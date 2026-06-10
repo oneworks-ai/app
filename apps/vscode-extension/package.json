@@ -1,0 +1,133 @@
+{
+  "publisher": "oneworks-ai",
+  "name": "@oneworks/vscode-extension",
+  "displayName": "One Works",
+  "version": "0.1.0-alpha.0",
+  "private": true,
+  "description": "One Works VS Code shell",
+  "license": "MIT",
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "files": [
+    "README.md",
+    "dist",
+    "package.json",
+    "resources"
+  ],
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "oneworks",
+          "title": "One Works",
+          "icon": "resources/oneworks.svg"
+        }
+      ]
+    },
+    "views": {
+      "oneworks": [
+        {
+          "id": "oneworks.sidebar",
+          "name": "One Works",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "oneworks.open",
+        "title": "One Works: Open Workspace",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "oneworks.reloadView",
+        "title": "One Works: Reload View",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "oneworks.openExternal",
+        "title": "One Works: Open in Browser",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "oneworks.restartServer",
+        "title": "One Works: Restart Project Server",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "oneworks.stopServer",
+        "title": "One Works: Stop Project Server",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "oneworks.stopAllServers",
+        "title": "One Works: Stop All Servers",
+        "icon": "$(circle-slash)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "oneworks.open",
+          "when": "view == oneworks.sidebar",
+          "group": "navigation@1"
+        },
+        {
+          "command": "oneworks.reloadView",
+          "when": "view == oneworks.sidebar",
+          "group": "navigation@2"
+        },
+        {
+          "command": "oneworks.restartServer",
+          "when": "view == oneworks.sidebar",
+          "group": "navigation@3"
+        },
+        {
+          "command": "oneworks.openExternal",
+          "when": "view == oneworks.sidebar",
+          "group": "navigation@4"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "One Works",
+      "properties": {
+        "oneworks.bootstrapCommand": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional `oneworks` executable, command name, or wrapper command. When empty, the extension searches the workspace `node_modules/.bin` and system `PATH` for `oneworks` / `ow` / `owo`, then runs the `web` subcommand."
+        }
+      }
+    }
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": false
+  },
+  "scripts": {
+    "build": "node ./scripts/clean-dist.mjs && pnpm run compile",
+    "compile": "tsc -p ./tsconfig.json",
+    "package": "pnpm run build && pnpm run package:vsix",
+    "package:vsix": "node ./scripts/package.mjs",
+    "publish:vsix": "node ./scripts/publish.mjs",
+    "typecheck": "tsc --noEmit -p ./tsconfig.json --pretty false",
+    "watch": "tsc -w -p ./tsconfig.json"
+  },
+  "oneWorksRelease": {
+    "extensionName": "oneworks-vscode-extension"
+  },
+  "devDependencies": {
+    "@types/vscode": "1.95.0",
+    "@vscode/vsce": "^3.9.1"
+  }
+}

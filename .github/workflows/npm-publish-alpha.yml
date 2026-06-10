@@ -1,0 +1,151 @@
+name: npm Alpha Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        default: false
+        description: Run publish-plan with --dry-run instead of publishing.
+        required: false
+        type: boolean
+      packages:
+        description: Comma-separated package names. Leave empty only when publish_all is true.
+        required: false
+        type: string
+      publish_all:
+        default: false
+        description: Publish the full public workspace plan when packages is empty.
+        required: false
+        type: boolean
+      publish_tag:
+        default: alpha
+        description: npm dist-tag used when publishing. Use latest for the bootstrap redirect package group when bare npx should resolve to it.
+        required: false
+        type: string
+      bootstrap_with_token:
+        default: false
+        description: Use NPM_TOKEN for first-publishing packages that cannot use Trusted Publishing yet.
+        required: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: npm-alpha-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: npm alpha publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          registry-url: https://registry.npmjs.org
+
+      - name: Install latest npm
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate publish inputs
+        env:
+          BOOTSTRAP_WITH_TOKEN: ${{ inputs.bootstrap_with_token }}
+          NODE_AUTH_TOKEN: ${{ inputs.bootstrap_with_token && secrets.NPM_TOKEN || '' }}
+          PACKAGES: ${{ inputs.packages }}
+          PUBLISH_ALL: ${{ inputs.publish_all }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          trimmed_packages="$(printf '%s' "${PACKAGES:-}" | tr -d '[:space:]')"
+          if [ -z "$trimmed_packages" ] && [ "${PUBLISH_ALL}" != "true" ]; then
+            echo "packages is empty. Set publish_all=true only when you intentionally want the full public workspace publish plan." >&2
+            exit 1
+          fi
+
+          if [ "${BOOTSTRAP_WITH_TOKEN}" = "true" ] && [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "bootstrap_with_token=true requires the NPM_TOKEN secret." >&2
+            exit 1
+          fi
+
+      - name: Configure npm token authentication
+        env:
+          BOOTSTRAP_WITH_TOKEN: ${{ inputs.bootstrap_with_token }}
+          NODE_AUTH_TOKEN: ${{ inputs.bootstrap_with_token && secrets.NPM_TOKEN || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${BOOTSTRAP_WITH_TOKEN}" != "true" ]; then
+            echo "Trusted Publishing mode: not configuring NPM_TOKEN."
+            exit 0
+          fi
+
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "bootstrap_with_token=true requires NPM_TOKEN." >&2
+            exit 1
+          fi
+
+          cat >> .npmrc <<'NPMRC'
+          registry=https://registry.npmjs.org/
+          //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
+          //registry.npmjs.com/:_authToken=${NODE_AUTH_TOKEN}
+          NPMRC
+
+          npm whoami --registry https://registry.npmjs.org
+
+      - name: Publish alpha packages
+        env:
+          BOOTSTRAP_WITH_TOKEN: ${{ inputs.bootstrap_with_token }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          NPM_CONFIG_PROVENANCE: "true"
+          NODE_AUTH_TOKEN: ${{ inputs.bootstrap_with_token && secrets.NPM_TOKEN || '' }}
+          PACKAGES: ${{ inputs.packages }}
+          PUBLISH_ALL: ${{ inputs.publish_all }}
+          PUBLISH_TAG: ${{ inputs.publish_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          trimmed_packages="$(printf '%s' "${PACKAGES:-}" | tr -d '[:space:]')"
+          if [ -z "$trimmed_packages" ] && [ "${PUBLISH_ALL}" != "true" ]; then
+            echo "packages is empty. Set publish_all=true only when you intentionally want the full public workspace publish plan." >&2
+            exit 1
+          fi
+
+          if [ "${BOOTSTRAP_WITH_TOKEN}" = "true" ]; then
+            echo "NPM_TOKEN is configured; npm can use it as a bootstrap fallback for newly added packages."
+          else
+            unset NODE_AUTH_TOKEN
+            echo "Trusted Publishing mode: npm publish will authenticate through GitHub OIDC."
+          fi
+
+          tag="${PUBLISH_TAG:-alpha}"
+          args=(--publish --no-git-checks --skip-existing --tag "${tag}" --no-confirm-retry)
+          if [ "${DRY_RUN}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          if [ -n "${PACKAGES}" ]; then
+            args+=(--packages "${PACKAGES}")
+          fi
+
+          pnpm tools publish-plan -- "${args[@]}"

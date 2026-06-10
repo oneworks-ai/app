@@ -1,0 +1,288 @@
+.session-list-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+
+  .session-list-scroll {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+
+    .session-list {
+      --session-content-gap: 8px;
+      --session-depth-indent: calc(
+        var(--session-leading-size) + var(--session-content-gap)
+      );
+      --session-leading-size: 16px;
+      --session-row-inline-padding: 6px;
+
+      padding: 0 12px 8px;
+      flex: 1;
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+
+      .ant-spin-nested-loading,
+      .ant-spin-container {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .ant-list-empty-text {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .ant-list-items {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+      }
+
+      .session-list-group {
+        min-height: 28px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 4px;
+        margin: 0;
+        padding: 0;
+        color: var(--text-color);
+      }
+
+      .session-list-group__title {
+        min-width: 0;
+        height: 28px;
+        border: 0;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 6px;
+        border-radius: 8px;
+        color: inherit;
+        background: transparent;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 1;
+
+        &:hover,
+        &:focus-visible {
+          outline: none;
+          color: var(--primary-color, #2563eb);
+        }
+
+        &:disabled {
+          cursor: default;
+          color: inherit;
+        }
+      }
+
+      .session-list-group__chevron {
+        flex: 0 0 16px;
+        width: 16px;
+        min-width: 16px;
+        height: 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--sub-text-color);
+        font-size: 16px;
+        line-height: 1;
+        transition: transform .18s ease, color .18s ease;
+      }
+
+      .session-list-group.is-collapsed .session-list-group__chevron {
+        transform: rotate(-90deg);
+      }
+
+      .session-list-group__icon {
+        flex: 0 0 var(--session-leading-size);
+        width: var(--session-leading-size);
+        min-width: var(--session-leading-size);
+        height: var(--session-leading-size);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: inherit;
+        font-size: var(--session-leading-size);
+        line-height: 1;
+      }
+
+      .session-list-group__text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 1;
+      }
+
+      .session-list-group__actions {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 2px;
+      }
+
+      .session-list-group__action {
+        width: 20px;
+        min-width: 20px;
+        height: 20px;
+        padding: 0;
+        border: 0;
+        border-radius: 5px;
+        color: var(--sub-text-color);
+        background: transparent;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: color .18s ease;
+
+        &:hover,
+        &:focus-visible {
+          outline: none;
+          color: var(--primary-color, #2563eb);
+          background: transparent;
+          box-shadow: none;
+        }
+
+        &:disabled {
+          cursor: default;
+          opacity: .45;
+        }
+
+        &.is-danger {
+          color: var(--danger-color, #dc2626);
+        }
+      }
+
+      .session-list-group__action-icon {
+        width: 16px;
+        min-width: 16px;
+        height: 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+      }
+
+      .session-row {
+        position: relative;
+
+        &::before {
+          content: '';
+          position: absolute;
+          top: 8px;
+          bottom: 8px;
+          left: calc(var(--session-row-inline-padding) * -1 + 2px);
+          width: 4px;
+          border-radius: 999px;
+          background: var(--primary-color, #2563eb);
+          opacity: 0;
+          pointer-events: none;
+          transform: scaleY(.72);
+          transform-origin: center;
+          transition: opacity .18s ease, transform .18s ease;
+        }
+
+        &.is-active::before {
+          opacity: 1;
+          transform: scaleY(1);
+        }
+
+        .session-row-main {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          width: auto;
+          min-width: 0;
+          // One tree level equals the adapter icon width plus the title gap,
+          // so a child icon aligns with the parent title start.
+          margin-left: calc(
+            var(--session-depth, 0) * var(--session-depth-indent)
+          );
+          padding: 4px 0;
+          border-radius: 6px;
+        }
+
+        &:hover .session-item,
+        &:hover .room-item,
+        &.is-active .session-item,
+        &.is-active .room-item {
+          color: var(--primary-color, #2563eb) !important;
+        }
+
+        .session-select-toggle {
+          width: 28px;
+          height: 28px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          align-self: center;
+          border-radius: 6px;
+          background-color: var(--bg-color);
+          color: var(--sub-text-color);
+
+          .ant-checkbox-wrapper {
+            margin-inline-start: 0;
+          }
+        }
+
+        .session-item,
+        .room-item {
+          flex: 1;
+          min-width: 0;
+          max-width: 100%;
+        }
+
+        .session-item,
+        .room-item {
+          padding: 0 !important;
+          border-color: transparent !important;
+          border-radius: 6px;
+          background-color: transparent;
+
+          &:hover,
+          &.active:hover,
+          &.selected:hover {
+            border-color: transparent !important;
+            background-color: transparent !important;
+          }
+
+          &.active,
+          &.selected {
+            border-color: transparent !important;
+            background-color: transparent !important;
+          }
+        }
+
+        .session-select-toggle + .session-item,
+        .session-select-toggle + .room-item {
+          margin-left: 0;
+        }
+      }
+    }
+  }
+
+  .empty-text {
+    padding: 0 12px;
+    text-align: center;
+    color: var(--sub-text-color);
+    font-size: 13px;
+  }
+}

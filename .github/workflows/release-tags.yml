@@ -1,0 +1,183 @@
+name: Release Tags
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/release-tags.yml
+      - apps/**/package.json
+      - packages/**/package.json
+      - scripts/**
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/release-tags.yml
+      - apps/**/package.json
+      - packages/**/package.json
+      - scripts/**
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Base commit to compare. Defaults to the previous commit for the selected ref.
+        required: false
+        type: string
+      head:
+        description: Head commit to compare. Defaults to the selected ref SHA.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: release-tags-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: release-tags
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: write
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve release tag range
+        id: range
+        shell: bash
+        run: |
+          initial=false
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            base="${{ inputs.base }}"
+            head="${{ inputs.head }}"
+            if [ -z "$head" ]; then
+              head="${{ github.sha }}"
+            fi
+            if [ -z "$base" ]; then
+              if ! base="$(git rev-parse "$head^" 2>/dev/null)"; then
+                base=""
+              fi
+            fi
+          else
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+          fi
+
+          if [ -z "$base" ]; then
+            initial=true
+          elif [[ "$base" =~ ^0+$ ]]; then
+            initial=true
+            base=""
+          elif [ -n "$base" ] && ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "::warning::Base commit $base is not available; planning initial release tags for this snapshot."
+            initial=true
+            base=""
+          fi
+
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+          echo "initial=$initial" >> "$GITHUB_OUTPUT"
+
+      - name: Plan release tags
+        id: plan
+        shell: bash
+        run: |
+          if [ "${{ steps.range.outputs.initial }}" = "true" ]; then
+            echo "Planning initial release tags because no comparable base commit is available."
+          fi
+
+          pnpm --silent tools release-tags plan "${{ steps.range.outputs.base }}" "${{ steps.range.outputs.head }}" --json \
+            | tee "$RUNNER_TEMP/release-tags.json"
+
+          count="$(PLAN_FILE="$RUNNER_TEMP/release-tags.json" node <<'NODE'
+          const fs = require('node:fs')
+          const plan = JSON.parse(fs.readFileSync(process.env.PLAN_FILE, 'utf8'))
+          console.log(plan.tags.length)
+          NODE
+          )"
+
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "Planned $count release tag(s)."
+
+      - name: Create release tags
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.plan.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          git config user.name "oneworks-release-bot"
+          git config user.email "release-bot@users.noreply.github.com"
+
+          PLAN_FILE="$RUNNER_TEMP/release-tags.json" node <<'NODE' > "$RUNNER_TEMP/release-tags.tsv"
+          const fs = require('node:fs')
+          const plan = JSON.parse(fs.readFileSync(process.env.PLAN_FILE, 'utf8'))
+          for (const item of plan.tags) {
+            console.log([item.tag, item.name, item.version, item.path].join('\t'))
+          }
+          NODE
+
+          while IFS=$'\t' read -r tag name version package_path; do
+            if [ -z "$tag" ]; then
+              continue
+            fi
+
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              echo "Release tag already exists: $tag"
+              continue
+            fi
+
+            echo "Creating $tag for $name@$version from $package_path"
+            git tag -a "$tag" "${{ steps.range.outputs.head }}" -m "Release $name@$version"
+            git push origin "refs/tags/$tag"
+
+            case "$tag" in
+              pkg/oneworks-desktop/v*)
+                echo "Dispatching desktop package workflow for $tag"
+                gh workflow run desktop-package.yml \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --ref "$tag" \
+                  -f create_release=true \
+                  -f release_tag="$tag" \
+                  -f retention_days=14
+                ;;
+              pkg/oneworks-vscode-extension/v*)
+                echo "Dispatching VS Code extension release workflow for $tag"
+                gh workflow run vscode-extension-release.yml \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --ref "$tag" \
+                  -f release_tag="$tag"
+                ;;
+              *)
+                echo "No automated workflow dispatch configured for $tag"
+                ;;
+            esac
+          done < "$RUNNER_TEMP/release-tags.tsv"

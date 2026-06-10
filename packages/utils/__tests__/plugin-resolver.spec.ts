@@ -1,0 +1,484 @@
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { resolveManagedPluginPackageInstallDir } from '#~/managed-plugin-package.js'
+import { getManagedPluginInstallDir } from '#~/managed-plugin.js'
+import {
+  discoverRuntimePluginConfigs,
+  resolveConfiguredPluginInstances,
+  resolvePluginHooksEntryPathForInstance,
+  resolveRuntimePluginConfig
+} from '#~/plugin-resolver.js'
+
+const tempDirs: string[] = []
+
+const writeLoggerPluginPackage = async (pluginRoot: string, version: string) => {
+  await mkdir(join(pluginRoot, 'dist'), { recursive: true })
+  await writeFile(
+    join(pluginRoot, 'package.json'),
+    JSON.stringify(
+      {
+        name: '@oneworks/plugin-logger',
+        version,
+        exports: {
+          '.': './dist/index.js',
+          './hooks': './dist/hooks.js',
+          './package.json': './package.json'
+        }
+      },
+      null,
+      2
+    )
+  )
+  await writeFile(join(pluginRoot, 'dist/index.js'), 'module.exports = { __oneWorksPluginManifest: true }\n')
+  await writeFile(join(pluginRoot, 'dist/hooks.js'), 'module.exports = {}\n')
+}
+
+const writeDirectoryPlugin = async (
+  pluginRoot: string,
+  manifestFile: 'plugin.json' | 'plugin.yaml' | 'plugin.yml' | 'package.json' = 'plugin.json'
+) => {
+  await mkdir(join(pluginRoot, 'hooks'), { recursive: true })
+  const manifest = {
+    name: 'workspace-tools',
+    plugin: {
+      client: { entry: './client/index.js' },
+      server: { entry: './server/index.js' },
+      contributions: {
+        navItems: [{ id: 'dashboard', title: 'Dashboard', route: '/plugins/workspace-tools/dashboard' }]
+      }
+    }
+  }
+  const content = manifestFile.endsWith('.json')
+    ? JSON.stringify(manifest, null, 2)
+    : [
+      'name: workspace-tools',
+      'plugin:',
+      '  client:',
+      '    entry: ./client/index.js',
+      '  server:',
+      '    entry: ./server/index.js'
+    ].join('\n')
+  await writeFile(join(pluginRoot, manifestFile), content)
+  await writeFile(join(pluginRoot, 'hooks/index.js'), 'module.exports = {}\n')
+}
+
+afterEach(async () => {
+  vi.unstubAllEnvs()
+  await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
+})
+
+describe('plugin resolver', () => {
+  it('resolves plugins from the runtime package dir when the workspace does not install them', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    const packageDir = join(tempDir, 'runtime-package')
+    const pluginRoot = join(packageDir, 'node_modules/@oneworks/plugin-logger')
+    await mkdir(workspace, { recursive: true })
+    await mkdir(packageDir, { recursive: true })
+    await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: '@acme/runtime' }, null, 2))
+    await writeLoggerPluginPackage(pluginRoot, '1.0.0')
+
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', packageDir)
+
+    const [instance] = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: [{ id: 'logger' }]
+    })
+
+    expect(instance).toMatchObject({
+      requestId: 'logger',
+      packageId: '@oneworks/plugin-logger',
+      rootDir: pluginRoot,
+      resolvedBy: 'oneworks-prefix'
+    })
+    expect(resolvePluginHooksEntryPathForInstance(workspace, instance!)).toContain(
+      join('node_modules', '@oneworks', 'plugin-logger', 'dist', 'hooks.js')
+    )
+  })
+
+  it('resolves default OneWorks plugins from the global package cache when workspace and runtime omit them', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    const realHome = join(tempDir, 'home')
+    const pluginRoot = resolveManagedPluginPackageInstallDir({
+      env: {
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome
+      },
+      packageName: '@oneworks/plugin-logger',
+      version: 'latest'
+    })
+    await mkdir(workspace, { recursive: true })
+    await writeLoggerPluginPackage(pluginRoot, '3.2.0')
+
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', realHome)
+    vi.stubEnv('__ONEWORKS_PROJECT_PLUGIN_AUTO_INSTALL__', 'false')
+
+    const [instance] = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: [{ id: 'logger' }]
+    })
+
+    expect(instance).toMatchObject({
+      requestId: 'logger',
+      packageId: '@oneworks/plugin-logger',
+      rootDir: pluginRoot,
+      resolvedBy: 'managed-package-cache'
+    })
+    expect(resolvePluginHooksEntryPathForInstance(workspace, instance!)).toContain(
+      join('node_modules', '@oneworks', 'plugin-logger', 'dist', 'hooks.js')
+    )
+  })
+
+  it('prefers module-managed active cache for default OneWorks plugins', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    const realHome = join(tempDir, 'home')
+    const packageDir = join(tempDir, 'runtime-package')
+    const bundledPluginRoot = join(packageDir, 'node_modules/@oneworks/plugin-logger')
+    const activePluginRoot = resolveManagedPluginPackageInstallDir({
+      env: {
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome
+      },
+      packageName: '@oneworks/plugin-logger',
+      version: '4.1.0'
+    })
+    await mkdir(workspace, { recursive: true })
+    await mkdir(join(realHome, '.oneworks/bootstrap/module-updates'), { recursive: true })
+    await writeLoggerPluginPackage(bundledPluginRoot, '1.0.0')
+    await writeLoggerPluginPackage(activePluginRoot, '4.1.0')
+    await writeFile(
+      join(realHome, '.oneworks/bootstrap/module-updates/oneworks__plugin-logger.json'),
+      JSON.stringify(
+        {
+          packageDir: activePluginRoot,
+          packageName: '@oneworks/plugin-logger',
+          updatedAt: '2026-06-06T00:00:00.000Z',
+          version: '4.1.0'
+        },
+        null,
+        2
+      )
+    )
+
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', packageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', realHome)
+
+    const [instance] = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: [{ id: 'logger' }]
+    })
+
+    expect(instance).toMatchObject({
+      packageId: '@oneworks/plugin-logger',
+      rootDir: activePluginRoot,
+      resolvedBy: 'managed-package-cache'
+    })
+  })
+
+  it('prefers an existing global package cache over workspace packages for OneWorks plugins', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    const workspacePluginRoot = join(workspace, 'node_modules/@oneworks/plugin-logger')
+    const realHome = join(tempDir, 'home')
+    const cachedPluginRoot = resolveManagedPluginPackageInstallDir({
+      env: {
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome
+      },
+      packageName: '@oneworks/plugin-logger',
+      version: 'latest'
+    })
+    await mkdir(workspace, { recursive: true })
+    await writeLoggerPluginPackage(workspacePluginRoot, '1.0.0')
+    await writeLoggerPluginPackage(cachedPluginRoot, '3.2.0')
+
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', realHome)
+    vi.stubEnv('__ONEWORKS_PROJECT_PLUGIN_AUTO_INSTALL__', 'false')
+
+    const [instance] = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: [{ id: 'logger' }]
+    })
+
+    expect(instance).toMatchObject({
+      packageId: '@oneworks/plugin-logger',
+      rootDir: cachedPluginRoot,
+      resolvedBy: 'managed-package-cache'
+    })
+  })
+
+  it('installs a non-bundled managed OneWorks plugin into an empty global package cache', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-empty-cache-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    const realHome = join(tempDir, 'home')
+    const npmPath = join(tempDir, 'npm')
+    const pluginRoot = resolveManagedPluginPackageInstallDir({
+      env: {
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome
+      },
+      packageName: '@oneworks/plugin-remote',
+      version: 'latest'
+    })
+    await mkdir(workspace, { recursive: true })
+    await writeFile(
+      npmPath,
+      `#!/usr/bin/env node
+const fs = require('node:fs')
+const path = require('node:path')
+if (process.argv[2] !== 'install') process.exit(1)
+const prefix = process.argv[process.argv.indexOf('--prefix') + 1]
+const spec = process.argv[process.argv.length - 1]
+const lastAt = spec.lastIndexOf('@')
+const packageName = spec.slice(0, lastAt)
+const version = spec.slice(lastAt + 1)
+const packageDir = path.join(prefix, 'node_modules', ...packageName.split('/'))
+fs.mkdirSync(path.join(packageDir, 'dist'), { recursive: true })
+fs.writeFileSync(path.join(packageDir, 'package.json'), JSON.stringify({
+  name: packageName,
+  version,
+  exports: {
+    '.': './dist/index.js',
+    './hooks': './dist/hooks.js',
+    './package.json': './package.json'
+  }
+}))
+fs.writeFileSync(path.join(packageDir, 'dist/index.js'), 'module.exports = { __oneWorksPluginManifest: true }\\n')
+fs.writeFileSync(path.join(packageDir, 'dist/hooks.js'), 'module.exports = {}\\n')
+`,
+      'utf8'
+    )
+    await chmod(npmPath, 0o755)
+
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', realHome)
+    vi.stubEnv('__ONEWORKS_PROJECT_PLUGIN_NPM_PATH__', npmPath)
+
+    const [instance] = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: [{ id: 'remote' }]
+    })
+
+    expect(instance).toMatchObject({
+      packageId: '@oneworks/plugin-remote',
+      resolvedBy: 'managed-package-cache',
+      rootDir: pluginRoot
+    })
+  })
+
+  it('uses an explicit managed plugin version when resolving the global package cache', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    const realHome = join(tempDir, 'home')
+    const pluginRoot = resolveManagedPluginPackageInstallDir({
+      env: {
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome
+      },
+      packageName: '@oneworks/plugin-logger',
+      version: '9.9.9'
+    })
+    await mkdir(workspace, { recursive: true })
+    await writeLoggerPluginPackage(pluginRoot, '9.9.9')
+
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', realHome)
+    vi.stubEnv('__ONEWORKS_PROJECT_PLUGIN_AUTO_INSTALL__', 'false')
+
+    const [instance] = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: [{ id: 'logger', version: '9.9.9' }]
+    })
+
+    expect(instance).toMatchObject({
+      packageId: '@oneworks/plugin-logger',
+      rootDir: pluginRoot,
+      resolvedBy: 'managed-package-cache'
+    })
+  })
+
+  it('loads directory plugin manifests from plugin json, yaml, yml, and package json files', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    await mkdir(workspace, { recursive: true })
+    const manifestFiles = ['plugin.json', 'plugin.yaml', 'plugin.yml', 'package.json'] as const
+    await Promise.all(
+      manifestFiles.map((fileName, index) => writeDirectoryPlugin(join(workspace, `plugin-${index}`), fileName))
+    )
+
+    const instances = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: manifestFiles.map((_, index) => ({ id: `./plugin-${index}` }))
+    })
+
+    expect(instances).toHaveLength(4)
+    expect(instances.map(instance => instance.manifest?.plugin?.client?.entry)).toEqual([
+      './client/index.js',
+      './client/index.js',
+      './client/index.js',
+      './client/index.js'
+    ])
+  })
+
+  it('discovers runtime plugins in global, dev, and explicit order without auto-loading project installs', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    const realHome = join(tempDir, 'home')
+    const env = { __ONEWORKS_PROJECT_REAL_HOME__: realHome }
+    const globalPlugin = join(realHome, '.oneworks/global/plugins/global')
+    const projectPlugin = join(workspace, '.oo/plugins/project')
+    const devPlugin = join(workspace, '.oo/plugins.dev/dev')
+    const explicitPlugin = join(workspace, 'explicit')
+    const managedInstall = getManagedPluginInstallDir(workspace, 'claude', 'managed', env)
+    const managedPlugin = join(managedInstall, 'oneworks')
+    await Promise.all([
+      writeDirectoryPlugin(globalPlugin),
+      writeDirectoryPlugin(projectPlugin),
+      writeDirectoryPlugin(devPlugin),
+      writeDirectoryPlugin(explicitPlugin),
+      writeDirectoryPlugin(managedPlugin),
+      mkdir(managedInstall, { recursive: true })
+    ])
+    await writeFile(
+      join(managedInstall, '.oneworks-plugin.json'),
+      JSON.stringify(
+        {
+          version: 1,
+          adapter: 'claude',
+          name: 'managed',
+          installedAt: '2026-01-01T00:00:00.000Z',
+          source: { type: 'path', path: '/tmp/managed' },
+          nativePluginPath: '.',
+          oneworksPluginPath: 'oneworks'
+        },
+        null,
+        2
+      )
+    )
+
+    const config = await resolveRuntimePluginConfig({
+      cwd: workspace,
+      plugins: [{ id: explicitPlugin }],
+      env
+    })
+
+    expect(config?.map(plugin => plugin.id)).toEqual([
+      globalPlugin,
+      devPlugin,
+      explicitPlugin
+    ])
+    expect(config?.map(plugin => plugin.id)).not.toContain(projectPlugin)
+    expect(config?.map(plugin => plugin.id)).not.toContain(managedPlugin)
+    expect(config?.find(plugin => plugin.id === devPlugin)).toMatchObject({ watch: true })
+  })
+
+  it('loads project-home managed plugin install directories only when explicitly configured', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    const env = {
+      __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1',
+      __ONEWORKS_PROJECT_REAL_HOME__: join(tempDir, 'home')
+    }
+    const managedInstall = getManagedPluginInstallDir(workspace, 'claude', 'managed', env)
+    const managedPlugin = join(managedInstall, 'oneworks')
+    await Promise.all([
+      writeDirectoryPlugin(managedPlugin),
+      mkdir(managedInstall, { recursive: true })
+    ])
+    await writeFile(
+      join(managedInstall, '.oneworks-plugin.json'),
+      JSON.stringify(
+        {
+          version: 1,
+          adapter: 'claude',
+          name: 'managed',
+          installedAt: '2026-01-01T00:00:00.000Z',
+          source: { type: 'path', path: '/tmp/managed' },
+          nativePluginPath: '.',
+          oneworksPluginPath: 'oneworks'
+        },
+        null,
+        2
+      )
+    )
+
+    const config = await resolveRuntimePluginConfig({
+      cwd: workspace,
+      plugins: [{ id: managedPlugin, scope: 'managed' }],
+      env
+    })
+    const instances = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: config
+    })
+
+    expect(config?.map(plugin => plugin.id)).toEqual([managedPlugin])
+    expect(instances).toHaveLength(1)
+    expect(instances[0]).toMatchObject({
+      rootDir: managedPlugin,
+      scope: 'managed'
+    })
+  })
+
+  it('lets explicit config replace an auto-discovered plugin by resolved root even when scope differs', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    const pluginRoot = join(workspace, '.oo/plugins.dev/demo')
+    await writeDirectoryPlugin(pluginRoot)
+
+    const config = await resolveRuntimePluginConfig({
+      cwd: workspace,
+      plugins: [{ id: pluginRoot, scope: 'custom' }],
+      env: { __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1' }
+    })
+    const instances = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: config
+    })
+
+    expect(instances).toHaveLength(1)
+    expect(instances[0]).toMatchObject({
+      rootDir: pluginRoot,
+      scope: 'custom'
+    })
+  })
+
+  it('skips global auto-discovery when global config is disabled', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    const realHome = join(tempDir, 'home')
+    const globalPlugin = join(realHome, '.oneworks/global/plugins/global')
+    await writeDirectoryPlugin(globalPlugin)
+
+    const discovered = await discoverRuntimePluginConfigs({
+      cwd: workspace,
+      env: {
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+        __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1'
+      }
+    })
+
+    expect(discovered.autoDiscovered).toEqual([])
+  })
+})

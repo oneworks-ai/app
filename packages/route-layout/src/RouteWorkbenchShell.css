@@ -1,0 +1,196 @@
+.route-workbench-shell {
+  --route-workbench-sidebar-width: var(--nav-rail-drawer-width, 224px);
+  --route-workbench-sidebar-bg: #202020;
+  --route-workbench-sidebar-border: rgba(255, 255, 255, .08);
+  --route-workbench-sidebar-text: rgba(255, 255, 255, .86);
+  --route-workbench-sidebar-muted: rgba(255, 255, 255, .52);
+  --route-workbench-sidebar-active: var(--primary-color, #2f8ca2);
+
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-color, #fff);
+}
+
+.route-workbench-shell__sidebar-region {
+  position: relative;
+  z-index: 30;
+  width: var(--route-workbench-sidebar-width);
+  min-width: var(--route-workbench-sidebar-width);
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex: 0 0 var(--route-workbench-sidebar-width);
+}
+
+.route-workbench-shell__sidebar {
+  box-sizing: border-box;
+  width: var(--route-workbench-sidebar-width);
+  min-width: var(--route-workbench-sidebar-width);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 8px;
+  border-right: 1px solid var(--route-workbench-sidebar-border);
+  background: var(--route-workbench-sidebar-bg);
+  color: var(--route-workbench-sidebar-text);
+}
+
+.route-workbench-shell__sidebar-brand {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  color: var(--route-workbench-sidebar-text);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.route-workbench-shell__sidebar-brand-icon,
+.route-workbench-shell__sidebar-item-icon {
+  width: var(--app-chrome-icon-size, 18px);
+  height: var(--app-chrome-icon-size, 18px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: inherit;
+}
+
+.route-workbench-shell__sidebar-brand-icon svg,
+.route-workbench-shell__sidebar-item-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.route-workbench-shell__sidebar-brand-text,
+.route-workbench-shell__sidebar-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-workbench-shell__sidebar-nav {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.route-workbench-shell__sidebar-item {
+  position: relative;
+  min-width: 0;
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--route-workbench-sidebar-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 12px;
+  text-align: left;
+  text-decoration: none;
+  font: 650 13px/1.2 ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.route-workbench-shell__sidebar-item::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.route-workbench-shell__sidebar .route-workbench-shell__sidebar-item:hover,
+.route-workbench-shell__sidebar
+  .route-workbench-shell__sidebar-item:focus-visible {
+  background: rgba(255, 255, 255, .06);
+  color: var(--route-workbench-sidebar-text);
+  outline: none;
+}
+
+.route-workbench-shell__sidebar-item.is-active {
+  color: var(--route-workbench-sidebar-active);
+}
+
+.route-workbench-shell__sidebar-item.is-active::before {
+  background: var(--route-workbench-sidebar-active);
+}
+
+.route-workbench-shell__sidebar-item:disabled {
+  cursor: default;
+  opacity: .48;
+}
+
+.route-workbench-shell__sidebar-footer {
+  margin-top: auto;
+  padding: 8px;
+  color: var(--route-workbench-sidebar-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.route-workbench-shell__content-region {
+  position: relative;
+  z-index: 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.route-workbench-shell__content {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+@media (max-width: 720px) {
+  .route-workbench-shell {
+    flex-direction: column;
+  }
+
+  .route-workbench-shell__sidebar-region {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    min-height: auto;
+    flex-basis: auto;
+  }
+
+  .route-workbench-shell__sidebar {
+    width: 100%;
+    min-width: 0;
+    min-height: auto;
+    flex: 0 0 auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--route-workbench-sidebar-border);
+  }
+
+  .route-workbench-shell__sidebar-nav {
+    display: flex;
+    overflow-x: auto;
+  }
+
+  .route-workbench-shell__sidebar-item {
+    flex: 0 0 auto;
+  }
+
+  .route-workbench-shell__sidebar-footer {
+    display: none;
+  }
+}

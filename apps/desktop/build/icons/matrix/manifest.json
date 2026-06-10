@@ -1,0 +1,38 @@
+{
+  "product": "oneworks",
+  "source": "assets/icon",
+  "sourceCommit": "bb5dec3934aa7af6f9ce969c3c6b02e8337ac076",
+  "theme": "matrix",
+  "type": "desktop-icon-theme",
+  "files": {
+    "darkPng": "dark.png",
+    "darkSvg": "dark.svg",
+    "iconComposer": "icon.icon/",
+    "lightPng": "light.png",
+    "lightSvg": "light.svg",
+    "platformPngDirs": [
+      "macos",
+      "windows",
+      "linux"
+    ],
+    "solid": "solid/",
+    "transparent": "transparent/"
+  },
+  "platformTransforms": {
+    "linux": {
+      "strategy": "crop-source-content"
+    },
+    "macos": {
+      "frameContentRatio": 0.82,
+      "squircleExponent": 5,
+      "strategy": "crop-source-content-frame-quintic-superellipse-mask"
+    },
+    "windows": {
+      "strategy": "crop-source-content"
+    }
+  },
+  "modes": [
+    "light",
+    "dark"
+  ]
+}

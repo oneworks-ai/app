@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext"
+  },
+  "references": [
+    {
+      "path": "./tsconfig.bundler.json"
+    }
+  ],
+  "include": [
+    "../../.oo.config.ts",
+    "../../.oo.dev.config.ts",
+    "../../scripts/**/*.ts",
+    "../../vitest.workspace.ts",
+    "../../apps/client/vite.config.ts",
+    "../../apps/relay-admin/vite.config.ts",
+    "../../apps/cli/src/**/*",
+    "../../apps/relay-server/src/**/*",
+    "../../apps/server/src/**/*",
+    "../../apps/vscode-extension/src/**/*"
+  ]
+}

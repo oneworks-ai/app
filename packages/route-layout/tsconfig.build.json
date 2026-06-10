@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfigs/tsconfig.bundler.web.json",
+  "compilerOptions": {
+    "composite": false,
+    "rootDir": "src",
+    "declaration": true,
+    "declarationMap": false,
+    "emitDeclarationOnly": false,
+    "noEmit": false,
+    "outDir": "dist",
+    "sourceMap": false
+  },
+  "include": [
+    "src/**/*"
+  ]
+}

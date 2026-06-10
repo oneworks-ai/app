@@ -1,0 +1,63 @@
+.todo-tool {
+  .todo-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 2px;
+    padding: 6px 4px;
+    border-radius: 0;
+    transition: background-color .2s;
+
+    &:hover {
+      background-color: var(--bg-color-hover);
+    }
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    &.completed {
+      opacity: .6;
+
+      .todo-text {
+        text-decoration: line-through;
+      }
+
+      .status-icon {
+        color: var(--success-color);
+      }
+    }
+
+    &.in_progress {
+      .status-icon {
+        color: var(--primary-color);
+      }
+    }
+
+    &.pending {
+      .status-icon {
+        color: var(--sub-text-color);
+      }
+    }
+
+    .status-icon {
+      font-size: 16px;
+    }
+
+    .todo-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .todo-text {
+      font-size: 13px;
+      color: var(--text-color);
+    }
+
+    .active-form {
+      font-size: 11px;
+      color: var(--sub-text-color);
+      font-style: italic;
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "product": "oneworks",
+  "source": "assets/icon",
+  "sourceCommit": "bb5dec3934aa7af6f9ce969c3c6b02e8337ac076",
+  "sourceSeed": "1p8gydn1f36735",
+  "defaultTheme": "metal",
+  "fill": {
+    "cropRatio": 0.82,
+    "sourceSize": 1024,
+    "strategy": "crop-source-content"
+  },
+  "platformAssets": {
+    "fallbackPng": "{theme}/{mode}.png",
+    "platformPng": "{theme}/{platform}/{mode}.png",
+    "solidFallbackPng": "{theme}/solid/{mode}.png",
+    "solidPlatformPng": "{theme}/solid/{platform}/{mode}.png",
+    "transparentFallbackPng": "{theme}/transparent/{mode}.png",
+    "transparentPlatformPng": "{theme}/transparent/{platform}/{mode}.png",
+    "platforms": [
+      "macos",
+      "windows",
+      "linux"
+    ]
+  },
+  "platformTransforms": {
+    "linux": {
+      "strategy": "crop-source-content"
+    },
+    "macos": {
+      "frameContentRatio": 0.82,
+      "squircleExponent": 5,
+      "strategy": "crop-source-content-frame-quintic-superellipse-mask"
+    },
+    "windows": {
+      "strategy": "crop-source-content"
+    }
+  },
+  "fallbackMode": "dark",
+  "themes": [
+    "industrial",
+    "metal",
+    "matrix"
+  ],
+  "modes": [
+    "light",
+    "dark"
+  ]
+}

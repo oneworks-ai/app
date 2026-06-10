@@ -1,0 +1,39 @@
+{
+  "name": "@oneworks/relay-admin",
+  "type": "module",
+  "version": "0.1.0-alpha.0",
+  "description": "OneWorks Relay admin client",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "apps/relay-admin"
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "preview": "vite preview",
+    "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project bundler.web apps/relay-admin/__tests__",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
+  },
+  "dependencies": {
+    "@material-symbols/svg-400": "0.44.8",
+    "antd": "^5.29.3",
+    "react-router-dom": "^7.12.0"
+  },
+  "devDependencies": {
+    "@oneworks/route-layout": "workspace:*",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.2",
+    "@vitejs/plugin-react": "^5.1.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^5.4.8"
+  }
+}

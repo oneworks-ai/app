@@ -1,0 +1,347 @@
+.component-lab-timeline {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  .chat-history-timeline-rail,
+  .chat-history-branch-graph {
+    --chat-history-timeline-surface: var(--overlay-lab-surface);
+    --chat-history-timeline-border: var(--overlay-lab-border);
+    --chat-history-timeline-muted: var(--overlay-lab-muted);
+  }
+}
+
+.component-lab-timeline__scenarios {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.component-lab-timeline__scenario {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.component-lab-timeline__scenario-title {
+  margin: 0;
+  color: var(--text-color);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.component-lab-timeline-shell {
+  border-radius: var(--overlay-lab-radius);
+  outline: 1px solid var(--overlay-lab-border);
+  outline-offset: 0;
+  background: var(--overlay-lab-surface);
+  box-shadow: var(--overlay-lab-shadow);
+  color: var(--text-color);
+  -webkit-backdrop-filter: blur(18px) saturate(1.32);
+  backdrop-filter: blur(18px) saturate(1.32);
+}
+
+.component-lab-timeline-shell {
+  min-width: 0;
+  height: 464px;
+  min-height: 0;
+  overflow: hidden;
+  display: block;
+}
+
+.component-lab-timeline-shell.is-small-data {
+  height: 240px;
+}
+
+.component-lab-timeline-shell.is-complex-forks {
+  height: 540px;
+}
+
+.component-lab-timeline-host {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.component-lab-timeline-host__header {
+  min-height: 42px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--overlay-lab-border);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  color: var(--overlay-lab-muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.component-lab-timeline-host__scroll-area {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  display: block;
+
+  > * {
+    min-height: 0;
+  }
+
+  .chat-history-timeline-view {
+    --chat-history-timeline-view-rail-width: 32px;
+    --chat-history-timeline-view-graph-content-width: min(
+      520px,
+      calc(100% - 52px)
+    );
+  }
+}
+
+.component-lab-timeline-host__rows {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  height: 100%;
+  padding: 16px 44px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.component-lab-timeline-host__row {
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: color .16s ease, opacity .16s ease;
+
+  &:hover,
+  &:focus-visible,
+  &.is-selected {
+    color: var(--primary-color);
+    outline: none;
+  }
+}
+
+.component-lab-timeline-host__row.is-consecutive {
+  margin-top: -7px;
+
+  .component-lab-timeline-host__avatar {
+    opacity: 0;
+  }
+
+  .component-lab-timeline-host__message-card {
+    border-radius: 12px;
+  }
+}
+
+.component-lab-timeline-host__avatar {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  border: 1px solid
+    color-mix(in srgb, var(--overlay-lab-border) 74%, transparent);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-color) 74%, transparent);
+  color: var(--overlay-lab-muted);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1;
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 28%, transparent) inset;
+}
+
+.component-lab-timeline-host__message-card {
+  min-width: 0;
+  max-width: min(72%, 620px);
+  padding: 9px 12px 10px;
+  border: 1px solid
+    color-mix(in srgb, var(--overlay-lab-border) 70%, transparent);
+  border-radius: 16px 16px 16px 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: color-mix(in srgb, var(--bg-color) 70%, transparent);
+  color: var(--text-color);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 28%, transparent) inset,
+    0 10px 22px color-mix(in srgb, #0f172a 7%, transparent);
+  transition:
+    border-color .16s ease,
+    background-color .16s ease,
+    box-shadow .16s ease,
+    color .16s ease;
+
+  strong {
+    min-width: 0;
+    overflow: hidden;
+    color: currentColor;
+    font-size: 12px;
+    font-weight: 760;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.component-lab-timeline-host__message-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--overlay-lab-muted);
+  font-size: 10px;
+  font-weight: 760;
+  line-height: 1;
+  white-space: nowrap;
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.component-lab-timeline-host__message-preview {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: color-mix(in srgb, var(--text-color) 72%, var(--overlay-lab-muted));
+  font-size: 11px;
+  font-weight: 560;
+  line-height: 1.35;
+  white-space: pre-line;
+}
+
+.component-lab-timeline-host__row.is-question {
+  flex-direction: row-reverse;
+
+  .component-lab-timeline-host__avatar {
+    border-color: color-mix(in srgb, var(--primary-color) 38%, transparent);
+    background: color-mix(in srgb, var(--primary-color) 88%, #0f172a);
+    color: #fff;
+  }
+
+  .component-lab-timeline-host__message-card {
+    border-color: color-mix(in srgb, var(--primary-color) 52%, transparent);
+    border-radius: 16px 16px 5px;
+    background: color-mix(in srgb, var(--primary-color) 88%, #0f172a);
+    color: #fff;
+  }
+
+  .component-lab-timeline-host__message-meta,
+  .component-lab-timeline-host__message-preview {
+    color: color-mix(in srgb, #fff 76%, transparent);
+  }
+}
+
+.component-lab-timeline-host__row.is-question.is-consecutive {
+  .component-lab-timeline-host__message-card {
+    border-top-right-radius: 5px;
+  }
+}
+
+.component-lab-timeline-host__row.is-answer.is-consecutive {
+  .component-lab-timeline-host__message-card {
+    border-top-left-radius: 5px;
+  }
+}
+
+.component-lab-timeline-host__row:hover,
+.component-lab-timeline-host__row:focus-visible,
+.component-lab-timeline-host__row.is-selected {
+  .component-lab-timeline-host__message-card {
+    border-color: color-mix(
+      in srgb,
+      var(--primary-color) 56%,
+      var(--overlay-lab-border)
+    );
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--primary-color) 14%, transparent),
+      0 1px 0 color-mix(in srgb, #fff 30%, transparent) inset,
+      0 12px 26px color-mix(in srgb, var(--primary-color) 11%, transparent);
+  }
+}
+
+.component-lab-timeline-rail-preview {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+
+  strong {
+    color: #fff;
+    font-size: 12px;
+    font-weight: 750;
+    line-height: 1.2;
+  }
+
+  p {
+    max-width: 240px;
+    margin: 0;
+    color: color-mix(in srgb, #fff 78%, transparent);
+    font-size: 11px;
+    font-weight: 550;
+    line-height: 1.35;
+  }
+}
+
+.component-lab-timeline-rail-preview__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  color: color-mix(in srgb, #fff 58%, transparent);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+@media (max-width: 760px) {
+  .component-lab-timeline-shell {
+    height: 430px;
+  }
+}
+
+@media (max-width: 620px) {
+  .component-lab-timeline-shell {
+    height: 430px;
+  }
+
+  .component-lab-timeline-host__rows {
+    padding: 12px 38px 12px 10px;
+  }
+
+  .component-lab-timeline-host__message-card {
+    max-width: min(84%, 520px);
+  }
+
+  .component-lab-timeline-host__scroll-area .chat-history-timeline-view {
+    --chat-history-timeline-view-graph-width: min(392px, calc(100% - 8px));
+  }
+}

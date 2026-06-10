@@ -1,0 +1,67 @@
+.relay-admin-action-button.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  justify-content: center;
+  min-width: 24px;
+  padding: 0;
+}
+
+.relay-admin-action-button.ant-btn .ant-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.relay-admin-action-button .relay-admin-icon {
+  height: 1em;
+  width: 1em;
+}
+
+.relay-admin-action-button.ant-btn-sm .relay-admin-icon {
+  font-size: 14px;
+}
+
+.relay-admin-table .relay-admin-action-button.ant-btn {
+  --relay-admin-table-action-size: var(--app-chrome-icon-size, 18px);
+
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: var(--placeholder-color) !important;
+  height: var(--relay-admin-table-action-size) !important;
+  min-height: 0;
+  min-width: var(--relay-admin-table-action-size);
+  padding: 0;
+  width: var(--relay-admin-table-action-size);
+}
+
+.relay-admin-table .relay-admin-action-button.ant-btn .relay-admin-icon,
+.relay-admin-table .relay-admin-action-button.ant-btn-sm .relay-admin-icon {
+  font-size: var(--relay-admin-table-action-size);
+  height: var(--relay-admin-table-action-size);
+  width: var(--relay-admin-table-action-size);
+}
+
+.relay-admin-table .relay-admin-action-button.ant-btn:hover,
+.relay-admin-table .relay-admin-action-button.ant-btn:focus-visible,
+.relay-admin-table
+  .relay-admin-action-button.ant-btn.ant-btn-text:not(:disabled):not(.ant-btn-disabled):hover {
+  background: transparent !important;
+  color: var(--primary-color) !important;
+}
+
+.relay-admin-table .relay-admin-action-button.ant-btn.ant-btn-dangerous:hover,
+.relay-admin-table
+  .relay-admin-action-button.ant-btn.ant-btn-dangerous:focus-visible {
+  background: transparent !important;
+  color: var(--danger-color) !important;
+}
+
+.relay-admin-table .relay-admin-action-button.ant-btn:disabled,
+.relay-admin-table .relay-admin-action-button.ant-btn.ant-btn-disabled {
+  background: transparent !important;
+  color: var(--placeholder-color) !important;
+  opacity: .46;
+}

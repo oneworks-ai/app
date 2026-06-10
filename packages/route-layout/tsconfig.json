@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfigs/tsconfig.bundler.web.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*",
+    "__tests__/**/*"
+  ]
+}

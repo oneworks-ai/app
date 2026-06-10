@@ -1,0 +1,1 @@
+import '@oneworks/register/dotenv'

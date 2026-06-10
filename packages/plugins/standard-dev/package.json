@@ -1,0 +1,12 @@
+{
+  "name": "@oneworks/plugin-standard-dev",
+  "version": "0.1.0-alpha.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/plugins/standard-dev"
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  }
+}

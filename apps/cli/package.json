@@ -1,0 +1,59 @@
+{
+  "name": "@oneworks/cli",
+  "version": "0.1.0-alpha.0",
+  "description": "One Works CLI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "apps/cli"
+  },
+  "imports": {
+    "#~/*.js": {
+      "__oneworks__": {
+        "default": "./src/*.ts"
+      }
+    }
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    "./config": {
+      "__oneworks__": {
+        "default": "./src/config.ts"
+      },
+      "default": {
+        "import": "./dist/config.mjs",
+        "require": "./dist/config.js"
+      }
+    }
+  },
+  "bin": {
+    "oneworks": "./cli.js",
+    "ow": "./cli.js",
+    "owo": "./cli.js"
+  },
+  "scripts": {
+    "postinstall": "node postinstall.js",
+    "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project node apps/cli/__tests__"
+  },
+  "dependencies": {
+    "@oneworks/app-runtime": "workspace:*",
+    "@oneworks/cli-helper": "workspace:*",
+    "@oneworks/config": "workspace:*",
+    "@oneworks/core": "workspace:*",
+    "@oneworks/hooks": "workspace:*",
+    "@oneworks/managed-plugins": "workspace:*",
+    "@oneworks/plugin-cli-skills": "workspace:*",
+    "@oneworks/register": "workspace:*",
+    "@oneworks/runtime-protocol": "workspace:*",
+    "@oneworks/runtime-store": "workspace:*",
+    "@oneworks/types": "workspace:*",
+    "@oneworks/utils": "workspace:*",
+    "@oneworks/workspace-assets": "workspace:*",
+    "commander": "^12.1.0",
+    "fast-glob": "^3.3.3",
+    "node-notifier": "^10.0.1"
+  },
+  "devDependencies": {
+    "@types/node-notifier": "^8.0.5"
+  }
+}

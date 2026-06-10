@@ -1,0 +1,116 @@
+.account-select-popup {
+  min-width: 320px;
+  max-width: 380px;
+}
+
+.account-option {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.account-option__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--oneworks-overlay-icon-gap, 6px);
+  min-width: 0;
+}
+
+.account-option__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--oneworks-overlay-font-size, 12px);
+  font-weight: 600;
+  line-height: var(--oneworks-overlay-line-height, 16px);
+}
+
+.account-option__actions {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.account-option__action {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sub-text-color, #6b7280);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color .18s ease, color .18s ease;
+
+  &:hover {
+    background: color-mix(in srgb, var(--border-color) 22%, transparent);
+    color: var(--text-color);
+  }
+
+  .material-symbols-rounded {
+    font-size: var(--oneworks-overlay-icon-size, 14px);
+    line-height: 1;
+  }
+}
+
+.account-option__meta {
+  font-size: 10px;
+  line-height: 12px;
+  color: var(--sub-text-color, #6b7280);
+}
+
+.account-select-popup__footer {
+  margin-top: var(--oneworks-overlay-item-gap, 2px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--oneworks-overlay-item-gap, 2px);
+}
+
+.account-select-popup__footer-divider {
+  flex-shrink: 0;
+}
+
+.account-select-popup__footer-action {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--oneworks-overlay-icon-gap, 6px);
+
+  .material-symbols-rounded {
+    width: var(--oneworks-overlay-icon-size);
+    min-width: var(--oneworks-overlay-icon-size);
+    height: var(--oneworks-overlay-icon-size);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--oneworks-overlay-icon-size);
+    line-height: 1;
+  }
+}
+
+.sender-mobile-select-actions {
+  .account-select-popup__footer-action {
+    min-height: 30px;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-color);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.4;
+    transition: color .16s ease;
+
+    &:hover {
+      color: var(--primary-color);
+    }
+  }
+}

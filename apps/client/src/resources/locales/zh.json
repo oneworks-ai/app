@@ -1,0 +1,3639 @@
+{
+  "common": {
+    "newChat": "新建会话",
+    "search": "搜索标题或 ID...",
+    "sessions": "会话列表",
+    "knowledgeBase": "数据资产",
+    "pluginStore": "插件市场",
+    "scheduledTasks": "定时任务",
+    "archive": "归档",
+    "archivedSessions": "已归档会话",
+    "theme": "主题模式",
+    "themeLight": "浅色模式",
+    "themeDark": "深色模式",
+    "themeSystem": "跟随系统",
+    "settings": "设置",
+    "navigation": "导航",
+    "language": "语言",
+    "reset": "重置",
+    "automation": "自动化任务",
+    "benchmark": "评测",
+    "delete": "删除",
+    "deleteSession": "删除会话",
+    "deleteSessionConfirm": "确定要删除这个会话吗？此操作不可撤销。",
+    "restore": "还原",
+    "restoreSuccess": "还原成功",
+    "restoreFailed": "还原失败",
+    "batchRestore": "批量还原",
+    "batchRestoreSuccess": "批量还原成功",
+    "batchRestoreFailed": "部分会话还原失败",
+    "cancel": "取消",
+    "continue": "继续",
+    "confirm": "确定",
+    "clear": "清空",
+    "select": "选择",
+    "confirmAction": "确认{{action}}",
+    "startNewChat": "暂时没有未归档的历史会话，聊点什么吧",
+    "backToHome": "返回首页",
+    "noData": "暂无数据",
+    "noSessions": "未找到匹配的会话",
+    "noArchivedSessions": "暂无已归档会话",
+    "sessionNotFound": "会话不存在",
+    "roomNotFound": "Agent Room 不存在",
+    "expand": "展开侧边栏",
+    "dragResize": "拖动调整宽度",
+    "selectOrCreateSession": "请选择或新建会话开始对话",
+    "batchMode": "批量操作",
+    "cancelBatch": "取消批量操作",
+    "batchArchive": "批量归档",
+    "archiveConfirm": "确定要归档选中的 {{count}} 个会话吗？",
+    "alreadyInNewChat": "当前已是新建会话",
+    "creatingChat": "正在新建",
+    "batchDelete": "批量删除",
+    "batchDeleteSuccess": "批量删除成功",
+    "batchDeleteFailed": "部分会话删除失败",
+    "selectedCount": "已选中 {{count}} 个会话",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "collapse": "收起侧边栏",
+    "close": "关闭",
+    "enterFullscreen": "全屏",
+    "exitFullscreen": "退出全屏",
+    "sort": "排序规则",
+    "tags": "标签",
+    "allTags": "全部标签",
+    "allAdapters": "全部适配器",
+    "searchActions": "搜索与筛选",
+    "expandItem": "展开项目",
+    "collapseItem": "收起项目",
+    "expandChildren": "展开子会话",
+    "collapseChildren": "收起子会话",
+    "expandGroup": "展开分组",
+    "collapseGroup": "折叠分组",
+    "childSummary": "{{count}} 个子会话",
+    "childStatusItem": "{{count}} {{status}}",
+    "deleteConfirm": "确定要删除选中的 {{count}} 个会话吗？",
+    "deleteSuccess": "删除成功",
+    "deleteFailed": "删除失败",
+    "operationFailed": "操作失败",
+    "openInNewWindow": "在新窗口打开",
+    "notSupportedYet": "暂未支持",
+    "notifications": {
+      "queueLabel": "消息队列",
+      "close": "关闭消息",
+      "mutePlugin": "屏蔽来自 {{plugin}} 的消息"
+    },
+    "copyFailed": "复制失败",
+    "star": "收藏",
+    "unstar": "取消收藏",
+    "rename": "重命名",
+    "renameSession": "重命名会话",
+    "addTag": "标签",
+    "actions": "操作",
+    "copySessionLink": "复制会话链接",
+    "copySessionId": "复制会话 ID",
+    "copyResumeCommand": "复制控制台指令",
+    "copyWorkspacePath": "复制工作区路径",
+    "copySessionMarkdown": "复制会话为 Markdown",
+    "forkCurrentWorkspace": "分叉到当前工作区",
+    "deriveNewWorktree": "派生到新工作树",
+    "createScheduledTask": "创建定时任务",
+    "moreActions": "更多操作",
+    "createdAt": "创建时间",
+    "sessionLinkCopied": "会话链接已复制到剪贴板",
+    "resumeCommandCopied": "控制台指令已复制到剪贴板",
+    "sessionIdCopied": "Session ID 已复制到剪贴板",
+    "workspacePathCopied": "工作区路径已复制到剪贴板",
+    "sessionMarkdownCopied": "会话 Markdown 已复制到剪贴板",
+    "doubleClickToCopy": "双击复制 Session ID",
+    "status": {
+      "running": "进行中",
+      "completed": "已完成",
+      "failed": "失败",
+      "terminated": "已终止",
+      "waiting_input": "等待输入"
+    }
+  },
+  "navRail": {
+    "newChat": "新建会话",
+    "conversations": "会话",
+    "sessions": "会话列表",
+    "archivedSessions": "已归档会话",
+    "more": "菜单",
+    "settings": "设置",
+    "theme": "主题模式",
+    "language": "语言",
+    "expandSidebar": "展开侧边栏",
+    "collapseSidebar": "收起侧边栏",
+    "collapsePanel": "折叠面板",
+    "back": "返回",
+    "forward": "前进",
+    "updateAvailable": "有可用更新：{{version}}",
+    "updateDownloading": "正在下载更新：{{progress}}",
+    "updateReady": "重启更新：{{version}}",
+    "moduleUpdateAvailable": "核心/适配器有 {{count}} 个可用更新"
+  },
+  "moduleUpdates": {
+    "menuLabel": "检查更新",
+    "title": "检查更新",
+    "check": "检查更新",
+    "checkFailed": "检查模块更新失败",
+    "installFailed": "安装模块更新失败",
+    "installSuccess": "{{name}} {{version}} 已写入运行时缓存",
+    "groupInstallFailed": "安装分组更新失败",
+    "groupInstallSuccess": "{{group}} 已更新 {{count}} 个模块",
+    "channelSaved": "更新通道已保存",
+    "channelSaveFailed": "保存更新通道失败",
+    "update": "更新",
+    "updateAll": "全部更新",
+    "updateGroup": "更新本组",
+    "installing": "更新中",
+    "allInstalling": "正在全部更新",
+    "groupInstalling": "更新中",
+    "allInstallFailed": "安装全部模块更新失败",
+    "allInstallSuccess": "已更新 {{count}} 个模块",
+    "confirmTitle": "确认更新内容",
+    "confirmBatchTitle": "确认 {{count}} 个模块的更新内容",
+    "confirmOk": "更新",
+    "confirmCancel": "取消",
+    "reviewTitle": "更新内容",
+    "reviewEmpty": "没有可更新的模块。",
+    "changelogSummaryTitle": "更新内容",
+    "changelogSummaryRange": "{{count}} 个模块",
+    "changelogSummaryIntro": "本次将更新 **{{count}} 个模块**。下面按功能更新和修复汇总本次变化；更新会先写入运行时缓存，重启对应运行时或开启新会话后生效。",
+    "changelogSummaryFeatures": "功能更新",
+    "changelogSummaryFixes": "问题修复",
+    "changelogSummaryMarkers": {
+      "important": "重点",
+      "fix": "修复",
+      "verification": "验证",
+      "other": "其他"
+    },
+    "changelogSummaryOther": "其他更新",
+    "changelogSummaryMoreItems": "还有 {{count}} 项，查看完整更新日志了解更多。",
+    "changelogSummaryGroups": "更新范围",
+    "changelogSummaryVersions": "版本变化",
+    "changelogSummaryGroupCount": "{{count}} 个模块",
+    "changelogSummaryMultipleVersions": "多个版本",
+    "changelogDetailTitle": "更新日志",
+    "changelogSummaryDetailHint": "已聚合可用的包级 changelog。",
+    "changelogSummaryMissingHint": "当前没有找到精确版本区间的包级 changelog，已按分组和版本范围生成摘要。",
+    "changelogRange": "{{from}} -> {{to}}",
+    "changelogEntryTitle": "{{version}} 更新日志",
+    "changelogMissing": "没有找到这个版本区间的更新日志。",
+    "reviewModulesTitle": "模块明细",
+    "reviewModulesIntro": "本次更新涉及 **{{count}} 个模块**，下面是模块分组和版本变化。",
+    "reviewModulesDescription": "查看涉及模块和版本变化",
+    "reviewChangelogTitle": "完整更新日志",
+    "reviewChangelogIntro": "下面是这次更新中每个包提供的原始 changelog。",
+    "reviewChangelogDescription": "查看每个包提供的原始 changelog",
+    "reviewDetailPagesTitle": "详细信息",
+    "cached": "已缓存",
+    "upToDate": "已是最新",
+    "notChecked": "尚未检查",
+    "summary": "{{total}} 个模块，{{available}} 个可更新，{{pendingActivation}} 个待重启生效",
+    "groupSummary": "{{total}} 个模块，{{available}} 个可更新，{{pendingActivation}} 个待生效",
+    "groupAvailableCount": "{{count}} 个可更新",
+    "groupPendingActivationCount": "{{count}} 个待生效",
+    "defaultChannel": "默认通道",
+    "groupChannelLabel": "{{group}} 更新通道",
+    "moduleChannelLabel": "{{name}} 更新通道",
+    "channelDefaultOption": "跟随全局（{{channel}}）",
+    "channelMixedOption": "混合",
+    "versionUnknown": "未知",
+    "channelOptions": {
+      "alpha": "Alpha",
+      "beta": "Beta",
+      "rc": "RC",
+      "stable": "Stable"
+    },
+    "kind": {
+      "adapter": "适配器",
+      "client": "客户端",
+      "plugin": "插件",
+      "runtime": "运行时",
+      "server": "服务端"
+    },
+    "groups": {
+      "adapter": "Adapters",
+      "core": "Core",
+      "plugin": "Plugins"
+    },
+    "status": {
+      "available": "可更新",
+      "cached": "已缓存",
+      "error": "检查失败",
+      "pendingActivation": "待生效",
+      "upToDate": "最新"
+    },
+    "versions": {
+      "current": "当前 {{version}}",
+      "cached": "缓存 {{version}}",
+      "latest": "最新 {{version}}",
+      "channel": "通道 {{channel}}"
+    },
+    "activation": {
+      "newSession": "更新后新会话会使用缓存版本。",
+      "restart": "更新后需要重启对应运行时才会生效。"
+    }
+  },
+  "interactionStructure": {
+    "searchPlaceholder": "搜索当前入口...",
+    "empty": "没有匹配的结构数据",
+    "filter": {
+      "label": "结构列表筛选",
+      "all": "全部",
+      "active": "推进中",
+      "done": "已完成"
+    },
+    "filterRoutes": {
+      "requests": {
+        "label": "需求类型筛选",
+        "all": "全部需求",
+        "stateLabel": "需求状态筛选",
+        "stateAll": "全部状态",
+        "priorityLabel": "优先级筛选",
+        "priorityAll": "全部优先级",
+        "priority": {
+          "high": "高优先级",
+          "medium": "中优先级",
+          "low": "低优先级"
+        },
+        "channelLabel": "来源筛选",
+        "channelAll": "全部来源",
+        "channel": {
+          "web": "Web",
+          "extension": "插件",
+          "navigation": "导航"
+        },
+        "states": {
+          "active": "推进中",
+          "done": "已完成"
+        }
+      },
+      "resources": {
+        "label": "资源类型筛选",
+        "all": "全部资源",
+        "stateLabel": "资源状态筛选",
+        "stateAll": "全部状态",
+        "sourceLabel": "资源来源筛选",
+        "sourceAll": "全部来源",
+        "source": {
+          "design": "设计资产",
+          "server": "服务端",
+          "docs": "文档"
+        },
+        "freshnessLabel": "时效筛选",
+        "freshnessAll": "全部时效",
+        "freshness": {
+          "current": "当前",
+          "archived": "归档"
+        },
+        "states": {
+          "pending": "待同步",
+          "archived": "已归档"
+        }
+      },
+      "operations": {
+        "label": "运维链路筛选",
+        "all": "全部链路",
+        "stateLabel": "链路状态筛选",
+        "stateAll": "全部状态",
+        "cadenceLabel": "频率筛选",
+        "cadenceAll": "全部频率",
+        "cadence": {
+          "nightly": "夜间",
+          "daily": "每日",
+          "weekly": "每周"
+        },
+        "ownerLabel": "负责人筛选",
+        "ownerAll": "全部负责人",
+        "owner": {
+          "system": "系统",
+          "product": "产品"
+        },
+        "states": {
+          "running": "运行中",
+          "archived": "已归档"
+        }
+      }
+    },
+    "actions": {
+      "archiveOperation": "归档链路",
+      "archiveResource": "归档资源",
+      "bookmarkResource": "加入资源集",
+      "convertToTask": "转为任务",
+      "copyResourceReference": "复制资源引用",
+      "createFollowUp": "创建跟进",
+      "markDone": "标记完成",
+      "openResource": "打开资源",
+      "pauseOperation": "暂停链路",
+      "pinOperation": "固定链路",
+      "runOperation": "运行检查",
+      "syncResource": "同步资源",
+      "unbookmarkResource": "移出资源集",
+      "unpinOperation": "取消固定",
+      "viewRunLog": "查看运行日志"
+    },
+    "selection": {
+      "selectedTotal": "{{selected}}/{{total}} 已选"
+    },
+    "itemState": {
+      "starred": "已收藏"
+    },
+    "navigationMenu": {
+      "hideEntry": "屏蔽 {{entry}}",
+      "showAllEntries": "显示全部入口",
+      "visibleEntries": "选择展示入口"
+    },
+    "moreMenuContext": {
+      "configureActions": "配置菜单动作",
+      "hideArchiveAction": "隐藏归档操作"
+    },
+    "debugTools": {
+      "title": "模拟调试工具",
+      "platform": "应用",
+      "platformFieldLabel": "模拟系统",
+      "platformMacos": "macOS",
+      "platformWindows": "Windows",
+      "platformWeb": "Web",
+      "fullscreen": "全屏",
+      "fullscreenFieldLabel": "模拟全屏",
+      "fullscreenOn": "已开启",
+      "fullscreenOff": "未开启"
+    },
+    "panels": {
+      "closeTab": "关闭 {{title}}",
+      "contextMenu": {
+        "keepOnlyTab": "只保留 {{tab}}",
+        "openAllTabs": "打开 {{panel}} 全部 Tab",
+        "resetDefaultPage": "回到 {{panel}} 默认页",
+        "resetDefaultTab": "恢复 {{panel}} 默认 Tab",
+        "selectTab": "切换到 {{tab}}",
+        "tabMetadata": "{{panel}} / {{tab}}"
+      },
+      "create": {
+        "label": "新建面板内容",
+        "summaryTab": "打开结构摘要",
+        "routeTab": "打开入口上下文",
+        "itemTab": "打开选中项目",
+        "itemDisabled": "选择左侧项目后可用",
+        "entryTemplates": "按入口新建",
+        "templates": "模板分组",
+        "customTitle": "自定义渲染入口",
+        "customDescription": "{{entry}} 注入的菜单项，可替换为任意渲染。",
+        "requests": {
+          "requirement": "新建需求卡片",
+          "followUp": "新建跟进项",
+          "experienceTemplate": "体验统一模板",
+          "pluginTemplate": "插件审计模板"
+        },
+        "resources": {
+          "importResource": "导入资源",
+          "referenceDoc": "新建参考文档",
+          "source": "按来源新建",
+          "designSource": "设计来源",
+          "serverSource": "服务端来源",
+          "docsSource": "文档来源"
+        },
+        "operations": {
+          "scheduledLane": "新建定时链路",
+          "monitorView": "新建监控视图",
+          "cadence": "按频率新建",
+          "cadenceNightly": "夜间任务",
+          "cadenceDaily": "每日任务",
+          "cadenceWeekly": "每周任务"
+        }
+      },
+      "side": {
+        "open": "打开右侧区域",
+        "close": "关闭右侧区域",
+        "resize": "拖动调整右侧区域宽度",
+        "kicker": "右侧插槽",
+        "title": "结构上下文",
+        "tabs": {
+          "summary": "结构摘要",
+          "route": "入口上下文",
+          "item": "选中项目"
+        },
+        "rows": {
+          "route": "入口",
+          "metric": "指标",
+          "path": "路径",
+          "item": "选中项",
+          "component": "组件"
+        }
+      },
+      "bottom": {
+        "open": "打开下方面板",
+        "close": "关闭下方面板",
+        "resize": "拖动调整下方面板高度",
+        "title": "路由下方面板",
+        "defaultItem": "入口默认页",
+        "tabs": {
+          "summary": "面板摘要",
+          "route": "路径上下文",
+          "item": "当前项目"
+        },
+        "rows": {
+          "path": "当前路径",
+          "item": "当前项目",
+          "slot": "渲染插槽"
+        }
+      }
+    },
+    "overview": {
+      "defaultPage": "入口默认页"
+    },
+    "detail": {
+      "sections": {
+        "structure": "结构状态",
+        "behavior": "组件接口",
+        "scroll": "滚动内容"
+      },
+      "rows": {
+        "routeSlot": {
+          "title": "路由插槽",
+          "description": "{{route}} 只把 path 和当前选择交给外部渲染，不把具体页面内容写进通用容器。"
+        },
+        "activeItem": {
+          "title": "当前选中项",
+          "description": "{{item}} 由左侧列表写入 URL，右侧根据选中项切换独立内容。"
+        },
+        "headerState": {
+          "title": "Header 模式",
+          "description": "当前 detail component 是 {{component}}，可以独立决定标题、面包屑和右侧 actions。"
+        },
+        "containerPadding": {
+          "title": "容器间距",
+          "description": "页面顶部间距复用 header token，避免 header 和内容区域再次各自维护尺寸。"
+        },
+        "componentSwitch": {
+          "title": "内容切换",
+          "description": "{{item}} 的右侧内容来自测试数据配置，不耦合到 route container layout。"
+        },
+        "sidebarLink": {
+          "title": "侧边栏入口",
+          "description": "{{route}} 的列表、筛选和右键菜单都可以由入口配置覆盖。"
+        },
+        "filterState": {
+          "title": "过滤条件",
+          "description": "当前项携带自己的 filter tokens，入口可以配置多个过滤器和不同选项。"
+        },
+        "contextActions": {
+          "title": "上下文操作",
+          "description": "右键菜单和批量操作由入口提供 action 列表，通用 List 只负责触发。"
+        },
+        "batchSelection": {
+          "title": "批量选择",
+          "description": "进入多选后，页面可以挂载自己的批量动作，不需要 List 知道业务含义。"
+        },
+        "itemRenderer": {
+          "title": "Item 渲染器",
+          "description": "列表项 icon、action、meta 和 children 都来自外部渲染配置。"
+        },
+        "scrollTrace": {
+          "title": "滚动验证 {{count}}",
+          "description": "{{route}} / {{item}} 的模拟内容行，用来验证 header 固定、内容滚动和底部留白。"
+        }
+      }
+    },
+    "itemMetrics": {
+      "coverage": "覆盖",
+      "owner": "负责人",
+      "progress": "进度",
+      "queue": "队列",
+      "risk": "风险",
+      "sla": "SLA",
+      "version": "版本"
+    },
+    "itemMetricValues": {
+      "medium": "中",
+      "reviewed": "已复核",
+      "running": "运行中",
+      "synced": "已同步"
+    },
+    "routes": {
+      "requests": {
+        "activeLabel": "当前需求入口",
+        "label": "需求入口",
+        "description": "承接对话、评审和临时推进事项。",
+        "metric": "3 组需求",
+        "searchPlaceholder": "搜索需求、来源或优先级..."
+      },
+      "resources": {
+        "activeLabel": "当前资源入口",
+        "label": "资源入口",
+        "description": "聚合资料、设计资产和接口参考。",
+        "metric": "3 类资源",
+        "searchPlaceholder": "搜索资源、接口或文档..."
+      },
+      "operations": {
+        "activeLabel": "当前运维入口",
+        "label": "运维入口",
+        "description": "跟踪例行任务、巡检和回归队列。",
+        "metric": "3 条链路",
+        "searchPlaceholder": "搜索链路、队列或负责人..."
+      }
+    },
+    "items": {
+      "requestCheckout": {
+        "title": "结算体验统一",
+        "description": "梳理桌面端和 Web 的核心步骤。",
+        "meta": "今天",
+        "tag": "体验"
+      },
+      "requestCheckoutMobile": {
+        "title": "移动断点验证",
+        "description": "确认 860px 以下的主要交互。",
+        "meta": "12:20",
+        "tag": "移动端"
+      },
+      "requestCheckoutCopy": {
+        "title": "空态文案收敛",
+        "description": "替换临时描述为可复用文案。",
+        "meta": "昨天",
+        "tag": "文案"
+      },
+      "requestPluginAudit": {
+        "title": "插件页操作审计",
+        "description": "补齐安装、禁用和异常态路径。",
+        "meta": "2 小时前",
+        "tag": "插件"
+      },
+      "requestNavigationRefresh": {
+        "title": "导航结构复核",
+        "description": "统一 sidebar 和右侧容器的切换关系。",
+        "meta": "周一",
+        "tag": "结构"
+      },
+      "assetDesignSystem": {
+        "title": "设计系统资料",
+        "description": "组件状态、间距和颜色引用。",
+        "meta": "4 项",
+        "tag": "设计"
+      },
+      "assetTokens": {
+        "title": "主题 token 表",
+        "description": "对齐暗色和浅色变量。",
+        "meta": "更新中",
+        "tag": "主题"
+      },
+      "assetCopyDeck": {
+        "title": "标准文案卡片",
+        "description": "可复用标题、提示和空态。",
+        "meta": "已审",
+        "tag": "文案"
+      },
+      "assetApiCatalog": {
+        "title": "接口目录",
+        "description": "页面入口与服务端契约映射。",
+        "meta": "18 条",
+        "tag": "API"
+      },
+      "assetReleaseNotes": {
+        "title": "发布说明模板",
+        "description": "记录用户可见变化和验证入口。",
+        "meta": "归档",
+        "tag": "发布"
+      },
+      "opsNightlyRun": {
+        "title": "夜间同步任务",
+        "description": "收集数据状态并生成摘要。",
+        "meta": "运行中",
+        "tag": "定时"
+      },
+      "opsDataSnapshot": {
+        "title": "数据快照",
+        "description": "拉取关键状态与增量记录。",
+        "meta": "采集中",
+        "tag": "数据"
+      },
+      "opsDigestPublish": {
+        "title": "摘要发布",
+        "description": "生成同步摘要并推送到入口。",
+        "meta": "待发布",
+        "tag": "摘要"
+      },
+      "opsReviewLoop": {
+        "title": "评审流转",
+        "description": "跟踪待处理、阻塞和完成状态。",
+        "meta": "5 个节点",
+        "tag": "流程"
+      },
+      "opsTriageQueue": {
+        "title": "待分诊队列",
+        "description": "把外部反馈归入对应入口。",
+        "meta": "3 条",
+        "tag": "队列"
+      },
+      "opsRegressionWatch": {
+        "title": "回归观察",
+        "description": "保留最近一次验证结果。",
+        "meta": "通过",
+        "tag": "回归"
+      },
+      "opsArchiveSweep": {
+        "title": "归档清理",
+        "description": "整理完成项并保留跳转记录。",
+        "meta": "已完成",
+        "tag": "归档"
+      }
+    }
+  },
+  "desktopStartupOverlay": {
+    "eyebrow": "OneWorks",
+    "title": "项目正在就位",
+    "defaultTip": "正在把项目上下文铺好。",
+    "tips": {
+      "quickFind": "小贴士：用快捷搜索可以直达动作、会话和文件。",
+      "dragFiles": "可以把文件拖进对话，少打一段路径。",
+      "newWindow": "会话右键可以在新窗口打开，适合并排推进。",
+      "slashCommand": "输入 / 可以找到常用命令和工作流。",
+      "sidePanel": "侧栏收起后，顶部按钮会接管导航。",
+      "terminal": "底部面板会保留终端和网页，回来时不用重新找。",
+      "context": "引用具体文件会让回答少一点猜测，多一点上下文。",
+      "glass": "你能透过玻璃看到骨架，说明前端已经在醒了。"
+    }
+  },
+  "launcher": {
+    "senderLabel": "启动输入框",
+    "senderPlaceholder": "输入要打开或启动的项目...",
+    "searchLabel": "搜索项目和操作",
+    "searchPlaceholder": "搜索项目或操作...",
+    "commandListLabel": "启动操作列表",
+    "commandFailed": "执行操作失败",
+    "noResults": "没有匹配的项目或操作",
+    "shortcutDisabled": "未设置",
+    "desktopActionUnavailable": "当前环境不支持桌面启动操作",
+    "openWorkspaceFailed": "打开项目失败",
+    "createWorkspaceFailed": "创建项目失败",
+    "createWorkspaceNamePlaceholder": "输入新项目文件夹名称",
+    "createWorkspaceNameSearchLabel": "输入新项目文件夹名称",
+    "createWorkspaceNameRequired": "请输入新项目文件夹名称",
+    "createWorkspaceParentRequired": "请选择项目创建位置",
+    "cloneRepositoryPromptTitle": "克隆远端仓库",
+    "cloneRepositoryUrlPlaceholder": "输入 Git 仓库 URL",
+    "cloneRepositorySearchLabel": "输入 Git 仓库 URL",
+    "cloneRepositoryUrlRequired": "请输入 Git 仓库 URL",
+    "cloneRepositoryDestinationRequired": "请选择克隆目标目录",
+    "cloneRepositoryCloning": "正在克隆到 {{path}}...",
+    "cloneRepositorySuccess": "仓库克隆完成",
+    "cloneRepositoryFailed": "克隆仓库失败",
+    "cloneRepositoryDestinationTitle": "克隆到",
+    "cloneRepositoryDestinationTooltip": "当前目录：{{path}}",
+    "cloneRepositoryDestinationLoading": "正在读取目录...",
+    "cloneRepositoryDestinationEmpty": "没有可进入的子目录",
+    "cloneRepositoryDestinationFailed": "读取目录失败",
+    "cloneRepositoryFavoriteDestination": "收藏这个目录",
+    "cloneRepositoryUnfavoriteDestination": "取消收藏这个目录",
+    "directoryBrowserTooltip": "当前目录：{{path}}",
+    "directoryBrowserLoading": "正在读取目录...",
+    "directoryBrowserEmpty": "没有可进入的子目录",
+    "directoryBrowserFailed": "读取目录失败",
+    "directoryBreadcrumbLabel": "当前目录路径",
+    "directoryNameCopied": "目录名字已复制",
+    "directoryPathCopied": "目录路径已复制",
+    "favoriteDirectory": "收藏这个目录",
+    "unfavoriteDirectory": "取消收藏这个目录",
+    "openWorkspaceSearchPlaceholder": "搜索当前列表中的目录路径...",
+    "openWorkspaceSearchLabel": "搜索目录路径",
+    "comingSoon": "这个入口还在接入中",
+    "files": {
+      "title": "文件",
+      "globalTitle": "文件搜索",
+      "rootLabel": "电脑",
+      "searchLabel": "搜索文件",
+      "searchPlaceholder": "搜索 {{project}} 下的文件...",
+      "globalSearchPlaceholder": "搜索电脑根目录下的文件或文件夹...",
+      "inputHint": "输入文件名或路径，搜索当前项目文件",
+      "globalInputHint": "输入文件名或路径，从电脑根目录搜索",
+      "searching": "正在搜索文件...",
+      "noResults": "没有匹配的文件或文件夹",
+      "searchFailed": "搜索文件失败",
+      "openFailed": "打开文件失败",
+      "folderBadge": "文件夹",
+      "externalBadge": "外部打开",
+      "loadingOpeners": "正在读取可用应用...",
+      "openWithDefault": "使用默认应用打开",
+      "openWithDefaultNamed": "使用默认应用打开（{{name}}）",
+      "openWithNamed": "使用 {{name}} 打开"
+    },
+    "resource": {
+      "searchPlaceholder": "搜索 {{project}} 的文件、会话、终端或网站...",
+      "createTitle": "创建",
+      "sessionsTitle": "会话",
+      "websitesTitle": "网站",
+      "terminalsTitle": "终端",
+      "newSession": "新建会话 Tab",
+      "newSessionHint": "在当前会话窗口打开一个会话页",
+      "newTerminal": "新建终端 Tab",
+      "newTerminalHint": "在底部面板创建新的终端",
+      "newWebsite": "新建网站 Tab",
+      "newWebsiteHint": "在底部面板创建新的浏览器页",
+      "tabBadge": "Tab",
+      "fileBadge": "应用内",
+      "sessionBadge": "会话",
+      "websiteBadge": "网站",
+      "terminalBadge": "终端"
+    },
+    "start": {
+      "title": "启动",
+      "newProjectFolder": "新建项目",
+      "newProjectFolderHint": "创建一个本地文件夹，并作为项目打开",
+      "openFolder": "打开项目",
+      "openFolderHint": "选择一个本地项目目录",
+      "cloneRepository": "克隆远端仓库",
+      "cloneRepositoryHint": "从 Git 仓库创建项目",
+      "connectRemoteService": "链接远程服务",
+      "connectRemoteServiceHint": "连接已有的 OneWorks 服务"
+    },
+    "projects": {
+      "copyName": "复制名字",
+      "copyPath": "复制路径",
+      "fileExplorer": "文件资源管理器",
+      "fileManager": "文件管理器",
+      "nameCopied": "项目名字已复制",
+      "open": "打开项目",
+      "openFolder": "在文件管理器中打开",
+      "pathCopied": "项目路径已复制",
+      "revealFailed": "无法在{{manager}}中显示项目",
+      "revealInFileManager": "在{{manager}}中显示",
+      "remove": "移除项目",
+      "removeConfirmDescription": "这只会把项目从最近列表移除，不会删除磁盘上的文件夹；下次打开该目录时会重新加入。",
+      "removeConfirmOk": "移除",
+      "removeConfirmTitle": "从启动页移除 {{name}}？",
+      "removeFailed": "移除项目失败",
+      "title": "项目"
+    },
+    "menu": {
+      "open": "打开 OneWorks 菜单",
+      "settings": "设置",
+      "about": "关于",
+      "checkUpdate": "检查更新",
+      "language": "语言",
+      "projectRequired": "请先打开或聚焦一个项目，再进入设置或关于",
+      "openFailed": "打开当前项目页面失败"
+    },
+    "settings": {
+      "title": "启动器设置",
+      "searchLabel": "搜索启动器设置",
+      "searchPlaceholder": "搜索设置...",
+      "listLabel": "启动器设置项",
+      "sectionsLabel": "启动器设置分组",
+      "empty": "没有匹配的设置项",
+      "resetSection": "重置{{section}}",
+      "sectionShortcutTooltip": "按 {{shortcut}} 切换到{{section}}",
+      "sections": {
+        "general": "通用",
+        "behavior": "行为",
+        "appearance": "外观",
+        "icon": "图标"
+      },
+      "items": {
+        "theme": {
+          "title": "主题模式",
+          "desc": "切换启动器和主界面的浅色、深色或系统模式"
+        },
+        "textSize": {
+          "title": "文字大小",
+          "desc": "调整启动器内文字的显示尺寸",
+          "default": "标准",
+          "large": "大号"
+        },
+        "windowMode": {
+          "title": "窗口模式",
+          "desc": "切换启动器的默认或紧凑窗口布局",
+          "default": "默认",
+          "compact": "紧凑"
+        },
+        "favorites": {
+          "title": "紧凑模式显示收藏",
+          "desc": "紧凑窗口中保留收藏入口"
+        },
+        "language": {
+          "title": "界面语言",
+          "desc": "快速切换当前界面语言"
+        },
+        "shortcut": {
+          "title": "启动快捷键",
+          "desc": "按下快捷键即可唤起启动器"
+        },
+        "launchAtLogin": {
+          "title": "开机自启",
+          "desc": "登录系统后自动启动 OneWorks"
+        },
+        "openLastWorkspaceOnStartup": {
+          "title": "启动时打开上次项目",
+          "desc": "普通启动时直接打开最近项目；关闭后默认进入启动器"
+        },
+        "autoUpdate": {
+          "title": "自动更新",
+          "desc": "为当前项目自动检查并下载桌面端更新"
+        },
+        "updateChannel": {
+          "title": "更新通道",
+          "desc": "为当前项目选择稳定版、RC、Beta 或 Alpha 更新"
+        },
+        "statusPin": {
+          "title": "Pin 图标",
+          "desc": "在系统状态区显示 Pin 图标，便于快速唤起启动器",
+          "descMac": "在 macOS 右上角菜单栏显示 Pin 图标，便于快速唤起启动器",
+          "descWindows": "在 Windows 系统托盘显示 Pin 图标，便于快速唤起启动器"
+        },
+        "hideAfterAction": {
+          "title": "执行后隐藏",
+          "desc": "打开项目、文件或会话后自动收起启动器"
+        },
+        "currentProject": {
+          "title": "显示当前项目",
+          "desc": "聚焦项目窗口时优先显示当前项目上下文"
+        },
+        "resourceSearch": {
+          "title": "搜索项目资源",
+          "desc": "在当前项目中搜索文件、会话、终端和网站"
+        },
+        "footerHints": {
+          "title": "底部按键提示",
+          "desc": "在右下角展示当前选中项可用操作"
+        },
+        "appIcon": {
+          "title": "应用图标",
+          "desc": "选择启动器使用的应用图标主题和背景",
+          "syncLabel": "同步桌面图标",
+          "syncDesc": "切换图标主题时同步桌面、Dock 或任务栏图标"
+        }
+      }
+    },
+    "about": {
+      "title": "关于",
+      "searchLabel": "关于 OneWorks",
+      "searchPlaceholder": "关于 OneWorks",
+      "listLabel": "关于 OneWorks"
+    },
+    "footer": {
+      "settings": "设置",
+      "help": "帮助",
+      "more": "更多"
+    },
+    "footerHints": {
+      "label": "当前选中项的键盘操作",
+      "section": "分组",
+      "move": "移动",
+      "open": "打开",
+      "toggle": "切换",
+      "adjust": "调整",
+      "edit": "编辑",
+      "create": "创建",
+      "clone": "克隆",
+      "openDirectory": "打开目录",
+      "context": "菜单",
+      "contextKey": "右键",
+      "fileSearch": "文件",
+      "close": "关闭",
+      "back": "返回"
+    },
+    "recent": {
+      "title": "最近项目",
+      "empty": "暂无最近项目",
+      "more": "更多..."
+    }
+  },
+  "auth": {
+    "title": "登录 OneWorks",
+    "subtitle": "请输入已配置的账号，继续进入当前工作区。",
+    "username": "账号",
+    "usernamePlaceholder": "请输入账号",
+    "usernameRequired": "请输入账号",
+    "password": "密码",
+    "passwordPlaceholder": "请输入密码",
+    "passwordRequired": "请输入密码",
+    "rememberDevice": "记住此设备",
+    "login": "登录",
+    "loginFailed": "登录失败",
+    "statusFailed": "无法读取登录状态",
+    "statusFailedHelp": "请确认后端服务仍在运行，然后重试。",
+    "statusTimeout": "读取登录状态超时，请确认后端服务仍在运行，然后重试。",
+    "retryStatus": "重试",
+    "accountMenu": "账号与连接",
+    "changeServer": "切换后端服务",
+    "logout": "退出当前连接登录",
+    "logoutFailed": "退出登录失败",
+    "generatedPasswordTitle": "当前使用自动生成的本地密码",
+    "generatedPasswordDescription": "请从本地密码文件获取密码；也可以在 webAuth.accounts 中配置固定账号。",
+    "generatedPasswordHint": "默认密码文件：{{path}}"
+  },
+  "serverConnection": {
+    "title": "连接你的后端服务",
+    "subtitle": "先在运行 OneWorks 的电脑上启动后端，再把终端里显示的服务地址填到下面。",
+    "desktopTitle": "切换后端服务",
+    "desktopSubtitle": "桌面应用已经启动了本机服务。你也可以连接其他 OneWorks 服务端，通过同一个 Electron 应用切换和控制不同执行环境。",
+    "setupTitle": "在电脑上执行",
+    "setupDescription": "复制终端里显示的 http 或 https 地址。复杂网络方案看 ",
+    "docsLink": "PWA 部署文档",
+    "localServiceTitle": "本机内置服务",
+    "localServiceBannerDescription": "这是 Electron 在当前设备上自动启动的本地服务，不需要额外鉴权。",
+    "localServiceAlias": "此设备",
+    "localServiceProfileDescription": "Electron 自动启动的本机服务",
+    "serverUrl": "后端服务地址",
+    "serverScheme": "后端服务协议",
+    "serverUrlPlaceholder": "粘贴终端显示的服务地址",
+    "serverUrlRequired": "请输入后端服务地址",
+    "invalidUrl": "请输入有效的 http 或 https 地址",
+    "connectionFailed": "无法连接到这个后端服务，请确认服务已启动并允许跨域访问",
+    "unsupportedServerVersion": "不支持这个后端版本。当前 PWA 版本是 {{clientVersion}}，后端版本是 {{serverVersion}}。",
+    "recentTitle": "已保存的后端服务",
+    "manageProfile": "管理后端服务",
+    "serverVersion": "后端 {{version}}",
+    "serverVersionUnknown": "未知版本",
+    "profileAlias": "别名",
+    "profileAliasPlaceholder": "例如家里的电脑",
+    "profileDescription": "介绍",
+    "profileDescriptionPlaceholder": "例如 Tailscale 私有网络、家用台式机",
+    "loginState": "登录态",
+    "loginSaved": "已保存登录态",
+    "loginMissing": "未登录",
+    "clearLoginState": "清除登录态",
+    "clearLoginStateConfirm": "仅清除当前浏览器保存的登录态。",
+    "removeProfile": "移除记录",
+    "removeProfileConfirm": "移除这条记录和它的本地登录态。",
+    "connect": "连接"
+  },
+  "automation": {
+    "title": "自动化任务",
+    "newRule": "新建规则",
+    "newTask": "新建任务",
+    "creatingRule": "正在新建",
+    "editRule": "编辑规则",
+    "createMode": "创建方式",
+    "createModeForm": "表单创建",
+    "createModeChat": "对话创建",
+    "searchRule": "搜索任务",
+    "favorite": "收藏",
+    "unfavorite": "取消收藏",
+    "toggleEnabled": "启用/停用",
+    "noDescription": "暂无说明",
+    "runSearch": "搜索运行记录",
+    "runFilters": "筛选运行记录",
+    "runOptions": "运行记录选项",
+    "statusAll": "全部状态",
+    "timeRange": "时间范围",
+    "timeAll": "全部时间",
+    "time24h": "近 24 小时",
+    "time7d": "近 7 天",
+    "time30d": "近 30 天",
+    "sortOrder": "排序",
+    "sortDesc": "时间最新",
+    "sortAsc": "时间最早",
+    "triggerCount": "{{count}} 个触发条件",
+    "basicDesc": "用于说明规则用途与开关启停",
+    "sectionBasic": "基本信息",
+    "sectionTriggers": "触发条件",
+    "sectionTasks": "任务内容",
+    "sectionStartup": "启动参数",
+    "startupSummaryDefault": "使用默认启动参数",
+    "startupDefault": "默认",
+    "startupAdapter": "适配器",
+    "startupDefaultAdapter": "使用默认适配器",
+    "startupModel": "模型",
+    "startupDefaultModel": "使用默认模型",
+    "defaultModelLabel": "默认模型",
+    "startupNoModels": "暂无可用模型",
+    "startupEffort": "推理强度",
+    "startupPermissionMode": "权限模式",
+    "startupWorkspace": "工作区",
+    "startupBranchAction": "分支动作",
+    "startupBranchKind": "分支来源",
+    "startupBranchName": "分支名称",
+    "startupBranchNameRequired": "请输入分支名称",
+    "startupBranchNamePlaceholder": "例如：codex/automation-nightly",
+    "startupUseManagedWorktree": "创建托管 worktree",
+    "startupUseCurrentWorkspace": "使用当前工作区",
+    "startupBranchDefault": "不指定分支",
+    "startupBranchCheckout": "切换到已有分支",
+    "startupBranchCreate": "创建新分支",
+    "startupBranchKindLocal": "本地分支",
+    "startupBranchKindRemote": "远程分支",
+    "startupSummaryAdapter": "适配器：{{value}}",
+    "startupSummaryModel": "模型：{{value}}",
+    "startupSummaryEffort": "推理：{{value}}",
+    "startupSummaryPermission": "权限：{{value}}",
+    "startupSummaryCheckoutBranch": "切换：{{value}}",
+    "startupSummaryCreateBranch": "新分支：{{value}}",
+    "startupSummaryBranchKind": "分支来源：{{value}}",
+    "effortLow": "低",
+    "effortMedium": "中",
+    "effortHigh": "高",
+    "effortMax": "最高",
+    "permissionAcceptEdits": "接受编辑",
+    "permissionPlan": "计划",
+    "permissionDontAsk": "不询问",
+    "permissionBypassPermissions": "跳过权限",
+    "ruleName": "规则名称",
+    "ruleNameRequired": "请输入规则名称",
+    "ruleDescription": "规则介绍",
+    "ruleDescriptionPlaceholder": "请输入规则介绍",
+    "immediateRun": "立即触发",
+    "ruleType": "触发类型",
+    "ruleTypeRequired": "请选择触发类型",
+    "typeInterval": "时间间隔",
+    "typeWebhook": "接口触发",
+    "typeCron": "Cron 周期",
+    "intervalMinutes": "间隔（分钟）",
+    "intervalRequired": "请输入时间间隔",
+    "webhookKey": "Webhook Key",
+    "webhookKeyHint": "留空自动生成",
+    "cronExpressionLabel": "Cron 表达式",
+    "cronExpressionRequired": "请输入 Cron 表达式",
+    "cronExpressionHint": "例如：0 9 * * 1",
+    "cronExpression": "Cron：{{expression}}",
+    "cronPreset": "常用预设",
+    "cronPresetHint": "选择常用 Cron",
+    "cronPresetHourly": "每小时整点",
+    "cronPresetDaily9": "每天 09:00",
+    "cronPresetWeekday9": "工作日 09:00",
+    "cronPresetWeekend10": "周末 10:00",
+    "cronInputHint": "可直接输入 Cron 表达式，或用下方每周配置生成表达式",
+    "weeklyDay": "每周日期",
+    "weeklyTime": "时间（HH:mm）",
+    "weeklyTimeHint": "例如：09:00",
+    "weekdaySun": "周日",
+    "weekdayMon": "周一",
+    "weekdayTue": "周二",
+    "weekdayWed": "周三",
+    "weekdayThu": "周四",
+    "weekdayFri": "周五",
+    "weekdaySat": "周六",
+    "triggerAny": "满足任意一个条件即可触发任务",
+    "taskAll": "触发后同时执行以下任务",
+    "addTrigger": "添加触发条件",
+    "addTask": "添加任务",
+    "remove": "移除",
+    "taskDefaultTitle": "任务 {{index}}",
+    "taskTitle": "任务标题",
+    "taskTitlePlaceholder": "可选，用于区分多个任务",
+    "collapseTask": "折叠任务内容",
+    "expandTask": "展开任务内容",
+    "taskIndex": "第 {{index}} 个任务",
+    "taskCount": "{{count}} 个任务",
+    "taskUnknown": "未命名任务",
+    "webhookUrl": "Webhook 地址",
+    "prompt": "自动任务内容",
+    "promptRequired": "请输入自动任务内容",
+    "trigger": "触发方式",
+    "webhookTrigger": "Webhook",
+    "intervalEvery": "每 {{minutes}} 分钟",
+    "enabled": "启用",
+    "enabledStatus": "启用状态",
+    "ruleStatus": "规则状态",
+    "lastRunLabel": "最近运行",
+    "lastRun": "最近运行",
+    "lastRunAt": "最近运行：{{time}}",
+    "noRunYet": "暂无运行记录",
+    "emptyRules": "暂无自动化任务",
+    "createRuleLink": "新建自动化任务",
+    "mobileRules": "规则",
+    "mobileDetails": "详情",
+    "collapseRulePanel": "收起规则列表",
+    "expandRulePanel": "展开规则列表",
+    "selectRule": "请选择一个自动化任务",
+    "ruleId": "规则 ID",
+    "createdAt": "创建时间",
+    "enabledOn": "已启用",
+    "enabledOff": "已停用",
+    "noTriggers": "暂无触发条件",
+    "noTasks": "暂无任务",
+    "runHistory": "运行记录",
+    "runTime": "运行时间",
+    "runStatus": "状态",
+    "runSummary": "摘要",
+    "session": "会话",
+    "relatedSession": "相关会话",
+    "openSession": "打开会话",
+    "noRuns": "暂无运行记录",
+    "actions": "操作",
+    "run": "立即运行",
+    "edit": "编辑",
+    "delete": "删除",
+    "copy": "复制",
+    "webhookCopied": "Webhook 已复制",
+    "created": "规则已创建",
+    "updated": "规则已更新",
+    "deleted": "规则已删除",
+    "saveFailed": "保存失败",
+    "deleteFailed": "删除失败",
+    "toggleFailed": "更新失败",
+    "runStarted": "已启动任务",
+    "runFailed": "启动失败",
+    "emptyLandingEyebrow": "AI 创建自动化",
+    "emptyLandingTitle": "让 AI 帮你创建自动化任务",
+    "emptyLandingDescription": "选择一个常见任务填入下方输入框，或直接描述触发条件和要执行的任务。发送后会进入会话，由 AI 调用工具完成创建。",
+    "emptyLandingPlaceholder": "描述你想创建的自动化任务",
+    "emptyLandingSendInstruction": "请根据下面的需求创建自动化任务。请优先调用可用的自动化任务工具完成创建；如果信息不足，先追问缺失配置。\n\n需求：\n{{request}}",
+    "emptyLandingAttachmentInstruction": "请根据我附带的上下文创建自动化任务。请优先调用可用的自动化任务工具完成创建；如果信息不足，先追问缺失配置。",
+    "starterDailyTitle": "每日项目简报",
+    "starterDailyDescription": "每天固定时间总结进展、风险和下一步。",
+    "starterDailyPrompt": "请帮我创建一个自动化任务：每天工作日上午 9 点检查当前项目状态，汇总昨天完成的工作、今天需要关注的风险和下一步建议。请通过可用的自动化任务工具完成创建。",
+    "starterHealthTitle": "定时健康检查",
+    "starterHealthDescription": "周期性运行检查，发现异常后提醒。",
+    "starterHealthPrompt": "请帮我创建一个自动化任务：每 30 分钟检查当前项目是否有失败的测试、构建错误或服务异常。如果发现问题，创建会话说明原因并给出修复建议。请通过可用的自动化任务工具完成创建。",
+    "starterWeeklyTitle": "每周复盘",
+    "starterWeeklyDescription": "每周固定时间整理进展、遗留问题和计划。",
+    "starterWeeklyPrompt": "请帮我创建一个自动化任务：每周五 17:30 总结本周开发进展、已解决的问题、未完成事项和下周建议。请通过可用的自动化任务工具完成创建。",
+    "starterReminderTitle": "重要事项提醒",
+    "starterReminderDescription": "到点提醒或检查特定事项。",
+    "starterReminderPrompt": "请帮我创建一个自动化任务：每个工作日 18:00 检查是否还有未处理的待办、等待输入或失败任务，并创建会话提醒我处理。请通过可用的自动化任务工具完成创建。"
+  },
+  "benchmark": {
+    "title": "评测",
+    "sidebarHint": "选择 category 和 case，查看任务目标并触发跑分。",
+    "category": "分类",
+    "categoryCount": "{{count}} 个分类",
+    "caseCount": "{{count}} 个用例",
+    "caseTree": "用例树",
+    "expandAll": "展开全部",
+    "collapseAll": "折叠全部",
+    "runSelected": "运行已选 ({{count}})",
+    "runAll": "运行全部",
+    "caseId": "用例：",
+    "searchPlaceholder": "搜索分类、标题或摘要",
+    "emptyCases": "暂无 benchmark 用例",
+    "mobileCases": "用例",
+    "mobileDetails": "详情",
+    "noSummary": "暂无摘要",
+    "configTitle": "用例配置",
+    "baseCommit": "基线 Commit",
+    "setupCommand": "初始化命令",
+    "testCommand": "测试命令",
+    "timeoutSec": "超时（秒）",
+    "runState": "运行状态",
+    "noActiveRun": "当前没有运行中的 benchmark 任务",
+    "runStatus": "运行状态",
+    "progress": "进度",
+    "lastMessage": "最新消息",
+    "taskGoal": "任务目标",
+    "resultTitle": "最近结果",
+    "noResult": "暂无结果",
+    "finalScore": "总分",
+    "lastRunAt": "最近运行",
+    "testScore": "测试分",
+    "goalScore": "目标分",
+    "referenceScore": "参考分",
+    "changedFiles": "改动文件数",
+    "noChangedFiles": "暂无改动文件记录",
+    "testExitCode": "测试退出码",
+    "durationMs": "耗时（毫秒）",
+    "issues": "问题",
+    "noIssues": "暂无问题",
+    "concurrency": "并发",
+    "runCategory": "运行当前分类",
+    "runCase": "运行当前用例",
+    "runStarted": "Benchmark 已启动",
+    "categoryRunStarted": "分类跑分已启动",
+    "runCompleted": "Benchmark 已完成",
+    "runFailed": "Benchmark 运行失败",
+    "status": {
+      "pass": "通过",
+      "partial": "部分完成",
+      "fail": "失败"
+    }
+  },
+  "knowledge": {
+    "title": "项目知识库",
+    "subtitle": "管理当前项目的技能、实体、流程与规则",
+    "tabs": {
+      "skills": "技能",
+      "entities": "实体",
+      "flows": "流程",
+      "rules": "规则"
+    },
+    "actions": {
+      "new": "新建",
+      "refresh": "刷新",
+      "refreshed": "已刷新",
+      "import": "导入",
+      "expand": "展开",
+      "collapse": "收起"
+    },
+    "filters": {
+      "search": "搜索名称、描述或参数",
+      "searchActive": "搜索当前列表",
+      "tags": "按标签过滤",
+      "noResults": "没有匹配的结果"
+    },
+    "meta": {
+      "params": "{{count}} 个参数",
+      "always": "常驻",
+      "skills": "技能",
+      "rules": "规则",
+      "skillsCount": "技能 {{count}}",
+      "rulesCount": "规则 {{count}}"
+    },
+    "skills": {
+      "title": "技能库",
+      "desc": "维护可复用的技能定义与调用说明。",
+      "empty": "暂未发现技能。",
+      "project": "项目技能",
+      "sourceProject": "项目内置",
+      "sourceGlobalConfig": "~/.oneworks/.oo.config.json",
+      "sourceProjectConfig": ".oo.config.json",
+      "sourceUserConfig": ".oo.dev.config.json",
+      "sourcePlugin": "插件",
+      "sourceHome": "真实 Home",
+      "market": "市场",
+      "create": "新建技能",
+      "createSuccess": "技能已创建",
+      "createFailed": "新建技能失败",
+      "createHint": "请在 .oo/skills 中创建技能文件，保存后刷新页面。",
+      "importHint": "请将技能文件导入至 .oo/skills，保存后刷新页面。",
+      "importSuccess": "已导入 {{count}} 个文件",
+      "importFailed": "导入技能失败",
+      "searchProject": "搜索项目技能",
+      "searchHub": "搜索已配置的 skills registries",
+      "marketActions": "Registry 与筛选",
+      "allRegistries": "全部 registries",
+      "registryFilter": "筛选 registry",
+      "allSources": "全部 sources",
+      "sourceFilter": "筛选 source",
+      "installFilter": "筛选安装状态",
+      "allStatuses": "全部状态",
+      "installedOnly": "仅已安装",
+      "notInstalled": "仅未安装",
+      "sort": "排序",
+      "sortDefault": "默认排序",
+      "sortInstallsDesc": "安装量优先",
+      "sortNameAsc": "名称 A-Z",
+      "sortNameDesc": "名称 Z-A",
+      "addRegistry": "添加 Registry",
+      "openConfig": "打开 skills 配置",
+      "noRegistry": "暂未配置 skills registry。",
+      "emptyHub": "已配置 registry 中没有匹配的 skill。",
+      "install": "安装",
+      "openOfficialSite": "打开官网",
+      "loadMore": "加载更多",
+      "loadingMore": "正在加载",
+      "reinstall": "重新安装",
+      "installSuccess": "已安装",
+      "installFailed": "安装失败",
+      "installed": "已安装",
+      "installs": "{{value}} 次安装",
+      "scope": "作用域",
+      "hooks": "钩子",
+      "registrySaved": "Registry 已保存",
+      "registryExists": "相同 source 的 Registry 已存在",
+      "registryConfigSource": "写入配置",
+      "registryTitle": "显示名称（可选）",
+      "registryTitlePlaceholder": "Lynx Team Skills",
+      "registrySource": "Source Path",
+      "registrySourceRequired": "请输入 skills source path",
+      "registrySourcePlaceholder": "example-source/default/public",
+      "registryValue": "NPM Registry（可选）",
+      "registryValuePlaceholder": "https://registry.example.com",
+      "skillName": "名称",
+      "skillNameRequired": "请输入技能名称",
+      "skillNamePlaceholder": "review-checklist",
+      "skillDescription": "描述",
+      "skillDescriptionPlaceholder": "用于代码审查的检查清单",
+      "skillBody": "内容",
+      "skillBodyPlaceholder": "写下这个技能的使用方式"
+    },
+    "entities": {
+      "title": "实体库",
+      "desc": "管理项目内的角色、组件或领域实体。",
+      "empty": "暂未发现实体。",
+      "create": "新建实体",
+      "createHint": "请创建实体定义文件，保存后刷新页面。",
+      "importHint": "请导入实体定义文件，保存后刷新页面。"
+    },
+    "flows": {
+      "title": "流程库",
+      "desc": "管理项目流程与参数定义。",
+      "empty": "暂未发现流程。",
+      "noContent": "暂无流程定义内容",
+      "create": "新建流程",
+      "createHint": "请在 .oo/specs 中创建流程文件，保存后刷新页面。",
+      "importHint": "请将流程文件导入至 .oo/specs，保存后刷新页面。"
+    },
+    "rules": {
+      "title": "规则库",
+      "desc": "维护项目规范、约束与执行规则。",
+      "empty": "暂未发现规则。",
+      "create": "新建规则",
+      "createHint": "请在 .oo/rules 中创建规则文件，保存后刷新页面。",
+      "importHint": "请将规则文件导入至 .oo/rules，保存后刷新页面。"
+    }
+  },
+  "agentRoom": {
+    "header": {
+      "eyebrow": "Agent Room",
+      "summary": "房间概览",
+      "memberCount": "{{count}} 个成员",
+      "attentionCount": "{{count}} 个待处理",
+      "runningCount": "{{count}} 个运行中"
+    },
+    "system": {
+      "memberJoined": "{{member}} 加入了房间"
+    },
+    "message": {
+      "you": "你",
+      "agent": "Agent",
+      "system": "系统",
+      "replyingTo": "回复 {{author}}：{{content}}",
+      "expandLong": "展开",
+      "collapseLong": "收起"
+    },
+    "reaction": {
+      "completed": "已完成",
+      "completedBy": "{{agent}} 已完成",
+      "working": "正在工作",
+      "workingBy": "{{agent}} 正在工作",
+      "openTarget": "打开 {{agent}} 会话"
+    },
+    "approvalBatch": {
+      "title": "审批队列",
+      "summary": "审批请求概览",
+      "total": "{{count}} 条请求",
+      "pendingCount": "{{count}} 个待处理",
+      "handledCount": "{{count}} 个已处理",
+      "actionCount": "{{count}} 条处理",
+      "pending": "待处理",
+      "handled": "已处理",
+      "handledByLeader": "leader 已处理",
+      "currentRequest": "当前请求",
+      "latestRequest": "最近请求",
+      "options": "可用选项",
+      "history": "{{count}} 条历史记录"
+    },
+    "interactionRequest": {
+      "title": "权限请求",
+      "titleWithSubject": "权限请求：{{subject}}",
+      "options": "可提交选项",
+      "response": "已回复：{{response}}",
+      "command": {
+        "summary": "确认后才允许执行此命令。",
+        "title": "命令",
+        "shell": "Shell：{{shell}}",
+        "arguments": "参数：{{arguments}}",
+        "script": "脚本内容",
+        "fullCommand": "完整命令"
+      },
+      "status": {
+        "pending": "待处理",
+        "handled": "已处理",
+        "expired": "已过期"
+      },
+      "kind": {
+        "confirmation": "确认",
+        "input": "输入",
+        "progress": "进度"
+      }
+    },
+    "mode": {
+      "session": "会话模式",
+      "room": "聊天室模式"
+    },
+    "transcript": {
+      "ariaLabel": "{{title}} 记录",
+      "empty": "暂无公开房间消息"
+    },
+    "status": {
+      "room": {
+        "active": "进行中",
+        "waiting": "等待处理",
+        "completed": "已完成",
+        "failed": "失败",
+        "idle": "空闲"
+      },
+      "member": {
+        "active": "活跃中",
+        "waiting": "等待确认",
+        "completed": "已完成",
+        "failed": "已失败",
+        "stopped": "已停止",
+        "idle": "空闲"
+      },
+      "run": {
+        "running": "进行中",
+        "waiting": "待确认",
+        "completed": "已完成",
+        "failed": "已失败",
+        "stopped": "已停止"
+      }
+    },
+    "actions": {
+      "openRun": "打开运行",
+      "openHostSession": "打开主会话",
+      "messageRun": "打开 {{target}} 会话",
+      "backToRoom": "返回"
+    },
+    "sessionStatus": {
+      "starting": "任务已创建，等待子 Agent 启动",
+      "startingStale": "子 Agent 未启动，未收到运行事件",
+      "running": "子 Agent 运行中",
+      "waiting": "子 Agent 等待确认",
+      "completed": "子任务已完成",
+      "failed": "子任务已失败",
+      "stopped": "子任务已停止"
+    },
+    "sessionBreadcrumbLabel": "{{roomTitle}} / {{sessionTitle}}",
+    "approvals": {
+      "empty": "暂无待审批",
+      "waitingForInput": "等待中",
+      "waitingDescription": "该子会话正在房间内等待，是否向用户申请权限由 leader 决定。"
+    },
+    "roster": {
+      "eyebrow": "Roster",
+      "title": "房间成员",
+      "compactTitle": "房间成员 · {{count}} 个",
+      "memberCount": "{{count}} 个成员",
+      "activeRuns": "{{count}} 个活跃",
+      "pendingCount": "{{count}} 个待处理",
+      "expandRuns": "显示会话",
+      "collapseRuns": "隐藏会话",
+      "noRuns": "暂无运行"
+    },
+    "composer": {
+      "placeholder": "发送消息给群聊",
+      "ariaLabel": "Agent Room 消息",
+      "send": "发送",
+      "sending": "发送中",
+      "target": {
+        "host": "{{target}}",
+        "member": "{{target}}",
+        "run": "{{target}}",
+        "missing": "找不到 {{target}}",
+        "ambiguous": "{{target}} 不唯一"
+      },
+      "completion": {
+        "member": "成员信箱",
+        "run": "运行"
+      },
+      "error": {
+        "missingTarget": "未知目标 {{target}}",
+        "ambiguousTarget": "目标不唯一 {{target}}",
+        "emptyTargetedMessage": "请为 {{target}} 补充消息",
+        "unsupportedAttachments": "Agent Room 消息当前仅支持文本。发送前请移除图片和文件附件。"
+      }
+    },
+    "sidebar": {
+      "label": "Agent Room",
+      "openRoom": "打开房间",
+      "favoriteRoom": "收藏房间",
+      "unfavoriteRoom": "取消收藏房间",
+      "favoritedRoom": "已收藏房间",
+      "archiveRoom": "归档房间",
+      "unarchiveRoom": "取消归档房间",
+      "copyRoomLink": "复制房间链接",
+      "copyRoomId": "复制房间 ID",
+      "roomLinkCopied": "房间链接已复制到剪贴板",
+      "roomIdCopied": "房间 ID 已复制到剪贴板",
+      "activeRuns": "{{count}} 个活跃",
+      "pendingCount": "{{count}} 个待处理"
+    }
+  },
+  "chat": {
+    "titleUpdated": "标题已更新",
+    "titleUpdateFailed": "标题更新失败",
+    "clickToEditTitle": "点击编辑标题",
+    "inputPlaceholder": "输入消息...",
+    "send": "发送",
+    "thinking": "正在思考",
+    "stop": "停止",
+    "result": "结果",
+    "sessionActive": "会话进行中",
+    "selectModel": "选择模型开始聊天",
+    "adapterSelectPlaceholder": "选择适配器",
+    "adapterBuiltinLabel": "内置支持",
+    "adapterConfiguredLabel": "已配置",
+    "adapterFirstRunHint": "首次启动某个适配器时会准备 CLI，可能会稍慢。",
+    "adapterHiddenBuiltinTitle": "已隐藏的内置适配器",
+    "adapterHideBuiltin": "隐藏 {{adapter}}",
+    "adapterHideLastBuiltinDisabled": "至少保留一个可用适配器",
+    "adapterRestoreBuiltin": "显示 {{adapter}}",
+    "modelSelectPlaceholder": "选择模型",
+    "defaultModelLabel": "默认模型",
+    "modelSearchPlaceholder": "搜索模型或服务",
+    "modelUnavailable": "暂无可用模型",
+    "modelConfigRequired": "请先在配置中添加模型服务后再开始会话",
+    "modelConfigRequiredTitle": "需要先配置模型服务",
+    "modelConfigRequiredHelp": "至少添加一个模型服务后，再回到输入框重新发送消息。",
+    "connectionErrorTitle": "连接异常",
+    "connectionClosedTitle": "连接已断开",
+    "connectionAuthRequiredTitle": "登录已过期",
+    "sessionErrorTitle": "任务失败",
+    "sessionCreateFailedTitle": "会话创建失败",
+    "connectionError": "WebSocket 连接失败，请检查服务状态后重试",
+    "connectionClosed": "WebSocket 连接已关闭，请重试",
+    "connectionAuthRequired": "登录状态已过期，请重新登录后继续",
+    "historyLoadFailed": "历史消息加载失败，请检查服务连接后重试",
+    "connectionErrorHelp": "当前流式更新还没恢复就中断了。重试连接后可以重新订阅这个会话的实时输出。",
+    "connectionClosedHelp": "当前消息流意外结束了。重试连接后，可以继续接收这个会话后续的新消息。",
+    "connectionAuthRequiredHelp": "服务端拒绝了当前实时连接。请重新登录，登录完成后再回到这个会话。",
+    "sessionErrorHelp": "可以先检查最近一次工具输出或终端日志，再决定是否从最近一条用户消息继续。",
+    "sessionCreateFailedHelp": "首条消息已经保留在当前页面。修复问题后，点击下方按钮会使用同一条消息重新创建会话。",
+    "sessionCreateFailedMessage": "会话创建失败",
+    "sessionStoppingMessage": "正在请求终止会话...",
+    "sessionStopRequestedMessage": "已请求终止会话",
+    "sessionStopFailedMessage": "终止会话失败",
+    "sessionErrorCode": "错误码：{{code}}",
+    "retryConnection": "重试连接",
+    "retrySessionCreation": "重试创建会话",
+    "retrySessionCreationRequired": "请先点击错误提示中的重试创建按钮",
+    "debugMockLabel": "调试预览",
+    "debugMockConnectionErrorMessage": "无法连上当前会话的消息流，WebSocket 握手在收到任何更新前就超时了。",
+    "debugMockConnectionClosedMessage": "assistant 已经开始回复，但连接中途断开；在重新连接前，不会再收到新的 token。",
+    "debugMockSessionErrorMessage": "runtime 在等待下游工具结果时触发了会话超时，这一轮任务已经停止。",
+    "permissionRequestBadge": "权限请求",
+    "permissionRequestTitleWithTool": "正在请求使用【{{tool}}】的调用权限，请选择通过",
+    "permissionSubject": "审批范围",
+    "permissionProjectConfig": "项目配置",
+    "permissionCurrentMode": "当前模式",
+    "permissionSuggestedMode": "建议模式",
+    "permissionDeniedTools": "受限工具",
+    "permissionReasons": "原因",
+    "permissionExpandOptions": "展开更多选项",
+    "permissionCollapseOptions": "收起更多选项",
+    "permissionConfirmOption": "确认选项",
+    "permissionConfirmOptionTooltip": "确认当前高亮的权限选项",
+    "permissionSendBlockedTooltip": "当前正在等待权限选项确认，请先确认上方选项",
+    "permissionSendBlockedError": "当前正在等待权限选项确认，暂时不能发送消息",
+    "agentRoomChildRequest": {
+      "title": "子任务请求处理",
+      "request": "请求",
+      "options": "可提交选项",
+      "moreContext": "更多上下文"
+    },
+    "agentRoomSessionSource": {
+      "leader": "leader",
+      "agent": "{{source}}",
+      "user": "你",
+      "separator": "："
+    },
+    "interactionOptionNavigation": "选项快速切换",
+    "interactionOptionPrevious": "上一个选项",
+    "interactionOptionNext": "下一个选项",
+    "tooltipSlashCommands": "快捷指令",
+    "tooltipMentionAgents": "提及代理",
+    "tooltipInjectContext": "注入上下文",
+    "tooltipUploadImages": "上传图片",
+    "tooltipReferenceActions": "更多",
+    "referenceActionsShortcutTooltip": "更多 / 权限模式",
+    "modelShortcutTooltip": "切换模型",
+    "modelAddRecommendation": "加入推荐模型",
+    "modelAlreadyRecommended": "已在推荐模型中",
+    "modelRemoveRecommendation": "从推荐模型中移除",
+    "effortShortcutTooltip": "切换推理强度",
+    "sendShortcutTooltip": "发送消息",
+    "queue": {
+      "steerTitle": "等待当前轮结束后发送",
+      "nextTitle": "合适时机发送",
+      "count": "{{count}} 条待发送",
+      "sendAfterTurn": "等待结束后发",
+      "sendNext": "下一轮发",
+      "steerShortcutTooltip": "等待当前轮结束后发送",
+      "nextShortcutTooltip": "在下一个合适时机发送",
+      "attachmentsOnly": "包含待发送的图片或引用",
+      "hasImage": "包含图片",
+      "hasReference": "包含引用",
+      "moveToSteer": "移动到等待当前轮结束后发送",
+      "moveToNext": "移动到合适时机发送",
+      "requeueMessage": "重新入队",
+      "stopCurrentRun": "停止当前执行",
+      "stopShortcutTooltip": "按两次 Esc 停止当前执行",
+      "stopShortcutConfirm": "再按一次 Esc 停止当前执行"
+    },
+    "adapterLockedTooltip": "创建会话后适配器会锁定",
+    "sessionTarget": {
+      "title": "会话目标",
+      "lockedHint": "创建后已固定",
+      "creatingHint": "正在创建会话",
+      "missingResourceWarning": "请先选择当前模式下的资源",
+      "modes": {
+        "default": "默认",
+        "workspace": "Workspace",
+        "entity": "Agent",
+        "spec": "Spec"
+      },
+      "placeholders": {
+        "workspace": "选择 workspace",
+        "entity": "选择 agent",
+        "spec": "选择 spec"
+      },
+      "empty": {
+        "workspace": "暂无 workspace",
+        "entity": "暂无 agent",
+        "spec": "暂无 spec"
+      }
+    },
+    "referenceActionsShort": "更多",
+    "referenceActionsTitle": "更多",
+    "referenceActionsDescription": "添加照片、文件和权限相关设置。",
+    "referenceAttachments": "添加照片和文件",
+    "referenceAttachmentsDescription": "选择图片或项目文件作为引用内容。",
+    "referencePermission": "权限模式",
+    "referencePermissionDescription": "控制工具执行前的授权策略。",
+    "collapseHeaderControls": "收起顶部栏",
+    "expandHeaderControls": "展开顶部栏",
+    "collapseStatusBar": "隐藏状态栏",
+    "expandStatusBar": "显示状态栏",
+    "referenceImage": "图片",
+    "referenceImageDescription": "从本地选择图片并附在消息中。",
+    "referenceFile": "文件",
+    "referenceFileDescription": "从当前项目目录树中选择要引用的文件。",
+    "accountSelectPlaceholder": "选择账号",
+    "accountSelectCreateAccount": "快速创建 {{adapter}} 账号",
+    "accountSelectCreateTitle": "接入 {{adapter}} 账号",
+    "accountSelectCreateWaiting": "等待账号接入完成",
+    "accountSelectCreateDescription": "请在 Codex 打开的浏览器登录流程中完成认证。完成前请保持此弹窗打开；如果不再继续，可以主动取消。",
+    "accountSelectCreateCanceling": "取消中…",
+    "accountSelectCreateCanceled": "已取消账号接入",
+    "accountSelectOpenAdapterConfig": "打开 {{adapter}} 配置",
+    "accountSelectOpenAccountConfig": "打开 {{account}} 设置",
+    "effortSelectPlaceholder": "推理强度",
+    "effortLabels": {
+      "default": "默认",
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "max": "最高"
+    },
+    "permissionModeSelectPlaceholder": "权限模式",
+    "assetWarningsTitle": "兼容性提示",
+    "assetWarningsCount": "{{count}} 个资产告警",
+    "assetWarningsMore": "还有 {{count}} 条",
+    "selectionWarningsTitle": "模型路由提示",
+    "selectionWarningsCount": "{{count}} 个模型告警",
+    "selectionWarningReasonExcluded": "该模型被适配器规则排除了",
+    "selectionWarningReasonNotIncluded": "该模型不在适配器允许列表中",
+    "selectionWarningFallback": "适配器 {{adapter}} 已将模型从 {{requestedModel}} 切换到 {{resolvedModel}}，原因：{{reason}}。",
+    "modelGroupBuiltin": "{{adapter}} 内置模型",
+    "modelGroupServices": "模型服务",
+    "imageTooLarge": "图片大小不能超过 5MB",
+    "imageReadFailed": "图片读取失败",
+    "previewImage": "预览图片",
+    "imagePreviewTitle": "图片",
+    "imageLoadFailed": "图片加载失败",
+    "openImageInBrowser": "在浏览器打开图片",
+    "copyImageLink": "复制图片链接",
+    "imageLinkCopied": "图片链接已复制",
+    "markdownLinkActions": {
+      "openWorkspaceFileInApp": "在当前应用打开文件",
+      "openInAppBrowser": "在应用内打开",
+      "openInExternalBrowser": "在外部浏览器中打开",
+      "copyMarkdownLink": "复制 Markdown 链接",
+      "copyMarkdownSuccess": "Markdown 链接已复制"
+    },
+    "imageZoomIn": "放大",
+    "imageZoomOut": "缩小",
+    "imageZoomReset": "重置缩放",
+    "imageNotSupportedInInteraction": "当前交互不支持图片",
+    "fileNotSupportedInInteraction": "当前交互不支持文件上下文",
+    "contextPickerTitle": "引用文件或文件夹",
+    "contextPickerDescription": "从当前项目目录树中选择一个或多个文件或文件夹。",
+    "contextPickerConfirm": "引用",
+    "contextPickerLoading": "正在加载项目目录树...",
+    "contextPickerEmpty": "当前目录下没有可选项目",
+    "contextPickerLoadFailed": "项目目录树加载失败",
+    "workspaceDrawerToggle": "工作区抽屉",
+    "workspaceDrawerClose": "关闭工作区抽屉",
+    "workspaceDrawerCollapse": "收起工作区抽屉",
+    "workspaceDrawerTitle": "工作区",
+    "workspacePathUnavailable": "暂无工作区路径",
+    "workspaceDrawerRefresh": "刷新工作区",
+    "workspaceDrawerForceSync": "强制同步",
+    "workspaceDrawerDisplayMode": "展示模式",
+    "workspaceDrawerLocateFile": "定位文件",
+    "workspaceDrawerExpandAll": "展开",
+    "workspaceDrawerCollapseAll": "折叠",
+    "workspaceDrawerToggleSection": "展开或折叠分栏",
+    "workspaceFileOpen": "打开文件",
+    "workspaceFileExternalOpenFailed": "无法在外部应用中打开文件",
+    "workspaceTreeReferenceToInput": "引用到输入框",
+    "workspaceTreeTargetMissing": "目标不存在",
+    "workspaceTreeTargetMissingState": "（目标不存在）",
+    "workspaceTreeExternalLinkState": "（外部链接）",
+    "workspaceTreeNodeLinkTitle": "{{path}} -> {{target}}{{state}}",
+    "workspaceTreeLinkTargetMissing": "链接目标不存在：{{target}}",
+    "workspaceTreeLinkTarget": "链接目标：{{target}}",
+    "workspaceFileCopyName": "复制文件名",
+    "workspaceFileCopyRelativePath": "复制相对路径",
+    "workspaceFileCopyAbsolutePath": "复制绝对路径",
+    "workspaceFileCopyPath": "复制路径",
+    "workspaceFileNameCopied": "文件名已复制",
+    "workspaceFileRelativePathCopied": "相对路径已复制",
+    "workspaceFileAbsolutePathCopied": "绝对路径已复制",
+    "workspaceFilePathCopied": "路径已复制",
+    "workspaceFileOpenInExternalEditor": "在 {{opener}} 中打开",
+    "workspacePathRevealInTree": "在目录树中定位",
+    "workspacePathRevealInFileManager": "在{{manager}}中显示",
+    "workspacePathOpenContainingFolderInFileManager": "在{{manager}}中打开所在文件夹",
+    "workspacePathRevealInFileManagerFailed": "无法在{{manager}}中显示路径",
+    "workspacePathFileManagerFallback": "文件管理器",
+    "workspacePathFileManager": {
+      "finder": "访达",
+      "explorer": "文件资源管理器",
+      "fileManager": "文件管理器"
+    },
+    "workspaceFileCloseOthers": "关闭其他",
+    "workspaceFileCloseRight": "关闭右侧",
+    "workspaceFileCloseAll": "关闭全部",
+    "workspaceDrawerChangedFiles": "改动文件",
+    "workspaceChanges": {
+      "summary": "{{count}} 个文件已更改",
+      "review": "审核",
+      "reviewTitle": "打开改动审核",
+      "expand": "展开",
+      "collapse": "折叠",
+      "expandFiles": "展开文件列表",
+      "collapseFiles": "折叠文件列表",
+      "showDiff": "展开 {{path}} 的 diff",
+      "hideDiff": "折叠 {{path}} 的 diff",
+      "diffUnavailable": "未记录 diff。",
+      "diffTruncated": "diff 较大，已截断显示。"
+    },
+    "workspaceDrawerChangedCount": "{{count}} 个",
+    "workspaceDrawerLoadingGit": "正在读取 Git 状态...",
+    "workspaceDrawerGitUnavailable": "当前工作区不可用 Git。",
+    "workspaceDrawerNoChangedFiles": "暂无改动文件",
+    "workspaceDrawerTree": "目录树",
+    "workspaceDrawerApprovals": "审批",
+    "workspaceDrawerAgents": "成员",
+    "workspaceDrawerChangedFolders": "按文件夹展示",
+    "workspaceDrawerChangedFlat": "平铺展示",
+    "workspaceDrawerChangedSection": {
+      "staged": "已暂存",
+      "tracked": "已跟踪",
+      "untracked": "未跟踪"
+    },
+    "workspaceDrawerSubmodule": "子模块",
+    "workspaceDrawerSubmoduleCommit": "提交已变化",
+    "workspaceDrawerSubmoduleTracked": "已跟踪改动",
+    "workspaceDrawerSubmoduleUntracked": "未跟踪改动",
+    "workspaceFileEditorTitle": "文件",
+    "workspaceFileEditorLoading": "正在读取文件...",
+    "workspaceFileEditorLoadFailed": "文件读取失败",
+    "workspaceImagePreviewLoadFailed": "图片加载失败",
+    "workspaceFileEditorSave": "保存",
+    "workspaceFileEditorSaved": "已保存",
+    "workspaceFileEditorRevert": "还原",
+    "workspaceFileEditorResizePanel": "拖拽调整文件编辑器高度",
+    "bottomPanelToggle": "下方面板",
+    "bottomPanelResizePanel": "拖拽调整下方面板高度",
+    "interactionPanel": {
+      "addIframe": "新建网页",
+      "addIframeDescription": "打开网页预览或外部调试页面。",
+      "addMobileDebug": "调试手机",
+      "addMobileDebugDescription": "连接移动设备并打开调试入口。",
+      "addSession": "新建会话",
+      "addSessionDescription": "在下方面板创建独立会话页。",
+      "addTab": "新增面板页",
+      "addTerminalDescription": "创建终端任务，保留命令输出上下文。",
+      "closeTab": "关闭 {{title}}",
+      "editPinnedTab": "编辑固定标签",
+      "emptyDescription": "打开资源、终端或网页预览，让会话里的辅助内容保持在同一块空间。",
+      "emptyHintManageTabs": "拖拽或右键标签来整理面板页",
+      "emptyHintOpenResource": "{{shortcut}} 快速打开资源",
+      "emptyStart": "开始",
+      "emptyTitle": "OneWorks",
+      "expandPanel": "展开下方面板",
+      "expandPanelFullscreen": "向上展开下方面板",
+      "hidePanel": "隐藏下方面板",
+      "editRunCommand": "编辑运行指令",
+      "favoriteRunCommand": "收藏运行指令",
+      "markdownEditorMode": "只显示 Markdown 源码",
+      "markdownPreviewMode": "全屏渲染 Markdown",
+      "markdownResizeSplit": "拖拽调整 Markdown 预览分割线",
+      "markdownSplitMode": "左右分屏预览 Markdown",
+      "minimizePanel": "最小化下方面板",
+      "addRunCommand": "添加运行指令",
+      "manageRunCommands": "管理运行指令",
+      "openResourceDescription": "打开项目文件、目录或资源引用。",
+      "addRunCommandEnv": "添加环境变量",
+      "mobileDebugAdbPath": "ADB 路径",
+      "mobileDebugAddNetworkTarget": "添加网络目标",
+      "mobileDebugAddPortForward": "添加端口转发",
+      "mobileDebugAdbInstallCommand": "brew install android-platform-tools",
+      "mobileDebugAdbInstallHint": "安装完成后保持手机连接并开启 USB 调试，页面会自动重新扫描。",
+      "mobileDebugAdbMissingDescription": "手机调试需要 Android Debug Bridge。macOS 可以通过 Homebrew 安装 Android Platform Tools。",
+      "mobileDebugAdbMissingTitle": "未检测到 ADB",
+      "mobileDebugAllApps": "全部应用",
+      "mobileDebugChrome": "Chrome",
+      "mobileDebugConfig": "配置",
+      "mobileDebugDesktopOnly": "手机调试仅在桌面端可用",
+      "mobileDebugDeviceOffline": "离线",
+      "mobileDebugDevicePort": "设备端口",
+      "mobileDebugDeviceReady": "已连接",
+      "mobileDebugDeviceUnauthorized": "未授权",
+      "mobileDebugDeviceUnknown": "未知",
+      "mobileDebugDevices": "设备",
+      "mobileDebugDiagnostics": "诊断",
+      "mobileDebugDiscoverNetworkTargets": "发现网络目标",
+      "mobileDebugDiscoverUsbDevices": "发现 USB 设备",
+      "mobileDebugLocalAddress": "本地地址，例如 127.0.0.1:3000",
+      "mobileDebugNetwork": "网络目标",
+      "mobileDebugNetworkAddress": "网络地址，例如 192.168.1.10:9222",
+      "mobileDebugNetworkTargets": "网络目标",
+      "mobileDebugNoKnownDevices": "未发现手机，去配置查看",
+      "mobileDebugNoNetworkTargetsConfigured": "还没有配置网络目标。",
+      "mobileDebugNoDevices": "没有检测到 Android 设备。请连接手机并开启 USB 调试。",
+      "mobileDebugNoMatchingTargets": "没有匹配的页面。",
+      "mobileDebugNoPortForwardingRules": "还没有配置端口转发规则。",
+      "mobileDebugNoTargets": "没有检测到可调试网页。请在手机 Chrome 打开网页，或确保目标 App 已开启 WebView 调试。",
+      "mobileDebugNotAvailable": "不可用",
+      "mobileDebugOther": "其他",
+      "mobileDebugPortForwardActive": "已生效",
+      "mobileDebugPortForwardError": "失败",
+      "mobileDebugPortForwardRemoved": "已移除",
+      "mobileDebugPortForwardSkipped": "已跳过",
+      "mobileDebugPortForwarding": "端口转发...",
+      "mobileDebugPortForwardingStatus": "端口转发",
+      "mobileDebugRefresh": "刷新",
+      "mobileDebugScanning": "正在扫描 Android 调试目标...",
+      "mobileDebugSearchPlaceholder": "搜索页面或网址",
+      "mobileDebugTargets": "可调试网页",
+      "mobileDebugTitle": "调试手机",
+      "mobileDebugWebView": "WebView",
+      "openResource": "打开资源",
+      "openResourceEmpty": "没有匹配的资源",
+      "openResourceInputHint": "输入内容搜索文件、会话或网页",
+      "openResourceLoading": "正在索引资源...",
+      "openResourceLoadFailed": "资源列表加载失败",
+      "openResourceRecentEmpty": "最近没有访问过的资源",
+      "openResourceRecentSection": "最近资源",
+      "openResourceResultsSection": "匹配资源",
+      "openResourceSearchPlaceholder": "搜索文件、会话或网页",
+      "openWorkspace": "打开当前工作区",
+      "openWorkspaceFailed": "无法打开当前工作区",
+      "openWorkspaceUnavailable": "没有可用的打开方式",
+      "openWorkspaceWith": "在 {{opener}} 中打开",
+      "pinTab": "固定标签",
+      "pinnedTabEditHint": "图标填写 Material Symbols 名称；留空时使用原本标题和图标。",
+      "pinnedTabIcon": "显示图标",
+      "pinnedTabTitle": "显示标题",
+      "removeRunCommand": "移除运行指令",
+      "removeRunCommandEnv": "移除环境变量",
+      "runCommandAdvanced": "高级配置",
+      "runCommandCwd": "工作目录",
+      "runCommandCwdPlaceholder": "cwd",
+      "runCommandEnvKey": "环境变量名",
+      "runCommandEnvKeyPlaceholder": "变量名",
+      "runCommandEnvValue": "环境变量值",
+      "runCommandEnvValuePlaceholder": "变量值",
+      "runCommandEscClosePrompt": "再按一次 Esc 关闭运行指令窗口",
+      "runCommandIcon": "图标",
+      "runCommandIconPlaceholder": "terminal",
+      "runCommandName": "名称",
+      "runCommandNamePlaceholder": "开发服务",
+      "runCommandBackToList": "返回指令列表",
+      "runCommandPrimary": "运行 {{command}}",
+      "runCommandRunning": "运行中",
+      "runCommandRun": "运行",
+      "runShellFile": "运行脚本",
+      "runShellFileTitle": "运行 {{file}}",
+      "runTaskRestart": "重启",
+      "runTaskStart": "启动",
+      "runTaskTerminate": "终止",
+      "runCommandScript": "脚本",
+      "runCommandScriptPlaceholder": "pnpm dev",
+      "runCommands": "运行指令",
+      "runCommandsEmpty": "暂无运行指令",
+      "runCommandsTitle": "运行指令",
+      "unfavoriteRunCommand": "取消收藏运行指令",
+      "closeWindowGroup": "关闭窗口组",
+      "maximizeWindowGroup": "最大化窗口组",
+      "restoreWindowGroup": "还原窗口组",
+      "resourceChildSession": "子会话",
+      "resourceFile": "文件",
+      "resourceWebsite": "网页",
+      "unpinTab": "取消固定",
+      "copyIframeUrl": "复制网址",
+      "iframeBack": "后退",
+      "iframeClearCache": "清除缓存",
+      "iframeClearCacheSuccess": "缓存已清除",
+      "iframeClearCookie": "清除 Cookie",
+      "iframeClearCookieSuccess": "Cookie 已清除",
+      "iframeDeviceToolbar": "显示设备工具栏",
+      "iframeEditingHint": "Enter 跳转",
+      "iframeEmpty": "输入 URL 后加载网页",
+      "iframeForward": "前进",
+      "iframeForceReload": "强制重新加载",
+      "iframeMore": "更多",
+      "iframeOpenExternalBrowser": "在外部浏览器中打开",
+      "iframeRefresh": "刷新",
+      "iframeScreenshot": "截图",
+      "iframeScreenshotCopied": "截图已复制",
+      "iframeScreenshotFailed": "截图失败",
+      "iframeTitle": "网页 {{index}}",
+      "iframeUrlCopied": "网址已复制",
+      "iframeZoom": "缩放",
+      "iframeZoomIn": "放大",
+      "iframeZoomOut": "缩小",
+      "iframeZoomReset": "重置缩放",
+      "newSameShellTerminal": "新建同类型终端",
+      "iframeUrlPlaceholder": "输入 URL",
+      "sessionTitle": "会话 {{index}}"
+    },
+    "workspaceDrawerFileStatus": {
+      "staged": "已暂存",
+      "tracked": "已跟踪改动",
+      "unstaged": "未暂存",
+      "untracked": "未跟踪",
+      "mixed": "混合"
+    },
+    "modelGroupRecommended": "推荐模型",
+    "modelMoreModels": "更多模型",
+    "availableTools": "可用工具",
+    "availableToolsEmpty": "当前会话没有可展示的工具。",
+    "toolGroupChromeDevtools": "ChromeDevtools",
+    "toolGroupSystem": "系统",
+    "toolsCount": "{{count}} 个工具",
+    "usedTools": "使用了 {{count}} 个工具",
+    "debugSessionId": "会话",
+    "debugType": "类型",
+    "debugUuid": "UUID",
+    "debugLeafUuid": "Leaf",
+    "debugAdapter": "适配器",
+    "debugModel": "模型",
+    "debugEffort": "推理强度",
+    "debugVersion": "版本",
+    "debugTools": "工具数",
+    "debugAgents": "代理数",
+    "debugCwd": "目录",
+    "debugContextCompaction": "上下文压缩",
+    "debugContextCompactionId": "压缩事件",
+    "debugContextCompactionTokens": "Token 数",
+    "debugTags": "标签",
+    "debugView": "视图",
+    "debugStarred": "收藏",
+    "debugArchived": "归档",
+    "debugEnable": "开启调试模式",
+    "debugDisable": "关闭调试模式",
+    "debugOpenSessionLog": "打开会话日志",
+    "debugEnabledValue": "开启",
+    "debugDisabledValue": "关闭",
+    "debugSectionTitle": "调试会话信息",
+    "debugModeTitle": "调试模式已开启",
+    "debugModeDescription": "当前 URL 带有 debug query，所以这里会展示平时隐藏的会话元信息。",
+    "contextCompressingTitle": "上下文正在压缩",
+    "contextCompactedTitle": "上下文已经压缩",
+    "contextCompactedMessage": "",
+    "contextCompactedDetail": "",
+    "contextCompactedTokens": "",
+    "viewInitInfo": "连续点击标题 5 次切换调试模式",
+    "viewHistory": "历史",
+    "viewTimeline": "时序",
+    "hideHistoryTimeline": "隐藏当前会话 Timeline",
+    "viewTerminal": "终端",
+    "viewSettings": "配置",
+    "newSessionTitle": "新会话",
+    "gitBranchSwitcher": "切换分支",
+    "gitOperations": "Git 操作",
+    "gitWorktree": "Worktree",
+    "statusBarTitle": "会话状态",
+    "statusBarSessionSubtitle": "这里统一展示当前会话绑定的工作区和 Git 上下文。",
+    "statusBarDraftSubtitle": "发送第一条消息前，先把新会话的工作区准备好。",
+    "sessionWorkspace": "会话工作区",
+    "sessionWorkspaceManaged": "托管 worktree",
+    "sessionWorkspaceShared": "共享工作区",
+    "sessionWorkspaceExternal": "外部工作区",
+    "sessionWorkspaceDraftCreateWorktree": "创建工作树",
+    "sessionWorkspaceDraftStrategyLocal": "本地",
+    "sessionWorkspaceDraftStrategyManaged": "新工作树",
+    "sessionWorkspaceMenuCurrentWorktree": "当前工作树",
+    "sessionWorkspaceMenuWorktreeList": "工作树列表",
+    "sessionWorkspaceMenuLaunchInWorktree": "以工作树模式启动",
+    "sessionWorkspaceMenuTransferToLocal": "转移到本地",
+    "sessionWorkspaceMenuCreateWorktree": "创建工作树",
+    "sessionWorkspaceDraftCreateWorktreeEnabled": "新会话会自动拿到一个隔离的托管 worktree。",
+    "sessionWorkspaceDraftCreateWorktreeDisabled": "新会话会直接复用当前共享工作区。",
+    "sessionWorkspaceDraftCreateBranchLabel": "新分支：{{branch}}",
+    "sessionWorkspaceDraftGitUnavailable": "当前工作区不可用 Git。",
+    "sessionWorkspaceSearchWorktrees": "搜索工作树",
+    "sessionWorkspaceNoWorktrees": "暂无工作树",
+    "sessionCreationProgress": {
+      "title": "会话环境准备",
+      "worktreePreparing": "检查仓库状态",
+      "worktreeCreating": "创建托管 worktree",
+      "worktreeCreated": "托管 worktree 已创建",
+      "environmentResolving": "解析环境脚本",
+      "environmentScriptRunning": "正在执行环境脚本",
+      "environmentScriptSucceeded": "环境脚本执行完成",
+      "environmentScriptFailed": "环境脚本执行失败",
+      "environmentSkipped": "没有需要执行的环境脚本",
+      "workspaceReady": "会话工作区已就绪",
+      "workspaceFailed": "会话工作区准备失败",
+      "outputLabel": "{{script}} 输出",
+      "outputSummary": "{{lines}} 行 · {{size}}",
+      "outputFollow": "滚动到最新输出",
+      "outputExpand": "展开脚本输出",
+      "outputCollapse": "收起脚本输出",
+      "outputMaximize": "放大脚本输出",
+      "outputRestore": "恢复脚本输出高度"
+    },
+    "sessionWorkspaceMode": "模式",
+    "sessionWorkspaceState": "状态",
+    "sessionWorkspaceBranch": "分支",
+    "sessionWorkspacePath": "路径",
+    "sessionWorkspaceCleanup": "清理策略",
+    "sessionWorkspaceCleanupDelete": "删除会话时一并删除",
+    "sessionWorkspaceCleanupRetain": "删除会话时保留",
+    "sessionWorkspaceBaseRef": "基线引用",
+    "sessionWorkspaceCurrentSession": "当前会话",
+    "sessionWorkspaceRepositoryWorktrees": "仓库 worktree",
+    "sessionWorkspaceEnvironment": "运行环境",
+    "sessionWorkspaceEnvironmentDefault": "默认环境",
+    "sessionWorkspaceEnvironmentProject": "项目",
+    "sessionWorkspaceEnvironmentLocal": "本地",
+    "sessionWorkspaceNoEnvironments": "暂无环境",
+    "sessionWorkspaceStateReady": "就绪",
+    "sessionWorkspaceStateProvisioning": "创建中",
+    "sessionWorkspaceStateDeleting": "删除中",
+    "sessionWorkspaceStateDeleted": "已删除",
+    "sessionWorkspaceStateBroken": "异常",
+    "sessionWorkspaceCreateWorktreeSuccess": "已为当前会话创建托管工作树。",
+    "sessionWorkspaceTransferToLocalSuccess": "当前工作树已转为本地保留。",
+    "sessionWorkspaceForceDeleteTitle": "删除有改动的工作区？",
+    "sessionWorkspaceForceDeleteDescription": "这个会话工作区里还有未提交的改动。是否仍然强制删除会话，并移除它绑定的 worktree？",
+    "gitDetachedHead": "DETACHED",
+    "gitSearchBranches": "搜索本地或远程分支",
+    "gitBranchViewMode": "分支展示模式",
+    "gitBranchViewTree": "树状",
+    "gitBranchViewFlat": "平铺",
+    "gitBranchesLocal": "本地分支",
+    "gitBranchesWorktrees": "其他 worktree",
+    "gitBranchesRemote": "远程分支",
+    "gitBranchCheckedOutInOtherWorktree": "已在 {{path}}",
+    "gitRemoteBranchCheckedOutInOtherWorktree": "本地分支已在 {{path}}",
+    "gitNoBranches": "没有匹配的分支",
+    "gitCreateBranch": "创建分支",
+    "gitCreateBranchWithName": "创建分支 {{branch}}",
+    "gitSwitchBranchSuccess": "已切换到 {{branch}}",
+    "gitCreateBranchSuccess": "已创建并切换到 {{branch}}",
+    "gitCommitShort": "提交",
+    "gitCommitAllChanges": "提交全部变更",
+    "gitCommitDialogTitle": "提交全部变更",
+    "gitCommitDescription": "会先暂存当前仓库的全部变更，再执行提交。",
+    "gitCommitPanelTitle": "提交更改",
+    "gitCommitPanelBranch": "分支",
+    "gitCommitPanelChanges": "更改",
+    "gitChangedFilesCount": "{{count}} 个文件",
+    "gitCommitIncludeUnstagedChanges": "包含未暂存的更改",
+    "gitCommitIncludeUnstagedChangesDescription": "带上未暂存和未跟踪文件。",
+    "gitCommitOnlyStagedChangesDescription": "只提交已暂存内容。",
+    "gitCommitSkipHooks": "跳过 Git hooks",
+    "gitCommitSkipHooksDescription": "跳过 pre-commit / commit-msg。",
+    "gitCommitAmend": "修订最近一次提交",
+    "gitCommitAmendDescription": "并入最近一次提交。当前：{{subject}}",
+    "gitCommitAmendUnavailableDescription": "当前仓库还没有可修订的提交。",
+    "gitCommitMessageLabel": "提交消息",
+    "gitCommitMessageOptional": "可选",
+    "gitCommitMessagePlaceholder": "输入提交说明",
+    "gitCommitMessagePlaceholderAmend": "留空则保留上一条提交消息",
+    "gitCommitMessageAmendHint": "留空会沿用最近一次提交消息。",
+    "gitCommitMessageRequired": "请输入提交说明",
+    "gitCommitSuccess": "提交成功",
+    "gitCommitNoChanges": "当前没有可提交的更改",
+    "gitCommitNoStagedChanges": "当前没有已暂存的更改",
+    "gitCommitNextStep": "后续步骤",
+    "gitCommitAndPush": "提交并推送",
+    "gitCommitAndPushSuccess": "提交并推送成功",
+    "gitCommitPushFailedAfterCommit": "提交已完成，但推送失败：{{error}}",
+    "gitAmendSuccess": "修订成功",
+    "gitAmendAndPushSuccess": "修订并推送成功",
+    "gitAmendUnavailable": "当前没有可修订的提交",
+    "gitForcePush": "强制推送",
+    "gitForcePushDescription": "用 force-with-lease 覆盖远端。",
+    "gitForcePushHint": "仅远端没有新提交时覆盖。",
+    "gitPushNeedsSyncOrForce": "当前分支落后上游，请先同步或开启强制推送。",
+    "gitPushShort": "推送",
+    "gitPush": "推送当前分支",
+    "gitPushPanelTitle": "推送更改",
+    "gitPushPanelUpstream": "上游",
+    "gitPushPanelUpstreamHint": "首次推送会自动设置上游。",
+    "gitForcePushSuccess": "强制推送成功",
+    "gitPushSuccess": "推送成功",
+    "gitSyncShort": "同步",
+    "gitSync": "同步当前分支",
+    "gitSyncSuccess": "同步成功",
+    "gitStatusDirty": "有未提交变更",
+    "gitStatusClean": "工作区干净",
+    "gitUpstreamStatus": "领先 {{ahead}} / 落后 {{behind}}",
+    "gitNoUpstream": "未设置上游",
+    "gitLocalBranch": "本地",
+    "gitRemoteBranch": "远程 · {{remote}}",
+    "deleteSessionTitle": "删除会话",
+    "deleteSessionDesc": "删除会话会永久移除全部消息与上下文，请确认后再继续。",
+    "timelineEmpty": "暂无事件记录",
+    "timelineTask": "子任务",
+    "timelineStatus": "状态",
+    "timelineTiming": "时序",
+    "timelineStart": "开始",
+    "timelineEventName": "事件名",
+    "timelineInput": "输入",
+    "timelineOutput": "输出",
+    "timelineEmptyValue": "—",
+    "timeline": {
+      "mainTasks": "主任务",
+      "mainStart": "对话启动",
+      "mainEnd": "对话结束",
+      "startTasks": "创建任务",
+      "askUserQuestion": "询问问题",
+      "edit": "编辑",
+      "resumeTask": "继续任务",
+      "userPrompt": "用户提示",
+      "merge": "合并",
+      "merged": "已合并",
+      "donePrefix": "完成",
+      "taskStart": "创建任务",
+      "taskEnd": "结束",
+      "viewGit": "Git 视图",
+      "viewGantt": "甘特图",
+      "eventListTitle": "事件列表",
+      "eventListSearch": "搜索事件",
+      "expandGraph": "展开对话图谱",
+      "collapseGraph": "收起对话图谱",
+      "running": "运行中",
+      "waitingInput": "等待输入",
+      "permissionRequest": "权限请求",
+      "failed": "失败",
+      "terminated": "已停止",
+      "ganttTitle": "任务时序",
+      "ganttMainSection": "主任务",
+      "ganttTasksSection": "任务",
+      "allTasksDone": "全部任务完成",
+      "userAnswer": "用户回答",
+      "receiveReply": "收到回复",
+      "destroyLabel": "销毁 {{name}}（{{end}}）",
+      "rangeLabel": "{{name}}（{{start}} → {{end}}）"
+    },
+    "messageActions": {
+      "copy": "复制原文",
+      "copySuccess": "消息原文已复制",
+      "copyFailed": "复制消息原文失败",
+      "copyLink": "复制消息链接",
+      "copyLinkSuccess": "消息链接已复制",
+      "copyId": "复制消息 ID",
+      "copyIdSuccess": "消息 ID 已复制",
+      "copyJson": "复制消息结构 JSON",
+      "copyJsonSuccess": "消息结构 JSON 已复制",
+      "copyTimestamp": "复制时间戳",
+      "copyTimestampSuccess": "时间戳已复制",
+      "edit": "编辑消息",
+      "editInProgress": "已有一条消息正在编辑，请先发送或取消当前编辑",
+      "saveEdit": "保存并分叉",
+      "confirmInline": "确认",
+      "recall": "撤回到此处",
+      "fork": "从此处分叉",
+      "recallConfirmTitle": "确认撤回到此处",
+      "recallConfirmContent": "后续消息会被回退到这条消息之后，是否继续？",
+      "forkConfirmTitle": "确认从此处分叉",
+      "forkConfirmContent": "将基于这条消息创建一个新的会话分支，是否继续？",
+      "branchNavigation": "消息版本切换",
+      "previousBranch": "上一个消息版本",
+      "nextBranch": "下一个消息版本"
+    },
+    "messageFooter": {
+      "tokens": "Token 数",
+      "copyTimestampSuccess": "ISO 时间已复制到剪贴板",
+      "copyTimestampTitle": "双击复制 ISO 时间并在控制台输出消息结构"
+    },
+    "turnProcessedDuration": "已处理 {{duration}}",
+    "turnDurationUnderSecond": "1 秒内",
+    "turnDurationHours": "{{count}} 小时",
+    "turnDurationMinutes": "{{count}} 分",
+    "turnDurationSeconds": "{{count}} 秒",
+    "turnSummaryCount": "{{count}} 条中间消息",
+    "turnExpandAction": "展开",
+    "turnCollapseAction": "收起",
+    "hint": "按 Enter 发送，Shift + Enter 换行，输入 / @ # 触发补全",
+    "newSessionGuide": {
+      "loading": "正在加载...",
+      "searchPlaceholder": "搜索动作、提示词或目标",
+      "recentTitle": "最近使用",
+      "emptySearch": "没有匹配的动作",
+      "showMore": "展开剩余 {{count}} 项",
+      "showLess": "收起列表",
+      "favoriteAction": "收藏动作",
+      "unfavoriteAction": "取消收藏",
+      "fallbackPresetPrefix": "预设",
+      "fallbackActionPrefix": "动作",
+      "welcomeMessage": "欢迎回来。先写下要推进的事情，或从下面选择一个动作模板开始。",
+      "announcements": {
+        "title": "最新公告"
+      },
+      "workspaces": {
+        "title": "已有 Workspace",
+        "empty": "暂未发现 workspace，请在 .oo.config.json 中配置 workspaces。"
+      },
+      "moreCount": "还有 {{count}} 项",
+      "specs": {
+        "title": "已有流程",
+        "params": "{{count}} 个参数",
+        "empty": "暂未发现流程，放入 .oo/specs/*.md 即可展示。",
+        "create": "快速创建流程",
+        "createToast": "请在 .oo/specs 下创建流程文件，保存后刷新页面。"
+      },
+      "entities": {
+        "title": "已有 Agent",
+        "empty": "暂未发现 Agent，加入实体定义文件后即可展示。",
+        "create": "快速创建 Agent",
+        "createToast": "请创建实体定义文件，保存后刷新页面。"
+      }
+    },
+    "attachments": {
+      "pastedImage": "粘贴图片"
+    },
+    "todo": {
+      "noTasks": "未规划任务",
+      "progress": "任务进度: {{completed}}/{{total}} 已完成",
+      "pendingCount": "{{count}} 待办",
+      "inProgressCount": "{{count}} 进行中",
+      "completedCount": "{{count}} 已完成"
+    },
+    "tools": {
+      "read": "读取文件",
+      "write": "写入文件",
+      "bash": "Bash",
+      "getTaskInfo": "任务详情",
+      "listTasks": "任务列表",
+      "listTasksEmpty": "暂无任务",
+      "startTasks": "启动任务",
+      "startTasksBackground": "后台任务",
+      "startTasksForeground": "前台任务",
+      "startTasksEmpty": "未提供任务",
+      "startTasksStarted": "已启动",
+      "startTasksFailed": "失败",
+      "startTasksLogs": "任务日志",
+      "task": "任务",
+      "taskCount": "{{count}} 个任务",
+      "taskExitCode": "退出码: {{code}}",
+      "writeSuccess": "写入成功",
+      "writeFailed": "写入失败",
+      "askUserQuestion": "询问问题",
+      "globTool": "Glob",
+      "grepTool": "Grep",
+      "editTool": "编辑文件",
+      "lsTool": "浏览目录",
+      "notebookEdit": "编辑 Notebook",
+      "webFetch": "抓取网页",
+      "webSearch": "网页搜索",
+      "booleanOn": "开启",
+      "booleanOff": "关闭",
+      "diffSplit": "双栏",
+      "diffInline": "单栏",
+      "skill": "技能",
+      "enterPlanMode": "进入计划模式",
+      "exitPlanMode": "退出计划模式",
+      "taskCreate": "创建任务",
+      "taskGet": "获取任务",
+      "taskUpdate": "更新任务",
+      "taskList": "列出任务",
+      "claudeTask": "Claude 任务",
+      "todo": "任务规划",
+      "call": "调用",
+      "reading": "正在读取文件...",
+      "offset": "offset",
+      "limit": "limit",
+      "timeout": "timeout",
+      "runInBackground": "后台执行",
+      "dangerouslyDisableSandbox": "禁用沙箱",
+      "viewCommand": "查看指令",
+      "noParameters": "无参数",
+      "groupSummaryCount": "{{name}} {{count}} 次",
+      "groupSummaryMoreCount": "+{{count}} 次",
+      "singleSelect": "单选",
+      "multiSelect": "多选",
+      "fields": {
+        "activeForm": "当前表述",
+        "addBlockedBy": "新增阻塞源",
+        "addBlocks": "新增阻塞项",
+        "allowedDomains": "允许域名",
+        "allowedPrompts": "允许的提示",
+        "answers": "回答",
+        "args": "参数",
+        "blockedDomains": "屏蔽域名",
+        "cellId": "单元 ID",
+        "cellType": "单元类型",
+        "command": "命令",
+        "content": "内容",
+        "description": "说明",
+        "disableSandbox": "禁用沙箱",
+        "details": "详情",
+        "editMode": "编辑模式",
+        "glob": "Glob",
+        "ignore": "忽略项",
+        "limit": "Limit",
+        "maxTurns": "最大轮次",
+        "metadata": "元数据",
+        "model": "模型",
+        "mode": "模式",
+        "newSource": "新内容",
+        "newString": "新字符串",
+        "oldString": "旧字符串",
+        "owner": "负责人",
+        "offset": "Offset",
+        "path": "路径",
+        "prompt": "提示词",
+        "pushToRemote": "推送到远端",
+        "questions": "问题",
+        "remoteSession": "远端会话",
+        "remoteSessionUrl": "远端会话地址",
+        "replaceAll": "全量替换",
+        "resume": "恢复",
+        "runInBackground": "后台执行",
+        "status": "状态",
+        "subagentType": "子代理类型",
+        "subject": "主题",
+        "timeout": "超时",
+        "todos": "待办事项"
+      },
+      "unknown": "未知工具"
+    },
+    "terminal": {
+      "addSession": "新建终端",
+      "closeNamedSession": "关闭 {{title}}",
+      "closeSession": "关闭终端 {{index}}",
+      "connectionError": "终端连接失败，请检查服务状态后重试",
+      "dragSession": "拖拽调整终端顺序",
+      "enterFullscreen": "全屏",
+      "exited": "已退出",
+      "exitFullscreen": "退出全屏",
+      "exitSummary": "终端已退出，exitCode={{code}}，signal={{signal}}",
+      "hideManager": "隐藏终端列表",
+      "manageTerminals": "管理终端",
+      "paneTitle": "终端 {{index}}",
+      "renameSession": "重命名 {{title}}",
+      "selectShell": "选择终端类型",
+      "sessionCount": "{{count}} 个终端",
+      "resizePanel": "拖动调整终端高度",
+      "shellTooltip": "Shell：{{shell}}",
+      "shellTooltipExited": "Shell：{{shell}}，已退出",
+      "showManager": "显示终端列表",
+      "shell": {
+        "bash": "Bash",
+        "default": "默认 Shell",
+        "sh": "sh",
+        "zsh": "Zsh"
+      }
+    },
+    "sessionSettings": "会话设置",
+    "enterTitle": "输入会话标题...",
+    "tags": "标签",
+    "addTagPlaceholder": "添加新标签并按回车...",
+    "noTags": "暂无标签",
+    "title": "标题",
+    "newSessionPlaceholder": "输入消息以创建新会话..."
+  },
+  "pluginStore": {
+    "title": "插件市场",
+    "subtitle": "管理当前工作区已安装的插件，也可以通过对话快速创建新插件。",
+    "configure": "插件配置",
+    "refresh": "刷新",
+    "details": "详情",
+    "createPlugin": "创建插件",
+    "connectPlugin": "接入插件",
+    "marketplace": "插件市场",
+    "viewMode": "插件页模式",
+    "searchPlaceholder": "搜索插件",
+    "empty": "当前没有加载插件",
+    "installedLabel": "已安装插件",
+    "groupMode": "插件分组方式",
+    "groupByEnabled": "按启用状态分组",
+    "groupBySource": "按来源分组",
+    "groupEnabled": "已启用",
+    "groupDisabled": "已禁用",
+    "sourceBuiltIn": "内置",
+    "sourceGlobal": "全局",
+    "sourceLocal": "本地",
+    "sourceLocalDev": "本地开发",
+    "localDirectory": "本地目录",
+    "disabled": "已禁用",
+    "enablePlugin": "启用插件",
+    "disablePlugin": "停用插件",
+    "enablePluginInWorkspace": "在当前仓库启用",
+    "disablePluginInWorkspace": "在当前仓库停用",
+    "enablePluginGlobally": "全局启用",
+    "disablePluginGlobally": "全局停用",
+    "enabledHint": "当前仓库停用后不会加载这个插件的客户端、服务端入口和贡献项；插件仍会保留在列表中，方便重新启用。",
+    "pluginEnabled": "插件已启用",
+    "pluginDisabled": "插件已停用",
+    "pluginEnabledUpdateFailed": "更新插件启用状态失败",
+    "watch": "Watch",
+    "watchHint": "监听这个插件目录的文件变化，变化后重新加载 plugin runtime 并通知前端重载对应插件。",
+    "openDetails": "查看详情",
+    "enableWatch": "开启 Watch",
+    "disableWatch": "关闭 Watch",
+    "copyPluginScope": "复制插件标识",
+    "copyPluginRoot": "复制插件路径",
+    "pluginScopeCopied": "插件标识已复制",
+    "pluginRootCopied": "插件路径已复制",
+    "watchEnabled": "已开启插件 watch",
+    "watchDisabled": "已关闭插件 watch",
+    "watchUpdateFailed": "更新插件 watch 失败",
+    "diagnostics": "诊断",
+    "marketplaceFilter": "过滤",
+    "marketplaceConfig": "配置",
+    "marketplaceFilterStatus": "启用状态",
+    "marketplaceFilterSource": "配置来源",
+    "marketplaceFilterAll": "全部",
+    "marketplaceFilterStatus_all": "全部",
+    "marketplaceFilterStatus_enabled": "已启用",
+    "marketplaceFilterStatus_disabled": "已禁用",
+    "marketplaceSearchPlaceholder": "搜索插件",
+    "marketplacePlugins": "插件",
+    "marketplacePluginsEmpty": "没有匹配的插件",
+    "marketplacePluginEnabled": "插件已启用",
+    "marketplacePluginDisabled": "插件已禁用",
+    "marketplacePluginSaveFailed": "保存插件配置失败",
+    "marketplaceSources": "插件源",
+    "marketplaceSourcesEmpty": "还没有插件源",
+    "addMarketplaceSource": "添加插件源",
+    "removeMarketplaceSource": "移除插件源",
+    "marketplaceSourceName": "源名称",
+    "marketplaceSourceUrl": "Git 仓库 URL",
+    "marketplaceSourceRef": "分支 / Tag",
+    "marketplaceSourcePath": "子目录",
+    "marketplaceSourceUrlRequired": "请输入 Git 仓库 URL",
+    "marketplaceSourceSaved": "插件源已保存",
+    "marketplaceSourceSaveFailed": "保存插件源失败",
+    "marketplaceSourceRemoved": "插件源已移除",
+    "marketplaceSourceEnabled": "插件源已启用",
+    "marketplaceSourceDisabled": "插件源已禁用",
+    "createLandingTitle": "用对话创建插件",
+    "createLandingDescription": "选择一个常见插件类型填入输入框，或直接描述你想扩展的入口、交互和文件位置。发送后会进入会话，由 AI 按插件结构创建实现。",
+    "createLandingPlaceholder": "描述你想创建的插件",
+    "createLandingSendInstruction": "请根据下面的需求创建一个 OneWorks 插件。请优先使用 create-plugin / plugin-creator 相关能力，按当前仓库插件结构落地；如果信息不足，先追问缺失配置。\n\n需求：\n{{request}}",
+    "createLandingAttachmentInstruction": "请根据我附带的上下文创建一个 OneWorks 插件。请优先使用 create-plugin / plugin-creator 相关能力，按当前仓库插件结构落地；如果信息不足，先追问缺失配置。",
+    "starterChatActionTitle": "会话头部按钮",
+    "starterChatActionDescription": "给聊天页增加一个按钮、菜单项或快捷操作。",
+    "starterChatActionPrompt": "请帮我创建一个插件：在聊天页头部增加一个操作按钮，点击后执行一个自定义命令。请按当前仓库插件结构创建，并包含客户端入口和 manifest 配置。",
+    "starterLauncherTitle": "启动器搜索",
+    "starterLauncherDescription": "在启动面板里接入自定义搜索结果或命令。",
+    "starterLauncherPrompt": "请帮我创建一个插件：给启动器增加一个搜索 provider，根据输入返回自定义命令结果，并支持点击执行。",
+    "starterWorkbenchTitle": "工作区面板",
+    "starterWorkbenchDescription": "向工作区底部或右侧增加一个插件标签页。",
+    "starterWorkbenchPrompt": "请帮我创建一个插件：在工作区面板里注册一个新的标签页，用客户端视图展示自定义内容。",
+    "starterRouteTitle": "插件页面",
+    "starterRouteDescription": "新增独立插件路由和对应的客户端视图。",
+    "starterRoutePrompt": "请帮我创建一个插件：注册一个独立插件页面路由，并实现一个可渲染的客户端视图。"
+  },
+  "pluginDetail": {
+    "backToStore": "返回插件市场",
+    "notFound": "没有找到这个插件",
+    "overview": "插件概览",
+    "version": "版本",
+    "requestedVersion": "版本规则",
+    "package": "包",
+    "request": "请求来源",
+    "root": "根目录",
+    "clientEntry": "客户端入口",
+    "clientDevEntry": "开发入口",
+    "serverEntry": "服务端入口",
+    "contributions": "扩展点",
+    "enableContribution": "启用扩展点",
+    "disableContribution": "关闭扩展点",
+    "contributionDisabled": "扩展点已关闭",
+    "enableContributionItem": "启用这个点位",
+    "disableContributionItem": "关闭这个点位",
+    "contributionItemDisabled": "这个点位已关闭",
+    "noContributionDescription": "这个点位没有描述",
+    "searchContributions": "搜索点位名称、描述或字段",
+    "filter": "过滤",
+    "filterStatus": "状态",
+    "filterStatus_all": "全部",
+    "filterStatus_enabled": "已启用",
+    "filterStatus_disabled": "已关闭",
+    "noContributionMatches": "没有匹配的点位",
+    "noContributions": "这个插件暂未声明扩展点",
+    "config": "配置",
+    "configOptions": "插件选项",
+    "configNoSchema": "这个插件暂未声明可交互配置。",
+    "configSaving": "保存中",
+    "configSaved": "已保存",
+    "configSaveFailed": "保存失败",
+    "configInstance": "实例配置",
+    "configManifest": "插件清单",
+    "skills": "技能",
+    "mcp": "MCP",
+    "hooks": "钩子",
+    "assetsEmpty": "没有可展示的插件资产",
+    "assetsLoadFailed": "插件资产加载失败",
+    "readme": "README",
+    "readmeEmpty": "这个插件没有 README.md",
+    "readmeLoadFailed": "README.md 加载失败",
+    "diagnosticsEmpty": "没有诊断信息",
+    "runtimeSlot": "运行时 Slot",
+    "runtimeSlotLabel": "运行时 {{slot}}",
+    "runtimeApis": "运行时 API",
+    "runtimePluginApis": "运行时插件 API",
+    "runtimeExtensionPoints": "运行时扩展点",
+    "runtimeExtensionContributions": "运行时扩展贡献",
+    "runtimeRoutes": "运行时路由",
+    "runtimeViews": "运行时视图",
+    "runtimeLaunchers": "运行时启动器搜索",
+    "groups": {
+      "extensionPoints": "插件扩展点",
+      "extensionContributions": "插件扩展贡献",
+      "navItems": "左侧导航入口",
+      "navMoreMenu": "左侧更多菜单",
+      "navFooterBefore": "左侧菜单上方区域",
+      "chatHeaderActions": "会话头部按钮",
+      "chatHeaderMoreMenu": "会话头部更多菜单",
+      "chatInteractionPanelEmptyActions": "会话空态操作",
+      "routeHeaderActions": "路由头部按钮",
+      "routeMoreMenuItems": "路由更多菜单",
+      "routeSidebarContextMenu": "路由侧栏右键菜单",
+      "routeWindowBarActions": "折叠态窗口栏按钮",
+      "workbenchAddMenu": "工作区新增菜单",
+      "workbenchTabs": "工作区标签页",
+      "workspaceDrawerTabs": "工作区抽屉标签页",
+      "launcherSearchProviders": "启动器搜索",
+      "routes": "插件页面路由"
+    },
+    "fields": {
+      "id": "标识",
+      "title": "标题",
+      "route": "路由",
+      "routeId": "路由标识",
+      "command": "命令",
+      "contributionSchema": "贡献 Schema",
+      "extensionPoint": "扩展点",
+      "mode": "模式",
+      "target": "API 路径",
+      "proxyTarget": "代理目标",
+      "href": "链接",
+      "active": "激活",
+      "activeLabel": "激活标签",
+      "activeTitle": "激活提示",
+      "danger": "危险操作",
+      "disabled": "禁用",
+      "selected": "选中",
+      "tab": "标签页",
+      "clientView": "客户端视图",
+      "viewId": "视图",
+      "placement": "位置",
+      "targetRoute": "目标入口",
+      "targetRoutes": "目标入口列表",
+      "icon": "图标",
+      "activeIcon": "激活图标",
+      "shortcut": "快捷键",
+      "inputSchema": "输入 Schema",
+      "outputSchema": "输出 Schema",
+      "headerSchema": "Header Schema"
+    }
+  },
+  "config": {
+    "title": "系统配置",
+    "readOnlyHint": "配置支持在线编辑，保存后会写入对应的 json/yaml 配置文件。",
+    "loadFailed": "配置加载失败",
+    "reload": "重新加载",
+    "editHint": "修改后会自动保存到当前来源配置文件，可用于全局、项目或本地覆盖。",
+    "maskHint": "敏感字段已脱敏展示，保留 ****** 可保持原值。",
+    "invalidJson": "JSON 格式错误，请修正后再保存。",
+    "saveSuccess": "配置已保存",
+    "saveFailed": "配置保存失败",
+    "copySuccess": "配置已复制",
+    "copyFailed": "复制失败",
+    "sources": {
+      "global": "全局",
+      "globalMissing": "全局（未创建）",
+      "project": "项目",
+      "user": "本地",
+      "projectMissing": "项目（未创建）",
+      "userMissing": "本地（未创建）"
+    },
+    "navigation": {
+      "search": "搜索配置分类",
+      "noResults": "没有匹配的配置分类"
+    },
+    "actions": {
+      "edit": "编辑",
+      "save": "保存",
+      "cancel": "取消",
+      "format": "格式化",
+      "copy": "复制"
+    },
+    "conflict": {
+      "title": "配置正在被其他地方修改",
+      "description": "{{source}} / {{target}} 在当前页面之外已经发生更新，而你这里还有未保存的编辑。",
+      "instructions": "请先选择保留哪一份，再继续编辑，避免两边互相覆盖。",
+      "keepLocal": "保留当前编辑",
+      "useRemote": "采用外部修改"
+    },
+    "editor": {
+      "addField": "添加字段",
+      "addItem": "添加项",
+      "remove": "移除",
+      "removeItemConfirmTitle": "确认删除这个条目？",
+      "collapse": "折叠",
+      "expand": "展开",
+      "addAdapter": "添加适配器",
+      "addPlugin": "添加插件",
+      "addMcpServer": "添加 MCP 服务",
+      "addModelService": "添加模型服务",
+      "addMarketplace": "添加源",
+      "addEnvVar": "添加环境变量",
+      "addHeader": "添加请求头",
+      "addEntry": "添加条目",
+      "newModelSelectorName": "新增模型元数据",
+      "moveUp": "上移",
+      "moveDown": "下移",
+      "shortcutPlaceholder": "按下快捷键",
+      "clearShortcut": "清除快捷键",
+      "newModelServiceName": "新增模型服务名称",
+      "newChannelName": "新增频道名称",
+      "newAdapterName": "新增适配器名称",
+      "newPluginName": "新增插件名称",
+      "newMcpServerName": "新增 MCP 服务名称",
+      "newMarketplaceName": "新增源名称",
+      "newEnvVarName": "新增环境变量名称",
+      "newHeaderName": "新增请求头名称",
+      "fieldKey": "字段名",
+      "fieldValue": "字段值",
+      "complexPlaceholder": "复杂结构请使用 JSON 输入",
+      "secretPlaceholder": "请输入密钥",
+      "itemPlaceholder": "请输入内容",
+      "commandPlaceholder": "请输入命令",
+      "urlPlaceholder": "请输入地址",
+      "multilinePlaceholder": "请输入内容",
+      "defaultAdapterPlaceholder": "请选择适配器",
+      "defaultModelServicePlaceholder": "请选择模型服务",
+      "defaultModelPlaceholder": "请选择模型",
+      "worktreeEnvironmentPlaceholder": "请选择 worktree 环境",
+      "workspaceFileOpenerPlaceholder": "选择检测到的应用",
+      "titlePlaceholder": "请输入标题",
+      "descriptionPlaceholder": "请输入描述",
+      "channelType": "频道类型",
+      "unknownChannelType": "未知类型",
+      "complexValue": "复杂结构",
+      "tagsPlaceholder": "输入后回车",
+      "types": {
+        "string": "文本",
+        "number": "数字",
+        "boolean": "开关",
+        "object": "对象",
+        "array": "数组"
+      },
+      "effort": {
+        "default": "默认",
+        "low": "低",
+        "medium": "中",
+        "high": "高",
+        "max": "最高"
+      }
+    },
+    "detail": {
+      "back": "返回",
+      "override": "覆盖到当前配置",
+      "inheritedReadonly": "这个值来自 extends 继承配置。先覆盖到当前配置，再进行编辑。",
+      "inheritedAppendOnly": "这个条目来自 extends 继承配置。当前集合按追加方式合并，不能直接在这里改这个继承条目；需要去源配置修改，或者整体覆盖当前集合。",
+      "partialOverride": "这个条目正在覆盖一份继承配置。未在本地设置的字段仍然来自继承层。",
+      "inheritedBadge": "继承",
+      "overrideBadge": "覆盖",
+      "localBadge": "本地"
+    },
+    "accounts": {
+      "title": "账号",
+      "back": "返回账号列表",
+      "backToAdapter": "返回适配器",
+      "empty": "暂无可用账号",
+      "detailMissing": "暂时无法读取账号详情。",
+      "default": "默认",
+      "count": "{{count}} 个账号",
+      "readyCount": "{{count}} 个可用",
+      "defaultHint": "默认：{{account}}",
+      "quotaTitle": "额度",
+      "settingsTitle": "账号配置",
+      "settingsDescription": "这里编辑的是适配器配置里的账号字段；如果适配器支持，会覆盖 workspace 保存的登录快照。",
+      "adapterKeyHint": "适配器：{{adapter}}",
+      "searchPlaceholder": "搜索账号",
+      "searchEmpty": "没有匹配的账号",
+      "deleteConfirmTitle": "确定删除 {{account}} 的工作区登录快照吗？",
+      "rowActions": {
+        "setDefault": "设为默认账号",
+        "clearDefault": "取消默认账号",
+        "delete": "删除账号快照"
+      },
+      "facts": {
+        "email": "邮箱",
+        "type": "类型",
+        "plan": "套餐"
+      },
+      "status": {
+        "ready": "可用",
+        "missing": "缺失",
+        "error": "异常"
+      },
+      "actions": {
+        "add": {
+          "label": "接入账号",
+          "description": "触发适配器的登录接入动作，并把凭据保存到当前工作区。"
+        },
+        "refresh": {
+          "label": "刷新额度",
+          "description": "重新拉取这个账号的套餐和额度信息。"
+        },
+        "remove": {
+          "label": "删除快照",
+          "description": "移除当前工作区里保存的这个账号快照。"
+        }
+      },
+      "actionSuccess": {
+        "add": "账号接入成功",
+        "refresh": "额度已刷新",
+        "remove": "账号快照已删除"
+      },
+      "actionFailed": {
+        "add": "账号接入失败",
+        "refresh": "刷新额度失败",
+        "remove": "删除账号快照失败"
+      },
+      "authFileDefaultLookup": "留空时默认读取 {{path}}。"
+    },
+    "fields": {
+      "general": {
+        "baseDir": {
+          "label": "工作目录",
+          "desc": "配置文件和缓存的默认目录"
+        },
+        "disableGlobalConfig": {
+          "label": "关闭全局配置",
+          "desc": "开启后不再把全局 ~/.oneworks/.oo.config.json 合并到当前配置结果；全局来源仍可编辑。"
+        },
+        "effort": {
+          "label": "默认思考强度",
+          "desc": "未指定时默认使用的 effort 等级"
+        },
+        "defaultAdapter": {
+          "label": "默认适配器",
+          "desc": "未指定时使用的适配器"
+        },
+        "defaultModelService": {
+          "label": "默认模型服务",
+          "desc": "未指定时使用的模型服务"
+        },
+        "defaultModel": {
+          "label": "默认模型",
+          "desc": "未指定时使用的模型"
+        },
+        "recommendedModels": {
+          "label": "建议模型",
+          "desc": "用于模型下拉推荐展示的列表",
+          "item": {
+            "service": {
+              "label": "模型服务",
+              "desc": "可选，指定模型所属的服务"
+            },
+            "model": {
+              "label": "模型",
+              "desc": "推荐展示的模型标识"
+            },
+            "title": {
+              "label": "标题",
+              "desc": "推荐项展示标题，可选"
+            },
+            "description": {
+              "label": "描述",
+              "desc": "推荐项展示描述，可选"
+            },
+            "placement": {
+              "label": "展示位置",
+              "desc": "推荐项出现的界面位置"
+            }
+          }
+        },
+        "interfaceLanguage": {
+          "label": "界面交互语言",
+          "desc": "控制界面显示与交互语言"
+        },
+        "modelLanguage": {
+          "label": "模型对话语言",
+          "desc": "控制模型输出语言"
+        },
+        "messageLinks": {
+          "label": "消息链接",
+          "desc": "控制聊天消息里的链接如何渲染和打开",
+          "externalLinkTarget": {
+            "label": "网页链接打开方式",
+            "desc": "选择网页链接在新标签打开，还是在当前标签打开"
+          },
+          "workspaceFileTarget": {
+            "label": "工作区文件打开方式",
+            "desc": "选择工作区文件链接打开到下方文件 tab、外部应用，还是使用浏览器默认链接行为"
+          },
+          "workspaceFileOpener": {
+            "label": "首选应用",
+            "desc": "选择工作区文件链接使用的外部应用；自动探测会按本机可用工具优先选择。"
+          },
+          "imageLinkMode": {
+            "label": "图片链接",
+            "desc": "将标准图片链接直接渲染为可点击预览的图片，或保持普通链接"
+          },
+          "plainWorkspacePathMode": {
+            "label": "裸文件路径",
+            "desc": "将消息文本中的工作区相对文件路径识别为可点击链接"
+          }
+        },
+        "announcements": {
+          "label": "公告",
+          "desc": "新建会话时的提示信息"
+        },
+        "permissions": {
+          "label": "权限",
+          "desc": "控制工具与资源的访问策略",
+          "allow": {
+            "label": "允许"
+          },
+          "deny": {
+            "label": "禁止"
+          },
+          "ask": {
+            "label": "询问"
+          }
+        },
+        "env": {
+          "label": "环境变量",
+          "desc": "覆盖或新增的运行环境变量"
+        },
+        "notifications": {
+          "label": "通知",
+          "desc": "会话状态变更时触发通知",
+          "disabled": {
+            "label": "禁用通知",
+            "desc": "关闭后不发送通知"
+          },
+          "volume": {
+            "label": "提示音量",
+            "desc": "0-1 或 0-100，0 为静音"
+          },
+          "events": {
+            "label": "事件通知",
+            "desc": "分别配置每一种会话状态通知",
+            "item": {
+              "enabled": {
+                "label": "启用通知"
+              },
+              "title": {
+                "label": "标题",
+                "desc": "留空使用默认标题"
+              },
+              "description": {
+                "label": "消息内容",
+                "desc": "留空使用默认文案"
+              },
+              "sound": {
+                "label": "提示音",
+                "desc": "音频文件路径，留空使用默认音效"
+              }
+            },
+            "completed": {
+              "label": "完成通知",
+              "desc": "会话完成时触发",
+              "disabled": {
+                "label": "禁用完成通知",
+                "desc": "关闭后不发送完成通知"
+              },
+              "title": {
+                "label": "完成标题",
+                "desc": "留空使用默认标题"
+              },
+              "description": {
+                "label": "完成文案",
+                "desc": "留空使用默认文案"
+              },
+              "sound": {
+                "label": "完成音频",
+                "desc": "音频文件路径，留空使用默认音效"
+              }
+            },
+            "failed": {
+              "label": "失败通知",
+              "desc": "会话失败时触发",
+              "disabled": {
+                "label": "禁用失败通知",
+                "desc": "关闭后不发送失败通知"
+              },
+              "title": {
+                "label": "失败标题",
+                "desc": "留空使用默认标题"
+              },
+              "description": {
+                "label": "失败文案",
+                "desc": "留空使用默认文案"
+              },
+              "sound": {
+                "label": "失败音频",
+                "desc": "音频文件路径，留空使用默认音效"
+              }
+            },
+            "terminated": {
+              "label": "终止通知",
+              "desc": "会话终止时触发",
+              "disabled": {
+                "label": "禁用终止通知",
+                "desc": "关闭后不发送终止通知"
+              },
+              "title": {
+                "label": "终止标题",
+                "desc": "留空使用默认标题"
+              },
+              "description": {
+                "label": "终止文案",
+                "desc": "留空使用默认文案"
+              },
+              "sound": {
+                "label": "终止音频",
+                "desc": "音频文件路径，留空使用默认音效"
+              }
+            },
+            "waiting_input": {
+              "label": "等待输入通知",
+              "desc": "会话等待输入时触发",
+              "disabled": {
+                "label": "禁用等待输入通知",
+                "desc": "关闭后不发送等待输入通知"
+              },
+              "title": {
+                "label": "等待输入标题",
+                "desc": "留空使用默认标题"
+              },
+              "description": {
+                "label": "等待输入文案",
+                "desc": "留空使用默认文案"
+              },
+              "sound": {
+                "label": "等待输入音频",
+                "desc": "音频文件路径，留空使用默认音效"
+              }
+            }
+          }
+        }
+      },
+      "conversation": {
+        "style": {
+          "label": "对话风格",
+          "desc": "控制助手的对话风格"
+        },
+        "createSessionWorktree": {
+          "label": "新建会话时创建工作树",
+          "desc": "开启后新会话会分配一个托管 worktree；关闭时默认复用当前工作区"
+        },
+        "showSessionCardMessage": {
+          "label": "显示会话消息摘要",
+          "desc": "开启后在左侧会话卡片中展示最近消息摘要；默认关闭，只显示标题和状态"
+        },
+        "worktreeEnvironment": {
+          "label": "默认 worktree 环境",
+          "desc": "新建、启动和销毁托管 worktree 时执行的环境脚本"
+        },
+        "customInstructions": {
+          "label": "自定义指令",
+          "desc": "为对话提供额外的提示与约束"
+        },
+        "startupPresets": {
+          "label": "启动预设",
+          "desc": "在新会话页展示一组可一键应用的启动环境预设"
+        },
+        "builtinActions": {
+          "label": "内置开发动作",
+          "desc": "在新会话页展示一组可直接套用的开发动作模板"
+        },
+        "starterItem": {
+          "title": {
+            "label": "标题",
+            "desc": "列表中展示的名称"
+          },
+          "description": {
+            "label": "说明",
+            "desc": "列表中展示的补充描述"
+          },
+          "icon": {
+            "label": "图标",
+            "desc": "Material Symbols 图标名称，例如 `rocket_launch`"
+          },
+          "mode": {
+            "label": "启动模式",
+            "desc": "新会话默认切换到的目标模式"
+          },
+          "target": {
+            "label": "目标资源",
+            "desc": "Workspace 使用 id，Agent / 实体 / 流程使用名称"
+          },
+          "targetLabel": {
+            "label": "目标展示名",
+            "desc": "可选的列表展示名称；留空时使用目标资源值"
+          },
+          "targetDescription": {
+            "label": "目标说明",
+            "desc": "可选的目标补充说明"
+          },
+          "model": {
+            "label": "模型",
+            "desc": "模型值，支持 `service,model` 形式"
+          },
+          "adapter": {
+            "label": "适配器",
+            "desc": "启动时切换到的适配器"
+          },
+          "account": {
+            "label": "账号",
+            "desc": "启动时切换到的账号"
+          },
+          "effort": {
+            "label": "推理强度",
+            "desc": "启动时应用的推理强度"
+          },
+          "permissionMode": {
+            "label": "权限模式",
+            "desc": "启动时应用的权限模式"
+          },
+          "worktreeCreate": {
+            "label": "使用工作树",
+            "desc": "是否默认给这个预设启用托管 worktree"
+          },
+          "worktreeEnvironment": {
+            "label": "工作树环境",
+            "desc": "该预设使用的 worktree 环境 id"
+          },
+          "branchName": {
+            "label": "分支名",
+            "desc": "启动时预填的目标分支名"
+          },
+          "branchKind": {
+            "label": "分支来源",
+            "desc": "分支来自本地还是远端"
+          },
+          "branchMode": {
+            "label": "分支动作",
+            "desc": "切换已有分支还是创建新分支"
+          },
+          "prompt": {
+            "label": "预置提示词",
+            "desc": "点击后预填到 sender 的提示词"
+          },
+          "files": {
+            "label": "关联文件",
+            "desc": "点击后附带到 sender 的文件路径列表"
+          },
+          "rules": {
+            "label": "关联规则",
+            "desc": "规则文件路径或规则标识；会尽量转换为上下文附件"
+          },
+          "skills": {
+            "label": "关联技能",
+            "desc": "技能文件路径或技能标识；会尽量转换为上下文附件"
+          },
+          "worktreeEnabledBadge": "工作树"
+        }
+      },
+      "models": {
+        "items": {
+          "label": "模型元数据明细",
+          "desc": "按 `service` 或 `service,model` 配置模型元信息；展示元数据如 alias/title/description 仅在 `model` 或 `service,model` 精确匹配时生效"
+        }
+      },
+      "modelServices": {
+        "items": {
+          "label": "服务明细",
+          "desc": "按服务名称平铺配置"
+        },
+        "item": {
+          "title": {
+            "label": "展示标题",
+            "desc": "用于默认模型服务下拉展示"
+          },
+          "description": {
+            "label": "展示描述",
+            "desc": "用于默认模型服务下拉展示"
+          },
+          "apiBaseUrl": {
+            "label": "API 地址",
+            "desc": "模型服务的 API 基础地址"
+          },
+          "apiKey": {
+            "label": "API 密钥",
+            "desc": "模型服务的访问密钥"
+          },
+          "models": {
+            "label": "模型列表",
+            "desc": "该服务支持的模型名称"
+          },
+          "timeoutMs": {
+            "label": "超时（毫秒）",
+            "desc": "模型服务超时。Codex 会映射为流空闲超时，Claude Code Router 会映射为全局 API 超时。"
+          },
+          "maxOutputTokens": {
+            "label": "最大输出 Token",
+            "desc": "该服务的默认输出上限。Codex 会映射为 maxOutputTokens，Claude Code Router 会映射为 maxtoken transformer。"
+          },
+          "extra": {
+            "label": "扩展配置",
+            "desc": "模型服务扩展参数"
+          }
+        }
+      },
+      "adapters": {
+        "defaultModel": {
+          "label": "默认模型",
+          "desc": "这个适配器优先使用的模型。"
+        },
+        "includeModels": {
+          "label": "允许模型",
+          "desc": "限制这个适配器仅可使用的模型列表。"
+        },
+        "excludeModels": {
+          "label": "禁用模型",
+          "desc": "禁止这个适配器使用的模型列表。"
+        },
+        "defaultAccount": {
+          "label": "默认账号",
+          "desc": "这个适配器默认选中的账号 key。"
+        },
+        "items": {
+          "label": "适配器明细",
+          "desc": "按适配器名称平铺配置，公共字段包括 `defaultModel`、`includeModels` 和 `excludeModels`"
+        }
+      },
+      "adapterAccount": {
+        "title": {
+          "label": "显示名称",
+          "desc": "这个账号在界面里的展示标题。"
+        },
+        "description": {
+          "label": "描述",
+          "desc": "补充说明这个账号的用途或来源。"
+        },
+        "authFile": {
+          "label": "认证文件",
+          "desc": "显式指定这个账号对应的 auth.json 路径。"
+        }
+      },
+      "plugins": {
+        "items": {
+          "label": "插件配置",
+          "desc": "按插件名称平铺配置"
+        },
+        "enabled": {
+          "label": "启用插件",
+          "desc": "控制插件启用状态"
+        },
+        "marketplaces": {
+          "label": "插件市场",
+          "desc": "适配器原生插件 marketplace 配置"
+        }
+      },
+      "mcp": {
+        "mcpServers": {
+          "label": "MCP 服务器",
+          "desc": "配置 MCP 服务器的连接信息"
+        },
+        "defaultIncludeMcpServers": {
+          "label": "默认启用列表",
+          "desc": "默认启用的 MCP 服务器"
+        },
+        "defaultExcludeMcpServers": {
+          "label": "默认禁用列表",
+          "desc": "默认禁用的 MCP 服务器"
+        },
+        "noDefaultOneworksMcpServer": {
+          "label": "禁用内置 MCP",
+          "desc": "不启用内置 OneWorks MCP 服务器"
+        },
+        "items": {
+          "label": "服务器明细",
+          "desc": "按服务器名称平铺配置"
+        }
+      },
+      "mcpServer": {
+        "enabled": {
+          "label": "是否启用",
+          "desc": "控制当前 MCP 服务器的启用状态"
+        },
+        "type": {
+          "label": "连接类型",
+          "desc": "选择 MCP 服务器的连接方式"
+        },
+        "command": {
+          "label": "命令",
+          "desc": "本地命令启动方式"
+        },
+        "args": {
+          "label": "命令参数",
+          "desc": "启动命令的参数列表"
+        },
+        "url": {
+          "label": "服务地址",
+          "desc": "远程 MCP 服务地址"
+        },
+        "headers": {
+          "label": "请求头",
+          "desc": "连接时附带的请求头"
+        },
+        "env": {
+          "label": "环境变量",
+          "desc": "为 MCP 服务器注入环境变量"
+        }
+      },
+      "shortcuts": {
+        "newSession": {
+          "label": "新建会话",
+          "desc": "创建新会话的全局快捷键"
+        },
+        "openConfig": {
+          "label": "打开配置",
+          "desc": "打开配置页的快捷键"
+        },
+        "sendMessage": {
+          "label": "发送消息",
+          "desc": "发送消息的快捷键"
+        },
+        "clearInput": {
+          "label": "清空输入框",
+          "desc": "清空输入框内容的快捷键"
+        },
+        "switchModel": {
+          "label": "切换模型",
+          "desc": "激活模型选择框并支持键盘切换"
+        },
+        "switchEffort": {
+          "label": "切换推理强度",
+          "desc": "激活推理强度选择框并支持键盘切换"
+        },
+        "switchPermissionMode": {
+          "label": "切换权限等级",
+          "desc": "打开权限模式菜单并支持键盘切换"
+        }
+      },
+      "experiments": {
+        "agentRoom": {
+          "label": "Agent Room 多 agent 群聊",
+          "desc": "启用实验性的 Agent Room 多 agent 群聊模式。默认关闭。"
+        },
+        "automation": {
+          "label": "自动化任务",
+          "desc": "启用实验性的自动化任务界面入口。默认关闭。"
+        },
+        "benchmark": {
+          "label": "评测",
+          "desc": "启用实验性的评测界面入口。默认关闭。"
+        },
+        "sessionTimeline": {
+          "label": "会话时序视图",
+          "desc": "在会话头部展示尚未完成的时序视图入口。默认关闭。"
+        }
+      }
+    },
+    "options": {
+      "language": {
+        "zh": "中文",
+        "en": "English"
+      },
+      "conversation": {
+        "friendly": "友好",
+        "programmatic": "程序化"
+      },
+      "conversationStarterMode": {
+        "default": "默认",
+        "workspace": "Workspace",
+        "agent": "Agent",
+        "entity": "实体",
+        "spec": "流程"
+      },
+      "permissionMode": {
+        "default": "默认",
+        "acceptEdits": "接受编辑",
+        "plan": "计划",
+        "dontAsk": "不询问",
+        "bypassPermissions": "跳过权限"
+      },
+      "branchKind": {
+        "local": "本地分支",
+        "remote": "远端分支"
+      },
+      "branchMode": {
+        "checkout": "切换",
+        "create": "创建"
+      },
+      "mcp": {
+        "command": "命令",
+        "sse": "SSE",
+        "http": "HTTP"
+      },
+      "messageLinks": {
+        "externalLinkTarget": {
+          "newTab": "打开新标签",
+          "currentTab": "当前标签打开"
+        },
+        "workspaceFileTarget": {
+          "fileTab": "下方文件 tab",
+          "externalIde": "外部应用",
+          "defaultLink": "浏览器默认"
+        },
+        "workspaceFileOpener": {
+          "auto": "自动探测",
+          "autoWithDefault": "自动探测（{{name}}）",
+          "vscode": "VS Code",
+          "cursor": "Cursor",
+          "windsurf": "Windsurf",
+          "zed": "Zed",
+          "intellij": "IntelliJ IDEA",
+          "webstorm": "WebStorm",
+          "pycharm": "PyCharm",
+          "goland": "GoLand",
+          "textedit": "文本编辑"
+        },
+        "imageLinkMode": {
+          "inlinePreview": "直接预览",
+          "link": "普通链接"
+        },
+        "plainWorkspacePathMode": {
+          "link": "识别为链接",
+          "text": "保持纯文本"
+        }
+      },
+      "recommendedModels": {
+        "modelSelector": "模型元数据"
+      }
+    },
+    "sectionGroups": {
+      "base": "基础配置",
+      "models": "模型配置",
+      "advanced": "进阶配置",
+      "advancedModels": "高阶模型配置",
+      "advancedRuntime": "运行时选项",
+      "advancedSandbox": "沙箱配置",
+      "advancedClient": "客户端标识",
+      "advancedOverrides": "原始覆盖",
+      "advancedMisc": "其他配置",
+      "permissions": "工具权限",
+      "env": "环境变量",
+      "links": "消息链接",
+      "items": "明细配置",
+      "plugins": "插件配置"
+    },
+    "groups": {
+      "config": "配置",
+      "app": "应用"
+    },
+    "environments": {
+      "newPlaceholder": "例如 env-node-20",
+      "newLocalPlaceholder": "例如 env-node-20",
+      "create": "新建",
+      "created": "环境已创建",
+      "empty": "暂无 worktree 环境",
+      "searchEmpty": "没有匹配的 worktree 环境",
+      "searchPlaceholder": "搜索环境",
+      "exists": "环境名称已存在",
+      "createFailed": "创建环境失败",
+      "saveFailed": "保存环境失败",
+      "edit": "编辑",
+      "name": "名称",
+      "createTitle": "创建环境",
+      "createDescription": "",
+      "projectListTitle": "项目环境",
+      "projectListDescription": "",
+      "localListTitle": "本地环境",
+      "localListDescription": "",
+      "detailTitle": "环境详细信息",
+      "baseScript": "脚本",
+      "availableEnvVars": "可用环境变量",
+      "platformOverrides": "平台覆盖",
+      "platformOverridesDescription": "覆盖特定操作系统的默认脚本。",
+      "platformScriptDescription": "只在 {{platform}} 下运行。",
+      "sources": {
+        "project": "项目",
+        "user": "本地"
+      },
+      "platforms": {
+        "macos": "macOS",
+        "linux": "Linux",
+        "windows": "Windows"
+      },
+      "operationSections": {
+        "create": {
+          "title": "创建脚本",
+          "description": "此脚本会在 worktree 创建完成后运行。"
+        },
+        "start": {
+          "title": "启动脚本",
+          "description": "此脚本会在适配器进程启动前运行。"
+        },
+        "destroy": {
+          "title": "清理脚本",
+          "description": "此脚本会在删除托管 worktree 前运行。"
+        }
+      },
+      "baseScriptDescriptions": {
+        "create": "在新 worktree 中运行。",
+        "start": "在会话工作区中运行。",
+        "destroy": "在将要删除的 worktree 中运行。"
+      },
+      "operations": {
+        "create": "创建",
+        "start": "启动",
+        "destroy": "销毁"
+      },
+      "scripts": {
+        "create": "create.sh",
+        "create.macos": "create.macos.sh",
+        "create.linux": "create.linux.sh",
+        "create.windows": "create.windows.ps1",
+        "start": "start.sh",
+        "start.macos": "start.macos.sh",
+        "start.linux": "start.linux.sh",
+        "start.windows": "start.windows.ps1",
+        "destroy": "destroy.sh",
+        "destroy.macos": "destroy.macos.sh",
+        "destroy.linux": "destroy.linux.sh",
+        "destroy.windows": "destroy.windows.ps1"
+      }
+    },
+    "about": {
+      "software": "软件信息",
+      "version": "版本",
+      "clientVersion": "Client 版本",
+      "serverVersion": "Server 版本",
+      "commitHash": "构建 Commit",
+      "lastRelease": "最后发布时间",
+      "checkUpdate": "检查更新",
+      "docs": "帮助文档",
+      "contact": "联系我们",
+      "feedback": "问题反馈",
+      "buildSource": {
+        "title": "应用来源",
+        "gitHash": "Git Hash",
+        "branch": "分支",
+        "buildTime": "构建时间"
+      },
+      "unknown": "未知"
+    },
+    "sections": {
+      "general": "通用",
+      "conversation": "会话",
+      "models": "模型元数据",
+      "modelServices": "模型服务",
+      "channels": "频道",
+      "adapters": "适配器",
+      "plugins": "插件",
+      "environments": "环境",
+      "mcp": "MCP",
+      "shortcuts": "快捷键",
+      "desktop": "桌面端",
+      "appearance": "外观",
+      "experiments": "实验功能",
+      "about": "关于"
+    },
+    "desktopSettings": {
+      "unavailable": "当前环境没有提供桌面端设置更新接口",
+      "saving": "正在保存...",
+      "saveFailed": "保存桌面端设置失败",
+      "openKeyboardSettingsFailed": "打开系统设置失败",
+      "appIcon": {
+        "label": "应用 icon",
+        "desc": "选择桌面应用 icon 主题，明暗外观跟随主题模式",
+        "theme": "主题",
+        "appearance": "外观",
+        "background": "默认背景",
+        "backgroundDesc": "渲染图标默认底色",
+        "backgroundStyle": {
+          "options": {
+            "transparent": {
+              "label": "透明",
+              "desc": "仅显示图标本体，不渲染底色"
+            },
+            "solid": {
+              "label": "纯色",
+              "desc": "使用应用 icon 主题色渲染纯色底色"
+            },
+            "textured": {
+              "label": "纹理",
+              "desc": "使用应用 icon 主题的质感背景"
+            }
+          }
+        },
+        "previewAlt": "OneWorks 应用 icon 预览",
+        "saveFailed": "保存应用 icon 设置失败",
+        "syncDockIcon": {
+          "label": "同步 Dock 图标",
+          "desc": "修改全局应用 icon 设置时同步更新 Dock 中的应用图标"
+        },
+        "syncTaskbarIcon": {
+          "label": "同步任务栏图标",
+          "desc": "修改全局应用 icon 设置时同步更新任务栏中的应用图标"
+        },
+        "syncAppIcon": {
+          "label": "同步系统应用图标",
+          "desc": "修改全局应用 icon 设置时同步更新系统中的应用图标"
+        },
+        "themeOptions": {
+          "industrial": "工业",
+          "metal": "金属",
+          "matrix": "矩阵"
+        }
+      },
+      "launcherShortcut": {
+        "label": "启动面板快捷键",
+        "desc": "打开或聚焦桌面启动面板。设置为空会停用全局快捷键。",
+        "placeholder": "按下新的快捷键",
+        "invalid": "快捷键至少需要包含 Command、Control 或 Option/Alt",
+        "registerFailed": "当前快捷键没有注册成功：{{message}}",
+        "registered": "快捷键已启用",
+        "openKeyboardSettings": "打开系统设置",
+        "retry": "重新检测",
+        "useFallback": "改用 Option+Space"
+      },
+      "updates": {
+        "label": "应用更新",
+        "desc": "正式桌面版会自动检测更新；这些设置保存到当前项目的 .oo.config.json。",
+        "autoUpdate": "自动检查并下载更新",
+        "check": "检查更新",
+        "checking": "正在检查...",
+        "update": "立即更新",
+        "restart": "重启更新",
+        "checkFailed": "检查更新失败",
+        "channel": {
+          "options": {
+            "stable": "稳定版",
+            "rc": "RC",
+            "beta": "Beta",
+            "alpha": "Alpha"
+          }
+        },
+        "status": {
+          "available": "发现 OneWorks {{version}}。",
+          "checking": "正在检查是否有新版本。",
+          "downloaded": "OneWorks {{version}} 已下载，重启后安装；直接退出应用时也会自动安装。",
+          "downloading": "正在下载更新：{{progress}}",
+          "error": "上次检查失败：{{message}}",
+          "idle": "当前版本 {{version}}。",
+          "autoUpdateOff": "当前版本 {{version}}。自动检查和下载已关闭。",
+          "disabled": "本次启动已关闭更新检查。",
+          "unavailable": "更新检查仅在带更新配置的正式安装包中可用。"
+        }
+      }
+    },
+    "appSettings": {
+      "projectThemeColor": {
+        "label": "界面主题色",
+        "desc": "选择当前配置层级的界面主色",
+        "previewAlt": "界面主题图标预览",
+        "saveFailed": "保存主题设置失败",
+        "backgroundStyle": {
+          "label": "背景",
+          "options": {
+            "transparent": {
+              "label": "透明",
+              "desc": "仅显示图标本体，不渲染底色"
+            },
+            "solid": {
+              "label": "纯色",
+              "desc": "使用项目主题色渲染纯色底色"
+            },
+            "textured": {
+              "label": "纹理",
+              "desc": "使用图标主题的质感背景"
+            }
+          }
+        },
+        "syncDockIcon": {
+          "label": "同步 Dock 图标",
+          "desc": "切换项目主题色时同步修改 Dock 中的应用图标"
+        },
+        "syncTaskbarIcon": {
+          "label": "同步任务栏图标",
+          "desc": "切换项目主题色时同步修改任务栏中的应用图标"
+        },
+        "syncAppIcon": {
+          "label": "同步系统应用图标",
+          "desc": "切换项目主题色时同步修改系统中的应用图标"
+        }
+      },
+      "themeMode": {
+        "label": "主题模式",
+        "desc": "切换浅色、深色或跟随系统的界面主题"
+      },
+      "senderHeaderDisplay": {
+        "label": "输入区顶栏默认展示",
+        "desc": "链接未显式指定时，默认展开或折叠输入区顶栏",
+        "expanded": "默认展开",
+        "collapsed": "默认折叠"
+      },
+      "sessionListSearchThreshold": {
+        "label": "会话列表搜索展示阈值",
+        "desc": "只有会话数量超过该值时才展示搜索和筛选区域，0 表示始终展示"
+      },
+      "interactionPanelPinnedTabLimit": {
+        "label": "下方面板固定标签上限",
+        "desc": "控制下方面板左侧最多显示多少个固定标签，默认 4 个"
+      },
+      "announcements": {
+        "label": "显示公告",
+        "desc": "新建会话时展示公告信息"
+      },
+      "recommendedActions": {
+        "label": "显示推荐操作",
+        "desc": "新建会话时展示推荐操作列表"
+      }
+    }
+  }
+}

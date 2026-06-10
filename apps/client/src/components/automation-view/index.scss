@@ -1,0 +1,166 @@
+.automation-view {
+  position: relative;
+
+  &__body {
+    --automation-view-right-padding-x: 0px;
+    --automation-view-right-padding-bottom: 0px;
+
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    position: relative;
+  }
+
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+
+  .ant-form-item {
+    margin-bottom: 12px;
+  }
+
+  &__select-arrow {
+    color: var(--sub-text-color);
+    font-size: 16px;
+    line-height: 1;
+    pointer-events: none;
+    transition: transform .18s ease, color .18s ease;
+  }
+
+  .ant-select-open &__select-arrow,
+  .ant-select-focused &__select-arrow {
+    color: var(--text-color);
+  }
+
+  .ant-select-open &__select-arrow {
+    transform: rotate(180deg);
+  }
+
+  &__title-leading-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  &__title-action-button.ant-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--sub-text-color);
+    box-shadow: none;
+
+    .ant-btn-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-inline-end: 0;
+      line-height: 1;
+    }
+
+    &:not(:disabled):hover,
+    &:not(:disabled):focus-visible {
+      background: var(--nav-hover-bg, var(--tag-hover-bg));
+      color: var(--text-color);
+    }
+
+    &.is-active,
+    &.is-active:disabled {
+      border: 1px solid var(--primary-color);
+      background: transparent;
+      color: var(--primary-color);
+      opacity: 1;
+    }
+  }
+
+  &__title-action-icon {
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  &__create-mode-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    height: 20px;
+    min-height: 20px;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    overflow: visible;
+    isolation: isolate;
+  }
+
+  &__create-mode-switch::before {
+    content: '';
+    position: absolute;
+    inset: -3px 0;
+    border: 1px solid var(--border-color);
+    border-radius: inherit;
+    background: var(--bg-color);
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  &__create-mode-button.ant-btn.ant-btn-text {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 22px;
+    min-width: 22px;
+    width: 22px;
+    margin-block: -1px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    color: var(--sub-text-color);
+    box-shadow: none;
+
+    .ant-btn-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-inline-end: 0;
+      line-height: 1;
+    }
+
+    &:not(:disabled):hover,
+    &:not(:disabled):focus-visible {
+      background: var(--tag-hover-bg);
+      color: var(--text-color);
+    }
+
+    &.is-active {
+      background: var(--primary-soft-bg);
+      color: var(--primary-color);
+    }
+  }
+
+  &__create-mode-icon {
+    font-size: 14px;
+    line-height: 1;
+  }
+}
+
+@media (max-width: 960px) {
+  .automation-view--compact {
+    .automation-view__body {
+      gap: 0;
+      height: 100%;
+    }
+
+    .automation-view__body {
+      padding: 0;
+    }
+  }
+}

@@ -1,0 +1,121 @@
+.session-context-menu {
+  min-width: 196px;
+}
+
+.session-context-menu-dropdown.ant-dropdown {
+  -webkit-app-region: no-drag;
+
+  .ant-dropdown-menu {
+    background: var(--bg-color) !important;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+.session-context-menu__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.session-context-menu__meta {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--oneworks-overlay-icon-gap, 6px);
+}
+
+.session-context-menu__icon {
+  width: 14px;
+  min-width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+
+  &.icon-asset--svg svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  &.icon-asset--image {
+    display: block;
+    object-fit: contain;
+  }
+}
+
+.session-context-menu__item--star .session-context-menu__icon {
+  color: #d97706;
+}
+
+.session-context-menu__item--archive .session-context-menu__icon {
+  color: #dc2626;
+}
+
+.session-context-menu__item--delete .session-context-menu__icon {
+  color: #991b1b;
+}
+
+.session-context-menu__item--copy-session-link .session-context-menu__icon {
+  color: #2563eb;
+}
+
+.session-context-menu__item--copy-session-id .session-context-menu__icon {
+  color: #64748b;
+}
+
+.session-context-menu__item--copy-resume-command .session-context-menu__icon {
+  color: #0f766e;
+}
+
+.session-context-menu__label {
+  min-width: 0;
+  font-size: 12px;
+  line-height: var(--oneworks-overlay-line-height, 16px);
+}
+
+.session-context-menu__confirm-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 12px;
+  flex-shrink: 0;
+}
+
+.session-context-menu__confirm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: color .16s ease;
+
+  .material-symbols-rounded {
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  &.is-accept:hover {
+    color: var(--success-color, #15803d);
+  }
+
+  &.is-cancel:hover {
+    color: var(--sub-text-color);
+  }
+}
+
+.session-context-menu__divider {
+  height: 1px;
+}

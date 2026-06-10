@@ -1,0 +1,120 @@
+.benchmark-view {
+  &__body {
+    flex-direction: row;
+    gap: 0;
+    padding: 0;
+  }
+
+  &__mobile-switcher-shell {
+    display: none;
+  }
+
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+
+  &__left {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    width: var(--subpage-secondary-panel-width);
+    min-width: var(--subpage-secondary-panel-width);
+    max-width: var(--subpage-secondary-panel-width);
+    background: var(--sub-bg-color);
+  }
+
+  &__right {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    margin: var(--subpage-content-card-gap);
+    margin-left: 0;
+    padding: 10px 12px 12px;
+    border-radius: var(--subpage-content-card-radius);
+    background: var(--subpage-content-card-bg);
+  }
+
+  &__canvas {
+    height: 100%;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    padding-right: 4px;
+  }
+
+  &__empty {
+    height: 100%;
+    display: grid;
+    place-items: center;
+  }
+
+  &__sep.ant-divider {
+    margin: 0;
+    border-color: var(--border-color);
+  }
+}
+
+@media (max-width: 1100px) {
+  .benchmark-view {
+    &__body {
+      flex-direction: column;
+    }
+
+    &__left {
+      width: 100%;
+      min-width: 0;
+      max-height: 320px;
+    }
+
+    &__right {
+      margin-top: 0;
+      margin-left: var(--subpage-content-card-gap);
+    }
+  }
+}
+
+@media (max-width: 720px) {
+  .benchmark-view {
+    &__right {
+      padding: 10px 12px;
+    }
+  }
+}
+
+@media (max-width: 960px) {
+  .benchmark-view--compact {
+    .benchmark-view__mobile-switcher-shell {
+      display: block;
+      padding: 12px;
+      padding-bottom: 0;
+    }
+
+    .benchmark-view__mobile-switcher {
+      width: 100%;
+
+      .ant-segmented-group {
+        gap: 4px;
+      }
+
+      .ant-segmented-item {
+        min-height: 32px;
+      }
+    }
+
+    .benchmark-view__left,
+    .benchmark-view__right {
+      width: auto;
+      min-width: 0;
+      max-width: none;
+      max-height: none;
+      margin: 0;
+      border-radius: 0;
+      background: var(--subpage-content-card-bg);
+      overflow: hidden;
+    }
+
+    .benchmark-view__right {
+      padding: 12px;
+    }
+  }
+}

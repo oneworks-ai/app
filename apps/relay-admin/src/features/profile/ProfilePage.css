@@ -1,0 +1,72 @@
+.relay-profile-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px var(--route-container-header-padding-inline);
+}
+
+.relay-profile {
+  display: grid;
+  gap: 18px;
+}
+
+.relay-profile__hero {
+  align-items: center;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+}
+
+.relay-profile__avatar.ant-avatar {
+  background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--primary-color) 32%, var(--border-color));
+  color: var(--primary-color);
+  flex: 0 0 auto;
+}
+
+.relay-profile__identity {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.relay-profile__identity h2 {
+  font-size: 20px;
+  line-height: 1.2;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.relay-profile__identity p {
+  color: var(--sub-text-color);
+  font-size: 13px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.relay-profile__eyebrow {
+  color: var(--sub-text-color);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.relay-profile__descriptions.ant-descriptions .ant-descriptions-view {
+  border-color: var(--border-color);
+}
+
+.relay-profile__descriptions.ant-descriptions .ant-descriptions-item-label,
+.relay-profile__descriptions.ant-descriptions .ant-descriptions-item-content {
+  background: transparent;
+  border-color: var(--border-color);
+  color: var(--text-color);
+}
+
+.relay-profile__descriptions.ant-descriptions .ant-descriptions-item-label {
+  color: var(--sub-text-color);
+  font-weight: 650;
+}
+
+.relay-profile__empty {
+  padding: 28px 0;
+}

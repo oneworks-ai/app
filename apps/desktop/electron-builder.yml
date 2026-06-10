@@ -1,0 +1,76 @@
+appId: ai.oneworks.desktop
+productName: One Works
+artifactName: oneworks-${version}-${os}-${arch}.${ext}
+copyright: Copyright One Works contributors
+afterSign: scripts/notarize.cjs
+icon: build/icon
+
+directories:
+  output: release
+
+publish:
+  provider: github
+  owner: oneworks-ai
+  repo: app
+  tagNamePrefix: pkg/oneworks-desktop/v
+  releaseType: release
+
+protocols:
+  - name: One Works
+    schemes:
+      - oneworks
+      - one-works
+
+mac:
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  icon: build/icon.icns
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  target:
+    - target: dmg
+    - target: zip
+
+dmg:
+  icon: build/icon.icns
+  sign: false
+
+pkg:
+  installLocation: /Applications
+  isRelocatable: false
+  scripts: pkg-scripts
+
+win:
+  compression: store
+  icon: build/icon.ico
+  target:
+    - target: nsis-web
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: One Works
+
+nsisWeb:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  differentialPackage: false
+  shortcutName: One Works
+
+linux:
+  category: Development
+  icon: build/icon.png
+  maintainer: One Works contributors <noreply@github.com>
+  target:
+    - target: AppImage
+    - target: deb
+    - target: tar.gz

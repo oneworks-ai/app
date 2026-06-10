@@ -1,0 +1,94 @@
+import './LsTool.scss'
+import { CodeBlock } from '#~/components/CodeBlock'
+import { safeJsonStringify } from '#~/utils/safe-serialize'
+import type { ToolInputs } from '@oneworks/core'
+import React, { useMemo } from 'react'
+import { ToolCallBox } from '../core/ToolCallBox'
+import { defineToolRender } from '../defineToolRender'
+import { FileList } from './components/FileList'
+
+export const LsTool = defineToolRender(({ item, resultItem }) => {
+  const input = (item.input != null ? item.input : {}) as ToolInputs['adapter:claude-code:LS']
+  const path = (input.path != null && input.path !== '') ? input.path : 'current directory'
+  const ignore = input.ignore
+
+  const shouldShowList = (content: any) => {
+    if (typeof content !== 'string') return false
+    const lines = content.split('\n').filter(l => l.trim())
+    if (lines.length > 0 && lines[0].includes('drwxr')) return false
+    return true
+  }
+
+  const processContent = (content: string) => {
+    const lines = content.split('\n').filter(line => line.trim() !== '')
+    if (lines.length > 0) {
+      lines.pop()
+    }
+    return lines
+  }
+
+  const fileCount = useMemo(() => {
+    if (!resultItem) return null
+    if (typeof resultItem.content !== 'string') return null
+    if (!shouldShowList(resultItem.content)) return null
+
+    const lines = processContent(resultItem.content)
+    return lines.length
+  }, [resultItem])
+
+  return (
+    <div className='tool-group ls-tool'>
+      <ToolCallBox
+        header={
+          <div className='tool-header-content'>
+            <span className='material-symbols-rounded tool-header-icon'>folder_open</span>
+            <span className='tool-header-title'>LS</span>
+            <span className='tool-header-secondary'>{path}</span>
+            {fileCount !== null && (
+              <span className='tool-header-chip'>{fileCount} files</span>
+            )}
+          </div>
+        }
+        content={
+          <div className='tool-content'>
+            {ignore && ignore.length > 0 && (
+              <div className='tool-input-grid'>
+                <div className='tool-input-item'>
+                  <span className='tool-input-label'>Ignore</span>
+                  <span className='tool-input-value'>{JSON.stringify(ignore)}</span>
+                </div>
+              </div>
+            )}
+
+            {resultItem
+              ? (
+                <div className='result-content'>
+                  {shouldShowList(resultItem.content)
+                    ? (
+                      <FileList
+                        content={processContent(resultItem.content as string)}
+                        removeRoot={true}
+                        defaultCollapsed={true}
+                      />
+                    )
+                    : (
+                      <CodeBlock
+                        code={typeof resultItem.content === 'string'
+                          ? resultItem.content
+                          : safeJsonStringify(resultItem.content, 2)}
+                        lang='text'
+                      />
+                    )}
+                </div>
+              )
+              : (
+                <div className='tool-placeholder'>
+                  Listing files...
+                </div>
+              )}
+          </div>
+        }
+      />
+    </div>
+  )
+})

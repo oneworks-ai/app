@@ -1,0 +1,78 @@
+{
+  "name": "@oneworks/icon",
+  "type": "module",
+  "version": "0.1.0-alpha.0",
+  "description": "OneWorks icon geometry, canvas renderer, SVG renderer, and browser loader",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/icon"
+  },
+  "imports": {
+    "#~/*.js": {
+      "__oneworks__": {
+        "default": "./src/*.ts"
+      },
+      "default": "./dist/*.js"
+    }
+  },
+  "exports": {
+    ".": {
+      "__oneworks__": {
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./canvas": {
+      "__oneworks__": {
+        "default": "./src/canvas.ts"
+      },
+      "types": "./dist/canvas.d.ts",
+      "default": "./dist/canvas.js"
+    },
+    "./core": {
+      "__oneworks__": {
+        "default": "./src/core.ts"
+      },
+      "types": "./dist/core.d.ts",
+      "default": "./dist/core.js"
+    },
+    "./loader": {
+      "__oneworks__": {
+        "default": "./src/loader.ts"
+      },
+      "types": "./dist/loader.d.ts",
+      "default": "./dist/loader.js"
+    },
+    "./presets": {
+      "__oneworks__": {
+        "default": "./src/presets.ts"
+      },
+      "types": "./dist/presets.d.ts",
+      "default": "./dist/presets.js"
+    },
+    "./svg": {
+      "__oneworks__": {
+        "default": "./src/svg.ts"
+      },
+      "types": "./dist/svg.d.ts",
+      "default": "./dist/svg.js"
+    },
+    "./types": {
+      "__oneworks__": {
+        "default": "./src/types.ts"
+      },
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/icon/__tests__"
+  },
+  "dependencies": {
+    "@paper-design/shaders": "^0.0.76"
+  }
+}

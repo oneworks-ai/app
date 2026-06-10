@@ -1,0 +1,186 @@
+.relay-user-detail-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.relay-user-detail {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.relay-user-detail__summary {
+  align-items: center;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border-color) 72%, transparent);
+  display: grid;
+  flex: 0 0 auto;
+  gap: 14px;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+  padding: 18px var(--route-container-header-padding-inline) 16px;
+}
+
+.relay-user-detail__avatar.ant-avatar {
+  background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--primary-color) 28%, var(--border-color));
+  color: var(--primary-color);
+  flex: 0 0 auto;
+}
+
+.relay-user-detail__title {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.relay-user-detail__title h2 {
+  font-size: 20px;
+  line-height: 1.2;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.relay-user-detail__meta {
+  align-items: center;
+  color: var(--sub-text-color);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 6px;
+  min-width: 0;
+}
+
+.relay-user-detail__meta > span:first-child {
+  overflow-wrap: anywhere;
+}
+
+.relay-user-detail__role {
+  min-width: 126px;
+}
+
+.relay-user-detail__device-limit {
+  align-items: center;
+  color: var(--text-color);
+  display: inline-flex;
+  gap: 6px;
+}
+
+.relay-user-detail__device-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--sub-text-color);
+  white-space: nowrap;
+}
+
+.relay-user-detail__device-input.ant-input-number {
+  width: 76px;
+}
+
+.relay-user-detail__fields {
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border-color) 72%, transparent);
+  display: grid;
+  flex: 0 0 auto;
+  gap: 0 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  padding: 12px var(--route-container-header-padding-inline);
+}
+
+.relay-user-detail__field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 0;
+}
+
+.relay-user-detail__field dt {
+  color: var(--sub-text-color);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.relay-user-detail__field dd {
+  color: var(--text-color);
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.relay-user-detail__devices {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 300px;
+  padding: 10px var(--route-container-header-padding-inline);
+}
+
+.relay-user-detail__devices-header {
+  align-items: center;
+  color: var(--sub-text-color);
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  justify-content: space-between;
+  min-height: 24px;
+}
+
+.relay-user-detail__devices-header h3 {
+  color: var(--text-color);
+  font-size: 14px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.relay-user-detail__devices-header span {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.relay-user-detail__devices > .relay-admin-list-table {
+  min-height: 0;
+}
+
+.relay-user-detail__private-devices {
+  align-items: center;
+  border-top: 1px solid
+    color-mix(in srgb, var(--border-color) 72%, transparent);
+  color: var(--sub-text-color);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 44px;
+  padding-top: 10px;
+}
+
+.relay-user-detail__private-devices > span:not(.relay-status-badge) {
+  font-size: 12px;
+}
+
+.relay-user-detail__empty {
+  padding: 28px 0;
+}
+
+@media (max-width: 860px) {
+  .relay-user-detail__fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .relay-user-detail__summary {
+    align-items: flex-start;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .relay-user-detail__fields {
+    grid-template-columns: 1fr;
+  }
+}

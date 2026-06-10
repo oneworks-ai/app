@@ -1,0 +1,768 @@
+import { spawn } from 'node:child_process'
+
+import { callHook } from '@oneworks/hooks'
+import type {
+  AdapterCtx,
+  AdapterEvent,
+  AdapterInteractionRequest,
+  AdapterOutputEvent,
+  AdapterQueryOptions
+} from '@oneworks/types'
+import {
+  CANONICAL_ONEWORKS_MCP_SERVER_NAME,
+  TRUSTED_ONEWORKS_CLI_PERMISSION_BASH_LOOKUP_KEYS,
+  resolveMcpPermissionServerKey,
+  resolveMcpPermissionServerKeys,
+  resolveTrustedOneworksCliPermissionSubjectFromCommand,
+  sanitizeMcpPermissionKeySegment
+} from '@oneworks/utils'
+import type { CodexSessionBase } from './session-common'
+
+import { formatCodexCommandForDisplay } from '#~/command-display.js'
+import {
+  AgentMessageAccumulator,
+  CommandOutputAccumulator,
+  formatTurnErrorMessage,
+  handleIncomingNotification
+} from '#~/protocol/incoming.js'
+import { CodexRpcClient } from '#~/protocol/rpc.js'
+import type {
+  CodexInputItem,
+  CodexThread,
+  CodexTurn,
+  CommandExecApprovalParams,
+  CommandExecDecision,
+  CommandExecutionRequestApprovalResponse,
+  FileChangeApprovalParams,
+  FileChangeDecision,
+  FileChangeRequestApprovalResponse,
+  McpServerElicitationRequestParams,
+  McpServerElicitationResponse
+} from '#~/types.js'
+
+import { resolveCodexAdapterConfig } from './config'
+import { resolveManagedPermissionDecisionForCtx } from './permissions'
+import {
+  buildFeatureArgs,
+  getErrorMessage,
+  isInvalidEncryptedContentError,
+  isStaleCachedThreadError,
+  mapContentToCodexInput,
+  toAdapterErrorData,
+  toCodexOutboundApprovalPolicy
+} from './session-common'
+
+const buildPermissionInteractionOptions = () => [
+  { label: '同意本次', value: 'allow_once', description: '仅继续这次被拦截的操作。' },
+  { label: '同意并在当前会话忽略类似调用', value: 'allow_session', description: '本会话内同类工具不再重复询问。' },
+  {
+    label: '同意并在当前项目忽略类似调用',
+    value: 'allow_project',
+    description: '写入 .oo.config.json，后续新会话仍生效。'
+  },
+  { label: '拒绝本次', value: 'deny_once', description: '拒绝当前这次操作。' },
+  { label: '拒绝并在当前会话阻止类似调用', value: 'deny_session', description: '本会话内同类工具直接拒绝。' },
+  {
+    label: '拒绝并在当前项目阻止类似调用',
+    value: 'deny_project',
+    description: '写入 .oo.config.json，后续新会话仍生效。'
+  }
+]
+
+const buildCodexPermissionInteraction = (params: {
+  sessionId: string
+  interactionId: string
+  question: string
+  subjectKey: string
+  subjectLookupKeys?: string[]
+  subjectLabel?: string
+  reasons?: string[]
+}): AdapterInteractionRequest => ({
+  id: params.interactionId,
+  payload: {
+    sessionId: params.sessionId,
+    kind: 'permission',
+    question: params.question,
+    options: buildPermissionInteractionOptions(),
+    permissionContext: {
+      adapter: 'codex',
+      deniedTools: [params.subjectKey],
+      reasons: params.reasons,
+      subjectKey: params.subjectKey,
+      subjectLookupKeys: params.subjectLookupKeys,
+      subjectLabel: params.subjectLabel ?? params.subjectKey,
+      scope: 'tool',
+      projectConfigPath: '.oo.config.json'
+    }
+  }
+})
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  value != null && typeof value === 'object' && !Array.isArray(value)
+)
+
+const extractMcpToolNameFromMessage = (message: string | undefined) => {
+  const trimmed = message?.trim()
+  if (trimmed == null || trimmed === '') return undefined
+
+  const quotedMatch = trimmed.match(/tool\s+["'`](.+?)["'`]/i)
+  if (quotedMatch?.[1] != null && quotedMatch[1].trim() !== '') {
+    return quotedMatch[1].trim()
+  }
+
+  const bareMatch = trimmed.match(/tool\s+([\w.:-]+)/i)
+  if (bareMatch?.[1] != null && bareMatch[1].trim() !== '') {
+    return bareMatch[1].trim()
+  }
+
+  return undefined
+}
+
+const buildMcpPermissionSubject = (payload: McpServerElicitationRequestParams) => {
+  const serverName = payload.serverName?.trim() || 'mcp'
+  const serverKeys = resolveMcpPermissionServerKeys(serverName)
+  const serverKey = resolveMcpPermissionServerKey(serverName) ?? 'mcp'
+  const toolName = payload._meta?.tool_title?.trim() || extractMcpToolNameFromMessage(payload.message)
+  const toolKey = sanitizeMcpPermissionKeySegment(toolName) ?? 'tool'
+  const subjectLookupKeys = [
+    ...serverKeys.map(key => `mcp-${key}-${toolKey}`),
+    ...(serverName === CANONICAL_ONEWORKS_MCP_SERVER_NAME ? [CANONICAL_ONEWORKS_MCP_SERVER_NAME] : [])
+  ]
+
+  return {
+    subjectKey: `mcp-${serverKey}-${toolKey}`,
+    subjectLookupKeys,
+    subjectLabel: toolName != null && toolName !== ''
+      ? `${serverName}:${toolName}`
+      : serverName
+  }
+}
+
+const supportsEmptyMcpAcceptPayload = (requestedSchema: unknown) => {
+  const schema = isRecord(requestedSchema) ? requestedSchema : {}
+  const schemaProperties = isRecord(schema.properties) ? schema.properties : {}
+  const schemaType = typeof schema.type === 'string' ? schema.type : undefined
+  const requiredFields = Array.isArray(schema.required)
+    ? schema.required.filter((value): value is string => typeof value === 'string' && value.trim() !== '')
+    : []
+
+  return schemaType === 'object' && Object.keys(schemaProperties).length === 0 && requiredFields.length === 0
+}
+
+const normalizePositiveTokenCount = (value: unknown) => (
+  typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : undefined
+)
+
+const readOptionalString = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== ''
+    ? value.trim()
+    : undefined
+)
+
+export const callCodexObservationalPreCompactHook = async (params: {
+  cwd: string
+  env: AdapterCtx['env']
+  logger: AdapterCtx['logger']
+  runtime: AdapterQueryOptions['runtime']
+  sessionId: string
+  tokenCount?: number
+  transcriptPath?: string | null
+  trigger?: string
+  turnId?: string
+}) => {
+  try {
+    const output = await callHook('PreCompact', {
+      adapter: 'codex',
+      canBlock: false,
+      cwd: params.cwd,
+      hookSource: 'bridge',
+      runtime: params.runtime,
+      sessionId: params.sessionId,
+      tokenCount: params.tokenCount,
+      transcriptPath: params.transcriptPath,
+      trigger: params.trigger,
+      turnId: params.turnId
+    }, params.env)
+
+    if (output?.continue === false) {
+      params.logger.warn(
+        '[codex stream hooks] ignoring blocking output from observational PreCompact hook',
+        output.stopReason
+      )
+    }
+
+    if (output?.hookSpecificOutput?.hookEventName === 'PreCompact') {
+      params.logger.warn(
+        '[codex stream hooks] ignoring hookSpecificOutput from observational PreCompact hook',
+        {
+          additionalContext: output.hookSpecificOutput.additionalContext != null,
+          replacementPrompt: output.hookSpecificOutput.replacementPrompt != null
+        }
+      )
+    }
+  } catch (error) {
+    params.logger.error('[codex stream hooks] PreCompact failed', error)
+  }
+}
+
+export const resolveCodexApprovalDecision = (params: {
+  answer: string | string[]
+  availableDecisions?: string[]
+  kind: 'command' | 'file-change'
+}): CommandExecDecision | FileChangeDecision => {
+  const raw = Array.isArray(params.answer) ? params.answer[0] : params.answer
+  const normalized = typeof raw === 'string' ? raw.trim() : ''
+  const available = new Set(params.availableDecisions ?? [])
+  const supportsSession = available.size === 0 || available.has('acceptForSession')
+  const supportsCancel = available.size === 0 || available.has('cancel')
+
+  if (normalized === 'allow_session' || normalized === 'allow_project') {
+    return supportsSession ? 'acceptForSession' : 'accept'
+  }
+  if (normalized === 'allow_once') {
+    return 'accept'
+  }
+  if (normalized === 'cancel') {
+    if (params.kind === 'file-change') {
+      return 'decline'
+    }
+    return supportsCancel ? 'cancel' : 'decline'
+  }
+  return 'decline'
+}
+
+export const buildCodexApprovalResponse = (params: {
+  answer: string | string[]
+  availableDecisions?: string[]
+  kind: 'command' | 'file-change'
+}): CommandExecutionRequestApprovalResponse | FileChangeRequestApprovalResponse => ({
+  decision: resolveCodexApprovalDecision(params)
+})
+
+export const buildCodexMcpElicitationResponse = (
+  answer: string | string[]
+): McpServerElicitationResponse => {
+  const raw = Array.isArray(answer) ? answer[0] : answer
+  const normalized = typeof raw === 'string' ? raw.trim() : ''
+  if (normalized === 'allow_once' || normalized === 'allow_session' || normalized === 'allow_project') {
+    return {
+      action: 'accept',
+      content: {}
+    }
+  }
+  if (normalized === 'deny_once' || normalized === 'deny_session' || normalized === 'deny_project') {
+    return { action: 'decline' }
+  }
+  return { action: 'cancel' }
+}
+
+/**
+ * Spawn `codex app-server` and drive it over JSON-RPC 2.0 (JSONL),
+ * forwarding events to `onEvent`.
+ */
+export async function createStreamCodexSession(
+  base: CodexSessionBase,
+  ctx: AdapterCtx,
+  options: AdapterQueryOptions
+) {
+  const {
+    logger,
+    cwd,
+    binaryPath,
+    spawnEnv,
+    useYolo,
+    approvalPolicy,
+    sandboxPolicy,
+    features,
+    configOverrideArgs,
+    resolvedModel,
+    resolvedMaxOutputTokens,
+    turnEffort,
+    threadCacheKey,
+    cachedThreadId
+  } = base
+  const { cache } = ctx
+  const { native: nativeConfig } = resolveCodexAdapterConfig(ctx)
+  const { onEvent, description, sessionId, extraOptions, type: sessionType } = options
+  const model = resolvedModel
+  const rpcApprovalPolicy = toCodexOutboundApprovalPolicy(approvalPolicy)
+
+  const {
+    experimentalApi = false,
+    maxOutputTokens: adapterMaxOutputTokens,
+    clientInfo: rawClientInfo = {}
+  } = nativeConfig
+  const maxOutputTokens = typeof resolvedMaxOutputTokens === 'number'
+    ? resolvedMaxOutputTokens
+    : resolvedMaxOutputTokens === null
+    ? undefined
+    : adapterMaxOutputTokens
+  const clientInfo = {
+    name: rawClientInfo.name ?? CANONICAL_ONEWORKS_MCP_SERVER_NAME,
+    title: rawClientInfo.title ?? 'One Works',
+    version: rawClientInfo.version ?? '0.1.0'
+  }
+
+  logger.info('[codex session] spawning app-server (stream mode)', { binaryPath, cwd })
+
+  const proc = spawn(
+    String(binaryPath),
+    [
+      ...(useYolo ? ['--yolo'] : []),
+      'app-server',
+      ...configOverrideArgs,
+      ...buildFeatureArgs(features),
+      ...(extraOptions ?? [])
+    ],
+    { env: spawnEnv, cwd, stdio: ['pipe', 'pipe', 'inherit'] }
+  )
+
+  const rpc = new CodexRpcClient(proc, logger)
+  const msgAcc = new AgentMessageAccumulator()
+  const cmdAcc = new CommandOutputAccumulator()
+  let threadId: string | undefined
+  let activeTurnId: string | undefined
+  let usedCachedThread = false
+  let didEmitExit = false
+  let didEmitFatalError = false
+  const pendingApprovals = new Map<string, {
+    rpcId: number
+    availableDecisions?: string[]
+    kind: 'command' | 'file-change' | 'mcp-elicitation'
+  }>()
+  const emitEvent = (event: AdapterOutputEvent) => {
+    if (event.type === 'error' && event.data.fatal !== false) {
+      didEmitFatalError = true
+    }
+    onEvent(event)
+  }
+
+  const emitFailureAndExit = (err: unknown) => {
+    if (didEmitExit) return
+    didEmitExit = true
+    const stderr = getErrorMessage(err)
+    logger.error('[codex session] stream session failed', { err, sessionId, threadId })
+    if (!didEmitFatalError) {
+      emitEvent({ type: 'error', data: toAdapterErrorData(err) })
+    }
+    rpc.destroy(stderr)
+    emitEvent({ type: 'exit', data: { exitCode: 1, stderr } })
+    proc.kill()
+  }
+
+  const readThreadCache = async () => (await cache.get('adapter.codex.threads')) ?? {}
+
+  const writeThreadCache = async (nextThreadId: string) => {
+    const cachedThreads = await readThreadCache()
+    if (cachedThreads[threadCacheKey] === nextThreadId) return
+    await cache.set('adapter.codex.threads', { ...cachedThreads, [threadCacheKey]: nextThreadId })
+  }
+
+  const deleteCachedThread = async () => {
+    const cachedThreads = await readThreadCache()
+    if (!(threadCacheKey in cachedThreads)) return
+    const { [threadCacheKey]: _removed, ...rest } = cachedThreads
+    await cache.set('adapter.codex.threads', rest)
+  }
+
+  rpc.onNotification((method, params) => {
+    if (method === 'turn/started') {
+      activeTurnId = (params as { turn?: { id?: string } }).turn?.id
+    } else if (method === 'turn/completed') {
+      const turn = (params as { turn?: CodexTurn }).turn
+      if (turn?.status === 'failed') {
+        logger.error('[codex session] turn failed', {
+          sessionId,
+          threadId,
+          turnId: turn.id,
+          error: turn.error
+        })
+        handleIncomingNotification(method, params, rpc, emitEvent, msgAcc, cmdAcc, approvalPolicy)
+        emitFailureAndExit(new Error(formatTurnErrorMessage(turn.error)))
+        activeTurnId = undefined
+        return
+      }
+      activeTurnId = undefined
+    } else if (method === 'item/started') {
+      const item = (params as { item?: { type?: string; tokenCount?: unknown; trigger?: unknown } }).item
+      if (item?.type === 'contextCompaction') {
+        void callCodexObservationalPreCompactHook({
+          cwd,
+          env: ctx.env,
+          logger,
+          runtime: options.runtime,
+          sessionId,
+          tokenCount: normalizePositiveTokenCount(item.tokenCount),
+          trigger: readOptionalString(item.trigger),
+          turnId: activeTurnId
+        })
+      }
+    }
+    handleIncomingNotification(method, params, rpc, emitEvent, msgAcc, cmdAcc, approvalPolicy)
+  })
+
+  rpc.onRequest((id, method, params) => {
+    if (method === 'item/commandExecution/requestApproval') {
+      if (approvalPolicy === 'never') {
+        rpc.respond(id, { decision: 'accept' })
+        return
+      }
+
+      const payload = params as unknown as CommandExecApprovalParams
+      const interactionId = `codex-approval:${id}`
+      const trustedOneworksCliSubject = resolveTrustedOneworksCliPermissionSubjectFromCommand(payload.command)
+      const subjectKey = trustedOneworksCliSubject?.key ?? 'Bash'
+      const subjectLookupKeys = trustedOneworksCliSubject == null
+        ? undefined
+        : TRUSTED_ONEWORKS_CLI_PERMISSION_BASH_LOOKUP_KEYS
+      const subjectLabel = trustedOneworksCliSubject?.label
+      const managedDecision = resolveManagedPermissionDecisionForCtx({
+        ctx,
+        subjectKeys: [
+          subjectKey,
+          ...(subjectLookupKeys ?? [])
+        ]
+      })
+      if (managedDecision === 'allow') {
+        rpc.respond(id, { decision: 'accept' })
+        return
+      }
+      if (managedDecision === 'deny') {
+        rpc.respond(id, { decision: 'decline' })
+        return
+      }
+
+      pendingApprovals.set(interactionId, {
+        rpcId: id,
+        availableDecisions: payload.availableDecisions,
+        kind: 'command'
+      })
+      const commandStr = formatCodexCommandForDisplay(payload.command)
+      emitEvent({
+        type: 'interaction_request',
+        data: buildCodexPermissionInteraction({
+          sessionId,
+          interactionId,
+          question: payload.reason?.trim() != null && payload.reason.trim() !== ''
+            ? `允许执行命令 \`${commandStr}\`？\n原因：${payload.reason.trim()}`
+            : `允许执行命令 \`${commandStr}\`？`,
+          subjectKey,
+          subjectLookupKeys,
+          subjectLabel,
+          reasons: payload.reason?.trim() ? [payload.reason.trim()] : undefined
+        })
+      })
+      return
+    }
+
+    if (method === 'item/fileChange/requestApproval') {
+      if (approvalPolicy === 'never') {
+        rpc.respond(id, { decision: 'accept' })
+        return
+      }
+
+      const payload = params as unknown as FileChangeApprovalParams
+      const interactionId = `codex-approval:${id}`
+      pendingApprovals.set(interactionId, {
+        rpcId: id,
+        kind: 'file-change'
+      })
+      emitEvent({
+        type: 'interaction_request',
+        data: buildCodexPermissionInteraction({
+          sessionId,
+          interactionId,
+          question: payload.reason?.trim() != null && payload.reason.trim() !== ''
+            ? `允许执行文件修改？\n原因：${payload.reason.trim()}`
+            : '允许执行文件修改？',
+          subjectKey: 'Edit',
+          reasons: payload.reason?.trim() ? [payload.reason.trim()] : undefined
+        })
+      })
+      return
+    }
+
+    if (method === 'mcpServer/elicitation/request') {
+      const payload = params as unknown as McpServerElicitationRequestParams
+      const interactionId = `codex-approval:${id}`
+      const isPermissionPrompt = payload._meta?.codex_approval_kind === 'mcp_tool_call'
+      const supportsEmptyAcceptPayload = supportsEmptyMcpAcceptPayload(payload.requestedSchema)
+      const { subjectKey, subjectLookupKeys, subjectLabel } = buildMcpPermissionSubject(payload)
+      const toolDescription = payload._meta?.tool_description?.trim()
+      const question = payload.message?.trim() || '允许执行 MCP 工具调用？'
+
+      if (approvalPolicy === 'never') {
+        rpc.respond(
+          id,
+          isPermissionPrompt && supportsEmptyAcceptPayload
+            ? {
+              action: 'accept',
+              content: {}
+            } satisfies McpServerElicitationResponse
+            : { action: 'cancel' } satisfies McpServerElicitationResponse
+        )
+        return
+      }
+
+      if (isPermissionPrompt && supportsEmptyAcceptPayload) {
+        const managedDecision = resolveManagedPermissionDecisionForCtx({
+          ctx,
+          subjectKeys: subjectLookupKeys
+        })
+        if (managedDecision === 'allow') {
+          rpc.respond(
+            id,
+            {
+              action: 'accept',
+              content: {}
+            } satisfies McpServerElicitationResponse
+          )
+          return
+        }
+        if (managedDecision === 'deny') {
+          rpc.respond(id, { action: 'decline' } satisfies McpServerElicitationResponse)
+          return
+        }
+
+        pendingApprovals.set(interactionId, {
+          rpcId: id,
+          kind: 'mcp-elicitation'
+        })
+        emitEvent({
+          type: 'interaction_request',
+          data: buildCodexPermissionInteraction({
+            sessionId,
+            interactionId,
+            question,
+            subjectKey,
+            subjectLookupKeys,
+            subjectLabel,
+            reasons: [toolDescription, question]
+              .filter((value): value is string => typeof value === 'string' && value !== '')
+          })
+        })
+        return
+      }
+
+      logger.warn('[codex session] unsupported mcp elicitation request; cancelling', {
+        id,
+        sessionId,
+        threadId,
+        activeTurnId,
+        method,
+        params
+      })
+      rpc.respond(id, { action: 'cancel' } satisfies McpServerElicitationResponse)
+      return
+    }
+
+    logger.warn('[codex session] unhandled rpc request', {
+      id,
+      method,
+      sessionId,
+      threadId,
+      activeTurnId,
+      params
+    })
+  })
+
+  proc.on('exit', (code) => {
+    if (didEmitExit) return
+    didEmitExit = true
+    if ((code ?? 0) !== 0 && !didEmitFatalError) {
+      emitEvent({
+        type: 'error',
+        data: {
+          message: `Process exited with code ${code ?? 1}`,
+          details: { exitCode: code ?? 1 },
+          fatal: true
+        }
+      })
+    }
+    rpc.destroy('process exited')
+    emitEvent({ type: 'exit', data: { exitCode: code ?? undefined } })
+  })
+
+  const startNewThread = async () => {
+    logger.info('[codex session] starting new thread', { cwd, sessionId })
+    const startResult = await rpc.request<{ thread: CodexThread }>('thread/start', {
+      cwd,
+      approvalPolicy: rpcApprovalPolicy,
+      sandboxPolicy,
+      serviceName: CANONICAL_ONEWORKS_MCP_SERVER_NAME,
+      ...(model ? { model } : {})
+    })
+    threadId = startResult.thread.id
+    usedCachedThread = false
+    await writeThreadCache(threadId)
+    logger.info('[codex session] thread started', { threadId, sessionId })
+  }
+
+  const isRecoverableCachedThreadError = (err: unknown) => (
+    isInvalidEncryptedContentError(err) || isStaleCachedThreadError(err)
+  )
+
+  const recoverFromCachedThreadError = async (source: string, err: unknown) => {
+    logger.warn('[codex session] cached thread is no longer usable; starting a fresh thread', {
+      sessionId,
+      threadId,
+      source,
+      error: getErrorMessage(err)
+    })
+    await deleteCachedThread()
+    await startNewThread()
+  }
+
+  const resumeCachedThread = async (nextThreadId: string) => {
+    logger.info('[codex session] resuming thread', { threadId: nextThreadId, sessionId })
+    const resumeResult = await rpc.request<{ thread: CodexThread }>('thread/resume', {
+      threadId: nextThreadId,
+      ...(model ? { model } : {})
+    })
+    threadId = resumeResult.thread.id
+    usedCachedThread = true
+    await writeThreadCache(threadId)
+  }
+
+  const startTurn = async (input: CodexInputItem[], source: string) => {
+    const turnParams: Record<string, unknown> = {
+      threadId: threadId!,
+      input,
+      cwd,
+      approvalPolicy: rpcApprovalPolicy,
+      sandboxPolicy,
+      ...(model ? { model } : {}),
+      ...(turnEffort ? { effort: turnEffort } : {}),
+      ...(typeof maxOutputTokens === 'number' ? { maxOutputTokens } : {})
+    }
+
+    try {
+      logger.info('[codex session] starting turn', { threadId, input, source })
+      const turnResult = await rpc.request<{ turn: CodexTurn }>('turn/start', turnParams)
+      logger.info('[codex session] turn started', { turnId: turnResult.turn.id, source })
+      return turnResult
+    } catch (err) {
+      if (usedCachedThread && isRecoverableCachedThreadError(err)) {
+        await recoverFromCachedThreadError(source, err)
+        const retryParams = {
+          ...turnParams,
+          threadId: threadId!
+        }
+        logger.info('[codex session] retrying turn on fresh thread', { threadId, source })
+        const retryResult = await rpc.request<{ turn: CodexTurn }>('turn/start', retryParams)
+        logger.info('[codex session] turn started after retry', { turnId: retryResult.turn.id, source })
+        return retryResult
+      }
+      throw err
+    }
+  }
+
+  try {
+    const initResult = await rpc.request<{ userAgent?: string }>('initialize', {
+      clientInfo,
+      capabilities: {
+        experimentalApi,
+        optOutNotificationMethods: [
+          'turn/diff/updated',
+          'turn/plan/updated',
+          'thread/tokenUsage/updated'
+        ]
+      }
+    })
+    logger.info('[codex session] initialized', { userAgent: initResult?.userAgent })
+    rpc.notify('initialized', {})
+
+    if (sessionType === 'resume' && cachedThreadId != null) {
+      try {
+        await resumeCachedThread(cachedThreadId)
+      } catch (err) {
+        if (!isRecoverableCachedThreadError(err)) throw err
+        await recoverFromCachedThreadError('thread/resume', err)
+      }
+    } else {
+      await startNewThread()
+    }
+
+    if (description) {
+      const input: CodexInputItem[] = [{ type: 'text', text: description }]
+      await startTurn(input, 'initial')
+    }
+  } catch (err) {
+    emitFailureAndExit(err)
+    throw err
+  }
+
+  const emit = (event: AdapterEvent) => {
+    switch (event.type) {
+      case 'message': {
+        const textItems: CodexInputItem[] = mapContentToCodexInput(
+          event.content as Array<{ type: string; text?: string; url?: string }>
+        )
+        if (activeTurnId != null) {
+          rpc.request('turn/steer', {
+            threadId: threadId!,
+            input: textItems,
+            expectedTurnId: activeTurnId
+          }).catch((err) => {
+            logger.error('[codex session] turn/steer failed', { err })
+            emitFailureAndExit(err)
+          })
+        } else {
+          startTurn(textItems, 'emit').catch((err) => {
+            logger.error('[codex session] turn/start from emit failed', { err })
+            emitFailureAndExit(err)
+          })
+        }
+        break
+      }
+
+      case 'interrupt': {
+        if (activeTurnId != null) {
+          rpc.request('turn/interrupt', {
+            threadId: threadId!,
+            turnId: activeTurnId
+          }).catch((err) => {
+            logger.error('[codex session] turn/interrupt failed', { err })
+          })
+        }
+        break
+      }
+
+      case 'stop': {
+        proc.kill()
+        break
+      }
+
+      default:
+        logger.warn('[codex session] unknown emit event', { event })
+        break
+    }
+  }
+
+  return {
+    kill: () => {
+      rpc.destroy('killed by caller')
+      proc.kill()
+    },
+    emit,
+    respondInteraction: (interactionId: string, data: string | string[]) => {
+      const pending = pendingApprovals.get(interactionId)
+      if (pending == null) return
+
+      pendingApprovals.delete(interactionId)
+      rpc.respond(
+        pending.rpcId,
+        pending.kind === 'mcp-elicitation'
+          ? buildCodexMcpElicitationResponse(data)
+          : buildCodexApprovalResponse({
+            answer: data,
+            availableDecisions: pending.availableDecisions,
+            kind: pending.kind
+          })
+      )
+    },
+    pid: proc.pid
+  }
+}

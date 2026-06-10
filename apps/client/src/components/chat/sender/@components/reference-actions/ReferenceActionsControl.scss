@@ -1,0 +1,263 @@
+.toolbar-btn.toolbar-btn--reference {
+  width: auto;
+  gap: 0 !important;
+  padding: 0 6px 0 2px !important;
+  color: var(--placeholder-color, #9ca3af);
+
+  .toolbar-btn__icon-shell {
+    width: auto;
+    min-width: 0;
+    height: 100%;
+  }
+
+  &:hover {
+    color: var(--sender-control-hover-color);
+    background-color: var(--sender-control-hover-bg);
+  }
+
+  &.active {
+    color: var(--sender-control-hover-color);
+    background-color: var(--sender-control-active-bg);
+  }
+}
+
+@media (max-width: 600px) {
+  .toolbar-btn.toolbar-btn--reference {
+    width: var(--sender-control-height);
+    min-width: var(--sender-control-height);
+    height: var(--sender-control-height);
+    padding: 0 !important;
+    justify-content: center;
+
+    .toolbar-btn__icon-shell {
+      width: 100%;
+      min-width: 100%;
+      height: 100%;
+      border-radius: var(--sender-control-radius);
+    }
+  }
+}
+
+.reference-actions-dropdown.ant-dropdown {
+  .ant-dropdown-menu {
+    min-width: 188px;
+  }
+}
+
+.reference-actions-menu {
+  min-width: 188px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--oneworks-overlay-item-gap, 0);
+  font-size: var(--oneworks-overlay-font-size, 12px);
+  line-height: var(--oneworks-overlay-line-height, 16px);
+}
+
+.reference-actions-menu-composite {
+  --reference-actions-menu-gap: var(--oneworks-overlay-item-gap, 0px);
+  --reference-actions-menu-width: 188px;
+  --reference-actions-submenu-width: 196px;
+  --oneworks-overlay-menu-width: 188px;
+
+  position: relative;
+}
+
+.reference-actions-menu-composite .oneworks-overlay-menu-column.is-submenu {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+}
+
+.reference-actions-menu-composite
+  .oneworks-overlay-menu-column.is-submenu[data-oneworks-overlay-menu-level='1'] {
+  left: calc(
+    var(--reference-actions-menu-width) + var(--reference-actions-menu-gap)
+  );
+}
+
+.reference-actions-menu-composite
+  .oneworks-overlay-menu-column.is-submenu[data-oneworks-overlay-menu-level='2'] {
+  left: calc(
+    var(--reference-actions-menu-width) +
+      var(--reference-actions-submenu-width) +
+      var(--reference-actions-menu-gap) +
+      var(--reference-actions-menu-gap)
+  );
+}
+
+.reference-actions-menu-composite
+  .oneworks-overlay-menu-column.is-submenu
+  .reference-actions-menu {
+  width: var(--reference-actions-submenu-width);
+  min-width: var(--reference-actions-submenu-width);
+  max-height: min(360px, calc(100vh - 24px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.reference-actions-menu-composite
+  .oneworks-overlay-menu-column.is-submenu:has(.reference-actions-menu-branch-tree)
+  .reference-actions-menu-panel {
+  width: min(376px, calc(100vw - 24px));
+  min-width: min(376px, calc(100vw - 24px));
+  padding: 0;
+  overflow: hidden;
+}
+
+.reference-actions-menu-composite
+  .oneworks-overlay-menu-column.is-submenu:has(.reference-actions-menu-branch-tree)
+  .reference-actions-menu {
+  width: 100%;
+  min-width: 100%;
+  max-height: none;
+  overflow: visible;
+}
+
+.reference-actions-menu-branch-tree {
+  --chat-header-git-branch-radius: var(--subpage-tertiary-radius, 8px);
+  --chat-header-git-branch-item-radius: 6px;
+  --chat-header-git-branch-icon-size: 14px;
+  --chat-header-git-branch-icon-gap: 8px;
+  --chat-header-git-branch-font-size: 12px;
+  --chat-header-git-branch-line-height: 16px;
+  --chat-header-git-branch-item-gap: 0px;
+  --chat-header-git-branch-row-height: 20px;
+  --chat-header-git-branch-item-padding: 0 8px;
+  --chat-header-git-branch-depth-offset: 14px;
+  --chat-header-git-branch-muted: color-mix(
+    in srgb,
+    var(--sub-text-color) 76%,
+    transparent
+  );
+  --oneworks-overlay-font-size: var(--chat-header-git-branch-font-size);
+  --oneworks-overlay-icon-gap: var(--chat-header-git-branch-icon-gap);
+  --oneworks-overlay-icon-size: var(--chat-header-git-branch-icon-size);
+  --oneworks-overlay-item-gap: var(--chat-header-git-branch-item-gap);
+  --oneworks-overlay-item-min-height: var(--chat-header-git-branch-row-height);
+  --oneworks-overlay-line-height: var(--chat-header-git-branch-line-height);
+  --oneworks-overlay-item-radius: var(--chat-header-git-branch-item-radius);
+  --oneworks-overlay-panel-padding-y: 0px;
+  --oneworks-overlay-tree-indent-base: 8px;
+  --oneworks-overlay-tree-indent-step: var(
+    --chat-header-git-branch-depth-offset
+  );
+  --oneworks-overlay-muted: var(--chat-header-git-branch-muted);
+  --oneworks-overlay-disabled: color-mix(
+    in srgb,
+    var(--sub-text-color) 54%,
+    transparent
+  );
+
+  width: 100%;
+  color: var(--text-color);
+
+  .chat-header-git__branch-toolbar.oneworks-overlay-search-row {
+    min-height: 30px;
+    padding: 3px 8px;
+  }
+
+  .chat-header-git__branch-list {
+    max-height: min(320px, calc(100vh - 120px));
+    padding: 0;
+  }
+
+  .chat-header-git__sections,
+  .chat-header-git__section,
+  .chat-header-git__branch-tree,
+  .chat-header-git__branch-tree-folder,
+  .chat-header-git__branch-tree-children {
+    gap: var(--chat-header-git-branch-item-gap);
+  }
+
+  .chat-header-git__section-label {
+    padding: 0 8px;
+    color: var(--chat-header-git-branch-muted);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: var(--chat-header-git-branch-line-height);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .chat-header-git__branch-row,
+  .chat-header-git__branch-folder-row,
+  .chat-header-git__create-row {
+    --oneworks-overlay-item-min-height: var(
+      --chat-header-git-branch-row-height
+    );
+
+    min-height: var(--chat-header-git-branch-row-height);
+    padding: var(--chat-header-git-branch-item-padding);
+    border: 0;
+    border-radius: var(--chat-header-git-branch-item-radius);
+    gap: var(--chat-header-git-branch-icon-gap);
+  }
+
+  .oneworks-overlay-tree-row__main,
+  .oneworks-overlay-tree-row__content,
+  .chat-header-git__branch-row-main {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .oneworks-overlay-tree-row__label,
+  .chat-header-git__row-title {
+    font-size: var(--chat-header-git-branch-font-size);
+    font-weight: 650;
+    line-height: var(--chat-header-git-branch-line-height);
+  }
+}
+
+.reference-actions-menu-current {
+  max-width: 64px;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--sub-text-color);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reference-actions-menu-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: color-mix(in srgb, var(--border-color) 72%, transparent);
+}
+
+.reference-actions-menu-label {
+  padding: 2px var(--oneworks-overlay-item-padding-x, 8px) 4px;
+  color: var(--sub-text-color);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+}
+
+.reference-actions-dropdown-item {
+  .reference-action-option__label {
+    font-weight: inherit !important;
+  }
+}
+
+.reference-actions-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: left;
+}
+
+.reference-action-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--oneworks-overlay-icon-gap, 6px);
+  min-width: 0;
+  width: 100%;
+}
+
+.reference-action-option__icon,
+.reference-action-option__check,
+.reference-action-option__chevron {
+  flex-shrink: 0;
+}

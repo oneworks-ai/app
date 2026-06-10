@@ -1,0 +1,25 @@
+// Official OpenCode square logo from https://opencode.oo/brand.
+const OPENCODE_ICON_SVG = `
+<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 300 300" width="1em" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(30, 0)">
+    <g clip-path="url(#opencode-clip)">
+      <mask id="opencode-mask" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="240" height="300">
+        <path d="M240 0H0V300H240V0Z" fill="white"></path>
+      </mask>
+      <g mask="url(#opencode-mask)">
+        <path d="M180 240H60V120H180V240Z" fill="#CFCECD"></path>
+        <path d="M180 60H60V240H180V60ZM240 300H0V0H240V300Z" fill="#211E1E"></path>
+      </g>
+    </g>
+  </g>
+  <defs>
+    <clipPath id="opencode-clip">
+      <rect width="240" height="300" fill="white"></rect>
+    </clipPath>
+  </defs>
+</svg>
+`
+  .trim()
+
+export const adapterIcon = `data:image/svg+xml;utf8,${encodeURIComponent(OPENCODE_ICON_SVG)}`
+export const adapterDisplayName = 'OpenCode'

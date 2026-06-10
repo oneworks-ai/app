@@ -1,0 +1,85 @@
+{
+  "name": "@oneworks/server",
+  "version": "0.1.0-alpha.0",
+  "description": "One Works server",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "apps/server"
+  },
+  "imports": {
+    "#~/*.js": {
+      "__oneworks__": {
+        "default": "./src/*.ts"
+      },
+      "default": {
+        "import": "./dist/__INTERNAL__home/*.mjs",
+        "require": "./dist/__INTERNAL__home/*.js"
+      }
+    }
+  },
+  "exports": {
+    "./cli-runtime": {
+      "__oneworks__": {
+        "default": "./src/cli-runtime.ts"
+      },
+      "default": {
+        "import": "./dist/cli-runtime.mjs",
+        "require": "./dist/cli-runtime.js"
+      }
+    },
+    "./module-update-cache": {
+      "__oneworks__": {
+        "default": "./src/module-update-cache.ts"
+      },
+      "default": {
+        "import": "./dist/module-update-cache.mjs",
+        "require": "./dist/module-update-cache.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "oneworks-server": "./cli.js"
+  },
+  "dependencies": {
+    "@koa/cors": "^5.0.0",
+    "@koa/router": "^12.0.0",
+    "@oneworks/adapter-claude-code": "workspace:*",
+    "@oneworks/app-runtime": "workspace:*",
+    "@oneworks/channel-lark": "workspace:*",
+    "@oneworks/channel-wechat": "workspace:*",
+    "@oneworks/cli-helper": "workspace:*",
+    "@oneworks/config": "workspace:*",
+    "@oneworks/core": "workspace:*",
+    "@oneworks/definition-core": "workspace:*",
+    "@oneworks/definition-loader": "workspace:*",
+    "@oneworks/managed-plugins": "workspace:*",
+    "@oneworks/register": "workspace:*",
+    "@oneworks/runtime-protocol": "workspace:*",
+    "@oneworks/runtime-store": "workspace:*",
+    "@oneworks/types": "workspace:*",
+    "@oneworks/utils": "workspace:*",
+    "commander": "^12.1.0",
+    "cron-parser": "^4.9.0",
+    "koa": "^2.15.0",
+    "koa-bodyparser": "^4.3.0",
+    "koa-send": "^5.0.1",
+    "node-pty": "^1.1.0",
+    "pino": "^10.2.0",
+    "pino-pretty": "^13.1.3",
+    "uuid": "^9.0.1",
+    "ws": "^8.17.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/koa": "^3.0.1",
+    "@types/koa-bodyparser": "^4.3.13",
+    "@types/koa-send": "^4.1.5",
+    "@types/koa__cors": "^5.0.1",
+    "@types/koa__router": "^12.0.5",
+    "@types/node": "^22.18.12",
+    "@types/uuid": "^9.0.8",
+    "@types/ws": "^8.18.1"
+  }
+}

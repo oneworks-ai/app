@@ -1,0 +1,88 @@
+import type { IRange, editor as MonacoEditorNamespace, languages } from 'monaco-editor'
+
+import type { SessionInfo } from '@oneworks/types'
+
+import type { SenderEditorSelection } from '#~/components/chat/sender/@types/sender-editor'
+import type { SenderCompletionMatch } from '#~/components/chat/sender/@utils/sender-completion'
+import { monacoApi } from '#~/components/monaco/monaco-runtime'
+
+export const FONT_SIZE = 13
+export const LINE_HEIGHT = 20
+export const MIN_EDITOR_HEIGHT = LINE_HEIGHT
+export const MAX_EDITOR_HEIGHT = LINE_HEIGHT * 10
+export const SENDER_UNICODE_HIGHLIGHT_OPTIONS: MonacoEditorNamespace.IUnicodeHighlightOptions = {
+  ambiguousCharacters: false
+}
+
+export const getMinEditorHeight = (lineCount: number) => LINE_HEIGHT * Math.max(1, Math.ceil(lineCount))
+
+export const clampEditorHeight = (height: number, minHeight = MIN_EDITOR_HEIGHT) =>
+  Math.min(MAX_EDITOR_HEIGHT, Math.max(minHeight, Math.ceil(height)))
+
+export const toMonacoRange = (
+  model: MonacoEditorNamespace.ITextModel,
+  start: number,
+  end: number
+) => {
+  const rangeStart = model.getPositionAt(start)
+  const rangeEnd = model.getPositionAt(end)
+
+  return new monacoApi.Range(rangeStart.lineNumber, rangeStart.column, rangeEnd.lineNumber, rangeEnd.column)
+}
+
+export const getSelectionOffsets = (
+  editor: MonacoEditorNamespace.IStandaloneCodeEditor
+): SenderEditorSelection | null => {
+  const model = editor.getModel()
+  const selection = editor.getSelection()
+
+  if (model == null || selection == null) {
+    return null
+  }
+
+  return {
+    start: model.getOffsetAt(selection.getStartPosition()),
+    end: model.getOffsetAt(selection.getEndPosition())
+  }
+}
+
+export const registerSenderCompletionProvider = ({
+  monaco,
+  resolveCompletionMatch,
+  sessionInfo
+}: {
+  monaco: typeof monacoApi
+  resolveCompletionMatch: (
+    value: string,
+    cursorOffset: number | null,
+    sessionInfo?: SessionInfo | null
+  ) => SenderCompletionMatch | null
+  sessionInfo?: SessionInfo | null
+}) =>
+  monaco.languages.registerCompletionItemProvider('markdown', {
+    triggerCharacters: ['/', '@', '#'],
+    provideCompletionItems: (model, position) => {
+      const cursorOffset = model.getOffsetAt(position)
+      const match = resolveCompletionMatch(model.getValue(), cursorOffset, sessionInfo)
+
+      if (match == null || match.items.length === 0) {
+        return { suggestions: [] }
+      }
+
+      const replaceRange = toMonacoRange(model, match.replaceStart, match.cursorOffset)
+      const suggestions: languages.CompletionItem[] = match.items.map((item) => ({
+        label: item.label,
+        kind: item.kind === 'command'
+          ? monaco.languages.CompletionItemKind.Function
+          : item.kind === 'agent'
+          ? monaco.languages.CompletionItemKind.Interface
+          : monaco.languages.CompletionItemKind.Keyword,
+        insertText: item.insertText,
+        range: replaceRange as IRange,
+        filterText: item.filterText,
+        sortText: `0-${item.value.toLowerCase()}`
+      }))
+
+      return { suggestions }
+    }
+  })

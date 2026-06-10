@@ -1,0 +1,6 @@
+packages:
+  - apps/*
+  - packages/adapters/*
+  - packages/channels/*
+  - packages/plugins/*
+  - packages/*

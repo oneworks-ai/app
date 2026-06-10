@@ -1,0 +1,23 @@
+{
+  "editor.defaultFormatter": "dprint.dprint",
+  "editor.formatOnSave": true,
+  "dprint.path": "./node_modules/.bin/dprint",
+  "cSpell.words": [
+    "acked",
+    "esbuild",
+    "Feishu",
+    "gantt",
+    "larksuiteoapi",
+    "shiki",
+    "unack",
+    "vfui"
+  ],
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "chat.instructionsFilesLocations": {
+    ".oo/rules": true
+  },
+  "chat.editor.fontFamily": "Menlo, Monaco, 'Courier New', monospace",
+  "chat.fontFamily": "Menlo, Monaco, 'Courier New', monospace",
+  "chat.editor.fontSize": 12,
+  "chat.fontSize": 12
+}

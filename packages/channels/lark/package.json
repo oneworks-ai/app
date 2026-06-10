@@ -1,0 +1,62 @@
+{
+  "name": "@oneworks/channel-lark",
+  "version": "0.1.0-alpha.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/channels/lark"
+  },
+  "imports": {
+    "#~/*.js": {
+      "__oneworks__": {
+        "default": "./src/*.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    }
+  },
+  "exports": {
+    ".": {
+      "__oneworks__": {
+        "default": "./src/index.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    },
+    "./connection": {
+      "__oneworks__": {
+        "default": "./src/connection.ts"
+      },
+      "default": {
+        "import": "./dist/connection.mjs",
+        "require": "./dist/connection.js"
+      }
+    },
+    "./mcp": {
+      "__oneworks__": {
+        "default": "./src/mcp/index.ts"
+      },
+      "default": {
+        "import": "./dist/mcp/index.mjs",
+        "require": "./dist/mcp/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "oneworks-channel-lark-mcp": "./mcp.js"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "latest",
+    "@modelcontextprotocol/sdk": "^1.25.3",
+    "@oneworks/cli-helper": "workspace:*",
+    "@oneworks/core": "workspace:*",
+    "@oneworks/types": "workspace:*",
+    "commander": "^12.1.0",
+    "zod": "^3.24.1"
+  }
+}

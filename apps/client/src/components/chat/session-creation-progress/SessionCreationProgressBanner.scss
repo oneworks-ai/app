@@ -1,0 +1,288 @@
+.session-creation-progress {
+  align-self: stretch;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin: 4px 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-color);
+  box-shadow: none;
+}
+
+.session-creation-progress--simple {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--nav-active-text, #2563eb);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.session-creation-progress__title {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--sub-text-color) 78%, transparent);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.session-creation-progress__title:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--sub-text-color) 18%, transparent);
+  outline-offset: 1px;
+}
+
+.session-creation-progress__title-icon {
+  flex: 0 0 auto;
+  color: inherit;
+  font-size: 14px;
+}
+
+.session-creation-progress__title-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.session-creation-progress__title-main {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-creation-progress__toggle {
+  flex: 0 0 auto;
+  color: inherit;
+  font-size: 14px;
+  transition: transform .18s ease;
+}
+
+.session-creation-progress.is-collapsed .session-creation-progress__toggle {
+  transform: rotate(-90deg);
+}
+
+.session-creation-progress__steps {
+  display: grid;
+  gap: 0;
+  margin-top: 10px;
+}
+
+.session-creation-progress__steps[hidden] {
+  display: none;
+}
+
+.session-creation-progress__step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  min-width: 0;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 5px 0 6px;
+  color: var(--sub-text-color);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.session-creation-progress__step:not(:last-child)::after {
+  position: absolute;
+  top: 23px;
+  bottom: -2px;
+  left: 7px;
+  width: 1px;
+  background: var(--border-color, rgba(148, 163, 184, .3));
+  content: '';
+}
+
+.session-creation-progress__step-icon {
+  position: relative;
+  z-index: 1;
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--composer-bg, var(--bg-color));
+  color: var(--nav-active-text, #2563eb);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.session-creation-progress__step--running
+  .session-creation-progress__step-icon {
+  animation: session-creation-progress-spin 1s linear infinite;
+}
+
+.session-creation-progress__step--success
+  .session-creation-progress__step-icon {
+  color: var(--success-color, #16a34a);
+}
+
+.session-creation-progress__step--error .session-creation-progress__step-icon {
+  color: var(--danger-color, #ef4444);
+}
+
+.session-creation-progress__step--skipped
+  .session-creation-progress__step-icon {
+  color: var(--sub-text-color);
+}
+
+.session-creation-progress__step-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.session-creation-progress__step-title {
+  color: var(--text-color);
+  font-weight: 600;
+}
+
+.session-creation-progress__step-detail-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.session-creation-progress__output-toggle {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--sub-text-color);
+  cursor: pointer;
+  line-height: 0;
+  padding: 0;
+}
+
+.session-creation-progress__output-toggle:hover {
+  background: var(--hover-bg, rgba(148, 163, 184, .12));
+  color: var(--text-color);
+}
+
+.session-creation-progress__output-toggle .material-symbols-rounded {
+  display: block;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 16px;
+}
+
+.session-creation-progress__step-detail {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--sub-text-color);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-creation-progress__step-output-summary {
+  flex: 0 0 auto;
+  color: var(--sub-text-color);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.session-creation-progress__step-output {
+  display: grid;
+  min-width: 0;
+  border-left: 1px solid var(--border-color, rgba(148, 163, 184, .3));
+  margin-top: 3px;
+  background: color-mix(
+    in srgb,
+    var(--composer-bg, var(--bg-color)) 72%,
+    transparent
+  );
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.session-creation-progress__output-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 3px 3px 0 8px;
+}
+
+.session-creation-progress__output-action {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--sub-text-color);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.session-creation-progress__output-action:hover {
+  background: var(--hover-bg, rgba(148, 163, 184, .12));
+  color: var(--text-color);
+}
+
+.session-creation-progress__output-action .material-symbols-rounded {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.session-creation-progress__output-body {
+  display: block;
+  max-height: 180px;
+  min-width: 0;
+  overflow: auto;
+}
+
+.session-creation-progress__step-output.is-expanded
+  .session-creation-progress__output-body {
+  max-height: min(52vh, 420px);
+}
+
+.session-creation-progress__output-line {
+  display: block;
+  padding: 2px 0 2px 8px;
+  color: var(--text-color);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.session-creation-progress__output-line--stderr {
+  color: var(--danger-color, #ef4444);
+}
+
+@keyframes session-creation-progress-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

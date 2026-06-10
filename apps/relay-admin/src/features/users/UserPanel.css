@@ -1,0 +1,101 @@
+.relay-user-panel__avatar.ant-avatar {
+  background: color-mix(in srgb, var(--text-color) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+  color: var(--sub-text-color);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.relay-user-panel__avatar-wrap {
+  display: inline-flex;
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.relay-user-panel__status-dot {
+  border: 2px solid var(--bg-color);
+  border-radius: 999px;
+  bottom: -1px;
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--border-color) 64%, transparent);
+  height: 9px;
+  position: absolute;
+  right: -1px;
+  width: 9px;
+}
+
+.relay-user-panel__status-dot--active {
+  background: var(--success-color);
+}
+
+.relay-user-panel__status-dot--disabled {
+  background: var(--danger-color);
+}
+
+.relay-user-panel__identity {
+  align-items: center;
+  color: var(--text-color);
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  text-decoration: none;
+}
+
+.relay-user-panel__identity:hover {
+  color: var(--primary-color);
+}
+
+.relay-user-panel__identity-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.relay-user-panel__identity-main strong,
+.relay-user-panel__identity-name {
+  overflow: hidden;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-user-panel__identity-name {
+  color: var(--sub-text-color);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.relay-user-panel__secondary {
+  color: var(--sub-text-color);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.relay-user-panel__source {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-user-panel__device-limit {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.relay-user-panel__device-count {
+  font-variant-numeric: tabular-nums;
+  min-width: 16px;
+  text-align: right;
+}
+
+.relay-user-panel__device-separator {
+  color: var(--sub-text-color);
+}
+
+.relay-user-panel__device-input.ant-input-number {
+  width: 58px;
+}

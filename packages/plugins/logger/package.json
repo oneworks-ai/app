@@ -1,0 +1,46 @@
+{
+  "name": "@oneworks/plugin-logger",
+  "version": "0.1.0-alpha.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/plugins/logger"
+  },
+  "imports": {
+    "#~/*.js": {
+      "__oneworks__": {
+        "default": "./src/*.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    }
+  },
+  "exports": {
+    ".": {
+      "__oneworks__": {
+        "default": "./src/index.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    },
+    "./hooks": {
+      "__oneworks__": {
+        "default": "./src/hooks.ts"
+      },
+      "default": {
+        "import": "./dist/hooks.mjs",
+        "require": "./dist/hooks.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@oneworks/core": "workspace:*",
+    "@oneworks/hooks": "workspace:*",
+    "@oneworks/types": "workspace:*"
+  }
+}

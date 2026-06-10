@@ -1,0 +1,43 @@
+{
+  "__oneWorksPluginManifest": true,
+  "name": "@oneworks/plugin-demo-extension",
+  "displayName": "Plugin Demo Extension",
+  "version": "0.1.0",
+  "plugin": {
+    "contributions": {
+      "extensionContributions": [
+        {
+          "id": "extension-quick-action",
+          "target": "demo/quick-actions",
+          "title": "Run extension action",
+          "titleI18n": {
+            "en": "Run extension action",
+            "zh-Hans": "运行扩展操作"
+          },
+          "descriptionI18n": {
+            "en": "Contributed by Plugin Demo Extension through the demo quick-actions extension point.",
+            "zh-Hans": "由插件 Demo Extension 通过 demo quick-actions 扩展点贡献。"
+          },
+          "icon": "add_link",
+          "command": "demo-extension/demo-quick-action"
+        }
+      ],
+      "navMoreMenu": [
+        {
+          "id": "extension-status",
+          "title": "Plugin Demo extension status",
+          "titleI18n": {
+            "en": "Plugin Demo extension status",
+            "zh-Hans": "插件 Demo 扩展状态"
+          },
+          "descriptionI18n": {
+            "en": "Reports whether the extension plugin is active.",
+            "zh-Hans": "报告扩展插件是否已激活。"
+          },
+          "icon": "add_link",
+          "command": "status"
+        }
+      ]
+    }
+  }
+}

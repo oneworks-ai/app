@@ -1,0 +1,153 @@
+.automation-view {
+  &__form-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    height: 100%;
+  }
+
+  &__form-panel--chat-create {
+    .automation-view__create-chat-panel {
+      margin-inline: calc(-1 * var(--automation-view-right-padding-x, 12px));
+      margin-bottom: calc(
+        -1 * var(--automation-view-right-padding-bottom, 12px)
+      );
+    }
+  }
+
+  &__form-panel > .ant-form {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  &__form-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-weight: 600;
+    color: var(--text-color);
+  }
+
+  &__form-title-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__form-icon {
+    font-size: 18px;
+    color: var(--sub-text-color);
+  }
+
+  &__form-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  &__create-chat-panel {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  &__form-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  &__form-section--basic {
+    gap: 8px;
+  }
+
+  &__form-section > .ant-form-item {
+    margin-bottom: 0;
+  }
+
+  &__label-icon {
+    font-size: 16px;
+    color: var(--sub-text-color);
+
+    &--run {
+      color: var(--success-color);
+    }
+  }
+
+  &__toggle-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  &__toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 30px;
+  }
+
+  &__toggle-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-color);
+
+    &--run {
+      color: var(--success-color);
+    }
+  }
+
+  &__action-icon {
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  &__icon-button--section-add:not(:disabled):hover,
+  &__icon-button--section-add:not(:disabled):focus-visible {
+    background: var(--tag-hover-bg) !important;
+    color: var(--text-color) !important;
+  }
+
+  &__form-section--basic > .ant-form-item .ant-input,
+  &__form-section--basic > .ant-form-item .ant-input-affix-wrapper {
+    border-radius: 6px !important;
+    background: var(--bg-color);
+  }
+
+  &__form-section--basic > .ant-form-item .ant-input,
+  &__form-section--basic > .ant-form-item .ant-input-affix-wrapper {
+    min-height: 30px;
+  }
+}
+
+@media (max-width: 960px) {
+  .automation-view {
+    &__form-panel {
+      gap: 12px;
+    }
+
+    &__form-title {
+      flex: 1;
+      padding-top: 4px;
+    }
+
+    &__form-stack {
+      gap: 14px;
+      padding-bottom: max(4px, env(safe-area-inset-bottom));
+    }
+  }
+}

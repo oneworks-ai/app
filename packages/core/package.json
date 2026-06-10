@@ -1,0 +1,64 @@
+{
+  "name": "@oneworks/core",
+  "version": "0.1.0-alpha.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/core"
+  },
+  "imports": {
+    "#~/*.js": {
+      "__oneworks__": {
+        "default": "./src/*.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    }
+  },
+  "exports": {
+    ".": {
+      "__oneworks__": {
+        "default": "./src/index.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    },
+    "./channel": {
+      "__oneworks__": {
+        "default": "./src/channel.ts"
+      },
+      "default": {
+        "import": "./dist/channel.mjs",
+        "require": "./dist/channel.js"
+      }
+    },
+    "./config-schema": {
+      "__oneworks__": {
+        "default": "./src/config-schema.ts"
+      },
+      "default": {
+        "import": "./dist/config-schema.mjs",
+        "require": "./dist/config-schema.js"
+      }
+    },
+    "./schema": {
+      "__oneworks__": {
+        "default": "./src/schema.ts"
+      },
+      "default": {
+        "import": "./dist/schema.mjs",
+        "require": "./dist/schema.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@oneworks/types": "workspace:*",
+    "@oneworks/utils": "workspace:*",
+    "zod": "^3.24.1"
+  }
+}

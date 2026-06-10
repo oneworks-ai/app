@@ -1,0 +1,83 @@
+{
+  "interfaceLanguage": "en",
+  "modelLanguage": "en",
+  "adapters": {
+    "codex": {}
+  },
+  "permissions": {
+    "defaultMode": "default",
+    "ask": [
+      "Bash(rm:*)",
+      "Bash(git clean:*)"
+    ],
+    "deny": [
+      "Bash(sudo:*)"
+    ]
+  },
+  "messageLinks": {
+    "workspaceFileTarget": "fileTab",
+    "plainWorkspacePathMode": "link",
+    "imageLinkMode": "inlinePreview"
+  },
+  "appearance": {
+    "primaryColor": "#E23F12",
+    "iconBackground": "transparent"
+  },
+  "conversation": {
+    "style": "programmatic",
+    "customInstructions": "This fixture is for One Works source debugging. Keep changes small, preserve deterministic files, and prefer commands that work with Node.js built-ins.",
+    "startupPresets": [
+      {
+        "id": "debug-smoke",
+        "title": "Debug smoke",
+        "description": "Check config loading, file links, and run command wiring.",
+        "icon": "bug_report",
+        "adapter": "codex",
+        "effort": "medium",
+        "permissionMode": "default",
+        "prompt": "Read README.md and fixtures/notes.md, then report whether file links and run commands are visible.",
+        "files": [
+          "README.md",
+          "fixtures/notes.md"
+        ],
+        "rules": [
+          ".oo/rules/DEBUG.md"
+        ]
+      }
+    ],
+    "builtinActions": [
+      {
+        "id": "debug-repro",
+        "title": "Repro note",
+        "description": "Turn a UI or runtime symptom into a compact repro checklist.",
+        "icon": "fact_check",
+        "adapter": "codex",
+        "effort": "medium",
+        "permissionMode": "default",
+        "prompt": "Convert the current symptom into a reproducible checklist for this fixture workspace.",
+        "rules": [
+          ".oo/rules/DEBUG.md"
+        ]
+      }
+    ],
+    "runCommands": [
+      {
+        "id": "smoke",
+        "name": "Smoke fixture",
+        "icon": "terminal",
+        "script": "node scripts/smoke.mjs",
+        "isFavorite": true
+      }
+    ]
+  },
+  "diagnostics": {
+    "startupProfile": {
+      "enabled": true,
+      "log": true,
+      "thresholdMs": 10
+    }
+  },
+  "webAuth": {
+    "enabled": false
+  }
+}

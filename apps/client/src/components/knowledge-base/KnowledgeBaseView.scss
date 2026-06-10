@@ -1,0 +1,90 @@
+.knowledge-base-view {
+  color: var(--text-color);
+}
+
+.knowledge-base-view__body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.knowledge-base-view--compact .knowledge-base-view__body {
+  flex-direction: column;
+}
+
+.knowledge-base-view__icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px !important;
+  min-width: 28px !important;
+  max-width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 !important;
+  border-radius: 6px !important;
+}
+
+.knowledge-base-view__icon-button .material-symbols-rounded {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.knowledge-base-view__content-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 960px) {
+  .knowledge-base-view--compact {
+    .knowledge-base-view__content {
+      gap: 8px;
+    }
+
+    .knowledge-base-view__section-header {
+      gap: 8px;
+    }
+
+    .knowledge-base-view__section-actions .ant-space {
+      gap: 6px !important;
+    }
+
+    .knowledge-base-view__icon-button,
+    .knowledge-base-view__action-button--icon-only {
+      width: var(--oneworks-mobile-panel-action-size) !important;
+      min-width: var(--oneworks-mobile-panel-action-size) !important;
+      max-width: var(--oneworks-mobile-panel-action-size) !important;
+      height: var(--oneworks-mobile-panel-action-size) !important;
+      min-height: var(--oneworks-mobile-panel-action-size) !important;
+      border-radius: var(--oneworks-mobile-panel-radius) !important;
+    }
+
+    .knowledge-base-view__filter-input,
+    .knowledge-base-view__filter-select {
+      min-width: 0;
+      flex: 1 1 100%;
+    }
+
+    .knowledge-base-view__filter-input .ant-input-affix-wrapper,
+    .knowledge-base-view__filter-select .ant-select-selector,
+    .knowledge-base-view__skill-toolbar-select .ant-select-selector {
+      min-height: var(--oneworks-mobile-panel-field-height) !important;
+      height: var(--oneworks-mobile-panel-field-height) !important;
+      border-radius: var(--oneworks-mobile-panel-radius) !important;
+    }
+
+    .knowledge-base-view__list .ant-list-items {
+      gap: 8px;
+    }
+
+    .knowledge-base-view__skill-result,
+    .knowledge-base-view__item {
+      padding: 10px;
+    }
+  }
+}

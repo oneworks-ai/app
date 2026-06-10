@@ -1,0 +1,26 @@
+{
+  "name": "@oneworks/web",
+  "version": "0.1.0-alpha.0",
+  "description": "One Works integrated web app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "apps/web"
+  },
+  "oneworks": {
+    "runtimeTranspile": true
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "oneworks-web": "./cli.js"
+  },
+  "dependencies": {
+    "@oneworks/cli-helper": "workspace:*",
+    "@oneworks/client": "workspace:*",
+    "@oneworks/register": "workspace:*",
+    "@oneworks/server": "workspace:*",
+    "commander": "^12.1.0"
+  }
+}

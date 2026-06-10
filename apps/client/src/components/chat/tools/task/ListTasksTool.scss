@@ -1,0 +1,31 @@
+.list-tasks-tool {
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 55%,
+    var(--primary-color) 45%
+  );
+
+  & .tool-call-header {
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--tag-bg) 80%, var(--primary-color) 20%),
+      var(--tag-bg)
+    );
+  }
+
+  &__list {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  &__empty {
+    padding: 8px 10px;
+    border: 1px dashed var(--border-color);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--sub-text-color);
+    background: var(--bg-color);
+  }
+}

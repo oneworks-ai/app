@@ -1,0 +1,140 @@
+.relay-data-panel.ant-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  scroll-margin-top: calc(var(--route-container-header-overlay-height) + 8px);
+}
+
+.relay-data-panel.ant-card .ant-card-head {
+  align-items: center;
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 0;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 8px var(--route-container-header-padding-inline);
+}
+
+.relay-data-panel.ant-card .ant-card-head-title {
+  min-width: 0;
+  padding: 0;
+}
+
+.relay-data-panel.ant-card .ant-card-extra {
+  padding: 0;
+}
+
+.relay-data-panel__title-row {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.relay-data-panel h2 {
+  font-size: 15px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.relay-data-panel__count {
+  align-items: center;
+  background: color-mix(in srgb, var(--text-color) 8%, transparent);
+  border-radius: 999px;
+  color: var(--sub-text-color);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 650;
+  height: 22px;
+  justify-content: center;
+  min-width: 22px;
+  padding: 0 8px;
+}
+
+.relay-data-panel__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.relay-data-panel.ant-card .ant-card-body {
+  background: var(--bg-color);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 8px var(--route-container-header-padding-inline) 10px;
+}
+
+.relay-admin-table .ant-table,
+.relay-admin-table .ant-table-container,
+.relay-admin-table .ant-table-content,
+.relay-admin-table .ant-table-header {
+  background: transparent;
+  color: var(--text-color);
+}
+
+.relay-admin-table .ant-table-thead > tr > th {
+  background: var(--bg-color);
+  border-color: color-mix(in srgb, var(--border-color) 72%, transparent);
+  color: var(--sub-text-color);
+  font-size: 12px;
+  font-weight: 650;
+  padding: 8px;
+}
+
+.relay-admin-table .ant-table-tbody > tr > td {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--border-color) 64%, transparent);
+  color: var(--text-color);
+  padding: 9px 8px;
+}
+
+.relay-admin-table .ant-table-thead > tr > th.ant-table-cell-fix-right,
+.relay-admin-table .ant-table-tbody > tr > td.ant-table-cell-fix-right {
+  background: var(--bg-color);
+  z-index: 3;
+}
+
+.relay-admin-table .ant-table-cell-fix-right-first {
+  border-left: 1px solid
+    color-mix(in srgb, var(--border-color) 72%, transparent);
+}
+
+.relay-admin-table .ant-table-cell-fix-right-first::after {
+  box-shadow: none;
+}
+
+.relay-admin-table .ant-table-tbody > tr.ant-table-placeholder > td {
+  background: transparent;
+  color: var(--placeholder-color);
+}
+
+.relay-admin-table .ant-table-tbody > tr:hover > td {
+  background: color-mix(in srgb, var(--primary-color) 5%, transparent);
+}
+
+.relay-admin-table .ant-table-tbody > tr:hover > td.ant-table-cell-fix-right {
+  background: color-mix(in srgb, var(--primary-color) 5%, var(--bg-color));
+}
+
+.relay-admin-table .ant-table-tbody > tr.ant-table-placeholder:hover > td {
+  background: transparent;
+}
+
+.relay-admin-table .ant-table-selection-column {
+  width: 32px;
+}
+
+.relay-admin-table .ant-empty-description {
+  color: var(--placeholder-color);
+}

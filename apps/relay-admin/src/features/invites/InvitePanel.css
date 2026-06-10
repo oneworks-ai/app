@@ -1,0 +1,9 @@
+.relay-invite-panel__table {
+  min-width: 760px;
+}
+
+.relay-invite-panel__code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}

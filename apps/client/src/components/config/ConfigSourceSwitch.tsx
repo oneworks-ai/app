@@ -1,0 +1,50 @@
+import { Button, Tooltip } from 'antd'
+import type { ReactNode } from 'react'
+
+import type { ConfigSource } from '@oneworks/core'
+
+import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
+
+export function ConfigSourceSwitch<TSource extends ConfigSource>({
+  value,
+  onChange,
+  options
+}: {
+  value: TSource
+  onChange: (value: TSource) => void
+  options: Array<{ value: TSource; icon: string; label: ReactNode }>
+}) {
+  const { isTouchInteraction } = useResponsiveLayout()
+
+  return (
+    <div className='config-view__source-switch' role='group'>
+      {options.map(opt => {
+        const isActive = opt.value === value
+        return (
+          <Tooltip
+            key={opt.value}
+            title={isTouchInteraction ? undefined : opt.label}
+            placement='top'
+          >
+            <Button
+              type='text'
+              size='small'
+              aria-pressed={isActive}
+              aria-label={String(opt.label)}
+              className={`config-view__source-switch-button ${isActive ? 'is-active' : ''}`}
+              icon={
+                <span className='config-view__source-option' aria-hidden='true'>
+                  <span className='material-symbols-rounded'>{opt.icon}</span>
+                  <span className='config-view__source-option-label'>{opt.label}</span>
+                </span>
+              }
+              onClick={() => {
+                onChange(opt.value)
+              }}
+            />
+          </Tooltip>
+        )
+      })}
+    </div>
+  )
+}

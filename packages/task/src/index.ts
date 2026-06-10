@@ -1,0 +1,5 @@
+export { generateAdapterQueryOptions } from './generate-adapter-query-options'
+export { run } from './run'
+export type { RunTaskOptions } from './type'
+export { resolveWorkspaceTaskTarget } from './workspace-target'
+export type { ResolvedWorkspaceTaskTarget } from './workspace-target'

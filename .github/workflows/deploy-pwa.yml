@@ -1,0 +1,49 @@
+name: Trigger PWA Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - apps/client/**
+      - packages/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .node-version
+      - .github/workflows/deploy-pwa.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: trigger-pwa-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trigger:
+    name: trigger-pwa-repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger pwa repository deployment
+        env:
+          GH_TOKEN: ${{ secrets.PWA_DEPLOY_TOKEN }}
+          SOURCE_REF: main
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::warning::Missing PWA_DEPLOY_TOKEN secret; skipping cross-repository PWA deployment."
+            exit 0
+          fi
+
+          gh workflow run deploy-pwa.yml \
+            --repo oneworks-ai/pwa \
+            --ref main \
+            -f source_ref="${SOURCE_REF}" \
+            -f source_sha="${SOURCE_SHA}"

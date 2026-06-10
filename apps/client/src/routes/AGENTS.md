@@ -1,0 +1,99 @@
+# Client Routes Module
+
+本目录是页面级入口：读取 URL、装配 route 级数据、处理导航和把 API detail 转成页面 view model。纯展示组件不放这里。
+
+## Agent Room 入口
+
+- `LauncherRoute.tsx`
+  - 桌面空项目启动页入口，只在 Electron preload 提供 `window.oneworksDesktop` 时使用。
+  - 使用 Raycast-like 命令面板：顶部搜索自动聚焦，列表按 action / project 分组，支持上下键切换和 Enter 执行。
+  - 通过 `window.oneworksDesktop.getWorkspaceSelectorState()` 获取 running / recent projects。
+  - 通过 `window.oneworksDesktop.openWorkspace()` 打开已有项目，通过 `chooseWorkspace()` 选择本地目录。
+  - 左下角只承载 app 级菜单入口；右下角只承载当前选中项的可用操作提示。
+  - `/` 文件搜索模式在 route 层只负责进入/退出模式、展示结果和调用 preload API。全局模式搜索电脑根目录；项目上下文模式搜索当前项目资源。
+  - 非桌面环境下必须降级提示能力不可用，不要直接访问 Electron IPC。
+- `AgentRoomRoute.tsx`
+  - `/rooms/:roomId` 主入口。
+  - 使用 SWR 拉取 `/api/agent-rooms/:id`。
+  - 装配 `ChatRouteView` 的 `agentRoomTranscript`。
+  - 负责 room 收藏/归档、打开 host session、打开 child run、发送 room 消息。
+- `AgentRoomSessionRoute.tsx`
+  - `/rooms/:roomId/sessions/:sessionId` 子 run 会话入口。
+  - 校验 session 是否属于当前 room 的 run，并复用普通 session 详情页展示。
+- `ModuleManagementRoute.tsx`
+  - `/modules` 模块管理页入口。
+  - 页面组件维护在 `src/components/module-updates/ModuleManagementView.tsx`。
+  - 负责检测和安装 bootstrap cache 模块更新，并编辑 project `desktop.updateChannel` / `desktop.moduleUpdateChannels`。
+- `ChatRoute.tsx`
+  - 普通 `/session/:sessionId` 入口。
+  - Agent Room 实验开启时，会把绑定了 room 的 host session 导向 room 视图。
+- `ChatRouteView.tsx`
+  - chat route 的壳层装配；Agent Room 模式通过 `agentRoomTranscript` 注入。
+- `agent-room-route-view-model.ts`
+  - 把 `AgentRoomDetailResponse` 转成前端 `AgentRoomViewModel`。
+  - 这里负责可见消息过滤、leader/child attribution、reaction 推导、approval batch 聚合、target label 生成。
+- `agent-room-session-paths.ts`
+  - room 与 room-scoped session URL 生成。
+
+## 分层约束
+
+- route 可以读 `useParams`、query params、SWR、`navigate` 和 API 封装。
+- route 不直接写复杂 DOM 结构；room 消息 UI 去 `src/components/agent-room/`。
+- `agent-room-route-view-model.ts` 可以解析后端 payload 并生成展示字段；组件层不要重复解析原始 payload。
+- 发送 room 消息统一走 `src/api/agent-rooms.ts` 的 `sendAgentRoomMessage`，不要在组件里手写 fetch。
+- 新增 URL 状态时，优先用 `agent-room-session-paths.ts` 或已有 query helper，避免多个入口拼出不同链接。
+- route container 的右侧 / 下方面板是 route-owned URL 状态：用 query 记录哪些 panel 可见、每个 panel 当前 tab、以及用户打开过的 tab 列表，再把 slot 传给 layout。layout 只根据 slot 是否存在渲染，不直接保存或写回 query。
+- 交互结构页当前采用 `routePanels=side,bottom` 记录可见面板，`sidePanelTab` / `bottomPanelTab` 记录当前 tab，`sidePanelTabs` / `bottomPanelTabs` 记录打开过的 tab。切换这些状态时用 `navigate(..., { replace: true })`，避免面板开合污染浏览器历史；tab 组件必须回传 next active tab 和累计 opened tabs，外部 route 再决定写 query、store 或其他持久化介质。
+- 关闭 route container 面板时默认只从 `routePanels` 移除对应 panel，不清理 `sidePanelTab` / `bottomPanelTab` 或 opened-tab query。这样外部能继续知道用户打开过哪些 tab，并在用户回到页面或重新打开面板时恢复到之前状态；只有明确的“重置 / 忘记面板状态”操作才清掉 tab query。
+- 交互结构页左下角 footer/debug tools 是 sidebar footer 信息区，不属于顶部 chrome。这里的图标槽统一用 `--interaction-structure-debug-icon-size: 16px`，不要复用 `--app-chrome-icon-size` 或单独写 17px/18px/20px，避免与 footer slot、platform switch、fullscreen switch 尺寸不同步。
+- 交互结构页左下角 debug tools 的操作系统切换必须是 `radiogroup` / `radio` 语义并支持方向键切换，视觉上对齐配置页右上角 source switch；全屏切换必须用真实 `Switch` 控件。两行的控件都靠右，左侧只保留说明图标。
+- 新增桌面 launcher 能力时，route 只做展示和 preload API 调用；窗口生命周期、workspace service 复用和最近项目状态留在 `apps/desktop/src/main/`。
+- launcher 视觉组件、设置页 section、footer hint 细节维护在 `src/components/launcher/`；route 不要继续吸收复杂 DOM 和局部控件状态。
+
+## Desktop Launcher 数据流
+
+Desktop preload:
+
+`window.oneworksDesktop`
+
+Route:
+
+`LauncherRoute -> normalizeWorkspaceSelectorState -> openWorkspace / chooseWorkspace / searchWorkspaceResources`
+
+Desktop main:
+
+`shared desktop client -> window-manager -> workspace-selector-state / workspace-file-search`
+
+最终行为：
+
+`空项目启动页 -> 选择项目 -> 复用共享 client、启动对应 workspace server -> 通过 IPC 注入 serverBaseUrl -> 加载 workspace route`
+
+## Desktop Launcher 交互边界
+
+- `Cmd+,` 这类 app 级快捷键在 launcher route 层处理，但必须避开 IME composition 和快捷键录入输入框。
+- launcher view mode 切换要清理当前列表状态、搜索状态和 footer hint，不要让 settings/about 的 hint 泄漏到 command 列表。
+- 全局文件搜索打开目录时走项目模式；打开文件时走用户偏好的外部编辑器。项目上下文文件搜索打开文件走项目 tabs，打开目录走右侧目录树定位。
+- launcher 的语言切换入口应写入 global config，而不是只改当前页面 i18n 状态。
+
+## Agent Room 数据流
+
+Server detail:
+
+`room + members + runs + messages`
+
+Route view model:
+
+`buildAgentRoomRouteViewModel(detail)`
+
+Component view model:
+
+`buildAgentRoomViewModel(routeViewModel)`
+
+最终渲染：
+
+`AgentRoomTranscript -> AgentRoomMessageList -> AgentRoomBubble`
+
+## 回归
+
+- Route/view model：`pnpm exec vitest run --workspace vitest.workspace.ts --project bundler.web apps/client/__tests__/agent-room-navigation.spec.ts`
+- Transcript/rendering：`pnpm exec vitest run --workspace vitest.workspace.ts --project bundler.web apps/client/__tests__/agent-room-rendering.spec.tsx`
