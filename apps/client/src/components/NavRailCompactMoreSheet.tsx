@@ -1,8 +1,8 @@
+import { ShortcutDisplay } from '@oneworks/components/route-layout'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-import { ShortcutDisplay } from '#~/components/ShortcutDisplay'
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import type { IconAsset } from '#~/components/icons/IconAsset'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'

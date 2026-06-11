@@ -5,8 +5,9 @@ import React from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import type { RouteContainerHeaderActionItem } from '@oneworks/components/route-layout'
+
 import type { RuleSummary } from '#~/api.js'
-import type { RouteContainerHeaderActionItem } from '#~/components/layout/RouteContainerHeader'
 import { RuleList } from './RuleList'
 import { SectionHeader } from './SectionHeader'
 import { TabContent } from './TabContent'

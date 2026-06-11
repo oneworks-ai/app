@@ -26,6 +26,7 @@
   flex-direction: row;
   gap: 0;
   overflow: hidden;
+  color: var(--text-color);
   background:
     linear-gradient(180deg, rgba(0, 0, 0, .02), rgba(0, 0, 0, 0)),
     var(--sub-bg-color);
@@ -381,15 +382,8 @@
     border-radius: 12px;
   }
 
-  &:not(.is-window-fullscreen) {
-    .app-shell__content-region.is-sidebar-collapsed {
-      padding: 6px 8px 6px 0;
-    }
-
-    .app-shell__content.is-sidebar-collapsed,
-    .app-shell__content-region.is-sidebar-collapsed .app-shell__content > * {
-      border-radius: var(--app-shell-content-radius);
-    }
+  .app-shell__content-region.is-sidebar-collapsed .app-shell__content > * {
+    border-radius: 0;
   }
 
   .app-shell__content.is-flat {
@@ -463,6 +457,25 @@
     backdrop-filter: var(--app-shell-vibrancy-blur);
     -webkit-backdrop-filter: var(--app-shell-vibrancy-blur);
     pointer-events: none;
+  }
+
+  .app-shell__content-region::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: var(--app-shell-vibrancy-sidebar-bg);
+    backdrop-filter: var(--app-shell-vibrancy-blur);
+    -webkit-backdrop-filter: var(--app-shell-vibrancy-blur);
+    pointer-events: none;
+  }
+
+  .app-shell__content {
+    z-index: 1;
+  }
+
+  .app-shell__content-region .app-shell__content > * {
+    background-color: transparent;
   }
 }
 

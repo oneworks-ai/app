@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@material-symbols/svg-400": "0.44.8",
+    "@oneworks/components": "workspace:*",
     "antd": "^5.29.3",
     "react-router-dom": "^7.12.0"
   },

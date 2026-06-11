@@ -1,17 +1,15 @@
-import './ShortcutDisplay.scss'
+import { useMemo } from 'react'
 
-import React, { useMemo } from 'react'
-
-import { getShortcutDisplayTokens } from '#~/utils/shortcutUtils'
+import { getShortcutDisplayTokens } from './shortcut-utils.js'
 
 export function ShortcutDisplay({
-  shortcut,
+  className,
   isMac,
-  className
+  shortcut
 }: {
-  shortcut?: string
-  isMac: boolean
   className?: string
+  isMac: boolean
+  shortcut?: string
 }) {
   const tokens = useMemo(() => getShortcutDisplayTokens(shortcut, isMac), [isMac, shortcut])
 

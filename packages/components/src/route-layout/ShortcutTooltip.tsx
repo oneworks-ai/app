@@ -1,26 +1,25 @@
-import './ShortcutTooltip.scss'
-
+import { useResponsiveLayout } from '@oneworks/route-layout'
 import { Tooltip } from 'antd'
 import type { TooltipPlacement } from 'antd/es/tooltip'
-import React, { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ComponentPropsWithoutRef, MouseEvent, PointerEvent, ReactNode } from 'react'
 
-import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
-import { formatShortcutLabel } from '#~/utils/shortcutUtils'
-import { ShortcutDisplay } from './ShortcutDisplay'
+import { ShortcutDisplay } from './ShortcutDisplay.js'
+import { formatShortcutLabel } from './shortcut-utils.js'
 
-type ShortcutTooltipTitle = React.ReactNode | ((shortcutLabel: string) => React.ReactNode)
+export type ShortcutTooltipTitle = ReactNode | ((shortcutLabel: string) => ReactNode)
 
-type ShortcutTooltipProps = {
-  shortcut?: string
-  isMac: boolean
-  title: ShortcutTooltipTitle
-  children: React.ReactNode
-  placement?: TooltipPlacement
-  align?: React.ComponentProps<typeof Tooltip>['align']
-  arrow?: React.ComponentProps<typeof Tooltip>['arrow']
+export type ShortcutTooltipProps = {
+  align?: ComponentPropsWithoutRef<typeof Tooltip>['align']
+  arrow?: ComponentPropsWithoutRef<typeof Tooltip>['arrow']
+  children: ReactNode
   enabled?: boolean
+  isMac: boolean
+  placement?: TooltipPlacement
+  shortcut?: string
   targetClassName?: string
-} & React.ComponentPropsWithoutRef<'div'>
+  title: ShortcutTooltipTitle
+} & Omit<ComponentPropsWithoutRef<'div'>, 'children' | 'title'>
 
 const resolveShortcutTooltipTitle = (title: ShortcutTooltipTitle, shortcutLabel: string) => {
   if (typeof title === 'function') {
@@ -31,16 +30,16 @@ const resolveShortcutTooltipTitle = (title: ShortcutTooltipTitle, shortcutLabel:
 }
 
 export const ShortcutTooltip = forwardRef<HTMLDivElement, ShortcutTooltipProps>(({
-  shortcut,
-  isMac,
-  title,
-  children,
-  placement = 'top',
   align,
   arrow,
-  enabled = true,
-  targetClassName,
+  children,
   className,
+  enabled = true,
+  isMac,
+  placement = 'top',
+  shortcut,
+  targetClassName,
+  title,
   ...divProps
 }, ref) => {
   const { isTouchInteraction } = useResponsiveLayout()
@@ -100,19 +99,19 @@ export const ShortcutTooltip = forwardRef<HTMLDivElement, ShortcutTooltipProps>(
 
     closeWithDelay()
   }, [clearCloseTimer, closeWithDelay])
-  const handlePointerDownCapture = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerDownCapture = useCallback((event: PointerEvent<HTMLDivElement>) => {
     closeForAction()
     onPointerDownCapture?.(event)
   }, [closeForAction, onPointerDownCapture])
-  const handleClickCapture = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+  const handleClickCapture = useCallback((event: MouseEvent<HTMLDivElement>) => {
     closeForAction()
     onClickCapture?.(event)
   }, [closeForAction, onClickCapture])
-  const handlePointerEnter = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerEnter = useCallback((event: PointerEvent<HTMLDivElement>) => {
     clearCloseTimer()
     onPointerEnter?.(event)
   }, [clearCloseTimer, onPointerEnter])
-  const handlePointerLeave = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerLeave = useCallback((event: PointerEvent<HTMLDivElement>) => {
     suppressHoverRef.current = false
     closeWithDelay()
     onPointerLeave?.(event)
@@ -165,6 +164,7 @@ export const ShortcutTooltip = forwardRef<HTMLDivElement, ShortcutTooltipProps>(
       onOpenChange={handleOpenChange}
       mouseEnterDelay={.3}
       mouseLeaveDelay={.08}
+      destroyOnHidden
     >
       {trigger}
     </Tooltip>

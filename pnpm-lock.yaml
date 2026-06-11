@@ -176,6 +176,9 @@ importers:
 
   apps/client:
     dependencies:
+      '@oneworks/components':
+        specifier: workspace:*
+        version: link:../../packages/components
       '@oneworks/icon':
         specifier: workspace:*
         version: link:../../packages/icon
@@ -403,6 +406,9 @@ importers:
       '@material-symbols/svg-400':
         specifier: 0.44.8
         version: 0.44.8
+      '@oneworks/components':
+        specifier: workspace:*
+        version: link:../../packages/components
       antd:
         specifier: ^5.29.3
         version: 5.29.3(luxon@3.7.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -786,6 +792,22 @@ importers:
       '@oneworks/register':
         specifier: workspace:*
         version: link:../register
+
+  packages/components:
+    dependencies:
+      '@oneworks/route-layout':
+        specifier: workspace:*
+        version: link:../route-layout
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.12
+        version: 18.3.27
+      antd:
+        specifier: ^5.20.0
+        version: 5.29.3(luxon@3.7.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
 
   packages/config:
     dependencies:

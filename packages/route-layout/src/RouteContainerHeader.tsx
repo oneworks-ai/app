@@ -39,7 +39,6 @@ export function RouteContainerHeaderActionButton({
       aria-busy={item.loading === true}
       aria-label={resolvedLabel}
       aria-pressed={item.active == null ? undefined : isActive}
-      data-tooltip={resolvedTitle}
       title={resolvedTitle}
       onClick={item.onSelect}
     >

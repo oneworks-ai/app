@@ -2,13 +2,11 @@
 import '../sender-toolbar/SenderSelectShared.scss'
 import './SenderSubmitAction.scss'
 
+import { ShortcutDisplay, ShortcutTooltip } from '@oneworks/components/route-layout'
 import type { SessionQueuedMessageMode } from '@oneworks/core'
 import { Button, Tooltip } from 'antd'
 import type { KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-
-import { ShortcutDisplay } from '#~/components/ShortcutDisplay'
-import { ShortcutTooltip } from '#~/components/ShortcutTooltip'
 
 const handleActionKeyDown = (event: KeyboardEvent<HTMLDivElement>, action?: () => void) => {
   if (action == null || (event.key !== 'Enter' && event.key !== ' ')) {

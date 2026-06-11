@@ -62,7 +62,7 @@ describe('route layout primitives', () => {
     expect(html).toContain('route-container-header')
     expect(html).toContain('认证管理')
     expect(html).toContain('aria-label="Refresh"')
-    expect(html).toContain('data-tooltip="Refresh"')
+    expect(html).not.toContain('data-tooltip=')
     expect(html).toContain('title="Refresh"')
     expect(html).toContain('route-container-header__title-icon')
   })

@@ -12,6 +12,7 @@
     "../../apps/relay-admin/src/**/*",
     "../../apps/client/src/**/*",
     "../../apps/client/src/**/*.json",
+    "../../packages/components/src/**/*",
     "../../packages/route-layout/src/**/*"
   ]
 }

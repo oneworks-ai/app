@@ -5,10 +5,11 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 
+import type { RouteContainerHeaderActionItem } from '@oneworks/components/route-layout'
+
 import { createSkill, getApiErrorMessage } from '#~/api.js'
 import type { EntitySummary, RuleSummary, SkillSummary, SpecSummary } from '#~/api.js'
 import { RouteContainerHeader } from '#~/components/layout/RouteContainerHeader'
-import type { RouteContainerHeaderActionItem } from '#~/components/layout/RouteContainerHeader'
 import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
 import { useRouteSidebar } from '#~/components/layout/route-sidebar-context'
 import type { RouteSidebarListItem } from '#~/components/layout/route-sidebar-context'

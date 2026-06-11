@@ -6,11 +6,11 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
+import type { RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
 import type { ConfigSource } from '@oneworks/core'
 import type { AboutInfo, ConfigResponse, ConfigUiSection } from '@oneworks/types'
 
 import { RouteContainerHeader } from '#~/components/layout/RouteContainerHeader'
-import type { RouteContainerHeaderBreadcrumb } from '#~/components/layout/RouteContainerHeader'
 import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
 import { useRouteSidebar } from '#~/components/layout/route-sidebar-context'
 import type { RouteSidebarListItem } from '#~/components/layout/route-sidebar-context'

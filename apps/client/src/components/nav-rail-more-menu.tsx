@@ -1,9 +1,9 @@
+import { ShortcutDisplay } from '@oneworks/components/route-layout'
 import { Button, Dropdown } from 'antd'
 import type { MenuProps } from 'antd'
 import type React from 'react'
 import type { ReactNode } from 'react'
 
-import { ShortcutDisplay } from '#~/components/ShortcutDisplay'
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import type { IconAsset } from '#~/components/icons/IconAsset'
 

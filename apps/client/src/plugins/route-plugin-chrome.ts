@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 
+import type { RouteContainerHeaderActionItem } from '@oneworks/components/route-layout'
+
 import type { NavRailWindowBarAction } from '#~/components/NavRail'
-import type { RouteContainerHeaderActionItem } from '#~/components/layout/RouteContainerHeader'
 import { useRouteSidebar } from '#~/components/layout/route-sidebar-context'
 import type {
   RouteSidebarListContextMenuFactory,

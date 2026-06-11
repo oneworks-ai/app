@@ -6,6 +6,8 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
+import type { RouteContainerHeaderActionItem } from '@oneworks/components/route-layout'
+
 import type { AutomationRule, AutomationRun } from '#~/api.js'
 import {
   createAutomationRule,
@@ -17,7 +19,6 @@ import {
   updateAutomationRule
 } from '#~/api.js'
 import { RouteContainerHeader } from '#~/components/layout/RouteContainerHeader'
-import type { RouteContainerHeaderActionItem } from '#~/components/layout/RouteContainerHeader'
 import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
 import { useRouteSidebar } from '#~/components/layout/route-sidebar-context'
 import type { RouteSidebarListItem } from '#~/components/layout/route-sidebar-context'

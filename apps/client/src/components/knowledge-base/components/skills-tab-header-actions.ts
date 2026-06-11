@@ -1,7 +1,7 @@
 import type { TFunction } from 'i18next'
 import type { RefObject } from 'react'
 
-import type { RouteContainerHeaderActionItem } from '#~/components/layout/RouteContainerHeader'
+import type { RouteContainerHeaderActionItem } from '@oneworks/components/route-layout'
 
 type SkillViewMode = 'project' | 'market'
 
