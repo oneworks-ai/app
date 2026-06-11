@@ -1,5 +1,4 @@
 import './RouteContainerHeader.scss'
-import '@oneworks/components/route-layout.css'
 
 import { RouteHeaderActionButton } from '@oneworks/components/route-layout'
 import { useAtomValue } from 'jotai'

@@ -8,12 +8,12 @@ import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
+import { ShortcutTooltip } from '@oneworks/components/route-layout'
 import { DEFAULT_THEME_PRIMARY_COLOR, ONEWORKS_THEME_COLOR_PRESETS } from '@oneworks/icon/presets'
 import { HostNavRail } from '@oneworks/route-layout'
 import type { ConfigResponse } from '@oneworks/types'
 
 import { getConfig, updateConfig } from '#~/api'
-import { ShortcutTooltip } from '#~/components/ShortcutTooltip'
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import type { IconAsset } from '#~/components/icons/IconAsset'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'

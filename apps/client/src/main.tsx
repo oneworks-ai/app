@@ -1,4 +1,5 @@
 import '@oneworks/route-layout/design-tokens.css'
+import '@oneworks/components/route-layout.css'
 import './styles/material-symbols-rounded.scss'
 import './styles/global.scss'
 

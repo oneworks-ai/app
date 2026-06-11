@@ -4,10 +4,10 @@ import '../sender-toolbar/SenderSelectBase.scss'
 import './EffortSelectControl.scss'
 import './EffortSelectDropdown.scss'
 
+import { ShortcutTooltip } from '@oneworks/components/route-layout'
 import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { ShortcutTooltip } from '#~/components/ShortcutTooltip'
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 

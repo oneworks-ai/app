@@ -1,10 +1,10 @@
 import './PermissionModeControl.scss'
 
+import { ShortcutTooltip } from '@oneworks/components/route-layout'
 import { Dropdown } from 'antd'
 import type { MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { ShortcutTooltip } from '#~/components/ShortcutTooltip'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 
 import type {

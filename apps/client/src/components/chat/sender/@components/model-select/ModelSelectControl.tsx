@@ -5,10 +5,10 @@ import './ModelSelectControl.scss'
 import './ModelSelectMenu.scss'
 import './ModelSelectMenuLabels.scss'
 
+import { ShortcutTooltip } from '@oneworks/components/route-layout'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { ShortcutTooltip } from '#~/components/ShortcutTooltip'
 import { useModelSelectBrowser } from '#~/components/chat/sender/@hooks/use-model-select-browser'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 
