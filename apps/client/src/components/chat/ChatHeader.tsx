@@ -1,6 +1,7 @@
 import './ChatHeader.scss'
 
-import { RouteHeaderActionButton } from '@oneworks/components/route-layout'
+import { RouteContainerHeaderActionButton, RouteHeaderActionButton } from '@oneworks/components/route-layout'
+import type { RouteContainerHeaderActionItem } from '@oneworks/components/route-layout'
 import type { ChatMessage, Session, SessionStatus } from '@oneworks/core'
 import type { SessionInfo } from '@oneworks/types'
 import { App, Button, Dropdown, Input, Switch, Tooltip } from 'antd'
@@ -26,8 +27,7 @@ import { copyTextWithFeedback } from '../../utils/copy'
 import { ConfigSectionPanel } from '../config'
 import type { FieldSpec } from '../config/configSchema'
 import { MaterialSymbol } from '../icons/MaterialSymbol'
-import { RouteContainerHeader, RouteContainerHeaderActionButton } from '../layout/RouteContainerHeader'
-import type { RouteContainerHeaderActionItem } from '../layout/RouteContainerHeader'
+import { RouteContainerHeader } from '../layout/RouteContainerHeader'
 import { RoomPixelAvatar } from '../room-pixel-avatar/RoomPixelAvatar'
 import { InteractionPanelWorkspaceActions } from './interaction-panel/InteractionPanelWorkspaceActions'
 import type {

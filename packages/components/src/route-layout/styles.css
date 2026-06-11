@@ -73,3 +73,122 @@
   font-size: 11px;
   font-weight: 700;
 }
+
+.route-container-header__leading-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--app-chrome-action-gap, 4px);
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.route-container-header__title-icon.icon-asset--svg svg,
+.route-container-header__action-icon.icon-asset--svg svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.route-container-header__title-icon.icon-asset--image,
+.route-container-header__action-icon.icon-asset--image {
+  display: block;
+  object-fit: contain;
+}
+
+.route-container-header__title-icon.material-symbols-rounded,
+.route-container-header__action-icon.material-symbols-rounded {
+  font-size: var(--route-container-header-icon-size);
+  line-height: 1;
+}
+
+.route-container-header__breadcrumb-back .material-symbols-rounded,
+.route-container-header__breadcrumb-separator .material-symbols-rounded,
+.route-container-header__breadcrumb-back > :not(.material-symbols-rounded),
+.route-container-header__breadcrumb-separator > :not(.material-symbols-rounded) {
+  width: var(--route-container-header-icon-size);
+  height: var(--route-container-header-icon-size);
+  font-size: var(--route-container-header-icon-size);
+  line-height: 1;
+}
+
+.route-container-header__action-button.ant-btn.ant-btn-text {
+  width: var(--route-container-header-icon-button-size);
+  height: var(--route-container-header-icon-button-size);
+  min-width: var(--route-container-header-icon-button-size);
+  min-height: 0;
+  padding: 0 !important;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  background-color: transparent;
+  color: var(--placeholder-color, #66707a);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    width .3s cubic-bezier(.4, 0, .2, 1),
+    height .3s cubic-bezier(.4, 0, .2, 1),
+    border-radius .3s cubic-bezier(.4, 0, .2, 1),
+    color .2s ease;
+}
+
+.route-container-header__action-button.ant-btn.ant-btn-text .ant-btn-icon {
+  width: var(--route-container-header-icon-button-size);
+  height: var(--route-container-header-icon-button-size);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.route-container-header__action-button.ant-btn.ant-btn-text
+  .route-container-header__action-icon {
+  width: var(--route-container-header-icon-size);
+  height: var(--route-container-header-icon-size);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.route-container-header__action-button.ant-btn.ant-btn-text
+  .route-container-header__action-icon.material-symbols-rounded {
+  transition: font-size .3s cubic-bezier(.4, 0, .2, 1);
+}
+
+.route-container-header__action-button.ant-btn.ant-btn-text:hover,
+.route-container-header__action-button.ant-btn.ant-btn-text:focus-visible {
+  background: transparent !important;
+  background-color: transparent !important;
+  color: var(--primary-color, #2563eb) !important;
+}
+
+.route-container-header__action-button.ant-btn.ant-btn-text:disabled,
+.route-container-header__action-button.ant-btn.ant-btn-text:disabled:hover,
+.route-container-header__action-button.ant-btn.ant-btn-text:disabled:focus-visible {
+  background: transparent !important;
+  background-color: transparent !important;
+  color: var(--placeholder-color, #66707a) !important;
+  cursor: default;
+  opacity: .45;
+}
+
+.route-container-header__action-button.ant-btn.ant-btn-text.is-active {
+  background: transparent !important;
+  background-color: transparent !important;
+  color: var(--primary-color, #2563eb) !important;
+}
+
+.route-container-header__action-button.ant-btn.ant-btn-text.is-active
+  .material-symbols-rounded {
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+}
+
+.route-container-header__action-button.ant-btn.ant-btn-text.is-danger:hover,
+.route-container-header__action-button.ant-btn.ant-btn-text.is-danger:focus-visible {
+  color: var(--danger-color, #d73a49) !important;
+}
+
+.route-container-header
+  :where(.ant-btn, .ant-dropdown-trigger, .shortcut-tooltip-target) {
+  -webkit-app-region: no-drag;
+}

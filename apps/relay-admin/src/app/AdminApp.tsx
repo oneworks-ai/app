@@ -1,17 +1,18 @@
 /* eslint-disable max-lines -- relay admin app owns auth, navigation, permissions, and route header wiring. */
 import '@oneworks/route-layout/design-tokens.css'
 import '@oneworks/route-layout/styles.css'
+import '@oneworks/components/route-layout.css'
 import './AdminApp.css'
 
+import { RouteContainerHeader } from '@oneworks/components/route-layout'
+import type { RouteContainerHeaderActionItem } from '@oneworks/components/route-layout'
 import {
   HostAppShell,
   HostNavRailWindowBar,
-  RouteContainerHeader,
   RouteContainerLayout,
   usePanelResize,
   useResponsiveLayout
 } from '@oneworks/route-layout'
-import type { RouteContainerHeaderActionItem } from '@oneworks/route-layout'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'

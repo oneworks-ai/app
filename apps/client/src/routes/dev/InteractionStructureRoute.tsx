@@ -7,12 +7,13 @@ import { useCallback, useLayoutEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
+import type { RouteContainerHeaderActionItem } from '@oneworks/components/route-layout'
+
 import type { NavRailWindowBarAction } from '#~/components/NavRail'
 import { DockPanel } from '#~/components/dock-panel/DockPanel'
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import { RouteContainerHeader } from '#~/components/layout/RouteContainerHeader'
-import type { RouteContainerHeaderActionItem } from '#~/components/layout/RouteContainerHeader'
 import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
 import { RouteContainerPanelDockWorkspace } from '#~/components/layout/RouteContainerPanelTabs'
 import type {

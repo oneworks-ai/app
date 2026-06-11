@@ -406,6 +406,9 @@ importers:
       '@material-symbols/svg-400':
         specifier: 0.44.8
         version: 0.44.8
+      '@oneworks/components':
+        specifier: workspace:*
+        version: link:../../packages/components
       antd:
         specifier: ^5.29.3
         version: 5.29.3(luxon@3.7.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

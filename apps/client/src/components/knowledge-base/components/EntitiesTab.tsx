@@ -4,8 +4,9 @@ import React from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import type { RouteContainerHeaderActionItem } from '@oneworks/components/route-layout'
+
 import type { EntitySummary } from '#~/api.js'
-import type { RouteContainerHeaderActionItem } from '#~/components/layout/RouteContainerHeader'
 import { EntityList } from './EntityList'
 import { FilterBar } from './FilterBar'
 import { SectionHeader } from './SectionHeader'

@@ -1,4 +1,4 @@
-import type { RouteContainerHeaderBreadcrumb } from '@oneworks/route-layout'
+import type { RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
 import { createElement, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 

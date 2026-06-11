@@ -7,11 +7,11 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
+import type { RouteContainerHeaderActionItem } from '@oneworks/components/route-layout'
 import type { ConfigResponse } from '@oneworks/types'
 
 import type { SkillSummary } from '#~/api.js'
 import { getConfig, listSkills } from '#~/api.js'
-import type { RouteContainerHeaderActionItem } from '#~/components/layout/RouteContainerHeader'
 import { useSkillsTabActions } from './@hooks/use-skills-tab-actions'
 import { ProjectSkillsList } from './ProjectSkillsList'
 import { SectionHeader } from './SectionHeader'
