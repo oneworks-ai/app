@@ -1,11 +1,11 @@
 import './RouteContainerHeader.scss'
+import '@oneworks/components/route-layout.css'
 
-import { Button } from 'antd'
+import { RouteHeaderActionButton } from '@oneworks/components/route-layout'
 import { useAtomValue } from 'jotai'
 import type { KeyboardEvent, ReactNode, Ref } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { ShortcutTooltip } from '#~/components/ShortcutTooltip'
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import type { IconAsset } from '#~/components/icons/IconAsset'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
@@ -41,7 +41,7 @@ export interface RouteContainerHeaderActionItem {
   disabled?: boolean
   /** Optional in-flight state for route-owned commands such as save/confirm. */
   loading?: boolean
-  /** Shortcut text displayed by `ShortcutTooltip`; execution still belongs to the caller. */
+  /** Shortcut text displayed by the shared action tooltip; execution still belongs to the caller. */
   shortcut?: string
   /** Tooltip title override for the inactive state. */
   title?: string
@@ -63,33 +63,25 @@ export function RouteContainerHeaderActionButton({
     : item.title ?? item.label
 
   return (
-    <ShortcutTooltip
+    <RouteHeaderActionButton
       isMac={isMac}
       shortcut={item.shortcut}
-      title={resolvedTitle}
-      placement='bottom'
-      enabled={resolvedTitle != null}
-    >
-      <Button
-        type='text'
-        className={[
-          'route-container-header__action-button',
-          isActive ? 'is-active' : '',
-          item.danger === true ? 'is-danger' : ''
-        ].filter(Boolean).join(' ')}
-        disabled={item.disabled}
-        loading={item.loading}
-        aria-label={resolvedLabel}
-        aria-pressed={item.active == null ? undefined : isActive}
-        onClick={item.onSelect}
-        icon={renderIconAsset({
-          active: isActive,
-          className: 'route-container-header__action-icon',
-          icon: resolvedIcon,
-          materialFilled: false
-        })}
-      />
-    </ShortcutTooltip>
+      tooltipTitle={resolvedTitle}
+      tooltipEnabled={resolvedTitle != null}
+      active={isActive}
+      danger={item.danger}
+      disabled={item.disabled}
+      loading={item.loading}
+      label={resolvedLabel}
+      pressed={item.active == null ? undefined : isActive}
+      onClick={item.onSelect}
+      icon={renderIconAsset({
+        active: isActive,
+        className: 'route-container-header__action-icon',
+        icon: resolvedIcon,
+        materialFilled: false
+      })}
+    />
   )
 }
 
@@ -324,66 +316,42 @@ export function RouteContainerHeader({
         {shouldRenderLeadingActions && (
           <div className='route-container-header__leading-actions'>
             {onOpenSidebar != null && (
-              <ShortcutTooltip
+              <RouteHeaderActionButton
                 isMac={isMac}
                 shortcut={getDesktopViewShortcut('toggle-sidebar')}
-                title={t('navRail.expandSidebar')}
-                placement='bottom'
-              >
-                <Button
-                  type='text'
-                  className='route-container-header__action-button'
-                  aria-label={t('navRail.expandSidebar')}
-                  onClick={handleOpenSidebar}
-                  icon={<MaterialSymbol className='route-container-header__action-icon' name='left_panel_open' />}
-                />
-              </ShortcutTooltip>
+                tooltipTitle={t('navRail.expandSidebar')}
+                label={t('navRail.expandSidebar')}
+                onClick={handleOpenSidebar}
+                icon={<MaterialSymbol className='route-container-header__action-icon' name='left_panel_open' />}
+              />
             )}
-            <ShortcutTooltip
+            <RouteHeaderActionButton
               isMac={isMac}
               shortcut={getDesktopViewShortcut('back')}
-              title={t('navRail.back')}
-              placement='bottom'
-            >
-              <Button
-                type='text'
-                className='route-container-header__action-button'
-                disabled={!canGoBack}
-                aria-label={t('navRail.back')}
-                onClick={goBack}
-                icon={<MaterialSymbol className='route-container-header__action-icon' name='arrow_back' />}
-              />
-            </ShortcutTooltip>
-            <ShortcutTooltip
+              tooltipTitle={t('navRail.back')}
+              disabled={!canGoBack}
+              label={t('navRail.back')}
+              onClick={goBack}
+              icon={<MaterialSymbol className='route-container-header__action-icon' name='arrow_back' />}
+            />
+            <RouteHeaderActionButton
               isMac={isMac}
               shortcut={getDesktopViewShortcut('forward')}
-              title={t('navRail.forward')}
-              placement='bottom'
-            >
-              <Button
-                type='text'
-                className='route-container-header__action-button'
-                disabled={!canGoForward}
-                aria-label={t('navRail.forward')}
-                onClick={goForward}
-                icon={<MaterialSymbol className='route-container-header__action-icon' name='arrow_forward' />}
-              />
-            </ShortcutTooltip>
+              tooltipTitle={t('navRail.forward')}
+              disabled={!canGoForward}
+              label={t('navRail.forward')}
+              onClick={goForward}
+              icon={<MaterialSymbol className='route-container-header__action-icon' name='arrow_forward' />}
+            />
             {onCreateSession != null && (
-              <ShortcutTooltip
+              <RouteHeaderActionButton
                 isMac={isMac}
                 shortcut='mod+k'
-                title={t('common.newChat')}
-                placement='bottom'
-              >
-                <Button
-                  type='text'
-                  className='route-container-header__action-button'
-                  aria-label={t('common.newChat')}
-                  onClick={onCreateSession}
-                  icon={<MaterialSymbol className='route-container-header__action-icon' name='edit_square' />}
-                />
-              </ShortcutTooltip>
+                tooltipTitle={t('common.newChat')}
+                label={t('common.newChat')}
+                onClick={onCreateSession}
+                icon={<MaterialSymbol className='route-container-header__action-icon' name='edit_square' />}
+              />
             )}
           </div>
         )}

@@ -26,6 +26,7 @@
   flex-direction: row;
   gap: 0;
   overflow: hidden;
+  color: var(--text-color);
   background:
     linear-gradient(180deg, rgba(0, 0, 0, .02), rgba(0, 0, 0, 0)),
     var(--sub-bg-color);

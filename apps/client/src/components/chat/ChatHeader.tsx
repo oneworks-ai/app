@@ -1,5 +1,6 @@
 import './ChatHeader.scss'
 
+import { RouteHeaderActionButton } from '@oneworks/components/route-layout'
 import type { ChatMessage, Session, SessionStatus } from '@oneworks/core'
 import type { SessionInfo } from '@oneworks/types'
 import { App, Button, Dropdown, Input, Switch, Tooltip } from 'antd'
@@ -169,6 +170,7 @@ export function ChatHeader({
   const navigate = useNavigate()
   const { message, modal } = App.useApp()
   const { isCompactLayout, isTouchInteraction } = useResponsiveLayout()
+  const isMac = navigator.platform.includes('Mac')
   const isSidebarCollapsed = useAtomValue(isSidebarCollapsedAtom)
   const { searchParams, update: updateQuery } = useQueryParams<{ debug: string }>({
     keys: ['debug'],
@@ -192,7 +194,7 @@ export function ChatHeader({
   ]
   const shouldShowViewSwitches = showViewSwitches ?? (hasSession && viewItems.length > 1)
   const isCreateSessionActive = isNewSessionActive ?? !hasSession
-  const resolveTooltipTitle = (title: string) => isTouchInteraction ? undefined : title
+  const resolveTooltipTitle = (title: string) => isTouchInteraction ? null : title
   const isHeaderChromeCompact = isCompactLayout || isSidebarCollapsed
 
   const sessionRecordTitle = normalizeTitle(sessionTitle)
@@ -222,7 +224,6 @@ export function ChatHeader({
           className='chat-header-compact-indicator'
           name='layers'
           aria-label={compactionLabel}
-          title={compactionLabel}
         />
       </Tooltip>
     )
@@ -631,16 +632,13 @@ export function ChatHeader({
   const modeSwitchButton = modeSwitchTarget == null
     ? null
     : (
-      <Tooltip title={resolveTooltipTitle(modeSwitchTarget.label)}>
-        <Button
-          type='text'
-          className='route-container-header__action-button'
-          title={modeSwitchTarget.label}
-          aria-label={modeSwitchTarget.label}
-          onClick={modeSwitchTarget.onClick}
-          icon={<MaterialSymbol className='route-container-header__action-icon' name={modeSwitchTarget.icon} />}
-        />
-      </Tooltip>
+      <RouteHeaderActionButton
+        isMac={isMac}
+        label={modeSwitchTarget.label}
+        tooltipTitle={resolveTooltipTitle(modeSwitchTarget.label)}
+        onClick={modeSwitchTarget.onClick}
+        icon={<MaterialSymbol className='route-container-header__action-icon' name={modeSwitchTarget.icon} />}
+      />
     )
 
   useEffect(() => {
@@ -715,126 +713,111 @@ export function ChatHeader({
     ? (
       <>
         {shouldShowViewSwitches && (
-          <Tooltip title={resolveTooltipTitle(activeViewItem.title)}>
-            <Dropdown
-              menu={{ items: compactViewItems }}
-              overlayClassName='chat-header-actions-dropdown'
-              placement='bottomRight'
-              trigger={['click']}
-            >
-              <Button
-                type='text'
-                className='route-container-header__action-button'
-                title={activeViewItem.title}
-                aria-label={activeViewItem.title}
-                icon={<MaterialSymbol className='route-container-header__action-icon' name={activeViewItem.icon} />}
-              />
-            </Dropdown>
-          </Tooltip>
+          <Dropdown
+            menu={{ items: compactViewItems }}
+            overlayClassName='chat-header-actions-dropdown'
+            placement='bottomRight'
+            trigger={['click']}
+          >
+            <RouteHeaderActionButton
+              isMac={isMac}
+              label={activeViewItem.title}
+              tooltipTitle={resolveTooltipTitle(activeViewItem.title)}
+              icon={<MaterialSymbol className='route-container-header__action-icon' name={activeViewItem.icon} />}
+            />
+          </Dropdown>
         )}
         {modeSwitchButton}
         {!shouldMoveWorkspaceActionsToMore && workspaceActions}
         {resolvedPluginHeaderActions.map(item => (
-          <Tooltip key={`${item.pluginScope}:${item.id}`} title={resolveTooltipTitle(item.label)}>
-            <Button
-              type='text'
-              className='route-container-header__action-button'
-              title={item.label}
-              aria-label={item.label}
-              onClick={() => runPluginAction(item)}
-              icon={<MaterialSymbol className='route-container-header__action-icon' name={item.icon ?? 'layers'} />}
-            />
-          </Tooltip>
+          <RouteHeaderActionButton
+            key={`${item.pluginScope}:${item.id}`}
+            isMac={isMac}
+            label={item.label}
+            tooltipTitle={resolveTooltipTitle(item.label)}
+            onClick={() => runPluginAction(item)}
+            icon={<MaterialSymbol className='route-container-header__action-icon' name={item.icon ?? 'layers'} />}
+          />
         ))}
         {bottomPanelButton}
         {workspaceDrawerButton}
         {shouldShowCompactMoreActions && (
-          <Tooltip title={resolveTooltipTitle(t('common.moreActions'))}>
-            <Dropdown
-              menu={{ items: compactMoreItems }}
-              overlayClassName='chat-header-actions-dropdown'
-              placement='bottomRight'
-              trigger={['click']}
-            >
-              <Button
-                type='text'
-                className='route-container-header__action-button'
-                title={t('common.moreActions')}
-                aria-label={t('common.moreActions')}
-                icon={<MaterialSymbol className='route-container-header__action-icon' name='more_vert' />}
-              />
-            </Dropdown>
-          </Tooltip>
+          <Dropdown
+            menu={{ items: compactMoreItems }}
+            overlayClassName='chat-header-actions-dropdown'
+            placement='bottomRight'
+            trigger={['click']}
+          >
+            <RouteHeaderActionButton
+              isMac={isMac}
+              label={t('common.moreActions')}
+              tooltipTitle={resolveTooltipTitle(t('common.moreActions'))}
+              icon={<MaterialSymbol className='route-container-header__action-icon' name='more_vert' />}
+            />
+          </Dropdown>
         )}
       </>
     )
     : (
       <>
         {shouldShowViewSwitches && viewItems.map(item => (
-          <Tooltip key={item.value} title={resolveTooltipTitle(item.title)}>
-            <Button
-              type='text'
-              className={`route-container-header__action-button ${activeView === item.value ? 'is-active' : ''}`}
-              title={item.title}
-              aria-label={item.title}
-              onClick={() => {
-                onViewChange(item.value)
-              }}
-              icon={<MaterialSymbol className='route-container-header__action-icon' name={item.icon} />}
-            />
-          </Tooltip>
+          <RouteHeaderActionButton
+            key={item.value}
+            isMac={isMac}
+            label={item.title}
+            tooltipTitle={resolveTooltipTitle(item.title)}
+            active={activeView === item.value}
+            onClick={() => {
+              onViewChange(item.value)
+            }}
+            icon={<MaterialSymbol className='route-container-header__action-icon' name={item.icon} />}
+          />
         ))}
         {modeSwitchButton}
         {workspaceActions}
         {resolvedPluginHeaderActions.map(item => (
-          <Tooltip key={`${item.pluginScope}:${item.id}`} title={resolveTooltipTitle(item.label)}>
-            <Button
-              type='text'
-              className='route-container-header__action-button'
-              title={item.label}
-              aria-label={item.label}
-              onClick={() => runPluginAction(item)}
-              icon={<MaterialSymbol className='route-container-header__action-icon' name={item.icon ?? 'layers'} />}
-            />
-          </Tooltip>
+          <RouteHeaderActionButton
+            key={`${item.pluginScope}:${item.id}`}
+            isMac={isMac}
+            label={item.label}
+            tooltipTitle={resolveTooltipTitle(item.label)}
+            onClick={() => runPluginAction(item)}
+            icon={<MaterialSymbol className='route-container-header__action-icon' name={item.icon ?? 'layers'} />}
+          />
         ))}
         {bottomPanelButton}
         {workspaceDrawerButton}
         {hasSession && shouldShowDebugButton && (
-          <Tooltip title={resolveTooltipTitle(isDebugMode ? t('chat.debugDisable') : t('chat.debugEnable'))}>
-            <Button
-              type='text'
-              className={`route-container-header__action-button ${isDebugMode ? 'is-debug-active' : ''}`}
-              title={isDebugMode ? t('chat.debugDisable') : t('chat.debugEnable')}
-              aria-label={isDebugMode ? t('chat.debugDisable') : t('chat.debugEnable')}
-              onClick={toggleDebugMode}
-              icon={
-                <MaterialSymbol
-                  className='route-container-header__action-icon'
-                  name='bug_report'
-                  filled={isDebugMode}
-                />
-              }
-            />
-          </Tooltip>
+          <RouteHeaderActionButton
+            isMac={isMac}
+            label={isDebugMode ? t('chat.debugDisable') : t('chat.debugEnable')}
+            tooltipTitle={resolveTooltipTitle(isDebugMode ? t('chat.debugDisable') : t('chat.debugEnable'))}
+            active={isDebugMode}
+            buttonClassName={isDebugMode ? 'is-debug-active' : undefined}
+            onClick={toggleDebugMode}
+            icon={
+              <MaterialSymbol
+                className='route-container-header__action-icon'
+                name='bug_report'
+                filled={isDebugMode}
+              />
+            }
+          />
         )}
         {shouldShowDesktopMoreActions && (
-          <Tooltip title={resolveTooltipTitle(t('common.moreActions'))}>
-            <Dropdown
-              menu={{ items: desktopMoreItems }}
-              overlayClassName='chat-header-actions-dropdown'
-              placement='bottomRight'
-              trigger={['click']}
-            >
-              <Button
-                type='text'
-                className='route-container-header__action-button'
-                title={t('common.moreActions')}
-                aria-label={t('common.moreActions')}
-                icon={<MaterialSymbol className='route-container-header__action-icon' name='more_vert' />}
-              />
-            </Dropdown>
-          </Tooltip>
+          <Dropdown
+            menu={{ items: desktopMoreItems }}
+            overlayClassName='chat-header-actions-dropdown'
+            placement='bottomRight'
+            trigger={['click']}
+          >
+            <RouteHeaderActionButton
+              isMac={isMac}
+              label={t('common.moreActions')}
+              tooltipTitle={resolveTooltipTitle(t('common.moreActions'))}
+              icon={<MaterialSymbol className='route-container-header__action-icon' name='more_vert' />}
+            />
+          </Dropdown>
         )}
       </>
     )

@@ -13,6 +13,7 @@
 - `RouteWorkbenchShell` is the lower-level structural frame used by `AppShellFrame`. Prefer `AppShellFrame` when a surface needs the same shell behavior as the main client; use `RouteWorkbenchShell` directly only for custom shell mechanics.
 - `design-tokens.css` owns the shared app chrome and color CSS variables used by both `apps/client` and standalone surfaces such as Relay Admin. Consumers should import it instead of recreating `--bg-color`, `--text-color`, `--border-color`, `--primary-color`, or dark-mode token tables locally.
 - This package must not import AntD or own AntD theme objects. Apps that use AntD must map the same resolved theme state to both `html.dark` and their own `ConfigProvider` theme adapter.
+- AntD-backed, product-facing route layout components belong in `packages/components/src/route-layout`. Keep this package as the lower-level primitive layer and expose higher-level action buttons, shortcut tooltips, and portal-backed chrome from `@oneworks/components/route-layout`.
 - CSS lives in plain `.css` so standalone Vite apps can consume it without requiring Sass.
 
 ## Consumer Pattern

@@ -30,6 +30,7 @@
     "prepublish": "vite build"
   },
   "dependencies": {
+    "@oneworks/components": "workspace:*",
     "@oneworks/icon": "workspace:*",
     "@oneworks/register": "workspace:*",
     "@oneworks/route-layout": "workspace:*",

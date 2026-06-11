@@ -1,0 +1,51 @@
+{
+  "name": "@oneworks/components",
+  "type": "module",
+  "version": "0.1.0-alpha.0",
+  "description": "Shared high-level React components for OneWorks applications",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/components"
+  },
+  "exports": {
+    ".": {
+      "__oneworks__": {
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./route-layout": {
+      "__oneworks__": {
+        "default": "./src/route-layout/index.ts"
+      },
+      "types": "./dist/route-layout/index.d.ts",
+      "default": "./dist/route-layout/index.js"
+    },
+    "./route-layout.css": "./src/route-layout/styles.css",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "README.md",
+    "dist",
+    "package.json",
+    "src/**/*.css"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
+  },
+  "peerDependencies": {
+    "antd": "^5.20.0",
+    "react": "^18.3.1"
+  },
+  "dependencies": {
+    "@oneworks/route-layout": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "antd": "^5.20.0",
+    "react": "^18.3.1"
+  }
+}
