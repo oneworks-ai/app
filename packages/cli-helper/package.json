@@ -1,0 +1,18 @@
+{
+  "name": "@oneworks/cli-helper",
+  "version": "0.1.0-alpha.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/cli-helper"
+  },
+  "exports": {
+    ".": "./loader.js",
+    "./entry": "./entry.js",
+    "./loader": "./loader.js",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@oneworks/register": "workspace:*"
+  }
+}

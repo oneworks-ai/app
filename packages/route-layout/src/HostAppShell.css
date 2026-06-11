@@ -1,0 +1,178 @@
+.host-app-shell {
+  --host-app-content-bg: var(--sub-bg-color, var(--bg-color, #f6f7f8));
+  --host-app-content-radius: 12px;
+  --host-app-layout-transition: .3s cubic-bezier(.4, 0, .2, 1);
+  --nav-rail-window-spacer-width: 64px;
+  --nav-rail-collapsed-window-spacer-width: 66px;
+  --nav-rail-window-action-size: var(--app-chrome-icon-size, 18px);
+  --nav-rail-window-icon-size: var(--app-chrome-icon-size, 18px);
+  --nav-rail-window-action-gap: var(--app-chrome-action-gap, 4px);
+  --nav-rail-window-gap: var(--app-chrome-action-gap, 4px);
+  --nav-rail-window-icon-color: var(--placeholder-color, #6b7280);
+  --nav-rail-collapsed-window-bar-max-width: calc(100vw - 96px);
+  --nav-rail-collapsed-window-bar-padding-x: var(
+    --route-container-header-padding-inline,
+    10px
+  );
+  --nav-rail-collapsed-window-bar-computed-width: calc(
+    var(
+      --nav-rail-collapsed-window-bar-padding-left,
+      var(--nav-rail-collapsed-window-bar-padding-x)
+    ) +
+      var(
+      --nav-rail-collapsed-window-bar-padding-right,
+      var(--nav-rail-collapsed-window-bar-padding-x)
+    ) +
+      var(--nav-rail-collapsed-window-bar-action-count, 2) *
+      var(--nav-rail-window-action-size) +
+      (
+      var(--nav-rail-collapsed-window-bar-action-count, 2) - 1
+    ) *
+      var(--nav-rail-window-action-gap)
+  );
+
+  min-height: 100vh;
+  height: var(--oneworks-visual-viewport-height, 100dvh);
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, .02), rgba(0, 0, 0, 0)),
+    var(--host-app-content-bg);
+}
+
+.host-app-shell:not(.app-shell--window-controls-reserved) {
+  --route-container-header-collapsed-compact-margin-offset: 0px;
+  --nav-rail-collapsed-window-bar-padding-left: var(
+    --route-container-header-padding-inline,
+    10px
+  );
+  --nav-rail-collapsed-window-bar-action-count: 2;
+  --nav-rail-collapsed-window-bar-width: var(
+    --nav-rail-collapsed-window-bar-computed-width
+  );
+  --nav-rail-top-padding: 33px;
+}
+
+.host-app-shell__content-region {
+  position: relative;
+  z-index: 0;
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  padding: 6px 8px 6px 0;
+  box-sizing: border-box;
+  background-color: var(--host-app-content-bg);
+  transition:
+    width var(--host-app-layout-transition),
+    max-width var(--host-app-layout-transition),
+    padding var(--host-app-layout-transition);
+}
+
+.host-app-shell__content-region.is-sidebar-collapsed {
+  padding: 0;
+}
+
+.host-app-shell__content {
+  flex: 1;
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: var(--host-app-content-radius);
+  background-color: var(--host-app-content-bg);
+  transition:
+    padding var(--host-app-layout-transition),
+    border-radius var(--host-app-layout-transition),
+    background-color .2s ease;
+}
+
+.host-app-shell__content.is-sidebar-collapsed {
+  border-radius: 0;
+}
+
+.host-app-shell__content > * {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border-radius: var(--host-app-content-radius);
+  overflow: hidden;
+  transition:
+    border-radius var(--host-app-layout-transition),
+    background-color .2s ease;
+}
+
+.host-app-shell__content-region.is-sidebar-collapsed
+  .host-app-shell__content
+  > * {
+  border-radius: 0;
+}
+
+.host-app-shell__mobile-sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  border: none;
+  background: rgba(0, 0, 0, .28);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .24s ease, visibility 0s linear .24s;
+  z-index: 60;
+}
+
+.host-app-shell__mobile-sidebar-backdrop.is-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.host-app-shell__mobile-sidebar-sheet {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(372px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition:
+    transform .24s cubic-bezier(.4, 0, .2, 1),
+    visibility 0s linear .24s;
+  z-index: 61;
+  pointer-events: none;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  will-change: transform;
+}
+
+.host-app-shell__mobile-sidebar-sheet.is-open {
+  transform: translateX(var(--oneworks-mobile-sidebar-drag-x, 0));
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.host-app-shell__mobile-sidebar-sheet[data-mobile-sidebar-dragging='true'] {
+  transition: none;
+}
+
+.host-app-shell--compact {
+  flex-direction: column;
+}
+
+.host-app-shell--compact .host-app-shell__content-region {
+  padding: 0;
+}
+
+.host-app-shell--compact .host-app-shell__content,
+.host-app-shell--compact .host-app-shell__content > * {
+  border-radius: 0;
+}

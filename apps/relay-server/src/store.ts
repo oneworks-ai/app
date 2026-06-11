@@ -1,0 +1,263 @@
+import { randomUUID } from 'node:crypto'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { dirname } from 'node:path'
+import process from 'node:process'
+
+import { hashDeviceToken } from './devices/private-metadata.js'
+import { sanitizeRelayStorageValue } from './storage/content-boundary.js'
+import { normalizeRelaySsoProviders } from './storage/sso-providers.js'
+import type {
+  RelayDevice,
+  RelayDeviceSession,
+  RelayEncryptedPayload,
+  RelayForwardingJob,
+  RelayForwardingJobStatus,
+  RelayInvite,
+  RelayOAuthState,
+  RelaySession,
+  RelayStore,
+  RelayUser
+} from './types.js'
+import { createToken, isRecord, normalizeRole, now } from './utils.js'
+
+const defaultStore = (): RelayStore => ({
+  createdAt: now(),
+  users: [],
+  invites: [],
+  ssoProviders: [],
+  devices: [],
+  deviceSessions: [],
+  forwardingJobs: [],
+  oauthStates: [],
+  sessions: []
+})
+
+const normalizeUser = (value: Record<string, unknown>): RelayUser => ({
+  id: typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : randomUUID(),
+  email: typeof value.email === 'string' ? value.email.trim() : '',
+  name: typeof value.name === 'string' ? value.name.trim() : '',
+  avatarUrl: typeof value.avatarUrl === 'string' && value.avatarUrl.trim() !== '' ? value.avatarUrl.trim() : undefined,
+  disabledAt: typeof value.disabledAt === 'string' && value.disabledAt.trim() !== ''
+    ? value.disabledAt.trim()
+    : undefined,
+  maxDevices: Number.isFinite(Number(value.maxDevices)) ? Math.max(0, Math.trunc(Number(value.maxDevices))) : undefined,
+  passwordHash: typeof value.passwordHash === 'string' && value.passwordHash.trim() !== ''
+    ? value.passwordHash.trim()
+    : undefined,
+  provider: typeof value.provider === 'string' && value.provider.trim() !== '' ? value.provider.trim() : undefined,
+  providerUserId: typeof value.providerUserId === 'string' && value.providerUserId.trim() !== ''
+    ? value.providerUserId.trim()
+    : undefined,
+  role: normalizeRole(value.role, 'member'),
+  createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+  updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined
+})
+
+const normalizeInvite = (value: Record<string, unknown>): RelayInvite => ({
+  code: typeof value.code === 'string' && value.code.trim() !== '' ? value.code.trim() : createToken(),
+  role: normalizeRole(value.role, 'member'),
+  userId: typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined,
+  maxUses: Number.isFinite(Number(value.maxUses)) ? Math.max(1, Number(value.maxUses)) : 1,
+  used: Number.isFinite(Number(value.used)) ? Math.max(0, Number(value.used)) : 0,
+  expiresAt: typeof value.expiresAt === 'string' ? value.expiresAt : undefined,
+  revokedAt: typeof value.revokedAt === 'string' && value.revokedAt.trim() !== '' ? value.revokedAt.trim() : undefined,
+  createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+  updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined
+})
+
+const normalizeEncryptedPayload = (value: unknown): RelayEncryptedPayload | undefined => {
+  if (!isRecord(value)) return undefined
+  return value.algorithm === 'aes-256-gcm' &&
+      typeof value.ciphertext === 'string' &&
+      typeof value.iv === 'string' &&
+      typeof value.tag === 'string' &&
+      value.version === 1
+    ? {
+      algorithm: 'aes-256-gcm',
+      ciphertext: value.ciphertext,
+      iv: value.iv,
+      tag: value.tag,
+      version: 1
+    }
+    : undefined
+}
+
+const normalizeDevice = (value: Record<string, unknown>): RelayDevice => {
+  const legacyDeviceToken = typeof value.deviceToken === 'string' && value.deviceToken.trim() !== ''
+    ? value.deviceToken.trim()
+    : undefined
+  const deviceTokenHash = typeof value.deviceTokenHash === 'string' && value.deviceTokenHash.trim() !== ''
+    ? value.deviceTokenHash.trim()
+    : legacyDeviceToken == null
+    ? hashDeviceToken(createToken())
+    : undefined
+
+  return {
+    id: typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : randomUUID(),
+    userId: typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined,
+    ...(typeof value.name === 'string' && value.name.trim() !== '' ? { name: value.name.trim() } : {}),
+    ...(isRecord(value.capabilities) ? { capabilities: value.capabilities } : {}),
+    ...(typeof value.workspaceFolder === 'string' ? { workspaceFolder: value.workspaceFolder } : {}),
+    ...(typeof value.pluginScope === 'string' ? { pluginScope: value.pluginScope } : {}),
+    ...(legacyDeviceToken == null ? {} : { deviceToken: legacyDeviceToken }),
+    deviceTokenHash,
+    encryptedMetadata: normalizeEncryptedPayload(value.encryptedMetadata),
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    lastSeenAt: typeof value.lastSeenAt === 'string' ? value.lastSeenAt : now()
+  }
+}
+
+const normalizeDeviceSession = (value: Record<string, unknown>): RelayDeviceSession | undefined => {
+  const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
+  const deviceId = typeof value.deviceId === 'string' && value.deviceId.trim() !== ''
+    ? value.deviceId.trim()
+    : undefined
+  if (id == null || deviceId == null) return undefined
+  return {
+    id,
+    deviceId,
+    userId: typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined,
+    title: typeof value.title === 'string' && value.title.trim() !== '' ? value.title.trim() : id,
+    state: typeof value.state === 'string' && value.state.trim() !== '' ? value.state.trim() : undefined,
+    lastActiveAt: typeof value.lastActiveAt === 'string' && value.lastActiveAt.trim() !== ''
+      ? value.lastActiveAt.trim()
+      : undefined,
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : now()
+  }
+}
+
+const forwardingJobStatuses = new Set<RelayForwardingJobStatus>([
+  'cancelled',
+  'claimed',
+  'failed',
+  'queued',
+  'running',
+  'succeeded'
+])
+
+const normalizeForwardingJob = (value: Record<string, unknown>): RelayForwardingJob | undefined => {
+  const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
+  const deviceId = typeof value.deviceId === 'string' && value.deviceId.trim() !== ''
+    ? value.deviceId.trim()
+    : undefined
+  const sessionId = typeof value.sessionId === 'string' && value.sessionId.trim() !== ''
+    ? value.sessionId.trim()
+    : undefined
+  if (id == null || deviceId == null || sessionId == null) return undefined
+  const traceId = typeof value.traceId === 'string' && value.traceId.trim() !== '' ? value.traceId.trim() : id
+  const status = typeof value.status === 'string' && forwardingJobStatuses.has(value.status as RelayForwardingJobStatus)
+    ? value.status as RelayForwardingJobStatus
+    : 'queued'
+  const payloadSizeBytes = Number.isFinite(Number(value.payloadSizeBytes))
+    ? Math.max(0, Number(value.payloadSizeBytes))
+    : 0
+  return {
+    id,
+    deviceId,
+    sessionId,
+    userId: typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined,
+    status,
+    traceId,
+    requestId: typeof value.requestId === 'string' && value.requestId.trim() !== ''
+      ? value.requestId.trim()
+      : undefined,
+    mode: typeof value.mode === 'string' && value.mode.trim() !== '' ? value.mode.trim() : undefined,
+    payloadSizeBytes,
+    resultSizeBytes: Number.isFinite(Number(value.resultSizeBytes))
+      ? Math.max(0, Number(value.resultSizeBytes))
+      : undefined,
+    errorCode: typeof value.errorCode === 'string' && value.errorCode.trim() !== ''
+      ? value.errorCode.trim()
+      : undefined,
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : now(),
+    claimedAt: typeof value.claimedAt === 'string' && value.claimedAt.trim() !== ''
+      ? value.claimedAt.trim()
+      : undefined,
+    completedAt: typeof value.completedAt === 'string' && value.completedAt.trim() !== ''
+      ? value.completedAt.trim()
+      : undefined
+  }
+}
+
+const normalizeOAuthState = (value: Record<string, unknown>): RelayOAuthState | undefined => {
+  const provider = typeof value.provider === 'string' && value.provider.trim() !== ''
+    ? value.provider.trim()
+    : undefined
+  if (provider == null) return undefined
+  const state = typeof value.state === 'string' && value.state.trim() !== '' ? value.state.trim() : undefined
+  const expiresAt = typeof value.expiresAt === 'string' ? value.expiresAt : undefined
+  if (state == null || expiresAt == null) return undefined
+  return {
+    state,
+    provider,
+    redirectUri: typeof value.redirectUri === 'string' && value.redirectUri.trim() !== ''
+      ? value.redirectUri
+      : undefined,
+    inviteCode: typeof value.inviteCode === 'string' && value.inviteCode.trim() !== '' ? value.inviteCode : undefined,
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    expiresAt
+  }
+}
+
+const normalizeSession = (value: Record<string, unknown>): RelaySession | undefined => {
+  const token = typeof value.token === 'string' && value.token.trim() !== '' ? value.token.trim() : undefined
+  const userId = typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined
+  const expiresAt = typeof value.expiresAt === 'string' ? value.expiresAt : undefined
+  if (token == null || userId == null || expiresAt == null) return undefined
+  return {
+    token,
+    userId,
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    expiresAt,
+    lastSeenAt: typeof value.lastSeenAt === 'string' ? value.lastSeenAt : now()
+  }
+}
+
+export const normalizeRelayStore = (value: unknown): RelayStore => {
+  const store = isRecord(value) ? value : {}
+  return {
+    createdAt: typeof store.createdAt === 'string' ? store.createdAt : now(),
+    users: Array.isArray(store.users) ? store.users.filter(isRecord).map(normalizeUser) : [],
+    invites: Array.isArray(store.invites) ? store.invites.filter(isRecord).map(normalizeInvite) : [],
+    ssoProviders: normalizeRelaySsoProviders(store.ssoProviders),
+    devices: Array.isArray(store.devices) ? store.devices.filter(isRecord).map(normalizeDevice) : [],
+    deviceSessions: Array.isArray(store.deviceSessions)
+      ? store.deviceSessions.filter(isRecord).map(normalizeDeviceSession).filter((value): value is RelayDeviceSession =>
+        value != null
+      )
+      : [],
+    forwardingJobs: Array.isArray(store.forwardingJobs)
+      ? store.forwardingJobs.filter(isRecord).map(normalizeForwardingJob).filter((value): value is RelayForwardingJob =>
+        value != null
+      )
+      : [],
+    oauthStates: Array.isArray(store.oauthStates)
+      ? store.oauthStates.filter(isRecord).map(normalizeOAuthState).filter((value): value is RelayOAuthState =>
+        value != null
+      )
+      : [],
+    sessions: Array.isArray(store.sessions)
+      ? store.sessions.filter(isRecord).map(normalizeSession).filter((value): value is RelaySession => value != null)
+      : []
+  }
+}
+
+export const readRelayStore = async (dataPath: string): Promise<RelayStore> => {
+  try {
+    return normalizeRelayStore(JSON.parse(await readFile(dataPath, 'utf8')))
+  } catch {
+    return defaultStore()
+  }
+}
+
+export const writeRelayStore = async (dataPath: string, store: RelayStore) => {
+  await mkdir(dirname(dataPath), { recursive: true })
+  const tempPath = `${dataPath}.${process.pid}.tmp`
+  await writeFile(tempPath, `${JSON.stringify(sanitizeRelayStorageValue(store), null, 2)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600
+  })
+  await rename(tempPath, dataPath)
+}

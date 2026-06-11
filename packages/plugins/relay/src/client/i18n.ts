@@ -1,0 +1,237 @@
+/* eslint-disable max-lines -- relay client messages stay colocated for plugin and session group UI. */
+export type RelayClientLocale = 'en' | 'zh-Hans'
+
+export interface RelayClientMessages {
+  actions: {
+    cancelServer: string
+    connect: string
+    disconnect: string
+    editServer: string
+    forgetToken: string
+    login: string
+    refresh: string
+    saveServer: string
+    serverSaved: string
+  }
+  aria: {
+    moreDeviceActions: string
+    serviceActions: string
+  }
+  devices: {
+    count: (count: number) => string
+    empty: string
+    error: string
+    features: {
+      sessions: string
+      terminal: string
+      workspaceFiles: string
+    }
+    label: string
+    local: string
+    status: Record<string, string>
+  }
+  emptyAccounts: string
+  emptyServers: string
+  errors: {
+    loginUrlMissing: string
+    optionsUpdateUnavailable: string
+    relayActionFailed: (action: string, status: number) => string
+    serverUrlInvalid: string
+    statusRequestFailed: (status: number) => string
+  }
+  inputs: {
+    serverName: string
+    serverUrl: string
+  }
+  labels: {
+    device: string
+    deviceId: string
+    no: string
+    remote: string
+    token: string
+    yes: string
+  }
+  launcher: {
+    statusTitle: string
+  }
+  service: {
+    active: string
+    noToken: string
+    registered: (registeredAt: string) => string
+    tokenStored: string
+  }
+  sessionGroups: {
+    createSession: string
+  }
+  status: Record<string, string>
+}
+
+export interface RelayClientI18nHost {
+  select: <T>(values: Partial<Record<string, T>>, fallbackLanguage?: string) => T | undefined
+}
+
+const relayClientMessages: Record<RelayClientLocale, RelayClientMessages> = {
+  en: {
+    actions: {
+      cancelServer: 'Cancel',
+      connect: 'Connect',
+      disconnect: 'Disconnect',
+      editServer: 'Edit server',
+      forgetToken: 'Forget token',
+      login: 'Login',
+      refresh: 'Refresh',
+      saveServer: 'Save',
+      serverSaved: 'Relay server saved.'
+    },
+    aria: {
+      moreDeviceActions: 'More device actions',
+      serviceActions: 'Service actions'
+    },
+    devices: {
+      count: count => `${count} ${count === 1 ? 'device' : 'devices'}`,
+      empty: 'No devices connected.',
+      error: 'Devices unavailable.',
+      features: {
+        sessions: 'sessions',
+        terminal: 'terminal',
+        workspaceFiles: 'files'
+      },
+      label: 'Devices',
+      local: 'This device',
+      status: {
+        offline: 'offline',
+        online: 'online',
+        stale: 'stale'
+      }
+    },
+    emptyAccounts: 'No SSO accounts connected.',
+    emptyServers: 'No relay servers configured.',
+    errors: {
+      loginUrlMissing: 'Relay login URL was not returned.',
+      optionsUpdateUnavailable: 'Plugin options update is unavailable.',
+      relayActionFailed: (action, status) => `Relay ${action} failed with ${status}`,
+      serverUrlInvalid: 'Enter a valid http or https API URL.',
+      statusRequestFailed: status => `Status request failed with ${status}`
+    },
+    inputs: {
+      serverName: 'Server name',
+      serverUrl: 'Server API URL'
+    },
+    labels: {
+      device: 'Device',
+      deviceId: 'Device ID',
+      no: 'no',
+      remote: 'Remote',
+      token: 'Token',
+      yes: 'yes'
+    },
+    launcher: {
+      statusTitle: 'Account status'
+    },
+    service: {
+      active: 'active',
+      noToken: 'no token',
+      registered: registeredAt => `registered ${registeredAt}`,
+      tokenStored: 'token stored'
+    },
+    sessionGroups: {
+      createSession: 'New session from this connection'
+    },
+    status: {
+      connected: 'connected',
+      connecting: 'connecting',
+      error: 'error',
+      idle: 'idle',
+      loading: 'loading',
+      registered: 'registered'
+    }
+  },
+  'zh-Hans': {
+    actions: {
+      cancelServer: '取消',
+      connect: '连接',
+      disconnect: '断开连接',
+      editServer: '编辑服务',
+      forgetToken: '忘记令牌',
+      login: '登录',
+      refresh: '刷新',
+      saveServer: '保存',
+      serverSaved: '认证服务已保存。'
+    },
+    aria: {
+      moreDeviceActions: '更多设备操作',
+      serviceActions: '服务操作'
+    },
+    devices: {
+      count: count => `${count} 台设备`,
+      empty: '暂无设备',
+      error: '设备暂不可用',
+      features: {
+        sessions: '会话',
+        terminal: '终端',
+        workspaceFiles: '文件'
+      },
+      label: '设备',
+      local: '本机',
+      status: {
+        offline: '离线',
+        online: '在线',
+        stale: '离线较久'
+      }
+    },
+    emptyAccounts: '还没有连接 SSO 登录账号。',
+    emptyServers: '还没有配置认证链接服务。',
+    errors: {
+      loginUrlMissing: '没有返回 Relay 登录地址。',
+      optionsUpdateUnavailable: '当前宿主不支持更新插件配置。',
+      relayActionFailed: (action, status) => `Relay ${action} 失败，状态码 ${status}`,
+      serverUrlInvalid: '请输入有效的 http 或 https API 地址。',
+      statusRequestFailed: status => `状态请求失败，状态码 ${status}`
+    },
+    inputs: {
+      serverName: '服务名称',
+      serverUrl: '服务 API 地址'
+    },
+    labels: {
+      device: '设备',
+      deviceId: '设备 ID',
+      no: '否',
+      remote: '远端',
+      token: '令牌',
+      yes: '是'
+    },
+    launcher: {
+      statusTitle: '账号状态'
+    },
+    service: {
+      active: '当前',
+      noToken: '未保存令牌',
+      registered: registeredAt => `已注册 ${registeredAt}`,
+      tokenStored: '已保存令牌'
+    },
+    sessionGroups: {
+      createSession: '基于此连接新建会话'
+    },
+    status: {
+      connected: '已连接',
+      connecting: '连接中',
+      error: '错误',
+      idle: '空闲',
+      loading: '加载中',
+      registered: '已注册'
+    }
+  }
+}
+
+export const relayClientLauncherStatusTitleI18n = {
+  en: relayClientMessages.en.launcher.statusTitle,
+  'zh-Hans': relayClientMessages['zh-Hans'].launcher.statusTitle
+}
+
+export const relayClientSessionGroupCreateTitleI18n = {
+  en: relayClientMessages.en.sessionGroups.createSession,
+  'zh-Hans': relayClientMessages['zh-Hans'].sessionGroups.createSession
+}
+
+export const createRelayClientI18n = (i18n?: RelayClientI18nHost) =>
+  i18n?.select(relayClientMessages, 'en') ?? relayClientMessages.en

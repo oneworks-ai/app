@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.bundler.json",
+  "compilerOptions": {
+  },
+  "references": [
+    { "path": "./tsconfig.bundler.json" }
+  ],
+  "include": [
+    "../../packages/*/__tests__/**/*",
+    "../../packages/adapters/*/__tests__/**/*",
+    "../../packages/channels/*/__tests__/**/*",
+    "../../packages/plugins/*/__tests__/**/*"
+  ]
+}

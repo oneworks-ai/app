@@ -1,0 +1,38 @@
+{
+  "name": "@oneworks/app-runtime",
+  "version": "0.1.0-alpha.0",
+  "description": "App-facing runtime facade for One Works",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/app-runtime"
+  },
+  "imports": {
+    "#~/*.js": {
+      "__oneworks__": {
+        "default": "./src/*.ts"
+      },
+      "default": {
+        "import": "./dist/*.mjs",
+        "require": "./dist/*.js"
+      }
+    }
+  },
+  "exports": {
+    ".": {
+      "__oneworks__": {
+        "default": "./src/index.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@oneworks/benchmark": "workspace:*",
+    "@oneworks/mcp": "workspace:*",
+    "@oneworks/task": "workspace:*"
+  }
+}

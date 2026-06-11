@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.node.test.json",
+  "compilerOptions": {
+    "incremental": false,
+    "composite": false,
+    "noEmit": true
+  },
+  "references": [],
+  "include": [
+    "../../.oo.config.ts",
+    "../../.oo.dev.config.ts",
+    "../../scripts/**/*.ts",
+    "../../vitest.workspace.ts",
+    "../../apps/client/vite.config.ts",
+    "../../apps/relay-admin/vite.config.ts",
+    "../../apps/cli/src/**/*",
+    "../../apps/relay-server/src/**/*",
+    "../../apps/server/src/**/*",
+    "../../apps/cli/__tests__/**/*",
+    "../../apps/relay-server/__tests__/**/*",
+    "../../apps/server/__tests__/**/*",
+    "../../scripts/__tests__/**/*"
+  ]
+}

@@ -1,0 +1,4 @@
+provider: github
+owner: oneworks-ai
+repo: app
+tagNamePrefix: pkg/oneworks-desktop/v

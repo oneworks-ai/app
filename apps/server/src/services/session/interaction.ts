@@ -1,0 +1,349 @@
+/* eslint-disable max-lines */
+
+import { env as processEnv } from 'node:process'
+
+import { v4 as uuidv4 } from 'uuid'
+
+import type { AskUserQuestionParams, WSEvent } from '@oneworks/core'
+import { DEFAULT_SUPPORTED_PROTOCOL_RANGE, getCurrentProtocolVersion } from '@oneworks/runtime-protocol'
+import type { RuntimeCommand } from '@oneworks/runtime-protocol'
+import { FileRuntimeSessionStore } from '@oneworks/runtime-store'
+
+import { handleChannelSessionEvent } from '#~/channels/index.js'
+import { getDb } from '#~/db/index.js'
+import { discoverRuntimeSessionStores, migrateRuntimeRoots } from '#~/services/runtime-store/discovery.js'
+import { resolveSessionRuntimeStoreRoot } from '#~/services/runtime-store/session-control.js'
+import { createWorkspaceRuntimeEnv } from '#~/services/runtime-store/workspace-env.js'
+import { applySessionEvent } from '#~/services/session/events.js'
+import {
+  broadcastSessionEvent,
+  deletePendingSessionInteraction,
+  emitRuntimeEvent,
+  getExternalSessionRuntime,
+  getPendingSessionInteraction,
+  getSessionConnectionState,
+  notifySessionUpdated,
+  setPendingSessionInteraction
+} from '#~/services/session/runtime.js'
+import { resolveSessionWorkspace } from '#~/services/session/workspace.js'
+import { getSessionLogger } from '#~/utils/logger.js'
+
+const canDeliverInteraction = (sessionId: string) => {
+  const runtime = getSessionConnectionState(sessionId)
+  if (runtime == null) {
+    return {
+      runtime,
+      hasActiveWebSocket: false,
+      hasChannelBinding: false,
+      deliverable: false
+    }
+  }
+
+  const hasActiveWebSocket = runtime.sockets.size > 0
+  const hasChannelBinding = getDb().getChannelSessionBySessionId(sessionId) != null
+
+  return {
+    runtime,
+    hasActiveWebSocket,
+    hasChannelBinding,
+    deliverable: hasActiveWebSocket || hasChannelBinding
+  }
+}
+
+export const canRequestInteraction = (sessionId: string) => canDeliverInteraction(sessionId).deliverable
+
+export async function waitForInteractionDeliveryPath(
+  sessionId: string,
+  options: {
+    timeoutMs?: number
+    intervalMs?: number
+  } = {}
+) {
+  const timeoutMs = options.timeoutMs ?? 5_000
+  const intervalMs = options.intervalMs ?? 100
+  const startedAt = Date.now()
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (canRequestInteraction(sessionId)) {
+      return true
+    }
+
+    const elapsedMs = Date.now() - startedAt
+    const delayMs = Math.min(intervalMs, Math.max(timeoutMs - elapsedMs, 0))
+    if (delayMs <= 0) {
+      break
+    }
+
+    await new Promise(resolve => setTimeout(resolve, delayMs))
+  }
+
+  return canRequestInteraction(sessionId)
+}
+
+const getStoredSessionInteraction = (sessionId: string) => {
+  const session = getDb().getSession(sessionId)
+  if (session?.status !== 'waiting_input') {
+    return undefined
+  }
+
+  const messages = getDb().getMessages(sessionId) as WSEvent[]
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const event = messages[index]
+    if (event == null) continue
+
+    if (event.type === 'interaction_response') {
+      return undefined
+    }
+
+    if (event.type === 'interaction_request') {
+      return {
+        id: event.id,
+        payload: event.payload
+      }
+    }
+  }
+
+  return undefined
+}
+
+export function getSessionInteraction(sessionId: string) {
+  const current = getSessionConnectionState(sessionId)?.currentInteraction
+  if (current != null) {
+    return current
+  }
+
+  return getStoredSessionInteraction(sessionId)
+}
+
+const hasSessionInteraction = (sessionId: string, interactionId: string) => {
+  const current = getSessionConnectionState(sessionId)?.currentInteraction
+  if (current?.id === interactionId) {
+    return true
+  }
+
+  return getStoredSessionInteraction(sessionId)?.id === interactionId
+}
+
+export function setSessionInteraction(sessionId: string, interaction: { id: string; payload: AskUserQuestionParams }) {
+  const runtime = getSessionConnectionState(sessionId)
+  if (runtime != null) {
+    runtime.currentInteraction = interaction
+  }
+}
+
+export function clearSessionInteraction(sessionId: string, interactionId: string) {
+  const runtime = getSessionConnectionState(sessionId)
+  if (runtime?.currentInteraction?.id === interactionId) {
+    runtime.currentInteraction = undefined
+  }
+}
+
+export function resolvePendingInteractionAsCancelled(sessionId: string, interactionId?: string) {
+  const targetInteractionId = interactionId ?? getSessionConnectionState(sessionId)?.currentInteraction?.id
+  if (targetInteractionId == null || targetInteractionId === '') {
+    return false
+  }
+
+  const pending = getPendingSessionInteraction(targetInteractionId)
+  if (pending != null) {
+    clearTimeout(pending.timer)
+    pending.resolve('cancel')
+    deletePendingSessionInteraction(targetInteractionId)
+  }
+
+  clearSessionInteraction(sessionId, targetInteractionId)
+  return pending != null
+}
+
+const buildSubmitInputCommand = (
+  sessionId: string,
+  interactionId: string,
+  data: string | string[]
+): RuntimeCommand => ({
+  protocolVersion: getCurrentProtocolVersion(),
+  supportedProtocolRange: DEFAULT_SUPPORTED_PROTOCOL_RANGE,
+  id: `cmd_submit_input_${uuidv4()}`,
+  ts: Date.now(),
+  sessionId,
+  type: 'submit_input',
+  priority: 10,
+  source: 'web',
+  commandId: `session-submit-${uuidv4()}`,
+  requestId: interactionId,
+  interactionId,
+  data
+})
+
+const appendExternalRuntimeInteractionResponse = async (
+  sessionId: string,
+  interactionId: string,
+  data: string | string[]
+) => {
+  const workspace = await resolveSessionWorkspace(sessionId).catch(() => undefined)
+  const runtimeRoots: string[] = []
+  if (workspace?.workspaceFolder != null) {
+    const env = createWorkspaceRuntimeEnv(workspace.workspaceFolder, processEnv)
+    await migrateRuntimeRoots({
+      cwd: workspace.workspaceFolder,
+      env
+    })
+    runtimeRoots.push(resolveSessionRuntimeStoreRoot(workspace.workspaceFolder, env))
+  } else {
+    return false
+  }
+
+  const stores = await discoverRuntimeSessionStores(runtimeRoots)
+  const store = stores.find(item => item.sessionId === sessionId)
+  if (store == null) {
+    return false
+  }
+
+  await new FileRuntimeSessionStore(store.storePath, sessionId)
+    .appendCommand(buildSubmitInputCommand(sessionId, interactionId, data))
+  return true
+}
+
+export async function requestInteraction(
+  params: AskUserQuestionParams,
+  options: {
+    interactionId?: string
+  } = {}
+): Promise<string | string[]> {
+  const { sessionId } = params
+  const delivery = canDeliverInteraction(sessionId)
+  const runtime = delivery.runtime
+  const serverLogger = getSessionLogger(sessionId, 'server')
+
+  if (runtime == null || !delivery.deliverable) {
+    serverLogger.warn({
+      sessionId,
+      hasRuntime: runtime != null,
+      hasActiveWebSocket: delivery.hasActiveWebSocket,
+      hasChannelBinding: delivery.hasChannelBinding
+    }, '[interaction] Interaction request rejected because no delivery path is active')
+    return Promise.reject(new Error(`Session ${sessionId} is not active`))
+  }
+
+  const interactionId = options.interactionId ?? uuidv4()
+  const event: WSEvent = {
+    type: 'interaction_request',
+    id: interactionId,
+    payload: params
+  }
+
+  runtime.currentInteraction = { id: interactionId, payload: params }
+  serverLogger.info({
+    sessionId,
+    interactionId,
+    question: params.question,
+    optionCount: params.options?.length ?? 0,
+    multiselect: params.multiselect ?? false,
+    hasActiveWebSocket: delivery.hasActiveWebSocket,
+    hasChannelBinding: delivery.hasChannelBinding
+  }, '[interaction] Queued interaction request')
+  emitRuntimeEvent(runtime, event, { recordMessage: false })
+
+  let deliveredToChannel = false
+  if (delivery.hasChannelBinding) {
+    try {
+      deliveredToChannel = await handleChannelSessionEvent(sessionId, event)
+    } catch (error) {
+      serverLogger.warn({
+        sessionId,
+        interactionId,
+        error: error instanceof Error ? error.message : String(error)
+      }, '[interaction] Channel delivery failed for interaction request')
+    }
+  }
+
+  if (!delivery.hasActiveWebSocket && !deliveredToChannel) {
+    runtime.currentInteraction = undefined
+    serverLogger.warn({
+      sessionId,
+      interactionId,
+      hasActiveWebSocket: delivery.hasActiveWebSocket,
+      hasChannelBinding: delivery.hasChannelBinding
+    }, '[interaction] Interaction request rejected because no delivery path is active')
+    return Promise.reject(new Error(`Session ${sessionId} is not active`))
+  }
+
+  applySessionEvent(sessionId, event, {
+    onSessionUpdated: (session) => {
+      notifySessionUpdated(sessionId, session)
+    }
+  })
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      deletePendingSessionInteraction(interactionId)
+      if (runtime.currentInteraction?.id === interactionId) {
+        runtime.currentInteraction = undefined
+      }
+      reject(new Error('Interaction timed out'))
+    }, 5 * 60 * 1000)
+
+    setPendingSessionInteraction(interactionId, { resolve, reject, timer })
+  })
+}
+
+export async function handleInteractionResponse(sessionId: string, interactionId: string, data: unknown) {
+  const serverLogger = getSessionLogger(sessionId, 'server')
+  const isExternalSession = getExternalSessionRuntime(sessionId) != null ||
+    getDb().getSessionRuntimeState(sessionId)?.runtimeKind === 'external'
+  const event: WSEvent = { type: 'interaction_response', id: interactionId, data: data as string | string[] }
+  const pending = getPendingSessionInteraction(interactionId)
+  const hasMatchingStoredInteraction = hasSessionInteraction(sessionId, interactionId)
+
+  if (isExternalSession || pending != null || hasMatchingStoredInteraction) {
+    serverLogger.info({
+      sessionId,
+      interactionId,
+      response: data,
+      isExternalSession,
+      hasPendingWaiter: pending != null,
+      hasMatchingStoredInteraction
+    }, '[interaction] Handling interaction response')
+
+    if (pending != null) {
+      clearTimeout(pending.timer)
+    }
+
+    if (isExternalSession && pending == null && hasMatchingStoredInteraction) {
+      const didAppendCommand = await appendExternalRuntimeInteractionResponse(
+        sessionId,
+        interactionId,
+        data as string | string[]
+      )
+      if (!didAppendCommand) {
+        serverLogger.warn({
+          sessionId,
+          interactionId
+        }, '[interaction] External runtime interaction response could not be queued')
+      }
+    }
+
+    clearSessionInteraction(sessionId, interactionId)
+    applySessionEvent(sessionId, event, {
+      broadcast: (nextEvent) => broadcastSessionEvent(sessionId, nextEvent),
+      onSessionUpdated: (session) => {
+        notifySessionUpdated(sessionId, session)
+      }
+    })
+
+    if (pending != null) {
+      pending.resolve(data as string | string[])
+      deletePendingSessionInteraction(interactionId)
+    }
+
+    return true
+  }
+
+  serverLogger.warn({
+    sessionId,
+    interactionId,
+    hasPendingWaiter: false,
+    isExternalSession,
+    hasMatchingStoredInteraction
+  }, '[interaction] Interaction response arrived without a pending or persisted interaction')
+  return false
+}

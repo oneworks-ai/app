@@ -1,0 +1,351 @@
+.dock-panel {
+  --dock-panel-chrome-icon-size: var(--app-chrome-icon-size, 18px);
+  --dock-panel-header-padding-block: var(
+    --route-container-panel-dock-header-padding-block,
+    4px
+  );
+  --dock-panel-header-padding-inline: var(
+    --route-container-panel-dock-header-padding-inline,
+    4px
+  );
+  --dock-panel-header-height: calc(
+    var(--dock-panel-chrome-icon-size) +
+      var(--dock-panel-header-padding-block) +
+      var(--dock-panel-header-padding-block)
+  );
+  --dock-panel-minimized-height: var(--dock-panel-header-height);
+
+  flex: 0 0 auto;
+  flex-basis: var(--dock-panel-height, 240px);
+  height: var(--dock-panel-height, 240px);
+  min-height: 0;
+  max-height: var(--dock-panel-max-height, 520px);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  background-color: var(--bg-color);
+  border-top: 1px solid var(--dock-panel-border-color, var(--border-color));
+  gap: 6px;
+  overflow: hidden;
+  opacity: var(--dock-panel-opacity, 1);
+  transform: translateY(var(--dock-panel-translate-y, 0));
+  transition:
+    flex-basis .24s cubic-bezier(.22, 1, .36, 1),
+    height .24s cubic-bezier(.22, 1, .36, 1),
+    opacity .18s ease,
+    transform .24s cubic-bezier(.22, 1, .36, 1),
+    border-top-color .18s ease;
+
+  &.is-resizing {
+    flex-basis: var(
+      --dock-panel-resize-height,
+      var(--dock-panel-height, 240px)
+    );
+    height: var(--dock-panel-resize-height, var(--dock-panel-height, 240px));
+    cursor: row-resize;
+    transition: none;
+
+    .dock-panel__body {
+      pointer-events: none;
+    }
+  }
+
+  &.is-minimized {
+    flex-basis: var(--dock-panel-minimized-height);
+    height: var(--dock-panel-minimized-height);
+    --dock-panel-opacity: 1;
+    --dock-panel-translate-y: 0;
+
+    .dock-panel__footer {
+      display: none;
+    }
+  }
+
+  &.is-resize-disabled .dock-panel__resize-strip {
+    cursor: default;
+  }
+
+  &.is-fullscreen {
+    position: absolute;
+    inset: var(--dock-panel-fullscreen-inset-top, 0) 0 0 0;
+    z-index: 30;
+    flex: 1 1 auto;
+    width: auto;
+    height: auto;
+    max-height: none;
+    border-top-color: var(--dock-panel-border-color, var(--border-color));
+    transform: none;
+    transform-origin: bottom center;
+    animation: dock-panel-fullscreen-enter .22s cubic-bezier(.22, 1, .36, 1);
+    will-change: clip-path, opacity;
+  }
+
+  &.is-fullscreen.is-fullscreen-exiting {
+    animation: dock-panel-fullscreen-exit .18s cubic-bezier(.4, 0, .2, 1)
+      forwards;
+    pointer-events: none;
+  }
+
+  &.is-open.is-entering-slide-up:not(.is-minimized):not(.is-fullscreen) {
+    animation: dock-panel-slide-up-enter .24s cubic-bezier(.22, 1, .36, 1) both;
+  }
+}
+
+.dock-panel.is-closing {
+  flex-basis: 0;
+  height: 0;
+  --dock-panel-padding-top: 0px;
+  --dock-panel-padding-bottom: 0px;
+  --dock-panel-border-color: transparent;
+  --dock-panel-opacity: 0;
+  --dock-panel-translate-y: 20px;
+  animation: dock-panel-slide-up-exit .24s cubic-bezier(.4, 0, .2, 1) both;
+  pointer-events: none;
+}
+
+.dock-panel__resize-strip {
+  position: absolute;
+  top: -4px;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: 9px;
+  cursor: row-resize;
+  touch-action: none;
+  --dock-panel-resize-line-color: transparent;
+
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    background: var(--dock-panel-resize-line-color);
+    border-radius: 999px;
+    transform: translateX(-50%);
+    transition: background-color .16s ease, opacity .16s ease;
+  }
+
+  &::before {
+    top: 4px;
+    width: 50vw;
+    height: 1px;
+  }
+
+  &::after {
+    top: 3px;
+    width: 34vw;
+    height: 3px;
+    opacity: .9;
+    mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      #000 28%,
+      #000 72%,
+      transparent 100%
+    );
+  }
+
+  &:hover,
+  &:focus-visible {
+    --dock-panel-resize-line-color: color-mix(
+      in srgb,
+      var(--primary-color) 48%,
+      transparent
+    );
+    outline: none;
+  }
+}
+
+.dock-panel.is-resizing .dock-panel__resize-strip {
+  --dock-panel-resize-line-color: color-mix(
+    in srgb,
+    var(--primary-color) 48%,
+    transparent
+  );
+}
+
+.dock-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: var(--dock-panel-header-height);
+  margin: 0;
+  padding: var(--dock-panel-header-padding-block)
+    var(--dock-panel-header-padding-inline);
+  cursor: default;
+  flex-shrink: 0;
+  transition: opacity .18s ease;
+}
+
+.dock-panel__header-main {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dock-panel__title,
+.dock-panel__meta {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  height: var(--dock-panel-chrome-icon-size);
+  padding: 0 8px;
+  border-radius: 6px;
+  background-color: var(--sub-bg-color);
+  color: var(--text-color);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dock-panel__title {
+  font-weight: 600;
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
+.dock-panel__meta {
+  flex: 0 1 auto;
+  max-width: min(180px, 40%);
+  color: var(--sub-text-color);
+  font-family:
+    ui-monospace, sfmono-regular, 'SF Mono', menlo, consolas, monospace;
+}
+
+.dock-panel__header-spacer {
+  display: none;
+}
+
+.dock-panel__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dock-panel__close-btn.ant-btn.ant-btn-text {
+  width: var(--dock-panel-chrome-icon-size);
+  height: var(--dock-panel-chrome-icon-size);
+  min-width: var(--dock-panel-chrome-icon-size);
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  color: var(--sub-text-color, #6b7280);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color .2s ease, color .2s ease;
+
+  .material-symbols-rounded {
+    width: var(--dock-panel-chrome-icon-size);
+    height: var(--dock-panel-chrome-icon-size);
+    font-size: var(--dock-panel-chrome-icon-size);
+    line-height: 1;
+  }
+
+  &:hover {
+    background-color: var(--nav-hover-bg, #f3f4f6);
+    color: var(--text-color, #111827);
+  }
+}
+
+.dock-panel__minimize-btn.ant-btn.ant-btn-text {
+  .material-symbols-rounded {
+    font-size: var(--dock-panel-chrome-icon-size);
+  }
+}
+
+.dock-panel__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dock-panel__footer {
+  flex-shrink: 0;
+}
+
+html.dark .dock-panel__close-btn.ant-btn.ant-btn-text {
+  --nav-hover-bg: #1a1a1a;
+}
+
+@keyframes dock-panel-slide-up-enter {
+  from {
+    flex-basis: 0;
+    height: 0;
+    border-top-color: transparent;
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    flex-basis: var(
+      --dock-panel-current-height,
+      var(--dock-panel-height, 240px)
+    );
+    height: var(--dock-panel-current-height, var(--dock-panel-height, 240px));
+    border-top-color: var(--dock-panel-border-color, var(--border-color));
+    opacity: var(--dock-panel-opacity, 1);
+    transform: translateY(var(--dock-panel-translate-y, 0));
+  }
+}
+
+@keyframes dock-panel-slide-up-exit {
+  from {
+    flex-basis: var(
+      --dock-panel-height,
+      240px
+    );
+    height: var(--dock-panel-height, 240px);
+    border-top-color: var(--border-color);
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    flex-basis: 0;
+    height: 0;
+    border-top-color: transparent;
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
+@keyframes dock-panel-fullscreen-enter {
+  from {
+    clip-path: inset(calc(100% - var(--dock-panel-height, 240px)) 0 0 0);
+    opacity: .96;
+  }
+
+  to {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+}
+
+@keyframes dock-panel-fullscreen-exit {
+  from {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+
+  to {
+    clip-path: inset(calc(100% - var(--dock-panel-height, 240px)) 0 0 0);
+    opacity: .96;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock-panel {
+    animation: none;
+    transition: none;
+  }
+}

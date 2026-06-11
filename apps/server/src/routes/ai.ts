@@ -1,0 +1,145 @@
+import process from 'node:process'
+
+import Router from '@koa/router'
+
+import { DefinitionLoader } from '@oneworks/definition-loader'
+import type { Definition, Entity, Rule, Spec } from '@oneworks/types'
+
+import { badRequest, internalServerError, isHttpError, notFound } from '#~/utils/http.js'
+import {
+  matchesDefinitionPath,
+  presentEntity,
+  presentEntityDetail,
+  presentRule,
+  presentRuleDetail,
+  presentSpec,
+  presentSpecDetail,
+  presentWorkspace
+} from './ai-presenters.js'
+import { registerAiSkillRoutes } from './ai-skill-routes.js'
+
+export function aiRouter(): Router {
+  const router = new Router()
+  const workspaceRoot = process.env.WORKSPACE_FOLDER || process.cwd()
+  const loader = new DefinitionLoader(workspaceRoot)
+
+  router.get('/specs', async (ctx) => {
+    try {
+      const specs = await loader.loadDefaultSpecs()
+      ctx.body = {
+        specs: specs.map((spec: Definition<Spec>) => presentSpec(spec, workspaceRoot))
+      }
+    } catch (err) {
+      throw internalServerError('Failed to load specs', { cause: err, code: 'ai_specs_load_failed' })
+    }
+  })
+
+  registerAiSkillRoutes(router, {
+    loader,
+    workspaceRoot
+  })
+
+  router.get('/specs/detail', async (ctx) => {
+    const targetPath = typeof ctx.query.path === 'string' ? ctx.query.path : undefined
+    if (!targetPath) {
+      throw badRequest('Missing path', undefined, 'missing_path')
+    }
+
+    try {
+      const specs = await loader.loadDefaultSpecs()
+      const spec = specs.find((item: Definition<Spec>) => matchesDefinitionPath(item, targetPath, workspaceRoot))
+
+      if (!spec) {
+        throw notFound('Spec not found', { path: targetPath }, 'spec_not_found')
+      }
+
+      ctx.body = {
+        spec: presentSpecDetail(spec, workspaceRoot)
+      }
+    } catch (err) {
+      if (isHttpError(err)) throw err
+      throw internalServerError('Failed to load spec detail', { cause: err, code: 'ai_spec_detail_load_failed' })
+    }
+  })
+
+  router.get('/entities', async (ctx) => {
+    try {
+      const entities = await loader.loadDefaultEntities()
+      ctx.body = {
+        entities: entities.map((entity: Definition<Entity>) => presentEntity(entity, workspaceRoot))
+      }
+    } catch (err) {
+      throw internalServerError('Failed to load entities', { cause: err, code: 'ai_entities_load_failed' })
+    }
+  })
+
+  router.get('/workspaces', async (ctx) => {
+    try {
+      const workspaces = await loader.loadWorkspaces()
+      ctx.body = {
+        workspaces: workspaces.map(presentWorkspace)
+      }
+    } catch (err) {
+      throw internalServerError('Failed to load workspaces', { cause: err, code: 'ai_workspaces_load_failed' })
+    }
+  })
+
+  router.get('/rules', async (ctx) => {
+    try {
+      const rules = await loader.loadDefaultRules()
+      ctx.body = {
+        rules: rules.map((rule: Definition<Rule>) => presentRule(rule, workspaceRoot))
+      }
+    } catch (err) {
+      throw internalServerError('Failed to load rules', { cause: err, code: 'ai_rules_load_failed' })
+    }
+  })
+
+  router.get('/rules/detail', async (ctx) => {
+    const targetPath = typeof ctx.query.path === 'string' ? ctx.query.path : undefined
+    if (!targetPath) {
+      throw badRequest('Missing path', undefined, 'missing_path')
+    }
+
+    try {
+      const rules = await loader.loadDefaultRules()
+      const rule = rules.find((item: Definition<Rule>) => matchesDefinitionPath(item, targetPath, workspaceRoot))
+
+      if (!rule) {
+        throw notFound('Rule not found', { path: targetPath }, 'rule_not_found')
+      }
+
+      ctx.body = {
+        rule: presentRuleDetail(rule, workspaceRoot)
+      }
+    } catch (err) {
+      if (isHttpError(err)) throw err
+      throw internalServerError('Failed to load rule detail', { cause: err, code: 'ai_rule_detail_load_failed' })
+    }
+  })
+
+  router.get('/entities/detail', async (ctx) => {
+    const targetPath = typeof ctx.query.path === 'string' ? ctx.query.path : undefined
+    if (!targetPath) {
+      throw badRequest('Missing path', undefined, 'missing_path')
+    }
+
+    try {
+      const entities = await loader.loadDefaultEntities()
+      const entity = entities.find((item: Definition<Entity>) => matchesDefinitionPath(item, targetPath, workspaceRoot))
+
+      if (!entity) {
+        throw notFound('Entity not found', { path: targetPath }, 'entity_not_found')
+      }
+
+      ctx.body = {
+        entity: presentEntityDetail(entity, workspaceRoot)
+      }
+    } catch (err) {
+      if (isHttpError(err)) throw err
+      throw internalServerError('Failed to load entity detail', { cause: err, code: 'ai_entity_detail_load_failed' })
+    }
+  })
+
+  return router
+}

@@ -1,0 +1,44 @@
+.write-tool {
+  .write-tool__header {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .write-tool__header-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .write-tool__status-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+
+    .material-symbols-rounded {
+      font-size: 16px;
+    }
+
+    &.error {
+      color: var(--danger-color);
+    }
+
+    &.success {
+      color: var(--success-color);
+    }
+  }
+
+  .tool-content {
+    display: flex;
+    flex-direction: column;
+  }
+}

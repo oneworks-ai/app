@@ -1,0 +1,169 @@
+.ant-select-dropdown.oneworks-overlay.adapter-select-popup {
+  --adapter-select-row-height: 20px;
+  --oneworks-overlay-item-gap: 0px;
+  --oneworks-overlay-line-height: var(--adapter-select-row-height);
+  --oneworks-overlay-select-item-min-height: 0px;
+  --oneworks-overlay-select-item-padding: var(--oneworks-overlay-item-padding);
+  --oneworks-overlay-select-panel-padding-y: var(
+    --oneworks-overlay-panel-padding-y
+  );
+}
+
+.adapter-select-popup {
+  .adapter-option,
+  .adapter-option__text {
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 400;
+  }
+}
+
+.adapter-select-menu {
+  min-width: 210px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--oneworks-overlay-item-gap, 2px);
+}
+
+.adapter-select-menu__divider {
+  flex-shrink: 0;
+}
+
+.adapter-select-menu__hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  padding: var(--oneworks-overlay-item-padding, 4px 12px 4px 18px);
+  color: var(--muted-text-color, #8a8f98);
+  font-size: 11px;
+  line-height: var(--adapter-select-row-height, 20px);
+
+  .material-symbols-rounded {
+    font-size: 14px;
+    line-height: var(--adapter-select-row-height, 20px);
+  }
+}
+
+.adapter-mobile-select-drawer {
+  .adapter-select-menu__hint {
+    margin: 0 0 8px;
+    padding: 0 2px 8px;
+    font-size: 12px;
+
+    .material-symbols-rounded {
+      font-size: 15px;
+    }
+  }
+
+  .adapter-hidden-options {
+    margin: 8px 0 0;
+    padding-top: 7px;
+    border-top: 1px solid var(--border-color);
+  }
+}
+
+.adapter-hidden-options {
+  margin: 0;
+}
+
+.adapter-hidden-options__title {
+  width: 100%;
+  padding: var(--oneworks-overlay-item-padding, 0 8px);
+  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: transparent;
+  color: var(--muted-text-color, #8a8f98);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: var(--oneworks-overlay-line-height, 16px);
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.adapter-hidden-options__title-main {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--oneworks-overlay-icon-gap, 6px);
+}
+
+.adapter-hidden-options__title-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.adapter-hidden-options__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--oneworks-overlay-item-gap, 6px);
+}
+
+.adapter-hidden-option {
+  --oneworks-overlay-line-height: var(--adapter-select-row-height, 20px);
+  width: 100%;
+  min-height: var(--adapter-select-row-height, 20px) !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--oneworks-overlay-icon-gap, 6px);
+  color: var(--text-color);
+  text-align: left;
+}
+
+.adapter-hidden-option__main {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--oneworks-overlay-icon-gap, 6px);
+  min-width: 0;
+}
+
+.adapter-hidden-option__icon {
+  width: var(--oneworks-overlay-icon-size, 14px);
+  height: var(--oneworks-overlay-icon-size, 14px);
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
+  opacity: .7;
+}
+
+.adapter-hidden-option__icon--fallback,
+.adapter-hidden-option__restore {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.adapter-hidden-option__title {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: var(--oneworks-overlay-font-size, 12px);
+  line-height: var(--oneworks-overlay-line-height, 16px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adapter-hidden-option
+  .adapter-hidden-option__restore.material-symbols-rounded {
+  width: var(--adapter-select-row-height, 20px) !important;
+  min-width: var(--adapter-select-row-height, 20px) !important;
+  height: var(--adapter-select-row-height, 20px) !important;
+  flex: 0 0 var(--adapter-select-row-height, 20px) !important;
+  font-size: 14px !important;
+  line-height: 1 !important;
+}
+
+.adapter-hidden-option__restore {
+  flex-shrink: 0;
+  color: var(--muted-text-color, #8a8f98);
+}

@@ -1,0 +1,41 @@
+.session-timeline-panel {
+  display: flex;
+  align-content: center;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+}
+
+.session-timeline-mermaid__svg {
+  display: block;
+  height: 100%;
+  min-width: max-content;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.session-timeline-mermaid__svg svg,
+.session-timeline-mermaid__svg text,
+.session-timeline-mermaid__svg tspan {
+  user-select: none;
+  pointer-events: none;
+}
+
+.session-timeline-mermaid__interactive {
+  cursor: pointer;
+  transition: filter .2s ease, opacity .2s ease;
+}
+
+.session-timeline-mermaid__interactive:hover {
+  filter: drop-shadow(0 0 6px var(--primary-color));
+  opacity: .9;
+}
+
+@media (max-width: 960px) {
+  .session-timeline-panel {
+    padding-bottom: 4px;
+  }
+}

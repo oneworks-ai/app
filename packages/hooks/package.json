@@ -1,0 +1,58 @@
+{
+  "name": "@oneworks/hooks",
+  "version": "0.1.0-alpha.0",
+  "description": "One Works hooks runtime and bridge helpers",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/hooks"
+  },
+  "imports": {
+    "#~/*.js": {
+      "__oneworks__": {
+        "default": "./src/*.ts"
+      },
+      "default": {
+        "import": "./dist/*.mjs",
+        "require": "./dist/*.js"
+      }
+    }
+  },
+  "exports": {
+    ".": {
+      "__oneworks__": {
+        "default": "./src/index.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    },
+    "./claude-json-plugin": {
+      "__oneworks__": {
+        "default": "./src/claude-json-plugin.ts"
+      },
+      "default": {
+        "import": "./dist/claude-json-plugin.mjs",
+        "require": "./dist/claude-json-plugin.js"
+      }
+    },
+    "./call-hook.js": "./call-hook.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "oneworks-call-hook": "./call-hook.js"
+  },
+  "scripts": {
+    "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/hooks/__tests__"
+  },
+  "dependencies": {
+    "@oneworks/config": "workspace:*",
+    "@oneworks/register": "workspace:*",
+    "@oneworks/types": "workspace:*",
+    "@oneworks/utils": "workspace:*"
+  },
+  "devDependencies": {
+    "fast-glob": "^3.3.3"
+  }
+}

@@ -1,0 +1,396 @@
+{
+  "__oneWorksPluginManifest": true,
+  "name": "@oneworks/plugin-demo",
+  "displayName": "Plugin Demo",
+  "version": "0.1.0",
+  "config": {
+    "schema": {
+      "type": "object",
+      "titleI18n": {
+        "en": "Plugin Demo options",
+        "zh-Hans": "插件 Demo 选项"
+      },
+      "descriptionI18n": {
+        "en": "Interactive options used by the demo client and server entries.",
+        "zh-Hans": "供 Demo 客户端和服务端入口读取的交互式选项。"
+      },
+      "properties": {
+        "greeting": {
+          "type": "string",
+          "default": "Hello from Plugin Demo",
+          "titleI18n": {
+            "en": "Greeting",
+            "zh-Hans": "问候语"
+          },
+          "descriptionI18n": {
+            "en": "Text shown by demo commands and panels.",
+            "zh-Hans": "Demo 命令和面板展示的文本。"
+          },
+          "x-oneworks-ui": {
+            "icon": "waving_hand",
+            "placeholder": "Hello from Plugin Demo"
+          }
+        },
+        "panelTheme": {
+          "type": "string",
+          "default": "system",
+          "oneOf": [
+            {
+              "const": "system",
+              "titleI18n": {
+                "en": "System",
+                "zh-Hans": "跟随系统"
+              }
+            },
+            {
+              "const": "teal",
+              "titleI18n": {
+                "en": "Teal",
+                "zh-Hans": "青色"
+              }
+            },
+            {
+              "const": "orange",
+              "titleI18n": {
+                "en": "Orange",
+                "zh-Hans": "橙色"
+              }
+            }
+          ],
+          "titleI18n": {
+            "en": "Panel theme",
+            "zh-Hans": "面板主题"
+          },
+          "descriptionI18n": {
+            "en": "Visual theme used by the demo workbench views.",
+            "zh-Hans": "Demo 工作区视图使用的视觉主题。"
+          },
+          "x-oneworks-ui": {
+            "icon": "palette"
+          }
+        },
+        "enableLauncherPreview": {
+          "type": "boolean",
+          "default": true,
+          "titleI18n": {
+            "en": "Launcher preview",
+            "zh-Hans": "启动器预览"
+          },
+          "descriptionI18n": {
+            "en": "Include preview metadata in launcher search results.",
+            "zh-Hans": "在启动器搜索结果里附带预览信息。"
+          },
+          "x-oneworks-ui": {
+            "icon": "manage_search"
+          }
+        },
+        "quickCommands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": ["ping", "status"],
+          "titleI18n": {
+            "en": "Quick commands",
+            "zh-Hans": "快捷命令"
+          },
+          "descriptionI18n": {
+            "en": "Command keywords advertised by the demo plugin.",
+            "zh-Hans": "Demo 插件对外展示的命令关键词。"
+          },
+          "x-oneworks-ui": {
+            "icon": "terminal"
+          }
+        },
+        "serverTimeoutMs": {
+          "type": "number",
+          "default": 1500,
+          "titleI18n": {
+            "en": "Server timeout",
+            "zh-Hans": "服务端超时"
+          },
+          "descriptionI18n": {
+            "en": "Timeout in milliseconds for demo server round trips.",
+            "zh-Hans": "Demo 服务端往返调用的超时时间，单位毫秒。"
+          },
+          "x-oneworks-ui": {
+            "icon": "timer"
+          }
+        }
+      }
+    }
+  },
+  "plugin": {
+    "contributions": {
+      "extensionPoints": [
+        {
+          "id": "quick-actions",
+          "title": "Plugin Demo quick actions",
+          "titleI18n": {
+            "en": "Plugin Demo quick actions",
+            "zh-Hans": "插件 Demo 快捷操作"
+          },
+          "descriptionI18n": {
+            "en": "Lets other plugins add actions rendered inside the Plugin Demo route.",
+            "zh-Hans": "允许其他插件向插件 Demo 路由中补充操作。"
+          },
+          "contributionSchema": {
+            "type": "object",
+            "required": ["id", "title", "command"],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "titleI18n": {
+                "type": "object"
+              },
+              "description": {
+                "type": "string"
+              },
+              "descriptionI18n": {
+                "type": "object"
+              },
+              "icon": {
+                "type": "string"
+              },
+              "command": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      ],
+      "navItems": [
+        {
+          "id": "home",
+          "title": "Plugin Demo home",
+          "titleI18n": {
+            "en": "Plugin Demo home",
+            "zh-Hans": "插件 Demo 首页"
+          },
+          "descriptionI18n": {
+            "en": "Opens the standalone plugin route rendered by the demo client entry.",
+            "zh-Hans": "打开由 demo 客户端入口渲染的独立插件页面。"
+          },
+          "icon": "extension"
+        }
+      ],
+      "navMoreMenu": [
+        {
+          "id": "ping",
+          "title": "Ping Plugin Demo server",
+          "titleI18n": {
+            "en": "Ping Plugin Demo server",
+            "zh-Hans": "Ping 插件 Demo 服务端"
+          },
+          "descriptionI18n": {
+            "en": "Runs the plugin server command from the sidebar more menu and shows the returned payload.",
+            "zh-Hans": "从侧边栏更多菜单运行插件服务端命令，并展示返回的数据。"
+          },
+          "icon": "terminal",
+          "command": "call-server"
+        }
+      ],
+      "navFooterBefore": [
+        {
+          "id": "footer-status",
+          "title": "Plugin Demo status",
+          "titleI18n": {
+            "en": "Plugin Demo status",
+            "zh-Hans": "插件 Demo 状态"
+          },
+          "descriptionI18n": {
+            "en": "Renders an action above the bottom sidebar menu and runs the demo server command.",
+            "zh-Hans": "在侧边栏底部菜单上方渲染操作，并运行 Demo 服务端命令。"
+          },
+          "icon": "notifications",
+          "command": "call-server"
+        }
+      ],
+      "chatHeaderActions": [
+        {
+          "id": "hello",
+          "title": "Plugin Demo greeting",
+          "titleI18n": {
+            "en": "Plugin Demo greeting",
+            "zh-Hans": "插件 Demo 问候"
+          },
+          "descriptionI18n": {
+            "en": "Adds a chat header button that fires a local client command.",
+            "zh-Hans": "在会话头部增加按钮，用于触发本地客户端命令。"
+          },
+          "icon": "star",
+          "command": "say-hi"
+        }
+      ],
+      "chatHeaderMoreMenu": [
+        {
+          "id": "server",
+          "title": "Plugin Demo server roundtrip",
+          "titleI18n": {
+            "en": "Plugin Demo server roundtrip",
+            "zh-Hans": "插件 Demo 服务端往返"
+          },
+          "descriptionI18n": {
+            "en": "Adds a chat header menu item that calls the server command through the client runtime.",
+            "zh-Hans": "在会话头部更多菜单中增加操作，通过客户端运行时调用服务端命令。"
+          },
+          "icon": "speed",
+          "command": "call-server"
+        }
+      ],
+      "routeHeaderActions": [
+        {
+          "id": "route-hello",
+          "title": "Plugin Demo route action",
+          "titleI18n": {
+            "en": "Plugin Demo route action",
+            "zh-Hans": "插件 Demo 路由按钮"
+          },
+          "descriptionI18n": {
+            "en": "Adds an action to route container headers on the demo plugin route.",
+            "zh-Hans": "在 Demo 插件路由的通用路由头部增加按钮。"
+          },
+          "icon": "extension",
+          "targetRoute": "/plugins/demo/home",
+          "command": "say-hi"
+        }
+      ],
+      "routeWindowBarActions": [
+        {
+          "id": "route-window-hello",
+          "title": "Plugin Demo compact route action",
+          "titleI18n": {
+            "en": "Plugin Demo compact route action",
+            "zh-Hans": "插件 Demo 折叠态路由按钮"
+          },
+          "descriptionI18n": {
+            "en": "Adds a matching compact action when the route sidebar is collapsed.",
+            "zh-Hans": "路由侧栏折叠时增加对应的紧凑按钮。"
+          },
+          "icon": "extension",
+          "targetRoute": "/plugins/demo/home",
+          "command": "say-hi"
+        }
+      ],
+      "routeMoreMenuItems": [
+        {
+          "id": "route-server",
+          "title": "Plugin Demo route server call",
+          "titleI18n": {
+            "en": "Plugin Demo route server call",
+            "zh-Hans": "插件 Demo 路由服务端调用"
+          },
+          "descriptionI18n": {
+            "en": "Adds a route more-menu item that calls the demo server command.",
+            "zh-Hans": "在通用路由更多菜单中增加服务端调用。"
+          },
+          "icon": "speed",
+          "targetRoute": "/plugins/demo/home",
+          "command": "call-server"
+        }
+      ],
+      "routeSidebarContextMenu": [
+        {
+          "id": "route-context-greeting",
+          "title": "Plugin Demo route context action",
+          "titleI18n": {
+            "en": "Plugin Demo route context action",
+            "zh-Hans": "插件 Demo 路由右键操作"
+          },
+          "descriptionI18n": {
+            "en": "Adds a route sidebar context-menu item backed by the demo command.",
+            "zh-Hans": "在通用路由侧栏右键菜单中增加 Demo 命令操作。"
+          },
+          "icon": "touch_app",
+          "targetRoute": "plugins",
+          "command": "say-hi"
+        }
+      ],
+      "workbenchTabs": [
+        {
+          "id": "bottom",
+          "title": "Plugin Demo bottom panel",
+          "titleI18n": {
+            "en": "Plugin Demo bottom panel",
+            "zh-Hans": "插件 Demo 底部面板"
+          },
+          "descriptionI18n": {
+            "en": "Registers a bottom workbench tab backed by the demo client view.",
+            "zh-Hans": "注册一个底部工作区标签页，并用 demo 客户端视图渲染内容。"
+          },
+          "icon": "terminal",
+          "placement": "bottom",
+          "clientView": "panel"
+        }
+      ],
+      "workbenchAddMenu": [
+        {
+          "id": "home",
+          "title": "Open Plugin Demo panel",
+          "titleI18n": {
+            "en": "Open Plugin Demo panel",
+            "zh-Hans": "打开插件 Demo 面板"
+          },
+          "descriptionI18n": {
+            "en": "Adds a workbench add menu item that opens the demo bottom panel.",
+            "zh-Hans": "在工作区新增菜单中增加入口，用于打开 demo 底部面板。"
+          },
+          "icon": "layers",
+          "tab": "bottom"
+        }
+      ],
+      "workspaceDrawerTabs": [
+        {
+          "id": "drawer",
+          "title": "Plugin Demo drawer",
+          "titleI18n": {
+            "en": "Plugin Demo drawer",
+            "zh-Hans": "插件 Demo 抽屉"
+          },
+          "descriptionI18n": {
+            "en": "Registers a right-side workspace drawer tab with the demo client view.",
+            "zh-Hans": "注册一个右侧工作区抽屉标签页，并用 demo 客户端视图渲染内容。"
+          },
+          "icon": "palette",
+          "placement": "right",
+          "clientView": "drawer"
+        }
+      ],
+      "launcherSearchProviders": [
+        {
+          "id": "quick",
+          "title": "Plugin Demo launcher search",
+          "titleI18n": {
+            "en": "Plugin Demo launcher search",
+            "zh-Hans": "插件 Demo 启动器搜索"
+          },
+          "descriptionI18n": {
+            "en": "Contributes server-backed launcher search results for plugin and server command keywords.",
+            "zh-Hans": "接入服务端驱动的启动器搜索结果，可搜索插件和服务端命令关键词。"
+          },
+          "command": "launcher.search"
+        }
+      ],
+      "routes": [
+        {
+          "id": "home",
+          "title": "Plugin Demo route",
+          "titleI18n": {
+            "en": "Plugin Demo route",
+            "zh-Hans": "插件 Demo 页面路由"
+          },
+          "descriptionI18n": {
+            "en": "Exposes the plugin route used by the left navigation entry.",
+            "zh-Hans": "暴露左侧导航入口使用的插件页面路由。"
+          },
+          "clientView": "overview"
+        }
+      ]
+    }
+  }
+}

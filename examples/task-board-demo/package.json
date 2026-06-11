@@ -1,0 +1,9 @@
+{
+  "name": "oneworks-task-board-demo",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node src/task-board.mjs",
+    "test": "node --test test/task-board.test.mjs"
+  }
+}

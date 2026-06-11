@@ -1,0 +1,218 @@
+{
+  "name": "@oneworks/utils",
+  "version": "0.1.0-alpha.0",
+  "description": "Shared runtime utilities for One Works",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/utils"
+  },
+  "imports": {
+    "#~/*.js": {
+      "__oneworks__": {
+        "default": "./src/*.ts"
+      },
+      "default": {
+        "import": "./dist/*.mjs",
+        "require": "./dist/*.js"
+      }
+    }
+  },
+  "exports": {
+    ".": {
+      "__oneworks__": {
+        "default": "./src/index.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    },
+    "./cache": {
+      "__oneworks__": {
+        "default": "./src/cache.ts"
+      },
+      "default": {
+        "import": "./dist/cache.mjs",
+        "require": "./dist/cache.js"
+      }
+    },
+    "./ai-path": {
+      "__oneworks__": {
+        "default": "./src/ai-path.ts"
+      },
+      "default": {
+        "import": "./dist/ai-path.mjs",
+        "require": "./dist/ai-path.js"
+      }
+    },
+    "./create-logger": {
+      "__oneworks__": {
+        "default": "./src/create-logger.ts"
+      },
+      "default": {
+        "import": "./dist/create-logger.mjs",
+        "require": "./dist/create-logger.js"
+      }
+    },
+    "./chat-message": {
+      "__oneworks__": {
+        "default": "./src/chat-message.ts"
+      },
+      "default": {
+        "import": "./dist/chat-message.mjs",
+        "require": "./dist/chat-message.js"
+      }
+    },
+    "./document-path": {
+      "__oneworks__": {
+        "default": "./src/document-path.ts"
+      },
+      "default": {
+        "import": "./dist/document-path.mjs",
+        "require": "./dist/document-path.js"
+      }
+    },
+    "./install-lock": {
+      "__oneworks__": {
+        "default": "./src/install-lock.ts"
+      },
+      "default": {
+        "import": "./dist/install-lock.mjs",
+        "require": "./dist/install-lock.js"
+      }
+    },
+    "./log-level": {
+      "__oneworks__": {
+        "default": "./src/log-level.ts"
+      },
+      "default": {
+        "import": "./dist/log-level.mjs",
+        "require": "./dist/log-level.js"
+      }
+    },
+    "./managed-plugin": {
+      "__oneworks__": {
+        "default": "./src/managed-plugin.ts"
+      },
+      "default": {
+        "import": "./dist/managed-plugin.mjs",
+        "require": "./dist/managed-plugin.js"
+      }
+    },
+    "./model-selection": {
+      "__oneworks__": {
+        "default": "./src/model-selection.ts"
+      },
+      "default": {
+        "import": "./dist/model-selection.mjs",
+        "require": "./dist/model-selection.js"
+      }
+    },
+    "./managed-npm-cli": {
+      "__oneworks__": {
+        "default": "./src/managed-npm-cli.ts"
+      },
+      "default": {
+        "import": "./dist/managed-npm-cli.mjs",
+        "require": "./dist/managed-npm-cli.js"
+      }
+    },
+    "./plugin-resolver": {
+      "__oneworks__": {
+        "default": "./src/plugin-resolver.ts"
+      },
+      "default": {
+        "import": "./dist/plugin-resolver.mjs",
+        "require": "./dist/plugin-resolver.js"
+      }
+    },
+    "./pinyin-search": {
+      "__oneworks__": {
+        "default": "./src/pinyin-search.ts"
+      },
+      "default": {
+        "import": "./dist/pinyin-search.mjs",
+        "require": "./dist/pinyin-search.js"
+      }
+    },
+    "./skills-cli": {
+      "__oneworks__": {
+        "default": "./src/skills-cli.ts"
+      },
+      "default": {
+        "import": "./dist/skills-cli.mjs",
+        "require": "./dist/skills-cli.js"
+      }
+    },
+    "./project-cache-path": {
+      "__oneworks__": {
+        "default": "./src/project-cache-path.ts"
+      },
+      "default": {
+        "import": "./dist/project-cache-path.mjs",
+        "require": "./dist/project-cache-path.js"
+      }
+    },
+    "./project-home-migration": {
+      "__oneworks__": {
+        "default": "./src/project-home-migration.ts"
+      },
+      "default": {
+        "import": "./dist/project-home-migration.mjs",
+        "require": "./dist/project-home-migration.js"
+      }
+    },
+    "./project-env": {
+      "__oneworks__": {
+        "default": "./src/project-env.ts"
+      },
+      "default": {
+        "import": "./dist/project-env.mjs",
+        "require": "./dist/project-env.js"
+      }
+    },
+    "./string-transform": {
+      "__oneworks__": {
+        "default": "./src/string-transform.ts"
+      },
+      "default": {
+        "import": "./dist/string-transform.mjs",
+        "require": "./dist/string-transform.js"
+      }
+    },
+    "./system": {
+      "__oneworks__": {
+        "default": "./src/system.ts"
+      },
+      "default": {
+        "import": "./dist/system.mjs",
+        "require": "./dist/system.js"
+      }
+    },
+    "./uuid": {
+      "__oneworks__": {
+        "default": "./src/uuid.ts"
+      },
+      "default": {
+        "import": "./dist/uuid.mjs",
+        "require": "./dist/uuid.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/utils/__tests__"
+  },
+  "dependencies": {
+    "@oneworks/types": "workspace:*",
+    "js-yaml": "^4.1.1",
+    "node-notifier": "^10.0.1",
+    "pinyin-pro": "^3.28.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node-notifier": "^8.0.5"
+  }
+}

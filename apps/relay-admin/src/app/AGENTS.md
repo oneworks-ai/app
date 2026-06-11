@@ -1,0 +1,22 @@
+# Relay Admin App Shell
+
+`src/app` 只放管理端最外层 React Router shell、共享宿主壳接线和全局样式。
+
+## 入口
+
+- `AdminApp.tsx`：挂载 `features/dashboard/AdminDashboard` 的 route 页面，并通过 `@oneworks/route-layout` 的 `HostAppShell` 提供共享 content surface 与 route shell；只做 route、header actions 和 shell 接线。
+- `AdminThemeProvider.tsx`：管理端主题入口，负责读取 / 保存主题偏好，同步 `html.dark`，并把同一套主题状态传给 AntD `ConfigProvider`。
+- `AdminNavRail.tsx`：Relay Admin 的业务侧栏 adapter。这里把管理端路由、底部账号菜单、主题 / 语言偏好等业务输入喂给共享 `HostNavRail` 插槽；不要在共享包里引入 admin API 或插件注册逻辑，也不要在这里复制一套 sidebar DOM。
+- `useAdminSidebarItems.tsx`：把 React Router location 映射为侧栏 item 和当前 route section，不监听 hash；设备入口应保持在认证管理入口之前，体现 Relay 的设备互联核心域。
+- `AdminApp.css`：管理端 app shell、菜单 adapter、AntD 全局 surface 适配和页面级布局；不要在这里维护独立色板。
+- `vite.config.ts` 在 dev server 里把 `/api/*` 和 `/login` 代理给 relay-server，登录 / API 语义不要在 app shell 里硬编码端口。
+
+## 约定
+
+- 新增业务区块时去 `src/features/<domain>/`，route 入口在 dashboard/app 层接线，不要把表格、表单或 API client 塞回 `AdminApp.tsx`。
+- 新增页面入口时同时接入权限判断：侧边栏入口、React route 直达守卫、dashboard snapshot/API 调用范围都要按 `shared/model/adminPermissions.ts` 的权限模型处理。
+- Relay Admin 必须复用 `@oneworks/route-layout/design-tokens.css` 的 `--bg-color`、`--text-color`、`--border-color`、`--primary-color` 等共享 token，不要新增 `--relay-*` 独立色板。
+- 主题切换必须同时影响 `html.dark` 和 AntD `ConfigProvider`；不要把主题状态只放在菜单或某个局部组件里。
+- 只有真正全局的 admin adapter 样式放在这里；共享 token、Host shell / NavRail 的结构、padding、radius、折叠预览与 footer slot 样式归 `packages/route-layout`。
+- 修改共享颜色、route header、nav rail 或 chrome 尺寸时，优先同步 `packages/route-layout/src/design-tokens.css`，再检查 `apps/client` 和 Relay Admin 的入口是否仍一致。
+- 修改页面 shell 后跑 `pnpm -C apps/relay-admin typecheck` 和 `pnpm -C apps/relay-admin build`。

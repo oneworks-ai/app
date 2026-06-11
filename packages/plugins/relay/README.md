@@ -1,0 +1,85 @@
+# @oneworks/plugin-relay
+
+Optional OneWorks Relay plugin.
+
+It connects the current workspace service to a user-managed public Relay, so phones, web clients, or other apps can discover devices and forward session messages through that Relay instead of directly reaching the local machine. Relay is not enabled by default; users opt in by installing this plugin and pointing it at their own `servers[]` list.
+
+## Configuration
+
+```json
+{
+  "plugins": [
+    {
+      "id": "@oneworks/plugin-relay",
+      "scope": "relay",
+      "options": {
+        "activeServerId": "prod",
+        "autoConnect": true,
+        "deviceName": "Office Mac",
+        "exposeSessions": true,
+        "servers": [
+          {
+            "id": "prod",
+            "name": "Production Relay",
+            "server": "relay.example.com",
+            "port": 443,
+            "protocol": "https",
+            "pairingToken": "prod-pairing-token"
+          },
+          {
+            "id": "lab",
+            "name": "Lab Relay",
+            "server": "127.0.0.1",
+            "port": 8788,
+            "protocol": "http",
+            "pairingToken": "lab-pairing-token"
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+Even one Relay service is configured through `servers[]`; there is no separate single-server config path.
+
+Each server can also use `baseUrl` when a full URL is easier than separate `server`, `port`, and `protocol` fields. The device identity and remote-issued device tokens are stored under the project home runtime directory, not in the project config file. Tokens are stored per server id so switching Relay systems does not overwrite another system's token.
+
+The plugin UI can open the selected Relay Server's `/login` page. In Electron, the login redirect uses the `oneworks://relay/auth` custom scheme to return to the current workspace plugin page; in Web, the redirect returns to the current plugin route. The callback token is used only to register the current device and is then replaced by the remote-issued device token.
+
+For a minimal self-hosted relay service, run:
+
+```bash
+npx @oneworks/relay-server --host 0.0.0.0 --port 8788
+```
+
+## Capabilities
+
+- Device registration and heartbeat against the configured Relay service.
+- Server-hosted SSO login page launch and Web/Electron callback handling.
+- Configurable `servers[]` entries with server / port, named Relay systems, pairing tokens, and capability switches.
+- Scoped plugin API for status, login URL, login callback, connect, disconnect, and forget actions.
+- Optional session exposure with metadata snapshots and forwarding jobs.
+- Device token storage under the project home runtime directory.
+
+The plugin must not persist session content. Session request payloads and results are forwarded through the Relay protocol while durable state remains limited to device identity, connection state, and remote-issued tokens.
+
+## Source Layout
+
+- `src/client/`: plugin UI entry.
+- `src/server/api.ts`: scoped plugin API handlers.
+- `src/server/controller.ts`: lifecycle and connect / disconnect / forget orchestration.
+- `src/server/heartbeat.ts`: registration and heartbeat loop.
+- `src/server/options.ts`: multi-server config normalization.
+- `src/server/session-worker.ts`: session snapshot and job forwarding worker.
+- `src/server/session-relay-client.ts`: remote Relay session API client.
+- `src/server/store.ts`: device identity and token persistence.
+- `__tests__/`: module-split tests for API, controller, heartbeat, sessions, and worker behavior.
+
+## Development
+
+```bash
+pnpm -C packages/plugins/relay test
+pnpm -C packages/plugins/relay typecheck
+pnpm -C packages/plugins/relay build
+```

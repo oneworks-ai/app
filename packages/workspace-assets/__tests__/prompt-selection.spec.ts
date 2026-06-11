@@ -1,0 +1,904 @@
+import { join } from 'node:path'
+
+import { describe, expect, it } from 'vitest'
+
+import { writeProjectSkillsLockfile } from '@oneworks/utils'
+import { getManagedPluginInstallDir } from '@oneworks/utils/managed-plugin'
+
+import { resolvePromptAssetSelection, resolveWorkspaceAssetBundle } from '#~/index.js'
+
+import { createWorkspace, installPluginPackage, writeDocument } from './test-helpers'
+
+describe('resolvePromptAssetSelection', () => {
+  it('loads nested project skills through the project skills lockfile', async () => {
+    const workspace = await createWorkspace()
+    const skillPath = join(workspace, '.oo/skills/.extends/base-skills/larksuite-cli/lark-doc/SKILL.md')
+    await writeDocument(
+      skillPath,
+      [
+        '---',
+        'name: lark-doc',
+        'description: Lark docs',
+        '---',
+        'Read docs.'
+      ].join('\n')
+    )
+    await writeProjectSkillsLockfile(workspace, {
+      version: 1,
+      skills: {
+        'lark-doc': {
+          hash: 'sha256:test',
+          installedAt: '2026-01-01T00:00:00.000Z',
+          installPath: '.oo/skills/.extends/base-skills/larksuite-cli/lark-doc',
+          name: 'lark-doc',
+          requested: true,
+          source: 'larksuite/cli'
+        }
+      }
+    })
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      useDefaultOneworksMcpServer: false
+    })
+
+    expect(bundle.skills).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: 'lark-doc',
+        sourcePath: skillPath
+      })
+    ]))
+  })
+
+  it('embeds only alwaysApply rules and keeps optional rules as summaries', async () => {
+    const workspace = await createWorkspace()
+
+    await writeDocument(
+      join(workspace, '.oo/rules/base.md'),
+      [
+        '---',
+        'alwaysApply: true',
+        'description: 基础约束',
+        '---',
+        '始终检查公共边界。'
+      ].join('\n')
+    )
+    await writeDocument(
+      join(workspace, '.oo/rules/optional.md'),
+      [
+        '---',
+        'alwaysApply: false',
+        'description: 按需参考规则',
+        '---',
+        '只有在特定场景才需要展开。'
+      ].join('\n')
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      useDefaultOneworksMcpServer: false
+    })
+    const [, options] = await resolvePromptAssetSelection({
+      bundle,
+      type: undefined
+    })
+
+    expect(options.systemPrompt).toContain('# base')
+    expect(options.systemPrompt).toContain('> 始终检查公共边界。')
+    expect(options.systemPrompt).toContain('# optional')
+    expect(options.systemPrompt).toContain('> Use when: 按需参考规则')
+    expect(options.systemPrompt).toContain('> Rule file path: .oo/rules/optional.md')
+    expect(options.systemPrompt).toContain('> Only read this rule file when the task matches the scenario above.')
+    expect(options.systemPrompt).not.toContain('> 只有在特定场景才需要展开。')
+  })
+
+  it('selects local assets by short name and scoped plugin assets explicitly', async () => {
+    const workspace = await createWorkspace()
+
+    await installPluginPackage(workspace, '@oneworks/plugin-demo', {
+      'package.json': JSON.stringify(
+        {
+          name: '@oneworks/plugin-demo',
+          version: '1.0.0'
+        },
+        null,
+        2
+      ),
+      'specs/release/index.md': '---\ndescription: 插件发布流程\n---\n执行插件发布'
+    })
+    await writeDocument(
+      join(workspace, '.oo/specs/release.md'),
+      '---\ndescription: 项目发布流程\n---\n执行项目发布'
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [{
+        plugins: [
+          { id: 'demo', scope: 'demo' }
+        ]
+      }, undefined],
+      useDefaultOneworksMcpServer: false
+    })
+    const [localData, localOptions] = await resolvePromptAssetSelection({
+      bundle,
+      type: 'spec',
+      name: 'release'
+    })
+    const [pluginData, pluginOptions] = await resolvePromptAssetSelection({
+      bundle,
+      type: 'spec',
+      name: 'demo/release'
+    })
+    const localSpecId = bundle.specs.find(asset => asset.origin === 'workspace' && asset.name === 'release')?.id
+    const pluginSpecId = bundle.specs.find(asset => asset.origin === 'plugin' && asset.displayName === 'demo/release')
+      ?.id
+
+    expect(localData.targetBody).toContain('执行项目发布')
+    expect(localData.targetBody).not.toContain('执行插件发布')
+    expect(localOptions.systemPrompt).toContain('项目发布流程')
+    expect(localOptions.systemPrompt).toContain('demo/release')
+    expect(localOptions.promptAssetIds).toEqual(expect.arrayContaining([localSpecId]))
+
+    expect(pluginData.targetBody).toContain('执行插件发布')
+    expect(pluginOptions.systemPrompt).toContain('插件发布流程')
+    expect(pluginOptions.promptAssetIds).toEqual(expect.arrayContaining([pluginSpecId]))
+  })
+
+  it('formats rules as markdown headings and blockquotes', async () => {
+    const workspace = await createWorkspace()
+
+    await writeDocument(
+      join(workspace, '.oo/rules/required.md'),
+      [
+        '---',
+        'description: 必须执行的规则',
+        'alwaysApply: true',
+        '---',
+        '# 标题',
+        '',
+        '正文第一行',
+        '正文第二行'
+      ].join('\n')
+    )
+    await writeDocument(
+      join(workspace, '.oo/rules/summary-only.md'),
+      [
+        '---',
+        'description: 只展示摘要',
+        'alwaysApply: false',
+        '---',
+        '不应该出现在引用正文里'
+      ].join('\n')
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [undefined, undefined],
+      useDefaultOneworksMcpServer: false
+    })
+    const [, resolvedOptions] = await resolvePromptAssetSelection({
+      bundle,
+      type: undefined
+    })
+
+    expect(resolvedOptions.systemPrompt).toContain('# required')
+    expect(resolvedOptions.systemPrompt).toContain('> # 标题')
+    expect(resolvedOptions.systemPrompt).toContain('> 正文第一行')
+    expect(resolvedOptions.systemPrompt).toContain('> 正文第二行')
+    expect(resolvedOptions.systemPrompt).toContain('# summary-only')
+    expect(resolvedOptions.systemPrompt).toContain('> Use when: 只展示摘要')
+    expect(resolvedOptions.systemPrompt).toContain('> Rule file path: .oo/rules/summary-only.md')
+    expect(resolvedOptions.systemPrompt).not.toContain('> 不应该出现在引用正文里')
+    expect(resolvedOptions.systemPrompt).not.toContain('--------------------')
+  })
+
+  it('keeps skills as route-only guidance unless the target spec references them', async () => {
+    const workspace = await createWorkspace()
+
+    await writeDocument(
+      join(workspace, '.oo/skills/research/SKILL.md'),
+      [
+        '---',
+        'description: 检索项目信息',
+        '---',
+        '先读 README.md'
+      ].join('\n')
+    )
+    await writeDocument(
+      join(workspace, '.oo/skills/review/SKILL.md'),
+      [
+        '---',
+        'description: 评审代码改动',
+        '---',
+        '检查回归风险'
+      ].join('\n')
+    )
+    await writeDocument(
+      join(workspace, '.oo/specs/release/index.md'),
+      [
+        '---',
+        'description: 发布流程',
+        'skills:',
+        '  - research',
+        '---',
+        '执行发布'
+      ].join('\n')
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      useDefaultOneworksMcpServer: false
+    })
+    const [data, options] = await resolvePromptAssetSelection({
+      bundle,
+      type: 'spec',
+      name: 'release'
+    })
+
+    expect(data.targetSkills.map(skill => skill.resolvedName ?? skill.attributes.name)).toEqual(['research'])
+    expect(options.systemPrompt).toContain('The following skill modules are loaded for the project')
+    expect(options.systemPrompt).toContain('# research')
+    expect(options.systemPrompt).toContain('> Skill file path: .oo/skills/research/SKILL.md')
+    expect(options.systemPrompt).toContain('<skill-content>')
+    expect(options.systemPrompt).toContain('先读 README.md')
+    expect(options.systemPrompt).toContain('# review')
+    expect(options.systemPrompt).toContain('> Skill file path: .oo/skills/review/SKILL.md')
+    expect(options.systemPrompt).toContain(
+      '> Do not preload the body by default; read the corresponding skill file only when the task clearly requires it.'
+    )
+    expect(options.systemPrompt).not.toContain('<skill-content>\n检查回归风险\n</skill-content>')
+  })
+
+  it('keeps skills as route-only guidance in normal mode', async () => {
+    const workspace = await createWorkspace()
+
+    await writeDocument(
+      join(workspace, '.oo/skills/research/SKILL.md'),
+      [
+        '---',
+        'description: 检索项目信息',
+        '---',
+        '先读 README.md'
+      ].join('\n')
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      useDefaultOneworksMcpServer: false
+    })
+    const [data, options] = await resolvePromptAssetSelection({
+      bundle,
+      type: undefined
+    })
+
+    expect(data.targetSkills).toEqual([])
+    expect(options.systemPrompt).not.toContain('The following skill modules are loaded for the project')
+    expect(options.systemPrompt).toContain('<skills>')
+    expect(options.systemPrompt).toContain('# research')
+    expect(options.systemPrompt).toContain('> Skill file path: .oo/skills/research/SKILL.md')
+    expect(options.systemPrompt).toContain(
+      '> Do not preload the body by default; read the corresponding skill file only when the task clearly requires it.'
+    )
+    expect(options.systemPrompt).not.toContain('<skill-content>')
+    expect(options.systemPrompt).not.toContain('先读 README.md')
+  })
+
+  it('omits route-only project skills when the adapter provides native skill loading', async () => {
+    const workspace = await createWorkspace()
+
+    await writeDocument(
+      join(workspace, '.oo/skills/research/SKILL.md'),
+      [
+        '---',
+        'description: 检索项目信息',
+        '---',
+        '先读 README.md'
+      ].join('\n')
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      useDefaultOneworksMcpServer: false
+    })
+    const [data, options] = await resolvePromptAssetSelection({
+      bundle,
+      adapter: 'claude-code',
+      type: undefined
+    })
+
+    expect(data.targetSkills).toEqual([])
+    expect(options.systemPrompt).not.toContain('<skills>')
+    expect(options.systemPrompt).not.toContain('# research')
+    expect(options.systemPrompt).not.toContain('Skill file path: .oo/skills/research/SKILL.md')
+    expect(options.promptAssetIds).not.toContain(bundle.skills[0]?.id)
+  })
+
+  it('keeps explicitly referenced skills embedded for adapters with native project skills', async () => {
+    const workspace = await createWorkspace()
+
+    await writeDocument(
+      join(workspace, '.oo/skills/research/SKILL.md'),
+      [
+        '---',
+        'description: 检索项目信息',
+        '---',
+        '先读 README.md'
+      ].join('\n')
+    )
+    await writeDocument(
+      join(workspace, '.oo/skills/review/SKILL.md'),
+      [
+        '---',
+        'description: 评审代码改动',
+        '---',
+        '检查回归风险'
+      ].join('\n')
+    )
+    await writeDocument(
+      join(workspace, '.oo/specs/release/index.md'),
+      [
+        '---',
+        'description: 发布流程',
+        'skills:',
+        '  - research',
+        '---',
+        '执行发布'
+      ].join('\n')
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      useDefaultOneworksMcpServer: false
+    })
+    const [data, options] = await resolvePromptAssetSelection({
+      bundle,
+      adapter: 'claude-code',
+      type: 'spec',
+      name: 'release'
+    })
+
+    expect(data.targetSkills.map(skill => skill.resolvedName ?? skill.attributes.name)).toEqual(['research'])
+    expect(options.systemPrompt).toContain('The following skill modules are loaded for the project')
+    expect(options.systemPrompt).toContain('# research')
+    expect(options.systemPrompt).toContain('<skill-content>')
+    expect(options.systemPrompt).toContain('先读 README.md')
+    expect(options.systemPrompt).not.toContain('<skills>')
+    expect(options.systemPrompt).not.toContain('# review')
+    expect(options.systemPrompt).not.toContain('Skill file path: .oo/skills/review/SKILL.md')
+  })
+
+  it('keeps spec route guidance without default identity in normal mode', async () => {
+    const workspace = await createWorkspace()
+
+    await writeDocument(
+      join(workspace, '.oo/specs/release/index.md'),
+      [
+        '---',
+        'description: 发布流程',
+        '---',
+        '执行发布'
+      ].join('\n')
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      useDefaultOneworksMcpServer: false
+    })
+    const [, options] = await resolvePromptAssetSelection({
+      bundle,
+      type: undefined
+    })
+
+    expect(options.systemPrompt).toContain('The project includes the following workflows')
+    expect(options.systemPrompt).toContain('Workflow name: release')
+    expect(options.systemPrompt).not.toContain('professional project execution manager')
+  })
+
+  it('injects spec identity guidance when a spec is actively selected', async () => {
+    const workspace = await createWorkspace()
+
+    await writeDocument(
+      join(workspace, '.oo/specs/release/index.md'),
+      [
+        '---',
+        'description: 发布流程',
+        '---',
+        '执行发布'
+      ].join('\n')
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      useDefaultOneworksMcpServer: false
+    })
+    const [, options] = await resolvePromptAssetSelection({
+      bundle,
+      type: 'spec',
+      name: 'release'
+    })
+
+    expect(options.systemPrompt).toContain('professional project execution manager')
+    expect(options.systemPrompt).toContain('Never complete code development work alone')
+    expect(options.systemPrompt).toContain('Workflow name: release')
+  })
+
+  it('embeds referenced skills for entity mode and removes them from route guidance', async () => {
+    const workspace = await createWorkspace()
+
+    await writeDocument(
+      join(workspace, '.oo/skills/research/SKILL.md'),
+      [
+        '---',
+        'description: 检索项目信息',
+        '---',
+        '先读 README.md'
+      ].join('\n')
+    )
+    await writeDocument(
+      join(workspace, '.oo/skills/review/SKILL.md'),
+      [
+        '---',
+        'description: 评审代码改动',
+        '---',
+        '检查回归风险'
+      ].join('\n')
+    )
+    await writeDocument(
+      join(workspace, '.oo/entities/reviewer/README.md'),
+      [
+        '---',
+        'description: 代码评审实体',
+        'skills:',
+        '  - review',
+        '---',
+        '负责代码评审'
+      ].join('\n')
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      useDefaultOneworksMcpServer: false
+    })
+    const [data, options] = await resolvePromptAssetSelection({
+      bundle,
+      type: 'entity',
+      name: 'reviewer'
+    })
+
+    expect(data.targetSkills.map(skill => skill.resolvedName ?? skill.attributes.name)).toEqual(['review'])
+    expect(options.systemPrompt).toContain('The following skill modules are loaded for the project')
+    expect(options.systemPrompt).toContain('# review')
+    expect(options.systemPrompt).toContain('<skill-content>')
+    expect(options.systemPrompt).toContain('检查回归风险')
+    expect(options.systemPrompt).not.toContain('<skills>\n# review')
+    expect(options.systemPrompt).toContain('<skills>')
+    expect(options.systemPrompt).toContain('# research')
+    expect(options.systemPrompt).toContain('> Skill file path: .oo/skills/research/SKILL.md')
+    expect(options.systemPrompt).not.toContain('<skill-content>\n先读 README.md\n</skill-content>')
+  })
+
+  it('appends conventional prompt files when loading a directory entity', async () => {
+    const workspace = await createWorkspace()
+
+    await writeDocument(
+      join(workspace, '.oo/entities/reviewer/README.md'),
+      [
+        '---',
+        'description: 代码评审实体',
+        '---',
+        '基础身份。'
+      ].join('\n')
+    )
+    await writeDocument(
+      join(workspace, '.oo/entities/reviewer/INTRODUCTION.md'),
+      '负责发现行为回归。'
+    )
+    await writeDocument(
+      join(workspace, '.oo/entities/reviewer/PERSONALITY.md'),
+      '说话克制，先给出高风险问题。'
+    )
+    await writeDocument(
+      join(workspace, '.oo/entities/reviewer/MEMORY.md'),
+      '记住上次评审指出过缺少验证。'
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      useDefaultOneworksMcpServer: false
+    })
+    const [data, options] = await resolvePromptAssetSelection({
+      bundle,
+      type: 'entity',
+      name: 'reviewer'
+    })
+
+    expect(data.targetBody).toContain('基础身份。')
+    expect(data.targetBody).toContain('## Introduction\n\n负责发现行为回归。')
+    expect(data.targetBody).toContain('## Personality\n\n说话克制，先给出高风险问题。')
+    expect(data.targetBody).toContain('## Memory\n\n记住上次评审指出过缺少验证。')
+    expect(options.systemPrompt).toContain('## Introduction\n\n负责发现行为回归。')
+    expect(data.targetBody.indexOf('基础身份。')).toBeLessThan(data.targetBody.indexOf('## Introduction'))
+    expect(data.targetBody.indexOf('## Introduction')).toBeLessThan(data.targetBody.indexOf('## Personality'))
+    expect(data.targetBody.indexOf('## Personality')).toBeLessThan(data.targetBody.indexOf('## Memory'))
+  })
+
+  it('appends alias prompt files for index json entities', async () => {
+    const workspace = await createWorkspace()
+
+    await writeDocument(
+      join(workspace, '.oo/entities/reviewer/index.json'),
+      JSON.stringify(
+        {
+          description: '代码评审实体',
+          prompt: '基础身份。'
+        },
+        null,
+        2
+      )
+    )
+    await writeDocument(
+      join(workspace, '.oo/entities/reviewer/介绍.md'),
+      '负责发现行为回归。'
+    )
+    await writeDocument(
+      join(workspace, '.oo/entities/reviewer/personality.md'),
+      '说话克制，先给出高风险问题。'
+    )
+    await writeDocument(
+      join(workspace, '.oo/entities/reviewer/记忆.md'),
+      '记住上次评审指出过缺少验证。'
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      useDefaultOneworksMcpServer: false
+    })
+    const [data] = await resolvePromptAssetSelection({
+      bundle,
+      type: 'entity',
+      name: 'reviewer'
+    })
+
+    expect(data.targetBody).toContain('基础身份。')
+    expect(data.targetBody).toContain('## Introduction\n\n负责发现行为回归。')
+    expect(data.targetBody).toContain('## Personality\n\n说话克制，先给出高风险问题。')
+    expect(data.targetBody).toContain('## Memory\n\n记住上次评审指出过缺少验证。')
+  })
+
+  it('inherits prompt, rules, and skills from scoped plugin entities', async () => {
+    const workspace = await createWorkspace()
+
+    await installPluginPackage(workspace, '@oneworks/plugin-standard-dev', {
+      'package.json': JSON.stringify(
+        {
+          name: '@oneworks/plugin-standard-dev',
+          version: '1.0.0'
+        },
+        null,
+        2
+      ),
+      'rules/base-review.md': '---\ndescription: 标准评审规则\n---\n父规则正文',
+      'skills/base-review/SKILL.md': '---\ndescription: 标准评审技能\n---\n父技能正文',
+      'entities/base-reviewer/README.md': [
+        '---',
+        'description: 标准评审实体',
+        'rules:',
+        '  - base-review',
+        'skills:',
+        '  - base-review',
+        'tools:',
+        '  include:',
+        '    - Read',
+        '---',
+        '父实体提示。'
+      ].join('\n')
+    })
+    await writeDocument(
+      join(workspace, '.oo/rules/base-review.md'),
+      '---\ndescription: 同名本地规则\n---\n同名本地规则正文'
+    )
+    await writeDocument(
+      join(workspace, '.oo/rules/frontend.md'),
+      '---\ndescription: 前端规则\n---\n子规则正文'
+    )
+    await writeDocument(
+      join(workspace, '.oo/skills/base-review/SKILL.md'),
+      '---\ndescription: 同名本地技能\n---\n同名本地技能正文'
+    )
+    await writeDocument(
+      join(workspace, '.oo/skills/frontend/SKILL.md'),
+      '---\ndescription: 前端技能\n---\n子技能正文'
+    )
+    await writeDocument(
+      join(workspace, '.oo/entities/frontend-reviewer/README.md'),
+      [
+        '---',
+        'description: 前端评审实体',
+        'extends: std/base-reviewer',
+        'rules:',
+        '  - frontend',
+        'skills:',
+        '  - frontend',
+        'tools:',
+        '  include:',
+        '    - Grep',
+        '---',
+        '子实体提示。'
+      ].join('\n')
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [{
+        plugins: [
+          { id: 'standard-dev', scope: 'std' }
+        ]
+      }, undefined],
+      useDefaultOneworksMcpServer: false
+    })
+    const [data, options] = await resolvePromptAssetSelection({
+      bundle,
+      type: 'entity',
+      name: 'frontend-reviewer'
+    })
+    const parentEntityId = bundle.entities.find(asset => asset.displayName === 'std/base-reviewer')?.id
+    const childEntityId = bundle.entities.find(asset => asset.displayName === 'frontend-reviewer')?.id
+
+    expect(data.targetBody).toContain('父实体提示。\n\n子实体提示。')
+    expect(data.targetSkills.map(skill => skill.resolvedName)).toEqual(['std/base-review', 'frontend'])
+    expect(options.systemPrompt).toContain('> 父规则正文')
+    expect(options.systemPrompt).toContain('> 子规则正文')
+    expect(options.systemPrompt).not.toContain('> 同名本地规则正文')
+    expect(options.systemPrompt).not.toContain('<skill-content>\n同名本地技能正文\n</skill-content>')
+    expect(options.tools).toEqual({ include: ['Grep'] })
+    expect(options.promptAssetIds).toEqual(expect.arrayContaining([parentEntityId, childEntityId]))
+  })
+
+  it('composes multiple parent entities in extends order', async () => {
+    const workspace = await createWorkspace()
+
+    await writeDocument(
+      join(workspace, '.oo/entities/base-a.md'),
+      [
+        '---',
+        'description: 父实体 A',
+        'tools:',
+        '  include:',
+        '    - Read',
+        '---',
+        '父实体 A 提示。'
+      ].join('\n')
+    )
+    await writeDocument(
+      join(workspace, '.oo/entities/base-b.md'),
+      [
+        '---',
+        'description: 父实体 B',
+        'tools:',
+        '  include:',
+        '    - Bash',
+        '---',
+        '父实体 B 提示。'
+      ].join('\n')
+    )
+    await writeDocument(
+      join(workspace, '.oo/entities/child.md'),
+      [
+        '---',
+        'description: 子实体',
+        'extends:',
+        '  - base-a',
+        '  - base-b',
+        '---',
+        '子实体提示。'
+      ].join('\n')
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      useDefaultOneworksMcpServer: false
+    })
+    const [data, options] = await resolvePromptAssetSelection({
+      bundle,
+      type: 'entity',
+      name: 'child'
+    })
+
+    expect(data.targetBody).toContain('父实体 A 提示。\n\n父实体 B 提示。\n\n子实体提示。')
+    expect(options.tools).toEqual({ include: ['Bash'] })
+  })
+
+  it('lets the current entity replace inherited rules', async () => {
+    const workspace = await createWorkspace()
+
+    await writeDocument(
+      join(workspace, '.oo/rules/base.md'),
+      '---\ndescription: 父规则\n---\n父规则正文'
+    )
+    await writeDocument(
+      join(workspace, '.oo/rules/child.md'),
+      '---\ndescription: 子规则\n---\n子规则正文'
+    )
+    await writeDocument(
+      join(workspace, '.oo/entities/base.md'),
+      [
+        '---',
+        'description: 父实体',
+        'rules:',
+        '  - base',
+        '---',
+        '父实体提示。'
+      ].join('\n')
+    )
+    await writeDocument(
+      join(workspace, '.oo/entities/child.md'),
+      [
+        '---',
+        'description: 子实体',
+        'extends: base',
+        'inherit:',
+        '  rules: replace',
+        'rules:',
+        '  - child',
+        '---',
+        '子实体提示。'
+      ].join('\n')
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      useDefaultOneworksMcpServer: false
+    })
+    const [, options] = await resolvePromptAssetSelection({
+      bundle,
+      type: 'entity',
+      name: 'child'
+    })
+
+    expect(options.systemPrompt).toContain('> 子规则正文')
+    expect(options.systemPrompt).toContain('> Use when: 父规则')
+    expect(options.systemPrompt).not.toContain('> 父规则正文')
+  })
+
+  it('rejects circular entity inheritance', async () => {
+    const workspace = await createWorkspace()
+
+    await writeDocument(
+      join(workspace, '.oo/entities/a.md'),
+      '---\ndescription: A\nextends: b\n---\nA'
+    )
+    await writeDocument(
+      join(workspace, '.oo/entities/b.md'),
+      '---\ndescription: B\nextends: a\n---\nB'
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      useDefaultOneworksMcpServer: false
+    })
+
+    await expect(resolvePromptAssetSelection({
+      bundle,
+      type: 'entity',
+      name: 'a'
+    })).rejects.toThrow('Circular entity inheritance detected: a -> b -> a')
+  })
+
+  it('does not preload all skills when the target entity omits skill references', async () => {
+    const workspace = await createWorkspace()
+
+    await writeDocument(
+      join(workspace, '.oo/skills/research/SKILL.md'),
+      [
+        '---',
+        'description: 检索项目信息',
+        '---',
+        '先读 README.md'
+      ].join('\n')
+    )
+    await writeDocument(
+      join(workspace, '.oo/entities/reviewer/README.md'),
+      [
+        '---',
+        'description: 代码评审实体',
+        '---',
+        '负责代码评审'
+      ].join('\n')
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      useDefaultOneworksMcpServer: false
+    })
+    const [data, options] = await resolvePromptAssetSelection({
+      bundle,
+      type: 'entity',
+      name: 'reviewer'
+    })
+
+    expect(data.targetSkills).toEqual([])
+    expect(options.systemPrompt).not.toContain('The following skill modules are loaded for the project')
+    expect(options.systemPrompt).toContain('# research')
+    expect(options.systemPrompt).toContain('> Skill file path: .oo/skills/research/SKILL.md')
+    expect(options.systemPrompt).not.toContain('先读 README.md')
+  })
+
+  it('lets spec plugin overrides exclude declared project-home managed plugins when mode is override', async () => {
+    const workspace = await createWorkspace()
+    const env = { __ONEWORKS_PROJECT_HOME_PROJECTS_DIR__: join(workspace, '.oneworks-projects') }
+    const installDir = getManagedPluginInstallDir(workspace, 'claude', 'demo', env)
+    const oneworksDir = join(installDir, 'oneworks')
+
+    await writeDocument(
+      join(workspace, '.oo.config.json'),
+      JSON.stringify(
+        {
+          plugins: [
+            {
+              id: oneworksDir,
+              scope: 'demo'
+            }
+          ]
+        },
+        null,
+        2
+      )
+    )
+    await writeDocument(
+      join(installDir, '.oneworks-plugin.json'),
+      JSON.stringify(
+        {
+          version: 1,
+          adapter: 'claude',
+          name: 'demo',
+          scope: 'demo',
+          installedAt: new Date().toISOString(),
+          source: {
+            type: 'path',
+            path: './demo'
+          },
+          nativePluginPath: 'native',
+          oneworksPluginPath: 'oneworks'
+        },
+        null,
+        2
+      )
+    )
+    await writeDocument(
+      join(oneworksDir, 'skills/research/SKILL.md'),
+      [
+        '---',
+        'description: 托管插件技能',
+        '---',
+        '先读插件文档'
+      ].join('\n')
+    )
+    await writeDocument(
+      join(workspace, '.oo/specs/isolated/index.md'),
+      [
+        '---',
+        'description: 隔离 spec',
+        'plugins:',
+        '  mode: override',
+        '  list: []',
+        '---',
+        '执行隔离流程'
+      ].join('\n')
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      useDefaultOneworksMcpServer: false
+    })
+    const [, options] = await resolvePromptAssetSelection({
+      bundle,
+      type: 'spec',
+      name: 'isolated'
+    })
+
+    expect(bundle.skills.map(asset => asset.displayName)).toContain('demo/research')
+    expect(options.assetBundle?.skills).toEqual([])
+    expect(options.systemPrompt).not.toContain('demo/research')
+  })
+})

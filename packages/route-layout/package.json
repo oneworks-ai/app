@@ -1,0 +1,47 @@
+{
+  "name": "@oneworks/route-layout",
+  "type": "module",
+  "version": "0.1.0-alpha.0",
+  "description": "Shared route container layout primitives for OneWorks React surfaces",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/route-layout"
+  },
+  "exports": {
+    ".": {
+      "__oneworks__": {
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./design-tokens.css": "./src/design-tokens.css",
+    "./layout.css": "./src/RouteContainerLayout.css",
+    "./styles.css": "./src/styles.css",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "README.md",
+    "dist",
+    "package.json",
+    "src/*.css"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project bundler.web packages/route-layout/__tests__",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1"
+  },
+  "dependencies": {
+    "@oneworks/icon": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

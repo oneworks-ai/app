@@ -1,0 +1,23 @@
+[submodule "infra/homebrew-tap"]
+	path = infra/homebrew-tap
+	url = https://github.com/oneworks-ai/homebrew-tap.git
+	branch = main
+[submodule "infra/windows/scoop-bucket"]
+	path = infra/windows/scoop-bucket
+	url = https://github.com/oneworks-ai/scoop-bucket.git
+	branch = main
+[submodule "assets/icon"]
+	path = assets/icon
+	url = https://github.com/oneworks-ai/icon.git
+	branch = main
+[submodule "assets/homepage"]
+	path = assets/homepage
+	url = https://github.com/oneworks-ai/oneworks-ai.github.io.git
+	branch = main
+[submodule "assets/pwa"]
+	path = assets/pwa
+	url = https://github.com/oneworks-ai/pwa.git
+	branch = main
+[submodule "assets/github-profile"]
+	path = assets/github-profile
+	url = https://github.com/oneworks-ai/.github.git

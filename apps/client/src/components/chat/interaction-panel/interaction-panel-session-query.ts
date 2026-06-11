@@ -1,0 +1,2 @@
+export const INTERACTION_PANEL_SESSION_QUERY_PARAM = 'panelSessionId'
+export const INTERACTION_PANEL_SESSION_FOCUS_QUERY_PARAM = 'panelSessionFocus'

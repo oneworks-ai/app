@@ -1,0 +1,36 @@
+.shortcut-tooltip-target {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.shortcut-tooltip-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: inherit;
+  line-height: 1.4;
+}
+
+.shortcut-tooltip-content__label {
+  color: inherit;
+  font-size: inherit;
+  font-weight: 400;
+  line-height: inherit;
+  white-space: nowrap;
+}
+
+.shortcut-tooltip-popover {
+  pointer-events: auto;
+
+  .ant-tooltip-inner {
+    padding: 6px 8px !important;
+  }
+
+  .shortcut-display {
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    border-color: color-mix(in srgb, currentColor 14%, transparent);
+    color: inherit;
+    box-shadow: none;
+  }
+}

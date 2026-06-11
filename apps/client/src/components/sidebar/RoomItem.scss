@@ -1,0 +1,370 @@
+.room-item {
+  --room-action-gap: 4px;
+  --room-action-size: 18px;
+  --room-actions-reserved-width: calc(
+    var(--room-action-size) + var(--room-action-gap) + var(--room-action-size) +
+      var(--room-action-gap) +
+      var(--room-action-size)
+  );
+  --room-item-avatar-radius: 2px;
+  --room-item-card-border: var(--border-color);
+  --room-pixel-avatar-border: var(--room-item-card-border);
+  --room-pixel-avatar-overlay: color-mix(
+    in srgb,
+    var(--room-pixel-avatar-accent) 10%,
+    transparent
+  );
+
+  color: var(--text-color);
+  cursor: pointer;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 8px !important;
+  position: relative;
+  border: 1px solid var(--room-item-card-border) !important;
+  border-radius: 6px;
+  transition: background-color .2s ease, border-color .2s ease, color .2s ease;
+  background-color: var(--bg-color);
+
+  &:not(.room-item--touch):hover {
+    color: var(--primary-color, #2563eb) !important;
+  }
+
+  &.active {
+    --room-item-card-border: transparent;
+
+    background-color: transparent !important;
+    color: var(--primary-color, #2563eb) !important;
+  }
+
+  &.selected {
+    background-color: var(--sidebar-active-bg) !important;
+    border-color: var(--sidebar-active-text) !important;
+  }
+
+  &__content {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    gap: var(--session-content-gap, 8px);
+  }
+
+  &__leading {
+    --room-item-avatar-size: var(--session-leading-size, 16px);
+
+    width: var(--room-item-avatar-size);
+    min-width: var(--room-item-avatar-size);
+    max-width: var(--room-item-avatar-size);
+    height: var(--room-item-avatar-size);
+    min-height: var(--room-item-avatar-size);
+    flex-shrink: 0;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--room-item-avatar-radius);
+    line-height: 1;
+    color: #fff;
+    background: transparent;
+
+    &--completed {
+      .room-pixel-avatar {
+        --room-pixel-avatar-bg: color-mix(
+          in srgb,
+          var(--success-color) 18%,
+          var(--tag-bg)
+        );
+      }
+    }
+
+    &--failed {
+      .room-pixel-avatar {
+        --room-pixel-avatar-bg: color-mix(
+          in srgb,
+          var(--danger-color) 18%,
+          var(--tag-bg)
+        );
+      }
+    }
+
+    &--idle {
+      .room-pixel-avatar {
+        --room-pixel-avatar-bg: color-mix(
+          in srgb,
+          var(--sub-text-color) 14%,
+          var(--tag-bg)
+        );
+      }
+    }
+  }
+
+  &__avatar {
+    --room-pixel-avatar-size: var(--room-item-avatar-size);
+
+    &.room-pixel-avatar {
+      // The element has both room-pixel-avatar and room-item__avatar classes.
+      // Keep this selector stronger than RoomPixelAvatar's own default radius.
+      --room-pixel-avatar-radius: var(--room-item-avatar-radius);
+
+      border-radius: var(--room-item-avatar-radius);
+    }
+  }
+
+  &__info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  &__title {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  &__title-text {
+    display: block;
+    font-weight: 600;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  &__favorite-icon {
+    color: var(--warning-color);
+    flex-shrink: 0;
+    font-size: 13px;
+    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+    line-height: 1;
+  }
+
+  &__header-side {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 0 0 auto;
+    gap: 6px;
+    // The hover actions are absolutely positioned in this side slot.
+    // Reserve their width in normal flow so long room titles stop before
+    // the favorite/archive/more action group.
+    min-width: var(--room-actions-reserved-width);
+    min-height: 18px;
+    overflow: visible;
+    position: relative;
+  }
+
+  &__time {
+    font-size: 10px;
+    line-height: 1;
+    color: var(--sub-text-color);
+    white-space: nowrap;
+    transition: none;
+  }
+
+  &__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--room-action-gap);
+    justify-content: flex-end;
+    opacity: 0;
+    min-width: var(--room-actions-reserved-width);
+    overflow: visible;
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%) translateX(3px);
+    visibility: hidden;
+    transition:
+      opacity .16s ease,
+      transform .16s ease,
+      visibility 0s linear .16s;
+    pointer-events: none;
+  }
+
+  & &__actions &__action-btn {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none;
+    color: var(--sub-text-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--room-action-size);
+    min-width: var(--room-action-size);
+    height: var(--room-action-size);
+    padding: 0;
+    border-radius: 6px;
+    gap: var(--room-action-gap);
+    opacity: .9;
+    transform: scale(.96);
+    transition:
+      background-color .18s ease,
+      border-color .18s ease,
+      color .18s ease,
+      opacity .16s ease,
+      transform .16s ease;
+
+    &:focus,
+    &:active,
+    &:hover {
+      background: transparent !important;
+      border-color: transparent !important;
+      box-shadow: none;
+      color: var(--text-color);
+    }
+
+    &.is-confirming {
+      width: auto;
+      min-width: var(--room-action-size);
+      padding: 0 6px;
+      margin-left: 2px;
+    }
+
+    &--favorite {
+      color: #d97706;
+
+      &:hover {
+        color: #b45309;
+      }
+
+      &.is-favorited {
+        .material-symbols-rounded {
+          color: #f59e0b;
+          font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+      }
+    }
+
+    &--archive {
+      color: #dc2626;
+
+      &:hover {
+        color: #b91c1c;
+      }
+    }
+
+    .material-symbols-rounded {
+      font-size: 16px;
+    }
+  }
+
+  &__action-label {
+    font-size: 10px;
+    line-height: 1;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  &:not(.room-item--touch):hover {
+    .room-item__time {
+      display: none;
+    }
+
+    .room-item__actions {
+      opacity: 1;
+      visibility: visible;
+      transition-delay: 0s;
+      pointer-events: auto;
+      transform: translateY(-50%) translateX(0);
+
+      .room-item__action-btn {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+  }
+}
+
+.room-item--touch {
+  .room-item__header-side {
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .room-item__time {
+    opacity: 1 !important;
+  }
+
+  .room-item__actions {
+    opacity: 1;
+    min-width: 0;
+    position: static;
+    transform: none;
+    visibility: visible;
+    transition-delay: 0s;
+    pointer-events: auto;
+  }
+
+  .room-item__action-btn {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    opacity: 1;
+    transform: none;
+
+    .material-symbols-rounded {
+      font-size: 18px;
+    }
+  }
+}
+
+.room-item--compact {
+  .room-item__info {
+    gap: 0;
+  }
+
+  .room-item__header {
+    align-items: flex-start;
+  }
+
+  .room-item__header-side {
+    gap: 4px;
+    min-height: 0;
+  }
+}
+
+.room-item--compact.room-item--touch {
+  .room-item__action-btn {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+  }
+}
+
+.room-title-tooltip {
+  max-width: 280px;
+
+  &__title {
+    font-weight: 500;
+    overflow-wrap: anywhere;
+  }
+
+  &__time {
+    margin-top: 4px;
+    color: rgba(255, 255, 255, .72);
+    font-size: 11px;
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+}

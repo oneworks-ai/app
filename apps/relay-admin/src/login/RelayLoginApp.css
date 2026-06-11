@@ -1,0 +1,310 @@
+:root {
+  --primary-color: #e23f12;
+  --primary-soft-bg: color-mix(
+    in srgb,
+    var(--primary-color) 12%,
+    var(--bg-color)
+  );
+  --primary-text-color: color-mix(
+    in srgb,
+    var(--primary-color) 82%,
+    var(--text-color)
+  );
+}
+
+html,
+body,
+#relay-login-root {
+  min-height: 100%;
+}
+
+.relay-login-app {
+  min-height: 100vh;
+}
+
+.relay-login-app__layout {
+  width: min(424px, 100%);
+}
+
+.relay-login-app__section {
+  display: grid;
+  gap: 12px;
+  padding: 22px 24px;
+  border-top: 1px solid rgba(26, 33, 29, .1);
+}
+
+.relay-login-app__section:first-child {
+  border-top: 0;
+}
+
+.relay-login-app__section:last-child {
+  padding-bottom: 24px;
+}
+
+.relay-login-app__section--accounts {
+  background: rgba(255, 255, 255, .16);
+}
+
+.relay-login-app__section-title {
+  color: #4e5a53;
+  font-size: 12px;
+  font-weight: 780;
+  line-height: 1;
+}
+
+.relay-login-app__form {
+  display: grid;
+  gap: 10px;
+}
+
+.relay-login-app__mode.ant-segmented {
+  min-height: 34px;
+  padding: 2px;
+  background: rgba(17, 23, 20, .06);
+  border: 1px solid rgba(24, 31, 27, .08);
+  box-shadow: none;
+}
+
+.relay-login-app__mode .ant-segmented-item {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.relay-login-app__mode .ant-segmented-item-selected {
+  color: var(--primary-color);
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 1px 4px rgba(6, 12, 10, .08);
+}
+
+.relay-login-app__form .ant-form-item {
+  margin-bottom: 0;
+}
+
+.relay-login-app__form .ant-form-item-explain-error {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.relay-login-app__form .ant-input,
+.relay-login-app__form .ant-input-password .ant-input {
+  color: #111714;
+  font-size: 14px;
+  font-weight: 560;
+}
+
+.relay-login-app__form .ant-input,
+.relay-login-app__form .ant-input-affix-wrapper {
+  min-height: 42px;
+  border-color: rgba(24, 31, 27, .16);
+  background: rgba(255, 255, 253, .94);
+  box-shadow: 0 1px 2px rgba(6, 12, 10, .04);
+}
+
+.relay-login-app__form .ant-input-affix-wrapper {
+  padding-block: 0;
+}
+
+.relay-login-app__form .ant-input-affix-wrapper .ant-input {
+  min-height: 0;
+  height: 40px;
+  padding-block: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.relay-login-app__form .ant-input-affix-wrapper .ant-input:hover,
+.relay-login-app__form .ant-input-affix-wrapper .ant-input:focus {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.relay-login-app__form .ant-input-affix-wrapper .ant-input-suffix {
+  margin-inline-start: 8px;
+}
+
+.relay-login-app__form .ant-input-password-icon {
+  color: rgba(78, 90, 83, .58);
+}
+
+.relay-login-app__form .ant-input-password-icon:hover {
+  color: rgba(17, 23, 20, .72);
+}
+
+.relay-login-app__form .ant-input:hover,
+.relay-login-app__form .ant-input-affix-wrapper:hover {
+  border-color: rgba(226, 63, 18, .42);
+}
+
+.relay-login-app__form .ant-input:focus,
+.relay-login-app__form .ant-input-affix-wrapper-focused {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(226, 63, 18, .1);
+}
+
+.relay-login-app__form .ant-input::placeholder {
+  color: rgba(78, 90, 83, .52);
+  font-weight: 560;
+}
+
+.relay-login-app__remember-item .ant-form-item-control-input {
+  min-height: 0;
+}
+
+.relay-login-app__remember-item .ant-checkbox-wrapper {
+  color: #5e6a63;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.relay-login-app__submit.ant-btn,
+.relay-login-app__provider-button.ant-btn {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.relay-login-app__submit.ant-btn {
+  justify-content: center;
+}
+
+.relay-login-app__submit.ant-btn .ant-btn-icon,
+.relay-login-app__provider-button.ant-btn .ant-btn-icon {
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.relay-login-app__submit.ant-btn > span:not(.ant-btn-icon),
+.relay-login-app__provider-button.ant-btn > span:not(.ant-btn-icon) {
+  display: inline-flex;
+  align-items: center;
+  line-height: 18px;
+}
+
+.relay-login-app__submit.ant-btn-primary {
+  border-color: var(--primary-color);
+  background: var(--primary-color);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, .2) inset,
+    0 10px 20px rgba(226, 63, 18, .22);
+}
+
+.relay-login-app__submit.ant-btn-primary:not(:disabled):hover {
+  border-color: #f04d20;
+  background: #f04d20;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, .22) inset,
+    0 12px 24px rgba(226, 63, 18, .24);
+}
+
+.relay-login-app__provider-list {
+  display: grid;
+  gap: 8px;
+}
+
+.relay-login-app__provider-button.ant-btn-default,
+.relay-login-app__account-button.ant-btn-text {
+  justify-content: flex-start;
+  border-color: rgba(24, 31, 27, .16);
+  color: #111714;
+  background: rgba(255, 255, 253, .94);
+  box-shadow: 0 1px 2px rgba(6, 12, 10, .04);
+}
+
+.relay-login-app__provider-button.ant-btn-default:not(:disabled):hover,
+.relay-login-app__account-button.ant-btn-text:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--primary-color) 48%, transparent);
+  color: var(--primary-text-color);
+  background: #ffffff;
+}
+
+.relay-login-app__account-list.ant-list {
+  display: grid;
+  gap: 8px;
+}
+
+.relay-login-app__account-list .ant-list-item {
+  padding: 0;
+  border-block-end: 0;
+}
+
+.relay-login-app__account-button.ant-btn {
+  height: 54px;
+  padding: 8px 10px;
+}
+
+.relay-login-app__account-button > span:not(.ant-btn-icon) {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.relay-login-app__account-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  text-align: left;
+}
+
+.relay-login-app__account-copy strong,
+.relay-login-app__account-copy small,
+.relay-login-app__provider-button.ant-btn > span:not(.ant-btn-icon) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-login-app__account-copy small {
+  color: #64706a;
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.relay-login-app__error {
+  color: var(--danger-color, #dc2626);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.relay-login-app .relay-admin-icon,
+.relay-login-app__google-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 18px;
+  color: currentColor;
+  line-height: 0;
+  vertical-align: middle;
+}
+
+.relay-login-app .relay-admin-icon svg,
+.relay-login-app__google-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  fill: currentColor;
+}
+
+.relay-login-app .relay-admin-icon svg * {
+  fill: currentColor;
+}
+
+@media (max-width: 520px) {
+  .relay-login-app__section {
+    padding-inline: 18px;
+  }
+}

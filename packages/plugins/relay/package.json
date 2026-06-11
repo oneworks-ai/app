@@ -1,0 +1,248 @@
+{
+  "name": "@oneworks/plugin-relay",
+  "__oneWorksPluginManifest": true,
+  "displayName": "Account",
+  "type": "module",
+  "version": "0.1.0-alpha.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/plugins/relay"
+  },
+  "config": {
+    "schema": {
+      "type": "object",
+      "titleI18n": {
+        "en": "Account options",
+        "zh-Hans": "账号选项"
+      },
+      "descriptionI18n": {
+        "en": "Connect this workspace service to a self-hosted OneWorks relay.",
+        "zh-Hans": "把当前工作区服务连接到自部署的 OneWorks Relay。"
+      },
+      "properties": {
+        "activeServerId": {
+          "type": "string",
+          "titleI18n": {
+            "en": "Active server",
+            "zh-Hans": "默认连接服务"
+          },
+          "descriptionI18n": {
+            "en": "Default server id from the servers list.",
+            "zh-Hans": "servers 列表里的默认连接服务 id。"
+          },
+          "x-oneworks-ui": {
+            "icon": "radio_button_checked",
+            "placeholder": "prod"
+          }
+        },
+        "servers": {
+          "type": "array",
+          "titleI18n": {
+            "en": "Relay servers",
+            "zh-Hans": "认证链接服务列表"
+          },
+          "descriptionI18n": {
+            "en": "Multiple relay systems this device can connect to.",
+            "zh-Hans": "当前设备可连接的多个 Relay 系统。"
+          },
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "server": {
+                "type": "string"
+              },
+              "port": {
+                "type": "number"
+              },
+              "protocol": {
+                "type": "string",
+                "enum": [
+                  "https",
+                  "http"
+                ]
+              },
+              "baseUrl": {
+                "type": "string"
+              },
+              "pairingToken": {
+                "type": "string",
+                "format": "password"
+              }
+            }
+          },
+          "x-oneworks-ui": {
+            "icon": "hub"
+          }
+        },
+        "deviceName": {
+          "type": "string",
+          "titleI18n": {
+            "en": "Device name",
+            "zh-Hans": "设备名称"
+          },
+          "descriptionI18n": {
+            "en": "Name shown in the relay device list.",
+            "zh-Hans": "在 Relay 设备列表里展示的名称。"
+          },
+          "x-oneworks-ui": {
+            "icon": "devices",
+            "placeholder": "Office Mac"
+          }
+        },
+        "autoConnect": {
+          "type": "boolean",
+          "default": false,
+          "titleI18n": {
+            "en": "Auto connect",
+            "zh-Hans": "自动连接"
+          },
+          "descriptionI18n": {
+            "en": "Register with the configured relay when the plugin starts.",
+            "zh-Hans": "插件启动时自动向配置的 Relay 注册。"
+          },
+          "x-oneworks-ui": {
+            "icon": "power_settings_new"
+          }
+        },
+        "exposeSessions": {
+          "type": "boolean",
+          "default": true,
+          "titleI18n": {
+            "en": "Expose sessions",
+            "zh-Hans": "开放会话"
+          },
+          "descriptionI18n": {
+            "en": "Allow the relay to list and forward chat sessions for this device.",
+            "zh-Hans": "允许 Relay 查询并转发当前设备上的聊天会话。"
+          },
+          "x-oneworks-ui": {
+            "icon": "forum"
+          }
+        },
+        "exposeTerminal": {
+          "type": "boolean",
+          "default": false,
+          "titleI18n": {
+            "en": "Expose terminal",
+            "zh-Hans": "开放终端"
+          },
+          "descriptionI18n": {
+            "en": "Advertise terminal access capability to the relay. Keep disabled unless the remote service is trusted.",
+            "zh-Hans": "向 Relay 声明终端访问能力；仅在信任远端服务时开启。"
+          },
+          "x-oneworks-ui": {
+            "icon": "terminal"
+          }
+        },
+        "exposeWorkspaceFiles": {
+          "type": "boolean",
+          "default": false,
+          "titleI18n": {
+            "en": "Expose workspace files",
+            "zh-Hans": "开放工作区文件"
+          },
+          "descriptionI18n": {
+            "en": "Advertise workspace file access capability to the relay.",
+            "zh-Hans": "向 Relay 声明工作区文件访问能力。"
+          },
+          "x-oneworks-ui": {
+            "icon": "folder_open"
+          }
+        }
+      }
+    }
+  },
+  "plugin": {
+    "client": {
+      "root": "dist/client",
+      "entry": "dist/client/index.js"
+    },
+    "server": {
+      "entry": "dist/server/index.js"
+    },
+    "contributions": {
+      "navFooterBefore": [
+        {
+          "id": "home",
+          "title": "Account",
+          "titleI18n": {
+            "en": "Account",
+            "zh-Hans": "账号"
+          },
+          "descriptionI18n": {
+            "en": "Connect this workspace service to a self-hosted relay.",
+            "zh-Hans": "把当前工作区服务连接到自部署 Relay。"
+          },
+          "icon": "account_circle",
+          "route": "/plugins/relay/home"
+        }
+      ],
+      "navMoreMenu": [
+        {
+          "id": "connect",
+          "title": "Connect account",
+          "titleI18n": {
+            "en": "Connect account",
+            "zh-Hans": "连接账号"
+          },
+          "icon": "cloud_sync",
+          "command": "connect"
+        }
+      ],
+      "routes": [
+        {
+          "id": "home",
+          "title": "Account",
+          "titleI18n": {
+            "en": "Account",
+            "zh-Hans": "账号"
+          },
+          "icon": "account_circle",
+          "clientView": "home"
+        }
+      ],
+      "launcherSearchProviders": [
+        {
+          "id": "relay",
+          "title": "Account",
+          "titleI18n": {
+            "en": "Account",
+            "zh-Hans": "账号"
+          },
+          "command": "search"
+        }
+      ]
+    }
+  },
+  "exports": {
+    ".": "./package.json",
+    "./client": {
+      "source": "./src/client/index.ts",
+      "default": "./dist/client/index.js"
+    },
+    "./server": {
+      "source": "./src/server/index.ts",
+      "default": "./dist/server/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "README.md",
+    "dist",
+    "package.json",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublish": "pnpm build",
+    "test": "pnpm -C ../../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/plugins/relay/__tests__",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
+  }
+}

@@ -1,0 +1,99 @@
+.model-select-menu-composite {
+  --oneworks-overlay-icon-gap: 9px;
+  --oneworks-overlay-menu-width: 220px;
+  --model-select-menu-header-offset: calc(
+    var(--oneworks-overlay-control-height) + 2px
+  );
+
+  position: relative;
+  inline-size: calc(
+    var(--oneworks-overlay-menu-column-count, 1) *
+      var(--oneworks-overlay-menu-width, 220px) +
+      var(--oneworks-overlay-menu-column-gap-count, 0) *
+      var(--oneworks-overlay-item-gap)
+  );
+  max-inline-size: calc(100vw - 48px);
+}
+
+.model-select-popup:has(.model-select-browser) {
+  padding: 0 !important;
+  outline: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.model-select-menu-composite .oneworks-overlay-panel {
+  --oneworks-overlay-icon-gap: 9px;
+  --oneworks-overlay-menu-width: 220px;
+
+  inline-size: var(--oneworks-overlay-menu-width, 220px);
+}
+
+.model-select-menu-composite
+  .oneworks-overlay-panel:has(> .oneworks-overlay-menu-header) {
+  padding-block-start: 0;
+}
+
+.model-select-menu-composite .oneworks-overlay-menu-column.is-submenu {
+  position: absolute;
+  inset-block-start: var(--oneworks-overlay-menu-boundary-offset-y, 0px);
+  inset-inline-start: calc(
+    var(--oneworks-overlay-menu-level, 1) *
+      (
+      var(--oneworks-overlay-menu-width, 220px) +
+        var(--oneworks-overlay-item-gap)
+    )
+  );
+  margin-block-start: calc(
+    var(--model-select-menu-header-offset) +
+      var(--oneworks-overlay-menu-offset-rows, 0) *
+      var(--oneworks-overlay-nested-row-offset)
+  ) !important;
+}
+
+.model-select-menu-composite .oneworks-overlay-action {
+  --oneworks-overlay-icon-gap: 9px;
+}
+
+.model-select-menu.oneworks-overlay-menu-list,
+.model-select-submenu-panel .oneworks-overlay-menu-list {
+  inline-size: var(--oneworks-overlay-menu-width, 220px);
+  min-inline-size: var(--oneworks-overlay-menu-width, 220px);
+  max-inline-size: calc(100vw - 48px);
+}
+
+.model-select-submenu-panel .oneworks-overlay-menu-list {
+  max-block-size: min(216px, calc(100vh - 180px));
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.model-select-menu.ant-menu,
+.model-select-submenu-popup.ant-menu-submenu-popup > .ant-menu {
+  inline-size: max-content;
+  min-inline-size: max-content;
+  max-inline-size: calc(100vw - 48px);
+}
+
+.model-select-menu.oneworks-overlay-menu-list .oneworks-overlay-menu-item,
+.model-select-submenu-panel .oneworks-overlay-menu-item,
+.model-select-menu.ant-menu .ant-menu-item,
+.model-select-menu.ant-menu .ant-menu-submenu-title,
+.model-select-submenu-popup.ant-menu-submenu-popup .ant-menu-item,
+.model-select-submenu-popup.ant-menu-submenu-popup .ant-menu-submenu-title {
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: calc(100vw - 48px);
+}
+
+.model-select-menu.oneworks-overlay-menu-list .oneworks-overlay-menu-label,
+.model-select-submenu-panel .oneworks-overlay-menu-label,
+.model-select-menu.ant-menu .ant-menu-title-content,
+.model-select-submenu-popup.ant-menu-submenu-popup .ant-menu-title-content {
+  inline-size: auto;
+  flex: 1 1 auto;
+}

@@ -1,0 +1,18 @@
+{
+  "extends": "../../packages/tsconfigs/tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true
+  },
+  "include": [
+    "src/main/**/*.ts",
+    "src/preload/**/*.ts",
+    "src/builtin-adapter-cache.cjs",
+    "src/workspace-selector-page.cjs",
+    "src/workspace-state.cjs"
+  ]
+}

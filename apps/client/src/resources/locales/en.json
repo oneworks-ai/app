@@ -1,0 +1,3638 @@
+{
+  "common": {
+    "newChat": "New Chat",
+    "search": "Search title or ID...",
+    "sessions": "Sessions",
+    "knowledgeBase": "Data Assets",
+    "pluginStore": "Plugin Marketplace",
+    "scheduledTasks": "Scheduled Tasks",
+    "archive": "Archive",
+    "archivedSessions": "Archived Sessions",
+    "theme": "Theme Mode",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System",
+    "settings": "Settings",
+    "navigation": "Navigation",
+    "language": "Language",
+    "reset": "Reset",
+    "automation": "Automation",
+    "benchmark": "Benchmark",
+    "delete": "Delete",
+    "deleteSession": "Delete Session",
+    "deleteSessionConfirm": "Are you sure you want to delete this session? This action cannot be undone.",
+    "restore": "Restore",
+    "restoreSuccess": "Restored successfully",
+    "restoreFailed": "Failed to restore",
+    "batchRestore": "Batch Restore",
+    "batchRestoreSuccess": "Batch restored successfully",
+    "batchRestoreFailed": "Failed to restore some sessions",
+    "cancel": "Cancel",
+    "continue": "Continue",
+    "confirm": "Confirm",
+    "clear": "Clear",
+    "select": "Select",
+    "confirmAction": "Confirm {{action}}",
+    "startNewChat": "No active sessions found. Start a new chat!",
+    "backToHome": "Back to Home",
+    "noData": "No data",
+    "noSessions": "No matching sessions found",
+    "noArchivedSessions": "No archived sessions",
+    "sessionNotFound": "Session not found",
+    "roomNotFound": "Agent room not found",
+    "expand": "Expand sidebar",
+    "dragResize": "Drag to resize",
+    "selectOrCreateSession": "Please select or create a session to start chatting",
+    "batchMode": "Batch Mode",
+    "cancelBatch": "Cancel Batch Mode",
+    "batchArchive": "Batch Archive",
+    "archiveConfirm": "Are you sure you want to archive the selected {{count}} chats?",
+    "alreadyInNewChat": "You are already in a new chat",
+    "creatingChat": "Creating",
+    "batchDelete": "Batch Delete",
+    "batchDeleteSuccess": "Batch deleted successfully",
+    "batchDeleteFailed": "Failed to delete some sessions",
+    "selectedCount": "{{count}} sessions selected",
+    "selectAll": "Select all",
+    "deselectAll": "Deselect all",
+    "collapse": "Collapse sidebar",
+    "close": "Close",
+    "enterFullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen",
+    "sort": "Sort order",
+    "tags": "Tags",
+    "allTags": "All tags",
+    "allAdapters": "All adapters",
+    "searchActions": "Search and filters",
+    "expandItem": "Expand item",
+    "collapseItem": "Collapse item",
+    "expandChildren": "Expand children",
+    "collapseChildren": "Collapse children",
+    "expandGroup": "Expand group",
+    "collapseGroup": "Collapse group",
+    "childSummary": "{{count}} child sessions",
+    "childStatusItem": "{{count}} {{status}}",
+    "deleteConfirm": "Are you sure you want to delete the selected {{count}} chats?",
+    "deleteSuccess": "Deleted successfully",
+    "deleteFailed": "Failed to delete",
+    "operationFailed": "Operation failed",
+    "openInNewWindow": "Open in New Window",
+    "notSupportedYet": "Not supported yet",
+    "notifications": {
+      "queueLabel": "Notification queue",
+      "close": "Close message",
+      "mutePlugin": "Mute messages from {{plugin}}"
+    },
+    "copyFailed": "Copy failed",
+    "star": "Star",
+    "unstar": "Unstar",
+    "rename": "Rename",
+    "renameSession": "Rename session",
+    "addTag": "Tag",
+    "copySessionLink": "Copy session link",
+    "copySessionId": "Copy session ID",
+    "copyResumeCommand": "Copy resume command",
+    "copyWorkspacePath": "Copy workspace path",
+    "copySessionMarkdown": "Copy session as Markdown",
+    "forkCurrentWorkspace": "Fork to current workspace",
+    "deriveNewWorktree": "Derive to new worktree",
+    "createScheduledTask": "Create scheduled task",
+    "moreActions": "More actions",
+    "createdAt": "Created at",
+    "sessionLinkCopied": "Session link copied to clipboard",
+    "resumeCommandCopied": "Resume command copied to clipboard",
+    "sessionIdCopied": "Session ID copied to clipboard",
+    "workspacePathCopied": "Workspace path copied to clipboard",
+    "sessionMarkdownCopied": "Session Markdown copied to clipboard",
+    "doubleClickToCopy": "Double click to copy Session ID",
+    "status": {
+      "running": "Running",
+      "completed": "Done",
+      "failed": "Failed",
+      "terminated": "Stopped",
+      "waiting_input": "Waiting"
+    }
+  },
+  "navRail": {
+    "newChat": "New Chat",
+    "conversations": "Conversations",
+    "sessions": "Sessions",
+    "archivedSessions": "Archived Sessions",
+    "more": "Menu",
+    "settings": "Settings",
+    "theme": "Theme Mode",
+    "language": "Language",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "collapsePanel": "Collapse panel",
+    "back": "Back",
+    "forward": "Forward",
+    "updateAvailable": "Update available: {{version}}",
+    "updateDownloading": "Downloading update: {{progress}}",
+    "updateReady": "Restart to update: {{version}}",
+    "moduleUpdateAvailable": "Core/adapter updates available: {{count}}"
+  },
+  "moduleUpdates": {
+    "menuLabel": "Check Updates",
+    "title": "Check Updates",
+    "check": "Check Updates",
+    "checkFailed": "Failed to check module updates",
+    "installFailed": "Failed to install module update",
+    "installSuccess": "{{name}} {{version}} was written to the runtime cache",
+    "groupInstallFailed": "Failed to install group updates",
+    "groupInstallSuccess": "{{group}} updated {{count}} modules",
+    "channelSaved": "Update channel saved",
+    "channelSaveFailed": "Failed to save update channel",
+    "update": "Update",
+    "updateAll": "Update All",
+    "updateGroup": "Update Group",
+    "installing": "Updating",
+    "allInstalling": "Updating All",
+    "groupInstalling": "Updating",
+    "allInstallFailed": "Failed to install all module updates",
+    "allInstallSuccess": "Updated {{count}} modules",
+    "confirmTitle": "Review update changes",
+    "confirmBatchTitle": "Review {{count}} module updates",
+    "confirmOk": "Update",
+    "confirmCancel": "Cancel",
+    "reviewTitle": "Update Contents",
+    "reviewEmpty": "No updateable modules.",
+    "changelogSummaryTitle": "Update Contents",
+    "changelogSummaryRange": "{{count}} modules",
+    "changelogSummaryIntro": "This update will install **{{count}} modules**. The changes below are grouped by feature updates and fixes. They are written to the runtime cache first and take effect after the matching runtime restarts or a new session starts.",
+    "changelogSummaryFeatures": "Features",
+    "changelogSummaryFixes": "Fixes",
+    "changelogSummaryMarkers": {
+      "important": "Important",
+      "fix": "Fix",
+      "verification": "Verified",
+      "other": "Other"
+    },
+    "changelogSummaryOther": "Other Updates",
+    "changelogSummaryMoreItems": "{{count}} more items. Open the full changelog for details.",
+    "changelogSummaryGroups": "Scope",
+    "changelogSummaryVersions": "Version changes",
+    "changelogSummaryGroupCount": "{{count}} modules",
+    "changelogSummaryMultipleVersions": "multiple versions",
+    "changelogDetailTitle": "Changelog",
+    "changelogSummaryDetailHint": "Available package changelogs have been merged into this summary.",
+    "changelogSummaryMissingHint": "No package-level changelog was found for the exact version ranges, so this summary was generated from groups and version ranges.",
+    "changelogRange": "{{from}} -> {{to}}",
+    "changelogEntryTitle": "{{version}} changelog",
+    "changelogMissing": "No changelog was found for this version range.",
+    "reviewModulesTitle": "Module Details",
+    "reviewModulesIntro": "This update affects **{{count}} modules**. The module groups and version changes are listed below.",
+    "reviewModulesDescription": "View affected modules and version changes",
+    "reviewChangelogTitle": "Full Changelog",
+    "reviewChangelogIntro": "Raw package changelogs included in this update are listed below.",
+    "reviewChangelogDescription": "View each package's raw changelog",
+    "reviewDetailPagesTitle": "Details",
+    "cached": "Cached",
+    "upToDate": "Up to date",
+    "notChecked": "Not checked yet",
+    "summary": "{{total}} modules, {{available}} updateable, {{pendingActivation}} pending restart",
+    "groupSummary": "{{total}} modules, {{available}} updateable, {{pendingActivation}} pending activation",
+    "groupAvailableCount": "{{count}} updateable",
+    "groupPendingActivationCount": "{{count}} pending activation",
+    "defaultChannel": "Default Channel",
+    "groupChannelLabel": "{{group}} update channel",
+    "moduleChannelLabel": "{{name}} update channel",
+    "channelDefaultOption": "Follow global ({{channel}})",
+    "channelMixedOption": "Mixed",
+    "versionUnknown": "Unknown",
+    "channelOptions": {
+      "alpha": "Alpha",
+      "beta": "Beta",
+      "rc": "RC",
+      "stable": "Stable"
+    },
+    "kind": {
+      "adapter": "Adapter",
+      "client": "Client",
+      "plugin": "Plugin",
+      "runtime": "Runtime",
+      "server": "Server"
+    },
+    "groups": {
+      "adapter": "Adapters",
+      "core": "Core",
+      "plugin": "Plugins"
+    },
+    "status": {
+      "available": "Available",
+      "cached": "Cached",
+      "error": "Check Failed",
+      "pendingActivation": "Pending",
+      "upToDate": "Latest"
+    },
+    "versions": {
+      "current": "Current {{version}}",
+      "cached": "Cached {{version}}",
+      "latest": "Latest {{version}}",
+      "channel": "Channel {{channel}}"
+    },
+    "activation": {
+      "newSession": "New sessions use the cached version after update.",
+      "restart": "Restart the corresponding runtime after update."
+    }
+  },
+  "interactionStructure": {
+    "searchPlaceholder": "Search this entry...",
+    "empty": "No matching structure data",
+    "filter": {
+      "label": "Structure list filter",
+      "all": "All",
+      "active": "Active",
+      "done": "Done"
+    },
+    "filterRoutes": {
+      "requests": {
+        "label": "Request type filter",
+        "all": "All requests",
+        "stateLabel": "Request status filter",
+        "stateAll": "All states",
+        "priorityLabel": "Priority filter",
+        "priorityAll": "All priorities",
+        "priority": {
+          "high": "High priority",
+          "medium": "Medium priority",
+          "low": "Low priority"
+        },
+        "channelLabel": "Source filter",
+        "channelAll": "All sources",
+        "channel": {
+          "web": "Web",
+          "extension": "Plugin",
+          "navigation": "Navigation"
+        },
+        "states": {
+          "active": "Active",
+          "done": "Done"
+        }
+      },
+      "resources": {
+        "label": "Resource type filter",
+        "all": "All resources",
+        "stateLabel": "Resource status filter",
+        "stateAll": "All states",
+        "sourceLabel": "Resource source filter",
+        "sourceAll": "All sources",
+        "source": {
+          "design": "Design assets",
+          "server": "Server",
+          "docs": "Docs"
+        },
+        "freshnessLabel": "Freshness filter",
+        "freshnessAll": "All freshness",
+        "freshness": {
+          "current": "Current",
+          "archived": "Archived"
+        },
+        "states": {
+          "pending": "Pending sync",
+          "archived": "Archived"
+        }
+      },
+      "operations": {
+        "label": "Operation lane filter",
+        "all": "All lanes",
+        "stateLabel": "Lane status filter",
+        "stateAll": "All states",
+        "cadenceLabel": "Cadence filter",
+        "cadenceAll": "All cadences",
+        "cadence": {
+          "nightly": "Nightly",
+          "daily": "Daily",
+          "weekly": "Weekly"
+        },
+        "ownerLabel": "Owner filter",
+        "ownerAll": "All owners",
+        "owner": {
+          "system": "System",
+          "product": "Product"
+        },
+        "states": {
+          "running": "Running",
+          "archived": "Archived"
+        }
+      }
+    },
+    "actions": {
+      "archiveOperation": "Archive lane",
+      "archiveResource": "Archive resource",
+      "bookmarkResource": "Add to resource set",
+      "convertToTask": "Convert to task",
+      "copyResourceReference": "Copy resource reference",
+      "createFollowUp": "Create follow-up",
+      "markDone": "Mark done",
+      "openResource": "Open resource",
+      "pauseOperation": "Pause lane",
+      "pinOperation": "Pin lane",
+      "runOperation": "Run check",
+      "syncResource": "Sync resource",
+      "unbookmarkResource": "Remove from resource set",
+      "unpinOperation": "Unpin lane",
+      "viewRunLog": "View run log"
+    },
+    "selection": {
+      "selectedTotal": "{{selected}}/{{total}} selected"
+    },
+    "itemState": {
+      "starred": "Starred"
+    },
+    "navigationMenu": {
+      "hideEntry": "Hide {{entry}}",
+      "showAllEntries": "Show all entries",
+      "visibleEntries": "Choose visible entries"
+    },
+    "moreMenuContext": {
+      "configureActions": "Configure menu actions",
+      "hideArchiveAction": "Hide archive action"
+    },
+    "debugTools": {
+      "title": "Mock debug tools",
+      "platform": "App",
+      "platformFieldLabel": "Mock system",
+      "platformMacos": "macOS",
+      "platformWindows": "Windows",
+      "platformWeb": "Web",
+      "fullscreen": "Fullscreen",
+      "fullscreenFieldLabel": "Mock fullscreen",
+      "fullscreenOn": "On",
+      "fullscreenOff": "Off"
+    },
+    "panels": {
+      "closeTab": "Close {{title}}",
+      "contextMenu": {
+        "keepOnlyTab": "Keep only {{tab}}",
+        "openAllTabs": "Open all {{panel}} tabs",
+        "resetDefaultPage": "Return to {{panel}} default page",
+        "resetDefaultTab": "Restore default {{panel}} tab",
+        "selectTab": "Switch to {{tab}}",
+        "tabMetadata": "{{panel}} / {{tab}}"
+      },
+      "create": {
+        "label": "Create panel content",
+        "summaryTab": "Open structure summary",
+        "routeTab": "Open entry context",
+        "itemTab": "Open selected item",
+        "itemDisabled": "Select a sidebar item first",
+        "entryTemplates": "Create by entry",
+        "templates": "Template group",
+        "customTitle": "Custom rendered entry",
+        "customDescription": "{{entry}} injects this menu item and can replace it with any renderer.",
+        "requests": {
+          "requirement": "New request card",
+          "followUp": "New follow-up",
+          "experienceTemplate": "Experience template",
+          "pluginTemplate": "Plugin audit template"
+        },
+        "resources": {
+          "importResource": "Import resource",
+          "referenceDoc": "New reference document",
+          "source": "Create by source",
+          "designSource": "Design source",
+          "serverSource": "Server source",
+          "docsSource": "Docs source"
+        },
+        "operations": {
+          "scheduledLane": "New scheduled lane",
+          "monitorView": "New monitor view",
+          "cadence": "Create by cadence",
+          "cadenceNightly": "Nightly task",
+          "cadenceDaily": "Daily task",
+          "cadenceWeekly": "Weekly task"
+        }
+      },
+      "side": {
+        "open": "Open side region",
+        "close": "Close side region",
+        "resize": "Drag to resize side region",
+        "kicker": "Side slot",
+        "title": "Structure context",
+        "tabs": {
+          "summary": "Structure summary",
+          "route": "Entry context",
+          "item": "Selected item"
+        },
+        "rows": {
+          "route": "Entry",
+          "metric": "Metric",
+          "path": "Path",
+          "item": "Selected item",
+          "component": "Component"
+        }
+      },
+      "bottom": {
+        "open": "Open bottom panel",
+        "close": "Close bottom panel",
+        "resize": "Drag to resize bottom panel",
+        "title": "Route bottom panel",
+        "defaultItem": "Entry default page",
+        "tabs": {
+          "summary": "Panel summary",
+          "route": "Path context",
+          "item": "Current item"
+        },
+        "rows": {
+          "path": "Current path",
+          "item": "Current item",
+          "slot": "Render slot"
+        }
+      }
+    },
+    "overview": {
+      "defaultPage": "Entry default page"
+    },
+    "detail": {
+      "sections": {
+        "structure": "Structure State",
+        "behavior": "Component Interfaces",
+        "scroll": "Scroll Content"
+      },
+      "rows": {
+        "routeSlot": {
+          "title": "Route slot",
+          "description": "{{route}} passes only the path and selected item to the external renderer instead of owning page content."
+        },
+        "activeItem": {
+          "title": "Selected item",
+          "description": "{{item}} is written to the URL from the left list, and the right side swaps independent content from it."
+        },
+        "headerState": {
+          "title": "Header mode",
+          "description": "The current detail component is {{component}}, so title, breadcrumbs, and right actions can be configured separately."
+        },
+        "containerPadding": {
+          "title": "Container spacing",
+          "description": "The page top spacing reuses header tokens to avoid maintaining header and content sizes separately."
+        },
+        "componentSwitch": {
+          "title": "Content switch",
+          "description": "{{item}} renders from test data configuration and stays decoupled from the route container layout."
+        },
+        "sidebarLink": {
+          "title": "Sidebar entry",
+          "description": "{{route}} can override list data, filters, and context menus from entry configuration."
+        },
+        "filterState": {
+          "title": "Filter state",
+          "description": "The current item carries its own filter tokens, while each entry can configure multiple filter groups."
+        },
+        "contextActions": {
+          "title": "Context actions",
+          "description": "Context menus and batch actions come from the entry action list; the generic List only triggers them."
+        },
+        "batchSelection": {
+          "title": "Batch selection",
+          "description": "When multi-select is active, pages can mount their own batch actions without teaching List business meaning."
+        },
+        "itemRenderer": {
+          "title": "Item renderer",
+          "description": "List item icons, actions, meta, and children come from external render configuration."
+        },
+        "scrollTrace": {
+          "title": "Scroll check {{count}}",
+          "description": "Mock content for {{route}} / {{item}} to verify fixed header behavior, body scrolling, and bottom spacing."
+        }
+      }
+    },
+    "itemMetrics": {
+      "coverage": "Coverage",
+      "owner": "Owner",
+      "progress": "Progress",
+      "queue": "Queue",
+      "risk": "Risk",
+      "sla": "SLA",
+      "version": "Version"
+    },
+    "itemMetricValues": {
+      "medium": "Medium",
+      "reviewed": "Reviewed",
+      "running": "Running",
+      "synced": "Synced"
+    },
+    "routes": {
+      "requests": {
+        "activeLabel": "Current Request Entry",
+        "label": "Request Entry",
+        "description": "Collect conversations, reviews, and ad hoc work.",
+        "metric": "3 request groups",
+        "searchPlaceholder": "Search requests, sources, or priorities..."
+      },
+      "resources": {
+        "activeLabel": "Current Resource Entry",
+        "label": "Resource Entry",
+        "description": "Gather docs, design assets, and API references.",
+        "metric": "3 resource types",
+        "searchPlaceholder": "Search resources, APIs, or docs..."
+      },
+      "operations": {
+        "activeLabel": "Current Operations Entry",
+        "label": "Operations Entry",
+        "description": "Track recurring tasks, checks, and regression queues.",
+        "metric": "3 flows",
+        "searchPlaceholder": "Search flows, queues, or owners..."
+      }
+    },
+    "items": {
+      "requestCheckout": {
+        "title": "Checkout experience alignment",
+        "description": "Map the core desktop and web steps.",
+        "meta": "Today",
+        "tag": "Experience"
+      },
+      "requestCheckoutMobile": {
+        "title": "Mobile breakpoint check",
+        "description": "Verify primary interactions under 860px.",
+        "meta": "12:20",
+        "tag": "Mobile"
+      },
+      "requestCheckoutCopy": {
+        "title": "Empty state copy pass",
+        "description": "Replace temporary text with reusable copy.",
+        "meta": "Yesterday",
+        "tag": "Copy"
+      },
+      "requestPluginAudit": {
+        "title": "Plugin action audit",
+        "description": "Cover install, disable, and error paths.",
+        "meta": "2h ago",
+        "tag": "Plugin"
+      },
+      "requestNavigationRefresh": {
+        "title": "Navigation structure review",
+        "description": "Align sidebar switching with the right container.",
+        "meta": "Monday",
+        "tag": "Structure"
+      },
+      "assetDesignSystem": {
+        "title": "Design system references",
+        "description": "Component states, spacing, and color references.",
+        "meta": "4 items",
+        "tag": "Design"
+      },
+      "assetTokens": {
+        "title": "Theme token table",
+        "description": "Align dark and light variables.",
+        "meta": "Updating",
+        "tag": "Theme"
+      },
+      "assetCopyDeck": {
+        "title": "Standard copy cards",
+        "description": "Reusable titles, hints, and empty states.",
+        "meta": "Reviewed",
+        "tag": "Copy"
+      },
+      "assetApiCatalog": {
+        "title": "API catalog",
+        "description": "Map page entries to server contracts.",
+        "meta": "18 rows",
+        "tag": "API"
+      },
+      "assetReleaseNotes": {
+        "title": "Release note template",
+        "description": "Record user-visible changes and checks.",
+        "meta": "Archived",
+        "tag": "Release"
+      },
+      "opsNightlyRun": {
+        "title": "Nightly sync task",
+        "description": "Collect data status and generate a summary.",
+        "meta": "Running",
+        "tag": "Schedule"
+      },
+      "opsDataSnapshot": {
+        "title": "Data snapshot",
+        "description": "Pull key state and incremental records.",
+        "meta": "Collecting",
+        "tag": "Data"
+      },
+      "opsDigestPublish": {
+        "title": "Digest publish",
+        "description": "Generate the sync summary and send it to the entry.",
+        "meta": "Pending publish",
+        "tag": "Digest"
+      },
+      "opsReviewLoop": {
+        "title": "Review loop",
+        "description": "Track waiting, blocked, and done states.",
+        "meta": "5 nodes",
+        "tag": "Flow"
+      },
+      "opsTriageQueue": {
+        "title": "Triage queue",
+        "description": "Sort outside feedback into the right entry.",
+        "meta": "3 items",
+        "tag": "Queue"
+      },
+      "opsRegressionWatch": {
+        "title": "Regression watch",
+        "description": "Keep the latest verification result.",
+        "meta": "Passed",
+        "tag": "Regression"
+      },
+      "opsArchiveSweep": {
+        "title": "Archive sweep",
+        "description": "Organize done items and retain links.",
+        "meta": "Done",
+        "tag": "Archive"
+      }
+    }
+  },
+  "desktopStartupOverlay": {
+    "eyebrow": "OneWorks",
+    "title": "Setting up your project",
+    "defaultTip": "Warming up the project context.",
+    "tips": {
+      "quickFind": "Tip: quick search jumps straight to actions, sessions, and files.",
+      "dragFiles": "Drop files into the composer to skip typing long paths.",
+      "newWindow": "Right-click a session to open it in a new window for side-by-side work.",
+      "slashCommand": "Type / to find common commands and workflows.",
+      "sidePanel": "When the sidebar is collapsed, the top bar takes over navigation.",
+      "terminal": "The bottom panel keeps terminals and web tabs where you left them.",
+      "context": "Referencing exact files means fewer guesses and better context.",
+      "glass": "If you can see the skeleton through the glass, the frontend is waking up."
+    }
+  },
+  "launcher": {
+    "senderLabel": "Launcher input",
+    "senderPlaceholder": "Type a project to open or start...",
+    "searchLabel": "Search projects and actions",
+    "searchPlaceholder": "Search projects or actions...",
+    "commandListLabel": "Launcher actions",
+    "commandFailed": "Failed to run action",
+    "noResults": "No matching projects or actions",
+    "shortcutDisabled": "Not set",
+    "desktopActionUnavailable": "Desktop launch actions are not available in this environment",
+    "openWorkspaceFailed": "Failed to open project",
+    "createWorkspaceFailed": "Failed to create project",
+    "createWorkspaceNamePlaceholder": "Enter a new project folder name",
+    "createWorkspaceNameSearchLabel": "Enter a new project folder name",
+    "createWorkspaceNameRequired": "Enter a new project folder name",
+    "createWorkspaceParentRequired": "Choose where to create the project",
+    "cloneRepositoryPromptTitle": "Clone Remote Repository",
+    "cloneRepositoryUrlPlaceholder": "Enter a Git repository URL",
+    "cloneRepositorySearchLabel": "Enter a Git repository URL",
+    "cloneRepositoryUrlRequired": "Enter a Git repository URL",
+    "cloneRepositoryDestinationRequired": "Choose a clone destination folder",
+    "cloneRepositoryCloning": "Cloning into {{path}}...",
+    "cloneRepositorySuccess": "Repository cloned",
+    "cloneRepositoryFailed": "Failed to clone repository",
+    "cloneRepositoryDestinationTitle": "Clone into",
+    "cloneRepositoryDestinationTooltip": "Current folder: {{path}}",
+    "cloneRepositoryDestinationLoading": "Loading folders...",
+    "cloneRepositoryDestinationEmpty": "No child folders",
+    "cloneRepositoryDestinationFailed": "Failed to load folders",
+    "cloneRepositoryFavoriteDestination": "Favorite this folder",
+    "cloneRepositoryUnfavoriteDestination": "Unfavorite this folder",
+    "directoryBrowserTooltip": "Current folder: {{path}}",
+    "directoryBrowserLoading": "Loading folders...",
+    "directoryBrowserEmpty": "No child folders",
+    "directoryBrowserFailed": "Failed to load folders",
+    "directoryBreadcrumbLabel": "Current folder path",
+    "directoryNameCopied": "Folder name copied",
+    "directoryPathCopied": "Folder path copied",
+    "favoriteDirectory": "Favorite this folder",
+    "unfavoriteDirectory": "Unfavorite this folder",
+    "openWorkspaceSearchPlaceholder": "Search folder paths in this list...",
+    "openWorkspaceSearchLabel": "Search folder paths",
+    "comingSoon": "This entry is still being connected",
+    "files": {
+      "title": "Files",
+      "globalTitle": "File Search",
+      "rootLabel": "Computer",
+      "searchLabel": "Search files",
+      "searchPlaceholder": "Search files in {{project}}...",
+      "globalSearchPlaceholder": "Search files or folders from the computer root...",
+      "inputHint": "Type a file name or path to search this project",
+      "globalInputHint": "Type a file name or path to search from the computer root",
+      "searching": "Searching files...",
+      "noResults": "No matching files or folders",
+      "searchFailed": "Failed to search files",
+      "openFailed": "Failed to open file",
+      "folderBadge": "Folder",
+      "externalBadge": "External",
+      "loadingOpeners": "Loading available apps...",
+      "openWithDefault": "Open with default app",
+      "openWithDefaultNamed": "Open with default app ({{name}})",
+      "openWithNamed": "Open with {{name}}"
+    },
+    "resource": {
+      "searchPlaceholder": "Search files, sessions, terminals, or websites in {{project}}...",
+      "createTitle": "Create",
+      "sessionsTitle": "Sessions",
+      "websitesTitle": "Websites",
+      "terminalsTitle": "Terminals",
+      "newSession": "New Session Tab",
+      "newSessionHint": "Open a session page in the current chat window",
+      "newTerminal": "New Terminal Tab",
+      "newTerminalHint": "Create a terminal in the bottom panel",
+      "newWebsite": "New Website Tab",
+      "newWebsiteHint": "Create a browser page in the bottom panel",
+      "tabBadge": "Tab",
+      "fileBadge": "In app",
+      "sessionBadge": "Session",
+      "websiteBadge": "Web",
+      "terminalBadge": "Terminal"
+    },
+    "start": {
+      "title": "Start",
+      "newProjectFolder": "New Project",
+      "newProjectFolderHint": "Create a local folder and open it as a project",
+      "openFolder": "Open Project",
+      "openFolderHint": "Choose a local project directory",
+      "cloneRepository": "Clone Remote Repository",
+      "cloneRepositoryHint": "Create a project from a Git repository",
+      "connectRemoteService": "Link Remote Service",
+      "connectRemoteServiceHint": "Connect an existing OneWorks service"
+    },
+    "projects": {
+      "copyName": "Copy name",
+      "copyPath": "Copy path",
+      "fileExplorer": "File Explorer",
+      "fileManager": "file manager",
+      "nameCopied": "Project name copied",
+      "open": "Open project",
+      "openFolder": "Open in file manager",
+      "pathCopied": "Project path copied",
+      "revealFailed": "Failed to show project in {{manager}}",
+      "revealInFileManager": "Show in {{manager}}",
+      "remove": "Remove project",
+      "removeConfirmDescription": "This only removes the project from the recent list. The folder stays on disk and can be opened again later.",
+      "removeConfirmOk": "Remove",
+      "removeConfirmTitle": "Remove {{name}} from the launcher?",
+      "removeFailed": "Failed to remove project",
+      "title": "Projects"
+    },
+    "menu": {
+      "open": "Open OneWorks menu",
+      "settings": "Settings",
+      "about": "About",
+      "checkUpdate": "Check Updates",
+      "language": "Language",
+      "projectRequired": "Open or focus a project before opening Settings or About",
+      "openFailed": "Failed to open this workspace page"
+    },
+    "settings": {
+      "title": "Launcher Settings",
+      "searchLabel": "Search launcher settings",
+      "searchPlaceholder": "Search settings...",
+      "listLabel": "Launcher settings",
+      "sectionsLabel": "Launcher setting sections",
+      "empty": "No matching settings",
+      "resetSection": "Reset {{section}}",
+      "sectionShortcutTooltip": "Press {{shortcut}} to switch to {{section}}",
+      "sections": {
+        "general": "General",
+        "behavior": "Behavior",
+        "appearance": "Appearance",
+        "icon": "Icon"
+      },
+      "items": {
+        "theme": {
+          "title": "Theme mode",
+          "desc": "Switch the launcher and main UI between light, dark, or system mode"
+        },
+        "textSize": {
+          "title": "Text size",
+          "desc": "Adjust text size inside the launcher",
+          "default": "Default",
+          "large": "Large"
+        },
+        "windowMode": {
+          "title": "Window mode",
+          "desc": "Switch the launcher between default and compact window layouts",
+          "default": "Default",
+          "compact": "Compact"
+        },
+        "favorites": {
+          "title": "Show favorites in compact mode",
+          "desc": "Keep favorites visible in the compact launcher window"
+        },
+        "language": {
+          "title": "Interface language",
+          "desc": "Quickly switch the current interface language"
+        },
+        "shortcut": {
+          "title": "Launcher shortcut",
+          "desc": "Press a shortcut to summon the launcher"
+        },
+        "launchAtLogin": {
+          "title": "Launch at login",
+          "desc": "Start OneWorks automatically after signing in"
+        },
+        "openLastWorkspaceOnStartup": {
+          "title": "Open last project at startup",
+          "desc": "Open the most recent project on normal app startup; otherwise show the launcher"
+        },
+        "autoUpdate": {
+          "title": "Automatic updates",
+          "desc": "Automatically check for and download desktop updates for the current project"
+        },
+        "updateChannel": {
+          "title": "Update channel",
+          "desc": "Choose Stable, RC, Beta, or Alpha for the current project's desktop updates"
+        },
+        "statusPin": {
+          "title": "Pin icon",
+          "desc": "Show a Pin icon in the system status area for quick launcher access",
+          "descMac": "Show a Pin icon in the macOS menu bar for quick launcher access",
+          "descWindows": "Show a Pin icon in the Windows system tray for quick launcher access"
+        },
+        "hideAfterAction": {
+          "title": "Hide after action",
+          "desc": "Collapse the launcher after opening a project, file, or session"
+        },
+        "currentProject": {
+          "title": "Show current project",
+          "desc": "Prefer the focused project context when a project window is active"
+        },
+        "resourceSearch": {
+          "title": "Search project resources",
+          "desc": "Search files, sessions, terminals, and websites in the current project"
+        },
+        "footerHints": {
+          "title": "Footer key hints",
+          "desc": "Show available actions for the selected item in the lower right"
+        },
+        "appIcon": {
+          "title": "App icon",
+          "desc": "Choose the app icon theme and background used by the launcher",
+          "syncLabel": "Sync desktop icon",
+          "syncDesc": "Update the desktop, Dock, or taskbar icon when the icon theme changes"
+        }
+      }
+    },
+    "about": {
+      "title": "About",
+      "searchLabel": "About OneWorks",
+      "searchPlaceholder": "About OneWorks",
+      "listLabel": "About OneWorks"
+    },
+    "footer": {
+      "settings": "Settings",
+      "help": "Help",
+      "more": "More"
+    },
+    "footerHints": {
+      "label": "Keyboard actions for the selected item",
+      "section": "Section",
+      "move": "Move",
+      "open": "Open",
+      "toggle": "Toggle",
+      "adjust": "Adjust",
+      "edit": "Edit",
+      "create": "Create",
+      "clone": "Clone",
+      "openDirectory": "Open folder",
+      "context": "Menu",
+      "contextKey": "Right click",
+      "fileSearch": "Files",
+      "close": "Close",
+      "back": "Back"
+    },
+    "recent": {
+      "title": "Recent Projects",
+      "empty": "No recent projects",
+      "more": "More..."
+    }
+  },
+  "auth": {
+    "title": "Sign in to OneWorks",
+    "subtitle": "Use a configured account to continue into this workspace.",
+    "username": "Username",
+    "usernamePlaceholder": "Enter username",
+    "usernameRequired": "Enter username",
+    "password": "Password",
+    "passwordPlaceholder": "Enter password",
+    "passwordRequired": "Enter password",
+    "rememberDevice": "Remember this device",
+    "login": "Sign in",
+    "loginFailed": "Sign in failed",
+    "statusFailed": "Could not load sign-in status",
+    "statusFailedHelp": "Make sure the backend service is still running, then retry.",
+    "statusTimeout": "Timed out while loading sign-in status. Make sure the backend service is still running, then retry.",
+    "retryStatus": "Retry",
+    "accountMenu": "Account and connection",
+    "changeServer": "Switch backend",
+    "logout": "Sign out of this server",
+    "logoutFailed": "Sign out failed",
+    "generatedPasswordTitle": "Using an auto-generated local password",
+    "generatedPasswordDescription": "Find the password in the local password file, or configure fixed accounts in webAuth.accounts.",
+    "generatedPasswordHint": "Default password file: {{path}}"
+  },
+  "serverConnection": {
+    "title": "Connect your backend",
+    "subtitle": "Start the backend on the computer running OneWorks, then paste the service address shown in the terminal.",
+    "desktopTitle": "Switch backend",
+    "desktopSubtitle": "The desktop app already started a local service on this device. You can also connect to other OneWorks backends and switch execution environments from the same Electron app.",
+    "setupTitle": "Run this on your computer",
+    "setupDescription": "Copy the http or https address shown in the terminal. For advanced network setups, see ",
+    "docsLink": "the PWA deployment guide",
+    "localServiceTitle": "Built-in local service",
+    "localServiceBannerDescription": "Electron started this local service automatically on the current device, so no extra sign-in is required.",
+    "localServiceAlias": "This device",
+    "localServiceProfileDescription": "Local service started automatically by Electron",
+    "serverUrl": "Backend service address",
+    "serverScheme": "Backend service protocol",
+    "serverUrlPlaceholder": "Paste the service address from the terminal",
+    "serverUrlRequired": "Enter the backend service address",
+    "invalidUrl": "Enter a valid http or https address",
+    "connectionFailed": "Could not connect to that backend service. Make sure it is running and allows cross-origin requests.",
+    "unsupportedServerVersion": "This backend version is not supported. The PWA version is {{clientVersion}}, and the backend version is {{serverVersion}}.",
+    "recentTitle": "Saved backend services",
+    "manageProfile": "Manage backend service",
+    "serverVersion": "Backend {{version}}",
+    "serverVersionUnknown": "unknown version",
+    "profileAlias": "Alias",
+    "profileAliasPlaceholder": "For example, Home computer",
+    "profileDescription": "Description",
+    "profileDescriptionPlaceholder": "For example, Tailscale private network or desktop at home",
+    "loginState": "Sign-in state",
+    "loginSaved": "Saved sign-in",
+    "loginMissing": "No saved sign-in",
+    "clearLoginState": "Clear sign-in state",
+    "clearLoginStateConfirm": "Only clears the sign-in state saved in this browser.",
+    "removeProfile": "Remove record",
+    "removeProfileConfirm": "Removes this record and its local sign-in state.",
+    "connect": "Connect"
+  },
+  "automation": {
+    "title": "Automation",
+    "newRule": "New Rule",
+    "newTask": "New Task",
+    "creatingRule": "Creating",
+    "editRule": "Edit Rule",
+    "createMode": "Creation mode",
+    "createModeForm": "Form",
+    "createModeChat": "Chat",
+    "searchRule": "Search tasks",
+    "favorite": "Favorite",
+    "unfavorite": "Unfavorite",
+    "toggleEnabled": "Enable/Disable",
+    "noDescription": "No description",
+    "runSearch": "Search runs",
+    "runFilters": "Filter runs",
+    "runOptions": "Run options",
+    "statusAll": "All statuses",
+    "timeRange": "Time range",
+    "timeAll": "All time",
+    "time24h": "Last 24 hours",
+    "time7d": "Last 7 days",
+    "time30d": "Last 30 days",
+    "sortOrder": "Sort order",
+    "sortDesc": "Newest first",
+    "sortAsc": "Oldest first",
+    "triggerCount": "{{count}} triggers",
+    "basicDesc": "Describe purpose and toggle the rule on or off",
+    "sectionBasic": "Basic Info",
+    "sectionTriggers": "Triggers",
+    "sectionTasks": "Tasks",
+    "sectionStartup": "Startup Parameters",
+    "startupSummaryDefault": "Use default startup parameters",
+    "startupDefault": "Default",
+    "startupAdapter": "Adapter",
+    "startupDefaultAdapter": "Use default adapter",
+    "startupModel": "Model",
+    "startupDefaultModel": "Use default model",
+    "defaultModelLabel": "Default model",
+    "startupNoModels": "No models available",
+    "startupEffort": "Reasoning Effort",
+    "startupPermissionMode": "Permission Mode",
+    "startupWorkspace": "Workspace",
+    "startupBranchAction": "Branch Action",
+    "startupBranchKind": "Branch Source",
+    "startupBranchName": "Branch Name",
+    "startupBranchNameRequired": "Enter a branch name",
+    "startupBranchNamePlaceholder": "Example: codex/automation-nightly",
+    "startupUseManagedWorktree": "Create managed worktree",
+    "startupUseCurrentWorkspace": "Use current workspace",
+    "startupBranchDefault": "Do not set branch",
+    "startupBranchCheckout": "Check out existing branch",
+    "startupBranchCreate": "Create new branch",
+    "startupBranchKindLocal": "Local branch",
+    "startupBranchKindRemote": "Remote branch",
+    "startupSummaryAdapter": "Adapter: {{value}}",
+    "startupSummaryModel": "Model: {{value}}",
+    "startupSummaryEffort": "Effort: {{value}}",
+    "startupSummaryPermission": "Permission: {{value}}",
+    "startupSummaryCheckoutBranch": "Checkout: {{value}}",
+    "startupSummaryCreateBranch": "New branch: {{value}}",
+    "startupSummaryBranchKind": "Branch source: {{value}}",
+    "effortLow": "Low",
+    "effortMedium": "Medium",
+    "effortHigh": "High",
+    "effortMax": "Max",
+    "permissionAcceptEdits": "Accept edits",
+    "permissionPlan": "Plan",
+    "permissionDontAsk": "Do not ask",
+    "permissionBypassPermissions": "Bypass permissions",
+    "ruleName": "Rule Name",
+    "ruleNameRequired": "Enter a rule name",
+    "ruleDescription": "Description",
+    "ruleDescriptionPlaceholder": "Enter a description",
+    "immediateRun": "Run Immediately",
+    "ruleType": "Trigger Type",
+    "ruleTypeRequired": "Select a trigger type",
+    "typeInterval": "Interval",
+    "typeWebhook": "Webhook",
+    "typeCron": "Cron",
+    "intervalMinutes": "Interval (minutes)",
+    "intervalRequired": "Enter an interval",
+    "webhookKey": "Webhook Key",
+    "webhookKeyHint": "Leave empty to auto-generate",
+    "cronExpressionLabel": "Cron Expression",
+    "cronExpressionRequired": "Enter a cron expression",
+    "cronExpressionHint": "Example: 0 9 * * 1",
+    "cronExpression": "Cron: {{expression}}",
+    "cronPreset": "Presets",
+    "cronPresetHint": "Choose a preset",
+    "cronPresetHourly": "Hourly",
+    "cronPresetDaily9": "Daily at 09:00",
+    "cronPresetWeekday9": "Weekdays at 09:00",
+    "cronPresetWeekend10": "Weekend at 10:00",
+    "cronInputHint": "Enter cron directly, or use weekly fields below to generate one",
+    "weeklyDay": "Weekly Day",
+    "weeklyTime": "Time (HH:mm)",
+    "weeklyTimeHint": "Example: 09:00",
+    "weekdaySun": "Sun",
+    "weekdayMon": "Mon",
+    "weekdayTue": "Tue",
+    "weekdayWed": "Wed",
+    "weekdayThu": "Thu",
+    "weekdayFri": "Fri",
+    "weekdaySat": "Sat",
+    "triggerAny": "Trigger when any condition matches",
+    "taskAll": "Run all tasks when triggered",
+    "addTrigger": "Add Trigger",
+    "addTask": "Add Task",
+    "remove": "Remove",
+    "taskDefaultTitle": "Task {{index}}",
+    "taskTitle": "Task Title",
+    "taskTitlePlaceholder": "Optional, for distinguishing tasks",
+    "collapseTask": "Collapse task content",
+    "expandTask": "Expand task content",
+    "taskIndex": "Task {{index}}",
+    "taskCount": "{{count}} tasks",
+    "taskUnknown": "Untitled Task",
+    "webhookUrl": "Webhook URL",
+    "prompt": "Task Prompt",
+    "promptRequired": "Enter the task prompt",
+    "trigger": "Trigger",
+    "webhookTrigger": "Webhook",
+    "intervalEvery": "Every {{minutes}} min",
+    "enabled": "Enabled",
+    "enabledStatus": "Enabled Status",
+    "ruleStatus": "Rule Status",
+    "lastRunLabel": "Last Run",
+    "lastRun": "Last Run",
+    "lastRunAt": "Last run: {{time}}",
+    "noRunYet": "No runs yet",
+    "emptyRules": "No automation rules",
+    "createRuleLink": "Create automation",
+    "mobileRules": "Rules",
+    "mobileDetails": "Details",
+    "collapseRulePanel": "Collapse rule list",
+    "expandRulePanel": "Expand rule list",
+    "selectRule": "Select an automation rule",
+    "ruleId": "Rule ID",
+    "createdAt": "Created At",
+    "enabledOn": "Enabled",
+    "enabledOff": "Disabled",
+    "noTriggers": "No triggers",
+    "noTasks": "No tasks",
+    "runHistory": "Run History",
+    "runTime": "Run Time",
+    "runStatus": "Status",
+    "runSummary": "Summary",
+    "session": "Session",
+    "relatedSession": "Related Session",
+    "openSession": "Open Session",
+    "noRuns": "No runs yet",
+    "actions": "Actions",
+    "run": "Run Now",
+    "edit": "Edit",
+    "delete": "Delete",
+    "copy": "Copy",
+    "webhookCopied": "Webhook copied",
+    "created": "Rule created",
+    "updated": "Rule updated",
+    "deleted": "Rule deleted",
+    "saveFailed": "Save failed",
+    "deleteFailed": "Delete failed",
+    "toggleFailed": "Update failed",
+    "runStarted": "Task started",
+    "runFailed": "Start failed",
+    "emptyLandingEyebrow": "AI automation setup",
+    "emptyLandingTitle": "Let AI create the automation",
+    "emptyLandingDescription": "Choose a common task to fill the sender below, or describe the trigger and the work to run. Sending starts a chat where AI can call tools to create it.",
+    "emptyLandingPlaceholder": "Describe the automation you want to create",
+    "emptyLandingSendInstruction": "Create an automation from the request below. Prefer calling the available automation tools to create it; if required details are missing, ask for the missing configuration first.\n\nRequest:\n{{request}}",
+    "emptyLandingAttachmentInstruction": "Create an automation from the context I attached. Prefer calling the available automation tools to create it; if required details are missing, ask for the missing configuration first.",
+    "starterDailyTitle": "Daily project brief",
+    "starterDailyDescription": "Summarize progress, risks, and next steps on a schedule.",
+    "starterDailyPrompt": "Help me create an automation: every weekday at 9:00 AM, check the current project status and summarize yesterday's completed work, today's risks, and suggested next steps. Please use the available automation tools to create it.",
+    "starterHealthTitle": "Scheduled health check",
+    "starterHealthDescription": "Run periodic checks and report when something breaks.",
+    "starterHealthPrompt": "Help me create an automation: every 30 minutes, check whether the current project has failing tests, build errors, or service issues. If there is a problem, create a session explaining the cause and suggested fixes. Please use the available automation tools to create it.",
+    "starterWeeklyTitle": "Weekly review",
+    "starterWeeklyDescription": "Collect progress, open issues, and planning notes each week.",
+    "starterWeeklyPrompt": "Help me create an automation: every Friday at 5:30 PM, summarize this week's development progress, solved issues, unfinished work, and recommendations for next week. Please use the available automation tools to create it.",
+    "starterReminderTitle": "Important reminders",
+    "starterReminderDescription": "Remind me or check specific items at the right time.",
+    "starterReminderPrompt": "Help me create an automation: every weekday at 6:00 PM, check whether there are unresolved todos, waiting inputs, or failed tasks, then create a session reminding me to handle them. Please use the available automation tools to create it."
+  },
+  "benchmark": {
+    "title": "Benchmark",
+    "sidebarHint": "Choose a category and case, inspect the task goal, and launch a run.",
+    "category": "Category",
+    "categoryCount": "{{count}} categories",
+    "caseCount": "{{count}} cases",
+    "caseTree": "Case Tree",
+    "expandAll": "Expand All",
+    "collapseAll": "Collapse All",
+    "runSelected": "Run Selected ({{count}})",
+    "runAll": "Run All",
+    "caseId": "Case:",
+    "searchPlaceholder": "Search category, title, or summary",
+    "emptyCases": "No benchmark cases",
+    "mobileCases": "Cases",
+    "mobileDetails": "Details",
+    "noSummary": "No summary",
+    "configTitle": "Case Config",
+    "baseCommit": "Base Commit",
+    "setupCommand": "Setup Command",
+    "testCommand": "Test Command",
+    "timeoutSec": "Timeout (sec)",
+    "runState": "Run State",
+    "noActiveRun": "No active benchmark run",
+    "runStatus": "Status",
+    "progress": "Progress",
+    "lastMessage": "Last Message",
+    "taskGoal": "Task Goal",
+    "resultTitle": "Latest Result",
+    "noResult": "No result yet",
+    "finalScore": "Final Score",
+    "lastRunAt": "Last Run",
+    "testScore": "Test Score",
+    "goalScore": "Goal Score",
+    "referenceScore": "Reference Score",
+    "changedFiles": "Changed Files",
+    "noChangedFiles": "No changed files recorded",
+    "testExitCode": "Test Exit Code",
+    "durationMs": "Duration (ms)",
+    "issues": "Issues",
+    "noIssues": "No issues",
+    "concurrency": "Concurrency",
+    "runCategory": "Run Category",
+    "runCase": "Run Case",
+    "runStarted": "Benchmark started",
+    "categoryRunStarted": "Category benchmark started",
+    "runCompleted": "Benchmark completed",
+    "runFailed": "Benchmark run failed",
+    "status": {
+      "pass": "Pass",
+      "partial": "Partial",
+      "fail": "Fail"
+    }
+  },
+  "knowledge": {
+    "title": "Project Knowledge Base",
+    "subtitle": "Manage skills, entities, flows, and rules for this project",
+    "tabs": {
+      "skills": "Skills",
+      "entities": "Entities",
+      "flows": "Flows",
+      "rules": "Rules"
+    },
+    "actions": {
+      "new": "New",
+      "refresh": "Refresh",
+      "refreshed": "Refreshed",
+      "import": "Import",
+      "expand": "Expand",
+      "collapse": "Collapse"
+    },
+    "filters": {
+      "search": "Search name, description, or params",
+      "searchActive": "Search current list",
+      "tags": "Filter by tags",
+      "noResults": "No matching results"
+    },
+    "meta": {
+      "params": "{{count}} params",
+      "always": "Always",
+      "skills": "Skills",
+      "rules": "Rules",
+      "skillsCount": "Skills {{count}}",
+      "rulesCount": "Rules {{count}}"
+    },
+    "skills": {
+      "title": "Skill Library",
+      "desc": "Maintain reusable skill definitions and usage notes.",
+      "empty": "No skills found.",
+      "project": "Project Skills",
+      "sourceProject": "Project Default",
+      "sourceGlobalConfig": "~/.oneworks/.oo.config.json",
+      "sourceProjectConfig": ".oo.config.json",
+      "sourceUserConfig": ".oo.dev.config.json",
+      "sourcePlugin": "Plugin",
+      "sourceHome": "Real Home",
+      "market": "Market",
+      "create": "Create Skill",
+      "createSuccess": "Skill created",
+      "createFailed": "Failed to create skill",
+      "createHint": "Create a skill file under .oo/skills, then refresh the page.",
+      "importHint": "Import skill files into .oo/skills, then refresh the page.",
+      "importSuccess": "Imported {{count}} files",
+      "importFailed": "Failed to import skills",
+      "searchProject": "Search project skills",
+      "searchHub": "Search configured skills registries",
+      "marketActions": "Registries and filters",
+      "allRegistries": "All registries",
+      "registryFilter": "Filter registries",
+      "allSources": "All sources",
+      "sourceFilter": "Filter sources",
+      "installFilter": "Filter install status",
+      "allStatuses": "All statuses",
+      "installedOnly": "Installed only",
+      "notInstalled": "Not installed",
+      "sort": "Sort",
+      "sortDefault": "Default",
+      "sortInstallsDesc": "Most installed",
+      "sortNameAsc": "Name A-Z",
+      "sortNameDesc": "Name Z-A",
+      "addRegistry": "Add Registry",
+      "openConfig": "Open skills config",
+      "noRegistry": "No skills registry configured.",
+      "emptyHub": "No matching skills were found in the configured registries.",
+      "install": "Install",
+      "openOfficialSite": "Open official site",
+      "loadMore": "Load more",
+      "loadingMore": "Loading",
+      "reinstall": "Reinstall",
+      "installSuccess": "Installed",
+      "installFailed": "Install failed",
+      "installed": "Installed",
+      "installs": "{{value}} installs",
+      "scope": "Scope",
+      "hooks": "Hooks",
+      "registrySaved": "Registry saved",
+      "registryExists": "A registry with the same source already exists",
+      "registryConfigSource": "Config file",
+      "registryTitle": "Display title (optional)",
+      "registryTitlePlaceholder": "Lynx Team Skills",
+      "registrySource": "Source path",
+      "registrySourceRequired": "Enter a skills source path",
+      "registrySourcePlaceholder": "example-source/default/public",
+      "registryValue": "NPM registry (optional)",
+      "registryValuePlaceholder": "https://registry.example.com",
+      "skillName": "Name",
+      "skillNameRequired": "Enter a skill name",
+      "skillNamePlaceholder": "review-checklist",
+      "skillDescription": "Description",
+      "skillDescriptionPlaceholder": "Checklist for code review",
+      "skillBody": "Body",
+      "skillBodyPlaceholder": "Describe how this skill should be used"
+    },
+    "entities": {
+      "title": "Entity Library",
+      "desc": "Manage roles, components, and domain entities for the project.",
+      "empty": "No entities found.",
+      "create": "Create Entity",
+      "createHint": "Create an entity definition file, then refresh the page.",
+      "importHint": "Import entity definition files, then refresh the page."
+    },
+    "flows": {
+      "title": "Flow Library",
+      "desc": "Manage project flows and parameter definitions.",
+      "empty": "No flows found.",
+      "noContent": "No flow definition content",
+      "create": "Create Flow",
+      "createHint": "Create a flow file under .oo/specs, then refresh the page.",
+      "importHint": "Import flow files into .oo/specs, then refresh the page."
+    },
+    "rules": {
+      "title": "Rule Library",
+      "desc": "Maintain project conventions, constraints, and enforcement rules.",
+      "empty": "No rules found.",
+      "create": "Create Rule",
+      "createHint": "Create a rule file under .oo/rules, then refresh the page.",
+      "importHint": "Import rule files into .oo/rules, then refresh the page."
+    }
+  },
+  "agentRoom": {
+    "header": {
+      "eyebrow": "Agent Room",
+      "summary": "Room summary",
+      "memberCount": "{{count}} members",
+      "attentionCount": "{{count}} waiting",
+      "runningCount": "{{count}} running"
+    },
+    "system": {
+      "memberJoined": "{{member}} joined the room"
+    },
+    "message": {
+      "you": "You",
+      "agent": "Agent",
+      "system": "System",
+      "replyingTo": "Replying to {{author}}: {{content}}",
+      "expandLong": "Show more",
+      "collapseLong": "Show less"
+    },
+    "reaction": {
+      "completed": "Completed",
+      "completedBy": "{{agent}} completed",
+      "working": "Working",
+      "workingBy": "{{agent}} is working",
+      "openTarget": "Open {{agent}} session"
+    },
+    "approvalBatch": {
+      "title": "Approval queue",
+      "summary": "Approval request summary",
+      "total": "{{count}} requests",
+      "pendingCount": "{{count}} pending",
+      "handledCount": "{{count}} handled",
+      "actionCount": "{{count}} leader actions",
+      "pending": "Pending",
+      "handled": "Handled",
+      "handledByLeader": "Handled by leader",
+      "currentRequest": "Current request",
+      "latestRequest": "Latest request",
+      "options": "Available options",
+      "history": "{{count}} history items"
+    },
+    "interactionRequest": {
+      "title": "Permission request",
+      "titleWithSubject": "Permission request: {{subject}}",
+      "options": "Available responses",
+      "response": "Responded: {{response}}",
+      "command": {
+        "summary": "Review this command before allowing execution.",
+        "title": "Command",
+        "shell": "Shell: {{shell}}",
+        "arguments": "Arguments: {{arguments}}",
+        "script": "Script content",
+        "fullCommand": "Full command"
+      },
+      "status": {
+        "pending": "Pending",
+        "handled": "Handled",
+        "expired": "Expired"
+      },
+      "kind": {
+        "confirmation": "Confirmation",
+        "input": "Input",
+        "progress": "Progress"
+      }
+    },
+    "mode": {
+      "session": "Session mode",
+      "room": "Room mode"
+    },
+    "transcript": {
+      "ariaLabel": "{{title}} transcript",
+      "empty": "No public room messages yet"
+    },
+    "status": {
+      "room": {
+        "active": "Active",
+        "waiting": "Waiting",
+        "completed": "Completed",
+        "failed": "Failed",
+        "idle": "Idle"
+      },
+      "member": {
+        "active": "Active",
+        "waiting": "Waiting",
+        "completed": "Completed",
+        "failed": "Failed",
+        "stopped": "Stopped",
+        "idle": "Idle"
+      },
+      "run": {
+        "running": "Running",
+        "waiting": "Waiting",
+        "completed": "Completed",
+        "failed": "Failed",
+        "stopped": "Stopped"
+      }
+    },
+    "actions": {
+      "openRun": "Open run",
+      "openHostSession": "Open host session",
+      "messageRun": "Open {{target}} session",
+      "backToRoom": "Back"
+    },
+    "sessionStatus": {
+      "starting": "Task created, waiting for the child agent to start",
+      "startingStale": "Child agent did not start; no runtime events received",
+      "running": "Child agent is running",
+      "waiting": "Child agent is waiting for confirmation",
+      "completed": "Child task completed",
+      "failed": "Child task failed",
+      "stopped": "Child task stopped"
+    },
+    "sessionBreadcrumbLabel": "{{roomTitle}} / {{sessionTitle}}",
+    "approvals": {
+      "empty": "No pending approvals",
+      "waitingForInput": "Waiting",
+      "waitingDescription": "This child run is waiting inside the room. The leader will decide whether to ask you for approval."
+    },
+    "roster": {
+      "eyebrow": "Roster",
+      "title": "Room members",
+      "compactTitle": "Room roster · {{count}} members",
+      "memberCount": "{{count}} members",
+      "activeRuns": "{{count}} active",
+      "pendingCount": "{{count}} pending",
+      "expandRuns": "Show sessions",
+      "collapseRuns": "Hide sessions",
+      "noRuns": "No runs yet"
+    },
+    "composer": {
+      "placeholder": "Message the host agent...",
+      "ariaLabel": "Agent room message",
+      "send": "Send",
+      "sending": "Sending",
+      "target": {
+        "host": "{{target}}",
+        "member": "{{target}}",
+        "run": "{{target}}",
+        "missing": "Can't find {{target}}",
+        "ambiguous": "Multiple matches for {{target}}"
+      },
+      "completion": {
+        "member": "member mailbox",
+        "run": "run"
+      },
+      "error": {
+        "missingTarget": "Unknown target {{target}}",
+        "ambiguousTarget": "Ambiguous target {{target}}",
+        "emptyTargetedMessage": "Add a message for {{target}}",
+        "unsupportedAttachments": "Agent Room messages currently support text only. Remove image and file attachments before sending."
+      }
+    },
+    "sidebar": {
+      "label": "Agent room",
+      "openRoom": "Open room",
+      "favoriteRoom": "Favorite room",
+      "unfavoriteRoom": "Unfavorite room",
+      "favoritedRoom": "Favorited room",
+      "archiveRoom": "Archive room",
+      "unarchiveRoom": "Unarchive room",
+      "copyRoomLink": "Copy room link",
+      "copyRoomId": "Copy room ID",
+      "roomLinkCopied": "Room link copied to clipboard",
+      "roomIdCopied": "Room ID copied to clipboard",
+      "activeRuns": "{{count}} active",
+      "pendingCount": "{{count}} waiting"
+    }
+  },
+  "chat": {
+    "titleUpdated": "Title updated",
+    "titleUpdateFailed": "Failed to update title",
+    "clickToEditTitle": "Click to edit title",
+    "inputPlaceholder": "Type a message...",
+    "send": "Send",
+    "thinking": "Thinking",
+    "stop": "Stop",
+    "result": "Result",
+    "sessionActive": "Session Active",
+    "selectModel": "Select a model to start",
+    "adapterSelectPlaceholder": "Select adapter",
+    "adapterBuiltinLabel": "Built in",
+    "adapterConfiguredLabel": "Configured",
+    "adapterFirstRunHint": "First launch of an adapter prepares its CLI and may take a little longer.",
+    "adapterHiddenBuiltinTitle": "Hidden built-in adapters",
+    "adapterHideBuiltin": "Hide {{adapter}}",
+    "adapterHideLastBuiltinDisabled": "Keep at least one adapter visible",
+    "adapterRestoreBuiltin": "Show {{adapter}}",
+    "modelSelectPlaceholder": "Select model",
+    "defaultModelLabel": "Default model",
+    "modelSearchPlaceholder": "Search models or services",
+    "modelUnavailable": "No models available",
+    "modelConfigRequired": "Add a model service in config before starting a session",
+    "modelConfigRequiredTitle": "Model setup required",
+    "modelConfigRequiredHelp": "Add at least one model service, then retry sending from the composer.",
+    "connectionErrorTitle": "Connection error",
+    "connectionClosedTitle": "Connection closed",
+    "connectionAuthRequiredTitle": "Login expired",
+    "sessionErrorTitle": "Task failed",
+    "sessionCreateFailedTitle": "Session creation failed",
+    "connectionError": "WebSocket connection failed. Check the server and try again.",
+    "connectionClosed": "WebSocket connection closed. Try reconnecting.",
+    "connectionAuthRequired": "Your login has expired. Sign in again to continue.",
+    "historyLoadFailed": "Failed to load message history. Retry after checking the server connection.",
+    "connectionErrorHelp": "Streaming updates stopped before the session could recover. Retry to resubscribe to the running session.",
+    "connectionClosedHelp": "The current stream has ended unexpectedly. Retry to reconnect and continue receiving new messages.",
+    "connectionAuthRequiredHelp": "The server rejected the realtime connection. Sign in again, then return to this session.",
+    "sessionErrorHelp": "Check the latest tool output or terminal logs, then continue from the most recent user message if needed.",
+    "sessionCreateFailedHelp": "The first message is still here. After fixing the issue, retry with the same message to create the session.",
+    "sessionCreateFailedMessage": "Failed to create session",
+    "sessionStoppingMessage": "Requesting session stop...",
+    "sessionStopRequestedMessage": "Session stop requested",
+    "sessionStopFailedMessage": "Failed to stop session",
+    "sessionErrorCode": "Error code: {{code}}",
+    "retryConnection": "Retry",
+    "retrySessionCreation": "Retry creating session",
+    "retrySessionCreationRequired": "Use the retry button in the error notice first.",
+    "debugMockLabel": "Debug Preview",
+    "debugMockConnectionErrorMessage": "Unable to reach the session stream. The websocket handshake timed out before any updates arrived.",
+    "debugMockConnectionClosedMessage": "The connection dropped after the assistant started responding. No further tokens will arrive until you reconnect.",
+    "debugMockSessionErrorMessage": "The runtime hit its session timeout while waiting for a downstream tool result and stopped this turn.",
+    "permissionRequestBadge": "Permission request",
+    "permissionRequestTitleWithTool": "Requesting permission to use 【{{tool}}】. Choose how to proceed.",
+    "permissionSubject": "Scope",
+    "permissionProjectConfig": "Project config",
+    "permissionCurrentMode": "Current mode",
+    "permissionSuggestedMode": "Suggested mode",
+    "permissionDeniedTools": "Restricted tools",
+    "permissionReasons": "Reasons",
+    "permissionExpandOptions": "Show more options",
+    "permissionCollapseOptions": "Show fewer options",
+    "permissionConfirmOption": "Confirm option",
+    "permissionConfirmOptionTooltip": "Confirm the currently highlighted permission option",
+    "permissionSendBlockedTooltip": "A permission choice is still pending. Confirm the option above first.",
+    "permissionSendBlockedError": "A permission choice is still pending, so sending is temporarily disabled.",
+    "agentRoomChildRequest": {
+      "title": "Child Task Request",
+      "request": "Request",
+      "options": "Available options",
+      "moreContext": "More context"
+    },
+    "agentRoomSessionSource": {
+      "leader": "leader",
+      "agent": "{{source}}",
+      "user": "You",
+      "separator": ":"
+    },
+    "interactionOptionNavigation": "Quick option navigation",
+    "interactionOptionPrevious": "Previous option",
+    "interactionOptionNext": "Next option",
+    "tooltipSlashCommands": "Slash commands",
+    "tooltipMentionAgents": "Mention agents",
+    "tooltipInjectContext": "Inject context",
+    "tooltipUploadImages": "Upload images",
+    "tooltipReferenceActions": "More",
+    "referenceActionsShortcutTooltip": "More / Permission mode",
+    "modelShortcutTooltip": "Switch model",
+    "modelAddRecommendation": "Add to recommended models",
+    "modelAlreadyRecommended": "Already recommended",
+    "modelRemoveRecommendation": "Remove from recommended models",
+    "effortShortcutTooltip": "Switch reasoning effort",
+    "sendShortcutTooltip": "Send message",
+    "queue": {
+      "steerTitle": "Send After Current Turn",
+      "nextTitle": "Send At Next Safe Point",
+      "count": "{{count}} queued",
+      "sendAfterTurn": "After turn",
+      "sendNext": "Next safe point",
+      "steerShortcutTooltip": "Queue the message until the current turn finishes",
+      "nextShortcutTooltip": "Queue the message and send it at the next safe point",
+      "attachmentsOnly": "Contains queued images or references",
+      "hasImage": "Contains images",
+      "hasReference": "Contains references",
+      "moveToSteer": "Move to send after current turn",
+      "moveToNext": "Move to send at next safe point",
+      "requeueMessage": "Re-queue message",
+      "stopCurrentRun": "Stop current run",
+      "stopShortcutTooltip": "Press Esc twice to stop the current run",
+      "stopShortcutConfirm": "Press Esc again to stop the current run"
+    },
+    "adapterLockedTooltip": "Adapters are locked after a session is created",
+    "sessionTarget": {
+      "title": "Session target",
+      "lockedHint": "Fixed after creation",
+      "creatingHint": "Creating session",
+      "missingResourceWarning": "Choose a resource for the current mode first",
+      "modes": {
+        "default": "Default",
+        "workspace": "Workspace",
+        "entity": "Agent",
+        "spec": "Spec"
+      },
+      "placeholders": {
+        "workspace": "Choose workspace",
+        "entity": "Choose agent",
+        "spec": "Choose spec"
+      },
+      "empty": {
+        "workspace": "No workspaces",
+        "entity": "No agents",
+        "spec": "No specs"
+      }
+    },
+    "referenceActionsShort": "More",
+    "referenceActionsTitle": "More",
+    "referenceActionsDescription": "Add photos, files, and permission-related settings.",
+    "referenceAttachments": "Add photos and files",
+    "referenceAttachmentsDescription": "Choose images or project files as references.",
+    "referencePermission": "Permission mode",
+    "referencePermissionDescription": "Control how tool actions are authorized.",
+    "collapseHeaderControls": "Collapse top bar",
+    "expandHeaderControls": "Expand top bar",
+    "collapseStatusBar": "Hide status bar",
+    "expandStatusBar": "Show status bar",
+    "referenceImage": "Image",
+    "referenceImageDescription": "Choose a local image and attach it to the message.",
+    "referenceFile": "File",
+    "referenceFileDescription": "Choose files from the current project tree.",
+    "accountSelectPlaceholder": "Select account",
+    "accountSelectCreateAccount": "Quick create {{adapter}} account",
+    "accountSelectCreateTitle": "Connect {{adapter}} account",
+    "accountSelectCreateWaiting": "Waiting for account connection",
+    "accountSelectCreateDescription": "Complete authentication in the browser flow opened by Codex. Keep this dialog open until the account is connected, or cancel if you want to stop.",
+    "accountSelectCreateCanceling": "Canceling…",
+    "accountSelectCreateCanceled": "Account connection canceled",
+    "accountSelectOpenAdapterConfig": "Open {{adapter}} config",
+    "accountSelectOpenAccountConfig": "Open {{account}} settings",
+    "effortSelectPlaceholder": "Effort",
+    "effortLabels": {
+      "default": "Standard",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "max": "Max"
+    },
+    "permissionModeSelectPlaceholder": "Permission mode",
+    "assetWarningsTitle": "Compatibility notes",
+    "assetWarningsCount": "{{count}} asset warnings",
+    "assetWarningsMore": "+{{count}} more",
+    "selectionWarningsTitle": "Model routing warnings",
+    "selectionWarningsCount": "{{count}} model warnings",
+    "selectionWarningReasonExcluded": "the model is excluded by adapter rules",
+    "selectionWarningReasonNotIncluded": "the model is not included by adapter rules",
+    "selectionWarningFallback": "Adapter {{adapter}} switched from {{requestedModel}} to {{resolvedModel}} because {{reason}}.",
+    "modelGroupBuiltin": "{{adapter}} built-in models",
+    "modelGroupServices": "Model Services",
+    "imageTooLarge": "Image must be smaller than 5MB",
+    "imageReadFailed": "Failed to read image",
+    "previewImage": "Preview image",
+    "imagePreviewTitle": "Image",
+    "imageLoadFailed": "Failed to load image",
+    "openImageInBrowser": "Open image in browser",
+    "copyImageLink": "Copy image link",
+    "imageLinkCopied": "Image link copied",
+    "markdownLinkActions": {
+      "openWorkspaceFileInApp": "Open file in current app",
+      "openInAppBrowser": "Open in app",
+      "openInExternalBrowser": "Open in external browser",
+      "copyMarkdownLink": "Copy Markdown link",
+      "copyMarkdownSuccess": "Markdown link copied"
+    },
+    "imageZoomIn": "Zoom in",
+    "imageZoomOut": "Zoom out",
+    "imageZoomReset": "Reset zoom",
+    "imageNotSupportedInInteraction": "Images are not supported for this interaction",
+    "fileNotSupportedInInteraction": "Files are not supported for this interaction",
+    "contextPickerTitle": "Reference files or folders",
+    "contextPickerDescription": "Choose one or more files or folders from the current project tree.",
+    "contextPickerConfirm": "Reference",
+    "contextPickerLoading": "Loading workspace tree...",
+    "contextPickerEmpty": "No items available in this directory",
+    "contextPickerLoadFailed": "Failed to load workspace tree",
+    "workspaceDrawerToggle": "Workspace drawer",
+    "workspaceDrawerClose": "Close workspace drawer",
+    "workspaceDrawerCollapse": "Collapse workspace drawer",
+    "workspaceDrawerTitle": "Workspace",
+    "workspacePathUnavailable": "No workspace path available",
+    "workspaceDrawerRefresh": "Refresh workspace",
+    "workspaceDrawerForceSync": "Force sync",
+    "workspaceDrawerDisplayMode": "Display mode",
+    "workspaceDrawerLocateFile": "Reveal file",
+    "workspaceDrawerExpandAll": "Expand",
+    "workspaceDrawerCollapseAll": "Collapse",
+    "workspaceDrawerToggleSection": "Expand or collapse section",
+    "workspaceFileOpen": "Open file",
+    "workspaceFileExternalOpenFailed": "Failed to open file in external app",
+    "workspaceTreeReferenceToInput": "Reference in input",
+    "workspaceTreeTargetMissing": "Target missing",
+    "workspaceTreeTargetMissingState": " (target missing)",
+    "workspaceTreeExternalLinkState": " (external link)",
+    "workspaceTreeNodeLinkTitle": "{{path}} -> {{target}}{{state}}",
+    "workspaceTreeLinkTargetMissing": "Link target missing: {{target}}",
+    "workspaceTreeLinkTarget": "Link target: {{target}}",
+    "workspaceFileCopyName": "Copy file name",
+    "workspaceFileCopyRelativePath": "Copy relative path",
+    "workspaceFileCopyAbsolutePath": "Copy absolute path",
+    "workspaceFileCopyPath": "Copy path",
+    "workspaceFileNameCopied": "File name copied",
+    "workspaceFileRelativePathCopied": "Relative path copied",
+    "workspaceFileAbsolutePathCopied": "Absolute path copied",
+    "workspaceFilePathCopied": "Path copied",
+    "workspaceFileOpenInExternalEditor": "Open in {{opener}}",
+    "workspacePathRevealInTree": "Reveal in tree",
+    "workspacePathRevealInFileManager": "Reveal in {{manager}}",
+    "workspacePathOpenContainingFolderInFileManager": "Open containing folder in {{manager}}",
+    "workspacePathRevealInFileManagerFailed": "Failed to reveal path in {{manager}}",
+    "workspacePathFileManagerFallback": "File Manager",
+    "workspacePathFileManager": {
+      "finder": "Finder",
+      "explorer": "File Explorer",
+      "fileManager": "File Manager"
+    },
+    "workspaceFileCloseOthers": "Close others",
+    "workspaceFileCloseRight": "Close to the right",
+    "workspaceFileCloseAll": "Close all",
+    "workspaceDrawerChangedFiles": "Changed files",
+    "workspaceChanges": {
+      "summary": "{{count}} files changed",
+      "review": "Review",
+      "reviewTitle": "Open changed files review",
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "expandFiles": "Expand file list",
+      "collapseFiles": "Collapse file list",
+      "showDiff": "Expand diff for {{path}}",
+      "hideDiff": "Collapse diff for {{path}}",
+      "diffUnavailable": "No diff was recorded.",
+      "diffTruncated": "Diff is large and was truncated."
+    },
+    "workspaceDrawerChangedCount": "{{count}}",
+    "workspaceDrawerLoadingGit": "Loading Git status...",
+    "workspaceDrawerGitUnavailable": "Git is unavailable for this workspace.",
+    "workspaceDrawerNoChangedFiles": "No changed files",
+    "workspaceDrawerTree": "Directory tree",
+    "workspaceDrawerApprovals": "Approvals",
+    "workspaceDrawerAgents": "Agents",
+    "workspaceDrawerChangedFolders": "Group by folder",
+    "workspaceDrawerChangedFlat": "Flat view",
+    "workspaceDrawerChangedSection": {
+      "staged": "Staged",
+      "tracked": "Tracked",
+      "untracked": "Untracked"
+    },
+    "workspaceDrawerSubmodule": "Submodule",
+    "workspaceDrawerSubmoduleCommit": "commit changed",
+    "workspaceDrawerSubmoduleTracked": "tracked changes",
+    "workspaceDrawerSubmoduleUntracked": "untracked changes",
+    "workspaceFileEditorTitle": "File",
+    "workspaceFileEditorLoading": "Loading file...",
+    "workspaceFileEditorLoadFailed": "Failed to load file",
+    "workspaceImagePreviewLoadFailed": "Failed to load image",
+    "workspaceFileEditorSave": "Save",
+    "workspaceFileEditorSaved": "Saved",
+    "workspaceFileEditorRevert": "Revert",
+    "workspaceFileEditorResizePanel": "Drag to resize file editor height",
+    "bottomPanelToggle": "Bottom panel",
+    "bottomPanelResizePanel": "Drag to resize bottom panel height",
+    "interactionPanel": {
+      "addIframe": "New web page",
+      "addIframeDescription": "Open a web preview or external debugging page.",
+      "addMobileDebug": "Debug phone",
+      "addMobileDebugDescription": "Connect a mobile device and open debugging tools.",
+      "addSession": "New session",
+      "addSessionDescription": "Create an independent session page in the bottom panel.",
+      "addTab": "Add panel page",
+      "addTerminalDescription": "Create a terminal task and keep command output in context.",
+      "closeTab": "Close {{title}}",
+      "editPinnedTab": "Edit pinned tab",
+      "emptyDescription": "Open resources, terminals, or web previews while keeping session context in one panel.",
+      "emptyHintManageTabs": "Drag or right-click tabs to organize panel pages",
+      "emptyHintOpenResource": "{{shortcut}} quick open resource",
+      "emptyStart": "Start",
+      "emptyTitle": "OneWorks",
+      "expandPanel": "Expand bottom panel",
+      "expandPanelFullscreen": "Expand bottom panel upward",
+      "hidePanel": "Hide bottom panel",
+      "editRunCommand": "Edit run command",
+      "favoriteRunCommand": "Favorite run command",
+      "markdownEditorMode": "Show Markdown source only",
+      "markdownPreviewMode": "Render Markdown full width",
+      "markdownResizeSplit": "Drag to resize Markdown preview split",
+      "markdownSplitMode": "Preview Markdown side by side",
+      "minimizePanel": "Minimize bottom panel",
+      "addRunCommand": "Add run command",
+      "manageRunCommands": "Manage run commands",
+      "openResourceDescription": "Open project files, folders, or resource references.",
+      "addRunCommandEnv": "Add environment variable",
+      "mobileDebugAdbPath": "ADB path",
+      "mobileDebugAddNetworkTarget": "Add network target",
+      "mobileDebugAddPortForward": "Add port forward",
+      "mobileDebugAdbInstallCommand": "brew install android-platform-tools",
+      "mobileDebugAdbInstallHint": "After installing, keep the phone connected with USB debugging enabled. This page will rescan automatically.",
+      "mobileDebugAdbMissingDescription": "Phone debugging needs Android Debug Bridge. On macOS, install Android Platform Tools with Homebrew.",
+      "mobileDebugAdbMissingTitle": "ADB not found",
+      "mobileDebugAllApps": "All apps",
+      "mobileDebugChrome": "Chrome",
+      "mobileDebugConfig": "Settings",
+      "mobileDebugDesktopOnly": "Phone debugging is only available in the desktop app",
+      "mobileDebugDeviceOffline": "Offline",
+      "mobileDebugDevicePort": "Device port",
+      "mobileDebugDeviceReady": "Connected",
+      "mobileDebugDeviceUnauthorized": "Unauthorized",
+      "mobileDebugDeviceUnknown": "Unknown",
+      "mobileDebugDevices": "Devices",
+      "mobileDebugDiagnostics": "Diagnostics",
+      "mobileDebugDiscoverNetworkTargets": "Discover network targets",
+      "mobileDebugDiscoverUsbDevices": "Discover USB devices",
+      "mobileDebugLocalAddress": "Local address, e.g. 127.0.0.1:3000",
+      "mobileDebugNetwork": "Network target",
+      "mobileDebugNetworkAddress": "Network address, e.g. 192.168.1.10:9222",
+      "mobileDebugNetworkTargets": "Network targets",
+      "mobileDebugNoKnownDevices": "No phone found, open settings",
+      "mobileDebugNoDevices": "No Android devices found. Connect a phone and enable USB debugging.",
+      "mobileDebugNoMatchingTargets": "No matching pages.",
+      "mobileDebugNoNetworkTargetsConfigured": "No network targets configured.",
+      "mobileDebugNoPortForwardingRules": "No port forwarding rules configured.",
+      "mobileDebugNoTargets": "No debuggable pages found. Open a page in mobile Chrome, or make sure the target app has WebView debugging enabled.",
+      "mobileDebugNotAvailable": "Not available",
+      "mobileDebugOther": "Other",
+      "mobileDebugPortForwardActive": "Active",
+      "mobileDebugPortForwardError": "Failed",
+      "mobileDebugPortForwardRemoved": "Removed",
+      "mobileDebugPortForwardSkipped": "Skipped",
+      "mobileDebugPortForwarding": "Port forwarding...",
+      "mobileDebugPortForwardingStatus": "Port forwarding",
+      "mobileDebugRefresh": "Refresh",
+      "mobileDebugScanning": "Scanning Android debug targets...",
+      "mobileDebugSearchPlaceholder": "Search pages or URLs",
+      "mobileDebugTargets": "Debuggable pages",
+      "mobileDebugTitle": "Debug phone",
+      "mobileDebugWebView": "WebView",
+      "openResource": "Open resource",
+      "openResourceEmpty": "No matching resources",
+      "openResourceInputHint": "Type to search files, sessions, or web pages",
+      "openResourceLoading": "Indexing resources...",
+      "openResourceLoadFailed": "Failed to load resources",
+      "openResourceRecentEmpty": "No recently visited resources",
+      "openResourceRecentSection": "Recent resources",
+      "openResourceResultsSection": "Matching resources",
+      "openResourceSearchPlaceholder": "Search files, sessions, or web pages",
+      "openWorkspace": "Open current workspace",
+      "openWorkspaceFailed": "Failed to open current workspace",
+      "openWorkspaceUnavailable": "No available opener",
+      "openWorkspaceWith": "Open in {{opener}}",
+      "pinTab": "Pin tab",
+      "pinnedTabEditHint": "Use a Material Symbols name for the icon; leave fields blank to use the original title and icon.",
+      "pinnedTabIcon": "Display icon",
+      "pinnedTabTitle": "Display title",
+      "removeRunCommand": "Remove run command",
+      "removeRunCommandEnv": "Remove environment variable",
+      "runCommandAdvanced": "Advanced",
+      "runCommandCwd": "Working directory",
+      "runCommandCwdPlaceholder": "cwd",
+      "runCommandEnvKey": "Environment variable name",
+      "runCommandEnvKeyPlaceholder": "Variable",
+      "runCommandEnvValue": "Environment variable value",
+      "runCommandEnvValuePlaceholder": "Value",
+      "runCommandEscClosePrompt": "Press Esc again to close the run command window",
+      "runCommandIcon": "Icon",
+      "runCommandIconPlaceholder": "terminal",
+      "runCommandName": "Name",
+      "runCommandNamePlaceholder": "Dev server",
+      "runCommandBackToList": "Back to commands",
+      "runCommandPrimary": "Run {{command}}",
+      "runCommandRunning": "Running",
+      "runCommandRun": "Run",
+      "runShellFile": "Run script",
+      "runShellFileTitle": "Run {{file}}",
+      "runTaskRestart": "Restart",
+      "runTaskStart": "Start",
+      "runTaskTerminate": "Terminate",
+      "runCommandScript": "Script",
+      "runCommandScriptPlaceholder": "pnpm dev",
+      "runCommands": "Run commands",
+      "runCommandsEmpty": "No run commands",
+      "runCommandsTitle": "Run commands",
+      "unfavoriteRunCommand": "Unfavorite run command",
+      "closeWindowGroup": "Close window group",
+      "maximizeWindowGroup": "Maximize window group",
+      "restoreWindowGroup": "Restore window group",
+      "resourceChildSession": "Child session",
+      "resourceFile": "File",
+      "resourceWebsite": "Web page",
+      "unpinTab": "Unpin tab",
+      "copyIframeUrl": "Copy URL",
+      "iframeBack": "Back",
+      "iframeClearCache": "Clear cache",
+      "iframeClearCacheSuccess": "Cache cleared",
+      "iframeClearCookie": "Clear Cookie",
+      "iframeClearCookieSuccess": "Cookie cleared",
+      "iframeDeviceToolbar": "Show device toolbar",
+      "iframeEditingHint": "Enter to open",
+      "iframeEmpty": "Enter a URL to load a web page",
+      "iframeForward": "Forward",
+      "iframeForceReload": "Force reload",
+      "iframeMore": "More",
+      "iframeOpenExternalBrowser": "Open in external browser",
+      "iframeRefresh": "Refresh",
+      "iframeScreenshot": "Screenshot",
+      "iframeScreenshotCopied": "Screenshot copied",
+      "iframeScreenshotFailed": "Screenshot failed",
+      "iframeTitle": "Page {{index}}",
+      "iframeUrlCopied": "URL copied",
+      "iframeZoom": "Zoom",
+      "iframeZoomIn": "Zoom in",
+      "iframeZoomOut": "Zoom out",
+      "iframeZoomReset": "Reset zoom",
+      "newSameShellTerminal": "New terminal with same shell",
+      "iframeUrlPlaceholder": "Enter URL",
+      "sessionTitle": "Session {{index}}"
+    },
+    "workspaceDrawerFileStatus": {
+      "staged": "Staged",
+      "tracked": "Tracked changes",
+      "unstaged": "Unstaged",
+      "untracked": "Untracked",
+      "mixed": "Mixed"
+    },
+    "modelGroupRecommended": "Recommended Models",
+    "modelMoreModels": "More models",
+    "availableTools": "Available Tools",
+    "availableToolsEmpty": "No tools are available for this session yet.",
+    "toolGroupChromeDevtools": "ChromeDevtools",
+    "toolGroupSystem": "System",
+    "toolsCount": "{{count}} tools",
+    "usedTools": "Used {{count}} tools",
+    "debugSessionId": "Session",
+    "debugType": "Type",
+    "debugUuid": "UUID",
+    "debugLeafUuid": "Leaf",
+    "debugAdapter": "Adapter",
+    "debugModel": "Model",
+    "debugEffort": "Effort",
+    "debugVersion": "Version",
+    "debugTools": "Tools",
+    "debugAgents": "Agents",
+    "debugCwd": "CWD",
+    "debugContextCompaction": "Context Compact",
+    "debugContextCompactionId": "Compact Event",
+    "debugContextCompactionTokens": "Token Count",
+    "debugTags": "Tags",
+    "debugView": "View",
+    "debugStarred": "Starred",
+    "debugArchived": "Archived",
+    "debugEnable": "Enable debug mode",
+    "debugDisable": "Disable debug mode",
+    "debugOpenSessionLog": "Open session log",
+    "debugEnabledValue": "Enabled",
+    "debugDisabledValue": "Disabled",
+    "debugSectionTitle": "Debug Session Info",
+    "debugModeTitle": "Debug mode is on",
+    "debugModeDescription": "This section is visible because the current URL contains a debug query.",
+    "contextCompressingTitle": "Compressing context",
+    "contextCompactedTitle": "Context compressed",
+    "contextCompactedMessage": "",
+    "contextCompactedDetail": "",
+    "contextCompactedTokens": "",
+    "viewInitInfo": "Click the title 5 times to toggle debug mode",
+    "viewHistory": "History",
+    "viewTimeline": "Timeline",
+    "hideHistoryTimeline": "Hide timeline in this session",
+    "viewTerminal": "Terminal",
+    "viewSettings": "Settings",
+    "newSessionTitle": "New session",
+    "gitBranchSwitcher": "Switch branch",
+    "gitOperations": "Git actions",
+    "gitWorktree": "Worktree",
+    "statusBarTitle": "Session status",
+    "statusBarSessionSubtitle": "Track the current session workspace and git context here.",
+    "statusBarDraftSubtitle": "Set up the next session workspace before sending the first message.",
+    "sessionWorkspace": "Session workspace",
+    "sessionWorkspaceManaged": "Managed worktree",
+    "sessionWorkspaceShared": "Shared workspace",
+    "sessionWorkspaceExternal": "External workspace",
+    "sessionWorkspaceDraftCreateWorktree": "Create worktree",
+    "sessionWorkspaceDraftStrategyLocal": "Local",
+    "sessionWorkspaceDraftStrategyManaged": "New worktree",
+    "sessionWorkspaceMenuCurrentWorktree": "Current worktree",
+    "sessionWorkspaceMenuWorktreeList": "Worktree list",
+    "sessionWorkspaceMenuLaunchInWorktree": "Start in worktree mode",
+    "sessionWorkspaceMenuTransferToLocal": "Transfer to local",
+    "sessionWorkspaceMenuCreateWorktree": "Create worktree",
+    "sessionWorkspaceDraftCreateWorktreeEnabled": "New sessions get an isolated managed worktree.",
+    "sessionWorkspaceDraftCreateWorktreeDisabled": "New sessions reuse the shared workspace directly.",
+    "sessionWorkspaceDraftCreateBranchLabel": "New branch: {{branch}}",
+    "sessionWorkspaceDraftGitUnavailable": "Git is unavailable for the current workspace.",
+    "sessionWorkspaceSearchWorktrees": "Search worktrees",
+    "sessionWorkspaceNoWorktrees": "No worktrees",
+    "sessionCreationProgress": {
+      "title": "Session setup",
+      "worktreePreparing": "Checking repository state",
+      "worktreeCreating": "Creating managed worktree",
+      "worktreeCreated": "Managed worktree created",
+      "environmentResolving": "Resolving environment scripts",
+      "environmentScriptRunning": "Running environment script",
+      "environmentScriptSucceeded": "Environment script finished",
+      "environmentScriptFailed": "Environment script failed",
+      "environmentSkipped": "No environment scripts to run",
+      "workspaceReady": "Session workspace is ready",
+      "workspaceFailed": "Session workspace failed",
+      "outputLabel": "{{script}} output",
+      "outputSummary": "{{lines}} lines · {{size}}",
+      "outputFollow": "Scroll to latest output",
+      "outputExpand": "Expand script output",
+      "outputCollapse": "Collapse script output",
+      "outputMaximize": "Maximize script output",
+      "outputRestore": "Restore script output height"
+    },
+    "sessionWorkspaceMode": "Mode",
+    "sessionWorkspaceState": "State",
+    "sessionWorkspaceBranch": "Branch",
+    "sessionWorkspacePath": "Path",
+    "sessionWorkspaceCleanup": "Cleanup",
+    "sessionWorkspaceCleanupDelete": "Deletes with session",
+    "sessionWorkspaceCleanupRetain": "Retained on delete",
+    "sessionWorkspaceBaseRef": "Base ref",
+    "sessionWorkspaceCurrentSession": "Current session",
+    "sessionWorkspaceRepositoryWorktrees": "Repository worktrees",
+    "sessionWorkspaceEnvironment": "Runtime environment",
+    "sessionWorkspaceEnvironmentDefault": "Default environment",
+    "sessionWorkspaceEnvironmentProject": "Project",
+    "sessionWorkspaceEnvironmentLocal": "Local",
+    "sessionWorkspaceNoEnvironments": "No environments",
+    "sessionWorkspaceStateReady": "Ready",
+    "sessionWorkspaceStateProvisioning": "Provisioning",
+    "sessionWorkspaceStateDeleting": "Deleting",
+    "sessionWorkspaceStateDeleted": "Deleted",
+    "sessionWorkspaceStateBroken": "Broken",
+    "sessionWorkspaceCreateWorktreeSuccess": "Created a managed worktree for this session.",
+    "sessionWorkspaceTransferToLocalSuccess": "This worktree is now retained locally.",
+    "sessionWorkspaceForceDeleteTitle": "Delete dirty workspace?",
+    "sessionWorkspaceForceDeleteDescription": "This session workspace has uncommitted changes. Force delete the session and remove its bound worktree anyway?",
+    "gitDetachedHead": "DETACHED",
+    "gitSearchBranches": "Search local or remote branches",
+    "gitBranchViewMode": "Branch view mode",
+    "gitBranchViewTree": "Tree",
+    "gitBranchViewFlat": "Flat",
+    "gitBranchesLocal": "Local branches",
+    "gitBranchesWorktrees": "Other worktrees",
+    "gitBranchesRemote": "Remote branches",
+    "gitBranchCheckedOutInOtherWorktree": "Checked out in {{path}}",
+    "gitRemoteBranchCheckedOutInOtherWorktree": "Local branch already checked out in {{path}}",
+    "gitNoBranches": "No matching branches",
+    "gitCreateBranch": "Create branch",
+    "gitCreateBranchWithName": "Create branch {{branch}}",
+    "gitSwitchBranchSuccess": "Switched to {{branch}}",
+    "gitCreateBranchSuccess": "Created and switched to {{branch}}",
+    "gitCommitShort": "Commit",
+    "gitCommitAllChanges": "Commit all changes",
+    "gitCommitDialogTitle": "Commit all changes",
+    "gitCommitDescription": "This stages all current repository changes before committing.",
+    "gitCommitPanelTitle": "Commit changes",
+    "gitCommitPanelBranch": "Branch",
+    "gitCommitPanelChanges": "Changes",
+    "gitChangedFilesCount": "{{count}} files",
+    "gitCommitIncludeUnstagedChanges": "Include unstaged changes",
+    "gitCommitIncludeUnstagedChangesDescription": "Include unstaged and untracked files.",
+    "gitCommitOnlyStagedChangesDescription": "Commit staged changes only.",
+    "gitCommitSkipHooks": "Skip Git hooks",
+    "gitCommitSkipHooksDescription": "Skip pre-commit and commit-msg hooks.",
+    "gitCommitAmend": "Amend latest commit",
+    "gitCommitAmendDescription": "Fold into the latest commit. Current: {{subject}}",
+    "gitCommitAmendUnavailableDescription": "There is no existing commit to amend in this repository.",
+    "gitCommitMessageLabel": "Commit message",
+    "gitCommitMessageOptional": "Optional",
+    "gitCommitMessagePlaceholder": "Enter a commit message",
+    "gitCommitMessagePlaceholderAmend": "Leave blank to keep the latest commit message",
+    "gitCommitMessageAmendHint": "Leave it blank to reuse the latest commit message.",
+    "gitCommitMessageRequired": "Enter a commit message",
+    "gitCommitSuccess": "Commit created",
+    "gitCommitNoChanges": "There are no changes to commit",
+    "gitCommitNoStagedChanges": "There are no staged changes to commit",
+    "gitCommitNextStep": "Next step",
+    "gitCommitAndPush": "Commit and push",
+    "gitCommitAndPushSuccess": "Commit and push completed",
+    "gitCommitPushFailedAfterCommit": "Commit completed, but push failed: {{error}}",
+    "gitAmendSuccess": "Amend completed",
+    "gitAmendAndPushSuccess": "Amend and push completed",
+    "gitAmendUnavailable": "There is no commit available to amend",
+    "gitForcePush": "Force push",
+    "gitForcePushDescription": "Use force-with-lease for the remote branch.",
+    "gitForcePushHint": "Only replaces it when the remote has no newer commits.",
+    "gitPushNeedsSyncOrForce": "This branch is behind upstream. Sync first or enable force push.",
+    "gitPushShort": "Push",
+    "gitPush": "Push current branch",
+    "gitPushPanelTitle": "Push changes",
+    "gitPushPanelUpstream": "Upstream",
+    "gitPushPanelUpstreamHint": "The first push sets the upstream automatically.",
+    "gitForcePushSuccess": "Force push completed",
+    "gitPushSuccess": "Push completed",
+    "gitSyncShort": "Sync",
+    "gitSync": "Sync current branch",
+    "gitSyncSuccess": "Sync completed",
+    "gitStatusDirty": "Uncommitted changes",
+    "gitStatusClean": "Working tree clean",
+    "gitUpstreamStatus": "Ahead {{ahead}} / behind {{behind}}",
+    "gitNoUpstream": "No upstream configured",
+    "gitLocalBranch": "Local",
+    "gitRemoteBranch": "Remote · {{remote}}",
+    "deleteSessionTitle": "Delete session",
+    "deleteSessionDesc": "This will permanently remove the session and all messages. Proceed carefully.",
+    "timelineEmpty": "No events yet",
+    "timelineTask": "Task",
+    "timelineStatus": "Status",
+    "timelineTiming": "Timeline",
+    "timelineStart": "Start",
+    "timelineEventName": "Event",
+    "timelineInput": "Input",
+    "timelineOutput": "Output",
+    "timelineEmptyValue": "—",
+    "timeline": {
+      "mainTasks": "Main task",
+      "mainStart": "Conversation start",
+      "mainEnd": "Conversation end",
+      "startTasks": "Create tasks",
+      "askUserQuestion": "AskUserQuestion",
+      "edit": "Edit",
+      "resumeTask": "Resume task",
+      "userPrompt": "User prompt",
+      "merge": "Merge",
+      "merged": "Merged",
+      "donePrefix": "Done",
+      "taskStart": "Create task",
+      "taskEnd": "End",
+      "viewGit": "Git Graph",
+      "viewGantt": "Gantt",
+      "eventListTitle": "Event List",
+      "eventListSearch": "Search events",
+      "expandGraph": "Expand conversation graph",
+      "collapseGraph": "Collapse conversation graph",
+      "running": "Running",
+      "waitingInput": "Waiting for input",
+      "permissionRequest": "Permission request",
+      "failed": "Failed",
+      "terminated": "Stopped",
+      "ganttTitle": "Task Timeline",
+      "ganttMainSection": "Main",
+      "ganttTasksSection": "Tasks",
+      "allTasksDone": "All tasks done",
+      "userAnswer": "User answer",
+      "receiveReply": "Reply received",
+      "destroyLabel": "Destroy {{name}} @ {{end}}",
+      "rangeLabel": "{{name}} ({{start}} → {{end}})"
+    },
+    "messageActions": {
+      "copy": "Copy raw text",
+      "copySuccess": "Raw message copied",
+      "copyFailed": "Failed to copy raw message",
+      "copyLink": "Copy message link",
+      "copyLinkSuccess": "Message link copied",
+      "copyId": "Copy message ID",
+      "copyIdSuccess": "Message ID copied",
+      "copyJson": "Copy message JSON",
+      "copyJsonSuccess": "Message JSON copied",
+      "copyTimestamp": "Copy timestamp",
+      "copyTimestampSuccess": "Timestamp copied",
+      "edit": "Edit message",
+      "editInProgress": "A message is already being edited. Send or cancel it first.",
+      "saveEdit": "Save as branch",
+      "confirmInline": "Confirm",
+      "recall": "Recall to here",
+      "fork": "Fork from here",
+      "recallConfirmTitle": "Recall to this message?",
+      "recallConfirmContent": "Messages after this point will be rolled back. Continue?",
+      "forkConfirmTitle": "Fork from this message?",
+      "forkConfirmContent": "This will create a new session branch from this message. Continue?",
+      "branchNavigation": "Message version navigation",
+      "previousBranch": "Previous message version",
+      "nextBranch": "Next message version"
+    },
+    "messageFooter": {
+      "tokens": "Tokens",
+      "copyTimestampSuccess": "Copied ISO timestamp",
+      "copyTimestampTitle": "Double-click to copy the ISO timestamp and log the message payload"
+    },
+    "turnProcessedDuration": "Processed {{duration}}",
+    "turnDurationUnderSecond": "<1s",
+    "turnDurationHours": "{{count}}h",
+    "turnDurationMinutes": "{{count}}m",
+    "turnDurationSeconds": "{{count}}s",
+    "turnSummaryCount": "{{count}} hidden messages",
+    "turnExpandAction": "Expand",
+    "turnCollapseAction": "Collapse",
+    "hint": "Press Enter to send, Shift + Enter for new line, type / @ # for completion",
+    "newSessionGuide": {
+      "loading": "Loading...",
+      "searchPlaceholder": "Search actions, prompts, or targets",
+      "recentTitle": "Recent",
+      "emptySearch": "No matching actions",
+      "showMore": "Show {{count}} more",
+      "showLess": "Show less",
+      "favoriteAction": "Favorite action",
+      "unfavoriteAction": "Unfavorite action",
+      "fallbackPresetPrefix": "Preset",
+      "fallbackActionPrefix": "Action",
+      "welcomeMessage": "Welcome back. Describe what you want to move forward, or start with an action template below.",
+      "announcements": {
+        "title": "Announcements"
+      },
+      "workspaces": {
+        "title": "Existing Workspaces",
+        "empty": "No workspaces found. Configure workspaces in .oo.config.json."
+      },
+      "moreCount": "{{count}} more",
+      "specs": {
+        "title": "Existing Flows",
+        "params": "{{count}} params",
+        "empty": "No flows found. Add .oo/specs/*.md to show them here.",
+        "create": "Quick Create Flow",
+        "createToast": "Create a flow file under .oo/specs, then refresh the page."
+      },
+      "entities": {
+        "title": "Existing Agents",
+        "empty": "No agents found. Add entity definition files to show them here.",
+        "create": "Quick Create Agent",
+        "createToast": "Create an entity definition file, then refresh the page."
+      }
+    },
+    "attachments": {
+      "pastedImage": "Pasted image"
+    },
+    "todo": {
+      "noTasks": "No tasks planned",
+      "progress": "Progress: {{completed}}/{{total}} completed",
+      "pendingCount": "{{count}} todo",
+      "inProgressCount": "{{count}} doing",
+      "completedCount": "{{count}} done"
+    },
+    "tools": {
+      "read": "Read File",
+      "write": "Write File",
+      "bash": "Bash",
+      "getTaskInfo": "Get Task Info",
+      "listTasks": "List Tasks",
+      "listTasksEmpty": "No tasks",
+      "startTasks": "Start Tasks",
+      "startTasksBackground": "Background",
+      "startTasksForeground": "Foreground",
+      "startTasksEmpty": "No tasks",
+      "startTasksStarted": "Started",
+      "startTasksFailed": "Failed",
+      "startTasksLogs": "Task Logs",
+      "task": "Task",
+      "taskCount": "{{count}} tasks",
+      "taskExitCode": "Exit: {{code}}",
+      "writeSuccess": "Write Success",
+      "writeFailed": "Write Failed",
+      "askUserQuestion": "Ask User Question",
+      "globTool": "Glob",
+      "grepTool": "Grep",
+      "editTool": "Edit File",
+      "lsTool": "List Directory",
+      "notebookEdit": "Notebook Edit",
+      "webFetch": "Web Fetch",
+      "webSearch": "Web Search",
+      "booleanOn": "On",
+      "booleanOff": "Off",
+      "diffSplit": "Split",
+      "diffInline": "Inline",
+      "skill": "Skill",
+      "enterPlanMode": "Enter Plan Mode",
+      "exitPlanMode": "Exit Plan Mode",
+      "taskCreate": "Create Task",
+      "taskGet": "Get Task",
+      "taskUpdate": "Update Task",
+      "taskList": "List Tasks",
+      "claudeTask": "Claude Task",
+      "todo": "Task Planning",
+      "call": "call",
+      "reading": "Reading file...",
+      "offset": "offset",
+      "limit": "limit",
+      "timeout": "timeout",
+      "runInBackground": "run in background",
+      "dangerouslyDisableSandbox": "sandbox disabled",
+      "viewCommand": "View command",
+      "noParameters": "No parameters",
+      "groupSummaryCount": "{{name}} {{count}}x",
+      "groupSummaryMoreCount": "+{{count}}x",
+      "singleSelect": "single",
+      "multiSelect": "multi",
+      "fields": {
+        "activeForm": "Active Form",
+        "addBlockedBy": "Add Blocked By",
+        "addBlocks": "Add Blocks",
+        "allowedDomains": "Allowed Domains",
+        "allowedPrompts": "Allowed Prompts",
+        "answers": "Answers",
+        "args": "Args",
+        "blockedDomains": "Blocked Domains",
+        "cellId": "Cell ID",
+        "cellType": "Cell Type",
+        "command": "Command",
+        "content": "Content",
+        "description": "Description",
+        "disableSandbox": "Disable Sandbox",
+        "details": "Details",
+        "editMode": "Edit Mode",
+        "glob": "Glob",
+        "ignore": "Ignore",
+        "limit": "Limit",
+        "maxTurns": "Max Turns",
+        "metadata": "Metadata",
+        "model": "Model",
+        "mode": "Mode",
+        "newSource": "New Source",
+        "newString": "New String",
+        "oldString": "Old String",
+        "owner": "Owner",
+        "offset": "Offset",
+        "path": "Path",
+        "prompt": "Prompt",
+        "pushToRemote": "Push To Remote",
+        "questions": "Questions",
+        "remoteSession": "Remote Session",
+        "remoteSessionUrl": "Remote Session URL",
+        "replaceAll": "Replace All",
+        "resume": "Resume",
+        "runInBackground": "Run In Background",
+        "status": "Status",
+        "subagentType": "Subagent Type",
+        "subject": "Subject",
+        "timeout": "Timeout",
+        "todos": "Todos"
+      },
+      "unknown": "Unknown tool"
+    },
+    "terminal": {
+      "addSession": "New terminal",
+      "closeNamedSession": "Close {{title}}",
+      "closeSession": "Close terminal {{index}}",
+      "connectionError": "Terminal connection failed. Check the server and try again.",
+      "dragSession": "Drag to reorder terminals",
+      "enterFullscreen": "Fullscreen",
+      "exited": "Exited",
+      "exitFullscreen": "Exit fullscreen",
+      "exitSummary": "Terminal exited with exitCode={{code}}, signal={{signal}}",
+      "hideManager": "Hide terminal list",
+      "manageTerminals": "Manage terminals",
+      "paneTitle": "Terminal {{index}}",
+      "renameSession": "Rename {{title}}",
+      "selectShell": "Choose terminal type",
+      "sessionCount": "{{count}} terminals",
+      "resizePanel": "Drag to resize terminal height",
+      "shellTooltip": "Shell: {{shell}}",
+      "shellTooltipExited": "Shell: {{shell}}, exited",
+      "showManager": "Show terminal list",
+      "shell": {
+        "bash": "Bash",
+        "default": "Default shell",
+        "sh": "sh",
+        "zsh": "Zsh"
+      }
+    },
+    "sessionSettings": "Session Settings",
+    "enterTitle": "Enter session title...",
+    "tags": "Tags",
+    "addTagPlaceholder": "Add tag and press Enter...",
+    "noTags": "No tags",
+    "title": "Title",
+    "newSessionPlaceholder": "Type a message to start a new chat..."
+  },
+  "pluginStore": {
+    "title": "Plugin Marketplace",
+    "subtitle": "Manage installed workspace plugins, or create a new plugin quickly through chat.",
+    "configure": "Plugin config",
+    "refresh": "Refresh",
+    "details": "Details",
+    "createPlugin": "Create plugin",
+    "connectPlugin": "Add plugin",
+    "marketplace": "Plugin Marketplace",
+    "viewMode": "Plugin page mode",
+    "searchPlaceholder": "Search plugins",
+    "empty": "No plugins are loaded",
+    "installedLabel": "Installed plugins",
+    "groupMode": "Plugin grouping mode",
+    "groupByEnabled": "Group by enabled state",
+    "groupBySource": "Group by source",
+    "groupEnabled": "Enabled",
+    "groupDisabled": "Disabled",
+    "sourceBuiltIn": "Built-in",
+    "sourceGlobal": "Global",
+    "sourceLocal": "Local",
+    "sourceLocalDev": "Local development",
+    "localDirectory": "Local directory",
+    "disabled": "Disabled",
+    "enablePlugin": "Enable plugin",
+    "disablePlugin": "Disable plugin",
+    "enablePluginInWorkspace": "Enable in this workspace",
+    "disablePluginInWorkspace": "Disable in this workspace",
+    "enablePluginGlobally": "Enable globally",
+    "disablePluginGlobally": "Disable globally",
+    "enabledHint": "Disabled plugins do not load client entries, server entries, or contributions in this workspace. They stay in the list so they can be enabled again.",
+    "pluginEnabled": "Plugin enabled",
+    "pluginDisabled": "Plugin disabled",
+    "pluginEnabledUpdateFailed": "Failed to update plugin enabled state",
+    "watch": "Watch",
+    "watchHint": "Watch this plugin directory, reload the plugin runtime after file changes, and notify the frontend to reload that plugin.",
+    "openDetails": "View details",
+    "enableWatch": "Enable Watch",
+    "disableWatch": "Disable Watch",
+    "copyPluginScope": "Copy plugin ID",
+    "copyPluginRoot": "Copy plugin path",
+    "pluginScopeCopied": "Plugin ID copied",
+    "pluginRootCopied": "Plugin path copied",
+    "watchEnabled": "Plugin watch enabled",
+    "watchDisabled": "Plugin watch disabled",
+    "watchUpdateFailed": "Failed to update plugin watch",
+    "diagnostics": "Diagnostics",
+    "marketplaceFilter": "Filter",
+    "marketplaceConfig": "Config",
+    "marketplaceFilterStatus": "Status",
+    "marketplaceFilterSource": "Config source",
+    "marketplaceFilterAll": "All",
+    "marketplaceFilterStatus_all": "All",
+    "marketplaceFilterStatus_enabled": "Enabled",
+    "marketplaceFilterStatus_disabled": "Disabled",
+    "marketplaceSearchPlaceholder": "Search plugins",
+    "marketplacePlugins": "Plugins",
+    "marketplacePluginsEmpty": "No matching plugins",
+    "marketplacePluginEnabled": "Plugin enabled",
+    "marketplacePluginDisabled": "Plugin disabled",
+    "marketplacePluginSaveFailed": "Failed to save plugin configuration",
+    "marketplaceSources": "Plugin sources",
+    "marketplaceSourcesEmpty": "No plugin sources yet",
+    "addMarketplaceSource": "Add plugin source",
+    "removeMarketplaceSource": "Remove plugin source",
+    "marketplaceSourceName": "Source name",
+    "marketplaceSourceUrl": "Git repository URL",
+    "marketplaceSourceRef": "Branch / tag",
+    "marketplaceSourcePath": "Subdirectory",
+    "marketplaceSourceUrlRequired": "Enter a Git repository URL",
+    "marketplaceSourceSaved": "Plugin source saved",
+    "marketplaceSourceSaveFailed": "Failed to save plugin source",
+    "marketplaceSourceRemoved": "Plugin source removed",
+    "marketplaceSourceEnabled": "Plugin source enabled",
+    "marketplaceSourceDisabled": "Plugin source disabled",
+    "createLandingTitle": "Create a plugin with chat",
+    "createLandingDescription": "Pick a common plugin type to prefill the composer, or describe the entry point, interaction, and files you want to extend. Sending starts a session where AI creates the plugin using the repository structure.",
+    "createLandingPlaceholder": "Describe the plugin you want to create",
+    "createLandingSendInstruction": "Create a OneWorks plugin from the request below. Prefer using create-plugin / plugin-creator capabilities and implement it using the current repository plugin structure. If required details are missing, ask for the missing configuration first.\n\nRequest:\n{{request}}",
+    "createLandingAttachmentInstruction": "Create a OneWorks plugin from the context I attached. Prefer using create-plugin / plugin-creator capabilities and implement it using the current repository plugin structure. If required details are missing, ask for the missing configuration first.",
+    "starterChatActionTitle": "Chat header action",
+    "starterChatActionDescription": "Add a button, menu item, or quick command to the chat page.",
+    "starterChatActionPrompt": "Help me create a plugin: add an action button to the chat header that runs a custom command when clicked. Use the current repository plugin structure, including a client entry and manifest configuration.",
+    "starterLauncherTitle": "Launcher search",
+    "starterLauncherDescription": "Add custom search results or commands to the launcher.",
+    "starterLauncherPrompt": "Help me create a plugin: add a launcher search provider that returns custom command results for the typed query and supports invoking a result.",
+    "starterWorkbenchTitle": "Workbench panel",
+    "starterWorkbenchDescription": "Add a plugin tab to the bottom or right workbench panel.",
+    "starterWorkbenchPrompt": "Help me create a plugin: register a new workbench panel tab and render custom client-side content in it.",
+    "starterRouteTitle": "Plugin page",
+    "starterRouteDescription": "Add a standalone plugin route and matching client view.",
+    "starterRoutePrompt": "Help me create a plugin: register a standalone plugin page route and implement a renderable client view."
+  },
+  "pluginDetail": {
+    "backToStore": "Back to Plugin Marketplace",
+    "notFound": "Plugin not found",
+    "overview": "Plugin overview",
+    "version": "Version",
+    "requestedVersion": "Version rule",
+    "package": "Package",
+    "request": "Request source",
+    "root": "Root directory",
+    "clientEntry": "Client entry",
+    "clientDevEntry": "Development entry",
+    "serverEntry": "Server entry",
+    "contributions": "Extension points",
+    "enableContribution": "Enable extension point",
+    "disableContribution": "Disable extension point",
+    "contributionDisabled": "Extension point disabled",
+    "enableContributionItem": "Enable this point",
+    "disableContributionItem": "Disable this point",
+    "contributionItemDisabled": "This point is disabled",
+    "noContributionDescription": "This point does not have a description",
+    "searchContributions": "Search point name, description, or fields",
+    "filter": "Filter",
+    "filterStatus": "Status",
+    "filterStatus_all": "All",
+    "filterStatus_enabled": "Enabled",
+    "filterStatus_disabled": "Disabled",
+    "noContributionMatches": "No matching points",
+    "noContributions": "This plugin does not declare extension points yet",
+    "config": "Configuration",
+    "configOptions": "Plugin options",
+    "configNoSchema": "This plugin has not declared an interactive configuration schema.",
+    "configSaving": "Saving",
+    "configSaved": "Saved",
+    "configSaveFailed": "Failed to save",
+    "configInstance": "Instance config",
+    "configManifest": "Plugin manifest",
+    "skills": "Skills",
+    "mcp": "MCP",
+    "hooks": "Hooks",
+    "assetsEmpty": "No plugin assets to display",
+    "assetsLoadFailed": "Failed to load plugin assets",
+    "readme": "README",
+    "readmeEmpty": "This plugin does not have a README.md",
+    "readmeLoadFailed": "Failed to load README.md",
+    "diagnosticsEmpty": "No diagnostics",
+    "runtimeSlot": "Runtime slot",
+    "runtimeSlotLabel": "Runtime {{slot}}",
+    "runtimeApis": "Runtime APIs",
+    "runtimePluginApis": "Runtime plugin APIs",
+    "runtimeExtensionPoints": "Runtime extension points",
+    "runtimeExtensionContributions": "Runtime extension contributions",
+    "runtimeRoutes": "Runtime routes",
+    "runtimeViews": "Runtime views",
+    "runtimeLaunchers": "Runtime launcher search",
+    "groups": {
+      "extensionPoints": "Plugin extension points",
+      "extensionContributions": "Plugin extension contributions",
+      "navItems": "Left navigation entries",
+      "navMoreMenu": "Left more menu",
+      "navFooterBefore": "Left footer above menu",
+      "chatHeaderActions": "Chat header actions",
+      "chatHeaderMoreMenu": "Chat header more menu",
+      "chatInteractionPanelEmptyActions": "Chat empty page actions",
+      "routeHeaderActions": "Route header actions",
+      "routeMoreMenuItems": "Route more menu",
+      "routeSidebarContextMenu": "Route sidebar context menu",
+      "routeWindowBarActions": "Collapsed window bar actions",
+      "workbenchAddMenu": "Workbench add menu",
+      "workbenchTabs": "Workbench tabs",
+      "workspaceDrawerTabs": "Workspace drawer tabs",
+      "launcherSearchProviders": "Launcher search",
+      "routes": "Plugin page routes"
+    },
+    "fields": {
+      "id": "ID",
+      "title": "Title",
+      "route": "Route",
+      "routeId": "Route ID",
+      "command": "Command",
+      "contributionSchema": "Contribution schema",
+      "extensionPoint": "Extension point",
+      "mode": "Mode",
+      "target": "API path",
+      "proxyTarget": "Proxy target",
+      "href": "Link",
+      "active": "Active",
+      "activeLabel": "Active label",
+      "activeTitle": "Active tooltip",
+      "danger": "Danger",
+      "disabled": "Disabled",
+      "selected": "Selected",
+      "tab": "Tab",
+      "clientView": "Client view",
+      "viewId": "View",
+      "placement": "Placement",
+      "targetRoute": "Target route",
+      "targetRoutes": "Target routes",
+      "icon": "Icon",
+      "activeIcon": "Active icon",
+      "shortcut": "Shortcut",
+      "inputSchema": "Input schema",
+      "outputSchema": "Output schema",
+      "headerSchema": "Header schema"
+    }
+  },
+  "config": {
+    "title": "System Configuration",
+    "readOnlyHint": "Configuration supports in-app editing and saves to json/yaml files.",
+    "loadFailed": "Failed to load configuration",
+    "reload": "Reload",
+    "editHint": "Changes are auto-saved to the selected source config file for global, project, or local overrides.",
+    "maskHint": "Sensitive fields are masked. Keep ****** to preserve existing values.",
+    "invalidJson": "Invalid JSON. Fix the format before saving.",
+    "saveSuccess": "Configuration saved",
+    "saveFailed": "Failed to save configuration",
+    "copySuccess": "Configuration copied",
+    "copyFailed": "Copy failed",
+    "sources": {
+      "global": "Global",
+      "globalMissing": "Global (Not created)",
+      "project": "Project",
+      "user": "Local",
+      "projectMissing": "Project (Not created)",
+      "userMissing": "Local (Not created)"
+    },
+    "navigation": {
+      "search": "Search config sections",
+      "noResults": "No matching sections"
+    },
+    "actions": {
+      "edit": "Edit",
+      "save": "Save",
+      "cancel": "Cancel",
+      "format": "Format",
+      "copy": "Copy"
+    },
+    "conflict": {
+      "title": "Configuration changed elsewhere",
+      "description": "{{source}} / {{target}} was updated outside this page while you still have unsaved edits.",
+      "instructions": "Choose which version to keep before continuing so the two copies do not overwrite each other.",
+      "keepLocal": "Keep my edits",
+      "useRemote": "Use external change"
+    },
+    "editor": {
+      "addField": "Add Field",
+      "addItem": "Add Item",
+      "remove": "Remove",
+      "removeItemConfirmTitle": "Delete this item?",
+      "collapse": "Collapse",
+      "expand": "Expand",
+      "addAdapter": "Add Adapter",
+      "addPlugin": "Add Plugin",
+      "addMcpServer": "Add MCP Server",
+      "addModelService": "Add Model Service",
+      "addMarketplace": "Add Registry",
+      "addEnvVar": "Add Environment Variable",
+      "addHeader": "Add Header",
+      "addEntry": "Add Entry",
+      "newModelSelectorName": "New model selector",
+      "moveUp": "Move Up",
+      "moveDown": "Move Down",
+      "shortcutPlaceholder": "Press shortcut",
+      "clearShortcut": "Clear shortcut",
+      "newModelServiceName": "New model service name",
+      "newChannelName": "New channel name",
+      "newAdapterName": "New adapter name",
+      "newPluginName": "New plugin name",
+      "newMcpServerName": "New MCP server name",
+      "newMarketplaceName": "New registry name",
+      "newEnvVarName": "New environment variable name",
+      "newHeaderName": "New header name",
+      "fieldKey": "Field Key",
+      "fieldValue": "Field Value",
+      "complexPlaceholder": "Use JSON for complex structures",
+      "secretPlaceholder": "Enter secret",
+      "itemPlaceholder": "Enter value",
+      "commandPlaceholder": "Enter command",
+      "urlPlaceholder": "Enter URL",
+      "multilinePlaceholder": "Enter content",
+      "defaultAdapterPlaceholder": "Select adapter",
+      "defaultModelServicePlaceholder": "Select model service",
+      "defaultModelPlaceholder": "Select model",
+      "worktreeEnvironmentPlaceholder": "Select worktree environment",
+      "workspaceFileOpenerPlaceholder": "Select detected app",
+      "titlePlaceholder": "Enter title",
+      "descriptionPlaceholder": "Enter description",
+      "channelType": "Channel Type",
+      "unknownChannelType": "Unknown type",
+      "complexValue": "Complex value",
+      "tagsPlaceholder": "Type and press Enter",
+      "types": {
+        "string": "Text",
+        "number": "Number",
+        "boolean": "Boolean",
+        "object": "Object",
+        "array": "Array"
+      },
+      "effort": {
+        "default": "Default",
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "max": "Max"
+      }
+    },
+    "detail": {
+      "back": "Back",
+      "override": "Override in current config",
+      "inheritedReadonly": "This value comes from an extended config. Override it here before editing.",
+      "inheritedAppendOnly": "This item comes from an extended config. This collection merges by append, so edit it in the source config or override the whole collection here.",
+      "partialOverride": "This entry overrides an inherited config. Fields not set locally still come from the inherited layer.",
+      "inheritedBadge": "Inherited",
+      "overrideBadge": "Override",
+      "localBadge": "Local"
+    },
+    "accounts": {
+      "title": "Accounts",
+      "back": "Back to accounts",
+      "backToAdapter": "Back to adapter",
+      "empty": "No accounts available yet.",
+      "detailMissing": "Account detail is currently unavailable.",
+      "default": "Default",
+      "count": "{{count}} accounts",
+      "readyCount": "{{count}} ready",
+      "defaultHint": "Default: {{account}}",
+      "quotaTitle": "Quota",
+      "settingsTitle": "Account settings",
+      "settingsDescription": "These fields edit the adapter config entry for this account. When supported, they override the stored workspace snapshot.",
+      "adapterKeyHint": "Adapter: {{adapter}}",
+      "searchPlaceholder": "Search accounts",
+      "searchEmpty": "No matching accounts",
+      "deleteConfirmTitle": "Delete the stored workspace snapshot for {{account}}?",
+      "rowActions": {
+        "setDefault": "Set as default account",
+        "clearDefault": "Clear default account",
+        "delete": "Delete account snapshot"
+      },
+      "facts": {
+        "email": "Email",
+        "type": "Type",
+        "plan": "Plan"
+      },
+      "status": {
+        "ready": "Ready",
+        "missing": "Missing",
+        "error": "Error"
+      },
+      "actions": {
+        "add": {
+          "label": "Connect account",
+          "description": "Run the adapter login action and save its credentials into this workspace."
+        },
+        "refresh": {
+          "label": "Refresh quota",
+          "description": "Fetch the latest plan and quota info for this account."
+        },
+        "remove": {
+          "label": "Remove snapshot",
+          "description": "Remove the stored workspace snapshot for this account."
+        }
+      },
+      "actionSuccess": {
+        "add": "Account connected",
+        "refresh": "Quota refreshed",
+        "remove": "Account snapshot removed"
+      },
+      "actionFailed": {
+        "add": "Failed to connect account",
+        "refresh": "Failed to refresh quota",
+        "remove": "Failed to remove account snapshot"
+      },
+      "authFileDefaultLookup": "Leave empty to use {{path}}."
+    },
+    "fields": {
+      "general": {
+        "baseDir": {
+          "label": "Workspace Folder",
+          "desc": "Default folder for configuration and cache files"
+        },
+        "disableGlobalConfig": {
+          "label": "Disable Global Config",
+          "desc": "Stop merging global ~/.oneworks/.oo.config.json into the current resolved config; the global source remains editable."
+        },
+        "effort": {
+          "label": "Default Effort",
+          "desc": "Default effort level used when none is specified"
+        },
+        "defaultAdapter": {
+          "label": "Default Adapter",
+          "desc": "Adapter used when none is specified"
+        },
+        "defaultModelService": {
+          "label": "Default Model Service",
+          "desc": "Model service used when none is specified"
+        },
+        "defaultModel": {
+          "label": "Default Model",
+          "desc": "Model used when none is specified"
+        },
+        "recommendedModels": {
+          "label": "Recommended Models",
+          "desc": "Models shown in the recommended section of the selector",
+          "item": {
+            "service": {
+              "label": "Model Service",
+              "desc": "Optional service that owns this model"
+            },
+            "model": {
+              "label": "Model",
+              "desc": "Model identifier shown in recommendations"
+            },
+            "title": {
+              "label": "Title",
+              "desc": "Optional display title for this recommendation"
+            },
+            "description": {
+              "label": "Description",
+              "desc": "Optional display description for this recommendation"
+            },
+            "placement": {
+              "label": "Placement",
+              "desc": "UI placement where this recommendation appears"
+            }
+          }
+        },
+        "interfaceLanguage": {
+          "label": "Interface Language",
+          "desc": "Controls UI display and interaction language"
+        },
+        "modelLanguage": {
+          "label": "Model Language",
+          "desc": "Controls the assistant response language"
+        },
+        "messageLinks": {
+          "label": "Message Links",
+          "desc": "Controls how links inside chat messages are rendered and opened",
+          "externalLinkTarget": {
+            "label": "Web Link Target",
+            "desc": "Choose whether web links open in a new browser tab or the current tab"
+          },
+          "workspaceFileTarget": {
+            "label": "Workspace File Target",
+            "desc": "Choose whether workspace file links open in the bottom file tab, an external app, or the browser default link behavior"
+          },
+          "workspaceFileOpener": {
+            "label": "Preferred App",
+            "desc": "Choose the external app used for workspace file links. Auto-detect uses the first installed supported tool."
+          },
+          "imageLinkMode": {
+            "label": "Image Links",
+            "desc": "Render standard image links inline with click-to-preview, or keep them as normal links"
+          },
+          "plainWorkspacePathMode": {
+            "label": "Plain File Paths",
+            "desc": "Turn plain workspace-relative file paths in message text into clickable links"
+          }
+        },
+        "announcements": {
+          "label": "Announcements",
+          "desc": "Shown when starting a new session"
+        },
+        "permissions": {
+          "label": "Permissions",
+          "desc": "Access policy for tools and resources",
+          "allow": {
+            "label": "Allow"
+          },
+          "deny": {
+            "label": "Deny"
+          },
+          "ask": {
+            "label": "Ask"
+          }
+        },
+        "env": {
+          "label": "Environment",
+          "desc": "Overrides or additional environment variables"
+        },
+        "notifications": {
+          "label": "Notifications",
+          "desc": "Trigger notifications on session status updates",
+          "disabled": {
+            "label": "Disable Notifications",
+            "desc": "Disable to stop sending notifications"
+          },
+          "volume": {
+            "label": "Notification Volume",
+            "desc": "0-1 or 0-100, 0 means mute"
+          },
+          "events": {
+            "label": "Event Notifications",
+            "desc": "Configure each notification trigger separately",
+            "item": {
+              "enabled": {
+                "label": "Enable notification"
+              },
+              "title": {
+                "label": "Title",
+                "desc": "Leave empty to use the default title"
+              },
+              "description": {
+                "label": "Message",
+                "desc": "Leave empty to use the default message"
+              },
+              "sound": {
+                "label": "Sound",
+                "desc": "Audio file path, leave empty for default sound"
+              }
+            },
+            "completed": {
+              "label": "Completion Notification",
+              "desc": "Triggered when a session completes",
+              "disabled": {
+                "label": "Disable Completion Notification",
+                "desc": "Disable to stop completion notifications"
+              },
+              "title": {
+                "label": "Completion Title",
+                "desc": "Leave empty to use the default title"
+              },
+              "description": {
+                "label": "Completion Message",
+                "desc": "Leave empty to use the default message"
+              },
+              "sound": {
+                "label": "Completion Sound",
+                "desc": "Audio file path, leave empty for default sound"
+              }
+            },
+            "failed": {
+              "label": "Failure Notification",
+              "desc": "Triggered when a session fails",
+              "disabled": {
+                "label": "Disable Failure Notification",
+                "desc": "Disable to stop failure notifications"
+              },
+              "title": {
+                "label": "Failure Title",
+                "desc": "Leave empty to use the default title"
+              },
+              "description": {
+                "label": "Failure Message",
+                "desc": "Leave empty to use the default message"
+              },
+              "sound": {
+                "label": "Failure Sound",
+                "desc": "Audio file path, leave empty for default sound"
+              }
+            },
+            "terminated": {
+              "label": "Termination Notification",
+              "desc": "Triggered when a session is terminated",
+              "disabled": {
+                "label": "Disable Termination Notification",
+                "desc": "Disable to stop termination notifications"
+              },
+              "title": {
+                "label": "Termination Title",
+                "desc": "Leave empty to use the default title"
+              },
+              "description": {
+                "label": "Termination Message",
+                "desc": "Leave empty to use the default message"
+              },
+              "sound": {
+                "label": "Termination Sound",
+                "desc": "Audio file path, leave empty for default sound"
+              }
+            },
+            "waiting_input": {
+              "label": "Waiting Input Notification",
+              "desc": "Triggered when a session waits for input",
+              "disabled": {
+                "label": "Disable Waiting Input Notification",
+                "desc": "Disable to stop waiting input notifications"
+              },
+              "title": {
+                "label": "Waiting Input Title",
+                "desc": "Leave empty to use the default title"
+              },
+              "description": {
+                "label": "Waiting Input Message",
+                "desc": "Leave empty to use the default message"
+              },
+              "sound": {
+                "label": "Waiting Input Sound",
+                "desc": "Audio file path, leave empty for default sound"
+              }
+            }
+          }
+        }
+      },
+      "conversation": {
+        "style": {
+          "label": "Conversation Style",
+          "desc": "Controls the assistant’s interaction style"
+        },
+        "createSessionWorktree": {
+          "label": "Create worktree for new sessions",
+          "desc": "When enabled, new sessions get a managed worktree; when disabled, they reuse the current workspace by default"
+        },
+        "showSessionCardMessage": {
+          "label": "Show Session Message Preview",
+          "desc": "Show the latest message preview in sidebar session cards. Disabled by default, so cards only show title and status."
+        },
+        "worktreeEnvironment": {
+          "label": "Default worktree environment",
+          "desc": "Environment scripts run when managed worktrees are created, started, and destroyed"
+        },
+        "customInstructions": {
+          "label": "Custom Instructions",
+          "desc": "Additional guidance for the assistant"
+        },
+        "startupPresets": {
+          "label": "Startup Presets",
+          "desc": "Show one-click startup environment presets on the new session page"
+        },
+        "builtinActions": {
+          "label": "Built-in Actions",
+          "desc": "Show reusable development action templates on the new session page"
+        },
+        "starterItem": {
+          "title": {
+            "label": "Title",
+            "desc": "Name shown in the list"
+          },
+          "description": {
+            "label": "Description",
+            "desc": "Supporting copy shown in the list"
+          },
+          "icon": {
+            "label": "Icon",
+            "desc": "Material Symbols icon name, for example `rocket_launch`"
+          },
+          "mode": {
+            "label": "Mode",
+            "desc": "Target mode selected for the new session"
+          },
+          "target": {
+            "label": "Target",
+            "desc": "Workspace uses the id; Agent / entity / spec use the resource name"
+          },
+          "targetLabel": {
+            "label": "Target Label",
+            "desc": "Optional display label shown in the list"
+          },
+          "targetDescription": {
+            "label": "Target Description",
+            "desc": "Optional supporting description for the selected target"
+          },
+          "model": {
+            "label": "Model",
+            "desc": "Model value, including optional `service,model` form"
+          },
+          "adapter": {
+            "label": "Adapter",
+            "desc": "Adapter selected when the preset is applied"
+          },
+          "account": {
+            "label": "Account",
+            "desc": "Account selected when the preset is applied"
+          },
+          "effort": {
+            "label": "Effort",
+            "desc": "Reasoning effort applied when the preset is used"
+          },
+          "permissionMode": {
+            "label": "Permission Mode",
+            "desc": "Permission mode applied when the preset is used"
+          },
+          "worktreeCreate": {
+            "label": "Use Worktree",
+            "desc": "Enable a managed worktree for this preset"
+          },
+          "worktreeEnvironment": {
+            "label": "Worktree Environment",
+            "desc": "Managed worktree environment id used by this preset"
+          },
+          "branchName": {
+            "label": "Branch Name",
+            "desc": "Branch name prefilled when the preset is applied"
+          },
+          "branchKind": {
+            "label": "Branch Kind",
+            "desc": "Whether the branch comes from a local or remote ref"
+          },
+          "branchMode": {
+            "label": "Branch Mode",
+            "desc": "Whether to checkout an existing branch or create a new one"
+          },
+          "prompt": {
+            "label": "Prompt",
+            "desc": "Prompt prefilled into the sender when clicked"
+          },
+          "files": {
+            "label": "Files",
+            "desc": "File paths attached to the sender when clicked"
+          },
+          "rules": {
+            "label": "Rules",
+            "desc": "Rule paths or rule identifiers that will be converted into starter context when possible"
+          },
+          "skills": {
+            "label": "Skills",
+            "desc": "Skill paths or skill identifiers that will be converted into starter context when possible"
+          },
+          "worktreeEnabledBadge": "Worktree"
+        }
+      },
+      "models": {
+        "items": {
+          "label": "Model Metadata Entries",
+          "desc": "Model metadata keyed by `service` or `service,model`. Display metadata like alias/title/description only applies to exact `model` or `service,model` matches"
+        }
+      },
+      "modelServices": {
+        "items": {
+          "label": "Service Entries",
+          "desc": "Flattened configuration by service name"
+        },
+        "item": {
+          "title": {
+            "label": "Display Title",
+            "desc": "Shown in the default model service dropdown"
+          },
+          "description": {
+            "label": "Display Description",
+            "desc": "Shown in the default model service dropdown"
+          },
+          "apiBaseUrl": {
+            "label": "API Base URL",
+            "desc": "Base URL for the model service API"
+          },
+          "apiKey": {
+            "label": "API Key",
+            "desc": "Access key for the model service"
+          },
+          "models": {
+            "label": "Models",
+            "desc": "Models supported by this service"
+          },
+          "timeoutMs": {
+            "label": "Timeout (ms)",
+            "desc": "Provider timeout in milliseconds. Codex uses it as stream idle timeout; Claude Code Router uses global API timeout."
+          },
+          "maxOutputTokens": {
+            "label": "Max Output Tokens",
+            "desc": "Default output token cap for this service. Codex uses maxOutputTokens; Claude Code Router uses the maxtoken transformer."
+          },
+          "extra": {
+            "label": "Extra Settings",
+            "desc": "Additional configuration for the service"
+          }
+        }
+      },
+      "adapters": {
+        "defaultModel": {
+          "label": "Default Model",
+          "desc": "Preferred model override for this adapter."
+        },
+        "includeModels": {
+          "label": "Allowed Models",
+          "desc": "Restrict this adapter to the listed models."
+        },
+        "excludeModels": {
+          "label": "Blocked Models",
+          "desc": "Models that this adapter must not use."
+        },
+        "defaultAccount": {
+          "label": "Default Account",
+          "desc": "Default account key selected for this adapter."
+        },
+        "items": {
+          "label": "Adapter Entries",
+          "desc": "Flattened configuration by adapter name. Common fields include `defaultModel`, `includeModels`, and `excludeModels`."
+        }
+      },
+      "adapterAccount": {
+        "title": {
+          "label": "Display Name",
+          "desc": "Title shown for this account in the UI."
+        },
+        "description": {
+          "label": "Description",
+          "desc": "Optional notes about the account purpose or source."
+        },
+        "authFile": {
+          "label": "Auth File",
+          "desc": "Explicit path to the auth.json file for this account."
+        }
+      },
+      "plugins": {
+        "items": {
+          "label": "Plugin Configuration",
+          "desc": "Flattened configuration by plugin name"
+        },
+        "enabled": {
+          "label": "Enabled Plugins",
+          "desc": "Enable or disable plugins"
+        },
+        "marketplaces": {
+          "label": "Plugin Marketplaces",
+          "desc": "Adapter-native plugin marketplaces"
+        }
+      },
+      "mcp": {
+        "mcpServers": {
+          "label": "MCP Servers",
+          "desc": "Connection details for MCP servers"
+        },
+        "defaultIncludeMcpServers": {
+          "label": "Default Include",
+          "desc": "MCP servers enabled by default"
+        },
+        "defaultExcludeMcpServers": {
+          "label": "Default Exclude",
+          "desc": "MCP servers disabled by default"
+        },
+        "noDefaultOneworksMcpServer": {
+          "label": "Disable Built-in MCP",
+          "desc": "Do not enable the built-in OneWorks MCP server"
+        },
+        "items": {
+          "label": "Server Entries",
+          "desc": "Flattened configuration by server name"
+        }
+      },
+      "mcpServer": {
+        "enabled": {
+          "label": "Enabled",
+          "desc": "Toggle MCP server availability"
+        },
+        "type": {
+          "label": "Connection Type",
+          "desc": "Choose how to connect to the server"
+        },
+        "command": {
+          "label": "Command",
+          "desc": "Local command launch"
+        },
+        "args": {
+          "label": "Arguments",
+          "desc": "Command arguments"
+        },
+        "url": {
+          "label": "Server URL",
+          "desc": "Remote MCP server address"
+        },
+        "headers": {
+          "label": "Headers",
+          "desc": "Headers included for the connection"
+        },
+        "env": {
+          "label": "Environment",
+          "desc": "Environment variables for the MCP server"
+        }
+      },
+      "shortcuts": {
+        "newSession": {
+          "label": "New Session",
+          "desc": "Global shortcut for creating a new session"
+        },
+        "openConfig": {
+          "label": "Open Config",
+          "desc": "Shortcut for opening the config view"
+        },
+        "sendMessage": {
+          "label": "Send Message",
+          "desc": "Shortcut for sending a message"
+        },
+        "clearInput": {
+          "label": "Clear Input",
+          "desc": "Shortcut for clearing the input"
+        },
+        "switchModel": {
+          "label": "Switch Model",
+          "desc": "Open the model selector and navigate it with the keyboard"
+        },
+        "switchEffort": {
+          "label": "Switch Reasoning Effort",
+          "desc": "Open the effort selector and navigate it with the keyboard"
+        },
+        "switchPermissionMode": {
+          "label": "Switch Permission Mode",
+          "desc": "Open the permission menu and navigate it with the keyboard"
+        }
+      },
+      "experiments": {
+        "agentRoom": {
+          "label": "Agent Room",
+          "desc": "Enable the experimental multi-agent room chat mode. Disabled by default."
+        },
+        "automation": {
+          "label": "Automation",
+          "desc": "Enable the experimental automation interface entry. Disabled by default."
+        },
+        "benchmark": {
+          "label": "Benchmark",
+          "desc": "Enable the experimental benchmark interface entry. Disabled by default."
+        },
+        "sessionTimeline": {
+          "label": "Session timeline",
+          "desc": "Show the unfinished timeline view in session headers. Disabled by default."
+        }
+      }
+    },
+    "options": {
+      "language": {
+        "zh": "Chinese",
+        "en": "English"
+      },
+      "conversation": {
+        "friendly": "Friendly",
+        "programmatic": "Programmatic"
+      },
+      "conversationStarterMode": {
+        "default": "Default",
+        "workspace": "Workspace",
+        "agent": "Agent",
+        "entity": "Entity",
+        "spec": "Spec"
+      },
+      "permissionMode": {
+        "default": "Default",
+        "acceptEdits": "Accept Edits",
+        "plan": "Plan",
+        "dontAsk": "Don't Ask",
+        "bypassPermissions": "Bypass Permissions"
+      },
+      "branchKind": {
+        "local": "Local Branch",
+        "remote": "Remote Branch"
+      },
+      "branchMode": {
+        "checkout": "Checkout",
+        "create": "Create"
+      },
+      "mcp": {
+        "command": "Command",
+        "sse": "SSE",
+        "http": "HTTP"
+      },
+      "messageLinks": {
+        "externalLinkTarget": {
+          "newTab": "Open a new tab",
+          "currentTab": "Open in current tab"
+        },
+        "workspaceFileTarget": {
+          "fileTab": "Bottom file tab",
+          "externalIde": "External app",
+          "defaultLink": "Browser default"
+        },
+        "workspaceFileOpener": {
+          "auto": "Auto-detect",
+          "autoWithDefault": "Auto-detect ({{name}})",
+          "vscode": "VS Code",
+          "cursor": "Cursor",
+          "windsurf": "Windsurf",
+          "zed": "Zed",
+          "intellij": "IntelliJ IDEA",
+          "webstorm": "WebStorm",
+          "pycharm": "PyCharm",
+          "goland": "GoLand",
+          "textedit": "TextEdit"
+        },
+        "imageLinkMode": {
+          "inlinePreview": "Inline preview",
+          "link": "Normal link"
+        },
+        "plainWorkspacePathMode": {
+          "link": "Clickable link",
+          "text": "Plain text"
+        }
+      },
+      "recommendedModels": {
+        "modelSelector": "Model Metadata"
+      }
+    },
+    "sectionGroups": {
+      "base": "Base Configuration",
+      "models": "Model Configuration",
+      "advanced": "Advanced Configuration",
+      "advancedModels": "Advanced Model Rules",
+      "advancedRuntime": "Runtime Options",
+      "advancedSandbox": "Sandbox",
+      "advancedClient": "Client Identity",
+      "advancedOverrides": "Raw Overrides",
+      "advancedMisc": "Other Options",
+      "permissions": "Tool Permissions",
+      "env": "Environment Variables",
+      "links": "Message Links",
+      "items": "Entry Configuration",
+      "plugins": "Plugin Configuration"
+    },
+    "groups": {
+      "config": "Configuration",
+      "app": "Application"
+    },
+    "environments": {
+      "newPlaceholder": "Example: env-node-20",
+      "newLocalPlaceholder": "Example: env-node-20",
+      "create": "New",
+      "created": "Environment created",
+      "empty": "No worktree environments",
+      "searchEmpty": "No matching worktree environments",
+      "searchPlaceholder": "Search environments",
+      "exists": "Environment name already exists",
+      "createFailed": "Failed to create environment",
+      "saveFailed": "Failed to save environment",
+      "edit": "Edit",
+      "name": "Name",
+      "createTitle": "Create Environment",
+      "createDescription": "",
+      "projectListTitle": "Project Environments",
+      "projectListDescription": "",
+      "localListTitle": "Local Environments",
+      "localListDescription": "",
+      "detailTitle": "Environment Details",
+      "baseScript": "Script",
+      "availableEnvVars": "Available env vars",
+      "platformOverrides": "Platform Overrides",
+      "platformOverridesDescription": "Override the default script for a specific operating system.",
+      "platformScriptDescription": "Runs only on {{platform}}.",
+      "sources": {
+        "project": "Project",
+        "user": "Local"
+      },
+      "platforms": {
+        "macos": "macOS",
+        "linux": "Linux",
+        "windows": "Windows"
+      },
+      "operationSections": {
+        "create": {
+          "title": "Create Script",
+          "description": "This script runs after the worktree is created."
+        },
+        "start": {
+          "title": "Start Script",
+          "description": "This script runs before the adapter process starts."
+        },
+        "destroy": {
+          "title": "Cleanup Script",
+          "description": "This script runs before deleting a managed worktree."
+        }
+      },
+      "baseScriptDescriptions": {
+        "create": "Runs in the new worktree.",
+        "start": "Runs in the session workspace.",
+        "destroy": "Runs in the worktree being deleted."
+      },
+      "operations": {
+        "create": "Create",
+        "start": "Start",
+        "destroy": "Destroy"
+      },
+      "scripts": {
+        "create": "create.sh",
+        "create.macos": "create.macos.sh",
+        "create.linux": "create.linux.sh",
+        "create.windows": "create.windows.ps1",
+        "start": "start.sh",
+        "start.macos": "start.macos.sh",
+        "start.linux": "start.linux.sh",
+        "start.windows": "start.windows.ps1",
+        "destroy": "destroy.sh",
+        "destroy.macos": "destroy.macos.sh",
+        "destroy.linux": "destroy.linux.sh",
+        "destroy.windows": "destroy.windows.ps1"
+      }
+    },
+    "about": {
+      "software": "Software Info",
+      "version": "Version",
+      "clientVersion": "Client Version",
+      "serverVersion": "Server Version",
+      "commitHash": "Build Commit",
+      "lastRelease": "Last Release",
+      "checkUpdate": "Check Updates",
+      "docs": "Documentation",
+      "contact": "Contact Us",
+      "feedback": "Feedback",
+      "buildSource": {
+        "title": "App Source",
+        "gitHash": "Git Hash",
+        "branch": "Branch",
+        "buildTime": "Build Time"
+      },
+      "unknown": "Unknown"
+    },
+    "sections": {
+      "general": "General",
+      "conversation": "Conversation",
+      "models": "Models",
+      "modelServices": "Model Services",
+      "channels": "Channels",
+      "adapters": "Adapters",
+      "plugins": "Plugins",
+      "environments": "Environments",
+      "mcp": "MCP",
+      "shortcuts": "Shortcuts",
+      "desktop": "Desktop",
+      "appearance": "Appearance",
+      "experiments": "Experiments",
+      "about": "About"
+    },
+    "desktopSettings": {
+      "unavailable": "Desktop settings update API is not available in this environment",
+      "saving": "Saving...",
+      "saveFailed": "Failed to save desktop settings",
+      "openKeyboardSettingsFailed": "Failed to open System Settings",
+      "appIcon": {
+        "label": "App icon",
+        "desc": "Choose the desktop app icon theme. Light or dark appearance follows theme mode",
+        "theme": "Theme",
+        "appearance": "Appearance",
+        "background": "Default background",
+        "backgroundDesc": "Render the icon tile background",
+        "backgroundStyle": {
+          "options": {
+            "transparent": {
+              "label": "Transparent",
+              "desc": "Show only the icon mark without a tile background"
+            },
+            "solid": {
+              "label": "Solid",
+              "desc": "Render a solid app-icon theme color tile"
+            },
+            "textured": {
+              "label": "Textured",
+              "desc": "Render the app icon theme's textured background"
+            }
+          }
+        },
+        "previewAlt": "OneWorks app icon preview",
+        "saveFailed": "Failed to save app icon settings",
+        "syncDockIcon": {
+          "label": "Sync Dock icon",
+          "desc": "Update the app icon in the Dock when global app icon settings change"
+        },
+        "syncTaskbarIcon": {
+          "label": "Sync taskbar icon",
+          "desc": "Update the app icon in the taskbar when global app icon settings change"
+        },
+        "syncAppIcon": {
+          "label": "Sync system app icon",
+          "desc": "Update the system app icon when global app icon settings change"
+        },
+        "themeOptions": {
+          "industrial": "Industrial",
+          "metal": "Metal",
+          "matrix": "Matrix"
+        }
+      },
+      "launcherShortcut": {
+        "label": "Launcher shortcut",
+        "desc": "Open or focus the desktop launcher. Leave it empty to disable the global shortcut.",
+        "placeholder": "Press a new shortcut",
+        "invalid": "Shortcut must include Command, Control, or Option/Alt",
+        "registerFailed": "Current shortcut is not registered: {{message}}",
+        "registered": "Shortcut enabled",
+        "openKeyboardSettings": "Open System Settings",
+        "retry": "Retry",
+        "useFallback": "Use Option+Space"
+      },
+      "updates": {
+        "label": "App updates",
+        "desc": "Release desktop builds check for updates automatically. These settings are saved to this project's .oo.config.json.",
+        "autoUpdate": "Check for and download updates automatically",
+        "check": "Check for Updates",
+        "checking": "Checking...",
+        "update": "Update Now",
+        "restart": "Restart to Update",
+        "checkFailed": "Failed to check for updates",
+        "channel": {
+          "options": {
+            "stable": "Stable",
+            "rc": "RC",
+            "beta": "Beta",
+            "alpha": "Alpha"
+          }
+        },
+        "status": {
+          "available": "OneWorks {{version}} is available.",
+          "checking": "Checking for a new version.",
+          "downloaded": "OneWorks {{version}} has been downloaded and will install after restart. It also installs automatically when you quit the app.",
+          "downloading": "Downloading update: {{progress}}",
+          "error": "Last update check failed: {{message}}",
+          "idle": "Current version {{version}}.",
+          "autoUpdateOff": "Current version {{version}}. Automatic checks and downloads are off.",
+          "disabled": "Update checks are disabled for this app launch.",
+          "unavailable": "Update checks are available only in release packages with update configuration."
+        }
+      }
+    },
+    "appSettings": {
+      "projectThemeColor": {
+        "label": "Interface theme color",
+        "desc": "Choose the interface primary color for the selected config layer",
+        "previewAlt": "Interface theme icon preview",
+        "saveFailed": "Failed to save theme settings",
+        "backgroundStyle": {
+          "label": "Background",
+          "options": {
+            "transparent": {
+              "label": "Transparent",
+              "desc": "Show only the icon mark without a tile background"
+            },
+            "solid": {
+              "label": "Solid",
+              "desc": "Render a solid project-color tile"
+            },
+            "textured": {
+              "label": "Textured",
+              "desc": "Render the icon theme's textured background"
+            }
+          }
+        },
+        "syncDockIcon": {
+          "label": "Sync Dock icon",
+          "desc": "Update the app icon in the Dock when the project theme color changes"
+        },
+        "syncTaskbarIcon": {
+          "label": "Sync taskbar icon",
+          "desc": "Update the app icon in the taskbar when the project theme color changes"
+        },
+        "syncAppIcon": {
+          "label": "Sync system app icon",
+          "desc": "Update the system app icon when the project theme color changes"
+        }
+      },
+      "themeMode": {
+        "label": "Theme mode",
+        "desc": "Switch between light, dark, or system theme for the interface"
+      },
+      "senderHeaderDisplay": {
+        "label": "Composer header default",
+        "desc": "Default expand or collapse behavior for the composer header when the URL does not override it",
+        "expanded": "Expanded by default",
+        "collapsed": "Collapsed by default"
+      },
+      "sessionListSearchThreshold": {
+        "label": "Session list search threshold",
+        "desc": "Only show the search and filter row when the session count exceeds this value; use 0 to always show it"
+      },
+      "interactionPanelPinnedTabLimit": {
+        "label": "Bottom panel pinned tab limit",
+        "desc": "Control how many pinned tabs can appear on the left side of the bottom panel; defaults to 4"
+      },
+      "announcements": {
+        "label": "Show announcements",
+        "desc": "Show announcements when creating a new session"
+      },
+      "recommendedActions": {
+        "label": "Show recommended actions",
+        "desc": "Show the recommended action list when creating a new session"
+      }
+    }
+  }
+}

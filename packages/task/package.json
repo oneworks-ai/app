@@ -1,0 +1,45 @@
+{
+  "name": "@oneworks/task",
+  "version": "0.1.0-alpha.0",
+  "description": "Task runtime for OneWorks",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/task"
+  },
+  "imports": {
+    "#~/*.js": {
+      "__oneworks__": {
+        "default": "./src/*.ts"
+      },
+      "default": {
+        "import": "./dist/*.mjs",
+        "require": "./dist/*.js"
+      }
+    }
+  },
+  "exports": {
+    ".": {
+      "__oneworks__": {
+        "default": "./src/index.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/task/__tests__"
+  },
+  "dependencies": {
+    "@oneworks/config": "workspace:*",
+    "@oneworks/hooks": "workspace:*",
+    "@oneworks/managed-plugins": "workspace:*",
+    "@oneworks/types": "workspace:*",
+    "@oneworks/utils": "workspace:*",
+    "@oneworks/workspace-assets": "workspace:*",
+    "zod": "^3.24.1"
+  }
+}

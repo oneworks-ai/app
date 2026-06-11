@@ -1,0 +1,59 @@
+{
+  "name": "@oneworks/desktop",
+  "version": "0.1.0-alpha.0",
+  "private": true,
+  "description": "One Works desktop shell",
+  "author": "One Works contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oneworks-ai/app.git"
+  },
+  "main": "./dist/main/index.js",
+  "scripts": {
+    "build:electron": "electron-vite build --config electron.vite.config.ts --outDir dist --ignoreConfigWarning",
+    "build:client": "pnpm -C ../client exec vite build",
+    "dev": "pnpm run build:electron && electron .",
+    "icons:sync": "node ./scripts/sync-icons.cjs",
+    "make": "pnpm run package && node ./scripts/make.cjs",
+    "make:pkg": "pnpm run package && node ./scripts/make.cjs --target pkg",
+    "make:pkg:icon": "pnpm run package:icon && node ./scripts/make.cjs --target pkg --mac-icon icon",
+    "make:pkg:from-package": "node ./scripts/make.cjs --target pkg",
+    "make:pkg:icon:from-package": "node ./scripts/make.cjs --target pkg --mac-icon icon",
+    "make:from-package": "node ./scripts/make.cjs",
+    "mock:update-feed": "node ./scripts/mock-update-feed.cjs",
+    "package": "pnpm run build:client && pnpm run build:electron && node ./scripts/package.cjs",
+    "package:icon": "node ./scripts/package.cjs --mac-icon icon --check-icons && pnpm run build:client && pnpm run build:electron && node ./scripts/package.cjs --mac-icon icon",
+    "smoke:package": "node ./scripts/smoke-packaged-server.cjs",
+    "verify:macos-install": "node ./scripts/verify-macos-install.cjs",
+    "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project node apps/desktop/__tests__",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@oneworks/adapter-claude-code": "workspace:*",
+    "@oneworks/adapter-codex": "workspace:*",
+    "@oneworks/adapter-copilot": "workspace:*",
+    "@oneworks/adapter-gemini": "workspace:*",
+    "@oneworks/adapter-kimi": "workspace:*",
+    "@oneworks/adapter-opencode": "workspace:*",
+    "@oneworks/cli-helper": "workspace:*",
+    "@oneworks/config": "workspace:*",
+    "@oneworks/icon": "workspace:*",
+    "@oneworks/plugin-logger": "workspace:*",
+    "@oneworks/plugin-standard-dev": "workspace:*",
+    "@oneworks/register": "workspace:*",
+    "@oneworks/server": "workspace:*",
+    "@oneworks/types": "workspace:*",
+    "@oneworks/utils": "workspace:*",
+    "electron-updater": "^6.8.3",
+    "oneworks": "workspace:*"
+  },
+  "devDependencies": {
+    "@electron/notarize": "^3.1.1",
+    "@electron/packager": "^19.1.0",
+    "@swc/core": "^1.0.0",
+    "electron": "^41.2.1",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^5.0.0",
+    "vite": "^5.4.8"
+  }
+}

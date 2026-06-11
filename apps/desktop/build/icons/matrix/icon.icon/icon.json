@@ -1,0 +1,70 @@
+{
+  "fill": {
+    "solid": "srgb:0.9137,1,0.9451,1"
+  },
+  "fill-specializations": [
+    {
+      "appearance": "light",
+      "idiom": "macOS",
+      "value": {
+        "solid": "srgb:0.9137,1,0.9451,1"
+      }
+    },
+    {
+      "appearance": "dark",
+      "idiom": "macOS",
+      "value": {
+        "solid": "srgb:0,0.1059,0.051,1"
+      }
+    },
+    {
+      "appearance": "tinted",
+      "idiom": "macOS",
+      "value": {
+        "solid": "srgb:0.9137,1,0.9451,1"
+      }
+    }
+  ],
+  "groups": [
+    {
+      "layers": [
+        {
+          "fill": "none",
+          "fill-specializations": [
+            {
+              "appearance": "light",
+              "idiom": "macOS",
+              "value": "none"
+            },
+            {
+              "appearance": "dark",
+              "idiom": "macOS",
+              "value": "none"
+            },
+            {
+              "appearance": "tinted",
+              "idiom": "macOS",
+              "value": "none"
+            }
+          ],
+          "glass": false,
+          "image-name": "icon.png",
+          "image-name-specializations": [
+            {
+              "appearance": "dark",
+              "idiom": "universal",
+              "value": "icon-dark.png"
+            }
+          ],
+          "name": "oneworks"
+        }
+      ]
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}

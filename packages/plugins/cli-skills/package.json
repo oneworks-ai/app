@@ -1,0 +1,12 @@
+{
+  "name": "@oneworks/plugin-cli-skills",
+  "version": "0.1.0-alpha.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/plugins/cli-skills"
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  }
+}

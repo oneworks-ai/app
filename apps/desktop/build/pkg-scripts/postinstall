@@ -1,0 +1,51 @@
+#!/bin/bash
+set -u
+
+find_installed_app() {
+  local target_volume="${3:-/}"
+  local applications_dir="/Applications"
+
+  if [[ -n "$target_volume" && "$target_volume" != "/" ]]; then
+    applications_dir="${target_volume%/}/Applications"
+  fi
+
+  local candidates=(
+    "$applications_dir/One Works Dev.app"
+    "$applications_dir/One Works.app"
+    "/Applications/One Works Dev.app"
+    "/Applications/One Works.app"
+  )
+
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -d "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+open_for_console_user() {
+  local app_path="$1"
+  local console_user
+  console_user="$(/usr/bin/stat -f '%Su' /dev/console 2>/dev/null || true)"
+
+  if [[ -z "$console_user" || "$console_user" == "root" || "$console_user" == "loginwindow" ]]; then
+    return 0
+  fi
+
+  local console_uid
+  console_uid="$(/usr/bin/id -u "$console_user" 2>/dev/null || true)"
+  if [[ -z "$console_uid" ]]; then
+    return 0
+  fi
+
+  /bin/launchctl asuser "$console_uid" /usr/bin/sudo -u "$console_user" /usr/bin/open "$app_path" >/dev/null 2>&1 || true
+}
+
+app_path="$(find_installed_app "$@")" || exit 0
+open_for_console_user "$app_path"
+
+exit 0

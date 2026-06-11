@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.bundler.web.json",
+  "compilerOptions": {
+  },
+  "references": [
+    { "path": "./tsconfig.bundler.web.json" }
+  ],
+  "include": [
+    "../../apps/relay-admin/__tests__/**/*",
+    "../../apps/client/__tests__/**/*",
+    "../../packages/route-layout/__tests__/**/*"
+  ]
+}

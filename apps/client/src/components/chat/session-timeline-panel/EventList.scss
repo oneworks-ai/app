@@ -1,0 +1,146 @@
+.session-timeline-event-table {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+  height: 100%;
+  min-height: 0;
+}
+
+.session-timeline-event-table__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.session-timeline-event-table__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-color);
+  min-width: 0;
+}
+
+.session-timeline-event-table__search {
+  width: 240px;
+  max-width: 40%;
+}
+
+.session-timeline-event-table__table {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+.session-timeline-event-table__table .ant-table {
+  height: 100%;
+}
+
+.session-timeline-event-table__table .ant-table-container {
+  height: 100%;
+}
+
+.session-timeline-event-table__table .ant-table-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.session-timeline-event-table__table .ant-table-pagination {
+  margin: 8px 0 0;
+}
+
+.session-timeline-event-table__time {
+  color: var(--secondary-text-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.session-timeline-event-table__label {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-color);
+}
+
+.session-timeline-event-table__value {
+  color: var(--sub-text-color);
+  overflow-wrap: anywhere;
+}
+
+.session-timeline-event-table__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.session-timeline-event-table__detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.session-timeline-event-table__detail-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.session-timeline-event-table__detail-key {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--sub-text-color);
+}
+
+.session-timeline-event-table__detail-text {
+  min-width: 0;
+  color: var(--sub-text-color);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.session-timeline-event-table__cell-timing {
+  display: inline-flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+@media (max-width: 960px) {
+  .session-timeline-event-table {
+    gap: 10px;
+    padding-top: 8px;
+  }
+
+  .session-timeline-event-table__header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .session-timeline-event-table__search {
+    width: 100%;
+    max-width: none;
+  }
+
+  .session-timeline-event-table__table .ant-table-thead > tr > th,
+  .session-timeline-event-table__table .ant-table-tbody > tr > td {
+    padding: 8px;
+    font-size: 12px;
+  }
+
+  .session-timeline-event-table__table .ant-table-pagination {
+    row-gap: 6px;
+  }
+
+  .session-timeline-event-table__label {
+    line-height: 1.4;
+  }
+
+  .session-timeline-event-table__time {
+    font-size: 11px;
+    white-space: nowrap;
+  }
+}

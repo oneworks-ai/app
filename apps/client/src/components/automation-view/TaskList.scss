@@ -1,0 +1,223 @@
+.automation-view {
+  &__task-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  &__task-stack {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  &__task-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  &__task-card + &__task-card {
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+  }
+
+  &__task-composer {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  &__task-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    width: 100%;
+  }
+
+  &__task-collapse-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 6px;
+    color: var(--sub-text-color);
+  }
+
+  &__task-collapse-button:not(:disabled):hover,
+  &__task-collapse-button:not(:disabled):focus-visible {
+    background: var(--tag-hover-bg) !important;
+    color: var(--text-color) !important;
+  }
+
+  &__task-title-item,
+  &__task-prompt-item {
+    width: 100%;
+  }
+
+  &__task-title-item {
+    box-sizing: border-box;
+    padding-right: 42px;
+    min-width: 0;
+  }
+
+  &__task-title-input {
+    width: 100%;
+    font-weight: 600;
+  }
+
+  &__task-collapsible {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  &__task-collapsible[hidden] {
+    display: none;
+  }
+
+  &__task-sender {
+    width: 100%;
+    min-width: 0;
+  }
+
+  &__task-sender-stack {
+    width: 100%;
+    min-width: 0;
+  }
+
+  &__task-status-bar {
+    min-width: 0;
+    width: 100%;
+
+    .chat-status-bar__content {
+      display: flex;
+      justify-content: flex-start;
+    }
+  }
+
+  &__section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  &__section-heading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  &__section-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  &__section-count {
+    font-size: 12px;
+    color: var(--sub-text-color);
+  }
+
+  &__form-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: var(--text-color);
+  }
+
+  &__form-icon {
+    font-size: 18px;
+    color: var(--sub-text-color);
+  }
+
+  &__form-desc {
+    margin-bottom: 0;
+    font-size: 12px;
+    color: var(--sub-text-color);
+  }
+
+  &__icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 6px;
+  }
+
+  &__task-remove-button {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 6px;
+  }
+
+  &__task-card + &__task-card &__task-remove-button {
+    top: 16px;
+  }
+
+  &__action-icon {
+    font-size: 18px;
+  }
+
+  &__task-card .ant-form-item {
+    margin-bottom: 10px;
+  }
+
+  &__task-composer .ant-form-item {
+    margin-bottom: 0;
+  }
+
+  &__task-title-input.ant-input {
+    border-radius: 6px !important;
+    background: var(--sub-bg-color);
+  }
+
+  &__task-title-input.ant-input {
+    min-height: 32px;
+  }
+}
+
+.automation-view__sender-adapter-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.automation-view__sender-adapter-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+
+  &--fallback {
+    font-size: 16px;
+    color: var(--sub-text-color);
+  }
+}

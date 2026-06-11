@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; connect-src 'self' http: https: ws: wss:; worker-src 'self' blob:; frame-src 'self' http: https:; media-src 'self' data: blob:; manifest-src 'self'; form-action 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="theme-color"
+      content="#ffffff"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#141414"
+      media="(prefers-color-scheme: dark)"
+    />
+    <meta name="apple-mobile-web-app-title" content="OneWorks" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <link
+      rel="preload"
+      href="/src/assets/fonts/material-symbols-rounded.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="/favicon-metal-light.svg"
+      media="(prefers-color-scheme: light)"
+    />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="/favicon-metal-dark.svg"
+      media="(prefers-color-scheme: dark)"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="300x300"
+      href="/favicon-metal-light.png"
+      media="(prefers-color-scheme: light)"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="300x300"
+      href="/favicon-metal-dark.png"
+      media="(prefers-color-scheme: dark)"
+    />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>One Works Web</title>
+    <script>
+    ;(() => {
+      const themeModes = new Set(['light', 'dark', 'system'])
+      const resolveThemeMode = (value) => {
+        const normalized = typeof value === 'string'
+          ? value.trim().toLowerCase()
+          : ''
+        return themeModes.has(normalized) ? normalized : 'system'
+      }
+
+      const params = new URLSearchParams(window.location.search)
+      const root = document.documentElement
+      const rawPreviewMode = params.get('__oneworks_desktop_startup')
+
+      let storedThemeMode = 'system'
+      try {
+        storedThemeMode = resolveThemeMode(
+          window.localStorage.getItem('theme')
+        )
+      } catch {}
+
+      const previewMode = rawPreviewMode == null
+        ? ''
+        : rawPreviewMode.trim().toLowerCase()
+      const rawPreviewTheme =
+        previewMode === 'light' || previewMode === 'dark'
+          ? previewMode
+          : (params.get('__oneworks_desktop_startup_theme') ?? '').trim()
+            .toLowerCase()
+      const startupTheme =
+        rawPreviewTheme === 'light' || rawPreviewTheme === 'dark'
+          ? rawPreviewTheme
+          : storedThemeMode
+      if (startupTheme === 'light' || startupTheme === 'dark') {
+        root.dataset.oneworksDesktopStartupTheme = startupTheme
+      }
+
+      if (rawPreviewMode == null) return
+
+      if (
+        previewMode === '' ||
+        previewMode === '0' ||
+        previewMode === 'false' ||
+        previewMode === 'off'
+      ) return
+
+      root.dataset.oneworksDesktopStartupPreview = 'true'
+      root.dataset.oneworksDesktopStartupScreen = 'true'
+      root.dataset.oneworksDesktopStartupReady = 'false'
+    })()
+    </script>
+    <style>
+    :root {
+      --oneworks-desktop-startup-surface: #f5f7f2;
+      --oneworks-desktop-startup-bg: rgba(250, 252, 248, .72);
+      --oneworks-desktop-startup-text: #1f241f;
+      --oneworks-desktop-startup-muted: #5f685d;
+      --oneworks-startup-shell-padding: 44px;
+      --oneworks-startup-content-width: 520px;
+      --oneworks-startup-stack-gap: 18px;
+      --oneworks-startup-content-offset-y: 12px;
+      --oneworks-startup-tip-bottom: 28px;
+      --oneworks-startup-tip-inline: 34px;
+      --oneworks-startup-tip-size: 12px;
+      --oneworks-startup-tip-line-height: 1.45;
+      --oneworks-startup-mobile-shell-padding: 28px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --oneworks-desktop-startup-surface: #202321;
+        --oneworks-desktop-startup-bg: rgba(28, 30, 29, .72);
+        --oneworks-desktop-startup-text: #f7f7f2;
+        --oneworks-desktop-startup-muted: #a6afa2;
+      }
+    }
+
+    html[data-oneworks-desktop-startup-theme='light'] {
+      --oneworks-desktop-startup-surface: #f5f7f2;
+      --oneworks-desktop-startup-bg: rgba(250, 252, 248, .72);
+      --oneworks-desktop-startup-text: #1f241f;
+      --oneworks-desktop-startup-muted: #5f685d;
+    }
+
+    html[data-oneworks-desktop-startup-theme='dark'] {
+      --oneworks-desktop-startup-surface: #202321;
+      --oneworks-desktop-startup-bg: rgba(28, 30, 29, .72);
+      --oneworks-desktop-startup-text: #f7f7f2;
+      --oneworks-desktop-startup-muted: #a6afa2;
+    }
+
+    .oneworks-desktop-startup-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483000;
+      display: none;
+      place-items: center;
+      padding: var(--oneworks-startup-shell-padding);
+      -webkit-backdrop-filter: blur(30px) saturate(112%);
+      backdrop-filter: blur(30px) saturate(112%);
+      background: var(--oneworks-desktop-startup-bg);
+      color: var(--oneworks-desktop-startup-text);
+      font-family:
+        -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI',
+        sans-serif;
+      opacity: 0;
+      pointer-events: auto;
+      text-align: center;
+      transition: opacity .38s ease, visibility 0s linear 0s;
+      visibility: hidden;
+    }
+
+    .oneworks-desktop-startup-overlay::before {
+      content: '';
+      display: none;
+    }
+
+    html[data-oneworks-desktop-startup-screen='true']
+      .oneworks-desktop-startup-overlay {
+      display: grid;
+      opacity: 1;
+      visibility: visible;
+    }
+
+    html[data-oneworks-desktop-startup-screen='true'] {
+      background: var(--oneworks-desktop-startup-surface);
+    }
+
+    html[data-oneworks-desktop-startup-ready='true']
+      .oneworks-desktop-startup-overlay {
+      opacity: 0;
+      pointer-events: none;
+      visibility: hidden;
+      transition: opacity .38s ease, visibility 0s linear .38s;
+    }
+
+    html[data-oneworks-desktop-startup-screen='true'] body {
+      min-height: 100vh;
+      background: var(--oneworks-desktop-startup-surface);
+      isolation: isolate;
+    }
+
+    html[data-oneworks-desktop-startup-screen='true'] body::before {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      content: '';
+      pointer-events: none;
+      background: var(--oneworks-desktop-startup-surface);
+    }
+
+    html[data-oneworks-desktop-startup-screen='true'] #root {
+      position: relative;
+      z-index: 1;
+      background: var(--oneworks-desktop-startup-surface);
+    }
+
+    .oneworks-desktop-startup-overlay__content {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: min(var(--oneworks-startup-content-width), 100%);
+      min-width: 0;
+      gap: var(--oneworks-startup-stack-gap);
+      transform: translateY(var(--oneworks-startup-content-offset-y));
+    }
+
+    .oneworks-desktop-startup-overlay__icon {
+      position: relative;
+      display: grid;
+      align-items: center;
+      justify-items: center;
+      width: 16vw;
+      max-width: 156px;
+      min-width: 112px;
+      aspect-ratio: 1;
+      isolation: isolate;
+    }
+
+    .oneworks-desktop-startup-overlay__icon-canvas {
+      position: absolute;
+      inset: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .oneworks-desktop-startup-overlay__icon-fallback {
+      display: none;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    html[data-oneworks-desktop-startup-fallback-icon='true']
+      .oneworks-desktop-startup-overlay__icon-fallback--light {
+      display: block;
+    }
+
+    html[data-oneworks-desktop-startup-fallback-icon='true']
+      .oneworks-desktop-startup-overlay__icon-fallback--dark {
+      display: none;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      html[data-oneworks-desktop-startup-fallback-icon='true']
+        .oneworks-desktop-startup-overlay__icon-fallback--light {
+        display: none;
+      }
+
+      html[data-oneworks-desktop-startup-fallback-icon='true']
+        .oneworks-desktop-startup-overlay__icon-fallback--dark {
+        display: block;
+      }
+    }
+
+    html[data-oneworks-desktop-startup-fallback-icon='true'][data-oneworks-desktop-startup-theme='light']
+      .oneworks-desktop-startup-overlay__icon-fallback--light {
+      display: block;
+    }
+
+    html[data-oneworks-desktop-startup-fallback-icon='true'][data-oneworks-desktop-startup-theme='light']
+      .oneworks-desktop-startup-overlay__icon-fallback--dark {
+      display: none;
+    }
+
+    html[data-oneworks-desktop-startup-fallback-icon='true'][data-oneworks-desktop-startup-theme='dark']
+      .oneworks-desktop-startup-overlay__icon-fallback--light {
+      display: none;
+    }
+
+    html[data-oneworks-desktop-startup-fallback-icon='true'][data-oneworks-desktop-startup-theme='dark']
+      .oneworks-desktop-startup-overlay__icon-fallback--dark {
+      display: block;
+    }
+
+    .oneworks-desktop-startup-overlay__icon.mobiusLoader
+      .oneworks-desktop-startup-overlay__icon-fallback {
+      display: none;
+    }
+
+    .oneworks-desktop-startup-overlay__tip {
+      position: absolute;
+      right: var(--oneworks-startup-tip-inline);
+      bottom: var(--oneworks-startup-tip-bottom);
+      left: var(--oneworks-startup-tip-inline);
+      z-index: 1;
+      margin: 0;
+      color: var(--oneworks-desktop-startup-muted);
+      font-size: var(--oneworks-startup-tip-size);
+      line-height: var(--oneworks-startup-tip-line-height);
+      overflow: hidden;
+      text-align: right;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .oneworks-desktop-startup-overlay,
+      html[data-oneworks-desktop-startup-ready='true']
+        .oneworks-desktop-startup-overlay {
+        transition: none;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .oneworks-desktop-startup-overlay {
+        --oneworks-startup-shell-padding: var(
+          --oneworks-startup-mobile-shell-padding
+        );
+        --oneworks-startup-tip-inline: var(
+          --oneworks-startup-mobile-shell-padding
+        );
+      }
+
+      .oneworks-desktop-startup-overlay__icon {
+        width: 118px;
+      }
+    }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div
+      id="oneworks-desktop-startup-overlay"
+      class="oneworks-desktop-startup-overlay"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      aria-hidden="true"
+    >
+      <div class="oneworks-desktop-startup-overlay__content">
+        <div
+          class="oneworks-desktop-startup-overlay__icon"
+          aria-label="OneWorks loading animation"
+          data-oneworks-desktop-startup-icon="true"
+          role="img"
+        >
+          <img
+            class="oneworks-desktop-startup-overlay__icon-fallback oneworks-desktop-startup-overlay__icon-fallback--light"
+            src="/favicon-metal-light.svg"
+            alt=""
+          />
+          <img
+            class="oneworks-desktop-startup-overlay__icon-fallback oneworks-desktop-startup-overlay__icon-fallback--dark"
+            src="/favicon-metal-dark.svg"
+            alt=""
+          />
+        </div>
+      </div>
+      <p
+        class="oneworks-desktop-startup-overlay__tip"
+        data-oneworks-desktop-startup-tip="true"
+      >
+        正在把项目上下文铺好。
+      </p>
+    </div>
+    <script type="module" src="./src/desktop-startup-preview.ts"></script>
+    <script>
+    ;(() => {
+      if (
+        document.documentElement.dataset.oneworksDesktopStartupPreview !==
+          'true'
+      ) {
+        return
+      }
+
+      const overlay = document.getElementById(
+        'oneworks-desktop-startup-overlay'
+      )
+      overlay?.setAttribute('aria-hidden', 'false')
+      overlay?.setAttribute('aria-busy', 'true')
+    })()
+    </script>
+    <script type="module" src="./src/main.tsx"></script>
+  </body>
+</html>

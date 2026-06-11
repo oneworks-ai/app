@@ -1,0 +1,25 @@
+{
+  "name": "@oneworks/plugin-demo-extension",
+  "type": "module",
+  "version": "0.1.0-alpha.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/plugins/demo-extension"
+  },
+  "exports": {
+    ".": "./plugin.json",
+    "./client": {
+      "source": "./client/src/index.tsx",
+      "default": "./client/dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "pnpm run build:client",
+    "build:client": "tsc -p client/tsconfig.json --noEmit && vite build --config client/vite.config.ts"
+  },
+  "devDependencies": {
+    "vite": "^5.4.8"
+  }
+}

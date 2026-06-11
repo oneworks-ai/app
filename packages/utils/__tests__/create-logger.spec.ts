@@ -1,0 +1,255 @@
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { resolveProjectHomePath } from '#~/ai-path.js'
+import { createLogger } from '#~/create-logger.js'
+
+async function listFiles(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true })
+  const files = await Promise.all(entries.map(async (entry) => {
+    const entryPath = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      return listFiles(entryPath)
+    }
+    return [entryPath]
+  }))
+  return files.flat()
+}
+
+const useProjectHome = (cwd: string) => {
+  process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = join(cwd, '.oneworks-projects')
+}
+
+describe('createLogger', () => {
+  const tempDirs: string[] = []
+
+  afterEach(async () => {
+    vi.useRealTimers()
+    delete process.env.__ONEWORKS_PROJECT_BASE_DIR__
+    delete process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__
+    await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
+  })
+
+  it('creates a canonical session log file under the task log directory', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ow-create-logger-'))
+    tempDirs.push(cwd)
+    useProjectHome(cwd)
+
+    const logger = createLogger(cwd, 'task-1', 'session-1')
+    logger.info('hello')
+    await new Promise<void>((resolve) => {
+      logger.stream.end(() => resolve())
+    })
+
+    const logDir = resolveProjectHomePath(cwd, process.env, 'logs', 'task-1')
+    const files = await listFiles(logDir)
+    expect(files).toEqual([join(logDir, 'session-1.log.md')])
+    expect(await readFile(files[0]!, 'utf8')).toContain('hello')
+  })
+
+  it('uses info as the default level', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ow-create-logger-'))
+    tempDirs.push(cwd)
+    useProjectHome(cwd)
+
+    const logger = createLogger(cwd, 'task-1', 'session-1')
+    logger.debug('Claude Code CLI stdout:', { line: 'hidden by default' })
+    logger.info('hello')
+    await new Promise<void>((resolve) => {
+      logger.stream.end(() => resolve())
+    })
+
+    const canonicalPath = resolveProjectHomePath(cwd, process.env, 'logs', 'task-1', 'session-1.log.md')
+    const content = await readFile(canonicalPath, 'utf8')
+    expect(content).toContain('__I__ hello')
+    expect(content).not.toContain('Claude Code CLI stdout:')
+    expect(content).not.toContain('__D__')
+  })
+
+  it('keeps writing resumed logs into the canonical session file even if legacy dated logs exist', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ow-create-logger-'))
+    tempDirs.push(cwd)
+    useProjectHome(cwd)
+
+    const legacyDir = resolveProjectHomePath(cwd, process.env, 'logs', 'task-1', '2026-3-19-22')
+    const legacyPath = join(legacyDir, 'session-1.log.md')
+    const canonicalPath = resolveProjectHomePath(cwd, process.env, 'logs', 'task-1', 'session-1.log.md')
+    await mkdir(legacyDir, { recursive: true })
+    await writeFile(legacyPath, '# legacy log\n')
+
+    const logger = createLogger(cwd, 'task-1', 'session-1')
+    logger.info('follow up')
+    await new Promise<void>((resolve) => {
+      logger.stream.end(() => resolve())
+    })
+
+    const files = await listFiles(resolveProjectHomePath(cwd, process.env, 'logs', 'task-1'))
+    expect(files.sort()).toEqual([canonicalPath, legacyPath].sort())
+    expect(await readFile(canonicalPath, 'utf8')).toContain('follow up')
+    expect(await readFile(legacyPath, 'utf8')).toBe('# legacy log\n')
+  })
+
+  it('skips debug entries when log level is info', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ow-create-logger-'))
+    tempDirs.push(cwd)
+    useProjectHome(cwd)
+
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-03-20T10:00:00.000Z'))
+
+    const logger = createLogger(cwd, 'task-1', 'session-1', '', 'info')
+    logger.debug('Claude Code CLI stdout:', { line: 'debug only' })
+    logger.info('session started')
+    await new Promise<void>((resolve) => {
+      logger.stream.end(() => resolve())
+    })
+
+    const canonicalPath = resolveProjectHomePath(cwd, process.env, 'logs', 'task-1', 'session-1.log.md')
+    const content = await readFile(canonicalPath, 'utf8')
+    expect(content).toContain('__I__ session started')
+    expect(content).not.toContain('Claude Code CLI stdout:')
+    expect(content).not.toContain('__D__')
+  })
+
+  it('keeps debug entries when log level is debug', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ow-create-logger-'))
+    tempDirs.push(cwd)
+    useProjectHome(cwd)
+
+    const logger = createLogger(cwd, 'task-1', 'session-1', '', 'debug')
+    logger.debug('Claude Code CLI stdout:', { line: 'debug enabled' })
+    await new Promise<void>((resolve) => {
+      logger.stream.end(() => resolve())
+    })
+
+    const canonicalPath = resolveProjectHomePath(cwd, process.env, 'logs', 'task-1', 'session-1.log.md')
+    const content = await readFile(canonicalPath, 'utf8')
+    expect(content).toContain('__D__ Claude Code CLI stdout:')
+    expect(content).toContain('```yaml')
+    expect(content).toContain('line: debug enabled')
+  })
+
+  it('writes logs under the env-configured ai base dir', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ow-create-logger-'))
+    tempDirs.push(cwd)
+    useProjectHome(cwd)
+    process.env.__ONEWORKS_PROJECT_BASE_DIR__ = '.oneworks'
+
+    const logger = createLogger(cwd, 'task-1', 'session-1')
+    logger.info('hello')
+    await new Promise<void>((resolve) => {
+      logger.stream.end(() => resolve())
+    })
+
+    const logDir = resolveProjectHomePath(cwd, process.env, 'logs', 'task-1')
+    const files = await listFiles(logDir)
+    expect(files).toEqual([join(logDir, 'session-1.log.md')])
+  })
+
+  it('honors an explicit env instead of falling back to process.env', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ow-create-logger-'))
+    tempDirs.push(cwd)
+    const env = {
+      __ONEWORKS_PROJECT_HOME_PROJECTS_DIR__: join(cwd, '.explicit-projects')
+    }
+
+    const logger = createLogger(cwd, 'task-1', 'session-1', '', 'info', env)
+    logger.info('explicit env')
+    await new Promise<void>((resolve) => {
+      logger.stream.end(() => resolve())
+    })
+
+    const canonicalPath = resolveProjectHomePath(cwd, env, 'logs', 'task-1', 'session-1.log.md')
+    expect(await readFile(canonicalPath, 'utf8')).toContain('explicit env')
+  })
+
+  it('does not backfill legacy log files before opening a canonical logger stream', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ow-create-logger-'))
+    tempDirs.push(cwd)
+    const env = {
+      __ONEWORKS_PROJECT_HOME_PROJECTS_DIR__: join(cwd, '.explicit-projects')
+    }
+
+    const legacyPath = join(cwd, '.oo', 'logs', 'task-1', 'session-1.log.md')
+    await mkdir(join(cwd, '.oo', 'logs', 'task-1'), { recursive: true })
+    await writeFile(legacyPath, '# legacy log\n')
+
+    const logger = createLogger(cwd, 'task-1', 'session-1', '', 'info', env)
+    logger.info('new log')
+    await new Promise<void>((resolve) => {
+      logger.stream.end(() => resolve())
+    })
+
+    const canonicalPath = resolveProjectHomePath(cwd, env, 'logs', 'task-1', 'session-1.log.md')
+    const content = await readFile(canonicalPath, 'utf8')
+    expect(content).not.toContain('# legacy log')
+    expect(content).toContain('new log')
+    await expect(readFile(legacyPath, 'utf8')).resolves.toBe('# legacy log\n')
+  })
+
+  it('keeps prefixed logs under the project-home logs tree', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ow-create-logger-'))
+    tempDirs.push(cwd)
+    useProjectHome(cwd)
+
+    const logger = createLogger(cwd, 'task-1', 'session-1', 'server')
+    logger.info('hello')
+    await new Promise<void>((resolve) => {
+      logger.stream.end(() => resolve())
+    })
+
+    const canonicalPath = resolveProjectHomePath(cwd, process.env, 'logs', 'server', 'task-1', 'session-1.log.md')
+    expect(await readFile(canonicalPath, 'utf8')).toContain('hello')
+  })
+
+  it('renders multiline strings as folded yaml blocks', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ow-create-logger-'))
+    tempDirs.push(cwd)
+    useProjectHome(cwd)
+
+    const logger = createLogger(cwd, 'task-1', 'session-1')
+    logger.info('task payload', {
+      a: {
+        b: '1233\n456'
+      }
+    })
+    await new Promise<void>((resolve) => {
+      logger.stream.end(() => resolve())
+    })
+
+    const canonicalPath = resolveProjectHomePath(cwd, process.env, 'logs', 'task-1', 'session-1.log.md')
+    const content = await readFile(canonicalPath, 'utf8')
+    expect(content).toContain('```yaml')
+    expect(content).toContain('a:')
+    expect(content).toContain('  b: >-')
+    expect(content).toContain('    1233')
+    expect(content).toContain('    456')
+  })
+
+  it('escapes markdown fence lines inside folded yaml strings', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ow-create-logger-'))
+    tempDirs.push(cwd)
+    useProjectHome(cwd)
+
+    const logger = createLogger(cwd, 'task-1', 'session-1')
+    logger.info({
+      prompt: 'before\n```bash\necho "hi"\n```\nafter'
+    })
+    await new Promise<void>((resolve) => {
+      logger.stream.end(() => resolve())
+    })
+
+    const canonicalPath = resolveProjectHomePath(cwd, process.env, 'logs', 'task-1', 'session-1.log.md')
+    const content = await readFile(canonicalPath, 'utf8')
+    expect(content).toContain('```yaml')
+    expect(content).toContain('prompt: >-')
+    expect(content).toContain('  before')
+    expect(content).toContain('  \\`\\`\\`bash')
+    expect(content).toContain('  echo "hi"')
+    expect(content).toContain('  \\`\\`\\`')
+    expect(content).toContain('  after')
+  })
+})

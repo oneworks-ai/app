@@ -1,0 +1,34 @@
+{
+  "name": "oneworks",
+  "version": "0.1.0-alpha.2",
+  "description": "One Works bootstrap launcher",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "apps/bootstrap"
+  },
+  "oneworks": {
+    "runtimeTranspile": true,
+    "publishAliases": [
+      "onework",
+      "oneork",
+      "oneorks"
+    ]
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "oneworks": "./cli.js",
+    "ow": "./cli.js",
+    "owo": "./cli.js"
+  },
+  "scripts": {
+    "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project node apps/bootstrap/__tests__"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.11.0",
+    "@oneworks/cli-helper": "workspace:*",
+    "commander": "^12.1.0"
+  }
+}

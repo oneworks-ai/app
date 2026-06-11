@@ -1,0 +1,1519 @@
+.chat-header-git {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.chat-draft-git {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0;
+  min-width: max-content;
+}
+
+.chat-header-git--compact,
+.chat-draft-git--compact .chat-header-git {
+  gap: 4px;
+}
+
+.chat-draft-git__controls {
+  gap: 0;
+  flex-wrap: nowrap;
+  min-width: max-content;
+}
+
+.chat-draft-git__unavailable {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--sub-text-color);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+
+  .material-symbols-rounded {
+    font-size: 14px;
+  }
+}
+
+.chat-header-git__split {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.chat-header-git__split-main.ant-btn.ant-btn-text,
+.chat-header-git__split-toggle.ant-btn.ant-btn-text,
+.chat-header-git__trigger.ant-btn.ant-btn-text {
+  height: 24px;
+  margin: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sub-text-color, #6b7280);
+  box-shadow: none;
+  transition: background-color .2s ease, color .2s ease, box-shadow .2s ease;
+
+  .material-symbols-rounded {
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  &:hover:not(:disabled) {
+    background-color: var(--nav-hover-bg, #f3f4f6);
+    color: var(--text-color, #111827);
+    box-shadow: inset 0 0 0 1px var(--nav-hover-border, rgba(37, 99, 235, .14));
+  }
+
+  &:disabled {
+    background: transparent;
+    color: var(--sub-text-color, #6b7280);
+  }
+}
+
+.chat-header-git__split-main.ant-btn.ant-btn-text .ant-btn-icon,
+.chat-header-git__split-toggle.ant-btn.ant-btn-text .ant-btn-icon,
+.chat-header-git__trigger.ant-btn.ant-btn-text .ant-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-inline-end: 0;
+  line-height: 1;
+}
+
+.chat-header-git__split-main.ant-btn.ant-btn-text,
+.chat-header-git__trigger.ant-btn.ant-btn-text {
+  min-width: 0;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.chat-header-git__split-main.ant-btn.ant-btn-text {
+  gap: 6px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.chat-header-git__split-toggle.ant-btn.ant-btn-text {
+  width: 24px;
+  padding: 0;
+  justify-content: center;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.chat-header-git__split.is-open {
+  .chat-header-git__split-main.ant-btn.ant-btn-text,
+  .chat-header-git__split-toggle.ant-btn.ant-btn-text {
+    background-color: var(--nav-active-bg, #eff6ff);
+    color: var(--nav-active-text, #2563eb);
+    box-shadow: inset 0 0 0 1px
+      var(--nav-active-border, rgba(37, 99, 235, .22));
+  }
+}
+
+.chat-header-git__split-divider {
+  width: 1px;
+  height: 12px;
+  background: var(--border-color);
+  flex-shrink: 0;
+}
+
+.chat-header-git__trigger.ant-btn.ant-btn-text {
+  gap: 8px;
+  padding-right: 6px;
+  justify-content: space-between;
+
+  &.is-open {
+    background-color: var(--nav-active-bg, #eff6ff);
+    color: var(--nav-active-text, #2563eb);
+    box-shadow: inset 0 0 0 1px
+      var(--nav-active-border, rgba(37, 99, 235, .22));
+  }
+
+  &.is-disabled {
+    opacity: .7;
+  }
+}
+
+.chat-header-git__trigger-main {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-header-git__trigger-chevron.material-symbols-rounded {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.chat-header-git__trigger-label {
+  min-width: 0;
+  max-width: 132px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.chat-header-git__trigger--worktree.is-compact .chat-header-git__trigger-label {
+  display: none;
+}
+
+.chat-header-git__trigger.ant-btn.ant-btn-text.chat-header-git__trigger--worktree.is-compact {
+  width: 24px;
+  min-width: 24px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+
+  .chat-header-git__trigger-main {
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+    gap: 0;
+  }
+
+  .chat-header-git__trigger-chevron {
+    display: none;
+  }
+}
+
+.chat-header-git__trigger.ant-btn.ant-btn-text.chat-header-git__trigger--branch.is-compact {
+  width: 24px;
+  min-width: 24px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+
+  .chat-header-git__trigger-label,
+  .chat-header-git__dirty-dot {
+    display: none;
+  }
+
+  .chat-header-git__trigger-main {
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+    gap: 0;
+  }
+
+  .chat-header-git__trigger-chevron {
+    display: none;
+  }
+}
+
+.chat-header-git__trigger.ant-btn.ant-btn-text.chat-header-git__trigger--environment.is-compact {
+  width: 24px;
+  min-width: 24px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+
+  .chat-header-git__trigger-label {
+    display: none;
+  }
+
+  .chat-header-git__trigger-main {
+    width: 100%;
+    justify-content: center;
+    gap: 0;
+  }
+
+  .chat-header-git__trigger-chevron {
+    display: none;
+  }
+}
+
+.chat-header-git__split--operations.is-compact {
+  gap: 4px;
+
+  .chat-header-git__split-main.ant-btn.ant-btn-text {
+    width: 24px;
+    min-width: 24px;
+    padding: 0;
+    justify-content: center;
+    align-items: center;
+    gap: 0;
+    border-radius: 6px;
+
+    .chat-header-git__trigger-label {
+      display: none;
+    }
+  }
+
+  .chat-header-git__split-divider {
+    display: none;
+  }
+
+  .chat-header-git__split-toggle.ant-btn.ant-btn-text {
+    width: 24px;
+    min-width: 24px;
+    padding: 0;
+    justify-content: center;
+    align-items: center;
+    border-top-left-radius: 6px;
+    border-bottom-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
+  }
+}
+
+.chat-header-git__trigger.ant-btn.ant-btn-text.chat-header-git__trigger--worktree.is-compact
+  .chat-header-git__trigger-main
+  .material-symbols-rounded,
+.chat-header-git__trigger.ant-btn.ant-btn-text.chat-header-git__trigger--branch.is-compact
+  .chat-header-git__trigger-main
+  .material-symbols-rounded,
+.chat-header-git__split--operations.is-compact .material-symbols-rounded {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-header-git__trigger.ant-btn.ant-btn-text.chat-header-git__trigger--worktree.is-compact
+  .chat-header-git__trigger-chevron,
+.chat-header-git__trigger.ant-btn.ant-btn-text.chat-header-git__trigger--branch.is-compact
+  .chat-header-git__trigger-chevron {
+  display: none !important;
+}
+
+@mixin chat-git-trigger-icon-only {
+  width: 24px;
+  min-width: 24px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+
+  .chat-header-git__trigger-label,
+  .chat-header-git__dirty-dot {
+    display: none;
+  }
+
+  .chat-header-git__trigger-main {
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+    gap: 0;
+  }
+
+  .chat-header-git__trigger-chevron {
+    display: none;
+  }
+}
+
+@mixin chat-git-split-icon-only {
+  gap: 4px;
+
+  .chat-header-git__split-main.ant-btn.ant-btn-text {
+    width: 24px;
+    min-width: 24px;
+    padding: 0;
+    border-radius: 6px;
+    justify-content: center;
+    align-items: center;
+    gap: 0;
+
+    .chat-header-git__trigger-label {
+      display: none;
+    }
+  }
+
+  .chat-header-git__split-divider {
+    display: none;
+  }
+
+  .chat-header-git__split-toggle.ant-btn.ant-btn-text {
+    width: 24px;
+    min-width: 24px;
+    padding: 0;
+    border-radius: 6px;
+    justify-content: center;
+    align-items: center;
+  }
+}
+
+@container sender-history (max-width: 820px) {
+  .chat-header-git__trigger.ant-btn.ant-btn-text.chat-header-git__trigger--environment {
+    @include chat-git-trigger-icon-only;
+  }
+}
+
+@container sender-history (max-width: 740px) {
+  .chat-header-git__trigger.ant-btn.ant-btn-text.chat-header-git__trigger--worktree {
+    @include chat-git-trigger-icon-only;
+  }
+}
+
+@container sender-history (max-width: 680px) {
+  .chat-header-git__split--operations {
+    @include chat-git-split-icon-only;
+  }
+}
+
+@container sender-history (max-width: 620px) {
+  .chat-header-git__trigger.ant-btn.ant-btn-text.chat-header-git__trigger--branch {
+    @include chat-git-trigger-icon-only;
+  }
+}
+
+.chat-header-git__separator {
+  width: 1px;
+  height: 12px;
+  margin-inline: 8px;
+  background: var(--border-color);
+  flex-shrink: 0;
+}
+
+.chat-header-git__dirty-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #d97706;
+  flex-shrink: 0;
+}
+
+.chat-header-git__overlay {
+  --oneworks-overlay-icon-size: 14px;
+  --oneworks-overlay-icon-gap: 6px;
+  --oneworks-overlay-font-size: 12px;
+  --oneworks-overlay-line-height: 16px;
+  --oneworks-overlay-item-gap: 6px;
+  --oneworks-overlay-item-min-height: 0px;
+  --oneworks-overlay-control-height: 30px;
+  --oneworks-overlay-item-padding: 0 8px;
+
+  width: 244px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--oneworks-overlay-item-gap);
+}
+
+.chat-header-git__overlay .oneworks-overlay-action {
+  --oneworks-overlay-icon-size: 14px;
+  --oneworks-overlay-icon-gap: 6px;
+  --oneworks-overlay-font-size: 12px;
+  --oneworks-overlay-line-height: 16px;
+  --oneworks-overlay-item-min-height: 0px;
+  --oneworks-overlay-item-padding: 0 8px;
+}
+
+.chat-header-git-dropdown.ant-dropdown {
+  -webkit-app-region: no-drag;
+}
+
+.chat-header-git__overlay--operations {
+  width: 208px;
+}
+
+.chat-header-git__overlay--branches {
+  --chat-header-git-branch-radius: var(--subpage-tertiary-radius, 8px);
+  --chat-header-git-branch-item-radius: 6px;
+  --chat-header-git-branch-icon-size: 14px;
+  --chat-header-git-branch-icon-gap: 9px;
+  --chat-header-git-branch-font-size: 12px;
+  --chat-header-git-branch-line-height: 16px;
+  --chat-header-git-branch-edge-padding: 8px;
+  --chat-header-git-branch-item-gap: 0px;
+  --chat-header-git-branch-row-height: 30px;
+  --chat-header-git-branch-item-padding: 0 8px;
+  --chat-header-git-branch-depth-offset: 14px;
+  --chat-header-git-branch-line-width: 3px;
+  --chat-header-git-branch-line-offset: 3px;
+  --chat-header-git-branch-line-inset: 4px;
+  --oneworks-overlay-font-size: var(--chat-header-git-branch-font-size);
+  --oneworks-overlay-icon-gap: var(--chat-header-git-branch-icon-gap);
+  --oneworks-overlay-icon-size: var(--chat-header-git-branch-icon-size);
+  --oneworks-overlay-item-gap: var(--chat-header-git-branch-item-gap);
+  --oneworks-overlay-item-min-height: var(--chat-header-git-branch-row-height);
+  --oneworks-overlay-line-height: var(--chat-header-git-branch-line-height);
+  --oneworks-overlay-item-radius: var(--chat-header-git-branch-item-radius);
+  --oneworks-overlay-panel-padding-y: 0px;
+  --oneworks-overlay-tree-indent-base: 8px;
+  --oneworks-overlay-tree-indent-step: var(
+    --chat-header-git-branch-depth-offset
+  );
+  --oneworks-overlay-muted: var(--chat-header-git-branch-muted);
+  --oneworks-overlay-disabled: color-mix(
+    in srgb,
+    var(--sub-text-color) 54%,
+    transparent
+  );
+  --chat-header-git-branch-border: color-mix(
+    in srgb,
+    var(--border-color) 72%,
+    transparent
+  );
+  --chat-header-git-branch-muted: color-mix(
+    in srgb,
+    var(--sub-text-color) 76%,
+    transparent
+  );
+  --chat-header-git-branch-surface: color-mix(
+    in srgb,
+    var(--bg-color) 62%,
+    transparent
+  );
+  --chat-header-git-branch-shadow:
+    0 18px 44px color-mix(in srgb, #0f172a 18%, transparent),
+    0 2px 10px color-mix(in srgb, #0f172a 8%, transparent);
+
+  width: min(376px, calc(100vw - 24px));
+  padding: 0;
+  border-radius: var(--chat-header-git-branch-radius);
+  outline: 1px solid var(--chat-header-git-branch-border);
+  outline-offset: 0;
+  gap: 0;
+  overflow: hidden;
+  background: var(--chat-header-git-branch-surface);
+  box-shadow: var(--chat-header-git-branch-shadow);
+  color: var(--text-color);
+  -webkit-backdrop-filter: blur(18px) saturate(1.32);
+  backdrop-filter: blur(18px) saturate(1.32);
+}
+
+.chat-header-git__overlay--environment {
+  width: 236px;
+}
+
+.chat-header-git__overlay--worktree-root {
+  width: 228px;
+}
+
+.chat-header-git__overlay--worktree-root,
+.chat-header-git__overlay--worktree-submenu {
+  --oneworks-overlay-icon-gap: 9px;
+  --oneworks-overlay-item-gap: 6px;
+  --chat-header-git-worktree-edge-padding: 8px;
+  --chat-header-git-worktree-root-row-min-height: 18px;
+  --chat-header-git-worktree-rich-row-gap: 12px;
+  --chat-header-git-worktree-rich-row-min-height: 30px;
+  --chat-header-git-worktree-rich-row-padding: 0 var(
+    --chat-header-git-worktree-edge-padding
+  );
+  --chat-header-git-worktree-description-font-size: 10px;
+  --chat-header-git-worktree-description-line-height: 1.25;
+}
+
+.chat-header-git__overlay--worktree-root {
+  .oneworks-overlay-action {
+    --oneworks-overlay-icon-gap: 9px;
+  }
+
+  .chat-header-git__menu-row.oneworks-overlay-action {
+    min-height: var(--chat-header-git-worktree-root-row-min-height) !important;
+    padding: var(--oneworks-overlay-item-padding) !important;
+    gap: var(--oneworks-overlay-icon-gap) !important;
+  }
+
+  .chat-header-git__menu-row-main,
+  .chat-header-git__menu-row-trailing {
+    gap: var(--oneworks-overlay-icon-gap);
+  }
+
+  .chat-header-git__menu-row-title {
+    font-size: var(--oneworks-overlay-font-size);
+    font-weight: 650;
+    line-height: var(--oneworks-overlay-line-height);
+  }
+
+  .chat-header-git__menu-row-value {
+    max-width: 132px;
+    color: var(--oneworks-overlay-muted);
+    font-size: 11px;
+    font-weight: 650;
+    line-height: var(--oneworks-overlay-line-height);
+  }
+}
+
+.chat-header-git__overlay--worktree-submenu {
+  --chat-header-git-worktree-menu-width: 288px;
+
+  padding: 0;
+  border-radius: var(--oneworks-overlay-radius);
+  outline: 1px solid var(--oneworks-overlay-border);
+  outline-offset: 0;
+  gap: 0;
+  overflow: hidden;
+  background: var(--oneworks-overlay-surface);
+  box-shadow: var(--oneworks-overlay-shadow);
+  color: var(--text-color);
+  -webkit-backdrop-filter: blur(18px) saturate(1.32);
+  backdrop-filter: blur(18px) saturate(1.32);
+
+  .chat-header-git__worktree-row.oneworks-overlay-action {
+    --oneworks-overlay-icon-gap: 9px;
+
+    min-height: var(--chat-header-git-worktree-rich-row-min-height) !important;
+    padding: var(--chat-header-git-worktree-rich-row-padding) !important;
+    gap: var(--chat-header-git-worktree-rich-row-gap) !important;
+  }
+
+  .chat-header-git__worktree-row-main {
+    gap: var(--oneworks-overlay-icon-gap);
+  }
+
+  .chat-header-git__row-copy {
+    gap: 1px;
+  }
+
+  .chat-header-git__row-title {
+    font-size: var(--oneworks-overlay-font-size);
+    font-weight: 650;
+    line-height: var(--oneworks-overlay-line-height);
+  }
+
+  .chat-header-git__row-subtitle {
+    font-size: var(--chat-header-git-worktree-description-font-size);
+    font-weight: 550;
+    line-height: var(--chat-header-git-worktree-description-line-height);
+  }
+}
+
+.chat-git-mobile-drawer {
+  .chat-header-git__overlay {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .chat-header-git__overlay--branches {
+    border-radius: 0;
+    outline: 0;
+    overflow: visible;
+    background: transparent;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .chat-header-git__overlay--worktree-submenu {
+    position: static;
+    border-radius: 0;
+    outline: 0;
+    overflow: visible;
+    background: transparent;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .chat-header-git__worktree-submenu-body {
+    min-height: 0;
+    max-height: min(42vh, 320px);
+  }
+
+  .chat-header-git__sections {
+    max-height: min(42vh, 320px);
+  }
+
+  .chat-header-git__overlay--branches .chat-header-git__sections {
+    max-height: none;
+  }
+
+  .chat-header-git__branch-list {
+    max-height: min(42vh, 320px);
+    padding-top: 0;
+  }
+
+  .chat-header-git__search.ant-input-affix-wrapper {
+    margin-top: 8px;
+  }
+
+  .chat-header-git__search-row {
+    align-items: center;
+    margin-top: 8px;
+    margin-bottom: 8px;
+
+    .chat-header-git__search.ant-input-affix-wrapper {
+      margin-top: 0;
+    }
+  }
+
+  .chat-header-git__branch-toolbar.oneworks-overlay-search-row {
+    margin-top: 8px;
+    margin-bottom: 8px;
+    padding: 0;
+    border-bottom: 0;
+  }
+}
+
+.chat-header-git__overlay--worktree-submenu {
+  position: absolute;
+  bottom: 0;
+  left: calc(100% + 6px);
+  width: min(var(--chat-header-git-worktree-menu-width), calc(100vw - 24px));
+}
+
+.chat-header-git__menu-shell {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-start;
+}
+
+.chat-header-git__menu-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--oneworks-overlay-icon-gap);
+  text-align: left;
+}
+
+.chat-header-git__menu-row-main,
+.chat-header-git__menu-row-trailing {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--oneworks-overlay-icon-gap);
+}
+
+.chat-header-git__menu-row-main {
+  flex: 0 0 auto;
+}
+
+.chat-header-git__menu-row-trailing {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+  color: var(--sub-text-color);
+
+  .material-symbols-rounded {
+    font-size: var(--oneworks-overlay-icon-size);
+  }
+}
+
+.chat-header-git__menu-row-title {
+  min-width: 0;
+  font-size: var(--oneworks-overlay-font-size);
+  font-weight: 600;
+  line-height: var(--oneworks-overlay-line-height);
+  white-space: nowrap;
+}
+
+.chat-header-git__menu-row-value {
+  min-width: 0;
+  max-width: 112px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--oneworks-overlay-font-size);
+  line-height: var(--oneworks-overlay-line-height);
+}
+
+.chat-header-git__menu-row--toggle.oneworks-overlay-action {
+  cursor: default;
+
+  &:hover {
+    color: var(--text-color);
+  }
+
+  &.is-disabled {
+    cursor: not-allowed;
+    opacity: .55;
+  }
+}
+
+.chat-header-git__worktree-switch.ant-switch {
+  flex-shrink: 0;
+  min-width: 30px;
+  height: 18px;
+  background: color-mix(in srgb, var(--sub-text-color) 30%, transparent);
+
+  .ant-switch-handle {
+    width: 14px;
+    height: 14px;
+
+    &::before {
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--text-color) 86%, var(--bg-color));
+    }
+  }
+
+  &.ant-switch-checked {
+    background: color-mix(in srgb, var(--primary-color) 72%, transparent);
+  }
+}
+
+.chat-header-git__overlay-meta {
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--sub-text-color);
+}
+
+.chat-header-git__search.ant-input-affix-wrapper {
+  flex: 1;
+  min-width: 0;
+  height: var(--oneworks-overlay-control-height);
+  min-height: var(--oneworks-overlay-control-height);
+  align-items: center;
+  border-radius: 9px;
+  padding-block: 0;
+  padding-inline: 8px;
+
+  .ant-input-prefix,
+  .ant-input-suffix {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .ant-input {
+    font-size: var(--oneworks-overlay-font-size);
+    line-height: var(--oneworks-overlay-line-height);
+  }
+
+  .material-symbols-rounded {
+    display: inline-flex;
+    align-items: center;
+    font-size: var(--oneworks-overlay-icon-size);
+    line-height: 1;
+  }
+}
+
+.chat-header-git__search-row {
+  display: flex;
+  align-items: center;
+  gap: var(--oneworks-overlay-item-gap);
+}
+
+.chat-header-git__branch-toolbar.oneworks-overlay-search-row {
+  min-height: var(--chat-header-git-branch-row-height);
+  padding: 0 var(--chat-header-git-branch-edge-padding);
+  border-bottom: 1px solid var(--chat-header-git-branch-border);
+  gap: 8px;
+}
+
+.chat-header-git__worktree-search-row {
+  min-height: 38px;
+  padding: 6px var(--chat-header-git-worktree-edge-padding);
+  border-top: 1px solid var(--oneworks-overlay-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-header-git__view-switch.oneworks-overlay-segmented {
+  --oneworks-overlay-segmented-item-size: 22px;
+  --oneworks-overlay-segmented-item-height: 20px;
+
+  border: 1px solid var(--chat-header-git-branch-border);
+  border-radius: var(--chat-header-git-branch-item-radius);
+  background: color-mix(in srgb, var(--sub-text-color) 18%, transparent);
+
+  &::before {
+    background: color-mix(in srgb, var(--primary-color) 76%, transparent);
+    box-shadow: 0 0 0 1px
+      color-mix(in srgb, var(--primary-color) 24%, transparent);
+  }
+
+  .oneworks-overlay-segmented__icon .material-symbols-rounded {
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  .oneworks-overlay-segmented__button.is-active {
+    color: #fff;
+  }
+}
+
+.chat-header-git__worktree-submenu-body {
+  min-height: 0;
+  max-height: 168px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.chat-header-git__branch-list {
+  max-height: 260px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--chat-header-git-branch-item-gap);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.chat-header-git__empty--environment {
+  padding: 10px 0 4px;
+}
+
+.chat-header-git__sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--oneworks-overlay-item-gap);
+  max-height: 260px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.chat-header-git__overlay--branches .chat-header-git__sections {
+  max-height: none;
+  overflow: visible;
+  scrollbar-gutter: auto;
+}
+
+.chat-header-git__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--oneworks-overlay-item-gap);
+}
+
+.chat-header-git__section-label {
+  padding: 0 8px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: var(--oneworks-overlay-line-height);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--sub-text-color);
+}
+
+.chat-header-git__overlay--branches {
+  .chat-header-git__sections,
+  .chat-header-git__section,
+  .chat-header-git__branch-tree,
+  .chat-header-git__branch-tree-folder,
+  .chat-header-git__branch-tree-children {
+    gap: var(--chat-header-git-branch-item-gap);
+  }
+
+  .chat-header-git__section-label {
+    padding: 0 8px;
+    color: var(--chat-header-git-branch-muted);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: var(--chat-header-git-branch-line-height);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .chat-header-git__branch-row,
+  .chat-header-git__branch-folder-row,
+  .chat-header-git__create-row {
+    --oneworks-overlay-item-min-height: var(
+      --chat-header-git-branch-row-height
+    );
+
+    position: relative;
+    min-height: var(--chat-header-git-branch-row-height);
+    padding: var(--chat-header-git-branch-item-padding);
+    border: 0;
+    border-radius: var(--chat-header-git-branch-item-radius);
+    display: flex;
+    align-items: center;
+    gap: var(--chat-header-git-branch-icon-gap);
+    background: transparent;
+    color: var(--text-color);
+    cursor: pointer;
+    font: inherit;
+    font-size: var(--chat-header-git-branch-font-size);
+    font-weight: 600;
+    line-height: var(--chat-header-git-branch-line-height);
+    text-align: left;
+    transition: color .16s ease, opacity .16s ease;
+    user-select: none;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: var(--chat-header-git-branch-line-inset);
+      bottom: var(--chat-header-git-branch-line-inset);
+      left: var(--chat-header-git-branch-line-offset);
+      width: var(--chat-header-git-branch-line-width);
+      border-radius: 999px;
+      background: transparent;
+      pointer-events: none;
+    }
+
+    &:hover,
+    &:focus-visible,
+    &.is-active {
+      color: var(--primary-color);
+      outline: none;
+    }
+
+    &.is-active::before,
+    &[aria-selected='true']::before {
+      background: var(--primary-color);
+    }
+
+    &:disabled,
+    &[aria-disabled='true'],
+    &.is-disabled {
+      color: var(--oneworks-overlay-disabled);
+      cursor: not-allowed;
+      opacity: 1;
+
+      &::before {
+        background: transparent;
+      }
+    }
+  }
+
+  .chat-header-git__branch-row-main {
+    gap: var(--chat-header-git-branch-icon-gap);
+  }
+
+  .chat-header-git__row-title {
+    font-size: var(--chat-header-git-branch-font-size);
+    font-weight: 650;
+    line-height: var(--chat-header-git-branch-line-height);
+  }
+
+  .chat-header-git__row-icon.material-symbols-rounded,
+  .chat-header-git__row-state.material-symbols-rounded {
+    width: var(--chat-header-git-branch-icon-size);
+    min-width: var(--chat-header-git-branch-icon-size);
+    height: var(--chat-header-git-branch-icon-size);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: currentColor;
+    font-size: var(--chat-header-git-branch-icon-size);
+    line-height: 1;
+  }
+}
+
+.chat-header-git__branch-row,
+.chat-header-git__operation-row,
+.chat-header-git__create-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--oneworks-overlay-icon-gap);
+  text-align: left;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: .55;
+  }
+}
+
+.chat-header-git__branch-tree {
+  display: flex;
+  flex-direction: column;
+  gap: var(--oneworks-overlay-item-gap);
+}
+
+.chat-header-git__branch-tree-folder,
+.chat-header-git__branch-tree-children {
+  display: flex;
+  flex-direction: column;
+  gap: var(--oneworks-overlay-item-gap);
+}
+
+.chat-header-git__branch-folder-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--oneworks-overlay-icon-gap);
+  text-align: left;
+}
+
+.chat-header-git__worktree-list {
+  padding: var(--chat-header-git-worktree-edge-padding) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--oneworks-overlay-item-gap);
+  overflow: visible;
+  scrollbar-gutter: auto;
+}
+
+.chat-header-git__worktree-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--oneworks-overlay-icon-gap);
+  cursor: default;
+}
+
+.chat-header-git__worktree-chip {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: color-mix(
+    in srgb,
+    var(--primary-color, #2563eb) 10%,
+    transparent
+  );
+  color: var(--primary-color, #2563eb);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.chat-header-git__branch-row-main,
+.chat-header-git__operation-row-main,
+.chat-header-git__worktree-row-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--oneworks-overlay-icon-gap);
+}
+
+.chat-header-git__row-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.chat-header-git__row-title {
+  min-width: 0;
+  font-size: var(--oneworks-overlay-font-size);
+  font-weight: 600;
+  line-height: var(--oneworks-overlay-line-height);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-header-git__row-subtitle {
+  min-width: 0;
+  font-size: var(--oneworks-overlay-font-size);
+  line-height: var(--oneworks-overlay-line-height);
+  color: var(--sub-text-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-header-git__row-icon.material-symbols-rounded,
+.chat-header-git__row-state.material-symbols-rounded {
+  font-size: var(--oneworks-overlay-icon-size);
+  flex-shrink: 0;
+}
+
+.chat-header-git__row-state.material-symbols-rounded {
+  color: var(--primary-color, #2563eb);
+}
+
+.chat-header-git__detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chat-header-git__detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--sub-text-color);
+}
+
+.chat-header-git__detail-label {
+  flex-shrink: 0;
+}
+
+.chat-header-git__detail-value {
+  min-width: 0;
+  text-align: right;
+  color: var(--text-color);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-header-git__workspace-error {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #b45309;
+  background: color-mix(in srgb, #f59e0b 10%, transparent);
+  border: 1px solid color-mix(in srgb, #f59e0b 24%, transparent);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.chat-header-git__create-row {
+  border: 1px dashed
+    color-mix(
+      in srgb,
+      var(--primary-color, #2563eb) 28%,
+      var(--border-color)
+    );
+}
+
+.chat-header-git__overlay--branches .chat-header-git__create-row {
+  border: 0;
+}
+
+.chat-header-git__empty {
+  padding: 8px 0 2px;
+}
+
+.chat-header-git__empty--branches {
+  min-height: var(--chat-header-git-branch-line-height);
+  padding: var(--chat-header-git-branch-item-padding);
+  display: flex;
+  align-items: center;
+  gap: var(--chat-header-git-branch-icon-gap);
+  color: var(--chat-header-git-branch-muted);
+  font-size: var(--chat-header-git-branch-font-size);
+  font-weight: 600;
+  line-height: var(--chat-header-git-branch-line-height);
+}
+
+.chat-header-git__empty-icon.material-symbols-rounded {
+  width: var(
+    --chat-header-git-branch-icon-size,
+    var(--oneworks-overlay-icon-size)
+  );
+  min-width: var(
+    --chat-header-git-branch-icon-size,
+    var(--oneworks-overlay-icon-size)
+  );
+  height: var(
+    --chat-header-git-branch-icon-size,
+    var(--oneworks-overlay-icon-size)
+  );
+  font-size: var(
+    --chat-header-git-branch-icon-size,
+    var(--oneworks-overlay-icon-size)
+  );
+  line-height: 1;
+}
+
+.chat-header-git__empty--worktrees {
+  min-height: var(--oneworks-overlay-control-height);
+  padding: var(--oneworks-overlay-item-padding);
+  display: flex;
+  align-items: center;
+  gap: var(--oneworks-overlay-icon-gap);
+  color: var(--oneworks-overlay-muted);
+  font-size: var(--oneworks-overlay-font-size);
+  font-weight: 600;
+  line-height: var(--oneworks-overlay-line-height);
+}
+
+.chat-header-git__loading {
+  padding: 8px 0;
+  display: flex;
+  justify-content: center;
+}
+
+.chat-header-git__divider {
+  height: 1px;
+  background: var(--border-color);
+}
+
+.chat-header-git__commit-modal {
+  .ant-modal-content {
+    padding: 14px;
+    border-radius: 20px;
+    background:
+      radial-gradient(
+        circle at top right,
+        rgba(255, 255, 255, .03),
+        transparent 34%
+      ),
+      var(--bg-color);
+    border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+  }
+
+  .ant-modal-close {
+    inset-inline-end: 10px;
+    top: 10px;
+    color: var(--sub-text-color);
+
+    &:hover {
+      color: var(--text-color);
+    }
+  }
+}
+
+.chat-header-git__commit-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chat-header-git__commit-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(
+    in srgb,
+    var(--sub-bg-color, rgba(15, 23, 42, .08)) 92%,
+    transparent
+  );
+
+  .material-symbols-rounded {
+    font-size: 18px;
+  }
+}
+
+.chat-header-git__commit-title {
+  margin-top: -4px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.chat-header-git__commit-summary-grid {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr);
+  gap: 8px 14px;
+}
+
+.chat-header-git__commit-summary-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sub-text-color);
+}
+
+.chat-header-git__commit-summary-value {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.chat-header-git__commit-summary-value--branch {
+  .material-symbols-rounded {
+    font-size: 14px;
+  }
+
+  span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.chat-header-git__commit-summary-value--stats {
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--sub-text-color);
+}
+
+.chat-header-git__commit-summary-delta {
+  font-weight: 700;
+
+  &.is-positive {
+    color: #22c55e;
+  }
+
+  &.is-negative {
+    color: #ef4444;
+  }
+}
+
+.chat-header-git__commit-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-header-git__commit-sub-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-header-git__commit-toggle-row {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr);
+  align-items: flex-start;
+  column-gap: 14px;
+  padding: 0;
+
+  &.is-disabled {
+    opacity: .6;
+  }
+}
+
+.chat-header-git__commit-toggle-checkbox {
+  width: 14px;
+  height: 14px;
+  margin: 2px 0 0;
+  justify-self: start;
+  accent-color: var(--primary-color, #2563eb);
+}
+
+.chat-header-git__commit-toggle-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.chat-header-git__commit-toggle-title,
+.chat-header-git__commit-section-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.chat-header-git__commit-toggle-description {
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--sub-text-color);
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.chat-header-git__commit-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.chat-header-git__commit-input.ant-input {
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: none;
+}
+
+.chat-header-git__commit-error {
+  margin-top: -6px;
+  font-size: 10px;
+  color: var(--error-text-color, #ef4444);
+}
+
+.chat-header-git__commit-next-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+  border-radius: 14px;
+  overflow: hidden;
+  background: transparent;
+}
+
+.chat-header-git__commit-next-step {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border-color) 72%, transparent);
+  background: transparent;
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-color);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color .2s ease, color .2s ease;
+
+  &:last-child {
+    border-bottom: 0;
+  }
+
+  &:hover:not(:disabled) {
+    background: color-mix(
+      in srgb,
+      var(--text-color) 5%,
+      transparent
+    );
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: .48;
+  }
+
+  &.is-selected {
+    background: color-mix(
+      in srgb,
+      var(--text-color) 8%,
+      transparent
+    );
+    box-shadow: inset 0 0 0 1px
+      color-mix(in srgb, var(--text-color) 8%, transparent);
+  }
+}
+
+.chat-header-git__commit-next-step-main {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chat-header-git__commit-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.chat-header-git__commit-submit.ant-btn.ant-btn-primary {
+  min-width: 180px;
+  height: 36px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: none;
+  border: 0;
+  background: var(--text-color);
+  color: var(--bg-color);
+
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
+    background: color-mix(in srgb, var(--text-color) 90%, transparent);
+    color: var(--bg-color);
+  }
+
+  &:disabled {
+    background: color-mix(in srgb, var(--text-color) 16%, transparent);
+    color: color-mix(in srgb, var(--bg-color) 72%, transparent);
+  }
+}
+
+html.dark {
+  .chat-header-git {
+    --nav-hover-bg: rgba(59, 130, 246, .14);
+    --nav-hover-border: rgba(96, 165, 250, .2);
+    --nav-active-bg: rgba(59, 130, 246, .2);
+    --nav-active-border: rgba(96, 165, 250, .28);
+    --nav-active-text: #3b82f6;
+  }
+
+  .chat-header-git__split,
+  .chat-header-git__trigger.ant-btn.ant-btn-text {
+    color: var(--sub-text-color);
+  }
+
+  .chat-draft-git__toggle {
+    --nav-hover-bg: rgba(59, 130, 246, .14);
+    --nav-hover-border: rgba(96, 165, 250, .2);
+  }
+
+  .chat-header-git__commit-modal {
+    .ant-modal-content {
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .5);
+    }
+  }
+}

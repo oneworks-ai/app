@@ -1,0 +1,84 @@
+.relay-admin-column-filter {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+  min-width: 0;
+}
+
+.relay-admin-column-filter__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-admin-column-filter__trigger.ant-btn {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 6px;
+  box-shadow: none !important;
+  color: var(--placeholder-color);
+  height: 14px;
+  min-height: 0;
+  min-width: 14px;
+  padding: 0;
+  width: 14px;
+}
+
+.relay-admin-column-filter__trigger.ant-btn .relay-admin-icon {
+  height: 14px;
+  width: 14px;
+}
+
+.relay-admin-column-filter__trigger.ant-btn:hover,
+.relay-admin-column-filter__trigger.ant-btn:focus-visible,
+.relay-admin-column-filter__trigger.ant-btn.ant-btn-text:not(:disabled):not(.ant-btn-disabled):hover,
+.relay-admin-column-filter__trigger.ant-btn.is-active {
+  background: transparent !important;
+  color: var(--primary-color) !important;
+  outline: none;
+}
+
+.relay-admin-column-filter__popover .ant-popover-inner {
+  background: color-mix(in srgb, var(--bg-color) 86%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow:
+    0 18px 44px color-mix(in srgb, #0f172a 18%, transparent),
+    0 2px 10px color-mix(in srgb, #0f172a 8%, transparent);
+  color: var(--text-color);
+  padding: 6px;
+}
+
+.relay-admin-column-filter__popover .ant-popover-arrow::before {
+  background: color-mix(in srgb, var(--bg-color) 86%, transparent);
+}
+
+.relay-admin-column-filter__menu {
+  display: grid;
+  gap: 2px;
+  min-width: 116px;
+}
+
+.relay-admin-column-filter__option {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--sub-text-color);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 24px;
+  min-height: 24px;
+  padding: 0 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.relay-admin-column-filter__option:hover,
+.relay-admin-column-filter__option:focus-visible,
+.relay-admin-column-filter__option.is-selected {
+  color: var(--primary-color);
+  outline: none;
+}

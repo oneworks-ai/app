@@ -1,0 +1,39 @@
+{
+  "name": "@oneworks/task-runtime",
+  "version": "0.1.0-alpha.0",
+  "description": "Runtime command and event engine for One Works tasks",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/task-runtime"
+  },
+  "imports": {
+    "#~/*.js": {
+      "__oneworks__": {
+        "default": "./src/*.ts"
+      },
+      "default": {
+        "import": "./dist/*.mjs",
+        "require": "./dist/*.js"
+      }
+    }
+  },
+  "exports": {
+    ".": {
+      "__oneworks__": {
+        "default": "./src/index.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/task-runtime/__tests__"
+  },
+  "dependencies": {
+    "@oneworks/runtime-protocol": "workspace:^"
+  }
+}

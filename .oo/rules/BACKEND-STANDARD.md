@@ -1,0 +1,74 @@
+---
+alwaysApply: false
+description: 仅在修改 apps/server、apps/cli 的路由、服务、数据库、适配器或 MCP 工具时加载的后端规范。
+globs:
+  - apps/server/src/**/*
+  - apps/server/__tests__/**/*
+  - apps/cli/src/**/*
+  - apps/cli/__tests__/**/*
+---
+
+# 后端开发规范 (Backend Development)
+
+## 路由挂载 (Server)
+
+- 所有的路由必须在 `src/server.ts` 中显式挂载到 `/api` 前缀下。
+- 每个业务模块应有独立的 Router 文件。
+
+## 数据处理 (Server)
+
+- 使用 `src/db/index.ts` 导出的 `getDb()` 获取数据库实例。
+- 数据持久化基于 Node.js 内置的 `node:sqlite`。
+- 所有的 SQL 操作应在对应的 Repo 中封装，避免在 Router 中直接编写 SQL。
+- Schema 初始化必须通过 `src/db/schema.ts` 提供的注入式编排器完成；每个领域的建表和迁移单独维护在 `src/db/*.schema.ts`。
+- 复杂的业务逻辑应从路由处理函数中提取。
+- 会话运行态状态（如 socket 集合、消息缓存、交互等待队列）统一放在 `src/services/`，不要放在 `routes/` 或 `websocket/` 私有文件中。
+- Server 侧配置读取统一通过 `src/services/config.ts`，不要在各模块内重复直接调用 `loadConfig` 或手写 `jsonVariables`。
+- 不要在单一 schema 文件中持续叠加所有表结构；新增领域时在独立 schema 模块中维护，并由 `src/db/index.ts` 注入注册。
+- 文件读取优先使用 `node:fs/promises` 并通过解构方式引入。
+
+## 外部适配器 (Adapters)
+
+- 所有的 CLI 或 AI 助手调用必须封装在 `src/adapters` 目录下。
+- 必须遵循 `defineAdapter` 规范，实现标准的事件回调和退出处理。
+- 适配器应负责特定工具的命令行参数构建和输出流解析（如 JSON 解析）。
+
+## MCP 工具开发 (CLI)
+
+- **注册规范**: 所有的 MCP 工具必须使用 `defineRegister` 包裹，并提供明确的 `title`, `description` 和 `inputSchema`。
+- **命名规范**: 工具名称必须使用 **PascalCase** (例如 `StartTasks`, `GetTaskStatus`)。
+- **参数校验**: 必须使用 `zod` 定义严格的输入 Schema。
+- **任务管理**: 涉及耗时操作的任务工具应支持 `background` 模式，并提供状态查询机制。
+
+**示例代码**:
+
+```typescript
+import { z } from 'zod'
+import { defineRegister } from '../types'
+
+export default defineRegister((server) => {
+  server.registerTool(
+    'MyCustomTool', // PascalCase
+    {
+      title: 'My Custom Tool',
+      description: 'A brief description of what this tool does',
+      inputSchema: z.object({
+        param1: z.string().describe('Description for param1'),
+        param2: z.number().optional().describe('Description for param2')
+      })
+    },
+    async ({ param1, param2 }) => {
+      // Implementation logic
+      return {
+        content: [{ type: 'text', text: `Result: ${param1}` }]
+      }
+    }
+  )
+})
+```
+
+## 错误处理
+
+- 使用 try-catch 包裹异步操作。
+- Server 端返回统一的 JSON 错误格式：`{ error: "message" }`。
+- 控制台日志应带有明确的前缀（如 `[server]`, `[cli]`, `[mcp]`）。

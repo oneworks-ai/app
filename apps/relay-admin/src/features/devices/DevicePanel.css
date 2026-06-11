@@ -1,0 +1,158 @@
+.relay-device-panel__identity {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.relay-device-panel__identity a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.relay-device-panel__identity a:hover,
+.relay-device-panel__identity a:focus-visible {
+  color: var(--primary-color);
+}
+
+.relay-device-panel__secondary {
+  color: var(--sub-text-color);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.relay-device-detail-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px var(--route-container-header-padding-inline);
+}
+
+.relay-device-detail {
+  display: grid;
+  gap: 18px;
+}
+
+.relay-device-detail__hero {
+  align-items: center;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-width: 0;
+}
+
+.relay-device-detail__icon {
+  align-items: center;
+  background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--primary-color) 32%, var(--border-color));
+  border-radius: 50%;
+  color: var(--primary-color);
+  display: inline-flex;
+  height: 56px;
+  justify-content: center;
+  width: 56px;
+}
+
+.relay-device-detail__icon .relay-admin-icon {
+  height: 26px;
+  width: 26px;
+}
+
+.relay-device-detail__title {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.relay-device-detail__title h2 {
+  font-size: 20px;
+  line-height: 1.2;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.relay-device-detail__title p {
+  color: var(--sub-text-color);
+  font-size: 13px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.relay-device-detail__eyebrow {
+  color: var(--sub-text-color);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.relay-device-detail__badges,
+.relay-device-detail__sessions-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.relay-device-detail__descriptions.ant-descriptions .ant-descriptions-view {
+  border-color: var(--border-color);
+}
+
+.relay-device-detail__descriptions.ant-descriptions
+  .ant-descriptions-item-label,
+.relay-device-detail__descriptions.ant-descriptions
+  .ant-descriptions-item-content {
+  background: transparent;
+  border-color: var(--border-color);
+  color: var(--text-color);
+}
+
+.relay-device-detail__descriptions.ant-descriptions
+  .ant-descriptions-item-label {
+  color: var(--sub-text-color);
+  font-weight: 650;
+}
+
+.relay-device-detail__json {
+  color: var(--sub-text-color);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.relay-device-detail__sessions {
+  border-top: 1px solid var(--border-color);
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+}
+
+.relay-device-detail__sessions-header h3 {
+  font-size: 14px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.relay-device-detail__error {
+  color: var(--danger-color);
+  font-size: 12px;
+  margin: 0;
+}
+
+.relay-device-detail__empty {
+  padding: 28px 0;
+}
+
+@media (max-width: 720px) {
+  .relay-device-detail__hero {
+    align-items: flex-start;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .relay-device-detail__badges {
+    grid-column: 1 / -1;
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "interfaceLanguage": "zh",
+  "modelLanguage": "zh",
+  "adapters": {
+    "codex": {},
+    "claude-code": {}
+  },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "ask": [
+      "Bash(rm:*)",
+      "Bash(git push:*)"
+    ],
+    "deny": [
+      "Bash(sudo:*)"
+    ]
+  },
+  "messageLinks": {
+    "workspaceFileTarget": "fileTab",
+    "plainWorkspacePathMode": "link",
+    "imageLinkMode": "inlinePreview"
+  },
+  "appearance": {
+    "primaryColor": "#00B454",
+    "iconBackground": "solid"
+  },
+  "conversation": {
+    "style": "friendly",
+    "customInstructions": "这个 workspace 是 One Works 演示项目。优先阅读 README.md 和 .oo/rules/PROJECT.md；代码改动保持小而可验证。",
+    "startupPresets": [
+      {
+        "id": "demo-code-tour",
+        "title": "代码导览",
+        "description": "快速解释演示项目结构和可运行命令。",
+        "icon": "travel_explore",
+        "adapter": "codex",
+        "effort": "medium",
+        "permissionMode": "default",
+        "prompt": "请阅读 README.md、.oo/rules/PROJECT.md 和 src/task-board.mjs，用 5 点说明这个示例项目如何工作。",
+        "files": [
+          "README.md",
+          "src/task-board.mjs"
+        ],
+        "rules": [
+          ".oo/rules/PROJECT.md"
+        ]
+      },
+      {
+        "id": "demo-feature",
+        "title": "小功能实现",
+        "description": "在任务面板中实现一个小的业务改动并补测试。",
+        "icon": "add_task",
+        "adapter": "codex",
+        "effort": "high",
+        "permissionMode": "acceptEdits",
+        "prompt": "请给 task board 增加按优先级统计的 summary 字段，并更新测试。",
+        "files": [
+          "src/task-board.mjs",
+          "test/task-board.test.mjs"
+        ],
+        "rules": [
+          ".oo/rules/PROJECT.md"
+        ]
+      }
+    ],
+    "builtinActions": [
+      {
+        "id": "demo-review",
+        "title": "Review 示例",
+        "description": "检查当前 task board 实现是否有行为风险或缺测。",
+        "icon": "rate_review",
+        "adapter": "codex",
+        "effort": "medium",
+        "permissionMode": "default",
+        "prompt": "请以代码评审方式检查 src/task-board.mjs 和 test/task-board.test.mjs，优先列出风险与缺失测试。",
+        "files": [
+          "src/task-board.mjs",
+          "test/task-board.test.mjs"
+        ],
+        "rules": [
+          ".oo/rules/PROJECT.md"
+        ]
+      }
+    ],
+    "runCommands": [
+      {
+        "id": "demo-test",
+        "name": "Run tests",
+        "icon": "science",
+        "script": "pnpm test",
+        "isFavorite": true
+      },
+      {
+        "id": "demo-start",
+        "name": "Print demo board",
+        "icon": "play_arrow",
+        "script": "pnpm start"
+      }
+    ]
+  },
+  "webAuth": {
+    "enabled": false
+  }
+}

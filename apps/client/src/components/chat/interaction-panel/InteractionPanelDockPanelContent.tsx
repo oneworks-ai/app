@@ -1,0 +1,222 @@
+import { useEffect, useState } from 'react'
+
+import type { IDockviewPanelProps } from 'dockview'
+
+import { ChatTerminalView } from '#~/components/chat/terminal/ChatTerminalView'
+import '#~/components/chat/workspace-drawer/ChatWorkspaceDrawer.scss'
+import { WorkspaceDrawerViewPanel } from '#~/components/chat/workspace-drawer/WorkspaceDrawerViewPanel'
+import { WorkspaceFileEditorView } from '#~/components/chat/workspace-file-editor/WorkspaceFileEditorView'
+import { PluginViewHost } from '#~/plugins/PluginHost'
+
+import { InteractionPanelIframeView } from './InteractionPanelIframeView'
+import { InteractionPanelMobileDebugView } from './InteractionPanelMobileDebugView'
+import { InteractionPanelRunCommandTaskView } from './InteractionPanelRunCommandTaskView'
+import { InteractionPanelSessionView } from './InteractionPanelSessionView'
+import { useInteractionPanelDockContext } from './interaction-panel-dock-context'
+
+const useDockPanelVisibility = (api: IDockviewPanelProps['api']) => {
+  const [isPanelVisible, setIsPanelVisible] = useState(() => api.isVisible)
+
+  useEffect(() => {
+    setIsPanelVisible(api.isVisible)
+    const disposable = api.onDidVisibilityChange(() => {
+      setIsPanelVisible(api.isVisible)
+    })
+    return () => disposable.dispose()
+  }, [api])
+
+  return isPanelVisible
+}
+
+export function InteractionPanelDockPanelContentBody({
+  isPanelVisible,
+  tabId
+}: {
+  isPanelVisible: boolean
+  tabId: string
+}) {
+  const {
+    activeTab,
+    activeSessionFocusRequestId,
+    activeSessionFocusSessionId,
+    bottomPanel,
+    iframePages,
+    isVisible,
+    markdownPreviewMode,
+    mobileDebugPages,
+    projectUrlHistoryKey,
+    sessionId,
+    sessionPages,
+    sessionUrlHistoryKey,
+    tabById,
+    terminalPanes,
+    terminalSessionId,
+    workspaceDrawerState,
+    workspaceRootPath,
+    onIframeMetadataChange,
+    onIframeNavigateHistory,
+    onIframeSelectHistory,
+    onIframeUrlChange,
+    onLocateWorkspacePath,
+    onMobileDebugPageChange,
+    onOpenIframeUrl,
+    onSessionPageChange
+  } = useInteractionPanelDockContext()
+  const tab = tabById[tabId]
+
+  if (tab == null) {
+    return null
+  }
+
+  const contentClassName = `chat-interaction-panel__dock-panel-content ${isPanelVisible ? 'is-visible' : 'is-hidden'}`
+
+  if (tab.kind === 'terminal') {
+    const pane = terminalPanes.panes.find(item => item.id === tab.id)
+    if (pane == null) return null
+    if (pane.runCommand != null) {
+      return (
+        <div className={contentClassName}>
+          <InteractionPanelRunCommandTaskView
+            activeTerminalId={isPanelVisible ? pane.id : ''}
+            pane={pane}
+            sessionId={terminalSessionId}
+            terminalPanes={terminalPanes}
+          />
+        </div>
+      )
+    }
+
+    return (
+      <div className={contentClassName}>
+        <ChatTerminalView
+          activeTerminalId={isPanelVisible ? pane.id : ''}
+          panes={[pane]}
+          sessionId={terminalSessionId}
+          onExit={terminalPanes.closeTerminal}
+          onInfoChange={terminalPanes.handleInfoChange}
+          onInitialCommandSent={terminalPanes.markInitialCommandSent}
+          onRestartChange={terminalPanes.handleRestartChange}
+          onTerminateChange={terminalPanes.handleTerminateChange}
+        />
+      </div>
+    )
+  }
+
+  if (tab.kind === 'file') {
+    return (
+      <div className={contentClassName}>
+        <WorkspaceFileEditorView
+          variant='content'
+          showTabs={false}
+          isOpen={isVisible && activeTab.kind === 'file' && activeTab.path === tab.path}
+          markdownPreviewMode={markdownPreviewMode}
+          openPaths={bottomPanel.openWorkspaceFilePaths}
+          path={tab.path}
+          sessionId={sessionId}
+          workspaceRootPath={workspaceRootPath}
+          onClose={bottomPanel.handleCloseWorkspaceFile}
+          onCloseAllPaths={bottomPanel.handleCloseAllWorkspaceFileTabs}
+          onCloseOtherPaths={bottomPanel.handleCloseOtherWorkspaceFileTabs}
+          onClosePath={bottomPanel.handleCloseWorkspaceFileTab}
+          onClosePathsToRight={bottomPanel.handleCloseWorkspaceFileTabsToRight}
+          onLocatePath={onLocateWorkspacePath}
+          onSelectPath={bottomPanel.handleSelectWorkspaceFile}
+        />
+      </div>
+    )
+  }
+
+  if (tab.kind === 'session') {
+    const page = sessionPages.find(item => item.id === tab.id)
+    if (page == null) return null
+    const shouldUseQueryFocus = activeSessionFocusRequestId != null &&
+      (activeSessionFocusSessionId == null ||
+        page.sessionId == null ||
+        page.sessionId === activeSessionFocusSessionId)
+    const autoFocusRequestId = shouldUseQueryFocus ? activeSessionFocusRequestId : page.focusRequestId
+    return (
+      <div className={contentClassName}>
+        <InteractionPanelSessionView
+          autoFocusRequestId={isPanelVisible ? autoFocusRequestId : undefined}
+          page={page}
+          sourceSessionId={sessionId}
+          onChangePage={(updater) => onSessionPageChange(page.id, updater)}
+        />
+      </div>
+    )
+  }
+
+  if (tab.kind === 'mobile-debug') {
+    const page = mobileDebugPages.find(item => item.id === tab.id)
+    if (page == null) return null
+    return (
+      <div className={contentClassName}>
+        <InteractionPanelMobileDebugView
+          isActive={activeTab.kind === 'mobile-debug' && activeTab.id === tab.id}
+          page={page}
+          onChangePage={(updater) => onMobileDebugPageChange(page.id, updater)}
+          onOpenDebugUrl={onOpenIframeUrl}
+        />
+      </div>
+    )
+  }
+
+  if (tab.kind === 'plugin') {
+    return (
+      <div className={contentClassName}>
+        <PluginViewHost scope={tab.pluginScope} routeId={tab.tabId} surface='workbench' viewId={tab.viewId} />
+      </div>
+    )
+  }
+
+  if (tab.kind === 'workspace-drawer') {
+    return (
+      <div className={contentClassName}>
+        <WorkspaceDrawerViewPanel
+          activeView={tab.view}
+          agentApprovals={workspaceDrawerState.agentApprovals}
+          agentRoster={workspaceDrawerState.agentRoster}
+          approvalMessages={workspaceDrawerState.approvalMessages}
+          changedLayout={workspaceDrawerState.changedLayout}
+          changedTreeCommand={workspaceDrawerState.changedTreeCommand}
+          isGitLoading={workspaceDrawerState.isGitLoading}
+          pluginTabs={workspaceDrawerState.pluginTabs}
+          repoState={workspaceDrawerState.repoState}
+          selectedFilePath={bottomPanel.selectedWorkspaceFilePath}
+          settingsView={workspaceDrawerState.settingsView}
+          sessionId={sessionId}
+          treeRefreshKey={workspaceDrawerState.treeRefreshKey}
+          workspaceTreeCommand={workspaceDrawerState.workspaceTreeCommand}
+          onOpenFile={workspaceDrawerState.onOpenFile}
+          onReferencePaths={workspaceDrawerState.onReferencePaths}
+        />
+      </div>
+    )
+  }
+
+  const page = iframePages.find(item => item.id === tab.id)
+  if (page == null) {
+    return null
+  }
+
+  return (
+    <div className={contentClassName}>
+      <InteractionPanelIframeView
+        isActive={activeTab.kind === 'iframe' && activeTab.id === tab.id}
+        page={page}
+        projectUrlHistoryKey={projectUrlHistoryKey}
+        sessionUrlHistoryKey={sessionUrlHistoryKey}
+        onChangeMetadata={onIframeMetadataChange}
+        onSelectHistory={onIframeSelectHistory}
+        onChangeUrl={onIframeUrlChange}
+        onNavigateHistory={onIframeNavigateHistory}
+      />
+    </div>
+  )
+}
+
+export function InteractionPanelDockPanelContent({ api, params }: IDockviewPanelProps<{ tabId: string }>) {
+  const isPanelVisible = useDockPanelVisibility(api)
+
+  return <InteractionPanelDockPanelContentBody isPanelVisible={isPanelVisible} tabId={params.tabId} />
+}

@@ -1,0 +1,84 @@
+{
+  "name": "@oneworks/client",
+  "type": "module",
+  "version": "0.1.0-alpha.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "apps/client"
+  },
+  "imports": {
+    "#~/*": [
+      "./src/*",
+      "./src/*.ts",
+      "./src/*.tsx",
+      "./src/*/index.ts",
+      "./src/*/index.tsx"
+    ]
+  },
+  "bin": {
+    "oneworks-client": "./cli.cjs"
+  },
+  "files": [
+    "cli.cjs",
+    "dist",
+    "preview-runtime.cjs",
+    "preview-server.cjs"
+  ],
+  "scripts": {
+    "icons:subset": "node ./scripts/generate-material-symbols-subset.mjs",
+    "prepublish": "vite build"
+  },
+  "dependencies": {
+    "@oneworks/icon": "workspace:*",
+    "@oneworks/register": "workspace:*",
+    "@oneworks/route-layout": "workspace:*",
+    "dockview": "6.2.2"
+  },
+  "devDependencies": {
+    "@ant-design/icons": "^5.3.7",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/modifiers": "^9.0.0",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@monaco-editor/react": "^4.7.0",
+    "@oneworks/adapter-claude-code": "workspace:*",
+    "@oneworks/adapter-codex": "workspace:*",
+    "@oneworks/adapter-copilot": "workspace:*",
+    "@oneworks/adapter-gemini": "workspace:*",
+    "@oneworks/adapter-kimi": "workspace:*",
+    "@oneworks/adapter-opencode": "workspace:*",
+    "@oneworks/channel-lark": "workspace:*",
+    "@oneworks/core": "workspace:*",
+    "@oneworks/plugin-chrome-devtools": "workspace:*",
+    "@oneworks/types": "workspace:*",
+    "@oneworks/utils": "workspace:*",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.2",
+    "@vitejs/plugin-react": "^5.1.2",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "antd": "^5.20.0",
+    "dayjs": "^1.11.19",
+    "devicon": "^2.17.0",
+    "i18next": "^25.7.4",
+    "i18next-browser-languagedetector": "^8.2.0",
+    "jotai": "^2.16.2",
+    "material-symbols": "0.44.8",
+    "mermaid": "^10.9.1",
+    "monaco-editor": "^0.55.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-i18next": "^16.5.3",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.12.0",
+    "remark-gfm": "^4.0.1",
+    "sass": "^1.97.2",
+    "shiki": "^3.21.0",
+    "subset-font": "2.5.0",
+    "swr": "^2.2.5",
+    "vite": "^5.4.8",
+    "vitest": "^3.2.4",
+    "zod": "^3.24.1"
+  }
+}

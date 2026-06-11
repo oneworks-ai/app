@@ -1,0 +1,47 @@
+.relay-status-badge {
+  align-items: center;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  min-height: 24px;
+  padding: 0 9px;
+  white-space: nowrap;
+}
+
+.relay-status-badge--success {
+  background: color-mix(in srgb, var(--success-color) 12%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--success-color) 35%,
+    var(--border-color)
+  );
+  color: var(--success-color);
+}
+
+.relay-status-badge--warning {
+  background: color-mix(in srgb, var(--warning-color) 18%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--warning-color) 45%,
+    var(--border-color)
+  );
+  color: var(--warning-color);
+}
+
+.relay-status-badge--danger {
+  background: color-mix(in srgb, var(--danger-color) 11%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--danger-color) 35%,
+    var(--border-color)
+  );
+  color: var(--danger-color);
+}
+
+.relay-status-badge--muted {
+  background: color-mix(in srgb, var(--text-color) 8%, transparent);
+  color: var(--sub-text-color);
+}

@@ -1,0 +1,420 @@
+.workspace-file-editor {
+  --workspace-file-editor-breadcrumb-bg: var(
+    --interaction-panel-header-bg,
+    var(--sub-bg-color)
+  );
+  gap: 0;
+
+  .dock-panel__title {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: none;
+    height: 28px;
+    padding: 0;
+    background: transparent;
+  }
+
+  &--embedded {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
+.workspace-file-editor__embedded-tabs {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--border-color);
+  flex: 0 0 auto;
+}
+
+.workspace-file-editor__embedded-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-file-editor__state {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--sub-text-color);
+  font-size: 12px;
+}
+
+.workspace-file-editor__breadcrumb {
+  min-width: 0;
+  height: 22px;
+  margin: 0;
+  padding: 0 0 0 4px;
+  border-block: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  background-color: var(--workspace-file-editor-breadcrumb-bg);
+  color: var(--sub-text-color);
+  font-family:
+    ui-monospace, sfmono-regular, 'SF Mono', menlo, consolas, monospace;
+  font-size: 12px;
+  line-height: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.workspace-file-editor__breadcrumb-part {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.workspace-file-editor__breadcrumb-node {
+  min-width: 0;
+  height: 18px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  color: inherit;
+  cursor: context-menu;
+  font: inherit;
+  line-height: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:hover,
+  &:focus-visible {
+    background-color: var(--interaction-panel-hover-bg, var(--tag-hover-bg));
+    outline: none;
+  }
+
+  &.is-current {
+    color: var(--text-color);
+  }
+}
+
+.workspace-file-editor__breadcrumb-separator {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  color: var(--sub-text-color);
+  opacity: .68;
+}
+
+.workspace-file-editor__breadcrumb-menu-icon {
+  font-size: 16px;
+}
+
+.workspace-file-editor__editor {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+
+  .monaco-editor,
+  .monaco-editor-background,
+  .monaco-editor .margin,
+  .monaco-editor .inputarea.ime-input {
+    background: transparent !important;
+  }
+
+  .monaco-editor .scroll-decoration,
+  .monaco-editor .minimap-shadow-visible {
+    box-shadow: none !important;
+  }
+}
+
+.workspace-file-editor__markdown-layout {
+  --workspace-file-editor-markdown-editor-size: 50%;
+
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+
+  &.is-dragging {
+    cursor: col-resize;
+    user-select: none;
+
+    .workspace-file-editor__markdown-editor-pane,
+    .workspace-file-editor__markdown-preview {
+      pointer-events: none;
+    }
+  }
+}
+
+.workspace-file-editor__markdown-editor-pane,
+.workspace-file-editor__markdown-preview {
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspace-file-editor__markdown-editor-pane {
+  display: flex;
+  flex: 0 0 var(--workspace-file-editor-markdown-editor-size);
+}
+
+.workspace-file-editor__markdown-preview {
+  flex: 1 1 0;
+  padding: 16px 18px 24px;
+  background-color: var(--bg-color);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+
+  .markdown-body {
+    max-width: none;
+    color: var(--text-color);
+  }
+
+  img {
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+.workspace-file-editor__markdown-splitter {
+  position: relative;
+  width: 10px;
+  min-width: 10px;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  background: transparent;
+  cursor: col-resize;
+  flex: 0 0 10px;
+  touch-action: none;
+
+  &:hover,
+  &:focus-visible {
+    outline: none;
+
+    .workspace-file-editor__markdown-splitter-line {
+      width: 2px;
+      background-color: var(--primary-color);
+    }
+  }
+}
+
+.workspace-file-editor__markdown-splitter-line {
+  width: 1px;
+  background-color: var(--border-color);
+  transition: width .14s ease, background-color .14s ease;
+}
+
+.workspace-file-editor__markdown-layout.is-dragging {
+  .workspace-file-editor__markdown-splitter-line {
+    width: 2px;
+    background-color: var(--primary-color);
+  }
+}
+
+.workspace-file-editor__markdown-layout--editor {
+  .workspace-file-editor__markdown-editor-pane {
+    flex-basis: 100%;
+  }
+}
+
+.workspace-file-editor__markdown-layout--preview {
+  .workspace-file-editor__markdown-preview {
+    flex-basis: 100%;
+    padding-inline: clamp(18px, 6vw, 56px);
+    border-left: none;
+  }
+
+  .markdown-body {
+    max-width: 920px;
+    margin: 0 auto;
+  }
+}
+
+.workspace-file-editor__image-preview {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  overflow: auto;
+
+  img {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 6px;
+    object-fit: contain;
+  }
+}
+
+.workspace-file-editor__tabs {
+  min-width: 0;
+  width: 100%;
+  height: 28px;
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.workspace-file-editor__tab {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 180px;
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 6px;
+  color: var(--sub-text-color);
+  overflow: hidden;
+  transition: background-color .18s ease, color .18s ease;
+
+  &:hover {
+    background-color: var(--nav-hover-bg);
+    color: var(--text-color);
+  }
+
+  &:hover,
+  &:focus-within {
+    .workspace-file-editor__tab-icon {
+      opacity: 0;
+      transform: scale(.82);
+    }
+
+    .workspace-file-editor__tab-close {
+      opacity: .74;
+      pointer-events: auto;
+      transform: scale(1);
+    }
+  }
+
+  &.is-active {
+    background-color: var(--sub-bg-color);
+    color: var(--text-color);
+  }
+}
+
+.workspace-file-editor__tab-main,
+.workspace-file-editor__tab-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.workspace-file-editor__tab-main {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px 0 3px;
+}
+
+.workspace-file-editor__tab-leading {
+  position: relative;
+  flex: 0 0 20px;
+  width: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.workspace-file-editor__tab-icon {
+  flex: 0 0 auto;
+  font-size: 14px;
+  line-height: 1;
+  transition: opacity .14s ease, transform .14s ease;
+
+  &.is-docs,
+  &.is-markdown {
+    color: #0f766e;
+  }
+
+  &.is-typescript,
+  &.is-source {
+    color: #2563eb;
+  }
+
+  &.is-javascript {
+    color: #ca8a04;
+  }
+}
+
+.workspace-file-editor__tab-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-file-editor__tab-close {
+  position: absolute;
+  inset: 2px 0;
+  width: 20px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(.82);
+  transition:
+    background-color .14s ease,
+    opacity .14s ease,
+    transform .14s ease;
+
+  .material-symbols-rounded {
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  &:hover {
+    background-color: color-mix(in srgb, var(--nav-hover-bg) 72%, transparent);
+    opacity: 1;
+  }
+}
+
+.workspace-file-editor__menu-icon.material-symbols-rounded {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 16px;
+}
+
+.workspace-file-editor-context-dropdown.ant-dropdown {
+  .ant-dropdown-menu {
+    min-width: 180px;
+  }
+
+  .ant-dropdown-menu-item-icon {
+    display: inline-flex !important;
+    align-items: center !important;
+    align-self: center !important;
+    justify-content: center !important;
+    line-height: 0 !important;
+  }
+}

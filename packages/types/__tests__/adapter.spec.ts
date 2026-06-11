@@ -1,0 +1,378 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import process from 'node:process'
+
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import {
+  loadAdapter,
+  loadAdapterBuiltinModels,
+  normalizeAdapterPackageId,
+  resolveAdapterPackageName,
+  resolveExistingNpmPackageDirs,
+  sanitizePackageName
+} from '@oneworks/types'
+
+const tempDirs: string[] = []
+
+afterEach(async () => {
+  vi.unstubAllEnvs()
+  await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
+})
+
+const writeAdapterPackage = async (
+  packageDir: string,
+  adapterId: string,
+  packageName = '@acme/custom-adapter',
+  options: { models?: string[]; dynamicModels?: string[]; version?: string } = {}
+) => {
+  const version = options.version ?? '1.0.0'
+  const adapterRoot = join(packageDir, 'node_modules', ...packageName.split('/'))
+  await mkdir(join(adapterRoot, 'dist'), { recursive: true })
+  await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: '@acme/runtime' }, null, 2))
+  await writeFile(
+    join(adapterRoot, 'package.json'),
+    JSON.stringify(
+      {
+        name: packageName,
+        version,
+        exports: {
+          '.': './dist/index.js',
+          ...(options.models == null && options.dynamicModels == null ? {} : { './models': './dist/models.js' }),
+          './package.json': './package.json'
+        }
+      },
+      null,
+      2
+    )
+  )
+  await writeFile(
+    join(adapterRoot, 'dist/index.js'),
+    `module.exports = { default: { id: ${JSON.stringify(adapterId)} } }\n`
+  )
+  if (options.models != null || options.dynamicModels != null) {
+    const dynamicModels = options.dynamicModels?.map(model => ({
+      value: model,
+      title: model,
+      description: `${model} model`
+    }))
+    const staticModels = options.models?.map(model => ({
+      value: model,
+      title: model,
+      description: `${model} model`
+    }))
+    await writeFile(
+      join(adapterRoot, 'dist/models.js'),
+      `module.exports = { ${
+        dynamicModels == null ? '' : `loadBuiltinModels: () => ${JSON.stringify(dynamicModels)}, `
+      }builtinModels: ${JSON.stringify(staticModels ?? [])} }\n`
+    )
+  }
+}
+
+describe('adapter package helpers', () => {
+  it('maps claude adapter aliases to the claude-code package', () => {
+    expect(normalizeAdapterPackageId('claude')).toBe('claude-code')
+    expect(normalizeAdapterPackageId('adapter-claude')).toBe('adapter-claude-code')
+    expect(resolveAdapterPackageName('claude')).toBe('@oneworks/adapter-claude-code')
+    expect(resolveAdapterPackageName('adapter-claude')).toBe('@oneworks/adapter-claude-code')
+  })
+
+  it('keeps other adapter ids unchanged', () => {
+    expect(normalizeAdapterPackageId('codex')).toBe('codex')
+    expect(normalizeAdapterPackageId('adapter-codex')).toBe('adapter-codex')
+    expect(resolveAdapterPackageName('codex')).toBe('@oneworks/adapter-codex')
+    expect(resolveAdapterPackageName('adapter-codex')).toBe('@oneworks/adapter-codex')
+    expect(resolveAdapterPackageName('@scope/custom-adapter')).toBe('@scope/custom-adapter')
+  })
+
+  it('loads adapters from the caller package dir before the active runtime package dir', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-resolver-'))
+    tempDirs.push(tempDir)
+
+    const callerPackageDir = join(tempDir, 'caller-package')
+    const runtimePackageDir = join(tempDir, 'runtime-package')
+    await writeAdapterPackage(callerPackageDir, 'caller')
+    await writeAdapterPackage(runtimePackageDir, 'runtime')
+
+    vi.stubEnv('__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__', callerPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', runtimePackageDir)
+
+    await expect(loadAdapter('@acme/custom-adapter')).resolves.toMatchObject({
+      id: 'caller'
+    })
+  })
+
+  it('loads adapter builtin models through the same package resolution path', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-models-resolver-'))
+    tempDirs.push(tempDir)
+
+    const callerPackageDir = join(tempDir, 'caller-package')
+    await writeAdapterPackage(callerPackageDir, 'caller', '@acme/custom-adapter', {
+      models: ['native-default', 'native-pro']
+    })
+
+    vi.stubEnv('__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__', callerPackageDir)
+
+    expect(loadAdapterBuiltinModels('@acme/custom-adapter')?.map(model => model.value)).toEqual([
+      'native-default',
+      'native-pro'
+    ])
+  })
+
+  it('prefers a dynamic builtin model loader when the adapter exports one', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-dynamic-models-'))
+    tempDirs.push(tempDir)
+
+    const callerPackageDir = join(tempDir, 'caller-package')
+    await writeAdapterPackage(callerPackageDir, 'caller', '@acme/custom-adapter', {
+      dynamicModels: ['cache-model'],
+      models: ['static-model']
+    })
+
+    vi.stubEnv('__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__', callerPackageDir)
+
+    expect(loadAdapterBuiltinModels('@acme/custom-adapter')?.map(model => model.value)).toEqual([
+      'cache-model'
+    ])
+  })
+
+  it('loads adapters from the bootstrap adapter package cache after runtime package dirs miss', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-cache-resolver-'))
+    tempDirs.push(tempDir)
+
+    const homeDir = join(tempDir, 'home')
+    const serverPackageDir = join(tempDir, 'server-package')
+    const adapterPackageName = '@acme/cached-adapter'
+    const cacheDir = join(
+      homeDir,
+      '.oneworks',
+      'bootstrap',
+      'adapter-packages',
+      sanitizePackageName(adapterPackageName),
+      '1.0.0'
+    )
+    await mkdir(serverPackageDir, { recursive: true })
+    await writeFile(join(serverPackageDir, 'package.json'), JSON.stringify({ name: '@oneworks/server' }, null, 2))
+    await writeAdapterPackage(cacheDir, 'cached-adapter', adapterPackageName)
+
+    vi.stubEnv('__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__', serverPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', serverPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', homeDir)
+
+    await expect(loadAdapter(adapterPackageName)).resolves.toMatchObject({
+      id: 'cached-adapter'
+    })
+  })
+
+  it('loads adapters from the configured package cache root', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-custom-cache-resolver-'))
+    tempDirs.push(tempDir)
+
+    const packageCacheRoot = join(tempDir, 'package-cache')
+    const serverPackageDir = join(tempDir, 'server-package')
+    const adapterPackageName = '@acme/configured-cache-adapter'
+    const cacheDir = join(
+      packageCacheRoot,
+      'adapter-packages',
+      sanitizePackageName(adapterPackageName),
+      '1.0.0'
+    )
+    await mkdir(serverPackageDir, { recursive: true })
+    await writeFile(join(serverPackageDir, 'package.json'), JSON.stringify({ name: '@oneworks/server' }, null, 2))
+    await writeAdapterPackage(cacheDir, 'configured-cache-adapter', adapterPackageName)
+
+    vi.stubEnv('__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__', serverPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', serverPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__', packageCacheRoot)
+
+    await expect(loadAdapter(adapterPackageName)).resolves.toMatchObject({
+      id: 'configured-cache-adapter'
+    })
+  })
+
+  it('lists cached npm runtime packages newest first from the configured cache root', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-npm-cache-resolver-'))
+    tempDirs.push(tempDir)
+
+    const packageCacheRoot = join(tempDir, 'package-cache')
+    const packageName = '@oneworks/client'
+    for (const version of ['3.4.0', '3.5.0']) {
+      const packageDir = join(
+        packageCacheRoot,
+        'npm',
+        sanitizePackageName(packageName),
+        version,
+        'node_modules',
+        ...packageName.split('/')
+      )
+      await mkdir(packageDir, { recursive: true })
+      await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: packageName, version }, null, 2))
+    }
+
+    expect(resolveExistingNpmPackageDirs(packageName, {
+      __ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__: packageCacheRoot
+    })).toEqual([
+      join(
+        packageCacheRoot,
+        'npm',
+        sanitizePackageName(packageName),
+        '3.5.0',
+        'node_modules',
+        ...packageName.split('/')
+      ),
+      join(
+        packageCacheRoot,
+        'npm',
+        sanitizePackageName(packageName),
+        '3.4.0',
+        'node_modules',
+        ...packageName.split('/')
+      )
+    ])
+  })
+
+  it('prefers the user-home adapter package cache over the default runtime package dir', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-cache-priority-'))
+    tempDirs.push(tempDir)
+
+    const homeDir = join(tempDir, 'home')
+    const serverPackageDir = join(tempDir, 'server-package')
+    const adapterPackageName = '@acme/cache-priority-adapter'
+    const cacheDir = join(
+      homeDir,
+      '.oneworks',
+      'bootstrap',
+      'adapter-packages',
+      sanitizePackageName(adapterPackageName),
+      '1.0.0'
+    )
+    await writeAdapterPackage(serverPackageDir, 'runtime-adapter', adapterPackageName, {
+      models: ['runtime-model']
+    })
+    await writeAdapterPackage(cacheDir, 'cached-adapter', adapterPackageName, {
+      models: ['cached-model']
+    })
+
+    vi.stubEnv('__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__', serverPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', serverPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', homeDir)
+
+    expect(loadAdapterBuiltinModels(adapterPackageName)?.map(model => model.value)).toEqual(['cached-model'])
+  })
+
+  it('prefers the user-home adapter package cache over workspace node_modules', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-workspace-cache-priority-'))
+    tempDirs.push(tempDir)
+
+    const originalCwd = process.cwd()
+    const workspace = join(tempDir, 'workspace')
+    const homeDir = join(tempDir, 'home')
+    const adapterPackageName = '@acme/workspace-cache-priority-adapter'
+    const cacheDir = join(
+      homeDir,
+      '.oneworks',
+      'bootstrap',
+      'adapter-packages',
+      sanitizePackageName(adapterPackageName),
+      '1.0.0'
+    )
+    await writeAdapterPackage(workspace, 'workspace-adapter', adapterPackageName, {
+      models: ['workspace-model']
+    })
+    await writeAdapterPackage(cacheDir, 'cached-adapter', adapterPackageName, {
+      models: ['cached-model']
+    })
+
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', homeDir)
+    process.chdir(workspace)
+    try {
+      expect(loadAdapterBuiltinModels(adapterPackageName)?.map(model => model.value)).toEqual(['cached-model'])
+    } finally {
+      process.chdir(originalCwd)
+    }
+  })
+
+  it('uses the built-in desktop adapter cache when global cache versions are below the built-in floor', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-cache-builtin-floor-'))
+    tempDirs.push(tempDir)
+
+    const homeDir = join(tempDir, 'home')
+    const serverPackageDir = join(tempDir, 'server-package')
+    const adapterPackageName = '@acme/builtin-floor-adapter'
+    const legacyCacheDir = join(
+      homeDir,
+      '.oneworks',
+      'bootstrap',
+      'adapter-packages',
+      sanitizePackageName(adapterPackageName),
+      '1.9.0'
+    )
+    const builtinCacheDir = join(
+      homeDir,
+      '.oneworks',
+      'bootstrap',
+      'adapter-packages',
+      sanitizePackageName(adapterPackageName),
+      '2.0.0'
+    )
+    await mkdir(serverPackageDir, { recursive: true })
+    await writeFile(join(serverPackageDir, 'package.json'), JSON.stringify({ name: '@oneworks/server' }, null, 2))
+    await writeAdapterPackage(legacyCacheDir, 'legacy-adapter', adapterPackageName, {
+      models: ['legacy-model'],
+      version: '1.9.0'
+    })
+    await writeAdapterPackage(builtinCacheDir, 'builtin-adapter', adapterPackageName, {
+      models: ['builtin-model'],
+      version: '2.0.0'
+    })
+
+    vi.stubEnv(
+      '__ONEWORKS_DESKTOP_BUILTIN_ADAPTER_PACKAGES__',
+      JSON.stringify({
+        [adapterPackageName]: {
+          cacheDir: builtinCacheDir,
+          version: '2.0.0'
+        }
+      })
+    )
+    vi.stubEnv('__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__', serverPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', serverPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', homeDir)
+
+    expect(loadAdapterBuiltinModels(adapterPackageName)?.map(model => model.value)).toEqual(['builtin-model'])
+  })
+
+  it('preserves an explicit external CLI package dir ahead of the user-home adapter cache', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-explicit-cli-dir-'))
+    tempDirs.push(tempDir)
+
+    const homeDir = join(tempDir, 'home')
+    const serverPackageDir = join(tempDir, 'server-package')
+    const explicitCliPackageDir = join(tempDir, 'explicit-cli-package')
+    const adapterPackageName = '@acme/explicit-cli-adapter'
+    const cacheDir = join(
+      homeDir,
+      '.oneworks',
+      'bootstrap',
+      'adapter-packages',
+      sanitizePackageName(adapterPackageName),
+      '1.0.0'
+    )
+    await mkdir(serverPackageDir, { recursive: true })
+    await writeFile(join(serverPackageDir, 'package.json'), JSON.stringify({ name: '@oneworks/server' }, null, 2))
+    await writeAdapterPackage(explicitCliPackageDir, 'explicit-adapter', adapterPackageName, {
+      models: ['explicit-model']
+    })
+    await writeAdapterPackage(cacheDir, 'cached-adapter', adapterPackageName, {
+      models: ['cached-model']
+    })
+
+    vi.stubEnv('__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__', explicitCliPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', serverPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', homeDir)
+
+    expect(loadAdapterBuiltinModels(adapterPackageName)?.map(model => model.value)).toEqual(['explicit-model'])
+  })
+})

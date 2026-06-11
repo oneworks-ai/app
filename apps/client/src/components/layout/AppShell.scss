@@ -1,0 +1,488 @@
+.app-shell {
+  --app-shell-content-bg: var(--sub-bg-color);
+  --app-shell-content-radius: 12px;
+  --app-shell-layout-transition: .3s cubic-bezier(.4, 0, .2, 1);
+  --nav-rail-collapsed-window-bar-computed-width: calc(
+    var(
+      --nav-rail-collapsed-window-bar-padding-left,
+      var(--nav-rail-collapsed-window-bar-padding-x)
+    ) +
+      var(
+      --nav-rail-collapsed-window-bar-padding-right,
+      var(--nav-rail-collapsed-window-bar-padding-x)
+    ) +
+      var(--nav-rail-collapsed-window-bar-action-count) *
+      var(--nav-rail-window-action-size) +
+      (
+      var(--nav-rail-collapsed-window-bar-action-count) - 1
+    ) *
+      var(--nav-rail-window-action-gap)
+  );
+
+  min-height: 100vh;
+  height: var(--oneworks-visual-viewport-height, 100dvh);
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, .02), rgba(0, 0, 0, 0)),
+    var(--sub-bg-color);
+}
+
+.app-shell:not(.app-shell--window-controls-reserved) {
+  --chat-header-collapsed-compact-margin-offset: -4px;
+  --route-container-header-collapsed-compact-margin-offset: 0px;
+  --nav-rail-window-spacer-width: 0px;
+  --nav-rail-collapsed-window-spacer-width: 0px;
+  --nav-rail-collapsed-window-bar-padding-left: var(
+    --route-container-header-padding-inline
+  );
+  --nav-rail-collapsed-window-bar-action-count: 2;
+  --nav-rail-collapsed-window-bar-width: var(
+    --nav-rail-collapsed-window-bar-computed-width
+  );
+  --nav-rail-top-padding: 33px;
+}
+
+.app-shell.is-window-fullscreen {
+  --nav-rail-window-spacer-width: 0px;
+  --nav-rail-collapsed-window-spacer-width: 0px;
+  --nav-rail-window-bar-padding-x: var(--route-container-header-padding-inline);
+}
+
+.app-shell.is-window-fullscreen.app-shell--desktop-simulation.app-shell--window-controls-reserved {
+  --nav-rail-collapsed-window-bar-width: var(
+    --nav-rail-collapsed-window-bar-computed-width
+  );
+}
+
+.app-shell__sidebar-region {
+  position: relative;
+  z-index: 30;
+  height: 100%;
+  display: flex;
+  flex-direction: row;
+  flex-shrink: 0;
+  min-height: 0;
+  overflow: visible;
+}
+
+.app-shell__sidebar-preview-dismiss-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.app-shell__sidebar-edge-swipe-zone {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 75;
+  width: 12px;
+  background: transparent;
+  touch-action: pan-y;
+}
+
+.app-shell__content-region {
+  position: relative;
+  z-index: 0;
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  padding: 6px 8px 6px 0;
+  box-sizing: border-box;
+  background-color: var(--app-shell-content-bg);
+  transition:
+    width var(--app-shell-layout-transition),
+    max-width var(--app-shell-layout-transition),
+    padding var(--app-shell-layout-transition);
+}
+
+.app-shell__content-region.is-sidebar-collapsed {
+  padding: 0;
+}
+
+.app-shell__content {
+  flex: 1;
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: var(--app-shell-content-radius);
+  background-color: var(--app-shell-content-bg);
+  transition:
+    padding var(--app-shell-layout-transition),
+    border-radius var(--app-shell-layout-transition),
+    background-color .2s ease;
+}
+
+.app-shell__content.app-shell__content--session {
+  padding: 0;
+}
+
+.app-shell__content.is-sidebar-collapsed {
+  border-radius: 0;
+}
+
+.app-shell__content.app-shell__content--session.is-sidebar-collapsed {
+  padding: 0;
+  box-shadow: none;
+}
+
+.app-shell__content.app-shell__content--session.is-sidebar-collapsed > * {
+  border-radius: 0;
+}
+
+.app-shell__content-region.is-sidebar-collapsed .app-shell__content > * {
+  border-radius: 0;
+}
+
+.app-shell__content.app-shell__content--route-sidebar {
+  padding: 0;
+  box-shadow: none;
+}
+
+.app-shell__content.app-shell__content--route-sidebar > * {
+  border-radius: 0;
+}
+
+.app-shell__content > * {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  transition:
+    border-radius var(--app-shell-layout-transition),
+    background-color .2s ease;
+}
+
+.app-shell__content.is-flat {
+  padding: 0;
+  background-color: var(--app-shell-content-bg);
+  box-shadow: none;
+}
+
+.app-shell__content.is-flat > * {
+  border-radius: 0;
+}
+
+.app-shell__mobile-sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  border: none;
+  background: rgba(0, 0, 0, .28);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .24s ease, visibility 0s linear .24s;
+  z-index: 60;
+}
+
+.app-shell__mobile-sidebar-backdrop.is-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.app-shell__mobile-sidebar-sheet {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(372px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition:
+    transform .24s cubic-bezier(.4, 0, .2, 1),
+    visibility 0s linear .24s;
+  z-index: 61;
+  pointer-events: none;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  will-change: transform;
+}
+
+.app-shell__mobile-sidebar-sheet--nav-only {
+  width: calc(52px + env(safe-area-inset-left));
+  max-width: calc(100vw - 24px);
+}
+
+.app-shell__mobile-sidebar-sheet.is-open {
+  transform: translateX(var(--oneworks-mobile-sidebar-drag-x, 0));
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.app-shell__mobile-sidebar-sheet[data-mobile-sidebar-dragging='true'] {
+  transition: none;
+}
+
+.app-shell__mobile-sidebar-surface {
+  height: 100%;
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 0 8px 8px 0;
+  background: var(--app-shell-content-bg);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, .22);
+  overscroll-behavior: contain;
+}
+
+.app-shell__mobile-sidebar-panel {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  height: 100%;
+}
+
+.app-shell--compact {
+  flex-direction: column;
+
+  .app-shell__content-region {
+    padding: 0;
+  }
+
+  .app-shell__content {
+    padding: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background-color: var(--app-shell-content-bg);
+  }
+
+  .app-shell__content > * {
+    border-radius: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .app-shell__mobile-sidebar-sheet {
+    width: min(356px, calc(100vw - 12px));
+    max-width: calc(100vw - 12px);
+  }
+
+  .app-shell__mobile-sidebar-sheet--nav-only {
+    width: calc(48px + env(safe-area-inset-left));
+  }
+
+  .app-shell--compact {
+    .app-shell__content {
+      padding: 0;
+    }
+
+    .app-shell__content > * {
+      border-radius: 0;
+    }
+  }
+}
+
+.app-shell--dark {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .02), rgba(255, 255, 255, 0)),
+    #111111;
+
+  .app-shell__content {
+    background-color: var(--app-shell-content-bg);
+    box-shadow: none;
+  }
+
+  .app-shell__mobile-sidebar-backdrop {
+    background: rgba(0, 0, 0, .48);
+  }
+
+  .app-shell__mobile-sidebar-surface {
+    box-shadow: 0 18px 44px rgba(0, 0, 0, .42);
+  }
+
+  .app-shell__content.is-flat {
+    box-shadow: none;
+  }
+}
+
+.app-shell--macos-vibrancy {
+  --app-shell-vibrancy-bg: color-mix(
+    in srgb,
+    var(--app-shell-content-bg) 72%,
+    transparent
+  );
+  --app-shell-vibrancy-sidebar-bg: color-mix(
+    in srgb,
+    var(--bg-color) 42%,
+    transparent
+  );
+  --app-shell-vibrancy-blur: blur(30px) saturate(1.35);
+  --app-shell-vibrancy-sidebar-control-bg: color-mix(
+    in srgb,
+    var(--bg-color) 62%,
+    transparent
+  );
+  --app-shell-vibrancy-surface-bg: color-mix(
+    in srgb,
+    var(--bg-color) 78%,
+    transparent
+  );
+
+  // Keep one backdrop layer across sidebar and content regions.
+  background: var(--app-shell-vibrancy-bg);
+  backdrop-filter: var(--app-shell-vibrancy-blur);
+  -webkit-backdrop-filter: var(--app-shell-vibrancy-blur);
+
+  .app-shell__mobile-sidebar-surface {
+    background-color: var(--app-shell-vibrancy-bg);
+    backdrop-filter: var(--app-shell-vibrancy-blur);
+    -webkit-backdrop-filter: var(--app-shell-vibrancy-blur);
+  }
+
+  .app-shell__sidebar-region,
+  .app-shell__content-region {
+    background-color: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .nav-rail,
+  .nav-rail--compact,
+  .nav-rail--compact-drawer,
+  .sidebar-container,
+  .sidebar-container--nav-embedded,
+  .sidebar-utility-footer {
+    background: transparent;
+    background-color: transparent;
+  }
+
+  .sidebar-utility-footer__action.ant-btn.ant-btn-text,
+  .session-select-toggle,
+  .batch-select-toggle,
+  .toolbar-filter-select .ant-select-selector {
+    background-color: var(--app-shell-vibrancy-sidebar-control-bg);
+  }
+
+  .app-shell__content {
+    background-color: transparent;
+  }
+
+  .app-shell__content-region .app-shell__content > * {
+    background-color: var(--app-shell-vibrancy-surface-bg);
+    border-radius: 12px;
+  }
+
+  &:not(.is-window-fullscreen) {
+    .app-shell__content-region.is-sidebar-collapsed {
+      padding: 6px 8px 6px 0;
+    }
+
+    .app-shell__content.is-sidebar-collapsed,
+    .app-shell__content-region.is-sidebar-collapsed .app-shell__content > * {
+      border-radius: var(--app-shell-content-radius);
+    }
+  }
+
+  .app-shell__content.is-flat {
+    background-color: transparent;
+  }
+}
+
+.app-shell--macos-vibrancy:not(.app-shell--desktop-simulation) {
+  // Real Electron provides the window material. Keep the root fully transparent
+  // and do not add sidebar tint layers here; extra web backgrounds fight with
+  // the native material and make the titlebar/sidebar colors diverge.
+  background: transparent;
+  background-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.app-shell--dark.app-shell--macos-vibrancy {
+  --app-shell-vibrancy-bg: color-mix(in srgb, #111111 70%, transparent);
+  --app-shell-vibrancy-sidebar-bg: color-mix(
+    in srgb,
+    #ffffff 8%,
+    transparent
+  );
+  --app-shell-vibrancy-sidebar-control-bg: color-mix(
+    in srgb,
+    var(--bg-color) 58%,
+    transparent
+  );
+  --app-shell-vibrancy-surface-bg: color-mix(
+    in srgb,
+    var(--bg-color) 72%,
+    transparent
+  );
+}
+
+.app-shell--desktop-simulation.app-shell--macos-vibrancy {
+  --app-shell-vibrancy-bg: color-mix(
+    in srgb,
+    var(--app-shell-content-bg) 68%,
+    transparent
+  );
+  --app-shell-vibrancy-sidebar-bg: color-mix(
+    in srgb,
+    var(--bg-color) 38%,
+    transparent
+  );
+  --app-shell-vibrancy-surface-bg: color-mix(
+    in srgb,
+    var(--bg-color) 76%,
+    transparent
+  );
+
+  background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--primary-color) 8%, var(--bg-color) 92%) 0%,
+    color-mix(
+      in srgb,
+      var(--app-shell-content-bg) 97%,
+      var(--primary-color) 3%
+    ) 42%,
+    color-mix(in srgb, var(--primary-color) 5%, var(--sub-bg-color) 95%) 100%
+  );
+
+  .app-shell__sidebar-region::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: var(--app-shell-vibrancy-sidebar-bg);
+    backdrop-filter: var(--app-shell-vibrancy-blur);
+    -webkit-backdrop-filter: var(--app-shell-vibrancy-blur);
+    pointer-events: none;
+  }
+}
+
+.app-shell--dark.app-shell--desktop-simulation.app-shell--macos-vibrancy {
+  --app-shell-vibrancy-bg: color-mix(in srgb, #111111 72%, transparent);
+  --app-shell-vibrancy-sidebar-bg: color-mix(
+    in srgb,
+    #ffffff 8%,
+    transparent
+  );
+  --app-shell-vibrancy-surface-bg: color-mix(
+    in srgb,
+    var(--bg-color) 80%,
+    transparent
+  );
+
+  background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--primary-color) 4%, #0f0f10 96%) 0%,
+    color-mix(in srgb, var(--bg-color) 97%, var(--primary-color) 3%) 44%,
+    color-mix(in srgb, var(--primary-color) 2%, #111111 98%) 100%
+  );
+}

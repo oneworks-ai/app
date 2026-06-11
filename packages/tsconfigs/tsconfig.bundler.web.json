@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx"
+  },
+  "references": [
+    {
+      "path": "./tsconfig.bundler.json"
+    }
+  ],
+  "include": [
+    "../../apps/relay-admin/src/**/*",
+    "../../apps/client/src/**/*",
+    "../../apps/client/src/**/*.json",
+    "../../packages/route-layout/src/**/*"
+  ]
+}

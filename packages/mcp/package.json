@@ -1,0 +1,47 @@
+{
+  "name": "@oneworks/mcp",
+  "version": "0.1.0-alpha.0",
+  "description": "One Works MCP server",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/mcp"
+  },
+  "imports": {
+    "#~/*.js": {
+      "__oneworks__": {
+        "default": "./src/*.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    }
+  },
+  "exports": {
+    ".": {
+      "__oneworks__": {
+        "default": "./src/index.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "oneworks-mcp": "./cli.js"
+  },
+  "scripts": {
+    "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/mcp/__tests__"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.3",
+    "@oneworks/cli-helper": "workspace:*",
+    "@oneworks/register": "workspace:*",
+    "@oneworks/utils": "workspace:*",
+    "commander": "^12.1.0",
+    "zod": "^3.24.1"
+  }
+}

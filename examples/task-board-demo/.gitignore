@@ -1,0 +1,7 @@
+.oo/.mock/
+.oo/.local/
+.oo/caches/
+.oo/logs/
+.oo/runtime/
+.logs/
+node_modules/

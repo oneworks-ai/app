@@ -1,0 +1,328 @@
+name: Desktop Package
+run-name: Desktop package (${{ github.ref_name }})
+
+env:
+  DESKTOP_RELEASE_TAG_PREFIX: pkg/oneworks-desktop/v
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  NODE_OPTIONS: --max-old-space-size=4096
+
+on:
+  pull_request:
+    branches:
+      - main
+    # Keep PR checks scoped to the desktop packaging pipeline itself. General
+    # app/server/package changes should use workflow_dispatch when macOS installer
+    # validation is explicitly needed.
+    paths:
+      - .node-version
+      - .npmrc
+      - .github/workflows/desktop-package.yml
+      - apps/desktop/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+  push:
+    branches:
+      - main
+    # Package release tag pushes bypass path filters and still create release
+    # artifacts; ordinary main pushes follow the same narrow CI policy as PRs.
+    paths:
+      - .node-version
+      - .npmrc
+      - .github/workflows/desktop-package.yml
+      - apps/desktop/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+    tags:
+      - "pkg/oneworks-desktop/v*"
+  workflow_dispatch:
+    inputs:
+      create_release:
+        default: false
+        description: Create or update a GitHub Release with the generated artifacts.
+        required: false
+        type: boolean
+      release_tag:
+        description: Release tag to use when create_release is enabled from workflow_dispatch. Must start with pkg/oneworks-desktop/v.
+        required: false
+        type: string
+      retention_days:
+        default: "14"
+        description: Number of days to keep workflow artifacts.
+        required: false
+        type: number
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS installer
+            runner: macos-26
+            artifact: oneworks-desktop-macos
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve desktop release metadata
+        id: desktop_release
+        shell: bash
+        run: |
+          tag=""
+          if [[ "$GITHUB_REF" == refs/tags/${DESKTOP_RELEASE_TAG_PREFIX}* ]]; then
+            tag="$GITHUB_REF_NAME"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.create_release }}" == "true" ]]; then
+            tag="${{ inputs.release_tag }}"
+          fi
+
+          enabled=false
+          auto_update=false
+          version=""
+          update_channel="stable"
+          if [[ -n "$tag" ]]; then
+            if [[ "$tag" != ${DESKTOP_RELEASE_TAG_PREFIX}* ]]; then
+              echo "Desktop release tags must start with ${DESKTOP_RELEASE_TAG_PREFIX}." >&2
+              exit 1
+            fi
+
+            version="${tag#${DESKTOP_RELEASE_TAG_PREFIX}}"
+            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+              echo "Desktop release tag must look like ${DESKTOP_RELEASE_TAG_PREFIX}1.2.3 or ${DESKTOP_RELEASE_TAG_PREFIX}1.2.3-beta.1." >&2
+              exit 1
+            fi
+            if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-([0-9A-Za-z]+)([.-].*)?$ ]]; then
+              update_channel="${BASH_REMATCH[1]}"
+              case "$update_channel" in
+                alpha|beta|rc) ;;
+                *)
+                  echo "Desktop prerelease channel must be alpha, beta, or rc." >&2
+                  exit 1
+                  ;;
+              esac
+            fi
+
+            enabled=true
+            auto_update=true
+            case "${{ vars.DESKTOP_AUTO_UPDATE || 'true' }}" in
+              false|0|no|off) auto_update=false ;;
+            esac
+          fi
+
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+          echo "auto_update=$auto_update" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "update_channel=$update_channel" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve desktop build source metadata
+        id: desktop_build_source
+        shell: bash
+        run: echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Package desktop app
+        run: pnpm desktop:package
+        env:
+          ONEWORKS_DESKTOP_ARCHS: ${{ runner.os == 'macOS' && 'arm64,x64' || '' }}
+          ONEWORKS_DESKTOP_BUILD_GIT_BRANCH: ${{ github.head_ref || github.ref_name }}
+          ONEWORKS_DESKTOP_BUILD_GIT_HASH: ${{ github.sha }}
+          ONEWORKS_DESKTOP_BUILD_TIME: ${{ steps.desktop_build_source.outputs.time }}
+          ONEWORKS_DESKTOP_ENABLE_AUTO_UPDATE: ${{ steps.desktop_release.outputs.auto_update }}
+          ONEWORKS_DESKTOP_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
+          ONEWORKS_DESKTOP_UPDATE_CHANNEL: ${{ steps.desktop_release.outputs.update_channel }}
+          ONEWORKS_DESKTOP_VERSION: ${{ steps.desktop_release.outputs.version }}
+
+      - name: Smoke test packaged server
+        run: pnpm -C apps/desktop smoke:package
+        env:
+          ONEWORKS_DESKTOP_SMOKE_ARCH: ${{ runner.os == 'macOS' && 'arm64' || '' }}
+          ONEWORKS_DESKTOP_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
+
+      - name: Validate desktop signing credentials
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          DESKTOP_CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_INSTALLER_KEY_PASSWORD }}
+          DESKTOP_CSC_INSTALLER_LINK: ${{ secrets.DESKTOP_CSC_INSTALLER_LINK }}
+          DESKTOP_CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
+          DESKTOP_CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
+          DESKTOP_SIGN: ${{ vars.DESKTOP_SIGN || 'false' }}
+        run: |
+          case "$DESKTOP_SIGN" in
+            true|TRUE|1|yes|YES|on|ON) ;;
+            *)
+              echo "Desktop signing is disabled."
+              exit 0
+              ;;
+          esac
+
+          missing=()
+          for name in \
+            APPLE_ID \
+            APPLE_ID_PASSWORD \
+            APPLE_TEAM_ID \
+            DESKTOP_CSC_LINK \
+            DESKTOP_CSC_KEY_PASSWORD \
+            DESKTOP_CSC_INSTALLER_LINK \
+            DESKTOP_CSC_INSTALLER_KEY_PASSWORD
+          do
+            if [[ -z "${!name}" ]]; then
+              missing+=("$name")
+            fi
+          done
+
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "Desktop signing is enabled but these secrets are missing: ${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Build desktop artifacts
+        run: pnpm -C apps/desktop make:from-package
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_INSTALLER_KEY_PASSWORD }}
+          CSC_INSTALLER_LINK: ${{ secrets.DESKTOP_CSC_INSTALLER_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
+          CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
+          DEBUG: electron-builder
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ONEWORKS_DESKTOP_ARCHS: ${{ runner.os == 'macOS' && 'arm64,x64' || '' }}
+          ONEWORKS_DESKTOP_MAKE_TARGETS: dmg,zip,pkg
+          ONEWORKS_DESKTOP_PUBLISH: never
+          ONEWORKS_DESKTOP_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
+          ONEWORKS_DESKTOP_UPDATE_CHANNEL: ${{ steps.desktop_release.outputs.update_channel }}
+          ONEWORKS_DESKTOP_VERSION: ${{ steps.desktop_release.outputs.version }}
+          ONEWORKS_DESKTOP_SIGN: ${{ vars.DESKTOP_SIGN || 'false' }}
+
+      - name: Verify macOS install artifact
+        run: pnpm -C apps/desktop verify:macos-install
+        env:
+          ONEWORKS_DESKTOP_BUILD_GIT_BRANCH: ${{ github.head_ref || github.ref_name }}
+          ONEWORKS_DESKTOP_BUILD_GIT_HASH: ${{ github.sha }}
+          ONEWORKS_DESKTOP_BUILD_TIME: ${{ steps.desktop_build_source.outputs.time }}
+          ONEWORKS_DESKTOP_INSTALL_ARCH: arm64
+          ONEWORKS_DESKTOP_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            apps/desktop/release/*
+          if-no-files-found: error
+          retention-days: ${{ github.event_name == 'workflow_dispatch' && inputs.retention_days || 14 }}
+
+  release:
+    name: GitHub Release
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: startsWith(github.ref, 'refs/tags/pkg/oneworks-desktop/v') || (github.event_name == 'workflow_dispatch' && inputs.create_release)
+    permissions:
+      contents: write
+    steps:
+      - name: Download installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ inputs.release_tag }}"
+            if [ -z "$tag" ]; then
+              echo "release_tag is required when create_release is enabled manually." >&2
+              exit 1
+            fi
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+
+          case "$tag" in
+            pkg/oneworks-desktop/v*) ;;
+            *)
+              echo "Desktop release tags must start with pkg/oneworks-desktop/v." >&2
+              exit 1
+              ;;
+          esac
+
+          version="${tag#pkg/oneworks-desktop/v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Desktop release tag must look like pkg/oneworks-desktop/v1.2.3 or pkg/oneworks-desktop/v1.2.3-beta.1." >&2
+            exit 1
+          fi
+          update_channel="stable"
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-([0-9A-Za-z]+)([.-].*)?$ ]]; then
+            update_channel="${BASH_REMATCH[1]}"
+            case "$update_channel" in
+              alpha|beta|rc) ;;
+              *)
+                echo "Desktop prerelease channel must be alpha, beta, or rc." >&2
+                exit 1
+                ;;
+            esac
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "update_channel=$update_channel" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub Release
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+          UPDATE_CHANNEL: ${{ steps.release.outputs.update_channel }}
+        shell: bash
+        run: |
+          NOTES=$(cat <<EOF
+          One Works desktop release ${TAG}
+
+          - Unsigned desktop installers generated by CI
+          - macOS: Intel (x64) and Apple Silicon (arm64) .dmg, .pkg, .zip
+          EOF
+          )
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists."
+            if [[ "$UPDATE_CHANNEL" == "stable" ]]; then
+              gh release edit "$TAG" --latest --notes "$NOTES"
+            else
+              gh release edit "$TAG" --prerelease --notes "$NOTES"
+            fi
+          else
+            if [[ "$UPDATE_CHANNEL" == "stable" ]]; then
+              gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes "$NOTES" --latest
+            else
+              gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes "$NOTES" --prerelease --latest=false
+            fi
+          fi
+
+          find release-artifacts -type f -print0 | xargs -0 gh release upload "$TAG" --clobber

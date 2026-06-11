@@ -1,0 +1,94 @@
+{
+  "name": "@oneworks/adapter-gemini",
+  "version": "0.1.0-alpha.0",
+  "description": "Gemini CLI Adapter for One Works",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/adapters/gemini"
+  },
+  "imports": {
+    "#~/*.js": {
+      "__oneworks__": {
+        "default": "./src/*.ts"
+      },
+      "default": {
+        "import": "./dist/*.mjs",
+        "require": "./dist/*.js"
+      }
+    }
+  },
+  "exports": {
+    ".": {
+      "__oneworks__": {
+        "default": "./src/index.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    },
+    "./schema": {
+      "__oneworks__": {
+        "default": "./src/schema.ts"
+      },
+      "default": {
+        "import": "./dist/schema.mjs",
+        "require": "./dist/schema.js"
+      }
+    },
+    "./config-schema": {
+      "__oneworks__": {
+        "default": "./src/config-schema.ts"
+      },
+      "default": {
+        "import": "./dist/config-schema.mjs",
+        "require": "./dist/config-schema.js"
+      }
+    },
+    "./cli-prepare": {
+      "__oneworks__": {
+        "default": "./src/cli-prepare.ts"
+      },
+      "default": {
+        "import": "./dist/cli-prepare.mjs",
+        "require": "./dist/cli-prepare.js"
+      }
+    },
+    "./models": {
+      "__oneworks__": {
+        "default": "./src/models.ts"
+      },
+      "default": {
+        "import": "./dist/models.mjs",
+        "require": "./dist/models.js"
+      }
+    },
+    "./icon": {
+      "__oneworks__": {
+        "default": "./src/icon.ts"
+      },
+      "default": {
+        "import": "./dist/icon.mjs",
+        "require": "./dist/icon.js"
+      }
+    },
+    "./hook-bridge": {
+      "__oneworks__": {
+        "default": "./src/hook-bridge.ts"
+      },
+      "default": {
+        "import": "./dist/hook-bridge.mjs",
+        "require": "./dist/hook-bridge.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@oneworks/core": "workspace:*",
+    "@oneworks/hooks": "workspace:*",
+    "@oneworks/types": "workspace:*",
+    "@oneworks/utils": "workspace:*",
+    "zod": "^3.24.1"
+  }
+}

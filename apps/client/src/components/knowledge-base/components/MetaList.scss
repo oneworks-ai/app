@@ -1,0 +1,30 @@
+.knowledge-base-view__meta-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--oneworks-overlay-item-gap, 6px);
+  padding: 0;
+}
+
+.knowledge-base-view__meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--oneworks-overlay-icon-gap, 6px);
+  min-height: var(--oneworks-overlay-item-min-height, 0);
+  padding: var(--oneworks-overlay-item-padding, 0 8px);
+  border-radius: var(--oneworks-overlay-item-radius, 6px);
+  color: var(--text-color);
+  font-size: var(--oneworks-overlay-font-size, 12px);
+  line-height: var(--oneworks-overlay-line-height, 16px);
+}
+
+.knowledge-base-view__meta-item-icon {
+  width: var(--oneworks-overlay-icon-size, 14px);
+  min-width: var(--oneworks-overlay-icon-size, 14px);
+  height: var(--oneworks-overlay-icon-size, 14px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sub-text-color);
+  font-size: var(--oneworks-overlay-icon-size, 14px);
+  line-height: 1;
+}

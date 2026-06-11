@@ -1,0 +1,1611 @@
+import path from 'node:path'
+
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { getDb } from '#~/db/index.js'
+import { processUserMessage, resetSessionServiceState, startAdapterSession } from '#~/services/session/index.js'
+import {
+  adapterSessionStore,
+  createSessionConnectionState,
+  externalSessionStore,
+  notifySessionUpdated
+} from '#~/services/session/runtime.js'
+import { resolveProjectHomePath } from '@oneworks/utils'
+
+const mocks = vi.hoisted(() => ({
+  run: vi.fn(),
+  generateAdapterQueryOptions: vi.fn(),
+  loadConfigState: vi.fn(),
+  updateConfigFile: vi.fn(),
+  handleChannelSessionEvent: vi.fn(),
+  resolveChannelSessionMcpServers: vi.fn(),
+  requestInteraction: vi.fn(),
+  canRequestInteraction: vi.fn(),
+  waitForInteractionDeliveryPath: vi.fn(),
+  resolveSessionWorkspace: vi.fn(),
+  resolveSessionWorkspaceFolder: vi.fn(),
+  provisionSessionWorkspace: vi.fn(),
+  beginSessionWorkspaceChangeTracking: vi.fn(),
+  finalizeSessionWorkspaceChangeTracking: vi.fn(),
+  clearSessionWorkspaceChangeTracking: vi.fn(),
+  watchRuntimeStoreRoot: vi.fn(),
+  appendFile: vi.fn(),
+  mkdir: vi.fn(),
+  readFile: vi.fn(),
+  writeFile: vi.fn()
+}))
+
+vi.mock('#~/db/index.js', () => ({
+  getDb: vi.fn()
+}))
+
+vi.mock('@oneworks/app-runtime', () => ({
+  generateAdapterQueryOptions: mocks.generateAdapterQueryOptions,
+  run: mocks.run
+}))
+
+vi.mock('#~/channels/index.js', () => ({
+  handleChannelSessionEvent: mocks.handleChannelSessionEvent,
+  resolveChannelSessionMcpServers: mocks.resolveChannelSessionMcpServers
+}))
+
+vi.mock('#~/services/config/index.js', () => ({
+  loadConfigState: mocks.loadConfigState,
+  getWorkspaceFolder: vi.fn(() => process.cwd())
+}))
+
+vi.mock('@oneworks/config', async () => {
+  const actual = await vi.importActual<typeof import('@oneworks/config')>('@oneworks/config')
+  return {
+    ...actual,
+    updateConfigFile: mocks.updateConfigFile
+  }
+})
+
+vi.mock('#~/services/session/interaction.js', () => ({
+  requestInteraction: mocks.requestInteraction,
+  canRequestInteraction: mocks.canRequestInteraction,
+  waitForInteractionDeliveryPath: mocks.waitForInteractionDeliveryPath
+}))
+
+vi.mock('#~/services/session/workspace.js', () => ({
+  resolveSessionWorkspace: mocks.resolveSessionWorkspace,
+  resolveSessionWorkspaceFolder: mocks.resolveSessionWorkspaceFolder,
+  provisionSessionWorkspace: mocks.provisionSessionWorkspace
+}))
+
+vi.mock('#~/services/session/workspace-changes.js', () => ({
+  beginSessionWorkspaceChangeTracking: mocks.beginSessionWorkspaceChangeTracking,
+  finalizeSessionWorkspaceChangeTracking: mocks.finalizeSessionWorkspaceChangeTracking,
+  clearSessionWorkspaceChangeTracking: mocks.clearSessionWorkspaceChangeTracking
+}))
+
+vi.mock('#~/services/runtime-store/watcher.js', () => ({
+  watchRuntimeStoreRoot: mocks.watchRuntimeStoreRoot
+}))
+
+vi.mock('#~/services/session/notification.js', () => ({
+  maybeNotifySession: vi.fn().mockResolvedValue(undefined)
+}))
+
+vi.mock('node:fs/promises', () => ({
+  appendFile: mocks.appendFile,
+  mkdir: mocks.mkdir,
+  readFile: mocks.readFile,
+  writeFile: mocks.writeFile
+}))
+
+vi.mock('#~/services/session/runtime.js', async () => {
+  const actual = await vi.importActual<typeof import('#~/services/session/runtime.js')>(
+    '#~/services/session/runtime.js'
+  )
+  return {
+    ...actual,
+    notifySessionUpdated: vi.fn()
+  }
+})
+
+vi.mock('#~/utils/logger.js', () => ({
+  getSessionLogger: vi.fn(() => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn()
+  }))
+}))
+
+describe('startAdapterSession', () => {
+  let currentSession: any
+  const getMessages = vi.fn()
+  const saveMessage = vi.fn()
+  const createSession = vi.fn()
+  const updateSession = vi.fn()
+  const getSessionRuntimeState = vi.fn()
+  const getChannelSessionBySessionId = vi.fn()
+  const getAgentRoomByHostSessionId = vi.fn()
+  const updateSessionRuntimeState = vi.fn()
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetSessionServiceState()
+    adapterSessionStore.clear()
+    externalSessionStore.clear()
+
+    currentSession = {
+      id: 'sess-1',
+      createdAt: Date.now(),
+      status: 'completed',
+      model: 'gpt-4o',
+      adapter: 'codex',
+      account: 'work',
+      effort: 'medium',
+      permissionMode: 'default'
+    }
+
+    getMessages.mockReturnValue([])
+    createSession.mockImplementation((_title?: string, id?: string) => ({
+      id: id ?? 'sess-1',
+      createdAt: Date.now()
+    }))
+    updateSession.mockImplementation((_id: string, updates: Record<string, unknown>) => {
+      currentSession = { ...currentSession, ...updates }
+    })
+    getSessionRuntimeState.mockReturnValue({
+      runtimeKind: 'interactive',
+      historySeedPending: false
+    })
+    getChannelSessionBySessionId.mockReturnValue(undefined)
+    getAgentRoomByHostSessionId.mockReturnValue(undefined)
+
+    vi.mocked(getDb).mockReturnValue({
+      getMessages,
+      listSessionQueuedMessages: vi.fn(() => []),
+      saveMessage,
+      getSession: vi.fn(() => currentSession),
+      getSessionRuntimeState,
+      getChannelSessionBySessionId,
+      getAgentRoomByHostSessionId,
+      createSession,
+      updateSession,
+      updateSessionRuntimeState
+    } as any)
+
+    mocks.generateAdapterQueryOptions.mockResolvedValue([
+      {},
+      {
+        systemPrompt: undefined,
+        tools: undefined,
+        mcpServers: undefined
+      }
+    ])
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder: process.cwd(),
+      projectConfig: {},
+      mergedConfig: {}
+    })
+    mocks.updateConfigFile.mockResolvedValue({ ok: true })
+    mocks.handleChannelSessionEvent.mockResolvedValue(undefined)
+    mocks.resolveChannelSessionMcpServers.mockResolvedValue({})
+    mocks.requestInteraction.mockReset()
+    mocks.canRequestInteraction.mockReturnValue(false)
+    mocks.waitForInteractionDeliveryPath.mockResolvedValue(false)
+    mocks.resolveSessionWorkspace.mockResolvedValue({
+      workspaceFolder: process.cwd()
+    })
+    mocks.resolveSessionWorkspaceFolder.mockResolvedValue(process.cwd())
+    mocks.provisionSessionWorkspace.mockResolvedValue(undefined)
+    mocks.beginSessionWorkspaceChangeTracking.mockResolvedValue(undefined)
+    mocks.finalizeSessionWorkspaceChangeTracking.mockResolvedValue(undefined)
+    mocks.clearSessionWorkspaceChangeTracking.mockReturnValue(undefined)
+    mocks.watchRuntimeStoreRoot.mockResolvedValue(undefined)
+    mocks.appendFile.mockResolvedValue(undefined)
+    mocks.mkdir.mockResolvedValue(undefined)
+    mocks.readFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }))
+    mocks.writeFile.mockResolvedValue(undefined)
+  })
+
+  it('reuses the cached runtime when adapter config is unchanged', async () => {
+    const runtime = {
+      ...createSessionConnectionState(),
+      session: {
+        emit: vi.fn(),
+        kill: vi.fn()
+      } as any,
+      config: {
+        runId: 'run-same',
+        model: 'gpt-4o',
+        adapter: 'codex',
+        account: 'work',
+        effort: 'medium',
+        permissionMode: 'default'
+      }
+    }
+    adapterSessionStore.set('sess-1', runtime as any)
+
+    const result = await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      effort: 'medium',
+      permissionMode: 'default'
+    })
+
+    expect(result).toBe(runtime)
+    expect(mocks.run).not.toHaveBeenCalled()
+    expect(runtime.session.kill).not.toHaveBeenCalled()
+  })
+
+  it('deduplicates concurrent start requests for the same session', async () => {
+    let resolveRun:
+      | ((value: { session: { emit: ReturnType<typeof vi.fn>; kill: ReturnType<typeof vi.fn> } }) => void)
+      | undefined
+    const emit = vi.fn()
+    const kill = vi.fn()
+
+    mocks.run.mockImplementationOnce(async () => {
+      return new Promise((resolve) => {
+        resolveRun = resolve as typeof resolveRun
+      })
+    })
+
+    const first = startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'claude-code',
+      permissionMode: 'default'
+    })
+    const second = startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'claude-code',
+      permissionMode: 'default'
+    })
+
+    await vi.waitFor(() => {
+      expect(mocks.run).toHaveBeenCalledTimes(1)
+      expect(resolveRun).toBeTypeOf('function')
+    })
+
+    resolveRun?.({
+      session: {
+        emit,
+        kill
+      }
+    })
+
+    const [firstRuntime, secondRuntime] = await Promise.all([first, second])
+    expect(firstRuntime).toBe(secondRuntime)
+    expect(mocks.run).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not fail adapter startup when permission mirror sync fails', async () => {
+    const emit = vi.fn()
+    const kill = vi.fn()
+    mocks.writeFile.mockRejectedValueOnce(new Error('readonly filesystem'))
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        emit,
+        kill
+      }
+    })
+
+    const runtime = await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'claude-code',
+      permissionMode: 'default'
+    })
+
+    expect(runtime.session.emit).toBe(emit)
+    expect(runtime.config?.adapter).toBe('claude-code')
+    expect(mocks.run).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses the session id as the adapter cache context when resuming from a parent runtime', async () => {
+    process.env.__ONEWORKS_PROJECT_CTX_ID__ = 'parent-ctx'
+    const emit = vi.fn()
+    const kill = vi.fn()
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        emit,
+        kill
+      }
+    })
+
+    try {
+      await startAdapterSession('sess-1', {
+        adapter: 'codex',
+        permissionMode: 'default'
+      })
+    } finally {
+      delete process.env.__ONEWORKS_PROJECT_CTX_ID__
+    }
+
+    expect(mocks.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          __ONEWORKS_PROJECT_CTX_ID__: 'sess-1'
+        })
+      }),
+      expect.objectContaining({
+        sessionId: 'sess-1'
+      })
+    )
+  })
+
+  it('resolves the adapter cwd from the session workspace service', async () => {
+    const emit = vi.fn()
+    const kill = vi.fn()
+    mocks.resolveSessionWorkspace.mockResolvedValueOnce({
+      workspaceFolder: '/workspace/.oo/worktrees/sessions/sess-1'
+    })
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        emit,
+        kill
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      permissionMode: 'default'
+    })
+
+    expect(mocks.generateAdapterQueryOptions).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      '/workspace/.oo/worktrees/sessions/sess-1',
+      expect.objectContaining({
+        adapter: 'codex',
+        model: 'gpt-4o'
+      })
+    )
+    expect(mocks.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: '/workspace/.oo/worktrees/sessions/sess-1',
+        adapter: 'codex'
+      }),
+      expect.any(Object)
+    )
+  })
+
+  it('uses the session workspace runtime root for adapter protocol commands', async () => {
+    const emit = vi.fn()
+    const kill = vi.fn()
+    const previousProjectOoBaseDir = process.env.__ONEWORKS_PROJECT_BASE_DIR__
+    const workspaceFolder = '/Users/yijie/codes/oneworks-app/.oo/worktrees/sessions/sess-1/oneworks-app'
+    const staleProjectOoBaseDir = '/Users/yijie/.codex/worktrees/0042/oneworks-app/.oneworks'
+    const runtimeRoot = resolveProjectHomePath(
+      workspaceFolder,
+      {
+        ...process.env,
+        __ONEWORKS_PROJECT_LAUNCH_CWD__: workspaceFolder,
+        __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspaceFolder
+      },
+      'runtime'
+    )
+    process.env.__ONEWORKS_PROJECT_BASE_DIR__ = staleProjectOoBaseDir
+    mocks.resolveSessionWorkspace.mockResolvedValueOnce({
+      workspaceFolder
+    })
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        emit,
+        kill
+      }
+    })
+
+    try {
+      await startAdapterSession('sess-1', {
+        adapter: 'codex'
+      })
+
+      expect(mocks.mkdir).toHaveBeenCalledWith(runtimeRoot, { recursive: true })
+      expect(mocks.watchRuntimeStoreRoot).toHaveBeenCalledWith(runtimeRoot)
+      expect(mocks.run).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cwd: workspaceFolder,
+          env: expect.objectContaining({
+            __ONEWORKS_PROJECT_BASE_DIR__: path.join(workspaceFolder, '.oo')
+          })
+        }),
+        expect.any(Object)
+      )
+      expect((mocks.run.mock.calls[0]?.[0] as { env?: Record<string, string> }).env?.__ONEWORKS_PROJECT_BASE_DIR__)
+        .not.toBe(staleProjectOoBaseDir)
+    } finally {
+      if (previousProjectOoBaseDir == null) {
+        delete process.env.__ONEWORKS_PROJECT_BASE_DIR__
+      } else {
+        process.env.__ONEWORKS_PROJECT_BASE_DIR__ = previousProjectOoBaseDir
+      }
+    }
+  })
+
+  it('sets workspace env to the selected child workspace when resolving workspace targets', async () => {
+    const emit = vi.fn()
+    const kill = vi.fn()
+    const previousWorkspace = process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
+    const previousPrimaryWorkspace = process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__
+    process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = '/workspace'
+    process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__ = '/workspace-primary'
+    mocks.resolveSessionWorkspace.mockResolvedValueOnce({
+      workspaceFolder: '/workspace/.oo/worktrees/sessions/sess-1'
+    })
+    mocks.generateAdapterQueryOptions.mockResolvedValueOnce([
+      {},
+      {
+        systemPrompt: undefined,
+        tools: undefined,
+        mcpServers: undefined,
+        workspace: {
+          cwd: '/workspace/.oo/worktrees/sessions/sess-1/apps/client'
+        }
+      }
+    ])
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        emit,
+        kill
+      }
+    })
+
+    try {
+      await startAdapterSession('sess-1', {
+        adapter: 'codex',
+        promptType: 'workspace',
+        promptName: 'client'
+      })
+
+      expect(mocks.run).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cwd: '/workspace/.oo/worktrees/sessions/sess-1/apps/client',
+          env: expect.objectContaining({
+            __ONEWORKS_PROJECT_BASE_DIR__: expect.any(String),
+            __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: '/workspace/.oo/worktrees/sessions/sess-1/apps/client'
+          })
+        }),
+        expect.any(Object)
+      )
+      expect(
+        (mocks.run.mock.calls[0]?.[0] as { env?: Record<string, string> }).env
+          ?.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__
+      )
+        .not.toBe('/workspace-primary')
+    } finally {
+      if (previousWorkspace == null) {
+        delete process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
+      } else {
+        process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = previousWorkspace
+      }
+      if (previousPrimaryWorkspace == null) {
+        delete process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__
+      } else {
+        process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__ = previousPrimaryWorkspace
+      }
+    }
+  })
+
+  it('passes host room metadata through adapter process env', async () => {
+    const emit = vi.fn()
+    const kill = vi.fn()
+    currentSession = {
+      ...currentSession,
+      title: 'Host task'
+    }
+    getAgentRoomByHostSessionId.mockReturnValueOnce({
+      id: 'room-host',
+      title: 'Host room',
+      hostSessionId: 'sess-1'
+    })
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        emit,
+        kill
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      adapter: 'codex'
+    })
+
+    expect(mocks.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          __ONEWORKS_PROJECT_BASE_DIR__: expect.any(String),
+          __ONEWORKS_RUNTIME_PROTOCOL_DEFAULT_ADAPTER__: 'codex',
+          __ONEWORKS_RUNTIME_PROTOCOL_DEFAULT_MODEL__: 'gpt-4o',
+          __ONEWORKS_RUNTIME_PROTOCOL_DEFAULT_EFFORT__: 'medium',
+          __ONEWORKS_RUNTIME_PROTOCOL_DEFAULT_PERMISSION_MODE__: 'default',
+          __ONEWORKS_AGENT_ROOM_HOST_SESSION_ID__: 'sess-1',
+          __ONEWORKS_AGENT_ROOM_ID__: 'room-host',
+          __ONEWORKS_AGENT_ROOM_TITLE__: 'Host room'
+        })
+      }),
+      expect.any(Object)
+    )
+  })
+
+  it('passes channel memory context through adapter process env', async () => {
+    const emit = vi.fn()
+    const kill = vi.fn()
+    getChannelSessionBySessionId.mockReturnValueOnce({
+      channelType: 'wechat',
+      sessionType: 'group',
+      channelId: 'group-1',
+      channelKey: 'erjie',
+      senderId: 'wxid-user',
+      sessionId: 'sess-1'
+    })
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        emit,
+        kill
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      adapter: 'codex'
+    })
+
+    expect(mocks.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          __ONEWORKS_PROJECT_CHANNEL_MEMORY_ROOT__: expect.stringContaining('channel-memory'),
+          __ONEWORKS_PROJECT_CHANNEL_TYPE__: 'wechat',
+          __ONEWORKS_PROJECT_CHANNEL_KEY__: 'erjie',
+          __ONEWORKS_PROJECT_CHANNEL_SESSION_TYPE__: 'group',
+          __ONEWORKS_PROJECT_CHANNEL_ID__: 'group-1',
+          __ONEWORKS_PROJECT_CHANNEL_SENDER_ID__: 'wxid-user',
+          __ONEWORKS_PROJECT_CHANNEL_CONTEXT_PATH__: expect.stringContaining('runtime-context')
+        })
+      }),
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining('oneworks mem')
+      })
+    )
+  })
+
+  it('writes current channel message context before dispatching a follow-up', async () => {
+    const emit = vi.fn()
+    currentSession.status = 'completed'
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        emit,
+        kill: vi.fn()
+      }
+    })
+
+    await processUserMessage('sess-1', 'follow up', {
+      channelContext: {
+        channelId: 'group-1',
+        channelKey: 'erjie',
+        channelType: 'wechat',
+        messageId: 'msg-2',
+        senderId: 'wxid-fresh',
+        sessionType: 'group'
+      }
+    })
+
+    expect(mocks.writeFile).toHaveBeenCalledWith(
+      expect.stringContaining('runtime-context'),
+      expect.stringContaining('"senderId": "wxid-fresh"'),
+      'utf8'
+    )
+  })
+
+  it('masks stale room env when no room exists for the host session', async () => {
+    const emit = vi.fn()
+    const kill = vi.fn()
+    const previousRoomId = process.env.__ONEWORKS_AGENT_ROOM_ID__
+    const previousRoomTitle = process.env.__ONEWORKS_AGENT_ROOM_TITLE__
+    const previousPrimaryWorkspace = process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__
+    const previousProjectOoBaseDir = process.env.__ONEWORKS_PROJECT_BASE_DIR__
+    process.env.__ONEWORKS_AGENT_ROOM_ID__ = 'stale-room'
+    process.env.__ONEWORKS_AGENT_ROOM_TITLE__ = 'Stale room'
+    process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__ = process.cwd()
+    delete process.env.__ONEWORKS_PROJECT_BASE_DIR__
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        emit,
+        kill
+      }
+    })
+
+    try {
+      await startAdapterSession('sess-1', {
+        adapter: 'codex'
+      })
+
+      const runOptions = mocks.run.mock.calls[0]?.[0] as { env?: Record<string, string> }
+      expect(runOptions.env).toEqual(expect.objectContaining({
+        __ONEWORKS_PROJECT_BASE_DIR__: expect.any(String),
+        __ONEWORKS_AGENT_ROOM_HOST_SESSION_ID__: 'sess-1',
+        __ONEWORKS_AGENT_ROOM_ID__: '',
+        __ONEWORKS_AGENT_ROOM_TITLE__: ''
+      }))
+      expect(runOptions.env?.__ONEWORKS_PROJECT_BASE_DIR__).toBe(path.join(process.cwd(), '.oo'))
+    } finally {
+      if (previousRoomId == null) {
+        delete process.env.__ONEWORKS_AGENT_ROOM_ID__
+      } else {
+        process.env.__ONEWORKS_AGENT_ROOM_ID__ = previousRoomId
+      }
+      if (previousRoomTitle == null) {
+        delete process.env.__ONEWORKS_AGENT_ROOM_TITLE__
+      } else {
+        process.env.__ONEWORKS_AGENT_ROOM_TITLE__ = previousRoomTitle
+      }
+      if (previousPrimaryWorkspace == null) {
+        delete process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__
+      } else {
+        process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__ = previousPrimaryWorkspace
+      }
+      if (previousProjectOoBaseDir == null) {
+        delete process.env.__ONEWORKS_PROJECT_BASE_DIR__
+      } else {
+        process.env.__ONEWORKS_PROJECT_BASE_DIR__ = previousProjectOoBaseDir
+      }
+    }
+  })
+
+  it('passes channel companion MCP servers into the runtime query options', async () => {
+    const emit = vi.fn()
+    const kill = vi.fn()
+    mocks.resolveChannelSessionMcpServers.mockResolvedValueOnce({
+      'channel-lark-default': {
+        command: process.execPath,
+        args: ['/tmp/channel-lark-mcp.js'],
+        env: {
+          ONEWORKS_LARK_APP_ID: 'cli_app'
+        }
+      }
+    })
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        emit,
+        kill
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      permissionMode: 'default'
+    })
+
+    expect(mocks.run).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        runtimeMcpServers: {
+          'channel-lark-default': {
+            command: process.execPath,
+            args: ['/tmp/channel-lark-mcp.js'],
+            env: {
+              ONEWORKS_LARK_APP_ID: 'cli_app'
+            }
+          }
+        }
+      })
+    )
+  })
+
+  it('restarts the runtime when adapter changes and ignores stale exit events', async () => {
+    const oldKill = vi.fn()
+    const oldEmit = vi.fn()
+    const newKill = vi.fn()
+    const newEmit = vi.fn()
+    let oldOnEvent: ((event: any) => void) | undefined
+
+    getMessages.mockReturnValue([
+      {
+        type: 'message',
+        message: {
+          id: 'assist-1',
+          role: 'assistant',
+          content: 'previous answer',
+          createdAt: Date.now()
+        }
+      }
+    ])
+
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      expect(adapterOptions.type).toBe('resume')
+      oldOnEvent = adapterOptions.onEvent
+      return {
+        session: {
+          kill: oldKill,
+          emit: oldEmit
+        }
+      }
+    })
+
+    const initialRuntime = await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      permissionMode: 'default'
+    })
+
+    expect(initialRuntime.config?.adapter).toBe('codex')
+
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      expect(adapterOptions.type).toBe('create')
+      return {
+        session: {
+          kill: newKill,
+          emit: newEmit
+        }
+      }
+    })
+
+    const restartedRuntime = await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'claude-code',
+      permissionMode: 'default'
+    })
+
+    expect(oldKill).toHaveBeenCalledOnce()
+    expect(restartedRuntime).not.toBe(initialRuntime)
+    expect(restartedRuntime.config?.adapter).toBe('claude-code')
+    expect(currentSession.adapter).toBe('claude-code')
+
+    oldOnEvent?.({
+      type: 'exit',
+      data: {
+        exitCode: 1,
+        stderr: 'old runtime exit'
+      }
+    })
+
+    expect(currentSession.status).toBe('completed')
+    expect(adapterSessionStore.get('sess-1')).toBe(restartedRuntime)
+    expect(vi.mocked(notifySessionUpdated)).toHaveBeenCalledWith(
+      'sess-1',
+      expect.objectContaining({
+        adapter: 'claude-code'
+      })
+    )
+    expect(newKill).not.toHaveBeenCalled()
+  })
+
+  it('restarts the runtime when effort changes', async () => {
+    const oldKill = vi.fn()
+    const oldEmit = vi.fn()
+    const newKill = vi.fn()
+    const newEmit = vi.fn()
+
+    mocks.run.mockImplementationOnce(async () => {
+      return {
+        session: {
+          kill: oldKill,
+          emit: oldEmit
+        }
+      }
+    })
+
+    const initialRuntime = await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      effort: 'medium',
+      permissionMode: 'default'
+    })
+
+    mocks.run.mockImplementationOnce(async () => {
+      return {
+        session: {
+          kill: newKill,
+          emit: newEmit
+        }
+      }
+    })
+
+    const restartedRuntime = await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      effort: 'high',
+      permissionMode: 'default'
+    })
+
+    expect(oldKill).toHaveBeenCalledOnce()
+    expect(restartedRuntime).not.toBe(initialRuntime)
+    expect(restartedRuntime.config?.effort).toBe('high')
+    expect(currentSession.effort).toBe('high')
+  })
+
+  it('restarts the runtime when account changes', async () => {
+    const oldKill = vi.fn()
+    const oldEmit = vi.fn()
+    const newKill = vi.fn()
+    const newEmit = vi.fn()
+
+    mocks.run.mockImplementationOnce(async () => {
+      return {
+        session: {
+          kill: oldKill,
+          emit: oldEmit
+        }
+      }
+    })
+
+    const initialRuntime = await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      account: 'work',
+      permissionMode: 'default'
+    })
+
+    mocks.run.mockImplementationOnce(async () => {
+      return {
+        session: {
+          kill: newKill,
+          emit: newEmit
+        }
+      }
+    })
+
+    const restartedRuntime = await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      account: 'personal',
+      permissionMode: 'default'
+    })
+
+    expect(oldKill).toHaveBeenCalledOnce()
+    expect(restartedRuntime).not.toBe(initialRuntime)
+    expect(restartedRuntime.config?.account).toBe('personal')
+    expect(currentSession.account).toBe('personal')
+  })
+
+  it('restarts the runtime when the persisted session is updated but the cached permission mode is still stale', async () => {
+    const oldKill = vi.fn()
+    const oldEmit = vi.fn()
+    const newKill = vi.fn()
+    const newEmit = vi.fn()
+
+    currentSession = {
+      ...currentSession,
+      permissionMode: undefined
+    }
+
+    mocks.run.mockImplementationOnce(async () => {
+      return {
+        session: {
+          kill: oldKill,
+          emit: oldEmit
+        }
+      }
+    })
+
+    const initialRuntime = await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'claude-code',
+      permissionMode: undefined
+    })
+
+    expect(initialRuntime.config?.permissionMode).toBeUndefined()
+
+    currentSession = {
+      ...currentSession,
+      permissionMode: 'bypassPermissions'
+    }
+
+    mocks.run.mockImplementationOnce(async () => {
+      return {
+        session: {
+          kill: newKill,
+          emit: newEmit
+        }
+      }
+    })
+
+    const restartedRuntime = await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'claude-code',
+      permissionMode: 'bypassPermissions'
+    })
+
+    expect(oldKill).toHaveBeenCalledOnce()
+    expect(restartedRuntime).not.toBe(initialRuntime)
+    expect(restartedRuntime.config?.permissionMode).toBe('bypassPermissions')
+  })
+
+  it('does not overwrite a newer session permission mode from stale adapter init updates', async () => {
+    let onEvent: ((event: any) => void) | undefined
+
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      onEvent = adapterOptions.onEvent
+      currentSession = {
+        ...currentSession,
+        permissionMode: 'bypassPermissions'
+      }
+      return {
+        session: {
+          kill: vi.fn(),
+          emit: vi.fn()
+        }
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      permissionMode: 'default'
+    })
+
+    onEvent?.({
+      type: 'init',
+      data: {
+        model: 'gpt-4o',
+        adapter: 'codex'
+      }
+    })
+
+    expect(currentSession.permissionMode).toBe('bypassPermissions')
+  })
+
+  it('marks the session as failed when adapter startup throws', async () => {
+    mocks.run.mockRejectedValueOnce(new Error('adapter init failed'))
+
+    await expect(startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      permissionMode: 'default'
+    })).rejects.toThrow('adapter init failed')
+
+    expect(currentSession.status).toBe('failed')
+    expect(vi.mocked(notifySessionUpdated)).toHaveBeenCalledWith(
+      'sess-1',
+      expect.objectContaining({
+        status: 'failed'
+      })
+    )
+  })
+
+  it('replaces the generated system prompt when appendSystemPrompt is false', async () => {
+    mocks.generateAdapterQueryOptions.mockResolvedValueOnce([
+      {},
+      {
+        systemPrompt: 'generated prompt',
+        tools: undefined,
+        mcpServers: undefined
+      }
+    ])
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        emit: vi.fn(),
+        kill: vi.fn()
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      systemPrompt: 'custom prompt',
+      appendSystemPrompt: false
+    })
+
+    expect(mocks.run).toHaveBeenCalledOnce()
+    expect(mocks.run.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      systemPrompt: 'custom prompt',
+      appendSystemPrompt: false
+    }))
+  })
+
+  it('injects pending history seed only for the first restart of a branched session', async () => {
+    getSessionRuntimeState.mockReturnValue({
+      runtimeKind: 'interactive',
+      historySeed: '历史上下文',
+      historySeedPending: true
+    })
+    mocks.generateAdapterQueryOptions.mockResolvedValueOnce([
+      {},
+      {
+        systemPrompt: 'generated prompt',
+        tools: undefined,
+        mcpServers: undefined
+      }
+    ])
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        emit: vi.fn(),
+        kill: vi.fn()
+      }
+    })
+
+    const runtime = await startAdapterSession('sess-1', {
+      adapter: 'codex'
+    })
+
+    expect(mocks.run.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      type: 'create'
+    }))
+    expect(mocks.run.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      systemPrompt: 'generated prompt\n\n历史上下文'
+    }))
+    expect(updateSessionRuntimeState).toHaveBeenCalledWith('sess-1', { historySeedPending: false })
+    expect(runtime.config?.seededFromHistory).toBe(true)
+  })
+
+  it('starts a new adapter session when history only contains workspace creation progress', async () => {
+    getMessages.mockReturnValue([
+      {
+        type: 'session_creation_progress',
+        sessionId: 'sess-1',
+        progress: {
+          phase: 'workspace',
+          step: 'workspace_ready',
+          status: 'success'
+        }
+      }
+    ])
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        emit: vi.fn(),
+        kill: vi.fn()
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      adapter: 'codex'
+    })
+
+    expect(mocks.run.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      type: 'create'
+    }))
+  })
+
+  it('applies standardized adapter session title updates', async () => {
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      adapterOptions.onEvent({
+        type: 'session_update',
+        data: {
+          title: '  Codex generated title  '
+        }
+      })
+      return {
+        session: {
+          emit: vi.fn(),
+          kill: vi.fn()
+        }
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      permissionMode: 'default'
+    })
+
+    expect(updateSession).toHaveBeenCalledWith('sess-1', {
+      title: 'Codex generated title'
+    })
+    expect(notifySessionUpdated).toHaveBeenCalledWith(
+      'sess-1',
+      expect.objectContaining({
+        title: 'Codex generated title'
+      })
+    )
+    expect(saveMessage).not.toHaveBeenCalled()
+  })
+
+  it('keeps the session failed when a fatal error is followed by stop', async () => {
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      adapterOptions.onEvent({
+        type: 'error',
+        data: {
+          message: 'turn failed',
+          fatal: true
+        }
+      })
+      adapterOptions.onEvent({
+        type: 'stop',
+        data: undefined
+      })
+      return {
+        session: {
+          emit: vi.fn(),
+          kill: vi.fn()
+        }
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      permissionMode: 'default'
+    })
+
+    expect(currentSession.status).toBe('failed')
+    expect(mocks.finalizeSessionWorkspaceChangeTracking).toHaveBeenCalledWith('sess-1', 'failed')
+  })
+
+  it('preserves the full model selector after adapter init reports a bare model id', async () => {
+    let onEvent: ((event: any) => void) | undefined
+
+    mocks.run
+      .mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+        onEvent = adapterOptions.onEvent
+        return {
+          session: {
+            emit: vi.fn(),
+            kill: vi.fn()
+          }
+        }
+      })
+      .mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+        expect(adapterOptions.type).toBe('resume')
+        expect(adapterOptions.model).toBe('gpt-responses,gpt-5.4-2026-03-05')
+        return {
+          session: {
+            emit: vi.fn(),
+            kill: vi.fn()
+          }
+        }
+      })
+
+    await startAdapterSession('sess-1', {
+      model: 'gpt-responses,gpt-5.4-2026-03-05',
+      adapter: 'codex',
+      permissionMode: 'default'
+    })
+
+    onEvent?.({
+      type: 'init',
+      data: {
+        uuid: 'sess-1',
+        model: 'gpt-5.4-2026-03-05',
+        adapter: 'codex',
+        version: 'unknown',
+        tools: [],
+        slashCommands: [],
+        cwd: process.cwd(),
+        agents: []
+      }
+    })
+
+    expect(currentSession.model).toBe('gpt-responses,gpt-5.4-2026-03-05')
+
+    currentSession = {
+      ...currentSession,
+      status: 'completed'
+    }
+    adapterSessionStore.clear()
+    getMessages.mockReturnValue([
+      {
+        type: 'message',
+        message: {
+          id: 'assist-1',
+          role: 'assistant',
+          content: 'previous answer',
+          createdAt: Date.now()
+        }
+      }
+    ])
+
+    await startAdapterSession('sess-1')
+  })
+
+  it('restarts the adapter on demand when a follow-up user message arrives after completion', async () => {
+    const emit = vi.fn()
+
+    currentSession.status = 'completed'
+    getMessages.mockReturnValue([
+      {
+        type: 'message',
+        message: {
+          id: 'assist-1',
+          role: 'assistant',
+          content: 'previous answer',
+          createdAt: Date.now()
+        }
+      }
+    ])
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        emit,
+        kill: vi.fn()
+      }
+    })
+
+    await processUserMessage('sess-1', 'follow up')
+
+    expect(mocks.run).toHaveBeenCalledOnce()
+    expect(mocks.run.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      type: 'resume',
+      sessionId: 'sess-1'
+    }))
+    expect(emit).toHaveBeenCalledWith({
+      type: 'message',
+      content: [{ type: 'text', text: 'follow up' }],
+      parentUuid: 'assist-1'
+    })
+    expect(currentSession.status).toBe('running')
+    expect(saveMessage).toHaveBeenCalledWith(
+      'sess-1',
+      expect.objectContaining({
+        type: 'message',
+        message: expect.objectContaining({
+          role: 'user',
+          content: 'follow up'
+        })
+      })
+    )
+  })
+
+  it('restarts a cached adapter runtime before follow-up messages when permission mode changed', async () => {
+    const oldKill = vi.fn()
+    const oldEmit = vi.fn()
+    const newEmit = vi.fn()
+
+    currentSession = {
+      ...currentSession,
+      status: 'running',
+      permissionMode: 'bypassPermissions'
+    }
+    adapterSessionStore.set('sess-1', {
+      ...createSessionConnectionState(),
+      session: {
+        emit: oldEmit,
+        kill: oldKill
+      },
+      config: {
+        runId: 'run-stale-permission',
+        model: 'gpt-4o',
+        adapter: 'codex',
+        account: 'work',
+        effort: 'medium',
+        permissionMode: 'default'
+      }
+    } as any)
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        emit: newEmit,
+        kill: vi.fn()
+      }
+    })
+
+    await processUserMessage('sess-1', 'follow up')
+
+    expect(oldKill).toHaveBeenCalledOnce()
+    expect(oldEmit).not.toHaveBeenCalled()
+    expect(mocks.run).toHaveBeenCalledOnce()
+    expect(adapterSessionStore.get('sess-1')?.config?.permissionMode).toBe('bypassPermissions')
+    expect(newEmit).toHaveBeenCalledWith({
+      type: 'message',
+      content: [{ type: 'text', text: 'follow up' }],
+      parentUuid: undefined
+    })
+  })
+
+  it('promotes passive session sockets when a follow-up user message restarts the adapter', async () => {
+    const emit = vi.fn()
+    const passiveSocket = {
+      readyState: 1,
+      send: vi.fn()
+    }
+
+    currentSession.status = 'completed'
+    getMessages.mockReturnValue([
+      {
+        type: 'message',
+        message: {
+          id: 'assist-1',
+          role: 'assistant',
+          content: 'previous answer',
+          createdAt: Date.now()
+        }
+      }
+    ])
+    const passiveRuntime = createSessionConnectionState()
+    passiveRuntime.sockets.add(passiveSocket as any)
+    externalSessionStore.set('sess-1', passiveRuntime)
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        emit,
+        kill: vi.fn()
+      }
+    })
+
+    await processUserMessage('sess-1', 'follow up')
+
+    expect(externalSessionStore.has('sess-1')).toBe(false)
+    expect(adapterSessionStore.get('sess-1')?.sockets.has(passiveSocket as any)).toBe(true)
+    expect(passiveSocket.send).toHaveBeenCalledWith(expect.stringContaining('"type":"message"'))
+    expect(emit).toHaveBeenCalledWith({
+      type: 'message',
+      content: [{ type: 'text', text: 'follow up' }],
+      parentUuid: 'assist-1'
+    })
+  })
+
+  it('routes codex native approval requests through the same interaction flow', async () => {
+    const respondInteraction = vi.fn()
+    let onEvent: ((event: any) => void) | undefined
+
+    mocks.canRequestInteraction.mockReturnValue(true)
+    mocks.requestInteraction.mockResolvedValueOnce('deny_project')
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      onEvent = adapterOptions.onEvent
+      return {
+        session: {
+          emit: vi.fn(),
+          kill: vi.fn(),
+          respondInteraction
+        }
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      permissionMode: 'default'
+    })
+
+    onEvent?.({
+      type: 'interaction_request',
+      data: {
+        id: 'approval-1',
+        payload: {
+          sessionId: 'sess-1',
+          kind: 'permission',
+          question: '允许执行命令 `pnpm test`？',
+          options: [
+            { label: '同意本次', value: 'allow_once' },
+            { label: '拒绝并在当前项目阻止类似调用', value: 'deny_project' }
+          ],
+          permissionContext: {
+            adapter: 'codex',
+            deniedTools: ['Bash'],
+            subjectKey: 'Bash',
+            subjectLabel: 'Bash',
+            scope: 'tool',
+            projectConfigPath: '.oo.config.json'
+          }
+        }
+      }
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 50))
+
+    await vi.waitFor(() => {
+      expect(respondInteraction).toHaveBeenCalledWith('approval-1', 'deny_project')
+    })
+
+    expect(updateSessionRuntimeState).toHaveBeenCalledWith(
+      'sess-1',
+      expect.objectContaining({
+        permissionState: expect.objectContaining({
+          deny: ['Bash']
+        })
+      })
+    )
+  })
+
+  it('auto-responds to codex native approvals when the session already remembers the tool', async () => {
+    const respondInteraction = vi.fn()
+    let onEvent: ((event: any) => void) | undefined
+
+    getSessionRuntimeState.mockReturnValue({
+      runtimeKind: 'interactive',
+      historySeedPending: false,
+      permissionState: {
+        allow: ['Bash'],
+        deny: [],
+        onceAllow: [],
+        onceDeny: []
+      }
+    })
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      onEvent = adapterOptions.onEvent
+      return {
+        session: {
+          emit: vi.fn(),
+          kill: vi.fn(),
+          respondInteraction
+        }
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      permissionMode: 'default'
+    })
+
+    onEvent?.({
+      type: 'interaction_request',
+      data: {
+        id: 'approval-remembered',
+        payload: {
+          sessionId: 'sess-1',
+          kind: 'permission',
+          question: '允许执行命令 `pnpm test`？',
+          permissionContext: {
+            adapter: 'codex',
+            deniedTools: ['Bash'],
+            subjectKey: 'Bash',
+            subjectLabel: 'Bash',
+            scope: 'tool',
+            projectConfigPath: '.oo.config.json'
+          }
+        }
+      }
+    })
+
+    await vi.waitFor(() => {
+      expect(respondInteraction).toHaveBeenCalledWith('approval-remembered', 'allow_session')
+    })
+    expect(mocks.requestInteraction).not.toHaveBeenCalled()
+  })
+
+  it('turns permission errors into a remembered allow interaction and restarts with the same permission mode', async () => {
+    const resumedEmit = vi.fn()
+    let onEvent: ((event: any) => void) | undefined
+
+    mocks.canRequestInteraction.mockReturnValue(true)
+    mocks.requestInteraction.mockResolvedValueOnce('allow_session')
+    mocks.run
+      .mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+        onEvent = adapterOptions.onEvent
+        return {
+          session: {
+            emit: vi.fn(),
+            kill: vi.fn()
+          }
+        }
+      })
+      .mockResolvedValueOnce({
+        session: {
+          emit: resumedEmit,
+          kill: vi.fn()
+        }
+      })
+
+    await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'claude-code',
+      permissionMode: 'default'
+    })
+
+    onEvent?.({
+      type: 'message',
+      data: {
+        id: 'assist-tool-use',
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tool-use-1',
+            name: 'adapter:claude-code:Write',
+            input: {
+              file_path: '/tmp/demo.txt',
+              content: 'ok'
+            }
+          }
+        ],
+        createdAt: Date.now()
+      }
+    })
+    onEvent?.({
+      type: 'error',
+      data: {
+        message: 'Permission required to continue',
+        code: 'permission_required',
+        details: {
+          toolUseId: 'tool-use-1',
+          permissionDenials: [
+            {
+              message: 'Write requires approval',
+              deniedTools: []
+            }
+          ]
+        },
+        fatal: true
+      }
+    })
+    onEvent?.({
+      type: 'exit',
+      data: {
+        exitCode: 1,
+        stderr: 'permission blocked'
+      }
+    })
+
+    await vi.waitFor(() => {
+      expect(currentSession.permissionMode).toBe('default')
+      expect(resumedEmit).toHaveBeenCalledWith({
+        type: 'message',
+        content: [{
+          type: 'text',
+          text: '权限规则已更新。请继续刚才被权限拦截的工作，并重试被阻止的操作。'
+        }]
+      })
+    })
+
+    expect(updateSessionRuntimeState).toHaveBeenCalledWith(
+      'sess-1',
+      expect.objectContaining({
+        permissionState: expect.objectContaining({
+          allow: ['Write']
+        })
+      })
+    )
+    expect(mocks.requestInteraction).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'sess-1',
+      kind: 'permission',
+      permissionContext: expect.objectContaining({
+        currentMode: 'default',
+        deniedTools: ['Write'],
+        subjectKey: 'Write',
+        subjectLabel: 'Write',
+        projectConfigPath: '.oo.config.json'
+      })
+    }))
+  })
+
+  it('suppresses follow-up assistant messages while a permission recovery prompt is pending', async () => {
+    let onEvent: ((event: any) => void) | undefined
+
+    mocks.canRequestInteraction.mockReturnValue(true)
+    mocks.requestInteraction.mockResolvedValueOnce('allow_once')
+    mocks.run
+      .mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+        onEvent = adapterOptions.onEvent
+        return {
+          session: {
+            emit: vi.fn(),
+            kill: vi.fn()
+          }
+        }
+      })
+      .mockResolvedValueOnce({
+        session: {
+          emit: vi.fn(),
+          kill: vi.fn()
+        }
+      })
+
+    await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'claude-code',
+      permissionMode: 'default'
+    })
+
+    onEvent?.({
+      type: 'error',
+      data: {
+        message: 'Permission required to continue',
+        code: 'permission_required',
+        details: {
+          permissionDenials: [
+            {
+              message: 'Write requires approval',
+              deniedTools: ['Write']
+            }
+          ]
+        },
+        fatal: true
+      }
+    })
+    onEvent?.({
+      type: 'message',
+      data: {
+        id: 'assist-permission-followup',
+        role: 'assistant',
+        content: '请先授权写文件',
+        createdAt: Date.now()
+      }
+    })
+    onEvent?.({
+      type: 'exit',
+      data: {
+        exitCode: 1,
+        stderr: 'permission blocked'
+      }
+    })
+
+    expect(saveMessage).not.toHaveBeenCalledWith(
+      'sess-1',
+      expect.objectContaining({
+        type: 'message',
+        message: expect.objectContaining({
+          id: 'assist-permission-followup'
+        })
+      })
+    )
+  })
+})
