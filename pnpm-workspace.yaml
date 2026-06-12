@@ -1,4 +1,5 @@
 packages:
+  - assets/*
   - apps/*
   - packages/adapters/*
   - packages/channels/*

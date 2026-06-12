@@ -1,0 +1,58 @@
+name: Trigger Avatar Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - assets/avatar/**
+      - packages/avatar/**
+      - .github/workflows/deploy-avatar.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: trigger-avatar-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trigger:
+    name: trigger-avatar-repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Trigger avatar repository deployment
+        env:
+          GH_TOKEN: ${{ secrets.AVATAR_DEPLOY_TOKEN }}
+          SOURCE_REF: main
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "Missing AVATAR_DEPLOY_TOKEN secret; cannot trigger cross-repository Avatar deployment." >&2
+            exit 1
+          fi
+
+          run_url="$(gh workflow run deploy-avatar.yml \
+            --repo oneworks-ai/avatar \
+            --ref main \
+            -f source_ref="${SOURCE_REF}" \
+            -f source_sha="${SOURCE_SHA}")"
+
+          echo "$run_url"
+          run_id="${run_url##*/}"
+          if [ -z "$run_id" ] || [ "$run_id" = "$run_url" ]; then
+            echo "Unable to resolve Avatar workflow run id from: $run_url" >&2
+            exit 1
+          fi
+
+          gh run watch "$run_id" \
+            --repo oneworks-ai/avatar \
+            --exit-status \
+            --interval 10

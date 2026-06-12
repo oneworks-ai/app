@@ -10,6 +10,10 @@
 	path = assets/icon
 	url = https://github.com/oneworks-ai/icon.git
 	branch = main
+[submodule "assets/avatar"]
+	path = assets/avatar
+	url = https://github.com/oneworks-ai/avatar.git
+	branch = main
 [submodule "assets/homepage"]
 	path = assets/homepage
 	url = https://github.com/oneworks-ai/oneworks-ai.github.io.git

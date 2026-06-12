@@ -18,6 +18,7 @@
 - `vscode-extension-release.yml`：通过 release tag 或手动输入 tag 发布 VS Code Marketplace、Open VSX 和 GitHub Release。
 - `desktop-package.yml`：构建 macOS 桌面包；tag / 手动 release 模式会创建 GitHub Release。
 - `deploy-pwa.yml`：从 app 仓库触发 `oneworks-ai/pwa` 的部署 workflow。
+- `deploy-avatar.yml`：从 app 仓库触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow，只监听 avatar 相关路径。
 
 ## 当前 Secrets / Variables
 
@@ -27,6 +28,7 @@
 - `VSCE_PAT`
 - `OVSX_PAT`
 - `PWA_DEPLOY_TOKEN`
+- `AVATAR_DEPLOY_TOKEN`
 
 桌面签名需要但当前未配置的 secrets：
 
