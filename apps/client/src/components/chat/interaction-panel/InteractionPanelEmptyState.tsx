@@ -1,3 +1,4 @@
+import { Tooltip } from 'antd'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -98,26 +99,32 @@ export function InteractionPanelEmptyState({
     <div className='chat-interaction-panel-empty'>
       <div className='chat-interaction-panel-empty__content'>
         <section className='chat-interaction-panel-empty__section' aria-label={t('chat.interactionPanel.emptyStart')}>
-          {actions.map(action => (
-            <button
-              key={action.key}
-              type='button'
-              className='chat-interaction-panel-empty__action'
-              onClick={action.onClick}
-            >
-              <span className='chat-interaction-panel-empty__action-header'>
-                <span className='material-symbols-rounded'>{action.icon}</span>
-                <span className='chat-interaction-panel-empty__action-title'>{action.label}</span>
-              </span>
-              <span className='chat-interaction-panel-empty__action-description'>
-                {action.description}
-              </span>
-              <span className='chat-interaction-panel-empty__action-footer'>
-                <span />
-                <span className='chat-interaction-panel-empty__shortcut'>{action.shortcut}</span>
-              </span>
-            </button>
-          ))}
+          {actions.map((action) => {
+            const description = action.description?.trim() ?? ''
+
+            return (
+              <Tooltip
+                key={action.key}
+                title={description !== '' ? description : undefined}
+                placement='topLeft'
+                mouseEnterDelay={.35}
+              >
+                <button
+                  type='button'
+                  className='chat-interaction-panel-empty__action'
+                  onClick={action.onClick}
+                >
+                  <span className='material-symbols-rounded chat-interaction-panel-empty__action-icon'>
+                    {action.icon}
+                  </span>
+                  <span className='chat-interaction-panel-empty__action-title'>{action.label}</span>
+                  {action.shortcut != null && action.shortcut !== '' && (
+                    <span className='chat-interaction-panel-empty__shortcut'>{action.shortcut}</span>
+                  )}
+                </button>
+              </Tooltip>
+            )
+          })}
         </section>
       </div>
     </div>

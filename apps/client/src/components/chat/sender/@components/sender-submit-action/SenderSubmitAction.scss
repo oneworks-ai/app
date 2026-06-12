@@ -1,4 +1,7 @@
 .chat-send-btn {
+  --chat-send-icon-rotation: -45deg;
+  --chat-send-icon-hover-rotation: -90deg;
+
   width: var(--sender-control-height);
   min-width: var(--sender-control-height);
   height: var(--sender-control-height);
@@ -24,7 +27,10 @@
     justify-content: center;
     line-height: 1;
     font-size: 17px;
+    transform: rotate(var(--chat-send-icon-rotation));
+    transform-origin: center;
     transition: transform .2s ease;
+    will-change: transform;
   }
 
   &:hover {
@@ -36,8 +42,8 @@
     );
   }
 
-  &:not(.thinking):hover .material-symbols-rounded {
-    transform: rotate(-45deg);
+  &:not(.stop):not(.disabled):not(.blocked):hover .material-symbols-rounded {
+    transform: rotate(var(--chat-send-icon-hover-rotation));
   }
 
   &.active {

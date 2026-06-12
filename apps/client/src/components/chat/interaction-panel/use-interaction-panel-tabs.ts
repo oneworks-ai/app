@@ -71,10 +71,7 @@ export function useInteractionPanelTabs({
     () => terminalPanes.panes.filter(pane => isTerminalPaneOnSurface(pane, 'bottom')),
     [terminalPanes.panes]
   )
-  const [activeTab, setActiveTab] = useState<ActiveInteractionTab>({
-    kind: 'terminal',
-    id: bottomTerminalPanes[0]?.id ?? terminalPanes.activeTerminalId
-  })
+  const [activeTab, setActiveTab] = useState<ActiveInteractionTab | null>(null)
   const workspaceDrawerItemByKey = useMemo(
     () => new Map<WorkspaceDrawerView, WorkspaceDrawerViewItem>(workspaceDrawerItems.map(item => [item.key, item])),
     [workspaceDrawerItems]
@@ -107,11 +104,13 @@ export function useInteractionPanelTabs({
   }
 
   const applyFallbackTab = (fallbackTab: ActiveInteractionTab | null) => {
-    if (fallbackTab != null) setActiveTab(fallbackTab)
+    setActiveTab(fallbackTab)
   }
 
   useEffect(() => {
-    if (activeTab.kind !== 'terminal' || bottomTerminalPanes.some(pane => pane.id === activeTab.id)) {
+    if (
+      activeTab == null || activeTab.kind !== 'terminal' || bottomTerminalPanes.some(pane => pane.id === activeTab.id)
+    ) {
       return
     }
 
@@ -126,7 +125,7 @@ export function useInteractionPanelTabs({
   }, [bottomPanel.openWorkspaceFilePaths, bottomPanel.selectedWorkspaceFilePath])
 
   useEffect(() => {
-    if (activeTab.kind !== 'file' || bottomPanel.openWorkspaceFilePaths.includes(activeTab.path)) {
+    if (activeTab == null || activeTab.kind !== 'file' || bottomPanel.openWorkspaceFilePaths.includes(activeTab.path)) {
       return
     }
 
@@ -182,6 +181,7 @@ export function useInteractionPanelTabs({
   })
 
   useEffect(() => {
+    if (activeTab == null) return
     const fallbackTab = tabs[0]
     if (fallbackTab == null || containsActiveTab(activeTab, tabs)) return
     setActiveTab(toActiveInteractionTab(fallbackTab))
@@ -317,7 +317,7 @@ export function useInteractionPanelTabs({
     if (page == null) return
     bottomPanel.handleSelectBottomPanelView('terminal')
     setActiveTab(current =>
-      current.kind === 'session' && current.id === page.id ? current : { kind: 'session', id: page.id }
+      current?.kind === 'session' && current.id === page.id ? current : { kind: 'session', id: page.id }
     )
   }, [bottomPanel.handleSelectBottomPanelView, canCreateSessionTab, sessionPageState.openSessionPage])
 
@@ -348,7 +348,7 @@ export function useInteractionPanelTabs({
     setPluginPages(current => current.filter(page => !targetPluginPageIds.has(page.id)))
     setWorkspaceDrawerViews(current => current.filter(view => !targetWorkspaceDrawerViews.has(view)))
 
-    if (containsActiveTab(activeTab, closeableTargetTabs)) {
+    if (activeTab != null && containsActiveTab(activeTab, closeableTargetTabs)) {
       const fallbackTab = getFallbackTabAfterClose(tabs, closeableTargetTabs, anchorTab)
       applyFallbackTab(fallbackTab == null ? null : toActiveInteractionTab(fallbackTab))
     }

@@ -26,6 +26,10 @@ export function InteractionPanelWorkspaceActions({
 
   return (
     <div className={containerClassName}>
+      <InteractionPanelWorkspaceOpener
+        iconClassName={iconClassName}
+        menuIconClassName={menuIconClassName}
+      />
       <InteractionPanelRunCommandsPopover
         commands={commands}
         iconClassName={iconClassName}
@@ -36,10 +40,6 @@ export function InteractionPanelWorkspaceActions({
         onTerminateRunCommandTask={onTerminateRunCommandTask}
         recordRunCommand={recordRunCommand}
         saveCommands={saveCommands}
-      />
-      <InteractionPanelWorkspaceOpener
-        iconClassName={iconClassName}
-        menuIconClassName={menuIconClassName}
       />
     </div>
   )

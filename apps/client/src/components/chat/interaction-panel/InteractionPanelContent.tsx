@@ -78,7 +78,7 @@ export function InteractionPanelContent({
   onTogglePanelFullscreen,
   onUnpinTab
 }: {
-  activeTab: ActiveInteractionTab
+  activeTab: ActiveInteractionTab | null
   activeSessionFocusRequestId?: string
   activeSessionFocusSessionId?: string
   bottomPanel: ChatRouteBottomPanelState
@@ -139,9 +139,7 @@ export function InteractionPanelContent({
   onTogglePanelFullscreen: () => void
   onUnpinTab: (tab: InteractionPanelTab) => void
 }) {
-  const hasPanelContent = tabs.length > 0 || terminalPanes.panes.length > 0 ||
-    bottomPanel.openWorkspaceFilePaths.length > 0 || iframePages.length > 0 || mobileDebugPages.length > 0 ||
-    (canCreateSessionTab && sessionPages.length > 0)
+  const hasPanelContent = activeTab != null && tabs.length > 0
 
   if (!hasPanelContent) {
     return (
