@@ -1,15 +1,5 @@
-import {
-  AVATAR_PALETTES,
-  AVATAR_PRESETS,
-  createAvatarDataUri,
-  createAvatarSvg,
-  getAvatarPalette
-} from './avatar.js'
-import type {
-  AvatarBackgroundStyle,
-  AvatarPalette,
-  CreateAvatarSvgOptions
-} from './avatar.js'
+import { AVATAR_PALETTES, AVATAR_PRESETS, createAvatarDataUri, createAvatarSvg, getAvatarPalette } from './avatar.js'
+import type { AvatarBackgroundStyle, AvatarPalette, CreateAvatarSvgOptions } from './avatar.js'
 
 export interface SeededAvatarConfig {
   readonly backgroundStyle: AvatarBackgroundStyle

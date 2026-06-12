@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Avatar glyph geometry, palettes, presets, and SVG output share one renderer contract. */
+
 export interface AvatarPalette {
   readonly id: string
   readonly name: string
@@ -808,7 +810,7 @@ const escapeXml = (value: string) =>
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
 
-const safeIdPart = (value: string) => value.replaceAll(/[^a-zA-Z0-9_-]/g, '-')
+const safeIdPart = (value: string) => value.replaceAll(/[^\w-]/g, '-')
 
 const resolveGlyphs = (emoticon: string) => {
   const chars = Array.from(emoticon.trim())
