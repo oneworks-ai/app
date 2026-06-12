@@ -74,6 +74,13 @@ const SESSION_SELECT = `
            SELECT COUNT(DISTINCT COALESCE(eventKey, CAST(id AS TEXT)))
            FROM messages
            WHERE sessionId = s.id
+             AND (
+               json_extract(data, '$.type') = 'message'
+               OR (
+                 json_extract(data, '$.type') IS NULL
+                 AND json_extract(data, '$.role') IN ('user', 'assistant', 'system')
+               )
+             )
          ) as messageCount,
          (SELECT GROUP_CONCAT(t.name) FROM tags t JOIN session_tags st ON t.id = st.tagId WHERE st.sessionId = s.id) as tags
   FROM sessions s

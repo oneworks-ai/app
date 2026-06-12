@@ -104,7 +104,8 @@
 .route-container-header__breadcrumb-back .material-symbols-rounded,
 .route-container-header__breadcrumb-separator .material-symbols-rounded,
 .route-container-header__breadcrumb-back > :not(.material-symbols-rounded),
-.route-container-header__breadcrumb-separator > :not(.material-symbols-rounded) {
+.route-container-header__breadcrumb-separator
+  > :not(.material-symbols-rounded) {
   width: var(--route-container-header-icon-size);
   height: var(--route-container-header-icon-size);
   font-size: var(--route-container-header-icon-size);

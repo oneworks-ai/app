@@ -11,6 +11,7 @@ const bundledPath = resolve(adapterPackageDir, 'node_modules/.bin/codex')
 
 export const CODEX_CLI_PACKAGE = '@openai/codex'
 export const CODEX_CLI_VERSION = '0.130.0'
+export const CODEX_CLI_MIN_VERSION = CODEX_CLI_VERSION
 
 /**
  * Returns the path to the codex binary.

@@ -45,6 +45,7 @@ const PROJECT_OO_BASE_DIR_ENV = '__ONEWORKS_PROJECT_BASE_DIR__'
 const PROJECT_OO_BASE_DIR_RESOLVE_CWD_ENV = '__ONEWORKS_PROJECT_BASE_DIR_RESOLVE_CWD__'
 const PROJECT_LAUNCH_CWD_ENV = '__ONEWORKS_PROJECT_LAUNCH_CWD__'
 const PROJECT_WORKSPACE_FOLDER_ENV = '__ONEWORKS_PROJECT_WORKSPACE_FOLDER__'
+const RUNTIME_CONSUMER_RUN_COMMAND = '__run'
 
 const isPathInside = (parentPath: string, targetPath: string) => {
   const relativePath = path.relative(parentPath, targetPath)
@@ -630,7 +631,7 @@ export function buildRuntimeConsumerSpawnPlan(params: {
     !hasAdapterPackageInRuntimePackageDir(existingCliPackageDir, adapter)
   const args = [
     ...cli.args,
-    'run',
+    RUNTIME_CONSUMER_RUN_COMMAND,
     '--print',
     '--output-format',
     'stream-json'

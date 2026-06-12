@@ -8,6 +8,7 @@ export interface ChatSessionViewSnapshot {
   creationProgress: SessionCreationProgressEvent[]
   messages: ChatMessage[]
   sessionInfo: SessionInfo | null
+  sessionOperationInfo: ChatSessionOperationInfo | null
   sessionCompactionInfo: SessionCompactionInfo | null
   sessionCompactionEvents: SessionCompactionInfo[]
   sessionWorkspaceChanges: SessionWorkspaceChanges[]
@@ -15,6 +16,15 @@ export interface ChatSessionViewSnapshot {
   errorState: ChatErrorState | null
   interactionRequest: InteractionRequestState | null
   isHydrated: boolean
+}
+
+export interface ChatSessionOperationInfo {
+  adapter?: string
+  message?: string
+  operationId: string
+  startedAt: number
+  summary?: string
+  title?: string
 }
 
 export const MAX_CHAT_SESSION_VIEW_SNAPSHOTS = 20
@@ -25,6 +35,7 @@ export const createChatSessionViewSnapshot = (
   creationProgress: value?.creationProgress ?? [],
   messages: value?.messages ?? [],
   sessionInfo: value?.sessionInfo ?? null,
+  sessionOperationInfo: value?.sessionOperationInfo ?? null,
   sessionCompactionInfo: value?.sessionCompactionInfo ?? null,
   sessionCompactionEvents: value?.sessionCompactionEvents ?? [],
   sessionWorkspaceChanges: value?.sessionWorkspaceChanges ?? [],
@@ -54,6 +65,7 @@ export const restoreChatSessionViewSnapshot = (snapshot?: ChatSessionViewSnapsho
     creationProgress: restorable.creationProgress,
     messages: restorable.messages,
     sessionInfo: restorable.sessionInfo,
+    sessionOperationInfo: restorable.sessionOperationInfo,
     sessionCompactionInfo: restorable.sessionCompactionInfo,
     sessionCompactionEvents: restorable.sessionCompactionEvents,
     sessionWorkspaceChanges: restorable.sessionWorkspaceChanges,

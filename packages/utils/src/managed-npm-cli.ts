@@ -60,6 +60,8 @@ interface ResolveManagedNpmCliPathParams extends ResolveManagedNpmCliOptionsPara
 interface EnsureManagedNpmCliParams extends ResolveManagedNpmCliPathParams {
   cwd: string
   logger: Pick<Logger, 'info'>
+  minimumVersion?: string
+  preferSystem?: boolean
 }
 
 const execFileAsync = promisify(execFile)
@@ -114,10 +116,10 @@ const toRealPath = (targetPath: string) => {
 
 const canRunCommand = async (binaryPath: string, args: string[], env?: NodeJS.ProcessEnv) => {
   try {
-    await execFileAsync(binaryPath, args, { env, timeout: COMMAND_CHECK_TIMEOUT_MS })
-    return true
+    const result = await execFileAsync(binaryPath, args, { env, timeout: COMMAND_CHECK_TIMEOUT_MS })
+    return `${String(result.stdout ?? '')}\n${String(result.stderr ?? '')}`
   } catch {
-    return false
+    return undefined
   }
 }
 
@@ -125,9 +127,36 @@ const normalizeVersionArgs = (versionArgs: string[] | undefined) => (
   versionArgs == null || versionArgs.length === 0 ? ['--version'] : versionArgs
 )
 
-const canRunBinary = (binaryPath: string, versionArgs: string[] | undefined, env?: NodeJS.ProcessEnv) =>
-  canRunCommand(binaryPath, normalizeVersionArgs(versionArgs), env)
-const canRunNpm = (binaryPath: string, env?: NodeJS.ProcessEnv) => canRunCommand(binaryPath, ['--version'], env)
+const parseSemver = (value: string | undefined): [number, number, number] | undefined => {
+  const match = value?.match(/(?:^|\D)(\d+)\.(\d+)\.(\d+)(?:\D|$)/u)
+  if (match == null) return undefined
+  return [Number(match[1]), Number(match[2]), Number(match[3])]
+}
+
+const isVersionAtLeast = (output: string, minimumVersion: string | undefined) => {
+  if (minimumVersion == null || minimumVersion.trim() === '') return true
+  const actual = parseSemver(output)
+  const minimum = parseSemver(minimumVersion)
+  if (actual == null || minimum == null) return false
+
+  for (let index = 0; index < minimum.length; index += 1) {
+    if (actual[index] > minimum[index]) return true
+    if (actual[index] < minimum[index]) return false
+  }
+  return true
+}
+
+const canRunBinary = async (
+  binaryPath: string,
+  versionArgs: string[] | undefined,
+  env?: NodeJS.ProcessEnv,
+  minimumVersion?: string
+) => {
+  const output = await canRunCommand(binaryPath, normalizeVersionArgs(versionArgs), env)
+  return output != null && isVersionAtLeast(output, minimumVersion)
+}
+const canRunNpm = async (binaryPath: string, env?: NodeJS.ProcessEnv) =>
+  await canRunCommand(binaryPath, ['--version'], env) != null
 
 const moveDirectory = async (source: string, target: string) => {
   try {
@@ -303,16 +332,17 @@ const migrateLegacyManagedNpmCliInstall = async (params: {
   binaryName: string
   legacyPaths: ManagedNpmCliPaths
   logger: Pick<Logger, 'info'>
+  minimumVersion?: string
   paths: ManagedNpmCliPaths
   versionArgs?: string[]
   env: NodeJS.ProcessEnv
 }) => {
   const targetBinaryUsable = existsSync(params.paths.binaryPath) &&
-    await canRunBinary(params.paths.binaryPath, params.versionArgs, params.env)
+    await canRunBinary(params.paths.binaryPath, params.versionArgs, params.env, params.minimumVersion)
   if (
     !existsSync(params.legacyPaths.binaryPath) ||
     targetBinaryUsable ||
-    !await canRunBinary(params.legacyPaths.binaryPath, params.versionArgs, params.env)
+    !await canRunBinary(params.legacyPaths.binaryPath, params.versionArgs, params.env, params.minimumVersion)
   ) {
     return false
   }
@@ -321,7 +351,7 @@ const migrateLegacyManagedNpmCliInstall = async (params: {
     lockDir: `${params.paths.installDir}.lock`
   }, async () => {
     const lockedTargetBinaryUsable = existsSync(params.paths.binaryPath) &&
-      await canRunBinary(params.paths.binaryPath, params.versionArgs, params.env)
+      await canRunBinary(params.paths.binaryPath, params.versionArgs, params.env, params.minimumVersion)
     if (lockedTargetBinaryUsable || !existsSync(params.legacyPaths.binaryPath)) {
       return
     }
@@ -335,7 +365,7 @@ const migrateLegacyManagedNpmCliInstall = async (params: {
   })
 
   return existsSync(params.paths.binaryPath) &&
-    await canRunBinary(params.paths.binaryPath, params.versionArgs, params.env)
+    await canRunBinary(params.paths.binaryPath, params.versionArgs, params.env, params.minimumVersion)
 }
 
 export const ensureManagedNpmCli = async (params: EnsureManagedNpmCliParams) => {
@@ -380,11 +410,25 @@ export const ensureManagedNpmCli = async (params: EnsureManagedNpmCliParams) => 
     }
   }
 
-  if (installOptions.source === 'system' && await canRunBinary(params.binaryName, params.versionArgs, probeEnv)) {
+  if (
+    params.preferSystem === true &&
+    installOptions.source == null &&
+    await canRunBinary(params.binaryName, params.versionArgs, probeEnv, params.minimumVersion)
+  ) {
     return params.binaryName
   }
 
-  if (existsSync(paths.binaryPath) && await canRunBinary(paths.binaryPath, params.versionArgs, probeEnv)) {
+  if (
+    installOptions.source === 'system' &&
+    await canRunBinary(params.binaryName, params.versionArgs, probeEnv, params.minimumVersion)
+  ) {
+    return params.binaryName
+  }
+
+  if (
+    existsSync(paths.binaryPath) &&
+    await canRunBinary(paths.binaryPath, params.versionArgs, probeEnv, params.minimumVersion)
+  ) {
     return binaryPath
   }
 
@@ -395,6 +439,7 @@ export const ensureManagedNpmCli = async (params: EnsureManagedNpmCliParams) => 
       env: probeEnv,
       legacyPaths,
       logger: params.logger,
+      minimumVersion: params.minimumVersion,
       paths,
       versionArgs: params.versionArgs
     })
@@ -405,7 +450,9 @@ export const ensureManagedNpmCli = async (params: EnsureManagedNpmCliParams) => 
   if (
     canUseProjectCli && params.bundledPath != null &&
     existsSync(params.bundledPath) &&
-    toRealPath(params.bundledPath) !== legacyBinaryPath
+    toRealPath(params.bundledPath) !== legacyBinaryPath &&
+    (params.minimumVersion == null ||
+      await canRunBinary(params.bundledPath, params.versionArgs, probeEnv, params.minimumVersion))
   ) {
     return toRealPath(params.bundledPath)
   }
@@ -420,7 +467,7 @@ export const ensureManagedNpmCli = async (params: EnsureManagedNpmCliParams) => 
     await withDirectoryInstallLock({
       lockDir: `${paths.installDir}.lock`
     }, async () => {
-      if (await canRunBinary(paths.binaryPath, params.versionArgs, installEnv)) {
+      if (await canRunBinary(paths.binaryPath, params.versionArgs, installEnv, params.minimumVersion)) {
         return
       }
 
@@ -455,7 +502,7 @@ export const ensureManagedNpmCli = async (params: EnsureManagedNpmCliParams) => 
       }
     })
 
-    if (!await canRunBinary(paths.binaryPath, params.versionArgs, installEnv)) {
+    if (!await canRunBinary(paths.binaryPath, params.versionArgs, installEnv, params.minimumVersion)) {
       throw new Error(
         `${params.binaryName} CLI installation completed, but the managed binary could not be executed.\n\n${
           buildManagedNpmCliInstallInstructions({
@@ -471,16 +518,27 @@ export const ensureManagedNpmCli = async (params: EnsureManagedNpmCliParams) => 
     return binaryPath
   }
 
-  if (canUseProjectCli && existsSync(legacyPaths.binaryPath)) {
+  if (
+    canUseProjectCli &&
+    existsSync(legacyPaths.binaryPath) &&
+    await canRunBinary(legacyPaths.binaryPath, params.versionArgs, probeEnv, params.minimumVersion)
+  ) {
     return legacyBinaryPath
   }
 
-  if (canUseSystemCli && await canRunBinary(params.binaryName, params.versionArgs, probeEnv)) {
+  if (
+    canUseSystemCli &&
+    await canRunBinary(params.binaryName, params.versionArgs, probeEnv, params.minimumVersion)
+  ) {
     return params.binaryName
   }
 
   if (installOptions.source === 'system') {
-    throw new Error(`${params.binaryName} CLI was not found on PATH.`)
+    throw new Error(
+      params.minimumVersion == null
+        ? `${params.binaryName} CLI was not found on PATH.`
+        : `${params.binaryName} CLI was not found on PATH or does not satisfy minimum version ${params.minimumVersion}.`
+    )
   }
 
   if (!installOptions.autoInstall) {

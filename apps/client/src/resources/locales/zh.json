@@ -1498,6 +1498,9 @@
     "inputPlaceholder": "输入消息...",
     "send": "发送",
     "thinking": "正在思考",
+    "sessionOperation": {
+      "codexCliPrepare": "正在准备 Codex CLI；如果本机没有可用版本，会自动安装…"
+    },
     "stop": "停止",
     "result": "结果",
     "sessionActive": "会话进行中",

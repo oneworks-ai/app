@@ -2,6 +2,7 @@
 import type { ChildProcess } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
@@ -17,6 +18,8 @@ import {
 } from '#~/services/runtime-store/engine-consumer.js'
 import type { RuntimeSessionMetadata, RuntimeSessionStore } from '#~/services/runtime-store/types.js'
 import { ensureServerRuntimeConsumerOnce } from '#~/services/runtime-store/watcher.js'
+
+const nodeRequire = createRequire(__filename)
 
 const createStore = (root: string, sessionId = 'sess-room-dev'): RuntimeSessionStore => {
   const storePath = path.join(root, 'sessions', sessionId)
@@ -153,7 +156,7 @@ describe('runtime store engine consumer', () => {
 
     expect(plan.args).toEqual([
       '/tmp/fake-ow.js',
-      'run',
+      '__run',
       '--print',
       '--output-format',
       'stream-json',
@@ -176,6 +179,38 @@ describe('runtime store engine consumer', () => {
     expect(plan.env.__ONEWORKS_PROJECT_CTX_ID__).toBe('sess-web')
     expect(plan.env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_ADAPTER__).toBe('codex')
     expect(plan.env.__ONEWORKS_AGENT_ROOM_HOST_SESSION_ID__).toBe('')
+  })
+
+  it('passes the initial message as prompt text without prefixing the run command', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-prompt-'))
+    const store = createStore(root, 'sess-web')
+    const plan = buildRuntimeConsumerSpawnPlan({
+      baseEnv: {
+        __ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__: '/tmp/fake-ow.js'
+      } as NodeJS.ProcessEnv,
+      command: {
+        message: 'hi'
+      },
+      cwd: '/workspace',
+      metadata: {
+        sessionId: 'sess-web',
+        cwd: '/workspace',
+        needsEngineConsumer: true,
+        createdAt: 100
+      } as RuntimeSessionMetadata,
+      store
+    })
+
+    expect(plan.args).toEqual([
+      '/tmp/fake-ow.js',
+      '__run',
+      '--print',
+      '--output-format',
+      'stream-json',
+      '--session-id',
+      'sess-web',
+      'hi'
+    ])
   })
 
   it('does not inherit exact project-home dirs from another workspace when spawning consumers', async () => {
@@ -288,7 +323,7 @@ describe('runtime store engine consumer', () => {
     expect(plan.command).toBe(process.execPath)
     expect(plan.args).toEqual([
       '/tmp/fake-ow.js',
-      'run',
+      '__run',
       '--print',
       '--output-format',
       'stream-json',
@@ -343,7 +378,7 @@ describe('runtime store engine consumer', () => {
 
     expect(plan.command).toBe('/workspace/node_modules/.bin/dyai')
     expect(plan.args.slice(0, 7)).toEqual([
-      'run',
+      '__run',
       '--print',
       '--output-format',
       'stream-json',
@@ -356,7 +391,7 @@ describe('runtime store engine consumer', () => {
   it('uses a matching workspace cli when available', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-matching-cli-'))
     const workspace = path.join(root, 'workspace')
-    const workspaceBin = path.join(workspace, 'node_modules', '.bin', 'ow')
+    const workspaceBin = path.join(workspace, 'node_modules', '.bin', 'oneworks')
     const workspaceCliPackage = path.join(workspace, 'node_modules', '@oneworks', 'cli')
     const store = createStore(root)
     const bundledVersion = JSON.parse(
@@ -393,7 +428,7 @@ describe('runtime store engine consumer', () => {
   it('prefers a matching workspace cli over a bootstrap command on PATH', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-workspace-before-bootstrap-'))
     const workspace = path.join(root, 'workspace')
-    const workspaceBin = path.join(workspace, 'node_modules', '.bin', 'ow')
+    const workspaceBin = path.join(workspace, 'node_modules', '.bin', 'oneworks')
     const workspaceCliPackage = path.join(workspace, 'node_modules', '@oneworks', 'cli')
     const pathBin = path.join(root, 'bin')
     const pathBootstrap = path.join(pathBin, 'oneworks')
@@ -434,7 +469,7 @@ describe('runtime store engine consumer', () => {
   it('uses the bundled cli when the workspace cli version is stale', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-stale-cli-'))
     const workspace = path.join(root, 'workspace')
-    const workspaceBin = path.join(workspace, 'node_modules', '.bin', 'ow')
+    const workspaceBin = path.join(workspace, 'node_modules', '.bin', 'oneworks')
     const workspaceCliPackage = path.join(workspace, 'node_modules', '@oneworks', 'cli')
     const store = createStore(root)
     await mkdir(path.dirname(workspaceBin), { recursive: true })
@@ -463,10 +498,13 @@ describe('runtime store engine consumer', () => {
     })
 
     expect(plan.command).toBe(process.execPath)
-    expect(plan.args[0]).toBe(path.join(process.cwd(), 'apps', 'cli', 'cli.js'))
+    expect(plan.args[0]).toBe(path.join(
+      path.dirname(nodeRequire.resolve('@oneworks/cli/package.json')),
+      'cli.js'
+    ))
   })
 
-  it('prefers the bundled fallback bootstrap over a plain user PATH ow', async () => {
+  it('uses a user PATH ow command before the bundled fallback bootstrap', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-user-path-'))
     const store = createStore(root)
     const userBinDir = path.join(root, 'user-bin')
@@ -493,10 +531,9 @@ describe('runtime store engine consumer', () => {
       store
     })
 
-    expect(plan.command).toBe(process.execPath)
-    expect(plan.args.slice(0, 5)).toEqual([
-      '/opt/oneworks/bootstrap.js',
-      'run',
+    expect(plan.command).toBe(userVfPath)
+    expect(plan.args.slice(0, 4)).toEqual([
+      '__run',
       '--print',
       '--output-format',
       'stream-json'
@@ -534,7 +571,7 @@ describe('runtime store engine consumer', () => {
 
     expect(plan.command).toBe(userBootstrapPath)
     expect(plan.args.slice(0, 4)).toEqual([
-      'run',
+      '__run',
       '--print',
       '--output-format',
       'stream-json'
@@ -791,7 +828,7 @@ describe('runtime store engine consumer', () => {
     expect(plan.command).toBe(process.execPath)
     expect(plan.args.slice(0, 6)).toEqual([
       fallbackBootstrapPath,
-      'run',
+      '__run',
       '--print',
       '--output-format',
       'stream-json',
@@ -946,7 +983,7 @@ describe('runtime store engine consumer', () => {
     await new Promise<void>(resolve => child?.once('exit', () => resolve()))
     const args = (await readFile(argsPath, 'utf8')).trim().split('\n')
     expect(args).toEqual([
-      'run',
+      '__run',
       '--print',
       '--output-format',
       'stream-json',
