@@ -209,6 +209,12 @@ export function ChatRouteShell({
     session: resolvedWorkspaceSession,
     setIsTerminalOpen
   })
+  const recentFilePaths = bottomPanel.selectedWorkspaceFilePath == null
+    ? bottomPanel.openWorkspaceFilePaths
+    : [
+      bottomPanel.selectedWorkspaceFilePath,
+      ...bottomPanel.openWorkspaceFilePaths.filter(path => path !== bottomPanel.selectedWorkspaceFilePath)
+    ]
   const workspaceDrawerCreateItems = useMemo(() =>
     buildWorkspaceDrawerViewItems({
       agentRosterCount: agentRoster?.members.length,
@@ -220,7 +226,7 @@ export function ChatRouteShell({
       t
     }), [agentApprovals, agentRoster, i18n.language, i18n.resolvedLanguage, pluginWorkbenchTabs, settingsView, t])
   const activeWorkspaceDrawerView = isWorkspaceDrawerOpen
-    ? workspaceDrawerView ?? workspaceDrawerDefaultView ?? 'tree'
+    ? workspaceDrawerView ?? workspaceDrawerDefaultView
     : undefined
   const workspaceDrawerCreateSelectedKeys = useMemo(
     () => activeWorkspaceDrawerView == null ? [] : [toWorkbenchDrawerViewMenuKey(activeWorkspaceDrawerView)],
@@ -584,6 +590,7 @@ export function ChatRouteShell({
             defaultView={workspaceDrawerView ?? workspaceDrawerDefaultView}
             isFullscreen={isWorkspaceDrawerFullscreen}
             locateFileRequest={workspaceDrawerLocateRequest}
+            recentFilePaths={recentFilePaths}
             selectedFilePath={bottomPanel.selectedWorkspaceFilePath}
             settingsView={settingsView}
             sessionId={resolvedWorkspaceSessionId}
@@ -602,7 +609,7 @@ export function ChatRouteShell({
       sidePanelLabel='工作区抽屉'
       sidePanelResize={{
         defaultWidth: 340,
-        maxWidth: 560,
+        maxWidth: 760,
         minContentWidth: 300,
         minWidth: 220,
         storageKey: 'workspaceDrawerWidth'

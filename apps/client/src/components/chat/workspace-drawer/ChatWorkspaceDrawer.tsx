@@ -3,14 +3,16 @@
 import '../interaction-panel/ChatInteractionPanel.scss'
 import './ChatWorkspaceDrawer.scss'
 
+import { App } from 'antd'
 import type { MenuProps } from 'antd'
+import { useAtomValue } from 'jotai'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
-import type { GitRepositoryState } from '@oneworks/types'
+import type { GitRepositoryState, TerminalShellKind } from '@oneworks/types'
 
 import { getSessionGitState, getWorkspaceGitState } from '#~/api'
 import { getAgentRoomApprovalMessages } from '#~/components/agent-room/@core/approval-messages'
@@ -30,17 +32,24 @@ import type {
   RouteContainerPanelDockActionItem,
   RouteContainerPanelDockChromeActionsConfig,
   RouteContainerPanelDockHeaderActionContext,
-  RouteContainerPanelDockTabItem
+  RouteContainerPanelDockTabItem,
+  RouteContainerPanelTabMenuContext
 } from '#~/components/layout/RouteContainerPanelTabs'
 import { RouteContainerPanelDockWorkspace } from '#~/components/layout/RouteContainerPanelTabs'
 import type { ContextPickerFile } from '#~/components/workspace/context-file-types'
 import { PluginViewHost } from '#~/plugins/PluginHost'
 import type { PluginContributionWorkbenchAddMenuItem, PluginContributionWorkbenchTab } from '#~/plugins/plugin-manifest'
 import { usePluginCommandExecutor, usePluginSlot } from '#~/plugins/plugin-slots'
+import { interactionPanelPinnedTabLimitAtom } from '#~/store/index'
 
+import { InteractionPanelEmptyState } from '../interaction-panel/InteractionPanelEmptyState'
 import { InteractionPanelIframeView } from '../interaction-panel/InteractionPanelIframeView'
 import { InteractionPanelMobileDebugView } from '../interaction-panel/InteractionPanelMobileDebugView'
+import { InteractionPanelOpenResourceDialog } from '../interaction-panel/InteractionPanelOpenResourceDialog'
+import { InteractionPanelPinnedTabEditModal } from '../interaction-panel/InteractionPanelPinnedTabEditModal'
 import { InteractionPanelSessionView } from '../interaction-panel/InteractionPanelSessionView'
+import { buildInteractionPanelDockTabContextMenuItems } from '../interaction-panel/interaction-panel-dock-tab-context-menu'
+import type { InteractionPanelPinnedTab } from '../interaction-panel/interaction-panel-pinned-tabs'
 import {
   areInteractionPanelPluginPagesEqual,
   createInteractionPanelPluginPage,
@@ -48,15 +57,20 @@ import {
   resolveInteractionPanelPluginTabDefinition
 } from '../interaction-panel/interaction-panel-plugin-pages'
 import type { InteractionPanelPluginPage } from '../interaction-panel/interaction-panel-plugin-pages'
+import { getFallbackTabAfterClose, getTabsForCloseScope } from '../interaction-panel/interaction-panel-tab-groups'
+import type { InteractionPanelTabCloseScope } from '../interaction-panel/interaction-panel-tab-groups'
 import {
   INTERACTION_PANEL_MOBILE_DEBUG_CONFIG_KEY,
   INTERACTION_PANEL_MOBILE_DEBUG_NO_DEVICES_KEY,
   parseInteractionPanelMobileDebugDeviceMenuKey,
   parseInteractionPanelPluginAddMenuKey
 } from '../interaction-panel/interaction-panel-tab-menu'
+import type { InteractionPanelTab } from '../interaction-panel/interaction-panel-tabs'
+import { useCopyTextWithFeedback } from '../interaction-panel/use-copy-text-with-feedback'
 import { useInteractionPanelIframePages } from '../interaction-panel/use-interaction-panel-iframe-pages'
 import { useInteractionPanelMobileDebugDeviceOptions } from '../interaction-panel/use-interaction-panel-mobile-debug-device-options'
 import { useInteractionPanelMobileDebugPages } from '../interaction-panel/use-interaction-panel-mobile-debug-pages'
+import { useInteractionPanelPinnedTabs } from '../interaction-panel/use-interaction-panel-pinned-tabs'
 import { useInteractionPanelSessionPages } from '../interaction-panel/use-interaction-panel-session-pages'
 import type { InteractionTerminalPanesController } from '../interaction-panel/use-interaction-terminal-panes'
 import { WorkspaceDrawerViewPanel } from './WorkspaceDrawerViewPanel'
@@ -157,13 +171,14 @@ const isWorkspaceDrawerHostedTabKey = (key: WorkspaceDrawerDockTabKey) =>
 export function ChatWorkspaceDrawer({
   agentApprovals,
   agentRoster,
-  defaultView = 'tree',
+  defaultView,
   isFullscreen = false,
   locateFileRequest,
   onClose,
   onFullscreenChange,
   onOpenFile,
   onReferencePaths,
+  recentFilePaths = [],
   selectedFilePath,
   settingsView,
   sessionId,
@@ -179,6 +194,7 @@ export function ChatWorkspaceDrawer({
   onFullscreenChange?: (fullscreen: boolean) => void
   onOpenFile?: (path: string) => void
   onReferencePaths?: (files: ContextPickerFile[]) => void
+  recentFilePaths?: string[]
   selectedFilePath?: string | null
   settingsView?: ReactNode
   sessionId?: string
@@ -186,7 +202,12 @@ export function ChatWorkspaceDrawer({
   terminalPanes: InteractionTerminalPanesController
 }) {
   const { i18n, t } = useTranslation()
+  const { message } = App.useApp()
+  const location = useLocation()
   const navigate = useNavigate()
+  const maxPinnedTabs = useAtomValue(interactionPanelPinnedTabLimitAtom)
+  const [editingPinnedTab, setEditingPinnedTab] = useState<InteractionPanelPinnedTab | null>(null)
+  const [isOpenResourceDialogOpen, setIsOpenResourceDialogOpen] = useState(false)
   const hasApprovalsTab = agentApprovals != null
   const hasAgentsTab = agentRoster != null
   const hasSettingsTab = settingsView != null
@@ -200,8 +221,10 @@ export function ChatWorkspaceDrawer({
   ), [pluginDrawerViews])
   const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac')
   const workspaceDrawerStorageKey = `chat-workspace-drawer:${sessionId ?? 'workspace'}`
+  const workspaceDrawerPinnedTabsStorageKey = `${workspaceDrawerStorageKey}:pinned`
   const workspaceDrawerSessionPagesId = `${workspaceDrawerStorageKey}:sessions`
   const workspaceDrawerIframeSessionId = `${workspaceDrawerStorageKey}:iframes`
+  const copyContextText = useCopyTextWithFeedback(t('common.copyFailed'), message)
   const iframePageState = useInteractionPanelIframePages({ terminalSessionId: workspaceDrawerIframeSessionId, t })
   const mobileDebugPageState = useInteractionPanelMobileDebugPages()
   const sessionPageState = useInteractionPanelSessionPages(workspaceDrawerSessionPagesId)
@@ -266,22 +289,27 @@ export function ChatWorkspaceDrawer({
   ])
   const availableViewKeys = useMemo(() => viewItems.map(item => item.key), [viewItems])
   const availableViewSet = useMemo(() => new Set<WorkspaceDrawerView>(availableViewKeys), [availableViewKeys])
-  const preferredDefaultView: WorkspaceDrawerView = defaultView === 'approvals' && !hasPendingApprovals && hasAgentsTab
-    ? 'agents'
-    : defaultView
+  const preferredDefaultView: WorkspaceDrawerView | undefined =
+    defaultView === 'approvals' && !hasPendingApprovals && hasAgentsTab
+      ? 'agents'
+      : defaultView
   const fallbackView: WorkspaceDrawerView = hasAgentsTab ? 'agents' : 'tree'
-  const isDefaultViewUnavailable = (preferredDefaultView === 'agents' && !hasAgentsTab) ||
-    (preferredDefaultView === 'approvals' && !hasApprovalsTab) ||
-    (preferredDefaultView === 'settings' && !hasSettingsTab) ||
-    isPluginDrawerViewUnavailable(preferredDefaultView)
-  const initialView = isDefaultViewUnavailable ? fallbackView : preferredDefaultView
-  const [activeView, setActiveView] = useState<WorkspaceDrawerView>(() => initialView)
-  const [openedViews, setOpenedViews] = useState<WorkspaceDrawerView[]>(() => [initialView])
-  const [activeTabKey, setActiveTabKey] = useState<WorkspaceDrawerDockTabKey>(() => initialView)
-  const isActiveViewUnavailable = (activeView === 'agents' && !hasAgentsTab) ||
-    (activeView === 'approvals' && !hasApprovalsTab) ||
-    (activeView === 'settings' && !hasSettingsTab) ||
-    isPluginDrawerViewUnavailable(activeView)
+  const isWorkspaceDrawerViewUnavailable = (view: WorkspaceDrawerView | null | undefined) =>
+    (view === 'agents' && !hasAgentsTab) ||
+    (view === 'approvals' && !hasApprovalsTab) ||
+    (view === 'settings' && !hasSettingsTab) ||
+    (view != null && isPluginDrawerViewUnavailable(view))
+  const isDefaultViewUnavailable = preferredDefaultView != null &&
+    isWorkspaceDrawerViewUnavailable(preferredDefaultView)
+  const initialView = preferredDefaultView == null
+    ? null
+    : isDefaultViewUnavailable
+    ? fallbackView
+    : preferredDefaultView
+  const [activeView, setActiveView] = useState<WorkspaceDrawerView | null>(() => initialView)
+  const [openedViews, setOpenedViews] = useState<WorkspaceDrawerView[]>(() => initialView == null ? [] : [initialView])
+  const [activeTabKey, setActiveTabKey] = useState<WorkspaceDrawerDockTabKey | null>(() => initialView)
+  const isActiveViewUnavailable = isWorkspaceDrawerViewUnavailable(activeView)
   const openDrawerView = useCallback((view: WorkspaceDrawerView) => {
     if (!availableViewSet.has(view)) return
 
@@ -321,17 +349,19 @@ export function ChatWorkspaceDrawer({
   }), [isFullscreen, onClose, onFullscreenChange, t])
 
   useEffect(() => {
-    if (isActiveViewUnavailable) {
+    if (activeView != null && isActiveViewUnavailable) {
       setActiveView(fallbackView)
       setActiveTabKey(fallbackView)
       setOpenedViews(prev => uniqueWorkspaceDrawerViews([...prev, fallbackView]))
     }
-  }, [fallbackView, isActiveViewUnavailable])
+  }, [activeView, fallbackView, isActiveViewUnavailable])
 
   useEffect(() => {
-    if (!isDefaultViewUnavailable) {
+    if (preferredDefaultView != null && !isDefaultViewUnavailable) {
       setActiveView(preferredDefaultView)
-      setActiveTabKey(current => isWorkspaceDrawerHostedTabKey(current) ? current : preferredDefaultView)
+      setActiveTabKey(current =>
+        current != null && isWorkspaceDrawerHostedTabKey(current) ? current : preferredDefaultView
+      )
       setOpenedViews(prev => uniqueWorkspaceDrawerViews([...prev, preferredDefaultView]))
     }
   }, [isDefaultViewUnavailable, preferredDefaultView])
@@ -353,16 +383,20 @@ export function ChatWorkspaceDrawer({
     handleWorkspaceTreeCommand('locate', path)
   }, [handleWorkspaceTreeCommand, locateFileRequest])
 
-  const resolvedActiveView = isActiveViewUnavailable ? fallbackView : activeView
+  const resolvedActiveView = activeView != null && isActiveViewUnavailable ? fallbackView : activeView
   const normalizedOpenedViews = useMemo(() => {
     const nextOpenedViews = uniqueWorkspaceDrawerViews(
-      [resolvedActiveView, ...openedViews].filter(view => availableViewSet.has(view))
+      [...(resolvedActiveView == null ? [] : [resolvedActiveView]), ...openedViews].filter(view =>
+        availableViewSet.has(view)
+      )
     )
 
-    return nextOpenedViews.length === 0 ? [fallbackView] : nextOpenedViews
-  }, [availableViewSet, fallbackView, openedViews, resolvedActiveView])
+    return nextOpenedViews
+  }, [availableViewSet, openedViews, resolvedActiveView])
 
   useEffect(() => {
+    if (resolvedActiveView == null) return
+
     setOpenedViews(prev => {
       const nextOpenedViews = uniqueWorkspaceDrawerViews(
         [resolvedActiveView, ...prev].filter(view => availableViewSet.has(view))
@@ -408,26 +442,162 @@ export function ChatWorkspaceDrawer({
       ]),
     [iframeTabKeys, mobileDebugTabKeys, normalizedOpenedViews, pluginTabKeys, sessionTabKeys, terminalTabKeys]
   )
-  const resolvedActiveTabKey = openedTabKeys.includes(activeTabKey) ? activeTabKey : resolvedActiveView
+  const resolvedActiveTabKey = activeTabKey != null && openedTabKeys.includes(activeTabKey)
+    ? activeTabKey
+    : openedTabKeys[0] ?? null
+  const drawerInteractionTabs = useMemo<InteractionPanelTab[]>(() => {
+    const viewItemByKey = new Map(viewItems.map(item => [item.key, item]))
+    const terminalPaneById = new Map(drawerTerminalPanes.map(pane => [pane.id, pane]))
+    const iframePageById = new Map(iframePageState.iframePages.map(page => [page.id, page]))
+    const mobileDebugPageById = new Map(mobileDebugPageState.mobileDebugPages.map(page => [page.id, page]))
+    const pluginPageById = new Map(pluginPages.map(page => [page.id, page]))
+    const sessionPageById = new Map(sessionPageState.sessionPages.map(page => [page.id, page]))
+
+    return openedTabKeys.flatMap((key): InteractionPanelTab[] => {
+      if (isWorkspaceDrawerViewTabKey(key, availableViewSet)) {
+        const item = viewItemByKey.get(key)
+        if (item == null) return []
+
+        return [{
+          canClose: true,
+          icon: item.icon,
+          id: key,
+          kind: 'workspace-drawer',
+          label: item.label,
+          view: key
+        }]
+      }
+
+      const terminalId = decodeWorkspaceDrawerHostedTabId(key, WORKSPACE_DRAWER_TERMINAL_TAB_PREFIX)
+      const terminalPane = terminalId == null ? undefined : terminalPaneById.get(terminalId)
+      if (terminalPane != null) {
+        const icon = terminalPane.runCommand?.icon ?? (
+          terminalPanes.infoById[terminalPane.id]?.isExited === true ? 'terminal_off' : 'terminal'
+        )
+
+        return [{
+          canClose: true,
+          icon,
+          id: key,
+          kind: 'terminal',
+          label: terminalPane.title,
+          shellKind: terminalPane.shellKind
+        }]
+      }
+
+      const sessionPageId = decodeWorkspaceDrawerHostedTabId(key, WORKSPACE_DRAWER_SESSION_TAB_PREFIX)
+      const sessionPage = sessionPageId == null ? undefined : sessionPageById.get(sessionPageId)
+      if (sessionPage != null) {
+        return [{
+          canClose: true,
+          icon: 'chat',
+          id: key,
+          kind: 'session',
+          label: sessionPage.title,
+          sessionId: sessionPage.sessionId
+        }]
+      }
+
+      const mobileDebugPageId = decodeWorkspaceDrawerHostedTabId(key, WORKSPACE_DRAWER_MOBILE_DEBUG_TAB_PREFIX)
+      const mobileDebugPage = mobileDebugPageId == null ? undefined : mobileDebugPageById.get(mobileDebugPageId)
+      if (mobileDebugPage != null) {
+        return [{
+          canClose: true,
+          icon: 'phonelink_setup',
+          id: key,
+          kind: 'mobile-debug',
+          label: mobileDebugPage.selectedDeviceLabel == null || mobileDebugPage.selectedDeviceLabel === ''
+            ? mobileDebugPage.title
+            : `${mobileDebugPage.title} · ${mobileDebugPage.selectedDeviceLabel}`
+        }]
+      }
+
+      const pluginPageId = decodeWorkspaceDrawerHostedTabId(key, WORKSPACE_DRAWER_PLUGIN_TAB_PREFIX)
+      const pluginPage = pluginPageId == null ? undefined : pluginPageById.get(pluginPageId)
+      if (pluginPage != null) {
+        return [{
+          canClose: true,
+          icon: pluginPage.icon,
+          id: key,
+          kind: 'plugin',
+          label: pluginPage.title,
+          pluginScope: pluginPage.pluginScope,
+          tabId: pluginPage.tabId,
+          viewId: pluginPage.viewId
+        }]
+      }
+
+      const iframePageId = decodeWorkspaceDrawerHostedTabId(key, WORKSPACE_DRAWER_IFRAME_TAB_PREFIX)
+      const iframePage = iframePageId == null ? undefined : iframePageById.get(iframePageId)
+      if (iframePage != null) {
+        return [{
+          canClose: true,
+          faviconUrl: iframePage.faviconUrl,
+          icon: 'language',
+          id: key,
+          kind: 'iframe',
+          label: iframePage.title
+        }]
+      }
+
+      return []
+    })
+  }, [
+    availableViewSet,
+    drawerTerminalPanes,
+    iframePageState.iframePages,
+    mobileDebugPageState.mobileDebugPages,
+    openedTabKeys,
+    pluginPages,
+    sessionPageState.sessionPages,
+    terminalPanes.infoById,
+    viewItems
+  ])
+  const drawerTabById = useMemo(
+    () => Object.fromEntries(drawerInteractionTabs.map(tab => [tab.id, tab])),
+    [drawerInteractionTabs]
+  )
+  const drawerPinnedTabs = useInteractionPanelPinnedTabs({
+    maxPinnedTabs,
+    tabs: drawerInteractionTabs,
+    terminalSessionId: workspaceDrawerPinnedTabsStorageKey
+  })
+  const drawerPinnedTabById = useMemo(
+    () => Object.fromEntries(drawerPinnedTabs.pinnedTabs.map(tab => [tab.id, tab])),
+    [drawerPinnedTabs.pinnedTabs]
+  )
+  const drawerIframePageByTabKey = useMemo(
+    () =>
+      Object.fromEntries(
+        iframePageState.iframePages.map(page => [toWorkspaceDrawerIframeTabKey(page.id), page])
+      ),
+    [iframePageState.iframePages]
+  )
 
   useEffect(() => {
-    if (openedTabKeys.includes(activeTabKey)) return
-    setActiveTabKey(resolvedActiveView)
-  }, [activeTabKey, openedTabKeys, resolvedActiveView])
+    if (activeTabKey != null && openedTabKeys.includes(activeTabKey)) return
+    setActiveTabKey(resolvedActiveTabKey)
+  }, [activeTabKey, openedTabKeys, resolvedActiveTabKey])
 
   const handleDockTabChange = useCallback((
     nextTabKey: WorkspaceDrawerDockTabKey | null,
     nextOpenedTabKeys: WorkspaceDrawerDockTabKey[]
   ) => {
+    const nextOpenedViews = nextOpenedTabKeys
+      .filter((key): key is WorkspaceDrawerView => isWorkspaceDrawerViewTabKey(key, availableViewSet))
+
     if (nextTabKey != null) {
       setActiveTabKey(nextTabKey)
       if (isWorkspaceDrawerViewTabKey(nextTabKey, availableViewSet)) {
         setActiveView(nextTabKey)
       }
+    } else {
+      setActiveTabKey(null)
+      if (nextOpenedViews.length === 0) {
+        setActiveView(null)
+      }
     }
 
-    const nextOpenedViews = nextOpenedTabKeys
-      .filter((key): key is WorkspaceDrawerView => isWorkspaceDrawerViewTabKey(key, availableViewSet))
     setOpenedViews(nextOpenedViews)
 
     const nextOpenedTabKeySet = new Set<WorkspaceDrawerDockTabKey>(nextOpenedTabKeys)
@@ -470,6 +640,89 @@ export function ChatWorkspaceDrawer({
       return nextPages.length === current.length ? current : nextPages
     })
   }, [availableViewSet, drawerTerminalPanes, iframePageState, mobileDebugPageState, sessionPageState, terminalPanes])
+
+  const handleOpenResourceAction = useCallback(() => {
+    setIsOpenResourceDialogOpen(true)
+  }, [])
+  const handleOpenResourceFile = useCallback((path: string) => {
+    onOpenFile?.(path)
+  }, [onOpenFile])
+  const handleOpenResourceSession = useCallback((targetSessionId: string) => {
+    void navigate({
+      pathname: `/session/${encodeURIComponent(targetSessionId)}`,
+      search: location.search
+    })
+  }, [location.search, navigate])
+  const handleOpenResourceWebsite = useCallback((url: string) => {
+    const page = iframePageState.openIframeUrl(url)
+    setActiveTabKey(toWorkspaceDrawerIframeTabKey(page.id))
+  }, [iframePageState])
+  const handleNewTerminalAction = useCallback((shellKind: TerminalShellKind = 'default') => {
+    const pane = terminalPanes.addTerminal(shellKind, { surface: 'workspace-drawer' })
+    setActiveTabKey(toWorkspaceDrawerTerminalTabKey(pane.id))
+  }, [terminalPanes])
+  const handleNewWebPageAction = useCallback(() => {
+    const page = iframePageState.addIframePage()
+    setActiveTabKey(toWorkspaceDrawerIframeTabKey(page.id))
+  }, [iframePageState])
+  const handleNewSessionAction = useCallback(() => {
+    if (sessionId == null || sessionId === '') return
+
+    const page = sessionPageState.addSessionPage(
+      t('chat.interactionPanel.sessionTitle', { index: sessionPageState.sessionPages.length + 1 })
+    )
+    setActiveTabKey(toWorkspaceDrawerSessionTabKey(page.id))
+  }, [sessionId, sessionPageState, t])
+  const handleNewMobileDebugPageAction = useCallback(() => {
+    const page = mobileDebugPageState.addMobileDebugPage(t('chat.interactionPanel.mobileDebugTitle'), {
+      mode: 'config',
+      selectedDeviceId: undefined,
+      selectedDeviceLabel: t('chat.interactionPanel.mobileDebugConfig')
+    })
+    setActiveTabKey(toWorkspaceDrawerMobileDebugTabKey(page.id))
+  }, [mobileDebugPageState, t])
+
+  const handleCloseDockTabGroup = useCallback((tab: InteractionPanelTab, scope: InteractionPanelTabCloseScope) => {
+    const targetTabs = getTabsForCloseScope(drawerInteractionTabs, tab, scope)
+    const targetTabKeys = new Set(targetTabs.map(item => item.id as WorkspaceDrawerDockTabKey))
+    const fallbackTab = getFallbackTabAfterClose(drawerInteractionTabs, targetTabs, tab)
+    const nextOpenedTabKeys = openedTabKeys.filter(key => !targetTabKeys.has(key))
+    const nextActiveTabKey = resolvedActiveTabKey != null && targetTabKeys.has(resolvedActiveTabKey)
+      ? (fallbackTab?.id as WorkspaceDrawerDockTabKey | undefined) ?? null
+      : resolvedActiveTabKey
+
+    handleDockTabChange(nextActiveTabKey, nextOpenedTabKeys)
+  }, [drawerInteractionTabs, handleDockTabChange, openedTabKeys, resolvedActiveTabKey])
+
+  const getTabContextMenuItems = useCallback((
+    context: RouteContainerPanelTabMenuContext<WorkspaceDrawerDockTabKey>
+  ) =>
+    buildInteractionPanelDockTabContextMenuItems({
+      allTabs: drawerInteractionTabs,
+      canPinMoreTabs: drawerPinnedTabs.canPinMoreTabs,
+      iframePage: drawerIframePageByTabKey[context.tab.key],
+      onCopyText: copyContextText,
+      onCloseTabGroup: handleCloseDockTabGroup,
+      onEditPinnedTab: setEditingPinnedTab,
+      onNewTerminal: handleNewTerminalAction,
+      onPinTab: drawerPinnedTabs.pinTab,
+      onUnpinTab: drawerPinnedTabs.unpinTab,
+      pinnedTab: drawerPinnedTabById[context.tab.key],
+      t,
+      tab: drawerTabById[context.tab.key]
+    }), [
+    copyContextText,
+    drawerIframePageByTabKey,
+    drawerInteractionTabs,
+    drawerPinnedTabById,
+    drawerPinnedTabs.canPinMoreTabs,
+    drawerPinnedTabs.pinTab,
+    drawerPinnedTabs.unpinTab,
+    drawerTabById,
+    handleCloseDockTabGroup,
+    handleNewTerminalAction,
+    t
+  ])
 
   const createMenuItems = useMemo<MenuProps['items']>(() =>
     buildWorkbenchCreateMenuItems(t, isMac, {
@@ -539,28 +792,22 @@ export function ChatWorkspaceDrawer({
     }
 
     if (key === 'resource') {
-      openDrawerView('tree')
+      handleOpenResourceAction()
       return
     }
 
     if (key === 'terminal') {
-      const pane = terminalPanes.addTerminal('default', { surface: 'workspace-drawer' })
-      setActiveTabKey(toWorkspaceDrawerTerminalTabKey(pane.id))
+      handleNewTerminalAction()
       return
     }
 
     if (key === 'iframe') {
-      const page = iframePageState.addIframePage()
-      setActiveTabKey(toWorkspaceDrawerIframeTabKey(page.id))
+      handleNewWebPageAction()
       return
     }
 
     if (key === 'session') {
-      if (sessionId == null || sessionId === '') return
-      const page = sessionPageState.addSessionPage(
-        t('chat.interactionPanel.sessionTitle', { index: sessionPageState.sessionPages.length + 1 })
-      )
-      setActiveTabKey(toWorkspaceDrawerSessionTabKey(page.id))
+      handleNewSessionAction()
       return
     }
 
@@ -569,12 +816,7 @@ export function ChatWorkspaceDrawer({
       key === INTERACTION_PANEL_MOBILE_DEBUG_CONFIG_KEY ||
       key === INTERACTION_PANEL_MOBILE_DEBUG_NO_DEVICES_KEY
     ) {
-      const page = mobileDebugPageState.addMobileDebugPage(t('chat.interactionPanel.mobileDebugTitle'), {
-        mode: 'config',
-        selectedDeviceId: undefined,
-        selectedDeviceLabel: t('chat.interactionPanel.mobileDebugConfig')
-      })
-      setActiveTabKey(toWorkspaceDrawerMobileDebugTabKey(page.id))
+      handleNewMobileDebugPageAction()
       return
     }
 
@@ -591,6 +833,11 @@ export function ChatWorkspaceDrawer({
   }, [
     deviceOptions,
     executePluginCommand,
+    handleNewMobileDebugPageAction,
+    handleNewSessionAction,
+    handleNewTerminalAction,
+    handleNewWebPageAction,
+    handleOpenResourceAction,
     iframePageState,
     mobileDebugPageState,
     navigate,
@@ -614,44 +861,50 @@ export function ChatWorkspaceDrawer({
     }), [availableViewSet, workspaceDrawerDockActions])
 
   const dockTabs = useMemo<Array<RouteContainerPanelDockTabItem<WorkspaceDrawerDockTabKey>>>(() => {
-    const drawerTabs: Array<RouteContainerPanelDockTabItem<WorkspaceDrawerDockTabKey>> = viewItems.map(item => ({
-      activeIcon: item.icon,
-      badge: item.count != null && item.count > 0
-        ? <span className='chat-workspace-drawer__view-count'>{item.count}</span>
-        : undefined,
-      content: () => (
-        <WorkspaceDrawerViewPanel
-          activeView={item.key}
-          agentApprovals={agentApprovals}
-          agentRoster={agentRoster}
-          approvalMessages={approvalMessages}
-          changedLayout={workspaceDrawerDockActions.changedLayout}
-          changedTreeCommand={workspaceDrawerDockActions.changedTreeCommand}
-          isGitLoading={isGitLoading}
-          repoState={repoState}
-          selectedFilePath={item.key === 'tree' ? treeActivePath : selectedFilePath}
-          settingsView={settingsView}
-          sessionId={sessionId}
-          pluginTabs={pluginTabs}
-          treeRefreshKey={workspaceDrawerDockActions.treeRefreshKey}
-          workspaceTreeCommand={workspaceDrawerDockActions.workspaceTreeCommand}
-          onOpenFile={onOpenFile}
-          onReferencePaths={onReferencePaths}
-        />
-      ),
-      icon: item.icon,
-      key: item.key,
-      label: item.label,
-      title: item.label
-    }))
+    const drawerTabs: Array<RouteContainerPanelDockTabItem<WorkspaceDrawerDockTabKey>> = viewItems.map((item) => {
+      const pinnedTab = drawerPinnedTabById[item.key]
+
+      return {
+        activeIcon: pinnedTab?.icon ?? item.icon,
+        badge: item.count != null && item.count > 0
+          ? <span className='chat-workspace-drawer__view-count'>{item.count}</span>
+          : undefined,
+        content: () => (
+          <WorkspaceDrawerViewPanel
+            activeView={item.key}
+            agentApprovals={agentApprovals}
+            agentRoster={agentRoster}
+            approvalMessages={approvalMessages}
+            changedLayout={workspaceDrawerDockActions.changedLayout}
+            changedTreeCommand={workspaceDrawerDockActions.changedTreeCommand}
+            isGitLoading={isGitLoading}
+            repoState={repoState}
+            selectedFilePath={item.key === 'tree' ? treeActivePath : selectedFilePath}
+            settingsView={settingsView}
+            sessionId={sessionId}
+            pluginTabs={pluginTabs}
+            treeRefreshKey={workspaceDrawerDockActions.treeRefreshKey}
+            workspaceTreeCommand={workspaceDrawerDockActions.workspaceTreeCommand}
+            onOpenFile={onOpenFile}
+            onReferencePaths={onReferencePaths}
+          />
+        ),
+        icon: pinnedTab?.icon ?? item.icon,
+        key: item.key,
+        label: pinnedTab?.title ?? item.label,
+        title: pinnedTab?.originalTitle ?? item.label
+      }
+    })
     const terminalTabs: Array<RouteContainerPanelDockTabItem<WorkspaceDrawerDockTabKey>> = drawerTerminalPanes.map(
       pane => {
         const tabKey = toWorkspaceDrawerTerminalTabKey(pane.id)
         const icon = pane.runCommand?.icon ?? (
           terminalPanes.infoById[pane.id]?.isExited === true ? 'terminal_off' : 'terminal'
         )
+        const pinnedTab = drawerPinnedTabById[tabKey]
 
         return {
+          activeIcon: pinnedTab?.icon ?? icon,
           content: ({ isVisible }) => (
             <div className={`chat-interaction-panel__dock-panel-content ${isVisible ? 'is-visible' : 'is-hidden'}`}>
               <ChatTerminalView
@@ -666,18 +919,20 @@ export function ChatWorkspaceDrawer({
               />
             </div>
           ),
-          icon,
+          icon: pinnedTab?.icon ?? icon,
           key: tabKey,
-          label: pane.title,
-          title: pane.title
+          label: pinnedTab?.title ?? pane.title,
+          title: pinnedTab?.originalTitle ?? pane.title
         }
       }
     )
     const sessionTabs: Array<RouteContainerPanelDockTabItem<WorkspaceDrawerDockTabKey>> = sessionPageState.sessionPages
       .map(page => {
         const tabKey = toWorkspaceDrawerSessionTabKey(page.id)
+        const pinnedTab = drawerPinnedTabById[tabKey]
 
         return {
+          activeIcon: pinnedTab?.icon ?? 'chat',
           content: ({ isVisible }) => (
             <div className={`chat-interaction-panel__dock-panel-content ${isVisible ? 'is-visible' : 'is-hidden'}`}>
               <InteractionPanelSessionView
@@ -688,17 +943,22 @@ export function ChatWorkspaceDrawer({
               />
             </div>
           ),
-          icon: 'chat',
+          icon: pinnedTab?.icon ?? 'chat',
           key: tabKey,
-          label: page.title,
-          title: page.title
+          label: pinnedTab?.title ?? page.title,
+          title: pinnedTab?.originalTitle ?? page.title
         }
       })
     const mobileDebugTabs: Array<RouteContainerPanelDockTabItem<WorkspaceDrawerDockTabKey>> = mobileDebugPageState
       .mobileDebugPages.map(page => {
         const tabKey = toWorkspaceDrawerMobileDebugTabKey(page.id)
+        const label = page.selectedDeviceLabel == null || page.selectedDeviceLabel === ''
+          ? page.title
+          : `${page.title} · ${page.selectedDeviceLabel}`
+        const pinnedTab = drawerPinnedTabById[tabKey]
 
         return {
+          activeIcon: pinnedTab?.icon ?? 'phonelink_setup',
           content: ({ isVisible }) => (
             <div className={`chat-interaction-panel__dock-panel-content ${isVisible ? 'is-visible' : 'is-hidden'}`}>
               <InteractionPanelMobileDebugView
@@ -712,36 +972,42 @@ export function ChatWorkspaceDrawer({
               />
             </div>
           ),
-          icon: 'phonelink_setup',
+          icon: pinnedTab?.icon ?? 'phonelink_setup',
           key: tabKey,
-          label: page.selectedDeviceLabel == null || page.selectedDeviceLabel === ''
-            ? page.title
-            : `${page.title} · ${page.selectedDeviceLabel}`,
-          title: page.title
+          label: pinnedTab?.title ?? label,
+          title: pinnedTab?.originalTitle ?? page.title
         }
       })
-    const pluginDockTabs: Array<RouteContainerPanelDockTabItem<WorkspaceDrawerDockTabKey>> = pluginPages.map(page => ({
-      content: ({ isVisible }) => (
-        <div className={`chat-interaction-panel__dock-panel-content ${isVisible ? 'is-visible' : 'is-hidden'}`}>
-          <PluginViewHost
-            routeId='chat-workspace-drawer'
-            scope={page.pluginScope}
-            surface='drawer'
-            viewId={page.viewId}
-          />
-        </div>
-      ),
-      icon: page.icon,
-      key: toWorkspaceDrawerPluginTabKey(page.id),
-      label: page.title,
-      title: page.title
-    }))
+    const pluginDockTabs: Array<RouteContainerPanelDockTabItem<WorkspaceDrawerDockTabKey>> = pluginPages.map((page) => {
+      const tabKey = toWorkspaceDrawerPluginTabKey(page.id)
+      const pinnedTab = drawerPinnedTabById[tabKey]
+
+      return {
+        activeIcon: pinnedTab?.icon ?? page.icon,
+        content: ({ isVisible }) => (
+          <div className={`chat-interaction-panel__dock-panel-content ${isVisible ? 'is-visible' : 'is-hidden'}`}>
+            <PluginViewHost
+              routeId='chat-workspace-drawer'
+              scope={page.pluginScope}
+              surface='drawer'
+              viewId={page.viewId}
+            />
+          </div>
+        ),
+        icon: pinnedTab?.icon ?? page.icon,
+        key: tabKey,
+        label: pinnedTab?.title ?? page.title,
+        title: pinnedTab?.originalTitle ?? page.title
+      }
+    })
     const iframeTabs: Array<RouteContainerPanelDockTabItem<WorkspaceDrawerDockTabKey>> = iframePageState.iframePages
       .map(
         page => {
           const tabKey = toWorkspaceDrawerIframeTabKey(page.id)
+          const pinnedTab = drawerPinnedTabById[tabKey]
 
           return {
+            activeIcon: pinnedTab?.icon ?? 'language',
             content: ({ isVisible }) => (
               <div className={`chat-interaction-panel__dock-panel-content ${isVisible ? 'is-visible' : 'is-hidden'}`}>
                 <InteractionPanelIframeView
@@ -756,8 +1022,8 @@ export function ChatWorkspaceDrawer({
                 />
               </div>
             ),
-            icon: 'language',
-            iconNode: page.faviconUrl == null || page.faviconUrl === ''
+            icon: pinnedTab?.icon ?? 'language',
+            iconNode: pinnedTab?.customIcon != null || page.faviconUrl == null || page.faviconUrl === ''
               ? undefined
               : (
                 <img
@@ -768,8 +1034,8 @@ export function ChatWorkspaceDrawer({
                 />
               ),
             key: tabKey,
-            label: page.title,
-            title: page.title
+            label: pinnedTab?.title ?? page.title,
+            title: pinnedTab?.originalTitle ?? page.title
           }
         }
       )
@@ -786,6 +1052,7 @@ export function ChatWorkspaceDrawer({
     agentApprovals,
     agentRoster,
     approvalMessages,
+    drawerPinnedTabById,
     drawerTerminalPanes,
     iframePageState,
     isGitLoading,
@@ -812,30 +1079,65 @@ export function ChatWorkspaceDrawer({
   ])
 
   return (
-    <aside className='chat-workspace-drawer' aria-label={t('chat.workspaceDrawerTitle')}>
-      <RouteContainerPanelDockWorkspace
-        activeTab={resolvedActiveTabKey}
-        ariaLabel={t('chat.workspaceDrawerTitle')}
-        className='chat-workspace-drawer__dock-workspace'
-        closable
-        closeLabel={() => t('common.close')}
-        createMenuItems={createMenuItems}
-        createMenuLabel={t('chat.interactionPanel.addTab')}
-        createMenuSelectedKeys={createMenuSelectedKeys}
-        getHeaderActions={getHeaderActions}
-        labelMode='icon-only'
-        minOpenTabs={1}
-        openedTabs={openedTabKeys}
-        panelChromeActions={panelChromeActions}
-        panelKey='chat-workspace-drawer'
-        storageKey={workspaceDrawerStorageKey}
-        tabs={dockTabs}
-        onCreateMenuClick={handleCreateMenuClick}
-        onCreateMenuOpenChange={(open) => {
-          if (open) void refreshDeviceOptions()
-        }}
-        onTabChange={handleDockTabChange}
+    <>
+      <aside className='chat-workspace-drawer' aria-label={t('chat.workspaceDrawerTitle')}>
+        <RouteContainerPanelDockWorkspace
+          activeTab={resolvedActiveTabKey}
+          ariaLabel={t('chat.workspaceDrawerTitle')}
+          className='chat-workspace-drawer__dock-workspace'
+          closable
+          closeLabel={() => t('common.close')}
+          createMenuItems={createMenuItems}
+          createMenuLabel={t('chat.interactionPanel.addTab')}
+          createMenuSelectedKeys={createMenuSelectedKeys}
+          defaultContent={
+            <InteractionPanelEmptyState
+              canCreateSessionTab={sessionId != null && sessionId !== ''}
+              onNewMobileDebugPage={handleNewMobileDebugPageAction}
+              onNewSession={handleNewSessionAction}
+              onNewTerminal={handleNewTerminalAction}
+              onNewWebPage={handleNewWebPageAction}
+              onOpenResource={handleOpenResourceAction}
+            />
+          }
+          getHeaderActions={getHeaderActions}
+          getTabContextMenuItems={getTabContextMenuItems}
+          labelMode='responsive'
+          minOpenTabs={0}
+          openedTabs={openedTabKeys}
+          panelChromeActions={panelChromeActions}
+          panelKey='chat-workspace-drawer'
+          storageKey={workspaceDrawerStorageKey}
+          tabs={dockTabs}
+          onCreateMenuClick={handleCreateMenuClick}
+          onCreateMenuOpenChange={(open) => {
+            if (open) void refreshDeviceOptions()
+          }}
+          onTabChange={handleDockTabChange}
+        />
+      </aside>
+      <InteractionPanelOpenResourceDialog
+        iframePages={iframePageState.iframePages}
+        open={isOpenResourceDialogOpen}
+        projectUrlHistoryKey={`${workspaceDrawerIframeSessionId}:project`}
+        recentFilePaths={recentFilePaths}
+        sessionId={sessionId}
+        sessionUrlHistoryKey={`${workspaceDrawerIframeSessionId}:session`}
+        onClose={() => setIsOpenResourceDialogOpen(false)}
+        onOpenFile={handleOpenResourceFile}
+        onOpenSession={handleOpenResourceSession}
+        onOpenWebsite={handleOpenResourceWebsite}
       />
-    </aside>
+      <InteractionPanelPinnedTabEditModal
+        pinnedTab={editingPinnedTab}
+        onClose={() => setEditingPinnedTab(null)}
+        onSave={(edits) => {
+          if (editingPinnedTab != null) {
+            drawerPinnedTabs.updatePinnedTab(editingPinnedTab.tab, edits)
+          }
+          setEditingPinnedTab(null)
+        }}
+      />
+    </>
   )
 }
