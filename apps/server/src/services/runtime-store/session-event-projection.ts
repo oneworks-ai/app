@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- projection rules stay centralized for runtime-store session replay. */
 import type { AskUserQuestionParams, ChatMessage, Session, SessionStatus, WSEvent } from '@oneworks/core'
 
 import type { SqliteDb } from '#~/db/index.js'
@@ -171,7 +172,14 @@ export function projectRuntimeSessionEvent(
     return projectMessageToSession(db, event, broadcast, metadata)
   } else if (event.type === 'approval_requested' || event.type === 'input_requested') {
     return projectApprovalToSession(db, event, broadcast)
-  } else if (event.type === 'command_ack' || event.type === 'command_failed' || event.type === 'command_cancelled') {
+  } else if (
+    event.type === 'command_ack' ||
+    event.type === 'command_failed' ||
+    event.type === 'command_cancelled' ||
+    event.type === 'operation_started' ||
+    event.type === 'operation_completed' ||
+    event.type === 'operation_failed'
+  ) {
     projectAuditToSession(db, event, broadcast)
   } else if (
     event.type === 'status_changed' ||

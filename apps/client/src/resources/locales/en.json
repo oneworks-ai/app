@@ -1497,6 +1497,9 @@
     "inputPlaceholder": "Type a message...",
     "send": "Send",
     "thinking": "Thinking",
+    "sessionOperation": {
+      "codexCliPrepare": "Preparing Codex CLI. If no compatible system install is available, it will be installed now…"
+    },
     "stop": "Stop",
     "result": "Result",
     "sessionActive": "Session Active",

@@ -1,3 +1,4 @@
+// dprint-ignore-file
 export * from './IconAsset.js'
 export * from './MaterialSymbol.js'
 export * from './RouteContainerHeader.js'

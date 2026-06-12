@@ -91,6 +91,47 @@ describe('optimistic session creation', () => {
     ])
   })
 
+  it('keeps the optimistic message while only non-chat events have been persisted', () => {
+    const creation = createOptimisticSessionCreation({
+      id: 'session-1',
+      initialMessage: 'hi',
+      options: { id: 'session-1' }
+    }, 101)
+    const runningSession: Session = {
+      id: 'session-1',
+      title: 'hi',
+      createdAt: 100,
+      messageCount: 3,
+      status: 'running'
+    }
+
+    expect(isOptimisticSessionResolvedBySession(creation, runningSession)).toBe(false)
+    expect(mergeOptimisticSessions([runningSession], { 'session-1': creation })).toEqual([
+      creation.session
+    ])
+  })
+
+  it('resolves a running optimistic session after the initial user message is projected', () => {
+    const creation = createOptimisticSessionCreation({
+      id: 'session-1',
+      initialMessage: 'hi',
+      options: { id: 'session-1' }
+    }, 101)
+    const runningSession: Session = {
+      id: 'session-1',
+      title: 'hi',
+      createdAt: 100,
+      lastUserMessage: 'hi',
+      messageCount: 1,
+      status: 'running'
+    }
+
+    expect(isOptimisticSessionResolvedBySession(creation, runningSession)).toBe(true)
+    expect(mergeOptimisticSessions([runningSession], { 'session-1': creation })).toEqual([
+      runningSession
+    ])
+  })
+
   it('tracks discarded optimistic session ids outside React component lifetime', () => {
     clearOptimisticSessionDiscarded('session-1')
     expect(isOptimisticSessionDiscarded('session-1')).toBe(false)

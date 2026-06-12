@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- hook wires the chat route state surface. */
 import { useAtomValue } from 'jotai'
 import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -69,6 +70,7 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     messages,
     setMessages,
     sessionInfo,
+    sessionOperationInfo,
     sessionCompactionInfo,
     sessionCompactionEvents,
     sessionWorkspaceChanges,
@@ -94,6 +96,11 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
   const handlePermissionModeChange = useSessionPermissionModeChange(session?.id, setPermissionMode)
   const lastObservedSessionRef = useRef<ObservedSessionSelection | null>(null)
   const isThinking = session?.status === 'running'
+  const sessionActivityLabel = sessionOperationInfo == null
+    ? undefined
+    : sessionOperationInfo.operationId === 'adapter-cli-prepare' && sessionOperationInfo.adapter === 'codex'
+    ? t('chat.sessionOperation.codexCliPrepare')
+    : sessionOperationInfo.message ?? sessionOperationInfo.title ?? sessionOperationInfo.summary ?? t('chat.thinking')
 
   useEffect(() => {
     if (session?.id == null || session.id === '') {
@@ -159,6 +166,7 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     errorState,
     retryConnection,
     isThinking,
+    sessionActivityLabel,
     activeView,
     isTerminalPanelFolded,
     isTerminalOpen,

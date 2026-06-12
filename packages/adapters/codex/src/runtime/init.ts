@@ -14,7 +14,7 @@ import {
 } from '@oneworks/utils'
 import { ensureManagedNpmCli } from '@oneworks/utils/managed-npm-cli'
 
-import { CODEX_CLI_PACKAGE, CODEX_CLI_VERSION, resolveCodexBinaryPath } from '#~/paths.js'
+import { CODEX_CLI_MIN_VERSION, CODEX_CLI_PACKAGE, CODEX_CLI_VERSION, resolveCodexBinaryPath } from '#~/paths.js'
 import {
   resolveCodexAdapterConfig,
   resolveInitialManagedCodexConfigContent,
@@ -241,7 +241,9 @@ export const initCodexAdapter = async (ctx: AdapterCtx) => {
     defaultPackageName: CODEX_CLI_PACKAGE,
     defaultVersion: CODEX_CLI_VERSION,
     env,
-    logger: ctx.logger
+    logger: ctx.logger,
+    minimumVersion: CODEX_CLI_MIN_VERSION,
+    preferSystem: adapterConfig.cli?.source == null
   })
   startupProfiler.mark('codex.init.ensureManagedNpmCli', managedCliStartedAt)
 

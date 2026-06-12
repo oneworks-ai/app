@@ -133,7 +133,44 @@ describe('sqliteDb', () => {
       requestEvent,
       nextRequestEvent
     ])
-    expect(db.getSession(session.id)?.messageCount).toBe(3)
+    expect(db.getSession(session.id)?.messageCount).toBe(1)
+  })
+
+  it('counts only actual chat messages in session messageCount', () => {
+    const session = db.createSession('Runtime session', 'session-message-count', 'running')
+    const messageEvent = {
+      type: 'message',
+      message: {
+        id: 'evt-user-message',
+        role: 'user',
+        content: 'hello',
+        createdAt: Date.now()
+      }
+    }
+
+    expect(db.saveMessage(session.id, {
+      type: 'adapter_event',
+      data: {
+        runtimeEvent: {
+          id: 'operation-prepare-started',
+          sessionId: session.id,
+          type: 'operation_started',
+          operationId: 'adapter-cli-prepare'
+        }
+      }
+    })).toBe(true)
+    expect(db.saveMessage(session.id, messageEvent)).toBe(true)
+    expect(db.saveMessage(session.id, {
+      type: 'interaction_request',
+      id: 'approval-1',
+      payload: {
+        sessionId: session.id,
+        kind: 'permission',
+        question: 'Allow command?'
+      }
+    })).toBe(true)
+
+    expect(db.getSession(session.id)?.messageCount).toBe(1)
   })
 
   it('persists channel message deduplication keys', () => {

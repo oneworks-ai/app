@@ -45,7 +45,7 @@ import {
   restoreChatSessionViewSnapshot,
   setChatSessionViewSnapshot
 } from './session-view-cache'
-import type { ChatSessionViewSnapshot } from './session-view-cache'
+import type { ChatSessionOperationInfo, ChatSessionViewSnapshot } from './session-view-cache'
 import type { ChatEffort } from './use-chat-effort'
 import type { PermissionMode } from './use-chat-permission-mode'
 
@@ -184,6 +184,66 @@ const getNestedRuntimeEvent = (data: WSEvent): Record<string, unknown> | undefin
   }
 
   return isRecord(data.data.runtimeEvent) ? data.data.runtimeEvent : undefined
+}
+
+const getRuntimeEventTimestamp = (event: Record<string, unknown>) => (
+  typeof event.ts === 'number' ? event.ts : Date.now()
+)
+
+const getSessionOperationInfoFromEvent = (
+  data: WSEvent
+): { operationId: string; operationInfo: ChatSessionOperationInfo | null } | null => {
+  const runtimeEvent = getNestedRuntimeEvent(data)
+  if (runtimeEvent == null) {
+    return null
+  }
+  const eventType = runtimeEvent.type
+  if (
+    eventType !== 'operation_started' &&
+    eventType !== 'operation_completed' &&
+    eventType !== 'operation_failed'
+  ) {
+    return null
+  }
+
+  const operationId = getOptionalString(runtimeEvent, 'operationId') ?? getOptionalString(runtimeEvent, 'id')
+  if (operationId == null) {
+    return null
+  }
+
+  if (eventType !== 'operation_started') {
+    return { operationId, operationInfo: null }
+  }
+
+  return {
+    operationId,
+    operationInfo: {
+      operationId,
+      adapter: getOptionalString(runtimeEvent, 'adapter'),
+      message: getOptionalString(runtimeEvent, 'message'),
+      startedAt: getRuntimeEventTimestamp(runtimeEvent),
+      summary: getOptionalString(runtimeEvent, 'summary'),
+      title: getOptionalString(runtimeEvent, 'title')
+    }
+  }
+}
+
+export const applySessionOperationEvent = (
+  current: ChatSessionOperationInfo | null,
+  data: WSEvent
+) => {
+  const operation = getSessionOperationInfoFromEvent(data)
+  if (operation == null) {
+    return current
+  }
+  if (operation.operationInfo != null) {
+    return operation.operationInfo
+  }
+  return current?.operationId === operation.operationId ? null : current
+}
+
+export const restoreSessionOperationInfoFromHistoryEvents = (events: WSEvent[]) => {
+  return events.reduce<ChatSessionOperationInfo | null>(applySessionOperationEvent, null)
 }
 
 const getPendingAgentRoomMessageMetadata = (data: WSEvent): ChatMessage['agentRoom'] | undefined => {
@@ -357,6 +417,7 @@ export function useChatSessionMessages({
   const [messagesState, setMessagesState] = useState<ChatMessage[]>([])
   const [creationProgressState, setCreationProgressState] = useState<SessionCreationProgressEvent[]>([])
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null)
+  const [sessionOperationInfo, setSessionOperationInfo] = useState<ChatSessionOperationInfo | null>(null)
   const [sessionCompactionInfo, setSessionCompactionInfo] = useState<SessionCompactionInfo | null>(null)
   const [sessionCompactionEvents, setSessionCompactionEvents] = useState<SessionCompactionInfo[]>([])
   const [sessionWorkspaceChanges, setSessionWorkspaceChanges] = useState<SessionWorkspaceChanges[]>([])
@@ -374,6 +435,7 @@ export function useChatSessionMessages({
   const expectedCloseRef = useRef(false)
   const fatalSessionErrorRef = useRef(false)
   const interactionRequestRef = useRef<InteractionRequestState | null>(null)
+  const sessionOperationInfoRef = useRef<ChatSessionOperationInfo | null>(null)
   const activeSessionIdRef = useRef<string | undefined>(session?.id)
   const historyRequestSeqRef = useRef(0)
   const appliedHistoryRequestSeqRef = useRef(0)
@@ -390,6 +452,7 @@ export function useChatSessionMessages({
       messages: ChatMessage[]
       creationProgress: SessionCreationProgressEvent[]
       sessionInfo: SessionInfo | null
+      sessionOperationInfo: ChatSessionOperationInfo | null
       sessionCompactionInfo: SessionCompactionInfo | null
       sessionCompactionEvents: SessionCompactionInfo[]
       sessionWorkspaceChanges: SessionWorkspaceChanges[]
@@ -488,6 +551,20 @@ export function useChatSessionMessages({
     }
   }, [updateSessionViewCache])
 
+  const applySessionOperationInfo = useCallback((
+    nextOperationInfo: ChatSessionOperationInfo | null,
+    sessionId = activeSessionIdRef.current
+  ) => {
+    sessionOperationInfoRef.current = nextOperationInfo
+    setSessionOperationInfo(nextOperationInfo)
+
+    if (sessionId != null && sessionId !== '') {
+      updateSessionViewCache(sessionId, {
+        sessionOperationInfo: nextOperationInfo
+      })
+    }
+  }, [updateSessionViewCache])
+
   const clearScheduledReconciles = useCallback(() => {
     for (const timer of reconcileTimersRef.current) {
       clearTimeout(timer)
@@ -538,6 +615,7 @@ export function useChatSessionMessages({
       )
       const currentSessionCompactionInfo = getLatestSessionCompactionInfo(currentSessionCompactionEvents)
       const currentSessionWorkspaceChanges = restoreSessionWorkspaceChangesFromHistoryEvents(events)
+      const currentSessionOperationInfo = restoreSessionOperationInfoFromHistoryEvents(events)
       let currentCreationProgress: SessionCreationProgressEvent[] = []
       let currentSessionInfo: SessionInfo | null = null
       const restoredInteraction = restoreInteractionStateFromHistory(
@@ -556,8 +634,10 @@ export function useChatSessionMessages({
       const nextQueuedMessages = res.queuedMessages ?? EMPTY_QUEUED_MESSAGES
 
       interactionRequestRef.current = restoredInteraction
+      sessionOperationInfoRef.current = currentSessionOperationInfo
       setInteractionRequest(restoredInteraction)
       applyQueuedMessages(nextQueuedMessages, sessionId)
+      applySessionOperationInfo(currentSessionOperationInfo, sessionId)
       setErrorState(nextErrorState)
 
       for (const data of events) {
@@ -573,6 +653,7 @@ export function useChatSessionMessages({
         messages: currentMessages,
         creationProgress: currentCreationProgress,
         sessionInfo: currentSessionInfo,
+        sessionOperationInfo: currentSessionOperationInfo,
         sessionCompactionInfo: currentSessionCompactionInfo,
         sessionCompactionEvents: currentSessionCompactionEvents,
         sessionWorkspaceChanges: currentSessionWorkspaceChanges,
@@ -585,6 +666,7 @@ export function useChatSessionMessages({
       setMessagesFromHistory(currentMessages)
       setCreationProgressState(currentCreationProgress)
       setSessionInfo(currentSessionInfo)
+      setSessionOperationInfo(currentSessionOperationInfo)
       setSessionCompactionInfo(currentSessionCompactionInfo)
       sessionCompactionEventsRef.current = currentSessionCompactionEvents
       setSessionCompactionEvents(currentSessionCompactionEvents)
@@ -650,6 +732,7 @@ export function useChatSessionMessages({
     }
   }, [
     applyQueuedMessages,
+    applySessionOperationInfo,
     clearScheduledHistoryRetries,
     mutate,
     setInteractionRequest,
@@ -687,6 +770,7 @@ export function useChatSessionMessages({
       setMessagesState([])
       setCreationProgressState([])
       setSessionInfo(null)
+      setSessionOperationInfo(null)
       setSessionCompactionInfo(null)
       sessionCompactionEventsRef.current = []
       setSessionCompactionEvents([])
@@ -696,6 +780,7 @@ export function useChatSessionMessages({
       setErrorState(null)
       setInteractionRequest(null)
       interactionRequestRef.current = null
+      sessionOperationInfoRef.current = null
       isInitialLoadRef.current = true
       lastConnectedModelRef.current = undefined
       lastConnectedEffortRef.current = undefined
@@ -726,7 +811,9 @@ export function useChatSessionMessages({
       setInteractionRequest(null)
       setMessagesState(nextMessages)
       setSessionInfo(null)
+      setSessionOperationInfo(null)
       setSessionCompactionInfo(null)
+      sessionOperationInfoRef.current = null
       sessionCompactionEventsRef.current = []
       setSessionCompactionEvents([])
       setSessionWorkspaceChanges([])
@@ -737,6 +824,7 @@ export function useChatSessionMessages({
       updateSessionViewCache(session.id, {
         messages: nextMessages,
         sessionInfo: null,
+        sessionOperationInfo: null,
         sessionCompactionInfo: null,
         sessionCompactionEvents: [],
         sessionWorkspaceChanges: [],
@@ -756,6 +844,7 @@ export function useChatSessionMessages({
     setMessagesState(restoredMessages)
     setCreationProgressState(restoredState.creationProgress)
     setSessionInfo(restoredState.sessionInfo)
+    setSessionOperationInfo(restoredState.sessionOperationInfo)
     setSessionCompactionInfo(restoredState.sessionCompactionInfo)
     sessionCompactionEventsRef.current = restoredState.sessionCompactionEvents
     setSessionCompactionEvents(restoredState.sessionCompactionEvents)
@@ -764,6 +853,7 @@ export function useChatSessionMessages({
     setErrorState(restoredState.errorState)
     setInteractionRequest(restoredState.interactionRequest)
     interactionRequestRef.current = restoredState.interactionRequest
+    sessionOperationInfoRef.current = restoredState.sessionOperationInfo
     setIsReady(restoredState.isReady || hasStagedLocalMessages)
     isInitialLoadRef.current = !(restoredState.isReady || hasStagedLocalMessages)
     if (hasStagedLocalMessages) {
@@ -970,6 +1060,13 @@ export function useChatSessionMessages({
             return
           }
 
+          if (data.type === 'adapter_event') {
+            const nextOperationInfo = applySessionOperationEvent(sessionOperationInfoRef.current, data)
+            if (nextOperationInfo !== sessionOperationInfoRef.current) {
+              applySessionOperationInfo(nextOperationInfo, session.id)
+            }
+          }
+
           if (data.type === 'message') {
             const message = getChatMessageFromSessionHistoryEvent(data)
             if (message?.role === 'assistant') {
@@ -1096,6 +1193,7 @@ export function useChatSessionMessages({
     adapter,
     account,
     applyQueuedMessages,
+    applySessionOperationInfo,
     clearScheduledReconciles,
     effort,
     modelForQuery,
@@ -1119,6 +1217,7 @@ export function useChatSessionMessages({
     creationProgress: creationProgressState,
     setMessages,
     sessionInfo,
+    sessionOperationInfo,
     sessionCompactionInfo,
     sessionCompactionEvents,
     sessionWorkspaceChanges,

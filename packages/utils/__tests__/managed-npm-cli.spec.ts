@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- managed CLI resolver tests cover several source fallback combinations. */
 import { access, chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -256,6 +257,123 @@ exit 42
         logger: {
           info: () => undefined
         }
+      })
+
+      expect(binaryPath).not.toBe('tool')
+      expect(binaryPath).toContain('/.oneworks/bootstrap/npm/example-tool/1.0.0/')
+    } finally {
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it('can prefer a user PATH binary when it satisfies a minimum version', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-managed-npm-cli-'))
+    const systemBinDir = join(workspace, 'system-bin')
+    const systemToolPath = join(systemBinDir, 'tool')
+    await mkdir(systemBinDir, { recursive: true })
+    await writeFile(
+      systemToolPath,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "system 2.0.0"
+  exit 0
+fi
+exit 42
+`
+    )
+    await chmod(systemToolPath, 0o755)
+
+    try {
+      const binaryPath = await ensureManagedNpmCli({
+        adapterKey: 'custom_tool',
+        binaryName: 'tool',
+        cwd: workspace,
+        defaultPackageName: '@example/tool',
+        defaultVersion: '1.0.0',
+        env: {
+          HOME: workspace,
+          PATH: `${systemBinDir}:${process.env.PATH ?? ''}`
+        },
+        logger: {
+          info: () => undefined
+        },
+        minimumVersion: '1.0.0',
+        preferSystem: true
+      })
+
+      expect(binaryPath).toBe('tool')
+    } finally {
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it('skips a preferred user PATH binary when it is below the minimum version', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-managed-npm-cli-'))
+    const systemBinDir = join(workspace, 'system-bin')
+    const systemToolPath = join(systemBinDir, 'tool')
+    const npmPath = join(workspace, 'npm')
+    await writeFile(
+      npmPath,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "10.0.0"
+  exit 0
+fi
+
+prefix=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--prefix" ]; then
+    shift
+    prefix="$1"
+  fi
+  shift
+done
+
+if [ -z "$prefix" ]; then
+  exit 2
+fi
+
+mkdir -p "$prefix/node_modules/.bin"
+tool="$prefix/node_modules/.bin/tool"
+{
+  printf '%s\\n' '#!/bin/sh'
+  printf '%s\\n' 'if [ "$1" = "--version" ]; then echo "managed 1.0.0"; exit 0; fi'
+  printf '%s\\n' 'exit 42'
+} > "$tool"
+chmod +x "$tool"
+`
+    )
+    await mkdir(systemBinDir, { recursive: true })
+    await writeFile(
+      systemToolPath,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "system 0.5.0"
+  exit 0
+fi
+exit 42
+`
+    )
+    await chmod(npmPath, 0o755)
+    await chmod(systemToolPath, 0o755)
+
+    try {
+      const binaryPath = await ensureManagedNpmCli({
+        adapterKey: 'custom_tool',
+        binaryName: 'tool',
+        cwd: workspace,
+        defaultPackageName: '@example/tool',
+        defaultVersion: '1.0.0',
+        env: {
+          HOME: workspace,
+          PATH: `${systemBinDir}:${process.env.PATH ?? ''}`,
+          __ONEWORKS_PROJECT_ADAPTER_CUSTOM_TOOL_NPM_PATH__: npmPath
+        },
+        logger: {
+          info: () => undefined
+        },
+        minimumVersion: '1.0.0',
+        preferSystem: true
       })
 
       expect(binaryPath).not.toBe('tool')

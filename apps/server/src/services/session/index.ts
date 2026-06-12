@@ -14,7 +14,7 @@ import type {
   WSEvent
 } from '@oneworks/core'
 import { DEFAULT_SUPPORTED_PROTOCOL_RANGE, getCurrentProtocolVersion } from '@oneworks/runtime-protocol'
-import type { RuntimeCommand } from '@oneworks/runtime-protocol'
+import type { RuntimeCommand, RuntimeEvent } from '@oneworks/runtime-protocol'
 import type {
   AdapterErrorData,
   AdapterOutputEvent,
@@ -101,6 +101,7 @@ const PROJECT_OO_BASE_DIR_RESOLVE_CWD_ENV = '__ONEWORKS_PROJECT_BASE_DIR_RESOLVE
 const PROJECT_LAUNCH_CWD_ENV = '__ONEWORKS_PROJECT_LAUNCH_CWD__'
 const PROJECT_WORKSPACE_FOLDER_ENV = '__ONEWORKS_PROJECT_WORKSPACE_FOLDER__'
 const PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD_ENV = '__ONEWORKS_PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD__'
+const ADAPTER_CLI_PREPARE_OPERATION_ID = 'adapter-cli-prepare'
 
 const SESSION_PERMISSION_MODES = new Set<SessionPermissionMode>([
   'default',
@@ -116,6 +117,38 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim() !== ''
 const normalizeSessionTitleUpdate = (value: unknown) => isNonEmptyString(value) ? value.trim() : undefined
+
+const buildAdapterCliPrepareRuntimeEvent = (params: {
+  adapter?: string
+  message?: string
+  runId: string
+  sessionId: string
+  type: 'operation_started' | 'operation_completed' | 'operation_failed'
+}): RuntimeEvent => {
+  const now = Date.now()
+  const status = params.type === 'operation_started'
+    ? 'starting'
+    : params.type === 'operation_completed'
+    ? 'completed'
+    : 'failed'
+
+  return {
+    protocolVersion: getCurrentProtocolVersion(),
+    supportedProtocolRange: DEFAULT_SUPPORTED_PROTOCOL_RANGE,
+    id: `operation:${params.runId}:${ADAPTER_CLI_PREPARE_OPERATION_ID}:${params.type}`,
+    seq: 0,
+    ts: now,
+    sessionId: params.sessionId,
+    type: params.type,
+    operationId: ADAPTER_CLI_PREPARE_OPERATION_ID,
+    runId: params.runId,
+    visibility: 'audit',
+    status,
+    title: 'Preparing adapter CLI',
+    message: params.message,
+    ...(params.adapter != null ? { adapter: params.adapter } : {})
+  }
+}
 
 const isPathInside = (parentPath: string, targetPath: string) => {
   const relativePath = path.relative(parentPath, targetPath)
@@ -657,6 +690,41 @@ export async function startAdapterSession(
     const connectionState = takeExternalSessionRuntime(sessionId) ?? createSessionConnectionState()
     const runId = uuidv4()
     activeAdapterRunStore.set(sessionId, runId)
+    let adapterCliPrepareOperationActive = false
+
+    const emitAdapterCliPrepareOperation = (
+      type: 'operation_started' | 'operation_completed' | 'operation_failed',
+      message?: string
+    ) => {
+      if ((resolvedAdapter ?? options.adapter) !== 'codex') {
+        return
+      }
+      if (activeAdapterRunStore.get(sessionId) !== runId) {
+        return
+      }
+
+      const runtimeEvent = buildAdapterCliPrepareRuntimeEvent({
+        adapter: resolvedAdapter ?? options.adapter,
+        message,
+        runId,
+        sessionId,
+        type
+      })
+      const wsEvent: WSEvent = {
+        type: 'adapter_event',
+        data: { runtimeEvent }
+      }
+
+      applySessionEvent(sessionId, wsEvent, {
+        broadcast: (ev) => emitRuntimeEvent(connectionState, ev),
+        onSessionUpdated: (session) => {
+          notifySessionUpdated(sessionId, session)
+        }
+      })
+      forwardSessionEventToChannel(sessionId, wsEvent)
+
+      adapterCliPrepareOperationActive = type === 'operation_started'
+    }
 
     try {
       const workspace = await resolveSessionWorkspace(sessionId)
@@ -762,6 +830,11 @@ export async function startAdapterSession(
         adapter: resolvedAdapter
       })
 
+      emitAdapterCliPrepareOperation(
+        'operation_started',
+        'Preparing Codex CLI. If no compatible system installation is available, One Works will install it now.'
+      )
+
       const { session } = await run({
         env,
         cwd: adapterCwd,
@@ -804,6 +877,9 @@ export async function startAdapterSession(
 
           switch (event.type) {
             case 'init':
+              if (adapterCliPrepareOperationActive) {
+                emitAdapterCliPrepareOperation('operation_completed', 'Codex CLI is ready.')
+              }
               if ('model' in (event.data as any)) {
                 const reportedModel = typeof (event.data as any).model === 'string'
                   ? (event.data as any).model
@@ -1241,6 +1317,12 @@ export async function startAdapterSession(
       }
       return runtime
     } catch (err) {
+      if (adapterCliPrepareOperationActive) {
+        emitAdapterCliPrepareOperation(
+          'operation_failed',
+          err instanceof Error ? err.message : 'Codex CLI preparation failed.'
+        )
+      }
       if (activeAdapterRunStore.get(sessionId) === runId) {
         activeAdapterRunStore.delete(sessionId)
       }

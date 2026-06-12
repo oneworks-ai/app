@@ -185,6 +185,20 @@ export const getActiveOptimisticSessionCreation = (
   return creation?.session === session ? creation : undefined
 }
 
+const normalizeComparableText = (value: string | undefined) => value?.trim().replace(/\s+/g, ' ')
+
+const isOptimisticInitialUserMessageProjected = (
+  creation: OptimisticSessionCreation,
+  session: Session
+) => {
+  const optimisticText = normalizeComparableText(creation.session.lastUserMessage)
+  const realText = normalizeComparableText(session.lastUserMessage)
+  if (realText == null || realText === '') {
+    return false
+  }
+  return optimisticText == null || optimisticText === '' || realText === optimisticText
+}
+
 export const isOptimisticSessionResolvedBySession = (
   creation: OptimisticSessionCreation | undefined,
   session: Session | undefined
@@ -192,7 +206,7 @@ export const isOptimisticSessionResolvedBySession = (
   creation != null &&
   session != null &&
   session.id === creation.session.id &&
-  (session.status !== 'running' || (session.messageCount ?? 0) > (creation.session.messageCount ?? 0))
+  (session.status !== 'running' || isOptimisticInitialUserMessageProjected(creation, session))
 )
 
 export const mergeOptimisticSessions = (

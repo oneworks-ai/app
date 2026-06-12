@@ -349,7 +349,7 @@ export function ChatHistoryView({
       title: agentRoomTranscript.room.title
     }
   }, [agentRoomTranscript])
-  const showThinkingIndicator = isCreating || session?.status === 'running'
+  const showThinkingIndicator = isCreating || session?.status === 'running' || sessionActivityLabel != null
   const historyRenderCount = (
     isAgentRoomMode ? agentRoomTranscript.room.messages.length : messages.length
   ) +
