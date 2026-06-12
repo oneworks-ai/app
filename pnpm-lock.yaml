@@ -176,6 +176,9 @@ importers:
 
   apps/client:
     dependencies:
+      '@oneworks/avatar':
+        specifier: workspace:*
+        version: link:../../packages/avatar
       '@oneworks/components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -589,6 +592,34 @@ importers:
         specifier: ^12.1.0
         version: 12.1.0
 
+  assets/avatar:
+    dependencies:
+      '@oneworks/avatar':
+        specifier: workspace:*
+        version: link:../../packages/avatar
+      '@oneworks/route-layout':
+        specifier: workspace:*
+        version: link:../../packages/route-layout
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.12
+        version: 18.3.27
+      '@types/react-dom':
+        specifier: ^18.3.2
+        version: 18.3.7(@types/react@18.3.27)
+      '@vitejs/plugin-react':
+        specifier: ^5.1.2
+        version: 5.1.2(vite@5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1))
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
+      vite:
+        specifier: ^5.4.8
+        version: 5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
+
   packages/adapters/claude-code:
     dependencies:
       '@oneworks/config':
@@ -714,6 +745,8 @@ importers:
       zod:
         specifier: ^3.24.1
         version: 3.25.76
+
+  packages/avatar: {}
 
   packages/app-runtime:
     dependencies:

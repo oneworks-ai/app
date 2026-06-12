@@ -95,6 +95,14 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - `__ONEWORKS_PROJECT_CLIENT_BASE__=/pwa/` 的官方独立构建会在编译期启用官网首页预览运行时；普通独立部署默认不包含这部分模拟数据和 hook 代码。自定义构建可以用 `__ONEWORKS_PROJECT_CLIENT_HOMEPAGE_PREVIEW__=1` 强制启用，或用 `__ONEWORKS_PROJECT_CLIENT_HOMEPAGE_PREVIEW__=0` 强制关闭。
 - 本仓库自己的 `gh-pages` 不再承载 PWA，后续主要用于项目文档站；文档站实现由单独分支维护时，不要把 PWA 发布逻辑重新写回本仓库。
 
+### 6. Avatar 独立部署维护
+
+- Avatar 预览站点由 `oneworks-ai/avatar` 仓库维护，并作为本仓库 `assets/avatar` submodule 挂载。
+- Avatar 的运行时来源是本仓库 `packages/avatar`，client 通过 `@oneworks/avatar` 使用同一套 SVG rect 渲染器。
+- 本仓库的 `.github/workflows/deploy-avatar.yml` 只在 `assets/avatar/**`、`packages/avatar/**` 或 workflow 自身变化时触发，避免其它 package / client 改动误触发 avatar Pages 更新。
+- 本仓库需要配置 Actions secret `AVATAR_DEPLOY_TOKEN`，用于跨仓库触发 `oneworks-ai/avatar` 的 `deploy-avatar.yml` workflow。推荐使用只授予 `oneworks-ai/avatar` Actions 写权限的 fine-grained token。
+- Avatar 仓库部署时会 checkout 本仓库 `main` 的指定 commit，并初始化 submodules；构建命令是 `ONEWORKS_AVATAR_BASE=/avatar/ pnpm -C assets/avatar build`，最终发布 `assets/avatar/dist/` 到 GitHub Pages。
+
 ## 注意事项
 
 - **持久化**: 直接启动 server 时，数据库文件默认存储在 home 下的 project-scoped 目录（默认 `~/.oneworks/projects/<project-key>/.local/server/db.sqlite`），同一 Git 项目的多个 worktree 共享；不同项目互不共享。运行产物（`logs`、`caches`、`.mock`、`runtime`）同样默认落在该 project home 下，避免写入用户本地仓库。`.oo/` 只承载可提交的项目资产与配置入口。

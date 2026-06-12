@@ -30,6 +30,7 @@
     "prepublish": "vite build"
   },
   "dependencies": {
+    "@oneworks/avatar": "workspace:*",
     "@oneworks/components": "workspace:*",
     "@oneworks/icon": "workspace:*",
     "@oneworks/register": "workspace:*",
