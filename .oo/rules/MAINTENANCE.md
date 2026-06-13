@@ -110,6 +110,13 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - 本仓库需要配置 Actions secret `AVATAR_DEPLOY_TOKEN`，用于跨仓库触发 `oneworks-ai/avatar` 的 `deploy-avatar.yml` workflow。推荐使用只授予 `oneworks-ai/avatar` Actions 写权限的 fine-grained token。
 - Avatar 仓库部署时会 checkout 本仓库 `main` 的指定 commit，并初始化 submodules；构建命令是 `ONEWORKS_AVATAR_BASE=/avatar/ pnpm -C assets/avatar build`，最终发布 `assets/avatar/dist/` 到 GitHub Pages。
 
+### 7. Homepage 文档站部署维护
+
+- Homepage 文档站由 `oneworks-ai/oneworks-ai.github.io` 仓库维护，并通过 GitHub Pages 发布到 `https://oneworks-ai.github.io/docs/`。
+- 本仓库的 `.github/workflows/deploy-homepage.yml` 只在 `.oo/docs/**` 或 workflow 自身变化时触发，避免非文档改动误触发 homepage Pages 更新。
+- 本仓库需要配置 Actions secret `HOMEPAGE_DEPLOY_TOKEN`，用于跨仓库触发 `oneworks-ai/oneworks-ai.github.io` 的 `deploy.yml` workflow。推荐使用只授予 `oneworks-ai/oneworks-ai.github.io` Actions 写权限的 fine-grained token 或 GitHub App installation token。
+- Homepage 仓库部署时应 checkout 本仓库 `main` 的指定 commit，并用 `source_ref=main`、`source_sha=<app commit sha>` 读取 `.oo/docs` 内容。
+
 ## 注意事项
 
 - **持久化**: 直接启动 server 时，数据库文件默认存储在 home 下的 project-scoped 目录（默认 `~/.oneworks/projects/<project-key>/.local/server/db.sqlite`），同一 Git 项目的多个 worktree 共享；不同项目互不共享。运行产物（`logs`、`caches`、`.mock`、`runtime`）同样默认落在该 project home 下，避免写入用户本地仓库。`.oo/` 只承载可提交的项目资产与配置入口。

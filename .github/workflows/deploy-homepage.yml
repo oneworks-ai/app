@@ -1,0 +1,57 @@
+name: Trigger Homepage Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .oo/docs/**
+      - .github/workflows/deploy-homepage.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: trigger-homepage-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trigger:
+    name: trigger-homepage-repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Trigger homepage repository Pages deployment
+        env:
+          GH_TOKEN: ${{ secrets.HOMEPAGE_DEPLOY_TOKEN }}
+          SOURCE_REF: main
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "Missing HOMEPAGE_DEPLOY_TOKEN secret; cannot trigger cross-repository Homepage deployment." >&2
+            exit 1
+          fi
+
+          run_url="$(gh workflow run deploy.yml \
+            --repo oneworks-ai/oneworks-ai.github.io \
+            --ref main \
+            -f source_ref="${SOURCE_REF}" \
+            -f source_sha="${SOURCE_SHA}")"
+
+          echo "$run_url"
+          run_id="${run_url##*/}"
+          if [ -z "$run_id" ] || [ "$run_id" = "$run_url" ]; then
+            echo "Unable to resolve Homepage workflow run id from: $run_url" >&2
+            exit 1
+          fi
+
+          gh run watch "$run_id" \
+            --repo oneworks-ai/oneworks-ai.github.io \
+            --exit-status \
+            --interval 10
