@@ -198,7 +198,7 @@ describe('relay plugin client login callbacks', () => {
       if (path === 'relay/login-url') {
         return new Response(
           JSON.stringify({
-            loginUrl: 'https://relay.cloudflare.oneworks.example.com/login'
+            loginUrl: 'https://cf.oneworks.cloud/login'
           }),
           { status: 200 }
         )
@@ -217,7 +217,7 @@ describe('relay plugin client login callbacks', () => {
       serverId: DEFAULT_OFFICIAL_RELAY_SERVER_ID
     })
     expect(open).toHaveBeenCalledWith(
-      'https://relay.cloudflare.oneworks.example.com/login',
+      'https://cf.oneworks.cloud/login',
       '_blank',
       'noopener,noreferrer'
     )

@@ -1,5 +1,5 @@
-export const OFFICIAL_RELAY_CLOUDFLARE_BASE_URL = 'https://relay.cloudflare.oneworks.example.com'
-export const OFFICIAL_RELAY_VERCEL_BASE_URL = 'https://relay.vercel.oneworks.example.com'
+export const OFFICIAL_RELAY_CLOUDFLARE_BASE_URL = 'https://cf.oneworks.cloud'
+export const OFFICIAL_RELAY_VERCEL_BASE_URL = 'https://vc.oneworks.cloud'
 
 export const OFFICIAL_RELAY_CLOUDFLARE_SERVER_ID = 'oneworks-cloudflare'
 export const OFFICIAL_RELAY_VERCEL_SERVER_ID = 'oneworks-vercel'
