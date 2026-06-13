@@ -172,4 +172,47 @@ describe('relay plugin scoped API', () => {
       }
     })
   })
+
+  it('passes disconnect request bodies through to the selected relay server', async () => {
+    stubRelayFetch()
+    const { apis, commands } = await createPluginHarness({
+      activeServerId: 'lab',
+      servers: [
+        {
+          id: 'lab',
+          pairingToken: 'lab-token',
+          port: 8788,
+          protocol: 'http',
+          server: '127.0.0.1'
+        },
+        {
+          id: 'prod',
+          pairingToken: 'prod-token',
+          baseUrl: 'https://relay.example'
+        }
+      ]
+    })
+
+    await commands.get('connect')?.()
+    await commands.get('connect')?.({ serverId: 'prod' })
+    const response = await apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+      method: 'POST',
+      path: 'disconnect'
+    }) as { body?: RelayPluginStatus; status?: number }
+
+    expect(response.status).toBe(200)
+    expect(response.body?.servers?.find(server => server.id === 'lab')).toMatchObject({
+      connected: true,
+      connection: {
+        state: 'registered'
+      }
+    })
+    expect(response.body?.servers?.find(server => server.id === 'prod')).toMatchObject({
+      connected: false,
+      connection: {
+        state: 'idle'
+      }
+    })
+  })
 })
