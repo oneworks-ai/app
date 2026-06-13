@@ -3,10 +3,20 @@ import { describe, expect, it } from 'vitest'
 import { evaluatePrChangePolicy } from '../pr-change-check'
 
 describe('pr-change-check', () => {
-  it('does not require changelog for documentation-only changes', () => {
+  it('does not require changelog for documentation content source changes', () => {
     const result = evaluatePrChangePolicy({
-      changedFiles: ['README.md', 'assets/homepage/apps/docs/usage/install.md'],
+      changedFiles: ['README.md', '.oo/docs/usage/install.md'],
       commitSubjects: ['docs: update install notes']
+    })
+
+    expect(result.violations).toEqual([])
+    expect(result.requiresChangelog).toBe(false)
+  })
+
+  it('does not require changelog for homepage docs shell changes', () => {
+    const result = evaluatePrChangePolicy({
+      changedFiles: ['assets/homepage/apps/docs/.vitepress/config.mts'],
+      commitSubjects: ['docs: update docs shell navigation']
     })
 
     expect(result.violations).toEqual([])

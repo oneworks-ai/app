@@ -41,8 +41,9 @@ const isChangelogFile = (filePath: string) => (
 const isDocsPath = (filePath: string) => (
   filePath === 'AGENTS.md' ||
   filePath.endsWith('/AGENTS.md') ||
-  filePath.startsWith('assets/homepage/apps/docs/') ||
   filePath.startsWith('.oo/docs/') ||
+  // `.oo/docs` is the content source; this path remains the homepage docs VitePress shell.
+  filePath.startsWith('assets/homepage/apps/docs/') ||
   filePath.startsWith('.oo/rules/') ||
   filePath.startsWith('docs/') ||
   filePath.startsWith('changelog/') ||
