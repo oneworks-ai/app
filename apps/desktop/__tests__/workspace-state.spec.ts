@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import os from 'node:os'
@@ -15,10 +16,20 @@ const {
   normalizeWorkspaceFolder,
   rememberRecentWorkspaceFolder,
   removeRecentWorkspaceFolder,
+  resolveProjectWorkspaceFolder,
   resolveDesktopLaunchWorkspaceFolder
 } = require('../src/workspace-state.cjs') as typeof import('../src/workspace-state.cjs')
 
 const createdDirectories = []
+const hasGit = () => {
+  try {
+    execFileSync('git', ['--version'], { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+const itWithGit = hasGit() ? it : it.skip
 
 const createWorkspace = (name) => {
   const workspaceFolder = fs.mkdtempSync(path.join(os.tmpdir(), `oneworks-desktop-${name}-`))
@@ -40,6 +51,39 @@ describe('workspace-state helpers', () => {
     createdDirectories.push(aliasFolder)
 
     expect(normalizeWorkspaceFolder(aliasFolder)).toBe(fs.realpathSync.native(workspaceFolder))
+  })
+
+  itWithGit('resolves linked git worktrees to the common project folder', () => {
+    const projectFolder = createWorkspace('git-project')
+    fs.writeFileSync(path.join(projectFolder, 'README.md'), 'test\n')
+    execFileSync('git', ['-C', projectFolder, 'init'], { stdio: 'ignore' })
+    execFileSync('git', ['-C', projectFolder, 'add', 'README.md'], { stdio: 'ignore' })
+    execFileSync(
+      'git',
+      [
+        '-C',
+        projectFolder,
+        '-c',
+        'user.name=One Works',
+        '-c',
+        'user.email=oneworks@example.test',
+        'commit',
+        '-m',
+        'init'
+      ],
+      { stdio: 'ignore' }
+    )
+    const worktreeParent = createWorkspace('git-worktree-parent')
+    const linkedWorktree = path.join(worktreeParent, 'linked')
+    execFileSync(
+      'git',
+      ['-C', projectFolder, 'worktree', 'add', linkedWorktree, '-b', `linked-${Date.now()}`],
+      { stdio: 'ignore' }
+    )
+    const realProjectFolder = fs.realpathSync.native(projectFolder)
+
+    expect(resolveProjectWorkspaceFolder(linkedWorktree)).toBe(realProjectFolder)
+    expect(rememberRecentWorkspaceFolder([linkedWorktree], projectFolder)).toEqual([realProjectFolder])
   })
 
   it('dedupes recent workspaces and migrates the legacy workspace field', () => {

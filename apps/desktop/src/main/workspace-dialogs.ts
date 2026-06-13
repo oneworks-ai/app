@@ -1,6 +1,6 @@
 import { dialog } from 'electron'
 
-import { normalizeWorkspaceFolder } from '../workspace-state.cjs'
+import { resolveProjectWorkspaceFolder } from '../workspace-state.cjs'
 import type { OpenWorkspaceDialogInput, WindowRecord } from './types'
 import { ensureWorkspaceFolderExists } from './workspace-folder-create'
 
@@ -24,7 +24,7 @@ export const createWorkspaceDialogController = ({
     if (result.canceled || result.filePaths[0] == null) {
       return undefined
     }
-    return normalizeWorkspaceFolder(result.filePaths[0])
+    return resolveProjectWorkspaceFolder(result.filePaths[0])
   }
 
   const promptForNewWorkspaceFolder = async (windowRecord?: WindowRecord) => {

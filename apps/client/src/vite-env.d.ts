@@ -6,6 +6,7 @@ interface ImportMetaEnv {
   readonly __ONEWORKS_PROJECT_SERVER_BASE_URL__: string
   readonly __ONEWORKS_PROJECT_SERVER_HOST__: string
   readonly __ONEWORKS_PROJECT_SERVER_PORT__: string
+  readonly __ONEWORKS_PROJECT_SERVER_ROLE__: string
   readonly __ONEWORKS_PROJECT_SERVER_WS_PATH__: string
   readonly __ONEWORKS_PROJECT_CLIENT_HOST__: string
   readonly __ONEWORKS_PROJECT_CLIENT_MODE__: string
@@ -15,6 +16,7 @@ interface ImportMetaEnv {
   readonly __ONEWORKS_PROJECT_CLIENT_DEV_SERVER__: string
   readonly __ONEWORKS_PROJECT_CLIENT_VERSION__: string
   readonly __ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__: string
+  readonly __ONEWORKS_PROJECT_WORKSPACE_ID__: string
   readonly __ONEWORKS_PROJECT_DEV_GIT_REF__: string
 }
 
@@ -28,6 +30,7 @@ interface DesktopWorkspaceSelectorProject {
   name: string
   sourceUrl?: string
   status?: 'ready' | 'starting' | 'stopped' | 'stopping'
+  workspaceId?: string
   workspaceFolder: string
 }
 
@@ -38,6 +41,7 @@ interface DesktopWorkspaceSelectorState {
 
 interface DesktopWorkspaceConnection {
   serverBaseUrl: string
+  workspaceId?: string
   workspaceFolder?: string
 }
 
@@ -309,6 +313,7 @@ interface Window {
     __ONEWORKS_PROJECT_SERVER_BASE_URL__: string
     __ONEWORKS_PROJECT_SERVER_HOST__: string
     __ONEWORKS_PROJECT_SERVER_PORT__: string
+    __ONEWORKS_PROJECT_SERVER_ROLE__: string
     __ONEWORKS_PROJECT_SERVER_WS_PATH__: string
     __ONEWORKS_PROJECT_CLIENT_MODE__: string
     __ONEWORKS_PROJECT_CLIENT_BASE__: string

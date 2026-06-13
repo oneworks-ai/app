@@ -149,13 +149,6 @@ const collectGitHomeEntries = (realHome) => {
   return [...entries]
 }
 
-const createSymlinkIfMissing = (sourcePath, targetPath) => {
-  if (!pathExistsOrSymlink(sourcePath) || pathExistsOrSymlink(targetPath)) return
-
-  mkdirSync(path.dirname(targetPath), { recursive: true })
-  symlinkSync(sourcePath, targetPath, resolveSymlinkType(sourcePath))
-}
-
 const hasExpectedSymlinkTarget = (sourcePath, targetPath) => {
   const targetStat = readLinkStat(targetPath)
   if (!targetStat?.isSymbolicLink()) return false
@@ -165,6 +158,23 @@ const hasExpectedSymlinkTarget = (sourcePath, targetPath) => {
   } catch {
     return false
   }
+}
+
+const symlinkSyncOrReuseExpected = (sourcePath, targetPath) => {
+  try {
+    symlinkSync(sourcePath, targetPath, resolveSymlinkType(sourcePath))
+  } catch (error) {
+    if (error?.code === 'EEXIST' && hasExpectedSymlinkTarget(sourcePath, targetPath)) return
+
+    throw error
+  }
+}
+
+const createSymlinkIfMissing = (sourcePath, targetPath) => {
+  if (!pathExistsOrSymlink(sourcePath) || pathExistsOrSymlink(targetPath)) return
+
+  mkdirSync(path.dirname(targetPath), { recursive: true })
+  symlinkSyncOrReuseExpected(sourcePath, targetPath)
 }
 
 const resolveBackupPath = (targetPath) => {
@@ -207,7 +217,7 @@ const syncDirectSymlinkTarget = (params) => {
   if (!moveAsideIncorrectDirectTarget(targetPath)) return
 
   mkdirSync(path.dirname(targetPath), { recursive: true })
-  symlinkSync(sourcePath, targetPath, resolveSymlinkType(sourcePath))
+  symlinkSyncOrReuseExpected(sourcePath, targetPath)
 }
 
 const bridgeDirectoryChildren = (sourceDir, targetDir) => {

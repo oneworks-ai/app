@@ -1,3 +1,4 @@
+const { execFileSync } = require('node:child_process')
 const { createHash } = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -29,12 +30,53 @@ const normalizeWorkspaceFolder = (value) => {
   }
 }
 
+const readGitProjectRoot = (workspaceFolder) => {
+  try {
+    const output = execFileSync(
+      'git',
+      [
+        '-C',
+        workspaceFolder,
+        'rev-parse',
+        '--path-format=absolute',
+        '--show-toplevel',
+        '--git-common-dir'
+      ],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 2_000
+      }
+    )
+    const [topLevel, gitCommonDir] = output
+      .split(/\r?\n/u)
+      .map(line => line.trim())
+      .filter(Boolean)
+    const commonGitDir = gitCommonDir == null ? undefined : normalizeWorkspaceFolder(gitCommonDir)
+    if (commonGitDir != null && path.basename(commonGitDir) === '.git') {
+      const commonProjectFolder = normalizeWorkspaceFolder(path.dirname(commonGitDir))
+      if (commonProjectFolder != null) return commonProjectFolder
+    }
+
+    return normalizeWorkspaceFolder(topLevel)
+  } catch {
+    return undefined
+  }
+}
+
+const resolveProjectWorkspaceFolder = (value) => {
+  const workspaceFolder = normalizeWorkspaceFolder(value)
+  if (workspaceFolder == null) return undefined
+
+  return readGitProjectRoot(workspaceFolder) ?? workspaceFolder
+}
+
 const dedupeWorkspaceFolders = (values) => {
   const normalizedValues = []
   const seenPaths = new Set()
 
   for (const value of values) {
-    const normalizedPath = normalizeWorkspaceFolder(value)
+    const normalizedPath = resolveProjectWorkspaceFolder(value)
     if (normalizedPath == null || seenPaths.has(normalizedPath)) {
       continue
     }
@@ -63,7 +105,7 @@ const rememberRecentWorkspaceFolder = (recentWorkspaces, workspaceFolder) => (
 )
 
 const removeRecentWorkspaceFolder = (recentWorkspaces, workspaceFolder) => {
-  const normalizedWorkspaceFolder = normalizeWorkspaceFolder(workspaceFolder) ?? path.resolve(workspaceFolder)
+  const normalizedWorkspaceFolder = resolveProjectWorkspaceFolder(workspaceFolder) ?? path.resolve(workspaceFolder)
   return dedupeWorkspaceFolders(recentWorkspaces)
     .filter(candidate => candidate !== normalizedWorkspaceFolder)
     .slice(0, MAX_RECENT_WORKSPACES)
@@ -94,7 +136,7 @@ const resolveDesktopLaunchWorkspaceFolder = ({ env }) => {
     return undefined
   }
 
-  return normalizeWorkspaceFolder(env.ONEWORKS_DESKTOP_WORKSPACE)
+  return resolveProjectWorkspaceFolder(env.ONEWORKS_DESKTOP_WORKSPACE)
 }
 
 module.exports = {
@@ -106,5 +148,6 @@ module.exports = {
   normalizeWorkspaceFolder,
   rememberRecentWorkspaceFolder,
   removeRecentWorkspaceFolder,
+  resolveProjectWorkspaceFolder,
   resolveDesktopLaunchWorkspaceFolder
 }

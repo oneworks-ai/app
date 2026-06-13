@@ -460,6 +460,16 @@
   .ant-dropdown-menu {
     min-width: 196px;
   }
+
+  .ant-dropdown-menu-submenu-title
+    > :not(.ant-dropdown-menu-item-icon):not(.ant-dropdown-menu-submenu-expand-icon) {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .ant-dropdown-menu-submenu-title > .ant-dropdown-menu-submenu-expand-icon {
+    margin-inline-start: auto !important;
+  }
 }
 
 .route-container-panel-dock-context-dropdown.ant-dropdown {

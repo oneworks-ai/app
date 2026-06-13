@@ -131,6 +131,12 @@
   padding: 0;
 }
 
+.app-shell:not(.app-shell--compact)
+  .app-shell__content.app-shell__content--session:not(.is-sidebar-collapsed) {
+  border: 1px solid var(--border-color);
+  box-sizing: border-box;
+}
+
 .app-shell__content.is-sidebar-collapsed {
   border-radius: 0;
 }

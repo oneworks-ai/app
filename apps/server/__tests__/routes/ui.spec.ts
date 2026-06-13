@@ -7,6 +7,7 @@ import Koa from 'koa'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { mountRoutes } from '#~/routes/index.js'
+import { createRuntimeScript } from '#~/routes/static-client.js'
 
 describe('ui static routing', () => {
   let distDir = ''
@@ -94,6 +95,28 @@ describe('ui static routing', () => {
     const assetBody = await assetResponse.text()
     expect(assetResponse.status).toBe(200)
     expect(assetBody).toBe('font-data')
+  })
+
+  it('injects manager runtime without a workspace folder', () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_WORKSPACE_FOLDER__', '')
+    const runtimeScript = createRuntimeScript(
+      {
+        __ONEWORKS_PROJECT_SERVER_HOST__: '127.0.0.1',
+        __ONEWORKS_PROJECT_SERVER_PORT__: 8787,
+        __ONEWORKS_PROJECT_SERVER_WS_PATH__: '/ws',
+        __ONEWORKS_PROJECT_SERVER_DATA_DIR__: '/tmp/ow-data',
+        __ONEWORKS_PROJECT_SERVER_LOG_DIR__: '/tmp/ow-logs',
+        __ONEWORKS_PROJECT_SERVER_LOG_LEVEL__: 'info',
+        __ONEWORKS_PROJECT_SERVER_DEBUG__: false,
+        __ONEWORKS_PROJECT_SERVER_ALLOW_CORS__: false,
+        __ONEWORKS_PROJECT_SERVER_ROLE__: 'manager',
+        __ONEWORKS_PROJECT_CLIENT_MODE__: 'static'
+      },
+      '/ui/'
+    )
+
+    expect(runtimeScript).toContain('"__ONEWORKS_PROJECT_SERVER_ROLE__":"manager"')
+    expect(runtimeScript).not.toContain('__ONEWORKS_PROJECT_WORKSPACE_FOLDER__')
   })
 
   it('redirects the client base without a trailing slash to the mounted ui alias', async () => {

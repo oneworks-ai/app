@@ -76,15 +76,18 @@ export const createRuntimeScript = (
   clientBase: string,
   serverBaseUrl?: string
 ) => {
-  const workspaceFolder = processEnv.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ ?? cwd()
+  const workspaceFolder = processEnv.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__?.trim()
   const runtimeEnv = {
     __ONEWORKS_PROJECT_SERVER_BASE_URL__: serverBaseUrl ?? env.__ONEWORKS_PROJECT_PUBLIC_BASE_URL__,
     __ONEWORKS_PROJECT_SERVER_HOST__: env.__ONEWORKS_PROJECT_SERVER_HOST__,
     __ONEWORKS_PROJECT_SERVER_PORT__: String(env.__ONEWORKS_PROJECT_SERVER_PORT__),
     __ONEWORKS_PROJECT_SERVER_WS_PATH__: env.__ONEWORKS_PROJECT_SERVER_WS_PATH__,
+    __ONEWORKS_PROJECT_SERVER_ROLE__: env.__ONEWORKS_PROJECT_SERVER_ROLE__,
     __ONEWORKS_PROJECT_CLIENT_MODE__: env.__ONEWORKS_PROJECT_CLIENT_MODE__,
     __ONEWORKS_PROJECT_CLIENT_BASE__: clientBase,
-    __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspaceFolder
+    ...(workspaceFolder == null || workspaceFolder === ''
+      ? {}
+      : { __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspaceFolder })
   }
   return `<script>window.__ONEWORKS_PROJECT_RUNTIME_ENV__=${JSON.stringify(runtimeEnv)}</script>`
 }

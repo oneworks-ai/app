@@ -11,12 +11,14 @@ import {
 export function useInteractionPanelShortcuts({
   enabled,
   isMac,
+  openResourceShortcut,
   onNewIframe,
   onNewTerminal,
   onOpenResource
 }: {
   enabled: boolean
   isMac: boolean
+  openResourceShortcut?: string | null
   onNewIframe: () => void
   onNewTerminal: () => void
   onOpenResource: () => void
@@ -27,8 +29,13 @@ export function useInteractionPanelShortcuts({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      const resolvedOpenResourceShortcut = openResourceShortcut === undefined
+        ? INTERACTION_PANEL_OPEN_FILE_SHORTCUT
+        : openResourceShortcut
       const shortcuts = [
-        { shortcut: INTERACTION_PANEL_OPEN_FILE_SHORTCUT, run: onOpenResource },
+        ...(resolvedOpenResourceShortcut == null
+          ? []
+          : [{ shortcut: resolvedOpenResourceShortcut, run: onOpenResource }]),
         { shortcut: INTERACTION_PANEL_NEW_TERMINAL_SHORTCUT, run: onNewTerminal },
         { shortcut: INTERACTION_PANEL_NEW_IFRAME_SHORTCUT, run: onNewIframe }
       ]
@@ -43,5 +50,5 @@ export function useInteractionPanelShortcuts({
 
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [enabled, isMac, onNewIframe, onNewTerminal, onOpenResource])
+  }, [enabled, isMac, openResourceShortcut, onNewIframe, onNewTerminal, onOpenResource])
 }

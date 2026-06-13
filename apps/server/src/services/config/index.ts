@@ -4,9 +4,19 @@ import {
   buildConfigJsonVariables as buildWorkspaceConfigJsonVariables,
   loadConfigState as loadWorkspaceConfigState
 } from '@oneworks/config'
+import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
 export function getWorkspaceFolder() {
-  return processEnv.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ ?? processCwd()
+  const workspaceFolder = processEnv.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__?.trim()
+  if (workspaceFolder != null && workspaceFolder !== '') {
+    return workspaceFolder
+  }
+
+  if (processEnv.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager') {
+    return resolveProjectHomePath(processCwd(), processEnv, 'workspace')
+  }
+
+  return processCwd()
 }
 
 export function buildConfigJsonVariables(

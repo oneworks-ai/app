@@ -19,6 +19,8 @@
 - `src/agent-room.ts`
   - Agent Room 跨包共享契约：room/member/run/message、room event、用户消息 target/delivery/reaction、HTTP request/response 类型
   - 改字段前同步确认 client view model、server service、db payload 兼容
+- `src/launcher.ts`
+  - launcher manager / client / desktop 共用的项目选择、目录浏览与打开 workspace 响应契约。
 
 ## 当前边界
 

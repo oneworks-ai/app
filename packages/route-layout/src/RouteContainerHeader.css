@@ -12,6 +12,8 @@
   padding: var(--route-container-header-padding-block, 10px)
     var(--route-container-header-padding-inline, 10px);
   background: color-mix(in srgb, var(--bg-color, #fff) 48%, transparent);
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
   box-shadow: none;
   backdrop-filter: blur(24px) saturate(1.38);
   -webkit-backdrop-filter: blur(24px) saturate(1.38);
