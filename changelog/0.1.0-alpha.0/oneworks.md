@@ -5,3 +5,4 @@
 - Keep optimistic first user messages visible until their real runtime projection arrives.
 - Launch server-side runtime consumers through the internal run entrypoint so user prompts are not prefixed with command names.
 - Align chat workbench sender spacing, panel empty-state actions, side-panel tabs, and workspace drawer resource actions.
+- Move the launcher workflow behind server APIs, add manager/workspace server modes, and expose the launcher overlay from web workspaces.

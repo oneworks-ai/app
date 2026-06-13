@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- service child coordinates target config, linked services, and process startup. */
+
 import type { ChildProcess } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
