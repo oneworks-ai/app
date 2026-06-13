@@ -8,6 +8,7 @@
 - 入口菜单、右键菜单和二级菜单的结构化数据应优先复用 `src/components/nav-rail-more-menu.tsx` 里的菜单 item / section 抽象，或先扩展这个抽象；不要在局部组件里直接拼 AntD `Dropdown menu.children` 后只补少量 class。
 - 如果某个业务入口需要注入额外 action，应通过外部传入的结构化配置或 render slot 接入，通用组件只负责触发、布局、选中态、图标态和 submenu chevron。
 - 二级菜单必须和一级菜单使用同一套图标尺寸、active / selected 规则、hover 颜色和 popup class；新增菜单能力后要同时看浅色、深色和 hover / submenu open 状态。
+- Browser menu、右键菜单和更多菜单这类非 Ant Dropdown 的 `oneworks-overlay-panel` 也必须显式复用 overlay token：panel padding 使用 `--oneworks-overlay-panel-padding-y`，行 gap 使用 `--oneworks-overlay-item-gap`，item padding 使用 `--oneworks-overlay-item-padding`，icon 使用 `--oneworks-overlay-icon-size`，divider 使用 `1px 8px` inset。特殊行例如 zoom 控制要嵌在同一菜单 row 节奏里，不要做成更高、更宽、独立 hover 语言的控制条。
 
 ## 常见落点
 
@@ -26,6 +27,9 @@
 - 至少验证：popup 是否打开、submenu 是否使用统一样式、hover 后图标颜色是否正确、点击 action 是否只触发外部传入回调。
 - 顶部 chrome 图标、图标按钮和 header 内容高度只有一个全局来源：`--app-chrome-icon-size`。`--app-chrome-content-height` 只能作为它的语义别名，整条 chrome 高度只能从 `--app-chrome-overlay-height` / `--route-container-header-overlay-height` 派生，并且该 overlay 高度必须包含 `--app-chrome-border-width`。Route header、带红绿灯的折叠窗口栏、route panel tabs / close actions 都必须引用这些 token 或引用只从它们派生的本地别名。不要再新增独立的 `*-icon-button-size`、`*-bar-height` 或局部 `20px` / `18px` / `40px` 覆盖。
 - 顶部 chrome 动作按钮间距统一走 `--app-chrome-action-gap`，折叠窗口栏和 route header actions 要同步引用，不要分别硬编码 gap。
+- 紧凑 toolbar，包括 route header actions、panel tab chrome、嵌入式网页 toolbar 和窗口控制条，外层 padding 默认走 `--route-container-header-padding-block` / `--route-container-header-padding-inline`，当前是 10px；icon-only button 的布局盒和 glyph 都要跟 `--app-chrome-icon-size` 对齐，当前是 18px。不要在局部 media query 里把 padding 压成 `6px`、gap 压成 `0`，或把按钮写成 `26px × 18px` 这类非标准尺寸。
+- 紧凑 chrome action 的默认 / hover / disabled 语义必须一致：默认透明背景 + `var(--placeholder-color)`，hover / focus / open 只切到 `var(--primary-color)`；不要加独立 hover 背景、inset ring 或 box-shadow。禁用态必须同时更新 disabled 色、`cursor: not-allowed`、`aria-label` / tooltip 文案；tooltip 要说明“为什么不可用”，不能继续显示正常动作名。
+- 紧凑 toolbar 里的 AntD `Input` / `Input` affix wrapper 不保留 AntD 默认 padding。外层 toolbar 已经提供 10px padding，输入框自身高度、prefix icon 和行高要跟 `--app-chrome-icon-size` 对齐；只有内部 trailing action 真实覆盖文本时才允许增加对应的局部 padding。
 - 折叠窗口栏当前就在 `/` 新会话时，普通 Web、Electron 和 `__oneworks_desktop` 模拟态都不显示 `nav-rail-create-session-indicator`，也不要为这格新建会话 action 预留宽度；Electron / 模拟态仍保留历史导航和对应宽度计算。
 - 折叠窗口栏里的红绿灯必须脱离会动画的栏位容器；不要把 `transform`、`filter` 或 `backdrop-filter` 放在它的祖先节点上，需要毛玻璃时用伪元素承载视觉效果，避免 fixed 定位在折叠动画里跳动。红绿灯尺寸和位置是固定锚点；需要修折叠态垂直对齐时，调整旁边 actions，不要改红绿灯高度或 `top`。
 - 展开态 `NavRailWindowBar` 在 macOS 原生红绿灯占位和调试页模拟红绿灯时必须使用同一个顶部锚点；`has-reserved-window-controls` 与 `has-window-controls` 都应保持 `top: 0`。不要只修模拟态或只修折叠态，否则 Electron 展开态会比折叠态和调试页向下偏移。
