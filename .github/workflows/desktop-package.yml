@@ -10,17 +10,6 @@ on:
   pull_request:
     branches:
       - main
-    # Keep PR checks scoped to the desktop packaging pipeline itself. General
-    # app/server/package changes should use workflow_dispatch when macOS installer
-    # validation is explicitly needed.
-    paths:
-      - .node-version
-      - .npmrc
-      - .github/workflows/desktop-package.yml
-      - apps/desktop/**
-      - package.json
-      - pnpm-lock.yaml
-      - pnpm-workspace.yaml
   push:
     branches:
       - main
@@ -57,17 +46,59 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: desktop-package-changes
+    runs-on: ubuntu-latest
+    outputs:
+      package: ${{ steps.filter.outputs.package }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check desktop package paths
+        id: filter
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "$GITHUB_REF" == refs/tags/${DESKTOP_RELEASE_TAG_PREFIX}* ]]; then
+            echo "package=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+          fi
+
+          if [[ -z "$base" || "$base" =~ ^0+$ ]] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "package=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git diff --name-only --diff-filter=ACMRT "$base" "$head" > "$RUNNER_TEMP/desktop-package-changes.txt"
+
+          package=false
+          while IFS= read -r file_path; do
+            case "$file_path" in
+              .node-version|.npmrc|.github/workflows/desktop-package.yml|apps/desktop/*|package.json|pnpm-lock.yaml|pnpm-workspace.yaml)
+                package=true
+                break
+                ;;
+            esac
+          done < "$RUNNER_TEMP/desktop-package-changes.txt"
+
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+
   package:
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.runner }}
+    name: macOS installer
+    needs: changes
+    if: needs.changes.outputs.package == 'true'
+    runs-on: macos-26
     timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: macOS installer
-            runner: macos-26
-            artifact: oneworks-desktop-macos
 
     steps:
       - name: Checkout repository
@@ -232,7 +263,7 @@ jobs:
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: oneworks-desktop-macos
           path: |
             apps/desktop/release/*
           if-no-files-found: error
