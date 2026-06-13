@@ -35,3 +35,10 @@ gh workflow run deploy-homepage.yml --repo oneworks-ai/app --ref main
 ```
 
 确认 `oneworks-ai/app` 的 Trigger Homepage Deploy 成功、`oneworks-ai/oneworks-ai.github.io` 的 Deploy Pages 被触发并成功、`https://oneworks-ai.github.io/docs/` 返回 `200`。如果 `HOMEPAGE_DEPLOY_TOKEN` 缺失，app 仓库 workflow 必须失败，不能 warning 后成功退出。
+
+## Workflow 维护注意
+
+- homepage 仓库 Pages workflow 同时 checkout homepage 和 app 仓库；构建 docs 时优先传绝对 `ONEWORKS_DOCS_SOURCE_DIR=${{ github.workspace }}/app/.oo/docs`，不要依赖相对 `ONEWORKS_APP_ROOT` 猜当前工作目录。
+- homepage 仓库 workflow 或 VitePress 壳层合入后，app 仓库还需要更新 `assets/homepage` submodule 指针；不要只合 homepage PR 就认为 app 已经消费到新部署逻辑。
+- VitePress `editLink.pattern` 等 runtime 函数必须自包含，不要闭包引用外层 config 变量。
+- 更完整的文档站维护和验收清单见 [Homepage Docs 维护经验](../maintenance/homepage-docs.md)。
