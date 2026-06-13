@@ -69,6 +69,7 @@ export interface RouteSidebarOverride {
 
 export interface RouteWindowBarOverride {
   actions: NavRailWindowBarAction[]
+  hideCreateSessionAction?: boolean
   /**
    * Provider key. Route-owned chrome and plugin-provided chrome should use
    * distinct keys so AppShell can merge them instead of replacing one source
@@ -101,6 +102,7 @@ export const mergeRouteWindowBarOverrides = (
 
   return {
     actions: overrides.flatMap(override => override.actions),
+    hideCreateSessionAction: overrides.some(override => override.hideCreateSessionAction === true),
     key: overrides.map(override => override.key).join('|')
   }
 }

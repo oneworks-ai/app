@@ -1504,6 +1504,8 @@
     "stop": "Stop",
     "result": "Result",
     "sessionActive": "Session Active",
+    "pinSessionDockPreview": "Pin current session",
+    "unpinSessionDockPreview": "Unpin current session",
     "selectModel": "Select a model to start",
     "adapterSelectPlaceholder": "Select adapter",
     "adapterBuiltinLabel": "Built in",

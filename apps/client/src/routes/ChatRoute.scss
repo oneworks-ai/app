@@ -55,6 +55,42 @@
   border-left: 0;
 }
 
+.route-container-layout__side-panel.chat-route-layout__workspace-panel.is-fullscreen
+  .chat-workspace-drawer__dock-workspace.route-container-panel-dock
+  .dv-tabs-and-actions-container,
+.route-container-layout__side-panel.chat-route-layout__workspace-panel.is-fullscreen
+  .chat-workspace-drawer__dock-workspace.route-container-panel-dock
+  .route-container-panel-dock__empty-header {
+  padding-left: 0;
+}
+
+.chat-route-layout.is-session-dock-previewing .route-container-layout__surface {
+  z-index: 50;
+  flex: none;
+  width: min(760px, calc(100% - min(340px, 45%)));
+  border-right: 1px solid var(--app-chrome-divider-color, var(--border-color));
+  background: color-mix(
+    in srgb,
+    var(--app-shell-content-bg, var(--bg-color)) 72%,
+    transparent
+  );
+  box-shadow: 18px 0 38px rgba(15, 23, 42, .18);
+  backdrop-filter: blur(28px) saturate(1.24);
+  -webkit-backdrop-filter: blur(28px) saturate(1.24);
+  animation: chat-session-dock-preview-enter .22s cubic-bezier(.22, 1, .36, 1)
+    both;
+}
+
+.chat-route-layout.is-session-dock-preview-exiting
+  .route-container-layout__surface {
+  animation: chat-session-dock-preview-exit .18s ease-in both;
+}
+
+.chat-route-layout.is-session-dock-previewing
+  :is(.chat-container, .chat-history-view__messages-frame, .chat-messages) {
+  background-color: transparent;
+}
+
 .chat-history-view__messages-frame {
   position: relative;
   flex: 1;
@@ -531,6 +567,30 @@
   place-items: center;
   align-content: center;
   gap: 16px;
+}
+
+@keyframes chat-session-dock-preview-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes chat-session-dock-preview-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
 }
 
 @media (max-width: 768px) {

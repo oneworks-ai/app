@@ -108,6 +108,7 @@ export function ChatHeader({
   activeView,
   enableTimelineView,
   historyTimelineHidden,
+  hideTitleIcon = false,
   isBottomPanelOpen,
   isWorkspaceDrawerOpen,
   isNewSessionActive,
@@ -116,12 +117,14 @@ export function ChatHeader({
   actionsOverride,
   projectWorkspaceFolder,
   runCommandTaskStatuses,
+  sessionDockPreviewPinned = false,
   showViewSwitches,
   terminalSessionId,
   onCreateSession,
   onOpenSidebar,
   onOpenSessionLog,
   onRunCommand,
+  onToggleSessionDockPreviewPinned,
   onTerminateRunCommandTask,
   onHistoryTimelineHiddenChange,
   onViewChange,
@@ -146,6 +149,7 @@ export function ChatHeader({
   activeView: ChatHeaderView
   enableTimelineView?: boolean
   historyTimelineHidden?: boolean
+  hideTitleIcon?: boolean
   isBottomPanelOpen: boolean
   isWorkspaceDrawerOpen: boolean
   isNewSessionActive?: boolean
@@ -154,12 +158,14 @@ export function ChatHeader({
   actionsOverride?: ReactNode
   projectWorkspaceFolder?: string
   runCommandTaskStatuses?: InteractionPanelRunCommandTaskStatus[]
+  sessionDockPreviewPinned?: boolean
   showViewSwitches?: boolean
   terminalSessionId?: string
   onCreateSession?: () => void
   onOpenSidebar?: () => void
   onOpenSessionLog?: () => void
   onRunCommand?: (command: InteractionPanelRunCommand) => void
+  onToggleSessionDockPreviewPinned?: () => void
   onTerminateRunCommandTask?: (terminalId: string) => void
   onHistoryTimelineHiddenChange?: (hidden: boolean) => void
   onViewChange: (view: ChatHeaderView) => void
@@ -234,7 +240,7 @@ export function ChatHeader({
         {projectDirectoryName}
       </span>
     )
-  const topLevelSessionIcon = breadcrumb == null && roomIconSeed == null
+  const topLevelSessionIcon = !hideTitleIcon && breadcrumb == null && roomIconSeed == null
     ? <MaterialSymbol className='chat-header-session-icon' name='chat_bubble' filled aria-hidden='true' />
     : null
   const titleContent = (
@@ -246,7 +252,7 @@ export function ChatHeader({
     </span>
   )
   const roomTitleIconSeed = normalizeTitle(roomIconSeed) ?? displayTitle
-  const roomTitleIcon = modeSwitch?.mode === 'room'
+  const roomTitleIcon = !hideTitleIcon && modeSwitch?.mode === 'room'
     ? (
       <RoomPixelAvatar
         className={[
@@ -640,6 +646,28 @@ export function ChatHeader({
         icon={<MaterialSymbol className='route-container-header__action-icon' name={modeSwitchTarget.icon} />}
       />
     )
+  const sessionDockPreviewPinLabel = sessionDockPreviewPinned
+    ? t('chat.unpinSessionDockPreview')
+    : t('chat.pinSessionDockPreview')
+  const sessionDockPreviewPinButton = onToggleSessionDockPreviewPinned == null
+    ? null
+    : (
+      <RouteHeaderActionButton
+        isMac={isMac}
+        label={sessionDockPreviewPinLabel}
+        tooltipTitle={resolveTooltipTitle(sessionDockPreviewPinLabel)}
+        active={sessionDockPreviewPinned}
+        pressed={sessionDockPreviewPinned}
+        onClick={onToggleSessionDockPreviewPinned}
+        icon={
+          <MaterialSymbol
+            className='route-container-header__action-icon'
+            name='push_pin'
+            filled={sessionDockPreviewPinned}
+          />
+        }
+      />
+    )
 
   useEffect(() => {
     return () => {
@@ -712,6 +740,7 @@ export function ChatHeader({
     : isHeaderChromeCompact
     ? (
       <>
+        {sessionDockPreviewPinButton}
         {shouldShowViewSwitches && (
           <Dropdown
             menu={{ items: compactViewItems }}
@@ -760,6 +789,7 @@ export function ChatHeader({
     )
     : (
       <>
+        {sessionDockPreviewPinButton}
         {shouldShowViewSwitches && viewItems.map(item => (
           <RouteHeaderActionButton
             key={item.value}

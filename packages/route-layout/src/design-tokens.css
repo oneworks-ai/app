@@ -12,6 +12,7 @@
   --app-chrome-padding-block: 10px;
   --app-chrome-padding-inline: 10px;
   --app-chrome-border-width: 1px;
+  --app-chrome-divider-color: var(--border-color);
   --app-chrome-overlay-height: calc(
     var(--app-chrome-content-height) + var(--app-chrome-padding-block) +
       var(--app-chrome-padding-block) +

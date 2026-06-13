@@ -80,9 +80,13 @@ export interface NavRailWindowBarAction {
   activeTitle?: string
   danger?: boolean
   disabled?: boolean
+  previewOnHover?: 'sidebar'
   progress?: number
   shortcut?: string
+  showTooltip?: boolean
   title?: string
+  onPreviewClose?: () => void
+  onPreviewOpen?: () => void
   onSelect?: () => void
 }
 
@@ -100,6 +104,7 @@ export function NavRailWindowBar({
   onToggleSidebarCollapsed,
   reserveWindowControls = false,
   showCreateSessionActiveIndicator = true,
+  showCreateSessionControl = true,
   showHistoryNavigation = true,
   showSimulatedWindowControls = false,
   showToggleSidebarLabel = false,
@@ -120,6 +125,7 @@ export function NavRailWindowBar({
   onToggleSidebarCollapsed?: () => void
   reserveWindowControls?: boolean
   showCreateSessionActiveIndicator?: boolean
+  showCreateSessionControl?: boolean
   showHistoryNavigation?: boolean
   showSimulatedWindowControls?: boolean
   showToggleSidebarLabel?: boolean
@@ -136,7 +142,8 @@ export function NavRailWindowBar({
     ? newSessionShortcut
     : 'mod+k'
   const isCreateSessionActive = location.pathname === '/'
-  const shouldRenderCreateSessionControl = !isCreateSessionActive || showCreateSessionActiveIndicator
+  const shouldRenderCreateSessionControl = showCreateSessionControl &&
+    (!isCreateSessionActive || showCreateSessionActiveIndicator)
   const toggleSidebarIcon = sidebarCollapsed ? 'left_panel_open' : 'left_panel_close'
   const toggleSidebarTitle = sidebarCollapsed ? t('navRail.expandSidebar') : t('navRail.collapseSidebar')
   const showResolvedToggleSidebarLabel = showToggleSidebarLabel && !sidebarCollapsed
@@ -167,6 +174,10 @@ export function NavRailWindowBar({
       ? action.activeTitle ?? action.activeLabel ?? action.title ?? action.label
       : action.title ?? action.label
     const progress = action.progress == null ? null : Math.max(0, Math.min(100, action.progress))
+    const handlePreviewOpen = action.onPreviewOpen ??
+      (action.previewOnHover === 'sidebar' ? onSidebarPreviewPointerEnter : undefined)
+    const handlePreviewClose = action.onPreviewClose ??
+      (action.previewOnHover === 'sidebar' ? onSidebarPreviewPointerLeave : undefined)
     const iconNode = (
       <span
         className={[
@@ -197,7 +208,10 @@ export function NavRailWindowBar({
         title={resolvedTitle}
         placement={windowBarTooltipPlacement}
         arrow={windowBarTooltipArrow}
-        enabled={resolvedTitle != null}
+        enabled={action.showTooltip !== false && resolvedTitle != null}
+        data-nav-rail-window-action-key={action.key}
+        onPointerEnter={handlePreviewOpen}
+        onPointerLeave={handlePreviewClose}
       >
         <Button
           type='text'
@@ -210,7 +224,9 @@ export function NavRailWindowBar({
           aria-label={resolvedLabel}
           aria-pressed={action.active == null ? undefined : isActive}
           icon={iconNode}
+          onBlur={handlePreviewClose}
           onClick={action.onSelect}
+          onFocus={handlePreviewOpen}
         />
       </ShortcutTooltip>
     )

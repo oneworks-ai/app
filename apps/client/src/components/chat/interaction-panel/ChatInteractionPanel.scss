@@ -470,6 +470,18 @@
 }
 
 .chat-interaction-panel__iframe-view {
+  --interaction-panel-chrome-icon-size: var(--app-chrome-icon-size, 18px);
+  --interaction-panel-toolbar-icon-color: color-mix(
+    in srgb,
+    var(--text-color) 56%,
+    var(--sub-text-color)
+  );
+  --interaction-panel-toolbar-icon-disabled-color: color-mix(
+    in srgb,
+    var(--sub-text-color) 32%,
+    transparent
+  );
+
   display: flex;
   flex: 1;
   flex-direction: column;
