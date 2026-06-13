@@ -1496,6 +1496,7 @@
     "titleUpdateFailed": "标题更新失败",
     "clickToEditTitle": "点击编辑标题",
     "inputPlaceholder": "输入消息...",
+    "childSessionPlaceholder": "输入消息继续子会话...",
     "send": "发送",
     "thinking": "正在思考",
     "sessionOperation": {
