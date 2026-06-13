@@ -9,6 +9,7 @@ import { handleAdminSsoProviders } from './routes/admin-sso-providers.js'
 import { handleAdminInvites, handleAdminUsers } from './routes/admin.js'
 import { handleAuthRoute } from './routes/auth.js'
 import { handleDeviceHeartbeat, handleDeviceList, handleDeviceRegister } from './routes/devices.js'
+import { handleEmailVerificationSendRoute } from './routes/email-verification.js'
 import { handleInviteLoginRoute } from './routes/invite-login.js'
 import { handleLoginRoute } from './routes/login.js'
 import { handleRelayMetrics } from './routes/metrics.js'
@@ -42,6 +43,7 @@ const handleInfo = (res: ServerResponse, args: RelayServerArgs, store: RelayStor
       invites: true,
       users: true,
       passwordAuth: true,
+      emailVerification: args.emailProvider != null || args.email?.provider !== 'disabled',
       oauth: providers.length > 0,
       oauthProviders: providers,
       sessionForwarding: true
@@ -82,6 +84,9 @@ const handleRelayRequestWithStore = async (
     return
   }
   if (await handlePasswordLoginRoute(req, res, args, store, storeRepository, url)) {
+    return
+  }
+  if (await handleEmailVerificationSendRoute(req, res, args, store, storeRepository, url)) {
     return
   }
   if (await handleAuthRoute(req, res, args, store, storeRepository, url)) {

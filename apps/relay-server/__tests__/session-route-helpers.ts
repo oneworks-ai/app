@@ -37,6 +37,10 @@ export const cleanupSessionRelayFixtures = async () => {
 
 export const createFixtureStore = (): RelayStore => ({
   createdAt: timestamp,
+  emailRisk: {
+    buckets: [],
+    challenges: []
+  },
   users: [
     {
       id: 'user-1',

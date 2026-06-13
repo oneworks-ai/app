@@ -10,6 +10,7 @@
 - `src/routes/admin-sso-providers.ts`：B 端托管 SSO provider 管理 API。
 - `src/devices/private-metadata.ts`：设备私有元数据加密、解密和 device token hash 工具。
 - `src/auth/sso-provider-*`：SSO provider 元数据校验、redaction、OAuth client 解析与 env / store 合并。
+- `src/email/`：验证码 / 邀请 / 登录邮件的 provider 抽象、Turnstile 校验、域名 evaluator 和发送风控；Admin UI 黑白名单管理留给 `apps/relay-admin` 后续任务，不要在这里写界面。
 - `src/session-forwarding/`：会话快照、job、payload / result 转发仓库和访问控制；JSON / SQLite 本地模式使用内存 payload 仓库，云端模式必须由存储 driver 提供可跨请求恢复的 payload 仓库。
 - `src/storage/`：store repository、SSO provider 归一化、JSON / SQLite / Postgres / Cloudflare Durable Object driver 与内容边界。
 - `src/platform/fetch-handler.ts`：把 Fetch `Request` 适配到现有 Node-style route handler；Cloudflare Worker 入口使用它，不要在 Worker 中重复实现 route。
@@ -29,6 +30,7 @@
 - Relay device 的 name / capabilities / workspaceFolder / pluginScope 是用户私有元数据。新写入必须加密存储，device token 只存 hash；admin 用户管理只返回 `deviceCount` / `maxDevices` 这类聚合字段，不返回其他用户设备详情。
 - `/api/relay/devices` 是当前 session 用户自己的设备列表。不要因为 owner/admin 有管理权限就把其他用户设备详情从这个接口返回。
 - SSO provider 的 `clientSecret` 可以由 admin API 写入 / 更新，但 list/detail 响应必须只返回 redacted 值，不能把明文 secret 返回给管理端。
+- 发信入口必须先经过 `src/email/` 的 Turnstile、域名策略、同邮箱 / 同 IP / 同域名和全局预算检查，再调用 Resend 或后续 provider。域名 allowlist 只能解除域名封禁，不能绕过 Turnstile、频率或预算。
 - `ONEWORKS_RELAY_STORAGE_DRIVER=sqlite` 是单机 Node 生产推荐路径，`ONEWORKS_RELAY_DATA_PATH` 指向 SQLite 文件；不要把 SQLite 实现扩散到 routes 或 session-forwarding。
 - `ONEWORKS_RELAY_STORAGE_DRIVER=postgres` 是 Vercel / serverless Node 路径，连接串来自 `ONEWORKS_RELAY_POSTGRES_URL`、`DATABASE_URL` 或 `--data`；日志和 repository location 必须脱敏连接串密码。
 - `cloudflare-do` 只允许由 `cloudflare/worker.ts` 通过 Durable Object repository 创建，不要从 Node CLI 直接实例化。

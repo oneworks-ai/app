@@ -6,6 +6,8 @@ export interface RelayServerArgs {
   dataPath: string
   deviceMetadataSecret?: string
   deviceOnlineTtlMs?: number
+  email?: RelayEmailConfig
+  emailProvider?: RelayEmailProvider
   embeddedAdminUi?: boolean
   help?: boolean
   host: string
@@ -17,9 +19,12 @@ export interface RelayServerArgs {
 }
 
 export type RelayAuthProvider = string
+export type RelayEmailProviderKind = 'disabled' | 'resend'
+export type RelayEmailPurpose = 'email-verification' | 'invite' | 'login'
 export type RelayRole = 'owner' | 'admin' | 'member' | 'viewer'
 export type RelaySsoProviderType = 'oauth2' | 'oidc'
 export type RelayStorageDriver = 'cloudflare-do' | 'json' | 'postgres' | 'sqlite'
+export type RelayTurnstileMode = 'auto' | 'off' | 'required'
 
 export interface RelayOAuthClient {
   authorizationUrl?: string
@@ -30,6 +35,54 @@ export interface RelayOAuthClient {
   scope?: string
   tokenUrl?: string
   userInfoUrl?: string
+}
+
+export interface RelayEmailProviderInput {
+  code: string
+  email: string
+  expiresAt: string
+  purpose: RelayEmailPurpose
+}
+
+export interface RelayEmailProviderResult {
+  messageId?: string
+}
+
+export interface RelayEmailProvider {
+  sendVerificationCode: (input: RelayEmailProviderInput) => Promise<RelayEmailProviderResult>
+}
+
+export interface RelayTurnstileConfig {
+  mode: RelayTurnstileMode
+  secretKey?: string
+  verifyUrl?: string
+}
+
+export interface RelayEmailRiskWindowConfig {
+  max: number
+  windowMs: number
+}
+
+export interface RelayEmailRiskConfig {
+  allowDomains: string[]
+  blockDomains: string[]
+  codeTtlMs: number
+  dailyBudget: number
+  disposableBlocklist: boolean
+  enabled: boolean
+  monthlyBudget: number
+  perDomain: RelayEmailRiskWindowConfig
+  perEmail: RelayEmailRiskWindowConfig
+  perIp: RelayEmailRiskWindowConfig
+  resendCooldownMs: number
+}
+
+export interface RelayEmailConfig {
+  from?: string
+  provider: RelayEmailProviderKind
+  resendApiKey?: string
+  risk: RelayEmailRiskConfig
+  turnstile: RelayTurnstileConfig
 }
 
 export interface RelayUser {
@@ -113,6 +166,33 @@ export interface RelaySession {
   lastSeenAt: string
 }
 
+export interface RelayEmailRiskBucket {
+  count: number
+  key: string
+  resetAt: string
+  updatedAt: string
+}
+
+export interface RelayEmailChallenge {
+  codeHash: string
+  createdAt: string
+  domain: string
+  emailHash: string
+  expiresAt: string
+  id: string
+  lastSentAt: string
+  providerMessageId?: string
+  purpose: RelayEmailPurpose
+  sendCount: number
+  updatedAt?: string
+  verifiedAt?: string
+}
+
+export interface RelayEmailRiskState {
+  buckets: RelayEmailRiskBucket[]
+  challenges: RelayEmailChallenge[]
+}
+
 export type RelayDeviceStatus = 'offline' | 'online' | 'stale'
 
 export interface RelayDeviceSession {
@@ -149,6 +229,7 @@ export interface RelayForwardingJob {
 
 export interface RelayStore {
   createdAt: string
+  emailRisk: RelayEmailRiskState
   users: RelayUser[]
   invites: RelayInvite[]
   ssoProviders: RelaySsoProvider[]

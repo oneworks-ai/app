@@ -25,6 +25,21 @@ Environment variables:
 - `ONEWORKS_RELAY_RATE_LIMIT_DEVICE_REGISTER_MAX` / `ONEWORKS_RELAY_RATE_LIMIT_DEVICE_REGISTER_WINDOW_SECONDS`: device registration and invite redeem limit, default `20` per `60` seconds
 - `ONEWORKS_RELAY_RATE_LIMIT_ADMIN_MUTATION_MAX` / `ONEWORKS_RELAY_RATE_LIMIT_ADMIN_MUTATION_WINDOW_SECONDS`: admin mutating API limit, default `60` per `60` seconds
 - `ONEWORKS_RELAY_RATE_LIMIT_DEVICE_CLAIM_MAX` / `ONEWORKS_RELAY_RATE_LIMIT_DEVICE_CLAIM_WINDOW_SECONDS`: device session-job claim limit, default `120` per `60` seconds
+- `ONEWORKS_RELAY_EMAIL_PROVIDER`: transactional email provider, `disabled` by default; set `resend` to enable Resend-backed verification code delivery
+- `ONEWORKS_RELAY_EMAIL_FROM`: sender address for transactional email, required when `ONEWORKS_RELAY_EMAIL_PROVIDER=resend`
+- `ONEWORKS_RELAY_RESEND_API_KEY`: Resend API key, required when `ONEWORKS_RELAY_EMAIL_PROVIDER=resend`
+- `ONEWORKS_RELAY_EMAIL_TURNSTILE_MODE`: `auto`, `required`, or `off`; `auto` requires Turnstile when Resend is enabled or `NODE_ENV=production`
+- `ONEWORKS_RELAY_TURNSTILE_SECRET_KEY`: Cloudflare Turnstile secret key for email send challenges
+- `ONEWORKS_RELAY_TURNSTILE_VERIFY_URL`: optional Turnstile siteverify URL override for tests
+- `ONEWORKS_RELAY_EMAIL_RISK_ENABLED`: set to `0`, `false`, `no`, or `off` to disable email send rate and budget checks; Turnstile and domain blocking remain explicit policy controls
+- `ONEWORKS_RELAY_EMAIL_CODE_TTL_SECONDS`: verification code TTL, default `600`; repeat requests during the TTL reuse the active challenge and do not call the email provider again
+- `ONEWORKS_RELAY_EMAIL_RESEND_COOLDOWN_SECONDS`: retry hint window for active challenges, default `60`
+- `ONEWORKS_RELAY_EMAIL_RISK_EMAIL_MAX` / `ONEWORKS_RELAY_EMAIL_RISK_EMAIL_WINDOW_SECONDS`: per-email send limit, default `3` per `3600` seconds
+- `ONEWORKS_RELAY_EMAIL_RISK_IP_MAX` / `ONEWORKS_RELAY_EMAIL_RISK_IP_WINDOW_SECONDS`: per-IP send limit, default `30` per `3600` seconds
+- `ONEWORKS_RELAY_EMAIL_RISK_DOMAIN_MAX` / `ONEWORKS_RELAY_EMAIL_RISK_DOMAIN_WINDOW_SECONDS`: per-domain send limit, default `100` per `3600` seconds
+- `ONEWORKS_RELAY_EMAIL_RISK_DAILY_BUDGET` / `ONEWORKS_RELAY_EMAIL_RISK_MONTHLY_BUDGET`: global email send circuit breakers, default `500` daily and `10000` monthly
+- `ONEWORKS_RELAY_EMAIL_DOMAIN_ALLOWLIST` / `ONEWORKS_RELAY_EMAIL_DOMAIN_BLOCKLIST`: comma or whitespace separated email domain overrides. Allowlist only bypasses domain blocking; it does not bypass Turnstile, rate limits, or budgets.
+- `ONEWORKS_RELAY_EMAIL_DISPOSABLE_BLOCKLIST_ENABLED`: set to `0`, `false`, `no`, or `off` to disable the built-in high-confidence disposable domain blocklist
 - `ONEWORKS_RELAY_GITHUB_CLIENT_ID` / `ONEWORKS_RELAY_GITHUB_CLIENT_SECRET`: GitHub OAuth
 - `ONEWORKS_RELAY_GOOGLE_CLIENT_ID` / `ONEWORKS_RELAY_GOOGLE_CLIENT_SECRET`: Google OAuth
 - `ONEWORKS_RELAY_SSO_PROVIDERS`: JSON object or array for multiple custom OAuth/OIDC SSO providers
@@ -88,6 +103,8 @@ Admin APIs require `Authorization: Bearer <token>`. The token can be the deploym
 `GET /admin` serves the React admin client from `@oneworks/relay-admin` (`apps/relay-admin`). The server route only returns the HTML shell and static assets under `/admin/assets/*`; the React client is built by Vite, consumes the `/login` callback `relay_token`, verifies the session through `/api/auth/me`, and calls the admin APIs above only for `owner` or `admin` users.
 
 `GET /login` serves the user-facing login page used by the Relay plugin. It accepts `redirect_uri`, `server_id`, `scope`, and optional `lang=zh-CN|en`; OAuth/OIDC success first returns to `/login/complete`, which stores recent account metadata in that browser and then redirects to the original callback with `relay_token` in the URL fragment. The same page also supports email + invite-code login through `POST /api/auth/invite-login`; successful invite login consumes one invite use and assigns the invite role to new users. When `lang` is omitted, the login page follows the browser `Accept-Language` header. Electron callbacks use `oneworks://relay/auth`; Web callbacks use the current plugin page URL.
+
+`POST /api/auth/email-verification/send` accepts an `email`, optional `purpose` (`email-verification`, `invite`, or `login`), and optional `turnstileToken`. Before any provider call, Relay verifies Turnstile when required, evaluates domain policy, checks per-email / per-IP / per-domain limits, checks global daily and monthly budgets, and reuses an active code within its TTL instead of sending another email. Rejections use a generic response so callers cannot infer whether an account exists.
 
 Admin client source lives in `apps/relay-admin`:
 
@@ -251,7 +268,7 @@ The response is process-local and resets when the relay-server process restarts.
 
 Run the service behind TLS and a reverse proxy. Set long random values for `ONEWORKS_RELAY_ADMIN_TOKEN` and `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`, store OAuth client secrets outside source control, and restrict `ONEWORKS_RELAY_ALLOW_ORIGIN` to the web app origin instead of using `*`.
 
-Built-in rate limits are enabled by default for OAuth start/callback, invite redeem and device registration, admin mutating APIs, and device session-job claims. A blocked request returns `429` with `Retry-After` and `X-RateLimit-*` headers. Keep nginx, load balancer, or CDN limits in front of the service as the first line of defense, especially for `/api/auth/*`, `/api/relay/devices/register`, `/api/relay/devices/<deviceId>/session-jobs`, `/api/relay/metrics`, and `/api/admin/*`.
+Built-in rate limits are enabled by default for OAuth start/callback, invite redeem, email verification sends, device registration, admin mutating APIs, and device session-job claims. A blocked request returns `429` with `Retry-After` and `X-RateLimit-*` headers. Keep nginx, load balancer, or CDN limits in front of the service as the first line of defense, especially for `/api/auth/*`, `/api/relay/devices/register`, `/api/relay/devices/<deviceId>/session-jobs`, `/api/relay/metrics`, and `/api/admin/*`.
 
 Token boundaries:
 

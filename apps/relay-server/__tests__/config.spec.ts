@@ -33,4 +33,38 @@ describe('relay server config', () => {
     })
     expect(output.join('')).toContain(`OneWorks Relay Server ${VERSION}`)
   })
+
+  it('parses email delivery risk and Turnstile environment settings', () => {
+    vi.stubEnv('ONEWORKS_RELAY_EMAIL_PROVIDER', 'resend')
+    vi.stubEnv('ONEWORKS_RELAY_EMAIL_FROM', 'Relay <relay@example.com>')
+    vi.stubEnv('ONEWORKS_RELAY_RESEND_API_KEY', 'test-key')
+    vi.stubEnv('ONEWORKS_RELAY_EMAIL_TURNSTILE_MODE', 'required')
+    vi.stubEnv('ONEWORKS_RELAY_TURNSTILE_SECRET_KEY', 'turnstile-secret')
+    vi.stubEnv('ONEWORKS_RELAY_EMAIL_RISK_EMAIL_MAX', '2')
+    vi.stubEnv('ONEWORKS_RELAY_EMAIL_RISK_EMAIL_WINDOW_SECONDS', '120')
+    vi.stubEnv('ONEWORKS_RELAY_EMAIL_RISK_DAILY_BUDGET', '9')
+    vi.stubEnv('ONEWORKS_RELAY_EMAIL_DOMAIN_ALLOWLIST', 'example.com, trusted.test')
+    vi.stubEnv('ONEWORKS_RELAY_EMAIL_DOMAIN_BLOCKLIST', 'blocked.test')
+
+    const args = parseRelayServerArgs([])
+
+    expect(args.email).toMatchObject({
+      from: 'Relay <relay@example.com>',
+      provider: 'resend',
+      resendApiKey: 'test-key',
+      risk: {
+        allowDomains: ['example.com', 'trusted.test'],
+        blockDomains: ['blocked.test'],
+        dailyBudget: 9,
+        perEmail: {
+          max: 2,
+          windowMs: 120_000
+        }
+      },
+      turnstile: {
+        mode: 'required',
+        secretKey: 'turnstile-secret'
+      }
+    })
+  })
 })

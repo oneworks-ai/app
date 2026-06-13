@@ -73,6 +73,10 @@ describe('relay storage repository', () => {
     })
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
+      emailRisk: {
+        buckets: [],
+        challenges: []
+      },
       users: [
         {
           id: 'user-1',
@@ -114,6 +118,10 @@ describe('relay storage repository', () => {
     })
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
+      emailRisk: {
+        buckets: [],
+        challenges: []
+      },
       users: [
         {
           id: 'user-1',
@@ -173,6 +181,10 @@ describe('relay storage repository', () => {
     const repository = createDurableObjectRelayStoreRepository(new MemoryDurableObjectStorage())
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
+      emailRisk: {
+        buckets: [],
+        challenges: []
+      },
       users: [],
       invites: [],
       ssoProviders: [],
