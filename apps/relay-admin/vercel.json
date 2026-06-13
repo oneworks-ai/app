@@ -1,0 +1,27 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm build:platform",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/proxy?relay_path=/api/:path*"
+    },
+    {
+      "source": "/login",
+      "destination": "/api/proxy?relay_path=/login"
+    },
+    {
+      "source": "/login/complete",
+      "destination": "/api/proxy?relay_path=/login/complete"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/admin/index.html"
+    },
+    {
+      "source": "/",
+      "destination": "/admin/index.html"
+    }
+  ]
+}

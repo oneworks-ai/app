@@ -7,7 +7,8 @@ import { join } from 'node:path'
 
 import { sendJson } from '../src/http.js'
 import { handleRelaySessionsRoute } from '../src/routes/sessions.js'
-import { createRelayStoreRepository, readRelayStore } from '../src/server.js'
+import { readRelayStore } from '../src/server.js'
+import { createRelayStoreRepository } from '../src/storage/repository.js'
 import { writeRelayStore } from '../src/store.js'
 import type { RelayServerArgs, RelayStore } from '../src/types.js'
 import { authHeaders, requestJson } from './helpers.js'
@@ -36,6 +37,10 @@ export const cleanupSessionRelayFixtures = async () => {
 
 export const createFixtureStore = (): RelayStore => ({
   createdAt: timestamp,
+  emailRisk: {
+    buckets: [],
+    challenges: []
+  },
   users: [
     {
       id: 'user-1',

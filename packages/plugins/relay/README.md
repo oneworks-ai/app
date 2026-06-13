@@ -2,7 +2,7 @@
 
 Optional OneWorks Relay plugin.
 
-It connects the current workspace service to a user-managed public Relay, so phones, web clients, or other apps can discover devices and forward session messages through that Relay instead of directly reaching the local machine. Relay is not enabled by default; users opt in by installing this plugin and pointing it at their own `servers[]` list.
+It connects the current workspace service to a public Relay, so phones, web clients, or other apps can discover devices and forward session messages through that Relay instead of directly reaching the local machine. Product users should normally connect to the managed OneWorks Relay service. Private `servers[]` entries are available when a user explicitly chooses to run Relay in their own cloud account or on their own host.
 
 ## Configuration
 
@@ -20,7 +20,7 @@ It connects the current workspace service to a user-managed public Relay, so pho
         "servers": [
           {
             "id": "prod",
-            "name": "Production Relay",
+            "name": "Private Production Relay",
             "server": "relay.example.com",
             "port": 443,
             "protocol": "https",
@@ -41,7 +41,9 @@ It connects the current workspace service to a user-managed public Relay, so pho
 }
 ```
 
-Even one Relay service is configured through `servers[]`; there is no separate single-server config path.
+Even one Relay service is configured through `servers[]`; there is no separate single-server config path. Use placeholder domains in docs and examples, and keep real deployment credentials in the platform secret store or project runtime store rather than in config files.
+
+The default product path is the managed OneWorks Relay service. Official service domains and mail routing are maintained outside plugin config: Relay/Admin hosts use the OneWorks-owned service slots, support addresses use role mailboxes such as `support@oneworks.cloud` and `hello@oneworks.cloud`, and transactional mail should use stable mail subdomains such as `mail.oneworks.cloud` rather than a Relay/Admin web host. Private `servers[]` entries should use the user's own confirmed domain, DNS, and mail strategy.
 
 Each server can also use `baseUrl` when a full URL is easier than separate `server`, `port`, and `protocol` fields. The device identity and remote-issued device tokens are stored under the project home runtime directory, not in the project config file. Tokens are stored per server id so switching Relay systems does not overwrite another system's token.
 
@@ -61,6 +63,8 @@ npx @oneworks/relay-server --host 0.0.0.0 --port 8788
 - Scoped plugin API for status, login URL, login callback, connect, disconnect, and forget actions.
 - Optional session exposure with metadata snapshots and forwarding jobs.
 - Device token storage under the project home runtime directory.
+
+`connect`, `disconnect`, and `forget` accept an optional `serverId` payload. `connect` without `serverId` uses `activeServerId` for compatibility; `disconnect` and `forget` without `serverId` apply to all connected/stored Relay servers. Status responses keep a top-level `connection` compatibility summary and expose per-server connection details on each `servers[]` item.
 
 The plugin must not persist session content. Session request payloads and results are forwarded through the Relay protocol while durable state remains limited to device identity, connection state, and remote-issued tokens.
 

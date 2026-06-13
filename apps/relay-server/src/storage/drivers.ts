@@ -3,6 +3,7 @@ import type { RelayStorageDriver } from '../types.js'
 export const DEFAULT_RELAY_STORAGE_DRIVER: RelayStorageDriver = 'json'
 
 const relayStorageDrivers = new Set<RelayStorageDriver>([
+  'cloudflare-do',
   'json',
   'sqlite',
   'postgres'
@@ -24,5 +25,5 @@ export const parseRelayStorageDriver = (value: string | undefined): RelayStorage
 export const createUnimplementedStorageDriverError = (driver: RelayStorageDriver) =>
   new Error(
     `Relay storage driver "${driver}" is not implemented yet. ` +
-      `Set ONEWORKS_RELAY_STORAGE_DRIVER=${DEFAULT_RELAY_STORAGE_DRIVER}, use sqlite for single-node production, or omit it.`
+      `Set ONEWORKS_RELAY_STORAGE_DRIVER=${DEFAULT_RELAY_STORAGE_DRIVER}, use sqlite for single-node production, postgres for serverless Node, cloudflare-do in the Worker adapter, or omit it.`
   )

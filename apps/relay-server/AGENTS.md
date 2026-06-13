@@ -10,10 +10,17 @@
 - `src/routes/admin-sso-providers.ts`：B 端托管 SSO provider 管理 API。
 - `src/devices/private-metadata.ts`：设备私有元数据加密、解密和 device token hash 工具。
 - `src/auth/sso-provider-*`：SSO provider 元数据校验、redaction、OAuth client 解析与 env / store 合并。
-- `src/session-forwarding/`：会话快照、job、volatile payload / result 转发和访问控制。
-- `src/storage/`：store repository、SSO provider 归一化、JSON / SQLite driver 与内容边界；Postgres 目前只保留明确未实现的接缝。
+- `src/email/`：验证码 / 邀请 / 登录邮件的 provider 抽象、Turnstile 校验、域名 evaluator 和发送风控；Admin UI 黑白名单管理留给 `apps/relay-admin` 后续任务，不要在这里写界面。
+- `src/session-forwarding/`：会话快照、job、payload / result 转发仓库和访问控制；JSON / SQLite 本地模式使用内存 payload 仓库，云端模式必须由存储 driver 提供可跨请求恢复的 payload 仓库。
+- `src/storage/`：store repository、SSO provider 归一化、JSON / SQLite / Postgres / Cloudflare Durable Object driver 与内容边界。
+- `src/platform/fetch-handler.ts`：把 Fetch `Request` 适配到现有 Node-style route handler；Cloudflare Worker 入口使用它，不要在 Worker 中重复实现 route。
+- `api/relay.ts`：Vercel Node Function 入口，使用 Postgres driver；Vercel 单项目部署时 `/admin` 由构建脚本复制出的静态 Admin 资源承载，不走这个函数。
+- `cloudflare/worker.ts`：Cloudflare Worker + Durable Object 入口，使用 `cloudflare-do` driver，禁用内嵌 `/admin` 静态页。
+- `scripts/prepare-vercel-build.mjs`：`build:vercel` 的最后一步，把 `apps/relay-admin/dist/admin` 复制到 `apps/relay-server/public/admin`，让同一个 Vercel project 同时提供 `/admin` 和 Relay API。
+- `scripts/prepare-vercel-output.mjs`：本地 `vercel build --prebuilt` 后处理，把 pnpm workspace 下的 Postgres runtime package 拷进 `.vercel/output/functions/api/relay.func/node_modules/`；本地 CLI prebuilt 部署前必须跑。
 - `src/telemetry/`：Relay trace 日志。
 - `README.md`：面向自部署用户的命令、环境变量、Admin API、生产部署和日志说明。
+- `.oo/rules/RELAY-DEPLOYMENT.md`：Relay 托管服务、私有化部署、Vercel / Cloudflare 域名、官方 OneWorks 域名 / 邮件拓扑和账号边界；处理部署请求时先读。
 
 ## 约定
 
@@ -23,6 +30,14 @@
 - Relay device 的 name / capabilities / workspaceFolder / pluginScope 是用户私有元数据。新写入必须加密存储，device token 只存 hash；admin 用户管理只返回 `deviceCount` / `maxDevices` 这类聚合字段，不返回其他用户设备详情。
 - `/api/relay/devices` 是当前 session 用户自己的设备列表。不要因为 owner/admin 有管理权限就把其他用户设备详情从这个接口返回。
 - SSO provider 的 `clientSecret` 可以由 admin API 写入 / 更新，但 list/detail 响应必须只返回 redacted 值，不能把明文 secret 返回给管理端。
-- `ONEWORKS_RELAY_STORAGE_DRIVER=sqlite` 是单机生产推荐路径，`ONEWORKS_RELAY_DATA_PATH` 指向 SQLite 文件；不要把 SQLite 实现扩散到 routes 或 session-forwarding。
+- 发信入口必须先经过 `src/email/` 的 Turnstile、域名策略、同邮箱 / 同 IP / 同域名和全局预算检查，再调用 Resend 或后续 provider。域名 allowlist 只能解除域名封禁，不能绕过 Turnstile、频率或预算。
+- `ONEWORKS_RELAY_STORAGE_DRIVER=sqlite` 是单机 Node 生产推荐路径，`ONEWORKS_RELAY_DATA_PATH` 指向 SQLite 文件；不要把 SQLite 实现扩散到 routes 或 session-forwarding。
+- `ONEWORKS_RELAY_STORAGE_DRIVER=postgres` 是 Vercel / serverless Node 路径，连接串来自 `ONEWORKS_RELAY_POSTGRES_URL`、`DATABASE_URL` 或 `--data`；日志和 repository location 必须脱敏连接串密码。
+- `cloudflare-do` 只允许由 `cloudflare/worker.ts` 通过 Durable Object repository 创建，不要从 Node CLI 直接实例化。
+- Vercel serverless 入口是单项目形态：`apps/relay-server` 的 `build:vercel` 会内置 Admin 静态页到 `/admin`；Cloudflare 仍使用 `apps/relay-admin` Pages + `apps/relay-server` Worker 两个部署面。
+- 用户只想使用 Relay 时，默认引导到 OneWorks 托管服务；只有用户明确选择私有化部署时，才按其提供的平台账号和域名部署。不要把个人账号、真实 account id、测试凭据、token、数据库 URL 或临时部署 URL 写入可提交文档。
+- OneWorks 官方服务域名、`support@oneworks.cloud` / `hello@oneworks.cloud` 收信路由和 Resend 发信子域约定只维护在 `.oo/rules/RELAY-DEPLOYMENT.md`；不要把私人收信目标或个人邮箱写入 README、AGENTS、handoff 或示例配置。
+- 私有化部署的域名和邮件策略是配置，不是代码常量。Vercel 默认是 `<project>.vercel.app` 或自定义域；Cloudflare Worker 默认是 `<worker>.<account-subdomain>.workers.dev`，其中 account subdomain 是账号级设置，变更会影响该账号下所有 Workers。部署前确认用户自己的 DNS 托管、收信策略、事务邮件发信域名和 Reply-To。
 - 修改 API 或存储边界后，优先跑 `pnpm -C apps/relay-server test` 和 `pnpm -C apps/relay-server typecheck`。
+- 修改 Vercel / Cloudflare 入口后，额外跑 esbuild bundle smoke：Vercel 使用 `apps/relay-server/api/relay.ts` + `--platform=node`，Cloudflare 使用 `apps/relay-server/cloudflare/worker.ts` + `--platform=browser` 并 external `node:*`。
 - 修改 `/admin` 静态挂载时，先跑 `pnpm -C apps/relay-admin build`，再用 relay-server smoke 请求 `/admin/assets/admin.js` 与 `/admin/assets/admin.css`。

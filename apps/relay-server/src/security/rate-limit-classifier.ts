@@ -45,6 +45,12 @@ export const classifyRateLimitedRequest = (req: IncomingMessage, url: URL): Rela
       key: `${ip}:password-login`
     }
   }
+  if (requestMethod === 'POST' && url.pathname === '/api/auth/email-verification/send') {
+    return {
+      category: 'auth',
+      key: `${ip}:email-verification-send`
+    }
+  }
   if (requestMethod === 'POST' && url.pathname === '/api/relay/devices/register') {
     return {
       category: 'device-registration',

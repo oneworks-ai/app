@@ -8,6 +8,8 @@ interface CustomSsoClient {
   id: string
 }
 
+type RelayConfigEnv = Record<string, string | undefined>
+
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
 )
@@ -41,8 +43,8 @@ const normalizeCustomSsoClient = (id: unknown, value: unknown): CustomSsoClient 
   }
 }
 
-export const readCustomSsoClients = () => {
-  const raw = process.env.ONEWORKS_RELAY_SSO_PROVIDERS
+export const readCustomSsoClients = (env: RelayConfigEnv = process.env) => {
+  const raw = env.ONEWORKS_RELAY_SSO_PROVIDERS
   if (raw == null || raw.trim() === '') return []
   let parsed: unknown
   try {

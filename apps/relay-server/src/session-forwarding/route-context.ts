@@ -40,8 +40,8 @@ export const requireDeviceAccess = (
   return { actor, device }
 }
 
-export const expireMissingPayload = (job: RelayForwardingJob, telemetry?: RelayTelemetry) => {
-  if (job.status !== 'queued' || getForwardingPayload(job.id) != null) return false
+export const expireMissingPayload = async (job: RelayForwardingJob, telemetry?: RelayTelemetry) => {
+  if (job.status !== 'queued' || (await getForwardingPayload(job.id)) != null) return false
   updateSessionForwardingJob(job, {
     status: 'failed',
     errorCode: 'payload_expired'
@@ -91,7 +91,7 @@ export const resolveJobAccess = async (
     sendForbidden(res, args)
     return undefined
   }
-  if (expireMissingPayload(job, telemetry)) {
+  if (await expireMissingPayload(job, telemetry)) {
     await persistStore(storeRepository, store)
   }
   return {

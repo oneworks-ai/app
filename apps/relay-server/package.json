@@ -15,14 +15,21 @@
   },
   "files": [
     "README.md",
+    "api",
     "cli.js",
+    "cloudflare",
     "dist",
     "package.json",
-    "src"
+    "scripts",
+    "src",
+    "vercel.json",
+    "wrangler.jsonc"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:vercel": "pnpm -C ../relay-admin build:platform && pnpm build && node scripts/prepare-vercel-build.mjs",
     "prepublish": "pnpm build",
+    "prepare:vercel-output": "node scripts/prepare-vercel-output.mjs",
     "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project node apps/relay-server/__tests__",
     "test:e2e:local-sso": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project node apps/relay-server/__tests__/local-sso-e2e.spec.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
@@ -30,6 +37,7 @@
   "dependencies": {
     "@oneworks/cli-helper": "workspace:*",
     "@oneworks/relay-admin": "workspace:*",
-    "pino": "^10.2.0"
+    "pino": "^10.2.0",
+    "postgres": "^3.4.9"
   }
 }

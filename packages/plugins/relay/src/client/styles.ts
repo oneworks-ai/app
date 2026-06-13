@@ -10,9 +10,9 @@ export const relayClientCss = `
 .oneworks-relay__toolbar-right { min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: var(--oneworks-overlay-item-gap, 6px); }
 .oneworks-relay__actions { min-height: var(--oneworks-overlay-control-height, 30px); display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--oneworks-overlay-item-gap, 6px); }
 .oneworks-relay__primary-actions, .oneworks-relay__revealed-actions, .oneworks-relay__account-actions { min-height: var(--oneworks-overlay-control-height, 30px); display: inline-flex; align-items: center; gap: var(--oneworks-overlay-item-gap, 6px); }
-.oneworks-relay__revealed-actions, .oneworks-relay__account-actions { width: 0; max-width: 0; overflow: hidden; opacity: 0; pointer-events: none; transform: translateX(4px); transition: width .16s ease, max-width .16s ease, opacity .16s ease, transform .16s ease; }
+.oneworks-relay__revealed-actions { width: 0; max-width: 0; overflow: hidden; opacity: 0; pointer-events: none; transform: translateX(4px); transition: width .16s ease, max-width .16s ease, opacity .16s ease, transform .16s ease; }
 .oneworks-relay__toolbar:hover .oneworks-relay__revealed-actions, .oneworks-relay__toolbar:focus-within .oneworks-relay__revealed-actions { width: 138px; max-width: 138px; overflow: visible; opacity: 1; pointer-events: auto; transform: translateX(0); }
-.oneworks-relay__account:hover .oneworks-relay__account-actions, .oneworks-relay__account:focus-within .oneworks-relay__account-actions { width: 102px; max-width: 102px; overflow: visible; opacity: 1; pointer-events: auto; transform: translateX(0); }
+.oneworks-relay__account-actions { flex-wrap: wrap; justify-content: flex-end; }
 .oneworks-relay__button { position: relative; width: var(--oneworks-overlay-control-height, 30px); min-width: var(--oneworks-overlay-control-height, 30px); min-height: var(--oneworks-overlay-control-height, 30px); display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: var(--oneworks-overlay-item-radius, 6px); padding: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); background: transparent; cursor: pointer; }
 .oneworks-relay__button:disabled { color: var(--disabled-text-color, var(--ant-color-text-disabled, #8c959f)); cursor: default; opacity: .62; }
 .oneworks-relay__button::before, .oneworks-relay__button::after { position: absolute; inset-inline-start: 50%; z-index: 20; opacity: 0; pointer-events: none; visibility: hidden; transition: opacity .12s ease, transform .12s ease, visibility .12s ease; }
@@ -36,18 +36,29 @@ export const relayClientCss = `
 .oneworks-relay__input::placeholder { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); opacity: .82; }
 .oneworks-relay__editor-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--oneworks-overlay-item-gap, 6px); }
 .oneworks-relay__notice { padding: var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)) calc(var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)) + 4px); border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); color: var(--danger-color, #dc2626); font: 600 12px/1.5 ui-sans-serif, system-ui, sans-serif; }
-.oneworks-relay__account { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); align-items: center; padding: var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)) 0; border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
-.oneworks-relay__account-main { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); align-items: center; }
+.oneworks-relay__account { min-width: 0; display: grid; border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
+.oneworks-relay__account-summary { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); align-items: center; padding: var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)) 0; cursor: pointer; list-style: none; }
+.oneworks-relay__account-summary::-webkit-details-marker { display: none; }
+.oneworks-relay__account-summary:focus-visible { outline: 2px solid var(--primary-color, var(--ant-color-primary, #1677ff)); outline-offset: -2px; }
+.oneworks-relay__account-panel { min-width: 0; display: grid; gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); padding: 0 0 var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)) calc(34px + var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px))); }
 .oneworks-relay__account-avatar { position: relative; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; color: var(--primary-text-color, var(--ant-color-primary, #1677ff)); background: color-mix(in srgb, var(--primary-color, #2563eb) 14%, transparent); font: 800 12px/1 ui-sans-serif, system-ui, sans-serif; overflow: visible; }
 .oneworks-relay__account-avatar-image { width: 100%; height: 100%; display: block; border-radius: inherit; object-fit: cover; }
 .oneworks-relay__account-status { position: absolute; inset-inline-end: -1px; inset-block-end: -1px; width: 10px; height: 10px; border: 2px solid var(--page-background, var(--ant-color-bg-layout, #fff)); border-radius: 999px; background: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); }
 .oneworks-relay__account-avatar[data-state="registered"] .oneworks-relay__account-status, .oneworks-relay__account-avatar[data-state="connected"] .oneworks-relay__account-status { background: var(--success-color, #0f766e); }
 .oneworks-relay__account-avatar[data-state="connecting"] .oneworks-relay__account-status, .oneworks-relay__account-avatar[data-state="loading"] .oneworks-relay__account-status { background: var(--primary-color, var(--ant-color-primary, #1677ff)); }
 .oneworks-relay__account-avatar[data-state="error"] .oneworks-relay__account-status { background: var(--danger-color, #dc2626); }
-.oneworks-relay__account-copy { min-width: 0; }
-.oneworks-relay__account-name { margin: 0; font: 700 13px/1.35 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oneworks-relay__account-subtitle { margin: 2px 0 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oneworks-relay__account-devices { grid-column: 1 / -1; min-width: 0; display: grid; gap: 4px; margin-inline-start: calc(34px + var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px))); padding-block-start: 2px; }
+.oneworks-relay__account-copy { min-width: 0; display: grid; gap: 2px; }
+.oneworks-relay__account-name { min-width: 0; display: flex; align-items: center; gap: 6px; margin: 0; font: 700 13px/1.35 ui-sans-serif, system-ui, sans-serif; }
+.oneworks-relay__account-platform { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-relay__account-state { flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--primary-color, #1677ff) 28%, transparent); border-radius: 999px; padding: 1px 6px; color: var(--primary-color, var(--ant-color-primary, #1677ff)); background: color-mix(in srgb, var(--primary-color, #1677ff) 8%, transparent); font: 700 10px/1.2 ui-sans-serif, system-ui, sans-serif; text-transform: lowercase; }
+.oneworks-relay__account-subtitle, .oneworks-relay__account-email { margin: 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-relay__account-chevron { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); transition: transform .16s ease; }
+.oneworks-relay__account[open] .oneworks-relay__account-chevron { transform: rotate(180deg); }
+.oneworks-relay__account-meta { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); }
+.oneworks-relay__account-fact { min-width: 0; display: grid; gap: 1px; }
+.oneworks-relay__account-fact-label { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 10px/1.2 ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; }
+.oneworks-relay__account-fact-value { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-relay__account-devices { min-width: 0; display: grid; gap: 4px; padding-block-start: 2px; }
 .oneworks-relay__devices-summary { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 600 11px/1.25 ui-sans-serif, system-ui, sans-serif; }
 .oneworks-relay__device-row { min-width: 0; min-height: 22px; display: grid; grid-template-columns: 10px minmax(0, max-content) auto minmax(0, 1fr); align-items: center; gap: 6px; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); }
 .oneworks-relay__device-status { width: 8px; height: 8px; border-radius: 999px; background: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); }
@@ -61,12 +72,14 @@ export const relayClientCss = `
 @media (max-width: 720px) {
   .oneworks-relay__toolbar { display: grid; }
   .oneworks-relay__server-editor { grid-template-columns: minmax(0, 1fr); }
-  .oneworks-relay__account { grid-template-columns: minmax(0, 1fr); }
-  .oneworks-relay__account-actions { justify-self: end; }
-  .oneworks-relay__account-devices { margin-inline-start: 0; }
+  .oneworks-relay__account-panel { padding-inline-start: 0; }
+  .oneworks-relay__account-actions { justify-content: flex-start; }
 }
 @media (max-width: 520px) {
   .oneworks-relay__section-title { flex-wrap: wrap; }
+  .oneworks-relay__account-summary { grid-template-columns: 34px minmax(0, 1fr); }
+  .oneworks-relay__account-chevron { display: none; }
+  .oneworks-relay__account-meta { grid-template-columns: minmax(0, 1fr); }
   .oneworks-relay__device-row { grid-template-columns: 10px minmax(0, 1fr) auto; }
   .oneworks-relay__device-features { grid-column: 2 / -1; }
 }

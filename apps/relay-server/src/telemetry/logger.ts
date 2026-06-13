@@ -1,5 +1,4 @@
 import process from 'node:process'
-import pino from 'pino'
 
 export type RelayLogLevel = 'debug' | 'error' | 'info' | 'warn'
 
@@ -45,13 +44,41 @@ const sanitizeLogValue = (key: string, value: unknown): unknown | undefined => {
   return sanitized
 }
 
-const logger = pino({
-  base: {
-    service: 'relay-server'
-  },
-  level: process.env.ONEWORKS_RELAY_LOG_LEVEL || 'info',
-  timestamp: pino.stdTimeFunctions.isoTime
-})
+const levelWeights: Record<RelayLogLevel, number> = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40
+}
+
+const readLogLevel = (value: unknown): RelayLogLevel => (
+  value === 'debug' || value === 'info' || value === 'warn' || value === 'error'
+    ? value
+    : 'info'
+)
+
+const shouldLog = (level: RelayLogLevel) =>
+  levelWeights[level] >= levelWeights[readLogLevel(process.env.ONEWORKS_RELAY_LOG_LEVEL)]
+
+const writeStructuredLog = (level: RelayLogLevel, body: RelayLogFields) => {
+  if (!shouldLog(level)) return
+  const payload = {
+    level,
+    time: new Date().toISOString(),
+    service: 'relay-server',
+    ...body
+  }
+  const line = JSON.stringify(payload)
+  if (level === 'error') {
+    console.error(line)
+    return
+  }
+  if (level === 'warn') {
+    console.warn(line)
+    return
+  }
+  process.stdout.write(`${line}\n`)
+}
 
 export const sanitizeRelayLogFields = (fields: RelayLogFields = {}) => {
   const sanitizedFields: RelayLogFields = {}
@@ -67,5 +94,5 @@ export const logRelayEvent = (level: RelayLogLevel, event: string, fields: Relay
     event,
     ...sanitizeRelayLogFields(fields)
   }
-  logger[level](body)
+  writeStructuredLog(level, body)
 }
