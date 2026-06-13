@@ -31,6 +31,7 @@ describe('env helpers', () => {
     vi.stubEnv('__ONEWORKS_PROJECT_PUBLIC_BASE_URL__', 'https://lan.example')
     vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ACTION_SECRET__', 'action-secret')
     vi.stubEnv('__ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__', 'http://127.0.0.1:53445')
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ROLE__', 'manager')
     vi.stubEnv('__ONEWORKS_PROJECT_CLIENT_MODE__', 'none')
 
     const { loadEnv } = await import('../src/env')
@@ -41,6 +42,7 @@ describe('env helpers', () => {
       __ONEWORKS_PROJECT_PUBLIC_BASE_URL__: 'https://lan.example',
       __ONEWORKS_PROJECT_SERVER_ACTION_SECRET__: 'action-secret',
       __ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__: 'http://127.0.0.1:53445',
+      __ONEWORKS_PROJECT_SERVER_ROLE__: 'manager',
       __ONEWORKS_PROJECT_CLIENT_MODE__: 'none'
     }))
   })

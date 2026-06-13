@@ -6,6 +6,7 @@ interface ImportMetaEnv {
   readonly __ONEWORKS_PROJECT_SERVER_BASE_URL__: string
   readonly __ONEWORKS_PROJECT_SERVER_HOST__: string
   readonly __ONEWORKS_PROJECT_SERVER_PORT__: string
+  readonly __ONEWORKS_PROJECT_SERVER_ROLE__: string
   readonly __ONEWORKS_PROJECT_SERVER_WS_PATH__: string
   readonly __ONEWORKS_PROJECT_CLIENT_HOST__: string
   readonly __ONEWORKS_PROJECT_CLIENT_MODE__: string
@@ -309,6 +310,7 @@ interface Window {
     __ONEWORKS_PROJECT_SERVER_BASE_URL__: string
     __ONEWORKS_PROJECT_SERVER_HOST__: string
     __ONEWORKS_PROJECT_SERVER_PORT__: string
+    __ONEWORKS_PROJECT_SERVER_ROLE__: string
     __ONEWORKS_PROJECT_SERVER_WS_PATH__: string
     __ONEWORKS_PROJECT_CLIENT_MODE__: string
     __ONEWORKS_PROJECT_CLIENT_BASE__: string

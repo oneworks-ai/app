@@ -64,6 +64,7 @@ export function InteractionPanelDockWorkspace({
   workspaceDrawerCreateSelectedKeys,
   workspaceDrawerState,
   workspaceRootPath,
+  openResourceShortcut,
   getTabHeaderActions,
   onAddMenuClick,
   onActivateTab,
@@ -107,6 +108,7 @@ export function InteractionPanelDockWorkspace({
         canCreateSessionTab,
         language: pluginLanguage,
         mobileDebugDevices: deviceOptions,
+        openResourceShortcut,
         pluginMenuItems: pluginAddMenuItems,
         selectedMobileDebugDeviceId: mobileDebugPage?.selectedDeviceId,
         workspaceDrawerItems: workspaceDrawerCreateItems
@@ -116,6 +118,7 @@ export function InteractionPanelDockWorkspace({
       deviceOptions,
       isMac,
       mobileDebugPage?.selectedDeviceId,
+      openResourceShortcut,
       pluginAddMenuItems,
       pluginLanguage,
       t,

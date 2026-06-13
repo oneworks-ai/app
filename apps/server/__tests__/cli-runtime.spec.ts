@@ -91,6 +91,70 @@ describe('applyServerRuntimeEnv', () => {
     expect(env.__ONEWORKS_PROJECT_REAL_HOME__).toBe('/tmp/ow-home')
   })
 
+  it('supports manager web runtime without binding a workspace', () => {
+    const repoRoot = process.cwd()
+    const packageDir = resolve(repoRoot, 'apps/web')
+    const env = applyServerRuntimeEnv({
+      baseEnv: {
+        HOME: '/tmp/ow-home'
+      },
+      cwd: repoRoot,
+      packageDir,
+      options: {},
+      defaults: {
+        allowCors: false,
+        clientBase: '/ui',
+        clientMode: 'static',
+        entryKind: 'web',
+        serverRole: 'manager',
+        serverHost: '127.0.0.1',
+        serverPort: '8787',
+        serverWsPath: '/ws',
+        workspaceMode: 'optional'
+      }
+    })
+
+    expect(env.__ONEWORKS_PROJECT_SERVER_ROLE__).toBe('manager')
+    expect(env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__).toBeUndefined()
+    expect(env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD__).toBeUndefined()
+    expect(env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__).toBeUndefined()
+    expect(env.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__).toBe('manager')
+    expect(env.__ONEWORKS_PROJECT_SERVER_DATA_DIR__).toBe('/tmp/ow-home/.oneworks/projects/manager/server/data')
+    expect(env.__ONEWORKS_PROJECT_SERVER_LOG_DIR__).toBe('/tmp/ow-home/.oneworks/projects/manager/logs/server')
+    expect(env.HOME).toBe('/tmp/ow-home/.oneworks/projects/manager/.mock')
+  })
+
+  it('keeps optional web runtime bound when a workspace is explicit', () => {
+    const repoRoot = process.cwd()
+    const packageDir = resolve(repoRoot, 'apps/web')
+    const env = applyServerRuntimeEnv({
+      baseEnv: {
+        HOME: '/tmp/ow-home'
+      },
+      cwd: resolve(repoRoot, 'apps/web'),
+      packageDir,
+      options: {
+        workspace: '../..'
+      },
+      defaults: {
+        allowCors: false,
+        clientBase: '/ui',
+        clientMode: 'static',
+        entryKind: 'web',
+        serverRole: 'workspace',
+        serverHost: '127.0.0.1',
+        serverPort: '8787',
+        serverWsPath: '/ws',
+        workspaceMode: 'optional'
+      }
+    })
+
+    expect(env.__ONEWORKS_PROJECT_SERVER_ROLE__).toBe('workspace')
+    expect(env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__).toBe(repoRoot)
+    expect(env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD__).toBe(repoRoot)
+    expect(env.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__).toBeUndefined()
+  })
+
   it('scopes inherited exact project-home paths when the workspace option selects another workspace', () => {
     const root = resolve(process.cwd(), 'tmp-cli-runtime-scope')
     const workspaceA = resolve(root, 'workspace-a')

@@ -32,6 +32,16 @@ const parsePort = (value: string) => {
   return normalizedValue
 }
 
+const isNonEmptyString = (value: string | undefined) => {
+  const trimmedValue = value?.trim()
+  return trimmedValue != null && trimmedValue !== ''
+}
+
+const hasConfiguredWorkspace = (options: WebCliOptions) => (
+  isNonEmptyString(options.workspace) ||
+  isNonEmptyString(process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__)
+)
+
 program
   .name('oneworks-web')
   .description(getWebDescription())
@@ -57,6 +67,7 @@ Examples:
     const packageDir = process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__ ?? resolve(process.cwd(), 'apps/web')
     const serverPackageDir = resolveActiveModulePackageDirSync('@oneworks/server') ??
       dirname(nodeRequire.resolve('@oneworks/server/package.json'))
+    const isWorkspaceWeb = hasConfiguredWorkspace(options)
     const env = applyServerRuntimeEnv({
       cwd: process.cwd(),
       packageDir,
@@ -66,9 +77,11 @@ Examples:
         clientBase: '/ui',
         clientMode: 'static',
         entryKind: 'web',
+        serverRole: isWorkspaceWeb ? 'workspace' : 'manager',
         serverHost: '127.0.0.1',
         serverPort: '8787',
-        serverWsPath: '/ws'
+        serverWsPath: '/ws',
+        workspaceMode: 'optional'
       }
     })
 

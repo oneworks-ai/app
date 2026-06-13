@@ -1,4 +1,3 @@
-import { ShortcutDisplay } from '@oneworks/components/route-layout'
 import { Button, Dropdown } from 'antd'
 import type { MenuProps } from 'antd'
 import type React from 'react'
@@ -6,6 +5,7 @@ import type { ReactNode } from 'react'
 
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import type { IconAsset } from '#~/components/icons/IconAsset'
+import { getShortcutDisplayTokens } from '#~/utils/shortcutUtils'
 
 export const NAV_RAIL_MORE_DROPDOWN_CLASS = 'nav-rail-more-dropdown'
 export const NAV_RAIL_MORE_CLOSE_DEFER_MS = 16
@@ -50,16 +50,22 @@ const isCustomMenuItem = (item: NavRailMoreMenuItem): item is NavRailMoreMenuCus
   'type' in item && item.type === 'custom'
 )
 
+const formatMenuShortcut = (shortcut: string | undefined, isMac: boolean) =>
+  getShortcutDisplayTokens(shortcut, isMac)
+    .map(token => token.value)
+    .join(isMac ? '' : '+')
+
 const renderMenuItemLabel = (
   item: NavRailMoreMenuBaseItem,
   isMac: boolean
 ) => {
-  if (item.shortcut == null) return item.label
+  const shortcutLabel = formatMenuShortcut(item.shortcut, isMac)
+  if (shortcutLabel === '') return item.label
 
   return (
     <span className='nav-menu-shortcut-label'>
       <span className='nav-menu-shortcut-title'>{item.label}</span>
-      <ShortcutDisplay className='nav-menu-shortcut' isMac={isMac} shortcut={item.shortcut} />
+      <span className='nav-menu-shortcut'>{shortcutLabel}</span>
     </span>
   )
 }

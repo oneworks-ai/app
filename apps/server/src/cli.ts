@@ -12,6 +12,7 @@ interface ServerCliOptions {
   dataDir?: string
   host?: string
   logDir?: string
+  manager?: boolean
   port?: string
   publicBaseUrl?: string
   workspace?: string
@@ -49,6 +50,7 @@ program
   .option('--config-dir <path>', 'Override config directory')
   .option('--data-dir <path>', 'Override server data directory')
   .option('--log-dir <path>', 'Override server log directory')
+  .option('--manager', 'Run the manager server without binding a workspace')
   .option('--public-base-url <url>', 'External base URL used in links')
   .option('--allow-cors', 'Enable CORS for remote clients')
   .addHelpText(
@@ -60,6 +62,10 @@ Examples:
 `
   )
   .action(async (options: ServerCliOptions) => {
+    if (options.manager === true && options.workspace?.trim()) {
+      throw new Error('Use either --manager or --workspace, not both.')
+    }
+
     const packageDir = process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__ ?? resolve(process.cwd(), 'apps/server')
     const env = applyServerRuntimeEnv({
       cwd: process.cwd(),
@@ -69,9 +75,11 @@ Examples:
         allowCors: false,
         clientMode: 'none',
         entryKind: 'server',
+        serverRole: options.manager === true ? 'manager' : 'workspace',
         serverHost: '127.0.0.1',
         serverPort: '8787',
-        serverWsPath: '/ws'
+        serverWsPath: '/ws',
+        workspaceMode: options.manager === true ? 'optional' : 'required'
       }
     })
 

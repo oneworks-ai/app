@@ -19,6 +19,7 @@ export interface ServerEnv {
   __ONEWORKS_PROJECT_SERVER_DEBUG__: boolean
   __ONEWORKS_PROJECT_SERVER_ALLOW_CORS__: boolean
   __ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__?: string
+  __ONEWORKS_PROJECT_SERVER_ROLE__?: 'manager' | 'workspace'
   __ONEWORKS_PROJECT_CLIENT_MODE__?: 'dev' | 'none' | 'static' | 'standalone' | 'independent' | 'desktop'
   __ONEWORKS_PROJECT_CLIENT_BASE__?: string
   __ONEWORKS_PROJECT_CLIENT_DIST_PATH__?: string
@@ -39,6 +40,7 @@ export function loadEnv(): ServerEnv {
     __ONEWORKS_PROJECT_SERVER_DEBUG__,
     __ONEWORKS_PROJECT_SERVER_ALLOW_CORS__,
     __ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__,
+    __ONEWORKS_PROJECT_SERVER_ROLE__ = 'workspace',
     __ONEWORKS_PROJECT_CLIENT_MODE__ = 'static',
     __ONEWORKS_PROJECT_CLIENT_BASE__,
     __ONEWORKS_PROJECT_CLIENT_DIST_PATH__
@@ -57,6 +59,7 @@ export function loadEnv(): ServerEnv {
       ? __ONEWORKS_PROJECT_SERVER_ALLOW_CORS__ === 'true'
       : true,
     __ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__,
+    __ONEWORKS_PROJECT_SERVER_ROLE__: __ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager' ? 'manager' : 'workspace',
     __ONEWORKS_PROJECT_CLIENT_MODE__: __ONEWORKS_PROJECT_CLIENT_MODE__ as ServerEnv['__ONEWORKS_PROJECT_CLIENT_MODE__'],
     __ONEWORKS_PROJECT_CLIENT_BASE__,
     __ONEWORKS_PROJECT_CLIENT_DIST_PATH__

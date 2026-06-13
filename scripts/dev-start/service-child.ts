@@ -33,6 +33,7 @@ export const runServiceChild = async (target: DevStartTarget) => {
     clientMode: config.clientMode,
     clientPort,
     extra: config.extraEnv,
+    serverRole: config.serverRole,
     serverPort
   })
   const projectHomeDir = runtimeEnv.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__
@@ -139,6 +140,7 @@ export const runServiceChild = async (target: DevStartTarget) => {
       args: [
         'exec',
         'oneworks-server',
+        ...(config.serverRole === 'manager' ? ['--manager'] : []),
         '--port',
         String(serverPort),
         '--allow-cors',

@@ -1,6 +1,8 @@
 import { Suspense, lazy } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 
+import { getStoredServerBaseUrl, isServerManagerRole } from '#~/runtime-config'
+
 const DevComponentLabRoute = import.meta.env.DEV
   ? lazy(async () => ({
     default: (await import('#~/routes/dev/ComponentLabRoute')).ComponentLabRoute
@@ -31,12 +33,17 @@ function DevComponentLabApp() {
 
 export default function App() {
   const location = useLocation()
+  const isManagerLauncher = isServerManagerRole()
   if (location.pathname === '/__component-lab') {
     return <DevComponentLabApp />
   }
 
+  if (location.pathname === '/' && isManagerLauncher && getStoredServerBaseUrl() == null) {
+    return <Navigate to='/launcher' replace />
+  }
+
   if (location.pathname === '/launcher') {
-    if (window.oneworksDesktop == null) {
+    if (window.oneworksDesktop == null && !isManagerLauncher) {
       return <Navigate to='/' replace />
     }
     return (

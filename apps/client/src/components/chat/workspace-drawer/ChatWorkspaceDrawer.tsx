@@ -9,7 +9,7 @@ import { useAtomValue } from 'jotai'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
 import type { GitRepositoryState, TerminalShellKind } from '@oneworks/types'
@@ -45,7 +45,6 @@ import { interactionPanelPinnedTabLimitAtom } from '#~/store/index'
 import { InteractionPanelEmptyState } from '../interaction-panel/InteractionPanelEmptyState'
 import { InteractionPanelIframeView } from '../interaction-panel/InteractionPanelIframeView'
 import { InteractionPanelMobileDebugView } from '../interaction-panel/InteractionPanelMobileDebugView'
-import { InteractionPanelOpenResourceDialog } from '../interaction-panel/InteractionPanelOpenResourceDialog'
 import { InteractionPanelPinnedTabEditModal } from '../interaction-panel/InteractionPanelPinnedTabEditModal'
 import { InteractionPanelSessionView } from '../interaction-panel/InteractionPanelSessionView'
 import { buildInteractionPanelDockTabContextMenuItems } from '../interaction-panel/interaction-panel-dock-tab-context-menu'
@@ -177,8 +176,10 @@ export function ChatWorkspaceDrawer({
   onClose,
   onFullscreenChange,
   onOpenFile,
+  onOpenResource,
+  openResourceShortcut,
+  openResourceShortcutLabel,
   onReferencePaths,
-  recentFilePaths = [],
   selectedFilePath,
   settingsView,
   sessionId,
@@ -193,8 +194,10 @@ export function ChatWorkspaceDrawer({
   onClose?: () => void
   onFullscreenChange?: (fullscreen: boolean) => void
   onOpenFile?: (path: string) => void
+  onOpenResource: () => void
+  openResourceShortcut?: string
+  openResourceShortcutLabel?: string
   onReferencePaths?: (files: ContextPickerFile[]) => void
-  recentFilePaths?: string[]
   selectedFilePath?: string | null
   settingsView?: ReactNode
   sessionId?: string
@@ -203,11 +206,9 @@ export function ChatWorkspaceDrawer({
 }) {
   const { i18n, t } = useTranslation()
   const { message } = App.useApp()
-  const location = useLocation()
   const navigate = useNavigate()
   const maxPinnedTabs = useAtomValue(interactionPanelPinnedTabLimitAtom)
   const [editingPinnedTab, setEditingPinnedTab] = useState<InteractionPanelPinnedTab | null>(null)
-  const [isOpenResourceDialogOpen, setIsOpenResourceDialogOpen] = useState(false)
   const hasApprovalsTab = agentApprovals != null
   const hasAgentsTab = agentRoster != null
   const hasSettingsTab = settingsView != null
@@ -642,21 +643,8 @@ export function ChatWorkspaceDrawer({
   }, [availableViewSet, drawerTerminalPanes, iframePageState, mobileDebugPageState, sessionPageState, terminalPanes])
 
   const handleOpenResourceAction = useCallback(() => {
-    setIsOpenResourceDialogOpen(true)
-  }, [])
-  const handleOpenResourceFile = useCallback((path: string) => {
-    onOpenFile?.(path)
-  }, [onOpenFile])
-  const handleOpenResourceSession = useCallback((targetSessionId: string) => {
-    void navigate({
-      pathname: `/session/${encodeURIComponent(targetSessionId)}`,
-      search: location.search
-    })
-  }, [location.search, navigate])
-  const handleOpenResourceWebsite = useCallback((url: string) => {
-    const page = iframePageState.openIframeUrl(url)
-    setActiveTabKey(toWorkspaceDrawerIframeTabKey(page.id))
-  }, [iframePageState])
+    onOpenResource()
+  }, [onOpenResource])
   const handleNewTerminalAction = useCallback((shellKind: TerminalShellKind = 'default') => {
     const pane = terminalPanes.addTerminal(shellKind, { surface: 'workspace-drawer' })
     setActiveTabKey(toWorkspaceDrawerTerminalTabKey(pane.id))
@@ -729,6 +717,7 @@ export function ChatWorkspaceDrawer({
       canCreateSessionTab: sessionId != null && sessionId !== '',
       language: pluginLanguage,
       mobileDebugDevices: deviceOptions,
+      openResourceShortcut,
       pluginMenuItems: pluginAddMenuItems,
       selectedMobileDebugDeviceId: mobileDebugPage?.selectedDeviceId,
       workspaceDrawerItems: viewItems
@@ -736,6 +725,8 @@ export function ChatWorkspaceDrawer({
     deviceOptions,
     isMac,
     mobileDebugPage?.selectedDeviceId,
+    openResourceShortcut,
+    openResourceShortcutLabel,
     pluginAddMenuItems,
     pluginLanguage,
     sessionId,
@@ -1098,6 +1089,7 @@ export function ChatWorkspaceDrawer({
               onNewTerminal={handleNewTerminalAction}
               onNewWebPage={handleNewWebPageAction}
               onOpenResource={handleOpenResourceAction}
+              openResourceShortcutLabel={openResourceShortcutLabel}
             />
           }
           getHeaderActions={getHeaderActions}
@@ -1116,18 +1108,6 @@ export function ChatWorkspaceDrawer({
           onTabChange={handleDockTabChange}
         />
       </aside>
-      <InteractionPanelOpenResourceDialog
-        iframePages={iframePageState.iframePages}
-        open={isOpenResourceDialogOpen}
-        projectUrlHistoryKey={`${workspaceDrawerIframeSessionId}:project`}
-        recentFilePaths={recentFilePaths}
-        sessionId={sessionId}
-        sessionUrlHistoryKey={`${workspaceDrawerIframeSessionId}:session`}
-        onClose={() => setIsOpenResourceDialogOpen(false)}
-        onOpenFile={handleOpenResourceFile}
-        onOpenSession={handleOpenResourceSession}
-        onOpenWebsite={handleOpenResourceWebsite}
-      />
       <InteractionPanelPinnedTabEditModal
         pinnedTab={editingPinnedTab}
         onClose={() => setEditingPinnedTab(null)}

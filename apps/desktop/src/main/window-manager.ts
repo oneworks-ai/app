@@ -7,7 +7,7 @@ import type { WebContents } from 'electron'
 import { matchesPinyinSearch, normalizePinyinSearchQuery } from '@oneworks/utils/pinyin-search'
 
 import { createWorkspaceSelectorHtml as createWorkspaceSelectorHtmlBase } from '../workspace-selector-page.cjs'
-import { normalizeWorkspaceFolder } from '../workspace-state.cjs'
+import { resolveProjectWorkspaceFolder } from '../workspace-state.cjs'
 import { createBrowserWindowFactory } from './browser-window-factory'
 import { WORKSPACE_RESOURCE_REQUEST_CHANNEL } from './constants'
 import type { LauncherClientServiceManager } from './launcher-client-service'
@@ -476,7 +476,7 @@ export const createWindowManager = ({
 
   const loadWorkspaceInWindow = async (windowRecord: WindowRecord, workspaceFolder: string) => {
     const startedAt = Date.now()
-    const normalizedWorkspaceFolder = normalizeWorkspaceFolder(workspaceFolder)
+    const normalizedWorkspaceFolder = resolveProjectWorkspaceFolder(workspaceFolder)
     if (normalizedWorkspaceFolder == null) {
       throw new Error('The selected workspace is no longer available.')
     }
@@ -560,7 +560,7 @@ export const createWindowManager = ({
   }
 
   const openWorkspaceWindow = async (workspaceFolder: string, input: OpenWorkspaceWindowInput = {}) => {
-    const normalizedWorkspaceFolder = normalizeWorkspaceFolder(workspaceFolder)
+    const normalizedWorkspaceFolder = resolveProjectWorkspaceFolder(workspaceFolder)
     if (normalizedWorkspaceFolder == null) {
       forgetWorkspaceFolder(workspaceFolder)
       throw new Error('The selected workspace is no longer available.')
@@ -586,7 +586,7 @@ export const createWindowManager = ({
       throw new Error('A workspace context is required to open this URL.')
     }
 
-    const normalizedWorkspaceFolder = normalizeWorkspaceFolder(sourceWindowRecord.workspaceFolder)
+    const normalizedWorkspaceFolder = resolveProjectWorkspaceFolder(sourceWindowRecord.workspaceFolder)
     if (normalizedWorkspaceFolder == null) {
       throw new Error('The selected workspace is no longer available.')
     }
@@ -613,7 +613,7 @@ export const createWindowManager = ({
   }
 
   const openWorkspaceRouteWindow = async (workspaceFolder: string, routePath: string) => {
-    const normalizedWorkspaceFolder = normalizeWorkspaceFolder(workspaceFolder)
+    const normalizedWorkspaceFolder = resolveProjectWorkspaceFolder(workspaceFolder)
     if (normalizedWorkspaceFolder == null) {
       forgetWorkspaceFolder(workspaceFolder)
       throw new Error('The selected workspace is no longer available.')
@@ -646,7 +646,7 @@ export const createWindowManager = ({
   }
 
   const resolveWorkspaceServiceForWorkspace = async (workspaceFolder: string) => {
-    const normalizedWorkspaceFolder = normalizeWorkspaceFolder(workspaceFolder)
+    const normalizedWorkspaceFolder = resolveProjectWorkspaceFolder(workspaceFolder)
     if (normalizedWorkspaceFolder == null) {
       throw new Error('The selected workspace is no longer available.')
     }
@@ -894,7 +894,7 @@ export const createWindowManager = ({
       throw new Error('A current workspace is required to open a resource.')
     }
 
-    const normalizedWorkspaceFolder = normalizeWorkspaceFolder(launcherWindowRecord.workspaceFolder)
+    const normalizedWorkspaceFolder = resolveProjectWorkspaceFolder(launcherWindowRecord.workspaceFolder)
     if (normalizedWorkspaceFolder == null) {
       throw new Error('The selected workspace is no longer available.')
     }

@@ -2,6 +2,7 @@ export type RuntimeEnv = Partial<{
   __ONEWORKS_PROJECT_SERVER_BASE_URL__: string
   __ONEWORKS_PROJECT_SERVER_HOST__: string
   __ONEWORKS_PROJECT_SERVER_PORT__: string
+  __ONEWORKS_PROJECT_SERVER_ROLE__: string
   __ONEWORKS_PROJECT_SERVER_WS_PATH__: string
   __ONEWORKS_PROJECT_CLIENT_MODE__: string
   __ONEWORKS_PROJECT_CLIENT_BASE__: string
@@ -172,9 +173,18 @@ export const isStandaloneClientMode = () => {
 
 export const isDesktopClientMode = () => getClientMode() === 'desktop'
 
+export const getServerRole = () => (
+  pickNonEmptyValue(
+    getRuntimeEnv().__ONEWORKS_PROJECT_SERVER_ROLE__,
+    import.meta.env.__ONEWORKS_PROJECT_SERVER_ROLE__
+  )?.trim().toLowerCase()
+)
+
+export const isServerManagerRole = () => getServerRole() === 'manager'
+
 export const isServerConnectionManagedClientMode = () => {
   const mode = getClientMode()
-  return mode === 'standalone' || mode === 'independent' || mode === 'desktop'
+  return mode === 'standalone' || mode === 'independent' || mode === 'desktop' || isServerManagerRole()
 }
 
 export const getRuntimeEnv = (): RuntimeEnv => getGlobalRuntimeEnv() ?? {}
@@ -245,6 +255,18 @@ export const getServerWsPath = () =>
 export const getServerBaseUrl = () => {
   const configuredServerBaseUrl = getConfiguredServerBaseUrl()
   if (isDesktopClientMode()) {
+    const explicitServerBaseUrl = normalizeServerBaseUrl(
+      getRuntimeEnv().__ONEWORKS_PROJECT_SERVER_BASE_URL__ ??
+        import.meta.env.__ONEWORKS_PROJECT_SERVER_BASE_URL__
+    )
+    if (explicitServerBaseUrl != null) {
+      return explicitServerBaseUrl
+    }
+
+    if (isDevServerClient() && globalThis.location?.origin != null) {
+      return globalThis.location.origin
+    }
+
     if (configuredServerBaseUrl != null) {
       return configuredServerBaseUrl
     }
