@@ -150,6 +150,10 @@ export const applyServerRuntimeEnv = (params: ApplyServerRuntimeEnvOptions) => {
   } else {
     const inheritedWorkspaceMatches = inheritedWorkspaceFolder != null &&
       resolve(inheritedWorkspaceFolder) === workspaceFolder
+    const inheritedHomeProjectDir = normalizeEnvValue(nextEnv.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__)
+    const shouldResetInheritedProjectHome = inheritedWorkspaceFolder == null
+      ? inheritedHomeProjectDir != null
+      : !inheritedWorkspaceMatches
     const preserveInheritedPrimaryWorkspace = inheritedWorkspaceMatches &&
       nextEnv.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__?.trim() != null &&
       nextEnv.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__?.trim() !== ''
@@ -163,8 +167,21 @@ export const applyServerRuntimeEnv = (params: ApplyServerRuntimeEnvOptions) => {
         nextEnv.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__ = primaryWorkspaceFolder
       }
     }
-    if (inheritedWorkspaceFolder != null && !inheritedWorkspaceMatches) {
+    if (shouldResetInheritedProjectHome) {
       delete nextEnv.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__
+      delete nextEnv.DB_PATH
+      const inheritedRealHome = normalizeEnvValue(nextEnv.__ONEWORKS_PROJECT_REAL_HOME__)
+      if (inheritedRealHome == null) {
+        delete nextEnv.HOME
+      } else {
+        nextEnv.HOME = inheritedRealHome
+      }
+      if (typeof params.options.dataDir !== 'string') {
+        delete nextEnv.__ONEWORKS_PROJECT_SERVER_DATA_DIR__
+      }
+      if (typeof params.options.logDir !== 'string') {
+        delete nextEnv.__ONEWORKS_PROJECT_SERVER_LOG_DIR__
+      }
     }
   }
 

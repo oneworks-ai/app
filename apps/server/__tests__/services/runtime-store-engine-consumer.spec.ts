@@ -216,13 +216,25 @@ describe('runtime store engine consumer', () => {
   it('does not inherit exact project-home dirs from another workspace when spawning consumers', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-env-'))
     const store = createStore(root, 'sess-web')
+    const homeProjectsDir = path.join(root, 'home-projects')
+    const realHome = path.join(root, 'real-home')
+    const managerMockHome = path.join(homeProjectsDir, 'manager', '.mock')
+    const managerDataDir = path.join(homeProjectsDir, 'manager', 'server', 'data')
+    const managerLogDir = path.join(homeProjectsDir, 'manager', 'logs')
+    const managerDbPath = path.join(homeProjectsDir, 'manager', '.local', 'server', 'db.sqlite')
     const plan = buildRuntimeConsumerSpawnPlan({
       baseEnv: {
         __ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__: '/tmp/fake-ow.js',
+        HOME: managerMockHome,
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+        __ONEWORKS_PROJECT_HOME_PROJECTS_DIR__: homeProjectsDir,
         __ONEWORKS_PROJECT_LAUNCH_CWD__: '/workspace-a',
         __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: '/workspace-a',
         __ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__: '/workspace-a',
-        __ONEWORKS_PROJECT_HOME_PROJECT_DIR__: 'workspace-a-home'
+        __ONEWORKS_PROJECT_HOME_PROJECT_DIR__: 'workspace-a-home',
+        __ONEWORKS_PROJECT_SERVER_DATA_DIR__: managerDataDir,
+        __ONEWORKS_PROJECT_SERVER_LOG_DIR__: managerLogDir,
+        DB_PATH: managerDbPath
       } as NodeJS.ProcessEnv,
       command: {
         message: 'Run in workspace B'
@@ -241,6 +253,11 @@ describe('runtime store engine consumer', () => {
     expect(plan.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD__).toBe('/workspace-b')
     expect(plan.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__).not.toBe('/workspace-a')
     expect(plan.env.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__).toBeUndefined()
+    expect(plan.env.__ONEWORKS_PROJECT_SERVER_DATA_DIR__).toBeUndefined()
+    expect(plan.env.__ONEWORKS_PROJECT_SERVER_LOG_DIR__).toBeUndefined()
+    expect(plan.env.DB_PATH).toBeUndefined()
+    expect(plan.env.HOME).toContain(homeProjectsDir)
+    expect(plan.env.HOME).not.toBe(managerMockHome)
   })
 
   it('passes channel context env through server-side consumer spawn plans', async () => {

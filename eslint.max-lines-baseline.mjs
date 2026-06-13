@@ -5,6 +5,7 @@ export default [
   'packages/plugins/demo/client/view.js',
   'packages/plugins/demo/plugin.json',
   '.oo/rules/adapter-error-debugging.md',
+  '.oo/docs/usage/plugins/ui-runtime.md',
   '.oo/rfcs/0001-copilot-adapter.md',
   '.oo/rfcs/0001-gemini-cli-adapter.md',
   '.oo/rfcs/0003-agent-room-aggregated-conversation.md',

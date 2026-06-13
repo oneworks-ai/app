@@ -1,7 +1,8 @@
 import { Suspense, lazy } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 
-import { getStoredServerBaseUrl, isServerManagerRole } from '#~/runtime-config'
+import { WorkspaceConnectionGate } from '#~/WorkspaceConnectionGate'
+import { getRuntimeWorkspaceId, isDesktopClientMode, isServerManagerRole } from '#~/runtime-config'
 
 const DevComponentLabRoute = import.meta.env.DEV
   ? lazy(async () => ({
@@ -34,12 +35,19 @@ function DevComponentLabApp() {
 export default function App() {
   const location = useLocation()
   const isManagerLauncher = isServerManagerRole()
+  const workspaceId = getRuntimeWorkspaceId()
   if (location.pathname === '/__component-lab') {
     return <DevComponentLabApp />
   }
 
-  if (location.pathname === '/' && isManagerLauncher && getStoredServerBaseUrl() == null) {
-    return <Navigate to='/launcher' replace />
+  if (workspaceId != null) {
+    return (
+      <Suspense fallback={null}>
+        <WorkspaceConnectionGate workspaceId={workspaceId}>
+          <WorkspaceApp />
+        </WorkspaceConnectionGate>
+      </Suspense>
+    )
   }
 
   if (location.pathname === '/launcher') {
@@ -53,9 +61,13 @@ export default function App() {
     )
   }
 
-  return (
-    <Suspense fallback={null}>
-      <WorkspaceApp />
-    </Suspense>
-  )
+  if (window.oneworksDesktop != null && isDesktopClientMode() && !isManagerLauncher) {
+    return (
+      <Suspense fallback={null}>
+        <WorkspaceApp />
+      </Suspense>
+    )
+  }
+
+  return <Navigate to='/launcher' replace />
 }
