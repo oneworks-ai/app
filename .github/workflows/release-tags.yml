@@ -4,11 +4,6 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - .github/workflows/release-tags.yml
-      - apps/**/package.json
-      - packages/**/package.json
-      - scripts/**
   push:
     branches:
       - main
@@ -39,8 +34,57 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  changes:
+    name: release-tags-changes
+    runs-on: ubuntu-latest
+    outputs:
+      plan: ${{ steps.filter.outputs.plan }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check release tag paths
+        id: filter
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "plan=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+          fi
+
+          if [[ -z "$base" || "$base" =~ ^0+$ ]] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "plan=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git diff --name-only --diff-filter=ACMRT "$base" "$head" > "$RUNNER_TEMP/release-tags-changes.txt"
+
+          plan=false
+          while IFS= read -r file_path; do
+            case "$file_path" in
+              .github/workflows/release-tags.yml|apps/*/package.json|packages/*/package.json|scripts/*)
+                plan=true
+                break
+                ;;
+            esac
+          done < "$RUNNER_TEMP/release-tags-changes.txt"
+
+          echo "plan=$plan" >> "$GITHUB_OUTPUT"
+
   plan:
     name: release-tags
+    needs: changes
+    if: needs.changes.outputs.plan == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
