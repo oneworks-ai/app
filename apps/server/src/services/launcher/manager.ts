@@ -1,3 +1,6 @@
+/* eslint-disable max-lines -- launcher manager keeps workspace discovery, recent projects, and service startup together. */
+
+import { Buffer } from 'node:buffer'
 import { execFileSync, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
@@ -514,7 +517,7 @@ export const createLauncherWorkspaceInDirectory = async (
     throw badRequest('A valid project name is required.', { projectName: rawProjectName })
   }
 
-  await mkdir(workspaceFolder, { recursive: false }).catch((error: unknown) => {
+  await mkdir(workspaceFolder, { recursive: false }).catch(() => {
     throw badRequest(
       'Failed to create workspace directory.',
       { projectName, parentDirectory },

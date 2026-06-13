@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- empty dock workspace wires launcher, plugin actions, and dock chrome together. */
+
 import type { MenuProps } from 'antd'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
