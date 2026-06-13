@@ -1,11 +1,82 @@
 import { describe, expect, it } from 'vitest'
 
 import { normalizeOptions } from '../src/server/options.js'
+import {
+  DEFAULT_OFFICIAL_RELAY_SERVER_ID,
+  OFFICIAL_RELAY_CLOUDFLARE_BASE_URL,
+  OFFICIAL_RELAY_VERCEL_BASE_URL
+} from '../src/shared/official-services.js'
 
 describe('relay plugin options', () => {
+  it('enables official OneWorks relay services by default', () => {
+    expect(normalizeOptions({})).toMatchObject({
+      activeServerId: DEFAULT_OFFICIAL_RELAY_SERVER_ID,
+      officialServices: {
+        cloudflare: true,
+        vercel: true
+      },
+      servers: [
+        {
+          id: 'oneworks-cloudflare',
+          name: 'OneWorks Relay (Cloudflare)',
+          official: true,
+          platform: 'Cloudflare',
+          remoteBaseUrl: OFFICIAL_RELAY_CLOUDFLARE_BASE_URL
+        },
+        {
+          id: 'oneworks-vercel',
+          name: 'OneWorks Relay (Vercel)',
+          official: true,
+          platform: 'Vercel',
+          remoteBaseUrl: OFFICIAL_RELAY_VERCEL_BASE_URL
+        }
+      ]
+    })
+  })
+
+  it('allows official relay services to be hidden and disabled', () => {
+    expect(normalizeOptions({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false
+    })).toMatchObject({
+      activeServerId: '',
+      officialServices: {
+        cloudflare: false,
+        vercel: false
+      },
+      servers: []
+    })
+  })
+
+  it('keeps custom servers alongside enabled official services', () => {
+    const options = normalizeOptions({
+      servers: [
+        {
+          id: 'prod',
+          name: 'Production',
+          baseUrl: 'https://relay.example.com'
+        }
+      ]
+    })
+
+    expect(options.servers.map(server => server.id)).toEqual([
+      'oneworks-cloudflare',
+      'oneworks-vercel',
+      'prod'
+    ])
+    expect(options.servers[2]).toMatchObject({
+      id: 'prod',
+      name: 'Production',
+      remoteBaseUrl: 'https://relay.example.com'
+    })
+    expect(options.servers[2]?.official).toBeUndefined()
+  })
+
   it('builds a relay URL from server and port fields inside servers', () => {
     expect(normalizeOptions({
       activeServerId: 'local',
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
       servers: [
         {
           id: 'local',
@@ -32,6 +103,8 @@ describe('relay plugin options', () => {
 
   it('ignores top-level relay server fields', () => {
     expect(normalizeOptions({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
       pairingToken: 'secret',
       port: 8788,
       protocol: 'http',
@@ -45,6 +118,8 @@ describe('relay plugin options', () => {
   it('normalizes multiple relay servers without exposing pairing tokens', () => {
     const options = normalizeOptions({
       activeServerId: 'lab',
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
       servers: [
         {
           id: 'prod',

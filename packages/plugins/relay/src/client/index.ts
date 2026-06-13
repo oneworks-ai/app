@@ -4,6 +4,7 @@ import {
   relayClientLauncherStatusTitleI18n,
   relayClientSessionGroupCreateTitleI18n
 } from './i18n.js'
+import { openRelayLogin } from './login-action.js'
 import { relayClientCss } from './styles.js'
 import type { Disposable, PluginClientContext, RelayStatus } from './types.js'
 import { renderRelayView } from './view.js'
@@ -188,6 +189,18 @@ export async function activatePlugin(ctx: PluginClientContext) {
     ctx.commands.register('disconnect', async () => {
       const response = await ctx.api.fetch('relay/disconnect', { method: 'POST' })
       return await response.json()
+    }),
+    ctx.commands.register('login', async () => {
+      try {
+        return await openRelayLogin(ctx, { forcePluginHomeRedirect: true })
+      } catch (error) {
+        ctx.notifications?.show?.({
+          description: error instanceof Error ? error.message : String(error),
+          level: 'error',
+          title: createRelayClientI18n(ctx.i18n).errors.loginUrlMissing
+        })
+        throw error
+      }
     }),
     ctx.commands.register('search', () => [{
       id: 'status',

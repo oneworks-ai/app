@@ -1,9 +1,8 @@
 /* eslint-disable max-lines -- relay client view owns login callbacks, device actions, and host API wiring. */
 import { createRelayClientI18n } from './i18n.js'
+import { openRelayLogin } from './login-action.js'
 import {
-  buildWebLoginRedirectUri,
   clearLoginCallbackFromUrl,
-  isDesktopRuntime,
   readLoginCallback
 } from './login-callback.js'
 import { buildRelayServerOptionsUpdate } from './options.js'
@@ -12,7 +11,6 @@ import type {
   Disposable,
   PluginClientContext,
   PluginViewContext,
-  RelayLoginUrlResponse,
   RelayServerStatus,
   RelayStatus,
   RelayViewState
@@ -206,18 +204,9 @@ export const renderRelayView = (
     state = { ...state, loading: true, error: null }
     paint()
     try {
-      const response = await postAction('login-url', {
-        ...(serverId == null ? {} : { serverId }),
-        ...(isDesktopRuntime() ? {} : { redirectUri: buildWebLoginRedirectUri(serverId) })
-      })
-      const body = await response.json() as RelayLoginUrlResponse
-      if (body.loginUrl == null || body.loginUrl.trim() === '') {
-        throw new Error(getMessages().errors.loginUrlMissing)
-      }
+      await openRelayLogin(ctx, { serverId: serverId ?? getActiveServer()?.id })
       state = { ...state, loading: false }
       paint()
-      const popup = window.open(body.loginUrl, '_blank', 'noopener,noreferrer')
-      if (popup == null) window.location.href = body.loginUrl
     } catch (error) {
       state = {
         loading: false,

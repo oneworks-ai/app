@@ -17,8 +17,8 @@
         "zh-Hans": "账号选项"
       },
       "descriptionI18n": {
-        "en": "Connect this workspace service to a self-hosted OneWorks relay.",
-        "zh-Hans": "把当前工作区服务连接到自部署的 OneWorks Relay。"
+        "en": "Connect this workspace service to OneWorks Relay services.",
+        "zh-Hans": "把当前工作区服务连接到 OneWorks Relay 服务。"
       },
       "properties": {
         "activeServerId": {
@@ -33,7 +33,37 @@
           },
           "x-oneworks-ui": {
             "icon": "radio_button_checked",
-            "placeholder": "prod"
+            "placeholder": "oneworks-cloudflare"
+          }
+        },
+        "enableOfficialCloudflareRelay": {
+          "type": "boolean",
+          "default": true,
+          "titleI18n": {
+            "en": "OneWorks Cloudflare Relay",
+            "zh-Hans": "OneWorks Cloudflare Relay"
+          },
+          "descriptionI18n": {
+            "en": "Show and enable the official OneWorks Relay service hosted on Cloudflare.",
+            "zh-Hans": "显示并启用托管在 Cloudflare 的 OneWorks 官方 Relay 服务。"
+          },
+          "x-oneworks-ui": {
+            "icon": "cloud"
+          }
+        },
+        "enableOfficialVercelRelay": {
+          "type": "boolean",
+          "default": true,
+          "titleI18n": {
+            "en": "OneWorks Vercel Relay",
+            "zh-Hans": "OneWorks Vercel Relay"
+          },
+          "descriptionI18n": {
+            "en": "Show and enable the official OneWorks Relay service hosted on Vercel.",
+            "zh-Hans": "显示并启用托管在 Vercel 的 OneWorks 官方 Relay 服务。"
+          },
+          "x-oneworks-ui": {
+            "icon": "deployed_code"
           }
         },
         "servers": {
@@ -43,8 +73,8 @@
             "zh-Hans": "认证链接服务列表"
           },
           "descriptionI18n": {
-            "en": "Multiple relay systems this device can connect to.",
-            "zh-Hans": "当前设备可连接的多个 Relay 系统。"
+            "en": "Additional private or custom relay systems this device can connect to.",
+            "zh-Hans": "当前设备可连接的额外私有或自定义 Relay 系统。"
           },
           "items": {
             "type": "object",
@@ -177,11 +207,11 @@
             "zh-Hans": "账号"
           },
           "descriptionI18n": {
-            "en": "Connect this workspace service to a self-hosted relay.",
-            "zh-Hans": "把当前工作区服务连接到自部署 Relay。"
+            "en": "Sign in to the default OneWorks Relay service.",
+            "zh-Hans": "登录默认 OneWorks Relay 服务。"
           },
           "icon": "account_circle",
-          "route": "/plugins/relay/home"
+          "command": "login"
         }
       ],
       "navMoreMenu": [

@@ -48,7 +48,9 @@ export interface RelayCapabilities {
 export interface RelayServerOptions {
   id: string
   name: string
+  official?: boolean
   pairingTokenConfigured: boolean
+  platform?: string
   port?: number
   protocol: 'http' | 'https'
   remoteBaseUrl: string
@@ -60,6 +62,10 @@ export interface RelayOptions {
   autoConnect: boolean
   capabilities: RelayCapabilities
   deviceName: string
+  officialServices: {
+    cloudflare: boolean
+    vercel: boolean
+  }
   servers: RelayServerOptions[]
 }
 
