@@ -72,11 +72,11 @@ pnpm tools dev-start <target>
 - 只做阅读、解释、轻量检索：不安装依赖，不启动服务；读基础规则后按文件路径直接查看相关 `AGENTS.md` / 规则文档。
 - 用户要求拉取最新代码：先确认工作区干净；`git fetch --prune origin` 后，如果当前是 detached HEAD 且用户没有指定分支，可对齐到 `origin/main`；如果在本地分支上，优先 `git pull --ff-only`。遇到本地改动先停下来说明，不要重置。
 - 用户要求运行测试、构建、CLI、server、client 或 Electron：如果 `node_modules` 缺失，先在当前 worktree 根目录执行 `pnpm install`；如果任务依赖私有配置而 `.oo.dev.config.json` / `.env` 缺失，优先从已有本地副本确认可复用来源，不能确认时向用户说明缺口。
-- 用户要求启动桌面端 / Electron：继续阅读 `apps/desktop/AGENTS.md` 与 homepage docs 的 `usage/desktop.md`；如果已有正式版或其他 worktree 的 Electron 在运行，先列出 PID、启动时间、命令路径和 worktree 来源。需要并行启动开发态时，使用独立 `--user-data-dir`，避免被单实例锁转发到已有应用。
+- 用户要求启动桌面端 / Electron：继续阅读 `apps/desktop/AGENTS.md` 与 `.oo/docs/usage/desktop.md`；如果已有正式版或其他 worktree 的 Electron 在运行，先列出 PID、启动时间、命令路径和 worktree 来源。需要并行启动开发态时，使用独立 `--user-data-dir`，避免被单实例锁转发到已有应用。
 - 用户要求启动前端或调试页面：继续阅读 `.oo/rules/FRONTEND-STANDARD.md`、`.oo/rules/frontend-standard/debugging.md` 和 `apps/client/AGENTS.md`；涉及聊天页 / sender / 消息级交互时，再读 `apps/client/src/components/chat/AGENTS.md`。
 - 用户要求启动后端、改 API、数据库、adapter 或 MCP：继续阅读 `.oo/rules/BACKEND-STANDARD.md`；按影响范围进入 `apps/server/src/routes/AGENTS.md`、`apps/server/src/services/*/AGENTS.md` 或相关 package 的 `AGENTS.md`。
 - 用户要求改配置语义、配置页、加载 / 写回 / 分层合并：继续阅读 `.oo/rules/CONFIG.md`，再按前端或后端落点补读对应规则。
-- 用户要求更新 README、接入方式、命令行为或使用说明：继续阅读 `.oo/rules/USAGE.md`，并按实际用户可见变化更新 homepage docs 文档站或对应 `.oo/docs/`。
+- 用户要求更新 README、接入方式、命令行为或使用说明：继续阅读 `.oo/rules/USAGE.md`，并按实际用户可见变化更新 `.oo/docs/` 公开文档内容源或对应模块 README。
 - 用户要求 hooks、benchmark、发布或 changelog：分别继续阅读 `.oo/rules/HOOKS.md` / `.oo/rules/HOOKS-REFERENCE.md`、`.oo/rules/BENCHMARK.md` / `.oo/rules/BENCHMARK-PLAN.md`、`.oo/rules/RELEASE.md` 与 `changelog/`。
 
 按任务继续阅读：
@@ -84,9 +84,9 @@ pnpm tools dev-start <target>
 - adapter runtime / mock home / 原生资产自动适配：`.oo/rules/ADAPTERS.md`
 - 配置加载、写回、分层合并或配置页 source 语义：`.oo/rules/CONFIG.md`
 - 前端 / 后端约束：`.oo/rules/FRONTEND-STANDARD.md`、`.oo/rules/BACKEND-STANDARD.md`
-- 桌面端 / Electron 打包、发布与本地调试：`apps/desktop/AGENTS.md`、homepage docs 的 `usage/desktop.md`
+- 桌面端 / Electron 打包、发布与本地调试：`apps/desktop/AGENTS.md`、`.oo/docs/usage/desktop.md`
 - 仓库开发与贡献：`.oo/rules/DEVELOPMENT.md`
-- 项目接入方式：homepage docs 文档站或对应 `.oo/docs/`
+- 项目接入方式：`.oo/docs/` 公开文档内容源或对应模块 README
 - 使用文档边界约定：`.oo/rules/USAGE.md`
 - hooks 方案与维护：`.oo/rules/HOOKS.md`、`.oo/rules/HOOKS-REFERENCE.md`
 - benchmark 方案与规划：`.oo/rules/BENCHMARK.md`、`.oo/rules/BENCHMARK-PLAN.md`
@@ -121,13 +121,13 @@ Agent Room / runtime 快速入口：
 维护约定：
 
 - `.oo/rules/` 是 `AGENTS.md` 的模块化组织目录：当 `AGENTS.md` 单文件过大，或模块内部组织、稳定入口、agent 记忆需要拆分时，把细节拆到最近的 `.oo/rules/` 下，并在最近的 `AGENTS.md` 保留入口链接。
-- `.oo/docs/` 是 `README.md` 的模块化组织目录：当面向外部用户的使用说明过大时，把细节拆到最近的 `.oo/docs/` 下，并在对应 `README.md` 保留入口链接。根目录现在使用 homepage docs 文档站承载公开文档，根 README 的文档入口应指向 `https://oneworks-ai.github.io/docs/`。
-- 强制边界：`AGENTS.md` / `.oo/rules/` 只描述模块内部组织结构、内部入口信息和 agent 对这个模块的稳定记忆；`README.md` / `.oo/docs/` 只描述模块外部如何使用。修改任意 `README.md` 或 `AGENTS.md` 时，必须先按这个边界判断内容归属，发现不符合边界的内容应同步迁移到正确位置。
-- README 必须保持多语言支持：根 README 使用 `README.md` 作为英文入口、`README.zh-Hans.md` 作为中文入口，并在顶部互链；模块 README 如果面向外部用户，也应优先保留或补齐同等多语言入口。homepage docs 文档站承载根公开文档时，也必须保留 i18n 设计。`AGENTS.md` 不强制多语言，按模块内部协作效率选择中文、英文或混合表达。
+- `.oo/docs/` 是主仓公开文档内容源，只放 Markdown 与文档图片 / 素材；中文 root locale 放在 `.oo/docs/index.md`、`.oo/docs/usage/`，英文 locale 放在 `.oo/docs/en/index.md`、`.oo/docs/en/usage/`。不要在 `.oo/docs/` 放 `package.json`、`.vitepress/`、Vue 组件、theme、构建脚本或 README 占位说明。VitePress 壳层、部署、构建和导航装配信息沉淀在 homepage / docs app 侧的 `AGENTS.md` 或规则文档中。
+- 强制边界：`AGENTS.md` / `.oo/rules/` 只描述模块内部组织结构、内部入口信息和 agent 对这个模块的稳定记忆；`README.md` / `.oo/docs/` 只描述模块外部如何使用。修改任意 `README.md`、`AGENTS.md` 或 `.oo/docs/` 内容时，必须先按这个边界判断内容归属，发现不符合边界的内容应同步迁移到正确位置。
+- README 必须保持多语言支持：根 README 使用 `README.md` 作为英文入口、`README.zh-Hans.md` 作为中文入口，并在顶部互链；模块 README 如果面向外部用户，也应优先保留或补齐同等多语言入口。`.oo/docs/` 作为 homepage docs 文档站内容源时，也必须保留 i18n 设计。`AGENTS.md` 不强制多语言，按模块内部协作效率选择中文、英文或混合表达。
 - 仓库 README 的编写与展示约定统一收敛在 `.oo/rules/USAGE.md`；调整 README 时先按那里的信息取舍、双语组织和截图规则执行。
-- 公开 README 只保留品牌、图标和必要路由入口。不要在根 README 放内部排障、实现细节、迁移记录或产品截图；用户使用说明放 homepage docs 或对应 `.oo/docs/`，维护规则放 `.oo/rules/`，agent 工作入口放最近的 `AGENTS.md`。
+- 公开 README 只保留品牌、图标和必要路由入口。不要在根 README 放内部排障、实现细节、迁移记录或产品截图；用户使用说明放 `.oo/docs/` 公开文档内容源或对应模块 README，维护规则放 `.oo/rules/`，agent 工作入口放最近的 `AGENTS.md`。
 - 顶层文件只做总览与导航；超过一屏的细节继续拆到同名子目录，保持渐进式披露。
-- 如果改动涉及面向用户的使用方式、配置入口、命令行为或接入路径变化，应及时更新 homepage docs 文档站或对应 `.oo/docs/` 下的使用文档。
+- 如果改动涉及面向用户的使用方式、配置入口、命令行为或接入路径变化，应及时更新 `.oo/docs/` 或对应模块 README 下的使用文档。
 - 更新日志统一维护在仓库根目录 `changelog/`，按版本目录组织。
 - 如果通过 worktree 切换到新副本，先确认本地私有配置与依赖已经就位，例如 `.oo.dev.config.json`、`.env`，并在当前 worktree 根目录执行一次 `pnpm install`。
 - AGENTS 与文档只描述现状，不记录迁移历史。

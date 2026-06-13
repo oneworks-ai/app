@@ -86,16 +86,23 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - 英文文本修改：编辑 `apps/client/src/resources/locales/en.json`。
 - 如果添加了新的 Key，请确保在两个文件中都进行添加，以保证多语言支持的完整性。
 
-### 5. PWA 独立部署维护
+### 5. 公开文档内容源维护
+
+- 主仓 `.oo/docs/` 是 homepage docs 文档站的公开内容源，只提交 Markdown 与文档图片 / 素材。
+- 中文 root locale 入口是 `.oo/docs/index.md`，中文使用页在 `.oo/docs/usage/`；英文入口是 `.oo/docs/en/index.md`，英文使用页在 `.oo/docs/en/usage/`。
+- VitePress 配置、主题、Vue 组件、构建脚本、部署 workflow、token 与 dev-start docs 等壳层或发布信息留在 homepage / docs app 侧维护，不写入 `.oo/docs/`，也不要用 `.oo/docs/README.md` 或 `.oo/docs/README.zh-Hans.md` 做占位说明。
+- 内容源迁移或链接调整至少做文件 / 链接层检查，例如统计 Markdown 与图片数量、检查中英文路径配对、确认 `.oo/docs` 没有引用旧 homepage docs app 目录或旧 public 图片路径。不要求为纯内容源迁移启动本地 docs 服务。
+
+### 6. PWA 独立部署维护
 
 - PWA 静态站点由 `oneworks-ai/pwa` 仓库维护，发布分支是该仓库的 `gh-pages`。
 - 本仓库的 `.github/workflows/deploy-pwa.yml` 负责在 `main` 的 client 相关输入变化时触发 `oneworks-ai/pwa` 的 `deploy-pwa.yml` workflow，并等待下游 workflow 成功；不再直接写本仓库的 `gh-pages`。
 - 本仓库需要配置 Actions secret `PWA_DEPLOY_TOKEN`，用于跨仓库触发 `oneworks-ai/pwa` workflow。推荐使用只授予 `oneworks-ai/pwa` Actions 写权限的 fine-grained token。
 - PWA 仓库部署时会 checkout 本仓库 `main` 的指定 commit，使用 `__ONEWORKS_PROJECT_CLIENT_MODE__=standalone` 和 `__ONEWORKS_PROJECT_CLIENT_BASE__=/pwa/` 构建 `apps/client`，然后把 `apps/client/dist/` 发布到 `oneworks-ai/pwa` 的 `gh-pages`。
 - `__ONEWORKS_PROJECT_CLIENT_BASE__=/pwa/` 的官方独立构建会在编译期启用官网首页预览运行时；普通独立部署默认不包含这部分模拟数据和 hook 代码。自定义构建可以用 `__ONEWORKS_PROJECT_CLIENT_HOMEPAGE_PREVIEW__=1` 强制启用，或用 `__ONEWORKS_PROJECT_CLIENT_HOMEPAGE_PREVIEW__=0` 强制关闭。
-- 本仓库自己的 `gh-pages` 不再承载 PWA，后续主要用于项目文档站；文档站实现由单独分支维护时，不要把 PWA 发布逻辑重新写回本仓库。
+- 本仓库自己的 `gh-pages` 不再承载 PWA，后续主要用于项目文档站；维护文档站构建或部署时，不要把 PWA 发布逻辑重新写回本仓库。
 
-### 6. Avatar 独立部署维护
+### 7. Avatar 独立部署维护
 
 - Avatar 预览站点由 `oneworks-ai/avatar` 仓库维护，并作为本仓库 `assets/avatar` submodule 挂载。
 - Avatar 的运行时来源是本仓库 `packages/avatar`，client 通过 `@oneworks/avatar` 使用同一套 SVG rect 渲染器。
