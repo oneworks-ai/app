@@ -12,7 +12,9 @@ export const getTargetConfig = (
       defaultServerPort: 8787,
       needsClient: true,
       needsServer: true,
-      readiness: 'http'
+      readiness: 'http',
+      serverRole: 'manager',
+      urlSuffix: 'launcher'
     }
   }
 

@@ -12,6 +12,7 @@ import {
   isDesktopClientMode,
   isServerConnectionManagedClientMode,
   isServerConnectionPickerRequested,
+  isServerManagerRole,
   normalizeServerBaseUrl,
   requestServerConnectionPicker,
   resolveDevDocumentTitle,
@@ -26,6 +27,7 @@ const getGlobalScope = () => (
       __ONEWORKS_PROJECT_CLIENT_DEV_SERVER__?: string
       __ONEWORKS_PROJECT_SERVER_HOST__?: string
       __ONEWORKS_PROJECT_SERVER_PORT__?: string
+      __ONEWORKS_PROJECT_SERVER_ROLE__?: string
     }
   }
 )
@@ -129,7 +131,7 @@ describe('server base URL helpers', () => {
     expect(normalizeServerBaseUrl('ftp://api.example.com')).toBeUndefined()
   })
 
-  it('uses the stored backend address only in standalone client mode', () => {
+  it('uses the stored backend address in standalone client mode', () => {
     localStorage.setItem(SERVER_BASE_URL_STORAGE_KEY, 'https://standalone.example.com')
     setRuntimeEnv({
       __ONEWORKS_PROJECT_CLIENT_MODE__: 'standalone',
@@ -139,6 +141,20 @@ describe('server base URL helpers', () => {
 
     expect(getServerBaseUrl()).toBe('https://standalone.example.com')
     expect(createServerUrl('/api/auth/status')).toBe('https://standalone.example.com/api/auth/status')
+  })
+
+  it('uses the stored workspace server address from manager client mode', () => {
+    localStorage.setItem(SERVER_BASE_URL_STORAGE_KEY, 'http://127.0.0.1:4899')
+    setRuntimeEnv({
+      __ONEWORKS_PROJECT_CLIENT_MODE__: 'static',
+      __ONEWORKS_PROJECT_SERVER_HOST__: '127.0.0.1',
+      __ONEWORKS_PROJECT_SERVER_PORT__: '8787',
+      __ONEWORKS_PROJECT_SERVER_ROLE__: 'manager'
+    })
+
+    expect(isServerManagerRole()).toBe(true)
+    expect(isServerConnectionManagedClientMode()).toBe(true)
+    expect(getServerBaseUrl()).toBe('http://127.0.0.1:4899')
   })
 
   it('persists normalized standalone server addresses', () => {
@@ -157,6 +173,14 @@ describe('server base URL helpers', () => {
     expect(isServerConnectionManagedClientMode()).toBe(true)
     expect(getConfiguredServerBaseUrl()).toBe('http://127.0.0.1:43123')
     expect(getServerBaseUrl()).toBe('http://127.0.0.1:43123')
+  })
+
+  it('detects manager server role from runtime env', () => {
+    setRuntimeEnv({
+      __ONEWORKS_PROJECT_SERVER_ROLE__: 'manager'
+    })
+
+    expect(isServerManagerRole()).toBe(true)
   })
 
   it('uses the dev server origin so Vite can proxy backend requests', () => {

@@ -171,6 +171,7 @@ const renderDrawer = async ({
         settingsView={settingsView}
         terminalSessionId='__workspace__'
         terminalPanes={terminalPanes}
+        onOpenResource={() => {}}
       />
     )
   }

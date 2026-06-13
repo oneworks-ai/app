@@ -20,11 +20,15 @@ export function ChatRouteBottomPanel({
   isFolded,
   isRendered,
   isVisible,
+  openResourceKeyboardShortcut,
+  openResourceShortcut,
+  openResourceShortcutLabel,
   shortcutRequest,
   onShortcutRequestHandled,
   onRunCommandTaskStatusesChange,
   onFoldChange,
   onLocateWorkspacePath,
+  onOpenResource,
   onReferenceWorkspacePaths,
   onWorkspaceDrawerCreateMenuClick,
   settingsView,
@@ -41,11 +45,15 @@ export function ChatRouteBottomPanel({
   isFolded: boolean
   isRendered: boolean
   isVisible: boolean
+  openResourceKeyboardShortcut?: string | null
+  openResourceShortcut?: string
+  openResourceShortcutLabel?: string
   shortcutRequest?: InteractionPanelShortcutRequest | null
   onShortcutRequestHandled?: (id: number) => void
   onRunCommandTaskStatusesChange?: (statuses: InteractionPanelRunCommandTaskStatus[]) => void
   onFoldChange: (isFolded: boolean) => void
   onLocateWorkspacePath: (path: string) => void
+  onOpenResource: () => void
   onReferenceWorkspacePaths?: (files: ContextPickerFile[]) => void
   onWorkspaceDrawerCreateMenuClick?: NonNullable<MenuProps['onClick']>
   settingsView?: ReactNode
@@ -67,11 +75,15 @@ export function ChatRouteBottomPanel({
       bottomPanel={bottomPanel}
       isFolded={isFolded}
       isVisible={isVisible}
+      openResourceKeyboardShortcut={openResourceKeyboardShortcut}
+      openResourceShortcut={openResourceShortcut}
+      openResourceShortcutLabel={openResourceShortcutLabel}
       shortcutRequest={shortcutRequest}
       onShortcutRequestHandled={onShortcutRequestHandled}
       onRunCommandTaskStatusesChange={onRunCommandTaskStatusesChange}
       onFoldChange={onFoldChange}
       onLocateWorkspacePath={onLocateWorkspacePath}
+      onOpenResource={onOpenResource}
       onReferenceWorkspacePaths={onReferenceWorkspacePaths}
       onWorkspaceDrawerCreateMenuClick={onWorkspaceDrawerCreateMenuClick}
       settingsView={settingsView}

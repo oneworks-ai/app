@@ -273,8 +273,12 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
 
         const displayBaseUrl = resolveDisplayBaseUrl(env, config)
         if (entryKind === 'web') {
+          const clientBase = normalizeClientBase(env.__ONEWORKS_PROJECT_CLIENT_BASE__, '/')
+          const clientPath = env.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager'
+            ? `${clientBase}launcher`
+            : clientBase
           logger.info(
-            `[web] ready at ${displayBaseUrl}${normalizeClientBase(env.__ONEWORKS_PROJECT_CLIENT_BASE__, '/')}`
+            `[web] ready at ${displayBaseUrl}${clientPath}`
           )
         } else {
           const host = `${serverHost}:${serverPort}`

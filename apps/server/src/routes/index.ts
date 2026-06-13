@@ -18,6 +18,7 @@ import { channelWebhooksRouter } from './channel-webhooks'
 import { configRouter } from './config'
 import { gitRouter } from './git'
 import { interactRouter } from './interact'
+import { launcherRouter } from './launcher'
 import { moduleUpdatesRouter } from './module-updates'
 import { pluginsRouter } from './plugins'
 import { sessionsRouter } from './sessions'
@@ -52,6 +53,7 @@ export const mountRoutes = async (
     { prefix: '/api/agent-rooms', router: agentRoomsRouter() },
     { prefix: '/api/adapters', router: adaptersRouter() },
     { prefix: '/api/interact', router: interactRouter() },
+    { prefix: '/api/launcher', router: launcherRouter(env) },
     { prefix: '/api/module-updates', router: moduleUpdatesRouter() },
     { prefix: '/api/plugins', router: pluginsRouter() },
     { prefix: '/api/auth', router: authRouter(env) },

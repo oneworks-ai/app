@@ -17,6 +17,7 @@ export interface DevStartOptions {
 
 export type ClientMode = 'dev' | 'standalone'
 export type ReadinessMode = 'client' | 'docs' | 'http' | 'process'
+export type ServerRole = 'manager' | 'workspace'
 
 export interface TargetConfig {
   base?: string
@@ -29,6 +30,7 @@ export interface TargetConfig {
   needsClient: boolean
   needsServer: boolean
   readiness: ReadinessMode
+  serverRole?: ServerRole
   urlSuffix?: string
 }
 
@@ -57,6 +59,7 @@ export interface RuntimeEnvInput {
   clientMode?: ClientMode
   clientPort?: number
   extra?: NodeJS.ProcessEnv
+  serverRole?: ServerRole
   serverPort?: number
 }
 

@@ -17,6 +17,9 @@
   - `deep-link.ts`：`oneworks://` / `one-works://` schema URL 解析，目前用于 Relay SSO 回跳到 workspace 插件页
   - `menu.ts`、`ipc-handlers.ts`、`shortcuts.ts`：菜单、IPC 与桌面快捷键
   - `updates.ts`：自动更新检查
+- `src/workspace-state.cjs`
+  - 桌面最近项目、workspace 显示名、启动 workspace 解析入口。
+  - 作为 project/workspace 打开或记录时，会把 Git linked worktree 归一到 common `.git` 对应的原始 project 目录；普通目录浏览仍使用真实路径。
 - `electron.vite.config.ts`
   - 使用 `electron-vite` 编译 main / preload TypeScript 到 `dist/`
 - `src/server-child.cjs`
