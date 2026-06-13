@@ -14,13 +14,14 @@
 - `src/server/session-relay-client.ts`：Relay 远端 session forwarding client。
 - `src/server/store.ts`：远端签发的 device token 持久化到 project home runtime 目录。
 - `__tests__/`：按 API、controller、heartbeat、session worker 等模块拆分测试。
-- `.oo/rules/RELAY-DEPLOYMENT.md`：Relay 托管服务、私有化部署、Vercel / Cloudflare 域名和账号边界；涉及插件默认服务或用户自部署接入时先读。
+- `.oo/rules/RELAY-DEPLOYMENT.md`：Relay 托管服务、私有化部署、Vercel / Cloudflare 域名、官方 OneWorks 域名 / 邮件拓扑和账号边界；涉及插件默认服务或用户自部署接入时先读。
 
 ## 约定
 
 - 插件必须保持可选；不要把 Relay 行为写进默认 server/client 启动路径。
 - 远端服务在 `normalizeOptions()` 后统一是 server item；官方服务来自集中 preset 常量和开关，用户自定义服务来自 `servers[]`。`server` / `port` / `protocol` 是 server item 内部字段，默认连接项用 `activeServerId`。
-- 产品默认路径是 OneWorks 托管 Relay，默认登录入口优先 Cloudflare 官方 preset；私有化部署必须先确认用户要自托管，并使用用户提供的域名 / 平台账号。插件示例使用占位域名，不写入真实账号、测试凭据或一次性部署 URL。
+- 产品默认路径是 OneWorks 托管 Relay，默认登录入口优先 Cloudflare 官方 preset；官方服务域名和邮件拓扑以 `.oo/rules/RELAY-DEPLOYMENT.md` 为准，不在插件示例配置中另设隐藏常量。
+- 私有化部署必须先确认用户要自托管，并使用用户提供的域名、DNS 托管、邮件策略和平台账号。插件示例使用占位域名，不写入真实账号、测试凭据、私人邮箱或一次性部署 URL。
 - 多服务下 device token 按 server id 分开保存；不要把一个 Relay 系统的 token 覆盖到另一个系统。
 - 插件登录必须打开所选 Relay Server 的 `/login` 页面；Web 回跳使用当前插件页，Electron 回跳使用 `oneworks://relay/auth` schema URL，再由桌面壳打开对应 workspace 的插件页面。
 - 不记录会话正文；插件只转发当前 in-memory job payload / result，持久化仅限 device identity 和每个 server 的 token。

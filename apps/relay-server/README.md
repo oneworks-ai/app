@@ -32,7 +32,11 @@ Environment variables:
 
 ## Managed service and private deployment
 
-Before starting a private deployment, confirm that the user wants to self-host instead of using the managed OneWorks Relay service. Private deployments require the user's target platform account or team, their desired dev / production domains, and their own secret storage. Do not use a maintainer's personal cloud account for a user deployment, and do not copy real account IDs, tokens, database URLs, or test credentials into committed docs.
+The default deployment path is the managed OneWorks Relay service. The official website uses `oneworks.cloud` with `www.oneworks.cloud` as an alias or redirect. Official Relay/Admin service slots are `dev.cf.oneworks.cloud` and `cf.oneworks.cloud` on Cloudflare, plus `dev.vc.oneworks.cloud` and `vc.oneworks.cloud` on Vercel.
+
+Official inbound addresses such as `support@oneworks.cloud` and `hello@oneworks.cloud` use Cloudflare Email Routing to verified destination mailboxes. Transactional mail such as verification codes, invitations, and system notifications should be sent from stable mail subdomains such as `mail.oneworks.cloud` and `mail.dev.oneworks.cloud`; do not attach transactional mail DNS records to Relay/Admin service hosts.
+
+Before starting a private deployment, confirm that the user wants to self-host instead of using the managed OneWorks Relay service. Private deployments require the user's target platform account or team, their desired dev / production domains, DNS host, inbound mail strategy, transactional mail provider, sending domain, Reply-To, and their own secret storage. Do not use a maintainer's personal cloud account for a user deployment, and do not copy real account IDs, private mailbox destinations, tokens, database URLs, or test credentials into committed docs.
 
 Use placeholder domains in examples:
 

@@ -43,6 +43,8 @@ It connects the current workspace service to a public Relay, so phones, web clie
 
 Even one Relay service is configured through `servers[]`; there is no separate single-server config path. Use placeholder domains in docs and examples, and keep real deployment credentials in the platform secret store or project runtime store rather than in config files.
 
+The default product path is the managed OneWorks Relay service. Official service domains and mail routing are maintained outside plugin config: Relay/Admin hosts use the OneWorks-owned service slots, support addresses use role mailboxes such as `support@oneworks.cloud` and `hello@oneworks.cloud`, and transactional mail should use stable mail subdomains such as `mail.oneworks.cloud` rather than a Relay/Admin web host. Private `servers[]` entries should use the user's own confirmed domain, DNS, and mail strategy.
+
 Each server can also use `baseUrl` when a full URL is easier than separate `server`, `port`, and `protocol` fields. The device identity and remote-issued device tokens are stored under the project home runtime directory, not in the project config file. Tokens are stored per server id so switching Relay systems does not overwrite another system's token.
 
 The plugin UI can open the selected Relay Server's `/login` page. In Electron, the login redirect uses the `oneworks://relay/auth` custom scheme to return to the current workspace plugin page; in Web, the redirect returns to the current plugin route. The callback token is used only to register the current device and is then replaced by the remote-issued device token.
