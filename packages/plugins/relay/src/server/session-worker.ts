@@ -15,6 +15,7 @@ export interface RelaySessionWorkerOptions {
   logger?: {
     warn: (...args: unknown[]) => void
   }
+  serverId?: string
 }
 
 export interface RelaySessionWorker {
@@ -45,7 +46,10 @@ export const createRelaySessionWorker = (options: RelaySessionWorkerOptions): Re
     if (stopped || inFlight != null) return
     inFlight = runOnce()
       .catch(error => {
-        options.logger?.warn({ err: error }, '[relay] session forwarding worker failed')
+        options.logger?.warn(
+          { err: error, ...(options.serverId == null ? {} : { serverId: options.serverId }) },
+          '[relay] session forwarding worker failed'
+        )
       })
       .finally(() => {
         inFlight = undefined

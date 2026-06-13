@@ -452,6 +452,9 @@ importers:
       pino:
         specifier: ^10.2.0
         version: 10.2.0
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
 
   apps/server:
     dependencies:
@@ -6067,6 +6070,10 @@ packages:
   postcss@8.5.8:
     resolution: {integrity: sha512-OW/rX8O/jXnm82Ey1k44pObPtdblfiuWnrd8X7GJ7emImCOstunGbXUpp7HdBrFQX6rJzn3sPT397Wp5aCwCHg==, tarball: https://registry.npmjs.org/postcss/-/postcss-8.5.8.tgz}
     engines: {node: ^10 || ^12 || >=14}
+
+  postgres@3.4.9:
+    resolution: {integrity: sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw==, tarball: https://registry.npmjs.org/postgres/-/postgres-3.4.9.tgz}
+    engines: {node: '>=12'}
 
   postject@1.0.0-alpha.6:
     resolution: {integrity: sha512-b9Eb8h2eVqNE8edvKdwqkrY6O7kAwmI8kcnBv1NScolYJbo59XUF0noFq+lxbC1yN20bmC0WBEbDC5H/7ASb0A==, tarball: https://registry.npmjs.org/postject/-/postject-1.0.0-alpha.6.tgz}
@@ -13203,6 +13210,8 @@ snapshots:
       nanoid: 3.3.11
       picocolors: 1.1.1
       source-map-js: 1.2.1
+
+  postgres@3.4.9: {}
 
   postject@1.0.0-alpha.6:
     dependencies:

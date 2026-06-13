@@ -13,8 +13,10 @@
 .oo/runtime
 .oo/worktrees/
 .oneworks/
+.vercel/
 .oo.dev.config.json
 apps/desktop/release/
+apps/relay-server/public/
 .oo/rules/*.local.md
 .oo/rules/*.dev.md
 .oo/rules/**/*.local.md

@@ -9,6 +9,10 @@ import { normalizeRelaySsoProviders } from './storage/sso-providers.js'
 import type {
   RelayDevice,
   RelayDeviceSession,
+  RelayEmailChallenge,
+  RelayEmailPurpose,
+  RelayEmailRiskBucket,
+  RelayEmailRiskState,
   RelayEncryptedPayload,
   RelayForwardingJob,
   RelayForwardingJobStatus,
@@ -22,6 +26,10 @@ import { createToken, isRecord, normalizeRole, now } from './utils.js'
 
 const defaultStore = (): RelayStore => ({
   createdAt: now(),
+  emailRisk: {
+    buckets: [],
+    challenges: []
+  },
   users: [],
   invites: [],
   ssoProviders: [],
@@ -215,10 +223,85 @@ const normalizeSession = (value: Record<string, unknown>): RelaySession | undefi
   }
 }
 
+const relayEmailPurposes = new Set<RelayEmailPurpose>([
+  'email-verification',
+  'invite',
+  'login'
+])
+
+const normalizeEmailPurpose = (value: unknown): RelayEmailPurpose => (
+  typeof value === 'string' && relayEmailPurposes.has(value as RelayEmailPurpose)
+    ? value as RelayEmailPurpose
+    : 'email-verification'
+)
+
+const normalizeEmailRiskBucket = (value: Record<string, unknown>): RelayEmailRiskBucket | undefined => {
+  const key = typeof value.key === 'string' && value.key.trim() !== '' ? value.key.trim() : undefined
+  const resetAt = typeof value.resetAt === 'string' && value.resetAt.trim() !== '' ? value.resetAt.trim() : undefined
+  if (key == null || resetAt == null) return undefined
+  return {
+    count: Number.isFinite(Number(value.count)) ? Math.max(0, Math.trunc(Number(value.count))) : 0,
+    key,
+    resetAt,
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : now()
+  }
+}
+
+const normalizeEmailChallenge = (value: Record<string, unknown>): RelayEmailChallenge | undefined => {
+  const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
+  const emailHash = typeof value.emailHash === 'string' && value.emailHash.trim() !== ''
+    ? value.emailHash.trim()
+    : undefined
+  const codeHash = typeof value.codeHash === 'string' && value.codeHash.trim() !== ''
+    ? value.codeHash.trim()
+    : undefined
+  const expiresAt = typeof value.expiresAt === 'string' && value.expiresAt.trim() !== ''
+    ? value.expiresAt.trim()
+    : undefined
+  if (id == null || emailHash == null || codeHash == null || expiresAt == null) return undefined
+  return {
+    codeHash,
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    domain: typeof value.domain === 'string' && value.domain.trim() !== ''
+      ? value.domain.trim().toLowerCase()
+      : 'unknown',
+    emailHash,
+    expiresAt,
+    id,
+    lastSentAt: typeof value.lastSentAt === 'string' ? value.lastSentAt : now(),
+    providerMessageId: typeof value.providerMessageId === 'string' && value.providerMessageId.trim() !== ''
+      ? value.providerMessageId.trim()
+      : undefined,
+    purpose: normalizeEmailPurpose(value.purpose),
+    sendCount: Number.isFinite(Number(value.sendCount)) ? Math.max(0, Math.trunc(Number(value.sendCount))) : 1,
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined,
+    verifiedAt: typeof value.verifiedAt === 'string' && value.verifiedAt.trim() !== ''
+      ? value.verifiedAt.trim()
+      : undefined
+  }
+}
+
+const normalizeEmailRiskState = (value: unknown): RelayEmailRiskState => {
+  const state = isRecord(value) ? value : {}
+  return {
+    buckets: Array.isArray(state.buckets)
+      ? state.buckets.filter(isRecord).map(normalizeEmailRiskBucket).filter((bucket): bucket is RelayEmailRiskBucket =>
+        bucket != null
+      )
+      : [],
+    challenges: Array.isArray(state.challenges)
+      ? state.challenges.filter(isRecord).map(normalizeEmailChallenge).filter((
+        challenge
+      ): challenge is RelayEmailChallenge => challenge != null)
+      : []
+  }
+}
+
 export const normalizeRelayStore = (value: unknown): RelayStore => {
   const store = isRecord(value) ? value : {}
   return {
     createdAt: typeof store.createdAt === 'string' ? store.createdAt : now(),
+    emailRisk: normalizeEmailRiskState(store.emailRisk),
     users: Array.isArray(store.users) ? store.users.filter(isRecord).map(normalizeUser) : [],
     invites: Array.isArray(store.invites) ? store.invites.filter(isRecord).map(normalizeInvite) : [],
     ssoProviders: normalizeRelaySsoProviders(store.ssoProviders),

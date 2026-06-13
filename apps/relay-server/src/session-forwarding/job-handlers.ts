@@ -81,7 +81,7 @@ export const handleSubmitJob = async (
     traceId: toOptionalString(body.traceId) ?? requestTrace.traceId ?? randomUUID(),
     userId: access.actor.kind === 'session' ? access.actor.user.id : undefined
   })
-  rememberForwardingPayload(job.id, {
+  await rememberForwardingPayload(job.id, {
     message,
     requestId: job.requestId
   })
@@ -116,7 +116,7 @@ export const handleListJobs = async (
   if (access == null) return
   const snapshot = getDeviceSessionSnapshot(store, deviceId)
   let changed = false
-  const jobs = listSessionForwardingJobs(store, {
+  const matchedJobs = listSessionForwardingJobs(store, {
     deviceId,
     status: parseListStatus(url.searchParams.get('status')) ?? 'active',
     limit: parseLimit(url.searchParams.get('limit'))
@@ -127,9 +127,11 @@ export const handleListJobs = async (
       job,
       snapshot.sessions.find(session => session.id === job.sessionId)
     )
-  ).map(job => {
+  )
+  const jobs: ReturnType<typeof publicForwardingJob>[] = []
+  for (const job of matchedJobs) {
     if (access.actor.kind === 'device' && job.status === 'queued') {
-      const payload = consumeForwardingPayload(job.id)
+      const payload = await consumeForwardingPayload(job.id)
       if (payload == null) {
         changed = true
         updateSessionForwardingJob(job, {
@@ -148,7 +150,8 @@ export const handleListJobs = async (
           traceId: job.traceId,
           userId: job.userId
         })
-        return publicForwardingJob(job)
+        jobs.push(publicForwardingJob(job))
+        continue
       }
       changed = true
       updateSessionForwardingJob(job, {
@@ -168,12 +171,13 @@ export const handleListJobs = async (
         traceId: job.traceId,
         userId: job.userId
       })
-      return publicForwardingJob(job, { payload })
+      jobs.push(publicForwardingJob(job, { payload }))
+      continue
     }
-    const payload = getForwardingPayload(job.id)
-    if (expireMissingPayload(job, telemetry)) changed = true
-    return publicForwardingJob(job, { payloadSizeBytes: payload?.payloadSize })
-  })
+    const payload = await getForwardingPayload(job.id)
+    if (await expireMissingPayload(job, telemetry)) changed = true
+    jobs.push(publicForwardingJob(job, { payloadSizeBytes: payload?.payloadSize }))
+  }
   if (changed) {
     await persistStore(storeRepository, store)
   }
@@ -191,11 +195,11 @@ export const handleGetJob = async (
 ) => {
   const access = await resolveJobAccess(req, res, args, store, storeRepository, jobId, telemetry)
   if (access == null) return
-  const payload = getForwardingPayload(access.job.id)
+  const payload = await getForwardingPayload(access.job.id)
   sendJson(res, 200, {
     job: publicForwardingJob(access.job, {
       payloadSizeBytes: payload?.payloadSize,
-      resultAvailable: hasForwardingResult(access.job.id)
+      resultAvailable: await hasForwardingResult(access.job.id)
     })
   }, args.allowOrigin)
 }
@@ -219,7 +223,7 @@ export const handleGetJobResult = async (
     sendJson(res, 409, { error: 'Forwarding job has no completed result.' }, args.allowOrigin)
     return
   }
-  const result = consumeForwardingResult(access.job.id)
+  const result = await consumeForwardingResult(access.job.id)
   if (result == null) {
     sendJson(res, 404, { error: 'Forwarding result is no longer available.' }, args.allowOrigin)
     return
@@ -262,7 +266,7 @@ export const handleUpdateJobStatus = async (
   }
   const hasResult = Object.prototype.hasOwnProperty.call(body, 'result')
   const resultPayload = status === 'succeeded' && hasResult
-    ? rememberForwardingResult(access.job.id, body.result)
+    ? await rememberForwardingResult(access.job.id, body.result)
     : undefined
   const updated = updateSessionForwardingJob(access.job, {
     status,
@@ -270,16 +274,16 @@ export const handleUpdateJobStatus = async (
     resultSizeBytes: resultPayload?.resultSize
   })
   if (status === 'cancelled' || status === 'failed' || status === 'succeeded') {
-    clearForwardingPayload(access.job.id)
+    await clearForwardingPayload(access.job.id)
   }
   if (status === 'cancelled' || status === 'failed') {
-    clearForwardingResult(access.job.id)
+    await clearForwardingResult(access.job.id)
   }
   if (status === 'succeeded' && !hasResult) {
-    clearForwardingResult(access.job.id)
+    await clearForwardingResult(access.job.id)
   }
   await persistStore(storeRepository, store)
-  const resultAvailable = hasForwardingResult(access.job.id)
+  const resultAvailable = await hasForwardingResult(access.job.id)
   telemetry?.metrics.recordJobStatus({
     deviceId: updated.deviceId,
     jobId: updated.id,

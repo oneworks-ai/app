@@ -26,7 +26,7 @@ export const handleRelayApi = async (request: PluginProxyRequest, controller: Re
     return await controllerJson(async () => await controller.completeLogin(readBody(request)))
   }
   if (request.method === 'POST' && route === 'disconnect') {
-    return createJsonResponse(await controller.disconnect())
+    return createJsonResponse(await controller.disconnect(readBody(request)))
   }
   if (request.method === 'POST' && route === 'forget') {
     return createJsonResponse(await controller.forget(readBody(request)))

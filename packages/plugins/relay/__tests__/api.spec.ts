@@ -2,6 +2,10 @@ import { Buffer } from 'node:buffer'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
+import {
+  DEFAULT_OFFICIAL_RELAY_SERVER_ID,
+  OFFICIAL_RELAY_CLOUDFLARE_BASE_URL
+} from '../src/shared/official-services.js'
 import { cleanupPluginFixtures, createPluginHarness, readDeviceStore, stubRelayFetch } from './helpers.js'
 import type { RelayPluginStatus } from './helpers.js'
 
@@ -38,6 +42,8 @@ describe('relay plugin scoped API', () => {
     const response = await apis.get('relay')?.handler?.({
       body: Buffer.from(JSON.stringify({
         activeServerId: 'lab',
+        enableOfficialCloudflareRelay: false,
+        enableOfficialVercelRelay: false,
         servers: [
           {
             id: 'prod',
@@ -81,6 +87,8 @@ describe('relay plugin scoped API', () => {
     stubRelayFetch()
 
     const { apis, commands, projectHome } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
       servers: [
         {
           id: 'prod',
@@ -111,6 +119,8 @@ describe('relay plugin scoped API', () => {
 
   it('creates relay login URLs for a selected remote server', async () => {
     const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
       servers: [
         {
           id: 'prod',
@@ -139,9 +149,34 @@ describe('relay plugin scoped API', () => {
     expect(loginUrl.searchParams.get('redirect_uri')).toBe('https://app.example/plugins/relay/home?relayLogin=1')
   })
 
+  it('creates relay login URLs for the default official Cloudflare service', async () => {
+    const { apis } = await createPluginHarness({})
+
+    const response = await apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({
+        redirectUri:
+          `https://app.example/plugins/relay/home?relayLogin=1&relayLoginServerId=${DEFAULT_OFFICIAL_RELAY_SERVER_ID}`
+      })),
+      method: 'POST',
+      path: 'login-url'
+    }) as { body?: { loginUrl?: string; redirectUri?: string; serverId?: string }; status?: number }
+    const loginUrl = new URL(String(response.body?.loginUrl))
+
+    expect(response.status).toBe(200)
+    expect(response.body?.serverId).toBe(DEFAULT_OFFICIAL_RELAY_SERVER_ID)
+    expect(response.body?.redirectUri).toBe(
+      `https://app.example/plugins/relay/home?relayLogin=1&relayLoginServerId=${DEFAULT_OFFICIAL_RELAY_SERVER_ID}`
+    )
+    expect(loginUrl.origin).toBe(new URL(OFFICIAL_RELAY_CLOUDFLARE_BASE_URL).origin)
+    expect(loginUrl.pathname).toBe('/login')
+    expect(loginUrl.searchParams.get('server_id')).toBe(DEFAULT_OFFICIAL_RELAY_SERVER_ID)
+  })
+
   it('uses login callback tokens to register the current device', async () => {
     const fetchMock = stubRelayFetch('callback-device-token')
     const { apis, projectHome } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
       servers: [
         {
           id: 'prod',
@@ -169,6 +204,49 @@ describe('relay plugin scoped API', () => {
     expect(store.servers).toMatchObject({
       prod: {
         deviceToken: 'callback-device-token'
+      }
+    })
+  })
+
+  it('passes disconnect request bodies through to the selected relay server', async () => {
+    stubRelayFetch()
+    const { apis, commands } = await createPluginHarness({
+      activeServerId: 'lab',
+      servers: [
+        {
+          id: 'lab',
+          pairingToken: 'lab-token',
+          port: 8788,
+          protocol: 'http',
+          server: '127.0.0.1'
+        },
+        {
+          id: 'prod',
+          pairingToken: 'prod-token',
+          baseUrl: 'https://relay.example'
+        }
+      ]
+    })
+
+    await commands.get('connect')?.()
+    await commands.get('connect')?.({ serverId: 'prod' })
+    const response = await apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+      method: 'POST',
+      path: 'disconnect'
+    }) as { body?: RelayPluginStatus; status?: number }
+
+    expect(response.status).toBe(200)
+    expect(response.body?.servers?.find(server => server.id === 'lab')).toMatchObject({
+      connected: true,
+      connection: {
+        state: 'registered'
+      }
+    })
+    expect(response.body?.servers?.find(server => server.id === 'prod')).toMatchObject({
+      connected: false,
+      connection: {
+        state: 'idle'
       }
     })
   })

@@ -9,7 +9,7 @@ export function activatePlugin(ctx: RelayPluginContext) {
   let disposed = false
 
   ctx.registerCommand('connect', async payload => await controller.connect(payload))
-  ctx.registerCommand('disconnect', async () => await controller.disconnect())
+  ctx.registerCommand('disconnect', async payload => await controller.disconnect(payload))
   ctx.registerCommand('status', async () => await controller.getPublicStatus())
   ctx.registerCommand('search', payload => controller.search(payload))
   ctx.registerApi('relay', {

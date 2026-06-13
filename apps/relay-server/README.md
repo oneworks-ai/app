@@ -1,6 +1,6 @@
 # @oneworks/relay-server
 
-Minimal self-hostable relay service for `@oneworks/plugin-relay`.
+Relay service for `@oneworks/plugin-relay`. Product users should normally use the managed OneWorks Relay service. Private deployment is available when an operator wants to run Relay in their own cloud account or on their own host.
 
 ```bash
 npx @oneworks/relay-server --host 0.0.0.0 --port 8788 --admin-token change-me
@@ -10,8 +10,10 @@ Environment variables:
 
 - `ONEWORKS_RELAY_HOST`: bind host, default `127.0.0.1`
 - `ONEWORKS_RELAY_PORT`: bind port, default `8788`
-- `ONEWORKS_RELAY_STORAGE_DRIVER`: storage driver, default `json`. Use `sqlite` for single-node production; `postgres` is reserved and fails clearly.
+- `ONEWORKS_RELAY_STORAGE_DRIVER`: storage driver, default `json`. Use `sqlite` for single-node Node deployments, `postgres` for Vercel or other serverless Node deployments, and `cloudflare-do` only through the Cloudflare Worker adapter.
 - `ONEWORKS_RELAY_DATA_PATH`: JSON or SQLite data file path
+- `ONEWORKS_RELAY_POSTGRES_URL` / `DATABASE_URL`: Postgres connection string for the `postgres` storage driver
+- `ONEWORKS_RELAY_POSTGRES_POOL_MAX`: optional Postgres client pool size, default `3`
 - `ONEWORKS_RELAY_ADMIN_TOKEN`: admin and initial pairing token
 - `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`: optional encryption secret for user-private device metadata; production should set a long random value
 - `ONEWORKS_RELAY_ALLOW_ORIGIN`: CORS allow origin, default `*`
@@ -23,10 +25,39 @@ Environment variables:
 - `ONEWORKS_RELAY_RATE_LIMIT_DEVICE_REGISTER_MAX` / `ONEWORKS_RELAY_RATE_LIMIT_DEVICE_REGISTER_WINDOW_SECONDS`: device registration and invite redeem limit, default `20` per `60` seconds
 - `ONEWORKS_RELAY_RATE_LIMIT_ADMIN_MUTATION_MAX` / `ONEWORKS_RELAY_RATE_LIMIT_ADMIN_MUTATION_WINDOW_SECONDS`: admin mutating API limit, default `60` per `60` seconds
 - `ONEWORKS_RELAY_RATE_LIMIT_DEVICE_CLAIM_MAX` / `ONEWORKS_RELAY_RATE_LIMIT_DEVICE_CLAIM_WINDOW_SECONDS`: device session-job claim limit, default `120` per `60` seconds
+- `ONEWORKS_RELAY_EMAIL_PROVIDER`: transactional email provider, `disabled` by default; set `resend` to enable Resend-backed verification code delivery
+- `ONEWORKS_RELAY_EMAIL_FROM`: sender address for transactional email, required when `ONEWORKS_RELAY_EMAIL_PROVIDER=resend`
+- `ONEWORKS_RELAY_RESEND_API_KEY`: Resend API key, required when `ONEWORKS_RELAY_EMAIL_PROVIDER=resend`
+- `ONEWORKS_RELAY_EMAIL_TURNSTILE_MODE`: `auto`, `required`, or `off`; `auto` requires Turnstile when Resend is enabled or `NODE_ENV=production`
+- `ONEWORKS_RELAY_TURNSTILE_SECRET_KEY`: Cloudflare Turnstile secret key for email send challenges
+- `ONEWORKS_RELAY_TURNSTILE_VERIFY_URL`: optional Turnstile siteverify URL override for tests
+- `ONEWORKS_RELAY_EMAIL_RISK_ENABLED`: set to `0`, `false`, `no`, or `off` to disable email send rate and budget checks; Turnstile and domain blocking remain explicit policy controls
+- `ONEWORKS_RELAY_EMAIL_CODE_TTL_SECONDS`: verification code TTL, default `600`; repeat requests during the TTL reuse the active challenge and do not call the email provider again
+- `ONEWORKS_RELAY_EMAIL_RESEND_COOLDOWN_SECONDS`: retry hint window for active challenges, default `60`
+- `ONEWORKS_RELAY_EMAIL_RISK_EMAIL_MAX` / `ONEWORKS_RELAY_EMAIL_RISK_EMAIL_WINDOW_SECONDS`: per-email send limit, default `3` per `3600` seconds
+- `ONEWORKS_RELAY_EMAIL_RISK_IP_MAX` / `ONEWORKS_RELAY_EMAIL_RISK_IP_WINDOW_SECONDS`: per-IP send limit, default `30` per `3600` seconds
+- `ONEWORKS_RELAY_EMAIL_RISK_DOMAIN_MAX` / `ONEWORKS_RELAY_EMAIL_RISK_DOMAIN_WINDOW_SECONDS`: per-domain send limit, default `100` per `3600` seconds
+- `ONEWORKS_RELAY_EMAIL_RISK_DAILY_BUDGET` / `ONEWORKS_RELAY_EMAIL_RISK_MONTHLY_BUDGET`: global email send circuit breakers, default `500` daily and `10000` monthly
+- `ONEWORKS_RELAY_EMAIL_DOMAIN_ALLOWLIST` / `ONEWORKS_RELAY_EMAIL_DOMAIN_BLOCKLIST`: comma or whitespace separated email domain overrides. Allowlist only bypasses domain blocking; it does not bypass Turnstile, rate limits, or budgets.
+- `ONEWORKS_RELAY_EMAIL_DISPOSABLE_BLOCKLIST_ENABLED`: set to `0`, `false`, `no`, or `off` to disable the built-in high-confidence disposable domain blocklist
 - `ONEWORKS_RELAY_GITHUB_CLIENT_ID` / `ONEWORKS_RELAY_GITHUB_CLIENT_SECRET`: GitHub OAuth
 - `ONEWORKS_RELAY_GOOGLE_CLIENT_ID` / `ONEWORKS_RELAY_GOOGLE_CLIENT_SECRET`: Google OAuth
 - `ONEWORKS_RELAY_SSO_PROVIDERS`: JSON object or array for multiple custom OAuth/OIDC SSO providers
 - `ONEWORKS_RELAY_SESSION_TTL_SECONDS`: login session lifetime
+
+## Managed service and private deployment
+
+The default deployment path is the managed OneWorks Relay service. The official website uses `oneworks.cloud` with `www.oneworks.cloud` as an alias or redirect. Official Relay/Admin service slots are `dev.cf.oneworks.cloud` and `cf.oneworks.cloud` on Cloudflare, plus `dev.vc.oneworks.cloud` and `vc.oneworks.cloud` on Vercel.
+
+Official inbound addresses such as `support@oneworks.cloud` and `hello@oneworks.cloud` use Cloudflare Email Routing to verified destination mailboxes. Transactional mail such as verification codes, invitations, and system notifications should be sent from stable mail subdomains such as `mail.oneworks.cloud` and `mail.dev.oneworks.cloud`; do not attach transactional mail DNS records to Relay/Admin service hosts.
+
+Before starting a private deployment, confirm that the user wants to self-host instead of using the managed OneWorks Relay service. Private deployments require the user's target platform account or team, their desired dev / production domains, DNS host, inbound mail strategy, transactional mail provider, sending domain, Reply-To, and their own secret storage. Do not use a maintainer's personal cloud account for a user deployment, and do not copy real account IDs, private mailbox destinations, tokens, database URLs, or test credentials into committed docs.
+
+Use placeholder domains in examples:
+
+- Vercel: `https://<project>.vercel.app` or a custom domain such as `https://relay.example.com`.
+- Cloudflare Pages: `https://<pages-project>.pages.dev` or a custom domain.
+- Cloudflare Workers: `https://<worker>.<account-subdomain>.workers.dev`. The `account-subdomain` is an account-level setting and changing it affects every Worker in that Cloudflare account.
 
 ## Google SSO
 
@@ -72,6 +103,8 @@ Admin APIs require `Authorization: Bearer <token>`. The token can be the deploym
 `GET /admin` serves the React admin client from `@oneworks/relay-admin` (`apps/relay-admin`). The server route only returns the HTML shell and static assets under `/admin/assets/*`; the React client is built by Vite, consumes the `/login` callback `relay_token`, verifies the session through `/api/auth/me`, and calls the admin APIs above only for `owner` or `admin` users.
 
 `GET /login` serves the user-facing login page used by the Relay plugin. It accepts `redirect_uri`, `server_id`, `scope`, and optional `lang=zh-CN|en`; OAuth/OIDC success first returns to `/login/complete`, which stores recent account metadata in that browser and then redirects to the original callback with `relay_token` in the URL fragment. The same page also supports email + invite-code login through `POST /api/auth/invite-login`; successful invite login consumes one invite use and assigns the invite role to new users. When `lang` is omitted, the login page follows the browser `Accept-Language` header. Electron callbacks use `oneworks://relay/auth`; Web callbacks use the current plugin page URL.
+
+`POST /api/auth/email-verification/send` accepts an `email`, optional `purpose` (`email-verification`, `invite`, or `login`), and optional `turnstileToken`. Before any provider call, Relay verifies Turnstile when required, evaluates domain policy, checks per-email / per-IP / per-domain limits, checks global daily and monthly budgets, and reuses an active code within its TTL instead of sending another email. Rejections use a generic response so callers cannot infer whether an account exists.
 
 Admin client source lives in `apps/relay-admin`:
 
@@ -159,9 +192,56 @@ ONEWORKS_RELAY_STORAGE_DRIVER=json
 ONEWORKS_RELAY_DATA_PATH=/var/lib/oneworks-relay/relay.json
 ```
 
-Avoid sharing the same JSON file across multiple running relay-server processes. `postgres` is still a reserved future driver; selecting it fails clearly at startup.
+Avoid sharing the same JSON file across multiple running relay-server processes.
 
-Relay storage must not record session content. The JSON and SQLite stores may persist only trace/status/device/user/permission metadata such as `traceId`, `requestId`, status, byte sizes, timestamps, and error codes. They must not persist `message`, `content`, `result`, `lastMessage`, or `lastUserMessage` fields. Device names, capabilities, workspace folders, and plugin scopes are stored as encrypted device metadata; admin user records expose only device counts and max-device limits for other users. New device tokens are stored as hashes rather than plaintext. Forwarded request payloads live only in process memory until the target device claims them; returned result payloads also stay in process memory and are consumed by the result read endpoint.
+For Vercel or other serverless Node deployments, use the Postgres driver:
+
+```bash
+ONEWORKS_RELAY_STORAGE_DRIVER=postgres
+ONEWORKS_RELAY_POSTGRES_URL=postgres://relay:secret@db.example.com:5432/relay
+```
+
+The Postgres driver stores the relay metadata snapshot in `relay_store_snapshots` and cloud forwarding payload/result bodies in `relay_forwarding_payloads`. Request handlers use a transaction and row lock around metadata mutations so cold starts and concurrent functions do not race on the JSON snapshot.
+
+For Cloudflare Workers, do not select `cloudflare-do` from the Node CLI. Deploy the Worker adapter in this package; it binds all requests for one Relay instance to a Durable Object and stores metadata plus forwarding payload/result bodies in Durable Object storage.
+
+Relay metadata storage must not record session content. The metadata snapshot may persist only trace/status/device/user/permission metadata such as `traceId`, `requestId`, status, byte sizes, timestamps, and error codes. It must not persist `message`, `content`, `result`, `lastMessage`, or `lastUserMessage` fields. Device names, capabilities, workspace folders, and plugin scopes are stored as encrypted device metadata; admin user records expose only device counts and max-device limits for other users. New device tokens are stored as hashes rather than plaintext. Forwarded request payloads and returned result bodies are stored separately from the metadata snapshot: in process memory for JSON/SQLite Node deployments, in Postgres for serverless Node, and in Durable Object storage for Cloudflare Workers.
+
+## Serverless Deployment
+
+Vercel:
+
+- Project root: `apps/relay-server`.
+- Build command: `pnpm build:vercel`; it builds `apps/relay-admin`, copies the Admin static assets into `apps/relay-server/public/admin`, then builds the Relay Server function.
+- Local prebuilt CLI deploys should run `vercel build --prod`, then `pnpm prepare:vercel-output`, then `vercel deploy --prebuilt --prod`. The prepare step copies the Postgres runtime package into the Vercel function output for pnpm workspace deployments.
+- `vercel.json` serves `/admin` and `/admin/*` as the Admin SPA on the same origin, and rewrites `/api/*`, `/login`, `/login/complete`, and `/health` to `api/relay.ts`.
+- Required env: `ONEWORKS_RELAY_STORAGE_DRIVER=postgres`, `ONEWORKS_RELAY_POSTGRES_URL` or `DATABASE_URL`, `ONEWORKS_RELAY_ADMIN_TOKEN`, `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`, `ONEWORKS_RELAY_PUBLIC_URL`, and a restricted `ONEWORKS_RELAY_ALLOW_ORIGIN`.
+- The Vercel deployment is one project and one domain: Relay Admin is available at `/admin`, while the server APIs and login flow share the same origin.
+- Domain choice is deployment configuration. The default `.vercel.app` domain follows the Vercel project name, such as `https://<project>.vercel.app`. For a custom domain, add the domain to the Vercel project and set both `ONEWORKS_RELAY_PUBLIC_URL` and `ONEWORKS_RELAY_ALLOW_ORIGIN` to that origin.
+- Vercel does not make local JSON / SQLite files durable for serverless functions. Use the Postgres driver and a managed Postgres database owned by the deployment account.
+
+Cloudflare Workers:
+
+- Project root: `apps/relay-server`.
+- Config: `wrangler.jsonc`.
+- Storage: `RELAY_OBJECT` Durable Object binding, class `RelayDurableObject`.
+- Required secrets/env: `ONEWORKS_RELAY_ADMIN_TOKEN`, `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`, `ONEWORKS_RELAY_PUBLIC_URL`, and a restricted `ONEWORKS_RELAY_ALLOW_ORIGIN`.
+- Optional env: `ONEWORKS_RELAY_INSTANCE_ID` to choose a Durable Object instance name; default is `main`.
+- The Worker also disables embedded `/admin`; deploy `apps/relay-admin` on Cloudflare Pages and proxy `/api/*`, `/login`, and `/login/complete` to this Relay Worker.
+- Workers default URLs are `https://<worker-name>.<account-subdomain>.workers.dev`. Choose Worker names such as `dev` and `pro` only after the user confirms the account subdomain. Do not change a Cloudflare account-level workers.dev subdomain without making the account-wide impact explicit.
+- For the Admin origin, prefer a Pages or custom domain and hide the Worker URL behind the Pages proxy when possible.
+
+OAuth env providers, managed SSO providers, sessions, devices, invites, and forwarding jobs use the same API surface across Node, Vercel, and Cloudflare. In serverless modes, in-process metrics and rate-limit buckets are still runtime-local; keep platform/CDN limits in front of sensitive endpoints.
+
+Minimum post-deploy checks:
+
+```bash
+curl -fsS https://<relay-origin>/health
+curl -i https://<admin-origin>/admin
+curl -i https://<admin-origin>/api/admin/users
+```
+
+`/health` should return `ok`, `/admin` should serve or redirect to the Admin shell, and `/api/admin/users` should return `401` without credentials. Create an owner user through the admin API, verify password login, then configure the Relay plugin `servers[]` entry to the final user-facing origin.
 
 ## Observability
 
@@ -188,7 +268,7 @@ The response is process-local and resets when the relay-server process restarts.
 
 Run the service behind TLS and a reverse proxy. Set long random values for `ONEWORKS_RELAY_ADMIN_TOKEN` and `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`, store OAuth client secrets outside source control, and restrict `ONEWORKS_RELAY_ALLOW_ORIGIN` to the web app origin instead of using `*`.
 
-Built-in rate limits are enabled by default for OAuth start/callback, invite redeem and device registration, admin mutating APIs, and device session-job claims. A blocked request returns `429` with `Retry-After` and `X-RateLimit-*` headers. Keep nginx, load balancer, or CDN limits in front of the service as the first line of defense, especially for `/api/auth/*`, `/api/relay/devices/register`, `/api/relay/devices/<deviceId>/session-jobs`, `/api/relay/metrics`, and `/api/admin/*`.
+Built-in rate limits are enabled by default for OAuth start/callback, invite redeem, email verification sends, device registration, admin mutating APIs, and device session-job claims. A blocked request returns `429` with `Retry-After` and `X-RateLimit-*` headers. Keep nginx, load balancer, or CDN limits in front of the service as the first line of defense, especially for `/api/auth/*`, `/api/relay/devices/register`, `/api/relay/devices/<deviceId>/session-jobs`, `/api/relay/metrics`, and `/api/admin/*`.
 
 Token boundaries:
 

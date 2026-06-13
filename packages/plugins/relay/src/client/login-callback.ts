@@ -9,8 +9,41 @@ const readSearchAndHashParams = () => ({
   search: new URLSearchParams(window.location.search)
 })
 
-export const buildWebLoginRedirectUri = (serverId?: string) => {
-  const url = new URL(window.location.href)
+const normalizeClientBase = (value: unknown) => {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (text === '' || text === '/') return ''
+  return `/${text.replace(/^\/+|\/+$/g, '')}`
+}
+
+const readRuntimeClientBase = () => {
+  const runtimeEnv = (globalThis as {
+    __ONEWORKS_PROJECT_RUNTIME_ENV__?: {
+      __ONEWORKS_PROJECT_CLIENT_BASE__?: unknown
+    }
+  }).__ONEWORKS_PROJECT_RUNTIME_ENV__
+  return normalizeClientBase(runtimeEnv?.__ONEWORKS_PROJECT_CLIENT_BASE__)
+}
+
+const readDocumentBase = () => {
+  const querySelector = typeof document === 'undefined' ? undefined : document.querySelector?.bind(document)
+  const href = querySelector?.('base')?.getAttribute('href')
+  if (href == null || href.trim() === '') return ''
+  try {
+    return normalizeClientBase(new URL(href, window.location.href).pathname)
+  } catch {
+    return ''
+  }
+}
+
+const inferClientBaseFromPath = (pathname: string, scope: string) => {
+  const marker = `/plugins/${encodeURIComponent(scope)}/`
+  const markerIndex = pathname.indexOf(marker)
+  if (markerIndex > 0) return normalizeClientBase(pathname.slice(0, markerIndex))
+  if (pathname === '/ui' || pathname.startsWith('/ui/')) return '/ui'
+  return ''
+}
+
+const buildLoginRedirectUri = (url: URL, serverId?: string) => {
   url.hash = ''
   url.searchParams.set('relayLogin', '1')
   if (serverId == null || serverId === '') {
@@ -20,6 +53,18 @@ export const buildWebLoginRedirectUri = (serverId?: string) => {
   }
   url.searchParams.delete('relay_token')
   return url.toString()
+}
+
+export const buildWebLoginRedirectUri = (serverId?: string) => {
+  return buildLoginRedirectUri(new URL(window.location.href), serverId)
+}
+
+export const buildPluginHomeWebLoginRedirectUri = (scope: string, serverId?: string) => {
+  const url = new URL(window.location.href)
+  const basePath = readRuntimeClientBase() || readDocumentBase() || inferClientBaseFromPath(url.pathname, scope)
+  url.pathname = `${basePath}/plugins/${encodeURIComponent(scope)}/home`
+  url.search = ''
+  return buildLoginRedirectUri(url, serverId)
 }
 
 export const readLoginCallback = (): RelayLoginCallback | undefined => {

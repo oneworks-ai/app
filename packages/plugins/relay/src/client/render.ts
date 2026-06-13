@@ -123,21 +123,25 @@ const renderRelayAccountRows = (
     const accountName = cleanText(server.account?.name ?? server.accountName)
     const accountEmail = cleanText(server.account?.email ?? server.accountEmail)
     const serverName = cleanText(server.name ?? server.id)
-    const title = accountName ?? accountEmail ?? valueOrDash(serverName)
-    const subtitle = accountEmail != null && accountEmail !== title
+    const platformName = cleanText(server.platform) ?? valueOrDash(serverName)
+    const accountTitle = accountName ?? accountEmail ?? t.labels.notSignedIn
+    const accountSubtitle = accountName != null && accountEmail != null && accountEmail !== accountName
       ? accountEmail
       : undefined
     const accountConnectionState = getAccountConnectionState(server, connectionState)
     const statusText = getStatusText(accountConnectionState, t)
-    const avatarSource = accountEmail ?? accountName ?? serverName
+    const avatarSource = accountEmail ?? accountName ?? platformName
     const avatarUrl = cleanText(server.account?.avatarUrl ?? server.accountAvatarUrl)
+    const remote = cleanText(server.remoteBaseUrl) ?? cleanText(server.server)
     const avatarMarkup = avatarUrl == null
       ? `<span>${escapeHtml(getAvatarInitials(avatarSource))}</span>`
       : `<img alt="" class="oneworks-relay__account-avatar-image" src="${escapeHtml(avatarUrl)}" />`
 
     return `
-      <div class="oneworks-relay__account" data-active="${server.active === true}">
-        <div class="oneworks-relay__account-main">
+      <details class="oneworks-relay__account" data-active="${server.active === true}" ${
+      server.active === true ? 'open' : ''
+    }>
+        <summary class="oneworks-relay__account-summary">
           <span class="oneworks-relay__account-avatar" data-state="${escapeHtml(accountConnectionState)}" title="${
       escapeHtml(statusText)
     }" aria-label="${escapeHtml(statusText)}">
@@ -145,17 +149,55 @@ const renderRelayAccountRows = (
             <span class="oneworks-relay__account-status"></span>
           </span>
           <div class="oneworks-relay__account-copy">
-            <p class="oneworks-relay__account-name">${escapeHtml(title)}</p>
-            ${subtitle == null ? '' : `<p class="oneworks-relay__account-subtitle">${escapeHtml(subtitle)}</p>`}
+            <p class="oneworks-relay__account-name">
+              <span class="oneworks-relay__account-platform">${escapeHtml(platformName)}</span>
+              <span class="oneworks-relay__account-state">${escapeHtml(statusText)}</span>
+            </p>
+            <p class="oneworks-relay__account-subtitle">${escapeHtml(accountTitle)}</p>
+            ${
+      accountSubtitle == null ? '' : `<p class="oneworks-relay__account-email">${escapeHtml(accountSubtitle)}</p>`
+    }
           </div>
+          <span class="oneworks-relay__account-chevron">${materialIcon('expand_more')}</span>
+        </summary>
+        <div class="oneworks-relay__account-panel">
+          <div class="oneworks-relay__account-meta">
+            <div class="oneworks-relay__account-fact">
+              <span class="oneworks-relay__account-fact-label">${escapeHtml(t.labels.account)}</span>
+              <span class="oneworks-relay__account-fact-value">${escapeHtml(accountTitle)}</span>
+            </div>
+            ${
+      accountSubtitle == null
+        ? ''
+        : `<div class="oneworks-relay__account-fact">
+              <span class="oneworks-relay__account-fact-label">${escapeHtml(t.labels.email)}</span>
+              <span class="oneworks-relay__account-fact-value">${escapeHtml(accountSubtitle)}</span>
+            </div>`
+    }
+            <div class="oneworks-relay__account-fact">
+              <span class="oneworks-relay__account-fact-label">${escapeHtml(t.labels.platform)}</span>
+              <span class="oneworks-relay__account-fact-value">${escapeHtml(platformName)}</span>
+            </div>
+            <div class="oneworks-relay__account-fact">
+              <span class="oneworks-relay__account-fact-label">${escapeHtml(t.labels.status)}</span>
+              <span class="oneworks-relay__account-fact-value">${escapeHtml(statusText)}</span>
+            </div>
+            <div class="oneworks-relay__account-fact">
+              <span class="oneworks-relay__account-fact-label">${escapeHtml(t.labels.remote)}</span>
+              <span class="oneworks-relay__account-fact-value" title="${escapeHtml(remote ?? '')}">${
+      escapeHtml(remote ?? '-')
+    }</span>
+            </div>
+          </div>
+          <div class="oneworks-relay__account-actions" aria-label="${escapeHtml(t.aria.serviceActions)}">
+            ${actionButton('login', t.actions.login, 'login', { serverId })}
+            ${actionButton('connect', t.actions.connect, 'cloud_sync', { primary: server.active === true, serverId })}
+            ${actionButton('disconnect', t.actions.disconnect, 'link_off', { serverId })}
+            ${actionButton('forget', t.actions.forgetToken, 'key_off', { serverId })}
+          </div>
+          ${renderRelayDeviceRows(server, currentDeviceId, t)}
         </div>
-        <div class="oneworks-relay__account-actions" aria-label="${escapeHtml(t.aria.serviceActions)}">
-          ${actionButton('login', t.actions.login, 'login', { serverId })}
-          ${actionButton('connect', t.actions.connect, 'cloud_sync', { primary: server.active === true, serverId })}
-          ${actionButton('forget', t.actions.forgetToken, 'key_off', { serverId })}
-        </div>
-        ${renderRelayDeviceRows(server, currentDeviceId, t)}
-      </div>
+      </details>
     `
   }).join('')
 

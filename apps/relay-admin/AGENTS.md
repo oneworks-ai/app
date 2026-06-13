@@ -9,15 +9,18 @@
 - `src/features/dashboard/`：管理台数据编排、route 页面切换、状态条、统计和 snapshot 聚合。
 - `src/features/auth/`：Relay 登录回跳 token 消费、管理端 session token 本地保存和 `/api/auth/me` 客户端。
 - `src/login/`：Relay `/login` 页面的 React + AntD 入口；通过 relay-server 注入的 JSON config 渲染最近账号、邀请码表单和 SSO provider 按钮。
+- `src/platform/`、`api/`、`functions/`：独立 Vercel / Cloudflare Pages 静态部署的同源代理入口；只转发 `/api/*`、`/login` 和 `/login/complete` 到真实 Relay Server，不在 Admin 里重新实现 Relay API。Vercel 推荐部署形态优先看 `apps/relay-server` 的单项目 `/admin` 构建。
 - `src/features/users/`：用户列表、用户表单、用户 API 和表单解析。
 - `src/features/invites/`：邀请码列表、邀请码表单、邀请码 API 和表单解析。
 - `src/features/sso/`：SSO provider 列表、创建、编辑、启用 / 禁用、secret 轮换和 API。
 - `src/shared/`：跨 feature 复用的 API request、类型、角色常量、表单工具和基础 UI；基础 action button、data card、status badge 等先看 `src/shared/ui/AGENTS.md`。
 - `__tests__/`：按 feature / 纯函数拆分的管理端单元测试。
 - `README.md`：面向开发者的管理端结构、命令和 server 挂载说明。
+- `.oo/rules/RELAY-DEPLOYMENT.md`：Relay 托管服务、私有化部署、Vercel / Cloudflare 域名、官方 OneWorks 域名 / 邮件拓扑和账号边界；处理 Admin 部署请求时先读。
 - `HANDOFF.md`：当前共享 layout / Admin session 登录迁移的交接说明；接续这条 workstream 时先读这里，再按落点进入 `src/app`、`src/features/auth` 或 `packages/route-layout`。
 - `vite.config.ts`：固定输出 `admin.js` 和 `admin.css`，供 relay-server 挂载；开发态接入登录页 live reload。
 - `vite.relayLoginDev.ts`：Vite dev server 的 `/login` 与 `/login/complete` 本地渲染 helper，从 relay-server 登录页源码生成 shell/config；`/login` 加载 `src/login/main.tsx` 并由 Vite 提供 HMR。
+- `scripts/prepare-platform-build.mjs`：把 Vite library 产物整理成 Vercel / Cloudflare Pages 可直接托管的 `dist/admin/index.html` 与 `dist/admin/assets/*`。
 
 ## 约定
 
@@ -31,3 +34,5 @@
 - 表单解析这类纯逻辑放到 feature 内的 `*Form.ts` 并配套 `__tests__/`，React 组件只负责交互和渲染。
 - SSO provider list/detail 只会拿到 redacted `clientSecret`；编辑表单中 secret 留空表示保留原值，填写新 secret 才提交轮换。
 - UI 保持工作台式、紧凑、可扫描；不要做营销页式 hero 或装饰布局。
+- Admin 部署默认优先使用 OneWorks 托管服务或 relay-server 单项目 `/admin`；只有用户明确选择私有化部署时，才为 Vercel / Cloudflare Pages 配置独立代理。代理目标、项目名、域名、DNS 托管、收信策略、事务邮件发信域名、Reply-To、账号信息和 secrets 都来自用户或 OneWorks 服务账号，不写进可提交文档。
+- 官方 OneWorks Admin/Relay 域名、`support@oneworks.cloud` / `hello@oneworks.cloud` 收信路由和 Resend 发信子域约定以 `.oo/rules/RELAY-DEPLOYMENT.md` 为准；不要在 Admin 文档或配置示例中记录私人邮箱、个人账号或平台 account slug。

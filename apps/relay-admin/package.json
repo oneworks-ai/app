@@ -17,6 +17,7 @@
   ],
   "scripts": {
     "build": "vite build",
+    "build:platform": "pnpm build && node scripts/prepare-platform-build.mjs",
     "dev": "vite",
     "preview": "vite preview",
     "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project bundler.web apps/relay-admin/__tests__",
