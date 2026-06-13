@@ -16,7 +16,7 @@
 - `npm-publish-alpha.yml`：手动发布 npm alpha 包；默认走 Trusted Publishing，新增包 bootstrap 才允许显式使用 `NPM_TOKEN`。
 - `vscode-extension-ci.yml`：构建并上传 VSIX artifact，不发布商店。
 - `vscode-extension-release.yml`：通过 release tag 或手动输入 tag 发布 VS Code Marketplace、Open VSX 和 GitHub Release。
-- `desktop-package.yml`：构建 macOS 桌面包；tag / 手动 release 模式会创建 GitHub Release。
+- `desktop-package.yml`：构建 macOS 桌面包；PR 上总是产出 `macOS installer` check，非桌面打包相关改动会快速跳过，tag / 手动 release 模式会创建 GitHub Release。
 - `deploy-pwa.yml`：从 app 仓库触发 `oneworks-ai/pwa` 的部署 workflow。
 - `deploy-avatar.yml`：从 app 仓库触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow，只监听 avatar 相关路径。
 
