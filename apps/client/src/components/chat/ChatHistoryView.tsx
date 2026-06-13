@@ -322,7 +322,7 @@ export function ChatHistoryView({
     account: selectedAccount,
     workspaceSourceSessionId,
     navigateOnCreate,
-    collapseSenderHeaderOnCreate: !embeddedSessionChrome,
+    collapseSenderHeaderOnCreate: true,
     onSessionCreated: handleSessionCreated,
     sessionTargetDraft,
     sessionCreationContext: shouldApplyPendingSessionCreationContext ? pendingSessionCreationContext : undefined,
@@ -380,7 +380,7 @@ export function ChatHistoryView({
   const [collapsedTurnIds, setCollapsedTurnIds] = useState<Set<string>>(new Set())
   const [expandedTurnIds, setExpandedTurnIds] = useState<Set<string>>(new Set())
   const [queueMode, setQueueMode] = useState<SessionQueuedMessageMode>('steer')
-  const [statusBarCollapsed, setStatusBarCollapsed] = useState(false)
+  const [statusBarCollapsed, setStatusBarCollapsed] = useState(() => embeddedSessionChrome)
   const [queuedDraft, setQueuedDraft] = useState<{ content: ChatMessageContent[] } | null>(null)
   const [agentRoomSubmitLoading, setAgentRoomSubmitLoading] = useState(false)
   const [agentRoomComposerTarget, setAgentRoomComposerTarget] = useState<
@@ -926,6 +926,8 @@ export function ChatHistoryView({
   const senderSubmitLabel = !isAgentRoomMode && queuedDraft != null ? t('chat.queue.requeueMessage') : undefined
   const senderPlaceholder = isAgentRoomMode
     ? t('agentRoom.composer.placeholder')
+    : embeddedSessionChrome
+    ? t('chat.childSessionPlaceholder')
     : newSessionGuide?.placeholder ?? placeholder
   const senderSessionInfo = isAgentRoomMode ? agentRoomSenderSessionInfo : sessionInfo
   const shouldShowMessages = shouldRevealMessages || isAgentRoomMode || messageTurns.length > 0
@@ -1293,7 +1295,11 @@ export function ChatHistoryView({
     )
   }
 
-  const useChatSenderSurface = !embeddedSessionChrome && !isAgentRoomMode
+  // Embedded session chrome only removes the route shell around child sessions.
+  // The composer surface must stay shared with primary chat so Sender props do
+  // not drift; default-collapsed status chrome is the intentional child-session
+  // exception.
+  const useChatSenderSurface = !isAgentRoomMode
   useEffect(() => {
     if (!useChatSenderSurface && statusBarCollapsed) {
       setStatusBarCollapsed(false)
@@ -1402,7 +1408,7 @@ export function ChatHistoryView({
             showStatusBarControlsInMore={useChatSenderSurface && statusBarCollapsed}
             statusBarGitControlsInMore={statusBarGitControlsInMore}
             modelUnavailable={modelUnavailable}
-            sessionTarget={embeddedSessionChrome || isAgentRoomMode
+            sessionTarget={isAgentRoomMode
               ? undefined
               : {
                 draft: session?.id != null ? getChatSessionTargetDraftFromSession(session) : sessionTargetDraft,
@@ -1415,28 +1421,26 @@ export function ChatHistoryView({
             onQueueModeChange={isAgentRoomMode ? undefined : setQueueMode}
             contextReferenceRequest={contextReferenceRequest}
           />
-          {!embeddedSessionChrome && (
-            <ChatStatusBar
-              draftWorkspace={workspaceDraft}
-              isCreating={!isAgentRoomMode && isCreating}
-              sessionId={senderSessionId}
-              adapterLocked={senderAdapterLocked}
-              isThinking={senderIsThinking}
-              modelUnavailable={modelUnavailable}
-              selectedAdapter={selectedAdapter}
-              adapterOptions={adapterOptions}
-              hiddenBuiltinAdapterOptions={hiddenBuiltinAdapterOptions}
-              onAdapterChange={onAdapterChange}
-              selectedAccount={selectedAccount}
-              accountOptions={accountOptions}
-              showAccountSelector={showAccountSelector}
-              collapsible={useChatSenderSurface}
-              collapsed={statusBarCollapsed}
-              onCollapsedChange={setStatusBarCollapsed}
-              onAccountChange={onAccountChange}
-              onDraftWorkspaceChange={handleDraftWorkspaceChange}
-            />
-          )}
+          <ChatStatusBar
+            draftWorkspace={workspaceDraft}
+            isCreating={!isAgentRoomMode && isCreating}
+            sessionId={senderSessionId}
+            adapterLocked={senderAdapterLocked}
+            isThinking={senderIsThinking}
+            modelUnavailable={modelUnavailable}
+            selectedAdapter={selectedAdapter}
+            adapterOptions={adapterOptions}
+            hiddenBuiltinAdapterOptions={hiddenBuiltinAdapterOptions}
+            onAdapterChange={onAdapterChange}
+            selectedAccount={selectedAccount}
+            accountOptions={accountOptions}
+            showAccountSelector={showAccountSelector}
+            collapsible={useChatSenderSurface}
+            collapsed={statusBarCollapsed}
+            onCollapsedChange={setStatusBarCollapsed}
+            onAccountChange={onAccountChange}
+            onDraftWorkspaceChange={handleDraftWorkspaceChange}
+          />
         </div>
       )}
     </>

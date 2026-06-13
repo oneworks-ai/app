@@ -310,6 +310,7 @@ const sessionFixture: Session = {
 
 const renderChatHistoryShell = async ({
   agentRoomSourceMembers,
+  embeddedSessionChrome = false,
   language = 'en',
   isAgentRoomSession = false,
   messages = [],
@@ -317,6 +318,7 @@ const renderChatHistoryShell = async ({
   session = sessionFixture
 }: {
   agentRoomSourceMembers?: AgentRoomMemberView[]
+  embeddedSessionChrome?: boolean
   language?: string
   isAgentRoomSession?: boolean
   messages?: ChatMessage[]
@@ -362,6 +364,7 @@ const renderChatHistoryShell = async ({
       <AntApp>
         <MemoryRouter>
           <ChatHistoryView
+            embeddedSessionChrome={embeddedSessionChrome}
             isReady
             isAgentRoomSession={isAgentRoomSession}
             agentRoomSourceMembers={agentRoomSourceMembers}
@@ -1923,6 +1926,27 @@ describe('agent room transcript rendering', () => {
     )
     expect(html).not.toContain('sender-room-target')
     expect(html).not.toContain('Chatting with')
+  })
+
+  it('keeps embedded child sessions on the primary session composer surface', async () => {
+    const html = await renderChatHistoryShell({ embeddedSessionChrome: true, roomMode: false })
+
+    expectContains(
+      html,
+      [
+        'sender-container--chat-surface',
+        'sender-session-target__trigger',
+        'chat-status-bar-frame',
+        'chat-status-bar--collapsible',
+        'is-collapsed',
+        'chat-status-bar__collapsed-line',
+        'chat-status-bar__actions'
+      ]
+    )
+    expect(html).toContain('Type a message in this child session...')
+    expect(html).not.toContain('Type a message...')
+    expect(html).not.toContain('new-session-guide')
+    expect(html).not.toContain('sender-room-target')
   })
 
   it('labels agent-origin messages without adding source badges to direct user messages in child sessions', async () => {

@@ -1495,6 +1495,7 @@
     "titleUpdateFailed": "Failed to update title",
     "clickToEditTitle": "Click to edit title",
     "inputPlaceholder": "Type a message...",
+    "childSessionPlaceholder": "Type a message in this child session...",
     "send": "Send",
     "thinking": "Thinking",
     "sessionOperation": {

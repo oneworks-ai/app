@@ -26,6 +26,10 @@
 - `sender/SenderSurface.scss`
   - chat sender surface 的共同样式来源。
   - `.sender-container--chat-surface` 的外观、status bar 衔接和 select 密度都维护在这里，不放在页面或插件局部样式里。
+- 主会话和 interaction panel 子会话必须共用同一套 session composer surface。
+  - 修改 `Sender` props、`ChatHistoryView` 的 composer 组装、`ChatStatusBar` 或 `.sender-container--chat-surface` 时，必须同步检查 `interaction-panel/InteractionPanelSessionView.tsx` 的 `embeddedSessionChrome` 路径。
+  - `embeddedSessionChrome` 只表示去掉外层 route chrome；不要用它关闭 sender surface、status bar、session target 或创建后 header 折叠这类主/子会话应一致的 composer 行为。
+  - 例外：interaction panel 子会话的 status bar 默认折叠，这是为了降低嵌入面板里的垂直占用；只能改默认值，不要移除 status bar 或另造一套 sender surface。
 - `sender/@components/`
   - sender 私有的通用视图组件与子模块目录，例如 `sender-toolbar/`、`model-select/`。
 - `sender/@core/`
