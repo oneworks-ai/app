@@ -37,6 +37,7 @@
   overflow: hidden;
   background-color: var(--bg-color, #fff);
   position: relative;
+  isolation: isolate;
 }
 
 .route-container-layout__main {
@@ -46,6 +47,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  border-radius: inherit;
   transition: padding-bottom .18s ease;
 }
 
@@ -275,6 +277,8 @@
   min-height: 0;
   background-color: var(--bg-color, #fff);
   position: relative;
+  overflow: hidden;
+  border-radius: inherit;
   transition: background-color .16s ease;
 }
 

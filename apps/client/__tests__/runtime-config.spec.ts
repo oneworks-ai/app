@@ -3,18 +3,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   SERVER_BASE_URL_STORAGE_KEY,
   SERVER_CONNECTION_PICKER_STORAGE_KEY,
+  buildWorkspaceClientBase,
   clearServerConnectionPickerRequest,
   clearStoredServerBaseUrl,
   createServerUrl,
   getConfiguredServerBaseUrl,
+  getRuntimeWorkspaceId,
   getServerBaseUrl,
   getServerHostEnv,
   isDesktopClientMode,
   isServerConnectionManagedClientMode,
   isServerConnectionPickerRequested,
+  isServerManagerRole,
   normalizeServerBaseUrl,
   requestServerConnectionPicker,
   resolveDevDocumentTitle,
+  resolveWorkspaceIdFromPathname,
   setStoredServerBaseUrl
 } from '#~/runtime-config'
 
@@ -23,9 +27,12 @@ const getGlobalScope = () => (
     __ONEWORKS_PROJECT_RUNTIME_ENV__?: {
       __ONEWORKS_PROJECT_SERVER_BASE_URL__?: string
       __ONEWORKS_PROJECT_CLIENT_MODE__?: string
+      __ONEWORKS_PROJECT_CLIENT_BASE__?: string
       __ONEWORKS_PROJECT_CLIENT_DEV_SERVER__?: string
       __ONEWORKS_PROJECT_SERVER_HOST__?: string
       __ONEWORKS_PROJECT_SERVER_PORT__?: string
+      __ONEWORKS_PROJECT_SERVER_ROLE__?: string
+      __ONEWORKS_PROJECT_WORKSPACE_ID__?: string
     }
   }
 )
@@ -111,6 +118,35 @@ describe('getServerHostEnv', () => {
   })
 })
 
+describe('workspace client route helpers', () => {
+  afterEach(() => {
+    clearRuntimeEnv()
+  })
+
+  it('builds workspace client bases under the web client base', () => {
+    expect(buildWorkspaceClientBase('w_abc123456', '/ui')).toBe('/ui/w/w_abc123456')
+    expect(buildWorkspaceClientBase('w_abc123456', '/')).toBe('/w/w_abc123456')
+    expect(buildWorkspaceClientBase(' w_abc123456 ', '/console/')).toBe('/console/w/w_abc123456')
+  })
+
+  it('resolves workspace ids from workspace client paths only', () => {
+    expect(resolveWorkspaceIdFromPathname('/ui/w/w_abc123456/session/s1', '/ui')).toBe('w_abc123456')
+    expect(resolveWorkspaceIdFromPathname('/ui/w/w_abc123456', '/ui')).toBe('w_abc123456')
+    expect(resolveWorkspaceIdFromPathname('/ui/session/s1', '/ui')).toBeUndefined()
+    expect(resolveWorkspaceIdFromPathname('/console/w/w_abc123456/session/s1', '/console')).toBe('w_abc123456')
+    expect(resolveWorkspaceIdFromPathname('/other/w/w_abc123456/session/s1')).toBeUndefined()
+    expect(resolveWorkspaceIdFromPathname('/ui/w/%E0%A4%A', '/ui')).toBeUndefined()
+  })
+
+  it('normalizes the runtime workspace id', () => {
+    setRuntimeEnv({
+      __ONEWORKS_PROJECT_WORKSPACE_ID__: ' w_abc123456 '
+    })
+
+    expect(getRuntimeWorkspaceId()).toBe('w_abc123456')
+  })
+})
+
 describe('server base URL helpers', () => {
   beforeEach(() => {
     vi.stubGlobal('localStorage', createStorage())
@@ -129,7 +165,7 @@ describe('server base URL helpers', () => {
     expect(normalizeServerBaseUrl('ftp://api.example.com')).toBeUndefined()
   })
 
-  it('uses the stored backend address only in standalone client mode', () => {
+  it('uses the stored backend address in standalone client mode', () => {
     localStorage.setItem(SERVER_BASE_URL_STORAGE_KEY, 'https://standalone.example.com')
     setRuntimeEnv({
       __ONEWORKS_PROJECT_CLIENT_MODE__: 'standalone',
@@ -139,6 +175,31 @@ describe('server base URL helpers', () => {
 
     expect(getServerBaseUrl()).toBe('https://standalone.example.com')
     expect(createServerUrl('/api/auth/status')).toBe('https://standalone.example.com/api/auth/status')
+  })
+
+  it('uses the stored workspace server address from manager client mode', () => {
+    localStorage.setItem(SERVER_BASE_URL_STORAGE_KEY, 'http://127.0.0.1:4899')
+    setRuntimeEnv({
+      __ONEWORKS_PROJECT_CLIENT_MODE__: 'static',
+      __ONEWORKS_PROJECT_SERVER_HOST__: '127.0.0.1',
+      __ONEWORKS_PROJECT_SERVER_PORT__: '8787',
+      __ONEWORKS_PROJECT_SERVER_ROLE__: 'manager'
+    })
+
+    expect(isServerManagerRole()).toBe(true)
+    expect(isServerConnectionManagedClientMode()).toBe(true)
+    expect(getServerBaseUrl()).toBe('http://127.0.0.1:4899')
+  })
+
+  it('prefers the explicit runtime workspace server over stored manager addresses', () => {
+    localStorage.setItem(SERVER_BASE_URL_STORAGE_KEY, 'http://127.0.0.1:4899')
+    setRuntimeEnv({
+      __ONEWORKS_PROJECT_CLIENT_MODE__: 'static',
+      __ONEWORKS_PROJECT_SERVER_BASE_URL__: 'http://127.0.0.1:5901',
+      __ONEWORKS_PROJECT_SERVER_ROLE__: 'manager'
+    })
+
+    expect(getServerBaseUrl()).toBe('http://127.0.0.1:5901')
   })
 
   it('persists normalized standalone server addresses', () => {
@@ -157,6 +218,14 @@ describe('server base URL helpers', () => {
     expect(isServerConnectionManagedClientMode()).toBe(true)
     expect(getConfiguredServerBaseUrl()).toBe('http://127.0.0.1:43123')
     expect(getServerBaseUrl()).toBe('http://127.0.0.1:43123')
+  })
+
+  it('detects manager server role from runtime env', () => {
+    setRuntimeEnv({
+      __ONEWORKS_PROJECT_SERVER_ROLE__: 'manager'
+    })
+
+    expect(isServerManagerRole()).toBe(true)
   })
 
   it('uses the dev server origin so Vite can proxy backend requests', () => {

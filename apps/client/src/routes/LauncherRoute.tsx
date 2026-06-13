@@ -11,6 +11,13 @@ import { DEFAULT_ICON_THEME } from '@oneworks/icon/presets'
 import { matchesPinyinSearch, normalizePinyinSearchQuery } from '@oneworks/utils/pinyin-search'
 
 import { getApiErrorMessage } from '#~/api'
+import {
+  createLauncherWorkspaceInDirectory,
+  forgetLauncherWorkspace,
+  getLauncherWorkspaceSelectorState,
+  listLauncherDirectories,
+  openLauncherWorkspace
+} from '#~/api/launcher'
 import { LauncherAboutView } from '#~/components/launcher/LauncherAboutView'
 import { LauncherSettingsView } from '#~/components/launcher/LauncherSettingsView'
 import type { LauncherKeyboardHint, LauncherSettingsResetAction } from '#~/components/launcher/LauncherSettingsView'
@@ -18,6 +25,7 @@ import { getProjectFileIconMeta } from '#~/components/workspace/project-file-tre
 import { useInterfaceLanguageConfig } from '#~/hooks/use-interface-language-config'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { appLanguageOptions, getActiveAppLanguageOption } from '#~/i18n'
+import { buildWorkspaceClientBase, isServerManagerRole, mergeRuntimeEnv } from '#~/runtime-config'
 import { copyTextWithFeedback } from '#~/utils/copy'
 import { deferImeCompositionEnd, isImeCompositionKeyEvent } from '#~/utils/keyboard-events'
 import { createOneWorksIconDataUri } from '#~/utils/oneworks-icon'
@@ -458,7 +466,21 @@ const mergeProjects = (state: DesktopWorkspaceSelectorState) => {
   return Array.from(projectsByFolder.values())
 }
 
-export function LauncherRoute() {
+export interface LauncherRouteProps {
+  active?: boolean
+  workspaceContext?: DesktopWorkspaceSelectorProject
+  onClose?: () => void
+  onOpenWorkspaceResource?: (target: DesktopWorkspaceResourceTarget) => Promise<void> | void
+  searchWorkspaceResources?: (query: string) => Promise<DesktopWorkspaceResourceSearchResponse>
+}
+
+export function LauncherRoute({
+  active = true,
+  workspaceContext,
+  onClose,
+  onOpenWorkspaceResource,
+  searchWorkspaceResources
+}: LauncherRouteProps = {}) {
   const { i18n, t } = useTranslation()
   const { message, modal } = App.useApp()
   const [selectorState, setSelectorState] = useState<DesktopWorkspaceSelectorState>(emptyWorkspaceSelectorState)
@@ -501,9 +523,11 @@ export function LauncherRoute() {
     entries: [initialLauncherSearchHistoryEntry],
     index: 0
   })
+  const isLauncherActiveRef = useRef(active)
   const isSearchComposingRef = useRef(false)
   const isSearchInputComposing = useCallback(() => isSearchComposingRef.current, [])
   const desktopApi = window.oneworksDesktop
+  const canUseServerLauncher = desktopApi == null && isServerManagerRole()
   const { updateGlobalInterfaceLanguage } = useInterfaceLanguageConfig()
   const { resolvedThemeMode } = useResolvedThemeMode()
   const launcherIconSrc = useLauncherIconSrc({ desktopApi, mode: resolvedThemeMode })
@@ -516,7 +540,27 @@ export function LauncherRoute() {
   const isCreateWorkspaceDirectoryMode = directoryBrowserMode === 'create-workspace'
   const isOpenWorkspaceDirectoryMode = directoryBrowserMode === 'open-workspace'
   const isDirectoryBrowserMode = directoryBrowserMode != null
-  const projects = useMemo(() => mergeProjects(selectorState), [selectorState])
+  const injectedWorkspaceContext = useMemo(() => {
+    if (workspaceContext == null || workspaceContext.workspaceFolder.trim() === '') return undefined
+
+    return {
+      ...workspaceContext,
+      isCurrent: true,
+      status: workspaceContext.status ?? 'ready'
+    } satisfies DesktopWorkspaceSelectorProject
+  }, [workspaceContext])
+  const projects = useMemo(() => {
+    const mergedProjects = mergeProjects(selectorState)
+    if (injectedWorkspaceContext == null) {
+      return mergedProjects
+    }
+
+    const injectedWorkspaceKey = normalizeDirectoryPathKey(injectedWorkspaceContext.workspaceFolder)
+    return [
+      injectedWorkspaceContext,
+      ...mergedProjects.filter(project => normalizeDirectoryPathKey(project.workspaceFolder) !== injectedWorkspaceKey)
+    ]
+  }, [injectedWorkspaceContext, selectorState])
   const currentProject = useMemo(
     () => projects.find(project => project.isCurrent === true),
     [projects]
@@ -541,15 +585,25 @@ export function LauncherRoute() {
     launcherViewMode,
     query
   ])
+  useEffect(() => {
+    const wasActive = isLauncherActiveRef.current
+    isLauncherActiveRef.current = active
+    if (!wasActive && active) {
+      setDismissedProjectContextFolder(undefined)
+    }
+  }, [active])
+
   const focusSearchInput = useCallback(() => {
     window.requestAnimationFrame(() => {
+      if (!isLauncherActiveRef.current) return
       searchInputRef.current?.focus()
     })
   }, [])
 
   useEffect(() => {
     let disposed = false
-    const statePromise = desktopApi?.getWorkspaceSelectorState?.()
+    const statePromise = desktopApi?.getWorkspaceSelectorState?.() ??
+      (canUseServerLauncher ? getLauncherWorkspaceSelectorState() : undefined)
     if (statePromise != null) {
       void statePromise.then((state) => {
         if (!disposed) {
@@ -570,7 +624,7 @@ export function LauncherRoute() {
       disposed = true
       dispose?.()
     }
-  }, [desktopApi])
+  }, [canUseServerLauncher, desktopApi])
 
   useEffect(() => {
     if (
@@ -610,8 +664,10 @@ export function LauncherRoute() {
   }, [currentSearchHistoryEntry])
 
   useEffect(() => {
+    if (!active) return
+
     focusSearchInput()
-  }, [focusSearchInput])
+  }, [active, focusSearchInput])
 
   useEffect(() => {
     const checkGitAvailability = desktopApi?.isGitAvailable
@@ -647,7 +703,8 @@ export function LauncherRoute() {
       return
     }
 
-    const listCloneDestinationDirectories = desktopApi?.listCloneDestinationDirectories
+    const listCloneDestinationDirectories = desktopApi?.listCloneDestinationDirectories ??
+      (canUseServerLauncher ? listLauncherDirectories : undefined)
     if (listCloneDestinationDirectories == null) {
       setCloneDestinationList(emptyCloneDestinationDirectoryList)
       setIsCloneDestinationLoading(false)
@@ -681,7 +738,7 @@ export function LauncherRoute() {
     return () => {
       disposed = true
     }
-  }, [cloneDestinationDirectory, desktopApi, isDirectoryBrowserMode])
+  }, [canUseServerLauncher, cloneDestinationDirectory, desktopApi, isDirectoryBrowserMode])
 
   useEffect(() => {
     const handleWindowFocus = () => {
@@ -706,28 +763,51 @@ export function LauncherRoute() {
   }, [message, t])
 
   const openWorkspace = useCallback(async (workspaceFolder: string) => {
-    if (desktopApi?.openWorkspace == null) {
-      showDesktopActionUnavailable()
-      return
-    }
-
     try {
-      await desktopApi.openWorkspace(workspaceFolder)
+      if (desktopApi?.openWorkspace != null) {
+        await desktopApi.openWorkspace(workspaceFolder)
+        return
+      }
+
+      if (canUseServerLauncher) {
+        const result = await openLauncherWorkspace(workspaceFolder)
+        const workspaceClientBase = buildWorkspaceClientBase(result.workspaceId)
+        mergeRuntimeEnv({
+          __ONEWORKS_PROJECT_CLIENT_BASE__: workspaceClientBase,
+          __ONEWORKS_PROJECT_SERVER_BASE_URL__: result.serverBaseUrl,
+          __ONEWORKS_PROJECT_SERVER_ROLE__: 'workspace',
+          __ONEWORKS_PROJECT_WORKSPACE_ID__: result.workspaceId,
+          __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: result.workspaceFolder
+        })
+        window.location.assign(workspaceClientBase)
+        return
+      }
+
+      showDesktopActionUnavailable()
     } catch (error) {
       console.error('[launcher] failed to open workspace', error)
       void message.error(t('launcher.openWorkspaceFailed'))
     }
-  }, [desktopApi, message, showDesktopActionUnavailable, t])
+  }, [
+    canUseServerLauncher,
+    desktopApi,
+    message,
+    showDesktopActionUnavailable,
+    t
+  ])
 
   const forgetWorkspace = useCallback(async (workspaceFolder: string) => {
     const forgetWorkspaceApi = desktopApi?.forgetWorkspace
-    if (forgetWorkspaceApi == null) {
-      showDesktopActionUnavailable()
-      return
-    }
 
     try {
-      await forgetWorkspaceApi(workspaceFolder)
+      if (forgetWorkspaceApi != null) {
+        await forgetWorkspaceApi(workspaceFolder)
+      } else if (canUseServerLauncher) {
+        await forgetLauncherWorkspace(workspaceFolder)
+      } else {
+        showDesktopActionUnavailable()
+        return
+      }
       const removedWorkspaceKey = normalizeDirectoryPathKey(workspaceFolder)
       setSelectorState(prev => ({
         ...prev,
@@ -739,7 +819,7 @@ export function LauncherRoute() {
       console.error('[launcher] failed to remove workspace from recents', error)
       void message.error(t('launcher.projects.removeFailed'))
     }
-  }, [desktopApi, message, showDesktopActionUnavailable, t])
+  }, [canUseServerLauncher, desktopApi, message, showDesktopActionUnavailable, t])
 
   const confirmForgetWorkspace = useCallback((project: DesktopWorkspaceSelectorProject) => {
     modal.confirm({
@@ -784,7 +864,9 @@ export function LauncherRoute() {
   ])
 
   const enterCreateWorkspaceDirectoryMode = useCallback(() => {
-    if (desktopApi?.listCloneDestinationDirectories == null || desktopApi.createWorkspaceInDirectory == null) {
+    const canCreateWorkspace = desktopApi?.createWorkspaceInDirectory != null || canUseServerLauncher
+    const canListDirectories = desktopApi?.listCloneDestinationDirectories != null || canUseServerLauncher
+    if (!canListDirectories || !canCreateWorkspace) {
       showDesktopActionUnavailable()
       return
     }
@@ -806,6 +888,7 @@ export function LauncherRoute() {
     setIsLauncherMenuOpen(false)
     focusSearchInput()
   }, [
+    canUseServerLauncher,
     desktopApi,
     focusSearchInput,
     projects,
@@ -814,7 +897,7 @@ export function LauncherRoute() {
   ])
 
   const enterOpenWorkspaceDirectoryMode = useCallback(() => {
-    if (desktopApi?.listCloneDestinationDirectories == null) {
+    if (desktopApi?.listCloneDestinationDirectories == null && !canUseServerLauncher) {
       showDesktopActionUnavailable()
       return
     }
@@ -836,6 +919,7 @@ export function LauncherRoute() {
     setIsLauncherMenuOpen(false)
     focusSearchInput()
   }, [
+    canUseServerLauncher,
     desktopApi,
     focusSearchInput,
     projects,
@@ -940,7 +1024,7 @@ export function LauncherRoute() {
 
   const handleCreateWorkspaceInDirectory = useCallback(async (parentDirectory: string | undefined) => {
     const createWorkspaceInDirectory = desktopApi?.createWorkspaceInDirectory
-    if (createWorkspaceInDirectory == null) {
+    if (createWorkspaceInDirectory == null && !canUseServerLauncher) {
       showDesktopActionUnavailable()
       return
     }
@@ -960,7 +1044,9 @@ export function LauncherRoute() {
     }
 
     try {
-      const workspaceFolder = await createWorkspaceInDirectory(normalizedParentDirectory, projectName)
+      const workspaceFolder = createWorkspaceInDirectory == null
+        ? (await createLauncherWorkspaceInDirectory(normalizedParentDirectory, projectName)).workspaceFolder
+        : await createWorkspaceInDirectory(normalizedParentDirectory, projectName)
       if (workspaceFolder == null || workspaceFolder.trim() === '') {
         focusSearchInput()
         return
@@ -977,6 +1063,7 @@ export function LauncherRoute() {
       void message.error(getApiErrorMessage(error, t('launcher.createWorkspaceFailed')))
     }
   }, [
+    canUseServerLauncher,
     desktopApi,
     focusSearchInput,
     message,
@@ -1003,7 +1090,18 @@ export function LauncherRoute() {
     await openWorkspace(normalizedDirectory)
   }, [focusSearchInput, message, openWorkspace, t])
 
-  const openCurrentWorkspaceResource = useCallback(async (target: unknown) => {
+  const openCurrentWorkspaceResource = useCallback(async (target: DesktopWorkspaceResourceTarget) => {
+    if (onOpenWorkspaceResource != null) {
+      try {
+        await onOpenWorkspaceResource(target)
+        onClose?.()
+      } catch (error) {
+        console.error('[launcher] failed to open workspace resource', error)
+        void message.error(t('launcher.files.openFailed'))
+      }
+      return
+    }
+
     if (desktopApi?.openCurrentWorkspaceResource == null) {
       showDesktopActionUnavailable()
       return
@@ -1015,7 +1113,7 @@ export function LauncherRoute() {
       console.error('[launcher] failed to open workspace resource', error)
       void message.error(t('launcher.files.openFailed'))
     }
-  }, [desktopApi, message, showDesktopActionUnavailable, t])
+  }, [desktopApi, message, onClose, onOpenWorkspaceResource, showDesktopActionUnavailable, t])
 
   const openCurrentWorkspaceFile = useCallback(async (path: string) => {
     await openCurrentWorkspaceResource({ kind: 'file', path })
@@ -1164,7 +1262,7 @@ export function LauncherRoute() {
       return
     }
 
-    const searchResources = desktopApi?.searchCurrentWorkspaceResources
+    const searchResources = searchWorkspaceResources ?? desktopApi?.searchCurrentWorkspaceResources
     const searchFiles = desktopApi?.searchCurrentWorkspaceFiles
     const searchPlugins = desktopApi?.plugins?.searchCurrentWorkspace
     const normalizedQuery = query.trim()
@@ -1226,7 +1324,7 @@ export function LauncherRoute() {
       isCancelled = true
       window.clearTimeout(timeoutId)
     }
-  }, [contextProject, desktopApi, isDirectoryBrowserMode, isFileSearchMode, query])
+  }, [contextProject, desktopApi, isDirectoryBrowserMode, isFileSearchMode, query, searchWorkspaceResources])
 
   useEffect(() => {
     if (!isFileSearchMode) {
@@ -2058,10 +2156,15 @@ export function LauncherRoute() {
   }, [t])
 
   const hideLauncherWindow = useCallback(() => {
+    if (onClose != null) {
+      onClose()
+      return
+    }
+
     void desktopApi?.hideLauncherWindow?.().catch((error) => {
       console.error('[launcher] failed to hide launcher window', error)
     })
-  }, [desktopApi])
+  }, [desktopApi, onClose])
 
   const checkDesktopUpdates = useCallback(() => {
     if (desktopApi?.checkForUpdates == null) {
@@ -2208,6 +2311,8 @@ export function LauncherRoute() {
   ])
 
   useEffect(() => {
+    if (!active) return
+
     const handleLauncherKeyDown = (event: globalThis.KeyboardEvent) => {
       if (isImeCompositionKeyEvent(event, isSearchInputComposing())) {
         return
@@ -2286,6 +2391,7 @@ export function LauncherRoute() {
     exitProjectContext,
     focusSearchInput,
     hideLauncherWindow,
+    active,
     isSearchInputComposing,
     launcherViewMode,
     navigateSearchHistory,

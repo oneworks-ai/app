@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- empty dock workspace wires launcher, plugin actions, and dock chrome together. */
+
 import type { MenuProps } from 'antd'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -33,6 +35,8 @@ export function InteractionPanelEmptyDockWorkspace({
   canFullscreenPanel,
   isPanelFullscreen,
   isPanelMinimized,
+  openResourceShortcut,
+  openResourceShortcutLabel,
   onAddMenuClick,
   onNewMobileDebugPage,
   onNewSession,
@@ -50,6 +54,8 @@ export function InteractionPanelEmptyDockWorkspace({
   canFullscreenPanel: boolean
   isPanelFullscreen: boolean
   isPanelMinimized: boolean
+  openResourceShortcut?: string
+  openResourceShortcutLabel?: string
   onAddMenuClick: NonNullable<MenuProps['onClick']>
   onNewMobileDebugPage: () => void
   onNewSession: () => void
@@ -80,9 +86,20 @@ export function InteractionPanelEmptyDockWorkspace({
         mobileDebugDevices: deviceOptions,
         language,
         pluginMenuItems: pluginAddMenuItems,
+        openResourceShortcut,
         workspaceDrawerItems: workspaceDrawerCreateItems
       }),
-    [canCreateSessionTab, deviceOptions, isMac, pluginAddMenuItems, t, workspaceDrawerCreateItems]
+    [
+      canCreateSessionTab,
+      deviceOptions,
+      isMac,
+      language,
+      openResourceShortcut,
+      openResourceShortcutLabel,
+      pluginAddMenuItems,
+      t,
+      workspaceDrawerCreateItems
+    ]
   )
   const extraEmptyActions = useMemo<InteractionPanelEmptyAction[]>(() =>
     pluginEmptyActions
@@ -164,6 +181,7 @@ export function InteractionPanelEmptyDockWorkspace({
         <InteractionPanelEmptyState
           canCreateSessionTab={canCreateSessionTab}
           extraActions={extraEmptyActions}
+          openResourceShortcutLabel={openResourceShortcutLabel}
           onNewSession={onNewSession}
           onNewMobileDebugPage={onNewMobileDebugPage}
           onNewTerminal={onNewTerminal}

@@ -4,12 +4,15 @@ import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const require = createRequire(import.meta.url)
+const fs = require('node:fs') as typeof import('node:fs')
 const tempDirs: string[] = []
 
 afterEach(async () => {
+  vi.restoreAllMocks()
+  delete require.cache[require.resolve('../mock-home-bridge.js')]
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 })
 
@@ -91,6 +94,37 @@ describe('bridgeRealHomeToMockHome', () => {
       code: 'ENOENT'
     })
     await expect(lstat(path.join(mockHome, 'Documents'))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('reuses an expected symlink when another process creates it during bridge setup', async () => {
+    const realHome = await mkdtemp(path.join(os.tmpdir(), 'ow-real-home-'))
+    const mockHome = await mkdtemp(path.join(os.tmpdir(), 'ow-mock-home-'))
+    tempDirs.push(realHome, mockHome)
+    const sourcePath = path.join(realHome, '.codex', 'config.toml')
+    const targetPath = path.join(mockHome, '.codex', 'config.toml')
+    const actualSymlinkSync = fs.symlinkSync.bind(fs)
+    let injectedRace = false
+
+    await mkdir(path.dirname(sourcePath), { recursive: true })
+    await writeFile(sourcePath, 'model = "real"\n')
+
+    vi.spyOn(fs, 'symlinkSync').mockImplementation((target, pathLike, type) => {
+      if (!injectedRace && String(pathLike) === targetPath) {
+        injectedRace = true
+        actualSymlinkSync(target, pathLike, type)
+        const error = new Error('file already exists') as NodeJS.ErrnoException
+        error.code = 'EEXIST'
+        throw error
+      }
+
+      return actualSymlinkSync(target, pathLike, type)
+    })
+
+    delete require.cache[require.resolve('../mock-home-bridge.js')]
+    const { bridgeRealHomeToMockHome } = require('../mock-home-bridge.js') as typeof import('../mock-home-bridge')
+
+    expect(() => bridgeRealHomeToMockHome({ realHome, mockHome })).not.toThrow()
+    expect(await readlink(targetPath)).toBe(sourcePath)
   })
 
   it('removes stale excluded .oneworks bridge entries from mock home', async () => {

@@ -73,14 +73,18 @@ const renderSelectionMenuIcon = (isSelected: boolean) =>
     ? <span className='material-symbols-rounded nav-menu-icon active'>check</span>
     : <div className='nav-menu-icon-placeholder' />
 
-const renderAddMenuLabel = (label: string, shortcut?: string) => (
-  <span className='chat-interaction-panel__add-menu-label'>
-    <span>{label}</span>
-    {shortcut != null && shortcut !== '' && (
-      <span className='chat-interaction-panel__add-menu-shortcut'>{shortcut}</span>
-    )}
-  </span>
+const renderAddMenuLabel = (label: string) => (
+  <span className='chat-interaction-panel__add-menu-label'>{label}</span>
 )
+
+const renderAddMenuShortcut = (shortcut: string | undefined, isMac: boolean) =>
+  shortcut == null || shortcut === ''
+    ? undefined
+    : (
+      <span className='chat-interaction-panel__add-menu-shortcut'>
+        {formatInteractionPanelShortcut(shortcut, isMac)}
+      </span>
+    )
 
 export const buildInteractionPanelAddMenuItems = (
   t: TFunction,
@@ -90,6 +94,7 @@ export const buildInteractionPanelAddMenuItems = (
     includeKinds?: InteractionPanelAddMenuItemKind[]
     language?: string
     mobileDebugDevices?: InteractionPanelMobileDebugDeviceOption[]
+    openResourceShortcut?: string
     pluginMenuItems?: Array<PluginContributionWorkbenchAddMenuItem & { pluginScope: string }>
     selectedMobileDebugDeviceId?: string
   } = {}
@@ -118,26 +123,23 @@ export const buildInteractionPanelAddMenuItems = (
         label: renderAddMenuLabel(device.label)
       })))
   ]
+  const openResourceShortcut = options.openResourceShortcut ?? INTERACTION_PANEL_OPEN_FILE_SHORTCUT
 
   const builtInItems: InteractionPanelMenuItems = [
     ...(shouldIncludeKind('resource')
       ? [{
+        extra: renderAddMenuShortcut(openResourceShortcut, isMac),
         key: 'resource',
         icon: <span className='material-symbols-rounded'>pageview</span>,
-        label: renderAddMenuLabel(
-          t('chat.interactionPanel.openResource'),
-          formatInteractionPanelShortcut(INTERACTION_PANEL_OPEN_FILE_SHORTCUT, isMac)
-        )
+        label: renderAddMenuLabel(t('chat.interactionPanel.openResource'))
       }]
       : []),
     ...(shouldIncludeKind('terminal')
       ? [{
+        extra: renderAddMenuShortcut(INTERACTION_PANEL_NEW_TERMINAL_SHORTCUT, isMac),
         key: 'terminal',
         icon: <span className='material-symbols-rounded'>terminal</span>,
-        label: renderAddMenuLabel(
-          t('chat.terminal.addSession'),
-          formatInteractionPanelShortcut(INTERACTION_PANEL_NEW_TERMINAL_SHORTCUT, isMac)
-        )
+        label: renderAddMenuLabel(t('chat.terminal.addSession'))
       }]
       : []),
     ...(options.canCreateSessionTab === false || !shouldIncludeKind('session')
@@ -149,12 +151,10 @@ export const buildInteractionPanelAddMenuItems = (
       }]),
     ...(shouldIncludeKind('iframe')
       ? [{
+        extra: renderAddMenuShortcut(INTERACTION_PANEL_NEW_IFRAME_SHORTCUT, isMac),
         key: 'iframe',
         icon: <span className='material-symbols-rounded'>language</span>,
-        label: renderAddMenuLabel(
-          t('chat.interactionPanel.addIframe'),
-          formatInteractionPanelShortcut(INTERACTION_PANEL_NEW_IFRAME_SHORTCUT, isMac)
-        )
+        label: renderAddMenuLabel(t('chat.interactionPanel.addIframe'))
       }]
       : []),
     ...(shouldIncludeKind('mobile-debug')

@@ -21,6 +21,7 @@ export interface InteractionPanelEmptyAction {
 export function InteractionPanelEmptyState({
   canCreateSessionTab,
   extraActions = [],
+  openResourceShortcutLabel,
   onNewMobileDebugPage,
   onNewSession,
   onNewTerminal,
@@ -29,6 +30,7 @@ export function InteractionPanelEmptyState({
 }: {
   canCreateSessionTab: boolean
   extraActions?: InteractionPanelEmptyAction[]
+  openResourceShortcutLabel?: string
   onNewMobileDebugPage: () => void
   onNewSession: () => void
   onNewTerminal: () => void
@@ -38,8 +40,8 @@ export function InteractionPanelEmptyState({
   const { t } = useTranslation()
   const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac')
   const openResourceShortcut = useMemo(
-    () => formatInteractionPanelShortcut(INTERACTION_PANEL_OPEN_FILE_SHORTCUT, isMac),
-    [isMac]
+    () => openResourceShortcutLabel ?? formatInteractionPanelShortcut(INTERACTION_PANEL_OPEN_FILE_SHORTCUT, isMac),
+    [isMac, openResourceShortcutLabel]
   )
   const newTerminalShortcut = useMemo(
     () => formatInteractionPanelShortcut(INTERACTION_PANEL_NEW_TERMINAL_SHORTCUT, isMac),

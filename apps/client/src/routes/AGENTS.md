@@ -5,10 +5,12 @@
 ## Agent Room 入口
 
 - `LauncherRoute.tsx`
-  - 桌面空项目启动页入口，只在 Electron preload 提供 `window.oneworksDesktop` 时使用。
+  - launcher / 空项目启动页入口；Electron preload 提供 `window.oneworksDesktop` 时走桌面 host，Web manager role 下也可作为 daemon launcher 入口。
   - 使用 Raycast-like 命令面板：顶部搜索自动聚焦，列表按 action / project 分组，支持上下键切换和 Enter 执行。
-  - 通过 `window.oneworksDesktop.getWorkspaceSelectorState()` 获取 running / recent projects。
-  - 通过 `window.oneworksDesktop.openWorkspace()` 打开已有项目，通过 `chooseWorkspace()` 选择本地目录。
+  - 桌面环境通过 `window.oneworksDesktop.getWorkspaceSelectorState()` 获取 running / recent projects。
+  - Web manager role 通过 `/api/launcher/workspaces` 获取 running / recent projects，并通过 `/api/launcher/workspaces/open` 启动 workspace server。
+  - 桌面环境通过 `window.oneworksDesktop.openWorkspace()` 打开已有项目；Web manager role 打开后把当前 tab 的 server base 切到返回的 workspace server。
+  - Web workspace 页内 launcher 由 `ChatRouteShell` 渲染 `LauncherOverlay` 并复用 `LauncherRoute`；只在非 Electron Web 下注册 `Cmd/Ctrl+Shift+P`。
   - 左下角只承载 app 级菜单入口；右下角只承载当前选中项的可用操作提示。
   - `/` 文件搜索模式在 route 层只负责进入/退出模式、展示结果和调用 preload API。全局模式搜索电脑根目录；项目上下文模式搜索当前项目资源。
   - 非桌面环境下必须降级提示能力不可用，不要直接访问 Electron IPC。
@@ -48,21 +50,26 @@
 - 交互结构页左下角 footer/debug tools 是 sidebar footer 信息区，不属于顶部 chrome。这里的图标槽统一用 `--interaction-structure-debug-icon-size: 16px`，不要复用 `--app-chrome-icon-size` 或单独写 17px/18px/20px，避免与 footer slot、platform switch、fullscreen switch 尺寸不同步。
 - 交互结构页左下角 debug tools 的操作系统切换必须是 `radiogroup` / `radio` 语义并支持方向键切换，视觉上对齐配置页右上角 source switch；全屏切换必须用真实 `Switch` 控件。两行的控件都靠右，左侧只保留说明图标。
 - 新增桌面 launcher 能力时，route 只做展示和 preload API 调用；窗口生命周期、workspace service 复用和最近项目状态留在 `apps/desktop/src/main/`。
+- 新增 Web manager launcher 能力时，route 仍只做展示和 API 调用；项目发现、workspace server 生命周期和文件系统操作应落在 server manager route / service。
 - launcher 视觉组件、设置页 section、footer hint 细节维护在 `src/components/launcher/`；route 不要继续吸收复杂 DOM 和局部控件状态。
 
 ## Desktop Launcher 数据流
 
-Desktop preload:
+Desktop preload / Web manager API:
 
-`window.oneworksDesktop`
+`window.oneworksDesktop` / `/api/launcher/*`
 
 Route:
 
-`LauncherRoute -> normalizeWorkspaceSelectorState -> openWorkspace / chooseWorkspace / searchWorkspaceResources`
+`LauncherRoute -> normalizeWorkspaceSelectorState -> openWorkspace / listLauncherDirectories / searchWorkspaceResources`
 
 Desktop main:
 
 `shared desktop client -> window-manager -> workspace-selector-state / workspace-file-search`
+
+Server manager:
+
+`shared web client -> launcher manager route -> launcher manager service -> workspace server process`
 
 最终行为：
 

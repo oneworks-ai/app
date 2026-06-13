@@ -41,7 +41,6 @@ import { interactionPanelPinnedTabLimitAtom } from '#~/store/index'
 
 import { InteractionPanelContent } from './InteractionPanelContent'
 import type { InteractionPanelDockTabHeaderActionContext } from './InteractionPanelDockWorkspace.types'
-import { InteractionPanelOpenResourceDialogHost } from './InteractionPanelOpenResourceDialogHost'
 import { InteractionPanelPinnedTabEditModal } from './InteractionPanelPinnedTabEditModal'
 import type { InteractionPanelPinnedTab } from './interaction-panel-pinned-tabs'
 import {
@@ -79,11 +78,15 @@ export function ChatInteractionPanel({
   bottomPanel,
   isFolded,
   isVisible,
+  openResourceKeyboardShortcut,
+  openResourceShortcut,
+  openResourceShortcutLabel,
   shortcutRequest,
   onShortcutRequestHandled,
   onRunCommandTaskStatusesChange,
   onFoldChange,
   onLocateWorkspacePath,
+  onOpenResource,
   onReferenceWorkspacePaths,
   onWorkspaceDrawerCreateMenuClick,
   settingsView,
@@ -99,11 +102,15 @@ export function ChatInteractionPanel({
   bottomPanel: ChatRouteBottomPanelState
   isFolded: boolean
   isVisible: boolean
+  openResourceKeyboardShortcut?: string | null
+  openResourceShortcut?: string | null
+  openResourceShortcutLabel?: string
   shortcutRequest?: InteractionPanelShortcutRequest | null
   onShortcutRequestHandled?: (id: number) => void
   onRunCommandTaskStatusesChange?: (statuses: InteractionPanelRunCommandTaskStatus[]) => void
   onFoldChange: (isFolded: boolean) => void
   onLocateWorkspacePath: (path: string) => void
+  onOpenResource: () => void
   onReferenceWorkspacePaths?: (files: ContextPickerFile[]) => void
   onWorkspaceDrawerCreateMenuClick?: NonNullable<MenuProps['onClick']>
   settingsView?: ReactNode
@@ -119,26 +126,19 @@ export function ChatInteractionPanel({
   const { isCompactLayout, isTouchInteraction } = useResponsiveLayout()
   const isCompactView = isCompactLayout || isTouchInteraction
   const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac')
+  const { projectUrlHistoryKey, sessionUrlHistoryKey } = useInteractionPanelWorkspaceUrlKeys(
+    sessionId,
+    terminalSessionId
+  )
   const maxPinnedTabs = useAtomValue(interactionPanelPinnedTabLimitAtom)
   const pluginAddMenuItems = usePluginSlot<PluginContributionWorkbenchAddMenuItem>('workbench.addMenu')
   const pluginWorkbenchTabs = usePluginSlot<PluginContributionWorkbenchTab>('workbench.tabs')
   const executePluginCommand = usePluginCommandExecutor()
   const pluginLanguage = i18n.resolvedLanguage ?? i18n.language
   const canCreateSessionTab = sessionId != null && sessionId !== ''
-  const [isOpenResourceDialogOpen, setIsOpenResourceDialogOpen] = useState(false)
   const [editingPinnedTab, setEditingPinnedTab] = useState<InteractionPanelPinnedTab | null>(null)
   const [markdownPreviewMode, setMarkdownPreviewMode] = useState<WorkspaceMarkdownPreviewMode>('preview')
   const handledShortcutRequestIdRef = useRef<number | null>(null)
-  const { projectUrlHistoryKey, sessionUrlHistoryKey } = useInteractionPanelWorkspaceUrlKeys(
-    sessionId,
-    terminalSessionId
-  )
-  const recentFilePaths = bottomPanel.selectedWorkspaceFilePath == null
-    ? bottomPanel.openWorkspaceFilePaths
-    : [
-      bottomPanel.selectedWorkspaceFilePath,
-      ...bottomPanel.openWorkspaceFilePaths.filter(path => path !== bottomPanel.selectedWorkspaceFilePath)
-    ]
   const bottomTerminalPanes = useMemo(
     () => terminalPanes.panes.filter(pane => isTerminalPaneOnSurface(pane, 'bottom')),
     [terminalPanes.panes]
@@ -241,7 +241,7 @@ export function ChatInteractionPanel({
 
     if (info.key === 'resource') {
       onFoldChange(false)
-      setIsOpenResourceDialogOpen(true)
+      onOpenResource()
       return
     }
     onFoldChange(false)
@@ -334,7 +334,7 @@ export function ChatInteractionPanel({
   }
   const handleOpenResourceDialog = () => {
     onFoldChange(false)
-    setIsOpenResourceDialogOpen(true)
+    onOpenResource()
   }
   const handlePanelAction = () => {
     if (isFolded) {
@@ -450,6 +450,7 @@ export function ChatInteractionPanel({
   useInteractionPanelShortcuts({
     enabled: isVisible,
     isMac,
+    openResourceShortcut: openResourceKeyboardShortcut,
     onNewIframe: handleNewWebPage,
     onNewTerminal: handleNewTerminal,
     onOpenResource: handleOpenResourceDialog
@@ -500,6 +501,8 @@ export function ChatInteractionPanel({
             isVisible={isVisible}
             markdownPreviewMode={markdownPreviewMode}
             mobileDebugPages={panelTabs.mobileDebugPages}
+            openResourceShortcut={openResourceShortcut ?? undefined}
+            openResourceShortcutLabel={openResourceShortcutLabel}
             pinnedTabs={pinnedTabs.pinnedTabs}
             tabs={panelTabs.tabs}
             projectUrlHistoryKey={projectUrlHistoryKey}
@@ -542,18 +545,6 @@ export function ChatInteractionPanel({
           />
         )}
       </DockPanel>
-      <InteractionPanelOpenResourceDialogHost
-        bottomPanel={bottomPanel}
-        iframePages={panelTabs.iframePages}
-        open={isOpenResourceDialogOpen}
-        projectUrlHistoryKey={projectUrlHistoryKey}
-        recentFilePaths={recentFilePaths}
-        sessionId={sessionId}
-        sessionUrlHistoryKey={sessionUrlHistoryKey}
-        onClose={() => setIsOpenResourceDialogOpen(false)}
-        onFoldChange={onFoldChange}
-        onOpenWebsite={panelTabs.openIframeUrl}
-      />
       <InteractionPanelPinnedTabEditModal
         pinnedTab={editingPinnedTab}
         onClose={() => setEditingPinnedTab(null)}

@@ -1,0 +1,134 @@
+# Start Services
+
+## Start the Web UI
+
+Run from your project root:
+
+```bash
+npx oneworks web
+```
+
+By default it:
+
+- resolves the current workspace root
+- starts a built-in server
+- serves the built-in Web UI
+- prints a client URL, usually `http://127.0.0.1:8787/ui/`
+
+Common options:
+
+```bash
+npx oneworks web --workspace /path/to/project --config-dir /path/to/project/infra
+```
+
+## Start a Headless Server
+
+Use this when a standalone PWA, static site, or another app should connect to the current project:
+
+```bash
+npx oneworks server
+```
+
+The server exposes only the control plane and does not mount the Web UI. Common options:
+
+```bash
+npx oneworks server --host 0.0.0.0 --port 8787 --allow-cors
+```
+
+Standalone PWA or static client deployments are usually cross-origin. If the server is only used behind a local tunnel or reverse proxy, start it with:
+
+```bash
+npx oneworks server --allow-cors
+```
+
+## Source Development UI Server and Client
+
+This section is only for developing the One Works repository itself. Project integrations should prefer:
+
+```bash
+npx oneworks web
+```
+
+From the One Works repository root, after `pnpm install`:
+
+```bash
+pnpm start
+```
+
+`pnpm start` calls `pnpm tools dev-start web`. The development launcher stores the server database, runtime store, mock home, cache, and startup logs under the project home, normally `~/.oneworks/projects/<project-key>`, instead of writing them into the repository workspace.
+
+To update the current source worktree and start a development service:
+
+```bash
+pnpm tools dev-start <target>
+```
+
+Targets include `web`, `electron`, `electron-workspace`, `pwa`, `homepage`, and `docs`. The launcher registers TypeScript through `scripts/run-tools.mjs`, installs missing register dependencies when needed, safely fetches and aligns the worktree when possible, checks workspace install state, starts services in the background, avoids busy ports, and prints ready URLs.
+
+Notes:
+
+- Web development defaults to server `8787` and client `5173`. If the default ports are busy, the launcher picks available ports unless explicit port environment variables are set.
+- `oneworks-client` development mode depends on local source and workspace install state. It is not the general runtime path for the npm package.
+- Outside development mode, `@oneworks/client` serves built `dist` directly and no longer depends on `vite preview`.
+
+## Runtime Directories
+
+- `__ONEWORKS_PROJECT_WORKSPACE_FOLDER__` points to the project root.
+- If it is not set, `@oneworks/web`, `@oneworks/server`, `oneworks-server`, and `oneworks-client` walk up from the current directory and look for `.oo`, `.oo.config.*`, `pnpm-workspace.yaml`, or a Git root.
+- Project config follows the resolved workspace root by default. Set `__ONEWORKS_PROJECT_CONFIG_DIR__` to move config files.
+- `__ONEWORKS_PROJECT_BASE_DIR__` defaults to `.oo` and can be set to `.oneworks`, `.oo`, or another project asset directory.
+- `__ONEWORKS_PROJECT_CACHE_DIR__` overrides the shared project cache. Without it, reusable adapter CLI and skill dependency resources are stored under `~/.oneworks/projects/<project-key>/caches`.
+- Without `DB_PATH`, the server SQLite database is stored at `~/.oneworks/projects/<project-key>/.local/server/db.sqlite`; the runtime store is stored under `~/.oneworks/projects/<project-key>/runtime`.
+- Multiple worktrees of the same Git project share a project key by default. Different projects do not share runtime data.
+- In Git worktrees, project cache, server database, mock home, logs, and runtime store follow `__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__` when set; otherwise One Works resolves the main worktree from the Git common dir.
+- `__ONEWORKS_PROJECT_ENTITIES_DIR__` defaults to `entities` and is resolved under the AI base directory.
+
+## Adapter CLI Installation and Versions
+
+Managed native adapter CLI installation, pinned versions, warmup, and environment overrides are documented in [Adapter CLI Installation and Versions](./adapter-cli.md).
+
+## Web Authentication and Runtime Mapping
+
+- Web authentication is disabled by default when the server binds to `localhost`, `127.*`, or `::1`; it is enabled by default when the server binds to `0.0.0.0`, a LAN IP, or a domain.
+- Multiple accounts can be configured:
+
+```yaml
+webAuth:
+  enabled: true
+  rememberDeviceTtlDays: 30
+  accounts:
+    - username: alice
+      password: change-me
+    - username: bob
+      password: change-me-too
+```
+
+- If no `webAuth.accounts` or `webAuth.password` is configured, the server generates `web-auth-password` in the data directory and uses `admin` as the default username.
+- Temporary disable:
+
+```yaml
+webAuth:
+  enabled: false
+```
+
+- `HOME` isolates runtime state. It defaults to the `.mock` directory under the project home. Startup bridges common dot directories from the real home and macOS Keychain/Application Support paths into the mock home.
+- `modelServices` is shared configuration. Each adapter maps it to its native runtime:
+  - `claude-code` uses Claude Code Router.
+  - `codex` and `gemini` use adapter-owned local proxies.
+  - some adapters write provider config into session-level or native config files.
+- If no routed `service,model` is selected, adapters keep using their native model and binary selection.
+
+## Default Built-in MCP
+
+- `oneworks` and server sessions load the built-in `OneWorks` MCP server by default.
+- Disable for one run:
+
+```bash
+oneworks --no-default-oneworks-mcp-server "..."
+```
+
+- Disable globally:
+
+```yaml
+noDefaultOneWorksMcpServer: true
+```

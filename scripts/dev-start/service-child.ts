@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- service child coordinates target config, linked services, and process startup. */
+
 import type { ChildProcess } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -33,6 +35,7 @@ export const runServiceChild = async (target: DevStartTarget) => {
     clientMode: config.clientMode,
     clientPort,
     extra: config.extraEnv,
+    serverRole: config.serverRole,
     serverPort
   })
   const projectHomeDir = runtimeEnv.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__
@@ -139,6 +142,7 @@ export const runServiceChild = async (target: DevStartTarget) => {
       args: [
         'exec',
         'oneworks-server',
+        ...(config.serverRole === 'manager' ? ['--manager'] : []),
         '--port',
         String(serverPort),
         '--allow-cors',

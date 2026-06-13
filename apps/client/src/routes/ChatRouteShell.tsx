@@ -18,6 +18,18 @@ import type {
   ChatHeaderRoomIconStatus,
   ChatHeaderView
 } from '#~/components/chat/ChatHeader.js'
+import {
+  MAX_VISIBLE_RECENT_RESOURCE_RESULTS,
+  MAX_VISIBLE_RESOURCE_RESULTS,
+  buildInteractionPanelRecentFileResources,
+  collectInteractionPanelChildSessions,
+  collectInteractionPanelWorkspaceFiles,
+  compareInteractionPanelRecentResources,
+  compareInteractionPanelResources
+} from '#~/components/chat/interaction-panel/interaction-panel-resource-search'
+import type {
+  InteractionPanelResourceSearchResult
+} from '#~/components/chat/interaction-panel/interaction-panel-resource-search'
 import type {
   InteractionPanelRunCommand,
   InteractionPanelRunCommandTaskStatus
@@ -27,6 +39,9 @@ import {
   writePendingInteractionPanelShortcutRequest
 } from '#~/components/chat/interaction-panel/interaction-panel-shortcut-request'
 import type { InteractionPanelShortcutRequest } from '#~/components/chat/interaction-panel/interaction-panel-shortcut-request'
+import { formatInteractionPanelShortcut } from '#~/components/chat/interaction-panel/interaction-panel-shortcuts'
+import { buildInteractionPanelWebsiteResources } from '#~/components/chat/interaction-panel/interaction-panel-website-resources'
+import { useInteractionPanelWorkspaceUrlKeys } from '#~/components/chat/interaction-panel/use-interaction-panel-workspace-url-keys'
 import { useInteractionTerminalPanes } from '#~/components/chat/interaction-panel/use-interaction-terminal-panes'
 import { parseWorkbenchDrawerViewMenuKey, toWorkbenchDrawerViewMenuKey } from '#~/components/chat/workbench-create-menu'
 import type {
@@ -49,10 +64,13 @@ import { useChatLayoutQueryState } from '#~/hooks/use-chat-layout-query-state'
 import type { PluginContributionWorkbenchTab } from '#~/plugins/plugin-manifest'
 import { usePluginSlot } from '#~/plugins/plugin-slots'
 import { useInstallRoutePluginMoreMenu, useInstallRoutePluginWindowBarActions } from '#~/plugins/route-plugin-chrome'
+import { isShortcutMatch } from '#~/utils/shortcutUtils'
 
 import { ChatRouteBottomPanel } from './ChatRouteBottomPanel'
+import { LauncherOverlay } from './LauncherOverlay'
 
 const WORKSPACE_TERMINAL_SESSION_ID = '__workspace__'
+const WEB_WORKSPACE_LAUNCHER_SHORTCUT = 'mod+shift+p'
 const CHAT_ROUTE_STARTUP_READY_SELECTOR = [
   '.chat-container.ready .chat-input-monaco[data-oneworks-sender-editor-ready="true"]',
   '.chat-container.ready .chat-messages.ready',
@@ -105,6 +123,69 @@ const normalizeLauncherResourceTarget = (value: unknown): DesktopWorkspaceResour
     ...(typeof value.url === 'string' ? { url: value.url } : {})
   }
 }
+
+const normalizeWebLauncherQuery = (query: string) => query.trim().toLowerCase()
+
+const getWorkspaceFolderName = (workspaceFolder: string) => {
+  const normalizedFolder = workspaceFolder.replace(/[\\/]+$/u, '')
+  return normalizedFolder.split(/[\\/]/u).filter(Boolean).at(-1) ?? workspaceFolder
+}
+
+const matchesWebLauncherQuery = (normalizedQuery: string, values: Array<string | undefined>) => {
+  if (normalizedQuery === '') return true
+  return values.some(value => value?.toLowerCase().includes(normalizedQuery) === true)
+}
+
+const isFileResource = (
+  resource: InteractionPanelResourceSearchResult
+): resource is Extract<InteractionPanelResourceSearchResult, { kind: 'file' }> => resource.kind === 'file'
+
+const isSessionResource = (
+  resource: InteractionPanelResourceSearchResult
+): resource is Extract<InteractionPanelResourceSearchResult, { kind: 'session' }> => resource.kind === 'session'
+
+const isWebsiteResource = (
+  resource: InteractionPanelResourceSearchResult
+): resource is Extract<InteractionPanelResourceSearchResult, { kind: 'website' }> => resource.kind === 'website'
+
+const toLauncherWorkspaceResourceSearchResponse = ({
+  files,
+  sessions,
+  terminals,
+  websites
+}: {
+  files: InteractionPanelResourceSearchResult[]
+  sessions: InteractionPanelResourceSearchResult[]
+  terminals: DesktopWorkspaceResourceSearchResult[]
+  websites: InteractionPanelResourceSearchResult[]
+}): DesktopWorkspaceResourceSearchResponse => ({
+  files: files.filter(isFileResource).map(file => ({
+    directory: file.directory,
+    id: file.id,
+    kind: 'file',
+    name: file.name,
+    path: file.path,
+    title: file.name,
+    updatedAt: file.updatedAt
+  })),
+  sessions: sessions.filter(isSessionResource).map(sessionResource => ({
+    createdAt: sessionResource.createdAt,
+    id: sessionResource.id,
+    kind: 'session',
+    sessionId: sessionResource.sessionId,
+    subtitle: sessionResource.sessionId,
+    title: sessionResource.title
+  })),
+  terminals,
+  websites: websites.filter(isWebsiteResource).map(website => ({
+    faviconUrl: website.faviconUrl,
+    id: website.id,
+    kind: 'website',
+    title: website.title,
+    updatedAt: website.updatedAt,
+    url: website.url
+  }))
+})
 
 export function ChatRouteShell({
   activeView,
@@ -197,12 +278,14 @@ export function ChatRouteShell({
   const [interactionPanelShortcutRequest, setInteractionPanelShortcutRequest] = useState<
     InteractionPanelShortcutRequest | null
   >(null)
+  const [isWebLauncherOpen, setIsWebLauncherOpen] = useState(false)
   const [runCommandTaskStatuses, setRunCommandTaskStatuses] = useState<InteractionPanelRunCommandTaskStatus[]>([])
   const resolvedWorkspaceSession = workspaceSession ?? session
   const resolvedWorkspaceSessionId = workspaceSessionId ?? resolvedWorkspaceSession?.id
   const sessionWorkspaceRootPath = sessionInfo?.type === 'init' ? sessionInfo.cwd.trim() : ''
   const workspaceRootPath = sessionWorkspaceRootPath === '' ? projectWorkspaceFolder : sessionWorkspaceRootPath
   const terminalSessionId = resolvedWorkspaceSessionId ?? WORKSPACE_TERMINAL_SESSION_ID
+  const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac')
   const terminalPanes = useInteractionTerminalPanes(terminalSessionId, t)
   const bottomPanel = useChatRouteBottomPanel({
     isTerminalOpen,
@@ -215,6 +298,31 @@ export function ChatRouteShell({
       bottomPanel.selectedWorkspaceFilePath,
       ...bottomPanel.openWorkspaceFilePaths.filter(path => path !== bottomPanel.selectedWorkspaceFilePath)
     ]
+  const { projectUrlHistoryKey, sessionUrlHistoryKey } = useInteractionPanelWorkspaceUrlKeys(
+    resolvedWorkspaceSessionId,
+    terminalSessionId
+  )
+  const canUseWorkspaceLauncher = workspaceRootPath != null && workspaceRootPath.trim() !== ''
+  const canUseWebLauncherShortcut = window.oneworksDesktop == null && canUseWorkspaceLauncher
+  const webWorkspaceLauncherShortcutLabel = useMemo(
+    () => formatInteractionPanelShortcut(WEB_WORKSPACE_LAUNCHER_SHORTCUT, isMac),
+    [isMac]
+  )
+  const openResourceShortcut = canUseWebLauncherShortcut ? WEB_WORKSPACE_LAUNCHER_SHORTCUT : undefined
+  const openResourceShortcutLabel = canUseWebLauncherShortcut ? webWorkspaceLauncherShortcutLabel : undefined
+  const webLauncherWorkspaceContext = useMemo<DesktopWorkspaceSelectorProject | undefined>(() => {
+    const normalizedWorkspaceRootPath = workspaceRootPath?.trim()
+    if (normalizedWorkspaceRootPath == null || normalizedWorkspaceRootPath === '') return undefined
+
+    const workspaceName = getWorkspaceFolderName(normalizedWorkspaceRootPath)
+    return {
+      description: normalizedWorkspaceRootPath,
+      isCurrent: true,
+      name: workspaceName === '' ? displayTitle?.trim() || normalizedWorkspaceRootPath : workspaceName,
+      status: 'ready',
+      workspaceFolder: normalizedWorkspaceRootPath
+    }
+  }, [displayTitle, workspaceRootPath])
   const workspaceDrawerCreateItems = useMemo(() =>
     buildWorkspaceDrawerViewItems({
       agentRosterCount: agentRoster?.members.length,
@@ -291,6 +399,82 @@ export function ChatRouteShell({
         : {})
     })
   }, [requestInteractionPanelShortcut, setIsTerminalOpen, setIsTerminalPanelFolded])
+  const handleOpenWebLauncher = useCallback(() => {
+    if (!canUseWorkspaceLauncher) return
+    setIsWebLauncherOpen(true)
+  }, [canUseWorkspaceLauncher])
+  const searchWebLauncherWorkspaceResources = useCallback(async (
+    query: string
+  ): Promise<DesktopWorkspaceResourceSearchResponse> => {
+    const normalizedQuery = normalizeWebLauncherQuery(query)
+    const queryTokens = normalizedQuery.split(/\s+/u).filter(Boolean)
+    const recentFiles = buildInteractionPanelRecentFileResources(recentFilePaths)
+    const websites = buildInteractionPanelWebsiteResources({
+      iframePages: [],
+      projectUrlHistoryKey,
+      sessionUrlHistoryKey
+    })
+    const terminals: DesktopWorkspaceResourceSearchResult[] = terminalPanes.panes
+      .map((pane, index) => ({
+        id: `terminal:${pane.id}`,
+        kind: 'terminal' as const,
+        shellKind: pane.shellKind,
+        terminalId: pane.id,
+        title: pane.title,
+        updatedAt: Number.MAX_SAFE_INTEGER - index
+      }))
+      .filter(terminal =>
+        matchesWebLauncherQuery(normalizedQuery, [terminal.title, terminal.terminalId, terminal.shellKind])
+      )
+
+    const [files, sessions] = await Promise.all([
+      normalizedQuery === ''
+        ? Promise.resolve(recentFiles)
+        : collectInteractionPanelWorkspaceFiles({
+          isCancelled: () => false,
+          queryTokens,
+          sessionId: resolvedWorkspaceSessionId
+        }),
+      collectInteractionPanelChildSessions(resolvedWorkspaceSessionId)
+    ])
+
+    const filteredSessions = sessions.filter(resource =>
+      matchesWebLauncherQuery(normalizedQuery, [resource.title, resource.sessionId])
+    )
+    const filteredWebsites = websites.filter(resource =>
+      matchesWebLauncherQuery(normalizedQuery, [resource.title, resource.url])
+    )
+
+    if (normalizedQuery === '') {
+      return toLauncherWorkspaceResourceSearchResponse({
+        files: [...files].sort(compareInteractionPanelRecentResources).slice(0, MAX_VISIBLE_RECENT_RESOURCE_RESULTS),
+        sessions: [...filteredSessions]
+          .sort(compareInteractionPanelRecentResources)
+          .slice(0, MAX_VISIBLE_RECENT_RESOURCE_RESULTS),
+        terminals: terminals.slice(0, MAX_VISIBLE_RECENT_RESOURCE_RESULTS),
+        websites: [...filteredWebsites]
+          .sort(compareInteractionPanelRecentResources)
+          .slice(0, MAX_VISIBLE_RECENT_RESOURCE_RESULTS)
+      })
+    }
+
+    return toLauncherWorkspaceResourceSearchResponse({
+      files: [...files].sort(compareInteractionPanelResources(normalizedQuery)).slice(0, MAX_VISIBLE_RESOURCE_RESULTS),
+      sessions: [...filteredSessions]
+        .sort(compareInteractionPanelResources(normalizedQuery))
+        .slice(0, MAX_VISIBLE_RESOURCE_RESULTS),
+      terminals: terminals.slice(0, MAX_VISIBLE_RESOURCE_RESULTS),
+      websites: [...filteredWebsites]
+        .sort(compareInteractionPanelResources(normalizedQuery))
+        .slice(0, MAX_VISIBLE_RESOURCE_RESULTS)
+    })
+  }, [
+    projectUrlHistoryKey,
+    recentFilePaths,
+    resolvedWorkspaceSessionId,
+    sessionUrlHistoryKey,
+    terminalPanes.panes
+  ])
   const resolvedHistoryView = typeof historyView === 'function'
     ? historyView({
       onOpenUrlInAppBrowser: handleOpenUrlInAppBrowser,
@@ -414,6 +598,32 @@ export function ChatRouteShell({
     setWorkspaceDrawerOpen
   ])
 
+  const requestLauncherResourceTarget = useCallback((target: DesktopWorkspaceResourceTarget) => {
+    const params = new URLSearchParams(location.search)
+    params.set('launcherAction', target.kind)
+    params.set('launcherRequestId', `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`)
+    const optionalParams: Array<[string, string | undefined]> = [
+      ['launcherPath', target.path],
+      ['launcherSessionId', target.sessionId],
+      ['launcherTerminalId', target.terminalId],
+      ['launcherTitle', target.title],
+      ['launcherUrl', target.url]
+    ]
+
+    for (const [key, value] of optionalParams) {
+      if (value == null || value === '') {
+        params.delete(key)
+      } else {
+        params.set(key, value)
+      }
+    }
+
+    void navigate({
+      pathname: location.pathname,
+      search: `?${params.toString()}`
+    }, { replace: true })
+  }, [location.pathname, location.search, navigate])
+
   useEffect(() => {
     const dispose = window.oneworksDesktop?.onWorkspaceResourceRequest?.((target) => {
       const normalizedTarget = normalizeLauncherResourceTarget(target)
@@ -457,6 +667,27 @@ export function ChatRouteShell({
     setIsTerminalPanelFolded,
     setWorkspaceDrawerOpen
   ])
+
+  useEffect(() => {
+    if (!canUseWebLauncherShortcut) {
+      setIsWebLauncherOpen(false)
+      return
+    }
+
+    const handleWebLauncherShortcut = (event: KeyboardEvent) => {
+      if (event.isComposing || !isShortcutMatch(event, WEB_WORKSPACE_LAUNCHER_SHORTCUT, isMac)) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      setIsWebLauncherOpen(open => !open)
+    }
+
+    window.addEventListener('keydown', handleWebLauncherShortcut, true)
+    return () => window.removeEventListener('keydown', handleWebLauncherShortcut, true)
+  }, [canUseWebLauncherShortcut, isMac])
 
   useEffect(() => {
     const params = new URLSearchParams(location.search)
@@ -576,85 +807,104 @@ export function ChatRouteShell({
   )
 
   return (
-    <RouteContainerLayout
-      className={`chat-route-layout ${shouldShowWorkspaceDrawer ? 'has-workspace-drawer' : ''} ${
-        bottomPanel.shouldShowBottomPanel ? 'has-bottom-dock' : ''
-      }`}
-      bodyClassName='chat-route-layout__body'
-      header={routeHeader}
-      sidePanel={shouldShowWorkspaceDrawer
-        ? (
-          <ChatWorkspaceDrawer
-            agentApprovals={agentApprovals}
-            agentRoster={agentRoster}
-            defaultView={workspaceDrawerView ?? workspaceDrawerDefaultView}
-            isFullscreen={isWorkspaceDrawerFullscreen}
-            locateFileRequest={workspaceDrawerLocateRequest}
-            recentFilePaths={recentFilePaths}
-            selectedFilePath={bottomPanel.selectedWorkspaceFilePath}
-            settingsView={settingsView}
-            sessionId={resolvedWorkspaceSessionId}
-            terminalSessionId={terminalSessionId}
-            terminalPanes={terminalPanes}
-            onClose={() => setWorkspaceDrawerOpen(false)}
-            onFullscreenChange={setWorkspaceDrawerFullscreen}
-            onReferencePaths={onReferenceWorkspacePaths}
-            onOpenFile={bottomPanel.handleOpenWorkspaceFile}
-          />
-        )
-        : undefined}
-      sidePanelClassName='chat-route-layout__workspace-panel'
-      sidePanelCompactMode='overlay'
-      sidePanelFullscreen={isWorkspaceDrawerFullscreen}
-      sidePanelLabel='工作区抽屉'
-      sidePanelResize={{
-        defaultWidth: 340,
-        maxWidth: 760,
-        minContentWidth: 300,
-        minWidth: 220,
-        storageKey: 'workspaceDrawerWidth'
-      }}
-      onCloseSidePanel={() => setWorkspaceDrawerOpen(false)}
-      bottomPanel={shouldRenderBottomPanel
-        ? (
-          <ChatRouteBottomPanel
-            agentApprovals={agentApprovals}
-            agentRoster={agentRoster}
-            bottomPanel={bottomPanel}
-            isFolded={isTerminalPanelFolded}
-            isRendered
-            isVisible={isBottomPanelVisible}
-            shortcutRequest={interactionPanelShortcutRequest}
-            sessionId={resolvedWorkspaceSessionId}
-            workspaceRootPath={workspaceRootPath}
-            onLocateWorkspacePath={handleLocateWorkspacePath}
-            onWorkspaceDrawerCreateMenuClick={handleWorkspaceDrawerCreateMenuClick}
-            onShortcutRequestHandled={(id) => {
-              const pendingRequest = pendingInteractionPanelShortcutRequest ??
-                readPendingInteractionPanelShortcutRequest()
-              if (pendingRequest?.id === id) {
-                pendingInteractionPanelShortcutRequest = null
-                writePendingInteractionPanelShortcutRequest(null)
-              }
-              clearInteractionPanelShortcutRequest(id)
-            }}
-            onRunCommandTaskStatusesChange={setRunCommandTaskStatuses}
-            onFoldChange={setIsTerminalPanelFolded}
-            onReferenceWorkspacePaths={onReferenceWorkspacePaths}
-            settingsView={settingsView}
-            terminalSessionId={terminalSessionId}
-            terminalPanes={terminalPanes}
-            workspaceDrawerCreateItems={workspaceDrawerCreateItems}
-            workspaceDrawerCreateSelectedKeys={workspaceDrawerCreateSelectedKeys}
-          />
-        )
-        : undefined}
-    >
-      <div
-        className={`chat-container ${isReady ? 'ready' : ''} ${isNewSession ? 'is-new-session' : ''}`}
+    <>
+      <RouteContainerLayout
+        className={`chat-route-layout ${shouldShowWorkspaceDrawer ? 'has-workspace-drawer' : ''} ${
+          bottomPanel.shouldShowBottomPanel ? 'has-bottom-dock' : ''
+        }`}
+        bodyClassName='chat-route-layout__body'
+        header={routeHeader}
+        sidePanel={shouldShowWorkspaceDrawer
+          ? (
+            <ChatWorkspaceDrawer
+              agentApprovals={agentApprovals}
+              agentRoster={agentRoster}
+              defaultView={workspaceDrawerView ?? workspaceDrawerDefaultView}
+              isFullscreen={isWorkspaceDrawerFullscreen}
+              locateFileRequest={workspaceDrawerLocateRequest}
+              selectedFilePath={bottomPanel.selectedWorkspaceFilePath}
+              settingsView={settingsView}
+              sessionId={resolvedWorkspaceSessionId}
+              terminalSessionId={terminalSessionId}
+              terminalPanes={terminalPanes}
+              onClose={() => setWorkspaceDrawerOpen(false)}
+              onFullscreenChange={setWorkspaceDrawerFullscreen}
+              onReferencePaths={onReferenceWorkspacePaths}
+              onOpenFile={bottomPanel.handleOpenWorkspaceFile}
+              onOpenResource={handleOpenWebLauncher}
+              openResourceShortcut={openResourceShortcut}
+              openResourceShortcutLabel={openResourceShortcutLabel}
+            />
+          )
+          : undefined}
+        sidePanelClassName='chat-route-layout__workspace-panel'
+        sidePanelCompactMode='overlay'
+        sidePanelFullscreen={isWorkspaceDrawerFullscreen}
+        sidePanelLabel='工作区抽屉'
+        sidePanelResize={{
+          defaultWidth: 340,
+          maxWidth: 760,
+          minContentWidth: 300,
+          minWidth: 220,
+          storageKey: 'workspaceDrawerWidth'
+        }}
+        onCloseSidePanel={() => setWorkspaceDrawerOpen(false)}
+        bottomPanel={shouldRenderBottomPanel
+          ? (
+            <ChatRouteBottomPanel
+              agentApprovals={agentApprovals}
+              agentRoster={agentRoster}
+              bottomPanel={bottomPanel}
+              isFolded={isTerminalPanelFolded}
+              isRendered
+              isVisible={isBottomPanelVisible}
+              shortcutRequest={interactionPanelShortcutRequest}
+              sessionId={resolvedWorkspaceSessionId}
+              workspaceRootPath={workspaceRootPath}
+              openResourceKeyboardShortcut={canUseWebLauncherShortcut ? null : undefined}
+              openResourceShortcut={openResourceShortcut}
+              openResourceShortcutLabel={openResourceShortcutLabel}
+              onLocateWorkspacePath={handleLocateWorkspacePath}
+              onWorkspaceDrawerCreateMenuClick={handleWorkspaceDrawerCreateMenuClick}
+              onShortcutRequestHandled={(id) => {
+                const pendingRequest = pendingInteractionPanelShortcutRequest ??
+                  readPendingInteractionPanelShortcutRequest()
+                if (pendingRequest?.id === id) {
+                  pendingInteractionPanelShortcutRequest = null
+                  writePendingInteractionPanelShortcutRequest(null)
+                }
+                clearInteractionPanelShortcutRequest(id)
+              }}
+              onRunCommandTaskStatusesChange={setRunCommandTaskStatuses}
+              onFoldChange={setIsTerminalPanelFolded}
+              onReferenceWorkspacePaths={onReferenceWorkspacePaths}
+              onOpenResource={handleOpenWebLauncher}
+              settingsView={settingsView}
+              terminalSessionId={terminalSessionId}
+              terminalPanes={terminalPanes}
+              workspaceDrawerCreateItems={workspaceDrawerCreateItems}
+              workspaceDrawerCreateSelectedKeys={workspaceDrawerCreateSelectedKeys}
+            />
+          )
+          : undefined}
       >
-        {renderedView}
-      </div>
-    </RouteContainerLayout>
+        <div
+          className={`chat-container ${isReady ? 'ready' : ''} ${isNewSession ? 'is-new-session' : ''}`}
+        >
+          {renderedView}
+        </div>
+      </RouteContainerLayout>
+      {canUseWorkspaceLauncher
+        ? (
+          <LauncherOverlay
+            open={isWebLauncherOpen}
+            workspaceContext={webLauncherWorkspaceContext}
+            searchWorkspaceResources={searchWebLauncherWorkspaceResources}
+            onClose={() => setIsWebLauncherOpen(false)}
+            onOpenWorkspaceResource={requestLauncherResourceTarget}
+          />
+        )
+        : undefined}
+    </>
   )
 }

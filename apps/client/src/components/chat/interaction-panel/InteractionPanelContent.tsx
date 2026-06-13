@@ -38,6 +38,8 @@ export function InteractionPanelContent({
   isVisible,
   markdownPreviewMode,
   mobileDebugPages,
+  openResourceShortcut,
+  openResourceShortcutLabel,
   pinnedTabs,
   tabs,
   onActivateTab,
@@ -91,6 +93,8 @@ export function InteractionPanelContent({
   isVisible: boolean
   markdownPreviewMode: WorkspaceMarkdownPreviewMode
   mobileDebugPages: InteractionPanelMobileDebugPage[]
+  openResourceShortcut?: string
+  openResourceShortcutLabel?: string
   pinnedTabs: InteractionPanelPinnedTab[]
   tabs: InteractionPanelTab[]
   onIframeUrlChange: (pageId: string, url: string) => void
@@ -148,6 +152,8 @@ export function InteractionPanelContent({
         canFullscreenPanel={canFullscreenPanel}
         isPanelFullscreen={isPanelFullscreen}
         isPanelMinimized={isPanelMinimized}
+        openResourceShortcut={openResourceShortcut}
+        openResourceShortcutLabel={openResourceShortcutLabel}
         onAddMenuClick={onAddMenuClick}
         onNewSession={onNewSession}
         onNewMobileDebugPage={onNewMobileDebugPage}
@@ -179,6 +185,7 @@ export function InteractionPanelContent({
       isVisible={isVisible}
       markdownPreviewMode={markdownPreviewMode}
       mobileDebugPages={mobileDebugPages}
+      openResourceShortcut={openResourceShortcut}
       pinnedTabs={pinnedTabs}
       projectUrlHistoryKey={projectUrlHistoryKey}
       sessionId={sessionId}
