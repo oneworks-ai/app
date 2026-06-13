@@ -13,6 +13,7 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - [消息级操作开发经验](./maintenance/message-actions.md)
 - [消息级操作维护工具](./maintenance/tooling.md)
 - [Team / Agent Room 冒烟验证](./maintenance/agent-room-team-smoke.md)
+- [Homepage Docs 维护经验](./maintenance/homepage-docs.md)
 - [Relay 托管与私有化部署](./RELAY-DEPLOYMENT.md)
 
 ## 常见问题索引
@@ -93,6 +94,7 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - 中文 root locale 入口是 `.oo/docs/index.md`，中文使用页在 `.oo/docs/usage/`；英文入口是 `.oo/docs/en/index.md`，英文使用页在 `.oo/docs/en/usage/`。
 - VitePress 配置、主题、Vue 组件、构建脚本、部署 workflow、token 与 dev-start docs 等壳层或发布信息留在 homepage / docs app 侧维护，不写入 `.oo/docs/`，也不要用 `.oo/docs/README.md` 或 `.oo/docs/README.zh-Hans.md` 做占位说明。
 - 内容源迁移或链接调整至少做文件 / 链接层检查，例如统计 Markdown 与图片数量、检查中英文路径配对、确认 `.oo/docs` 没有引用旧 homepage docs app 目录或旧 public 图片路径。不要求为纯内容源迁移启动本地 docs 服务。
+- 维护 homepage docs 壳层、submodule 指针、Pages workflow 或跨仓触发时，继续阅读 [Homepage Docs 维护经验](./maintenance/homepage-docs.md)。
 
 ### 6. PWA 独立部署维护
 
@@ -111,7 +113,7 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - 本仓库需要配置 Actions secret `AVATAR_DEPLOY_TOKEN`，用于跨仓库触发 `oneworks-ai/avatar` 的 `deploy-avatar.yml` workflow。推荐使用只授予 `oneworks-ai/avatar` Actions 写权限的 fine-grained token。
 - Avatar 仓库部署时会 checkout 本仓库 `main` 的指定 commit，并初始化 submodules；构建命令是 `ONEWORKS_AVATAR_BASE=/avatar/ pnpm -C assets/avatar build`，最终发布 `assets/avatar/dist/` 到 GitHub Pages。
 
-### 7. Homepage 文档站部署维护
+### 8. Homepage 文档站部署维护
 
 - Homepage 文档站由 `oneworks-ai/oneworks-ai.github.io` 仓库维护，并通过 GitHub Pages 发布到 `https://oneworks-ai.github.io/docs/`。
 - 本仓库的 `.github/workflows/deploy-homepage.yml` 只在 `.oo/docs/**` 或 workflow 自身变化时触发，避免非文档改动误触发 homepage Pages 更新。

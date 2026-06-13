@@ -8,6 +8,7 @@
 - [macOS Developer ID 签名](../.oo/rules/release/macos-signing.md)
 - [发布步骤](../.oo/rules/release/process.md)
 - [tag 与经验沉淀](../.oo/rules/release/tags.md)
+- [Homepage Docs 维护经验](../.oo/rules/maintenance/homepage-docs.md)
 
 ## Workflow 地图
 
@@ -60,6 +61,7 @@
 - 新增 workflow 时统一设置 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`。
 - 修改 `.github/workflows/*.yml` 后至少跑 `pnpm exec dprint check .github/workflows`。
 - 需要验证 GitHub 侧真实结果时，用 `gh run list` / `gh run view` 看远端 workflow，不只看本地脚本。
+- 调整 homepage docs 跨仓部署时，还要确认 `oneworks-ai/oneworks-ai.github.io` 的 `Deploy Pages` workflow 真实通过，并验证 `https://oneworks-ai.github.io/docs/`。
 - `.github/AGENTS.md` 必须保持精简；详细过程、踩坑和轮换步骤继续拆到 `.oo/rules/release/`。
 
 ## 已知风险
