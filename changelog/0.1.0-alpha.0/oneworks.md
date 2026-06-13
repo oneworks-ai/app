@@ -7,3 +7,4 @@
 - Align chat workbench sender spacing, panel empty-state actions, side-panel tabs, and workspace drawer resource actions.
 - Move the launcher workflow behind server APIs, add manager/workspace server modes, and expose the launcher overlay from web workspaces.
 - Stabilize workspace-scoped web routes, project-server runtime environments, launcher selection, dock tab activation, and embedded route chrome.
+- Align embedded web toolbar sizing, hover, menu, disabled tooltip, and design-standard documentation with shared chrome and overlay tokens.

@@ -478,13 +478,21 @@
 }
 
 .chat-interaction-panel__iframe-toolbar {
+  box-sizing: border-box;
   display: flex;
   position: relative;
   z-index: 30;
   align-items: center;
-  gap: 4px;
-  min-height: var(--dv-tabs-and-actions-container-height);
-  padding: 0 var(--interaction-panel-toolbar-edge-padding);
+  gap: var(--app-chrome-action-gap, 4px);
+  height: var(
+    --dv-tabs-and-actions-container-height,
+    calc(var(--interaction-panel-chrome-icon-size) + 20px + 1px)
+  );
+  min-height: var(
+    --dv-tabs-and-actions-container-height,
+    calc(var(--interaction-panel-chrome-icon-size) + 20px + 1px)
+  );
+  padding: 10px;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--bg-color);
   flex: 0 0 auto;
@@ -498,7 +506,7 @@
 .chat-interaction-panel__iframe-navigation {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--app-chrome-action-gap, 4px);
   flex: 0 0 auto;
 
   .ant-btn {
@@ -507,24 +515,22 @@
     height: var(--interaction-panel-chrome-icon-size);
     padding: 0;
     border-radius: 6px;
-    color: var(--interaction-panel-toolbar-icon-color);
-    transition:
-      background-color .18s ease,
-      box-shadow .18s ease,
-      color .18s ease;
+    background-color: transparent;
+    color: var(--placeholder-color);
+    transition: color .18s ease;
 
     &.is-disabled,
     &:disabled,
     &.ant-btn-text:disabled {
       color: var(--interaction-panel-toolbar-icon-disabled-color);
-      cursor: default;
+      cursor: not-allowed;
     }
 
     &:not(:disabled):not(.is-disabled):hover,
     &:not(:disabled):not(.is-disabled):focus-visible {
-      background-color: var(--interaction-panel-hover-bg);
-      box-shadow: inset 0 0 0 1px var(--interaction-panel-hover-ring);
-      color: var(--text-color);
+      background-color: transparent;
+      box-shadow: none;
+      color: var(--primary-color);
     }
 
     &.is-disabled:hover,
@@ -537,6 +543,10 @@
       box-shadow: none;
       color: var(--interaction-panel-toolbar-icon-disabled-color);
     }
+
+    &:focus-visible {
+      outline: none;
+    }
   }
 
   .material-symbols-rounded {
@@ -548,7 +558,7 @@
 .chat-interaction-panel__iframe-actions {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--app-chrome-action-gap, 4px);
   flex: 0 0 auto;
 }
 
@@ -561,8 +571,9 @@
   height: var(--interaction-panel-chrome-icon-size);
   padding: 0;
   border-radius: 6px;
-  color: var(--interaction-panel-toolbar-icon-color);
-  transition: background-color .18s ease, box-shadow .18s ease, color .18s ease;
+  background-color: transparent;
+  color: var(--placeholder-color);
+  transition: color .18s ease;
 
   .material-symbols-rounded {
     font-size: var(--interaction-panel-chrome-icon-size);
@@ -573,19 +584,28 @@
   &:not(:disabled):focus-visible,
   &.ant-dropdown-open,
   &.is-open {
-    background-color: var(--interaction-panel-hover-bg);
-    box-shadow: inset 0 0 0 1px var(--interaction-panel-hover-ring);
-    color: var(--text-color);
+    background-color: transparent;
+    box-shadow: none;
+    color: var(--primary-color);
   }
 
   &:disabled {
     background-color: transparent;
     color: var(--interaction-panel-toolbar-icon-disabled-color);
   }
+
+  &:focus-visible {
+    outline: none;
+  }
 }
 
-.chat-interaction-panel__iframe-history-trigger {
+.chat-interaction-panel__iframe-history-trigger,
+.chat-interaction-panel__iframe-navigation-trigger {
   display: inline-flex;
+
+  &.is-disabled {
+    cursor: not-allowed;
+  }
 }
 
 .chat-interaction-panel__iframe-address {
@@ -625,8 +645,8 @@
   transition: color .18s ease, box-shadow .18s ease;
 
   &.ant-input-affix-wrapper {
-    height: 30px;
-    padding-right: 34px;
+    height: var(--interaction-panel-chrome-icon-size);
+    padding: 0;
     border: 0;
     border-radius: 6px;
     box-shadow: none;
@@ -644,11 +664,13 @@
   }
 
   .ant-input {
+    height: var(--interaction-panel-chrome-icon-size);
     font-size: 12px;
+    line-height: var(--interaction-panel-chrome-icon-size);
   }
 
   .material-symbols-rounded {
-    font-size: 16px;
+    font-size: var(--interaction-panel-chrome-icon-size);
   }
 }
 
@@ -664,7 +686,7 @@
   border: 0;
   border-radius: 6px;
   background-color: transparent;
-  color: var(--sub-text-color);
+  color: var(--placeholder-color);
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
@@ -679,7 +701,8 @@
   &:not(:disabled):hover,
   &:not(:disabled):focus-visible {
     background-color: transparent;
-    color: var(--text-color);
+    box-shadow: none;
+    color: var(--primary-color);
   }
 
   &:disabled {
@@ -1592,7 +1615,12 @@
 }
 
 .chat-interaction-panel-browser-menu {
-  min-width: 252px;
+  width: 214px;
+  min-width: 214px;
+  max-width: calc(100vw - 48px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--oneworks-overlay-item-gap);
 }
 
 .chat-interaction-panel-browser-menu__item {
@@ -1600,18 +1628,38 @@
   align-items: center;
   gap: var(--oneworks-overlay-icon-gap);
   width: 100%;
+  box-sizing: border-box;
   text-align: left;
+
+  .chat-interaction-panel__menu-icon {
+    width: var(--oneworks-overlay-icon-size);
+    min-width: var(--oneworks-overlay-icon-size);
+    height: var(--oneworks-overlay-icon-size);
+    color: currentColor;
+    font-size: var(--oneworks-overlay-icon-size);
+    line-height: 1;
+  }
 }
 
 .chat-interaction-panel-browser-menu__disabled-wrapper {
   display: block;
+
+  .chat-interaction-panel-browser-menu__item {
+    width: 100%;
+  }
+}
+
+.chat-interaction-panel-browser-menu__divider.oneworks-overlay-divider {
+  margin: 1px 8px;
+  background: var(--oneworks-overlay-border);
+  opacity: .72;
 }
 
 .chat-interaction-panel-browser-menu__zoom-row {
   display: flex;
   align-items: center;
   gap: var(--oneworks-overlay-icon-gap);
-  min-height: var(--oneworks-overlay-control-height);
+  min-height: var(--oneworks-overlay-item-min-height);
   padding: var(--oneworks-overlay-item-padding);
   color: var(--text-color);
   font-size: var(--oneworks-overlay-font-size);
@@ -1626,11 +1674,11 @@
 .chat-interaction-panel-browser-menu__zoom-controls {
   display: inline-flex;
   align-items: center;
-  height: var(--oneworks-overlay-control-height);
+  height: var(--oneworks-overlay-line-height);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--oneworks-overlay-item-radius);
   overflow: hidden;
-  background-color: color-mix(in srgb, var(--bg-color) 92%, var(--text-color));
+  background-color: transparent;
 }
 
 .chat-interaction-panel-browser-menu__zoom-btn,
@@ -1638,12 +1686,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--oneworks-overlay-control-height);
-  height: var(--oneworks-overlay-control-height);
+  width: var(--oneworks-overlay-line-height);
+  height: var(--oneworks-overlay-line-height);
   padding: 0;
   border: none;
   background: transparent;
-  color: var(--sub-text-color);
+  color: var(--oneworks-overlay-muted);
   cursor: pointer;
   font-family: 'Material Symbols Rounded';
   font-size: var(--oneworks-overlay-icon-size);
@@ -1663,7 +1711,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 50px;
+  min-width: 48px;
   height: 100%;
   border-right: 1px solid var(--border-color);
   border-left: 1px solid var(--border-color);
@@ -1674,8 +1722,8 @@
 }
 
 .chat-interaction-panel-browser-menu__zoom-reset {
-  border-radius: 6px;
-  flex: 0 0 var(--oneworks-overlay-control-height);
+  border-radius: var(--oneworks-overlay-item-radius);
+  flex: 0 0 var(--oneworks-overlay-line-height);
 }
 
 .chat-interaction-panel__iframe-history-item {
@@ -1734,16 +1782,17 @@
 
 @media (max-width: 680px), (max-height: 760px) {
   .chat-interaction-panel__iframe-toolbar {
-    gap: 4px;
-    padding: 6px;
+    gap: var(--app-chrome-action-gap, 4px);
+    padding: 10px;
   }
 
   .chat-interaction-panel__iframe-navigation {
-    gap: 0;
+    gap: var(--app-chrome-action-gap, 4px);
 
     .ant-btn {
-      width: 26px;
-      min-width: 26px;
+      width: var(--interaction-panel-chrome-icon-size);
+      min-width: var(--interaction-panel-chrome-icon-size);
+      height: var(--interaction-panel-chrome-icon-size);
     }
   }
 
