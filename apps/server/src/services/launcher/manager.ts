@@ -2,6 +2,7 @@
 
 import { Buffer } from 'node:buffer'
 import { execFileSync, spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -20,7 +21,7 @@ import type {
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
 import { applyServerRuntimeEnv } from '#~/cli-runtime.js'
-import { badRequest, internalServerError } from '#~/utils/http.js'
+import { badRequest, internalServerError, notFound } from '#~/utils/http.js'
 import { logger } from '#~/utils/logger.js'
 
 const nodeRequire = createRequire(__filename)
@@ -44,6 +45,31 @@ interface LauncherWorkspaceService {
 }
 
 const services = new Map<string, LauncherWorkspaceService>()
+let workspaceServiceCleanupRegistered = false
+
+const stopWorkspaceServiceChildren = () => {
+  for (const service of services.values()) {
+    const child = service.process
+    if (child != null && child.exitCode == null && child.signalCode == null) {
+      child.kill('SIGTERM')
+    }
+  }
+}
+
+const registerWorkspaceServiceCleanup = () => {
+  if (workspaceServiceCleanupRegistered) {
+    return
+  }
+  workspaceServiceCleanupRegistered = true
+
+  process.once('exit', stopWorkspaceServiceChildren)
+  const forwardSignal = (signal: NodeJS.Signals) => {
+    stopWorkspaceServiceChildren()
+    process.kill(process.pid, signal)
+  }
+  process.once('SIGINT', () => forwardSignal('SIGINT'))
+  process.once('SIGTERM', () => forwardSignal('SIGTERM'))
+}
 
 const isDirectory = (value: string) => {
   try {
@@ -123,6 +149,46 @@ const normalizePathForRemoval = (value: unknown) => {
 const getWorkspaceDisplayName = (workspaceFolder: string) => path.basename(workspaceFolder) || workspaceFolder
 
 const getWorkspaceDescription = (workspaceFolder: string) => workspaceFolder
+
+export const createLauncherWorkspaceId = (workspaceFolder: string) => (
+  `w_${createHash('sha256').update(workspaceFolder).digest('base64url').slice(0, 22)}`
+)
+
+const normalizeClientBase = (value?: string) => {
+  let base = value?.trim() ?? '/ui'
+  if (base === '') {
+    base = '/ui'
+  }
+  if (!base.startsWith('/')) {
+    base = `/${base}`
+  }
+  if (base.length > 1 && base.endsWith('/')) {
+    base = base.slice(0, -1)
+  }
+  return base
+}
+
+const normalizeWorkspaceId = (value: unknown) => {
+  if (typeof value !== 'string') return undefined
+  const trimmedValue = value.trim()
+  return /^w_[\w-]{8,64}$/u.test(trimmedValue) ? trimmedValue : undefined
+}
+
+export const createLauncherWorkspaceClientBase = (
+  workspaceId: string,
+  clientBase = process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ ?? '/ui'
+) => {
+  const normalizedWorkspaceId = normalizeWorkspaceId(workspaceId)
+  if (normalizedWorkspaceId == null) {
+    throw new Error('Invalid workspace id')
+  }
+
+  const normalizedClientBase = normalizeClientBase(clientBase)
+  const workspacePath = `w/${encodeURIComponent(normalizedWorkspaceId)}`
+  return normalizedClientBase === '/'
+    ? `/${workspacePath}`
+    : `${normalizedClientBase}/${workspacePath}`
+}
 
 const getLauncherStatePath = () => (
   resolveProjectHomePath(process.cwd(), process.env, 'launcher', 'state.json')
@@ -204,6 +270,7 @@ const toProject = (
   name: getWorkspaceDisplayName(workspaceFolder),
   ...(input.isCurrent == null ? {} : { isCurrent: input.isCurrent }),
   ...(input.status == null ? {} : { status: input.status }),
+  workspaceId: createLauncherWorkspaceId(workspaceFolder),
   workspaceFolder
 })
 
@@ -288,7 +355,9 @@ const createWorkspaceServerEnv = (
       workspaceMode: 'required'
     }
   })
-  env.__ONEWORKS_PROJECT_CLIENT_BASE__ = process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ ?? '/ui/'
+  const workspaceId = createLauncherWorkspaceId(workspaceFolder)
+  env.__ONEWORKS_PROJECT_CLIENT_BASE__ = createLauncherWorkspaceClientBase(workspaceId)
+  env.__ONEWORKS_PROJECT_WORKSPACE_ID__ = workspaceId
   env.__ONEWORKS_PROJECT_WEB_AUTH_ENABLED__ = 'false'
   if (input.clientOrigin != null) {
     env.__ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__ = input.clientOrigin
@@ -325,6 +394,7 @@ const startWorkspaceService = async (
       stdio: ['ignore', 'pipe', 'pipe']
     }
   )
+  registerWorkspaceServiceCleanup()
   service.process = child
   child.stdout?.on('data', data => writePrefixedChunk(`[oneworks-workspace:${service.workspaceFolder}] `, data))
   child.stderr?.on('data', data => writePrefixedChunk(`[oneworks-workspace:${service.workspaceFolder}] `, data))
@@ -401,6 +471,22 @@ export const listLauncherWorkspaces = async (): Promise<LauncherWorkspaceSelecto
   }
 }
 
+const resolveLauncherWorkspaceFolderById = async (rawWorkspaceId: unknown) => {
+  const workspaceId = normalizeWorkspaceId(rawWorkspaceId)
+  if (workspaceId == null) {
+    throw badRequest('A valid workspace id is required.', { workspaceId: rawWorkspaceId }, 'invalid_workspace_id')
+  }
+
+  for (const service of services.values()) {
+    if (createLauncherWorkspaceId(service.workspaceFolder) === workspaceId) {
+      return service.workspaceFolder
+    }
+  }
+
+  return (await getRecentWorkspaces())
+    .find(workspaceFolder => createLauncherWorkspaceId(workspaceFolder) === workspaceId)
+}
+
 export const openLauncherWorkspace = async (
   rawWorkspaceFolder: unknown,
   input: {
@@ -425,8 +511,23 @@ export const openLauncherWorkspace = async (
   return {
     project: toProject(workspaceFolder, { status: service.status }),
     serverBaseUrl: service.serverBaseUrl,
+    workspaceId: createLauncherWorkspaceId(workspaceFolder),
     workspaceFolder
   }
+}
+
+export const openLauncherWorkspaceById = async (
+  rawWorkspaceId: unknown,
+  input: {
+    clientOrigin?: string
+  } = {}
+): Promise<LauncherWorkspaceOpenResponse> => {
+  const workspaceFolder = await resolveLauncherWorkspaceFolderById(rawWorkspaceId)
+  if (workspaceFolder == null) {
+    throw notFound('Workspace not found.', { workspaceId: rawWorkspaceId }, 'workspace_not_found')
+  }
+
+  return await openLauncherWorkspace(workspaceFolder, input)
 }
 
 export const forgetLauncherWorkspace = async (rawWorkspaceFolder: unknown) => {

@@ -6,6 +6,7 @@ export interface LauncherWorkspaceSelectorProject {
   name: string
   sourceUrl?: string
   status?: LauncherWorkspaceServiceStatus
+  workspaceId: string
   workspaceFolder: string
 }
 
@@ -17,6 +18,7 @@ export interface LauncherWorkspaceSelectorState {
 export interface LauncherWorkspaceOpenResponse {
   project: LauncherWorkspaceSelectorProject
   serverBaseUrl: string
+  workspaceId: string
   workspaceFolder: string
 }
 

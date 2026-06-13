@@ -25,7 +25,7 @@ import { getProjectFileIconMeta } from '#~/components/workspace/project-file-tre
 import { useInterfaceLanguageConfig } from '#~/hooks/use-interface-language-config'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { appLanguageOptions, getActiveAppLanguageOption } from '#~/i18n'
-import { getClientBase, isServerManagerRole, mergeRuntimeEnv, setStoredServerBaseUrl } from '#~/runtime-config'
+import { buildWorkspaceClientBase, isServerManagerRole, mergeRuntimeEnv } from '#~/runtime-config'
 import { copyTextWithFeedback } from '#~/utils/copy'
 import { deferImeCompositionEnd, isImeCompositionKeyEvent } from '#~/utils/keyboard-events'
 import { createOneWorksIconDataUri } from '#~/utils/oneworks-icon'
@@ -586,7 +586,11 @@ export function LauncherRoute({
     query
   ])
   useEffect(() => {
+    const wasActive = isLauncherActiveRef.current
     isLauncherActiveRef.current = active
+    if (!wasActive && active) {
+      setDismissedProjectContextFolder(undefined)
+    }
   }, [active])
 
   const focusSearchInput = useCallback(() => {
@@ -767,16 +771,15 @@ export function LauncherRoute({
 
       if (canUseServerLauncher) {
         const result = await openLauncherWorkspace(workspaceFolder)
-        const serverBaseUrl = setStoredServerBaseUrl(result.serverBaseUrl)
-        if (serverBaseUrl == null) {
-          throw new Error('Workspace server returned an invalid URL.')
-        }
+        const workspaceClientBase = buildWorkspaceClientBase(result.workspaceId)
         mergeRuntimeEnv({
-          __ONEWORKS_PROJECT_SERVER_BASE_URL__: serverBaseUrl,
+          __ONEWORKS_PROJECT_CLIENT_BASE__: workspaceClientBase,
+          __ONEWORKS_PROJECT_SERVER_BASE_URL__: result.serverBaseUrl,
           __ONEWORKS_PROJECT_SERVER_ROLE__: 'workspace',
+          __ONEWORKS_PROJECT_WORKSPACE_ID__: result.workspaceId,
           __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: result.workspaceFolder
         })
-        window.location.assign(getClientBase())
+        window.location.assign(workspaceClientBase)
         return
       }
 

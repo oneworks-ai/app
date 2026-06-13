@@ -24,6 +24,14 @@ const createLauncherApiUrl = (path: string) => (
   createServerUrlFromBase(getManagerServerBaseUrl(), path)
 )
 
+const createLauncherClientOriginHeaders = (): Record<string, string> => {
+  const origin = globalThis.location?.origin
+  if (origin == null || origin === 'null' || origin.trim() === '') {
+    return {}
+  }
+  return { 'X-OneWorks-Client-Origin': origin }
+}
+
 export const getLauncherWorkspaceSelectorState = () => (
   fetchApiJson<LauncherWorkspaceSelectorState>(createLauncherApiUrl('/api/launcher/workspaces'))
 )
@@ -31,10 +39,23 @@ export const getLauncherWorkspaceSelectorState = () => (
 export const openLauncherWorkspace = (workspaceFolder: string) => (
   fetchApiJson<LauncherWorkspaceOpenResponse>(createLauncherApiUrl('/api/launcher/workspaces/open'), {
     method: 'POST',
-    headers: jsonHeaders,
+    headers: {
+      ...jsonHeaders,
+      ...createLauncherClientOriginHeaders()
+    },
     body: JSON.stringify({ workspaceFolder }),
     timeoutMs: 30_000
   })
+)
+
+export const getLauncherWorkspaceConnection = (workspaceId: string) => (
+  fetchApiJson<LauncherWorkspaceOpenResponse>(
+    createLauncherApiUrl(`/api/launcher/workspaces/${encodeURIComponent(workspaceId)}/connection`),
+    {
+      headers: createLauncherClientOriginHeaders(),
+      timeoutMs: 30_000
+    }
+  )
 )
 
 export const forgetLauncherWorkspace = (workspaceFolder: string) => (

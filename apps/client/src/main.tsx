@@ -15,7 +15,14 @@ import { SWRConfig } from 'swr'
 import { fetchApiJson } from '#~/api/base.js'
 import { installHomepagePreviewRuntimeIfEnabled } from '#~/homepage-preview/runtime-loader'
 import { setupPwa } from '#~/pwa.js'
-import { getClientBase, mergeRuntimeEnv, normalizeServerBaseUrl, resolveDevDocumentTitle } from '#~/runtime-config.js'
+import {
+  buildWorkspaceClientBase,
+  getClientBase,
+  mergeRuntimeEnv,
+  normalizeServerBaseUrl,
+  resolveDevDocumentTitle,
+  resolveWorkspaceIdFromPathname
+} from '#~/runtime-config.js'
 import { setupMobileViewport } from '#~/utils/mobile-viewport.js'
 
 import App from './App'
@@ -55,6 +62,17 @@ const installDesktopWorkspaceRuntimeIfAvailable = async () => {
   })
 }
 
+const installWorkspaceRouteRuntimeIfAvailable = () => {
+  const workspaceId = resolveWorkspaceIdFromPathname(window.location.pathname)
+  if (workspaceId == null) return
+
+  mergeRuntimeEnv({
+    __ONEWORKS_PROJECT_CLIENT_BASE__: buildWorkspaceClientBase(workspaceId),
+    __ONEWORKS_PROJECT_SERVER_ROLE__: 'workspace',
+    __ONEWORKS_PROJECT_WORKSPACE_ID__: workspaceId
+  })
+}
+
 function AppProviders() {
   const { i18n } = useTranslation()
   const language = i18n.resolvedLanguage ?? i18n.language
@@ -91,6 +109,7 @@ const renderApp = () => {
 }
 
 const startApp = async () => {
+  installWorkspaceRouteRuntimeIfAvailable()
   await installDesktopWorkspaceRuntimeIfAvailable()
   setupMobileViewport()
 

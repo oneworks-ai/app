@@ -1,15 +1,20 @@
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
+import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 import Koa from 'koa'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { launcherRouter } from '#~/routes/launcher.js'
-import { resolveLauncherProjectWorkspaceFolder } from '#~/services/launcher/manager.js'
+import {
+  createLauncherWorkspaceClientBase,
+  createLauncherWorkspaceId,
+  resolveLauncherProjectWorkspaceFolder
+} from '#~/services/launcher/manager.js'
 
 const createServerEnv = (role: 'manager' | 'workspace') => ({
   __ONEWORKS_PROJECT_SERVER_HOST__: '127.0.0.1',
@@ -93,6 +98,12 @@ describe('launcher routes', () => {
     baseUrl = `http://127.0.0.1:${address.port}`
   }
 
+  const writeLauncherState = async (state: unknown) => {
+    const statePath = resolveProjectHomePath(process.cwd(), process.env, 'launcher', 'state.json')
+    await mkdir(path.dirname(statePath), { recursive: true })
+    await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`)
+  }
+
   it('serves workspace selector state in manager role', async () => {
     await startApp('manager')
 
@@ -105,6 +116,50 @@ describe('launcher routes', () => {
     expect(response.status).toBe(200)
     expect(Array.isArray(body.recentProjects)).toBe(true)
     expect(Array.isArray(body.runningProjects)).toBe(true)
+  })
+
+  it('serves stable workspace ids in selector projects', async () => {
+    const workspaceFolder = fs.realpathSync.native(await mkdtemp(path.join(tempHome, 'workspace-')))
+    await writeLauncherState({ recentWorkspaces: [workspaceFolder] })
+    await startApp('manager')
+
+    const response = await fetch(`${baseUrl}/workspaces`)
+    const body = await response.json() as {
+      recentProjects?: Array<{
+        workspaceFolder?: unknown
+        workspaceId?: unknown
+      }>
+    }
+
+    expect(response.status).toBe(200)
+    expect(body.recentProjects).toEqual([
+      expect.objectContaining({
+        workspaceFolder,
+        workspaceId: createLauncherWorkspaceId(workspaceFolder)
+      })
+    ])
+  })
+
+  it('builds workspace client bases from workspace ids', () => {
+    expect(createLauncherWorkspaceClientBase('w_abc123456')).toBe('/ui/w/w_abc123456')
+    expect(createLauncherWorkspaceClientBase('w_abc123456', '/console/')).toBe('/console/w/w_abc123456')
+    expect(createLauncherWorkspaceClientBase('w_abc123456', '/')).toBe('/w/w_abc123456')
+  })
+
+  it('rejects invalid workspace connection ids', async () => {
+    await startApp('manager')
+
+    const response = await fetch(`${baseUrl}/workspaces/not-valid/connection`)
+
+    expect(response.status).toBe(400)
+  })
+
+  it('returns 404 for unknown workspace connection ids', async () => {
+    await startApp('manager')
+
+    const response = await fetch(`${baseUrl}/workspaces/w_abc123456/connection`)
+
+    expect(response.status).toBe(404)
   })
 
   it('does not expose launcher routes from workspace role', async () => {

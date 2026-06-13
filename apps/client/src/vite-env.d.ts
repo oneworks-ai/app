@@ -16,6 +16,7 @@ interface ImportMetaEnv {
   readonly __ONEWORKS_PROJECT_CLIENT_DEV_SERVER__: string
   readonly __ONEWORKS_PROJECT_CLIENT_VERSION__: string
   readonly __ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__: string
+  readonly __ONEWORKS_PROJECT_WORKSPACE_ID__: string
   readonly __ONEWORKS_PROJECT_DEV_GIT_REF__: string
 }
 
@@ -29,6 +30,7 @@ interface DesktopWorkspaceSelectorProject {
   name: string
   sourceUrl?: string
   status?: 'ready' | 'starting' | 'stopped' | 'stopping'
+  workspaceId?: string
   workspaceFolder: string
 }
 
@@ -39,6 +41,7 @@ interface DesktopWorkspaceSelectorState {
 
 interface DesktopWorkspaceConnection {
   serverBaseUrl: string
+  workspaceId?: string
   workspaceFolder?: string
 }
 

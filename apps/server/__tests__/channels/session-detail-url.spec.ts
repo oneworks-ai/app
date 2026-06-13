@@ -87,6 +87,17 @@ describe('session detail url', () => {
     })).toBe('https://bot.example.com/custom-ui/session/sess-1?toolUseId=tool-1')
   })
 
+  it('uses the workspace client base for session detail links', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_CLIENT_BASE__', '/ui/w/w_abc123456')
+
+    const { buildSessionDetailUrl } = await import('#~/channels/session-detail-url.js')
+
+    expect(buildSessionDetailUrl(undefined, {
+      sessionId: 'sess-1',
+      toolUseId: 'tool-1'
+    })).toBe('http://localhost:8787/ui/w/w_abc123456/session/sess-1?toolUseId=tool-1')
+  })
+
   it('prefers the channel serverBaseUrl for server action links', async () => {
     vi.stubEnv('__ONEWORKS_PROJECT_PUBLIC_BASE_URL__', 'https://lan.example')
     vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ACTION_SECRET__', 'test-secret')

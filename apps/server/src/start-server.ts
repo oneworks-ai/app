@@ -219,6 +219,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
   logStartup('create runtime returned')
   const { app, env, server, configs, config } = runtime
   const entryKind = resolveEntryKind(options)
+  const shouldStartRuntimeStoreWatcher = env.__ONEWORKS_PROJECT_SERVER_ROLE__ !== 'manager'
   logStartup(`entry kind resolved kind=${entryKind}`)
   logStartup('config watch acquire begin')
   const configWatch = await acquireConfigWatchRuntime()
@@ -292,7 +293,11 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
         resolve()
       })
     })
-    scheduleRuntimeStoreWatcher()
+    if (shouldStartRuntimeStoreWatcher) {
+      scheduleRuntimeStoreWatcher()
+    } else {
+      logStartup('runtime store watcher skipped for manager role')
+    }
     scheduleProjectHomeSegmentMigration(logStartup)
 
     server.once('close', () => {

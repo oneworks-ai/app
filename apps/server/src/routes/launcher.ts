@@ -7,9 +7,29 @@ import {
   forgetLauncherWorkspace,
   listLauncherDirectories,
   listLauncherWorkspaces,
-  openLauncherWorkspace
+  openLauncherWorkspace,
+  openLauncherWorkspaceById
 } from '#~/services/launcher/manager.js'
 import { notFound } from '#~/utils/http.js'
+
+const normalizeLauncherClientOrigin = (value: string | undefined) => {
+  const trimmedValue = value?.trim()
+  if (trimmedValue == null || trimmedValue === '') return undefined
+
+  try {
+    const url = new URL(trimmedValue)
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.origin : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const getLauncherClientOrigin = (ctx: Router.RouterContext) => (
+  normalizeLauncherClientOrigin(ctx.get('X-OneWorks-Client-Origin')) ??
+    normalizeLauncherClientOrigin(ctx.get('Origin')) ??
+    normalizeLauncherClientOrigin(ctx.get('Referer')) ??
+    normalizeLauncherClientOrigin(ctx.origin)
+)
 
 export function launcherRouter(env: ReturnType<typeof loadEnv>): Router {
   const router = new Router()
@@ -27,8 +47,14 @@ export function launcherRouter(env: ReturnType<typeof loadEnv>): Router {
 
   router.post('/workspaces/open', async (ctx) => {
     const body = ctx.request.body as { workspaceFolder?: unknown }
-    const clientOrigin = ctx.get('Origin') || ctx.origin
+    const clientOrigin = getLauncherClientOrigin(ctx)
     ctx.body = await openLauncherWorkspace(body?.workspaceFolder, { clientOrigin })
+  })
+
+  router.get('/workspaces/:workspaceId/connection', async (ctx) => {
+    const { workspaceId } = ctx.params as { workspaceId?: string }
+    const clientOrigin = getLauncherClientOrigin(ctx)
+    ctx.body = await openLauncherWorkspaceById(workspaceId, { clientOrigin })
   })
 
   router.post('/workspaces/forget', async (ctx) => {
