@@ -10,6 +10,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import type { ChatMessage, Session } from '@oneworks/core'
 import type { SessionInfo } from '@oneworks/types'
 
+import type { NavRailWindowBarAction } from '#~/components/NavRail'
 import { ChatHeader } from '#~/components/chat/ChatHeader.js'
 import type {
   ChatHeaderBreadcrumb,
@@ -54,6 +55,7 @@ import type { WorkspaceDrawerView } from '#~/components/chat/workspace-drawer/wo
 import { buildWorkspaceDrawerViewItems } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
 import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
 import { useDesktopWorkspaceStartupReady } from '#~/components/layout/desktop-workspace-startup-ready'
+import { useRouteSidebar } from '#~/components/layout/route-sidebar-context'
 import { useRouteContainerSidebarOpener } from '#~/components/layout/use-route-container-sidebar-opener'
 import type { ContextPickerFile } from '#~/components/workspace/context-file-types'
 import { addDesktopViewShortcutListener } from '#~/desktop/view-shortcuts'
@@ -71,6 +73,7 @@ import { LauncherOverlay } from './LauncherOverlay'
 
 const WORKSPACE_TERMINAL_SESSION_ID = '__workspace__'
 const WEB_WORKSPACE_LAUNCHER_SHORTCUT = 'mod+shift+p'
+const SESSION_DOCK_PREVIEW_EXIT_MS = 180
 const CHAT_ROUTE_STARTUP_READY_SELECTOR = [
   '.chat-container.ready .chat-input-monaco[data-oneworks-sender-editor-ready="true"]',
   '.chat-container.ready .chat-messages.ready',
@@ -262,6 +265,7 @@ export function ChatRouteShell({
   const navigate = useNavigate()
   const location = useLocation()
   const { openRouteSidebar } = useRouteContainerSidebarOpener()
+  const { clearRouteWindowBar, hasRouteSidebarProvider, setRouteWindowBar } = useRouteSidebar()
   const {
     isWorkspaceDrawerFullscreen,
     isWorkspaceDrawerOpen,
@@ -279,6 +283,10 @@ export function ChatRouteShell({
     InteractionPanelShortcutRequest | null
   >(null)
   const [isWebLauncherOpen, setIsWebLauncherOpen] = useState(false)
+  const [isSessionDockPreviewOpen, setIsSessionDockPreviewOpen] = useState(false)
+  const [isSessionDockPreviewRendered, setIsSessionDockPreviewRendered] = useState(false)
+  const [isSessionDockPreviewExiting, setIsSessionDockPreviewExiting] = useState(false)
+  const [isSessionDockPreviewPinned, setIsSessionDockPreviewPinned] = useState(false)
   const [runCommandTaskStatuses, setRunCommandTaskStatuses] = useState<InteractionPanelRunCommandTaskStatus[]>([])
   const resolvedWorkspaceSession = workspaceSession ?? session
   const resolvedWorkspaceSessionId = workspaceSessionId ?? resolvedWorkspaceSession?.id
@@ -286,6 +294,9 @@ export function ChatRouteShell({
   const workspaceRootPath = sessionWorkspaceRootPath === '' ? projectWorkspaceFolder : sessionWorkspaceRootPath
   const terminalSessionId = resolvedWorkspaceSessionId ?? WORKSPACE_TERMINAL_SESSION_ID
   const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac')
+  const fullscreenSessionWindowBarLabel = resolvedWorkspaceSession?.title?.trim() ||
+    displayTitle?.trim() ||
+    t('navRail.conversations')
   const terminalPanes = useInteractionTerminalPanes(terminalSessionId, t)
   const bottomPanel = useChatRouteBottomPanel({
     isTerminalOpen,
@@ -323,6 +334,124 @@ export function ChatRouteShell({
       workspaceFolder: normalizedWorkspaceRootPath
     }
   }, [displayTitle, workspaceRootPath])
+  const handleSessionDockPreviewOpen = useCallback(() => {
+    if (!isWorkspaceDrawerFullscreen) return
+
+    setIsSessionDockPreviewRendered(true)
+    setIsSessionDockPreviewExiting(false)
+    setIsSessionDockPreviewOpen(true)
+  }, [isWorkspaceDrawerFullscreen])
+  const handleSessionDockSelect = useCallback(() => {
+    setIsSessionDockPreviewRendered(false)
+    setIsSessionDockPreviewExiting(false)
+    setIsSessionDockPreviewPinned(false)
+    setIsSessionDockPreviewOpen(false)
+    setWorkspaceDrawerFullscreen(false)
+  }, [setWorkspaceDrawerFullscreen])
+  const handleSessionDockPreviewPinToggle = useCallback(() => {
+    setIsSessionDockPreviewPinned(pinned => !pinned)
+    setIsSessionDockPreviewRendered(true)
+    setIsSessionDockPreviewExiting(false)
+    setIsSessionDockPreviewOpen(true)
+  }, [])
+
+  useEffect(() => {
+    if (isSessionDockPreviewOpen) {
+      setIsSessionDockPreviewRendered(true)
+      setIsSessionDockPreviewExiting(false)
+      return undefined
+    }
+
+    if (!isSessionDockPreviewRendered) return undefined
+
+    setIsSessionDockPreviewExiting(true)
+    const timeoutId = window.setTimeout(() => {
+      setIsSessionDockPreviewRendered(false)
+      setIsSessionDockPreviewExiting(false)
+    }, SESSION_DOCK_PREVIEW_EXIT_MS)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [isSessionDockPreviewOpen, isSessionDockPreviewRendered])
+
+  useEffect(() => {
+    if (!isSessionDockPreviewOpen || isSessionDockPreviewPinned) return undefined
+
+    let closeTimer: number | null = null
+    const clearCloseTimer = () => {
+      if (closeTimer == null) return
+
+      window.clearTimeout(closeTimer)
+      closeTimer = null
+    }
+    const scheduleClose = () => {
+      clearCloseTimer()
+      closeTimer = window.setTimeout(() => {
+        closeTimer = null
+        setIsSessionDockPreviewOpen(false)
+      }, 180)
+    }
+    const handlePointerMove = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+
+      const previewSurface = document.querySelector(
+        '.chat-route-layout.is-session-dock-previewing .route-container-layout__surface'
+      )
+      const previewTrigger = document.querySelector(
+        '[data-nav-rail-window-action-key="chat-session"]'
+      )
+      if (previewSurface?.contains(target) === true || previewTrigger?.contains(target) === true) {
+        clearCloseTimer()
+        return
+      }
+
+      scheduleClose()
+    }
+
+    window.addEventListener('pointermove', handlePointerMove, { passive: true })
+    return () => {
+      clearCloseTimer()
+      window.removeEventListener('pointermove', handlePointerMove)
+    }
+  }, [isSessionDockPreviewOpen, isSessionDockPreviewPinned])
+
+  useEffect(() => {
+    const key = 'chat-workspace-drawer-fullscreen-window-bar'
+    if (!hasRouteSidebarProvider || !isWorkspaceDrawerFullscreen) return undefined
+
+    const actions: NavRailWindowBarAction[] = resolvedWorkspaceSessionId == null || resolvedWorkspaceSessionId === ''
+      ? []
+      : [
+        {
+          active: true,
+          icon: 'chat_bubble',
+          key: 'chat-session',
+          label: fullscreenSessionWindowBarLabel,
+          showTooltip: false,
+          title: fullscreenSessionWindowBarLabel,
+          onPreviewOpen: handleSessionDockPreviewOpen,
+          onSelect: handleSessionDockSelect
+        }
+      ]
+
+    setRouteWindowBar({
+      actions,
+      hideCreateSessionAction: true,
+      key
+    })
+
+    return () => clearRouteWindowBar(key)
+  }, [
+    clearRouteWindowBar,
+    fullscreenSessionWindowBarLabel,
+    handleSessionDockPreviewOpen,
+    handleSessionDockSelect,
+    hasRouteSidebarProvider,
+    isWorkspaceDrawerFullscreen,
+    resolvedWorkspaceSessionId,
+    setRouteWindowBar
+  ])
+
   const workspaceDrawerCreateItems = useMemo(() =>
     buildWorkspaceDrawerViewItems({
       agentRosterCount: agentRoster?.members.length,
@@ -784,6 +913,7 @@ export function ChatRouteShell({
       activeView={activeView}
       enableTimelineView={enableTimelineView}
       historyTimelineHidden={historyTimelineHidden}
+      hideTitleIcon={isSessionDockPreviewRendered}
       isBottomPanelOpen={bottomPanel.shouldShowBottomPanel}
       isWorkspaceDrawerOpen={isWorkspaceDrawerOpen}
       isNewSessionActive={isNewSession}
@@ -794,10 +924,12 @@ export function ChatRouteShell({
       showViewSwitches={showViewSwitches}
       terminalSessionId={terminalSessionId}
       runCommandTaskStatuses={runCommandTaskStatuses}
+      sessionDockPreviewPinned={isSessionDockPreviewPinned}
       onCreateSession={() => void navigate('/')}
       onOpenSidebar={openRouteSidebar}
       onOpenSessionLog={debugSessionLogPath == null ? undefined : handleOpenSessionLog}
       onRunCommand={handleRunCommand}
+      onToggleSessionDockPreviewPinned={isSessionDockPreviewRendered ? handleSessionDockPreviewPinToggle : undefined}
       onTerminateRunCommandTask={handleTerminateRunCommandTask}
       onHistoryTimelineHiddenChange={onHistoryTimelineHiddenChange}
       onViewChange={setActiveView}
@@ -811,6 +943,8 @@ export function ChatRouteShell({
       <RouteContainerLayout
         className={`chat-route-layout ${shouldShowWorkspaceDrawer ? 'has-workspace-drawer' : ''} ${
           bottomPanel.shouldShowBottomPanel ? 'has-bottom-dock' : ''
+        } ${isSessionDockPreviewRendered ? 'is-session-dock-previewing' : ''} ${
+          isSessionDockPreviewExiting ? 'is-session-dock-preview-exiting' : ''
         }`}
         bodyClassName='chat-route-layout__body'
         header={routeHeader}
@@ -843,7 +977,7 @@ export function ChatRouteShell({
         sidePanelLabel='工作区抽屉'
         sidePanelResize={{
           defaultWidth: 340,
-          maxWidth: 760,
+          maxWidthRatio: 0.7,
           minContentWidth: 300,
           minWidth: 220,
           storageKey: 'workspaceDrawerWidth'

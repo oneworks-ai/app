@@ -1505,6 +1505,8 @@
     "stop": "停止",
     "result": "结果",
     "sessionActive": "会话进行中",
+    "pinSessionDockPreview": "固定当前对话",
+    "unpinSessionDockPreview": "取消固定当前对话",
     "selectModel": "选择模型开始聊天",
     "adapterSelectPlaceholder": "选择适配器",
     "adapterBuiltinLabel": "内置支持",

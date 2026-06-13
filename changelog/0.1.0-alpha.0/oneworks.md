@@ -9,3 +9,4 @@
 - Stabilize workspace-scoped web routes, project-server runtime environments, launcher selection, dock tab activation, and embedded route chrome.
 - Align embedded web toolbar sizing, hover, menu, disabled tooltip, and design-standard documentation with shared chrome and overlay tokens.
 - Keep interaction panel child-session composers aligned with primary session sender chrome while preserving child-specific collapsed status bar and placeholder behavior.
+- Add a pinned current-session preview dock over fullscreen workspace drawers with matching chrome dividers, blur, and enter/exit animation.

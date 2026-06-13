@@ -562,7 +562,8 @@ export function AppShell({
   const routeWindowBarActionCount = routeWindowBarActions.length
   const updateActionCount = visibleUpdateAction == null ? 0 : 1
   const isCreateSessionActive = location.pathname === '/'
-  const shouldReserveCreateSessionAction = !isCreateSessionActive
+  const hideCreateSessionAction = routeWindowBar?.hideCreateSessionAction === true
+  const shouldReserveCreateSessionAction = !hideCreateSessionAction && !isCreateSessionActive
   const desktopLayoutStyle = useMemo<CSSProperties>(() => {
     const baseStyle = {
       '--nav-rail-drawer-width': `${desktopDrawerWidth}px`,
@@ -700,7 +701,8 @@ export function AppShell({
               onSidebarPreviewPointerLeave={scheduleSidebarPreviewClose}
               onToggleSidebarCollapsed={() => setSidebarCollapsed(!isSidebarCollapsed)}
               reserveWindowControls={shouldReserveWindowControls}
-              showCreateSessionActiveIndicator={false}
+              showCreateSessionActiveIndicator={!hideCreateSessionAction}
+              showCreateSessionControl={!hideCreateSessionAction}
               showHistoryNavigation={isDesktopShell}
               showSimulatedWindowControls={showSimulatedWindowControls}
               showToggleSidebarLabel={!isDesktopShell}

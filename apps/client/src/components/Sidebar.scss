@@ -156,6 +156,11 @@
   background: var(--app-shell-content-bg, var(--sub-bg-color));
 }
 
+.nav-rail.is-sidebar-collapsed.is-sidebar-preview-open .sidebar-utility-footer {
+  background: transparent;
+  background-color: transparent;
+}
+
 .sidebar-utility-footer__action.ant-btn.ant-btn-text {
   min-width: 0;
   height: 40px;

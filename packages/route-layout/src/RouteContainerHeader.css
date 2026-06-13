@@ -35,7 +35,7 @@
   right: 0;
   bottom: 0;
   left: 0;
-  background: color-mix(in srgb, var(--border-color, #d8dee4) 62%, transparent);
+  background: var(--app-chrome-divider-color, var(--border-color, #d8dee4));
   pointer-events: none;
 }
 
@@ -357,5 +357,5 @@ html.dark .route-container-header {
 }
 
 html.dark .route-container-header::after {
-  background: color-mix(in srgb, var(--border-color, #2c2c2c) 78%, transparent);
+  background: var(--app-chrome-divider-color, var(--border-color, #2c2c2c));
 }
