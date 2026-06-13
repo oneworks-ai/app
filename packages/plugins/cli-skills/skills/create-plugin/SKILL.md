@@ -15,9 +15,9 @@ description: 当用户想创建或改造 OneWorks plugin，实现界面入口、
 
 开始写或改 plugin 前，先读取当前仓库里的插件规则和示例：
 
-- `assets/homepage/apps/docs/usage/plugins.md`
-- `assets/homepage/apps/docs/usage/plugins/ui-runtime.md`
-- `assets/homepage/apps/docs/usage/plugins/server-runtime.md`
+- `.oo/docs/usage/plugins.md`
+- `.oo/docs/usage/plugins/ui-runtime.md`
+- `.oo/docs/usage/plugins/server-runtime.md`
 - `packages/plugins/demo/package.json`
 - `packages/plugins/demo/plugin.json`
 - `packages/plugins/demo/README.md`
@@ -268,7 +268,7 @@ packages/plugins/<plugin-name>/
 - 用 `ctx.views.register(viewId, { renderNode })` 注册 React view；manifest 的 `clientView` 必须能找到同名 view。无构建插件从 `ctx.react` 取 `createElement` / hooks；TSX 插件也必须复用宿主 React 单例，不要 bundle 第二份 React。`ctx.views.register(viewId, render)` 是兼容 DOM view，只用于简单无 React 插件。
 - view context 读取宿主状态：`view.host.language` 是当前界面语言，`view.host.themeMode` 是用户选择的 `light | dark | system`，`view.host.resolvedThemeMode` 是实际 `light | dark`，`view.host.isDarkMode` 是深色状态，`view.host.surface` 表示当前挂载在 `route | workbench | drawer`。
 - 插件自己的按钮、placeholder、菜单项、状态文案必须走 i18n：React view 内使用 `view.i18n.resolveText({ en, "zh-Hans": "..." })`；前端命令、界面消息、launcher 本地搜索这类不在 view render 内执行的逻辑使用 `ctx.i18n.resolveText(...)` 或 `ctx.i18n.getLanguage()`。不要用 `view.host.language.startsWith('zh')` 手写分支，也不要只写英文硬编码。
-- 需要复用宿主 UI 时，React view 优先用 `view.ui.*` 声明式组件，不要复制宿主组件 DOM。当前组件包括 `Icon`、`Button`、`Input`、`Segmented`、`Switch`、`Sender`、`ProjectFileTree`，以及 overlay 系列的 `OverlayDropdown`、`OverlayMenu`、`OverlaySearchMenu`、`OverlaySearchRow`、`OverlaySegmented`、`OverlaySelectLabel`、`OverlayTree`；菜单、搜索、树、确认态、danger 态、快捷键和嵌套 submenu 都应该走这些结构化 overlay props。需要真实弹出浮层时优先用 `OverlayDropdown`，不要把 overlay primitive 直接平铺在插件页面里。overlay 树需要独立浮层外观时传 `surface: true`，不要在插件内手写 panel 样式。`Sender` 默认套用 chat sender surface，并包含模型、权限、adapter / account 和 status bar 编排。sender 样式只能通过 `surface: "chat" | "plain"`、`density: "default" | "compact"`、`showHeader`、`showStatusBar`、`placeholder`、`initialContent`、`defaultAdapter`、`defaultModel` 这类结构化选项控制。DOM view 兼容路径才使用 `view.components.render(component, container, props)`，返回的 `{ dispose() }` 必须在 view 的 `dispose()` 里清理；需要示例时参考 `assets/homepage/apps/docs/usage/plugins/ui-runtime.md` 的“宿主组件用法示例”。
+- 需要复用宿主 UI 时，React view 优先用 `view.ui.*` 声明式组件，不要复制宿主组件 DOM。当前组件包括 `Icon`、`Button`、`Input`、`Segmented`、`Switch`、`Sender`、`ProjectFileTree`，以及 overlay 系列的 `OverlayDropdown`、`OverlayMenu`、`OverlaySearchMenu`、`OverlaySearchRow`、`OverlaySegmented`、`OverlaySelectLabel`、`OverlayTree`；菜单、搜索、树、确认态、danger 态、快捷键和嵌套 submenu 都应该走这些结构化 overlay props。需要真实弹出浮层时优先用 `OverlayDropdown`，不要把 overlay primitive 直接平铺在插件页面里。overlay 树需要独立浮层外观时传 `surface: true`，不要在插件内手写 panel 样式。`Sender` 默认套用 chat sender surface，并包含模型、权限、adapter / account 和 status bar 编排。sender 样式只能通过 `surface: "chat" | "plain"`、`density: "default" | "compact"`、`showHeader`、`showStatusBar`、`placeholder`、`initialContent`、`defaultAdapter`、`defaultModel` 这类结构化选项控制。DOM view 兼容路径才使用 `view.components.render(component, container, props)`，返回的 `{ dispose() }` 必须在 view 的 `dispose()` 里清理；需要示例时参考 `.oo/docs/usage/plugins/ui-runtime.md` 的“宿主组件用法示例”。
 - 用 `ctx.commands.register(commandId, handler)` 注册前端命令。
 - 用 `ctx.commands.execute(commandId, payload)` 调用前端或 server command。
 - 用 `ctx.extensionPoints.register({ id, title, description, contributionSchema })` 暴露插件自己的扩展点；贡献方用 `ctx.extensionPoints.onAvailable('other-scope/point', point => ctx.extensionPoints.contribute('other-scope/point', contribution))`，不要用激活时的一次性 `has(...)` 判断来决定是否贡献。React view 里用 `view.extensions.getContributions('point')` 读取当前插件扩展点的贡献。
@@ -388,6 +388,6 @@ export function activatePlugin(ctx) {
 
 如果新增了用户可见 plugin 能力，同步更新：
 
-- `assets/homepage/apps/docs/usage/plugins.md`：manifest、扩展点、watch、plugin store、server API。
-- `assets/homepage/apps/docs/usage/web.md`：Web UI 上的具体入口和交互变化。
+- `.oo/docs/usage/plugins.md`：manifest、扩展点、watch、plugin store、server API。
+- `.oo/docs/usage/web.md`：Web UI 上的具体入口和交互变化。
 - plugin 自己的英文和中文 README：告诉使用者它注册了哪些入口、有哪些配置项、需要哪些本地服务、如何调试。

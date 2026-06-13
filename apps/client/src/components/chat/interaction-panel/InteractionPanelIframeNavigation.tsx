@@ -1,4 +1,4 @@
-import { Button, Dropdown } from 'antd'
+import { Button, Dropdown, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import { useTranslation } from 'react-i18next'
 
@@ -26,6 +26,19 @@ export function InteractionPanelIframeNavigation({
   pageId: string
 }) {
   const { t } = useTranslation()
+  const backLabel = t('chat.interactionPanel.iframeBack')
+  const backTooltip = canGoBack ? backLabel : t('chat.interactionPanel.iframeBackUnavailable')
+  const forwardLabel = t('chat.interactionPanel.iframeForward')
+  const forwardTooltip = canGoForward ? forwardLabel : t('chat.interactionPanel.iframeForwardUnavailable')
+  const refreshLabel = t('chat.interactionPanel.iframeRefresh')
+  const refreshTooltip = frameUrl === '' ? t('chat.interactionPanel.iframeRefreshUnavailable') : refreshLabel
+  const backTriggerClassName = `chat-interaction-panel__iframe-navigation-trigger ${canGoBack ? '' : 'is-disabled'}`
+  const forwardTriggerClassName = `chat-interaction-panel__iframe-navigation-trigger ${
+    canGoForward ? '' : 'is-disabled'
+  }`
+  const refreshTriggerClassName = `chat-interaction-panel__iframe-navigation-trigger ${
+    frameUrl === '' ? 'is-disabled' : ''
+  }`
   const visibleHistory = history.length > 0 ? history : frameUrl === '' ? [] : [frameUrl]
   const visibleHistoryIndex = history.length > 0 ? historyIndex : 0
   const historyMenuItems: MenuProps['items'] = visibleHistory.map((url, index) => ({
@@ -57,30 +70,40 @@ export function InteractionPanelIframeNavigation({
         overlayClassName='chat-interaction-panel-history-dropdown'
         trigger={['contextMenu']}
       >
-        <span className='chat-interaction-panel__iframe-history-trigger'>
+        <Tooltip title={backTooltip}>
+          <span className={backTriggerClassName}>
+            <Button
+              type='text'
+              aria-label={backLabel}
+              className={!canGoBack ? 'is-disabled' : undefined}
+              icon={<span className='material-symbols-rounded'>arrow_back</span>}
+              onClick={() => canGoBack && onNavigateHistory(-1)}
+            />
+          </span>
+        </Tooltip>
+      </Dropdown>
+      <Tooltip title={forwardTooltip}>
+        <span className={forwardTriggerClassName}>
           <Button
             type='text'
-            aria-label={t('chat.interactionPanel.iframeBack')}
-            className={!canGoBack ? 'is-disabled' : undefined}
-            icon={<span className='material-symbols-rounded'>arrow_back</span>}
-            onClick={() => canGoBack && onNavigateHistory(-1)}
+            disabled={!canGoForward}
+            aria-label={forwardLabel}
+            icon={<span className='material-symbols-rounded'>arrow_forward</span>}
+            onClick={() => onNavigateHistory(1)}
           />
         </span>
-      </Dropdown>
-      <Button
-        type='text'
-        disabled={!canGoForward}
-        aria-label={t('chat.interactionPanel.iframeForward')}
-        icon={<span className='material-symbols-rounded'>arrow_forward</span>}
-        onClick={() => onNavigateHistory(1)}
-      />
-      <Button
-        type='text'
-        disabled={frameUrl === ''}
-        aria-label={t('chat.interactionPanel.iframeRefresh')}
-        icon={<span className='material-symbols-rounded'>refresh</span>}
-        onClick={onRefresh}
-      />
+      </Tooltip>
+      <Tooltip title={refreshTooltip}>
+        <span className={refreshTriggerClassName}>
+          <Button
+            type='text'
+            disabled={frameUrl === ''}
+            aria-label={refreshLabel}
+            icon={<span className='material-symbols-rounded'>refresh</span>}
+            onClick={onRefresh}
+          />
+        </span>
+      </Tooltip>
     </div>
   )
 }
