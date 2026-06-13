@@ -1,0 +1,13 @@
+.workspace-connection-gate {
+  min-height: 100vh;
+}
+
+.workspace-connection-gate--error {
+  padding: 24px;
+}
+
+.workspace-connection-gate--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

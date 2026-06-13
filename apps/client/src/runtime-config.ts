@@ -9,6 +9,7 @@ export type RuntimeEnv = Partial<{
   __ONEWORKS_PROJECT_CLIENT_DEV_SERVER__: string
   __ONEWORKS_PROJECT_CLIENT_VERSION__: string
   __ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__: string
+  __ONEWORKS_PROJECT_WORKSPACE_ID__: string
   __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: string
 }>
 
@@ -202,6 +203,71 @@ export const getClientBase = () => (
   )
 )
 
+export const WORKSPACE_CLIENT_ROUTE_SEGMENT = 'w'
+
+export const normalizeWorkspaceId = (value?: string) => {
+  const trimmedValue = value?.trim()
+  if (trimmedValue == null || trimmedValue === '') {
+    return undefined
+  }
+  return /^w_[\w-]{8,64}$/u.test(trimmedValue) ? trimmedValue : undefined
+}
+
+export const getRuntimeWorkspaceId = () => (
+  normalizeWorkspaceId(getRuntimeEnv().__ONEWORKS_PROJECT_WORKSPACE_ID__)
+)
+
+export const buildWorkspaceClientBase = (
+  workspaceId: string,
+  clientBase = resolveClientBase(
+    import.meta.env.__ONEWORKS_PROJECT_CLIENT_BASE__,
+    import.meta.env.BASE_URL,
+    '/ui'
+  )
+) => {
+  const normalizedWorkspaceId = normalizeWorkspaceId(workspaceId)
+  if (normalizedWorkspaceId == null) {
+    throw new Error('Invalid workspace id')
+  }
+  const normalizedClientBase = normalizeBase(clientBase)
+  const workspacePath = `${WORKSPACE_CLIENT_ROUTE_SEGMENT}/${encodeURIComponent(normalizedWorkspaceId)}`
+  return normalizedClientBase === '/'
+    ? `/${workspacePath}`
+    : `${normalizedClientBase}/${workspacePath}`
+}
+
+export const resolveWorkspaceIdFromPathname = (
+  pathname: string,
+  clientBase = resolveClientBase(
+    import.meta.env.__ONEWORKS_PROJECT_CLIENT_BASE__,
+    import.meta.env.BASE_URL,
+    '/ui'
+  )
+) => {
+  const normalizedBase = normalizeBase(clientBase)
+  const normalizedPathname = pathname.startsWith('/') ? pathname : `/${pathname}`
+  const relativePath = normalizedBase === '/'
+    ? normalizedPathname
+    : normalizedPathname === normalizedBase
+    ? '/'
+    : normalizedPathname.startsWith(`${normalizedBase}/`)
+    ? normalizedPathname.slice(normalizedBase.length)
+    : ''
+
+  const [segment, workspaceId] = relativePath.split('/').filter(Boolean)
+  if (segment !== WORKSPACE_CLIENT_ROUTE_SEGMENT) {
+    return undefined
+  }
+  if (workspaceId == null) {
+    return undefined
+  }
+  try {
+    return normalizeWorkspaceId(decodeURIComponent(workspaceId))
+  } catch {
+    return undefined
+  }
+}
+
 export const getServerHostEnv = () =>
   normalizeServerHost(
     getRuntimeEnv().__ONEWORKS_PROJECT_SERVER_HOST__ ??
@@ -212,13 +278,17 @@ export const getServerPortEnv = () =>
   getRuntimeEnv().__ONEWORKS_PROJECT_SERVER_PORT__ ??
     import.meta.env.__ONEWORKS_PROJECT_SERVER_PORT__
 
-export const getConfiguredServerBaseUrl = () => {
-  const configuredServerBaseUrl = normalizeServerBaseUrl(
+const getExplicitServerBaseUrl = () => (
+  normalizeServerBaseUrl(
     getRuntimeEnv().__ONEWORKS_PROJECT_SERVER_BASE_URL__ ??
       import.meta.env.__ONEWORKS_PROJECT_SERVER_BASE_URL__
   )
-  if (configuredServerBaseUrl != null) {
-    return configuredServerBaseUrl
+)
+
+export const getConfiguredServerBaseUrl = () => {
+  const explicitServerBaseUrl = getExplicitServerBaseUrl()
+  if (explicitServerBaseUrl != null) {
+    return explicitServerBaseUrl
   }
 
   const serverHost = getServerHostEnv()
@@ -254,11 +324,8 @@ export const getServerWsPath = () =>
 
 export const getServerBaseUrl = () => {
   const configuredServerBaseUrl = getConfiguredServerBaseUrl()
+  const explicitServerBaseUrl = getExplicitServerBaseUrl()
   if (isDesktopClientMode()) {
-    const explicitServerBaseUrl = normalizeServerBaseUrl(
-      getRuntimeEnv().__ONEWORKS_PROJECT_SERVER_BASE_URL__ ??
-        import.meta.env.__ONEWORKS_PROJECT_SERVER_BASE_URL__
-    )
     if (explicitServerBaseUrl != null) {
       return explicitServerBaseUrl
     }
@@ -276,6 +343,10 @@ export const getServerBaseUrl = () => {
     return normalizeServerBaseUrl(`${serverHost}:${serverPort}`) ?? `${getBrowserProtocol()}://localhost:8787`
   }
 
+  if (explicitServerBaseUrl != null) {
+    return explicitServerBaseUrl
+  }
+
   if (isServerConnectionManagedClientMode()) {
     const storedServerBaseUrl = getStoredServerBaseUrl()
     if (storedServerBaseUrl != null) {
@@ -284,10 +355,6 @@ export const getServerBaseUrl = () => {
   }
 
   if (configuredServerBaseUrl != null) {
-    const explicitServerBaseUrl = normalizeServerBaseUrl(
-      getRuntimeEnv().__ONEWORKS_PROJECT_SERVER_BASE_URL__ ??
-        import.meta.env.__ONEWORKS_PROJECT_SERVER_BASE_URL__
-    )
     if (explicitServerBaseUrl != null || !isDevServerClient()) {
       return configuredServerBaseUrl
     }

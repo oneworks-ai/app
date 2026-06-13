@@ -598,6 +598,32 @@ export function ChatRouteShell({
     setWorkspaceDrawerOpen
   ])
 
+  const requestLauncherResourceTarget = useCallback((target: DesktopWorkspaceResourceTarget) => {
+    const params = new URLSearchParams(location.search)
+    params.set('launcherAction', target.kind)
+    params.set('launcherRequestId', `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`)
+    const optionalParams: Array<[string, string | undefined]> = [
+      ['launcherPath', target.path],
+      ['launcherSessionId', target.sessionId],
+      ['launcherTerminalId', target.terminalId],
+      ['launcherTitle', target.title],
+      ['launcherUrl', target.url]
+    ]
+
+    for (const [key, value] of optionalParams) {
+      if (value == null || value === '') {
+        params.delete(key)
+      } else {
+        params.set(key, value)
+      }
+    }
+
+    void navigate({
+      pathname: location.pathname,
+      search: `?${params.toString()}`
+    }, { replace: true })
+  }, [location.pathname, location.search, navigate])
+
   useEffect(() => {
     const dispose = window.oneworksDesktop?.onWorkspaceResourceRequest?.((target) => {
       const normalizedTarget = normalizeLauncherResourceTarget(target)
@@ -875,7 +901,7 @@ export function ChatRouteShell({
             workspaceContext={webLauncherWorkspaceContext}
             searchWorkspaceResources={searchWebLauncherWorkspaceResources}
             onClose={() => setIsWebLauncherOpen(false)}
-            onOpenWorkspaceResource={handleLauncherResourceTarget}
+            onOpenWorkspaceResource={requestLauncherResourceTarget}
           />
         )
         : undefined}
