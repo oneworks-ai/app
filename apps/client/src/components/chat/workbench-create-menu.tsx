@@ -33,6 +33,7 @@ export const buildWorkbenchCreateMenuItems = (
     interactionPanelItemKinds?: InteractionPanelAddMenuItemKind[]
     language?: string
     mobileDebugDevices?: InteractionPanelMobileDebugDeviceOption[]
+    openResourceShortcut?: string
     pluginMenuItems?: Array<PluginContributionWorkbenchAddMenuItem & { pluginScope: string }>
     selectedMobileDebugDeviceId?: string
     workspaceDrawerItems?: WorkspaceDrawerViewItem[]

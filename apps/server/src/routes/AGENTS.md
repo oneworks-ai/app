@@ -10,6 +10,8 @@
 - `config.ts`：配置读取与写回 API。
 - `automation.ts`：automation API。
 - `module-updates.ts`：运行时模块版本检测与缓存安装 API；业务逻辑放在 `../services/module-updates.ts`。
+- `launcher.ts`：manager role 的 launcher 控制面 API；只挂项目选择、目录浏览、创建目录、启动 workspace server 等 daemon 能力。
+- `static-client.ts`：Web client 静态挂载与 runtime env 注入；manager role 下不要注入 workspace folder，默认入口由 client 导向 `/launcher`。
 
 ## Agent Room Route
 

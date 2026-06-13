@@ -107,13 +107,16 @@ function useLauncherThemeConfig() {
 
 export function LauncherApp() {
   const themeConfig = useLauncherThemeConfig()
+  const isWebLauncher = window.oneworksDesktop == null
 
   useEffect(() => {
     document.documentElement.classList.add('oneworks-launcher-window')
+    document.documentElement.classList.toggle('oneworks-launcher-web', isWebLauncher)
     return () => {
       document.documentElement.classList.remove('oneworks-launcher-window')
+      document.documentElement.classList.remove('oneworks-launcher-web')
     }
-  }, [])
+  }, [isWebLauncher])
 
   return (
     <ConfigProvider theme={themeConfig}>

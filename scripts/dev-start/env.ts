@@ -135,18 +135,25 @@ export const buildRuntimeEnv = async ({
   clientMode = 'dev',
   clientPort,
   extra = {},
+  serverRole = 'workspace',
   serverPort
 }: RuntimeEnvInput) => {
+  const isManagerServer = serverRole === 'manager'
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     __ONEWORKS_PROJECT_CLIENT_BASE__: base,
     __ONEWORKS_PROJECT_CLIENT_MODE__: clientMode,
+    __ONEWORKS_PROJECT_SERVER_ROLE__: serverRole,
     __ONEWORKS_PROJECT_SERVER_PORT__: serverPort == null ? undefined : String(serverPort),
     __ONEWORKS_PROJECT_CLIENT_PORT__: clientPort == null ? undefined : String(clientPort),
     __ONEWORKS_PROJECT_LAUNCH_CWD__: process.env.__ONEWORKS_PROJECT_LAUNCH_CWD__ ?? repoRoot,
-    __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ ?? repoRoot,
-    __ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__: process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__ ??
-      repoRoot,
+    ...(isManagerServer
+      ? { __ONEWORKS_PROJECT_HOME_PROJECT_DIR__: 'manager' }
+      : {
+        __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ ?? repoRoot,
+        __ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__: process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__ ??
+          repoRoot
+      }),
     __ONEWORKS_PROJECT_REAL_HOME__: process.env.__ONEWORKS_PROJECT_REAL_HOME__ ?? process.env.HOME ?? '',
     NO_PROXY: appendNoProxy(process.env.NO_PROXY),
     no_proxy: appendNoProxy(process.env.no_proxy),
@@ -158,7 +165,7 @@ export const buildRuntimeEnv = async ({
   }
 
   const projectHomeDir = resolveProjectHomeDir(env)
-  const pluginFsAllowRoots = await resolvePluginFsAllowRoots(env)
+  const pluginFsAllowRoots = isManagerServer ? [] : await resolvePluginFsAllowRoots(env)
   return {
     ...env,
     ...(pluginFsAllowRoots.length > 0

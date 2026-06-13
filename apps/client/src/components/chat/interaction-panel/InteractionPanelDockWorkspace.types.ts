@@ -76,6 +76,7 @@ export interface InteractionPanelDockWorkspaceProps {
   workspaceDrawerCreateSelectedKeys?: string[]
   workspaceDrawerState: InteractionPanelWorkspaceDrawerState
   workspaceRootPath?: string
+  openResourceShortcut?: string
   /**
    * Route-owned extension point for tab-specific group header actions.
    *

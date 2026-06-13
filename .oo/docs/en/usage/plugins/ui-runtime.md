@@ -1,0 +1,88 @@
+# UI Runtime and Frontend Entries
+
+UI plugins extend the One Works frontend without forking the host application. They can contribute navigation entries, panels, views, buttons, and plugin-specific pages while keeping plugin behavior in a package.
+
+## Runtime Model
+
+The host loads plugin manifests from the active plugin graph. A plugin can declare frontend contributions and, when needed, a server entry with scoped APIs. The frontend renders plugin contributions inside host-owned surfaces.
+
+Important boundaries:
+
+- The host owns global routing, app shell, authentication, session state, and project service connection.
+- The plugin owns its own views, labels, commands, and plugin-specific state.
+- Shared data contracts should be expressed through manifest metadata and scoped APIs.
+- A plugin should not rely on private host component internals unless that surface is explicitly documented.
+
+## Frontend Entries
+
+A frontend entry can contribute UI to known host surfaces such as:
+
+- navigation or launcher entries
+- plugin detail pages
+- chat header actions
+- side panels or tabs
+- custom pages
+
+The manifest should identify the contribution target, display text, optional icon metadata, and the module entry used by the host to load the view.
+
+## Configuration UI
+
+Plugin configuration uses the same schema-driven UI as the main configuration page. A manifest can provide:
+
+- `config.schema` or `config.jsonSchema`
+- `titleI18n` and `descriptionI18n`
+- `x-oneworks-ui` hints for icons, placeholders, and sensitive fields
+- `config.uiSchema` when the default JSON Schema renderer is not enough
+
+Saved values are written to the active project config under `plugins[].options` for that plugin instance.
+
+## Frontend to Server Calls
+
+When a plugin needs backend behavior, expose it through a server entry and call it through the plugin scoped API. This keeps plugin calls tied to the active plugin instance and project service.
+
+Use scoped APIs instead of direct host internals for:
+
+- reading plugin-specific data
+- writing plugin runtime state
+- running plugin commands
+- checking plugin diagnostics
+
+## State and Persistence
+
+Frontend plugin state should be explicit about where it lives:
+
+- ephemeral UI state can stay in the view
+- project configuration belongs in `plugins[].options`
+- plugin runtime data belongs in the project home or host-provided plugin data APIs
+- user-interface-only preferences can use browser storage when they do not affect project behavior
+
+Do not write plugin runtime data into source-controlled project assets unless the user explicitly chooses that behavior.
+
+## Design Expectations
+
+Plugin UI should match the host application:
+
+- compact controls for repeated work
+- predictable navigation and focus behavior
+- no marketing-style landing pages inside operational tool surfaces
+- icons for common tool actions
+- clear empty, loading, error, and disabled states
+
+Plugin UI should not describe itself with tutorial text when a familiar control can make the action obvious.
+
+## Debugging UI Contributions
+
+If a contribution is missing:
+
+1. Check that the plugin package resolves.
+2. Check that the manifest declares the frontend contribution.
+3. Check that the plugin instance is enabled.
+4. Check whether the contribution target exists in the current app version.
+5. Check browser console and server logs for plugin loading errors.
+
+If a contribution renders but cannot call server behavior:
+
+1. Verify the plugin server entry is loaded.
+2. Verify the scoped API name and scope.
+3. Verify the current project service is the expected one.
+4. Check authentication and CORS only when using a standalone client or PWA.

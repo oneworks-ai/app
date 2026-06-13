@@ -8,7 +8,8 @@ import {
   PROJECT_PRIMARY_WORKSPACE_FOLDER_ENV,
   PROJECT_WORKSPACE_FOLDER_ENV,
   PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD_ENV,
-  resolveProjectHomePath
+  resolveProjectHomePath,
+  resolveProjectMockHome
 } from '@oneworks/utils'
 import { resolveProjectPrimaryWorkspaceFolder } from '@oneworks/utils/project-cache-path'
 
@@ -21,20 +22,26 @@ const isPathInside = (parentPath: string, targetPath: string) => {
   )
 }
 
+const normalizeEnvValue = (value: string | undefined) => {
+  const trimmedValue = value?.trim()
+  return trimmedValue == null || trimmedValue === '' ? undefined : trimmedValue
+}
+
 export const createWorkspaceRuntimeEnv = (
   workspaceFolder: string,
   env: NodeJS.ProcessEnv = processEnv
 ): NodeJS.ProcessEnv => {
   const normalizedWorkspaceFolder = path.resolve(workspaceFolder)
-  const inheritedWorkspaceFolder = env[PROJECT_WORKSPACE_FOLDER_ENV]?.trim()
+  const inheritedWorkspaceFolder = normalizeEnvValue(env[PROJECT_WORKSPACE_FOLDER_ENV])
   const inheritedWorkspaceMatches = inheritedWorkspaceFolder != null &&
-    inheritedWorkspaceFolder !== '' &&
     path.resolve(inheritedWorkspaceFolder) === normalizedWorkspaceFolder
   const preserveInheritedPrimaryWorkspace = inheritedWorkspaceFolder != null &&
-    inheritedWorkspaceFolder !== '' &&
     inheritedWorkspaceMatches &&
-    env[PROJECT_PRIMARY_WORKSPACE_FOLDER_ENV]?.trim() != null &&
-    env[PROJECT_PRIMARY_WORKSPACE_FOLDER_ENV]?.trim() !== ''
+    normalizeEnvValue(env[PROJECT_PRIMARY_WORKSPACE_FOLDER_ENV]) != null
+  const inheritedHomeProjectDir = normalizeEnvValue(env[PROJECT_ONEWORKS_HOME_PROJECT_DIR_ENV])
+  const shouldResetInheritedProjectHome = inheritedWorkspaceFolder == null
+    ? inheritedHomeProjectDir != null
+    : !inheritedWorkspaceMatches
   const runtimeEnv: NodeJS.ProcessEnv = {
     ...env,
     [PROJECT_LAUNCH_CWD_ENV]: normalizedWorkspaceFolder,
@@ -49,8 +56,18 @@ export const createWorkspaceRuntimeEnv = (
       runtimeEnv[PROJECT_PRIMARY_WORKSPACE_FOLDER_ENV] = primaryWorkspaceFolder
     }
   }
-  if (inheritedWorkspaceFolder != null && inheritedWorkspaceFolder !== '' && !inheritedWorkspaceMatches) {
+  if (shouldResetInheritedProjectHome) {
     delete runtimeEnv[PROJECT_ONEWORKS_HOME_PROJECT_DIR_ENV]
+    delete runtimeEnv.DB_PATH
+    delete runtimeEnv.__ONEWORKS_PROJECT_SERVER_DATA_DIR__
+    delete runtimeEnv.__ONEWORKS_PROJECT_SERVER_LOG_DIR__
+
+    const realHome = normalizeEnvValue(runtimeEnv.__ONEWORKS_PROJECT_REAL_HOME__)
+    if (realHome == null) {
+      delete runtimeEnv.HOME
+    } else {
+      runtimeEnv.HOME = realHome
+    }
   }
 
   const ooBaseDirSourceCwd = runtimeEnv[PROJECT_OO_BASE_DIR_RESOLVE_CWD_ENV]?.trim()
@@ -61,6 +78,7 @@ export const createWorkspaceRuntimeEnv = (
   ) {
     runtimeEnv[PROJECT_OO_BASE_DIR_RESOLVE_CWD_ENV] = normalizedWorkspaceFolder
   }
+  runtimeEnv.HOME = resolveProjectMockHome(normalizedWorkspaceFolder, runtimeEnv)
 
   return runtimeEnv
 }

@@ -4,10 +4,10 @@ import process from 'node:process'
 import { BrowserWindow, app, dialog, globalShortcut, nativeTheme, shell } from 'electron'
 
 import {
-  normalizeWorkspaceFolder,
   rememberRecentWorkspaceFolder,
   removeRecentWorkspaceFolder,
-  resolveDesktopLaunchWorkspaceFolder
+  resolveDesktopLaunchWorkspaceFolder,
+  resolveProjectWorkspaceFolder
 } from '../workspace-state.cjs'
 import { readDesktopBuildSource } from './build-source'
 import { DESKTOP_SETTINGS_CHANNEL, DESKTOP_UPDATE_STATUS_CHANNEL, GLOBAL_INTERFACE_LANGUAGE_CHANNEL } from './constants'
@@ -271,7 +271,7 @@ export const createDesktopApp = () => {
   }
 
   const normalizeLaunchRequest = (launchRequest: LaunchRequest): LaunchRequest => {
-    const workspaceFolder = normalizeWorkspaceFolder(launchRequest.workspaceFolder)
+    const workspaceFolder = resolveProjectWorkspaceFolder(launchRequest.workspaceFolder)
     return {
       ...(launchRequest.routePath == null ? {} : { routePath: launchRequest.routePath }),
       ...(workspaceFolder == null ? {} : { workspaceFolder })
@@ -427,7 +427,7 @@ export const createDesktopApp = () => {
     additionalData: unknown
   ) => {
     const deepLinkRequest = parseDesktopDeepLinkLaunchRequest(findDesktopDeepLinkArg(_argv) ?? '')
-    const workspaceFolder = normalizeWorkspaceFolder(
+    const workspaceFolder = resolveProjectWorkspaceFolder(
       (additionalData as { workspaceFolder?: unknown } | undefined)?.workspaceFolder
     )
     const launchRequest = deepLinkRequest ?? { workspaceFolder }
