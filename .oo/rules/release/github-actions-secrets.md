@@ -11,6 +11,7 @@
 - `OVSX_PAT`：发布 Open VSX Registry 扩展，给 VSCodium、Theia、Code OSS 等 VS Code 兼容 IDE 使用。
 - `PWA_DEPLOY_TOKEN`：从 `oneworks-ai/app` 触发 `oneworks-ai/pwa` 的部署 workflow。
 - `AVATAR_DEPLOY_TOKEN`：从 `oneworks-ai/app` 触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow。
+- `HOMEPAGE_DEPLOY_TOKEN`：从 `oneworks-ai/app` 触发 `oneworks-ai/oneworks-ai.github.io` 的 GitHub Pages 部署 workflow。
 - `APPLE_ID`、`APPLE_ID_PASSWORD`、`APPLE_TEAM_ID`、`DESKTOP_CSC_LINK`、`DESKTOP_CSC_KEY_PASSWORD`、`DESKTOP_CSC_INSTALLER_LINK`、`DESKTOP_CSC_INSTALLER_KEY_PASSWORD`：macOS App Store 外分发签名和 notarization；未做 Apple Developer 签名时可以缺省。
 
 macOS Developer ID 签名的完整创建和验证步骤见 [macOS signing](./macos-signing.md)。
@@ -177,5 +178,7 @@ gh workflow run deploy-pwa.yml --repo oneworks-ai/app --ref main
 ```
 
 确认 `oneworks-ai/app` 的 Trigger PWA Deploy 成功、`oneworks-ai/pwa` 的 Deploy PWA 被触发并成功、`https://oneworks-ai.github.io/pwa/` 返回 `200`。如果 `PWA_DEPLOY_TOKEN` 缺失，app 仓库 workflow 必须失败，不能 warning 后成功退出。
+
+Homepage Pages token 的配置、轮换和验证见 [homepage-github-pages.md](./homepage-github-pages.md)。
 
 Avatar Pages token 的配置、轮换和验证见 [avatar-github-pages.md](./avatar-github-pages.md)。

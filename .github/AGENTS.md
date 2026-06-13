@@ -19,6 +19,7 @@
 - `desktop-package.yml`：构建 macOS 桌面包；tag / 手动 release 模式会创建 GitHub Release。
 - `deploy-pwa.yml`：从 app 仓库触发 `oneworks-ai/pwa` 的部署 workflow。
 - `deploy-avatar.yml`：从 app 仓库触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow，只监听 avatar 相关路径。
+- `deploy-homepage.yml`：从 app 仓库触发 `oneworks-ai/oneworks-ai.github.io` 的 GitHub Pages 部署 workflow，只监听 `.oo/docs` 和自身 workflow。
 
 ## 当前 Secrets / Variables
 
@@ -29,6 +30,10 @@
 - `OVSX_PAT`
 - `PWA_DEPLOY_TOKEN`
 - `AVATAR_DEPLOY_TOKEN`
+
+新增 homepage 文档站部署需要配置的 secret：
+
+- `HOMEPAGE_DEPLOY_TOKEN`
 
 桌面签名需要但当前未配置的 secrets：
 
