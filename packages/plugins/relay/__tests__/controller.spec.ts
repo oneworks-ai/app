@@ -1,3 +1,5 @@
+import { Buffer } from 'node:buffer'
+
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { cleanupPluginFixtures, createPluginHarness, readDeviceStore, stubRelayFetch } from './helpers.js'
@@ -7,6 +9,12 @@ afterEach(async () => {
   vi.useRealTimers()
   await cleanupPluginFixtures()
 })
+
+const flushAsyncWork = async () => {
+  for (let index = 0; index < 10; index += 1) {
+    await Promise.resolve()
+  }
+}
 
 describe('relay plugin controller', () => {
   it('registers a device with the configured remote relay', async () => {
@@ -148,6 +156,22 @@ describe('relay plugin controller', () => {
       remoteBaseUrl: 'https://relay.example.com',
       state: 'registered'
     })
+    expect(prodStatus.servers?.find(server => server.id === 'lab')).toMatchObject({
+      connected: true,
+      connection: {
+        activeServerId: 'lab',
+        remoteBaseUrl: 'http://127.0.0.1:8788',
+        state: 'registered'
+      }
+    })
+    expect(prodStatus.servers?.find(server => server.id === 'prod')).toMatchObject({
+      connected: true,
+      connection: {
+        activeServerId: 'prod',
+        remoteBaseUrl: 'https://relay.example.com',
+        state: 'registered'
+      }
+    })
     expect(store.servers).toMatchObject({
       lab: {
         deviceToken: 'remote-device-token',
@@ -158,6 +182,164 @@ describe('relay plugin controller', () => {
         remoteBaseUrl: 'https://relay.example.com'
       }
     })
+  })
+
+  it('keeps per-server heartbeat and session worker loops when connecting another relay server', async () => {
+    vi.useFakeTimers()
+    const fetchMock = stubRelayFetch()
+    const { commands, disposers } = await createPluginHarness(
+      {
+        activeServerId: 'lab',
+        deviceName: 'Office Mac',
+        exposeSessions: true,
+        servers: [
+          {
+            id: 'lab',
+            pairingToken: 'lab-token',
+            port: 8788,
+            protocol: 'http',
+            server: '127.0.0.1'
+          },
+          {
+            id: 'prod',
+            pairingToken: 'prod-token',
+            baseUrl: 'https://relay.example'
+          }
+        ]
+      },
+      {
+        sessions: {
+          listSessions: vi.fn(() => [{ id: 'local-session' }]),
+          submitMessage: vi.fn()
+        }
+      }
+    )
+
+    await commands.get('connect')?.()
+    await commands.get('connect')?.({ serverId: 'prod' })
+    await flushAsyncWork()
+    fetchMock.mockClear()
+    await vi.advanceTimersByTimeAsync(30_000)
+    disposers.forEach(dispose => dispose())
+    const requestUrls = fetchMock.mock.calls.map(([url]) => String(url))
+
+    expect(requestUrls).toContain('http://127.0.0.1:8788/api/relay/devices/heartbeat')
+    expect(requestUrls).toContain('https://relay.example/api/relay/devices/heartbeat')
+    expect(requestUrls.some(url => (
+      url.startsWith('http://127.0.0.1:8788/api/relay/devices/') &&
+      url.endsWith('/sessions/snapshot')
+    ))).toBe(true)
+    expect(requestUrls.some(url => (
+      url.startsWith('https://relay.example/api/relay/devices/') &&
+      url.endsWith('/sessions/snapshot')
+    ))).toBe(true)
+  })
+
+  it('disconnects one relay server without stopping other active connections', async () => {
+    vi.useFakeTimers()
+    const fetchMock = stubRelayFetch()
+    const { commands, disposers } = await createPluginHarness({
+      activeServerId: 'lab',
+      deviceName: 'Office Mac',
+      servers: [
+        {
+          id: 'lab',
+          pairingToken: 'lab-token',
+          port: 8788,
+          protocol: 'http',
+          server: '127.0.0.1'
+        },
+        {
+          id: 'prod',
+          pairingToken: 'prod-token',
+          baseUrl: 'https://relay.example'
+        }
+      ]
+    })
+
+    await commands.get('connect')?.()
+    await commands.get('connect')?.({ serverId: 'prod' })
+    const status = await commands.get('disconnect')?.({ serverId: 'prod' }) as RelayPluginStatus
+    fetchMock.mockClear()
+    await vi.advanceTimersByTimeAsync(30_000)
+    disposers.forEach(dispose => dispose())
+    const requestUrls = fetchMock.mock.calls.map(([url]) => String(url))
+
+    expect(status.servers?.find(server => server.id === 'lab')).toMatchObject({
+      connected: true,
+      connection: {
+        state: 'registered'
+      }
+    })
+    expect(status.servers?.find(server => server.id === 'prod')).toMatchObject({
+      connected: false,
+      connection: {
+        state: 'idle'
+      }
+    })
+    expect(requestUrls).toContain('http://127.0.0.1:8788/api/relay/devices/heartbeat')
+    expect(requestUrls).not.toContain('https://relay.example/api/relay/devices/heartbeat')
+  })
+
+  it('forgets one relay server without stopping other active connections', async () => {
+    vi.useFakeTimers()
+    const fetchMock = stubRelayFetch()
+    const { apis, commands, disposers, projectHome } = await createPluginHarness({
+      activeServerId: 'lab',
+      deviceName: 'Office Mac',
+      servers: [
+        {
+          id: 'lab',
+          pairingToken: 'lab-token',
+          port: 8788,
+          protocol: 'http',
+          server: '127.0.0.1'
+        },
+        {
+          id: 'prod',
+          pairingToken: 'prod-token',
+          baseUrl: 'https://relay.example'
+        }
+      ]
+    })
+
+    await commands.get('connect')?.()
+    await commands.get('connect')?.({ serverId: 'prod' })
+    const forgetResponse = await apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+      method: 'POST',
+      path: 'forget'
+    }) as { body?: RelayPluginStatus; status?: number }
+    const store = await readDeviceStore(projectHome)
+    fetchMock.mockClear()
+    await vi.advanceTimersByTimeAsync(30_000)
+    disposers.forEach(dispose => dispose())
+    const requestUrls = fetchMock.mock.calls.map(([url]) => String(url))
+
+    expect(forgetResponse.status).toBe(200)
+    expect(forgetResponse.body?.servers?.find(server => server.id === 'lab')).toMatchObject({
+      connected: true,
+      connection: {
+        state: 'registered'
+      }
+    })
+    expect(forgetResponse.body?.servers?.find(server => server.id === 'prod')).toMatchObject({
+      connected: false,
+      connection: {
+        state: 'idle'
+      },
+      hasToken: false
+    })
+    expect(store.servers).toMatchObject({
+      lab: {
+        deviceToken: 'remote-device-token'
+      },
+      prod: {
+        deviceToken: ''
+      }
+    })
+    expect(requestUrls).toContain('http://127.0.0.1:8788/api/relay/devices/heartbeat')
+    expect(requestUrls).not.toContain('https://relay.example/api/relay/devices/heartbeat')
   })
 
   it('starts scheduled heartbeat after connecting', async () => {

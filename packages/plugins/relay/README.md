@@ -62,6 +62,8 @@ npx @oneworks/relay-server --host 0.0.0.0 --port 8788
 - Optional session exposure with metadata snapshots and forwarding jobs.
 - Device token storage under the project home runtime directory.
 
+`connect`, `disconnect`, and `forget` accept an optional `serverId` payload. `connect` without `serverId` uses `activeServerId` for compatibility; `disconnect` and `forget` without `serverId` apply to all connected/stored Relay servers. Status responses keep a top-level `connection` compatibility summary and expose per-server connection details on each `servers[]` item.
+
 The plugin must not persist session content. Session request payloads and results are forwarded through the Relay protocol while durable state remains limited to device identity, connection state, and remote-issued tokens.
 
 ## Source Layout

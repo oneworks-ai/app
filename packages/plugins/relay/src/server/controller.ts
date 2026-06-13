@@ -16,7 +16,7 @@ import { isRecord, toString } from './utils.js'
 export interface RelayController {
   connect: (payload?: unknown) => Promise<unknown>
   createLoginUrl: (payload?: unknown) => Promise<unknown>
-  disconnect: () => Promise<unknown>
+  disconnect: (payload?: unknown) => Promise<unknown>
   dispose: () => void
   forget: (payload?: unknown) => Promise<unknown>
   getPublicStatus: () => Promise<unknown>
@@ -36,6 +36,7 @@ const createMissingRemoteState = (state: RelayConnectionState, requestedServerId
   message: requestedServerId == null || requestedServerId === ''
     ? 'Configure at least one relay server before connecting.'
     : `Unknown relay server: ${requestedServerId}.`,
+  ...(requestedServerId == null || requestedServerId === '' ? {} : { activeServerId: requestedServerId }),
   lastConnectedAt: state.lastConnectedAt,
   lastError: requestedServerId == null || requestedServerId === ''
     ? 'missing_relay_server'
@@ -81,13 +82,17 @@ const getStoredServer = (
 const createServerStatuses = (
   store: RelayStore,
   options: ReturnType<typeof normalizeOptions>,
+  getConnectionState: (server: Pick<ResolvedRelayServer, 'id' | 'remoteBaseUrl'>) => RelayConnectionState,
   activeServerId?: string
 ) =>
   options.servers.map(server => {
     const stored = store.servers[server.id]
+    const connection = getConnectionState(server)
     return {
       ...server,
       active: server.id === (activeServerId ?? options.activeServerId),
+      connected: connection.state === 'registered',
+      connection,
       ...(stored?.account == null ? {} : { account: stored.account }),
       hasToken: (stored?.deviceToken ?? '') !== '',
       registeredAt: stored?.registeredAt ?? null,
@@ -198,25 +203,50 @@ const fetchRelayDevices = async (
 export const createRelayController = (ctx: RelayPluginContext): RelayController => {
   let state = initialState()
   const deviceStore = createRelayDeviceStore(ctx.projectHome)
-  let heartbeat: ReturnType<typeof startHeartbeat> | undefined
-  let sessionWorker: ReturnType<typeof createRelaySessionWorker> | undefined
+  const heartbeats = new Map<string, ReturnType<typeof startHeartbeat>>()
+  const sessionWorkers = new Map<string, ReturnType<typeof createRelaySessionWorker>>()
+  const connectionStates: Record<string, RelayConnectionState> = {}
+
+  const getConnectionState = (server: Pick<ResolvedRelayServer, 'id' | 'remoteBaseUrl'>) => ({
+    ...initialState(),
+    activeServerId: server.id,
+    remoteBaseUrl: server.remoteBaseUrl,
+    ...connectionStates[server.id]
+  })
+
+  const setConnectionState = (serverId: string, nextState: RelayConnectionState) => {
+    connectionStates[serverId] = nextState
+    state = nextState
+  }
+
+  const stopRemoteLoop = (serverId: string) => {
+    heartbeats.get(serverId)?.stop()
+    heartbeats.delete(serverId)
+    sessionWorkers.get(serverId)?.stop()
+    sessionWorkers.delete(serverId)
+  }
 
   const stopRemoteLoops = () => {
-    heartbeat?.stop()
-    heartbeat = undefined
-    sessionWorker?.stop()
-    sessionWorker = undefined
+    for (const serverId of new Set([...heartbeats.keys(), ...sessionWorkers.keys()])) {
+      stopRemoteLoop(serverId)
+    }
   }
 
   const getPublicStatus = async () => {
     const options = normalizeOptions(ctx.options)
     const statusActiveServerId = state.activeServerId || options.activeServerId
-    const activeServer = resolveActiveRelayServer(ctx.options, statusActiveServerId) ??
-      resolveActiveRelayServer(ctx.options)
+    const resolvedStatusServer = statusActiveServerId === ''
+      ? undefined
+      : resolveActiveRelayServer(ctx.options, statusActiveServerId)
+    const activeServer = resolvedStatusServer ??
+      (state.activeServerId == null || state.activeServerId === '' ? resolveActiveRelayServer(ctx.options) : undefined)
+    const summaryState = activeServer == null
+      ? state
+      : getConnectionState(activeServer)
     const store = await deviceStore.readStore()
     const storedActiveServer = activeServer == null ? undefined : getStoredServer(store, activeServer)
     const serverStatuses = await Promise.all(
-      createServerStatuses(store, options, activeServer?.id).map(
+      createServerStatuses(store, options, getConnectionState, activeServer?.id).map(
         async (serverStatus) => {
           const server = options.servers.find(item => item.id === serverStatus.id)
           if (server == null) return serverStatus
@@ -247,9 +277,9 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         updatedAt: storedActiveServer?.updatedAt ?? null
       },
       connection: {
-        ...state,
-        activeServerId: activeServer?.id ?? options.activeServerId,
-        remoteBaseUrl: state.remoteBaseUrl || activeServer?.remoteBaseUrl || ''
+        ...summaryState,
+        activeServerId: summaryState.activeServerId || activeServer?.id || options.activeServerId,
+        remoteBaseUrl: summaryState.remoteBaseUrl || activeServer?.remoteBaseUrl || ''
       },
       storePath: deviceStore.storePath
     }
@@ -263,24 +293,23 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     const options = normalizeOptions(ctx.options)
     const activeServer = resolveActiveRelayServer(ctx.options, requestedServerId)
     if (activeServer == null) {
-      stopRemoteLoops()
       state = createMissingRemoteState(state, requestedServerId)
       return await getPublicStatus()
     }
 
-    stopRemoteLoops()
+    stopRemoteLoop(activeServer.id)
     const store = await deviceStore.readStore()
     const storedServer = getStoredServer(store, activeServer)
     const authToken = transientAuthToken || storedServer?.deviceToken || activeServer.pairingToken
     const registerUrl = new URL('/api/relay/devices/register', activeServer.remoteBaseUrl)
-    state = {
+    setConnectionState(activeServer.id, {
       state: 'connecting',
       message: `Registering ${store.deviceId} with ${activeServer.name}.`,
       activeServerId: activeServer.id,
-      lastConnectedAt: state.lastConnectedAt,
+      lastConnectedAt: getConnectionState(activeServer).lastConnectedAt,
       lastError: null,
       remoteBaseUrl: activeServer.remoteBaseUrl
-    }
+    })
 
     try {
       const response = await fetch(registerUrl, {
@@ -318,46 +347,55 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
           deviceToken: nextStoredServer?.deviceToken ?? '',
           remoteBaseUrl: activeServer.remoteBaseUrl
         }
-        heartbeat = startHeartbeat({
-          capabilities: options.capabilities,
-          deviceId: auth.deviceId,
-          deviceName: options.deviceName,
-          deviceToken: auth.deviceToken,
-          logger: ctx.logger,
-          pluginScope: ctx.scope,
-          remoteBaseUrl: auth.remoteBaseUrl,
-          workspaceFolder: ctx.workspaceFolder
-        })
+        heartbeats.set(
+          activeServer.id,
+          startHeartbeat({
+            capabilities: options.capabilities,
+            deviceId: auth.deviceId,
+            deviceName: options.deviceName,
+            deviceToken: auth.deviceToken,
+            logger: ctx.logger,
+            pluginScope: ctx.scope,
+            remoteBaseUrl: auth.remoteBaseUrl,
+            serverId: activeServer.id,
+            workspaceFolder: ctx.workspaceFolder
+          })
+        )
         if (options.capabilities.sessions && ctx.sessions != null) {
-          sessionWorker = createRelaySessionWorker({
+          const sessionWorker = createRelaySessionWorker({
             adapter: ctx.sessions,
             auth,
-            logger: ctx.logger
+            logger: ctx.logger,
+            serverId: activeServer.id
           })
+          sessionWorkers.set(activeServer.id, sessionWorker)
           void sessionWorker.runOnce().catch(error => {
-            ctx.logger.warn({ err: error, scope: ctx.scope }, '[relay] session forwarding bootstrap failed')
+            ctx.logger.warn(
+              { err: error, scope: ctx.scope, serverId: activeServer.id },
+              '[relay] session forwarding bootstrap failed'
+            )
           })
         }
       }
-      state = {
+      setConnectionState(activeServer.id, {
         state: 'registered',
         message: `Device registered with ${activeServer.name}.`,
         activeServerId: activeServer.id,
         lastConnectedAt: registeredAt,
         lastError: null,
         remoteBaseUrl: activeServer.remoteBaseUrl
-      }
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      ctx.logger.warn({ err: error, scope: ctx.scope }, '[relay] device registration failed')
-      state = {
+      ctx.logger.warn({ err: error, scope: ctx.scope, serverId: activeServer.id }, '[relay] device registration failed')
+      setConnectionState(activeServer.id, {
         state: 'error',
         message,
         activeServerId: activeServer.id,
-        lastConnectedAt: state.lastConnectedAt,
+        lastConnectedAt: getConnectionState(activeServer).lastConnectedAt,
         lastError: message,
         remoteBaseUrl: activeServer.remoteBaseUrl
-      }
+      })
     }
 
     return await getPublicStatus()
@@ -398,34 +436,113 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     })
   }
 
-  const disconnect = async () => {
+  const disconnect = async (payload?: unknown) => {
+    const requestedServerId = readServerId(payload)
+    if (requestedServerId !== '') {
+      const activeServer = resolveActiveRelayServer(ctx.options, requestedServerId)
+      if (activeServer == null) {
+        state = createMissingRemoteState(state, requestedServerId)
+        return await getPublicStatus()
+      }
+      const previousState = getConnectionState(activeServer)
+      stopRemoteLoop(activeServer.id)
+      setConnectionState(activeServer.id, {
+        state: 'idle',
+        message: `Relay connection disabled for ${activeServer.name}.`,
+        activeServerId: activeServer.id,
+        lastConnectedAt: previousState.lastConnectedAt,
+        lastError: null,
+        remoteBaseUrl: activeServer.remoteBaseUrl
+      })
+      return await getPublicStatus()
+    }
+
+    const options = normalizeOptions(ctx.options)
+    const previousState = state
     stopRemoteLoops()
+    for (const server of options.servers) {
+      const previousServerState = getConnectionState(server)
+      connectionStates[server.id] = {
+        state: 'idle',
+        message: 'Relay connection disabled for this server process.',
+        activeServerId: server.id,
+        lastConnectedAt: previousServerState.lastConnectedAt,
+        lastError: null,
+        remoteBaseUrl: server.remoteBaseUrl
+      }
+    }
+    for (const [serverId, previousServerState] of Object.entries(connectionStates)) {
+      if (options.servers.some(server => server.id === serverId)) continue
+      connectionStates[serverId] = {
+        state: 'idle',
+        message: 'Relay connection disabled for this server process.',
+        activeServerId: previousServerState.activeServerId ?? serverId,
+        lastConnectedAt: previousServerState.lastConnectedAt,
+        lastError: null,
+        remoteBaseUrl: previousServerState.remoteBaseUrl
+      }
+    }
     state = {
       state: 'idle',
-      message: 'Relay connection disabled for this server process.',
-      activeServerId: state.activeServerId,
-      lastConnectedAt: state.lastConnectedAt,
+      message: 'Relay connections disabled for this server process.',
+      activeServerId: previousState.activeServerId,
+      lastConnectedAt: previousState.lastConnectedAt,
       lastError: null,
-      remoteBaseUrl: state.remoteBaseUrl
+      remoteBaseUrl: previousState.remoteBaseUrl
     }
     return await getPublicStatus()
   }
 
   const forget = async (payload?: unknown) => {
-    stopRemoteLoops()
     const store = await deviceStore.readStore()
     const requestedServerId = readServerId(payload)
-    const activeServer = resolveActiveRelayServer(ctx.options, requestedServerId)
     const nextServers = { ...store.servers }
-    if (activeServer == null) {
+    if (requestedServerId === '') {
+      const options = normalizeOptions(ctx.options)
+      stopRemoteLoops()
       for (const server of Object.values(nextServers)) {
         nextServers[server.id] = {
           ...server,
           deviceToken: ''
         }
       }
+      for (const server of options.servers) {
+        connectionStates[server.id] = {
+          state: 'idle',
+          message: 'Stored relay device tokens removed.',
+          activeServerId: server.id,
+          lastConnectedAt: null,
+          lastError: null,
+          remoteBaseUrl: server.remoteBaseUrl
+        }
+      }
+      for (const [serverId, previousServerState] of Object.entries(connectionStates)) {
+        if (options.servers.some(server => server.id === serverId)) continue
+        connectionStates[serverId] = {
+          state: 'idle',
+          message: 'Stored relay device tokens removed.',
+          activeServerId: previousServerState.activeServerId ?? serverId,
+          lastConnectedAt: null,
+          lastError: null,
+          remoteBaseUrl: previousServerState.remoteBaseUrl
+        }
+      }
+      state = {
+        state: 'idle',
+        message: 'Stored relay device tokens removed.',
+        activeServerId: state.activeServerId,
+        lastConnectedAt: null,
+        lastError: null,
+        remoteBaseUrl: state.remoteBaseUrl
+      }
     } else {
+      const activeServer = resolveActiveRelayServer(ctx.options, requestedServerId)
+      if (activeServer == null) {
+        state = createMissingRemoteState(state, requestedServerId)
+        return await getPublicStatus()
+      }
       const previous = getStoredServer(store, activeServer)
+      stopRemoteLoop(activeServer.id)
       nextServers[activeServer.id] = {
         deviceToken: '',
         id: activeServer.id,
@@ -433,6 +550,14 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         remoteBaseUrl: activeServer.remoteBaseUrl,
         updatedAt: new Date().toISOString()
       }
+      setConnectionState(activeServer.id, {
+        state: 'idle',
+        message: `Stored relay device token removed for ${activeServer.name}.`,
+        activeServerId: activeServer.id,
+        lastConnectedAt: null,
+        lastError: null,
+        remoteBaseUrl: activeServer.remoteBaseUrl
+      })
     }
     await deviceStore.writeStore({
       deviceId: store.deviceId,
@@ -440,16 +565,6 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
       deviceName: store.deviceName,
       servers: nextServers
     })
-    state = {
-      state: 'idle',
-      message: activeServer == null
-        ? 'Stored relay device tokens removed.'
-        : `Stored relay device token removed for ${activeServer.name}.`,
-      activeServerId: activeServer?.id,
-      lastConnectedAt: null,
-      lastError: null,
-      remoteBaseUrl: activeServer?.remoteBaseUrl
-    }
     return await getPublicStatus()
   }
 

@@ -19,6 +19,7 @@ export interface RelayHeartbeatLoopOptions extends RelayHeartbeatOptions {
   logger?: {
     warn: (...args: unknown[]) => void
   }
+  serverId?: string
 }
 
 export interface RelayHeartbeatLoop {
@@ -78,7 +79,10 @@ export const startHeartbeat = (options: RelayHeartbeatLoopOptions): RelayHeartbe
     if (stopped || inFlight != null) return
     inFlight = sendHeartbeat(options)
       .catch(error => {
-        options.logger?.warn({ err: error }, '[relay] heartbeat failed')
+        options.logger?.warn(
+          { err: error, ...(options.serverId == null ? {} : { serverId: options.serverId }) },
+          '[relay] heartbeat failed'
+        )
       })
       .finally(() => {
         inFlight = undefined

@@ -1,11 +1,12 @@
+import type { Buffer } from 'node:buffer'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { vi } from 'vitest'
 
-import type { Buffer } from 'node:buffer'
 import { activatePlugin } from '../src/server/index.js'
+import type { RelayLocalSessionAdapter } from '../src/server/session-types.js'
 
 export type CommandHandler = (payload?: unknown) => unknown | Promise<unknown>
 export type ApiHandler = (request: { body: Buffer; method: string; path: string }) => unknown | Promise<unknown>
@@ -36,6 +37,15 @@ export interface RelayPluginStatus {
       name?: string
     }
     active?: boolean
+    connected?: boolean
+    connection?: {
+      activeServerId?: string
+      lastConnectedAt?: string | null
+      lastError?: string | null
+      message?: string
+      remoteBaseUrl?: string
+      state?: string
+    }
     devices?: Array<{
       capabilities?: Record<string, unknown>
       id?: string
@@ -56,7 +66,12 @@ export const cleanupPluginFixtures = async () => {
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 }
 
-export const createPluginHarness = async (options: Record<string, unknown>) => {
+export const createPluginHarness = async (
+  options: Record<string, unknown>,
+  harnessOptions: {
+    sessions?: RelayLocalSessionAdapter
+  } = {}
+) => {
   const projectHome = await mkdtemp(join(tmpdir(), 'oneworks-relay-plugin-test-'))
   tempDirs.push(projectHome)
   const commands = new Map<string, CommandHandler>()
@@ -74,7 +89,8 @@ export const createPluginHarness = async (options: Record<string, unknown>) => {
     logger,
     registerCommand: (commandId: string, handler: CommandHandler) => commands.set(commandId, handler),
     registerApi: (apiId: string, api: ApiRegistration) => apis.set(apiId, api),
-    dispose: (callback: () => void) => disposers.push(callback)
+    dispose: (callback: () => void) => disposers.push(callback),
+    sessions: harnessOptions.sessions
   } as never)
 
   return {
