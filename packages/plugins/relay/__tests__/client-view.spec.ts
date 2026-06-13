@@ -134,6 +134,7 @@ const statusPayload = {
     hasToken: true,
     id: 'local',
     name: 'Local Relay SSO',
+    platform: 'Cloudflare',
     devices: [{
       capabilities: {
         sessions: true,
@@ -279,7 +280,13 @@ describe('relay plugin client view', () => {
     expect(container.innerHTML).toContain('key_off')
     expect(container.innerHTML).toContain('oneworks-relay__revealed-actions')
     expect(container.innerHTML).toContain('oneworks-relay__account')
+    expect(container.innerHTML).toContain('<details class="oneworks-relay__account"')
+    expect(container.innerHTML).toContain('oneworks-relay__account-summary')
     expect(container.innerHTML).toContain('oneworks-relay__account-avatar')
+    expect(container.innerHTML).toContain('oneworks-relay__account-platform')
+    expect(container.innerHTML).toContain('Cloudflare')
+    expect(container.innerHTML).toContain('oneworks-relay__account-state')
+    expect(container.innerHTML).toContain('registered')
     expect(container.innerHTML).toContain('Local Relay SSO')
     expect(container.innerHTML).toContain('owner@local.test')
     expect(container.innerHTML).toContain('Office Mac')
@@ -287,6 +294,7 @@ describe('relay plugin client view', () => {
     expect(container.innerHTML).toContain('This device')
     expect(container.innerHTML).toContain('sessions / terminal')
     expect(container.innerHTML).toContain('aria-label="Connect"')
+    expect(container.innerHTML).toContain('aria-label="Disconnect"')
     expect(container.innerHTML).toContain('data-tooltip="Connect"')
     expect(container.innerHTML).toContain('data-server-id="local"')
     expect(container.innerHTML).not.toContain('<span>Connect</span>')

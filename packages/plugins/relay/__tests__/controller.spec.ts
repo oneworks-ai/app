@@ -21,6 +21,8 @@ describe('relay plugin controller', () => {
     const fetchMock = stubRelayFetch()
     const { commands, projectHome } = await createPluginHarness({
       deviceName: 'Office Mac',
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
       exposeSessions: true,
       exposeTerminal: false,
       exposeWorkspaceFiles: false,
@@ -89,7 +91,10 @@ describe('relay plugin controller', () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
-    const { commands } = await createPluginHarness({})
+    const { commands } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false
+    })
 
     const status = await commands.get('connect')?.() as RelayPluginStatus
 
@@ -105,6 +110,8 @@ describe('relay plugin controller', () => {
     const { commands, projectHome } = await createPluginHarness({
       activeServerId: 'lab',
       deviceName: 'Office Mac',
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
       servers: [
         {
           id: 'prod',
@@ -347,6 +354,8 @@ describe('relay plugin controller', () => {
     const fetchMock = stubRelayFetch()
     const { commands, disposers } = await createPluginHarness({
       deviceName: 'Office Mac',
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
       servers: [
         {
           id: 'prod',

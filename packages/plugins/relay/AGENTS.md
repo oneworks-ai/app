@@ -1,6 +1,6 @@
 # Relay Plugin Package
 
-`packages/plugins/relay` 是可选 Relay 插件，不属于默认内置体验。它把当前 workspace 服务注册到用户自部署的公网 Relay，并通过 scoped plugin API 暴露连接状态和控制命令。远端服务统一配置在 `servers[]`，即使只有一个 Relay 系统也不要增加 top-level 单服务入口。
+`packages/plugins/relay` 是可选 Relay 插件，不属于默认内置体验。它把当前 workspace 服务注册到 OneWorks 官方或用户自部署的公网 Relay，并通过 scoped plugin API 暴露连接状态和控制命令。远端服务在归一化后统一表现为 server items：官方 Cloudflare / Vercel preset 由开关控制，用户自定义服务继续放在 `servers[]`，即使只有一个自定义 Relay 系统也不要增加 top-level 单服务入口。
 
 ## 入口
 
@@ -19,8 +19,8 @@
 ## 约定
 
 - 插件必须保持可选；不要把 Relay 行为写进默认 server/client 启动路径。
-- 远端服务只能来自 `servers[]`；`server` / `port` / `protocol` 是 server item 内部字段，默认连接项用 `activeServerId`。
-- 产品默认路径是 OneWorks 托管 Relay；私有化部署必须先确认用户要自托管，并使用用户提供的域名 / 平台账号。插件示例使用占位域名，不写入真实账号、测试凭据或一次性部署 URL。
+- 远端服务在 `normalizeOptions()` 后统一是 server item；官方服务来自集中 preset 常量和开关，用户自定义服务来自 `servers[]`。`server` / `port` / `protocol` 是 server item 内部字段，默认连接项用 `activeServerId`。
+- 产品默认路径是 OneWorks 托管 Relay，默认登录入口优先 Cloudflare 官方 preset；私有化部署必须先确认用户要自托管，并使用用户提供的域名 / 平台账号。插件示例使用占位域名，不写入真实账号、测试凭据或一次性部署 URL。
 - 多服务下 device token 按 server id 分开保存；不要把一个 Relay 系统的 token 覆盖到另一个系统。
 - 插件登录必须打开所选 Relay Server 的 `/login` 页面；Web 回跳使用当前插件页，Electron 回跳使用 `oneworks://relay/auth` schema URL，再由桌面壳打开对应 workspace 的插件页面。
 - 不记录会话正文；插件只转发当前 in-memory job payload / result，持久化仅限 device identity 和每个 server 的 token。

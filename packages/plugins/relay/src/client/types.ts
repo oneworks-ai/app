@@ -57,6 +57,10 @@ export interface RelayStatus {
   }
   options?: {
     deviceName?: string
+    officialServices?: {
+      cloudflare?: boolean
+      vercel?: boolean
+    }
     servers?: RelayServerStatus[]
   }
   servers?: RelayServerStatus[]
@@ -87,6 +91,8 @@ export interface RelayServerStatus {
   hasToken?: boolean
   id?: string
   name?: string
+  official?: boolean
+  platform?: string
   port?: number
   protocol?: string
   registeredAt?: string | null

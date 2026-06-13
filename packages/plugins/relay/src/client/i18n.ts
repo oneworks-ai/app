@@ -44,10 +44,15 @@ export interface RelayClientMessages {
     serverUrl: string
   }
   labels: {
+    account: string
     device: string
     deviceId: string
+    email: string
     no: string
+    notSignedIn: string
+    platform: string
     remote: string
+    status: string
     token: string
     yes: string
   }
@@ -118,10 +123,15 @@ const relayClientMessages: Record<RelayClientLocale, RelayClientMessages> = {
       serverUrl: 'Server API URL'
     },
     labels: {
+      account: 'Account',
       device: 'Device',
       deviceId: 'Device ID',
+      email: 'Email',
       no: 'no',
+      notSignedIn: 'Not signed in',
+      platform: 'Platform',
       remote: 'Remote',
+      status: 'Status',
       token: 'Token',
       yes: 'yes'
     },
@@ -193,10 +203,15 @@ const relayClientMessages: Record<RelayClientLocale, RelayClientMessages> = {
       serverUrl: '服务 API 地址'
     },
     labels: {
+      account: '账号',
       device: '设备',
       deviceId: '设备 ID',
+      email: '邮箱',
       no: '否',
+      notSignedIn: '未登录',
+      platform: '平台',
       remote: '远端',
+      status: '状态',
       token: '令牌',
       yes: '是'
     },
