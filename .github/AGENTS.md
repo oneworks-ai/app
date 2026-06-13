@@ -12,9 +12,9 @@
 ## Workflow 地图
 
 - `quality.yml`：所有 `main` push / PR / 手动触发都会跑 lint、format、typecheck、commit message 检查。
-- `release-tags.yml`：PR 上总是产出 `release-tags` check；监听 package version / scripts 变化，创建 `pkg/*/v*` release tags，并按 tag 显式调度对应发布 workflow。
+- `release-tags.yml`：按 package version / scripts 相关路径触发，创建 `pkg/*/v*` release tags，并按 tag 显式调度对应发布 workflow。
 - `npm-publish-alpha.yml`：手动发布 npm alpha 包；默认走 Trusted Publishing，新增包 bootstrap 才允许显式使用 `NPM_TOKEN`。
-- `vscode-extension-ci.yml`：PR 上总是产出 `VS Code extension` check；VS Code 扩展相关改动会构建并上传 VSIX artifact，不发布商店。
+- `vscode-extension-ci.yml`：按 VS Code 扩展相关路径触发，构建并上传 VSIX artifact，不发布商店。
 - `vscode-extension-release.yml`：通过 release tag 或手动输入 tag 发布 VS Code Marketplace、Open VSX 和 GitHub Release。
 - `desktop-package.yml`：构建 macOS 桌面包；PR 上总是产出 `macOS installer` check，非桌面打包相关改动会快速跳过，tag / 手动 release 模式会创建 GitHub Release。
 - `deploy-pwa.yml`：从 app 仓库触发 `oneworks-ai/pwa` 的部署 workflow。
