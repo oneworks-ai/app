@@ -19,7 +19,7 @@
 - `scripts/prepare-vercel-output.mjs`：本地 `vercel build --prebuilt` 后处理，把 pnpm workspace 下的 Postgres runtime package 拷进 `.vercel/output/functions/api/relay.func/node_modules/`；本地 CLI prebuilt 部署前必须跑。
 - `src/telemetry/`：Relay trace 日志。
 - `README.md`：面向自部署用户的命令、环境变量、Admin API、生产部署和日志说明。
-- `.oo/rules/RELAY-DEPLOYMENT.md`：Relay 托管服务、私有化部署、Vercel / Cloudflare 域名和账号边界；处理部署请求时先读。
+- `.oo/rules/RELAY-DEPLOYMENT.md`：Relay 托管服务、私有化部署、Vercel / Cloudflare 域名、官方 OneWorks 域名 / 邮件拓扑和账号边界；处理部署请求时先读。
 
 ## 约定
 
@@ -34,7 +34,8 @@
 - `cloudflare-do` 只允许由 `cloudflare/worker.ts` 通过 Durable Object repository 创建，不要从 Node CLI 直接实例化。
 - Vercel serverless 入口是单项目形态：`apps/relay-server` 的 `build:vercel` 会内置 Admin 静态页到 `/admin`；Cloudflare 仍使用 `apps/relay-admin` Pages + `apps/relay-server` Worker 两个部署面。
 - 用户只想使用 Relay 时，默认引导到 OneWorks 托管服务；只有用户明确选择私有化部署时，才按其提供的平台账号和域名部署。不要把个人账号、真实 account id、测试凭据、token、数据库 URL 或临时部署 URL 写入可提交文档。
-- 私有化部署的域名是配置，不是代码常量。Vercel 默认是 `<project>.vercel.app` 或自定义域；Cloudflare Worker 默认是 `<worker>.<account-subdomain>.workers.dev`，其中 account subdomain 是账号级设置，变更会影响该账号下所有 Workers。
+- OneWorks 官方服务域名、`support@oneworks.cloud` / `hello@oneworks.cloud` 收信路由和 Resend 发信子域约定只维护在 `.oo/rules/RELAY-DEPLOYMENT.md`；不要把私人收信目标或个人邮箱写入 README、AGENTS、handoff 或示例配置。
+- 私有化部署的域名和邮件策略是配置，不是代码常量。Vercel 默认是 `<project>.vercel.app` 或自定义域；Cloudflare Worker 默认是 `<worker>.<account-subdomain>.workers.dev`，其中 account subdomain 是账号级设置，变更会影响该账号下所有 Workers。部署前确认用户自己的 DNS 托管、收信策略、事务邮件发信域名和 Reply-To。
 - 修改 API 或存储边界后，优先跑 `pnpm -C apps/relay-server test` 和 `pnpm -C apps/relay-server typecheck`。
 - 修改 Vercel / Cloudflare 入口后，额外跑 esbuild bundle smoke：Vercel 使用 `apps/relay-server/api/relay.ts` + `--platform=node`，Cloudflare 使用 `apps/relay-server/cloudflare/worker.ts` + `--platform=browser` 并 external `node:*`。
 - 修改 `/admin` 静态挂载时，先跑 `pnpm -C apps/relay-admin build`，再用 relay-server smoke 请求 `/admin/assets/admin.js` 与 `/admin/assets/admin.css`。

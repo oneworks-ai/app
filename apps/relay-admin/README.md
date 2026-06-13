@@ -29,6 +29,8 @@ The development server is a normal Vite React app with HMR. Open `/admin`, `/adm
 
 The recommended Vercel deployment is the single-project Relay Server build from `apps/relay-server`: `pnpm build:vercel` builds this Admin app and serves it at the same origin under `/admin`. For product users, prefer the managed OneWorks Relay service unless they explicitly choose private deployment.
 
+The managed OneWorks service uses the official Relay/Admin slots `dev.cf.oneworks.cloud`, `cf.oneworks.cloud`, `dev.vc.oneworks.cloud`, and `vc.oneworks.cloud`. Inbound support addresses such as `support@oneworks.cloud` and `hello@oneworks.cloud` are role addresses; do not document private forwarding destinations. Transactional mail belongs on stable mail subdomains such as `mail.oneworks.cloud` and `mail.dev.oneworks.cloud`, not on Admin or Relay web hosts.
+
 Relay Admin can also run as a standalone static Pages/Vercel app while the Relay Server remains a separate persistent upstream. This mode keeps the browser on one public origin and proxies the Relay routes that need server behavior:
 
 - `/api/*`
@@ -63,7 +65,7 @@ ONEWORKS_RELAY_ADMIN_PROXY_TARGET=https://relay.example.com
 
 Use `apps/relay-admin` as the Pages project root. Set the build command to `pnpm build:platform` and the output directory to `dist`. `functions/api/[[path]].ts`, `functions/login.ts`, and `functions/login/complete.ts` proxy the same Relay routes through Cloudflare Pages Functions.
 
-For Cloudflare private deployments, pair this Pages project with the `apps/relay-server` Worker + Durable Object deployment. The Pages domain, Worker name, and Cloudflare account subdomain belong to the user's deployment account; keep committed docs on placeholder domains.
+For Cloudflare private deployments, pair this Pages project with the `apps/relay-server` Worker + Durable Object deployment. The Pages domain, Worker name, Cloudflare account subdomain, DNS host, inbound mail plan, transactional mail sending domain, and Reply-To belong to the user's deployment account and domain plan; keep committed docs on placeholder domains.
 
 Set one of these environment variables in Cloudflare Pages:
 
