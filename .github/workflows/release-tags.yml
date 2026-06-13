@@ -1,3 +1,5 @@
+# eslint-disable max-lines -- release tag planning and tag dispatch stay in one workflow.
+
 name: Release Tags
 
 on:
