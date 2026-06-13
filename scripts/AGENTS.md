@@ -24,7 +24,7 @@
 - `pnpm tools dev-start homepage`
   - 官网首页预览：初始化 `assets/homepage` submodule，启动主仓 PWA iframe 预览，并启动 Astro homepage
 - `pnpm tools dev-start docs`
-  - 使用文档本地预览：启动 `assets/homepage/apps/docs` 下的独立 VitePress 文档站
+  - 使用文档本地预览：通过 homepage docs shell staging 主仓 `.oo/docs` 内容并启动独立 VitePress 文档站
 - `pnpm tools adapter-e2e run <selection>`
   - 真实离线 adapter E2E。`selection` 支持 `codex` / `claude-code` / `opencode` / case id / `all`
 - `pnpm tools adapter-e2e test [selection]`
