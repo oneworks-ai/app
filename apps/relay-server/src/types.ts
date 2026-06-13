@@ -4,7 +4,9 @@ export interface RelayServerArgs {
   allowOrigin: string
   adminToken: string
   dataPath: string
+  deviceMetadataSecret?: string
   deviceOnlineTtlMs?: number
+  embeddedAdminUi?: boolean
   help?: boolean
   host: string
   oauth?: Record<string, RelayOAuthClient | undefined>
@@ -17,7 +19,7 @@ export interface RelayServerArgs {
 export type RelayAuthProvider = string
 export type RelayRole = 'owner' | 'admin' | 'member' | 'viewer'
 export type RelaySsoProviderType = 'oauth2' | 'oidc'
-export type RelayStorageDriver = 'json' | 'postgres' | 'sqlite'
+export type RelayStorageDriver = 'cloudflare-do' | 'json' | 'postgres' | 'sqlite'
 
 export interface RelayOAuthClient {
   authorizationUrl?: string

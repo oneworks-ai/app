@@ -2,7 +2,7 @@
 
 Optional OneWorks Relay plugin.
 
-It connects the current workspace service to a user-managed public Relay, so phones, web clients, or other apps can discover devices and forward session messages through that Relay instead of directly reaching the local machine. Relay is not enabled by default; users opt in by installing this plugin and pointing it at their own `servers[]` list.
+It connects the current workspace service to a public Relay, so phones, web clients, or other apps can discover devices and forward session messages through that Relay instead of directly reaching the local machine. Product users should normally connect to the managed OneWorks Relay service. Private `servers[]` entries are available when a user explicitly chooses to run Relay in their own cloud account or on their own host.
 
 ## Configuration
 
@@ -20,7 +20,7 @@ It connects the current workspace service to a user-managed public Relay, so pho
         "servers": [
           {
             "id": "prod",
-            "name": "Production Relay",
+            "name": "Private Production Relay",
             "server": "relay.example.com",
             "port": 443,
             "protocol": "https",
@@ -41,7 +41,7 @@ It connects the current workspace service to a user-managed public Relay, so pho
 }
 ```
 
-Even one Relay service is configured through `servers[]`; there is no separate single-server config path.
+Even one Relay service is configured through `servers[]`; there is no separate single-server config path. Use placeholder domains in docs and examples, and keep real deployment credentials in the platform secret store or project runtime store rather than in config files.
 
 Each server can also use `baseUrl` when a full URL is easier than separate `server`, `port`, and `protocol` fields. The device identity and remote-issued device tokens are stored under the project home runtime directory, not in the project config file. Tokens are stored per server id so switching Relay systems does not overwrite another system's token.
 

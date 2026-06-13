@@ -32,8 +32,8 @@ export const deviceTokenMatches = (device: RelayDevice, token: string) => {
   return device.deviceToken === token
 }
 
-const deviceMetadataSecret = (args: Pick<RelayServerArgs, 'adminToken' | 'dataPath'>) => {
-  const configured = cleanText(process.env.ONEWORKS_RELAY_DEVICE_METADATA_SECRET)
+const deviceMetadataSecret = (args: Pick<RelayServerArgs, 'adminToken' | 'dataPath' | 'deviceMetadataSecret'>) => {
+  const configured = cleanText(args.deviceMetadataSecret ?? process.env.ONEWORKS_RELAY_DEVICE_METADATA_SECRET)
   if (configured !== '') return configured
   if (args.adminToken !== '') return args.adminToken
   return `oneworks-relay-device-metadata:${args.dataPath}`
@@ -76,7 +76,7 @@ export const legacyDevicePrivateMetadata = (device: RelayDevice): RelayDevicePri
   }, device.id)
 
 export const encryptDevicePrivateMetadata = (
-  args: Pick<RelayServerArgs, 'adminToken' | 'dataPath'>,
+  args: Pick<RelayServerArgs, 'adminToken' | 'dataPath' | 'deviceMetadataSecret'>,
   device: Pick<RelayDevice, 'id' | 'userId'>,
   metadata: RelayDevicePrivateMetadata
 ): RelayEncryptedPayload => {
@@ -95,7 +95,7 @@ export const encryptDevicePrivateMetadata = (
 }
 
 export const decryptDevicePrivateMetadata = (
-  args: Pick<RelayServerArgs, 'adminToken' | 'dataPath'>,
+  args: Pick<RelayServerArgs, 'adminToken' | 'dataPath' | 'deviceMetadataSecret'>,
   device: RelayDevice
 ): RelayDevicePrivateMetadata | undefined => {
   const encrypted = device.encryptedMetadata
@@ -127,12 +127,12 @@ export const decryptDevicePrivateMetadata = (
 }
 
 export const visibleDevicePrivateMetadata = (
-  args: Pick<RelayServerArgs, 'adminToken' | 'dataPath'>,
+  args: Pick<RelayServerArgs, 'adminToken' | 'dataPath' | 'deviceMetadataSecret'>,
   device: RelayDevice
 ) => decryptDevicePrivateMetadata(args, device) ?? legacyDevicePrivateMetadata(device)
 
 export const storeEncryptedDevicePrivateMetadata = (
-  args: Pick<RelayServerArgs, 'adminToken' | 'dataPath'>,
+  args: Pick<RelayServerArgs, 'adminToken' | 'dataPath' | 'deviceMetadataSecret'>,
   device: RelayDevice,
   metadata: RelayDevicePrivateMetadata
 ) => {

@@ -9,6 +9,9 @@ import {
 
 const ssoProviderTypes = new Set<RelaySsoProvider['type']>(['oauth2', 'oidc'])
 
+const hasOwn = (body: Record<string, unknown>, field: string) =>
+  Object.prototype.hasOwnProperty.call(body, field)
+
 export interface RelayAdminSsoProvider {
   id: string
   name: string
@@ -31,7 +34,7 @@ const requireText = (value: unknown, field: string) => {
 }
 
 const readBoolean = (body: Record<string, unknown>, field: string, fallback: boolean) => {
-  if (!Object.hasOwn(body, field)) return fallback
+  if (!hasOwn(body, field)) return fallback
   if (typeof body[field] !== 'boolean') throw new Error(`SSO provider ${field} must be a boolean.`)
   return body[field]
 }
@@ -55,11 +58,11 @@ const readHttpUrl = (value: unknown, field: string) => {
 }
 
 const readPatchHttpUrl = (body: Record<string, unknown>, field: string, fallback: string) => (
-  Object.hasOwn(body, field) ? readHttpUrl(body[field], field) : fallback
+  hasOwn(body, field) ? readHttpUrl(body[field], field) : fallback
 )
 
 const readPatchText = (body: Record<string, unknown>, field: string, fallback: string) => (
-  Object.hasOwn(body, field) ? requireText(body[field], field) : fallback
+  hasOwn(body, field) ? requireText(body[field], field) : fallback
 )
 
 const assertProviderIdAvailable = (id: string, existingIds: ReadonlySet<string>) => {
@@ -110,7 +113,7 @@ export const updateSsoProviderFromBody = (
   provider: RelaySsoProvider,
   body: Record<string, unknown>
 ): RelaySsoProvider => {
-  if (Object.hasOwn(body, 'id')) {
+  if (hasOwn(body, 'id')) {
     const id = normalizeSsoProviderId(body.id, 'SSO provider id')
     if (id !== provider.id) throw new Error('SSO provider id cannot be changed.')
   }

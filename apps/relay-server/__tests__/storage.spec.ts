@@ -7,10 +7,34 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { parseRelayServerArgs } from '../src/config.js'
 import { parseRelayStorageDriver } from '../src/storage/drivers.js'
+import {
+  type RelayDurableObjectStorage,
+  createDurableObjectRelayStoreRepository
+} from '../src/storage/durable-object.js'
 import { createRelayStoreRepository } from '../src/storage/repository.js'
 import type { RelayStore } from '../src/types.js'
 
 const tempDirs: string[] = []
+
+class MemoryDurableObjectStorage implements RelayDurableObjectStorage {
+  private readonly values = new Map<string, unknown>()
+
+  async delete(key: string) {
+    return this.values.delete(key)
+  }
+
+  async get<T = unknown>(key: string) {
+    return this.values.get(key) as T | undefined
+  }
+
+  async put(key: string, value: unknown) {
+    this.values.set(key, value)
+  }
+
+  async transaction<T>(callback: (transaction: RelayDurableObjectStorage) => Promise<T>) {
+    return await callback(this)
+  }
+}
 
 const createTempDataPath = async (filename = 'store.json') => {
   const root = await mkdtemp(join(tmpdir(), 'oneworks-relay-storage-test-'))
@@ -142,6 +166,40 @@ describe('relay storage repository', () => {
       users: [{ id: 'user-1', role: 'owner' }],
       devices: [{ id: 'device-1', name: 'Office Mac' }],
       forwardingJobs: [{ id: 'job-1', traceId: 'trace-1', payloadSizeBytes: 18 }]
+    })
+  })
+
+  it('persists Cloudflare Durable Object relay store data and forwarding payloads', async () => {
+    const repository = createDurableObjectRelayStoreRepository(new MemoryDurableObjectStorage())
+    const store: RelayStore = {
+      createdAt: '2026-01-01T00:00:00.000Z',
+      users: [],
+      invites: [],
+      ssoProviders: [],
+      devices: [],
+      deviceSessions: [],
+      forwardingJobs: [],
+      oauthStates: [],
+      sessions: []
+    }
+
+    await repository.write(store)
+    await repository.forwardingPayloads?.rememberPayload('job-1', {
+      message: 'hello relay',
+      requestId: 'request-1'
+    })
+    await repository.forwardingPayloads?.rememberResult('job-1', { ok: true })
+
+    expect(repository.driver).toBe('cloudflare-do')
+    await expect(repository.read()).resolves.toMatchObject({ createdAt: '2026-01-01T00:00:00.000Z' })
+    await expect(repository.forwardingPayloads?.consumePayload('job-1')).resolves.toMatchObject({
+      message: 'hello relay',
+      payloadSize: 11,
+      requestId: 'request-1'
+    })
+    await expect(repository.forwardingPayloads?.consumePayload('job-1')).resolves.toBeUndefined()
+    await expect(repository.forwardingPayloads?.consumeResult('job-1')).resolves.toMatchObject({
+      result: { ok: true }
     })
   })
 
@@ -323,14 +381,20 @@ describe('relay storage repository', () => {
     })
   })
 
-  it('parses explicit storage driver config and fails clearly for postgres', () => {
+  it('parses explicit storage driver config and exposes cloud storage adapters explicitly', () => {
     vi.stubEnv('ONEWORKS_RELAY_STORAGE_DRIVER', 'sqlite')
 
     const envArgs = parseRelayServerArgs([])
     const cliArgs = parseRelayServerArgs(['--storage-driver', 'postgres'])
+    const postgresRepository = createRelayStoreRepository({
+      dataPath: 'postgres://relay:secret@localhost:5432/relay',
+      storageDriver: 'postgres'
+    })
 
     expect(envArgs.storageDriver).toBe('sqlite')
     expect(cliArgs.storageDriver).toBe('postgres')
+    expect(postgresRepository.driver).toBe('postgres')
+    expect(postgresRepository.location).toBe('postgres://relay:***@localhost:5432/relay')
     expect(
       createRelayStoreRepository({
         dataPath: ':memory:',
@@ -340,9 +404,10 @@ describe('relay storage repository', () => {
     expect(() =>
       createRelayStoreRepository({
         dataPath: '/tmp/oneworks-relay.json',
-        storageDriver: 'postgres'
+        storageDriver: 'cloudflare-do'
       })
-    ).toThrow(/Relay storage driver "postgres" is not implemented yet/)
-    expect(() => parseRelayStorageDriver('mysql')).toThrow(/Supported values: json, sqlite, postgres/)
+    ).toThrow(/Relay storage driver "cloudflare-do" must be created by the Cloudflare Worker adapter/)
+    expect(parseRelayStorageDriver('cloudflare-do')).toBe('cloudflare-do')
+    expect(() => parseRelayStorageDriver('mysql')).toThrow(/Supported values: cloudflare-do, json, sqlite, postgres/)
   })
 })

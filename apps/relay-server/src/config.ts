@@ -7,6 +7,8 @@ import { parseRelayStorageDriver } from './storage/drivers.js'
 import type { RelayOAuthClient, RelayServerArgs } from './types.js'
 import { VERSION } from './types.js'
 
+export type RelayConfigEnv = Record<string, string | undefined>
+
 export const DEFAULT_DATA_PATH = join(homedir(), '.oneworks', 'relay-server', 'data.json')
 const DEFAULT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const DEFAULT_DEVICE_ONLINE_TTL_MS = 60 * 1000
@@ -16,47 +18,52 @@ const readPositiveInteger = (value: string | undefined, fallback: number) => {
   return Number.isFinite(number) && number > 0 ? number : fallback
 }
 
-const readStorageDriver = () => {
-  return parseRelayStorageDriver(process.env.ONEWORKS_RELAY_STORAGE_DRIVER)
+const readStorageDriver = (env: RelayConfigEnv) => {
+  return parseRelayStorageDriver(env.ONEWORKS_RELAY_STORAGE_DRIVER)
 }
 
-const readOAuthClients = () => {
+const readOAuthClients = (env: RelayConfigEnv) => {
   const oauth: Record<string, RelayOAuthClient | undefined> = {
-    github: process.env.ONEWORKS_RELAY_GITHUB_CLIENT_ID && process.env.ONEWORKS_RELAY_GITHUB_CLIENT_SECRET
+    github: env.ONEWORKS_RELAY_GITHUB_CLIENT_ID && env.ONEWORKS_RELAY_GITHUB_CLIENT_SECRET
       ? {
-        clientId: process.env.ONEWORKS_RELAY_GITHUB_CLIENT_ID,
-        clientSecret: process.env.ONEWORKS_RELAY_GITHUB_CLIENT_SECRET
+        clientId: env.ONEWORKS_RELAY_GITHUB_CLIENT_ID,
+        clientSecret: env.ONEWORKS_RELAY_GITHUB_CLIENT_SECRET
       }
       : undefined,
-    google: process.env.ONEWORKS_RELAY_GOOGLE_CLIENT_ID && process.env.ONEWORKS_RELAY_GOOGLE_CLIENT_SECRET
+    google: env.ONEWORKS_RELAY_GOOGLE_CLIENT_ID && env.ONEWORKS_RELAY_GOOGLE_CLIENT_SECRET
       ? {
-        clientId: process.env.ONEWORKS_RELAY_GOOGLE_CLIENT_ID,
-        clientSecret: process.env.ONEWORKS_RELAY_GOOGLE_CLIENT_SECRET
+        clientId: env.ONEWORKS_RELAY_GOOGLE_CLIENT_ID,
+        clientSecret: env.ONEWORKS_RELAY_GOOGLE_CLIENT_SECRET
       }
       : undefined
   }
-  for (const provider of readCustomSsoClients()) {
+  for (const provider of readCustomSsoClients(env)) {
     oauth[provider.id] = provider.client
   }
   return oauth
 }
 
-export const parseRelayServerArgs = (argv: string[]): RelayServerArgs => {
+export const parseRelayServerArgs = (
+  argv: string[],
+  env: RelayConfigEnv = process.env
+): RelayServerArgs => {
   const args: RelayServerArgs = {
-    host: process.env.ONEWORKS_RELAY_HOST || '127.0.0.1',
-    port: Number(process.env.ONEWORKS_RELAY_PORT || '8788'),
-    dataPath: process.env.ONEWORKS_RELAY_DATA_PATH || DEFAULT_DATA_PATH,
-    adminToken: process.env.ONEWORKS_RELAY_ADMIN_TOKEN || '',
-    allowOrigin: process.env.ONEWORKS_RELAY_ALLOW_ORIGIN || '*',
-    publicBaseUrl: process.env.ONEWORKS_RELAY_PUBLIC_URL || undefined,
-    sessionTtlMs: readPositiveInteger(process.env.ONEWORKS_RELAY_SESSION_TTL_SECONDS, DEFAULT_SESSION_TTL_MS / 1000) *
+    host: env.ONEWORKS_RELAY_HOST || '127.0.0.1',
+    port: Number(env.ONEWORKS_RELAY_PORT || '8788'),
+    dataPath: env.ONEWORKS_RELAY_DATA_PATH || DEFAULT_DATA_PATH,
+    adminToken: env.ONEWORKS_RELAY_ADMIN_TOKEN || '',
+    allowOrigin: env.ONEWORKS_RELAY_ALLOW_ORIGIN || '*',
+    deviceMetadataSecret: env.ONEWORKS_RELAY_DEVICE_METADATA_SECRET || undefined,
+    publicBaseUrl: env.ONEWORKS_RELAY_PUBLIC_URL || undefined,
+    sessionTtlMs: readPositiveInteger(env.ONEWORKS_RELAY_SESSION_TTL_SECONDS, DEFAULT_SESSION_TTL_MS / 1000) *
       1000,
     deviceOnlineTtlMs: readPositiveInteger(
-      process.env.ONEWORKS_RELAY_DEVICE_ONLINE_TTL_SECONDS,
+      env.ONEWORKS_RELAY_DEVICE_ONLINE_TTL_SECONDS,
       DEFAULT_DEVICE_ONLINE_TTL_MS / 1000
     ) * 1000,
-    storageDriver: readStorageDriver(),
-    oauth: readOAuthClients()
+    embeddedAdminUi: true,
+    storageDriver: readStorageDriver(env),
+    oauth: readOAuthClients(env)
   }
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -91,18 +98,21 @@ export const printRelayServerHelp = (
   write(`OneWorks Relay Server ${VERSION}
 
 Usage:
-  oneworks-relay-server [--host 0.0.0.0] [--port 8788] [--data ./relay.sqlite] [--admin-token token] [--storage-driver json|sqlite]
+  oneworks-relay-server [--host 0.0.0.0] [--port 8788] [--data ./relay.sqlite] [--admin-token token] [--storage-driver json|sqlite|postgres]
 
 Environment:
   ONEWORKS_RELAY_HOST
   ONEWORKS_RELAY_PORT
   ONEWORKS_RELAY_DATA_PATH
   ONEWORKS_RELAY_ADMIN_TOKEN
+  ONEWORKS_RELAY_DEVICE_METADATA_SECRET
   ONEWORKS_RELAY_ALLOW_ORIGIN
   ONEWORKS_RELAY_PUBLIC_URL
   ONEWORKS_RELAY_DEVICE_ONLINE_TTL_SECONDS
   ONEWORKS_RELAY_SESSION_TTL_SECONDS
   ONEWORKS_RELAY_STORAGE_DRIVER
+  ONEWORKS_RELAY_POSTGRES_URL
+  ONEWORKS_RELAY_POSTGRES_POOL_MAX
   ONEWORKS_RELAY_LOG_LEVEL
   ONEWORKS_RELAY_RATE_LIMIT_ENABLED
   ONEWORKS_RELAY_RATE_LIMIT_AUTH_MAX

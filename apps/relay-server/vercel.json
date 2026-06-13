@@ -1,0 +1,39 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm build:vercel",
+  "functions": {
+    "api/relay.ts": {
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/relay?relay_path=/api/:path*"
+    },
+    {
+      "source": "/login",
+      "destination": "/api/relay?relay_path=/login"
+    },
+    {
+      "source": "/login/complete",
+      "destination": "/api/relay?relay_path=/login/complete"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/relay?relay_path=/health"
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin/index.html"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/admin/index.html"
+    },
+    {
+      "source": "/",
+      "destination": "/admin/index.html"
+    }
+  ]
+}

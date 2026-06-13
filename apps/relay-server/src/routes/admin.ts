@@ -13,6 +13,9 @@ const cleanString = (value: unknown) => typeof value === 'string' ? value.trim()
 
 const cleanEmail = (value: unknown) => cleanString(value).toLowerCase()
 
+const hasOwn = (body: Record<string, unknown>, field: string) =>
+  Object.prototype.hasOwnProperty.call(body, field)
+
 const readMaxDevices = (value: unknown) => {
   if (value == null || value === '') return undefined
   const count = Number(value)
@@ -158,7 +161,7 @@ export const handleAdminUsers = async (
       role: normalizeRole(body.role, 'member'),
       createdAt: now()
     }
-    if (Object.hasOwn(body, 'maxDevices')) {
+    if (hasOwn(body, 'maxDevices')) {
       const maxDevices = readMaxDevices(body.maxDevices)
       if (maxDevices == null && body.maxDevices != null && body.maxDevices !== '') {
         sendJson(res, 400, { error: 'User max devices must be a non-negative number.' }, args.allowOrigin)
@@ -166,7 +169,7 @@ export const handleAdminUsers = async (
       }
       user.maxDevices = maxDevices
     }
-    if (Object.hasOwn(body, 'password') && cleanString(body.password) !== '') {
+    if (hasOwn(body, 'password') && cleanString(body.password) !== '') {
       try {
         await applyPasswordInput(user, body.password, email)
       } catch (error) {
@@ -192,7 +195,7 @@ export const handleAdminUsers = async (
       sendJson(res, 404, { error: 'User not found.' }, args.allowOrigin)
       return
     }
-    if (Object.hasOwn(body, 'email')) {
+    if (hasOwn(body, 'email')) {
       const email = cleanEmail(body.email)
       if (email === '') {
         sendJson(res, 400, { error: 'User email is required.' }, args.allowOrigin)
@@ -204,8 +207,8 @@ export const handleAdminUsers = async (
       }
       user.email = email
     }
-    if (Object.hasOwn(body, 'name')) user.name = cleanString(body.name)
-    if (Object.hasOwn(body, 'password')) {
+    if (hasOwn(body, 'name')) user.name = cleanString(body.name)
+    if (hasOwn(body, 'password')) {
       try {
         await applyPasswordInput(user, body.password, user.email)
       } catch (error) {
@@ -216,7 +219,7 @@ export const handleAdminUsers = async (
         throw error
       }
     }
-    if (Object.hasOwn(body, 'role')) {
+    if (hasOwn(body, 'role')) {
       if (!isRelayRole(body.role)) {
         sendJson(res, 400, { error: 'Invalid user role.' }, args.allowOrigin)
         return
@@ -227,7 +230,7 @@ export const handleAdminUsers = async (
       }
       user.role = body.role
     }
-    if (Object.hasOwn(body, 'maxDevices')) {
+    if (hasOwn(body, 'maxDevices')) {
       const maxDevices = readMaxDevicesPatch(body.maxDevices)
       if (!maxDevices.ok) {
         sendJson(res, 400, { error: maxDevices.error }, args.allowOrigin)
@@ -235,7 +238,7 @@ export const handleAdminUsers = async (
       }
       user.maxDevices = maxDevices.value
     }
-    if (Object.hasOwn(body, 'disabled') && typeof body.disabled !== 'boolean') {
+    if (hasOwn(body, 'disabled') && typeof body.disabled !== 'boolean') {
       sendJson(res, 400, { error: 'User disabled state must be a boolean.' }, args.allowOrigin)
       return
     }
@@ -315,7 +318,7 @@ export const handleAdminInvites = async (
     }
     if (body.revoked === true && invite.revokedAt == null) invite.revokedAt = now()
     if (body.revoked === false) invite.revokedAt = undefined
-    if (Object.hasOwn(body, 'role')) {
+    if (hasOwn(body, 'role')) {
       if (!isRelayRole(body.role)) {
         sendJson(res, 400, { error: 'Invalid invite role.' }, args.allowOrigin)
         return

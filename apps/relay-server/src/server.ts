@@ -6,7 +6,6 @@ import process from 'node:process'
 import { enabledRelayAuthProviders } from './auth/sso-provider-registry.js'
 import { sendJson } from './http.js'
 import { handleAdminSsoProviders } from './routes/admin-sso-providers.js'
-import { handleAdminAsset, handleAdminPage } from './routes/admin-ui.js'
 import { handleAdminInvites, handleAdminUsers } from './routes/admin.js'
 import { handleAuthRoute } from './routes/auth.js'
 import { handleDeviceHeartbeat, handleDeviceList, handleDeviceRegister } from './routes/devices.js'
@@ -18,14 +17,16 @@ import { handleRelaySessionsRoute } from './routes/sessions.js'
 import { handleAdminSecurityTokens } from './security/admin-route.js'
 import { attachAuditLogger } from './security/audit.js'
 import { createRelayRateLimiter, sendRateLimitExceeded } from './security/rate-limit.js'
-import { createRelayStoreRepository } from './storage/repository.js'
+import { setForwardingPayloadRepository } from './session-forwarding/payloads.js'
+import type { RelayStoreRepository } from './storage/repository.js'
 import { createRelayTelemetry } from './telemetry/metrics.js'
 import type { RelayTelemetry } from './telemetry/metrics.js'
 import type { RelayServerArgs, RelayStore } from './types.js'
 import { VERSION } from './types.js'
 
+type RelayStoreRepositoryModule = typeof import('./storage/repository.js')
+
 export { parseRelayServerArgs, printRelayServerHelp } from './config.js'
-export { createRelayStoreRepository } from './storage/repository.js'
 export { readRelayStore } from './store.js'
 export type { RelayServerArgs } from './types.js'
 export { VERSION } from './types.js'
@@ -48,8 +49,115 @@ const handleInfo = (res: ServerResponse, args: RelayServerArgs, store: RelayStor
   }, args.allowOrigin)
 }
 
-export const createRelayHandler = (args: RelayServerArgs, telemetry: RelayTelemetry = createRelayTelemetry()) => {
-  const storeRepository = createRelayStoreRepository(args)
+const handleAdminAssetRoute = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  args: RelayServerArgs,
+  url: URL
+) => {
+  const { handleAdminAsset } = await import('./routes/admin-ui.js')
+  await handleAdminAsset(req, res, args, url)
+}
+
+const handleAdminPageRoute = async (req: IncomingMessage, res: ServerResponse, args: RelayServerArgs) => {
+  const { handleAdminPage } = await import('./routes/admin-ui.js')
+  handleAdminPage(req, res, args)
+}
+
+const handleRelayRequestWithStore = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  args: RelayServerArgs,
+  telemetry: RelayTelemetry,
+  storeRepository: RelayStoreRepository,
+  store: RelayStore
+) => {
+  const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
+  attachAuditLogger(req, res, args, store, url)
+
+  if (handleLoginRoute(req, res, args, store, url)) {
+    return
+  }
+  if (await handleInviteLoginRoute(req, res, args, store, storeRepository, url)) {
+    return
+  }
+  if (await handlePasswordLoginRoute(req, res, args, store, storeRepository, url)) {
+    return
+  }
+  if (await handleAuthRoute(req, res, args, store, storeRepository, url)) {
+    return
+  }
+  if (req.method === 'GET' && url.pathname === '/health') {
+    sendJson(res, 200, { ok: true, version: VERSION }, args.allowOrigin)
+    return
+  }
+  if (req.method === 'GET' && url.pathname === '/api/relay/info') {
+    handleInfo(res, args, store)
+    return
+  }
+  if (url.pathname === '/api/relay/metrics') {
+    handleRelayMetrics(req, res, args, store, telemetry)
+    return
+  }
+  if (args.embeddedAdminUi !== false && req.method === 'GET' && url.pathname.startsWith('/admin/assets/')) {
+    await handleAdminAssetRoute(req, res, args, url)
+    return
+  }
+  if (
+    args.embeddedAdminUi !== false && req.method === 'GET' &&
+    (url.pathname === '/admin' || url.pathname.startsWith('/admin/'))
+  ) {
+    await handleAdminPageRoute(req, res, args)
+    return
+  }
+  if (req.method === 'POST' && url.pathname === '/api/relay/devices/register') {
+    await handleDeviceRegister(req, res, args, store, storeRepository, telemetry)
+    return
+  }
+  if (req.method === 'POST' && url.pathname === '/api/relay/devices/heartbeat') {
+    await handleDeviceHeartbeat(req, res, args, store, storeRepository, telemetry)
+    return
+  }
+  if (req.method === 'GET' && url.pathname === '/api/relay/devices') {
+    handleDeviceList(req, res, args, store)
+    return
+  }
+  if (await handleRelaySessionsRoute(req, res, args, store, storeRepository, url, telemetry)) {
+    return
+  }
+  if (url.pathname.startsWith('/api/admin/security/tokens')) {
+    await handleAdminSecurityTokens(req, res, args, store, storeRepository, url)
+    return
+  }
+  if (url.pathname === '/api/admin/users' || url.pathname.startsWith('/api/admin/users/')) {
+    await handleAdminUsers(req, res, args, store, storeRepository, url)
+    return
+  }
+  if (url.pathname === '/api/admin/invites' || url.pathname.startsWith('/api/admin/invites/')) {
+    await handleAdminInvites(req, res, args, store, storeRepository, url)
+    return
+  }
+  if (url.pathname === '/api/admin/sso-providers' || url.pathname.startsWith('/api/admin/sso-providers/')) {
+    await handleAdminSsoProviders(req, res, args, store, storeRepository, url)
+    return
+  }
+
+  sendJson(res, 404, { error: 'Not found.' }, args.allowOrigin)
+}
+
+export const createRelayHandler = (
+  args: RelayServerArgs,
+  telemetry: RelayTelemetry = createRelayTelemetry(),
+  storeRepository?: RelayStoreRepository
+) => {
+  let defaultStoreRepository: Promise<RelayStoreRepository> | undefined
+  const loadStoreRepository = async () => {
+    if (storeRepository != null) return storeRepository
+    defaultStoreRepository ??= import(`./storage/${'repository.js'}`).then(module =>
+      (module as RelayStoreRepositoryModule).createRelayStoreRepository(args)
+    )
+    return await defaultStoreRepository
+  }
   const rateLimiter = createRelayRateLimiter()
 
   return async (req: IncomingMessage, res: ServerResponse) => {
@@ -65,74 +173,23 @@ export const createRelayHandler = (args: RelayServerArgs, telemetry: RelayTeleme
       return
     }
 
-    const store = await storeRepository.read()
-    attachAuditLogger(req, res, args, store, url)
+    const activeStoreRepository = await loadStoreRepository()
+    setForwardingPayloadRepository(activeStoreRepository.forwardingPayloads)
 
-    if (handleLoginRoute(req, res, args, store, url)) {
+    if (activeStoreRepository.withStore != null) {
+      await activeStoreRepository.withStore(async (store, requestRepository) => {
+        await handleRelayRequestWithStore(req, res, args, telemetry, requestRepository, store)
+      })
       return
     }
-    if (await handleInviteLoginRoute(req, res, args, store, storeRepository, url)) {
-      return
-    }
-    if (await handlePasswordLoginRoute(req, res, args, store, storeRepository, url)) {
-      return
-    }
-    if (await handleAuthRoute(req, res, args, store, storeRepository, url)) {
-      return
-    }
-    if (req.method === 'GET' && url.pathname === '/health') {
-      sendJson(res, 200, { ok: true, version: VERSION }, args.allowOrigin)
-      return
-    }
-    if (req.method === 'GET' && url.pathname === '/api/relay/info') {
-      handleInfo(res, args, store)
-      return
-    }
-    if (url.pathname === '/api/relay/metrics') {
-      handleRelayMetrics(req, res, args, store, telemetry)
-      return
-    }
-    if (req.method === 'GET' && url.pathname.startsWith('/admin/assets/')) {
-      await handleAdminAsset(req, res, args, url)
-      return
-    }
-    if (req.method === 'GET' && (url.pathname === '/admin' || url.pathname.startsWith('/admin/'))) {
-      handleAdminPage(req, res, args)
-      return
-    }
-    if (req.method === 'POST' && url.pathname === '/api/relay/devices/register') {
-      await handleDeviceRegister(req, res, args, store, storeRepository, telemetry)
-      return
-    }
-    if (req.method === 'POST' && url.pathname === '/api/relay/devices/heartbeat') {
-      await handleDeviceHeartbeat(req, res, args, store, storeRepository, telemetry)
-      return
-    }
-    if (req.method === 'GET' && url.pathname === '/api/relay/devices') {
-      handleDeviceList(req, res, args, store)
-      return
-    }
-    if (await handleRelaySessionsRoute(req, res, args, store, storeRepository, url, telemetry)) {
-      return
-    }
-    if (url.pathname.startsWith('/api/admin/security/tokens')) {
-      await handleAdminSecurityTokens(req, res, args, store, storeRepository, url)
-      return
-    }
-    if (url.pathname === '/api/admin/users' || url.pathname.startsWith('/api/admin/users/')) {
-      await handleAdminUsers(req, res, args, store, storeRepository, url)
-      return
-    }
-    if (url.pathname === '/api/admin/invites' || url.pathname.startsWith('/api/admin/invites/')) {
-      await handleAdminInvites(req, res, args, store, storeRepository, url)
-      return
-    }
-    if (url.pathname === '/api/admin/sso-providers' || url.pathname.startsWith('/api/admin/sso-providers/')) {
-      await handleAdminSsoProviders(req, res, args, store, storeRepository, url)
-      return
-    }
-
-    sendJson(res, 404, { error: 'Not found.' }, args.allowOrigin)
+    await handleRelayRequestWithStore(
+      req,
+      res,
+      args,
+      telemetry,
+      activeStoreRepository,
+      await activeStoreRepository.read()
+    )
   }
 }
 
@@ -151,16 +208,26 @@ export const createRelayServer = (args: RelayServerArgs): Server => {
   })
 }
 
+const isFileStorageDriver = (driver: RelayServerArgs['storageDriver']) =>
+  driver == null || driver === 'json' || driver === 'sqlite'
+
+const displayDataLocation = (args: RelayServerArgs) => {
+  if (args.storageDriver === 'postgres') {
+    return args.dataPath.replace(/:\/\/([^:@]+):([^@]+)@/, '://$1:***@') || 'postgres'
+  }
+  return args.dataPath
+}
+
 export const startRelayServer = (args: RelayServerArgs) => {
   const resolvedArgs = {
     ...args,
-    dataPath: resolve(args.dataPath)
+    dataPath: isFileStorageDriver(args.storageDriver) ? resolve(args.dataPath) : args.dataPath
   }
   const server = createRelayServer(resolvedArgs)
   server.listen(resolvedArgs.port, resolvedArgs.host, () => {
     process.stdout.write(`[relay-server] listening on http://${resolvedArgs.host}:${resolvedArgs.port}\n`)
     process.stdout.write(`[relay-server] storage ${resolvedArgs.storageDriver ?? 'json'}\n`)
-    process.stdout.write(`[relay-server] data ${resolvedArgs.dataPath}\n`)
+    process.stdout.write(`[relay-server] data ${displayDataLocation(resolvedArgs)}\n`)
     if (resolvedArgs.adminToken === '') {
       process.stdout.write('[relay-server] admin token is not set; admin endpoints and pairing are open.\n')
     }

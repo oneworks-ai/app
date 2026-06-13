@@ -20,9 +20,58 @@ pnpm -C apps/relay-admin dev
 pnpm -C apps/relay-admin test
 pnpm -C apps/relay-admin typecheck
 pnpm -C apps/relay-admin build
+pnpm -C apps/relay-admin build:platform
 ```
 
 The development server is a normal Vite React app with HMR. Open `/admin`, `/admin/users`, `/admin/profile`, `/admin/invites`, or `/admin/sso` on the Vite origin during UI work. In dev, `/api/*` proxies to `http://127.0.0.1:48888` by default; set `ONEWORKS_RELAY_ADMIN_DEV_PROXY_TARGET` when the relay server uses another origin. `/login` and `/login/complete` are generated locally by the Vite dev server from relay-server source; `/login` loads `src/login/main.tsx` with HMR, while relay-server shell/config changes trigger a full reload on the Vite origin. The production build must use Vite. `vite.config.ts` fixes the main output filenames to `admin.js`, `login.js`, and `admin.css`; shared hashed JS chunks are served from the same `/admin/assets/` directory.
+
+## Standalone Pages
+
+The recommended Vercel deployment is the single-project Relay Server build from `apps/relay-server`: `pnpm build:vercel` builds this Admin app and serves it at the same origin under `/admin`. For product users, prefer the managed OneWorks Relay service unless they explicitly choose private deployment.
+
+Relay Admin can also run as a standalone static Pages/Vercel app while the Relay Server remains a separate persistent upstream. This mode keeps the browser on one public origin and proxies the Relay routes that need server behavior:
+
+- `/api/*`
+- `/login`
+- `/login/complete`
+
+Build the platform output with:
+
+```bash
+pnpm -C apps/relay-admin build:platform
+```
+
+The platform build writes:
+
+- `dist/admin/index.html`: React Router history shell for `/admin/*`.
+- `dist/admin/assets/*`: `admin.js`, `login.js`, CSS, chunks, and favicons.
+- `dist/_redirects`: Cloudflare Pages SPA fallback rules.
+
+### Standalone Vercel
+
+Use `apps/relay-admin` as the Vercel project root. `vercel.json` runs `pnpm build:platform`, serves `dist`, rewrites `/admin/*` to the static shell, and sends `/api/*`, `/login`, and `/login/complete` through `api/proxy.ts`.
+
+Use this mode only for private deployments where the user already has a separate Relay Server origin. In Vercel-only private deployments, prefer the single-project `apps/relay-server` shape so Admin and API share one domain.
+
+Set one of these environment variables in Vercel:
+
+```bash
+ONEWORKS_RELAY_ADMIN_PROXY_TARGET=https://relay.example.com
+```
+
+### Cloudflare Pages
+
+Use `apps/relay-admin` as the Pages project root. Set the build command to `pnpm build:platform` and the output directory to `dist`. `functions/api/[[path]].ts`, `functions/login.ts`, and `functions/login/complete.ts` proxy the same Relay routes through Cloudflare Pages Functions.
+
+For Cloudflare private deployments, pair this Pages project with the `apps/relay-server` Worker + Durable Object deployment. The Pages domain, Worker name, and Cloudflare account subdomain belong to the user's deployment account; keep committed docs on placeholder domains.
+
+Set one of these environment variables in Cloudflare Pages:
+
+```bash
+ONEWORKS_RELAY_ADMIN_PROXY_TARGET=https://relay.example.com
+```
+
+For SSO and password-login redirects to stay on the Admin domain, configure the upstream Relay Server with `ONEWORKS_RELAY_PUBLIC_URL` set to the Vercel or Cloudflare custom domain, for example `https://relay-admin.example.com`.
 
 ## Source Layout
 
