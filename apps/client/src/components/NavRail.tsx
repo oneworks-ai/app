@@ -78,6 +78,11 @@ export interface NavRailWindowBarAction {
   activeIcon?: IconAsset
   activeLabel?: string
   activeTitle?: string
+  badge?: {
+    animated?: boolean
+    label?: string
+    tone: 'error' | 'muted' | 'primary' | 'warning'
+  }
   danger?: boolean
   disabled?: boolean
   previewOnHover?: 'sidebar'
@@ -171,7 +176,8 @@ export function NavRailWindowBar({
   const renderWindowBarAction = (action: NavRailWindowBarAction, className: string) => {
     const isActive = action.active === true
     const resolvedIcon = isActive && action.activeIcon != null ? action.activeIcon : action.icon
-    const resolvedLabel = isActive ? action.activeLabel ?? action.label : action.label
+    const baseLabel = isActive ? action.activeLabel ?? action.label : action.label
+    const resolvedLabel = action.badge?.label == null ? baseLabel : `${baseLabel} · ${action.badge.label}`
     const resolvedTitle = isActive
       ? action.activeTitle ?? action.activeLabel ?? action.title ?? action.label
       : action.title ?? action.label
@@ -193,7 +199,8 @@ export function NavRailWindowBar({
       <span
         className={[
           'nav-rail-window-action-visual',
-          progress == null ? '' : 'has-progress'
+          progress == null ? '' : 'has-progress',
+          action.badge == null ? '' : 'has-badge'
         ].filter(Boolean).join(' ')}
         style={progress == null
           ? undefined
@@ -208,6 +215,17 @@ export function NavRailWindowBar({
           icon: resolvedIcon,
           materialFilled: false
         })}
+        {action.badge != null && (
+          <span
+            className={[
+              'nav-rail-window-action-badge',
+              `is-${action.badge.tone}`,
+              action.badge.animated === true ? 'is-animated' : ''
+            ].filter(Boolean).join(' ')}
+            aria-hidden='true'
+            title={action.badge.label}
+          />
+        )}
       </span>
     )
 

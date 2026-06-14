@@ -45,6 +45,14 @@ import { formatInteractionPanelShortcut } from '#~/components/chat/interaction-p
 import { buildInteractionPanelWebsiteResources } from '#~/components/chat/interaction-panel/interaction-panel-website-resources'
 import { useInteractionPanelWorkspaceUrlKeys } from '#~/components/chat/interaction-panel/use-interaction-panel-workspace-url-keys'
 import { useInteractionTerminalPanes } from '#~/components/chat/interaction-panel/use-interaction-terminal-panes'
+import {
+  getSessionNotificationFingerprint,
+  isSessionNotificationMarkedRead,
+  readSessionNotificationReadMarker,
+  resolveSessionNotificationIndicator,
+  writeSessionNotificationReadMarker
+} from '#~/components/chat/session-notification-indicator'
+import type { SessionNotificationReadMarker } from '#~/components/chat/session-notification-indicator'
 import { parseWorkbenchDrawerViewMenuKey, toWorkbenchDrawerViewMenuKey } from '#~/components/chat/workbench-create-menu'
 import type {
   ChatWorkspaceDrawerAgentApprovals,
@@ -340,6 +348,9 @@ export function ChatRouteShell({
   const [isSessionDockPreviewPinned, setIsSessionDockPreviewPinned] = useState(false)
   const [workspaceDrawerWidth, setWorkspaceDrawerWidthState] = useState(readWorkspaceDrawerWidth)
   const [runCommandTaskStatuses, setRunCommandTaskStatuses] = useState<InteractionPanelRunCommandTaskStatus[]>([])
+  const [sessionNotificationReadMarker, setSessionNotificationReadMarker] = useState<
+    SessionNotificationReadMarker | null
+  >(() => readSessionNotificationReadMarker(workspaceSessionId ?? session?.id))
   const resolvedWorkspaceSession = workspaceSession ?? session
   const resolvedWorkspaceSessionId = workspaceSessionId ?? resolvedWorkspaceSession?.id
   const sessionWorkspaceRootPath = sessionInfo?.type === 'init' ? sessionInfo.cwd.trim() : ''
@@ -349,6 +360,32 @@ export function ChatRouteShell({
   const fullscreenSessionWindowBarLabel = resolvedWorkspaceSession?.title?.trim() ||
     displayTitle?.trim() ||
     t('navRail.conversations')
+  const sessionNotificationFingerprint = resolvedWorkspaceSession == null
+    ? ''
+    : getSessionNotificationFingerprint(resolvedWorkspaceSession)
+  const sessionNotificationRead = isSessionNotificationMarkedRead(
+    resolvedWorkspaceSession,
+    sessionNotificationReadMarker
+  )
+  const sessionNotificationIndicator = useMemo(() =>
+    resolveSessionNotificationIndicator(resolvedWorkspaceSession, {
+      completedRead: sessionNotificationRead
+    }), [
+    resolvedWorkspaceSession,
+    sessionNotificationFingerprint,
+    sessionNotificationRead
+  ])
+  const sessionNotificationBadge = useMemo(() => {
+    if (sessionNotificationIndicator == null) return undefined
+
+    return {
+      ...(sessionNotificationIndicator.animated == null
+        ? {}
+        : { animated: sessionNotificationIndicator.animated }),
+      label: t(`common.status.${sessionNotificationIndicator.status}`),
+      tone: sessionNotificationIndicator.tone
+    }
+  }, [sessionNotificationIndicator, t])
   const terminalPanes = useInteractionTerminalPanes(terminalSessionId, t)
   const bottomPanel = useChatRouteBottomPanel({
     isTerminalOpen,
@@ -460,6 +497,33 @@ export function ChatRouteShell({
     setIsSessionDockPreviewOpen(true)
   }, [isSessionDockPreviewPinned])
 
+  const markSessionNotificationRead = useCallback(() => {
+    if (resolvedWorkspaceSession == null) return
+
+    const marker = writeSessionNotificationReadMarker(resolvedWorkspaceSession)
+    if (marker != null) {
+      setSessionNotificationReadMarker(marker)
+    }
+  }, [resolvedWorkspaceSession, sessionNotificationFingerprint])
+
+  useEffect(() => {
+    setSessionNotificationReadMarker(readSessionNotificationReadMarker(resolvedWorkspaceSessionId))
+  }, [resolvedWorkspaceSessionId])
+
+  useEffect(() => {
+    if (resolvedWorkspaceSession == null) return
+    if (isWorkspaceDrawerFullscreen && !isSessionDockPreviewOpen && !isSessionDockPreviewPinned) return
+
+    markSessionNotificationRead()
+  }, [
+    isSessionDockPreviewOpen,
+    isSessionDockPreviewPinned,
+    isWorkspaceDrawerFullscreen,
+    markSessionNotificationRead,
+    resolvedWorkspaceSession,
+    sessionNotificationFingerprint
+  ])
+
   useEffect(() => {
     if (isSessionDockPreviewOpen) {
       setIsSessionDockPreviewRendered(true)
@@ -550,6 +614,7 @@ export function ChatRouteShell({
         : [
           {
             active: isSessionDockPreviewPinned,
+            badge: sessionNotificationBadge,
             icon: 'chat_bubble',
             key: 'chat-session',
             label: fullscreenSessionWindowBarLabel,
@@ -577,6 +642,7 @@ export function ChatRouteShell({
     isSessionDockPreviewPinned,
     isWorkspaceDrawerFullscreen,
     resolvedWorkspaceSessionId,
+    sessionNotificationBadge,
     setRouteWindowBar
   ])
 

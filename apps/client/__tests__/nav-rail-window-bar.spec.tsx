@@ -95,7 +95,7 @@ const renderWindowBar = (
 ) => {
   shortcutCaptures.length = 0
 
-  renderToStaticMarkup(
+  return renderToStaticMarkup(
     <NavRailWindowBar
       isMacShortcutLayout={false}
       sidebarCollapsed
@@ -143,5 +143,23 @@ describe('nav rail window bar', () => {
     shortcutCaptures.find(capture => capture.actionKey === 'sidebar-preview')?.onPointerEnter?.()
 
     expect(calls).toEqual(['open-sidebar'])
+  })
+
+  it('renders notification badges on collapsed window actions', () => {
+    const html = renderWindowBar({
+      collapsedActions: [{
+        badge: {
+          animated: true,
+          label: 'Waiting',
+          tone: 'warning'
+        },
+        icon: 'chat',
+        key: 'session-preview',
+        label: 'Session preview'
+      }]
+    })
+
+    expect(html).toContain('aria-label="Session preview · Waiting"')
+    expect(html).toContain('nav-rail-window-action-badge is-warning is-animated')
   })
 })
