@@ -6,7 +6,7 @@ const nodeRequire = createRequire(__filename)
 
 const ONE_WORKS_DEVTOOLS_PATCH_SCRIPT_PATH = 'oneworks-devtools-patch.js'
 const ONE_WORKS_DEVTOOLS_STYLE_PATH = 'oneworks-devtools.css'
-export const ONE_WORKS_DEVTOOLS_ASSET_VERSION = '20260614zo'
+export const ONE_WORKS_DEVTOOLS_ASSET_VERSION = '20260614zv'
 
 const oneWorksDevtoolsStyle = `
 html {
@@ -27,13 +27,13 @@ html {
   );
 }
 
-.tabbed-pane-header[aria-label="Main toolbar"] {
+.tabbed-pane-header {
   background: var(--oneworks-devtools-toolbar-bg) !important;
   box-sizing: border-box !important;
   min-height: var(--oneworks-devtools-toolbar-total-height) !important;
 }
 
-.tabbed-pane-header[aria-label="Main toolbar"] .toolbar-shadow,
+.tabbed-pane-header .toolbar-shadow,
 .toolbar-shadow.wrappable.toolbar-grow-vertical {
   box-sizing: border-box !important;
   min-height: var(--oneworks-devtools-toolbar-total-height) !important;
@@ -43,7 +43,7 @@ html {
   gap: 4px !important;
 }
 
-.tabbed-pane-header[aria-label="Main toolbar"] {
+.tabbed-pane-header {
   display: flex !important;
   align-items: center !important;
   box-sizing: border-box !important;
@@ -51,30 +51,28 @@ html {
   padding: 0 10px !important;
 }
 
-.tabbed-pane-header[aria-label="Main toolbar"] .tabbed-pane-header-tabs {
-  height: var(--oneworks-devtools-toolbar-total-height) !important;
-  min-height: var(--oneworks-devtools-toolbar-total-height) !important;
-  background: transparent !important;
-}
-
-.tabbed-pane-header[aria-label="Main toolbar"] .tabbed-pane-header-tab {
+.tabbed-pane-header .tabbed-pane-header-tab {
   box-sizing: border-box !important;
   height: var(--oneworks-devtools-toolbar-total-height) !important;
   min-height: var(--oneworks-devtools-toolbar-total-height) !important;
-  padding: 0 10px !important;
   background: transparent !important;
   line-height: var(--oneworks-devtools-toolbar-icon-size) !important;
 }
 
-.tabbed-pane-header[aria-label="Main toolbar"] .tabbed-pane-header-tab.selected,
-.tabbed-pane-header[aria-label="Main toolbar"] .tabbed-pane-header-tab:hover,
-.tabbed-pane-header[aria-label="Main toolbar"] .tabbed-pane-header-tab:focus-visible {
+.tabbed-pane-header .tabbed-pane-header-tab.selected,
+.tabbed-pane-header .tabbed-pane-header-tab:hover,
+.tabbed-pane-header .tabbed-pane-header-tab:focus-visible {
   background: transparent !important;
 }
 
-.tabbed-pane-header[aria-label="Main toolbar"] .tabbed-pane-header-tab-title {
+.tabbed-pane-header .tabbed-pane-header-tab-title {
   height: var(--oneworks-devtools-toolbar-icon-size) !important;
   line-height: var(--oneworks-devtools-toolbar-icon-size) !important;
+}
+
+.tabbed-pane-header .tabbed-pane-header-tabs-drop-down-container {
+  height: var(--oneworks-devtools-toolbar-total-height) !important;
+  min-height: var(--oneworks-devtools-toolbar-total-height) !important;
 }
 
 .tabbed-pane-left-toolbar.toolbar-shadow {
@@ -89,7 +87,7 @@ html {
   padding-block: var(--oneworks-devtools-toolbar-padding-block) !important;
 }
 
-.tabbed-pane-header[aria-label="Main toolbar"] .toolbar-shadow {
+.tabbed-pane-header .toolbar-shadow {
   display: flex !important;
   align-items: center !important;
   gap: 4px !important;
@@ -109,7 +107,7 @@ html {
   padding-block: var(--oneworks-devtools-toolbar-padding-block) !important;
 }
 
-.tabbed-pane-header[aria-label="Main toolbar"] .toolbar-shadow .toolbar,
+.tabbed-pane-header .toolbar-shadow .toolbar,
 .toolbar-shadow.wrappable.toolbar-grow-vertical .toolbar {
   display: flex !important;
   align-items: center !important;
@@ -148,7 +146,7 @@ html {
 
 .toolbar-button.toolbar-has-glyph,
 button.toolbar-button.toolbar-has-glyph,
-.tabbed-pane-header[aria-label="Main toolbar"] .tabbed-pane-header-tab devtools-icon {
+.tabbed-pane-header .tabbed-pane-header-tab devtools-icon {
   box-sizing: border-box !important;
 }
 
@@ -182,7 +180,7 @@ button.toolbar-button.toolbar-has-glyph {
 .toolbar-button.toolbar-has-glyph .toolbar-glyph,
 .toolbar-button.toolbar-has-glyph .toolbar-button-icon,
 devtools-icon.toolbar-button-icon,
-.tabbed-pane-header[aria-label="Main toolbar"] .tabbed-pane-header-tab devtools-icon {
+.tabbed-pane-header .tabbed-pane-header-tab devtools-icon {
   --icon-size: var(--oneworks-devtools-toolbar-icon-size) !important;
   width: var(--oneworks-devtools-toolbar-icon-size) !important;
   min-width: var(--oneworks-devtools-toolbar-icon-size) !important;
