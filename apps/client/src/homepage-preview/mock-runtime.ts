@@ -80,6 +80,11 @@ const HOMEPAGE_PREVIEW_QUERY = 'owPreview'
 const HOMEPAGE_PREVIEW_QUERY_VALUE = 'homepage'
 const HOMEPAGE_PREVIEW_MESSAGE = 'oneworks:homepage-preview'
 const HOMEPAGE_PREVIEW_SOURCE = 'oneworks-homepage'
+const OFFICIAL_HOMEPAGE_PREVIEW_HOSTS = new Set([
+  'oneworks.cloud',
+  'www.oneworks.cloud',
+  'oneworks-ai.github.io'
+])
 const HOMEPAGE_PREVIEW_RUNTIME_STORAGE_KEY = 'oneworks:homepage-preview-runtime'
 const DEFAULT_SESSION_ID = 'homepage-preview'
 const ROOM_HOST_SESSION_ID = 'homepage-room-host'
@@ -2456,7 +2461,7 @@ const isAllowedPreviewOrigin = (origin: string) => {
   if (isLocalPreviewOrigin(origin)) return true
   try {
     const originUrl = new URL(origin)
-    return originUrl.hostname === 'oneworks-ai.github.io'
+    return OFFICIAL_HOMEPAGE_PREVIEW_HOSTS.has(originUrl.hostname)
   } catch {
     return false
   }
