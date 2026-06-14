@@ -93,6 +93,13 @@ export const classifyAuditTarget = (req: IncomingMessage, url: URL) => {
       resource: 'password'
     }
   }
+  const passkeyMatch = /^\/api\/auth\/passkey\/(register|login)\/(options|verify)$/.exec(url.pathname)
+  if (req.method === 'POST' && passkeyMatch != null) {
+    return {
+      action: `auth.passkey.${passkeyMatch[1]}.${passkeyMatch[2]}`,
+      resource: 'passkey'
+    }
+  }
   if (req.method === 'POST' && url.pathname === '/api/relay/devices/register') {
     return {
       action: 'device.register',

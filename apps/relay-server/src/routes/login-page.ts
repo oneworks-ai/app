@@ -175,6 +175,7 @@ export const renderRelayLoginPage = (input: RelayLoginPageInput) => {
   return loginShell(
     t,
     buildLoginClientConfig({
+      passkey: input.args.passkey,
       providers: input.providers,
       redirectUri,
       startUrlForProvider: providerId => buildProviderStartUrl(input, providerId, redirectUri),

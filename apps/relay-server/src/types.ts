@@ -13,6 +13,7 @@ export interface RelayServerArgs {
   help?: boolean
   host: string
   oauth?: Record<string, RelayOAuthClient | undefined>
+  passkey?: RelayPasskeyConfig
   port: number
   publicBaseUrl?: string
   sessionTtlMs?: number
@@ -23,10 +24,21 @@ export type RelayAuthProvider = string
 export type RelayEmailProviderKind = 'disabled' | 'resend'
 export type RelayEmailPurpose = 'email-verification' | 'invite' | 'login'
 export type RelayLocale = 'en' | 'zh-CN'
+export type RelayPasskeyChallengeKind = 'authentication' | 'registration'
+export type RelayRegistrationMode = 'admin_created_only' | 'email_verified' | 'invite_required'
 export type RelayRole = 'owner' | 'admin' | 'member' | 'viewer'
 export type RelaySsoProviderType = 'oauth2' | 'oidc'
 export type RelayStorageDriver = 'cloudflare-do' | 'json' | 'postgres' | 'sqlite'
 export type RelayTurnstileMode = 'auto' | 'off' | 'required'
+
+export interface RelayPasskeyConfig {
+  enabled: boolean
+  origin?: string
+  registrationMode: RelayRegistrationMode
+  rpId?: string
+  rpName: string
+  timeoutMs: number
+}
 
 export interface RelayOAuthClient {
   authorizationUrl?: string
@@ -102,6 +114,34 @@ export interface RelayUser {
   role: RelayRole
   createdAt: string
   updatedAt?: string
+}
+
+export interface RelayPasskeyCredential {
+  backedUp: boolean
+  counter: number
+  createdAt: string
+  deviceType: string
+  id: string
+  lastUsedAt?: string
+  name?: string
+  publicKey: string
+  transports?: string[]
+  updatedAt?: string
+  userId: string
+}
+
+export interface RelayPasskeyChallenge {
+  challenge: string
+  createdAt: string
+  emailChallengeId?: string
+  emailHash?: string
+  expiresAt: string
+  id: string
+  inviteCode?: string
+  kind: RelayPasskeyChallengeKind
+  origin: string
+  rpId: string
+  userId?: string
 }
 
 export interface RelayInvite {
@@ -237,6 +277,8 @@ export interface RelayStore {
   users: RelayUser[]
   invites: RelayInvite[]
   ssoProviders: RelaySsoProvider[]
+  passkeyChallenges: RelayPasskeyChallenge[]
+  passkeys: RelayPasskeyCredential[]
   devices: RelayDevice[]
   deviceSessions: RelayDeviceSession[]
   forwardingJobs: RelayForwardingJob[]

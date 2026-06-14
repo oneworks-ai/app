@@ -8,7 +8,7 @@
 - `src/app/`：React Router 页面 shell、全局样式与顶层装配；通过 `@vibe@oneworks/route-layout` 的 `AppShellFrame` 复用主应用宿主壳能力，不要复制一套 sidebar / mobile drawer / route container 交互。
 - `src/features/dashboard/`：管理台数据编排、route 页面切换、状态条、统计和 snapshot 聚合。
 - `src/features/auth/`：Relay 登录回跳 token 消费、管理端 session token 本地保存和 `/api/auth/me` 客户端。
-- `src/login/`：Relay `/login` 页面的 React + AntD 入口；通过 relay-server 注入的 JSON config 渲染最近账号、邀请码表单和 SSO provider 按钮。
+- `src/login/`：Relay `/login` 页面的 React + AntD 入口；通过 relay-server 注入的 JSON config 渲染最近账号、passkey 登录 / 注册、邀请码表单和 SSO provider 按钮。Passkey WebAuthn 调用只放在这里的登录 UI，邮箱验证码、邀请码策略、credential 存储和 session 发放由 `apps/relay-server/src/auth/passkeys.ts` 与 `src/routes/passkeys.ts` 处理。
 - `src/platform/`、`api/`、`functions/`：独立 Vercel / Cloudflare Pages 静态部署的同源代理入口；只转发 `/api/*`、`/login` 和 `/login/complete` 到真实 Relay Server，不在 Admin 里重新实现 Relay API。Vercel 推荐部署形态优先看 `apps/relay-server` 的单项目 `/admin` 构建。
 - `src/features/users/`：用户列表、用户表单、用户 API 和表单解析。
 - `src/features/invites/`：邀请码列表、邀请码表单、邀请码 API 和表单解析。

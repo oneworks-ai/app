@@ -18,6 +18,9 @@ import type {
   RelayForwardingJobStatus,
   RelayInvite,
   RelayOAuthState,
+  RelayPasskeyChallenge,
+  RelayPasskeyChallengeKind,
+  RelayPasskeyCredential,
   RelaySession,
   RelayStore,
   RelayUser
@@ -33,6 +36,8 @@ const defaultStore = (): RelayStore => ({
   users: [],
   invites: [],
   ssoProviders: [],
+  passkeyChallenges: [],
+  passkeys: [],
   devices: [],
   deviceSessions: [],
   forwardingJobs: [],
@@ -60,6 +65,77 @@ const normalizeUser = (value: Record<string, unknown>): RelayUser => ({
   createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
   updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined
 })
+
+const normalizeStringArray = (value: unknown) => (
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map(item => item.trim())
+    : undefined
+)
+
+const normalizePasskeyCredential = (value: Record<string, unknown>): RelayPasskeyCredential | undefined => {
+  const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
+  const publicKey = typeof value.publicKey === 'string' && value.publicKey.trim() !== ''
+    ? value.publicKey.trim()
+    : undefined
+  const userId = typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined
+  if (id == null || publicKey == null || userId == null) return undefined
+  return {
+    backedUp: value.backedUp === true,
+    counter: Number.isFinite(Number(value.counter)) ? Math.max(0, Math.trunc(Number(value.counter))) : 0,
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    deviceType: typeof value.deviceType === 'string' && value.deviceType.trim() !== ''
+      ? value.deviceType.trim()
+      : 'unknown',
+    id,
+    lastUsedAt: typeof value.lastUsedAt === 'string' && value.lastUsedAt.trim() !== ''
+      ? value.lastUsedAt.trim()
+      : undefined,
+    name: typeof value.name === 'string' && value.name.trim() !== '' ? value.name.trim() : undefined,
+    publicKey,
+    transports: normalizeStringArray(value.transports),
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined,
+    userId
+  }
+}
+
+const passkeyChallengeKinds = new Set<RelayPasskeyChallengeKind>(['authentication', 'registration'])
+
+const normalizePasskeyChallenge = (value: Record<string, unknown>): RelayPasskeyChallenge | undefined => {
+  const challenge = typeof value.challenge === 'string' && value.challenge.trim() !== ''
+    ? value.challenge.trim()
+    : undefined
+  const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
+  const kind = typeof value.kind === 'string' && passkeyChallengeKinds.has(value.kind as RelayPasskeyChallengeKind)
+    ? value.kind as RelayPasskeyChallengeKind
+    : undefined
+  const expiresAt = typeof value.expiresAt === 'string' && value.expiresAt.trim() !== ''
+    ? value.expiresAt.trim()
+    : undefined
+  const origin = typeof value.origin === 'string' && value.origin.trim() !== '' ? value.origin.trim() : undefined
+  const rpId = typeof value.rpId === 'string' && value.rpId.trim() !== '' ? value.rpId.trim() : undefined
+  if (challenge == null || id == null || kind == null || expiresAt == null || origin == null || rpId == null) {
+    return undefined
+  }
+  return {
+    challenge,
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    emailChallengeId: typeof value.emailChallengeId === 'string' && value.emailChallengeId.trim() !== ''
+      ? value.emailChallengeId.trim()
+      : undefined,
+    emailHash: typeof value.emailHash === 'string' && value.emailHash.trim() !== ''
+      ? value.emailHash.trim()
+      : undefined,
+    expiresAt,
+    id,
+    inviteCode: typeof value.inviteCode === 'string' && value.inviteCode.trim() !== ''
+      ? value.inviteCode.trim()
+      : undefined,
+    kind,
+    origin,
+    rpId,
+    userId: typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined
+  }
+}
 
 const normalizeInvite = (value: Record<string, unknown>): RelayInvite => ({
   code: typeof value.code === 'string' && value.code.trim() !== '' ? value.code.trim() : createToken(),
@@ -305,6 +381,16 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
     users: Array.isArray(store.users) ? store.users.filter(isRecord).map(normalizeUser) : [],
     invites: Array.isArray(store.invites) ? store.invites.filter(isRecord).map(normalizeInvite) : [],
     ssoProviders: normalizeRelaySsoProviders(store.ssoProviders),
+    passkeyChallenges: Array.isArray(store.passkeyChallenges)
+      ? store.passkeyChallenges.filter(isRecord).map(normalizePasskeyChallenge).filter((
+        value
+      ): value is RelayPasskeyChallenge => value != null)
+      : [],
+    passkeys: Array.isArray(store.passkeys)
+      ? store.passkeys.filter(isRecord).map(normalizePasskeyCredential).filter((
+        value
+      ): value is RelayPasskeyCredential => value != null)
+      : [],
     devices: Array.isArray(store.devices) ? store.devices.filter(isRecord).map(normalizeDevice) : [],
     deviceSessions: Array.isArray(store.deviceSessions)
       ? store.deviceSessions.filter(isRecord).map(normalizeDeviceSession).filter((value): value is RelayDeviceSession =>

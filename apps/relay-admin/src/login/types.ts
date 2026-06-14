@@ -13,6 +13,13 @@ export interface RelayLoginMessages {
   passwordMismatch: string
   passwordPlaceholder: string
   passwordRequired: string
+  passkeyCodePlaceholder: string
+  passkeyNamePlaceholder: string
+  passkeyRegister: string
+  passkeyRegisterHint: string
+  passkeySendCode: string
+  passkeySignIn: string
+  passkeyTitle: string
   recentAccounts: string
   rememberAccount: string
   registerWithInvite: string
@@ -21,6 +28,15 @@ export interface RelayLoginMessages {
   signInWithPassword: string
   signInWithSso: string
   signingIn: string
+}
+
+export interface RelayLoginPasskeyConfig {
+  enabled: boolean
+  loginOptionsUrl: string
+  loginVerifyUrl: string
+  registrationMode: 'admin_created_only' | 'email_verified' | 'invite_required'
+  registerOptionsUrl: string
+  registerVerifyUrl: string
 }
 
 export interface RelayLoginProviderConfig {
@@ -32,10 +48,12 @@ export interface RelayLoginProviderConfig {
 }
 
 export interface RelayLoginConfig {
+  emailVerificationSendUrl: string
   inviteLoginUrl: string
   locale: 'en' | 'zh-CN'
   messages: RelayLoginMessages
   passwordLoginUrl: string
+  passkey: RelayLoginPasskeyConfig
   providers: RelayLoginProviderConfig[]
   redirectUri: string
 }

@@ -41,6 +41,12 @@ Environment variables:
 - `ONEWORKS_RELAY_EMAIL_RISK_DAILY_BUDGET` / `ONEWORKS_RELAY_EMAIL_RISK_MONTHLY_BUDGET`: global email send circuit breakers, default `500` daily and `10000` monthly
 - `ONEWORKS_RELAY_EMAIL_DOMAIN_ALLOWLIST` / `ONEWORKS_RELAY_EMAIL_DOMAIN_BLOCKLIST`: comma or whitespace separated email domain overrides. Allowlist only bypasses domain blocking; it does not bypass Turnstile, rate limits, or budgets.
 - `ONEWORKS_RELAY_EMAIL_DISPOSABLE_BLOCKLIST_ENABLED`: set to `0`, `false`, `no`, or `off` to disable the built-in high-confidence disposable domain blocklist
+- `ONEWORKS_RELAY_PASSKEY_ENABLED`: set to `0`, `false`, `no`, or `off` to disable passkey login and registration. Passkey support is enabled by default.
+- `ONEWORKS_RELAY_REGISTRATION_MODE`: passkey self-registration policy, default `invite_required`. Use `email_verified` to allow registration after email-code verification without an invite, or `admin_created_only` to disable new account self-registration while still allowing existing users to bind passkeys with email verification.
+- `ONEWORKS_RELAY_PASSKEY_RP_NAME`: WebAuthn relying party display name, default `One Works`.
+- `ONEWORKS_RELAY_PASSKEY_RP_ID`: optional WebAuthn relying party id. Leave empty for the hostname from the public origin; set it when the service is behind a proxy or custom domain and the browser origin should bind to a parent domain.
+- `ONEWORKS_RELAY_PASSKEY_ORIGIN`: optional expected browser origin for passkey ceremonies. Defaults to `ONEWORKS_RELAY_PUBLIC_URL` origin or the request origin.
+- `ONEWORKS_RELAY_PASSKEY_TIMEOUT_SECONDS`: passkey ceremony and challenge timeout, default `60`.
 - `ONEWORKS_RELAY_GITHUB_CLIENT_ID` / `ONEWORKS_RELAY_GITHUB_CLIENT_SECRET`: GitHub OAuth
 - `ONEWORKS_RELAY_GOOGLE_CLIENT_ID` / `ONEWORKS_RELAY_GOOGLE_CLIENT_SECRET`: Google OAuth
 - `ONEWORKS_RELAY_SSO_PROVIDERS`: JSON object or array for multiple custom OAuth/OIDC SSO providers
@@ -81,6 +87,19 @@ For a managed provider, use the Redirect URI shown in `/admin`. With the default
 
 The Google OAuth client must be a Web application client, and the redirect URI registered in Google Cloud must exactly match the URI sent by Relay.
 
+## Passkey login
+
+The `/login` page supports passkey sign-in and passkey account creation on the same origin as the Relay Server. Passkey registration always requires a verified email code from `POST /api/auth/email-verification/send`. With the default `ONEWORKS_RELAY_REGISTRATION_MODE=invite_required`, a new user must also enter a valid invite code; with `email_verified`, a verified email can self-register without an invite; with `admin_created_only`, only existing Relay users can bind a passkey after email verification.
+
+The passkey API surface is:
+
+- `POST /api/auth/passkey/register/options`: validate email code and optional invite, then create WebAuthn registration options.
+- `POST /api/auth/passkey/register/verify`: verify the authenticator response, create or update the Relay user, store the public credential, consume the invite when present, and issue a Relay session token.
+- `POST /api/auth/passkey/login/options`: create WebAuthn authentication options for an existing user with passkeys.
+- `POST /api/auth/passkey/login/verify`: verify the authenticator response, update credential counter metadata, and issue a Relay session token.
+
+For production, serve `/login` over HTTPS and set `ONEWORKS_RELAY_PUBLIC_URL`, `ONEWORKS_RELAY_ALLOW_ORIGIN`, and, when needed, `ONEWORKS_RELAY_PASSKEY_ORIGIN` / `ONEWORKS_RELAY_PASSKEY_RP_ID` to the final user-facing custom domain. Passkeys are origin-bound; changing the public domain after users enroll credentials can make existing credentials unusable on the new domain.
+
 ## Admin
 
 Admin APIs require `Authorization: Bearer <token>`. The token can be the deployment-level `ONEWORKS_RELAY_ADMIN_TOKEN` or a Relay login session token whose user role has admin capabilities (`owner` or `admin`). If the admin token is intentionally empty, admin endpoints remain open.
@@ -103,7 +122,7 @@ Admin APIs require `Authorization: Bearer <token>`. The token can be the deploym
 
 `GET /admin` serves the React admin client from `@oneworks/relay-admin` (`apps/relay-admin`). The server route only returns the HTML shell and static assets under `/admin/assets/*`; the React client is built by Vite, consumes the `/login` callback `relay_token`, verifies the session through `/api/auth/me`, and calls the admin APIs above only for `owner` or `admin` users.
 
-`GET /login` serves the user-facing login page used by the Relay plugin. It accepts `redirect_uri`, `server_id`, `scope`, and optional `lang=zh-CN|en`; OAuth/OIDC success first returns to `/login/complete`, which stores recent account metadata in that browser and then redirects to the original callback with `relay_token` in the URL fragment. The same page also supports email + invite-code login through `POST /api/auth/invite-login`; successful invite login consumes one invite use and assigns the invite role to new users. When `lang` is omitted, the login page follows the browser `Accept-Language` header. Electron callbacks use `oneworks://relay/auth`; Web callbacks use the current plugin page URL.
+`GET /login` serves the user-facing login page used by the Relay plugin. It accepts `redirect_uri`, `server_id`, `scope`, and optional `lang=zh-CN|en`; OAuth/OIDC success first returns to `/login/complete`, which stores recent account metadata in that browser and then redirects to the original callback with `relay_token` in the URL fragment. The same page also supports passkey login / registration, plus email + invite-code login through `POST /api/auth/invite-login`; successful invite or passkey registration consumes one invite use when an invite is present and assigns the invite role to new users. When `lang` is omitted, the login page follows the browser `Accept-Language` header. Electron callbacks use `oneworks://relay/auth`; Web callbacks use the current plugin page URL.
 
 `POST /api/auth/email-verification/send` accepts an `email`, optional `purpose` (`email-verification`, `invite`, or `login`), optional `locale` / `lang` (`zh-CN` or `en`), and optional `turnstileToken`. Login pages should pass their current page locale so verification emails match the visible UI language; when omitted, the server falls back to `Accept-Language` and then English. Before any provider call, Relay verifies Turnstile when required, evaluates domain policy, checks per-email / per-IP / per-domain limits, checks global daily and monthly budgets, and reuses an active code within its TTL instead of sending another email. Rejections use a generic response so callers cannot infer whether an account exists.
 
