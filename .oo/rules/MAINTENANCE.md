@@ -115,7 +115,7 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 
 ### 8. Homepage 文档站部署维护
 
-- Homepage 文档站由 `oneworks-ai/oneworks-ai.github.io` 仓库维护，并通过 GitHub Pages 发布到 `https://oneworks-ai.github.io/docs/`。
+- Homepage 文档站由 `oneworks-ai/oneworks-ai.github.io` 仓库维护，并通过 GitHub Pages 发布到 canonical URL `https://oneworks.cloud/docs/`。
 - 本仓库的 `.github/workflows/deploy-homepage.yml` 只在 `.oo/docs/**` 或 workflow 自身变化时触发，避免非文档改动误触发 homepage Pages 更新。
 - 本仓库需要配置 Actions secret `HOMEPAGE_DEPLOY_TOKEN`，用于跨仓库触发 `oneworks-ai/oneworks-ai.github.io` 的 `deploy.yml` workflow。推荐使用只授予 `oneworks-ai/oneworks-ai.github.io` Actions 写权限的 fine-grained token 或 GitHub App installation token。
 - Homepage 仓库部署时应 checkout 本仓库 `main` 的指定 commit，并用 `source_ref=main`、`source_sha=<app commit sha>` 读取 `.oo/docs` 内容。

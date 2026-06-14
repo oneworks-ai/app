@@ -21,6 +21,13 @@
 - [插件、界面扩展与数据资产](./usage/plugins.md)
 - [适配器原生插件与 Marketplace](./usage/native-plugins.md)
 
+## 官方入口
+
+- 官网：[oneworks.cloud](https://oneworks.cloud/)
+- 文档站：[oneworks.cloud/docs](https://oneworks.cloud/docs/)
+- GitHub：[oneworks-ai/app](https://github.com/oneworks-ai/app)
+- 支持邮箱：[support@oneworks.cloud](mailto:support@oneworks.cloud)
+
 ## 接入目标
 
 - 不需要 clone 本仓库，只需要安装相关包。

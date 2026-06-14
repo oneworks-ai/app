@@ -9,7 +9,7 @@ description: 处理 README、面向用户文档、接入方式、安装运行说
 
 `.oo/docs` 是主仓公开文档内容源，只承载面向外部用户的安装、运行、CLI、插件、使用说明和文档图片 / 素材。它不是 VitePress 应用目录，不放 `package.json`、`.vitepress/`、Vue 组件、theme、构建脚本或部署配置，也不保留 README 占位说明。
 
-根目录的公开文档由 homepage docs 文档站发布：[https://oneworks-ai.github.io/docs/](https://oneworks-ai.github.io/docs/)。主仓 `.oo/docs` 提供 Markdown 与图片内容，homepage / docs app 侧负责 VitePress 壳层、导航、构建和部署装配；这些壳层信息应沉淀在 homepage 侧的 `AGENTS.md` 或规则文档中，而不是写进 `.oo/docs` README。
+根目录的公开文档由 homepage docs 文档站发布，canonical URL 是 [https://oneworks.cloud/docs/](https://oneworks.cloud/docs/)。主仓 `.oo/docs` 提供 Markdown 与图片内容，homepage / docs app 侧负责 VitePress 壳层、导航、构建和部署装配；这些壳层信息应沉淀在 homepage 侧的 `AGENTS.md` 或规则文档中，而不是写进 `.oo/docs` README。
 
 ## `.oo/docs` 约定
 

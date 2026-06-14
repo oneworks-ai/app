@@ -34,7 +34,7 @@ gh workflow run deploy.yml \
 gh workflow run deploy-homepage.yml --repo oneworks-ai/app --ref main
 ```
 
-确认 `oneworks-ai/app` 的 Trigger Homepage Deploy 成功、`oneworks-ai/oneworks-ai.github.io` 的 Deploy Pages 被触发并成功、`https://oneworks-ai.github.io/docs/` 返回 `200`。如果 `HOMEPAGE_DEPLOY_TOKEN` 缺失，app 仓库 workflow 必须失败，不能 warning 后成功退出。
+确认 `oneworks-ai/app` 的 Trigger Homepage Deploy 成功、`oneworks-ai/oneworks-ai.github.io` 的 Deploy Pages 被触发并成功、`https://oneworks.cloud/docs/` 返回 `200`。如果 `HOMEPAGE_DEPLOY_TOKEN` 缺失，app 仓库 workflow 必须失败，不能 warning 后成功退出。
 
 ## Workflow 维护注意
 
