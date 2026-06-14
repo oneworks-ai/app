@@ -27,6 +27,7 @@ Environment variables:
 - `ONEWORKS_RELAY_RATE_LIMIT_DEVICE_CLAIM_MAX` / `ONEWORKS_RELAY_RATE_LIMIT_DEVICE_CLAIM_WINDOW_SECONDS`: device session-job claim limit, default `120` per `60` seconds
 - `ONEWORKS_RELAY_EMAIL_PROVIDER`: transactional email provider, `disabled` by default; set `resend` to enable Resend-backed verification code delivery
 - `ONEWORKS_RELAY_EMAIL_FROM`: sender address for transactional email, required when `ONEWORKS_RELAY_EMAIL_PROVIDER=resend`
+- `ONEWORKS_RELAY_EMAIL_LOGO_URL`: HTTPS PNG/JPEG logo used in transactional HTML emails. Defaults to `https://oneworks.cloud/pwa/pwa-icon-192.png`; set `off` or `none` to disable the image.
 - `ONEWORKS_RELAY_RESEND_API_KEY`: Resend API key, required when `ONEWORKS_RELAY_EMAIL_PROVIDER=resend`
 - `ONEWORKS_RELAY_EMAIL_TURNSTILE_MODE`: `auto`, `required`, or `off`; `auto` requires Turnstile when Resend is enabled or `NODE_ENV=production`
 - `ONEWORKS_RELAY_TURNSTILE_SECRET_KEY`: Cloudflare Turnstile secret key for email send challenges

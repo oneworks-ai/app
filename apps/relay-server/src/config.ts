@@ -20,6 +20,7 @@ export const DEFAULT_DATA_PATH = join(homedir(), '.oneworks', 'relay-server', 'd
 const DEFAULT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const DEFAULT_DEVICE_ONLINE_TTL_MS = 60 * 1000
 const DEFAULT_EMAIL_CODE_TTL_MS = 10 * 60 * 1000
+const DEFAULT_EMAIL_LOGO_URL = 'https://oneworks.cloud/pwa/pwa-icon-192.png'
 const DEFAULT_EMAIL_RESEND_COOLDOWN_MS = 60 * 1000
 
 const readPositiveInteger = (value: string | undefined, fallback: number) => {
@@ -42,6 +43,13 @@ const readStringList = (value: string | undefined) => (
     ? []
     : value.split(/[,\s]+/u).map(item => item.trim().toLowerCase()).filter(item => item !== '')
 )
+
+const readEmailLogoUrl = (value: string | undefined) => {
+  if (value == null) return DEFAULT_EMAIL_LOGO_URL
+  const logoUrl = value.trim()
+  if (logoUrl === '') return undefined
+  return new Set(['0', 'false', 'no', 'none', 'off']).has(logoUrl.toLowerCase()) ? undefined : logoUrl
+}
 
 const readStorageDriver = (env: RelayConfigEnv) => {
   return parseRelayStorageDriver(env.ONEWORKS_RELAY_STORAGE_DRIVER)
@@ -98,6 +106,7 @@ const readEmailWindow = (
 
 const readEmailConfig = (env: RelayConfigEnv): RelayEmailConfig => ({
   from: env.ONEWORKS_RELAY_EMAIL_FROM,
+  logoUrl: readEmailLogoUrl(env.ONEWORKS_RELAY_EMAIL_LOGO_URL),
   provider: readEmailProvider(env.ONEWORKS_RELAY_EMAIL_PROVIDER),
   resendApiKey: env.ONEWORKS_RELAY_RESEND_API_KEY,
   risk: {
@@ -209,6 +218,7 @@ Environment:
   ONEWORKS_RELAY_LOG_LEVEL
   ONEWORKS_RELAY_EMAIL_PROVIDER
   ONEWORKS_RELAY_EMAIL_FROM
+  ONEWORKS_RELAY_EMAIL_LOGO_URL
   ONEWORKS_RELAY_RESEND_API_KEY
   ONEWORKS_RELAY_EMAIL_TURNSTILE_MODE
   ONEWORKS_RELAY_TURNSTILE_SECRET_KEY

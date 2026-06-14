@@ -34,6 +34,7 @@ const defaultRisk = (): RelayEmailRiskConfig => ({
 
 const emailConfig = (): RelayEmailConfig => ({
   from: 'OneWorks Relay <verify@mail.oneworks.cloud>',
+  logoUrl: 'https://oneworks.cloud/pwa/pwa-icon-192.png',
   provider: 'resend',
   resendApiKey: 'test-resend-key',
   risk: defaultRisk(),
@@ -52,12 +53,15 @@ describe('relay email provider', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-14T08:00:00.000Z'))
 
-    const payload = buildRelayEmailPayload({
-      code: '123456',
-      email: 'member@example.com',
-      expiresAt: '2026-06-14T08:10:00.000Z',
-      purpose: 'login'
-    })
+    const payload = buildRelayEmailPayload(
+      {
+        code: '123456',
+        email: 'member@example.com',
+        expiresAt: '2026-06-14T08:10:00.000Z',
+        purpose: 'login'
+      },
+      { logoUrl: 'https://oneworks.cloud/pwa/pwa-icon-192.png' }
+    )
 
     expect(payload.subject).toBe('OneWorks Relay sign-in code')
     expect(payload.text).toContain('OneWorks Relay')
@@ -67,6 +71,8 @@ describe('relay email provider', () => {
     expect(payload.text).toContain('Never share this code with anyone.')
     expect(payload.html).toContain('<!doctype html>')
     expect(payload.html).toContain('OneWorks Relay')
+    expect(payload.html).toContain('<img src="https://oneworks.cloud/pwa/pwa-icon-192.png"')
+    expect(payload.html).toContain('alt="OneWorks"')
     expect(payload.html).toContain('Sign in to OneWorks Relay')
     expect(payload.html).toContain('Verification code')
     expect(payload.html).toContain('1 2 3 4 5 6')
@@ -120,5 +126,6 @@ describe('relay email provider', () => {
     })
     expect(requestBody?.html).toEqual(expect.stringContaining('6 5 4 3 2 1'))
     expect(requestBody?.html).toEqual(expect.stringContaining('Verify your email address'))
+    expect(requestBody?.html).toEqual(expect.stringContaining('https://oneworks.cloud/pwa/pwa-icon-192.png'))
   })
 })

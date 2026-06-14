@@ -80,6 +80,7 @@ export interface RelayEmailRiskConfig {
 
 export interface RelayEmailConfig {
   from?: string
+  logoUrl?: string
   provider: RelayEmailProviderKind
   resendApiKey?: string
   risk: RelayEmailRiskConfig
