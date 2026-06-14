@@ -10,7 +10,10 @@
   min-height: var(--route-container-header-overlay-height);
   padding: var(--route-container-header-padding-block, 10px)
     var(--route-container-header-padding-inline, 10px);
-  background: color-mix(in srgb, var(--bg-color) 48%, transparent);
+  background: var(
+    --app-chrome-overlay-background,
+    color-mix(in srgb, var(--bg-color) 48%, transparent)
+  );
   border-top-left-radius: inherit;
   border-top-right-radius: inherit;
   box-shadow: none;
@@ -296,7 +299,10 @@
 }
 
 html.dark .route-container-header {
-  background: color-mix(in srgb, var(--bg-color) 42%, transparent);
+  background: var(
+    --app-chrome-overlay-background,
+    color-mix(in srgb, var(--bg-color) 42%, transparent)
+  );
   box-shadow: none;
 
   &::after {

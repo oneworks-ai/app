@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
@@ -38,6 +39,20 @@ describe('route layout primitives', () => {
     expect(html).toContain('data-path="/admin?tab=users#details"')
     expect(html).toContain('data-pathname="/admin"')
     expect(html).toContain('data-search="?tab=users"')
+  })
+
+  it('renders route layout root styles and main overlays', () => {
+    const html = renderToStaticMarkup(
+      <RouteContainerLayout
+        mainOverlay={<div data-testid='main-overlay' />}
+        style={{ '--route-container-side-panel-width': '360px' } as CSSProperties}
+      >
+        <main>Content</main>
+      </RouteContainerLayout>
+    )
+
+    expect(html).toContain('--route-container-side-panel-width:360px')
+    expect(html).toContain('data-testid="main-overlay"')
   })
 
   it('renders compact route header title and actions', () => {

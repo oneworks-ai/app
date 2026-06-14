@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { useRef } from 'react'
+import type { CSSProperties, ReactNode, UIEvent } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 import { RouteContainerSidePanel } from './RouteContainerSidePanel.js'
 import type { RouteContainerSidePanelResizeOptions } from './RouteContainerSidePanel.js'
@@ -37,6 +37,7 @@ export interface RouteContainerLayoutProps {
   header?: ReactNode
   isCompactLayout?: boolean
   location?: RouteContainerLayoutLocation
+  mainOverlay?: ReactNode
   path?: string
   sidePanel?: RouteContainerLayoutSlot
   sidePanelClassName?: string
@@ -44,6 +45,7 @@ export interface RouteContainerLayoutProps {
   sidePanelFullscreen?: boolean
   sidePanelLabel?: string
   sidePanelResize?: RouteContainerSidePanelResizeOptions
+  style?: CSSProperties
   surfaceClassName?: string
   onCloseSidePanel?: () => void
 }
@@ -60,6 +62,7 @@ export function RouteContainerLayout({
   header,
   isCompactLayout,
   location,
+  mainOverlay,
   path,
   sidePanel,
   sidePanelCompactMode = 'dock',
@@ -67,6 +70,7 @@ export function RouteContainerLayout({
   sidePanelClassName,
   sidePanelLabel,
   sidePanelResize,
+  style,
   surfaceClassName,
   onCloseSidePanel
 }: RouteContainerLayoutProps) {
@@ -124,10 +128,23 @@ export function RouteContainerLayout({
   const bodyClasses = ['route-container-layout__body', bodyClassName].filter(Boolean).join(' ')
   const sidePanelClasses = ['route-container-layout__side-panel', sidePanelClassName].filter(Boolean).join(' ')
   const bodyContent = resolveSlotContent(children)
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const mainRef = useRef<HTMLDivElement | null>(null)
+  const resetContainerScroll = useCallback((element: HTMLDivElement | null) => {
+    if (element == null) return
+    if (element.scrollTop !== 0) element.scrollTop = 0
+    if (element.scrollLeft !== 0) element.scrollLeft = 0
+  }, [])
+  const handleContainerScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    resetContainerScroll(event.currentTarget)
+  }, [resetContainerScroll])
+
+  useEffect(() => {
+    resetContainerScroll(rootRef.current)
+  }, [resetContainerScroll, rootClassName])
 
   return (
-    <div className={rootClassName}>
+    <div ref={rootRef} className={rootClassName} style={style} onScroll={handleContainerScroll}>
       <div ref={mainRef} className='route-container-layout__main'>
         <div className={surfaceClasses}>
           {header}
@@ -145,6 +162,7 @@ export function RouteContainerLayout({
             resize={sidePanelResize}
           />
         )}
+        {mainOverlay}
       </div>
       {shouldRenderSidePanelAsOverlay && (
         <>

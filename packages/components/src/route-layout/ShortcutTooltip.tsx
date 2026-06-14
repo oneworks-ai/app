@@ -46,6 +46,7 @@ export const ShortcutTooltip = forwardRef<HTMLDivElement, ShortcutTooltipProps>(
   const [open, setOpen] = useState(false)
   const suppressHoverRef = useRef(false)
   const closeTimerRef = useRef<number | null>(null)
+  const actionCloseTimerRef = useRef<number | null>(null)
   const {
     onClickCapture,
     onPointerDownCapture,
@@ -67,6 +68,12 @@ export const ShortcutTooltip = forwardRef<HTMLDivElement, ShortcutTooltipProps>(
       closeTimerRef.current = null
     }
   }, [])
+  const clearActionCloseTimer = useCallback(() => {
+    if (actionCloseTimerRef.current != null) {
+      window.clearTimeout(actionCloseTimerRef.current)
+      actionCloseTimerRef.current = null
+    }
+  }, [])
   const closeWithDelay = useCallback(() => {
     clearCloseTimer()
     closeTimerRef.current = window.setTimeout(() => {
@@ -80,12 +87,25 @@ export const ShortcutTooltip = forwardRef<HTMLDivElement, ShortcutTooltipProps>(
       setOpen(false)
     }
   }, [clearCloseTimer, resolvedTitle])
-  useEffect(() => clearCloseTimer, [clearCloseTimer])
+  useEffect(() => {
+    return () => {
+      clearCloseTimer()
+      clearActionCloseTimer()
+    }
+  }, [clearActionCloseTimer, clearCloseTimer])
   const closeForAction = useCallback(() => {
     clearCloseTimer()
+    clearActionCloseTimer()
     suppressHoverRef.current = true
     setOpen(false)
-  }, [clearCloseTimer])
+  }, [clearActionCloseTimer, clearCloseTimer])
+  const scheduleCloseForAction = useCallback(() => {
+    clearActionCloseTimer()
+    actionCloseTimerRef.current = window.setTimeout(() => {
+      actionCloseTimerRef.current = null
+      closeForAction()
+    }, 0)
+  }, [clearActionCloseTimer, closeForAction])
   const handleOpenChange = useCallback((nextOpen: boolean) => {
     if (nextOpen && suppressHoverRef.current) {
       return
@@ -100,13 +120,12 @@ export const ShortcutTooltip = forwardRef<HTMLDivElement, ShortcutTooltipProps>(
     closeWithDelay()
   }, [clearCloseTimer, closeWithDelay])
   const handlePointerDownCapture = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    closeForAction()
     onPointerDownCapture?.(event)
-  }, [closeForAction, onPointerDownCapture])
+  }, [onPointerDownCapture])
   const handleClickCapture = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    closeForAction()
     onClickCapture?.(event)
-  }, [closeForAction, onClickCapture])
+    scheduleCloseForAction()
+  }, [onClickCapture, scheduleCloseForAction])
   const handlePointerEnter = useCallback((event: PointerEvent<HTMLDivElement>) => {
     clearCloseTimer()
     onPointerEnter?.(event)

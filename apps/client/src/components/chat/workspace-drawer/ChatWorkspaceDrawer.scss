@@ -22,6 +22,7 @@
   background-color: var(--bg-color);
   color: var(--text-color);
   overflow: hidden;
+  overflow: clip;
   transition:
     opacity .16s ease,
     transform .18s cubic-bezier(.4, 0, .2, 1),
@@ -29,6 +30,10 @@
 }
 
 .chat-workspace-drawer__dock-workspace.route-container-panel-dock {
+  --interaction-panel-chrome-icon-size: var(
+    --route-container-panel-dock-icon-size,
+    var(--app-chrome-icon-size, 18px)
+  );
   --route-container-panel-dock-header-padding-block: var(
     --route-container-header-padding-block,
     10px

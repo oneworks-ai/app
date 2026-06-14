@@ -10,6 +10,8 @@ export interface RouteContainerSidePanelResizeOptions {
   maxWidthRatio?: number
   minContentWidth?: number
   minWidth?: number
+  width?: number
+  onWidthChange?: (width: number) => void
   resizeHandleAriaLabel?: string
   resizeHandleTitle?: string
   storageKey?: string
@@ -24,10 +26,7 @@ interface RouteContainerSidePanelProps {
   resize?: RouteContainerSidePanelResizeOptions
 }
 
-const DEFAULT_SIDE_PANEL_WIDTH = 300
-const MAX_SIDE_PANEL_WIDTH = 520
-const MIN_SIDE_PANEL_CONTENT_WIDTH = 360
-const MIN_SIDE_PANEL_WIDTH = 240
+const SIDE_PANEL_WIDTH = { default: 300, max: 520, min: 240, minContent: 360 } as const
 
 const clampPanelWidth = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max))
 
@@ -35,23 +34,22 @@ const normalizeMaxWidthRatio = (value: number | undefined) =>
   value == null || !Number.isFinite(value) || value <= 0 ? undefined : Math.min(value, 1)
 
 const readStoredSidePanelWidth = ({
-  defaultWidth = DEFAULT_SIDE_PANEL_WIDTH,
-  maxWidth = MAX_SIDE_PANEL_WIDTH,
-  minWidth = MIN_SIDE_PANEL_WIDTH,
+  defaultWidth = SIDE_PANEL_WIDTH.default,
+  maxWidth = SIDE_PANEL_WIDTH.max,
+  minWidth = SIDE_PANEL_WIDTH.min,
   storageKey
 }: RouteContainerSidePanelResizeOptions) => {
-  if (storageKey == null) return clampPanelWidth(defaultWidth, minWidth, maxWidth)
+  const fallbackWidth = clampPanelWidth(defaultWidth, minWidth, maxWidth)
+  if (storageKey == null) return fallbackWidth
 
   try {
     const storedValue = localStorage.getItem(storageKey)
-    if (storedValue == null) return clampPanelWidth(defaultWidth, minWidth, maxWidth)
-
-    const parsedValue = Number(storedValue)
+    const parsedValue = storedValue == null ? Number.NaN : Number(storedValue)
     return Number.isFinite(parsedValue)
       ? clampPanelWidth(parsedValue, minWidth, maxWidth)
-      : clampPanelWidth(defaultWidth, minWidth, maxWidth)
+      : fallbackWidth
   } catch {
-    return clampPanelWidth(defaultWidth, minWidth, maxWidth)
+    return fallbackWidth
   }
 }
 
@@ -74,51 +72,56 @@ export function RouteContainerSidePanel({
   resize
 }: RouteContainerSidePanelProps) {
   const fullscreenRenderState = useRouteSidePanelFullscreenState({ isClosing, isFullscreen })
-  const minWidth = resize?.minWidth ?? MIN_SIDE_PANEL_WIDTH
-  const minContentWidth = resize?.minContentWidth ?? MIN_SIDE_PANEL_CONTENT_WIDTH
+  const minWidth = resize?.minWidth ?? SIDE_PANEL_WIDTH.min
+  const minContentWidth = resize?.minContentWidth ?? SIDE_PANEL_WIDTH.minContent
   const configuredMaxWidth = resize?.maxWidth
   const configuredMaxWidthRatio = normalizeMaxWidthRatio(resize?.maxWidthRatio)
-  const defaultWidth = resize?.defaultWidth ?? DEFAULT_SIDE_PANEL_WIDTH
   const renderFullscreenShell = fullscreenRenderState !== 'idle'
   const resizeEnabled = resize != null && !isClosing && !renderFullscreenShell
 
   const resolveMaxWidth = useCallback((containerWidth?: number) => {
     const measuredContainerWidth = containerWidth ?? containerRef.current?.getBoundingClientRect().width
-    const containerMaxWidth = measuredContainerWidth == null
-      ? configuredMaxWidth ?? MAX_SIDE_PANEL_WIDTH
+    const contentMaxWidth = measuredContainerWidth == null
+      ? configuredMaxWidth ?? SIDE_PANEL_WIDTH.max
       : measuredContainerWidth - minContentWidth
     const ratioMaxWidth = measuredContainerWidth == null || configuredMaxWidthRatio == null
       ? undefined
       : measuredContainerWidth * configuredMaxWidthRatio
-    const configuredMaxWidthLimit = [configuredMaxWidth, ratioMaxWidth]
-      .filter((value): value is number => value != null && Number.isFinite(value) && value > 0)
-      .reduce<number | undefined>((current, value) => current == null ? value : Math.min(current, value), undefined)
-    const resolvedMaxWidth = configuredMaxWidthLimit == null
-      ? containerMaxWidth
-      : Math.min(configuredMaxWidthLimit, containerMaxWidth)
+    const resolvedMaxWidth = [configuredMaxWidth, ratioMaxWidth, contentMaxWidth]
+      .filter((value): value is number => value != null && Number.isFinite(value))
+      .reduce((current, value) => Math.min(current, value))
 
     return Math.max(minWidth, Math.floor(resolvedMaxWidth))
   }, [configuredMaxWidth, configuredMaxWidthRatio, containerRef, minContentWidth, minWidth])
 
   const [maxWidth, setMaxWidth] = useState(() => resolveMaxWidth())
-  const [width, setWidthState] = useState(() => readStoredSidePanelWidth(resize ?? {}))
+  const [uncontrolledWidth, setUncontrolledWidth] = useState(() => readStoredSidePanelWidth(resize ?? {}))
+  const controlledWidth = resize?.width
+  const width = controlledWidth ?? uncontrolledWidth
   const maxWidthRef = useRef(maxWidth)
   const widthRef = useRef(width)
   const setWidth = useCallback((nextWidth: number) => {
     widthRef.current = nextWidth
-    setWidthState(nextWidth)
-  }, [])
+    if (controlledWidth == null) {
+      setUncontrolledWidth(nextWidth)
+    }
+    resize?.onWidthChange?.(nextWidth)
+  }, [controlledWidth, resize?.onWidthChange])
 
   useEffect(() => {
-    if (!resizeEnabled) return
+    widthRef.current = width
+  }, [width])
+
+  useEffect(() => {
+    if (!resizeEnabled || controlledWidth != null) return
 
     setWidth(readStoredSidePanelWidth({
-      defaultWidth,
+      defaultWidth: resize?.defaultWidth,
       maxWidth,
       minWidth,
       storageKey: resize?.storageKey
     }))
-  }, [defaultWidth, maxWidth, minWidth, resize?.storageKey, resizeEnabled])
+  }, [controlledWidth, maxWidth, minWidth, resize?.defaultWidth, resize?.storageKey, resizeEnabled, setWidth])
 
   useEffect(() => {
     if (!resizeEnabled) return
@@ -142,13 +145,13 @@ export function RouteContainerSidePanel({
     const resizeObserver = new ResizeObserver(updateMaxWidth)
     resizeObserver.observe(container)
     return () => resizeObserver.disconnect()
-  }, [containerRef, minWidth, resizeEnabled, resolveMaxWidth])
+  }, [containerRef, minWidth, resize?.storageKey, resizeEnabled, resolveMaxWidth, setWidth])
 
   const commitWidth = useCallback((nextWidth: number) => {
     const resolvedWidth = clampPanelWidth(nextWidth, minWidth, maxWidth)
     setWidth(resolvedWidth)
     writeStoredSidePanelWidth(resize?.storageKey, resolvedWidth)
-  }, [maxWidth, minWidth, resize?.storageKey])
+  }, [maxWidth, minWidth, resize?.storageKey, setWidth])
 
   const sideResize = usePanelResize({
     axis: 'x',
@@ -191,9 +194,7 @@ export function RouteContainerSidePanel({
           title={resize.resizeHandleTitle ?? 'Resize side panel'}
         />
       )}
-      <div className='route-container-layout__side-panel-content'>
-        {content}
-      </div>
+      <div className='route-container-layout__side-panel-content'>{content}</div>
     </aside>
   )
 }

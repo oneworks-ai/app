@@ -3,11 +3,12 @@ import './ChatRoute.scss'
 
 import type { MenuProps } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import type { ChatMessage, Session } from '@oneworks/core'
+import { usePanelResize } from '@oneworks/route-layout'
 import type { SessionInfo } from '@oneworks/types'
 
 import type { NavRailWindowBarAction } from '#~/components/NavRail'
@@ -74,12 +75,62 @@ import { LauncherOverlay } from './LauncherOverlay'
 const WORKSPACE_TERMINAL_SESSION_ID = '__workspace__'
 const WEB_WORKSPACE_LAUNCHER_SHORTCUT = 'mod+shift+p'
 const SESSION_DOCK_PREVIEW_EXIT_MS = 180
+const SESSION_DOCK_PREVIEW_EDGE_BUFFER_PX = 56
+const WORKSPACE_DRAWER_WIDTH_STORAGE_KEY = 'workspaceDrawerWidth'
+const WORKSPACE_DRAWER_DEFAULT_WIDTH = 340
+const WORKSPACE_DRAWER_MIN_WIDTH = 220
+const WORKSPACE_DRAWER_MIN_CONTENT_WIDTH = 300
+const WORKSPACE_DRAWER_MAX_WIDTH_RATIO = 0.7
 const CHAT_ROUTE_STARTUP_READY_SELECTOR = [
   '.chat-container.ready .chat-input-monaco[data-oneworks-sender-editor-ready="true"]',
   '.chat-container.ready .chat-messages.ready',
   '.chat-container.ready .chat-settings-panel',
   '.chat-container.ready .chat-timeline-view'
 ].join(',')
+
+const clampWorkspaceDrawerWidth = (value: number, maxWidth = Number.POSITIVE_INFINITY) => {
+  const resolvedMaxWidth = Number.isFinite(maxWidth)
+    ? Math.max(WORKSPACE_DRAWER_MIN_WIDTH, Math.floor(maxWidth))
+    : Number.POSITIVE_INFINITY
+  return Math.min(Math.max(value, WORKSPACE_DRAWER_MIN_WIDTH), resolvedMaxWidth)
+}
+
+const resolveWorkspaceDrawerMaxWidth = (containerWidth?: number) => {
+  if (containerWidth == null || !Number.isFinite(containerWidth) || containerWidth <= 0) {
+    return Number.POSITIVE_INFINITY
+  }
+
+  const contentMaxWidth = containerWidth - WORKSPACE_DRAWER_MIN_CONTENT_WIDTH
+  const ratioMaxWidth = containerWidth * WORKSPACE_DRAWER_MAX_WIDTH_RATIO
+  return Math.max(WORKSPACE_DRAWER_MIN_WIDTH, Math.floor(Math.min(contentMaxWidth, ratioMaxWidth)))
+}
+
+const readWorkspaceDrawerWidth = () => {
+  if (typeof localStorage === 'undefined') return WORKSPACE_DRAWER_DEFAULT_WIDTH
+
+  try {
+    const storedValue = localStorage.getItem(WORKSPACE_DRAWER_WIDTH_STORAGE_KEY)
+    if (storedValue == null) return WORKSPACE_DRAWER_DEFAULT_WIDTH
+
+    const parsedValue = Number(storedValue)
+    return Number.isFinite(parsedValue)
+      ? clampWorkspaceDrawerWidth(parsedValue)
+      : WORKSPACE_DRAWER_DEFAULT_WIDTH
+  } catch {
+    return WORKSPACE_DRAWER_DEFAULT_WIDTH
+  }
+}
+
+const writeWorkspaceDrawerWidth = (width: number) => {
+  if (typeof localStorage === 'undefined') return
+
+  try {
+    localStorage.setItem(WORKSPACE_DRAWER_WIDTH_STORAGE_KEY, String(width))
+  } catch {
+    // Ignore storage failures; resizing should remain usable.
+  }
+}
+
 const launcherResourceKinds = new Set<DesktopWorkspaceResourceTarget['kind']>([
   'directory',
   'file',
@@ -287,6 +338,7 @@ export function ChatRouteShell({
   const [isSessionDockPreviewRendered, setIsSessionDockPreviewRendered] = useState(false)
   const [isSessionDockPreviewExiting, setIsSessionDockPreviewExiting] = useState(false)
   const [isSessionDockPreviewPinned, setIsSessionDockPreviewPinned] = useState(false)
+  const [workspaceDrawerWidth, setWorkspaceDrawerWidthState] = useState(readWorkspaceDrawerWidth)
   const [runCommandTaskStatuses, setRunCommandTaskStatuses] = useState<InteractionPanelRunCommandTaskStatus[]>([])
   const resolvedWorkspaceSession = workspaceSession ?? session
   const resolvedWorkspaceSessionId = workspaceSessionId ?? resolvedWorkspaceSession?.id
@@ -321,6 +373,47 @@ export function ChatRouteShell({
   )
   const openResourceShortcut = canUseWebLauncherShortcut ? WEB_WORKSPACE_LAUNCHER_SHORTCUT : undefined
   const openResourceShortcutLabel = canUseWebLauncherShortcut ? webWorkspaceLauncherShortcutLabel : undefined
+  const workspaceDrawerWidthStyle = useMemo(() =>
+    ({
+      '--route-container-side-panel-width': `${workspaceDrawerWidth}px`
+    }) as CSSProperties, [workspaceDrawerWidth])
+  const handleWorkspaceDrawerWidthChange = useCallback((width: number) => {
+    setWorkspaceDrawerWidthState(clampWorkspaceDrawerWidth(width))
+  }, [])
+  const commitWorkspaceDrawerWidth = useCallback((width: number, maxWidth?: number) => {
+    const resolvedWidth = clampWorkspaceDrawerWidth(width, maxWidth)
+    setWorkspaceDrawerWidthState(resolvedWidth)
+    writeWorkspaceDrawerWidth(resolvedWidth)
+  }, [])
+  const resolveWorkspaceDrawerMaxWidthFromElement = useCallback((element: Element | null | undefined) => {
+    const mainElement = element?.closest('.route-container-layout__main') ??
+      document.querySelector('.chat-route-layout .route-container-layout__main')
+    return resolveWorkspaceDrawerMaxWidth(mainElement?.getBoundingClientRect().width)
+  }, [])
+  const sessionDockPreviewResizeMaxWidth = typeof window === 'undefined'
+    ? Number.POSITIVE_INFINITY
+    : resolveWorkspaceDrawerMaxWidth(window.innerWidth)
+  const sessionDockPreviewResize = usePanelResize({
+    axis: 'x',
+    cursor: 'col-resize',
+    direction: -1,
+    disabled: !isSessionDockPreviewRendered || !isWorkspaceDrawerFullscreen,
+    getMaxValue: (event) => resolveWorkspaceDrawerMaxWidthFromElement(event?.currentTarget),
+    max: sessionDockPreviewResizeMaxWidth,
+    min: WORKSPACE_DRAWER_MIN_WIDTH,
+    onCommit: (width) =>
+      commitWorkspaceDrawerWidth(
+        width,
+        resolveWorkspaceDrawerMaxWidthFromElement(document.querySelector('.chat-session-dock-preview-resize-handle'))
+      ),
+    onPreview: handleWorkspaceDrawerWidthChange,
+    onResizeStart: () => {
+      setIsSessionDockPreviewRendered(true)
+      setIsSessionDockPreviewExiting(false)
+      setIsSessionDockPreviewOpen(true)
+    },
+    value: workspaceDrawerWidth
+  })
   const webLauncherWorkspaceContext = useMemo<DesktopWorkspaceSelectorProject | undefined>(() => {
     const normalizedWorkspaceRootPath = workspaceRootPath?.trim()
     if (normalizedWorkspaceRootPath == null || normalizedWorkspaceRootPath === '') return undefined
@@ -341,19 +434,31 @@ export function ChatRouteShell({
     setIsSessionDockPreviewExiting(false)
     setIsSessionDockPreviewOpen(true)
   }, [isWorkspaceDrawerFullscreen])
-  const handleSessionDockSelect = useCallback(() => {
+  const clearSessionDockPreview = useCallback(() => {
     setIsSessionDockPreviewRendered(false)
     setIsSessionDockPreviewExiting(false)
     setIsSessionDockPreviewPinned(false)
     setIsSessionDockPreviewOpen(false)
-    setWorkspaceDrawerFullscreen(false)
-  }, [setWorkspaceDrawerFullscreen])
+  }, [])
+  const handleWorkspaceDrawerFullscreenChange = useCallback((fullscreen: boolean) => {
+    if (!fullscreen) {
+      clearSessionDockPreview()
+    }
+
+    setWorkspaceDrawerFullscreen(fullscreen)
+  }, [clearSessionDockPreview, setWorkspaceDrawerFullscreen])
   const handleSessionDockPreviewPinToggle = useCallback(() => {
-    setIsSessionDockPreviewPinned(pinned => !pinned)
+    if (isSessionDockPreviewPinned) {
+      setIsSessionDockPreviewPinned(false)
+      setIsSessionDockPreviewOpen(false)
+      return
+    }
+
+    setIsSessionDockPreviewPinned(true)
     setIsSessionDockPreviewRendered(true)
     setIsSessionDockPreviewExiting(false)
     setIsSessionDockPreviewOpen(true)
-  }, [])
+  }, [isSessionDockPreviewPinned])
 
   useEffect(() => {
     if (isSessionDockPreviewOpen) {
@@ -390,7 +495,21 @@ export function ChatRouteShell({
         setIsSessionDockPreviewOpen(false)
       }, 180)
     }
+    const isPointerInPreviewBuffer = (event: PointerEvent, element: Element | null) => {
+      if (!(element instanceof HTMLElement)) return false
+
+      const rect = element.getBoundingClientRect()
+      return event.clientX >= rect.right &&
+        event.clientX <= rect.right + SESSION_DOCK_PREVIEW_EDGE_BUFFER_PX &&
+        event.clientY >= rect.top - SESSION_DOCK_PREVIEW_EDGE_BUFFER_PX &&
+        event.clientY <= rect.bottom + SESSION_DOCK_PREVIEW_EDGE_BUFFER_PX
+    }
     const handlePointerMove = (event: PointerEvent) => {
+      if (sessionDockPreviewResize.isResizing) {
+        clearCloseTimer()
+        return
+      }
+
       const target = event.target
       if (!(target instanceof Node)) return
 
@@ -400,7 +519,13 @@ export function ChatRouteShell({
       const previewTrigger = document.querySelector(
         '[data-nav-rail-window-action-key="chat-session"]'
       )
-      if (previewSurface?.contains(target) === true || previewTrigger?.contains(target) === true) {
+      const previewResizeHandle = document.querySelector('.chat-session-dock-preview-resize-handle')
+      if (
+        previewSurface?.contains(target) === true ||
+        previewTrigger?.contains(target) === true ||
+        previewResizeHandle?.contains(target) === true ||
+        isPointerInPreviewBuffer(event, previewSurface)
+      ) {
         clearCloseTimer()
         return
       }
@@ -413,26 +538,28 @@ export function ChatRouteShell({
       clearCloseTimer()
       window.removeEventListener('pointermove', handlePointerMove)
     }
-  }, [isSessionDockPreviewOpen, isSessionDockPreviewPinned])
+  }, [isSessionDockPreviewOpen, isSessionDockPreviewPinned, sessionDockPreviewResize.isResizing])
 
   useEffect(() => {
     const key = 'chat-workspace-drawer-fullscreen-window-bar'
     if (!hasRouteSidebarProvider || !isWorkspaceDrawerFullscreen) return undefined
 
-    const actions: NavRailWindowBarAction[] = resolvedWorkspaceSessionId == null || resolvedWorkspaceSessionId === ''
-      ? []
-      : [
-        {
-          active: true,
-          icon: 'chat_bubble',
-          key: 'chat-session',
-          label: fullscreenSessionWindowBarLabel,
-          showTooltip: false,
-          title: fullscreenSessionWindowBarLabel,
-          onPreviewOpen: handleSessionDockPreviewOpen,
-          onSelect: handleSessionDockSelect
-        }
-      ]
+    const actions: NavRailWindowBarAction[] = [
+      ...(resolvedWorkspaceSessionId == null || resolvedWorkspaceSessionId === ''
+        ? []
+        : [
+          {
+            active: isSessionDockPreviewPinned,
+            icon: 'chat_bubble',
+            key: 'chat-session',
+            label: fullscreenSessionWindowBarLabel,
+            showTooltip: false,
+            title: fullscreenSessionWindowBarLabel,
+            onPreviewOpen: handleSessionDockPreviewOpen,
+            onSelect: handleSessionDockPreviewPinToggle
+          }
+        ])
+    ]
 
     setRouteWindowBar({
       actions,
@@ -445,8 +572,9 @@ export function ChatRouteShell({
     clearRouteWindowBar,
     fullscreenSessionWindowBarLabel,
     handleSessionDockPreviewOpen,
-    handleSessionDockSelect,
+    handleSessionDockPreviewPinToggle,
     hasRouteSidebarProvider,
+    isSessionDockPreviewPinned,
     isWorkspaceDrawerFullscreen,
     resolvedWorkspaceSessionId,
     setRouteWindowBar
@@ -945,15 +1073,43 @@ export function ChatRouteShell({
           bottomPanel.shouldShowBottomPanel ? 'has-bottom-dock' : ''
         } ${isSessionDockPreviewRendered ? 'is-session-dock-previewing' : ''} ${
           isSessionDockPreviewExiting ? 'is-session-dock-preview-exiting' : ''
-        }`}
+        } ${sessionDockPreviewResize.isResizing ? 'is-session-dock-preview-resizing' : ''}`}
+        style={workspaceDrawerWidthStyle}
         bodyClassName='chat-route-layout__body'
         header={routeHeader}
+        mainOverlay={isSessionDockPreviewRendered
+          ? (
+            <>
+              {sessionDockPreviewResize.isResizing && (
+                <div className='chat-session-dock-preview-resize-shield' aria-hidden='true' />
+              )}
+              <div
+                aria-label={t('common.dragResize')}
+                aria-valuemax={Number.isFinite(sessionDockPreviewResizeMaxWidth)
+                  ? Math.floor(sessionDockPreviewResizeMaxWidth)
+                  : undefined}
+                aria-valuemin={WORKSPACE_DRAWER_MIN_WIDTH}
+                aria-valuenow={Math.floor(workspaceDrawerWidth)}
+                className={[
+                  'chat-session-dock-preview-resize-handle',
+                  sessionDockPreviewResize.isResizing ? 'is-resizing' : ''
+                ].filter(Boolean).join(' ')}
+                onKeyDown={sessionDockPreviewResize.handleKeyDown}
+                onPointerDown={sessionDockPreviewResize.handlePointerDown}
+                role='separator'
+                tabIndex={0}
+                title={t('common.dragResize')}
+              />
+            </>
+          )
+          : undefined}
         sidePanel={shouldShowWorkspaceDrawer
           ? (
             <ChatWorkspaceDrawer
               agentApprovals={agentApprovals}
               agentRoster={agentRoster}
               defaultView={workspaceDrawerView ?? workspaceDrawerDefaultView}
+              isBottomPanelOpen={bottomPanel.shouldShowBottomPanel}
               isFullscreen={isWorkspaceDrawerFullscreen}
               locateFileRequest={workspaceDrawerLocateRequest}
               selectedFilePath={bottomPanel.selectedWorkspaceFilePath}
@@ -962,7 +1118,12 @@ export function ChatRouteShell({
               terminalSessionId={terminalSessionId}
               terminalPanes={terminalPanes}
               onClose={() => setWorkspaceDrawerOpen(false)}
-              onFullscreenChange={setWorkspaceDrawerFullscreen}
+              onFullscreenChange={handleWorkspaceDrawerFullscreenChange}
+              onOpenBottomPanel={() => {
+                if (!bottomPanel.shouldShowBottomPanel) {
+                  bottomPanel.handleToggleBottomPanel()
+                }
+              }}
               onReferencePaths={onReferenceWorkspacePaths}
               onOpenFile={bottomPanel.handleOpenWorkspaceFile}
               onOpenResource={handleOpenWebLauncher}
@@ -976,11 +1137,13 @@ export function ChatRouteShell({
         sidePanelFullscreen={isWorkspaceDrawerFullscreen}
         sidePanelLabel='工作区抽屉'
         sidePanelResize={{
-          defaultWidth: 340,
-          maxWidthRatio: 0.7,
-          minContentWidth: 300,
-          minWidth: 220,
-          storageKey: 'workspaceDrawerWidth'
+          defaultWidth: WORKSPACE_DRAWER_DEFAULT_WIDTH,
+          maxWidthRatio: WORKSPACE_DRAWER_MAX_WIDTH_RATIO,
+          minContentWidth: WORKSPACE_DRAWER_MIN_CONTENT_WIDTH,
+          minWidth: WORKSPACE_DRAWER_MIN_WIDTH,
+          onWidthChange: handleWorkspaceDrawerWidthChange,
+          storageKey: WORKSPACE_DRAWER_WIDTH_STORAGE_KEY,
+          width: workspaceDrawerWidth
         }}
         onCloseSidePanel={() => setWorkspaceDrawerOpen(false)}
         bottomPanel={shouldRenderBottomPanel
