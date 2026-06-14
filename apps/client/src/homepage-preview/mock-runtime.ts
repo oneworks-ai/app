@@ -2127,6 +2127,40 @@ const handleApiRequest = async (
     return { body: { projects: [] } }
   }
 
+  if (
+    (path === '/api/module-updates' || path === '/api/module-updates/check') && (method === 'GET' || method === 'POST')
+  ) {
+    return {
+      body: {
+        checkedAt: new Date().toISOString(),
+        channel: 'stable',
+        moduleChannels: {},
+        modules: [],
+        npmTag: 'latest'
+      }
+    }
+  }
+
+  if (path === '/api/module-updates/settings' && method === 'PATCH') {
+    return {
+      body: {
+        checkedAt: new Date().toISOString(),
+        channel: 'stable',
+        moduleChannels: {},
+        modules: [],
+        npmTag: 'latest'
+      }
+    }
+  }
+
+  if (path === '/api/plugins' && method === 'GET') {
+    return { body: { diagnostics: [], plugins: [] } }
+  }
+
+  if (path === '/api/plugins/marketplace/catalog' && method === 'GET') {
+    return { body: { plugins: [], sources: [] } }
+  }
+
   if ((path === '/api/skill-hub/search' || path === '/api/skill-hub/skills-cli/search') && method === 'GET') {
     return { body: buildSkillHubSearchResponse(url) }
   }
