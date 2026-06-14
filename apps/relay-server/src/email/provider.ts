@@ -1,11 +1,6 @@
-import type {
-  RelayEmailConfig,
-  RelayEmailProvider,
-  RelayEmailProviderInput,
-  RelayEmailProviderResult,
-  RelayEmailPurpose,
-  RelayServerArgs
-} from '../types.js'
+import type { RelayEmailConfig, RelayEmailProvider, RelayEmailProviderResult, RelayServerArgs } from '../types.js'
+
+import { buildRelayEmailPayload } from './template.js'
 
 export class RelayEmailProviderUnavailableError extends Error {
   constructor(message = 'Email delivery is not configured.') {
@@ -18,38 +13,6 @@ export class RelayEmailProviderSendError extends Error {
   constructor(message = 'Email delivery failed.') {
     super(message)
     this.name = 'RelayEmailProviderSendError'
-  }
-}
-
-const purposeTitle: Record<RelayEmailPurpose, string> = {
-  'email-verification': 'Verify your email',
-  invite: 'Confirm your Relay invite',
-  login: 'Sign in to OneWorks Relay'
-}
-
-const purposeIntro: Record<RelayEmailPurpose, string> = {
-  'email-verification': 'Use this code to verify your email address.',
-  invite: 'Use this code to continue with your Relay invite.',
-  login: 'Use this code to sign in to OneWorks Relay.'
-}
-
-const minutesUntil = (expiresAt: string) => {
-  const remainingMs = Date.parse(expiresAt) - Date.now()
-  return Math.max(1, Math.ceil(remainingMs / 60_000))
-}
-
-const buildEmailPayload = (input: RelayEmailProviderInput) => {
-  const minutes = minutesUntil(input.expiresAt)
-  return {
-    subject: `OneWorks Relay: ${purposeTitle[input.purpose]}`,
-    text: [
-      purposeIntro[input.purpose],
-      '',
-      `Code: ${input.code}`,
-      '',
-      `This code expires in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
-      'If you did not request this email, you can ignore it.'
-    ].join('\n')
   }
 }
 
@@ -83,10 +46,11 @@ export const createResendRelayEmailProvider = (config: RelayEmailConfig): RelayE
   const from = config.from.trim()
   return {
     sendVerificationCode: async input => {
-      const payload = buildEmailPayload(input)
+      const payload = buildRelayEmailPayload(input)
       const response = await fetch('https://api.resend.com/emails', {
         body: JSON.stringify({
           from,
+          html: payload.html,
           subject: payload.subject,
           text: payload.text,
           to: [input.email]
