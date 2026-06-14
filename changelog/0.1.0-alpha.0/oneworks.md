@@ -17,4 +17,5 @@
 - Route homepage PWA preview sessions directly into the mock workspace app instead of the launcher gate.
 - Stub homepage preview plugin and module-update APIs so the offline preview renders without console 404s.
 - Standardize Relay verification emails with branded HTML and plain-text bodies.
-- Add the OneWorks logo to Relay transactional emails with a configurable HTTPS image URL.
+- Add the One Works logo to Relay transactional emails with a configurable HTTPS image URL.
+- Localize Relay transactional emails from the login page language and add shared One Works footer links.

@@ -33,6 +33,7 @@ export interface RelayLoginProviderConfig {
 
 export interface RelayLoginConfig {
   inviteLoginUrl: string
+  locale: 'en' | 'zh-CN'
   messages: RelayLoginMessages
   passwordLoginUrl: string
   providers: RelayLoginProviderConfig[]

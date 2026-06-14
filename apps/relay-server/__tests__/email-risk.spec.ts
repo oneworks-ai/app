@@ -86,8 +86,10 @@ const createEmailProvider = () => {
 const sendEmailVerification = async (
   baseUrl: string,
   input: {
+    acceptLanguage?: string
     email: string
     ip?: string
+    locale?: string
     purpose?: string
     turnstileToken?: string
   }
@@ -95,10 +97,12 @@ const sendEmailVerification = async (
   await requestJson(baseUrl, '/api/auth/email-verification/send', {
     body: JSON.stringify({
       email: input.email,
+      locale: input.locale,
       purpose: input.purpose,
       turnstileToken: input.turnstileToken
     }),
     headers: {
+      ...(input.acceptLanguage == null ? {} : { 'accept-language': input.acceptLanguage }),
       'content-type': 'application/json',
       'x-forwarded-for': input.ip ?? '203.0.113.10'
     },
@@ -122,6 +126,7 @@ describe('relay email send risk controls', () => {
     expect(provider.sendVerificationCode).toHaveBeenCalledTimes(1)
     expect(sent[0]).toMatchObject({
       email: 'new-user@example.com',
+      locale: 'en',
       purpose: 'email-verification'
     })
     expect(sent[0]?.code).toMatch(/^\d{6}$/)
@@ -131,6 +136,44 @@ describe('relay email send risk controls', () => {
       domain: 'example.com',
       providerMessageId: 'email-1',
       sendCount: 1
+    })
+  })
+
+  it('passes the page locale to the email provider with Accept-Language fallback', async () => {
+    const bodyLocaleProvider = createEmailProvider()
+    const bodyLocaleRelay = await listenRelay({
+      email: emailConfig({
+        risk: {
+          codeTtlMs: 1
+        }
+      }),
+      emailProvider: bodyLocaleProvider.provider
+    })
+
+    await sendEmailVerification(bodyLocaleRelay.baseUrl, {
+      acceptLanguage: 'en-US,en;q=0.9',
+      email: 'zh-page@example.com',
+      locale: 'zh-CN'
+    })
+    expect(bodyLocaleProvider.sent[0]).toMatchObject({
+      email: 'zh-page@example.com',
+      locale: 'zh-CN'
+    })
+    await cleanupRelayFixtures()
+
+    const headerLocaleProvider = createEmailProvider()
+    const headerLocaleRelay = await listenRelay({
+      email: emailConfig(),
+      emailProvider: headerLocaleProvider.provider
+    })
+
+    await sendEmailVerification(headerLocaleRelay.baseUrl, {
+      acceptLanguage: 'zh-CN,zh;q=0.9,en;q=0.5',
+      email: 'zh-header@example.com'
+    })
+    expect(headerLocaleProvider.sent[0]).toMatchObject({
+      email: 'zh-header@example.com',
+      locale: 'zh-CN'
     })
   })
 

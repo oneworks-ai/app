@@ -46,6 +46,7 @@ export const buildLoginClientConfig = (input: BuildLoginClientConfigInput) => ({
     signingIn: input.t.signingIn
   },
   inviteLoginUrl: '/api/auth/invite-login',
+  locale: input.t.htmlLang,
   passwordLoginUrl: '/api/auth/password-login',
   providers: input.providers.map(provider => ({
     displayName: provider.displayName,

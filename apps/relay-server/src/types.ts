@@ -22,6 +22,7 @@ export interface RelayServerArgs {
 export type RelayAuthProvider = string
 export type RelayEmailProviderKind = 'disabled' | 'resend'
 export type RelayEmailPurpose = 'email-verification' | 'invite' | 'login'
+export type RelayLocale = 'en' | 'zh-CN'
 export type RelayRole = 'owner' | 'admin' | 'member' | 'viewer'
 export type RelaySsoProviderType = 'oauth2' | 'oidc'
 export type RelayStorageDriver = 'cloudflare-do' | 'json' | 'postgres' | 'sqlite'
@@ -42,6 +43,7 @@ export interface RelayEmailProviderInput {
   code: string
   email: string
   expiresAt: string
+  locale?: RelayLocale
   purpose: RelayEmailPurpose
 }
 

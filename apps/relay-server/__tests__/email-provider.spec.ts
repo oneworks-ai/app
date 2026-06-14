@@ -33,7 +33,7 @@ const defaultRisk = (): RelayEmailRiskConfig => ({
 })
 
 const emailConfig = (): RelayEmailConfig => ({
-  from: 'OneWorks Relay <verify@mail.oneworks.cloud>',
+  from: 'One Works <verify@mail.oneworks.cloud>',
   logoUrl: 'https://oneworks.cloud/pwa/pwa-icon-192.png',
   provider: 'resend',
   resendApiKey: 'test-resend-key',
@@ -63,20 +63,53 @@ describe('relay email provider', () => {
       { logoUrl: 'https://oneworks.cloud/pwa/pwa-icon-192.png' }
     )
 
-    expect(payload.subject).toBe('OneWorks Relay sign-in code')
-    expect(payload.text).toContain('OneWorks Relay')
-    expect(payload.text).toContain('Sign in to OneWorks Relay')
-    expect(payload.text).toContain('Code: 123456')
+    expect(payload.subject).toBe('One Works sign-in code')
+    expect(payload.text).toContain('One Works')
+    expect(payload.text).toContain('Sign in to One Works')
+    expect(payload.text).toContain('Verification code: 123456')
     expect(payload.text).toContain('This code expires in 10 minutes.')
     expect(payload.text).toContain('Never share this code with anyone.')
+    expect(payload.text).toContain('https://oneworks.cloud/')
+    expect(payload.text).toContain('https://oneworks.cloud/docs/')
+    expect(payload.text).toContain('support@oneworks.cloud')
     expect(payload.html).toContain('<!doctype html>')
-    expect(payload.html).toContain('OneWorks Relay')
+    expect(payload.html).toContain('<html lang="en">')
+    expect(payload.html).toContain('One Works')
+    expect(payload.html).not.toContain('OneWorks Relay')
     expect(payload.html).toContain('<img src="https://oneworks.cloud/pwa/pwa-icon-192.png"')
-    expect(payload.html).toContain('alt="OneWorks"')
-    expect(payload.html).toContain('Sign in to OneWorks Relay')
+    expect(payload.html).toContain('alt="One Works"')
+    expect(payload.html).toContain('Sign in to One Works')
     expect(payload.html).toContain('Verification code')
     expect(payload.html).toContain('1 2 3 4 5 6')
     expect(payload.html).toContain('This code expires in 10 minutes.')
+    expect(payload.html).toContain('href="https://oneworks.cloud/"')
+    expect(payload.html).toContain('href="https://oneworks.cloud/docs/"')
+    expect(payload.html).toContain('href="mailto:support@oneworks.cloud"')
+  })
+
+  it('builds localized Chinese verification emails', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-14T08:00:00.000Z'))
+
+    const payload = buildRelayEmailPayload({
+      code: '123456',
+      email: 'member@example.com',
+      expiresAt: '2026-06-14T08:10:00.000Z',
+      locale: 'zh-CN',
+      purpose: 'login'
+    })
+
+    expect(payload.subject).toBe('One Works 登录验证码')
+    expect(payload.text).toContain('登录 One Works')
+    expect(payload.text).toContain('验证码: 123456')
+    expect(payload.text).toContain('验证码将在 10 分钟后过期。')
+    expect(payload.text).toContain('官网: https://oneworks.cloud/')
+    expect(payload.html).toContain('<html lang="zh-CN">')
+    expect(payload.html).toContain('登录 One Works')
+    expect(payload.html).toContain('验证码')
+    expect(payload.html).toContain('官网')
+    expect(payload.html).toContain('文档')
+    expect(payload.html).toContain('支持')
   })
 
   it('escapes dynamic email template content in HTML', () => {
@@ -90,7 +123,7 @@ describe('relay email provider', () => {
       purpose: 'email-verification'
     })
 
-    expect(payload.text).toContain('Code: 12<3&4')
+    expect(payload.text).toContain('Verification code: 12<3&4')
     expect(payload.html).toContain('1 2 &lt; 3 &amp; 4')
     expect(payload.html).not.toContain('12<3&4')
   })
@@ -119,13 +152,14 @@ describe('relay email provider', () => {
       })
     )
     expect(requestBody).toMatchObject({
-      from: 'OneWorks Relay <verify@mail.oneworks.cloud>',
-      subject: 'OneWorks Relay verification code',
-      text: expect.stringContaining('Code: 654321'),
+      from: 'One Works <verify@mail.oneworks.cloud>',
+      subject: 'One Works verification code',
+      text: expect.stringContaining('Verification code: 654321'),
       to: ['member@example.com']
     })
     expect(requestBody?.html).toEqual(expect.stringContaining('6 5 4 3 2 1'))
     expect(requestBody?.html).toEqual(expect.stringContaining('Verify your email address'))
+    expect(requestBody?.html).toEqual(expect.not.stringContaining('OneWorks Relay'))
     expect(requestBody?.html).toEqual(expect.stringContaining('https://oneworks.cloud/pwa/pwa-icon-192.png'))
   })
 })

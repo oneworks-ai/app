@@ -7,7 +7,8 @@ import { verifyRelayTurnstile } from '../email/turnstile.js'
 import { readRequestBody, sendJson } from '../http.js'
 import { requestIp } from '../security/request.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
-import type { RelayEmailProvider, RelayEmailPurpose, RelayServerArgs, RelayStore } from '../types.js'
+import type { RelayEmailProvider, RelayEmailPurpose, RelayLocale, RelayServerArgs, RelayStore } from '../types.js'
+import { normalizeRelayLoginLocale, parseAcceptLanguage } from './login-page-i18n.js'
 
 const relayEmailPurposes = new Set<RelayEmailPurpose>([
   'email-verification',
@@ -22,6 +23,22 @@ const purposeFromBody = (value: unknown): RelayEmailPurpose => (
     ? value as RelayEmailPurpose
     : 'email-verification'
 )
+
+const localeFromBody = (body: Record<string, unknown>) => (
+  normalizeRelayLoginLocale(cleanString(body.locale)) ??
+    normalizeRelayLoginLocale(cleanString(body.lang)) ??
+    normalizeRelayLoginLocale(cleanString(body.language))
+)
+
+const resolveEmailLocale = (req: IncomingMessage, body: Record<string, unknown>): RelayLocale => {
+  const bodyLocale = localeFromBody(body)
+  if (bodyLocale != null) return bodyLocale
+  for (const language of parseAcceptLanguage(req.headers['accept-language'])) {
+    const locale = normalizeRelayLoginLocale(language)
+    if (locale != null) return locale
+  }
+  return 'en'
+}
 
 const turnstileTokenFromBody = (body: Record<string, unknown>) => (
   cleanString(body.turnstileToken) ||
@@ -118,6 +135,7 @@ export const handleEmailVerificationSendRoute = async (
   }
 
   const purpose = purposeFromBody(body.purpose)
+  const locale = resolveEmailLocale(req, body)
   const decision = prepareRelayEmailChallengeSend(store, args.email, {
     email,
     ip,
@@ -141,6 +159,7 @@ export const handleEmailVerificationSendRoute = async (
       code: decision.code ?? '',
       email,
       expiresAt: decision.challenge.expiresAt,
+      locale,
       purpose
     })
     rememberRelayEmailProviderResult(store, decision.challenge.id, result.messageId)
