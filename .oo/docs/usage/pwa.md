@@ -36,7 +36,7 @@ pnpm --filter @oneworks/client exec vite build
 
 Service Worker 只在生产构建中注册；本地 dev 模式会主动避免缓存干扰。
 
-官网首页用于嵌入展示的模拟数据与交互运行时通过编译开关控制，不应进入普通 PWA 产物。官方 `https://oneworks-ai.github.io/pwa/` 部署使用 `__ONEWORKS_PROJECT_CLIENT_BASE__=/pwa/`，会自动启用这部分首页预览运行时；其他独立部署默认不打包。如果需要在本地或自定义静态站点里预览官网嵌入效果，可以显式传入 `__ONEWORKS_PROJECT_CLIENT_HOMEPAGE_PREVIEW__=1`；如果自定义 `/pwa/` base 但不想包含首页预览运行时，可以传入 `__ONEWORKS_PROJECT_CLIENT_HOMEPAGE_PREVIEW__=0`。
+官网首页用于嵌入展示的模拟数据与交互运行时通过编译开关控制，不应进入普通 PWA 产物。官方 `https://oneworks.cloud/pwa/` 部署使用 `__ONEWORKS_PROJECT_CLIENT_BASE__=/pwa/`，会自动启用这部分首页预览运行时；其他独立部署默认不打包。如果需要在本地或自定义静态站点里预览官网嵌入效果，可以显式传入 `__ONEWORKS_PROJECT_CLIENT_HOMEPAGE_PREVIEW__=1`；如果自定义 `/pwa/` base 但不想包含首页预览运行时，可以传入 `__ONEWORKS_PROJECT_CLIENT_HOMEPAGE_PREVIEW__=0`。
 
 独立 client 构建时会把 client 版本号和构建 commit 写入前端产物。“设置 -> 关于”会展示 client 版本与 server 版本；双击 client 版本号可以显示构建 commit hash，方便确认手机上的 PWA 是否已经更新到预期版本。
 
@@ -175,7 +175,7 @@ https://oneworks-api.example.com
 
 ## GitHub Pages 部署建议
 
-GitHub Pages 可以托管独立 client。官方 PWA 部署由 `oneworks-ai/pwa` 仓库维护，访问地址是 `https://oneworks-ai.github.io/pwa/`。
+GitHub Pages 可以托管独立 client。官方 PWA 部署由 `oneworks-ai/pwa` 仓库维护，访问地址是 `https://oneworks.cloud/pwa/`。
 
 主仓库 `main` 出现 client 相关更新后，会触发 `oneworks-ai/pwa` 重新构建并发布自己的 `gh-pages`。主仓库的 `gh-pages` 不再承载 PWA，后续主要用于项目文档站。fork 或私有部署仍可使用 `https://<github-user>.github.io/<repo-name>/` 这类项目站点形态。
 

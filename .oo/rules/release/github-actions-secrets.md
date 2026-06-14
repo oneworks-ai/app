@@ -177,7 +177,7 @@ gh workflow run deploy-pwa.yml \
 gh workflow run deploy-pwa.yml --repo oneworks-ai/app --ref main
 ```
 
-确认 `oneworks-ai/app` 的 Trigger PWA Deploy 成功、`oneworks-ai/pwa` 的 Deploy PWA 被触发并成功、`https://oneworks-ai.github.io/pwa/` 返回 `200`。如果 `PWA_DEPLOY_TOKEN` 缺失，app 仓库 workflow 必须失败，不能 warning 后成功退出。
+确认 `oneworks-ai/app` 的 Trigger PWA Deploy 成功、`oneworks-ai/pwa` 的 Deploy PWA 被触发并成功、`https://oneworks.cloud/pwa/` 返回 `200`。如果 `PWA_DEPLOY_TOKEN` 缺失，app 仓库 workflow 必须失败，不能 warning 后成功退出。
 
 Homepage Pages token 的配置、轮换和验证见 [homepage-github-pages.md](./homepage-github-pages.md)。
 

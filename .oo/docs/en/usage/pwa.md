@@ -36,7 +36,7 @@ Build output is under `apps/client/dist/`. Keep these PWA files at the static si
 
 The Service Worker is registered only in production builds. Local dev mode avoids cache interference.
 
-Homepage preview data and interaction runtime are controlled by build flags and should not enter ordinary PWA artifacts. The official `https://oneworks-ai.github.io/pwa/` deployment uses `__ONEWORKS_PROJECT_CLIENT_BASE__=/pwa/`, which enables that preview runtime automatically. Other standalone deployments exclude it by default. Use `__ONEWORKS_PROJECT_CLIENT_HOMEPAGE_PREVIEW__=1` to include it, or `__ONEWORKS_PROJECT_CLIENT_HOMEPAGE_PREVIEW__=0` to force it off.
+Homepage preview data and interaction runtime are controlled by build flags and should not enter ordinary PWA artifacts. The official `https://oneworks.cloud/pwa/` deployment uses `__ONEWORKS_PROJECT_CLIENT_BASE__=/pwa/`, which enables that preview runtime automatically. Other standalone deployments exclude it by default. Use `__ONEWORKS_PROJECT_CLIENT_HOMEPAGE_PREVIEW__=1` to include it, or `__ONEWORKS_PROJECT_CLIENT_HOMEPAGE_PREVIEW__=0` to force it off.
 
 Standalone builds include the client version and build commit. `Settings -> About` shows both client and server versions; double-click the client version to reveal the build commit hash.
 
@@ -151,7 +151,7 @@ Use Caddy, Nginx, or Traefik to reverse proxy to `http://localhost:8787`. Public
 GitHub Pages can host the standalone client. The official PWA deployment is maintained by the `oneworks-ai/pwa` repository at:
 
 ```text
-https://oneworks-ai.github.io/pwa/
+https://oneworks.cloud/pwa/
 ```
 
 When client-related inputs change on the main repository `main`, the PWA repository rebuilds and publishes its own `gh-pages`. Forks and private deployments can still use project-site URLs such as `https://<github-user>.github.io/<repo-name>/`.

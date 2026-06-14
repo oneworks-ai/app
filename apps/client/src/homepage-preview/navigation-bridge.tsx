@@ -7,6 +7,11 @@ import { getClientBase } from '#~/runtime-config'
 
 const HOMEPAGE_PREVIEW_MESSAGE = 'oneworks:homepage-preview'
 const HOMEPAGE_PREVIEW_SOURCE = 'oneworks-homepage'
+const OFFICIAL_HOMEPAGE_PREVIEW_HOSTS = new Set([
+  'oneworks.cloud',
+  'www.oneworks.cloud',
+  'oneworks-ai.github.io'
+])
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -28,7 +33,7 @@ const isAllowedPreviewOrigin = (origin: string) => {
   if (isLocalPreviewOrigin(origin)) return true
   try {
     const originUrl = new URL(origin)
-    return originUrl.hostname === 'oneworks-ai.github.io'
+    return OFFICIAL_HOMEPAGE_PREVIEW_HOSTS.has(originUrl.hostname)
   } catch {
     return false
   }

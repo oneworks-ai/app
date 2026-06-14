@@ -2,7 +2,7 @@ import { getClientVersion } from '#~/client-build-info'
 import { createServerUrlFromBase } from '#~/runtime-config'
 import { areSemverVersionsCompatible } from '#~/version-compatibility'
 
-export const PWA_DOCS_URL = 'https://oneworks-ai.github.io/docs/usage/pwa'
+export const PWA_DOCS_URL = 'https://oneworks.cloud/docs/usage/pwa'
 
 interface ServerPublicStatus {
   version?: string
