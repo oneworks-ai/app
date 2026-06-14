@@ -572,8 +572,12 @@ export function InteractionPanelIframeView({
       pagePaneRef.current,
       toolbarRef.current,
       viewportToolbarRef.current
-    ].filter((element): element is HTMLElement => element != null)
-    observedElements.forEach(element => observer.observe(element))
+    ]
+    observedElements.forEach(element => {
+      if (element != null) {
+        observer.observe(element)
+      }
+    })
 
     return () => {
       window.removeEventListener('resize', updateViewportScale)

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- iframe browser menu keeps page actions, viewport controls, and developer tool toggles together. */
 import { App } from 'antd'
 import type { MutableRefObject } from 'react'
 import { useState } from 'react'

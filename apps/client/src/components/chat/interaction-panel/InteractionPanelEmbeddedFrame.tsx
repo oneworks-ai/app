@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- embedded frame coordinates viewport sizing, rulers, media queries, and resize handles together. */
 import type { TFunction } from 'i18next'
 import type { MutableRefObject, PointerEvent, ReactNode } from 'react'
 import { useCallback, useEffect, useState } from 'react'
