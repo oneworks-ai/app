@@ -18,18 +18,22 @@ const formatZoomPercent = (value: number) => `${Math.round(value * 100)}%`
 export function InteractionPanelIframeBrowserMenu({
   canUseFrame,
   iframeRef,
+  isDeveloperToolsOpen,
   isViewportToolbarOpen,
   onClose,
   onForceReload,
+  onToggleDeveloperTools,
   onToggleViewportToolbar,
   shouldUseWebview,
   webviewRef
 }: {
   canUseFrame: boolean
   iframeRef: MutableRefObject<HTMLIFrameElement | null>
+  isDeveloperToolsOpen: boolean
   isViewportToolbarOpen: boolean
   onClose: () => void
   onForceReload: () => void
+  onToggleDeveloperTools: () => void
   onToggleViewportToolbar: () => void
   shouldUseWebview: boolean
   webviewRef: MutableRefObject<ElectronWebviewElement | null>
@@ -68,6 +72,11 @@ export function InteractionPanelIframeBrowserMenu({
 
   const handleToggleViewportToolbar = () => {
     onToggleViewportToolbar()
+    onClose()
+  }
+
+  const handleToggleDeveloperTools = () => {
+    onToggleDeveloperTools()
     onClose()
   }
 
@@ -126,8 +135,23 @@ export function InteractionPanelIframeBrowserMenu({
         <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>devices</span>
         <span>{t('chat.interactionPanel.iframeViewportToolbar')}</span>
       </OverlayAction>
+      <OverlayAction
+        className={`chat-interaction-panel-browser-menu__item ${isDeveloperToolsOpen ? 'is-active' : ''}`}
+        disabled={!canUseFrame}
+        onClick={handleToggleDeveloperTools}
+      >
+        <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>data_object</span>
+        <span>
+          {t(
+            isDeveloperToolsOpen
+              ? 'chat.interactionPanel.iframeDebugCloseDeveloperTools'
+              : 'chat.interactionPanel.iframeDebugOpenDeveloperTools'
+          )}
+        </span>
+      </OverlayAction>
       <OverlayDivider className='chat-interaction-panel-browser-menu__divider' decorative />
       <div className='chat-interaction-panel-browser-menu__zoom-row'>
+        <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>zoom_in</span>
         <span className='chat-interaction-panel-browser-menu__zoom-label'>
           {t('chat.interactionPanel.iframeZoom')}
         </span>

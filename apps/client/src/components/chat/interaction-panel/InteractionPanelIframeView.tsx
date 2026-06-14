@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- iframe view coordinates URL state, navigation controls, and webview lifecycle. */
-import { App } from 'antd'
+import { App, Dropdown } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -12,11 +12,15 @@ import {
 } from '#~/api/web-debug'
 import type { WebDebugChiiRuntime, WebDebugDevtoolsDockSide, WebDebugTarget } from '#~/api/web-debug'
 import { readWebpageMetadata } from '#~/api/webpage'
+import { OverlayAction, OverlayDivider, OverlayPanel } from '#~/components/overlay'
 import { addDesktopViewShortcutListener } from '#~/desktop/view-shortcuts'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 
 import { InteractionPanelEmbeddedFrame } from './InteractionPanelEmbeddedFrame'
-import type { InteractionPanelEmbeddedFrameViewportSize } from './InteractionPanelEmbeddedFrame'
+import type {
+  InteractionPanelEmbeddedFrameResizeEdge,
+  InteractionPanelEmbeddedFrameViewportSize
+} from './InteractionPanelEmbeddedFrame'
 import { InteractionPanelIframeAddressBar } from './InteractionPanelIframeAddressBar'
 import { InteractionPanelIframeNavigation } from './InteractionPanelIframeNavigation'
 import { InteractionPanelIframeToolbarActions } from './InteractionPanelIframeToolbarActions'
@@ -56,39 +60,289 @@ type ChiiTargetInjectionStatus = 'failed' | 'injected' | 'unavailable'
 interface ChiiTargetInjectionOptions {
   force?: boolean
 }
-type IframeViewportPresetId = 'desktop' | 'mobile' | 'responsive' | 'tablet'
-
-const IFRAME_VIEWPORT_PRESETS: Array<{
-  icon: string
-  id: IframeViewportPresetId
-  labelKey: string
+interface IframeViewportPreset {
+  id: string
+  label?: string
+  labelKey?: string
   size: InteractionPanelEmbeddedFrameViewportSize | null
-}> = [
+}
+
+const IFRAME_VIEWPORT_RESPONSIVE_PRESET = {
+  id: 'responsive',
+  labelKey: 'chat.interactionPanel.iframeViewportResponsive',
+  size: null
+} satisfies IframeViewportPreset
+
+const IFRAME_VIEWPORT_ZOOM_OPTIONS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2] as const
+type IframeViewportZoomValue = 'auto' | typeof IFRAME_VIEWPORT_ZOOM_OPTIONS[number]
+
+const IFRAME_VIEWPORT_STANDARD_PRESETS = [
   {
-    icon: 'fit_screen',
-    id: 'responsive',
-    labelKey: 'chat.interactionPanel.iframeViewportResponsive',
-    size: null
+    id: 'iphone-se',
+    label: 'iPhone SE',
+    size: { height: 667, width: 375 }
   },
   {
-    icon: 'smartphone',
-    id: 'mobile',
-    labelKey: 'chat.interactionPanel.iframeViewportMobile',
+    id: 'iphone-xr',
+    label: 'iPhone XR',
+    size: { height: 896, width: 414 }
+  },
+  {
+    id: 'iphone-12-pro',
+    label: 'iPhone 12 Pro',
     size: { height: 844, width: 390 }
   },
   {
-    icon: 'tablet_mac',
-    id: 'tablet',
-    labelKey: 'chat.interactionPanel.iframeViewportTablet',
+    id: 'iphone-14-pro-max',
+    label: 'iPhone 14 Pro Max',
+    size: { height: 932, width: 430 }
+  },
+  {
+    id: 'iphone-16',
+    label: 'iPhone 16',
+    size: { height: 852, width: 393 }
+  },
+  {
+    id: 'iphone-16-pro',
+    label: 'iPhone 16 Pro',
+    size: { height: 874, width: 402 }
+  },
+  {
+    id: 'iphone-16-pro-max',
+    label: 'iPhone 16 Pro Max',
+    size: { height: 956, width: 440 }
+  },
+  {
+    id: 'iphone-17',
+    label: 'iPhone 17',
+    size: { height: 874, width: 402 }
+  },
+  {
+    id: 'iphone-17-pro',
+    label: 'iPhone 17 Pro',
+    size: { height: 874, width: 402 }
+  },
+  {
+    id: 'iphone-17-pro-max',
+    label: 'iPhone 17 Pro Max',
+    size: { height: 956, width: 440 }
+  },
+  {
+    id: 'iphone-air',
+    label: 'iPhone Air',
+    size: { height: 912, width: 420 }
+  },
+  {
+    id: 'pixel-7',
+    label: 'Pixel 7',
+    size: { height: 915, width: 412 }
+  },
+  {
+    id: 'pixel-9',
+    label: 'Pixel 9',
+    size: { height: 923, width: 412 }
+  },
+  {
+    id: 'pixel-9-pro',
+    label: 'Pixel 9 Pro',
+    size: { height: 914, width: 410 }
+  },
+  {
+    id: 'pixel-9-pro-xl',
+    label: 'Pixel 9 Pro XL',
+    size: { height: 921, width: 414 }
+  },
+  {
+    id: 'pixel-10',
+    label: 'Pixel 10',
+    size: { height: 923, width: 412 }
+  },
+  {
+    id: 'pixel-10-pro',
+    label: 'Pixel 10 Pro',
+    size: { height: 914, width: 410 }
+  },
+  {
+    id: 'pixel-10-pro-xl',
+    label: 'Pixel 10 Pro XL',
+    size: { height: 921, width: 414 }
+  },
+  {
+    id: 'samsung-galaxy-s8-plus',
+    label: 'Samsung Galaxy S8+',
+    size: { height: 740, width: 360 }
+  },
+  {
+    id: 'samsung-galaxy-s20-ultra',
+    label: 'Samsung Galaxy S20 Ultra',
+    size: { height: 915, width: 412 }
+  },
+  {
+    id: 'samsung-galaxy-s25',
+    label: 'Samsung Galaxy S25',
+    size: { height: 780, width: 360 }
+  },
+  {
+    id: 'samsung-galaxy-s25-plus',
+    label: 'Samsung Galaxy S25+',
+    size: { height: 891, width: 412 }
+  },
+  {
+    id: 'samsung-galaxy-s25-ultra',
+    label: 'Samsung Galaxy S25 Ultra',
+    size: { height: 891, width: 412 }
+  },
+  {
+    id: 'galaxy-z-flip-6',
+    label: 'Galaxy Z Flip6',
+    size: { height: 960, width: 393 }
+  },
+  {
+    id: 'galaxy-z-fold-6-cover',
+    label: 'Galaxy Z Fold6 Cover',
+    size: { height: 792, width: 323 }
+  },
+  {
+    id: 'galaxy-z-fold-6-main',
+    label: 'Galaxy Z Fold6 Main',
+    size: { height: 720, width: 619 }
+  },
+  {
+    id: 'ipad-mini',
+    label: 'iPad Mini',
     size: { height: 1024, width: 768 }
   },
   {
-    icon: 'desktop_windows',
-    id: 'desktop',
-    labelKey: 'chat.interactionPanel.iframeViewportDesktop',
+    id: 'ipad-air',
+    label: 'iPad Air',
+    size: { height: 1180, width: 820 }
+  },
+  {
+    id: 'ipad-pro',
+    label: 'iPad Pro',
+    size: { height: 1366, width: 1024 }
+  },
+  {
+    id: 'surface-pro-7',
+    label: 'Surface Pro 7',
+    size: { height: 1368, width: 912 }
+  },
+  {
+    id: 'surface-duo',
+    label: 'Surface Duo',
+    size: { height: 720, width: 540 }
+  },
+  {
+    id: 'galaxy-z-fold-5',
+    label: 'Galaxy Z Fold 5',
+    size: { height: 882, width: 344 }
+  },
+  {
+    id: 'asus-zenbook-fold',
+    label: 'Asus Zenbook Fold',
+    size: { height: 853, width: 1280 }
+  },
+  {
+    id: 'samsung-galaxy-a51-71',
+    label: 'Samsung Galaxy A51/71',
+    size: { height: 914, width: 412 }
+  },
+  {
+    id: 'nest-hub',
+    label: 'Nest Hub',
+    size: { height: 600, width: 1024 }
+  },
+  {
+    id: 'nest-hub-max',
+    label: 'Nest Hub Max',
     size: { height: 800, width: 1280 }
   }
-]
+] satisfies readonly IframeViewportPreset[]
+
+const IFRAME_VIEWPORT_PRESETS = [
+  IFRAME_VIEWPORT_RESPONSIVE_PRESET,
+  ...IFRAME_VIEWPORT_STANDARD_PRESETS
+] as const
+
+type IframeViewportPresetId = (typeof IFRAME_VIEWPORT_PRESETS)[number]['id']
+type IframeViewportDeviceType = 'desktop' | 'mobile'
+
+const copyImageDataUrlToClipboard = async (dataUrl: string) => {
+  if (window.oneworksDesktop?.writeImageDataUrlToClipboard != null) {
+    await window.oneworksDesktop.writeImageDataUrlToClipboard(dataUrl)
+    return
+  }
+
+  if (navigator.clipboard?.write == null || typeof ClipboardItem === 'undefined') {
+    throw new Error('Image clipboard is unavailable.')
+  }
+
+  const response = await fetch(dataUrl)
+  const blob = await response.blob()
+  await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
+}
+
+const escapeHtmlAttribute = (value: string) => (
+  value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+)
+
+const readIframeScreenshotDataUrl = async (
+  iframe: HTMLIFrameElement,
+  fullSize: boolean
+) => {
+  const iframeDocument = iframe.contentDocument
+  if (iframeDocument == null) throw new Error('Iframe document is unavailable.')
+
+  const clonedDocumentElement = iframeDocument.documentElement.cloneNode(true) as HTMLElement
+  clonedDocumentElement.querySelectorAll('script').forEach(script => script.remove())
+  clonedDocumentElement.querySelector('head')?.insertAdjacentHTML(
+    'afterbegin',
+    `<base href="${escapeHtmlAttribute(iframeDocument.location.href)}">`
+  )
+
+  const documentWidth = Math.max(
+    iframeDocument.documentElement.scrollWidth,
+    iframeDocument.body?.scrollWidth ?? 0,
+    iframe.clientWidth
+  )
+  const documentHeight = Math.max(
+    iframeDocument.documentElement.scrollHeight,
+    iframeDocument.body?.scrollHeight ?? 0,
+    iframe.clientHeight
+  )
+  const width = Math.min(12_000, Math.max(1, Math.round(fullSize ? documentWidth : iframe.clientWidth)))
+  const height = Math.min(12_000, Math.max(1, Math.round(fullSize ? documentHeight : iframe.clientHeight)))
+  const html = new XMLSerializer().serializeToString(clonedDocumentElement)
+  const svg = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">`,
+    `<foreignObject width="100%" height="100%">${html}</foreignObject>`,
+    '</svg>'
+  ].join('')
+  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }))
+
+  try {
+    const image = new Image()
+    image.decoding = 'async'
+    image.src = url
+    await image.decode()
+
+    const canvas = window.document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext('2d')
+    if (context == null) throw new Error('Canvas is unavailable.')
+    context.fillStyle = '#fff'
+    context.fillRect(0, 0, width, height)
+    context.drawImage(image, 0, 0)
+    return canvas.toDataURL('image/png')
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
 
 const delay = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
 
@@ -220,8 +474,19 @@ export function InteractionPanelIframeView({
   const [developerToolsWidth, setDeveloperToolsWidth] = useState(DEVELOPER_TOOLS_DEFAULT_WIDTH)
   const [isDeveloperToolsOpen, setIsDeveloperToolsOpen] = useState(false)
   const [isDeveloperToolsResizing, setIsDeveloperToolsResizing] = useState(false)
+  const [isViewportDeviceFrameVisible, setIsViewportDeviceFrameVisible] = useState(false)
+  const [isViewportDevicePixelRatioVisible, setIsViewportDevicePixelRatioVisible] = useState(false)
+  const [isViewportDeviceTypeVisible, setIsViewportDeviceTypeVisible] = useState(false)
+  const [isViewportMediaQueriesVisible, setIsViewportMediaQueriesVisible] = useState(true)
+  const [isViewportMoreOpen, setIsViewportMoreOpen] = useState(false)
+  const [isViewportResizing, setIsViewportResizing] = useState(false)
+  const [isViewportRulersVisible, setIsViewportRulersVisible] = useState(false)
   const [isViewportToolbarOpen, setIsViewportToolbarOpen] = useState(false)
   const [reloadVersion, setReloadVersion] = useState(0)
+  const [autoViewportScale, setAutoViewportScale] = useState(1)
+  const [viewportDevicePixelRatio, setViewportDevicePixelRatio] = useState('2')
+  const [viewportDeviceType, setViewportDeviceType] = useState<IframeViewportDeviceType>('mobile')
+  const [viewportZoomValue, setViewportZoomValue] = useState<IframeViewportZoomValue>('auto')
   const [viewportSize, setViewportSize] = useState<InteractionPanelEmbeddedFrameViewportSize>({
     height: 844,
     width: 390
@@ -232,8 +497,11 @@ export function InteractionPanelIframeView({
   const chiiTargetId = useMemo(() => createChiiTargetId(page.id), [page.id])
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const isMountedRef = useRef(false)
+  const pagePaneRef = useRef<HTMLDivElement | null>(null)
   const toolbarRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<HTMLDivElement | null>(null)
+  const viewportToolbarRef = useRef<HTMLDivElement | null>(null)
+  const viewportResizeCleanupRef = useRef<(() => void) | null>(null)
   const developerToolsFrameRef = useRef<HTMLIFrameElement | null>(null)
   const developerToolsResizeCleanupRef = useRef<(() => void) | null>(null)
   const webviewRef = useRef<ElectronWebviewElement | null>(null)
@@ -265,8 +533,53 @@ export function InteractionPanelIframeView({
   const externalUrl = normalizedDraftUrl !== '' ? normalizedDraftUrl : frameUrl
   const embeddedFrameUrl = webview.shouldUseWebview ? webviewFrameUrl : frameUrl
   const developerToolsOrigin = useMemo(() => getUrlOrigin(developerToolsUrl), [developerToolsUrl])
-  const iframeViewportSize = viewportPresetId === 'responsive' ? null : viewportSize
+  const iframeViewportSize = isViewportToolbarOpen ? viewportSize : null
+  const isViewportSizeEditable = viewportPresetId === IFRAME_VIEWPORT_RESPONSIVE_PRESET.id
+  const resolvedViewportScale = viewportZoomValue === 'auto' ? autoViewportScale : viewportZoomValue
+  const viewportZoomPercent = `${Math.round(resolvedViewportScale * 100)}%`
   const shouldHideToolbar = webview.shouldUseWebview && isMobileDebugDevtools
+
+  useEffect(() => {
+    if (!isViewportToolbarOpen) {
+      setAutoViewportScale(1)
+      return
+    }
+
+    const updateViewportScale = () => {
+      const pagePane = pagePaneRef.current
+      if (pagePane == null) return
+
+      const topToolbarHeight = shouldHideToolbar ? 0 : toolbarRef.current?.offsetHeight ?? 0
+      const viewportToolbarHeight = viewportToolbarRef.current?.offsetHeight ?? 0
+      const availableWidth = Math.max(1, pagePane.clientWidth - 24)
+      const availableHeight = Math.max(1, pagePane.clientHeight - topToolbarHeight - viewportToolbarHeight - 24)
+      const nextScale = Math.min(1, availableWidth / viewportSize.width, availableHeight / viewportSize.height)
+      const normalizedScale = Math.max(0.1, Math.floor(nextScale * 100) / 100)
+      setAutoViewportScale(current => Math.abs(current - normalizedScale) < 0.005 ? current : normalizedScale)
+    }
+
+    updateViewportScale()
+    window.addEventListener('resize', updateViewportScale)
+
+    if (typeof ResizeObserver === 'undefined') {
+      return () => {
+        window.removeEventListener('resize', updateViewportScale)
+      }
+    }
+
+    const observer = new ResizeObserver(updateViewportScale)
+    const observedElements = [
+      pagePaneRef.current,
+      toolbarRef.current,
+      viewportToolbarRef.current
+    ].filter((element): element is HTMLElement => element != null)
+    observedElements.forEach(element => observer.observe(element))
+
+    return () => {
+      window.removeEventListener('resize', updateViewportScale)
+      observer.disconnect()
+    }
+  }, [isViewportToolbarOpen, shouldHideToolbar, viewportSize.height, viewportSize.width])
 
   useEffect(() => {
     setDraftUrl(page.url)
@@ -559,17 +872,155 @@ export function InteractionPanelIframeView({
 
   const handleViewportPresetChange = (presetId: IframeViewportPresetId) => {
     setViewportPresetId(presetId)
+    setViewportZoomValue('auto')
     const presetSize = IFRAME_VIEWPORT_PRESETS.find(preset => preset.id === presetId)?.size
     if (presetSize != null) setViewportSize(presetSize)
   }
 
   const handleViewportSizeChange = (dimension: keyof InteractionPanelEmbeddedFrameViewportSize, value: string) => {
     const nextValue = Math.min(4096, Math.max(1, Number.parseInt(value, 10) || 1))
+    setViewportPresetId('responsive')
     setViewportSize(current => ({ ...current, [dimension]: nextValue }))
+  }
+
+  const handleViewportZoomChange = (value: string) => {
+    if (value === 'auto') {
+      setViewportZoomValue('auto')
+      return
+    }
+
+    const nextZoomValue = Number.parseFloat(value)
+    if (!Number.isFinite(nextZoomValue)) return
+    setViewportZoomValue(nextZoomValue as IframeViewportZoomValue)
   }
 
   const handleRotateViewport = () => {
     setViewportSize(current => ({ height: current.width, width: current.height }))
+    setViewportZoomValue('auto')
+  }
+
+  const handleSelectViewportMediaQuerySize = (width: number) => {
+    setViewportPresetId('responsive')
+    setViewportZoomValue('auto')
+    setViewportSize(current => ({ ...current, width }))
+  }
+
+  const handleViewportResizeStart = (
+    event: PointerEvent<HTMLDivElement>,
+    edge: InteractionPanelEmbeddedFrameResizeEdge
+  ) => {
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+
+    viewportResizeCleanupRef.current?.()
+    setIsViewportResizing(true)
+    setViewportPresetId('responsive')
+    setViewportZoomValue('auto')
+
+    const startX = event.clientX
+    const startY = event.clientY
+    const startSize = viewportSize
+    const scale = Math.max(0.1, resolvedViewportScale)
+
+    const resizeViewport = (clientX: number, clientY: number) => {
+      const deltaX = (clientX - startX) / scale
+      const deltaY = (clientY - startY) / scale
+      const nextWidth = edge === 'right'
+        ? startSize.width + deltaX
+        : edge === 'left'
+          ? startSize.width - deltaX
+          : startSize.width
+      const nextHeight = edge === 'bottom'
+        ? startSize.height + deltaY
+        : edge === 'top'
+          ? startSize.height - deltaY
+          : startSize.height
+
+      setViewportSize({
+        height: Math.min(4096, Math.max(1, Math.round(nextHeight))),
+        width: Math.min(4096, Math.max(1, Math.round(nextWidth)))
+      })
+    }
+
+    const handlePointerMove = (moveEvent: globalThis.PointerEvent) => {
+      moveEvent.preventDefault()
+      resizeViewport(moveEvent.clientX, moveEvent.clientY)
+    }
+
+    const cleanup = () => {
+      setIsViewportResizing(false)
+      window.removeEventListener('pointermove', handlePointerMove, true)
+      window.removeEventListener('pointerup', cleanup, true)
+      window.removeEventListener('pointercancel', cleanup, true)
+      viewportResizeCleanupRef.current = null
+    }
+
+    viewportResizeCleanupRef.current = cleanup
+    window.addEventListener('pointermove', handlePointerMove, true)
+    window.addEventListener('pointerup', cleanup, true)
+    window.addEventListener('pointercancel', cleanup, true)
+  }
+
+  const handleToggleViewportDeviceFrame = () => {
+    setIsViewportDeviceFrameVisible(current => !current)
+    setIsViewportMoreOpen(false)
+  }
+
+  const handleToggleViewportMediaQueries = () => {
+    setIsViewportMediaQueriesVisible(current => !current)
+    setIsViewportMoreOpen(false)
+  }
+
+  const handleToggleViewportRulers = () => {
+    setIsViewportRulersVisible(current => !current)
+    setIsViewportMoreOpen(false)
+  }
+
+  const handleToggleViewportDevicePixelRatio = () => {
+    setIsViewportDevicePixelRatioVisible(current => !current)
+    setIsViewportMoreOpen(false)
+  }
+
+  const handleToggleViewportDeviceType = () => {
+    setIsViewportDeviceTypeVisible(current => !current)
+    setIsViewportMoreOpen(false)
+  }
+
+  const handleViewportScreenshot = async (fullSize: boolean) => {
+    setIsViewportMoreOpen(false)
+
+    try {
+      const webviewElement = webviewRef.current
+      if (webview.shouldUseWebview && webviewElement?.capturePage != null) {
+        const screenshot = await webviewElement.capturePage()
+        const dataUrl = screenshot.toDataURL()
+        if (dataUrl.trim() === '') throw new Error('Empty screenshot.')
+        await copyImageDataUrlToClipboard(dataUrl)
+        void message.success(t('chat.interactionPanel.iframeScreenshotCopied'))
+        return
+      }
+
+      const iframeElement = iframeRef.current
+      if (iframeElement == null) throw new Error('Iframe is unavailable.')
+      const dataUrl = await readIframeScreenshotDataUrl(iframeElement, fullSize)
+      await copyImageDataUrlToClipboard(dataUrl)
+      void message.success(t('chat.interactionPanel.iframeScreenshotCopied'))
+    } catch {
+      void message.error(t('chat.interactionPanel.iframeScreenshotFailed'))
+    }
+  }
+
+  const handleResetViewportDefaults = () => {
+    setViewportPresetId('responsive')
+    setViewportZoomValue('auto')
+    setViewportSize({ height: 844, width: 390 })
+    setIsViewportDeviceFrameVisible(false)
+    setIsViewportDevicePixelRatioVisible(false)
+    setIsViewportDeviceTypeVisible(false)
+    setIsViewportMediaQueriesVisible(true)
+    setIsViewportRulersVisible(false)
+    setIsViewportMoreOpen(false)
   }
 
   const handleWebviewAttached = useCallback(() => {
@@ -889,7 +1340,7 @@ export function InteractionPanelIframeView({
           isDeveloperToolsResizing ? 'is-resizing-devtools' : ''
         ].filter(Boolean).join(' ')}
       >
-        <div className='chat-interaction-panel__iframe-page-pane'>
+        <div ref={pagePaneRef} className='chat-interaction-panel__iframe-page-pane'>
           {!shouldHideToolbar && (
             <div
               ref={toolbarRef}
@@ -929,27 +1380,38 @@ export function InteractionPanelIframeView({
             </div>
           )}
           {!shouldHideToolbar && isViewportToolbarOpen && (
-            <div className='chat-interaction-panel__iframe-viewport-toolbar' data-dock-panel-no-resize='true'>
+            <div
+              ref={viewportToolbarRef}
+              className='chat-interaction-panel__iframe-viewport-toolbar'
+              data-dock-panel-no-resize='true'
+            >
               <span className='chat-interaction-panel__iframe-viewport-label'>
                 {t('chat.interactionPanel.iframeViewportDimensions')}
               </span>
               <select
-                className='chat-interaction-panel__iframe-viewport-select'
+                className='chat-interaction-panel__iframe-viewport-select is-preset'
                 value={viewportPresetId}
                 aria-label={t('chat.interactionPanel.iframeViewportPreset')}
                 onChange={event => handleViewportPresetChange(event.currentTarget.value as IframeViewportPresetId)}
               >
-                {IFRAME_VIEWPORT_PRESETS.map(preset => (
-                  <option key={preset.id} value={preset.id}>{t(preset.labelKey)}</option>
-                ))}
+                <option value={IFRAME_VIEWPORT_RESPONSIVE_PRESET.id}>
+                  {t(IFRAME_VIEWPORT_RESPONSIVE_PRESET.labelKey)}
+                </option>
+                <optgroup label={t('chat.interactionPanel.iframeViewportStandard')}>
+                  {IFRAME_VIEWPORT_STANDARD_PRESETS.map(preset => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label ?? preset.id}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
               <input
                 className='chat-interaction-panel__iframe-viewport-input'
                 type='number'
                 min={1}
                 max={4096}
-                disabled={iframeViewportSize == null}
-                value={iframeViewportSize?.width ?? ''}
+                disabled={!isViewportSizeEditable}
+                value={viewportSize.width}
                 aria-label={t('chat.interactionPanel.iframeViewportWidth')}
                 onChange={event => handleViewportSizeChange('width', event.currentTarget.value)}
               />
@@ -959,38 +1421,146 @@ export function InteractionPanelIframeView({
                 type='number'
                 min={1}
                 max={4096}
-                disabled={iframeViewportSize == null}
-                value={iframeViewportSize?.height ?? ''}
+                disabled={!isViewportSizeEditable}
+                value={viewportSize.height}
                 aria-label={t('chat.interactionPanel.iframeViewportHeight')}
                 onChange={event => handleViewportSizeChange('height', event.currentTarget.value)}
               />
               <select
                 className='chat-interaction-panel__iframe-viewport-select is-compact'
-                value='100'
+                value={viewportZoomValue}
                 aria-label={t('chat.interactionPanel.iframeViewportZoom')}
-                disabled
-                onChange={() => undefined}
+                onChange={event => handleViewportZoomChange(event.currentTarget.value)}
               >
-                <option value='100'>100%</option>
+                <option value='auto'>{t('chat.interactionPanel.iframeViewportZoomAuto', { value: viewportZoomPercent })}</option>
+                {IFRAME_VIEWPORT_ZOOM_OPTIONS.map(zoomValue => (
+                  <option key={zoomValue} value={zoomValue}>
+                    {Math.round(zoomValue * 100)}%
+                  </option>
+                ))}
               </select>
+              {isViewportDevicePixelRatioVisible && (
+                <select
+                  className='chat-interaction-panel__iframe-viewport-select is-compact'
+                  value={viewportDevicePixelRatio}
+                  aria-label={t('chat.interactionPanel.iframeViewportDevicePixelRatio')}
+                  onChange={event => setViewportDevicePixelRatio(event.currentTarget.value)}
+                >
+                  <option value='1'>DPR 1</option>
+                  <option value='2'>DPR 2</option>
+                  <option value='3'>DPR 3</option>
+                </select>
+              )}
+              {isViewportDeviceTypeVisible && (
+                <select
+                  className='chat-interaction-panel__iframe-viewport-select is-device-type'
+                  value={viewportDeviceType}
+                  aria-label={t('chat.interactionPanel.iframeViewportDeviceType')}
+                  onChange={event => setViewportDeviceType(event.currentTarget.value as IframeViewportDeviceType)}
+                >
+                  <option value='mobile'>{t('chat.interactionPanel.iframeViewportDeviceTypeMobile')}</option>
+                  <option value='desktop'>{t('chat.interactionPanel.iframeViewportDeviceTypeDesktop')}</option>
+                </select>
+              )}
+              <span className='chat-interaction-panel__iframe-viewport-spacer' aria-hidden='true' />
               <button
                 type='button'
                 className='chat-interaction-panel__iframe-viewport-icon-btn'
-                disabled={iframeViewportSize == null}
                 aria-label={t('chat.interactionPanel.iframeViewportRotate')}
                 onClick={handleRotateViewport}
               >
                 <span className='material-symbols-rounded' aria-hidden='true'>screen_rotation</span>
               </button>
-              <select
-                className='chat-interaction-panel__iframe-viewport-select'
-                value='none'
-                aria-label={t('chat.interactionPanel.iframeViewportNetwork')}
-                disabled
-                onChange={() => undefined}
+              <Dropdown
+                trigger={['click']}
+                open={isViewportMoreOpen}
+                menu={{ items: [] }}
+                overlayClassName='chat-interaction-panel-viewport-menu-dropdown'
+                placement='bottomRight'
+                popupRender={() => (
+                  <OverlayPanel
+                    className='chat-interaction-panel-viewport-menu'
+                    onClick={event => event.stopPropagation()}
+                    onMouseDown={event => event.stopPropagation()}
+                  >
+                    <OverlayAction
+                      className='chat-interaction-panel-viewport-menu__item'
+                      icon='mobile'
+                      selected={isViewportDeviceFrameVisible}
+                      aria-label={t(isViewportDeviceFrameVisible
+                        ? 'chat.interactionPanel.iframeViewportHideDeviceFrame'
+                        : 'chat.interactionPanel.iframeViewportShowDeviceFrame')}
+                      onClick={handleToggleViewportDeviceFrame}
+                    />
+                    <OverlayAction
+                      className='chat-interaction-panel-viewport-menu__item'
+                      icon='view_timeline'
+                      selected={isViewportMediaQueriesVisible}
+                      aria-label={t(isViewportMediaQueriesVisible
+                        ? 'chat.interactionPanel.iframeViewportHideMediaQueries'
+                        : 'chat.interactionPanel.iframeViewportShowMediaQueries')}
+                      onClick={handleToggleViewportMediaQueries}
+                    />
+                    <OverlayAction
+                      className='chat-interaction-panel-viewport-menu__item'
+                      icon='rule_settings'
+                      selected={isViewportRulersVisible}
+                      aria-label={t(isViewportRulersVisible
+                        ? 'chat.interactionPanel.iframeViewportHideRulers'
+                        : 'chat.interactionPanel.iframeViewportShowRulers')}
+                      onClick={handleToggleViewportRulers}
+                    />
+                    <OverlayDivider className='chat-interaction-panel-viewport-menu__divider' decorative />
+                    <OverlayAction
+                      className='chat-interaction-panel-viewport-menu__item'
+                      icon='density_medium'
+                      selected={isViewportDevicePixelRatioVisible}
+                      aria-label={t(isViewportDevicePixelRatioVisible
+                        ? 'chat.interactionPanel.iframeViewportRemoveDevicePixelRatio'
+                        : 'chat.interactionPanel.iframeViewportAddDevicePixelRatio')}
+                      onClick={handleToggleViewportDevicePixelRatio}
+                    />
+                    <OverlayAction
+                      className='chat-interaction-panel-viewport-menu__item'
+                      icon='devices'
+                      selected={isViewportDeviceTypeVisible}
+                      aria-label={t(isViewportDeviceTypeVisible
+                        ? 'chat.interactionPanel.iframeViewportRemoveDeviceType'
+                        : 'chat.interactionPanel.iframeViewportAddDeviceType')}
+                      onClick={handleToggleViewportDeviceType}
+                    />
+                    <OverlayDivider className='chat-interaction-panel-viewport-menu__divider' decorative />
+                    <OverlayAction
+                      className='chat-interaction-panel-viewport-menu__item'
+                      icon='image'
+                      aria-label={t('chat.interactionPanel.iframeViewportCaptureScreenshot')}
+                      onClick={() => void handleViewportScreenshot(false)}
+                    />
+                    <OverlayAction
+                      className='chat-interaction-panel-viewport-menu__item'
+                      icon='fullscreen'
+                      aria-label={t('chat.interactionPanel.iframeViewportCaptureFullSizeScreenshot')}
+                      onClick={() => void handleViewportScreenshot(true)}
+                    />
+                    <OverlayDivider className='chat-interaction-panel-viewport-menu__divider' decorative />
+                    <OverlayAction
+                      className='chat-interaction-panel-viewport-menu__item'
+                      icon='restart_alt'
+                      aria-label={t('chat.interactionPanel.iframeViewportResetToDefaults')}
+                      onClick={handleResetViewportDefaults}
+                    />
+                  </OverlayPanel>
+                )}
+                onOpenChange={setIsViewportMoreOpen}
               >
-                <option value='none'>{t('chat.interactionPanel.iframeViewportNoThrottling')}</option>
-              </select>
+                <button
+                  type='button'
+                  className={`chat-interaction-panel__iframe-viewport-icon-btn ${isViewportMoreOpen ? 'is-open' : ''}`}
+                  aria-label={t('chat.interactionPanel.iframeMore')}
+                >
+                  <span className='material-symbols-rounded' aria-hidden='true'>more_vert</span>
+                </button>
+              </Dropdown>
             </div>
           )}
           <InteractionPanelEmbeddedFrame
@@ -1000,9 +1570,16 @@ export function InteractionPanelIframeView({
             reloadVersion={reloadVersion}
             shouldUseWebview={webview.shouldUseWebview}
             t={t}
+            isViewportResizing={isViewportResizing}
+            showDeviceFrame={isViewportDeviceFrameVisible}
+            showMediaQueries={isViewportMediaQueriesVisible}
+            showRulers={isViewportRulersVisible}
+            viewportScale={resolvedViewportScale}
             viewportSize={iframeViewportSize}
             webviewRef={webviewRef}
             onIframeLoad={handleLoad}
+            onSelectMediaQuerySize={handleSelectViewportMediaQuerySize}
+            onViewportResizeStart={handleViewportResizeStart}
             onWebviewAttached={handleWebviewAttached}
           />
         </div>

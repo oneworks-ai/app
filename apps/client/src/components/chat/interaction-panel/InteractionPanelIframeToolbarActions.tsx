@@ -81,26 +81,6 @@ export function InteractionPanelIframeToolbarActions({
           onClick={() => void handleScreenshot()}
         />
       </Tooltip>
-      <Tooltip
-        title={t(
-          isDeveloperToolsOpen
-            ? 'chat.interactionPanel.iframeDebugCloseDeveloperTools'
-            : 'chat.interactionPanel.iframeDebugOpenDeveloperTools'
-        )}
-      >
-        <Button
-          type='text'
-          className={`chat-interaction-panel__iframe-tool-btn ${isDeveloperToolsOpen ? 'is-open' : ''}`}
-          disabled={!canUseFrame}
-          aria-label={t(
-            isDeveloperToolsOpen
-              ? 'chat.interactionPanel.iframeDebugCloseDeveloperTools'
-              : 'chat.interactionPanel.iframeDebugOpenDeveloperTools'
-          )}
-          icon={<span className='material-symbols-rounded'>data_object</span>}
-          onClick={onToggleDeveloperTools}
-        />
-      </Tooltip>
       <Dropdown
         trigger={['click']}
         open={isMoreOpen}
@@ -111,11 +91,13 @@ export function InteractionPanelIframeToolbarActions({
           <InteractionPanelIframeBrowserMenu
             canUseFrame={canUseFrame}
             iframeRef={iframeRef}
+            isDeveloperToolsOpen={isDeveloperToolsOpen}
             isViewportToolbarOpen={isViewportToolbarOpen}
             shouldUseWebview={shouldUseWebview}
             webviewRef={webviewRef}
             onClose={() => setIsMoreOpen(false)}
             onForceReload={onForceReload}
+            onToggleDeveloperTools={onToggleDeveloperTools}
             onToggleViewportToolbar={onToggleViewportToolbar}
           />
         )}
