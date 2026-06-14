@@ -687,7 +687,9 @@ export function AppShell({
           sidebarPreviewDismissLayerClassName='app-shell__sidebar-preview-dismiss-layer'
           sidebarRegionClassName='app-shell__sidebar-region'
           showSidebar={showSidebar}
-          desktopChrome={({ openSidebarPreview, scheduleSidebarPreviewClose, sidebarPreviewOpen }) => (
+          desktopChrome={(
+            { closeSidebarPreview, openSidebarPreview, scheduleSidebarPreviewClose, sidebarPreviewOpen }
+          ) => (
             <NavRailWindowBar
               canGoBack={canGoBack}
               canGoForward={canGoForward}
@@ -697,6 +699,7 @@ export function AppShell({
               onNavigateBack={goBack}
               onNavigateForward={goForward}
               onCreateSession={() => onSelectSession({ id: '' } as Session, true)}
+              onSidebarPreviewClose={closeSidebarPreview}
               onSidebarPreviewPointerEnter={openSidebarPreview}
               onSidebarPreviewPointerLeave={scheduleSidebarPreviewClose}
               onToggleSidebarCollapsed={() => setSidebarCollapsed(!isSidebarCollapsed)}

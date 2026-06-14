@@ -1563,7 +1563,7 @@ export function ChatHistoryView({
           </div>
         )
         : (
-          <ComposerStack>
+          <ComposerStack className='chat-composer-stack'>
             {composerContent}
           </ComposerStack>
         )}

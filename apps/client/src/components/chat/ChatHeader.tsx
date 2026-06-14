@@ -598,7 +598,9 @@ export function ChatHeader({
     label: t('chat.bottomPanelToggle'),
     onSelect: onToggleBottomPanel
   }
-  const bottomPanelButton = isBottomPanelOpen ? null : <RouteContainerHeaderActionButton item={bottomPanelAction} />
+  const bottomPanelButton = isBottomPanelOpen || isWorkspaceDrawerOpen
+    ? null
+    : <RouteContainerHeaderActionButton item={bottomPanelAction} />
   const workspaceActions = !canShowWorkspaceActions
     ? null
     : (

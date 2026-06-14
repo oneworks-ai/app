@@ -92,6 +92,11 @@
   transition: var(--chat-surface-text-color-transition);
 }
 
+.sender-container--chat-surface .chat-input-wrapper {
+  border-radius: var(--chat-surface-panel-radius);
+  background: transparent;
+}
+
 .sender-container--chat-surface .chat-input-container {
   --chat-input-container-padding: var(--chat-surface-input-padding);
   --chat-input-header-toggle-size: var(--chat-surface-control-height);
@@ -103,7 +108,7 @@
   z-index: 3;
   padding: 0;
   border: 0;
-  border-radius: 0;
+  border-radius: var(--chat-surface-panel-radius);
   background: transparent;
   box-shadow: var(--chat-surface-status-shadow);
 }

@@ -189,6 +189,10 @@ export interface RouteContainerPanelDockChromeActionConfig {
  * business tab commands in `getHeaderActions`; keep panel chrome commands here.
  */
 export interface RouteContainerPanelDockChromeActionsConfig {
+  /**
+   * Extra panel command rendered immediately before the close action.
+   */
+  beforeClose?: RouteContainerPanelDockChromeActionConfig
   close?: RouteContainerPanelDockChromeActionConfig
   fullscreen?: RouteContainerPanelDockChromeActionConfig
   minimize?: RouteContainerPanelDockChromeActionConfig
@@ -342,6 +346,7 @@ const buildRouteContainerPanelDockChromeActions = (
   [
     resolveRouteContainerPanelDockChromeAction('fullscreen', 'fullscreen', actions?.fullscreen, 'fullscreen_exit'),
     resolveRouteContainerPanelDockChromeAction('minimize', 'bottom_panel_close', actions?.minimize),
+    resolveRouteContainerPanelDockChromeAction('before-close', 'more_horiz', actions?.beforeClose),
     resolveRouteContainerPanelDockChromeAction('close', 'disabled_by_default', actions?.close)
   ].filter((action): action is RouteContainerPanelDockActionItem => action != null)
 
@@ -1269,6 +1274,7 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
   onTabClose
 }: RouteContainerPanelDockProps<TabKey>) {
   const apiRef = useRef<Dockview.DockviewApi | null>(null)
+  const dockRootRef = useRef<HTMLDivElement | null>(null)
   const contextMenuOwnerId = useId()
   const disposablesRef = useRef<Array<{ dispose: () => void }>>([])
   const isSyncingRef = useRef(false)
@@ -1309,6 +1315,44 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
     if (api == null || isSyncingRef.current) return
     writeRouteContainerPanelDockLayout(storageKey, api.toJSON())
   }, [storageKey])
+  const layoutDockToRootSize = useCallback(() => {
+    const api = apiRef.current
+    const root = dockRootRef.current
+    if (api == null || root == null) return
+
+    const rect = root.getBoundingClientRect()
+    const width = Math.round(rect.width)
+    const height = Math.round(rect.height)
+    if (width <= 0 || height <= 0) return
+
+    api.layout(width, height, true)
+  }, [])
+
+  useEffect(() => {
+    const root = dockRootRef.current
+    if (root == null || typeof ResizeObserver === 'undefined') return undefined
+
+    let frameId: number | null = null
+    const scheduleLayout = () => {
+      if (frameId != null) {
+        window.cancelAnimationFrame(frameId)
+      }
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null
+        layoutDockToRootSize()
+      })
+    }
+    const observer = new ResizeObserver(scheduleLayout)
+    observer.observe(root)
+    scheduleLayout()
+
+    return () => {
+      if (frameId != null) {
+        window.cancelAnimationFrame(frameId)
+      }
+      observer.disconnect()
+    }
+  }, [layoutDockToRootSize])
 
   const canReceiveExternalTabDrag = useCallback((dataTransfer: DataTransfer) => (
     externalTabDrag?.droppable === true &&
@@ -1572,6 +1616,7 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
     } finally {
       endDockSync(persistLayout)
     }
+    window.requestAnimationFrame(layoutDockToRootSize)
 
     disposablesRef.current = [
       event.api.onDidActivePanelChange((panel) => {
@@ -1604,6 +1649,7 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
     disposeDockSubscriptions,
     endDockSync,
     isTabClosable,
+    layoutDockToRootSize,
     persistLayout,
     selectTab,
     storageKey
@@ -1812,6 +1858,7 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
     <RouteContainerPanelDockContext.Provider value={contextValue}>
       {contextMenuPortal}
       <div
+        ref={dockRootRef}
         className={[
           'route-container-panel-dock',
           `is-${labelMode}`,

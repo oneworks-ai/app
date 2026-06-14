@@ -184,6 +184,10 @@
 }
 
 .chat-interaction-panel__dock-workspace.route-container-panel-dock {
+  --interaction-panel-chrome-icon-size: var(
+    --route-container-panel-dock-icon-size,
+    var(--app-chrome-icon-size, 18px)
+  );
   --route-container-panel-dock-header-padding-block: var(
     --route-container-header-padding-block,
     10px
@@ -369,6 +373,14 @@
 }
 
 .chat-interaction-panel__dock-tab {
+  --chat-interaction-panel-dock-tab-icon-size: var(
+    --interaction-panel-chrome-icon-size,
+    var(
+      --route-container-panel-dock-icon-size,
+      var(--app-chrome-icon-size, 18px)
+    )
+  );
+
   display: flex;
   align-items: center;
   gap: 6px;
@@ -385,20 +397,20 @@
   position: relative;
   align-items: center;
   justify-content: center;
-  width: var(--interaction-panel-chrome-icon-size);
-  height: var(--interaction-panel-chrome-icon-size);
+  width: var(--chat-interaction-panel-dock-tab-icon-size);
+  height: var(--chat-interaction-panel-dock-tab-icon-size);
   color: var(--sub-text-color);
-  flex: 0 0 var(--interaction-panel-chrome-icon-size);
+  flex: 0 0 var(--chat-interaction-panel-dock-tab-icon-size);
 }
 
 .chat-interaction-panel__dock-tab-icon.material-symbols-rounded {
-  font-size: var(--interaction-panel-chrome-icon-size);
+  font-size: var(--chat-interaction-panel-dock-tab-icon-size);
   line-height: 1;
 }
 
 .chat-interaction-panel__dock-tab-favicon {
-  width: var(--interaction-panel-chrome-icon-size);
-  height: var(--interaction-panel-chrome-icon-size);
+  width: var(--chat-interaction-panel-dock-tab-icon-size);
+  height: var(--chat-interaction-panel-dock-tab-icon-size);
   border-radius: 3px;
   background-color: var(--bg-color);
   object-fit: contain;

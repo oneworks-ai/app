@@ -93,7 +93,10 @@
   inset: 0;
   z-index: 0;
   border-bottom: 1px solid var(--app-chrome-divider-color, var(--border-color));
-  background: color-mix(in srgb, var(--bg-color) 68%, transparent);
+  background: var(
+    --app-chrome-overlay-background,
+    color-mix(in srgb, var(--bg-color) 48%, transparent)
+  );
   box-shadow: none;
   backdrop-filter: blur(24px) saturate(1.38);
   -webkit-backdrop-filter: blur(24px) saturate(1.38);

@@ -6,8 +6,8 @@ import './ChatWorkspaceDrawer.scss'
 import { App } from 'antd'
 import type { MenuProps } from 'antd'
 import { useAtomValue } from 'jotai'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode, UIEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
@@ -171,10 +171,12 @@ export function ChatWorkspaceDrawer({
   agentApprovals,
   agentRoster,
   defaultView,
+  isBottomPanelOpen = false,
   isFullscreen = false,
   locateFileRequest,
   onClose,
   onFullscreenChange,
+  onOpenBottomPanel,
   onOpenFile,
   onOpenResource,
   openResourceShortcut,
@@ -189,10 +191,12 @@ export function ChatWorkspaceDrawer({
   agentApprovals?: ChatWorkspaceDrawerAgentApprovals
   agentRoster?: ChatWorkspaceDrawerAgentRoster
   defaultView?: WorkspaceDrawerView
+  isBottomPanelOpen?: boolean
   isFullscreen?: boolean
   locateFileRequest?: ChatWorkspaceDrawerLocateFileRequest | null
   onClose?: () => void
   onFullscreenChange?: (fullscreen: boolean) => void
+  onOpenBottomPanel?: () => void
   onOpenFile?: (path: string) => void
   onOpenResource: () => void
   openResourceShortcut?: string
@@ -216,11 +220,25 @@ export function ChatWorkspaceDrawer({
   const pluginAddMenuItems = usePluginSlot<PluginContributionWorkbenchAddMenuItem>('workbench.addMenu')
   const executePluginCommand = usePluginCommandExecutor()
   const pluginLanguage = i18n.resolvedLanguage ?? i18n.language
+  const drawerRef = useRef<HTMLElement | null>(null)
+  const resetDrawerScroll = useCallback((element: HTMLElement | null) => {
+    if (element == null) return
+    if (element.scrollTop !== 0) element.scrollTop = 0
+    if (element.scrollLeft !== 0) element.scrollLeft = 0
+  }, [])
+  const handleDrawerScroll = useCallback((event: UIEvent<HTMLElement>) => {
+    resetDrawerScroll(event.currentTarget)
+  }, [resetDrawerScroll])
   const pluginDrawerViews = useMemo(() => getPluginWorkspaceDrawerViews(pluginTabs), [pluginTabs])
   const isPluginDrawerViewUnavailable = useCallback((view: WorkspaceDrawerView) => (
     view.startsWith('plugin:') && !pluginDrawerViews.has(view as `plugin:${string}:${string}`)
   ), [pluginDrawerViews])
   const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac')
+
+  useEffect(() => {
+    resetDrawerScroll(drawerRef.current)
+  }, [isFullscreen, resetDrawerScroll])
+
   const workspaceDrawerStorageKey = `chat-workspace-drawer:${sessionId ?? 'workspace'}`
   const workspaceDrawerPinnedTabsStorageKey = `${workspaceDrawerStorageKey}:pinned`
   const workspaceDrawerSessionPagesId = `${workspaceDrawerStorageKey}:sessions`
@@ -332,6 +350,15 @@ export function ChatWorkspaceDrawer({
     ...(onClose == null
       ? {}
       : {
+        ...(!isBottomPanelOpen && onOpenBottomPanel != null
+          ? {
+            beforeClose: {
+              icon: 'bottom_panel_open',
+              label: t('chat.bottomPanelToggle'),
+              onSelect: onOpenBottomPanel
+            }
+          }
+          : {}),
         close: {
           icon: 'right_panel_close',
           label: t('chat.workspaceDrawerCollapse'),
@@ -347,7 +374,7 @@ export function ChatWorkspaceDrawer({
           onSelect: () => onFullscreenChange(!isFullscreen)
         }
       })
-  }), [isFullscreen, onClose, onFullscreenChange, t])
+  }), [isBottomPanelOpen, isFullscreen, onClose, onFullscreenChange, onOpenBottomPanel, t])
 
   useEffect(() => {
     if (activeView != null && isActiveViewUnavailable) {
@@ -1071,7 +1098,12 @@ export function ChatWorkspaceDrawer({
 
   return (
     <>
-      <aside className='chat-workspace-drawer' aria-label={t('chat.workspaceDrawerTitle')}>
+      <aside
+        ref={drawerRef}
+        className='chat-workspace-drawer'
+        aria-label={t('chat.workspaceDrawerTitle')}
+        onScroll={handleDrawerScroll}
+      >
         <RouteContainerPanelDockWorkspace
           activeTab={resolvedActiveTabKey}
           ariaLabel={t('chat.workspaceDrawerTitle')}

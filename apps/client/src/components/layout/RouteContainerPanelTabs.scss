@@ -202,12 +202,13 @@
 }
 
 .route-container-panel-dock {
+  --route-container-panel-dock-icon-size: var(--app-chrome-icon-size, 18px);
   --route-container-panel-chrome-border-width: var(
     --route-container-header-border-width,
     var(--app-chrome-border-width, 1px)
   );
   --route-container-panel-chrome-height: calc(
-    var(--app-chrome-icon-size, 18px) +
+    var(--route-container-panel-dock-icon-size) +
       var(--route-container-panel-dock-header-padding-block) +
       var(--route-container-panel-dock-header-padding-block) +
       var(--route-container-panel-chrome-border-width)
@@ -574,19 +575,26 @@
 }
 
 .route-container-panel-dock-tab__icon {
-  width: var(--app-chrome-icon-size, 18px);
-  height: var(--app-chrome-icon-size, 18px);
-  min-width: var(--app-chrome-icon-size, 18px);
+  width: var(--route-container-panel-dock-icon-size);
+  height: var(--route-container-panel-dock-icon-size);
+  min-width: var(--route-container-panel-dock-icon-size);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: opacity .12s ease;
 
   .material-symbols-rounded {
-    width: var(--app-chrome-icon-size, 18px);
-    height: var(--app-chrome-icon-size, 18px);
-    font-size: var(--app-chrome-icon-size, 18px);
+    width: var(--route-container-panel-dock-icon-size);
+    height: var(--route-container-panel-dock-icon-size);
+    font-size: var(--route-container-panel-dock-icon-size);
     line-height: 1;
+  }
+
+  > :is(img, svg) {
+    width: var(--route-container-panel-dock-icon-size);
+    height: var(--route-container-panel-dock-icon-size);
+    flex: 0 0 var(--route-container-panel-dock-icon-size);
+    object-fit: contain;
   }
 }
 
@@ -595,7 +603,7 @@
   overflow: hidden;
   font-size: 12px;
   font-weight: 600;
-  line-height: var(--app-chrome-icon-size, 18px);
+  line-height: var(--route-container-panel-dock-icon-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -606,15 +614,15 @@
 }
 
 .route-container-panel-dock.is-icon-only .dv-tab {
-  width: var(--app-chrome-icon-size, 18px);
-  max-width: var(--app-chrome-icon-size, 18px);
-  flex: 0 0 var(--app-chrome-icon-size, 18px);
+  width: var(--route-container-panel-dock-icon-size);
+  max-width: var(--route-container-panel-dock-icon-size);
+  flex: 0 0 var(--route-container-panel-dock-icon-size);
 }
 
 .route-container-panel-dock-tab__close {
-  width: var(--app-chrome-icon-size, 18px);
-  height: var(--app-chrome-icon-size, 18px);
-  min-width: var(--app-chrome-icon-size, 18px);
+  width: var(--route-container-panel-dock-icon-size);
+  height: var(--route-container-panel-dock-icon-size);
+  min-width: var(--route-container-panel-dock-icon-size);
   position: absolute;
   top: 50%;
   left: 0;

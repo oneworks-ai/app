@@ -99,6 +99,7 @@ export function NavRailWindowBar({
   onCreateSession,
   onNavigateBack,
   onNavigateForward,
+  onSidebarPreviewClose,
   onSidebarPreviewPointerEnter,
   onSidebarPreviewPointerLeave,
   onToggleSidebarCollapsed,
@@ -120,6 +121,7 @@ export function NavRailWindowBar({
   onCreateSession?: () => void
   onNavigateBack?: () => void
   onNavigateForward?: () => void
+  onSidebarPreviewClose?: () => void
   onSidebarPreviewPointerEnter?: () => void
   onSidebarPreviewPointerLeave?: () => void
   onToggleSidebarCollapsed?: () => void
@@ -174,10 +176,19 @@ export function NavRailWindowBar({
       ? action.activeTitle ?? action.activeLabel ?? action.title ?? action.label
       : action.title ?? action.label
     const progress = action.progress == null ? null : Math.max(0, Math.min(100, action.progress))
-    const handlePreviewOpen = action.onPreviewOpen ??
+    const resolvedPreviewOpen = action.onPreviewOpen ??
       (action.previewOnHover === 'sidebar' ? onSidebarPreviewPointerEnter : undefined)
     const handlePreviewClose = action.onPreviewClose ??
       (action.previewOnHover === 'sidebar' ? onSidebarPreviewPointerLeave : undefined)
+    const handlePreviewOpen = resolvedPreviewOpen == null
+      ? undefined
+      : () => {
+        if (action.previewOnHover !== 'sidebar') {
+          onSidebarPreviewClose?.()
+        }
+
+        resolvedPreviewOpen()
+      }
     const iconNode = (
       <span
         className={[

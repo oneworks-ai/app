@@ -13,6 +13,11 @@
   --app-chrome-padding-inline: 10px;
   --app-chrome-border-width: 1px;
   --app-chrome-divider-color: var(--border-color);
+  --app-chrome-overlay-background: color-mix(
+    in srgb,
+    var(--bg-color) 48%,
+    transparent
+  );
   --app-chrome-overlay-height: calc(
     var(--app-chrome-content-height) + var(--app-chrome-padding-block) +
       var(--app-chrome-padding-block) +
@@ -113,6 +118,12 @@
 }
 
 html.dark {
+  --app-chrome-overlay-background: color-mix(
+    in srgb,
+    var(--bg-color) 42%,
+    transparent
+  );
+
   --bg-color: #141414;
   --sub-bg-color: #262626;
   --sub-sub-bg-color: #303030;

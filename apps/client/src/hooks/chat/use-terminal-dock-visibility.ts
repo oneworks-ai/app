@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 
+const TERMINAL_DOCK_EXIT_DURATION_MS = 240
+
 export function useTerminalDockVisibility(isOpen: boolean) {
   const [isRendered, setIsRendered] = useState(isOpen)
   const [isVisible, setIsVisible] = useState(isOpen)
@@ -16,6 +18,12 @@ export function useTerminalDockVisibility(isOpen: boolean) {
     }
 
     setIsVisible(false)
+    const timeoutId = window.setTimeout(() => {
+      setIsRendered(false)
+    }, TERMINAL_DOCK_EXIT_DURATION_MS)
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
   }, [isOpen])
 
   return {
