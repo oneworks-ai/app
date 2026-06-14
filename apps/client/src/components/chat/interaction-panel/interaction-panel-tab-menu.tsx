@@ -23,6 +23,7 @@ type InteractionPanelMenuItems = NonNullable<MenuProps['items']>
 export type InteractionPanelAddMenuItemKind =
   | 'iframe'
   | 'mobile-debug'
+  | 'page-debugger'
   | 'plugin'
   | 'resource'
   | 'session'
@@ -155,6 +156,13 @@ export const buildInteractionPanelAddMenuItems = (
         key: 'iframe',
         icon: <span className='material-symbols-rounded'>language</span>,
         label: renderAddMenuLabel(t('chat.interactionPanel.addIframe'))
+      }]
+      : []),
+    ...(shouldIncludeKind('page-debugger')
+      ? [{
+        key: 'page-debugger',
+        icon: <span className='material-symbols-rounded'>data_object</span>,
+        label: renderAddMenuLabel(t('chat.interactionPanel.pageDebuggerListTitle'))
       }]
       : []),
     ...(shouldIncludeKind('mobile-debug')

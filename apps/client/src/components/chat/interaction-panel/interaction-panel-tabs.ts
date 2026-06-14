@@ -20,6 +20,7 @@ export type InteractionPanelTab =
   | { id: string; kind: 'file'; icon: string; label: string; path: string; canClose: true }
   | { id: string; kind: 'iframe'; faviconUrl?: string; icon: string; label: string; canClose: true }
   | { id: string; kind: 'mobile-debug'; icon: string; label: string; canClose: true }
+  | { id: string; kind: 'page-debugger'; icon: string; label: string; canClose: true }
   | { id: string; kind: 'session'; icon: string; label: string; sessionId?: string; canClose: true }
   | {
     id: string
@@ -45,6 +46,7 @@ export type ActiveInteractionTab =
   | { kind: 'file'; path: string }
   | { kind: 'iframe'; id: string }
   | { kind: 'mobile-debug'; id: string }
+  | { kind: 'page-debugger'; id: string }
   | { kind: 'session'; id: string }
   | { kind: 'plugin'; id: string }
   | { kind: 'workspace-drawer'; id: string }

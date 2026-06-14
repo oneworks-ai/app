@@ -1716,6 +1716,41 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
     apiRef.current = null
   }, [disposeDockSubscriptions, visibleTabs.length])
 
+  useEffect(() => {
+    const dockElement = dockRootRef.current
+    if (dockElement == null || typeof ResizeObserver === 'undefined') return
+
+    let animationFrame = 0
+    let lastWidth = -1
+    let lastHeight = -1
+    const layoutDockview = () => {
+      animationFrame = 0
+      const api = apiRef.current
+      if (api == null) return
+
+      const rect = dockElement.getBoundingClientRect()
+      const width = Math.max(0, Math.round(rect.width))
+      const height = Math.max(0, Math.round(rect.height))
+      if (width <= 0 || height <= 0 || (width === lastWidth && height === lastHeight)) return
+
+      lastWidth = width
+      lastHeight = height
+      api.layout(width, height)
+    }
+    const scheduleLayout = () => {
+      if (animationFrame !== 0) return
+      animationFrame = window.requestAnimationFrame(layoutDockview)
+    }
+    const resizeObserver = new ResizeObserver(scheduleLayout)
+    resizeObserver.observe(dockElement)
+    scheduleLayout()
+
+    return () => {
+      if (animationFrame !== 0) window.cancelAnimationFrame(animationFrame)
+      resizeObserver.disconnect()
+    }
+  }, [])
+
   useEffect(() => () => {
     if (syncReleaseTimerRef.current != null) {
       window.clearTimeout(syncReleaseTimerRef.current)

@@ -67,6 +67,7 @@ export function useInteractionPanelTabs({
   const closeInteractionPanelSessionPages = useCloseInteractionPanelSessionPages(sessionPageState)
   const [pluginPages, setPluginPages] = useState<InteractionPanelPluginPage[]>([])
   const [workspaceDrawerViews, setWorkspaceDrawerViews] = useState<WorkspaceDrawerView[]>([])
+  const [isPageDebuggerListOpen, setIsPageDebuggerListOpen] = useState(false)
   const bottomTerminalPanes = useMemo(
     () => terminalPanes.panes.filter(pane => isTerminalPaneOnSurface(pane, 'bottom')),
     [terminalPanes.panes]
@@ -92,6 +93,7 @@ export function useInteractionPanelTabs({
     if (iframeId != null) return { kind: 'iframe', id: iframeId }
     const mobileDebugPageId = mobileDebugPageState.mobileDebugPages[0]?.id
     if (mobileDebugPageId != null) return { kind: 'mobile-debug', id: mobileDebugPageId }
+    if (isPageDebuggerListOpen) return { kind: 'page-debugger', id: 'page-debugger' }
     const sessionPageId = canCreateSessionTab ? sessionPageState.sessionPages[0]?.id : undefined
     if (sessionPageId != null) return { kind: 'session', id: sessionPageId }
     const pluginPageId = pluginPages[0]?.id
@@ -161,17 +163,28 @@ export function useInteractionPanelTabs({
         terminalInfoById: terminalPanes.infoById,
         terminalPanes: bottomTerminalPanes
       }),
+      ...(isPageDebuggerListOpen
+        ? [{
+          canClose: true as const,
+          icon: 'data_object',
+          id: 'page-debugger',
+          kind: 'page-debugger' as const,
+          label: t('chat.interactionPanel.pageDebuggerListTitle')
+        }]
+        : []),
       ...workspaceDrawerTabs
     ]
   }, [
     bottomPanel.openWorkspaceFilePaths,
     canCreateSessionTab,
     iframePageState.iframePages,
+    isPageDebuggerListOpen,
     mobileDebugPageState.mobileDebugPages,
     pluginPages,
     sessionPageState.sessionPages,
     terminalPanes.infoById,
     bottomTerminalPanes,
+    t,
     workspaceDrawerItemByKey,
     workspaceDrawerViews
   ])
@@ -235,6 +248,13 @@ export function useInteractionPanelTabs({
       const nextPage = iframePageState.addIframePage()
       bottomPanel.handleSelectBottomPanelView('terminal')
       setActiveTab({ kind: 'iframe', id: nextPage.id })
+      return
+    }
+
+    if (key === 'page-debugger') {
+      setIsPageDebuggerListOpen(true)
+      bottomPanel.handleSelectBottomPanelView('terminal')
+      setActiveTab({ kind: 'page-debugger', id: 'page-debugger' })
       return
     }
 
@@ -335,6 +355,7 @@ export function useInteractionPanelTabs({
     const targetMobileDebugIds = new Set(
       closeableTargetTabs.filter(tab => tab.kind === 'mobile-debug').map(tab => tab.id)
     )
+    const shouldClosePageDebugger = closeableTargetTabs.some(tab => tab.kind === 'page-debugger')
     const targetSessionPageIds = new Set(closeableTargetTabs.filter(tab => tab.kind === 'session').map(tab => tab.id))
     const targetPluginPageIds = new Set(closeableTargetTabs.filter(tab => tab.kind === 'plugin').map(tab => tab.id))
     const targetWorkspaceDrawerViews = new Set(
@@ -344,6 +365,7 @@ export function useInteractionPanelTabs({
     closeWorkspaceFileTabsForScope({ bottomPanel, targetTabs: closeableTargetTabs })
     iframePageState.closeIframePages(targetIframeIds)
     mobileDebugPageState.closeMobileDebugPages(targetMobileDebugIds)
+    if (shouldClosePageDebugger) setIsPageDebuggerListOpen(false)
     closeInteractionPanelSessionPages(targetSessionPageIds)
     setPluginPages(current => current.filter(page => !targetPluginPageIds.has(page.id)))
     setWorkspaceDrawerViews(current => current.filter(view => !targetWorkspaceDrawerViews.has(view)))

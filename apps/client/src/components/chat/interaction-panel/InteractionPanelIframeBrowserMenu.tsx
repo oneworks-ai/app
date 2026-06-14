@@ -1,4 +1,5 @@
-import { App, Tooltip } from 'antd'
+/* eslint-disable max-lines -- iframe browser menu keeps page actions, viewport controls, and developer tool toggles together. */
+import { App } from 'antd'
 import type { MutableRefObject } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -18,15 +19,23 @@ const formatZoomPercent = (value: number) => `${Math.round(value * 100)}%`
 export function InteractionPanelIframeBrowserMenu({
   canUseFrame,
   iframeRef,
+  isDeveloperToolsOpen,
+  isViewportToolbarOpen,
   onClose,
   onForceReload,
+  onToggleDeveloperTools,
+  onToggleViewportToolbar,
   shouldUseWebview,
   webviewRef
 }: {
   canUseFrame: boolean
   iframeRef: MutableRefObject<HTMLIFrameElement | null>
+  isDeveloperToolsOpen: boolean
+  isViewportToolbarOpen: boolean
   onClose: () => void
   onForceReload: () => void
+  onToggleDeveloperTools: () => void
+  onToggleViewportToolbar: () => void
   shouldUseWebview: boolean
   webviewRef: MutableRefObject<ElectronWebviewElement | null>
 }) {
@@ -60,6 +69,16 @@ export function InteractionPanelIframeBrowserMenu({
       // Fall through to the existing reload path.
     }
     onForceReload()
+  }
+
+  const handleToggleViewportToolbar = () => {
+    onToggleViewportToolbar()
+    onClose()
+  }
+
+  const handleToggleDeveloperTools = () => {
+    onToggleDeveloperTools()
+    onClose()
   }
 
   const clearWebviewData = async (dataType: 'cache' | 'cookies') => {
@@ -109,16 +128,31 @@ export function InteractionPanelIframeBrowserMenu({
         <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>refresh</span>
         <span>{t('chat.interactionPanel.iframeForceReload')}</span>
       </OverlayAction>
-      <Tooltip title={t('common.notSupportedYet')} placement='left'>
-        <span className='chat-interaction-panel-browser-menu__disabled-wrapper'>
-          <OverlayAction className='chat-interaction-panel-browser-menu__item' disabled>
-            <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>devices</span>
-            <span>{t('chat.interactionPanel.iframeDeviceToolbar')}</span>
-          </OverlayAction>
+      <OverlayAction
+        className={`chat-interaction-panel-browser-menu__item ${isViewportToolbarOpen ? 'is-active' : ''}`}
+        disabled={!canUseFrame}
+        onClick={handleToggleViewportToolbar}
+      >
+        <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>devices</span>
+        <span>{t('chat.interactionPanel.iframeViewportToolbar')}</span>
+      </OverlayAction>
+      <OverlayAction
+        className={`chat-interaction-panel-browser-menu__item ${isDeveloperToolsOpen ? 'is-active' : ''}`}
+        disabled={!canUseFrame}
+        onClick={handleToggleDeveloperTools}
+      >
+        <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>data_object</span>
+        <span>
+          {t(
+            isDeveloperToolsOpen
+              ? 'chat.interactionPanel.iframeDebugCloseDeveloperTools'
+              : 'chat.interactionPanel.iframeDebugOpenDeveloperTools'
+          )}
         </span>
-      </Tooltip>
+      </OverlayAction>
       <OverlayDivider className='chat-interaction-panel-browser-menu__divider' decorative />
       <div className='chat-interaction-panel-browser-menu__zoom-row'>
+        <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>zoom_in</span>
         <span className='chat-interaction-panel-browser-menu__zoom-label'>
           {t('chat.interactionPanel.iframeZoom')}
         </span>

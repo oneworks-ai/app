@@ -1,6 +1,9 @@
 import type { InteractionPanelIframePage } from './InteractionPanelIframeView'
 
 const buildIframeStorageKey = (sessionId: string) => `chatInteractionIframePages:${sessionId}`
+const iframePageDevtoolsVariants = new Set<InteractionPanelIframePage['variant']>([
+  'mobile-debug-devtools'
+])
 
 export interface OpenInteractionPanelIframeUrlOptions {
   faviconUrl?: string
@@ -47,12 +50,15 @@ export const getIframePageFallbackFaviconUrl = (url: string) => {
 }
 
 const getIframePageTitleForUrl = (page: InteractionPanelIframePage, url: string) => (
-  page.variant === 'mobile-debug-devtools' ? page.title : getIframePageHostTitle(url, page.title)
+  isIframePageDevtoolsVariant(page) ? page.title : getIframePageHostTitle(url, page.title)
 )
 
 const getIframePageFaviconUrlForUrl = (page: InteractionPanelIframePage, url: string) => (
-  page.variant === 'mobile-debug-devtools' ? page.faviconUrl : getIframePageFallbackFaviconUrl(url)
+  isIframePageDevtoolsVariant(page) ? page.faviconUrl : getIframePageFallbackFaviconUrl(url)
 )
+
+export const isIframePageDevtoolsVariant = (page: Pick<InteractionPanelIframePage, 'variant'>) =>
+  iframePageDevtoolsVariants.has(page.variant)
 
 export const createIframePage = (
   title: string,
@@ -70,7 +76,7 @@ const normalizeIframePage = (page: InteractionPanelIframePage): InteractionPanel
   const historyIndex = history == null || history.length === 0
     ? undefined
     : Math.min(Math.max(page.historyIndex ?? history.length - 1, 0), history.length - 1)
-  const variant = page.variant === 'mobile-debug-devtools' ? page.variant : undefined
+  const variant = isIframePageDevtoolsVariant(page) ? page.variant : undefined
   const { variant: _variant, ...basePage } = page
   return {
     ...basePage,
@@ -183,10 +189,10 @@ export const updateIframePageMetadata = (
   metadata: { faviconUrl?: string; title?: string }
 ): InteractionPanelIframePage => ({
   ...page,
-  ...(page.variant === 'mobile-debug-devtools' || metadata.title == null || metadata.title.trim() === ''
+  ...(isIframePageDevtoolsVariant(page) || metadata.title == null || metadata.title.trim() === ''
     ? {}
     : { title: metadata.title.trim() }),
-  ...(page.variant === 'mobile-debug-devtools' || metadata.faviconUrl == null || metadata.faviconUrl.trim() === ''
+  ...(isIframePageDevtoolsVariant(page) || metadata.faviconUrl == null || metadata.faviconUrl.trim() === ''
     ? {}
     : { faviconUrl: metadata.faviconUrl })
 })
