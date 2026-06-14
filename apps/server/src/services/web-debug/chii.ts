@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- Chii embedding coordinates HTTP assets, target routing, and websocket upgrades. */
-import type { Buffer } from 'node:buffer'
+import { Buffer } from 'node:buffer'
 import { readFileSync } from 'node:fs'
 import type { IncomingMessage, Server } from 'node:http'
 import { createRequire } from 'node:module'
