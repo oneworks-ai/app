@@ -1,9 +1,7 @@
 /* eslint-disable max-lines -- Chii embedding coordinates HTTP assets, target routing, and websocket upgrades. */
 import type { Buffer } from 'node:buffer'
 import { readFileSync } from 'node:fs'
-import http from 'node:http'
 import type { IncomingMessage, Server } from 'node:http'
-import https from 'node:https'
 import { createRequire } from 'node:module'
 import type { Duplex } from 'node:stream'
 import { URL } from 'node:url'
@@ -11,20 +9,14 @@ import { URL } from 'node:url'
 import type Koa from 'koa'
 import type { WebSocket, WebSocketServer as WsWebSocketServer } from 'ws'
 
-import { getRunningLauncherWorkspaceServerBaseUrlById } from '#~/services/launcher/manager.js'
 import {
   isHttpUpgradeSocketHandled,
   markHttpUpgradeSocketHandled,
   scheduleUnhandledHttpUpgradeSocketClose
 } from '#~/utils/http-upgrade.js'
 
-import { getOneWorksDevtoolsAsset, injectOneWorksDevtoolsAssets } from './chii-devtools-assets.js'
 import { getPathWithoutTrailingSlash, resolveChiiBasePath } from './chii-paths.js'
-import {
-  WEB_DEBUG_CHII_BASE_PATH,
-  WEB_DEBUG_CHII_WORKSPACE_ROUTE_PREFIX,
-  normalizeWebDebugWorkspaceId
-} from './chii-runtime.js'
+import { WEB_DEBUG_CHII_BASE_PATH } from './chii-runtime.js'
 import type { ChiiChannelManager } from './chii-targets.js'
 import { buildChiiTargetsResponse } from './chii-targets.js'
 
@@ -60,11 +52,6 @@ interface ChiiUpgradeRequest {
   id: string
   searchParams: URLSearchParams
   type: ChiiConnectionType
-}
-
-interface ChiiWorkspaceProxyRequest {
-  proxiedPath: string
-  workspaceId: string
 }
 
 const installedServers = new WeakSet<Server>()
@@ -112,167 +99,6 @@ const normalizeChiiServerUrlOverride = (value: string | null) => {
 
 const buildChiiTargetScriptWithServerUrl = (serverUrl: string) =>
   `window.ChiiServerUrl=${JSON.stringify(serverUrl)};\n${getChiiTargetScript()}`
-
-const parseChiiWorkspaceProxyPath = (pathname: string): ChiiWorkspaceProxyRequest | undefined => {
-  if (!pathname.startsWith(WEB_DEBUG_CHII_WORKSPACE_ROUTE_PREFIX)) return undefined
-
-  const relativePath = pathname.slice(WEB_DEBUG_CHII_WORKSPACE_ROUTE_PREFIX.length)
-  const slashIndex = relativePath.indexOf('/')
-  const rawWorkspaceId = slashIndex === -1 ? relativePath : relativePath.slice(0, slashIndex)
-  let decodedWorkspaceId: string
-  try {
-    decodedWorkspaceId = decodeURIComponent(rawWorkspaceId)
-  } catch {
-    return undefined
-  }
-  const workspaceId = normalizeWebDebugWorkspaceId(decodedWorkspaceId)
-  if (workspaceId == null) return undefined
-
-  const suffix = slashIndex === -1 ? '' : relativePath.slice(slashIndex + 1)
-  return {
-    proxiedPath: `${WEB_DEBUG_CHII_BASE_PATH}${suffix}`,
-    workspaceId
-  }
-}
-
-const parseChiiWorkspaceProxyRequest = (request: IncomingMessage) => {
-  try {
-    const requestUrl = new URL(request.url ?? '', `http://${request.headers.host ?? 'localhost'}`)
-    const proxyRequest = parseChiiWorkspaceProxyPath(requestUrl.pathname)
-    return proxyRequest == null ? undefined : { ...proxyRequest, search: requestUrl.search }
-  } catch {
-    return undefined
-  }
-}
-
-const hopByHopHeaders = new Set([
-  'connection',
-  'keep-alive',
-  'proxy-authenticate',
-  'proxy-authorization',
-  'te',
-  'trailer',
-  'transfer-encoding',
-  'upgrade'
-])
-
-const createProxyHeaders = (
-  headers: IncomingMessage['headers'],
-  targetUrl: URL,
-  input: {
-    upgrade?: boolean
-  } = {}
-) => {
-  const next: Record<string, string | string[]> = {}
-  for (const [name, value] of Object.entries(headers)) {
-    if (value == null || hopByHopHeaders.has(name.toLowerCase())) continue
-    next[name] = value
-  }
-  next.host = targetUrl.host
-  if (input.upgrade === true) {
-    next.connection = 'Upgrade'
-    next.upgrade = 'websocket'
-  }
-  return next
-}
-
-const setProxyResponseHeaders = (ctx: Koa.Context, headers: http.IncomingHttpHeaders) => {
-  for (const [name, value] of Object.entries(headers)) {
-    if (value == null || hopByHopHeaders.has(name.toLowerCase())) continue
-    ctx.set(name, value)
-  }
-}
-
-const resolveWorkspaceChiiProxyTargetUrl = (
-  proxyRequest: ChiiWorkspaceProxyRequest & { search?: string }
-) => {
-  const serverBaseUrl = getRunningLauncherWorkspaceServerBaseUrlById(proxyRequest.workspaceId)
-  if (serverBaseUrl == null) return undefined
-
-  return new URL(`${proxyRequest.proxiedPath}${proxyRequest.search ?? ''}`, serverBaseUrl)
-}
-
-const proxyChiiWorkspaceHttpRequest = async (
-  ctx: Koa.Context,
-  proxyRequest: ChiiWorkspaceProxyRequest
-) => {
-  const targetUrl = resolveWorkspaceChiiProxyTargetUrl({ ...proxyRequest, search: ctx.search })
-  if (targetUrl == null) {
-    ctx.status = 502
-    ctx.body = {
-      error: 'Workspace Chii server is not available.'
-    }
-    return
-  }
-
-  const transport = targetUrl.protocol === 'https:' ? https : http
-  await new Promise<void>((resolve, reject) => {
-    const proxy = transport.request(targetUrl, {
-      headers: createProxyHeaders(ctx.req.headers, targetUrl),
-      method: ctx.method
-    }, (response) => {
-      ctx.status = response.statusCode ?? 502
-      setProxyResponseHeaders(ctx, response.headers)
-      ctx.body = response
-      resolve()
-    })
-    proxy.on('error', reject)
-    ctx.req.on('error', reject)
-    ctx.req.pipe(proxy)
-  })
-}
-
-const writeRawResponseHead = (
-  socket: Duplex,
-  statusCode: number,
-  statusMessage: string | undefined,
-  rawHeaders: string[]
-) => {
-  let responseHead = `HTTP/1.1 ${statusCode} ${statusMessage ?? ''}\r\n`
-  for (let index = 0; index < rawHeaders.length; index += 2) {
-    const name = rawHeaders[index]
-    const value = rawHeaders[index + 1]
-    if (name == null || value == null || hopByHopHeaders.has(name.toLowerCase())) continue
-    responseHead += `${name}: ${value}\r\n`
-  }
-  responseHead += '\r\n'
-  socket.write(responseHead)
-}
-
-const proxyChiiWorkspaceUpgradeRequest = (
-  request: IncomingMessage,
-  socket: Duplex,
-  head: Buffer,
-  proxyRequest: ChiiWorkspaceProxyRequest & { search: string }
-) => {
-  const targetUrl = resolveWorkspaceChiiProxyTargetUrl(proxyRequest)
-  if (targetUrl == null) {
-    socket.destroy()
-    return
-  }
-
-  const transport = targetUrl.protocol === 'https:' ? https : http
-  const proxy = transport.request(targetUrl, {
-    headers: createProxyHeaders(request.headers, targetUrl, { upgrade: true }),
-    method: 'GET'
-  })
-  proxy.once('upgrade', (response, proxySocket, proxyHead) => {
-    writeRawResponseHead(socket, response.statusCode ?? 101, response.statusMessage, response.rawHeaders)
-    if (proxyHead.length > 0) socket.write(proxyHead)
-    if (head.length > 0) proxySocket.write(head)
-    proxySocket.pipe(socket)
-    socket.pipe(proxySocket)
-  })
-  proxy.once('response', (response) => {
-    writeRawResponseHead(socket, response.statusCode ?? 502, response.statusMessage, response.rawHeaders)
-    response.resume()
-    socket.end()
-  })
-  proxy.once('error', () => socket.destroy())
-  socket.once('error', () => proxy.destroy())
-  socket.once('close', () => proxy.destroy())
-  proxy.end()
-}
 
 const setChiiCorsHeaders = (ctx: Koa.Context) => {
   ctx.set('Access-Control-Allow-Origin', '*')
@@ -579,12 +405,6 @@ const installChiiHttpMiddleware = (app: Koa, chiiWebSocketServer: ChiiWebSocketR
   }
 
   app.use(async (ctx, next) => {
-    const workspaceProxyRequest = parseChiiWorkspaceProxyPath(ctx.path)
-    if (workspaceProxyRequest != null) {
-      await proxyChiiWorkspaceHttpRequest(ctx, workspaceProxyRequest)
-      return
-    }
-
     if (ctx.path === pathWithoutTrailingSlash) {
       ctx.redirect(WEB_DEBUG_CHII_BASE_PATH)
       return
@@ -598,21 +418,6 @@ const installChiiHttpMiddleware = (app: Koa, chiiWebSocketServer: ChiiWebSocketR
 
     if (ctx.path === getPathWithoutTrailingSlash(basePath)) {
       ctx.redirect(basePath)
-      return
-    }
-
-    const oneWorksDevtoolsAsset = getOneWorksDevtoolsAsset(ctx.path, basePath)
-    if (oneWorksDevtoolsAsset != null) {
-      ctx.set('Cache-Control', 'no-store')
-      ctx.type = oneWorksDevtoolsAsset.contentType
-      ctx.body = oneWorksDevtoolsAsset.body
-      return
-    }
-
-    if (ctx.path === `${basePath}front_end/chii_app.html`) {
-      ctx.set('Cache-Control', 'no-store')
-      ctx.type = 'text/html; charset=utf-8'
-      ctx.body = injectOneWorksDevtoolsAssets(basePath)
       return
     }
 
@@ -647,13 +452,6 @@ const installChiiUpgradeMiddleware = (server: Server, chiiWebSocketServer: ChiiW
 
   server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) => {
     if (isHttpUpgradeSocketHandled(socket)) return
-
-    const workspaceProxyRequest = parseChiiWorkspaceProxyRequest(request)
-    if (workspaceProxyRequest != null) {
-      markHttpUpgradeSocketHandled(socket)
-      proxyChiiWorkspaceUpgradeRequest(request, socket, head, workspaceProxyRequest)
-      return
-    }
 
     const upgradeRequest = parseChiiUpgradeRequest(request)
     if (upgradeRequest == null) {

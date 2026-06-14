@@ -1,8 +1,4 @@
 /* eslint-disable max-lines -- Web debug API keeps Chii runtime, target normalization, and devtools URL construction together. */
-import { getRuntimeWorkspaceId } from '#~/runtime-config'
-
-import { fetchApiJson } from './base'
-
 export interface WebDebugChiiRuntime {
   basePath: string
   consoleUrl: string
@@ -98,35 +94,17 @@ const resolveBrowserChiiRuntime = (runtime: WebDebugChiiRuntime): WebDebugChiiRu
 
   const runtimeOrigin = new URL(runtime.consoleUrl).origin
   const browserOrigin = window.location.origin
-  const isWorkspaceProxyRuntime = runtime.basePath.includes('/workspaces/')
-  const resolvedOrigin = isWorkspaceProxyRuntime ? browserOrigin : runtimeOrigin
-  const consoleOrigin = resolvedOrigin === browserOrigin
+  const consoleOrigin = runtimeOrigin === browserOrigin
     ? browserOrigin
-    : resolveIsolatedBrowserOrigin(resolvedOrigin)
+    : resolveIsolatedBrowserOrigin(runtimeOrigin)
   const targetUrl = new URL(`${runtime.basePath}target.js`, browserOrigin)
-  targetUrl.searchParams.set('oneworks_chii_server_url', new URL(runtime.basePath, resolvedOrigin).toString())
+  targetUrl.searchParams.set('oneworks_chii_server_url', new URL(runtime.basePath, runtimeOrigin).toString())
   return {
     ...runtime,
     consoleUrl: new URL(runtime.basePath, consoleOrigin).toString(),
     targetUrl: targetUrl.toString(),
-    targetsUrl: new URL(`${runtime.basePath}targets`, resolvedOrigin).toString()
+    targetsUrl: new URL(`${runtime.basePath}targets`, runtimeOrigin).toString()
   }
-}
-
-const createWebDebugChiiRuntimeUrl = () => {
-  const workspaceId = getRuntimeWorkspaceId()
-  const browserOrigin = typeof window === 'undefined' ? undefined : window.location.origin
-  if (
-    workspaceId != null &&
-    browserOrigin != null &&
-    (browserOrigin.startsWith('http://') || browserOrigin.startsWith('https://'))
-  ) {
-    const url = new URL('/api/web-debug/chii', browserOrigin)
-    url.searchParams.set('workspaceId', workspaceId)
-    return url.toString()
-  }
-
-  return '/api/web-debug/chii'
 }
 
 const createWebDebugClientId = () => {
@@ -147,6 +125,25 @@ const setPositiveNumberSearchParam = (url: URL, key: string, value: number | und
 const setNonEmptySearchParam = (url: URL, key: string, value: string | undefined) => {
   if (value == null || value.trim() === '') return
   url.searchParams.set(key, value.trim())
+}
+
+const fetchHostApiJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  const response = await fetch(path, init)
+  if (!response.ok) {
+    throw new Error(`Request failed with status ${response.status}`)
+  }
+  const body = await response.json() as unknown
+  if (
+    body != null &&
+    typeof body === 'object' &&
+    !Array.isArray(body) &&
+    'success' in body &&
+    (body as { success?: unknown }).success === true &&
+    'data' in body
+  ) {
+    return (body as { data: T }).data
+  }
+  return body as T
 }
 
 const normalizeWebDebugTargets = (value: unknown): WebDebugTargetsResponse => {
@@ -174,7 +171,7 @@ const normalizeWebDebugTargets = (value: unknown): WebDebugTargetsResponse => {
 }
 
 export const readWebDebugChiiRuntime = async () => {
-  const runtime = await fetchApiJson<WebDebugChiiRuntime>(createWebDebugChiiRuntimeUrl(), {
+  const runtime = await fetchHostApiJson<WebDebugChiiRuntime>('/api/web-debug/chii', {
     cache: 'no-store'
   })
   const resolvedRuntime = resolveBrowserChiiRuntime(runtime)
@@ -232,9 +229,6 @@ export const buildWebDebugDevtoolsUrl = (
   setNonEmptySearchParam(devtoolsUrl, 'oneworks_toolbar_background_color', options.toolbarBackgroundColor)
   setPositiveNumberSearchParam(devtoolsUrl, 'oneworks_toolbar_icon_size', options.toolbarIconSize)
   setPositiveNumberSearchParam(devtoolsUrl, 'oneworks_toolbar_total_height', options.toolbarTotalHeight)
-  if (isDebugEnabled) {
-    devtoolsUrl.searchParams.set('oneworks_debug', '1')
-  }
   debugWebDebugDevtools('build devtools url', {
     debug: isDebugEnabled,
     dockControls: options.dockControls,

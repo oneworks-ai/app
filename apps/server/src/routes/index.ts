@@ -66,7 +66,7 @@ export const mountRoutes = async (
     { prefix: '/api/channels', router: channelSendRouter() },
     { prefix: '/api/automation', router: automationRouter() },
     { prefix: '/api/config', router: configRouter() },
-    { prefix: '/api/web-debug', router: webDebugRouter(env) },
+    { prefix: '/api/web-debug', router: webDebugRouter() },
     { prefix: '/api/webpage', router: webpageRouter() },
     { prefix: '/api/worktree-environments', router: worktreeEnvironmentsRouter() },
     { prefix: '/api/workspace', router: workspaceRouter() }

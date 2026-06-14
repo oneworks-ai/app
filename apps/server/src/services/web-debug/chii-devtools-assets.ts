@@ -311,6 +311,7 @@ const hostOrigin = searchParams.get('oneworks_host_origin') || '*';
 const leftToolbarLocation = Legacy.Toolbar.ToolbarItemLocation.MAIN_TOOLBAR_LEFT;
 const rightToolbarLocation = Legacy.Toolbar.ToolbarItemLocation.MAIN_TOOLBAR_RIGHT;
 const debugKeys = ['oneworks_debug', 'oneworks_devtools_debug'];
+const protocolDebugKeys = ['oneworks_protocol_debug'];
 const storageDebugKeys = ['oneworks-devtools-debug', 'oneworks_debug'];
 let hasOneWorksDeviceToolbarRegistration = false;
 
@@ -345,6 +346,14 @@ const isDevtoolsDebugEnabled = () => {
     if (queryValue != null) return isDebugValueEnabled(queryValue);
   }
   return isDebugValueEnabled(readStorageDebugValue());
+};
+
+const isProtocolDebugEnabled = () => {
+  for (const key of protocolDebugKeys) {
+    const queryValue = searchParams.get(key);
+    if (queryValue != null) return isDebugValueEnabled(queryValue);
+  }
+  return false;
 };
 
 const debugDevtools = (...args) => {
@@ -468,7 +477,7 @@ const summarizeProtocolData = (data, direction, methodsById) => {
 };
 
 const installProtocolDebugging = () => {
-  if (!isDevtoolsDebugEnabled()) return;
+  if (!isProtocolDebugEnabled()) return;
   const NativeWebSocket = window.WebSocket;
   if (NativeWebSocket == null || NativeWebSocket.__oneworksDevtoolsPatched === true) return;
 
