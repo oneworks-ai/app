@@ -15,6 +15,10 @@ import {
   scheduleUnhandledHttpUpgradeSocketClose
 } from '#~/utils/http-upgrade.js'
 
+import {
+  getOneWorksDevtoolsStyleAndPatchAsset,
+  injectOneWorksDevtoolsStyleAndPatchAssets
+} from './chii-devtools-assets.js'
 import { getPathWithoutTrailingSlash, resolveChiiBasePath } from './chii-paths.js'
 import { WEB_DEBUG_CHII_BASE_PATH } from './chii-runtime.js'
 import type { ChiiChannelManager } from './chii-targets.js'
@@ -418,6 +422,21 @@ const installChiiHttpMiddleware = (app: Koa, chiiWebSocketServer: ChiiWebSocketR
 
     if (ctx.path === getPathWithoutTrailingSlash(basePath)) {
       ctx.redirect(basePath)
+      return
+    }
+
+    const oneWorksDevtoolsAsset = getOneWorksDevtoolsStyleAndPatchAsset(ctx.path, basePath)
+    if (oneWorksDevtoolsAsset != null) {
+      ctx.set('Cache-Control', 'no-store')
+      ctx.type = oneWorksDevtoolsAsset.contentType
+      ctx.body = oneWorksDevtoolsAsset.body
+      return
+    }
+
+    if (ctx.path === `${basePath}front_end/chii_app.html`) {
+      ctx.set('Cache-Control', 'no-store')
+      ctx.type = 'text/html; charset=utf-8'
+      ctx.body = injectOneWorksDevtoolsStyleAndPatchAssets(basePath)
       return
     }
 

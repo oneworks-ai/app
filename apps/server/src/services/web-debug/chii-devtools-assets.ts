@@ -4,11 +4,9 @@ import { createRequire } from 'node:module'
 
 const nodeRequire = createRequire(__filename)
 
-const ONE_WORKS_DEVTOOLS_BOOTSTRAP_SCRIPT_PATH = 'oneworks-devtools-bootstrap.js'
 const ONE_WORKS_DEVTOOLS_PATCH_SCRIPT_PATH = 'oneworks-devtools-patch.js'
 const ONE_WORKS_DEVTOOLS_STYLE_PATH = 'oneworks-devtools.css'
-const ONE_WORKS_DEVTOOLS_LEGACY_SCRIPT_PATH = 'front_end/ui/legacy/legacy.js'
-export const ONE_WORKS_DEVTOOLS_ASSET_VERSION = '20260614zm'
+export const ONE_WORKS_DEVTOOLS_ASSET_VERSION = '20260614zo'
 
 const oneWorksDevtoolsStyle = `
 html {
@@ -156,7 +154,6 @@ button.toolbar-button.toolbar-has-glyph,
 
 .toolbar-button.toolbar-has-glyph,
 button.toolbar-button.toolbar-has-glyph {
-  display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
   width: var(--oneworks-devtools-toolbar-icon-size) !important;
@@ -169,7 +166,6 @@ button.toolbar-button.toolbar-has-glyph {
   border-radius: 2px !important;
   background: transparent !important;
   line-height: var(--oneworks-devtools-toolbar-icon-size) !important;
-  pointer-events: auto !important;
   vertical-align: middle !important;
 }
 
@@ -302,385 +298,6 @@ devtools-icon.toolbar-button-icon,
 }
 `
 
-const oneWorksDevtoolsBootstrapScript = `
-import * as Legacy from './front_end/ui/legacy/legacy.js';
-
-const ONE_WORKS_DEVTOOLS_SOURCE = 'oneworks-devtools';
-const searchParams = new URLSearchParams(location.search);
-const hostOrigin = searchParams.get('oneworks_host_origin') || '*';
-const leftToolbarLocation = Legacy.Toolbar.ToolbarItemLocation.MAIN_TOOLBAR_LEFT;
-const rightToolbarLocation = Legacy.Toolbar.ToolbarItemLocation.MAIN_TOOLBAR_RIGHT;
-const debugKeys = ['oneworks_debug', 'oneworks_devtools_debug'];
-const protocolDebugKeys = ['oneworks_protocol_debug'];
-const storageDebugKeys = ['oneworks-devtools-debug', 'oneworks_debug'];
-let hasOneWorksDeviceToolbarRegistration = false;
-
-const isDebugValueEnabled = (value) => {
-  if (value == null) return false;
-  const normalizedValue = String(value).trim().toLowerCase();
-  return normalizedValue === '' || (
-    normalizedValue !== '0' &&
-    normalizedValue !== 'false' &&
-    normalizedValue !== 'off' &&
-    normalizedValue !== 'no'
-  );
-};
-
-const readStorageDebugValue = () => {
-  for (const key of storageDebugKeys) {
-    try {
-      const localValue = window.localStorage?.getItem(key);
-      if (localValue != null) return localValue;
-      const sessionValue = window.sessionStorage?.getItem(key);
-      if (sessionValue != null) return sessionValue;
-    } catch {
-      return null;
-    }
-  }
-  return null;
-};
-
-const isDevtoolsDebugEnabled = () => {
-  for (const key of debugKeys) {
-    const queryValue = searchParams.get(key);
-    if (queryValue != null) return isDebugValueEnabled(queryValue);
-  }
-  return isDebugValueEnabled(readStorageDebugValue());
-};
-
-const isProtocolDebugEnabled = () => {
-  for (const key of protocolDebugKeys) {
-    const queryValue = searchParams.get(key);
-    if (queryValue != null) return isDebugValueEnabled(queryValue);
-  }
-  return false;
-};
-
-const debugDevtools = (...args) => {
-  if (!isDevtoolsDebugEnabled()) return;
-  console.debug('[oneworks-devtools]', ...args);
-};
-
-const debugDevtoolsJson = (label, payload) => {
-  if (!isDevtoolsDebugEnabled()) return;
-  let serializedPayload = '';
-  try {
-    serializedPayload = JSON.stringify(payload);
-  } catch (error) {
-    serializedPayload = JSON.stringify({
-      error: String(error)
-    });
-  }
-  console.debug('[oneworks-devtools]', label, serializedPayload);
-  window.parent?.postMessage({
-    label,
-    payload: serializedPayload,
-    source: ONE_WORKS_DEVTOOLS_SOURCE,
-    type: 'debug-log'
-  }, hostOrigin);
-};
-
-const isProtocolMethodInteresting = (method) => (
-  typeof method === 'string' &&
-  (
-    method === 'DOM.enable' ||
-    method === 'DOM.disable' ||
-    method === 'DOM.getDocument' ||
-    method === 'DOM.requestChildNodes' ||
-    method === 'DOM.documentUpdated' ||
-    method === 'DOM.setChildNodes' ||
-    method === 'DOM.childNodeInserted' ||
-    method === 'DOM.childNodeRemoved' ||
-    method === 'Page.enable' ||
-    method === 'Page.loadEventFired' ||
-    method === 'Inspector.detached'
-  )
-);
-
-const readProtocolRootSummary = (root) => {
-  if (root == null || typeof root !== 'object') return null;
-  return {
-    backendNodeId: root.backendNodeId ?? null,
-    childNodeCount: root.childNodeCount ?? null,
-    childrenLength: Array.isArray(root.children) ? root.children.length : null,
-    localName: root.localName ?? null,
-    nodeId: root.nodeId ?? null,
-    nodeName: root.nodeName ?? null,
-    nodeType: root.nodeType ?? null
-  };
-};
-
-const readProtocolNodeSummary = (node) => {
-  if (node == null || typeof node !== 'object') return null;
-  return {
-    backendNodeId: node.backendNodeId ?? null,
-    childNodeCount: node.childNodeCount ?? null,
-    childrenLength: Array.isArray(node.children) ? node.children.length : null,
-    nodeId: node.nodeId ?? null,
-    nodeName: node.nodeName ?? null,
-    nodeType: node.nodeType ?? null
-  };
-};
-
-const readProtocolDataText = (data) => {
-  if (typeof data === 'string') return data;
-  if (data instanceof ArrayBuffer) return '[ArrayBuffer ' + data.byteLength + ']';
-  if (ArrayBuffer.isView(data)) return '[' + data.constructor.name + ' ' + data.byteLength + ']';
-  return null;
-};
-
-const summarizeProtocolMessage = (message, direction, methodsById) => {
-  if (message == null || typeof message !== 'object') return null;
-  const id = message.id == null ? null : String(message.id);
-  const method = typeof message.method === 'string' ? message.method : null;
-  if (direction === 'send' && id != null && method != null) {
-    methodsById.set(id, method);
-  }
-
-  const requestMethod = method ?? (id == null ? null : methodsById.get(id) ?? null);
-  const isInteresting = isProtocolMethodInteresting(method) ||
-    isProtocolMethodInteresting(requestMethod) ||
-    message.error != null;
-  if (!isInteresting) return null;
-
-  return {
-    direction,
-    error: message.error ?? null,
-    id,
-    method,
-    params: message.params == null ? null : {
-      depth: message.params.depth ?? null,
-      nodeId: message.params.nodeId ?? null,
-      parentId: message.params.parentId ?? null,
-      nodesLength: Array.isArray(message.params.nodes) ? message.params.nodes.length : null
-    },
-    requestMethod,
-    result: message.result == null ? null : {
-      root: readProtocolRootSummary(message.result.root)
-    }
-  };
-};
-
-const summarizeProtocolData = (data, direction, methodsById) => {
-  const text = readProtocolDataText(data);
-  if (text == null || !text.startsWith('{') && !text.startsWith('[')) return [];
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return [];
-  }
-  const messages = Array.isArray(parsed) ? parsed : [parsed];
-  return messages
-    .map(message => summarizeProtocolMessage(message, direction, methodsById))
-    .filter(Boolean);
-};
-
-const installProtocolDebugging = () => {
-  if (!isProtocolDebugEnabled()) return;
-  const NativeWebSocket = window.WebSocket;
-  if (NativeWebSocket == null || NativeWebSocket.__oneworksDevtoolsPatched === true) return;
-
-  const PatchedWebSocket = function(url, protocols) {
-    const socket = protocols == null ? new NativeWebSocket(url) : new NativeWebSocket(url, protocols);
-    const socketUrl = String(url);
-    const isChiiClientSocket = /\\/__oneworks_chii__\\/client\\//.test(socketUrl);
-    const methodsById = new Map();
-
-    if (isChiiClientSocket) {
-      debugDevtoolsJson('protocol-websocket-created', {
-        url: socketUrl
-      });
-    }
-
-    const nativeSend = socket.send.bind(socket);
-    Object.defineProperty(socket, 'send', {
-      configurable: true,
-      value(data) {
-        if (isChiiClientSocket) {
-          const summaries = summarizeProtocolData(data, 'send', methodsById);
-          if (summaries.length > 0) {
-            debugDevtoolsJson('protocol-send', { summaries, url: socketUrl });
-          }
-        }
-        return nativeSend(data);
-      }
-    });
-
-    socket.addEventListener('message', (event) => {
-      if (!isChiiClientSocket) return;
-      const summaries = summarizeProtocolData(event.data, 'receive', methodsById);
-      if (summaries.length > 0) {
-        debugDevtoolsJson('protocol-receive', { summaries, url: socketUrl });
-      }
-    });
-
-    socket.addEventListener('close', (event) => {
-      if (!isChiiClientSocket) return;
-      debugDevtoolsJson('protocol-websocket-close', {
-        code: event.code,
-        reason: event.reason,
-        url: socketUrl,
-        wasClean: event.wasClean
-      });
-    });
-
-    socket.addEventListener('error', () => {
-      if (!isChiiClientSocket) return;
-      debugDevtoolsJson('protocol-websocket-error', {
-        url: socketUrl
-      });
-    });
-
-    return socket;
-  };
-  Object.setPrototypeOf(PatchedWebSocket, NativeWebSocket);
-  PatchedWebSocket.prototype = NativeWebSocket.prototype;
-  PatchedWebSocket.__oneworksDevtoolsPatched = true;
-  window.WebSocket = PatchedWebSocket;
-  debugDevtools('protocol debugging installed');
-};
-
-installProtocolDebugging();
-
-const describeToolbarDescriptor = (descriptor) => ({
-  actionId: descriptor?.actionId,
-  commandPrompt: descriptor?.commandPrompt,
-  experiment: descriptor?.experiment,
-  location: descriptor?.location,
-  order: descriptor?.order,
-  showLabel: descriptor?.showLabel,
-  title: descriptor?.title
-});
-
-const getLoadItemSource = (descriptor) => {
-  try {
-    return String(descriptor?.loadItem ?? '');
-  } catch {
-    return '';
-  }
-};
-
-const postToggleDeviceToolbar = () => {
-  debugDevtools('post toggle device toolbar', { hostOrigin });
-  window.parent?.postMessage({
-    source: ONE_WORKS_DEVTOOLS_SOURCE,
-    type: 'toggle-device-toolbar'
-  }, hostOrigin);
-};
-
-const stopToolbarPointerEvent = (event) => {
-  event.stopPropagation();
-};
-
-const activateDeviceToolbarButton = (event) => {
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  postToggleDeviceToolbar();
-};
-
-const createOneWorksDeviceToolbarItem = () => {
-  debugDevtools('create device toolbar button');
-  const button = new Legacy.Toolbar.ToolbarButton('Toggle device toolbar', 'devices', '', 'oneworks-toggle-device-toolbar');
-  button.element.classList.add('oneworks-device-toolbar-button');
-  button.element.dataset.oneworksDeviceToolbarButton = 'true';
-  button.element.setAttribute('aria-label', 'Toggle device toolbar');
-  button.element.setAttribute('title', 'Toggle device toolbar');
-  button.element.addEventListener('pointerdown', stopToolbarPointerEvent, true);
-  button.element.addEventListener('mousedown', stopToolbarPointerEvent, true);
-  button.element.addEventListener('click', activateDeviceToolbarButton, true);
-  button.element.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    activateDeviceToolbarButton(event);
-  }, true);
-  return button;
-};
-
-const createOneWorksDeviceToolbarRegistration = (descriptor) => {
-  hasOneWorksDeviceToolbarRegistration = true;
-  return {
-    ...descriptor,
-    actionId: undefined,
-    condition: undefined,
-    loadItem: async () => ({
-      item: createOneWorksDeviceToolbarItem
-    }),
-    location: descriptor?.location ?? leftToolbarLocation,
-    order: descriptor?.order ?? 1
-  };
-};
-
-const isEmulationDeviceToolbarRegistration = (descriptor) => (
-  descriptor?.actionId === 'emulation.toggle-device-mode'
-);
-
-const isScreencastToolbarRegistration = (descriptor) => (
-  descriptor?.location === leftToolbarLocation &&
-  descriptor?.order === 1 &&
-  /ScreencastApp|ToolbarButtonProvider|screencast/i.test(getLoadItemSource(descriptor))
-);
-
-const isNodeIndicatorRegistration = (descriptor) => (
-  descriptor?.location === leftToolbarLocation &&
-  descriptor?.order === 2 &&
-  /NodeIndicator/.test(getLoadItemSource(descriptor))
-);
-
-const isOutermostTargetSelectorRegistration = (descriptor) => (
-  descriptor?.location === rightToolbarLocation &&
-  descriptor?.order === 98 &&
-  /OutermostTargetSelector/.test(getLoadItemSource(descriptor))
-);
-
-const isCloseButtonRegistration = (descriptor) => (
-  descriptor?.location === rightToolbarLocation &&
-  descriptor?.order === 101 &&
-  /CloseButtonProvider/.test(getLoadItemSource(descriptor))
-);
-
-globalThis.__ONEWORKS_DEVTOOLS_REWRITE_TOOLBAR_ITEM__ = (descriptor) => {
-  const isDeviceToolbarRegistration = isEmulationDeviceToolbarRegistration(descriptor) ||
-    isScreencastToolbarRegistration(descriptor);
-  if (isDeviceToolbarRegistration) {
-    if (hasOneWorksDeviceToolbarRegistration) {
-      debugDevtools('skip duplicate device toolbar item', {
-        descriptor: describeToolbarDescriptor(descriptor)
-      });
-      return null;
-    }
-    debugDevtools('replace toolbar item', {
-      descriptor: describeToolbarDescriptor(descriptor),
-      reason: isScreencastToolbarRegistration(descriptor) ? 'screencast-device-toolbar' : 'device-toolbar'
-    });
-    return createOneWorksDeviceToolbarRegistration(descriptor);
-  }
-
-  const skipReason = isNodeIndicatorRegistration(descriptor)
-    ? 'node-indicator'
-    : isOutermostTargetSelectorRegistration(descriptor)
-      ? 'outermost-target-selector'
-      : isCloseButtonRegistration(descriptor)
-        ? 'close-button'
-        : null;
-
-  if (skipReason != null) {
-    debugDevtools('skip toolbar item', {
-      descriptor: describeToolbarDescriptor(descriptor),
-      reason: skipReason
-    });
-    return null;
-  }
-
-  return descriptor;
-};
-
-debugDevtools('bootstrap installed', {
-  dockSide: searchParams.get('oneworks_dock_side'),
-  hostOrigin,
-  location: location.href
-});
-`
-
 const oneWorksDevtoolsPatchScript = `
 const ONE_WORKS_DEVTOOLS_SOURCE = 'oneworks-devtools';
 const ONE_WORKS_HOST_SOURCE = 'oneworks-host';
@@ -712,6 +329,12 @@ const dockSideLabelPatterns = {
     /右侧/
   ]
 };
+const deviceToolbarLabelPatterns = [
+  /toggle\\s+screencast/i,
+  /screencast/i,
+  /设备工具栏/,
+  /屏幕投射/
+];
 let currentDockSide = searchParams.get('oneworks_dock_side') || 'right';
 let isDeviceToolbarOpen = false;
 const observedRoots = new WeakSet();
@@ -930,6 +553,38 @@ const getDockSideFromEvent = (event) => {
   return null;
 };
 
+const isDeviceToolbarLabel = (label) => deviceToolbarLabelPatterns.some(pattern => pattern.test(label));
+
+const isDeviceToolbarElement = (element) => (
+  isDeviceToolbarLabel(getElementLabel(element)) &&
+  (
+    element.matches?.('button, [role="button"], .toolbar-button') === true ||
+    element.closest?.('button, [role="button"], .toolbar-button') === element
+  )
+);
+
+const getDeviceToolbarButtonFromElement = (element) => {
+  const candidates = [
+    element,
+    element.closest?.('button, [role="button"], .toolbar-button')
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (!(candidate instanceof HTMLElement)) continue;
+    if (isDeviceToolbarElement(candidate)) return candidate;
+  }
+  return null;
+};
+
+const getDeviceToolbarButtonFromEvent = (event) => {
+  const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+  for (const item of path) {
+    if (!(item instanceof Element)) continue;
+    const button = getDeviceToolbarButtonFromElement(item);
+    if (button != null) return button;
+  }
+  return null;
+};
+
 const postDockSide = (dockSide) => {
   currentDockSide = dockSide;
   document.documentElement.dataset.oneworksDockSide = dockSide;
@@ -942,10 +597,29 @@ const postDockSide = (dockSide) => {
   updateDockSideStateForAllRoots();
 };
 
+const postToggleDeviceToolbar = () => {
+  debugDevtools('post toggle device toolbar', { hostOrigin });
+  window.parent?.postMessage({
+    source: ONE_WORKS_DEVTOOLS_SOURCE,
+    type: 'toggle-device-toolbar'
+  }, hostOrigin);
+};
+
 const handleDockSideButtonEvent = (dockSide, event) => {
   event.preventDefault();
   event.stopPropagation();
   postDockSide(dockSide);
+};
+
+const handleDeviceToolbarEvent = (event) => {
+  if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+  const button = getDeviceToolbarButtonFromEvent(event);
+  if (button == null) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (event.type === 'click' || event.type === 'keydown') {
+    postToggleDeviceToolbar();
+  }
 };
 
 const createDockSideButton = (dockSide, label) => {
@@ -1044,6 +718,17 @@ const injectDockSideMenus = (root = document) => {
   updateDockSideState(root);
 };
 
+const markDeviceToolbarButtons = (root = document) => {
+  const controls = root.querySelectorAll?.('button, [role="button"], .toolbar-button') ?? [];
+  for (const control of controls) {
+    if (!(control instanceof HTMLElement)) continue;
+    if (!isDeviceToolbarElement(control)) continue;
+    control.classList.add('oneworks-device-toolbar-button');
+    control.dataset.oneworksDeviceToolbarButton = 'true';
+    control.setAttribute('aria-label', control.getAttribute('aria-label') || 'Toggle screencast');
+  }
+};
+
 const updateDockSideState = (root = document) => {
   const controls = root.querySelectorAll?.('.oneworks-dock-side-menu__button') ?? [];
   for (const control of controls) {
@@ -1079,6 +764,7 @@ const updateDeviceToolbarStateForAllRoots = () => {
 
 const applyDevtoolsPatch = (root = document) => {
   injectRootStyle(root);
+  markDeviceToolbarButtons(root);
   injectDockSideMenus(root);
   updateDockSideState(root);
   updateDeviceToolbarState(root);
@@ -1134,6 +820,11 @@ document.addEventListener('keydown', (event) => {
   event.stopImmediatePropagation();
   postDockSide(dockSide);
 }, true);
+
+document.addEventListener('pointerdown', handleDeviceToolbarEvent, true);
+document.addEventListener('mousedown', handleDeviceToolbarEvent, true);
+document.addEventListener('click', handleDeviceToolbarEvent, true);
+document.addEventListener('keydown', handleDeviceToolbarEvent, true);
 
 observeRoot(document);
 document.documentElement.dataset.oneworksDockSide = currentDockSide;
@@ -1194,52 +885,22 @@ const readChiiAppHtml = () =>
     'utf8'
   )
 
-const readChiiLegacyScript = () =>
-  readFileSync(
-    nodeRequire.resolve('chii/public/front_end/ui/legacy/legacy.js'),
-    'utf8'
-  )
-
-const patchChiiLegacyScript = (source: string) => {
-  const patchedSource = source.replace(
-    /registerToolbarItem:function\((\w+)\)\{(\w+)\.push\(\1\)\}/,
-    'registerToolbarItem:function($1){const t=globalThis.__ONEWORKS_DEVTOOLS_REWRITE_TOOLBAR_ITEM__?.($1);t!==null&&$2.push(t||$1)}'
-  )
-  return patchedSource
-}
-
-export const injectOneWorksDevtoolsAssets = (basePath: string) => {
+export const injectOneWorksDevtoolsStyleAndPatchAssets = (basePath: string) => {
   const html = readChiiAppHtml()
   if (html.includes(ONE_WORKS_DEVTOOLS_PATCH_SCRIPT_PATH)) return html
 
   const appScript = '<script type="module" src="./entrypoints/chii_app/chii_app.js"></script>'
-  const tagsBeforeApp = [
-    `<link rel="stylesheet" href="${basePath}${ONE_WORKS_DEVTOOLS_STYLE_PATH}?v=${ONE_WORKS_DEVTOOLS_ASSET_VERSION}">`,
-    `<script type="module" src="${basePath}${ONE_WORKS_DEVTOOLS_BOOTSTRAP_SCRIPT_PATH}?v=${ONE_WORKS_DEVTOOLS_ASSET_VERSION}"></script>`
-  ].join('\n')
-  const tagsAfterApp =
+  const styleTag =
+    `<link rel="stylesheet" href="${basePath}${ONE_WORKS_DEVTOOLS_STYLE_PATH}?v=${ONE_WORKS_DEVTOOLS_ASSET_VERSION}">`
+  const patchTag =
     `<script defer src="${basePath}${ONE_WORKS_DEVTOOLS_PATCH_SCRIPT_PATH}?v=${ONE_WORKS_DEVTOOLS_ASSET_VERSION}"></script>`
 
   return html.includes(appScript)
-    ? html.replace(appScript, `${tagsBeforeApp}\n${appScript}\n${tagsAfterApp}`)
-    : `${html}\n${tagsBeforeApp}\n${tagsAfterApp}`
+    ? html.replace(appScript, `${styleTag}\n${appScript}\n${patchTag}`)
+    : `${html}\n${styleTag}\n${patchTag}`
 }
 
-export const getOneWorksDevtoolsAsset = (path: string, basePath: string) => {
-  if (path === `${basePath}${ONE_WORKS_DEVTOOLS_LEGACY_SCRIPT_PATH}`) {
-    return {
-      body: patchChiiLegacyScript(readChiiLegacyScript()),
-      contentType: 'application/javascript; charset=utf-8'
-    }
-  }
-
-  if (path === `${basePath}${ONE_WORKS_DEVTOOLS_BOOTSTRAP_SCRIPT_PATH}`) {
-    return {
-      body: oneWorksDevtoolsBootstrapScript,
-      contentType: 'application/javascript; charset=utf-8'
-    }
-  }
-
+export const getOneWorksDevtoolsStyleAndPatchAsset = (path: string, basePath: string) => {
   if (path === `${basePath}${ONE_WORKS_DEVTOOLS_PATCH_SCRIPT_PATH}`) {
     return {
       body: oneWorksDevtoolsPatchScript,
