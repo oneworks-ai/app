@@ -19,3 +19,4 @@
 - Standardize Relay verification emails with branded HTML and plain-text bodies.
 - Add the One Works logo to Relay transactional emails with a configurable HTTPS image URL.
 - Localize Relay transactional emails from the login page language and add shared One Works footer links.
+- Add Relay passkey login and verified-email passkey registration with configurable invite gating.

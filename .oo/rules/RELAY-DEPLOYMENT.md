@@ -28,6 +28,8 @@ These domains are the OneWorks-owned public topology. Keep this list in sync wit
 
 For each Relay slot, set `ONEWORKS_RELAY_PUBLIC_URL` and `ONEWORKS_RELAY_ALLOW_ORIGIN` to the user-facing Admin origin for that slot. In the Cloudflare shape, the Worker origin should usually stay behind the Pages/custom-domain proxy; expose the Pages/custom domain as the public Admin/API/login origin.
 
+Passkeys are bound to the browser origin and relying party id. For every official or private Relay slot, set `ONEWORKS_RELAY_PASSKEY_ORIGIN` and `ONEWORKS_RELAY_PASSKEY_RP_ID` only when the public origin cannot be inferred from `ONEWORKS_RELAY_PUBLIC_URL`; do not enroll production passkeys on a temporary platform domain and then move users to a custom domain.
+
 The official topology is not a template for user private deployments. Private deployments should use the user's own domains and generic examples such as `https://relay.example.com` in committed docs.
 
 ## Official Mail Topology
@@ -64,8 +66,9 @@ The official topology is not a template for user private deployments. Private de
    - For Resend or similar providers, prefer a stable mail subdomain such as `mail.example.com` and optional dev subdomain such as `mail.dev.example.com`, instead of attaching mail records to the Relay/Admin web host.
 4. Generate long random values for `ONEWORKS_RELAY_ADMIN_TOKEN` and `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`.
 5. Set `ONEWORKS_RELAY_PUBLIC_URL` and `ONEWORKS_RELAY_ALLOW_ORIGIN` to the user-facing Admin origin.
-6. Deploy, then verify health, Admin shell, unauthorized admin API behavior, owner login, and plugin device registration.
-7. Update Relay plugin `servers[]` only after the target public origin is known.
+6. Choose passkey registration policy: `invite_required` for gated deployments, `email_verified` for open verified-email onboarding, or `admin_created_only` for admin-provisioned accounts only.
+7. Deploy, then verify health, Admin shell, unauthorized admin API behavior, owner login, passkey registration/login on the final public origin, and plugin device registration.
+8. Update Relay plugin `servers[]` only after the target public origin is known.
 
 ## Vercel Notes
 
@@ -74,6 +77,7 @@ The official topology is not a template for user private deployments. Private de
 - `pnpm build:vercel` builds `apps/relay-admin`, embeds Admin under `/admin`, and builds the serverless function.
 - Vercel serverless must use the Postgres storage driver. Do not rely on local JSON, SQLite files, or process memory for durable cloud state.
 - Required env: `ONEWORKS_RELAY_STORAGE_DRIVER=postgres`, `ONEWORKS_RELAY_POSTGRES_URL` or `DATABASE_URL`, `ONEWORKS_RELAY_ADMIN_TOKEN`, `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`, `ONEWORKS_RELAY_PUBLIC_URL`, and `ONEWORKS_RELAY_ALLOW_ORIGIN`.
+- Passkeys work on Vercel when `/login`, `/api/auth/passkey/*`, and `/admin` share the same final HTTPS origin. Set `ONEWORKS_RELAY_PASSKEY_ORIGIN` / `ONEWORKS_RELAY_PASSKEY_RP_ID` only if the inferred origin is wrong.
 - Local prebuilt CLI deploys should run `vercel build --prod`, `pnpm prepare:vercel-output`, then `vercel deploy --prebuilt --prod`.
 - The Vercel project domain decides the default `.vercel.app` origin. Users can add their own custom domain and should then set public URL and CORS to that custom origin.
 
@@ -88,6 +92,7 @@ The official topology is not a template for user private deployments. Private de
 - For short test/prod Worker URLs, choose a neutral account subdomain owned by the deployment account, then use short Worker names such as `dev` and `pro`.
 - Pages default domains use `https://<pages-project>.pages.dev`. Create separate Pages projects for dev and prod slots when the user wants both reserved.
 - The public Admin origin should usually be the Pages or custom domain; the Worker URL can remain an implementation detail behind the Pages proxy.
+- Passkeys work on Cloudflare when the browser reaches the Pages/custom domain and the proxied Worker verifies that same origin. Keep `ONEWORKS_RELAY_PUBLIC_URL` pointed at the Pages/custom domain, not the hidden Worker URL.
 
 ## Smoke Checks
 

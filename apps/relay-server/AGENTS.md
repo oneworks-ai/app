@@ -7,6 +7,7 @@
 - `src/server.ts`：HTTP route 挂载与服务创建。
 - `src/routes/`：传输层处理函数，只做认证、参数解析和响应。
 - `src/routes/login.ts` / `src/routes/login-page.ts`：Relay 插件打开的 `/login` 与 `/login/complete` SSO 登录入口；负责 redirect 校验、provider start URL 计算、JSON config 注入和 Web/Electron 回跳，不承载完整用户端设备 / 会话页面。`/login` 的 React + AntD 控件在 `apps/relay-admin/src/login`，不要在 relay-server 字符串模板里手写 input/button/list。
+- `src/auth/passkeys.ts` / `src/routes/passkeys.ts`：passkey 注册与登录核心逻辑和 HTTP route。这里处理 WebAuthn options/verify、邮箱验证码校验、邀请码策略、credential counter 更新和 session 发放；登录页 UI 仍在 `apps/relay-admin/src/login`。
 - `src/routes/admin-sso-providers.ts`：B 端托管 SSO provider 管理 API。
 - `src/devices/private-metadata.ts`：设备私有元数据加密、解密和 device token hash 工具。
 - `src/auth/sso-provider-*`：SSO provider 元数据校验、redaction、OAuth client 解析与 env / store 合并。
@@ -31,6 +32,7 @@
 - `/api/relay/devices` 是当前 session 用户自己的设备列表。不要因为 owner/admin 有管理权限就把其他用户设备详情从这个接口返回。
 - SSO provider 的 `clientSecret` 可以由 admin API 写入 / 更新，但 list/detail 响应必须只返回 redacted 值，不能把明文 secret 返回给管理端。
 - 发信入口必须先经过 `src/email/` 的 Turnstile、域名策略、同邮箱 / 同 IP / 同域名和全局预算检查，再调用 Resend 或后续 provider。域名 allowlist 只能解除域名封禁，不能绕过 Turnstile、频率或预算。
+- Passkey 注册必须先校验邮箱验证码；新用户是否还需要邀请码由 `ONEWORKS_RELAY_REGISTRATION_MODE` 决定。`invite_required` 是默认值，`email_verified` 允许邮箱验证后自注册，`admin_created_only` 禁止新账号自注册但允许已有用户绑定 passkey。不要把这些策略硬编码到前端。
 - `ONEWORKS_RELAY_STORAGE_DRIVER=sqlite` 是单机 Node 生产推荐路径，`ONEWORKS_RELAY_DATA_PATH` 指向 SQLite 文件；不要把 SQLite 实现扩散到 routes 或 session-forwarding。
 - `ONEWORKS_RELAY_STORAGE_DRIVER=postgres` 是 Vercel / serverless Node 路径，连接串来自 `ONEWORKS_RELAY_POSTGRES_URL`、`DATABASE_URL` 或 `--data`；日志和 repository location 必须脱敏连接串密码。
 - `cloudflare-do` 只允许由 `cloudflare/worker.ts` 通过 Durable Object repository 创建，不要从 Node CLI 直接实例化。

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RelayCredentialForm } from './RelayCredentialForm'
 import type { LoginFormValues } from './RelayCredentialForm'
 import { ProviderButtonsSection, RememberedAccountsSection } from './RelayLoginSections'
+import { RelayPasskeyPanel } from './RelayPasskeyPanel'
 import { isRecord, readAccounts, readStringField, writeAccounts } from './accountStorage'
 import type { RelayLoginConfig, RelayLoginProviderConfig, RelayRememberedAccount } from './types'
 
@@ -12,6 +13,7 @@ export const RelayLoginApp = ({ config }: { config: RelayLoginConfig }) => {
   const [form] = Form.useForm<LoginFormValues>()
   const passwordRef = useRef<InputRef>(null)
   const [accounts, setAccounts] = useState<RelayRememberedAccount[]>(() => readAccounts())
+  const [passkeyEmailHint, setPasskeyEmailHint] = useState('')
   const providerById = useMemo(
     () => new Map(config.providers.map(provider => [provider.id, provider])),
     [config.providers]
@@ -73,6 +75,10 @@ export const RelayLoginApp = ({ config }: { config: RelayLoginConfig }) => {
   }, [rememberAccount])
 
   const startAccountLogin = useCallback((account: RelayRememberedAccount) => {
+    if (account.provider === 'passkey') {
+      setPasskeyEmailHint(account.email)
+      return
+    }
     if (account.provider === 'invite' || account.provider === 'password') {
       form.setFieldsValue({ email: account.email })
       passwordRef.current?.focus()
@@ -94,6 +100,12 @@ export const RelayLoginApp = ({ config }: { config: RelayLoginConfig }) => {
             />
           )
           : null}
+
+        <RelayPasskeyPanel
+          config={config}
+          emailHint={passkeyEmailHint}
+          finishWithToken={finishWithToken}
+        />
 
         <RelayCredentialForm
           config={config}

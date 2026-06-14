@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- Email risk policy keeps bucket accounting and challenge reuse in one transactional unit. */
-import { createHash, randomInt, randomUUID } from 'node:crypto'
+import { Buffer } from 'node:buffer'
+import { createHash, randomInt, randomUUID, timingSafeEqual } from 'node:crypto'
 
 import type {
   RelayEmailChallenge,
@@ -34,6 +35,16 @@ export type RelayEmailChallengeSendDecision =
   | RelayEmailChallengeSendPrepared
   | RelayEmailChallengeSendRejected
 
+export type RelayEmailChallengeVerifyResult =
+  | {
+    challenge: RelayEmailChallenge
+    verified: true
+  }
+  | {
+    reason: 'expired' | 'invalid'
+    verified: false
+  }
+
 interface RelayEmailLimitTarget {
   key: string
   max: number
@@ -49,6 +60,11 @@ const hashRelayEmailCode = (input: {
   emailHash: string
   purpose: RelayEmailPurpose
 }) => hashText(`${input.purpose}:${input.emailHash}:${input.code}`)
+
+const safeEqualHex = (left: string, right: string) => {
+  if (left.length !== right.length) return false
+  return timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'))
+}
 
 const createVerificationCode = () => randomInt(0, 1_000_000).toString().padStart(6, '0')
 
@@ -272,4 +288,37 @@ export const rememberRelayEmailProviderResult = (
   if (challenge == null) return
   challenge.providerMessageId = messageId
   challenge.updatedAt = now()
+}
+
+export const verifyRelayEmailChallengeCode = (
+  store: RelayStore,
+  input: {
+    consume?: boolean
+    code: string
+    email: string
+    nowMs?: number
+    purpose: RelayEmailPurpose
+  }
+): RelayEmailChallengeVerifyResult => {
+  const nowMs = input.nowMs ?? Date.now()
+  pruneEmailRiskState(store, nowMs)
+  const emailHash = hashRelayEmailAddress(input.email)
+  const expectedHash = hashRelayEmailCode({
+    code: input.code,
+    emailHash,
+    purpose: input.purpose
+  })
+  const challenge = store.emailRisk.challenges.find(item =>
+    item.emailHash === emailHash &&
+    item.purpose === input.purpose &&
+    item.verifiedAt == null &&
+    parseTimeMs(item.expiresAt) > nowMs &&
+    safeEqualHex(item.codeHash, expectedHash)
+  )
+  if (challenge == null) return { reason: 'invalid', verified: false }
+  if (input.consume === true) {
+    challenge.verifiedAt = resetAtIso(nowMs)
+    challenge.updatedAt = challenge.verifiedAt
+  }
+  return { challenge, verified: true }
 }

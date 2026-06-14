@@ -1,3 +1,4 @@
+import type { RelayPasskeyConfig } from '../types.js'
 import type { RelayLoginMessages } from './login-page-i18n.js'
 import type { RelayLoginProvider } from './login-page-types.js'
 
@@ -10,6 +11,7 @@ export interface RelayLoginClientAssets {
 
 interface BuildLoginClientConfigInput {
   providers: RelayLoginProvider[]
+  passkey?: RelayPasskeyConfig
   redirectUri: string
   startUrlForProvider: (providerId: string) => string
   t: RelayLoginMessages
@@ -36,6 +38,13 @@ export const buildLoginClientConfig = (input: BuildLoginClientConfigInput) => ({
     passwordMismatch: input.t.passwordMismatch,
     passwordPlaceholder: input.t.passwordPlaceholder,
     passwordRequired: input.t.passwordRequired,
+    passkeyCodePlaceholder: input.t.passkeyCodePlaceholder,
+    passkeyNamePlaceholder: input.t.passkeyNamePlaceholder,
+    passkeyRegister: input.t.passkeyRegister,
+    passkeyRegisterHint: input.t.passkeyRegisterHint,
+    passkeySendCode: input.t.passkeySendCode,
+    passkeySignIn: input.t.passkeySignIn,
+    passkeyTitle: input.t.passkeyTitle,
     recentAccounts: input.t.recentAccounts,
     rememberAccount: input.t.rememberAccount,
     registerWithInvite: input.t.registerWithInvite,
@@ -45,9 +54,18 @@ export const buildLoginClientConfig = (input: BuildLoginClientConfigInput) => ({
     signInWithSso: input.t.signInWithSso,
     signingIn: input.t.signingIn
   },
+  emailVerificationSendUrl: '/api/auth/email-verification/send',
   inviteLoginUrl: '/api/auth/invite-login',
   locale: input.t.htmlLang,
   passwordLoginUrl: '/api/auth/password-login',
+  passkey: {
+    enabled: input.passkey?.enabled !== false,
+    loginOptionsUrl: '/api/auth/passkey/login/options',
+    loginVerifyUrl: '/api/auth/passkey/login/verify',
+    registrationMode: input.passkey?.registrationMode ?? 'invite_required',
+    registerOptionsUrl: '/api/auth/passkey/register/options',
+    registerVerifyUrl: '/api/auth/passkey/register/verify'
+  },
   providers: input.providers.map(provider => ({
     displayName: provider.displayName,
     icon: isGoogleProvider(provider) ? 'google' : 'login',

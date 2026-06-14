@@ -30,6 +30,13 @@ export interface RelayLoginMessages {
   passwordMismatch: string
   passwordPlaceholder: string
   passwordRequired: string
+  passkeyCodePlaceholder: string
+  passkeyNamePlaceholder: string
+  passkeyRegister: string
+  passkeyRegisterHint: string
+  passkeySendCode: string
+  passkeySignIn: string
+  passkeyTitle: string
   recentAccounts: string
   rememberAccount: string
   registerWithInvite: string
@@ -70,6 +77,13 @@ const messages: Record<RelayLoginLocale, RelayLoginMessages> = {
     passwordMismatch: 'The passwords do not match.',
     passwordPlaceholder: 'Password',
     passwordRequired: 'Password is required.',
+    passkeyCodePlaceholder: 'Verification code',
+    passkeyNamePlaceholder: 'Passkey name',
+    passkeyRegister: 'Create Passkey account',
+    passkeyRegisterHint: 'Verify your email first, then create a passkey for this browser or device.',
+    passkeySendCode: 'Send code',
+    passkeySignIn: 'Sign in with Passkey',
+    passkeyTitle: 'Passkey',
     recentAccounts: 'Recent accounts',
     rememberAccount: 'Remember account',
     registerWithInvite: 'Create account',
@@ -106,6 +120,13 @@ const messages: Record<RelayLoginLocale, RelayLoginMessages> = {
     passwordMismatch: '两次输入的密码不一致。',
     passwordPlaceholder: '密码',
     passwordRequired: '请输入密码。',
+    passkeyCodePlaceholder: '验证码',
+    passkeyNamePlaceholder: 'Passkey 名称',
+    passkeyRegister: '创建 Passkey 账号',
+    passkeyRegisterHint: '先验证邮箱，然后为这个浏览器或设备创建 Passkey。',
+    passkeySendCode: '发送验证码',
+    passkeySignIn: '使用 Passkey 登录',
+    passkeyTitle: 'Passkey',
     recentAccounts: '最近账号',
     rememberAccount: '记住账号',
     registerWithInvite: '注册',

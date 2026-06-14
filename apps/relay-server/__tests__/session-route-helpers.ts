@@ -41,6 +41,8 @@ export const createFixtureStore = (): RelayStore => ({
     buckets: [],
     challenges: []
   },
+  passkeyChallenges: [],
+  passkeys: [],
   users: [
     {
       id: 'user-1',

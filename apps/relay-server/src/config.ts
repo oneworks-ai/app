@@ -9,6 +9,8 @@ import type {
   RelayEmailConfig,
   RelayEmailProviderKind,
   RelayOAuthClient,
+  RelayPasskeyConfig,
+  RelayRegistrationMode,
   RelayServerArgs,
   RelayTurnstileMode
 } from './types.js'
@@ -22,6 +24,7 @@ const DEFAULT_DEVICE_ONLINE_TTL_MS = 60 * 1000
 const DEFAULT_EMAIL_CODE_TTL_MS = 10 * 60 * 1000
 const DEFAULT_EMAIL_LOGO_URL = 'https://oneworks.cloud/pwa/pwa-icon-192.png'
 const DEFAULT_EMAIL_RESEND_COOLDOWN_MS = 60 * 1000
+const DEFAULT_PASSKEY_TIMEOUT_MS = 60 * 1000
 
 const readPositiveInteger = (value: string | undefined, fallback: number) => {
   const number = Number(value)
@@ -92,6 +95,16 @@ const readTurnstileMode = (value: string | undefined): RelayTurnstileMode => {
   )
 }
 
+const readRegistrationMode = (value: string | undefined): RelayRegistrationMode => {
+  const mode = value?.trim().toLowerCase().replaceAll('-', '_') ?? ''
+  if (mode === '' || mode === 'invite_required') return 'invite_required'
+  if (mode === 'email_verified' || mode === 'email') return 'email_verified'
+  if (mode === 'admin_created_only' || mode === 'admin') return 'admin_created_only'
+  throw new Error(
+    `Unsupported ONEWORKS_RELAY_REGISTRATION_MODE "${value}". Supported values: invite_required, email_verified, admin_created_only.`
+  )
+}
+
 const readEmailWindow = (
   env: RelayConfigEnv,
   prefix: string,
@@ -144,6 +157,18 @@ const readEmailConfig = (env: RelayConfigEnv): RelayEmailConfig => ({
   }
 })
 
+const readPasskeyConfig = (env: RelayConfigEnv): RelayPasskeyConfig => ({
+  enabled: readBoolean(env.ONEWORKS_RELAY_PASSKEY_ENABLED, true),
+  origin: env.ONEWORKS_RELAY_PASSKEY_ORIGIN,
+  registrationMode: readRegistrationMode(env.ONEWORKS_RELAY_REGISTRATION_MODE),
+  rpId: env.ONEWORKS_RELAY_PASSKEY_RP_ID,
+  rpName: env.ONEWORKS_RELAY_PASSKEY_RP_NAME || 'One Works',
+  timeoutMs: readPositiveInteger(
+    env.ONEWORKS_RELAY_PASSKEY_TIMEOUT_SECONDS,
+    DEFAULT_PASSKEY_TIMEOUT_MS / 1000
+  ) * 1000
+})
+
 export const parseRelayServerArgs = (
   argv: string[],
   env: RelayConfigEnv = process.env
@@ -164,6 +189,7 @@ export const parseRelayServerArgs = (
     ) * 1000,
     embeddedAdminUi: true,
     email: readEmailConfig(env),
+    passkey: readPasskeyConfig(env),
     storageDriver: readStorageDriver(env),
     oauth: readOAuthClients(env)
   }
@@ -237,6 +263,12 @@ Environment:
   ONEWORKS_RELAY_EMAIL_DOMAIN_ALLOWLIST
   ONEWORKS_RELAY_EMAIL_DOMAIN_BLOCKLIST
   ONEWORKS_RELAY_EMAIL_DISPOSABLE_BLOCKLIST_ENABLED
+  ONEWORKS_RELAY_PASSKEY_ENABLED
+  ONEWORKS_RELAY_PASSKEY_ORIGIN
+  ONEWORKS_RELAY_PASSKEY_RP_ID
+  ONEWORKS_RELAY_PASSKEY_RP_NAME
+  ONEWORKS_RELAY_PASSKEY_TIMEOUT_SECONDS
+  ONEWORKS_RELAY_REGISTRATION_MODE
   ONEWORKS_RELAY_RATE_LIMIT_ENABLED
   ONEWORKS_RELAY_RATE_LIMIT_AUTH_MAX
   ONEWORKS_RELAY_RATE_LIMIT_AUTH_WINDOW_SECONDS

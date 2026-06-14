@@ -57,6 +57,30 @@ body,
   gap: 10px;
 }
 
+.relay-login-app__passkey-register {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.relay-login-app__passkey-code-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+
+.relay-login-app__passkey-code-row .ant-btn {
+  min-height: 42px;
+  font-weight: 650;
+}
+
+@media (max-width: 420px) {
+  .relay-login-app__passkey-code-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .relay-login-app__mode.ant-segmented {
   min-height: 34px;
   padding: 2px;

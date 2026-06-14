@@ -14,6 +14,7 @@ import { handleEmailVerificationSendRoute } from './routes/email-verification.js
 import { handleInviteLoginRoute } from './routes/invite-login.js'
 import { handleLoginRoute } from './routes/login.js'
 import { handleRelayMetrics } from './routes/metrics.js'
+import { handlePasskeyRoute } from './routes/passkeys.js'
 import { handlePasswordLoginRoute } from './routes/password-login.js'
 import { handleRelaySessionsRoute } from './routes/sessions.js'
 import { handleAdminSecurityTokens } from './security/admin-route.js'
@@ -45,6 +46,8 @@ const handleInfo = (res: ServerResponse, args: RelayServerArgs, store: RelayStor
       users: true,
       passwordAuth: true,
       emailVerification: args.emailProvider != null || args.email?.provider !== 'disabled',
+      passkeyAuth: args.passkey?.enabled !== false,
+      registrationMode: args.passkey?.registrationMode ?? 'invite_required',
       oauth: providers.length > 0,
       oauthProviders: providers,
       sessionForwarding: true
@@ -85,6 +88,9 @@ const handleRelayRequestWithStore = async (
     return
   }
   if (await handlePasswordLoginRoute(req, res, args, store, storeRepository, url)) {
+    return
+  }
+  if (await handlePasskeyRoute(req, res, args, store, storeRepository, url)) {
     return
   }
   if (await handleEmailVerificationSendRoute(req, res, args, store, storeRepository, url)) {
