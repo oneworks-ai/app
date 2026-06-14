@@ -174,6 +174,23 @@ const normalizeWorkspaceId = (value: unknown) => {
   return /^w_[\w-]{8,64}$/u.test(trimmedValue) ? trimmedValue : undefined
 }
 
+export const getRunningLauncherWorkspaceServerBaseUrlById = (rawWorkspaceId: unknown) => {
+  const workspaceId = normalizeWorkspaceId(rawWorkspaceId)
+  if (workspaceId == null) return undefined
+
+  for (const service of services.values()) {
+    if (
+      service.status === 'ready' &&
+      service.serverBaseUrl != null &&
+      createLauncherWorkspaceId(service.workspaceFolder) === workspaceId
+    ) {
+      return service.serverBaseUrl
+    }
+  }
+
+  return undefined
+}
+
 export const createLauncherWorkspaceClientBase = (
   workspaceId: string,
   clientBase = process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ ?? '/ui'

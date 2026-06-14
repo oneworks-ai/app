@@ -1,7 +1,8 @@
 /* eslint-disable max-lines -- websocket setup keeps auth, terminal, plugin watch, and session channels together. */
 
 import type { Buffer } from 'node:buffer'
-import type { Server } from 'node:http'
+import type { IncomingMessage, Server } from 'node:http'
+import type { Duplex } from 'node:stream'
 import { URL } from 'node:url'
 
 import { v4 as uuidv4 } from 'uuid'
@@ -29,11 +30,24 @@ import {
   getAdapterSessionRuntime,
   removeSessionSubscriberSocket
 } from '#~/services/session/runtime.js'
+import {
+  isHttpUpgradeSocketHandled,
+  markHttpUpgradeSocketHandled,
+  scheduleUnhandledHttpUpgradeSocketClose
+} from '#~/utils/http-upgrade.js'
 import { safeJsonStringify } from '#~/utils/json.js'
 import { getSessionLogger } from '#~/utils/logger.js'
 import { handleTerminalSocketConnection, sendTerminalFatalError } from './terminal'
 
 const WEBSOCKET_OPEN = 1
+
+const parseRequestPathname = (request: IncomingMessage) => {
+  try {
+    return new URL(request.url ?? '', `http://${request.headers.host ?? 'localhost'}`).pathname
+  } catch {
+    return undefined
+  }
+}
 
 const sendSocketError = (ws: WebSocket, error: unknown) => {
   if (ws.readyState !== WEBSOCKET_OPEN) return
@@ -46,7 +60,25 @@ const sendSocketError = (ws: WebSocket, error: unknown) => {
 }
 
 export function setupWebSocket(server: Server, env: ServerEnv) {
-  const wss = new WebSocketServer({ server, path: env.__ONEWORKS_PROJECT_SERVER_WS_PATH__ })
+  const wss = new WebSocketServer({ noServer: true })
+
+  server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+    if (isHttpUpgradeSocketHandled(socket)) return
+
+    if (parseRequestPathname(request) !== env.__ONEWORKS_PROJECT_SERVER_WS_PATH__) {
+      scheduleUnhandledHttpUpgradeSocketClose(socket)
+      return
+    }
+
+    markHttpUpgradeSocketHandled(socket)
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request)
+    })
+  })
+
+  server.once('close', () => {
+    wss.close()
+  })
 
   wss.on('connection', async (ws, req) => {
     const url = new URL(req.url ?? '', `http://${req.headers.host ?? 'localhost'}`)

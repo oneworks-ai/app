@@ -84,6 +84,13 @@ export function DockPanel({
   const pendingPanelHeightRef = useRef(panelHeight)
   const resizeEnabled = allowResize && !isResizeDisabled && !isMinimized && !effectiveFullscreen
 
+  const resetPanelScroll = useCallback(() => {
+    const panel = panelRef.current
+    if (panel == null || (panel.scrollTop === 0 && panel.scrollLeft === 0)) return
+
+    panel.scrollTo(0, 0)
+  }, [])
+
   useEffect(() => {
     const wasOpen = previousIsOpenRef.current
     previousIsOpenRef.current = isOpen
@@ -124,6 +131,28 @@ export function DockPanel({
   }, [readContainerHeight])
 
   useEffect(() => {
+    const panel = panelRef.current
+    if (panel == null) return undefined
+
+    let animationFrame = 0
+    const handleScroll = () => {
+      if (animationFrame !== 0) return
+      animationFrame = window.requestAnimationFrame(() => {
+        animationFrame = 0
+        resetPanelScroll()
+      })
+    }
+
+    resetPanelScroll()
+    panel.addEventListener('scroll', handleScroll, { passive: true })
+
+    return () => {
+      if (animationFrame !== 0) window.cancelAnimationFrame(animationFrame)
+      panel.removeEventListener('scroll', handleScroll)
+    }
+  }, [resetPanelScroll])
+
+  useEffect(() => {
     pendingPanelHeightRef.current = panelHeight
     localStorage.setItem(storageKey, String(panelHeight))
   }, [panelHeight, storageKey])
@@ -139,6 +168,10 @@ export function DockPanel({
       return nextHeight
     })
   }, [effectiveMinHeight, maxHeight])
+
+  useEffect(() => {
+    resetPanelScroll()
+  }, [effectiveFullscreen, isMinimized, isOpen, panelHeight, resetPanelScroll])
 
   const getResizeMaxHeight = useCallback(() => {
     const parentHeight = readContainerHeight()

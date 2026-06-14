@@ -13,6 +13,7 @@ import { loadConfigState } from '#~/services/config/index.js'
 import { acquireConfigWatchRuntime } from '#~/services/config/watch.js'
 import { getPluginManager } from '#~/services/plugins/index.js'
 import { startRuntimeStoreWatcher } from '#~/services/runtime-store/watcher.js'
+import { installWebDebugChii } from '#~/services/web-debug/chii.js'
 
 import { handleChannelSessionEvent, initChannels } from './channels'
 import type { ChannelConfigSourceEntry } from './channels'
@@ -243,6 +244,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
   }
 
   try {
+    logStartup('web debug chii install begin')
+    installWebDebugChii({ app, server })
+    logStartup('web debug chii install complete')
     logStartup('middlewares init begin')
     await initMiddlewares(app, env, {
       publicPaths: config.server?.publicPaths

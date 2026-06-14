@@ -45,9 +45,12 @@ const mobileDebugDevtoolsStyleId = 'oneworks-mobile-debug-devtools-style'
 const mobileDebugDevtoolsStyle = `
   .toolbar-button,
   .toolbar-button[role="button"] {
-    min-width: 24px !important;
-    width: 24px !important;
-    height: 24px !important;
+    min-width: 18px !important;
+    width: 18px !important;
+    height: 18px !important;
+    margin: 0 3px !important;
+    padding: 0 !important;
+    background: transparent !important;
   }
 
   .toolbar-button devtools-icon,
@@ -56,15 +59,15 @@ const mobileDebugDevtoolsStyle = `
   .toolbar-button .largeicon,
   devtools-icon.toolbar-button-icon,
   .tabbed-pane-header-tab devtools-icon {
-    --icon-size: 16px !important;
-    width: 16px !important;
-    min-width: 16px !important;
-    height: 16px !important;
-    min-height: 16px !important;
-    font-size: 16px !important;
-    line-height: 16px !important;
+    --icon-size: 18px !important;
+    width: 18px !important;
+    min-width: 18px !important;
+    height: 18px !important;
+    min-height: 18px !important;
+    font-size: 18px !important;
+    line-height: 18px !important;
   }
-`
+	`
 
 const buildMobileDebugDevtoolsStyleScript = () =>
   `(() => {

@@ -45,6 +45,7 @@ import { interactionPanelPinnedTabLimitAtom } from '#~/store/index'
 import { InteractionPanelEmptyState } from '../interaction-panel/InteractionPanelEmptyState'
 import { InteractionPanelIframeView } from '../interaction-panel/InteractionPanelIframeView'
 import { InteractionPanelMobileDebugView } from '../interaction-panel/InteractionPanelMobileDebugView'
+import { InteractionPanelPageDebuggerListView } from '../interaction-panel/InteractionPanelPageDebuggerListView'
 import { InteractionPanelPinnedTabEditModal } from '../interaction-panel/InteractionPanelPinnedTabEditModal'
 import { InteractionPanelSessionView } from '../interaction-panel/InteractionPanelSessionView'
 import { buildInteractionPanelDockTabContextMenuItems } from '../interaction-panel/interaction-panel-dock-tab-context-menu'
@@ -112,6 +113,7 @@ const haveSameWorkspaceDrawerViews = (
 
 const WORKSPACE_DRAWER_IFRAME_TAB_PREFIX = 'workspace-drawer:iframe:'
 const WORKSPACE_DRAWER_MOBILE_DEBUG_TAB_PREFIX = 'workspace-drawer:mobile-debug:'
+const WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY = 'workspace-drawer:page-debugger'
 const WORKSPACE_DRAWER_PLUGIN_TAB_PREFIX = 'workspace-drawer:plugin:'
 const WORKSPACE_DRAWER_SESSION_TAB_PREFIX = 'workspace-drawer:session:'
 const WORKSPACE_DRAWER_TERMINAL_TAB_PREFIX = 'workspace-drawer:terminal:'
@@ -120,6 +122,7 @@ type WorkspaceDrawerDockTabKey =
   | WorkspaceDrawerView
   | `${typeof WORKSPACE_DRAWER_IFRAME_TAB_PREFIX}${string}`
   | `${typeof WORKSPACE_DRAWER_MOBILE_DEBUG_TAB_PREFIX}${string}`
+  | typeof WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY
   | `${typeof WORKSPACE_DRAWER_PLUGIN_TAB_PREFIX}${string}`
   | `${typeof WORKSPACE_DRAWER_SESSION_TAB_PREFIX}${string}`
   | `${typeof WORKSPACE_DRAWER_TERMINAL_TAB_PREFIX}${string}`
@@ -163,6 +166,7 @@ const isWorkspaceDrawerViewTabKey = (
 const isWorkspaceDrawerHostedTabKey = (key: WorkspaceDrawerDockTabKey) =>
   key.startsWith(WORKSPACE_DRAWER_IFRAME_TAB_PREFIX) ||
   key.startsWith(WORKSPACE_DRAWER_MOBILE_DEBUG_TAB_PREFIX) ||
+  key === WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY ||
   key.startsWith(WORKSPACE_DRAWER_PLUGIN_TAB_PREFIX) ||
   key.startsWith(WORKSPACE_DRAWER_SESSION_TAB_PREFIX) ||
   key.startsWith(WORKSPACE_DRAWER_TERMINAL_TAB_PREFIX)
@@ -248,6 +252,7 @@ export function ChatWorkspaceDrawer({
   const mobileDebugPageState = useInteractionPanelMobileDebugPages()
   const sessionPageState = useInteractionPanelSessionPages(workspaceDrawerSessionPagesId)
   const [pluginPages, setPluginPages] = useState<InteractionPanelPluginPage[]>([])
+  const [isPageDebuggerListOpen, setIsPageDebuggerListOpen] = useState(false)
   const mobileDebugPage = mobileDebugPageState.mobileDebugPages[0]
   const { deviceOptions, refreshDeviceOptions } = useInteractionPanelMobileDebugDeviceOptions(
     mobileDebugPage?.deviceOptions
@@ -450,6 +455,10 @@ export function ChatWorkspaceDrawer({
     () => mobileDebugPageState.mobileDebugPages.map(page => toWorkspaceDrawerMobileDebugTabKey(page.id)),
     [mobileDebugPageState.mobileDebugPages]
   )
+  const pageDebuggerTabKeys = useMemo<WorkspaceDrawerDockTabKey[]>(
+    () => isPageDebuggerListOpen ? [WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY] : [],
+    [isPageDebuggerListOpen]
+  )
   const pluginTabKeys = useMemo(
     () => pluginPages.map(page => toWorkspaceDrawerPluginTabKey(page.id)),
     [pluginPages]
@@ -465,10 +474,19 @@ export function ChatWorkspaceDrawer({
         ...terminalTabKeys,
         ...iframeTabKeys,
         ...mobileDebugTabKeys,
+        ...pageDebuggerTabKeys,
         ...pluginTabKeys,
         ...sessionTabKeys
       ]),
-    [iframeTabKeys, mobileDebugTabKeys, normalizedOpenedViews, pluginTabKeys, sessionTabKeys, terminalTabKeys]
+    [
+      iframeTabKeys,
+      mobileDebugTabKeys,
+      normalizedOpenedViews,
+      pageDebuggerTabKeys,
+      pluginTabKeys,
+      sessionTabKeys,
+      terminalTabKeys
+    ]
   )
   const resolvedActiveTabKey = activeTabKey != null && openedTabKeys.includes(activeTabKey)
     ? activeTabKey
@@ -540,6 +558,16 @@ export function ChatWorkspaceDrawer({
         }]
       }
 
+      if (key === WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY) {
+        return [{
+          canClose: true,
+          icon: 'data_object',
+          id: key,
+          kind: 'page-debugger',
+          label: t('chat.interactionPanel.pageDebuggerListTitle')
+        }]
+      }
+
       const pluginPageId = decodeWorkspaceDrawerHostedTabId(key, WORKSPACE_DRAWER_PLUGIN_TAB_PREFIX)
       const pluginPage = pluginPageId == null ? undefined : pluginPageById.get(pluginPageId)
       if (pluginPage != null) {
@@ -578,6 +606,7 @@ export function ChatWorkspaceDrawer({
     openedTabKeys,
     pluginPages,
     sessionPageState.sessionPages,
+    t,
     terminalPanes.infoById,
     viewItems
   ])
@@ -650,6 +679,10 @@ export function ChatWorkspaceDrawer({
       mobileDebugPageState.closeMobileDebugPages(new Set(closedMobileDebugIds))
     }
 
+    if (!nextOpenedTabKeySet.has(WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY)) {
+      setIsPageDebuggerListOpen(false)
+    }
+
     const closedSessionPageIds = sessionPageState.sessionPages
       .filter(page => !nextOpenedTabKeySet.has(toWorkspaceDrawerSessionTabKey(page.id)))
       .map(page => page.id)
@@ -696,6 +729,10 @@ export function ChatWorkspaceDrawer({
     })
     setActiveTabKey(toWorkspaceDrawerMobileDebugTabKey(page.id))
   }, [mobileDebugPageState, t])
+  const handleNewPageDebuggerListAction = useCallback(() => {
+    setIsPageDebuggerListOpen(true)
+    setActiveTabKey(WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY)
+  }, [])
 
   const handleCloseDockTabGroup = useCallback((tab: InteractionPanelTab, scope: InteractionPanelTabCloseScope) => {
     const targetTabs = getTabsForCloseScope(drawerInteractionTabs, tab, scope)
@@ -824,6 +861,11 @@ export function ChatWorkspaceDrawer({
       return
     }
 
+    if (key === 'page-debugger') {
+      handleNewPageDebuggerListAction()
+      return
+    }
+
     if (key === 'session') {
       handleNewSessionAction()
       return
@@ -852,6 +894,7 @@ export function ChatWorkspaceDrawer({
     deviceOptions,
     executePluginCommand,
     handleNewMobileDebugPageAction,
+    handleNewPageDebuggerListAction,
     handleNewSessionAction,
     handleNewTerminalAction,
     handleNewWebPageAction,
@@ -996,6 +1039,24 @@ export function ChatWorkspaceDrawer({
           title: pinnedTab?.originalTitle ?? page.title
         }
       })
+    const pageDebuggerTabs: Array<RouteContainerPanelDockTabItem<WorkspaceDrawerDockTabKey>> = isPageDebuggerListOpen
+      ? [{
+        activeIcon: drawerPinnedTabById[WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY]?.icon ?? 'data_object',
+        content: ({ isVisible }) => (
+          <div className={`chat-interaction-panel__dock-panel-content ${isVisible ? 'is-visible' : 'is-hidden'}`}>
+            <InteractionPanelPageDebuggerListView
+              isActive={isVisible && resolvedActiveTabKey === WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY}
+            />
+          </div>
+        ),
+        icon: drawerPinnedTabById[WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY]?.icon ?? 'data_object',
+        key: WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY,
+        label: drawerPinnedTabById[WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY]?.title ??
+          t('chat.interactionPanel.pageDebuggerListTitle'),
+        title: drawerPinnedTabById[WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY]?.originalTitle ??
+          t('chat.interactionPanel.pageDebuggerListTitle')
+      }]
+      : []
     const pluginDockTabs: Array<RouteContainerPanelDockTabItem<WorkspaceDrawerDockTabKey>> = pluginPages.map((page) => {
       const tabKey = toWorkspaceDrawerPluginTabKey(page.id)
       const pinnedTab = drawerPinnedTabById[tabKey]
@@ -1063,6 +1124,7 @@ export function ChatWorkspaceDrawer({
       ...terminalTabs,
       ...sessionTabs,
       ...mobileDebugTabs,
+      ...pageDebuggerTabs,
       ...pluginDockTabs,
       ...iframeTabs
     ]
@@ -1073,6 +1135,7 @@ export function ChatWorkspaceDrawer({
     drawerPinnedTabById,
     drawerTerminalPanes,
     iframePageState,
+    isPageDebuggerListOpen,
     isGitLoading,
     mobileDebugPageState,
     onOpenFile,
@@ -1085,6 +1148,7 @@ export function ChatWorkspaceDrawer({
     sessionId,
     sessionPageState,
     settingsView,
+    t,
     terminalPanes,
     terminalSessionId,
     treeActivePath,

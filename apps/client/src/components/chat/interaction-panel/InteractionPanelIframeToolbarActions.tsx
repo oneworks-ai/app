@@ -24,13 +24,21 @@ const copyImageDataUrlToClipboard = async (dataUrl: string) => {
 export function InteractionPanelIframeToolbarActions({
   frameUrl,
   iframeRef,
+  isDeveloperToolsOpen,
+  isViewportToolbarOpen,
   onForceReload,
+  onToggleDeveloperTools,
+  onToggleViewportToolbar,
   shouldUseWebview,
   webviewRef
 }: {
   frameUrl: string
   iframeRef: MutableRefObject<HTMLIFrameElement | null>
+  isDeveloperToolsOpen: boolean
+  isViewportToolbarOpen: boolean
   onForceReload: () => void
+  onToggleDeveloperTools: () => void
+  onToggleViewportToolbar: () => void
   shouldUseWebview: boolean
   webviewRef: MutableRefObject<ElectronWebviewElement | null>
 }) {
@@ -73,6 +81,26 @@ export function InteractionPanelIframeToolbarActions({
           onClick={() => void handleScreenshot()}
         />
       </Tooltip>
+      <Tooltip
+        title={t(
+          isDeveloperToolsOpen
+            ? 'chat.interactionPanel.iframeDebugCloseDeveloperTools'
+            : 'chat.interactionPanel.iframeDebugOpenDeveloperTools'
+        )}
+      >
+        <Button
+          type='text'
+          className={`chat-interaction-panel__iframe-tool-btn ${isDeveloperToolsOpen ? 'is-open' : ''}`}
+          disabled={!canUseFrame}
+          aria-label={t(
+            isDeveloperToolsOpen
+              ? 'chat.interactionPanel.iframeDebugCloseDeveloperTools'
+              : 'chat.interactionPanel.iframeDebugOpenDeveloperTools'
+          )}
+          icon={<span className='material-symbols-rounded'>data_object</span>}
+          onClick={onToggleDeveloperTools}
+        />
+      </Tooltip>
       <Dropdown
         trigger={['click']}
         open={isMoreOpen}
@@ -83,10 +111,12 @@ export function InteractionPanelIframeToolbarActions({
           <InteractionPanelIframeBrowserMenu
             canUseFrame={canUseFrame}
             iframeRef={iframeRef}
+            isViewportToolbarOpen={isViewportToolbarOpen}
             shouldUseWebview={shouldUseWebview}
             webviewRef={webviewRef}
             onClose={() => setIsMoreOpen(false)}
             onForceReload={onForceReload}
+            onToggleViewportToolbar={onToggleViewportToolbar}
           />
         )}
         onOpenChange={setIsMoreOpen}

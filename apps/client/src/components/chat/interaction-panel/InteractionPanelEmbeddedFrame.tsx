@@ -1,30 +1,44 @@
 import type { TFunction } from 'i18next'
-import type { MutableRefObject } from 'react'
-import { useEffect, useState } from 'react'
+import type { MutableRefObject, ReactNode } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import type { InteractionPanelIframePage } from './InteractionPanelIframeView'
 import type { ElectronWebviewElement } from './use-interaction-panel-webview'
+
+export interface InteractionPanelEmbeddedFrameViewportSize {
+  height: number
+  width: number
+}
 
 export function InteractionPanelEmbeddedFrame({
   frameUrl,
   iframeRef,
   onIframeLoad,
+  onWebviewAttached,
   page,
   reloadVersion,
   shouldUseWebview,
   t,
+  viewportSize,
   webviewRef
 }: {
   frameUrl: string
   iframeRef: MutableRefObject<HTMLIFrameElement | null>
   onIframeLoad: () => void
+  onWebviewAttached?: () => void
   page: InteractionPanelIframePage
   reloadVersion: number
   shouldUseWebview: boolean
   t: TFunction
+  viewportSize: InteractionPanelEmbeddedFrameViewportSize | null
   webviewRef: MutableRefObject<ElectronWebviewElement | null>
 }) {
   const [attachedWebviewUrl, setAttachedWebviewUrl] = useState('')
+  const attachWebviewRef = useCallback((node: ElectronWebviewElement | null) => {
+    const previousNode = webviewRef.current
+    webviewRef.current = node
+    if (node != null && node !== previousNode) onWebviewAttached?.()
+  }, [onWebviewAttached, webviewRef])
 
   useEffect(() => {
     if (!shouldUseWebview || frameUrl === '') {
@@ -58,19 +72,25 @@ export function InteractionPanelEmbeddedFrame({
       )
     }
 
-    return (
+    const webviewFrame = (
       <webview
         key={page.id}
-        ref={webviewRef}
+        ref={attachWebviewRef}
         className='chat-interaction-panel__iframe chat-interaction-panel__webview'
         partition='persist:oneworks-interaction-panel'
         src={attachedWebviewUrl}
         title={page.title}
       />
     )
+
+    return (
+      <FrameViewport viewportSize={viewportSize}>
+        {webviewFrame}
+      </FrameViewport>
+    )
   }
 
-  return (
+  const iframeFrame = (
     <iframe
       key={`${frameUrl}:${reloadVersion}`}
       ref={iframeRef}
@@ -79,5 +99,38 @@ export function InteractionPanelEmbeddedFrame({
       title={page.title}
       onLoad={onIframeLoad}
     />
+  )
+
+  return (
+    <FrameViewport viewportSize={viewportSize}>
+      {iframeFrame}
+    </FrameViewport>
+  )
+}
+
+function FrameViewport({
+  children,
+  viewportSize
+}: {
+  children: ReactNode
+  viewportSize: InteractionPanelEmbeddedFrameViewportSize | null
+}) {
+  return (
+    <div
+      className={[
+        'chat-interaction-panel__iframe-frame-host',
+        viewportSize == null ? '' : 'has-fixed-viewport'
+      ].filter(Boolean).join(' ')}
+    >
+      <div
+        className='chat-interaction-panel__iframe-frame-viewport'
+        style={viewportSize == null ? undefined : {
+          height: viewportSize.height,
+          width: viewportSize.width
+        }}
+      >
+        {children}
+      </div>
+    </div>
   )
 }

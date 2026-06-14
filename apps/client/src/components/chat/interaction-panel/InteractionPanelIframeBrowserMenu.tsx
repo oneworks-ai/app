@@ -1,4 +1,4 @@
-import { App, Tooltip } from 'antd'
+import { App } from 'antd'
 import type { MutableRefObject } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -18,15 +18,19 @@ const formatZoomPercent = (value: number) => `${Math.round(value * 100)}%`
 export function InteractionPanelIframeBrowserMenu({
   canUseFrame,
   iframeRef,
+  isViewportToolbarOpen,
   onClose,
   onForceReload,
+  onToggleViewportToolbar,
   shouldUseWebview,
   webviewRef
 }: {
   canUseFrame: boolean
   iframeRef: MutableRefObject<HTMLIFrameElement | null>
+  isViewportToolbarOpen: boolean
   onClose: () => void
   onForceReload: () => void
+  onToggleViewportToolbar: () => void
   shouldUseWebview: boolean
   webviewRef: MutableRefObject<ElectronWebviewElement | null>
 }) {
@@ -60,6 +64,11 @@ export function InteractionPanelIframeBrowserMenu({
       // Fall through to the existing reload path.
     }
     onForceReload()
+  }
+
+  const handleToggleViewportToolbar = () => {
+    onToggleViewportToolbar()
+    onClose()
   }
 
   const clearWebviewData = async (dataType: 'cache' | 'cookies') => {
@@ -109,14 +118,14 @@ export function InteractionPanelIframeBrowserMenu({
         <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>refresh</span>
         <span>{t('chat.interactionPanel.iframeForceReload')}</span>
       </OverlayAction>
-      <Tooltip title={t('common.notSupportedYet')} placement='left'>
-        <span className='chat-interaction-panel-browser-menu__disabled-wrapper'>
-          <OverlayAction className='chat-interaction-panel-browser-menu__item' disabled>
-            <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>devices</span>
-            <span>{t('chat.interactionPanel.iframeDeviceToolbar')}</span>
-          </OverlayAction>
-        </span>
-      </Tooltip>
+      <OverlayAction
+        className={`chat-interaction-panel-browser-menu__item ${isViewportToolbarOpen ? 'is-active' : ''}`}
+        disabled={!canUseFrame}
+        onClick={handleToggleViewportToolbar}
+      >
+        <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>devices</span>
+        <span>{t('chat.interactionPanel.iframeViewportToolbar')}</span>
+      </OverlayAction>
       <OverlayDivider className='chat-interaction-panel-browser-menu__divider' decorative />
       <div className='chat-interaction-panel-browser-menu__zoom-row'>
         <span className='chat-interaction-panel-browser-menu__zoom-label'>

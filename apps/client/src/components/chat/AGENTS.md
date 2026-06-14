@@ -52,6 +52,7 @@
   - 工作区抽屉 tab 的共享 header action / command state。
   - 目录树、改动文件等 workspace drawer tab 可能出现在右侧 drawer，也可能作为底部 interaction panel tab。新增 tab action 时必须接入这里或同级共享 resolver，不要只在 `ChatWorkspaceDrawer` 或底部面板某一处补按钮。
 - `interaction-panel/ChatInteractionPanel.tsx` 只负责把各类 tab action resolver 注册进 `InteractionPanelDockWorkspace`；不要新增本地 Dockview header / prefix / tab renderer。展开态底部面板、右侧工作区抽屉和未来 Agent Room 类 pane 都应通过 `RouteContainerPanelDockWorkspace` 的 group active tab context 获取 actions，保证同一个 tab 移动到右侧、底部或 split group 后行为一致。
+- 进入 `interaction-panel/` 修改 iframe、webview、页面调试器、移动调试、tab dock 或底部工作区面板前，先读 `interaction-panel/AGENTS.md`。
 
 ## 消息级操作的当前约束
 

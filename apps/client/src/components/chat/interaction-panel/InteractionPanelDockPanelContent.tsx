@@ -10,6 +10,7 @@ import { PluginViewHost } from '#~/plugins/PluginHost'
 
 import { InteractionPanelIframeView } from './InteractionPanelIframeView'
 import { InteractionPanelMobileDebugView } from './InteractionPanelMobileDebugView'
+import { InteractionPanelPageDebuggerListView } from './InteractionPanelPageDebuggerListView'
 import { InteractionPanelRunCommandTaskView } from './InteractionPanelRunCommandTaskView'
 import { InteractionPanelSessionView } from './InteractionPanelSessionView'
 import { useInteractionPanelDockContext } from './interaction-panel-dock-context'
@@ -156,6 +157,16 @@ export function InteractionPanelDockPanelContentBody({
           page={page}
           onChangePage={(updater) => onMobileDebugPageChange(page.id, updater)}
           onOpenDebugUrl={onOpenIframeUrl}
+        />
+      </div>
+    )
+  }
+
+  if (tab.kind === 'page-debugger') {
+    return (
+      <div className={contentClassName}>
+        <InteractionPanelPageDebuggerListView
+          isActive={activeTab.kind === 'page-debugger' && activeTab.id === tab.id}
         />
       </div>
     )

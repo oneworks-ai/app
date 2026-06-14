@@ -172,6 +172,7 @@ export default defineConfig({
       ? {}
       : {
         proxy: {
+          '/__oneworks_chii__': { ...devServerHttpProxy, ws: true },
           '/api': devServerHttpProxy,
           '/channels': devServerHttpProxy,
           '/ws': { ...devServerHttpProxy, ws: true }
