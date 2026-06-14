@@ -13,6 +13,10 @@ export interface RelayEmailPayload {
   text: string
 }
 
+export interface RelayEmailTemplateOptions {
+  logoUrl?: string
+}
+
 const purposeContent: Record<RelayEmailPurpose, RelayEmailTemplateContent> = {
   'email-verification': {
     headline: 'Verify your email address',
@@ -51,10 +55,31 @@ const escapeHtml = (value: string) =>
 
 const formatCodeForHtml = (code: string) => escapeHtml(code.trim().split('').join(' '))
 
-export const buildRelayEmailPayload = (input: RelayEmailProviderInput): RelayEmailPayload => {
+const renderBrandHeader = (logoUrl: string | undefined) => {
+  const safeLogoUrl = logoUrl == null || logoUrl.trim() === '' ? undefined : escapeHtml(logoUrl.trim())
+  if (safeLogoUrl == null) {
+    return '<div style="font-size:13px;line-height:18px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#4f46e5;">OneWorks Relay</div>'
+  }
+  return `<table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td width="36" style="width:36px;padding:0 12px 0 0;">
+                      <img src="${safeLogoUrl}" width="36" height="36" alt="OneWorks" style="display:block;width:36px;height:36px;border:0;border-radius:9px;">
+                    </td>
+                    <td style="padding:0;">
+                      <div style="font-size:13px;line-height:18px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#4f46e5;">OneWorks Relay</div>
+                    </td>
+                  </tr>
+                </table>`
+}
+
+export const buildRelayEmailPayload = (
+  input: RelayEmailProviderInput,
+  options: RelayEmailTemplateOptions = {}
+): RelayEmailPayload => {
   const minutes = minutesUntil(input.expiresAt)
   const expiresIn = pluralizeMinutes(minutes)
   const content = purposeContent[input.purpose]
+  const brandHeader = renderBrandHeader(options.logoUrl)
   const htmlCode = formatCodeForHtml(input.code)
   const headline = escapeHtml(content.headline)
   const intro = escapeHtml(content.intro)
@@ -80,7 +105,7 @@ export const buildRelayEmailPayload = (input: RelayEmailProviderInput): RelayEma
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;max-width:560px;background:#ffffff;border:1px solid #dfe7f2;border-radius:16px;overflow:hidden;">
             <tr>
               <td style="padding:28px 32px 20px;border-bottom:1px solid #edf2f7;">
-                <div style="font-size:13px;line-height:18px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#4f46e5;">OneWorks Relay</div>
+                ${brandHeader}
                 <h1 style="margin:14px 0 0;font-size:24px;line-height:32px;font-weight:700;color:#111827;">${headline}</h1>
               </td>
             </tr>

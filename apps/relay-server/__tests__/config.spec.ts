@@ -50,6 +50,7 @@ describe('relay server config', () => {
 
     expect(args.email).toMatchObject({
       from: 'Relay <relay@example.com>',
+      logoUrl: 'https://oneworks.cloud/pwa/pwa-icon-192.png',
       provider: 'resend',
       resendApiKey: 'test-key',
       risk: {
@@ -66,5 +67,15 @@ describe('relay server config', () => {
         secretKey: 'turnstile-secret'
       }
     })
+  })
+
+  it('parses transactional email logo URL overrides', () => {
+    expect(parseRelayServerArgs([], {}).email?.logoUrl).toBe('https://oneworks.cloud/pwa/pwa-icon-192.png')
+    expect(
+      parseRelayServerArgs([], {
+        ONEWORKS_RELAY_EMAIL_LOGO_URL: 'https://cdn.example.com/relay-logo.png'
+      }).email?.logoUrl
+    ).toBe('https://cdn.example.com/relay-logo.png')
+    expect(parseRelayServerArgs([], { ONEWORKS_RELAY_EMAIL_LOGO_URL: 'off' }).email?.logoUrl).toBeUndefined()
   })
 })

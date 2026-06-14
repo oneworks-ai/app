@@ -46,7 +46,7 @@ export const createResendRelayEmailProvider = (config: RelayEmailConfig): RelayE
   const from = config.from.trim()
   return {
     sendVerificationCode: async input => {
-      const payload = buildRelayEmailPayload(input)
+      const payload = buildRelayEmailPayload(input, { logoUrl: config.logoUrl })
       const response = await fetch('https://api.resend.com/emails', {
         body: JSON.stringify({
           from,
