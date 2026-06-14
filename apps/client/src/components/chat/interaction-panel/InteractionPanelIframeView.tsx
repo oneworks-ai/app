@@ -929,13 +929,13 @@ export function InteractionPanelIframeView({
       const nextWidth = edge === 'right'
         ? startSize.width + deltaX
         : edge === 'left'
-          ? startSize.width - deltaX
-          : startSize.width
+        ? startSize.width - deltaX
+        : startSize.width
       const nextHeight = edge === 'bottom'
         ? startSize.height + deltaY
         : edge === 'top'
-          ? startSize.height - deltaY
-          : startSize.height
+        ? startSize.height - deltaY
+        : startSize.height
 
       setViewportSize({
         height: Math.min(4096, Math.max(1, Math.round(nextHeight))),
@@ -1432,7 +1432,9 @@ export function InteractionPanelIframeView({
                 aria-label={t('chat.interactionPanel.iframeViewportZoom')}
                 onChange={event => handleViewportZoomChange(event.currentTarget.value)}
               >
-                <option value='auto'>{t('chat.interactionPanel.iframeViewportZoomAuto', { value: viewportZoomPercent })}</option>
+                <option value='auto'>
+                  {t('chat.interactionPanel.iframeViewportZoomAuto', { value: viewportZoomPercent })}
+                </option>
                 {IFRAME_VIEWPORT_ZOOM_OPTIONS.map(zoomValue => (
                   <option key={zoomValue} value={zoomValue}>
                     {Math.round(zoomValue * 100)}%
@@ -1487,27 +1489,33 @@ export function InteractionPanelIframeView({
                       className='chat-interaction-panel-viewport-menu__item'
                       icon='mobile'
                       selected={isViewportDeviceFrameVisible}
-                      aria-label={t(isViewportDeviceFrameVisible
-                        ? 'chat.interactionPanel.iframeViewportHideDeviceFrame'
-                        : 'chat.interactionPanel.iframeViewportShowDeviceFrame')}
+                      aria-label={t(
+                        isViewportDeviceFrameVisible
+                          ? 'chat.interactionPanel.iframeViewportHideDeviceFrame'
+                          : 'chat.interactionPanel.iframeViewportShowDeviceFrame'
+                      )}
                       onClick={handleToggleViewportDeviceFrame}
                     />
                     <OverlayAction
                       className='chat-interaction-panel-viewport-menu__item'
                       icon='view_timeline'
                       selected={isViewportMediaQueriesVisible}
-                      aria-label={t(isViewportMediaQueriesVisible
-                        ? 'chat.interactionPanel.iframeViewportHideMediaQueries'
-                        : 'chat.interactionPanel.iframeViewportShowMediaQueries')}
+                      aria-label={t(
+                        isViewportMediaQueriesVisible
+                          ? 'chat.interactionPanel.iframeViewportHideMediaQueries'
+                          : 'chat.interactionPanel.iframeViewportShowMediaQueries'
+                      )}
                       onClick={handleToggleViewportMediaQueries}
                     />
                     <OverlayAction
                       className='chat-interaction-panel-viewport-menu__item'
                       icon='rule_settings'
                       selected={isViewportRulersVisible}
-                      aria-label={t(isViewportRulersVisible
-                        ? 'chat.interactionPanel.iframeViewportHideRulers'
-                        : 'chat.interactionPanel.iframeViewportShowRulers')}
+                      aria-label={t(
+                        isViewportRulersVisible
+                          ? 'chat.interactionPanel.iframeViewportHideRulers'
+                          : 'chat.interactionPanel.iframeViewportShowRulers'
+                      )}
                       onClick={handleToggleViewportRulers}
                     />
                     <OverlayDivider className='chat-interaction-panel-viewport-menu__divider' decorative />
@@ -1515,18 +1523,22 @@ export function InteractionPanelIframeView({
                       className='chat-interaction-panel-viewport-menu__item'
                       icon='density_medium'
                       selected={isViewportDevicePixelRatioVisible}
-                      aria-label={t(isViewportDevicePixelRatioVisible
-                        ? 'chat.interactionPanel.iframeViewportRemoveDevicePixelRatio'
-                        : 'chat.interactionPanel.iframeViewportAddDevicePixelRatio')}
+                      aria-label={t(
+                        isViewportDevicePixelRatioVisible
+                          ? 'chat.interactionPanel.iframeViewportRemoveDevicePixelRatio'
+                          : 'chat.interactionPanel.iframeViewportAddDevicePixelRatio'
+                      )}
                       onClick={handleToggleViewportDevicePixelRatio}
                     />
                     <OverlayAction
                       className='chat-interaction-panel-viewport-menu__item'
                       icon='devices'
                       selected={isViewportDeviceTypeVisible}
-                      aria-label={t(isViewportDeviceTypeVisible
-                        ? 'chat.interactionPanel.iframeViewportRemoveDeviceType'
-                        : 'chat.interactionPanel.iframeViewportAddDeviceType')}
+                      aria-label={t(
+                        isViewportDeviceTypeVisible
+                          ? 'chat.interactionPanel.iframeViewportRemoveDeviceType'
+                          : 'chat.interactionPanel.iframeViewportAddDeviceType'
+                      )}
                       onClick={handleToggleViewportDeviceType}
                     />
                     <OverlayDivider className='chat-interaction-panel-viewport-menu__divider' decorative />

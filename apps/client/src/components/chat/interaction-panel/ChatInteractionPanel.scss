@@ -1197,24 +1197,48 @@
   }
 
   &.is-phone {
-    > button:nth-child(1) { left: 6%; }
-    > button:nth-child(2) { left: 14%; }
-    > button:nth-child(3) { left: 32%; }
-    > button:nth-child(4) { left: 68%; }
-    > button:nth-child(5) { left: 86%; }
+    > button:nth-child(1) {
+      left: 6%;
+    }
+    > button:nth-child(2) {
+      left: 14%;
+    }
+    > button:nth-child(3) {
+      left: 32%;
+    }
+    > button:nth-child(4) {
+      left: 68%;
+    }
+    > button:nth-child(5) {
+      left: 86%;
+    }
   }
 
   &.is-tablet {
-    > button:nth-child(1) { left: 12%; }
-    > button:nth-child(2) { left: 42%; }
-    > button:nth-child(3) { left: 76%; }
+    > button:nth-child(1) {
+      left: 12%;
+    }
+    > button:nth-child(2) {
+      left: 42%;
+    }
+    > button:nth-child(3) {
+      left: 76%;
+    }
   }
 
   &.is-desktop {
-    > button:nth-child(1) { left: 22%; }
-    > button:nth-child(2) { left: 48%; }
-    > button:nth-child(3) { left: 74%; }
-    > button:nth-child(4) { left: 94%; }
+    > button:nth-child(1) {
+      left: 22%;
+    }
+    > button:nth-child(2) {
+      left: 48%;
+    }
+    > button:nth-child(3) {
+      left: 74%;
+    }
+    > button:nth-child(4) {
+      left: 94%;
+    }
   }
 }
 
@@ -1252,10 +1276,10 @@
       left: 0;
       background-image:
         repeating-linear-gradient(
-        to right,
-        transparent 0 9px,
-        color-mix(in srgb, var(--text-color) 42%, transparent) 9px 10px
-      ),
+          to right,
+          transparent 0 9px,
+          color-mix(in srgb, var(--text-color) 42%, transparent) 9px 10px
+        ),
         repeating-linear-gradient(
         to right,
         transparent 0 49px,
@@ -1300,10 +1324,10 @@
       left: 0;
       background-image:
         repeating-linear-gradient(
-        to bottom,
-        transparent 0 9px,
-        color-mix(in srgb, var(--text-color) 42%, transparent) 9px 10px
-      ),
+          to bottom,
+          transparent 0 9px,
+          color-mix(in srgb, var(--text-color) 42%, transparent) 9px 10px
+        ),
         repeating-linear-gradient(
         to bottom,
         transparent 0 49px,
