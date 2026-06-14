@@ -69,5 +69,14 @@ export default function App() {
     )
   }
 
-  return <Navigate to='/launcher' replace />
+  return (
+    <Navigate
+      to={{
+        pathname: '/launcher',
+        search: location.search,
+        hash: location.hash
+      }}
+      replace
+    />
+  )
 }

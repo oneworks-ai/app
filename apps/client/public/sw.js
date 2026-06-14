@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'oneworks-web'
-const CACHE_VERSION = 'v3'
+const CACHE_VERSION = 'v4'
 const APP_CACHE = `${CACHE_PREFIX}-app-${CACHE_VERSION}`
 const STATIC_CACHE = `${CACHE_PREFIX}-static-${CACHE_VERSION}`
 const serviceWorkerGlobal = globalThis
@@ -11,6 +11,8 @@ const isSameOrigin = url => url.origin === serviceWorkerGlobal.location.origin
 const isInsideAppScope = url => url.href.startsWith(appScopeUrl.href)
 
 const isSkippableAssetUrl = value => /^(?:data|blob|javascript):/i.test(value.trim())
+
+const createReloadRequest = request => new Request(request, { cache: 'reload' })
 
 const resolveAppAssetUrl = (value, baseUrl = appScopeUrl.href) => {
   const trimmed = value.trim()
@@ -120,7 +122,7 @@ const cacheAppShell = async () => {
 const networkFirstNavigation = async request => {
   const cache = await caches.open(APP_CACHE)
   try {
-    const response = await fetch(request)
+    const response = await fetch(createReloadRequest(request))
     if (response.ok) {
       await cache.put(appScopeUrl.href, response.clone())
     }
@@ -137,7 +139,7 @@ const networkFirstNavigation = async request => {
 const staleWhileRevalidate = async request => {
   const cache = await caches.open(STATIC_CACHE)
   const cached = await cache.match(request)
-  const networkResponse = fetch(request)
+  const networkResponse = fetch(createReloadRequest(request))
     .then(async response => {
       if (response.ok) {
         await cache.put(request, response.clone())

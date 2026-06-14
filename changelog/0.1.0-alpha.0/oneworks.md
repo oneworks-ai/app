@@ -11,3 +11,4 @@
 - Keep interaction panel child-session composers aligned with primary session sender chrome while preserving child-specific collapsed status bar and placeholder behavior.
 - Add a pinned current-session preview dock over fullscreen workspace drawers with matching chrome dividers, blur, and enter/exit animation.
 - Allow the homepage PWA preview to run from the official `oneworks.cloud` domain and update public PWA/docs links to canonical URLs.
+- Preserve homepage preview query parameters when entering the PWA launcher and refresh service worker caches after PWA deployments.
