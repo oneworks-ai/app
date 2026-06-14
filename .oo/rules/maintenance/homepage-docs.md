@@ -46,7 +46,7 @@ ONEWORKS_DOCS_SOURCE_DIR="$PWD/.oo/docs" pnpm -C assets/homepage build
 - docs shell、VitePress config、prepare script、homepage workflow 或 submodule 指针变化：运行 `ONEWORKS_DOCS_SOURCE_DIR="$PWD/.oo/docs" pnpm -C assets/homepage build`。
 - app 仓库 PR 合并前查 `lint`、`format-check`、`typecheck`、`commit-message`、`pr-change-policy`。
 - homepage Pages 变更合入后查真实 workflow：`gh run list --repo oneworks-ai/oneworks-ai.github.io --workflow deploy.yml`，失败时用 `gh run view <run-id> --log-failed`。
-- 最终确认线上入口：`curl -L https://oneworks-ai.github.io/docs/` 应返回 `200`，页面里应能看到当前文档站标题、语言入口或关键导航。
+- 最终确认线上入口：`curl -L https://oneworks.cloud/docs/` 应返回 `200`，页面里应能看到当前文档站标题、语言入口或关键导航。
 
 ## Secrets 与触发链路
 

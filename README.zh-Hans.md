@@ -6,7 +6,7 @@
   <a href="https://github.com/oneworks-ai/app/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/oneworks-ai/app?style=flat-square"></a>
   <a href="https://www.npmjs.com/package/oneworks"><img alt="npm" src="https://img.shields.io/npm/v/oneworks?label=npm&style=flat-square"></a>
   <a href="https://github.com/oneworks-ai/app/releases"><img alt="Release" src="https://img.shields.io/github/v/release/oneworks-ai/app?include_prereleases&label=release&style=flat-square"></a>
-  <a href="https://oneworks-ai.github.io/docs/"><img alt="Docs" src="https://img.shields.io/badge/docs-online-2563eb?style=flat-square"></a>
+  <a href="https://oneworks.cloud/docs/"><img alt="Docs" src="https://img.shields.io/badge/docs-online-2563eb?style=flat-square"></a>
 </p>
 
 <p align="center">

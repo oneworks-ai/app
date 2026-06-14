@@ -17,14 +17,14 @@ This rule is the internal entry point for Relay deployment work. It covers `apps
 
 These domains are the OneWorks-owned public topology. Keep this list in sync with deployment docs and do not copy private account slugs, platform account IDs, or personal mailbox destinations into committed files.
 
-| Host                    | Role                                                                                         |
-| ----------------------- | -------------------------------------------------------------------------------------------- |
-| `oneworks.cloud`        | Official website, served by GitHub Pages custom domain for `https://oneworks-ai.github.io/`. |
-| `www.oneworks.cloud`    | Website alias or redirect to the apex domain.                                                |
-| `dev.cf.oneworks.cloud` | Cloudflare dev Relay/Admin service.                                                          |
-| `cf.oneworks.cloud`     | Cloudflare production Relay/Admin service.                                                   |
-| `dev.vc.oneworks.cloud` | Vercel dev Relay/Admin service.                                                              |
-| `vc.oneworks.cloud`     | Vercel production Relay/Admin service.                                                       |
+| Host                    | Role                                                              |
+| ----------------------- | ----------------------------------------------------------------- |
+| `oneworks.cloud`        | Official website and docs canonical host, served by GitHub Pages. |
+| `www.oneworks.cloud`    | Website alias or redirect to the apex domain.                     |
+| `dev.cf.oneworks.cloud` | Cloudflare dev Relay/Admin service.                               |
+| `cf.oneworks.cloud`     | Cloudflare production Relay/Admin service.                        |
+| `dev.vc.oneworks.cloud` | Vercel dev Relay/Admin service.                                   |
+| `vc.oneworks.cloud`     | Vercel production Relay/Admin service.                            |
 
 For each Relay slot, set `ONEWORKS_RELAY_PUBLIC_URL` and `ONEWORKS_RELAY_ALLOW_ORIGIN` to the user-facing Admin origin for that slot. In the Cloudflare shape, the Worker origin should usually stay behind the Pages/custom-domain proxy; expose the Pages/custom domain as the public Admin/API/login origin.
 
@@ -35,8 +35,8 @@ The official topology is not a template for user private deployments. Private de
 - `support@oneworks.cloud` and `hello@oneworks.cloud` receive mail through Cloudflare Email Routing and forward to verified destination mailboxes.
 - Public docs, AGENTS, rules, handoffs, and changelogs must not name personal Gmail addresses, private mailboxes, or individual maintainer accounts as routing targets.
 - Resend is only for transactional mail such as verification codes, invites, and system notifications. Do not use Resend as the support or hello inbound mailbox.
-- Use stable Resend sending subdomains: `mail.oneworks.cloud` for production and `mail.dev.oneworks.cloud` for dev.
-- Put Resend DNS records on those mail subdomains, not on Relay/Admin service hosts such as `cf.oneworks.cloud`, `dev.cf.oneworks.cloud`, `vc.oneworks.cloud`, or `dev.vc.oneworks.cloud`. This avoids CNAME/MX/TXT conflicts with web service hosts and keeps mail reputation scoped to stable mail domains.
+- Use `mail.oneworks.cloud` as the stable Resend sending domain for the official service. Add separate sending domains only when the mail provider plan, reputation strategy, and DNS ownership are explicitly confirmed.
+- Put Resend DNS records on stable mail subdomains, not on Relay/Admin service hosts such as `cf.oneworks.cloud`, `dev.cf.oneworks.cloud`, `vc.oneworks.cloud`, or `dev.vc.oneworks.cloud`. This avoids CNAME/MX/TXT conflicts with web service hosts and keeps mail reputation scoped to mail domains.
 - Transactional mail should use a role-address Reply-To such as `support@oneworks.cloud` or `hello@oneworks.cloud`, not a personal address.
 
 ## Privacy Boundary
