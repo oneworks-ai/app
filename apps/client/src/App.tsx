@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useRef } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 
 import { WorkspaceConnectionGate } from '#~/WorkspaceConnectionGate'
@@ -18,6 +18,11 @@ const WorkspaceApp = lazy(async () => ({
   default: (await import('#~/WorkspaceApp')).WorkspaceApp
 }))
 
+const isHomepagePreviewSearch = (search: string) => (
+  __ONEWORKS_PROJECT_HOMEPAGE_PREVIEW__ &&
+  new URLSearchParams(search).get('owPreview') === 'homepage'
+)
+
 function DevComponentLabApp() {
   const Route = DevComponentLabRoute
 
@@ -36,6 +41,12 @@ export default function App() {
   const location = useLocation()
   const isManagerLauncher = isServerManagerRole()
   const workspaceId = getRuntimeWorkspaceId()
+  const isHomepagePreviewEntry = isHomepagePreviewSearch(location.search)
+  const homepagePreviewActiveRef = useRef(isHomepagePreviewEntry)
+  if (isHomepagePreviewEntry) {
+    homepagePreviewActiveRef.current = true
+  }
+
   if (location.pathname === '/__component-lab') {
     return <DevComponentLabApp />
   }
@@ -46,6 +57,14 @@ export default function App() {
         <WorkspaceConnectionGate workspaceId={workspaceId}>
           <WorkspaceApp />
         </WorkspaceConnectionGate>
+      </Suspense>
+    )
+  }
+
+  if (homepagePreviewActiveRef.current) {
+    return (
+      <Suspense fallback={null}>
+        <WorkspaceApp />
       </Suspense>
     )
   }
