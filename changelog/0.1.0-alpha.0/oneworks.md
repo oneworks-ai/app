@@ -16,3 +16,4 @@
 - Preserve homepage preview query parameters when entering the PWA launcher and refresh service worker caches after PWA deployments.
 - Route homepage PWA preview sessions directly into the mock workspace app instead of the launcher gate.
 - Stub homepage preview plugin and module-update APIs so the offline preview renders without console 404s.
+- Standardize Relay verification emails with branded HTML and plain-text bodies.
