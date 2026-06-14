@@ -1,6 +1,8 @@
 import type { IncomingMessage } from 'node:http'
 
-export type RelayLoginLocale = 'en' | 'zh-CN'
+import type { RelayLocale } from '../types.js'
+
+export type RelayLoginLocale = RelayLocale
 
 export interface RelayLoginMessages {
   brandName: string
@@ -124,7 +126,7 @@ export const normalizeRelayLoginLocale = (value: string | null | undefined): Rel
   return undefined
 }
 
-const parseAcceptLanguage = (value: string | string[] | undefined): string[] => {
+export const parseAcceptLanguage = (value: string | string[] | undefined): string[] => {
   const header = Array.isArray(value) ? value.join(',') : value
   if (!header) return []
   return header

@@ -44,6 +44,7 @@ const readLoginConfig = (html: string) => {
   expect(match?.[1]).toBeDefined()
   return JSON.parse(match?.[1] ?? '{}') as {
     inviteLoginUrl?: string
+    locale?: 'en' | 'zh-CN'
     messages?: {
       confirmPasswordPlaceholder?: string
       passwordMismatch?: string
@@ -431,6 +432,7 @@ describe('relay server auth routes', () => {
       signInWithPassword: 'Sign in'
     })
     expect(config.inviteLoginUrl).toBe('/api/auth/invite-login')
+    expect(config.locale).toBe('en')
     expect(config.passwordLoginUrl).toBe('/api/auth/password-login')
     expect(body).toContain(encodeURIComponent('https://relay.example/login/complete'))
     expect(config.redirectUri).toContain('oneworks://relay/auth')
@@ -448,6 +450,7 @@ describe('relay server auth routes', () => {
     expect(body).not.toContain('data-account-section hidden')
     expect(body).not.toContain('这个浏览器还没有记住任何账号。')
     expect(config.providers).toEqual([])
+    expect(config.locale).toBe('zh-CN')
     expect(body).not.toContain('还没有配置可用的 SSO 提供方。')
     expect(body).not.toContain('<div class="relay-login__providers">')
     expect(body).toContain('密码')
