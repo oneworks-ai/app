@@ -1,8 +1,8 @@
-# RFC 0006 Details: Relay 团队配置共享架构
+# RFC 0006 细节：Relay 团队配置共享架构
 
 返回入口：[RFC 0006: Relay 团队配置共享](./0006-relay-team-config-sharing.md)
 
-## Data Model
+## 数据模型
 
 ```ts
 interface RelayTeam {
@@ -65,21 +65,21 @@ interface RelayConfigProfileAssignment {
 }
 ```
 
-Storage driver 第一阶段继续共享 normalized Relay store。Postgres 和 SQLite 后续可以把这些对象拆成表，但 route/service 不能依赖具体 driver。
+存储驱动第一阶段继续共享 normalized Relay store。Postgres 和 SQLite 后续可以把这些对象拆成表，但 route/service 不能依赖具体 driver。
 
-## Snapshot Semantics
+## Snapshot 语义
 
-Snapshot calculation is deterministic:
+Snapshot 计算必须是确定性的：
 
-1. Resolve authenticated user.
-2. Resolve active team memberships and team roles.
-3. Filter profile assignments by `team.configs.consume`.
-4. Filter by device project context.
-5. Sort by `priority`, then `updatedAt`, then `id`.
-6. Merge patches in order.
-7. Attach conflict diagnostics and provenance.
+1. 解析已认证用户。
+2. 解析有效团队成员关系和团队角色。
+3. 按 `team.configs.consume` 过滤 profile assignment。
+4. 按设备项目上下文过滤。
+5. 按 `priority`、`updatedAt`、`id` 排序。
+6. 按顺序合并 patch。
+7. 附加冲突诊断和来源信息。
 
-Snapshot response adds:
+Snapshot 响应新增：
 
 ```ts
 interface RelayConfigSnapshotProvenance {
@@ -95,11 +95,11 @@ interface RelayConfigSnapshotProvenance {
 }
 ```
 
-Every applied field should be traceable to team, profile, version, and assignment. This is required for plugin UI, audit review, and support debugging.
+每个已应用字段都应该能追溯到 team、profile、version 和 assignment。这是插件界面、审计复核和支持排障的共同前提。
 
-## API Surface
+## API 边界
 
-Team API:
+团队 API：
 
 - `GET/POST /api/relay/teams`
 - `GET/PATCH /api/relay/teams/:teamId`
@@ -107,7 +107,7 @@ Team API:
 - `GET/POST /api/relay/teams/:teamId/members`
 - `PATCH/DELETE /api/relay/teams/:teamId/members/:userId`
 
-Config sharing API:
+配置共享 API：
 
 - `GET/POST /api/relay/teams/:teamId/config-profiles`
 - `GET/PATCH /api/relay/config-profiles/:profileId`
@@ -117,83 +117,83 @@ Config sharing API:
 - `PATCH /api/relay/config-assignments/:assignmentId`
 - `POST /api/relay/config-profiles/:profileId/secrets/rotate`
 
-Admin API may mirror these under `/api/admin/*` for tenant admins. User-owned flows should use `/api/relay/*` with session auth and team-scoped authorization.
+Admin API 可以在 `/api/admin/*` 下为租户管理员提供镜像入口。用户自助流程应使用 `/api/relay/*`，并通过 session 鉴权和团队作用域授权判断。
 
-## Validation
+## 校验
 
-Share draft validation:
+分享草稿校验：
 
-- Only safe fields are accepted.
-- `env`, hooks, MCP servers, shell permissions, local paths, unknown config roots, and adapter-native secret blocks are rejected.
-- `modelServices` entries are normalized into display metadata plus secret references.
-- `defaultModelService` must point to a shared or already-visible service key.
-- `recommendedModels` must reference visible service keys.
+- 第一版接受声明型协作字段：`modelServices`、`defaultModelService`、`recommendedModels`、`plugins`、`marketplaces`、`skills`、`skillsMeta`、`skillRegistries`。
+- `plugins` 只共享插件声明、scope、启用状态和 schema 可校验 options；带 password/secret 语义的 option 必须转成 secret ref。
+- `skills` 只共享声明和 metadata，不自动安装不可信远端内容；安装仍需要显式动作和 lockfile 记录。
+- `modelServices` 条目归一化成展示元数据和 secret ref，`defaultModelService` 与 `recommendedModels` 必须引用可见 service key。
+- `env`、hooks、MCP servers、shell permissions、本地路径、未知 config root 和 adapter-native secret block 第一版拒绝。
 
-The server must validate again even if the plugin UI already filtered fields.
+即使插件界面已经过滤字段，服务端也必须重新校验。
 
-## Secret Handling
+## 密钥处理
 
-Secret store requirements:
+Secret store 要求：
 
-- Store encrypted payloads only.
-- Include `secretVersion`, `createdByUserId`, `rotatedAt`, and `revokedAt`.
-- Redact secrets from all list/detail responses.
-- Record upload, rotate, revoke, and snapshot delivery events.
+- 只保存 encrypted payload。
+- 记录 `secretVersion`、`createdByUserId`、`rotatedAt` 和 `revokedAt`。
+- 所有 list/detail 响应都必须脱敏 secret。
+- 记录上传、轮换、撤销和 snapshot 交付事件。
 
-Explicit share mode:
+显式共享模式：
 
-- Relay decrypts secret for snapshot generation.
-- Snapshot sends plaintext only to authorized consuming devices.
-- Snapshot carries bounded TTL.
-- Plugin cache must drop expired secrets.
+- Relay 为生成 snapshot 解密 secret。
+- Snapshot 只向授权消费设备发送 plaintext。
+- Snapshot 带有有界 TTL。
+- 插件缓存必须丢弃过期 secret。
 
-Proxy mode:
+代理模式：
 
-- Snapshot points model service `apiBaseUrl` to Relay proxy.
-- Device receives an ephemeral relay credential, not the provider API key.
-- Relay forwards model API traffic with server-side secret.
-- This mode needs separate rate limit, audit, and cost controls.
+- Snapshot 把模型服务 `apiBaseUrl` 指向 Relay proxy。
+- 设备收到临时 Relay credential，而不是 provider API key。
+- Relay 使用服务端 secret 转发模型 API 流量。
+- 该模式需要独立的 rate limit、审计和成本控制。
 
-## Cache And Revocation
+## 缓存和撤销
 
-Plugin cache behavior:
+插件缓存行为：
 
-- Non-secret snapshots may be used offline with warning.
-- Secret-bearing snapshots require a bounded TTL, default 24 hours or less.
-- If `mustRefreshAfter` is in the past and refresh fails, the hook must stop applying secret-bearing config unless policy explicitly allows grace mode.
-- UI must distinguish synced, applied, expired, revoked, and project-miss states.
+- 不含 secret 的 snapshot 可以离线使用，但必须展示提醒。
+- 含 secret 的 snapshot 必须有有界 TTL，默认不超过 24 小时。
+- 如果 `mustRefreshAfter` 已过且刷新失败，除非策略显式允许 grace mode，否则 hook 必须停止应用 secret-bearing config。
+- UI 必须区分已同步、已应用、已过期、已撤销和项目未命中状态。
 
-Revocation triggers:
+撤销触发：
 
-- Team member removal, team archive, profile disable, replacement publish, secret rotate/revoke, user disable, or device disable.
+- 移除团队成员、归档团队、禁用 profile、发布替代版本、轮换或撤销 secret、禁用用户、禁用设备。
 
-## Admin UI
+## Admin 界面
 
-Relay Admin adds these domains:
+Relay Admin 增加这些领域：
 
-- Teams: searchable list, members, role filters, archive action, audit summary.
-- Config profiles: profile list, version history, assignment table, publish/disable, secret rotation.
-- User detail: team memberships and inherited config profiles.
+- 团队：可搜索列表、成员、角色过滤、归档操作、审计摘要。
+- 配置 profile：profile 列表、版本历史、assignment 表、发布/禁用、secret rotation。
+- 用户详情：团队成员关系和继承的 config profiles。
 
-Admin list pages must follow existing Admin table conventions: search, filters, columns, batch action affordance, sticky header, bottom pagination, icon action buttons, and detail links on primary identifiers.
+Admin 列表页必须遵循现有表格约定：搜索、过滤、列配置、批量操作入口、固定表头、底部分页、图标操作按钮，以及主识别字段上的详情链接。
 
-## Relay Plugin UI
+## Relay 插件界面
 
-Relay plugin adds:
+Relay 插件增加：
 
-- current remote config source team/profile/version;
-- share draft builder with team selector, safe field preview, API key warning, and secret mode selector;
-- refresh/apply status with expiration and revocation warnings.
+- 当前远端配置来源 team/profile/version；
+- 分享草稿构建器，包含团队选择、安全字段预览、API key 警告和密钥模式选择；
+- refresh/apply 状态，包含过期和撤销警告。
 
-The plugin should never upload config automatically. Sharing starts from an explicit user action, and the final submit screen must show all fields and secrets that will leave the machine.
+插件绝不能自动上传配置。共享必须从用户显式动作开始，最终提交界面必须展示所有将离开本机的字段和 secret。
 
-## Migration Notes
+## 迁移说明
 
-- Existing `user.teamIds` can be transformed into synthetic `RelayTeamMember` rows.
-- Existing raw `configAssignments` remain readable for private deployments using hand-authored store data.
+- 现有 `user.teamIds` 可以迁移成 synthetic `RelayTeamMember` 记录。
+- 现有 raw `configAssignments` 继续可读，兼容手写 store data 的私有部署。
 - Once profile assignments exist, Admin should stop exposing raw assignment JSON editing.
 - Snapshot contract should remain backward compatible for existing Relay plugin versions by keeping `assignments`, `hash`, `version`, and safe config fields.
 
-## Service Boundaries
+## 服务边界
 
-Routes handle auth, request parsing, and responses only; team membership and config profile logic belongs in server services; storage drivers stay permission-agnostic; Relay plugin owns local preview/cache application; Relay Admin owns management UI and never reimplements server validation.
+Routes 只处理 auth、请求解析和响应；团队成员关系和 config profile 逻辑放在 server services；存储驱动保持 permission-agnostic；Relay 插件负责本地预览和缓存应用；Relay Admin 只负责管理界面，不能重写服务端校验。
