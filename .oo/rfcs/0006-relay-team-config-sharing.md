@@ -47,7 +47,7 @@ Relay 需要从“按 `teamIds` 过滤配置下发”的底层原语，升级成
 - 团队 owner/admin/editor 可以维护 profile、版本和 assignment。
 - 一个用户可以加入同一租户内的多个团队，并从多个团队同时继承配置。
 - 团队 member 的设备按用户、团队、项目规则获得配置 snapshot。
-- Relay plugin 可以展示配置来源、版本、是否命中项目、是否已应用，以及缓存是否过期。
+- Relay plugin 可以展示配置来源、版本、启用状态、是否命中项目、是否已应用，以及缓存是否过期。
 - 成员移除、team archive、profile disable、secret rotate 后，客户端不会无限期使用旧的 secret-bearing snapshot。
 - 所有共享行为可审计。
 
