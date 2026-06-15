@@ -666,6 +666,8 @@
     "shortcutDisabled": "Not set",
     "desktopActionUnavailable": "Desktop launch actions are not available in this environment",
     "openWorkspaceFailed": "Failed to open project",
+    "openingProjectAnimationLabel": "OneWorks opening project animation",
+    "openingProjectTitle": "Opening {{name}}",
     "createWorkspaceFailed": "Failed to create project",
     "createWorkspaceNamePlaceholder": "Enter a new project folder name",
     "createWorkspaceNameSearchLabel": "Enter a new project folder name",

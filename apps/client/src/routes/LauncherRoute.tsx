@@ -21,6 +21,7 @@ import {
 import { LauncherAboutView } from '#~/components/launcher/LauncherAboutView'
 import { LauncherSettingsView } from '#~/components/launcher/LauncherSettingsView'
 import type { LauncherKeyboardHint, LauncherSettingsResetAction } from '#~/components/launcher/LauncherSettingsView'
+import { WorkspaceOpeningOverlay } from '#~/components/workspace/WorkspaceOpeningOverlay'
 import { getProjectFileIconMeta } from '#~/components/workspace/project-file-tree/project-file-tree-icons'
 import { useInterfaceLanguageConfig } from '#~/hooks/use-interface-language-config'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
@@ -286,6 +287,11 @@ interface LauncherSearchHistoryState {
   index: number
 }
 
+interface LauncherOpeningWorkspace {
+  name: string
+  path: string
+}
+
 const initialLauncherSearchHistoryEntry: LauncherSearchHistoryEntry = {
   isFileSearchMode: false,
   launcherViewMode: 'commands',
@@ -515,6 +521,7 @@ export function LauncherRoute({
   const [dismissedProjectContextFolder, setDismissedProjectContextFolder] = useState<string>()
   const [isLauncherMenuOpen, setIsLauncherMenuOpen] = useState(false)
   const [launcherViewMode, setLauncherViewMode] = useState<LauncherViewMode>('commands')
+  const [openingWorkspace, setOpeningWorkspace] = useState<LauncherOpeningWorkspace>()
   const [settingsOperationHints, setSettingsOperationHints] = useState<LauncherKeyboardHint[]>([])
   const [settingsResetAction, setSettingsResetAction] = useState<LauncherSettingsResetAction>()
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -762,15 +769,33 @@ export function LauncherRoute({
     void message.warning(t('launcher.desktopActionUnavailable'))
   }, [message, t])
 
-  const openWorkspace = useCallback(async (workspaceFolder: string) => {
+  const openWorkspace = useCallback(async (workspaceFolder: string, workspaceName?: string) => {
+    const normalizedWorkspaceFolder = workspaceFolder.trim()
+    if (normalizedWorkspaceFolder === '') {
+      void message.error(t('launcher.openWorkspaceFailed'))
+      focusSearchInput()
+      return
+    }
+
+    setOpeningWorkspace({
+      name: workspaceName?.trim() || getDirectoryDisplayName(normalizedWorkspaceFolder),
+      path: normalizedWorkspaceFolder
+    })
+
+    const clearOpeningWorkspace = () => {
+      setOpeningWorkspace(current => current?.path === normalizedWorkspaceFolder ? undefined : current)
+    }
+
     try {
       if (desktopApi?.openWorkspace != null) {
-        await desktopApi.openWorkspace(workspaceFolder)
+        await desktopApi.openWorkspace(normalizedWorkspaceFolder)
+        onClose?.()
+        window.setTimeout(clearOpeningWorkspace, 320)
         return
       }
 
       if (canUseServerLauncher) {
-        const result = await openLauncherWorkspace(workspaceFolder)
+        const result = await openLauncherWorkspace(normalizedWorkspaceFolder)
         const workspaceClientBase = buildWorkspaceClientBase(result.workspaceId)
         mergeRuntimeEnv({
           __ONEWORKS_PROJECT_CLIENT_BASE__: workspaceClientBase,
@@ -784,14 +809,18 @@ export function LauncherRoute({
       }
 
       showDesktopActionUnavailable()
+      clearOpeningWorkspace()
     } catch (error) {
       console.error('[launcher] failed to open workspace', error)
       void message.error(t('launcher.openWorkspaceFailed'))
+      clearOpeningWorkspace()
     }
   }, [
     canUseServerLauncher,
     desktopApi,
+    focusSearchInput,
     message,
+    onClose,
     showDesktopActionUnavailable,
     t
   ])
@@ -1441,7 +1470,7 @@ export function LauncherRoute({
         icon: <span className='material-symbols-rounded launcher-command-menu__icon'>keyboard_return</span>,
         key: 'open-project',
         label: t('launcher.projects.open'),
-        onClick: () => void openWorkspace(project.workspaceFolder)
+        onClick: () => void openWorkspace(project.workspaceFolder, project.name)
       },
       {
         icon: <span className='material-symbols-rounded launcher-command-menu__icon'>folder_open</span>,
@@ -1992,7 +2021,7 @@ export function LauncherRoute({
       },
       {
         commands: projects.map(project => ({
-          action: () => void openWorkspace(project.workspaceFolder),
+          action: () => void openWorkspace(project.workspaceFolder, project.name),
           contextMenuItems: buildProjectContextMenuItems(project),
           icon: project.status === 'ready' ? 'radio_button_checked' : 'history',
           id: `project:${encodeURIComponent(project.workspaceFolder)}`,
@@ -2126,12 +2155,12 @@ export function LauncherRoute({
   }, [activeCommandId, flatCommands, launcherViewMode])
 
   const runCommand = useCallback((command?: LauncherCommand) => {
-    if (command == null) return
+    if (command == null || openingWorkspace != null) return
     void Promise.resolve(command.action()).catch((error) => {
       console.error('[launcher] command failed', error)
       void message.error(t('launcher.commandFailed'))
     })
-  }, [message, t])
+  }, [message, openingWorkspace, t])
 
   const runCommandAndSelect = useCallback((command?: LauncherCommand) => {
     if (command == null) return
@@ -2318,6 +2347,12 @@ export function LauncherRoute({
         return
       }
 
+      if (openingWorkspace != null) {
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+
       if (
         event.metaKey &&
         !event.ctrlKey &&
@@ -2395,11 +2430,17 @@ export function LauncherRoute({
     isSearchInputComposing,
     launcherViewMode,
     navigateSearchHistory,
-    openLauncherView
+    openLauncherView,
+    openingWorkspace
   ])
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (isImeCompositionKeyEvent(event, isSearchInputComposing())) {
+      return
+    }
+
+    if (openingWorkspace != null) {
+      event.preventDefault()
       return
     }
 
@@ -2619,7 +2660,10 @@ export function LauncherRoute({
     ]
 
   return (
-    <main className='launcher-route'>
+    <main
+      className={`launcher-route ${openingWorkspace != null ? 'is-opening-workspace' : ''}`}
+      aria-busy={openingWorkspace != null}
+    >
       <div className='launcher-command-shell'>
         <div className='launcher-command-search'>
           <div className='launcher-command-search__input-row'>
@@ -2970,6 +3014,13 @@ export function LauncherRoute({
           </div>
         </div>
       </div>
+      {openingWorkspace != null && (
+        <WorkspaceOpeningOverlay
+          appearance={resolvedThemeMode}
+          subtitle={openingWorkspace.path}
+          title={t('launcher.openingProjectTitle', { name: openingWorkspace.name })}
+        />
+      )}
     </main>
   )
 }
