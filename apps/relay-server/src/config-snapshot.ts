@@ -8,6 +8,7 @@ import {
   normalizeRelayConfigAssignment,
   normalizeRelayConfigSafeFields
 } from './config-snapshot-normalize.js'
+import { getRelayUserTeamIds } from './teams.js'
 import type {
   RelayConfigAssignment,
   RelayConfigProjectContext,
@@ -77,10 +78,11 @@ export const createRelayConfigSnapshotForUser = (
   } = {}
 ): RelayConfigSnapshot => {
   const shouldFilterProject = hasProjectContext(options.projectContext)
+  const teamIdsForUser = getRelayUserTeamIds(store, user)
   const assignments = store.configAssignments
     .map(normalizeRelayConfigAssignment)
     .filter((assignment): assignment is RelayConfigAssignment => assignment != null)
-    .filter(assignment => assignmentTargetsUser(assignment, user))
+    .filter(assignment => assignmentTargetsUser(assignment, user, teamIdsForUser))
     .filter(assignment => !shouldFilterProject || matchesRelayConfigProject(assignment, options.projectContext ?? {}))
     .map(snapshotAssignmentFromStore)
     .filter((assignment): assignment is RelayConfigSnapshotAssignment => assignment != null)

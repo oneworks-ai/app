@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { buildAuditEvent } from '../src/security/audit.js'
 import { readRelayStore, writeRelayStore } from '../src/store.js'
+import { normalizeRelayTeamPolicy } from '../src/teams.js'
 import type { RelayStore } from '../src/types.js'
 import { authHeaders, cleanupRelayFixtures, listenRelay, requestJson } from './helpers.js'
 
@@ -20,6 +21,9 @@ const createSecurityStore = (): RelayStore => ({
     buckets: [],
     challenges: []
   },
+  teamPolicy: normalizeRelayTeamPolicy(undefined),
+  teams: [],
+  teamMembers: [],
   passkeyChallenges: [],
   passkeys: [],
   users: [

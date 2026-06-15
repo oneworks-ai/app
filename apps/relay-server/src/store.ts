@@ -7,6 +7,7 @@ import { normalizeRelayConfigAssignment } from './config-snapshot.js'
 import { hashDeviceToken } from './devices/private-metadata.js'
 import { sanitizeRelayStorageValue } from './storage/content-boundary.js'
 import { normalizeRelaySsoProviders } from './storage/sso-providers.js'
+import { normalizeRelayTeamPolicy, normalizeTeamRole } from './teams.js'
 import type {
   RelayConfigAssignment,
   RelayDevice,
@@ -25,6 +26,8 @@ import type {
   RelayPasskeyCredential,
   RelaySession,
   RelayStore,
+  RelayTeam,
+  RelayTeamMember,
   RelayUser
 } from './types.js'
 import { createToken, isRecord, normalizeRole, now } from './utils.js'
@@ -36,6 +39,9 @@ const defaultStore = (): RelayStore => ({
     buckets: [],
     challenges: []
   },
+  teamPolicy: normalizeRelayTeamPolicy(undefined),
+  teams: [],
+  teamMembers: [],
   users: [],
   invites: [],
   ssoProviders: [],
@@ -75,6 +81,96 @@ const normalizeStringArray = (value: unknown) => (
     ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map(item => item.trim())
     : undefined
 )
+
+const normalizeSlug = (value: unknown, fallback: string) => {
+  const source = typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback
+  const slug = source.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '')
+  return slug === '' ? fallback : slug
+}
+
+const normalizeTeam = (value: Record<string, unknown>): RelayTeam | undefined => {
+  const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
+  const slug = normalizeSlug(value.slug, id ?? randomUUID())
+  const teamId = id ?? slug
+  return {
+    id: teamId,
+    slug,
+    name: typeof value.name === 'string' && value.name.trim() !== '' ? value.name.trim() : teamId,
+    description: typeof value.description === 'string' && value.description.trim() !== ''
+      ? value.description.trim()
+      : undefined,
+    createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
+      ? value.createdByUserId.trim()
+      : 'system',
+    archivedAt: typeof value.archivedAt === 'string' && value.archivedAt.trim() !== ''
+      ? value.archivedAt.trim()
+      : undefined,
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined
+  }
+}
+
+const normalizeTeamMember = (value: Record<string, unknown>): RelayTeamMember | undefined => {
+  const teamId = typeof value.teamId === 'string' && value.teamId.trim() !== '' ? value.teamId.trim() : undefined
+  const userId = typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined
+  if (teamId == null || userId == null) return undefined
+  return {
+    id: typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : `member:${teamId}:${userId}`,
+    teamId,
+    userId,
+    role: normalizeTeamRole(value.role, 'member'),
+    ...(typeof value.configEnabled === 'boolean' ? { configEnabled: value.configEnabled } : {}),
+    ...(typeof value.defaultForPublishing === 'boolean' ? { defaultForPublishing: value.defaultForPublishing } : {}),
+    createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
+      ? value.createdByUserId.trim()
+      : userId,
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined
+  }
+}
+
+const addLegacyTeamMemberships = (
+  users: RelayUser[],
+  teams: RelayTeam[],
+  teamMembers: RelayTeamMember[]
+) => {
+  const teamIds = new Set(teams.map(team => team.id))
+  const memberKeys = new Set(teamMembers.map(member => `${member.teamId}:${member.userId}`))
+  const nextTeams = [...teams]
+  const nextMembers = [...teamMembers]
+
+  for (const user of users) {
+    for (const teamId of user.teamIds ?? []) {
+      if (!teamIds.has(teamId)) {
+        nextTeams.push({
+          id: teamId,
+          slug: normalizeSlug(teamId, teamId),
+          name: teamId,
+          createdByUserId: user.id,
+          createdAt: user.createdAt
+        })
+        teamIds.add(teamId)
+      }
+      const key = `${teamId}:${user.id}`
+      if (!memberKeys.has(key)) {
+        nextMembers.push({
+          id: `legacy:${teamId}:${user.id}`,
+          teamId,
+          userId: user.id,
+          role: 'member',
+          createdByUserId: user.id,
+          createdAt: user.createdAt
+        })
+        memberKeys.add(key)
+      }
+    }
+  }
+
+  return {
+    teamMembers: nextMembers,
+    teams: nextTeams
+  }
+}
 
 const normalizePasskeyCredential = (value: Record<string, unknown>): RelayPasskeyCredential | undefined => {
   const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
@@ -379,6 +475,16 @@ const normalizeEmailRiskState = (value: unknown): RelayEmailRiskState => {
 
 export const normalizeRelayStore = (value: unknown): RelayStore => {
   const store = isRecord(value) ? value : {}
+  const users = Array.isArray(store.users) ? store.users.filter(isRecord).map(normalizeUser) : []
+  const teams = Array.isArray(store.teams)
+    ? store.teams.filter(isRecord).map(normalizeTeam).filter((team): team is RelayTeam => team != null)
+    : []
+  const teamMembers = Array.isArray(store.teamMembers)
+    ? store.teamMembers.filter(isRecord).map(normalizeTeamMember).filter((
+      member
+    ): member is RelayTeamMember => member != null)
+    : []
+  const legacyTeams = addLegacyTeamMemberships(users, teams, teamMembers)
   return {
     createdAt: typeof store.createdAt === 'string' ? store.createdAt : now(),
     configAssignments: Array.isArray(store.configAssignments)
@@ -387,7 +493,10 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
       ): value is RelayConfigAssignment => value != null)
       : [],
     emailRisk: normalizeEmailRiskState(store.emailRisk),
-    users: Array.isArray(store.users) ? store.users.filter(isRecord).map(normalizeUser) : [],
+    teamPolicy: normalizeRelayTeamPolicy(store.teamPolicy),
+    teams: legacyTeams.teams,
+    teamMembers: legacyTeams.teamMembers,
+    users,
     invites: Array.isArray(store.invites) ? store.invites.filter(isRecord).map(normalizeInvite) : [],
     ssoProviders: normalizeRelaySsoProviders(store.ssoProviders),
     passkeyChallenges: Array.isArray(store.passkeyChallenges)

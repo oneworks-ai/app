@@ -173,11 +173,14 @@ export const hasProjectContext = (context: RelayConfigProjectContext | undefined
   context != null && getProjectCandidates(context).length > 0
 )
 
-export const assignmentTargetsUser = (assignment: RelayConfigAssignment, user: RelayUser) => {
+export const assignmentTargetsUser = (
+  assignment: RelayConfigAssignment,
+  user: RelayUser,
+  teamIdsForUser: string[] = user.teamIds ?? []
+) => {
   const userIds = assignment.target?.userIds ?? []
   const teamIds = assignment.target?.teamIds ?? []
   if (userIds.length === 0 && teamIds.length === 0) return true
 
-  const userTeamIds = user.teamIds ?? []
-  return userIds.includes(user.id) || teamIds.some(teamId => userTeamIds.includes(teamId))
+  return userIds.includes(user.id) || teamIds.some(teamId => teamIdsForUser.includes(teamId))
 }

@@ -260,6 +260,107 @@ describe('relay config snapshot route', () => {
     expect(JSON.stringify(snapshot.body)).not.toContain('team-b')
   })
 
+  it('uses team memberships for team-targeted assignments and respects member config disable', async () => {
+    const { args, baseUrl } = await listenRelay()
+    const store = await seedUsers(args.dataPath)
+    for (const user of store.users) {
+      user.teamIds = undefined
+    }
+    store.teams.push(
+      {
+        id: 'team-a',
+        slug: 'team-a',
+        name: 'Team A',
+        createdByUserId: 'user-1',
+        createdAt: timestamp
+      },
+      {
+        id: 'team-b',
+        slug: 'team-b',
+        name: 'Team B',
+        createdByUserId: 'user-1',
+        createdAt: timestamp
+      },
+      {
+        id: 'team-c',
+        slug: 'team-c',
+        name: 'Team C',
+        createdByUserId: 'user-1',
+        createdAt: timestamp
+      }
+    )
+    store.teamMembers.push(
+      {
+        id: 'team-a-user-1',
+        teamId: 'team-a',
+        userId: 'user-1',
+        role: 'member',
+        configEnabled: true,
+        createdByUserId: 'user-1',
+        createdAt: timestamp
+      },
+      {
+        id: 'team-b-user-1',
+        teamId: 'team-b',
+        userId: 'user-1',
+        role: 'member',
+        configEnabled: false,
+        createdByUserId: 'user-1',
+        createdAt: timestamp
+      },
+      {
+        id: 'team-c-user-1',
+        teamId: 'team-c',
+        userId: 'user-1',
+        role: 'viewer',
+        createdByUserId: 'user-1',
+        createdAt: timestamp
+      }
+    )
+    upsertRelayConfigAssignment(store, {
+      configPatch: {
+        defaultModelService: 'team-a'
+      },
+      id: 'team-a-membership',
+      target: {
+        teamIds: ['team-a']
+      },
+      updatedAt: timestamp
+    })
+    upsertRelayConfigAssignment(store, {
+      configPatch: {
+        defaultModelService: 'team-b-disabled'
+      },
+      id: 'team-b-disabled',
+      target: {
+        teamIds: ['team-b']
+      },
+      updatedAt: '2026-01-02T00:00:00.000Z'
+    })
+    upsertRelayConfigAssignment(store, {
+      configPatch: {
+        defaultModelService: 'team-c-viewer'
+      },
+      id: 'team-c-viewer',
+      target: {
+        teamIds: ['team-c']
+      },
+      updatedAt: '2026-01-03T00:00:00.000Z'
+    })
+    await writeRelayStore(args.dataPath, store)
+
+    const snapshot = await requestJson(baseUrl, '/api/relay/config-snapshot', {
+      headers: authHeaders('user-1-session')
+    })
+    const assignments = snapshot.body.assignments as Array<{ id?: string }>
+    const serialized = JSON.stringify(snapshot.body)
+
+    expect(snapshot.response.status).toBe(200)
+    expect(assignments.map(assignment => assignment.id)).toEqual(['team-a-membership'])
+    expect(serialized).not.toContain('team-b-disabled')
+    expect(serialized).not.toContain('team-c-viewer')
+  })
+
   it('rejects unauthenticated snapshot requests', async () => {
     const { baseUrl } = await listenRelay()
 

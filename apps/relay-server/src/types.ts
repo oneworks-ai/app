@@ -27,8 +27,10 @@ export type RelayLocale = 'en' | 'zh-CN'
 export type RelayPasskeyChallengeKind = 'authentication' | 'registration'
 export type RelayRegistrationMode = 'admin_created_only' | 'email_verified' | 'invite_required'
 export type RelayRole = 'owner' | 'admin' | 'member' | 'viewer'
+export type RelaySecretMode = 'device_encrypted' | 'proxy'
 export type RelaySsoProviderType = 'oauth2' | 'oidc'
 export type RelayStorageDriver = 'cloudflare-do' | 'json' | 'postgres' | 'sqlite'
+export type RelayTeamRole = 'owner' | 'admin' | 'editor' | 'member' | 'viewer'
 export type RelayTurnstileMode = 'auto' | 'off' | 'required'
 
 export interface RelayPasskeyConfig {
@@ -115,6 +117,50 @@ export interface RelayUser {
   teamIds?: string[]
   createdAt: string
   updatedAt?: string
+}
+
+export interface RelayTeam {
+  id: string
+  slug: string
+  name: string
+  description?: string
+  createdByUserId: string
+  archivedAt?: string
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface RelayTeamMember {
+  id: string
+  teamId: string
+  userId: string
+  role: RelayTeamRole
+  configEnabled?: boolean
+  defaultForPublishing?: boolean
+  createdByUserId: string
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface RelayTeamPolicy {
+  allowedMarketplaceIds?: string[]
+  allowedPluginIds?: string[]
+  allowedSecretModes: RelaySecretMode[]
+  allowedSkillRegistries?: string[]
+  allowedSkillSources?: string[]
+  maxAssignmentsPerProfile?: number
+  maxMembersPerTeam?: number
+  maxProfilesPerTeam?: number
+  maxSecretTtlHours?: number
+  maxTeamsPerTenant?: number
+  maxTeamsPerUser?: number
+  proxyModeEnabled: boolean
+  requireOwnerApprovalForSecretProfiles?: boolean
+  selfServiceTeamCreation: boolean
+  teamsEnabled: boolean
+  tenantId: string
+  updatedAt?: string
+  updatedByUserId?: string
 }
 
 export interface RelayPasskeyCredential {
@@ -340,6 +386,9 @@ export interface RelayStore {
   createdAt: string
   configAssignments: RelayConfigAssignment[]
   emailRisk: RelayEmailRiskState
+  teamPolicy: RelayTeamPolicy
+  teams: RelayTeam[]
+  teamMembers: RelayTeamMember[]
   users: RelayUser[]
   invites: RelayInvite[]
   ssoProviders: RelaySsoProvider[]

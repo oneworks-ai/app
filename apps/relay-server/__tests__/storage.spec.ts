@@ -10,6 +10,7 @@ import { parseRelayStorageDriver } from '../src/storage/drivers.js'
 import { createDurableObjectRelayStoreRepository } from '../src/storage/durable-object.js'
 import type { RelayDurableObjectStorage } from '../src/storage/durable-object.js'
 import { createRelayStoreRepository } from '../src/storage/repository.js'
+import { normalizeRelayTeamPolicy } from '../src/teams.js'
 import type { RelayStore } from '../src/types.js'
 
 const tempDirs: string[] = []
@@ -76,6 +77,9 @@ describe('relay storage repository', () => {
         buckets: [],
         challenges: []
       },
+      teamPolicy: normalizeRelayTeamPolicy(undefined),
+      teams: [],
+      teamMembers: [],
       passkeyChallenges: [],
       passkeys: [],
       users: [
@@ -125,6 +129,9 @@ describe('relay storage repository', () => {
         buckets: [],
         challenges: []
       },
+      teamPolicy: normalizeRelayTeamPolicy(undefined),
+      teams: [],
+      teamMembers: [],
       passkeyChallenges: [],
       passkeys: [],
       users: [
@@ -191,6 +198,9 @@ describe('relay storage repository', () => {
         buckets: [],
         challenges: []
       },
+      teamPolicy: normalizeRelayTeamPolicy(undefined),
+      teams: [],
+      teamMembers: [],
       passkeyChallenges: [],
       passkeys: [],
       users: [],

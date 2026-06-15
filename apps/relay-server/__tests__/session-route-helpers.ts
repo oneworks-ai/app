@@ -10,6 +10,7 @@ import { handleRelaySessionsRoute } from '../src/routes/sessions.js'
 import { readRelayStore } from '../src/server.js'
 import { createRelayStoreRepository } from '../src/storage/repository.js'
 import { writeRelayStore } from '../src/store.js'
+import { normalizeRelayTeamPolicy } from '../src/teams.js'
 import type { RelayServerArgs, RelayStore } from '../src/types.js'
 import { authHeaders, requestJson } from './helpers.js'
 
@@ -42,6 +43,9 @@ export const createFixtureStore = (): RelayStore => ({
     buckets: [],
     challenges: []
   },
+  teamPolicy: normalizeRelayTeamPolicy(undefined),
+  teams: [],
+  teamMembers: [],
   passkeyChallenges: [],
   passkeys: [],
   users: [

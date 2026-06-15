@@ -18,6 +18,8 @@ import { handleRelayMetrics } from './routes/metrics.js'
 import { handlePasskeyRoute } from './routes/passkeys.js'
 import { handlePasswordLoginRoute } from './routes/password-login.js'
 import { handleRelaySessionsRoute } from './routes/sessions.js'
+import { handleRelayTeamPolicyRoute } from './routes/team-policy.js'
+import { handleTeamsRoute } from './routes/teams.js'
 import { handleAdminSecurityTokens } from './security/admin-route.js'
 import { attachAuditLogger } from './security/audit.js'
 import { createRelayRateLimiter, sendRateLimitExceeded } from './security/rate-limit.js'
@@ -52,7 +54,8 @@ const handleInfo = (res: ServerResponse, args: RelayServerArgs, store: RelayStor
       registrationMode: args.passkey?.registrationMode ?? 'invite_required',
       oauth: providers.length > 0,
       oauthProviders: providers,
-      sessionForwarding: true
+      sessionForwarding: true,
+      teams: true
     }
   }, args.allowOrigin)
 }
@@ -111,6 +114,12 @@ const handleRelayRequestWithStore = async (
   }
   if (req.method === 'GET' && url.pathname === '/api/relay/config-snapshot') {
     handleRelayConfigSnapshot(req, res, args, store, url)
+    return
+  }
+  if (await handleRelayTeamPolicyRoute(req, res, args, store, storeRepository, url)) {
+    return
+  }
+  if (await handleTeamsRoute(req, res, args, store, storeRepository, url)) {
     return
   }
   if (url.pathname === '/api/relay/metrics') {
