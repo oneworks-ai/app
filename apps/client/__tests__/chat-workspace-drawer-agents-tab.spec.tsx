@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { AgentRoomRoster } from '#~/components/agent-room'
 import type { AgentRoomMemberView, AgentRoomViewModel } from '#~/components/agent-room'
 import { useInteractionTerminalPanes } from '#~/components/chat/interaction-panel/use-interaction-terminal-panes'
+import type { SessionPanelStateController } from '#~/components/chat/interaction-panel/use-session-panel-state'
 import { ChatWorkspaceDrawer } from '#~/components/chat/workspace-drawer/ChatWorkspaceDrawer'
 import type {
   ChatWorkspaceDrawerAgentApprovals,
@@ -137,6 +138,15 @@ const roomWithoutApproval: AgentRoomViewModel = {
   ]
 }
 
+const createTestPanelStateController = (): SessionPanelStateController => ({
+  panelState: {
+    bottom: { tabs: [] },
+    right: { tabs: [] }
+  },
+  setPanelState: () => undefined,
+  updateArea: () => undefined
+})
+
 const renderDrawer = async ({
   agentApprovals,
   agentRoster,
@@ -168,6 +178,7 @@ const renderDrawer = async ({
         agentApprovals={agentApprovals}
         agentRoster={agentRoster}
         defaultView={resolvedDefaultView}
+        panelStateController={createTestPanelStateController()}
         settingsView={settingsView}
         terminalSessionId='__workspace__'
         terminalPanes={terminalPanes}

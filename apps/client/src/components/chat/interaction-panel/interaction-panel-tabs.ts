@@ -28,6 +28,8 @@ export type InteractionPanelTab =
     icon: string
     label: string
     pluginScope: string
+    state?: unknown
+    stateVersion?: number
     tabId: string
     viewId: string
     canClose: true

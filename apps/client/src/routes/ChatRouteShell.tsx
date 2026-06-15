@@ -7,9 +7,9 @@ import type { CSSProperties, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 
-import type { ChatMessage, Session } from '@oneworks/core'
+import type { ChatMessage, Session, SessionPanelAreaState } from '@oneworks/core'
 import { usePanelResize } from '@oneworks/route-layout'
-import type { SessionInfo } from '@oneworks/types'
+import type { SessionInfo, TerminalShellKind } from '@oneworks/types'
 
 import type { NavRailWindowBarAction } from '#~/components/NavRail'
 import { ChatHeader } from '#~/components/chat/ChatHeader.js'
@@ -42,9 +42,14 @@ import {
 } from '#~/components/chat/interaction-panel/interaction-panel-shortcut-request'
 import type { InteractionPanelShortcutRequest } from '#~/components/chat/interaction-panel/interaction-panel-shortcut-request'
 import { formatInteractionPanelShortcut } from '#~/components/chat/interaction-panel/interaction-panel-shortcuts'
+import {
+  WORKSPACE_DRAWER_INTERACTION_TAB_PREFIX,
+  toWorkspaceDrawerInteractionTabId
+} from '#~/components/chat/interaction-panel/interaction-panel-tabs'
 import { buildInteractionPanelWebsiteResources } from '#~/components/chat/interaction-panel/interaction-panel-website-resources'
 import { useInteractionPanelWorkspaceUrlKeys } from '#~/components/chat/interaction-panel/use-interaction-panel-workspace-url-keys'
 import { useInteractionTerminalPanes } from '#~/components/chat/interaction-panel/use-interaction-terminal-panes'
+import { useSessionPanelState } from '#~/components/chat/interaction-panel/use-session-panel-state'
 import {
   getSessionNotificationFingerprint,
   isSessionNotificationMarkedRead,
@@ -53,6 +58,7 @@ import {
   writeSessionNotificationReadMarker
 } from '#~/components/chat/session-notification-indicator'
 import type { SessionNotificationReadMarker } from '#~/components/chat/session-notification-indicator'
+import type { TerminalPaneConfig } from '#~/components/chat/terminal/@utils/terminal-panes'
 import { parseWorkbenchDrawerViewMenuKey, toWorkbenchDrawerViewMenuKey } from '#~/components/chat/workbench-create-menu'
 import type {
   ChatWorkspaceDrawerAgentApprovals,
@@ -62,6 +68,7 @@ import type {
 import { ChatWorkspaceDrawer } from '#~/components/chat/workspace-drawer/ChatWorkspaceDrawer'
 import type { WorkspaceDrawerView } from '#~/components/chat/workspace-drawer/workspace-drawer-types'
 import { buildWorkspaceDrawerViewItems } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
+import type { WorkspaceDrawerViewItem } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
 import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
 import { useDesktopWorkspaceStartupReady } from '#~/components/layout/desktop-workspace-startup-ready'
 import { useRouteSidebar } from '#~/components/layout/route-sidebar-context'
@@ -95,6 +102,62 @@ const CHAT_ROUTE_STARTUP_READY_SELECTOR = [
   '.chat-container.ready .chat-settings-panel',
   '.chat-container.ready .chat-timeline-view'
 ].join(',')
+
+const isChatRouteDebugEnabled = () => {
+  try {
+    return new URLSearchParams(window.location?.search ?? '').get('oneworks_debug') === '1'
+  } catch {
+    return false
+  }
+}
+
+const logChatRouteDebug = (message: string, data?: unknown) => {
+  if (!isChatRouteDebugEnabled()) return
+  try {
+    const debugGlobal = window as typeof window & {
+      __oneworksDebugEvents?: Array<{ at: number; data?: unknown; message: string; scope: string }>
+    }
+    const events = debugGlobal.__oneworksDebugEvents ?? []
+    events.push({ at: Date.now(), data, message, scope: 'chat-layout' })
+    if (events.length > 1000) events.splice(0, events.length - 1000)
+    debugGlobal.__oneworksDebugEvents = events
+  } catch {
+    // Debug buffer should never affect the app.
+  }
+  void data
+  void message
+}
+
+const summarizeSessionPanelAreaForChatDebug = (area: SessionPanelAreaState) => ({
+  activeTabId: area.activeTabId,
+  tabs: area.tabs.map(tab => ({ id: tab.id, kind: tab.kind }))
+})
+
+const terminalShellKinds = new Set<TerminalShellKind>(['default', 'zsh', 'bash', 'sh'])
+
+const isTerminalShellKind = (value: unknown): value is TerminalShellKind =>
+  typeof value === 'string' && terminalShellKinds.has(value as TerminalShellKind)
+
+const getSessionPanelTerminalPanes = (session?: Session): TerminalPaneConfig[] => (
+  (['bottom', 'right'] as const).flatMap(area =>
+    session?.panelState?.[area].tabs.flatMap((tab): TerminalPaneConfig[] => {
+      if (tab.kind !== 'terminal') return []
+      return [{
+        id: tab.terminalId,
+        title: tab.title,
+        shellKind: isTerminalShellKind(tab.shellKind) ? tab.shellKind : 'default',
+        surface: area === 'right' ? 'workspace-drawer' : 'bottom',
+        ...(tab.runCommand == null ? {} : { runCommand: tab.runCommand as TerminalPaneConfig['runCommand'] })
+      }]
+    }) ?? []
+  )
+)
+
+const getSessionPanelActiveTerminalId = (session?: Session) => {
+  const bottomPanelState = session?.panelState?.bottom
+  const activeTab = bottomPanelState?.tabs.find(tab => tab.id === bottomPanelState.activeTabId)
+  return activeTab?.kind === 'terminal' ? activeTab.terminalId : undefined
+}
 
 const clampWorkspaceDrawerWidth = (value: number, maxWidth = Number.POSITIVE_INFINITY) => {
   const resolvedMaxWidth = Number.isFinite(maxWidth)
@@ -351,8 +414,75 @@ export function ChatRouteShell({
   const [sessionNotificationReadMarker, setSessionNotificationReadMarker] = useState<
     SessionNotificationReadMarker | null
   >(() => readSessionNotificationReadMarker(workspaceSessionId ?? session?.id))
-  const resolvedWorkspaceSession = workspaceSession ?? session
+  const chatContainerRef = useRef<HTMLDivElement | null>(null)
+  const chatRouteRenderCountRef = useRef(0)
+  chatRouteRenderCountRef.current += 1
+  const sourceWorkspaceSession = workspaceSession ?? session
+  const sessionPanelStateController = useSessionPanelState(
+    sourceWorkspaceSession,
+    workspaceSessionId ?? session?.id
+  )
+  const { panelState: sessionPanelState, updateArea: updateSessionPanelArea } = sessionPanelStateController
+  const resolvedWorkspaceSession = useMemo<Session | undefined>(() => (
+    sourceWorkspaceSession == null
+      ? undefined
+      : {
+        ...sourceWorkspaceSession,
+        panelState: sessionPanelState
+      }
+  ), [sourceWorkspaceSession, sessionPanelState])
   const resolvedWorkspaceSessionId = workspaceSessionId ?? resolvedWorkspaceSession?.id
+
+  useEffect(() => {
+    if (!isChatRouteDebugEnabled()) return undefined
+
+    const node = chatContainerRef.current
+    if (node == null || typeof ResizeObserver === 'undefined') return undefined
+
+    let lastRectKey: string | null = null
+    let frameId: number | null = null
+    const readRect = () => {
+      const rect = node.getBoundingClientRect()
+      return {
+        height: Math.round(rect.height * 10) / 10,
+        width: Math.round(rect.width * 10) / 10,
+        x: Math.round(rect.x * 10) / 10,
+        y: Math.round(rect.y * 10) / 10
+      }
+    }
+    const report = (reason: string) => {
+      const rect = readRect()
+      const rectKey = JSON.stringify(rect)
+      if (rectKey === lastRectKey) return
+      lastRectKey = rectKey
+      logChatRouteDebug('chat container rect', {
+        reason,
+        rect,
+        renderCount: chatRouteRenderCountRef.current
+      })
+    }
+    const scheduleReport = (reason: string) => {
+      if (frameId != null) {
+        window.cancelAnimationFrame(frameId)
+      }
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null
+        report(reason)
+      })
+    }
+
+    const observer = new ResizeObserver(() => scheduleReport('resize-observer'))
+    observer.observe(node)
+    scheduleReport('mount')
+
+    return () => {
+      if (frameId != null) {
+        window.cancelAnimationFrame(frameId)
+      }
+      observer.disconnect()
+    }
+  }, [])
+
   const sessionWorkspaceRootPath = sessionInfo?.type === 'init' ? sessionInfo.cwd.trim() : ''
   const workspaceRootPath = sessionWorkspaceRootPath === '' ? projectWorkspaceFolder : sessionWorkspaceRootPath
   const terminalSessionId = resolvedWorkspaceSessionId ?? WORKSPACE_TERMINAL_SESSION_ID
@@ -386,11 +516,35 @@ export function ChatRouteShell({
       tone: sessionNotificationIndicator.tone
     }
   }, [sessionNotificationIndicator, t])
-  const terminalPanes = useInteractionTerminalPanes(terminalSessionId, t)
+  const initialTerminalPanes = useMemo(
+    () => getSessionPanelTerminalPanes(resolvedWorkspaceSession),
+    [resolvedWorkspaceSession?.panelState]
+  )
+  const panelActiveTerminalId = useMemo(
+    () => getSessionPanelActiveTerminalId(resolvedWorkspaceSession),
+    [resolvedWorkspaceSession?.panelState]
+  )
+  const terminalPanes = useInteractionTerminalPanes(terminalSessionId, t, {
+    activeTerminalId: panelActiveTerminalId,
+    initialPanes: initialTerminalPanes
+  })
   const bottomPanel = useChatRouteBottomPanel({
     isTerminalOpen,
     session: resolvedWorkspaceSession,
     setIsTerminalOpen
+  })
+  useEffect(() => {
+    logChatRouteDebug('commit', {
+      activeView,
+      bottom: summarizeSessionPanelAreaForChatDebug(sessionPanelState.bottom),
+      isBottomPanelOpen: bottomPanel.shouldShowBottomPanel,
+      isNewSession,
+      isReady,
+      isWorkspaceDrawerOpen,
+      renderCount: chatRouteRenderCountRef.current,
+      right: summarizeSessionPanelAreaForChatDebug(sessionPanelState.right),
+      sessionId: resolvedWorkspaceSessionId
+    })
   })
   const recentFilePaths = bottomPanel.selectedWorkspaceFilePath == null
     ? bottomPanel.openWorkspaceFilePaths
@@ -656,31 +810,135 @@ export function ChatRouteShell({
       pluginTabs: pluginWorkbenchTabs,
       t
     }), [agentApprovals, agentRoster, i18n.language, i18n.resolvedLanguage, pluginWorkbenchTabs, settingsView, t])
+  const workspaceDrawerItemByView = useMemo(
+    () =>
+      new Map<WorkspaceDrawerView, WorkspaceDrawerViewItem>(
+        workspaceDrawerCreateItems.map(item => [item.key, item])
+      ),
+    [workspaceDrawerCreateItems]
+  )
+  const resolveWorkspaceDrawerViewFromRightTabId = useCallback((tabId?: string) => {
+    if (tabId == null || tabId.trim() === '') return undefined
+
+    const activeTab = sessionPanelState.right.tabs.find(tab => tab.id === tabId)
+    if (
+      activeTab?.kind === 'workspace-drawer' && workspaceDrawerItemByView.has(activeTab.view as WorkspaceDrawerView)
+    ) {
+      return activeTab.view as WorkspaceDrawerView
+    }
+
+    const directView = tabId as WorkspaceDrawerView
+    if (workspaceDrawerItemByView.has(directView)) return directView
+
+    if (tabId.startsWith(WORKSPACE_DRAWER_INTERACTION_TAB_PREFIX)) {
+      const prefixedView = tabId.slice(WORKSPACE_DRAWER_INTERACTION_TAB_PREFIX.length) as WorkspaceDrawerView
+      if (workspaceDrawerItemByView.has(prefixedView)) return prefixedView
+    }
+
+    return undefined
+  }, [sessionPanelState.right.tabs, workspaceDrawerItemByView])
+  const [runtimeRightWorkspaceDrawerView, setRuntimeRightWorkspaceDrawerView] = useState<WorkspaceDrawerView | null>(
+    null
+  )
+  const consumedRightTabOverrideKeyRef = useRef<string | null>(null)
+  const rightTabOverride = useMemo(() => {
+    const value = new URLSearchParams(location.search).get('rightTab')?.trim()
+    return value == null || value === '' ? undefined : value
+  }, [location.search])
+
+  useEffect(() => {
+    const sessionKey = resolvedWorkspaceSessionId ?? ''
+    if (rightTabOverride == null) {
+      if (consumedRightTabOverrideKeyRef.current !== sessionKey) {
+        consumedRightTabOverrideKeyRef.current = sessionKey
+        setRuntimeRightWorkspaceDrawerView(null)
+      }
+      return
+    }
+
+    const overrideKey = `${sessionKey}:${rightTabOverride}`
+    if (consumedRightTabOverrideKeyRef.current === overrideKey) return
+    if (workspaceDrawerCreateItems.length <= 0) return
+
+    consumedRightTabOverrideKeyRef.current = overrideKey
+    setRuntimeRightWorkspaceDrawerView(resolveWorkspaceDrawerViewFromRightTabId(rightTabOverride) ?? null)
+  }, [
+    resolvedWorkspaceSessionId,
+    resolveWorkspaceDrawerViewFromRightTabId,
+    rightTabOverride,
+    workspaceDrawerCreateItems.length
+  ])
+  const persistedRightWorkspaceDrawerView = resolveWorkspaceDrawerViewFromRightTabId(
+    sessionPanelState.right.activeTabId
+  )
+  const resolvedWorkspaceDrawerView = runtimeRightWorkspaceDrawerView ??
+    persistedRightWorkspaceDrawerView ??
+    workspaceDrawerView ??
+    workspaceDrawerDefaultView ??
+    workspaceDrawerCreateItems[0]?.key
   const activeWorkspaceDrawerView = isWorkspaceDrawerOpen
-    ? workspaceDrawerView ?? workspaceDrawerDefaultView
+    ? resolvedWorkspaceDrawerView
     : undefined
   const workspaceDrawerCreateSelectedKeys = useMemo(
     () => activeWorkspaceDrawerView == null ? [] : [toWorkbenchDrawerViewMenuKey(activeWorkspaceDrawerView)],
     [activeWorkspaceDrawerView]
   )
   const shouldShowWorkspaceDrawer = isWorkspaceDrawerOpen
+  const ensureWorkspaceDrawerPanelView = useCallback((view: WorkspaceDrawerView) => {
+    const item = workspaceDrawerItemByView.get(view)
+    if (item == null) return
+
+    const tab = {
+      id: toWorkspaceDrawerInteractionTabId(item.key),
+      kind: 'workspace-drawer' as const,
+      title: item.label,
+      view: item.key
+    }
+
+    setRuntimeRightWorkspaceDrawerView(null)
+    updateSessionPanelArea('right', (area) => {
+      const existingIndex = area.tabs.findIndex(candidate => candidate.id === tab.id)
+      const tabs = existingIndex < 0
+        ? [...area.tabs, tab]
+        : area.tabs.map(candidate => candidate.id === tab.id ? tab : candidate)
+
+      return {
+        ...(area.layout == null ? {} : { layout: area.layout }),
+        tabs,
+        activeTabId: tab.id
+      }
+    })
+  }, [updateSessionPanelArea, workspaceDrawerItemByView])
+  const setWorkspaceDrawerOpenWithPanelState = useCallback((open: boolean, view?: WorkspaceDrawerView) => {
+    if (open) {
+      const nextView = view ??
+        (sessionPanelState.right.tabs.length === 0
+          ? resolvedWorkspaceDrawerView ?? workspaceDrawerCreateItems[0]?.key
+          : undefined)
+      if (nextView != null) {
+        ensureWorkspaceDrawerPanelView(nextView)
+      }
+    }
+
+    setWorkspaceDrawerOpen(open, view)
+  }, [
+    ensureWorkspaceDrawerPanelView,
+    resolvedWorkspaceDrawerView,
+    sessionPanelState.right.tabs.length,
+    setWorkspaceDrawerOpen,
+    workspaceDrawerCreateItems
+  ])
   const { isRendered: isBottomPanelRendered, isVisible: isBottomPanelVisible } = useTerminalDockVisibility(
     bottomPanel.shouldShowBottomPanel
   )
   useDesktopWorkspaceStartupReady(isReady, { visibleSelector: CHAT_ROUTE_STARTUP_READY_SELECTOR })
-  const handleOpenSessionLog = () => {
-    if (debugSessionLogPath == null) return
-    bottomPanel.handleOpenWorkspaceFile(debugSessionLogPath)
-    setWorkspaceDrawerOpen(true)
-    setWorkspaceDrawerLocateRequest(current => ({ id: (current?.id ?? 0) + 1, path: debugSessionLogPath }))
-  }
   const handleLocateWorkspacePath = useCallback((path: string) => {
     const normalizedPath = path.trim()
     if (normalizedPath === '') return
 
-    setWorkspaceDrawerOpen(true)
+    setWorkspaceDrawerOpenWithPanelState(true, 'tree')
     setWorkspaceDrawerLocateRequest(current => ({ id: (current?.id ?? 0) + 1, path: normalizedPath }))
-  }, [setWorkspaceDrawerOpen])
+  }, [setWorkspaceDrawerOpenWithPanelState])
   const requestInteractionPanelShortcut = useCallback((
     action: InteractionPanelShortcutAction,
     payload: Omit<InteractionPanelShortcutRequest, 'action' | 'id'> = {}
@@ -698,8 +956,8 @@ export function ChatRouteShell({
     const drawerView = parseWorkbenchDrawerViewMenuKey(String(info.key))
     if (drawerView == null) return
 
-    setWorkspaceDrawerOpen(true, drawerView)
-  }, [setWorkspaceDrawerOpen])
+    setWorkspaceDrawerOpenWithPanelState(true, drawerView)
+  }, [setWorkspaceDrawerOpenWithPanelState])
   const handleRunCommand = useCallback((command: InteractionPanelRunCommand) => {
     setIsTerminalPanelFolded(false)
     setIsTerminalOpen(true)
@@ -722,6 +980,20 @@ export function ChatRouteShell({
         : {})
     })
   }, [requestInteractionPanelShortcut, setIsTerminalOpen, setIsTerminalPanelFolded])
+  const handleOpenWorkspaceFileInInteractionPanel = useCallback((path: string) => {
+    const normalizedPath = path.trim()
+    if (normalizedPath === '') return
+
+    setIsTerminalPanelFolded(false)
+    setIsTerminalOpen(true)
+    requestInteractionPanelShortcut('open-workspace-file', { path: normalizedPath })
+  }, [requestInteractionPanelShortcut, setIsTerminalOpen, setIsTerminalPanelFolded])
+  const handleOpenSessionLog = () => {
+    if (debugSessionLogPath == null) return
+    handleOpenWorkspaceFileInInteractionPanel(debugSessionLogPath)
+    setWorkspaceDrawerOpenWithPanelState(true, 'tree')
+    setWorkspaceDrawerLocateRequest(current => ({ id: (current?.id ?? 0) + 1, path: debugSessionLogPath }))
+  }
   const handleOpenWebLauncher = useCallback(() => {
     if (!canUseWorkspaceLauncher) return
     setIsWebLauncherOpen(true)
@@ -798,16 +1070,25 @@ export function ChatRouteShell({
     sessionUrlHistoryKey,
     terminalPanes.panes
   ])
-  const resolvedHistoryView = typeof historyView === 'function'
-    ? historyView({
-      onOpenUrlInAppBrowser: handleOpenUrlInAppBrowser,
-      onOpenWorkspaceFile: bottomPanel.handleOpenWorkspaceFile,
-      workspaceRootPath
-    })
-    : historyView
-  const renderedView = activeView === 'timeline' && enableTimelineView === true
-    ? timelineView ?? resolvedHistoryView
-    : resolvedHistoryView
+  const resolvedHistoryView = useMemo(() => (
+    typeof historyView === 'function'
+      ? historyView({
+        onOpenUrlInAppBrowser: handleOpenUrlInAppBrowser,
+        onOpenWorkspaceFile: handleOpenWorkspaceFileInInteractionPanel,
+        workspaceRootPath
+      })
+      : historyView
+  ), [
+    handleOpenUrlInAppBrowser,
+    handleOpenWorkspaceFileInInteractionPanel,
+    historyView,
+    workspaceRootPath
+  ])
+  const renderedView = useMemo(() => (
+    activeView === 'timeline' && enableTimelineView === true
+      ? timelineView ?? resolvedHistoryView
+      : resolvedHistoryView
+  ), [activeView, enableTimelineView, resolvedHistoryView, timelineView])
   const clearInteractionPanelShortcutRequest = useCallback((id: number) => {
     if (!bottomPanel.shouldShowBottomPanel) {
       pendingInteractionPanelShortcutClearIdRef.current = id
@@ -848,15 +1129,13 @@ export function ChatRouteShell({
   const handleLauncherResourceTarget = useCallback((target: DesktopWorkspaceResourceTarget) => {
     const targetPath = target.path
     if (target.kind === 'directory' && targetPath != null && targetPath !== '') {
-      setWorkspaceDrawerOpen(true, 'tree')
+      setWorkspaceDrawerOpenWithPanelState(true, 'tree')
       setWorkspaceDrawerLocateRequest(current => ({ id: (current?.id ?? 0) + 1, path: targetPath }))
       return
     }
 
     if (target.kind === 'file' && targetPath != null && targetPath !== '') {
-      bottomPanel.handleOpenWorkspaceFile(targetPath)
-      setIsTerminalPanelFolded(false)
-      setIsTerminalOpen(true)
+      handleOpenWorkspaceFileInInteractionPanel(targetPath)
       return
     }
 
@@ -912,13 +1191,13 @@ export function ChatRouteShell({
       })
     }
   }, [
-    bottomPanel,
+    handleOpenWorkspaceFileInInteractionPanel,
     navigate,
     requestInteractionPanelShortcut,
     session?.id,
     setIsTerminalOpen,
     setIsTerminalPanelFolded,
-    setWorkspaceDrawerOpen
+    setWorkspaceDrawerOpenWithPanelState
   ])
 
   const requestLauncherResourceTarget = useCallback((target: DesktopWorkspaceResourceTarget) => {
@@ -967,12 +1246,12 @@ export function ChatRouteShell({
       }
 
       if (action === 'toggle-file-tree') {
-        setWorkspaceDrawerOpen(!isWorkspaceDrawerOpen, isWorkspaceDrawerOpen ? undefined : 'tree')
+        setWorkspaceDrawerOpenWithPanelState(!isWorkspaceDrawerOpen, isWorkspaceDrawerOpen ? undefined : 'tree')
         return
       }
 
       if (action === 'toggle-side-panel') {
-        setWorkspaceDrawerOpen(!isWorkspaceDrawerOpen)
+        setWorkspaceDrawerOpenWithPanelState(!isWorkspaceDrawerOpen)
         return
       }
 
@@ -988,7 +1267,7 @@ export function ChatRouteShell({
     requestInteractionPanelShortcut,
     setIsTerminalOpen,
     setIsTerminalPanelFolded,
-    setWorkspaceDrawerOpen
+    setWorkspaceDrawerOpenWithPanelState
   ])
 
   useEffect(() => {
@@ -1128,7 +1407,7 @@ export function ChatRouteShell({
       onHistoryTimelineHiddenChange={onHistoryTimelineHiddenChange}
       onViewChange={setActiveView}
       onToggleBottomPanel={bottomPanel.handleToggleBottomPanel}
-      onToggleWorkspaceDrawer={() => setWorkspaceDrawerOpen(!isWorkspaceDrawerOpen)}
+      onToggleWorkspaceDrawer={() => setWorkspaceDrawerOpenWithPanelState(!isWorkspaceDrawerOpen)}
     />
   )
 
@@ -1174,16 +1453,17 @@ export function ChatRouteShell({
             <ChatWorkspaceDrawer
               agentApprovals={agentApprovals}
               agentRoster={agentRoster}
-              defaultView={workspaceDrawerView ?? workspaceDrawerDefaultView}
+              defaultView={activeWorkspaceDrawerView}
               isBottomPanelOpen={bottomPanel.shouldShowBottomPanel}
               isFullscreen={isWorkspaceDrawerFullscreen}
               locateFileRequest={workspaceDrawerLocateRequest}
+              panelStateController={sessionPanelStateController}
               selectedFilePath={bottomPanel.selectedWorkspaceFilePath}
               settingsView={settingsView}
               sessionId={resolvedWorkspaceSessionId}
               terminalSessionId={terminalSessionId}
               terminalPanes={terminalPanes}
-              onClose={() => setWorkspaceDrawerOpen(false)}
+              onClose={() => setWorkspaceDrawerOpenWithPanelState(false)}
               onFullscreenChange={handleWorkspaceDrawerFullscreenChange}
               onOpenBottomPanel={() => {
                 if (!bottomPanel.shouldShowBottomPanel) {
@@ -1191,7 +1471,7 @@ export function ChatRouteShell({
                 }
               }}
               onReferencePaths={onReferenceWorkspacePaths}
-              onOpenFile={bottomPanel.handleOpenWorkspaceFile}
+              onOpenFile={handleOpenWorkspaceFileInInteractionPanel}
               onOpenResource={handleOpenWebLauncher}
               openResourceShortcut={openResourceShortcut}
               openResourceShortcutLabel={openResourceShortcutLabel}
@@ -1211,7 +1491,7 @@ export function ChatRouteShell({
           storageKey: WORKSPACE_DRAWER_WIDTH_STORAGE_KEY,
           width: workspaceDrawerWidth
         }}
-        onCloseSidePanel={() => setWorkspaceDrawerOpen(false)}
+        onCloseSidePanel={() => setWorkspaceDrawerOpenWithPanelState(false)}
         bottomPanel={shouldRenderBottomPanel
           ? (
             <ChatRouteBottomPanel
@@ -1222,6 +1502,7 @@ export function ChatRouteShell({
               isRendered
               isVisible={isBottomPanelVisible}
               shortcutRequest={interactionPanelShortcutRequest}
+              session={resolvedWorkspaceSession}
               sessionId={resolvedWorkspaceSessionId}
               workspaceRootPath={workspaceRootPath}
               openResourceKeyboardShortcut={canUseWebLauncherShortcut ? null : undefined}
@@ -1245,6 +1526,7 @@ export function ChatRouteShell({
               settingsView={settingsView}
               terminalSessionId={terminalSessionId}
               terminalPanes={terminalPanes}
+              panelStateController={sessionPanelStateController}
               workspaceDrawerCreateItems={workspaceDrawerCreateItems}
               workspaceDrawerCreateSelectedKeys={workspaceDrawerCreateSelectedKeys}
             />
@@ -1252,6 +1534,7 @@ export function ChatRouteShell({
           : undefined}
       >
         <div
+          ref={chatContainerRef}
           className={`chat-container ${isReady ? 'ready' : ''} ${isNewSession ? 'is-new-session' : ''}`}
         >
           {renderedView}

@@ -1,6 +1,7 @@
 # One Works 0.1.0-alpha.0
 
 - Add embedded web debugger viewport controls for device presets, resizing, media query breakpoints, rulers, and screenshots.
+- Persist session panel tabs, active panels, and dock layouts across bottom and right workbench areas.
 - Prefer compatible system Codex CLI installs while keeping the managed install fallback.
 - Show Codex CLI preparation status in sessions so first-run installs are visible.
 - Keep optimistic first user messages visible until their real runtime projection arrives.

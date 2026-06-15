@@ -44,6 +44,7 @@ export interface InteractionPanelDockContextValue {
   onAddMenuClick: NonNullable<MenuProps['onClick']>
   onCloseTab: (tab: InteractionPanelTab) => void
   onCloseTabGroup: (tab: InteractionPanelTab, scope: InteractionPanelTabCloseScope) => void
+  onCloseWorkspaceFilePaths: (paths: string[]) => void
   onEditPinnedTab: (tab: InteractionPanelPinnedTab) => void
   onIframeMetadataChange: (pageId: string, metadata: { faviconUrl?: string; title?: string }) => void
   onIframeNavigateHistory: (pageId: string, delta: -1 | 1) => void
@@ -60,7 +61,9 @@ export interface InteractionPanelDockContextValue {
   onOpenIframeUrl: (url: string, options?: OpenInteractionPanelIframeUrlOptions) => void
   onPanelAction: () => void
   onPinTab: (tab: InteractionPanelTab) => void
+  onPluginTabStateChange: (tabId: string, state: unknown) => void
   onRunCommand: (command: InteractionPanelRunCommand) => void
+  onSelectWorkspaceFilePath: (path: string) => void
   onSessionPageChange: (
     pageId: string,
     updater: (page: InteractionPanelSessionPage) => InteractionPanelSessionPage

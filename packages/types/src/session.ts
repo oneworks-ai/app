@@ -55,10 +55,94 @@ export interface SessionMessageQueueState {
   next: SessionQueuedMessage[]
 }
 
-export interface SessionWorkspaceFileState {
-  openPaths: string[]
-  selectedPath?: string
-  isOpen?: boolean
+export type SessionPanelArea = 'bottom' | 'right'
+export type SessionPanelWorkspaceDrawerView =
+  | 'agents'
+  | 'approvals'
+  | 'changes'
+  | 'settings'
+  | 'tree'
+  | `plugin:${string}:${string}`
+
+export interface SessionPanelWebViewportState {
+  height?: number
+  presetId?: string
+  width?: number
+}
+
+export type SessionPanelTab =
+  | {
+    id: string
+    kind: 'web'
+    title: string
+    url: string
+    deviceToolbarOpen?: boolean
+    faviconUrl?: string
+    history?: string[]
+    historyIndex?: number
+    inspectOpen?: boolean
+    variant?: 'mobile-debug-devtools'
+    viewport?: SessionPanelWebViewportState
+  }
+  | {
+    id: string
+    kind: 'terminal'
+    terminalId: string
+    title: string
+    runCommand?: unknown
+    shellKind?: string
+  }
+  | {
+    id: string
+    kind: 'file'
+    path: string
+    title: string
+  }
+  | {
+    id: string
+    kind: 'session'
+    title: string
+    focusRequestId?: string
+    sessionId?: string
+  }
+  | {
+    id: string
+    kind: 'mobile-debug'
+    title: string
+    state?: unknown
+  }
+  | {
+    id: string
+    kind: 'page-debugger'
+    title: string
+  }
+  | {
+    id: string
+    kind: 'workspace-drawer'
+    title: string
+    view: SessionPanelWorkspaceDrawerView
+  }
+  | {
+    id: string
+    kind: 'plugin'
+    pluginScope: string
+    tabId: string
+    viewId: string
+    icon?: string
+    state?: unknown
+    stateVersion?: number
+    title: string
+  }
+
+export interface SessionPanelAreaState {
+  activeTabId?: string
+  layout?: Record<string, unknown>
+  tabs: SessionPanelTab[]
+}
+
+export interface SessionPanelState {
+  bottom: SessionPanelAreaState
+  right: SessionPanelAreaState
 }
 
 export interface Session {
@@ -85,7 +169,7 @@ export interface Session {
   effort?: EffortLevel
   promptType?: SessionPromptType
   promptName?: string
-  workspaceFileState?: SessionWorkspaceFileState
+  panelState?: SessionPanelState
 }
 
 export interface SessionWorkspace {

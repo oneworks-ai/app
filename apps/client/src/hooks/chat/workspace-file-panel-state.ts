@@ -1,5 +1,3 @@
-import type { SessionWorkspaceFileState } from '@oneworks/core'
-
 export interface WorkspaceFilePanelState {
   openPaths: string[]
   selectedPath: string | null
@@ -19,7 +17,7 @@ export const uniqueNonEmptyPaths = (paths: Array<string | null | undefined>) => 
 }
 
 export const normalizeWorkspaceFileState = (
-  state: SessionWorkspaceFileState | WorkspaceFilePanelState | undefined
+  state: WorkspaceFilePanelState | undefined
 ): WorkspaceFilePanelState => {
   const selectedPath = state?.selectedPath?.trim() || null
   const openPaths = uniqueNonEmptyPaths([
@@ -35,9 +33,3 @@ export const normalizeWorkspaceFileState = (
     isOpen: state?.isOpen === true && normalizedSelectedPath != null
   }
 }
-
-export const toSessionWorkspaceFileState = (state: WorkspaceFilePanelState): SessionWorkspaceFileState => ({
-  openPaths: state.openPaths,
-  ...(state.selectedPath == null ? {} : { selectedPath: state.selectedPath }),
-  isOpen: state.isOpen
-})

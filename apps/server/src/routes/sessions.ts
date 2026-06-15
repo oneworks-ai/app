@@ -5,9 +5,9 @@ import Router from '@koa/router'
 import type {
   ChatMessage,
   ChatMessageContent,
+  SessionPanelState,
   SessionPermissionMode,
   SessionQueuedMessageMode,
-  SessionWorkspaceFileState,
   WSEvent
 } from '@oneworks/core'
 import type { GitBranchKind, SessionInfo, SessionInitInfo, SessionPromptType } from '@oneworks/types'
@@ -253,12 +253,12 @@ export function sessionsRouter(): Router {
 
   router.patch('/:id', (ctx) => {
     const { id } = ctx.params as { id: string }
-    const { title, isStarred, isArchived, tags, workspaceFileState, permissionMode } = ctx.request.body as {
+    const { title, isStarred, isArchived, tags, panelState, permissionMode } = ctx.request.body as {
       title?: string
       isStarred?: boolean
       isArchived?: boolean
       tags?: string[]
-      workspaceFileState?: SessionWorkspaceFileState
+      panelState?: SessionPanelState
       permissionMode?: unknown
     }
     if (permissionMode !== undefined && !isSessionPermissionMode(permissionMode)) {
@@ -272,13 +272,13 @@ export function sessionsRouter(): Router {
     if (
       title !== undefined ||
       isStarred !== undefined ||
-      workspaceFileState !== undefined ||
+      panelState !== undefined ||
       permissionMode !== undefined
     ) {
       updateAndNotifySession(id, {
         title,
         isStarred,
-        workspaceFileState,
+        panelState,
         ...(permissionMode !== undefined ? { permissionMode } : {})
       })
     }

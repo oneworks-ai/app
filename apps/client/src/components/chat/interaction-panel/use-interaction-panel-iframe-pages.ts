@@ -6,11 +6,9 @@ import {
   createIframePage,
   navigateIframePageHistory,
   normalizeFrameUrl,
-  readIframePages,
   selectIframePageHistoryIndex,
   updateIframePageMetadata,
-  updateIframePageUrl,
-  writeIframePages
+  updateIframePageUrl
 } from './interaction-panel-iframe-pages'
 import type { OpenInteractionPanelIframeUrlOptions } from './interaction-panel-iframe-pages'
 
@@ -24,11 +22,7 @@ export function useInteractionPanelIframePages({
   t: TFunction
 }) {
   const iframePagesRef = useRef<InteractionPanelIframePage[]>([])
-  const [iframePages, setIframePages] = useState(() => {
-    const nextPages = readIframePages(terminalSessionId)
-    iframePagesRef.current = nextPages
-    return nextPages
-  })
+  const [iframePages, setIframePages] = useState<InteractionPanelIframePage[]>([])
 
   const setNextIframePages = (updater: IframePagesUpdater) => {
     const nextPages = updater(iframePagesRef.current)
@@ -37,14 +31,9 @@ export function useInteractionPanelIframePages({
   }
 
   useEffect(() => {
-    const nextPages = readIframePages(terminalSessionId)
-    iframePagesRef.current = nextPages
-    setIframePages(nextPages)
+    iframePagesRef.current = []
+    setIframePages([])
   }, [terminalSessionId])
-
-  useEffect(() => {
-    writeIframePages(terminalSessionId, iframePages)
-  }, [iframePages, terminalSessionId])
 
   const addIframePage = () => {
     const nextPage = createIframePage(
