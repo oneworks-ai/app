@@ -9,7 +9,7 @@
 - `src/routes/login.ts` / `src/routes/login-page.ts`：Relay 插件打开的 `/login` 与 `/login/complete` SSO 登录入口；负责 redirect 校验、provider start URL 计算、JSON config 注入和 Web/Electron 回跳，不承载完整用户端设备 / 会话页面。`/login` 的 React + AntD 控件在 `apps/relay-admin/src/login`，不要在 relay-server 字符串模板里手写 input/button/list。
 - `src/auth/passkeys.ts` / `src/routes/passkeys.ts`：passkey 注册与登录核心逻辑和 HTTP route。这里处理 WebAuthn options/verify、邮箱验证码校验、邀请码策略、credential counter 更新和 session 发放；登录页 UI 仍在 `apps/relay-admin/src/login`。
 - `src/routes/admin-sso-providers.ts`：B 端托管 SSO provider 管理 API。
-- `src/routes/teams.ts`、`src/routes/team-*.ts`、`src/teams.ts`：团队、成员、租户团队策略 API 与团队配置消费权限 helper；`/api/relay/teams` 面向用户自助团队流程，`/api/admin/teams` 和 `/api/admin/team-policy` 只给站点管理员。
+- `src/routes/teams.ts`、`src/routes/team-*.ts`、`src/routes/config-secrets.ts`、`src/teams.ts`、`src/config-secrets.ts`：团队、成员、租户团队策略、配置 secret 加密存储 / 轮换 / 撤销 API 与团队配置消费权限 helper；`/api/relay/teams` 面向用户自助团队流程，`/api/admin/teams` 和 `/api/admin/team-policy` 只给站点管理员。
 - `src/devices/private-metadata.ts`：设备私有元数据加密、解密和 device token hash 工具。
 - `src/auth/sso-provider-*`：SSO provider 元数据校验、redaction、OAuth client 解析与 env / store 合并。
 - `src/email/`：验证码 / 邀请 / 登录邮件的 provider 抽象、Turnstile 校验、域名 evaluator 和发送风控；Admin UI 黑白名单管理留给 `apps/relay-admin` 后续任务，不要在这里写界面。

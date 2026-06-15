@@ -39,7 +39,6 @@ const createRelayConfigSnapshotFixture = (workspaceFolder: string): RelayConfigS
         modelServices: {
           'relay-smoke': {
             apiBaseUrl: 'https://relay.example.com/v1',
-            apiKey: 'relay-secret',
             models: ['relay-smoke-model'],
             title: 'Relay smoke service'
           }
@@ -120,7 +119,6 @@ describe('relay managed config snapshot contract', () => {
         modelServices: {
           'relay-smoke': {
             apiBaseUrl: 'https://relay.example.com/v1',
-            apiKey: 'relay-secret',
             models: ['relay-smoke-model'],
             title: 'Relay smoke service'
           }
@@ -128,6 +126,7 @@ describe('relay managed config snapshot contract', () => {
       }
     })
     expect(JSON.stringify(result)).not.toContain('relay-denied')
+    expect(JSON.stringify(result)).not.toContain('relay-secret')
     expect(JSON.stringify(result)).not.toContain('RELAY_FORBIDDEN_ENV')
     expect(JSON.stringify(result)).not.toContain('@oneworks/plugin-forbidden')
   })

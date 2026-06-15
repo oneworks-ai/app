@@ -26,10 +26,25 @@ describe('relay config snapshot cache', () => {
             modelServices: {
               relay: {
                 apiBaseUrl: 'https://relay.example/v1',
-                apiKey: 'secret'
+                apiKey: 'sk-cache-secret'
               }
             }
-          }
+          },
+          secrets: [
+            {
+              algorithm: 'aes-256-gcm',
+              ciphertext: 'ciphertext',
+              expiresAt: '2999-01-01T00:00:00.000Z',
+              iv: 'iv',
+              keyId: 'device:device-1:token',
+              recipientDeviceId: 'device-1',
+              ref: 'modelServices.relay.apiKey',
+              secretId: 'secret-1',
+              secretVersion: 1,
+              tag: 'tag',
+              version: 1
+            }
+          ]
         }
       ],
       hash: 'hash-1',
@@ -48,11 +63,19 @@ describe('relay config snapshot cache', () => {
           configPatch: {
             modelServices: {
               relay: {
-                apiBaseUrl: 'https://relay.example/v1',
-                apiKey: 'secret'
+                apiBaseUrl: 'https://relay.example/v1'
               }
             }
-          }
+          },
+          secrets: [
+            {
+              algorithm: 'aes-256-gcm',
+              ciphertext: 'ciphertext',
+              expiresAt: '2999-01-01T00:00:00.000Z',
+              ref: 'modelServices.relay.apiKey',
+              secretId: 'secret-1'
+            }
+          ]
         }
       ],
       hash: 'hash-1',
@@ -64,6 +87,7 @@ describe('relay config snapshot cache', () => {
       version: 'v1'
     })
     expect(store.snapshotPath).toBe(join(projectHome, '.local/plugins/relay/config-snapshot.json'))
+    expect(JSON.stringify(await store.readSnapshot())).not.toContain('sk-cache-secret')
   })
 
   it('preserves the previous snapshot while recording sync errors', async () => {

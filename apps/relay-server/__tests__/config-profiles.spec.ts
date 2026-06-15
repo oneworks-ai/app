@@ -20,6 +20,14 @@ const seedConfigProfileFixture = async (dataPath: string) => {
     { token: 'member-session', userId: 'member-1', createdAt: timestamp, expiresAt: future, lastSeenAt: timestamp },
     { token: 'admin-session', userId: 'admin-1', createdAt: timestamp, expiresAt: future, lastSeenAt: timestamp }
   )
+  store.devices.push({
+    id: 'member-device',
+    deviceToken: 'member-device-token',
+    userId: 'member-1',
+    createdAt: timestamp,
+    lastSeenAt: timestamp,
+    name: 'Member Device'
+  })
   store.teams.push({
     id: 'team-1',
     slug: 'team-1',
@@ -181,5 +189,106 @@ describe('relay config profile routes', () => {
     expect(secondAssignment.response.status).toBe(403)
     expect(disabled.body.assignment).toMatchObject({ enabled: false })
     expect(snapshot.body.assignments).toEqual([])
+  })
+
+  it('delivers profile secrets only as device encrypted snapshot envelopes', async () => {
+    const { args, baseUrl } = await listenRelay()
+    await seedConfigProfileFixture(args.dataPath)
+
+    const createdSecret = await requestJson(baseUrl, '/api/relay/teams/team-1/config-secrets', {
+      method: 'POST',
+      headers: authHeaders('owner-session'),
+      body: JSON.stringify({ name: 'OpenAI API key', value: 'sk-relay-team-secret' })
+    })
+    const secret = createdSecret.body.secret as Record<string, unknown>
+    const profile = await requestJson(baseUrl, '/api/relay/teams/team-1/config-profiles', {
+      method: 'POST',
+      headers: authHeaders('owner-session'),
+      body: JSON.stringify({ name: 'Secret Team Config' })
+    })
+    const profileId = (profile.body.profile as Record<string, unknown>).id as string
+    const version = await requestJson(baseUrl, `/api/relay/config-profiles/${profileId}/versions`, {
+      method: 'POST',
+      headers: authHeaders('owner-session'),
+      body: JSON.stringify({
+        allowedFields: ['defaultModelService', 'modelServices'],
+        configPatch: {
+          defaultModelService: 'relay-secret',
+          modelServices: {
+            'relay-secret': {
+              apiBaseUrl: 'https://relay.example.com/v1',
+              apiKey: 'sk-relay-team-secret'
+            }
+          }
+        },
+        secretRefs: {
+          'modelServices.relay-secret.apiKey': secret.id
+        }
+      })
+    })
+    const versionId = (version.body.version as Record<string, unknown>).id as string
+    await requestJson(baseUrl, `/api/relay/config-profiles/${profileId}/publish`, {
+      method: 'POST',
+      headers: authHeaders('owner-session'),
+      body: JSON.stringify({ versionId })
+    })
+    await requestJson(baseUrl, `/api/relay/config-profiles/${profileId}/assignments`, {
+      method: 'POST',
+      headers: authHeaders('owner-session'),
+      body: JSON.stringify({})
+    })
+
+    const deviceSnapshot = await requestJson(baseUrl, '/api/relay/config-snapshot', {
+      headers: authHeaders('member-device-token')
+    })
+    const sessionSnapshot = await requestJson(baseUrl, '/api/relay/config-snapshot', {
+      headers: authHeaders('member-session')
+    })
+    const deviceAssignments = deviceSnapshot.body.assignments as Array<Record<string, unknown>>
+    const deviceSecrets = deviceAssignments[0]?.secrets as Array<Record<string, unknown>>
+
+    expect(createdSecret.response.status).toBe(200)
+    expect(createdSecret.body).toMatchObject({
+      secret: {
+        id: expect.any(String),
+        name: 'OpenAI API key',
+        revokedAt: null,
+        secretVersion: 1,
+        teamId: 'team-1'
+      }
+    })
+    expect(JSON.stringify(createdSecret.body)).not.toContain('sk-relay-team-secret')
+    expect(version.response.status).toBe(200)
+    expect(deviceSnapshot.response.status).toBe(200)
+    expect(deviceAssignments).toHaveLength(1)
+    expect(deviceAssignments[0]).toMatchObject({
+      configPatch: {
+        defaultModelService: 'relay-secret',
+        modelServices: {
+          'relay-secret': {
+            apiBaseUrl: 'https://relay.example.com/v1'
+          }
+        }
+      },
+      mustRefreshAfter: expect.any(String)
+    })
+    expect(deviceSecrets).toHaveLength(1)
+    expect(deviceSecrets[0]).toMatchObject({
+      algorithm: 'aes-256-gcm',
+      ciphertext: expect.any(String),
+      expiresAt: expect.any(String),
+      iv: expect.any(String),
+      keyId: 'device:member-device:token',
+      recipientDeviceId: 'member-device',
+      ref: 'modelServices.relay-secret.apiKey',
+      secretId: secret.id,
+      secretVersion: 1,
+      tag: expect.any(String),
+      version: 1
+    })
+    expect(sessionSnapshot.response.status).toBe(200)
+    expect(JSON.stringify(sessionSnapshot.body)).not.toContain('"secrets"')
+    expect(JSON.stringify(deviceSnapshot.body)).not.toContain('sk-relay-team-secret')
+    expect(JSON.stringify(sessionSnapshot.body)).not.toContain('sk-relay-team-secret')
   })
 })

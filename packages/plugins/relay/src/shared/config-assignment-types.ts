@@ -33,11 +33,27 @@ export interface RelayConfigAssignment {
   configPatch?: RelayConfigPatch
   enabled?: boolean
   id: string
+  mustRefreshAfter?: string
   project?: RelayConfigProjectRule
   ruleIds?: string[]
   rules?: string[] | RelayConfigAssignment[]
+  secrets?: RelayConfigSnapshotSecretEnvelope[]
   updatedAt?: string
   version?: string
+}
+
+export interface RelayConfigSnapshotSecretEnvelope {
+  algorithm: 'aes-256-gcm'
+  ciphertext: string
+  expiresAt: string
+  iv: string
+  keyId: string
+  recipientDeviceId: string
+  ref: string
+  secretId: string
+  secretVersion: number
+  tag: string
+  version: 1
 }
 
 export interface RelayConfigSnapshot {

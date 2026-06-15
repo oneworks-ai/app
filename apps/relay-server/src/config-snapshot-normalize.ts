@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Relay config normalization keeps safe fields, sanitization, and project rules together. */
 import { RELAY_CONFIG_SAFE_FIELDS } from './config-safe-fields.js'
 import type {
   RelayConfigAssignment,
@@ -48,6 +49,45 @@ export const normalizeRelayConfigTarget = (value: unknown): RelayConfigAssignmen
   return teamIds == null && userIds == null ? undefined : { teamIds, userIds }
 }
 
+const secretLikeKeyPattern =
+  /(?:^|[_-])(?:api[_-]?key|secret|token|password|credential|private[_-]?key)(?:$|[_-])|apiKey|accessToken|refreshToken/iu
+
+const isSecretLikeConfigKey = (key: string) => secretLikeKeyPattern.test(key)
+
+const sanitizeRelayConfigValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeRelayConfigValue).filter(item => item !== undefined)
+  }
+  if (!isRecord(value)) return value
+
+  const sanitized: Record<string, unknown> = {}
+  for (const [key, item] of Object.entries(value)) {
+    if (isSecretLikeConfigKey(key)) continue
+    const nextValue = sanitizeRelayConfigValue(item)
+    if (nextValue !== undefined) {
+      sanitized[key] = nextValue
+    }
+  }
+  return sanitized
+}
+
+const normalizeSanitizedRecord = (value: unknown): Record<string, unknown> | undefined => {
+  if (!isRecord(value)) return undefined
+  const sanitized = Object.fromEntries(
+    Object.entries(value)
+      .map(([key, item]) => [key, sanitizeRelayConfigValue(item)] as const)
+      .filter((entry): entry is [string, unknown] => entry[1] !== undefined)
+  )
+  return isRecord(sanitized) && Object.keys(sanitized).length > 0 ? sanitized : undefined
+}
+
+const normalizeSanitizedArrayOrRecord = (value: unknown): unknown[] | Record<string, unknown> | undefined => {
+  if (isRecord(value)) return normalizeSanitizedRecord(value)
+  const sanitized = sanitizeRelayConfigValue(value)
+  if (Array.isArray(sanitized)) return sanitized.length > 0 ? sanitized : undefined
+  return undefined
+}
+
 export const filterRelayConfigPatch = (
   patch: RelayConfigPatch | undefined,
   allowedFields?: RelayConfigSafeField[]
@@ -59,26 +99,33 @@ export const filterRelayConfigPatch = (
   if (allowed.has('defaultModelService') && typeof patch.defaultModelService === 'string') {
     filtered.defaultModelService = patch.defaultModelService
   }
-  if (allowed.has('modelServices') && isRecord(patch.modelServices)) {
-    filtered.modelServices = patch.modelServices
+  const modelServices = normalizeSanitizedRecord(patch.modelServices)
+  if (allowed.has('modelServices') && modelServices != null) {
+    filtered.modelServices = modelServices
   }
-  if (allowed.has('recommendedModels') && Array.isArray(patch.recommendedModels)) {
-    filtered.recommendedModels = patch.recommendedModels
+  const recommendedModels = sanitizeRelayConfigValue(patch.recommendedModels)
+  if (allowed.has('recommendedModels') && Array.isArray(recommendedModels) && recommendedModels.length > 0) {
+    filtered.recommendedModels = recommendedModels
   }
-  if (allowed.has('plugins') && isRecord(patch.plugins)) {
-    filtered.plugins = patch.plugins
+  const plugins = normalizeSanitizedRecord(patch.plugins)
+  if (allowed.has('plugins') && plugins != null) {
+    filtered.plugins = plugins
   }
-  if (allowed.has('marketplaces') && isRecord(patch.marketplaces)) {
-    filtered.marketplaces = patch.marketplaces
+  const marketplaces = normalizeSanitizedRecord(patch.marketplaces)
+  if (allowed.has('marketplaces') && marketplaces != null) {
+    filtered.marketplaces = marketplaces
   }
-  if (allowed.has('skills') && (Array.isArray(patch.skills) || isRecord(patch.skills))) {
-    filtered.skills = patch.skills
+  const skills = normalizeSanitizedArrayOrRecord(patch.skills)
+  if (allowed.has('skills') && skills != null) {
+    filtered.skills = skills
   }
-  if (allowed.has('skillsMeta') && isRecord(patch.skillsMeta)) {
-    filtered.skillsMeta = patch.skillsMeta
+  const skillsMeta = normalizeSanitizedRecord(patch.skillsMeta)
+  if (allowed.has('skillsMeta') && skillsMeta != null) {
+    filtered.skillsMeta = skillsMeta
   }
-  if (allowed.has('skillRegistries') && (Array.isArray(patch.skillRegistries) || isRecord(patch.skillRegistries))) {
-    filtered.skillRegistries = patch.skillRegistries
+  const skillRegistries = normalizeSanitizedArrayOrRecord(patch.skillRegistries)
+  if (allowed.has('skillRegistries') && skillRegistries != null) {
+    filtered.skillRegistries = skillRegistries
   }
 
   return Object.keys(filtered).length > 0 ? filtered : undefined

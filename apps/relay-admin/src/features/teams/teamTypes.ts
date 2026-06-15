@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Relay Admin team contracts stay in one feature-local type file. */
 export type RelayAdminTeamMemberRole = 'admin' | 'editor' | 'member' | 'owner' | 'viewer'
 export type RelayAdminConfigAssignmentMode = 'default' | 'override'
 export type RelayAdminConfigProfileStatus = 'disabled' | 'draft' | 'published'
@@ -113,6 +114,17 @@ export interface RelayAdminConfigProfileVersion {
   version: number
 }
 
+export interface RelayAdminConfigSecret {
+  createdAt: string
+  createdByUserId: string
+  id: string
+  name: string
+  revokedAt: string | null
+  rotatedAt: string | null
+  secretVersion: number
+  teamId: string
+}
+
 export interface RelayAdminConfigProfileAssignment {
   createdAt: string
   enabled: boolean
@@ -171,6 +183,16 @@ export interface CreateConfigProfileVersionInput {
   changeNote?: string
   configPatch: RelayAdminConfigPatch
   secretRefs?: Record<string, string>
+}
+
+export interface CreateConfigSecretInput {
+  name: string
+  teamId: string
+  value: string
+}
+
+export interface RotateConfigSecretInput {
+  value: string
 }
 
 export interface CreateConfigProfileAssignmentInput {

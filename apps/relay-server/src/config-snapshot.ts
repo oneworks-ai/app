@@ -1,5 +1,7 @@
+/* eslint-disable max-lines -- Snapshot assembly keeps legacy assignments, profile provenance, and secret envelopes together. */
 import { createHash } from 'node:crypto'
 
+import { createRelayConfigSnapshotSecretEnvelopes, relayConfigSecretExpiresAt } from './config-secrets.js'
 import {
   assignmentTargetsUser,
   filterRelayConfigPatch,
@@ -17,6 +19,8 @@ import type {
   RelayConfigProjectContext,
   RelayConfigSnapshot,
   RelayConfigSnapshotAssignment,
+  RelayDevice,
+  RelayServerArgs,
   RelayStore,
   RelayUser
 } from './types.js'
@@ -52,6 +56,11 @@ const latestUpdatedAt = (store: RelayStore, assignments: RelayConfigSnapshotAssi
   return latest
 }
 
+const snapshotAssignmentForHash = (assignment: RelayConfigSnapshotAssignment) => {
+  const { mustRefreshAfter: _mustRefreshAfter, secrets: _secrets, ...stableAssignment } = assignment
+  return stableAssignment
+}
+
 const snapshotAssignmentFromStore = (
   assignment: RelayConfigAssignment
 ): RelayConfigSnapshotAssignment | undefined => {
@@ -76,7 +85,12 @@ const profileSnapshotAssignmentFromStore = (
   store: RelayStore,
   assignment: RelayConfigProfileAssignment,
   profile: RelayConfigProfile,
-  version: RelayConfigProfileVersion
+  version: RelayConfigProfileVersion,
+  options: {
+    recipientDevice?: RelayDevice
+    recipientDeviceToken?: string
+    serverArgs?: Pick<RelayServerArgs, 'adminToken' | 'dataPath' | 'deviceMetadataSecret'>
+  } = {}
 ): RelayConfigSnapshotAssignment | undefined => {
   if (!assignment.enabled || profile.status !== 'published') return undefined
 
@@ -84,11 +98,22 @@ const profileSnapshotAssignmentFromStore = (
   if (configPatch == null) return undefined
 
   const team = store.teams.find(item => item.id === profile.teamId)
+  const secretExpiresAt = relayConfigSecretExpiresAt(store)
+  const secrets = createRelayConfigSnapshotSecretEnvelopes({
+    args: options.serverArgs,
+    expiresAt: secretExpiresAt,
+    recipientDevice: options.recipientDevice,
+    recipientDeviceToken: options.recipientDeviceToken,
+    secretRefs: version.secretRefs,
+    store,
+    teamId: profile.teamId
+  })
   return {
     id: assignment.id,
     allowedFields: version.allowedFields,
     configPatch,
     enabled: true,
+    ...(secrets.length === 0 ? {} : { mustRefreshAfter: secretExpiresAt, secrets }),
     ...(assignment.project == null ? {} : { project: assignment.project }),
     provenance: {
       teamId: profile.teamId,
@@ -111,6 +136,9 @@ const createProfileSnapshotAssignments = (
   user: RelayUser,
   options: {
     projectContext?: RelayConfigProjectContext
+    recipientDevice?: RelayDevice
+    recipientDeviceToken?: string
+    serverArgs?: Pick<RelayServerArgs, 'adminToken' | 'dataPath' | 'deviceMetadataSecret'>
     shouldFilterProject: boolean
     teamIdsForUser: string[]
   }
@@ -134,7 +162,11 @@ const createProfileSnapshotAssignments = (
       const version = store.configProfileVersions.find(item => item.id === versionId)
       return profile == null || version == null || version.profileId !== profile.id
         ? undefined
-        : profileSnapshotAssignmentFromStore(store, assignment, profile, version)
+        : profileSnapshotAssignmentFromStore(store, assignment, profile, version, {
+          recipientDevice: options.recipientDevice,
+          recipientDeviceToken: options.recipientDeviceToken,
+          serverArgs: options.serverArgs
+        })
     })
     .filter((assignment): assignment is RelayConfigSnapshotAssignment => assignment != null)
 
@@ -143,6 +175,9 @@ export const createRelayConfigSnapshotForUser = (
   user: RelayUser,
   options: {
     projectContext?: RelayConfigProjectContext
+    recipientDevice?: RelayDevice
+    recipientDeviceToken?: string
+    serverArgs?: Pick<RelayServerArgs, 'adminToken' | 'dataPath' | 'deviceMetadataSecret'>
     sourceServerId?: string
   } = {}
 ): RelayConfigSnapshot => {
@@ -159,13 +194,16 @@ export const createRelayConfigSnapshotForUser = (
     ...legacyAssignments,
     ...createProfileSnapshotAssignments(store, user, {
       projectContext: options.projectContext,
+      recipientDevice: options.recipientDevice,
+      recipientDeviceToken: options.recipientDeviceToken,
+      serverArgs: options.serverArgs,
       shouldFilterProject,
       teamIdsForUser
     })
   ]
   const updatedAt = latestUpdatedAt(store, assignments)
   const hash = hashRelayConfigSnapshot({
-    assignments,
+    assignments: assignments.map(snapshotAssignmentForHash),
     updatedAt,
     userId: user.id
   })

@@ -112,6 +112,26 @@ export const classifyAuditTarget = (req: IncomingMessage, url: URL) => {
       resource: 'device'
     }
   }
+  if (req.method === 'GET' && url.pathname === '/api/relay/config-snapshot') {
+    return {
+      action: 'config.snapshot.deliver',
+      resource: 'config-snapshot'
+    }
+  }
+  const teamConfigSecretsMatch = /^\/api\/(admin|relay)\/teams\/([^/]+)\/config-secrets$/.exec(url.pathname)
+  if (req.method === 'POST' && teamConfigSecretsMatch != null) {
+    return {
+      action: 'config.secret.create',
+      resource: `team:${decodeSegment(teamConfigSecretsMatch[2]) ?? 'unknown'}`
+    }
+  }
+  const configSecretActionMatch = /^\/api\/(admin|relay)\/config-secrets\/([^/]+)\/(rotate|revoke)$/.exec(url.pathname)
+  if (req.method === 'POST' && configSecretActionMatch != null) {
+    return {
+      action: `config.secret.${configSecretActionMatch[3]}`,
+      resource: `secret:${decodeSegment(configSecretActionMatch[2]) ?? 'unknown'}`
+    }
+  }
   const claimMatch = /^\/api\/relay\/devices\/([^/]+)\/session-jobs$/.exec(url.pathname)
   if (req.method === 'GET' && claimMatch != null) {
     return {

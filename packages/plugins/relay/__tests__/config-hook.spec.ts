@@ -7,7 +7,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import packageJson from '../package.json'
 import { resolveConfig } from '../src/config.js'
+import { createRelayDeviceStore } from '../src/server/store.js'
 import { createRelayConfigSnapshotStore } from '../src/shared/config-cache.js'
+import { encryptRelayConfigSnapshotSecretEnvelope } from '../src/shared/config-secrets.js'
 
 const tempDirs: string[] = []
 
@@ -42,6 +44,18 @@ describe('relay config hook', () => {
     }
     const projectHome = resolveProjectHomePath(workspaceFolder, env)
     const snapshotStore = createRelayConfigSnapshotStore(projectHome)
+    await createRelayDeviceStore(projectHome).writeStore({
+      deviceId: 'device-1',
+      deviceName: 'Device 1',
+      deviceSecret: 'device-secret',
+      servers: {
+        prod: {
+          deviceToken: 'device-token',
+          id: 'prod',
+          remoteBaseUrl: 'https://relay.example'
+        }
+      }
+    })
     await snapshotStore.writeSnapshot({
       assignments: [
         {
@@ -55,7 +69,6 @@ describe('relay config hook', () => {
             modelServices: {
               relay: {
                 apiBaseUrl: 'https://relay.example/v1',
-                apiKey: 'relay-key',
                 models: ['relay-model']
               }
             },
@@ -71,7 +84,18 @@ describe('relay config hook', () => {
           },
           project: {
             allow: [basename(workspaceFolder)]
-          }
+          },
+          secrets: [
+            encryptRelayConfigSnapshotSecretEnvelope({
+              deviceToken: 'device-token',
+              expiresAt: '2999-01-01T00:00:00.000Z',
+              plaintext: 'relay-key',
+              recipientDeviceId: 'device-1',
+              ref: 'modelServices.relay.apiKey',
+              secretId: 'secret-1',
+              secretVersion: 1
+            })
+          ]
         }
       ],
       hash: 'hash-1',
@@ -101,6 +125,7 @@ describe('relay config hook', () => {
       lastAppliedAt: expect.any(String),
       matchedProject: true
     })
+    expect(JSON.stringify(await snapshotStore.readSnapshot())).not.toContain('relay-key')
   })
 
   it('returns undefined when there is no cache or the project is denied', async () => {

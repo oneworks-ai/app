@@ -51,6 +51,22 @@ const getReferencedRules = (
     .filter((rule): rule is RelayConfigAssignment => rule != null)
 ]
 
+const assignmentSecretExpiry = (assignment: RelayConfigAssignment) => {
+  const expiries = [
+    assignment.mustRefreshAfter,
+    ...(assignment.secrets ?? []).map(secret => secret.expiresAt)
+  ].filter((value): value is string => typeof value === 'string' && value.trim() !== '')
+  const timestamps = expiries
+    .map(value => Date.parse(value))
+    .filter(value => Number.isFinite(value))
+  return timestamps.length === 0 ? undefined : Math.min(...timestamps)
+}
+
+const isExpiredSecretBearingAssignment = (assignment: RelayConfigAssignment) => {
+  const expiry = assignmentSecretExpiry(assignment)
+  return expiry != null && expiry <= Date.now()
+}
+
 const applyAssignmentPatch = (
   params: {
     allowedFields: RelayConfigSafeField[]
@@ -61,6 +77,7 @@ const applyAssignmentPatch = (
   }
 ) => {
   if (params.assignment.enabled === false) return params.patch
+  if (isExpiredSecretBearingAssignment(params.assignment)) return params.patch
   if (!matchesRelayConfigProject(params.assignment, params.context)) return params.patch
 
   const assignmentAllowedFields = normalizeRelayConfigSafeFields(params.assignment.allowedFields)

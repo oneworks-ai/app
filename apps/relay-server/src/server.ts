@@ -14,6 +14,7 @@ import {
   handleConfigProfilesRoute,
   handleTeamConfigProfilesRoute
 } from './routes/config-profiles.js'
+import { handleConfigSecretsRoute, handleTeamConfigSecretsRoute } from './routes/config-secrets.js'
 import { handleRelayConfigSnapshot } from './routes/config-snapshot.js'
 import { handleDeviceHeartbeat, handleDeviceList, handleDeviceRegister } from './routes/devices.js'
 import { handleEmailVerificationSendRoute } from './routes/email-verification.js'
@@ -127,6 +128,9 @@ const handleRelayRequestWithStore = async (
   if (await handleTeamConfigProfilesRoute(req, res, args, store, storeRepository, url)) {
     return
   }
+  if (await handleTeamConfigSecretsRoute(req, res, args, store, storeRepository, url)) {
+    return
+  }
   if (await handleTeamsRoute(req, res, args, store, storeRepository, url)) {
     return
   }
@@ -134,6 +138,9 @@ const handleRelayRequestWithStore = async (
     return
   }
   if (await handleConfigProfileAssignmentsRoute(req, res, args, store, storeRepository, url)) {
+    return
+  }
+  if (await handleConfigSecretsRoute(req, res, args, store, storeRepository, url)) {
     return
   }
   if (url.pathname === '/api/relay/metrics') {

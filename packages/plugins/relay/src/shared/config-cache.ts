@@ -1,8 +1,18 @@
+/* eslint-disable max-lines -- Relay config snapshot cache keeps normalization and persistence together. */
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import type { RelayConfigAssignment, RelayConfigSnapshot } from './config-assignment.js'
-import { normalizeRelayConfigSafeFields, normalizeRelayConfigStringList } from './config-assignment.js'
+import type {
+  RelayConfigAssignment,
+  RelayConfigPatch,
+  RelayConfigSnapshot,
+  RelayConfigSnapshotSecretEnvelope
+} from './config-assignment.js'
+import {
+  filterRelayConfigPatch,
+  normalizeRelayConfigSafeFields,
+  normalizeRelayConfigStringList
+} from './config-assignment.js'
 
 const CONFIG_SNAPSHOT_PATH = ['.local', 'plugins', 'relay', 'config-snapshot.json'] as const
 
@@ -39,8 +49,50 @@ const normalizeProfile = (value: unknown) => {
   }
 }
 
-const normalizeConfigPatch = (value: unknown) => (
-  isRecord(value) ? value : undefined
+const normalizeConfigPatch = (
+  value: unknown,
+  allowedFields: RelayConfigAssignment['allowedFields']
+) => (
+  isRecord(value) ? filterRelayConfigPatch(value as RelayConfigPatch, allowedFields) : undefined
+)
+
+const normalizeSecretEnvelope = (value: unknown): RelayConfigSnapshotSecretEnvelope | undefined => {
+  if (!isRecord(value)) return undefined
+  const secretVersion = Number(value.secretVersion)
+  if (
+    value.algorithm !== 'aes-256-gcm' ||
+    typeof value.ciphertext !== 'string' ||
+    typeof value.expiresAt !== 'string' ||
+    typeof value.iv !== 'string' ||
+    typeof value.keyId !== 'string' ||
+    typeof value.recipientDeviceId !== 'string' ||
+    typeof value.ref !== 'string' ||
+    typeof value.secretId !== 'string' ||
+    !Number.isFinite(secretVersion) ||
+    typeof value.tag !== 'string' ||
+    value.version !== 1
+  ) {
+    return undefined
+  }
+  return {
+    algorithm: 'aes-256-gcm',
+    ciphertext: value.ciphertext,
+    expiresAt: value.expiresAt,
+    iv: value.iv,
+    keyId: value.keyId,
+    recipientDeviceId: value.recipientDeviceId,
+    ref: value.ref,
+    secretId: value.secretId,
+    secretVersion: Math.max(1, Math.trunc(secretVersion)),
+    tag: value.tag,
+    version: 1
+  }
+}
+
+const normalizeSecretEnvelopes = (value: unknown) => (
+  Array.isArray(value)
+    ? value.map(normalizeSecretEnvelope).filter((secret): secret is RelayConfigSnapshotSecretEnvelope => secret != null)
+    : []
 )
 
 const normalizeProjectRule = (value: unknown) => {
@@ -58,6 +110,9 @@ const normalizeAssignment = (value: unknown, fallbackId: string): RelayConfigAss
   if (!isRecord(value)) return undefined
   const id = normalizeText(value.id) ?? fallbackId
   if (id === '') return undefined
+  const allowedFields = normalizeRelayConfigSafeFields(value.allowedFields)
+  const configPatch = normalizeConfigPatch(value.configPatch ?? value.config, allowedFields)
+  const secrets = normalizeSecretEnvelopes(value.secrets)
 
   const inlineRules = Array.isArray(value.rules)
     ? value.rules
@@ -72,16 +127,20 @@ const normalizeAssignment = (value: unknown, fallbackId: string): RelayConfigAss
   ]
   return {
     id,
-    ...(normalizeRelayConfigSafeFields(value.allowedFields).length === 0
+    ...(allowedFields.length === 0
       ? {}
-      : { allowedFields: normalizeRelayConfigSafeFields(value.allowedFields) }),
-    ...(normalizeConfigPatch(value.configPatch ?? value.config) == null
+      : { allowedFields }),
+    ...(configPatch == null
       ? {}
-      : { configPatch: normalizeConfigPatch(value.configPatch ?? value.config) }),
+      : { configPatch }),
     ...(value.enabled === false ? { enabled: false } : {}),
+    ...(normalizeText(value.mustRefreshAfter) == null
+      ? {}
+      : { mustRefreshAfter: normalizeText(value.mustRefreshAfter) }),
     ...(normalizeProjectRule(value.project) == null ? {} : { project: normalizeProjectRule(value.project) }),
     ...(ruleIds.length === 0 ? {} : { ruleIds }),
     ...(inlineRules == null || inlineRules.length === 0 ? {} : { rules: inlineRules }),
+    ...(secrets.length === 0 ? {} : { secrets }),
     ...(normalizeText(value.updatedAt) == null ? {} : { updatedAt: normalizeText(value.updatedAt) }),
     ...(normalizeText(value.version) == null ? {} : { version: normalizeText(value.version) })
   }
@@ -123,10 +182,11 @@ export const createRelayConfigSnapshotStore = (projectHome: string) => {
   const snapshotPath = join(projectHome, ...CONFIG_SNAPSHOT_PATH)
 
   const writeSnapshot = async (snapshot: RelayConfigSnapshot) => {
+    const normalizedSnapshot = normalizeRelayConfigSnapshot(snapshot) ?? snapshot
     await mkdir(storeDir, { recursive: true })
     await writeFile(
       snapshotPath,
-      `${JSON.stringify(snapshot, null, 2)}\n`,
+      `${JSON.stringify(normalizedSnapshot, null, 2)}\n`,
       {
         encoding: 'utf8',
         mode: 0o600

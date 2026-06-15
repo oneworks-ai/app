@@ -128,7 +128,11 @@ export const TeamProfileVersionForm = ({ disabled, onCreateVersion, onCreated }:
         <Input.TextArea autoSize={{ minRows: 8 }} disabled={disabled} />
       </Form.Item>
       <Form.Item label='Secret Refs JSON' name='secretRefs'>
-        <Input.TextArea autoSize={{ minRows: 3 }} disabled={disabled} placeholder='{"OPENAI_API_KEY":"secret-id"}' />
+        <Input.TextArea
+          autoSize={{ minRows: 3 }}
+          disabled={disabled}
+          placeholder='{"modelServices.team-model.apiKey":"secret-id"}'
+        />
       </Form.Item>
       <Form.Item label='变更说明' name='changeNote'>
         <Input disabled={disabled} />

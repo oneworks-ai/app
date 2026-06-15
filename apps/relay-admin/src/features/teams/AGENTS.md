@@ -1,6 +1,6 @@
 # Relay Admin Teams Feature
 
-`features/teams` 负责 Relay Admin 中的团队与团队配置 profile 管理界面。这里消费 `apps/relay-server` 的 `/api/admin/teams`、`/api/admin/team-policy`、`/api/admin/teams/:teamId/config-profiles`、`/api/admin/config-profiles/*` 和 `/api/admin/config-assignments/*`。
+`features/teams` 负责 Relay Admin 中的团队与团队配置 profile 管理界面。这里消费 `apps/relay-server` 的 `/api/admin/teams`、`/api/admin/team-policy`、`/api/admin/teams/:teamId/config-profiles`、`/api/admin/teams/:teamId/config-secrets`、`/api/admin/config-profiles/*`、`/api/admin/config-assignments/*` 和 `/api/admin/config-secrets/*`。
 
 ## 入口
 
@@ -10,6 +10,7 @@
 - `TeamPolicyForm.tsx`：站点管理员配置 teamsEnabled、selfService、proxyMode 和容量上限。
 - `TeamTable.tsx`：团队列表、搜索、展示列和选中团队操作。
 - `TeamConfigProfiles.tsx`：选中团队的 config profile、version 发布和 assignment 启停。
+- `TeamConfigSecrets.tsx`：选中团队的 secret 创建、轮换、撤销和 redacted ID 列表。
 
 ## 约定
 

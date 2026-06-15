@@ -3,14 +3,17 @@ import type {
   CreateConfigProfileAssignmentInput,
   CreateConfigProfileInput,
   CreateConfigProfileVersionInput,
+  CreateConfigSecretInput,
   CreateTeamInput,
   CreateTeamMemberInput,
   RelayAdminConfigProfile,
   RelayAdminConfigProfileAssignment,
   RelayAdminConfigProfileVersion,
+  RelayAdminConfigSecret,
   RelayAdminTeam,
   RelayAdminTeamMember,
   RelayAdminTeamPolicy,
+  RotateConfigSecretInput,
   UpdateTeamMemberInput,
   UpdateTeamPolicyInput
 } from './teamTypes'
@@ -82,6 +85,43 @@ export const fetchRelayAdminTeamConfigProfiles = async (token: string, teamId: s
   await requestJson<{ profiles: RelayAdminConfigProfile[] }>(
     token,
     `/api/admin/teams/${encodeURIComponent(teamId)}/config-profiles`
+  )
+
+export const fetchRelayAdminTeamConfigSecrets = async (token: string, teamId: string) =>
+  await requestJson<{ secrets: RelayAdminConfigSecret[] }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(teamId)}/config-secrets`
+  )
+
+export const createRelayAdminConfigSecret = async (token: string, input: CreateConfigSecretInput) =>
+  await requestJson<{ secret: RelayAdminConfigSecret }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(input.teamId)}/config-secrets`,
+    {
+      body: JSON.stringify({ name: input.name, value: input.value }),
+      method: 'POST'
+    }
+  )
+
+export const rotateRelayAdminConfigSecret = async (
+  token: string,
+  secret: RelayAdminConfigSecret,
+  input: RotateConfigSecretInput
+) =>
+  await requestJson<{ secret: RelayAdminConfigSecret }>(
+    token,
+    `/api/admin/config-secrets/${encodeURIComponent(secret.id)}/rotate`,
+    {
+      body: JSON.stringify(input),
+      method: 'POST'
+    }
+  )
+
+export const revokeRelayAdminConfigSecret = async (token: string, secret: RelayAdminConfigSecret) =>
+  await requestJson<{ secret: RelayAdminConfigSecret }>(
+    token,
+    `/api/admin/config-secrets/${encodeURIComponent(secret.id)}/revoke`,
+    { method: 'POST' }
   )
 
 export const fetchRelayAdminConfigProfile = async (token: string, profileId: string) =>

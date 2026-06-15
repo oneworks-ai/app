@@ -139,7 +139,6 @@ export const createRelayConfigSnapshotFixture = () => ({
         modelServices: {
           'relay-assigned': {
             apiBaseUrl: 'https://relay.example/v1',
-            apiKey: 'relay-key',
             models: ['relay-model']
           }
         },

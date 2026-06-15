@@ -66,8 +66,7 @@ describe('relay config assignment', () => {
     )).toEqual({
       modelServices: {
         relay: {
-          apiBaseUrl: 'https://relay.example.com/v1',
-          apiKey: 'secret'
+          apiBaseUrl: 'https://relay.example.com/v1'
         }
       },
       plugins: {
@@ -75,6 +74,17 @@ describe('relay config assignment', () => {
       },
       recommendedModels: [{ model: 'relay-model' }]
     })
+    expect(JSON.stringify(filterRelayConfigPatch(
+      {
+        modelServices: {
+          relay: {
+            apiBaseUrl: 'https://relay.example.com/v1',
+            apiKey: 'secret'
+          }
+        }
+      },
+      ['modelServices']
+    ))).not.toContain('secret')
   })
 
   it('resolves matching assignments into a merged safe patch', () => {
@@ -143,12 +153,10 @@ describe('relay config assignment', () => {
         defaultModelService: 'relay-base',
         modelServices: {
           'relay-base': {
-            apiBaseUrl: 'https://base.example.com/v1',
-            apiKey: 'base-key'
+            apiBaseUrl: 'https://base.example.com/v1'
           },
           'relay-project': {
-            apiBaseUrl: 'https://project.example.com/v1',
-            apiKey: 'project-key'
+            apiBaseUrl: 'https://project.example.com/v1'
           }
         },
         recommendedModels: [{ model: 'project-model', service: 'relay-project' }]
@@ -236,8 +244,7 @@ describe('relay config assignment', () => {
         defaultModelService: 'relay-team',
         modelServices: {
           'relay-team': {
-            apiBaseUrl: 'https://team.example.com/v1',
-            apiKey: 'team-key'
+            apiBaseUrl: 'https://team.example.com/v1'
           }
         }
       }

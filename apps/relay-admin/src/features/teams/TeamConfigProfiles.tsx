@@ -7,6 +7,7 @@ import { AdminActionButton } from '../../shared/ui/AdminActionButton'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 import { TeamConfigAssignmentForm } from './TeamConfigAssignmentForm'
 import { TeamProfileCreateForm, TeamProfileVersionForm } from './TeamConfigProfileForms'
+import { TeamConfigSecrets } from './TeamConfigSecrets'
 import type {
   CreateConfigProfileAssignmentInput,
   CreateConfigProfileInput,
@@ -342,6 +343,7 @@ export const TeamConfigProfiles = ({ disabled, team, token }: TeamConfigProfiles
           />
         </div>
       )}
+      <TeamConfigSecrets disabled={disabled} team={team} token={token} />
 
       <Drawer
         destroyOnHidden

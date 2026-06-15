@@ -120,8 +120,7 @@ describe('relay config snapshot route', () => {
         defaultModelService: 'relay-user',
         modelServices: {
           'relay-user': {
-            apiBaseUrl: 'https://relay.example.com/v1',
-            apiKey: 'relay-key'
+            apiBaseUrl: 'https://relay.example.com/v1'
           }
         }
       },
@@ -130,6 +129,7 @@ describe('relay config snapshot route', () => {
     })
     expect(assignments[0]).not.toHaveProperty('target')
     expect(serialized).not.toContain('do-not-send')
+    expect(serialized).not.toContain('relay-key')
     expect(serialized).not.toContain('not-allowed')
     expect(serialized).not.toContain('other-user')
     expect(serialized).not.toContain('user-2')

@@ -89,11 +89,15 @@ export const handleRelayConfigSnapshot = (
       sendJson(res, 403, { error: 'User context required.' }, args.allowOrigin)
       return
     }
+    const recipientDeviceToken = getBearerToken(req)
     sendJson(
       res,
       200,
       createRelayConfigSnapshotForUser(store, deviceResult.user, {
         projectContext: projectContextFromRequest(url, args, deviceResult.device),
+        recipientDevice: deviceResult.device,
+        recipientDeviceToken,
+        serverArgs: args,
         sourceServerId: args.publicBaseUrl
       }),
       args.allowOrigin

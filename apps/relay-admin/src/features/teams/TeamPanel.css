@@ -89,7 +89,8 @@
 
 .relay-team-panel__profiles,
 .relay-team-panel__members,
-.relay-team-panel__profile-detail {
+.relay-team-panel__profile-detail,
+.relay-team-panel__secrets {
   display: grid;
   gap: 12px;
   min-width: 0;

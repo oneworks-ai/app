@@ -311,6 +311,18 @@ export interface RelayConfigProfileVersion {
   createdAt: string
 }
 
+export interface RelayConfigSecret {
+  id: string
+  teamId: string
+  name: string
+  encryptedPayload: RelayEncryptedPayload
+  secretVersion: number
+  createdByUserId: string
+  createdAt: string
+  rotatedAt?: string
+  revokedAt?: string
+}
+
 export interface RelayConfigProfileAssignment {
   id: string
   profileId: string
@@ -336,13 +348,29 @@ export interface RelayConfigSnapshotProvenance {
   fields: RelayConfigSafeField[]
 }
 
+export interface RelayConfigSnapshotSecretEnvelope {
+  algorithm: 'aes-256-gcm'
+  ciphertext: string
+  expiresAt: string
+  iv: string
+  keyId: string
+  recipientDeviceId: string
+  ref: string
+  secretId: string
+  secretVersion: number
+  tag: string
+  version: 1
+}
+
 export interface RelayConfigSnapshotAssignment {
   allowedFields?: RelayConfigSafeField[]
   configPatch?: RelayConfigPatch
   enabled?: boolean
   id: string
+  mustRefreshAfter?: string
   project?: RelayConfigProjectRule
   provenance?: RelayConfigSnapshotProvenance
+  secrets?: RelayConfigSnapshotSecretEnvelope[]
   updatedAt?: string
   version?: string
 }
@@ -453,6 +481,7 @@ export interface RelayStore {
   createdAt: string
   configAssignments: RelayConfigAssignment[]
   configProfileAssignments: RelayConfigProfileAssignment[]
+  configSecrets: RelayConfigSecret[]
   configProfileVersions: RelayConfigProfileVersion[]
   configProfiles: RelayConfigProfile[]
   emailRisk: RelayEmailRiskState

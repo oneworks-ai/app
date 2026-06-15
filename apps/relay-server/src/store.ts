@@ -18,6 +18,7 @@ import type {
   RelayConfigProfile,
   RelayConfigProfileAssignment,
   RelayConfigProfileVersion,
+  RelayConfigSecret,
   RelayDevice,
   RelayDeviceSession,
   RelayEmailChallenge,
@@ -44,6 +45,7 @@ const defaultStore = (): RelayStore => ({
   createdAt: now(),
   configAssignments: [],
   configProfileAssignments: [],
+  configSecrets: [],
   configProfileVersions: [],
   configProfiles: [],
   emailRisk: {
@@ -277,6 +279,33 @@ const normalizeEncryptedPayload = (value: unknown): RelayEncryptedPayload | unde
     : undefined
 }
 
+const normalizeConfigSecret = (value: Record<string, unknown>): RelayConfigSecret | undefined => {
+  const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
+  const teamId = typeof value.teamId === 'string' && value.teamId.trim() !== '' ? value.teamId.trim() : undefined
+  const encryptedPayload = normalizeEncryptedPayload(value.encryptedPayload)
+  if (id == null || teamId == null || encryptedPayload == null) return undefined
+
+  return {
+    id,
+    teamId,
+    name: typeof value.name === 'string' && value.name.trim() !== '' ? value.name.trim() : id,
+    encryptedPayload,
+    secretVersion: Number.isFinite(Number(value.secretVersion))
+      ? Math.max(1, Math.trunc(Number(value.secretVersion)))
+      : 1,
+    createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
+      ? value.createdByUserId.trim()
+      : 'system',
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    rotatedAt: typeof value.rotatedAt === 'string' && value.rotatedAt.trim() !== ''
+      ? value.rotatedAt.trim()
+      : undefined,
+    revokedAt: typeof value.revokedAt === 'string' && value.revokedAt.trim() !== ''
+      ? value.revokedAt.trim()
+      : undefined
+  }
+}
+
 const normalizeDevice = (value: Record<string, unknown>): RelayDevice => {
   const legacyDeviceToken = typeof value.deviceToken === 'string' && value.deviceToken.trim() !== ''
     ? value.deviceToken.trim()
@@ -507,6 +536,11 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
       ? store.configProfileAssignments.filter(isRecord).map(normalizeRelayConfigProfileAssignment).filter((
         value
       ): value is RelayConfigProfileAssignment => value != null)
+      : [],
+    configSecrets: Array.isArray(store.configSecrets)
+      ? store.configSecrets.filter(isRecord).map(normalizeConfigSecret).filter((
+        value
+      ): value is RelayConfigSecret => value != null)
       : [],
     configProfileVersions: Array.isArray(store.configProfileVersions)
       ? store.configProfileVersions.filter(isRecord).map(normalizeRelayConfigProfileVersion).filter((

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Relay config patch normalization and merging share one contract module. */
 import { RELAY_CONFIG_SAFE_FIELDS } from './config-assignment-types.js'
 import type { RelayConfigPatch, RelayConfigSafeField } from './config-assignment-types.js'
 
@@ -12,6 +13,43 @@ export const unique = <T>(values: T[]) => [...new Set(values)]
 const normalizeText = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
+
+const secretLikeKeyPattern =
+  /(?:^|[_-])(?:api[_-]?key|secret|token|password|credential|private[_-]?key)(?:$|[_-])|apiKey|accessToken|refreshToken/iu
+
+const isSecretLikeConfigKey = (key: string) => secretLikeKeyPattern.test(key)
+
+const sanitizeRelayConfigValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeRelayConfigValue).filter(item => item !== undefined)
+  }
+  if (!isRecord(value)) return value
+
+  const sanitized: Record<string, unknown> = {}
+  for (const [key, item] of Object.entries(value)) {
+    if (isSecretLikeConfigKey(key)) continue
+    const nextValue = sanitizeRelayConfigValue(item)
+    if (nextValue !== undefined) {
+      sanitized[key] = nextValue
+    }
+  }
+  return sanitized
+}
+
+const normalizeSanitizedRecord = (value: unknown): Record<string, unknown> | undefined => {
+  if (!isRecord(value)) return undefined
+  const sanitized = Object.fromEntries(
+    Object.entries(value)
+      .map(([key, item]) => [key, sanitizeRelayConfigValue(item)] as const)
+      .filter((entry): entry is [string, unknown] => entry[1] !== undefined)
+  )
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined
+}
+
+const normalizeSanitizedProperties = (value: unknown): Record<string, unknown> | undefined => {
+  const sanitized = sanitizeRelayConfigValue(value)
+  return isRecord(sanitized) && Object.keys(sanitized).length > 0 ? sanitized : undefined
+}
 
 export const normalizeRelayConfigStringList = (value: unknown): string[] | undefined => {
   if (typeof value === 'string') return [value].map(item => item.trim()).filter(Boolean)
@@ -34,14 +72,13 @@ export const normalizeRelayConfigSafeFields = (
 const normalizeModelService = (value: unknown): Record<string, unknown> | undefined => {
   if (!isRecord(value)) return undefined
   const apiBaseUrl = normalizeText(value.apiBaseUrl)
-  const apiKey = typeof value.apiKey === 'string' ? value.apiKey : undefined
-  if (apiBaseUrl == null || apiKey == null) return undefined
+  if (apiBaseUrl == null) return undefined
+  const extra = normalizeSanitizedProperties(value.extra)
 
   return {
     ...(normalizeText(value.title) == null ? {} : { title: normalizeText(value.title) }),
     ...(normalizeText(value.description) == null ? {} : { description: normalizeText(value.description) }),
     apiBaseUrl,
-    apiKey,
     ...(Array.isArray(value.models)
       ? { models: value.models.map(item => normalizeText(item)).filter((item): item is string => item != null) }
       : {}),
@@ -51,7 +88,7 @@ const normalizeModelService = (value: unknown): Record<string, unknown> | undefi
     ...(typeof value.maxOutputTokens === 'number' && Number.isFinite(value.maxOutputTokens)
       ? { maxOutputTokens: value.maxOutputTokens }
       : {}),
-    ...(isRecord(value.extra) ? { extra: value.extra } : {})
+    ...(extra == null ? {} : { extra })
   }
 }
 
@@ -89,13 +126,13 @@ const normalizeRecommendedModels = (value: unknown): unknown[] | undefined => {
   return models.length > 0 ? models : undefined
 }
 
-const normalizeRecordField = (value: unknown): Record<string, unknown> | undefined => (
-  isRecord(value) && Object.keys(value).length > 0 ? value : undefined
-)
+const normalizeRecordField = normalizeSanitizedRecord
 
 const normalizeArrayOrRecordField = (value: unknown): unknown[] | Record<string, unknown> | undefined => {
-  if (Array.isArray(value)) return value
-  return normalizeRecordField(value)
+  if (isRecord(value)) return normalizeRecordField(value)
+  const sanitized = sanitizeRelayConfigValue(value)
+  if (Array.isArray(sanitized)) return sanitized.length > 0 ? sanitized : undefined
+  return undefined
 }
 
 export const filterRelayConfigPatch = (
