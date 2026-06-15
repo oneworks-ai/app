@@ -1,12 +1,13 @@
 import { AdminIcon } from '../shared/ui/AdminIcon'
 import type { AdminIconName } from '../shared/ui/AdminIcon'
 
-export type AdminNavIconName = 'devices' | 'users' | 'invites' | 'sso'
+export type AdminNavIconName = 'devices' | 'users' | 'invites' | 'sso' | 'teams'
 
 const iconByName: Record<AdminNavIconName, AdminIconName> = {
   devices: 'hub',
   invites: 'key',
   sso: 'link',
+  teams: 'admin_panel_settings',
   users: 'group'
 }
 

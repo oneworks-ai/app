@@ -11,7 +11,9 @@ describe('relay admin frontend permissions', () => {
   it('matches section entry visibility to the relay role model', () => {
     expect(canAccessRelayAdminSection('viewer', 'devices')).toBe(true)
     expect(canAccessRelayAdminSection('member', 'devices')).toBe(true)
+    expect(canAccessRelayAdminSection('member', 'teams')).toBe(false)
     expect(canAccessRelayAdminSection('member', 'users')).toBe(false)
+    expect(canAccessRelayAdminSection('admin', 'teams')).toBe(true)
     expect(canAccessRelayAdminSection('admin', 'users')).toBe(true)
     expect(canAccessRelayAdminSection('owner', 'sso')).toBe(true)
   })
@@ -33,6 +35,7 @@ describe('relay admin frontend permissions', () => {
       devices: [],
       invites: [],
       ssoProviders: [],
+      teams: [],
       users: []
     })
     expect(requests).toEqual(['/api/relay/devices'])

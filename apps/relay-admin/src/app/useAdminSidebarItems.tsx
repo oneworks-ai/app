@@ -6,7 +6,7 @@ import { canAccessRelayAdminSection } from '../shared/model/adminPermissions'
 import type { RelayAdminRole } from '../shared/model/adminTypes'
 import { AdminNavIcon } from './AdminNavIcon'
 
-export type AdminSectionId = 'devices' | 'users' | 'invites' | 'sso'
+export type AdminSectionId = 'devices' | 'users' | 'invites' | 'sso' | 'teams'
 
 type AdminSectionDefinition = Omit<HostSidebarQuickLinkItem, 'active' | 'disabled' | 'key' | 'onSelect'> & {
   id: AdminSectionId
@@ -37,6 +37,12 @@ export const adminSections = [
     id: 'sso',
     label: 'SSO',
     path: '/sso'
+  },
+  {
+    icon: <AdminNavIcon name='teams' />,
+    id: 'teams',
+    label: '团队配置',
+    path: '/teams'
   }
 ] satisfies AdminSectionDefinition[]
 

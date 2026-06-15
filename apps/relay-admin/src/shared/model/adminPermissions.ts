@@ -1,6 +1,6 @@
 import type { RelayAdminRole } from './adminTypes'
 
-export type RelayAdminSectionAccessId = 'devices' | 'invites' | 'sso' | 'users'
+export type RelayAdminSectionAccessId = 'devices' | 'invites' | 'sso' | 'teams' | 'users'
 
 export const relayAdminRoles = ['owner', 'admin', 'member', 'viewer'] as const satisfies readonly RelayAdminRole[]
 

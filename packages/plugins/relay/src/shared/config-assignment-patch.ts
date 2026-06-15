@@ -1,10 +1,5 @@
 import { RELAY_CONFIG_SAFE_FIELDS } from './config-assignment-types.js'
-import type {
-  RelayConfigAssignment,
-  RelayConfigPatch,
-  RelayConfigProjectContext,
-  RelayConfigSafeField
-} from './config-assignment-types.js'
+import type { RelayConfigPatch, RelayConfigSafeField } from './config-assignment-types.js'
 
 const SAFE_FIELD_SET = new Set<string>(RELAY_CONFIG_SAFE_FIELDS)
 
@@ -34,60 +29,6 @@ export const normalizeRelayConfigSafeFields = (
   const fields = normalizeRelayConfigStringList(value)
     ?.filter((field): field is RelayConfigSafeField => SAFE_FIELD_SET.has(field)) ?? [...RELAY_CONFIG_SAFE_FIELDS]
   return unique(fields)
-}
-
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
-
-const matchPattern = (pattern: string, value: string) => {
-  if (pattern === value) return true
-  if (!pattern.includes('*')) return false
-
-  const expression = `^${pattern.split('*').map(escapeRegExp).join('.*')}$`
-  return new RegExp(expression, 'u').test(value)
-}
-
-const normalizePath = (value: string) => value.replace(/\\/gu, '/').replace(/\/+$/u, '')
-
-const getPathName = (value: string | undefined) => {
-  if (value == null) return undefined
-  const normalized = normalizePath(value)
-  const segments = normalized.split('/').filter(Boolean)
-  return segments[segments.length - 1]
-}
-
-const getProjectCandidates = (context: RelayConfigProjectContext) => {
-  const cwd = normalizeText(context.cwd)
-  const workspaceFolder = normalizeText(context.workspaceFolder)
-  return unique([
-    normalizeText(context.projectId),
-    normalizeText(context.projectName),
-    cwd,
-    workspaceFolder,
-    getPathName(cwd),
-    getPathName(workspaceFolder),
-    ...(cwd == null ? [] : [normalizePath(cwd)]),
-    ...(workspaceFolder == null ? [] : [normalizePath(workspaceFolder)])
-  ].filter((value): value is string => value != null && value !== ''))
-}
-
-const matchesAnyPattern = (patterns: string[] | undefined, candidates: string[]) => (
-  patterns == null || patterns.length === 0
-    ? false
-    : patterns.some(pattern => candidates.some(candidate => matchPattern(pattern, candidate)))
-)
-
-export const matchesRelayConfigProject = (
-  assignment: Pick<RelayConfigAssignment, 'project'>,
-  context: RelayConfigProjectContext
-) => {
-  const candidates = getProjectCandidates(context)
-  const allow = normalizeRelayConfigStringList(assignment.project?.allow)
-  const deny = normalizeRelayConfigStringList(assignment.project?.deny)
-
-  if (matchesAnyPattern(deny, candidates)) return false
-  if (allow == null || allow.length === 0) return true
-
-  return matchesAnyPattern(allow, candidates)
 }
 
 const normalizeModelService = (value: unknown): Record<string, unknown> | undefined => {
@@ -148,6 +89,15 @@ const normalizeRecommendedModels = (value: unknown): unknown[] | undefined => {
   return models.length > 0 ? models : undefined
 }
 
+const normalizeRecordField = (value: unknown): Record<string, unknown> | undefined => (
+  isRecord(value) && Object.keys(value).length > 0 ? value : undefined
+)
+
+const normalizeArrayOrRecordField = (value: unknown): unknown[] | Record<string, unknown> | undefined => {
+  if (Array.isArray(value)) return value
+  return normalizeRecordField(value)
+}
+
 export const filterRelayConfigPatch = (
   patch: RelayConfigPatch | undefined,
   allowedFields?: RelayConfigSafeField[]
@@ -168,8 +118,44 @@ export const filterRelayConfigPatch = (
   if (allowed.has('recommendedModels') && recommendedModels != null) {
     filtered.recommendedModels = recommendedModels
   }
+  const plugins = normalizeRecordField(patch.plugins)
+  if (allowed.has('plugins') && plugins != null) {
+    filtered.plugins = plugins
+  }
+  const marketplaces = normalizeRecordField(patch.marketplaces)
+  if (allowed.has('marketplaces') && marketplaces != null) {
+    filtered.marketplaces = marketplaces
+  }
+  const skills = normalizeArrayOrRecordField(patch.skills)
+  if (allowed.has('skills') && skills != null) {
+    filtered.skills = skills
+  }
+  const skillsMeta = normalizeRecordField(patch.skillsMeta)
+  if (allowed.has('skillsMeta') && skillsMeta != null) {
+    filtered.skillsMeta = skillsMeta
+  }
+  const skillRegistries = normalizeArrayOrRecordField(patch.skillRegistries)
+  if (allowed.has('skillRegistries') && skillRegistries != null) {
+    filtered.skillRegistries = skillRegistries
+  }
 
   return Object.keys(filtered).length > 0 ? filtered : undefined
+}
+
+const mergeRecordField = (
+  left: Record<string, unknown> | undefined,
+  right: Record<string, unknown> | undefined
+) => ({ ...(left ?? {}), ...(right ?? {}) })
+
+const mergeArrayOrRecordField = (
+  left: RelayConfigPatch['skills'],
+  right: RelayConfigPatch['skills']
+) => {
+  if (Array.isArray(left) && Array.isArray(right)) return [...left, ...right]
+  if (isRecord(left) || isRecord(right)) {
+    return mergeRecordField(isRecord(left) ? left : undefined, isRecord(right) ? right : undefined)
+  }
+  return right ?? left
 }
 
 export const mergeRelayConfigPatches = (
@@ -185,6 +171,21 @@ export const mergeRelayConfigPatches = (
   }
   if (left.recommendedModels != null || right.recommendedModels != null) {
     merged.recommendedModels = [...(left.recommendedModels ?? []), ...(right.recommendedModels ?? [])]
+  }
+  if (left.plugins != null || right.plugins != null) {
+    merged.plugins = mergeRecordField(left.plugins, right.plugins)
+  }
+  if (left.marketplaces != null || right.marketplaces != null) {
+    merged.marketplaces = mergeRecordField(left.marketplaces, right.marketplaces)
+  }
+  if (left.skills != null || right.skills != null) {
+    merged.skills = mergeArrayOrRecordField(left.skills, right.skills)
+  }
+  if (left.skillsMeta != null || right.skillsMeta != null) {
+    merged.skillsMeta = mergeRecordField(left.skillsMeta, right.skillsMeta)
+  }
+  if (left.skillRegistries != null || right.skillRegistries != null) {
+    merged.skillRegistries = mergeArrayOrRecordField(left.skillRegistries, right.skillRegistries)
   }
 
   return Object.keys(merged).length > 0 ? merged : undefined

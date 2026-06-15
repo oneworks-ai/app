@@ -183,8 +183,12 @@ const emptyConfigDistributionStatus = (): RelayConfigDistributionStatus => ({
   lastAppliedAt: null,
   lastError: null,
   lastSyncedAt: null,
+  marketplaceKeys: [],
   matchedProject: null,
   modelServiceKeys: [],
+  pluginKeys: [],
+  skillKeys: [],
+  skillRegistryKeys: [],
   sourceServerId: null,
   version: null
 })
@@ -200,6 +204,15 @@ const readStatusText = (value: unknown) => {
   return text == null ? null : text
 }
 
+const readRecordKeys = (value: unknown) => (
+  isRecord(value) ? Object.keys(value).filter(key => key.trim() !== '') : []
+)
+
+const readArrayOrRecordKeys = (value: unknown) => {
+  if (Array.isArray(value)) return readStringList(value)
+  return readRecordKeys(value)
+}
+
 const readMatchedProject = (value: unknown) => {
   if (typeof value === 'boolean') return value
   return readStatusText(value)
@@ -212,6 +225,10 @@ const normalizeConfigDistributionStatus = (value: unknown): RelayConfigDistribut
   const derivedModelServiceKeys = modelServiceKeys.length === 0 && isRecord(value.modelServices)
     ? Object.keys(value.modelServices).filter(key => key.trim() !== '')
     : modelServiceKeys
+  const marketplaceKeys = readStringList(value.marketplaceKeys)
+  const pluginKeys = readStringList(value.pluginKeys)
+  const skillKeys = readStringList(value.skillKeys)
+  const skillRegistryKeys = readStringList(value.skillRegistryKeys)
 
   return {
     allowedFields: readStringList(value.allowedFields),
@@ -219,21 +236,26 @@ const normalizeConfigDistributionStatus = (value: unknown): RelayConfigDistribut
     lastAppliedAt: readStatusText(value.lastAppliedAt),
     lastError: readStatusText(value.lastError),
     lastSyncedAt: readStatusText(value.lastSyncedAt),
+    marketplaceKeys: marketplaceKeys.length === 0 ? readRecordKeys(value.marketplaces) : marketplaceKeys,
     matchedProject: readMatchedProject(value.matchedProject),
     modelServiceKeys: derivedModelServiceKeys,
+    pluginKeys: pluginKeys.length === 0 ? readRecordKeys(value.plugins) : pluginKeys,
+    skillKeys: skillKeys.length === 0 ? readArrayOrRecordKeys(value.skills) : skillKeys,
+    skillRegistryKeys: skillRegistryKeys.length === 0
+      ? readArrayOrRecordKeys(value.skillRegistries)
+      : skillRegistryKeys,
     sourceServerId: readStatusText(value.sourceServerId),
     version: readStatusText(value.version)
   }
 }
 
-const collectSnapshotModelServiceKeys = (snapshot: RelayConfigSnapshot | undefined) => {
+const collectSnapshotPatchKeys = (
+  snapshot: RelayConfigSnapshot | undefined,
+  field: 'marketplaces' | 'modelServices' | 'plugins' | 'skillRegistries' | 'skills'
+) => {
   const keys = new Set<string>()
   const collectAssignment = (assignment: NonNullable<RelayConfigSnapshot['assignments']>[number]) => {
-    if (isRecord(assignment.configPatch?.modelServices)) {
-      for (const key of Object.keys(assignment.configPatch.modelServices)) {
-        if (key.trim() !== '') keys.add(key)
-      }
-    }
+    for (const key of readArrayOrRecordKeys(assignment.configPatch?.[field])) keys.add(key)
     if (Array.isArray(assignment.rules)) {
       for (const rule of assignment.rules) {
         if (typeof rule === 'string') continue
@@ -272,8 +294,12 @@ const snapshotToConfigDistributionStatus = (
     lastAppliedAt: snapshot.lastAppliedAt ?? null,
     lastError: snapshot.lastError ?? null,
     lastSyncedAt: snapshot.lastSyncedAt ?? null,
+    marketplaceKeys: collectSnapshotPatchKeys(snapshot, 'marketplaces'),
     matchedProject: snapshot.matchedProject ?? null,
-    modelServiceKeys: collectSnapshotModelServiceKeys(snapshot),
+    modelServiceKeys: collectSnapshotPatchKeys(snapshot, 'modelServices'),
+    pluginKeys: collectSnapshotPatchKeys(snapshot, 'plugins'),
+    skillKeys: collectSnapshotPatchKeys(snapshot, 'skills'),
+    skillRegistryKeys: collectSnapshotPatchKeys(snapshot, 'skillRegistries'),
     sourceServerId: snapshot.sourceServerId ?? null,
     version: snapshot.version
   }

@@ -1,0 +1,123 @@
+.relay-team-panel {
+  min-width: 0;
+}
+
+.relay-team-panel__layout {
+  display: grid;
+  grid-template-columns: minmax(280px, .95fr) minmax(360px, 1.25fr);
+  gap: 16px;
+  min-width: 0;
+}
+
+.relay-team-panel__left,
+.relay-team-panel__right {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
+}
+
+.relay-team-panel__section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.relay-team-panel__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.relay-team-panel__section-header h3 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--ant-color-text, #1f2328);
+  font: 700 14px/1.3 ui-sans-serif, system-ui, sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-team-panel__policy-form {
+  display: grid;
+  gap: 12px;
+}
+
+.relay-team-panel__policy-switches,
+.relay-team-panel__policy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+.relay-team-panel__policy-grid .ant-input-number {
+  width: 100%;
+}
+
+.relay-team-panel__team-link,
+.relay-team-panel__profile-button {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-team-panel__profile-button {
+  border: 0;
+  color: var(--ant-color-link, #1677ff);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.relay-team-panel__profile-button.is-active {
+  color: var(--ant-color-primary, #1677ff);
+  font-weight: 700;
+}
+
+.relay-team-panel__secondary {
+  color: var(--ant-color-text-secondary, #57606a);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.relay-team-panel__profiles,
+.relay-team-panel__profile-detail {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.relay-team-panel__json-inline {
+  max-width: 260px;
+  max-height: 72px;
+  overflow: auto;
+  margin: 0;
+  color: var(--ant-color-text-secondary, #57606a);
+  font: 600 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.relay-team-panel__error {
+  margin: 0;
+  color: var(--ant-color-error, #cf222e);
+  font: 600 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+}
+
+@media (max-width: 980px) {
+  .relay-team-panel__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .relay-team-panel__policy-switches,
+  .relay-team-panel__policy-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

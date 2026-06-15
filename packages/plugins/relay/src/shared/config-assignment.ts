@@ -1,12 +1,12 @@
 import {
   filterRelayConfigPatch,
   isRecord,
-  matchesRelayConfigProject,
   mergeRelayConfigPatches,
   normalizeRelayConfigSafeFields,
   normalizeRelayConfigStringList,
   unique
 } from './config-assignment-patch.js'
+import { matchesRelayConfigProject } from './config-assignment-project.js'
 import type {
   RelayConfigAssignment,
   RelayConfigPatch,
@@ -17,6 +17,7 @@ import type {
 } from './config-assignment-types.js'
 
 export * from './config-assignment-patch.js'
+export * from './config-assignment-project.js'
 export * from './config-assignment-types.js'
 
 const getRuleEntries = (snapshot: RelayConfigSnapshot | undefined) => (

@@ -88,6 +88,10 @@ const hasConfigDistributionDetails = (status: RelayConfigDistributionStatus | un
   ].some(value => cleanText(value) != null) ||
     status.matchedProject != null ||
     cleanTextList(status.allowedFields).length > 0 ||
+    cleanTextList(status.marketplaceKeys).length > 0 ||
+    cleanTextList(status.pluginKeys).length > 0 ||
+    cleanTextList(status.skillKeys).length > 0 ||
+    cleanTextList(status.skillRegistryKeys).length > 0 ||
     cleanTextList(status.modelServiceKeys).length > 0
 }
 
@@ -107,7 +111,11 @@ const renderConfigDistribution = (
 ) => {
   const lastError = cleanText(status?.lastError)
   const hasDetails = hasConfigDistributionDetails(status)
+  const marketplaceKeys = cleanTextList(status?.marketplaceKeys).join(', ')
   const modelServiceKeys = cleanTextList(status?.modelServiceKeys).join(', ')
+  const pluginKeys = cleanTextList(status?.pluginKeys).join(', ')
+  const skillKeys = cleanTextList(status?.skillKeys).join(', ')
+  const skillRegistryKeys = cleanTextList(status?.skillRegistryKeys).join(', ')
   const allowedFields = cleanTextList(status?.allowedFields).join(', ')
   const state = lastError != null ? 'error' : hasDetails ? 'synced' : 'empty'
   const stateText = state === 'error'
@@ -152,6 +160,10 @@ const renderConfigDistribution = (
     )
   }
         ${renderConfigDistributionFact(t.configDistribution.labels.modelServices, modelServiceKeys)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.plugins, pluginKeys)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.marketplaces, marketplaceKeys)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.skills, skillKeys)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.skillRegistries, skillRegistryKeys)}
         ${renderConfigDistributionFact(t.configDistribution.labels.allowedFields, allowedFields)}
         ${
     lastError == null

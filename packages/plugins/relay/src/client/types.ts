@@ -75,8 +75,12 @@ export interface RelayConfigDistributionStatus {
   lastAppliedAt?: string | null
   lastError?: string | null
   lastSyncedAt?: string | null
+  marketplaceKeys?: string[]
   matchedProject?: boolean | string | null
   modelServiceKeys?: string[]
+  pluginKeys?: string[]
+  skillKeys?: string[]
+  skillRegistryKeys?: string[]
   sourceServerId?: string | null
   version?: string | null
 }

@@ -29,7 +29,11 @@ export interface RelayClientMessages {
       lastError: string
       lastSyncedAt: string
       matchedProject: string
+      marketplaces: string
       modelServices: string
+      plugins: string
+      skillRegistries: string
+      skills: string
       sourceServer: string
       version: string
     }
@@ -126,7 +130,11 @@ const relayClientMessages: Record<RelayClientLocale, RelayClientMessages> = {
         lastError: 'Last error',
         lastSyncedAt: 'Last synced',
         matchedProject: 'Project match',
+        marketplaces: 'Marketplaces',
         modelServices: 'Model services',
+        plugins: 'Plugins',
+        skillRegistries: 'Skill registries',
+        skills: 'Skills',
         sourceServer: 'Source server',
         version: 'Version'
       },
@@ -228,7 +236,11 @@ const relayClientMessages: Record<RelayClientLocale, RelayClientMessages> = {
         lastError: '最后错误',
         lastSyncedAt: '最后同步',
         matchedProject: '项目命中',
+        marketplaces: '市场',
         modelServices: '模型服务',
+        plugins: '插件',
+        skillRegistries: 'Skill registries',
+        skills: 'Skills',
         sourceServer: '来源服务',
         version: '版本'
       },

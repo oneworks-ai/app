@@ -57,16 +57,21 @@ describe('relay config assignment', () => {
         permissions: {
           allow: ['Nope']
         },
-        plugins: [{ id: 'unexpected' }],
+        plugins: {
+          relay: { enabled: true }
+        },
         recommendedModels: [{ model: 'relay-model' }]
       },
-      ['modelServices', 'recommendedModels']
+      ['modelServices', 'plugins', 'recommendedModels']
     )).toEqual({
       modelServices: {
         relay: {
           apiBaseUrl: 'https://relay.example.com/v1',
           apiKey: 'secret'
         }
+      },
+      plugins: {
+        relay: { enabled: true }
       },
       recommendedModels: [{ model: 'relay-model' }]
     })
@@ -149,6 +154,49 @@ describe('relay config assignment', () => {
         recommendedModels: [{ model: 'project-model', service: 'relay-project' }]
       }
     })
+  })
+
+  it('resolves plugin, marketplace, and skill fields from team profiles', () => {
+    const result = resolveRelayConfigPatchForProject(
+      {
+        version: 'v2',
+        assignments: [
+          {
+            id: 'team-profile',
+            allowedFields: ['plugins', 'marketplaces', 'skills', 'skillsMeta', 'skillRegistries'],
+            configPatch: {
+              env: { SECRET: 'nope' },
+              marketplaces: { official: { enabled: true } },
+              plugins: { relay: { enabled: true } },
+              skillRegistries: ['https://skills.example.com'],
+              skills: ['team-skill'],
+              skillsMeta: { source: 'team' }
+            }
+          },
+          {
+            id: 'team-profile-override',
+            allowedFields: ['plugins', 'skills'],
+            configPatch: {
+              plugins: { github: { enabled: true } },
+              skills: ['override-skill']
+            }
+          }
+        ]
+      },
+      { projectId: 'customer-a' }
+    )
+
+    expect(result.patch).toEqual({
+      marketplaces: { official: { enabled: true } },
+      plugins: {
+        github: { enabled: true },
+        relay: { enabled: true }
+      },
+      skillRegistries: ['https://skills.example.com'],
+      skills: ['team-skill', 'override-skill'],
+      skillsMeta: { source: 'team' }
+    })
+    expect(JSON.stringify(result.patch)).not.toContain('SECRET')
   })
 
   it('resolves assignment rule references from snapshot rules', () => {

@@ -102,7 +102,16 @@ describe('relay managed config snapshot contract', () => {
       }
     )
 
-    expect(RELAY_CONFIG_SAFE_FIELDS).toEqual(['defaultModelService', 'modelServices', 'recommendedModels'])
+    expect(RELAY_CONFIG_SAFE_FIELDS).toEqual([
+      'defaultModelService',
+      'modelServices',
+      'recommendedModels',
+      'plugins',
+      'marketplaces',
+      'skills',
+      'skillsMeta',
+      'skillRegistries'
+    ])
     expect(result).toEqual({
       allowedFields: ['defaultModelService', 'modelServices'],
       matchedAssignmentIds: ['matching-workspace'],

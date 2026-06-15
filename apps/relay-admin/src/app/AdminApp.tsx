@@ -39,6 +39,7 @@ const clampAdminSidebarWidth = (width: number) =>
 const createSectionLabels: Record<AdminDashboardCreateSectionId, string> = {
   invites: '邀请码',
   sso: 'SSO',
+  teams: '团队',
   users: '用户'
 }
 
@@ -46,6 +47,7 @@ const getCreateSectionIdFromPath = (pathname: string): AdminDashboardCreateSecti
   if (pathname === '/users') return 'users'
   if (pathname === '/invites') return 'invites'
   if (pathname === '/sso') return 'sso'
+  if (pathname === '/teams') return 'teams'
   return undefined
 }
 
@@ -108,7 +110,7 @@ export const AdminApp = () => {
   const headerTitle = isProfileRoute ? '个人资料' : activeSection.label
   const headerIcon = isProfileRoute ? <AdminIcon name='account_circle' /> : activeSection.icon
   const isCreateActionActive = activeCreateSectionId != null && createSectionId === activeCreateSectionId
-  const canRenderSection = useCallback((sectionId: 'devices' | 'invites' | 'sso' | 'users') => (
+  const canRenderSection = useCallback((sectionId: 'devices' | 'invites' | 'sso' | 'teams' | 'users') => (
     dashboard.authStatus === 'checking' ||
     canAccessRelayAdminSection(dashboard.currentUser?.role, sectionId)
   ), [dashboard.authStatus, dashboard.currentUser?.role])
@@ -350,6 +352,19 @@ export const AdminApp = () => {
                       createSectionId={createSectionId}
                       dashboard={dashboard}
                       sectionId='sso'
+                      onCreateSectionChange={setCreateSectionId}
+                    />
+                  )
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
+                path='teams'
+                element={canRenderSection('teams')
+                  ? (
+                    <AdminDashboard
+                      createSectionId={createSectionId}
+                      dashboard={dashboard}
+                      sectionId='teams'
                       onCreateSectionChange={setCreateSectionId}
                     />
                   )

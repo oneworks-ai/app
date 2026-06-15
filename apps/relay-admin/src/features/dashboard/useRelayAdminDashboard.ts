@@ -32,6 +32,8 @@ import {
   deleteRelayAdminSsoProvider,
   updateRelayAdminSsoProvider
 } from '../sso/ssoProvidersApi'
+import type { CreateTeamInput, RelayAdminTeam, RelayAdminTeamPolicy, UpdateTeamPolicyInput } from '../teams/teamTypes'
+import { createRelayAdminTeam, updateRelayAdminTeamPolicy } from '../teams/teamsApi'
 import { createRelayAdminUser, updateRelayAdminUser } from '../users/usersApi'
 import { fetchRelayAdminSnapshot } from './adminSnapshot'
 
@@ -50,6 +52,8 @@ export const useRelayAdminDashboard = () => {
   const [users, setUsers] = useState<RelayAdminUser[]>([])
   const [invites, setInvites] = useState<RelayAdminInvite[]>([])
   const [ssoProviders, setSsoProviders] = useState<RelayAdminSsoProvider[]>([])
+  const [teams, setTeams] = useState<RelayAdminTeam[]>([])
+  const [teamPolicy, setTeamPolicy] = useState<RelayAdminTeamPolicy | undefined>()
   const [error, setError] = useState<string | undefined>()
   const [loading, setLoading] = useState(false)
   const [loginUrl] = useState(buildAdminLoginUrl)
@@ -77,6 +81,8 @@ export const useRelayAdminDashboard = () => {
     setUsers(snapshot.users)
     setInvites(snapshot.invites)
     setSsoProviders(snapshot.ssoProviders)
+    setTeams(snapshot.teams)
+    setTeamPolicy(snapshot.teamPolicy)
   }, [canManageAdmin, token])
 
   const refresh = useCallback(async () => {
@@ -85,6 +91,8 @@ export const useRelayAdminDashboard = () => {
       setDevices([])
       setInvites([])
       setSsoProviders([])
+      setTeams([])
+      setTeamPolicy(undefined)
       return
     }
     await run(loadSnapshot)
@@ -234,11 +242,27 @@ export const useRelayAdminDashboard = () => {
     })
   }, [loadSnapshot, run, token])
 
+  const createTeam = useCallback(async (input: CreateTeamInput) => {
+    await run(async () => {
+      await createRelayAdminTeam(token, input)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
+  const updateTeamPolicy = useCallback(async (input: UpdateTeamPolicyInput) => {
+    await run(async () => {
+      const body = await updateRelayAdminTeamPolicy(token, input)
+      setTeamPolicy(body.policy)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
   return {
     canLoad,
     accounts,
     createInvite,
     createSsoProvider,
+    createTeam,
     createUser,
     authError,
     authStatus,
@@ -260,7 +284,10 @@ export const useRelayAdminDashboard = () => {
     setUserPassword,
     setUserRole,
     ssoProviders,
+    teamPolicy,
+    teams,
     token,
+    updateTeamPolicy,
     updateSsoProvider,
     users
   }
