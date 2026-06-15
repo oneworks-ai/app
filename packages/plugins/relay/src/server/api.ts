@@ -1,3 +1,5 @@
+import { buildRelayConfigShareDraft } from '../shared/config-share-draft.js'
+
 import type { RelayController } from './controller.js'
 import { normalizeOptions } from './options.js'
 import { createErrorResponse, createJsonResponse, readBody } from './responses.js'
@@ -27,6 +29,9 @@ export const handleRelayApi = async (request: PluginProxyRequest, controller: Re
   }
   if (request.method === 'POST' && route === 'config-refresh') {
     return createJsonResponse(await controller.refreshConfigDistribution(readBody(request)))
+  }
+  if (request.method === 'POST' && route === 'config-share-draft') {
+    return createJsonResponse(buildRelayConfigShareDraft(readBody(request)))
   }
   if (request.method === 'POST' && route === 'disconnect') {
     return createJsonResponse(await controller.disconnect(readBody(request)))

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Relay config hook owns snapshot resolution, secret application, and runtime config projection. */
 import { basename } from 'node:path'
 
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
@@ -19,8 +20,13 @@ interface RelayPluginConfigHookContext {
 
 interface RelaySafeConfig {
   defaultModelService?: string
+  marketplaces?: Record<string, unknown>
   modelServices?: Record<string, unknown>
+  plugins?: unknown[] | Record<string, unknown>
   recommendedModels?: unknown[]
+  skillRegistries?: unknown[] | Record<string, unknown>
+  skills?: unknown[] | Record<string, unknown>
+  skillsMeta?: Record<string, unknown>
 }
 
 const readText = (value: unknown) => (
@@ -74,6 +80,21 @@ const toConfig = (
   if (Array.isArray(patch.recommendedModels)) {
     config.recommendedModels = patch.recommendedModels
   }
+  if (Array.isArray(patch.plugins) || isRecord(patch.plugins)) {
+    config.plugins = patch.plugins
+  }
+  if (isRecord(patch.marketplaces)) {
+    config.marketplaces = patch.marketplaces
+  }
+  if (Array.isArray(patch.skills) || isRecord(patch.skills)) {
+    config.skills = patch.skills
+  }
+  if (isRecord(patch.skillsMeta)) {
+    config.skillsMeta = patch.skillsMeta
+  }
+  if (Array.isArray(patch.skillRegistries) || isRecord(patch.skillRegistries)) {
+    config.skillRegistries = patch.skillRegistries
+  }
 
   return Object.keys(config).length > 0 ? config : undefined
 }
@@ -97,16 +118,32 @@ const setSecretValue = (patch: RelayConfigPatch, ref: string, value: string) => 
   if (root == null || leaf == null || rest.length === 0) return
   if (!SAFE_TOP_LEVEL_FIELDS.has(root) || !secretRefLeafPattern.test(leaf)) return
 
-  if (!isRecord(patch[root])) {
+  if (!isRecord(patch[root]) && !Array.isArray(patch[root])) {
     patch[root] = {}
   }
-  let target = patch[root] as Record<string, unknown>
+  let target = patch[root] as Record<string, unknown> | unknown[]
   for (const segment of path.slice(1, -1)) {
+    if (Array.isArray(target)) {
+      const index = Number(segment)
+      if (!Number.isInteger(index) || index < 0 || index >= target.length) return
+      const current = target[index]
+      if (!isRecord(current) && !Array.isArray(current)) {
+        target[index] = {}
+      }
+      target = target[index] as Record<string, unknown> | unknown[]
+      continue
+    }
     const current = target[segment]
-    if (!isRecord(current)) {
+    if (!isRecord(current) && !Array.isArray(current)) {
       target[segment] = {}
     }
-    target = target[segment] as Record<string, unknown>
+    target = target[segment] as Record<string, unknown> | unknown[]
+  }
+  if (Array.isArray(target)) {
+    const index = Number(leaf)
+    if (!Number.isInteger(index) || index < 0 || index >= target.length) return
+    target[index] = value
+    return
   }
   target[leaf] = value
 }

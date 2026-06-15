@@ -107,7 +107,7 @@ export const filterRelayConfigPatch = (
   if (allowed.has('recommendedModels') && Array.isArray(recommendedModels) && recommendedModels.length > 0) {
     filtered.recommendedModels = recommendedModels
   }
-  const plugins = normalizeSanitizedRecord(patch.plugins)
+  const plugins = normalizeSanitizedArrayOrRecord(patch.plugins)
   if (allowed.has('plugins') && plugins != null) {
     filtered.plugins = plugins
   }

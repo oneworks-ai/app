@@ -155,7 +155,7 @@ export const filterRelayConfigPatch = (
   if (allowed.has('recommendedModels') && recommendedModels != null) {
     filtered.recommendedModels = recommendedModels
   }
-  const plugins = normalizeRecordField(patch.plugins)
+  const plugins = normalizeArrayOrRecordField(patch.plugins)
   if (allowed.has('plugins') && plugins != null) {
     filtered.plugins = plugins
   }
@@ -185,8 +185,8 @@ const mergeRecordField = (
 ) => ({ ...(left ?? {}), ...(right ?? {}) })
 
 const mergeArrayOrRecordField = (
-  left: RelayConfigPatch['skills'],
-  right: RelayConfigPatch['skills']
+  left: RelayConfigPatch['plugins'] | RelayConfigPatch['skills'],
+  right: RelayConfigPatch['plugins'] | RelayConfigPatch['skills']
 ) => {
   if (Array.isArray(left) && Array.isArray(right)) return [...left, ...right]
   if (isRecord(left) || isRecord(right)) {
@@ -210,7 +210,7 @@ export const mergeRelayConfigPatches = (
     merged.recommendedModels = [...(left.recommendedModels ?? []), ...(right.recommendedModels ?? [])]
   }
   if (left.plugins != null || right.plugins != null) {
-    merged.plugins = mergeRecordField(left.plugins, right.plugins)
+    merged.plugins = mergeArrayOrRecordField(left.plugins, right.plugins)
   }
   if (left.marketplaces != null || right.marketplaces != null) {
     merged.marketplaces = mergeRecordField(left.marketplaces, right.marketplaces)

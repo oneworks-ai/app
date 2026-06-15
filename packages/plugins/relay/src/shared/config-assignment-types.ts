@@ -15,7 +15,7 @@ export interface RelayConfigPatch {
   defaultModelService?: string
   marketplaces?: Record<string, unknown>
   modelServices?: Record<string, unknown>
-  plugins?: Record<string, unknown>
+  plugins?: unknown[] | Record<string, unknown>
   recommendedModels?: unknown[]
   skillRegistries?: unknown[] | Record<string, unknown>
   skills?: unknown[] | Record<string, unknown>

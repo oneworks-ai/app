@@ -83,6 +83,48 @@ describe('relay plugin scoped API', () => {
     expect(JSON.stringify(response.body)).not.toContain('lab-token')
   })
 
+  it('previews relay team config share drafts without echoing plaintext secrets', async () => {
+    const { apis } = await createPluginHarness({})
+
+    const response = await apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({
+        config: {
+          modelServices: {
+            openai: {
+              apiBaseUrl: 'https://api.openai.com/v1',
+              apiKey: 'sk-local-secret'
+            }
+          }
+        }
+      })),
+      method: 'POST',
+      path: 'config-share-draft'
+    }) as {
+      body?: {
+        configPatch?: Record<string, unknown>
+        secretItems?: Array<Record<string, unknown>>
+      }
+      status?: number
+    }
+
+    expect(response.status).toBe(200)
+    expect(response.body?.configPatch).toMatchObject({
+      modelServices: {
+        openai: {
+          apiBaseUrl: 'https://api.openai.com/v1'
+        }
+      }
+    })
+    expect(response.body?.secretItems).toEqual([
+      expect.objectContaining({
+        path: 'modelServices.openai.apiKey',
+        ref: 'modelServices.openai.apiKey',
+        uploadRequired: true
+      })
+    ])
+    expect(JSON.stringify(response.body)).not.toContain('sk-local-secret')
+  })
+
   it('includes Relay configuration distribution status in public status and refresh responses', async () => {
     let refreshed = false
     const { apis } = await createPluginHarness({}, {

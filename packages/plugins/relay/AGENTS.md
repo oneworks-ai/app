@@ -14,6 +14,7 @@
 - `src/server/session-relay-client.ts`：Relay 远端 session forwarding client。
 - `src/server/store.ts`：远端签发的 device token 持久化到 project home runtime 目录。
 - `src/shared/config-secrets.ts`：team config snapshot secret envelope 的设备 token 加解密工具；plaintext 只供 config hook 内存应用，不写回 snapshot cache。
+- `src/shared/config-share-draft.ts`：团队配置显式分享草稿构建器；负责从用户选择的配置中提取模型服务、插件、marketplaces、skills 等声明型字段，拒绝 env / MCP / permissions / 本地路径，并把 schema 或命名识别出的 secret 变成待上传预览项。
 - `__tests__/`：按 API、controller、heartbeat、session worker 等模块拆分测试。
 - `.oo/rules/RELAY-DEPLOYMENT.md`：Relay 托管服务、私有化部署、Vercel / Cloudflare 域名、官方 OneWorks 域名 / 邮件拓扑和账号边界；涉及插件默认服务或用户自部署接入时先读。
 
