@@ -146,17 +146,18 @@ Secret store 要求：
 
 显式共享模式：
 
-- Relay 为生成 snapshot 解密 secret。
-- Snapshot 只向授权消费设备发送 plaintext。
-- Snapshot 带有有界 TTL。
-- 插件缓存必须丢弃过期 secret。
+- Relay 验证设备、成员和版本后，为目标设备生成 envelope encrypted payload。
+- Snapshot 不返回 plaintext，只返回 ciphertext、algorithm、keyId、secretVersion、expiresAt 和 recipientDeviceId。
+- 插件用本地私钥解密，plaintext 只进入内存；如果落盘缓存，仍保存密文。
+- HTTPS 仍必需，但不是唯一秘密边界；即使传输日志被记录也看不到 secret。
 
 代理模式：
 
+- 代理模式是团队或租户可选策略，不是默认要求。
 - Snapshot 把模型服务 `apiBaseUrl` 指向 Relay proxy。
 - 设备收到临时 Relay credential，而不是 provider API key。
-- Relay 使用服务端 secret 转发模型 API 流量。
-- 该模式需要独立的 rate limit、审计和成本控制。
+- Relay 使用服务端 secret 转发模型 API 流量，团队需要接受额外服务器压力和成本。
+- 该模式需要独立的 rate limit、审计、成本控制和容量告警。
 
 ## 缓存和撤销
 

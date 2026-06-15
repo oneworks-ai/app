@@ -146,9 +146,9 @@ Secret handling 是这项能力最难的部分：
 - 上传 API key 必须有显式确认和审计。
 - 服务端持久化只能保存加密后的 secret payload。
 - Admin/team API 永不回显 plaintext。
-- Snapshot API 只有在显式共享模式下，才可以向授权消费设备返回 plaintext。
+- Snapshot API 不传 plaintext；显式共享模式只下发按设备公钥加密的 secret payload，本地插件解密后使用。
 - 每个 secret-bearing snapshot 都必须带 `expiresAt`、`secretVersion` 和 `mustRefreshAfter`。
-- 代理模式是推荐生产路径，因为 API key 不离开 Relay。
+- 代理模式是可选策略，不是默认要求；只有团队明确选择集中代理、审计或成本控制时才让模型流量经过 Relay。
 
 ## 推进计划
 
