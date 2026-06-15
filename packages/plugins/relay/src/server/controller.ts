@@ -1,5 +1,15 @@
 import type { RelayConfigSnapshot } from '../shared/config-assignment.js'
 import { createRelayConfigSnapshotStore } from '../shared/config-cache.js'
+import { getRelayConfigShareTargets, publishRelayConfigShareDraft } from './config-share.js'
+import {
+  filterRelayConfigSnapshotByPreferences,
+  readRelayConfigSourceKind,
+  readRelayConfigSourcePreferences,
+  readRelayConfigSourcePreferencesForSnapshot,
+  relayConfigSourceDisabledByPreferences,
+  serializeRelayConfigSourcePreferences,
+  updateRelayConfigSourcePreference
+} from './config-source-preferences.js'
 import { syncRelayConfigSnapshot } from './config-sync.js'
 import { startHeartbeat } from './heartbeat.js'
 import { normalizeOptions, resolveActiveRelayServer } from './options.js'
@@ -25,7 +35,10 @@ export interface RelayController {
   dispose: () => void
   forget: (payload?: unknown) => Promise<unknown>
   getPublicStatus: () => Promise<RelayPublicStatus>
+  getConfigShareTargets: (payload?: unknown) => Promise<unknown>
+  publishConfigShareDraft: (payload?: unknown) => Promise<unknown>
   refreshConfigDistribution: (payload?: unknown) => Promise<RelayPublicStatus>
+  setConfigSourceEnabled: (payload?: unknown) => Promise<RelayPublicStatus>
   completeLogin: (payload?: unknown) => Promise<unknown>
   search: (payload?: unknown) => unknown[]
 }
@@ -102,6 +115,9 @@ const createServerStatuses = (
       ...(stored?.account == null ? {} : { account: stored.account }),
       hasToken: (stored?.deviceToken ?? '') !== '',
       registeredAt: stored?.registeredAt ?? null,
+      sessionAuthenticated: (stored?.sessionToken ?? '') !== '' &&
+        (stored?.sessionExpiresAt == null || Date.parse(stored.sessionExpiresAt) > Date.now()),
+      sessionExpiresAt: stored?.sessionExpiresAt ?? null,
       updatedAt: stored?.updatedAt ?? null
     }
   })
@@ -114,6 +130,8 @@ const withStoredServer = (
     deviceName: string
     deviceToken: string
     registeredAt: string
+    sessionExpiresAt?: string
+    sessionToken?: string
   }
 ): RelayStore => {
   const previous = getStoredServer(store, server)
@@ -124,11 +142,14 @@ const withStoredServer = (
     servers: {
       ...store.servers,
       [server.id]: {
+        ...(previous?.configDisabledSources == null ? {} : { configDisabledSources: previous.configDisabledSources }),
         deviceToken: update.deviceToken,
         id: server.id,
         ...(account == null ? {} : { account }),
         registeredAt: previous?.registeredAt ?? update.registeredAt,
         remoteBaseUrl: server.remoteBaseUrl,
+        sessionExpiresAt: update.sessionExpiresAt ?? previous?.sessionExpiresAt,
+        sessionToken: update.sessionToken ?? previous?.sessionToken,
         updatedAt: update.registeredAt
       }
     }
@@ -190,6 +211,7 @@ const emptyConfigDistributionStatus = (): RelayConfigDistributionStatus => ({
   skillKeys: [],
   skillRegistryKeys: [],
   sourceServerId: null,
+  sources: [],
   version: null
 })
 
@@ -245,9 +267,35 @@ const normalizeConfigDistributionStatus = (value: unknown): RelayConfigDistribut
       ? readArrayOrRecordKeys(value.skillRegistries)
       : skillRegistryKeys,
     sourceServerId: readStatusText(value.sourceServerId),
+    sources: [],
     version: readStatusText(value.version)
   }
 }
+
+const collectSnapshotSources = (
+  snapshot: RelayConfigSnapshot | undefined,
+  preferences = readRelayConfigSourcePreferences(undefined)
+) =>
+  (snapshot?.assignments ?? [])
+    .map(assignment => {
+      const provenance = assignment.provenance
+      if (provenance == null) return undefined
+      const disabledBy = relayConfigSourceDisabledByPreferences(provenance, preferences)
+      return {
+        assignmentId: provenance.assignmentId,
+        disabledBy,
+        enabled: disabledBy.length === 0,
+        fields: provenance.fields,
+        mode: provenance.mode,
+        profileId: provenance.profileId,
+        profileName: provenance.profileName,
+        teamId: provenance.teamId,
+        ...(provenance.teamName == null ? {} : { teamName: provenance.teamName }),
+        version: provenance.version,
+        versionId: provenance.versionId
+      }
+    })
+    .filter((source): source is NonNullable<typeof source> => source != null)
 
 const collectSnapshotPatchKeys = (
   snapshot: RelayConfigSnapshot | undefined,
@@ -285,22 +333,25 @@ const collectSnapshotAllowedFields = (snapshot: RelayConfigSnapshot | undefined)
 }
 
 const snapshotToConfigDistributionStatus = (
-  snapshot: RelayConfigSnapshot | undefined
+  snapshot: RelayConfigSnapshot | undefined,
+  preferences = readRelayConfigSourcePreferences(undefined)
 ): RelayConfigDistributionStatus => {
   if (snapshot == null) return emptyConfigDistributionStatus()
+  const effectiveSnapshot = filterRelayConfigSnapshotByPreferences(snapshot, preferences)
   return {
-    allowedFields: collectSnapshotAllowedFields(snapshot),
+    allowedFields: collectSnapshotAllowedFields(effectiveSnapshot),
     hash: snapshot.hash ?? null,
     lastAppliedAt: snapshot.lastAppliedAt ?? null,
     lastError: snapshot.lastError ?? null,
     lastSyncedAt: snapshot.lastSyncedAt ?? null,
-    marketplaceKeys: collectSnapshotPatchKeys(snapshot, 'marketplaces'),
+    marketplaceKeys: collectSnapshotPatchKeys(effectiveSnapshot, 'marketplaces'),
     matchedProject: snapshot.matchedProject ?? null,
-    modelServiceKeys: collectSnapshotPatchKeys(snapshot, 'modelServices'),
-    pluginKeys: collectSnapshotPatchKeys(snapshot, 'plugins'),
-    skillKeys: collectSnapshotPatchKeys(snapshot, 'skills'),
-    skillRegistryKeys: collectSnapshotPatchKeys(snapshot, 'skillRegistries'),
+    modelServiceKeys: collectSnapshotPatchKeys(effectiveSnapshot, 'modelServices'),
+    pluginKeys: collectSnapshotPatchKeys(effectiveSnapshot, 'plugins'),
+    skillKeys: collectSnapshotPatchKeys(effectiveSnapshot, 'skills'),
+    skillRegistryKeys: collectSnapshotPatchKeys(effectiveSnapshot, 'skillRegistries'),
     sourceServerId: snapshot.sourceServerId ?? null,
+    sources: collectSnapshotSources(snapshot, preferences),
     version: snapshot.version
   }
 }
@@ -308,6 +359,26 @@ const snapshotToConfigDistributionStatus = (
 const readResponseJson = async (response: Response) => {
   const body = await response.json().catch(() => ({}))
   return isRecord(body) ? body : {}
+}
+
+const fetchRelaySessionProfile = async (
+  server: Pick<ResolvedRelayServer, 'remoteBaseUrl'>,
+  sessionToken: string
+) => {
+  const response = await fetch(new URL('/api/auth/me', server.remoteBaseUrl), {
+    headers: {
+      authorization: `Bearer ${sessionToken}`
+    }
+  })
+  const body = await readResponseJson(response)
+  if (!response.ok) {
+    const message = toString(body.error) || `Relay session check failed with ${response.status}.`
+    throw new Error(message)
+  }
+  return {
+    account: normalizeAccountProfile(body.user),
+    expiresAt: isRecord(body.session) ? readOptionalText(body.session.expiresAt) : undefined
+  }
 }
 
 const fetchRelayDevices = async (
@@ -378,7 +449,12 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         return setConfigDistributionError(error)
       }
     }
-    const cachedStatus = snapshotToConfigDistributionStatus(await configSnapshotStore.readSnapshot())
+    const snapshot = await configSnapshotStore.readSnapshot()
+    const store = await deviceStore.readStore()
+    const cachedStatus = snapshotToConfigDistributionStatus(
+      snapshot,
+      readRelayConfigSourcePreferencesForSnapshot(store, snapshot)
+    )
     configDistributionStatus = cachedStatus.version == null && cachedStatus.lastError == null
       ? configDistributionStatus ?? readConfiguredConfigDistributionStatus()
       : cachedStatus
@@ -409,7 +485,10 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         server: activeServer,
         storedServer: getStoredServer(store, activeServer)
       })
-      configDistributionStatus = snapshotToConfigDistributionStatus(result.snapshot)
+      configDistributionStatus = snapshotToConfigDistributionStatus(
+        result.snapshot,
+        readRelayConfigSourcePreferencesForSnapshot(store, result.snapshot)
+      )
       return configDistributionStatus
     } catch (error) {
       ctx.logger.warn({ err: error, scope: ctx.scope }, '[relay] config distribution refresh failed')
@@ -490,6 +569,59 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     const configDistribution = await refreshConfigDistributionStatus(payload)
     return await getPublicStatus(configDistribution)
   }
+
+  const setConfigSourceEnabled = async (payload?: unknown) => {
+    const body = isRecord(payload) ? payload : {}
+    const kind = readRelayConfigSourceKind(body.kind)
+    const id = readOptionalText(body.id)
+    if (kind == null || id == null) {
+      throw new Error('Config source kind and id are required.')
+    }
+    if (typeof body.enabled !== 'boolean') {
+      throw new TypeError('Config source enabled state must be a boolean.')
+    }
+    const requestedServerId = readServerId(payload)
+    const activeServer = resolveActiveRelayServer(ctx.options, requestedServerId)
+    if (activeServer == null) {
+      throw new Error(
+        requestedServerId === ''
+          ? 'Configure at least one relay server before changing relay config source state.'
+          : `Unknown relay server: ${requestedServerId}.`
+      )
+    }
+    const store = await deviceStore.readStore()
+    const previous = getStoredServer(store, activeServer)
+    const preferences = updateRelayConfigSourcePreference(
+      readRelayConfigSourcePreferences(previous),
+      kind,
+      id,
+      body.enabled
+    )
+    const serializedPreferences = serializeRelayConfigSourcePreferences(preferences)
+    const updatedAt = new Date().toISOString()
+    await deviceStore.writeStore({
+      ...store,
+      servers: {
+        ...store.servers,
+        [activeServer.id]: {
+          ...(previous ?? {
+            deviceToken: '',
+            id: activeServer.id,
+            remoteBaseUrl: activeServer.remoteBaseUrl
+          }),
+          configDisabledSources: serializedPreferences,
+          updatedAt
+        }
+      }
+    })
+    const snapshot = await configSnapshotStore.readSnapshot()
+    configDistributionStatus = snapshotToConfigDistributionStatus(snapshot, preferences)
+    return await getPublicStatus(configDistributionStatus)
+  }
+
+  const getConfigShareTargets = async (payload?: unknown) => await getRelayConfigShareTargets(ctx, payload)
+
+  const publishConfigShareDraft = async (payload?: unknown) => await publishRelayConfigShareDraft(ctx, payload)
 
   const connect = async (payload?: unknown) => {
     const requestedServerId = readServerId(payload)
@@ -637,10 +769,38 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     if (token === '') {
       throw new Error('Missing relay login token.')
     }
-    return await connect({
+    const requestedServerId = readServerId(payload)
+    const activeServer = resolveActiveRelayServer(ctx.options, requestedServerId)
+    if (activeServer == null) {
+      throw new Error(
+        requestedServerId === ''
+          ? 'Configure at least one relay server before completing login.'
+          : `Unknown relay server: ${requestedServerId}.`
+      )
+    }
+    const session = await fetchRelaySessionProfile(activeServer, token)
+    await connect({
       ...(isRecord(payload) ? payload : {}),
       authToken: token
     })
+    const store = await deviceStore.readStore()
+    const stored = store.servers[activeServer.id]
+    if (stored != null) {
+      await deviceStore.writeStore({
+        ...store,
+        servers: {
+          ...store.servers,
+          [activeServer.id]: {
+            ...stored,
+            ...(session.account == null ? {} : { account: session.account }),
+            sessionExpiresAt: session.expiresAt,
+            sessionToken: token,
+            updatedAt: new Date().toISOString()
+          }
+        }
+      })
+    }
+    return await getPublicStatus()
   }
 
   const disconnect = async (payload?: unknown) => {
@@ -710,7 +870,10 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
       for (const server of Object.values(nextServers)) {
         nextServers[server.id] = {
           ...server,
-          deviceToken: ''
+          ...(server.configDisabledSources == null ? {} : { configDisabledSources: server.configDisabledSources }),
+          deviceToken: '',
+          sessionExpiresAt: undefined,
+          sessionToken: undefined
         }
       }
       for (const server of options.servers) {
@@ -751,10 +914,13 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
       const previous = getStoredServer(store, activeServer)
       stopRemoteLoop(activeServer.id)
       nextServers[activeServer.id] = {
+        ...(previous?.configDisabledSources == null ? {} : { configDisabledSources: previous.configDisabledSources }),
         deviceToken: '',
         id: activeServer.id,
         registeredAt: previous?.registeredAt,
         remoteBaseUrl: activeServer.remoteBaseUrl,
+        sessionExpiresAt: undefined,
+        sessionToken: undefined,
         updatedAt: new Date().toISOString()
       }
       setConnectionState(activeServer.id, {
@@ -792,8 +958,11 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
       }
     },
     forget,
+    getConfigShareTargets,
     getPublicStatus,
+    publishConfigShareDraft,
     refreshConfigDistribution,
+    setConfigSourceEnabled,
     search: payload => [{
       id: 'status',
       title: 'Account status',

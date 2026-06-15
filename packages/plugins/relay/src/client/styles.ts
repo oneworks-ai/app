@@ -81,11 +81,26 @@ export const relayClientCss = `
 .oneworks-relay__config-fact { min-width: 0; display: grid; gap: 1px; }
 .oneworks-relay__config-fact-label { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 10px/1.2 ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; }
 .oneworks-relay__config-fact-value { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-relay__config-sources { min-width: 0; display: grid; gap: 4px; }
+.oneworks-relay__config-source { min-width: 0; min-height: 30px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); }
+.oneworks-relay__config-source[data-enabled="false"] { opacity: .72; }
+.oneworks-relay__config-source-copy { min-width: 0; display: grid; gap: 1px; }
+.oneworks-relay__config-source-name { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 700 12px/1.25 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-relay__config-source-meta, .oneworks-relay__config-source-state { min-width: 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 500 11px/1.25 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-relay__config-source-actions { min-width: 0; display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--oneworks-overlay-item-gap, 6px); }
+.oneworks-relay__share { min-width: 0; display: grid; gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); padding: var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)) 0 0; border-top: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
+.oneworks-relay__share-form { min-width: 0; display: grid; grid-template-columns: minmax(140px, .55fr) minmax(140px, .45fr); gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); }
+.oneworks-relay__share-editor { min-width: 0; display: grid; gap: 4px; }
+.oneworks-relay__textarea { width: 100%; min-width: 0; min-height: 132px; resize: vertical; border: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); border-radius: var(--oneworks-overlay-item-radius, 6px); outline: 0; padding: 8px; color: var(--text-color, var(--ant-color-text, #1f2328)); background: color-mix(in srgb, var(--page-background, #fff) 94%, transparent); font: 500 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.oneworks-relay__textarea:focus { border-color: var(--primary-color, var(--ant-color-primary, #1677ff)); }
+.oneworks-relay__share-grid { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); }
+.oneworks-relay__share-empty { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 500 12px/1.4 ui-sans-serif, system-ui, sans-serif; }
 @media (max-width: 720px) {
   .oneworks-relay__toolbar { display: grid; }
   .oneworks-relay__server-editor { grid-template-columns: minmax(0, 1fr); }
   .oneworks-relay__account-panel { padding-inline-start: 0; }
   .oneworks-relay__account-actions { justify-content: flex-start; }
+  .oneworks-relay__share-form { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 520px) {
   .oneworks-relay__section-title { flex-wrap: wrap; }
@@ -93,6 +108,7 @@ export const relayClientCss = `
   .oneworks-relay__account-chevron { display: none; }
   .oneworks-relay__account-meta { grid-template-columns: minmax(0, 1fr); }
   .oneworks-relay__config-grid { grid-template-columns: minmax(0, 1fr); }
+  .oneworks-relay__share-grid { grid-template-columns: minmax(0, 1fr); }
   .oneworks-relay__device-row { grid-template-columns: 10px minmax(0, 1fr) auto; }
   .oneworks-relay__device-features { grid-column: 2 / -1; }
 }

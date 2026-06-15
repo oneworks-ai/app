@@ -89,6 +89,13 @@ describe('relay plugin controller', () => {
       hash: 'snapshot-hash',
       modelServiceKeys: ['relay-assigned'],
       sourceServerId: 'prod',
+      sources: [
+        expect.objectContaining({
+          enabled: true,
+          profileName: 'Base Profile',
+          teamName: 'Team One'
+        })
+      ],
       version: 'snapshot-v1'
     })
     expect(status.servers?.[0]).toMatchObject({

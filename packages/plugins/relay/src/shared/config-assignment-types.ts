@@ -28,6 +28,18 @@ export interface RelayConfigProjectRule {
   deny?: string[]
 }
 
+export interface RelayConfigSnapshotProvenance {
+  assignmentId: string
+  fields: RelayConfigSafeField[]
+  mode: 'default' | 'override'
+  profileId: string
+  profileName: string
+  teamId: string
+  teamName?: string
+  version: number
+  versionId: string
+}
+
 export interface RelayConfigAssignment {
   allowedFields?: RelayConfigSafeField[]
   configPatch?: RelayConfigPatch
@@ -35,6 +47,7 @@ export interface RelayConfigAssignment {
   id: string
   mustRefreshAfter?: string
   project?: RelayConfigProjectRule
+  provenance?: RelayConfigSnapshotProvenance
   ruleIds?: string[]
   rules?: string[] | RelayConfigAssignment[]
   secrets?: RelayConfigSnapshotSecretEnvelope[]

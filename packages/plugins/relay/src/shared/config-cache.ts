@@ -6,6 +6,7 @@ import type {
   RelayConfigAssignment,
   RelayConfigPatch,
   RelayConfigSnapshot,
+  RelayConfigSnapshotProvenance,
   RelayConfigSnapshotSecretEnvelope
 } from './config-assignment.js'
 import {
@@ -106,6 +107,40 @@ const normalizeProjectRule = (value: unknown) => {
   }
 }
 
+const normalizeProvenance = (value: unknown): RelayConfigSnapshotProvenance | undefined => {
+  if (!isRecord(value)) return undefined
+  const assignmentId = normalizeText(value.assignmentId)
+  const profileId = normalizeText(value.profileId)
+  const profileName = normalizeText(value.profileName)
+  const teamId = normalizeText(value.teamId)
+  const versionId = normalizeText(value.versionId)
+  const version = Number(value.version)
+  const fields = normalizeRelayConfigSafeFields(value.fields)
+  if (
+    assignmentId == null ||
+    profileId == null ||
+    profileName == null ||
+    teamId == null ||
+    versionId == null ||
+    !Number.isFinite(version) ||
+    fields.length === 0 ||
+    (value.mode !== 'default' && value.mode !== 'override')
+  ) {
+    return undefined
+  }
+  return {
+    assignmentId,
+    fields,
+    mode: value.mode,
+    profileId,
+    profileName,
+    teamId,
+    ...(normalizeText(value.teamName) == null ? {} : { teamName: normalizeText(value.teamName) }),
+    version: Math.max(1, Math.trunc(version)),
+    versionId
+  }
+}
+
 const normalizeAssignment = (value: unknown, fallbackId: string): RelayConfigAssignment | undefined => {
   if (!isRecord(value)) return undefined
   const id = normalizeText(value.id) ?? fallbackId
@@ -138,6 +173,7 @@ const normalizeAssignment = (value: unknown, fallbackId: string): RelayConfigAss
       ? {}
       : { mustRefreshAfter: normalizeText(value.mustRefreshAfter) }),
     ...(normalizeProjectRule(value.project) == null ? {} : { project: normalizeProjectRule(value.project) }),
+    ...(normalizeProvenance(value.provenance) == null ? {} : { provenance: normalizeProvenance(value.provenance) }),
     ...(ruleIds.length === 0 ? {} : { ruleIds }),
     ...(inlineRules == null || inlineRules.length === 0 ? {} : { rules: inlineRules }),
     ...(secrets.length === 0 ? {} : { secrets }),

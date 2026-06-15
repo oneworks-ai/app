@@ -13,6 +13,8 @@
 - `src/server/session-worker.ts`：会话快照、job claim 和结果回传 worker。
 - `src/server/session-relay-client.ts`：Relay 远端 session forwarding client。
 - `src/server/store.ts`：远端签发的 device token 持久化到 project home runtime 目录。
+- `src/server/config-source-preferences.ts`：本机对 team/profile/assignment 配置来源的启停偏好；用于插件界面 opt-out 和 config hook 应用前过滤 snapshot。
+- `src/server/config-share.ts`：团队配置分享发布编排；只使用登录 session 调用 `/api/relay/*` 团队/profile/secret API，device token 不能用于团队管理。
 - `src/shared/config-secrets.ts`：team config snapshot secret envelope 的设备 token 加解密工具；plaintext 只供 config hook 内存应用，不写回 snapshot cache。
 - `src/shared/config-share-draft.ts`：团队配置显式分享草稿构建器；负责从用户选择的配置中提取模型服务、插件、marketplaces、skills 等声明型字段，拒绝 env / MCP / permissions / 本地路径，并把 schema 或命名识别出的 secret 变成待上传预览项。
 - `__tests__/`：按 API、controller、heartbeat、session worker 等模块拆分测试。

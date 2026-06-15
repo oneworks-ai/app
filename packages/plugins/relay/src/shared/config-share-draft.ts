@@ -54,6 +54,11 @@ export interface RelayConfigShareDraftInput {
 
 type RelayConfigShareDraftExtracted = Partial<Record<RelayConfigSafeField, unknown>>
 
+interface RelayConfigShareDraftBuildResult {
+  draft: RelayConfigShareDraft
+  secretValues: Record<string, string>
+}
+
 const SAFE_FIELD_SET = new Set<string>(RELAY_CONFIG_SAFE_FIELDS)
 const rejectedRootNames = new Set([
   'adapters',
@@ -178,6 +183,7 @@ const sanitizeDraftValue = (
     rejectedFields: string[]
     schema?: unknown
     secrets: RelayConfigShareDraftSecretItem[]
+    secretValues?: Record<string, string>
   }
 ): unknown => {
   const leaf = path.at(-1)
@@ -188,6 +194,9 @@ const sanitizeDraftValue = (
   ) {
     if (value !== undefined && value !== null && value !== '') {
       const ref = pathToSecretRef(path)
+      if (params.secretValues != null && typeof value === 'string') {
+        params.secretValues[ref] = value
+      }
       if (!params.secrets.some(item => item.ref === ref)) {
         params.secrets.push({
           displayName: createSecretDisplayName(path),
@@ -282,6 +291,7 @@ const sanitizePluginEntry = (
     pluginSchemas: Record<string, unknown>
     rejectedFields: string[]
     secrets: RelayConfigShareDraftSecretItem[]
+    secretValues?: Record<string, string>
   },
   keyHint: string
 ) =>
@@ -289,7 +299,8 @@ const sanitizePluginEntry = (
     issues: params.issues,
     rejectedFields: params.rejectedFields,
     schema: params.pluginSchemas[keyHint],
-    secrets: params.secrets
+    secrets: params.secrets,
+    secretValues: params.secretValues
   })
 
 const sanitizePlugins = (
@@ -299,6 +310,7 @@ const sanitizePlugins = (
     pluginSchemas: Record<string, unknown>
     rejectedFields: string[]
     secrets: RelayConfigShareDraftSecretItem[]
+    secretValues?: Record<string, string>
   }
 ) => {
   if (Array.isArray(value)) {
@@ -321,6 +333,7 @@ const extractShareableConfig = (
     pluginSchemas: Record<string, unknown>
     rejectedFields: string[]
     secrets: RelayConfigShareDraftSecretItem[]
+    secretValues?: Record<string, string>
   }
 ) => {
   const general = isRecord(source.general) ? source.general : {}
@@ -379,6 +392,7 @@ const sanitizeShareableConfig = (
     pluginSchemas: Record<string, unknown>
     rejectedFields: string[]
     secrets: RelayConfigShareDraftSecretItem[]
+    secretValues?: Record<string, string>
   }
 ): RelayConfigPatch => {
   const sanitized: RelayConfigPatch = {}
@@ -390,7 +404,8 @@ const sanitizeShareableConfig = (
       : sanitizeDraftValue(value, [field], {
         issues: params.issues,
         rejectedFields: params.rejectedFields,
-        secrets: params.secrets
+        secrets: params.secrets,
+        secretValues: params.secretValues
       })
     if (nextValue !== undefined) {
       ;(sanitized as Record<string, unknown>)[field] = nextValue
@@ -449,12 +464,15 @@ const countSecretsForField = (field: RelayConfigSafeField, secrets: RelayConfigS
   )
     .length
 
-export const buildRelayConfigShareDraft = (input: RelayConfigShareDraftInput | unknown): RelayConfigShareDraft => {
+const buildRelayConfigShareDraftInternal = (
+  input: RelayConfigShareDraftInput | unknown
+): RelayConfigShareDraftBuildResult => {
   const body = resolveInput(input)
   const source = isRecord(body.config) ? body.config : {}
   const issues: RelayConfigShareDraftIssue[] = []
   const rejectedFields: string[] = []
   const secretItems: RelayConfigShareDraftSecretItem[] = []
+  const secretValues: Record<string, string> = {}
   const pluginSchemas = readPluginSchemas(body.pluginSchemas)
   const allowedFields = normalizeRelayConfigSafeFields(body.allowedFields)
   const sanitized = sanitizeShareableConfig(
@@ -462,13 +480,15 @@ export const buildRelayConfigShareDraft = (input: RelayConfigShareDraftInput | u
       issues,
       pluginSchemas,
       rejectedFields,
-      secrets: secretItems
+      secrets: secretItems,
+      secretValues
     }),
     {
       issues,
       pluginSchemas,
       rejectedFields,
-      secrets: secretItems
+      secrets: secretItems,
+      secretValues
     }
   )
   const filtered = validateModelServiceReferences(
@@ -494,12 +514,22 @@ export const buildRelayConfigShareDraft = (input: RelayConfigShareDraftInput | u
   )
 
   return {
-    allowedFields: effectiveAllowedFields,
-    ...(filtered == null ? {} : { configPatch: filtered }),
-    fieldSummaries,
-    issues,
-    pendingSecretRefs,
-    rejectedFields,
-    secretItems
+    draft: {
+      allowedFields: effectiveAllowedFields,
+      ...(filtered == null ? {} : { configPatch: filtered }),
+      fieldSummaries,
+      issues,
+      pendingSecretRefs,
+      rejectedFields,
+      secretItems
+    },
+    secretValues
   }
 }
+
+export const buildRelayConfigShareDraft = (input: RelayConfigShareDraftInput | unknown): RelayConfigShareDraft =>
+  buildRelayConfigShareDraftInternal(input).draft
+
+export const collectRelayConfigShareSecretValues = (
+  input: RelayConfigShareDraftInput | unknown
+): Record<string, string> => buildRelayConfigShareDraftInternal(input).secretValues

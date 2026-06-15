@@ -166,6 +166,72 @@ describe('relay config hook', () => {
     })
   })
 
+  it('skips locally disabled team config profiles when resolving config', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'oneworks-relay-config-hook-disabled-source-'))
+    tempDirs.push(root)
+    const workspaceFolder = join(root, 'workspace-disabled-source')
+    const home = join(root, 'home')
+    const env = {
+      __ONEWORKS_PROJECT_REAL_HOME__: home,
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspaceFolder
+    }
+    const projectHome = resolveProjectHomePath(workspaceFolder, env)
+    await createRelayDeviceStore(projectHome).writeStore({
+      deviceId: 'device-1',
+      deviceName: 'Device 1',
+      deviceSecret: 'device-secret',
+      servers: {
+        prod: {
+          configDisabledSources: {
+            assignmentIds: [],
+            profileIds: ['profile-disabled'],
+            teamIds: []
+          },
+          deviceToken: 'device-token',
+          id: 'prod',
+          remoteBaseUrl: 'https://relay.example'
+        }
+      }
+    })
+    const snapshotStore = createRelayConfigSnapshotStore(projectHome)
+    await snapshotStore.writeSnapshot({
+      assignments: [
+        {
+          id: 'assignment-disabled',
+          allowedFields: ['modelServices'],
+          configPatch: {
+            modelServices: {
+              relay: {
+                apiBaseUrl: 'https://relay.example/v1'
+              }
+            }
+          },
+          provenance: {
+            assignmentId: 'assignment-disabled',
+            fields: ['modelServices'],
+            mode: 'default',
+            profileId: 'profile-disabled',
+            profileName: 'Disabled Profile',
+            teamId: 'team-1',
+            teamName: 'Team One',
+            version: 1,
+            versionId: 'version-disabled'
+          }
+        }
+      ],
+      hash: 'hash-disabled',
+      lastError: null,
+      lastSyncedAt: '2026-06-15T00:00:00.000Z',
+      sourceServerId: 'prod',
+      version: 'v-disabled'
+    })
+
+    await expect(resolveConfig(createContext(workspaceFolder, env) as never)).resolves.toBeUndefined()
+    await expect(snapshotStore.readSnapshot()).resolves.toMatchObject({
+      matchedProject: false
+    })
+  })
+
   it('declares the real package config export and config hook entry', () => {
     expect(packageJson.configHook).toEqual({
       entry: './dist/config.cjs'

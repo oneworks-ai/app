@@ -23,6 +23,15 @@ export interface RelayPluginStatus {
     matchedProject?: boolean | string | null
     modelServiceKeys?: string[]
     sourceServerId?: string | null
+    sources?: Array<{
+      assignmentId?: string
+      disabledBy?: string[]
+      enabled?: boolean
+      profileId?: string
+      profileName?: string
+      teamId?: string
+      teamName?: string
+    }>
     version?: string | null
   }
   connection: {
@@ -68,6 +77,8 @@ export interface RelayPluginStatus {
     hasToken?: boolean
     id: string
     remoteBaseUrl: string
+    sessionAuthenticated?: boolean
+    sessionExpiresAt?: string | null
   }>
 }
 
@@ -154,6 +165,17 @@ export const createRelayConfigSnapshotFixture = () => ({
       },
       project: {
         allow: ['workspace']
+      },
+      provenance: {
+        assignmentId: 'base',
+        fields: ['modelServices', 'defaultModelService', 'recommendedModels'],
+        mode: 'default',
+        profileId: 'profile-1',
+        profileName: 'Base Profile',
+        teamId: 'team-1',
+        teamName: 'Team One',
+        version: 1,
+        versionId: 'version-1'
       }
     }
   ],
@@ -171,6 +193,21 @@ export const stubRelayFetch = (deviceToken = 'remote-device-token') => {
     const url = String(input)
     const body = url.endsWith('/api/relay/config-snapshot')
       ? createRelayConfigSnapshotFixture()
+      : url.endsWith('/api/auth/me')
+      ? {
+        session: {
+          expiresAt: '2999-01-01T00:00:00.000Z',
+          lastSeenAt: '2026-06-15T00:00:00.000Z'
+        },
+        user: {
+          avatarUrl: '',
+          email: 'owner@local.test',
+          id: 'owner',
+          name: 'Owner Local',
+          provider: 'local',
+          role: 'owner'
+        }
+      }
       : url.endsWith('/api/relay/devices')
       ? {
         devices: [{

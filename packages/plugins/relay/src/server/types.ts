@@ -1,5 +1,6 @@
 import type { Buffer } from 'node:buffer'
 
+import type { RelayConfigSourcePreferences } from './config-source-preferences.js'
 import type { RelayLocalSessionAdapter } from './session-types.js'
 
 export type RelayLocalizedText = string | Record<string, string>
@@ -75,10 +76,13 @@ export interface RelayOptions {
 
 export interface RelayStoredServer {
   account?: RelayAccountProfile
+  configDisabledSources?: RelayConfigSourcePreferences
   deviceToken: string
   id: string
   registeredAt?: string
   remoteBaseUrl: string
+  sessionExpiresAt?: string
+  sessionToken?: string
   updatedAt?: string
 }
 
@@ -130,7 +134,22 @@ export interface RelayConfigDistributionStatus {
   skillKeys: string[]
   skillRegistryKeys: string[]
   sourceServerId: string | null
+  sources?: RelayConfigDistributionSourceStatus[]
   version: string | null
+}
+
+export interface RelayConfigDistributionSourceStatus {
+  assignmentId: string
+  disabledBy: Array<'assignment' | 'profile' | 'team'>
+  enabled: boolean
+  fields: string[]
+  mode: 'default' | 'override'
+  profileId: string
+  profileName: string
+  teamId: string
+  teamName?: string
+  version: number
+  versionId: string
 }
 
 export interface RelayPublicServerStatus extends RelayServerOptions {
@@ -142,6 +161,8 @@ export interface RelayPublicServerStatus extends RelayServerOptions {
   devicesError?: string
   hasToken: boolean
   registeredAt: string | null
+  sessionExpiresAt: string | null
+  sessionAuthenticated: boolean
   updatedAt: string | null
 }
 

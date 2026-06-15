@@ -30,6 +30,17 @@ describe('relay config snapshot cache', () => {
               }
             }
           },
+          provenance: {
+            assignmentId: 'base',
+            fields: ['modelServices'],
+            mode: 'default',
+            profileId: 'profile-1',
+            profileName: 'Base Profile',
+            teamId: 'team-1',
+            teamName: 'Team One',
+            version: 1,
+            versionId: 'version-1'
+          },
           secrets: [
             {
               algorithm: 'aes-256-gcm',
@@ -66,6 +77,13 @@ describe('relay config snapshot cache', () => {
                 apiBaseUrl: 'https://relay.example/v1'
               }
             }
+          },
+          provenance: {
+            assignmentId: 'base',
+            profileId: 'profile-1',
+            profileName: 'Base Profile',
+            teamId: 'team-1',
+            teamName: 'Team One'
           },
           secrets: [
             {

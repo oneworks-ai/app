@@ -3,6 +3,10 @@ import { basename } from 'node:path'
 
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
+import {
+  filterRelayConfigSnapshotByPreferences,
+  readRelayConfigSourcePreferencesForSnapshot
+} from './server/config-source-preferences.js'
 import { createRelayDeviceStore } from './server/store.js'
 import { RELAY_CONFIG_SAFE_FIELDS, resolveRelayConfigPatchForProject } from './shared/config-assignment.js'
 import type { RelayConfigPatch, RelayConfigSnapshot } from './shared/config-assignment.js'
@@ -197,8 +201,18 @@ export const resolveConfig = async (context: RelayPluginConfigHookContext) => {
   const snapshot = await snapshotStore.readSnapshot()
   if (snapshot == null) return undefined
 
-  const resolved = resolveRelayConfigPatchForProject(snapshot, resolveProjectContext(context))
-  const patch = await applySnapshotSecrets(projectHome, snapshot, resolved.patch, resolved.matchedAssignmentIds)
+  const store = await createRelayDeviceStore(projectHome).readStore()
+  const effectiveSnapshot = filterRelayConfigSnapshotByPreferences(
+    snapshot,
+    readRelayConfigSourcePreferencesForSnapshot(store, snapshot)
+  )
+  const resolved = resolveRelayConfigPatchForProject(effectiveSnapshot, resolveProjectContext(context))
+  const patch = await applySnapshotSecrets(
+    projectHome,
+    effectiveSnapshot,
+    resolved.patch,
+    resolved.matchedAssignmentIds
+  )
   const config = toConfig(patch)
   await snapshotStore.writeSnapshot({
     ...snapshot,

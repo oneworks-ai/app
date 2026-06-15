@@ -1,4 +1,5 @@
 interface ActionButtonOptions {
+  data?: Record<string, boolean | number | string | undefined>
   disabled?: boolean
   primary?: boolean
   serverId?: string
@@ -27,11 +28,16 @@ export const actionButton = (
   options: ActionButtonOptions = {}
 ) => {
   const disabledAttr = options.disabled === true ? ' disabled' : ''
+  const dataAttrs = Object.entries(options.data ?? {})
+    .map(([key, value]) => value == null ? '' : ` data-${escapeHtml(key)}="${escapeHtml(value)}"`)
+    .join('')
   const serverAttr = options.serverId == null ? '' : ` data-server-id="${escapeHtml(options.serverId)}"`
   const primaryAttr = options.primary === true ? ' data-primary="true"' : ''
   return `<button class="oneworks-relay__button" type="button" aria-label="${escapeHtml(label)}" data-tooltip="${
     escapeHtml(label)
-  }" data-action="${escapeHtml(action)}"${disabledAttr}${primaryAttr}${serverAttr}>${materialIcon(iconName)}</button>`
+  }" data-action="${escapeHtml(action)}"${disabledAttr}${primaryAttr}${serverAttr}${dataAttrs}>${
+    materialIcon(iconName)
+  }</button>`
 }
 
 export const fact = (iconName: string, label: string, value: unknown) => `

@@ -134,6 +134,8 @@ const statusPayload = {
     id: 'local',
     name: 'Local Relay SSO',
     platform: 'Cloudflare',
+    sessionAuthenticated: true,
+    sessionExpiresAt: '2999-01-01T00:00:00.000Z',
     devices: [{
       capabilities: {
         sessions: true,
@@ -319,6 +321,19 @@ describe('relay plugin client view', () => {
             matchedProject: true,
             modelServiceKeys: ['openai', 'anthropic'],
             sourceServerId: 'oneworks-cloudflare',
+            sources: [{
+              assignmentId: 'assignment-1',
+              disabledBy: [],
+              enabled: true,
+              fields: ['modelServices'],
+              mode: 'default',
+              profileId: 'profile-1',
+              profileName: 'Base Profile',
+              teamId: 'team-1',
+              teamName: 'Team One',
+              version: 1,
+              versionId: 'version-1'
+            }],
             version: '2026.06.15'
           }
         })
@@ -341,6 +356,10 @@ describe('relay plugin client view', () => {
     expect(container.innerHTML).toContain('matched')
     expect(container.innerHTML).toContain('openai, anthropic')
     expect(container.innerHTML).toContain('modelServices, models')
+    expect(container.innerHTML).toContain('Team One / Base Profile')
+    expect(container.innerHTML).toContain('data-action="toggle-config-source"')
+    expect(container.innerHTML).toContain('data-source-kind="team"')
+    expect(container.innerHTML).toContain('data-source-kind="profile"')
     cleanup?.dispose()
   })
 
@@ -360,6 +379,28 @@ describe('relay plugin client view', () => {
     expect(container.innerHTML).toContain('aria-label="Refresh Relay configuration"')
     expect(container.innerHTML).toContain('data-action="refresh-config"')
     expect(container.innerHTML).toContain('published_with_changes')
+    cleanup?.dispose()
+  })
+
+  it('renders explicit Relay config sharing controls', async () => {
+    installBrowser()
+    const apiFetch = vi.fn(async (path: string) => {
+      if (path === 'relay/status') return statusResponse()
+      return new Response('{}', { status: 404 })
+    })
+    const { cleanup, renderHome } = await createClientHarness(apiFetch)
+    const container = new FakeContainer()
+
+    renderHome(container as unknown as HTMLElement)
+    await flushPromises()
+
+    expect(container.innerHTML).toContain('Team config share')
+    expect(container.innerHTML).toContain('data-action="share-preview"')
+    expect(container.innerHTML).toContain('data-action="share-load-targets"')
+    expect(container.innerHTML).toContain('data-action="share-publish"')
+    expect(container.innerHTML).toContain('data-field="share-config"')
+    expect(container.innerHTML).toContain('data-field="share-team"')
+    expect(container.innerHTML).toContain('data-field="share-profile-name"')
     cleanup?.dispose()
   })
 
