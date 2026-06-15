@@ -6,7 +6,10 @@ import type { GitRepositoryState, TerminalShellKind } from '@oneworks/types'
 import type { AgentRoomMessageView } from '#~/components/agent-room/@types/agent-room-view'
 import type { WorkspaceDrawerViewItem } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
 import type { WorkspaceMarkdownPreviewMode } from '#~/components/chat/workspace-file-editor/workspace-file-editor-language'
-import type { RouteContainerPanelDockActionItem } from '#~/components/layout/RouteContainerPanelTabs'
+import type {
+  RouteContainerPanelDockActionItem,
+  RouteContainerPanelDockLayout
+} from '#~/components/layout/RouteContainerPanelTabs'
 import type { ContextPickerFile } from '#~/components/workspace/context-file-types'
 import type { ProjectFileTreeCommand } from '#~/components/workspace/project-file-tree/project-file-tree-types'
 import type { ChatRouteBottomPanelState } from '#~/hooks/chat/use-chat-route-bottom-panel'
@@ -62,6 +65,7 @@ export interface InteractionPanelDockWorkspaceProps {
   isPanelFullscreen: boolean
   isPanelMinimized: boolean
   isVisible: boolean
+  layout?: RouteContainerPanelDockLayout | null
   markdownPreviewMode: WorkspaceMarkdownPreviewMode
   mobileDebugPages: InteractionPanelMobileDebugPage[]
   pinnedTabs: InteractionPanelPinnedTab[]
@@ -93,11 +97,13 @@ export interface InteractionPanelDockWorkspaceProps {
   onAddMenuClick: NonNullable<MenuProps['onClick']>
   onCloseTab: (tab: InteractionPanelTab) => void
   onCloseTabGroup: (tab: InteractionPanelTab, scope: InteractionPanelTabCloseScope) => void
+  onCloseWorkspaceFilePaths: (paths: string[]) => void
   onEditPinnedTab: (tab: InteractionPanelPinnedTab) => void
   onIframeMetadataChange: (pageId: string, metadata: { faviconUrl?: string; title?: string }) => void
   onIframeNavigateHistory: (pageId: string, delta: -1 | 1) => void
   onIframeSelectHistory: (pageId: string, index: number) => void
   onIframeUrlChange: (pageId: string, url: string) => void
+  onLayoutChange?: (layout: RouteContainerPanelDockLayout) => void
   onLocateWorkspacePath: (path: string) => void
   onMarkdownPreviewModeChange: (mode: WorkspaceMarkdownPreviewMode) => void
   onMobileDebugPageChange: (
@@ -111,7 +117,9 @@ export interface InteractionPanelDockWorkspaceProps {
   onPanelClose: () => void
   onPanelAction: () => void
   onPinTab: (tab: InteractionPanelTab) => void
+  onPluginTabStateChange: (tabId: string, state: unknown) => void
   onRunCommand: (command: InteractionPanelRunCommand) => void
+  onSelectWorkspaceFilePath: (path: string) => void
   onSessionPageChange: (
     pageId: string,
     updater: (page: InteractionPanelSessionPage) => InteractionPanelSessionPage

@@ -74,11 +74,13 @@ export function PluginViewHost({
   routeId,
   scope,
   surface = 'route',
+  tab,
   viewId
 }: {
   routeId?: string
   scope: string
   surface?: PluginViewSurface
+  tab?: PluginViewContext['tab']
   viewId: string
 }) {
   const { refreshPlugins, registry, snapshot } = usePluginContext()
@@ -128,6 +130,7 @@ export function PluginViewHost({
     },
     routeId,
     scope,
+    ...(tab == null ? {} : { tab }),
     ui: pluginHostComponentReactApi
   }), [
     hostComponentApi,
@@ -142,6 +145,7 @@ export function PluginViewHost({
     snapshot.extensionContributions,
     snapshot.extensionPoints,
     surface,
+    tab,
     themeMode,
     updatePluginOptions
   ])

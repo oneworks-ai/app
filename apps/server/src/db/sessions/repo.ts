@@ -6,7 +6,7 @@ import type { SessionPermissionState } from '@oneworks/utils'
 
 import { buildUpdateStatement } from '../repo.utils'
 import type { SqliteDatabase } from '../sqlite'
-import { normalizeSessionWorkspaceFileState, parseSessionWorkspaceFileState } from './workspace-file-state'
+import { normalizeSessionPanelState, parseSessionPanelState } from './panel-state'
 
 export type SessionRuntimeKind = 'interactive' | 'external'
 
@@ -45,7 +45,7 @@ interface SessionRow {
   effort: string | null
   promptType: string | null
   promptName: string | null
-  workspaceFileState: string | null
+  panelState: string | null
 }
 
 type SessionUpdate = Partial<Omit<Session, 'id' | 'createdAt' | 'messageCount'>>
@@ -100,7 +100,7 @@ const sessionUpdateFields = [
   { key: 'effort' },
   { key: 'promptType' },
   { key: 'promptName' },
-  { key: 'workspaceFileState', toParam: value => JSON.stringify(normalizeSessionWorkspaceFileState(value)) },
+  { key: 'panelState', toParam: value => JSON.stringify(normalizeSessionPanelState(value)) },
   { key: 'messageBranchGroupId' },
   { key: 'messageBranchSourceSessionId' },
   { key: 'messageBranchSourceMessageId' },
@@ -134,7 +134,7 @@ const parsePermissionState = (value: string | null) => {
 }
 
 function mapSessionRow(row: SessionRow): Session {
-  const workspaceFileState = parseSessionWorkspaceFileState(row.workspaceFileState)
+  const panelState = parseSessionPanelState(row.panelState)
   return {
     id: row.id,
     parentSessionId: row.parentSessionId ?? undefined,
@@ -159,7 +159,7 @@ function mapSessionRow(row: SessionRow): Session {
     effort: (row.effort as any) ?? undefined,
     promptType: (row.promptType as any) ?? undefined,
     promptName: row.promptName ?? undefined,
-    ...(workspaceFileState == null ? {} : { workspaceFileState })
+    ...(panelState == null ? {} : { panelState })
   }
 }
 

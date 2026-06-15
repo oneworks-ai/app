@@ -117,7 +117,7 @@ describe('db schema modules', () => {
       'model',
       'adapter',
       'permissionMode',
-      'workspaceFileState'
+      'panelState'
     ]))
     expect(channelColumns.map(column => column.name)).toEqual(expect.arrayContaining([
       'senderId',

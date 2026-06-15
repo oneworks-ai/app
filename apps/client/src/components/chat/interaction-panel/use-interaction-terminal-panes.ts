@@ -12,20 +12,41 @@ import {
   DEFAULT_TERMINAL_ID,
   createTerminalPane,
   getNextTerminalTitle,
+  normalizeTerminalPanes,
   withExplicitTerminalPaneIds,
   withFixedTerminalTitles
 } from '#~/components/chat/terminal/@utils/terminal-panes'
 import type { TerminalPaneConfig, TerminalPaneSurface } from '#~/components/chat/terminal/@utils/terminal-panes'
 import type { TerminalPaneInfo } from '#~/components/chat/terminal/ChatTerminalView'
 
-import { readInteractionTerminalPanes, writeInteractionTerminalPanes } from './interaction-terminal-panes-storage'
+interface InteractionTerminalPanesOptions {
+  activeTerminalId?: string | null
+  initialPanes?: TerminalPaneConfig[]
+}
 
-export function useInteractionTerminalPanes(sessionId: string, t: TFunction) {
-  const [panes, setPanes] = useState<TerminalPaneConfig[]>(() => readInteractionTerminalPanes(sessionId, t))
-  const [activeTerminalId, setActiveTerminalId] = useState(() => panes[0]?.id ?? DEFAULT_TERMINAL_ID)
+const normalizeInitialPanes = (panes: TerminalPaneConfig[] | undefined, t: TFunction) =>
+  withFixedTerminalTitles(normalizeTerminalPanes(panes ?? [], { fallback: false }), t)
+
+const resolveActiveTerminalId = (panes: TerminalPaneConfig[], activeTerminalId?: string | null) => (
+  activeTerminalId != null && panes.some(pane => pane.id === activeTerminalId)
+    ? activeTerminalId
+    : panes[0]?.id ?? DEFAULT_TERMINAL_ID
+)
+
+export function useInteractionTerminalPanes(
+  sessionId: string,
+  t: TFunction,
+  options: InteractionTerminalPanesOptions = {}
+) {
+  const initialPanesKey = JSON.stringify(options.initialPanes ?? [])
+  const [panes, setPanes] = useState<TerminalPaneConfig[]>(() => normalizeInitialPanes(options.initialPanes, t))
+  const [activeTerminalId, setActiveTerminalId] = useState(() =>
+    resolveActiveTerminalId(panes, options.activeTerminalId)
+  )
   const [infoById, setInfoById] = useState<Record<string, TerminalPaneInfo>>({})
   const [runTaskRunningById, setRunTaskRunningById] = useState<Record<string, boolean>>({})
   const panesRef = useRef(panes)
+  const initialPanesKeyRef = useRef(initialPanesKey)
   const sessionIdRef = useRef(sessionId)
   const tRef = useRef(t)
   const pendingRestartByIdRef = useRef(
@@ -46,24 +67,30 @@ export function useInteractionTerminalPanes(sessionId: string, t: TFunction) {
   }, [t])
 
   useEffect(() => {
-    if (sessionIdRef.current === sessionId) {
+    if (sessionIdRef.current === sessionId && initialPanesKeyRef.current === initialPanesKey) {
       return
     }
 
     sessionIdRef.current = sessionId
-    const nextPanes = readInteractionTerminalPanes(sessionId, tRef.current)
+    initialPanesKeyRef.current = initialPanesKey
+    const nextPanes = normalizeInitialPanes(options.initialPanes, tRef.current)
     setPanes(nextPanes)
-    setActiveTerminalId(nextPanes[0]?.id ?? DEFAULT_TERMINAL_ID)
+    setActiveTerminalId(resolveActiveTerminalId(nextPanes, options.activeTerminalId))
     setInfoById({})
     setRunTaskRunningById({})
     pendingRestartByIdRef.current.clear()
     restartHandlersRef.current.clear()
     terminateHandlersRef.current.clear()
-  }, [sessionId])
+  }, [initialPanesKey, options.activeTerminalId, options.initialPanes, sessionId])
 
   useEffect(() => {
-    writeInteractionTerminalPanes(sessionId, panes)
-  }, [panes, sessionId])
+    setActiveTerminalId(current => {
+      if (current === options.activeTerminalId || options.activeTerminalId == null) {
+        return current
+      }
+      return panes.some(pane => pane.id === options.activeTerminalId) ? options.activeTerminalId : current
+    })
+  }, [options.activeTerminalId, panes])
 
   const removeExitedTerminal = useCallback((terminalId: string) => {
     setPanes((current) => {

@@ -50,6 +50,7 @@ export function InteractionPanelDockWorkspace({
   isPanelFullscreen,
   isPanelMinimized,
   isVisible,
+  layout,
   markdownPreviewMode,
   mobileDebugPages,
   pinnedTabs,
@@ -70,11 +71,13 @@ export function InteractionPanelDockWorkspace({
   onActivateTab,
   onCloseTab,
   onCloseTabGroup,
+  onCloseWorkspaceFilePaths,
   onEditPinnedTab,
   onIframeMetadataChange,
   onIframeNavigateHistory,
   onIframeSelectHistory,
   onIframeUrlChange,
+  onLayoutChange,
   onLocateWorkspacePath,
   onMarkdownPreviewModeChange,
   onMobileDebugPageChange,
@@ -85,7 +88,9 @@ export function InteractionPanelDockWorkspace({
   onPanelClose,
   onPanelAction,
   onPinTab,
+  onPluginTabStateChange,
   onRunCommand,
+  onSelectWorkspaceFilePath,
   onSessionPageChange,
   onTogglePanelFullscreen,
   onUnpinTab
@@ -323,6 +328,7 @@ export function InteractionPanelDockWorkspace({
     onAddMenuClick,
     onCloseTab,
     onCloseTabGroup,
+    onCloseWorkspaceFilePaths,
     onEditPinnedTab,
     onIframeMetadataChange,
     onIframeNavigateHistory,
@@ -337,7 +343,9 @@ export function InteractionPanelDockWorkspace({
     onPanelClose,
     onPanelAction,
     onPinTab,
+    onPluginTabStateChange,
     onRunCommand,
+    onSelectWorkspaceFilePath,
     onSessionPageChange,
     onTogglePanelFullscreen,
     onUnpinTab
@@ -358,6 +366,7 @@ export function InteractionPanelDockWorkspace({
         getHeaderActions={getHeaderActions}
         getTabContextMenuItems={getTabContextMenuItems}
         labelMode='responsive'
+        layout={layout}
         minOpenTabs={0}
         openedTabs={tabs.map(tab => tab.id)}
         panelChromeActions={panelChromeActions}
@@ -368,6 +377,7 @@ export function InteractionPanelDockWorkspace({
         onCreateMenuOpenChange={(open) => {
           if (open) void refreshDeviceOptions()
         }}
+        onLayoutChange={onLayoutChange}
         onTabChange={handleTabChange}
         onTabClose={handleTabClose}
       />

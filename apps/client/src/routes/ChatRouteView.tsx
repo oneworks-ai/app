@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
@@ -22,6 +22,49 @@ import { CHAT_ROUTE_SENDER_FOCUS_QUERY_PARAM } from './chat-route-query'
 import type { ChatRouteAgentRoomTranscript } from './chat-route-view-types'
 
 const hiddenHistoryTimelineSessionStorageKey = 'oneworks.chat.hiddenHistoryTimelineSessionIds'
+
+const PanelIndependentChatHistoryView = memo(ChatHistoryView)
+
+const toPanelIndependentSession = (session: Session): Session => {
+  const { panelState: _panelState, ...panelIndependentSession } = session
+  return panelIndependentSession as Session
+}
+
+const getPanelIndependentSessionKey = (session?: Session) => {
+  if (session == null) return ''
+
+  return JSON.stringify(toPanelIndependentSession(session))
+}
+
+const getPanelIndependentSessionsKey = (sessions: Session[]) => JSON.stringify(sessions.map(toPanelIndependentSession))
+
+const usePanelIndependentSession = (session?: Session) => {
+  const key = useMemo(() => getPanelIndependentSessionKey(session), [session])
+  const valueRef = useRef<{ key: string; value?: Session } | null>(null)
+
+  if (valueRef.current?.key !== key) {
+    valueRef.current = {
+      key,
+      value: session == null ? undefined : toPanelIndependentSession(session)
+    }
+  }
+
+  return valueRef.current?.value
+}
+
+const usePanelIndependentSessions = (sessions: Session[]) => {
+  const key = useMemo(() => getPanelIndependentSessionsKey(sessions), [sessions])
+  const valueRef = useRef<{ key: string; value: Session[] } | null>(null)
+
+  if (valueRef.current?.key !== key) {
+    valueRef.current = {
+      key,
+      value: sessions.map(toPanelIndependentSession)
+    }
+  }
+
+  return valueRef.current?.value ?? []
+}
 
 const readHiddenHistoryTimelineSessionIds = () => {
   if (typeof window === 'undefined') {
@@ -99,6 +142,8 @@ export function ChatRouteView({
   const resolvedEnableTimelineView = useSessionTimelineExperiment(isAgentRoomMode ? false : enableTimelineView)
   const canUseTimelineView = isAgentRoomMode ? false : resolvedEnableTimelineView
   const currentSessionId = session?.id
+  const panelIndependentSession = usePanelIndependentSession(session)
+  const panelIndependentSessions = usePanelIndependentSessions(sessions)
   const isHistoryTimelineHidden = currentSessionId == null
     ? false
     : hiddenHistoryTimelineSessionIds.has(currentSessionId)
@@ -191,71 +236,135 @@ export function ChatRouteView({
       return next
     })
   }, [currentSessionId])
+  const handleClearMessages = useCallback(() => setMessages([]), [setMessages])
+  const renderHistoryView = useCallback(({
+    onOpenUrlInAppBrowser,
+    onOpenWorkspaceFile,
+    workspaceRootPath
+  }: {
+    onOpenUrlInAppBrowser: (url: string, title?: string) => void
+    onOpenWorkspaceFile: (path: string) => void
+    workspaceRootPath?: string
+  }) => (
+    <PanelIndependentChatHistoryView
+      isReady={isReady}
+      isAgentRoomSession={isAgentRoomSession}
+      messages={messages}
+      agentRoomSourceMembers={agentRoomSourceMembers}
+      canonicalSessionId={canonicalSessionId ?? currentSessionId}
+      session={panelIndependentSession}
+      sessions={panelIndependentSessions}
+      targetMessageId={targetMessageId}
+      targetToolUseId={targetToolUseId}
+      sessionInfo={sessionInfo}
+      sessionCompactionEvents={sessionCompactionEvents}
+      sessionWorkspaceChanges={sessionWorkspaceChanges}
+      historyStatusNotices={historyStatusNotices}
+      historyCreationProgress={creationProgress}
+      sessionActivityLabel={sessionActivityLabel}
+      queuedMessages={queuedMessages}
+      onRetryConnection={retryConnection}
+      interactionRequest={interactionRequest}
+      onInteractionResponse={handleInteractionResponse}
+      setMessages={setMessages}
+      onClearMessages={handleClearMessages}
+      placeholder={placeholder}
+      newSessionGuide={newSessionGuide}
+      modelMenuGroups={modelMenuGroups}
+      builtinPreviewModelOptions={builtinPreviewModelOptions}
+      modelSearchOptions={modelSearchOptions}
+      recommendedModelOptions={recommendedModelOptions}
+      servicePreviewModelOptions={servicePreviewModelOptions}
+      onToggleRecommendedModel={toggleRecommendedModel}
+      updatingRecommendedModelValue={updatingRecommendedModelValue}
+      selectedModel={selectedModel}
+      modelForQuery={modelForQuery}
+      onModelChange={setSelectedModel}
+      effort={effort}
+      effortOptions={effortOptions}
+      onEffortChange={setEffort}
+      permissionMode={permissionMode}
+      permissionModeOptions={permissionModeOptions}
+      onPermissionModeChange={setPermissionMode}
+      selectedAdapter={selectedAdapter}
+      adapterOptions={adapterOptions}
+      hiddenBuiltinAdapterOptions={hiddenBuiltinAdapterOptions}
+      onAdapterChange={setSelectedAdapter}
+      selectedAccount={selectedAccount}
+      accountOptions={accountOptions}
+      showAccountSelector={showAccountSelector}
+      onAccountChange={setSelectedAccount}
+      senderAutoFocusKey={senderFocusRequestId}
+      modelUnavailable={modelUnavailable}
+      hasAvailableModels={hasAvailableModels}
+      agentRoomTranscript={agentRoomTranscript}
+      contextReferenceRequest={contextReferenceRequest}
+      hideHistoryTimeline={isHistoryTimelineHidden}
+      onOpenUrlInAppBrowser={onOpenUrlInAppBrowser}
+      onOpenWorkspaceFile={onOpenWorkspaceFile}
+      workspaceRootPath={workspaceRootPath}
+    />
+  ), [
+    adapterOptions,
+    agentRoomSourceMembers,
+    agentRoomTranscript,
+    builtinPreviewModelOptions,
+    canonicalSessionId,
+    contextReferenceRequest,
+    creationProgress,
+    currentSessionId,
+    effort,
+    effortOptions,
+    handleClearMessages,
+    handleInteractionResponse,
+    hasAvailableModels,
+    hiddenBuiltinAdapterOptions,
+    historyStatusNotices,
+    interactionRequest,
+    isAgentRoomSession,
+    isHistoryTimelineHidden,
+    isReady,
+    messages,
+    modelForQuery,
+    modelMenuGroups,
+    modelSearchOptions,
+    modelUnavailable,
+    newSessionGuide,
+    panelIndependentSession,
+    panelIndependentSessions,
+    permissionMode,
+    permissionModeOptions,
+    placeholder,
+    queuedMessages,
+    recommendedModelOptions,
+    retryConnection,
+    selectedAccount,
+    selectedAdapter,
+    selectedModel,
+    senderFocusRequestId,
+    servicePreviewModelOptions,
+    sessionActivityLabel,
+    sessionCompactionEvents,
+    sessionInfo,
+    sessionWorkspaceChanges,
+    setEffort,
+    setMessages,
+    setPermissionMode,
+    setSelectedAccount,
+    setSelectedAdapter,
+    setSelectedModel,
+    showAccountSelector,
+    targetMessageId,
+    targetToolUseId,
+    toggleRecommendedModel,
+    updatingRecommendedModelValue
+  ])
   useChatRouteDeepLinkView({ activeView, setActiveView, targetMessageId, targetToolUseId })
   return (
     <ChatRouteShell
       activeView={session?.id != null || isAgentRoomMode ? activeView : 'history'}
       headerActionsOverride={headerActionsOverride}
-      historyView={({ onOpenUrlInAppBrowser, onOpenWorkspaceFile, workspaceRootPath }) => (
-        <ChatHistoryView
-          isReady={isReady}
-          isAgentRoomSession={isAgentRoomSession}
-          messages={messages}
-          agentRoomSourceMembers={agentRoomSourceMembers}
-          canonicalSessionId={canonicalSessionId ?? session?.id}
-          session={session}
-          sessions={sessions}
-          targetMessageId={targetMessageId}
-          targetToolUseId={targetToolUseId}
-          sessionInfo={sessionInfo}
-          sessionCompactionEvents={sessionCompactionEvents}
-          sessionWorkspaceChanges={sessionWorkspaceChanges}
-          historyStatusNotices={historyStatusNotices}
-          historyCreationProgress={creationProgress}
-          sessionActivityLabel={sessionActivityLabel}
-          queuedMessages={queuedMessages}
-          onRetryConnection={retryConnection}
-          interactionRequest={interactionRequest}
-          onInteractionResponse={handleInteractionResponse}
-          setMessages={setMessages}
-          onClearMessages={() => setMessages([])}
-          placeholder={placeholder}
-          newSessionGuide={newSessionGuide}
-          modelMenuGroups={modelMenuGroups}
-          builtinPreviewModelOptions={builtinPreviewModelOptions}
-          modelSearchOptions={modelSearchOptions}
-          recommendedModelOptions={recommendedModelOptions}
-          servicePreviewModelOptions={servicePreviewModelOptions}
-          onToggleRecommendedModel={toggleRecommendedModel}
-          updatingRecommendedModelValue={updatingRecommendedModelValue}
-          selectedModel={selectedModel}
-          modelForQuery={modelForQuery}
-          onModelChange={setSelectedModel}
-          effort={effort}
-          effortOptions={effortOptions}
-          onEffortChange={setEffort}
-          permissionMode={permissionMode}
-          permissionModeOptions={permissionModeOptions}
-          onPermissionModeChange={setPermissionMode}
-          selectedAdapter={selectedAdapter}
-          adapterOptions={adapterOptions}
-          hiddenBuiltinAdapterOptions={hiddenBuiltinAdapterOptions}
-          onAdapterChange={setSelectedAdapter}
-          selectedAccount={selectedAccount}
-          accountOptions={accountOptions}
-          showAccountSelector={showAccountSelector}
-          onAccountChange={setSelectedAccount}
-          senderAutoFocusKey={senderFocusRequestId}
-          modelUnavailable={modelUnavailable}
-          hasAvailableModels={hasAvailableModels}
-          agentRoomTranscript={agentRoomTranscript}
-          contextReferenceRequest={contextReferenceRequest}
-          hideHistoryTimeline={isHistoryTimelineHidden}
-          onOpenUrlInAppBrowser={onOpenUrlInAppBrowser}
-          onOpenWorkspaceFile={onOpenWorkspaceFile}
-          workspaceRootPath={workspaceRootPath}
-        />
-      )}
+      historyView={renderHistoryView}
       agentRoster={agentRoomTranscript == null
         ? undefined
         : {

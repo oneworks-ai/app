@@ -513,6 +513,11 @@ export interface PluginViewContext {
   }
   routeId?: string
   scope: string
+  tab?: {
+    id: string
+    setState: (nextState: unknown) => void
+    state: unknown
+  }
   ui: PluginHostComponentReactApi
 }
 

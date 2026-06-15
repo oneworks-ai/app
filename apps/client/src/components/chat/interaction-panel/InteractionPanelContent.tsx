@@ -5,7 +5,10 @@ import type { TerminalShellKind } from '@oneworks/types'
 
 import type { WorkspaceDrawerViewItem } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
 import type { WorkspaceMarkdownPreviewMode } from '#~/components/chat/workspace-file-editor/workspace-file-editor-language'
-import type { RouteContainerPanelDockActionItem } from '#~/components/layout/RouteContainerPanelTabs'
+import type {
+  RouteContainerPanelDockActionItem,
+  RouteContainerPanelDockLayout
+} from '#~/components/layout/RouteContainerPanelTabs'
 import type { ChatRouteBottomPanelState } from '#~/hooks/chat/use-chat-route-bottom-panel'
 
 import { InteractionPanelDockWorkspace } from './InteractionPanelDockWorkspace'
@@ -36,6 +39,7 @@ export function InteractionPanelContent({
   isPanelFullscreen,
   isPanelMinimized,
   isVisible,
+  layout,
   markdownPreviewMode,
   mobileDebugPages,
   openResourceShortcut,
@@ -45,10 +49,12 @@ export function InteractionPanelContent({
   onActivateTab,
   onCloseTab,
   onCloseTabGroup,
+  onCloseWorkspaceFilePaths,
   onIframeUrlChange,
   onIframeMetadataChange,
   onIframeNavigateHistory,
   onIframeSelectHistory,
+  onLayoutChange,
   onLocateWorkspacePath,
   onMarkdownPreviewModeChange,
   onMobileDebugPageChange,
@@ -75,7 +81,9 @@ export function InteractionPanelContent({
   onNewSession,
   onNewMobileDebugPage,
   onPinTab,
+  onPluginTabStateChange,
   onRunCommand,
+  onSelectWorkspaceFilePath,
   onSessionPageChange,
   onTogglePanelFullscreen,
   onUnpinTab
@@ -91,6 +99,7 @@ export function InteractionPanelContent({
   isPanelFullscreen: boolean
   isPanelMinimized: boolean
   isVisible: boolean
+  layout?: RouteContainerPanelDockLayout | null
   markdownPreviewMode: WorkspaceMarkdownPreviewMode
   mobileDebugPages: InteractionPanelMobileDebugPage[]
   openResourceShortcut?: string
@@ -101,6 +110,7 @@ export function InteractionPanelContent({
   onIframeMetadataChange: (pageId: string, metadata: { faviconUrl?: string; title?: string }) => void
   onIframeNavigateHistory: (pageId: string, delta: -1 | 1) => void
   onIframeSelectHistory: (pageId: string, index: number) => void
+  onLayoutChange?: (layout: RouteContainerPanelDockLayout) => void
   onLocateWorkspacePath: (path: string) => void
   onMarkdownPreviewModeChange: (mode: WorkspaceMarkdownPreviewMode) => void
   onMobileDebugPageChange: (
@@ -131,11 +141,14 @@ export function InteractionPanelContent({
   onActivateTab: (tab: InteractionPanelTab) => void
   onCloseTab: (tab: InteractionPanelTab) => void
   onCloseTabGroup: (tab: InteractionPanelTab, scope: InteractionPanelTabCloseScope) => void
+  onCloseWorkspaceFilePaths: (paths: string[]) => void
   onEditPinnedTab: (tab: InteractionPanelPinnedTab) => void
   onNewSession: () => void
   onNewMobileDebugPage: () => void
   onPinTab: (tab: InteractionPanelTab) => void
+  onPluginTabStateChange: (tabId: string, state: unknown) => void
   onRunCommand: (command: InteractionPanelRunCommand) => void
+  onSelectWorkspaceFilePath: (path: string) => void
   onSessionPageChange: (
     pageId: string,
     updater: (page: InteractionPanelSessionPage) => InteractionPanelSessionPage
@@ -183,6 +196,7 @@ export function InteractionPanelContent({
       isPanelFullscreen={isPanelFullscreen}
       isPanelMinimized={isPanelMinimized}
       isVisible={isVisible}
+      layout={layout}
       markdownPreviewMode={markdownPreviewMode}
       mobileDebugPages={mobileDebugPages}
       openResourceShortcut={openResourceShortcut}
@@ -202,11 +216,13 @@ export function InteractionPanelContent({
       onActivateTab={onActivateTab}
       onCloseTab={onCloseTab}
       onCloseTabGroup={onCloseTabGroup}
+      onCloseWorkspaceFilePaths={onCloseWorkspaceFilePaths}
       onEditPinnedTab={onEditPinnedTab}
       onIframeMetadataChange={onIframeMetadataChange}
       onIframeNavigateHistory={onIframeNavigateHistory}
       onIframeSelectHistory={onIframeSelectHistory}
       onIframeUrlChange={onIframeUrlChange}
+      onLayoutChange={onLayoutChange}
       onLocateWorkspacePath={onLocateWorkspacePath}
       onMarkdownPreviewModeChange={onMarkdownPreviewModeChange}
       onMobileDebugPageChange={onMobileDebugPageChange}
@@ -218,7 +234,9 @@ export function InteractionPanelContent({
       onPanelClose={onPanelClose}
       onPanelAction={onPanelAction}
       onPinTab={onPinTab}
+      onPluginTabStateChange={onPluginTabStateChange}
       onRunCommand={onRunCommand}
+      onSelectWorkspaceFilePath={onSelectWorkspaceFilePath}
       onSessionPageChange={onSessionPageChange}
       onTogglePanelFullscreen={onTogglePanelFullscreen}
       onUnpinTab={onUnpinTab}

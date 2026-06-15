@@ -496,11 +496,7 @@ const buildSessionFromMessages = (
     adapter: input.adapter ?? 'codex',
     permissionMode: input.permissionMode ?? 'acceptEdits',
     effort: input.effort ?? 'medium',
-    ...(input.tags != null ? { tags: input.tags } : {}),
-    workspaceFileState: {
-      isOpen: false,
-      openPaths: []
-    }
+    ...(input.tags != null ? { tags: input.tags } : {})
   }
 }
 
@@ -1709,11 +1705,7 @@ const handleCreateSession = async (init?: RequestInit): Promise<HomepagePreviewR
       ? body.options.adapter
       : 'codex',
     permissionMode: 'acceptEdits',
-    effort: 'medium',
-    workspaceFileState: {
-      isOpen: false,
-      openPaths: []
-    }
+    effort: 'medium'
   }
   store.sessions.set(id, session)
   store.history.set(id, [{ type: 'message', message: userMessage }])

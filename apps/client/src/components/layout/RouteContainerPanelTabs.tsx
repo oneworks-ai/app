@@ -33,6 +33,107 @@ const ROUTE_CONTAINER_PANEL_DOCK_EXTERNAL_TAB_POINTER_DROP_EVENT = 'route-contai
 const ROUTE_CONTAINER_PANEL_DOCK_CONTEXT_MENU_OPEN_EVENT = 'route-container-panel-dock:context-menu-open'
 const ROUTE_CONTAINER_PANEL_DOCK_EXTERNAL_TAB_POINTER_DRAG_THRESHOLD = 12
 const ROUTE_CONTAINER_PANEL_DOCK_SELECTOR = '.route-container-panel-dock'
+const ROUTE_CONTAINER_PANEL_DOCK_LAYOUT_CHANGE_DELAY_MS = 120
+
+const isRouteContainerPanelDockDebugEnabled = () => {
+  try {
+    return new URLSearchParams(window.location?.search ?? '').get('oneworks_debug') === '1'
+  } catch {
+    return false
+  }
+}
+
+const logRouteContainerPanelDockDebug = (message: string, data?: unknown) => {
+  if (!isRouteContainerPanelDockDebugEnabled()) return
+
+  try {
+    const debugGlobal = window as typeof window & {
+      __oneworksDebugEvents?: Array<{ at: number; data?: unknown; message: string; scope: string }>
+    }
+    const events = debugGlobal.__oneworksDebugEvents ?? []
+    events.push({ at: Date.now(), data, message, scope: 'route-panel-dock' })
+    if (events.length > 1000) events.splice(0, events.length - 1000)
+    debugGlobal.__oneworksDebugEvents = events
+  } catch {
+    // Debug buffer should never affect the app.
+  }
+
+  void data
+  void message
+}
+
+const summarizeRouteContainerPanelDockEventTarget = (target: EventTarget | null) => {
+  if (!(target instanceof Element)) return null
+
+  const tabElement = target.closest('[data-route-container-panel-dock-tab-key]')
+  return {
+    className: target.className?.toString?.(),
+    tabKey: tabElement instanceof HTMLElement ? tabElement.dataset.routeContainerPanelDockTabKey : undefined,
+    tagName: target.tagName,
+    text: target.textContent?.trim().replace(/\s+/g, ' ').slice(0, 80)
+  }
+}
+
+const isRouteContainerPanelObjectRecord = (value: unknown): value is Record<string, unknown> =>
+  value != null && typeof value === 'object' && !Array.isArray(value)
+
+const isRouteContainerPanelLayoutActiveStateKey = (key: string) => key.toLowerCase().includes('active')
+
+const normalizeRouteContainerPanelLayoutNodeKey = (
+  value: unknown,
+  siblingTotalSize?: number,
+  options: { ignoreActiveState?: boolean } = {}
+): unknown => {
+  if (Array.isArray(value)) {
+    const totalSize = value.reduce((total, item) => {
+      if (!isRouteContainerPanelObjectRecord(item) || typeof item.size !== 'number') return total
+
+      return total + item.size
+    }, 0)
+
+    return value.map(item =>
+      normalizeRouteContainerPanelLayoutNodeKey(
+        item,
+        totalSize > 0 ? totalSize : undefined,
+        options
+      )
+    )
+  }
+
+  if (!isRouteContainerPanelObjectRecord(value)) return value
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .flatMap(([key, inputValue]): Array<[string, unknown]> => {
+        if (options.ignoreActiveState === true && isRouteContainerPanelLayoutActiveStateKey(key)) return []
+        if (key === 'height' || key === 'width') return []
+        if (key === 'size') {
+          if (typeof inputValue !== 'number' || siblingTotalSize == null || siblingTotalSize <= 0) return []
+
+          return [[
+            'sizeRatio',
+            Math.round((inputValue / siblingTotalSize) * 10000) / 10000
+          ]]
+        }
+
+        return [[key, normalizeRouteContainerPanelLayoutNodeKey(inputValue, undefined, options)]]
+      })
+      .sort(([left], [right]) => left.localeCompare(right))
+  )
+}
+
+const serializeRouteContainerPanelLayoutKey = (value: unknown): string =>
+  JSON.stringify(normalizeRouteContainerPanelLayoutNodeKey(value)) ?? 'undefined'
+
+const serializeRouteContainerPanelLayoutStructureKey = (value: unknown): string =>
+  JSON.stringify(normalizeRouteContainerPanelLayoutNodeKey(value, undefined, {
+    ignoreActiveState: true
+  })) ?? 'undefined'
+
+export const areRouteContainerPanelDockLayoutsEquivalent = (
+  left: RouteContainerPanelDockLayout | null | undefined,
+  right: RouteContainerPanelDockLayout | null | undefined
+) => serializeRouteContainerPanelLayoutKey(left ?? null) === serializeRouteContainerPanelLayoutKey(right ?? null)
 
 /**
  * Generic route-panel tab descriptor.
@@ -220,6 +321,7 @@ export interface RouteContainerPanelDockActionItem {
 }
 
 type RouteContainerPanelDockContextMenuItem = BuiltInContextMenuItem | ReactContextMenuItemConfig
+export type RouteContainerPanelDockLayout = SerializedDockview
 
 /**
  * Full route-panel Dockview workspace.
@@ -259,6 +361,7 @@ export interface RouteContainerPanelDockProps<TabKey extends string> {
   ) => RouteContainerPanelDockContextMenuItem[]
   headerActions?: RouteContainerPanelDockActionItem[]
   labelMode?: 'icon-only' | 'responsive'
+  layout?: RouteContainerPanelDockLayout | null
   minOpenTabs?: number
   openedTabs: readonly TabKey[]
   /**
@@ -276,6 +379,7 @@ export interface RouteContainerPanelDockProps<TabKey extends string> {
   tabs: Array<RouteContainerPanelDockTabItem<TabKey>>
   onCreateMenuClick?: MenuProps['onClick']
   onCreateMenuOpenChange?: (open: boolean) => void
+  onLayoutChange?: (layout: RouteContainerPanelDockLayout) => void
   onTabChange: (tabKey: TabKey | null, openedTabs: TabKey[]) => void
   onTabClose?: (tabKey: TabKey) => void
 }
@@ -385,6 +489,23 @@ const uniqueKnownValues = <Value extends string>(knownValues: readonly Value[], 
   return result
 }
 
+const normalizeRouteContainerPanelDockLayout = (
+  value: unknown,
+  tabs: Array<RouteContainerPanelDockTabItem<string>>
+): SerializedDockview | null => {
+  const tabKeys = new Set(tabs.map(tab => tab.key))
+  if (value == null || typeof value !== 'object' || (value as SerializedDockview).panels == null) {
+    return null
+  }
+  if (typeof (value as SerializedDockview).panels !== 'object') {
+    return null
+  }
+
+  return Object.keys((value as SerializedDockview).panels).every(panelId => tabKeys.has(panelId))
+    ? value as SerializedDockview
+    : null
+}
+
 const readRouteContainerPanelDockLayout = (
   storageKey: string | undefined,
   tabs: Array<RouteContainerPanelDockTabItem<string>>
@@ -392,15 +513,7 @@ const readRouteContainerPanelDockLayout = (
   if (storageKey == null || typeof window === 'undefined') return null
 
   try {
-    const value = JSON.parse(window.localStorage.getItem(storageKey) ?? 'null')
-    const tabKeys = new Set(tabs.map(tab => tab.key))
-    if (value == null || typeof value !== 'object' || value.panels == null || typeof value.panels !== 'object') {
-      return null
-    }
-
-    return Object.keys(value.panels).every(panelId => tabKeys.has(panelId))
-      ? value as SerializedDockview
-      : null
+    return normalizeRouteContainerPanelDockLayout(JSON.parse(window.localStorage.getItem(storageKey) ?? 'null'), tabs)
   } catch {
     return null
   }
@@ -654,6 +767,32 @@ function RouteContainerPanelDockTab({ api, containerApi, params }: IDockviewPane
   const isClosable = isTabClosable(tab.key, groupState.tabCount)
   const tabCloseLabel = closeLabel?.(title) ?? title
   const canDragExternalTab = externalTabDrag?.draggable === true && tab.disabled !== true
+  const activateTab = (source: string) => {
+    logRouteContainerPanelDockDebug('tab activate', {
+      activeTab,
+      apiGroupActivePanelId: api.group.activePanel?.id,
+      apiIsActive: api.isActive,
+      apiIsVisible: api.isVisible,
+      groupTabCount: groupState.tabCount,
+      openedTabs,
+      panelKey,
+      source,
+      tabKey: tab.key
+    })
+    selectTab(tab.key)
+    api.setActive()
+    window.setTimeout(() => {
+      logRouteContainerPanelDockDebug('tab activate after tick', {
+        activeTab,
+        apiGroupActivePanelId: api.group.activePanel?.id,
+        apiIsActive: api.isActive,
+        apiIsVisible: api.isVisible,
+        panelKey,
+        source,
+        tabKey: tab.key
+      })
+    }, 0)
+  }
   const handleContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (!hasContextMenu) return
 
@@ -702,8 +841,7 @@ function RouteContainerPanelDockTab({ api, containerApi, params }: IDockviewPane
     if (!canDragExternalTab || externalTabDrag == null || event.button !== 0) return
 
     event.stopPropagation()
-    selectTab(tab.key)
-    api.setActive()
+    activateTab('external-pointerdown')
     const pointerId = event.pointerId
     const startX = event.clientX
     const startY = event.clientY
@@ -795,6 +933,27 @@ function RouteContainerPanelDockTab({ api, containerApi, params }: IDockviewPane
     window.addEventListener('pointerup', handlePointerUp)
     window.addEventListener('pointercancel', handlePointerCancel)
   }
+  const handleTabPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    const target = event.target
+    const isCloseTarget = target instanceof Element &&
+      target.closest('.route-container-panel-dock-tab__close') != null
+    logRouteContainerPanelDockDebug('tab pointerdown capture', {
+      button: event.button,
+      canDragExternalTab,
+      isCloseTarget,
+      panelKey,
+      tabKey: tab.key,
+      target: summarizeRouteContainerPanelDockEventTarget(target)
+    })
+    if (
+      isCloseTarget
+    ) {
+      return
+    }
+    if (canDragExternalTab) {
+      handleExternalPointerDown(event)
+    }
+  }
 
   return (
     <div
@@ -804,13 +963,10 @@ function RouteContainerPanelDockTab({ api, containerApi, params }: IDockviewPane
         canDragExternalTab ? 'is-external-draggable' : '',
         isExternalDragging ? 'is-external-dragging' : ''
       ].filter(Boolean).join(' ')}
+      data-route-container-panel-dock-tab-key={tab.key}
       title={title}
-      onClick={() => {
-        selectTab(tab.key)
-        api.setActive()
-      }}
       onContextMenu={hasContextMenu ? handleContextMenu : undefined}
-      onPointerDown={canDragExternalTab ? handleExternalPointerDown : undefined}
+      onPointerDownCapture={handleTabPointerDown}
     >
       <span className='route-container-panel-dock-tab__icon'>
         {tab.iconNode ??
@@ -1262,6 +1418,7 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
   getTabContextMenuItems,
   headerActions = [],
   labelMode = 'icon-only',
+  layout,
   minOpenTabs = 0,
   openedTabs,
   panelChromeActions,
@@ -1270,6 +1427,7 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
   tabs,
   onCreateMenuClick,
   onCreateMenuOpenChange,
+  onLayoutChange,
   onTabChange,
   onTabClose
 }: RouteContainerPanelDockProps<TabKey>) {
@@ -1279,6 +1437,11 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
   const disposablesRef = useRef<Array<{ dispose: () => void }>>([])
   const isSyncingRef = useRef(false)
   const syncReleaseTimerRef = useRef<number | null>(null)
+  const lastAppliedLayoutKeyRef = useRef<string | null>(null)
+  const lastReplayedLayoutStructureKeyRef = useRef<string | null>(null)
+  const pendingLayoutChangeRef = useRef<RouteContainerPanelDockLayout | null>(null)
+  const layoutChangeTimerRef = useRef<number | null>(null)
+  const onLayoutChangeRef = useRef(onLayoutChange)
   const allTabs = useMemo(() => tabs.map(tab => tab as unknown as RouteContainerPanelDockTabItem<string>), [tabs])
   const tabKeys = useMemo(() => tabs.map(tab => tab.key), [tabs])
   const normalizedOpenedTabs = useMemo(() => uniqueKnownValues(tabKeys, openedTabs), [openedTabs, tabKeys])
@@ -1288,6 +1451,22 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
     return (closable ? tabs.filter(tab => openedTabSet.has(tab.key) || tab.key === effectiveActiveTab) : tabs)
       .map(tab => tab as unknown as RouteContainerPanelDockTabItem<string>)
   }, [closable, effectiveActiveTab, normalizedOpenedTabs, tabs])
+  const visibleTabKeysKey = useMemo(
+    () => visibleTabs.map(tab => tab.key).join('\u0000'),
+    [visibleTabs]
+  )
+  const controlledLayout = useMemo(
+    () => normalizeRouteContainerPanelDockLayout(layout, visibleTabs),
+    [layout, visibleTabs]
+  )
+  const controlledLayoutKey = useMemo(
+    () => serializeRouteContainerPanelLayoutKey(controlledLayout ?? null),
+    [controlledLayout]
+  )
+  const controlledLayoutStructureKey = useMemo(
+    () => serializeRouteContainerPanelLayoutStructureKey(controlledLayout ?? null),
+    [controlledLayout]
+  )
   const tabByKey = useMemo(() => Object.fromEntries(visibleTabs.map(tab => [tab.key, tab])), [visibleTabs])
   const resolvedPanelChromeActions = useMemo(
     () => buildRouteContainerPanelDockChromeActions(panelChromeActions),
@@ -1305,16 +1484,80 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
     visibleTabsRef.current = visibleTabs
   }, [effectiveActiveTab, normalizedOpenedTabs, visibleTabs])
 
+  useEffect(() => {
+    onLayoutChangeRef.current = onLayoutChange
+  }, [onLayoutChange])
+
   const disposeDockSubscriptions = useCallback(() => {
     disposablesRef.current.forEach(disposable => disposable.dispose())
     disposablesRef.current = []
   }, [])
 
+  const flushLayoutChange = useCallback(() => {
+    const nextLayout = pendingLayoutChangeRef.current
+    pendingLayoutChangeRef.current = null
+    if (nextLayout == null) return
+
+    onLayoutChangeRef.current?.(nextLayout)
+  }, [])
+
+  const scheduleLayoutChange = useCallback((nextLayout: RouteContainerPanelDockLayout) => {
+    if (onLayoutChangeRef.current == null) return
+
+    pendingLayoutChangeRef.current = nextLayout
+    logRouteContainerPanelDockDebug('schedule layout change', {
+      layoutKeyLength: serializeRouteContainerPanelLayoutKey(nextLayout).length,
+      panelKey,
+      visibleTabKeys: visibleTabsRef.current.map(tab => tab.key)
+    })
+    if (layoutChangeTimerRef.current != null) {
+      window.clearTimeout(layoutChangeTimerRef.current)
+      logRouteContainerPanelDockDebug('reschedule layout change', { panelKey })
+    }
+    layoutChangeTimerRef.current = window.setTimeout(() => {
+      layoutChangeTimerRef.current = null
+      flushLayoutChange()
+    }, ROUTE_CONTAINER_PANEL_DOCK_LAYOUT_CHANGE_DELAY_MS)
+  }, [flushLayoutChange])
+
   const persistLayout = useCallback(() => {
     const api = apiRef.current
-    if (api == null || isSyncingRef.current) return
-    writeRouteContainerPanelDockLayout(storageKey, api.toJSON())
-  }, [storageKey])
+    if (api == null || isSyncingRef.current) {
+      logRouteContainerPanelDockDebug('persist layout skipped', {
+        hasApi: api != null,
+        isSyncing: isSyncingRef.current,
+        panelKey
+      })
+      return
+    }
+    const nextLayout = normalizeRouteContainerPanelDockLayout(api.toJSON(), visibleTabsRef.current)
+    if (nextLayout == null) {
+      logRouteContainerPanelDockDebug('persist layout skipped', {
+        panelKey,
+        reason: 'empty-layout'
+      })
+      return
+    }
+
+    const nextLayoutKey = serializeRouteContainerPanelLayoutKey(nextLayout)
+    if (lastAppliedLayoutKeyRef.current === nextLayoutKey) {
+      logRouteContainerPanelDockDebug('persist layout skipped', {
+        panelKey,
+        reason: 'same-layout',
+        visibleTabKeys: visibleTabsRef.current.map(tab => tab.key)
+      })
+      return
+    }
+
+    lastAppliedLayoutKeyRef.current = nextLayoutKey
+    logRouteContainerPanelDockDebug('persist layout', {
+      layoutKeyLength: nextLayoutKey.length,
+      panelKey,
+      visibleTabKeys: visibleTabsRef.current.map(tab => tab.key)
+    })
+    writeRouteContainerPanelDockLayout(storageKey, nextLayout)
+    scheduleLayoutChange(nextLayout)
+  }, [panelKey, scheduleLayoutChange, storageKey])
   const layoutDockToRootSize = useCallback(() => {
     const api = apiRef.current
     const root = dockRootRef.current
@@ -1479,6 +1722,20 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
 
   const selectTab = useCallback((tabKey: string) => {
     const typedTabKey = tabKey as TabKey
+    if (activeTabRef.current === typedTabKey && normalizedOpenedTabsRef.current.includes(typedTabKey)) {
+      logRouteContainerPanelDockDebug('select tab ignored', {
+        reason: 'already-active-opened',
+        tabKey: typedTabKey
+      })
+      return
+    }
+    logRouteContainerPanelDockDebug('select tab', {
+      currentActiveTab: activeTabRef.current,
+      nextActiveTab: typedTabKey,
+      openedTabs: normalizedOpenedTabsRef.current,
+      tabKeys,
+      visibleTabKeys: visibleTabsRef.current.map(tab => tab.key)
+    })
     activeTabRef.current = typedTabKey
     onTabChange(typedTabKey, uniqueKnownValues(tabKeys, [...normalizedOpenedTabsRef.current, typedTabKey]))
   }, [onTabChange, tabKeys])
@@ -1494,6 +1751,56 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
     onTabClose?.(typedTabKey)
     onTabChange(nextActiveTab, nextOpenedTabs)
   }, [onTabChange, onTabClose])
+
+  useEffect(() => {
+    const root = dockRootRef.current
+    if (root == null) return undefined
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return
+
+      const target = event.target
+      if (!(target instanceof Element)) return
+      if (target.closest('.route-container-panel-dock-tab__close') != null) return
+
+      const tabElement = target.closest('[data-route-container-panel-dock-tab-key]')
+      if (!(tabElement instanceof HTMLElement) || !root.contains(tabElement)) return
+
+      const tabKey = tabElement.dataset.routeContainerPanelDockTabKey
+      if (tabKey == null || !visibleTabsRef.current.some(tab => tab.key === tabKey)) return
+
+      const isAlreadyActive = activeTabRef.current === tabKey && apiRef.current?.activePanel?.id === tabKey
+      if (isAlreadyActive) {
+        logRouteContainerPanelDockDebug('root pointerdown ignored', {
+          reason: 'already-active',
+          tabKey
+        })
+        return
+      }
+
+      logRouteContainerPanelDockDebug('root pointerdown capture', {
+        activeTab: activeTabRef.current,
+        apiActivePanelId: apiRef.current?.activePanel?.id,
+        target: summarizeRouteContainerPanelDockEventTarget(target),
+        tabKey,
+        visibleTabKeys: visibleTabsRef.current.map(tab => tab.key)
+      })
+      selectTab(tabKey)
+      apiRef.current?.getPanel(tabKey)?.api.setActive()
+      window.setTimeout(() => {
+        logRouteContainerPanelDockDebug('root pointerdown after tick', {
+          activeTab: activeTabRef.current,
+          apiActivePanelId: apiRef.current?.activePanel?.id,
+          tabKey
+        })
+      }, 0)
+    }
+
+    root.addEventListener('pointerdown', handlePointerDown, true)
+    return () => {
+      root.removeEventListener('pointerdown', handlePointerDown, true)
+    }
+  }, [selectTab])
 
   const isTabClosable = useCallback(
     (tabKey: string, localTabCount?: number) => {
@@ -1608,34 +1915,60 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
   const handleReady = useCallback((event: Dockview.DockviewReadyEvent) => {
     apiRef.current = event.api
     disposeDockSubscriptions()
+    logRouteContainerPanelDockDebug('ready begin sync', {
+      activeTab: activeTabRef.current,
+      hasControlledLayout: controlledLayout != null,
+      panelKey,
+      visibleTabKeys: visibleTabsRef.current.map(tab => tab.key)
+    })
     beginDockSync()
     try {
-      const savedLayout = readRouteContainerPanelDockLayout(storageKey, visibleTabsRef.current)
+      const savedLayout = controlledLayout ?? readRouteContainerPanelDockLayout(storageKey, visibleTabsRef.current)
       if (savedLayout != null) event.api.fromJSON(savedLayout, { reuseExistingPanels: true })
+      lastAppliedLayoutKeyRef.current = serializeRouteContainerPanelLayoutKey(savedLayout ?? null)
+      lastReplayedLayoutStructureKeyRef.current = serializeRouteContainerPanelLayoutStructureKey(savedLayout ?? null)
+      if (controlledLayout == null && savedLayout != null) {
+        onLayoutChange?.(savedLayout)
+      }
       syncRouteContainerPanelDockPanels(event.api, visibleTabsRef.current, activeTabRef.current)
     } finally {
       endDockSync(persistLayout)
     }
+    logRouteContainerPanelDockDebug('ready end sync', {
+      activePanelId: event.api.activePanel?.id,
+      panelKey,
+      panelIds: event.api.panels.map(panel => panel.id)
+    })
     window.requestAnimationFrame(layoutDockToRootSize)
 
     disposablesRef.current = [
       event.api.onDidActivePanelChange((panel) => {
+        logRouteContainerPanelDockDebug('dock active panel change', {
+          activeTab: activeTabRef.current,
+          isSyncing: isSyncingRef.current,
+          panelId: panel?.id,
+          visibleTabKeys: visibleTabsRef.current.map(tab => tab.key)
+        })
         if (isSyncingRef.current || panel == null) return
         const panelTabKey = panel.id as TabKey
-        if (!visibleTabsRef.current.some(tab => tab.key === panelTabKey)) return
-
-        const controlledActiveTab = activeTabRef.current
-        if (controlledActiveTab == null || controlledActiveTab === panelTabKey) return
-
-        const controlledPanel = event.api.getPanel(controlledActiveTab)
-        if (controlledPanel == null) return
-
-        beginDockSync()
-        try {
-          controlledPanel.api.setActive()
-        } finally {
-          endDockSync(persistLayout)
+        if (!visibleTabsRef.current.some(tab => tab.key === panelTabKey)) {
+          logRouteContainerPanelDockDebug('dock active panel ignored', {
+            panelId: panel.id,
+            reason: 'not-visible',
+            visibleTabKeys: visibleTabsRef.current.map(tab => tab.key)
+          })
+          return
         }
+        if (activeTabRef.current === panelTabKey) {
+          logRouteContainerPanelDockDebug('dock active panel ignored', {
+            panelId: panel.id,
+            reason: 'already-active'
+          })
+          return
+        }
+
+        selectTab(panelTabKey)
+        persistLayout()
       }),
       event.api.onDidRemovePanel((panel) => {
         if (isSyncingRef.current || !isTabClosable(panel.id)) return
@@ -1646,10 +1979,13 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
   }, [
     beginDockSync,
     closeTab,
+    controlledLayout,
     disposeDockSubscriptions,
     endDockSync,
     isTabClosable,
     layoutDockToRootSize,
+    onLayoutChange,
+    panelKey,
     persistLayout,
     selectTab,
     storageKey
@@ -1684,6 +2020,46 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
     return [...customItems, ...defaultItems]
   }, [closeLabel, closeTab, getTabContextMenuItems, isTabClosable, selectTab, tabByKey])
 
+  useEffect(() => {
+    const api = apiRef.current
+    if (api == null || controlledLayout == null) return
+
+    if (lastReplayedLayoutStructureKeyRef.current === controlledLayoutStructureKey) {
+      lastAppliedLayoutKeyRef.current = controlledLayoutKey
+      return
+    }
+
+    beginDockSync()
+    logRouteContainerPanelDockDebug('controlled layout replay begin', {
+      controlledLayoutKeyLength: controlledLayoutKey.length,
+      controlledLayoutStructureKeyLength: controlledLayoutStructureKey.length,
+      panelKey,
+      visibleTabKeys: visibleTabsRef.current.map(tab => tab.key)
+    })
+    try {
+      api.fromJSON(controlledLayout, { reuseExistingPanels: true })
+      syncRouteContainerPanelDockPanels(api, visibleTabsRef.current, activeTabRef.current)
+      lastAppliedLayoutKeyRef.current = controlledLayoutKey
+      lastReplayedLayoutStructureKeyRef.current = controlledLayoutStructureKey
+    } finally {
+      endDockSync()
+    }
+    logRouteContainerPanelDockDebug('controlled layout replay end', {
+      activePanelId: api.activePanel?.id,
+      panelKey,
+      panelIds: api.panels.map(panel => panel.id)
+    })
+    window.requestAnimationFrame(layoutDockToRootSize)
+  }, [
+    beginDockSync,
+    controlledLayout,
+    controlledLayoutKey,
+    controlledLayoutStructureKey,
+    endDockSync,
+    layoutDockToRootSize,
+    panelKey
+  ])
+
   const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac')
   const contextMenuItems = useMemo(() =>
     contextMenuState == null
@@ -1702,13 +2078,24 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
     const api = apiRef.current
     if (api == null || visibleTabs.length === 0) return
 
+    const nextVisibleTabs = visibleTabsRef.current
     beginDockSync()
+    logRouteContainerPanelDockDebug('visible tabs sync begin', {
+      activeTab: effectiveActiveTab,
+      panelKey,
+      visibleTabKeys: nextVisibleTabs.map(tab => tab.key)
+    })
     try {
-      syncRouteContainerPanelDockPanels(api, visibleTabs, effectiveActiveTab)
+      syncRouteContainerPanelDockPanels(api, nextVisibleTabs, effectiveActiveTab)
     } finally {
-      endDockSync(persistLayout)
+      endDockSync()
     }
-  }, [beginDockSync, effectiveActiveTab, endDockSync, persistLayout, visibleTabs])
+    logRouteContainerPanelDockDebug('visible tabs sync end', {
+      activePanelId: api.activePanel?.id,
+      panelKey,
+      panelIds: api.panels.map(panel => panel.id)
+    })
+  }, [beginDockSync, effectiveActiveTab, endDockSync, panelKey, visibleTabKeysKey, visibleTabs.length])
 
   useEffect(() => {
     if (visibleTabs.length > 0) return
@@ -1752,6 +2139,9 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
   }, [])
 
   useEffect(() => () => {
+    if (layoutChangeTimerRef.current != null) {
+      window.clearTimeout(layoutChangeTimerRef.current)
+    }
     if (syncReleaseTimerRef.current != null) {
       window.clearTimeout(syncReleaseTimerRef.current)
     }

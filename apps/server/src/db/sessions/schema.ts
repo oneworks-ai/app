@@ -30,7 +30,7 @@ export const sessionsSchemaModule: SchemaModule = {
         effort TEXT,
         promptType TEXT,
         promptName TEXT,
-        workspaceFileState TEXT
+        panelState TEXT
       );
 
       CREATE TABLE IF NOT EXISTS messages (
@@ -92,7 +92,7 @@ export const sessionsSchemaModule: SchemaModule = {
     ensureColumn('sessions', 'effort', 'TEXT')
     ensureColumn('sessions', 'promptType', 'TEXT')
     ensureColumn('sessions', 'promptName', 'TEXT')
-    ensureColumn('sessions', 'workspaceFileState', 'TEXT')
+    ensureColumn('sessions', 'panelState', 'TEXT')
     ensureColumn('messages', 'eventKey', 'TEXT')
     exec(`
       CREATE INDEX IF NOT EXISTS idx_messages_session_eventKey ON messages(sessionId, eventKey);

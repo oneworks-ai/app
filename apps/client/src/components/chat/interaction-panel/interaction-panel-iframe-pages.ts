@@ -1,6 +1,5 @@
 import type { InteractionPanelIframePage } from './InteractionPanelIframeView'
 
-const buildIframeStorageKey = (sessionId: string) => `chatInteractionIframePages:${sessionId}`
 const iframePageDevtoolsVariants = new Set<InteractionPanelIframePage['variant']>([
   'mobile-debug-devtools'
 ])
@@ -71,7 +70,7 @@ export const createIframePage = (
   ...(options.variant == null ? {} : { variant: options.variant })
 })
 
-const normalizeIframePage = (page: InteractionPanelIframePage): InteractionPanelIframePage => {
+export const normalizeIframePage = (page: InteractionPanelIframePage): InteractionPanelIframePage => {
   const history = Array.isArray(page.history) ? page.history.filter(url => typeof url === 'string') : undefined
   const historyIndex = history == null || history.length === 0
     ? undefined
@@ -83,35 +82,6 @@ const normalizeIframePage = (page: InteractionPanelIframePage): InteractionPanel
     ...(typeof page.faviconUrl === 'string' && page.faviconUrl !== '' ? { faviconUrl: page.faviconUrl } : {}),
     ...(history == null || historyIndex == null ? {} : { history, historyIndex }),
     ...(variant == null ? {} : { variant })
-  }
-}
-
-export const readIframePages = (sessionId: string): InteractionPanelIframePage[] => {
-  if (typeof window === 'undefined') return []
-  try {
-    const rawValue = window.localStorage.getItem(buildIframeStorageKey(sessionId))
-    const parsedValue = rawValue == null ? [] : JSON.parse(rawValue)
-    if (!Array.isArray(parsedValue)) return []
-    return parsedValue
-      .filter((item): item is InteractionPanelIframePage => (
-        item != null &&
-        typeof item === 'object' &&
-        typeof item.id === 'string' &&
-        typeof item.title === 'string' &&
-        typeof item.url === 'string'
-      ))
-      .map(normalizeIframePage)
-  } catch {
-    return []
-  }
-}
-
-export const writeIframePages = (sessionId: string, pages: InteractionPanelIframePage[]) => {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(buildIframeStorageKey(sessionId), JSON.stringify(pages))
-  } catch {
-    // Persisting iframe pages is best-effort only.
   }
 }
 
