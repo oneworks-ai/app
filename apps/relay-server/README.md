@@ -18,6 +18,7 @@ Environment variables:
 - `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`: optional encryption secret for user-private device metadata; production should set a long random value
 - `ONEWORKS_RELAY_ALLOW_ORIGIN`: CORS allow origin, default `*`
 - `ONEWORKS_RELAY_PUBLIC_URL`: public base URL used for OAuth callback URLs
+- `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD`: default `/login` method, default `password`; supported values are `password`, `passkey`, and `verification_code`. The browser remembers the last selected method when local storage is available.
 - `ONEWORKS_RELAY_DEVICE_ONLINE_TTL_SECONDS`: device online freshness window, default `60`
 - `ONEWORKS_RELAY_LOG_LEVEL`: pino log level for relay trace logs, default `info`
 - `ONEWORKS_RELAY_RATE_LIMIT_ENABLED`: set to `0`, `false`, `no`, or `off` to disable built-in sensitive-route rate limits
@@ -43,6 +44,7 @@ Environment variables:
 - `ONEWORKS_RELAY_EMAIL_DISPOSABLE_BLOCKLIST_ENABLED`: set to `0`, `false`, `no`, or `off` to disable the built-in high-confidence disposable domain blocklist
 - `ONEWORKS_RELAY_PASSKEY_ENABLED`: set to `0`, `false`, `no`, or `off` to disable passkey login and registration. Passkey support is enabled by default.
 - `ONEWORKS_RELAY_REGISTRATION_MODE`: passkey self-registration policy, default `invite_required`. Use `email_verified` to allow registration after email-code verification without an invite, or `admin_created_only` to disable new account self-registration while still allowing existing users to bind passkeys with email verification.
+- `ONEWORKS_RELAY_PASSKEY_EMAIL_VERIFICATION_REQUIRED`: set to `0`, `false`, `no`, or `off` to let new passkey self-registrations skip the email-code confirmation step. It defaults to required. Existing users must still verify email before adding a passkey.
 - `ONEWORKS_RELAY_PASSKEY_RP_NAME`: WebAuthn relying party display name, default `One Works`.
 - `ONEWORKS_RELAY_PASSKEY_RP_ID`: optional WebAuthn relying party id. Leave empty for the hostname from the public origin; set it when the service is behind a proxy or custom domain and the browser origin should bind to a parent domain.
 - `ONEWORKS_RELAY_PASSKEY_ORIGIN`: optional expected browser origin for passkey ceremonies. Defaults to `ONEWORKS_RELAY_PUBLIC_URL` origin or the request origin.
@@ -87,9 +89,27 @@ For a managed provider, use the Redirect URI shown in `/admin`. With the default
 
 The Google OAuth client must be a Web application client, and the redirect URI registered in Google Cloud must exactly match the URI sent by Relay.
 
+## GitHub SSO
+
+GitHub sign-in can be enabled with `ONEWORKS_RELAY_GITHUB_CLIENT_ID` and `ONEWORKS_RELAY_GITHUB_CLIENT_SECRET`. Use either a GitHub OAuth App or a GitHub App with user authorization configured; Relay login only needs user identity and verified primary email access, not repository permissions.
+
+Add this callback URL to the GitHub app/client:
+
+```text
+<ONEWORKS_RELAY_PUBLIC_URL or relay origin>/api/auth/oauth/github/callback
+```
+
+Use a product-facing app name such as `OneWorks Login` or your own brand. If one GitHub app/client is shared by local, dev, and production, every callback URL added to it becomes part of that app's trust surface; use separate apps/clients when environments need separate secrets, audiences, or callback slots.
+
 ## Passkey login
 
-The `/login` page supports passkey sign-in and passkey account creation on the same origin as the Relay Server. Passkey registration always requires a verified email code from `POST /api/auth/email-verification/send`. With the default `ONEWORKS_RELAY_REGISTRATION_MODE=invite_required`, a new user must also enter a valid invite code; with `email_verified`, a verified email can self-register without an invite; with `admin_created_only`, only existing Relay users can bind a passkey after email verification.
+The `/login` page supports password, passkey, and email verification code sign-in. `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD` chooses the first method shown, and the browser stores the last selected method for the next visit. Email verification code sign-in uses `POST /api/auth/email-verification/send` with `purpose=login`, then `POST /api/auth/email-code-login`; it only signs in existing enabled users.
+
+Passkey sign-in and passkey account creation run on the same origin as the Relay Server. The login page first asks only for email or account name. If the account already has a passkey, Relay starts WebAuthn authentication. If no passkey is available and registration is allowed, the page asks for the extra fields required by policy: email verification code when `ONEWORKS_RELAY_PASSKEY_EMAIL_VERIFICATION_REQUIRED` is enabled and invite code when `ONEWORKS_RELAY_REGISTRATION_MODE=invite_required`. If neither field is required for a new user, registration can go straight into browser passkey creation.
+
+Passkey registration requires a verified email code by default. Set `ONEWORKS_RELAY_PASSKEY_EMAIL_VERIFICATION_REQUIRED=off` only when the deployment intentionally allows new passkey self-registration without email confirmation; existing users must still verify email before adding a new passkey. With the default `ONEWORKS_RELAY_REGISTRATION_MODE=invite_required`, a new user must also enter a valid invite code; with `email_verified`, a verified email can self-register without an invite; with `admin_created_only`, only existing Relay users can bind passkeys after email verification.
+
+Relay does not treat `users.email` as the global account key. `users.email` is a contact address; login ownership is stored in auth identities. SSO users are keyed by `(provider, providerUserId)`, so the same verified email from Google and GitHub creates separate Relay users. Email-code login is limited to `email_code` identities and cannot sign in SSO-only users that merely share the same email. `loginId` is the user-visible unique account name and can be changed after login.
 
 The passkey API surface is:
 
@@ -97,6 +117,7 @@ The passkey API surface is:
 - `POST /api/auth/passkey/register/verify`: verify the authenticator response, create or update the Relay user, store the public credential, consume the invite when present, and issue a Relay session token.
 - `POST /api/auth/passkey/login/options`: create WebAuthn authentication options for an existing user with passkeys.
 - `POST /api/auth/passkey/login/verify`: verify the authenticator response, update credential counter metadata, and issue a Relay session token.
+- `POST /api/auth/email-code-login`: verify a `purpose=login` email code for an existing enabled user and issue a Relay session token.
 
 For production, serve `/login` over HTTPS and set `ONEWORKS_RELAY_PUBLIC_URL`, `ONEWORKS_RELAY_ALLOW_ORIGIN`, and, when needed, `ONEWORKS_RELAY_PASSKEY_ORIGIN` / `ONEWORKS_RELAY_PASSKEY_RP_ID` to the final user-facing custom domain. Passkeys are origin-bound; changing the public domain after users enroll credentials can make existing credentials unusable on the new domain.
 
@@ -105,8 +126,8 @@ For production, serve `/login` over HTTPS and set `ONEWORKS_RELAY_PUBLIC_URL`, `
 Admin APIs require `Authorization: Bearer <token>`. The token can be the deployment-level `ONEWORKS_RELAY_ADMIN_TOKEN` or a Relay login session token whose user role has admin capabilities (`owner` or `admin`). If the admin token is intentionally empty, admin endpoints remain open.
 
 - `GET /api/admin/users`: list users with stable, redacted user records, including `deviceCount` and `maxDevices`.
-- `POST /api/admin/users`: create a user. Emails are required and duplicate emails are rejected case-insensitively.
-- `PATCH /api/admin/users`: update a user by `id` or `email`; supports `email`, `name`, `role`, `maxDevices`, and boolean `disabled`.
+- `POST /api/admin/users`: create a non-SSO user. Email is required and must not conflict with another `email_code` login identity.
+- `PATCH /api/admin/users`: update a user by `id` or a legacy email lookup; prefer `id` because email is not a global account key. Supports `email`, `name`, `role`, `maxDevices`, and boolean `disabled`.
 - `GET /api/admin/invites`: list invite records.
 - `POST /api/admin/invites`: create an invite with `role` and `maxUses`; duplicate codes are rejected.
 - `PATCH /api/admin/invites`: update or revoke an invite by `code`; set `revoked: true`.
@@ -122,7 +143,7 @@ Admin APIs require `Authorization: Bearer <token>`. The token can be the deploym
 
 `GET /admin` serves the React admin client from `@oneworks/relay-admin` (`apps/relay-admin`). The server route only returns the HTML shell and static assets under `/admin/assets/*`; the React client is built by Vite, consumes the `/login` callback `relay_token`, verifies the session through `/api/auth/me`, and calls the admin APIs above only for `owner` or `admin` users.
 
-`GET /login` serves the user-facing login page used by the Relay plugin. It accepts `redirect_uri`, `server_id`, `scope`, and optional `lang=zh-CN|en`; OAuth/OIDC success first returns to `/login/complete`, which stores recent account metadata in that browser and then redirects to the original callback with `relay_token` in the URL fragment. The same page also supports passkey login / registration, plus email + invite-code login through `POST /api/auth/invite-login`; successful invite or passkey registration consumes one invite use when an invite is present and assigns the invite role to new users. When `lang` is omitted, the login page follows the browser `Accept-Language` header. Electron callbacks use `oneworks://relay/auth`; Web callbacks use the current plugin page URL.
+`GET /login` serves the user-facing login page used by the Relay plugin. It accepts `redirect_uri`, `server_id`, `scope`, and optional `lang=zh-CN|en`; OAuth/OIDC success first returns to `/login/complete`, which stores recent account metadata in that browser and then redirects to the original callback with `relay_token` in the URL fragment. The same page supports password login, passkey login / registration, existing-user email verification code login, and email + invite-code registration through `POST /api/auth/invite-login`; successful invite or passkey registration consumes one invite use when an invite is present and assigns the invite role to new users. When `lang` is omitted, the login page follows the browser `Accept-Language` header. Electron callbacks use `oneworks://relay/auth`; Web callbacks use the current plugin page URL.
 
 `POST /api/auth/email-verification/send` accepts an `email`, optional `purpose` (`email-verification`, `invite`, or `login`), optional `locale` / `lang` (`zh-CN` or `en`), and optional `turnstileToken`. Login pages should pass their current page locale so verification emails match the visible UI language; when omitted, the server falls back to `Accept-Language` and then English. Before any provider call, Relay verifies Turnstile when required, evaluates domain policy, checks per-email / per-IP / per-domain limits, checks global daily and monthly budgets, and reuses an active code within its TTL instead of sending another email. Rejections use a generic response so callers cannot infer whether an account exists.
 
@@ -167,6 +188,8 @@ Default roles:
 The admin token principal receives all known capabilities. Device tokens receive only device-scoped capabilities: heartbeat, self registration refresh, session snapshot publishing, session/job polling, and job status updates for the same device.
 
 Capability names live in `src/permissions/capabilities.ts`; the role matrix lives in `src/permissions/roles.ts`; principal helpers live in `src/permissions/principals.ts`. Add new domains by defining a capability first, assigning it in the role matrix, and then using the shared permission helpers in the route or forwarding access helper. Do not add ad hoc role checks in routes.
+
+Custom OAuth/OIDC-compatible providers are configured with explicit authorization, token, and userinfo endpoints. Relay expects a stable provider user id and verified email metadata from the userinfo/profile response; automatic OIDC discovery, JWKS fetching, and ID token validation are not part of the generic provider path unless that support is added explicitly.
 
 Custom SSO example:
 

@@ -9,6 +9,7 @@ export const createUserInputFromFormData = (formData: FormData): CreateUserInput
   const maxDevices = Number(maxDevicesText)
   return {
     email,
+    loginId: readFormText(formData, 'loginId') || null,
     ...(maxDevicesText === '' || !Number.isFinite(maxDevices)
       ? {}
       : { maxDevices: Math.max(0, Math.trunc(maxDevices)) }),

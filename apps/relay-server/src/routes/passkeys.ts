@@ -3,6 +3,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server'
 
+import { findEnabledEmailCodeUserByIdentifier } from '../auth/identities.js'
+import { loginIdentifierFromBody } from '../auth/login-identifiers.js'
 import {
   RelayPasskeyError,
   prepareRelayPasskeyAuthentication,
@@ -39,7 +41,11 @@ const responseFromBody = <TResponse>(body: Record<string, unknown>) => (
     : undefined
 )
 
-const readEmail = (body: Record<string, unknown>) => normalizeEmailAddress(body.email)
+const readEmail = (store: RelayStore, body: Record<string, unknown>) => {
+  const loginId = loginIdentifierFromBody(body)
+  const existing = findEnabledEmailCodeUserByIdentifier(store, loginId)
+  return normalizeEmailAddress(existing?.email ?? loginId)
+}
 
 const requireEmail = (email: string) => looksLikeEmailAddress(email) && domainFromEmail(email) !== ''
 
@@ -100,7 +106,7 @@ const handleRegisterOptions = async (
     return
   }
   const body = await readRequestBody(req)
-  const email = readEmail(body)
+  const email = readEmail(store, body)
   if (!requireEmail(email)) {
     sendEmailRequired(res, args)
     return
@@ -126,7 +132,7 @@ const handleRegisterVerify = async (
   storeRepository: RelayStoreRepository,
   body: Record<string, unknown>
 ) => {
-  const email = readEmail(body)
+  const email = readEmail(store, body)
   const response = responseFromBody<RegistrationResponseJSON>(body)
   if (!requireEmail(email)) {
     sendEmailRequired(res, args)
@@ -160,7 +166,7 @@ const handleLoginOptions = async (
     return
   }
   const body = await readRequestBody(req)
-  const email = readEmail(body)
+  const email = readEmail(store, body)
   if (!requireEmail(email)) {
     sendEmailRequired(res, args)
     return
@@ -181,7 +187,7 @@ const handleLoginVerify = async (
   storeRepository: RelayStoreRepository,
   body: Record<string, unknown>
 ) => {
-  const email = readEmail(body)
+  const email = readEmail(store, body)
   const response = responseFromBody<AuthenticationResponseJSON>(body)
   if (!requireEmail(email)) {
     sendEmailRequired(res, args)

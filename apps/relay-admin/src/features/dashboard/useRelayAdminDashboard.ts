@@ -185,6 +185,13 @@ export const useRelayAdminDashboard = () => {
     })
   }, [loadSnapshot, run, token])
 
+  const setUserLoginId = useCallback(async (user: RelayAdminUser, loginId: string | null) => {
+    await run(async () => {
+      await updateRelayAdminUser(token, { id: user.id, loginId })
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
   const createInvite = useCallback(async (input: CreateInviteInput) => {
     await run(async () => {
       await createRelayAdminInvite(token, input)
@@ -257,6 +264,7 @@ export const useRelayAdminDashboard = () => {
     setUserMaxDevices,
     setSsoProviderEnabled,
     setUserDisabled,
+    setUserLoginId,
     setUserPassword,
     setUserRole,
     ssoProviders,

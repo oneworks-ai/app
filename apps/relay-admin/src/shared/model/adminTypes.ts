@@ -6,6 +6,7 @@ export interface RelayAdminCurrentUser {
   disabledAt?: string | null
   email: string
   id: string
+  loginId?: string | null
   name: string
   provider?: string | null
   role: RelayAdminRole
@@ -27,6 +28,7 @@ export interface RelayAdminUser {
   disabledAt: string | null
   email: string
   id: string
+  loginId: string | null
   maxDevices: number | null
   name: string
   passwordEnabled: boolean
@@ -90,6 +92,7 @@ export interface RelayAdminDeviceSession {
 export interface CreateUserInput {
   disabled?: boolean
   email: string
+  loginId?: string | null
   maxDevices?: number | null
   name?: string
   password?: string
@@ -99,6 +102,7 @@ export interface CreateUserInput {
 export interface UpdateUserInput {
   disabled?: boolean
   id: string
+  loginId?: string | null
   maxDevices?: number | null
   password?: string
   role?: RelayAdminRole

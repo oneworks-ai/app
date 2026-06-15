@@ -11,6 +11,7 @@ export interface UserCreateFormProps {
 
 interface UserCreateFormValues {
   email: string
+  loginId?: string
   maxDevices?: number | null
   name?: string
   password?: string
@@ -23,6 +24,7 @@ export const UserCreateForm = ({ disabled, onCreated, onCreateUser }: UserCreate
   const handleCreate = async (values: UserCreateFormValues) => {
     const input: CreateUserInput = {
       email: values.email.trim(),
+      loginId: values.loginId?.trim() === '' ? null : values.loginId?.trim(),
       maxDevices: values.maxDevices ?? null,
       name: values.name?.trim() ?? '',
       role: values.role
@@ -44,6 +46,9 @@ export const UserCreateForm = ({ disabled, onCreated, onCreateUser }: UserCreate
     >
       <Form.Item label='邮箱' name='email' rules={[{ required: true, type: 'email' }]}>
         <Input disabled={disabled} placeholder='email@example.com' />
+      </Form.Item>
+      <Form.Item label='登录 ID' name='loginId'>
+        <Input disabled={disabled} placeholder='留空默认使用邮箱' />
       </Form.Item>
       <Form.Item label='名称' name='name'>
         <Input disabled={disabled} placeholder='显示名称' />

@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+import { findEnabledEmailCodeUserByIdentifier } from '../auth/identities.js'
+import { findEnabledUserByLoginIdentifier, loginIdentifierFromBody } from '../auth/login-identifiers.js'
 import { domainFromEmail, looksLikeEmailAddress, normalizeEmailAddress } from '../email/domains.js'
 import { prepareRelayEmailChallengeSend, rememberRelayEmailProviderResult } from '../email/policy.js'
 import { RelayEmailProviderUnavailableError, resolveRelayEmailProvider } from '../email/provider.js'
@@ -100,7 +102,12 @@ export const handleEmailVerificationSendRoute = async (
   }
 
   const body = await readRequestBody(req)
-  const email = normalizeEmailAddress(body.email)
+  const purpose = purposeFromBody(body.purpose)
+  const loginId = loginIdentifierFromBody(body)
+  const loginUser = purpose === 'login'
+    ? findEnabledEmailCodeUserByIdentifier(store, loginId)
+    : findEnabledUserByLoginIdentifier(store, loginId)
+  const email = normalizeEmailAddress(loginUser?.email ?? (purpose === 'login' ? '' : loginId))
   if (!looksLikeEmailAddress(email) || domainFromEmail(email) === '') {
     sendJson(res, 400, {
       code: 'email_required',
@@ -134,7 +141,6 @@ export const handleEmailVerificationSendRoute = async (
     return true
   }
 
-  const purpose = purposeFromBody(body.purpose)
   const locale = resolveEmailLocale(req, body)
   const decision = prepareRelayEmailChallengeSend(store, args.email, {
     email,

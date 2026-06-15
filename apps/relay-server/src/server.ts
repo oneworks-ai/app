@@ -10,6 +10,7 @@ import { handleAdminSsoProviders } from './routes/admin-sso-providers.js'
 import { handleAdminInvites, handleAdminUsers } from './routes/admin.js'
 import { handleAuthRoute } from './routes/auth.js'
 import { handleDeviceHeartbeat, handleDeviceList, handleDeviceRegister } from './routes/devices.js'
+import { handleEmailCodeLoginRoute } from './routes/email-code-login.js'
 import { handleEmailVerificationSendRoute } from './routes/email-verification.js'
 import { handleInviteLoginRoute } from './routes/invite-login.js'
 import { handleLoginRoute } from './routes/login.js'
@@ -45,6 +46,8 @@ const handleInfo = (res: ServerResponse, args: RelayServerArgs, store: RelayStor
       invites: true,
       users: true,
       passwordAuth: true,
+      defaultLoginMethod: args.defaultLoginMethod ?? 'password',
+      emailCodeLogin: args.emailProvider != null || args.email?.provider !== 'disabled',
       emailVerification: args.emailProvider != null || args.email?.provider !== 'disabled',
       passkeyAuth: args.passkey?.enabled !== false,
       registrationMode: args.passkey?.registrationMode ?? 'invite_required',
@@ -88,6 +91,9 @@ const handleRelayRequestWithStore = async (
     return
   }
   if (await handlePasswordLoginRoute(req, res, args, store, storeRepository, url)) {
+    return
+  }
+  if (await handleEmailCodeLoginRoute(req, res, args, store, storeRepository, url)) {
     return
   }
   if (await handlePasskeyRoute(req, res, args, store, storeRepository, url)) {
