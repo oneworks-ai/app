@@ -6,6 +6,7 @@
 
 - `teamsApi.ts`：团队、租户团队策略、config profile / version / assignment 的 Admin API 封装。
 - `TeamPanel.tsx`：团队配置页面的顶层编排，负责策略表单、团队列表和选中团队的配置 profile 区域。
+- `TeamMembers.tsx`：选中团队的成员列表、添加成员、角色调整和配置启停。
 - `TeamPolicyForm.tsx`：站点管理员配置 teamsEnabled、selfService、proxyMode 和容量上限。
 - `TeamTable.tsx`：团队列表、搜索、展示列和选中团队操作。
 - `TeamConfigProfiles.tsx`：选中团队的 config profile、version 发布和 assignment 启停。

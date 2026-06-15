@@ -49,6 +49,20 @@ export interface RelayAdminTeam {
   updatedAt: string | null
 }
 
+export interface RelayAdminTeamMember {
+  configEnabled: boolean
+  createdAt: string
+  createdByUserId: string
+  defaultForPublishing: boolean
+  email: string | null
+  id: string
+  name: string | null
+  role: RelayAdminTeamMemberRole
+  teamId: string
+  updatedAt: string | null
+  userId: string
+}
+
 export interface RelayAdminConfigProjectRule {
   allow?: string[]
   deny?: string[]
@@ -116,6 +130,21 @@ export interface CreateTeamInput {
   description?: string
   name: string
   slug?: string
+}
+
+export interface CreateTeamMemberInput {
+  configEnabled?: boolean
+  defaultForPublishing?: boolean
+  email?: string
+  role: RelayAdminTeamMemberRole
+  teamId: string
+  userId?: string
+}
+
+export interface UpdateTeamMemberInput {
+  configEnabled?: boolean
+  defaultForPublishing?: boolean
+  role?: RelayAdminTeamMemberRole
 }
 
 export interface UpdateTeamPolicyInput {

@@ -88,10 +88,29 @@
 }
 
 .relay-team-panel__profiles,
+.relay-team-panel__members,
 .relay-team-panel__profile-detail {
   display: grid;
   gap: 12px;
   min-width: 0;
+}
+
+.relay-team-panel__member-identity {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.relay-team-panel__member-identity strong,
+.relay-team-panel__member-identity span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-team-panel__member-identity span {
+  color: var(--ant-color-text-secondary, #57606a);
+  font-size: 12px;
 }
 
 .relay-team-panel__json-inline {

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { DataPanel } from '../../shared/ui/DataPanel'
 import { TeamConfigProfiles } from './TeamConfigProfiles'
 import { TeamCreateForm } from './TeamCreateForm'
+import { TeamMembers } from './TeamMembers'
 import { TeamPolicyForm } from './TeamPolicyForm'
 import { TeamTable } from './TeamTable'
 import type { CreateTeamInput, RelayAdminTeam, RelayAdminTeamPolicy, UpdateTeamPolicyInput } from './teamTypes'
@@ -82,6 +83,11 @@ export const TeamPanel = ({
             </section>
           </div>
           <section className='relay-team-panel__section relay-team-panel__right'>
+            <TeamMembers
+              disabled={disabled || policy?.teamsEnabled === false}
+              team={selectedTeam}
+              token={token}
+            />
             <TeamConfigProfiles
               disabled={disabled || policy?.teamsEnabled === false}
               team={selectedTeam}

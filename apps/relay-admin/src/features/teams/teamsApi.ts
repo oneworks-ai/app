@@ -4,11 +4,14 @@ import type {
   CreateConfigProfileInput,
   CreateConfigProfileVersionInput,
   CreateTeamInput,
+  CreateTeamMemberInput,
   RelayAdminConfigProfile,
   RelayAdminConfigProfileAssignment,
   RelayAdminConfigProfileVersion,
   RelayAdminTeam,
+  RelayAdminTeamMember,
   RelayAdminTeamPolicy,
+  UpdateTeamMemberInput,
   UpdateTeamPolicyInput
 } from './teamTypes'
 
@@ -31,6 +34,43 @@ export const createRelayAdminTeam = async (token: string, input: CreateTeamInput
     body: JSON.stringify(input),
     method: 'POST'
   })
+
+export const fetchRelayAdminTeamMembers = async (token: string, teamId: string) =>
+  await requestJson<{ members: RelayAdminTeamMember[] }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(teamId)}/members`
+  )
+
+export const createRelayAdminTeamMember = async (token: string, input: CreateTeamMemberInput) =>
+  await requestJson<{ member: RelayAdminTeamMember }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(input.teamId)}/members`,
+    {
+      body: JSON.stringify(input),
+      method: 'POST'
+    }
+  )
+
+export const updateRelayAdminTeamMember = async (
+  token: string,
+  member: RelayAdminTeamMember,
+  input: UpdateTeamMemberInput
+) =>
+  await requestJson<{ member: RelayAdminTeamMember }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(member.teamId)}/members/${encodeURIComponent(member.userId)}`,
+    {
+      body: JSON.stringify(input),
+      method: 'PATCH'
+    }
+  )
+
+export const deleteRelayAdminTeamMember = async (token: string, member: RelayAdminTeamMember) =>
+  await requestJson<{ deleted: boolean; member: RelayAdminTeamMember }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(member.teamId)}/members/${encodeURIComponent(member.userId)}`,
+    { method: 'DELETE' }
+  )
 
 export const updateRelayAdminTeamPolicy = async (token: string, input: UpdateTeamPolicyInput) =>
   await requestJson<{ policy: RelayAdminTeamPolicy }>(token, '/api/admin/team-policy', {
