@@ -2,13 +2,9 @@ import { randomUUID } from 'node:crypto'
 
 import type { RelayAuthProvider, RelayInvite, RelayRole, RelayStore } from '../types.js'
 import { now } from '../utils.js'
-import {
-  ensureAuthIdentity,
-  findEnabledUserByAuthIdentity,
-  generateUniqueLoginId,
-  touchAuthIdentity
-} from './identities.js'
+import { ensureAuthIdentity, findEnabledUserByAuthIdentity, touchAuthIdentity } from './identities.js'
 import { consumeInvite, findUsableInvite } from './invites.js'
+import { generateUniqueLoginId } from './login-identifiers.js'
 
 export interface OAuthUserProfile {
   avatarUrl?: string

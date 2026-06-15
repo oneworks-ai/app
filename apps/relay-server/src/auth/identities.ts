@@ -14,17 +14,6 @@ export const nonSsoAuthProviders = new Set([
 
 export const cleanEmailIdentity = (value: string) => value.trim().toLowerCase()
 
-export const cleanGeneratedLoginId = (value: string | undefined) => {
-  const normalized = (value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/@.+$/, '')
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 48)
-  return normalized === '' ? 'user' : normalized
-}
-
 const authIdentityKey = (input: Pick<RelayAuthIdentity, 'provider' | 'providerUserId'>) =>
   `${input.provider.toLowerCase()}:${input.providerUserId.toLowerCase()}`
 
@@ -195,15 +184,4 @@ export const findEnabledEmailCodeUserByIdentifier = (
   if (identity == null) return undefined
   const user = store.users.find(item => item.id === identity.userId)
   return user == null || user.disabledAt != null ? undefined : user
-}
-
-export const generateUniqueLoginId = (store: RelayStore, candidate: string | undefined) => {
-  const base = cleanGeneratedLoginId(candidate)
-  let next = base
-  let suffix = 2
-  while (store.users.some(user => user.loginId?.trim().toLowerCase() === next)) {
-    next = `${base}-${suffix}`
-    suffix += 1
-  }
-  return next
 }

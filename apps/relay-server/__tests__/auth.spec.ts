@@ -250,6 +250,8 @@ describe('relay server auth routes', () => {
     })
     const githubCallback = await requestJson(baseUrl, `/api/auth/oauth/github/callback?code=ok&state=${githubState}`)
     const store = await readRelayStore(args.dataPath)
+    const githubUser = githubCallback.body.user as { id: string }
+    const googleUser = googleCallback.body.user as { id: string }
 
     expect(googleCallback.response.status).toBe(200)
     expect(githubCallback.response.status).toBe(200)
@@ -259,19 +261,19 @@ describe('relay server auth routes', () => {
       provider: 'github',
       role: 'member'
     })
-    expect(githubCallback.body.user.id).not.toBe(googleCallback.body.user.id)
+    expect(githubUser.id).not.toBe(googleUser.id)
     expect(store.users).toHaveLength(2)
     expect(store.users.map(user => user.email)).toEqual(['same@example.com', 'same@example.com'])
     expect(store.authIdentities).toEqual(expect.arrayContaining([
       expect.objectContaining({
         provider: 'google',
         providerUserId: 'google-same@example.com',
-        userId: googleCallback.body.user.id
+        userId: googleUser.id
       }),
       expect.objectContaining({
         provider: 'github',
         providerUserId: '12345',
-        userId: githubCallback.body.user.id
+        userId: githubUser.id
       })
     ]))
   })

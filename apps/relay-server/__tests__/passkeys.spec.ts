@@ -253,9 +253,10 @@ describe('relay passkey auth routes', () => {
       headers: { 'content-type': 'application/json' },
       method: 'POST'
     })
+    const registrationUser = registration.body.user as { id: string }
     const loginIdUpdate = await requestJson(baseUrl, '/api/admin/users', {
       body: JSON.stringify({
-        id: registration.body.user.id,
+        id: registrationUser.id,
         loginId: 'owner-login'
       }),
       headers: authHeaders(String(registration.body.token)),
