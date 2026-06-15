@@ -9,6 +9,7 @@ import { sendJson } from './http.js'
 import { handleAdminSsoProviders } from './routes/admin-sso-providers.js'
 import { handleAdminInvites, handleAdminUsers } from './routes/admin.js'
 import { handleAuthRoute } from './routes/auth.js'
+import { handleRelayConfigSnapshot } from './routes/config-snapshot.js'
 import { handleDeviceHeartbeat, handleDeviceList, handleDeviceRegister } from './routes/devices.js'
 import { handleEmailVerificationSendRoute } from './routes/email-verification.js'
 import { handleInviteLoginRoute } from './routes/invite-login.js'
@@ -41,6 +42,7 @@ const handleInfo = (res: ServerResponse, args: RelayServerArgs, store: RelayStor
     version: VERSION,
     features: {
       authSessions: true,
+      configSnapshot: true,
       deviceRegistration: true,
       invites: true,
       users: true,
@@ -105,6 +107,10 @@ const handleRelayRequestWithStore = async (
   }
   if (req.method === 'GET' && url.pathname === '/api/relay/info') {
     handleInfo(res, args, store)
+    return
+  }
+  if (req.method === 'GET' && url.pathname === '/api/relay/config-snapshot') {
+    handleRelayConfigSnapshot(req, res, args, store, url)
     return
   }
   if (url.pathname === '/api/relay/metrics') {

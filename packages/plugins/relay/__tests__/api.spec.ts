@@ -83,6 +83,65 @@ describe('relay plugin scoped API', () => {
     expect(JSON.stringify(response.body)).not.toContain('lab-token')
   })
 
+  it('includes Relay configuration distribution status in public status and refresh responses', async () => {
+    let refreshed = false
+    const { apis } = await createPluginHarness({}, {
+      configDistribution: {
+        getStatus: () => ({
+          allowedFields: ['modelServices'],
+          hash: 'sha256:before',
+          lastAppliedAt: '2026-06-15T08:05:00.000Z',
+          lastError: null,
+          lastSyncedAt: '2026-06-15T08:00:00.000Z',
+          matchedProject: true,
+          modelServiceKeys: ['openai'],
+          sourceServerId: 'oneworks-cloudflare',
+          version: '2026.06.15-a'
+        }),
+        refresh: () => {
+          refreshed = true
+          return {
+            allowedFields: ['modelServices', 'models'],
+            hash: 'sha256:after',
+            lastAppliedAt: '2026-06-15T09:05:00.000Z',
+            lastError: null,
+            lastSyncedAt: '2026-06-15T09:00:00.000Z',
+            matchedProject: true,
+            modelServiceKeys: ['openai', 'anthropic'],
+            sourceServerId: 'oneworks-cloudflare',
+            version: '2026.06.15-b'
+          }
+        }
+      }
+    })
+
+    const statusResponse = await apis.get('relay')?.handler?.({
+      body: Buffer.alloc(0),
+      method: 'GET',
+      path: 'status'
+    }) as { body?: RelayPluginStatus; status?: number }
+    const refreshResponse = await apis.get('relay')?.handler?.({
+      body: Buffer.alloc(0),
+      method: 'POST',
+      path: 'config-refresh'
+    }) as { body?: RelayPluginStatus; status?: number }
+
+    expect(statusResponse.status).toBe(200)
+    expect(statusResponse.body?.configDistribution).toMatchObject({
+      hash: 'sha256:before',
+      modelServiceKeys: ['openai'],
+      version: '2026.06.15-a'
+    })
+    expect(refreshResponse.status).toBe(200)
+    expect(refreshed).toBe(true)
+    expect(refreshResponse.body?.configDistribution).toMatchObject({
+      allowedFields: ['modelServices', 'models'],
+      hash: 'sha256:after',
+      modelServiceKeys: ['openai', 'anthropic'],
+      version: '2026.06.15-b'
+    })
+  })
+
   it('forgets the stored remote device token', async () => {
     stubRelayFetch()
 

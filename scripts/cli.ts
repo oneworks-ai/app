@@ -19,6 +19,7 @@ import { devStartTargets, parseDevStartTarget, runDevStart as runDevStartCommand
 import { runHomebrewTapSyncOneWorks } from './homebrew-tap'
 import { runMessageActionsVerify } from './message-actions'
 import { runPrChangeCheck } from './pr-change-check'
+import { runRelayConfigSmoke } from './relay-config-smoke'
 import { runReleaseTagsPlan } from './release-tags'
 import { runWindowsInstallSyncOneWorks } from './windows-install'
 
@@ -77,6 +78,7 @@ interface ScriptsCliDeps {
   runWindowsInstallSyncOneWorks: typeof runWindowsInstallSyncOneWorks
   runPublishPlan: (args: string[]) => Promise<unknown>
   runAgentRoomResumeSmoke: typeof runAgentRoomResumeSmoke
+  runRelayConfigSmoke: typeof runRelayConfigSmoke
   runDevStart: typeof runDevStartCommand
 }
 
@@ -116,6 +118,7 @@ const defaultDeps: ScriptsCliDeps = {
     return runPublishPlanCli(args)
   },
   runAgentRoomResumeSmoke,
+  runRelayConfigSmoke,
   runDevStart: runDevStartCommand
 }
 
@@ -361,6 +364,28 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
     }) => {
       await deps.runAgentRoomResumeSmoke({
         json: options.json ?? false
+      })
+    })
+
+  const relayConfigCommand = program
+    .command('relay-config')
+    .description('Run reusable Relay managed config verification flows')
+
+  relayConfigCommand
+    .command('smoke')
+    .description('Run a real @oneworks/plugin-relay ./config -> loadConfigState smoke')
+    .option('--allow-pending', 'Exit successfully while the final Relay config hook API is still pending', false)
+    .option('--json', 'Print machine-readable JSON', false)
+    .option('--keep-temp', 'Keep the temporary smoke workspace for debugging', false)
+    .action(async (options: {
+      allowPending?: boolean
+      json?: boolean
+      keepTemp?: boolean
+    }) => {
+      await deps.runRelayConfigSmoke({
+        allowPending: options.allowPending ?? false,
+        json: options.json ?? false,
+        keepTemp: options.keepTemp ?? false
       })
     })
 

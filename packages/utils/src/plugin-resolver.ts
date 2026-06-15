@@ -9,6 +9,7 @@ import { load as loadYaml } from 'js-yaml'
 import type {
   PluginChildConfig,
   PluginConfig,
+  PluginConfigHookManifest,
   PluginInstanceConfig,
   PluginManifest,
   PluginManifestChildDefinition
@@ -76,16 +77,43 @@ const isTopLevelDirectoryReference = (id: string) => (
   /^[a-z]:[\\/]/i.test(id)
 )
 
+const normalizePluginConfigHookManifest = (value: unknown): PluginManifest['configHook'] => {
+  if (typeof value === 'string') {
+    const entry = value.trim()
+    return entry !== '' ? entry : undefined
+  }
+
+  if (!isRecord(value)) return undefined
+
+  const entry = typeof value.entry === 'string' ? value.entry.trim() : undefined
+  return entry != null && entry !== ''
+    ? { entry } satisfies PluginConfigHookManifest
+    : undefined
+}
+
+const hasPluginConfigSchemaFields = (value: Record<string, unknown>) => (
+  'jsonSchema' in value || 'schema' in value || 'uiSchema' in value
+)
+
+const normalizePluginConfigManifest = (value: unknown): PluginManifest['config'] => (
+  isRecord(value) && hasPluginConfigSchemaFields(value)
+    ? value as PluginManifest['config']
+    : undefined
+)
+
 const toPluginManifest = (value: unknown): PluginManifest | undefined => {
   if (!isRecord(value)) return undefined
 
   const manifestLike = value.__oneWorksPluginManifest === true || 'assets' in value || 'children' in value ||
-    'plugin' in value || 'scope' in value
+    'config' in value || 'configHook' in value || 'plugin' in value || 'scope' in value
   if (!manifestLike) return undefined
 
   if ('scope' in value) {
     throw new Error('Plugin manifests must not define scope. Scope is controlled by user config.')
   }
+
+  const configHook = normalizePluginConfigHookManifest(value.configHook) ??
+    normalizePluginConfigHookManifest(value.config)
 
   return {
     __oneWorksPluginManifest: true,
@@ -128,9 +156,8 @@ const toPluginManifest = (value: unknown): PluginManifest | undefined => {
         })
       )
       : undefined,
-    config: isRecord(value.config)
-      ? value.config as PluginManifest['config']
-      : undefined,
+    config: normalizePluginConfigManifest(value.config),
+    ...(configHook != null ? { configHook } : {}),
     plugin: isRecord(value.plugin)
       ? {
         client: isRecord(value.plugin.client)
@@ -171,6 +198,7 @@ export interface ResolvedPluginReference {
   resolvedBy:
     | 'direct'
     | 'oneworks-prefix'
+    | 'vibe-forge-prefix'
     | 'managed-package-cache'
     | 'manifest-package'
     | 'manifest-directory'
@@ -316,9 +344,11 @@ const resolveManagedPackageReference = async (
   cwd: string,
   requestId: string,
   packageId: string,
-  version?: string
+  version?: string,
+  options?: { autoInstallManaged?: boolean }
 ): Promise<ResolvedPluginReference | undefined> => {
   if (!isManagedPluginPackageName(packageId)) return undefined
+  if (options?.autoInstallManaged === false) return undefined
 
   const rootDir = await ensureManagedPluginPackage({
     cwd,
@@ -380,10 +410,11 @@ const resolveCachedManagedPackageReference = async (
 const resolvePackageReference = async (
   cwd: string,
   id: string,
-  version?: string
+  version?: string,
+  options?: { autoInstallManaged?: boolean }
 ): Promise<ResolvedPluginReference> => {
   const candidates = shouldTryPrefixedPackageId(id)
-    ? [id, `@oneworks/plugin-${id}`]
+    ? [id, `@oneworks/plugin-${id}`, `@vibe-forge/plugin-${id}`]
     : [id]
 
   for (const candidate of candidates) {
@@ -399,18 +430,23 @@ const resolvePackageReference = async (
   for (const candidate of candidates) {
     const rootDir = resolveInstalledPackageRoot(cwd, candidate)
     if (rootDir != null) {
+      const resolvedBy = candidate === id
+        ? 'direct'
+        : candidate.startsWith('@oneworks/')
+        ? 'oneworks-prefix'
+        : 'vibe-forge-prefix'
       return {
         sourceType: 'package',
         requestId: id,
         packageId: candidate,
-        resolvedBy: candidate === id ? 'direct' : 'oneworks-prefix',
+        resolvedBy,
         rootDir
       }
     }
   }
 
   for (const candidate of candidates) {
-    const managedReference = await resolveManagedPackageReference(cwd, id, candidate, version)
+    const managedReference = await resolveManagedPackageReference(cwd, id, candidate, version, options)
     if (managedReference != null) return managedReference
   }
 
@@ -484,11 +520,25 @@ export const resolvePluginHooksEntryPath = (
   rootDir?: string
 ) => resolveOptionalPackageEntryPath(cwd, `${packageId}/hooks`, rootDir)
 
+export const resolvePluginConfigEntryPath = (
+  cwd: string,
+  packageId: string,
+  rootDir?: string
+) => resolveOptionalPackageEntryPath(cwd, `${packageId}/config`, rootDir)
+
 export const resolveDirectoryPluginHooksEntryPath = (rootDir: string) => {
   const directPath = resolve(rootDir, 'hooks.js')
   if (existsSync(directPath)) return directPath
 
   const indexPath = resolve(rootDir, 'hooks', 'index.js')
+  return existsSync(indexPath) ? indexPath : undefined
+}
+
+export const resolveDirectoryPluginConfigEntryPath = (rootDir: string) => {
+  const directPath = resolve(rootDir, 'config.js')
+  if (existsSync(directPath)) return directPath
+
+  const indexPath = resolve(rootDir, 'config', 'index.js')
   return existsSync(indexPath) ? indexPath : undefined
 }
 
@@ -499,6 +549,31 @@ export const resolvePluginHooksEntryPathForInstance = (
   instance.packageId != null
     ? resolvePluginHooksEntryPath(cwd, instance.packageId, instance.rootDir)
     : resolveDirectoryPluginHooksEntryPath(instance.rootDir)
+)
+
+const resolveManifestConfigEntryPath = (
+  instance: Pick<ResolvedPluginInstance, 'manifest' | 'rootDir'>
+) => {
+  const entry = typeof instance.manifest?.configHook === 'string'
+    ? instance.manifest.configHook
+    : instance.manifest?.configHook?.entry
+
+  if (entry == null || entry.trim() === '') return undefined
+
+  const configPath = resolve(instance.rootDir, entry)
+  return existsSync(configPath) ? configPath : undefined
+}
+
+export const resolvePluginConfigEntryPathForInstance = (
+  cwd: string,
+  instance: Pick<ResolvedPluginInstance, 'manifest' | 'packageId' | 'rootDir'>
+) => (
+  resolveManifestConfigEntryPath(instance) ??
+    (
+      instance.packageId != null
+        ? resolvePluginConfigEntryPath(cwd, instance.packageId, instance.rootDir)
+        : resolveDirectoryPluginConfigEntryPath(instance.rootDir)
+    )
 )
 
 const resolveDirectoryPath = (baseDir: string, path: string) => (
@@ -550,7 +625,8 @@ const hasExplicitChildOverride = (children: PluginChildConfig[], childId: string
 const resolveChildReference = async (
   cwd: string,
   parent: ResolvedPluginInstance,
-  childConfig: PluginChildConfig
+  childConfig: PluginChildConfig,
+  options?: { autoInstallManaged?: boolean }
 ): Promise<{
   reference: ResolvedPluginReference
   manifestChild?: PluginManifestChildDefinition
@@ -558,12 +634,12 @@ const resolveChildReference = async (
   const manifestChild = parent.childDefinitions[childConfig.id]
   if (manifestChild == null) {
     return {
-      reference: await resolvePackageReference(cwd, childConfig.id, childConfig.version)
+      reference: await resolvePackageReference(cwd, childConfig.id, childConfig.version, options)
     }
   }
 
   if (manifestChild.source.type === 'package') {
-    const reference = await resolvePackageReference(cwd, manifestChild.source.id, childConfig.version)
+    const reference = await resolvePackageReference(cwd, manifestChild.source.id, childConfig.version, options)
     return {
       reference: {
         ...reference,
@@ -587,13 +663,14 @@ const resolveChildReference = async (
 
 const resolveTopLevelReference = async (
   cwd: string,
-  config: PluginInstanceConfig
+  config: PluginInstanceConfig,
+  options?: { autoInstallManaged?: boolean }
 ) => {
   if (isTopLevelDirectoryReference(config.id)) {
     return resolveDirectoryReference(cwd, config.id)
   }
 
-  return await resolvePackageReference(cwd, config.id, config.version)
+  return await resolvePackageReference(cwd, config.id, config.version, options)
 }
 
 interface ResolvePluginInstanceParams {
@@ -605,6 +682,7 @@ interface ResolvePluginInstanceParams {
   parent?: ResolvedPluginInstance
   resolvedReference?: ResolvedPluginReference
   ancestorKeys?: string[]
+  autoInstallManaged?: boolean
 }
 
 const resolveInstance = async (
@@ -626,10 +704,13 @@ const resolveInstance = async (
     manifestChild
   } = parent == null
     ? {
-      reference: resolvedReference ?? await resolveTopLevelReference(cwd, config as PluginInstanceConfig),
+      reference: resolvedReference ??
+        await resolveTopLevelReference(cwd, config as PluginInstanceConfig, {
+          autoInstallManaged: params.autoInstallManaged
+        }),
       manifestChild: undefined
     }
-    : await resolveChildReference(cwd, parent, config)
+    : await resolveChildReference(cwd, parent, config, { autoInstallManaged: params.autoInstallManaged })
 
   const cycleKey = `${reference.sourceType}:${reference.packageId ?? reference.rootDir}`
   if (ancestorKeys.includes(cycleKey)) {
@@ -686,7 +767,8 @@ const resolveInstance = async (
           childDefinitions,
           children: []
         },
-        ancestorKeys: nextAncestorKeys
+        ancestorKeys: nextAncestorKeys,
+        autoInstallManaged: params.autoInstallManaged
       })
     )
   )
@@ -845,6 +927,7 @@ export const resolveConfiguredPluginInstances = async (params: {
   plugins?: PluginConfig
   overlaySource?: string
   includeDisabled?: boolean
+  autoInstallManaged?: boolean
 }) => {
   const pluginConfigs = normalizePluginConfig(
     params.plugins,
@@ -853,7 +936,9 @@ export const resolveConfiguredPluginInstances = async (params: {
   const instances: ResolvedPluginInstance[] = []
   const resolvedKeys: string[] = []
   for (const [index, config] of (pluginConfigs ?? []).entries()) {
-    const reference = await resolveTopLevelReference(params.cwd, config)
+    const reference = await resolveTopLevelReference(params.cwd, config, {
+      autoInstallManaged: params.autoInstallManaged
+    })
     const key = toResolvedPluginKey(reference)
     removeResolvedPluginByKey(instances, resolvedKeys, key)
     if (config.enabled === false && params.includeDisabled !== true) continue
@@ -863,7 +948,8 @@ export const resolveConfiguredPluginInstances = async (params: {
         config,
         instancePath: String(index),
         overlaySource: params.overlaySource,
-        resolvedReference: reference
+        resolvedReference: reference,
+        autoInstallManaged: params.autoInstallManaged
       })
     )
     resolvedKeys.push(key)

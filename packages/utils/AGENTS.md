@@ -15,6 +15,8 @@
   - workspace 共享的路径规范化 helper
 - `src/model-selection.ts`
   - model service、defaultModel、adapter/model 兼容性处理
+- `src/plugin-resolver.ts`
+  - 统一插件实例解析、简写包名解析、manifest / hooks / config hook 入口解析
 - `src/cache.ts`
   - home project `caches/<task>/<session>/<key>.json` 读写 helper
 - `src/system.ts`
@@ -33,6 +35,7 @@
   - 通用路径 helper
   - 通用 cache helper
   - 通用 model selection helper
+  - 通用插件解析 helper
   - 通用 system helper
 - 本包不负责：
   - task 生命周期

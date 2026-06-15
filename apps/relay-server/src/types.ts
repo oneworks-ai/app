@@ -112,6 +112,7 @@ export interface RelayUser {
   provider?: RelayAuthProvider
   providerUserId?: string
   role: RelayRole
+  teamIds?: string[]
   createdAt: string
   updatedAt?: string
 }
@@ -191,6 +192,70 @@ export interface RelayEncryptedPayload {
   iv: string
   tag: string
   version: 1
+}
+
+export type RelayConfigSafeField = 'defaultModelService' | 'modelServices' | 'recommendedModels'
+
+export interface RelayConfigPatch {
+  defaultModelService?: string
+  modelServices?: Record<string, unknown>
+  recommendedModels?: unknown[]
+  [key: string]: unknown
+}
+
+export interface RelayConfigProjectRule {
+  allow?: string[]
+  deny?: string[]
+}
+
+export interface RelayConfigAssignmentTarget {
+  teamIds?: string[]
+  userIds?: string[]
+}
+
+export interface RelayConfigAssignment {
+  allowedFields?: RelayConfigSafeField[]
+  configPatch?: RelayConfigPatch
+  enabled?: boolean
+  id: string
+  project?: RelayConfigProjectRule
+  target?: RelayConfigAssignmentTarget
+  updatedAt?: string
+  version?: string
+}
+
+export interface RelayConfigSnapshotAssignment {
+  allowedFields?: RelayConfigSafeField[]
+  configPatch?: RelayConfigPatch
+  enabled?: boolean
+  id: string
+  project?: RelayConfigProjectRule
+  updatedAt?: string
+  version?: string
+}
+
+export interface RelayConfigSnapshot {
+  account?: {
+    email?: string
+    id?: string
+    name?: string
+  }
+  assignments: RelayConfigSnapshotAssignment[]
+  hash: string
+  sourceServerId?: string
+  team?: {
+    id?: string
+    name?: string
+  }
+  updatedAt: string
+  version: string
+}
+
+export interface RelayConfigProjectContext {
+  cwd?: string
+  projectId?: string
+  projectName?: string
+  workspaceFolder?: string
 }
 
 export interface RelayOAuthState {
@@ -273,6 +338,7 @@ export interface RelayForwardingJob {
 
 export interface RelayStore {
   createdAt: string
+  configAssignments: RelayConfigAssignment[]
   emailRisk: RelayEmailRiskState
   users: RelayUser[]
   invites: RelayInvite[]

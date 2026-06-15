@@ -71,6 +71,7 @@ describe('relay storage repository', () => {
     })
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
+      configAssignments: [],
       emailRisk: {
         buckets: [],
         challenges: []
@@ -83,6 +84,7 @@ describe('relay storage repository', () => {
           email: 'owner@example.com',
           name: 'Owner',
           role: 'owner',
+          teamIds: ['team-a'],
           createdAt: '2026-01-01T00:00:00.000Z'
         }
       ],
@@ -103,7 +105,7 @@ describe('relay storage repository', () => {
       users: [{ id: 'user-1', email: 'owner@example.com' }]
     })
     await expect(repository.read()).resolves.toMatchObject({
-      users: [{ id: 'user-1', role: 'owner' }],
+      users: [{ id: 'user-1', role: 'owner', teamIds: ['team-a'] }],
       devices: [],
       deviceSessions: [],
       forwardingJobs: []
@@ -118,6 +120,7 @@ describe('relay storage repository', () => {
     })
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
+      configAssignments: [],
       emailRisk: {
         buckets: [],
         challenges: []
@@ -183,6 +186,7 @@ describe('relay storage repository', () => {
     const repository = createDurableObjectRelayStoreRepository(new MemoryDurableObjectStorage())
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
+      configAssignments: [],
       emailRisk: {
         buckets: [],
         challenges: []

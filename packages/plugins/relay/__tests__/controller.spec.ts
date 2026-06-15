@@ -2,7 +2,14 @@ import { Buffer } from 'node:buffer'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { cleanupPluginFixtures, createPluginHarness, readDeviceStore, stubRelayFetch } from './helpers.js'
+import { createRelayConfigSnapshotStore } from '../src/shared/config-cache.js'
+import {
+  cleanupPluginFixtures,
+  createPluginHarness,
+  readConfigSnapshot,
+  readDeviceStore,
+  stubRelayFetch
+} from './helpers.js'
 import type { RelayPluginStatus } from './helpers.js'
 
 afterEach(async () => {
@@ -39,11 +46,13 @@ describe('relay plugin controller', () => {
     const [, init] = fetchMock.mock.calls[0]
     const requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>
     const store = await readDeviceStore(projectHome)
+    const snapshot = await readConfigSnapshot(projectHome)
 
     expect(status.connection.state).toBe('registered')
     expect(status.device.hasToken).toBe(true)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(3)
     expect(String(fetchMock.mock.calls[0][0])).toBe('https://relay.example/api/relay/devices/register')
+    expect(String(fetchMock.mock.calls[1][0])).toBe('https://relay.example/api/relay/config-snapshot')
     expect(init?.headers).toMatchObject({
       authorization: 'Bearer pair-token',
       'content-type': 'application/json'
@@ -70,6 +79,18 @@ describe('relay plugin controller', () => {
         remoteBaseUrl: 'https://relay.example'
       }
     })
+    expect(snapshot).toMatchObject({
+      hash: 'snapshot-hash',
+      lastError: null,
+      sourceServerId: 'prod',
+      version: 'snapshot-v1'
+    })
+    expect(status.configDistribution).toMatchObject({
+      hash: 'snapshot-hash',
+      modelServiceKeys: ['relay-assigned'],
+      sourceServerId: 'prod',
+      version: 'snapshot-v1'
+    })
     expect(status.servers?.[0]).toMatchObject({
       account: {
         email: 'owner@local.test',
@@ -85,6 +106,48 @@ describe('relay plugin controller', () => {
         status: 'online'
       }
     ])
+  })
+
+  it('reports applied Relay config distribution metadata from the local snapshot cache', async () => {
+    const { commands, projectHome } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false
+    })
+    await createRelayConfigSnapshotStore(projectHome).writeSnapshot({
+      assignments: [
+        {
+          id: 'base',
+          allowedFields: ['modelServices'],
+          configPatch: {
+            modelServices: {
+              relay: {
+                apiBaseUrl: 'https://relay.example/v1'
+              }
+            }
+          }
+        }
+      ],
+      hash: 'sha256:cache',
+      lastAppliedAt: '2026-06-15T00:05:00.000Z',
+      lastError: null,
+      lastSyncedAt: '2026-06-15T00:00:00.000Z',
+      matchedProject: true,
+      sourceServerId: 'prod',
+      version: 'v1'
+    })
+
+    const status = await commands.get('status')?.() as RelayPluginStatus
+
+    expect(status.configDistribution).toMatchObject({
+      allowedFields: ['modelServices'],
+      hash: 'sha256:cache',
+      lastAppliedAt: '2026-06-15T00:05:00.000Z',
+      lastSyncedAt: '2026-06-15T00:00:00.000Z',
+      matchedProject: true,
+      modelServiceKeys: ['relay'],
+      sourceServerId: 'prod',
+      version: 'v1'
+    })
   })
 
   it('reports a local error when relay server config is missing', async () => {

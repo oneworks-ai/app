@@ -364,6 +364,36 @@ describe('scripts cli', () => {
     })
   })
 
+  it('dispatches relay config smoke with pending and debug options', async () => {
+    const runRelayConfigSmoke = vi.fn(async () => ({
+      cachePath: '/tmp/oneworks-relay-config-smoke/project-home/.local/plugins/relay/config-snapshot.json',
+      ok: false,
+      pending: ['pending hook'],
+      projectHome: '/tmp/oneworks-relay-config-smoke/project-home',
+      tempRoot: '/tmp/oneworks-relay-config-smoke',
+      workspaceDir: '/tmp/oneworks-relay-config-smoke/workspace'
+    }))
+    const cli = createScriptsCli({
+      runRelayConfigSmoke
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'relay-config',
+      'smoke',
+      '--allow-pending',
+      '--json',
+      '--keep-temp'
+    ])
+
+    expect(runRelayConfigSmoke).toHaveBeenCalledWith({
+      allowPending: true,
+      json: true,
+      keepTemp: true
+    })
+  })
+
   it('dispatches homebrew tap OneWorks formula sync', async () => {
     const runHomebrewTapSyncOneWorks = vi.fn(async () => ({
       formulaPath: '/repo/infra/homebrew-tap/Formula/oneworks.rb',

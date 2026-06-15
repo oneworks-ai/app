@@ -3,10 +3,12 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import process from 'node:process'
 
+import { normalizeRelayConfigAssignment } from './config-snapshot.js'
 import { hashDeviceToken } from './devices/private-metadata.js'
 import { sanitizeRelayStorageValue } from './storage/content-boundary.js'
 import { normalizeRelaySsoProviders } from './storage/sso-providers.js'
 import type {
+  RelayConfigAssignment,
   RelayDevice,
   RelayDeviceSession,
   RelayEmailChallenge,
@@ -29,6 +31,7 @@ import { createToken, isRecord, normalizeRole, now } from './utils.js'
 
 const defaultStore = (): RelayStore => ({
   createdAt: now(),
+  configAssignments: [],
   emailRisk: {
     buckets: [],
     challenges: []
@@ -62,6 +65,7 @@ const normalizeUser = (value: Record<string, unknown>): RelayUser => ({
     ? value.providerUserId.trim()
     : undefined,
   role: normalizeRole(value.role, 'member'),
+  teamIds: normalizeStringArray(value.teamIds),
   createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
   updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined
 })
@@ -377,6 +381,11 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
   const store = isRecord(value) ? value : {}
   return {
     createdAt: typeof store.createdAt === 'string' ? store.createdAt : now(),
+    configAssignments: Array.isArray(store.configAssignments)
+      ? store.configAssignments.filter(isRecord).map(normalizeRelayConfigAssignment).filter((
+        value
+      ): value is RelayConfigAssignment => value != null)
+      : [],
     emailRisk: normalizeEmailRiskState(store.emailRisk),
     users: Array.isArray(store.users) ? store.users.filter(isRecord).map(normalizeUser) : [],
     invites: Array.isArray(store.invites) ? store.invites.filter(isRecord).map(normalizeInvite) : [],

@@ -1,11 +1,12 @@
 /* eslint-disable max-lines -- relay client renderer keeps account, server, and device markup together. */
 import { actionButton, escapeHtml, materialIcon, valueOrDash } from './dom.js'
 import type { RelayClientMessages } from './i18n.js'
-import type { RelayServerStatus, RelayStatus } from './types.js'
+import type { RelayConfigDistributionStatus, RelayServerStatus, RelayStatus } from './types.js'
 
 interface RenderRelayViewMarkupOptions {
   activeRemote?: string
   activeServer?: RelayServerStatus
+  configDistribution?: RelayConfigDistributionStatus
   connectionState: string
   device: NonNullable<RelayStatus['device']>
   editingServer: boolean
@@ -59,6 +60,107 @@ const getDeviceFeatureText = (
     .filter(key => capabilities[key] === true)
     .map(key => t.devices.features[key])
   return labels.length === 0 ? undefined : labels.join(' / ')
+}
+
+const cleanTextList = (values: string[] | undefined) => (
+  Array.isArray(values)
+    ? values.map(cleanText).filter((value): value is string => value != null)
+    : []
+)
+
+const getProjectMatchText = (
+  value: RelayConfigDistributionStatus['matchedProject'] | undefined,
+  t: RelayClientMessages
+) => {
+  if (value === true) return t.configDistribution.matched
+  if (value === false) return t.configDistribution.notMatched
+  return cleanText(value) ?? t.configDistribution.unknown
+}
+
+const hasConfigDistributionDetails = (status: RelayConfigDistributionStatus | undefined) => {
+  if (status == null) return false
+  return [
+    status.hash,
+    status.lastAppliedAt,
+    status.lastSyncedAt,
+    status.sourceServerId,
+    status.version
+  ].some(value => cleanText(value) != null) ||
+    status.matchedProject != null ||
+    cleanTextList(status.allowedFields).length > 0 ||
+    cleanTextList(status.modelServiceKeys).length > 0
+}
+
+const renderConfigDistributionFact = (label: string, value: unknown) => {
+  const text = valueOrDash(value)
+  return `
+    <div class="oneworks-relay__config-fact">
+      <span class="oneworks-relay__config-fact-label">${escapeHtml(label)}</span>
+      <span class="oneworks-relay__config-fact-value" title="${escapeHtml(text)}">${escapeHtml(text)}</span>
+    </div>
+  `
+}
+
+const renderConfigDistribution = (
+  status: RelayConfigDistributionStatus | undefined,
+  t: RelayClientMessages
+) => {
+  const lastError = cleanText(status?.lastError)
+  const hasDetails = hasConfigDistributionDetails(status)
+  const modelServiceKeys = cleanTextList(status?.modelServiceKeys).join(', ')
+  const allowedFields = cleanTextList(status?.allowedFields).join(', ')
+  const state = lastError != null ? 'error' : hasDetails ? 'synced' : 'empty'
+  const stateText = state === 'error'
+    ? t.configDistribution.failed
+    : state === 'synced'
+    ? t.configDistribution.synced
+    : t.configDistribution.empty
+
+  return `
+    <section class="oneworks-relay__config" aria-label="${escapeHtml(t.configDistribution.title)}">
+      <div class="oneworks-relay__config-header">
+        <h3 class="oneworks-relay__config-title">
+          ${materialIcon('rule_settings')}
+          <span>${escapeHtml(t.configDistribution.title)}</span>
+          <span class="oneworks-relay__config-state" data-state="${escapeHtml(state)}">${escapeHtml(stateText)}</span>
+        </h3>
+        ${actionButton('refresh-config', t.actions.refreshConfig, 'published_with_changes')}
+      </div>
+      ${
+    lastError == null
+      ? ''
+      : `<div class="oneworks-relay__config-error">${escapeHtml(lastError)}</div>`
+  }
+      ${
+    state === 'empty'
+      ? `<div class="oneworks-relay__config-empty">${escapeHtml(t.configDistribution.emptyDescription)}</div>`
+      : ''
+  }
+      <div class="oneworks-relay__config-grid">
+        ${renderConfigDistributionFact(t.configDistribution.labels.lastSyncedAt, status?.lastSyncedAt)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.lastAppliedAt, status?.lastAppliedAt)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.version, status?.version)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.hash, status?.hash)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.sourceServer, status?.sourceServerId)}
+        ${
+    renderConfigDistributionFact(
+      t.configDistribution.labels.matchedProject,
+      getProjectMatchText(
+        status?.matchedProject,
+        t
+      )
+    )
+  }
+        ${renderConfigDistributionFact(t.configDistribution.labels.modelServices, modelServiceKeys)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.allowedFields, allowedFields)}
+        ${
+    lastError == null
+      ? ''
+      : renderConfigDistributionFact(t.configDistribution.labels.lastError, lastError)
+  }
+      </div>
+    </section>
+  `
 }
 
 const renderRelayDeviceRows = (
@@ -204,6 +306,7 @@ const renderRelayAccountRows = (
 export const renderRelayViewMarkup = ({
   activeRemote,
   activeServer,
+  configDistribution,
   connectionState,
   device,
   editingServer,
@@ -215,6 +318,7 @@ export const renderRelayViewMarkup = ({
   stateError
 }: RenderRelayViewMarkupOptions) => {
   const accountRows = renderRelayAccountRows(servers, connectionState, cleanText(device.id), t)
+  const configDistributionMarkup = renderConfigDistribution(configDistribution, t)
   const serviceName = valueOrDash(activeServer?.name ?? activeServer?.id ?? device.name ?? options.deviceName)
   const serviceTitle = activeRemote ?? serviceName
   const serverEditorMarkup = editingServer
@@ -273,6 +377,7 @@ export const renderRelayViewMarkup = ({
     accountRows === '' ? `<div class="oneworks-relay__empty">${escapeHtml(t.emptyAccounts)}</div>` : accountRows
   }
           </div>
+          ${configDistributionMarkup}
         </section>
       </div>
     </main>

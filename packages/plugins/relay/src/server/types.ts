@@ -18,6 +18,10 @@ export interface RelayPluginContext {
   workspaceFolder: string
   projectHome: string
   options: Record<string, unknown>
+  configDistribution?: {
+    getStatus?: () => RelayConfigDistributionStatus | Promise<RelayConfigDistributionStatus>
+    refresh?: () => RelayConfigDistributionStatus | Promise<RelayConfigDistributionStatus>
+  }
   logger: {
     warn: (...args: unknown[]) => void
   }
@@ -111,4 +115,46 @@ export interface RelayConnectionState {
   lastConnectedAt: string | null
   lastError: string | null
   remoteBaseUrl?: string
+}
+
+export interface RelayConfigDistributionStatus {
+  allowedFields: string[]
+  hash: string | null
+  lastAppliedAt: string | null
+  lastError: string | null
+  lastSyncedAt: string | null
+  matchedProject: boolean | string | null
+  modelServiceKeys: string[]
+  sourceServerId: string | null
+  version: string | null
+}
+
+export interface RelayPublicServerStatus extends RelayServerOptions {
+  account?: RelayAccountProfile
+  active: boolean
+  connected: boolean
+  connection: RelayConnectionState
+  devices?: RelayRemoteDeviceSummary[]
+  devicesError?: string
+  hasToken: boolean
+  registeredAt: string | null
+  updatedAt: string | null
+}
+
+export interface RelayPublicStatus {
+  configDistribution: RelayConfigDistributionStatus
+  connection: RelayConnectionState & {
+    activeServerId?: string
+    remoteBaseUrl?: string
+  }
+  device: {
+    hasToken: boolean
+    id: string
+    name: string
+    registeredAt: string | null
+    updatedAt: string | null
+  }
+  options: RelayOptions
+  servers: RelayPublicServerStatus[]
+  storePath: string
 }

@@ -14,6 +14,7 @@ export interface RelayPermissionPrincipal {
 }
 
 export const deviceTokenPermissions = Object.freeze([
+  relayPermissions.relayConfigSnapshotRead,
   relayPermissions.relayDevicesHeartbeat,
   relayPermissions.relayDevicesRead,
   relayPermissions.relayDevicesRegister,

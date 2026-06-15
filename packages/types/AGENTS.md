@@ -7,6 +7,8 @@
 
 - `src/config.ts`
   - `Config`、adapter 配置、MCP 配置与 UI 配置返回契约
+- `src/plugin.ts`
+  - 插件实例配置、manifest、config schema / config hook 入口和运行时 metadata 契约
 - `src/workspace.ts`
   - workspace asset contract、adapter asset plan
 - `src/adapter.ts`

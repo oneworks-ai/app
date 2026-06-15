@@ -45,6 +45,8 @@ export interface PluginViewContext {
 }
 
 export interface RelayStatus {
+  configDistribution?: RelayConfigDistributionStatus
+  configSync?: RelayConfigDistributionStatus
   connection?: {
     activeServerId?: string
     remoteBaseUrl?: string
@@ -65,6 +67,18 @@ export interface RelayStatus {
   }
   servers?: RelayServerStatus[]
   [key: string]: unknown
+}
+
+export interface RelayConfigDistributionStatus {
+  allowedFields?: string[]
+  hash?: string | null
+  lastAppliedAt?: string | null
+  lastError?: string | null
+  lastSyncedAt?: string | null
+  matchedProject?: boolean | string | null
+  modelServiceKeys?: string[]
+  sourceServerId?: string | null
+  version?: string | null
 }
 
 export interface RelayServerStatus {

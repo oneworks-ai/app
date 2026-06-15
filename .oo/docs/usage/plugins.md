@@ -13,7 +13,7 @@ One Works 现在有两套并行的插件使用方式：
 
 - 内置 One Works 插件会按运行时声明的版本从全局 package cache 解析；缺失时会安装到该 cache。
 - 其他插件通过 npm 安装到你的项目 workspace，或使用目录路径引用；如果包解析不到，会直接报错。
-- `id` 支持简写：例如配置 `logger` 时，会优先解析 `logger`，失败后再尝试 `@oneworks/plugin-logger`。
+- `id` 支持简写：例如配置 `logger` 时，会优先解析 `logger`，失败后再尝试 `@oneworks/plugin-logger`；旧的 `@vibe-forge/plugin-logger` 仍作为兼容路径解析。
 
 全局 package cache 默认位于 `~/.oneworks/bootstrap/npm`；如需调整根目录，可以设置 `__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__`。
 
@@ -127,6 +127,58 @@ plugin 实例：
 `writeOnly: true` 或 `x-oneworks-ui.sensitive: true` 会按敏感字段展示。
 需要完全控制 UI 时，也可以在 manifest 里提供 `config.uiSchema`，直接使用配置页内部的
 `ConfigUiObjectSchema` 结构。
+
+## Config Hook
+
+插件也可以提供一个 config hook，在 One Works 读取完 global/project/user config 后返回一段临时 config patch。这个 patch 会合并到最终 user 层，因此运行时、Web UI 和 adapter 都能看到最终生效的 `modelServices`、默认模型、MCP、权限等配置。
+
+适合放在这里的逻辑：
+
+- Relay 服务按用户、团队、项目白名单下发 `modelServices`
+- 插件根据 `plugins[].options` 判断哪些字段允许合并
+- 插件读取服务端提前同步到本地目录的配置文件，再合并到本次启动的最终配置
+
+这类规则不应该直接放到普通设置页字段里编辑。用户可见的规则、项目 allow/deny 列表、可合并字段白名单、本地变更自动同步云端等能力，应由对应插件自己的插件页或服务协议承载；普通配置页只展示合并后的最终 config。
+
+插件包可以通过 package export 暴露 `./config`：
+
+```json
+{
+  "exports": {
+    ".": "./dist/index.js",
+    "./config": "./dist/config.js"
+  }
+}
+```
+
+也可以在 manifest 里声明相对入口。`config` 字段仍用于插件实例配置表单 schema，config hook 使用独立的 `configHook` 字段：
+
+```js
+module.exports = {
+  __oneWorksPluginManifest: true,
+  configHook: { entry: './dist/config.js' }
+}
+```
+
+`./config` 入口导出一个函数，返回要合并的 config patch：
+
+```js
+module.exports = async (ctx) => {
+  const service = ctx.plugin.options.serviceKey || 'relay'
+  return {
+    defaultModelService: service,
+    modelServices: {
+      [service]: {
+        apiBaseUrl: ctx.jsonVariables.RELAY_BASE_URL,
+        apiKey: ctx.jsonVariables.RELAY_API_KEY,
+        models: ['gpt-relay']
+      }
+    }
+  }
+}
+```
+
+`ctx` 中包含当前 `cwd`、`env`、`jsonVariables`、`projectConfig`、`userConfig`、`mergedConfig` 和当前插件实例元数据。config hook 应尽量读取本地已同步数据；如果需要访问网络，建议插件自己做缓存和失败降级。
 
 ## Scope 与资源引用
 

@@ -7,6 +7,7 @@ export const relayPermissions = {
   adminSsoWrite: 'admin.sso.write',
   adminUsersRead: 'admin.users.read',
   adminUsersWrite: 'admin.users.write',
+  relayConfigSnapshotRead: 'relay.configSnapshot.read',
   relayDevicesHeartbeat: 'relay.devices.heartbeat',
   relayDevicesRead: 'relay.devices.read',
   relayDevicesReadAny: 'relay.devices.read.any',

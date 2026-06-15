@@ -7,12 +7,24 @@ import { vi } from 'vitest'
 
 import { activatePlugin } from '../src/server/index.js'
 import type { RelayLocalSessionAdapter } from '../src/server/session-types.js'
+import type { RelayConfigDistributionStatus } from '../src/server/types.js'
 
 export type CommandHandler = (payload?: unknown) => unknown | Promise<unknown>
 export type ApiHandler = (request: { body: Buffer; method: string; path: string }) => unknown | Promise<unknown>
 export type ApiRegistration = Record<string, unknown> & { handler?: ApiHandler }
 
 export interface RelayPluginStatus {
+  configDistribution?: {
+    allowedFields?: string[]
+    hash?: string | null
+    lastAppliedAt?: string | null
+    lastError?: string | null
+    lastSyncedAt?: string | null
+    matchedProject?: boolean | string | null
+    modelServiceKeys?: string[]
+    sourceServerId?: string | null
+    version?: string | null
+  }
   connection: {
     activeServerId?: string
     lastError: string | null
@@ -69,6 +81,10 @@ export const cleanupPluginFixtures = async () => {
 export const createPluginHarness = async (
   options: Record<string, unknown>,
   harnessOptions: {
+    configDistribution?: {
+      getStatus?: () => RelayConfigDistributionStatus | Promise<RelayConfigDistributionStatus>
+      refresh?: () => RelayConfigDistributionStatus | Promise<RelayConfigDistributionStatus>
+    }
     sessions?: RelayLocalSessionAdapter
   } = {}
 ) => {
@@ -86,6 +102,7 @@ export const createPluginHarness = async (
     workspaceFolder: '/workspace',
     projectHome,
     options,
+    configDistribution: harnessOptions.configDistribution,
     logger,
     registerCommand: (commandId: string, handler: CommandHandler) => commands.set(commandId, handler),
     registerApi: (apiId: string, api: ApiRegistration) => apis.set(apiId, api),
@@ -107,10 +124,55 @@ export const readDeviceStore = async (projectHome: string) =>
     await readFile(join(projectHome, '.local/plugins/relay/device.json'), 'utf8')
   ) as Record<string, unknown>
 
+export const readConfigSnapshot = async (projectHome: string) =>
+  JSON.parse(
+    await readFile(join(projectHome, '.local/plugins/relay/config-snapshot.json'), 'utf8')
+  ) as Record<string, unknown>
+
+export const createRelayConfigSnapshotFixture = () => ({
+  assignments: [
+    {
+      id: 'base',
+      allowedFields: ['modelServices', 'defaultModelService', 'recommendedModels'],
+      configPatch: {
+        defaultModelService: 'relay-assigned',
+        modelServices: {
+          'relay-assigned': {
+            apiBaseUrl: 'https://relay.example/v1',
+            apiKey: 'relay-key',
+            models: ['relay-model']
+          }
+        },
+        permissions: {
+          allow: ['not-safe']
+        },
+        recommendedModels: [
+          {
+            model: 'relay-model',
+            service: 'relay-assigned'
+          }
+        ]
+      },
+      project: {
+        allow: ['workspace']
+      }
+    }
+  ],
+  hash: 'snapshot-hash',
+  team: {
+    id: 'team-1',
+    name: 'Team One'
+  },
+  updatedAt: '2026-06-15T00:00:00.000Z',
+  version: 'snapshot-v1'
+})
+
 export const stubRelayFetch = (deviceToken = 'remote-device-token') => {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input)
-    const body = url.endsWith('/api/relay/devices')
+    const body = url.endsWith('/api/relay/config-snapshot')
+      ? createRelayConfigSnapshotFixture()
+      : url.endsWith('/api/relay/devices')
       ? {
         devices: [{
           capabilities: { sessions: true, terminal: true, workspaceFiles: false },

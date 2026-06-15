@@ -13,6 +13,15 @@ import type {
   RelayViewState
 } from './types.js'
 
+class RelayActionError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message)
+  }
+}
+
 export const renderRelayView = (
   container: HTMLElement,
   ctx: PluginClientContext,
@@ -79,6 +88,7 @@ export const renderRelayView = (
     container.innerHTML = renderRelayViewMarkup({
       activeRemote: getActiveRemote(),
       activeServer,
+      configDistribution: status?.configDistribution ?? status?.configSync,
       connectionState,
       device,
       editingServer,
@@ -173,9 +183,43 @@ export const renderRelayView = (
     })
     if (!response.ok) {
       const text = await response.text()
-      throw new Error(text || getMessages().errors.relayActionFailed(action, response.status))
+      throw new RelayActionError(
+        text || getMessages().errors.relayActionFailed(action, response.status),
+        response.status
+      )
     }
     return response
+  }
+
+  const toErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
+
+  const refreshConfigDistribution = async () => {
+    state = { ...state, loading: true, error: null }
+    paint()
+    try {
+      const response = await postAction('config-refresh')
+      state = { loading: false, error: null, status: await response.json() }
+    } catch (error) {
+      if (error instanceof RelayActionError && (error.status === 404 || error.status === 405)) {
+        try {
+          state = { loading: false, error: null, status: await readStatus() }
+        } catch (statusError) {
+          state = {
+            loading: false,
+            error: toErrorMessage(statusError),
+            status: state.status
+          }
+        }
+        paint()
+        return
+      }
+      state = {
+        loading: false,
+        error: toErrorMessage(error),
+        status: state.status
+      }
+    }
+    paint()
   }
 
   const callAction = async (action: string, serverId?: string, payload: Record<string, unknown> = {}) => {
@@ -244,6 +288,10 @@ export const renderRelayView = (
     }
     if (action === 'refresh') {
       void refresh()
+      return
+    }
+    if (action === 'refresh-config') {
+      void refreshConfigDistribution()
       return
     }
     if (action === 'login') {
