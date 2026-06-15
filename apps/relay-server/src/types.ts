@@ -21,6 +21,8 @@ export interface RelayServerArgs {
 }
 
 export type RelayAuthProvider = string
+export type RelayConfigAssignmentMode = 'default' | 'override'
+export type RelayConfigProfileStatus = 'disabled' | 'draft' | 'published'
 export type RelayEmailProviderKind = 'disabled' | 'resend'
 export type RelayEmailPurpose = 'email-verification' | 'invite' | 'login'
 export type RelayLocale = 'en' | 'zh-CN'
@@ -240,12 +242,25 @@ export interface RelayEncryptedPayload {
   version: 1
 }
 
-export type RelayConfigSafeField = 'defaultModelService' | 'modelServices' | 'recommendedModels'
+export type RelayConfigSafeField =
+  | 'defaultModelService'
+  | 'marketplaces'
+  | 'modelServices'
+  | 'plugins'
+  | 'recommendedModels'
+  | 'skillRegistries'
+  | 'skills'
+  | 'skillsMeta'
 
 export interface RelayConfigPatch {
   defaultModelService?: string
+  marketplaces?: Record<string, unknown>
   modelServices?: Record<string, unknown>
+  plugins?: Record<string, unknown>
   recommendedModels?: unknown[]
+  skillRegistries?: unknown
+  skills?: unknown
+  skillsMeta?: Record<string, unknown>
   [key: string]: unknown
 }
 
@@ -270,12 +285,64 @@ export interface RelayConfigAssignment {
   version?: string
 }
 
+export interface RelayConfigProfile {
+  id: string
+  teamId: string
+  name: string
+  description?: string
+  status: RelayConfigProfileStatus
+  activeVersionId?: string
+  createdByUserId: string
+  updatedByUserId?: string
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface RelayConfigProfileVersion {
+  id: string
+  profileId: string
+  version: number
+  allowedFields: RelayConfigSafeField[]
+  configPatch: RelayConfigPatch
+  secretRefs?: Record<string, string>
+  sourceHash: string
+  createdByUserId: string
+  changeNote?: string
+  createdAt: string
+}
+
+export interface RelayConfigProfileAssignment {
+  id: string
+  profileId: string
+  versionId?: string
+  priority: number
+  target?: RelayConfigAssignmentTarget
+  project?: RelayConfigProjectRule
+  mode: RelayConfigAssignmentMode
+  enabled: boolean
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface RelayConfigSnapshotProvenance {
+  teamId: string
+  teamName?: string
+  profileId: string
+  profileName: string
+  versionId: string
+  version: number
+  assignmentId: string
+  mode: RelayConfigAssignmentMode
+  fields: RelayConfigSafeField[]
+}
+
 export interface RelayConfigSnapshotAssignment {
   allowedFields?: RelayConfigSafeField[]
   configPatch?: RelayConfigPatch
   enabled?: boolean
   id: string
   project?: RelayConfigProjectRule
+  provenance?: RelayConfigSnapshotProvenance
   updatedAt?: string
   version?: string
 }
@@ -385,6 +452,9 @@ export interface RelayForwardingJob {
 export interface RelayStore {
   createdAt: string
   configAssignments: RelayConfigAssignment[]
+  configProfileAssignments: RelayConfigProfileAssignment[]
+  configProfileVersions: RelayConfigProfileVersion[]
+  configProfiles: RelayConfigProfile[]
   emailRisk: RelayEmailRiskState
   teamPolicy: RelayTeamPolicy
   teams: RelayTeam[]

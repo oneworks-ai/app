@@ -73,6 +73,9 @@ describe('relay storage repository', () => {
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
       configAssignments: [],
+      configProfileAssignments: [],
+      configProfileVersions: [],
+      configProfiles: [],
       emailRisk: {
         buckets: [],
         challenges: []
@@ -125,6 +128,9 @@ describe('relay storage repository', () => {
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
       configAssignments: [],
+      configProfileAssignments: [],
+      configProfileVersions: [],
+      configProfiles: [],
       emailRisk: {
         buckets: [],
         challenges: []
@@ -194,6 +200,9 @@ describe('relay storage repository', () => {
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
       configAssignments: [],
+      configProfileAssignments: [],
+      configProfileVersions: [],
+      configProfiles: [],
       emailRisk: {
         buckets: [],
         challenges: []

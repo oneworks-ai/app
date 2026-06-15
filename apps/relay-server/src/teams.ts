@@ -153,3 +153,6 @@ export const canManageRelayTeamMembers = (member: RelayTeamMember | undefined) =
 
 export const canUpdateRelayTeam = (member: RelayTeamMember | undefined) =>
   member?.role === 'owner' || member?.role === 'admin'
+
+export const canWriteRelayTeamConfigs = (member: RelayTeamMember | undefined) =>
+  member?.role === 'owner' || member?.role === 'admin' || member?.role === 'editor'

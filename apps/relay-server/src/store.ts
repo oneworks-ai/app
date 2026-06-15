@@ -3,6 +3,11 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import process from 'node:process'
 
+import {
+  normalizeRelayConfigProfile,
+  normalizeRelayConfigProfileAssignment,
+  normalizeRelayConfigProfileVersion
+} from './config-profiles.js'
 import { normalizeRelayConfigAssignment } from './config-snapshot.js'
 import { hashDeviceToken } from './devices/private-metadata.js'
 import { sanitizeRelayStorageValue } from './storage/content-boundary.js'
@@ -10,6 +15,9 @@ import { normalizeRelaySsoProviders } from './storage/sso-providers.js'
 import { normalizeRelayTeamPolicy, normalizeTeamRole } from './teams.js'
 import type {
   RelayConfigAssignment,
+  RelayConfigProfile,
+  RelayConfigProfileAssignment,
+  RelayConfigProfileVersion,
   RelayDevice,
   RelayDeviceSession,
   RelayEmailChallenge,
@@ -35,6 +43,9 @@ import { createToken, isRecord, normalizeRole, now } from './utils.js'
 const defaultStore = (): RelayStore => ({
   createdAt: now(),
   configAssignments: [],
+  configProfileAssignments: [],
+  configProfileVersions: [],
+  configProfiles: [],
   emailRisk: {
     buckets: [],
     challenges: []
@@ -491,6 +502,21 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
       ? store.configAssignments.filter(isRecord).map(normalizeRelayConfigAssignment).filter((
         value
       ): value is RelayConfigAssignment => value != null)
+      : [],
+    configProfileAssignments: Array.isArray(store.configProfileAssignments)
+      ? store.configProfileAssignments.filter(isRecord).map(normalizeRelayConfigProfileAssignment).filter((
+        value
+      ): value is RelayConfigProfileAssignment => value != null)
+      : [],
+    configProfileVersions: Array.isArray(store.configProfileVersions)
+      ? store.configProfileVersions.filter(isRecord).map(normalizeRelayConfigProfileVersion).filter((
+        value
+      ): value is RelayConfigProfileVersion => value != null)
+      : [],
+    configProfiles: Array.isArray(store.configProfiles)
+      ? store.configProfiles.filter(isRecord).map(normalizeRelayConfigProfile).filter((
+        value
+      ): value is RelayConfigProfile => value != null)
       : [],
     emailRisk: normalizeEmailRiskState(store.emailRisk),
     teamPolicy: normalizeRelayTeamPolicy(store.teamPolicy),

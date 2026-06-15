@@ -9,6 +9,11 @@ import { sendJson } from './http.js'
 import { handleAdminSsoProviders } from './routes/admin-sso-providers.js'
 import { handleAdminInvites, handleAdminUsers } from './routes/admin.js'
 import { handleAuthRoute } from './routes/auth.js'
+import {
+  handleConfigProfileAssignmentsRoute,
+  handleConfigProfilesRoute,
+  handleTeamConfigProfilesRoute
+} from './routes/config-profiles.js'
 import { handleRelayConfigSnapshot } from './routes/config-snapshot.js'
 import { handleDeviceHeartbeat, handleDeviceList, handleDeviceRegister } from './routes/devices.js'
 import { handleEmailVerificationSendRoute } from './routes/email-verification.js'
@@ -119,7 +124,16 @@ const handleRelayRequestWithStore = async (
   if (await handleRelayTeamPolicyRoute(req, res, args, store, storeRepository, url)) {
     return
   }
+  if (await handleTeamConfigProfilesRoute(req, res, args, store, storeRepository, url)) {
+    return
+  }
   if (await handleTeamsRoute(req, res, args, store, storeRepository, url)) {
+    return
+  }
+  if (await handleConfigProfilesRoute(req, res, args, store, storeRepository, url)) {
+    return
+  }
+  if (await handleConfigProfileAssignmentsRoute(req, res, args, store, storeRepository, url)) {
     return
   }
   if (url.pathname === '/api/relay/metrics') {

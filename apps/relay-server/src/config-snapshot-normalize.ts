@@ -1,3 +1,4 @@
+import { RELAY_CONFIG_SAFE_FIELDS } from './config-safe-fields.js'
 import type {
   RelayConfigAssignment,
   RelayConfigPatch,
@@ -8,12 +9,6 @@ import type {
   RelayUser
 } from './types.js'
 import { isRecord, now } from './utils.js'
-
-export const RELAY_CONFIG_SAFE_FIELDS = [
-  'defaultModelService',
-  'modelServices',
-  'recommendedModels'
-] as const satisfies readonly RelayConfigSafeField[]
 
 const SAFE_FIELD_SET = new Set<string>(RELAY_CONFIG_SAFE_FIELDS)
 
@@ -39,14 +34,14 @@ export const normalizeRelayConfigSafeFields = (value: unknown): RelayConfigSafeF
   return unique(fields)
 }
 
-const normalizeRelayConfigProjectRule = (value: unknown): RelayConfigProjectRule | undefined => {
+export const normalizeRelayConfigProjectRule = (value: unknown): RelayConfigProjectRule | undefined => {
   if (!isRecord(value)) return undefined
   const allow = normalizeStringList(value.allow)
   const deny = normalizeStringList(value.deny)
   return allow == null && deny == null ? undefined : { allow, deny }
 }
 
-const normalizeRelayConfigAssignmentTarget = (value: unknown): RelayConfigAssignment['target'] => {
+export const normalizeRelayConfigTarget = (value: unknown): RelayConfigAssignment['target'] => {
   if (!isRecord(value)) return undefined
   const teamIds = normalizeStringList(value.teamIds)
   const userIds = normalizeStringList(value.userIds)
@@ -70,6 +65,21 @@ export const filterRelayConfigPatch = (
   if (allowed.has('recommendedModels') && Array.isArray(patch.recommendedModels)) {
     filtered.recommendedModels = patch.recommendedModels
   }
+  if (allowed.has('plugins') && isRecord(patch.plugins)) {
+    filtered.plugins = patch.plugins
+  }
+  if (allowed.has('marketplaces') && isRecord(patch.marketplaces)) {
+    filtered.marketplaces = patch.marketplaces
+  }
+  if (allowed.has('skills') && (Array.isArray(patch.skills) || isRecord(patch.skills))) {
+    filtered.skills = patch.skills
+  }
+  if (allowed.has('skillsMeta') && isRecord(patch.skillsMeta)) {
+    filtered.skillsMeta = patch.skillsMeta
+  }
+  if (allowed.has('skillRegistries') && (Array.isArray(patch.skillRegistries) || isRecord(patch.skillRegistries))) {
+    filtered.skillRegistries = patch.skillRegistries
+  }
 
   return Object.keys(filtered).length > 0 ? filtered : undefined
 }
@@ -82,7 +92,7 @@ export const normalizeRelayConfigAssignment = (value: unknown): RelayConfigAssig
   const allowedFields = normalizeRelayConfigSafeFields(value.allowedFields)
   const configPatch = filterRelayConfigPatch(value.configPatch as RelayConfigPatch | undefined, allowedFields)
   const project = normalizeRelayConfigProjectRule(value.project)
-  const target = normalizeRelayConfigAssignmentTarget(value.target)
+  const target = normalizeRelayConfigTarget(value.target)
   return {
     id,
     allowedFields,
@@ -174,7 +184,7 @@ export const hasProjectContext = (context: RelayConfigProjectContext | undefined
 )
 
 export const assignmentTargetsUser = (
-  assignment: RelayConfigAssignment,
+  assignment: Pick<RelayConfigAssignment, 'target'>,
   user: RelayUser,
   teamIdsForUser: string[] = user.teamIds ?? []
 ) => {

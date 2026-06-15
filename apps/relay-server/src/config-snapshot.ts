@@ -11,6 +11,9 @@ import {
 import { getRelayUserTeamIds } from './teams.js'
 import type {
   RelayConfigAssignment,
+  RelayConfigProfile,
+  RelayConfigProfileAssignment,
+  RelayConfigProfileVersion,
   RelayConfigProjectContext,
   RelayConfigSnapshot,
   RelayConfigSnapshotAssignment,
@@ -69,6 +72,72 @@ const snapshotAssignmentFromStore = (
   }
 }
 
+const profileSnapshotAssignmentFromStore = (
+  store: RelayStore,
+  assignment: RelayConfigProfileAssignment,
+  profile: RelayConfigProfile,
+  version: RelayConfigProfileVersion
+): RelayConfigSnapshotAssignment | undefined => {
+  if (!assignment.enabled || profile.status !== 'published') return undefined
+
+  const configPatch = filterRelayConfigPatch(version.configPatch, version.allowedFields)
+  if (configPatch == null) return undefined
+
+  const team = store.teams.find(item => item.id === profile.teamId)
+  return {
+    id: assignment.id,
+    allowedFields: version.allowedFields,
+    configPatch,
+    enabled: true,
+    ...(assignment.project == null ? {} : { project: assignment.project }),
+    provenance: {
+      teamId: profile.teamId,
+      ...(team?.name == null ? {} : { teamName: team.name }),
+      profileId: profile.id,
+      profileName: profile.name,
+      versionId: version.id,
+      version: version.version,
+      assignmentId: assignment.id,
+      mode: assignment.mode,
+      fields: version.allowedFields
+    },
+    updatedAt: assignment.updatedAt ?? version.createdAt,
+    version: `${profile.id}:${version.version}`
+  }
+}
+
+const createProfileSnapshotAssignments = (
+  store: RelayStore,
+  user: RelayUser,
+  options: {
+    projectContext?: RelayConfigProjectContext
+    shouldFilterProject: boolean
+    teamIdsForUser: string[]
+  }
+) =>
+  store.configProfileAssignments
+    .filter(assignment => assignmentTargetsUser(assignment, user, options.teamIdsForUser))
+    .filter(assignment =>
+      !options.shouldFilterProject || matchesRelayConfigProject(
+        assignment,
+        options.projectContext ?? {}
+      )
+    )
+    .sort((left, right) =>
+      left.priority - right.priority ||
+      (left.updatedAt ?? left.createdAt).localeCompare(right.updatedAt ?? right.createdAt) ||
+      left.id.localeCompare(right.id)
+    )
+    .map(assignment => {
+      const profile = store.configProfiles.find(item => item.id === assignment.profileId)
+      const versionId = assignment.versionId ?? profile?.activeVersionId
+      const version = store.configProfileVersions.find(item => item.id === versionId)
+      return profile == null || version == null || version.profileId !== profile.id
+        ? undefined
+        : profileSnapshotAssignmentFromStore(store, assignment, profile, version)
+    })
+    .filter((assignment): assignment is RelayConfigSnapshotAssignment => assignment != null)
+
 export const createRelayConfigSnapshotForUser = (
   store: RelayStore,
   user: RelayUser,
@@ -79,13 +148,21 @@ export const createRelayConfigSnapshotForUser = (
 ): RelayConfigSnapshot => {
   const shouldFilterProject = hasProjectContext(options.projectContext)
   const teamIdsForUser = getRelayUserTeamIds(store, user)
-  const assignments = store.configAssignments
+  const legacyAssignments = store.configAssignments
     .map(normalizeRelayConfigAssignment)
     .filter((assignment): assignment is RelayConfigAssignment => assignment != null)
     .filter(assignment => assignmentTargetsUser(assignment, user, teamIdsForUser))
     .filter(assignment => !shouldFilterProject || matchesRelayConfigProject(assignment, options.projectContext ?? {}))
     .map(snapshotAssignmentFromStore)
     .filter((assignment): assignment is RelayConfigSnapshotAssignment => assignment != null)
+  const assignments = [
+    ...legacyAssignments,
+    ...createProfileSnapshotAssignments(store, user, {
+      projectContext: options.projectContext,
+      shouldFilterProject,
+      teamIdsForUser
+    })
+  ]
   const updatedAt = latestUpdatedAt(store, assignments)
   const hash = hashRelayConfigSnapshot({
     assignments,
