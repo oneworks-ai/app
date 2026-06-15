@@ -174,15 +174,13 @@ Secret store 要求：
 
 ## Admin 界面
 
-Relay Admin 增加这些领域：
+用户分组下要展示用户加入了哪些团队：用户列表支持按团队过滤，用户详情有“所属团队”区块，展示团队名、团队角色、加入时间、默认发布团队和继承的 config profiles。
 
-团队页包含可搜索列表、成员、角色过滤、归档操作和审计摘要；配置 profile 页包含版本历史、assignment 表、发布/禁用和 secret rotation；用户详情页展示团队成员关系和继承的 config profiles。
+团队详情页展示成员表、角色过滤、归档操作和审计摘要。拥有 `team.members.write` 的 owner/admin 可以直接在团队界面邀请用户、调整角色或移除成员；邀请入口不应该藏到全局用户管理页。配置 profile 页展示版本历史、assignment 表、发布/禁用和 secret rotation。
 
 Admin 列表页必须遵循现有表格约定：搜索、过滤、列配置、批量操作入口、固定表头、底部分页、图标操作按钮，以及主识别字段上的详情链接。
 
 ## Relay 插件界面
-
-Relay 插件增加：
 
 当前远端配置来源 team/profile/version、分享草稿构建器、团队选择、安全字段预览、API key 警告、密钥模式选择，以及带过期和撤销警告的 refresh/apply 状态。
 
