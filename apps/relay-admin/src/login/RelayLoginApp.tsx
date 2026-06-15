@@ -1,25 +1,47 @@
+/* eslint-disable max-lines -- Relay login app coordinates remembered accounts and multiple login methods. */
 import { Form } from 'antd'
 import type { InputRef } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { RelayCredentialForm } from './RelayCredentialForm'
 import type { LoginFormValues } from './RelayCredentialForm'
+import { RelayEmailCodePanel } from './RelayEmailCodePanel'
+import { RelayLoginMethodSwitcher } from './RelayLoginMethodSwitcher'
 import { ProviderButtonsSection, RememberedAccountsSection } from './RelayLoginSections'
 import { RelayPasskeyPanel } from './RelayPasskeyPanel'
 import { isRecord, readAccounts, readStringField, writeAccounts } from './accountStorage'
-import type { RelayLoginConfig, RelayLoginProviderConfig, RelayRememberedAccount } from './types'
+import { readLoginMethod, writeLoginMethod } from './loginMethodStorage'
+import type { RelayLoginConfig, RelayLoginMethod, RelayLoginProviderConfig, RelayRememberedAccount } from './types'
+
+const loginMethodByProvider = (provider: string): RelayLoginMethod | undefined => {
+  if (provider === 'passkey') return 'passkey'
+  if (provider === 'verification_code') return 'verification_code'
+  if (provider === 'invite' || provider === 'password') return 'password'
+  return undefined
+}
+
+const resolveInitialLoginMethod = (config: RelayLoginConfig): RelayLoginMethod => {
+  const enabled = config.loginMethods.enabled
+  const remembered = readLoginMethod()
+  if (remembered != null && enabled.includes(remembered)) return remembered
+  return enabled.includes(config.loginMethods.default)
+    ? config.loginMethods.default
+    : enabled[0] ?? 'password'
+}
 
 export const RelayLoginApp = ({ config }: { config: RelayLoginConfig }) => {
   const [form] = Form.useForm<LoginFormValues>()
   const passwordRef = useRef<InputRef>(null)
   const [accounts, setAccounts] = useState<RelayRememberedAccount[]>(() => readAccounts())
+  const [emailCodeEmailHint, setEmailCodeEmailHint] = useState('')
+  const [loginMethod, setLoginMethod] = useState<RelayLoginMethod>(() => resolveInitialLoginMethod(config))
   const [passkeyEmailHint, setPasskeyEmailHint] = useState('')
+  const [rememberAccount, setRememberAccount] = useState(true)
   const providerById = useMemo(
     () => new Map(config.providers.map(provider => [provider.id, provider])),
     [config.providers]
   )
-
-  const rememberAccount = Form.useWatch('rememberAccount', form) !== false
+  const enabledLoginMethods = useMemo(() => config.loginMethods.enabled, [config.loginMethods.enabled])
 
   const storeAccount = useCallback((account: RelayRememberedAccount) => {
     setAccounts(current => {
@@ -34,6 +56,18 @@ export const RelayLoginApp = ({ config }: { config: RelayLoginConfig }) => {
     })
   }, [])
 
+  const updateLoginMethod = useCallback((method: RelayLoginMethod) => {
+    if (!enabledLoginMethods.includes(method)) return
+    setLoginMethod(method)
+    writeLoginMethod(method)
+  }, [enabledLoginMethods])
+
+  useEffect(() => {
+    if (!enabledLoginMethods.includes(loginMethod)) {
+      updateLoginMethod(resolveInitialLoginMethod(config))
+    }
+  }, [config, enabledLoginMethods, loginMethod, updateLoginMethod])
+
   useEffect(() => {
     window.__relayLoginRedirectUri = config.redirectUri
     window.__relayLoginStoreAccount = storeAccount
@@ -45,6 +79,8 @@ export const RelayLoginApp = ({ config }: { config: RelayLoginConfig }) => {
   }, [config.redirectUri, storeAccount])
 
   const finishWithToken = useCallback((token: string, user: unknown, authProvider = 'password') => {
+    const finishedMethod = loginMethodByProvider(authProvider)
+    if (finishedMethod != null) writeLoginMethod(finishedMethod)
     if (isRecord(user) && rememberAccount) {
       const email = readStringField(user, 'email')
       const name = readStringField(user, 'name') || email
@@ -76,17 +112,24 @@ export const RelayLoginApp = ({ config }: { config: RelayLoginConfig }) => {
 
   const startAccountLogin = useCallback((account: RelayRememberedAccount) => {
     if (account.provider === 'passkey') {
+      updateLoginMethod('passkey')
       setPasskeyEmailHint(account.email)
       return
     }
+    if (account.provider === 'verification_code') {
+      updateLoginMethod('verification_code')
+      setEmailCodeEmailHint(account.email)
+      return
+    }
     if (account.provider === 'invite' || account.provider === 'password') {
+      updateLoginMethod('password')
       form.setFieldsValue({ email: account.email })
       passwordRef.current?.focus()
       return
     }
     const provider = providerById.get(account.provider)
     if (provider != null) startProviderLogin(provider, account.email)
-  }, [form, providerById, startProviderLogin])
+  }, [form, providerById, startProviderLogin, updateLoginMethod])
 
   return (
     <main className='relay-login relay-login-app' data-login-page>
@@ -101,17 +144,48 @@ export const RelayLoginApp = ({ config }: { config: RelayLoginConfig }) => {
           )
           : null}
 
-        <RelayPasskeyPanel
-          config={config}
-          emailHint={passkeyEmailHint}
-          finishWithToken={finishWithToken}
-        />
+        {loginMethod === 'passkey'
+          ? (
+            <RelayPasskeyPanel
+              config={config}
+              emailHint={passkeyEmailHint}
+              finishWithToken={finishWithToken}
+              rememberAccount={rememberAccount}
+              onRememberAccountChange={setRememberAccount}
+            />
+          )
+          : null}
 
-        <RelayCredentialForm
+        {loginMethod === 'verification_code'
+          ? (
+            <RelayEmailCodePanel
+              config={config}
+              emailHint={emailCodeEmailHint}
+              finishWithToken={finishWithToken}
+              rememberAccount={rememberAccount}
+              onRememberAccountChange={setRememberAccount}
+            />
+          )
+          : null}
+
+        {loginMethod === 'password'
+          ? (
+            <RelayCredentialForm
+              config={config}
+              finishWithToken={finishWithToken}
+              form={form}
+              passwordRef={passwordRef}
+              rememberAccount={rememberAccount}
+              onRememberAccountChange={setRememberAccount}
+            />
+          )
+          : null}
+
+        <RelayLoginMethodSwitcher
+          activeMethod={loginMethod}
           config={config}
-          finishWithToken={finishWithToken}
-          form={form}
-          passwordRef={passwordRef}
+          enabledMethods={enabledLoginMethods}
+          onChange={updateLoginMethod}
         />
 
         {config.providers.length > 0

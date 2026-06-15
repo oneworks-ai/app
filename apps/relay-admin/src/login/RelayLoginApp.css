@@ -10,6 +10,12 @@
     var(--primary-color) 82%,
     var(--text-color)
   );
+  --relay-login-inline-gap: 8px;
+  --relay-login-stack-gap: 14px;
+  --relay-login-control-gap: var(--relay-login-stack-gap);
+  --relay-login-section-end-gap: var(--relay-login-stack-gap);
+  --relay-login-panel-x: 24px;
+  --relay-login-panel-y: 22px;
 }
 
 html,
@@ -28,8 +34,8 @@ body,
 
 .relay-login-app__section {
   display: grid;
-  gap: 12px;
-  padding: 22px 24px;
+  gap: var(--relay-login-stack-gap);
+  padding: var(--relay-login-panel-y) var(--relay-login-panel-x);
   border-top: 1px solid rgba(26, 33, 29, .1);
 }
 
@@ -38,7 +44,11 @@ body,
 }
 
 .relay-login-app__section:last-child {
-  padding-bottom: 24px;
+  padding-bottom: var(--relay-login-panel-x);
+}
+
+.relay-login-app__section--auth-method {
+  padding-bottom: var(--relay-login-section-end-gap);
 }
 
 .relay-login-app__section--accounts {
@@ -54,19 +64,18 @@ body,
 
 .relay-login-app__form {
   display: grid;
-  gap: 10px;
+  gap: var(--relay-login-stack-gap);
 }
 
-.relay-login-app__passkey-register {
+.relay-login-app__account-stack {
   display: grid;
-  gap: 10px;
-  padding-top: 2px;
+  gap: var(--relay-login-control-gap);
 }
 
 .relay-login-app__passkey-code-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: var(--relay-login-inline-gap);
   align-items: start;
 }
 
@@ -149,7 +158,7 @@ body,
 }
 
 .relay-login-app__form .ant-input-affix-wrapper .ant-input-suffix {
-  margin-inline-start: 8px;
+  margin-inline-start: var(--relay-login-inline-gap);
 }
 
 .relay-login-app__form .ant-input-password-icon {
@@ -176,11 +185,13 @@ body,
   font-weight: 560;
 }
 
-.relay-login-app__remember-item .ant-form-item-control-input {
-  min-height: 0;
+.relay-login-app__remember-row {
+  min-height: 18px;
+  display: flex;
+  align-items: center;
 }
 
-.relay-login-app__remember-item .ant-checkbox-wrapper {
+.relay-login-app__remember-row .ant-checkbox-wrapper {
   color: #5e6a63;
   font-size: 12px;
   font-weight: 600;
@@ -233,7 +244,7 @@ body,
 
 .relay-login-app__provider-list {
   display: grid;
-  gap: 8px;
+  gap: var(--relay-login-inline-gap);
 }
 
 .relay-login-app__provider-button.ant-btn-default,
@@ -250,6 +261,44 @@ body,
   border-color: color-mix(in srgb, var(--primary-color) 48%, transparent);
   color: var(--primary-text-color);
   background: #ffffff;
+}
+
+.relay-login-app__method-switcher {
+  padding: 0 var(--relay-login-panel-x) var(--relay-login-panel-y);
+}
+
+.relay-login-app__method-switch-list {
+  display: grid;
+  gap: var(--relay-login-inline-gap);
+  justify-items: start;
+}
+
+.relay-login-app__method-switch-button.ant-btn-text {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  color: rgba(78, 90, 83, .72);
+  background: transparent;
+  box-shadow: none;
+  gap: var(--relay-login-inline-gap);
+  font-size: 12px;
+  font-weight: 650;
+  justify-content: flex-start;
+  line-height: 18px;
+}
+
+.relay-login-app__method-switch-button.ant-btn-text .ant-btn-icon {
+  width: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.relay-login-app__method-switch-button.ant-btn-text:not(:disabled):hover {
+  color: var(--primary-text-color);
+  background: transparent;
 }
 
 .relay-login-app__account-list.ant-list {
@@ -303,6 +352,7 @@ body,
 }
 
 .relay-login-app .relay-admin-icon,
+.relay-login-app__github-icon,
 .relay-login-app__google-icon {
   width: 18px;
   height: 18px;
@@ -316,6 +366,7 @@ body,
 }
 
 .relay-login-app .relay-admin-icon svg,
+.relay-login-app__github-icon svg,
 .relay-login-app__google-icon svg {
   width: 100%;
   height: 100%;

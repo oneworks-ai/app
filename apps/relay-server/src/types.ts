@@ -5,6 +5,7 @@ export interface RelayServerArgs {
   allowOrigin: string
   adminToken: string
   dataPath: string
+  defaultLoginMethod?: RelayLoginMethod
   deviceMetadataSecret?: string
   deviceOnlineTtlMs?: number
   email?: RelayEmailConfig
@@ -24,6 +25,7 @@ export type RelayAuthProvider = string
 export type RelayEmailProviderKind = 'disabled' | 'resend'
 export type RelayEmailPurpose = 'email-verification' | 'invite' | 'login'
 export type RelayLocale = 'en' | 'zh-CN'
+export type RelayLoginMethod = 'passkey' | 'password' | 'verification_code'
 export type RelayPasskeyChallengeKind = 'authentication' | 'registration'
 export type RelayRegistrationMode = 'admin_created_only' | 'email_verified' | 'invite_required'
 export type RelayRole = 'owner' | 'admin' | 'member' | 'viewer'
@@ -32,6 +34,7 @@ export type RelayStorageDriver = 'cloudflare-do' | 'json' | 'postgres' | 'sqlite
 export type RelayTurnstileMode = 'auto' | 'off' | 'required'
 
 export interface RelayPasskeyConfig {
+  emailVerificationRequired: boolean
   enabled: boolean
   origin?: string
   registrationMode: RelayRegistrationMode
@@ -104,6 +107,7 @@ export interface RelayEmailConfig {
 export interface RelayUser {
   id: string
   email: string
+  loginId?: string
   name: string
   avatarUrl?: string
   disabledAt?: string
@@ -113,6 +117,18 @@ export interface RelayUser {
   providerUserId?: string
   role: RelayRole
   createdAt: string
+  updatedAt?: string
+}
+
+export interface RelayAuthIdentity {
+  id: string
+  userId: string
+  provider: RelayAuthProvider
+  providerUserId: string
+  email?: string
+  emailVerified?: boolean
+  createdAt: string
+  lastUsedAt?: string
   updatedAt?: string
 }
 
@@ -275,6 +291,7 @@ export interface RelayStore {
   createdAt: string
   emailRisk: RelayEmailRiskState
   users: RelayUser[]
+  authIdentities: RelayAuthIdentity[]
   invites: RelayInvite[]
   ssoProviders: RelaySsoProvider[]
   passkeyChallenges: RelayPasskeyChallenge[]

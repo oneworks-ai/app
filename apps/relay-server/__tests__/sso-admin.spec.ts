@@ -157,6 +157,7 @@ describe('relay server admin managed SSO providers', () => {
             JSON.stringify({
               sub: 'google-owner',
               email: 'owner@example.com',
+              email_verified: true,
               name: 'Google Owner',
               picture: 'https://example.com/avatar.png'
             }),

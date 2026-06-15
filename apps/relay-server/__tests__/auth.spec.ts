@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Auth tests cover shared login, SSO, invite, and password flows together. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { readRelayStore } from '../src/server.js'
@@ -15,11 +16,18 @@ const googleOauth = {
   }
 }
 
-const stubGoogleProfile = (email: string) => {
+const githubOauth = {
+  github: {
+    clientId: 'github-client-id',
+    clientSecret: 'github-client-secret'
+  }
+}
+
+const stubGoogleProfile = (email: string, options: { emailVerified?: boolean } = {}) => {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input)
+    vi.fn(async (requestInput: RequestInfo | URL) => {
+      const url = String(requestInput)
       if (url === 'https://oauth2.googleapis.com/token') {
         return new Response(JSON.stringify({ access_token: 'provider-token' }), { status: 200 })
       }
@@ -28,9 +36,50 @@ const stubGoogleProfile = (email: string) => {
           JSON.stringify({
             sub: `google-${email}`,
             email,
+            email_verified: options.emailVerified ?? true,
             name: `User ${email}`,
             picture: 'https://example.com/avatar.png'
           }),
+          { status: 200 }
+        )
+      }
+      return new Response(JSON.stringify({ error: 'unexpected fetch' }), { status: 500 })
+    })
+  )
+}
+
+const stubGithubProfile = (input: {
+  email: string
+  id: number
+  login: string
+}) => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (requestInput: RequestInfo | URL) => {
+      const url = String(requestInput)
+      if (url === 'https://github.com/login/oauth/access_token') {
+        return new Response(JSON.stringify({ access_token: 'github-provider-token' }), { status: 200 })
+      }
+      if (url === 'https://api.github.com/user') {
+        return new Response(
+          JSON.stringify({
+            avatar_url: 'https://github.example/avatar.png',
+            id: input.id,
+            login: input.login,
+            name: input.login
+          }),
+          { status: 200 }
+        )
+      }
+      if (url === 'https://api.github.com/user/emails') {
+        return new Response(
+          JSON.stringify([
+            {
+              email: input.email,
+              primary: true,
+              verified: true
+            }
+          ]),
           { status: 200 }
         )
       }
@@ -75,6 +124,19 @@ const startGoogleFlow = async (baseUrl: string, input: {
   if (input.loginHint != null) search.set('login_hint', input.loginHint)
   if (input.prompt != null) search.set('prompt', input.prompt)
   const response = await requestRaw(baseUrl, `/api/auth/oauth/google/start?${search.toString()}`, {
+    redirect: 'manual'
+  })
+
+  expect(response.status).toBe(302)
+  return response.headers.get('location') ?? ''
+}
+
+const startGithubFlow = async (baseUrl: string, input: {
+  inviteCode?: string
+} = {}) => {
+  const search = new URLSearchParams()
+  if (input.inviteCode != null) search.set('invite_code', input.inviteCode)
+  const response = await requestRaw(baseUrl, `/api/auth/oauth/github/start?${search.toString()}`, {
     redirect: 'manual'
   })
 
@@ -161,6 +223,73 @@ describe('relay server auth routes', () => {
     expect(callback.body).toEqual({ error: 'Invite required.' })
   })
 
+  it('keeps same-email SSO logins as separate users across providers', async () => {
+    const { args, baseUrl } = await listenRelay({
+      oauth: {
+        ...googleOauth,
+        ...githubOauth
+      }
+    })
+    await startGoogleFlow(baseUrl)
+    const googleState = (await readRelayStore(args.dataPath)).oauthStates[0].state
+    stubGoogleProfile('same@example.com')
+    const googleCallback = await requestJson(baseUrl, `/api/auth/oauth/google/callback?code=ok&state=${googleState}`)
+    const ownerToken = String(googleCallback.body.token)
+    await requestJson(baseUrl, '/api/admin/invites', {
+      method: 'POST',
+      headers: authHeaders(ownerToken),
+      body: JSON.stringify({ code: 'github-same-email', role: 'member' })
+    })
+
+    await startGithubFlow(baseUrl, { inviteCode: 'github-same-email' })
+    const githubState = (await readRelayStore(args.dataPath)).oauthStates[0].state
+    stubGithubProfile({
+      email: 'same@example.com',
+      id: 12_345,
+      login: 'same-login'
+    })
+    const githubCallback = await requestJson(baseUrl, `/api/auth/oauth/github/callback?code=ok&state=${githubState}`)
+    const store = await readRelayStore(args.dataPath)
+    const githubUser = githubCallback.body.user as { id: string }
+    const googleUser = googleCallback.body.user as { id: string }
+
+    expect(googleCallback.response.status).toBe(200)
+    expect(githubCallback.response.status).toBe(200)
+    expect(githubCallback.body.user).toMatchObject({
+      email: 'same@example.com',
+      loginId: 'same-login',
+      provider: 'github',
+      role: 'member'
+    })
+    expect(githubUser.id).not.toBe(googleUser.id)
+    expect(store.users).toHaveLength(2)
+    expect(store.users.map(user => user.email)).toEqual(['same@example.com', 'same@example.com'])
+    expect(store.authIdentities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        provider: 'google',
+        providerUserId: 'google-same@example.com',
+        userId: googleUser.id
+      }),
+      expect.objectContaining({
+        provider: 'github',
+        providerUserId: '12345',
+        userId: githubUser.id
+      })
+    ]))
+  })
+
+  it('rejects OAuth profiles without a verified email', async () => {
+    const { args, baseUrl } = await listenRelay({ oauth: googleOauth })
+    await startGoogleFlow(baseUrl)
+    const state = (await readRelayStore(args.dataPath)).oauthStates[0].state
+    stubGoogleProfile('owner@example.com', { emailVerified: false })
+
+    const callback = await requestJson(baseUrl, `/api/auth/oauth/google/callback?code=ok&state=${state}`)
+
+    expect(callback.response.status).toBe(403)
+    expect(callback.body).toEqual({ error: 'OAuth profile did not include a verified email address.' })
+  })
+
   it('creates email invite login sessions and enforces max uses with the invite role', async () => {
     const { args, baseUrl } = await listenRelay()
     const invite = await requestJson(baseUrl, '/api/admin/invites', {
@@ -216,6 +345,7 @@ describe('relay server auth routes', () => {
       headers: authHeaders('admin-token'),
       body: JSON.stringify({
         email: 'password@example.com',
+        loginId: 'password-user',
         name: 'Password User',
         password: 'correct-password',
         role: 'admin'
@@ -229,11 +359,27 @@ describe('relay server auth routes', () => {
         password: 'wrong-password'
       })
     })
+    const missing = await requestJson(baseUrl, '/api/auth/password-login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'missing@example.com',
+        password: 'missing-password'
+      })
+    })
     const login = await requestJson(baseUrl, '/api/auth/password-login', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         email: 'PASSWORD@example.com',
+        password: 'correct-password'
+      })
+    })
+    const loginById = await requestJson(baseUrl, '/api/auth/password-login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        loginId: 'password-user',
         password: 'correct-password'
       })
     })
@@ -246,6 +392,7 @@ describe('relay server auth routes', () => {
     expect(created.response.status).toBe(200)
     expect(created.body.user).toMatchObject({
       email: 'password@example.com',
+      loginId: 'password-user',
       passwordEnabled: true,
       provider: 'password',
       role: 'admin'
@@ -253,10 +400,18 @@ describe('relay server auth routes', () => {
     expect(JSON.stringify(created.body.user)).not.toContain('passwordHash')
     expect(rejected.response.status).toBe(401)
     expect(rejected.body).toEqual({ error: 'Invalid email or password.' })
+    expect(missing.response.status).toBe(401)
+    expect(missing.body).toEqual({ code: 'registration_required', error: 'Invite required.' })
     expect(login.response.status).toBe(200)
     expect(login.body.user).toMatchObject({
       email: 'password@example.com',
       provider: 'password',
+      role: 'admin'
+    })
+    expect(loginById.response.status).toBe(200)
+    expect(loginById.body.user).toMatchObject({
+      email: 'password@example.com',
+      loginId: 'password-user',
       role: 'admin'
     })
     expect(me.response.status).toBe(200)
@@ -438,6 +593,19 @@ describe('relay server auth routes', () => {
     expect(config.redirectUri).toContain('oneworks://relay/auth')
   })
 
+  it('marks GitHub login providers with the GitHub icon', async () => {
+    const { baseUrl } = await listenRelay({ oauth: githubOauth })
+    const response = await requestRaw(baseUrl, '/login?redirect_uri=https%3A%2F%2Fapp.example%2Fcallback')
+    const config = readLoginConfig(await response.text())
+
+    expect(response.status).toBe(200)
+    expect(config.providers).toEqual([expect.objectContaining({
+      icon: 'github',
+      id: 'github',
+      startUrl: expect.stringContaining('/api/auth/oauth/github/start')
+    })])
+  })
+
   it('omits empty login page sections for missing local accounts and SSO providers', async () => {
     const { baseUrl } = await listenRelay()
     const redirect = encodeURIComponent('https://app.example/callback')
@@ -466,7 +634,7 @@ describe('relay server auth routes', () => {
     expect(response.status).toBe(200)
     expect(body).toContain('data-complete-title')
     expect(body).toContain('登录失败')
-    expect(body).toContain('新账号登录需要邀请码。')
+    expect(body).toContain('新账号登陆需要邀请码。')
     expect(body).toContain('Invite required.')
   })
 
@@ -491,7 +659,7 @@ describe('relay server auth routes', () => {
     expect(zhBody).toContain('最近账号')
     expect(zhBody).not.toContain('这个浏览器还没有记住任何账号。')
     expect(zhBody).toContain('记住账号')
-    expect(zhBody).toContain('使用 google 登录')
+    expect(zhBody).toContain('使用 google 登陆')
     expect(enResponse.status).toBe(200)
     expect(enBody).toContain('<html lang="en">')
     expect(enBody).toContain('Recent accounts')

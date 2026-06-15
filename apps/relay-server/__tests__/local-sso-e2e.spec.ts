@@ -75,6 +75,7 @@ const listenLocalSso = async () => {
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
         res.end(JSON.stringify({
           email: 'owner@local-sso.test',
+          email_verified: true,
           name: 'Local SSO Owner',
           picture: 'http://127.0.0.1/avatar.png',
           sub: 'local-sso-owner'

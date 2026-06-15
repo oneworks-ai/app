@@ -16,6 +16,7 @@ const readMaxDevices = (user: RelayAdminUser) => {
 const normalizeRelayAdminUser = (user: RelayAdminUser): RelayAdminUser => ({
   ...user,
   deviceCount: readDeviceCount(user),
+  loginId: typeof user.loginId === 'string' && user.loginId.trim() !== '' ? user.loginId.trim() : null,
   maxDevices: readMaxDevices(user)
 })
 

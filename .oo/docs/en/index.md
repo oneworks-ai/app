@@ -13,6 +13,7 @@ This documentation is the user-facing entry point for integrating One Works into
 - [Web UI and Terminal View](./usage/web.md)
 - [Adapter Configuration and Multiple Accounts](./usage/adapters.md)
 - [PWA and Standalone Deployment](./usage/pwa.md)
+- [Relay Hosting, Login, and Identity Model](./usage/relay.md)
 - [Channel Session Binding](./usage/channels.md)
 - [CLI and Examples](./usage/cli.md)
 - [Examples Directory](./usage/examples.md)

@@ -19,6 +19,7 @@ const createSecurityStore = (): RelayStore => ({
     buckets: [],
     challenges: []
   },
+  authIdentities: [],
   passkeyChallenges: [],
   passkeys: [],
   users: [

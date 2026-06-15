@@ -1,4 +1,4 @@
-import { Button, Checkbox, Form, Input, Segmented, Typography } from 'antd'
+import { Button, Checkbox, Form, Input, Typography } from 'antd'
 import type { FormInstance, InputRef } from 'antd'
 import { useCallback, useState } from 'react'
 import type { RefObject } from 'react'
@@ -7,8 +7,6 @@ import { AdminIcon } from '../shared/ui/AdminIcon'
 import { RegistrationFields } from './RegistrationFields'
 import { isRecord } from './accountStorage'
 import type { RelayLoginConfig } from './types'
-
-type LoginMode = 'invite' | 'password'
 
 export interface LoginFormValues {
   confirmPassword?: string
@@ -23,17 +21,39 @@ interface RelayCredentialFormProps {
   finishWithToken: (token: string, user: unknown, authProvider?: string) => void
   form: FormInstance<LoginFormValues>
   passwordRef: RefObject<InputRef>
+  rememberAccount: boolean
+  onRememberAccountChange: (rememberAccount: boolean) => void
 }
 
-export const RelayCredentialForm = ({ config, finishWithToken, form, passwordRef }: RelayCredentialFormProps) => {
+const readError = (body: unknown, fallback: string) => (
+  isRecord(body) && typeof body.error === 'string' ? body.error : fallback
+)
+
+const readErrorCode = (body: unknown) => (
+  isRecord(body) && typeof body.code === 'string' ? body.code : undefined
+)
+
+class RelayPasswordLoginRequestError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string
+  ) {
+    super(message)
+  }
+}
+
+export const RelayCredentialForm = (
+  { config, finishWithToken, form, passwordRef, rememberAccount, onRememberAccountChange }: RelayCredentialFormProps
+) => {
   const [error, setError] = useState('')
+  const [isCompletingInviteRegistration, setIsCompletingInviteRegistration] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [loginMode, setLoginMode] = useState<LoginMode>('password')
 
   const localizeAuthError = useCallback((message: string) => {
     if (message === 'Invalid email or password.') return config.messages.invalidCredentials
     if (message === 'Invite required.') return config.messages.inviteRequired
     if (message === 'Email required.') return config.messages.emailRequired
+    if (message === 'Login ID and password are required.') return config.messages.emailRequired
     if (message.startsWith('Password must be at least')) return config.messages.passwordMinLength
     return message
   }, [
@@ -44,22 +64,22 @@ export const RelayCredentialForm = ({ config, finishWithToken, form, passwordRef
   ])
 
   const handlePasswordLogin = useCallback(async (values: LoginFormValues) => {
-    const email = values.email.trim()
+    const loginId = values.email.trim()
     const password = values.password
     setError('')
     setIsSubmitting(true)
     try {
       const response = await fetch(config.passwordLoginUrl, {
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: loginId, loginId, password }),
         headers: { 'content-type': 'application/json' },
         method: 'POST'
       })
       const body = await response.json().catch(() => ({})) as unknown
       if (!response.ok) {
-        const message = isRecord(body) && typeof body.error === 'string'
-          ? body.error
-          : config.messages.invalidCredentials
-        throw new Error(message)
+        throw new RelayPasswordLoginRequestError(
+          readError(body, config.messages.invalidCredentials),
+          readErrorCode(body)
+        )
       }
       if (!isRecord(body) || typeof body.token !== 'string') {
         throw new Error(config.messages.invalidCredentials)
@@ -67,20 +87,27 @@ export const RelayCredentialForm = ({ config, finishWithToken, form, passwordRef
       finishWithToken(body.token, body.user, 'password')
     } catch (loginError) {
       const message = loginError instanceof Error ? loginError.message : String(loginError)
+      if (loginError instanceof RelayPasswordLoginRequestError && loginError.code === 'registration_required') {
+        form.setFieldsValue({ confirmPassword: undefined, inviteCode: undefined })
+        setIsCompletingInviteRegistration(true)
+        setError(localizeAuthError(message))
+        setIsSubmitting(false)
+        return
+      }
       setError(localizeAuthError(message))
       setIsSubmitting(false)
     }
-  }, [config.messages.invalidCredentials, config.passwordLoginUrl, finishWithToken, localizeAuthError])
+  }, [config.messages.invalidCredentials, config.passwordLoginUrl, finishWithToken, form, localizeAuthError])
 
   const handleInviteRegistration = useCallback(async (values: LoginFormValues) => {
-    const email = values.email.trim()
+    const loginId = values.email.trim()
     const password = values.password
     const inviteCode = values.inviteCode?.trim() ?? ''
     setError('')
     setIsSubmitting(true)
     try {
       const response = await fetch(config.inviteLoginUrl, {
-        body: JSON.stringify({ email, inviteCode, password }),
+        body: JSON.stringify({ email: loginId, inviteCode, loginId, password }),
         headers: { 'content-type': 'application/json' },
         method: 'POST'
       })
@@ -103,73 +130,56 @@ export const RelayCredentialForm = ({ config, finishWithToken, form, passwordRef
   }, [config.inviteLoginUrl, config.messages.inviteRequired, finishWithToken, localizeAuthError])
 
   const handleSubmit = useCallback(async (values: LoginFormValues) => {
-    if (loginMode === 'invite') {
+    if (isCompletingInviteRegistration) {
       await handleInviteRegistration(values)
       return
     }
     await handlePasswordLogin(values)
-  }, [handleInviteRegistration, handlePasswordLogin, loginMode])
-
-  const updateLoginMode = useCallback((value: string | number) => {
-    setLoginMode(value === 'invite' ? 'invite' : 'password')
-    setError('')
-  }, [])
+  }, [handleInviteRegistration, handlePasswordLogin, isCompletingInviteRegistration])
 
   const passwordRules = [
     { message: config.messages.passwordRequired, required: true },
     { message: config.messages.passwordMinLength, min: 8 }
   ]
-  const sectionTitle = loginMode === 'invite' ? config.messages.registerWithInvite : config.messages.signInWithPassword
-  const idleSubmitLabel = loginMode === 'invite'
-    ? config.messages.continueWithRegistration
-    : config.messages.continueWithPassword
+  const sectionTitle = config.messages.signInWithPassword
+  const idleSubmitLabel = config.messages.signInMode
   const submitLabel = isSubmitting ? config.messages.signingIn : idleSubmitLabel
-  const submitIconName = loginMode === 'invite' ? 'add' : 'login'
 
   return (
-    <section className='relay-login-app__section'>
+    <section className='relay-login-app__section relay-login-app__section--auth-method'>
       <Typography.Text className='relay-login-app__section-title'>
         {sectionTitle}
       </Typography.Text>
-      <Segmented
-        block
-        className='relay-login-app__mode'
-        options={[
-          { label: config.messages.signInMode, value: 'password' },
-          { label: config.messages.registerWithInvite, value: 'invite' }
-        ]}
-        value={loginMode}
-        onChange={updateLoginMode}
-      />
       <Form
         className='relay-login-app__form'
         form={form}
-        initialValues={{ rememberAccount: true }}
         layout='vertical'
         requiredMark={false}
         onFinish={handleSubmit}
       >
-        <Form.Item name='email' rules={[{ message: config.messages.emailRequired, required: true, type: 'email' }]}>
-          <Input autoComplete='email' inputMode='email' placeholder={config.messages.emailPlaceholder} size='large' />
+        <Form.Item name='email' rules={[{ message: config.messages.emailRequired, required: true }]}>
+          <Input autoComplete='username' placeholder={config.messages.emailPlaceholder} size='large' />
         </Form.Item>
         <Form.Item name='password' rules={passwordRules}>
           <Input.Password
             ref={passwordRef}
-            autoComplete={loginMode === 'invite' ? 'new-password' : 'current-password'}
+            autoComplete='current-password'
             placeholder={config.messages.passwordPlaceholder}
             size='large'
           />
         </Form.Item>
-        {loginMode === 'invite' ? <RegistrationFields config={config} /> : null}
-        <Form.Item className='relay-login-app__remember-item' name='rememberAccount' valuePropName='checked'>
-          <Checkbox>{config.messages.rememberAccount}</Checkbox>
-        </Form.Item>
+        {isCompletingInviteRegistration ? <RegistrationFields config={config} /> : null}
+        <div className='relay-login-app__remember-row'>
+          <Checkbox checked={rememberAccount} onChange={event => onRememberAccountChange(event.target.checked)}>
+            {config.messages.rememberAccount}
+          </Checkbox>
+        </div>
         {error === '' ? null : <Typography.Text className='relay-login-app__error'>{error}</Typography.Text>}
         <Button
           block
           className='relay-login-app__submit'
           htmlType='submit'
-          icon={<AdminIcon name={submitIconName} />}
+          icon={<AdminIcon name='login' />}
           loading={isSubmitting}
           size='large'
           type='primary'

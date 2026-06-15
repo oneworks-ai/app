@@ -175,6 +175,8 @@ export const renderRelayLoginPage = (input: RelayLoginPageInput) => {
   return loginShell(
     t,
     buildLoginClientConfig({
+      defaultLoginMethod: input.args.defaultLoginMethod,
+      emailCodeLoginEnabled: input.args.emailProvider != null || input.args.email?.provider !== 'disabled',
       passkey: input.args.passkey,
       providers: input.providers,
       redirectUri,

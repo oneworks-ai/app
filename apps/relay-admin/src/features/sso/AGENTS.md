@@ -18,3 +18,4 @@
 - 编辑 provider 时 secret 为空表示保留原 secret；只有填写新 secret 才提交更新。
 - SSO 相关状态和 API 留在本 feature；dashboard 只做 snapshot 与操作编排。
 - 新增常见 SSO 登录方式时优先加 preset，不要让用户手填标准端点；secret 仍由用户在管理端输入，不放进前端代码或文档示例。
+- SSO 对接经验按 provider 拆在 `.oo/rules/relay-deployment/sso-*.md`；新增或排查 provider 前先读 `sso-common.md`，再读 GitHub / Google / OIDC 对应文件，不要把 provider 控制台经验堆进本 feature 的 AGENTS。

@@ -78,4 +78,16 @@ describe('relay server config', () => {
     ).toBe('https://cdn.example.com/relay-logo.png')
     expect(parseRelayServerArgs([], { ONEWORKS_RELAY_EMAIL_LOGO_URL: 'off' }).email?.logoUrl).toBeUndefined()
   })
+
+  it('parses login method and passkey email verification environment settings', () => {
+    const args = parseRelayServerArgs([], {
+      ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD: 'verification-code',
+      ONEWORKS_RELAY_PASSKEY_EMAIL_VERIFICATION_REQUIRED: 'off'
+    })
+
+    expect(args.defaultLoginMethod).toBe('verification_code')
+    expect(args.passkey).toMatchObject({
+      emailVerificationRequired: false
+    })
+  })
 })

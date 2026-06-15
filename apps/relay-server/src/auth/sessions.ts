@@ -39,6 +39,7 @@ export const resolveSession = (req: IncomingMessage, store: RelayStore) => {
 export const publicUser = (user: RelayUser) => ({
   id: user.id,
   email: user.email,
+  loginId: user.loginId,
   name: user.name,
   avatarUrl: user.avatarUrl,
   disabledAt: user.disabledAt,

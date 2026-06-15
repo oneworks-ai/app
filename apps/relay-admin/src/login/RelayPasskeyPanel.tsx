@@ -4,7 +4,7 @@ import type {
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON
 } from '@simplewebauthn/browser'
-import { Button, Form, Input, Typography } from 'antd'
+import { Button, Checkbox, Form, Input, Typography } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
 
 import { AdminIcon } from '../shared/ui/AdminIcon'
@@ -15,18 +15,34 @@ interface RelayPasskeyPanelProps {
   config: RelayLoginConfig
   emailHint?: string
   finishWithToken: (token: string, user: unknown, authProvider?: string) => void
+  rememberAccount: boolean
+  onRememberAccountChange: (rememberAccount: boolean) => void
 }
 
 interface PasskeyFormValues {
-  credentialName?: string
   email: string
   inviteCode?: string
   verificationCode?: string
 }
 
+type PasskeyStep = 'identify' | 'register'
+
 const readError = (body: unknown, fallback: string) => (
   isRecord(body) && typeof body.error === 'string' ? body.error : fallback
 )
+
+const readErrorCode = (body: unknown) => (
+  isRecord(body) && typeof body.code === 'string' ? body.code : undefined
+)
+
+class RelayLoginRequestError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string
+  ) {
+    super(message)
+  }
+}
 
 interface RelayTokenResponse {
   token: string
@@ -61,15 +77,28 @@ const localizeError = (message: string, config: RelayLoginConfig) => {
   return message
 }
 
-export const RelayPasskeyPanel = ({ config, emailHint, finishWithToken }: RelayPasskeyPanelProps) => {
+export const RelayPasskeyPanel = (
+  { config, emailHint, finishWithToken, rememberAccount, onRememberAccountChange }: RelayPasskeyPanelProps
+) => {
   const [form] = Form.useForm<PasskeyFormValues>()
   const [error, setError] = useState('')
   const [isSendingCode, setIsSendingCode] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [step, setStep] = useState<PasskeyStep>('identify')
+  const watchedEmail = Form.useWatch('email', form)
 
   useEffect(() => {
-    if (emailHint != null && emailHint !== '') form.setFieldsValue({ email: emailHint })
+    if (emailHint != null && emailHint !== '') {
+      form.setFieldsValue({ email: emailHint })
+      setStep('identify')
+    }
   }, [emailHint, form])
+
+  const showRegistration = config.passkey.registrationMode !== 'admin_created_only'
+  const showInvite = config.passkey.registrationMode === 'invite_required'
+  const showEmailVerification = config.passkey.emailVerificationRequired
+  const needsRegistrationDetails = showEmailVerification || showInvite
+  const canUsePasskey = typeof watchedEmail === 'string' && watchedEmail.trim() !== ''
 
   const postJson = useCallback(async (url: string, body: Record<string, unknown>) => {
     const response = await fetch(url, {
@@ -78,37 +107,21 @@ export const RelayPasskeyPanel = ({ config, emailHint, finishWithToken }: RelayP
       method: 'POST'
     })
     const payload = await response.json().catch(() => ({})) as unknown
-    if (!response.ok) throw new Error(readError(payload, config.messages.invalidCredentials))
+    if (!response.ok) {
+      throw new RelayLoginRequestError(readError(payload, config.messages.invalidCredentials), readErrorCode(payload))
+    }
     return payload
   }, [config.messages.invalidCredentials])
 
-  const handlePasskeySignIn = useCallback(async () => {
-    const email = form.getFieldValue('email')?.trim() ?? ''
-    setError('')
-    setIsSubmitting(true)
-    try {
-      await form.validateFields(['email'])
-      const optionsPayload = await postJson(config.passkey.loginOptionsUrl, { email })
-      const optionsJSON = readAuthenticationOptions(optionsPayload, config.messages.invalidCredentials)
-      const response = await startAuthentication({ optionsJSON })
-      const verifyPayload = await postJson(config.passkey.loginVerifyUrl, { email, response })
-      const body = requireTokenBody(verifyPayload, config.messages.invalidCredentials)
-      finishWithToken(body.token, body.user, 'passkey')
-    } catch (passkeyError) {
-      const message = passkeyError instanceof Error ? passkeyError.message : String(passkeyError)
-      setError(localizeError(message, config))
-      setIsSubmitting(false)
-    }
-  }, [config, finishWithToken, form, postJson])
-
   const handleSendCode = useCallback(async () => {
-    const email = form.getFieldValue('email')?.trim() ?? ''
+    const loginId = form.getFieldValue('email')?.trim() ?? ''
     setError('')
     setIsSendingCode(true)
     try {
       await form.validateFields(['email'])
       await postJson(config.emailVerificationSendUrl, {
-        email,
+        email: loginId,
+        loginId,
         locale: config.locale,
         purpose: 'email-verification'
       })
@@ -120,41 +133,97 @@ export const RelayPasskeyPanel = ({ config, emailHint, finishWithToken }: RelayP
     }
   }, [config, form, postJson])
 
-  const handlePasskeyRegistration = useCallback(async () => {
+  const finishPasskeyAuthentication = useCallback(async (loginId: string) => {
+    const optionsPayload = await postJson(config.passkey.loginOptionsUrl, { email: loginId, loginId })
+    const optionsJSON = readAuthenticationOptions(optionsPayload, config.messages.invalidCredentials)
+    const response = await startAuthentication({ optionsJSON })
+    const verifyPayload = await postJson(config.passkey.loginVerifyUrl, { email: loginId, loginId, response })
+    const body = requireTokenBody(verifyPayload, config.messages.invalidCredentials)
+    finishWithToken(body.token, body.user, 'passkey')
+  }, [
+    config.messages.invalidCredentials,
+    config.passkey.loginOptionsUrl,
+    config.passkey.loginVerifyUrl,
+    finishWithToken,
+    postJson
+  ])
+
+  const finishPasskeyRegistration = useCallback(async (values: PasskeyFormValues) => {
+    const loginId = values.email.trim()
+    const optionsPayload = await postJson(config.passkey.registerOptionsUrl, {
+      code: values.verificationCode?.trim() ?? '',
+      email: loginId,
+      inviteCode: values.inviteCode?.trim() ?? '',
+      loginId
+    })
+    const optionsJSON = readRegistrationOptions(optionsPayload, config.messages.invalidCredentials)
+    const response = await startRegistration({ optionsJSON })
+    const verifyPayload = await postJson(config.passkey.registerVerifyUrl, {
+      email: loginId,
+      loginId,
+      response
+    })
+    const body = requireTokenBody(verifyPayload, config.messages.invalidCredentials)
+    finishWithToken(body.token, body.user, 'passkey')
+  }, [
+    config.messages.invalidCredentials,
+    config.passkey.registerOptionsUrl,
+    config.passkey.registerVerifyUrl,
+    finishWithToken,
+    postJson
+  ])
+
+  const handleUsePasskey = useCallback(async () => {
     setError('')
     setIsSubmitting(true)
     try {
-      const values = await form.validateFields()
-      const email = values.email.trim()
-      const optionsPayload = await postJson(config.passkey.registerOptionsUrl, {
-        code: values.verificationCode?.trim() ?? '',
-        credentialName: values.credentialName?.trim() ?? '',
-        email,
-        inviteCode: values.inviteCode?.trim() ?? ''
+      if (step === 'register') {
+        const values = await form.validateFields()
+        await finishPasskeyRegistration(values)
+        return
+      }
+
+      const values = await form.validateFields(['email'])
+      const loginId = values.email.trim()
+      await finishPasskeyAuthentication(loginId).catch(async authError => {
+        if (
+          !showRegistration || !(authError instanceof RelayLoginRequestError) ||
+          authError.code !== 'passkey_unavailable'
+        ) {
+          throw authError
+        }
+        if (needsRegistrationDetails) {
+          setStep('register')
+          setIsSubmitting(false)
+          return
+        }
+        await finishPasskeyRegistration({ email: loginId })
       })
-      const optionsJSON = readRegistrationOptions(optionsPayload, config.messages.invalidCredentials)
-      const response = await startRegistration({ optionsJSON })
-      const verifyPayload = await postJson(config.passkey.registerVerifyUrl, {
-        credentialName: values.credentialName?.trim() ?? '',
-        email,
-        response
-      })
-      const body = requireTokenBody(verifyPayload, config.messages.invalidCredentials)
-      finishWithToken(body.token, body.user, 'passkey')
     } catch (passkeyError) {
+      if (step === 'identify') {
+        form.setFieldsValue({
+          inviteCode: undefined,
+          verificationCode: undefined
+        })
+      }
       const message = passkeyError instanceof Error ? passkeyError.message : String(passkeyError)
       setError(localizeError(message, config))
       setIsSubmitting(false)
     }
-  }, [config, finishWithToken, form, postJson])
+  }, [
+    config,
+    finishPasskeyAuthentication,
+    finishPasskeyRegistration,
+    form,
+    needsRegistrationDetails,
+    showRegistration,
+    step
+  ])
 
   if (!config.passkey.enabled) return null
 
-  const showRegistration = config.passkey.registrationMode !== 'admin_created_only'
-  const showInvite = config.passkey.registrationMode === 'invite_required'
-
   return (
-    <section className='relay-login-app__section relay-login-app__section--passkey'>
+    <section className='relay-login-app__section relay-login-app__section--auth-method relay-login-app__section--passkey'>
       <Typography.Text className='relay-login-app__section-title'>{config.messages.passkeyTitle}</Typography.Text>
       <Form
         className='relay-login-app__form relay-login-app__passkey-form'
@@ -162,72 +231,74 @@ export const RelayPasskeyPanel = ({ config, emailHint, finishWithToken }: RelayP
         layout='vertical'
         requiredMark={false}
       >
-        <Form.Item name='email' rules={[{ message: config.messages.emailRequired, required: true, type: 'email' }]}>
-          <Input
-            autoComplete='email webauthn'
-            inputMode='email'
-            placeholder={config.messages.emailPlaceholder}
-            size='large'
-          />
-        </Form.Item>
+        <div className='relay-login-app__account-stack'>
+          <Form.Item
+            name='email'
+            rules={[{ message: config.messages.emailRequired, required: true }]}
+          >
+            <Input
+              autoComplete='username webauthn'
+              disabled={step === 'register'}
+              placeholder={config.messages.emailPlaceholder}
+              size='large'
+            />
+          </Form.Item>
+          {step === 'register'
+            ? (
+              <>
+                {showEmailVerification
+                  ? (
+                    <div className='relay-login-app__passkey-code-row'>
+                      <Form.Item
+                        name='verificationCode'
+                        rules={[{ message: config.messages.passkeyCodePlaceholder, required: true }]}
+                      >
+                        <Input
+                          autoComplete='one-time-code'
+                          inputMode='numeric'
+                          maxLength={6}
+                          placeholder={config.messages.passkeyCodePlaceholder}
+                          size='large'
+                        />
+                      </Form.Item>
+                      <Button loading={isSendingCode} size='large' onClick={handleSendCode}>
+                        {config.messages.passkeySendCode}
+                      </Button>
+                    </div>
+                  )
+                  : null}
+                {showInvite
+                  ? (
+                    <Form.Item name='inviteCode' rules={[{ message: config.messages.inviteRequired, required: true }]}>
+                      <Input
+                        autoComplete='one-time-code'
+                        placeholder={config.messages.inviteCodePlaceholder}
+                        size='large'
+                      />
+                    </Form.Item>
+                  )
+                  : null}
+              </>
+            )
+            : null}
+          <div className='relay-login-app__remember-row'>
+            <Checkbox checked={rememberAccount} onChange={event => onRememberAccountChange(event.target.checked)}>
+              {config.messages.rememberAccount}
+            </Checkbox>
+          </div>
+        </div>
         <Button
           block
           className='relay-login-app__submit relay-login-app__passkey-button'
+          disabled={!canUsePasskey}
           icon={<AdminIcon name='key' />}
           loading={isSubmitting}
           size='large'
-          onClick={handlePasskeySignIn}
+          type='primary'
+          onClick={handleUsePasskey}
         >
-          {config.messages.passkeySignIn}
+          {config.messages.useLoginMethodPasskey}
         </Button>
-        {showRegistration
-          ? (
-            <div className='relay-login-app__passkey-register'>
-              <div className='relay-login-app__passkey-code-row'>
-                <Form.Item
-                  name='verificationCode'
-                  rules={[{ message: config.messages.passkeyCodePlaceholder, required: true }]}
-                >
-                  <Input
-                    autoComplete='one-time-code'
-                    inputMode='numeric'
-                    maxLength={6}
-                    placeholder={config.messages.passkeyCodePlaceholder}
-                    size='large'
-                  />
-                </Form.Item>
-                <Button loading={isSendingCode} size='large' onClick={handleSendCode}>
-                  {config.messages.passkeySendCode}
-                </Button>
-              </div>
-              {showInvite
-                ? (
-                  <Form.Item name='inviteCode' rules={[{ message: config.messages.inviteRequired, required: true }]}>
-                    <Input
-                      autoComplete='one-time-code'
-                      placeholder={config.messages.inviteCodePlaceholder}
-                      size='large'
-                    />
-                  </Form.Item>
-                )
-                : null}
-              <Form.Item name='credentialName'>
-                <Input autoComplete='off' placeholder={config.messages.passkeyNamePlaceholder} size='large' />
-              </Form.Item>
-              <Button
-                block
-                className='relay-login-app__submit'
-                icon={<AdminIcon name='add' />}
-                loading={isSubmitting}
-                size='large'
-                type='primary'
-                onClick={handlePasskeyRegistration}
-              >
-                {config.messages.passkeyRegister}
-              </Button>
-            </div>
-          )
-          : null}
       </Form>
       {error === '' ? null : <Typography.Text className='relay-login-app__error'>{error}</Typography.Text>}
     </section>

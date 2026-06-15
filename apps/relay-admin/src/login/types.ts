@@ -14,23 +14,33 @@ export interface RelayLoginMessages {
   passwordPlaceholder: string
   passwordRequired: string
   passkeyCodePlaceholder: string
-  passkeyNamePlaceholder: string
-  passkeyRegister: string
-  passkeyRegisterHint: string
   passkeySendCode: string
-  passkeySignIn: string
   passkeyTitle: string
   recentAccounts: string
   rememberAccount: string
   registerWithInvite: string
+  signInWithCode: string
   signInMode: string
   signInWithInvite: string
   signInWithPassword: string
   signInWithSso: string
   signingIn: string
+  switchLoginMethod: string
+  useLoginMethodPasskey: string
+  useLoginMethodPassword: string
+  useLoginMethodVerificationCode: string
+  verificationCodeSignIn: string
+}
+
+export type RelayLoginMethod = 'passkey' | 'password' | 'verification_code'
+
+export interface RelayLoginMethodsConfig {
+  default: RelayLoginMethod
+  enabled: RelayLoginMethod[]
 }
 
 export interface RelayLoginPasskeyConfig {
+  emailVerificationRequired: boolean
   enabled: boolean
   loginOptionsUrl: string
   loginVerifyUrl: string
@@ -41,16 +51,18 @@ export interface RelayLoginPasskeyConfig {
 
 export interface RelayLoginProviderConfig {
   displayName?: string
-  icon: 'google' | 'login'
+  icon: 'github' | 'google' | 'login'
   id: string
   label: string
   startUrl: string
 }
 
 export interface RelayLoginConfig {
+  emailCodeLoginUrl: string
   emailVerificationSendUrl: string
   inviteLoginUrl: string
   locale: 'en' | 'zh-CN'
+  loginMethods: RelayLoginMethodsConfig
   messages: RelayLoginMessages
   passwordLoginUrl: string
   passkey: RelayLoginPasskeyConfig

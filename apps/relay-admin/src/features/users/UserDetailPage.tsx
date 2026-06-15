@@ -1,8 +1,8 @@
 /* eslint-disable max-lines -- user detail keeps account settings, metadata, and device list together. */
 import './UserDetailPage.css'
 
-import { Avatar, Empty, InputNumber, Select } from 'antd'
-import { useMemo } from 'react'
+import { Avatar, Empty, Input, InputNumber, Select } from 'antd'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
 
@@ -24,6 +24,7 @@ export interface UserDetailPageProps {
   disabled: boolean
   invites: RelayAdminInvite[]
   loading: boolean
+  onSetLoginId: (user: RelayAdminUser, loginId: string | null) => Promise<void>
   onSetMaxDevices: (user: RelayAdminUser, maxDevices: number | null) => Promise<void>
   onSetRole: (user: RelayAdminUser, role: RelayAdminRole) => Promise<void>
   users: RelayAdminUser[]
@@ -66,12 +67,14 @@ export const UserDetailPage = ({
   disabled,
   invites,
   loading,
+  onSetLoginId,
   onSetMaxDevices,
   onSetRole,
   users
 }: UserDetailPageProps) => {
   const { userId } = useParams()
   const user = users.find(item => item.id === userId)
+  const [loginIdValue, setLoginIdValue] = useState('')
   const boundInvites = useMemo(
     () => user == null ? [] : invites.filter(invite => invite.userId === user.id),
     [invites, user]
@@ -80,6 +83,10 @@ export const UserDetailPage = ({
     () => user == null || currentUser?.id !== user.id ? [] : devices.filter(device => device.userId === user.id),
     [currentUser?.id, devices, user]
   )
+
+  useEffect(() => {
+    setLoginIdValue(user?.loginId ?? '')
+  }, [user?.id, user?.loginId])
 
   if (user == null) {
     return (
@@ -97,7 +104,30 @@ export const UserDetailPage = ({
   const maxDevices = userMaxDevices(user)
   const canViewDeviceDetails = currentUser?.id === user.id
   const isCurrentUser = currentUser?.id === user.id
+  const commitLoginId = () => {
+    const nextLoginId = loginIdValue.trim()
+    const currentLoginId = user.loginId ?? ''
+    if (nextLoginId === currentLoginId) return
+    void onSetLoginId(user, nextLoginId === '' ? null : nextLoginId)
+  }
   const detailFields: Array<{ key: string; label: string; value: ReactNode }> = [
+    {
+      key: 'loginId',
+      label: '登录 ID',
+      value: (
+        <Input
+          aria-label={`Login ID for ${user.email}`}
+          className='relay-user-detail__login-id-input'
+          disabled={disabled}
+          placeholder={`默认：${user.email}`}
+          size='small'
+          value={loginIdValue}
+          onBlur={commitLoginId}
+          onChange={event => setLoginIdValue(event.target.value)}
+          onPressEnter={event => event.currentTarget.blur()}
+        />
+      )
+    },
     {
       key: 'role',
       label: '权限',

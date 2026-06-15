@@ -55,6 +55,11 @@ export const ProfilePage = ({
       label: '名称'
     },
     {
+      children: currentUser.loginId == null || currentUser.loginId === '' ? currentUser.email : currentUser.loginId,
+      key: 'loginId',
+      label: '登录 ID'
+    },
+    {
       children: currentUser.disabledAt == null ? 'active' : 'disabled',
       key: 'status',
       label: '状态'

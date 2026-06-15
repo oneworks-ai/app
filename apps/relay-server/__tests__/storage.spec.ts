@@ -75,6 +75,7 @@ describe('relay storage repository', () => {
         buckets: [],
         challenges: []
       },
+      authIdentities: [],
       passkeyChallenges: [],
       passkeys: [],
       users: [
@@ -122,6 +123,7 @@ describe('relay storage repository', () => {
         buckets: [],
         challenges: []
       },
+      authIdentities: [],
       passkeyChallenges: [],
       passkeys: [],
       users: [
@@ -187,6 +189,7 @@ describe('relay storage repository', () => {
         buckets: [],
         challenges: []
       },
+      authIdentities: [],
       passkeyChallenges: [],
       passkeys: [],
       users: [],

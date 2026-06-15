@@ -51,6 +51,7 @@ const stubSsoProfile = (tokenUrl: string, userInfoUrl: string, email: string) =>
           JSON.stringify({
             sub: `sso-${email}`,
             email,
+            email_verified: true,
             preferred_username: email.split('@')[0],
             picture: 'https://sso.example/avatar.png'
           }),

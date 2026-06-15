@@ -112,6 +112,7 @@ npx vitest run <path>
 ## 项目规范
 
 - 架构说明：[ARCHITECTURE.md](./ARCHITECTURE.md)
+- 任务规划、委派与经验沉淀：[maintenance/task-planning.md](./maintenance/task-planning.md)
 - 配置分层设计：[CONFIG.md](./CONFIG.md)
 - 重构待办：[REFACTOR-TODO.md](./REFACTOR-TODO.md)
 - CLI 维护说明：[`apps/cli/src/AGENTS.md`](../../apps/cli/src/AGENTS.md)
