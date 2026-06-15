@@ -15,6 +15,7 @@ describe('cli argv normalization', () => {
 
   it('preserves explicit subcommands and help/version flags', () => {
     expect(normalizeCliArgs(['run', 'hello'])).toEqual(['__run', 'run', 'hello'])
+    expect(normalizeCliArgs(['__run', '--print', 'hi'])).toEqual(['__run', '--print', 'hi'])
     expect(normalizeCliArgs(['list'])).toEqual(['list'])
     expect(normalizeCliArgs(['config', 'list'])).toEqual(['config', 'list'])
     expect(normalizeCliArgs(['benchmark', 'list'])).toEqual(['benchmark', 'list'])

@@ -13,7 +13,8 @@ const ROOT_SUBCOMMANDS = new Set([
   'plugin',
   'report',
   'skills',
-  'stop'
+  'stop',
+  '__run'
 ])
 
 export const normalizeCliArgs = (args: string[]) => {
