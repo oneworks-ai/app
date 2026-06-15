@@ -88,6 +88,8 @@ export const AdminDashboard = ({
           disabled={disabled}
           invites={dashboard.invites}
           loading={dashboard.loading || dashboard.authStatus === 'checking'}
+          teams={dashboard.teams}
+          token={dashboard.token}
           onSetMaxDevices={dashboard.setUserMaxDevices}
           onSetRole={dashboard.setUserRole}
           users={dashboard.users}

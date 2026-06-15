@@ -6,6 +6,7 @@
 
 - `UserPanel.tsx`：用户模块装配，只组合表单和表格。
 - `UserDetailPage.tsx`：`/admin/users/:userId` 的账号详情页，复用 dashboard snapshot 与用户操作 props。
+- `UserTeamsPanel.tsx`：用户详情中的所属团队、团队角色、团队配置启停和继承 config profile 展示。
 - `UserCreateForm.tsx`：创建用户表单。
 - `UserTable.tsx`：用户列表、角色选择、设备数量 / 上限配置和状态操作。
 - `userForm.ts`：从 `FormData` 生成 `CreateUserInput`，保持纯函数并配套测试。

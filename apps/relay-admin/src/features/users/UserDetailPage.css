@@ -121,6 +121,48 @@
   padding: 10px var(--route-container-header-padding-inline);
 }
 
+.relay-user-detail__teams {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px var(--route-container-header-padding-inline);
+}
+
+.relay-user-detail__team-name {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.relay-user-detail__team-name strong,
+.relay-user-detail__team-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-user-detail__team-name span,
+.relay-user-detail__profiles-empty {
+  color: var(--sub-text-color);
+  font-size: 12px;
+}
+
+.relay-user-detail__team-badges,
+.relay-user-detail__profiles {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.relay-user-detail__error {
+  color: var(--danger-color, #dc2626);
+  font-size: 12px;
+  font-weight: 650;
+  margin: 0;
+}
+
 .relay-user-detail__devices-header {
   align-items: center;
   color: var(--sub-text-color);
