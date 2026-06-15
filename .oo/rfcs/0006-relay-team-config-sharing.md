@@ -11,7 +11,7 @@ targetVersion: vNext
 
 # RFC 0006: Relay 团队配置共享
 
-细节页：[Relay 团队配置共享架构细节](./0006-relay-team-config-sharing-architecture.md)
+细节页：[架构细节](./0006-relay-team-config-sharing-architecture.md)、[租户策略](./0006-relay-team-policy.md)
 
 ## 摘要
 
@@ -101,6 +101,10 @@ Relay 需要从“按 `teamIds` 过滤配置下发”的底层原语，升级成
 
 团队作用域权限必须由用户 session、团队成员关系、全局角色三者共同判断。Device token 只能消费已经授权给所属用户的 snapshot，不能调用团队管理 API。
 
+## 租户策略
+
+团队能力先由站点管理员在租户策略里开启和限额，再由团队 owner/admin 在允许范围内使用。策略需要覆盖是否允许自助建团队、最大团队数、最大团队成员数、profile/assignment 上限、可用密钥模式、proxy mode 是否开放、secret TTL、插件白名单和 skills 来源白名单。Proxy mode 尤其不能由团队单方面开启，避免把模型流量无意压到 Relay 服务端。
+
 ## 共享流程
 
 1. 用户创建团队或加入现有团队。
@@ -187,7 +191,7 @@ Secret handling 是这项能力最难的部分：
 
 ## 待确认问题
 
-- 官方 Relay 是否默认开放自助创建团队，还是由租户策略控制？
+- 官方 Relay 默认配额、申请提额流程和 proxy mode 开放策略是什么？
 - 带密钥的配置发布是否需要第二个 owner 审批？
 - 专用 `remoteManaged` 配置层落地前，本地 user config 和远端团队配置的默认优先级是什么？
 - 项目匹配只使用显式 `projectId` 和 workspace basename，还是也加入 git remote fingerprint？

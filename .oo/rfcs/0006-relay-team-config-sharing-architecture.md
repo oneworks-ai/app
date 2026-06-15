@@ -121,7 +121,7 @@ interface RelayConfigSnapshotProvenance {
 - `PATCH /api/relay/config-assignments/:assignmentId`
 - `POST /api/relay/config-profiles/:profileId/secrets/rotate`
 
-Admin API 可以在 `/api/admin/*` 下为租户管理员提供镜像入口。用户自助流程应使用 `/api/relay/*`，并通过 session 鉴权和团队作用域授权判断。
+Admin API 可以在 `/api/admin/*` 下为租户管理员提供镜像入口。用户自助流程使用 `/api/relay/*`，并先检查租户策略，再做 session 鉴权和团队授权。
 
 ## 校验
 
