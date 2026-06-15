@@ -667,6 +667,8 @@
     "shortcutDisabled": "未设置",
     "desktopActionUnavailable": "当前环境不支持桌面启动操作",
     "openWorkspaceFailed": "打开项目失败",
+    "openingProjectAnimationLabel": "OneWorks 打开项目动画",
+    "openingProjectTitle": "正在打开 {{name}}",
     "createWorkspaceFailed": "创建项目失败",
     "createWorkspaceNamePlaceholder": "输入新项目文件夹名称",
     "createWorkspaceNameSearchLabel": "输入新项目文件夹名称",

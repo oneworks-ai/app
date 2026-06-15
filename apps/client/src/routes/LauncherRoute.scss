@@ -89,11 +89,13 @@ html.oneworks-launcher-window.dark {
 }
 
 .launcher-route {
+  position: relative;
   height: 100vh;
   min-height: 100%;
   display: flex;
   align-items: flex-start;
   justify-content: center;
+  overflow: hidden;
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--bg-color) 32%, transparent),
@@ -207,6 +209,10 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
   padding: 0;
   box-sizing: border-box;
   -webkit-app-region: no-drag;
+}
+
+.launcher-route.is-opening-workspace .launcher-command-shell {
+  filter: saturate(.92);
 }
 
 .launcher-command-search {
@@ -920,5 +926,11 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
   .launcher-command-item__remove,
   .launcher-command-item__secondary {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .launcher-route.is-opening-workspace .launcher-command-shell {
+    filter: none;
   }
 }
