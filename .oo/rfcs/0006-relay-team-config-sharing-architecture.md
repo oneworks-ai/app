@@ -128,7 +128,7 @@ Admin API 可以在 `/api/admin/*` 下为租户管理员提供镜像入口。用
 分享草稿校验：
 
 - 第一版接受声明型协作字段：`modelServices`、`defaultModelService`、`recommendedModels`、`plugins`、`marketplaces`、`skills`、`skillsMeta`、`skillRegistries`。
-- `plugins` 只共享插件声明、scope、启用状态和 schema 可校验 options；带 password/secret 语义的 option 必须转成 secret ref。
+- `plugins` 只共享插件声明、scope、启用状态和 schema 可校验 options；插件 schema 可以用 `writeOnly: true`、`format: "password"` 或 `x-oneworks-ui.sensitive: true` 标注 secret 属性，分享时这些字段必须转成 secret ref。
 - `skills` 只共享声明和 metadata，不自动安装不可信远端内容；安装仍需要显式动作和 lockfile 记录。
 - `modelServices` 条目归一化成展示元数据和 secret ref，`defaultModelService` 与 `recommendedModels` 必须引用可见 service key。
 - `env`、hooks、MCP servers、shell permissions、本地路径、未知 config root 和 adapter-native secret block 第一版拒绝。
