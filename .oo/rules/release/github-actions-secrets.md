@@ -12,6 +12,8 @@
 - `PWA_DEPLOY_TOKEN`：从 `oneworks-ai/app` 触发 `oneworks-ai/pwa` 的部署 workflow。
 - `AVATAR_DEPLOY_TOKEN`：从 `oneworks-ai/app` 触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow。
 - `HOMEPAGE_DEPLOY_TOKEN`：从 `oneworks-ai/app` 触发 `oneworks-ai/oneworks-ai.github.io` 的 GitHub Pages 部署 workflow。
+- `RELAY_DEV_CLOUDFLARE_API_TOKEN`、`RELAY_DEV_CLOUDFLARE_ACCOUNT_ID`：部署官方 Cloudflare dev Relay/Admin。
+- `RELAY_DEV_VERCEL_TOKEN`、`RELAY_DEV_VERCEL_ORG_ID`、`RELAY_DEV_VERCEL_PROJECT_ID`：部署官方 Vercel dev Relay/Admin。
 - `APPLE_ID`、`APPLE_ID_PASSWORD`、`APPLE_TEAM_ID`、`DESKTOP_CSC_LINK`、`DESKTOP_CSC_KEY_PASSWORD`、`DESKTOP_CSC_INSTALLER_LINK`、`DESKTOP_CSC_INSTALLER_KEY_PASSWORD`：macOS App Store 外分发签名和 notarization；未做 Apple Developer 签名时可以缺省。
 
 macOS Developer ID 签名的完整创建和验证步骤见 [macOS signing](./macos-signing.md)。
@@ -182,3 +184,7 @@ gh workflow run deploy-pwa.yml --repo oneworks-ai/app --ref main
 Homepage Pages token 的配置、轮换和验证见 [homepage-github-pages.md](./homepage-github-pages.md)。
 
 Avatar Pages token 的配置、轮换和验证见 [avatar-github-pages.md](./avatar-github-pages.md)。
+
+## Relay Dev Deploy
+
+Relay dev deployment workflow secrets、variables 和 smoke check 维护方式见 [Relay dev deploy GitHub Actions](./relay-dev-deploy-github-actions.md)。

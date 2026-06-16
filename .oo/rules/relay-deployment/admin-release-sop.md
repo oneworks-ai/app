@@ -74,6 +74,8 @@ For every production Admin origin:
 
 After merging to `origin/main`, deploy the same SHA to dev first.
 
+The official dev slots are deployed by `.github/workflows/deploy-relay-dev.yml` when Relay-related paths change on `main`. If a release needs to verify only one platform, run the same workflow manually and choose `cloudflare` or `vercel`; otherwise use `both`.
+
 Run smoke checks against every dev slot being promoted from:
 
 ```bash

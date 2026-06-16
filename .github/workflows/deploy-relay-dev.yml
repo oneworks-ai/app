@@ -1,0 +1,200 @@
+name: Deploy Relay Dev
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/deploy-relay-dev.yml
+      - apps/relay-admin/**
+      - apps/relay-server/**
+      - packages/components/**
+      - packages/route-layout/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Dev platform to deploy.
+        required: true
+        default: both
+        type: choice
+        options:
+          - both
+          - cloudflare
+          - vercel
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: deploy-relay-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-cloudflare-dev:
+    name: cloudflare-dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'both' || github.event.inputs.platform == 'cloudflare'
+    env:
+      CF_API_TOKEN: ${{ secrets.RELAY_DEV_CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT_ID: ${{ secrets.RELAY_DEV_CLOUDFLARE_ACCOUNT_ID }}
+      CF_WORKER_NAME: ${{ vars.RELAY_DEV_CF_WORKER_NAME }}
+      CF_PAGES_PROJECT: ${{ vars.RELAY_DEV_CF_PAGES_PROJECT }}
+      RELAY_DEV_CF_ORIGIN: ${{ vars.RELAY_DEV_CF_ORIGIN }}
+      RELAY_DEV_EXPECTED_SSO_PROVIDERS: ${{ vars.RELAY_DEV_EXPECTED_SSO_PROVIDERS }}
+      WRANGLER_VERSION: 4.49.0
+    steps:
+      - name: Check Cloudflare deployment credentials
+        id: credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${CF_API_TOKEN}" ] || [ -z "${CF_ACCOUNT_ID}" ]; then
+            echo "::notice::Skipping Cloudflare Relay dev deploy because RELAY_DEV_CLOUDFLARE_API_TOKEN or RELAY_DEV_CLOUDFLARE_ACCOUNT_ID is not configured."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        if: steps.credentials.outputs.available == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        if: steps.credentials.outputs.available == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        if: steps.credentials.outputs.available == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.credentials.outputs.available == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Relay Admin Pages artifact
+        if: steps.credentials.outputs.available == 'true'
+        run: pnpm -C apps/relay-admin build:platform
+
+      - name: Deploy Relay Worker
+        if: steps.credentials.outputs.available == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ env.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          worker_name="${CF_WORKER_NAME:-oneworks-relay-dev}"
+          pnpm dlx "wrangler@${WRANGLER_VERSION}" deploy \
+            --config apps/relay-server/wrangler.jsonc \
+            --name "$worker_name"
+
+      - name: Deploy Relay Admin Pages
+        if: steps.credentials.outputs.available == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ env.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pages_project="${CF_PAGES_PROJECT:-oneworks-dev}"
+          pnpm dlx "wrangler@${WRANGLER_VERSION}" pages deploy apps/relay-admin/dist \
+            --project-name "$pages_project" \
+            --branch main \
+            --commit-hash "${GITHUB_SHA}" \
+            --commit-message "Deploy Relay dev ${GITHUB_SHA}"
+
+      - name: Smoke check Cloudflare dev
+        if: steps.credentials.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export RELAY_DEV_ORIGIN="${RELAY_DEV_CF_ORIGIN:-https://dev.cf.oneworks.cloud}"
+          node .github/workflows/scripts/relay-dev-smoke.mjs
+
+  deploy-vercel-dev:
+    name: vercel-dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'both' || github.event.inputs.platform == 'vercel'
+    env:
+      RELAY_DEV_VERCEL_TOKEN: ${{ secrets.RELAY_DEV_VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.RELAY_DEV_VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.RELAY_DEV_VERCEL_PROJECT_ID }}
+      RELAY_DEV_VC_ORIGIN: ${{ vars.RELAY_DEV_VC_ORIGIN }}
+      RELAY_DEV_EXPECTED_SSO_PROVIDERS: ${{ vars.RELAY_DEV_EXPECTED_SSO_PROVIDERS }}
+      VERCEL_CLI_VERSION: 48.8.2
+    steps:
+      - name: Check Vercel deployment credentials
+        id: credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${RELAY_DEV_VERCEL_TOKEN}" ] || [ -z "${VERCEL_ORG_ID}" ] || [ -z "${VERCEL_PROJECT_ID}" ]; then
+            echo "::notice::Skipping Vercel Relay dev deploy because RELAY_DEV_VERCEL_TOKEN, RELAY_DEV_VERCEL_ORG_ID, or RELAY_DEV_VERCEL_PROJECT_ID is not configured."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        if: steps.credentials.outputs.available == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        if: steps.credentials.outputs.available == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        if: steps.credentials.outputs.available == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.credentials.outputs.available == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Pull Vercel project settings
+        if: steps.credentials.outputs.available == 'true'
+        working-directory: apps/relay-server
+        run: pnpm dlx "vercel@${VERCEL_CLI_VERSION}" pull --yes --environment=production --token "$RELAY_DEV_VERCEL_TOKEN"
+
+      - name: Build Vercel prebuilt output
+        if: steps.credentials.outputs.available == 'true'
+        working-directory: apps/relay-server
+        run: |
+          pnpm dlx "vercel@${VERCEL_CLI_VERSION}" build --prod --token "$RELAY_DEV_VERCEL_TOKEN"
+          pnpm prepare:vercel-output
+
+      - name: Deploy Vercel dev project
+        if: steps.credentials.outputs.available == 'true'
+        id: deploy
+        working-directory: apps/relay-server
+        run: |
+          set -euo pipefail
+          deploy_url="$(pnpm dlx "vercel@${VERCEL_CLI_VERSION}" deploy --prebuilt --prod --token "$RELAY_DEV_VERCEL_TOKEN")"
+          echo "$deploy_url"
+          echo "url=$deploy_url" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke check Vercel dev
+        if: steps.credentials.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export RELAY_DEV_ORIGIN="${RELAY_DEV_VC_ORIGIN:-https://dev.vc.oneworks.cloud}"
+          node .github/workflows/scripts/relay-dev-smoke.mjs
