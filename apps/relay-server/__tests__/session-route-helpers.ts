@@ -42,6 +42,7 @@ export const createFixtureStore = (): RelayStore => ({
   configProfileAssignments: [],
   configProfileVersions: [],
   configProfiles: [],
+  configSecrets: [],
   emailRisk: {
     buckets: [],
     challenges: []

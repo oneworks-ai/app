@@ -20,6 +20,7 @@ const createSecurityStore = (): RelayStore => ({
   configProfileAssignments: [],
   configProfileVersions: [],
   configProfiles: [],
+  configSecrets: [],
   emailRisk: {
     buckets: [],
     challenges: []

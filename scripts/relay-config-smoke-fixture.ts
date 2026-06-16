@@ -3,9 +3,13 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 
+import { encryptRelayConfigSnapshotSecretEnvelope } from '../packages/plugins/relay/src/shared/config-secrets'
+
 export const RELAY_CONFIG_SMOKE_SERVICE_KEY = 'relay-smoke'
 export const RELAY_CONFIG_SMOKE_MODEL = 'relay-smoke-model'
 export const RELAY_CONFIG_SNAPSHOT_RELATIVE_PATH = ['.local', 'plugins', 'relay', 'config-snapshot.json'] as const
+const RELAY_CONFIG_SMOKE_DEVICE_ID = 'relay-smoke-device'
+const RELAY_CONFIG_SMOKE_DEVICE_TOKEN = 'relay-smoke-device-token'
 
 export interface RelayConfigSmokeFixture {
   cachePath: string
@@ -48,7 +52,6 @@ const createSnapshotFixture = (workspaceDir: string) => ({
         modelServices: {
           [RELAY_CONFIG_SMOKE_SERVICE_KEY]: {
             apiBaseUrl: 'https://relay.example.com/v1',
-            apiKey: 'relay-smoke-key',
             models: [RELAY_CONFIG_SMOKE_MODEL],
             title: 'Relay smoke service'
           }
@@ -58,7 +61,18 @@ const createSnapshotFixture = (workspaceDir: string) => ({
             id: '@oneworks/plugin-forbidden'
           }
         ]
-      }
+      },
+      secrets: [
+        encryptRelayConfigSnapshotSecretEnvelope({
+          deviceToken: RELAY_CONFIG_SMOKE_DEVICE_TOKEN,
+          expiresAt: '2999-01-01T00:00:00.000Z',
+          plaintext: 'relay-smoke-key',
+          recipientDeviceId: RELAY_CONFIG_SMOKE_DEVICE_ID,
+          ref: `modelServices.${RELAY_CONFIG_SMOKE_SERVICE_KEY}.apiKey`,
+          secretId: 'relay-smoke-secret',
+          secretVersion: 1
+        })
+      ]
     },
     {
       id: 'smoke-workspace-denied-assignment',
@@ -127,6 +141,18 @@ export const createWorkspaceFixture = async (repoRoot: string): Promise<RelayCon
   })
 
   const cachePath = join(projectHome, ...RELAY_CONFIG_SNAPSHOT_RELATIVE_PATH)
+  await writeJson(join(projectHome, '.local', 'plugins', 'relay', 'device.json'), {
+    deviceId: RELAY_CONFIG_SMOKE_DEVICE_ID,
+    deviceName: 'Relay Smoke Device',
+    deviceSecret: 'relay-smoke-device-secret',
+    servers: {
+      corp: {
+        deviceToken: RELAY_CONFIG_SMOKE_DEVICE_TOKEN,
+        id: 'corp',
+        remoteBaseUrl: 'https://relay.example.com'
+      }
+    }
+  })
   await writeJson(cachePath, createSnapshotFixture(workspaceDir))
 
   return {

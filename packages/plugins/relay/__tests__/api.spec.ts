@@ -334,8 +334,12 @@ describe('relay plugin scoped API', () => {
           lastAppliedAt: '2026-06-15T08:05:00.000Z',
           lastError: null,
           lastSyncedAt: '2026-06-15T08:00:00.000Z',
+          marketplaceKeys: [],
           matchedProject: true,
           modelServiceKeys: ['openai'],
+          pluginKeys: [],
+          skillKeys: [],
+          skillRegistryKeys: [],
           sourceServerId: 'oneworks-cloudflare',
           version: '2026.06.15-a'
         }),
@@ -347,8 +351,12 @@ describe('relay plugin scoped API', () => {
             lastAppliedAt: '2026-06-15T09:05:00.000Z',
             lastError: null,
             lastSyncedAt: '2026-06-15T09:00:00.000Z',
+            marketplaceKeys: [],
             matchedProject: true,
             modelServiceKeys: ['openai', 'anthropic'],
+            pluginKeys: [],
+            skillKeys: [],
+            skillRegistryKeys: [],
             sourceServerId: 'oneworks-cloudflare',
             version: '2026.06.15-b'
           }

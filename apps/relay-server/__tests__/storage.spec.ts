@@ -76,6 +76,7 @@ describe('relay storage repository', () => {
       configProfileAssignments: [],
       configProfileVersions: [],
       configProfiles: [],
+      configSecrets: [],
       emailRisk: {
         buckets: [],
         challenges: []
@@ -131,6 +132,7 @@ describe('relay storage repository', () => {
       configProfileAssignments: [],
       configProfileVersions: [],
       configProfiles: [],
+      configSecrets: [],
       emailRisk: {
         buckets: [],
         challenges: []
@@ -203,6 +205,7 @@ describe('relay storage repository', () => {
       configProfileAssignments: [],
       configProfileVersions: [],
       configProfiles: [],
+      configSecrets: [],
       emailRisk: {
         buckets: [],
         challenges: []
