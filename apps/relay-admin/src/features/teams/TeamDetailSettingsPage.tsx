@@ -149,7 +149,7 @@ export const TeamDetailSettingsPage = ({
           layout='vertical'
           onFinish={handleSubmit}
         >
-          <div className='relay-team-panel__settings-grid'>
+          <section className='relay-team-panel__settings-section relay-team-panel__settings-section--identity'>
             <div className='relay-team-panel__avatar-field'>
               <span className='relay-team-panel__settings-field-label'>团队头像</span>
               <Upload
@@ -169,7 +169,7 @@ export const TeamDetailSettingsPage = ({
                   <Avatar
                     className='relay-team-detail__avatar'
                     shape='square'
-                    size={72}
+                    size={76}
                     src={avatarPreview}
                   >
                     {teamInitials(watchedName ?? team.name)}
@@ -197,24 +197,34 @@ export const TeamDetailSettingsPage = ({
                 <Input disabled={disabled} />
               </Form.Item>
             </div>
-          </div>
+          </section>
           <Form.Item hidden name='avatarUrl' rules={[{ validator: validateAvatarSource }]}>
             <Input />
           </Form.Item>
-          <Form.Item label='团队介绍' name='description'>
-            <Input.TextArea autoSize={{ minRows: 3 }} disabled={disabled} />
-          </Form.Item>
-          <Form.Item label='允许配置 Proxy 模式' name='proxyModeEnabled' valuePropName='checked'>
-            <Switch disabled={disabled} />
-          </Form.Item>
-          <Button
-            className='relay-team-panel__settings-submit'
-            disabled={disabled}
-            htmlType='submit'
-            type='primary'
-          >
-            保存团队设置
-          </Button>
+          <section className='relay-team-panel__settings-section'>
+            <Form.Item label='团队介绍' name='description'>
+              <Input.TextArea autoSize={{ minRows: 4 }} disabled={disabled} />
+            </Form.Item>
+          </section>
+          <section className='relay-team-panel__settings-section'>
+            <div className='relay-team-panel__settings-option'>
+              <span className='relay-team-panel__settings-option-label'>允许配置 Proxy 模式</span>
+              <Form.Item name='proxyModeEnabled' noStyle valuePropName='checked'>
+                <Switch disabled={disabled} />
+              </Form.Item>
+            </div>
+          </section>
+          <div className='relay-team-panel__settings-actions'>
+            <Button
+              className='relay-team-panel__settings-submit'
+              disabled={disabled}
+              htmlType='submit'
+              icon={<AdminIcon name='check' />}
+              type='primary'
+            >
+              保存团队设置
+            </Button>
+          </div>
         </Form>
       </div>
     </DataPanel>
