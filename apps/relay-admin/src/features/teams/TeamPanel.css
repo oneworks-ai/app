@@ -89,19 +89,35 @@
 }
 
 .relay-team-panel__settings-preview {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(160px, auto);
+  align-items: end;
+  gap: 14px 18px;
   min-width: 0;
   border-bottom: 1px solid
     var(--border-color, var(--ant-color-border-secondary, #f0f0f0));
   padding: 0 0 14px;
 }
 
-.relay-team-panel__settings-preview > div {
+.relay-team-panel__avatar-editor {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+
+.relay-team-panel__avatar-field.ant-form-item {
+  flex: 1 1 280px;
+  margin: 0;
+  min-width: 0;
+}
+
+.relay-team-panel__settings-preview-copy {
   display: grid;
   gap: 3px;
   min-width: 0;
+  justify-self: end;
+  text-align: right;
 }
 
 .relay-team-panel__settings-preview strong,
@@ -307,21 +323,43 @@
 }
 
 .relay-team-panel__member-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.relay-team-panel__member-avatar.ant-avatar {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+  color: var(--sub-text-color);
+  background: color-mix(in srgb, var(--text-color) 8%, transparent);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.relay-team-panel__member-identity-copy {
   display: grid;
   gap: 2px;
   min-width: 0;
 }
 
-.relay-team-panel__member-identity strong,
-.relay-team-panel__member-identity span {
+.relay-team-panel__member-identity-copy strong,
+.relay-team-panel__member-email,
+.relay-team-panel__member-id {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.relay-team-panel__member-identity span {
+.relay-team-panel__member-email {
   color: var(--ant-color-text-secondary, #57606a);
   font-size: 12px;
+}
+
+.relay-team-panel__member-id {
+  color: var(--ant-color-text-tertiary, #8c959f);
+  font: 600 11px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .relay-team-panel__json-inline {
@@ -350,6 +388,15 @@
 
   .relay-team-detail__meta-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .relay-team-panel__settings-preview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .relay-team-panel__settings-preview-copy {
+    justify-self: stretch;
+    text-align: left;
   }
 
   .relay-team-panel__policy-switches,

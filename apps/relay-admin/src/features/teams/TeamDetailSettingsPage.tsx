@@ -107,24 +107,31 @@ export const TeamDetailSettingsPage = ({
           onFinish={handleSubmit}
         >
           <div className='relay-team-panel__settings-preview'>
-            <Avatar
-              className='relay-team-detail__avatar'
-              shape='square'
-              size={56}
-              src={cleanText(watchedAvatarUrl) === '' ? undefined : cleanText(watchedAvatarUrl)}
-            >
-              {teamInitials(watchedName ?? team.name)}
-            </Avatar>
-            <div>
+            <div className='relay-team-panel__avatar-editor'>
+              <Avatar
+                className='relay-team-detail__avatar'
+                shape='square'
+                size={56}
+                src={cleanText(watchedAvatarUrl) === '' ? undefined : cleanText(watchedAvatarUrl)}
+              >
+                {teamInitials(watchedName ?? team.name)}
+              </Avatar>
+              <Form.Item
+                className='relay-team-panel__avatar-field'
+                label='团队头像'
+                name='avatarUrl'
+                rules={[{ validator: validateAvatarUrl }]}
+              >
+                <Input allowClear disabled={disabled} placeholder='https://example.com/team.png' />
+              </Form.Item>
+            </div>
+            <div className='relay-team-panel__settings-preview-copy'>
               <strong>{cleanText(watchedName) === '' ? team.name : cleanText(watchedName)}</strong>
               <span>{team.slug}</span>
             </div>
           </div>
           <Form.Item label='团队名称' name='name' rules={[{ required: true }]}>
             <Input disabled={disabled} />
-          </Form.Item>
-          <Form.Item label='头像 URL' name='avatarUrl' rules={[{ validator: validateAvatarUrl }]}>
-            <Input disabled={disabled} placeholder='https://example.com/team.png' />
           </Form.Item>
           <Form.Item label='Slug' name='slug'>
             <Input disabled={disabled} />

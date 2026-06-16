@@ -31,6 +31,7 @@ const seedTeamUsers = async (dataPath: string) => {
       id: 'user-2',
       email: 'two@example.com',
       name: 'Two',
+      avatarUrl: 'https://cdn.example.com/users/two.png',
       role: 'member',
       createdAt: timestamp
     },
@@ -104,6 +105,9 @@ describe('relay team routes', () => {
     const userTwoTeams = await requestJson(baseUrl, '/api/relay/teams', {
       headers: authHeaders('user-2-session')
     })
+    const members = await requestJson(baseUrl, `/api/relay/teams/${teamId}/members`, {
+      headers: authHeaders('user-1-session')
+    })
     const deniedUpdate = await requestJson(baseUrl, `/api/relay/teams/${teamId}`, {
       method: 'PATCH',
       headers: authHeaders('user-2-session'),
@@ -147,10 +151,21 @@ describe('relay team routes', () => {
     })
     expect(added.response.status).toBe(200)
     expect(added.body.member).toMatchObject({
+      avatarUrl: 'https://cdn.example.com/users/two.png',
       configEnabled: false,
       role: 'editor',
       userId: 'user-2'
     })
+    expect(members.response.status).toBe(200)
+    expect(members.body.members).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          avatarUrl: 'https://cdn.example.com/users/two.png',
+          email: 'two@example.com',
+          userId: 'user-2'
+        })
+      ])
+    )
     expect(userTwoTeams.response.status).toBe(200)
     expect(userTwoTeams.body.teams).toMatchObject([
       {

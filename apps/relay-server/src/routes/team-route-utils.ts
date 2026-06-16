@@ -129,6 +129,7 @@ export const serializeTeamMember = (member: RelayTeamMember, user: RelayUser | u
   id: member.id,
   teamId: member.teamId,
   userId: member.userId,
+  avatarUrl: user?.avatarUrl ?? null,
   email: user?.email ?? null,
   name: user?.name ?? null,
   role: member.role,

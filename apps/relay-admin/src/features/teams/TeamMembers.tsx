@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- member table keeps filters, add form, role, and config toggles together. */
-import { Button, Drawer, Form, Input, Popconfirm, Select, Space, Switch } from 'antd'
+import { Avatar, Button, Drawer, Form, Input, Popconfirm, Select, Space, Switch } from 'antd'
 import type { TableColumnsType } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Key } from 'react'
@@ -47,6 +47,10 @@ const roleOptions: Array<{ label: string; value: RelayAdminTeamMemberRole }> = [
 ]
 
 const cleanText = (value: string | undefined) => value?.trim() ?? ''
+
+const memberAvatarFallback = (member: RelayAdminTeamMember) => (
+  (member.name ?? member.email ?? member.userId).trim().slice(0, 1).toUpperCase()
+)
 
 const formatTimestamp = (value: string | null | undefined) => {
   if (value == null || value === '') return '-'
@@ -188,12 +192,22 @@ export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
       key: 'identity',
       render: (_, member) => (
         <span className='relay-team-panel__member-identity'>
-          <strong>{member.name ?? member.email ?? member.userId}</strong>
-          <span>{member.email ?? member.userId}</span>
+          <Avatar
+            className='relay-team-panel__member-avatar'
+            size={30}
+            src={member.avatarUrl ?? undefined}
+          >
+            {memberAvatarFallback(member)}
+          </Avatar>
+          <span className='relay-team-panel__member-identity-copy'>
+            <strong>{member.name ?? member.email ?? member.userId}</strong>
+            <span className='relay-team-panel__member-email'>{member.email ?? '未设置邮箱'}</span>
+            <span className='relay-team-panel__member-id'>ID {member.userId}</span>
+          </span>
         </span>
       ),
       title: '成员',
-      width: 220
+      width: 300
     },
     {
       dataIndex: 'role',

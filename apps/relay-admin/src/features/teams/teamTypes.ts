@@ -53,6 +53,7 @@ export interface RelayAdminTeam {
 }
 
 export interface RelayAdminTeamMember {
+  avatarUrl: string | null
   configEnabled: boolean
   createdAt: string
   createdByUserId: string
