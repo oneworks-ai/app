@@ -11,14 +11,18 @@ import { registerAccountsCommand } from '#~/commands/accounts.js'
 
 const mocks = vi.hoisted(() => ({
   buildConfigJsonVariables: vi.fn(() => ({})),
-  loadConfig: vi.fn(),
+  loadConfigState: vi.fn(),
   loadAdapter: vi.fn()
 }))
 
-vi.mock('@oneworks/config', () => ({
-  buildConfigJsonVariables: mocks.buildConfigJsonVariables,
-  loadConfig: mocks.loadConfig
-}))
+vi.mock('@oneworks/config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@oneworks/config')>()
+  return {
+    ...actual,
+    buildConfigJsonVariables: mocks.buildConfigJsonVariables,
+    loadConfigState: mocks.loadConfigState
+  }
+})
 
 vi.mock('@oneworks/types', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@oneworks/types')>()
@@ -56,7 +60,12 @@ describe('accounts command', () => {
     process.chdir(cwd)
     process.env.HOME = homeDir
 
-    mocks.loadConfig.mockResolvedValue([{}, {}])
+    mocks.loadConfigState.mockResolvedValue({
+      effectiveProjectConfig: {},
+      projectConfig: {},
+      userConfig: undefined,
+      mergedConfig: {}
+    })
     mocks.loadAdapter.mockResolvedValue({
       manageAccount: vi.fn().mockResolvedValue({
         accountKey: 'work',
@@ -107,7 +116,12 @@ describe('accounts command', () => {
     await mkdir(accountDir, { recursive: true })
     await writeFile(path.join(accountDir, 'auth.json'), '{}\n')
 
-    mocks.loadConfig.mockResolvedValue([{}, {}])
+    mocks.loadConfigState.mockResolvedValue({
+      effectiveProjectConfig: {},
+      projectConfig: {},
+      userConfig: undefined,
+      mergedConfig: {}
+    })
     mocks.loadAdapter.mockResolvedValue({
       manageAccount: vi.fn().mockResolvedValue({
         accountKey: 'work',

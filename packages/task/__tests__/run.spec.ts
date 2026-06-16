@@ -28,6 +28,21 @@ vi.mock('#~/prepare.js', () => ({
 
 vi.mock('@oneworks/types', () => ({
   loadAdapter: loadAdapterMock,
+  resolveAdapterRuntimeTarget: (adapterKey: string, options?: { config?: { adapters?: Record<string, unknown> } }) => {
+    const adapterConfig = options?.config?.adapters?.[adapterKey]
+    const packageId = adapterConfig != null && typeof adapterConfig === 'object' && !Array.isArray(adapterConfig)
+      ? (adapterConfig as Record<string, unknown>).packageId
+      : undefined
+    const loadSpecifier = typeof packageId === 'string' && packageId.trim() !== ''
+      ? packageId.trim()
+      : adapterKey
+    return {
+      instanceKey: adapterKey,
+      loadSpecifier,
+      runtimeAdapter: loadSpecifier === '@oneworks/adapter-codex' ? 'codex' : adapterKey,
+      ...(typeof packageId === 'string' ? { packageId } : {})
+    }
+  },
   sanitizePackageName: (packageName: string) => packageName.replace(/^@/, '').replace(/[\\/]/g, '__')
 }))
 
@@ -184,6 +199,69 @@ describe('task run adapter init', () => {
     })
 
     expect(result.resolvedAdapter).toBe('claude-code')
+  })
+
+  it('loads a configured runtime package while preserving the adapter instance key', async () => {
+    const ctx = createCtx()
+    ctx.configs = [{
+      adapters: createAdapters({
+        fast: {
+          packageId: '@oneworks/adapter-codex',
+          defaultModel: 'gpt-5.5',
+          sandboxPolicy: {
+            type: 'workspaceWrite'
+          }
+        }
+      })
+    }, undefined] as unknown as AdapterCtx['configs']
+    prepareMock.mockResolvedValue([ctx])
+
+    const result = await run({
+      adapter: 'fast',
+      cwd: ctx.cwd,
+      env: {}
+    }, {
+      type: 'create',
+      runtime: 'cli',
+      sessionId: 'session-dynamic-instance',
+      description: 'hello',
+      onEvent: vi.fn()
+    })
+
+    expect(loadAdapterMock).toHaveBeenCalledWith('@oneworks/adapter-codex')
+    expect(initMock).toHaveBeenCalledWith(expect.objectContaining({
+      configState: expect.objectContaining({
+        mergedConfig: expect.objectContaining({
+          adapters: expect.objectContaining({
+            codex: expect.objectContaining({
+              packageId: '@oneworks/adapter-codex',
+              sandboxPolicy: {
+                type: 'workspaceWrite'
+              }
+            })
+          })
+        })
+      })
+    }))
+    expect(queryMock.mock.calls[0]?.[0]).toMatchObject({
+      configState: {
+        mergedConfig: {
+          adapters: {
+            fast: expect.objectContaining({
+              packageId: '@oneworks/adapter-codex'
+            }),
+            codex: expect.objectContaining({
+              sandboxPolicy: {
+                type: 'workspaceWrite'
+              }
+            })
+          }
+        }
+      }
+    })
+    expect(ctx.env.__ONEWORKS_PROJECT_ADAPTER__).toBe('fast')
+    expect(ctx.env.__ONEWORKS_RUNTIME_PROTOCOL_DEFAULT_ADAPTER__).toBe('fast')
+    expect(result.resolvedAdapter).toBe('fast')
   })
 
   it('inherits parent session adapter and model from env when omitted by the task input', async () => {

@@ -12,6 +12,13 @@ export interface AdapterAccountConfigCommon {
 }
 
 export interface AdapterConfigCommon {
+  /**
+   * Runtime adapter package name or package root path used by this configured adapter instance.
+   *
+   * This lets `adapters.fast` load `@oneworks/adapter-codex`, or a local package path,
+   * while keeping `fast` as the user-facing adapter key.
+   */
+  packageId?: string
   defaultModel?: string
   includeModels?: string[]
   excludeModels?: string[]

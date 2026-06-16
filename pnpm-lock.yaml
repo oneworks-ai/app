@@ -932,6 +932,9 @@ importers:
 
   packages/managed-plugins:
     dependencies:
+      '@oneworks/config':
+        specifier: workspace:*
+        version: link:../config
       '@oneworks/types':
         specifier: workspace:*
         version: link:../types

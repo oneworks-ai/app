@@ -24,6 +24,11 @@ vi.mock('#~/services/config/index.js', () => ({
 vi.mock('@oneworks/types', () => ({
   loadAdapter: mocks.loadAdapter,
   resolveAdapterPackageName: (type: string) => `@oneworks/adapter-${type}`,
+  resolveAdapterRuntimeTarget: (type: string) => ({
+    instanceKey: type,
+    loadSpecifier: type,
+    runtimeAdapter: type
+  }),
   sanitizePackageName: (packageName: string) => packageName.replace(/^@/, '').replace(/[\\/]/g, '__')
 }))
 

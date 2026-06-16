@@ -107,6 +107,7 @@ describe('config schema bundle', () => {
       properties: {}
     })
     expect((adapters.additionalProperties as Record<string, unknown>).properties).toMatchObject({
+      packageId: { type: 'string' },
       defaultModel: { type: 'string' },
       includeModels: { type: 'array' },
       excludeModels: { type: 'array' }
@@ -537,6 +538,69 @@ describe('config schema bundle', () => {
       expect(knownInvalid.success).toBe(false)
       expect(knownWithUnknownKey.success).toBe(false)
       expect(unknownAdapter.success).toBe(true)
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('uses a configured adapter packageId path as the schema source for that adapter instance', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-schema-'))
+
+    try {
+      await writeFile(
+        path.join(tempDir, '.oo.config.json'),
+        JSON.stringify(
+          {
+            adapters: {
+              fast: {
+                packageId: './node_modules/@oneworks/adapter-codex'
+              }
+            }
+          },
+          null,
+          2
+        )
+      )
+      await writePackage(tempDir, '@oneworks/adapter-codex', {
+        'config-schema.js': `
+const { z } = require(${JSON.stringify(zodPath)})
+
+module.exports.adapterConfigContribution = {
+  adapterKey: 'codex',
+  title: 'Codex',
+  schema: z.object({
+    localOnlyFlag: z.boolean().optional().describe('Local-only flag')
+  })
+}
+`
+      }, {
+        './config-schema': './config-schema.js'
+      })
+
+      const bundle = await composeWorkspaceConfigSchemaBundle({ cwd: tempDir })
+      const adapters = (bundle.jsonSchema.properties as Record<string, unknown>).adapters as Record<string, unknown>
+      const adapterProperties = adapters.properties as Record<string, unknown>
+      const fastSchema = adapterProperties.fast as Record<string, unknown>
+      const knownValid = await validateConfigSection('adapters', {
+        fast: {
+          packageId: './node_modules/@oneworks/adapter-codex',
+          localOnlyFlag: true
+        }
+      }, { cwd: tempDir })
+      const knownWithUnknownKey = await validateConfigSection('adapters', {
+        fast: {
+          packageId: './node_modules/@oneworks/adapter-codex',
+          customFlag: true
+        }
+      }, { cwd: tempDir })
+
+      expect(bundle.extensions.adapters).toContain('fast')
+      expect(fastSchema.properties).toMatchObject({
+        packageId: { type: 'string' },
+        localOnlyFlag: { type: 'boolean' }
+      })
+      expect(knownValid.success).toBe(true)
+      expect(knownWithUnknownKey.success).toBe(false)
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }

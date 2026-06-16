@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 
-import { loadAdapterPluginInstaller } from '@oneworks/types'
+import { buildConfigJsonVariables, loadConfigState } from '@oneworks/config'
+import { loadAdapterPluginInstaller, resolveAdapterRuntimeTarget } from '@oneworks/types'
 import type {
   AdapterPluginAddOptions,
   AdapterPluginAddResult,
@@ -195,6 +196,17 @@ export const addAdapterPlugin = async (
   adapter: string,
   options: AdapterPluginAddOptions
 ): Promise<AdapterPluginAddResult> => {
-  const installer = await loadAdapterPluginInstaller(adapter)
+  const cwd = options.cwd ?? process.cwd()
+  const env = resolvePluginInstallEnv(cwd, options.env)
+  const configState = await loadConfigState({
+    cwd,
+    env,
+    jsonVariables: buildConfigJsonVariables(cwd, env)
+  })
+  const adapterTarget = resolveAdapterRuntimeTarget(adapter, {
+    config: configState.mergedConfig,
+    cwd
+  })
+  const installer = await loadAdapterPluginInstaller(adapterTarget.loadSpecifier)
   return installAdapterPluginWithInstaller(installer, options)
 }

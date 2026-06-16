@@ -1224,6 +1224,7 @@ defaultModel: package-model
 
   it('splits adapter config into common and native sections while allowing extra common keys', () => {
     const result = splitAdapterConfigEntry({
+      packageId: '@oneworks/adapter-codex',
       defaultModel: 'gpt-5.4',
       includeModels: ['gpt-5.4'],
       excludeModels: ['gpt-4.1'],
@@ -1240,6 +1241,7 @@ defaultModel: package-model
       },
       model: 'legacy-model'
     } as {
+      packageId?: string
       defaultModel?: string
       includeModels?: string[]
       excludeModels?: string[]
@@ -1254,6 +1256,7 @@ defaultModel: package-model
     })
 
     expect(ADAPTER_COMMON_CONFIG_KEYS).toEqual([
+      'packageId',
       'defaultModel',
       'includeModels',
       'excludeModels',
@@ -1261,6 +1264,7 @@ defaultModel: package-model
       'accounts'
     ])
     expect(result.common).toEqual({
+      packageId: '@oneworks/adapter-codex',
       defaultModel: 'gpt-5.4',
       includeModels: ['gpt-5.4'],
       excludeModels: ['gpt-4.1'],

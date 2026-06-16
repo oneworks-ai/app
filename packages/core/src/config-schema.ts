@@ -60,6 +60,8 @@ export const adapterAccountConfigCommonSchema = z.object({
 })
 
 export const adapterConfigCommonSchema = z.object({
+  packageId: z.string().optional()
+    .describe('Runtime adapter package name or package root path for this adapter instance'),
   defaultModel: z.string().optional().describe('Default model override for this adapter'),
   includeModels: z.array(z.string()).optional().describe('Allowed model IDs for this adapter'),
   excludeModels: z.array(z.string()).optional().describe('Blocked model IDs for this adapter'),

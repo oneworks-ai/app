@@ -66,6 +66,7 @@ export interface ResolveConfigStateOptions {
 type AdapterConfigRecord = object
 
 export const ADAPTER_COMMON_CONFIG_KEYS = [
+  'packageId',
   'defaultModel',
   'includeModels',
   'excludeModels',
