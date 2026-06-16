@@ -7,6 +7,8 @@ afterEach(cleanupRelayFixtures)
 
 const timestamp = '2026-01-01T00:00:00.000Z'
 const future = '2999-01-01T00:00:00.000Z'
+const tinyPngDataUrl =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
 
 interface AuditEventSnapshot {
   action: string
@@ -272,6 +274,11 @@ describe('relay team routes', () => {
       headers: authHeaders('admin-token'),
       body: JSON.stringify({ avatarUrl: 'ftp://cdn.example.com/team.png' })
     })
+    const uploadedAvatarUpdate = await requestJson(baseUrl, `/api/admin/teams/${teamId}`, {
+      method: 'PATCH',
+      headers: authHeaders('admin-token'),
+      body: JSON.stringify({ avatarUrl: tinyPngDataUrl })
+    })
     const relayPolicy = await requestJson(baseUrl, '/api/relay/team-policy', {
       headers: authHeaders('user-1-session')
     })
@@ -297,7 +304,11 @@ describe('relay team routes', () => {
     })
     expect(invalidAvatarUpdate.response.status).toBe(400)
     expect(invalidAvatarUpdate.body).toEqual({
-      error: 'Team avatar URL must be an HTTP or HTTPS URL.'
+      error: 'Team avatar must be an HTTP/HTTPS URL or an uploaded image up to 512 KiB.'
+    })
+    expect(uploadedAvatarUpdate.response.status).toBe(200)
+    expect(uploadedAvatarUpdate.body.team).toMatchObject({
+      avatarUrl: tinyPngDataUrl
     })
     expect(limitedMember.response.status).toBe(403)
     expect(limitedMember.body).toEqual({ error: 'Team member limit reached.' })

@@ -101,15 +101,37 @@
 
 .relay-team-panel__avatar-editor {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 12px;
   min-width: 0;
 }
 
-.relay-team-panel__avatar-field.ant-form-item {
-  flex: 1 1 280px;
-  margin: 0;
+.relay-team-panel__avatar-controls {
+  display: grid;
+  gap: 8px;
   min-width: 0;
+}
+
+.relay-team-panel__avatar-label {
+  color: var(--text-color, var(--ant-color-text, #1f2328));
+  font: 600 13px/1.3 ui-sans-serif, system-ui, sans-serif;
+}
+
+.relay-team-panel__avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.relay-team-panel__avatar-actions .ant-btn {
+  display: inline-flex;
+  align-items: center;
+}
+
+.relay-team-panel__avatar-error.ant-alert {
+  padding: 4px 8px;
+  font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif;
 }
 
 .relay-team-panel__settings-preview-copy {

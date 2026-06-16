@@ -11,9 +11,31 @@ import type { RelayServerArgs, RelayStore, RelayTeam, RelayTeamMember, RelayTeam
 
 export const cleanString = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 
+const maxTeamAvatarImageBytes = 512 * 1024
+const teamAvatarDataUrlPattern = /^data:(image\/(?:png|jpeg|webp|gif));base64,([a-z0-9+/=\s]+)$/iu
+const base64Pattern = /^(?:[a-z0-9+/]{4})*(?:[a-z0-9+/]{2}==|[a-z0-9+/]{3}=)?$/iu
+
+const getBase64ByteLength = (value: string) => {
+  if (value === '' || value.length % 4 !== 0 || !base64Pattern.test(value)) return 0
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0
+  return (value.length / 4) * 3 - padding
+}
+
+const cleanAvatarDataUrl = (text: string): string | undefined => {
+  const match = teamAvatarDataUrlPattern.exec(text)
+  if (match == null) return undefined
+  const mimeType = match[1].toLowerCase()
+  const base64 = match[2].replace(/\s/gu, '')
+  const byteLength = getBase64ByteLength(base64)
+  if (byteLength === 0 || byteLength > maxTeamAvatarImageBytes) return undefined
+  return `data:${mimeType};base64,${base64}`
+}
+
 export const cleanAvatarUrl = (value: unknown): { ok: true; value?: string } | { error: string; ok: false } => {
   const text = cleanString(value)
   if (text === '') return { ok: true }
+  const dataUrl = cleanAvatarDataUrl(text)
+  if (dataUrl != null) return { ok: true, value: dataUrl }
   try {
     const url = new URL(text)
     if (url.protocol === 'http:' || url.protocol === 'https:') {
@@ -22,7 +44,7 @@ export const cleanAvatarUrl = (value: unknown): { ok: true; value?: string } | {
   } catch {
     // Invalid URLs fall through to the shared validation error below.
   }
-  return { error: 'Team avatar URL must be an HTTP or HTTPS URL.', ok: false }
+  return { error: 'Team avatar must be an HTTP/HTTPS URL or an uploaded image up to 512 KiB.', ok: false }
 }
 
 export const firstCleanString = (...values: unknown[]) => {

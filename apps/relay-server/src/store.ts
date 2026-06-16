@@ -113,6 +113,16 @@ const normalizeHttpUrl = (value: unknown) => {
   }
 }
 
+const normalizeImageDataUrl = (value: unknown) => {
+  if (typeof value !== 'string' || value.trim() === '') return undefined
+  const match = /^data:(image\/(?:png|jpeg|webp|gif));base64,([a-z0-9+/=\s]+)$/iu.exec(value.trim())
+  if (match == null) return undefined
+  const base64 = match[2].replace(/\s/gu, '')
+  return base64 === '' ? undefined : `data:${match[1].toLowerCase()};base64,${base64}`
+}
+
+const normalizeAvatarSource = (value: unknown) => normalizeImageDataUrl(value) ?? normalizeHttpUrl(value)
+
 const normalizeTeam = (value: Record<string, unknown>): RelayTeam | undefined => {
   const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
   const slug = normalizeSlug(value.slug, id ?? randomUUID())
@@ -124,7 +134,7 @@ const normalizeTeam = (value: Record<string, unknown>): RelayTeam | undefined =>
     description: typeof value.description === 'string' && value.description.trim() !== ''
       ? value.description.trim()
       : undefined,
-    avatarUrl: normalizeHttpUrl(value.avatarUrl),
+    avatarUrl: normalizeAvatarSource(value.avatarUrl),
     ...(typeof value.proxyModeEnabled === 'boolean' ? { proxyModeEnabled: value.proxyModeEnabled } : {}),
     createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
       ? value.createdByUserId.trim()

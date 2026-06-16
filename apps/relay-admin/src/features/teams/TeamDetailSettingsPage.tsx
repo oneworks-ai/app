@@ -1,9 +1,11 @@
 import './TeamPanel.css'
 
-import { Avatar, Button, Empty, Form, Input, Switch } from 'antd'
-import { useEffect } from 'react'
+import { Alert, Avatar, Button, Empty, Form, Input, Switch, Upload } from 'antd'
+import type { UploadProps } from 'antd'
+import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
+import { AdminIcon } from '../../shared/ui/AdminIcon'
 import { DataPanel } from '../../shared/ui/DataPanel'
 import type { RelayAdminTeam, UpdateTeamInput } from './teamTypes'
 
@@ -23,6 +25,9 @@ interface TeamSettingsFormValues {
 }
 
 const cleanText = (value: string | undefined) => value?.trim() ?? ''
+const maxAvatarFileBytes = 512 * 1024
+const acceptedAvatarMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
+const avatarDataUrlPattern = /^data:image\/(?:png|jpeg|webp|gif);base64,/iu
 
 const valuesFromTeam = (team: RelayAdminTeam | undefined): TeamSettingsFormValues => ({
   avatarUrl: team?.avatarUrl ?? '',
@@ -42,16 +47,31 @@ const teamInitials = (name: string) => {
   return Array.from(text).slice(0, 2).join('').toUpperCase()
 }
 
-const validateAvatarUrl = async (_: unknown, value: string | undefined) => {
+const readAvatarFile = async (file: File) =>
+  await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.addEventListener('load', () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+      } else {
+        reject(new Error('头像读取失败'))
+      }
+    })
+    reader.addEventListener('error', () => reject(new Error('头像读取失败')))
+    reader.readAsDataURL(file)
+  })
+
+const validateAvatarSource = async (_: unknown, value: string | undefined) => {
   const text = cleanText(value)
   if (text === '') return
+  if (avatarDataUrlPattern.test(text)) return
   try {
     const url = new URL(text)
     if (url.protocol === 'http:' || url.protocol === 'https:') return
   } catch {
     // Invalid URLs fall through to the shared field error below.
   }
-  throw new Error('请输入 HTTP/HTTPS 图片地址')
+  throw new Error('请上传 PNG、JPEG、WebP 或 GIF 图片')
 }
 
 export const TeamDetailSettingsPage = ({
@@ -63,12 +83,35 @@ export const TeamDetailSettingsPage = ({
   const { teamId } = useParams()
   const team = teams.find(item => item.id === teamId)
   const [form] = Form.useForm<TeamSettingsFormValues>()
+  const [avatarUploadError, setAvatarUploadError] = useState<string | undefined>()
   const watchedAvatarUrl = Form.useWatch('avatarUrl', form)
   const watchedName = Form.useWatch('name', form)
+  const avatarPreview = cleanText(watchedAvatarUrl) === '' ? undefined : cleanText(watchedAvatarUrl)
 
   useEffect(() => {
     form.setFieldsValue(valuesFromTeam(team))
+    setAvatarUploadError(undefined)
   }, [form, team])
+
+  const handleAvatarUpload: UploadProps['beforeUpload'] = file => {
+    setAvatarUploadError(undefined)
+    if (!acceptedAvatarMimeTypes.has(file.type)) {
+      setAvatarUploadError('头像仅支持 PNG、JPEG、WebP 或 GIF')
+      return Upload.LIST_IGNORE
+    }
+    if (file.size > maxAvatarFileBytes) {
+      setAvatarUploadError('头像不能超过 512 KiB')
+      return Upload.LIST_IGNORE
+    }
+
+    void readAvatarFile(file).then(dataUrl => {
+      form.setFieldValue('avatarUrl', dataUrl)
+      void form.validateFields(['avatarUrl'])
+    }).catch(reason => {
+      setAvatarUploadError(reason instanceof Error ? reason.message : String(reason))
+    })
+    return Upload.LIST_IGNORE
+  }
 
   const handleSubmit = async (values: TeamSettingsFormValues) => {
     if (team == null) return
@@ -112,24 +155,54 @@ export const TeamDetailSettingsPage = ({
                 className='relay-team-detail__avatar'
                 shape='square'
                 size={56}
-                src={cleanText(watchedAvatarUrl) === '' ? undefined : cleanText(watchedAvatarUrl)}
+                src={avatarPreview}
               >
                 {teamInitials(watchedName ?? team.name)}
               </Avatar>
-              <Form.Item
-                className='relay-team-panel__avatar-field'
-                label='团队头像'
-                name='avatarUrl'
-                rules={[{ validator: validateAvatarUrl }]}
-              >
-                <Input allowClear disabled={disabled} placeholder='https://example.com/team.png' />
-              </Form.Item>
+              <div className='relay-team-panel__avatar-controls'>
+                <span className='relay-team-panel__avatar-label'>团队头像</span>
+                <div className='relay-team-panel__avatar-actions'>
+                  <Upload
+                    accept='image/png,image/jpeg,image/webp,image/gif'
+                    beforeUpload={handleAvatarUpload}
+                    disabled={disabled}
+                    maxCount={1}
+                    showUploadList={false}
+                  >
+                    <Button disabled={disabled} icon={<AdminIcon name='cloud_upload' />}>
+                      上传头像
+                    </Button>
+                  </Upload>
+                  <Button
+                    danger
+                    disabled={disabled || avatarPreview == null}
+                    icon={<AdminIcon name='delete' />}
+                    onClick={() => {
+                      form.setFieldValue('avatarUrl', '')
+                      setAvatarUploadError(undefined)
+                    }}
+                  >
+                    移除头像
+                  </Button>
+                </div>
+                {avatarUploadError == null ? null : (
+                  <Alert
+                    className='relay-team-panel__avatar-error'
+                    message={avatarUploadError}
+                    showIcon={false}
+                    type='error'
+                  />
+                )}
+              </div>
             </div>
             <div className='relay-team-panel__settings-preview-copy'>
               <strong>{cleanText(watchedName) === '' ? team.name : cleanText(watchedName)}</strong>
               <span>{team.slug}</span>
             </div>
           </div>
+          <Form.Item hidden name='avatarUrl' rules={[{ validator: validateAvatarSource }]}>
+            <Input />
+          </Form.Item>
           <Form.Item label='团队名称' name='name' rules={[{ required: true }]}>
             <Input disabled={disabled} />
           </Form.Item>
