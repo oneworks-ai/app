@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- member table keeps filters, add form, role, and config toggles together. */
 import { Button, Drawer, Form, Input, Popconfirm, Select, Space, Switch } from 'antd'
 import type { TableColumnsType } from 'antd'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Key } from 'react'
 
 import { AdminActionButton } from '../../shared/ui/AdminActionButton'
@@ -9,6 +9,7 @@ import { AdminColumnFilter } from '../../shared/ui/AdminColumnFilter'
 import { AdminListTable } from '../../shared/ui/AdminListTable'
 import type { AdminListColumnOption } from '../../shared/ui/AdminListTable'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
+import { useTeamDetailTabActions } from './TeamDetailTabActions'
 import type {
   CreateTeamMemberInput,
   RelayAdminTeam,
@@ -122,7 +123,7 @@ export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
   const [searchValue, setSearchValue] = useState('')
   const [selectedMemberKeys, setSelectedMemberKeys] = useState<Key[]>([])
   const [visibleColumnKeys, setVisibleColumnKeys] = useState(['identity', 'role', 'config', 'createdAt'])
-  const refreshMembers = () => setRevision(value => value + 1)
+  const refreshMembers = useCallback(() => setRevision(value => value + 1), [])
 
   useEffect(() => {
     let active = true
@@ -313,12 +314,10 @@ export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
       />
     </Space>
   )
-
-  if (team == null) return null
-
-  return (
-    <div className='relay-team-panel__members'>
-      <div className='relay-team-panel__tab-actions'>
+  const tabActions = useMemo(() =>
+    team == null
+      ? undefined
+      : (
         <Space size={4}>
           <AdminActionButton
             aria-label='添加成员'
@@ -338,7 +337,14 @@ export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
             title='刷新成员'
           />
         </Space>
-      </div>
+      ), [disabled, loading, refreshMembers, team])
+
+  useTeamDetailTabActions('members', tabActions)
+
+  if (team == null) return null
+
+  return (
+    <div className='relay-team-panel__members'>
       {error == null ? null : <p className='relay-team-panel__error'>{error}</p>}
       <AdminListTable<RelayAdminTeamMember>
         ariaLabel='团队成员列表'

@@ -7,6 +7,7 @@ import { AdminActionButton } from '../../shared/ui/AdminActionButton'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 import { TeamConfigAssignmentForm } from './TeamConfigAssignmentForm'
 import { TeamProfileCreateForm, TeamProfileVersionForm } from './TeamConfigProfileForms'
+import { useTeamDetailTabActions } from './TeamDetailTabActions'
 import type {
   CreateConfigProfileAssignmentInput,
   CreateConfigProfileInput,
@@ -282,14 +283,10 @@ export const TeamConfigProfiles = ({ disabled, team, token }: TeamConfigProfiles
     { children: selectedDetail?.versions.length ?? 0, key: 'versions', label: '版本数' },
     { children: selectedDetail?.assignments.length ?? 0, key: 'assignments', label: '分配数' }
   ]
-
-  if (team == null) {
-    return <Empty description='请选择团队' />
-  }
-
-  return (
-    <div className='relay-team-panel__profiles'>
-      <div className='relay-team-panel__tab-actions'>
+  const tabActions = useMemo(() =>
+    team == null
+      ? undefined
+      : (
         <Space size={4}>
           <AdminActionButton
             aria-label='创建 Profile'
@@ -301,13 +298,24 @@ export const TeamConfigProfiles = ({ disabled, team, token }: TeamConfigProfiles
             type='primary'
           />
           <AdminActionButton
+            aria-label='刷新 Profiles'
             disabled={disabled || loading}
             iconName='refresh'
             onClick={refreshProfiles}
             size='small'
+            title='刷新 Profiles'
           />
         </Space>
-      </div>
+      ), [disabled, loading, refreshProfiles, team])
+
+  useTeamDetailTabActions('profiles', tabActions)
+
+  if (team == null) {
+    return <Empty description='请选择团队' />
+  }
+
+  return (
+    <div className='relay-team-panel__profiles'>
       {error == null ? null : <p className='relay-team-panel__error'>{error}</p>}
       <Table<RelayAdminConfigProfile>
         className='relay-admin-table relay-team-panel__profile-table'

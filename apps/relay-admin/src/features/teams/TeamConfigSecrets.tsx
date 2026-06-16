@@ -1,10 +1,11 @@
 /* eslint-disable max-lines -- Secret management keeps the table and drawers in one local workflow. */
 import { Button, Drawer, Form, Input, Space, Table } from 'antd'
 import type { TableColumnsType } from 'antd'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { AdminActionButton } from '../../shared/ui/AdminActionButton'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
+import { useTeamDetailTabActions } from './TeamDetailTabActions'
 import type { CreateConfigSecretInput, RelayAdminConfigSecret, RelayAdminTeam } from './teamTypes'
 import {
   createRelayAdminConfigSecret,
@@ -163,28 +164,32 @@ export const TeamConfigSecrets = ({ disabled, team, token }: TeamConfigSecretsPr
       width: 96
     }
   ]
+  const tabActions = useMemo(() => (
+    <Space size={4}>
+      <AdminActionButton
+        aria-label='创建 Secret'
+        disabled={disabled}
+        iconName='add'
+        onClick={() => setCreateDrawerOpen(true)}
+        size='small'
+        title='创建 Secret'
+        type='primary'
+      />
+      <AdminActionButton
+        aria-label='刷新 Secrets'
+        disabled={disabled || loading}
+        iconName='refresh'
+        onClick={refreshSecrets}
+        size='small'
+        title='刷新 Secrets'
+      />
+    </Space>
+  ), [disabled, loading, refreshSecrets])
+
+  useTeamDetailTabActions('secrets', tabActions)
 
   return (
     <div className='relay-team-panel__secrets'>
-      <div className='relay-team-panel__tab-actions'>
-        <Space size={4}>
-          <AdminActionButton
-            aria-label='创建 Secret'
-            disabled={disabled}
-            iconName='add'
-            onClick={() => setCreateDrawerOpen(true)}
-            size='small'
-            title='创建 Secret'
-            type='primary'
-          />
-          <AdminActionButton
-            disabled={disabled || loading}
-            iconName='refresh'
-            onClick={refreshSecrets}
-            size='small'
-          />
-        </Space>
-      </div>
       {error == null ? null : <p className='relay-team-panel__error'>{error}</p>}
       <Table<RelayAdminConfigSecret>
         className='relay-admin-table relay-team-panel__secret-table'
