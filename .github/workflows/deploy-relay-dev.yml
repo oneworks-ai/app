@@ -102,6 +102,7 @@ jobs:
 
       - name: Deploy Relay Admin Pages
         if: steps.credentials.outputs.available == 'true'
+        working-directory: apps/relay-admin
         env:
           CLOUDFLARE_API_TOKEN: ${{ env.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_ACCOUNT_ID }}
@@ -109,7 +110,7 @@ jobs:
         run: |
           set -euo pipefail
           pages_project="${CF_PAGES_PROJECT:-oneworks-dev}"
-          pnpm dlx "wrangler@${WRANGLER_VERSION}" pages deploy apps/relay-admin/dist \
+          pnpm dlx "wrangler@${WRANGLER_VERSION}" pages deploy dist \
             --project-name "$pages_project" \
             --branch main \
             --commit-hash "${GITHUB_SHA}" \
@@ -193,7 +194,6 @@ jobs:
 
       - name: Smoke check Vercel dev
         if: steps.credentials.outputs.available == 'true'
-        shell: bash
         run: |
           set -euo pipefail
           export RELAY_DEV_ORIGIN="${RELAY_DEV_VC_ORIGIN:-https://dev.vc.oneworks.cloud}"

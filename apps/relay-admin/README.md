@@ -34,6 +34,7 @@ The managed OneWorks service uses the official Relay/Admin slots `dev.cf.onework
 Relay Admin can also run as a standalone static Pages/Vercel app while the Relay Server remains a separate persistent upstream. This mode keeps the browser on one public origin and proxies the Relay routes that need server behavior:
 
 - `/api/*`
+- `/health`
 - `/login`
 - `/login/complete`
 
@@ -63,7 +64,7 @@ ONEWORKS_RELAY_ADMIN_PROXY_TARGET=https://relay.example.com
 
 ### Cloudflare Pages
 
-Use `apps/relay-admin` as the Pages project root. Set the build command to `pnpm build:platform` and the output directory to `dist`. `functions/api/[[path]].ts`, `functions/login.ts`, and `functions/login/complete.ts` proxy the same Relay routes through Cloudflare Pages Functions.
+Use `apps/relay-admin` as the Pages project root. Set the build command to `pnpm build:platform` and the output directory to `dist`. `functions/health.ts`, `functions/api/[[path]].ts`, `functions/login.ts`, and `functions/login/complete.ts` proxy the same Relay routes through Cloudflare Pages Functions.
 
 For Cloudflare private deployments, pair this Pages project with the `apps/relay-server` Worker + Durable Object deployment. The Pages domain, Worker name, Cloudflare account subdomain, DNS host, inbound mail plan, transactional mail sending domain, and Reply-To belong to the user's deployment account and domain plan; keep committed docs on placeholder domains.
 
