@@ -124,6 +124,8 @@ export { readWebpageMetadata } from './api/webpage'
 export type { WebpageMetadataResponse } from './api/webpage'
 export type { WorkspaceFileContent, WorkspaceTreeEntry } from './api/workspace'
 export {
+  getWorkspacePanelState,
+  getWorkspacePanelStateCacheKey,
   getWorkspacePathActionCapabilities,
   getWorkspaceResourceUrl,
   listWorkspaceFileOpeners,
@@ -132,8 +134,10 @@ export {
   openWorkspaceInExternalOpener,
   readWorkspaceFile,
   revealWorkspacePathInFileManager,
-  updateWorkspaceFile
+  updateWorkspaceFile,
+  updateWorkspacePanelState
 } from './api/workspace'
+export type { WorkspacePanelStateResponse } from './api/workspace'
 
 // Worktree 环境脚本 API
 export {

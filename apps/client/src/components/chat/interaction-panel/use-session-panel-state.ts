@@ -9,7 +9,8 @@ import type {
   SessionPanelTab
 } from '@oneworks/core'
 
-import { getSession, updateSession } from '#~/api'
+import { getSession, getWorkspacePanelState, updateSession, updateWorkspacePanelState } from '#~/api'
+import { WORKSPACE_TERMINAL_SESSION_ID } from '#~/components/chat/terminal/@utils/terminal-session-ids'
 import { getServerBaseUrl } from '#~/runtime-config'
 
 const emptyArea = (): SessionPanelAreaState => ({ tabs: [] })
@@ -18,15 +19,59 @@ const SESSION_PANEL_STATE_PERSIST_DELAY_MS = 120
 const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
   value != null && typeof value === 'object' && !Array.isArray(value)
 
+const isSerializablePrimitive = (value: unknown) =>
+  value == null || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number'
+
+const sanitizeSerializableValue = (value: unknown, seen = new WeakSet<object>()): unknown => {
+  if (isSerializablePrimitive(value)) {
+    return typeof value === 'number' && !Number.isFinite(value) ? null : value
+  }
+
+  if (typeof value === 'bigint' || typeof value === 'function' || typeof value === 'symbol') {
+    return undefined
+  }
+
+  if (Array.isArray(value)) {
+    if (seen.has(value)) return undefined
+    seen.add(value)
+    return value
+      .map(item => sanitizeSerializableValue(item, seen))
+      .filter(item => item !== undefined)
+  }
+
+  if (!isObjectRecord(value)) {
+    return undefined
+  }
+
+  if (seen.has(value)) return undefined
+  seen.add(value)
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .flatMap(([key, item]): Array<[string, unknown]> => {
+        const sanitized = sanitizeSerializableValue(item, seen)
+        return sanitized === undefined ? [] : [[key, sanitized]]
+      })
+      .sort(([left], [right]) => left.localeCompare(right))
+  )
+}
+
+const sanitizeSerializableRecord = (value: unknown): Record<string, unknown> | undefined => {
+  const sanitized = sanitizeSerializableValue(value)
+  return isObjectRecord(sanitized) ? sanitized : undefined
+}
+
 const normalizeArea = (value: unknown): SessionPanelAreaState => {
   const input = isObjectRecord(value) ? value : {}
   const tabs = Array.isArray(input.tabs)
-    ? input.tabs.filter((tab): tab is SessionPanelTab => isObjectRecord(tab) && typeof tab.id === 'string')
+    ? input.tabs
+      .map(tab => sanitizeSerializableValue(tab))
+      .filter((tab): tab is SessionPanelTab => isObjectRecord(tab) && typeof tab.id === 'string')
     : []
   const activeTabId = typeof input.activeTabId === 'string' && tabs.some(tab => tab.id === input.activeTabId)
     ? input.activeTabId
     : undefined
-  const layout = isObjectRecord(input.layout) ? input.layout : undefined
+  const layout = sanitizeSerializableRecord(input.layout)
   return {
     tabs,
     ...(layout == null ? {} : { layout }),
@@ -55,14 +100,39 @@ const ensureActiveTab = (area: SessionPanelAreaState): SessionPanelAreaState => 
   }
 }
 
-const stableSerializeValue = (value: unknown): string =>
-  JSON.stringify(value, (_key, input) => {
-    if (!isObjectRecord(input)) return input
+const stableSerializeValue = (value: unknown): string => {
+  const seen = new WeakSet<object>()
+  return JSON.stringify(value, (_key, input) => {
+    if (isSerializablePrimitive(input)) {
+      return typeof input === 'number' && !Number.isFinite(input) ? null : input
+    }
+
+    if (typeof input === 'bigint' || typeof input === 'function' || typeof input === 'symbol') {
+      return undefined
+    }
+
+    if (Array.isArray(input)) {
+      if (seen.has(input)) return undefined
+      seen.add(input)
+      return input
+    }
+
+    if (!isObjectRecord(input)) return undefined
+    if (seen.has(input)) return undefined
+    seen.add(input)
 
     return Object.fromEntries(
-      Object.entries(input).sort(([left], [right]) => left.localeCompare(right))
+      Object.entries(input)
+        .filter(([, item]) =>
+          item !== undefined &&
+          typeof item !== 'function' &&
+          typeof item !== 'symbol' &&
+          typeof item !== 'bigint'
+        )
+        .sort(([left], [right]) => left.localeCompare(right))
     )
   }) ?? 'undefined'
+}
 
 const serializePanelState = (value: SessionPanelState) => stableSerializeValue(value)
 
@@ -204,23 +274,33 @@ const summarizeAreaForDebug = (area: SessionPanelAreaState) => {
   }
 }
 
-export function useSessionPanelState(session?: Session, fallbackSessionId?: string): SessionPanelStateController {
-  const [panelState, setPanelState] = useState<SessionPanelState>(() => normalizeSessionPanelState(session?.panelState))
+export function useSessionPanelState(
+  session?: Session,
+  fallbackSessionId?: string,
+  options: {
+    fallbackPanelState?: SessionPanelState
+  } = {}
+): SessionPanelStateController {
+  const sourcePanelState = session?.panelState ?? options.fallbackPanelState
+  const [panelState, setPanelState] = useState<SessionPanelState>(() => normalizeSessionPanelState(sourcePanelState))
   const lastSessionStateKeyRef = useRef<string | null>(null)
   const pendingPersistRef = useRef<PendingPanelStatePersist | null>(null)
   const persistTimerRef = useRef<number | null>(null)
   const inFlightPersistKeyRef = useRef<string | null>(null)
   const completedPersistKeyRef = useRef<string | null>(
-    serializePanelState(normalizeSessionPanelState(session?.panelState))
+    serializePanelState(normalizeSessionPanelState(sourcePanelState))
   )
   const sessionId = session?.id ?? fallbackSessionId
-  const persistedStateKey = useMemo(() => stableSerializeValue(session?.panelState ?? null), [session?.panelState])
+  const persistedStateKey = useMemo(
+    () => stableSerializeValue(sourcePanelState ?? null),
+    [sourcePanelState]
+  )
 
   useEffect(() => {
     const nextKey = `${sessionId ?? ''}:${persistedStateKey}`
     if (lastSessionStateKeyRef.current === nextKey) return
 
-    const nextState = normalizeSessionPanelState(session?.panelState)
+    const nextState = normalizeSessionPanelState(sourcePanelState)
     lastSessionStateKeyRef.current = nextKey
     completedPersistKeyRef.current = serializePanelState(nextState)
     pendingPersistRef.current = null
@@ -230,7 +310,7 @@ export function useSessionPanelState(session?: Session, fallbackSessionId?: stri
       persistTimerRef.current = null
     }
     setPanelState(current => serializePanelState(current) === serializePanelState(nextState) ? current : nextState)
-  }, [persistedStateKey, session?.panelState, sessionId])
+  }, [persistedStateKey, sessionId, sourcePanelState])
 
   useEffect(() => () => {
     if (persistTimerRef.current != null) {
@@ -266,8 +346,9 @@ export function useSessionPanelState(session?: Session, fallbackSessionId?: stri
         serverBaseUrl: getServerBaseUrl(),
         sessionId
       })
-      const latestSession = await getSession(sessionId)
-      const latestState = normalizeSessionPanelState(latestSession.session.panelState)
+      const latestState = sessionId === WORKSPACE_TERMINAL_SESSION_ID
+        ? normalizeSessionPanelState((await getWorkspacePanelState()).panelState)
+        : normalizeSessionPanelState((await getSession(sessionId)).session.panelState)
       const mergedState = mergePanelStateForPersist(baseState, nextState, latestState)
       const mergedStateKey = serializePanelState(mergedState)
       if (completedPersistKeyRef.current === mergedStateKey) {
@@ -278,12 +359,18 @@ export function useSessionPanelState(session?: Session, fallbackSessionId?: stri
         return
       }
 
-      await updateSession(sessionId, { panelState: mergedState })
-      completedPersistKeyRef.current = mergedStateKey
+      const committedState = sessionId === WORKSPACE_TERMINAL_SESSION_ID
+        ? normalizeSessionPanelState((await updateWorkspacePanelState(mergedState)).panelState)
+        : mergedState
+      if (sessionId !== WORKSPACE_TERMINAL_SESSION_ID) {
+        await updateSession(sessionId, { panelState: mergedState })
+      }
+      const committedStateKey = serializePanelState(committedState)
+      completedPersistKeyRef.current = committedStateKey
       logPanelStateDebug('persist done', {
-        bottom: summarizeAreaForDebug(mergedState.bottom),
-        mergedKeyLength: mergedStateKey.length,
-        right: summarizeAreaForDebug(mergedState.right),
+        bottom: summarizeAreaForDebug(committedState.bottom),
+        mergedKeyLength: committedStateKey.length,
+        right: summarizeAreaForDebug(committedState.right),
         serverBaseUrl: getServerBaseUrl(),
         sessionId
       })

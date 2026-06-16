@@ -6,11 +6,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
+import useSWR from 'swr'
 
-import type { ChatMessage, Session, SessionPanelAreaState } from '@oneworks/core'
+import type { ChatMessage, Session, SessionPanelAreaState, SessionPanelState } from '@oneworks/core'
 import { usePanelResize } from '@oneworks/route-layout'
 import type { SessionInfo, TerminalShellKind } from '@oneworks/types'
 
+import { getWorkspacePanelState, getWorkspacePanelStateCacheKey } from '#~/api'
 import type { NavRailWindowBarAction } from '#~/components/NavRail'
 import { ChatHeader } from '#~/components/chat/ChatHeader.js'
 import type {
@@ -59,6 +61,7 @@ import {
 } from '#~/components/chat/session-notification-indicator'
 import type { SessionNotificationReadMarker } from '#~/components/chat/session-notification-indicator'
 import type { TerminalPaneConfig } from '#~/components/chat/terminal/@utils/terminal-panes'
+import { WORKSPACE_TERMINAL_SESSION_ID } from '#~/components/chat/terminal/@utils/terminal-session-ids'
 import { parseWorkbenchDrawerViewMenuKey, toWorkbenchDrawerViewMenuKey } from '#~/components/chat/workbench-create-menu'
 import type {
   ChatWorkspaceDrawerAgentApprovals,
@@ -82,12 +85,12 @@ import { useChatLayoutQueryState } from '#~/hooks/use-chat-layout-query-state'
 import type { PluginContributionWorkbenchTab } from '#~/plugins/plugin-manifest'
 import { usePluginSlot } from '#~/plugins/plugin-slots'
 import { useInstallRoutePluginMoreMenu, useInstallRoutePluginWindowBarActions } from '#~/plugins/route-plugin-chrome'
+import { getRuntimeWorkspaceId } from '#~/runtime-config'
 import { isShortcutMatch } from '#~/utils/shortcutUtils'
 
 import { ChatRouteBottomPanel } from './ChatRouteBottomPanel'
 import { LauncherOverlay } from './LauncherOverlay'
 
-const WORKSPACE_TERMINAL_SESSION_ID = '__workspace__'
 const WEB_WORKSPACE_LAUNCHER_SHORTCUT = 'mod+shift+p'
 const SESSION_DOCK_PREVIEW_EXIT_MS = 180
 const SESSION_DOCK_PREVIEW_EDGE_BUFFER_PX = 56
@@ -138,9 +141,9 @@ const terminalShellKinds = new Set<TerminalShellKind>(['default', 'zsh', 'bash',
 const isTerminalShellKind = (value: unknown): value is TerminalShellKind =>
   typeof value === 'string' && terminalShellKinds.has(value as TerminalShellKind)
 
-const getSessionPanelTerminalPanes = (session?: Session): TerminalPaneConfig[] => (
+const getPanelStateTerminalPanes = (panelState?: SessionPanelState): TerminalPaneConfig[] => (
   (['bottom', 'right'] as const).flatMap(area =>
-    session?.panelState?.[area].tabs.flatMap((tab): TerminalPaneConfig[] => {
+    panelState?.[area].tabs.flatMap((tab): TerminalPaneConfig[] => {
       if (tab.kind !== 'terminal') return []
       return [{
         id: tab.terminalId,
@@ -153,8 +156,8 @@ const getSessionPanelTerminalPanes = (session?: Session): TerminalPaneConfig[] =
   )
 )
 
-const getSessionPanelActiveTerminalId = (session?: Session) => {
-  const bottomPanelState = session?.panelState?.bottom
+const getPanelStateActiveTerminalId = (panelState?: SessionPanelState) => {
+  const bottomPanelState = panelState?.bottom
   const activeTab = bottomPanelState?.tabs.find(tab => tab.id === bottomPanelState.activeTabId)
   return activeTab?.kind === 'terminal' ? activeTab.terminalId : undefined
 }
@@ -418,9 +421,19 @@ export function ChatRouteShell({
   const chatRouteRenderCountRef = useRef(0)
   chatRouteRenderCountRef.current += 1
   const sourceWorkspaceSession = workspaceSession ?? session
+  const runtimeWorkspaceId = getRuntimeWorkspaceId()
+  const shouldUseWorkspacePanelState = sourceWorkspaceSession == null && runtimeWorkspaceId != null
+  const { data: workspacePanelStateRes } = useSWR(
+    shouldUseWorkspacePanelState ? getWorkspacePanelStateCacheKey() : null,
+    getWorkspacePanelState,
+    { revalidateOnFocus: true }
+  )
   const sessionPanelStateController = useSessionPanelState(
     sourceWorkspaceSession,
-    workspaceSessionId ?? session?.id
+    workspaceSessionId ?? session?.id ?? (shouldUseWorkspacePanelState ? WORKSPACE_TERMINAL_SESSION_ID : undefined),
+    {
+      fallbackPanelState: shouldUseWorkspacePanelState ? workspacePanelStateRes?.panelState : undefined
+    }
   )
   const { panelState: sessionPanelState, updateArea: updateSessionPanelArea } = sessionPanelStateController
   const resolvedWorkspaceSession = useMemo<Session | undefined>(() => (
@@ -517,12 +530,12 @@ export function ChatRouteShell({
     }
   }, [sessionNotificationIndicator, t])
   const initialTerminalPanes = useMemo(
-    () => getSessionPanelTerminalPanes(resolvedWorkspaceSession),
-    [resolvedWorkspaceSession?.panelState]
+    () => getPanelStateTerminalPanes(sessionPanelState),
+    [sessionPanelState]
   )
   const panelActiveTerminalId = useMemo(
-    () => getSessionPanelActiveTerminalId(resolvedWorkspaceSession),
-    [resolvedWorkspaceSession?.panelState]
+    () => getPanelStateActiveTerminalId(sessionPanelState),
+    [sessionPanelState]
   )
   const terminalPanes = useInteractionTerminalPanes(terminalSessionId, t, {
     activeTerminalId: panelActiveTerminalId,

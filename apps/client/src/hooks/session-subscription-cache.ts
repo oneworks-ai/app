@@ -1,8 +1,8 @@
 import type { ScopedMutator } from 'swr'
 
-import type { Session } from '@oneworks/core'
+import type { Session, SessionPanelState } from '@oneworks/core'
 
-import { getSessionCacheKey } from '#~/api'
+import { getSessionCacheKey, getWorkspacePanelStateCacheKey } from '#~/api'
 
 interface SessionListResponse {
   sessions: Session[]
@@ -10,6 +10,11 @@ interface SessionListResponse {
 
 interface SessionDetailResponse {
   session: Session
+}
+
+interface WorkspacePanelStateUpdate {
+  panelState: SessionPanelState
+  updatedAt: number
 }
 
 interface DeletedSessionUpdate {
@@ -101,6 +106,18 @@ export function updateSessionCaches(
 
   void mutate(getSessionCacheKey(updatedSession.id), (prev: SessionDetailResponse | undefined) => {
     return mergeSessionDetail(prev, updatedSession)
+  }, false)
+}
+
+export function updateWorkspacePanelStateCache(
+  mutate: ScopedMutator,
+  update: WorkspacePanelStateUpdate
+) {
+  void mutate(getWorkspacePanelStateCacheKey(), (prev: WorkspacePanelStateUpdate | undefined) => {
+    if (prev != null && prev.updatedAt > update.updatedAt) {
+      return prev
+    }
+    return update
   }, false)
 }
 
