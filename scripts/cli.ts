@@ -19,6 +19,7 @@ import { devStartTargets, parseDevStartTarget, runDevStart as runDevStartCommand
 import { runHomebrewTapSyncOneWorks } from './homebrew-tap'
 import { runMessageActionsVerify } from './message-actions'
 import { runPrChangeCheck } from './pr-change-check'
+import { runRelayConfigLiveSmoke } from './relay-config-live-smoke'
 import { runRelayConfigSmoke } from './relay-config-smoke'
 import { runReleaseTagsPlan } from './release-tags'
 import { runWindowsInstallSyncOneWorks } from './windows-install'
@@ -78,6 +79,7 @@ interface ScriptsCliDeps {
   runWindowsInstallSyncOneWorks: typeof runWindowsInstallSyncOneWorks
   runPublishPlan: (args: string[]) => Promise<unknown>
   runAgentRoomResumeSmoke: typeof runAgentRoomResumeSmoke
+  runRelayConfigLiveSmoke: typeof runRelayConfigLiveSmoke
   runRelayConfigSmoke: typeof runRelayConfigSmoke
   runDevStart: typeof runDevStartCommand
 }
@@ -118,6 +120,7 @@ const defaultDeps: ScriptsCliDeps = {
     return runPublishPlanCli(args)
   },
   runAgentRoomResumeSmoke,
+  runRelayConfigLiveSmoke,
   runRelayConfigSmoke,
   runDevStart: runDevStartCommand
 }
@@ -386,6 +389,24 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
         allowPending: options.allowPending ?? false,
         json: options.json ?? false,
         keepTemp: options.keepTemp ?? false
+      })
+    })
+
+  relayConfigCommand
+    .command('live-smoke')
+    .description('Run a real Relay Server/Admin/team config live smoke')
+    .option('--json', 'Print machine-readable JSON', false)
+    .option('--keep-temp', 'Keep the temporary smoke workspace for debugging', false)
+    .option('--skip-admin-build', 'Reuse existing relay-admin dist assets', false)
+    .action(async (options: {
+      json?: boolean
+      keepTemp?: boolean
+      skipAdminBuild?: boolean
+    }) => {
+      await deps.runRelayConfigLiveSmoke({
+        json: options.json ?? false,
+        keepTemp: options.keepTemp ?? false,
+        skipAdminBuild: options.skipAdminBuild ?? false
       })
     })
 

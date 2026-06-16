@@ -18,6 +18,9 @@
 - `vscode-extension-ci.yml`：按 VS Code 扩展相关路径触发，构建并上传 VSIX artifact，不发布商店。
 - `vscode-extension-release.yml`：通过 release tag 或手动输入 tag 发布 VS Code Marketplace、Open VSX 和 GitHub Release。
 - `desktop-package.yml`：构建 macOS 桌面包；PR 上总是产出 `macOS installer` check，非桌面打包相关改动会快速跳过，tag / 手动 release 模式会创建 GitHub Release。
+- `relay-ci.yml`：只在 Relay Server / Admin / config hook 相关路径变化时跑 server test、admin test 和真实 `relay-config live-smoke`。
+- `deploy-relay-server.yml`：只监听 Relay Server runtime 和构建依赖，构建 server 部署 artifact 并可按变量触发外部 Relay Server 部署；纯 Admin 前端改动不会触发它。
+- `deploy-relay-admin.yml`：只监听 Relay Admin 前端及其 UI 依赖，构建独立 Admin 平台 artifact 并可按变量触发外部前端部署。
 - `deploy-pwa.yml`：从 app 仓库触发 `oneworks-ai/pwa` 的部署 workflow。
 - `deploy-avatar.yml`：从 app 仓库触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow，只监听 avatar 相关路径。
 - `deploy-homepage.yml`：从 app 仓库触发 `oneworks-ai/oneworks-ai.github.io` 的 GitHub Pages 部署 workflow，只监听 `.oo/docs` 和自身 workflow。
@@ -35,6 +38,11 @@
 新增 homepage 文档站部署需要配置的 secret：
 
 - `HOMEPAGE_DEPLOY_TOKEN`
+
+Relay 部署可选配置；未配置时 workflow 只验证并上传 artifact，不触发外部部署：
+
+- secrets: `RELAY_SERVER_DEPLOY_TOKEN`、`RELAY_ADMIN_DEPLOY_TOKEN`
+- variables: `RELAY_SERVER_DEPLOY_REPOSITORY`、`RELAY_SERVER_DEPLOY_WORKFLOW`、`RELAY_ADMIN_DEPLOY_REPOSITORY`、`RELAY_ADMIN_DEPLOY_WORKFLOW`
 
 桌面签名需要但当前未配置的 secrets：
 

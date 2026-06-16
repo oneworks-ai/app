@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- CLI command dispatch tests stay together to keep command coverage searchable. */
 import { describe, expect, it, vi } from 'vitest'
 
 import { createScriptsCli } from '../cli'
@@ -391,6 +392,52 @@ describe('scripts cli', () => {
       allowPending: true,
       json: true,
       keepTemp: true
+    })
+  })
+
+  it('dispatches relay config live smoke with CI debug options', async () => {
+    const runRelayConfigLiveSmoke = vi.fn(async () => ({
+      adminAssetBytes: {
+        css: 1024,
+        js: 2048
+      },
+      adminShellOk: true,
+      assignmentId: 'assignment',
+      checks: {
+        adminAssets: true,
+        adminUserTeamSummary: true,
+        configHookMerged: true,
+        deviceSnapshot: true,
+        secretEnvelopeOnly: true,
+        teamPolicy: true
+      },
+      ok: true as const,
+      profileId: 'profile',
+      projectHome: '/tmp/oneworks-relay-config-live-smoke/project-home',
+      relayUrl: 'http://127.0.0.1:8788',
+      snapshotHash: 'sha256:live-smoke',
+      teamId: 'team',
+      tempRoot: '/tmp/oneworks-relay-config-live-smoke',
+      workspaceDir: '/tmp/oneworks-relay-config-live-smoke/workspace'
+    }))
+    const cli = createScriptsCli({
+      runRelayConfigLiveSmoke
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'relay-config',
+      'live-smoke',
+      '--json',
+      '--keep-temp',
+      '--skip-admin-build'
+    ])
+
+    expect(runRelayConfigLiveSmoke).toHaveBeenCalledWith({
+      json: true,
+      keepTemp: true,
+      skipAdminBuild: true
     })
   })
 
