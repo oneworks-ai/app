@@ -6,7 +6,7 @@ import { relayPermissions } from '../permissions/index.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
 import { findRelayTeam } from '../teams.js'
 import type { RelayServerArgs, RelayStore } from '../types.js'
-import { archiveTeam, createTeam, updateTeam } from './team-actions.js'
+import { archiveTeam, createTeam, restoreTeam, updateTeam } from './team-actions.js'
 import { createMember, deleteMember, listMembers, updateMember } from './team-members.js'
 import {
   authUserId,
@@ -83,6 +83,10 @@ export const handleTeamsRoute = async (
   }
   if (segments.length === 2 && segments[1] === 'archive' && req.method === 'POST') {
     await archiveTeam(res, args, store, storeRepository, auth, team)
+    return true
+  }
+  if (segments.length === 2 && segments[1] === 'restore' && req.method === 'POST') {
+    await restoreTeam(res, args, store, storeRepository, auth, team)
     return true
   }
   if (segments.length === 2 && segments[1] === 'members') {

@@ -136,6 +136,7 @@ export const AdminDashboard = ({
           teams={dashboard.teams}
           onCreateOpenChange={open => onCreateSectionChange?.(open ? 'teams' : undefined)}
           onCreateTeam={dashboard.createTeam}
+          onSetArchived={dashboard.setTeamArchived}
         />
       )}
       {sectionId === 'team-settings' && (

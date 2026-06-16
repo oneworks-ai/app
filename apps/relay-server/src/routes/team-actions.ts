@@ -139,3 +139,21 @@ export const archiveTeam = async (
   await storeRepository.write(store)
   sendJson(res, 200, { team: serializeTeam(team, store, authUserId(auth)) }, args.allowOrigin)
 }
+
+export const restoreTeam = async (
+  res: ServerResponse,
+  args: RelayServerArgs,
+  store: RelayStore,
+  storeRepository: RelayStoreRepository,
+  auth: RelayAuthContext,
+  team: RelayTeam
+) => {
+  if (!canWriteTeam(store, auth, team.id)) {
+    sendJson(res, 403, { error: 'Permission denied.' }, args.allowOrigin)
+    return
+  }
+  team.archivedAt = undefined
+  team.updatedAt = now()
+  await storeRepository.write(store)
+  sendJson(res, 200, { team: serializeTeam(team, store, authUserId(auth)) }, args.allowOrigin)
+}

@@ -10,7 +10,7 @@
 - `TeamDetailPage.tsx`：`/teams/:teamId` 二级详情页，负责成员、配置 Profiles 和 Secrets tabs。
 - `TeamMembers.tsx`：选中团队的成员列表、添加成员、角色调整和配置启停。
 - `TeamPolicyForm.tsx`：站点管理员配置 teamsEnabled、selfService、proxyMode 和容量上限。
-- `TeamTable.tsx`：团队列表、搜索、展示列和选中团队操作。
+- `TeamTable.tsx`：团队列表、搜索、展示列、多选批量操作和团队归档 / 恢复状态操作。
 - `TeamConfigProfiles.tsx`：选中团队的 config profile、version 发布和 assignment 启停。
 - `TeamConfigSecrets.tsx`：选中团队的 secret 创建、轮换、撤销和 redacted ID 列表。
 

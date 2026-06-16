@@ -1,6 +1,7 @@
 import accountCircleSvg from '@material-symbols/svg-400/rounded/account_circle.svg?raw'
 import addSvg from '@material-symbols/svg-400/rounded/add.svg?raw'
 import adminPanelSettingsSvg from '@material-symbols/svg-400/rounded/admin_panel_settings.svg?raw'
+import archiveSvg from '@material-symbols/svg-400/rounded/archive.svg?raw'
 import badgeSvg from '@material-symbols/svg-400/rounded/badge.svg?raw'
 import checkSvg from '@material-symbols/svg-400/rounded/check.svg?raw'
 import chevronLeftSvg from '@material-symbols/svg-400/rounded/chevron_left.svg?raw'
@@ -30,6 +31,7 @@ import personSvg from '@material-symbols/svg-400/rounded/person.svg?raw'
 import refreshSvg from '@material-symbols/svg-400/rounded/refresh.svg?raw'
 import searchSvg from '@material-symbols/svg-400/rounded/search.svg?raw'
 import sellSvg from '@material-symbols/svg-400/rounded/sell.svg?raw'
+import unarchiveSvg from '@material-symbols/svg-400/rounded/unarchive.svg?raw'
 import viewColumnSvg from '@material-symbols/svg-400/rounded/view_column.svg?raw'
 import viewWeekSvg from '@material-symbols/svg-400/rounded/view_week.svg?raw'
 
@@ -37,6 +39,7 @@ export type AdminIconName =
   | 'account_circle'
   | 'add'
   | 'admin_panel_settings'
+  | 'archive'
   | 'badge'
   | 'check'
   | 'chevron_left'
@@ -64,6 +67,7 @@ export type AdminIconName =
   | 'refresh'
   | 'search'
   | 'sell'
+  | 'unarchive'
   | 'view_column'
   | 'view_week'
 
@@ -71,6 +75,7 @@ const adminIconSvgByName: Record<AdminIconName, string> = {
   account_circle: accountCircleSvg,
   add: addSvg,
   admin_panel_settings: adminPanelSettingsSvg,
+  archive: archiveSvg,
   badge: badgeSvg,
   check: checkSvg,
   chevron_left: chevronLeftSvg,
@@ -98,6 +103,7 @@ const adminIconSvgByName: Record<AdminIconName, string> = {
   refresh: refreshSvg,
   search: searchSvg,
   sell: sellSvg,
+  unarchive: unarchiveSvg,
   view_column: viewColumnSvg,
   view_week: viewWeekSvg
 }

@@ -13,6 +13,7 @@ export interface TeamPanelProps {
   teams: RelayAdminTeam[]
   onCreateOpenChange: (open: boolean) => void
   onCreateTeam: (input: CreateTeamInput) => Promise<void>
+  onSetArchived: (team: RelayAdminTeam, archived: boolean) => Promise<void>
 }
 
 export const TeamPanel = ({
@@ -20,6 +21,7 @@ export const TeamPanel = ({
   isCreateOpen,
   onCreateOpenChange,
   onCreateTeam,
+  onSetArchived,
   teams
 }: TeamPanelProps) => {
   return (
@@ -38,7 +40,11 @@ export const TeamPanel = ({
         />
       </Drawer>
       <div className='relay-team-panel'>
-        <TeamTable teams={teams} />
+        <TeamTable
+          disabled={disabled}
+          teams={teams}
+          onSetArchived={onSetArchived}
+        />
       </div>
     </DataPanel>
   )

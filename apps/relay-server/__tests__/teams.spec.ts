@@ -88,6 +88,14 @@ describe('relay team routes', () => {
       headers: authHeaders('user-1-session'),
       body: JSON.stringify({ configEnabled: true, role: 'member' })
     })
+    const ownerArchive = await requestJson(baseUrl, `/api/relay/teams/${teamId}/archive`, {
+      method: 'POST',
+      headers: authHeaders('user-1-session')
+    })
+    const ownerRestore = await requestJson(baseUrl, `/api/relay/teams/${teamId}/restore`, {
+      method: 'POST',
+      headers: authHeaders('user-1-session')
+    })
     const lastOwnerDelete = await requestJson(baseUrl, `/api/relay/teams/${teamId}/members/user-1`, {
       method: 'DELETE',
       headers: authHeaders('user-1-session')
@@ -124,6 +132,10 @@ describe('relay team routes', () => {
       role: 'member',
       userId: 'user-2'
     })
+    expect(ownerArchive.response.status).toBe(200)
+    expect(ownerArchive.body.team.archivedAt).toEqual(expect.any(String))
+    expect(ownerRestore.response.status).toBe(200)
+    expect(ownerRestore.body.team.archivedAt).toBeNull()
     expect(lastOwnerDelete.response.status).toBe(400)
     expect(lastOwnerDelete.body).toEqual({ error: 'Team must keep at least one owner.' })
   })

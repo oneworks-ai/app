@@ -1,7 +1,10 @@
+import { Space } from 'antd'
 import type { TableColumnsType } from 'antd'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { Key } from 'react'
 import { Link } from 'react-router-dom'
 
+import { AdminActionButton } from '../../shared/ui/AdminActionButton'
 import { AdminColumnFilter } from '../../shared/ui/AdminColumnFilter'
 import { AdminListTable } from '../../shared/ui/AdminListTable'
 import type { AdminListColumnOption } from '../../shared/ui/AdminListTable'
@@ -9,7 +12,9 @@ import { StatusBadge } from '../../shared/ui/StatusBadge'
 import type { RelayAdminTeam } from './teamTypes'
 
 export interface TeamTableProps {
+  disabled: boolean
   teams: RelayAdminTeam[]
+  onSetArchived: (team: RelayAdminTeam, archived: boolean) => Promise<void>
 }
 
 const formatTimestamp = (value: string | null | undefined) => {
@@ -19,8 +24,9 @@ const formatTimestamp = (value: string | null | undefined) => {
   return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
-export const TeamTable = ({ teams }: TeamTableProps) => {
+export const TeamTable = ({ disabled, onSetArchived, teams }: TeamTableProps) => {
   const [searchValue, setSearchValue] = useState('')
+  const [selectedTeamKeys, setSelectedTeamKeys] = useState<Key[]>([])
   const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'archived'>('active')
   const [visibleColumnKeys, setVisibleColumnKeys] = useState(['name', 'status', 'memberCount', 'createdAt'])
   const filteredTeams = useMemo(() => {
@@ -34,6 +40,17 @@ export const TeamTable = ({ teams }: TeamTableProps) => {
       )
     })
   }, [searchValue, statusFilter, teams])
+  const filteredTeamIds = useMemo(() => new Set(filteredTeams.map(team => team.id)), [filteredTeams])
+  const selectedTeams = useMemo(
+    () => teams.filter(team => selectedTeamKeys.includes(team.id)),
+    [selectedTeamKeys, teams]
+  )
+  const hasSelectedTeams = selectedTeams.length > 0
+
+  useEffect(() => {
+    setSelectedTeamKeys(keys => keys.filter(key => filteredTeamIds.has(String(key))))
+  }, [filteredTeamIds])
+
   const columnOptions: AdminListColumnOption[] = [
     { key: 'name', label: '团队', required: true },
     { key: 'slug', label: 'Slug' },
@@ -103,12 +120,60 @@ export const TeamTable = ({ teams }: TeamTableProps) => {
       render: value => formatTimestamp(value),
       title: '更新时间',
       width: 170
+    },
+    {
+      align: 'right',
+      fixed: 'right',
+      key: 'actions',
+      render: (_, team) => {
+        const archived = team.archivedAt != null
+        return (
+          <Space size={4}>
+            <AdminActionButton
+              aria-label={archived ? '恢复团队' : '归档团队'}
+              danger={!archived}
+              disabled={disabled}
+              iconName={archived ? 'unarchive' : 'archive'}
+              size='small'
+              title={archived ? '恢复团队' : '归档团队'}
+              type='text'
+              onClick={() => void onSetArchived(team, !archived)}
+            />
+          </Space>
+        )
+      },
+      title: '操作',
+      width: 64
     }
   ]
+  const batchActions = (
+    <Space size={4}>
+      <AdminActionButton
+        aria-label='批量恢复团队'
+        disabled={disabled || !hasSelectedTeams}
+        iconName='unarchive'
+        size='small'
+        title='批量恢复团队'
+        type='text'
+        onClick={() => void Promise.all(selectedTeams.map(team => onSetArchived(team, false)))}
+      />
+      <AdminActionButton
+        aria-label='批量归档团队'
+        danger
+        disabled={disabled || !hasSelectedTeams}
+        iconName='archive'
+        size='small'
+        title='批量归档团队'
+        type='text'
+        onClick={() => void Promise.all(selectedTeams.map(team => onSetArchived(team, true)))}
+      />
+    </Space>
+  )
 
   return (
     <AdminListTable<RelayAdminTeam>
       ariaLabel='团队列表'
+      batchActions={batchActions}
       className='relay-team-panel__team-table'
       columnOptions={columnOptions}
       columns={columns}
@@ -117,8 +182,10 @@ export const TeamTable = ({ teams }: TeamTableProps) => {
       rowKey='id'
       searchPlaceholder='搜索团队、slug'
       searchValue={searchValue}
+      selectedRowKeys={selectedTeamKeys}
       visibleColumnKeys={visibleColumnKeys}
       onSearchChange={setSearchValue}
+      onSelectedRowKeysChange={setSelectedTeamKeys}
       onVisibleColumnKeysChange={setVisibleColumnKeys}
     />
   )

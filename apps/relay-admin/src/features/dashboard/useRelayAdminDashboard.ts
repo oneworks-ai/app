@@ -33,7 +33,12 @@ import {
   updateRelayAdminSsoProvider
 } from '../sso/ssoProvidersApi'
 import type { CreateTeamInput, RelayAdminTeam, RelayAdminTeamPolicy, UpdateTeamPolicyInput } from '../teams/teamTypes'
-import { createRelayAdminTeam, updateRelayAdminTeamPolicy } from '../teams/teamsApi'
+import {
+  archiveRelayAdminTeam,
+  createRelayAdminTeam,
+  restoreRelayAdminTeam,
+  updateRelayAdminTeamPolicy
+} from '../teams/teamsApi'
 import { createRelayAdminUser, updateRelayAdminUser } from '../users/usersApi'
 import { fetchRelayAdminSnapshot } from './adminSnapshot'
 
@@ -249,6 +254,17 @@ export const useRelayAdminDashboard = () => {
     })
   }, [loadSnapshot, run, token])
 
+  const setTeamArchived = useCallback(async (team: RelayAdminTeam, archived: boolean) => {
+    await run(async () => {
+      if (archived) {
+        await archiveRelayAdminTeam(token, team.id)
+      } else {
+        await restoreRelayAdminTeam(token, team.id)
+      }
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
   const updateTeamPolicy = useCallback(async (input: UpdateTeamPolicyInput) => {
     await run(async () => {
       const body = await updateRelayAdminTeamPolicy(token, input)
@@ -278,6 +294,7 @@ export const useRelayAdminDashboard = () => {
     refresh,
     selectAccount,
     setInviteRevoked,
+    setTeamArchived,
     setUserMaxDevices,
     setSsoProviderEnabled,
     setUserDisabled,

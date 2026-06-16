@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Relay Admin team API endpoint mapping stays in one feature-local file. */
 import { requestJson } from '../../shared/api/requestJson'
 import type {
   CreateConfigProfileAssignmentInput,
@@ -37,6 +38,20 @@ export const createRelayAdminTeam = async (token: string, input: CreateTeamInput
     body: JSON.stringify(input),
     method: 'POST'
   })
+
+export const archiveRelayAdminTeam = async (token: string, teamId: string) =>
+  await requestJson<{ team: RelayAdminTeam }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(teamId)}/archive`,
+    { method: 'POST' }
+  )
+
+export const restoreRelayAdminTeam = async (token: string, teamId: string) =>
+  await requestJson<{ team: RelayAdminTeam }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(teamId)}/restore`,
+    { method: 'POST' }
+  )
 
 export const fetchRelayAdminTeamMembers = async (token: string, teamId: string) =>
   await requestJson<{ members: RelayAdminTeamMember[] }>(
