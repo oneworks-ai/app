@@ -1081,6 +1081,74 @@ describe('runtime store engine consumer', () => {
     expect(registry.consumers.has(store.storePath)).toBe(false)
   })
 
+  it('deduplicates server consumer starts across independent watcher registries', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-cross-process-dedupe-'))
+    const store = createStore(root)
+    await mkdir(store.storePath, { recursive: true })
+    await writeFile(
+      store.metaPath,
+      JSON.stringify({
+        protocolVersion: '1.0.0',
+        sessionId: store.sessionId,
+        title: 'Room child',
+        entity: 'room-smoke-dev',
+        cwd: root,
+        hostSessionId: 'host-session',
+        needsEngineConsumer: true,
+        createdAt: 100
+      })
+    )
+    await writeFile(
+      store.statePath,
+      JSON.stringify({
+        protocolVersion: '1.0.0',
+        sessionId: store.sessionId,
+        status: 'starting',
+        lastSeq: 0,
+        updatedAt: 100
+      })
+    )
+    await writeFile(
+      path.join(store.storePath, 'heartbeat.json'),
+      JSON.stringify({
+        protocolVersion: '1.0.0',
+        sessionId: store.sessionId,
+        runtimeId: 'pending_engine_consumer',
+        status: 'starting',
+        updatedAt: 100
+      })
+    )
+
+    const child = Object.assign(new EventEmitter(), {
+      exitCode: null,
+      signalCode: null,
+      unref: vi.fn()
+    }) as unknown as ChildProcess
+    const startConsumer = vi.fn(async () => child)
+    const registryA = {
+      consumers: new Map<string, ChildProcess>(),
+      starting: new Set<string>()
+    }
+    const registryB = {
+      consumers: new Map<string, ChildProcess>(),
+      starting: new Set<string>()
+    }
+
+    await Promise.all([
+      ensureServerRuntimeConsumerOnce(store, registryA, startConsumer),
+      ensureServerRuntimeConsumerOnce(store, registryB, startConsumer)
+    ])
+
+    expect(startConsumer).toHaveBeenCalledTimes(1)
+    expect(
+      registryA.consumers.get(store.storePath) === child ||
+        registryB.consumers.get(store.storePath) === child
+    ).toBe(true)
+    expect(child.unref).toHaveBeenCalledTimes(1)
+
+    child.emit('exit')
+  })
+
   it('marks sessions failed when the configured consumer cli path is missing', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-missing-cli-'))
     const store = createStore(root)
