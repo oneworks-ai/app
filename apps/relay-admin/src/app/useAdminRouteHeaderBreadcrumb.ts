@@ -39,7 +39,7 @@ export const useAdminRouteHeaderBreadcrumb = (
   }, [normalizedPathname])
   const teamDetailId = useMemo(() => {
     if (isTeamSettingsRoute) return undefined
-    const match = /^\/teams\/([^/]+)$/.exec(normalizedPathname)
+    const match = /^\/teams\/([^/]+)(?:\/(?:members|profiles|secrets))?$/.exec(normalizedPathname)
     return decodeRouteSegment(match?.[1])
   }, [isTeamSettingsRoute, normalizedPathname])
   const deviceDetailTitle = useMemo(() => {
@@ -106,7 +106,7 @@ export const useAdminRouteHeaderBreadcrumb = (
         currentTitle: '团队设置',
         parentTitle: teamDetailSettingsTitle,
         separatorIcon: createElement(AdminIcon, { className: breadcrumbIconClassName, name: 'chevron_right' }),
-        onBack: () => void navigate(`/teams/${encodeURIComponent(teamDetailSettingsId)}`)
+        onBack: () => void navigate(`/teams/${encodeURIComponent(teamDetailSettingsId)}/members`)
       }
     }
 

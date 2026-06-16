@@ -64,7 +64,7 @@ export const TeamTable = ({ disabled, onSetArchived, teams }: TeamTableProps) =>
       dataIndex: 'name',
       key: 'name',
       render: (_, team) => (
-        <Link className='relay-team-panel__team-link' to={`/teams/${encodeURIComponent(team.id)}`}>
+        <Link className='relay-team-panel__team-link' to={`/teams/${encodeURIComponent(team.id)}/members`}>
           {team.name}
         </Link>
       ),

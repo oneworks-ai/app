@@ -2,8 +2,8 @@ import './TeamPanel.css'
 
 import { Empty, Tabs } from 'antd'
 import type { ReactNode } from 'react'
-import { useCallback, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 
 import { DataPanel } from '../../shared/ui/DataPanel'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
@@ -39,10 +39,12 @@ export const TeamDetailPage = ({
   teams,
   token
 }: TeamDetailPageProps) => {
-  const { teamId } = useParams()
+  const { tabKey, teamId } = useParams()
+  const navigate = useNavigate()
   const team = teams.find(item => item.id === teamId)
   const configDisabled = disabled || policy?.teamsEnabled === false
-  const [activeTabKey, setActiveTabKey] = useState<TeamDetailTabKey>('members')
+  const normalizedTabKey = tabKey ?? ''
+  const activeTabKey: TeamDetailTabKey = isTeamDetailTabKey(normalizedTabKey) ? normalizedTabKey : 'members'
   const [tabActions, setTabActions] = useState<Partial<Record<TeamDetailTabKey, ReactNode>>>({})
   const registerTabActions = useCallback((key: TeamDetailTabKey, actions: ReactNode | undefined) => {
     setTabActions(current => current[key] === actions ? current : { ...current, [key]: actions })
@@ -51,6 +53,11 @@ export const TeamDetailPage = ({
     }
   }, [])
   const tabActionsContext = useMemo(() => ({ registerTabActions }), [registerTabActions])
+
+  useEffect(() => {
+    if (teamId == null || tabKey == null || isTeamDetailTabKey(tabKey)) return
+    void navigate(`/teams/${encodeURIComponent(teamId)}/members`, { replace: true })
+  }, [navigate, tabKey, teamId])
 
   if (team == null) {
     return (
@@ -144,7 +151,9 @@ export const TeamDetailPage = ({
               ? null
               : <div className='relay-team-panel__tab-actions'>{tabActions[activeTabKey]}</div>}
             onChange={key => {
-              if (isTeamDetailTabKey(key)) setActiveTabKey(key)
+              if (isTeamDetailTabKey(key)) {
+                void navigate(`/teams/${encodeURIComponent(team.id)}/${key}`)
+              }
             }}
           />
         </TeamDetailTabActionsContext.Provider>

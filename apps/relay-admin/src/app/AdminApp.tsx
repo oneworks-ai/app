@@ -15,7 +15,7 @@ import {
 } from '@oneworks/route-layout'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { AdminDashboard } from '../features/dashboard/AdminDashboard'
 import type { AdminDashboardCreateSectionId } from '../features/dashboard/AdminDashboard'
@@ -57,8 +57,14 @@ const getUserDetailIdFromPath = (pathname: string) => {
 }
 
 const getTeamDetailIdFromPath = (pathname: string) => {
-  const match = /^\/teams\/([^/]+)$/.exec(pathname)
+  const match = /^\/teams\/([^/]+)(?:\/(?:members|profiles|secrets))?$/.exec(pathname)
   return match == null ? undefined : decodeURIComponent(match[1])
+}
+
+const TeamDetailDefaultRoute = () => {
+  const { teamId } = useParams()
+  if (teamId == null) return <Navigate to='/teams' replace />
+  return <Navigate to={`/teams/${encodeURIComponent(teamId)}/members`} replace />
 }
 
 const readAdminSidebarWidth = () => {
@@ -419,9 +425,15 @@ export const AdminApp = () => {
                   : <Navigate to='/devices' replace />}
               />
               <Route
-                path='teams/:teamId'
+                path='teams/:teamId/:tabKey'
                 element={canRenderSection('teams')
                   ? <AdminDashboard dashboard={dashboard} sectionId='team-detail' />
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
+                path='teams/:teamId'
+                element={canRenderSection('teams')
+                  ? <TeamDetailDefaultRoute />
                   : <Navigate to='/devices' replace />}
               />
               <Route path='*' element={<Navigate to='/devices' replace />} />
