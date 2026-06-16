@@ -2,11 +2,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { VERSION, parseRelayServerArgs, printRelayServerHelp } from '../src/server.js'
 
+// eslint-disable-next-line ts/no-require-imports
+const relayServerPackage = require('../package.json') as { version: string }
+
 afterEach(() => {
   vi.unstubAllEnvs()
 })
 
 describe('relay server config', () => {
+  it('uses the package version for public server version output', () => {
+    expect(VERSION).toBe(relayServerPackage.version)
+  })
+
   it('parses CLI args and prints help without starting a server', () => {
     vi.stubEnv('ONEWORKS_RELAY_HOST', '0.0.0.0')
     vi.stubEnv('ONEWORKS_RELAY_ADMIN_TOKEN', 'env-admin')

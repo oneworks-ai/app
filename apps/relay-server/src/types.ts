@@ -1,5 +1,4 @@
 /* eslint-disable max-lines -- Relay server public types stay in one package-local contract file. */
-export const VERSION = '3.4.0-rc'
 
 export interface RelayServerArgs {
   allowOrigin: string

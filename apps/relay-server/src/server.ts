@@ -26,14 +26,14 @@ import type { RelayStoreRepository } from './storage/repository.js'
 import { createRelayTelemetry } from './telemetry/metrics.js'
 import type { RelayTelemetry } from './telemetry/metrics.js'
 import type { RelayServerArgs, RelayStore } from './types.js'
-import { VERSION } from './types.js'
+import { VERSION } from './version.js'
 
 type RelayStoreRepositoryModule = typeof import('./storage/repository.js')
 
 export { parseRelayServerArgs, printRelayServerHelp } from './config.js'
 export { readRelayStore } from './store.js'
 export type { RelayServerArgs } from './types.js'
-export { VERSION } from './types.js'
+export { VERSION } from './version.js'
 
 const handleInfo = (res: ServerResponse, args: RelayServerArgs, store: RelayStore) => {
   const providers = enabledRelayAuthProviders(args, store)
