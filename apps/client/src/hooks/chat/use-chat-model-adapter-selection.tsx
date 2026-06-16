@@ -12,7 +12,8 @@ import type {
 
 import { getConfig, updateConfig } from '#~/api.js'
 import { ModelSelectOptionLabel } from '#~/components/chat/sender/@components/model-select/ModelSelectOptionLabel'
-import { getAdapterDisplay } from '#~/resources/adapters.js'
+import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
+import { getAdapterDisplay, resolveAdapterDisplayIcon } from '#~/resources/adapters.js'
 import {
   BUILTIN_NATIVE_ADAPTERS,
   DEFAULT_NATIVE_ADAPTER,
@@ -125,6 +126,7 @@ export function useChatModelAdapterSelection({
   adapterLocked?: boolean
 } = {}) {
   const { t } = useTranslation()
+  const { resolvedThemeMode } = useResolvedThemeMode()
   const [selectedAdapter, setSelectedAdapter] = useState<string | undefined>(() =>
     readStorageValue(ADAPTER_STORAGE_KEY)
   )
@@ -528,13 +530,14 @@ export function useChatModelAdapterSelection({
 
     return availableAdapters.map((key) => {
       const display = getAdapterDisplay(key)
+      const displayIcon = resolveAdapterDisplayIcon(display, resolvedThemeMode)
       const isBuiltin = isBuiltinNativeAdapter(key)
       const kind = isBuiltin ? 'builtin' : 'configured'
-      const iconNode = display.icon != null
+      const iconNode = displayIcon != null
         ? createElement('img', {
           key: 'icon',
           className: 'adapter-option__icon',
-          src: display.icon,
+          src: displayIcon,
           alt: '',
           'aria-hidden': true
         })
@@ -597,7 +600,7 @@ export function useChatModelAdapterSelection({
         ])
       }
     })
-  }, [availableAdapters, setBuiltinAdapterHidden, t])
+  }, [availableAdapters, resolvedThemeMode, setBuiltinAdapterHidden, t])
 
   const hiddenBuiltinAdapterOptions = useMemo<HiddenBuiltinAdapterOption[]>(() => {
     return hiddenBuiltinAdapters
@@ -608,13 +611,13 @@ export function useChatModelAdapterSelection({
 
         return {
           fallbackIcon: 'deployed_code',
-          iconUrl: display.icon,
+          iconUrl: resolveAdapterDisplayIcon(display, resolvedThemeMode),
           onRestore: () => setBuiltinAdapterHidden(key, false),
           title: display.title,
           value: key
         }
       })
-  }, [availableAdapterSet, hiddenBuiltinAdapters, setBuiltinAdapterHidden, t])
+  }, [availableAdapterSet, hiddenBuiltinAdapters, resolvedThemeMode, setBuiltinAdapterHidden, t])
 
   const toggleRecommendedModel = useCallback(async (option: ModelSelectOption) => {
     const serviceKey = option.serviceKey?.trim()

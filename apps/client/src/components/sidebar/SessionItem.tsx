@@ -3,7 +3,8 @@ import { Button, Tag, Tooltip } from 'antd'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { getAdapterDisplay } from '#~/resources/adapters.js'
+import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
+import { getAdapterDisplay, resolveAdapterDisplayIcon } from '#~/resources/adapters.js'
 
 import { SessionCard } from './SessionCard'
 import { SessionContextMenu } from './SessionContextMenu'
@@ -51,6 +52,7 @@ export function SessionItem({
   onToggleSelect
 }: SessionItemProps) {
   const { t, i18n } = useTranslation()
+  const { resolvedThemeMode } = useResolvedThemeMode()
   const automationPrefix = 'automation:'
   const itemContentRef = useRef<HTMLDivElement | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingSessionAction>(null)
@@ -113,6 +115,9 @@ export function SessionItem({
   const adapterDisplay = session.adapter != null && session.adapter !== ''
     ? getAdapterDisplay(session.adapter)
     : undefined
+  const adapterDisplayIcon = adapterDisplay == null
+    ? undefined
+    : resolveAdapterDisplayIcon(adapterDisplay, resolvedThemeMode)
   const titleTooltipContent = isTouchInteraction
     ? undefined
     : (
@@ -267,16 +272,16 @@ export function SessionItem({
         }`}
         contentRef={itemContentRef}
         leading={
-          <div className={`session-leading ${adapterDisplay?.icon != null ? 'has-adapter' : ''}`}>
-            {adapterDisplay?.icon != null && (
+          <div className={`session-leading ${adapterDisplayIcon != null ? 'has-adapter' : ''}`}>
+            {adapterDisplayIcon != null && (
               <img
                 className='session-adapter-icon'
-                src={adapterDisplay.icon}
+                src={adapterDisplayIcon}
                 alt=''
                 aria-hidden='true'
               />
             )}
-            <div className={`status-indicator ${adapterDisplay?.icon != null ? 'is-overlay' : ''}`}>
+            <div className={`status-indicator ${adapterDisplayIcon != null ? 'is-overlay' : ''}`}>
               {getStatusIcon(session.status)}
             </div>
           </div>
