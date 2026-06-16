@@ -90,107 +90,111 @@ const handleRelayRequestWithStore = async (
   store: RelayStore
 ) => {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
-  attachAuditLogger(req, res, args, store, url)
+  const auditLogger = attachAuditLogger(req, res, args, store, storeRepository, url)
 
-  if (handleLoginRoute(req, res, args, store, url)) {
-    return
-  }
-  if (await handleInviteLoginRoute(req, res, args, store, storeRepository, url)) {
-    return
-  }
-  if (await handlePasswordLoginRoute(req, res, args, store, storeRepository, url)) {
-    return
-  }
-  if (await handlePasskeyRoute(req, res, args, store, storeRepository, url)) {
-    return
-  }
-  if (await handleEmailVerificationSendRoute(req, res, args, store, storeRepository, url)) {
-    return
-  }
-  if (await handleAuthRoute(req, res, args, store, storeRepository, url)) {
-    return
-  }
-  if (req.method === 'GET' && url.pathname === '/health') {
-    sendJson(res, 200, { ok: true, version: VERSION }, args.allowOrigin)
-    return
-  }
-  if (req.method === 'GET' && url.pathname === '/api/relay/info') {
-    handleInfo(res, args, store)
-    return
-  }
-  if (req.method === 'GET' && url.pathname === '/api/relay/config-snapshot') {
-    handleRelayConfigSnapshot(req, res, args, store, url)
-    return
-  }
-  if (await handleRelayTeamPolicyRoute(req, res, args, store, storeRepository, url)) {
-    return
-  }
-  if (await handleTeamConfigProfilesRoute(req, res, args, store, storeRepository, url)) {
-    return
-  }
-  if (await handleTeamConfigSecretsRoute(req, res, args, store, storeRepository, url)) {
-    return
-  }
-  if (await handleTeamsRoute(req, res, args, store, storeRepository, url)) {
-    return
-  }
-  if (await handleConfigProfilesRoute(req, res, args, store, storeRepository, url)) {
-    return
-  }
-  if (await handleConfigProfileAssignmentsRoute(req, res, args, store, storeRepository, url)) {
-    return
-  }
-  if (await handleConfigSecretsRoute(req, res, args, store, storeRepository, url)) {
-    return
-  }
-  if (url.pathname === '/api/relay/metrics') {
-    handleRelayMetrics(req, res, args, store, telemetry)
-    return
-  }
-  if (args.embeddedAdminUi !== false && req.method === 'GET' && url.pathname.startsWith('/admin/assets/')) {
-    await handleAdminAssetRoute(req, res, args, url)
-    return
-  }
-  if (
-    args.embeddedAdminUi !== false && req.method === 'GET' &&
-    (url.pathname === '/admin' || url.pathname.startsWith('/admin/'))
-  ) {
-    await handleAdminPageRoute(req, res, args)
-    return
-  }
-  if (req.method === 'POST' && url.pathname === '/api/relay/devices/register') {
-    await handleDeviceRegister(req, res, args, store, storeRepository, telemetry)
-    return
-  }
-  if (req.method === 'POST' && url.pathname === '/api/relay/devices/heartbeat') {
-    await handleDeviceHeartbeat(req, res, args, store, storeRepository, telemetry)
-    return
-  }
-  if (req.method === 'GET' && url.pathname === '/api/relay/devices') {
-    handleDeviceList(req, res, args, store)
-    return
-  }
-  if (await handleRelaySessionsRoute(req, res, args, store, storeRepository, url, telemetry)) {
-    return
-  }
-  if (url.pathname.startsWith('/api/admin/security/tokens')) {
-    await handleAdminSecurityTokens(req, res, args, store, storeRepository, url)
-    return
-  }
-  if (url.pathname === '/api/admin/users' || url.pathname.startsWith('/api/admin/users/')) {
-    await handleAdminUsers(req, res, args, store, storeRepository, url)
-    return
-  }
-  if (url.pathname === '/api/admin/invites' || url.pathname.startsWith('/api/admin/invites/')) {
-    await handleAdminInvites(req, res, args, store, storeRepository, url)
-    return
-  }
-  if (url.pathname === '/api/admin/sso-providers' || url.pathname.startsWith('/api/admin/sso-providers/')) {
-    await handleAdminSsoProviders(req, res, args, store, storeRepository, url)
-    return
-  }
+  try {
+    if (handleLoginRoute(req, res, args, store, url)) {
+      return
+    }
+    if (await handleInviteLoginRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (await handlePasswordLoginRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (await handlePasskeyRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (await handleEmailVerificationSendRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (await handleAuthRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (req.method === 'GET' && url.pathname === '/health') {
+      sendJson(res, 200, { ok: true, version: VERSION }, args.allowOrigin)
+      return
+    }
+    if (req.method === 'GET' && url.pathname === '/api/relay/info') {
+      handleInfo(res, args, store)
+      return
+    }
+    if (req.method === 'GET' && url.pathname === '/api/relay/config-snapshot') {
+      handleRelayConfigSnapshot(req, res, args, store, url)
+      return
+    }
+    if (await handleRelayTeamPolicyRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (await handleTeamConfigProfilesRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (await handleTeamConfigSecretsRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (await handleTeamsRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (await handleConfigProfilesRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (await handleConfigProfileAssignmentsRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (await handleConfigSecretsRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (url.pathname === '/api/relay/metrics') {
+      handleRelayMetrics(req, res, args, store, telemetry)
+      return
+    }
+    if (args.embeddedAdminUi !== false && req.method === 'GET' && url.pathname.startsWith('/admin/assets/')) {
+      await handleAdminAssetRoute(req, res, args, url)
+      return
+    }
+    if (
+      args.embeddedAdminUi !== false && req.method === 'GET' &&
+      (url.pathname === '/admin' || url.pathname.startsWith('/admin/'))
+    ) {
+      await handleAdminPageRoute(req, res, args)
+      return
+    }
+    if (req.method === 'POST' && url.pathname === '/api/relay/devices/register') {
+      await handleDeviceRegister(req, res, args, store, storeRepository, telemetry)
+      return
+    }
+    if (req.method === 'POST' && url.pathname === '/api/relay/devices/heartbeat') {
+      await handleDeviceHeartbeat(req, res, args, store, storeRepository, telemetry)
+      return
+    }
+    if (req.method === 'GET' && url.pathname === '/api/relay/devices') {
+      handleDeviceList(req, res, args, store)
+      return
+    }
+    if (await handleRelaySessionsRoute(req, res, args, store, storeRepository, url, telemetry)) {
+      return
+    }
+    if (url.pathname.startsWith('/api/admin/security/tokens')) {
+      await handleAdminSecurityTokens(req, res, args, store, storeRepository, url)
+      return
+    }
+    if (url.pathname === '/api/admin/users' || url.pathname.startsWith('/api/admin/users/')) {
+      await handleAdminUsers(req, res, args, store, storeRepository, url)
+      return
+    }
+    if (url.pathname === '/api/admin/invites' || url.pathname.startsWith('/api/admin/invites/')) {
+      await handleAdminInvites(req, res, args, store, storeRepository, url)
+      return
+    }
+    if (url.pathname === '/api/admin/sso-providers' || url.pathname.startsWith('/api/admin/sso-providers/')) {
+      await handleAdminSsoProviders(req, res, args, store, storeRepository, url)
+      return
+    }
 
-  sendJson(res, 404, { error: 'Not found.' }, args.allowOrigin)
+    sendJson(res, 404, { error: 'Not found.' }, args.allowOrigin)
+  } finally {
+    await auditLogger.flush()
+  }
 }
 
 export const createRelayHandler = (

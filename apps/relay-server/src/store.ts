@@ -14,6 +14,7 @@ import { sanitizeRelayStorageValue } from './storage/content-boundary.js'
 import { normalizeRelaySsoProviders } from './storage/sso-providers.js'
 import { normalizeRelayTeamPolicy, normalizeTeamRole } from './teams.js'
 import type {
+  RelayAuditLogEntry,
   RelayConfigAssignment,
   RelayConfigProfile,
   RelayConfigProfileAssignment,
@@ -43,6 +44,7 @@ import { createToken, isRecord, normalizeRole, now } from './utils.js'
 
 const defaultStore = (): RelayStore => ({
   createdAt: now(),
+  auditEvents: [],
   configAssignments: [],
   configProfileAssignments: [],
   configSecrets: [],
@@ -440,6 +442,37 @@ const normalizeSession = (value: Record<string, unknown>): RelaySession | undefi
   }
 }
 
+const normalizeAuditLogEntry = (value: Record<string, unknown>): RelayAuditLogEntry | undefined => {
+  const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
+  const actor = typeof value.actor === 'string' && value.actor.trim() !== '' ? value.actor.trim() : undefined
+  const action = typeof value.action === 'string' && value.action.trim() !== '' ? value.action.trim() : undefined
+  const resource = typeof value.resource === 'string' && value.resource.trim() !== ''
+    ? value.resource.trim()
+    : undefined
+  const status = typeof value.status === 'string' && value.status.trim() !== '' ? value.status.trim() : undefined
+  const createdAt = typeof value.createdAt === 'string' && value.createdAt.trim() !== ''
+    ? value.createdAt.trim()
+    : undefined
+  if (id == null || actor == null || action == null || resource == null || status == null || createdAt == null) {
+    return undefined
+  }
+  return {
+    id,
+    actor,
+    action,
+    resource,
+    status,
+    ip: typeof value.ip === 'string' && value.ip.trim() !== '' ? value.ip.trim() : undefined,
+    userAgent: typeof value.userAgent === 'string' && value.userAgent.trim() !== ''
+      ? value.userAgent.trim()
+      : undefined,
+    requestId: typeof value.requestId === 'string' && value.requestId.trim() !== ''
+      ? value.requestId.trim()
+      : undefined,
+    createdAt
+  }
+}
+
 const relayEmailPurposes = new Set<RelayEmailPurpose>([
   'email-verification',
   'invite',
@@ -528,6 +561,11 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
   const legacyTeams = addLegacyTeamMemberships(users, teams, teamMembers)
   return {
     createdAt: typeof store.createdAt === 'string' ? store.createdAt : now(),
+    auditEvents: Array.isArray(store.auditEvents)
+      ? store.auditEvents.filter(isRecord).map(normalizeAuditLogEntry).filter((
+        value
+      ): value is RelayAuditLogEntry => value != null)
+      : [],
     configAssignments: Array.isArray(store.configAssignments)
       ? store.configAssignments.filter(isRecord).map(normalizeRelayConfigAssignment).filter((
         value
@@ -602,7 +640,7 @@ export const readRelayStore = async (dataPath: string): Promise<RelayStore> => {
 
 export const writeRelayStore = async (dataPath: string, store: RelayStore) => {
   await mkdir(dirname(dataPath), { recursive: true })
-  const tempPath = `${dataPath}.${process.pid}.tmp`
+  const tempPath = `${dataPath}.${process.pid}.${randomUUID()}.tmp`
   await writeFile(tempPath, `${JSON.stringify(sanitizeRelayStorageValue(store), null, 2)}\n`, {
     encoding: 'utf8',
     mode: 0o600

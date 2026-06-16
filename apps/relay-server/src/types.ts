@@ -393,6 +393,18 @@ export interface RelayConfigSnapshot {
   version: string
 }
 
+export interface RelayAuditLogEntry {
+  id: string
+  actor: string
+  action: string
+  resource: string
+  status: string
+  ip?: string
+  userAgent?: string
+  requestId?: string
+  createdAt: string
+}
+
 export interface RelayConfigProjectContext {
   cwd?: string
   projectId?: string
@@ -480,6 +492,7 @@ export interface RelayForwardingJob {
 
 export interface RelayStore {
   createdAt: string
+  auditEvents: RelayAuditLogEntry[]
   configAssignments: RelayConfigAssignment[]
   configProfileAssignments: RelayConfigProfileAssignment[]
   configSecrets: RelayConfigSecret[]

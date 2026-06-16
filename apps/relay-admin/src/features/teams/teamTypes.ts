@@ -139,6 +139,18 @@ export interface RelayAdminConfigProfileAssignment {
   versionId: string | null
 }
 
+export interface RelayAdminAuditEvent {
+  action: string
+  actor: string
+  createdAt: string
+  id: string
+  ip: string | null
+  requestId: string | null
+  resource: string
+  status: string
+  userAgent: string | null
+}
+
 export interface CreateTeamInput {
   description?: string
   name: string

@@ -209,7 +209,8 @@
 .relay-team-panel__profiles,
 .relay-team-panel__members,
 .relay-team-panel__profile-detail,
-.relay-team-panel__secrets {
+.relay-team-panel__secrets,
+.relay-team-panel__audit {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -220,7 +221,8 @@
 
 .relay-team-panel__profile-table,
 .relay-team-panel__assignment-table,
-.relay-team-panel__secret-table {
+.relay-team-panel__secret-table,
+.relay-team-panel__audit-table {
   flex: 0 0 auto;
 }
 

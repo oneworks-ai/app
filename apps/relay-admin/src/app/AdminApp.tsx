@@ -57,7 +57,7 @@ const getUserDetailIdFromPath = (pathname: string) => {
 }
 
 const getTeamDetailIdFromPath = (pathname: string) => {
-  const match = /^\/teams\/([^/]+)(?:\/(?:members|profiles|secrets))?$/.exec(pathname)
+  const match = /^\/teams\/([^/]+)(?:\/(?:audit|members|profiles|secrets))?$/.exec(pathname)
   return match == null ? undefined : decodeURIComponent(match[1])
 }
 

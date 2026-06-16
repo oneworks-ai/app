@@ -8,6 +8,15 @@ afterEach(cleanupRelayFixtures)
 const timestamp = '2026-01-01T00:00:00.000Z'
 const future = '2999-01-01T00:00:00.000Z'
 
+interface AuditEventSnapshot {
+  action: string
+  actor: string
+  resource: string
+  status: string
+}
+
+const sleep = async (ms: number) => await new Promise<void>(resolve => setTimeout(resolve, ms))
+
 const seedTeamUsers = async (dataPath: string) => {
   const store = await readRelayStore(dataPath)
   store.users.push(
@@ -59,6 +68,23 @@ const seedTeamUsers = async (dataPath: string) => {
   await writeRelayStore(dataPath, store)
 }
 
+const waitForTeamAuditEvents = async (
+  baseUrl: string,
+  teamId: string,
+  predicate: (event: AuditEventSnapshot) => boolean
+) => {
+  let events: AuditEventSnapshot[] = []
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const audit = await requestJson(baseUrl, `/api/admin/teams/${teamId}/audit-events`, {
+      headers: authHeaders('admin-token')
+    })
+    events = Array.isArray(audit.body.events) ? audit.body.events as AuditEventSnapshot[] : []
+    if (events.some(predicate)) return events
+    await sleep(25)
+  }
+  return events
+}
+
 describe('relay team routes', () => {
   it('lets a session create a team and manage members through team role permissions', async () => {
     const { args, baseUrl } = await listenRelay()
@@ -105,6 +131,11 @@ describe('relay team routes', () => {
       method: 'DELETE',
       headers: authHeaders('user-1-session')
     })
+    const auditEvents = await waitForTeamAuditEvents(
+      baseUrl,
+      teamId,
+      event => event.action === 'team.member.delete' && event.status === 'failure'
+    )
 
     expect(created.response.status).toBe(200)
     expect(created.body.team).toMatchObject({
@@ -145,6 +176,40 @@ describe('relay team routes', () => {
     expect(ownerRestore.body.team.archivedAt).toBeNull()
     expect(lastOwnerDelete.response.status).toBe(400)
     expect(lastOwnerDelete.body).toEqual({ error: 'Team must keep at least one owner.' })
+    expect(auditEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: 'team.member.create',
+          actor: 'session:user-1',
+          resource: `team:${teamId}`,
+          status: 'success'
+        }),
+        expect.objectContaining({
+          action: 'team.update',
+          actor: 'session:user-2',
+          resource: `team:${teamId}`,
+          status: 'failure'
+        }),
+        expect.objectContaining({
+          action: 'team.archive',
+          actor: 'session:user-1',
+          resource: `team:${teamId}`,
+          status: 'success'
+        }),
+        expect.objectContaining({
+          action: 'team.restore',
+          actor: 'session:user-1',
+          resource: `team:${teamId}`,
+          status: 'success'
+        }),
+        expect.objectContaining({
+          action: 'team.member.delete',
+          actor: 'session:user-1',
+          resource: `team:${teamId}`,
+          status: 'failure'
+        })
+      ])
+    )
   })
 
   it('enforces tenant team policy for self-service creation and member limits', async () => {

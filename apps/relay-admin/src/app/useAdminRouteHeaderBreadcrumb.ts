@@ -39,7 +39,7 @@ export const useAdminRouteHeaderBreadcrumb = (
   }, [normalizedPathname])
   const teamDetailId = useMemo(() => {
     if (isTeamSettingsRoute) return undefined
-    const match = /^\/teams\/([^/]+)(?:\/(?:members|profiles|secrets))?$/.exec(normalizedPathname)
+    const match = /^\/teams\/([^/]+)(?:\/(?:audit|members|profiles|secrets))?$/.exec(normalizedPathname)
     return decodeRouteSegment(match?.[1])
   }, [isTeamSettingsRoute, normalizedPathname])
   const deviceDetailTitle = useMemo(() => {

@@ -7,6 +7,7 @@ import type {
   CreateConfigSecretInput,
   CreateTeamInput,
   CreateTeamMemberInput,
+  RelayAdminAuditEvent,
   RelayAdminConfigProfile,
   RelayAdminConfigProfileAssignment,
   RelayAdminConfigProfileVersion,
@@ -68,6 +69,12 @@ export const fetchRelayAdminTeamMembers = async (token: string, teamId: string) 
   await requestJson<{ members: RelayAdminTeamMember[] }>(
     token,
     `/api/admin/teams/${encodeURIComponent(teamId)}/members`
+  )
+
+export const fetchRelayAdminTeamAuditEvents = async (token: string, teamId: string) =>
+  await requestJson<{ events: RelayAdminAuditEvent[] }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(teamId)}/audit-events`
   )
 
 export const createRelayAdminTeamMember = async (token: string, input: CreateTeamMemberInput) =>

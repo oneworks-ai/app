@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { createContext, useContext, useEffect } from 'react'
 
-export type TeamDetailTabKey = 'members' | 'profiles' | 'secrets'
+export type TeamDetailTabKey = 'audit' | 'members' | 'profiles' | 'secrets'
 
 export interface TeamDetailTabActionsContextValue {
   registerTabActions: (key: TeamDetailTabKey, actions: ReactNode | undefined) => () => void

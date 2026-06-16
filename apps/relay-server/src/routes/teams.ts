@@ -5,7 +5,7 @@ import { sendJson } from '../http.js'
 import { relayPermissions } from '../permissions/index.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
 import { findRelayTeam } from '../teams.js'
-import type { RelayServerArgs, RelayStore } from '../types.js'
+import type { RelayAuditLogEntry, RelayServerArgs, RelayStore } from '../types.js'
 import { archiveTeam, createTeam, restoreTeam, updateTeam } from './team-actions.js'
 import { createMember, deleteMember, listMembers, updateMember } from './team-members.js'
 import {
@@ -17,6 +17,34 @@ import {
   serializeTeam,
   visibleTeams
 } from './team-route-utils.js'
+
+const serializeAuditEvent = (event: RelayAuditLogEntry) => ({
+  id: event.id,
+  actor: event.actor,
+  action: event.action,
+  resource: event.resource,
+  status: event.status,
+  ip: event.ip ?? null,
+  userAgent: event.userAgent ?? null,
+  requestId: event.requestId ?? null,
+  createdAt: event.createdAt
+})
+
+const listTeamAuditEvents = (
+  res: ServerResponse,
+  args: RelayServerArgs,
+  store: RelayStore,
+  teamId: string
+) => {
+  const resource = `team:${teamId}`
+  const events = store.auditEvents
+    .filter(event => event.resource === resource)
+    .slice()
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    .slice(0, 100)
+    .map(serializeAuditEvent)
+  sendJson(res, 200, { events }, args.allowOrigin)
+}
 
 export const handleTeamsRoute = async (
   req: IncomingMessage,
@@ -87,6 +115,14 @@ export const handleTeamsRoute = async (
   }
   if (segments.length === 2 && segments[1] === 'restore' && req.method === 'POST') {
     await restoreTeam(res, args, store, storeRepository, auth, team)
+    return true
+  }
+  if (segments.length === 2 && segments[1] === 'audit-events' && req.method === 'GET') {
+    if (!canReadTeam(store, auth, team.id)) {
+      sendJson(res, 403, { error: 'Permission denied.' }, args.allowOrigin)
+      return true
+    }
+    listTeamAuditEvents(res, args, store, team.id)
     return true
   }
   if (segments.length === 2 && segments[1] === 'members') {

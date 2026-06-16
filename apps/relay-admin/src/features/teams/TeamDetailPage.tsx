@@ -7,6 +7,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { DataPanel } from '../../shared/ui/DataPanel'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
+import { TeamAuditEvents } from './TeamAuditEvents'
 import { TeamConfigProfiles } from './TeamConfigProfiles'
 import { TeamConfigSecrets } from './TeamConfigSecrets'
 import { TeamDetailTabActionsContext } from './TeamDetailTabActions'
@@ -23,7 +24,7 @@ export interface TeamDetailPageProps {
 }
 
 const isTeamDetailTabKey = (value: string): value is TeamDetailTabKey =>
-  value === 'members' || value === 'profiles' || value === 'secrets'
+  value === 'members' || value === 'profiles' || value === 'secrets' || value === 'audit'
 
 const formatTimestamp = (value: string | null | undefined) => {
   if (value == null || value === '') return '-'
@@ -145,6 +146,17 @@ export const TeamDetailPage = ({
                 ),
                 key: 'secrets',
                 label: '密钥'
+              },
+              {
+                children: (
+                  <TeamAuditEvents
+                    disabled={configDisabled}
+                    team={team}
+                    token={token}
+                  />
+                ),
+                key: 'audit',
+                label: '操作审计'
               }
             ]}
             tabBarExtraContent={tabActions[activeTabKey] == null
