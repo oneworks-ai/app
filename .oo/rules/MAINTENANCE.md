@@ -13,6 +13,7 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - [消息级操作开发经验](./maintenance/message-actions.md)
 - [消息级操作维护工具](./maintenance/tooling.md)
 - [Team / Agent Room 冒烟验证](./maintenance/agent-room-team-smoke.md)
+- [能力展示录屏工具](./maintenance/demo-video.md)
 - [Homepage Docs 维护经验](./maintenance/homepage-docs.md)
 - [Relay 托管与私有化部署](./RELAY-DEPLOYMENT.md)
 

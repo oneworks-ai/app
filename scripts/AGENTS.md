@@ -44,6 +44,10 @@
   - 在当前 Feishu messenger 页里按可见文本点击一个右侧会话内的按钮或快捷气泡
 - `pnpm tools message-actions verify [--quiet]`
   - 跑消息级 `编辑 / 撤回 / 分叉 / 复制原文` 的固定质量检查组合，并打印真实 Chrome 回归清单
+- `pnpm tools demo-video list [--json]`
+  - 列出能力展示录屏场景；录屏规则见 `.oo/rules/maintenance/demo-video.md`
+- `pnpm tools demo-video record <scenario> --url <url> [--out-dir <path>] [--name <name>] [--keep-frames]`
+  - 冷启动独立 Chrome profile 执行场景动作，按帧截图并用 `ffmpeg` 合成 MP4；默认输出到 `.logs/demo-videos/<scenario>`
 - `pnpm tools agent-room-smoke resume [--json]`
   - 跑真实 `StartTasks -> agent room 消息 -> inactive task resume` smoke；启动临时 server / SQLite / MCP / Codex adapter，LLM 只用 mock，结束后清理临时进程
 - `pnpm tools relay-config smoke [--allow-pending] [--json]`
