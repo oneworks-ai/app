@@ -80,6 +80,8 @@ Common callback paths:
 
 Provider secrets managed from Admin are stored server-side. List and detail APIs return only redacted values. User-facing SSO buttons should use branded provider icons instead of the generic login icon.
 
+Built-in GitHub and Google login use dedicated environment variables. Do not put `github` or `google` into `ONEWORKS_RELAY_SSO_PROVIDERS`; those provider ids are reserved. If an existing deployment has the old value, remove it from every Vercel, Cloudflare, or equivalent platform env / secret store, redeploy, and verify `/health`, `/api/auth/providers`, and the OAuth start `302` on each public origin.
+
 For private deployment, choose the final public domain before configuring SSO and passkeys. A Vercel single-project deployment usually serves Admin, API, and login from one domain. In a Cloudflare Pages + Worker split deployment, register OAuth callbacks on the Pages/custom domain that users open, not on a hidden Worker URL. Whether dev, test, and production share one OAuth client is a deployment decision; use separate clients when secrets, callbacks, or audiences need isolation.
 
 ## Email Codes and Abuse Control

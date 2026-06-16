@@ -95,6 +95,8 @@ The Google OAuth client must be a Web application client, and the redirect URI r
 
 GitHub sign-in can be enabled with `ONEWORKS_RELAY_GITHUB_CLIENT_ID` and `ONEWORKS_RELAY_GITHUB_CLIENT_SECRET`. Use either a GitHub OAuth App or a GitHub App with user authorization configured; Relay login only needs user identity and verified primary email access, not repository permissions.
 
+Do not add `github` to `ONEWORKS_RELAY_SSO_PROVIDERS`; `github` is a reserved built-in provider id. When fixing an existing deployment, remove stale custom `github` entries from every platform env store, redeploy, then verify `/health`, `/api/auth/providers`, and the GitHub OAuth start redirect on each public origin.
+
 Add this callback URL to the GitHub app/client:
 
 ```text
