@@ -30,6 +30,17 @@ Read `.oo/rules/relay-deployment/sso-common.md` first.
   - Public or self-serve login should allow broad account access.
   - Company-only login can restrict installation or authorization to the user's organization or enterprise.
 
+## Relay Env
+
+Configure the built-in GitHub provider with platform secrets:
+
+```text
+ONEWORKS_RELAY_GITHUB_CLIENT_ID=<github-client-id>
+ONEWORKS_RELAY_GITHUB_CLIENT_SECRET=<github-client-secret>
+```
+
+Do not configure GitHub through `ONEWORKS_RELAY_SSO_PROVIDERS`. The `github` provider id is reserved for the built-in GitHub flow, and Relay rejects custom SSO JSON entries that try to override it.
+
 ## Callback Setup
 
 GitHub callback for the built-in provider:
@@ -57,5 +68,6 @@ GitHub callback for the built-in provider:
 ## Troubleshooting
 
 - If `/login` shows a generic provider button, check `login-page-client-config.ts`, `LoginProviderIcon.tsx`, and login provider types.
+- If a deployment starts returning 500 after enabling GitHub SSO, check that platform secrets do not still contain `ONEWORKS_RELAY_SSO_PROVIDERS` with a `github` entry; remove that secret and use the dedicated GitHub env vars instead.
 - If callback fails, compare the exact `redirect_uri` in the GitHub authorization URL with the callback URL configured in GitHub.
 - If login creates or matches the wrong account, inspect auth identities and verify the provider id plus GitHub user id are used instead of email-only lookup.
