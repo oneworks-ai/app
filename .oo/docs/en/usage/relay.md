@@ -20,6 +20,13 @@ Before creating platform projects, OAuth clients, mail domains, or passkeys, dec
 
 Configuration belongs to the deployment environment, not to code constants. Do not put real account IDs, project IDs, personal emails, database URLs, OAuth secrets, Resend keys, verification codes, or temporary deployment URLs into README files, `.oo/docs`, rules, screenshots, or example config.
 
+When debugging platform configuration, first confirm that you are inspecting the right project and environment:
+
+- On Vercel, use `vercel env ls production` for the current project's production environment. If the deployment command uses `--prod`, update production env even when the custom domain is a dev domain. `vercel env pull` writes secrets to local files; use only ignored scratch files and delete them afterward.
+- On Cloudflare Workers, use `wrangler secret list --name <worker-name>` to inspect Worker secrets. If the workflow deploys with a `--name` override, use the same Worker name when listing or deleting secrets.
+- Cloudflare Pages and Workers have separate env stores. Admin Pages proxy env and Relay Worker SSO / storage secrets must be checked separately.
+- After deleting stale variables, list again to prove they are gone, then redeploy. Vercel needs a new deployment to pick up env changes; Cloudflare secret put/delete may create a new Worker version immediately, but you should still run the normal deploy workflow so code and config come from the same commit.
+
 After deployment, run at least:
 
 ```bash

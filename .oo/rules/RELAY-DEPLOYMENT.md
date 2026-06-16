@@ -94,6 +94,7 @@ The official topology is not a template for user private deployments. Private de
 ## Production Admin Release
 
 - For official production Admin / Relay releases, use `.oo/rules/relay-deployment/admin-release-sop.md`.
+- For official dev deploy GitHub Actions env / secret store setup, use `.oo/rules/release/relay-dev-deploy-github-actions.md`.
 - Production Admin releases are manual promotions from a known `origin/main` SHA or release tag after dev slot verification.
 - Treat login page, SSO, passkey, email-code, invite, device registration, session forwarding, or storage changes as Relay releases even when the visible diff looks like Admin UI.
 - Production smoke checks must include health, provider list, unauthorized admin API behavior, login config, Admin shell assets, and the intended login methods.
