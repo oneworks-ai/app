@@ -15,7 +15,7 @@ import type {
   RelayServerArgs,
   RelayTurnstileMode
 } from './types.js'
-import { VERSION } from './types.js'
+import { VERSION } from './version.js'
 
 export type RelayConfigEnv = Record<string, string | undefined>
 

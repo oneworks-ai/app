@@ -337,7 +337,7 @@ docker run -d --name oneworks-relay \
   -e ONEWORKS_RELAY_PUBLIC_URL=https://oneworks.example.com \
   -e ONEWORKS_RELAY_ALLOW_ORIGIN=https://oneworks.example.com \
   node:22-bookworm-slim \
-  sh -lc "npx --yes @oneworks/relay-server@3.4.0-rc --host 0.0.0.0 --port 8788"
+  sh -lc "npx --yes @oneworks/relay-server --host 0.0.0.0 --port 8788"
 ```
 
 Systemd example after installing the package globally on the host:

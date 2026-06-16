@@ -7,4 +7,5 @@
 - Pass Relay email provider, Resend, Turnstile, rate-limit, budget, and domain policy environment variables through the Cloudflare Worker runtime.
 - Fix Relay dev deployment automation so Cloudflare Pages deploys Admin proxy functions and same-origin `/health` smoke checks work.
 - Fix Vercel prebuilt Relay deployments by copying WebAuthn runtime dependencies into the serverless function output.
+- Fix Relay Server version reporting to read from its package metadata instead of a stale hardcoded release string.
 - Document the official domain, DNS, and email topology for public, dev, Cloudflare, Vercel, and support-mail deployments.
