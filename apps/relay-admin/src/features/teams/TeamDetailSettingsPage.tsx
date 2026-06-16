@@ -149,8 +149,9 @@ export const TeamDetailSettingsPage = ({
           layout='vertical'
           onFinish={handleSubmit}
         >
-          <div className='relay-team-panel__settings-preview'>
-            <div className='relay-team-panel__avatar-editor'>
+          <div className='relay-team-panel__settings-grid'>
+            <div className='relay-team-panel__avatar-field'>
+              <span className='relay-team-panel__settings-field-label'>团队头像</span>
               <Upload
                 accept='image/png,image/jpeg,image/webp,image/gif'
                 beforeUpload={handleAvatarUpload}
@@ -168,7 +169,7 @@ export const TeamDetailSettingsPage = ({
                   <Avatar
                     className='relay-team-detail__avatar'
                     shape='square'
-                    size={64}
+                    size={72}
                     src={avatarPreview}
                   >
                     {teamInitials(watchedName ?? team.name)}
@@ -188,19 +189,17 @@ export const TeamDetailSettingsPage = ({
                 />
               )}
             </div>
-            <div className='relay-team-panel__settings-preview-copy'>
-              <strong>{cleanText(watchedName) === '' ? team.name : cleanText(watchedName)}</strong>
-              <span>{team.slug}</span>
+            <div className='relay-team-panel__settings-fields'>
+              <Form.Item label='团队名称' name='name' rules={[{ required: true }]}>
+                <Input disabled={disabled} />
+              </Form.Item>
+              <Form.Item label='Slug' name='slug'>
+                <Input disabled={disabled} />
+              </Form.Item>
             </div>
           </div>
           <Form.Item hidden name='avatarUrl' rules={[{ validator: validateAvatarSource }]}>
             <Input />
-          </Form.Item>
-          <Form.Item label='团队名称' name='name' rules={[{ required: true }]}>
-            <Input disabled={disabled} />
-          </Form.Item>
-          <Form.Item label='Slug' name='slug'>
-            <Input disabled={disabled} />
           </Form.Item>
           <Form.Item label='团队介绍' name='description'>
             <Input.TextArea autoSize={{ minRows: 3 }} disabled={disabled} />
@@ -208,7 +207,12 @@ export const TeamDetailSettingsPage = ({
           <Form.Item label='允许配置 Proxy 模式' name='proxyModeEnabled' valuePropName='checked'>
             <Switch disabled={disabled} />
           </Form.Item>
-          <Button disabled={disabled} htmlType='submit' type='primary'>
+          <Button
+            className='relay-team-panel__settings-submit'
+            disabled={disabled}
+            htmlType='submit'
+            type='primary'
+          >
             保存团队设置
           </Button>
         </Form>
