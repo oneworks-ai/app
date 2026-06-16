@@ -5,6 +5,7 @@ import { ProfilePage } from '../profile/ProfilePage'
 import { SsoProviderPanel } from '../sso/SsoProviderPanel'
 import { TeamDetailPage } from '../teams/TeamDetailPage'
 import { TeamPanel } from '../teams/TeamPanel'
+import { TeamSettingsPage } from '../teams/TeamSettingsPage'
 import { UserDetailPage } from '../users/UserDetailPage'
 import { UserPanel } from '../users/UserPanel'
 import { AdminStatusBar } from './AdminStatusBar'
@@ -19,6 +20,7 @@ export type AdminDashboardSectionId =
   | 'invites'
   | 'sso'
   | 'team-detail'
+  | 'team-settings'
   | 'teams'
 export type AdminDashboardCreateSectionId = Extract<AdminDashboardSectionId, 'invites' | 'sso' | 'teams' | 'users'>
 
@@ -131,10 +133,15 @@ export const AdminDashboard = ({
         <TeamPanel
           disabled={disabled}
           isCreateOpen={createSectionId === 'teams'}
-          policy={dashboard.teamPolicy}
           teams={dashboard.teams}
           onCreateOpenChange={open => onCreateSectionChange?.(open ? 'teams' : undefined)}
           onCreateTeam={dashboard.createTeam}
+        />
+      )}
+      {sectionId === 'team-settings' && (
+        <TeamSettingsPage
+          disabled={disabled}
+          policy={dashboard.teamPolicy}
           onUpdatePolicy={dashboard.updateTeamPolicy}
         />
       )}

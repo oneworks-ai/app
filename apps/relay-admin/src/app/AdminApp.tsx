@@ -15,7 +15,7 @@ import {
 } from '@oneworks/route-layout'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
 import { AdminDashboard } from '../features/dashboard/AdminDashboard'
 import type { AdminDashboardCreateSectionId } from '../features/dashboard/AdminDashboard'
@@ -69,6 +69,7 @@ const readAdminSidebarWidth = () => {
 export const AdminApp = () => {
   const dashboard = useRelayAdminDashboard()
   const location = useLocation()
+  const navigate = useNavigate()
   const { activeSection, activeSectionId, sidebarItems } = useAdminSectionNavigation(dashboard.currentUser?.role)
   const { isCompactLayout } = useResponsiveLayout()
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
@@ -102,6 +103,7 @@ export const AdminApp = () => {
   const headerBreadcrumb = useAdminRouteHeaderBreadcrumb(location.pathname, dashboard)
   const normalizedPathname = location.pathname === '/' ? '/' : location.pathname.replace(/\/+$/, '')
   const isProfileRoute = normalizedPathname === '/profile'
+  const isTeamListRoute = normalizedPathname === '/teams'
   const activeCreateSectionId = getCreateSectionIdFromPath(normalizedPathname)
   const activeUserDetailId = getUserDetailIdFromPath(normalizedPathname)
   const activeUserDetail = activeUserDetailId == null
@@ -183,6 +185,17 @@ export const AdminApp = () => {
       })
     }
 
+    if (isTeamListRoute) {
+      items.push({
+        disabled: !dashboard.canLoad || dashboard.loading,
+        icon: <AdminIcon name='admin_panel_settings' />,
+        key: 'teams:settings',
+        label: '团队设置',
+        title: '团队设置',
+        onSelect: () => void navigate('/teams/settings')
+      })
+    }
+
     if (!isProfileRoute) {
       items.push({
         disabled: !dashboard.canLoad || dashboard.loading,
@@ -205,7 +218,9 @@ export const AdminApp = () => {
     dashboard.setUserDisabled,
     dashboard.token,
     isCreateActionActive,
-    isProfileRoute
+    isProfileRoute,
+    isTeamListRoute,
+    navigate
   ])
 
   useEffect(() => {
@@ -368,6 +383,12 @@ export const AdminApp = () => {
                       onCreateSectionChange={setCreateSectionId}
                     />
                   )
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
+                path='teams/settings'
+                element={canRenderSection('teams')
+                  ? <AdminDashboard dashboard={dashboard} sectionId='team-settings' />
                   : <Navigate to='/devices' replace />}
               />
               <Route
