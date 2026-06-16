@@ -187,42 +187,4 @@ Avatar Pages token 的配置、轮换和验证见 [avatar-github-pages.md](./ava
 
 ## Relay Dev Deploy
 
-`.github/workflows/deploy-relay-dev.yml` 在 `main` 的 Relay 相关路径变更后自动部署官方 dev slots，也支持手动选择 `cloudflare`、`vercel` 或 `both`。如果仓库 deploy secrets 还没配置，相关 job 会输出 notice 并跳过部署，避免把 `main` 标红；配置好 secrets 后同一个 workflow 会开始真实部署和 smoke check。
-
-Cloudflare dev deploy 需要仓库 secrets：
-
-- `RELAY_DEV_CLOUDFLARE_API_TOKEN`
-- `RELAY_DEV_CLOUDFLARE_ACCOUNT_ID`
-
-可选仓库 variables：
-
-- `RELAY_DEV_CF_WORKER_NAME`：默认 `oneworks-relay-dev`。
-- `RELAY_DEV_CF_PAGES_PROJECT`：默认 `oneworks-dev`。
-- `RELAY_DEV_CF_ORIGIN`：默认 `https://dev.cf.oneworks.cloud`。
-
-Vercel dev deploy 需要仓库 secrets：
-
-- `RELAY_DEV_VERCEL_TOKEN`
-- `RELAY_DEV_VERCEL_ORG_ID`
-- `RELAY_DEV_VERCEL_PROJECT_ID`
-
-可选仓库 variables：
-
-- `RELAY_DEV_VC_ORIGIN`：默认 `https://dev.vc.oneworks.cloud`。
-
-两边共享的可选 variable：
-
-- `RELAY_DEV_EXPECTED_SSO_PROVIDERS`：逗号分隔的 provider id 列表，例如 `github,google-sso`。设置后 smoke check 会要求 `/api/auth/providers` 和 `/login` 配置里都出现这些 provider。
-
-平台项目自身的 runtime env 仍然在 Cloudflare / Vercel 平台侧维护，不放进 GitHub Actions 明文文档。至少确认这些值已经在对应 dev slot 配好：
-
-- Relay Server：`ONEWORKS_RELAY_STORAGE_DRIVER`、`ONEWORKS_RELAY_ADMIN_TOKEN`、`ONEWORKS_RELAY_DEVICE_METADATA_SECRET`、`ONEWORKS_RELAY_PUBLIC_URL`、`ONEWORKS_RELAY_ALLOW_ORIGIN`、SSO provider secrets、邮件 provider secrets 和 passkey / invite / login method 配置。
-- Cloudflare Pages Admin：`ONEWORKS_RELAY_ADMIN_PROXY_TARGET` 指向对应 Worker origin，不能指向同一个 Pages custom domain，否则 `/api/*`、`/login` 和 `/login/complete` 可能代理回自身。
-- Vercel dev：`apps/relay-server` 是单项目形态，Admin、API 和 login 同源，`ONEWORKS_RELAY_PUBLIC_URL` 应指向最终 dev Vercel custom domain。
-
-部署后 workflow 会检查：
-
-- `/health` 返回 `ok=true`。
-- `/api/auth/providers` 包含预期 SSO providers。
-- `/api/admin/users` 未带认证时返回 `401`。
-- `/login` 注入 Relay login config，并包含预期 SSO provider id。
+Relay dev deployment workflow secrets、variables 和 smoke check 维护方式见 [Relay dev deploy GitHub Actions](./relay-dev-deploy-github-actions.md)。
