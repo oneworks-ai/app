@@ -54,6 +54,10 @@ Runtime env still belongs in Cloudflare / Vercel platform secret stores, not in 
 - mail provider secrets
 - passkey, invite, and default login method settings
 
+For built-in SSO providers, set dedicated platform secrets. For GitHub dev login, use `ONEWORKS_RELAY_GITHUB_CLIENT_ID` and `ONEWORKS_RELAY_GITHUB_CLIENT_SECRET` on both the Cloudflare Worker and the Vercel project. Remove any stale `ONEWORKS_RELAY_SSO_PROVIDERS` secret that contains a reserved built-in id such as `github`, because it will make `/health` and other routes fail during startup.
+
+When changing Cloudflare Worker secrets, verify the actual secret names with `wrangler secret list --name <worker-name>`. Wrangler `secret delete` may require interactive confirmation; do not assume deletion succeeded until the stale key is absent from the list. For Vercel, runtime env changes require a new production deployment before `dev.vc.oneworks.cloud` reflects them.
+
 ## Smoke Checks
 
 After deploy, the workflow checks:
