@@ -5,7 +5,7 @@ import type { ChildProcess } from 'node:child_process'
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
 import { homedir } from 'node:os'
@@ -23,7 +23,8 @@ import type {
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
 import { applyServerRuntimeEnv } from '#~/cli-runtime.js'
-import { badRequest, internalServerError, notFound } from '#~/utils/http.js'
+import { createWorkspaceRuntimeEnv } from '#~/services/runtime-store/workspace-env.js'
+import { badRequest, conflict, internalServerError, isHttpError, notFound } from '#~/utils/http.js'
 import { logger } from '#~/utils/logger.js'
 
 const nodeRequire = createRequire(__filename)
@@ -33,6 +34,9 @@ const WORKSPACE_SERVER_HOST = '127.0.0.1'
 const WORKSPACE_SERVER_READY_TIMEOUT_MS = 20_000
 const WORKSPACE_SERVER_READY_POLL_MS = 200
 const WORKSPACE_SERVER_STOP_TIMEOUT_MS = 5_000
+const WORKSPACE_INSTANCE_LOCK_TIMEOUT_MS = 30_000
+const WORKSPACE_INSTANCE_LOCK_STALE_MS = 60_000
+const WORKSPACE_INSTANCE_PROTOCOL_VERSION = 1
 const invalidFileNameCharacters = new Set(['<', '>', ':', '"', '/', '\\', '|', '?', '*'])
 
 interface LauncherManagerState {
@@ -40,12 +44,28 @@ interface LauncherManagerState {
 }
 
 interface LauncherWorkspaceService {
+  identity?: LauncherWorkspaceInstanceIdentity
   process?: ChildProcess
   serverBaseUrl?: string
   startPromise?: Promise<LauncherWorkspaceService>
   status: LauncherWorkspaceServiceStatus
   stopPromise?: Promise<void>
   stopRequested?: boolean
+  workspaceFolder: string
+}
+
+interface LauncherWorkspaceInstanceIdentity {
+  implementationId: string
+  launchConfigHash: string
+  packageDir: string
+  repoRoot?: string
+}
+
+interface LauncherWorkspaceInstanceState extends LauncherWorkspaceInstanceIdentity {
+  pid?: number
+  protocolVersion: number
+  serverBaseUrl?: string
+  startedAt: string
   workspaceFolder: string
 }
 
@@ -341,6 +361,328 @@ const getAvailablePort = async () => (
 
 const sleep = async (ms: number) => await new Promise(resolvePromise => setTimeout(resolvePromise, ms))
 
+const isPidRunning = (pid: unknown) => {
+  if (typeof pid !== 'number' || !Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+const readGitCommand = (cwd: string, args: string[]) => {
+  try {
+    return execFileSync('git', ['-C', cwd, ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 5_000
+    }).trim()
+  } catch {
+    return undefined
+  }
+}
+
+const readGitLargeCommand = (cwd: string, args: string[]) => {
+  try {
+    return execFileSync('git', ['-C', cwd, ...args], {
+      encoding: 'utf8',
+      maxBuffer: 20 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 5_000
+    })
+  } catch {
+    return undefined
+  }
+}
+
+const resolvePackageDir = () => (
+  process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__ ?? resolve(process.cwd(), 'apps/server')
+)
+
+const resolveImplementationIdentity = (packageDir: string) => {
+  const normalizedPackageDir = fs.realpathSync.native(packageDir)
+  const repoRoot = readGitCommand(normalizedPackageDir, ['rev-parse', '--path-format=absolute', '--show-toplevel'])
+  const head = repoRoot == null ? undefined : readGitCommand(repoRoot, ['rev-parse', 'HEAD'])
+  if (repoRoot != null && head != null) {
+    const status = readGitCommand(repoRoot, ['status', '--porcelain=v1'])
+    const diff = status == null || status === ''
+      ? ''
+      : readGitLargeCommand(repoRoot, ['diff', '--binary', 'HEAD', '--'])
+    const untracked = status == null || status === ''
+      ? ''
+      : readGitLargeCommand(repoRoot, ['ls-files', '--others', '--exclude-standard'])
+    const dirtyHash = status == null || status === ''
+      ? 'clean'
+      : createHash('sha256').update(`${status}\n${diff ?? ''}\n${untracked ?? ''}`).digest('hex').slice(0, 12)
+    return {
+      implementationId: `git:${head}:${dirtyHash}`,
+      repoRoot: fs.realpathSync.native(repoRoot)
+    }
+  }
+
+  return {
+    implementationId: `path:${normalizedPackageDir}`
+  }
+}
+
+export const resolveLauncherWorkspaceInstanceIdentity = (
+  workspaceFolder: string,
+  input: {
+    clientOrigin?: string
+  } = {}
+): LauncherWorkspaceInstanceIdentity => {
+  const packageDir = fs.realpathSync.native(resolvePackageDir())
+  const implementation = resolveImplementationIdentity(packageDir)
+  const launchConfigHash = createHash('sha256')
+    .update(JSON.stringify({
+      clientBase: createLauncherWorkspaceClientBase(createLauncherWorkspaceId(workspaceFolder)),
+      clientOrigin: input.clientOrigin ?? null,
+      host: WORKSPACE_SERVER_HOST,
+      workspaceFolder
+    }))
+    .digest('hex')
+    .slice(0, 16)
+
+  return {
+    implementationId: implementation.implementationId,
+    launchConfigHash,
+    packageDir,
+    ...(implementation.repoRoot == null ? {} : { repoRoot: implementation.repoRoot })
+  }
+}
+
+const getWorkspaceInstanceStatePath = (workspaceFolder: string) => (
+  resolveProjectHomePath(
+    workspaceFolder,
+    createWorkspaceRuntimeEnv(workspaceFolder, process.env),
+    '.local',
+    'server',
+    'instance.json'
+  )
+)
+
+const getWorkspaceInstanceLockPath = (workspaceFolder: string) => (
+  resolveProjectHomePath(
+    workspaceFolder,
+    createWorkspaceRuntimeEnv(workspaceFolder, process.env),
+    '.local',
+    'server',
+    'instance.lock'
+  )
+)
+
+const readWorkspaceInstanceState = async (workspaceFolder: string) => {
+  try {
+    const raw = await readFile(getWorkspaceInstanceStatePath(workspaceFolder), 'utf8')
+    const value = JSON.parse(raw) as unknown
+    if (value == null || typeof value !== 'object' || Array.isArray(value)) return undefined
+    return value as LauncherWorkspaceInstanceState
+  } catch {
+    return undefined
+  }
+}
+
+const removeWorkspaceInstanceState = async (workspaceFolder: string) => {
+  await rm(getWorkspaceInstanceStatePath(workspaceFolder), { force: true })
+}
+
+const removeWorkspaceInstanceStateForPid = async (workspaceFolder: string, pid?: number) => {
+  if (!isPidRunning(pid)) {
+    const state = await readWorkspaceInstanceState(workspaceFolder)
+    if (state == null || state.pid === pid) {
+      await removeWorkspaceInstanceState(workspaceFolder)
+    }
+    return
+  }
+
+  const state = await readWorkspaceInstanceState(workspaceFolder)
+  if (state?.pid === pid) {
+    await removeWorkspaceInstanceState(workspaceFolder)
+  }
+}
+
+const writeWorkspaceInstanceState = async (
+  workspaceFolder: string,
+  state: LauncherWorkspaceInstanceState
+) => {
+  const statePath = getWorkspaceInstanceStatePath(workspaceFolder)
+  await mkdir(path.dirname(statePath), { recursive: true })
+  await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`)
+}
+
+const readWorkspaceInstanceLockOwner = async (lockPath: string) => {
+  try {
+    const raw = await readFile(path.join(lockPath, 'owner.json'), 'utf8')
+    const value = JSON.parse(raw) as unknown
+    return value != null && typeof value === 'object' && !Array.isArray(value)
+      ? value as { pid?: unknown; startedAt?: unknown }
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const acquireWorkspaceInstanceLock = async (workspaceFolder: string) => {
+  const lockPath = getWorkspaceInstanceLockPath(workspaceFolder)
+  const startedAt = Date.now()
+
+  while (Date.now() - startedAt < WORKSPACE_INSTANCE_LOCK_TIMEOUT_MS) {
+    try {
+      await mkdir(lockPath, { recursive: false })
+      const ownerJson = JSON.stringify(
+        {
+          pid: process.pid,
+          startedAt: Date.now()
+        },
+        null,
+        2
+      )
+      await writeFile(path.join(lockPath, 'owner.json'), `${ownerJson}\n`)
+      return async () => {
+        await rm(lockPath, { recursive: true, force: true })
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        throw error
+      }
+
+      const owner = await readWorkspaceInstanceLockOwner(lockPath)
+      const lockStat = await stat(lockPath).catch(() => undefined)
+      const ownerStartedAt = typeof owner?.startedAt === 'number' ? owner.startedAt : 0
+      const lockStartedAt = ownerStartedAt > 0 ? ownerStartedAt : lockStat?.mtimeMs ?? Date.now()
+      const lockAgeMs = Date.now() - lockStartedAt
+      if (!isPidRunning(owner?.pid) && lockAgeMs > WORKSPACE_INSTANCE_LOCK_STALE_MS) {
+        await rm(lockPath, { recursive: true, force: true })
+        continue
+      }
+      await sleep(WORKSPACE_SERVER_READY_POLL_MS)
+    }
+  }
+
+  throw conflict(
+    'Workspace server startup is already in progress.',
+    { workspaceFolder },
+    'workspace_server_start_in_progress'
+  )
+}
+
+const withWorkspaceInstanceLock = async <T>(
+  workspaceFolder: string,
+  fn: () => Promise<T>
+) => {
+  const release = await acquireWorkspaceInstanceLock(workspaceFolder)
+  try {
+    return await fn()
+  } finally {
+    await release()
+  }
+}
+
+const isWorkspaceInstanceReady = async (state: LauncherWorkspaceInstanceState | undefined) => {
+  if (state?.protocolVersion !== WORKSPACE_INSTANCE_PROTOCOL_VERSION) return false
+  if (typeof state.serverBaseUrl !== 'string' || state.serverBaseUrl.trim() === '') return false
+  if (!isPidRunning(state.pid)) return false
+
+  try {
+    const response = await fetch(`${state.serverBaseUrl}/api/auth/status`)
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+const assertCompatibleWorkspaceInstance = (
+  workspaceFolder: string,
+  state: LauncherWorkspaceInstanceIdentity & {
+    pid?: number
+    serverBaseUrl?: string
+    startedAt?: string
+    workspaceFolder: string
+  },
+  identity: LauncherWorkspaceInstanceIdentity
+) => {
+  if (
+    state.workspaceFolder === workspaceFolder &&
+    state.implementationId === identity.implementationId &&
+    state.launchConfigHash === identity.launchConfigHash
+  ) {
+    return
+  }
+
+  throw conflict(
+    'Workspace is already served by a different One Works version.',
+    {
+      existing: {
+        implementationId: state.implementationId,
+        launchConfigHash: state.launchConfigHash,
+        packageDir: state.packageDir,
+        pid: state.pid,
+        repoRoot: state.repoRoot,
+        serverBaseUrl: state.serverBaseUrl,
+        startedAt: state.startedAt,
+        workspaceFolder: state.workspaceFolder
+      },
+      requested: {
+        implementationId: identity.implementationId,
+        launchConfigHash: identity.launchConfigHash,
+        packageDir: identity.packageDir,
+        repoRoot: identity.repoRoot,
+        workspaceFolder
+      },
+      workspaceFolder
+    },
+    'workspace_server_version_conflict'
+  )
+}
+
+const getReusableWorkspaceInstanceService = async (
+  workspaceFolder: string,
+  identity: LauncherWorkspaceInstanceIdentity
+) => {
+  const state = await readWorkspaceInstanceState(workspaceFolder)
+  if (state == null) return undefined
+
+  if (!await isWorkspaceInstanceReady(state)) {
+    await removeWorkspaceInstanceState(workspaceFolder)
+    return undefined
+  }
+
+  assertCompatibleWorkspaceInstance(workspaceFolder, state, identity)
+  await rememberRecentWorkspace(workspaceFolder)
+  return {
+    identity,
+    serverBaseUrl: state.serverBaseUrl,
+    status: 'ready',
+    workspaceFolder
+  } satisfies LauncherWorkspaceService
+}
+
+const getProcessWorkspaceService = async (
+  workspaceFolder: string,
+  service: LauncherWorkspaceService,
+  identity: LauncherWorkspaceInstanceIdentity
+) => {
+  if (service.identity != null) {
+    assertCompatibleWorkspaceInstance(workspaceFolder, {
+      ...service.identity,
+      pid: service.process?.pid,
+      serverBaseUrl: service.serverBaseUrl,
+      workspaceFolder
+    }, identity)
+  }
+
+  if (service.startPromise != null) {
+    return await service.startPromise
+  }
+  if (service.status === 'ready' && service.serverBaseUrl != null) {
+    await rememberRecentWorkspace(workspaceFolder)
+    return service
+  }
+  services.delete(workspaceFolder)
+  return undefined
+}
+
 const waitForServerReady = async (service: LauncherWorkspaceService) => {
   const serverBaseUrl = service.serverBaseUrl
   if (serverBaseUrl == null) {
@@ -381,7 +723,7 @@ const createWorkspaceServerEnv = (
     port: number
   }
 ) => {
-  const packageDir = process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__ ?? resolve(process.cwd(), 'apps/server')
+  const packageDir = resolvePackageDir()
   const env = applyServerRuntimeEnv({
     cwd: workspaceFolder,
     packageDir,
@@ -419,7 +761,8 @@ const startWorkspaceService = async (
   service: LauncherWorkspaceService,
   input: {
     clientOrigin?: string
-  }
+  },
+  identity: LauncherWorkspaceInstanceIdentity
 ) => {
   const port = await getAvailablePort()
   if (service.stopRequested === true) {
@@ -452,6 +795,7 @@ const startWorkspaceService = async (
     if (services.get(service.workspaceFolder) === service) {
       services.delete(service.workspaceFolder)
     }
+    void removeWorkspaceInstanceStateForPid(service.workspaceFolder, child.pid)
     service.status = 'stopped'
     logger.info(
       `[launcher] workspace server exited workspace=${service.workspaceFolder} code=${code ?? 'null'} signal=${
@@ -463,6 +807,14 @@ const startWorkspaceService = async (
   await waitForServerReady(service)
   service.status = 'ready'
   service.stopRequested = false
+  await writeWorkspaceInstanceState(service.workspaceFolder, {
+    ...identity,
+    pid: child.pid,
+    protocolVersion: WORKSPACE_INSTANCE_PROTOCOL_VERSION,
+    serverBaseUrl: service.serverBaseUrl,
+    startedAt: new Date().toISOString(),
+    workspaceFolder: service.workspaceFolder
+  })
   await rememberRecentWorkspace(service.workspaceFolder)
   return service
 }
@@ -473,34 +825,41 @@ const ensureWorkspaceService = async (
     clientOrigin?: string
   }
 ) => {
+  const identity = resolveLauncherWorkspaceInstanceIdentity(workspaceFolder, input)
   const existingService = services.get(workspaceFolder)
   if (existingService != null) {
-    if (existingService.startPromise != null) {
-      return await existingService.startPromise
-    }
-    if (existingService.status === 'ready' && existingService.serverBaseUrl != null) {
-      await rememberRecentWorkspace(workspaceFolder)
-      return existingService
-    }
-    services.delete(workspaceFolder)
+    const service = await getProcessWorkspaceService(workspaceFolder, existingService, identity)
+    if (service != null) return service
   }
 
-  const service: LauncherWorkspaceService = {
-    status: 'starting',
-    workspaceFolder
-  }
-  services.set(workspaceFolder, service)
-  service.startPromise = startWorkspaceService(service, input)
-    .catch((error) => {
-      services.delete(workspaceFolder)
-      service.status = 'stopped'
-      service.process?.kill()
-      throw error
-    })
-    .finally(() => {
-      service.startPromise = undefined
-    })
-  return await service.startPromise
+  return await withWorkspaceInstanceLock(workspaceFolder, async () => {
+    const lockedExistingService = services.get(workspaceFolder)
+    if (lockedExistingService != null) {
+      const service = await getProcessWorkspaceService(workspaceFolder, lockedExistingService, identity)
+      if (service != null) return service
+    }
+
+    const reusableService = await getReusableWorkspaceInstanceService(workspaceFolder, identity)
+    if (reusableService != null) return reusableService
+
+    const service: LauncherWorkspaceService = {
+      identity,
+      status: 'starting',
+      workspaceFolder
+    }
+    services.set(workspaceFolder, service)
+    service.startPromise = startWorkspaceService(service, input, identity)
+      .catch((error) => {
+        services.delete(workspaceFolder)
+        service.status = 'stopped'
+        service.process?.kill()
+        throw error
+      })
+      .finally(() => {
+        service.startPromise = undefined
+      })
+    return await service.startPromise
+  })
 }
 
 const stopLauncherWorkspaceService = async (service: LauncherWorkspaceService) => {
@@ -580,6 +939,7 @@ export const openLauncherWorkspace = async (
   }
 
   const service = await ensureWorkspaceService(workspaceFolder, input).catch((error) => {
+    if (isHttpError(error)) throw error
     throw internalServerError('Failed to start workspace server.', {
       cause: error,
       details: { workspaceFolder }

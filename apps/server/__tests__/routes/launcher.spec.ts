@@ -13,8 +13,11 @@ import { launcherRouter } from '#~/routes/launcher.js'
 import {
   createLauncherWorkspaceClientBase,
   createLauncherWorkspaceId,
-  resolveLauncherProjectWorkspaceFolder
+  openLauncherWorkspace,
+  resolveLauncherProjectWorkspaceFolder,
+  resolveLauncherWorkspaceInstanceIdentity
 } from '#~/services/launcher/manager.js'
+import { createWorkspaceRuntimeEnv } from '#~/services/runtime-store/workspace-env.js'
 
 const createServerEnv = (role: 'manager' | 'workspace') => ({
   __ONEWORKS_PROJECT_SERVER_HOST__: '127.0.0.1',
@@ -104,6 +107,52 @@ describe('launcher routes', () => {
     await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`)
   }
 
+  const writeWorkspaceInstanceState = async (workspaceFolder: string, state: unknown) => {
+    const statePath = resolveProjectHomePath(
+      workspaceFolder,
+      createWorkspaceRuntimeEnv(workspaceFolder, process.env),
+      '.local',
+      'server',
+      'instance.json'
+    )
+    await mkdir(path.dirname(statePath), { recursive: true })
+    await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`)
+  }
+
+  const startWorkspaceStatusServer = async () => {
+    const statusServer = http.createServer((request, response) => {
+      if (request.url === '/api/auth/status') {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end('{}')
+        return
+      }
+
+      response.writeHead(404)
+      response.end()
+    })
+    await new Promise<void>((resolve) => {
+      statusServer.listen(0, '127.0.0.1', () => resolve())
+    })
+    const address = statusServer.address()
+    if (address == null || typeof address === 'string') {
+      throw new Error('Failed to start status server')
+    }
+
+    return {
+      serverBaseUrl: `http://127.0.0.1:${address.port}`,
+      close: async () =>
+        await new Promise<void>((resolve, reject) => {
+          statusServer.close((error) => {
+            if (error) {
+              reject(error)
+              return
+            }
+            resolve()
+          })
+        })
+    }
+  }
+
   it('serves workspace selector state in manager role', async () => {
     await startApp('manager')
 
@@ -144,6 +193,53 @@ describe('launcher routes', () => {
     expect(createLauncherWorkspaceClientBase('w_abc123456')).toBe('/ui/w/w_abc123456')
     expect(createLauncherWorkspaceClientBase('w_abc123456', '/console/')).toBe('/console/w/w_abc123456')
     expect(createLauncherWorkspaceClientBase('w_abc123456', '/')).toBe('/w/w_abc123456')
+  })
+
+  it('reuses a live compatible workspace server instance', async () => {
+    const workspaceFolder = fs.realpathSync.native(await mkdtemp(path.join(tempHome, 'workspace-')))
+    const statusServer = await startWorkspaceStatusServer()
+    try {
+      const identity = resolveLauncherWorkspaceInstanceIdentity(workspaceFolder)
+      await writeWorkspaceInstanceState(workspaceFolder, {
+        ...identity,
+        pid: process.pid,
+        protocolVersion: 1,
+        serverBaseUrl: statusServer.serverBaseUrl,
+        startedAt: new Date().toISOString(),
+        workspaceFolder
+      })
+
+      const response = await openLauncherWorkspace(workspaceFolder)
+
+      expect(response.serverBaseUrl).toBe(statusServer.serverBaseUrl)
+      expect(response.project.status).toBe('ready')
+    } finally {
+      await statusServer.close()
+    }
+  })
+
+  it('rejects a live workspace server instance from another version', async () => {
+    const workspaceFolder = fs.realpathSync.native(await mkdtemp(path.join(tempHome, 'workspace-')))
+    const statusServer = await startWorkspaceStatusServer()
+    try {
+      await writeWorkspaceInstanceState(workspaceFolder, {
+        implementationId: 'git:other:clean',
+        launchConfigHash: 'other-config',
+        packageDir: '/other/oneworks/apps/server',
+        pid: process.pid,
+        protocolVersion: 1,
+        serverBaseUrl: statusServer.serverBaseUrl,
+        startedAt: new Date().toISOString(),
+        workspaceFolder
+      })
+
+      await expect(openLauncherWorkspace(workspaceFolder)).rejects.toMatchObject({
+        code: 'workspace_server_version_conflict',
+        status: 409
+      })
+    } finally {
+      await statusServer.close()
+    }
   })
 
   it('rejects invalid workspace connection ids', async () => {
