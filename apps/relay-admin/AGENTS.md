@@ -16,7 +16,7 @@
 - `src/shared/`：跨 feature 复用的 API request、类型、角色常量、表单工具和基础 UI；基础 action button、data card、status badge 等先看 `src/shared/ui/AGENTS.md`。
 - `__tests__/`：按 feature / 纯函数拆分的管理端单元测试。
 - `README.md`：面向开发者的管理端结构、命令和 server 挂载说明。
-- `.oo/rules/RELAY-DEPLOYMENT.md`：Relay 托管服务、私有化部署、Vercel / Cloudflare 域名、官方 OneWorks 域名 / 邮件拓扑和账号边界；处理 Admin 部署请求时先读。
+- `.oo/rules/RELAY-DEPLOYMENT.md`：Relay 托管服务、私有化部署、Vercel / Cloudflare 域名、官方 OneWorks 域名 / 邮件拓扑和账号边界；处理 Admin 部署请求时先读。正式版 Admin 发布继续读 `.oo/rules/relay-deployment/admin-release-sop.md`。
 - `HANDOFF.md`：当前共享 layout / Admin session 登录迁移的交接说明；接续这条 workstream 时先读这里，再按落点进入 `src/app`、`src/features/auth` 或 `packages/route-layout`。
 - `vite.config.ts`：固定输出 `admin.js` 和 `admin.css`，供 relay-server 挂载；开发态接入登录页 live reload。
 - `vite.relayLoginDev.ts`：Vite dev server 的 `/login` 与 `/login/complete` 本地渲染 helper，从 relay-server 登录页源码生成 shell/config；`/login` 加载 `src/login/main.tsx` 并由 Vite 提供 HMR。

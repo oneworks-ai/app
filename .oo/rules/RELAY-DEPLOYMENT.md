@@ -81,6 +81,13 @@ The official topology is not a template for user private deployments. Private de
 - For custom OAuth/OIDC providers, continue with `.oo/rules/relay-deployment/sso-oidc.md`.
 - If a new provider gets branded UI support, create a provider-specific rule file next to these and link it here instead of mixing its lessons into the common file.
 
+## Production Admin Release
+
+- For official production Admin / Relay releases, use `.oo/rules/relay-deployment/admin-release-sop.md`.
+- Production Admin releases are manual promotions from a known `origin/main` SHA or release tag after dev slot verification.
+- Treat login page, SSO, passkey, email-code, invite, device registration, session forwarding, or storage changes as Relay releases even when the visible diff looks like Admin UI.
+- Production smoke checks must include health, provider list, unauthorized admin API behavior, login config, Admin shell assets, and the intended login methods.
+
 ## Vercel Notes
 
 - Preferred private Vercel shape is the `apps/relay-server` single project.
