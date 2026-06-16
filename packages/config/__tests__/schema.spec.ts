@@ -227,7 +227,7 @@ describe('config schema bundle', () => {
             request: {
               url: 'http://127.0.0.1:7000/transcribe',
               headers: {
-                Authorization: 'Bearer ${env:LOCAL_ASR_TOKEN}'
+                Authorization: 'Bearer $' + '{env:LOCAL_ASR_TOKEN}'
               },
               body: {
                 kind: 'json',

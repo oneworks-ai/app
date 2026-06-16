@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Voice input coordinates recorder, waveform, transcription retry, and service selection state. */
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'

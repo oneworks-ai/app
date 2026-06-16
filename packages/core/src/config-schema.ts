@@ -330,7 +330,7 @@ export const speechToTextCustomHttpBodyConfigSchema = z.object({
 export const speechToTextCustomHttpRequestConfigSchema = z.object({
   method: z.enum(['POST', 'PUT']).optional().describe('HTTP method'),
   url: z.string().url().describe('Custom speech-to-text endpoint URL'),
-  headers: z.record(z.string(), z.string()).optional().describe('HTTP headers, supports ${env:NAME}'),
+  headers: z.record(z.string(), z.string()).optional().describe('HTTP headers, supports $' + '{env:NAME}'),
   body: speechToTextCustomHttpBodyConfigSchema.optional().describe('Request body mapping')
 })
 

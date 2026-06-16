@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Speech-to-text runtime keeps provider dispatch, response normalization, and config resolution together. */
 import { Buffer } from 'node:buffer'
 import { env as processEnv } from 'node:process'
 
@@ -78,7 +79,7 @@ const decodeAudio = (audioBase64: string) => {
     normalized === '' ||
     normalized.length % 4 === 1 ||
     paddingLength > 2 ||
-    !/^[A-Za-z0-9+/]+={0,2}$/.test(normalized) ||
+    !/^[\d+/a-z]+={0,2}$/i.test(normalized) ||
     (firstPaddingIndex !== -1 && !/^=+$/.test(normalized.slice(firstPaddingIndex)))
   ) {
     throw new VoiceRuntimeError('UNSUPPORTED_AUDIO_FORMAT', 'Invalid audio payload')
@@ -209,6 +210,20 @@ const normalizeNumber = (value: unknown) => {
   return undefined
 }
 
+const normalizeTimestampMs = (
+  item: Record<string, unknown>,
+  millisecondKeys: string[],
+  secondKey: string
+) => {
+  for (const key of millisecondKeys) {
+    const milliseconds = normalizeNumber(item[key])
+    if (milliseconds != null) return milliseconds
+  }
+
+  const seconds = normalizeNumber(item[secondKey])
+  return seconds == null ? undefined : Math.round(seconds * 1000)
+}
+
 const normalizeSegments = (value: unknown) => {
   if (!Array.isArray(value)) return undefined
   return value
@@ -218,8 +233,8 @@ const normalizeSegments = (value: unknown) => {
       if (text === '') return undefined
       return {
         text,
-        startMs: normalizeNumber(item.startMs ?? item.start_ms ?? item.start),
-        endMs: normalizeNumber(item.endMs ?? item.end_ms ?? item.end),
+        startMs: normalizeTimestampMs(item, ['startMs', 'start_ms'], 'start'),
+        endMs: normalizeTimestampMs(item, ['endMs', 'end_ms'], 'end'),
         speaker: typeof item.speaker === 'string' ? item.speaker : undefined
       }
     })
@@ -235,8 +250,8 @@ const normalizeWords = (value: unknown) => {
       if (text === '') return undefined
       return {
         text,
-        startMs: normalizeNumber(item.startMs ?? item.start_ms ?? item.start),
-        endMs: normalizeNumber(item.endMs ?? item.end_ms ?? item.end),
+        startMs: normalizeTimestampMs(item, ['startMs', 'start_ms'], 'start'),
+        endMs: normalizeTimestampMs(item, ['endMs', 'end_ms'], 'end'),
         confidence: normalizeNumber(item.confidence),
         speaker: typeof item.speaker === 'string' ? item.speaker : undefined
       }
@@ -374,7 +389,7 @@ const transcribeWithOpenAI = async (
 
 const interpolateTemplate = (value: string, input: SpeechToTextProviderInput) => (
   value
-    .replace(/\$\{env:([A-Z0-9_]+)\}/gi, (_, envName: string) => {
+    .replace(/\$\{env:(\w+)\}/gi, (_, envName: string) => {
       const envValue = processEnv[envName]
       if (envValue == null || envValue === '') {
         throw new VoiceRuntimeError('MISSING_CREDENTIAL', `Missing environment variable ${envName}`)

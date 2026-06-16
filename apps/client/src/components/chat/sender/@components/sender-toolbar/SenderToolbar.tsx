@@ -13,7 +13,8 @@ import { EffortSelectControl } from '../effort-select/EffortSelectControl'
 import { ModelSelectControl } from '../model-select/ModelSelectControl'
 import { ReferenceActionsControl } from '../reference-actions/ReferenceActionsControl'
 import { SenderSubmitAction } from '../sender-submit-action/SenderSubmitAction'
-import { SenderVoiceControl, SenderVoiceRecordingBar } from './SenderVoiceControl'
+import { SenderVoiceControl } from './SenderVoiceControl'
+import { SenderVoiceRecordingBar } from './SenderVoiceRecordingBar'
 
 export function SenderToolbar({
   state,

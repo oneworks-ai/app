@@ -1,6 +1,7 @@
 # One Works 0.1.0-alpha.0
 
 - Add embedded web debugger viewport controls for device presets, resizing, media query breakpoints, rulers, and screenshots.
+- Add configurable speech-to-text services with sender recording controls, default service selection, and server-side transcription APIs.
 - Keep web workspace opening covered by a full-screen animated transition until the target route is ready.
 - Persist session panel tabs, active panels, and dock layouts across bottom and right workbench areas.
 - Prefer compatible system Codex CLI installs while keeping the managed install fallback.

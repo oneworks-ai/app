@@ -100,7 +100,7 @@ describe('mergeConfigs', () => {
                 request: {
                   url: 'https://asr.example.com/v1/transcribe',
                   headers: {
-                    Authorization: 'Bearer ${env:TEAM_ASR_TOKEN}'
+                    Authorization: 'Bearer $' + '{env:TEAM_ASR_TOKEN}'
                   },
                   body: {
                     kind: 'json',
@@ -347,7 +347,7 @@ describe('mergeConfigs', () => {
             request: {
               url: 'https://asr.example.com/v1/transcribe',
               headers: {
-                Authorization: 'Bearer ${env:TEAM_ASR_TOKEN}'
+                Authorization: 'Bearer $' + '{env:TEAM_ASR_TOKEN}'
               },
               body: {
                 kind: 'json',

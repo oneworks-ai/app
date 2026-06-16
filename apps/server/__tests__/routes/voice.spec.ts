@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Voice route tests keep the local provider fixture and API stack coverage together. */
+import { Buffer } from 'node:buffer'
 import http from 'node:http'
 
 import Router from '@koa/router'
@@ -126,8 +128,59 @@ describe('voiceRouter', () => {
       response.end(JSON.stringify({
         data: {
           language: 'zh',
+          segments: [
+            {
+              end: 1.25,
+              speaker: 'agent',
+              start: .25,
+              text: '你好'
+            }
+          ],
           text: '你好，世界'
-        }
+        },
+        words: [
+          {
+            confidence: .98,
+            end: .8,
+            start: .25,
+            word: '你好'
+          }
+        ]
+      }))
+    })
+    await new Promise<void>((resolve) => {
+      providerServer!.listen(0, '127.0.0.1', () => resolve())
+    })
+    const address = providerServer.address()
+    if (address == null || typeof address === 'string') {
+      throw new Error('Failed to start provider test server')
+    }
+    providerBaseUrl = `http://127.0.0.1:${address.port}`
+  }
+
+  const startProviderWithMillisecondTimestamps = async () => {
+    providerServer = http.createServer(async (request, response) => {
+      expect(request.headers.authorization).toBe('Bearer test-token')
+      await readRequestJson(request)
+      response.setHeader('Content-Type', 'application/json')
+      response.end(JSON.stringify({
+        data: {
+          segments: [
+            {
+              endMs: 1250,
+              start_ms: 250,
+              text: '你好'
+            }
+          ],
+          text: '你好'
+        },
+        words: [
+          {
+            endMs: 800,
+            startMs: 250,
+            word: '你好'
+          }
+        ]
       }))
     })
     await new Promise<void>((resolve) => {
@@ -155,7 +208,7 @@ describe('voiceRouter', () => {
                 request: {
                   url: `${providerBaseUrl}/transcribe`,
                   headers: {
-                    Authorization: 'Bearer ${env:LOCAL_ASR_TOKEN}'
+                    Authorization: 'Bearer $' + '{env:LOCAL_ASR_TOKEN}'
                   },
                   body: {
                     kind: 'json',
@@ -167,7 +220,9 @@ describe('voiceRouter', () => {
                 },
                 response: {
                   languagePath: 'data.language',
-                  textPath: 'data.text'
+                  segmentsPath: 'data.segments',
+                  textPath: 'data.text',
+                  wordsPath: 'words'
                 }
               }
             }
@@ -244,14 +299,118 @@ describe('voiceRouter', () => {
       },
       method: 'POST'
     })
-    const payload = await response.json() as { result?: { language?: string; serviceId?: string; text?: string } }
+    const payload = await response.json() as {
+      result?: {
+        language?: string
+        segments?: unknown[]
+        serviceId?: string
+        text?: string
+        words?: unknown[]
+      }
+    }
 
     expect(response.status).toBe(200)
     expect(payload.result).toEqual({
       language: 'zh',
+      segments: [
+        {
+          endMs: 1250,
+          speaker: 'agent',
+          startMs: 250,
+          text: '你好'
+        }
+      ],
       serviceId: 'local-asr',
-      text: '你好，世界'
+      text: '你好，世界',
+      words: [
+        {
+          confidence: .98,
+          endMs: 800,
+          startMs: 250,
+          text: '你好'
+        }
+      ]
     })
+  })
+
+  it('preserves explicit millisecond timestamps from provider responses', async () => {
+    await startProviderWithMillisecondTimestamps()
+    mockVoiceConfig()
+
+    const response = await fetch(`${baseUrl}/api/voice/speech-to-text`, {
+      body: JSON.stringify({
+        audioBase64: Buffer.from('audio').toString('base64'),
+        language: 'zh',
+        mimeType: 'audio/webm'
+      }),
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      method: 'POST'
+    })
+    const payload = await response.json() as {
+      result?: {
+        segments?: unknown[]
+        words?: unknown[]
+      }
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.result?.segments).toEqual([
+      {
+        endMs: 1250,
+        startMs: 250,
+        text: '你好'
+      }
+    ])
+    expect(payload.result?.words).toEqual([
+      {
+        endMs: 800,
+        startMs: 250,
+        text: '你好'
+      }
+    ])
+  })
+
+  it('normalizes second timestamps from provider responses to milliseconds', async () => {
+    await startProvider()
+    mockVoiceConfig()
+
+    const response = await fetch(`${baseUrl}/api/voice/speech-to-text`, {
+      body: JSON.stringify({
+        audioBase64: Buffer.from('audio').toString('base64'),
+        language: 'zh',
+        mimeType: 'audio/webm'
+      }),
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      method: 'POST'
+    })
+    const payload = await response.json() as {
+      result?: {
+        segments?: unknown[]
+        words?: unknown[]
+      }
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.result?.segments).toEqual([
+      {
+        endMs: 1250,
+        speaker: 'agent',
+        startMs: 250,
+        text: '你好'
+      }
+    ])
+    expect(payload.result?.words).toEqual([
+      {
+        confidence: .98,
+        endMs: 800,
+        startMs: 250,
+        text: '你好'
+      }
+    ])
   })
 
   it('rejects invalid base64 audio before calling the provider', async () => {
@@ -401,7 +560,7 @@ describe('voiceRouter', () => {
 
     expect(response.status).toBe(200)
     expect(payload.success).toBe(true)
-    expect(payload.data?.result).toEqual({
+    expect(payload.data?.result).toMatchObject({
       language: 'zh',
       serviceId: 'local-asr',
       text: '你好，世界'
