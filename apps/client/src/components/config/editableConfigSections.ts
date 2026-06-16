@@ -8,6 +8,7 @@ export const editableConfigSectionKeys = [
   'appearance',
   'plugins',
   'mcp',
+  'voice',
   'shortcuts',
   'experiments'
 ] as const

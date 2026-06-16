@@ -14,6 +14,7 @@ export const CONFIG_SECTION_KEYS = [
   'plugins',
   'mcp',
   'auth',
+  'voice',
   'shortcuts',
   'experiments',
   'diagnostics'
@@ -63,6 +64,7 @@ export interface ConfigSections {
     noDefaultOneworksMcpServer?: Config['noDefaultOneworksMcpServer']
   }
   auth: Config['webAuth']
+  voice: Config['voice']
   shortcuts: Config['shortcuts']
   experiments: Config['experiments']
   diagnostics: Config['diagnostics']
@@ -124,6 +126,7 @@ export const buildConfigSections = (config: Config | undefined): ConfigSections 
     noDefaultOneworksMcpServer: config?.noDefaultOneworksMcpServer
   },
   auth: config?.webAuth,
+  voice: config?.voice,
   shortcuts: config?.shortcuts,
   experiments: config?.experiments,
   diagnostics: config?.diagnostics

@@ -52,6 +52,7 @@ export function Sender(props: SenderProps) {
           showContextPicker={controller.attachments.showContextPicker}
           onCancelContextPicker={controller.onCancelContextPicker}
           onConfirmContextPicker={controller.onConfirmContextPicker}
+          voiceInput={controller.voiceInput}
         />
       )}
     </div>

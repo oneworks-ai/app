@@ -23,7 +23,18 @@ export interface UpdateConfigFileOptions {
   value: unknown
 }
 
-const shouldMaskKey = (key: string) => /key|token|secret|password/i.test(key)
+const sensitiveHeaderKeys = new Set([
+  'authorization',
+  'cookie',
+  'proxy-authorization',
+  'set-cookie'
+])
+
+const shouldMaskKey = (key: string) => {
+  const normalized = key.trim().toLowerCase()
+  if (normalized === 'apikeyenv' || normalized === 'api_key_env' || normalized === 'api-key-env') return false
+  return sensitiveHeaderKeys.has(normalized) || /key|token|secret|password/i.test(key)
+}
 
 const projectConfigPaths = [
   './.oo.config.json',
@@ -357,6 +368,10 @@ const updateConfigSection = (config: Config, section: string, value: unknown): C
     }
     case 'auth': {
       updateField('webAuth', mergeMaskedValues(sectionValue, config.webAuth) as Config['webAuth'])
+      return nextConfig
+    }
+    case 'voice': {
+      updateField('voice', mergeMaskedValues(sectionValue, config.voice) as Config['voice'])
       return nextConfig
     }
     case 'shortcuts': {

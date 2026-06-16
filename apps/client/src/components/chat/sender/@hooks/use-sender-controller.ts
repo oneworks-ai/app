@@ -1,6 +1,6 @@
 /* eslint-disable max-lines */
 import { App } from 'antd'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { buildSenderControllerResult } from '#~/components/chat/sender/@core/build-sender-controller-result'
@@ -22,6 +22,7 @@ import { useSenderRefs } from './use-sender-refs'
 import { useSenderSelectOverlays } from './use-sender-select-overlays'
 import { useSenderShortcuts } from './use-sender-shortcuts'
 import { useSenderSubmit } from './use-sender-submit'
+import { useSenderVoiceInput } from './use-sender-voice-input'
 
 const mergePendingContextFiles = <T extends { path: string }>(current: T[], incoming: T[]) => {
   const nextByPath = new Map(current.map(file => [file.path, file]))
@@ -151,6 +152,31 @@ export const useSenderController = (props: SenderProps) => {
 
     void handleSend(mode)
   }
+  const notifyVoiceError = useCallback((content: string) => {
+    void message.error({ content, key: 'chat-voice-input-error' })
+  }, [message])
+  const notifyVoiceWarning = useCallback((content: string) => {
+    void message.warning({ content, key: 'chat-voice-input-warning' })
+  }, [message])
+  const notifyVoiceSuccess = useCallback((content: string) => {
+    void message.success({ content, key: 'chat-voice-input-success' })
+  }, [message])
+  const voiceInput = useSenderVoiceInput({
+    canSendAfterTranscription: props.hideSubmitAction !== true &&
+      !props.modelUnavailable &&
+      !isPermissionInteraction &&
+      props.submitLoading !== true,
+    canStartRecording: !isBusy && !props.modelUnavailable && !isPermissionInteraction,
+    editorRef,
+    enabled: props.enableVoiceInput === true && !isInlineEdit && !hideSender,
+    input: composer.input,
+    notifyError: notifyVoiceError,
+    notifySuccess: notifyVoiceSuccess,
+    notifyWarning: notifyVoiceWarning,
+    onInputChange: props.onInputChange,
+    onSendAfterTranscription: () => triggerSend(),
+    setInput: composer.setInput
+  })
 
   useEffect(() => {
     const request = props.contextReferenceRequest
@@ -279,7 +305,8 @@ export const useSenderController = (props: SenderProps) => {
         void handleSend('next')
       }
       : undefined,
-    toolbar
+    toolbar,
+    voiceInput
   })
 
   return {

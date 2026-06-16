@@ -1511,6 +1511,28 @@
     "childSessionPlaceholder": "Type a message in this child session...",
     "send": "Send",
     "thinking": "Thinking",
+    "voiceInput": {
+      "tooltip": "Voice input",
+      "start": "Start recording",
+      "menu": "Voice service menu",
+      "stop": "Stop recording and transcribe",
+      "sendAfterTranscription": "Send after transcription",
+      "transcribing": "Transcribing",
+      "configure": "Configure voice service",
+      "retry": "Retry",
+      "setDefault": "Set default: {{name}}",
+      "setupPrompt": "No available speech-to-text service is configured",
+      "defaultService": "Default",
+      "defaultSaved": "Default voice service saved",
+      "defaultSaveFailed": "Failed to save default voice service",
+      "unsupported": "Recording is not supported in this browser",
+      "unavailable": "Recording is not available in the current state",
+      "permissionDenied": "Microphone permission was denied",
+      "loadServicesFailed": "Failed to load voice services",
+      "recordingFailed": "Failed to start recording",
+      "emptyRecording": "No recognizable audio was recorded",
+      "transcribeFailed": "Speech recognition failed"
+    },
     "sessionOperation": {
       "codexCliPrepare": "Preparing Codex CLI. If no compatible system install is available, it will be installed now…"
     },
@@ -2715,6 +2737,7 @@
       "newAdapterName": "New adapter name",
       "newPluginName": "New plugin name",
       "newMcpServerName": "New MCP server name",
+      "newSpeechToTextServiceName": "New speech-to-text service name",
       "newMarketplaceName": "New registry name",
       "newEnvVarName": "New environment variable name",
       "newHeaderName": "New header name",
@@ -2729,6 +2752,7 @@
       "defaultAdapterPlaceholder": "Select adapter",
       "defaultModelServicePlaceholder": "Select model service",
       "defaultModelPlaceholder": "Select model",
+      "defaultSpeechToTextServicePlaceholder": "Select speech-to-text service",
       "worktreeEnvironmentPlaceholder": "Select worktree environment",
       "workspaceFileOpenerPlaceholder": "Select detected app",
       "titlePlaceholder": "Enter title",
@@ -3304,6 +3328,122 @@
           "desc": "Environment variables for the MCP server"
         }
       },
+      "voice": {
+        "speechToText": {
+          "label": "Speech to Text",
+          "desc": "Configure transcription services used by sender recording"
+        },
+        "defaultServiceId": {
+          "label": "Default Voice Service",
+          "desc": "Speech-to-text service used by sender when no service is selected manually"
+        },
+        "services": {
+          "label": "Voice Services",
+          "desc": "OpenAI-compatible or custom HTTP speech-to-text services keyed by service id"
+        },
+        "serviceItem": {
+          "label": {
+            "label": "Display Name",
+            "desc": "Name shown in settings and sender menus"
+          },
+          "description": {
+            "label": "Description",
+            "desc": "Notes about this service, account, or limits"
+          },
+          "provider": {
+            "label": "Provider",
+            "desc": "Choose built-in OpenAI-compatible transcription or custom HTTP mapping"
+          },
+          "enabled": {
+            "label": "Enabled",
+            "desc": "Disabled services are hidden from sender"
+          },
+          "language": {
+            "label": "Default Language",
+            "desc": "For example auto, zh, or en; exact values depend on the provider"
+          },
+          "prompt": {
+            "label": "Recognition Prompt",
+            "desc": "Vocabulary, domain terms, or provider context hint"
+          },
+          "timeoutMs": {
+            "label": "Timeout (ms)",
+            "desc": "Maximum wait time for transcription requests"
+          },
+          "maxDurationSeconds": {
+            "label": "Max Recording Seconds",
+            "desc": "Maximum duration sender can record"
+          },
+          "maxBytes": {
+            "label": "Max Audio Bytes",
+            "desc": "Maximum audio payload accepted by the server"
+          },
+          "baseUrl": {
+            "label": "OpenAI API URL",
+            "desc": "Base URL for OpenAI or compatible APIs"
+          },
+          "apiKeyEnv": {
+            "label": "API Key Env Var",
+            "desc": "Recommended way to store keys, for example OPENAI_API_KEY"
+          },
+          "apiKey": {
+            "label": "API Key",
+            "desc": "Prefer global or user config only; project config should use env references"
+          },
+          "model": {
+            "label": "Model",
+            "desc": "Speech-to-text model id"
+          },
+          "responseFormat": {
+            "label": "Response Format",
+            "desc": "response_format for OpenAI-compatible APIs"
+          },
+          "requestUrl": {
+            "label": "Request URL",
+            "desc": "Custom HTTP speech-to-text endpoint"
+          },
+          "requestMethod": {
+            "label": "Request Method",
+            "desc": "Custom HTTP method"
+          },
+          "requestHeaders": {
+            "label": "Headers",
+            "desc": "Supports ${env:NAME} environment variable references"
+          },
+          "bodyKind": {
+            "label": "Body Type",
+            "desc": "Choose JSON, multipart upload, or raw binary"
+          },
+          "fileField": {
+            "label": "File Field",
+            "desc": "Multipart field name for the audio file"
+          },
+          "audioBase64Field": {
+            "label": "Base64 Field",
+            "desc": "JSON field name for base64 audio"
+          },
+          "bodyFields": {
+            "label": "Request Fields",
+            "desc": "Extra fields. Supports {{language}}, {{prompt}}, {{mimeType}}, and {{filename}}"
+          },
+          "textPath": {
+            "label": "Text Path",
+            "desc": "Dot path to transcript text in JSON response, for example data.text"
+          },
+          "languagePath": {
+            "label": "Language Path",
+            "desc": "Dot path to language in JSON response"
+          },
+          "segmentsPath": {
+            "label": "Segments Path",
+            "desc": "Dot path to transcript segments array in JSON response"
+          },
+          "wordsPath": {
+            "label": "Words Path",
+            "desc": "Dot path to word timestamp array in JSON response"
+          }
+        }
+      },
       "shortcuts": {
         "newSession": {
           "label": "New Session",
@@ -3423,6 +3563,30 @@
       },
       "recommendedModels": {
         "modelSelector": "Model Metadata"
+      },
+      "voice": {
+        "provider": {
+          "openaiTranscriptions": "OpenAI-compatible transcription",
+          "customHttp": "Custom HTTP"
+        },
+        "bodyKind": {
+          "json": "JSON Base64",
+          "multipart": "Multipart File",
+          "binary": "Raw Binary"
+        },
+        "responseFormat": {
+          "json": "JSON",
+          "verboseJson": "Verbose JSON",
+          "text": "Plain Text",
+          "srt": "SRT Subtitles",
+          "vtt": "VTT Subtitles"
+        }
+      }
+    },
+    "voice": {
+      "aiAssist": {
+        "label": "Create with AI",
+        "prompt": "I want to create a speech-to-text service configuration for One Works.\n\nPlease first ask me for the provider, endpoint URL, authentication method, model name, language, audio format limits, and response JSON structure.\nThen generate JSON that can be written to the One Works voice.speechToText configuration format.\n\nConstraints:\n- Do not write API keys in plain text in project config; prefer environment variable references.\n- Use lowercase kebab-case service ids.\n- For OpenAI-compatible APIs, use provider openai-transcriptions.\n- For custom HTTP APIs, use provider custom-http and include request/response mappings.\n- End with test steps and troubleshooting suggestions."
       }
     },
     "sectionGroups": {
@@ -3545,6 +3709,7 @@
       "channels": "Channels",
       "adapters": "Adapters",
       "plugins": "Plugins",
+      "voice": "Voice",
       "environments": "Environments",
       "mcp": "MCP",
       "shortcuts": "Shortcuts",

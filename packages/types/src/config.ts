@@ -2,6 +2,7 @@ import type { EffortLevel } from './common'
 import type { GitBranchKind } from './git'
 import type { PluginConfig } from './plugin'
 import type { SessionPermissionMode } from './session'
+import type { VoiceConfig } from './voice'
 
 export interface AdapterMap {}
 
@@ -540,6 +541,7 @@ export interface Config {
    */
   plugins?: PluginConfig
   marketplaces?: MarketplaceConfig
+  voice?: VoiceConfig
   experiments?: ExperimentsConfig
   diagnostics?: DiagnosticsConfig
 }
@@ -599,6 +601,7 @@ export interface ConfigSection {
   }
   shortcuts?: Config['shortcuts']
   auth?: Config['webAuth']
+  voice?: Config['voice']
   experiments?: Config['experiments']
   diagnostics?: Config['diagnostics']
 }

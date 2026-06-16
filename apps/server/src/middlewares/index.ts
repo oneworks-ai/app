@@ -10,6 +10,8 @@ import { authMiddleware } from './auth'
 import type { PublicAccessOptions } from './public-access'
 import { publicAccessMiddleware } from './public-access'
 
+export const JSON_BODY_LIMIT = '32mb'
+
 export interface InitMiddlewaresOptions {
   publicPaths?: PublicAccessOptions['publicPaths']
 }
@@ -44,6 +46,8 @@ export async function initMiddlewares(
     publicPaths: options.publicPaths
   }))
   app.use(apiEnvelopeMiddleware())
-  app.use(bodyParser())
+  app.use(bodyParser({
+    jsonLimit: JSON_BODY_LIMIT
+  }))
   app.use(authMiddleware(env))
 }

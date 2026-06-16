@@ -61,6 +61,7 @@ import { resolveSessionCompactionStatus } from '#~/hooks/chat/session-compaction
 import {
   hasPersistedSessionCreationTarget,
   pendingSessionCreationContextAtom,
+  pendingSessionInitialContentAtom,
   shouldUsePendingSessionCreationContext
 } from '#~/hooks/chat/session-creation-context'
 import type { ChatAdapterAccountOption } from '#~/hooks/chat/use-chat-adapter-account-selection'
@@ -275,7 +276,9 @@ export function ChatHistoryView({
   )
   const workspaceDraftDirtyRef = useRef(false)
   const pendingSessionCreationContext = useAtomValue(pendingSessionCreationContextAtom)
+  const pendingSessionInitialContent = useAtomValue(pendingSessionInitialContentAtom)
   const setPendingSessionCreationContext = useSetAtom(pendingSessionCreationContextAtom)
+  const setPendingSessionInitialContent = useSetAtom(pendingSessionInitialContentAtom)
   const [sessionTargetDraft, setSessionTargetDraft] = useState<ChatSessionTargetDraft>(() => ({
     ...DEFAULT_CHAT_SESSION_TARGET_DRAFT
   }))
@@ -295,6 +298,15 @@ export function ChatHistoryView({
     if (!hasPersistedSession || pendingSessionCreationContext == null) return
     setPendingSessionCreationContext(undefined)
   }, [hasPersistedSession, pendingSessionCreationContext, setPendingSessionCreationContext])
+  useEffect(() => {
+    if (!shouldApplyPendingSessionCreationContext || pendingSessionInitialContent == null) return
+    setNewSessionInitialContent(pendingSessionInitialContent)
+    setPendingSessionInitialContent(undefined)
+  }, [
+    pendingSessionInitialContent,
+    setPendingSessionInitialContent,
+    shouldApplyPendingSessionCreationContext
+  ])
   const {
     creationProgress,
     isCreating,
@@ -1420,6 +1432,7 @@ export function ChatHistoryView({
             queueMode={isAgentRoomMode ? undefined : queueMode}
             onQueueModeChange={isAgentRoomMode ? undefined : setQueueMode}
             contextReferenceRequest={contextReferenceRequest}
+            enableVoiceInput
           />
           <ChatStatusBar
             draftWorkspace={workspaceDraft}

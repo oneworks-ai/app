@@ -495,12 +495,37 @@ export const SectionForm = ({
       const isWorkspaceFileOpener = sectionKey === 'general' &&
         field.path.join('.') === 'messageLinks.workspaceFileOpener'
       const isWorktreeEnvironment = sectionKey === 'conversation' && field.path.join('.') === 'worktreeEnvironment'
+      const isVoiceDefaultService = sectionKey === 'voice' &&
+        field.path.join('.') === 'speechToText.defaultServiceId'
+      const localVoiceServices = getValueByPath(currentValue, ['speechToText', 'services'])
+      const resolvedVoiceServices = getValueByPath(currentResolvedValue, ['speechToText', 'services'])
+      const localVoiceServiceRecord = isRecord(localVoiceServices) ? localVoiceServices : {}
+      const resolvedVoiceServiceRecord = isRecord(resolvedVoiceServices) ? resolvedVoiceServices : {}
+      const voiceServices = {
+        ...resolvedVoiceServiceRecord,
+        ...localVoiceServiceRecord
+      }
+      const voiceServiceOptions = Object.keys(voiceServices).length > 0
+        ? Object.entries(voiceServices).map(([key, service]) => {
+          const label = service != null && typeof service === 'object' && !Array.isArray(service) &&
+              typeof (service as Record<string, unknown>).label === 'string' &&
+              ((service as Record<string, unknown>).label as string).trim() !== ''
+            ? ((service as Record<string, unknown>).label as string).trim()
+            : key
+          return {
+            value: key,
+            label: <span>{label}</span>
+          }
+        })
+        : []
       const options: Array<{ value: string; label: ReactNode }> = isDefaultModelService
         ? modelServiceOptions
         : isDefaultModel
         ? modelOptions
         : isDefaultAdapter
         ? adapterOptions
+        : isVoiceDefaultService
+        ? voiceServiceOptions
         : isWorkspaceFileOpener
         ? workspaceFileOpenerOptions ?? []
         : isWorktreeEnvironment
@@ -526,6 +551,8 @@ export const SectionForm = ({
               ? 'config.editor.workspaceFileOpenerPlaceholder'
               : isWorktreeEnvironment
               ? 'config.editor.worktreeEnvironmentPlaceholder'
+              : field.placeholderKey != null
+              ? field.placeholderKey
               : 'config.editor.defaultModelPlaceholder'
           )}
         />

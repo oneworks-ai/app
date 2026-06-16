@@ -172,12 +172,25 @@ export const configGroupMeta: Record<string, Record<string, ConfigGroupMeta>> = 
       collapsible: true,
       defaultExpanded: true
     }
+  },
+  voice: {
+    speechToText: {
+      labelKey: 'config.fields.voice.speechToText.label',
+      collapsible: true,
+      defaultExpanded: true
+    },
+    services: {
+      labelKey: 'config.fields.voice.services.label',
+      collapsible: true,
+      defaultExpanded: true
+    }
   }
 }
 
 export const configGroupOrder: Record<string, string[]> = {
   general: ['base', 'models', 'links', 'permissions', 'env', 'items', 'advanced', 'default'],
-  conversation: ['defaults', 'presets', 'actions', 'default']
+  conversation: ['defaults', 'presets', 'actions', 'default'],
+  voice: ['speechToText', 'services', 'default']
 }
 
 const notificationEventDetailFields: FieldSpec[] = [
@@ -557,6 +570,237 @@ const pluginMarketplaceDetailFields: FieldSpec[] = [
     type: 'json',
     defaultValue: {},
     icon: 'store'
+  }
+]
+
+const speechToTextProviderOptions: FieldSpec['options'] = [
+  { value: 'openai-transcriptions', label: 'config.options.voice.provider.openaiTranscriptions' },
+  { value: 'custom-http', label: 'config.options.voice.provider.customHttp' }
+]
+
+const speechToTextBodyKindOptions: FieldSpec['options'] = [
+  { value: 'json', label: 'config.options.voice.bodyKind.json' },
+  { value: 'multipart', label: 'config.options.voice.bodyKind.multipart' },
+  { value: 'binary', label: 'config.options.voice.bodyKind.binary' }
+]
+
+const speechToTextResponseFormatOptions: FieldSpec['options'] = [
+  { value: 'json', label: 'config.options.voice.responseFormat.json' },
+  { value: 'verbose_json', label: 'config.options.voice.responseFormat.verboseJson' },
+  { value: 'text', label: 'config.options.voice.responseFormat.text' },
+  { value: 'srt', label: 'config.options.voice.responseFormat.srt' },
+  { value: 'vtt', label: 'config.options.voice.responseFormat.vtt' }
+]
+
+const speechToTextServiceDetailFields: FieldSpec[] = [
+  {
+    path: ['label'],
+    type: 'string',
+    defaultValue: '',
+    icon: 'title',
+    labelKey: 'config.fields.voice.serviceItem.label.label',
+    descriptionKey: 'config.fields.voice.serviceItem.label.desc'
+  },
+  {
+    path: ['description'],
+    type: 'multiline',
+    defaultValue: '',
+    icon: 'notes',
+    labelKey: 'config.fields.voice.serviceItem.description.label',
+    descriptionKey: 'config.fields.voice.serviceItem.description.desc'
+  },
+  {
+    path: ['provider'],
+    type: 'select',
+    defaultValue: 'custom-http',
+    icon: 'category',
+    options: speechToTextProviderOptions,
+    labelKey: 'config.fields.voice.serviceItem.provider.label',
+    descriptionKey: 'config.fields.voice.serviceItem.provider.desc'
+  },
+  {
+    path: ['enabled'],
+    type: 'boolean',
+    defaultValue: true,
+    icon: 'toggle_on',
+    labelKey: 'config.fields.voice.serviceItem.enabled.label',
+    descriptionKey: 'config.fields.voice.serviceItem.enabled.desc'
+  },
+  {
+    path: ['language'],
+    type: 'string',
+    defaultValue: 'auto',
+    icon: 'translate',
+    labelKey: 'config.fields.voice.serviceItem.language.label',
+    descriptionKey: 'config.fields.voice.serviceItem.language.desc'
+  },
+  {
+    path: ['prompt'],
+    type: 'multiline',
+    defaultValue: '',
+    icon: 'record_voice_over',
+    labelKey: 'config.fields.voice.serviceItem.prompt.label',
+    descriptionKey: 'config.fields.voice.serviceItem.prompt.desc'
+  },
+  {
+    path: ['timeoutMs'],
+    type: 'number',
+    defaultValue: 60000,
+    icon: 'timer',
+    labelKey: 'config.fields.voice.serviceItem.timeoutMs.label',
+    descriptionKey: 'config.fields.voice.serviceItem.timeoutMs.desc'
+  },
+  {
+    path: ['maxDurationSeconds'],
+    type: 'number',
+    defaultValue: 300,
+    icon: 'schedule',
+    labelKey: 'config.fields.voice.serviceItem.maxDurationSeconds.label',
+    descriptionKey: 'config.fields.voice.serviceItem.maxDurationSeconds.desc'
+  },
+  {
+    path: ['maxBytes'],
+    type: 'number',
+    defaultValue: undefined,
+    icon: 'data_usage',
+    labelKey: 'config.fields.voice.serviceItem.maxBytes.label',
+    descriptionKey: 'config.fields.voice.serviceItem.maxBytes.desc'
+  },
+  {
+    path: ['baseUrl'],
+    type: 'string',
+    defaultValue: 'https://api.openai.com/v1',
+    icon: 'link',
+    labelKey: 'config.fields.voice.serviceItem.baseUrl.label',
+    descriptionKey: 'config.fields.voice.serviceItem.baseUrl.desc'
+  },
+  {
+    path: ['apiKeyEnv'],
+    type: 'string',
+    defaultValue: '',
+    icon: 'terminal',
+    labelKey: 'config.fields.voice.serviceItem.apiKeyEnv.label',
+    descriptionKey: 'config.fields.voice.serviceItem.apiKeyEnv.desc'
+  },
+  {
+    path: ['apiKey'],
+    type: 'string',
+    defaultValue: '',
+    icon: 'key',
+    sensitive: true,
+    labelKey: 'config.fields.voice.serviceItem.apiKey.label',
+    descriptionKey: 'config.fields.voice.serviceItem.apiKey.desc'
+  },
+  {
+    path: ['model'],
+    type: 'string',
+    defaultValue: 'gpt-4o-mini-transcribe',
+    icon: 'model_training',
+    labelKey: 'config.fields.voice.serviceItem.model.label',
+    descriptionKey: 'config.fields.voice.serviceItem.model.desc'
+  },
+  {
+    path: ['responseFormat'],
+    type: 'select',
+    defaultValue: 'json',
+    icon: 'data_object',
+    options: speechToTextResponseFormatOptions,
+    labelKey: 'config.fields.voice.serviceItem.responseFormat.label',
+    descriptionKey: 'config.fields.voice.serviceItem.responseFormat.desc'
+  },
+  {
+    path: ['request', 'url'],
+    type: 'string',
+    defaultValue: '',
+    icon: 'link',
+    labelKey: 'config.fields.voice.serviceItem.requestUrl.label',
+    descriptionKey: 'config.fields.voice.serviceItem.requestUrl.desc'
+  },
+  {
+    path: ['request', 'method'],
+    type: 'select',
+    defaultValue: 'POST',
+    icon: 'http',
+    options: [
+      { value: 'POST', label: 'POST' },
+      { value: 'PUT', label: 'PUT' }
+    ],
+    labelKey: 'config.fields.voice.serviceItem.requestMethod.label',
+    descriptionKey: 'config.fields.voice.serviceItem.requestMethod.desc'
+  },
+  {
+    path: ['request', 'headers'],
+    type: 'record',
+    recordKind: 'keyValue',
+    defaultValue: {},
+    icon: 'fact_check',
+    labelKey: 'config.fields.voice.serviceItem.requestHeaders.label',
+    descriptionKey: 'config.fields.voice.serviceItem.requestHeaders.desc'
+  },
+  {
+    path: ['request', 'body', 'kind'],
+    type: 'select',
+    defaultValue: 'json',
+    icon: 'data_object',
+    options: speechToTextBodyKindOptions,
+    labelKey: 'config.fields.voice.serviceItem.bodyKind.label',
+    descriptionKey: 'config.fields.voice.serviceItem.bodyKind.desc'
+  },
+  {
+    path: ['request', 'body', 'fileField'],
+    type: 'string',
+    defaultValue: 'file',
+    icon: 'upload_file',
+    labelKey: 'config.fields.voice.serviceItem.fileField.label',
+    descriptionKey: 'config.fields.voice.serviceItem.fileField.desc'
+  },
+  {
+    path: ['request', 'body', 'audioBase64Field'],
+    type: 'string',
+    defaultValue: 'audioBase64',
+    icon: 'text_fields',
+    labelKey: 'config.fields.voice.serviceItem.audioBase64Field.label',
+    descriptionKey: 'config.fields.voice.serviceItem.audioBase64Field.desc'
+  },
+  {
+    path: ['request', 'body', 'fields'],
+    type: 'json',
+    defaultValue: {},
+    icon: 'tune',
+    labelKey: 'config.fields.voice.serviceItem.bodyFields.label',
+    descriptionKey: 'config.fields.voice.serviceItem.bodyFields.desc'
+  },
+  {
+    path: ['response', 'textPath'],
+    type: 'string',
+    defaultValue: 'text',
+    icon: 'short_text',
+    labelKey: 'config.fields.voice.serviceItem.textPath.label',
+    descriptionKey: 'config.fields.voice.serviceItem.textPath.desc'
+  },
+  {
+    path: ['response', 'languagePath'],
+    type: 'string',
+    defaultValue: '',
+    icon: 'translate',
+    labelKey: 'config.fields.voice.serviceItem.languagePath.label',
+    descriptionKey: 'config.fields.voice.serviceItem.languagePath.desc'
+  },
+  {
+    path: ['response', 'segmentsPath'],
+    type: 'string',
+    defaultValue: '',
+    icon: 'segment',
+    labelKey: 'config.fields.voice.serviceItem.segmentsPath.label',
+    descriptionKey: 'config.fields.voice.serviceItem.segmentsPath.desc'
+  },
+  {
+    path: ['response', 'wordsPath'],
+    type: 'string',
+    defaultValue: '',
+    icon: 'format_quote',
+    labelKey: 'config.fields.voice.serviceItem.wordsPath.label',
+    descriptionKey: 'config.fields.voice.serviceItem.wordsPath.desc'
   }
 ]
 
@@ -1083,6 +1327,79 @@ export const configSchema: Record<string, FieldSpec[]> = {
           return t(`config.options.mcp.${type}`, { defaultValue: type })
         },
         getBreadcrumbLabel: (_item, itemKey) => itemKey
+      }
+    }
+  ],
+  voice: [
+    {
+      path: ['speechToText', 'defaultServiceId'],
+      type: 'select',
+      defaultValue: '',
+      icon: 'record_voice_over',
+      group: 'speechToText',
+      placeholderKey: 'config.editor.defaultSpeechToTextServicePlaceholder',
+      labelKey: 'config.fields.voice.defaultServiceId.label',
+      descriptionKey: 'config.fields.voice.defaultServiceId.desc'
+    },
+    {
+      path: ['speechToText', 'services'],
+      type: 'detailCollection',
+      defaultValue: {},
+      icon: 'mic',
+      group: 'services',
+      labelKey: 'config.fields.voice.services.label',
+      descriptionKey: 'config.fields.voice.services.desc',
+      detailCollection: {
+        collectionKind: 'recordMap',
+        keyPlaceholderKey: 'config.editor.newSpeechToTextServiceName',
+        createItem: () => ({
+          label: '',
+          provider: 'custom-http',
+          enabled: true,
+          language: 'auto',
+          timeoutMs: 60000,
+          maxDurationSeconds: 300,
+          request: {
+            method: 'POST',
+            url: '',
+            headers: {},
+            body: {
+              kind: 'json',
+              audioBase64Field: 'audioBase64',
+              fields: {}
+            }
+          },
+          response: {
+            textPath: 'text'
+          }
+        }),
+        itemFields: speechToTextServiceDetailFields,
+        summaryControls: [{ kind: 'boolean', path: ['enabled'], checkedValue: true }],
+        getItemTitle: (item, itemKey) => {
+          const label = typeof item.label === 'string' ? item.label.trim() : ''
+          return label !== '' ? label : itemKey
+        },
+        getItemSubtitle: (item, itemKey, _itemIndex, { t }) => {
+          const provider = typeof item.provider === 'string' ? item.provider : ''
+          const translatedProvider = provider === ''
+            ? undefined
+            : t(
+              `config.options.voice.provider.${provider.replace(/-([a-z])/g, (_, char: string) => char.toUpperCase())}`,
+              {
+                defaultValue: provider
+              }
+            )
+          const label = typeof item.label === 'string' ? item.label.trim() : ''
+          return [label !== '' ? itemKey : undefined, translatedProvider].filter(Boolean).join(' · ') || undefined
+        },
+        getItemDescription: (item) => {
+          const description = typeof item.description === 'string' ? item.description.trim() : ''
+          return description !== '' ? description : undefined
+        },
+        getBreadcrumbLabel: (item, itemKey) => {
+          const label = typeof item.label === 'string' ? item.label.trim() : ''
+          return label !== '' ? label : itemKey
+        }
       }
     }
   ],
