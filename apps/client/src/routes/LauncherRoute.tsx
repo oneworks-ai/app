@@ -16,7 +16,8 @@ import {
   forgetLauncherWorkspace,
   getLauncherWorkspaceSelectorState,
   listLauncherDirectories,
-  openLauncherWorkspace
+  openLauncherWorkspace,
+  stopLauncherWorkspace
 } from '#~/api/launcher'
 import { LauncherAboutView } from '#~/components/launcher/LauncherAboutView'
 import { LauncherSettingsView } from '#~/components/launcher/LauncherSettingsView'
@@ -55,6 +56,7 @@ const CLONE_DESTINATION_RECENTS_STORAGE_KEY = 'oneworks_launcher_clone_destinati
 const cloneRepositoryMessageKey = 'launcher-clone-repository'
 
 type LauncherDirectoryBrowserMode = 'clone' | 'create-workspace' | 'open-workspace'
+type ServerLauncherAvailability = 'available' | 'checking' | 'unavailable'
 
 const getCloneRepositoryUrlCandidate = (value: string) => {
   const trimmedValue = value.trim()
@@ -472,6 +474,40 @@ const mergeProjects = (state: DesktopWorkspaceSelectorState) => {
   return Array.from(projectsByFolder.values())
 }
 
+const getRecentProjectFromRunningProject = (
+  project: DesktopWorkspaceSelectorProject
+): DesktopWorkspaceSelectorProject => {
+  const recentProject: DesktopWorkspaceSelectorProject = {
+    description: project.description,
+    name: project.name,
+    workspaceFolder: project.workspaceFolder
+  }
+  if (project.isCurrent != null) {
+    recentProject.isCurrent = project.isCurrent
+  }
+  if (project.sourceUrl != null) {
+    recentProject.sourceUrl = project.sourceUrl
+  }
+  if (project.workspaceId != null) {
+    recentProject.workspaceId = project.workspaceId
+  }
+  return recentProject
+}
+
+const getProjectStatusIcon = (status: DesktopWorkspaceSelectorProject['status']) => {
+  if (status === 'ready') return 'radio_button_checked'
+  if (status === 'starting') return 'progress_activity'
+  if (status === 'stopping') return 'stop_circle'
+  return 'history'
+}
+
+const getProjectStatusIconTone = (status: DesktopWorkspaceSelectorProject['status']) => {
+  if (status === 'ready') return 'project-running'
+  if (status === 'starting') return 'project-starting'
+  if (status === 'stopping') return 'project-stopping'
+  return 'project-recent'
+}
+
 export interface LauncherRouteProps {
   active?: boolean
   workspaceContext?: DesktopWorkspaceSelectorProject
@@ -534,7 +570,10 @@ export function LauncherRoute({
   const isSearchComposingRef = useRef(false)
   const isSearchInputComposing = useCallback(() => isSearchComposingRef.current, [])
   const desktopApi = window.oneworksDesktop
-  const canUseServerLauncher = desktopApi == null && isServerManagerRole()
+  const [serverLauncherAvailability, setServerLauncherAvailability] = useState<ServerLauncherAvailability>(() =>
+    desktopApi == null ? (isServerManagerRole() ? 'available' : 'checking') : 'unavailable'
+  )
+  const canUseServerLauncher = desktopApi == null && serverLauncherAvailability !== 'unavailable'
   const { updateGlobalInterfaceLanguage } = useInterfaceLanguageConfig()
   const { resolvedThemeMode } = useResolvedThemeMode()
   const launcherIconSrc = useLauncherIconSrc({ desktopApi, mode: resolvedThemeMode })
@@ -556,22 +595,19 @@ export function LauncherRoute({
       status: workspaceContext.status ?? 'ready'
     } satisfies DesktopWorkspaceSelectorProject
   }, [workspaceContext])
+  const mergedProjects = useMemo(() => mergeProjects(selectorState), [selectorState])
+  const currentProject = useMemo(
+    () => injectedWorkspaceContext ?? mergedProjects.find(project => project.isCurrent === true),
+    [injectedWorkspaceContext, mergedProjects]
+  )
   const projects = useMemo(() => {
-    const mergedProjects = mergeProjects(selectorState)
-    if (injectedWorkspaceContext == null) {
+    if (currentProject == null) {
       return mergedProjects
     }
 
-    const injectedWorkspaceKey = normalizeDirectoryPathKey(injectedWorkspaceContext.workspaceFolder)
-    return [
-      injectedWorkspaceContext,
-      ...mergedProjects.filter(project => normalizeDirectoryPathKey(project.workspaceFolder) !== injectedWorkspaceKey)
-    ]
-  }, [injectedWorkspaceContext, selectorState])
-  const currentProject = useMemo(
-    () => projects.find(project => project.isCurrent === true),
-    [projects]
-  )
+    const currentProjectKey = normalizeDirectoryPathKey(currentProject.workspaceFolder)
+    return mergedProjects.filter(project => normalizeDirectoryPathKey(project.workspaceFolder) !== currentProjectKey)
+  }, [currentProject, mergedProjects])
   const contextProject = useMemo(() => (
     currentProject?.workspaceFolder === dismissedProjectContextFolder ? undefined : currentProject
   ), [currentProject, dismissedProjectContextFolder])
@@ -610,15 +646,24 @@ export function LauncherRoute({
   useEffect(() => {
     let disposed = false
     const statePromise = desktopApi?.getWorkspaceSelectorState?.() ??
-      (canUseServerLauncher ? getLauncherWorkspaceSelectorState() : undefined)
+      (desktopApi == null ? getLauncherWorkspaceSelectorState() : undefined)
+    if (desktopApi == null && statePromise != null) {
+      setServerLauncherAvailability(current => current === 'available' ? current : 'checking')
+    }
     if (statePromise != null) {
       void statePromise.then((state) => {
         if (!disposed) {
+          if (desktopApi == null) {
+            setServerLauncherAvailability('available')
+          }
           setSelectorState(normalizeWorkspaceSelectorState(state))
           setDismissedProjectContextFolder(undefined)
         }
       })
         .catch((error) => {
+          if (desktopApi == null && !disposed) {
+            setServerLauncherAvailability('unavailable')
+          }
           console.error('[launcher] failed to load workspace selector state', error)
         })
     }
@@ -631,7 +676,7 @@ export function LauncherRoute({
       disposed = true
       dispose?.()
     }
-  }, [canUseServerLauncher, desktopApi])
+  }, [desktopApi])
 
   useEffect(() => {
     if (
@@ -850,6 +895,60 @@ export function LauncherRoute({
     }
   }, [canUseServerLauncher, desktopApi, message, showDesktopActionUnavailable, t])
 
+  const stopWorkspace = useCallback(async (
+    project: DesktopWorkspaceSelectorProject,
+    input: {
+      forget?: boolean
+    } = {}
+  ) => {
+    const stopWorkspaceApi = desktopApi?.stopWorkspace
+    const removed = input.forget === true
+
+    try {
+      if (stopWorkspaceApi != null) {
+        await stopWorkspaceApi(project.workspaceFolder, { forget: removed })
+      } else if (canUseServerLauncher) {
+        await stopLauncherWorkspace(project.workspaceFolder, { forget: removed })
+      } else {
+        showDesktopActionUnavailable()
+        return
+      }
+
+      const stoppedWorkspaceKey = normalizeDirectoryPathKey(project.workspaceFolder)
+      setSelectorState((prev) => {
+        const nextRecentProjects = prev.recentProjects.filter(candidate =>
+          normalizeDirectoryPathKey(candidate.workspaceFolder) !== stoppedWorkspaceKey
+        )
+        return {
+          ...prev,
+          runningProjects: prev.runningProjects.filter(candidate =>
+            normalizeDirectoryPathKey(candidate.workspaceFolder) !== stoppedWorkspaceKey
+          ),
+          recentProjects: removed
+            ? nextRecentProjects
+            : [
+              getRecentProjectFromRunningProject(project),
+              ...nextRecentProjects
+            ]
+        }
+      })
+      void message.success(t(
+        removed
+          ? 'launcher.projects.stopAndRemoveSuccess'
+          : 'launcher.projects.stopServiceSuccess'
+      ))
+    } catch (error) {
+      console.error('[launcher] failed to stop workspace service', error)
+      void message.error(getApiErrorMessage(error, t('launcher.projects.stopFailed')))
+    }
+  }, [
+    canUseServerLauncher,
+    desktopApi,
+    message,
+    showDesktopActionUnavailable,
+    t
+  ])
+
   const confirmForgetWorkspace = useCallback((project: DesktopWorkspaceSelectorProject) => {
     modal.confirm({
       cancelText: t('common.cancel'),
@@ -860,6 +959,36 @@ export function LauncherRoute({
       onOk: () => forgetWorkspace(project.workspaceFolder)
     })
   }, [forgetWorkspace, modal, t])
+
+  const confirmStopWorkspace = useCallback((
+    project: DesktopWorkspaceSelectorProject,
+    input: {
+      forget?: boolean
+    } = {}
+  ) => {
+    const removed = input.forget === true
+    modal.confirm({
+      cancelText: t('common.cancel'),
+      content: t(
+        removed
+          ? 'launcher.projects.stopAndRemoveConfirmDescription'
+          : 'launcher.projects.stopServiceConfirmDescription'
+      ),
+      okButtonProps: { danger: true },
+      okText: t(
+        removed
+          ? 'launcher.projects.stopAndRemoveConfirmOk'
+          : 'launcher.projects.stopServiceConfirmOk'
+      ),
+      title: t(
+        removed
+          ? 'launcher.projects.stopAndRemoveConfirmTitle'
+          : 'launcher.projects.stopServiceConfirmTitle',
+        { name: project.name }
+      ),
+      onOk: () => stopWorkspace(project, { forget: removed })
+    })
+  }, [modal, stopWorkspace, t])
 
   const enterCloneRepositoryMode = useCallback(() => {
     if (!canCloneRepository || desktopApi?.cloneRepository == null) {
@@ -1464,7 +1593,7 @@ export function LauncherRoute({
   }, [fileOpenerOptions, openCurrentWorkspaceFileInExternalOpener, t])
 
   const buildProjectContextMenuItems = useCallback((project: DesktopWorkspaceSelectorProject): MenuProps['items'] => {
-    const canRemoveProject = project.status == null
+    const isRunningProject = project.status != null
     const items: NonNullable<MenuProps['items']> = [
       {
         icon: <span className='material-symbols-rounded launcher-command-menu__icon'>keyboard_return</span>,
@@ -1507,24 +1636,38 @@ export function LauncherRoute({
       }
     ]
 
-    if (canRemoveProject) {
+    items.push({ type: 'divider' })
+    if (isRunningProject) {
       items.push(
         {
-          type: 'divider'
+          danger: true,
+          icon: <span className='material-symbols-rounded launcher-command-menu__icon'>stop_circle</span>,
+          key: 'stop-project-service',
+          label: t('launcher.projects.stopService'),
+          onClick: () => confirmStopWorkspace(project)
         },
         {
           danger: true,
-          icon: <span className='material-symbols-rounded launcher-command-menu__icon'>close</span>,
-          key: 'remove-project',
-          label: t('launcher.projects.remove'),
-          onClick: () => confirmForgetWorkspace(project)
+          icon: <span className='material-symbols-rounded launcher-command-menu__icon'>delete</span>,
+          key: 'stop-and-remove-project',
+          label: t('launcher.projects.stopAndRemove'),
+          onClick: () => confirmStopWorkspace(project, { forget: true })
         }
       )
+    } else {
+      items.push({
+        danger: true,
+        icon: <span className='material-symbols-rounded launcher-command-menu__icon'>close</span>,
+        key: 'remove-project',
+        label: t('launcher.projects.remove'),
+        onClick: () => confirmForgetWorkspace(project)
+      })
     }
 
     return items
   }, [
     confirmForgetWorkspace,
+    confirmStopWorkspace,
     filesystemManagerName,
     message,
     openWorkspace,
@@ -2023,7 +2166,8 @@ export function LauncherRoute({
         commands: projects.map(project => ({
           action: () => void openWorkspace(project.workspaceFolder, project.name),
           contextMenuItems: buildProjectContextMenuItems(project),
-          icon: project.status === 'ready' ? 'radio_button_checked' : 'history',
+          icon: getProjectStatusIcon(project.status),
+          iconTone: getProjectStatusIconTone(project.status),
           id: `project:${encodeURIComponent(project.workspaceFolder)}`,
           keywords: [project.name, project.description, project.workspaceFolder],
           removeAction: project.status == null ? () => confirmForgetWorkspace(project) : undefined,

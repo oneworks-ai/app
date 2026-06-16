@@ -360,6 +360,36 @@ export const createDesktopApp = () => {
     stopWorkspaceService: serviceManager.stopWorkspaceService
   })
 
+  const stopWorkspaceFolder = async (
+    workspaceFolder: string,
+    input: {
+      forget?: boolean
+    } = {}
+  ) => {
+    const workspaceFolderCandidate = workspaceFolder.trim()
+    const normalizedWorkspaceFolder = resolveProjectWorkspaceFolder(workspaceFolderCandidate) ??
+      workspaceFolderCandidate
+    const service = runtimeState.services.get(normalizedWorkspaceFolder)
+    const stopped = service != null
+    if (service != null) {
+      await serviceManager.stopWorkspaceService(service)
+    }
+
+    const removed = input.forget === true
+    if (removed) {
+      forgetWorkspaceFolder(normalizedWorkspaceFolder)
+    } else if (stopped) {
+      rememberWorkspaceFolder(normalizedWorkspaceFolder)
+    }
+
+    return {
+      ok: true,
+      removed,
+      stopped,
+      workspaceFolder: normalizedWorkspaceFolder
+    }
+  }
+
   menuManager = createAppMenuManager({
     checkForUpdates: autoUpdateManager.checkForUpdates,
     createLauncherWindow: windowManager.createLauncherWindow,
@@ -478,6 +508,7 @@ export const createDesktopApp = () => {
       searchCurrentWorkspacePlugins: windowManager.searchCurrentWorkspacePlugins,
       searchCurrentWorkspaceResources: windowManager.searchCurrentWorkspaceResources,
       setThemeSource: setDesktopThemeSource,
+      stopWorkspaceFolder,
       updateDesktopSettings,
       updateGlobalAppearanceConfig,
       updateGlobalInterfaceLanguageConfig
