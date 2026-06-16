@@ -11,7 +11,10 @@ import { AdminActionButton } from '../../shared/ui/AdminActionButton'
 import { AdminColumnFilter } from '../../shared/ui/AdminColumnFilter'
 import { AdminListTable } from '../../shared/ui/AdminListTable'
 import type { AdminListColumnOption } from '../../shared/ui/AdminListTable'
+import { StatusBadge } from '../../shared/ui/StatusBadge'
 import { UserPasswordModal } from './UserPasswordModal'
+import type { UserTableTeamFilter } from './userTableModel'
+import { createUserTeamFilterOptions, filterRelayAdminUsers } from './userTableModel'
 
 export interface UserTableProps {
   currentUser?: RelayAdminCurrentUser
@@ -50,9 +53,11 @@ export const UserTable = ({
   const [selectedUserKeys, setSelectedUserKeys] = useState<Key[]>([])
   const [sourceFilter, setSourceFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'disabled'>('all')
+  const [teamFilter, setTeamFilter] = useState<UserTableTeamFilter>('all')
   const [visibleColumnKeys, setVisibleColumnKeys] = useState([
     'identity',
     'role',
+    'teams',
     'devices',
     'provider'
   ])
@@ -60,29 +65,16 @@ export const UserTable = ({
     () => Array.from(new Set(users.map(user => user.provider ?? 'local'))).sort(),
     [users]
   )
+  const teamOptions = useMemo(() => createUserTeamFilterOptions(users), [users])
   const filteredUsers = useMemo(() => {
-    const normalizedSearch = searchValue.trim().toLowerCase()
-    return users.filter(user => {
-      const source = user.provider ?? 'local'
-      const status = user.disabled ? 'disabled' : 'active'
-      const searchableValues = [
-        user.email,
-        user.id,
-        user.name,
-        `${user.deviceCount}`,
-        user.maxDevices == null ? 'unlimited' : `${user.maxDevices}`,
-        user.role,
-        source,
-        status
-      ]
-      return (
-        (normalizedSearch === '' || searchableValues.some(value => value.toLowerCase().includes(normalizedSearch))) &&
-        (roleFilter === 'all' || user.role === roleFilter) &&
-        (sourceFilter === 'all' || source === sourceFilter) &&
-        (statusFilter === 'all' || status === statusFilter)
-      )
+    return filterRelayAdminUsers(users, {
+      roleFilter,
+      searchValue,
+      sourceFilter,
+      statusFilter,
+      teamFilter
     })
-  }, [roleFilter, searchValue, sourceFilter, statusFilter, users])
+  }, [roleFilter, searchValue, sourceFilter, statusFilter, teamFilter, users])
   const filteredUserIds = useMemo(() => new Set(filteredUsers.map(user => user.id)), [filteredUsers])
   const selectedUsers = useMemo(
     () => users.filter(user => selectedUserKeys.includes(user.id)),
@@ -98,6 +90,7 @@ export const UserTable = ({
     { key: 'identity', label: '用户', required: true },
     { key: 'id', label: '用户 ID' },
     { key: 'role', label: '权限' },
+    { key: 'teams', label: '团队' },
     { key: 'devices', label: '设备' },
     { key: 'provider', label: '来源' }
   ]
@@ -188,6 +181,34 @@ export const UserTable = ({
         />
       ),
       width: 106
+    },
+    {
+      key: 'teams',
+      render: (_, user) => (
+        <span className='relay-user-panel__teams'>
+          {user.teams.length === 0
+            ? <span className='relay-user-panel__secondary'>-</span>
+            : user.teams.map(team => (
+              <StatusBadge key={team.id} tone={team.configEnabled ? 'success' : 'warning'}>
+                {team.name}
+              </StatusBadge>
+            ))}
+        </span>
+      ),
+      title: (
+        <AdminColumnFilter<UserTableTeamFilter>
+          allValue='all'
+          ariaLabel='按团队过滤用户'
+          label='团队'
+          options={[
+            { label: '全部团队', value: 'all' },
+            ...teamOptions
+          ]}
+          value={teamFilter}
+          onChange={setTeamFilter}
+        />
+      ),
+      width: 190
     },
     {
       dataIndex: 'deviceCount',
@@ -298,7 +319,7 @@ export const UserTable = ({
         dataSource={filteredUsers}
         emptyText='暂无用户'
         rowKey='id'
-        searchPlaceholder='搜索邮箱、名称、来源'
+        searchPlaceholder='搜索邮箱、名称、来源、团队'
         searchValue={searchValue}
         selectedRowKeys={selectedUserKeys}
         visibleColumnKeys={visibleColumnKeys}

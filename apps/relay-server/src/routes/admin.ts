@@ -32,6 +32,22 @@ const readMaxDevicesPatch = (value: unknown) => {
 const userDeviceCount = (store: RelayStore, user: RelayUser) =>
   store.devices.filter(device => device.userId === user.id).length
 
+const userTeamSummaries = (store: RelayStore, user: RelayUser) =>
+  store.teamMembers
+    .filter(member => member.userId === user.id)
+    .map(member => {
+      const team = store.teams.find(item => item.id === member.teamId)
+      return {
+        id: member.teamId,
+        archivedAt: team?.archivedAt ?? null,
+        configEnabled: member.configEnabled !== false,
+        defaultForPublishing: member.defaultForPublishing === true,
+        name: team?.name ?? member.teamId,
+        role: member.role,
+        slug: team?.slug ?? member.teamId
+      }
+    })
+
 const redactUser = (user: RelayUser, store: RelayStore) => ({
   id: user.id,
   email: user.email,
@@ -44,6 +60,7 @@ const redactUser = (user: RelayUser, store: RelayStore) => ({
   passwordEnabled: user.passwordHash != null,
   provider: user.provider ?? null,
   role: user.role,
+  teams: userTeamSummaries(store, user),
   createdAt: user.createdAt,
   updatedAt: user.updatedAt ?? null
 })
