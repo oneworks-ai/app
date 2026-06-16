@@ -7,7 +7,6 @@ import { AdminActionButton } from '../../shared/ui/AdminActionButton'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 import { TeamConfigAssignmentForm } from './TeamConfigAssignmentForm'
 import { TeamProfileCreateForm, TeamProfileVersionForm } from './TeamConfigProfileForms'
-import { TeamConfigSecrets } from './TeamConfigSecrets'
 import type {
   CreateConfigProfileAssignmentInput,
   CreateConfigProfileInput,
@@ -291,7 +290,7 @@ export const TeamConfigProfiles = ({ disabled, team, token }: TeamConfigProfiles
   return (
     <div className='relay-team-panel__profiles'>
       <div className='relay-team-panel__section-header'>
-        <h3>{team.name}</h3>
+        <h3>配置 Profiles</h3>
         <Space size={4}>
           <AdminActionButton
             disabled={disabled}
@@ -343,7 +342,6 @@ export const TeamConfigProfiles = ({ disabled, team, token }: TeamConfigProfiles
           />
         </div>
       )}
-      <TeamConfigSecrets disabled={disabled} team={team} token={token} />
 
       <Drawer
         destroyOnHidden

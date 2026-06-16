@@ -1,10 +1,11 @@
 import './TeamPanel.css'
 
-import { Drawer } from 'antd'
+import { Drawer, Empty, Tabs } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 
 import { DataPanel } from '../../shared/ui/DataPanel'
 import { TeamConfigProfiles } from './TeamConfigProfiles'
+import { TeamConfigSecrets } from './TeamConfigSecrets'
 import { TeamCreateForm } from './TeamCreateForm'
 import { TeamMembers } from './TeamMembers'
 import { TeamPolicyForm } from './TeamPolicyForm'
@@ -83,16 +84,54 @@ export const TeamPanel = ({
             </section>
           </div>
           <section className='relay-team-panel__section relay-team-panel__right'>
-            <TeamMembers
-              disabled={disabled || policy?.teamsEnabled === false}
-              team={selectedTeam}
-              token={token}
-            />
-            <TeamConfigProfiles
-              disabled={disabled || policy?.teamsEnabled === false}
-              team={selectedTeam}
-              token={token}
-            />
+            <div className='relay-team-panel__detail-header'>
+              <div>
+                <h3>{selectedTeam?.name ?? '团队详情'}</h3>
+                <p>{selectedTeam?.slug ?? '选择一个团队查看成员、配置和 Secrets'}</p>
+              </div>
+            </div>
+            {selectedTeam == null
+              ? <Empty description='请选择团队' />
+              : (
+                <Tabs
+                  className='relay-team-panel__tabs'
+                  items={[
+                    {
+                      children: (
+                        <TeamMembers
+                          disabled={disabled || policy?.teamsEnabled === false}
+                          team={selectedTeam}
+                          token={token}
+                        />
+                      ),
+                      key: 'members',
+                      label: '成员'
+                    },
+                    {
+                      children: (
+                        <TeamConfigProfiles
+                          disabled={disabled || policy?.teamsEnabled === false}
+                          team={selectedTeam}
+                          token={token}
+                        />
+                      ),
+                      key: 'profiles',
+                      label: '配置 Profiles'
+                    },
+                    {
+                      children: (
+                        <TeamConfigSecrets
+                          disabled={disabled || policy?.teamsEnabled === false}
+                          team={selectedTeam}
+                          token={token}
+                        />
+                      ),
+                      key: 'secrets',
+                      label: 'Secrets'
+                    }
+                  ]}
+                />
+              )}
           </section>
         </div>
       </div>
