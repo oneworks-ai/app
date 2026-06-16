@@ -100,11 +100,15 @@ export const useAdminRouteHeaderBreadcrumb = (
 
     if (teamDetailSettingsId != null) {
       return {
+        ancestors: [{
+          title: teamDetailSettingsTitle,
+          onSelect: () => void navigate(`/teams/${encodeURIComponent(teamDetailSettingsId)}/members`)
+        }],
         ariaLabel: '团队导航',
         backIcon: createElement(AdminIcon, { className: breadcrumbIconClassName, name: 'chevron_left' }),
         backLabel: '返回团队详情',
         currentTitle: '团队设置',
-        parentTitle: teamDetailSettingsTitle,
+        parentTitle: '团队',
         separatorIcon: createElement(AdminIcon, { className: breadcrumbIconClassName, name: 'chevron_right' }),
         onBack: () => void navigate(`/teams/${encodeURIComponent(teamDetailSettingsId)}/members`)
       }
