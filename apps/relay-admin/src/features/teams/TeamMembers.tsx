@@ -321,14 +321,14 @@ export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
       <div className='relay-team-panel__tab-actions'>
         <Space size={4}>
           <AdminActionButton
+            aria-label='添加成员'
             disabled={disabled}
             iconName='add'
             onClick={() => setDrawerOpen(true)}
             size='small'
+            title='添加成员'
             type='primary'
-          >
-            成员
-          </AdminActionButton>
+          />
           <AdminActionButton
             aria-label='刷新成员'
             disabled={disabled || loading}

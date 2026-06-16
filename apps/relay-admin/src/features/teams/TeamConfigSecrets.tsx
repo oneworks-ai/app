@@ -169,14 +169,14 @@ export const TeamConfigSecrets = ({ disabled, team, token }: TeamConfigSecretsPr
       <div className='relay-team-panel__tab-actions'>
         <Space size={4}>
           <AdminActionButton
+            aria-label='创建 Secret'
             disabled={disabled}
             iconName='add'
             onClick={() => setCreateDrawerOpen(true)}
             size='small'
+            title='创建 Secret'
             type='primary'
-          >
-            Secret
-          </AdminActionButton>
+          />
           <AdminActionButton
             disabled={disabled || loading}
             iconName='refresh'

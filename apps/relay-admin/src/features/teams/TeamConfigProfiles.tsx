@@ -292,14 +292,14 @@ export const TeamConfigProfiles = ({ disabled, team, token }: TeamConfigProfiles
       <div className='relay-team-panel__tab-actions'>
         <Space size={4}>
           <AdminActionButton
+            aria-label='创建 Profile'
             disabled={disabled}
             iconName='add'
             onClick={() => setCreateDrawerOpen(true)}
             size='small'
+            title='创建 Profile'
             type='primary'
-          >
-            Profile
-          </AdminActionButton>
+          />
           <AdminActionButton
             disabled={disabled || loading}
             iconName='refresh'
