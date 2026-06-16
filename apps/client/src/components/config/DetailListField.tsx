@@ -4,10 +4,12 @@ import './record-editors/RecordEditors.scss'
 import { Button, Input, Switch, Tooltip } from 'antd'
 import { useMemo, useState } from 'react'
 
-import { getAdapterDisplay } from '#~/resources/adapters'
 import type { ConfigUiSection } from '@oneworks/types'
 
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
+import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
+import { getAdapterDisplay, resolveAdapterDisplayIcon } from '#~/resources/adapters'
+
 import { DetailCollectionFieldActions } from './DetailCollectionFieldActions'
 import type { ConfigDetailRoute } from './configDetail'
 import { toDetailCollectionEntries } from './configDetail'
@@ -88,12 +90,13 @@ export const DetailCollectionField = ({
   uiSection?: ConfigUiSection
   t: TranslationFn
 }) => {
-  const detailCollection = field.detailCollection
-  if (detailCollection == null) return null
+  const { resolvedThemeMode } = useResolvedThemeMode()
   const [newRecordKey, setNewRecordKey] = useState('')
   const [newRecordKind, setNewRecordKind] = useState(
     uiSection?.kind === 'recordMap' ? (uiSection.recordMap.entryKinds?.[0]?.key ?? '') : ''
   )
+  const detailCollection = field.detailCollection
+  if (detailCollection == null) return null
 
   const items = toDetailCollectionEntries({
     field,
@@ -261,6 +264,9 @@ export const DetailCollectionField = ({
         const subtitle = detailCollection.getItemSubtitle?.(item, key, index, detailContext)
         const description = detailCollection.getItemDescription?.(item, key, index, detailContext)
         const adapterDisplay = sectionKey === 'adapters' ? getAdapterDisplay(key) : undefined
+        const adapterDisplayIcon = adapterDisplay == null
+          ? undefined
+          : resolveAdapterDisplayIcon(adapterDisplay, resolvedThemeMode)
         const displayTitle = sectionKey === 'adapters' ? resolveAdapterListTitle(key) : title
         const displaySubtitle = sectionKey === 'adapters'
           ? resolveAdapterListSubtitle({ item, fallbackSubtitle: subtitle, t })
@@ -273,15 +279,15 @@ export const DetailCollectionField = ({
             <div className='config-view__detail-list-row'>
               <button type='button' className='config-view__detail-list-main' onClick={() => openDetail(key)}>
                 <div
-                  className={`config-view__record-heading${adapterDisplay?.icon != null ? ' has-adapter-icon' : ''}`}
+                  className={`config-view__record-heading${adapterDisplayIcon != null ? ' has-adapter-icon' : ''}`}
                 >
                   {adapterDisplay != null && (
                     <div className='config-view__adapter-icon-wrap' aria-hidden='true'>
-                      {adapterDisplay.icon != null
+                      {adapterDisplayIcon != null
                         ? (
                           <img
                             className='config-view__adapter-icon'
-                            src={adapterDisplay.icon}
+                            src={adapterDisplayIcon}
                             alt=''
                           />
                         )

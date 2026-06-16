@@ -2,13 +2,16 @@ import { createElement, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import useSWR from 'swr'
 
-import { getConfig } from '#~/api.js'
-import { getAdapterDisplay } from '#~/resources/adapters.js'
 import type { ConfigResponse } from '@oneworks/types'
+
+import { getConfig } from '#~/api.js'
+import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
+import { getAdapterDisplay, resolveAdapterDisplayIcon } from '#~/resources/adapters.js'
 
 const ADAPTER_STORAGE_KEY = 'oneworks_chat_adapter'
 
 export function useChatAdapter() {
+  const { resolvedThemeMode } = useResolvedThemeMode()
   const [selectedAdapter, setSelectedAdapter] = useState<string | undefined>(() => {
     try {
       const raw = localStorage.getItem(ADAPTER_STORAGE_KEY)
@@ -46,14 +49,15 @@ export function useChatAdapter() {
     const keys = Object.keys(mergedAdapters)
     return keys.map((key) => {
       const display = getAdapterDisplay(key)
+      const displayIcon = resolveAdapterDisplayIcon(display, resolvedThemeMode)
       return {
         value: key,
         label: createElement('span', { className: 'adapter-option' }, [
-          display.icon != null
+          displayIcon != null
             ? createElement('img', {
               key: 'icon',
               className: 'adapter-option__icon',
-              src: display.icon,
+              src: displayIcon,
               alt: '',
               'aria-hidden': true
             })
@@ -66,7 +70,7 @@ export function useChatAdapter() {
         ])
       }
     })
-  }, [mergedAdapters])
+  }, [mergedAdapters, resolvedThemeMode])
 
   // Auto-select: use stored value if valid, else config default, else first available
   useEffect(() => {

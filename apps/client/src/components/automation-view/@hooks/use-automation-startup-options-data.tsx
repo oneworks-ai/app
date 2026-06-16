@@ -34,7 +34,8 @@ import type {
   ModelSelectMenuGroup,
   ModelSelectOption
 } from '#~/hooks/chat/use-chat-model-adapter-selection'
-import { getAdapterDisplay } from '#~/resources/adapters.js'
+import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
+import { getAdapterDisplay, resolveAdapterDisplayIcon } from '#~/resources/adapters.js'
 import { decorateAutomationSenderModelOption, mapAutomationSenderModelMenuGroups } from '../@utils/sender-model-options'
 
 interface AutomationSenderAdapterOption extends ChatAdapterSelectOption {}
@@ -57,6 +58,7 @@ export function useAutomationStartupOptionsData({
   selectedModel?: string
 }) {
   const { t } = useTranslation()
+  const { resolvedThemeMode } = useResolvedThemeMode()
   const { data: configRes } = useSWR<ConfigResponse>('/api/config', getConfig)
 
   const mergedAdapters = useMemo(() => {
@@ -228,12 +230,13 @@ export function useAutomationStartupOptionsData({
   const adapterOptions = useMemo<AutomationSenderAdapterOption[]>(() => {
     return availableAdapters.map((key) => {
       const display = getAdapterDisplay(key)
+      const displayIcon = resolveAdapterDisplayIcon(display, resolvedThemeMode)
       const isBuiltin = isBuiltinNativeAdapter(key)
-      const iconNode = display.icon != null
+      const iconNode = displayIcon != null
         ? createElement('img', {
           key: 'icon',
           className: 'automation-view__sender-adapter-icon',
-          src: display.icon,
+          src: displayIcon,
           alt: '',
           'aria-hidden': true
         })
@@ -259,7 +262,7 @@ export function useAutomationStartupOptionsData({
         ])
       }
     })
-  }, [availableAdapters])
+  }, [availableAdapters, resolvedThemeMode])
 
   const modelSelectorData = useMemo(() => {
     return buildModelSelectorData({
