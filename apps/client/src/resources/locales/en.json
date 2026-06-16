@@ -765,6 +765,17 @@
       "removeConfirmOk": "Remove",
       "removeConfirmTitle": "Remove {{name}} from the launcher?",
       "removeFailed": "Failed to remove project",
+      "stopAndRemove": "Stop and remove",
+      "stopAndRemoveConfirmDescription": "This stops the local server process for the project and removes it from the recent list. The folder stays on disk.",
+      "stopAndRemoveConfirmOk": "Stop and remove",
+      "stopAndRemoveConfirmTitle": "Stop and remove {{name}} from the launcher?",
+      "stopAndRemoveSuccess": "Project service stopped and removed",
+      "stopFailed": "Failed to stop project service",
+      "stopService": "Stop service",
+      "stopServiceConfirmDescription": "This stops the local server process for the project. Project files are not deleted and the project can be opened again later.",
+      "stopServiceConfirmOk": "Stop",
+      "stopServiceConfirmTitle": "Stop the server process for {{name}}?",
+      "stopServiceSuccess": "Project service stopped",
       "title": "Projects"
     },
     "menu": {

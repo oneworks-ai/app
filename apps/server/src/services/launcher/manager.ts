@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- launcher manager keeps workspace discovery, recent projects, and service startup together. */
 
 import { Buffer } from 'node:buffer'
+import type { ChildProcess } from 'node:child_process'
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
@@ -16,7 +17,8 @@ import type {
   LauncherWorkspaceOpenResponse,
   LauncherWorkspaceSelectorProject,
   LauncherWorkspaceSelectorState,
-  LauncherWorkspaceServiceStatus
+  LauncherWorkspaceServiceStatus,
+  LauncherWorkspaceStopResponse
 } from '@oneworks/types'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
@@ -30,6 +32,7 @@ const MAX_RECENT_WORKSPACES = 20
 const WORKSPACE_SERVER_HOST = '127.0.0.1'
 const WORKSPACE_SERVER_READY_TIMEOUT_MS = 20_000
 const WORKSPACE_SERVER_READY_POLL_MS = 200
+const WORKSPACE_SERVER_STOP_TIMEOUT_MS = 5_000
 const invalidFileNameCharacters = new Set(['<', '>', ':', '"', '/', '\\', '|', '?', '*'])
 
 interface LauncherManagerState {
@@ -37,20 +40,64 @@ interface LauncherManagerState {
 }
 
 interface LauncherWorkspaceService {
-  process?: ReturnType<typeof spawn>
+  process?: ChildProcess
   serverBaseUrl?: string
   startPromise?: Promise<LauncherWorkspaceService>
   status: LauncherWorkspaceServiceStatus
+  stopPromise?: Promise<void>
+  stopRequested?: boolean
   workspaceFolder: string
 }
 
 const services = new Map<string, LauncherWorkspaceService>()
 let workspaceServiceCleanupRegistered = false
 
+const isChildProcessRunning = (child?: ChildProcess): child is ChildProcess => (
+  child != null && child.exitCode == null && child.signalCode == null
+)
+
+const killChildProcess = async (child?: ChildProcess) => {
+  if (!isChildProcessRunning(child)) return
+
+  await new Promise<void>((resolvePromise) => {
+    let settled = false
+    let forceKillTimer: ReturnType<typeof setTimeout> | undefined
+
+    const cleanup = () => {
+      if (settled) return
+      settled = true
+      if (forceKillTimer != null) {
+        clearTimeout(forceKillTimer)
+      }
+      child.off('exit', cleanup)
+      resolvePromise()
+    }
+
+    child.once('exit', cleanup)
+    forceKillTimer = setTimeout(() => {
+      if (isChildProcessRunning(child)) {
+        child.kill('SIGKILL')
+      }
+    }, WORKSPACE_SERVER_STOP_TIMEOUT_MS)
+
+    try {
+      if (!child.kill('SIGTERM')) {
+        cleanup()
+      }
+    } catch {
+      cleanup()
+    }
+
+    if (!isChildProcessRunning(child)) {
+      cleanup()
+    }
+  })
+}
+
 const stopWorkspaceServiceChildren = () => {
   for (const service of services.values()) {
     const child = service.process
-    if (child != null && child.exitCode == null && child.signalCode == null) {
+    if (isChildProcessRunning(child)) {
       child.kill('SIGTERM')
     }
   }
@@ -375,6 +422,9 @@ const startWorkspaceService = async (
   }
 ) => {
   const port = await getAvailablePort()
+  if (service.stopRequested === true) {
+    throw new Error('Workspace server startup was canceled.')
+  }
   service.serverBaseUrl = `http://${WORKSPACE_SERVER_HOST}:${port}`
   const { env, packageDir } = createWorkspaceServerEnv(service.workspaceFolder, {
     clientOrigin: input.clientOrigin,
@@ -412,6 +462,7 @@ const startWorkspaceService = async (
 
   await waitForServerReady(service)
   service.status = 'ready'
+  service.stopRequested = false
   await rememberRecentWorkspace(service.workspaceFolder)
   return service
 }
@@ -450,6 +501,36 @@ const ensureWorkspaceService = async (
       service.startPromise = undefined
     })
   return await service.startPromise
+}
+
+const stopLauncherWorkspaceService = async (service: LauncherWorkspaceService) => {
+  if (service.stopPromise != null) {
+    await service.stopPromise
+    return
+  }
+
+  service.status = 'stopping'
+  service.stopRequested = true
+  service.startPromise?.catch(() => undefined)
+  service.stopPromise = (async () => {
+    if (service.process == null && service.startPromise != null) {
+      await Promise.race([
+        service.startPromise.catch(() => undefined),
+        sleep(WORKSPACE_SERVER_READY_POLL_MS)
+      ])
+    }
+
+    await killChildProcess(service.process)
+    if (services.get(service.workspaceFolder) === service) {
+      services.delete(service.workspaceFolder)
+    }
+    service.status = 'stopped'
+  })()
+    .finally(() => {
+      service.stopPromise = undefined
+    })
+
+  await service.stopPromise
 }
 
 export const listLauncherWorkspaces = async (): Promise<LauncherWorkspaceSelectorState> => {
@@ -538,6 +619,38 @@ export const forgetLauncherWorkspace = async (rawWorkspaceFolder: unknown) => {
 
   await removeRecentWorkspace(workspaceFolder)
   return { ok: true, workspaceFolder }
+}
+
+export const stopLauncherWorkspace = async (
+  rawWorkspaceFolder: unknown,
+  input: {
+    forget?: boolean
+  } = {}
+): Promise<LauncherWorkspaceStopResponse> => {
+  const workspaceFolder = normalizePathForRemoval(rawWorkspaceFolder)
+  if (workspaceFolder == null) {
+    throw badRequest('A workspace folder is required.', { workspaceFolder: rawWorkspaceFolder })
+  }
+
+  const service = services.get(workspaceFolder)
+  const stopped = service != null
+  if (service != null) {
+    await stopLauncherWorkspaceService(service)
+  }
+
+  const removed = input.forget === true
+  if (removed) {
+    await removeRecentWorkspace(workspaceFolder)
+  } else if (stopped) {
+    await rememberRecentWorkspace(workspaceFolder)
+  }
+
+  return {
+    ok: true,
+    removed,
+    stopped,
+    workspaceFolder
+  }
 }
 
 const resolveDefaultDirectory = () => normalizeWorkspaceFolder(homedir()) ?? path.parse(homedir()).root

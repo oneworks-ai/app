@@ -37,46 +37,48 @@ export function NewSessionGuide({
   const hasStarterList = visibleStartupPresets.length > 0 || visibleBuiltinActions.length > 0
 
   return (
-    <div className='new-session-guide'>
-      {visibleAnnouncements.length > 0 && (
-        <div className='new-session-guide__announcements'>
-          <div className='new-session-guide__announcements-list'>
-            {visibleAnnouncements.map((item, index) => (
-              <div key={`${item}-${index}`} className='new-session-guide__announcements-item'>
-                <span className='material-symbols-rounded new-session-guide__announcements-icon'>
-                  {hasConfiguredAnnouncements ? 'campaign' : 'waving_hand'}
-                </span>
-                <div className='new-session-guide__announcements-copy'>
-                  <MarkdownContent content={item} />
+    <div className={['new-session-guide', hasStarterList ? 'has-starter-list' : ''].filter(Boolean).join(' ')}>
+      <div className='new-session-guide__content'>
+        {visibleAnnouncements.length > 0 && (
+          <div className='new-session-guide__announcements'>
+            <div className='new-session-guide__announcements-list'>
+              {visibleAnnouncements.map((item, index) => (
+                <div key={`${item}-${index}`} className='new-session-guide__announcements-item'>
+                  <span className='material-symbols-rounded new-session-guide__announcements-icon'>
+                    {hasConfiguredAnnouncements ? 'campaign' : 'waving_hand'}
+                  </span>
+                  <div className='new-session-guide__announcements-copy'>
+                    <MarkdownContent content={item} />
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            {hasConfiguredAnnouncements && (
+              <button
+                type='button'
+                className='new-session-guide__announcements-close'
+                onClick={() => setShowAnnouncements(false)}
+              >
+                <span className='material-symbols-rounded'>close</span>
+              </button>
+            )}
           </div>
-          {hasConfiguredAnnouncements && (
-            <button
-              type='button'
-              className='new-session-guide__announcements-close'
-              onClick={() => setShowAnnouncements(false)}
-            >
-              <span className='material-symbols-rounded'>close</span>
-            </button>
-          )}
+        )}
+        <div className='new-session-guide__composer'>
+          <ComposerStack>
+            {composer}
+          </ComposerStack>
         </div>
-      )}
-      <div className='new-session-guide__composer'>
-        <ComposerStack>
-          {composer}
-        </ComposerStack>
+        {hasStarterList && (
+          <div className='new-session-guide__main'>
+            <NewSessionGuideStarterList
+              startupPresets={visibleStartupPresets}
+              builtinActions={visibleBuiltinActions}
+              onApplyStarter={onApplyStarter}
+            />
+          </div>
+        )}
       </div>
-      {hasStarterList && (
-        <div className='new-session-guide__main'>
-          <NewSessionGuideStarterList
-            startupPresets={visibleStartupPresets}
-            builtinActions={visibleBuiltinActions}
-            onApplyStarter={onApplyStarter}
-          />
-        </div>
-      )}
     </div>
   )
 }

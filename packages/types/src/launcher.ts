@@ -22,6 +22,13 @@ export interface LauncherWorkspaceOpenResponse {
   workspaceFolder: string
 }
 
+export interface LauncherWorkspaceStopResponse {
+  ok: true
+  removed: boolean
+  stopped: boolean
+  workspaceFolder: string
+}
+
 export interface LauncherDirectoryEntry {
   name: string
   path: string

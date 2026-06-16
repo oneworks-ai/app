@@ -151,6 +151,7 @@ interface IpcHandlersInput {
   ) => Promise<LauncherWorkspaceResourceSearchResponse>
   searchCurrentWorkspacePlugins: (windowRecord: WindowRecord, query: string) => Promise<unknown>
   setThemeSource: (themeSource: unknown) => string
+  stopWorkspaceFolder: (workspaceFolder: string, input?: { forget?: boolean }) => Promise<unknown>
   updateDesktopSettings: (settings: Partial<DesktopSettings>, windowRecord?: WindowRecord) => Promise<DesktopSettings>
   updateGlobalAppearanceConfig: (
     appearance: Partial<Pick<DesktopSettings, 'primaryColor' | 'themeMode'>>
@@ -186,6 +187,7 @@ export const registerIpcHandlers = ({
   searchCurrentWorkspaceResources,
   searchCurrentWorkspacePlugins,
   setThemeSource,
+  stopWorkspaceFolder,
   updateDesktopSettings,
   updateGlobalAppearanceConfig,
   updateGlobalInterfaceLanguageConfig
@@ -280,6 +282,14 @@ export const registerIpcHandlers = ({
     if (typeof workspaceFolder !== 'string' || workspaceFolder.trim() === '') return
 
     forgetWorkspaceFolder(workspaceFolder)
+  })
+
+  ipcMain.handle('desktop:stop-workspace', async (_event, workspaceFolder: unknown, input: unknown) => {
+    if (typeof workspaceFolder !== 'string' || workspaceFolder.trim() === '') return undefined
+
+    return await stopWorkspaceFolder(workspaceFolder, {
+      forget: isRecord(input) && input.forget === true
+    })
   })
 
   const normalizeFileSearchOptions = (value: unknown) => ({

@@ -766,6 +766,17 @@
       "removeConfirmOk": "移除",
       "removeConfirmTitle": "从启动页移除 {{name}}？",
       "removeFailed": "移除项目失败",
+      "stopAndRemove": "终止并移除",
+      "stopAndRemoveConfirmDescription": "这会终止该项目的本地服务端进程，并从最近列表移除；不会删除磁盘上的文件夹。",
+      "stopAndRemoveConfirmOk": "终止并移除",
+      "stopAndRemoveConfirmTitle": "终止并从启动页移除 {{name}}？",
+      "stopAndRemoveSuccess": "项目服务已终止并移除",
+      "stopFailed": "终止项目服务失败",
+      "stopService": "终止服务",
+      "stopServiceConfirmDescription": "这会断开该项目正在运行的本地服务端进程；项目文件不会删除，之后可以重新打开。",
+      "stopServiceConfirmOk": "终止",
+      "stopServiceConfirmTitle": "终止 {{name}} 的服务端进程？",
+      "stopServiceSuccess": "项目服务已终止",
       "title": "项目"
     },
     "menu": {

@@ -199,6 +199,8 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
   createWorkspaceInDirectory: (parentDirectory: string, projectName: string) =>
     ipcRenderer.invoke('desktop:create-workspace-in-directory', parentDirectory, projectName),
   forgetWorkspace: (workspaceFolder: string) => ipcRenderer.invoke('desktop:forget-workspace', workspaceFolder),
+  stopWorkspace: (workspaceFolder: string, input?: { forget?: boolean }) =>
+    ipcRenderer.invoke('desktop:stop-workspace', workspaceFolder, input),
   getDesktopIconPreview: (settings: unknown) => ipcRenderer.invoke('desktop:get-icon-preview', settings),
   getDesktopSettings: () => ipcRenderer.invoke('desktop:get-settings'),
   getUpdateStatus: () => ipcRenderer.invoke('desktop:get-update-status'),
