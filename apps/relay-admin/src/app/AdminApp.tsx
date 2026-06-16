@@ -56,6 +56,11 @@ const getUserDetailIdFromPath = (pathname: string) => {
   return match == null ? undefined : decodeURIComponent(match[1])
 }
 
+const getTeamDetailIdFromPath = (pathname: string) => {
+  const match = /^\/teams\/([^/]+)$/.exec(pathname)
+  return match == null ? undefined : decodeURIComponent(match[1])
+}
+
 const readAdminSidebarWidth = () => {
   if (typeof window === 'undefined') return DEFAULT_ADMIN_SIDEBAR_WIDTH
 
@@ -106,9 +111,13 @@ export const AdminApp = () => {
   const isTeamListRoute = normalizedPathname === '/teams'
   const activeCreateSectionId = getCreateSectionIdFromPath(normalizedPathname)
   const activeUserDetailId = getUserDetailIdFromPath(normalizedPathname)
+  const activeTeamDetailId = getTeamDetailIdFromPath(normalizedPathname)
   const activeUserDetail = activeUserDetailId == null
     ? undefined
     : dashboard.users.find(user => user.id === activeUserDetailId)
+  const activeTeamDetail = activeTeamDetailId == null
+    ? undefined
+    : dashboard.teams.find(team => team.id === activeTeamDetailId)
   const headerTitle = isProfileRoute ? '个人资料' : activeSection.label
   const headerIcon = isProfileRoute ? <AdminIcon name='account_circle' /> : activeSection.icon
   const isCreateActionActive = activeCreateSectionId != null && createSectionId === activeCreateSectionId
@@ -166,6 +175,17 @@ export const AdminApp = () => {
       })
     }
 
+    if (activeTeamDetail != null) {
+      items.push({
+        disabled: !dashboard.canLoad || dashboard.loading,
+        icon: <AdminIcon name='admin_panel_settings' />,
+        key: 'team:settings',
+        label: '团队设置',
+        title: '团队设置',
+        onSelect: () => void navigate(`/teams/${encodeURIComponent(activeTeamDetail.id)}/settings`)
+      })
+    }
+
     if (activeCreateSectionId != null) {
       const createSectionLabel = createSectionLabels[activeCreateSectionId]
 
@@ -210,6 +230,7 @@ export const AdminApp = () => {
     return items
   }, [
     activeCreateSectionId,
+    activeTeamDetail,
     activeUserDetail,
     dashboard.canLoad,
     dashboard.loading,
@@ -389,6 +410,12 @@ export const AdminApp = () => {
                 path='teams/settings'
                 element={canRenderSection('teams')
                   ? <AdminDashboard dashboard={dashboard} sectionId='team-settings' />
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
+                path='teams/:teamId/settings'
+                element={canRenderSection('teams')
+                  ? <AdminDashboard dashboard={dashboard} sectionId='team-detail-settings' />
                   : <Navigate to='/devices' replace />}
               />
               <Route

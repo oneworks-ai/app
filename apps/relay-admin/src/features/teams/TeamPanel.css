@@ -82,6 +82,12 @@
   width: min(720px, 100%);
 }
 
+.relay-team-panel__team-settings-form {
+  display: grid;
+  gap: 12px;
+  width: min(720px, 100%);
+}
+
 .relay-team-panel--settings {
   align-items: flex-start;
 }

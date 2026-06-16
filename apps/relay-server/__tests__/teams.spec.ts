@@ -83,6 +83,11 @@ describe('relay team routes', () => {
       headers: authHeaders('user-2-session'),
       body: JSON.stringify({ name: 'Blocked' })
     })
+    const deniedProxyUpdate = await requestJson(baseUrl, `/api/relay/teams/${teamId}`, {
+      method: 'PATCH',
+      headers: authHeaders('user-1-session'),
+      body: JSON.stringify({ proxyModeEnabled: true })
+    })
     const ownerUpdate = await requestJson(baseUrl, `/api/relay/teams/${teamId}/members/user-2`, {
       method: 'PATCH',
       headers: authHeaders('user-1-session'),
@@ -126,6 +131,8 @@ describe('relay team routes', () => {
       }
     ])
     expect(deniedUpdate.response.status).toBe(403)
+    expect(deniedProxyUpdate.response.status).toBe(403)
+    expect(deniedProxyUpdate.body).toEqual({ error: 'Team proxy mode can only be managed by tenant admins.' })
     expect(ownerUpdate.response.status).toBe(200)
     expect(ownerUpdate.body.member).toMatchObject({
       configEnabled: true,
@@ -170,6 +177,15 @@ describe('relay team routes', () => {
       headers: authHeaders('admin-token'),
       body: JSON.stringify({ role: 'member', userId: 'user-2' })
     })
+    const adminUpdate = await requestJson(baseUrl, `/api/admin/teams/${teamId}`, {
+      method: 'PATCH',
+      headers: authHeaders('admin-token'),
+      body: JSON.stringify({
+        description: 'Platform-owned team',
+        name: 'Admin Team Updated',
+        proxyModeEnabled: true
+      })
+    })
     const relayPolicy = await requestJson(baseUrl, '/api/relay/team-policy', {
       headers: authHeaders('user-1-session')
     })
@@ -186,6 +202,12 @@ describe('relay team routes', () => {
       error: 'Self-service team creation is disabled by tenant policy.'
     })
     expect(adminCreate.response.status).toBe(200)
+    expect(adminUpdate.response.status).toBe(200)
+    expect(adminUpdate.body.team).toMatchObject({
+      description: 'Platform-owned team',
+      name: 'Admin Team Updated',
+      proxyModeEnabled: true
+    })
     expect(limitedMember.response.status).toBe(403)
     expect(limitedMember.body).toEqual({ error: 'Team member limit reached.' })
     expect(relayPolicy.response.status).toBe(200)

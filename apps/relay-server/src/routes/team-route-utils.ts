@@ -93,6 +93,7 @@ export const serializeTeam = (
     slug: team.slug,
     name: team.name,
     description: team.description ?? null,
+    proxyModeEnabled: team.proxyModeEnabled === true,
     archivedAt: team.archivedAt ?? null,
     memberCount: teamMemberCount(store, team.id),
     membership: membership == null

@@ -15,6 +15,7 @@ import type {
   RelayAdminTeamMember,
   RelayAdminTeamPolicy,
   RotateConfigSecretInput,
+  UpdateTeamInput,
   UpdateTeamMemberInput,
   UpdateTeamPolicyInput
 } from './teamTypes'
@@ -38,6 +39,16 @@ export const createRelayAdminTeam = async (token: string, input: CreateTeamInput
     body: JSON.stringify(input),
     method: 'POST'
   })
+
+export const updateRelayAdminTeam = async (token: string, team: RelayAdminTeam, input: UpdateTeamInput) =>
+  await requestJson<{ team: RelayAdminTeam }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(team.id)}`,
+    {
+      body: JSON.stringify(input),
+      method: 'PATCH'
+    }
+  )
 
 export const archiveRelayAdminTeam = async (token: string, teamId: string) =>
   await requestJson<{ team: RelayAdminTeam }>(

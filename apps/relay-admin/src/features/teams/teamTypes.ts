@@ -46,6 +46,7 @@ export interface RelayAdminTeam {
     role: RelayAdminTeamMemberRole
   } | null
   name: string
+  proxyModeEnabled: boolean
   slug: string
   updatedAt: string | null
 }
@@ -141,6 +142,13 @@ export interface RelayAdminConfigProfileAssignment {
 export interface CreateTeamInput {
   description?: string
   name: string
+  slug?: string
+}
+
+export interface UpdateTeamInput {
+  description?: string
+  name?: string
+  proxyModeEnabled?: boolean
   slug?: string
 }
 

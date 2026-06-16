@@ -112,6 +112,7 @@ const normalizeTeam = (value: Record<string, unknown>): RelayTeam | undefined =>
     description: typeof value.description === 'string' && value.description.trim() !== ''
       ? value.description.trim()
       : undefined,
+    ...(typeof value.proxyModeEnabled === 'boolean' ? { proxyModeEnabled: value.proxyModeEnabled } : {}),
     createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
       ? value.createdByUserId.trim()
       : 'system',

@@ -117,6 +117,17 @@ export const updateTeam = async (
   if (Object.prototype.hasOwnProperty.call(body, 'description')) {
     team.description = cleanString(body.description) === '' ? undefined : cleanString(body.description)
   }
+  if (Object.prototype.hasOwnProperty.call(body, 'proxyModeEnabled')) {
+    if (!isAdminAuth(auth)) {
+      sendJson(res, 403, { error: 'Team proxy mode can only be managed by tenant admins.' }, args.allowOrigin)
+      return
+    }
+    if (typeof body.proxyModeEnabled !== 'boolean') {
+      sendJson(res, 400, { error: 'Team proxy mode state must be a boolean.' }, args.allowOrigin)
+      return
+    }
+    team.proxyModeEnabled = body.proxyModeEnabled
+  }
   team.updatedAt = now()
   await storeRepository.write(store)
   sendJson(res, 200, { team: serializeTeam(team, store, authUserId(auth)) }, args.allowOrigin)

@@ -33,6 +33,10 @@ export const useAdminRouteHeaderBreadcrumb = (
     return decodeRouteSegment(match?.[1])
   }, [normalizedPathname])
   const isTeamSettingsRoute = normalizedPathname === '/teams/settings'
+  const teamDetailSettingsId = useMemo(() => {
+    const match = /^\/teams\/([^/]+)\/settings$/.exec(normalizedPathname)
+    return decodeRouteSegment(match?.[1])
+  }, [normalizedPathname])
   const teamDetailId = useMemo(() => {
     if (isTeamSettingsRoute) return undefined
     const match = /^\/teams\/([^/]+)$/.exec(normalizedPathname)
@@ -52,6 +56,10 @@ export const useAdminRouteHeaderBreadcrumb = (
     if (teamDetailId == null) return undefined
     return dashboard.teams.find(item => item.id === teamDetailId)?.name ?? '团队详情'
   }, [dashboard.teams, teamDetailId])
+  const teamDetailSettingsTitle = useMemo(() => {
+    if (teamDetailSettingsId == null) return undefined
+    return dashboard.teams.find(item => item.id === teamDetailSettingsId)?.name ?? '团队详情'
+  }, [dashboard.teams, teamDetailSettingsId])
 
   return useMemo(() => {
     if (deviceDetailId != null) {
@@ -90,6 +98,18 @@ export const useAdminRouteHeaderBreadcrumb = (
       }
     }
 
+    if (teamDetailSettingsId != null) {
+      return {
+        ariaLabel: '团队导航',
+        backIcon: createElement(AdminIcon, { className: breadcrumbIconClassName, name: 'chevron_left' }),
+        backLabel: '返回团队详情',
+        currentTitle: '团队设置',
+        parentTitle: teamDetailSettingsTitle,
+        separatorIcon: createElement(AdminIcon, { className: breadcrumbIconClassName, name: 'chevron_right' }),
+        onBack: () => void navigate(`/teams/${encodeURIComponent(teamDetailSettingsId)}`)
+      }
+    }
+
     if (isTeamSettingsRoute) {
       return {
         ariaLabel: '团队导航',
@@ -109,6 +129,8 @@ export const useAdminRouteHeaderBreadcrumb = (
     isTeamSettingsRoute,
     navigate,
     teamDetailId,
+    teamDetailSettingsId,
+    teamDetailSettingsTitle,
     teamDetailTitle,
     userDetailId,
     userDetailTitle

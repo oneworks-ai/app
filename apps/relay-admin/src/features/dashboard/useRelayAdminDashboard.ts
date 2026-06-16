@@ -32,11 +32,18 @@ import {
   deleteRelayAdminSsoProvider,
   updateRelayAdminSsoProvider
 } from '../sso/ssoProvidersApi'
-import type { CreateTeamInput, RelayAdminTeam, RelayAdminTeamPolicy, UpdateTeamPolicyInput } from '../teams/teamTypes'
+import type {
+  CreateTeamInput,
+  RelayAdminTeam,
+  RelayAdminTeamPolicy,
+  UpdateTeamInput,
+  UpdateTeamPolicyInput
+} from '../teams/teamTypes'
 import {
   archiveRelayAdminTeam,
   createRelayAdminTeam,
   restoreRelayAdminTeam,
+  updateRelayAdminTeam,
   updateRelayAdminTeamPolicy
 } from '../teams/teamsApi'
 import { createRelayAdminUser, updateRelayAdminUser } from '../users/usersApi'
@@ -265,6 +272,13 @@ export const useRelayAdminDashboard = () => {
     })
   }, [loadSnapshot, run, token])
 
+  const updateTeam = useCallback(async (team: RelayAdminTeam, input: UpdateTeamInput) => {
+    await run(async () => {
+      await updateRelayAdminTeam(token, team, input)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
   const updateTeamPolicy = useCallback(async (input: UpdateTeamPolicyInput) => {
     await run(async () => {
       const body = await updateRelayAdminTeamPolicy(token, input)
@@ -304,6 +318,7 @@ export const useRelayAdminDashboard = () => {
     teamPolicy,
     teams,
     token,
+    updateTeam,
     updateTeamPolicy,
     updateSsoProvider,
     users
