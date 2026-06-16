@@ -17,6 +17,8 @@
 - `npm-publish-alpha.yml`：手动发布 npm alpha 包；默认走 Trusted Publishing，新增包 bootstrap 才允许显式使用 `NPM_TOKEN`。
 - `vscode-extension-ci.yml`：按 VS Code 扩展相关路径触发，构建并上传 VSIX artifact，不发布商店。
 - `vscode-extension-release.yml`：通过 release tag 或手动输入 tag 发布 VS Code Marketplace、Open VSX 和 GitHub Release。
+- `idea-plugin-ci.yml`：按 IDEA 插件相关路径触发，执行 Gradle `buildPlugin verifyPluginStructure` 并上传插件 zip artifact。
+- `idea-plugin-release.yml`：通过 `pkg/oneworks-idea-plugin/v*` release tag 或手动输入 tag 构建插件 zip，并创建 / 更新 GitHub Release。
 - `desktop-package.yml`：构建 macOS 桌面包；PR 上总是产出 `macOS installer` check，非桌面打包相关改动会快速跳过，tag / 手动 release 模式会创建 GitHub Release。
 - `deploy-pwa.yml`：从 app 仓库触发 `oneworks-ai/pwa` 的部署 workflow。
 - `deploy-avatar.yml`：从 app 仓库触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow，只监听 avatar 相关路径。
@@ -69,4 +71,5 @@
 - 当前迁移期会把仓库 force push 成单提交快照；这会让 GitHub `paths` 过滤在部分 push 上近似看到整仓变化，导致 Desktop / PWA / VS Code CI 在文档改动后也被触发。
 - `Release Tags` 在 force push 后可能找不到可比较 base 并进入 initial plan；已存在 tag 会跳过，但 force push 不会移动旧 tag。
 - VS Code 官方 Marketplace 和 Open VSX 是两套发布系统；`VSCE_PAT` 不能用于 Open VSX。
+- JetBrains Marketplace 首次上架必须手动上传且需要插件签名配置；当前 IDEA release workflow 只产出 GitHub Release zip，不自动发布 Marketplace。
 - npm Trusted Publishing 不能用来创建全新包的首次 package settings；新增 public 包首发后要去 npm 配 Trusted Publisher。

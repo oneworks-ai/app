@@ -1,0 +1,19 @@
+{
+  "name": "@oneworks/idea-plugin",
+  "version": "0.1.0-alpha.0",
+  "private": true,
+  "description": "One Works IntelliJ Platform shell",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "apps/idea-plugin"
+  },
+  "scripts": {
+    "build": "gradle buildPlugin verifyPluginStructure --no-daemon -Dorg.gradle.vfs.watch=false",
+    "runIde": "gradle runIde"
+  },
+  "oneWorksRelease": {
+    "extensionName": "oneworks-idea-plugin"
+  }
+}

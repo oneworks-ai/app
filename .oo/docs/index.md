@@ -10,6 +10,7 @@
 - [适配器 CLI 安装与版本](./usage/adapter-cli.md)
 - [桌面应用](./usage/desktop.md)
 - [VS Code 扩展](./usage/vscode-extension.md)
+- [JetBrains IDE 插件](./usage/idea-plugin.md)
 - [Web UI 与 Terminal 视图](./usage/web.md)
 - [适配器配置与多账号](./usage/adapters.md)
 - [PWA 与独立部署](./usage/pwa.md)
