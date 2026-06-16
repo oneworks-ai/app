@@ -17,6 +17,7 @@
 - Keep workspace drawer chrome actions aligned so the bottom-panel opener sits before the drawer collapse action without duplicate chat-header controls.
 - Show collapsed session status badges in fullscreen workspace navigation so running, unread completed, waiting-input, and failed sessions remain visible.
 - Share workspace terminal panel state across web browser sessions while restoring the terminal pane content from workspace-level state.
+- Let the web launcher stop running workspace server processes, remove stopped project entries, animate running project icons, and keep new-session empty states centered with or without starter lists.
 - Allow the homepage PWA preview to run from the official `oneworks.cloud` domain and update public PWA/docs links to canonical URLs.
 - Preserve homepage preview query parameters when entering the PWA launcher and refresh service worker caches after PWA deployments.
 - Route homepage PWA preview sessions directly into the mock workspace app instead of the launcher gate.
