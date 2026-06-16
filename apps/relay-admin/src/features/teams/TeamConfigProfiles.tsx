@@ -289,8 +289,7 @@ export const TeamConfigProfiles = ({ disabled, team, token }: TeamConfigProfiles
 
   return (
     <div className='relay-team-panel__profiles'>
-      <div className='relay-team-panel__section-header'>
-        <h3>配置 Profiles</h3>
+      <div className='relay-team-panel__tab-actions'>
         <Space size={4}>
           <AdminActionButton
             disabled={disabled}

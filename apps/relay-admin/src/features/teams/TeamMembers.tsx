@@ -318,8 +318,7 @@ export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
 
   return (
     <div className='relay-team-panel__members'>
-      <div className='relay-team-panel__section-header'>
-        <h3>成员</h3>
+      <div className='relay-team-panel__tab-actions'>
         <Space size={4}>
           <AdminActionButton
             disabled={disabled}

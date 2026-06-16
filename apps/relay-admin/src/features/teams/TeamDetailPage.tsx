@@ -4,7 +4,6 @@ import { Empty, Tabs } from 'antd'
 import { useParams } from 'react-router-dom'
 
 import { DataPanel } from '../../shared/ui/DataPanel'
-import { StatusBadge } from '../../shared/ui/StatusBadge'
 import { TeamConfigProfiles } from './TeamConfigProfiles'
 import { TeamConfigSecrets } from './TeamConfigSecrets'
 import { TeamMembers } from './TeamMembers'
@@ -45,22 +44,6 @@ export const TeamDetailPage = ({
   return (
     <DataPanel id='team-detail'>
       <section className='relay-team-detail'>
-        <div className='relay-team-detail__summary'>
-          <div className='relay-team-detail__title'>
-            <h2>{team.name}</h2>
-            <div className='relay-team-detail__meta'>
-              <span>{team.slug}</span>
-              <span aria-hidden='true'>/</span>
-              {team.archivedAt == null
-                ? <StatusBadge tone='success'>active</StatusBadge>
-                : <StatusBadge tone='warning'>archived</StatusBadge>}
-            </div>
-          </div>
-          <div className='relay-team-detail__stats'>
-            <StatusBadge tone='muted'>{`${team.memberCount} 名成员`}</StatusBadge>
-          </div>
-        </div>
-
         <Tabs
           className='relay-team-panel__tabs'
           items={[

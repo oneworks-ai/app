@@ -41,7 +41,7 @@ export const adminSections = [
   {
     icon: <AdminNavIcon name='teams' />,
     id: 'teams',
-    label: '团队配置',
+    label: '团队',
     path: '/teams'
   }
 ] satisfies AdminSectionDefinition[]

@@ -166,8 +166,7 @@ export const TeamConfigSecrets = ({ disabled, team, token }: TeamConfigSecretsPr
 
   return (
     <div className='relay-team-panel__secrets'>
-      <div className='relay-team-panel__section-header'>
-        <h3>Secrets</h3>
+      <div className='relay-team-panel__tab-actions'>
         <Space size={4}>
           <AdminActionButton
             disabled={disabled}

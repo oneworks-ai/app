@@ -1,24 +1,32 @@
 .relay-team-panel {
+  display: flex;
+  flex: 1;
   min-width: 0;
+  min-height: 0;
 }
 
 .relay-team-panel__list-layout {
   display: grid;
+  flex: 1;
   grid-template-columns: minmax(280px, .72fr) minmax(420px, 1.28fr);
   gap: 16px;
   min-width: 0;
+  min-height: 0;
 }
 
 .relay-team-panel__section {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   min-width: 0;
+  min-height: 0;
   border: 1px solid var(--ant-color-border-secondary, #f0f0f0);
   border-radius: 8px;
   padding: 12px;
 }
 
 .relay-team-panel__team-list-section {
+  flex: 1;
   min-height: 0;
 }
 
@@ -66,15 +74,41 @@
 }
 
 .relay-team-panel__tabs {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
 .relay-team-panel__tabs > .ant-tabs-nav {
   margin: 0 0 12px;
 }
 
-.relay-team-panel__tabs > .ant-tabs-content-holder,
+.relay-team-panel__tabs > .ant-tabs-content-holder {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.relay-team-panel__tabs > .ant-tabs-content-holder > .ant-tabs-content,
 .relay-team-panel__tabs .ant-tabs-tabpane {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+}
+
+.relay-team-panel__tabs .ant-tabs-tabpane-hidden {
+  display: none;
+}
+
+.relay-team-panel__tab-actions {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
   min-width: 0;
 }
 
@@ -123,46 +157,11 @@
 }
 
 .relay-team-detail {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
-}
-
-.relay-team-detail__summary {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  flex: 1;
+  flex-direction: column;
   min-width: 0;
-  border: 1px solid var(--ant-color-border-secondary, #f0f0f0);
-  border-radius: 8px;
-  padding: 14px;
-}
-
-.relay-team-detail__title {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.relay-team-detail__title h2 {
-  overflow: hidden;
-  margin: 0;
-  color: var(--ant-color-text, #1f2328);
-  font: 700 18px/1.25 ui-sans-serif, system-ui, sans-serif;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.relay-team-detail__meta,
-.relay-team-detail__stats {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: 0;
-  color: var(--ant-color-text-secondary, #57606a);
-  font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif;
+  min-height: 0;
 }
 
 .relay-team-detail__empty {
@@ -178,9 +177,18 @@
 .relay-team-panel__members,
 .relay-team-panel__profile-detail,
 .relay-team-panel__secrets {
-  display: grid;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   gap: 12px;
   min-width: 0;
+  min-height: 0;
+}
+
+.relay-team-panel__profile-table,
+.relay-team-panel__assignment-table,
+.relay-team-panel__secret-table {
+  flex: 0 0 auto;
 }
 
 .relay-team-panel__member-identity {
@@ -223,10 +231,6 @@
 }
 
 @media (max-width: 640px) {
-  .relay-team-detail__summary {
-    display: grid;
-  }
-
   .relay-team-panel__policy-switches,
   .relay-team-panel__policy-grid {
     grid-template-columns: minmax(0, 1fr);
