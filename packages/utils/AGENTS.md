@@ -1,7 +1,7 @@
 # Utils Package
 
 `@oneworks/utils` 承载跨 runtime 共用的基础 helper。
-当前收口的是 markdown logger、log level 解析、字符串 key 转换、路径 helper、uuid、chat-message helper、cache、model selection 和系统通知工具。
+当前收口的是 markdown logger、log level 解析、字符串 key 转换、路径 helper、uuid、chat-message helper、cache、model selection、managed plugin package installer 和系统通知工具。
 
 ## 先看哪里
 
@@ -15,6 +15,8 @@
   - workspace 共享的路径规范化 helper
 - `src/model-selection.ts`
   - model service、defaultModel、adapter/model 兼容性处理
+- `src/managed-plugin-package.ts`
+  - `@oneworks/plugin-*` package 的 bootstrap cache、registry fallback、metadata 解析与安装 helper
 - `src/cache.ts`
   - home project `caches/<task>/<session>/<key>.json` 读写 helper
 - `src/system.ts`
@@ -23,6 +25,7 @@
   - 默认图标与默认音效资产解析
 - `__tests__/create-logger.spec.ts`
 - `__tests__/log-level.spec.ts`
+- `__tests__/managed-plugin-package.spec.ts`
 
 ## 当前边界
 
@@ -33,6 +36,7 @@
   - 通用路径 helper
   - 通用 cache helper
   - 通用 model selection helper
+  - managed plugin package cache / installer helper
   - 通用 system helper
 - 本包不负责：
   - task 生命周期
@@ -43,4 +47,4 @@
 
 - 只放可复用、无业务编排的 helper；带产品语义的逻辑留在消费包。
 - 优先依赖 `@oneworks/types`，不要反向依赖 `core`、`hooks` 或 `mcp`。
-- 修改 logger 或 log level 规则后，至少回归 `packages/utils/__tests__` 和相关消费方测试。
+- 修改 logger、log level 或 managed plugin package installer 后，至少回归 `packages/utils/__tests__` 和相关消费方测试。

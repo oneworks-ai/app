@@ -68,6 +68,8 @@ Use placeholder domains in examples:
 - Cloudflare Pages: `https://<pages-project>.pages.dev` or a custom domain.
 - Cloudflare Workers: `https://<worker>.<account-subdomain>.workers.dev`. The `account-subdomain` is an account-level setting and changing it affects every Worker in that Cloudflare account.
 
+Treat domains, storage driver, SSO clients, passkey origin, mail provider, login defaults, and plugin server entries as deployment configuration. Keep them in platform environment variables, secret stores, Admin-managed provider records, or private operator runbooks, not in committed code. The public server version reported by `/health` comes from this package's `package.json`; after deploying, verify that `/health.version` matches the package version you intended to roll out.
+
 ## Google SSO
 
 Google sign-in can be enabled in either of these ways:
@@ -92,6 +94,8 @@ The Google OAuth client must be a Web application client, and the redirect URI r
 ## GitHub SSO
 
 GitHub sign-in can be enabled with `ONEWORKS_RELAY_GITHUB_CLIENT_ID` and `ONEWORKS_RELAY_GITHUB_CLIENT_SECRET`. Use either a GitHub OAuth App or a GitHub App with user authorization configured; Relay login only needs user identity and verified primary email access, not repository permissions.
+
+Do not add `github` to `ONEWORKS_RELAY_SSO_PROVIDERS`; `github` is a reserved built-in provider id. When fixing an existing deployment, remove stale custom `github` entries from every platform env store, redeploy, then verify `/health`, `/api/auth/providers`, and the GitHub OAuth start redirect on each public origin.
 
 Add this callback URL to the GitHub app/client:
 
@@ -256,7 +260,7 @@ Vercel:
 
 - Project root: `apps/relay-server`.
 - Build command: `pnpm build:vercel`; it builds `apps/relay-admin`, copies the Admin static assets into `apps/relay-server/public/admin`, then builds the Relay Server function.
-- Local prebuilt CLI deploys should run `vercel build --prod`, then `pnpm prepare:vercel-output`, then `vercel deploy --prebuilt --prod`. The prepare step copies the Postgres runtime package into the Vercel function output for pnpm workspace deployments.
+- Local prebuilt CLI deploys should run `vercel build --prod`, then `pnpm prepare:vercel-output`, then `vercel deploy --prebuilt --prod`. The prepare step copies the Postgres and WebAuthn runtime dependency trees into the Vercel function output for pnpm workspace deployments.
 - `vercel.json` serves `/admin` and `/admin/*` as the Admin SPA on the same origin, and rewrites `/api/*`, `/login`, `/login/complete`, and `/health` to `api/relay.ts`.
 - Required env: `ONEWORKS_RELAY_STORAGE_DRIVER=postgres`, `ONEWORKS_RELAY_POSTGRES_URL` or `DATABASE_URL`, `ONEWORKS_RELAY_ADMIN_TOKEN`, `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`, `ONEWORKS_RELAY_PUBLIC_URL`, and a restricted `ONEWORKS_RELAY_ALLOW_ORIGIN`.
 - The Vercel deployment is one project and one domain: Relay Admin is available at `/admin`, while the server APIs and login flow share the same origin.
@@ -337,7 +341,7 @@ docker run -d --name oneworks-relay \
   -e ONEWORKS_RELAY_PUBLIC_URL=https://oneworks.example.com \
   -e ONEWORKS_RELAY_ALLOW_ORIGIN=https://oneworks.example.com \
   node:22-bookworm-slim \
-  sh -lc "npx --yes @oneworks/relay-server@3.4.0-rc --host 0.0.0.0 --port 8788"
+  sh -lc "npx --yes @oneworks/relay-server --host 0.0.0.0 --port 8788"
 ```
 
 Systemd example after installing the package globally on the host:

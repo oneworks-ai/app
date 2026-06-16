@@ -17,6 +17,20 @@ For Claude Code plugins and marketplaces, see [Adapter Native Plugins and Market
 
 The global package cache defaults to `~/.oneworks/bootstrap/npm`. Override it with `__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__`.
 
+For automatic built-in plugin installs, registry and auth settings follow standard npm config: user `~/.npmrc`, project
+`.npmrc`, then environment variables, with later sources taking precedence. One Works supports standard entries such as
+`registry=...`, `@oneworks:registry=...`, and `//registry.example.com/:_authToken=...`. If no registry is explicitly
+configured, One Works probes the default npm registry first; on network errors, timeouts, or 5xx responses, it falls back
+to `https://registry.npmmirror.com`. When you configure a company registry or any other explicit registry, One Works does
+not switch to a public mirror unless you also set `ONEWORKS_NPM_REGISTRY_FALLBACKS` with a comma-separated fallback list.
+
+Project `.npmrc` example:
+
+```ini
+@oneworks:registry=https://registry.npmmirror.com
+//registry.npmmirror.com/:_authToken=${NPM_TOKEN}
+```
+
 ```bash
 pnpm add -D @oneworks/plugin-standard-dev @oneworks/plugin-logger
 ```

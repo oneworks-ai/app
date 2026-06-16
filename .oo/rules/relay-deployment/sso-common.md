@@ -56,6 +56,8 @@ The managed provider path uses the provider id configured in Admin. Keep the pro
 - Keep provider secrets in platform secret stores or local ignored scratch files only.
 - Never commit client secrets, App private keys, manifest output, temporary test OAuth credentials, account IDs, personal mailbox addresses, or maintainer account names into README, AGENTS, `.oo/docs`, changelog, PR descriptions, or config files.
 - When documenting setup, use placeholders such as `https://relay.example.com` and `<provider-client-id>`.
+- Built-in providers are configured by their dedicated env vars, not by `ONEWORKS_RELAY_SSO_PROVIDERS`. Use `ONEWORKS_RELAY_GITHUB_CLIENT_ID` / `ONEWORKS_RELAY_GITHUB_CLIENT_SECRET` for GitHub and `ONEWORKS_RELAY_GOOGLE_CLIENT_ID` / `ONEWORKS_RELAY_GOOGLE_CLIENT_SECRET` for Google.
+- `ONEWORKS_RELAY_SSO_PROVIDERS` is only for custom provider ids. Do not put reserved ids such as `github` or `google` in that JSON; Relay rejects those entries at startup.
 
 ## Verification Checklist
 

@@ -72,6 +72,16 @@ The official topology is not a template for user private deployments. Private de
 7. Deploy, then verify health, Admin shell, unauthorized admin API behavior, owner login, passkey registration/login on the final public origin, and plugin device registration.
 8. Update Relay plugin `servers[]` only after the target public origin is known.
 
+## Configuration Source Of Truth
+
+- Treat deployment URL, storage driver, mail provider, SSO clients, passkey origin, default login method, registration policy, and plugin `servers[]` as deployment configuration. Do not hard-code these values in TypeScript, committed JSON, screenshots, examples, or platform-specific output directories.
+- The Relay Server public version must come from `apps/relay-server/package.json` package metadata. Do not introduce release-string constants for `/health`, config JSON, logs, Admin display, or deployment smoke checks. After every private or official deploy, compare `/health.version` with the package version that was deployed.
+- Pick the final user-facing origin before configuring OAuth callbacks, passkeys, CORS, email links, or plugin server entries. Temporary platform domains are acceptable for tests, but do not enroll production passkeys or publish production plugin presets on a temporary domain that will later be replaced.
+- Keep an operator-owned deployment matrix outside the repo for each private customer or self-hosted account: platform account/team, dev/prod domains, DNS host, storage backend, transactional mail domain, Reply-To, SSO app/client ids, callback URLs, and secret names. Repository docs should use placeholders only.
+- Use platform secret stores for `ONEWORKS_RELAY_ADMIN_TOKEN`, `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`, database URLs, Resend/API keys, OAuth client secrets, and Turnstile secrets. Local `.env` / scratch files are only for temporary operator setup and must stay ignored.
+- When copying a deployment between Cloudflare and Vercel, re-evaluate storage and long-lived forwarding behavior instead of copying env blindly: Vercel requires Postgres for durable serverless state, Cloudflare uses Durable Object storage through the Worker adapter, and single-host Node usually uses SQLite.
+- Treat health, login config, SSO providers, passkey registration, email code delivery, and plugin device registration as configuration smoke checks. A deployment that returns `ok` but exposes the wrong version, public URL, provider list, CORS origin, or login method is not fully configured.
+
 ## SSO / OAuth Provider Onboarding
 
 - Provider-specific setup lessons are split by provider. Do not expand this file with detailed OAuth UI walkthroughs; read the narrow file that matches the provider being configured.
@@ -84,6 +94,7 @@ The official topology is not a template for user private deployments. Private de
 ## Production Admin Release
 
 - For official production Admin / Relay releases, use `.oo/rules/relay-deployment/admin-release-sop.md`.
+- For official dev deploy GitHub Actions env / secret store setup, use `.oo/rules/release/relay-dev-deploy-github-actions.md`.
 - Production Admin releases are manual promotions from a known `origin/main` SHA or release tag after dev slot verification.
 - Treat login page, SSO, passkey, email-code, invite, device registration, session forwarding, or storage changes as Relay releases even when the visible diff looks like Admin UI.
 - Production smoke checks must include health, provider list, unauthorized admin API behavior, login config, Admin shell assets, and the intended login methods.

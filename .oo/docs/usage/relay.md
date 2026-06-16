@@ -2,6 +2,41 @@
 
 Relay 是 One Works 插件设备和云端会话之间的中继服务。普通用户默认使用 One Works 托管服务；只有需要私有化部署、公司内网隔离或自有域名 / 存储 / SSO 策略时，才需要自己部署 Relay Server 与 Admin。
 
+## 私有化部署配置清单
+
+私有化部署前，先把下面这些配置定下来，再创建平台项目、OAuth client、邮箱域名或 passkey：
+
+| 配置项       | 建议                                                                                                          |
+| ------------ | ------------------------------------------------------------------------------------------------------------- |
+| 公开域名     | 先确定用户最终访问的 `https://relay.example.com` 这类域名，再配置 SSO / passkey。                             |
+| 部署形态     | Vercel 单项目使用 Postgres；Cloudflare 使用 Pages + Worker / Durable Object；单机 Node 通常使用 SQLite。      |
+| `PUBLIC_URL` | `ONEWORKS_RELAY_PUBLIC_URL` 指向浏览器实际打开的 Admin / login / API origin。                                 |
+| CORS         | `ONEWORKS_RELAY_ALLOW_ORIGIN` 生产环境只放允许访问的前端 origin，不使用 `*`。                                 |
+| 密钥         | Admin token、设备元数据密钥、数据库 URL、邮件 key、OAuth secret 都放平台 secret store。                       |
+| 邮件         | 验证码、邀请、系统通知使用稳定发信域名和角色地址 Reply-To，不把发信 DNS 绑在 Relay Web host 上。              |
+| SSO          | callback URL 必须和 Relay 实际发出的 URL 完全一致；内置 GitHub / Google 用专用环境变量。                      |
+| Passkey      | 在最终 HTTPS origin 上注册；必要时显式设置 `ONEWORKS_RELAY_PASSKEY_ORIGIN` / `ONEWORKS_RELAY_PASSKEY_RP_ID`。 |
+| 插件服务     | Relay plugin 的 `servers[]` 只写最终公开 origin；dev、prod、公司内网服务可以并存。                            |
+
+配置属于部署环境，不属于代码常量。不要把真实账号 ID、项目 ID、个人邮箱、数据库连接串、OAuth secret、Resend key、验证码或临时部署 URL 写进 README、`.oo/docs`、规则文件、截图或示例配置。
+
+排查平台配置时，先确认自己查的是正确项目和环境：
+
+- Vercel 用 `vercel env ls production` 查当前项目的 production 环境变量；如果部署命令使用 `--prod`，即使域名叫 dev，也要改 production env。`vercel env pull` 会把 secret 写到本地文件，只能写到 ignored scratch 文件并及时删除。
+- Cloudflare Workers 用 `wrangler secret list --name <worker-name>` 查 Worker secrets；workflow 如果用 `--name` 覆盖 Worker 名，查 secret 时也必须带同一个名字。
+- Cloudflare Pages 和 Workers 是两套 env store。Admin Pages 的 proxy env 与 Relay Worker 的 SSO / storage secret 互不共享，要分别检查。
+- 删除旧变量后重新 list 确认不存在，再重新部署。Vercel 需要新 deployment 才会读取新 env；Cloudflare secret put/delete 可能立即产生新 Worker 版本，但仍应跑正式部署 workflow 保证代码和配置来自同一个 commit。
+
+部署完成后至少检查：
+
+```bash
+curl -fsS https://<relay-origin>/health
+curl -fsS https://<relay-origin>/api/auth/providers
+curl -i https://<relay-origin>/api/admin/users
+```
+
+`/health.version` 应等于实际部署的 `@oneworks/relay-server` 包版本。只返回 `ok` 还不够，还要确认 public URL、登录方式、SSO provider、邮件验证码、passkey 和插件设备注册都在最终域名上工作。
+
 ## 登录方式
 
 `/login` 是 Relay 插件、Admin 和 Web 回跳共用的登录页。部署方可以通过 `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD` 设置默认方式，浏览器也会记住用户上次选择的方式。
@@ -51,6 +86,8 @@ Relay 不把邮箱当作全局唯一账号键。`users.email` 是联系邮箱；
 ```
 
 Admin 中维护的 provider secret 只保存在服务端，列表和详情接口只返回脱敏值。面向用户的 SSO 按钮应使用 provider 品牌图标，不要退回通用登录图标。
+
+内置 GitHub / Google 登录使用专用环境变量，不要把 `github` 或 `google` 写进 `ONEWORKS_RELAY_SSO_PROVIDERS`。这两个 provider id 是保留的；如果旧部署里已经写错，要从 Vercel、Cloudflare 或对应平台的所有环境变量 / secret store 中清掉旧值，重新部署后分别验证 `/health`、`/api/auth/providers` 和 OAuth start `302`。
 
 私有化部署时，先确定用户最终访问的公开域名，再配置 SSO 和 passkey。Vercel 单项目通常把 Admin、API 和登录页放在同一个域名；Cloudflare Pages + Worker 这类分离部署也应把 OAuth callback 注册到用户打开的 Pages / 自定义域名，而不是隐藏的 Worker 地址。开发、测试、生产是否共用同一个 OAuth client 由部署方决定；需要隔离 secret、callback 或受众时，应使用独立 client。
 

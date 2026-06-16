@@ -2,6 +2,41 @@
 
 Relay connects One Works plugin devices with cloud sessions. Most users should use the managed One Works Relay service. Private deployment is for teams that need their own domain, storage, SSO policy, or network isolation.
 
+## Private Deployment Configuration Checklist
+
+Before creating platform projects, OAuth clients, mail domains, or passkeys, decide these settings first:
+
+| Setting          | Recommendation                                                                                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public domain    | Choose the final user-facing domain such as `https://relay.example.com` before configuring SSO or passkeys.                                           |
+| Deployment shape | Use Postgres for a Vercel single-project deployment, Pages + Worker / Durable Object for Cloudflare, and usually SQLite for single-host Node.         |
+| `PUBLIC_URL`     | Set `ONEWORKS_RELAY_PUBLIC_URL` to the real browser-facing Admin / login / API origin.                                                                |
+| CORS             | In production, set `ONEWORKS_RELAY_ALLOW_ORIGIN` to the allowed frontend origin instead of `*`.                                                       |
+| Secrets          | Store admin tokens, device metadata secrets, database URLs, mail keys, and OAuth secrets in the platform secret store.                                |
+| Mail             | Send verification, invite, and system emails from a stable sending domain with a role-address Reply-To; do not attach mail DNS to the Relay web host. |
+| SSO              | Callback URLs must exactly match the URL Relay sends; built-in GitHub and Google providers use their dedicated env vars.                              |
+| Passkey          | Enroll on the final HTTPS origin; set `ONEWORKS_RELAY_PASSKEY_ORIGIN` / `ONEWORKS_RELAY_PASSKEY_RP_ID` when they must be explicit.                    |
+| Plugin servers   | Put only final public origins in Relay plugin `servers[]`; dev, prod, and company services can coexist.                                               |
+
+Configuration belongs to the deployment environment, not to code constants. Do not put real account IDs, project IDs, personal emails, database URLs, OAuth secrets, Resend keys, verification codes, or temporary deployment URLs into README files, `.oo/docs`, rules, screenshots, or example config.
+
+When debugging platform configuration, first confirm that you are inspecting the right project and environment:
+
+- On Vercel, use `vercel env ls production` for the current project's production environment. If the deployment command uses `--prod`, update production env even when the custom domain is a dev domain. `vercel env pull` writes secrets to local files; use only ignored scratch files and delete them afterward.
+- On Cloudflare Workers, use `wrangler secret list --name <worker-name>` to inspect Worker secrets. If the workflow deploys with a `--name` override, use the same Worker name when listing or deleting secrets.
+- Cloudflare Pages and Workers have separate env stores. Admin Pages proxy env and Relay Worker SSO / storage secrets must be checked separately.
+- After deleting stale variables, list again to prove they are gone, then redeploy. Vercel needs a new deployment to pick up env changes; Cloudflare secret put/delete may create a new Worker version immediately, but you should still run the normal deploy workflow so code and config come from the same commit.
+
+After deployment, run at least:
+
+```bash
+curl -fsS https://<relay-origin>/health
+curl -fsS https://<relay-origin>/api/auth/providers
+curl -i https://<relay-origin>/api/admin/users
+```
+
+`/health.version` should match the deployed `@oneworks/relay-server` package version. Returning `ok` is not enough; also verify the public URL, login methods, SSO providers, email codes, passkey flow, and plugin device registration on the final domain.
+
 ## Login Methods
 
 `/login` is shared by the Relay plugin, Admin, and Web redirect flows. Operators can set the default method with `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD`, and the browser remembers the last method selected by the user.
@@ -51,6 +86,8 @@ Common callback paths:
 ```
 
 Provider secrets managed from Admin are stored server-side. List and detail APIs return only redacted values. User-facing SSO buttons should use branded provider icons instead of the generic login icon.
+
+Built-in GitHub and Google login use dedicated environment variables. Do not put `github` or `google` into `ONEWORKS_RELAY_SSO_PROVIDERS`; those provider ids are reserved. If an existing deployment has the old value, remove it from every Vercel, Cloudflare, or equivalent platform env / secret store, redeploy, and verify `/health`, `/api/auth/providers`, and the OAuth start `302` on each public origin.
 
 For private deployment, choose the final public domain before configuring SSO and passkeys. A Vercel single-project deployment usually serves Admin, API, and login from one domain. In a Cloudflare Pages + Worker split deployment, register OAuth callbacks on the Pages/custom domain that users open, not on a hidden Worker URL. Whether dev, test, and production share one OAuth client is a deployment decision; use separate clients when secrets, callbacks, or audiences need isolation.
 

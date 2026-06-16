@@ -30,6 +30,21 @@ Read `.oo/rules/relay-deployment/sso-common.md` first.
   - Public or self-serve login should allow broad account access.
   - Company-only login can restrict installation or authorization to the user's organization or enterprise.
 
+## Relay Env
+
+Configure the built-in GitHub provider with platform secrets:
+
+```text
+ONEWORKS_RELAY_GITHUB_CLIENT_ID=<github-client-id>
+ONEWORKS_RELAY_GITHUB_CLIENT_SECRET=<github-client-secret>
+```
+
+Do not configure GitHub through `ONEWORKS_RELAY_SSO_PROVIDERS`. The `github` provider id is reserved for the built-in GitHub flow, and Relay rejects custom SSO JSON entries that try to override it.
+
+When enabling GitHub SSO in cloud slots, update every active platform environment store that can serve the origin: Vercel project env, Cloudflare Worker secrets/vars, and any Pages proxy env that influences the public origin. Remove stale `ONEWORKS_RELAY_SSO_PROVIDERS` values that contain `github` before redeploying; leaving an old reserved-provider entry in one platform can make that platform fail even if another slot is fixed.
+
+For official dev slot CLI commands and platform-specific env store pitfalls, read `.oo/rules/release/relay-dev-deploy-github-actions.md`.
+
 ## Callback Setup
 
 GitHub callback for the built-in provider:
@@ -54,8 +69,29 @@ GitHub callback for the built-in provider:
 - If the GitHub provider id changes, update provider icon mapping and tests at the same time.
 - Keep app avatar/icon brand-neutral and transparent when possible; do not use a maintainer's profile image.
 
+## Cloud Rollout Checks
+
+After changing GitHub SSO env or callback settings on Vercel, Cloudflare, or a private equivalent, verify each public origin separately:
+
+```bash
+curl -fsS https://<relay-origin>/health
+curl -fsS https://<relay-origin>/api/auth/providers
+curl -I "https://<relay-origin>/api/auth/oauth/github/start?redirect_uri=https%3A%2F%2F<relay-origin>%2Fadmin%2Fdevices"
+```
+
+Expected:
+
+- Deployment job or platform deploy is green for the same commit / config generation being tested.
+- `/health` returns `ok`.
+- `/api/auth/providers` includes `github`.
+- OAuth start returns `302` to GitHub authorization and the `redirect_uri` inside that authorization URL matches the callback configured in the GitHub app/client.
+
+Do this for both dev and production slots when both are active, and for every supported platform when the deployment supports both Cloudflare and Vercel. Do not assume success on one platform means the other platform's secret store, callback list, Pages proxy, or serverless bundle is correct.
+
 ## Troubleshooting
 
 - If `/login` shows a generic provider button, check `login-page-client-config.ts`, `LoginProviderIcon.tsx`, and login provider types.
+- If a deployment starts returning 500 after enabling GitHub SSO, check that platform secrets do not still contain `ONEWORKS_RELAY_SSO_PROVIDERS` with a `github` entry; remove that secret from every affected platform and redeploy so the runtime no longer sees the stale reserved-provider config.
+- If one platform works and another does not, compare platform env first, then deployment logs. A common failure is fixing the repository or one cloud slot while a second slot still has the old `ONEWORKS_RELAY_SSO_PROVIDERS` value.
 - If callback fails, compare the exact `redirect_uri` in the GitHub authorization URL with the callback URL configured in GitHub.
 - If login creates or matches the wrong account, inspect auth identities and verify the provider id plus GitHub user id are used instead of email-only lookup.
