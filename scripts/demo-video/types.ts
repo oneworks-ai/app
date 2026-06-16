@@ -56,9 +56,11 @@ export interface DemoVideoScenarioContext {
   clickSelector: (selector: string, options?: DemoVideoClickOptions) => Promise<void>
   clickText: (text: string, options?: DemoVideoClickOptions) => Promise<void>
   navigate: (url: string) => Promise<void>
+  pressKey: (key: string, options?: DemoVideoKeyOptions) => Promise<void>
   recordFor: (durationMs: number) => Promise<void>
   requireUrl: () => string
   resolveUrl: (path: string) => string
+  typeText: (text: string, options?: DemoVideoTypeOptions) => Promise<void>
   waitForText: (text: string, options?: DemoVideoTextOptions) => Promise<void>
 }
 
@@ -68,6 +70,14 @@ export interface DemoVideoTextOptions {
 }
 
 export interface DemoVideoClickOptions extends DemoVideoTextOptions {
+  settleMs?: number
+}
+
+export interface DemoVideoKeyOptions {
+  settleMs?: number
+}
+
+export interface DemoVideoTypeOptions {
   settleMs?: number
 }
 

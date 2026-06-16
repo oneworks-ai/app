@@ -39,6 +39,26 @@ export const demoVideoScenarios = [
       await ctx.clickText('成员', { exact: true, settleMs: 500 })
       await ctx.recordFor(1_500)
     }
+  },
+  {
+    defaultDurationMs: 7_000,
+    defaultFps: 6,
+    defaultViewport: {
+      height: 720,
+      width: 1280
+    },
+    description: '点击首个输入控件，展示鼠标光标、文本输入和 Enter 按键 HUD。',
+    id: 'keyboard-input-tour',
+    requiresUrl: true,
+    title: '键盘输入展示',
+    run: async (ctx) => {
+      await ctx.navigate(ctx.requireUrl())
+      await ctx.clickSelector('input, textarea, [contenteditable="true"]', { settleMs: 400 })
+      await ctx.typeText('OneWorks demo')
+      await ctx.recordFor(800)
+      await ctx.pressKey('Enter')
+      await ctx.recordFor(1_500)
+    }
   }
 ] satisfies DemoVideoScenario[]
 

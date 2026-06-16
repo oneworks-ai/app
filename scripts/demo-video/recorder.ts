@@ -11,11 +11,13 @@ import process from 'node:process'
 import type {
   DemoVideoClickOptions,
   DemoVideoColorScheme,
+  DemoVideoKeyOptions,
   DemoVideoRecordOptions,
   DemoVideoRecordResult,
   DemoVideoScenario,
   DemoVideoScenarioContext,
   DemoVideoTextOptions,
+  DemoVideoTypeOptions,
   DemoVideoViewport
 } from './types'
 
@@ -61,10 +63,135 @@ interface Point {
   y: number
 }
 
+interface KeyDefinition {
+  code: string
+  display: string
+  key: string
+  windowsVirtualKeyCode: number
+  text?: string
+}
+
+interface ModifierKeyDefinition extends KeyDefinition {
+  modifierBit: number
+}
+
+interface ParsedKeyCombo {
+  displayLabels: string[]
+  key: KeyDefinition
+  modifiers: ModifierKeyDefinition[]
+}
+
 const DEFAULT_COLOR_SCHEME: DemoVideoColorScheme = 'light'
 const DEFAULT_OUTPUT_ROOT = '.logs/demo-videos'
 const DEFAULT_CHROME_TIMEOUT_MS = 15_000
 const DEFAULT_ACTION_TIMEOUT_MS = 10_000
+
+const modifierKeyDefinitions: Record<string, ModifierKeyDefinition> = {
+  alt: {
+    code: 'AltLeft',
+    display: 'Alt',
+    key: 'Alt',
+    modifierBit: 1,
+    windowsVirtualKeyCode: 18
+  },
+  control: {
+    code: 'ControlLeft',
+    display: 'Ctrl',
+    key: 'Control',
+    modifierBit: 2,
+    windowsVirtualKeyCode: 17
+  },
+  meta: {
+    code: 'MetaLeft',
+    display: '⌘',
+    key: 'Meta',
+    modifierBit: 4,
+    windowsVirtualKeyCode: 91
+  },
+  shift: {
+    code: 'ShiftLeft',
+    display: 'Shift',
+    key: 'Shift',
+    modifierBit: 8,
+    windowsVirtualKeyCode: 16
+  }
+}
+
+const modifierAliases: Record<string, keyof typeof modifierKeyDefinitions> = {
+  alt: 'alt',
+  cmd: 'meta',
+  command: 'meta',
+  control: 'control',
+  ctrl: 'control',
+  meta: 'meta',
+  option: 'alt',
+  shift: 'shift'
+}
+
+const specialKeyDefinitions: Record<string, KeyDefinition> = {
+  arrowdown: {
+    code: 'ArrowDown',
+    display: '↓',
+    key: 'ArrowDown',
+    windowsVirtualKeyCode: 40
+  },
+  arrowleft: {
+    code: 'ArrowLeft',
+    display: '←',
+    key: 'ArrowLeft',
+    windowsVirtualKeyCode: 37
+  },
+  arrowright: {
+    code: 'ArrowRight',
+    display: '→',
+    key: 'ArrowRight',
+    windowsVirtualKeyCode: 39
+  },
+  arrowup: {
+    code: 'ArrowUp',
+    display: '↑',
+    key: 'ArrowUp',
+    windowsVirtualKeyCode: 38
+  },
+  backspace: {
+    code: 'Backspace',
+    display: 'Backspace',
+    key: 'Backspace',
+    windowsVirtualKeyCode: 8
+  },
+  delete: {
+    code: 'Delete',
+    display: 'Delete',
+    key: 'Delete',
+    windowsVirtualKeyCode: 46
+  },
+  enter: {
+    code: 'Enter',
+    display: 'Enter',
+    key: 'Enter',
+    text: '\r',
+    windowsVirtualKeyCode: 13
+  },
+  escape: {
+    code: 'Escape',
+    display: 'Esc',
+    key: 'Escape',
+    windowsVirtualKeyCode: 27
+  },
+  space: {
+    code: 'Space',
+    display: 'Space',
+    key: ' ',
+    text: ' ',
+    windowsVirtualKeyCode: 32
+  },
+  tab: {
+    code: 'Tab',
+    display: 'Tab',
+    key: 'Tab',
+    windowsVirtualKeyCode: 9
+  }
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -82,6 +209,75 @@ const sleep = async (ms: number) =>
 const sanitizeFileSegment = (value: string) => {
   const sanitized = value.trim().replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '')
   return sanitized === '' ? 'demo-video' : sanitized
+}
+
+const normalizeKeyToken = (value: string) => value.trim().toLowerCase().replace(/[\s_-]+/g, '')
+
+const createPrintableKeyDefinition = (value: string): KeyDefinition => {
+  if (/^[a-z]$/i.test(value)) {
+    const upper = value.toUpperCase()
+    const lower = value.toLowerCase()
+    return {
+      code: `Key${upper}`,
+      display: upper,
+      key: lower,
+      text: lower,
+      windowsVirtualKeyCode: upper.charCodeAt(0)
+    }
+  }
+
+  if (/^\d$/.test(value)) {
+    return {
+      code: `Digit${value}`,
+      display: value,
+      key: value,
+      text: value,
+      windowsVirtualKeyCode: value.charCodeAt(0)
+    }
+  }
+
+  if (value.length === 1) {
+    return {
+      code: value,
+      display: value,
+      key: value,
+      text: value,
+      windowsVirtualKeyCode: value.toUpperCase().charCodeAt(0)
+    }
+  }
+
+  throw new Error(`Unsupported demo video key: ${value}`)
+}
+
+const parseKeyDefinition = (value: string): KeyDefinition => {
+  const normalized = normalizeKeyToken(value)
+  return specialKeyDefinitions[normalized] ?? createPrintableKeyDefinition(value)
+}
+
+const parseKeyCombo = (value: string): ParsedKeyCombo => {
+  const parts = value.split('+').map(part => part.trim()).filter(part => part !== '')
+  if (parts.length === 0) throw new Error('A key value is required.')
+
+  const keyPart = parts.at(-1)
+  if (keyPart == null) throw new Error('A key value is required.')
+  const modifiers = parts.slice(0, -1).map((part) => {
+    const alias = modifierAliases[normalizeKeyToken(part)]
+    if (alias == null) throw new Error(`Unsupported demo video modifier key: ${part}`)
+    return modifierKeyDefinitions[alias]
+  })
+  const key = parseKeyDefinition(keyPart)
+
+  return {
+    displayLabels: modifiers.map(modifier => modifier.display).concat(key.display),
+    key,
+    modifiers
+  }
+}
+
+const formatTypedText = (value: string) => {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  if (normalized === '') return 'empty text'
+  return normalized.length <= 24 ? `"${normalized}"` : `"${normalized.slice(0, 21)}..."`
 }
 
 const resolveOutputPaths = (input: {
@@ -472,13 +668,14 @@ const findPointBySelectorExpression = (selector: string) => `
 })()
 `
 
-const installCursorExpression = `
+const installOverlayExpression = `
 (() => {
-  const id = '__oneworks_demo_video_cursor';
-  let cursor = document.getElementById(id);
+  const cursorId = '__oneworks_demo_video_cursor';
+  const keyboardId = '__oneworks_demo_video_keyboard';
+  let cursor = document.getElementById(cursorId);
   if (cursor == null) {
     cursor = document.createElement('div');
-    cursor.id = id;
+    cursor.id = cursorId;
     cursor.setAttribute('aria-hidden', 'true');
     cursor.style.position = 'fixed';
     cursor.style.zIndex = '2147483647';
@@ -490,22 +687,83 @@ const installCursorExpression = `
     cursor.style.boxShadow = '0 0 0 4px rgba(22, 119, 255, 0.24), 0 6px 18px rgba(15, 23, 42, 0.3)';
     cursor.style.pointerEvents = 'none';
     cursor.style.transform = 'translate(-50%, -50%)';
-    cursor.style.transition = 'left 160ms ease, top 160ms ease, opacity 120ms ease';
+    cursor.style.transition = 'left 160ms ease, top 160ms ease, opacity 120ms ease, transform 120ms ease';
     cursor.style.opacity = '0';
     document.documentElement.appendChild(cursor);
   }
-  window.__oneworksDemoVideoSetCursor = (x, y, visible = true) => {
+  let keyboard = document.getElementById(keyboardId);
+  if (keyboard == null) {
+    keyboard = document.createElement('div');
+    keyboard.id = keyboardId;
+    keyboard.setAttribute('aria-hidden', 'true');
+    keyboard.style.position = 'fixed';
+    keyboard.style.left = '50%';
+    keyboard.style.bottom = '28px';
+    keyboard.style.zIndex = '2147483647';
+    keyboard.style.display = 'flex';
+    keyboard.style.alignItems = 'center';
+    keyboard.style.justifyContent = 'center';
+    keyboard.style.gap = '8px';
+    keyboard.style.maxWidth = 'calc(100vw - 48px)';
+    keyboard.style.pointerEvents = 'none';
+    keyboard.style.transform = 'translateX(-50%)';
+    keyboard.style.transition = 'opacity 160ms ease, transform 160ms ease';
+    keyboard.style.opacity = '0';
+    document.documentElement.appendChild(keyboard);
+  }
+  const buildKey = (label) => {
+    const key = document.createElement('kbd');
+    key.textContent = String(label);
+    key.style.display = 'inline-flex';
+    key.style.alignItems = 'center';
+    key.style.justifyContent = 'center';
+    key.style.minWidth = '34px';
+    key.style.minHeight = '28px';
+    key.style.padding = '3px 10px';
+    key.style.border = '1px solid rgba(255, 255, 255, 0.72)';
+    key.style.borderRadius = '7px';
+    key.style.background = 'rgba(15, 23, 42, 0.88)';
+    key.style.boxShadow = '0 10px 24px rgba(15, 23, 42, 0.32)';
+    key.style.color = '#ffffff';
+    key.style.font = '700 13px/1.1 ui-sans-serif, system-ui, sans-serif';
+    key.style.letterSpacing = '0';
+    return key;
+  };
+  window.__oneworksDemoVideoSetCursor = (x, y, visible = true, pressed = false) => {
     cursor.style.left = String(x) + 'px';
     cursor.style.top = String(y) + 'px';
     cursor.style.opacity = visible ? '1' : '0';
+    cursor.style.transform = pressed ? 'translate(-50%, -50%) scale(0.72)' : 'translate(-50%, -50%)';
+  };
+  window.__oneworksDemoVideoShowKeys = (labels) => {
+    keyboard.replaceChildren(...labels.map(buildKey));
+    keyboard.style.opacity = '1';
+    keyboard.style.transform = 'translateX(-50%) translateY(0)';
+    if (window.__oneworksDemoVideoKeyboardTimer != null) {
+      clearTimeout(window.__oneworksDemoVideoKeyboardTimer);
+    }
+    window.__oneworksDemoVideoKeyboardTimer = setTimeout(() => {
+      keyboard.style.opacity = '0';
+      keyboard.style.transform = 'translateX(-50%) translateY(6px)';
+    }, 1200);
   };
 })()
 `
 
-const setCursorExpression = (point: Point) => `
+const setCursorExpression = (point: Point, pressed = false) => `
 (() => {
   if (typeof window.__oneworksDemoVideoSetCursor === 'function') {
-    window.__oneworksDemoVideoSetCursor(${JSON.stringify(point.x)}, ${JSON.stringify(point.y)}, true);
+    window.__oneworksDemoVideoSetCursor(${JSON.stringify(point.x)}, ${JSON.stringify(point.y)}, true, ${
+  JSON.stringify(pressed)
+});
+  }
+})()
+`
+
+const showKeysExpression = (labels: string[]) => `
+(() => {
+  if (typeof window.__oneworksDemoVideoShowKeys === 'function') {
+    window.__oneworksDemoVideoShowKeys(${JSON.stringify(labels)});
   }
 })()
 `
@@ -571,7 +829,7 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
   async navigate(url: string) {
     await this.client.send('Page.navigate', { url })
     await this.waitForReadyState()
-    await this.evaluate(installCursorExpression)
+    await this.evaluate(installOverlayExpression)
   }
 
   async recordFor(durationMs: number) {
@@ -605,6 +863,36 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
       timeoutMs: options.timeoutMs ?? DEFAULT_ACTION_TIMEOUT_MS
     })
     await this.clickPoint(point, options.settleMs)
+  }
+
+  async pressKey(key: string, options: DemoVideoKeyOptions = {}) {
+    const parsed = parseKeyCombo(key)
+    await this.showKeys(parsed.displayLabels)
+    await this.recordFor(300)
+
+    let modifiers = 0
+    for (const modifier of parsed.modifiers) {
+      modifiers |= modifier.modifierBit
+      await this.dispatchKeyEvent(modifier, 'rawKeyDown', modifiers)
+    }
+
+    const includeText = modifiers === 0 && parsed.key.text != null
+    await this.dispatchKeyEvent(parsed.key, 'keyDown', modifiers, includeText)
+    await this.dispatchKeyEvent(parsed.key, 'keyUp', modifiers)
+
+    for (const modifier of parsed.modifiers.toReversed()) {
+      await this.dispatchKeyEvent(modifier, 'keyUp', modifiers)
+      modifiers &= ~modifier.modifierBit
+    }
+
+    await sleep(options.settleMs ?? 500)
+  }
+
+  async typeText(text: string, options: DemoVideoTypeOptions = {}) {
+    await this.showKeys(['Type', formatTypedText(text)])
+    await this.recordFor(300)
+    await this.client.send('Input.insertText', { text })
+    await sleep(options.settleMs ?? 500)
   }
 
   private async waitForReadyState(timeoutMs = DEFAULT_ACTION_TIMEOUT_MS) {
@@ -651,6 +939,7 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
       x: point.x,
       y: point.y
     })
+    await this.evaluate(setCursorExpression(point, true))
     await this.client.send('Input.dispatchMouseEvent', {
       button: 'left',
       buttons: 0,
@@ -659,7 +948,34 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
       x: point.x,
       y: point.y
     })
+    await this.evaluate(setCursorExpression(point))
     await sleep(settleMs)
+  }
+
+  private async showKeys(labels: string[]) {
+    await this.evaluate(showKeysExpression(labels))
+  }
+
+  private async dispatchKeyEvent(
+    key: KeyDefinition,
+    type: 'keyDown' | 'keyUp' | 'rawKeyDown',
+    modifiers: number,
+    includeText = false
+  ) {
+    await this.client.send('Input.dispatchKeyEvent', {
+      code: key.code,
+      key: key.key,
+      modifiers,
+      nativeVirtualKeyCode: key.windowsVirtualKeyCode,
+      type,
+      windowsVirtualKeyCode: key.windowsVirtualKeyCode,
+      ...(includeText && key.text != null
+        ? {
+          text: key.text,
+          unmodifiedText: key.text
+        }
+        : {})
+    })
   }
 
   private async findPointByText(text: string, exact: boolean) {
