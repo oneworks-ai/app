@@ -256,7 +256,7 @@ Vercel:
 
 - Project root: `apps/relay-server`.
 - Build command: `pnpm build:vercel`; it builds `apps/relay-admin`, copies the Admin static assets into `apps/relay-server/public/admin`, then builds the Relay Server function.
-- Local prebuilt CLI deploys should run `vercel build --prod`, then `pnpm prepare:vercel-output`, then `vercel deploy --prebuilt --prod`. The prepare step copies the Postgres runtime package into the Vercel function output for pnpm workspace deployments.
+- Local prebuilt CLI deploys should run `vercel build --prod`, then `pnpm prepare:vercel-output`, then `vercel deploy --prebuilt --prod`. The prepare step copies the Postgres and WebAuthn runtime dependency trees into the Vercel function output for pnpm workspace deployments.
 - `vercel.json` serves `/admin` and `/admin/*` as the Admin SPA on the same origin, and rewrites `/api/*`, `/login`, `/login/complete`, and `/health` to `api/relay.ts`.
 - Required env: `ONEWORKS_RELAY_STORAGE_DRIVER=postgres`, `ONEWORKS_RELAY_POSTGRES_URL` or `DATABASE_URL`, `ONEWORKS_RELAY_ADMIN_TOKEN`, `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`, `ONEWORKS_RELAY_PUBLIC_URL`, and a restricted `ONEWORKS_RELAY_ALLOW_ORIGIN`.
 - The Vercel deployment is one project and one domain: Relay Admin is available at `/admin`, while the server APIs and login flow share the same origin.
