@@ -22,7 +22,7 @@
 - `scripts/prepare-vercel-output.mjs`：本地 `vercel build --prebuilt` 后处理，把 pnpm workspace 下的 Postgres runtime package 拷进 `.vercel/output/functions/api/relay.func/node_modules/`；本地 CLI prebuilt 部署前必须跑。
 - `src/telemetry/`：Relay trace 日志。
 - `README.md`：面向自部署用户的命令、环境变量、Admin API、生产部署和日志说明。
-- `.oo/rules/RELAY-DEPLOYMENT.md`：Relay 托管服务、私有化部署、Vercel / Cloudflare 域名、官方 OneWorks 域名 / 邮件拓扑和账号边界；处理部署请求时先读。SSO provider 对接经验拆在 `.oo/rules/relay-deployment/sso-*.md`，先读 common，再按 GitHub / Google / OIDC 读取对应文件。
+- `.oo/rules/RELAY-DEPLOYMENT.md`：Relay 托管服务、私有化部署、Vercel / Cloudflare 域名、官方 OneWorks 域名 / 邮件拓扑和账号边界；处理部署请求时先读。正式版 Admin / Relay 发布继续读 `.oo/rules/relay-deployment/admin-release-sop.md`。SSO provider 对接经验拆在 `.oo/rules/relay-deployment/sso-*.md`，先读 common，再按 GitHub / Google / OIDC 读取对应文件。
 
 ## 约定
 
