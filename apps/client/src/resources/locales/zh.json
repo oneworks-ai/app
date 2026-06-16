@@ -1512,6 +1512,28 @@
     "childSessionPlaceholder": "输入消息继续子会话...",
     "send": "发送",
     "thinking": "正在思考",
+    "voiceInput": {
+      "tooltip": "语音输入",
+      "start": "开始录音",
+      "menu": "语音服务菜单",
+      "stop": "停止录音并识别",
+      "sendAfterTranscription": "识别后发送",
+      "transcribing": "识别中",
+      "configure": "配置语音服务",
+      "retry": "重试",
+      "setDefault": "设为默认：{{name}}",
+      "setupPrompt": "还没有可用的语音转文字服务",
+      "defaultService": "默认",
+      "defaultSaved": "默认语音服务已保存",
+      "defaultSaveFailed": "保存默认语音服务失败",
+      "unsupported": "当前浏览器不支持录音",
+      "unavailable": "当前状态暂不能录音",
+      "permissionDenied": "麦克风权限被拒绝",
+      "loadServicesFailed": "加载语音服务失败",
+      "recordingFailed": "录音启动失败",
+      "emptyRecording": "没有录到可识别的音频",
+      "transcribeFailed": "语音识别失败"
+    },
     "sessionOperation": {
       "codexCliPrepare": "正在准备 Codex CLI；如果本机没有可用版本，会自动安装…"
     },
@@ -2716,6 +2738,7 @@
       "newAdapterName": "新增适配器名称",
       "newPluginName": "新增插件名称",
       "newMcpServerName": "新增 MCP 服务名称",
+      "newSpeechToTextServiceName": "新增语音服务名称",
       "newMarketplaceName": "新增源名称",
       "newEnvVarName": "新增环境变量名称",
       "newHeaderName": "新增请求头名称",
@@ -2730,6 +2753,7 @@
       "defaultAdapterPlaceholder": "请选择适配器",
       "defaultModelServicePlaceholder": "请选择模型服务",
       "defaultModelPlaceholder": "请选择模型",
+      "defaultSpeechToTextServicePlaceholder": "请选择语音服务",
       "worktreeEnvironmentPlaceholder": "请选择 worktree 环境",
       "workspaceFileOpenerPlaceholder": "选择检测到的应用",
       "titlePlaceholder": "请输入标题",
@@ -3305,6 +3329,122 @@
           "desc": "为 MCP 服务器注入环境变量"
         }
       },
+      "voice": {
+        "speechToText": {
+          "label": "语音转文字",
+          "desc": "配置 sender 录音后使用的转写服务"
+        },
+        "defaultServiceId": {
+          "label": "默认语音服务",
+          "desc": "未手动选择时，sender 使用的语音转文字服务"
+        },
+        "services": {
+          "label": "语音服务",
+          "desc": "按服务 id 配置 OpenAI 兼容或自定义 HTTP 语音转文字接口"
+        },
+        "serviceItem": {
+          "label": {
+            "label": "显示名称",
+            "desc": "在配置页和 sender 菜单里展示的名称"
+          },
+          "description": {
+            "label": "说明",
+            "desc": "补充说明这个服务的用途、账号或限制"
+          },
+          "provider": {
+            "label": "Provider",
+            "desc": "选择内置 OpenAI 兼容转写，或自定义 HTTP 映射"
+          },
+          "enabled": {
+            "label": "启用服务",
+            "desc": "关闭后 sender 不会使用这个服务"
+          },
+          "language": {
+            "label": "默认语言",
+            "desc": "例如 auto、zh、en；具体取值由服务商决定"
+          },
+          "prompt": {
+            "label": "识别提示词",
+            "desc": "传给服务商的热词、领域词或上下文提示"
+          },
+          "timeoutMs": {
+            "label": "超时（毫秒）",
+            "desc": "转写请求的最大等待时间"
+          },
+          "maxDurationSeconds": {
+            "label": "最长录音秒数",
+            "desc": "sender 侧允许录制的最长时长"
+          },
+          "maxBytes": {
+            "label": "最大音频字节",
+            "desc": "服务端接受的最大音频 payload 大小"
+          },
+          "baseUrl": {
+            "label": "OpenAI API 地址",
+            "desc": "OpenAI 或兼容接口的 base URL"
+          },
+          "apiKeyEnv": {
+            "label": "API Key 环境变量",
+            "desc": "推荐使用环境变量保存密钥，例如 OPENAI_API_KEY"
+          },
+          "apiKey": {
+            "label": "API Key",
+            "desc": "仅建议写在 global 或 user 配置；project 配置应使用环境变量引用"
+          },
+          "model": {
+            "label": "模型",
+            "desc": "语音转文字模型 id"
+          },
+          "responseFormat": {
+            "label": "响应格式",
+            "desc": "OpenAI 兼容接口的 response_format"
+          },
+          "requestUrl": {
+            "label": "请求地址",
+            "desc": "自定义 HTTP 语音转文字接口地址"
+          },
+          "requestMethod": {
+            "label": "请求方法",
+            "desc": "自定义 HTTP 请求方法"
+          },
+          "requestHeaders": {
+            "label": "请求头",
+            "desc": "支持 ${env:NAME} 引用环境变量"
+          },
+          "bodyKind": {
+            "label": "请求体类型",
+            "desc": "选择 JSON、multipart 文件上传或原始二进制"
+          },
+          "fileField": {
+            "label": "文件字段名",
+            "desc": "multipart 请求里承载音频文件的字段名"
+          },
+          "audioBase64Field": {
+            "label": "Base64 字段名",
+            "desc": "JSON 请求里承载 base64 音频的字段名"
+          },
+          "bodyFields": {
+            "label": "请求字段",
+            "desc": "额外请求字段，支持 {{language}}、{{prompt}}、{{mimeType}}、{{filename}}"
+          },
+          "textPath": {
+            "label": "文本路径",
+            "desc": "响应 JSON 中转写文本的点路径，例如 data.text"
+          },
+          "languagePath": {
+            "label": "语言路径",
+            "desc": "响应 JSON 中语言字段的点路径"
+          },
+          "segmentsPath": {
+            "label": "分段路径",
+            "desc": "响应 JSON 中分段数组的点路径"
+          },
+          "wordsPath": {
+            "label": "词级路径",
+            "desc": "响应 JSON 中词级时间戳数组的点路径"
+          }
+        }
+      },
       "shortcuts": {
         "newSession": {
           "label": "新建会话",
@@ -3424,6 +3564,30 @@
       },
       "recommendedModels": {
         "modelSelector": "模型元数据"
+      },
+      "voice": {
+        "provider": {
+          "openaiTranscriptions": "OpenAI 兼容转写",
+          "customHttp": "自定义 HTTP"
+        },
+        "bodyKind": {
+          "json": "JSON Base64",
+          "multipart": "Multipart 文件",
+          "binary": "原始二进制"
+        },
+        "responseFormat": {
+          "json": "JSON",
+          "verboseJson": "Verbose JSON",
+          "text": "纯文本",
+          "srt": "SRT 字幕",
+          "vtt": "VTT 字幕"
+        }
+      }
+    },
+    "voice": {
+      "aiAssist": {
+        "label": "用 AI 创建配置",
+        "prompt": "我想为 One Works 创建一个语音转文字服务配置。\n\n请先询问我服务商、接口地址、鉴权方式、模型名、语言、音频格式限制和返回 JSON 结构。\n然后基于 One Works 的 voice.speechToText 配置格式生成可写入配置文件的 JSON。\n\n约束：\n- 不要把 API key 明文写进 project 配置，优先使用环境变量引用。\n- 服务 id 使用小写 kebab-case。\n- 如果是 OpenAI 兼容接口，provider 使用 openai-transcriptions。\n- 如果是自定义 HTTP 接口，provider 使用 custom-http，并补齐 request/response 映射。\n- 最后给出测试步骤和失败排查建议。"
       }
     },
     "sectionGroups": {
@@ -3546,6 +3710,7 @@
       "channels": "频道",
       "adapters": "适配器",
       "plugins": "插件",
+      "voice": "语音",
       "environments": "环境",
       "mcp": "MCP",
       "shortcuts": "快捷键",

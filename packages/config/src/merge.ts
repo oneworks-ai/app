@@ -8,6 +8,7 @@ import {
 } from '@oneworks/utils'
 
 import { mergeSkills } from './merge-skills'
+import { mergeVoice } from './merge-voice'
 import { mergeWorkspaceConfigs } from './workspace-config'
 
 const hasOwnKeys = (value: Record<string, unknown>) => Object.keys(value).length > 0
@@ -179,6 +180,7 @@ export function mergeConfigs<T extends Partial<Config>>(left?: T, right?: T) {
     skillRegistries: mergeConfiguredSkillRegistries(left, right),
     plugins: mergePluginConfigs(left?.plugins, right?.plugins) as Config['plugins'],
     marketplaces: mergeMarketplaceConfigs(left?.marketplaces, right?.marketplaces),
+    voice: mergeVoice(left?.voice, right?.voice),
     diagnostics: mergeRecord(
       left?.diagnostics as Record<string, unknown> | undefined,
       right?.diagnostics as Record<string, unknown> | undefined

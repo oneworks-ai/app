@@ -290,6 +290,76 @@ export const serverConfigSchema = z.object({
     .describe('Extra public paths allowed on non-local hosts; channel webhook paths are always allowed')
 })
 
+export const speechToTextCapabilitiesConfigSchema = z.object({
+  streaming: z.boolean().optional().describe('Whether this service supports streaming transcription'),
+  diarization: z.boolean().optional().describe('Whether this service can identify speakers'),
+  wordTimestamps: z.boolean().optional().describe('Whether this service can return word timestamps'),
+  languageDetection: z.boolean().optional().describe('Whether this service can detect spoken language')
+})
+
+export const speechToTextServiceCommonConfigSchema = z.object({
+  label: z.string().optional().describe('Display label'),
+  description: z.string().optional().describe('Display description'),
+  provider: z.string().min(1).describe('Speech-to-text provider kind'),
+  enabled: z.boolean().optional().describe('Enable this service'),
+  language: z.string().optional().describe('Default language, or auto'),
+  prompt: z.string().optional().describe('Default provider prompt or vocabulary hint'),
+  timeoutMs: z.number().int().positive().optional().describe('Request timeout in milliseconds'),
+  maxDurationSeconds: z.number().int().positive().optional().describe('Maximum recording duration'),
+  maxBytes: z.number().int().positive().optional().describe('Maximum audio payload bytes'),
+  capabilities: speechToTextCapabilitiesConfigSchema.optional().describe('Declared service capabilities')
+})
+
+export const speechToTextOpenAITranscriptionsConfigSchema = speechToTextServiceCommonConfigSchema.extend({
+  provider: z.literal('openai-transcriptions'),
+  baseUrl: z.string().url().optional().describe('OpenAI-compatible API base URL'),
+  apiKey: z.string().optional().describe('API key. Prefer apiKeyEnv for shared config files'),
+  apiKeyEnv: z.string().optional().describe('Environment variable that stores the API key'),
+  model: z.string().min(1).describe('Transcription model id'),
+  responseFormat: z.enum(['json', 'text', 'srt', 'verbose_json', 'vtt']).optional()
+    .describe('Provider response format')
+})
+
+export const speechToTextCustomHttpBodyConfigSchema = z.object({
+  kind: z.enum(['multipart', 'binary', 'json']).describe('Custom HTTP request body kind'),
+  fileField: z.string().optional().describe('Multipart file field name'),
+  audioBase64Field: z.string().optional().describe('JSON field that receives the base64 audio'),
+  fields: z.record(z.string(), jsonValueSchema).optional().describe('Static or templated request fields')
+})
+
+export const speechToTextCustomHttpRequestConfigSchema = z.object({
+  method: z.enum(['POST', 'PUT']).optional().describe('HTTP method'),
+  url: z.string().url().describe('Custom speech-to-text endpoint URL'),
+  headers: z.record(z.string(), z.string()).optional().describe('HTTP headers, supports $' + '{env:NAME}'),
+  body: speechToTextCustomHttpBodyConfigSchema.optional().describe('Request body mapping')
+})
+
+export const speechToTextCustomHttpResponseConfigSchema = z.object({
+  textPath: z.string().optional().describe('Dot path for transcript text'),
+  languagePath: z.string().optional().describe('Dot path for detected language'),
+  segmentsPath: z.string().optional().describe('Dot path for transcript segments'),
+  wordsPath: z.string().optional().describe('Dot path for word timestamps')
+})
+
+export const speechToTextCustomHttpConfigSchema = speechToTextServiceCommonConfigSchema.extend({
+  provider: z.literal('custom-http'),
+  request: speechToTextCustomHttpRequestConfigSchema,
+  response: speechToTextCustomHttpResponseConfigSchema.optional()
+})
+
+export const speechToTextServiceConfigSchema = z.discriminatedUnion('provider', [
+  speechToTextOpenAITranscriptionsConfigSchema,
+  speechToTextCustomHttpConfigSchema
+])
+
+export const voiceConfigSchema = z.object({
+  speechToText: z.object({
+    defaultServiceId: z.string().optional().describe('Default speech-to-text service id'),
+    services: z.record(z.string(), speechToTextServiceConfigSchema).optional()
+      .describe('Configured speech-to-text services')
+  }).optional().describe('Speech-to-text configuration')
+})
+
 export const skillRegistryPublishConfigSchema = z.object({
   access: z.string().optional().describe('Default publish access passed to the skills CLI'),
   group: z.string().optional().describe('Default publish group passed to the skills CLI'),
@@ -578,6 +648,7 @@ export const configSectionSchemas = {
   plugins: pluginSectionSchema,
   mcp: mcpConfigSectionSchema,
   auth: webAuthConfigSchema,
+  voice: voiceConfigSchema,
   shortcuts: shortcutsConfigSchema,
   experiments: experimentsConfigSchema,
   diagnostics: diagnosticsConfigSchema
@@ -621,6 +692,7 @@ export const baseConfigFileSchema = z.object({
   conversation: conversationConfigSchema.optional(),
   plugins: pluginConfigSchema.optional(),
   marketplaces: marketplaceConfigSchema.optional(),
+  voice: voiceConfigSchema.optional(),
   experiments: experimentsConfigSchema.optional(),
   diagnostics: diagnosticsConfigSchema.optional()
 }).strict()

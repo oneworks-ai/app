@@ -200,6 +200,66 @@ describe('config schema bundle', () => {
     }
   })
 
+  it('validates voice speech-to-text services', async () => {
+    const bundle = composeBaseConfigSchemaBundle()
+    const voice = (bundle.jsonSchema.properties as Record<string, unknown>).voice as Record<string, unknown>
+    const speechToText = (voice.properties as Record<string, unknown>).speechToText as Record<string, unknown>
+    const speechToTextProperties = speechToText.properties as Record<string, unknown>
+
+    expect(speechToTextProperties.defaultServiceId).toMatchObject({
+      type: 'string'
+    })
+    expect(speechToTextProperties.services).toMatchObject({
+      type: 'object'
+    })
+
+    const parsed = await validateConfigSection('voice', {
+      speechToText: {
+        defaultServiceId: 'local-asr',
+        services: {
+          openai: {
+            provider: 'openai-transcriptions',
+            model: 'gpt-4o-mini-transcribe',
+            apiKeyEnv: 'OPENAI_API_KEY'
+          },
+          'local-asr': {
+            provider: 'custom-http',
+            request: {
+              url: 'http://127.0.0.1:7000/transcribe',
+              headers: {
+                Authorization: 'Bearer $' + '{env:LOCAL_ASR_TOKEN}'
+              },
+              body: {
+                kind: 'json',
+                audioBase64Field: 'audio'
+              }
+            },
+            response: {
+              textPath: 'data.text'
+            }
+          }
+        }
+      }
+    })
+
+    expect(parsed.success).toBe(true)
+    if (parsed.success) {
+      expect(parsed.data.speechToText?.defaultServiceId).toBe('local-asr')
+      expect(parsed.data.speechToText?.services?.openai.provider).toBe('openai-transcriptions')
+    }
+
+    const invalid = await validateConfigSection('voice', {
+      speechToText: {
+        services: {
+          broken: {
+            provider: 'custom-http'
+          }
+        }
+      }
+    })
+    expect(invalid.success).toBe(false)
+  })
+
   it('validates appearance primary color settings', async () => {
     const bundle = composeBaseConfigSchemaBundle()
     const appearance = (bundle.jsonSchema.properties as Record<string, unknown>).appearance as Record<string, unknown>

@@ -64,6 +64,7 @@ export interface SenderProps {
   hideHeaderControls?: boolean
   hideSelectionControls?: boolean
   hideSubmitAction?: boolean
+  enableVoiceInput?: boolean
   autoFocus?: boolean
   autoFocusKey?: string
   modelMenuGroups?: ModelSelectMenuGroup[]

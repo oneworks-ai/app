@@ -31,6 +31,7 @@ import {
   trimTrailingSlash
 } from './static-client'
 import { uiRouter } from './ui'
+import { voiceRouter } from './voice'
 import { webDebugRouter } from './web-debug'
 import { webpageRouter } from './webpage'
 import { workspaceRouter } from './workspace'
@@ -66,6 +67,7 @@ export const mountRoutes = async (
     { prefix: '/api/channels', router: channelSendRouter() },
     { prefix: '/api/automation', router: automationRouter() },
     { prefix: '/api/config', router: configRouter() },
+    { prefix: '/api/voice', router: voiceRouter() },
     { prefix: '/api/web-debug', router: webDebugRouter() },
     { prefix: '/api/webpage', router: webpageRouter() },
     { prefix: '/api/worktree-environments', router: worktreeEnvironmentsRouter() },

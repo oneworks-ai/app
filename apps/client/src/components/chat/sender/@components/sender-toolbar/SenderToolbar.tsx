@@ -7,11 +7,14 @@ import type {
   SenderToolbarRefs,
   SenderToolbarState
 } from '../../@types/sender-toolbar-types'
+import type { SenderVoiceInputController } from '../../@types/sender-voice-input'
 
 import { EffortSelectControl } from '../effort-select/EffortSelectControl'
 import { ModelSelectControl } from '../model-select/ModelSelectControl'
 import { ReferenceActionsControl } from '../reference-actions/ReferenceActionsControl'
 import { SenderSubmitAction } from '../sender-submit-action/SenderSubmitAction'
+import { SenderVoiceControl } from './SenderVoiceControl'
+import { SenderVoiceRecordingBar } from './SenderVoiceRecordingBar'
 
 export function SenderToolbar({
   state,
@@ -21,7 +24,8 @@ export function SenderToolbar({
   sessionTarget,
   showHeaderControlsInMore = false,
   showStatusBarControlsInMore = false,
-  statusBarGitControlsInMore
+  statusBarGitControlsInMore,
+  voiceInput
 }: {
   state: SenderToolbarState
   data: SenderToolbarData
@@ -31,7 +35,16 @@ export function SenderToolbar({
   showHeaderControlsInMore?: boolean
   showStatusBarControlsInMore?: boolean
   statusBarGitControlsInMore?: SenderProps['statusBarGitControlsInMore']
+  voiceInput?: SenderVoiceInputController
 }) {
+  if (voiceInput != null && voiceInput.state.phase !== 'idle') {
+    return (
+      <div className='chat-input-toolbar chat-input-toolbar--voice-active'>
+        <SenderVoiceRecordingBar voiceInput={voiceInput} />
+      </div>
+    )
+  }
+
   return (
     <div className='chat-input-toolbar'>
       {!state.hideReferenceActions && (
@@ -46,6 +59,10 @@ export function SenderToolbar({
       )}
 
       <div className='toolbar-left'>
+        {voiceInput != null && (
+          <SenderVoiceControl voiceInput={voiceInput} />
+        )}
+
         {!state.hideReferenceActions && (
           <ReferenceActionsControl
             state={state}

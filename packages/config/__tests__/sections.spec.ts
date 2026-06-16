@@ -60,6 +60,13 @@ describe('config sections helpers', () => {
       section: 'desktop',
       sectionPath: ['launcherShortcut']
     })
+
+    expect(resolveConfigSectionPath(parseConfigSectionPath('voice.speechToText.defaultServiceId'))).toEqual({
+      input: ['voice', 'speechToText', 'defaultServiceId'],
+      normalizedPath: 'voice.speechToText.defaultServiceId',
+      section: 'voice',
+      sectionPath: ['speechToText', 'defaultServiceId']
+    })
   })
 
   it('supports plugin list aliases and exact JSON-array paths', () => {
@@ -102,6 +109,11 @@ describe('config sections helpers', () => {
       disableGlobalConfig: true,
       experiments: {
         agentRoom: true
+      },
+      voice: {
+        speechToText: {
+          defaultServiceId: 'local-asr'
+        }
       }
     })
 
@@ -151,6 +163,12 @@ describe('config sections helpers', () => {
       exists: true,
       value: true
     })
+
+    const voiceDefaultPath = resolveConfigSectionPath(parseConfigSectionPath('voice.speechToText.defaultServiceId'))
+    expect(getConfigSectionValueAtPath(sections, voiceDefaultPath)).toEqual({
+      exists: true,
+      value: 'local-asr'
+    })
   })
 
   it('marks object keys as undefined and splices array items when unsetting', () => {
@@ -196,9 +214,22 @@ describe('config sections helpers', () => {
       },
       appearance: {
         primaryColor: '#00B454'
+      },
+      voice: {
+        speechToText: {
+          services: {
+            local: {
+              provider: 'custom-http',
+              request: {
+                url: 'http://127.0.0.1:7000/transcribe'
+              }
+            }
+          }
+        }
       }
     })
     expect(hasConfigSectionValue(configuredSections.general)).toBe(true)
     expect(hasConfigSectionValue(configuredSections.appearance)).toBe(true)
+    expect(hasConfigSectionValue(configuredSections.voice)).toBe(true)
   })
 })

@@ -65,7 +65,18 @@ export const getFieldDescription = (
   return t(key, { defaultValue: '' })
 }
 
-export const isSensitiveKey = (key: string) => /key|token|secret|password/i.test(key)
+const sensitiveHeaderKeys = new Set([
+  'authorization',
+  'cookie',
+  'proxy-authorization',
+  'set-cookie'
+])
+
+export const isSensitiveKey = (key: string) => {
+  const normalized = key.trim().toLowerCase()
+  if (normalized === 'apikeyenv' || normalized === 'api_key_env' || normalized === 'api-key-env') return false
+  return sensitiveHeaderKeys.has(normalized) || /key|token|secret|password/i.test(key)
+}
 
 export const getValueByPath = (value: unknown, path: string[]) => {
   if (path.length === 0) return value

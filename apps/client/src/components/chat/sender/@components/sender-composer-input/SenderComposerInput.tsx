@@ -8,6 +8,7 @@ import type {
   SenderToolbarRefs,
   SenderToolbarState
 } from '../../@types/sender-toolbar-types'
+import type { SenderVoiceInputController } from '../../@types/sender-voice-input'
 
 import type { PendingContextFile, PendingImage } from '../../@types/sender-composer'
 import type { SenderEditorHandle } from '../../@types/sender-editor'
@@ -43,7 +44,8 @@ export function SenderComposerInput({
   sessionTarget,
   showHeaderControlsInMore,
   showStatusBarControlsInMore,
-  statusBarGitControlsInMore
+  statusBarGitControlsInMore,
+  voiceInput
 }: {
   editorRef: MutableRefObject<SenderEditorHandle | null>
   sessionInfo?: SessionInfo | null
@@ -75,7 +77,10 @@ export function SenderComposerInput({
   showHeaderControlsInMore?: boolean
   showStatusBarControlsInMore?: boolean
   statusBarGitControlsInMore?: SenderProps['statusBarGitControlsInMore']
+  voiceInput?: SenderVoiceInputController
 }) {
+  const voiceEditorDisabled = voiceInput != null && voiceInput.state.phase !== 'idle'
+
   return (
     <div className='chat-input-composer'>
       <SenderAttachments
@@ -89,7 +94,7 @@ export function SenderComposerInput({
         sessionInfo={sessionInfo}
         value={input}
         placeholder={placeholder}
-        disabled={disabled}
+        disabled={disabled || voiceEditorDisabled}
         sendShortcut={toolbarState.resolvedSendShortcut}
         sendShortcutDisabled={toolbarState.sendBlocked || toolbarState.hideSubmitAction}
         onSendShortcut={toolbarHandlers.onSend}
@@ -112,6 +117,7 @@ export function SenderComposerInput({
         showHeaderControlsInMore={showHeaderControlsInMore}
         showStatusBarControlsInMore={showStatusBarControlsInMore}
         statusBarGitControlsInMore={statusBarGitControlsInMore}
+        voiceInput={voiceInput}
       />
     </div>
   )

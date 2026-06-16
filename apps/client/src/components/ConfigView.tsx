@@ -1,6 +1,7 @@
 import './ConfigView.scss'
 
 import { App, Button, Empty, Space, Spin } from 'antd'
+import { useSetAtom } from 'jotai'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -25,6 +26,7 @@ import {
   listWorktreeEnvironments,
   updateConfig
 } from '../api'
+import { pendingSessionInitialContentAtom } from '../hooks/chat/session-creation-context'
 import { useQueryParams } from '../hooks/useQueryParams'
 import { resolveWorkspaceFileOpenerSelectModels } from '../utils/workspace-file-openers'
 import { AboutSection, ConfigSectionPanel, ConfigSourceSwitch, DisplayValue } from './config'
@@ -55,18 +57,19 @@ interface ConfigDraftConflict {
 
 interface ConfigQueryParams extends Record<string, string> {
   detail: string
+  section: string
   source: string
   tab: string
 }
 
 const configSourceKeys = ['global', 'project', 'user'] as const
-const configQueryKeys: string[] = ['tab', 'source', 'detail']
-const configQueryDefaults: ConfigQueryParams = { tab: 'general', source: 'project', detail: '' }
+const configQueryKeys: string[] = ['tab', 'source', 'detail', 'section']
+const configQueryDefaults: ConfigQueryParams = { tab: 'general', source: 'project', detail: '', section: '' }
 const configQueryOmit = {
-  detail: (value: string) => value.trim() === ''
+  detail: (value: string) => value.trim() === '',
+  section: (value: string) => value.trim() === ''
 }
 const CONFIG_ROUTE_SIDEBAR_KEY = 'config-view'
-
 const isConfigSourceKey = (value: string): value is ConfigSource => (
   configSourceKeys.includes(value as ConfigSource)
 )
@@ -75,6 +78,7 @@ export function ConfigView() {
   const { t } = useTranslation()
   const { message, modal } = App.useApp()
   const navigate = useNavigate()
+  const setPendingSessionInitialContent = useSetAtom(pendingSessionInitialContentAtom)
   const {
     closeRouteSidebar,
     isCompactView,
@@ -180,6 +184,7 @@ export function ConfigView() {
     },
     { key: 'plugins', icon: 'extension', label: t('config.sections.plugins'), value: currentSource?.plugins },
     { key: 'mcp', icon: 'account_tree', label: t('config.sections.mcp'), value: currentSource?.mcp },
+    { key: 'voice', icon: 'mic', label: t('config.sections.voice'), value: currentSource?.voice },
     { key: 'shortcuts', icon: 'keyboard', label: t('config.sections.shortcuts'), value: currentSource?.shortcuts },
     { key: 'group-app', type: 'group', label: t('config.groups.app') },
     ...(hasDesktopSettings
@@ -234,7 +239,10 @@ export function ConfigView() {
     return groups.filter(group => group.tabs.length > 0)
   }, [navSearchQuery, t, tabs])
 
-  const queryTabKey = tabKeys.has(queryValues.tab) ? queryValues.tab : 'general'
+  const sectionAliasTab = queryValues.section === 'voice.speechToText' ? 'voice' : undefined
+  const rawTab = searchParams.get('tab')
+  const queryTabKey = sectionAliasTab ??
+    (rawTab != null && tabKeys.has(queryValues.tab) ? queryValues.tab : 'general')
   const [activeTabKey, setActiveTabKeyState] = useState(queryTabKey)
   const setSourceKey = useCallback((next: ConfigSource) => {
     setSourceKeyState(next)
@@ -247,7 +255,7 @@ export function ConfigView() {
   const setActiveTabKey = useCallback((key: string) => {
     setActiveTabKeyState(key)
     setDetailQueryState('')
-    updateQuery({ tab: key, detail: '' })
+    updateQuery({ tab: key, detail: '', section: '' })
   }, [updateQuery])
   const activeTab = useMemo(() => tabs.find(tab => tab.key === activeTabKey), [tabs, activeTabKey])
   const activeContentTab = activeTab != null && activeTab.type !== 'group' ? activeTab : undefined
@@ -713,6 +721,11 @@ export function ConfigView() {
     closeRouteSidebar()
   }, [closeRouteSidebar, setActiveTabKey])
 
+  const handleCreateVoiceSetupSession = useCallback(() => {
+    setPendingSessionInitialContent([{ type: 'text', text: t('config.voice.aiAssist.prompt') }])
+    void navigate('/')
+  }, [navigate, setPendingSessionInitialContent, t])
+
   useLayoutEffect(() => {
     if (!hasRouteSidebarProvider) return
 
@@ -802,13 +815,26 @@ export function ConfigView() {
     </div>
   )
   const shouldShowSourceSwitch = activeTabKey !== 'appearance' && configTabKeys.has(activeTabKey)
-  const headerActions = shouldShowSourceSwitch
+  const headerActions = shouldShowSourceSwitch || activeTabKey === 'voice'
     ? (
-      <ConfigSourceSwitch
-        value={sourceKey}
-        onChange={setSourceKey}
-        options={sourceOptions}
-      />
+      <>
+        {activeTabKey === 'voice' && (
+          <Button
+            size='small'
+            icon={<span className='material-symbols-rounded'>auto_awesome</span>}
+            onClick={handleCreateVoiceSetupSession}
+          >
+            {t('config.voice.aiAssist.label')}
+          </Button>
+        )}
+        {shouldShowSourceSwitch && (
+          <ConfigSourceSwitch
+            value={sourceKey}
+            onChange={setSourceKey}
+            options={sourceOptions}
+          />
+        )}
+      </>
     )
     : undefined
 
