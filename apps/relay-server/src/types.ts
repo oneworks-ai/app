@@ -126,6 +126,7 @@ export interface RelayTeam {
   slug: string
   name: string
   description?: string
+  avatarUrl?: string
   proxyModeEnabled?: boolean
   createdByUserId: string
   archivedAt?: string

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { ServerResponse } from 'node:http'
+import { URL } from 'node:url'
 
 import { authContextHasPermission } from '../auth/permissions.js'
 import type { RelayAuthContext } from '../auth/permissions.js'
@@ -9,6 +10,20 @@ import { canManageRelayTeamMembers, canUpdateRelayTeam, findRelayTeamMember, tea
 import type { RelayServerArgs, RelayStore, RelayTeam, RelayTeamMember, RelayTeamPolicy, RelayUser } from '../types.js'
 
 export const cleanString = (value: unknown) => typeof value === 'string' ? value.trim() : ''
+
+export const cleanAvatarUrl = (value: unknown): { ok: true; value?: string } | { error: string; ok: false } => {
+  const text = cleanString(value)
+  if (text === '') return { ok: true }
+  try {
+    const url = new URL(text)
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      return { ok: true, value: url.toString() }
+    }
+  } catch {
+    // Invalid URLs fall through to the shared validation error below.
+  }
+  return { error: 'Team avatar URL must be an HTTP or HTTPS URL.', ok: false }
+}
 
 export const firstCleanString = (...values: unknown[]) => {
   for (const value of values) {
@@ -93,6 +108,7 @@ export const serializeTeam = (
     slug: team.slug,
     name: team.name,
     description: team.description ?? null,
+    avatarUrl: team.avatarUrl ?? null,
     proxyModeEnabled: team.proxyModeEnabled === true,
     archivedAt: team.archivedAt ?? null,
     memberCount: teamMemberCount(store, team.id),

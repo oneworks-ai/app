@@ -35,6 +35,7 @@ export interface RelayAdminTeamPolicy {
 
 export interface RelayAdminTeam {
   archivedAt: string | null
+  avatarUrl: string | null
   createdAt: string
   createdByUserId: string
   description: string | null
@@ -152,12 +153,14 @@ export interface RelayAdminAuditEvent {
 }
 
 export interface CreateTeamInput {
+  avatarUrl?: string
   description?: string
   name: string
   slug?: string
 }
 
 export interface UpdateTeamInput {
+  avatarUrl?: string
   description?: string
   name?: string
   proxyModeEnabled?: boolean

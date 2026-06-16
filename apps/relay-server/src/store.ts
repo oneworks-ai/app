@@ -103,6 +103,16 @@ const normalizeSlug = (value: unknown, fallback: string) => {
   return slug === '' ? fallback : slug
 }
 
+const normalizeHttpUrl = (value: unknown) => {
+  if (typeof value !== 'string' || value.trim() === '') return undefined
+  try {
+    const url = new URL(value.trim())
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : undefined
+  } catch {
+    return undefined
+  }
+}
+
 const normalizeTeam = (value: Record<string, unknown>): RelayTeam | undefined => {
   const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
   const slug = normalizeSlug(value.slug, id ?? randomUUID())
@@ -114,6 +124,7 @@ const normalizeTeam = (value: Record<string, unknown>): RelayTeam | undefined =>
     description: typeof value.description === 'string' && value.description.trim() !== ''
       ? value.description.trim()
       : undefined,
+    avatarUrl: normalizeHttpUrl(value.avatarUrl),
     ...(typeof value.proxyModeEnabled === 'boolean' ? { proxyModeEnabled: value.proxyModeEnabled } : {}),
     createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
       ? value.createdByUserId.trim()

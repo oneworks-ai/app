@@ -1,6 +1,6 @@
 import './TeamPanel.css'
 
-import { Button, Empty, Form, Input, Switch } from 'antd'
+import { Avatar, Button, Empty, Form, Input, Switch } from 'antd'
 import { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 
@@ -15,6 +15,7 @@ export interface TeamDetailSettingsPageProps {
 }
 
 interface TeamSettingsFormValues {
+  avatarUrl?: string
   description?: string
   name: string
   proxyModeEnabled: boolean
@@ -24,11 +25,34 @@ interface TeamSettingsFormValues {
 const cleanText = (value: string | undefined) => value?.trim() ?? ''
 
 const valuesFromTeam = (team: RelayAdminTeam | undefined): TeamSettingsFormValues => ({
+  avatarUrl: team?.avatarUrl ?? '',
   description: team?.description ?? '',
   name: team?.name ?? '',
   proxyModeEnabled: team?.proxyModeEnabled ?? false,
   slug: team?.slug ?? ''
 })
+
+const teamInitials = (name: string) => {
+  const text = cleanText(name)
+  if (text === '') return '团'
+  const words = text.split(/\s+/u).filter(Boolean)
+  if (words.length >= 2) {
+    return `${Array.from(words[0] ?? '').at(0) ?? ''}${Array.from(words[1] ?? '').at(0) ?? ''}`.toUpperCase()
+  }
+  return Array.from(text).slice(0, 2).join('').toUpperCase()
+}
+
+const validateAvatarUrl = async (_: unknown, value: string | undefined) => {
+  const text = cleanText(value)
+  if (text === '') return
+  try {
+    const url = new URL(text)
+    if (url.protocol === 'http:' || url.protocol === 'https:') return
+  } catch {
+    // Invalid URLs fall through to the shared field error below.
+  }
+  throw new Error('请输入 HTTP/HTTPS 图片地址')
+}
 
 export const TeamDetailSettingsPage = ({
   disabled,
@@ -39,6 +63,8 @@ export const TeamDetailSettingsPage = ({
   const { teamId } = useParams()
   const team = teams.find(item => item.id === teamId)
   const [form] = Form.useForm<TeamSettingsFormValues>()
+  const watchedAvatarUrl = Form.useWatch('avatarUrl', form)
+  const watchedName = Form.useWatch('name', form)
 
   useEffect(() => {
     form.setFieldsValue(valuesFromTeam(team))
@@ -49,6 +75,7 @@ export const TeamDetailSettingsPage = ({
     const name = cleanText(values.name)
     if (name === '') return
     await onUpdateTeam(team, {
+      avatarUrl: cleanText(values.avatarUrl),
       description: cleanText(values.description),
       name,
       proxyModeEnabled: values.proxyModeEnabled,
@@ -79,8 +106,25 @@ export const TeamDetailSettingsPage = ({
           layout='vertical'
           onFinish={handleSubmit}
         >
+          <div className='relay-team-panel__settings-preview'>
+            <Avatar
+              className='relay-team-detail__avatar'
+              shape='square'
+              size={56}
+              src={cleanText(watchedAvatarUrl) === '' ? undefined : cleanText(watchedAvatarUrl)}
+            >
+              {teamInitials(watchedName ?? team.name)}
+            </Avatar>
+            <div>
+              <strong>{cleanText(watchedName) === '' ? team.name : cleanText(watchedName)}</strong>
+              <span>{team.slug}</span>
+            </div>
+          </div>
           <Form.Item label='团队名称' name='name' rules={[{ required: true }]}>
             <Input disabled={disabled} />
+          </Form.Item>
+          <Form.Item label='头像 URL' name='avatarUrl' rules={[{ validator: validateAvatarUrl }]}>
+            <Input disabled={disabled} placeholder='https://example.com/team.png' />
           </Form.Item>
           <Form.Item label='Slug' name='slug'>
             <Input disabled={disabled} />

@@ -1,6 +1,6 @@
 import './TeamPanel.css'
 
-import { Empty, Tabs } from 'antd'
+import { Avatar, Empty, Tabs } from 'antd'
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -13,7 +13,7 @@ import { TeamConfigSecrets } from './TeamConfigSecrets'
 import { TeamDetailTabActionsContext } from './TeamDetailTabActions'
 import type { TeamDetailTabKey } from './TeamDetailTabActions'
 import { TeamMembers } from './TeamMembers'
-import type { RelayAdminTeam, RelayAdminTeamPolicy } from './teamTypes'
+import type { RelayAdminTeam, RelayAdminTeamMemberRole, RelayAdminTeamPolicy } from './teamTypes'
 
 export interface TeamDetailPageProps {
   disabled: boolean
@@ -31,6 +31,32 @@ const formatTimestamp = (value: string | null | undefined) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+}
+
+const teamInitials = (name: string) => {
+  const words = name.trim().split(/\s+/u).filter(Boolean)
+  if (words.length >= 2) {
+    return `${Array.from(words[0] ?? '').at(0) ?? ''}${Array.from(words[1] ?? '').at(0) ?? ''}`.toUpperCase()
+  }
+  const fallback = words[0] ?? name
+  return Array.from(fallback).slice(0, 2).join('').toUpperCase() || '团'
+}
+
+const teamRoleLabel = (role: RelayAdminTeamMemberRole | undefined) => {
+  switch (role) {
+    case 'owner':
+      return '团队所有者'
+    case 'admin':
+      return '团队管理员'
+    case 'editor':
+      return '编辑者'
+    case 'viewer':
+      return '只读成员'
+    case 'member':
+      return '成员'
+    default:
+      return '平台管理员'
+  }
 }
 
 export const TeamDetailPage = ({
@@ -77,30 +103,45 @@ export const TeamDetailPage = ({
     <DataPanel id='team-detail'>
       <section className='relay-team-detail'>
         <div className='relay-team-detail__overview' aria-label='团队基本信息'>
-          <p
-            className={[
-              'relay-team-detail__description',
-              team.description == null || team.description.trim() === '' ? 'is-empty' : ''
-            ].filter(Boolean).join(' ')}
-          >
-            {team.description == null || team.description.trim() === '' ? '暂无团队介绍' : team.description}
-          </p>
-          <dl className='relay-team-detail__meta-list'>
-            <div className='relay-team-detail__meta-item'>
-              <dt>Slug</dt>
-              <dd>{team.slug}</dd>
-            </div>
-            <div className='relay-team-detail__meta-item'>
-              <dt>状态</dt>
-              <dd>
+          <div className='relay-team-detail__identity'>
+            <Avatar
+              className='relay-team-detail__avatar'
+              shape='square'
+              size={48}
+              src={team.avatarUrl ?? undefined}
+            >
+              {teamInitials(team.name)}
+            </Avatar>
+            <div className='relay-team-detail__identity-copy'>
+              <div className='relay-team-detail__name-row'>
+                <h2>{team.name}</h2>
                 {team.archivedAt == null
-                  ? <StatusBadge tone='success'>active</StatusBadge>
-                  : <StatusBadge tone='warning'>archived</StatusBadge>}
-              </dd>
+                  ? <StatusBadge tone='success'>启用</StatusBadge>
+                  : <StatusBadge tone='warning'>已归档</StatusBadge>}
+              </div>
+              <p className='relay-team-detail__slug'>{team.slug}</p>
+              <p
+                className={[
+                  'relay-team-detail__description',
+                  team.description == null || team.description.trim() === '' ? 'is-empty' : ''
+                ].filter(Boolean).join(' ')}
+              >
+                {team.description == null || team.description.trim() === '' ? '暂无团队介绍' : team.description}
+              </p>
             </div>
+          </div>
+          <dl className='relay-team-detail__meta-list'>
             <div className='relay-team-detail__meta-item'>
               <dt>成员</dt>
               <dd>{team.memberCount}</dd>
+            </div>
+            <div className='relay-team-detail__meta-item'>
+              <dt>我的角色</dt>
+              <dd>{teamRoleLabel(team.membership?.role)}</dd>
+            </div>
+            <div className='relay-team-detail__meta-item'>
+              <dt>Proxy 模式</dt>
+              <dd>{team.proxyModeEnabled ? '允许' : '关闭'}</dd>
             </div>
             <div className='relay-team-detail__meta-item'>
               <dt>创建时间</dt>

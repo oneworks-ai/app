@@ -246,10 +246,16 @@ describe('relay team routes', () => {
       method: 'PATCH',
       headers: authHeaders('admin-token'),
       body: JSON.stringify({
+        avatarUrl: 'https://cdn.example.com/relay-demo-team.png',
         description: 'Platform-owned team',
         name: 'Admin Team Updated',
         proxyModeEnabled: true
       })
+    })
+    const invalidAvatarUpdate = await requestJson(baseUrl, `/api/admin/teams/${teamId}`, {
+      method: 'PATCH',
+      headers: authHeaders('admin-token'),
+      body: JSON.stringify({ avatarUrl: 'ftp://cdn.example.com/team.png' })
     })
     const relayPolicy = await requestJson(baseUrl, '/api/relay/team-policy', {
       headers: authHeaders('user-1-session')
@@ -269,9 +275,14 @@ describe('relay team routes', () => {
     expect(adminCreate.response.status).toBe(200)
     expect(adminUpdate.response.status).toBe(200)
     expect(adminUpdate.body.team).toMatchObject({
+      avatarUrl: 'https://cdn.example.com/relay-demo-team.png',
       description: 'Platform-owned team',
       name: 'Admin Team Updated',
       proxyModeEnabled: true
+    })
+    expect(invalidAvatarUpdate.response.status).toBe(400)
+    expect(invalidAvatarUpdate.body).toEqual({
+      error: 'Team avatar URL must be an HTTP or HTTPS URL.'
     })
     expect(limitedMember.response.status).toBe(403)
     expect(limitedMember.body).toEqual({ error: 'Team member limit reached.' })

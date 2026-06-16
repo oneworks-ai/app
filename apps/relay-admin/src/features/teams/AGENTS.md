@@ -8,7 +8,7 @@
 - `TeamPanel.tsx`：`/teams` 一级列表页，只负责团队列表和新建团队抽屉；不要在这里承载团队详情或站点策略。
 - `TeamSettingsPage.tsx`：`/teams/settings` 二级配置页，负责站点团队策略表单；从 `/teams` 的 header 设置入口进入。
 - `TeamDetailPage.tsx`：`/teams/:teamId/members|profiles|secrets|audit` 二级详情子页，负责成员、配置方案、密钥和操作审计 tabs；旧 `/teams/:teamId` 只做跳转。
-- `TeamDetailSettingsPage.tsx`：`/teams/:teamId/settings` 三级团队配置页，负责团队名称、介绍、Slug 和团队级平台策略开关。
+- `TeamDetailSettingsPage.tsx`：`/teams/:teamId/settings` 三级团队配置页，负责团队名称、头像、介绍、Slug 和团队级平台策略开关。
 - `TeamMembers.tsx`：选中团队的成员列表、添加成员、角色调整和配置启停。
 - `TeamPolicyForm.tsx`：站点管理员配置 teamsEnabled、selfService、proxyMode 和容量上限。
 - `TeamTable.tsx`：团队列表、搜索、展示列、多选批量操作和团队归档 / 恢复状态操作。

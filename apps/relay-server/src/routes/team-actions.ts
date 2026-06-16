@@ -10,6 +10,7 @@ import { now } from '../utils.js'
 import {
   authUserId,
   canWriteTeam,
+  cleanAvatarUrl,
   cleanSlug,
   cleanString,
   ensureTeamsWritable,
@@ -60,11 +61,17 @@ export const createTeam = async (
     sendJson(res, 409, { error: 'Team slug already exists.' }, args.allowOrigin)
     return
   }
+  const avatarUrl = cleanAvatarUrl(body.avatarUrl)
+  if (!avatarUrl.ok) {
+    sendJson(res, 400, { error: avatarUrl.error }, args.allowOrigin)
+    return
+  }
   const team: RelayTeam = {
     id: randomUUID(),
     slug,
     name,
     ...(cleanString(body.description) === '' ? {} : { description: cleanString(body.description) }),
+    ...(avatarUrl.value == null ? {} : { avatarUrl: avatarUrl.value }),
     createdByUserId: owner.id,
     createdAt: now()
   }
@@ -116,6 +123,14 @@ export const updateTeam = async (
   }
   if (Object.prototype.hasOwnProperty.call(body, 'description')) {
     team.description = cleanString(body.description) === '' ? undefined : cleanString(body.description)
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'avatarUrl')) {
+    const avatarUrl = cleanAvatarUrl(body.avatarUrl)
+    if (!avatarUrl.ok) {
+      sendJson(res, 400, { error: avatarUrl.error }, args.allowOrigin)
+      return
+    }
+    team.avatarUrl = avatarUrl.value
   }
   if (Object.prototype.hasOwnProperty.call(body, 'proxyModeEnabled')) {
     if (!isAdminAuth(auth)) {
