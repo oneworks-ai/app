@@ -100,7 +100,7 @@ export const TeamConfigSecrets = ({ disabled, team, token }: TeamConfigSecretsPr
     {
       dataIndex: 'name',
       key: 'name',
-      title: 'Secret',
+      title: '密钥',
       width: 180
     },
     {
@@ -124,7 +124,7 @@ export const TeamConfigSecrets = ({ disabled, team, token }: TeamConfigSecretsPr
       dataIndex: 'id',
       key: 'id',
       render: value => <span className='relay-team-panel__secondary'>{value}</span>,
-      title: 'Secret ID',
+      title: '密钥 ID',
       width: 260
     },
     {
@@ -141,20 +141,20 @@ export const TeamConfigSecrets = ({ disabled, team, token }: TeamConfigSecretsPr
       render: (_, secret) => (
         <Space size={4}>
           <AdminActionButton
-            aria-label='轮换 Secret'
+            aria-label='轮换密钥'
             disabled={disabled || secret.revokedAt != null}
             iconName='refresh'
             size='small'
-            title='轮换 Secret'
+            title='轮换密钥'
             type='text'
             onClick={() => setRotateSecret(secret)}
           />
           <AdminActionButton
-            aria-label='撤销 Secret'
+            aria-label='撤销密钥'
             disabled={disabled || secret.revokedAt != null}
             iconName='disabled_by_default'
             size='small'
-            title='撤销 Secret'
+            title='撤销密钥'
             type='text'
             onClick={() => void revokeSecret(secret)}
           />
@@ -167,21 +167,21 @@ export const TeamConfigSecrets = ({ disabled, team, token }: TeamConfigSecretsPr
   const tabActions = useMemo(() => (
     <Space size={4}>
       <AdminActionButton
-        aria-label='创建 Secret'
+        aria-label='创建密钥'
         disabled={disabled}
         iconName='add'
         onClick={() => setCreateDrawerOpen(true)}
         size='small'
-        title='创建 Secret'
+        title='创建密钥'
         type='primary'
       />
       <AdminActionButton
-        aria-label='刷新 Secrets'
+        aria-label='刷新密钥'
         disabled={disabled || loading}
         iconName='refresh'
         onClick={refreshSecrets}
         size='small'
-        title='刷新 Secrets'
+        title='刷新密钥'
       />
     </Space>
   ), [disabled, loading, refreshSecrets])
@@ -196,7 +196,7 @@ export const TeamConfigSecrets = ({ disabled, team, token }: TeamConfigSecretsPr
         columns={columns}
         dataSource={secrets}
         loading={loading}
-        locale={{ emptyText: '暂无 Secret' }}
+        locale={{ emptyText: '暂无密钥' }}
         pagination={false}
         rowKey='id'
         scroll={{ x: 'max-content' }}
@@ -206,19 +206,19 @@ export const TeamConfigSecrets = ({ disabled, team, token }: TeamConfigSecretsPr
       <Drawer
         destroyOnHidden
         open={createDrawerOpen}
-        title='新建 Secret'
+        title='新建密钥'
         width={460}
         onClose={() => setCreateDrawerOpen(false)}
       >
         <Form form={createForm} layout='vertical' onFinish={createSecret}>
-          <Form.Item label='Secret 名称' name='name' rules={[{ required: true }]}>
+          <Form.Item label='密钥名称' name='name' rules={[{ required: true }]}>
             <Input disabled={disabled} placeholder='OpenAI API key' />
           </Form.Item>
-          <Form.Item label='Secret Value' name='value' rules={[{ required: true }]}>
+          <Form.Item label='密钥值' name='value' rules={[{ required: true }]}>
             <Input.Password disabled={disabled} />
           </Form.Item>
           <Button block disabled={disabled} htmlType='submit' type='primary'>
-            创建 Secret
+            创建密钥
           </Button>
         </Form>
       </Drawer>
@@ -226,16 +226,16 @@ export const TeamConfigSecrets = ({ disabled, team, token }: TeamConfigSecretsPr
       <Drawer
         destroyOnHidden
         open={rotateSecret != null}
-        title={rotateSecret == null ? '轮换 Secret' : `轮换 Secret · ${rotateSecret.name}`}
+        title={rotateSecret == null ? '轮换密钥' : `轮换密钥 · ${rotateSecret.name}`}
         width={460}
         onClose={() => setRotateSecret(undefined)}
       >
         <Form form={rotateForm} layout='vertical' onFinish={submitRotation}>
-          <Form.Item label='Secret Value' name='value' rules={[{ required: true }]}>
+          <Form.Item label='密钥值' name='value' rules={[{ required: true }]}>
             <Input.Password disabled={disabled || rotateSecret == null} />
           </Form.Item>
           <Button block disabled={disabled || rotateSecret == null} htmlType='submit' type='primary'>
-            轮换 Secret
+            轮换密钥
           </Button>
         </Form>
       </Drawer>

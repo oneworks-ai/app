@@ -70,14 +70,14 @@ export const TeamProfileCreateForm = ({
 
   return (
     <Form form={form} layout='vertical' onFinish={handleCreate}>
-      <Form.Item label='Profile 名称' name='name' rules={[{ required: true }]}>
+      <Form.Item label='配置方案名称' name='name' rules={[{ required: true }]}>
         <Input disabled={disabled} placeholder='Team defaults' />
       </Form.Item>
       <Form.Item label='描述' name='description'>
         <Input.TextArea autoSize={{ minRows: 3 }} disabled={disabled} />
       </Form.Item>
       <Button block disabled={disabled} htmlType='submit' type='primary'>
-        创建 Profile
+        创建配置方案
       </Button>
     </Form>
   )
@@ -124,10 +124,10 @@ export const TeamProfileVersionForm = ({ disabled, onCreateVersion, onCreated }:
       <Form.Item label='允许字段' name='allowedFields' rules={[{ required: true }]}>
         <Select disabled={disabled} mode='multiple' options={relayConfigSafeFieldOptions} />
       </Form.Item>
-      <Form.Item label='Config Patch JSON' name='configPatch' rules={[{ required: true }]}>
+      <Form.Item label='配置补丁 JSON' name='configPatch' rules={[{ required: true }]}>
         <Input.TextArea autoSize={{ minRows: 8 }} disabled={disabled} />
       </Form.Item>
-      <Form.Item label='Secret Refs JSON' name='secretRefs'>
+      <Form.Item label='密钥引用 JSON' name='secretRefs'>
         <Input.TextArea
           autoSize={{ minRows: 3 }}
           disabled={disabled}

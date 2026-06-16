@@ -102,14 +102,14 @@ export const TeamConfigAssignmentForm = ({
       <Form.Item label='用户 ID' name='userIds'>
         <Input.TextArea autoSize={{ minRows: 2 }} disabled={disabled} />
       </Form.Item>
-      <Form.Item label='项目 allow' name='allow'>
+      <Form.Item label='允许的项目' name='allow'>
         <Input.TextArea autoSize={{ minRows: 2 }} disabled={disabled} />
       </Form.Item>
-      <Form.Item label='项目 deny' name='deny'>
+      <Form.Item label='拒绝的项目' name='deny'>
         <Input.TextArea autoSize={{ minRows: 2 }} disabled={disabled} />
       </Form.Item>
       <Button block disabled={disabled} htmlType='submit' type='primary'>
-        创建 Assignment
+        创建分配
       </Button>
     </Form>
   )

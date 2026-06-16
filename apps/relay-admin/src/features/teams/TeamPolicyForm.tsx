@@ -79,7 +79,7 @@ export const TeamPolicyForm = ({ disabled, onUpdatePolicy, policy }: TeamPolicyF
         <Form.Item label='代理模式' name='proxyModeEnabled' valuePropName='checked'>
           <Switch disabled={disabled || policy == null} />
         </Form.Item>
-        <Form.Item label='Secret 审批' name='requireOwnerApprovalForSecretProfiles' valuePropName='checked'>
+        <Form.Item label='密钥审批' name='requireOwnerApprovalForSecretProfiles' valuePropName='checked'>
           <Switch disabled={disabled || policy == null} />
         </Form.Item>
       </div>
@@ -93,13 +93,13 @@ export const TeamPolicyForm = ({ disabled, onUpdatePolicy, policy }: TeamPolicyF
         <Form.Item label='团队成员上限' name='maxMembersPerTeam'>
           <InputNumber controls={false} disabled={disabled || policy == null} min={0} placeholder='不限' />
         </Form.Item>
-        <Form.Item label='Profile 上限' name='maxProfilesPerTeam'>
+        <Form.Item label='配置方案上限' name='maxProfilesPerTeam'>
           <InputNumber controls={false} disabled={disabled || policy == null} min={0} placeholder='不限' />
         </Form.Item>
-        <Form.Item label='Assignment 上限' name='maxAssignmentsPerProfile'>
+        <Form.Item label='分配上限' name='maxAssignmentsPerProfile'>
           <InputNumber controls={false} disabled={disabled || policy == null} min={0} placeholder='不限' />
         </Form.Item>
-        <Form.Item label='Secret TTL 小时' name='maxSecretTtlHours'>
+        <Form.Item label='密钥有效期上限（小时）' name='maxSecretTtlHours'>
           <InputNumber controls={false} disabled={disabled || policy == null} min={0} placeholder='不限' />
         </Form.Item>
       </div>

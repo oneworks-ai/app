@@ -153,7 +153,7 @@ export const TeamConfigProfiles = ({ disabled, team, token }: TeamConfigProfiles
           {profile.name}
         </button>
       ),
-      title: 'Profile',
+      title: '配置方案',
       width: 220
     },
     {
@@ -278,7 +278,7 @@ export const TeamConfigProfiles = ({ disabled, team, token }: TeamConfigProfiles
     }
   ]
   const selectedDescriptionItems: DescriptionsProps['items'] = [
-    { children: selectedProfile?.id ?? '-', key: 'id', label: 'Profile ID' },
+    { children: selectedProfile?.id ?? '-', key: 'id', label: '配置方案 ID' },
     { children: selectedProfile?.activeVersionId ?? '-', key: 'activeVersionId', label: '当前版本' },
     { children: selectedDetail?.versions.length ?? 0, key: 'versions', label: '版本数' },
     { children: selectedDetail?.assignments.length ?? 0, key: 'assignments', label: '分配数' }
@@ -289,21 +289,21 @@ export const TeamConfigProfiles = ({ disabled, team, token }: TeamConfigProfiles
       : (
         <Space size={4}>
           <AdminActionButton
-            aria-label='创建 Profile'
+            aria-label='创建配置方案'
             disabled={disabled}
             iconName='add'
             onClick={() => setCreateDrawerOpen(true)}
             size='small'
-            title='创建 Profile'
+            title='创建配置方案'
             type='primary'
           />
           <AdminActionButton
-            aria-label='刷新 Profiles'
+            aria-label='刷新配置方案'
             disabled={disabled || loading}
             iconName='refresh'
             onClick={refreshProfiles}
             size='small'
-            title='刷新 Profiles'
+            title='刷新配置方案'
           />
         </Space>
       ), [disabled, loading, refreshProfiles, team])
@@ -322,7 +322,7 @@ export const TeamConfigProfiles = ({ disabled, team, token }: TeamConfigProfiles
         columns={columns}
         dataSource={profiles}
         loading={loading}
-        locale={{ emptyText: '暂无配置 Profile' }}
+        locale={{ emptyText: '暂无配置方案' }}
         pagination={false}
         rowKey='id'
         scroll={{ x: 'max-content' }}
@@ -341,7 +341,7 @@ export const TeamConfigProfiles = ({ disabled, team, token }: TeamConfigProfiles
             className='relay-admin-table relay-team-panel__assignment-table'
             columns={assignmentColumns}
             dataSource={selectedDetail?.assignments ?? []}
-            locale={{ emptyText: '暂无 Assignment' }}
+            locale={{ emptyText: '暂无分配' }}
             pagination={false}
             rowKey='id'
             scroll={{ x: 'max-content' }}
@@ -353,7 +353,7 @@ export const TeamConfigProfiles = ({ disabled, team, token }: TeamConfigProfiles
       <Drawer
         destroyOnHidden
         open={createDrawerOpen}
-        title='新建 Config Profile'
+        title='新建配置方案'
         width={460}
         onClose={() => setCreateDrawerOpen(false)}
       >
@@ -380,7 +380,7 @@ export const TeamConfigProfiles = ({ disabled, team, token }: TeamConfigProfiles
       <Drawer
         destroyOnHidden
         open={assignmentDrawerOpen}
-        title={selectedProfile == null ? '创建 Assignment' : `创建 Assignment · ${selectedProfile.name}`}
+        title={selectedProfile == null ? '创建分配' : `创建分配 · ${selectedProfile.name}`}
         width={560}
         onClose={() => setAssignmentDrawerOpen(false)}
       >

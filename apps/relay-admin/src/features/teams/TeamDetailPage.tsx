@@ -126,7 +126,7 @@ export const TeamDetailPage = ({
                   />
                 ),
                 key: 'profiles',
-                label: '配置 Profiles'
+                label: '配置方案'
               },
               {
                 children: (
@@ -137,7 +137,7 @@ export const TeamDetailPage = ({
                   />
                 ),
                 key: 'secrets',
-                label: 'Secrets'
+                label: '密钥'
               }
             ]}
             tabBarExtraContent={tabActions[activeTabKey] == null
