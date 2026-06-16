@@ -20,7 +20,7 @@ const adminUserDisplayName = (user: { email: string; name: string }) => user.nam
 
 export const useAdminRouteHeaderBreadcrumb = (
   pathname: string,
-  dashboard: Pick<RelayAdminDashboardState, 'currentUser' | 'devices' | 'users'>
+  dashboard: Pick<RelayAdminDashboardState, 'currentUser' | 'devices' | 'teams' | 'users'>
 ): RouteContainerHeaderBreadcrumb | undefined => {
   const navigate = useNavigate()
   const normalizedPathname = pathname.replace(/\/+$/, '')
@@ -30,6 +30,10 @@ export const useAdminRouteHeaderBreadcrumb = (
   }, [normalizedPathname])
   const userDetailId = useMemo(() => {
     const match = /^\/users\/([^/]+)$/.exec(normalizedPathname)
+    return decodeRouteSegment(match?.[1])
+  }, [normalizedPathname])
+  const teamDetailId = useMemo(() => {
+    const match = /^\/teams\/([^/]+)$/.exec(normalizedPathname)
     return decodeRouteSegment(match?.[1])
   }, [normalizedPathname])
   const deviceDetailTitle = useMemo(() => {
@@ -42,6 +46,10 @@ export const useAdminRouteHeaderBreadcrumb = (
     if (user != null) return adminUserDisplayName(user)
     return dashboard.currentUser?.id === userDetailId ? adminUserDisplayName(dashboard.currentUser) : '账号详情'
   }, [dashboard.currentUser, dashboard.users, userDetailId])
+  const teamDetailTitle = useMemo(() => {
+    if (teamDetailId == null) return undefined
+    return dashboard.teams.find(item => item.id === teamDetailId)?.name ?? '团队详情'
+  }, [dashboard.teams, teamDetailId])
 
   return useMemo(() => {
     if (deviceDetailId != null) {
@@ -56,9 +64,8 @@ export const useAdminRouteHeaderBreadcrumb = (
       }
     }
 
-    return userDetailId == null
-      ? undefined
-      : {
+    if (userDetailId != null) {
+      return {
         ariaLabel: '账号导航',
         backIcon: createElement(AdminIcon, { className: breadcrumbIconClassName, name: 'chevron_left' }),
         backLabel: '返回用户列表',
@@ -67,5 +74,20 @@ export const useAdminRouteHeaderBreadcrumb = (
         separatorIcon: createElement(AdminIcon, { className: breadcrumbIconClassName, name: 'chevron_right' }),
         onBack: () => void navigate('/users')
       }
-  }, [deviceDetailId, deviceDetailTitle, navigate, userDetailId, userDetailTitle])
+    }
+
+    if (teamDetailId != null) {
+      return {
+        ariaLabel: '团队导航',
+        backIcon: createElement(AdminIcon, { className: breadcrumbIconClassName, name: 'chevron_left' }),
+        backLabel: '返回团队列表',
+        currentTitle: teamDetailTitle,
+        parentTitle: '团队',
+        separatorIcon: createElement(AdminIcon, { className: breadcrumbIconClassName, name: 'chevron_right' }),
+        onBack: () => void navigate('/teams')
+      }
+    }
+
+    return undefined
+  }, [deviceDetailId, deviceDetailTitle, navigate, teamDetailId, teamDetailTitle, userDetailId, userDetailTitle])
 }

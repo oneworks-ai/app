@@ -370,6 +370,12 @@ export const AdminApp = () => {
                   )
                   : <Navigate to='/devices' replace />}
               />
+              <Route
+                path='teams/:teamId'
+                element={canRenderSection('teams')
+                  ? <AdminDashboard dashboard={dashboard} sectionId='team-detail' />
+                  : <Navigate to='/devices' replace />}
+              />
               <Route path='*' element={<Navigate to='/devices' replace />} />
             </Routes>
           </main>

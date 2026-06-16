@@ -29,7 +29,12 @@ export const demoVideoScenarios = [
     requiresUrl: true,
     title: 'Relay 团队配置 Tabs',
     run: async (ctx) => {
-      await ctx.navigate(ctx.resolveUrl('/admin/teams'))
+      const inputUrl = ctx.requireUrl()
+      const startUrl = new URL(inputUrl).pathname.startsWith('/admin/')
+        ? inputUrl
+        : ctx.resolveUrl('/admin/teams')
+      await ctx.navigate(startUrl)
+      await ctx.clickSelector('.relay-team-panel__team-link', { settleMs: 800 })
       await ctx.waitForText('成员', { timeoutMs: 15_000 })
       await ctx.recordFor(2_000)
       await ctx.clickText('配置 Profiles', { exact: true, settleMs: 500 })

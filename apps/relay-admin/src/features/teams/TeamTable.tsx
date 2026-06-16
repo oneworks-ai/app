@@ -1,6 +1,6 @@
-import { Button } from 'antd'
 import type { TableColumnsType } from 'antd'
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { AdminColumnFilter } from '../../shared/ui/AdminColumnFilter'
 import { AdminListTable } from '../../shared/ui/AdminListTable'
@@ -9,9 +9,7 @@ import { StatusBadge } from '../../shared/ui/StatusBadge'
 import type { RelayAdminTeam } from './teamTypes'
 
 export interface TeamTableProps {
-  selectedTeamId?: string
   teams: RelayAdminTeam[]
-  onSelectTeam: (teamId: string) => void
 }
 
 const formatTimestamp = (value: string | null | undefined) => {
@@ -21,7 +19,7 @@ const formatTimestamp = (value: string | null | undefined) => {
   return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
-export const TeamTable = ({ onSelectTeam, selectedTeamId, teams }: TeamTableProps) => {
+export const TeamTable = ({ teams }: TeamTableProps) => {
   const [searchValue, setSearchValue] = useState('')
   const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'archived'>('active')
   const [visibleColumnKeys, setVisibleColumnKeys] = useState(['name', 'status', 'memberCount', 'createdAt'])
@@ -49,16 +47,9 @@ export const TeamTable = ({ onSelectTeam, selectedTeamId, teams }: TeamTableProp
       dataIndex: 'name',
       key: 'name',
       render: (_, team) => (
-        <Button
-          className={[
-            'relay-team-panel__team-link',
-            team.id === selectedTeamId ? 'is-active' : ''
-          ].filter(Boolean).join(' ')}
-          type='link'
-          onClick={() => onSelectTeam(team.id)}
-        >
+        <Link className='relay-team-panel__team-link' to={`/teams/${encodeURIComponent(team.id)}`}>
           {team.name}
-        </Button>
+        </Link>
       ),
       title: '团队',
       width: 200

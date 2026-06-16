@@ -2,17 +2,9 @@
   min-width: 0;
 }
 
-.relay-team-panel__layout {
+.relay-team-panel__list-layout {
   display: grid;
-  grid-template-columns: minmax(280px, .95fr) minmax(360px, 1.25fr);
-  gap: 16px;
-  min-width: 0;
-}
-
-.relay-team-panel__left,
-.relay-team-panel__right {
-  display: grid;
-  align-content: start;
+  grid-template-columns: minmax(280px, .72fr) minmax(420px, 1.28fr);
   gap: 16px;
   min-width: 0;
 }
@@ -24,6 +16,10 @@
   border: 1px solid var(--ant-color-border-secondary, #f0f0f0);
   border-radius: 8px;
   padding: 12px;
+}
+
+.relay-team-panel__team-list-section {
+  min-height: 0;
 }
 
 .relay-team-panel__section-header {
@@ -100,6 +96,7 @@
 
 .relay-team-panel__team-link,
 .relay-team-panel__profile-button {
+  display: inline-block;
   max-width: 100%;
   overflow: hidden;
   padding: 0;
@@ -119,6 +116,57 @@
 .relay-team-panel__profile-button.is-active {
   color: var(--ant-color-primary, #1677ff);
   font-weight: 700;
+}
+
+.relay-team-panel__team-link {
+  color: var(--ant-color-link, #1677ff);
+}
+
+.relay-team-detail {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.relay-team-detail__summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  border: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.relay-team-detail__title {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.relay-team-detail__title h2 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--ant-color-text, #1f2328);
+  font: 700 18px/1.25 ui-sans-serif, system-ui, sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-team-detail__meta,
+.relay-team-detail__stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ant-color-text-secondary, #57606a);
+  font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif;
+}
+
+.relay-team-detail__empty {
+  padding: 48px 0;
 }
 
 .relay-team-panel__secondary {
@@ -169,12 +217,16 @@
 }
 
 @media (max-width: 980px) {
-  .relay-team-panel__layout {
+  .relay-team-panel__list-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 640px) {
+  .relay-team-detail__summary {
+    display: grid;
+  }
+
   .relay-team-panel__policy-switches,
   .relay-team-panel__policy-grid {
     grid-template-columns: minmax(0, 1fr);

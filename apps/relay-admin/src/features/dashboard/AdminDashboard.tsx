@@ -3,6 +3,7 @@ import { DevicePanel } from '../devices/DevicePanel'
 import { InvitePanel } from '../invites/InvitePanel'
 import { ProfilePage } from '../profile/ProfilePage'
 import { SsoProviderPanel } from '../sso/SsoProviderPanel'
+import { TeamDetailPage } from '../teams/TeamDetailPage'
 import { TeamPanel } from '../teams/TeamPanel'
 import { UserDetailPage } from '../users/UserDetailPage'
 import { UserPanel } from '../users/UserPanel'
@@ -17,6 +18,7 @@ export type AdminDashboardSectionId =
   | 'users'
   | 'invites'
   | 'sso'
+  | 'team-detail'
   | 'teams'
 export type AdminDashboardCreateSectionId = Extract<AdminDashboardSectionId, 'invites' | 'sso' | 'teams' | 'users'>
 
@@ -131,10 +133,18 @@ export const AdminDashboard = ({
           isCreateOpen={createSectionId === 'teams'}
           policy={dashboard.teamPolicy}
           teams={dashboard.teams}
-          token={dashboard.token}
           onCreateOpenChange={open => onCreateSectionChange?.(open ? 'teams' : undefined)}
           onCreateTeam={dashboard.createTeam}
           onUpdatePolicy={dashboard.updateTeamPolicy}
+        />
+      )}
+      {sectionId === 'team-detail' && (
+        <TeamDetailPage
+          disabled={disabled}
+          loading={dashboard.loading || dashboard.authStatus === 'checking'}
+          policy={dashboard.teamPolicy}
+          teams={dashboard.teams}
+          token={dashboard.token}
         />
       )}
     </div>
