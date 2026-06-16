@@ -1,5 +1,6 @@
 import type {
   MessageWorkspaceFileOpener,
+  SessionPanelState,
   WorkspaceExternalOpenResponse,
   WorkspaceExternalOpenerId,
   WorkspaceFileOpenResponse,
@@ -27,6 +28,25 @@ export interface WorkspaceFileContent {
   encoding: 'utf-8'
   path: string
   size: number
+}
+
+export interface WorkspacePanelStateResponse {
+  panelState: SessionPanelState
+  updatedAt: number
+}
+
+export const getWorkspacePanelStateCacheKey = () => '/api/workspace/panel-state'
+
+export async function getWorkspacePanelState(): Promise<WorkspacePanelStateResponse> {
+  return fetchApiJson<WorkspacePanelStateResponse>(getWorkspacePanelStateCacheKey())
+}
+
+export async function updateWorkspacePanelState(panelState: SessionPanelState): Promise<WorkspacePanelStateResponse> {
+  return fetchApiJson<WorkspacePanelStateResponse>(getWorkspacePanelStateCacheKey(), {
+    method: 'PATCH',
+    headers: jsonHeaders,
+    body: JSON.stringify({ panelState })
+  })
 }
 
 export async function listWorkspaceTree(path?: string) {

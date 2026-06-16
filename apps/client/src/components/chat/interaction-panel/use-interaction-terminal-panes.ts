@@ -10,6 +10,7 @@ import type {
 } from '#~/components/chat/terminal/@hooks/use-terminal-session'
 import {
   DEFAULT_TERMINAL_ID,
+  TERMINAL_SHELL_KINDS,
   createTerminalPane,
   getNextTerminalTitle,
   normalizeTerminalPanes,
@@ -32,6 +33,11 @@ const resolveActiveTerminalId = (panes: TerminalPaneConfig[], activeTerminalId?:
     ? activeTerminalId
     : panes[0]?.id ?? DEFAULT_TERMINAL_ID
 )
+
+const normalizeTerminalShellKind = (value: unknown): TerminalShellKind =>
+  typeof value === 'string' && TERMINAL_SHELL_KINDS.includes(value as TerminalShellKind)
+    ? value as TerminalShellKind
+    : 'default'
 
 export function useInteractionTerminalPanes(
   sessionId: string,
@@ -186,19 +192,18 @@ export function useInteractionTerminalPanes(
       title?: string
     } = {}
   ) => {
+    const explicitPanes = withExplicitTerminalPaneIds(panesRef.current)
+    const title = options.title?.trim()
     const pane = createTerminalPane(
-      shellKind,
-      options.title ?? '',
+      normalizeTerminalShellKind(shellKind),
+      title == null || title === '' ? getNextTerminalTitle(explicitPanes, t) : title,
       options.initialCommand,
       options.runCommand,
       options.surface
     )
     setPanes(current => {
       const explicitPanes = withExplicitTerminalPaneIds(current)
-      const nextPanes = withFixedTerminalTitles([
-        ...explicitPanes,
-        { ...pane, title: pane.title.trim() === '' ? getNextTerminalTitle(explicitPanes, t) : pane.title }
-      ], t)
+      const nextPanes = withFixedTerminalTitles([...explicitPanes, pane], t)
       return nextPanes
     })
     setActiveTerminalId(pane.id)
