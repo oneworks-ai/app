@@ -151,49 +151,42 @@ export const TeamDetailSettingsPage = ({
         >
           <div className='relay-team-panel__settings-preview'>
             <div className='relay-team-panel__avatar-editor'>
-              <Avatar
-                className='relay-team-detail__avatar'
-                shape='square'
-                size={56}
-                src={avatarPreview}
+              <Upload
+                accept='image/png,image/jpeg,image/webp,image/gif'
+                beforeUpload={handleAvatarUpload}
+                className='relay-team-panel__avatar-upload'
+                disabled={disabled}
+                maxCount={1}
+                showUploadList={false}
               >
-                {teamInitials(watchedName ?? team.name)}
-              </Avatar>
-              <div className='relay-team-panel__avatar-controls'>
-                <span className='relay-team-panel__avatar-label'>团队头像</span>
-                <div className='relay-team-panel__avatar-actions'>
-                  <Upload
-                    accept='image/png,image/jpeg,image/webp,image/gif'
-                    beforeUpload={handleAvatarUpload}
-                    disabled={disabled}
-                    maxCount={1}
-                    showUploadList={false}
+                <button
+                  aria-label='修改团队头像'
+                  className='relay-team-panel__avatar-trigger'
+                  disabled={disabled}
+                  type='button'
+                >
+                  <Avatar
+                    className='relay-team-detail__avatar'
+                    shape='square'
+                    size={64}
+                    src={avatarPreview}
                   >
-                    <Button disabled={disabled} icon={<AdminIcon name='cloud_upload' />}>
-                      上传头像
-                    </Button>
-                  </Upload>
-                  <Button
-                    danger
-                    disabled={disabled || avatarPreview == null}
-                    icon={<AdminIcon name='delete' />}
-                    onClick={() => {
-                      form.setFieldValue('avatarUrl', '')
-                      setAvatarUploadError(undefined)
-                    }}
-                  >
-                    移除头像
-                  </Button>
-                </div>
-                {avatarUploadError == null ? null : (
-                  <Alert
-                    className='relay-team-panel__avatar-error'
-                    message={avatarUploadError}
-                    showIcon={false}
-                    type='error'
-                  />
-                )}
-              </div>
+                    {teamInitials(watchedName ?? team.name)}
+                  </Avatar>
+                  <span className='relay-team-panel__avatar-overlay'>
+                    <AdminIcon name='edit' />
+                    <span>修改头像</span>
+                  </span>
+                </button>
+              </Upload>
+              {avatarUploadError == null ? null : (
+                <Alert
+                  className='relay-team-panel__avatar-error'
+                  message={avatarUploadError}
+                  showIcon={false}
+                  type='error'
+                />
+              )}
             </div>
             <div className='relay-team-panel__settings-preview-copy'>
               <strong>{cleanText(watchedName) === '' ? team.name : cleanText(watchedName)}</strong>

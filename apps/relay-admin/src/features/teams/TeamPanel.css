@@ -100,33 +100,67 @@
 }
 
 .relay-team-panel__avatar-editor {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.relay-team-panel__avatar-controls {
   display: grid;
   gap: 8px;
-  min-width: 0;
+  width: max-content;
+  max-width: 220px;
 }
 
-.relay-team-panel__avatar-label {
-  color: var(--text-color, var(--ant-color-text, #1f2328));
-  font: 600 13px/1.3 ui-sans-serif, system-ui, sans-serif;
+.relay-team-panel__avatar-upload.ant-upload-wrapper,
+.relay-team-panel__avatar-upload .ant-upload {
+  display: block;
+  width: 64px;
+  height: 64px;
 }
 
-.relay-team-panel__avatar-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: 0;
+.relay-team-panel__avatar-trigger {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  overflow: hidden;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
 }
 
-.relay-team-panel__avatar-actions .ant-btn {
-  display: inline-flex;
-  align-items: center;
+.relay-team-panel__avatar-trigger:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+}
+
+.relay-team-panel__avatar-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  color: #fff;
+  background: rgb(0 0 0 / 64%);
+  opacity: 0;
+  transition: opacity 160ms ease;
+  font: 700 12px/1.2 ui-sans-serif, system-ui, sans-serif;
+}
+
+.relay-team-panel__avatar-overlay .relay-admin-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.relay-team-panel__avatar-trigger:not(:disabled):hover
+  .relay-team-panel__avatar-overlay,
+.relay-team-panel__avatar-trigger:not(:disabled):focus-visible
+  .relay-team-panel__avatar-overlay {
+  opacity: 1;
+}
+
+.relay-team-panel__avatar-trigger:focus-visible {
+  outline: 2px solid var(--ant-color-primary, #1677ff);
+  outline-offset: 2px;
 }
 
 .relay-team-panel__avatar-error.ant-alert {
