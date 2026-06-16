@@ -83,19 +83,21 @@ curl -fsS https://<dev-admin-origin>/health
 curl -fsS https://<dev-admin-origin>/api/auth/providers
 curl -i https://<dev-admin-origin>/api/admin/users
 curl -fsS "https://<dev-admin-origin>/login?redirect_uri=https%3A%2F%2F<dev-admin-origin>%2Fadmin%2Fdevices&lang=zh-CN"
+curl -I "https://<dev-admin-origin>/api/auth/oauth/<provider-id>/start?redirect_uri=https%3A%2F%2F<dev-admin-origin>%2Fadmin%2Fdevices"
 ```
 
 Expected:
 
 - `/health` returns `{"ok":true,...}`.
 - `/api/auth/providers` returns configured SSO providers when SSO should be enabled.
+- OAuth start returns `302` to the provider authorization page when that provider should be enabled.
 - `/api/admin/users` returns `401` without an admin or session token.
 - `/login` contains the login config script and renders expected login methods.
 - Admin shell loads `/admin` assets without 404s.
 - Deployment metadata points at the same SHA that was approved for release.
 - Owner/admin can log in through the intended default method.
 - If passkey changed, register and log in on the final dev origin, not on a temporary platform domain.
-- If SSO changed, complete one real provider callback per changed provider.
+- If SSO changed, verify `/api/auth/providers`, OAuth start `302`, and one real provider callback per changed provider on every affected platform. Do not infer Vercel success from Cloudflare success or the other way around, because each platform has separate secret stores and deployment logs.
 - If email verification changed, send one code through the real provider and confirm rate-limit / budget guards still apply.
 
 Do not promote production if dev only works through a temporary domain while the production release will use a custom domain.

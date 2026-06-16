@@ -80,6 +80,8 @@ Relay 不把邮箱当作全局唯一账号键。`users.email` 是联系邮箱；
 
 Admin 中维护的 provider secret 只保存在服务端，列表和详情接口只返回脱敏值。面向用户的 SSO 按钮应使用 provider 品牌图标，不要退回通用登录图标。
 
+内置 GitHub / Google 登录使用专用环境变量，不要把 `github` 或 `google` 写进 `ONEWORKS_RELAY_SSO_PROVIDERS`。这两个 provider id 是保留的；如果旧部署里已经写错，要从 Vercel、Cloudflare 或对应平台的所有环境变量 / secret store 中清掉旧值，重新部署后分别验证 `/health`、`/api/auth/providers` 和 OAuth start `302`。
+
 私有化部署时，先确定用户最终访问的公开域名，再配置 SSO 和 passkey。Vercel 单项目通常把 Admin、API 和登录页放在同一个域名；Cloudflare Pages + Worker 这类分离部署也应把 OAuth callback 注册到用户打开的 Pages / 自定义域名，而不是隐藏的 Worker 地址。开发、测试、生产是否共用同一个 OAuth client 由部署方决定；需要隔离 secret、callback 或受众时，应使用独立 client。
 
 ## 验证码与风控
