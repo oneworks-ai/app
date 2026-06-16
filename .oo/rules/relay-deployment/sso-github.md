@@ -43,6 +43,8 @@ Do not configure GitHub through `ONEWORKS_RELAY_SSO_PROVIDERS`. The `github` pro
 
 When enabling GitHub SSO in cloud slots, update every active platform environment store that can serve the origin: Vercel project env, Cloudflare Worker secrets/vars, and any Pages proxy env that influences the public origin. Remove stale `ONEWORKS_RELAY_SSO_PROVIDERS` values that contain `github` before redeploying; leaving an old reserved-provider entry in one platform can make that platform fail even if another slot is fixed.
 
+For official dev slot CLI commands and platform-specific env store pitfalls, read `.oo/rules/release/relay-dev-deploy-github-actions.md`.
+
 ## Callback Setup
 
 GitHub callback for the built-in provider:

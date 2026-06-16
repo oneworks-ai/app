@@ -20,6 +20,13 @@ Relay 是 One Works 插件设备和云端会话之间的中继服务。普通用
 
 配置属于部署环境，不属于代码常量。不要把真实账号 ID、项目 ID、个人邮箱、数据库连接串、OAuth secret、Resend key、验证码或临时部署 URL 写进 README、`.oo/docs`、规则文件、截图或示例配置。
 
+排查平台配置时，先确认自己查的是正确项目和环境：
+
+- Vercel 用 `vercel env ls production` 查当前项目的 production 环境变量；如果部署命令使用 `--prod`，即使域名叫 dev，也要改 production env。`vercel env pull` 会把 secret 写到本地文件，只能写到 ignored scratch 文件并及时删除。
+- Cloudflare Workers 用 `wrangler secret list --name <worker-name>` 查 Worker secrets；workflow 如果用 `--name` 覆盖 Worker 名，查 secret 时也必须带同一个名字。
+- Cloudflare Pages 和 Workers 是两套 env store。Admin Pages 的 proxy env 与 Relay Worker 的 SSO / storage secret 互不共享，要分别检查。
+- 删除旧变量后重新 list 确认不存在，再重新部署。Vercel 需要新 deployment 才会读取新 env；Cloudflare secret put/delete 可能立即产生新 Worker 版本，但仍应跑正式部署 workflow 保证代码和配置来自同一个 commit。
+
 部署完成后至少检查：
 
 ```bash
