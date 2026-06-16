@@ -227,8 +227,9 @@ export const AdminApp = () => {
         disabled: !dashboard.canLoad || dashboard.loading,
         icon: <AdminIcon name='refresh' />,
         key: 'refresh',
-        label: 'Refresh',
+        label: '刷新',
         loading: dashboard.loading,
+        title: '刷新',
         onSelect: () => void dashboard.refresh()
       })
     }
