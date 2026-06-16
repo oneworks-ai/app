@@ -2,6 +2,34 @@
 
 Relay 是 One Works 插件设备和云端会话之间的中继服务。普通用户默认使用 One Works 托管服务；只有需要私有化部署、公司内网隔离或自有域名 / 存储 / SSO 策略时，才需要自己部署 Relay Server 与 Admin。
 
+## 私有化部署配置清单
+
+私有化部署前，先把下面这些配置定下来，再创建平台项目、OAuth client、邮箱域名或 passkey：
+
+| 配置项       | 建议                                                                                                          |
+| ------------ | ------------------------------------------------------------------------------------------------------------- |
+| 公开域名     | 先确定用户最终访问的 `https://relay.example.com` 这类域名，再配置 SSO / passkey。                             |
+| 部署形态     | Vercel 单项目使用 Postgres；Cloudflare 使用 Pages + Worker / Durable Object；单机 Node 通常使用 SQLite。      |
+| `PUBLIC_URL` | `ONEWORKS_RELAY_PUBLIC_URL` 指向浏览器实际打开的 Admin / login / API origin。                                 |
+| CORS         | `ONEWORKS_RELAY_ALLOW_ORIGIN` 生产环境只放允许访问的前端 origin，不使用 `*`。                                 |
+| 密钥         | Admin token、设备元数据密钥、数据库 URL、邮件 key、OAuth secret 都放平台 secret store。                       |
+| 邮件         | 验证码、邀请、系统通知使用稳定发信域名和角色地址 Reply-To，不把发信 DNS 绑在 Relay Web host 上。              |
+| SSO          | callback URL 必须和 Relay 实际发出的 URL 完全一致；内置 GitHub / Google 用专用环境变量。                      |
+| Passkey      | 在最终 HTTPS origin 上注册；必要时显式设置 `ONEWORKS_RELAY_PASSKEY_ORIGIN` / `ONEWORKS_RELAY_PASSKEY_RP_ID`。 |
+| 插件服务     | Relay plugin 的 `servers[]` 只写最终公开 origin；dev、prod、公司内网服务可以并存。                            |
+
+配置属于部署环境，不属于代码常量。不要把真实账号 ID、项目 ID、个人邮箱、数据库连接串、OAuth secret、Resend key、验证码或临时部署 URL 写进 README、`.oo/docs`、规则文件、截图或示例配置。
+
+部署完成后至少检查：
+
+```bash
+curl -fsS https://<relay-origin>/health
+curl -fsS https://<relay-origin>/api/auth/providers
+curl -i https://<relay-origin>/api/admin/users
+```
+
+`/health.version` 应等于实际部署的 `@oneworks/relay-server` 包版本。只返回 `ok` 还不够，还要确认 public URL、登录方式、SSO provider、邮件验证码、passkey 和插件设备注册都在最终域名上工作。
+
 ## 登录方式
 
 `/login` 是 Relay 插件、Admin 和 Web 回跳共用的登录页。部署方可以通过 `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD` 设置默认方式，浏览器也会记住用户上次选择的方式。

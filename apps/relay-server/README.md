@@ -68,6 +68,8 @@ Use placeholder domains in examples:
 - Cloudflare Pages: `https://<pages-project>.pages.dev` or a custom domain.
 - Cloudflare Workers: `https://<worker>.<account-subdomain>.workers.dev`. The `account-subdomain` is an account-level setting and changing it affects every Worker in that Cloudflare account.
 
+Treat domains, storage driver, SSO clients, passkey origin, mail provider, login defaults, and plugin server entries as deployment configuration. Keep them in platform environment variables, secret stores, Admin-managed provider records, or private operator runbooks, not in committed code. The public server version reported by `/health` comes from this package's `package.json`; after deploying, verify that `/health.version` matches the package version you intended to roll out.
+
 ## Google SSO
 
 Google sign-in can be enabled in either of these ways:
