@@ -46,7 +46,6 @@
 .relay-team-panel__tabs > .ant-tabs-nav .ant-tabs-extra-content {
   display: flex;
   align-items: center;
-  padding-bottom: 12px;
 }
 
 .relay-team-panel__tabs > .ant-tabs-content-holder {
@@ -71,6 +70,7 @@
 
 .relay-team-panel__tab-actions {
   display: flex;
+  align-items: center;
   flex: 0 0 auto;
   justify-content: flex-end;
   min-width: 0;
