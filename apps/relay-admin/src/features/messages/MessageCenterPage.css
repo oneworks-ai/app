@@ -79,10 +79,21 @@
 }
 
 .relay-message-center__category-filter .ant-segmented-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 24px;
   border-radius: 4px;
   color: var(--sub-text-color);
-  font: 700 12px/24px ui-sans-serif, system-ui, sans-serif;
+  font: 700 12px/1 ui-sans-serif, system-ui, sans-serif;
+}
+
+.relay-message-center__category-filter .ant-segmented-item-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  line-height: 1;
 }
 
 .relay-message-center__category-filter .ant-segmented-item-selected {
@@ -100,9 +111,15 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-height: 24px;
+  line-height: 1;
 }
 
 .relay-message-center__category-option .relay-admin-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
   width: 14px;
   height: 14px;
 }
