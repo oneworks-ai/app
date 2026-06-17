@@ -1,6 +1,13 @@
 import type { WorkspaceAssetAdapter } from '@oneworks/types'
 
-const NATIVE_SKILL_ADAPTERS = new Set<WorkspaceAssetAdapter>(['claude-code', 'copilot', 'gemini', 'kimi', 'opencode'])
+const NATIVE_SKILL_ADAPTERS = new Set<WorkspaceAssetAdapter>([
+  'claude-code',
+  'codex',
+  'copilot',
+  'gemini',
+  'kimi',
+  'opencode'
+])
 
 export const supportsNativeProjectSkills = (adapter?: string): adapter is WorkspaceAssetAdapter =>
   adapter != null && NATIVE_SKILL_ADAPTERS.has(adapter as WorkspaceAssetAdapter)
@@ -8,6 +15,8 @@ export const supportsNativeProjectSkills = (adapter?: string): adapter is Worksp
 export const resolveNativeSkillDiagnosticReason = (adapter: WorkspaceAssetAdapter) => (
   adapter === 'claude-code'
     ? 'Synced into the Claude mock home as a native skill.'
+    : adapter === 'codex'
+    ? 'Mirrored into the Codex mock home as a native skill.'
     : adapter === 'copilot'
     ? 'Staged for Copilot CLI native skill discovery.'
     : adapter === 'gemini'
