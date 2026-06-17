@@ -26,6 +26,8 @@ export type RelayConfigProfileStatus = 'disabled' | 'draft' | 'published'
 export type RelayEmailProviderKind = 'disabled' | 'resend'
 export type RelayEmailPurpose = 'email-verification' | 'invite' | 'login'
 export type RelayLocale = 'en' | 'zh-CN'
+export type RelayMessageAudienceScope = 'all' | 'team' | 'users'
+export type RelayMessageKind = 'announcement' | 'personal' | 'system'
 export type RelayPasskeyChallengeKind = 'authentication' | 'registration'
 export type RelayRegistrationMode = 'admin_created_only' | 'email_verified' | 'invite_required'
 export type RelayRole = 'owner' | 'admin' | 'member' | 'viewer'
@@ -160,6 +162,23 @@ export interface RelayTeamInvitation {
   createdAt: string
   updatedAt?: string
   respondedAt?: string
+}
+
+export interface RelayMessageAudience {
+  scope: RelayMessageAudienceScope
+  teamId?: string
+  userIds?: string[]
+}
+
+export interface RelayMessage {
+  id: string
+  kind: RelayMessageKind
+  title: string
+  body: string
+  audience: RelayMessageAudience
+  createdByUserId: string
+  createdAt: string
+  updatedAt?: string
 }
 
 export interface RelayTeamPolicy {
@@ -519,6 +538,7 @@ export interface RelayStore {
   teamPolicy: RelayTeamPolicy
   teams: RelayTeam[]
   teamInvitations?: RelayTeamInvitation[]
+  messages?: RelayMessage[]
   teamMembers: RelayTeamMember[]
   users: RelayUser[]
   invites: RelayInvite[]

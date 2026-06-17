@@ -5,6 +5,7 @@ import type {
   CreateConfigProfileInput,
   CreateConfigProfileVersionInput,
   CreateConfigSecretInput,
+  CreateRelayAdminMessageInput,
   CreateTeamInvitationInput,
   CreateTeamInput,
   CreateTeamMemberInput,
@@ -13,6 +14,7 @@ import type {
   RelayAdminConfigProfileAssignment,
   RelayAdminConfigProfileVersion,
   RelayAdminConfigSecret,
+  RelayAdminMessage,
   RelayAdminTeam,
   RelayAdminTeamInvitation,
   RelayAdminTeamMember,
@@ -38,7 +40,16 @@ export const fetchRelayAdminTeams = async (token: string) =>
   await requestJson<RelayAdminTeamsResponse>(token, '/api/admin/teams')
 
 export const fetchRelayAdminMessages = async (token: string) =>
-  await requestJson<{ invitations: RelayAdminTeamInvitation[] }>(token, '/api/admin/messages')
+  await requestJson<{ invitations: RelayAdminTeamInvitation[]; messages: RelayAdminMessage[] }>(
+    token,
+    '/api/admin/messages'
+  )
+
+export const createRelayAdminMessage = async (token: string, input: CreateRelayAdminMessageInput) =>
+  await requestJson<{ message: RelayAdminMessage }>(token, '/api/admin/messages', {
+    body: JSON.stringify(input),
+    method: 'POST'
+  })
 
 export const createRelayAdminTeam = async (token: string, input: CreateTeamInput) =>
   await requestJson<{ team: RelayAdminTeam }>(token, '/api/admin/teams', {

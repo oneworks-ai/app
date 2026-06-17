@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { hashPassword } from '../src/auth/passwords.js'
 import { readRelayStore, writeRelayStore } from '../src/store.js'
 import { authHeaders, cleanupRelayFixtures, listenRelay, requestJson } from './helpers.js'
 
@@ -383,6 +384,118 @@ describe('relay team routes', () => {
           configEnabled: false,
           role: 'editor',
           userId: 'user-2'
+        })
+      ])
+    )
+  })
+
+  it('lets admins and team admins send visible account messages', async () => {
+    const { args, baseUrl } = await listenRelay()
+    await seedTeamUsers(args.dataPath)
+
+    const created = await requestJson(baseUrl, '/api/relay/teams', {
+      method: 'POST',
+      headers: authHeaders('user-1-session'),
+      body: JSON.stringify({ name: 'Message Team', slug: 'message-team' })
+    })
+    const teamId = (created.body.team as Record<string, unknown>).id as string
+    await requestJson(baseUrl, `/api/relay/teams/${teamId}/members`, {
+      method: 'POST',
+      headers: authHeaders('user-1-session'),
+      body: JSON.stringify({ role: 'member', userId: 'user-2' })
+    })
+    const teamMessage = await requestJson(baseUrl, '/api/admin/messages', {
+      method: 'POST',
+      headers: authHeaders('user-1-session'),
+      body: JSON.stringify({
+        kind: 'system',
+        scope: 'team',
+        teamId,
+        title: 'Team policy update',
+        body: 'Team admins can send messages to their managed teams.'
+      })
+    })
+    const deniedGlobal = await requestJson(baseUrl, '/api/admin/messages', {
+      method: 'POST',
+      headers: authHeaders('user-1-session'),
+      body: JSON.stringify({
+        kind: 'announcement',
+        scope: 'all',
+        title: 'Blocked',
+        body: 'Team owners cannot broadcast to the whole tenant.'
+      })
+    })
+    const adminBroadcast = await requestJson(baseUrl, '/api/admin/messages', {
+      method: 'POST',
+      headers: authHeaders('admin-session'),
+      body: JSON.stringify({
+        kind: 'announcement',
+        scope: 'all',
+        title: 'Platform notice',
+        body: 'Platform admins can broadcast to everyone.'
+      })
+    })
+    const visible = await requestJson(baseUrl, '/api/admin/messages', {
+      headers: authHeaders('user-2-session')
+    })
+
+    expect(teamMessage.response.status).toBe(200)
+    expect(teamMessage.body.message).toMatchObject({
+      audience: {
+        scope: 'team',
+        teamId
+      },
+      kind: 'system',
+      title: 'Team policy update'
+    })
+    expect(deniedGlobal.response.status).toBe(403)
+    expect(adminBroadcast.response.status).toBe(200)
+    expect(visible.response.status).toBe(200)
+    expect(visible.body.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: 'Team policy update' }),
+        expect.objectContaining({ title: 'Platform notice' })
+      ])
+    )
+  })
+
+  it('records successful password logins as personal account messages', async () => {
+    const { args, baseUrl } = await listenRelay()
+    const store = await readRelayStore(args.dataPath)
+    store.users.push({
+      id: 'login-user',
+      email: 'login@example.com',
+      name: 'Login User',
+      passwordHash: await hashPassword('password123'),
+      role: 'member',
+      createdAt: timestamp
+    })
+    await writeRelayStore(args.dataPath, store)
+
+    const login = await requestJson(baseUrl, '/api/auth/password-login', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'user-agent': 'Vitest Browser',
+        'x-forwarded-for': '203.0.113.10',
+        'x-vercel-ip-city': 'Shanghai',
+        'x-vercel-ip-country': 'CN'
+      },
+      body: JSON.stringify({ email: 'login@example.com', password: 'password123' })
+    })
+    const token = (login.body as Record<string, unknown>).token as string
+    const messages = await requestJson(baseUrl, '/api/admin/messages', {
+      headers: authHeaders(token)
+    })
+
+    expect(login.response.status).toBe(200)
+    expect(messages.response.status).toBe(200)
+    expect(messages.body.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'personal',
+          title: '新设备登录提醒',
+          body: expect.stringContaining('203.0.113.10')
         })
       ])
     )

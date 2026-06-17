@@ -3,6 +3,8 @@ export type RelayAdminTeamMemberRole = 'admin' | 'editor' | 'member' | 'owner' |
 export type RelayAdminTeamInvitationStatus = 'accepted' | 'declined' | 'pending' | 'revoked'
 export type RelayAdminConfigAssignmentMode = 'default' | 'override'
 export type RelayAdminConfigProfileStatus = 'disabled' | 'draft' | 'published'
+export type RelayAdminMessageAudienceScope = 'all' | 'team' | 'users'
+export type RelayAdminMessageKind = 'announcement' | 'personal' | 'system'
 export type RelayAdminConfigSafeField =
   | 'defaultModelService'
   | 'marketplaces'
@@ -95,6 +97,42 @@ export interface RelayAdminTeamInvitation {
   updatedAt: string | null
   user: RelayAdminTeamInvitationUser | null
   userId: string | null
+}
+
+export interface RelayAdminMessageUser {
+  avatarUrl: string | null
+  email: string
+  id: string
+  name: string
+  provider: string | null
+  role: string
+}
+
+export interface RelayAdminMessageTeam {
+  avatarUrl: string | null
+  id: string
+  name: string
+  slug: string
+}
+
+export interface RelayAdminMessageAudience {
+  scope: RelayAdminMessageAudienceScope
+  team: RelayAdminMessageTeam | null
+  teamId: string | null
+  userIds: string[]
+  users: Array<RelayAdminMessageUser | null>
+}
+
+export interface RelayAdminMessage {
+  audience: RelayAdminMessageAudience
+  body: string
+  createdAt: string
+  createdBy: RelayAdminMessageUser | null
+  createdByUserId: string
+  id: string
+  kind: RelayAdminMessageKind
+  title: string
+  updatedAt: string | null
 }
 
 export interface RelayAdminConfigProjectRule {
@@ -214,6 +252,16 @@ export interface CreateTeamInvitationInput {
   role: RelayAdminTeamMemberRole
   teamId: string
   userId?: string
+}
+
+export interface CreateRelayAdminMessageInput {
+  body: string
+  emails?: string[]
+  kind: RelayAdminMessageKind
+  scope: RelayAdminMessageAudienceScope
+  teamId?: string
+  title: string
+  userIds?: string[]
 }
 
 export interface UpdateTeamMemberInput {

@@ -137,7 +137,8 @@ export const AdminNavRail = ({
     void navigate('/messages')
     setAccountMenuOpen(false)
   }, [navigate])
-  const isMessageCenterActive = location.pathname.replace(/\/+$/u, '') === '/messages'
+  const normalizedPathname = location.pathname.replace(/\/+$/u, '')
+  const isMessageCenterActive = normalizedPathname === '/messages' || normalizedPathname.startsWith('/messages/')
   const accountMenuItems = useMemo<MenuProps['items']>(() => {
     const accountItems = visibleAccounts.length === 0
       ? [{

@@ -139,7 +139,7 @@ const handleRelayRequestWithStore = async (
     if (await handleTeamInvitationActionsRoute(req, res, args, store, storeRepository, url)) {
       return
     }
-    if (handleAdminMessagesRoute(req, res, args, store, url)) {
+    if (await handleAdminMessagesRoute(req, res, args, store, storeRepository, url)) {
       return
     }
     if (await handleConfigProfilesRoute(req, res, args, store, storeRepository, url)) {

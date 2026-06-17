@@ -32,6 +32,10 @@ export const useAdminRouteHeaderBreadcrumb = (
     const match = /^\/users\/([^/]+)$/.exec(normalizedPathname)
     return decodeRouteSegment(match?.[1])
   }, [normalizedPathname])
+  const messageDetailId = useMemo(() => {
+    const match = /^\/messages\/(.+)$/.exec(normalizedPathname)
+    return decodeRouteSegment(match?.[1])
+  }, [normalizedPathname])
   const isTeamSettingsRoute = normalizedPathname === '/teams/settings'
   const teamDetailSettingsId = useMemo(() => {
     const match = /^\/teams\/([^/]+)\/settings$/.exec(normalizedPathname)
@@ -86,6 +90,18 @@ export const useAdminRouteHeaderBreadcrumb = (
       }
     }
 
+    if (messageDetailId != null) {
+      return {
+        ariaLabel: '消息导航',
+        backIcon: createElement(AdminIcon, { className: breadcrumbIconClassName, name: 'chevron_left' }),
+        backLabel: '返回消息中心',
+        currentTitle: '消息详情',
+        parentTitle: '消息中心',
+        separatorIcon: createElement(AdminIcon, { className: breadcrumbIconClassName, name: 'chevron_right' }),
+        onBack: () => void navigate('/messages')
+      }
+    }
+
     if (teamDetailId != null) {
       return {
         ariaLabel: '团队导航',
@@ -131,6 +147,7 @@ export const useAdminRouteHeaderBreadcrumb = (
     deviceDetailId,
     deviceDetailTitle,
     isTeamSettingsRoute,
+    messageDetailId,
     navigate,
     teamDetailId,
     teamDetailSettingsId,

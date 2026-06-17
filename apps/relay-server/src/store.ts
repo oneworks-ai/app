@@ -30,6 +30,10 @@ import type {
   RelayForwardingJob,
   RelayForwardingJobStatus,
   RelayInvite,
+  RelayMessage,
+  RelayMessageAudience,
+  RelayMessageAudienceScope,
+  RelayMessageKind,
   RelayOAuthState,
   RelayPasskeyChallenge,
   RelayPasskeyChallengeKind,
@@ -59,6 +63,7 @@ const defaultStore = (): RelayStore => ({
   teamPolicy: normalizeRelayTeamPolicy(undefined),
   teams: [],
   teamInvitations: [],
+  messages: [],
   teamMembers: [],
   users: [],
   invites: [],
@@ -199,6 +204,50 @@ const normalizeTeamInvitation = (value: Record<string, unknown>): RelayTeamInvit
     createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
     updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined,
     respondedAt: typeof value.respondedAt === 'string' ? value.respondedAt : undefined
+  }
+}
+
+const relayMessageKinds = new Set<RelayMessageKind>(['announcement', 'personal', 'system'])
+const relayMessageAudienceScopes = new Set<RelayMessageAudienceScope>(['all', 'team', 'users'])
+
+const normalizeRelayMessageKind = (value: unknown): RelayMessageKind => (
+  typeof value === 'string' && relayMessageKinds.has(value as RelayMessageKind)
+    ? value as RelayMessageKind
+    : 'personal'
+)
+
+const normalizeRelayMessageAudienceScope = (value: unknown): RelayMessageAudienceScope => (
+  typeof value === 'string' && relayMessageAudienceScopes.has(value as RelayMessageAudienceScope)
+    ? value as RelayMessageAudienceScope
+    : 'users'
+)
+
+const normalizeRelayMessageAudience = (value: unknown): RelayMessageAudience => {
+  const record = isRecord(value) ? value : {}
+  const scope = normalizeRelayMessageAudienceScope(record.scope)
+  const teamId = typeof record.teamId === 'string' && record.teamId.trim() !== '' ? record.teamId.trim() : undefined
+  const userIds = normalizeStringArray(record.userIds)
+
+  if (scope === 'team' && teamId != null) return { scope, teamId }
+  if (scope === 'all') return { scope }
+  return { scope: 'users', userIds: userIds ?? [] }
+}
+
+const normalizeRelayMessage = (value: Record<string, unknown>): RelayMessage | undefined => {
+  const title = typeof value.title === 'string' && value.title.trim() !== '' ? value.title.trim() : undefined
+  const body = typeof value.body === 'string' && value.body.trim() !== '' ? value.body.trim() : undefined
+  if (title == null || body == null) return undefined
+  return {
+    id: typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : randomUUID(),
+    kind: normalizeRelayMessageKind(value.kind),
+    title,
+    body,
+    audience: normalizeRelayMessageAudience(value.audience),
+    createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
+      ? value.createdByUserId.trim()
+      : 'system',
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined
   }
 }
 
@@ -655,6 +704,11 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
       ? store.teamInvitations.filter(isRecord).map(normalizeTeamInvitation).filter((
         value
       ): value is RelayTeamInvitation => value != null)
+      : [],
+    messages: Array.isArray(store.messages)
+      ? store.messages.filter(isRecord).map(normalizeRelayMessage).filter((value): value is RelayMessage =>
+        value != null
+      )
       : [],
     teamMembers: legacyTeams.teamMembers,
     users,

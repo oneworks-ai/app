@@ -66,6 +66,11 @@ const getTeamDetailSettingsIdFromPath = (pathname: string) => {
   return match == null ? undefined : decodeURIComponent(match[1])
 }
 
+const getMessageIdFromPath = (pathname: string) => {
+  const match = /^\/messages\/(.+)$/.exec(pathname)
+  return match == null ? undefined : decodeURIComponent(match[1])
+}
+
 const TeamDetailDefaultRoute = () => {
   const { teamId } = useParams()
   if (teamId == null) return <Navigate to='/teams' replace />
@@ -93,6 +98,7 @@ export const AdminApp = () => {
   const [sidebarWidth, setSidebarWidth] = useState(() => readAdminSidebarWidth())
   const [createSectionId, setCreateSectionId] = useState<AdminDashboardCreateSectionId | undefined>()
   const [passwordUser, setPasswordUser] = useState<RelayAdminUser | undefined>()
+  const [messageComposerSignal, setMessageComposerSignal] = useState(0)
   const [teamDetailSettingsResetSignal, setTeamDetailSettingsResetSignal] = useState(0)
   const canResizeSidebar = !isCompactLayout && !sidebarCollapsed
   const commitSidebarWidth = useCallback((nextWidth: number) => {
@@ -121,6 +127,8 @@ export const AdminApp = () => {
   const normalizedPathname = location.pathname === '/' ? '/' : location.pathname.replace(/\/+$/, '')
   const isProfileRoute = normalizedPathname === '/profile'
   const isMessagesRoute = normalizedPathname === '/messages'
+  const activeMessageId = getMessageIdFromPath(normalizedPathname)
+  const isMessageDetailRoute = activeMessageId != null
   const isTeamListRoute = normalizedPathname === '/teams'
   const activeCreateSectionId = getCreateSectionIdFromPath(normalizedPathname)
   const activeUserDetailId = getUserDetailIdFromPath(normalizedPathname)
@@ -133,8 +141,19 @@ export const AdminApp = () => {
     ? undefined
     : dashboard.teams.find(team => team.id === activeTeamDetailId)
   const isTeamDetailSettingsRoute = activeTeamDetailSettingsId != null
-  const headerTitle = isMessagesRoute ? '消息中心' : isProfileRoute ? '个人资料' : activeSection.label
-  const headerIcon = isMessagesRoute
+  const canSendMessages = (
+    dashboard.currentUser?.role === 'owner' ||
+    dashboard.currentUser?.role === 'admin' ||
+    dashboard.teams.some(team => team.membership?.role === 'owner' || team.membership?.role === 'admin')
+  )
+  const headerTitle = isMessagesRoute
+    ? '消息中心'
+    : isMessageDetailRoute
+      ? '消息详情'
+      : isProfileRoute
+        ? '个人资料'
+        : activeSection.label
+  const headerIcon = isMessagesRoute || isMessageDetailRoute
     ? <AdminIcon name='notifications' />
     : isProfileRoute
       ? <AdminIcon name='account_circle' />
@@ -235,6 +254,17 @@ export const AdminApp = () => {
       })
     }
 
+    if ((isMessagesRoute || isMessageDetailRoute) && canSendMessages) {
+      items.push({
+        disabled: !dashboard.canLoad || dashboard.loading,
+        icon: <AdminIcon name='add' />,
+        key: 'messages:compose',
+        label: '发送消息',
+        title: '发送消息',
+        onSelect: () => setMessageComposerSignal(current => current + 1)
+      })
+    }
+
     if (isTeamDetailSettingsRoute) {
       items.push({
         disabled: !dashboard.canLoad || dashboard.loading,
@@ -244,7 +274,7 @@ export const AdminApp = () => {
         title: '重置当前表单',
         onSelect: () => setTeamDetailSettingsResetSignal(current => current + 1)
       })
-    } else if (!isProfileRoute && !isMessagesRoute) {
+    } else if (!isProfileRoute && !isMessagesRoute && !isMessageDetailRoute) {
       items.push({
         disabled: !dashboard.canLoad || dashboard.loading,
         icon: <AdminIcon name='refresh' />,
@@ -262,11 +292,14 @@ export const AdminApp = () => {
     activeTeamDetail,
     activeUserDetail,
     dashboard.canLoad,
+    dashboard.currentUser?.role,
     dashboard.loading,
     dashboard.logout,
     dashboard.refresh,
     dashboard.setUserDisabled,
+    dashboard.teams,
     dashboard.token,
+    isMessageDetailRoute,
     isCreateActionActive,
     isMessagesRoute,
     isProfileRoute,
@@ -398,7 +431,27 @@ export const AdminApp = () => {
                   : <Navigate to='/devices' replace />}
               />
               <Route path='profile' element={<AdminDashboard dashboard={dashboard} sectionId='profile' />} />
-              <Route path='messages' element={<AdminDashboard dashboard={dashboard} sectionId='messages' />} />
+              <Route
+                path='messages'
+                element={(
+                  <AdminDashboard
+                    dashboard={dashboard}
+                    openMessageComposerSignal={messageComposerSignal}
+                    sectionId='messages'
+                  />
+                )}
+              />
+              <Route
+                path='messages/:messageId'
+                element={(
+                  <AdminDashboard
+                    dashboard={dashboard}
+                    messageId={activeMessageId}
+                    openMessageComposerSignal={messageComposerSignal}
+                    sectionId='messages'
+                  />
+                )}
+              />
               <Route
                 path='invites'
                 element={canRenderSection('invites')

@@ -17,6 +17,11 @@
   background: color-mix(in srgb, var(--ant-color-warning, #d97706) 10%, transparent);
 }
 
+.relay-message-center__item--team_invitation .relay-message-center__team-avatar.ant-avatar {
+  color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+}
+
 .relay-message-center__item--personal .relay-message-center__team-avatar.ant-avatar {
   color: var(--ant-color-success, #1a7f37);
   background: color-mix(in srgb, var(--ant-color-success, #1a7f37) 10%, transparent);
@@ -73,8 +78,19 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
-  padding: 12px 0;
+  padding: 10px 0;
   border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+}
+
+.relay-message-center__item:hover h4,
+.relay-message-center__item:focus-visible h4 {
+  color: var(--primary-color);
+}
+
+.relay-message-center__item:focus-visible {
+  outline: 1px solid var(--primary-color);
+  outline-offset: -1px;
 }
 
 .relay-message-center__item-copy {
@@ -90,7 +106,8 @@
   min-width: 0;
 }
 
-.relay-message-center__item-copy h4 {
+.relay-message-center__item-copy h4,
+.relay-message-center__detail-title h3 {
   overflow: hidden;
   color: var(--text-color);
   font: 750 13px/1.3 ui-sans-serif, system-ui, sans-serif;
@@ -98,7 +115,28 @@
   white-space: nowrap;
 }
 
-.relay-message-center__item-copy p,
+.relay-message-center__detail-title h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.relay-message-center__item-title-row time {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--sub-text-color) 72%, transparent);
+  font: 600 11px/1.3 ui-sans-serif, system-ui, sans-serif;
+}
+
+.relay-message-center__item-copy p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: var(--sub-text-color);
+  font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
 .relay-message-center__item-meta {
   overflow: hidden;
   margin: 0;
@@ -116,6 +154,93 @@
   justify-self: end;
 }
 
+.relay-message-center--detail {
+  min-height: 0;
+}
+
+.relay-message-center__detail {
+  display: grid;
+  gap: 0;
+}
+
+.relay-message-center__detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.relay-message-center__detail-title {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.relay-message-center__detail-title time {
+  color: var(--sub-text-color);
+  font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif;
+}
+
+.relay-message-center__detail-body {
+  margin: 0;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-color);
+  font: 600 13px/1.6 ui-sans-serif, system-ui, sans-serif;
+  white-space: pre-wrap;
+}
+
+.relay-message-center__detail-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.relay-message-center__detail-meta div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 0;
+}
+
+.relay-message-center__detail-meta dt {
+  color: var(--sub-text-color);
+  font: 700 11px/1.3 ui-sans-serif, system-ui, sans-serif;
+}
+
+.relay-message-center__detail-meta dd {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-color);
+  font: 700 12px/1.35 ui-sans-serif, system-ui, sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-message-center__detail-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0 0;
+}
+
+.relay-message-center__composer .ant-drawer-body {
+  padding: 10px;
+}
+
+.relay-message-center__composer .ant-form {
+  display: grid;
+  gap: 10px;
+}
+
+.relay-message-center__composer .ant-form-item {
+  margin-bottom: 0;
+}
+
 @media (max-width: 760px) {
   .relay-message-center__item {
     grid-template-columns: auto minmax(0, 1fr);
@@ -124,5 +249,14 @@
   .relay-message-center__item-actions {
     grid-column: 2;
     justify-self: start;
+  }
+
+  .relay-message-center__detail-meta {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .relay-message-center__detail-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
   }
 }

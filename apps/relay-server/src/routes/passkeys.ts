@@ -15,6 +15,7 @@ import { domainFromEmail, looksLikeEmailAddress, normalizeEmailAddress } from '.
 import { readRequestBody, sendJson } from '../http.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
 import type { RelayServerArgs, RelayStore } from '../types.js'
+import { recordLoginNotificationMessage } from './team-invitations.js'
 
 const cleanString = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 
@@ -73,6 +74,7 @@ const sendCredentialRequired = (res: ServerResponse, args: RelayServerArgs) => {
 }
 
 const finishWithSession = async (
+  req: IncomingMessage,
   res: ServerResponse,
   args: RelayServerArgs,
   store: RelayStore,
@@ -81,6 +83,7 @@ const finishWithSession = async (
 ) => {
   const session = createSession(store, userId, args.sessionTtlMs)
   const user = store.users.find(item => item.id === userId)
+  if (user != null) recordLoginNotificationMessage(req, store, user)
   await storeRepository.write(store)
   sendJson(res, 200, {
     token: session.token,
@@ -120,6 +123,7 @@ const handleRegisterOptions = async (
 }
 
 const handleRegisterVerify = async (
+  req: IncomingMessage,
   res: ServerResponse,
   args: RelayServerArgs,
   store: RelayStore,
@@ -142,7 +146,7 @@ const handleRegisterVerify = async (
       email,
       response
     })
-    await finishWithSession(res, args, store, storeRepository, result.tokenUser.id)
+    await finishWithSession(req, res, args, store, storeRepository, result.tokenUser.id)
   } catch (error) {
     sendPasskeyError(res, args, error)
   }
@@ -175,6 +179,7 @@ const handleLoginOptions = async (
 }
 
 const handleLoginVerify = async (
+  req: IncomingMessage,
   res: ServerResponse,
   args: RelayServerArgs,
   store: RelayStore,
@@ -193,7 +198,7 @@ const handleLoginVerify = async (
   }
   try {
     const result = await verifyRelayPasskeyAuthentication(args, store, { email, response })
-    await finishWithSession(res, args, store, storeRepository, result.tokenUser.id)
+    await finishWithSession(req, res, args, store, storeRepository, result.tokenUser.id)
   } catch (error) {
     sendPasskeyError(res, args, error)
   }
@@ -223,11 +228,11 @@ export const handlePasskeyRoute = async (
   }
   const body = await readRequestBody(req)
   if (url.pathname === '/api/auth/passkey/register/verify') {
-    await handleRegisterVerify(res, args, store, storeRepository, body)
+    await handleRegisterVerify(req, res, args, store, storeRepository, body)
     return true
   }
   if (url.pathname === '/api/auth/passkey/login/verify') {
-    await handleLoginVerify(res, args, store, storeRepository, body)
+    await handleLoginVerify(req, res, args, store, storeRepository, body)
     return true
   }
   return false
