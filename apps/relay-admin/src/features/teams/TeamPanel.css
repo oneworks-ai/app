@@ -85,6 +85,8 @@
 .relay-team-panel__team-settings-form {
   display: grid;
   gap: 0;
+  height: 100%;
+  min-height: 0;
   width: min(760px, 100%);
   border-top: 1px solid
     color-mix(
@@ -112,12 +114,17 @@
 
 .relay-team-panel__settings-actions-row {
   border-bottom: 0;
+  margin-top: auto;
   padding: 16px 0 0;
 }
 
 .relay-team-panel__settings-row--avatar {
   align-items: center;
   padding: 16px 0;
+}
+
+.relay-team-panel__settings-row--avatar .relay-team-panel__settings-control {
+  justify-items: end;
 }
 
 .relay-team-panel__settings-label {
@@ -226,13 +233,14 @@
 }
 
 .relay-team-panel__settings-switch-item.ant-form-item {
+  justify-self: end;
   width: max-content;
 }
 
 .relay-team-panel__settings-actions {
   display: flex;
-  justify-content: flex-start;
-  padding-top: 18px;
+  justify-content: flex-end;
+  padding-top: 0;
 }
 
 .relay-team-panel__settings-submit.ant-btn {
@@ -241,7 +249,7 @@
 }
 
 .relay-team-panel--settings {
-  align-items: flex-start;
+  align-items: stretch;
 }
 
 .relay-team-panel__policy-switches,
@@ -496,6 +504,12 @@
   .relay-team-panel__settings-row,
   .relay-team-panel__settings-actions-row {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .relay-team-panel__settings-row--avatar .relay-team-panel__settings-control,
+  .relay-team-panel__settings-switch-item.ant-form-item {
+    justify-self: start;
+    justify-items: start;
   }
 
   .relay-team-panel__policy-switches,
