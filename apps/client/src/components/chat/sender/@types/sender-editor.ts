@@ -6,6 +6,7 @@ export interface SenderEditorSelection {
 export interface SenderEditorHandle {
   focus: () => void
   replaceSelection: (text: string, selection?: SenderEditorSelection | null) => void
+  setValue: (value: string, selection?: SenderEditorSelection | null) => void
   setSelection: (selection: SenderEditorSelection) => void
   getSelection: () => SenderEditorSelection | null
   getValue: () => string

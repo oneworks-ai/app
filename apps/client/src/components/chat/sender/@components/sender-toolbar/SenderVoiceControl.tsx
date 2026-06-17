@@ -69,8 +69,46 @@ export function SenderVoiceControl({
       handlers.selectService(key.slice('service:'.length))
     }
   }
-  const buttonDisabled = state.loadingServices || state.unsupported || !state.canStartRecording
+  const isRecording = state.phase === 'recording'
+  const isTranscribing = state.phase === 'transcribing'
+  const isVoiceActive = isRecording || isTranscribing
+  const buttonDisabled = !isVoiceActive && (state.loadingServices || state.unsupported || !state.canStartRecording)
+  const buttonClickDisabled = !isVoiceActive && (buttonDisabled || state.setupOpen)
   const serviceMenu = { items: menuItems, onClick: handleMenuClick }
+  const activeButtonLabel = isTranscribing ? t('common.cancel') : t('chat.voiceInput.stop')
+  const buttonTooltip = isVoiceActive ? activeButtonLabel : state.selectedServiceLabel ?? t('chat.voiceInput.tooltip')
+  const buttonAriaLabel = isVoiceActive ? activeButtonLabel : t('chat.voiceInput.start')
+  const buttonIcon = isTranscribing || state.loadingServices ? 'progress_activity' : isRecording ? 'stop' : 'mic'
+  const handleVoiceButtonClick = () => {
+    if (buttonClickDisabled) return
+    if (isTranscribing) {
+      handlers.cancelTranscription()
+      return
+    }
+    if (isRecording) {
+      handlers.stopRecording()
+      return
+    }
+    handlers.startRecording()
+  }
+  const errorActions: Array<{ ariaLabel: string; icon: string; key: string; onClick: () => void }> = []
+  if (state.canRetry) {
+    errorActions.push({
+      ariaLabel: t('chat.voiceInput.retry'),
+      icon: 'refresh',
+      key: 'retry',
+      onClick: handlers.retryTranscription
+    })
+  }
+  if (state.errorCanOpenConfig) {
+    errorActions.push({
+      ariaLabel: t('chat.voiceInput.configure'),
+      icon: 'settings',
+      key: 'config',
+      onClick: handlers.openConfig
+    })
+  }
+  errorActions.push({ ariaLabel: t('common.close'), icon: 'close', key: 'close', onClick: handlers.dismissNotice })
 
   return (
     <div className='sender-voice-control'>
@@ -79,7 +117,7 @@ export function SenderVoiceControl({
         menu={serviceMenu}
       >
         <Tooltip
-          title={state.selectedServiceLabel ?? t('chat.voiceInput.tooltip')}
+          title={buttonTooltip}
           placement='top'
           mouseEnterDelay={.3}
         >
@@ -88,37 +126,17 @@ export function SenderVoiceControl({
             className={[
               'toolbar-btn',
               'sender-voice-control__button',
-              state.loadingServices ? 'is-loading' : ''
+              state.loadingServices || isTranscribing ? 'is-loading' : '',
+              isRecording ? 'is-recording' : '',
+              state.setupOpen ? 'is-click-disabled' : ''
             ].filter(Boolean).join(' ')}
-            aria-label={t('chat.voiceInput.start')}
-            aria-disabled={buttonDisabled || undefined}
+            aria-label={buttonAriaLabel}
+            aria-disabled={buttonClickDisabled || undefined}
             disabled={buttonDisabled}
-            onClick={handlers.startRecording}
+            onClick={handleVoiceButtonClick}
           >
             <span className='toolbar-btn__icon-shell'>
-              <span className='material-symbols-rounded'>{state.loadingServices ? 'progress_activity' : 'mic'}</span>
-            </span>
-          </button>
-        </Tooltip>
-      </Dropdown>
-
-      <Dropdown
-        trigger={['click', 'contextMenu']}
-        menu={serviceMenu}
-      >
-        <Tooltip
-          title={t('chat.voiceInput.menu')}
-          placement='top'
-          mouseEnterDelay={.3}
-        >
-          <button
-            type='button'
-            className='toolbar-btn sender-voice-control__menu-button'
-            aria-label={t('chat.voiceInput.menu')}
-            aria-haspopup='menu'
-          >
-            <span className='toolbar-btn__icon-shell'>
-              <span className='material-symbols-rounded'>more_horiz</span>
+              <span className='material-symbols-rounded'>{buttonIcon}</span>
             </span>
           </button>
         </Tooltip>
@@ -126,48 +144,42 @@ export function SenderVoiceControl({
 
       {state.setupOpen && (
         <div className='sender-voice-setup'>
-          <span className='material-symbols-rounded'>settings_voice</span>
-          <span className='sender-voice-setup__text'>{t('chat.voiceInput.setupPrompt')}</span>
           <Button
             size='small'
-            type='primary'
-            icon={<span className='material-symbols-rounded'>open_in_new</span>}
+            type='text'
+            className='sender-voice-setup__action'
             onClick={handlers.openConfig}
           >
-            {t('chat.voiceInput.configure')}
+            {t('chat.voiceInput.setupAction')}
           </Button>
           <Button
             size='small'
             type='text'
+            className='sender-voice-setup__close'
             aria-label={t('common.close')}
             icon={<span className='material-symbols-rounded'>close</span>}
-            onClick={handlers.dismissSetup}
+            onClick={handlers.dismissNotice}
           />
         </div>
       )}
 
       {state.errorMessage != null && state.phase === 'idle' && !state.setupOpen && (
         <div className='sender-voice-error'>
-          <span className='material-symbols-rounded'>error</span>
-          <span className='sender-voice-error__text'>{state.errorMessage}</span>
-          {state.canRetry && (
-            <Button
-              size='small'
-              type='text'
-              icon={<span className='material-symbols-rounded'>refresh</span>}
-              onClick={handlers.retryTranscription}
+          <span className='material-symbols-rounded sender-voice-error__icon'>error</span>
+          <span className='sender-voice-error__text' title={state.errorMessage}>{state.errorMessage}</span>
+          {errorActions.map(action => (
+            <button
+              key={action.key}
+              type='button'
+              className='toolbar-btn sender-voice-error__action'
+              aria-label={action.ariaLabel}
+              onClick={action.onClick}
             >
-              {t('chat.voiceInput.retry')}
-            </Button>
-          )}
-          <Button
-            size='small'
-            type='text'
-            icon={<span className='material-symbols-rounded'>settings</span>}
-            onClick={handlers.openConfig}
-          >
-            {t('chat.voiceInput.configure')}
-          </Button>
+              <span className='toolbar-btn__icon-shell'>
+                <span className='material-symbols-rounded'>{action.icon}</span>
+              </span>
+            </button>
+          ))}
         </div>
       )}
     </div>

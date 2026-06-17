@@ -1,14 +1,49 @@
 import './Sender.scss'
 
+import { Dropdown } from 'antd'
+import type { MenuProps } from 'antd'
+import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+
 import { useSenderController } from '#~/components/chat/sender/@hooks/use-sender-controller'
 
 import { SenderBody } from './@components/sender-body/SenderBody'
 import type { SenderProps } from './@types/sender-props'
 
 export function Sender(props: SenderProps) {
+  const { t } = useTranslation()
   const controller = useSenderController(props)
+  const hiddenVoiceInputMenu = useMemo<MenuProps | undefined>(() => {
+    if (props.hiddenVoiceInputActions == null || controller.hideSender || controller.isInlineEdit) {
+      return undefined
+    }
 
-  return (
+    return {
+      items: [
+        {
+          key: 'show-voice-input',
+          icon: <span className='material-symbols-rounded'>mic</span>,
+          label: t('chat.voiceInput.showInSender')
+        },
+        {
+          key: 'configure-voice-input',
+          icon: <span className='material-symbols-rounded'>settings</span>,
+          label: t('chat.voiceInput.configure')
+        }
+      ],
+      onClick: ({ key }) => {
+        if (key === 'show-voice-input') {
+          props.hiddenVoiceInputActions?.onShow()
+          return
+        }
+        if (key === 'configure-voice-input') {
+          props.hiddenVoiceInputActions?.onConfigure()
+        }
+      }
+    }
+  }, [controller.hideSender, controller.isInlineEdit, props.hiddenVoiceInputActions, t])
+
+  const content = (
     <div
       className={[
         'chat-input-wrapper',
@@ -56,5 +91,16 @@ export function Sender(props: SenderProps) {
         />
       )}
     </div>
+  )
+
+  if (hiddenVoiceInputMenu == null) return content
+
+  return (
+    <Dropdown
+      trigger={['contextMenu']}
+      menu={hiddenVoiceInputMenu}
+    >
+      {content}
+    </Dropdown>
   )
 }

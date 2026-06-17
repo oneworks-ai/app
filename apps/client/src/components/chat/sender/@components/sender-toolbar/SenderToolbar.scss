@@ -106,8 +106,7 @@
   flex: 0 1 auto;
 }
 
-.sender-voice-control__button,
-.sender-voice-control__menu-button {
+.sender-voice-control__button {
   border: 0;
   background: transparent;
 }
@@ -115,6 +114,15 @@
 .sender-voice-control__button {
   &.is-loading .material-symbols-rounded {
     animation: sender-voice-spin .9s linear infinite;
+  }
+
+  &.is-click-disabled {
+    cursor: default;
+  }
+
+  &.is-click-disabled:hover {
+    color: var(--sub-text-color, #9ca3af);
+    background: transparent;
   }
 
   &:disabled,
@@ -126,110 +134,151 @@
 
 .sender-voice-setup,
 .sender-voice-error {
+  height: var(--sender-control-height);
   min-height: var(--sender-control-height);
-  max-width: min(360px, 48vw);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 6px;
+  flex: 0 0 auto;
   border-radius: var(--sender-control-radius);
-  border: 1px solid var(--border-color);
-  background: color-mix(
-    in srgb,
-    var(--bg-color, #fff) 92%,
-    var(--sub-bg-color, #f3f4f6) 8%
-  );
-  color: var(--sub-text-color, #64748b);
+}
+
+.sender-voice-setup {
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--sub-text-color, #71717a);
   font-size: 12px;
-  line-height: 1.3;
+  line-height: 1;
+  white-space: nowrap;
+}
 
-  .material-symbols-rounded {
-    font-size: 15px;
-    line-height: 1;
-    flex: 0 0 auto;
-  }
+.sender-voice-setup .ant-btn {
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  font-size: 12px;
+  line-height: 1;
 
-  .ant-btn {
-    height: 22px;
-    padding: 0 7px;
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    border-radius: 6px;
-    font-size: 12px;
-    flex: 0 0 auto;
-
-    .material-symbols-rounded {
-      font-size: 14px;
-    }
+  &:hover,
+  &:focus-visible {
+    background: transparent !important;
+    border-color: transparent !important;
   }
 }
 
-.sender-voice-setup__text,
+.sender-voice-setup__action.ant-btn {
+  padding: 0 4px;
+  color: var(--sub-text-color, #71717a);
+
+  &:hover,
+  &:focus-visible {
+    color: var(--primary-color, #2563eb);
+  }
+}
+
+.sender-voice-setup__close.ant-btn {
+  width: 20px;
+  min-width: 20px;
+  padding: 0;
+  color: color-mix(in srgb, var(--sub-text-color, #71717a) 78%, transparent);
+
+  &:hover,
+  &:focus-visible {
+    color: var(--text-color, #18181b);
+    background: transparent !important;
+    text-decoration: none;
+  }
+
+  .material-symbols-rounded {
+    font-size: 14px;
+    line-height: 1;
+  }
+}
+
+.sender-voice-error {
+  gap: 4px;
+  padding: 0;
+  min-width: 0;
+  flex: 0 1 auto;
+  color: #b45309;
+  background: transparent;
+  max-width: min(360px, 40vw);
+}
+
+.sender-voice-error__icon {
+  width: 20px;
+  min-width: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+}
+
 .sender-voice-error__text {
   min-width: 0;
   overflow: hidden;
+  color: currentColor;
+  font-size: 12px;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.sender-voice-error {
-  color: #b45309;
-  border-color: color-mix(in srgb, #f59e0b 42%, var(--border-color) 58%);
-  background: color-mix(in srgb, #f59e0b 10%, var(--bg-color, #fff) 90%);
-}
+.sender-voice-error__action {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: inherit;
 
-.chat-input-toolbar--voice-active {
-  margin-top: 4px;
-  justify-content: stretch;
+  &:hover,
+  &:focus-visible {
+    color: var(--sender-control-hover-color);
+    background: var(--sender-control-hover-bg);
+  }
 }
 
 .sender-voice-recording {
   width: 100%;
   min-width: 0;
-  min-height: var(--sender-control-height);
-  display: grid;
-  grid-template-columns: auto minmax(64px, 1fr) auto auto auto;
-  align-items: center;
-  gap: 8px;
-}
-
-.sender-voice-recording__leading {
-  width: var(--sender-control-height);
   height: var(--sender-control-height);
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: center;
-  color: var(--primary-color, #2563eb);
-
-  .material-symbols-rounded {
-    font-size: 18px;
-    line-height: 1;
-  }
+  gap: 6px;
+  flex: 1 1 auto;
 }
 
 .sender-voice-recording__time {
-  min-width: 42px;
+  min-width: 34px;
   color: var(--sub-text-color, #64748b);
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1;
   text-align: right;
   white-space: nowrap;
 }
 
 .sender-voice-waveform {
-  height: 22px;
+  height: 20px;
   min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(28, minmax(2px, 1fr));
+  display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   overflow: hidden;
 }
 
 .sender-voice-waveform__bar {
-  height: 18px;
+  width: 3px;
+  min-width: 3px;
+  height: 16px;
+  flex: 0 0 3px;
   border-radius: 999px;
   background: color-mix(
     in srgb,
@@ -237,45 +286,7 @@
     var(--text-color, #111827) 24%
   );
   transform-origin: center;
-  transition: transform .08s linear;
-}
-
-.sender-voice-recording__action {
-  width: var(--sender-control-height);
-  height: var(--sender-control-height);
-  min-width: var(--sender-control-height);
-  border: 1px solid var(--border-color);
-  border-radius: var(--sender-control-radius);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-color, #fff);
-  color: var(--sub-text-color, #64748b);
-  cursor: pointer;
-  transition: all .18s ease;
-
-  .material-symbols-rounded {
-    font-size: 17px;
-    line-height: 1;
-  }
-
-  &:hover {
-    color: var(--text-color, #111827);
-    border-color: color-mix(
-      in srgb,
-      var(--primary-color, #2563eb) 38%,
-      var(--border-color) 62%
-    );
-  }
-
-  &:disabled {
-    opacity: .52;
-    cursor: not-allowed;
-  }
-}
-
-.sender-voice-recording__action--send {
-  color: var(--primary-color, #2563eb);
+  transition: transform .12s linear;
 }
 
 .sender-voice-menu-item {
@@ -351,14 +362,8 @@
     max-width: 100%;
   }
 
-  .sender-voice-setup,
-  .sender-voice-error {
-    max-width: calc(100vw - 72px);
-  }
-
   .sender-voice-recording {
-    grid-template-columns: auto minmax(54px, 1fr) auto auto auto;
-    gap: 6px;
+    width: min(128px, calc(100vw - 156px));
   }
 
   .sender-voice-waveform {

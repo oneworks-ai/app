@@ -1522,12 +1522,18 @@
       "retry": "Retry",
       "setDefault": "Set default: {{name}}",
       "setupPrompt": "No available speech-to-text service is configured",
+      "setupAction": "No voice service configured, configure",
+      "showInSender": "Show voice input",
+      "showInSenderFailed": "Failed to show voice input",
       "defaultService": "Default",
+      "browserWebSpeechService": "Browser speech recognition",
       "defaultSaved": "Default voice service saved",
       "defaultSaveFailed": "Failed to save default voice service",
       "unsupported": "Recording is not supported in this browser",
       "unavailable": "Recording is not available in the current state",
       "permissionDenied": "Microphone permission was denied",
+      "browserLanguageUnsupported": "This recognition language is not supported by the browser",
+      "browserRecognitionNetwork": "Browser speech recognition network error",
       "loadServicesFailed": "Failed to load voice services",
       "recordingFailed": "Failed to start recording",
       "emptyRecording": "No recognizable audio was recorded",
@@ -3336,6 +3342,10 @@
         "defaultServiceId": {
           "label": "Default Voice Service",
           "desc": "Speech-to-text service used by sender when no service is selected manually"
+        },
+        "showInSender": {
+          "label": "Show Voice Input",
+          "desc": "Hide the sender voice button when off; right-click the sender or open settings to enable it again"
         },
         "services": {
           "label": "Voice Services",

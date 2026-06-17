@@ -26,7 +26,8 @@ import {
   getApiErrorMessage,
   getConfig,
   openSessionWorkspaceFileInExternalOpener,
-  openWorkspaceFileInExternalOpener
+  openWorkspaceFileInExternalOpener,
+  updateConfig
 } from '#~/api'
 import {
   AgentRoomTranscript,
@@ -265,7 +266,7 @@ export function ChatHistoryView({
   const location = useLocation()
   const navigate = useNavigate()
   const { isCompactLayout } = useResponsiveLayout()
-  const { data: configRes } = useSWR<ConfigResponse>('/api/config', getConfig)
+  const { data: configRes, mutate: mutateConfig } = useSWR<ConfigResponse>('/api/config', getConfig)
   const configWorkspaceDraft = useMemo(
     () => getChatSessionWorkspaceDraftFromConfig(configRes),
     [configRes]
@@ -274,6 +275,7 @@ export function ChatHistoryView({
     () => resolveMessageLinksConfig(configRes?.sources?.merged?.general?.messageLinks),
     [configRes?.sources?.merged?.general?.messageLinks]
   )
+  const showVoiceInputInSender = configRes?.sources?.merged?.voice?.speechToText?.showInSender !== false
   const workspaceDraftDirtyRef = useRef(false)
   const pendingSessionCreationContext = useAtomValue(pendingSessionCreationContextAtom)
   const pendingSessionInitialContent = useAtomValue(pendingSessionInitialContentAtom)
@@ -294,6 +296,30 @@ export function ChatHistoryView({
     }
     onSessionCreated?.(createdSession)
   }, [onSessionCreated, pendingSessionCreationContext, setPendingSessionCreationContext])
+  const handleOpenVoiceConfig = useCallback(() => {
+    void navigate('/config?section=voice.speechToText')
+  }, [navigate])
+  const handleShowVoiceInputInSender = useCallback(() => {
+    void (async () => {
+      try {
+        const config = await getConfig()
+        const currentVoice = config.sources?.user?.voice ?? {}
+        await updateConfig('user', 'voice', {
+          ...currentVoice,
+          speechToText: {
+            ...(currentVoice.speechToText ?? {}),
+            showInSender: true
+          }
+        })
+        await mutateConfig()
+      } catch (error) {
+        void message.error({
+          content: getApiErrorMessage(error, t('chat.voiceInput.showInSenderFailed')),
+          key: 'chat-voice-input-show-failed'
+        })
+      }
+    })()
+  }, [message, mutateConfig, t])
   useEffect(() => {
     if (!hasPersistedSession || pendingSessionCreationContext == null) return
     setPendingSessionCreationContext(undefined)
@@ -1432,7 +1458,13 @@ export function ChatHistoryView({
             queueMode={isAgentRoomMode ? undefined : queueMode}
             onQueueModeChange={isAgentRoomMode ? undefined : setQueueMode}
             contextReferenceRequest={contextReferenceRequest}
-            enableVoiceInput
+            enableVoiceInput={showVoiceInputInSender}
+            hiddenVoiceInputActions={!showVoiceInputInSender
+              ? {
+                onConfigure: handleOpenVoiceConfig,
+                onShow: handleShowVoiceInputInSender
+              }
+              : undefined}
           />
           <ChatStatusBar
             draftWorkspace={workspaceDraft}

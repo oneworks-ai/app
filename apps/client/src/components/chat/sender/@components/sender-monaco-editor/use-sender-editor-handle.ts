@@ -45,6 +45,23 @@ export const useSenderEditorHandle = ({
         editor.setSelection(toMonacoRange(model, nextOffset, nextOffset))
         editor.focus()
       },
+      setValue: (nextValue: string, selection?: SenderEditorSelection | null) => {
+        const editor = standaloneEditorRef.current
+        const model = editor?.getModel()
+
+        if (editor == null || model == null) {
+          return
+        }
+
+        if (editor.getValue() !== nextValue) {
+          editor.setValue(nextValue)
+        }
+        if (selection != null) {
+          const start = Math.max(0, Math.min(selection.start, nextValue.length))
+          const end = Math.max(start, Math.min(selection.end, nextValue.length))
+          editor.setSelection(toMonacoRange(model, start, end))
+        }
+      },
       setSelection: (selection: SenderEditorSelection) => {
         const editor = standaloneEditorRef.current
         const model = editor?.getModel()
