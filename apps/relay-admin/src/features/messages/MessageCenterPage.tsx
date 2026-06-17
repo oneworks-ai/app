@@ -547,9 +547,8 @@ export const MessageCenterPage = ({
                 </div>
               ))}
             </dl>
-            <div className='relay-message-center__detail-actions'>
-              <Button onClick={() => void navigate('/messages')}>返回消息列表</Button>
-              {activeMessage.invitation != null && activeMessage.invitation.status === 'pending' ? (
+            {activeMessage.invitation != null && activeMessage.invitation.status === 'pending' ? (
+              <div className='relay-message-center__detail-actions'>
                 <Space size={6}>
                   <Button
                     disabled={activeInvitationId != null}
@@ -566,8 +565,8 @@ export const MessageCenterPage = ({
                     拒绝
                   </Button>
                 </Space>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
           </article>
         )}
       </section>

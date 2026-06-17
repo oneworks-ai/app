@@ -223,7 +223,7 @@
 .relay-message-center__detail-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
   padding: 12px 0 0;
 }
@@ -256,7 +256,6 @@
   }
 
   .relay-message-center__detail-actions {
-    align-items: stretch;
-    flex-direction: column-reverse;
+    align-items: flex-end;
   }
 }
