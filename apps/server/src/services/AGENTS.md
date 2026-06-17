@@ -7,6 +7,7 @@
 - runtime-store/：统一 CLI runtime protocol 持久化与投影目录，负责把 runtime events 投影到 session 和 Agent Room
 - voice/：标准语音能力服务目录，负责 speech-to-text 服务解析、凭证模板展开、外部转写调用和响应归一化
 - web-debug/：跨入口浏览器调试 runtime 目录，负责内置 Chii 等 Web/iframe/webview 调试能力，不归属单个 webpage metadata 功能
+- model-providers/：官方模型服务商能力目录，负责服务商模型、余额、状态和 secret 动作的服务端编排
 - module-updates.ts：运行时模块版本检测与 bootstrap cache 安装编排，供普通 web、bootstrap web 和桌面 workspace 共同使用
 
 分层约定：services 统一承载跨入口复用的业务编排、运行态状态和配置装载；routes/websocket/channels 不直接维护会话缓存，不直接拼装 loadConfig 的 jsonVariables。

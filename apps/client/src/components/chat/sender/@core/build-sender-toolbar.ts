@@ -97,6 +97,8 @@ export const buildSenderToolbar = ({
       onInterrupt: props.onInterrupt,
       onModelChange: props.onModelChange,
       onToggleRecommendedModel: props.onToggleRecommendedModel,
+      onConnectMoreModelServices: props.onConnectMoreModelServices,
+      onOpenModelServicesConfig: props.onOpenModelServicesConfig,
       onPermissionModeChange: props.onPermissionModeChange,
       onQueueModeChange: props.onQueueModeChange,
       onCancel: props.onCancel,

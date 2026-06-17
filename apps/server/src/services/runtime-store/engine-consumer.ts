@@ -46,6 +46,15 @@ const PROJECT_OO_BASE_DIR_RESOLVE_CWD_ENV = '__ONEWORKS_PROJECT_BASE_DIR_RESOLVE
 const PROJECT_LAUNCH_CWD_ENV = '__ONEWORKS_PROJECT_LAUNCH_CWD__'
 const PROJECT_WORKSPACE_FOLDER_ENV = '__ONEWORKS_PROJECT_WORKSPACE_FOLDER__'
 const RUNTIME_CONSUMER_RUN_COMMAND = '__run'
+const DEFAULT_RUNTIME_CONSUMER_PRINT_IDLE_TIMEOUT_SECONDS = 180
+const CONSUMER_RESTART_COMMAND_TYPES = new Set([
+  'send_message',
+  'steer_message',
+  'submit_input',
+  'approve',
+  'deny',
+  'resume'
+])
 
 const isPathInside = (parentPath: string, targetPath: string) => {
   const relativePath = path.relative(parentPath, targetPath)
@@ -157,6 +166,19 @@ const pushOption = (args: string[], flag: string, value: string | undefined) => 
     args.push(flag, value)
   }
 }
+
+const parsePositiveInteger = (value: string | undefined) => {
+  const trimmed = value?.trim()
+  if (trimmed == null || trimmed === '' || !/^\d+$/.test(trimmed)) {
+    return undefined
+  }
+  const parsed = Number(trimmed)
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined
+}
+
+const resolveRuntimeConsumerPrintIdleTimeoutSeconds = (env: NodeJS.ProcessEnv) =>
+  parsePositiveInteger(env.ONEWORKS_RUNTIME_CONSUMER_PRINT_IDLE_TIMEOUT_SECONDS) ??
+    DEFAULT_RUNTIME_CONSUMER_PRINT_IDLE_TIMEOUT_SECONDS
 
 const pushPromptTargetOptions = (args: string[], promptType: string | undefined, promptName: string | undefined) => {
   if (promptType === 'entity') {
@@ -297,7 +319,9 @@ export function shouldStartServerRuntimeConsumer(params: {
       ? params.heartbeat.updatedAt
       : 0
   )
-  const hasQueuedCommandAfterTerminal = params.queuedCommand?.ts != null &&
+  const hasQueuedCommandAfterTerminal = params.queuedCommand != null &&
+    CONSUMER_RESTART_COMMAND_TYPES.has(params.queuedCommand.type) &&
+    params.queuedCommand.ts != null &&
     params.queuedCommand.ts > latestTerminalUpdatedAt
   if (
     (isTerminalStatus(params.state?.status) || isTerminalStatus(params.heartbeat?.status)) &&
@@ -634,7 +658,9 @@ export function buildRuntimeConsumerSpawnPlan(params: {
     RUNTIME_CONSUMER_RUN_COMMAND,
     '--print',
     '--output-format',
-    'stream-json'
+    'stream-json',
+    '--print-idle-timeout',
+    String(resolveRuntimeConsumerPrintIdleTimeoutSeconds(baseEnv))
   ]
   if (launchMode === 'resume') {
     args.push('--resume', sessionId)

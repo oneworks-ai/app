@@ -246,9 +246,7 @@ export const ModelServicesRecordEditor = ({
                   [newKey]: {
                     title: '',
                     description: '',
-                    apiBaseUrl: '',
                     apiKey: '',
-                    models: [],
                     timeoutMs: undefined,
                     maxOutputTokens: undefined,
                     extra: {}

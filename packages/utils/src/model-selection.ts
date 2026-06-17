@@ -5,8 +5,17 @@ import type {
   EffortLevel,
   ModelMetadataConfig,
   ModelServiceConfig,
-  ServiceModelEntry
+  ServiceModelEntry,
+  ServiceModelOption
 } from '@oneworks/types'
+
+import {
+  getModelProviderDefinition,
+  normalizeIconRef,
+  resolveModelServiceConfig,
+  resolveModelServiceIcon,
+  resolveModelServiceModels
+} from './model-providers'
 
 export interface AdapterModelRuleEvaluation {
   allowed: boolean
@@ -156,7 +165,7 @@ export const listServiceModels = (modelServices: Record<string, ModelServiceConf
     const service = (serviceValue != null && typeof serviceValue === 'object')
       ? serviceValue
       : undefined
-    const models = Array.isArray(service?.models) ? service.models : []
+    const models = resolveModelServiceModels(service)
 
     for (const model of models) {
       const normalizedModel = normalizeNonEmptyString(model)
@@ -173,13 +182,83 @@ export const listServiceModels = (modelServices: Record<string, ModelServiceConf
   return list
 }
 
+const resolveServiceModelOptionIcon = (params: {
+  selectorValue: string
+  model: string
+  serviceIcon: ServiceModelOption['serviceIcon']
+  models?: Record<string, ModelMetadataConfig>
+}) => (
+  normalizeIconRef(
+    resolveExactModelMetadata({
+      model: params.selectorValue,
+      models: params.models
+    })?.icon
+  ) ??
+    normalizeIconRef(
+      resolveExactModelMetadata({
+        model: params.model,
+        models: params.models
+      })?.icon
+    )
+)
+
+export const listServiceModelOptions = (params: {
+  modelServices: Record<string, ModelServiceConfig>
+  models?: Record<string, ModelMetadataConfig>
+}) => {
+  const list: ServiceModelOption[] = []
+
+  for (const [serviceKey, serviceValue] of Object.entries(params.modelServices)) {
+    const normalizedServiceKey = normalizeNonEmptyString(serviceKey)
+    if (!normalizedServiceKey) continue
+
+    const service = (serviceValue != null && typeof serviceValue === 'object')
+      ? serviceValue
+      : undefined
+    const serviceIcon = resolveModelServiceIcon(service)
+    const provider = getModelProviderDefinition(service?.provider)
+    const serviceTitle = normalizeNonEmptyString(service?.title) ?? provider?.title
+    const models = resolveModelServiceModels(service)
+
+    for (const model of models) {
+      const normalizedModel = normalizeNonEmptyString(model)
+      if (!normalizedModel) continue
+
+      const selectorValue = buildServiceModelSelector(normalizedServiceKey, normalizedModel)
+      const displayMetadata = resolveModelDisplayMetadata({
+        model: selectorValue,
+        models: params.models
+      })
+
+      list.push({
+        serviceKey: normalizedServiceKey,
+        model: normalizedModel,
+        selectorValue,
+        ...(serviceTitle != null ? { serviceTitle } : {}),
+        ...(displayMetadata?.title != null ? { modelTitle: displayMetadata.title } : {}),
+        serviceIcon,
+        modelIcon: resolveServiceModelOptionIcon({
+          selectorValue,
+          model: normalizedModel,
+          serviceIcon,
+          models: params.models
+        })
+      })
+    }
+  }
+
+  return list
+}
+
 const getModelServiceExtraRecord = (service: ModelServiceConfig | undefined, adapter: string) => {
   const extra = asRecord(service?.extra)
   return asRecord(extra[adapter])
 }
 
 const hasResponsesModelServiceBaseUrl = (service: ModelServiceConfig | undefined) => (
-  normalizeNonEmptyString(service?.apiBaseUrl)?.replace(/\/+$/u, '').endsWith('/responses') === true
+  normalizeNonEmptyString(resolveModelServiceConfig(service).service?.apiBaseUrl)?.replace(/\/+$/u, '').endsWith(
+    '/responses'
+  ) === true
 )
 
 export const isModelServiceCompatibleWithAdapter = (params: {
@@ -202,11 +281,11 @@ export const isModelServiceCompatibleWithAdapter = (params: {
   return true
 }
 
-export const filterServiceModelsForAdapter = (params: {
+export const filterServiceModelsForAdapter = <TEntry extends ServiceModelEntry>(params: {
   adapter?: string
   modelServices: Record<string, ModelServiceConfig>
   models?: Record<string, ModelMetadataConfig>
-  serviceModels: ServiceModelEntry[]
+  serviceModels: TEntry[]
 }) => {
   const adapter = normalizeNonEmptyString(params.adapter)
   if (!adapter) return params.serviceModels

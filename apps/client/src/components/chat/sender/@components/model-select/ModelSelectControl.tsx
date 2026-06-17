@@ -63,6 +63,8 @@ export function ModelSelectControl({
     | 'onCloseReferenceActions'
     | 'onModelChange'
     | 'onToggleRecommendedModel'
+    | 'onConnectMoreModelServices'
+    | 'onOpenModelServicesConfig'
   >
 }) {
   const { t } = useTranslation()
@@ -86,7 +88,9 @@ export function ModelSelectControl({
     onQueueTextareaFocusRestore,
     onCloseReferenceActions,
     onModelChange,
-    onToggleRecommendedModel
+    onToggleRecommendedModel,
+    onConnectMoreModelServices,
+    onOpenModelServicesConfig
   } = handlers
   const isCompactControl = isCompactLayout || isTouchInteraction
   const isModelSelectOpen = showModelSelect
@@ -156,7 +160,9 @@ export function ModelSelectControl({
     selectedModel,
     updatingRecommendedModelValue,
     onCloseModelSelect: closeModelSelect,
-    onSelectModel: handleModelSelection
+    onSelectModel: handleModelSelection,
+    onConnectMoreModelServices,
+    onOpenModelServicesConfig
   })
 
   return (
@@ -272,6 +278,8 @@ export function ModelSelectControl({
             onSearchChange={onModelSearchValueChange}
             onSelectModel={handleModelSelection}
             onToggleRecommendedModel={onToggleRecommendedModel}
+            onConnectMoreModelServices={onConnectMoreModelServices}
+            onOpenModelServicesConfig={onOpenModelServicesConfig}
           />
         )}
       </div>

@@ -1,4 +1,5 @@
-import type { ModelServiceConfig } from '@oneworks/types'
+import type { ModelServiceConfig, ResolvedModelServiceConfig } from '@oneworks/types'
+import { resolveModelServiceConfig } from '@oneworks/utils'
 
 import { asPlainRecord, normalizeStringRecord } from './object-utils'
 
@@ -29,7 +30,7 @@ const getProviderExtra = (service: ModelServiceConfig) => ({
   ...asPlainRecord(asPlainRecord(service.extra)?.opencode)
 })
 
-const inferProviderPackage = (service: ModelServiceConfig, providerExtra: Record<string, unknown>) => {
+const inferProviderPackage = (service: ResolvedModelServiceConfig, providerExtra: Record<string, unknown>) => {
   if (typeof providerExtra.npm === 'string' && providerExtra.npm.trim() !== '') return providerExtra.npm
   const wireApi = typeof providerExtra.wireApi === 'string' ? providerExtra.wireApi : undefined
   return wireApi === 'responses' || service.apiBaseUrl.includes('/responses')
@@ -61,18 +62,26 @@ export const resolveOpenCodeModel = (
       providerConfig: undefined
     }
   }
+  const resolved = resolveModelServiceConfig(service, ['modelServices', serviceKey])
+  if (resolved.service == null) {
+    return {
+      cliModel: serviceKey !== '' && modelId !== '' ? `${serviceKey}/${modelId}` : (modelId || normalized),
+      providerConfig: undefined
+    }
+  }
+  const resolvedService = resolved.service
 
-  const providerExtra = getProviderExtra(service)
+  const providerExtra = getProviderExtra(resolvedService)
   const providerId = typeof providerExtra.providerId === 'string' && providerExtra.providerId.trim() !== ''
     ? providerExtra.providerId
     : serviceKey
-  const npm = inferProviderPackage(service, providerExtra)
+  const npm = inferProviderPackage(resolvedService, providerExtra)
   const baseURL = appendQueryParams(
-    normalizeProviderBaseURL(service.apiBaseUrl, npm),
+    normalizeProviderBaseURL(resolvedService.apiBaseUrl, npm),
     normalizeStringRecord(providerExtra.queryParams)
   )
-  const normalizedTimeoutMs = normalizePositiveInteger(service.timeoutMs)
-  const normalizedMaxOutputTokens = normalizePositiveInteger(service.maxOutputTokens)
+  const normalizedTimeoutMs = normalizePositiveInteger(resolvedService.timeoutMs)
+  const normalizedMaxOutputTokens = normalizePositiveInteger(resolvedService.maxOutputTokens)
 
   return {
     cliModel: `${providerId}/${modelId}`,
@@ -81,7 +90,7 @@ export const resolveOpenCodeModel = (
         npm,
         name: service.title?.trim() !== '' ? service.title : serviceKey,
         options: {
-          apiKey: service.apiKey,
+          apiKey: resolvedService.apiKey,
           baseURL,
           ...(normalizedTimeoutMs != null
             ? {

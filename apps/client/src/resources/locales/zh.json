@@ -2041,6 +2041,8 @@
     },
     "modelGroupRecommended": "推荐模型",
     "modelMoreModels": "更多模型",
+    "modelConnectMoreServices": "接入更多",
+    "modelOpenModelServicesConfig": "打开配置",
     "availableTools": "可用工具",
     "availableToolsEmpty": "当前会话没有可展示的工具。",
     "toolGroupChromeDevtools": "ChromeDevtools",
@@ -2710,7 +2712,12 @@
       "save": "保存",
       "cancel": "取消",
       "format": "格式化",
-      "copy": "复制"
+      "copy": "复制",
+      "openModelServiceHomepage": "打开管理主页",
+      "configureModelServiceWithSession": "用会话修改模型服务",
+      "createModelServiceWithSession": "用会话新增模型服务",
+      "modelServiceSessionCreated": "已创建模型服务配置会话",
+      "modelServiceSessionCreateFailed": "创建模型服务配置会话失败"
     },
     "conflict": {
       "title": "配置正在被其他地方修改",
@@ -2850,6 +2857,49 @@
         "remove": "删除账号快照失败"
       },
       "authFileDefaultLookup": "留空时默认读取 {{path}}。"
+    },
+    "modelServices": {
+      "identity": {
+        "configured": "已选择官方服务商",
+        "hostMatch": "根据 API 地址识别",
+        "custom": "自定义兼容服务"
+      },
+      "actions": {
+        "openHomepage": "管理后台",
+        "openExternal": "在外部浏览器打开",
+        "createSecret": "创建 Secret",
+        "openApiKeys": "打开 API Key 页面",
+        "queryBalance": "查询余额",
+        "queryStatus": "服务状态",
+        "queryModels": "查询模型",
+        "refreshModels": "写入模型列表"
+      },
+      "results": {
+        "actionFailed": "模型服务操作失败",
+        "amountUnknown": "未知",
+        "balance": "余额",
+        "status": "状态",
+        "models": "{{count}} 个模型",
+        "modelsMore": "还有 {{count}} 个",
+        "modelsLoaded": "已查询 {{count}} 个模型",
+        "modelsRefreshed": "已写入 {{count}} 个模型",
+        "modelsEmpty": "没有可写入的模型",
+        "secretCreated": "Secret 已创建并复制到剪贴板"
+      },
+      "portal": {
+        "secretTitle": "{{provider}} Secret 管理",
+        "iframeHint": "浏览器模式使用 iframe 打开；如果平台禁止嵌入，请用外部浏览器打开。",
+        "webviewHint": "Electron 模式使用 webview 打开；如登录或支付页面受限，请用外部浏览器打开。"
+      },
+      "status": {
+        "operational": "正常",
+        "degraded": "性能下降",
+        "partial_outage": "部分故障",
+        "major_outage": "严重故障",
+        "maintenance": "维护中",
+        "unknown": "未知",
+        "unsupported": "暂不支持"
+      }
     },
     "fields": {
       "general": {
@@ -3199,6 +3249,10 @@
           "desc": "按服务名称平铺配置"
         },
         "item": {
+          "provider": {
+            "label": "官方服务商",
+            "desc": "选择后会使用内置 API 地址、模型目录、图标和管理入口；自定义服务可留空。"
+          },
           "title": {
             "label": "展示标题",
             "desc": "用于默认模型服务下拉展示"
@@ -3207,9 +3261,17 @@
             "label": "展示描述",
             "desc": "用于默认模型服务下拉展示"
           },
+          "icon": {
+            "label": "服务图标",
+            "desc": "可填 builtin:id、material:name 或图片 URL；留空时使用服务商图标。"
+          },
+          "homepageUrl": {
+            "label": "管理主页",
+            "desc": "可覆盖服务商默认后台地址，用于充值、购买、API Key 管理。"
+          },
           "apiBaseUrl": {
             "label": "API 地址",
-            "desc": "模型服务的 API 基础地址"
+            "desc": "模型服务 API 地址覆盖；已选择官方服务商时通常无需填写。"
           },
           "apiKey": {
             "label": "API 密钥",
@@ -3217,7 +3279,29 @@
           },
           "models": {
             "label": "模型列表",
-            "desc": "该服务支持的模型名称"
+            "desc": "该服务支持的模型名称；留空时使用服务商默认模型目录。"
+          },
+          "management": {
+            "enabled": {
+              "label": "启用管理能力",
+              "desc": "开启后可使用查询模型、余额、状态和 Secret 辅助入口。"
+            },
+            "apiKey": {
+              "label": "管理 API Key",
+              "desc": "部分平台需要独立的管理 API Key；留空时默认复用模型 API Key。"
+            },
+            "organizationId": {
+              "label": "组织 ID",
+              "desc": "用于需要组织维度管理 API 的平台。"
+            },
+            "projectId": {
+              "label": "项目 ID",
+              "desc": "用于需要项目维度管理 API 的平台。"
+            }
+          },
+          "providerOptions": {
+            "label": "服务商扩展配置",
+            "desc": "按服务商保留的轻量 JSON 配置，例如区域、endpoint 类型或特殊管理 API 参数。"
           },
           "timeoutMs": {
             "label": "超时（毫秒）",
@@ -3508,6 +3592,49 @@
       "language": {
         "zh": "中文",
         "en": "English"
+      },
+      "modelProviders": {
+        "custom": "自定义 OpenAI 兼容服务",
+        "openai": "OpenAI",
+        "anthropic": "Anthropic",
+        "moonshot-cn": "Moonshot / Kimi 中国站",
+        "moonshot-intl": "Moonshot / Kimi 国际站",
+        "deepseek": "DeepSeek",
+        "minimax": "MiniMax",
+        "qwen": "阿里千问 / 百炼",
+        "zhipu": "智谱 GLM",
+        "azure-openai": "Azure OpenAI",
+        "google-gemini": "Google Gemini",
+        "aws-bedrock": "AWS Bedrock",
+        "openrouter": "OpenRouter",
+        "vercel-ai-gateway": "Vercel AI Gateway",
+        "requesty": "Requesty",
+        "portkey": "Portkey",
+        "litellm": "LiteLLM",
+        "micu": "Micu",
+        "apiyi": "APIYI",
+        "yunwu": "云雾"
+      },
+      "modelProviderDescriptions": {
+        "openai": "OpenAI 官方 API 平台，用于 GPT 模型和多模态服务。",
+        "anthropic": "Anthropic 官方 Claude 模型控制台服务。",
+        "moonshot-cn": "Moonshot / Kimi 中国站官方 OpenAI 兼容 API 服务。",
+        "moonshot-intl": "Moonshot / Kimi 国际站官方 OpenAI 兼容 API 服务。",
+        "deepseek": "DeepSeek 官方 OpenAI 兼容 API 服务。",
+        "minimax": "MiniMax 官方 API 平台，支持文本、多模态和智能体服务。",
+        "qwen": "阿里云百炼 / DashScope 千问模型 API 服务。",
+        "zhipu": "智谱 BigModel 官方 GLM 模型 API 服务。",
+        "azure-openai": "Azure AI Foundry 托管的 OpenAI 模型部署服务。",
+        "google-gemini": "Google AI Studio 和 Gemini API 服务。",
+        "aws-bedrock": "AWS Bedrock 托管基础模型服务。",
+        "openrouter": "OpenRouter 模型路由平台，提供 OpenAI 兼容 API。",
+        "vercel-ai-gateway": "Vercel AI Gateway，用于跨模型服务商路由请求。",
+        "requesty": "Requesty AI Gateway，用于 OpenAI 兼容模型路由。",
+        "portkey": "Portkey AI Gateway，用于管理和路由模型请求。",
+        "litellm": "LiteLLM 网关和代理，用于统一模型 API。",
+        "micu": "Micu 中转平台，提供 OpenAI 兼容模型接入。",
+        "apiyi": "APIYI 中转平台，提供 OpenAI 兼容模型接入。",
+        "yunwu": "云雾中转平台，提供 OpenAI 兼容模型接入。"
       },
       "conversation": {
         "friendly": "友好",

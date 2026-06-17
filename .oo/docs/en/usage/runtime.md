@@ -113,7 +113,7 @@ webAuth:
 
 - `HOME` isolates runtime state. It defaults to the `.mock` directory under the project home. Startup bridges common dot directories from the real home and macOS Keychain/Application Support paths into the mock home.
 - `modelServices` is shared configuration. Each adapter maps it to its native runtime:
-  - `claude-code` uses Claude Code Router.
+  - `claude-code` connects directly to known official Anthropic-compatible endpoints for Anthropic, Kimi, DeepSeek, Alibaba Qwen/Bailian, Zhipu GLM, MiniMax, OpenRouter, Requesty, Vercel AI Gateway, and Portkey; other OpenAI-compatible `service,model` selections fall back to Claude Code Router.
   - `codex` and `gemini` use adapter-owned local proxies.
   - some adapters write provider config into session-level or native config files.
 - If no routed `service,model` is selected, adapters keep using their native model and binary selection.

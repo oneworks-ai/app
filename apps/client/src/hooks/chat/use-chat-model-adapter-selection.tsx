@@ -20,7 +20,7 @@ import {
   filterServiceModelsForAdapter,
   hasRunnableChatModelSelection,
   isBuiltinNativeAdapter,
-  listServiceModels,
+  listServiceModelOptions,
   normalizeNonEmptyString,
   resolveAdapterForChatModelSelection,
   resolveAdapterModelCompatibility,
@@ -200,7 +200,12 @@ export function useChatModelAdapterSelection({
   const defaultModelService = normalizeNonEmptyString(configRes?.sources?.merged?.general?.defaultModelService)
   const defaultModel = normalizeNonEmptyString(configRes?.sources?.merged?.general?.defaultModel)
 
-  const allServiceModels = useMemo(() => listServiceModels(mergedModelServices), [mergedModelServices])
+  const allServiceModels = useMemo(() => (
+    listServiceModelOptions({
+      modelServices: mergedModelServices,
+      models: mergedModels
+    })
+  ), [mergedModelServices, mergedModels])
   const visibleHiddenBuiltinAdapters = adapterLocked ? [] : hiddenBuiltinAdapters
   const availableAdapters = useMemo(() => (
     resolveSelectableAdapterKeys({

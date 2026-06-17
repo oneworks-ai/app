@@ -51,4 +51,36 @@ describe('config helpers', () => {
     expect(local?.request?.headers?.['X-Api-Key']).toBe('******')
     expect(local?.request?.headers?.['X-Trace-Id']).toBe('trace')
   })
+
+  it('masks secret-like model service fields before returning config sections', () => {
+    const sections = buildSections(
+      {
+        env: {
+          API_TOKEN: 'secret-token',
+          SAFE_NAME: 'visible'
+        },
+        modelServices: {
+          kimi: {
+            provider: 'moonshot-cn',
+            apiKey: 'secret-kimi',
+            management: {
+              apiKey: 'secret-management'
+            }
+          }
+        }
+      } satisfies Config
+    )
+
+    expect(sections.modelServices?.kimi).toMatchObject({
+      provider: 'moonshot-cn',
+      apiKey: '******',
+      management: {
+        apiKey: '******'
+      }
+    })
+    expect(sections.general.env).toEqual({
+      API_TOKEN: '******',
+      SAFE_NAME: 'visible'
+    })
+  })
 })

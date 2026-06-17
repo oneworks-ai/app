@@ -119,6 +119,12 @@ describe('runtime store engine consumer', () => {
       queuedCommand: { ts: 200, type: 'submit_input' },
       state: { sessionId: 'sess-room-dev', status: 'completed', lastSeq: 10, updatedAt: 300 }
     })).toBe(false)
+    expect(shouldStartServerRuntimeConsumer({
+      heartbeat: { protocolVersion: '1.0.0', runtimeId: 'ow-run-old', status: 'failed', updatedAt: 100 },
+      metadata,
+      queuedCommand: { ts: 200, type: 'stop' },
+      state: { sessionId: 'sess-room-dev', status: 'failed', lastSeq: 10, updatedAt: 100 }
+    })).toBe(false)
   })
 
   it('builds a server-side consumer spawn plan for ordinary web sessions', async () => {
@@ -160,6 +166,8 @@ describe('runtime store engine consumer', () => {
       '--print',
       '--output-format',
       'stream-json',
+      '--print-idle-timeout',
+      '180',
       '--session-id',
       'sess-web',
       '--workspace',
@@ -207,10 +215,37 @@ describe('runtime store engine consumer', () => {
       '--print',
       '--output-format',
       'stream-json',
+      '--print-idle-timeout',
+      '180',
       '--session-id',
       'sess-web',
       'hi'
     ])
+  })
+
+  it('allows overriding server consumer print idle timeout', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-idle-timeout-'))
+    const store = createStore(root, 'sess-web')
+    const plan = buildRuntimeConsumerSpawnPlan({
+      baseEnv: {
+        __ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__: '/tmp/fake-ow.js',
+        ONEWORKS_RUNTIME_CONSUMER_PRINT_IDLE_TIMEOUT_SECONDS: '45'
+      } as NodeJS.ProcessEnv,
+      command: {
+        message: 'hi'
+      },
+      cwd: '/workspace',
+      metadata: {
+        sessionId: 'sess-web',
+        cwd: '/workspace',
+        needsEngineConsumer: true,
+        createdAt: 100
+      } as RuntimeSessionMetadata,
+      store
+    })
+
+    expect(plan.args).toContain('--print-idle-timeout')
+    expect(plan.args[plan.args.indexOf('--print-idle-timeout') + 1]).toBe('45')
   })
 
   it('does not inherit exact project-home dirs from another workspace when spawning consumers', async () => {
@@ -344,6 +379,8 @@ describe('runtime store engine consumer', () => {
       '--print',
       '--output-format',
       'stream-json',
+      '--print-idle-timeout',
+      '180',
       '--session-id',
       'sess-room-dev',
       '--entity',
@@ -394,14 +431,15 @@ describe('runtime store engine consumer', () => {
     })
 
     expect(plan.command).toBe('/workspace/node_modules/.bin/dyai')
-    expect(plan.args.slice(0, 7)).toEqual([
+    expect(plan.args.slice(0, 8)).toEqual([
       '__run',
       '--print',
       '--output-format',
       'stream-json',
+      '--print-idle-timeout',
+      '180',
       '--session-id',
-      'sess-room-dev',
-      '--entity'
+      'sess-room-dev'
     ])
   })
 
@@ -849,8 +887,9 @@ describe('runtime store engine consumer', () => {
       '--print',
       '--output-format',
       'stream-json',
-      '--session-id'
+      '--print-idle-timeout'
     ])
+    expect(plan.args.slice(6, 8)).toEqual(['180', '--session-id'])
   })
 
   it('reads start command runtime options for server consumers', async () => {
@@ -1004,6 +1043,8 @@ describe('runtime store engine consumer', () => {
       '--print',
       '--output-format',
       'stream-json',
+      '--print-idle-timeout',
+      '180',
       '--resume',
       'sess-web'
     ])
@@ -1147,6 +1188,72 @@ describe('runtime store engine consumer', () => {
     expect(child.unref).toHaveBeenCalledTimes(1)
 
     child.emit('exit')
+  })
+
+  it('keeps the cross-process start lock briefly after a fast consumer wrapper exit', async () => {
+    vi.useFakeTimers()
+    try {
+      const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-fast-exit-lock-'))
+      const store = createStore(root)
+      await mkdir(store.storePath, { recursive: true })
+      await writeFile(
+        store.metaPath,
+        JSON.stringify({
+          protocolVersion: '1.0.0',
+          sessionId: store.sessionId,
+          title: 'Room child',
+          entity: 'room-smoke-dev',
+          cwd: root,
+          hostSessionId: 'host-session',
+          needsEngineConsumer: true,
+          createdAt: 100
+        })
+      )
+      await writeFile(
+        store.statePath,
+        JSON.stringify({
+          protocolVersion: '1.0.0',
+          sessionId: store.sessionId,
+          status: 'starting',
+          lastSeq: 0,
+          updatedAt: 100
+        })
+      )
+      await writeFile(
+        path.join(store.storePath, 'heartbeat.json'),
+        JSON.stringify({
+          protocolVersion: '1.0.0',
+          sessionId: store.sessionId,
+          runtimeId: 'pending_engine_consumer',
+          status: 'starting',
+          updatedAt: 100
+        })
+      )
+
+      const child = Object.assign(new EventEmitter(), {
+        exitCode: null,
+        signalCode: null,
+        unref: vi.fn()
+      }) as unknown as ChildProcess
+      const startConsumer = vi.fn(async () => child)
+      const registryA = {
+        consumers: new Map<string, ChildProcess>(),
+        starting: new Set<string>()
+      }
+      const registryB = {
+        consumers: new Map<string, ChildProcess>(),
+        starting: new Set<string>()
+      }
+
+      await ensureServerRuntimeConsumerOnce(store, registryA, startConsumer)
+      child.emit('exit')
+      await ensureServerRuntimeConsumerOnce(store, registryB, startConsumer)
+
+      expect(startConsumer).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(10_000)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('marks sessions failed when the configured consumer cli path is missing', async () => {

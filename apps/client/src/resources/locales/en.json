@@ -2040,6 +2040,8 @@
     },
     "modelGroupRecommended": "Recommended Models",
     "modelMoreModels": "More models",
+    "modelConnectMoreServices": "Connect more",
+    "modelOpenModelServicesConfig": "Open config",
     "availableTools": "Available Tools",
     "availableToolsEmpty": "No tools are available for this session yet.",
     "toolGroupChromeDevtools": "ChromeDevtools",
@@ -2709,7 +2711,12 @@
       "save": "Save",
       "cancel": "Cancel",
       "format": "Format",
-      "copy": "Copy"
+      "copy": "Copy",
+      "openModelServiceHomepage": "Open management home",
+      "configureModelServiceWithSession": "Modify model service in session",
+      "createModelServiceWithSession": "Add model service in session",
+      "modelServiceSessionCreated": "Model service config session created",
+      "modelServiceSessionCreateFailed": "Failed to create model service config session"
     },
     "conflict": {
       "title": "Configuration changed elsewhere",
@@ -2849,6 +2856,49 @@
         "remove": "Failed to remove account snapshot"
       },
       "authFileDefaultLookup": "Leave empty to use {{path}}."
+    },
+    "modelServices": {
+      "identity": {
+        "configured": "Official provider selected",
+        "hostMatch": "Detected from API host",
+        "custom": "Custom compatible service"
+      },
+      "actions": {
+        "openHomepage": "Management Console",
+        "openExternal": "Open in external browser",
+        "createSecret": "Create Secret",
+        "openApiKeys": "Open API Keys",
+        "queryBalance": "Check Balance",
+        "queryStatus": "Service Status",
+        "queryModels": "List Models",
+        "refreshModels": "Write Model List"
+      },
+      "results": {
+        "actionFailed": "Model service action failed",
+        "amountUnknown": "Unknown",
+        "balance": "Balance",
+        "status": "Status",
+        "models": "{{count}} models",
+        "modelsMore": "{{count}} more",
+        "modelsLoaded": "Loaded {{count}} models",
+        "modelsRefreshed": "Wrote {{count}} models",
+        "modelsEmpty": "No models to write",
+        "secretCreated": "Secret created and copied to clipboard"
+      },
+      "portal": {
+        "secretTitle": "{{provider}} Secret Management",
+        "iframeHint": "Browser mode opens this page in an iframe. Use the external browser if the provider blocks embedding.",
+        "webviewHint": "Electron mode opens this page in a webview. Use the external browser if login or payment pages are restricted."
+      },
+      "status": {
+        "operational": "Operational",
+        "degraded": "Degraded",
+        "partial_outage": "Partial outage",
+        "major_outage": "Major outage",
+        "maintenance": "Maintenance",
+        "unknown": "Unknown",
+        "unsupported": "Unsupported"
+      }
     },
     "fields": {
       "general": {
@@ -3198,6 +3248,10 @@
           "desc": "Flattened configuration by service name"
         },
         "item": {
+          "provider": {
+            "label": "Official Provider",
+            "desc": "Uses the built-in API base URL, model catalog, icon, and management links. Leave empty for custom services."
+          },
           "title": {
             "label": "Display Title",
             "desc": "Shown in the default model service dropdown"
@@ -3206,9 +3260,17 @@
             "label": "Display Description",
             "desc": "Shown in the default model service dropdown"
           },
+          "icon": {
+            "label": "Service Icon",
+            "desc": "Use builtin:id, material:name, or an image URL. Leave empty to use the provider icon."
+          },
+          "homepageUrl": {
+            "label": "Management Home",
+            "desc": "Override the provider console URL used for top-up, purchase, and API key management."
+          },
           "apiBaseUrl": {
             "label": "API Base URL",
-            "desc": "Base URL for the model service API"
+            "desc": "Override the model service API URL. Usually not needed when an official provider is selected."
           },
           "apiKey": {
             "label": "API Key",
@@ -3216,7 +3278,29 @@
           },
           "models": {
             "label": "Models",
-            "desc": "Models supported by this service"
+            "desc": "Models supported by this service. Leave empty to use the provider default catalog."
+          },
+          "management": {
+            "enabled": {
+              "label": "Enable Management Actions",
+              "desc": "Enable helper actions for models, balance, service status, and secrets."
+            },
+            "apiKey": {
+              "label": "Management API Key",
+              "desc": "Some providers require a separate management API key. Leave empty to reuse the model API key."
+            },
+            "organizationId": {
+              "label": "Organization ID",
+              "desc": "Used by providers whose management APIs are scoped to an organization."
+            },
+            "projectId": {
+              "label": "Project ID",
+              "desc": "Used by providers whose management APIs are scoped to a project."
+            }
+          },
+          "providerOptions": {
+            "label": "Provider Options",
+            "desc": "Lightweight provider-specific JSON settings such as region, endpoint kind, or special management API parameters."
           },
           "timeoutMs": {
             "label": "Timeout (ms)",
@@ -3507,6 +3591,49 @@
       "language": {
         "zh": "Chinese",
         "en": "English"
+      },
+      "modelProviders": {
+        "custom": "Custom OpenAI-compatible service",
+        "openai": "OpenAI",
+        "anthropic": "Anthropic",
+        "moonshot-cn": "Moonshot / Kimi China",
+        "moonshot-intl": "Moonshot / Kimi International",
+        "deepseek": "DeepSeek",
+        "minimax": "MiniMax",
+        "qwen": "Alibaba Qwen / Bailian",
+        "zhipu": "Zhipu GLM",
+        "azure-openai": "Azure OpenAI",
+        "google-gemini": "Google Gemini",
+        "aws-bedrock": "AWS Bedrock",
+        "openrouter": "OpenRouter",
+        "vercel-ai-gateway": "Vercel AI Gateway",
+        "requesty": "Requesty",
+        "portkey": "Portkey",
+        "litellm": "LiteLLM",
+        "micu": "Micu",
+        "apiyi": "APIYI",
+        "yunwu": "Yunwu"
+      },
+      "modelProviderDescriptions": {
+        "openai": "Official OpenAI API platform for GPT models and multimodal services.",
+        "anthropic": "Official Anthropic Console service for Claude models.",
+        "moonshot-cn": "Moonshot/Kimi China official OpenAI-compatible API service.",
+        "moonshot-intl": "Moonshot/Kimi international official OpenAI-compatible API service.",
+        "deepseek": "Official DeepSeek OpenAI-compatible API service.",
+        "minimax": "Official MiniMax API platform for chat, multimodal, and agent services.",
+        "qwen": "Alibaba Cloud Bailian/DashScope API service for Qwen models.",
+        "zhipu": "Zhipu BigModel official API service for GLM models.",
+        "azure-openai": "Azure-hosted OpenAI model deployments managed through Azure AI Foundry.",
+        "google-gemini": "Google AI Studio and Gemini API service.",
+        "aws-bedrock": "AWS Bedrock managed foundation model service.",
+        "openrouter": "OpenRouter model routing platform with OpenAI-compatible APIs.",
+        "vercel-ai-gateway": "Vercel AI Gateway for routing requests across model providers.",
+        "requesty": "Requesty AI gateway for OpenAI-compatible model routing.",
+        "portkey": "Portkey AI gateway for managing and routing model traffic.",
+        "litellm": "LiteLLM gateway and proxy for unified model APIs.",
+        "micu": "Micu relay platform for OpenAI-compatible model access.",
+        "apiyi": "APIYI relay platform for OpenAI-compatible model access.",
+        "yunwu": "Yunwu relay platform for OpenAI-compatible model access."
       },
       "conversation": {
         "friendly": "Friendly",

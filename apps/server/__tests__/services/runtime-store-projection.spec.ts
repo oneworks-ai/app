@@ -1122,6 +1122,198 @@ describe('runtime store projection', () => {
     }))
   })
 
+  it('does not replay stale failed runtime state when newer events completed', async () => {
+    tempRoot = await mkdtemp(path.join(os.tmpdir(), 'ow-runtime-store-'))
+    const root = path.join(tempRoot, '.oneworks/runtime')
+    const storePath = path.join(root, 'sessions/sess-stale-failed-state')
+    await mkdir(storePath, { recursive: true })
+    await writeFile(
+      path.join(root, 'index.json'),
+      JSON.stringify({
+        protocolVersion: '1.0.0',
+        sessions: {
+          'sess-stale-failed-state': {
+            storePath: 'sessions/sess-stale-failed-state',
+            status: 'completed'
+          }
+        }
+      })
+    )
+    await writeFile(
+      path.join(storePath, 'meta.json'),
+      JSON.stringify({
+        protocolVersion: '1.0.0',
+        supportedProtocolRange: '^1.0.0',
+        sessionId: 'sess-stale-failed-state',
+        title: 'Stale failed state',
+        createdAt: 100
+      })
+    )
+    await writeFile(
+      path.join(storePath, 'commands.jsonl'),
+      `${
+        JSON.stringify({
+          id: 'cmd-start-1',
+          ts: 100,
+          sessionId: 'sess-stale-failed-state',
+          type: 'start',
+          priority: 20,
+          source: 'web',
+          commandId: 'session-start-1',
+          message: 'hello'
+        })
+      }\n`
+    )
+    await writeFile(
+      path.join(storePath, 'state.json'),
+      JSON.stringify({
+        protocolVersion: '1.0.0',
+        sessionId: 'sess-stale-failed-state',
+        status: 'failed',
+        title: 'Stale failed state',
+        lastSeq: 0,
+        lastMessage: 'Runtime consumer exited before startup completed with code 1.',
+        updatedAt: 150
+      })
+    )
+    await writeFile(
+      path.join(storePath, 'events.jsonl'),
+      [
+        JSON.stringify({
+          id: 'evt-started',
+          seq: 1,
+          ts: 200,
+          sessionId: 'sess-stale-failed-state',
+          type: 'session_started',
+          status: 'running'
+        }),
+        JSON.stringify({
+          id: 'evt-message',
+          seq: 2,
+          ts: 300,
+          sessionId: 'sess-stale-failed-state',
+          type: 'message',
+          role: 'assistant',
+          content: 'done'
+        }),
+        JSON.stringify({
+          id: 'evt-completed',
+          seq: 3,
+          ts: 400,
+          sessionId: 'sess-stale-failed-state',
+          type: 'session_completed',
+          status: 'completed',
+          summary: 'done'
+        }),
+        ''
+      ].join('\n')
+    )
+
+    const store = (await discoverRuntimeSessionStores([root]))[0] as RuntimeSessionStore
+    await replayRuntimeStore(store, { db, broadcast: false })
+
+    expect(db.getSession('sess-stale-failed-state')).toEqual(expect.objectContaining({
+      lastMessage: 'done',
+      messageCount: 2,
+      status: 'completed'
+    }))
+    expect(db.getMessages('sess-stale-failed-state')).toEqual([
+      expect.objectContaining({
+        type: 'message',
+        message: expect.objectContaining({
+          id: 'session-start-1',
+          role: 'user',
+          content: 'hello'
+        })
+      }),
+      expect.objectContaining({
+        type: 'message',
+        message: expect.objectContaining({
+          id: 'evt-message',
+          role: 'assistant',
+          content: 'done'
+        })
+      })
+    ])
+  })
+
+  it('defers fresh startup failed runtime state while events may still arrive', async () => {
+    tempRoot = await mkdtemp(path.join(os.tmpdir(), 'ow-runtime-store-'))
+    const root = path.join(tempRoot, '.oneworks/runtime')
+    const storePath = path.join(root, 'sessions/sess-startup-failure-grace')
+    await mkdir(storePath, { recursive: true })
+    await writeFile(
+      path.join(root, 'index.json'),
+      JSON.stringify({
+        protocolVersion: '1.0.0',
+        sessions: {
+          'sess-startup-failure-grace': {
+            storePath: 'sessions/sess-startup-failure-grace',
+            status: 'failed'
+          }
+        }
+      })
+    )
+    await writeFile(
+      path.join(storePath, 'meta.json'),
+      JSON.stringify({
+        protocolVersion: '1.0.0',
+        supportedProtocolRange: '^1.0.0',
+        sessionId: 'sess-startup-failure-grace',
+        title: 'Startup failure grace',
+        createdAt: Date.now()
+      })
+    )
+    await writeFile(
+      path.join(storePath, 'commands.jsonl'),
+      `${
+        JSON.stringify({
+          id: 'cmd-start-1',
+          ts: Date.now(),
+          sessionId: 'sess-startup-failure-grace',
+          type: 'start',
+          priority: 20,
+          source: 'web',
+          commandId: 'session-start-1',
+          message: 'hello'
+        })
+      }\n`
+    )
+    await writeFile(
+      path.join(storePath, 'state.json'),
+      JSON.stringify({
+        protocolVersion: '1.0.0',
+        sessionId: 'sess-startup-failure-grace',
+        status: 'failed',
+        title: 'Startup failure grace',
+        lastSeq: 0,
+        lastMessage: 'Runtime consumer exited before startup completed with code 1.',
+        updatedAt: Date.now()
+      })
+    )
+    await writeFile(path.join(storePath, 'events.jsonl'), '')
+
+    const store = (await discoverRuntimeSessionStores([root]))[0] as RuntimeSessionStore
+    await replayRuntimeStore(store, { db, broadcast: false })
+
+    expect(db.getSession('sess-startup-failure-grace')).toEqual(expect.objectContaining({
+      lastMessage: 'hello',
+      lastUserMessage: 'hello',
+      messageCount: 1,
+      status: 'running'
+    }))
+    expect(db.getMessages('sess-startup-failure-grace')).toEqual([
+      expect.objectContaining({
+        type: 'message',
+        message: expect.objectContaining({
+          id: 'session-start-1',
+          role: 'user',
+          content: 'hello'
+        })
+      })
+    ])
+  })
+
   it('does not miss runtime metadata when meta appears after the first scan', async () => {
     tempRoot = await mkdtemp(path.join(os.tmpdir(), 'ow-runtime-store-'))
     const root = path.join(tempRoot, '.oneworks/runtime')

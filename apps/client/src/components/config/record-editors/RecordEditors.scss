@@ -198,17 +198,22 @@
   cursor: pointer;
 }
 
-.config-view__record-card .config-view__record-actions {
+.config-view__record-card
+  :is(.config-view__record-actions, .config-view__detail-action-btn) {
   opacity: 0;
   pointer-events: none;
+  visibility: hidden;
   transform: translateY(-2px);
-  transition: opacity .16s ease, transform .16s ease;
+  transition: opacity .16s ease, transform .16s ease, visibility .16s ease;
 }
 
-.config-view__record-card:hover .config-view__record-actions,
-.config-view__record-card:focus-within .config-view__record-actions {
+.config-view__record-card:hover
+  :is(.config-view__record-actions, .config-view__detail-action-btn),
+.config-view__record-card:focus-within
+  :is(.config-view__record-actions, .config-view__detail-action-btn) {
   opacity: 1;
   pointer-events: auto;
+  visibility: visible;
   transform: translateY(0);
 }
 

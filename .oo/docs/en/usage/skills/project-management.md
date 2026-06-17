@@ -36,6 +36,7 @@ The lockfile makes project skill inputs reviewable and repeatable.
 
 - `oneworks-cli-quickstart`
 - `oneworks-cli-print-mode`
+- `oneworks-model-services`
 - `create-entity`
 - `update-entity`
 - `create-plugin`

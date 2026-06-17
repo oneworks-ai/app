@@ -11,6 +11,7 @@ import type { AdapterCtx, AdapterQueryOptions, Config, ModelServiceConfig } from
 import {
   migrateProjectHomeSegment,
   parseServiceModelSelector,
+  resolveModelServiceConfig,
   resolveProjectOoPath,
   syncSymlinkTarget
 } from '@oneworks/utils'
@@ -240,10 +241,13 @@ const buildGeneratedModelConfig = (params: {
 
   const service = params.modelServices[parsed.serviceKey]
   if (service == null) return undefined
+  const resolved = resolveModelServiceConfig(service, ['modelServices', parsed.serviceKey])
+  if (resolved.service == null) return undefined
+  const resolvedService = resolved.service
 
-  const extra = resolveModelServiceExtra(service)
+  const extra = resolveModelServiceExtra(resolvedService)
   const providerType = inferProviderType({
-    apiBaseUrl: service.apiBaseUrl,
+    apiBaseUrl: resolvedService.apiBaseUrl,
     providerType: typeof extra.providerType === 'string' ? extra.providerType : undefined,
     modelName: parsed.modelName
   })
@@ -257,7 +261,7 @@ const buildGeneratedModelConfig = (params: {
   const providerEnv = normalizeStringRecord(extra.env)
   const queryParams = normalizeStringRecord(extra.queryParams)
   const baseUrl = appendQueryParams(
-    normalizeProviderBaseUrl(service.apiBaseUrl, providerType),
+    normalizeProviderBaseUrl(resolvedService.apiBaseUrl, providerType),
     queryParams
   )
   const capabilities = Array.from(
@@ -275,7 +279,7 @@ const buildGeneratedModelConfig = (params: {
       [providerKey]: {
         type: providerType,
         base_url: baseUrl,
-        api_key: service.apiKey,
+        api_key: resolvedService.apiKey,
         ...(Object.keys(customHeaders).length > 0 ? { custom_headers: customHeaders } : {}),
         ...(Object.keys(providerEnv).length > 0 ? { env: providerEnv } : {})
       }
@@ -295,7 +299,7 @@ const buildGeneratedModelConfig = (params: {
       cliModel: modelKey,
       config: {
         ...generated,
-        services: buildMoonshotServiceConfig(baseUrl, service.apiKey, customHeaders)
+        services: buildMoonshotServiceConfig(baseUrl, resolvedService.apiKey, customHeaders)
       }
     }
     : {

@@ -81,11 +81,22 @@ export const adapterNativeCliConfigSchema = z.object({
 export const modelServiceConfigSchema = z.object({
   title: z.string().optional().describe('Display title'),
   description: z.string().optional().describe('Display description'),
-  apiBaseUrl: z.string().min(1).describe('Provider API base URL'),
+  provider: z.string().min(1).optional().describe('Known provider id used to apply defaults'),
+  icon: z.string().optional().describe('Service icon override'),
+  homepageUrl: z.string().optional().describe('Provider management homepage override'),
+  apiBaseUrl: z.string().min(1).optional().describe('Provider API base URL override'),
   apiKey: z.string().min(1).describe('Provider API key'),
   models: z.array(z.string()).optional().describe('Supported model IDs'),
   timeoutMs: z.number().int().positive().optional().describe('Request timeout in milliseconds'),
   maxOutputTokens: z.number().int().positive().optional().describe('Default max output tokens'),
+  providerOptions: z.record(z.string(), jsonValueSchema).optional().describe('Provider-specific management options'),
+  management: z.object({
+    enabled: z.boolean().optional().describe('Enable provider management API actions'),
+    apiKey: z.string().optional().describe('Provider management API key'),
+    organizationId: z.string().optional().describe('Provider organization id'),
+    projectId: z.string().optional().describe('Provider project id'),
+    endpointKind: z.string().optional().describe('Provider management endpoint kind')
+  }).optional().describe('Provider management API credentials and options'),
   extra: z.record(z.string(), jsonValueSchema).optional().describe('Provider-specific extra config')
 })
 
@@ -101,6 +112,7 @@ export const modelMetadataConfigSchema = z.object({
   alias: z.union([z.string(), z.array(z.string())]).optional().describe('Model aliases'),
   title: z.string().optional().describe('Display title'),
   description: z.string().optional().describe('Display description'),
+  icon: z.string().optional().describe('Model icon override'),
   defaultAdapter: z.string().optional().describe('Preferred adapter key'),
   effort: effortLevelSchema.optional().describe('Recommended effort level')
 })

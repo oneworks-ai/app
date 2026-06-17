@@ -109,6 +109,15 @@
         "require": "./dist/model-selection.js"
       }
     },
+    "./model-providers": {
+      "__oneworks__": {
+        "default": "./src/model-providers.ts"
+      },
+      "default": {
+        "import": "./dist/model-providers.mjs",
+        "require": "./dist/model-providers.js"
+      }
+    },
     "./managed-npm-cli": {
       "__oneworks__": {
         "default": "./src/managed-npm-cli.ts"

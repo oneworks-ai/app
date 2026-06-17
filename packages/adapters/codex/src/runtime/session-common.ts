@@ -7,7 +7,7 @@ import process from 'node:process'
 import { resolveConfigState } from '@oneworks/config'
 import { NATIVE_HOOK_BRIDGE_ADAPTER_ENV } from '@oneworks/hooks'
 import type { AdapterCtx, AdapterQueryOptions, Config, ModelServiceConfig } from '@oneworks/types'
-import { createStartupProfiler, mergeProcessEnvWithProjectEnv } from '@oneworks/utils'
+import { createStartupProfiler, mergeProcessEnvWithProjectEnv, resolveModelServiceConfig } from '@oneworks/utils'
 import { createLogger } from '@oneworks/utils/create-logger'
 
 import { resolveCodexBinaryPath } from '#~/paths.js'
@@ -153,6 +153,10 @@ interface CodexModelProviderExtra {
   queryParams?: Record<string, string>
   headers?: Record<string, string>
 }
+
+const resolveConfiguredModelService = (service: ModelServiceConfig | undefined) => (
+  service == null ? undefined : resolveModelServiceConfig(service).service
+)
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -403,71 +407,74 @@ function buildCodexConfigOverrides(params: {
     const service = modelServices[serviceKey]
 
     if (service) {
-      const { title, apiBaseUrl, apiKey, extra, timeoutMs, maxOutputTokens } = service
-      const { wireApi, queryParams, headers } = (extra?.codex as CodexModelProviderExtra | undefined) ?? {}
-      const prefix = `model_providers.${serviceKey}`
-      const normalizedBaseUrl = normalizeProviderBaseUrl(apiBaseUrl, wireApi)
-      const normalizedHeaders = normalizeStringRecord(headers)
-      const normalizedQueryParams = normalizeStringRecord(queryParams)
-      const normalizedTimeoutMs = normalizePositiveInteger(timeoutMs)
-      const normalizedMaxOutputTokens = normalizePositiveInteger(maxOutputTokens)
-      const shouldProxyProvider = proxyBaseUrl != null && normalizedBaseUrl != null
+      const resolvedService = resolveConfiguredModelService(service)
+      if (resolvedService) {
+        const { title, apiBaseUrl, apiKey, extra, timeoutMs, maxOutputTokens } = resolvedService
+        const { wireApi, queryParams, headers } = (extra?.codex as CodexModelProviderExtra | undefined) ?? {}
+        const prefix = `model_providers.${serviceKey}`
+        const normalizedBaseUrl = normalizeProviderBaseUrl(apiBaseUrl, wireApi)
+        const normalizedHeaders = normalizeStringRecord(headers)
+        const normalizedQueryParams = normalizeStringRecord(queryParams)
+        const normalizedTimeoutMs = normalizePositiveInteger(timeoutMs)
+        const normalizedMaxOutputTokens = normalizePositiveInteger(maxOutputTokens)
+        const shouldProxyProvider = proxyBaseUrl != null && normalizedBaseUrl != null
 
-      pushBoth(`model_provider=${toToml(serviceKey)}`)
-      pushBoth(`${prefix}.name=${toToml(title ?? serviceKey)}`)
-      if (shouldProxyProvider) {
-        const proxyMeta = encodeCodexProxyMeta({
-          upstreamBaseUrl: normalizedBaseUrl,
-          ...(Object.keys(normalizedHeaders).length > 0 ? { headers: normalizedHeaders } : {}),
-          ...(Object.keys(normalizedQueryParams).length > 0 ? { queryParams: normalizedQueryParams } : {}),
-          ...(normalizedMaxOutputTokens != null ? { maxOutputTokens: normalizedMaxOutputTokens } : {}),
-          ...(proxyLogContext != null ? { logContext: proxyLogContext } : {}),
-          diagnostics: {
-            ...proxyDiagnostics,
-            routedServiceKey: serviceKey,
-            resolvedModel: modelId || undefined,
-            wireApi: wireApi ?? 'responses'
-          }
-        })
-        const fingerprintProxyMeta = encodeCodexProxyMeta({
-          upstreamBaseUrl: normalizedBaseUrl,
-          ...(Object.keys(normalizedHeaders).length > 0 ? { headers: normalizedHeaders } : {}),
-          ...(Object.keys(normalizedQueryParams).length > 0 ? { queryParams: normalizedQueryParams } : {}),
-          ...(normalizedMaxOutputTokens != null ? { maxOutputTokens: normalizedMaxOutputTokens } : {}),
-          diagnostics: {
-            routedServiceKey: serviceKey,
-            resolvedModel: modelId || undefined,
-            wireApi: wireApi ?? 'responses'
-          }
-        })
-        pushArgs(`${prefix}.base_url=${toToml(proxyBaseUrl)}`)
-        pushFingerprintArgs(`${prefix}.base_url=${toToml(normalizedBaseUrl)}`)
-        pushArgs(
-          `${prefix}.http_headers=${toTomlInlineTable({ [CODEX_PROXY_META_HEADER_NAME]: proxyMeta })}`
-        )
-        pushFingerprintArgs(
-          `${prefix}.http_headers=${toTomlInlineTable({ [CODEX_PROXY_META_HEADER_NAME]: fingerprintProxyMeta })}`
-        )
-      } else if (normalizedBaseUrl != null) {
-        pushBoth(`${prefix}.base_url=${toToml(normalizedBaseUrl)}`)
-      }
-      if (apiKey) {
-        pushBoth(`${prefix}.experimental_bearer_token=${toToml(apiKey)}`)
-      }
-      if (wireApi) {
-        pushBoth(`${prefix}.wire_api=${toToml(wireApi)}`)
-      }
-      if (!shouldProxyProvider && Object.keys(normalizedHeaders).length > 0) {
-        pushBoth(`${prefix}.http_headers=${toTomlInlineTable(normalizedHeaders)}`)
-      }
-      if (normalizedTimeoutMs != null) {
-        pushBoth(`${prefix}.stream_idle_timeout_ms=${normalizedTimeoutMs}`)
-      }
-      resolvedMaxOutputTokens = shouldProxyProvider && normalizedMaxOutputTokens != null
-        ? null
-        : normalizedMaxOutputTokens
-      if (!shouldProxyProvider && Object.keys(normalizedQueryParams).length > 0) {
-        pushBoth(`${prefix}.query_params=${toTomlInlineTable(normalizedQueryParams)}`)
+        pushBoth(`model_provider=${toToml(serviceKey)}`)
+        pushBoth(`${prefix}.name=${toToml(title ?? serviceKey)}`)
+        if (shouldProxyProvider) {
+          const proxyMeta = encodeCodexProxyMeta({
+            upstreamBaseUrl: normalizedBaseUrl,
+            ...(Object.keys(normalizedHeaders).length > 0 ? { headers: normalizedHeaders } : {}),
+            ...(Object.keys(normalizedQueryParams).length > 0 ? { queryParams: normalizedQueryParams } : {}),
+            ...(normalizedMaxOutputTokens != null ? { maxOutputTokens: normalizedMaxOutputTokens } : {}),
+            ...(proxyLogContext != null ? { logContext: proxyLogContext } : {}),
+            diagnostics: {
+              ...proxyDiagnostics,
+              routedServiceKey: serviceKey,
+              resolvedModel: modelId || undefined,
+              wireApi: wireApi ?? 'responses'
+            }
+          })
+          const fingerprintProxyMeta = encodeCodexProxyMeta({
+            upstreamBaseUrl: normalizedBaseUrl,
+            ...(Object.keys(normalizedHeaders).length > 0 ? { headers: normalizedHeaders } : {}),
+            ...(Object.keys(normalizedQueryParams).length > 0 ? { queryParams: normalizedQueryParams } : {}),
+            ...(normalizedMaxOutputTokens != null ? { maxOutputTokens: normalizedMaxOutputTokens } : {}),
+            diagnostics: {
+              routedServiceKey: serviceKey,
+              resolvedModel: modelId || undefined,
+              wireApi: wireApi ?? 'responses'
+            }
+          })
+          pushArgs(`${prefix}.base_url=${toToml(proxyBaseUrl)}`)
+          pushFingerprintArgs(`${prefix}.base_url=${toToml(normalizedBaseUrl)}`)
+          pushArgs(
+            `${prefix}.http_headers=${toTomlInlineTable({ [CODEX_PROXY_META_HEADER_NAME]: proxyMeta })}`
+          )
+          pushFingerprintArgs(
+            `${prefix}.http_headers=${toTomlInlineTable({ [CODEX_PROXY_META_HEADER_NAME]: fingerprintProxyMeta })}`
+          )
+        } else if (normalizedBaseUrl != null) {
+          pushBoth(`${prefix}.base_url=${toToml(normalizedBaseUrl)}`)
+        }
+        if (apiKey) {
+          pushBoth(`${prefix}.experimental_bearer_token=${toToml(apiKey)}`)
+        }
+        if (wireApi) {
+          pushBoth(`${prefix}.wire_api=${toToml(wireApi)}`)
+        }
+        if (!shouldProxyProvider && Object.keys(normalizedHeaders).length > 0) {
+          pushBoth(`${prefix}.http_headers=${toTomlInlineTable(normalizedHeaders)}`)
+        }
+        if (normalizedTimeoutMs != null) {
+          pushBoth(`${prefix}.stream_idle_timeout_ms=${normalizedTimeoutMs}`)
+        }
+        resolvedMaxOutputTokens = shouldProxyProvider && normalizedMaxOutputTokens != null
+          ? null
+          : normalizedMaxOutputTokens
+        if (!shouldProxyProvider && Object.keys(normalizedQueryParams).length > 0) {
+          pushBoth(`${prefix}.query_params=${toTomlInlineTable(normalizedQueryParams)}`)
+        }
       }
     }
 
@@ -761,7 +768,9 @@ export async function resolveSessionBase(
 
   const routedServiceKey = resolveRoutedServiceKey(options.model)
   const routedService = routedServiceKey != null ? mergedModelServices[routedServiceKey] : undefined
-  const shouldUseProxy = typeof routedService?.apiBaseUrl === 'string' && routedService.apiBaseUrl.trim() !== ''
+  const resolvedRoutedService = resolveConfiguredModelService(routedService)
+  const shouldUseProxy = typeof resolvedRoutedService?.apiBaseUrl === 'string' &&
+    resolvedRoutedService.apiBaseUrl.trim() !== ''
   const proxyLogger = shouldUseProxy
     ? createLogger(
       cwd,
@@ -782,9 +791,9 @@ export async function resolveSessionBase(
       serviceKey: routedServiceKey,
       proxyBaseUrl,
       upstreamBaseUrl: normalizeProviderBaseUrl(
-        routedService?.apiBaseUrl,
-        ((routedService?.extra?.codex as CodexModelProviderExtra | undefined) ?? {}).wireApi
-      ) ?? routedService?.apiBaseUrl
+        resolvedRoutedService?.apiBaseUrl,
+        ((resolvedRoutedService?.extra?.codex as CodexModelProviderExtra | undefined) ?? {}).wireApi
+      ) ?? resolvedRoutedService?.apiBaseUrl
     })
   }
 

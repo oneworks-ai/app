@@ -11,6 +11,7 @@ const CLI_DEFAULT_SKILL_NAMES = [
   'oneworks-cli-print-mode',
   'oneworks-channel',
   'oneworks-mem',
+  'oneworks-model-services',
   'create-entity',
   'update-entity',
   'create-plugin'

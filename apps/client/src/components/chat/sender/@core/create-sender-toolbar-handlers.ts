@@ -20,6 +20,8 @@ export const createSenderToolbarHandlers = ({
   onInterrupt,
   onModelChange,
   onToggleRecommendedModel,
+  onConnectMoreModelServices,
+  onOpenModelServicesConfig,
   onPermissionModeChange,
   onQueueModeChange,
   onCancel,
@@ -45,6 +47,8 @@ export const createSenderToolbarHandlers = ({
   onInterrupt: () => void
   onModelChange?: (model: string) => void
   onToggleRecommendedModel?: (option: ModelSelectOption) => void | Promise<void>
+  onConnectMoreModelServices?: () => void
+  onOpenModelServicesConfig?: () => void
   onPermissionModeChange?: (mode: PermissionMode) => void
   onQueueModeChange?: (mode: SessionQueuedMessageMode) => void
   onCancel?: () => void
@@ -130,6 +134,8 @@ export const createSenderToolbarHandlers = ({
     onCloseReferenceActions: () => referenceActions.closeReferenceActions(),
     onModelChange,
     onToggleRecommendedModel,
+    onConnectMoreModelServices,
+    onOpenModelServicesConfig,
     onEffortChange,
     onAdapterChange,
     onAccountChange,

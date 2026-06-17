@@ -3,6 +3,7 @@ import { atom } from 'jotai'
 import type { ChatMessageContent } from '@oneworks/types'
 
 export interface PendingSessionCreationContext {
+  initialContent?: ChatMessageContent[]
   source?: {
     groupId?: string
     label?: string

@@ -13,6 +13,7 @@ import type {
 import {
   mergeProcessEnvWithProjectEnv,
   omitAdapterCommonConfig,
+  resolveModelServiceConfig,
   resolveProjectMockHome,
   syncSymlinkTarget
 } from '@oneworks/utils'
@@ -212,16 +213,23 @@ export const resolveCopilotModelConfig = (
       providerEnv: {}
     }
   }
+  const resolvedService = resolveModelServiceConfig(service).service
+  if (resolvedService == null) {
+    return {
+      cliModel: modelId || undefined,
+      providerEnv: {}
+    }
+  }
 
   const wireApi = asString(extra?.wireApi)
-  const providerBaseUrl = normalizeCopilotProviderBaseUrl(service.apiBaseUrl, wireApi)
+  const providerBaseUrl = normalizeCopilotProviderBaseUrl(resolvedService.apiBaseUrl, wireApi)
   const maxPromptTokens = asPositiveIntegerString(extra?.maxPromptTokens)
-  const maxOutputTokens = asPositiveIntegerString(extra?.maxOutputTokens ?? service.maxOutputTokens)
+  const maxOutputTokens = asPositiveIntegerString(extra?.maxOutputTokens ?? resolvedService.maxOutputTokens)
   return {
     cliModel: modelId || undefined,
     providerEnv: {
       ...(providerBaseUrl != null ? { COPILOT_PROVIDER_BASE_URL: providerBaseUrl } : {}),
-      ...(service.apiKey ? { COPILOT_PROVIDER_API_KEY: service.apiKey } : {}),
+      ...(resolvedService.apiKey ? { COPILOT_PROVIDER_API_KEY: resolvedService.apiKey } : {}),
       COPILOT_PROVIDER_TYPE: asString(extra?.type) ?? 'openai',
       COPILOT_PROVIDER_MODEL_ID: asString(extra?.modelId) ?? modelId,
       COPILOT_PROVIDER_WIRE_MODEL: asString(extra?.wireModel) ?? modelId,
