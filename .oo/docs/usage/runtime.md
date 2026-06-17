@@ -55,7 +55,7 @@ npx oneworks web
 pnpm start
 ```
 
-`pnpm start` 会调用 `pnpm tools dev-start web`，自动把 server DB、runtime store、mock home、cache 和启动日志放到 project home（默认 `~/.oneworks/projects/<project-key>`），避免写回仓库工作区。
+`pnpm start` 会调用 `pnpm tools dev-start web`，自动把 server DB、runtime store、mock home、cache 和启动日志放到当前开发实例的 project home（默认 `~/.oneworks/dev-instances/<worktree-key>/projects/<project-key>`），避免写回仓库工作区，也避免多个源码 worktree 并行开发时共享同一套本地状态。
 
 如果目标是快速把当前源码 worktree 更新到最新并启动开发服务，执行：
 

@@ -8,6 +8,7 @@ import { buildRuntimeEnv } from './env'
 import { ensureGitUpdated, ensureWorkspaceInstall } from './git-workspace'
 import { resolvePorts } from './network'
 import { log, logDir, managerLogPath, repoRoot, sleep, statePath } from './paths'
+import { withDevStartPortLock } from './port-lock'
 import { readState, runSync, spawnDetachedLogged, writeJsonAtomic } from './process'
 import { printReady, reuseIfReady, stateReady, stopStaleState, waitForReady } from './readiness'
 import { startServiceChild } from './service-manager'
@@ -158,23 +159,27 @@ export const runMain = async (
       }
     }
 
-    await stopStaleState(target)
-    const ports = await resolvePorts(config)
-    if (ports.clientPort == null) throw new Error('Docs port was not resolved')
-    const docsUrl = getDocsUrl(ports.clientPort)
-    const linkedHomepageUrl = await ensureLinkedHomepage(docsUrl)
-    await startServiceChild({ config, linkedHomepageUrl, ports, target })
-    await waitForReady(target)
+    await withDevStartPortLock(async () => {
+      await stopStaleState(target)
+      const ports = await resolvePorts(config)
+      if (ports.clientPort == null) throw new Error('Docs port was not resolved')
+      const docsUrl = getDocsUrl(ports.clientPort)
+      const linkedHomepageUrl = await ensureLinkedHomepage(docsUrl)
+      await startServiceChild({ config, linkedHomepageUrl, ports, target })
+      await waitForReady(target)
+    })
     return
   }
 
-  await stopStaleState(target)
-  const ports = await resolvePorts(config)
-  await startServiceChild({
-    config,
-    linkedDocsUrl: links.linkedDocsUrl,
-    ports,
-    target
+  await withDevStartPortLock(async () => {
+    await stopStaleState(target)
+    const ports = await resolvePorts(config)
+    await startServiceChild({
+      config,
+      linkedDocsUrl: links.linkedDocsUrl,
+      ports,
+      target
+    })
+    await waitForReady(target)
   })
-  await waitForReady(target)
 }
