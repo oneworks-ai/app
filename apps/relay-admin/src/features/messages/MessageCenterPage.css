@@ -2,7 +2,7 @@
   display: grid;
   gap: 0;
   min-width: 0;
-  padding: 10px;
+  padding: 0 10px 10px;
 }
 
 .relay-message-center__team-avatar.ant-avatar {
@@ -37,11 +37,21 @@
   min-width: 0;
 }
 
+.relay-message-center__filters {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 0 10px;
+}
+
 .relay-message-center__search.ant-input-affix-wrapper {
+  align-items: center;
   width: 100%;
-  border-color: transparent;
+  min-height: 32px;
+  border: 0;
+  border-radius: 0;
   background: transparent;
-  padding-inline: 0;
+  padding: 0;
   box-shadow: none;
 }
 
@@ -54,6 +64,36 @@
 
 .relay-message-center__search .ant-input {
   background: transparent;
+}
+
+.relay-message-center__category-filter.ant-segmented {
+  justify-self: start;
+  min-width: 0;
+  border-radius: 4px;
+  background: transparent;
+  padding: 0;
+}
+
+.relay-message-center__category-filter .ant-segmented-group {
+  gap: 4px;
+}
+
+.relay-message-center__category-filter .ant-segmented-item {
+  min-height: 24px;
+  border-radius: 4px;
+  color: var(--sub-text-color);
+  font: 700 12px/24px ui-sans-serif, system-ui, sans-serif;
+}
+
+.relay-message-center__category-filter .ant-segmented-item-selected {
+  color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  box-shadow: none;
+}
+
+.relay-message-center__category-filter .ant-segmented-thumb {
+  background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  box-shadow: none;
 }
 
 .relay-message-center__error {
@@ -69,7 +109,6 @@
 .relay-message-center__list {
   display: grid;
   min-width: 0;
-  border-top: 1px solid var(--border-color);
 }
 
 .relay-message-center__item {
@@ -150,7 +189,23 @@
   color: color-mix(in srgb, var(--sub-text-color) 80%, transparent);
 }
 
+.relay-message-center__item-side {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-self: stretch;
+  justify-items: end;
+  min-width: max-content;
+}
+
+.relay-message-center__item-side time {
+  align-self: end;
+  color: color-mix(in srgb, var(--sub-text-color) 72%, transparent);
+  font: 600 11px/1.3 ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap;
+}
+
 .relay-message-center__item-actions {
+  align-self: center;
   justify-self: end;
 }
 
@@ -302,8 +357,13 @@
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .relay-message-center__item-actions {
+  .relay-message-center__item-side {
     grid-column: 2;
+    align-self: start;
+    justify-items: start;
+  }
+
+  .relay-message-center__item-actions {
     justify-self: start;
   }
 

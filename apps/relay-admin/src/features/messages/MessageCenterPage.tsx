@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- Message center keeps list, detail, and composer behavior together. */
 import './MessageCenterPage.css'
 
-import { Avatar, Button, Drawer, Empty, Form, Input, Select, Space } from 'antd'
+import { Avatar, Button, Drawer, Empty, Form, Input, Segmented, Select, Space } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useNavigate } from 'react-router-dom'
@@ -40,6 +40,7 @@ export interface MessageCenterPageProps {
 }
 
 type MessageKind = RelayAdminMessageKind | 'team_invitation'
+type MessageCategoryFilter = MessageKind | 'all'
 
 interface MessageCenterItem {
   badge: string
@@ -104,6 +105,14 @@ const messageKindBadge: Record<RelayAdminMessageKind, string> = {
   personal: '个人',
   system: '系统'
 }
+
+const messageCategoryOptions: Array<{ label: string, value: MessageCategoryFilter }> = [
+  { label: '全部', value: 'all' },
+  { label: '公告', value: 'announcement' },
+  { label: '邀请', value: 'team_invitation' },
+  { label: '个人', value: 'personal' },
+  { label: '系统', value: 'system' }
+]
 
 const buildSearchableText = (values: Array<string | null | undefined>) => (
   values.filter((value): value is string => value != null && value.trim() !== '').join(' ').toLowerCase()
@@ -381,6 +390,7 @@ export const MessageCenterPage = ({
   const [invitations, setInvitations] = useState<RelayAdminTeamInvitation[]>([])
   const [localMessages, setLocalMessages] = useState<RelayAdminMessage[]>([])
   const [loading, setLoading] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState<MessageCategoryFilter>('all')
   const [searchValue, setSearchValue] = useState('')
   const [serverMessages, setServerMessages] = useState<RelayAdminMessage[]>([])
   const [useDemoMessages, setUseDemoMessages] = useState(false)
@@ -500,10 +510,13 @@ export const MessageCenterPage = ({
       .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
   }, [currentUser, demoInvitationStatus, invitations, localMessages, serverMessages, useDemoMessages])
   const filteredMessages = useMemo(() => {
+    const categoryMessages = categoryFilter === 'all'
+      ? messages
+      : messages.filter(message => message.kind === categoryFilter)
     const query = searchValue.trim().toLowerCase()
-    if (query === '') return messages
-    return messages.filter(message => message.searchableText.includes(query))
-  }, [messages, searchValue])
+    if (query === '') return categoryMessages
+    return categoryMessages.filter(message => message.searchableText.includes(query))
+  }, [categoryFilter, messages, searchValue])
   const activeMessage = useMemo(() => (
     messageId == null ? undefined : messages.find(message => message.id === messageId)
   ), [messageId, messages])
@@ -595,20 +608,36 @@ export const MessageCenterPage = ({
 
   return (
     <section className='relay-message-center'>
-      <Input
-        allowClear
-        className='relay-message-center__search'
-        disabled={loading && messages.length === 0}
-        placeholder='搜索消息、团队、邀请人、账号、邮箱、用户 ID'
-        prefix={<AdminIcon name='search' />}
-        value={searchValue}
-        onChange={event => setSearchValue(event.target.value)}
-      />
+      <div className='relay-message-center__filters'>
+        <Input
+          allowClear
+          className='relay-message-center__search'
+          disabled={loading && messages.length === 0}
+          placeholder='搜索消息、团队、邀请人、账号、邮箱、用户 ID'
+          prefix={<AdminIcon name='search' />}
+          value={searchValue}
+          onChange={event => setSearchValue(event.target.value)}
+        />
+        <Segmented
+          className='relay-message-center__category-filter'
+          options={messageCategoryOptions}
+          value={categoryFilter}
+          onChange={value => setCategoryFilter(value as MessageCategoryFilter)}
+        />
+      </div>
       {error == null ? null : <p className='relay-message-center__error'>{error}</p>}
       {filteredMessages.length === 0 ? (
         <Empty
           className='relay-message-center__empty'
-          description={loading ? '正在加载消息' : searchValue.trim() === '' ? '暂无消息' : '无匹配消息'}
+          description={
+            loading
+              ? '正在加载消息'
+              : searchValue.trim() !== ''
+                ? '无匹配消息'
+                : categoryFilter === 'all'
+                  ? '暂无消息'
+                  : '当前分类暂无消息'
+          }
         />
       ) : (
         <div className='relay-message-center__list'>
@@ -638,40 +667,40 @@ export const MessageCenterPage = ({
                 {message.title.slice(0, 1).toUpperCase()}
               </Avatar>
               <div className='relay-message-center__item-copy'>
-                <div className='relay-message-center__item-title-row'>
-                  <h4>{message.title}</h4>
-                  <time>{formatTimestamp(message.createdAt)}</time>
-                  <StatusBadge tone={messageStatusTone(message)}>
-                    {message.badge}
-                  </StatusBadge>
-                </div>
+                <h4>{message.title}</h4>
                 <p>{message.body}</p>
                 <span className='relay-message-center__item-meta'>{message.meta}</span>
               </div>
-              {message.invitation != null && message.invitation.status === 'pending' ? (
-                <Space
-                  className='relay-message-center__item-actions'
-                  size={6}
-                  onClick={event => event.stopPropagation()}
-                >
-                  <Button
-                    disabled={activeInvitationId != null}
-                    loading={activeInvitationId === message.invitation.id}
-                    size='small'
-                    type='primary'
-                    onClick={() => void respondInvitation(message.invitation as RelayAdminTeamInvitation, 'accept')}
+              <div className='relay-message-center__item-side'>
+                <StatusBadge tone={messageStatusTone(message)}>
+                  {message.badge}
+                </StatusBadge>
+                {message.invitation != null && message.invitation.status === 'pending' ? (
+                  <Space
+                    className='relay-message-center__item-actions'
+                    size={6}
+                    onClick={event => event.stopPropagation()}
                   >
-                    接受
-                  </Button>
-                  <Button
-                    disabled={activeInvitationId != null}
-                    size='small'
-                    onClick={() => void respondInvitation(message.invitation as RelayAdminTeamInvitation, 'decline')}
-                  >
-                    拒绝
-                  </Button>
-                </Space>
-              ) : null}
+                    <Button
+                      disabled={activeInvitationId != null}
+                      loading={activeInvitationId === message.invitation.id}
+                      size='small'
+                      type='primary'
+                      onClick={() => void respondInvitation(message.invitation as RelayAdminTeamInvitation, 'accept')}
+                    >
+                      接受
+                    </Button>
+                    <Button
+                      disabled={activeInvitationId != null}
+                      size='small'
+                      onClick={() => void respondInvitation(message.invitation as RelayAdminTeamInvitation, 'decline')}
+                    >
+                      拒绝
+                    </Button>
+                  </Space>
+                ) : <span aria-hidden='true' />}
+                <time>{formatTimestamp(message.createdAt)}</time>
+              </div>
             </article>
           ))}
         </div>
