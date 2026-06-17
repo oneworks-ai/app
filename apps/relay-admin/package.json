@@ -28,7 +28,9 @@
     "@oneworks/components": "workspace:*",
     "@simplewebauthn/browser": "13.3.0",
     "antd": "^5.29.3",
-    "react-router-dom": "^7.12.0"
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.12.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@oneworks/route-layout": "workspace:*",

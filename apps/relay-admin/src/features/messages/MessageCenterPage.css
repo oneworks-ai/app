@@ -155,12 +155,14 @@
 }
 
 .relay-message-center--detail {
-  min-height: 0;
+  min-height: calc(100dvh - 72px);
 }
 
 .relay-message-center__detail {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 0;
+  min-height: inherit;
 }
 
 .relay-message-center__detail-header {
@@ -189,7 +191,59 @@
   border-bottom: 1px solid var(--border-color);
   color: var(--text-color);
   font: 600 13px/1.6 ui-sans-serif, system-ui, sans-serif;
-  white-space: pre-wrap;
+}
+
+.relay-message-center__detail-body > :first-child {
+  margin-top: 0;
+}
+
+.relay-message-center__detail-body > :last-child {
+  margin-bottom: 0;
+}
+
+.relay-message-center__detail-body p,
+.relay-message-center__detail-body ul,
+.relay-message-center__detail-body ol,
+.relay-message-center__detail-body blockquote,
+.relay-message-center__detail-body pre {
+  margin: 0 0 8px;
+}
+
+.relay-message-center__detail-body ul,
+.relay-message-center__detail-body ol {
+  padding-left: 18px;
+}
+
+.relay-message-center__detail-body code {
+  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text-color) 7%, transparent);
+  padding: 1px 4px;
+  font: 650 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.relay-message-center__detail-body pre {
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-color) 6%, transparent);
+  padding: 10px;
+}
+
+.relay-message-center__detail-body pre code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.relay-message-center__detail-body blockquote {
+  border-left: 2px solid color-mix(in srgb, var(--primary-color) 72%, transparent);
+  color: var(--sub-text-color);
+  padding-left: 10px;
+}
+
+.relay-message-center__detail-body a {
+  color: var(--primary-color);
 }
 
 .relay-message-center__detail-meta {
@@ -225,7 +279,9 @@
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
+  margin-top: auto;
   padding: 12px 0 0;
+  border-top: 1px solid var(--border-color);
 }
 
 .relay-message-center__composer .ant-drawer-body {

@@ -3,7 +3,9 @@ import './MessageCenterPage.css'
 
 import { Avatar, Button, Drawer, Empty, Form, Input, Select, Space } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { useNavigate } from 'react-router-dom'
+import remarkGfm from 'remark-gfm'
 
 import type { RelayAdminCurrentUser, RelayAdminUser } from '../../shared/model/adminTypes'
 import { AdminIcon } from '../../shared/ui/AdminIcon'
@@ -43,6 +45,7 @@ interface MessageCenterItem {
   badge: string
   body: string
   createdAt: string
+  detailBody: string
   detailRows: Array<[string, string]>
   id: string
   invitation?: RelayAdminTeamInvitation
@@ -106,6 +109,16 @@ const buildSearchableText = (values: Array<string | null | undefined>) => (
   values.filter((value): value is string => value != null && value.trim() !== '').join(' ').toLowerCase()
 )
 
+const markdownToSummary = (value: string) => (
+  value
+    .replace(/```[\s\S]*?```/gu, ' ')
+    .replace(/`([^`]+)`/gu, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/gu, '$1')
+    .replace(/[*_~>#|-]+/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+)
+
 const displayUser = (user: RelayAdminMessageUser | RelayAdminCurrentUser | null | undefined) => (
   user == null ? '系统' : user.name.trim() || user.email || user.id
 )
@@ -128,7 +141,8 @@ const relayMessageToItem = (message: RelayAdminMessage): MessageCenterItem => {
     id: `message:${message.id}`,
     kind: message.kind,
     title: message.title,
-    body: message.body,
+    body: markdownToSummary(message.body) || message.body,
+    detailBody: message.body,
     meta: [messageKindLabel[message.kind], audience, sender].filter(Boolean).join(' · '),
     badge: messageKindBadge[message.kind],
     status: 'sent',
@@ -159,11 +173,13 @@ const invitationToMessage = (invitation: RelayAdminTeamInvitation): MessageCente
   const target = invitationTarget(invitation)
   const inviter = invitationInviter(invitation)
   const createdAt = formatTimestamp(invitation.createdAt)
+  const body = `${inviter} 邀请 ${target} 以 ${invitation.role} 身份加入团队。接受后才会加入团队并继承对应团队配置。`
   return {
     id: `team-invitation:${invitation.id}`,
     kind: 'team_invitation',
     title: `${teamName} 邀请`,
-    body: `${inviter} 邀请 ${target} 以 ${invitation.role} 身份加入团队。接受后才会加入团队并继承对应团队配置。`,
+    body,
+    detailBody: `**${inviter}** 邀请 **${target}** 以 \`${invitation.role}\` 身份加入团队。\n\n接受后才会加入团队并继承对应团队配置。`,
     meta: [
       messageKindLabel.team_invitation,
       invitation.configEnabled ? '启用团队配置' : '不启用团队配置',
@@ -538,7 +554,11 @@ export const MessageCenterPage = ({
                 <time>{formatTimestamp(activeMessage.createdAt)}</time>
               </div>
             </div>
-            <p className='relay-message-center__detail-body'>{activeMessage.body}</p>
+            <div className='relay-message-center__detail-body'>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {activeMessage.detailBody}
+              </ReactMarkdown>
+            </div>
             <dl className='relay-message-center__detail-meta'>
               {activeMessage.detailRows.map(([label, value]) => (
                 <div key={label}>
