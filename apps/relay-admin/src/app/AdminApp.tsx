@@ -61,6 +61,11 @@ const getTeamDetailIdFromPath = (pathname: string) => {
   return match == null ? undefined : decodeURIComponent(match[1])
 }
 
+const getTeamDetailSettingsIdFromPath = (pathname: string) => {
+  const match = /^\/teams\/([^/]+)\/settings$/.exec(pathname)
+  return match == null ? undefined : decodeURIComponent(match[1])
+}
+
 const TeamDetailDefaultRoute = () => {
   const { teamId } = useParams()
   if (teamId == null) return <Navigate to='/teams' replace />
@@ -88,6 +93,7 @@ export const AdminApp = () => {
   const [sidebarWidth, setSidebarWidth] = useState(() => readAdminSidebarWidth())
   const [createSectionId, setCreateSectionId] = useState<AdminDashboardCreateSectionId | undefined>()
   const [passwordUser, setPasswordUser] = useState<RelayAdminUser | undefined>()
+  const [teamDetailSettingsResetSignal, setTeamDetailSettingsResetSignal] = useState(0)
   const canResizeSidebar = !isCompactLayout && !sidebarCollapsed
   const commitSidebarWidth = useCallback((nextWidth: number) => {
     const resolvedWidth = clampAdminSidebarWidth(nextWidth)
@@ -118,12 +124,14 @@ export const AdminApp = () => {
   const activeCreateSectionId = getCreateSectionIdFromPath(normalizedPathname)
   const activeUserDetailId = getUserDetailIdFromPath(normalizedPathname)
   const activeTeamDetailId = getTeamDetailIdFromPath(normalizedPathname)
+  const activeTeamDetailSettingsId = getTeamDetailSettingsIdFromPath(normalizedPathname)
   const activeUserDetail = activeUserDetailId == null
     ? undefined
     : dashboard.users.find(user => user.id === activeUserDetailId)
   const activeTeamDetail = activeTeamDetailId == null
     ? undefined
     : dashboard.teams.find(team => team.id === activeTeamDetailId)
+  const isTeamDetailSettingsRoute = activeTeamDetailSettingsId != null
   const headerTitle = isProfileRoute ? '个人资料' : activeSection.label
   const headerIcon = isProfileRoute ? <AdminIcon name='account_circle' /> : activeSection.icon
   const isCreateActionActive = activeCreateSectionId != null && createSectionId === activeCreateSectionId
@@ -222,7 +230,16 @@ export const AdminApp = () => {
       })
     }
 
-    if (!isProfileRoute) {
+    if (isTeamDetailSettingsRoute) {
+      items.push({
+        disabled: !dashboard.canLoad || dashboard.loading,
+        icon: <AdminIcon name='restart_alt' />,
+        key: 'team:settings:reset',
+        label: '重置表单',
+        title: '重置当前表单',
+        onSelect: () => setTeamDetailSettingsResetSignal(current => current + 1)
+      })
+    } else if (!isProfileRoute) {
       items.push({
         disabled: !dashboard.canLoad || dashboard.loading,
         icon: <AdminIcon name='refresh' />,
@@ -248,6 +265,7 @@ export const AdminApp = () => {
     isCreateActionActive,
     isProfileRoute,
     isTeamListRoute,
+    isTeamDetailSettingsRoute,
     navigate
   ])
 
@@ -422,7 +440,13 @@ export const AdminApp = () => {
               <Route
                 path='teams/:teamId/settings'
                 element={canRenderSection('teams')
-                  ? <AdminDashboard dashboard={dashboard} sectionId='team-detail-settings' />
+                  ? (
+                    <AdminDashboard
+                      dashboard={dashboard}
+                      resetTeamDetailSettingsSignal={teamDetailSettingsResetSignal}
+                      sectionId='team-detail-settings'
+                    />
+                  )
                   : <Navigate to='/devices' replace />}
               />
               <Route

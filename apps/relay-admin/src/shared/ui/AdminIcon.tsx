@@ -29,6 +29,7 @@ import logoutSvg from '@material-symbols/svg-400/rounded/logout.svg?raw'
 import moreHorizSvg from '@material-symbols/svg-400/rounded/more_horiz.svg?raw'
 import personSvg from '@material-symbols/svg-400/rounded/person.svg?raw'
 import refreshSvg from '@material-symbols/svg-400/rounded/refresh.svg?raw'
+import restartAltSvg from '@material-symbols/svg-400/rounded/restart_alt.svg?raw'
 import searchSvg from '@material-symbols/svg-400/rounded/search.svg?raw'
 import sellSvg from '@material-symbols/svg-400/rounded/sell.svg?raw'
 import unarchiveSvg from '@material-symbols/svg-400/rounded/unarchive.svg?raw'
@@ -65,6 +66,7 @@ export type AdminIconName =
   | 'more_horiz'
   | 'person'
   | 'refresh'
+  | 'restart_alt'
   | 'search'
   | 'sell'
   | 'unarchive'
@@ -101,6 +103,7 @@ const adminIconSvgByName: Record<AdminIconName, string> = {
   more_horiz: moreHorizSvg,
   person: personSvg,
   refresh: refreshSvg,
+  restart_alt: restartAltSvg,
   search: searchSvg,
   sell: sellSvg,
   unarchive: unarchiveSvg,

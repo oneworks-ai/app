@@ -29,6 +29,7 @@ export type AdminDashboardCreateSectionId = Extract<AdminDashboardSectionId, 'in
 export interface AdminDashboardProps {
   createSectionId?: AdminDashboardCreateSectionId
   dashboard: RelayAdminDashboardState
+  resetTeamDetailSettingsSignal?: number
   sectionId: AdminDashboardSectionId
   onCreateSectionChange?: (sectionId: AdminDashboardCreateSectionId | undefined) => void
 }
@@ -36,6 +37,7 @@ export interface AdminDashboardProps {
 export const AdminDashboard = ({
   createSectionId,
   dashboard,
+  resetTeamDetailSettingsSignal,
   sectionId,
   onCreateSectionChange
 }: AdminDashboardProps) => {
@@ -161,6 +163,7 @@ export const AdminDashboard = ({
         <TeamDetailSettingsPage
           disabled={disabled}
           loading={dashboard.loading || dashboard.authStatus === 'checking'}
+          resetSignal={resetTeamDetailSettingsSignal}
           teams={dashboard.teams}
           onUpdateTeam={dashboard.updateTeam}
         />

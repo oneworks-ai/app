@@ -2,7 +2,7 @@ import './TeamPanel.css'
 
 import { Alert, Avatar, Button, Empty, Form, Input, Switch, Upload } from 'antd'
 import type { UploadProps } from 'antd'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 import { AdminIcon } from '../../shared/ui/AdminIcon'
@@ -12,6 +12,7 @@ import type { RelayAdminTeam, UpdateTeamInput } from './teamTypes'
 export interface TeamDetailSettingsPageProps {
   disabled: boolean
   loading: boolean
+  resetSignal?: number
   teams: RelayAdminTeam[]
   onUpdateTeam: (team: RelayAdminTeam, input: UpdateTeamInput) => Promise<void>
 }
@@ -36,6 +37,13 @@ const valuesFromTeam = (team: RelayAdminTeam | undefined): TeamSettingsFormValue
   proxyModeEnabled: team?.proxyModeEnabled ?? false,
   slug: team?.slug ?? ''
 })
+const teamSettingsFormFieldNames: Array<keyof TeamSettingsFormValues> = [
+  'avatarUrl',
+  'description',
+  'name',
+  'proxyModeEnabled',
+  'slug'
+]
 
 const teamInitials = (name: string) => {
   const text = cleanText(name)
@@ -78,6 +86,7 @@ export const TeamDetailSettingsPage = ({
   disabled,
   loading,
   onUpdateTeam,
+  resetSignal,
   teams
 }: TeamDetailSettingsPageProps) => {
   const { teamId } = useParams()
@@ -87,11 +96,20 @@ export const TeamDetailSettingsPage = ({
   const watchedAvatarUrl = Form.useWatch('avatarUrl', form)
   const watchedName = Form.useWatch('name', form)
   const avatarPreview = cleanText(watchedAvatarUrl) === '' ? undefined : cleanText(watchedAvatarUrl)
-
-  useEffect(() => {
+  const resetFormToTeam = useCallback(() => {
     form.setFieldsValue(valuesFromTeam(team))
+    form.setFields(teamSettingsFormFieldNames.map(name => ({ errors: [], name, warnings: [] })))
     setAvatarUploadError(undefined)
   }, [form, team])
+
+  useEffect(() => {
+    resetFormToTeam()
+  }, [resetFormToTeam])
+
+  useEffect(() => {
+    if (resetSignal == null) return
+    resetFormToTeam()
+  }, [resetFormToTeam, resetSignal])
 
   const handleAvatarUpload: UploadProps['beforeUpload'] = file => {
     setAvatarUploadError(undefined)
