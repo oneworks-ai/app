@@ -2,6 +2,7 @@
 import './MessageCenterPage.css'
 
 import { Avatar, Button, Drawer, Empty, Form, Input, Segmented, Select, Space } from 'antd'
+import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useNavigate } from 'react-router-dom'
@@ -40,7 +41,7 @@ export interface MessageCenterPageProps {
 }
 
 type MessageKind = RelayAdminMessageKind | 'team_invitation'
-type MessageCategoryFilter = MessageKind | 'all'
+type MessageCategoryFilter = RelayAdminMessageKind | 'all'
 
 interface MessageCenterItem {
   badge: string
@@ -106,13 +107,25 @@ const messageKindBadge: Record<RelayAdminMessageKind, string> = {
   system: '系统'
 }
 
-const messageCategoryOptions: Array<{ label: string, value: MessageCategoryFilter }> = [
-  { label: '全部', value: 'all' },
-  { label: '公告', value: 'announcement' },
-  { label: '邀请', value: 'team_invitation' },
-  { label: '个人', value: 'personal' },
-  { label: '系统', value: 'system' }
+const messageCategoryLabel = (iconName: 'admin_panel_settings' | 'fact_check' | 'notifications' | 'person', label: string) => (
+  <span className='relay-message-center__category-option'>
+    <AdminIcon name={iconName} />
+    <span>{label}</span>
+  </span>
+)
+
+const messageCategoryOptions: Array<{ label: ReactNode, value: MessageCategoryFilter }> = [
+  { label: messageCategoryLabel('fact_check', '全部'), value: 'all' },
+  { label: messageCategoryLabel('notifications', '公告'), value: 'announcement' },
+  { label: messageCategoryLabel('person', '个人'), value: 'personal' },
+  { label: messageCategoryLabel('admin_panel_settings', '系统'), value: 'system' }
 ]
+
+const isMessageInCategory = (message: MessageCenterItem, category: MessageCategoryFilter) => {
+  if (category === 'all') return true
+  if (category === 'personal') return message.kind === 'personal' || message.kind === 'team_invitation'
+  return message.kind === category
+}
 
 const buildSearchableText = (values: Array<string | null | undefined>) => (
   values.filter((value): value is string => value != null && value.trim() !== '').join(' ').toLowerCase()
@@ -512,7 +525,7 @@ export const MessageCenterPage = ({
   const filteredMessages = useMemo(() => {
     const categoryMessages = categoryFilter === 'all'
       ? messages
-      : messages.filter(message => message.kind === categoryFilter)
+      : messages.filter(message => isMessageInCategory(message, categoryFilter))
     const query = searchValue.trim().toLowerCase()
     if (query === '') return categoryMessages
     return categoryMessages.filter(message => message.searchableText.includes(query))
@@ -585,6 +598,7 @@ export const MessageCenterPage = ({
                 <Space size={6}>
                   <Button
                     disabled={activeInvitationId != null}
+                    icon={<AdminIcon name='check' />}
                     loading={activeInvitationId === activeMessage.invitation.id}
                     type='primary'
                     onClick={() => void respondInvitation(activeMessage.invitation as RelayAdminTeamInvitation, 'accept')}
@@ -593,6 +607,7 @@ export const MessageCenterPage = ({
                   </Button>
                   <Button
                     disabled={activeInvitationId != null}
+                    icon={<AdminIcon name='close' />}
                     onClick={() => void respondInvitation(activeMessage.invitation as RelayAdminTeamInvitation, 'decline')}
                   >
                     拒绝
@@ -675,32 +690,34 @@ export const MessageCenterPage = ({
                 <StatusBadge tone={messageStatusTone(message)}>
                   {message.badge}
                 </StatusBadge>
-                {message.invitation != null && message.invitation.status === 'pending' ? (
-                  <Space
-                    className='relay-message-center__item-actions'
-                    size={6}
-                    onClick={event => event.stopPropagation()}
-                  >
-                    <Button
-                      disabled={activeInvitationId != null}
-                      loading={activeInvitationId === message.invitation.id}
-                      size='small'
-                      type='primary'
-                      onClick={() => void respondInvitation(message.invitation as RelayAdminTeamInvitation, 'accept')}
-                    >
-                      接受
-                    </Button>
-                    <Button
-                      disabled={activeInvitationId != null}
-                      size='small'
-                      onClick={() => void respondInvitation(message.invitation as RelayAdminTeamInvitation, 'decline')}
-                    >
-                      拒绝
-                    </Button>
-                  </Space>
-                ) : <span aria-hidden='true' />}
                 <time>{formatTimestamp(message.createdAt)}</time>
               </div>
+              {message.invitation != null && message.invitation.status === 'pending' ? (
+                <Space
+                  className='relay-message-center__item-actions'
+                  size={6}
+                  onClick={event => event.stopPropagation()}
+                >
+                  <Button
+                    disabled={activeInvitationId != null}
+                    icon={<AdminIcon name='check' />}
+                    loading={activeInvitationId === message.invitation.id}
+                    size='small'
+                    type='primary'
+                    onClick={() => void respondInvitation(message.invitation as RelayAdminTeamInvitation, 'accept')}
+                  >
+                    接受
+                  </Button>
+                  <Button
+                    disabled={activeInvitationId != null}
+                    icon={<AdminIcon name='close' />}
+                    size='small'
+                    onClick={() => void respondInvitation(message.invitation as RelayAdminTeamInvitation, 'decline')}
+                  >
+                    拒绝
+                  </Button>
+                </Space>
+              ) : null}
             </article>
           ))}
         </div>
