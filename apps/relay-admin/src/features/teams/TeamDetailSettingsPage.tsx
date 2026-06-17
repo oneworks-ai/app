@@ -149,9 +149,9 @@ export const TeamDetailSettingsPage = ({
           layout='vertical'
           onFinish={handleSubmit}
         >
-          <section className='relay-team-panel__settings-section relay-team-panel__settings-section--identity'>
-            <div className='relay-team-panel__avatar-field'>
-              <span className='relay-team-panel__settings-field-label'>团队头像</span>
+          <div className='relay-team-panel__settings-row relay-team-panel__settings-row--avatar'>
+            <span className='relay-team-panel__settings-label'>团队头像</span>
+            <div className='relay-team-panel__settings-control'>
               <Upload
                 accept='image/png,image/jpeg,image/webp,image/gif'
                 beforeUpload={handleAvatarUpload}
@@ -189,41 +189,62 @@ export const TeamDetailSettingsPage = ({
                 />
               )}
             </div>
-            <div className='relay-team-panel__settings-fields'>
-              <Form.Item label='团队名称' name='name' rules={[{ required: true }]}>
-                <Input disabled={disabled} />
-              </Form.Item>
-              <Form.Item label='Slug' name='slug'>
-                <Input disabled={disabled} />
-              </Form.Item>
-            </div>
-          </section>
+          </div>
+          <div className='relay-team-panel__settings-row'>
+            <label className='relay-team-panel__settings-label' htmlFor='name'>
+              <span className='relay-team-panel__settings-required'>*</span>
+              团队名称
+            </label>
+            <Form.Item
+              className='relay-team-panel__settings-control-item'
+              name='name'
+              rules={[{ required: true }]}
+            >
+              <Input disabled={disabled} id='name' />
+            </Form.Item>
+          </div>
+          <div className='relay-team-panel__settings-row'>
+            <label className='relay-team-panel__settings-label' htmlFor='slug'>
+              Slug
+            </label>
+            <Form.Item className='relay-team-panel__settings-control-item' name='slug'>
+              <Input disabled={disabled} id='slug' />
+            </Form.Item>
+          </div>
           <Form.Item hidden name='avatarUrl' rules={[{ validator: validateAvatarSource }]}>
             <Input />
           </Form.Item>
-          <section className='relay-team-panel__settings-section'>
-            <Form.Item label='团队介绍' name='description'>
-              <Input.TextArea autoSize={{ minRows: 4 }} disabled={disabled} />
+          <div className='relay-team-panel__settings-row relay-team-panel__settings-row--description'>
+            <label className='relay-team-panel__settings-label' htmlFor='description'>
+              团队介绍
+            </label>
+            <Form.Item className='relay-team-panel__settings-control-item' name='description'>
+              <Input.TextArea autoSize={{ minRows: 4 }} disabled={disabled} id='description' />
             </Form.Item>
-          </section>
-          <section className='relay-team-panel__settings-section'>
-            <div className='relay-team-panel__settings-option'>
-              <span className='relay-team-panel__settings-option-label'>允许配置 Proxy 模式</span>
-              <Form.Item name='proxyModeEnabled' noStyle valuePropName='checked'>
-                <Switch disabled={disabled} />
-              </Form.Item>
-            </div>
-          </section>
-          <div className='relay-team-panel__settings-actions'>
-            <Button
-              className='relay-team-panel__settings-submit'
-              disabled={disabled}
-              htmlType='submit'
-              icon={<AdminIcon name='check' />}
-              type='primary'
+          </div>
+          <div className='relay-team-panel__settings-row'>
+            <span className='relay-team-panel__settings-label'>允许配置 Proxy 模式</span>
+            <Form.Item
+              className='relay-team-panel__settings-control-item relay-team-panel__settings-switch-item'
+              name='proxyModeEnabled'
+              valuePropName='checked'
             >
-              保存团队设置
-            </Button>
+              <Switch disabled={disabled} />
+            </Form.Item>
+          </div>
+          <div className='relay-team-panel__settings-actions-row'>
+            <span />
+            <div className='relay-team-panel__settings-actions'>
+              <Button
+                className='relay-team-panel__settings-submit'
+                disabled={disabled}
+                htmlType='submit'
+                icon={<AdminIcon name='check' />}
+                type='primary'
+              >
+                保存团队设置
+              </Button>
+            </div>
           </div>
         </Form>
       </div>
