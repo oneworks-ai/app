@@ -31,3 +31,4 @@
 - Add Relay passkey login and verified-email passkey registration with configurable invite gating.
 - Add configurable Relay login methods with browser method memory, email verification code login, and a passkey email-confirmation toggle for new self-registration.
 - Allow configured adapter instances to load runtime adapters from `packageId`, including package names and local package paths, while preserving the user-facing adapter key.
+- Add an outbound-only local macOS iMessage channel package that sends through user-authorized Messages automation and documents inbound/webhook limitations.
