@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { channelDefinition } from '#~/index.js'
 import { createChannelConnection } from '#~/connection.js'
+import { channelDefinition } from '#~/index.js'
 import { sendImessageMessage } from '#~/send.js'
 import type { AppleScriptRunner } from '#~/send.js'
 import type { ImessageChannelConfig } from '#~/types.js'

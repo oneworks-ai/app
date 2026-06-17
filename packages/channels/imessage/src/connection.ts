@@ -21,10 +21,11 @@ export const createChannelConnection = defineCreateChannelConnection(async (
         channelType: 'imessage'
       }, '[imessage] outbound-only macOS Messages bridge ready; inbound receiving is not enabled')
     },
-    generateSystemPrompt: async () => [
-      'iMessage channel runs through a local macOS Messages automation bridge.',
-      'It can send outbound messages only from this Mac after the user grants Automation permission.',
-      'It does not provide a cloud webhook or reliable background inbound listener.'
-    ].join('\n')
+    generateSystemPrompt: async () =>
+      [
+        'iMessage channel runs through a local macOS Messages automation bridge.',
+        'It can send outbound messages only from this Mac after the user grants Automation permission.',
+        'It does not provide a cloud webhook or reliable background inbound listener.'
+      ].join('\n')
   }
 })
