@@ -24,7 +24,7 @@ import { buildAdapterAssetPlan, resolvePromptAssetSelection, resolveWorkspaceAss
 import { createWorkspace, installPluginPackage, writeDocument } from './test-helpers'
 
 describe('buildAdapterAssetPlan', () => {
-  it('builds codex diagnostics for prompt, mcp, hook plugins, and unsupported opencode assets', async () => {
+  it('builds codex diagnostics for native skills, mcp, hook plugins, and unsupported opencode assets', async () => {
     const workspace = await createWorkspace()
 
     await installPluginPackage(workspace, '@oneworks/plugin-logger', {
@@ -89,6 +89,7 @@ describe('buildAdapterAssetPlan', () => {
       bundle,
       type: undefined,
       name: undefined,
+      adapter: 'codex',
       input: {
         skills: {
           include: ['research']
@@ -112,7 +113,7 @@ describe('buildAdapterAssetPlan', () => {
       expect.objectContaining({
         assetId: researchSkillId,
         adapter: 'codex',
-        status: 'prompt'
+        status: 'native'
       }),
       expect.objectContaining({
         adapter: 'codex',
@@ -134,7 +135,7 @@ describe('buildAdapterAssetPlan', () => {
       expect.objectContaining({
         assetId: reviewSkillId,
         adapter: 'codex',
-        status: 'prompt'
+        status: 'native'
       })
     ]))
   })

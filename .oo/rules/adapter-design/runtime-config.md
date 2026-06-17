@@ -61,7 +61,7 @@ worktree 场景下，旧项目共享 CLI cache 会通过 [`packages/utils/src/pr
 
 - `ow adapter prepare` 只准备配置里 `prepareOnInstall: true` 的 CLI
 - `ow adapter prepare --all` 准备所有已安装 adapter 暴露的 CLI target
-- `ow adapter prepare codex claude-code gemini` 按 adapter 名显式准备；`claude-code.routerCli` / `ccr` 可单独准备 Claude Code Router
+- `ow adapter prepare codex claude-code copilot gemini kimi opencode` 按 adapter 名显式准备；`claude-code.routerCli` / `ccr` 可单独准备 Claude Code Router
 - `@oneworks/cli` 的 `postinstall` 只在项目根 `.oo.config.json` 或 `infra/.oo.config.json` 里发现 `adapters.<name>.cli.prepareOnInstall: true` / `routerCli.prepareOnInstall: true` 时触发同一套 prepare 逻辑
 - postinstall 默认不在 `CI=true` 时执行；可以用 `ONEWORKS_POSTINSTALL_PREPARE=1` 显式允许，或用 `ONEWORKS_SKIP_ADAPTER_PREPARE=1` / `ONEWORKS_SKIP_POSTINSTALL=1` 跳过
 - postinstall 失败默认只告警，不阻断依赖安装；需要严格失败时设置 `ONEWORKS_POSTINSTALL_STRICT=1`
@@ -160,6 +160,30 @@ CLI / client / server / hook 入口在切换 `HOME` 到 project mock home 后，
 - OpenCode 允许整个 session config dir 成为原生边界
 - 官方文档没有单独的 workspace trust key；当前 workspace 直接受 permissions 规则约束，额外目录才走 `permission.external_directory`
 - 所以这里最适合把 MCP、skills、commands、agents、modes 一起收敛进一个 session config root，并把 update 提示压到 mock-home/session config 这一层处理
+
+## Kimi
+
+- 实现入口：
+  - [`packages/adapters/kimi/src/runtime/init.ts`](../../../packages/adapters/kimi/src/runtime/init.ts)
+  - [`packages/adapters/kimi/src/runtime/config.ts`](../../../packages/adapters/kimi/src/runtime/config.ts)
+  - [`packages/adapters/kimi/src/runtime/session.ts`](../../../packages/adapters/kimi/src/runtime/session.ts)
+  - [`packages/adapters/kimi/src/runtime/direct.ts`](../../../packages/adapters/kimi/src/runtime/direct.ts)
+- 自动生效内容：
+  - 托管 `kimi-cli` uv tool，默认写入全局 bootstrap uv cache
+  - session share dir `KIMI_SHARE_DIR=<project-home>/caches/<ctx>/<session>/adapter-kimi/share`
+  - `--wire` JSON-RPC stream runtime
+  - `--config-file`、`--mcp-config-file`、`--skills-dir`
+  - selected MCP servers
+  - session 级 skills overlay
+  - generated Kimi `providers` / `models` / `services`
+  - native hooks command 与 `__ONEWORKS_PROJECT_KIMI_NATIVE_HOOKS_AVAILABLE__`
+
+设计考量：
+
+- Kimi 的 CLI 安装不是 npm 包，继续走 `uv tool install`，但 cache root 仍和其他 managed package 一样受 `__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__` 控制
+- Kimi runtime 不能污染真实 `~/.kimi`；真实 credentials 只在需要时软链到 session share dir
+- `modelServices` 可以映射 `kimi`、`openai_legacy`、`openai_responses`、`anthropic`、`gemini`、`vertexai` provider type；URL 要按 provider type 归一化，避免重复拼 `/chat/completions` 或 `/responses`
+- `showThinkingStream` 已在 config schema 声明，但 runtime 尚未映射到 Kimi config 的 `show_thinking_stream`
 
 ## Gemini
 

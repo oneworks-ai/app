@@ -25,7 +25,19 @@ Skill frontmatter 支持 `dependencies`。依赖先按本地 workspace / 插件 
 | `codex`       | `<project-home>/.mock/.codex/hooks.json`                                             | `<project-home>/.mock/.agents/skills -> .oo/skills`，并把每个 workspace skill 目录软链到 `<project-home>/.mock/.codex/skills/<name>` | 翻译成 `-c mcp_servers.<name>.*`                                  | managed `config.toml` 写 workspace trust 与 update-check 默认值；账号 auth 快照落到 `<project-home>/.local/adapters/codex/accounts/<key>/auth.json`，账号元数据与 quota 快照落到 `meta.json`，session HOME 隔离到 `<project-home>/caches/<ctx>/<session>/adapter-codex-home`，并继承通用 mock home bridge |
 | `copilot`     | `<project-home>/.mock/copilot/settings.json` 里的 `hooks`                            | session 级 `<project-home>/.mock/copilot/sessions/<session>/skills`，通过 `COPILOT_SKILLS_DIRS` 注入                                 | 翻译成 `--additional-mcp-config`                                  | `settings.json` 写 workspace trust / `configContent`；custom instructions 通过 `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`；custom agents 通过 `COPILOT_AGENT_DIRS`；local plugins 通过 `--plugin-dir`                                                                                                             |
 | `gemini`      | `<project-home>/.mock/.gemini/settings.json` 里的 `hooks` / `hooksConfig`            | `<project-home>/.mock/.agents/skills -> .oo/skills`                                                                                  | 写进 `<project-home>/.mock/.gemini/settings.json` 的 `mcpServers` | `<project-home>/.mock/.gemini/settings.json`、本地 Gemini compatibility proxy、`GEMINI_CLI_HOME`                                                                                                                                                                                                          |
+| `kimi`        | session 级 generated `config.json` / copied TOML config 里的 `hooks`                 | session 级 `<project-home>/caches/<ctx>/<session>/adapter-kimi/skills`，通过 `--skills-dir` 注入                                     | 写进 session 级 `mcp.json`，再用 `--mcp-config-file` 注入         | session share dir `<project-home>/caches/<ctx>/<session>/adapter-kimi/share`；`KIMI_SHARE_DIR`；`--wire` JSON-RPC；`modelServices` 转 Kimi providers/models/services                                                                                                                                      |
 | `opencode`    | `<project-home>/.mock/.config/opencode/opencode.json` 与 `plugins/oneworks-hooks.js` | session 级 `OPENCODE_CONFIG_DIR/skills`                                                                                              | 写进最终 `opencode.json`                                          | fallback `opencode.json` 默认写 `$schema` 与 `autoupdate: false`；`agents/commands/modes/plugins` 与 overlay 一起进入 session config dir                                                                                                                                                                  |
+
+## 当前支持矩阵
+
+| Adapter       | CLI prepare                                   | Accounts                                  | modelServices                                                                 | Hooks                                                                        | MCP                        | Plugins / skills                                                                |
+| ------------- | --------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------- |
+| `claude-code` | managed npm `@anthropic-ai/claude-code` + CCR | 依赖 Claude 原生登录态 / keychain bridge  | 通过 Claude Code Router 接 OpenAI-compatible `chat/completions` 服务          | 原生 Claude settings bridge；禁用重复 framework bridge                       | `--mcp-config`             | Claude native plugin 转 One Works plugin；skills 走 mock home                   |
+| `codex`       | managed npm `@openai/codex`                   | One Works 管理账号快照、默认账号和 quota  | Codex provider / config override 路径；模型目录优先读 Codex catalog/cache     | 原生 Codex hooks；transcript 只补观测类工具事件                              | `-c mcp_servers.<name>.*`  | skills 同步到 `.agents/skills` 与 `.codex/skills/<name>`；OpenCode overlay 跳过 |
+| `copilot`     | managed npm `@github/copilot`                 | 依赖 Copilot 原生登录态 / keychain bridge | `modelServices.extra.copilot` 通过本地 provider proxy 转 `COPILOT_PROVIDER_*` | Copilot 原生 `PreToolUse` / `PostToolUse` / `Stop`；只去重这三类 bridge 事件 | `--additional-mcp-config`  | session skills / instructions / agents / local plugin dirs                      |
+| `gemini`      | managed npm `@google/gemini-cli`              | 依赖 Gemini 原生登录态                    | `service,model` 通过本地 Gemini compatibility proxy 接 OpenAI-compatible 服务 | Gemini settings native hooks                                                 | `settings.json.mcpServers` | `.agents/skills` native skills；OpenCode overlay 跳过                           |
+| `kimi`        | managed uv `kimi-cli`                         | 依赖 Kimi 原生 credentials 软链           | `modelServices.extra.kimi` / `extra.codex` / `extra.opencode` 转 Kimi config  | Kimi Beta native hooks，经 `kimi-hook.js` 调 `oneworks-call-hook`            | `--mcp-config-file`        | session `--skills-dir` native skills；OpenCode overlay 跳过                     |
+| `opencode`    | managed npm `opencode-ai`                     | 依赖 OpenCode 原生 provider 配置          | 合并到 session `opencode.json` 的 provider/model 配置                         | OpenCode plugin bridge；`PreCompact` 为不可阻断观测                          | session `opencode.json`    | session `OPENCODE_CONFIG_DIR` 同时承载 skills、commands、agents、modes、plugins |
 
 ## Claude Code
 
@@ -82,6 +94,25 @@ macOS `Library/Keychains` 与 `Library/Application Support` 由通用 mock home 
 - [Copilot CLI command reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference)
 - [Copilot CLI configuration directory](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference)
 - [Copilot hooks configuration](https://docs.github.com/en/copilot/reference/hooks-configuration)
+
+## Kimi
+
+- init 阶段在 [`packages/adapters/kimi/src/runtime/init.ts`](../../../packages/adapters/kimi/src/runtime/init.ts) 定位或安装 Kimi CLI，并预备 native hook runtime
+- query 阶段在 [`packages/adapters/kimi/src/runtime/config.ts`](../../../packages/adapters/kimi/src/runtime/config.ts) 生成 session share dir、Kimi config、MCP config、skills overlay 和 spawn env
+- stream runtime 在 [`packages/adapters/kimi/src/runtime/session.ts`](../../../packages/adapters/kimi/src/runtime/session.ts) 走 `kimi --wire` JSON-RPC 长连接；direct runtime 在 [`packages/adapters/kimi/src/runtime/direct.ts`](../../../packages/adapters/kimi/src/runtime/direct.ts) 只做交互式透传
+- native hooks 由 [`packages/adapters/kimi/src/runtime/native-hooks.ts`](../../../packages/adapters/kimi/src/runtime/native-hooks.ts) 写入 generated JSON / copied TOML config，最终通过 [`packages/adapters/kimi/kimi-hook.js`](../../../packages/adapters/kimi/kimi-hook.js) 调用统一 hook runtime
+
+设计考量：
+
+- Kimi 有稳定的 `--skills-dir` 和 `--mcp-config-file`，所以 skills / MCP 都保持 session 级，不写真实 `~/.kimi`
+- `modelServices` 会翻译成 Kimi `providers` / `models` / `services`；`providerType: "kimi"` 时还会生成 search/fetch 服务
+- credentials 只从真实 Kimi home 软链到 session share dir；One Works 当前不提供 Kimi 多账号管理 UI
+- Kimi native hooks 仍是 Beta，新增事件前必须同步 adapter、hook runtime 去重和 permission service
+
+官方文档：
+
+- [Kimi Code CLI Docs](https://moonshotai.github.io/kimi-cli/en/)
+- [Kimi Hooks Beta](https://moonshotai.github.io/kimi-cli/zh/customization/hooks.html)
 
 ## OpenCode
 

@@ -6,6 +6,7 @@
 - Persist session panel tabs, active panels, and dock layouts across bottom and right workbench areas.
 - Prefer compatible system Codex CLI installs while keeping the managed install fallback.
 - Show Codex CLI preparation status in sessions so first-run installs are visible.
+- Document the current adapter support matrix and keep native skill capability tests aligned across Codex, Claude Code, Copilot, Gemini, Kimi, and OpenCode.
 - Keep optimistic first user messages visible until their real runtime projection arrives.
 - Launch server-side runtime consumers through the internal run entrypoint so user prompts are not prefixed with command names.
 - Preserve runtime consumer `__run` argv normalization so web-created Codex sessions receive the original user prompt.
