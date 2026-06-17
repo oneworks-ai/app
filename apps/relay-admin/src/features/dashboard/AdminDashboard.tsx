@@ -13,6 +13,7 @@ import { UserPanel } from '../users/UserPanel'
 import { AdminStatusBar } from './AdminStatusBar'
 import type { RelayAdminDashboardState } from './useRelayAdminDashboard'
 
+export type AdminDashboardMessageMode = 'center' | 'create' | 'history'
 export type AdminDashboardSectionId =
   | 'device-detail'
   | 'devices'
@@ -31,8 +32,9 @@ export type AdminDashboardCreateSectionId = Extract<AdminDashboardSectionId, 'in
 export interface AdminDashboardProps {
   createSectionId?: AdminDashboardCreateSectionId
   dashboard: RelayAdminDashboardState
+  messageDetailBasePath?: '/message-pushes' | '/messages'
   messageId?: string
-  openMessageComposerSignal?: number
+  messageMode?: AdminDashboardMessageMode
   resetTeamDetailSettingsSignal?: number
   sectionId: AdminDashboardSectionId
   onCreateSectionChange?: (sectionId: AdminDashboardCreateSectionId | undefined) => void
@@ -41,8 +43,9 @@ export interface AdminDashboardProps {
 export const AdminDashboard = ({
   createSectionId,
   dashboard,
+  messageDetailBasePath,
   messageId,
-  openMessageComposerSignal,
+  messageMode,
   resetTeamDetailSettingsSignal,
   sectionId,
   onCreateSectionChange
@@ -121,8 +124,9 @@ export const AdminDashboard = ({
           accounts={dashboard.accounts}
           activeToken={dashboard.token}
           currentUser={dashboard.currentUser}
+          detailBasePath={messageDetailBasePath}
           messageId={messageId}
-          openComposerSignal={openMessageComposerSignal}
+          mode={messageMode}
           teams={dashboard.teams}
           token={dashboard.token}
           users={dashboard.users}

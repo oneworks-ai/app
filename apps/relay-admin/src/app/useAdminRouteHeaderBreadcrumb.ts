@@ -33,9 +33,16 @@ export const useAdminRouteHeaderBreadcrumb = (
     return decodeRouteSegment(match?.[1])
   }, [normalizedPathname])
   const messageDetailId = useMemo(() => {
+    if (normalizedPathname === '/messages/create') return undefined
     const match = /^\/messages\/(.+)$/.exec(normalizedPathname)
     return decodeRouteSegment(match?.[1])
   }, [normalizedPathname])
+  const isMessagePushCreateRoute = normalizedPathname === '/message-pushes/create'
+  const messagePushDetailId = useMemo(() => {
+    if (isMessagePushCreateRoute) return undefined
+    const match = /^\/message-pushes\/(.+)$/.exec(normalizedPathname)
+    return decodeRouteSegment(match?.[1])
+  }, [isMessagePushCreateRoute, normalizedPathname])
   const isTeamSettingsRoute = normalizedPathname === '/teams/settings'
   const teamDetailSettingsId = useMemo(() => {
     const match = /^\/teams\/([^/]+)\/settings$/.exec(normalizedPathname)
@@ -102,6 +109,30 @@ export const useAdminRouteHeaderBreadcrumb = (
       }
     }
 
+    if (isMessagePushCreateRoute) {
+      return {
+        ariaLabel: '消息推送导航',
+        backIcon: createElement(AdminIcon, { className: breadcrumbIconClassName, name: 'chevron_left' }),
+        backLabel: '返回发送历史',
+        currentTitle: '创建推送',
+        parentTitle: '消息推送',
+        separatorIcon: createElement(AdminIcon, { className: breadcrumbIconClassName, name: 'chevron_right' }),
+        onBack: () => void navigate('/message-pushes')
+      }
+    }
+
+    if (messagePushDetailId != null) {
+      return {
+        ariaLabel: '消息推送导航',
+        backIcon: createElement(AdminIcon, { className: breadcrumbIconClassName, name: 'chevron_left' }),
+        backLabel: '返回发送历史',
+        currentTitle: '推送详情',
+        parentTitle: '消息推送',
+        separatorIcon: createElement(AdminIcon, { className: breadcrumbIconClassName, name: 'chevron_right' }),
+        onBack: () => void navigate('/message-pushes')
+      }
+    }
+
     if (teamDetailId != null) {
       return {
         ariaLabel: '团队导航',
@@ -146,8 +177,10 @@ export const useAdminRouteHeaderBreadcrumb = (
   }, [
     deviceDetailId,
     deviceDetailTitle,
+    isMessagePushCreateRoute,
     isTeamSettingsRoute,
     messageDetailId,
+    messagePushDetailId,
     navigate,
     teamDetailId,
     teamDetailSettingsId,

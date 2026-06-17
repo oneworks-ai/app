@@ -66,6 +66,7 @@ export const useRelayAdminDashboard = () => {
   const [ssoProviders, setSsoProviders] = useState<RelayAdminSsoProvider[]>([])
   const [teams, setTeams] = useState<RelayAdminTeam[]>([])
   const [teamPolicy, setTeamPolicy] = useState<RelayAdminTeamPolicy | undefined>()
+  const [snapshotLoaded, setSnapshotLoaded] = useState(false)
   const [error, setError] = useState<string | undefined>()
   const [loading, setLoading] = useState(false)
   const [loginUrl] = useState(buildAdminLoginUrl)
@@ -95,6 +96,7 @@ export const useRelayAdminDashboard = () => {
     setSsoProviders(snapshot.ssoProviders)
     setTeams(snapshot.teams)
     setTeamPolicy(snapshot.teamPolicy)
+    setSnapshotLoaded(true)
   }, [canManageAdmin, token])
 
   const refresh = useCallback(async () => {
@@ -105,6 +107,7 @@ export const useRelayAdminDashboard = () => {
       setSsoProviders([])
       setTeams([])
       setTeamPolicy(undefined)
+      setSnapshotLoaded(false)
       return
     }
     await run(loadSnapshot)
@@ -125,11 +128,13 @@ export const useRelayAdminDashboard = () => {
       clearAdminSessionToken()
       setAuthStatus('missing')
       setCurrentUser(undefined)
+      setSnapshotLoaded(false)
       return
     }
 
     setAuthStatus('checking')
     setAuthError(undefined)
+    setSnapshotLoaded(false)
     void fetchRelayAdminMe(nextToken)
       .then(body => {
         if (!active) return
@@ -144,6 +149,7 @@ export const useRelayAdminDashboard = () => {
         setTokenState('')
         setCurrentUser(undefined)
         setAuthStatus('missing')
+        setSnapshotLoaded(false)
         setAuthError(reason instanceof Error ? reason.message : String(reason))
       })
 
@@ -159,6 +165,7 @@ export const useRelayAdminDashboard = () => {
     setCurrentUser(account.user)
     setAuthStatus('checking')
     setAuthError(undefined)
+    setSnapshotLoaded(false)
   }, [])
 
   const logout = useCallback(() => {
@@ -167,6 +174,7 @@ export const useRelayAdminDashboard = () => {
     setCurrentUser(undefined)
     setAuthStatus('missing')
     setAuthError(undefined)
+    setSnapshotLoaded(false)
   }, [token])
 
   const createUser = useCallback(async (input: CreateUserInput) => {
@@ -314,6 +322,7 @@ export const useRelayAdminDashboard = () => {
     setUserDisabled,
     setUserPassword,
     setUserRole,
+    snapshotLoaded,
     ssoProviders,
     teamPolicy,
     teams,

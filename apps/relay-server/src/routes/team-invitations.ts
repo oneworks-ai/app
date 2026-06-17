@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { resolveAuthContext } from '../auth/permissions.js'
 import { readRequestBody, sendJson } from '../http.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
-import { findRelayTeamMember, isRelayTeamRole, teamMemberCount } from '../teams.js'
+import { canManageRelayTeamMembers, findRelayTeamMember, isRelayTeamRole, teamMemberCount } from '../teams.js'
 import type {
   RelayAuthProvider,
   RelayMessage,
@@ -57,16 +57,17 @@ const invitationMatchesUser = (invitation: RelayTeamInvitation, user: RelayUser 
   )
 )
 
-const serializeUserSummary = (user: RelayUser | undefined) => user == null
-  ? null
-  : {
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    avatarUrl: user.avatarUrl ?? null,
-    provider: (user.provider ?? null) as RelayAuthProvider | null,
-    role: user.role
-  }
+const serializeUserSummary = (user: RelayUser | undefined) =>
+  user == null
+    ? null
+    : {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatarUrl: user.avatarUrl ?? null,
+      provider: (user.provider ?? null) as RelayAuthProvider | null,
+      role: user.role
+    }
 
 export const serializeTeamInvitation = (invitation: RelayTeamInvitation, store: RelayStore) => {
   const team = store.teams.find(item => item.id === invitation.teamId)
@@ -107,15 +108,23 @@ const normalizeMessageKind = (value: unknown): RelayMessageKind => (
 
 const cleanUserIds = (value: unknown) => (
   Array.isArray(value)
-    ? [...new Set(value.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
-      .map(item => item.trim()))]
+    ? [
+      ...new Set(
+        value.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+          .map(item => item.trim())
+      )
+    ]
     : []
 )
 
 const cleanEmailList = (value: unknown) => (
   Array.isArray(value)
-    ? [...new Set(value.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
-      .map(item => item.trim().toLowerCase()))]
+    ? [
+      ...new Set(
+        value.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+          .map(item => item.trim().toLowerCase())
+      )
+    ]
     : []
 )
 
@@ -173,16 +182,37 @@ const authCanCreateMessage = (
   audience: RelayMessageAudience
 ) => {
   if (auth == null) return false
-  if (isAdminAuth(auth)) return true
-  if (audience.scope === 'team' && audience.teamId != null) return canWriteTeamMembers(store, auth, audience.teamId)
-  if (audience.scope !== 'users' || audience.teamId == null || !canWriteTeamMembers(store, auth, audience.teamId)) {
+  if (audience.scope === 'all') return isAdminAuth(auth)
+  if (audience.scope === 'users' && audience.teamId == null) return isAdminAuth(auth)
+  if (audience.scope === 'team' && audience.teamId != null) {
+    return authCanManageMessageTeam(store, auth, audience.teamId)
+  }
+  if (
+    audience.scope !== 'users' ||
+    audience.teamId == null ||
+    !authCanManageMessageTeam(store, auth, audience.teamId)
+  ) {
     return false
   }
-  const teamUserIds = new Set(store.teamMembers
-    .filter(member => member.teamId === audience.teamId)
-    .map(member => member.userId))
+  const teamUserIds = new Set(
+    store.teamMembers
+      .filter(member => member.teamId === audience.teamId)
+      .map(member => member.userId)
+  )
   return (audience.userIds ?? []).every(userId => teamUserIds.has(userId))
 }
+
+const authCanManageMessageTeam = (
+  store: RelayStore,
+  auth: ReturnType<typeof resolveAuthContext>,
+  teamId: string
+) => (
+  auth?.kind === 'session' && canManageRelayTeamMembers(findRelayTeamMember(store, teamId, auth.user.id))
+)
+
+const isPlatformScopedMessageAudience = (audience: RelayMessageAudience) => (
+  audience.scope === 'all' || (audience.scope === 'users' && audience.teamId == null)
+)
 
 const readMessageAudience = (store: RelayStore, body: Record<string, unknown>) => {
   const scope = cleanString(body.scope)
@@ -212,12 +242,23 @@ const messageVisibleToAuth = (
   auth: ReturnType<typeof resolveAuthContext>
 ) => {
   if (auth == null) return false
-  if (isAdminAuth(auth)) return true
-  if (auth.kind !== 'session') return false
-  if (message.createdByUserId === auth.user.id) return true
+  if (auth.kind !== 'session') return message.audience.scope === 'all'
   if (message.audience.scope === 'all') return true
   if (message.audience.scope === 'users') return (message.audience.userIds ?? []).includes(auth.user.id)
   return message.audience.teamId != null && findRelayTeamMember(store, message.audience.teamId, auth.user.id) != null
+}
+
+const messageSentHistoryVisibleToAuth = (
+  message: RelayMessage,
+  store: RelayStore,
+  auth: ReturnType<typeof resolveAuthContext>
+) => {
+  if (auth == null) return false
+  if (message.audience.teamId != null) return authCanManageMessageTeam(store, auth, message.audience.teamId)
+  if (isAdminAuth(auth) && isPlatformScopedMessageAudience(message.audience)) return true
+  return auth.kind === 'session' &&
+    message.createdByUserId === auth.user.id &&
+    isPlatformScopedMessageAudience(message.audience)
 }
 
 const createRelayMessage = (
@@ -251,7 +292,8 @@ const headerValue = (req: IncomingMessage, name: string) => {
 
 const requestIp = (req: IncomingMessage) => {
   const forwarded = headerValue(req, 'x-forwarded-for').split(',')[0]?.trim()
-  return forwarded || headerValue(req, 'cf-connecting-ip') || headerValue(req, 'x-real-ip') || req.socket.remoteAddress || '未知 IP'
+  return forwarded || headerValue(req, 'cf-connecting-ip') || headerValue(req, 'x-real-ip') ||
+    req.socket.remoteAddress || '未知 IP'
 }
 
 const requestLocation = (req: IncomingMessage) => {
@@ -277,7 +319,8 @@ export const recordLoginNotificationMessage = (
   createRelayMessage(store, {
     kind: 'personal',
     title: '新设备登录提醒',
-    body: `检测到账号从 IP ${ip} 在 ${location} 完成登录。设备信息：${userAgent}。如果不是你本人操作，请及时修改密码或联系管理员。`,
+    body:
+      `检测到账号从 IP ${ip} 在 ${location} 完成登录。设备信息：${userAgent}。如果不是你本人操作，请及时修改密码或联系管理员。`,
     audience: { scope: 'users', userIds: [user.id] },
     createdByUserId: 'system'
   })
@@ -537,20 +580,27 @@ export const handleAdminMessagesRoute = async (
     return true
   }
 
+  const sentHistoryView = url.searchParams.get('view') === 'sent'
   const messages = relayMessages(store)
-    .filter(message => messageVisibleToAuth(message, store, auth))
-    .slice()
-    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
-    .map(message => serializeRelayMessage(message, store))
-  const invitations = teamInvitations(store)
-    .filter(invitation =>
-      auth.kind === 'session'
-        ? invitationMatchesUser(invitation, auth.user) || invitation.createdByUserId === auth.user.id
-        : isPendingInvitation(invitation)
+    .filter(message =>
+      sentHistoryView
+        ? messageSentHistoryVisibleToAuth(message, store, auth)
+        : messageVisibleToAuth(message, store, auth)
     )
     .slice()
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
-    .map(invitation => serializeTeamInvitation(invitation, store))
+    .map(message => serializeRelayMessage(message, store))
+  const invitations = sentHistoryView
+    ? []
+    : teamInvitations(store)
+      .filter(invitation =>
+        auth.kind === 'session'
+          ? invitationMatchesUser(invitation, auth.user) || invitation.createdByUserId === auth.user.id
+          : isPendingInvitation(invitation)
+      )
+      .slice()
+      .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+      .map(invitation => serializeTeamInvitation(invitation, store))
   sendJson(res, 200, { invitations, messages }, args.allowOrigin)
   return true
 }

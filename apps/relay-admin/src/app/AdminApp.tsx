@@ -21,7 +21,7 @@ import { AdminDashboard } from '../features/dashboard/AdminDashboard'
 import type { AdminDashboardCreateSectionId } from '../features/dashboard/AdminDashboard'
 import { useRelayAdminDashboard } from '../features/dashboard/useRelayAdminDashboard'
 import { UserPasswordModal } from '../features/users/UserPasswordModal'
-import { canAccessRelayAdminSection } from '../shared/model/adminPermissions'
+import { canAccessRelayAdminSection, canManageRelayMessages } from '../shared/model/adminPermissions'
 import type { RelayAdminUser } from '../shared/model/adminTypes'
 import { AdminIcon } from '../shared/ui/AdminIcon'
 import { AdminNavRail } from './AdminNavRail'
@@ -66,8 +66,9 @@ const getTeamDetailSettingsIdFromPath = (pathname: string) => {
   return match == null ? undefined : decodeURIComponent(match[1])
 }
 
-const getMessageIdFromPath = (pathname: string) => {
-  const match = /^\/messages\/(.+)$/.exec(pathname)
+const getMessageIdFromPath = (pathname: string, basePath: '/message-pushes' | '/messages') => {
+  if (pathname === `${basePath}/create`) return undefined
+  const match = new RegExp(`^${basePath}/(.+)$`).exec(pathname)
   return match == null ? undefined : decodeURIComponent(match[1])
 }
 
@@ -91,14 +92,16 @@ export const AdminApp = () => {
   const dashboard = useRelayAdminDashboard()
   const location = useLocation()
   const navigate = useNavigate()
-  const { activeSection, activeSectionId, sidebarItems } = useAdminSectionNavigation(dashboard.currentUser?.role)
+  const canSendMessages = canManageRelayMessages(dashboard.currentUser?.role, dashboard.teams)
+  const { activeSection, activeSectionId, sidebarItems } = useAdminSectionNavigation(dashboard.currentUser?.role, {
+    canManageMessages: canSendMessages
+  })
   const { isCompactLayout } = useResponsiveLayout()
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(() => readAdminSidebarWidth())
   const [createSectionId, setCreateSectionId] = useState<AdminDashboardCreateSectionId | undefined>()
   const [passwordUser, setPasswordUser] = useState<RelayAdminUser | undefined>()
-  const [messageComposerSignal, setMessageComposerSignal] = useState(0)
   const [teamDetailSettingsResetSignal, setTeamDetailSettingsResetSignal] = useState(0)
   const canResizeSidebar = !isCompactLayout && !sidebarCollapsed
   const commitSidebarWidth = useCallback((nextWidth: number) => {
@@ -127,8 +130,12 @@ export const AdminApp = () => {
   const normalizedPathname = location.pathname === '/' ? '/' : location.pathname.replace(/\/+$/, '')
   const isProfileRoute = normalizedPathname === '/profile'
   const isMessagesRoute = normalizedPathname === '/messages'
-  const activeMessageId = getMessageIdFromPath(normalizedPathname)
+  const isMessagePushRoute = normalizedPathname === '/message-pushes'
+  const isMessagePushCreateRoute = normalizedPathname === '/message-pushes/create'
+  const activeMessageId = getMessageIdFromPath(normalizedPathname, '/messages')
+  const activeMessagePushId = getMessageIdFromPath(normalizedPathname, '/message-pushes')
   const isMessageDetailRoute = activeMessageId != null
+  const isMessagePushDetailRoute = activeMessagePushId != null
   const isTeamListRoute = normalizedPathname === '/teams'
   const activeCreateSectionId = getCreateSectionIdFromPath(normalizedPathname)
   const activeUserDetailId = getUserDetailIdFromPath(normalizedPathname)
@@ -141,23 +148,24 @@ export const AdminApp = () => {
     ? undefined
     : dashboard.teams.find(team => team.id === activeTeamDetailId)
   const isTeamDetailSettingsRoute = activeTeamDetailSettingsId != null
-  const canSendMessages = (
-    dashboard.currentUser?.role === 'owner' ||
-    dashboard.currentUser?.role === 'admin' ||
-    dashboard.teams.some(team => team.membership?.role === 'owner' || team.membership?.role === 'admin')
-  )
+  const canRenderMessagePushes = dashboard.authStatus === 'checking' || !dashboard.snapshotLoaded || canSendMessages
   const headerTitle = isMessagesRoute
     ? '消息中心'
-    : isMessageDetailRoute
-      ? '消息详情'
-      : isProfileRoute
-        ? '个人资料'
-        : activeSection.label
-  const headerIcon = isMessagesRoute || isMessageDetailRoute
+    : isMessagePushRoute
+    ? '消息推送'
+    : isMessagePushCreateRoute
+    ? '创建推送'
+    : isMessageDetailRoute || isMessagePushDetailRoute
+    ? '消息详情'
+    : isProfileRoute
+    ? '个人资料'
+    : activeSection.label
+  const headerIcon = isMessagesRoute || isMessageDetailRoute || isMessagePushRoute || isMessagePushCreateRoute ||
+      isMessagePushDetailRoute
     ? <AdminIcon name='notifications' />
     : isProfileRoute
-      ? <AdminIcon name='account_circle' />
-      : activeSection.icon
+    ? <AdminIcon name='account_circle' />
+    : activeSection.icon
   const isCreateActionActive = activeCreateSectionId != null && createSectionId === activeCreateSectionId
   const canRenderSection = useCallback((sectionId: 'devices' | 'invites' | 'sso' | 'teams' | 'users') => (
     dashboard.authStatus === 'checking' ||
@@ -254,14 +262,14 @@ export const AdminApp = () => {
       })
     }
 
-    if ((isMessagesRoute || isMessageDetailRoute) && canSendMessages) {
+    if (isMessagePushRoute && canSendMessages) {
       items.push({
         disabled: !dashboard.canLoad || dashboard.loading,
         icon: <AdminIcon name='add' />,
-        key: 'messages:compose',
-        label: '发送消息',
-        title: '发送消息',
-        onSelect: () => setMessageComposerSignal(current => current + 1)
+        key: 'message-pushes:create',
+        label: '创建推送',
+        title: '创建信息推送',
+        onSelect: () => void navigate('/message-pushes/create')
       })
     }
 
@@ -274,7 +282,14 @@ export const AdminApp = () => {
         title: '重置当前表单',
         onSelect: () => setTeamDetailSettingsResetSignal(current => current + 1)
       })
-    } else if (!isProfileRoute && !isMessagesRoute && !isMessageDetailRoute) {
+    } else if (
+      !isProfileRoute &&
+      !isMessagesRoute &&
+      !isMessageDetailRoute &&
+      !isMessagePushRoute &&
+      !isMessagePushCreateRoute &&
+      !isMessagePushDetailRoute
+    ) {
       items.push({
         disabled: !dashboard.canLoad || dashboard.loading,
         icon: <AdminIcon name='refresh' />,
@@ -297,9 +312,12 @@ export const AdminApp = () => {
     dashboard.logout,
     dashboard.refresh,
     dashboard.setUserDisabled,
-    dashboard.teams,
     dashboard.token,
+    canSendMessages,
     isMessageDetailRoute,
+    isMessagePushCreateRoute,
+    isMessagePushDetailRoute,
+    isMessagePushRoute,
     isCreateActionActive,
     isMessagesRoute,
     isProfileRoute,
@@ -433,24 +451,78 @@ export const AdminApp = () => {
               <Route path='profile' element={<AdminDashboard dashboard={dashboard} sectionId='profile' />} />
               <Route
                 path='messages'
-                element={(
+                element={
                   <AdminDashboard
                     dashboard={dashboard}
-                    openMessageComposerSignal={messageComposerSignal}
+                    messageDetailBasePath='/messages'
+                    messageMode='center'
                     sectionId='messages'
                   />
-                )}
+                }
+              />
+              <Route
+                path='messages/create'
+                element={<Navigate to='/messages' replace />}
               />
               <Route
                 path='messages/:messageId'
-                element={(
+                element={
                   <AdminDashboard
                     dashboard={dashboard}
                     messageId={activeMessageId}
-                    openMessageComposerSignal={messageComposerSignal}
+                    messageDetailBasePath='/messages'
+                    messageMode='center'
                     sectionId='messages'
                   />
-                )}
+                }
+              />
+              <Route
+                path='messages/*'
+                element={<Navigate to='/messages' replace />}
+              />
+              <Route
+                path='message-pushes'
+                element={canRenderMessagePushes
+                  ? (
+                    <AdminDashboard
+                      dashboard={dashboard}
+                      messageDetailBasePath='/message-pushes'
+                      messageMode='history'
+                      sectionId='messages'
+                    />
+                  )
+                  : <Navigate to='/messages' replace />}
+              />
+              <Route
+                path='message-pushes/create'
+                element={canRenderMessagePushes
+                  ? (
+                    <AdminDashboard
+                      dashboard={dashboard}
+                      messageDetailBasePath='/message-pushes'
+                      messageMode='create'
+                      sectionId='messages'
+                    />
+                  )
+                  : <Navigate to='/messages' replace />}
+              />
+              <Route
+                path='message-pushes/:messageId'
+                element={canRenderMessagePushes
+                  ? (
+                    <AdminDashboard
+                      dashboard={dashboard}
+                      messageDetailBasePath='/message-pushes'
+                      messageId={activeMessagePushId}
+                      messageMode='history'
+                      sectionId='messages'
+                    />
+                  )
+                  : <Navigate to='/messages' replace />}
+              />
+              <Route
+                path='message-pushes/*'
+                element={<Navigate to={canRenderMessagePushes ? '/message-pushes' : '/messages'} replace />}
               />
               <Route
                 path='invites'

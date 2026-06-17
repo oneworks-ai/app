@@ -6,8 +6,8 @@ import type {
   CreateConfigProfileVersionInput,
   CreateConfigSecretInput,
   CreateRelayAdminMessageInput,
-  CreateTeamInvitationInput,
   CreateTeamInput,
+  CreateTeamInvitationInput,
   CreateTeamMemberInput,
   RelayAdminAuditEvent,
   RelayAdminConfigProfile,
@@ -39,11 +39,15 @@ export interface RelayAdminConfigProfileDetailResponse {
 export const fetchRelayAdminTeams = async (token: string) =>
   await requestJson<RelayAdminTeamsResponse>(token, '/api/admin/teams')
 
-export const fetchRelayAdminMessages = async (token: string) =>
-  await requestJson<{ invitations: RelayAdminTeamInvitation[]; messages: RelayAdminMessage[] }>(
+export const fetchRelayAdminMessages = async (token: string, options?: { view?: 'sent' }) => {
+  const searchParams = new URLSearchParams()
+  if (options?.view != null) searchParams.set('view', options.view)
+  const query = searchParams.size === 0 ? '' : `?${searchParams.toString()}`
+  return await requestJson<{ invitations: RelayAdminTeamInvitation[]; messages: RelayAdminMessage[] }>(
     token,
-    '/api/admin/messages'
+    `/api/admin/messages${query}`
   )
+}
 
 export const createRelayAdminMessage = async (token: string, input: CreateRelayAdminMessageInput) =>
   await requestJson<{ message: RelayAdminMessage }>(token, '/api/admin/messages', {

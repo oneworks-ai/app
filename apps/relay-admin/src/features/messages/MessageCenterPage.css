@@ -12,22 +12,34 @@
   font-weight: 750;
 }
 
-.relay-message-center__item--announcement .relay-message-center__team-avatar.ant-avatar {
+.relay-message-center__item--announcement
+  .relay-message-center__team-avatar.ant-avatar {
   color: var(--ant-color-warning, #d97706);
-  background: color-mix(in srgb, var(--ant-color-warning, #d97706) 10%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--ant-color-warning, #d97706) 10%,
+    transparent
+  );
 }
 
-.relay-message-center__item--team_invitation .relay-message-center__team-avatar.ant-avatar {
+.relay-message-center__item--team_invitation
+  .relay-message-center__team-avatar.ant-avatar {
   color: var(--primary-color);
   background: color-mix(in srgb, var(--primary-color) 12%, transparent);
 }
 
-.relay-message-center__item--personal .relay-message-center__team-avatar.ant-avatar {
+.relay-message-center__item--personal
+  .relay-message-center__team-avatar.ant-avatar {
   color: var(--ant-color-success, #1a7f37);
-  background: color-mix(in srgb, var(--ant-color-success, #1a7f37) 10%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--ant-color-success, #1a7f37) 10%,
+    transparent
+  );
 }
 
-.relay-message-center__item--system .relay-message-center__team-avatar.ant-avatar {
+.relay-message-center__item--system
+  .relay-message-center__team-avatar.ant-avatar {
   color: var(--sub-text-color);
   background: color-mix(in srgb, var(--text-color) 8%, transparent);
 }
@@ -47,7 +59,7 @@
 .relay-message-center__filter-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 10px;
   min-width: 0;
 }
@@ -80,10 +92,6 @@
   border-radius: 4px;
   background: transparent;
   padding: 0;
-}
-
-.relay-message-center__user-compose.ant-btn {
-  flex: 0 0 auto;
 }
 
 .relay-message-center__category-filter .ant-segmented-group {
@@ -255,6 +263,17 @@
   min-height: calc(100dvh - 72px);
 }
 
+.relay-message-center--create {
+  min-height: calc(100dvh - 72px);
+}
+
+.relay-message-center__create-form {
+  display: grid;
+  gap: 10px;
+  width: min(560px, 100%);
+  padding: 10px 0;
+}
+
 .relay-message-center__detail {
   display: flex;
   flex-direction: column;
@@ -316,7 +335,13 @@
   border-radius: 4px;
   background: color-mix(in srgb, var(--text-color) 7%, transparent);
   padding: 1px 4px;
-  font: 650 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font:
+    650 12px/1.4 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
 }
 
 .relay-message-center__detail-body pre {
@@ -334,7 +359,8 @@
 }
 
 .relay-message-center__detail-body blockquote {
-  border-left: 2px solid color-mix(in srgb, var(--primary-color) 72%, transparent);
+  border-left: 2px solid
+    color-mix(in srgb, var(--primary-color) 72%, transparent);
   color: var(--sub-text-color);
   padding-left: 10px;
 }
@@ -381,16 +407,12 @@
   border-top: 1px solid var(--border-color);
 }
 
-.relay-message-center__composer .ant-drawer-body {
-  padding: 10px;
-}
-
-.relay-message-center__composer .ant-form {
+.relay-message-center__create-form .ant-form {
   display: grid;
   gap: 10px;
 }
 
-.relay-message-center__composer .ant-form-item {
+.relay-message-center__create-form .ant-form-item {
   margin-bottom: 0;
 }
 

@@ -1,13 +1,14 @@
 /* eslint-disable max-lines -- Message center keeps list, detail, and composer behavior together. */
 import './MessageCenterPage.css'
 
-import { Avatar, Button, Drawer, Empty, Form, Input, Segmented, Select, Space } from 'antd'
+import { Avatar, Button, Empty, Form, Input, Segmented, Select, Space } from 'antd'
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useNavigate } from 'react-router-dom'
 import remarkGfm from 'remark-gfm'
 
+import { canManageRelayAdmin, isRelayAdminTeamManagerRole } from '../../shared/model/adminPermissions'
 import type { RelayAdminCurrentUser, RelayAdminUser } from '../../shared/model/adminTypes'
 import { AdminIcon } from '../../shared/ui/AdminIcon'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
@@ -32,8 +33,9 @@ export interface MessageCenterPageProps {
   accounts: AdminSessionAccount[]
   activeToken: string
   currentUser?: RelayAdminCurrentUser
+  detailBasePath?: '/message-pushes' | '/messages'
   messageId?: string
-  openComposerSignal?: number
+  mode?: 'center' | 'create' | 'history'
   teams: RelayAdminTeam[]
   token: string
   users: RelayAdminUser[]
@@ -107,14 +109,17 @@ const messageKindBadge: Record<RelayAdminMessageKind, string> = {
   system: '系统'
 }
 
-const messageCategoryLabel = (iconName: 'admin_panel_settings' | 'fact_check' | 'notifications' | 'person', label: string) => (
+const messageCategoryLabel = (
+  iconName: 'admin_panel_settings' | 'fact_check' | 'notifications' | 'person',
+  label: string
+) => (
   <span className='relay-message-center__category-option'>
     <AdminIcon name={iconName} />
     <span>{label}</span>
   </span>
 )
 
-const messageCategoryOptions: Array<{ label: ReactNode, value: MessageCategoryFilter }> = [
+const messageCategoryOptions: Array<{ label: ReactNode; value: MessageCategoryFilter }> = [
   { label: messageCategoryLabel('fact_check', '全部'), value: 'all' },
   { label: messageCategoryLabel('notifications', '公告'), value: 'announcement' },
   { label: messageCategoryLabel('person', '个人'), value: 'personal' },
@@ -201,7 +206,8 @@ const invitationToMessage = (invitation: RelayAdminTeamInvitation): MessageCente
     kind: 'team_invitation',
     title: `${teamName} 邀请`,
     body,
-    detailBody: `**${inviter}** 邀请 **${target}** 以 \`${invitation.role}\` 身份加入团队。\n\n接受后才会加入团队并继承对应团队配置。`,
+    detailBody:
+      `**${inviter}** 邀请 **${target}** 以 \`${invitation.role}\` 身份加入团队。\n\n接受后才会加入团队并继承对应团队配置。`,
     meta: [
       messageKindLabel.team_invitation,
       invitation.configEnabled ? '启用团队配置' : '不启用团队配置',
@@ -276,7 +282,8 @@ const demoRelayMessages = (currentUser: RelayAdminCurrentUser | undefined): Rela
       id: 'demo-personal-login',
       kind: 'personal',
       title: '新设备登录提醒',
-      body: `${accountName} 的账号刚刚从 IP 203.0.113.42 在 CN Shanghai 完成登录。设备信息：Chrome / macOS。若不是本人操作，请及时修改密码或联系管理员。`,
+      body:
+        `${accountName} 的账号刚刚从 IP 203.0.113.42 在 CN Shanghai 完成登录。设备信息：Chrome / macOS。若不是本人操作，请及时修改密码或联系管理员。`,
       audience: {
         scope: 'users',
         team: null,
@@ -293,8 +300,15 @@ const demoRelayMessages = (currentUser: RelayAdminCurrentUser | undefined): Rela
       id: 'demo-system-config-sync',
       kind: 'system',
       title: '团队配置同步策略已生效',
-      body: '新的配置分发规则会影响已加入团队的用户，未接受邀请的用户不会收到团队配置。管理员可在团队配置页继续调整分发范围。',
-      audience: { scope: 'team', team: { id: 'demo-team', name: 'Relay Demo Team', slug: 'relay-demo-team', avatarUrl: null }, teamId: 'demo-team', userIds: [], users: [] },
+      body:
+        '新的配置分发规则会影响已加入团队的用户，未接受邀请的用户不会收到团队配置。管理员可在团队配置页继续调整分发范围。',
+      audience: {
+        scope: 'team',
+        team: { id: 'demo-team', name: 'Relay Demo Team', slug: 'relay-demo-team', avatarUrl: null },
+        teamId: 'demo-team',
+        userIds: [],
+        users: []
+      },
       createdBy: null,
       createdByUserId: 'system',
       createdAt: '2026-06-16T21:45:00.000Z',
@@ -337,14 +351,6 @@ const messageStatusTone = (message: MessageCenterItem) => (
   message.kind === 'team_invitation' && message.status === 'pending' ? 'warning' : 'muted'
 )
 
-const isTeamManagerRole = (role: string | null | undefined) => (
-  role === 'owner' || role === 'admin'
-)
-
-const canSendPlatformMessage = (currentUser: RelayAdminCurrentUser | undefined) => (
-  currentUser?.role === 'owner' || currentUser?.role === 'admin'
-)
-
 const createLocalMessage = (
   values: CreateRelayAdminMessageInput,
   currentUser: RelayAdminCurrentUser | undefined,
@@ -384,8 +390,9 @@ const createLocalMessage = (
 
 export const MessageCenterPage = ({
   currentUser,
+  detailBasePath = '/messages',
   messageId,
-  openComposerSignal,
+  mode = 'center',
   teams,
   token,
   users,
@@ -396,7 +403,6 @@ export const MessageCenterPage = ({
   const composerScope = Form.useWatch('scope', composerForm)
   const composerTeamId = Form.useWatch('teamId', composerForm)
   const [activeInvitationId, setActiveInvitationId] = useState<string | undefined>()
-  const [composerOpen, setComposerOpen] = useState(false)
   const [composing, setComposing] = useState(false)
   const [demoInvitationStatus, setDemoInvitationStatus] = useState<RelayAdminTeamInvitation['status']>('pending')
   const [error, setError] = useState<string | undefined>()
@@ -407,12 +413,12 @@ export const MessageCenterPage = ({
   const [searchValue, setSearchValue] = useState('')
   const [serverMessages, setServerMessages] = useState<RelayAdminMessage[]>([])
   const [useDemoMessages, setUseDemoMessages] = useState(false)
-  const isPlatformSender = canSendPlatformMessage(currentUser)
+  const isCreateMode = mode === 'create'
+  const isHistoryMode = mode === 'history'
+  const isPlatformSender = canManageRelayAdmin(currentUser?.role)
   const manageableTeams = useMemo(() => (
-    isPlatformSender
-      ? teams
-      : teams.filter(team => isTeamManagerRole(team.membership?.role))
-  ), [isPlatformSender, teams])
+    teams.filter(team => isRelayAdminTeamManagerRole(team.membership?.role))
+  ), [teams])
   const canSendMessage = isPlatformSender || manageableTeams.length > 0
   const refreshMessages = useCallback(() => {
     if (token.trim() === '') {
@@ -423,9 +429,9 @@ export const MessageCenterPage = ({
     }
     setLoading(true)
     setError(undefined)
-    void fetchRelayAdminMessages(token)
+    void fetchRelayAdminMessages(token, isHistoryMode ? { view: 'sent' } : undefined)
       .then(body => {
-        setInvitations(body.invitations)
+        setInvitations(isHistoryMode ? [] : body.invitations)
         setServerMessages(body.messages ?? [])
         setUseDemoMessages(false)
       })
@@ -437,7 +443,7 @@ export const MessageCenterPage = ({
         setError(message === 'Not found.' ? undefined : message)
       })
       .finally(() => setLoading(false))
-  }, [token])
+  }, [isHistoryMode, token])
   const respondInvitation = async (invitation: RelayAdminTeamInvitation, action: 'accept' | 'decline') => {
     setActiveInvitationId(invitation.id)
     setError(undefined)
@@ -459,7 +465,7 @@ export const MessageCenterPage = ({
       setActiveInvitationId(undefined)
     }
   }
-  const openComposer = useCallback(() => {
+  const resetComposerDefaults = useCallback(() => {
     const defaultScope: RelayAdminMessageAudienceScope = isPlatformSender ? 'all' : 'team'
     composerForm.setFieldsValue({
       kind: isPlatformSender ? 'announcement' : 'system',
@@ -467,17 +473,11 @@ export const MessageCenterPage = ({
       teamId: defaultScope === 'all' ? undefined : manageableTeams[0]?.id,
       userIds: []
     })
-    setComposerOpen(true)
   }, [composerForm, isPlatformSender, manageableTeams])
-  const openUserComposer = useCallback(() => {
-    composerForm.setFieldsValue({
-      kind: 'personal',
-      scope: 'users',
-      teamId: isPlatformSender ? undefined : manageableTeams[0]?.id,
-      userIds: []
-    })
-    setComposerOpen(true)
-  }, [composerForm, isPlatformSender, manageableTeams])
+  const finishComposer = useCallback(() => {
+    composerForm.resetFields()
+    if (isCreateMode) void navigate(detailBasePath)
+  }, [composerForm, detailBasePath, isCreateMode, navigate])
   const submitComposer = async (values: MessageComposerValues) => {
     const scope = values.scope ?? (isPlatformSender ? 'all' : 'team')
     const input: CreateRelayAdminMessageInput = {
@@ -493,15 +493,13 @@ export const MessageCenterPage = ({
     try {
       const body = await createRelayAdminMessage(token, input)
       setLocalMessages(current => [body.message, ...current])
-      setComposerOpen(false)
-      composerForm.resetFields()
-      refreshMessages()
+      if (!isCreateMode) refreshMessages()
+      finishComposer()
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason)
       if (message === 'Not found.' || message === 'Method not allowed.') {
         setLocalMessages(current => [createLocalMessage(input, currentUser, users, teams), ...current])
-        setComposerOpen(false)
-        composerForm.resetFields()
+        finishComposer()
       } else {
         setError(message)
       }
@@ -511,26 +509,33 @@ export const MessageCenterPage = ({
   }
 
   useEffect(() => {
+    if (isCreateMode) return
+    if (isHistoryMode && !canSendMessage) {
+      setInvitations([])
+      setServerMessages([])
+      return
+    }
     refreshMessages()
-  }, [refreshMessages])
+  }, [canSendMessage, isCreateMode, isHistoryMode, refreshMessages])
 
   useEffect(() => {
-    if (openComposerSignal == null || openComposerSignal === 0 || !canSendMessage) return
-    openComposer()
-  }, [canSendMessage, openComposer, openComposerSignal])
+    if (!isCreateMode || !canSendMessage) return
+    resetComposerDefaults()
+  }, [canSendMessage, isCreateMode, resetComposerDefaults])
 
   const messages = useMemo(() => {
-    const invitationMessages = (useDemoMessages
-      ? [demoTeamInvitation(currentUser, demoInvitationStatus)]
-      : invitations
-    ).map(invitationToMessage)
+    const invitationMessages = isHistoryMode
+      ? []
+      : (useDemoMessages
+        ? [demoTeamInvitation(currentUser, demoInvitationStatus)]
+        : invitations).map(invitationToMessage)
     const relayMessages = [
       ...localMessages,
       ...(useDemoMessages ? demoRelayMessages(currentUser) : serverMessages)
     ].map(relayMessageToItem)
     return [...invitationMessages, ...relayMessages]
       .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
-  }, [currentUser, demoInvitationStatus, invitations, localMessages, serverMessages, useDemoMessages])
+  }, [currentUser, demoInvitationStatus, invitations, isHistoryMode, localMessages, serverMessages, useDemoMessages])
   const filteredMessages = useMemo(() => {
     const categoryMessages = categoryFilter === 'all'
       ? messages
@@ -544,88 +549,171 @@ export const MessageCenterPage = ({
   ), [messageId, messages])
   const scopeOptions = useMemo(() => [
     ...(isPlatformSender ? [{ label: '全体用户', value: 'all' as const }] : []),
-    { label: '团队成员', value: 'team' as const },
+    ...(manageableTeams.length > 0 ? [{ label: '团队成员', value: 'team' as const }] : []),
     { label: '指定用户', value: 'users' as const }
-  ], [isPlatformSender])
+  ], [isPlatformSender, manageableTeams.length])
   const teamOptions = manageableTeams.map(team => ({
     label: `${team.name} · ${team.slug}`,
     value: team.id
   }))
   const userOptions = (isPlatformSender || composerTeamId == null
     ? users
-    : users.filter(user => user.teams.some(team => team.id === composerTeamId))
-  ).map(user => ({
-    label: `${user.name.trim() || user.email} · ${user.email} · ${user.id}`,
-    value: user.id
-  }))
+    : users.filter(user => user.teams.some(team => team.id === composerTeamId))).map(user => ({
+      label: `${user.name.trim() || user.email} · ${user.email} · ${user.id}`,
+      value: user.id
+    }))
   const shouldPickTeam = composerScope === 'team' || (composerScope === 'users' && !isPlatformSender)
+  const searchPlaceholder = isHistoryMode
+    ? '搜索发送人、目标、标题、内容、用户 ID'
+    : '搜索消息、团队、邀请人、账号、邮箱、用户 ID'
+  const composerFormNode = (
+    <Form
+      form={composerForm}
+      layout='vertical'
+      onFinish={values => void submitComposer(values)}
+    >
+      <Form.Item label='消息类型' name='kind' rules={[{ required: true, message: '请选择消息类型' }]}>
+        <Select
+          options={[
+            { label: '站内公告', value: 'announcement' },
+            { label: '个人通知', value: 'personal' },
+            { label: '系统消息', value: 'system' }
+          ]}
+        />
+      </Form.Item>
+      <Form.Item label='发送范围' name='scope' rules={[{ required: true, message: '请选择发送范围' }]}>
+        <Select options={scopeOptions} />
+      </Form.Item>
+      {shouldPickTeam
+        ? (
+          <Form.Item label='目标团队' name='teamId' rules={[{ required: true, message: '请选择目标团队' }]}>
+            <Select options={teamOptions} />
+          </Form.Item>
+        )
+        : null}
+      {composerScope === 'users'
+        ? (
+          <Form.Item label='目标用户' name='userIds' rules={[{ required: true, message: '请选择目标用户' }]}>
+            <Select mode='multiple' options={userOptions} />
+          </Form.Item>
+        )
+        : null}
+      <Form.Item label='标题' name='title' rules={[{ required: true, message: '请输入标题' }]}>
+        <Input />
+      </Form.Item>
+      <Form.Item label='内容' name='body' rules={[{ required: true, message: '请输入内容' }]}>
+        <Input.TextArea autoSize={{ minRows: 5, maxRows: 9 }} />
+      </Form.Item>
+      <Button htmlType='submit' icon={<AdminIcon name='check' />} loading={composing} type='primary'>
+        发送消息
+      </Button>
+    </Form>
+  )
+
+  if (isCreateMode) {
+    return (
+      <section className='relay-message-center relay-message-center--create'>
+        {canSendMessage
+          ? (
+            <div className='relay-message-center__create-form'>
+              {error == null ? null : <p className='relay-message-center__error'>{error}</p>}
+              {composerFormNode}
+            </div>
+          )
+          : (
+            <Empty
+              className='relay-message-center__empty'
+              description='当前账号没有创建消息推送权限'
+            />
+          )}
+      </section>
+    )
+  }
+
+  if (isHistoryMode && !canSendMessage) {
+    return (
+      <section className='relay-message-center relay-message-center--history'>
+        <Empty
+          className='relay-message-center__empty'
+          description='当前账号没有查看发送历史权限'
+        />
+      </section>
+    )
+  }
 
   if (messageId != null) {
     return (
       <section className='relay-message-center relay-message-center--detail'>
-        {activeMessage == null ? (
-          <Empty
-            className='relay-message-center__empty'
-            description={loading ? '正在加载消息' : '消息不存在或当前账号无权查看'}
-          />
-        ) : (
-          <article className={`relay-message-center__detail relay-message-center__item--${activeMessage.kind}`}>
-            <div className='relay-message-center__detail-header'>
-              <Avatar
-                className='relay-message-center__team-avatar'
-                icon={<AdminIcon name={messageKindIconName[activeMessage.kind]} />}
-                size={44}
-                src={activeMessage.invitation?.teamAvatarUrl ?? activeMessage.rawMessage?.audience.team?.avatarUrl ?? undefined}
-              >
-                {activeMessage.title.slice(0, 1).toUpperCase()}
-              </Avatar>
-              <div className='relay-message-center__detail-title'>
-                <div className='relay-message-center__item-title-row'>
-                  <h3>{activeMessage.title}</h3>
-                  <StatusBadge tone={messageStatusTone(activeMessage)}>
-                    {activeMessage.badge}
-                  </StatusBadge>
+        {activeMessage == null
+          ? (
+            <Empty
+              className='relay-message-center__empty'
+              description={loading ? '正在加载消息' : '消息不存在或当前账号无权查看'}
+            />
+          )
+          : (
+            <article className={`relay-message-center__detail relay-message-center__item--${activeMessage.kind}`}>
+              <div className='relay-message-center__detail-header'>
+                <Avatar
+                  className='relay-message-center__team-avatar'
+                  icon={<AdminIcon name={messageKindIconName[activeMessage.kind]} />}
+                  size={44}
+                  src={activeMessage.invitation?.teamAvatarUrl ?? activeMessage.rawMessage?.audience.team?.avatarUrl ??
+                    undefined}
+                >
+                  {activeMessage.title.slice(0, 1).toUpperCase()}
+                </Avatar>
+                <div className='relay-message-center__detail-title'>
+                  <div className='relay-message-center__item-title-row'>
+                    <h3>{activeMessage.title}</h3>
+                    <StatusBadge tone={messageStatusTone(activeMessage)}>
+                      {activeMessage.badge}
+                    </StatusBadge>
+                  </div>
+                  <time>{formatTimestamp(activeMessage.createdAt)}</time>
                 </div>
-                <time>{formatTimestamp(activeMessage.createdAt)}</time>
               </div>
-            </div>
-            <div className='relay-message-center__detail-body'>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {activeMessage.detailBody}
-              </ReactMarkdown>
-            </div>
-            <dl className='relay-message-center__detail-meta'>
-              {activeMessage.detailRows.map(([label, value]) => (
-                <div key={label}>
-                  <dt>{label}</dt>
-                  <dd>{value}</dd>
-                </div>
-              ))}
-            </dl>
-            {activeMessage.invitation != null && activeMessage.invitation.status === 'pending' ? (
-              <div className='relay-message-center__detail-actions'>
-                <Space size={6}>
-                  <Button
-                    disabled={activeInvitationId != null}
-                    icon={<AdminIcon name='check' />}
-                    loading={activeInvitationId === activeMessage.invitation.id}
-                    type='primary'
-                    onClick={() => void respondInvitation(activeMessage.invitation as RelayAdminTeamInvitation, 'accept')}
-                  >
-                    接受邀请
-                  </Button>
-                  <Button
-                    disabled={activeInvitationId != null}
-                    icon={<AdminIcon name='close' />}
-                    onClick={() => void respondInvitation(activeMessage.invitation as RelayAdminTeamInvitation, 'decline')}
-                  >
-                    拒绝
-                  </Button>
-                </Space>
+              <div className='relay-message-center__detail-body'>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {activeMessage.detailBody}
+                </ReactMarkdown>
               </div>
-            ) : null}
-          </article>
-        )}
+              <dl className='relay-message-center__detail-meta'>
+                {activeMessage.detailRows.map(([label, value]) => (
+                  <div key={label}>
+                    <dt>{label}</dt>
+                    <dd>{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              {activeMessage.invitation != null && activeMessage.invitation.status === 'pending'
+                ? (
+                  <div className='relay-message-center__detail-actions'>
+                    <Space size={6}>
+                      <Button
+                        disabled={activeInvitationId != null}
+                        icon={<AdminIcon name='check' />}
+                        loading={activeInvitationId === activeMessage.invitation.id}
+                        type='primary'
+                        onClick={() =>
+                          void respondInvitation(activeMessage.invitation as RelayAdminTeamInvitation, 'accept')}
+                      >
+                        接受邀请
+                      </Button>
+                      <Button
+                        disabled={activeInvitationId != null}
+                        icon={<AdminIcon name='close' />}
+                        onClick={() =>
+                          void respondInvitation(activeMessage.invitation as RelayAdminTeamInvitation, 'decline')}
+                      >
+                        拒绝
+                      </Button>
+                    </Space>
+                  </div>
+                )
+                : null}
+            </article>
+          )}
       </section>
     )
   }
@@ -637,7 +725,7 @@ export const MessageCenterPage = ({
           allowClear
           className='relay-message-center__search'
           disabled={loading && messages.length === 0}
-          placeholder='搜索消息、团队、邀请人、账号、邮箱、用户 ID'
+          placeholder={searchPlaceholder}
           prefix={<AdminIcon name='search' />}
           value={searchValue}
           onChange={event => setSearchValue(event.target.value)}
@@ -649,145 +737,93 @@ export const MessageCenterPage = ({
             value={categoryFilter}
             onChange={value => setCategoryFilter(value as MessageCategoryFilter)}
           />
-          {canSendMessage ? (
-            <Button
-              className='relay-message-center__user-compose'
-              icon={<AdminIcon name='person' />}
-              onClick={openUserComposer}
-            >
-              给用户发消息
-            </Button>
-          ) : null}
         </div>
       </div>
       {error == null ? null : <p className='relay-message-center__error'>{error}</p>}
-      {filteredMessages.length === 0 ? (
-        <Empty
-          className='relay-message-center__empty'
-          description={
-            loading
+      {filteredMessages.length === 0
+        ? (
+          <Empty
+            className='relay-message-center__empty'
+            description={loading
               ? '正在加载消息'
               : searchValue.trim() !== ''
-                ? '无匹配消息'
-                : categoryFilter === 'all'
-                  ? '暂无消息'
-                  : '当前分类暂无消息'
-          }
-        />
-      ) : (
-        <div className='relay-message-center__list'>
-          {filteredMessages.map(message => (
-            <article
-              className={[
-                'relay-message-center__item',
-                `relay-message-center__item--${message.kind}`
-              ].join(' ')}
-              key={message.id}
-              role='button'
-              tabIndex={0}
-              onClick={() => void navigate(`/messages/${encodeURIComponent(message.id)}`)}
-              onKeyDown={event => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  void navigate(`/messages/${encodeURIComponent(message.id)}`)
-                }
-              }}
-            >
-              <Avatar
-                className='relay-message-center__team-avatar'
-                icon={<AdminIcon name={messageKindIconName[message.kind]} />}
-                size={34}
-                src={message.invitation?.teamAvatarUrl ?? message.rawMessage?.audience.team?.avatarUrl ?? undefined}
+              ? '无匹配消息'
+              : categoryFilter === 'all'
+              ? isHistoryMode ? '暂无发送历史' : '暂无消息'
+              : '当前分类暂无消息'}
+          />
+        )
+        : (
+          <div className='relay-message-center__list'>
+            {filteredMessages.map(message => (
+              <article
+                className={[
+                  'relay-message-center__item',
+                  `relay-message-center__item--${message.kind}`
+                ].join(' ')}
+                key={message.id}
+                role='button'
+                tabIndex={0}
+                onClick={() => void navigate(`${detailBasePath}/${encodeURIComponent(message.id)}`)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    void navigate(`${detailBasePath}/${encodeURIComponent(message.id)}`)
+                  }
+                }}
               >
-                {message.title.slice(0, 1).toUpperCase()}
-              </Avatar>
-              <div className='relay-message-center__item-copy'>
-                <h4>{message.title}</h4>
-                <p>{message.body}</p>
-                <span className='relay-message-center__item-meta'>{message.meta}</span>
-              </div>
-              <div className='relay-message-center__item-side'>
-                <StatusBadge tone={messageStatusTone(message)}>
-                  {message.badge}
-                </StatusBadge>
-                <time>{formatTimestamp(message.createdAt)}</time>
-              </div>
-              {message.invitation != null && message.invitation.status === 'pending' ? (
-                <Space
-                  className='relay-message-center__item-actions'
-                  size={6}
-                  onClick={event => event.stopPropagation()}
+                <Avatar
+                  className='relay-message-center__team-avatar'
+                  icon={<AdminIcon name={messageKindIconName[message.kind]} />}
+                  size={34}
+                  src={message.invitation?.teamAvatarUrl ?? message.rawMessage?.audience.team?.avatarUrl ?? undefined}
                 >
-                  <Button
-                    disabled={activeInvitationId != null}
-                    icon={<AdminIcon name='check' />}
-                    loading={activeInvitationId === message.invitation.id}
-                    size='small'
-                    type='primary'
-                    onClick={() => void respondInvitation(message.invitation as RelayAdminTeamInvitation, 'accept')}
-                  >
-                    接受
-                  </Button>
-                  <Button
-                    disabled={activeInvitationId != null}
-                    icon={<AdminIcon name='close' />}
-                    size='small'
-                    onClick={() => void respondInvitation(message.invitation as RelayAdminTeamInvitation, 'decline')}
-                  >
-                    拒绝
-                  </Button>
-                </Space>
-              ) : null}
-            </article>
-          ))}
-        </div>
-      )}
-      <Drawer
-        className='relay-message-center__composer'
-        destroyOnHidden
-        open={composerOpen}
-        title='发送消息'
-        width={420}
-        onClose={() => setComposerOpen(false)}
-      >
-        <Form
-          form={composerForm}
-          layout='vertical'
-          onFinish={values => void submitComposer(values)}
-        >
-          <Form.Item label='消息类型' name='kind' rules={[{ required: true, message: '请选择消息类型' }]}>
-            <Select
-              options={[
-                { label: '站内公告', value: 'announcement' },
-                { label: '个人通知', value: 'personal' },
-                { label: '系统消息', value: 'system' }
-              ]}
-            />
-          </Form.Item>
-          <Form.Item label='发送范围' name='scope' rules={[{ required: true, message: '请选择发送范围' }]}>
-            <Select options={scopeOptions} />
-          </Form.Item>
-          {shouldPickTeam ? (
-            <Form.Item label='目标团队' name='teamId' rules={[{ required: true, message: '请选择目标团队' }]}>
-              <Select options={teamOptions} />
-            </Form.Item>
-          ) : null}
-          {composerScope === 'users' ? (
-            <Form.Item label='目标用户' name='userIds' rules={[{ required: true, message: '请选择目标用户' }]}>
-              <Select mode='multiple' options={userOptions} />
-            </Form.Item>
-          ) : null}
-          <Form.Item label='标题' name='title' rules={[{ required: true, message: '请输入标题' }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item label='内容' name='body' rules={[{ required: true, message: '请输入内容' }]}>
-            <Input.TextArea autoSize={{ minRows: 5, maxRows: 9 }} />
-          </Form.Item>
-          <Button block htmlType='submit' loading={composing} type='primary'>
-            发送消息
-          </Button>
-        </Form>
-      </Drawer>
+                  {message.title.slice(0, 1).toUpperCase()}
+                </Avatar>
+                <div className='relay-message-center__item-copy'>
+                  <h4>{message.title}</h4>
+                  <p>{message.body}</p>
+                  <span className='relay-message-center__item-meta'>{message.meta}</span>
+                </div>
+                <div className='relay-message-center__item-side'>
+                  <StatusBadge tone={messageStatusTone(message)}>
+                    {message.badge}
+                  </StatusBadge>
+                  <time>{formatTimestamp(message.createdAt)}</time>
+                </div>
+                {message.invitation != null && message.invitation.status === 'pending'
+                  ? (
+                    <Space
+                      className='relay-message-center__item-actions'
+                      size={6}
+                      onClick={event => event.stopPropagation()}
+                    >
+                      <Button
+                        disabled={activeInvitationId != null}
+                        icon={<AdminIcon name='check' />}
+                        loading={activeInvitationId === message.invitation.id}
+                        size='small'
+                        type='primary'
+                        onClick={() => void respondInvitation(message.invitation as RelayAdminTeamInvitation, 'accept')}
+                      >
+                        接受
+                      </Button>
+                      <Button
+                        disabled={activeInvitationId != null}
+                        icon={<AdminIcon name='close' />}
+                        size='small'
+                        onClick={() =>
+                          void respondInvitation(message.invitation as RelayAdminTeamInvitation, 'decline')}
+                      >
+                        拒绝
+                      </Button>
+                    </Space>
+                  )
+                  : null}
+              </article>
+            ))}
+          </div>
+        )}
     </section>
   )
 }
