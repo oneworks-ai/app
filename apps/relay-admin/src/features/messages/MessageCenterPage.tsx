@@ -469,6 +469,15 @@ export const MessageCenterPage = ({
     })
     setComposerOpen(true)
   }, [composerForm, isPlatformSender, manageableTeams])
+  const openUserComposer = useCallback(() => {
+    composerForm.setFieldsValue({
+      kind: 'personal',
+      scope: 'users',
+      teamId: isPlatformSender ? undefined : manageableTeams[0]?.id,
+      userIds: []
+    })
+    setComposerOpen(true)
+  }, [composerForm, isPlatformSender, manageableTeams])
   const submitComposer = async (values: MessageComposerValues) => {
     const scope = values.scope ?? (isPlatformSender ? 'all' : 'team')
     const input: CreateRelayAdminMessageInput = {
@@ -633,12 +642,23 @@ export const MessageCenterPage = ({
           value={searchValue}
           onChange={event => setSearchValue(event.target.value)}
         />
-        <Segmented
-          className='relay-message-center__category-filter'
-          options={messageCategoryOptions}
-          value={categoryFilter}
-          onChange={value => setCategoryFilter(value as MessageCategoryFilter)}
-        />
+        <div className='relay-message-center__filter-row'>
+          <Segmented
+            className='relay-message-center__category-filter'
+            options={messageCategoryOptions}
+            value={categoryFilter}
+            onChange={value => setCategoryFilter(value as MessageCategoryFilter)}
+          />
+          {canSendMessage ? (
+            <Button
+              className='relay-message-center__user-compose'
+              icon={<AdminIcon name='person' />}
+              onClick={openUserComposer}
+            >
+              给用户发消息
+            </Button>
+          ) : null}
+        </div>
       </div>
       {error == null ? null : <p className='relay-message-center__error'>{error}</p>}
       {filteredMessages.length === 0 ? (

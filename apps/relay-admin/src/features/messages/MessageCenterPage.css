@@ -44,6 +44,14 @@
   padding: 0 0 10px;
 }
 
+.relay-message-center__filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
 .relay-message-center__search.ant-input-affix-wrapper {
   align-items: center;
   width: 100%;
@@ -67,11 +75,15 @@
 }
 
 .relay-message-center__category-filter.ant-segmented {
-  justify-self: start;
+  flex: 0 1 auto;
   min-width: 0;
   border-radius: 4px;
   background: transparent;
   padding: 0;
+}
+
+.relay-message-center__user-compose.ant-btn {
+  flex: 0 0 auto;
 }
 
 .relay-message-center__category-filter .ant-segmented-group {
