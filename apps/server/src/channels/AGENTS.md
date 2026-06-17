@@ -164,6 +164,7 @@ interface ChannelConnectionExtensions {
 频道实现可在此方法中调用平台 API（如获取 bot profile），结果自动注入 systemPrompt。
 
 `handleWebhook` 用于 HTTP callback 型平台；server route 统一挂在 `/channels/:channelType/:channelKey/webhook`，route 只分发，平台 payload 解析和 secret 校验放在对应 channel package。
+通用 route 同时支持 `GET` webhook verification / challenge 和 `POST` 事件回调；`ChannelWebhookRequest` 会带上 method、headers、query、解析后的 body，以及 body parser 可用时的 `rawBody?: string | Uint8Array`，需要 HMAC / token challenge / 解密的平台应优先使用 `rawBody`。
 
 `updateMessage` 主要用于频道内的增量状态展示，例如把连续的 tool_use / tool_result 事件更新到同一条卡片或消息里，而不是每次发送一条新的文本回复。
 

@@ -93,7 +93,39 @@ describe('channel webhook routes', () => {
       },
       body: {
         TypeName: 'AddMsg'
-      }
+      },
+      rawBody: JSON.stringify({
+        TypeName: 'AddMsg'
+      })
+    })
+  })
+
+  it('passes GET webhook verification requests to the channel manager', async () => {
+    handleChannelWebhook.mockResolvedValue({
+      statusCode: 200,
+      headers: {
+        'content-type': 'text/plain'
+      },
+      body: 'challenge-ok'
+    })
+
+    const response = await fetch(`${baseUrl}/channels/qq/default/webhook?signature=sig&echostr=hello`, {
+      method: 'GET'
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.text()).toBe('challenge-ok')
+    expect(handleChannelWebhook).toHaveBeenCalledWith({
+      channelType: 'qq',
+      channelKey: 'default',
+      method: 'GET',
+      headers: expect.any(Object),
+      query: {
+        signature: 'sig',
+        echostr: 'hello'
+      },
+      body: undefined,
+      rawBody: undefined
     })
   })
 })
