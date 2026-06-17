@@ -813,6 +813,15 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
 
+  packages/channels/wecom:
+    dependencies:
+      '@oneworks/core':
+        specifier: workspace:*
+        version: link:../../core
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+
   packages/cli-helper:
     dependencies:
       '@oneworks/register':
