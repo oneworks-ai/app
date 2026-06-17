@@ -359,6 +359,26 @@ describe('prepareClaudeExecution', () => {
       }
     },
     {
+      name: 'Alibaba Qwen Coding Plan provider',
+      provider: 'qwen-coding-plan',
+      model: 'qwen3.7-plus',
+      expectedEnv: {
+        ANTHROPIC_BASE_URL: 'https://coding.dashscope.aliyuncs.com/apps/anthropic',
+        ANTHROPIC_MODEL: 'qwen3.7-plus'
+      }
+    },
+    {
+      name: 'Kimi Code',
+      provider: 'kimi-code',
+      model: 'kimi-for-coding',
+      expectedEnv: {
+        ANTHROPIC_BASE_URL: 'https://api.kimi.com/coding/',
+        ANTHROPIC_AUTH_TOKEN: '',
+        ANTHROPIC_API_KEY: 'official-key',
+        ANTHROPIC_MODEL: 'kimi-for-coding'
+      }
+    },
+    {
       name: 'Zhipu GLM long context',
       provider: 'zhipu',
       model: 'glm-5.2[1m]',
@@ -374,6 +394,17 @@ describe('prepareClaudeExecution', () => {
       }
     },
     {
+      name: 'Zhipu GLM Coding Plan',
+      provider: 'zhipu-coding-plan',
+      model: 'GLM-5.2',
+      expectedEnv: {
+        ANTHROPIC_BASE_URL: 'https://open.bigmodel.cn/api/anthropic',
+        ANTHROPIC_MODEL: 'GLM-5.2',
+        ENABLE_TOOL_SEARCH: '0',
+        CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: '1'
+      }
+    },
+    {
       name: 'MiniMax China',
       apiBaseUrl: 'https://api.minimaxi.com/v1',
       provider: 'minimax',
@@ -384,6 +415,47 @@ describe('prepareClaudeExecution', () => {
         API_TIMEOUT_MS: '3000000',
         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
         CLAUDE_CODE_AUTO_COMPACT_WINDOW: '512000'
+      }
+    },
+    {
+      name: 'MiniMax Token Plan',
+      provider: 'minimax-token-plan',
+      model: 'MiniMax-M3',
+      expectedEnv: {
+        ANTHROPIC_BASE_URL: 'https://api.minimax.io/anthropic',
+        ANTHROPIC_AUTH_TOKEN: '',
+        ANTHROPIC_API_KEY: 'official-key',
+        ANTHROPIC_MODEL: 'MiniMax-M3',
+        API_TIMEOUT_MS: '3000000',
+        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+        CLAUDE_CODE_AUTO_COMPACT_WINDOW: '512000'
+      }
+    },
+    {
+      name: 'Tencent TokenHub Coding Plan',
+      provider: 'tencent-tokenhub-coding-plan',
+      model: 'tc-code-latest',
+      expectedEnv: {
+        ANTHROPIC_BASE_URL: 'https://api.lkeap.cloud.tencent.com/coding/anthropic',
+        ANTHROPIC_MODEL: 'tc-code-latest'
+      }
+    },
+    {
+      name: 'Volcengine Ark Coding Plan',
+      provider: 'volcengine-ark-coding-plan',
+      model: 'glm-5.1',
+      expectedEnv: {
+        ANTHROPIC_BASE_URL: 'https://ark.cn-beijing.volces.com/api/coding',
+        ANTHROPIC_MODEL: 'glm-5.1'
+      }
+    },
+    {
+      name: 'Baidu Qianfan Coding Plan',
+      provider: 'baidu-qianfan-coding-plan',
+      model: 'qianfan-code-latest',
+      expectedEnv: {
+        ANTHROPIC_BASE_URL: 'https://qianfan.baidubce.com/anthropic/coding',
+        ANTHROPIC_MODEL: 'qianfan-code-latest'
       }
     },
     {

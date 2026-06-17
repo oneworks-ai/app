@@ -38,6 +38,7 @@ const builtinMaterialIconMap: Record<string, string> = {
   apiyi: 'api',
   aws: 'deployed_code',
   azure: 'cloud',
+  baidu: 'travel_explore',
   deepseek: 'search_insights',
   gemini: 'diamond',
   litellm: 'account_tree',
@@ -51,7 +52,9 @@ const builtinMaterialIconMap: Record<string, string> = {
   portkey: 'vpn_key',
   qwen: 'cloud',
   requesty: 'sync_alt',
+  tencent: 'cloud_circle',
   vercel: 'change_history',
+  volcengine: 'local_fire_department',
   yunwu: 'cloud',
   zhipu: 'neurology'
 }

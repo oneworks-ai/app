@@ -22,6 +22,7 @@ import {
   ModelServiceProviderActionHeader
 } from './ModelServiceProviderActionContent'
 import { ModelServiceProviderActionResults } from './ModelServiceProviderActionResults'
+import { ModelServiceProviderPlanSummary } from './ModelServiceProviderPlanSummary'
 import { ModelServiceProviderPortal } from './ModelServiceProviderPortal'
 import type { TranslationFn } from './configUtils'
 import {
@@ -93,9 +94,7 @@ export const ModelServiceProviderActions = ({
     setPortalTitle(title)
   }
 
-  const handleOpenExternal = async (url: string) => {
-    await runAction('external', async () => openExternalUrl(url))
-  }
+  const handleOpenExternal = async (url: string) => await runAction('external', async () => openExternalUrl(url))
 
   const handleListModels = async () => {
     const result = await runAction('models', () => listModelServiceModels(serviceKey, { service, source }))
@@ -162,6 +161,7 @@ export const ModelServiceProviderActions = ({
         serviceStatus={serviceStatus}
         t={t}
       />
+      <ModelServiceProviderPlanSummary onOpen={openPortal} service={service} t={t} />
       <ModelServiceProviderActionButtons
         canCreateSecret={actionCapabilities.canCreateSecret}
         homepageUrl={homepageUrl}

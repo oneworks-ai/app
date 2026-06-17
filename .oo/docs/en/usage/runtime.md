@@ -116,6 +116,20 @@ webAuth:
   - `claude-code` connects directly to known official Anthropic-compatible endpoints for Anthropic, Kimi, DeepSeek, Alibaba Qwen/Bailian, Zhipu GLM, MiniMax, OpenRouter, Requesty, Vercel AI Gateway, and Portkey; other OpenAI-compatible `service,model` selections fall back to Claude Code Router.
   - `codex` and `gemini` use adapter-owned local proxies.
   - some adapters write provider config into session-level or native config files.
+- Coding Plan and Token Plan mean provider billing products, not agent Plan Mode. Prefer dedicated provider ids such as `qwen-coding-plan`, `zhipu-coding-plan`, `minimax-token-plan`, `kimi-code`, `tencent-tokenhub-coding-plan`, `volcengine-ark-coding-plan`, and `baidu-qianfan-coding-plan`; do not mix plan keys with ordinary API keys or plan base URLs with ordinary API base URLs.
+- Plan model lists come from the built-in catalog by default and do not assume `/v1/models` works. Write `models` only when you want a fixed allowlist:
+
+```yaml
+modelServices:
+  qwen-coding:
+    provider: qwen-coding-plan
+    apiKey: ${ALIYUN_CODING_PLAN_KEY}
+
+  minimax-token:
+    provider: minimax-token-plan
+    apiKey: ${MINIMAX_SUBSCRIPTION_KEY}
+```
+
 - If no routed `service,model` is selected, adapters keep using their native model and binary selection.
 
 ## Default Built-in MCP

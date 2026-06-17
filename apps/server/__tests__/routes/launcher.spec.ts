@@ -153,6 +153,66 @@ describe('launcher routes', () => {
     }
   }
 
+  const createGitRuntimeFixture = async () => {
+    const repoRoot = fs.realpathSync.native(await mkdtemp(path.join(tempHome, 'runtime-repo-')))
+    const serverPackageDir = path.join(repoRoot, 'apps', 'server')
+    const typesPackageDir = path.join(repoRoot, 'packages', 'types')
+    await mkdir(path.join(serverPackageDir, 'src'), { recursive: true })
+    await mkdir(path.join(repoRoot, 'apps', 'client', 'src'), { recursive: true })
+    await mkdir(path.join(typesPackageDir, 'src'), { recursive: true })
+    await writeFile(path.join(repoRoot, 'package.json'), '{"name":"fixture","private":true}\\n')
+    await writeFile(path.join(repoRoot, 'pnpm-workspace.yaml'), 'packages:\\n  - apps/*\\n  - packages/*\\n')
+    await writeFile(
+      path.join(serverPackageDir, 'package.json'),
+      JSON.stringify(
+        {
+          name: '@oneworks/server',
+          dependencies: {
+            '@oneworks/types': 'workspace:*'
+          }
+        },
+        null,
+        2
+      )
+    )
+    await writeFile(path.join(serverPackageDir, 'src', 'index.ts'), 'export const server = true\n')
+    await writeFile(path.join(repoRoot, 'apps', 'client', 'src', 'index.tsx'), 'export const client = true\n')
+    await writeFile(
+      path.join(typesPackageDir, 'package.json'),
+      JSON.stringify(
+        {
+          name: '@oneworks/types'
+        },
+        null,
+        2
+      )
+    )
+    await writeFile(path.join(typesPackageDir, 'src', 'index.ts'), 'export interface Fixture {}\n')
+    execFileSync('git', ['-C', repoRoot, 'init'], { stdio: 'ignore' })
+    execFileSync('git', ['-C', repoRoot, 'add', '.'], { stdio: 'ignore' })
+    execFileSync(
+      'git',
+      [
+        '-C',
+        repoRoot,
+        '-c',
+        'user.name=One Works',
+        '-c',
+        'user.email=oneworks@example.test',
+        'commit',
+        '-m',
+        'init'
+      ],
+      { stdio: 'ignore' }
+    )
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', serverPackageDir)
+    return {
+      repoRoot,
+      serverPackageDir,
+      workspaceFolder: fs.realpathSync.native(await mkdtemp(path.join(tempHome, 'workspace-')))
+    }
+  }
+
   it('serves workspace selector state in manager role', async () => {
     await startApp('manager')
 
@@ -237,6 +297,54 @@ describe('launcher routes', () => {
         code: 'workspace_server_version_conflict',
         status: 409
       })
+    } finally {
+      await statusServer.close()
+    }
+  })
+
+  itWithGit('keeps workspace server identity stable for client-only edits', async () => {
+    const fixture = await createGitRuntimeFixture()
+    const firstIdentity = resolveLauncherWorkspaceInstanceIdentity(fixture.workspaceFolder)
+
+    await writeFile(path.join(fixture.repoRoot, 'apps', 'client', 'src', 'index.tsx'), 'export const client = false\n')
+    const clientOnlyIdentity = resolveLauncherWorkspaceInstanceIdentity(fixture.workspaceFolder)
+
+    await writeFile(path.join(fixture.serverPackageDir, 'src', 'index.ts'), 'export const server = false\n')
+    const serverIdentity = resolveLauncherWorkspaceInstanceIdentity(fixture.workspaceFolder)
+
+    expect(clientOnlyIdentity.implementationId).toBe(firstIdentity.implementationId)
+    expect(clientOnlyIdentity.sourceVersionId).not.toBe(firstIdentity.sourceVersionId)
+    expect(serverIdentity.implementationId).not.toBe(firstIdentity.implementationId)
+  })
+
+  itWithGit('reuses legacy clean git instances when the server runtime did not change', async () => {
+    const fixture = await createGitRuntimeFixture()
+    const statusServer = await startWorkspaceStatusServer()
+    try {
+      const head = execFileSync('git', ['-C', fixture.repoRoot, 'rev-parse', 'HEAD'], {
+        encoding: 'utf8'
+      }).trim()
+      const identity = resolveLauncherWorkspaceInstanceIdentity(fixture.workspaceFolder)
+      await writeFile(
+        path.join(fixture.repoRoot, 'apps', 'client', 'src', 'index.tsx'),
+        'export const client = false\n'
+      )
+      await writeWorkspaceInstanceState(fixture.workspaceFolder, {
+        implementationId: `git:${head}:clean`,
+        launchConfigHash: identity.launchConfigHash,
+        packageDir: fs.realpathSync.native(fixture.serverPackageDir),
+        pid: process.pid,
+        protocolVersion: 1,
+        repoRoot: fixture.repoRoot,
+        serverBaseUrl: statusServer.serverBaseUrl,
+        startedAt: new Date().toISOString(),
+        workspaceFolder: fixture.workspaceFolder
+      })
+
+      const response = await openLauncherWorkspace(fixture.workspaceFolder)
+
+      expect(response.serverBaseUrl).toBe(statusServer.serverBaseUrl)
+      expect(response.project.status).toBe('ready')
     } finally {
       await statusServer.close()
     }

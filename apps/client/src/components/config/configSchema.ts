@@ -336,6 +336,24 @@ const modelServiceDetailFields: FieldSpec[] = [
     descriptionKey: 'config.fields.modelServices.item.models.desc'
   },
   {
+    path: ['billing'],
+    type: 'json',
+    defaultValue: {},
+    icon: 'payments',
+    unsetWhenEmpty: true,
+    labelKey: 'config.fields.modelServices.item.billing.label',
+    descriptionKey: 'config.fields.modelServices.item.billing.desc'
+  },
+  {
+    path: ['codingPlan'],
+    type: 'json',
+    defaultValue: {},
+    icon: 'workspace_premium',
+    unsetWhenEmpty: true,
+    labelKey: 'config.fields.modelServices.item.codingPlan.label',
+    descriptionKey: 'config.fields.modelServices.item.codingPlan.desc'
+  },
+  {
     path: ['management', 'enabled'],
     type: 'boolean',
     defaultValue: true,

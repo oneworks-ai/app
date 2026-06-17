@@ -9,6 +9,7 @@ import {
   listLauncherWorkspaces,
   openLauncherWorkspace,
   openLauncherWorkspaceById,
+  restartLauncherWorkspaceById,
   stopLauncherWorkspace
 } from '#~/services/launcher/manager.js'
 import { notFound } from '#~/utils/http.js'
@@ -56,6 +57,12 @@ export function launcherRouter(env: ReturnType<typeof loadEnv>): Router {
     const { workspaceId } = ctx.params as { workspaceId?: string }
     const clientOrigin = getLauncherClientOrigin(ctx)
     ctx.body = await openLauncherWorkspaceById(workspaceId, { clientOrigin })
+  })
+
+  router.post('/workspaces/:workspaceId/restart', async (ctx) => {
+    const { workspaceId } = ctx.params as { workspaceId?: string }
+    const clientOrigin = getLauncherClientOrigin(ctx)
+    ctx.body = await restartLauncherWorkspaceById(workspaceId, { clientOrigin })
   })
 
   router.post('/workspaces/forget', async (ctx) => {

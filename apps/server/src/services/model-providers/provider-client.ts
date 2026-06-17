@@ -139,8 +139,63 @@ export const listProviderModels = async (serviceConfig: ModelServiceConfig): Pro
 
 const firstBalanceNumber = (...values: unknown[]) => values.map(asNumber).find(value => value != null)
 
+const parseKimiCodeQuotaDetail = (value: unknown) => {
+  const record = asRecord(value)
+  return {
+    limit: asNumber(record.limit),
+    remaining: asNumber(record.remaining),
+    resetTime: normalizeString(record.resetTime)
+  }
+}
+
+const normalizeKimiTimeUnit = (value: unknown) => {
+  const unit = normalizeString(value)
+  if (unit == null) return undefined
+  return unit.replace(/^TIME_UNIT_/u, '').toLowerCase()
+}
+
+const getKimiCodeAccountStatus = async (
+  service: ResolvedModelServiceConfig
+): Promise<ProviderAccountStatus> => {
+  const payload = await fetchJson(joinApiPath(resolveApiRoot(service), 'usages'), {
+    headers: authHeaders(service)
+  })
+  const record = asRecord(payload)
+  const usage = parseKimiCodeQuotaDetail(record.usage)
+  const totalQuota = parseKimiCodeQuotaDetail(record.totalQuota)
+  const user = asRecord(record.user)
+  const membership = asRecord(user.membership)
+  const parallel = asRecord(record.parallel)
+  const limits = Array.isArray(record.limits) ? record.limits : []
+  const windows = limits.map((item) => {
+    const limit = asRecord(item)
+    const window = asRecord(limit.window)
+    const detail = parseKimiCodeQuotaDetail(limit.detail)
+    return {
+      duration: asNumber(window.duration),
+      timeUnit: normalizeKimiTimeUnit(window.timeUnit),
+      ...detail
+    }
+  })
+
+  return {
+    kind: 'quota',
+    unit: 'request',
+    limit: totalQuota.limit ?? usage.limit,
+    remaining: totalQuota.remaining ?? usage.remaining,
+    resetTime: totalQuota.resetTime ?? usage.resetTime,
+    windows,
+    parallelLimit: asNumber(parallel.limit),
+    plan: normalizeString(membership.level),
+    raw: payload
+  }
+}
+
 export const getProviderAccountStatus = async (serviceConfig: ModelServiceConfig): Promise<ProviderAccountStatus> => {
   const service = resolveService(serviceConfig)
+  if (service.provider === 'kimi-code') {
+    return getKimiCodeAccountStatus(service)
+  }
   if (service.provider === 'moonshot-cn' || service.provider === 'moonshot-intl') {
     const payload = await fetchJson(joinApiPath(resolveApiRoot(service), 'users/me/balance'), {
       headers: authHeaders(service)

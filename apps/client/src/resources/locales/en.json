@@ -655,6 +655,16 @@
       "glass": "If you can see the skeleton through the glass, the frontend is waking up."
     }
   },
+  "workspaceConnection": {
+    "processId": "Process",
+    "requestedVersion": "Requested",
+    "restartFailed": "Failed to restart the workspace server",
+    "restartWorkspaceServer": "Restart workspace server",
+    "retry": "Retry",
+    "runningVersion": "Running",
+    "serverUrl": "Server URL",
+    "versionConflictDescription": "This page and the running workspace server come from different versions. Client-only edits can reuse the workspace server; if server runtime code changed, restart the workspace server to continue."
+  },
   "launcher": {
     "senderLabel": "Launcher input",
     "senderPlaceholder": "Type a project to open or start...",
@@ -2877,6 +2887,10 @@
         "actionFailed": "Model service action failed",
         "amountUnknown": "Unknown",
         "balance": "Balance",
+        "quota": "Quota",
+        "resetsAt": "resets at {{time}}",
+        "windowQuota": "{{duration}} window {{amount}}",
+        "parallelLimit": "parallel {{count}}",
         "status": "Status",
         "models": "{{count}} models",
         "modelsMore": "{{count}} more",
@@ -2884,6 +2898,47 @@
         "modelsRefreshed": "Wrote {{count}} models",
         "modelsEmpty": "No models to write",
         "secretCreated": "Secret created and copied to clipboard"
+      },
+      "plan": {
+        "title": "Subscription plan",
+        "labels": {
+          "kind": "Billing",
+          "keyKind": "Key",
+          "quota": "Quota",
+          "allowedUse": "Use",
+          "defaultModels": "Default models"
+        },
+        "links": {
+          "purchase": "Purchase",
+          "key": "Create Key",
+          "docs": "Docs"
+        },
+        "kind": {
+          "payg": "Pay-as-you-go API",
+          "product_subscription": "Product subscription",
+          "coding_plan": "Coding Plan",
+          "token_plan": "Token Plan",
+          "relay_coding_plan": "Relay Coding Plan"
+        },
+        "keyKind": {
+          "payg_api_key": "Pay-as-you-go API key",
+          "coding_plan_key": "Coding Plan key",
+          "subscription_key": "Subscription key"
+        },
+        "quotaUnit": {
+          "request": "Requests",
+          "token": "Tokens",
+          "credit": "Credits"
+        },
+        "quotaWindow": {
+          "5h": "5h",
+          "weekly": "Weekly",
+          "monthly": "Monthly"
+        },
+        "allowedUse": {
+          "coding_tools_only": "Coding tools only",
+          "general_api": "General API"
+        }
       },
       "portal": {
         "secretTitle": "{{provider}} Secret Management",
@@ -3270,15 +3325,23 @@
           },
           "apiBaseUrl": {
             "label": "API Base URL",
-            "desc": "Override the model service API URL. Usually not needed when an official provider is selected."
+            "desc": "Override the model service API URL. Coding Plan and Token Plan services must use their dedicated plan base URL."
           },
           "apiKey": {
             "label": "API Key",
-            "desc": "Access key for the model service"
+            "desc": "Access key for the model service. Use a plan-specific key for Coding Plan or Token Plan providers."
           },
           "models": {
             "label": "Models",
             "desc": "Models supported by this service. Leave empty to use the provider default catalog."
+          },
+          "billing": {
+            "label": "Billing Metadata",
+            "desc": "Optional override for billing kind, key kind, quota unit, quota windows, and allowed use."
+          },
+          "codingPlan": {
+            "label": "Coding Plan Metadata",
+            "desc": "Optional override for plan links, protocol base URLs, regions, default models, and restrictions."
           },
           "management": {
             "enabled": {
@@ -3598,10 +3661,17 @@
         "anthropic": "Anthropic",
         "moonshot-cn": "Moonshot / Kimi China",
         "moonshot-intl": "Moonshot / Kimi International",
+        "kimi-code": "Kimi Code",
         "deepseek": "DeepSeek",
         "minimax": "MiniMax",
+        "minimax-token-plan": "MiniMax Token Plan",
         "qwen": "Alibaba Qwen / Bailian",
+        "qwen-coding-plan": "Alibaba Coding Plan",
         "zhipu": "Zhipu GLM",
+        "zhipu-coding-plan": "Zhipu GLM Coding Plan",
+        "tencent-tokenhub-coding-plan": "Tencent TokenHub Coding Plan",
+        "volcengine-ark-coding-plan": "Volcengine Ark Coding Plan",
+        "baidu-qianfan-coding-plan": "Baidu Qianfan Coding Plan",
         "azure-openai": "Azure OpenAI",
         "google-gemini": "Google Gemini",
         "aws-bedrock": "AWS Bedrock",
@@ -3619,10 +3689,17 @@
         "anthropic": "Official Anthropic Console service for Claude models.",
         "moonshot-cn": "Moonshot/Kimi China official OpenAI-compatible API service.",
         "moonshot-intl": "Moonshot/Kimi international official OpenAI-compatible API service.",
+        "kimi-code": "Kimi Code membership benefit endpoint for coding agents.",
         "deepseek": "Official DeepSeek OpenAI-compatible API service.",
         "minimax": "Official MiniMax API platform for chat, multimodal, and agent services.",
+        "minimax-token-plan": "MiniMax Token Plan subscription endpoint for MiniMax M-series coding models.",
         "qwen": "Alibaba Cloud Bailian/DashScope API service for Qwen models.",
+        "qwen-coding-plan": "Alibaba Cloud Model Studio Coding Plan endpoint for coding agents.",
         "zhipu": "Zhipu BigModel official API service for GLM models.",
+        "zhipu-coding-plan": "Zhipu GLM Coding Plan endpoint for supported coding tools.",
+        "tencent-tokenhub-coding-plan": "Tencent Cloud TokenHub Coding Plan endpoint for coding agents.",
+        "volcengine-ark-coding-plan": "Volcengine Ark Coding Plan endpoint for coding agents.",
+        "baidu-qianfan-coding-plan": "Baidu Qianfan Coding Plan endpoint for coding agents.",
         "azure-openai": "Azure-hosted OpenAI model deployments managed through Azure AI Foundry.",
         "google-gemini": "Google AI Studio and Gemini API service.",
         "aws-bedrock": "AWS Bedrock managed foundation model service.",

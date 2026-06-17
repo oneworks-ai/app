@@ -656,6 +656,16 @@
       "glass": "你能透过玻璃看到骨架，说明前端已经在醒了。"
     }
   },
+  "workspaceConnection": {
+    "processId": "进程",
+    "requestedVersion": "当前请求",
+    "restartFailed": "重启项目服务失败",
+    "restartWorkspaceServer": "重启项目服务",
+    "retry": "重试",
+    "runningVersion": "正在运行",
+    "serverUrl": "服务地址",
+    "versionConflictDescription": "当前页面和已运行的项目服务来自不同版本。纯前端改动会自动复用项目服务；如果服务端运行时代码变了，可以重启项目服务后继续。"
+  },
   "launcher": {
     "senderLabel": "启动输入框",
     "senderPlaceholder": "输入要打开或启动的项目...",
@@ -2878,6 +2888,10 @@
         "actionFailed": "模型服务操作失败",
         "amountUnknown": "未知",
         "balance": "余额",
+        "quota": "额度",
+        "resetsAt": "{{time}} 重置",
+        "windowQuota": "{{duration}} 窗口 {{amount}}",
+        "parallelLimit": "并发 {{count}}",
         "status": "状态",
         "models": "{{count}} 个模型",
         "modelsMore": "还有 {{count}} 个",
@@ -2885,6 +2899,47 @@
         "modelsRefreshed": "已写入 {{count}} 个模型",
         "modelsEmpty": "没有可写入的模型",
         "secretCreated": "Secret 已创建并复制到剪贴板"
+      },
+      "plan": {
+        "title": "订阅套餐",
+        "labels": {
+          "kind": "计费",
+          "keyKind": "Key",
+          "quota": "额度",
+          "allowedUse": "用途",
+          "defaultModels": "默认模型"
+        },
+        "links": {
+          "purchase": "购买",
+          "key": "创建 Key",
+          "docs": "文档"
+        },
+        "kind": {
+          "payg": "按量 API",
+          "product_subscription": "产品订阅",
+          "coding_plan": "Coding Plan",
+          "token_plan": "Token Plan",
+          "relay_coding_plan": "中转 Coding Plan"
+        },
+        "keyKind": {
+          "payg_api_key": "按量 API Key",
+          "coding_plan_key": "Coding Plan Key",
+          "subscription_key": "Subscription Key"
+        },
+        "quotaUnit": {
+          "request": "请求数",
+          "token": "Token",
+          "credit": "Credit"
+        },
+        "quotaWindow": {
+          "5h": "5 小时",
+          "weekly": "每周",
+          "monthly": "每月"
+        },
+        "allowedUse": {
+          "coding_tools_only": "仅编程工具",
+          "general_api": "通用 API"
+        }
       },
       "portal": {
         "secretTitle": "{{provider}} Secret 管理",
@@ -3271,15 +3326,23 @@
           },
           "apiBaseUrl": {
             "label": "API 地址",
-            "desc": "模型服务 API 地址覆盖；已选择官方服务商时通常无需填写。"
+            "desc": "模型服务 API 地址覆盖；Coding Plan 和 Token Plan 必须使用套餐专属 Base URL。"
           },
           "apiKey": {
             "label": "API 密钥",
-            "desc": "模型服务的访问密钥"
+            "desc": "模型服务的访问密钥。Coding Plan 或 Token Plan 服务商应填写套餐专属 Key。"
           },
           "models": {
             "label": "模型列表",
             "desc": "该服务支持的模型名称；留空时使用服务商默认模型目录。"
+          },
+          "billing": {
+            "label": "计费元数据",
+            "desc": "可选覆盖计费类型、Key 类型、额度单位、额度窗口和允许用途。"
+          },
+          "codingPlan": {
+            "label": "Coding Plan 元数据",
+            "desc": "可选覆盖套餐链接、协议 Base URL、地区、默认模型和限制提示。"
           },
           "management": {
             "enabled": {
@@ -3599,10 +3662,17 @@
         "anthropic": "Anthropic",
         "moonshot-cn": "Moonshot / Kimi 中国站",
         "moonshot-intl": "Moonshot / Kimi 国际站",
+        "kimi-code": "Kimi Code",
         "deepseek": "DeepSeek",
         "minimax": "MiniMax",
+        "minimax-token-plan": "MiniMax Token Plan",
         "qwen": "阿里千问 / 百炼",
+        "qwen-coding-plan": "阿里云 Coding Plan",
         "zhipu": "智谱 GLM",
+        "zhipu-coding-plan": "智谱 GLM Coding Plan",
+        "tencent-tokenhub-coding-plan": "腾讯云 TokenHub Coding Plan",
+        "volcengine-ark-coding-plan": "火山方舟 Coding Plan",
+        "baidu-qianfan-coding-plan": "百度千帆 Coding Plan",
         "azure-openai": "Azure OpenAI",
         "google-gemini": "Google Gemini",
         "aws-bedrock": "AWS Bedrock",
@@ -3620,10 +3690,17 @@
         "anthropic": "Anthropic 官方 Claude 模型控制台服务。",
         "moonshot-cn": "Moonshot / Kimi 中国站官方 OpenAI 兼容 API 服务。",
         "moonshot-intl": "Moonshot / Kimi 国际站官方 OpenAI 兼容 API 服务。",
+        "kimi-code": "Kimi Code 会员权益里的编程智能体接入端点。",
         "deepseek": "DeepSeek 官方 OpenAI 兼容 API 服务。",
         "minimax": "MiniMax 官方 API 平台，支持文本、多模态和智能体服务。",
+        "minimax-token-plan": "MiniMax Token Plan 订阅端点，用于 MiniMax M 系列编程模型。",
         "qwen": "阿里云百炼 / DashScope 千问模型 API 服务。",
+        "qwen-coding-plan": "阿里云百炼 Coding Plan 编程智能体接入端点。",
         "zhipu": "智谱 BigModel 官方 GLM 模型 API 服务。",
+        "zhipu-coding-plan": "智谱 GLM Coding Plan 支持工具专用端点。",
+        "tencent-tokenhub-coding-plan": "腾讯云 TokenHub Coding Plan 编程智能体接入端点。",
+        "volcengine-ark-coding-plan": "火山方舟 Coding Plan 编程智能体接入端点。",
+        "baidu-qianfan-coding-plan": "百度千帆 Coding Plan 编程智能体接入端点。",
         "azure-openai": "Azure AI Foundry 托管的 OpenAI 模型部署服务。",
         "google-gemini": "Google AI Studio 和 Gemini API 服务。",
         "aws-bedrock": "AWS Bedrock 托管基础模型服务。",

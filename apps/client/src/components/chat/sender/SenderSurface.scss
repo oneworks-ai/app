@@ -633,21 +633,6 @@
 .sender-container--chat-surface
   .chat-input-toolbar
   .toolbar-left
-  .model-select
-  :is(.ant-select-selection-item, .ant-select-selection-placeholder)::before {
-  content: 'model_training';
-  font-family: 'Material Symbols Rounded';
-  font-size: var(--chat-surface-control-icon-size);
-  font-weight: 300;
-  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
-  line-height: var(--chat-surface-control-line-height);
-  color: currentColor;
-  -webkit-text-fill-color: currentColor;
-}
-
-.sender-container--chat-surface
-  .chat-input-toolbar
-  .toolbar-left
   :is(.toolbar-btn, .toolbar-btn *, .model-select, .model-select
     *, .effort-select, .effort-select *, .sender-select-arrow) {
   transition: var(--chat-surface-text-color-transition);
@@ -656,7 +641,7 @@
 .sender-container--chat-surface
   .chat-input-toolbar
   .toolbar-left
-  :is(.sender-select-arrow, .effort-option__icon) {
+  :is(.sender-select-arrow, .model-select-trigger-icon-symbol, .effort-option__icon) {
   line-height: var(--chat-surface-control-line-height);
 }
 

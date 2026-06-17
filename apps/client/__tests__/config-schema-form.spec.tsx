@@ -9,6 +9,19 @@ import { parseConfigDetailRoute, serializeConfigDetailRoute } from '#~/component
 import { configSchema } from '#~/components/config/configSchema'
 import { editableConfigSectionKeys } from '#~/components/config/editableConfigSections'
 
+vi.hoisted(() => {
+  const storage = new Map<string, string>()
+  vi.stubGlobal('localStorage', {
+    getItem: vi.fn((key: string) => storage.get(key) ?? null),
+    removeItem: vi.fn((key: string) => {
+      storage.delete(key)
+    }),
+    setItem: vi.fn((key: string, value: string) => {
+      storage.set(key, value)
+    })
+  })
+})
+
 vi.mock('#~/i18n', () => ({
   appLanguageOptions: [
     { value: 'zh', label: 'config.options.language.zh' },
@@ -571,8 +584,39 @@ describe('config schema form', () => {
     expect(html).toContain('config.fields.modelServices.item.provider.label')
     expect(html).toContain('config.fields.modelServices.item.apiBaseUrl.label')
     expect(html).toContain('config.fields.modelServices.item.models.label')
+    expect(html).toContain('config.fields.modelServices.item.billing.label')
+    expect(html).toContain('config.fields.modelServices.item.codingPlan.label')
     expect(html).toContain('config.modelServices.actions.queryModels')
     expect(html).toContain('config.modelServices.actions.queryBalance')
+  })
+
+  it('renders Coding Plan metadata in model service detail pages', () => {
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{
+          qwen: {
+            provider: 'qwen-coding-plan',
+            apiKey: 'sk-sp-token'
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={{
+          kind: 'detailCollectionItem',
+          fieldPath: [],
+          itemKey: 'qwen'
+        }}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('Alibaba Cloud Model Studio Coding Plan')
+    expect(html).toContain('https://coding.dashscope.aliyuncs.com/v1')
+    expect(html).toContain('https://coding.dashscope.aliyuncs.com/apps/anthropic')
+    expect(html).toContain('Coding Plan keys commonly use the sk-sp-* prefix.')
+    expect(html).toContain('config.modelServices.plan.links.key')
   })
 
   it('creates model service entries without default apiBaseUrl or models overrides', () => {

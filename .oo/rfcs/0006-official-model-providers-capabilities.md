@@ -103,9 +103,23 @@ https://open.bigmodel.cn/api/paas/v4
 https://open.bigmodel.cn/api/coding/paas/v4
 ```
 
-不要把 Coding endpoint 自动用于通用模型服务。只有用户明确选择时，才增加 `providerOptions.endpointKind: 'general' | 'coding'`。
+不要把 Coding endpoint 自动用于通用模型服务。普通 BigModel API 使用 `provider: zhipu`；GLM Coding Plan 使用独立 `provider: zhipu-coding-plan` 和套餐 key。
 
 智谱文档提供模型总览页，列出模型名、上下文和能力。在 API 索引公开稳定 list models 端点之前，先使用静态目录加手动模型条目。
+
+## Coding Plan / Token Plan 细节
+
+Coding Plan / Token Plan 是服务商计费/额度产品，不是 agent Plan Mode。registry 用独立 provider id 表示套餐入口：
+
+- `qwen-coding-plan`: 阿里云百炼 Coding Plan，OpenAI `https://coding.dashscope.aliyuncs.com/v1`，Anthropic `https://coding.dashscope.aliyuncs.com/apps/anthropic`；国际站使用 `https://coding-intl.dashscope.aliyuncs.com/...`。
+- `zhipu-coding-plan`: 智谱 GLM Coding Plan，OpenAI `https://open.bigmodel.cn/api/coding/paas/v4`，Anthropic `https://open.bigmodel.cn/api/anthropic`。
+- `minimax-token-plan`: MiniMax Token Plan，OpenAI `https://api.minimax.io/v1`，Anthropic `https://api.minimax.io/anthropic`；中国站可用 `https://api.minimaxi.com/anthropic`。
+- `kimi-code`: Kimi Code，OpenAI `https://api.kimi.com/coding/v1`，Anthropic `https://api.kimi.com/coding/`，模型 `kimi-for-coding`。
+- `tencent-tokenhub-coding-plan`: 腾讯云 TokenHub Coding Plan，OpenAI `https://api.lkeap.cloud.tencent.com/coding/v3`，Anthropic `https://api.lkeap.cloud.tencent.com/coding/anthropic`。
+- `volcengine-ark-coding-plan`: 火山方舟 Coding Plan，OpenAI `https://ark.cn-beijing.volces.com/api/coding/v3`，Anthropic `https://ark.cn-beijing.volces.com/api/coding`。
+- `baidu-qianfan-coding-plan`: 百度千帆 Coding Plan，OpenAI `https://qianfan.baidubce.com/v2/coding`，Anthropic `https://qianfan.baidubce.com/anthropic/coding`。
+
+这些套餐通常要求专属 key、专属 base URL 和交互式编程工具用途。不要自动把普通 API key 迁移到套餐 provider，也不要把套餐 key 写进普通 provider。模型列表默认以内置目录为准，只有用户明确固定 allowlist 时才写 `models`。
 
 ## 来源
 

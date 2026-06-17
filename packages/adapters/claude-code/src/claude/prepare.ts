@@ -4,7 +4,12 @@ import { dirname } from 'node:path'
 import { resolveConfigState } from '@oneworks/config'
 import { NATIVE_HOOK_BRIDGE_ADAPTER_ENV } from '@oneworks/hooks'
 import type { AdapterCtx, AdapterQueryOptions, Config } from '@oneworks/types'
-import { resolveModelServiceConfig, resolveModelServiceModels, resolveProjectOoPath } from '@oneworks/utils'
+import {
+  resolveModelServiceConfig,
+  resolveModelServiceModels,
+  resolveModelServicePlanProtocolBaseUrl,
+  resolveProjectOoPath
+} from '@oneworks/utils'
 import { ensureManagedNpmCli } from '@oneworks/utils/managed-npm-cli'
 
 import { ensureClaudeCodeRouterReady } from '../ccr/daemon'
@@ -104,40 +109,85 @@ const parseModelServiceModel = (value: unknown) => {
 
 type OfficialAnthropicProvider =
   | 'anthropic'
+  | 'baidu-qianfan-coding-plan'
   | 'deepseek'
+  | 'kimi-code'
   | 'minimax'
+  | 'minimax-token-plan'
   | 'moonshot-cn'
   | 'moonshot-intl'
   | 'openrouter'
   | 'portkey'
   | 'qwen'
+  | 'qwen-coding-plan'
   | 'requesty'
+  | 'tencent-tokenhub-coding-plan'
   | 'vercel-ai-gateway'
+  | 'volcengine-ark-coding-plan'
   | 'zhipu'
+  | 'zhipu-coding-plan'
 
 const OFFICIAL_ANTHROPIC_PROVIDER_HOSTS: Array<{
-  match: (host: string) => boolean
+  match: (url: URL) => boolean
   provider: OfficialAnthropicProvider
 }> = [
-  { match: host => host === 'api.anthropic.com', provider: 'anthropic' },
-  { match: host => host === 'api.deepseek.com', provider: 'deepseek' },
-  { match: host => host === 'api.minimax.io' || host === 'api.minimaxi.com', provider: 'minimax' },
-  { match: host => host === 'api.moonshot.cn', provider: 'moonshot-cn' },
-  { match: host => host === 'api.moonshot.ai', provider: 'moonshot-intl' },
-  { match: host => host === 'openrouter.ai', provider: 'openrouter' },
-  { match: host => host === 'api.portkey.ai', provider: 'portkey' },
+  { match: url => url.hostname === 'api.anthropic.com', provider: 'anthropic' },
+  { match: url => url.hostname === 'api.deepseek.com', provider: 'deepseek' },
   {
-    match: host =>
-      host === 'dashscope.aliyuncs.com' ||
-      host === 'dashscope-intl.aliyuncs.com' ||
-      host === 'dashscope-us.aliyuncs.com' ||
-      host.endsWith('.dashscope.aliyuncs.com') ||
-      host.endsWith('.maas.aliyuncs.com'),
+    match: url =>
+      (url.hostname === 'api.minimax.io' || url.hostname === 'api.minimaxi.com') &&
+      url.pathname.replace(/\/+$/u, '').startsWith('/anthropic'),
+    provider: 'minimax-token-plan'
+  },
+  { match: url => url.hostname === 'api.minimax.io' || url.hostname === 'api.minimaxi.com', provider: 'minimax' },
+  { match: url => url.hostname === 'api.moonshot.cn', provider: 'moonshot-cn' },
+  { match: url => url.hostname === 'api.moonshot.ai', provider: 'moonshot-intl' },
+  {
+    match: url => url.hostname === 'api.kimi.com' && url.pathname.replace(/\/+$/u, '').startsWith('/coding'),
+    provider: 'kimi-code'
+  },
+  { match: url => url.hostname === 'openrouter.ai', provider: 'openrouter' },
+  { match: url => url.hostname === 'api.portkey.ai', provider: 'portkey' },
+  {
+    match: url =>
+      url.hostname === 'coding.dashscope.aliyuncs.com' ||
+      url.hostname === 'coding-intl.dashscope.aliyuncs.com',
+    provider: 'qwen-coding-plan'
+  },
+  {
+    match: url =>
+      url.hostname === 'dashscope.aliyuncs.com' ||
+      url.hostname === 'dashscope-intl.aliyuncs.com' ||
+      url.hostname === 'dashscope-us.aliyuncs.com' ||
+      url.hostname.endsWith('.dashscope.aliyuncs.com') ||
+      url.hostname.endsWith('.maas.aliyuncs.com'),
     provider: 'qwen'
   },
-  { match: host => host === 'router.requesty.ai', provider: 'requesty' },
-  { match: host => host === 'ai-gateway.vercel.sh', provider: 'vercel-ai-gateway' },
-  { match: host => host === 'open.bigmodel.cn', provider: 'zhipu' }
+  { match: url => url.hostname === 'router.requesty.ai', provider: 'requesty' },
+  {
+    match: url =>
+      url.hostname === 'api.lkeap.cloud.tencent.com' &&
+      url.pathname.replace(/\/+$/u, '').startsWith('/coding'),
+    provider: 'tencent-tokenhub-coding-plan'
+  },
+  { match: url => url.hostname === 'ai-gateway.vercel.sh', provider: 'vercel-ai-gateway' },
+  {
+    match: url =>
+      url.hostname === 'ark.cn-beijing.volces.com' &&
+      url.pathname.replace(/\/+$/u, '').startsWith('/api/coding'),
+    provider: 'volcengine-ark-coding-plan'
+  },
+  {
+    match: url => url.hostname === 'qianfan.baidubce.com' && url.pathname.includes('/coding'),
+    provider: 'baidu-qianfan-coding-plan'
+  },
+  {
+    match: url =>
+      url.hostname === 'open.bigmodel.cn' &&
+      url.pathname.replace(/\/+$/u, '').startsWith('/api/coding'),
+    provider: 'zhipu-coding-plan'
+  },
+  { match: url => url.hostname === 'open.bigmodel.cn', provider: 'zhipu' }
 ]
 
 const OFFICIAL_ANTHROPIC_PROVIDERS = new Set<string>(
@@ -152,8 +202,9 @@ const resolveOfficialAnthropicProvider = (
     return provider as OfficialAnthropicProvider
   }
   try {
-    const host = new URL(apiBaseUrl).hostname.toLowerCase()
-    return OFFICIAL_ANTHROPIC_PROVIDER_HOSTS.find(entry => entry.match(host))?.provider
+    const url = new URL(apiBaseUrl)
+    url.hostname = url.hostname.toLowerCase()
+    return OFFICIAL_ANTHROPIC_PROVIDER_HOSTS.find(entry => entry.match(url))?.provider
   } catch {
     return undefined
   }
@@ -219,8 +270,12 @@ const resolveOfficialAnthropicBaseUrl = (
   provider: OfficialAnthropicProvider,
   apiBaseUrl: string
 ) => {
-  if (provider === 'qwen') return resolveQwenAnthropicBaseUrl(apiBaseUrl)
-  if (provider === 'zhipu') return setPath(apiBaseUrl, '/api/anthropic')
+  if (provider === 'qwen' || provider === 'qwen-coding-plan') return resolveQwenAnthropicBaseUrl(apiBaseUrl)
+  if (provider === 'zhipu' || provider === 'zhipu-coding-plan') return setPath(apiBaseUrl, '/api/anthropic')
+  if (provider === 'kimi-code') return setPath(apiBaseUrl, '/coding/')
+  if (provider === 'tencent-tokenhub-coding-plan') return setPath(apiBaseUrl, '/coding/anthropic')
+  if (provider === 'volcengine-ark-coding-plan') return setPath(apiBaseUrl, '/api/coding')
+  if (provider === 'baidu-qianfan-coding-plan') return setPath(apiBaseUrl, '/anthropic/coding')
   if (provider === 'openrouter') return resolveOpenRouterAnthropicBaseUrl(apiBaseUrl)
   if (provider === 'requesty' || provider === 'vercel-ai-gateway' || provider === 'portkey') {
     return resolveRootAnthropicBaseUrl(apiBaseUrl)
@@ -248,9 +303,10 @@ const resolveOfficialAnthropicModelService = (
   if (resolved == null) return undefined
   const provider = resolveOfficialAnthropicProvider(resolved.provider, resolved.apiBaseUrl)
   if (provider == null) return undefined
+  const planAnthropicBaseUrl = resolveModelServicePlanProtocolBaseUrl(resolved, 'anthropic')
   return {
     apiKey: resolved.apiKey,
-    baseUrl: resolveOfficialAnthropicBaseUrl(provider, resolved.apiBaseUrl),
+    baseUrl: planAnthropicBaseUrl ?? resolveOfficialAnthropicBaseUrl(provider, resolved.apiBaseUrl),
     extra: resolved.extra,
     model: selection.modelName,
     models: resolveModelServiceModels(resolved),
@@ -275,15 +331,20 @@ const buildOfficialAnthropicEnv = (
       providerExtra.provider ??
       providerExtra.portkeyProvider
   )
-  const isZhipuLongContextModel = service.provider === 'zhipu' && /\[1m\]/iu.test(service.model)
-  const zhipuHaikuModel = service.provider === 'zhipu' && service.model !== 'glm-4.5-air' &&
+  const isZhipuProvider = service.provider === 'zhipu' || service.provider === 'zhipu-coding-plan'
+  const isMiniMaxProvider = service.provider === 'minimax' || service.provider === 'minimax-token-plan'
+  const usesAnthropicApiKey = service.provider === 'anthropic' ||
+    service.provider === 'kimi-code' ||
+    service.provider === 'minimax-token-plan'
+  const isZhipuLongContextModel = isZhipuProvider && /\[1m\]/iu.test(service.model)
+  const zhipuHaikuModel = isZhipuProvider && service.model !== 'glm-4.5-air' &&
       service.models?.includes('glm-4.5-air')
     ? 'glm-4.5-air'
     : service.model
 
   return {
     ANTHROPIC_BASE_URL: service.baseUrl,
-    ...(service.provider === 'anthropic'
+    ...(usesAnthropicApiKey
       ? {
         ANTHROPIC_API_KEY: service.apiKey,
         ANTHROPIC_AUTH_TOKEN: ''
@@ -303,14 +364,14 @@ const buildOfficialAnthropicEnv = (
         CLAUDE_CODE_AUTO_COMPACT_WINDOW: currentEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW ?? '262144'
       }
       : {}),
-    ...(service.provider === 'minimax'
+    ...(isMiniMaxProvider
       ? {
         API_TIMEOUT_MS: currentEnv.API_TIMEOUT_MS ?? '3000000',
         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: currentEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC ?? '1',
         CLAUDE_CODE_AUTO_COMPACT_WINDOW: currentEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW ?? '512000'
       }
       : {}),
-    ...(service.provider === 'zhipu'
+    ...(isZhipuProvider
       ? {
         ENABLE_TOOL_SEARCH: currentEnv.ENABLE_TOOL_SEARCH ?? '0',
         CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: currentEnv.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS ?? '1',

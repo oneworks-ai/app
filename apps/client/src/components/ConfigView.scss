@@ -731,6 +731,108 @@ html.dark .config-view__section-body {
   line-height: 1;
 }
 
+.config-view__model-service-plan {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-color) 64%, transparent);
+}
+
+.config-view__model-service-plan-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-color);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.config-view__model-service-plan-header .material-symbols-rounded {
+  color: var(--warning-color);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.config-view__model-service-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.config-view__model-service-plan-row,
+.config-view__model-service-plan-endpoint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  color: var(--sub-text-color);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.config-view__model-service-plan-row strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-color);
+  font-weight: 600;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-view__model-service-plan-endpoints {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+}
+
+.config-view__model-service-plan-endpoint code {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-color);
+  font-size: 11px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-view__model-service-plan-models {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+  color: var(--sub-text-color);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.config-view__model-service-plan-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.config-view__model-service-plan-links .ant-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.config-view__model-service-plan-links .material-symbols-rounded {
+  font-size: 15px;
+  line-height: 1;
+}
+
 .config-view__model-service-action-results {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

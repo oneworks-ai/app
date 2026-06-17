@@ -59,6 +59,17 @@ export const getLauncherWorkspaceConnection = (workspaceId: string) => (
   )
 )
 
+export const restartLauncherWorkspace = (workspaceId: string) => (
+  fetchApiJson<LauncherWorkspaceOpenResponse>(
+    createLauncherApiUrl(`/api/launcher/workspaces/${encodeURIComponent(workspaceId)}/restart`),
+    {
+      method: 'POST',
+      headers: createLauncherClientOriginHeaders(),
+      timeoutMs: 45_000
+    }
+  )
+)
+
 export const forgetLauncherWorkspace = (workspaceFolder: string) => (
   fetchApiJson<ApiOkResponse & { workspaceFolder: string }>(createLauncherApiUrl('/api/launcher/workspaces/forget'), {
     method: 'POST',

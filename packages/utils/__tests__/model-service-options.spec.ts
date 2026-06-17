@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  resolveModelProviderIdentity,
+  resolveModelServiceBilling,
+  resolveModelServiceCodingPlan,
   resolveModelServiceConfig,
   resolveModelServiceDescription,
-  resolveModelServiceHomepageUrl
+  resolveModelServiceHomepageUrl,
+  resolveModelServicePlanProtocolBaseUrl
 } from '#~/model-providers.js'
 import { filterServiceModelsForAdapter, listServiceModelOptions, listServiceModels } from '#~/model-selection.js'
 import type { ModelServiceConfig } from '@oneworks/types'
@@ -122,6 +126,73 @@ describe('model service options', () => {
       'zhipu,glm-4.7',
       'zhipu,glm-4.5-air',
       'minimax,MiniMax-M3'
+    ])
+  })
+
+  it('resolves official coding plan defaults without calling model list APIs', () => {
+    const result = resolveModelServiceConfig({
+      provider: 'qwen-coding-plan',
+      apiKey: 'sk-sp-token'
+    })
+
+    expect(result.issues).toEqual([])
+    expect(result.service?.apiBaseUrl).toBe('https://coding.dashscope.aliyuncs.com/v1')
+    expect(result.service?.providerDefinition?.title).toBe('Alibaba Coding Plan')
+    expect(resolveModelServiceBilling(result.service)).toMatchObject({
+      kind: 'coding_plan',
+      keyKind: 'coding_plan_key',
+      quotaUnit: 'request',
+      allowedUse: 'coding_tools_only'
+    })
+    expect(resolveModelServicePlanProtocolBaseUrl(result.service, 'anthropic')).toBe(
+      'https://coding.dashscope.aliyuncs.com/apps/anthropic'
+    )
+    expect(resolveModelServiceCodingPlan(result.service)?.defaultModels?.slice(0, 3)).toEqual([
+      'qwen3.7-plus',
+      'qwen3.6-plus',
+      'kimi-k2.5'
+    ])
+  })
+
+  it('detects dedicated coding plan providers from endpoint hosts and paths', () => {
+    expect(
+      resolveModelProviderIdentity({
+        apiBaseUrl: 'https://api.kimi.com/coding/v1',
+        apiKey: 'token'
+      }).provider
+    ).toBe('kimi-code')
+
+    expect(
+      resolveModelProviderIdentity({
+        apiBaseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+        apiKey: 'token'
+      }).provider
+    ).toBe('zhipu-coding-plan')
+
+    expect(
+      resolveModelProviderIdentity({
+        apiBaseUrl: 'https://qianfan.baidubce.com/anthropic/coding',
+        apiKey: 'token'
+      }).provider
+    ).toBe('baidu-qianfan-coding-plan')
+  })
+
+  it('keeps coding plan catalog models overridable by explicit service models', () => {
+    expect(
+      listServiceModels({
+        kimiCode: {
+          provider: 'kimi-code',
+          apiKey: 'token'
+        },
+        qwenCoding: {
+          provider: 'qwen-coding-plan',
+          apiKey: 'token',
+          models: ['qwen3-coder-plus']
+        }
+      }).map(option => option.selectorValue)
+    ).toEqual([
+      'kimiCode,kimi-for-coding',
+      'qwenCoding,qwen3-coder-plus'
     ])
   })
 

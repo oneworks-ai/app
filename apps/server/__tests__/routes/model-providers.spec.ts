@@ -79,6 +79,10 @@ describe('model provider routes', () => {
             provider: 'deepseek',
             apiKey: 'secret-deepseek'
           },
+          kimiCode: {
+            provider: 'kimi-code',
+            apiKey: 'secret-kimi-code'
+          },
           projectKimi: {
             provider: 'moonshot-cn',
             apiKey: 'secret-merged-user'
@@ -129,10 +133,34 @@ describe('model provider routes', () => {
 
   it('lists provider registry without service secrets', async () => {
     const response = await request(`${baseUrl}/api/model-providers`)
-    const payload = await response.json() as { providers?: Array<{ id: string; portal?: { homepage?: string } }> }
+    const payload = await response.json() as {
+      providers?: Array<{
+        id: string
+        codingPlan?: {
+          defaultModels?: string[]
+          protocols?: {
+            anthropic?: { baseUrl?: string }
+            openai?: { baseUrl?: string }
+          }
+        }
+        capabilities?: { balance?: string; listModels?: string }
+        portal?: { homepage?: string }
+      }>
+    }
+    const qwenCodingPlan = payload.providers?.find(provider => provider.id === 'qwen-coding-plan')
+    const kimiCode = payload.providers?.find(provider => provider.id === 'kimi-code')
 
     expect(response.status).toBe(200)
     expect(payload.providers?.some(provider => provider.id === 'moonshot-cn')).toBe(true)
+    expect(qwenCodingPlan?.codingPlan?.protocols?.openai?.baseUrl).toBe('https://coding.dashscope.aliyuncs.com/v1')
+    expect(qwenCodingPlan?.codingPlan?.protocols?.anthropic?.baseUrl).toBe(
+      'https://coding.dashscope.aliyuncs.com/apps/anthropic'
+    )
+    expect(qwenCodingPlan?.codingPlan?.defaultModels).toContain('qwen3-coder-plus')
+    expect(kimiCode?.capabilities).toMatchObject({
+      balance: 'api',
+      listModels: 'api'
+    })
     expect(JSON.stringify(payload)).not.toContain('secret-kimi')
   })
 
@@ -283,6 +311,81 @@ describe('model provider routes', () => {
     expect(fetchMock).toHaveBeenCalledWith('https://api.deepseek.com/user/balance', {
       headers: { Authorization: 'Bearer secret-deepseek' }
     })
+  })
+
+  it('normalizes Kimi Code usage quota response', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          user: {
+            membership: {
+              level: 'LEVEL_INTERMEDIATE'
+            }
+          },
+          usage: {
+            limit: '100',
+            remaining: '100',
+            resetTime: '2026-06-22T13:36:53.337560Z'
+          },
+          limits: [
+            {
+              window: {
+                duration: 300,
+                timeUnit: 'TIME_UNIT_MINUTE'
+              },
+              detail: {
+                limit: '100',
+                remaining: '98',
+                resetTime: '2026-06-17T17:36:53.337560Z'
+              }
+            }
+          ],
+          parallel: {
+            limit: '20'
+          },
+          totalQuota: {
+            limit: '100',
+            remaining: '99'
+          }
+        }),
+        { status: 200 }
+      )
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await request(`${baseUrl}/api/model-services/kimiCode/balance`, { method: 'POST' })
+    const payload = await response.json() as {
+      account?: {
+        kind?: string
+        limit?: number
+        parallelLimit?: number
+        plan?: string
+        remaining?: number
+        windows?: Array<{ duration?: number; limit?: number; remaining?: number; timeUnit?: string }>
+      }
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.account).toMatchObject({
+      kind: 'quota',
+      unit: 'request',
+      limit: 100,
+      remaining: 99,
+      parallelLimit: 20,
+      plan: 'LEVEL_INTERMEDIATE',
+      windows: [
+        {
+          duration: 300,
+          timeUnit: 'minute',
+          limit: 100,
+          remaining: 98
+        }
+      ]
+    })
+    expect(fetchMock).toHaveBeenCalledWith('https://api.kimi.com/coding/v1/usages', {
+      headers: { Authorization: 'Bearer secret-kimi-code' }
+    })
+    expect(JSON.stringify(payload)).not.toContain('secret-kimi-code')
   })
 
   it('preserves upstream rate limit status', async () => {

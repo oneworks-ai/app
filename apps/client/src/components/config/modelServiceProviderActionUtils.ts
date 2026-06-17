@@ -81,6 +81,25 @@ export const normalizeProviderModels = (models: ProviderModelInfo[]) => (
 export const formatBalance = (account: ProviderAccountStatus | null, t: TranslationFn) => {
   if (account == null) return undefined
   if (account.kind === 'unsupported') return account.reason
+  if (account.kind === 'quota') {
+    const amount = account.remaining == null || account.limit == null
+      ? account.remaining ?? account.limit ?? t('config.modelServices.results.amountUnknown')
+      : `${account.remaining}/${account.limit}`
+    const reset = account.resetTime == null
+      ? undefined
+      : t('config.modelServices.results.resetsAt', { time: account.resetTime })
+    const window = account.windows?.[0]
+    const windowAmount = window?.remaining == null || window.limit == null
+      ? undefined
+      : t('config.modelServices.results.windowQuota', {
+        amount: `${window.remaining}/${window.limit}`,
+        duration: [window.duration, window.timeUnit].filter(Boolean).join(' ')
+      })
+    const parallel = account.parallelLimit == null
+      ? undefined
+      : t('config.modelServices.results.parallelLimit', { count: account.parallelLimit })
+    return [amount, reset, windowAmount, parallel].filter(Boolean).join(' · ')
+  }
   if (account.kind === 'cost') {
     const amount = account.amount == null ? t('config.modelServices.results.amountUnknown') : String(account.amount)
     return [account.currency, amount, account.period].filter(Boolean).join(' ')
@@ -90,6 +109,12 @@ export const formatBalance = (account: ProviderAccountStatus | null, t: Translat
     : String(account.available)
   return [account.currency, available].filter(Boolean).join(' ')
 }
+
+export const getAccountStatusLabel = (account: ProviderAccountStatus, t: TranslationFn) => (
+  account.kind === 'quota'
+    ? t('config.modelServices.results.quota')
+    : t('config.modelServices.results.balance')
+)
 
 export const formatStatus = (status: ProviderServiceStatus | null, t: TranslationFn) => {
   if (status == null) return undefined
