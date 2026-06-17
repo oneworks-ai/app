@@ -11,14 +11,14 @@ import type { AdminListColumnOption } from '../../shared/ui/AdminListTable'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 import { useTeamDetailTabActions } from './TeamDetailTabActions'
 import type {
-  CreateTeamMemberInput,
+  CreateTeamInvitationInput,
   RelayAdminTeam,
   RelayAdminTeamMember,
   RelayAdminTeamMemberRole,
   UpdateTeamMemberInput
 } from './teamTypes'
 import {
-  createRelayAdminTeamMember,
+  createRelayAdminTeamInvitation,
   deleteRelayAdminTeamMember,
   fetchRelayAdminTeamMembers,
   updateRelayAdminTeamMember
@@ -59,24 +59,24 @@ const formatTimestamp = (value: string | null | undefined) => {
   return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
-const TeamMemberCreateForm = ({
+const TeamMemberInviteForm = ({
   disabled,
-  onCreateMember,
-  onCreated,
+  onInviteMember,
+  onInvited,
   team
 }: {
   disabled: boolean
   team: RelayAdminTeam
-  onCreateMember: (input: CreateTeamMemberInput) => Promise<void>
-  onCreated: () => void
+  onInviteMember: (input: CreateTeamInvitationInput) => Promise<void>
+  onInvited: () => void
 }) => {
   const [form] = Form.useForm<TeamMemberFormValues>()
 
-  const handleCreate = async (values: TeamMemberFormValues) => {
+  const handleInvite = async (values: TeamMemberFormValues) => {
     const email = cleanText(values.email)
     const userId = cleanText(values.userId)
     if (email === '' && userId === '') return
-    await onCreateMember({
+    await onInviteMember({
       configEnabled: values.configEnabled,
       defaultForPublishing: values.defaultForPublishing,
       email,
@@ -85,7 +85,7 @@ const TeamMemberCreateForm = ({
       userId
     })
     form.resetFields()
-    onCreated()
+    onInvited()
   }
 
   return (
@@ -93,7 +93,7 @@ const TeamMemberCreateForm = ({
       form={form}
       initialValues={{ configEnabled: true, defaultForPublishing: false, role: 'member' }}
       layout='vertical'
-      onFinish={handleCreate}
+      onFinish={handleInvite}
     >
       <Form.Item label='用户邮箱' name='email'>
         <Input disabled={disabled} placeholder='member@example.com' />
@@ -111,7 +111,7 @@ const TeamMemberCreateForm = ({
         <Switch disabled={disabled} />
       </Form.Item>
       <Button block disabled={disabled} htmlType='submit' type='primary'>
-        添加成员
+        发送邀请
       </Button>
     </Form>
   )
@@ -122,6 +122,7 @@ export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
   const [error, setError] = useState<string | undefined>()
   const [loading, setLoading] = useState(false)
   const [members, setMembers] = useState<RelayAdminTeamMember[]>([])
+  const [notice, setNotice] = useState<string | undefined>()
   const [revision, setRevision] = useState(0)
   const [roleFilter, setRoleFilter] = useState<RelayAdminTeamMemberRole | 'all'>('all')
   const [searchValue, setSearchValue] = useState('')
@@ -171,9 +172,10 @@ export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
     [members, selectedMemberKeys]
   )
 
-  const createMember = async (input: CreateTeamMemberInput) => {
-    await createRelayAdminTeamMember(token, input)
-    refreshMembers()
+  const inviteMember = async (input: CreateTeamInvitationInput) => {
+    const body = await createRelayAdminTeamInvitation(token, input)
+    const target = body.invitation.email ?? body.invitation.userId ?? '该用户'
+    setNotice(`已向 ${target} 发送团队邀请，接受后才会出现在成员列表。`)
   }
 
   const updateMember = async (member: RelayAdminTeamMember, input: UpdateTeamMemberInput) => {
@@ -334,12 +336,12 @@ export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
       : (
         <Space size={4}>
           <AdminActionButton
-            aria-label='添加成员'
+            aria-label='邀请成员'
             disabled={disabled}
             iconName='add'
             onClick={() => setDrawerOpen(true)}
             size='small'
-            title='添加成员'
+            title='邀请成员'
             type='primary'
           />
           <AdminActionButton
@@ -360,6 +362,7 @@ export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
   return (
     <div className='relay-team-panel__members'>
       {error == null ? null : <p className='relay-team-panel__error'>{error}</p>}
+      {notice == null ? null : <p className='relay-team-panel__notice'>{notice}</p>}
       <AdminListTable<RelayAdminTeamMember>
         ariaLabel='团队成员列表'
         batchActions={batchActions}
@@ -380,15 +383,15 @@ export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
       <Drawer
         destroyOnHidden
         open={drawerOpen}
-        title={`添加成员 · ${team.name}`}
+        title={`邀请成员 · ${team.name}`}
         width={460}
         onClose={() => setDrawerOpen(false)}
       >
-        <TeamMemberCreateForm
+        <TeamMemberInviteForm
           disabled={disabled}
           team={team}
-          onCreateMember={createMember}
-          onCreated={() => setDrawerOpen(false)}
+          onInviteMember={inviteMember}
+          onInvited={() => setDrawerOpen(false)}
         />
       </Drawer>
     </div>

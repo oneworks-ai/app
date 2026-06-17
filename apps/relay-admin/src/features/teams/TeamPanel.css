@@ -498,6 +498,12 @@
   font: 600 12px/1.4 ui-sans-serif, system-ui, sans-serif;
 }
 
+.relay-team-panel__notice {
+  margin: 0;
+  color: var(--ant-color-success, #1a7f37);
+  font: 600 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+}
+
 @media (max-width: 640px) {
   .relay-team-detail__overview {
     grid-template-columns: minmax(0, 1fr);

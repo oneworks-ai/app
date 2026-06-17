@@ -31,6 +31,7 @@ export type RelayRegistrationMode = 'admin_created_only' | 'email_verified' | 'i
 export type RelayRole = 'owner' | 'admin' | 'member' | 'viewer'
 export type RelaySecretMode = 'device_encrypted' | 'proxy'
 export type RelaySsoProviderType = 'oauth2' | 'oidc'
+export type RelayTeamInvitationStatus = 'accepted' | 'declined' | 'pending' | 'revoked'
 export type RelayStorageDriver = 'cloudflare-do' | 'json' | 'postgres' | 'sqlite'
 export type RelayTeamRole = 'owner' | 'admin' | 'editor' | 'member' | 'viewer'
 export type RelayTurnstileMode = 'auto' | 'off' | 'required'
@@ -144,6 +145,21 @@ export interface RelayTeamMember {
   createdByUserId: string
   createdAt: string
   updatedAt?: string
+}
+
+export interface RelayTeamInvitation {
+  id: string
+  teamId: string
+  userId?: string
+  email?: string
+  role: RelayTeamRole
+  configEnabled?: boolean
+  defaultForPublishing?: boolean
+  status: RelayTeamInvitationStatus
+  createdByUserId: string
+  createdAt: string
+  updatedAt?: string
+  respondedAt?: string
 }
 
 export interface RelayTeamPolicy {
@@ -502,6 +518,7 @@ export interface RelayStore {
   emailRisk: RelayEmailRiskState
   teamPolicy: RelayTeamPolicy
   teams: RelayTeam[]
+  teamInvitations?: RelayTeamInvitation[]
   teamMembers: RelayTeamMember[]
   users: RelayUser[]
   invites: RelayInvite[]

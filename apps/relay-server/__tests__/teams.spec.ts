@@ -319,6 +319,75 @@ describe('relay team routes', () => {
     })
   })
 
+  it('invites members through account messages before adding them to a team', async () => {
+    const { args, baseUrl } = await listenRelay()
+    await seedTeamUsers(args.dataPath)
+
+    const created = await requestJson(baseUrl, '/api/admin/teams', {
+      method: 'POST',
+      headers: authHeaders('admin-token'),
+      body: JSON.stringify({ name: 'Invite Team', ownerUserId: 'user-1' })
+    })
+    const teamId = (created.body.team as Record<string, unknown>).id as string
+    const invitation = await requestJson(baseUrl, `/api/admin/teams/${teamId}/invitations`, {
+      method: 'POST',
+      headers: authHeaders('admin-token'),
+      body: JSON.stringify({ configEnabled: false, role: 'editor', userId: 'user-2' })
+    })
+    const membersBeforeAccept = await requestJson(baseUrl, `/api/relay/teams/${teamId}/members`, {
+      headers: authHeaders('user-1-session')
+    })
+    const messages = await requestJson(baseUrl, '/api/admin/messages', {
+      headers: authHeaders('user-2-session')
+    })
+    const invitationId = (invitation.body.invitation as Record<string, unknown>).id as string
+    const accepted = await requestJson(baseUrl, `/api/admin/team-invitations/${invitationId}/accept`, {
+      method: 'POST',
+      headers: authHeaders('user-2-session')
+    })
+    const membersAfterAccept = await requestJson(baseUrl, `/api/relay/teams/${teamId}/members`, {
+      headers: authHeaders('user-1-session')
+    })
+
+    expect(invitation.response.status).toBe(200)
+    expect(invitation.body.invitation).toMatchObject({
+      configEnabled: false,
+      role: 'editor',
+      status: 'pending',
+      teamId,
+      userId: 'user-2'
+    })
+    expect(membersBeforeAccept.body.members).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ userId: 'user-2' })
+      ])
+    )
+    expect(messages.response.status).toBe(200)
+    expect(messages.body.invitations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: invitationId,
+          status: 'pending',
+          teamName: 'Invite Team'
+        })
+      ])
+    )
+    expect(accepted.response.status).toBe(200)
+    expect(accepted.body.invitation).toMatchObject({
+      id: invitationId,
+      status: 'accepted'
+    })
+    expect(membersAfterAccept.body.members).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          configEnabled: false,
+          role: 'editor',
+          userId: 'user-2'
+        })
+      ])
+    )
+  })
+
   it('keeps admin team routes tenant-admin only', async () => {
     const { args, baseUrl } = await listenRelay()
     await seedTeamUsers(args.dataPath)

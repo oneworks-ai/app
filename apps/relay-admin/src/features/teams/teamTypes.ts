@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- Relay Admin team contracts stay in one feature-local type file. */
 export type RelayAdminTeamMemberRole = 'admin' | 'editor' | 'member' | 'owner' | 'viewer'
+export type RelayAdminTeamInvitationStatus = 'accepted' | 'declined' | 'pending' | 'revoked'
 export type RelayAdminConfigAssignmentMode = 'default' | 'override'
 export type RelayAdminConfigProfileStatus = 'disabled' | 'draft' | 'published'
 export type RelayAdminConfigSafeField =
@@ -65,6 +66,35 @@ export interface RelayAdminTeamMember {
   teamId: string
   updatedAt: string | null
   userId: string
+}
+
+export interface RelayAdminTeamInvitationUser {
+  avatarUrl: string | null
+  email: string
+  id: string
+  name: string
+  provider: string | null
+  role: string
+}
+
+export interface RelayAdminTeamInvitation {
+  configEnabled: boolean
+  createdAt: string
+  createdByUserId: string
+  defaultForPublishing: boolean
+  email: string | null
+  id: string
+  inviter: RelayAdminTeamInvitationUser | null
+  respondedAt: string | null
+  role: RelayAdminTeamMemberRole
+  status: RelayAdminTeamInvitationStatus
+  teamAvatarUrl: string | null
+  teamId: string
+  teamName: string | null
+  teamSlug: string | null
+  updatedAt: string | null
+  user: RelayAdminTeamInvitationUser | null
+  userId: string | null
 }
 
 export interface RelayAdminConfigProjectRule {
@@ -169,6 +199,15 @@ export interface UpdateTeamInput {
 }
 
 export interface CreateTeamMemberInput {
+  configEnabled?: boolean
+  defaultForPublishing?: boolean
+  email?: string
+  role: RelayAdminTeamMemberRole
+  teamId: string
+  userId?: string
+}
+
+export interface CreateTeamInvitationInput {
   configEnabled?: boolean
   defaultForPublishing?: boolean
   email?: string

@@ -27,6 +27,7 @@ import linkSvg from '@material-symbols/svg-400/rounded/link.svg?raw'
 import loginSvg from '@material-symbols/svg-400/rounded/login.svg?raw'
 import logoutSvg from '@material-symbols/svg-400/rounded/logout.svg?raw'
 import moreHorizSvg from '@material-symbols/svg-400/rounded/more_horiz.svg?raw'
+import notificationsSvg from '@material-symbols/svg-400/rounded/notifications.svg?raw'
 import personSvg from '@material-symbols/svg-400/rounded/person.svg?raw'
 import refreshSvg from '@material-symbols/svg-400/rounded/refresh.svg?raw'
 import restartAltSvg from '@material-symbols/svg-400/rounded/restart_alt.svg?raw'
@@ -64,6 +65,7 @@ export type AdminIconName =
   | 'login'
   | 'logout'
   | 'more_horiz'
+  | 'notifications'
   | 'person'
   | 'refresh'
   | 'restart_alt'
@@ -101,6 +103,7 @@ const adminIconSvgByName: Record<AdminIconName, string> = {
   login: loginSvg,
   logout: logoutSvg,
   more_horiz: moreHorizSvg,
+  notifications: notificationsSvg,
   person: personSvg,
   refresh: refreshSvg,
   restart_alt: restartAltSvg,

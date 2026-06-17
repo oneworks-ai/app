@@ -5,6 +5,7 @@ import type {
   CreateConfigProfileInput,
   CreateConfigProfileVersionInput,
   CreateConfigSecretInput,
+  CreateTeamInvitationInput,
   CreateTeamInput,
   CreateTeamMemberInput,
   RelayAdminAuditEvent,
@@ -13,6 +14,7 @@ import type {
   RelayAdminConfigProfileVersion,
   RelayAdminConfigSecret,
   RelayAdminTeam,
+  RelayAdminTeamInvitation,
   RelayAdminTeamMember,
   RelayAdminTeamPolicy,
   RotateConfigSecretInput,
@@ -34,6 +36,9 @@ export interface RelayAdminConfigProfileDetailResponse {
 
 export const fetchRelayAdminTeams = async (token: string) =>
   await requestJson<RelayAdminTeamsResponse>(token, '/api/admin/teams')
+
+export const fetchRelayAdminMessages = async (token: string) =>
+  await requestJson<{ invitations: RelayAdminTeamInvitation[] }>(token, '/api/admin/messages')
 
 export const createRelayAdminTeam = async (token: string, input: CreateTeamInput) =>
   await requestJson<{ team: RelayAdminTeam }>(token, '/api/admin/teams', {
@@ -71,6 +76,12 @@ export const fetchRelayAdminTeamMembers = async (token: string, teamId: string) 
     `/api/admin/teams/${encodeURIComponent(teamId)}/members`
   )
 
+export const fetchRelayAdminTeamInvitations = async (token: string, teamId: string) =>
+  await requestJson<{ invitations: RelayAdminTeamInvitation[] }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(teamId)}/invitations`
+  )
+
 export const fetchRelayAdminTeamAuditEvents = async (token: string, teamId: string) =>
   await requestJson<{ events: RelayAdminAuditEvent[] }>(
     token,
@@ -85,6 +96,30 @@ export const createRelayAdminTeamMember = async (token: string, input: CreateTea
       body: JSON.stringify(input),
       method: 'POST'
     }
+  )
+
+export const createRelayAdminTeamInvitation = async (token: string, input: CreateTeamInvitationInput) =>
+  await requestJson<{ invitation: RelayAdminTeamInvitation }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(input.teamId)}/invitations`,
+    {
+      body: JSON.stringify(input),
+      method: 'POST'
+    }
+  )
+
+export const acceptRelayAdminTeamInvitation = async (token: string, invitationId: string) =>
+  await requestJson<{ invitation: RelayAdminTeamInvitation }>(
+    token,
+    `/api/admin/team-invitations/${encodeURIComponent(invitationId)}/accept`,
+    { method: 'POST' }
+  )
+
+export const declineRelayAdminTeamInvitation = async (token: string, invitationId: string) =>
+  await requestJson<{ invitation: RelayAdminTeamInvitation }>(
+    token,
+    `/api/admin/team-invitations/${encodeURIComponent(invitationId)}/decline`,
+    { method: 'POST' }
   )
 
 export const updateRelayAdminTeamMember = async (

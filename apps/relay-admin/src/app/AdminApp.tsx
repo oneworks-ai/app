@@ -120,6 +120,7 @@ export const AdminApp = () => {
   const headerBreadcrumb = useAdminRouteHeaderBreadcrumb(location.pathname, dashboard)
   const normalizedPathname = location.pathname === '/' ? '/' : location.pathname.replace(/\/+$/, '')
   const isProfileRoute = normalizedPathname === '/profile'
+  const isMessagesRoute = normalizedPathname === '/messages'
   const isTeamListRoute = normalizedPathname === '/teams'
   const activeCreateSectionId = getCreateSectionIdFromPath(normalizedPathname)
   const activeUserDetailId = getUserDetailIdFromPath(normalizedPathname)
@@ -132,8 +133,12 @@ export const AdminApp = () => {
     ? undefined
     : dashboard.teams.find(team => team.id === activeTeamDetailId)
   const isTeamDetailSettingsRoute = activeTeamDetailSettingsId != null
-  const headerTitle = isProfileRoute ? '个人资料' : activeSection.label
-  const headerIcon = isProfileRoute ? <AdminIcon name='account_circle' /> : activeSection.icon
+  const headerTitle = isMessagesRoute ? '消息中心' : isProfileRoute ? '个人资料' : activeSection.label
+  const headerIcon = isMessagesRoute
+    ? <AdminIcon name='notifications' />
+    : isProfileRoute
+      ? <AdminIcon name='account_circle' />
+      : activeSection.icon
   const isCreateActionActive = activeCreateSectionId != null && createSectionId === activeCreateSectionId
   const canRenderSection = useCallback((sectionId: 'devices' | 'invites' | 'sso' | 'teams' | 'users') => (
     dashboard.authStatus === 'checking' ||
@@ -239,7 +244,7 @@ export const AdminApp = () => {
         title: '重置当前表单',
         onSelect: () => setTeamDetailSettingsResetSignal(current => current + 1)
       })
-    } else if (!isProfileRoute) {
+    } else if (!isProfileRoute && !isMessagesRoute) {
       items.push({
         disabled: !dashboard.canLoad || dashboard.loading,
         icon: <AdminIcon name='refresh' />,
@@ -263,6 +268,7 @@ export const AdminApp = () => {
     dashboard.setUserDisabled,
     dashboard.token,
     isCreateActionActive,
+    isMessagesRoute,
     isProfileRoute,
     isTeamListRoute,
     isTeamDetailSettingsRoute,
@@ -392,6 +398,7 @@ export const AdminApp = () => {
                   : <Navigate to='/devices' replace />}
               />
               <Route path='profile' element={<AdminDashboard dashboard={dashboard} sectionId='profile' />} />
+              <Route path='messages' element={<AdminDashboard dashboard={dashboard} sectionId='messages' />} />
               <Route
                 path='invites'
                 element={canRenderSection('invites')

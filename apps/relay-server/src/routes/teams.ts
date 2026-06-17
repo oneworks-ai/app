@@ -7,6 +7,7 @@ import type { RelayStoreRepository } from '../storage/repository.js'
 import { findRelayTeam } from '../teams.js'
 import type { RelayAuditLogEntry, RelayServerArgs, RelayStore } from '../types.js'
 import { archiveTeam, createTeam, restoreTeam, updateTeam } from './team-actions.js'
+import { createTeamInvitation, listTeamInvitations } from './team-invitations.js'
 import { createMember, deleteMember, listMembers, updateMember } from './team-members.js'
 import {
   authUserId,
@@ -132,6 +133,16 @@ export const handleTeamsRoute = async (
     }
     if (req.method === 'POST') {
       await createMember(req, res, args, store, storeRepository, auth, team)
+      return true
+    }
+  }
+  if (segments.length === 2 && segments[1] === 'invitations') {
+    if (req.method === 'GET') {
+      listTeamInvitations(res, args, store, auth, team)
+      return true
+    }
+    if (req.method === 'POST') {
+      await createTeamInvitation(req, res, args, store, storeRepository, auth, team)
       return true
     }
   }

@@ -1,6 +1,7 @@
 import { DeviceDetailPage } from '../devices/DeviceDetailPage'
 import { DevicePanel } from '../devices/DevicePanel'
 import { InvitePanel } from '../invites/InvitePanel'
+import { MessageCenterPage } from '../messages/MessageCenterPage'
 import { ProfilePage } from '../profile/ProfilePage'
 import { SsoProviderPanel } from '../sso/SsoProviderPanel'
 import { TeamDetailPage } from '../teams/TeamDetailPage'
@@ -19,6 +20,7 @@ export type AdminDashboardSectionId =
   | 'user-detail'
   | 'users'
   | 'invites'
+  | 'messages'
   | 'sso'
   | 'team-detail'
   | 'team-detail-settings'
@@ -108,6 +110,15 @@ export const AdminDashboard = ({
           accounts={dashboard.accounts}
           activeToken={dashboard.token}
           currentUser={dashboard.currentUser}
+        />
+      )}
+      {sectionId === 'messages' && (
+        <MessageCenterPage
+          accounts={dashboard.accounts}
+          activeToken={dashboard.token}
+          currentUser={dashboard.currentUser}
+          token={dashboard.token}
+          onTeamInvitationChanged={dashboard.refresh}
         />
       )}
       {sectionId === 'invites' && (

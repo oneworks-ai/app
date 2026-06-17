@@ -24,6 +24,7 @@ import { handleRelayMetrics } from './routes/metrics.js'
 import { handlePasskeyRoute } from './routes/passkeys.js'
 import { handlePasswordLoginRoute } from './routes/password-login.js'
 import { handleRelaySessionsRoute } from './routes/sessions.js'
+import { handleAdminMessagesRoute, handleTeamInvitationActionsRoute } from './routes/team-invitations.js'
 import { handleRelayTeamPolicyRoute } from './routes/team-policy.js'
 import { handleTeamsRoute } from './routes/teams.js'
 import { handleAdminSecurityTokens } from './security/admin-route.js'
@@ -133,6 +134,12 @@ const handleRelayRequestWithStore = async (
       return
     }
     if (await handleTeamsRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (await handleTeamInvitationActionsRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (handleAdminMessagesRoute(req, res, args, store, url)) {
       return
     }
     if (await handleConfigProfilesRoute(req, res, args, store, storeRepository, url)) {

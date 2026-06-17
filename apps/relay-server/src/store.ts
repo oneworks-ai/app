@@ -37,6 +37,8 @@ import type {
   RelaySession,
   RelayStore,
   RelayTeam,
+  RelayTeamInvitation,
+  RelayTeamInvitationStatus,
   RelayTeamMember,
   RelayUser
 } from './types.js'
@@ -56,6 +58,7 @@ const defaultStore = (): RelayStore => ({
   },
   teamPolicy: normalizeRelayTeamPolicy(undefined),
   teams: [],
+  teamInvitations: [],
   teamMembers: [],
   users: [],
   invites: [],
@@ -163,6 +166,39 @@ const normalizeTeamMember = (value: Record<string, unknown>): RelayTeamMember | 
       : userId,
     createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
     updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined
+  }
+}
+
+const teamInvitationStatuses = new Set<RelayTeamInvitationStatus>(['accepted', 'declined', 'pending', 'revoked'])
+
+const normalizeTeamInvitationStatus = (value: unknown): RelayTeamInvitationStatus => (
+  typeof value === 'string' && teamInvitationStatuses.has(value as RelayTeamInvitationStatus)
+    ? value as RelayTeamInvitationStatus
+    : 'pending'
+)
+
+const normalizeTeamInvitation = (value: Record<string, unknown>): RelayTeamInvitation | undefined => {
+  const teamId = typeof value.teamId === 'string' && value.teamId.trim() !== '' ? value.teamId.trim() : undefined
+  const rawUserId = typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined
+  const rawEmail = typeof value.email === 'string' && value.email.trim() !== ''
+    ? value.email.trim().toLowerCase()
+    : undefined
+  if (teamId == null || (rawUserId == null && rawEmail == null)) return undefined
+  return {
+    id: typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : randomUUID(),
+    teamId,
+    ...(rawUserId == null ? {} : { userId: rawUserId }),
+    ...(rawEmail == null ? {} : { email: rawEmail }),
+    role: normalizeTeamRole(value.role, 'member'),
+    ...(typeof value.configEnabled === 'boolean' ? { configEnabled: value.configEnabled } : {}),
+    ...(typeof value.defaultForPublishing === 'boolean' ? { defaultForPublishing: value.defaultForPublishing } : {}),
+    status: normalizeTeamInvitationStatus(value.status),
+    createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
+      ? value.createdByUserId.trim()
+      : 'system',
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined,
+    respondedAt: typeof value.respondedAt === 'string' ? value.respondedAt : undefined
   }
 }
 
@@ -615,6 +651,11 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
     emailRisk: normalizeEmailRiskState(store.emailRisk),
     teamPolicy: normalizeRelayTeamPolicy(store.teamPolicy),
     teams: legacyTeams.teams,
+    teamInvitations: Array.isArray(store.teamInvitations)
+      ? store.teamInvitations.filter(isRecord).map(normalizeTeamInvitation).filter((
+        value
+      ): value is RelayTeamInvitation => value != null)
+      : [],
     teamMembers: legacyTeams.teamMembers,
     users,
     invites: Array.isArray(store.invites) ? store.invites.filter(isRecord).map(normalizeInvite) : [],
