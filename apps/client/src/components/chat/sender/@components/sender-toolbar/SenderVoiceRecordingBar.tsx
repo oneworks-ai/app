@@ -1,7 +1,10 @@
-import { Tooltip } from 'antd'
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { SenderVoiceInputController } from '../../@types/sender-voice-input'
+
+const WAVEFORM_BAR_WIDTH = 3
+const WAVEFORM_BAR_GAP = 2
 
 const formatElapsedTime = (seconds: number) => {
   const minutes = Math.floor(seconds / 60)
@@ -15,17 +18,29 @@ export function SenderVoiceRecordingBar({
   voiceInput: SenderVoiceInputController
 }) {
   const { t } = useTranslation()
-  const { state, handlers } = voiceInput
+  const { state } = voiceInput
+  const { setWaveformCapacity } = voiceInput.handlers
+  const waveformRef = useRef<HTMLDivElement | null>(null)
   const isTranscribing = state.phase === 'transcribing'
+
+  useEffect(() => {
+    const node = waveformRef.current
+    if (node == null) return undefined
+
+    const updateCapacity = () => {
+      const width = node.getBoundingClientRect().width
+      setWaveformCapacity(Math.floor((width + WAVEFORM_BAR_GAP) / (WAVEFORM_BAR_WIDTH + WAVEFORM_BAR_GAP)))
+    }
+    updateCapacity()
+
+    const resizeObserver = new ResizeObserver(updateCapacity)
+    resizeObserver.observe(node)
+    return () => resizeObserver.disconnect()
+  }, [setWaveformCapacity])
 
   return (
     <div className='sender-voice-recording'>
-      <div className='sender-voice-recording__leading'>
-        <span className='material-symbols-rounded'>
-          {isTranscribing ? 'progress_activity' : 'graphic_eq'}
-        </span>
-      </div>
-      <div className='sender-voice-waveform' aria-hidden='true'>
+      <div className='sender-voice-waveform' aria-hidden='true' ref={waveformRef}>
         {state.waveformLevels.map((level, index) => (
           <span
             // Waveform bars are positional; no stable domain id exists.
@@ -38,33 +53,6 @@ export function SenderVoiceRecordingBar({
       <div className='sender-voice-recording__time'>
         {isTranscribing ? t('chat.voiceInput.transcribing') : formatElapsedTime(state.elapsedSeconds)}
       </div>
-      <Tooltip title={isTranscribing ? t('common.cancel') : t('chat.voiceInput.stop')}>
-        <button
-          type='button'
-          className='sender-voice-recording__action'
-          aria-label={isTranscribing ? t('common.cancel') : t('chat.voiceInput.stop')}
-          onClick={() => {
-            if (isTranscribing) {
-              handlers.cancelTranscription()
-              return
-            }
-            handlers.stopRecording()
-          }}
-        >
-          <span className='material-symbols-rounded'>{isTranscribing ? 'close' : 'stop'}</span>
-        </button>
-      </Tooltip>
-      <Tooltip title={t('chat.voiceInput.sendAfterTranscription')}>
-        <button
-          type='button'
-          className='sender-voice-recording__action sender-voice-recording__action--send'
-          disabled={isTranscribing || !state.canSendAfterTranscription}
-          aria-label={t('chat.voiceInput.sendAfterTranscription')}
-          onClick={() => handlers.stopRecording({ sendAfterTranscription: true })}
-        >
-          <span className='material-symbols-rounded'>send</span>
-        </button>
-      </Tooltip>
     </div>
   )
 }

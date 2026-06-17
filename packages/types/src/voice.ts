@@ -66,6 +66,7 @@ export type SpeechToTextServiceConfig =
 
 export interface SpeechToTextConfig {
   defaultServiceId?: string
+  showInSender?: boolean
   services?: Record<string, SpeechToTextServiceConfig>
 }
 

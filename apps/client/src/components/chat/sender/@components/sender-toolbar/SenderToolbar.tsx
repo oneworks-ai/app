@@ -37,13 +37,9 @@ export function SenderToolbar({
   statusBarGitControlsInMore?: SenderProps['statusBarGitControlsInMore']
   voiceInput?: SenderVoiceInputController
 }) {
-  if (voiceInput != null && voiceInput.state.phase !== 'idle') {
-    return (
-      <div className='chat-input-toolbar chat-input-toolbar--voice-active'>
-        <SenderVoiceRecordingBar voiceInput={voiceInput} />
-      </div>
-    )
-  }
+  const isVoiceRecording = voiceInput?.state.phase === 'recording'
+  const isVoiceTranscribing = voiceInput?.state.phase === 'transcribing'
+  const voiceSubmitAvailable = voiceInput?.state.canSendAfterTranscription === true
 
   return (
     <div className='chat-input-toolbar'>
@@ -59,65 +55,79 @@ export function SenderToolbar({
       )}
 
       <div className='toolbar-left'>
-        {voiceInput != null && (
-          <SenderVoiceControl voiceInput={voiceInput} />
-        )}
+        {(isVoiceRecording || isVoiceTranscribing) && voiceInput != null
+          ? (
+            <SenderVoiceRecordingBar voiceInput={voiceInput} />
+          )
+          : (
+            <>
+              {!state.hideReferenceActions && (
+                <ReferenceActionsControl
+                  state={state}
+                  data={data}
+                  refs={refs}
+                  handlers={handlers}
+                  sessionTarget={sessionTarget}
+                  showHeaderControlsInMore={showHeaderControlsInMore}
+                  showStatusBarControlsInMore={showStatusBarControlsInMore}
+                  statusBarGitControlsInMore={statusBarGitControlsInMore}
+                />
+              )}
 
-        {!state.hideReferenceActions && (
-          <ReferenceActionsControl
-            state={state}
-            data={data}
-            refs={refs}
-            handlers={handlers}
-            sessionTarget={sessionTarget}
-            showHeaderControlsInMore={showHeaderControlsInMore}
-            showStatusBarControlsInMore={showStatusBarControlsInMore}
-            statusBarGitControlsInMore={statusBarGitControlsInMore}
-          />
-        )}
+              {!state.isInlineEdit && !state.hideSelectionControls && (
+                <ModelSelectControl
+                  state={state}
+                  data={data}
+                  refs={refs}
+                  handlers={handlers}
+                />
+              )}
 
-        {!state.isInlineEdit && !state.hideSelectionControls && (
-          <ModelSelectControl
-            state={state}
-            data={data}
-            refs={refs}
-            handlers={handlers}
-          />
-        )}
-
-        {!state.isInlineEdit && !state.hideSelectionControls && state.supportsEffort && (
-          <EffortSelectControl
-            state={state}
-            data={data}
-            refs={refs}
-            handlers={handlers}
-          />
-        )}
+              {!state.isInlineEdit && !state.hideSelectionControls && state.supportsEffort && (
+                <EffortSelectControl
+                  state={state}
+                  data={data}
+                  refs={refs}
+                  handlers={handlers}
+                />
+              )}
+            </>
+          )}
       </div>
 
-      {!state.hideSubmitAction && (
+      {(voiceInput != null || !state.hideSubmitAction) && (
         <div className={`toolbar-right ${state.isInlineEdit ? 'toolbar-right--inline-edit' : ''}`.trim()}>
-          <SenderSubmitAction
-            isInlineEdit={state.isInlineEdit}
-            submitLoading={state.submitLoading}
-            submitLabel={data.submitLabel}
-            hasComposerContent={state.hasComposerContent}
-            modelUnavailable={state.modelUnavailable}
-            sendBlocked={state.sendBlocked}
-            sendBlockedTooltip={state.sendBlockedTooltip}
-            showConfirmInteractionAction={state.showConfirmInteractionAction}
-            confirmInteractionLabel={data.confirmInteractionLabel}
-            isThinking={state.isThinking}
-            stopLoading={state.stopLoading}
-            resolvedSendShortcut={state.resolvedSendShortcut}
-            queueSteerShortcut={data.composerControlShortcuts.queueSteer}
-            queueNextShortcut={data.composerControlShortcuts.queueNext}
-            isMac={state.isMac}
-            onCancel={handlers.onCancel}
-            onConfirmInteractionAction={handlers.onConfirmInteractionOption}
-            onSend={handlers.onSend}
-            onStop={handlers.onInterrupt}
-          />
+          {voiceInput != null && (
+            <SenderVoiceControl voiceInput={voiceInput} />
+          )}
+
+          {!state.hideSubmitAction && (
+            <SenderSubmitAction
+              isInlineEdit={state.isInlineEdit}
+              submitLoading={isVoiceTranscribing || state.submitLoading}
+              submitLabel={data.submitLabel}
+              hasComposerContent={isVoiceRecording || isVoiceTranscribing || state.hasComposerContent}
+              modelUnavailable={(isVoiceRecording && !voiceSubmitAvailable) || isVoiceTranscribing ||
+                state.modelUnavailable}
+              sendBlocked={!isVoiceRecording && state.sendBlocked}
+              sendBlockedTooltip={isVoiceRecording ? undefined : state.sendBlockedTooltip}
+              showConfirmInteractionAction={!isVoiceRecording && !isVoiceTranscribing &&
+                state.showConfirmInteractionAction}
+              confirmInteractionLabel={data.confirmInteractionLabel}
+              isThinking={!isVoiceRecording && !isVoiceTranscribing && state.isThinking}
+              stopLoading={state.stopLoading}
+              resolvedSendShortcut={state.resolvedSendShortcut}
+              queueSteerShortcut={data.composerControlShortcuts.queueSteer}
+              queueNextShortcut={data.composerControlShortcuts.queueNext}
+              isMac={state.isMac}
+              onCancel={handlers.onCancel}
+              onConfirmInteractionAction={handlers.onConfirmInteractionOption}
+              onSend={isVoiceRecording
+                ? () => voiceInput?.handlers.stopRecording({ sendAfterTranscription: true })
+                : handlers.onSend}
+              onStop={handlers.onInterrupt}
+            />
+          )}
         </div>
       )}
     </div>

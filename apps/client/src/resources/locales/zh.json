@@ -1523,12 +1523,18 @@
       "retry": "重试",
       "setDefault": "设为默认：{{name}}",
       "setupPrompt": "还没有可用的语音转文字服务",
+      "setupAction": "未配置语音服务，去配置",
+      "showInSender": "显示语音输入",
+      "showInSenderFailed": "显示语音输入失败",
       "defaultService": "默认",
+      "browserWebSpeechService": "浏览器语音识别",
       "defaultSaved": "默认语音服务已保存",
       "defaultSaveFailed": "保存默认语音服务失败",
       "unsupported": "当前浏览器不支持录音",
       "unavailable": "当前状态暂不能录音",
       "permissionDenied": "麦克风权限被拒绝",
+      "browserLanguageUnsupported": "当前浏览器不支持这个识别语言",
+      "browserRecognitionNetwork": "浏览器语音识别网络异常",
       "loadServicesFailed": "加载语音服务失败",
       "recordingFailed": "录音启动失败",
       "emptyRecording": "没有录到可识别的音频",
@@ -3337,6 +3343,10 @@
         "defaultServiceId": {
           "label": "默认语音服务",
           "desc": "未手动选择时，sender 使用的语音转文字服务"
+        },
+        "showInSender": {
+          "label": "显示语音输入",
+          "desc": "关闭后隐藏 sender 的语音按钮；可通过右键 sender 或配置页重新开启"
         },
         "services": {
           "label": "语音服务",

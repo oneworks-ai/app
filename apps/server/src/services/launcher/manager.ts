@@ -527,6 +527,8 @@ const acquireWorkspaceInstanceLock = async (workspaceFolder: string) => {
   const lockPath = getWorkspaceInstanceLockPath(workspaceFolder)
   const startedAt = Date.now()
 
+  await mkdir(path.dirname(lockPath), { recursive: true })
+
   while (Date.now() - startedAt < WORKSPACE_INSTANCE_LOCK_TIMEOUT_MS) {
     try {
       await mkdir(lockPath, { recursive: false })

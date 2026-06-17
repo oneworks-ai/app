@@ -355,6 +355,7 @@ export const speechToTextServiceConfigSchema = z.discriminatedUnion('provider', 
 export const voiceConfigSchema = z.object({
   speechToText: z.object({
     defaultServiceId: z.string().optional().describe('Default speech-to-text service id'),
+    showInSender: z.boolean().optional().describe('Show speech-to-text controls in the sender'),
     services: z.record(z.string(), speechToTextServiceConfigSchema).optional()
       .describe('Configured speech-to-text services')
   }).optional().describe('Speech-to-text configuration')

@@ -1332,6 +1332,15 @@ export const configSchema: Record<string, FieldSpec[]> = {
   ],
   voice: [
     {
+      path: ['speechToText', 'showInSender'],
+      type: 'boolean',
+      defaultValue: true,
+      icon: 'keyboard_voice',
+      group: 'speechToText',
+      labelKey: 'config.fields.voice.showInSender.label',
+      descriptionKey: 'config.fields.voice.showInSender.desc'
+    },
+    {
       path: ['speechToText', 'defaultServiceId'],
       type: 'select',
       defaultValue: '',
