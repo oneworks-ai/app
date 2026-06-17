@@ -163,27 +163,10 @@ CLI / client / server / hook 入口在切换 `HOME` 到 project mock home 后，
 
 ## Kimi
 
-- 实现入口：
-  - [`packages/adapters/kimi/src/runtime/init.ts`](../../../packages/adapters/kimi/src/runtime/init.ts)
-  - [`packages/adapters/kimi/src/runtime/config.ts`](../../../packages/adapters/kimi/src/runtime/config.ts)
-  - [`packages/adapters/kimi/src/runtime/session.ts`](../../../packages/adapters/kimi/src/runtime/session.ts)
-  - [`packages/adapters/kimi/src/runtime/direct.ts`](../../../packages/adapters/kimi/src/runtime/direct.ts)
-- 自动生效内容：
-  - 托管 `kimi-cli` uv tool，默认写入全局 bootstrap uv cache
-  - session share dir `KIMI_SHARE_DIR=<project-home>/caches/<ctx>/<session>/adapter-kimi/share`
-  - `--wire` JSON-RPC stream runtime
-  - `--config-file`、`--mcp-config-file`、`--skills-dir`
-  - selected MCP servers
-  - session 级 skills overlay
-  - generated Kimi `providers` / `models` / `services`
-  - native hooks command 与 `__ONEWORKS_PROJECT_KIMI_NATIVE_HOOKS_AVAILABLE__`
-
-设计考量：
-
-- Kimi 的 CLI 安装不是 npm 包，继续走 `uv tool install`，但 cache root 仍和其他 managed package 一样受 `__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__` 控制
-- Kimi runtime 不能污染真实 `~/.kimi`；真实 credentials 只在需要时软链到 session share dir
-- `modelServices` 可以映射 `kimi`、`openai_legacy`、`openai_responses`、`anthropic`、`gemini`、`vertexai` provider type；URL 要按 provider type 归一化，避免重复拼 `/chat/completions` 或 `/responses`
-- `showThinkingStream` 已在 config schema 声明，但 runtime 尚未映射到 Kimi config 的 `show_thinking_stream`
+- 入口：[`packages/adapters/kimi/src/runtime/init.ts`](../../../packages/adapters/kimi/src/runtime/init.ts)、[`config.ts`](../../../packages/adapters/kimi/src/runtime/config.ts)、[`session.ts`](../../../packages/adapters/kimi/src/runtime/session.ts)、[`direct.ts`](../../../packages/adapters/kimi/src/runtime/direct.ts)
+- 自动生效内容：托管 `kimi-cli` uv tool、session share dir / `KIMI_SHARE_DIR`、`--wire`、`--config-file`、`--mcp-config-file`、`--skills-dir`、selected MCP、session skills overlay、generated providers/models/services、native hooks env
+- Kimi CLI 安装走全局 bootstrap uv cache，仍受 `__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__` 控制；runtime 不写真实 `~/.kimi`，credentials 只软链到 session share dir
+- `modelServices` provider type、URL 归一化和 `showThinkingStream` 映射缺口继续看 [`packages/adapters/kimi/.oo/rules/`](../../../packages/adapters/kimi/.oo/rules/)
 
 ## Gemini
 
