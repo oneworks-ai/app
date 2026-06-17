@@ -83,7 +83,8 @@
 }
 
 .relay-team-panel__team-settings-form {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 0;
   height: 100%;
   min-height: 0;
@@ -125,6 +126,15 @@
 
 .relay-team-panel__settings-row--avatar .relay-team-panel__settings-control {
   justify-items: end;
+}
+
+.relay-team-panel__settings-row--description {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.relay-team-panel__settings-row--description .relay-team-panel__settings-label {
+  min-height: 0;
 }
 
 .relay-team-panel__settings-label {
