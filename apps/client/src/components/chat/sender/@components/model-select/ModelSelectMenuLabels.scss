@@ -23,6 +23,10 @@
   font-weight: 600;
 }
 
+.model-menu-group-label {
+  gap: 6px;
+}
+
 .model-select-menu-item-label {
   display: flex;
   align-items: center;
@@ -37,6 +41,7 @@
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  gap: 6px;
 }
 
 .model-select-menu-item-text {
@@ -47,6 +52,27 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.model-select-menu-item-icon,
+.model-select-menu-item-icon-symbol {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.model-select-menu-item-icon {
+  object-fit: contain;
+}
+
+.model-select-menu-item-icon-symbol {
+  color: var(--placeholder-color, #9ca3af);
+  font-size: 16px;
+  line-height: 16px;
 }
 
 .model-select-menu-item-service,

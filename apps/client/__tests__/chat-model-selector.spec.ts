@@ -67,6 +67,42 @@ describe('chat model selector helpers', () => {
     expect(new Set(selectors).size).toBe(2)
   })
 
+  it('includes provider catalog models when a service omits models', () => {
+    expect(listServiceModels({
+      kimi: {
+        provider: 'moonshot-cn',
+        apiKey: 'token',
+        models: []
+      }
+    })).toEqual([
+      {
+        serviceKey: 'kimi',
+        model: 'kimi-k2.7-code',
+        selectorValue: 'kimi,kimi-k2.7-code'
+      },
+      {
+        serviceKey: 'kimi',
+        model: 'kimi-k2.6',
+        selectorValue: 'kimi,kimi-k2.6'
+      },
+      {
+        serviceKey: 'kimi',
+        model: 'kimi-k2.5',
+        selectorValue: 'kimi,kimi-k2.5'
+      },
+      {
+        serviceKey: 'kimi',
+        model: 'kimi-k2-0905-preview',
+        selectorValue: 'kimi,kimi-k2-0905-preview'
+      },
+      {
+        serviceKey: 'kimi',
+        model: 'kimi-k2',
+        selectorValue: 'kimi,kimi-k2'
+      }
+    ])
+  })
+
   it('honors a configured default model that is already service-qualified', () => {
     const serviceModels = listServiceModels(modelServices)
 

@@ -39,6 +39,7 @@ describe('run command print output', () => {
       'oneworks-cli-print-mode',
       'oneworks-channel',
       'oneworks-mem',
+      'oneworks-model-services',
       'create-entity',
       'update-entity',
       'create-plugin'

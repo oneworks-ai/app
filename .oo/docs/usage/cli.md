@@ -52,6 +52,7 @@
 
 - `oneworks-cli-quickstart`：介绍 `oneworks`、`oneworks list`、`oneworks --resume`、`oneworks stop`、`oneworks kill`，以及 `oneworks config list|get|set|unset` 的基本用法和输出语义。
 - `oneworks-cli-print-mode`：介绍 `--print`、`--input-format`、权限请求、继续会话和 `submit_input` 的写法。
+- `oneworks-model-services`：说明模型服务商配置、内置 provider id、默认 API 地址、服务商后台入口、模型/余额/状态能力和安全写回规则。
 - `create-entity`：按用户需求创建新的 One Works entity。
 - `update-entity`：按用户需求更新已有 One Works entity。
 - `create-plugin`：理解用户想要的 plugin 效果；需求不明确时先列出不确定点让用户确认，再转成 One Works plugin manifest、前端入口、server 入口和验证步骤。
@@ -59,6 +60,7 @@
 ```bash
 oneworks --include-skill oneworks-cli-quickstart "介绍一下 oneworks CLI 怎么恢复一个会话"
 oneworks --include-skill oneworks-cli-print-mode --print "告诉我 print 模式怎么处理权限请求"
+oneworks --include-skill oneworks-model-services "帮我配置 DeepSeek 官方模型服务"
 oneworks --include-skill create-plugin "做一个插件，给 chat header 加一个截图按钮"
 ```
 

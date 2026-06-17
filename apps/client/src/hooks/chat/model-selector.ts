@@ -1,10 +1,11 @@
-import type { AdapterBuiltinModel, ModelMetadataConfig, ServiceModelEntry } from '@oneworks/types'
+import type { AdapterBuiltinModel, ModelMetadataConfig, ServiceModelEntry, ServiceModelOption } from '@oneworks/types'
 import {
   BUILTIN_NATIVE_ADAPTERS,
   DEFAULT_NATIVE_ADAPTER,
   buildServiceModelSelector,
   filterServiceModelsForAdapter,
   isBuiltinNativeAdapter,
+  listServiceModelOptions,
   listServiceModels,
   mergeAdapterConfigs,
   normalizeNonEmptyString,
@@ -20,13 +21,14 @@ import {
   resolveServiceModelSelector
 } from '@oneworks/utils/model-selection'
 
-export type { ServiceModelEntry }
+export type { ServiceModelEntry, ServiceModelOption }
 export {
   BUILTIN_NATIVE_ADAPTERS,
   DEFAULT_NATIVE_ADAPTER,
   buildServiceModelSelector,
   filterServiceModelsForAdapter,
   isBuiltinNativeAdapter,
+  listServiceModelOptions,
   listServiceModels,
   mergeAdapterConfigs,
   normalizeNonEmptyString,

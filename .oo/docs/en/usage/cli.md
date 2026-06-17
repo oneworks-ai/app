@@ -46,6 +46,7 @@ Commands default to the project root workspace. If `__ONEWORKS_PROJECT_WORKSPACE
 
 - `oneworks-cli-quickstart`: explains `oneworks`, `oneworks list`, `oneworks --resume`, `oneworks stop`, `oneworks kill`, and `oneworks config list|get|set|unset`.
 - `oneworks-cli-print-mode`: explains `--print`, `--input-format`, permission requests, session continuation, and `submit_input`.
+- `oneworks-model-services`: explains model service provider config, built-in provider ids, default API base URLs, provider portals, model/balance/status capabilities, and safe writeback rules.
 - `create-entity`: creates a new One Works entity from a user request.
 - `update-entity`: updates an existing One Works entity.
 - `create-plugin`: turns a desired plugin behavior into a manifest, frontend entry, server entry, and verification steps.
@@ -53,6 +54,7 @@ Commands default to the project root workspace. If `__ONEWORKS_PROJECT_WORKSPACE
 ```bash
 oneworks --include-skill oneworks-cli-quickstart "explain how oneworks CLI resumes a session"
 oneworks --include-skill oneworks-cli-print-mode --print "explain permission handling in print mode"
+oneworks --include-skill oneworks-model-services "help me configure the official DeepSeek model service"
 oneworks --include-skill create-plugin "make a plugin that adds a screenshot button to the chat header"
 ```
 

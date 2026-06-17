@@ -84,6 +84,59 @@ describe('generateDefaultCCRConfigJSON', () => {
     ])
   })
 
+  it('uses chat completions endpoints for provider registry API roots in CCR', () => {
+    const raw = generateDefaultCCRConfigJSON({
+      cwd: '/tmp/project',
+      userConfig: {
+        defaultModelService: 'kimi',
+        defaultModel: 'kimi-k2',
+        modelServices: {
+          kimi: {
+            provider: 'moonshot-cn',
+            apiKey: 'kimi-key'
+          }
+        }
+      }
+    })
+
+    const config = JSON.parse(raw) as {
+      Providers: Array<{ name: string; api_base_url: string }>
+      Router: { default: string }
+    }
+
+    expect(config.Providers).toMatchObject([
+      {
+        name: 'kimi',
+        api_base_url: 'https://api.moonshot.cn/v1/chat/completions'
+      }
+    ])
+    expect(config.Router.default).toBe('kimi,kimi-k2')
+  })
+
+  it('does not append chat completions when an endpoint is already configured', () => {
+    const raw = generateDefaultCCRConfigJSON({
+      cwd: '/tmp/project',
+      userConfig: {
+        defaultModelService: 'kimi',
+        defaultModel: 'kimi-k2',
+        modelServices: {
+          kimi: {
+            provider: 'moonshot-cn',
+            apiBaseUrl: 'https://api.moonshot.cn/v1/chat/completions',
+            apiKey: 'kimi-key',
+            models: ['kimi-k2']
+          }
+        }
+      }
+    })
+
+    const config = JSON.parse(raw) as {
+      Providers: Array<{ name: string; api_base_url: string }>
+    }
+
+    expect(config.Providers[0]?.api_base_url).toBe('https://api.moonshot.cn/v1/chat/completions')
+  })
+
   it('maps model service timeout to CCR API_TIMEOUT_MS and prefers the default service when values differ', () => {
     const raw = generateDefaultCCRConfigJSON({
       cwd: '/tmp/project',

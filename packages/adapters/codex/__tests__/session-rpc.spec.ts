@@ -1421,6 +1421,52 @@ describe('createCodexSession RPC approval policy mapping', () => {
     session.kill()
   })
 
+  it('routes provider-only model services with default base URL through the local proxy', async () => {
+    process.env.HOME = '/tmp'
+    const { proc } = makeProc()
+    spawnMock.mockReturnValue(proc)
+
+    const session = await createCodexSession(
+      makeCtx({
+        configs: [{
+          modelServices: {
+            kimi: {
+              provider: 'moonshot-cn',
+              apiKey: 'test-key'
+            }
+          }
+        }, undefined]
+      }),
+      {
+        type: 'create',
+        runtime: 'server',
+        sessionId: 'session-provider-default-base-url',
+        model: 'kimi,kimi-k2',
+        description: 'Reply with pong.',
+        onEvent: () => {}
+      } as any
+    )
+
+    const spawnArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    const overrides = getConfigOverrides(spawnArgs)
+    const proxyMeta = decodeProxyMeta(overrides, 'kimi')
+
+    expect(overrides).toContain('model_provider="kimi"')
+    expect(overrides).toContain('model_providers.kimi.experimental_bearer_token="test-key"')
+    expect(getConfigOverride(overrides, 'model_providers.kimi.base_url=')).toMatch(
+      /^model_providers\.kimi\.base_url="http:\/\/127\.0\.0\.1:\d+"$/
+    )
+    expect(proxyMeta).toMatchObject({
+      upstreamBaseUrl: 'https://api.moonshot.cn/v1',
+      diagnostics: {
+        routedServiceKey: 'kimi',
+        resolvedModel: 'kimi-k2'
+      }
+    })
+
+    session.kill()
+  })
+
   it('keeps proxy-routed thread cache stable across create and resume diagnostics', async () => {
     process.env.HOME = '/tmp'
     const ctx = makeCtx({

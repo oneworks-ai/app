@@ -44,6 +44,10 @@ import type {
   AgentRoomViewModel
 } from '#~/components/agent-room'
 import { ComposerStack } from '#~/components/composer-landing/ComposerLanding'
+import {
+  buildModelServiceConfigSessionInitialContent,
+  buildModelServiceConfigSessionTitle
+} from '#~/components/config/modelServiceConfigSession'
 import type { ContextReferenceRequest } from '#~/components/workspace/context-file-types'
 import {
   DEFAULT_CHAT_SESSION_TARGET_DRAFT,
@@ -261,7 +265,7 @@ export function ChatHistoryView({
   workspaceSourceSessionId?: string
   senderAutoFocusKey?: string
 }) {
-  const { t } = useTranslation()
+  const { i18n, t } = useTranslation()
   const { message } = App.useApp()
   const location = useLocation()
   const navigate = useNavigate()
@@ -320,6 +324,53 @@ export function ChatHistoryView({
       }
     })()
   }, [message, mutateConfig, t])
+  const handleConnectMoreModelServices = useCallback(() => {
+    try {
+      const language = i18n.resolvedLanguage ?? i18n.language
+      const request = {
+        mode: 'create' as const,
+        source: 'global' as const
+      }
+      const title = buildModelServiceConfigSessionTitle(request, { language })
+      const initialContent = buildModelServiceConfigSessionInitialContent(request, {
+        language,
+        globalConfigPath: configRes?.meta?.sourceFiles?.global?.writableConfigPath,
+        projectConfigPath: configRes?.meta?.sourceFiles?.project?.writableConfigPath,
+        userConfigPath: configRes?.meta?.sourceFiles?.user?.writableConfigPath
+      })
+      setPendingSessionCreationContext({
+        initialContent,
+        tags: ['config', 'model-services'],
+        title
+      })
+      navigate({
+        pathname: '/',
+        search: location.search
+      })
+    } catch (error) {
+      void message.error(getApiErrorMessage(error, t('config.actions.modelServiceSessionCreateFailed')))
+    }
+  }, [
+    configRes?.meta?.sourceFiles?.global?.writableConfigPath,
+    configRes?.meta?.sourceFiles?.project?.writableConfigPath,
+    configRes?.meta?.sourceFiles?.user?.writableConfigPath,
+    i18n.language,
+    i18n.resolvedLanguage,
+    location.search,
+    message,
+    navigate,
+    setPendingSessionCreationContext,
+    t
+  ])
+  const handleOpenModelServicesConfig = useCallback(() => {
+    const params = new URLSearchParams(location.search)
+    params.set('tab', 'modelServices')
+    params.set('source', 'global')
+    navigate({
+      pathname: '/config',
+      search: `?${params.toString()}`
+    })
+  }, [location.search, navigate])
   useEffect(() => {
     if (!hasPersistedSession || pendingSessionCreationContext == null) return
     setPendingSessionCreationContext(undefined)
@@ -631,6 +682,12 @@ export function ChatHistoryView({
         : { ...DEFAULT_CHAT_SESSION_TARGET_DRAFT }
     )
   }, [agentRoomTranscript?.room.id, session?.id, session?.promptName, session?.promptType])
+  useEffect(() => {
+    if (session?.id != null) {
+      return
+    }
+    setNewSessionInitialContent(pendingSessionCreationContext?.initialContent)
+  }, [pendingSessionCreationContext?.initialContent, session?.id])
   useEffect(() => {
     if (session?.id != null) {
       return
@@ -1427,6 +1484,8 @@ export function ChatHistoryView({
             servicePreviewModelOptions={servicePreviewModelOptions}
             onToggleRecommendedModel={onToggleRecommendedModel}
             updatingRecommendedModelValue={updatingRecommendedModelValue}
+            onConnectMoreModelServices={handleConnectMoreModelServices}
+            onOpenModelServicesConfig={handleOpenModelServicesConfig}
             selectedModel={selectedModel}
             onModelChange={onModelChange}
             effort={effort}

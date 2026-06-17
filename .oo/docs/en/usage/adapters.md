@@ -42,7 +42,7 @@ Native CLI installation and version pinning are covered in [Adapter CLI Installa
 
 `modelServices` is shared configuration. Each adapter maps it to the native runtime differently:
 
-- Claude Code can use Claude Code Router.
+- Claude Code connects directly to known official Anthropic-compatible endpoints for Anthropic, Kimi, DeepSeek, Alibaba Qwen/Bailian, Zhipu GLM, MiniMax, OpenRouter, Requesty, Vercel AI Gateway, and Portkey; other OpenAI-compatible routed models can still use Claude Code Router.
 - Codex and Gemini use adapter-owned local proxy behavior.
 - Some adapters write provider configuration to native config files or session-level state.
 

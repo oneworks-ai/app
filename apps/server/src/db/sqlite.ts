@@ -79,7 +79,7 @@ class NodeSqliteDatabase implements SqliteDatabase {
         ? `oneworks_tx_${++this.savepointId}`
         : undefined
 
-      this.database.exec(savepointName == null ? 'BEGIN' : `SAVEPOINT ${savepointName}`)
+      this.database.exec(savepointName == null ? 'BEGIN IMMEDIATE' : `SAVEPOINT ${savepointName}`)
 
       try {
         const result = fn(...args)
@@ -100,15 +100,23 @@ class NodeSqliteDatabase implements SqliteDatabase {
   }
 }
 
+const initializeSqliteDatabase = (database: NodeDatabaseSync) => {
+  database.exec(`
+    PRAGMA busy_timeout = 5000;
+    PRAGMA journal_mode = WAL;
+    PRAGMA synchronous = NORMAL;
+  `)
+}
+
 const defaultDatabaseOptions = {
   enableForeignKeyConstraints: false
 } satisfies DatabaseSyncOptions
 
 export function createSqliteDatabase(path: string, options: DatabaseSyncOptions = {}) {
-  return new NodeSqliteDatabase(
-    new DatabaseSync(path, {
-      ...defaultDatabaseOptions,
-      ...options
-    })
-  )
+  const database = new DatabaseSync(path, {
+    ...defaultDatabaseOptions,
+    ...options
+  })
+  initializeSqliteDatabase(database)
+  return new NodeSqliteDatabase(database)
 }

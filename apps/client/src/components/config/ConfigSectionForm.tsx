@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { Fragment, useMemo } from 'react'
 import useSWR from 'swr'
 
-import type { ConfigUiObjectSchema, ConfigUiSection } from '@oneworks/types'
+import type { ConfigSource, ConfigUiObjectSchema, ConfigUiSection } from '@oneworks/types'
 
 import { getAdapterAccounts } from '#~/api'
 import { normalizeSendShortcut, resolveSendShortcut } from '#~/utils/shortcutUtils'
@@ -18,6 +18,7 @@ import { FieldRow } from './ConfigFieldRow'
 import { ShortcutInput } from './ConfigShortcutInput'
 import { DetailCollectionField } from './DetailListField'
 import { McpServerItemEditor } from './McpServerItemEditor'
+import { ModelServiceProviderActions } from './ModelServiceProviderActions'
 import { RecommendedModelsItemEditor } from './RecommendedModelsItemEditor'
 import type { ConfigDetailRoute } from './configDetail'
 import { resolveConfigDetailRouteMeta } from './configDetail'
@@ -32,6 +33,7 @@ import {
   setValueByPath
 } from './configUtils'
 import type { TranslationFn } from './configUtils'
+import type { ModelServiceConfigSessionRequest } from './modelServiceConfigSession'
 import {
   BooleanRecordEditor,
   KeyValueEditor,
@@ -61,6 +63,7 @@ export const SectionForm = ({
   uiSection,
   value,
   resolvedValue,
+  source = 'project',
   onChange,
   mergedModelServices,
   mergedAdapters,
@@ -69,6 +72,8 @@ export const SectionForm = ({
   workspaceFileOpenerOptions,
   detailRoute = null,
   onOpenDetailRoute,
+  creatingModelServiceSessionKey,
+  onCreateModelServiceSession,
   t
 }: {
   sectionKey: string
@@ -76,6 +81,7 @@ export const SectionForm = ({
   uiSection?: ConfigUiSection
   value: unknown
   resolvedValue?: unknown
+  source?: ConfigSource
   onChange: (nextValue: unknown) => void
   mergedModelServices: Record<string, unknown>
   mergedAdapters: Record<string, unknown>
@@ -84,6 +90,8 @@ export const SectionForm = ({
   workspaceFileOpenerOptions?: Array<{ value: string; label: ReactNode }>
   detailRoute?: ConfigDetailRoute | null
   onOpenDetailRoute?: (route: ConfigDetailRoute) => void
+  creatingModelServiceSessionKey?: string | null
+  onCreateModelServiceSession?: (request: ModelServiceConfigSessionRequest) => void | Promise<void>
   t: TranslationFn
 }) => {
   const fields = providedFields ?? configSchema[sectionKey] ?? []
@@ -377,6 +385,16 @@ export const SectionForm = ({
       : getFieldDescription(t, sectionKey, field.path)
     const icon = field.icon ?? getTypeIcon(getValueType(valueToUse))
     const handleValueChange = (nextValue: unknown) => {
+      if (field.unsetWhenEmpty === true) {
+        if (nextValue === '') {
+          onCurrentValueChange(setValueByPath(currentValue, field.path, undefined))
+          return
+        }
+        if (Array.isArray(nextValue) && nextValue.length === 0) {
+          onCurrentValueChange(setValueByPath(currentValue, field.path, undefined))
+          return
+        }
+      }
       onCurrentValueChange(setValueByPath(currentValue, field.path, nextValue))
     }
 
@@ -403,11 +421,14 @@ export const SectionForm = ({
           field={field}
           value={fieldValue}
           resolvedValue={resolvedFieldValue}
+          source={source}
           onChange={(next) => handleValueChange(next)}
           onOpenDetail={(route) => onOpenDetailRoute?.(route)}
           mergedModelServices={mergedModelServices}
           mergedAdapters={mergedAdapters}
           uiSection={uiSection}
+          creatingModelServiceSessionKey={creatingModelServiceSessionKey}
+          onCreateModelServiceSession={onCreateModelServiceSession}
           t={t}
         />
       )
@@ -1009,6 +1030,19 @@ export const SectionForm = ({
       if (!canOverrideInheritedDetailItem) return
       writeDetailItem(detailMeta.resolvedItem)
     }
+    const modelServiceActions = sectionKey === 'modelServices' && detailMeta.field.path.length === 0
+      ? (
+        <ModelServiceProviderActions
+          key={`${source}:${detailMeta.itemKey}:${detailMeta.itemSource}`}
+          serviceKey={detailMeta.itemKey}
+          source={source}
+          canRefreshModels={detailMeta.itemSource !== 'inherited'}
+          item={detailMeta.itemSource === 'inherited' ? detailMeta.resolvedItem : detailMeta.item}
+          onChange={writeDetailItem}
+          t={t}
+        />
+      )
+      : null
     const detailNotice = detailMeta.itemSource === 'inherited'
       ? (
         <div className='config-view__detail-notice'>
@@ -1039,6 +1073,7 @@ export const SectionForm = ({
         return (
           <div className='config-view__detail-panel'>
             {detailNotice}
+            {modelServiceActions}
             {renderFieldGroups({
               currentFields: detailMeta.field.detailCollection!.itemFields!,
               currentValue: undefined,
@@ -1054,6 +1089,7 @@ export const SectionForm = ({
       return (
         <div className='config-view__detail-panel'>
           {detailNotice}
+          {modelServiceActions}
           <DisplayValue value={detailMeta.resolvedItem} sectionKey={sectionKey} path={detailMeta.field.path} t={t} />
         </div>
       )
@@ -1063,6 +1099,7 @@ export const SectionForm = ({
       return (
         <div className='config-view__detail-panel'>
           {detailNotice}
+          {modelServiceActions}
           <RecommendedModelsItemEditor
             value={detailMeta.item}
             onChange={writeDetailItem}
@@ -1077,6 +1114,7 @@ export const SectionForm = ({
       return (
         <div className='config-view__detail-panel'>
           {detailNotice}
+          {modelServiceActions}
           <McpServerItemEditor
             value={detailMeta.item}
             onChange={writeDetailItem}
@@ -1099,6 +1137,7 @@ export const SectionForm = ({
         return (
           <div className='config-view__detail-panel'>
             {detailNotice}
+            {modelServiceActions}
             <ComplexTextEditor
               value={detailMeta.item}
               onChange={(next) => writeDetailItem((next ?? {}) as Record<string, unknown>)}
@@ -1313,6 +1352,7 @@ export const SectionForm = ({
       return (
         <div className='config-view__detail-panel'>
           {detailNotice}
+          {modelServiceActions}
           {renderFieldGroups({
             currentFields: detailMeta.field.detailCollection!.itemFields!,
             currentValue: detailMeta.item,

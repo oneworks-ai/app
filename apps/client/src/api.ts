@@ -70,6 +70,16 @@ export {
   listWorkspaces
 } from './api/knowledge'
 export {
+  createModelServiceSecret,
+  getModelProviderStatus,
+  getModelServiceBalance,
+  getModelServiceStatus,
+  listModelProviders,
+  listModelServiceModels,
+  probeModelProvider,
+  refreshModelServiceModels
+} from './api/model-providers'
+export {
   checkModuleUpdates,
   getModuleUpdates,
   installModuleUpdate,

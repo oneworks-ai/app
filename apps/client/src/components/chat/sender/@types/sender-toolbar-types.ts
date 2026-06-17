@@ -99,6 +99,8 @@ export interface SenderToolbarHandlers {
   onCloseReferenceActions: () => void
   onModelChange?: (model: string) => void
   onToggleRecommendedModel?: (option: ModelSelectOption) => void | Promise<void>
+  onConnectMoreModelServices?: () => void
+  onOpenModelServicesConfig?: () => void
   onEffortChange?: (effort: ChatEffort) => void
   onAdapterChange?: (adapter: string) => void
   onAccountChange?: (account: string) => void

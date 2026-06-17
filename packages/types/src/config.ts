@@ -33,16 +33,150 @@ export interface AdapterBuiltinModel {
   description: string
 }
 
+export type IconRef =
+  | { kind: 'builtin'; id: string }
+  | { kind: 'url'; url: string; darkUrl?: string }
+  | { kind: 'data'; value: string; darkValue?: string }
+  | { kind: 'material'; name: string }
+
+export type ModelProviderCategory =
+  | 'official'
+  | 'cloud'
+  | 'relay'
+  | 'gateway'
+  | 'inference'
+  | 'custom'
+  | 'local'
+
+export type ModelProviderCapabilitySupport =
+  | 'api'
+  | 'static'
+  | 'manual'
+  | 'todo'
+  | 'unsupported'
+
+export interface ModelProviderCapabilities {
+  listModels?: ModelProviderCapabilitySupport
+  balance?: ModelProviderCapabilitySupport
+  secrets?: ModelProviderCapabilitySupport
+  status?: ModelProviderCapabilitySupport
+}
+
+export interface ModelProviderPortalLinks {
+  homepage?: string
+  console?: string
+  usage?: string
+  billing?: string
+  purchase?: string
+  topUp?: string
+  pricing?: string
+  apiKeys?: string
+  docs?: string
+  status?: string
+}
+
+export type ModelProviderStatusKind = 'statuspage' | 'cloud_status_openapi' | 'page_only' | 'unsupported'
+
+export interface ModelProviderStatusDefinition {
+  kind: ModelProviderStatusKind
+  pageUrl?: string
+  summaryUrl?: string
+  statusUrl?: string
+  componentMatchers?: string[]
+  requiresCredentials?: boolean
+  notes?: string
+}
+
+export interface ModelProviderDefinition {
+  id: string
+  title: string
+  description?: string
+  category: ModelProviderCategory
+  icon?: IconRef
+  defaultApiBaseUrl?: string
+  defaultModels?: string[]
+  portal?: ModelProviderPortalLinks
+  capabilities?: ModelProviderCapabilities
+  status?: ModelProviderStatusDefinition
+}
+
+export interface ModelServiceManagementConfig {
+  enabled?: boolean
+  apiKey?: string
+  organizationId?: string
+  projectId?: string
+  endpointKind?: string
+}
+
 export interface ModelServiceConfig {
   title?: string
   description?: string
-  apiBaseUrl: string
+  provider?: string
+  icon?: string
+  homepageUrl?: string
+  apiBaseUrl?: string
   apiKey: string
   models?: string[]
   timeoutMs?: number
   maxOutputTokens?: number
+  providerOptions?: Record<string, unknown>
+  management?: ModelServiceManagementConfig
   extra?: Record<string, unknown>
 }
+
+export interface ResolvedModelServiceConfig extends ModelServiceConfig {
+  apiBaseUrl: string
+  modelSource?: 'configured' | 'provider_catalog' | 'remote_cache'
+  providerDefinition?: ModelProviderDefinition
+}
+
+export interface ModelProviderIdentity {
+  provider?: string
+  confidence: 'configured' | 'host_match' | 'none'
+  warnings?: string[]
+}
+
+export interface ProviderModelInfo {
+  id: string
+  title?: string
+  ownedBy?: string
+  createdAt?: number
+  contextLength?: number
+  maxOutputTokens?: number
+  supportsReasoning?: boolean
+  inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'file'>
+  outputModalities?: Array<'text' | 'image' | 'audio' | 'video'>
+  raw?: unknown
+}
+
+export type ProviderAccountStatus =
+  | { kind: 'balance'; currency?: string; available?: number; raw?: unknown }
+  | { kind: 'cost'; currency?: string; amount?: number; period?: string; raw?: unknown }
+  | { kind: 'unsupported'; reason: string }
+
+export type ProviderStatusIndicator =
+  | 'operational'
+  | 'degraded'
+  | 'partial_outage'
+  | 'major_outage'
+  | 'maintenance'
+  | 'unknown'
+  | 'unsupported'
+
+export interface ProviderServiceStatus {
+  indicator: ProviderStatusIndicator
+  description?: string
+  pageUrl?: string
+  checkedAt: string
+  components?: Array<{ name: string; status: string }>
+  incidents?: Array<{ name: string; status?: string; impact?: string }>
+  source: ModelProviderStatusKind
+}
+
+export type ProviderSecretResult =
+  | { kind: 'created'; value: string; id?: string; expiresAt?: number; raw?: unknown }
+  | { kind: 'console'; url: string; reason: string }
+  | { kind: 'unsupported'; reason: string }
 
 export interface RecommendedModelConfig {
   service?: string
@@ -56,6 +190,7 @@ export interface ModelMetadataConfig {
   alias?: string | string[]
   title?: string
   description?: string
+  icon?: string
   defaultAdapter?: string
   effort?: EffortLevel
 }

@@ -18,7 +18,7 @@ import {
   DEFAULT_NATIVE_ADAPTER,
   filterServiceModelsForAdapter,
   isBuiltinNativeAdapter,
-  listServiceModels,
+  listServiceModelOptions,
   normalizeNonEmptyString,
   resolveAdapterModelCompatibility,
   resolveChatAdapterSelection,
@@ -99,7 +99,12 @@ export function useAutomationStartupOptionsData({
   const allBuiltinModelValues = useMemo(() => (
     Object.values(adapterBuiltinModels).flatMap(models => buildBuiltinModelValues(models))
   ), [adapterBuiltinModels])
-  const allServiceModels = useMemo(() => listServiceModels(mergedModelServices), [mergedModelServices])
+  const allServiceModels = useMemo(() => (
+    listServiceModelOptions({
+      modelServices: mergedModelServices,
+      models: mergedModels
+    })
+  ), [mergedModelServices, mergedModels])
   const defaultModelService = normalizeNonEmptyString(configRes?.sources?.merged?.general?.defaultModelService)
 
   const resolveAdapterValue = useCallback((value?: string) => (

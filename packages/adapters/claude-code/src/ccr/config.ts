@@ -1,12 +1,26 @@
 import { createHash } from 'node:crypto'
 
-import type { Config, ModelServiceConfig } from '@oneworks/types'
-import { resolveModelDisplayMetadata } from '@oneworks/utils'
+import type { Config, ModelServiceConfig, ResolvedModelServiceConfig } from '@oneworks/types'
+import { resolveModelDisplayMetadata, resolveModelServiceConfig, resolveModelServiceModels } from '@oneworks/utils'
 
 import { resolveTransformerPath } from './paths'
 
 const DEFAULT_ROUTER_PORT_RANGE_START = 20000
 const DEFAULT_ROUTER_PORT_RANGE_SIZE = 20000
+const OPENAI_COMPATIBLE_CHAT_COMPLETIONS_PROVIDERS = new Set([
+  'openai',
+  'moonshot-cn',
+  'moonshot-intl',
+  'deepseek',
+  'qwen',
+  'zhipu',
+  'google-gemini',
+  'openrouter',
+  'vercel-ai-gateway',
+  'requesty',
+  'portkey'
+])
+const OPENAI_COMPATIBLE_ENDPOINT_PATTERN = /\/(?:chat\/completions|responses|messages)\/?$/u
 
 const getServiceQueryParams = (service: ModelServiceConfig) => {
   const extra = (service.extra ?? {}) as {
@@ -21,16 +35,22 @@ const getServiceQueryParams = (service: ModelServiceConfig) => {
   return extra.claudeCodeRouter?.queryParams ?? extra.codex?.queryParams
 }
 
-const buildProviderBaseUrl = (service: ModelServiceConfig) => {
+const buildProviderBaseUrl = (service: ResolvedModelServiceConfig) => {
   const queryParams = getServiceQueryParams(service)
-  if (queryParams == null || Object.keys(queryParams).length === 0) {
-    return service.apiBaseUrl
+  const url = new URL(service.apiBaseUrl)
+  if (
+    service.provider != null &&
+    OPENAI_COMPATIBLE_CHAT_COMPLETIONS_PROVIDERS.has(service.provider) &&
+    !OPENAI_COMPATIBLE_ENDPOINT_PATTERN.test(url.pathname)
+  ) {
+    url.pathname = `${url.pathname.replace(/\/+$/u, '')}/chat/completions`
   }
 
-  const url = new URL(service.apiBaseUrl)
-  for (const [key, value] of Object.entries(queryParams)) {
-    if (typeof value !== 'string' || value.trim() === '') continue
-    url.searchParams.set(key, value)
+  if (queryParams != null) {
+    for (const [key, value] of Object.entries(queryParams)) {
+      if (typeof value !== 'string' || value.trim() === '') continue
+      url.searchParams.set(key, value)
+    }
   }
   return url.toString()
 }
@@ -89,7 +109,7 @@ const normalizeServiceModel = (
 ) => {
   const service = modelServices[serviceKey]
   if (!service) return undefined
-  const models = service.models ?? []
+  const models = resolveModelServiceModels(service)
 
   const resolveModelAliases = (candidate: string) =>
     resolveModelDisplayMetadata({
@@ -161,7 +181,15 @@ const resolveDefaultModel = (params: {
   userConfig?: Config
   modelServices: Record<string, ModelServiceConfig>
 }) => {
-  const { config, userConfig, modelServices } = params
+  const { config, userConfig } = params
+  const modelServices = Object.fromEntries(
+    Object.entries(params.modelServices)
+      .map(([serviceKey, service]) => {
+        const resolved = resolveModelServiceConfig(service, ['modelServices', serviceKey])
+        return resolved.service != null ? [serviceKey, resolved.service] as const : undefined
+      })
+      .filter((entry): entry is readonly [string, ResolvedModelServiceConfig] => entry != null)
+  )
   const modelMetadata = {
     ...(config?.models ?? {}),
     ...(userConfig?.models ?? {})
@@ -170,7 +198,7 @@ const resolveDefaultModel = (params: {
     name,
     api_base_url: buildProviderBaseUrl(configValue),
     api_key: configValue.apiKey,
-    models: configValue.models,
+    models: resolveModelServiceModels(configValue),
     transformer: buildProviderTransformer(configValue)
   }))
   const defaultProvider = providers[0]
@@ -195,10 +223,11 @@ const resolveDefaultModel = (params: {
     return {
       defaultModel: resolvedByInput,
       providers,
-      defaultService: defaultModelServiceName
+      defaultService: defaultModelServiceName,
+      modelServices
     }
   }
-  const fallbackModelName = modelServices[defaultModelServiceName]?.models?.[0] ??
+  const fallbackModelName = resolveModelServiceModels(modelServices[defaultModelServiceName])?.[0] ??
     defaultProvider.models?.[0]
   if (!fallbackModelName) {
     throw new Error(`模型服务 ${defaultModelServiceName} 无可用模型`)
@@ -215,7 +244,8 @@ const resolveDefaultModel = (params: {
   return {
     defaultModel: `${defaultModelServiceName},${normalizedFallback}`,
     providers,
-    defaultService: defaultModelServiceName
+    defaultService: defaultModelServiceName,
+    modelServices
   }
 }
 
@@ -284,7 +314,12 @@ export const generateDefaultCCRConfigJSON = (params: {
     ...(config?.models ?? {}),
     ...(userConfig?.models ?? {})
   }
-  const { defaultModel, providers, defaultService } = resolveDefaultModel({
+  const {
+    defaultModel,
+    providers,
+    defaultService,
+    modelServices: resolvedModelServices
+  } = resolveDefaultModel({
     config,
     userConfig,
     modelServices
@@ -324,7 +359,7 @@ export const generateDefaultCCRConfigJSON = (params: {
           fallback: adapterOptions?.modelFallbacks?.default,
           defaultModel,
           defaultService,
-          modelServices,
+          modelServices: resolvedModelServices,
           modelMetadata,
           config,
           userConfig
@@ -333,7 +368,7 @@ export const generateDefaultCCRConfigJSON = (params: {
           fallback: adapterOptions?.modelFallbacks?.background,
           defaultModel,
           defaultService,
-          modelServices,
+          modelServices: resolvedModelServices,
           modelMetadata,
           config,
           userConfig
@@ -342,7 +377,7 @@ export const generateDefaultCCRConfigJSON = (params: {
           fallback: adapterOptions?.modelFallbacks?.think,
           defaultModel,
           defaultService,
-          modelServices,
+          modelServices: resolvedModelServices,
           modelMetadata,
           config,
           userConfig
@@ -351,7 +386,7 @@ export const generateDefaultCCRConfigJSON = (params: {
           fallback: adapterOptions?.modelFallbacks?.longContext,
           defaultModel,
           defaultService,
-          modelServices,
+          modelServices: resolvedModelServices,
           modelMetadata,
           config,
           userConfig

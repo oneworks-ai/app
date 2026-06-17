@@ -1,11 +1,14 @@
 import type {
   AdapterBuiltinModel,
+  IconRef,
   ModelMetadataConfig,
   ModelServiceConfig,
   RecommendedModelConfig
 } from '@oneworks/types'
 
-import type { ServiceModelEntry } from './model-selector'
+import { getAdapterDisplay } from '#~/resources/adapters.js'
+
+import type { ServiceModelEntry, ServiceModelOption } from './model-selector'
 import {
   buildServiceModelSelector,
   resolveModelDisplayMetadata,
@@ -14,12 +17,27 @@ import {
 } from './model-selector'
 import { buildModelSelectOption } from './model-selector-data-option-utils'
 
+type ServiceModelOptionLike = ServiceModelEntry & Partial<Pick<ServiceModelOption, 'serviceIcon' | 'modelIcon'>>
+
+const buildAdapterIconRef = (adapterKey: string): IconRef => {
+  const { darkIcon, icon } = getAdapterDisplay(adapterKey)
+  if (icon != null && icon.trim() !== '') {
+    return {
+      kind: 'url',
+      url: icon,
+      darkUrl: darkIcon?.trim() || undefined
+    }
+  }
+
+  return { kind: 'material', name: 'deployed_code' }
+}
+
 export const buildServiceModelGroups = (params: {
-  availableServiceModels: ServiceModelEntry[]
+  availableServiceModels: ServiceModelOptionLike[]
   mergedModelServices: Record<string, ModelServiceConfig>
   mergedModels: Record<string, ModelMetadataConfig>
 }) => {
-  const serviceModelsByKey = new Map<string, ServiceModelEntry[]>()
+  const serviceModelsByKey = new Map<string, ServiceModelOptionLike[]>()
   for (const entry of params.availableServiceModels) {
     const entries = serviceModelsByKey.get(entry.serviceKey) ?? []
     entries.push(entry)
@@ -59,6 +77,8 @@ export const buildServiceModelGroups = (params: {
             aliases: metadata?.aliases,
             serviceKey,
             serviceTitle,
+            serviceIcon: entry.serviceIcon,
+            modelIcon: entry.modelIcon,
             searchTerms: [entry.model, ...(metadata?.aliases ?? []), metadata?.title]
           })
         })
@@ -76,6 +96,8 @@ export const buildBuiltinModelGroups = (params: {
     .map(([adapterKey, models]) => {
       if (!Array.isArray(models) || models.length === 0) return null
 
+      const adapterIcon = buildAdapterIconRef(adapterKey)
+
       return {
         key: `builtin:${adapterKey}`,
         title: params.builtinGroupTitle(adapterKey),
@@ -91,6 +113,7 @@ export const buildBuiltinModelGroups = (params: {
             modelName: model.value,
             description: metadata?.description ?? model.description,
             aliases: metadata?.aliases,
+            modelIcon: adapterIcon,
             searchTerms: [model.value, ...(metadata?.aliases ?? []), metadata?.title]
           })
         })
@@ -100,7 +123,7 @@ export const buildBuiltinModelGroups = (params: {
 }
 
 export const buildRecommendedModelOptions = (params: {
-  availableServiceModels: ServiceModelEntry[]
+  availableServiceModels: ServiceModelOptionLike[]
   defaultModelService?: string
   mergedModels: Record<string, ModelMetadataConfig>
   mergedModelServices: Record<string, ModelServiceConfig>
@@ -137,6 +160,7 @@ export const buildRecommendedModelOptions = (params: {
         serviceModels: params.availableServiceModels,
         preferredServiceKey: item.service ?? params.defaultModelService
       }) ?? item.model
+      const serviceModelOption = params.availableServiceModels.find(entry => entry.selectorValue === value)
 
       return buildModelSelectOption({
         value,
@@ -146,6 +170,8 @@ export const buildRecommendedModelOptions = (params: {
         aliases: metadata?.aliases,
         serviceKey: item.service ?? params.modelToService.get(item.model)?.key,
         serviceTitle,
+        serviceIcon: serviceModelOption?.serviceIcon,
+        modelIcon: serviceModelOption?.modelIcon,
         searchTerms: [item.model, ...(metadata?.aliases ?? []), metadata?.title]
       })
     })

@@ -1,5 +1,12 @@
 import { appLanguageOptions } from '#~/i18n'
 
+import type { ModelServiceConfig } from '@oneworks/types'
+import {
+  listModelProviderDefinitions,
+  resolveModelProviderIdentity,
+  resolveModelServiceDescription
+} from '@oneworks/utils/model-providers'
+
 import type { TranslationFn } from './configUtils'
 
 export type FieldValueType =
@@ -35,6 +42,7 @@ export interface FieldSpec {
   recordKind?: RecordKind
   sensitive?: boolean
   hidden?: boolean
+  unsetWhenEmpty?: boolean
   collapse?: {
     key: string
     labelKey: string
@@ -116,6 +124,41 @@ export interface ConfigGroupMeta {
   labelKey: string
   collapsible?: boolean
   defaultExpanded?: boolean
+}
+
+const modelProviderOptions: FieldSpec['options'] = [
+  { value: '', label: 'config.options.modelProviders.custom' },
+  ...listModelProviderDefinitions()
+    .filter(provider => provider.category !== 'custom')
+    .map(provider => ({
+      value: provider.id,
+      label: `config.options.modelProviders.${provider.id}`
+    }))
+]
+
+const resolveProviderDescriptionTranslation = (
+  providerId: string,
+  fallback: string | undefined,
+  t: TranslationFn
+) => {
+  const key = `config.options.modelProviderDescriptions.${providerId}`
+  const translated = t(key, { defaultValue: fallback ?? '' }).trim()
+  if (translated !== '' && translated !== key) return translated
+  return fallback
+}
+
+const resolveModelServiceListDescription = (
+  item: Record<string, unknown>,
+  t: TranslationFn
+) => {
+  const service = item as unknown as ModelServiceConfig
+  const configuredDescription = typeof item.description === 'string' ? item.description.trim() : ''
+  if (configuredDescription !== '') return configuredDescription
+
+  const fallbackDescription = resolveModelServiceDescription(service)
+  const providerId = resolveModelProviderIdentity(service).provider
+  if (providerId == null) return fallbackDescription
+  return resolveProviderDescriptionTranslation(providerId, fallbackDescription, t)
 }
 
 export const configGroupMeta: Record<string, Record<string, ConfigGroupMeta>> = {
@@ -222,6 +265,16 @@ const notificationEventDetailFields: FieldSpec[] = [
 
 const modelServiceDetailFields: FieldSpec[] = [
   {
+    path: ['provider'],
+    type: 'select',
+    defaultValue: '',
+    icon: 'hub',
+    options: modelProviderOptions,
+    unsetWhenEmpty: true,
+    labelKey: 'config.fields.modelServices.item.provider.label',
+    descriptionKey: 'config.fields.modelServices.item.provider.desc'
+  },
+  {
     path: ['title'],
     type: 'string',
     defaultValue: '',
@@ -238,10 +291,29 @@ const modelServiceDetailFields: FieldSpec[] = [
     descriptionKey: 'config.fields.modelServices.item.description.desc'
   },
   {
+    path: ['icon'],
+    type: 'string',
+    defaultValue: '',
+    icon: 'image',
+    unsetWhenEmpty: true,
+    labelKey: 'config.fields.modelServices.item.icon.label',
+    descriptionKey: 'config.fields.modelServices.item.icon.desc'
+  },
+  {
+    path: ['homepageUrl'],
+    type: 'string',
+    defaultValue: '',
+    icon: 'home',
+    unsetWhenEmpty: true,
+    labelKey: 'config.fields.modelServices.item.homepageUrl.label',
+    descriptionKey: 'config.fields.modelServices.item.homepageUrl.desc'
+  },
+  {
     path: ['apiBaseUrl'],
     type: 'string',
     defaultValue: '',
     icon: 'link',
+    unsetWhenEmpty: true,
     labelKey: 'config.fields.modelServices.item.apiBaseUrl.label',
     descriptionKey: 'config.fields.modelServices.item.apiBaseUrl.desc'
   },
@@ -259,8 +331,50 @@ const modelServiceDetailFields: FieldSpec[] = [
     type: 'string[]',
     defaultValue: [],
     icon: 'view_list',
+    unsetWhenEmpty: true,
     labelKey: 'config.fields.modelServices.item.models.label',
     descriptionKey: 'config.fields.modelServices.item.models.desc'
+  },
+  {
+    path: ['management', 'enabled'],
+    type: 'boolean',
+    defaultValue: true,
+    icon: 'admin_panel_settings',
+    labelKey: 'config.fields.modelServices.item.management.enabled.label',
+    descriptionKey: 'config.fields.modelServices.item.management.enabled.desc'
+  },
+  {
+    path: ['management', 'apiKey'],
+    type: 'string',
+    defaultValue: '',
+    icon: 'vpn_key',
+    sensitive: true,
+    labelKey: 'config.fields.modelServices.item.management.apiKey.label',
+    descriptionKey: 'config.fields.modelServices.item.management.apiKey.desc'
+  },
+  {
+    path: ['management', 'organizationId'],
+    type: 'string',
+    defaultValue: '',
+    icon: 'corporate_fare',
+    labelKey: 'config.fields.modelServices.item.management.organizationId.label',
+    descriptionKey: 'config.fields.modelServices.item.management.organizationId.desc'
+  },
+  {
+    path: ['management', 'projectId'],
+    type: 'string',
+    defaultValue: '',
+    icon: 'folder_managed',
+    labelKey: 'config.fields.modelServices.item.management.projectId.label',
+    descriptionKey: 'config.fields.modelServices.item.management.projectId.desc'
+  },
+  {
+    path: ['providerOptions'],
+    type: 'json',
+    defaultValue: {},
+    icon: 'tune',
+    labelKey: 'config.fields.modelServices.item.providerOptions.label',
+    descriptionKey: 'config.fields.modelServices.item.providerOptions.desc'
   },
   {
     path: ['timeoutMs'],
@@ -1164,9 +1278,7 @@ export const configSchema: Record<string, FieldSpec[]> = {
         createItem: () => ({
           title: '',
           description: '',
-          apiBaseUrl: '',
           apiKey: '',
-          models: [],
           timeoutMs: undefined,
           maxOutputTokens: undefined,
           extra: {}
@@ -1180,10 +1292,7 @@ export const configSchema: Record<string, FieldSpec[]> = {
           const title = typeof item.title === 'string' ? item.title.trim() : ''
           return title !== '' ? itemKey : undefined
         },
-        getItemDescription: (item) => {
-          const description = typeof item.description === 'string' ? item.description.trim() : ''
-          return description !== '' ? description : undefined
-        },
+        getItemDescription: (item, _itemKey, _itemIndex, { t }) => resolveModelServiceListDescription(item, t),
         getBreadcrumbLabel: (item, itemKey) => {
           const title = typeof item.title === 'string' ? item.title.trim() : ''
           return title !== '' ? title : itemKey

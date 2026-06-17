@@ -38,7 +38,7 @@ import { projectRuntimeEvent } from './projection.js'
 import type { RuntimeProjectionResult } from './projection.js'
 import { projectRuntimeCommand } from './session-command-projection.js'
 import { runtimeStatusToSessionStatus } from './session-projection.js'
-import type { RuntimeEventCheckpoint, RuntimeSessionStore } from './types.js'
+import type { RuntimeEventCheckpoint, RuntimeSessionState, RuntimeSessionStore } from './types.js'
 import { createWorkspaceRuntimeEnv } from './workspace-env.js'
 
 export interface RuntimeStoreWatcherOptions {
@@ -70,6 +70,8 @@ export interface RuntimeConsumerStartRegistry {
 }
 
 const ENGINE_CONSUMER_START_LOCK_FILENAME = 'engine-consumer.start.lock'
+const ENGINE_CONSUMER_START_LOCK_MIN_HOLD_MS = 10_000
+const STARTUP_FAILURE_STATE_GRACE_MS = 10_000
 
 export type RuntimeStoreSessionEventDelivery = (
   sessionId: string,
@@ -106,6 +108,23 @@ const releaseEngineConsumerStartLock = (
   void lock.release().catch(error => {
     logger.warn({ error, sessionId }, '[runtime-store] Failed to release runtime consumer start lock')
   })
+}
+
+const releaseEngineConsumerStartLockAfterMinHold = (
+  lock: { release: () => Promise<void> },
+  sessionId: string,
+  acquiredAt: number
+) => {
+  const delayMs = Math.max(0, ENGINE_CONSUMER_START_LOCK_MIN_HOLD_MS - (Date.now() - acquiredAt))
+  if (delayMs <= 0) {
+    releaseEngineConsumerStartLock(lock, sessionId)
+    return
+  }
+
+  const timer = setTimeout(() => {
+    releaseEngineConsumerStartLock(lock, sessionId)
+  }, delayMs)
+  timer.unref?.()
 }
 
 const deliverProjectedSessionEvents = async (
@@ -152,6 +171,25 @@ const hasActivationCommandAfterRuntimeState = (
   )
 )
 
+const hasRuntimeEventAfterState = (
+  checkpoint: RuntimeEventCheckpoint,
+  state: { lastSeq?: number } | undefined
+) => (
+  typeof checkpoint.lastSeq === 'number' &&
+  typeof state?.lastSeq === 'number' &&
+  checkpoint.lastSeq > state.lastSeq
+)
+
+const isStartupFailureStateWithinGrace = (
+  state: RuntimeSessionState | undefined,
+  now = Date.now()
+) => (
+  state?.status === 'failed' &&
+  (state.lastSeq ?? 0) <= 0 &&
+  typeof state.updatedAt === 'number' &&
+  now - state.updatedAt < STARTUP_FAILURE_STATE_GRACE_MS
+)
+
 export async function replayRuntimeStore(
   store: RuntimeSessionStore,
   options: RuntimeStoreReplayOptions
@@ -185,6 +223,8 @@ export async function replayRuntimeStore(
     state != null &&
     isTerminalRuntimeStatus(state.status) &&
     projectedStateStatus != null &&
+    !hasRuntimeEventAfterState(result.checkpoint, state) &&
+    !isStartupFailureStateWithinGrace(state) &&
     !hasActivationCommandAfterRuntimeState(commands, state.updatedAt) &&
     session?.status !== projectedStateStatus
   ) {
@@ -227,12 +267,14 @@ export async function ensureServerRuntimeConsumerOnce(
   }
 
   let startLock: Awaited<ReturnType<typeof acquireEngineConsumerStartLock>> | undefined
+  let startLockAcquiredAt = 0
   registry.starting.add(store.storePath)
   try {
     startLock = await acquireEngineConsumerStartLock(store)
     if (startLock == null) {
       return
     }
+    startLockAcquiredAt = Date.now()
 
     const [metadata, state, heartbeat, queuedCommand] = await Promise.all([
       readRuntimeSessionMetadata(store),
@@ -259,7 +301,7 @@ export async function ensureServerRuntimeConsumerOnce(
       if (registry.consumers.get(store.storePath) === child) {
         registry.consumers.delete(store.storePath)
       }
-      releaseEngineConsumerStartLock(ownedStartLock, store.sessionId)
+      releaseEngineConsumerStartLockAfterMinHold(ownedStartLock, store.sessionId, startLockAcquiredAt)
     }
     child.once('exit', cleanup)
     child.once('error', cleanup)

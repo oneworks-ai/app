@@ -2,6 +2,7 @@ import { Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import type { ModelSelectOption } from '#~/hooks/chat/use-chat-model-adapter-selection'
+import { renderIconRef } from '#~/utils/model-provider-icons'
 
 const renderModelMenuTooltip = (lines: string[]) => {
   if (lines.length === 0) {
@@ -38,6 +39,11 @@ export function ModelSelectOptionLabel({
 
   const labelContent = (
     <span className='model-select-menu-item-main'>
+      {renderIconRef({
+        icon: option.modelIcon ?? option.serviceIcon,
+        imageClassName: 'model-select-menu-item-icon',
+        symbolClassName: 'model-select-menu-item-icon-symbol'
+      })}
       <span className='model-select-menu-item-text'>
         {showServicePrefix && option.serviceTitle && (
           <span className='model-select-menu-item-service'>

@@ -17,3 +17,16 @@
 - [HMR、安全、落地与验证](.oo/rfcs/plugin-runtime-plan.md)
 
 公开命名在配置字段、HTTP API、共享契约、前端宿主、服务端服务、路由名称和文档中都保持为 `plugin`。
+
+## 官方模型服务商 RFC
+
+- [总览与能力边界](.oo/rfcs/0006-official-model-providers.md)
+- [能力矩阵与平台链接](.oo/rfcs/0006-official-model-providers-capabilities.md)
+- [配置示例](.oo/rfcs/0006-official-model-providers-config-examples.md)
+- [共享契约](.oo/rfcs/0006-official-model-providers-contracts.md)
+- [任务执行与验收](.oo/rfcs/0006-official-model-providers-execution.md)
+- [图标规则](.oo/rfcs/0006-official-model-providers-icons.md)
+- [后台主页与充值入口](.oo/rfcs/0006-official-model-providers-portal.md)
+- [用户场景](.oo/rfcs/0006-official-model-providers-scenarios.md)
+- [服务状态](.oo/rfcs/0006-official-model-providers-status.md)
+- [配置页 UI 计划](.oo/rfcs/0006-official-model-providers-ui-plan.md)
