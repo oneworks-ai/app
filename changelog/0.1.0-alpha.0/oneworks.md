@@ -30,3 +30,4 @@
 - Localize Relay transactional emails from the login page language and add shared One Works footer links.
 - Add Relay passkey login and verified-email passkey registration with configurable invite gating.
 - Add configurable Relay login methods with browser method memory, email verification code login, and a passkey email-confirmation toggle for new self-registration.
+- Allow configured adapter instances to load runtime adapters from `packageId`, including package names and local package paths, while preserving the user-facing adapter key.

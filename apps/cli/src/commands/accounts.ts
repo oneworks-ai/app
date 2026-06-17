@@ -1,8 +1,8 @@
 import process from 'node:process'
 
-import { buildConfigJsonVariables, loadConfig } from '@oneworks/config'
+import { buildConfigJsonVariables, loadConfigState, resolveRuntimeAdapterConfigState } from '@oneworks/config'
 import type { AdapterCtx, AdapterManageAccountProgressEvent } from '@oneworks/types'
-import { loadAdapter } from '@oneworks/types'
+import { loadAdapter, resolveAdapterRuntimeTarget } from '@oneworks/types'
 import {
   mergeProcessEnvWithProjectEnv,
   persistAdapterAccountArtifacts,
@@ -28,19 +28,32 @@ const createTransientCache = (): AdapterCtx['cache'] => {
 
 const loadCliAdapterContext = async (adapterKey: string, cwd: string) => {
   const env = mergeProcessEnvWithProjectEnv(undefined, { workspaceFolder: cwd })
-  const [projectConfig, userConfig] = await loadConfig({
+  const configState = await loadConfigState({
     cwd,
     env,
     jsonVariables: buildConfigJsonVariables(cwd, env)
   })
-  const adapter = await loadAdapter(adapterKey)
+  const adapterTarget = resolveAdapterRuntimeTarget(adapterKey, {
+    config: configState.mergedConfig,
+    cwd
+  })
+  const runtimeConfigState = resolveRuntimeAdapterConfigState(
+    configState,
+    adapterKey,
+    adapterTarget.runtimeAdapter
+  )
+  const adapter = await loadAdapter(adapterTarget.loadSpecifier)
   const adapterCtx = {
     ctxId: `cli-adapter-accounts-${adapterKey}`,
     cwd,
     env,
     cache: createTransientCache(),
     logger: createLogger(cwd, `cli/adapter-accounts/${adapterKey}`, 'cli', '', 'info', env),
-    configs: [projectConfig, userConfig]
+    configs: [
+      runtimeConfigState.effectiveProjectConfig ?? runtimeConfigState.projectConfig,
+      runtimeConfigState.userConfig
+    ],
+    configState: runtimeConfigState
   } satisfies AdapterCtx
 
   return {

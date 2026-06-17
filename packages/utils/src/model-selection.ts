@@ -771,6 +771,7 @@ export const resolveAdapterModelCompatibility = (params: {
 export const omitAdapterCommonConfig = <T extends Record<string, unknown> | undefined>(adapterConfig: T) => {
   const record = asRecord(adapterConfig)
   const {
+    packageId: _packageId,
     defaultModel: _defaultModel,
     model: _legacyModel,
     includeModels: _includeModels,

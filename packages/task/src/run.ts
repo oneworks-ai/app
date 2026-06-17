@@ -1,4 +1,4 @@
-import { resolveAdapterCommonConfig, resolveConfigState } from '@oneworks/config'
+import { resolveAdapterCommonConfig, resolveConfigState, resolveRuntimeAdapterConfigState } from '@oneworks/config'
 import { callHook, createAdapterHookBridge } from '@oneworks/hooks'
 import type { HookInputs } from '@oneworks/hooks'
 import type {
@@ -10,7 +10,7 @@ import type {
   TaskDetail,
   WorkspaceAssetAdapter
 } from '@oneworks/types'
-import { loadAdapter } from '@oneworks/types'
+import { loadAdapter, resolveAdapterRuntimeTarget } from '@oneworks/types'
 import {
   createStartupProfiler,
   listServiceModels,
@@ -165,10 +165,11 @@ export const run = async (
 ) => {
   const prepareStartedAt = nowStartupMs()
   const [ctx] = await prepare(options, adapterOptions)
-  const { mergedConfig } = resolveConfigState({
+  const configState = resolveConfigState({
     configState: ctx.configState,
     configs: ctx.configs
   })
+  const { mergedConfig } = configState
   const effectivePermissionMode = resolveEffectivePermissionMode(
     adapterOptions.permissionMode,
     mergedConfig.permissions?.defaultMode
@@ -195,12 +196,6 @@ export const run = async (
   })
   startupProfiler.mark('task.prepare', prepareStartedAt)
 
-  const { logger, cache, ...base } = ctx
-
-  const cacheSetStartedAt = startupProfiler.now()
-  await cache.set('base', base)
-  startupProfiler.mark('task.cache.set.base', cacheSetStartedAt)
-
   const resolvedSelection = resolveQuerySelection({
     mergedConfig,
     inputAdapter: selectionAdapter,
@@ -210,12 +205,37 @@ export const run = async (
   if (adapterType == null) {
     throw new Error('No adapter found in config, please set adapters in config file')
   }
+  const adapterTarget = resolveAdapterRuntimeTarget(adapterType, {
+    config: mergedConfig,
+    cwd: ctx.cwd
+  })
+  const runtimeAdapterType = adapterTarget.runtimeAdapter
+  const runtimeConfigState = resolveRuntimeAdapterConfigState(
+    configState,
+    adapterType,
+    runtimeAdapterType
+  )
+  const runtimeCtx: AdapterCtx = runtimeConfigState === configState
+    ? ctx
+    : {
+      ...ctx,
+      configs: [
+        runtimeConfigState.effectiveProjectConfig ?? runtimeConfigState.projectConfig,
+        runtimeConfigState.userConfig
+      ],
+      configState: runtimeConfigState
+    }
+  const { logger, cache, ...base } = runtimeCtx
+
+  const cacheSetStartedAt = startupProfiler.now()
+  await cache.set('base', base)
+  startupProfiler.mark('task.cache.set.base', cacheSetStartedAt)
 
   const mergedModelServices = mergedConfig.modelServices ?? {}
   const serviceModels = listServiceModels(mergedModelServices)
   const mergedDefaultModelService = pickFirstNonEmptyString([mergedConfig.defaultModelService])
   const supportedEffortAdapters = new Set(['claude-code', 'codex', 'copilot', 'kimi', 'opencode'])
-  const supportsEffort = supportedEffortAdapters.has(adapterType)
+  const supportsEffort = supportedEffortAdapters.has(runtimeAdapterType)
   const adapterCommonConfig = supportsEffort
     ? resolveAdapterCommonConfig<Record<string, unknown> & { effort?: AdapterQueryOptions['effort'] }, 'effort'>(
       adapterType,
@@ -230,7 +250,7 @@ export const run = async (
       mergedConfig
     })
   const compatibilityResult = resolveAdapterModelCompatibility({
-    adapter: adapterType,
+    adapter: runtimeAdapterType,
     model: resolvedSelection.model,
     adapterConfig: adapterCommonConfig,
     serviceModels,
@@ -242,8 +262,11 @@ export const run = async (
   }
 
   const loadAdapterStartedAt = startupProfiler.now()
-  const adapter = await loadAdapter(adapterType)
-  startupProfiler.mark('task.loadAdapter', loadAdapterStartedAt, { adapter: adapterType })
+  const adapter = await loadAdapter(adapterTarget.loadSpecifier)
+  startupProfiler.mark('task.loadAdapter', loadAdapterStartedAt, {
+    adapter: adapterType,
+    runtimeAdapter: runtimeAdapterType
+  })
   const resolvedModel = compatibilityResult.model ?? resolvedSelection.model
   const selectionWarnings = compatibilityResult.warning != null ? [compatibilityResult.warning] : undefined
   if (!supportsEffort && effectiveAdapterOptions.effort != null) {
@@ -258,12 +281,12 @@ export const run = async (
       models: mergedConfig.models
     })
     : { effort: undefined as undefined }
-  setNonEmptyEnv(ctx.env, INHERITED_ADAPTER_ENV, adapterType)
-  setNonEmptyEnv(ctx.env, INHERITED_MODEL_ENV, resolvedModel)
-  setNonEmptyEnv(ctx.env, RUNTIME_DEFAULT_ADAPTER_ENV, adapterType)
-  setNonEmptyEnv(ctx.env, RUNTIME_DEFAULT_MODEL_ENV, resolvedModel)
-  setNonEmptyEnv(ctx.env, RUNTIME_DEFAULT_EFFORT_ENV, resolvedEffort)
-  setNonEmptyEnv(ctx.env, RUNTIME_DEFAULT_PERMISSION_MODE_ENV, effectivePermissionMode)
+  setNonEmptyEnv(runtimeCtx.env, INHERITED_ADAPTER_ENV, adapterType)
+  setNonEmptyEnv(runtimeCtx.env, INHERITED_MODEL_ENV, resolvedModel)
+  setNonEmptyEnv(runtimeCtx.env, RUNTIME_DEFAULT_ADAPTER_ENV, adapterType)
+  setNonEmptyEnv(runtimeCtx.env, RUNTIME_DEFAULT_MODEL_ENV, resolvedModel)
+  setNonEmptyEnv(runtimeCtx.env, RUNTIME_DEFAULT_EFFORT_ENV, resolvedEffort)
+  setNonEmptyEnv(runtimeCtx.env, RUNTIME_DEFAULT_PERMISSION_MODE_ENV, effectivePermissionMode)
 
   const originalOnEvent = effectiveAdapterOptions.onEvent
   const supportedAssetPlanAdapters = new Set<WorkspaceAssetAdapter>([
@@ -286,25 +309,28 @@ export const run = async (
       })
   ) as Record<string, NonNullable<Config['mcpServers']>[string]>
   const runtimeMcpSelection = splitRuntimeMcpSelection({
-    assets: ctx.assets,
+    assets: runtimeCtx.assets,
     runtimeServerNames: new Set(Object.keys(runtimeMcpServers)),
     selection: effectiveAdapterOptions.mcpServers
   })
   const assetPlanStartedAt = startupProfiler.now()
-  const assetPlanBaseRaw = ctx.assets == null || !supportsAssetPlan(adapterType)
+  const assetPlanBaseRaw = runtimeCtx.assets == null || !supportsAssetPlan(runtimeAdapterType)
     ? undefined
     : await buildAdapterAssetPlan({
-      adapter: adapterType,
-      bundle: ctx.assets,
+      adapter: runtimeAdapterType,
+      bundle: runtimeCtx.assets,
       options: {
         mcpServers: runtimeMcpSelection.workspaceSelection,
         skills: effectiveAdapterOptions.skills,
         promptAssetIds: effectiveAdapterOptions.promptAssetIds
       }
     })
-  startupProfiler.mark('task.buildAdapterAssetPlan', assetPlanStartedAt, { adapter: adapterType })
+  startupProfiler.mark('task.buildAdapterAssetPlan', assetPlanStartedAt, {
+    adapter: adapterType,
+    runtimeAdapter: runtimeAdapterType
+  })
   const workspaceMcpAssetIds = new Set(
-    Object.values(ctx.assets?.mcpServers ?? {}).map(asset => asset.id)
+    Object.values(runtimeCtx.assets?.mcpServers ?? {}).map(asset => asset.id)
   )
   const assetPlanBase = assetPlanBaseRaw == null || !runtimeMcpSelection.excludeAllWorkspaceMcp
     ? assetPlanBaseRaw
@@ -344,25 +370,29 @@ export const run = async (
       }
     }
   const adapterInitStartedAt = startupProfiler.now()
-  await adapter.init?.(ctx)
-  startupProfiler.mark('task.adapter.init', adapterInitStartedAt, { adapter: adapterType })
+  await adapter.init?.(runtimeCtx)
+  startupProfiler.mark('task.adapter.init', adapterInitStartedAt, {
+    adapter: adapterType,
+    runtimeAdapter: runtimeAdapterType
+  })
   const nativeBridgeDisabledEvents: Array<keyof HookInputs> =
-    adapterType === 'codex' && ctx.env.__ONEWORKS_PROJECT_CODEX_NATIVE_HOOKS_AVAILABLE__ === '1'
+    runtimeAdapterType === 'codex' && runtimeCtx.env.__ONEWORKS_PROJECT_CODEX_NATIVE_HOOKS_AVAILABLE__ === '1'
       ? BASE_NATIVE_BRIDGE_DISABLED_EVENTS
-      : adapterType === 'claude-code' && ctx.env.__ONEWORKS_PROJECT_CLAUDE_NATIVE_HOOKS_AVAILABLE__ === '1'
+      : runtimeAdapterType === 'claude-code' &&
+          runtimeCtx.env.__ONEWORKS_PROJECT_CLAUDE_NATIVE_HOOKS_AVAILABLE__ === '1'
       ? BASE_NATIVE_BRIDGE_DISABLED_EVENTS
-      : adapterType === 'gemini' && ctx.env.__ONEWORKS_PROJECT_GEMINI_NATIVE_HOOKS_AVAILABLE__ === '1'
+      : runtimeAdapterType === 'gemini' && runtimeCtx.env.__ONEWORKS_PROJECT_GEMINI_NATIVE_HOOKS_AVAILABLE__ === '1'
       ? BASE_NATIVE_BRIDGE_DISABLED_EVENTS
-      : adapterType === 'kimi' && ctx.env.__ONEWORKS_PROJECT_KIMI_NATIVE_HOOKS_AVAILABLE__ === '1'
+      : runtimeAdapterType === 'kimi' && runtimeCtx.env.__ONEWORKS_PROJECT_KIMI_NATIVE_HOOKS_AVAILABLE__ === '1'
       ? BASE_NATIVE_BRIDGE_DISABLED_EVENTS
-      : adapterType === 'copilot' && ctx.env.__ONEWORKS_PROJECT_COPILOT_NATIVE_HOOKS_AVAILABLE__ === '1'
+      : runtimeAdapterType === 'copilot' && runtimeCtx.env.__ONEWORKS_PROJECT_COPILOT_NATIVE_HOOKS_AVAILABLE__ === '1'
       ? COPILOT_NATIVE_BRIDGE_DISABLED_EVENTS
-      : adapterType === 'opencode' && ctx.env.__ONEWORKS_PROJECT_OPENCODE_NATIVE_HOOKS_AVAILABLE__ === '1'
+      : runtimeAdapterType === 'opencode' && runtimeCtx.env.__ONEWORKS_PROJECT_OPENCODE_NATIVE_HOOKS_AVAILABLE__ === '1'
       ? OPENCODE_NATIVE_BRIDGE_DISABLED_EVENTS
       : []
   const hookBridge = createAdapterHookBridge({
-    ctx,
-    adapter: adapterType,
+    ctx: runtimeCtx,
+    adapter: runtimeAdapterType,
     runtime: effectiveAdapterOptions.runtime,
     sessionId: effectiveAdapterOptions.sessionId,
     type: effectiveAdapterOptions.type,
@@ -397,7 +427,7 @@ export const run = async (
         .then(async () => {
           await callHook('TaskStop', {
             adapter: adapterType,
-            cwd: ctx.cwd,
+            cwd: runtimeCtx.cwd,
             sessionId: effectiveAdapterOptions.sessionId,
 
             options,
@@ -405,7 +435,7 @@ export const run = async (
 
             exitCode: data.exitCode,
             stderr: data.stderr
-          }, ctx.env)
+          }, runtimeCtx.env)
         })
         .catch((e) => {
           logger.error('[Hook] TaskStop failed', e)
@@ -417,12 +447,12 @@ export const run = async (
   const taskStartStartedAt = startupProfiler.now()
   const taskStartOutput = await callHook('TaskStart', {
     adapter: adapterType,
-    cwd: ctx.cwd,
+    cwd: runtimeCtx.cwd,
     sessionId: effectiveAdapterOptions.sessionId,
 
     options,
     adapterOptions: effectiveAdapterOptions
-  }, ctx.env)
+  }, runtimeCtx.env)
   startupProfiler.mark('task.hook.TaskStart', taskStartStartedAt, { adapter: adapterType })
   if (taskStartOutput?.continue === false) {
     throw new Error(taskStartOutput.stopReason ?? 'TaskStart hook blocked task startup')
@@ -435,7 +465,7 @@ export const run = async (
   startupProfiler.mark('task.hookBridge.prepareInitialPrompt', initialPromptStartedAt, { adapter: adapterType })
   const queryStartedAt = startupProfiler.now()
   const session = await adapter.query(
-    ctx,
+    runtimeCtx,
     {
       ...effectiveAdapterOptions,
       assetPlan,
@@ -461,7 +491,7 @@ export const run = async (
         await taskStopQueue
       }
     },
-    ctx,
+    ctx: runtimeCtx,
     resolvedAdapter: adapterType
   }
 }

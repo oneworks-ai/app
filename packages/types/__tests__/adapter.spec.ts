@@ -10,6 +10,7 @@ import {
   loadAdapterBuiltinModels,
   normalizeAdapterPackageId,
   resolveAdapterPackageName,
+  resolveAdapterRuntimeTarget,
   resolveExistingNpmPackageDirs,
   sanitizePackageName
 } from '@oneworks/types'
@@ -85,6 +86,49 @@ describe('adapter package helpers', () => {
     expect(resolveAdapterPackageName('codex')).toBe('@oneworks/adapter-codex')
     expect(resolveAdapterPackageName('adapter-codex')).toBe('@oneworks/adapter-codex')
     expect(resolveAdapterPackageName('@scope/custom-adapter')).toBe('@scope/custom-adapter')
+  })
+
+  it('resolves configured adapter runtime packages from package names and package root paths', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-runtime-target-'))
+    tempDirs.push(tempDir)
+
+    const callerPackageDir = join(tempDir, 'caller-package')
+    await writeAdapterPackage(callerPackageDir, 'path-codex', '@oneworks/adapter-codex', {
+      models: ['path-model']
+    })
+    const adapterRoot = join(callerPackageDir, 'node_modules', '@oneworks', 'adapter-codex')
+
+    expect(resolveAdapterRuntimeTarget('fast', {
+      config: {
+        adapters: {
+          fast: {
+            packageId: '@oneworks/adapter-codex'
+          }
+        } as any
+      }
+    })).toMatchObject({
+      instanceKey: 'fast',
+      loadSpecifier: '@oneworks/adapter-codex',
+      runtimeAdapter: 'codex'
+    })
+    expect(resolveAdapterRuntimeTarget('local', {
+      config: {
+        adapters: {
+          local: {
+            packageId: './node_modules/@oneworks/adapter-codex'
+          }
+        } as any
+      },
+      cwd: callerPackageDir
+    })).toMatchObject({
+      instanceKey: 'local',
+      loadSpecifier: adapterRoot,
+      runtimeAdapter: 'codex'
+    })
+    await expect(loadAdapter(adapterRoot)).resolves.toMatchObject({
+      id: 'path-codex'
+    })
+    expect(loadAdapterBuiltinModels(adapterRoot)?.map(model => model.value)).toEqual(['path-model'])
   })
 
   it('loads adapters from the caller package dir before the active runtime package dir', async () => {

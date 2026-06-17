@@ -2,7 +2,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, resolve } from 'node:path'
+import { dirname, isAbsolute, resolve } from 'node:path'
+import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 
 import type { ChannelDescriptor } from '@oneworks/core/channel'
@@ -15,7 +16,12 @@ import {
   configSectionSchemas
 } from '@oneworks/core/config-schema'
 import type { Config, ConfigJsonSchema, ConfigUiSchema } from '@oneworks/types'
-import { resolveAdapterPackageName, resolveExistingAdapterPackageCacheDir } from '@oneworks/types'
+import {
+  resolveAdapterKeyFromPackageName,
+  resolveAdapterPackageName,
+  resolveAdapterRuntimeTarget,
+  resolveExistingAdapterPackageCacheDir
+} from '@oneworks/types'
 import { z } from 'zod'
 
 import { buildConfigJsonVariables, loadConfigState } from './load'
@@ -26,6 +32,11 @@ interface ResolvedAdapterSchemaEntry {
   configKey: string
   contribution: AdapterConfigContribution
   isAlias: boolean
+}
+
+interface AdapterSchemaSpecifier {
+  configKey: string
+  loadSpecifier: string
 }
 
 export interface ConfigSchemaBundle {
@@ -76,6 +87,42 @@ const readWorkspacePackageJson = async (cwd: string) => {
   }
 }
 
+const normalizeNonEmptyString = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+)
+
+const isPathSpecifier = (value: string) => (
+  value.startsWith('.') ||
+  value.startsWith('/') ||
+  value.startsWith('~') ||
+  (!value.startsWith('@') && /[\\/]/.test(value)) ||
+  /^[a-z]:[\\/]/i.test(value)
+)
+
+const resolvePathSpecifier = (specifier: string, cwd: string) => {
+  if (specifier === '~') {
+    return process.env.HOME != null ? resolve(process.env.HOME) : resolve(cwd, specifier)
+  }
+  if (specifier.startsWith('~/')) {
+    return process.env.HOME != null
+      ? resolve(process.env.HOME, specifier.slice(2))
+      : resolve(cwd, specifier)
+  }
+  return isAbsolute(specifier) ? resolve(specifier) : resolve(cwd, specifier)
+}
+
+const readPackageNameFromRoot = (packageRoot: string) => {
+  const packageJsonPath = resolve(packageRoot, 'package.json')
+  if (!existsSync(packageJsonPath)) return undefined
+
+  try {
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as { name?: unknown }
+    return normalizeNonEmptyString(packageJson.name)
+  } catch {
+    return undefined
+  }
+}
+
 const collectPackageNames = async (cwd: string) => {
   const packageJson = await readWorkspacePackageJson(cwd)
   const packageNames = new Set([
@@ -117,7 +164,8 @@ const collectConfiguredKeys = async (cwd: string) => {
     jsonVariables: buildConfigJsonVariables(cwd)
   })
 
-  const adapters = Object.keys(mergedConfig.adapters ?? {})
+  const adapters = Object.entries(mergedConfig.adapters ?? {})
+    .map(([key]) => ({ key }))
   const channels = Object.values(mergedConfig.channels ?? {})
     .flatMap((entry) => {
       if (entry == null || typeof entry !== 'object') return []
@@ -125,7 +173,7 @@ const collectConfiguredKeys = async (cwd: string) => {
       return typeof type === 'string' && type.trim() !== '' ? [type] : []
     })
 
-  return { adapters, channels }
+  return { adapters, channels, mergedConfig }
 }
 
 const isAdapterPackageName = (name: string) => (
@@ -896,6 +944,27 @@ const loadPackageExportFromPackageJson = async (
   }
 }
 
+const loadPackageRootExportFromPackageJson = async (
+  packageJsonPath: string,
+  exportKey: string,
+  preferredConditions: readonly string[]
+) => {
+  const exportPath = resolvePackageExportPath(packageJsonPath, exportKey, preferredConditions)
+  if (exportPath == null) {
+    return undefined
+  }
+
+  try {
+    return createRequire(packageJsonPath)(exportPath) as Record<string, unknown>
+  } catch {}
+
+  try {
+    return await import(pathToFileURL(exportPath).href) as Record<string, unknown>
+  } catch {
+    return undefined
+  }
+}
+
 const loadPackageSubpathWithSourceFallback = async (packageName: string, subpath: string, cwd: string) => {
   const normalizedSubpath = subpath === ''
     ? ''
@@ -976,10 +1045,69 @@ const loadPackageSubpathWithSourceFallback = async (packageName: string, subpath
   }
 }
 
+const loadPackageRootSubpathWithSourceFallback = async (packageRoot: string, subpath: string) => {
+  const packageJsonPath = resolve(packageRoot, 'package.json')
+  if (!existsSync(packageJsonPath)) return undefined
+
+  const exportKey = subpath === ''
+    ? '.'
+    : subpath.startsWith('./')
+    ? subpath
+    : `.${subpath}`
+  const sourceExportModule = await loadPackageRootExportFromPackageJson(
+    packageJsonPath,
+    exportKey,
+    ['__oneworks__', 'default', 'import', 'require', 'node']
+  )
+  if (sourceExportModule != null) {
+    return sourceExportModule
+  }
+
+  const runtimeExportModule = await loadPackageRootExportFromPackageJson(
+    packageJsonPath,
+    exportKey,
+    ['import', 'default', 'require', 'node']
+  )
+  if (runtimeExportModule != null) {
+    return runtimeExportModule
+  }
+
+  const sourcePath = subpath === './config-schema'
+    ? resolve(packageRoot, 'src/config-schema.ts')
+    : resolve(packageRoot, 'src/index.ts')
+  if (existsSync(sourcePath)) {
+    try {
+      return await import(pathToFileURL(sourcePath).href) as Record<string, unknown>
+    } catch {}
+  }
+
+  return undefined
+}
+
 const loadAdapterContribution = async (
   specifierOrKey: string,
   cwd: string
 ): Promise<AdapterConfigContribution | undefined> => {
+  if (isPathSpecifier(specifierOrKey)) {
+    const packageRoot = resolvePathSpecifier(specifierOrKey, cwd)
+    const mod = await loadPackageRootSubpathWithSourceFallback(packageRoot, './config-schema') as {
+      adapterConfigContribution?: AdapterConfigContribution
+    } | undefined
+    const contribution = mod?.adapterConfigContribution
+    if (contribution == null) {
+      return undefined
+    }
+
+    const packageName = readPackageNameFromRoot(packageRoot)
+    const adapterKey = packageName == null ? undefined : resolveAdapterKeyFromPackageName(packageName)
+    return packageName != null && !packageName.startsWith('@oneworks/adapter-')
+      ? {
+        ...contribution,
+        adapterKey: adapterKey ?? packageName
+      }
+      : contribution
+  }
+
   const packageName = specifierOrKey.startsWith('@')
     ? specifierOrKey
     : resolveAdapterPackageName(specifierOrKey)
@@ -1058,6 +1186,11 @@ const createIssueErrorResult = (issues: readonly z.ZodIssue[]) => ({
   error: new z.ZodError([...issues])
 })
 
+const dedupeAdapterSchemaSpecifiers = (specifiers: readonly AdapterSchemaSpecifier[]) =>
+  Array.from(
+    new Map(specifiers.map(specifier => [specifier.configKey, specifier])).values()
+  )
+
 export const composeBaseConfigSchemaBundle = () =>
   createBundle(
     BASE_SCHEMA_ID,
@@ -1073,9 +1206,23 @@ export const composeWorkspaceConfigSchemaBundle = async (
     collectConfiguredKeys(options.cwd)
   ])
 
-  const adapterSpecifiers = new Set<string>([
-    ...configuredKeys.adapters,
-    ...Array.from(packageNames).filter(isAdapterPackageName).map(adapterPackageNameToKey)
+  const adapterSpecifiers = dedupeAdapterSchemaSpecifiers([
+    ...configuredKeys.adapters.map((adapter) => {
+      const adapterTarget = resolveAdapterRuntimeTarget(adapter.key, {
+        config: configuredKeys.mergedConfig,
+        cwd: options.cwd
+      })
+      return {
+        configKey: adapter.key,
+        loadSpecifier: adapterTarget.loadSpecifier
+      }
+    }),
+    ...Array.from(packageNames)
+      .filter(isAdapterPackageName)
+      .map(packageName => ({
+        configKey: adapterPackageNameToKey(packageName),
+        loadSpecifier: packageName
+      }))
   ])
   const channelSpecifiers = new Set<string>([
     ...configuredKeys.channels,
@@ -1084,9 +1231,9 @@ export const composeWorkspaceConfigSchemaBundle = async (
 
   const adapterEntries = dedupeResolvedAdapterSchemaEntries((
     await Promise.all(
-      Array.from(adapterSpecifiers).map(async (specifier) => {
-        const contribution = await loadAdapterContribution(specifier, options.cwd)
-        return contribution == null ? undefined : resolveAdapterSchemaEntry(specifier, contribution)
+      adapterSpecifiers.map(async (specifier) => {
+        const contribution = await loadAdapterContribution(specifier.loadSpecifier, options.cwd)
+        return contribution == null ? undefined : resolveAdapterSchemaEntry(specifier.configKey, contribution)
       })
     )
   ).filter((entry): entry is ResolvedAdapterSchemaEntry => entry != null))

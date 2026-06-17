@@ -1,6 +1,9 @@
 import { buildConfigSections } from '@oneworks/config'
 import type { AdapterBuiltinModel, Config } from '@oneworks/types'
-import { loadAdapterBuiltinModels as loadAdapterPackageBuiltinModels } from '@oneworks/types'
+import {
+  loadAdapterBuiltinModels as loadAdapterPackageBuiltinModels,
+  resolveAdapterRuntimeTarget
+} from '@oneworks/types'
 import { BUILTIN_NATIVE_ADAPTERS, normalizeNonEmptyString } from '@oneworks/utils/model-selection'
 
 import { getServerAppInfo } from '#~/utils/app-info.js'
@@ -48,7 +51,8 @@ export const buildSections = (config: Config | undefined) => {
 }
 
 export const loadAdapterBuiltinModels = (
-  config: Config
+  config: Config,
+  cwd?: string
 ): Record<string, AdapterBuiltinModel[]> => {
   const result: Record<string, AdapterBuiltinModel[]> = {}
   const adapterKeys = Array.from(
@@ -64,7 +68,8 @@ export const loadAdapterBuiltinModels = (
   )
   for (const adapterKey of adapterKeys) {
     try {
-      const builtinModels = loadAdapterPackageBuiltinModels(adapterKey)
+      const adapterTarget = resolveAdapterRuntimeTarget(adapterKey, { config, cwd })
+      const builtinModels = loadAdapterPackageBuiltinModels(adapterTarget.loadSpecifier)
       if (Array.isArray(builtinModels)) {
         result[adapterKey] = builtinModels
       }

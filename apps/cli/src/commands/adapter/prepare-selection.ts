@@ -1,5 +1,7 @@
-import { loadAdapterCliPreparer, normalizeAdapterPackageId } from '@oneworks/types'
-import type { AdapterCliPrepareTarget, AdapterCliPreparer, Config } from '@oneworks/types'
+/* eslint-disable max-lines -- prepare selection keeps parsing and runtime adapter aliasing together. */
+import { resolveConfigState, resolveRuntimeAdapterConfigState } from '@oneworks/config'
+import { loadAdapterCliPreparer, normalizeAdapterPackageId, resolveAdapterRuntimeTarget } from '@oneworks/types'
+import type { AdapterCliPrepareContext, AdapterCliPrepareTarget, AdapterCliPreparer, Config } from '@oneworks/types'
 
 const KNOWN_PREPARE_ADAPTERS = [
   'codex',
@@ -87,6 +89,50 @@ const pushUniqueRequest = (
   requests.push(request)
 }
 
+const createRuntimePrepareContext = (
+  ctx: AdapterCliPrepareContext,
+  instanceKey: string,
+  runtimeKey: string
+): AdapterCliPrepareContext => {
+  const configState = resolveConfigState({
+    configState: ctx.configState,
+    configs: ctx.configs
+  })
+  const runtimeConfigState = resolveRuntimeAdapterConfigState(configState, instanceKey, runtimeKey)
+
+  return {
+    ...ctx,
+    configs: [
+      runtimeConfigState.effectiveProjectConfig ?? runtimeConfigState.projectConfig,
+      runtimeConfigState.userConfig
+    ],
+    configState: runtimeConfigState
+  }
+}
+
+const wrapRuntimePreparer = (
+  preparer: AdapterCliPreparer,
+  instanceKey: string,
+  runtimeKey: string
+): AdapterCliPreparer => {
+  if (preparer.adapter === instanceKey && instanceKey === runtimeKey) return preparer
+
+  return {
+    ...preparer,
+    adapter: instanceKey,
+    prepare: async (ctx, options) => {
+      const result = await preparer.prepare(
+        createRuntimePrepareContext(ctx, instanceKey, runtimeKey),
+        options
+      )
+      return {
+        ...result,
+        adapter: instanceKey
+      }
+    }
+  }
+}
+
 export const resolveAdapterPrepareRequests = (params: {
   all?: boolean
   config: Config
@@ -159,6 +205,7 @@ export const resolveAdapterPrepareRequests = (params: {
 
 export const loadAdapterPreparePreparers = async (params: {
   config: Config
+  cwd?: string
   requiredTargets: string[]
 }) => {
   const configuredAdapters = Object.keys(params.config.adapters ?? {})
@@ -171,7 +218,12 @@ export const loadAdapterPreparePreparers = async (params: {
 
   for (const adapterId of adapterIds) {
     try {
-      preparers.push(await loadAdapterCliPreparer(adapterId))
+      const adapterTarget = resolveAdapterRuntimeTarget(adapterId, {
+        config: params.config,
+        cwd: params.cwd
+      })
+      const preparer = await loadAdapterCliPreparer(adapterTarget.loadSpecifier)
+      preparers.push(wrapRuntimePreparer(preparer, adapterId, adapterTarget.runtimeAdapter))
     } catch (error) {
       if (requestedAdapters.includes(adapterId)) throw error
     }

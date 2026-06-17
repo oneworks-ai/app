@@ -79,7 +79,7 @@ export function configRouter(): Router {
       mergedSections.general.baseDir = process.env.__ONEWORKS_PROJECT_BASE_DIR__ != null
         ? resolveProjectOoBaseDirName(process.env)
         : mergedConfig.baseDir ?? resolveProjectOoBaseDirName(process.env)
-      mergedSections.adapterBuiltinModels = loadAdapterBuiltinModels(mergedConfig)
+      mergedSections.adapterBuiltinModels = loadAdapterBuiltinModels(mergedConfig, workspaceFolder)
       const about = await buildConfigAbout()
       ctx.body = {
         sources: {
