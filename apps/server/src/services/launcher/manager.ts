@@ -531,6 +531,7 @@ const acquireWorkspaceInstanceLock = async (workspaceFolder: string) => {
 
   while (Date.now() - startedAt < WORKSPACE_INSTANCE_LOCK_TIMEOUT_MS) {
     try {
+      await mkdir(path.dirname(lockPath), { recursive: true })
       await mkdir(lockPath, { recursive: false })
       const ownerJson = JSON.stringify(
         {

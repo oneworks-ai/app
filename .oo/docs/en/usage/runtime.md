@@ -55,7 +55,7 @@ From the One Works repository root, after `pnpm install`:
 pnpm start
 ```
 
-`pnpm start` calls `pnpm tools dev-start web`. The development launcher stores the server database, runtime store, mock home, cache, and startup logs under the project home, normally `~/.oneworks/projects/<project-key>`, instead of writing them into the repository workspace.
+`pnpm start` calls `pnpm tools dev-start web`. The development launcher stores the server database, runtime store, mock home, cache, and startup logs under the current development instance project home, normally `~/.oneworks/dev-instances/<worktree-key>/projects/<project-key>`. This keeps repository workspaces clean and prevents parallel source worktrees from sharing the same local state.
 
 To update the current source worktree and start a development service:
 
