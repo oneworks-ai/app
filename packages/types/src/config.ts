@@ -1,6 +1,6 @@
 import type { EffortLevel } from './common'
 import type { GitBranchKind } from './git'
-import type { PluginConfig } from './plugin'
+import type { PluginConfig, ResolvedPluginInstanceMetadata } from './plugin'
 import type { SessionPermissionMode } from './session'
 import type { VoiceConfig } from './voice'
 
@@ -586,6 +586,20 @@ export interface StartupProfileDiagnosticsConfig {
 export interface DiagnosticsConfig {
   startupProfile?: boolean | StartupProfileDiagnosticsConfig
 }
+
+export interface PluginConfigHookContext {
+  cwd: string
+  env: Record<string, string | null | undefined>
+  jsonVariables: Record<string, string | null | undefined>
+  projectConfig?: Config
+  userConfig?: Config
+  mergedConfig: Config
+  plugin: ResolvedPluginInstanceMetadata
+}
+
+export type PluginConfigHook = (
+  context: PluginConfigHookContext
+) => Config | undefined | void | Promise<Config | undefined | void>
 
 export interface Config {
   extend?: string | string[]

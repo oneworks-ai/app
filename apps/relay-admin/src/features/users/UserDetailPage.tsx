@@ -17,6 +17,8 @@ import type {
 import { AdminIcon } from '../../shared/ui/AdminIcon'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 import { DeviceTable } from '../devices/DeviceTable'
+import type { RelayAdminTeam } from '../teams/teamTypes'
+import { UserTeamsPanel } from './UserTeamsPanel'
 
 export interface UserDetailPageProps {
   currentUser?: RelayAdminCurrentUser
@@ -25,6 +27,8 @@ export interface UserDetailPageProps {
   invites: RelayAdminInvite[]
   loading: boolean
   onSetLoginId: (user: RelayAdminUser, loginId: string | null) => Promise<void>
+  teams: RelayAdminTeam[]
+  token: string
   onSetMaxDevices: (user: RelayAdminUser, maxDevices: number | null) => Promise<void>
   onSetRole: (user: RelayAdminUser, role: RelayAdminRole) => Promise<void>
   users: RelayAdminUser[]
@@ -68,6 +72,8 @@ export const UserDetailPage = ({
   invites,
   loading,
   onSetLoginId,
+  teams,
+  token,
   onSetMaxDevices,
   onSetRole,
   users
@@ -206,6 +212,12 @@ export const UserDetailPage = ({
             </div>
           ))}
         </dl>
+
+        <UserTeamsPanel
+          teams={teams}
+          token={token}
+          userId={user.id}
+        />
 
         <div className='relay-user-detail__devices'>
           <div className='relay-user-detail__devices-header'>

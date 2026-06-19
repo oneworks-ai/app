@@ -189,6 +189,9 @@
       }
     }
   },
+  "configHook": {
+    "entry": "./dist/config.cjs"
+  },
   "plugin": {
     "client": {
       "root": "dist/client",
@@ -261,6 +264,16 @@
       "source": "./src/server/index.ts",
       "default": "./dist/server/index.js"
     },
+    "./config": {
+      "__oneworks__": {
+        "import": "./src/config.ts",
+        "require": "./src/config.cts"
+      },
+      "default": {
+        "import": "./dist/config.js",
+        "require": "./dist/config.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -274,5 +287,8 @@
     "prepublish": "pnpm build",
     "test": "pnpm -C ../../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/plugins/relay/__tests__",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
+  },
+  "dependencies": {
+    "@oneworks/utils": "workspace:*"
   }
 }

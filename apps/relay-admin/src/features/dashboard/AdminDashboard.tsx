@@ -1,13 +1,19 @@
 import { DeviceDetailPage } from '../devices/DeviceDetailPage'
 import { DevicePanel } from '../devices/DevicePanel'
 import { InvitePanel } from '../invites/InvitePanel'
+import { MessageCenterPage } from '../messages/MessageCenterPage'
 import { ProfilePage } from '../profile/ProfilePage'
 import { SsoProviderPanel } from '../sso/SsoProviderPanel'
+import { TeamDetailPage } from '../teams/TeamDetailPage'
+import { TeamDetailSettingsPage } from '../teams/TeamDetailSettingsPage'
+import { TeamPanel } from '../teams/TeamPanel'
+import { TeamSettingsPage } from '../teams/TeamSettingsPage'
 import { UserDetailPage } from '../users/UserDetailPage'
 import { UserPanel } from '../users/UserPanel'
 import { AdminStatusBar } from './AdminStatusBar'
 import type { RelayAdminDashboardState } from './useRelayAdminDashboard'
 
+export type AdminDashboardMessageMode = 'center' | 'create' | 'history'
 export type AdminDashboardSectionId =
   | 'device-detail'
   | 'devices'
@@ -15,12 +21,21 @@ export type AdminDashboardSectionId =
   | 'user-detail'
   | 'users'
   | 'invites'
+  | 'messages'
   | 'sso'
-export type AdminDashboardCreateSectionId = Extract<AdminDashboardSectionId, 'invites' | 'sso' | 'users'>
+  | 'team-detail'
+  | 'team-detail-settings'
+  | 'team-settings'
+  | 'teams'
+export type AdminDashboardCreateSectionId = Extract<AdminDashboardSectionId, 'invites' | 'sso' | 'teams' | 'users'>
 
 export interface AdminDashboardProps {
   createSectionId?: AdminDashboardCreateSectionId
   dashboard: RelayAdminDashboardState
+  messageDetailBasePath?: '/message-pushes' | '/messages'
+  messageId?: string
+  messageMode?: AdminDashboardMessageMode
+  resetTeamDetailSettingsSignal?: number
   sectionId: AdminDashboardSectionId
   onCreateSectionChange?: (sectionId: AdminDashboardCreateSectionId | undefined) => void
 }
@@ -28,6 +43,10 @@ export interface AdminDashboardProps {
 export const AdminDashboard = ({
   createSectionId,
   dashboard,
+  messageDetailBasePath,
+  messageId,
+  messageMode,
+  resetTeamDetailSettingsSignal,
   sectionId,
   onCreateSectionChange
 }: AdminDashboardProps) => {
@@ -87,6 +106,8 @@ export const AdminDashboard = ({
           invites={dashboard.invites}
           loading={dashboard.loading || dashboard.authStatus === 'checking'}
           onSetLoginId={dashboard.setUserLoginId}
+          teams={dashboard.teams}
+          token={dashboard.token}
           onSetMaxDevices={dashboard.setUserMaxDevices}
           onSetRole={dashboard.setUserRole}
           users={dashboard.users}
@@ -97,6 +118,20 @@ export const AdminDashboard = ({
           accounts={dashboard.accounts}
           activeToken={dashboard.token}
           currentUser={dashboard.currentUser}
+        />
+      )}
+      {sectionId === 'messages' && (
+        <MessageCenterPage
+          accounts={dashboard.accounts}
+          activeToken={dashboard.token}
+          currentUser={dashboard.currentUser}
+          detailBasePath={messageDetailBasePath}
+          messageId={messageId}
+          mode={messageMode}
+          teams={dashboard.teams}
+          token={dashboard.token}
+          users={dashboard.users}
+          onTeamInvitationChanged={dashboard.refresh}
         />
       )}
       {sectionId === 'invites' && (
@@ -120,6 +155,41 @@ export const AdminDashboard = ({
           onSetEnabled={dashboard.setSsoProviderEnabled}
           onUpdateProvider={dashboard.updateSsoProvider}
           providers={dashboard.ssoProviders}
+        />
+      )}
+      {sectionId === 'teams' && (
+        <TeamPanel
+          disabled={disabled}
+          isCreateOpen={createSectionId === 'teams'}
+          teams={dashboard.teams}
+          onCreateOpenChange={open => onCreateSectionChange?.(open ? 'teams' : undefined)}
+          onCreateTeam={dashboard.createTeam}
+          onSetArchived={dashboard.setTeamArchived}
+        />
+      )}
+      {sectionId === 'team-settings' && (
+        <TeamSettingsPage
+          disabled={disabled}
+          policy={dashboard.teamPolicy}
+          onUpdatePolicy={dashboard.updateTeamPolicy}
+        />
+      )}
+      {sectionId === 'team-detail' && (
+        <TeamDetailPage
+          disabled={disabled}
+          loading={dashboard.loading || dashboard.authStatus === 'checking'}
+          policy={dashboard.teamPolicy}
+          teams={dashboard.teams}
+          token={dashboard.token}
+        />
+      )}
+      {sectionId === 'team-detail-settings' && (
+        <TeamDetailSettingsPage
+          disabled={disabled}
+          loading={dashboard.loading || dashboard.authStatus === 'checking'}
+          resetSignal={resetTeamDetailSettingsSignal}
+          teams={dashboard.teams}
+          onUpdateTeam={dashboard.updateTeam}
         />
       )}
     </div>

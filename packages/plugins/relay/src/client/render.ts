@@ -1,11 +1,28 @@
 /* eslint-disable max-lines -- relay client renderer keeps account, server, and device markup together. */
 import { actionButton, escapeHtml, materialIcon, valueOrDash } from './dom.js'
 import type { RelayClientMessages } from './i18n.js'
-import type { RelayServerStatus, RelayStatus } from './types.js'
+import type {
+  RelayConfigDistributionStatus,
+  RelayConfigShareDraft,
+  RelayConfigShareTargets,
+  RelayServerStatus,
+  RelayStatus
+} from './types.js'
 
 interface RenderRelayViewMarkupOptions {
   activeRemote?: string
   activeServer?: RelayServerStatus
+  configShare: {
+    draft: RelayConfigShareDraft | null
+    error: string | null
+    loading: boolean
+    profileName: string
+    publishing: boolean
+    targets: RelayConfigShareTargets | null
+    teamId: string
+    text: string
+  }
+  configDistribution?: RelayConfigDistributionStatus
   connectionState: string
   device: NonNullable<RelayStatus['device']>
   editingServer: boolean
@@ -59,6 +76,303 @@ const getDeviceFeatureText = (
     .filter(key => capabilities[key] === true)
     .map(key => t.devices.features[key])
   return labels.length === 0 ? undefined : labels.join(' / ')
+}
+
+const cleanTextList = (values: string[] | undefined) => (
+  Array.isArray(values)
+    ? values.map(cleanText).filter((value): value is string => value != null)
+    : []
+)
+
+const getProjectMatchText = (
+  value: RelayConfigDistributionStatus['matchedProject'] | undefined,
+  t: RelayClientMessages
+) => {
+  if (value === true) return t.configDistribution.matched
+  if (value === false) return t.configDistribution.notMatched
+  return cleanText(value) ?? t.configDistribution.unknown
+}
+
+const hasConfigDistributionDetails = (status: RelayConfigDistributionStatus | undefined) => {
+  if (status == null) return false
+  return [
+    status.hash,
+    status.lastAppliedAt,
+    status.lastSyncedAt,
+    status.sourceServerId,
+    status.version
+  ].some(value => cleanText(value) != null) ||
+    status.matchedProject != null ||
+    (status.sources?.length ?? 0) > 0 ||
+    cleanTextList(status.allowedFields).length > 0 ||
+    cleanTextList(status.marketplaceKeys).length > 0 ||
+    cleanTextList(status.pluginKeys).length > 0 ||
+    cleanTextList(status.skillKeys).length > 0 ||
+    cleanTextList(status.skillRegistryKeys).length > 0 ||
+    cleanTextList(status.modelServiceKeys).length > 0
+}
+
+const renderConfigDistributionFact = (label: string, value: unknown) => {
+  const text = valueOrDash(value)
+  return `
+    <div class="oneworks-relay__config-fact">
+      <span class="oneworks-relay__config-fact-label">${escapeHtml(label)}</span>
+      <span class="oneworks-relay__config-fact-value" title="${escapeHtml(text)}">${escapeHtml(text)}</span>
+    </div>
+  `
+}
+
+const sourceTitle = (source: NonNullable<RelayConfigDistributionStatus['sources']>[number]) => {
+  const team = cleanText(source.teamName) ?? cleanText(source.teamId) ?? '-'
+  const profile = cleanText(source.profileName) ?? cleanText(source.profileId) ?? '-'
+  return `${team} / ${profile}`
+}
+
+const sourceVersion = (source: NonNullable<RelayConfigDistributionStatus['sources']>[number]) => {
+  const version = source.version == null ? undefined : `v${source.version}`
+  return [version, cleanText(source.versionId)].filter(Boolean).join(' / ')
+}
+
+const renderConfigDistributionSources = (
+  status: RelayConfigDistributionStatus | undefined,
+  t: RelayClientMessages
+) => {
+  const sources = status?.sources ?? []
+  if (sources.length === 0) return ''
+  const rows = sources.map((source) => {
+    const disabledBy = cleanTextList(source.disabledBy).join(', ')
+    const teamDisabled = source.disabledBy?.includes('team') === true
+    const profileDisabled = source.disabledBy?.includes('profile') === true
+    const sourceState = source.enabled === false
+      ? `${t.configDistribution.sourceDisabled}${disabledBy === '' ? '' : ` (${disabledBy})`}`
+      : t.configDistribution.sourceEnabled
+    const fields = cleanTextList(source.fields).join(', ')
+    return `
+      <div class="oneworks-relay__config-source" data-enabled="${source.enabled === false ? 'false' : 'true'}">
+        <div class="oneworks-relay__config-source-copy">
+          <span class="oneworks-relay__config-source-name" title="${escapeHtml(sourceTitle(source))}">${
+      escapeHtml(sourceTitle(source))
+    }</span>
+          <span class="oneworks-relay__config-source-meta" title="${escapeHtml(fields)}">${
+      escapeHtml([source.mode, sourceVersion(source), fields].filter(Boolean).join(' / '))
+    }</span>
+          <span class="oneworks-relay__config-source-state">${escapeHtml(sourceState)}</span>
+        </div>
+        <div class="oneworks-relay__config-source-actions">
+          ${
+      actionButton(
+        'toggle-config-source',
+        teamDisabled ? t.actions.configSourceEnableTeam : t.actions.configSourceDisableTeam,
+        teamDisabled ? 'group' : 'group_off',
+        {
+          data: {
+            'source-enabled': teamDisabled,
+            'source-id': source.teamId,
+            'source-kind': 'team'
+          }
+        }
+      )
+    }
+          ${
+      actionButton(
+        'toggle-config-source',
+        profileDisabled ? t.actions.configSourceEnableProfile : t.actions.configSourceDisableProfile,
+        profileDisabled ? 'toggle_on' : 'toggle_off',
+        {
+          data: {
+            'source-enabled': profileDisabled,
+            'source-id': source.profileId,
+            'source-kind': 'profile'
+          }
+        }
+      )
+    }
+        </div>
+      </div>
+    `
+  }).join('')
+  return `
+    <div class="oneworks-relay__config-sources" aria-label="${escapeHtml(t.configDistribution.labels.sources)}">
+      <div class="oneworks-relay__devices-summary">
+        <span>${escapeHtml(t.configDistribution.labels.sources)}</span>
+        <span>${escapeHtml(String(sources.length))}</span>
+      </div>
+      ${rows}
+    </div>
+  `
+}
+
+const renderConfigDistribution = (
+  status: RelayConfigDistributionStatus | undefined,
+  t: RelayClientMessages
+) => {
+  const lastError = cleanText(status?.lastError)
+  const hasDetails = hasConfigDistributionDetails(status)
+  const marketplaceKeys = cleanTextList(status?.marketplaceKeys).join(', ')
+  const modelServiceKeys = cleanTextList(status?.modelServiceKeys).join(', ')
+  const pluginKeys = cleanTextList(status?.pluginKeys).join(', ')
+  const skillKeys = cleanTextList(status?.skillKeys).join(', ')
+  const skillRegistryKeys = cleanTextList(status?.skillRegistryKeys).join(', ')
+  const allowedFields = cleanTextList(status?.allowedFields).join(', ')
+  const state = lastError != null ? 'error' : hasDetails ? 'synced' : 'empty'
+  const stateText = state === 'error'
+    ? t.configDistribution.failed
+    : state === 'synced'
+    ? t.configDistribution.synced
+    : t.configDistribution.empty
+
+  return `
+    <section class="oneworks-relay__config" aria-label="${escapeHtml(t.configDistribution.title)}">
+      <div class="oneworks-relay__config-header">
+        <h3 class="oneworks-relay__config-title">
+          ${materialIcon('rule_settings')}
+          <span>${escapeHtml(t.configDistribution.title)}</span>
+          <span class="oneworks-relay__config-state" data-state="${escapeHtml(state)}">${escapeHtml(stateText)}</span>
+        </h3>
+        ${actionButton('refresh-config', t.actions.refreshConfig, 'published_with_changes')}
+      </div>
+      ${
+    lastError == null
+      ? ''
+      : `<div class="oneworks-relay__config-error">${escapeHtml(lastError)}</div>`
+  }
+      ${
+    state === 'empty'
+      ? `<div class="oneworks-relay__config-empty">${escapeHtml(t.configDistribution.emptyDescription)}</div>`
+      : ''
+  }
+      <div class="oneworks-relay__config-grid">
+        ${renderConfigDistributionFact(t.configDistribution.labels.lastSyncedAt, status?.lastSyncedAt)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.lastAppliedAt, status?.lastAppliedAt)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.version, status?.version)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.hash, status?.hash)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.sourceServer, status?.sourceServerId)}
+        ${
+    renderConfigDistributionFact(
+      t.configDistribution.labels.matchedProject,
+      getProjectMatchText(
+        status?.matchedProject,
+        t
+      )
+    )
+  }
+        ${renderConfigDistributionFact(t.configDistribution.labels.modelServices, modelServiceKeys)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.plugins, pluginKeys)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.marketplaces, marketplaceKeys)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.skills, skillKeys)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.skillRegistries, skillRegistryKeys)}
+        ${renderConfigDistributionFact(t.configDistribution.labels.allowedFields, allowedFields)}
+        ${
+    lastError == null
+      ? ''
+      : renderConfigDistributionFact(t.configDistribution.labels.lastError, lastError)
+  }
+      </div>
+      ${renderConfigDistributionSources(status, t)}
+    </section>
+  `
+}
+
+const renderConfigShareSummary = (
+  draft: RelayConfigShareDraft | null,
+  t: RelayClientMessages
+) => {
+  if (draft == null) return `<div class="oneworks-relay__share-empty">${escapeHtml(t.share.emptyDraft)}</div>`
+  const fields = cleanTextList(draft.allowedFields).join(', ')
+  const secretCount = Array.isArray(draft.secretItems) ? draft.secretItems.length : 0
+  const rejected = cleanTextList(draft.rejectedFields).join(', ')
+  const issues = Array.isArray(draft.issues)
+    ? draft.issues
+      .map(issue => `${cleanText(issue.path) ?? '-'}: ${cleanText(issue.message) ?? cleanText(issue.code) ?? '-'}`)
+      .slice(0, 4)
+      .join(' / ')
+    : ''
+  const fieldRows = [
+    renderConfigDistributionFact(t.share.labels.fields, fields),
+    renderConfigDistributionFact(t.share.labels.secrets, t.share.pendingSecrets(secretCount)),
+    renderConfigDistributionFact(t.share.labels.rejected, rejected),
+    renderConfigDistributionFact(t.share.labels.issues, issues)
+  ].join('')
+  return `<div class="oneworks-relay__share-grid">${fieldRows}</div>`
+}
+
+const renderConfigShareTeamOptions = (targets: RelayConfigShareTargets | null, selectedTeamId: string) => {
+  const teams = targets?.teams ?? []
+  if (teams.length === 0) return ''
+  return teams
+    .map((team) => {
+      const id = cleanText(team.id) ?? ''
+      const label = cleanText(team.name) ?? cleanText(team.slug) ?? id
+      return `<option value="${escapeHtml(id)}" ${id === selectedTeamId ? 'selected' : ''}>${
+        escapeHtml(label)
+      }</option>`
+    })
+    .join('')
+}
+
+const renderConfigShare = (
+  share: RenderRelayViewMarkupOptions['configShare'],
+  activeServer: RelayServerStatus | undefined,
+  t: RelayClientMessages
+) => {
+  const sessionReady = activeServer?.sessionAuthenticated === true
+  const teams = share.targets?.teams ?? []
+  const canPublish = sessionReady && share.draft?.configPatch != null && share.teamId !== '' && !share.publishing
+  const state = share.error != null ? 'error' : share.draft?.configPatch != null ? 'synced' : 'empty'
+  const stateText = share.error != null ? t.configDistribution.failed : share.draft?.configPatch != null
+    ? t.share.draftReady
+    : t.share.emptyDraft
+  return `
+    <section class="oneworks-relay__share" aria-label="${escapeHtml(t.share.title)}">
+      <div class="oneworks-relay__config-header">
+        <h3 class="oneworks-relay__config-title">
+          ${materialIcon('ios_share')}
+          <span>${escapeHtml(t.share.title)}</span>
+          <span class="oneworks-relay__config-state" data-state="${escapeHtml(state)}">${escapeHtml(stateText)}</span>
+        </h3>
+        <div class="oneworks-relay__primary-actions">
+          ${actionButton('share-preview', t.actions.sharePreview, 'preview', { disabled: share.loading })}
+          ${
+    actionButton('share-load-targets', t.actions.shareLoadTargets, 'groups', {
+      disabled: !sessionReady || share.loading
+    })
+  }
+          ${
+    actionButton('share-publish', t.actions.sharePublish, 'publish', {
+      disabled: !canPublish,
+      primary: true
+    })
+  }
+        </div>
+      </div>
+      ${share.error == null ? '' : `<div class="oneworks-relay__config-error">${escapeHtml(share.error)}</div>`}
+      ${sessionReady ? '' : `<div class="oneworks-relay__share-empty">${escapeHtml(t.share.loginRequired)}</div>`}
+      <div class="oneworks-relay__share-form">
+        <label class="oneworks-relay__field" title="${escapeHtml(t.inputs.shareProfileName)}">
+          ${materialIcon('label')}
+          <input aria-label="${
+    escapeHtml(t.inputs.shareProfileName)
+  }" class="oneworks-relay__input" data-field="share-profile-name" placeholder="${
+    escapeHtml(t.inputs.shareProfileName)
+  }" value="${escapeHtml(share.profileName)}" />
+        </label>
+        <label class="oneworks-relay__field" title="${escapeHtml(t.inputs.shareTeam)}">
+          ${materialIcon('group')}
+          <select aria-label="${escapeHtml(t.inputs.shareTeam)}" class="oneworks-relay__input" data-field="share-team">
+            <option value="">${escapeHtml(teams.length === 0 ? t.share.noTeams : t.inputs.shareTeam)}</option>
+            ${renderConfigShareTeamOptions(share.targets, share.teamId)}
+          </select>
+        </label>
+      </div>
+      <label class="oneworks-relay__share-editor" title="${escapeHtml(t.inputs.shareConfig)}">
+        <span class="oneworks-relay__config-fact-label">${escapeHtml(t.inputs.shareConfig)}</span>
+        <textarea aria-label="${
+    escapeHtml(t.inputs.shareConfig)
+  }" class="oneworks-relay__textarea" data-field="share-config" spellcheck="false">${escapeHtml(share.text)}</textarea>
+      </label>
+      ${renderConfigShareSummary(share.draft, t)}
+    </section>
+  `
 }
 
 const renderRelayDeviceRows = (
@@ -204,6 +518,8 @@ const renderRelayAccountRows = (
 export const renderRelayViewMarkup = ({
   activeRemote,
   activeServer,
+  configShare,
+  configDistribution,
   connectionState,
   device,
   editingServer,
@@ -215,6 +531,8 @@ export const renderRelayViewMarkup = ({
   stateError
 }: RenderRelayViewMarkupOptions) => {
   const accountRows = renderRelayAccountRows(servers, connectionState, cleanText(device.id), t)
+  const configDistributionMarkup = renderConfigDistribution(configDistribution, t)
+  const configShareMarkup = renderConfigShare(configShare, activeServer, t)
   const serviceName = valueOrDash(activeServer?.name ?? activeServer?.id ?? device.name ?? options.deviceName)
   const serviceTitle = activeRemote ?? serviceName
   const serverEditorMarkup = editingServer
@@ -273,6 +591,8 @@ export const renderRelayViewMarkup = ({
     accountRows === '' ? `<div class="oneworks-relay__empty">${escapeHtml(t.emptyAccounts)}</div>` : accountRows
   }
           </div>
+          ${configDistributionMarkup}
+          ${configShareMarkup}
         </section>
       </div>
     </main>

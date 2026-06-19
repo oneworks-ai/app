@@ -6,6 +6,7 @@ import { createSession, pruneExpiredAuth, publicUser } from '../auth/sessions.js
 import { readRequestBody, sendJson } from '../http.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
 import type { RelayServerArgs, RelayStore } from '../types.js'
+import { recordLoginNotificationMessage } from './team-invitations.js'
 
 const passwordFromBody = (body: Record<string, unknown>) => (
   typeof body.password === 'string' ? body.password : ''
@@ -42,6 +43,7 @@ export const handlePasswordLoginRoute = async (
   }
 
   const session = createSession(store, user.id, args.sessionTtlMs)
+  recordLoginNotificationMessage(req, store, user)
   await storeRepository.write(store)
   sendJson(res, 200, { token: session.token, user: publicUser(user) }, args.allowOrigin)
   return true

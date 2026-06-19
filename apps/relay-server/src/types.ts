@@ -21,15 +21,22 @@ export interface RelayServerArgs {
 }
 
 export type RelayAuthProvider = string
+export type RelayConfigAssignmentMode = 'default' | 'override'
+export type RelayConfigProfileStatus = 'disabled' | 'draft' | 'published'
 export type RelayEmailProviderKind = 'disabled' | 'resend'
 export type RelayEmailPurpose = 'email-verification' | 'invite' | 'login'
 export type RelayLocale = 'en' | 'zh-CN'
 export type RelayLoginMethod = 'passkey' | 'password' | 'verification_code'
+export type RelayMessageAudienceScope = 'all' | 'team' | 'users'
+export type RelayMessageKind = 'announcement' | 'personal' | 'system'
 export type RelayPasskeyChallengeKind = 'authentication' | 'registration'
 export type RelayRegistrationMode = 'admin_created_only' | 'email_verified' | 'invite_required'
 export type RelayRole = 'owner' | 'admin' | 'member' | 'viewer'
+export type RelaySecretMode = 'device_encrypted' | 'proxy'
 export type RelaySsoProviderType = 'oauth2' | 'oidc'
+export type RelayTeamInvitationStatus = 'accepted' | 'declined' | 'pending' | 'revoked'
 export type RelayStorageDriver = 'cloudflare-do' | 'json' | 'postgres' | 'sqlite'
+export type RelayTeamRole = 'owner' | 'admin' | 'editor' | 'member' | 'viewer'
 export type RelayTurnstileMode = 'auto' | 'off' | 'required'
 
 export interface RelayPasskeyConfig {
@@ -115,8 +122,87 @@ export interface RelayUser {
   provider?: RelayAuthProvider
   providerUserId?: string
   role: RelayRole
+  teamIds?: string[]
   createdAt: string
   updatedAt?: string
+}
+
+export interface RelayTeam {
+  id: string
+  slug: string
+  name: string
+  description?: string
+  avatarUrl?: string
+  proxyModeEnabled?: boolean
+  createdByUserId: string
+  archivedAt?: string
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface RelayTeamMember {
+  id: string
+  teamId: string
+  userId: string
+  role: RelayTeamRole
+  configEnabled?: boolean
+  defaultForPublishing?: boolean
+  createdByUserId: string
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface RelayTeamInvitation {
+  id: string
+  teamId: string
+  userId?: string
+  email?: string
+  role: RelayTeamRole
+  configEnabled?: boolean
+  defaultForPublishing?: boolean
+  status: RelayTeamInvitationStatus
+  createdByUserId: string
+  createdAt: string
+  updatedAt?: string
+  respondedAt?: string
+}
+
+export interface RelayMessageAudience {
+  scope: RelayMessageAudienceScope
+  teamId?: string
+  userIds?: string[]
+}
+
+export interface RelayMessage {
+  id: string
+  kind: RelayMessageKind
+  title: string
+  body: string
+  audience: RelayMessageAudience
+  createdByUserId: string
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface RelayTeamPolicy {
+  allowedMarketplaceIds?: string[]
+  allowedPluginIds?: string[]
+  allowedSecretModes: RelaySecretMode[]
+  allowedSkillRegistries?: string[]
+  allowedSkillSources?: string[]
+  maxAssignmentsPerProfile?: number
+  maxMembersPerTeam?: number
+  maxProfilesPerTeam?: number
+  maxSecretTtlHours?: number
+  maxTeamsPerTenant?: number
+  maxTeamsPerUser?: number
+  proxyModeEnabled: boolean
+  requireOwnerApprovalForSecretProfiles?: boolean
+  selfServiceTeamCreation: boolean
+  teamsEnabled: boolean
+  tenantId: string
+  updatedAt?: string
+  updatedByUserId?: string
 }
 
 export interface RelayAuthIdentity {
@@ -208,6 +294,175 @@ export interface RelayEncryptedPayload {
   version: 1
 }
 
+export type RelayConfigSafeField =
+  | 'defaultModelService'
+  | 'marketplaces'
+  | 'modelServices'
+  | 'plugins'
+  | 'recommendedModels'
+  | 'skillRegistries'
+  | 'skills'
+  | 'skillsMeta'
+
+export interface RelayConfigPatch {
+  defaultModelService?: string
+  marketplaces?: Record<string, unknown>
+  modelServices?: Record<string, unknown>
+  plugins?: unknown[] | Record<string, unknown>
+  recommendedModels?: unknown[]
+  skillRegistries?: unknown
+  skills?: unknown
+  skillsMeta?: Record<string, unknown>
+  [key: string]: unknown
+}
+
+export interface RelayConfigProjectRule {
+  allow?: string[]
+  deny?: string[]
+}
+
+export interface RelayConfigAssignmentTarget {
+  teamIds?: string[]
+  userIds?: string[]
+}
+
+export interface RelayConfigAssignment {
+  allowedFields?: RelayConfigSafeField[]
+  configPatch?: RelayConfigPatch
+  enabled?: boolean
+  id: string
+  project?: RelayConfigProjectRule
+  target?: RelayConfigAssignmentTarget
+  updatedAt?: string
+  version?: string
+}
+
+export interface RelayConfigProfile {
+  id: string
+  teamId: string
+  name: string
+  description?: string
+  status: RelayConfigProfileStatus
+  activeVersionId?: string
+  createdByUserId: string
+  updatedByUserId?: string
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface RelayConfigProfileVersion {
+  id: string
+  profileId: string
+  version: number
+  allowedFields: RelayConfigSafeField[]
+  configPatch: RelayConfigPatch
+  secretRefs?: Record<string, string>
+  sourceHash: string
+  createdByUserId: string
+  changeNote?: string
+  createdAt: string
+}
+
+export interface RelayConfigSecret {
+  id: string
+  teamId: string
+  name: string
+  encryptedPayload: RelayEncryptedPayload
+  secretVersion: number
+  createdByUserId: string
+  createdAt: string
+  rotatedAt?: string
+  revokedAt?: string
+}
+
+export interface RelayConfigProfileAssignment {
+  id: string
+  profileId: string
+  versionId?: string
+  priority: number
+  target?: RelayConfigAssignmentTarget
+  project?: RelayConfigProjectRule
+  mode: RelayConfigAssignmentMode
+  enabled: boolean
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface RelayConfigSnapshotProvenance {
+  teamId: string
+  teamName?: string
+  profileId: string
+  profileName: string
+  versionId: string
+  version: number
+  assignmentId: string
+  mode: RelayConfigAssignmentMode
+  fields: RelayConfigSafeField[]
+}
+
+export interface RelayConfigSnapshotSecretEnvelope {
+  algorithm: 'aes-256-gcm'
+  ciphertext: string
+  expiresAt: string
+  iv: string
+  keyId: string
+  recipientDeviceId: string
+  ref: string
+  secretId: string
+  secretVersion: number
+  tag: string
+  version: 1
+}
+
+export interface RelayConfigSnapshotAssignment {
+  allowedFields?: RelayConfigSafeField[]
+  configPatch?: RelayConfigPatch
+  enabled?: boolean
+  id: string
+  mustRefreshAfter?: string
+  project?: RelayConfigProjectRule
+  provenance?: RelayConfigSnapshotProvenance
+  secrets?: RelayConfigSnapshotSecretEnvelope[]
+  updatedAt?: string
+  version?: string
+}
+
+export interface RelayConfigSnapshot {
+  account?: {
+    email?: string
+    id?: string
+    name?: string
+  }
+  assignments: RelayConfigSnapshotAssignment[]
+  hash: string
+  sourceServerId?: string
+  team?: {
+    id?: string
+    name?: string
+  }
+  updatedAt: string
+  version: string
+}
+
+export interface RelayAuditLogEntry {
+  id: string
+  actor: string
+  action: string
+  resource: string
+  status: string
+  ip?: string
+  userAgent?: string
+  requestId?: string
+  createdAt: string
+}
+
+export interface RelayConfigProjectContext {
+  cwd?: string
+  projectId?: string
+  projectName?: string
+  workspaceFolder?: string
+}
+
 export interface RelayOAuthState {
   state: string
   provider: RelayAuthProvider
@@ -288,7 +543,18 @@ export interface RelayForwardingJob {
 
 export interface RelayStore {
   createdAt: string
+  auditEvents: RelayAuditLogEntry[]
+  configAssignments: RelayConfigAssignment[]
+  configProfileAssignments: RelayConfigProfileAssignment[]
+  configSecrets: RelayConfigSecret[]
+  configProfileVersions: RelayConfigProfileVersion[]
+  configProfiles: RelayConfigProfile[]
   emailRisk: RelayEmailRiskState
+  teamPolicy: RelayTeamPolicy
+  teams: RelayTeam[]
+  teamInvitations?: RelayTeamInvitation[]
+  messages?: RelayMessage[]
+  teamMembers: RelayTeamMember[]
   users: RelayUser[]
   authIdentities: RelayAuthIdentity[]
   invites: RelayInvite[]

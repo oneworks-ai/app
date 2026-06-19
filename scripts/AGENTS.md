@@ -44,8 +44,16 @@
   - 在当前 Feishu messenger 页里按可见文本点击一个右侧会话内的按钮或快捷气泡
 - `pnpm tools message-actions verify [--quiet]`
   - 跑消息级 `编辑 / 撤回 / 分叉 / 复制原文` 的固定质量检查组合，并打印真实 Chrome 回归清单
+- `pnpm tools demo-video list [--json]`
+  - 列出能力展示录屏场景；录屏规则见 `.oo/rules/maintenance/demo-video.md`
+- `pnpm tools demo-video record <scenario> --url <url> [--out-dir <path>] [--name <name>] [--keep-frames]`
+  - 冷启动独立 Chrome profile 执行场景动作，按帧截图并用 `ffmpeg` 合成 MP4；默认输出到 `.logs/demo-videos/<scenario>`
 - `pnpm tools agent-room-smoke resume [--json]`
   - 跑真实 `StartTasks -> agent room 消息 -> inactive task resume` smoke；启动临时 server / SQLite / MCP / Codex adapter，LLM 只用 mock，结束后清理临时进程
+- `pnpm tools relay-config smoke [--allow-pending] [--json]`
+  - 跑 Relay 配置下发 smoke：临时 workspace 使用真实 `@oneworks/plugin-relay`，准备 project home 本地 `config-snapshot.json`，调用 `@oneworks/config` 的 `loadConfigState` 验证 `mergedConfig.modelServices` 生效；最终验收不要带 `--allow-pending`
+- `pnpm tools relay-config live-smoke [--json] [--keep-temp] [--skip-admin-build]`
+  - 跑真实 Relay Server / Admin / 团队配置下发 smoke：临时 server 创建用户、团队、secret、profile、assignment，成员设备拉取加密 snapshot，再让真实 config hook 本地解密合并；CI 使用时不要带 `--skip-admin-build`
 - `pnpm tools commitmsg-check [base] [head]`
   - 校验一个 git range 里的 commit title 是否符合 Conventional Commit；GitHub 默认 merge commit 例外
 - `pnpm tools pr-change-check [base] [head] --body-file <path>`

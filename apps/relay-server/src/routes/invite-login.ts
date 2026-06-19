@@ -8,6 +8,7 @@ import { createSession, pruneExpiredAuth, publicUser } from '../auth/sessions.js
 import { readRequestBody, sendJson } from '../http.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
 import type { RelayServerArgs, RelayStore } from '../types.js'
+import { recordLoginNotificationMessage } from './team-invitations.js'
 
 const cleanString = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 
@@ -66,6 +67,7 @@ export const handleInviteLoginRoute = async (
       passwordHash
     })
     const session = createSession(store, user.id, args.sessionTtlMs)
+    recordLoginNotificationMessage(req, store, user)
     await storeRepository.write(store)
     sendJson(res, 200, { token: session.token, user: publicUser(user) }, args.allowOrigin)
   } catch (error) {

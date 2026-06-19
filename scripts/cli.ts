@@ -14,11 +14,15 @@ import {
   runChromeDebugMessengerSend,
   runChromeDebugTargets
 } from './chrome-debug'
+import { parseDemoVideoColorScheme, runDemoVideoList, runDemoVideoRecord } from './demo-video'
+import type { DemoVideoColorScheme } from './demo-video'
 import type { DevStartTarget } from './dev-start'
 import { devStartTargets, parseDevStartTarget, runDevStart as runDevStartCommand } from './dev-start'
 import { runHomebrewTapSyncOneWorks } from './homebrew-tap'
 import { runMessageActionsVerify } from './message-actions'
 import { runPrChangeCheck } from './pr-change-check'
+import { runRelayConfigLiveSmoke } from './relay-config-live-smoke'
+import { runRelayConfigSmoke } from './relay-config-smoke'
 import { runReleaseTagsPlan } from './release-tags'
 import { runWindowsInstallSyncOneWorks } from './windows-install'
 
@@ -72,11 +76,15 @@ interface ScriptsCliDeps {
   runChromeDebugMessengerSend: typeof runChromeDebugMessengerSend
   runChromeDebugMessengerClickReply: typeof runChromeDebugMessengerClickReply
   runChromeDebugMessengerClickText: typeof runChromeDebugMessengerClickText
+  runDemoVideoList: typeof runDemoVideoList
+  runDemoVideoRecord: typeof runDemoVideoRecord
   runMessageActionsVerify: typeof runMessageActionsVerify
   runHomebrewTapSyncOneWorks: typeof runHomebrewTapSyncOneWorks
   runWindowsInstallSyncOneWorks: typeof runWindowsInstallSyncOneWorks
   runPublishPlan: (args: string[]) => Promise<unknown>
   runAgentRoomResumeSmoke: typeof runAgentRoomResumeSmoke
+  runRelayConfigLiveSmoke: typeof runRelayConfigLiveSmoke
+  runRelayConfigSmoke: typeof runRelayConfigSmoke
   runDevStart: typeof runDevStartCommand
 }
 
@@ -108,6 +116,8 @@ const defaultDeps: ScriptsCliDeps = {
   runChromeDebugMessengerSend,
   runChromeDebugMessengerClickReply,
   runChromeDebugMessengerClickText,
+  runDemoVideoList,
+  runDemoVideoRecord,
   runMessageActionsVerify,
   runHomebrewTapSyncOneWorks,
   runWindowsInstallSyncOneWorks,
@@ -116,6 +126,8 @@ const defaultDeps: ScriptsCliDeps = {
     return runPublishPlanCli(args)
   },
   runAgentRoomResumeSmoke,
+  runRelayConfigLiveSmoke,
+  runRelayConfigSmoke,
   runDevStart: runDevStartCommand
 }
 
@@ -348,6 +360,77 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
       })
     })
 
+  const demoVideoCommand = program
+    .command('demo-video')
+    .description('Record reusable product capability demo videos')
+
+  demoVideoCommand
+    .command('list')
+    .description('List available demo video scenarios')
+    .option('--json', 'Print machine-readable JSON', false)
+    .action(async (options: {
+      json?: boolean
+    }) => {
+      await deps.runDemoVideoList({
+        json: options.json ?? false
+      })
+    })
+
+  demoVideoCommand
+    .command('record <scenario>')
+    .description('Record a demo video scenario with isolated Chrome and ffmpeg')
+    .option('--url <url>', 'Prepared page URL or service base URL for the scenario')
+    .option('--out-dir <path>', 'Output directory')
+    .option('--name <name>', 'Output file basename')
+    .option('--width <px>', 'Viewport width', value => parsePositiveIntegerOption(value, 'width'))
+    .option('--height <px>', 'Viewport height', value => parsePositiveIntegerOption(value, 'height'))
+    .option('--fps <fps>', 'Recording frame rate', value => parsePositiveIntegerOption(value, 'fps'))
+    .option(
+      '--duration-ms <ms>',
+      'Scenario-controlled recording duration for generic scenarios',
+      value => parsePositiveIntegerOption(value, 'duration-ms')
+    )
+    .option('--chrome-path <path>', 'Chrome executable path')
+    .option('--ffmpeg-path <path>', 'ffmpeg executable path', 'ffmpeg')
+    .option(
+      '--color-scheme <scheme>',
+      'Emulated prefers-color-scheme: light, dark, or system',
+      value => parseDemoVideoColorScheme(value),
+      'light' as DemoVideoColorScheme
+    )
+    .option('--keep-frames', 'Keep raw PNG frames next to the MP4', false)
+    .option('--json', 'Print machine-readable JSON', false)
+    .action(async (scenarioId: string, options: {
+      chromePath?: string
+      colorScheme: DemoVideoColorScheme
+      durationMs?: number
+      ffmpegPath?: string
+      fps?: number
+      height?: number
+      json?: boolean
+      keepFrames?: boolean
+      name?: string
+      outDir?: string
+      url?: string
+      width?: number
+    }) => {
+      await deps.runDemoVideoRecord({
+        scenarioId,
+        chromePath: options.chromePath,
+        colorScheme: options.colorScheme,
+        durationMs: options.durationMs,
+        ffmpegPath: options.ffmpegPath,
+        fps: options.fps,
+        height: options.height,
+        json: options.json ?? false,
+        keepFrames: options.keepFrames ?? false,
+        name: options.name,
+        outDir: options.outDir,
+        url: options.url,
+        width: options.width
+      })
+    })
+
   const agentRoomSmokeCommand = program
     .command('agent-room-smoke')
     .description('Run reusable verification flows for agent rooms')
@@ -361,6 +444,46 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
     }) => {
       await deps.runAgentRoomResumeSmoke({
         json: options.json ?? false
+      })
+    })
+
+  const relayConfigCommand = program
+    .command('relay-config')
+    .description('Run reusable Relay managed config verification flows')
+
+  relayConfigCommand
+    .command('smoke')
+    .description('Run a real @oneworks/plugin-relay ./config -> loadConfigState smoke')
+    .option('--allow-pending', 'Exit successfully while the final Relay config hook API is still pending', false)
+    .option('--json', 'Print machine-readable JSON', false)
+    .option('--keep-temp', 'Keep the temporary smoke workspace for debugging', false)
+    .action(async (options: {
+      allowPending?: boolean
+      json?: boolean
+      keepTemp?: boolean
+    }) => {
+      await deps.runRelayConfigSmoke({
+        allowPending: options.allowPending ?? false,
+        json: options.json ?? false,
+        keepTemp: options.keepTemp ?? false
+      })
+    })
+
+  relayConfigCommand
+    .command('live-smoke')
+    .description('Run a real Relay Server/Admin/team config live smoke')
+    .option('--json', 'Print machine-readable JSON', false)
+    .option('--keep-temp', 'Keep the temporary smoke workspace for debugging', false)
+    .option('--skip-admin-build', 'Reuse existing relay-admin dist assets', false)
+    .action(async (options: {
+      json?: boolean
+      keepTemp?: boolean
+      skipAdminBuild?: boolean
+    }) => {
+      await deps.runRelayConfigLiveSmoke({
+        json: options.json ?? false,
+        keepTemp: options.keepTemp ?? false,
+        skipAdminBuild: options.skipAdminBuild ?? false
       })
     })
 

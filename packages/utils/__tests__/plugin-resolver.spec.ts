@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Plugin resolver regression coverage keeps related package and config resolution fixtures together. */
+
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -24,6 +26,7 @@ const { getManagedPluginInstallDir } = await import('#~/managed-plugin.js')
 const {
   discoverRuntimePluginConfigs,
   resolveConfiguredPluginInstances,
+  resolvePluginConfigEntryPathForInstance,
   resolvePluginHooksEntryPathForInstance,
   resolveRuntimePluginConfig
 } = await import('#~/plugin-resolver.js')
@@ -44,6 +47,7 @@ const writeLoggerPluginPackage = async (
         version,
         exports: {
           '.': './dist/index.js',
+          './config': './dist/config.js',
           './hooks': './dist/hooks.js',
           './package.json': './package.json'
         }
@@ -53,6 +57,7 @@ const writeLoggerPluginPackage = async (
     )
   )
   await writeFile(join(pluginRoot, 'dist/index.js'), 'module.exports = { __oneWorksPluginManifest: true }\n')
+  await writeFile(join(pluginRoot, 'dist/config.js'), 'module.exports = () => ({})\n')
   await writeFile(join(pluginRoot, 'dist/hooks.js'), 'module.exports = {}\n')
 }
 
@@ -102,28 +107,31 @@ describe('plugin resolver', () => {
     const workspace = join(tempDir, 'workspace')
     const realHome = join(tempDir, 'home')
     const packageDir = join(tempDir, 'runtime-package')
-    const pluginRoot = join(packageDir, 'node_modules/@oneworks/plugin-logger')
+    const pluginRoot = join(packageDir, 'node_modules/@oneworks/plugin-runtime-only')
     await mkdir(workspace, { recursive: true })
     await mkdir(packageDir, { recursive: true })
     await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: '@acme/runtime' }, null, 2))
-    await writeLoggerPluginPackage(pluginRoot, '1.0.0')
+    await writeLoggerPluginPackage(pluginRoot, '1.0.0', '@oneworks/plugin-runtime-only')
 
     vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', realHome)
     vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', packageDir)
 
     const [instance] = await resolveConfiguredPluginInstances({
       cwd: workspace,
-      plugins: [{ id: 'logger' }]
+      plugins: [{ id: 'runtime-only' }]
     })
 
     expect(instance).toMatchObject({
-      requestId: 'logger',
-      packageId: '@oneworks/plugin-logger',
+      requestId: 'runtime-only',
+      packageId: '@oneworks/plugin-runtime-only',
       rootDir: pluginRoot,
       resolvedBy: 'oneworks-prefix'
     })
     expect(resolvePluginHooksEntryPathForInstance(workspace, instance!)).toContain(
-      join('node_modules', '@oneworks', 'plugin-logger', 'dist', 'hooks.js')
+      join('node_modules', '@oneworks', 'plugin-runtime-only', 'dist', 'hooks.js')
+    )
+    expect(resolvePluginConfigEntryPathForInstance(workspace, instance!)).toContain(
+      join('node_modules', '@oneworks', 'plugin-runtime-only', 'dist', 'config.js')
     )
   })
 

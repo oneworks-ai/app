@@ -10,6 +10,7 @@ import { parseRelayStorageDriver } from '../src/storage/drivers.js'
 import { createDurableObjectRelayStoreRepository } from '../src/storage/durable-object.js'
 import type { RelayDurableObjectStorage } from '../src/storage/durable-object.js'
 import { createRelayStoreRepository } from '../src/storage/repository.js'
+import { normalizeRelayTeamPolicy } from '../src/teams.js'
 import type { RelayStore } from '../src/types.js'
 
 const tempDirs: string[] = []
@@ -71,10 +72,21 @@ describe('relay storage repository', () => {
     })
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
+      auditEvents: [],
+      configAssignments: [],
+      configProfileAssignments: [],
+      configProfileVersions: [],
+      configProfiles: [],
+      configSecrets: [],
       emailRisk: {
         buckets: [],
         challenges: []
       },
+      teamPolicy: normalizeRelayTeamPolicy(undefined),
+      teams: [],
+      teamInvitations: [],
+      messages: [],
+      teamMembers: [],
       authIdentities: [],
       passkeyChallenges: [],
       passkeys: [],
@@ -84,6 +96,7 @@ describe('relay storage repository', () => {
           email: 'owner@example.com',
           name: 'Owner',
           role: 'owner',
+          teamIds: ['team-a'],
           createdAt: '2026-01-01T00:00:00.000Z'
         }
       ],
@@ -104,7 +117,7 @@ describe('relay storage repository', () => {
       users: [{ id: 'user-1', email: 'owner@example.com' }]
     })
     await expect(repository.read()).resolves.toMatchObject({
-      users: [{ id: 'user-1', role: 'owner' }],
+      users: [{ id: 'user-1', role: 'owner', teamIds: ['team-a'] }],
       devices: [],
       deviceSessions: [],
       forwardingJobs: []
@@ -119,10 +132,21 @@ describe('relay storage repository', () => {
     })
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
+      auditEvents: [],
+      configAssignments: [],
+      configProfileAssignments: [],
+      configProfileVersions: [],
+      configProfiles: [],
+      configSecrets: [],
       emailRisk: {
         buckets: [],
         challenges: []
       },
+      teamPolicy: normalizeRelayTeamPolicy(undefined),
+      teams: [],
+      teamInvitations: [],
+      messages: [],
+      teamMembers: [],
       authIdentities: [],
       passkeyChallenges: [],
       passkeys: [],
@@ -185,10 +209,21 @@ describe('relay storage repository', () => {
     const repository = createDurableObjectRelayStoreRepository(new MemoryDurableObjectStorage())
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
+      auditEvents: [],
+      configAssignments: [],
+      configProfileAssignments: [],
+      configProfileVersions: [],
+      configProfiles: [],
+      configSecrets: [],
       emailRisk: {
         buckets: [],
         challenges: []
       },
+      teamPolicy: normalizeRelayTeamPolicy(undefined),
+      teams: [],
+      teamInvitations: [],
+      messages: [],
+      teamMembers: [],
       authIdentities: [],
       passkeyChallenges: [],
       passkeys: [],

@@ -8,4 +8,5 @@
 - Fix Relay dev deployment automation so Cloudflare Pages deploys Admin proxy functions and same-origin `/health` smoke checks work.
 - Fix Vercel prebuilt Relay deployments by copying WebAuthn runtime dependencies into the serverless function output.
 - Fix Relay Server version reporting to read from its package metadata instead of a stale hardcoded release string.
+- Add Relay team configuration distribution APIs, Admin team/message management surfaces, and plugin-side team config snapshot consumption.
 - Document the official domain, DNS, and email topology for public, dev, Cloudflare, Vercel, and support-mail deployments.

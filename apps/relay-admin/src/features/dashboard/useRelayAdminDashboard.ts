@@ -32,6 +32,20 @@ import {
   deleteRelayAdminSsoProvider,
   updateRelayAdminSsoProvider
 } from '../sso/ssoProvidersApi'
+import type {
+  CreateTeamInput,
+  RelayAdminTeam,
+  RelayAdminTeamPolicy,
+  UpdateTeamInput,
+  UpdateTeamPolicyInput
+} from '../teams/teamTypes'
+import {
+  archiveRelayAdminTeam,
+  createRelayAdminTeam,
+  restoreRelayAdminTeam,
+  updateRelayAdminTeam,
+  updateRelayAdminTeamPolicy
+} from '../teams/teamsApi'
 import { createRelayAdminUser, updateRelayAdminUser } from '../users/usersApi'
 import { fetchRelayAdminSnapshot } from './adminSnapshot'
 
@@ -50,6 +64,9 @@ export const useRelayAdminDashboard = () => {
   const [users, setUsers] = useState<RelayAdminUser[]>([])
   const [invites, setInvites] = useState<RelayAdminInvite[]>([])
   const [ssoProviders, setSsoProviders] = useState<RelayAdminSsoProvider[]>([])
+  const [teams, setTeams] = useState<RelayAdminTeam[]>([])
+  const [teamPolicy, setTeamPolicy] = useState<RelayAdminTeamPolicy | undefined>()
+  const [snapshotLoaded, setSnapshotLoaded] = useState(false)
   const [error, setError] = useState<string | undefined>()
   const [loading, setLoading] = useState(false)
   const [loginUrl] = useState(buildAdminLoginUrl)
@@ -77,6 +94,9 @@ export const useRelayAdminDashboard = () => {
     setUsers(snapshot.users)
     setInvites(snapshot.invites)
     setSsoProviders(snapshot.ssoProviders)
+    setTeams(snapshot.teams)
+    setTeamPolicy(snapshot.teamPolicy)
+    setSnapshotLoaded(true)
   }, [canManageAdmin, token])
 
   const refresh = useCallback(async () => {
@@ -85,6 +105,9 @@ export const useRelayAdminDashboard = () => {
       setDevices([])
       setInvites([])
       setSsoProviders([])
+      setTeams([])
+      setTeamPolicy(undefined)
+      setSnapshotLoaded(false)
       return
     }
     await run(loadSnapshot)
@@ -105,11 +128,13 @@ export const useRelayAdminDashboard = () => {
       clearAdminSessionToken()
       setAuthStatus('missing')
       setCurrentUser(undefined)
+      setSnapshotLoaded(false)
       return
     }
 
     setAuthStatus('checking')
     setAuthError(undefined)
+    setSnapshotLoaded(false)
     void fetchRelayAdminMe(nextToken)
       .then(body => {
         if (!active) return
@@ -124,6 +149,7 @@ export const useRelayAdminDashboard = () => {
         setTokenState('')
         setCurrentUser(undefined)
         setAuthStatus('missing')
+        setSnapshotLoaded(false)
         setAuthError(reason instanceof Error ? reason.message : String(reason))
       })
 
@@ -139,6 +165,7 @@ export const useRelayAdminDashboard = () => {
     setCurrentUser(account.user)
     setAuthStatus('checking')
     setAuthError(undefined)
+    setSnapshotLoaded(false)
   }, [])
 
   const logout = useCallback(() => {
@@ -147,6 +174,7 @@ export const useRelayAdminDashboard = () => {
     setCurrentUser(undefined)
     setAuthStatus('missing')
     setAuthError(undefined)
+    setSnapshotLoaded(false)
   }, [token])
 
   const createUser = useCallback(async (input: CreateUserInput) => {
@@ -241,11 +269,45 @@ export const useRelayAdminDashboard = () => {
     })
   }, [loadSnapshot, run, token])
 
+  const createTeam = useCallback(async (input: CreateTeamInput) => {
+    await run(async () => {
+      await createRelayAdminTeam(token, input)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
+  const setTeamArchived = useCallback(async (team: RelayAdminTeam, archived: boolean) => {
+    await run(async () => {
+      if (archived) {
+        await archiveRelayAdminTeam(token, team.id)
+      } else {
+        await restoreRelayAdminTeam(token, team.id)
+      }
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
+  const updateTeam = useCallback(async (team: RelayAdminTeam, input: UpdateTeamInput) => {
+    await run(async () => {
+      await updateRelayAdminTeam(token, team, input)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
+  const updateTeamPolicy = useCallback(async (input: UpdateTeamPolicyInput) => {
+    await run(async () => {
+      const body = await updateRelayAdminTeamPolicy(token, input)
+      setTeamPolicy(body.policy)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
   return {
     canLoad,
     accounts,
     createInvite,
     createSsoProvider,
+    createTeam,
     createUser,
     authError,
     authStatus,
@@ -261,14 +323,20 @@ export const useRelayAdminDashboard = () => {
     refresh,
     selectAccount,
     setInviteRevoked,
+    setTeamArchived,
     setUserMaxDevices,
     setSsoProviderEnabled,
     setUserDisabled,
     setUserLoginId,
     setUserPassword,
     setUserRole,
+    snapshotLoaded,
     ssoProviders,
+    teamPolicy,
+    teams,
     token,
+    updateTeam,
+    updateTeamPolicy,
     updateSsoProvider,
     users
   }

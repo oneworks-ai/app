@@ -10,6 +10,7 @@ import { handleRelaySessionsRoute } from '../src/routes/sessions.js'
 import { readRelayStore } from '../src/server.js'
 import { createRelayStoreRepository } from '../src/storage/repository.js'
 import { writeRelayStore } from '../src/store.js'
+import { normalizeRelayTeamPolicy } from '../src/teams.js'
 import type { RelayServerArgs, RelayStore } from '../src/types.js'
 import { authHeaders, requestJson } from './helpers.js'
 
@@ -37,10 +38,21 @@ export const cleanupSessionRelayFixtures = async () => {
 
 export const createFixtureStore = (): RelayStore => ({
   createdAt: timestamp,
+  auditEvents: [],
+  configAssignments: [],
+  configProfileAssignments: [],
+  configProfileVersions: [],
+  configProfiles: [],
+  configSecrets: [],
   emailRisk: {
     buckets: [],
     challenges: []
   },
+  teamPolicy: normalizeRelayTeamPolicy(undefined),
+  teams: [],
+  teamInvitations: [],
+  messages: [],
+  teamMembers: [],
   authIdentities: [],
   passkeyChallenges: [],
   passkeys: [],

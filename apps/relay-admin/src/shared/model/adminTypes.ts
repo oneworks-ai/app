@@ -34,7 +34,18 @@ export interface RelayAdminUser {
   passwordEnabled: boolean
   provider: string | null
   role: RelayAdminRole
+  teams: RelayAdminUserTeamSummary[]
   updatedAt: string | null
+}
+
+export interface RelayAdminUserTeamSummary {
+  archivedAt: string | null
+  configEnabled: boolean
+  defaultForPublishing: boolean
+  id: string
+  name: string
+  role: 'admin' | 'editor' | 'member' | 'owner' | 'viewer'
+  slug: string
 }
 
 export interface RelayAdminInvite {

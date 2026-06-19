@@ -13,6 +13,10 @@
 - `src/server/session-worker.ts`：会话快照、job claim 和结果回传 worker。
 - `src/server/session-relay-client.ts`：Relay 远端 session forwarding client。
 - `src/server/store.ts`：远端签发的 device token 持久化到 project home runtime 目录。
+- `src/server/config-source-preferences.ts`：本机对 team/profile/assignment 配置来源的启停偏好；用于插件界面 opt-out 和 config hook 应用前过滤 snapshot。
+- `src/server/config-share.ts`：团队配置分享发布编排；只使用登录 session 调用 `/api/relay/*` 团队/profile/secret API，device token 不能用于团队管理。
+- `src/shared/config-secrets.ts`：team config snapshot secret envelope 的设备 token 加解密工具；plaintext 只供 config hook 内存应用，不写回 snapshot cache。
+- `src/shared/config-share-draft.ts`：团队配置显式分享草稿构建器；负责从用户选择的配置中提取模型服务、插件、marketplaces、skills 等声明型字段，拒绝 env / MCP / permissions / 本地路径，并把 schema 或命名识别出的 secret 变成待上传预览项。
 - `__tests__/`：按 API、controller、heartbeat、session worker 等模块拆分测试。
 - `.oo/rules/RELAY-DEPLOYMENT.md`：Relay 托管服务、私有化部署、Vercel / Cloudflare 域名、官方 OneWorks 域名 / 邮件拓扑和账号边界；涉及插件默认服务或用户自部署接入时先读。
 
@@ -25,4 +29,5 @@
 - 多服务下 device token 按 server id 分开保存；不要把一个 Relay 系统的 token 覆盖到另一个系统。
 - 插件登录必须打开所选 Relay Server 的 `/login` 页面；Web 回跳使用当前插件页，Electron 回跳使用 `oneworks://relay/auth` schema URL，再由桌面壳打开对应 workspace 的插件页面。
 - 不记录会话正文；插件只转发当前 in-memory job payload / result，持久化仅限 device identity 和每个 server 的 token。
+- Relay config snapshot cache 只能保存 encrypted secret envelope；config hook 可以用本地 device token 解密并在内存中注入 secret 字段，但不能把 plaintext 写回 project home。
 - 修改插件行为后跑 `pnpm -C packages/plugins/relay test`、`pnpm -C packages/plugins/relay typecheck` 和 `pnpm -C packages/plugins/relay build`。

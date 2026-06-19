@@ -113,6 +113,11 @@ export interface PluginConfigManifest {
   uiSchema?: ConfigUiObjectSchema
 }
 
+export interface PluginConfigHookManifest {
+  /** 插件包内的 config hook 入口。相对路径从插件根目录解析。 */
+  entry?: string
+}
+
 export interface PluginContributionBase {
   description?: PluginLocalizedText
   descriptionI18n?: Record<string, string>
@@ -424,6 +429,7 @@ export interface PluginManifest {
   assets?: PluginManifestAssets
   children?: Record<string, PluginManifestChildDefinition>
   config?: PluginConfigManifest
+  configHook?: string | PluginConfigHookManifest
   plugin?: {
     client?: PluginClientManifest
     server?: PluginServerManifest
@@ -596,6 +602,7 @@ export interface ManagedPluginInstallConfig {
 export type PluginResolutionStrategy =
   | 'direct'
   | 'oneworks-prefix'
+  | 'vibe-forge-prefix'
   | 'managed-package-cache'
   | 'manifest-package'
   | 'manifest-directory'

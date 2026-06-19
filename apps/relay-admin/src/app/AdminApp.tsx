@@ -15,13 +15,13 @@ import {
 } from '@oneworks/route-layout'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { AdminDashboard } from '../features/dashboard/AdminDashboard'
 import type { AdminDashboardCreateSectionId } from '../features/dashboard/AdminDashboard'
 import { useRelayAdminDashboard } from '../features/dashboard/useRelayAdminDashboard'
 import { UserPasswordModal } from '../features/users/UserPasswordModal'
-import { canAccessRelayAdminSection } from '../shared/model/adminPermissions'
+import { canAccessRelayAdminSection, canManageRelayMessages } from '../shared/model/adminPermissions'
 import type { RelayAdminUser } from '../shared/model/adminTypes'
 import { AdminIcon } from '../shared/ui/AdminIcon'
 import { AdminNavRail } from './AdminNavRail'
@@ -39,6 +39,7 @@ const clampAdminSidebarWidth = (width: number) =>
 const createSectionLabels: Record<AdminDashboardCreateSectionId, string> = {
   invites: '邀请码',
   sso: 'SSO',
+  teams: '团队',
   users: '用户'
 }
 
@@ -46,12 +47,35 @@ const getCreateSectionIdFromPath = (pathname: string): AdminDashboardCreateSecti
   if (pathname === '/users') return 'users'
   if (pathname === '/invites') return 'invites'
   if (pathname === '/sso') return 'sso'
+  if (pathname === '/teams') return 'teams'
   return undefined
 }
 
 const getUserDetailIdFromPath = (pathname: string) => {
   const match = /^\/users\/([^/]+)$/.exec(pathname)
   return match == null ? undefined : decodeURIComponent(match[1])
+}
+
+const getTeamDetailIdFromPath = (pathname: string) => {
+  const match = /^\/teams\/([^/]+)(?:\/(?:audit|members|profiles|secrets))?$/.exec(pathname)
+  return match == null ? undefined : decodeURIComponent(match[1])
+}
+
+const getTeamDetailSettingsIdFromPath = (pathname: string) => {
+  const match = /^\/teams\/([^/]+)\/settings$/.exec(pathname)
+  return match == null ? undefined : decodeURIComponent(match[1])
+}
+
+const getMessageIdFromPath = (pathname: string, basePath: '/message-pushes' | '/messages') => {
+  if (pathname === `${basePath}/create`) return undefined
+  const match = new RegExp(`^${basePath}/(.+)$`).exec(pathname)
+  return match == null ? undefined : decodeURIComponent(match[1])
+}
+
+const TeamDetailDefaultRoute = () => {
+  const { teamId } = useParams()
+  if (teamId == null) return <Navigate to='/teams' replace />
+  return <Navigate to={`/teams/${encodeURIComponent(teamId)}/members`} replace />
 }
 
 const readAdminSidebarWidth = () => {
@@ -67,13 +91,18 @@ const readAdminSidebarWidth = () => {
 export const AdminApp = () => {
   const dashboard = useRelayAdminDashboard()
   const location = useLocation()
-  const { activeSection, activeSectionId, sidebarItems } = useAdminSectionNavigation(dashboard.currentUser?.role)
+  const navigate = useNavigate()
+  const canSendMessages = canManageRelayMessages(dashboard.currentUser?.role, dashboard.teams)
+  const { activeSection, activeSectionId, sidebarItems } = useAdminSectionNavigation(dashboard.currentUser?.role, {
+    canManageMessages: canSendMessages
+  })
   const { isCompactLayout } = useResponsiveLayout()
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(() => readAdminSidebarWidth())
   const [createSectionId, setCreateSectionId] = useState<AdminDashboardCreateSectionId | undefined>()
   const [passwordUser, setPasswordUser] = useState<RelayAdminUser | undefined>()
+  const [teamDetailSettingsResetSignal, setTeamDetailSettingsResetSignal] = useState(0)
   const canResizeSidebar = !isCompactLayout && !sidebarCollapsed
   const commitSidebarWidth = useCallback((nextWidth: number) => {
     const resolvedWidth = clampAdminSidebarWidth(nextWidth)
@@ -100,15 +129,45 @@ export const AdminApp = () => {
   const headerBreadcrumb = useAdminRouteHeaderBreadcrumb(location.pathname, dashboard)
   const normalizedPathname = location.pathname === '/' ? '/' : location.pathname.replace(/\/+$/, '')
   const isProfileRoute = normalizedPathname === '/profile'
+  const isMessagesRoute = normalizedPathname === '/messages'
+  const isMessagePushRoute = normalizedPathname === '/message-pushes'
+  const isMessagePushCreateRoute = normalizedPathname === '/message-pushes/create'
+  const activeMessageId = getMessageIdFromPath(normalizedPathname, '/messages')
+  const activeMessagePushId = getMessageIdFromPath(normalizedPathname, '/message-pushes')
+  const isMessageDetailRoute = activeMessageId != null
+  const isMessagePushDetailRoute = activeMessagePushId != null
+  const isTeamListRoute = normalizedPathname === '/teams'
   const activeCreateSectionId = getCreateSectionIdFromPath(normalizedPathname)
   const activeUserDetailId = getUserDetailIdFromPath(normalizedPathname)
+  const activeTeamDetailId = getTeamDetailIdFromPath(normalizedPathname)
+  const activeTeamDetailSettingsId = getTeamDetailSettingsIdFromPath(normalizedPathname)
   const activeUserDetail = activeUserDetailId == null
     ? undefined
     : dashboard.users.find(user => user.id === activeUserDetailId)
-  const headerTitle = isProfileRoute ? '个人资料' : activeSection.label
-  const headerIcon = isProfileRoute ? <AdminIcon name='account_circle' /> : activeSection.icon
+  const activeTeamDetail = activeTeamDetailId == null
+    ? undefined
+    : dashboard.teams.find(team => team.id === activeTeamDetailId)
+  const isTeamDetailSettingsRoute = activeTeamDetailSettingsId != null
+  const canRenderMessagePushes = dashboard.authStatus === 'checking' || !dashboard.snapshotLoaded || canSendMessages
+  const headerTitle = isMessagesRoute
+    ? '消息中心'
+    : isMessagePushRoute
+    ? '消息推送'
+    : isMessagePushCreateRoute
+    ? '创建推送'
+    : isMessageDetailRoute || isMessagePushDetailRoute
+    ? '消息详情'
+    : isProfileRoute
+    ? '个人资料'
+    : activeSection.label
+  const headerIcon = isMessagesRoute || isMessageDetailRoute || isMessagePushRoute || isMessagePushCreateRoute ||
+      isMessagePushDetailRoute
+    ? <AdminIcon name='notifications' />
+    : isProfileRoute
+    ? <AdminIcon name='account_circle' />
+    : activeSection.icon
   const isCreateActionActive = activeCreateSectionId != null && createSectionId === activeCreateSectionId
-  const canRenderSection = useCallback((sectionId: 'devices' | 'invites' | 'sso' | 'users') => (
+  const canRenderSection = useCallback((sectionId: 'devices' | 'invites' | 'sso' | 'teams' | 'users') => (
     dashboard.authStatus === 'checking' ||
     canAccessRelayAdminSection(dashboard.currentUser?.role, sectionId)
   ), [dashboard.authStatus, dashboard.currentUser?.role])
@@ -162,6 +221,17 @@ export const AdminApp = () => {
       })
     }
 
+    if (activeTeamDetail != null) {
+      items.push({
+        disabled: !dashboard.canLoad || dashboard.loading,
+        icon: <AdminIcon name='admin_panel_settings' />,
+        key: 'team:settings',
+        label: '团队设置',
+        title: '团队设置',
+        onSelect: () => void navigate(`/teams/${encodeURIComponent(activeTeamDetail.id)}/settings`)
+      })
+    }
+
     if (activeCreateSectionId != null) {
       const createSectionLabel = createSectionLabels[activeCreateSectionId]
 
@@ -181,13 +251,52 @@ export const AdminApp = () => {
       })
     }
 
-    if (!isProfileRoute) {
+    if (isTeamListRoute) {
+      items.push({
+        disabled: !dashboard.canLoad || dashboard.loading,
+        icon: <AdminIcon name='admin_panel_settings' />,
+        key: 'teams:settings',
+        label: '团队设置',
+        title: '团队设置',
+        onSelect: () => void navigate('/teams/settings')
+      })
+    }
+
+    if (isMessagePushRoute && canSendMessages) {
+      items.push({
+        disabled: !dashboard.canLoad || dashboard.loading,
+        icon: <AdminIcon name='add' />,
+        key: 'message-pushes:create',
+        label: '创建推送',
+        title: '创建信息推送',
+        onSelect: () => void navigate('/message-pushes/create')
+      })
+    }
+
+    if (isTeamDetailSettingsRoute) {
+      items.push({
+        disabled: !dashboard.canLoad || dashboard.loading,
+        icon: <AdminIcon name='restart_alt' />,
+        key: 'team:settings:reset',
+        label: '重置表单',
+        title: '重置当前表单',
+        onSelect: () => setTeamDetailSettingsResetSignal(current => current + 1)
+      })
+    } else if (
+      !isProfileRoute &&
+      !isMessagesRoute &&
+      !isMessageDetailRoute &&
+      !isMessagePushRoute &&
+      !isMessagePushCreateRoute &&
+      !isMessagePushDetailRoute
+    ) {
       items.push({
         disabled: !dashboard.canLoad || dashboard.loading,
         icon: <AdminIcon name='refresh' />,
         key: 'refresh',
-        label: 'Refresh',
+        label: '刷新',
         loading: dashboard.loading,
+        title: '刷新',
         onSelect: () => void dashboard.refresh()
       })
     }
@@ -195,15 +304,26 @@ export const AdminApp = () => {
     return items
   }, [
     activeCreateSectionId,
+    activeTeamDetail,
     activeUserDetail,
     dashboard.canLoad,
+    dashboard.currentUser?.role,
     dashboard.loading,
     dashboard.logout,
     dashboard.refresh,
     dashboard.setUserDisabled,
     dashboard.token,
+    canSendMessages,
+    isMessageDetailRoute,
+    isMessagePushCreateRoute,
+    isMessagePushDetailRoute,
+    isMessagePushRoute,
     isCreateActionActive,
-    isProfileRoute
+    isMessagesRoute,
+    isProfileRoute,
+    isTeamListRoute,
+    isTeamDetailSettingsRoute,
+    navigate
   ])
 
   useEffect(() => {
@@ -330,6 +450,81 @@ export const AdminApp = () => {
               />
               <Route path='profile' element={<AdminDashboard dashboard={dashboard} sectionId='profile' />} />
               <Route
+                path='messages'
+                element={
+                  <AdminDashboard
+                    dashboard={dashboard}
+                    messageDetailBasePath='/messages'
+                    messageMode='center'
+                    sectionId='messages'
+                  />
+                }
+              />
+              <Route
+                path='messages/create'
+                element={<Navigate to='/messages' replace />}
+              />
+              <Route
+                path='messages/:messageId'
+                element={
+                  <AdminDashboard
+                    dashboard={dashboard}
+                    messageId={activeMessageId}
+                    messageDetailBasePath='/messages'
+                    messageMode='center'
+                    sectionId='messages'
+                  />
+                }
+              />
+              <Route
+                path='messages/*'
+                element={<Navigate to='/messages' replace />}
+              />
+              <Route
+                path='message-pushes'
+                element={canRenderMessagePushes
+                  ? (
+                    <AdminDashboard
+                      dashboard={dashboard}
+                      messageDetailBasePath='/message-pushes'
+                      messageMode='history'
+                      sectionId='messages'
+                    />
+                  )
+                  : <Navigate to='/messages' replace />}
+              />
+              <Route
+                path='message-pushes/create'
+                element={canRenderMessagePushes
+                  ? (
+                    <AdminDashboard
+                      dashboard={dashboard}
+                      messageDetailBasePath='/message-pushes'
+                      messageMode='create'
+                      sectionId='messages'
+                    />
+                  )
+                  : <Navigate to='/messages' replace />}
+              />
+              <Route
+                path='message-pushes/:messageId'
+                element={canRenderMessagePushes
+                  ? (
+                    <AdminDashboard
+                      dashboard={dashboard}
+                      messageDetailBasePath='/message-pushes'
+                      messageId={activeMessagePushId}
+                      messageMode='history'
+                      sectionId='messages'
+                    />
+                  )
+                  : <Navigate to='/messages' replace />}
+              />
+              <Route
+                path='message-pushes/*'
+                element={<Navigate to={canRenderMessagePushes ? '/message-pushes' : '/messages'} replace />}
+              />
+              <Route
                 path='invites'
                 element={canRenderSection('invites')
                   ? (
@@ -353,6 +548,49 @@ export const AdminApp = () => {
                       onCreateSectionChange={setCreateSectionId}
                     />
                   )
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
+                path='teams'
+                element={canRenderSection('teams')
+                  ? (
+                    <AdminDashboard
+                      createSectionId={createSectionId}
+                      dashboard={dashboard}
+                      sectionId='teams'
+                      onCreateSectionChange={setCreateSectionId}
+                    />
+                  )
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
+                path='teams/settings'
+                element={canRenderSection('teams')
+                  ? <AdminDashboard dashboard={dashboard} sectionId='team-settings' />
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
+                path='teams/:teamId/settings'
+                element={canRenderSection('teams')
+                  ? (
+                    <AdminDashboard
+                      dashboard={dashboard}
+                      resetTeamDetailSettingsSignal={teamDetailSettingsResetSignal}
+                      sectionId='team-detail-settings'
+                    />
+                  )
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
+                path='teams/:teamId/:tabKey'
+                element={canRenderSection('teams')
+                  ? <AdminDashboard dashboard={dashboard} sectionId='team-detail' />
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
+                path='teams/:teamId'
+                element={canRenderSection('teams')
+                  ? <TeamDetailDefaultRoute />
                   : <Navigate to='/devices' replace />}
               />
               <Route path='*' element={<Navigate to='/devices' replace />} />

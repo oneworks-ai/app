@@ -2,9 +2,11 @@
 // New files should satisfy the global max-lines rule instead of extending it.
 export default [
   '.oo.config.json',
+  '.oo/docs/en/usage/plugins.md',
   'packages/plugins/demo/client/view.js',
   'packages/plugins/demo/plugin.json',
   '.oo/rules/adapter-error-debugging.md',
+  '.oo/docs/usage/plugins.md',
   '.oo/docs/usage/plugins/ui-runtime.md',
   '.oo/rfcs/0001-copilot-adapter.md',
   '.oo/rfcs/0001-gemini-cli-adapter.md',

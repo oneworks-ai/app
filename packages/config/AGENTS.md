@@ -11,6 +11,8 @@
   - `loadConfig()`
   - `loadAdapterConfig()`
   - `resetConfigCache()`
+- `src/plugin-config.ts`
+  - 插件 config hook 加载与运行时 config patch 合并
 - `src/update.ts`
   - `updateConfigFile()`
 - `src/define.ts`
@@ -31,6 +33,7 @@
   - workspace 级缓存与 cache reset
   - `defineConfig()` typed helper
   - global/project/user/extend config merge 策略
+  - 插件 config hook 返回值到最终 user 层的运行时合并
   - 默认 system prompt 开关解析与合并策略
   - 默认内建 MCP 开关与 package 解析
 - 本包不负责：

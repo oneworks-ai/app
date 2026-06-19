@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { buildAuditEvent } from '../src/security/audit.js'
 import { readRelayStore, writeRelayStore } from '../src/store.js'
+import { normalizeRelayTeamPolicy } from '../src/teams.js'
 import type { RelayStore } from '../src/types.js'
 import { authHeaders, cleanupRelayFixtures, listenRelay, requestJson } from './helpers.js'
 
@@ -15,10 +16,21 @@ const timestamp = '2026-01-01T00:00:00.000Z'
 
 const createSecurityStore = (): RelayStore => ({
   createdAt: timestamp,
+  auditEvents: [],
+  configAssignments: [],
+  configProfileAssignments: [],
+  configProfileVersions: [],
+  configProfiles: [],
+  configSecrets: [],
   emailRisk: {
     buckets: [],
     challenges: []
   },
+  teamPolicy: normalizeRelayTeamPolicy(undefined),
+  teams: [],
+  teamInvitations: [],
+  messages: [],
+  teamMembers: [],
   authIdentities: [],
   passkeyChallenges: [],
   passkeys: [],

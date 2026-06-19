@@ -3,11 +3,24 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import process from 'node:process'
 
+import {
+  normalizeRelayConfigProfile,
+  normalizeRelayConfigProfileAssignment,
+  normalizeRelayConfigProfileVersion
+} from './config-profiles.js'
+import { normalizeRelayConfigAssignment } from './config-snapshot.js'
 import { hashDeviceToken } from './devices/private-metadata.js'
 import { sanitizeRelayStorageValue } from './storage/content-boundary.js'
 import { normalizeRelaySsoProviders } from './storage/sso-providers.js'
+import { normalizeRelayTeamPolicy, normalizeTeamRole } from './teams.js'
 import type {
+  RelayAuditLogEntry,
   RelayAuthIdentity,
+  RelayConfigAssignment,
+  RelayConfigProfile,
+  RelayConfigProfileAssignment,
+  RelayConfigProfileVersion,
+  RelayConfigSecret,
   RelayDevice,
   RelayDeviceSession,
   RelayEmailChallenge,
@@ -18,22 +31,41 @@ import type {
   RelayForwardingJob,
   RelayForwardingJobStatus,
   RelayInvite,
+  RelayMessage,
+  RelayMessageAudience,
+  RelayMessageAudienceScope,
+  RelayMessageKind,
   RelayOAuthState,
   RelayPasskeyChallenge,
   RelayPasskeyChallengeKind,
   RelayPasskeyCredential,
   RelaySession,
   RelayStore,
+  RelayTeam,
+  RelayTeamInvitation,
+  RelayTeamInvitationStatus,
+  RelayTeamMember,
   RelayUser
 } from './types.js'
 import { createToken, isRecord, normalizeRole, now } from './utils.js'
 
 const defaultStore = (): RelayStore => ({
   createdAt: now(),
+  auditEvents: [],
+  configAssignments: [],
+  configProfileAssignments: [],
+  configSecrets: [],
+  configProfileVersions: [],
+  configProfiles: [],
   emailRisk: {
     buckets: [],
     challenges: []
   },
+  teamPolicy: normalizeRelayTeamPolicy(undefined),
+  teams: [],
+  teamInvitations: [],
+  messages: [],
+  teamMembers: [],
   users: [],
   authIdentities: [],
   invites: [],
@@ -65,6 +97,7 @@ const normalizeUser = (value: Record<string, unknown>): RelayUser => ({
     ? value.providerUserId.trim()
     : undefined,
   role: normalizeRole(value.role, 'member'),
+  teamIds: normalizeStringArray(value.teamIds),
   createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
   updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined
 })
@@ -152,6 +185,195 @@ const normalizeStringArray = (value: unknown) => (
     ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map(item => item.trim())
     : undefined
 )
+
+const normalizeSlug = (value: unknown, fallback: string) => {
+  const source = typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback
+  const slug = source.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '')
+  return slug === '' ? fallback : slug
+}
+
+const normalizeHttpUrl = (value: unknown) => {
+  if (typeof value !== 'string' || value.trim() === '') return undefined
+  try {
+    const url = new URL(value.trim())
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const normalizeImageDataUrl = (value: unknown) => {
+  if (typeof value !== 'string' || value.trim() === '') return undefined
+  const match = /^data:(image\/(?:png|jpeg|webp|gif));base64,([a-z0-9+/=\s]+)$/iu.exec(value.trim())
+  if (match == null) return undefined
+  const base64 = match[2].replace(/\s/gu, '')
+  return base64 === '' ? undefined : `data:${match[1].toLowerCase()};base64,${base64}`
+}
+
+const normalizeAvatarSource = (value: unknown) => normalizeImageDataUrl(value) ?? normalizeHttpUrl(value)
+
+const normalizeTeam = (value: Record<string, unknown>): RelayTeam | undefined => {
+  const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
+  const slug = normalizeSlug(value.slug, id ?? randomUUID())
+  const teamId = id ?? slug
+  return {
+    id: teamId,
+    slug,
+    name: typeof value.name === 'string' && value.name.trim() !== '' ? value.name.trim() : teamId,
+    description: typeof value.description === 'string' && value.description.trim() !== ''
+      ? value.description.trim()
+      : undefined,
+    avatarUrl: normalizeAvatarSource(value.avatarUrl),
+    ...(typeof value.proxyModeEnabled === 'boolean' ? { proxyModeEnabled: value.proxyModeEnabled } : {}),
+    createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
+      ? value.createdByUserId.trim()
+      : 'system',
+    archivedAt: typeof value.archivedAt === 'string' && value.archivedAt.trim() !== ''
+      ? value.archivedAt.trim()
+      : undefined,
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined
+  }
+}
+
+const normalizeTeamMember = (value: Record<string, unknown>): RelayTeamMember | undefined => {
+  const teamId = typeof value.teamId === 'string' && value.teamId.trim() !== '' ? value.teamId.trim() : undefined
+  const userId = typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined
+  if (teamId == null || userId == null) return undefined
+  return {
+    id: typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : `member:${teamId}:${userId}`,
+    teamId,
+    userId,
+    role: normalizeTeamRole(value.role, 'member'),
+    ...(typeof value.configEnabled === 'boolean' ? { configEnabled: value.configEnabled } : {}),
+    ...(typeof value.defaultForPublishing === 'boolean' ? { defaultForPublishing: value.defaultForPublishing } : {}),
+    createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
+      ? value.createdByUserId.trim()
+      : userId,
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined
+  }
+}
+
+const teamInvitationStatuses = new Set<RelayTeamInvitationStatus>(['accepted', 'declined', 'pending', 'revoked'])
+
+const normalizeTeamInvitationStatus = (value: unknown): RelayTeamInvitationStatus => (
+  typeof value === 'string' && teamInvitationStatuses.has(value as RelayTeamInvitationStatus)
+    ? value as RelayTeamInvitationStatus
+    : 'pending'
+)
+
+const normalizeTeamInvitation = (value: Record<string, unknown>): RelayTeamInvitation | undefined => {
+  const teamId = typeof value.teamId === 'string' && value.teamId.trim() !== '' ? value.teamId.trim() : undefined
+  const rawUserId = typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined
+  const rawEmail = typeof value.email === 'string' && value.email.trim() !== ''
+    ? value.email.trim().toLowerCase()
+    : undefined
+  if (teamId == null || (rawUserId == null && rawEmail == null)) return undefined
+  return {
+    id: typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : randomUUID(),
+    teamId,
+    ...(rawUserId == null ? {} : { userId: rawUserId }),
+    ...(rawEmail == null ? {} : { email: rawEmail }),
+    role: normalizeTeamRole(value.role, 'member'),
+    ...(typeof value.configEnabled === 'boolean' ? { configEnabled: value.configEnabled } : {}),
+    ...(typeof value.defaultForPublishing === 'boolean' ? { defaultForPublishing: value.defaultForPublishing } : {}),
+    status: normalizeTeamInvitationStatus(value.status),
+    createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
+      ? value.createdByUserId.trim()
+      : 'system',
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined,
+    respondedAt: typeof value.respondedAt === 'string' ? value.respondedAt : undefined
+  }
+}
+
+const relayMessageKinds = new Set<RelayMessageKind>(['announcement', 'personal', 'system'])
+const relayMessageAudienceScopes = new Set<RelayMessageAudienceScope>(['all', 'team', 'users'])
+
+const normalizeRelayMessageKind = (value: unknown): RelayMessageKind => (
+  typeof value === 'string' && relayMessageKinds.has(value as RelayMessageKind)
+    ? value as RelayMessageKind
+    : 'personal'
+)
+
+const normalizeRelayMessageAudienceScope = (value: unknown): RelayMessageAudienceScope => (
+  typeof value === 'string' && relayMessageAudienceScopes.has(value as RelayMessageAudienceScope)
+    ? value as RelayMessageAudienceScope
+    : 'users'
+)
+
+const normalizeRelayMessageAudience = (value: unknown): RelayMessageAudience => {
+  const record = isRecord(value) ? value : {}
+  const scope = normalizeRelayMessageAudienceScope(record.scope)
+  const teamId = typeof record.teamId === 'string' && record.teamId.trim() !== '' ? record.teamId.trim() : undefined
+  const userIds = normalizeStringArray(record.userIds)
+
+  if (scope === 'team' && teamId != null) return { scope, teamId }
+  if (scope === 'all') return { scope }
+  return { scope: 'users', userIds: userIds ?? [] }
+}
+
+const normalizeRelayMessage = (value: Record<string, unknown>): RelayMessage | undefined => {
+  const title = typeof value.title === 'string' && value.title.trim() !== '' ? value.title.trim() : undefined
+  const body = typeof value.body === 'string' && value.body.trim() !== '' ? value.body.trim() : undefined
+  if (title == null || body == null) return undefined
+  return {
+    id: typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : randomUUID(),
+    kind: normalizeRelayMessageKind(value.kind),
+    title,
+    body,
+    audience: normalizeRelayMessageAudience(value.audience),
+    createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
+      ? value.createdByUserId.trim()
+      : 'system',
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined
+  }
+}
+
+const addLegacyTeamMemberships = (
+  users: RelayUser[],
+  teams: RelayTeam[],
+  teamMembers: RelayTeamMember[]
+) => {
+  const teamIds = new Set(teams.map(team => team.id))
+  const memberKeys = new Set(teamMembers.map(member => `${member.teamId}:${member.userId}`))
+  const nextTeams = [...teams]
+  const nextMembers = [...teamMembers]
+
+  for (const user of users) {
+    for (const teamId of user.teamIds ?? []) {
+      if (!teamIds.has(teamId)) {
+        nextTeams.push({
+          id: teamId,
+          slug: normalizeSlug(teamId, teamId),
+          name: teamId,
+          createdByUserId: user.id,
+          createdAt: user.createdAt
+        })
+        teamIds.add(teamId)
+      }
+      const key = `${teamId}:${user.id}`
+      if (!memberKeys.has(key)) {
+        nextMembers.push({
+          id: `legacy:${teamId}:${user.id}`,
+          teamId,
+          userId: user.id,
+          role: 'member',
+          createdByUserId: user.id,
+          createdAt: user.createdAt
+        })
+        memberKeys.add(key)
+      }
+    }
+  }
+
+  return {
+    teamMembers: nextMembers,
+    teams: nextTeams
+  }
+}
 
 const normalizePasskeyCredential = (value: Record<string, unknown>): RelayPasskeyCredential | undefined => {
   const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
@@ -245,6 +467,33 @@ const normalizeEncryptedPayload = (value: unknown): RelayEncryptedPayload | unde
       version: 1
     }
     : undefined
+}
+
+const normalizeConfigSecret = (value: Record<string, unknown>): RelayConfigSecret | undefined => {
+  const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
+  const teamId = typeof value.teamId === 'string' && value.teamId.trim() !== '' ? value.teamId.trim() : undefined
+  const encryptedPayload = normalizeEncryptedPayload(value.encryptedPayload)
+  if (id == null || teamId == null || encryptedPayload == null) return undefined
+
+  return {
+    id,
+    teamId,
+    name: typeof value.name === 'string' && value.name.trim() !== '' ? value.name.trim() : id,
+    encryptedPayload,
+    secretVersion: Number.isFinite(Number(value.secretVersion))
+      ? Math.max(1, Math.trunc(Number(value.secretVersion)))
+      : 1,
+    createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
+      ? value.createdByUserId.trim()
+      : 'system',
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    rotatedAt: typeof value.rotatedAt === 'string' && value.rotatedAt.trim() !== ''
+      ? value.rotatedAt.trim()
+      : undefined,
+    revokedAt: typeof value.revokedAt === 'string' && value.revokedAt.trim() !== ''
+      ? value.revokedAt.trim()
+      : undefined
+  }
 }
 
 const normalizeDevice = (value: Record<string, unknown>): RelayDevice => {
@@ -380,6 +629,37 @@ const normalizeSession = (value: Record<string, unknown>): RelaySession | undefi
   }
 }
 
+const normalizeAuditLogEntry = (value: Record<string, unknown>): RelayAuditLogEntry | undefined => {
+  const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
+  const actor = typeof value.actor === 'string' && value.actor.trim() !== '' ? value.actor.trim() : undefined
+  const action = typeof value.action === 'string' && value.action.trim() !== '' ? value.action.trim() : undefined
+  const resource = typeof value.resource === 'string' && value.resource.trim() !== ''
+    ? value.resource.trim()
+    : undefined
+  const status = typeof value.status === 'string' && value.status.trim() !== '' ? value.status.trim() : undefined
+  const createdAt = typeof value.createdAt === 'string' && value.createdAt.trim() !== ''
+    ? value.createdAt.trim()
+    : undefined
+  if (id == null || actor == null || action == null || resource == null || status == null || createdAt == null) {
+    return undefined
+  }
+  return {
+    id,
+    actor,
+    action,
+    resource,
+    status,
+    ip: typeof value.ip === 'string' && value.ip.trim() !== '' ? value.ip.trim() : undefined,
+    userAgent: typeof value.userAgent === 'string' && value.userAgent.trim() !== ''
+      ? value.userAgent.trim()
+      : undefined,
+    requestId: typeof value.requestId === 'string' && value.requestId.trim() !== ''
+      ? value.requestId.trim()
+      : undefined,
+    createdAt
+  }
+}
+
 const relayEmailPurposes = new Set<RelayEmailPurpose>([
   'email-verification',
   'invite',
@@ -457,6 +737,15 @@ const normalizeEmailRiskState = (value: unknown): RelayEmailRiskState => {
 export const normalizeRelayStore = (value: unknown): RelayStore => {
   const store = isRecord(value) ? value : {}
   const users = Array.isArray(store.users) ? store.users.filter(isRecord).map(normalizeUser) : []
+  const teams = Array.isArray(store.teams)
+    ? store.teams.filter(isRecord).map(normalizeTeam).filter((team): team is RelayTeam => team != null)
+    : []
+  const teamMembers = Array.isArray(store.teamMembers)
+    ? store.teamMembers.filter(isRecord).map(normalizeTeamMember).filter((
+      member
+    ): member is RelayTeamMember => member != null)
+    : []
+  const legacyTeams = addLegacyTeamMemberships(users, teams, teamMembers)
   const authIdentities = Array.isArray(store.authIdentities)
     ? store.authIdentities.filter(isRecord).map(normalizeAuthIdentity).filter((
       value
@@ -465,7 +754,50 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
   appendLegacyAuthIdentities(authIdentities, users)
   return {
     createdAt: typeof store.createdAt === 'string' ? store.createdAt : now(),
+    auditEvents: Array.isArray(store.auditEvents)
+      ? store.auditEvents.filter(isRecord).map(normalizeAuditLogEntry).filter((
+        value
+      ): value is RelayAuditLogEntry => value != null)
+      : [],
+    configAssignments: Array.isArray(store.configAssignments)
+      ? store.configAssignments.filter(isRecord).map(normalizeRelayConfigAssignment).filter((
+        value
+      ): value is RelayConfigAssignment => value != null)
+      : [],
+    configProfileAssignments: Array.isArray(store.configProfileAssignments)
+      ? store.configProfileAssignments.filter(isRecord).map(normalizeRelayConfigProfileAssignment).filter((
+        value
+      ): value is RelayConfigProfileAssignment => value != null)
+      : [],
+    configSecrets: Array.isArray(store.configSecrets)
+      ? store.configSecrets.filter(isRecord).map(normalizeConfigSecret).filter((
+        value
+      ): value is RelayConfigSecret => value != null)
+      : [],
+    configProfileVersions: Array.isArray(store.configProfileVersions)
+      ? store.configProfileVersions.filter(isRecord).map(normalizeRelayConfigProfileVersion).filter((
+        value
+      ): value is RelayConfigProfileVersion => value != null)
+      : [],
+    configProfiles: Array.isArray(store.configProfiles)
+      ? store.configProfiles.filter(isRecord).map(normalizeRelayConfigProfile).filter((
+        value
+      ): value is RelayConfigProfile => value != null)
+      : [],
     emailRisk: normalizeEmailRiskState(store.emailRisk),
+    teamPolicy: normalizeRelayTeamPolicy(store.teamPolicy),
+    teams: legacyTeams.teams,
+    teamInvitations: Array.isArray(store.teamInvitations)
+      ? store.teamInvitations.filter(isRecord).map(normalizeTeamInvitation).filter((
+        value
+      ): value is RelayTeamInvitation => value != null)
+      : [],
+    messages: Array.isArray(store.messages)
+      ? store.messages.filter(isRecord).map(normalizeRelayMessage).filter((value): value is RelayMessage =>
+        value != null
+      )
+      : [],
+    teamMembers: legacyTeams.teamMembers,
     users,
     authIdentities,
     invites: Array.isArray(store.invites) ? store.invites.filter(isRecord).map(normalizeInvite) : [],
@@ -512,7 +844,7 @@ export const readRelayStore = async (dataPath: string): Promise<RelayStore> => {
 
 export const writeRelayStore = async (dataPath: string, store: RelayStore) => {
   await mkdir(dirname(dataPath), { recursive: true })
-  const tempPath = `${dataPath}.${process.pid}.tmp`
+  const tempPath = `${dataPath}.${process.pid}.${randomUUID()}.tmp`
   await writeFile(tempPath, `${JSON.stringify(sanitizeRelayStorageValue(store), null, 2)}\n`, {
     encoding: 'utf8',
     mode: 0o600

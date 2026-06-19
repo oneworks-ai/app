@@ -8,10 +8,22 @@ import type {
   Disposable,
   PluginClientContext,
   PluginViewContext,
+  RelayConfigShareDraft,
+  RelayConfigShareTargets,
+  RelayConfigShareViewState,
   RelayServerStatus,
   RelayStatus,
   RelayViewState
 } from './types.js'
+
+class RelayActionError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message)
+  }
+}
 
 export const renderRelayView = (
   container: HTMLElement,
@@ -29,6 +41,16 @@ export const renderRelayView = (
   let serverDraft = {
     name: '',
     remoteBaseUrl: ''
+  }
+  let configShare: RelayConfigShareViewState = {
+    draft: null,
+    error: null,
+    loading: false,
+    profileName: '',
+    publishing: false,
+    targets: null,
+    teamId: '',
+    text: ''
   }
 
   const getServers = () => {
@@ -79,6 +101,8 @@ export const renderRelayView = (
     container.innerHTML = renderRelayViewMarkup({
       activeRemote: getActiveRemote(),
       activeServer,
+      configShare,
+      configDistribution: status?.configDistribution ?? status?.configSync,
       connectionState,
       device,
       editingServer,
@@ -173,9 +197,152 @@ export const renderRelayView = (
     })
     if (!response.ok) {
       const text = await response.text()
-      throw new Error(text || getMessages().errors.relayActionFailed(action, response.status))
+      throw new RelayActionError(
+        text || getMessages().errors.relayActionFailed(action, response.status),
+        response.status
+      )
     }
     return response
+  }
+
+  const postJsonAction = async <T>(action: string, payload?: Record<string, unknown>): Promise<T> => {
+    const response = await postAction(action, payload)
+    return await response.json() as T
+  }
+
+  const toErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
+
+  const readShareConfig = () => {
+    try {
+      return JSON.parse(configShare.text) as Record<string, unknown>
+    } catch {
+      throw new Error(getMessages().errors.shareConfigInvalid)
+    }
+  }
+
+  const previewShare = async () => {
+    configShare = { ...configShare, error: null, loading: true }
+    paint()
+    try {
+      const draft = await postJsonAction<RelayConfigShareDraft>('config-share-draft', {
+        config: readShareConfig()
+      })
+      configShare = { ...configShare, draft, error: null, loading: false }
+    } catch (error) {
+      configShare = { ...configShare, error: toErrorMessage(error), loading: false }
+    }
+    paint()
+  }
+
+  const loadShareTargets = async () => {
+    configShare = { ...configShare, error: null, loading: true }
+    paint()
+    try {
+      const targets = await postJsonAction<RelayConfigShareTargets>('config-share-targets', {
+        serverId: getActiveServer()?.id
+      })
+      const firstTeamId = targets.teams?.find(team => typeof team.id === 'string' && team.id.trim() !== '')?.id ?? ''
+      configShare = {
+        ...configShare,
+        error: null,
+        loading: false,
+        targets,
+        teamId: configShare.teamId || firstTeamId
+      }
+    } catch (error) {
+      configShare = { ...configShare, error: toErrorMessage(error), loading: false }
+    }
+    paint()
+  }
+
+  const publishShare = async () => {
+    if (configShare.teamId === '') {
+      configShare = { ...configShare, error: getMessages().errors.shareTeamRequired }
+      paint()
+      return
+    }
+    configShare = { ...configShare, error: null, publishing: true }
+    paint()
+    try {
+      const response = await postJsonAction<{ draft?: RelayConfigShareDraft }>('config-share-publish', {
+        assignToTeam: true,
+        config: readShareConfig(),
+        profileName: configShare.profileName || undefined,
+        serverId: getActiveServer()?.id,
+        teamId: configShare.teamId
+      })
+      configShare = {
+        ...configShare,
+        draft: response.draft ?? configShare.draft,
+        error: null,
+        publishing: false
+      }
+      ctx.notifications?.show?.({
+        level: 'success',
+        title: getMessages().actions.sharePublished
+      })
+      await refreshConfigDistribution()
+    } catch (error) {
+      configShare = { ...configShare, error: toErrorMessage(error), publishing: false }
+      paint()
+    }
+  }
+
+  const refreshConfigDistribution = async () => {
+    state = { ...state, loading: true, error: null }
+    paint()
+    try {
+      const response = await postAction('config-refresh')
+      state = { loading: false, error: null, status: await response.json() }
+    } catch (error) {
+      if (error instanceof RelayActionError && (error.status === 404 || error.status === 405)) {
+        try {
+          state = { loading: false, error: null, status: await readStatus() }
+        } catch (statusError) {
+          state = {
+            loading: false,
+            error: toErrorMessage(statusError),
+            status: state.status
+          }
+        }
+        paint()
+        return
+      }
+      state = {
+        loading: false,
+        error: toErrorMessage(error),
+        status: state.status
+      }
+    }
+    paint()
+  }
+
+  const toggleConfigSource = async (target: HTMLElement) => {
+    const kind = target.dataset.sourceKind
+    const id = target.dataset.sourceId
+    if (kind == null || id == null || id.trim() === '') return
+    state = { ...state, loading: true, error: null }
+    paint()
+    try {
+      const status = await postJsonAction<RelayStatus>('config-source-enabled', {
+        enabled: target.dataset.sourceEnabled === 'true',
+        id,
+        kind,
+        serverId: getActiveServer()?.id
+      })
+      state = { loading: false, error: null, status }
+      ctx.notifications?.show?.({
+        level: 'success',
+        title: getMessages().actions.configSourceUpdated
+      })
+    } catch (error) {
+      state = {
+        loading: false,
+        error: toErrorMessage(error),
+        status: state.status
+      }
+    }
+    paint()
   }
 
   const callAction = async (action: string, serverId?: string, payload: Record<string, unknown> = {}) => {
@@ -229,7 +396,7 @@ export const renderRelayView = (
       ? event.target.closest<HTMLElement>('[data-action]')
       : null
     const action = target?.dataset.action
-    if (action == null) return
+    if (target == null || action == null) return
     if (action === 'edit-server') {
       openServerEditor()
       return
@@ -246,6 +413,26 @@ export const renderRelayView = (
       void refresh()
       return
     }
+    if (action === 'refresh-config') {
+      void refreshConfigDistribution()
+      return
+    }
+    if (action === 'share-preview') {
+      void previewShare()
+      return
+    }
+    if (action === 'share-load-targets') {
+      void loadShareTargets()
+      return
+    }
+    if (action === 'share-publish') {
+      void publishShare()
+      return
+    }
+    if (action === 'toggle-config-source') {
+      void toggleConfigSource(target)
+      return
+    }
     if (action === 'login') {
       void openLogin(target?.dataset.serverId || undefined)
       return
@@ -254,7 +441,11 @@ export const renderRelayView = (
   }
 
   const handleInput = (event: Event) => {
-    const target = event.target instanceof HTMLInputElement ? event.target : null
+    const target = event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement ||
+        event.target instanceof HTMLSelectElement
+      ? event.target
+      : null
     if (target == null) return
 
     const field = target.dataset.field
@@ -264,6 +455,18 @@ export const renderRelayView = (
     }
     if (field === 'server-url') {
       serverDraft = { ...serverDraft, remoteBaseUrl: target.value }
+      return
+    }
+    if (field === 'share-config') {
+      configShare = { ...configShare, text: target.value }
+      return
+    }
+    if (field === 'share-profile-name') {
+      configShare = { ...configShare, profileName: target.value }
+      return
+    }
+    if (field === 'share-team') {
+      configShare = { ...configShare, teamId: target.value }
     }
   }
 

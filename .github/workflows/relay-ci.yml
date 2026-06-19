@@ -1,0 +1,94 @@
+name: Relay CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - apps/relay-admin/**
+      - apps/relay-server/**
+      - packages/components/**
+      - packages/config/**
+      - packages/plugins/relay/**
+      - packages/route-layout/**
+      - packages/tsconfigs/**
+      - packages/types/**
+      - packages/utils/**
+      - scripts/cli.ts
+      - scripts/run-tools.mjs
+      - scripts/relay-config-*.ts
+      - scripts/__tests__/cli.spec.ts
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .node-version
+      - .github/workflows/relay-ci.yml
+  push:
+    branches:
+      - main
+    paths:
+      - apps/relay-admin/**
+      - apps/relay-server/**
+      - packages/components/**
+      - packages/config/**
+      - packages/plugins/relay/**
+      - packages/route-layout/**
+      - packages/tsconfigs/**
+      - packages/types/**
+      - packages/utils/**
+      - scripts/cli.ts
+      - scripts/run-tools.mjs
+      - scripts/relay-config-*.ts
+      - scripts/__tests__/cli.spec.ts
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .node-version
+      - .github/workflows/relay-ci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: relay-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  relay:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: relay-server-test
+            command: pnpm -C apps/relay-server test
+          - name: relay-admin-test
+            command: pnpm -C apps/relay-admin test
+          - name: relay-live-smoke
+            command: pnpm tools relay-config live-smoke --json
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run ${{ matrix.name }}
+        run: ${{ matrix.command }}

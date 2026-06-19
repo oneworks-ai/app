@@ -18,6 +18,7 @@ import { load } from 'js-yaml'
 import { mergeDefaultChannelSessionPermissions } from './default-channel-session-permissions'
 import { mergeDefaultOneworksMcpPermissions } from './default-oneworks-mcp'
 import { mergeConfigs } from './merge'
+import { applyPluginConfigHooks } from './plugin-config'
 
 export interface LoadConfigOptions {
   cwd?: string
@@ -587,18 +588,41 @@ export const resetConfigCache = (cwd?: string) => {
 
 export const loadConfig = (options: LoadConfigOptions = {}) => {
   return (async () => {
-    const [projectSource, userSource, globalSource] = await loadConfigSources(options)
-    const globalConfig = resolveApplicableGlobalConfig(globalSource, projectSource, userSource)
-    const effectiveProjectConfig = resolveLayeredProjectConfig(
-      globalConfig,
-      projectSource?.resolvedConfig
-    )
-    const [projectConfig, userConfig] = mergeDefaultOneworksMcpPermissions({
-      projectConfig: effectiveProjectConfig,
-      userConfig: userSource?.resolvedConfig
-    })
+    const { effectiveProjectConfig: projectConfig, userConfig } = await loadEffectiveConfigPair(options)
     return [projectConfig, userConfig] as const
   })()
+}
+
+const resolvePluginConfigCwd = (options: LoadConfigOptions) => (
+  resolveProjectWorkspaceFolder(options.cwd ?? process.cwd(), options.env ?? process.env)
+)
+
+const loadEffectiveConfigPair = async (options: LoadConfigOptions = {}) => {
+  const [projectSource, userSource, globalSource] = await loadConfigSources(options)
+  const globalConfig = resolveApplicableGlobalConfig(globalSource, projectSource, userSource)
+  const effectiveProjectConfig = resolveLayeredProjectConfig(
+    globalConfig,
+    projectSource?.resolvedConfig
+  )
+  const [hookedProjectConfig, hookedUserConfig] = await applyPluginConfigHooks({
+    cwd: resolvePluginConfigCwd(options),
+    env: options.env ?? process.env,
+    jsonVariables: options.jsonVariables ?? {},
+    projectConfig: effectiveProjectConfig,
+    userConfig: userSource?.resolvedConfig
+  })
+  const [effectiveProjectConfigWithDefaults, userConfig] = mergeDefaultOneworksMcpPermissions({
+    projectConfig: hookedProjectConfig,
+    userConfig: hookedUserConfig
+  })
+  return {
+    effectiveProjectConfig: effectiveProjectConfigWithDefaults,
+    globalConfig,
+    globalSource,
+    projectSource,
+    userConfig,
+    userSource
+  }
 }
 
 export const loadConfigSources = (options: LoadConfigOptions = {}) => {
@@ -703,16 +727,14 @@ export const resolveConfigState = (
 export const loadConfigState = async (
   options: LoadConfigOptions = {}
 ): Promise<ResolvedConfigState> => {
-  const [projectSource, userSource, globalSource] = await loadConfigSources(options)
-  const globalConfig = resolveApplicableGlobalConfig(globalSource, projectSource, userSource)
-  const effectiveProjectConfig = resolveLayeredProjectConfig(
+  const {
+    effectiveProjectConfig: effectiveProjectConfigWithDefaults,
     globalConfig,
-    projectSource?.resolvedConfig
-  )
-  const [effectiveProjectConfigWithDefaults, userConfig] = mergeDefaultOneworksMcpPermissions({
-    projectConfig: effectiveProjectConfig,
-    userConfig: userSource?.resolvedConfig
-  })
+    globalSource,
+    projectSource,
+    userConfig,
+    userSource
+  } = await loadEffectiveConfigPair(options)
   const [effectiveProjectConfigWithRuntimeDefaults, userConfigWithRuntimeDefaults] =
     mergeDefaultChannelSessionPermissions({
       env: options.env ?? process.env,
