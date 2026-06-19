@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- user detail keeps account settings, metadata, and device list together. */
 import './UserDetailPage.css'
 
-import { Avatar, Empty, Input, InputNumber, Select } from 'antd'
+import { Avatar, Empty, Input, InputNumber, Select, Tabs } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
@@ -213,32 +213,44 @@ export const UserDetailPage = ({
           ))}
         </dl>
 
-        <UserTeamsPanel
-          teams={teams}
-          token={token}
-          userId={user.id}
+        <Tabs
+          className='relay-user-detail__tabs'
+          items={[
+            {
+              children: (
+                <UserTeamsPanel
+                  teams={teams}
+                  token={token}
+                  userId={user.id}
+                />
+              ),
+              key: 'teams',
+              label: '所属团队'
+            },
+            {
+              children: (
+                <div className='relay-user-detail__devices'>
+                  {canViewDeviceDetails
+                    ? (
+                      <DeviceTable
+                        devices={visibleDevices}
+                        initialVisibleColumnKeys={['name', 'status', 'lastSeenAt', 'capabilities']}
+                        searchPlaceholder='搜索设备、支持功能'
+                      />
+                    )
+                    : (
+                      <div className='relay-user-detail__private-devices'>
+                        <StatusBadge tone='muted'>{`${deviceCount} 台设备`}</StatusBadge>
+                        <span>设备明细仅账号本人可见</span>
+                      </div>
+                    )}
+                </div>
+              ),
+              key: 'devices',
+              label: '设备'
+            }
+          ]}
         />
-
-        <div className='relay-user-detail__devices'>
-          <div className='relay-user-detail__devices-header'>
-            <h3>设备</h3>
-            <span>已连接 {deviceCount} · 上限 {maxDevices ?? '不限'}</span>
-          </div>
-          {canViewDeviceDetails
-            ? (
-              <DeviceTable
-                devices={visibleDevices}
-                initialVisibleColumnKeys={['name', 'status', 'lastSeenAt', 'capabilities']}
-                searchPlaceholder='搜索设备、支持功能'
-              />
-            )
-            : (
-              <div className='relay-user-detail__private-devices'>
-                <StatusBadge tone='muted'>{`${deviceCount} 台设备`}</StatusBadge>
-                <span>设备明细仅账号本人可见</span>
-              </div>
-            )}
-        </div>
       </div>
     </section>
   )
