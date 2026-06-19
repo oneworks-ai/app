@@ -79,7 +79,7 @@
 .relay-team-panel__policy-form {
   display: grid;
   gap: 12px;
-  width: min(720px, 100%);
+  width: 100%;
 }
 
 .relay-team-panel__team-settings-form {
@@ -88,7 +88,7 @@
   gap: 0;
   height: 100%;
   min-height: 0;
-  width: min(760px, 100%);
+  width: 100%;
   border-top: 1px solid
     color-mix(
       in srgb,

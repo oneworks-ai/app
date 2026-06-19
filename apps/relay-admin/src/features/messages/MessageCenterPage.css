@@ -278,7 +278,7 @@
   gap: 0;
   min-height: inherit;
   min-width: 0;
-  width: min(760px, 100%);
+  width: 100%;
   border-top: 1px solid
     color-mix(
       in srgb,
