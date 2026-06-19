@@ -568,45 +568,92 @@ export const MessageCenterPage = ({
     : '搜索消息、团队、邀请人、账号、邮箱、用户 ID'
   const composerFormNode = (
     <Form
+      className='relay-message-center__create-form'
       form={composerForm}
       layout='vertical'
       onFinish={values => void submitComposer(values)}
     >
-      <Form.Item label='消息类型' name='kind' rules={[{ required: true, message: '请选择消息类型' }]}>
-        <Select
-          options={[
-            { label: '站内公告', value: 'announcement' },
-            { label: '个人通知', value: 'personal' },
-            { label: '系统消息', value: 'system' }
-          ]}
-        />
-      </Form.Item>
-      <Form.Item label='发送范围' name='scope' rules={[{ required: true, message: '请选择发送范围' }]}>
-        <Select options={scopeOptions} />
-      </Form.Item>
+      <div className='relay-message-center__create-row'>
+        <label className='relay-message-center__create-label' htmlFor='message-kind'>
+          <span className='relay-message-center__create-required'>*</span>
+          消息类型
+        </label>
+        <Form.Item className='relay-message-center__create-control-item' name='kind' rules={[{ required: true }]}>
+          <Select
+            id='message-kind'
+            options={[
+              { label: '站内公告', value: 'announcement' },
+              { label: '个人通知', value: 'personal' },
+              { label: '系统消息', value: 'system' }
+            ]}
+          />
+        </Form.Item>
+      </div>
+      <div className='relay-message-center__create-row'>
+        <label className='relay-message-center__create-label' htmlFor='message-scope'>
+          <span className='relay-message-center__create-required'>*</span>
+          发送范围
+        </label>
+        <Form.Item className='relay-message-center__create-control-item' name='scope' rules={[{ required: true }]}>
+          <Select id='message-scope' options={scopeOptions} />
+        </Form.Item>
+      </div>
       {shouldPickTeam
         ? (
-          <Form.Item label='目标团队' name='teamId' rules={[{ required: true, message: '请选择目标团队' }]}>
-            <Select options={teamOptions} />
-          </Form.Item>
+          <div className='relay-message-center__create-row'>
+            <label className='relay-message-center__create-label' htmlFor='message-team'>
+              <span className='relay-message-center__create-required'>*</span>
+              目标团队
+            </label>
+            <Form.Item className='relay-message-center__create-control-item' name='teamId' rules={[{ required: true }]}>
+              <Select id='message-team' options={teamOptions} />
+            </Form.Item>
+          </div>
         )
         : null}
       {composerScope === 'users'
         ? (
-          <Form.Item label='目标用户' name='userIds' rules={[{ required: true, message: '请选择目标用户' }]}>
-            <Select mode='multiple' options={userOptions} />
-          </Form.Item>
+          <div className='relay-message-center__create-row'>
+            <label className='relay-message-center__create-label' htmlFor='message-users'>
+              <span className='relay-message-center__create-required'>*</span>
+              目标用户
+            </label>
+            <Form.Item
+              className='relay-message-center__create-control-item'
+              name='userIds'
+              rules={[{ required: true }]}
+            >
+              <Select id='message-users' mode='multiple' options={userOptions} />
+            </Form.Item>
+          </div>
         )
         : null}
-      <Form.Item label='标题' name='title' rules={[{ required: true, message: '请输入标题' }]}>
-        <Input />
-      </Form.Item>
-      <Form.Item label='内容' name='body' rules={[{ required: true, message: '请输入内容' }]}>
-        <Input.TextArea autoSize={{ minRows: 5, maxRows: 9 }} />
-      </Form.Item>
-      <Button htmlType='submit' icon={<AdminIcon name='check' />} loading={composing} type='primary'>
-        发送消息
-      </Button>
+      <div className='relay-message-center__create-row'>
+        <label className='relay-message-center__create-label' htmlFor='message-title'>
+          <span className='relay-message-center__create-required'>*</span>
+          标题
+        </label>
+        <Form.Item className='relay-message-center__create-control-item' name='title' rules={[{ required: true }]}>
+          <Input id='message-title' />
+        </Form.Item>
+      </div>
+      <div className='relay-message-center__create-row relay-message-center__create-row--body'>
+        <label className='relay-message-center__create-label' htmlFor='message-body'>
+          <span className='relay-message-center__create-required'>*</span>
+          内容
+        </label>
+        <Form.Item className='relay-message-center__create-control-item' name='body' rules={[{ required: true }]}>
+          <Input.TextArea id='message-body' autoSize={{ minRows: 6, maxRows: 12 }} />
+        </Form.Item>
+      </div>
+      <div className='relay-message-center__create-actions-row'>
+        <span />
+        <div className='relay-message-center__create-actions'>
+          <Button htmlType='submit' icon={<AdminIcon name='check' />} loading={composing} type='primary'>
+            发送消息
+          </Button>
+        </div>
+      </div>
     </Form>
   )
 
@@ -615,10 +662,10 @@ export const MessageCenterPage = ({
       <section className='relay-message-center relay-message-center--create'>
         {canSendMessage
           ? (
-            <div className='relay-message-center__create-form'>
+            <>
               {error == null ? null : <p className='relay-message-center__error'>{error}</p>}
               {composerFormNode}
-            </div>
+            </>
           )
           : (
             <Empty
