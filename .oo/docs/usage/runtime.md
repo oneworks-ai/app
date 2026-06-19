@@ -55,7 +55,7 @@ npx oneworks web
 pnpm start
 ```
 
-`pnpm start` 会调用 `pnpm tools dev-start web`，自动把 server DB、runtime store、mock home、cache 和启动日志放到 project home（默认 `~/.oneworks/projects/<project-key>`），避免写回仓库工作区。
+`pnpm start` 会调用 `pnpm tools dev-start web`，自动把 server DB、runtime store、mock home、cache 和启动日志放到当前开发实例的 project home（默认 `~/.oneworks/dev-instances/<worktree-key>/projects/<project-key>`），避免写回仓库工作区，也避免多个源码 worktree 并行开发时共享同一套本地状态。
 
 如果目标是快速把当前源码 worktree 更新到最新并启动开发服务，执行：
 
@@ -111,7 +111,7 @@ webAuth:
 
 - `HOME` 可用于隔离运行环境，默认落到 project home 的 `.mock` 子目录。启动入口会把真实 home 里的常见 dot 目录和 macOS `Library/Keychains`、`Library/Application Support` 桥接进 mock home；直接软链路径如果已有旧文件或目录，会先移动到同级 `.backup-*` 再创建正确软链。
 - `modelServices` 是共享层配置；各 adapter 会按自己的原生运行时做映射，具体以对应 adapter 文档为准。
-  - 例如 `claude-code` 走 Claude Code Router
+  - `claude-code` 对 Anthropic、Kimi、DeepSeek、百炼/Qwen、智谱 GLM、MiniMax、OpenRouter、Requesty、Vercel AI Gateway、Portkey 等已知 Anthropic-compatible 官方入口优先直连；其它 OpenAI-compatible `service,model` 继续回退 Claude Code Router
   - `codex` 与 `gemini` 走 adapter 自己的本地代理
   - 部分 adapter 会把 provider 配置写进 session 级或原生配置文件
 - 未选择 routed `service,model` 时，adapter 继续使用自己的原生模型/二进制路径。

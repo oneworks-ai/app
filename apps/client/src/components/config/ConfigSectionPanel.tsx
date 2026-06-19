@@ -5,7 +5,7 @@ import { Button, Tooltip } from 'antd'
 import type { ReactNode } from 'react'
 import { useLayoutEffect, useRef } from 'react'
 
-import type { ConfigUiSection } from '@oneworks/types'
+import type { ConfigSource, ConfigUiSection } from '@oneworks/types'
 
 import { SectionForm } from './ConfigSectionForm'
 import { ConfigSectionFrame } from './ConfigSectionFrame'
@@ -19,6 +19,7 @@ import {
 } from './configDetail'
 import type { FieldSpec } from './configSchema'
 import type { TranslationFn } from './configUtils'
+import type { ModelServiceConfigSessionRequest } from './modelServiceConfigSession'
 import { toLabel } from './record-editors/schemaRecordUtils'
 
 export function ConfigSectionPanel({
@@ -30,6 +31,7 @@ export function ConfigSectionPanel({
   uiSection,
   value,
   resolvedValue,
+  source = 'project',
   onChange,
   mergedModelServices,
   mergedAdapters,
@@ -38,6 +40,8 @@ export function ConfigSectionPanel({
   workspaceFileOpenerOptions,
   detailQuery = '',
   onDetailQueryChange,
+  creatingModelServiceSessionKey,
+  onCreateModelServiceSession,
   headerExtra,
   showHeader = true,
   t,
@@ -51,6 +55,7 @@ export function ConfigSectionPanel({
   uiSection?: ConfigUiSection
   value: unknown
   resolvedValue?: unknown
+  source?: ConfigSource
   onChange: (nextValue: unknown) => void
   mergedModelServices: Record<string, unknown>
   mergedAdapters: Record<string, unknown>
@@ -59,6 +64,8 @@ export function ConfigSectionPanel({
   workspaceFileOpenerOptions?: Array<{ value: string; label: ReactNode }>
   detailQuery?: string
   onDetailQueryChange?: (nextQuery: string) => void
+  creatingModelServiceSessionKey?: string | null
+  onCreateModelServiceSession?: (request: ModelServiceConfigSessionRequest) => void | Promise<void>
   headerExtra?: ReactNode
   showHeader?: boolean
   t: TranslationFn
@@ -223,6 +230,7 @@ export function ConfigSectionPanel({
         uiSection={uiSection}
         value={value}
         resolvedValue={resolvedValue}
+        source={source}
         onChange={onChange}
         mergedModelServices={mergedModelServices}
         mergedAdapters={mergedAdapters}
@@ -231,6 +239,8 @@ export function ConfigSectionPanel({
         workspaceFileOpenerOptions={workspaceFileOpenerOptions}
         detailRoute={detailRoute}
         onOpenDetailRoute={handleOpenDetail}
+        creatingModelServiceSessionKey={creatingModelServiceSessionKey}
+        onCreateModelServiceSession={onCreateModelServiceSession}
         t={t}
       />
     </ConfigSectionFrame>

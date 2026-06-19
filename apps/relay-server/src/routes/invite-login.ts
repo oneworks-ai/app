@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+import { findEnabledEmailCodeUserByIdentifier } from '../auth/identities.js'
 import { InviteLoginError, upsertInviteLoginUser } from '../auth/invite-login.js'
+import { loginIdentifierFromBody } from '../auth/login-identifiers.js'
 import { PasswordValidationError, hashPassword } from '../auth/passwords.js'
 import { createSession, pruneExpiredAuth, publicUser } from '../auth/sessions.js'
 import { readRequestBody, sendJson } from '../http.js'
@@ -10,7 +12,7 @@ import { recordLoginNotificationMessage } from './team-invitations.js'
 
 const cleanString = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 
-const cleanEmail = (value: unknown) => cleanString(value).toLowerCase()
+const cleanEmail = (value: string) => value.trim().toLowerCase()
 
 const looksLikeEmail = (value: string) => {
   const at = value.indexOf('@')
@@ -42,7 +44,9 @@ export const handleInviteLoginRoute = async (
 
   pruneExpiredAuth(store)
   const body = await readRequestBody(req)
-  const email = cleanEmail(body.email)
+  const loginId = loginIdentifierFromBody(body)
+  const existing = findEnabledEmailCodeUserByIdentifier(store, loginId)
+  const email = cleanEmail(existing?.email ?? loginId)
   const inviteCode = inviteCodeFromBody(body)
   if (!looksLikeEmail(email)) {
     sendJson(res, 400, { error: 'Email required.' }, args.allowOrigin)

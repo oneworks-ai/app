@@ -8,7 +8,8 @@ import {
   listLauncherDirectories,
   listLauncherWorkspaces,
   openLauncherWorkspace,
-  openLauncherWorkspaceById
+  openLauncherWorkspaceById,
+  stopLauncherWorkspace
 } from '#~/services/launcher/manager.js'
 import { notFound } from '#~/utils/http.js'
 
@@ -60,6 +61,11 @@ export function launcherRouter(env: ReturnType<typeof loadEnv>): Router {
   router.post('/workspaces/forget', async (ctx) => {
     const body = ctx.request.body as { workspaceFolder?: unknown }
     ctx.body = await forgetLauncherWorkspace(body?.workspaceFolder)
+  })
+
+  router.post('/workspaces/stop', async (ctx) => {
+    const body = ctx.request.body as { forget?: unknown; workspaceFolder?: unknown }
+    ctx.body = await stopLauncherWorkspace(body?.workspaceFolder, { forget: body?.forget === true })
   })
 
   router.get('/directories', async (ctx) => {

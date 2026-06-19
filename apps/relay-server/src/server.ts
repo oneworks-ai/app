@@ -17,6 +17,7 @@ import {
 import { handleConfigSecretsRoute, handleTeamConfigSecretsRoute } from './routes/config-secrets.js'
 import { handleRelayConfigSnapshot } from './routes/config-snapshot.js'
 import { handleDeviceHeartbeat, handleDeviceList, handleDeviceRegister } from './routes/devices.js'
+import { handleEmailCodeLoginRoute } from './routes/email-code-login.js'
 import { handleEmailVerificationSendRoute } from './routes/email-verification.js'
 import { handleInviteLoginRoute } from './routes/invite-login.js'
 import { handleLoginRoute } from './routes/login.js'
@@ -35,14 +36,14 @@ import type { RelayStoreRepository } from './storage/repository.js'
 import { createRelayTelemetry } from './telemetry/metrics.js'
 import type { RelayTelemetry } from './telemetry/metrics.js'
 import type { RelayServerArgs, RelayStore } from './types.js'
-import { VERSION } from './types.js'
+import { VERSION } from './version.js'
 
 type RelayStoreRepositoryModule = typeof import('./storage/repository.js')
 
 export { parseRelayServerArgs, printRelayServerHelp } from './config.js'
 export { readRelayStore } from './store.js'
 export type { RelayServerArgs } from './types.js'
-export { VERSION } from './types.js'
+export { VERSION } from './version.js'
 
 const handleInfo = (res: ServerResponse, args: RelayServerArgs, store: RelayStore) => {
   const providers = enabledRelayAuthProviders(args, store)
@@ -56,6 +57,8 @@ const handleInfo = (res: ServerResponse, args: RelayServerArgs, store: RelayStor
       invites: true,
       users: true,
       passwordAuth: true,
+      defaultLoginMethod: args.defaultLoginMethod ?? 'password',
+      emailCodeLogin: args.emailProvider != null || args.email?.provider !== 'disabled',
       emailVerification: args.emailProvider != null || args.email?.provider !== 'disabled',
       passkeyAuth: args.passkey?.enabled !== false,
       registrationMode: args.passkey?.registrationMode ?? 'invite_required',
@@ -101,6 +104,9 @@ const handleRelayRequestWithStore = async (
       return
     }
     if (await handlePasswordLoginRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (await handleEmailCodeLoginRoute(req, res, args, store, storeRepository, url)) {
       return
     }
     if (await handlePasskeyRoute(req, res, args, store, storeRepository, url)) {

@@ -548,6 +548,7 @@ describe('config schema form', () => {
         sectionKey='modelServices'
         value={{
           openai: {
+            provider: 'openai',
             title: 'OpenAI',
             description: 'Primary service',
             apiBaseUrl: 'https://api.openai.com/v1',
@@ -567,8 +568,47 @@ describe('config schema form', () => {
       />
     )
 
+    expect(html).toContain('config.fields.modelServices.item.provider.label')
     expect(html).toContain('config.fields.modelServices.item.apiBaseUrl.label')
     expect(html).toContain('config.fields.modelServices.item.models.label')
+    expect(html).toContain('config.modelServices.actions.queryModels')
+    expect(html).toContain('config.modelServices.actions.queryBalance')
+  })
+
+  it('creates model service entries without default apiBaseUrl or models overrides', () => {
+    const modelServicesField = configSchema.modelServices?.[0]
+    const item = modelServicesField?.detailCollection?.createItem?.('kimi')
+
+    expect(item).toMatchObject({
+      title: '',
+      description: '',
+      apiKey: '',
+      timeoutMs: undefined,
+      maxOutputTokens: undefined,
+      extra: {}
+    })
+    expect(item).not.toHaveProperty('apiBaseUrl')
+    expect(item).not.toHaveProperty('models')
+  })
+
+  it('falls back to provider descriptions in model service summaries', () => {
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{
+          deepseek: {
+            provider: 'deepseek',
+            apiKey: 'secret'
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('Official DeepSeek OpenAI-compatible API service.')
   })
 
   it('renders inherited detail-collection entries as readonly summaries in source views', () => {

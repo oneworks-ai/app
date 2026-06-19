@@ -20,6 +20,16 @@ export const printReady = (state: DevStartState) => {
 
 export const stateReady = async (state: DevStartState | undefined) => {
   if (state?.root !== repoRoot) return false
+  for (const pid of [state.servicePid, state.serverPid, state.clientPid]) {
+    if (pid != null && !isPositivePid(pid)) return false
+    if (isPositivePid(pid)) {
+      try {
+        process.kill(pid, 0)
+      } catch {
+        return false
+      }
+    }
+  }
   if (typeof state.serverUrl === 'string' && !(await serverReady(state.serverUrl))) return false
   if (typeof state.clientUrl === 'string' && !(await urlReady(state.clientUrl))) return false
   if (typeof state.docsUrl === 'string' && !(await urlReady(state.docsUrl))) return false

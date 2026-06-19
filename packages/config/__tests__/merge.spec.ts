@@ -91,7 +91,31 @@ describe('mergeConfigs', () => {
               level: 'info'
             }
           }
-        ]
+        ],
+        voice: {
+          speechToText: {
+            services: {
+              'team-asr': {
+                provider: 'custom-http',
+                request: {
+                  url: 'https://asr.example.com/v1/transcribe',
+                  headers: {
+                    Authorization: 'Bearer $' + '{env:TEAM_ASR_TOKEN}'
+                  },
+                  body: {
+                    kind: 'json',
+                    fields: {
+                      model: 'general'
+                    }
+                  }
+                },
+                response: {
+                  textPath: 'data.text'
+                }
+              }
+            }
+          }
+        }
       },
       {
         adapters: {
@@ -174,7 +198,26 @@ describe('mergeConfigs', () => {
               headless: true
             }
           }
-        ]
+        ],
+        voice: {
+          speechToText: {
+            defaultServiceId: 'team-asr',
+            services: {
+              'team-asr': {
+                provider: 'custom-http',
+                request: {
+                  url: 'https://asr.example.com/v1/transcribe',
+                  body: {
+                    kind: 'json',
+                    fields: {
+                      language: '{{language}}'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     )!
 
@@ -294,6 +337,33 @@ describe('mergeConfigs', () => {
         }
       }
     ])
+    expect(merged.voice).toEqual({
+      speechToText: {
+        defaultServiceId: 'team-asr',
+        services: {
+          'team-asr': {
+            provider: 'custom-http',
+            capabilities: undefined,
+            request: {
+              url: 'https://asr.example.com/v1/transcribe',
+              headers: {
+                Authorization: 'Bearer $' + '{env:TEAM_ASR_TOKEN}'
+              },
+              body: {
+                kind: 'json',
+                fields: {
+                  model: 'general',
+                  language: '{{language}}'
+                }
+              }
+            },
+            response: {
+              textPath: 'data.text'
+            }
+          }
+        }
+      }
+    })
   })
 
   it('appends list-based fields from layered conversation config', () => {

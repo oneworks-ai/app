@@ -1,7 +1,16 @@
+import type { IconRef } from './config'
+
 export interface ServiceModelEntry {
   serviceKey: string
   model: string
   selectorValue: string
+}
+
+export interface ServiceModelOption extends ServiceModelEntry {
+  serviceTitle?: string
+  modelTitle?: string
+  serviceIcon: IconRef
+  modelIcon?: IconRef
 }
 
 export type AdapterModelRuleRejectionReason = 'not_included' | 'excluded'

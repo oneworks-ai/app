@@ -37,6 +37,7 @@ export const filterRelayAdminUsers = (users: RelayAdminUser[], filters: UserTabl
     const searchableValues = [
       user.email,
       user.id,
+      user.loginId ?? '',
       user.name,
       `${user.deviceCount}`,
       user.maxDevices == null ? 'unlimited' : `${user.maxDevices}`,

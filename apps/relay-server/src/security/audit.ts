@@ -144,6 +144,12 @@ export const classifyAuditTarget = (req: IncomingMessage, url: URL, store: Relay
       resource: 'password'
     }
   }
+  if (req.method === 'POST' && url.pathname === '/api/auth/email-code-login') {
+    return {
+      action: 'auth.email_code_login',
+      resource: 'email-code'
+    }
+  }
   const passkeyMatch = /^\/api\/auth\/passkey\/(register|login)\/(options|verify)$/.exec(url.pathname)
   if (req.method === 'POST' && passkeyMatch != null) {
     return {

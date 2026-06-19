@@ -14,4 +14,5 @@
 
 - 这里只服务 `__ONEWORKS_PROJECT_SERVER_ROLE__=manager` 的控制面；不要让 workspace server 在请求级别切换目录。
 - workspace 长期运行态仍是独立 server 进程；manager 只负责发现、启动和记录状态。
+- 同一 workspace 的 workspace server 启动必须通过 project-home 下的 `.local/server/instance.json` 与文件锁做跨进程去重；live 且同实现版本 / 启动配置的实例直接复用，不一致时返回 409，由外部决定是否停止旧实例或重试。
 - Electron main 可以继续管理窗口生命周期，但 launcher 的 Node/文件系统/启动 workspace server 能力应优先落在这里，再由桌面或 Web 前端调用。

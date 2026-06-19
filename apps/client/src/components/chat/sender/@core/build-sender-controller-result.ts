@@ -9,6 +9,7 @@ import type {
   SenderToolbarRefs,
   SenderToolbarState
 } from '../@types/sender-toolbar-types'
+import type { SenderVoiceInputController } from '../@types/sender-voice-input'
 import type { SenderCompletionMatch, SenderTokenDecoration } from '../@utils/sender-completion'
 
 interface SenderControllerAttachments {
@@ -63,7 +64,8 @@ export const buildSenderControllerResult = ({
   secondarySendShortcut,
   onSecondarySendShortcut,
   editorRef,
-  toolbar
+  toolbar,
+  voiceInput
 }: {
   attachments: SenderControllerAttachments
   completion: SenderControllerCompletion
@@ -86,6 +88,7 @@ export const buildSenderControllerResult = ({
   onSecondarySendShortcut?: () => void
   editorRef: MutableRefObject<SenderEditorHandle | null>
   toolbar: SenderControllerToolbar
+  voiceInput?: SenderVoiceInputController
 }) => ({
   isInlineEdit,
   isThinking,
@@ -99,6 +102,7 @@ export const buildSenderControllerResult = ({
   completion,
   attachments,
   toolbar,
+  voiceInput,
   handleKeyDown,
   interactionRequest,
   interactionResponse,

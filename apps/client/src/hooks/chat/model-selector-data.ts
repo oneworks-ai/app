@@ -5,7 +5,7 @@ import type {
   RecommendedModelConfig
 } from '@oneworks/types'
 
-import type { ServiceModelEntry } from './model-selector'
+import type { ServiceModelEntry, ServiceModelOption } from './model-selector'
 import { resolveModelServiceTitle } from './model-selector'
 import {
   buildBuiltinModelGroups,
@@ -32,7 +32,7 @@ const resolveBuiltinPreviewGroup = (
 
 export const buildModelSelectorData = (params: {
   activeBuiltinModels: Record<string, AdapterBuiltinModel[]>
-  availableServiceModels: ServiceModelEntry[]
+  availableServiceModels: Array<ServiceModelEntry | ServiceModelOption>
   builtinPreviewAdapter?: string
   builtinPreviewLimit?: number
   defaultModelService?: string

@@ -35,6 +35,8 @@ export const createSenderToolbarBindings = ({
     onInterrupt: () => void
     onModelChange?: (model: string) => void
     onToggleRecommendedModel?: (option: ModelSelectOption) => void | Promise<void>
+    onConnectMoreModelServices?: () => void
+    onOpenModelServicesConfig?: () => void
     onPermissionModeChange?: (mode: PermissionMode) => void
     onQueueModeChange?: (mode: SessionQueuedMessageMode) => void
     onCancel?: () => void
@@ -179,17 +181,7 @@ export const createSenderToolbarBindings = ({
     isInlineEdit: ui.isInlineEdit,
     message: resources.message,
     modelUnavailable: ui.modelUnavailable,
-    onAdapterChange: callbacks.onAdapterChange,
-    onAccountChange: callbacks.onAccountChange,
-    onEffortChange: callbacks.onEffortChange,
-    onInterrupt: callbacks.onInterrupt,
-    onModelChange: callbacks.onModelChange,
-    onToggleRecommendedModel: callbacks.onToggleRecommendedModel,
-    onPermissionModeChange: callbacks.onPermissionModeChange,
-    onQueueModeChange: callbacks.onQueueModeChange,
-    onCancel: callbacks.onCancel,
-    onConfirmInteractionOption: callbacks.onConfirmInteractionOption,
-    onSend: callbacks.onSend,
+    ...callbacks,
     referenceActions: ui.referenceActions,
     selectOverlays: ui.selectOverlays,
     t: resources.t

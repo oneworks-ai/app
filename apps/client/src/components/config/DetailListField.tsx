@@ -4,16 +4,23 @@ import './record-editors/RecordEditors.scss'
 import { Button, Input, Switch, Tooltip } from 'antd'
 import { useMemo, useState } from 'react'
 
-import { getAdapterDisplay } from '#~/resources/adapters'
-import type { ConfigUiSection } from '@oneworks/types'
+import type { ConfigSource, ConfigUiSection, ModelServiceConfig } from '@oneworks/types'
+import { resolveModelServiceHomepageUrl, resolveModelServiceIcon } from '@oneworks/utils/model-providers'
 
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
+import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
+import { getAdapterDisplay, resolveAdapterDisplayIcon } from '#~/resources/adapters'
+import { renderIconRef } from '#~/utils/model-provider-icons'
+
 import { DetailCollectionFieldActions } from './DetailCollectionFieldActions'
 import type { ConfigDetailRoute } from './configDetail'
 import { toDetailCollectionEntries } from './configDetail'
 import type { FieldSpec } from './configSchema'
 import { getFieldLabel, getValueByPath, setValueByPath } from './configUtils'
 import type { TranslationFn } from './configUtils'
+import { getModelServiceConfigSessionActionKey } from './modelServiceConfigSession'
+import type { ModelServiceConfigSessionRequest } from './modelServiceConfigSession'
+import { normalizePortalUrl, openExternalUrl } from './modelServiceProviderActionUtils'
 import { buildConfigUiObjectDefaultValue } from './record-editors/schemaRecordUtils'
 
 const normalizeConfigText = (value: unknown) => (
@@ -70,30 +77,37 @@ export const DetailCollectionField = ({
   field,
   value,
   resolvedValue,
+  source = 'project',
   onChange,
   onOpenDetail,
   mergedModelServices,
   mergedAdapters,
   uiSection,
+  creatingModelServiceSessionKey,
+  onCreateModelServiceSession,
   t
 }: {
   sectionKey: string
   field: FieldSpec
   value: unknown
   resolvedValue?: unknown
+  source?: ConfigSource
   onChange: (nextValue: unknown) => void
   onOpenDetail: (route: ConfigDetailRoute) => void
   mergedModelServices: Record<string, unknown>
   mergedAdapters: Record<string, unknown>
   uiSection?: ConfigUiSection
+  creatingModelServiceSessionKey?: string | null
+  onCreateModelServiceSession?: (request: ModelServiceConfigSessionRequest) => void | Promise<void>
   t: TranslationFn
 }) => {
-  const detailCollection = field.detailCollection
-  if (detailCollection == null) return null
+  const { resolvedThemeMode } = useResolvedThemeMode()
   const [newRecordKey, setNewRecordKey] = useState('')
   const [newRecordKind, setNewRecordKind] = useState(
     uiSection?.kind === 'recordMap' ? (uiSection.recordMap.entryKinds?.[0]?.key ?? '') : ''
   )
+  const detailCollection = field.detailCollection
+  if (detailCollection == null) return null
 
   const items = toDetailCollectionEntries({
     field,
@@ -132,6 +146,7 @@ export const DetailCollectionField = ({
       Record<string, unknown>
     >
     : []
+  const createModelServiceActionKey = getModelServiceConfigSessionActionKey({ mode: 'create', source })
 
   const updateRecordEntry = (itemKey: string, nextItem: Record<string, unknown>) => {
     onChange(setValueByPath(value, [itemKey], nextItem))
@@ -256,11 +271,25 @@ export const DetailCollectionField = ({
 
   return (
     <div className='config-view__detail-list'>
-      {items.map(({ item, key, index, localIndex, source, hasResolvedOverlay }) => {
+      {items.map(({ item, key, index, localIndex, source: itemSource, hasResolvedOverlay }) => {
         const title = detailCollection.getItemTitle(item, key, index, detailContext)
         const subtitle = detailCollection.getItemSubtitle?.(item, key, index, detailContext)
         const description = detailCollection.getItemDescription?.(item, key, index, detailContext)
         const adapterDisplay = sectionKey === 'adapters' ? getAdapterDisplay(key) : undefined
+        const adapterDisplayIcon = adapterDisplay == null
+          ? undefined
+          : resolveAdapterDisplayIcon(adapterDisplay, resolvedThemeMode)
+        const modelServiceIcon = sectionKey === 'modelServices'
+          ? resolveModelServiceIcon(item as unknown as ModelServiceConfig)
+          : undefined
+        const modelServiceHomepageUrl = sectionKey === 'modelServices'
+          ? normalizePortalUrl(resolveModelServiceHomepageUrl(item as unknown as ModelServiceConfig))
+          : undefined
+        const modelServiceUpdateActionKey = getModelServiceConfigSessionActionKey({
+          mode: 'update',
+          serviceKey: key,
+          source
+        })
         const displayTitle = sectionKey === 'adapters' ? resolveAdapterListTitle(key) : title
         const displaySubtitle = sectionKey === 'adapters'
           ? resolveAdapterListSubtitle({ item, fallbackSubtitle: subtitle, t })
@@ -268,20 +297,24 @@ export const DetailCollectionField = ({
         return (
           <div
             key={`${field.path.join('.')}:${key}:${title}`}
-            className={`config-view__record-card${source === 'inherited' ? ' config-view__record-card--readonly' : ''}`}
+            className={`config-view__record-card${
+              itemSource === 'inherited' ? ' config-view__record-card--readonly' : ''
+            }`}
           >
             <div className='config-view__detail-list-row'>
               <button type='button' className='config-view__detail-list-main' onClick={() => openDetail(key)}>
                 <div
-                  className={`config-view__record-heading${adapterDisplay?.icon != null ? ' has-adapter-icon' : ''}`}
+                  className={`config-view__record-heading${
+                    adapterDisplayIcon != null || modelServiceIcon != null ? ' has-adapter-icon' : ''
+                  }`}
                 >
                   {adapterDisplay != null && (
                     <div className='config-view__adapter-icon-wrap' aria-hidden='true'>
-                      {adapterDisplay.icon != null
+                      {adapterDisplayIcon != null
                         ? (
                           <img
                             className='config-view__adapter-icon'
-                            src={adapterDisplay.icon}
+                            src={adapterDisplayIcon}
                             alt=''
                           />
                         )
@@ -292,18 +325,27 @@ export const DetailCollectionField = ({
                         )}
                     </div>
                   )}
+                  {modelServiceIcon != null && (
+                    <div className='config-view__adapter-icon-wrap' aria-hidden='true'>
+                      {renderIconRef({
+                        icon: modelServiceIcon,
+                        imageClassName: 'config-view__adapter-icon',
+                        symbolClassName: 'config-view__adapter-icon-fallback'
+                      })}
+                    </div>
+                  )}
                   <div className='config-view__record-heading-text'>
                     <div className='config-view__detail-list-title'>
                       <span>{displayTitle}</span>
-                      {(source === 'inherited' || hasResolvedOverlay) && (
+                      {(itemSource === 'inherited' || hasResolvedOverlay) && (
                         <span
                           className={`config-view__detail-badge${
-                            source === 'inherited'
+                            itemSource === 'inherited'
                               ? ' config-view__detail-badge--readonly'
                               : ' config-view__detail-badge--override'
                           }`}
                         >
-                          {source === 'inherited'
+                          {itemSource === 'inherited'
                             ? t('config.detail.inheritedBadge')
                             : t('config.detail.overrideBadge')}
                         </span>
@@ -320,8 +362,41 @@ export const DetailCollectionField = ({
                   </div>
                 </div>
               </button>
-              {renderSummaryControls({ item, itemKey: key, title: displayTitle, localIndex, source })}
-              {(isListCollection || isRecordMapCollection) && source === 'local' && (
+              {sectionKey === 'modelServices' && onCreateModelServiceSession != null && (
+                <Tooltip title={t('config.actions.configureModelServiceWithSession')}>
+                  <Button
+                    type='text'
+                    size='small'
+                    className='config-view__icon-button config-view__icon-button--compact config-view__detail-action-btn'
+                    aria-label={t('config.actions.configureModelServiceWithSession')}
+                    loading={creatingModelServiceSessionKey === modelServiceUpdateActionKey}
+                    disabled={creatingModelServiceSessionKey != null &&
+                      creatingModelServiceSessionKey !== modelServiceUpdateActionKey}
+                    icon={<span className='material-symbols-rounded'>forum</span>}
+                    onClick={() =>
+                      void onCreateModelServiceSession({
+                        mode: 'update',
+                        service: item,
+                        serviceKey: key,
+                        source
+                      })}
+                  />
+                </Tooltip>
+              )}
+              {modelServiceHomepageUrl != null && (
+                <Tooltip title={t('config.actions.openModelServiceHomepage', { defaultValue: '打开管理主页' })}>
+                  <Button
+                    type='text'
+                    size='small'
+                    className='config-view__icon-button config-view__icon-button--compact config-view__detail-action-btn'
+                    aria-label={t('config.actions.openModelServiceHomepage', { defaultValue: '打开管理主页' })}
+                    icon={<span className='material-symbols-rounded'>open_in_new</span>}
+                    onClick={() => void openExternalUrl(modelServiceHomepageUrl)}
+                  />
+                </Tooltip>
+              )}
+              {renderSummaryControls({ item, itemKey: key, title: displayTitle, localIndex, source: itemSource })}
+              {(isListCollection || isRecordMapCollection) && itemSource === 'local' && (
                 <DetailCollectionFieldActions
                   index={localIndex ?? 0}
                   itemCount={isListCollection
@@ -406,6 +481,25 @@ export const DetailCollectionField = ({
                 onClick={addRecordItem}
               />
             </Tooltip>
+            {sectionKey === 'modelServices' && onCreateModelServiceSession != null && (
+              <Tooltip title={t('config.actions.createModelServiceWithSession')}>
+                <Button
+                  size='small'
+                  type='text'
+                  className='config-view__icon-button'
+                  aria-label={t('config.actions.createModelServiceWithSession')}
+                  loading={creatingModelServiceSessionKey === createModelServiceActionKey}
+                  disabled={creatingModelServiceSessionKey != null &&
+                    creatingModelServiceSessionKey !== createModelServiceActionKey}
+                  icon={<span className='material-symbols-rounded'>forum</span>}
+                  onClick={() =>
+                    void onCreateModelServiceSession({
+                      mode: 'create',
+                      source
+                    })}
+                />
+              </Tooltip>
+            )}
           </div>
         </div>
       )}

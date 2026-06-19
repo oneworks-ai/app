@@ -1,17 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 
-import type { Session } from '@oneworks/core'
+import type { Session, SessionPanelTab } from '@oneworks/core'
 
-import { updateSession } from '#~/api'
-
-import {
-  normalizeWorkspaceFileState,
-  toSessionWorkspaceFileState,
-  uniqueNonEmptyPaths
-} from './workspace-file-panel-state'
+import { normalizeWorkspaceFileState, uniqueNonEmptyPaths } from './workspace-file-panel-state'
 import type { WorkspaceFilePanelState } from './workspace-file-panel-state'
 
 export type ChatBottomPanelView = 'file' | 'terminal'
+
+const getWorkspaceFileStateFromSessionPanel = (session?: Session): WorkspaceFilePanelState => {
+  const bottom = session?.panelState?.bottom
+  const fileTabs =
+    bottom?.tabs.filter((tab): tab is Extract<SessionPanelTab, { kind: 'file' }> => tab.kind === 'file') ?? []
+  const activeTab = bottom?.tabs.find(tab => tab.id === bottom.activeTabId)
+  const selectedPath = activeTab?.kind === 'file' ? activeTab.path : fileTabs[0]?.path
+  return {
+    openPaths: fileTabs.map(tab => tab.path),
+    selectedPath,
+    isOpen: activeTab?.kind === 'file'
+  }
+}
 
 export function useChatRouteBottomPanel({
   isTerminalOpen,
@@ -22,7 +29,7 @@ export function useChatRouteBottomPanel({
   session?: Session
   setIsTerminalOpen: (isOpen: boolean) => void
 }) {
-  const initialWorkspaceFileState = normalizeWorkspaceFileState(session?.workspaceFileState)
+  const initialWorkspaceFileState = normalizeWorkspaceFileState(getWorkspaceFileStateFromSessionPanel(session))
   const [bottomPanelView, setBottomPanelView] = useState<ChatBottomPanelView>('terminal')
   const [selectedWorkspaceFilePath, setSelectedWorkspaceFilePath] = useState<string | null>(
     initialWorkspaceFileState.selectedPath
@@ -32,17 +39,17 @@ export function useChatRouteBottomPanel({
   const hasWorkspaceFileEditor = isWorkspaceFileEditorOpen && selectedWorkspaceFilePath != null
   const shouldShowFileEditor = isTerminalOpen && hasWorkspaceFileEditor && bottomPanelView === 'file'
   const shouldShowBottomPanel = isTerminalOpen
-  const persistedWorkspaceFileStateKey = JSON.stringify(session?.workspaceFileState ?? null)
-  const workspaceFileStateEffectKey = `${session?.id ?? ''}:${persistedWorkspaceFileStateKey}`
-  const lastWorkspaceFileStateEffectKeyRef = useRef<string | null>(null)
+  const persistedPanelFileStateKey = JSON.stringify(session?.panelState?.bottom ?? null)
+  const panelFileStateEffectKey = `${session?.id ?? ''}:${persistedPanelFileStateKey}`
+  const lastPanelFileStateEffectKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (lastWorkspaceFileStateEffectKeyRef.current === workspaceFileStateEffectKey) {
+    if (lastPanelFileStateEffectKeyRef.current === panelFileStateEffectKey) {
       return
     }
-    lastWorkspaceFileStateEffectKeyRef.current = workspaceFileStateEffectKey
+    lastPanelFileStateEffectKeyRef.current = panelFileStateEffectKey
 
-    const nextState = normalizeWorkspaceFileState(session?.workspaceFileState)
+    const nextState = normalizeWorkspaceFileState(getWorkspaceFileStateFromSessionPanel(session))
     setOpenWorkspaceFilePaths(nextState.openPaths)
     setSelectedWorkspaceFilePath(nextState.selectedPath)
     setIsWorkspaceFileEditorOpen(nextState.isOpen)
@@ -53,21 +60,13 @@ export function useChatRouteBottomPanel({
     }
 
     setBottomPanelView(current => current === 'file' ? 'terminal' : current)
-  }, [session?.workspaceFileState, setIsTerminalOpen, workspaceFileStateEffectKey])
+  }, [panelFileStateEffectKey, session, setIsTerminalOpen])
 
   const commitWorkspaceFileState = (state: WorkspaceFilePanelState) => {
     const nextState = normalizeWorkspaceFileState(state)
     setOpenWorkspaceFilePaths(nextState.openPaths)
     setSelectedWorkspaceFilePath(nextState.selectedPath)
     setIsWorkspaceFileEditorOpen(nextState.isOpen)
-
-    if (session?.id != null) {
-      void updateSession(session.id, {
-        workspaceFileState: toSessionWorkspaceFileState(nextState)
-      }).catch((err: unknown) => {
-        console.error('[chat] failed to persist workspace file state:', err)
-      })
-    }
   }
 
   const handleSelectBottomPanelView = (view: ChatBottomPanelView) => {

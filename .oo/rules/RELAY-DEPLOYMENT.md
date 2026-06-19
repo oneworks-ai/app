@@ -30,6 +30,8 @@ For each Relay slot, set `ONEWORKS_RELAY_PUBLIC_URL` and `ONEWORKS_RELAY_ALLOW_O
 
 Passkeys are bound to the browser origin and relying party id. For every official or private Relay slot, set `ONEWORKS_RELAY_PASSKEY_ORIGIN` and `ONEWORKS_RELAY_PASSKEY_RP_ID` only when the public origin cannot be inferred from `ONEWORKS_RELAY_PUBLIC_URL`; do not enroll production passkeys on a temporary platform domain and then move users to a custom domain.
 
+Relay login method ordering is deployment configuration. Set `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD` to `password`, `passkey`, or `verification_code` for the first method shown on `/login`; browsers may remember the user's last selected method. Keep `ONEWORKS_RELAY_PASSKEY_EMAIL_VERIFICATION_REQUIRED` enabled unless a deployment intentionally allows new passkey accounts without email-code confirmation.
+
 The official topology is not a template for user private deployments. Private deployments should use the user's own domains and generic examples such as `https://relay.example.com` in committed docs.
 
 ## Official Mail Topology
@@ -70,6 +72,33 @@ The official topology is not a template for user private deployments. Private de
 7. Deploy, then verify health, Admin shell, unauthorized admin API behavior, owner login, passkey registration/login on the final public origin, and plugin device registration.
 8. Update Relay plugin `servers[]` only after the target public origin is known.
 
+## Configuration Source Of Truth
+
+- Treat deployment URL, storage driver, mail provider, SSO clients, passkey origin, default login method, registration policy, and plugin `servers[]` as deployment configuration. Do not hard-code these values in TypeScript, committed JSON, screenshots, examples, or platform-specific output directories.
+- The Relay Server public version must come from `apps/relay-server/package.json` package metadata. Do not introduce release-string constants for `/health`, config JSON, logs, Admin display, or deployment smoke checks. After every private or official deploy, compare `/health.version` with the package version that was deployed.
+- Pick the final user-facing origin before configuring OAuth callbacks, passkeys, CORS, email links, or plugin server entries. Temporary platform domains are acceptable for tests, but do not enroll production passkeys or publish production plugin presets on a temporary domain that will later be replaced.
+- Keep an operator-owned deployment matrix outside the repo for each private customer or self-hosted account: platform account/team, dev/prod domains, DNS host, storage backend, transactional mail domain, Reply-To, SSO app/client ids, callback URLs, and secret names. Repository docs should use placeholders only.
+- Use platform secret stores for `ONEWORKS_RELAY_ADMIN_TOKEN`, `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`, database URLs, Resend/API keys, OAuth client secrets, and Turnstile secrets. Local `.env` / scratch files are only for temporary operator setup and must stay ignored.
+- When copying a deployment between Cloudflare and Vercel, re-evaluate storage and long-lived forwarding behavior instead of copying env blindly: Vercel requires Postgres for durable serverless state, Cloudflare uses Durable Object storage through the Worker adapter, and single-host Node usually uses SQLite.
+- Treat health, login config, SSO providers, passkey registration, email code delivery, and plugin device registration as configuration smoke checks. A deployment that returns `ok` but exposes the wrong version, public URL, provider list, CORS origin, or login method is not fully configured.
+
+## SSO / OAuth Provider Onboarding
+
+- Provider-specific setup lessons are split by provider. Do not expand this file with detailed OAuth UI walkthroughs; read the narrow file that matches the provider being configured.
+- Always read `.oo/rules/relay-deployment/sso-common.md` before creating or editing any SSO provider.
+- For built-in GitHub login, continue with `.oo/rules/relay-deployment/sso-github.md`.
+- For built-in Google login or Google managed provider setup, continue with `.oo/rules/relay-deployment/sso-google.md`.
+- For custom OAuth/OIDC providers, continue with `.oo/rules/relay-deployment/sso-oidc.md`.
+- If a new provider gets branded UI support, create a provider-specific rule file next to these and link it here instead of mixing its lessons into the common file.
+
+## Production Admin Release
+
+- For official production Admin / Relay releases, use `.oo/rules/relay-deployment/admin-release-sop.md`.
+- For official dev deploy GitHub Actions env / secret store setup, use `.oo/rules/release/relay-dev-deploy-github-actions.md`.
+- Production Admin releases are manual promotions from a known `origin/main` SHA or release tag after dev slot verification.
+- Treat login page, SSO, passkey, email-code, invite, device registration, session forwarding, or storage changes as Relay releases even when the visible diff looks like Admin UI.
+- Production smoke checks must include health, provider list, unauthorized admin API behavior, login config, Admin shell assets, and the intended login methods.
+
 ## Vercel Notes
 
 - Preferred private Vercel shape is the `apps/relay-server` single project.
@@ -78,6 +107,7 @@ The official topology is not a template for user private deployments. Private de
 - Vercel serverless must use the Postgres storage driver. Do not rely on local JSON, SQLite files, or process memory for durable cloud state.
 - Required env: `ONEWORKS_RELAY_STORAGE_DRIVER=postgres`, `ONEWORKS_RELAY_POSTGRES_URL` or `DATABASE_URL`, `ONEWORKS_RELAY_ADMIN_TOKEN`, `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`, `ONEWORKS_RELAY_PUBLIC_URL`, and `ONEWORKS_RELAY_ALLOW_ORIGIN`.
 - Passkeys work on Vercel when `/login`, `/api/auth/passkey/*`, and `/admin` share the same final HTTPS origin. Set `ONEWORKS_RELAY_PASSKEY_ORIGIN` / `ONEWORKS_RELAY_PASSKEY_RP_ID` only if the inferred origin is wrong.
+- SSO callbacks on Vercel should be registered against the same final Vercel project or custom domain used for `ONEWORKS_RELAY_PUBLIC_URL`; if a custom domain will replace the default `.vercel.app` domain, do that before production passkey enrollment and OAuth rollout.
 - Local prebuilt CLI deploys should run `vercel build --prod`, `pnpm prepare:vercel-output`, then `vercel deploy --prebuilt --prod`.
 - The Vercel project domain decides the default `.vercel.app` origin. Users can add their own custom domain and should then set public URL and CORS to that custom origin.
 
@@ -93,6 +123,7 @@ The official topology is not a template for user private deployments. Private de
 - Pages default domains use `https://<pages-project>.pages.dev`. Create separate Pages projects for dev and prod slots when the user wants both reserved.
 - The public Admin origin should usually be the Pages or custom domain; the Worker URL can remain an implementation detail behind the Pages proxy.
 - Passkeys work on Cloudflare when the browser reaches the Pages/custom domain and the proxied Worker verifies that same origin. Keep `ONEWORKS_RELAY_PUBLIC_URL` pointed at the Pages/custom domain, not the hidden Worker URL.
+- SSO provider consoles should register callback URLs on the Pages/custom domain as well. Do not register only the Worker URL unless users actually open `/login` on the Worker origin, because OAuth callback, cookies, and passkey ceremonies must agree on the user-facing origin.
 
 ## Smoke Checks
 

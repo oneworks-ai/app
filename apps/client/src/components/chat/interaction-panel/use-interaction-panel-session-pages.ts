@@ -1,25 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import {
-  createInteractionPanelSessionPage,
-  readInteractionPanelSessionPages,
-  writeInteractionPanelSessionPages
-} from './interaction-panel-session-pages'
+import { createInteractionPanelSessionPage } from './interaction-panel-session-pages'
 import type { InteractionPanelSessionPage } from './interaction-panel-session-pages'
 
 export function useInteractionPanelSessionPages(terminalSessionId: string) {
   const terminalSessionIdRef = useRef(terminalSessionId)
-  const [sessionPages, setSessionPages] = useState(() => readInteractionPanelSessionPages(terminalSessionId))
+  const [sessionPages, setSessionPages] = useState<InteractionPanelSessionPage[]>([])
 
   useEffect(() => {
     if (terminalSessionIdRef.current === terminalSessionId) return
     terminalSessionIdRef.current = terminalSessionId
-    setSessionPages(readInteractionPanelSessionPages(terminalSessionId))
+    setSessionPages([])
   }, [terminalSessionId])
-
-  useEffect(() => {
-    writeInteractionPanelSessionPages(terminalSessionId, sessionPages)
-  }, [sessionPages, terminalSessionId])
 
   const addSessionPage = useCallback((title: string) => {
     const nextPage = createInteractionPanelSessionPage(title)

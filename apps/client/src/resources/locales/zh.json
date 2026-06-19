@@ -667,6 +667,8 @@
     "shortcutDisabled": "未设置",
     "desktopActionUnavailable": "当前环境不支持桌面启动操作",
     "openWorkspaceFailed": "打开项目失败",
+    "openingProjectAnimationLabel": "OneWorks 打开项目动画",
+    "openingProjectTitle": "正在打开 {{name}}",
     "createWorkspaceFailed": "创建项目失败",
     "createWorkspaceNamePlaceholder": "输入新项目文件夹名称",
     "createWorkspaceNameSearchLabel": "输入新项目文件夹名称",
@@ -764,6 +766,17 @@
       "removeConfirmOk": "移除",
       "removeConfirmTitle": "从启动页移除 {{name}}？",
       "removeFailed": "移除项目失败",
+      "stopAndRemove": "终止并移除",
+      "stopAndRemoveConfirmDescription": "这会终止该项目的本地服务端进程，并从最近列表移除；不会删除磁盘上的文件夹。",
+      "stopAndRemoveConfirmOk": "终止并移除",
+      "stopAndRemoveConfirmTitle": "终止并从启动页移除 {{name}}？",
+      "stopAndRemoveSuccess": "项目服务已终止并移除",
+      "stopFailed": "终止项目服务失败",
+      "stopService": "终止服务",
+      "stopServiceConfirmDescription": "这会断开该项目正在运行的本地服务端进程；项目文件不会删除，之后可以重新打开。",
+      "stopServiceConfirmOk": "终止",
+      "stopServiceConfirmTitle": "终止 {{name}} 的服务端进程？",
+      "stopServiceSuccess": "项目服务已终止",
       "title": "项目"
     },
     "menu": {
@@ -1499,6 +1512,34 @@
     "childSessionPlaceholder": "输入消息继续子会话...",
     "send": "发送",
     "thinking": "正在思考",
+    "voiceInput": {
+      "tooltip": "语音输入",
+      "start": "开始录音",
+      "menu": "语音服务菜单",
+      "stop": "停止录音并识别",
+      "sendAfterTranscription": "识别后发送",
+      "transcribing": "识别中",
+      "configure": "配置语音服务",
+      "retry": "重试",
+      "setDefault": "设为默认：{{name}}",
+      "setupPrompt": "还没有可用的语音转文字服务",
+      "setupAction": "未配置语音服务，去配置",
+      "showInSender": "显示语音输入",
+      "showInSenderFailed": "显示语音输入失败",
+      "defaultService": "默认",
+      "browserWebSpeechService": "浏览器语音识别",
+      "defaultSaved": "默认语音服务已保存",
+      "defaultSaveFailed": "保存默认语音服务失败",
+      "unsupported": "当前浏览器不支持录音",
+      "unavailable": "当前状态暂不能录音",
+      "permissionDenied": "麦克风权限被拒绝",
+      "browserLanguageUnsupported": "当前浏览器不支持这个识别语言",
+      "browserRecognitionNetwork": "浏览器语音识别网络异常",
+      "loadServicesFailed": "加载语音服务失败",
+      "recordingFailed": "录音启动失败",
+      "emptyRecording": "没有录到可识别的音频",
+      "transcribeFailed": "语音识别失败"
+    },
     "sessionOperation": {
       "codexCliPrepare": "正在准备 Codex CLI；如果本机没有可用版本，会自动安装…"
     },
@@ -1872,6 +1913,11 @@
       "openWorkspaceFailed": "无法打开当前工作区",
       "openWorkspaceUnavailable": "没有可用的打开方式",
       "openWorkspaceWith": "在 {{opener}} 中打开",
+      "pageDebuggerListEmpty": "还没有可调试页面。",
+      "pageDebuggerListLoadFailed": "页面调试器列表读取失败",
+      "pageDebuggerListLoading": "正在读取可调试页面...",
+      "pageDebuggerListTitle": "页面调试器列表",
+      "pageDebuggerUntitledTarget": "未命名页面",
       "pinTab": "固定标签",
       "pinnedTabEditHint": "图标填写 Material Symbols 名称；留空时使用原本标题和图标。",
       "pinnedTabIcon": "显示图标",
@@ -1920,6 +1966,50 @@
       "iframeClearCookie": "清除 Cookie",
       "iframeClearCookieSuccess": "Cookie 已清除",
       "iframeDeviceToolbar": "显示设备工具栏",
+      "iframeViewportDesktop": "桌面",
+      "iframeViewportDimensions": "尺寸：",
+      "iframeViewportHeight": "高度",
+      "iframeViewportAddDevicePixelRatio": "添加设备像素比",
+      "iframeViewportAddDeviceType": "添加设备类型",
+      "iframeViewportCaptureFullSizeScreenshot": "捕获完整尺寸屏幕截图",
+      "iframeViewportCaptureScreenshot": "捕获屏幕截图",
+      "iframeViewportDevicePixelRatio": "设备像素比",
+      "iframeViewportDeviceType": "设备类型",
+      "iframeViewportDeviceTypeDesktop": "桌面",
+      "iframeViewportDeviceTypeMobile": "手机",
+      "iframeViewportHideDeviceFrame": "隐藏设备外框",
+      "iframeViewportHideMediaQueries": "隐藏媒体查询",
+      "iframeViewportHideRulers": "隐藏标尺",
+      "iframeViewportMobile": "手机",
+      "iframeViewportNetwork": "网络限速",
+      "iframeViewportNoThrottling": "No throttling",
+      "iframeViewportPreset": "尺寸预设",
+      "iframeViewportRemoveDevicePixelRatio": "移除设备像素比",
+      "iframeViewportRemoveDeviceType": "移除设备类型",
+      "iframeViewportResetToDefaults": "重置为默认值",
+      "iframeViewportResponsive": "响应式",
+      "iframeViewportRotate": "旋转",
+      "iframeViewportShowDeviceFrame": "显示设备外框",
+      "iframeViewportShowMediaQueries": "显示媒体查询",
+      "iframeViewportShowRulers": "显示标尺",
+      "iframeViewportStandard": "标准",
+      "iframeViewportTablet": "平板",
+      "iframeViewportToolbar": "窗口尺寸",
+      "iframeViewportWidth": "宽度",
+      "iframeViewportZoom": "缩放",
+      "iframeViewportZoomAuto": "自动 {{value}}",
+      "iframeDebugAutoInjectUnavailableCopied": "无法自动接入这个页面，调试脚本已复制，请加入目标页面后刷新。",
+      "iframeDebugCloseDeveloperTools": "关闭开发者工具",
+      "iframeDebugCopyScript": "复制调试脚本",
+      "iframeDebugDeveloperToolsTitle": "开发者工具",
+      "iframeDebugDockBottom": "停靠到底部",
+      "iframeDebugDockLeft": "停靠到左侧",
+      "iframeDebugDockRight": "停靠到右侧",
+      "iframeDebugInjectUnavailable": "Web UI 无法向这个页面注入脚本",
+      "iframeDebugOpenDeveloperTools": "打开开发者工具",
+      "iframeDebugResizeDeveloperTools": "拖拽调整开发者工具宽度",
+      "iframeDebugScriptCopied": "调试脚本已复制",
+      "iframeDebugServiceUnavailable": "页面调试服务不可用",
       "iframeEditingHint": "Enter 跳转",
       "iframeEmpty": "输入 URL 后加载网页",
       "iframeForward": "前进",
@@ -1951,6 +2041,8 @@
     },
     "modelGroupRecommended": "推荐模型",
     "modelMoreModels": "更多模型",
+    "modelConnectMoreServices": "接入更多",
+    "modelOpenModelServicesConfig": "打开配置",
     "availableTools": "可用工具",
     "availableToolsEmpty": "当前会话没有可展示的工具。",
     "toolGroupChromeDevtools": "ChromeDevtools",
@@ -2620,7 +2712,12 @@
       "save": "保存",
       "cancel": "取消",
       "format": "格式化",
-      "copy": "复制"
+      "copy": "复制",
+      "openModelServiceHomepage": "打开管理主页",
+      "configureModelServiceWithSession": "用会话修改模型服务",
+      "createModelServiceWithSession": "用会话新增模型服务",
+      "modelServiceSessionCreated": "已创建模型服务配置会话",
+      "modelServiceSessionCreateFailed": "创建模型服务配置会话失败"
     },
     "conflict": {
       "title": "配置正在被其他地方修改",
@@ -2654,6 +2751,7 @@
       "newAdapterName": "新增适配器名称",
       "newPluginName": "新增插件名称",
       "newMcpServerName": "新增 MCP 服务名称",
+      "newSpeechToTextServiceName": "新增语音服务名称",
       "newMarketplaceName": "新增源名称",
       "newEnvVarName": "新增环境变量名称",
       "newHeaderName": "新增请求头名称",
@@ -2668,6 +2766,7 @@
       "defaultAdapterPlaceholder": "请选择适配器",
       "defaultModelServicePlaceholder": "请选择模型服务",
       "defaultModelPlaceholder": "请选择模型",
+      "defaultSpeechToTextServicePlaceholder": "请选择语音服务",
       "worktreeEnvironmentPlaceholder": "请选择 worktree 环境",
       "workspaceFileOpenerPlaceholder": "选择检测到的应用",
       "titlePlaceholder": "请输入标题",
@@ -2758,6 +2857,49 @@
         "remove": "删除账号快照失败"
       },
       "authFileDefaultLookup": "留空时默认读取 {{path}}。"
+    },
+    "modelServices": {
+      "identity": {
+        "configured": "已选择官方服务商",
+        "hostMatch": "根据 API 地址识别",
+        "custom": "自定义兼容服务"
+      },
+      "actions": {
+        "openHomepage": "管理后台",
+        "openExternal": "在外部浏览器打开",
+        "createSecret": "创建 Secret",
+        "openApiKeys": "打开 API Key 页面",
+        "queryBalance": "查询余额",
+        "queryStatus": "服务状态",
+        "queryModels": "查询模型",
+        "refreshModels": "写入模型列表"
+      },
+      "results": {
+        "actionFailed": "模型服务操作失败",
+        "amountUnknown": "未知",
+        "balance": "余额",
+        "status": "状态",
+        "models": "{{count}} 个模型",
+        "modelsMore": "还有 {{count}} 个",
+        "modelsLoaded": "已查询 {{count}} 个模型",
+        "modelsRefreshed": "已写入 {{count}} 个模型",
+        "modelsEmpty": "没有可写入的模型",
+        "secretCreated": "Secret 已创建并复制到剪贴板"
+      },
+      "portal": {
+        "secretTitle": "{{provider}} Secret 管理",
+        "iframeHint": "浏览器模式使用 iframe 打开；如果平台禁止嵌入，请用外部浏览器打开。",
+        "webviewHint": "Electron 模式使用 webview 打开；如登录或支付页面受限，请用外部浏览器打开。"
+      },
+      "status": {
+        "operational": "正常",
+        "degraded": "性能下降",
+        "partial_outage": "部分故障",
+        "major_outage": "严重故障",
+        "maintenance": "维护中",
+        "unknown": "未知",
+        "unsupported": "暂不支持"
+      }
     },
     "fields": {
       "general": {
@@ -3107,6 +3249,10 @@
           "desc": "按服务名称平铺配置"
         },
         "item": {
+          "provider": {
+            "label": "官方服务商",
+            "desc": "选择后会使用内置 API 地址、模型目录、图标和管理入口；自定义服务可留空。"
+          },
           "title": {
             "label": "展示标题",
             "desc": "用于默认模型服务下拉展示"
@@ -3115,9 +3261,17 @@
             "label": "展示描述",
             "desc": "用于默认模型服务下拉展示"
           },
+          "icon": {
+            "label": "服务图标",
+            "desc": "可填 builtin:id、material:name 或图片 URL；留空时使用服务商图标。"
+          },
+          "homepageUrl": {
+            "label": "管理主页",
+            "desc": "可覆盖服务商默认后台地址，用于充值、购买、API Key 管理。"
+          },
           "apiBaseUrl": {
             "label": "API 地址",
-            "desc": "模型服务的 API 基础地址"
+            "desc": "模型服务 API 地址覆盖；已选择官方服务商时通常无需填写。"
           },
           "apiKey": {
             "label": "API 密钥",
@@ -3125,7 +3279,29 @@
           },
           "models": {
             "label": "模型列表",
-            "desc": "该服务支持的模型名称"
+            "desc": "该服务支持的模型名称；留空时使用服务商默认模型目录。"
+          },
+          "management": {
+            "enabled": {
+              "label": "启用管理能力",
+              "desc": "开启后可使用查询模型、余额、状态和 Secret 辅助入口。"
+            },
+            "apiKey": {
+              "label": "管理 API Key",
+              "desc": "部分平台需要独立的管理 API Key；留空时默认复用模型 API Key。"
+            },
+            "organizationId": {
+              "label": "组织 ID",
+              "desc": "用于需要组织维度管理 API 的平台。"
+            },
+            "projectId": {
+              "label": "项目 ID",
+              "desc": "用于需要项目维度管理 API 的平台。"
+            }
+          },
+          "providerOptions": {
+            "label": "服务商扩展配置",
+            "desc": "按服务商保留的轻量 JSON 配置，例如区域、endpoint 类型或特殊管理 API 参数。"
           },
           "timeoutMs": {
             "label": "超时（毫秒）",
@@ -3243,6 +3419,126 @@
           "desc": "为 MCP 服务器注入环境变量"
         }
       },
+      "voice": {
+        "speechToText": {
+          "label": "语音转文字",
+          "desc": "配置 sender 录音后使用的转写服务"
+        },
+        "defaultServiceId": {
+          "label": "默认语音服务",
+          "desc": "未手动选择时，sender 使用的语音转文字服务"
+        },
+        "showInSender": {
+          "label": "显示语音输入",
+          "desc": "关闭后隐藏 sender 的语音按钮；可通过右键 sender 或配置页重新开启"
+        },
+        "services": {
+          "label": "语音服务",
+          "desc": "按服务 id 配置 OpenAI 兼容或自定义 HTTP 语音转文字接口"
+        },
+        "serviceItem": {
+          "label": {
+            "label": "显示名称",
+            "desc": "在配置页和 sender 菜单里展示的名称"
+          },
+          "description": {
+            "label": "说明",
+            "desc": "补充说明这个服务的用途、账号或限制"
+          },
+          "provider": {
+            "label": "Provider",
+            "desc": "选择内置 OpenAI 兼容转写，或自定义 HTTP 映射"
+          },
+          "enabled": {
+            "label": "启用服务",
+            "desc": "关闭后 sender 不会使用这个服务"
+          },
+          "language": {
+            "label": "默认语言",
+            "desc": "例如 auto、zh、en；具体取值由服务商决定"
+          },
+          "prompt": {
+            "label": "识别提示词",
+            "desc": "传给服务商的热词、领域词或上下文提示"
+          },
+          "timeoutMs": {
+            "label": "超时（毫秒）",
+            "desc": "转写请求的最大等待时间"
+          },
+          "maxDurationSeconds": {
+            "label": "最长录音秒数",
+            "desc": "sender 侧允许录制的最长时长"
+          },
+          "maxBytes": {
+            "label": "最大音频字节",
+            "desc": "服务端接受的最大音频 payload 大小"
+          },
+          "baseUrl": {
+            "label": "OpenAI API 地址",
+            "desc": "OpenAI 或兼容接口的 base URL"
+          },
+          "apiKeyEnv": {
+            "label": "API Key 环境变量",
+            "desc": "推荐使用环境变量保存密钥，例如 OPENAI_API_KEY"
+          },
+          "apiKey": {
+            "label": "API Key",
+            "desc": "仅建议写在 global 或 user 配置；project 配置应使用环境变量引用"
+          },
+          "model": {
+            "label": "模型",
+            "desc": "语音转文字模型 id"
+          },
+          "responseFormat": {
+            "label": "响应格式",
+            "desc": "OpenAI 兼容接口的 response_format"
+          },
+          "requestUrl": {
+            "label": "请求地址",
+            "desc": "自定义 HTTP 语音转文字接口地址"
+          },
+          "requestMethod": {
+            "label": "请求方法",
+            "desc": "自定义 HTTP 请求方法"
+          },
+          "requestHeaders": {
+            "label": "请求头",
+            "desc": "支持 ${env:NAME} 引用环境变量"
+          },
+          "bodyKind": {
+            "label": "请求体类型",
+            "desc": "选择 JSON、multipart 文件上传或原始二进制"
+          },
+          "fileField": {
+            "label": "文件字段名",
+            "desc": "multipart 请求里承载音频文件的字段名"
+          },
+          "audioBase64Field": {
+            "label": "Base64 字段名",
+            "desc": "JSON 请求里承载 base64 音频的字段名"
+          },
+          "bodyFields": {
+            "label": "请求字段",
+            "desc": "额外请求字段，支持 {{language}}、{{prompt}}、{{mimeType}}、{{filename}}"
+          },
+          "textPath": {
+            "label": "文本路径",
+            "desc": "响应 JSON 中转写文本的点路径，例如 data.text"
+          },
+          "languagePath": {
+            "label": "语言路径",
+            "desc": "响应 JSON 中语言字段的点路径"
+          },
+          "segmentsPath": {
+            "label": "分段路径",
+            "desc": "响应 JSON 中分段数组的点路径"
+          },
+          "wordsPath": {
+            "label": "词级路径",
+            "desc": "响应 JSON 中词级时间戳数组的点路径"
+          }
+        }
+      },
       "shortcuts": {
         "newSession": {
           "label": "新建会话",
@@ -3296,6 +3592,49 @@
       "language": {
         "zh": "中文",
         "en": "English"
+      },
+      "modelProviders": {
+        "custom": "自定义 OpenAI 兼容服务",
+        "openai": "OpenAI",
+        "anthropic": "Anthropic",
+        "moonshot-cn": "Moonshot / Kimi 中国站",
+        "moonshot-intl": "Moonshot / Kimi 国际站",
+        "deepseek": "DeepSeek",
+        "minimax": "MiniMax",
+        "qwen": "阿里千问 / 百炼",
+        "zhipu": "智谱 GLM",
+        "azure-openai": "Azure OpenAI",
+        "google-gemini": "Google Gemini",
+        "aws-bedrock": "AWS Bedrock",
+        "openrouter": "OpenRouter",
+        "vercel-ai-gateway": "Vercel AI Gateway",
+        "requesty": "Requesty",
+        "portkey": "Portkey",
+        "litellm": "LiteLLM",
+        "micu": "Micu",
+        "apiyi": "APIYI",
+        "yunwu": "云雾"
+      },
+      "modelProviderDescriptions": {
+        "openai": "OpenAI 官方 API 平台，用于 GPT 模型和多模态服务。",
+        "anthropic": "Anthropic 官方 Claude 模型控制台服务。",
+        "moonshot-cn": "Moonshot / Kimi 中国站官方 OpenAI 兼容 API 服务。",
+        "moonshot-intl": "Moonshot / Kimi 国际站官方 OpenAI 兼容 API 服务。",
+        "deepseek": "DeepSeek 官方 OpenAI 兼容 API 服务。",
+        "minimax": "MiniMax 官方 API 平台，支持文本、多模态和智能体服务。",
+        "qwen": "阿里云百炼 / DashScope 千问模型 API 服务。",
+        "zhipu": "智谱 BigModel 官方 GLM 模型 API 服务。",
+        "azure-openai": "Azure AI Foundry 托管的 OpenAI 模型部署服务。",
+        "google-gemini": "Google AI Studio 和 Gemini API 服务。",
+        "aws-bedrock": "AWS Bedrock 托管基础模型服务。",
+        "openrouter": "OpenRouter 模型路由平台，提供 OpenAI 兼容 API。",
+        "vercel-ai-gateway": "Vercel AI Gateway，用于跨模型服务商路由请求。",
+        "requesty": "Requesty AI Gateway，用于 OpenAI 兼容模型路由。",
+        "portkey": "Portkey AI Gateway，用于管理和路由模型请求。",
+        "litellm": "LiteLLM 网关和代理，用于统一模型 API。",
+        "micu": "Micu 中转平台，提供 OpenAI 兼容模型接入。",
+        "apiyi": "APIYI 中转平台，提供 OpenAI 兼容模型接入。",
+        "yunwu": "云雾中转平台，提供 OpenAI 兼容模型接入。"
       },
       "conversation": {
         "friendly": "友好",
@@ -3362,6 +3701,30 @@
       },
       "recommendedModels": {
         "modelSelector": "模型元数据"
+      },
+      "voice": {
+        "provider": {
+          "openaiTranscriptions": "OpenAI 兼容转写",
+          "customHttp": "自定义 HTTP"
+        },
+        "bodyKind": {
+          "json": "JSON Base64",
+          "multipart": "Multipart 文件",
+          "binary": "原始二进制"
+        },
+        "responseFormat": {
+          "json": "JSON",
+          "verboseJson": "Verbose JSON",
+          "text": "纯文本",
+          "srt": "SRT 字幕",
+          "vtt": "VTT 字幕"
+        }
+      }
+    },
+    "voice": {
+      "aiAssist": {
+        "label": "用 AI 创建配置",
+        "prompt": "我想为 One Works 创建一个语音转文字服务配置。\n\n请先询问我服务商、接口地址、鉴权方式、模型名、语言、音频格式限制和返回 JSON 结构。\n然后基于 One Works 的 voice.speechToText 配置格式生成可写入配置文件的 JSON。\n\n约束：\n- 不要把 API key 明文写进 project 配置，优先使用环境变量引用。\n- 服务 id 使用小写 kebab-case。\n- 如果是 OpenAI 兼容接口，provider 使用 openai-transcriptions。\n- 如果是自定义 HTTP 接口，provider 使用 custom-http，并补齐 request/response 映射。\n- 最后给出测试步骤和失败排查建议。"
       }
     },
     "sectionGroups": {
@@ -3484,6 +3847,7 @@
       "channels": "频道",
       "adapters": "适配器",
       "plugins": "插件",
+      "voice": "语音",
       "environments": "环境",
       "mcp": "MCP",
       "shortcuts": "快捷键",

@@ -111,7 +111,6 @@ const buildWorkspaceResourceTargetUrl = (
   return appendWorkspaceResourceTargetParams(targetUrl, target).toString()
 }
 
-const WORKSPACE_TERMINAL_SESSION_ID = '__workspace__'
 const LAUNCHER_RESOURCE_RESULT_LIMIT = 40
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -147,7 +146,7 @@ const getSessionTitle = (session: Record<string, unknown>) => {
   return typeof session.id === 'string' ? session.id : ''
 }
 
-const buildStoredResourcesScript = (terminalSessionId: string) =>
+const buildStoredResourcesScript = () =>
   `(() => {
   const parseJson = value => {
     try {
@@ -181,34 +180,10 @@ const buildStoredResourcesScript = (terminalSessionId: string) =>
     if (key.startsWith('chatInteractionUrlHistory:') && Array.isArray(value)) {
       value.forEach(addWebsite)
     }
-    if (key.startsWith('chatInteractionIframePages:') && Array.isArray(value)) {
-      value.forEach(page => addWebsite({ ...page, updatedAt: Number.MAX_SAFE_INTEGER - index }))
-    }
   }
 
-  const terminalPanes = parseJson(localStorage.getItem(${JSON.stringify(`chatTerminalPaneIds:${terminalSessionId}`)}))
-  const terminals = Array.isArray(terminalPanes)
-    ? terminalPanes.map((pane, index) => {
-      if (typeof pane === 'string' && pane.trim() !== '') {
-        return { id: 'terminal:' + pane.trim(), kind: 'terminal', terminalId: pane.trim(), title: pane.trim() }
-      }
-      if (pane == null || typeof pane !== 'object') return null
-      const terminalId = asText(pane.id)
-      if (terminalId === '') return null
-      const title = asText(pane.title) || terminalId
-      const shellKind = asText(pane.shellKind)
-      return {
-        id: 'terminal:' + terminalId,
-        kind: 'terminal',
-        terminalId,
-        title,
-        ...(shellKind === '' ? {} : { shellKind })
-      }
-    }).filter(Boolean)
-    : []
-
   return {
-    terminals,
+    terminals: [],
     websites: Array.from(websitesByUrl.values()).sort((left, right) => right.updatedAt - left.updatedAt)
   }
 })()`
@@ -713,15 +688,8 @@ export const createWindowManager = ({
       : findWorkspaceWindowRecord(launcherWindowRecord.workspaceFolder)
   }
 
-  const getLauncherSourceTerminalSessionId = (launcherWindowRecord: WindowRecord, clientUrl: string) => {
-    const routePath = getWorkspaceClientRoutePath(clientUrl, launcherWindowRecord.launcherSourceUrl)
-    const sessionId = routePath.match(/^\/session\/([^/]+)/)?.[1]
-    return sessionId == null ? WORKSPACE_TERMINAL_SESSION_ID : decodeURIComponent(sessionId)
-  }
-
   const readLauncherStoredResources = async (
     launcherWindowRecord: WindowRecord,
-    clientUrl: string,
     query: string
   ): Promise<Pick<LauncherWorkspaceResourceSearchResponse, 'terminals' | 'websites'>> => {
     const sourceWindowRecord = findLauncherSourceWorkspaceWindowRecord(launcherWindowRecord)
@@ -729,9 +697,8 @@ export const createWindowManager = ({
       return { terminals: [], websites: [] }
     }
 
-    const terminalSessionId = getLauncherSourceTerminalSessionId(launcherWindowRecord, clientUrl)
     const value = await sourceWindowRecord.window.webContents
-      .executeJavaScript(buildStoredResourcesScript(terminalSessionId), false)
+      .executeJavaScript(buildStoredResourcesScript(), false)
       .catch(() => null)
     if (!isRecord(value)) {
       return { terminals: [], websites: [] }
@@ -784,7 +751,7 @@ export const createWindowManager = ({
       fetchWorkspaceApi<{ sessions?: unknown[] }>(launcherWindowRecord, '/api/sessions').catch(() => ({
         sessions: []
       })),
-      readLauncherStoredResources(launcherWindowRecord, clientUrl, query)
+      readLauncherStoredResources(launcherWindowRecord, query)
     ])
     const sessionRecords = (Array.isArray(sessionsResponse.sessions) ? sessionsResponse.sessions : [])
       .filter(isRecord)

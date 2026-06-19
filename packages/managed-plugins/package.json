@@ -34,6 +34,7 @@
     "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/managed-plugins/__tests__"
   },
   "dependencies": {
+    "@oneworks/config": "workspace:*",
     "@oneworks/types": "workspace:*",
     "@oneworks/utils": "workspace:*"
   }

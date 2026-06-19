@@ -386,7 +386,8 @@ describe('initChannels', () => {
       method: 'POST',
       headers: { 'x-test': '1' },
       query: { secret: 'secret' },
-      body: { TypeName: 'AddMsg' }
+      body: { TypeName: 'AddMsg' },
+      rawBody: '{"TypeName":"AddMsg"}'
     })
 
     expect(result).toEqual({
@@ -397,7 +398,8 @@ describe('initChannels', () => {
       method: 'POST',
       headers: { 'x-test': '1' },
       query: { secret: 'secret' },
-      body: { TypeName: 'AddMsg' }
+      body: { TypeName: 'AddMsg' },
+      rawBody: '{"TypeName":"AddMsg"}'
     })
   })
 

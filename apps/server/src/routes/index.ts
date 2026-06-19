@@ -19,6 +19,7 @@ import { configRouter } from './config'
 import { gitRouter } from './git'
 import { interactRouter } from './interact'
 import { launcherRouter } from './launcher'
+import { modelProvidersRouter, modelServicesRouter } from './model-providers'
 import { moduleUpdatesRouter } from './module-updates'
 import { pluginsRouter } from './plugins'
 import { sessionsRouter } from './sessions'
@@ -31,6 +32,8 @@ import {
   trimTrailingSlash
 } from './static-client'
 import { uiRouter } from './ui'
+import { voiceRouter } from './voice'
+import { webDebugRouter } from './web-debug'
 import { webpageRouter } from './webpage'
 import { workspaceRouter } from './workspace'
 import { worktreeEnvironmentsRouter } from './worktree-environments'
@@ -55,6 +58,8 @@ export const mountRoutes = async (
     { prefix: '/api/interact', router: interactRouter() },
     { prefix: '/api/launcher', router: launcherRouter(env) },
     { prefix: '/api/module-updates', router: moduleUpdatesRouter() },
+    { prefix: '/api/model-providers', router: modelProvidersRouter() },
+    { prefix: '/api/model-services', router: modelServicesRouter() },
     { prefix: '/api/plugins', router: pluginsRouter() },
     { prefix: '/api/auth', router: authRouter(env) },
     { prefix: '/api/ai', router: aiRouter() },
@@ -65,6 +70,8 @@ export const mountRoutes = async (
     { prefix: '/api/channels', router: channelSendRouter() },
     { prefix: '/api/automation', router: automationRouter() },
     { prefix: '/api/config', router: configRouter() },
+    { prefix: '/api/voice', router: voiceRouter() },
+    { prefix: '/api/web-debug', router: webDebugRouter() },
     { prefix: '/api/webpage', router: webpageRouter() },
     { prefix: '/api/worktree-environments', router: worktreeEnvironmentsRouter() },
     { prefix: '/api/workspace', router: workspaceRouter() }

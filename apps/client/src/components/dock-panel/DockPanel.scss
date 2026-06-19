@@ -28,7 +28,7 @@
   background-color: var(--bg-color);
   border-top: 1px solid var(--dock-panel-border-color, var(--border-color));
   gap: 6px;
-  overflow: hidden;
+  overflow: clip;
   opacity: var(--dock-panel-opacity, 1);
   transform: translateY(var(--dock-panel-translate-y, 0));
   transition:

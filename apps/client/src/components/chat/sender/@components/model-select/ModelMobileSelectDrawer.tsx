@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- mobile model selector mirrors desktop search and submenu navigation. */
 import { useEffect, useMemo, useState } from 'react'
+import type { ReactElement } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { ModelSelectMenuGroup, ModelSelectOption } from '#~/hooks/chat/use-chat-model-adapter-selection'
@@ -29,7 +30,9 @@ export function ModelMobileSelectDrawer({
   onClose,
   onSearchChange,
   onSelectModel,
-  onToggleRecommendedModel
+  onToggleRecommendedModel,
+  onConnectMoreModelServices,
+  onOpenModelServicesConfig
 }: {
   builtinPreviewModelOptions?: ModelSelectOption[]
   open: boolean
@@ -44,6 +47,8 @@ export function ModelMobileSelectDrawer({
   onSearchChange: (value: string) => void
   onSelectModel: (value: string) => void
   onToggleRecommendedModel?: (option: ModelSelectOption) => void | Promise<void>
+  onConnectMoreModelServices?: () => void
+  onOpenModelServicesConfig?: () => void
 }) {
   const { t } = useTranslation()
   const [modelView, setModelView] = useState<ModelMobileView>({ kind: 'root' })
@@ -234,6 +239,34 @@ export function ModelMobileSelectDrawer({
     </div>
   )
 
+  const renderModelActionOption = ({
+    key,
+    title,
+    icon,
+    onClick
+  }: {
+    key: string
+    title: string
+    icon: string
+    onClick: () => void
+  }) => (
+    <div
+      key={key}
+      role='button'
+      tabIndex={0}
+      className='sender-mobile-select-option model-mobile-select-navigation-option'
+      onClick={onClick}
+      onKeyDown={(event) => handleSenderMobileSelectOptionKeyDown(event, onClick)}
+    >
+      <span className='material-symbols-rounded sender-mobile-select-option__icon'>
+        {icon}
+      </span>
+      <span className='sender-mobile-select-option__copy'>
+        <span className='sender-mobile-select-option__title'>{title}</span>
+      </span>
+    </div>
+  )
+
   const renderModelList = () => {
     if (hasModelSearchQuery) {
       return filteredModelSearchOptions.length > 0
@@ -242,17 +275,52 @@ export function ModelMobileSelectDrawer({
     }
 
     if (modelView.kind === 'more') {
-      return availableModelMenuGroups.length > 0
-        ? availableModelMenuGroups.map(group =>
-          renderModelNavigationOption({
-            key: group.key,
-            title: group.title,
-            description: group.description,
-            icon: 'folder',
-            onClick: () => setModelView({ kind: 'group', groupKey: group.key })
+      const actionOptions = [
+        onConnectMoreModelServices == null
+          ? null
+          : renderModelActionOption({
+            key: 'model-services-connect-more',
+            title: t('chat.modelConnectMoreServices'),
+            icon: 'add_circle',
+            onClick: () => {
+              onClose()
+              onSearchChange('')
+              onConnectMoreModelServices()
+            }
+          }),
+        onOpenModelServicesConfig == null
+          ? null
+          : renderModelActionOption({
+            key: 'model-services-open-config',
+            title: t('chat.modelOpenModelServicesConfig'),
+            icon: 'settings',
+            onClick: () => {
+              onClose()
+              onSearchChange('')
+              onOpenModelServicesConfig()
+            }
           })
-        )
-        : renderEmptyOption()
+      ].filter((item): item is ReactElement => item != null)
+      const groupOptions = availableModelMenuGroups.map(group =>
+        renderModelNavigationOption({
+          key: group.key,
+          title: group.title,
+          description: group.description,
+          icon: 'folder',
+          onClick: () => setModelView({ kind: 'group', groupKey: group.key })
+        })
+      )
+
+      if (groupOptions.length === 0 && actionOptions.length === 0) {
+        return renderEmptyOption()
+      }
+
+      return (
+        <>
+          {groupOptions}
+          {actionOptions}
+        </>
+      )
     }
 
     if (modelView.kind === 'group') {
@@ -266,7 +334,8 @@ export function ModelMobileSelectDrawer({
         : renderEmptyOption()
     }
 
-    const hasRootContent = rootModelSections.length > 0 || availableModelMenuGroups.length > 0
+    const hasModelServiceActions = onConnectMoreModelServices != null || onOpenModelServicesConfig != null
+    const hasRootContent = rootModelSections.length > 0 || availableModelMenuGroups.length > 0 || hasModelServiceActions
     if (!hasRootContent) {
       return renderEmptyOption()
     }
@@ -274,7 +343,7 @@ export function ModelMobileSelectDrawer({
     return (
       <>
         {rootModelSections.map(renderModelSection)}
-        {availableModelMenuGroups.length > 0 && renderModelNavigationOption({
+        {(availableModelMenuGroups.length > 0 || hasModelServiceActions) && renderModelNavigationOption({
           key: 'more-models',
           title: t('chat.modelMoreModels'),
           icon: 'apps',

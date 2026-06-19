@@ -114,7 +114,7 @@ export function InteractionPanelEmptyState({
                 <button
                   type='button'
                   className='chat-interaction-panel-empty__action'
-                  onClick={action.onClick}
+                  onClick={() => action.onClick()}
                 >
                   <span className='material-symbols-rounded chat-interaction-panel-empty__action-icon'>
                     {action.icon}

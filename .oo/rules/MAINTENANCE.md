@@ -10,6 +10,7 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - [AI 常见问题索引](./maintenance/common-issues.md)
 - [日志消费与排查](./maintenance/logs.md)
 - [会话终止与创建取消排查](./maintenance/session-termination.md)
+- [任务规划、委派与经验沉淀](./maintenance/task-planning.md)
 - [消息级操作开发经验](./maintenance/message-actions.md)
 - [消息级操作维护工具](./maintenance/tooling.md)
 - [Team / Agent Room 冒烟验证](./maintenance/agent-room-team-smoke.md)
@@ -22,6 +23,7 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - Subagent 执行“取最新代码并启动 web 服务”超过 1 分钟：见 [Subagent 启动 Web 服务超过 1 分钟](./maintenance/common-issues.md#subagent-启动-web-服务超过-1-分钟)。
 - 开发服务输出 `[dev-start] ready` 后仍继续 `ps` / `curl` / 读 log：见 [开发服务 ready 后仍继续验证](./maintenance/common-issues.md#开发服务-ready-后仍继续验证)。
 - 启动入口混用 `start.sh`、`screen` 或旧脚本：见 [开发服务启动入口混用历史脚本](./maintenance/common-issues.md#开发服务启动入口混用历史脚本)。
+- 复杂任务需要拆 PR、开子线程、监控或沉淀经验：见 [任务规划、委派与经验沉淀](./maintenance/task-planning.md)。
 
 ## 开发环境启动
 

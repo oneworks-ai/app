@@ -1,4 +1,11 @@
-import type { AskUserQuestionParams, EffortLevel, Session, SessionPermissionMode, WSEvent } from '@oneworks/core'
+import type {
+  AskUserQuestionParams,
+  EffortLevel,
+  Session,
+  SessionPanelState,
+  SessionPermissionMode,
+  WSEvent
+} from '@oneworks/core'
 import type { AdapterSession, SessionCreationProgressEvent, SessionPromptType } from '@oneworks/types'
 import { WebSocket as WebSocketImpl } from 'ws'
 import type { WebSocket } from 'ws'
@@ -183,6 +190,14 @@ export function notifyConfigUpdated(workspaceFolder: string) {
     type: 'config_updated',
     workspaceFolder,
     updatedAt: Date.now()
+  })
+}
+
+export function notifyWorkspacePanelStateUpdated(panelState: SessionPanelState, updatedAt: number) {
+  sendEventToSockets(sessionSubscriberSockets, {
+    type: 'workspace_panel_state_updated',
+    panelState,
+    updatedAt
   })
 }
 

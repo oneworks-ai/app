@@ -86,6 +86,7 @@ pnpm tools dev-start <target>
 - 前端 / 后端约束：`.oo/rules/FRONTEND-STANDARD.md`、`.oo/rules/BACKEND-STANDARD.md`
 - 桌面端 / Electron 打包、发布与本地调试：`apps/desktop/AGENTS.md`、`.oo/docs/usage/desktop.md`
 - 仓库开发与贡献：`.oo/rules/DEVELOPMENT.md`
+- 复杂任务拆分、子线程协作、交叉审阅或经验沉淀：`.oo/rules/maintenance/task-planning.md`
 - 项目接入方式：`.oo/docs/` 公开文档内容源或对应模块 README
 - Relay 托管服务 / 私有化部署 / Vercel / Cloudflare / 域名与账号边界：`.oo/rules/RELAY-DEPLOYMENT.md`，再读 `apps/relay-server/AGENTS.md`、`apps/relay-admin/AGENTS.md` 和 `packages/plugins/relay/AGENTS.md`
 - 使用文档边界约定：`.oo/rules/USAGE.md`

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useContext, useEffect, useRef } from 'react'
 import type { PropsWithChildren } from 'react'
 
 import { DesktopWorkspaceStartupReadyContext } from './desktop-workspace-startup-ready'
@@ -6,6 +6,7 @@ import { DesktopWorkspaceStartupReadyContext } from './desktop-workspace-startup
 const STARTUP_MIN_VISIBLE_MS = 720
 
 export function DesktopWorkspaceStartupProvider({ children }: PropsWithChildren) {
+  const parentMarkReady = useContext(DesktopWorkspaceStartupReadyContext)
   const markWorkspaceStartupReady = window.oneworksDesktop?.markWorkspaceStartupReady
   const hasStartupOverlay = markWorkspaceStartupReady != null
   const readyRequestedRef = useRef(!hasStartupOverlay)
@@ -31,7 +32,7 @@ export function DesktopWorkspaceStartupProvider({ children }: PropsWithChildren)
   }, [])
 
   return (
-    <DesktopWorkspaceStartupReadyContext.Provider value={hasStartupOverlay ? markReady : null}>
+    <DesktopWorkspaceStartupReadyContext.Provider value={hasStartupOverlay ? markReady : parentMarkReady}>
       {children}
     </DesktopWorkspaceStartupReadyContext.Provider>
   )

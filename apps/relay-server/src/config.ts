@@ -8,13 +8,14 @@ import { parseRelayStorageDriver } from './storage/drivers.js'
 import type {
   RelayEmailConfig,
   RelayEmailProviderKind,
+  RelayLoginMethod,
   RelayOAuthClient,
   RelayPasskeyConfig,
   RelayRegistrationMode,
   RelayServerArgs,
   RelayTurnstileMode
 } from './types.js'
-import { VERSION } from './types.js'
+import { VERSION } from './version.js'
 
 export type RelayConfigEnv = Record<string, string | undefined>
 
@@ -105,6 +106,16 @@ const readRegistrationMode = (value: string | undefined): RelayRegistrationMode 
   )
 }
 
+const readLoginMethod = (value: string | undefined): RelayLoginMethod => {
+  const method = value?.trim().toLowerCase().replaceAll('-', '_') ?? ''
+  if (method === '' || method === 'password') return 'password'
+  if (method === 'passkey') return 'passkey'
+  if (method === 'verification_code' || method === 'code' || method === 'email_code') return 'verification_code'
+  throw new Error(
+    `Unsupported ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD "${value}". Supported values: password, passkey, verification_code.`
+  )
+}
+
 const readEmailWindow = (
   env: RelayConfigEnv,
   prefix: string,
@@ -158,6 +169,7 @@ const readEmailConfig = (env: RelayConfigEnv): RelayEmailConfig => ({
 })
 
 const readPasskeyConfig = (env: RelayConfigEnv): RelayPasskeyConfig => ({
+  emailVerificationRequired: readBoolean(env.ONEWORKS_RELAY_PASSKEY_EMAIL_VERIFICATION_REQUIRED, true),
   enabled: readBoolean(env.ONEWORKS_RELAY_PASSKEY_ENABLED, true),
   origin: env.ONEWORKS_RELAY_PASSKEY_ORIGIN,
   registrationMode: readRegistrationMode(env.ONEWORKS_RELAY_REGISTRATION_MODE),
@@ -177,6 +189,7 @@ export const parseRelayServerArgs = (
     host: env.ONEWORKS_RELAY_HOST || '127.0.0.1',
     port: Number(env.ONEWORKS_RELAY_PORT || '8788'),
     dataPath: env.ONEWORKS_RELAY_DATA_PATH || DEFAULT_DATA_PATH,
+    defaultLoginMethod: readLoginMethod(env.ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD),
     adminToken: env.ONEWORKS_RELAY_ADMIN_TOKEN || '',
     allowOrigin: env.ONEWORKS_RELAY_ALLOW_ORIGIN || '*',
     deviceMetadataSecret: env.ONEWORKS_RELAY_DEVICE_METADATA_SECRET || undefined,
@@ -232,6 +245,7 @@ Environment:
   ONEWORKS_RELAY_HOST
   ONEWORKS_RELAY_PORT
   ONEWORKS_RELAY_DATA_PATH
+  ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD
   ONEWORKS_RELAY_ADMIN_TOKEN
   ONEWORKS_RELAY_DEVICE_METADATA_SECRET
   ONEWORKS_RELAY_ALLOW_ORIGIN
@@ -264,6 +278,7 @@ Environment:
   ONEWORKS_RELAY_EMAIL_DOMAIN_BLOCKLIST
   ONEWORKS_RELAY_EMAIL_DISPOSABLE_BLOCKLIST_ENABLED
   ONEWORKS_RELAY_PASSKEY_ENABLED
+  ONEWORKS_RELAY_PASSKEY_EMAIL_VERIFICATION_REQUIRED
   ONEWORKS_RELAY_PASSKEY_ORIGIN
   ONEWORKS_RELAY_PASSKEY_RP_ID
   ONEWORKS_RELAY_PASSKEY_RP_NAME

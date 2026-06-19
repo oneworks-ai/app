@@ -53,4 +53,25 @@ describe('resolveCopilotModelConfig', () => {
       }
     })
   })
+
+  it('uses provider default base URLs for routed services without apiBaseUrl', () => {
+    const { ctx } = makeCtx({
+      configs: [{
+        modelServices: {
+          kimi: {
+            provider: 'moonshot-cn',
+            apiKey: 'kimi-key'
+          }
+        }
+      }, undefined]
+    })
+
+    expect(resolveCopilotModelConfig(ctx, 'kimi,kimi-k2')).toMatchObject({
+      cliModel: 'kimi-k2',
+      providerEnv: {
+        COPILOT_PROVIDER_BASE_URL: 'https://api.moonshot.cn/v1',
+        COPILOT_PROVIDER_API_KEY: 'kimi-key'
+      }
+    })
+  })
 })

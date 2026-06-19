@@ -7,6 +7,12 @@ import process from 'node:process'
 
 import type { WSEvent } from '@oneworks/core'
 import type { RuntimeCommand } from '@oneworks/runtime-protocol'
+import {
+  RuntimeStoreLockError,
+  acquireLockFile,
+  createOwnerMetadata,
+  isRuntimeOwnerStale
+} from '@oneworks/runtime-store'
 
 import type { SqliteDb } from '#~/db/index.js'
 import { getDb } from '#~/db/index.js'
@@ -32,7 +38,7 @@ import { projectRuntimeEvent } from './projection.js'
 import type { RuntimeProjectionResult } from './projection.js'
 import { projectRuntimeCommand } from './session-command-projection.js'
 import { runtimeStatusToSessionStatus } from './session-projection.js'
-import type { RuntimeEventCheckpoint, RuntimeSessionStore } from './types.js'
+import type { RuntimeEventCheckpoint, RuntimeSessionState, RuntimeSessionStore } from './types.js'
 import { createWorkspaceRuntimeEnv } from './workspace-env.js'
 
 export interface RuntimeStoreWatcherOptions {
@@ -63,10 +69,63 @@ export interface RuntimeConsumerStartRegistry {
   starting: Set<string>
 }
 
+const ENGINE_CONSUMER_START_LOCK_FILENAME = 'engine-consumer.start.lock'
+const ENGINE_CONSUMER_START_LOCK_MIN_HOLD_MS = 10_000
+const STARTUP_FAILURE_STATE_GRACE_MS = 10_000
+
 export type RuntimeStoreSessionEventDelivery = (
   sessionId: string,
   event: WSEvent
 ) => Promise<boolean> | boolean
+
+const acquireEngineConsumerStartLock = async (store: RuntimeSessionStore) => {
+  const lockPath = path.join(store.storePath, 'locks', ENGINE_CONSUMER_START_LOCK_FILENAME)
+  try {
+    return await acquireLockFile(lockPath, {
+      ...createOwnerMetadata(`engine-consumer-start:${store.sessionId}`),
+      kind: 'engine-consumer.start',
+      sessionId: store.sessionId
+    }, {
+      isStale: metadata =>
+        isRuntimeOwnerStale(metadata as Parameters<typeof isRuntimeOwnerStale>[0], {
+          staleMs: 30_000
+        }),
+      staleMs: 30_000,
+      timeoutMs: 0
+    })
+  } catch (error) {
+    if (error instanceof RuntimeStoreLockError) {
+      return undefined
+    }
+    throw error
+  }
+}
+
+const releaseEngineConsumerStartLock = (
+  lock: { release: () => Promise<void> },
+  sessionId: string
+) => {
+  void lock.release().catch(error => {
+    logger.warn({ error, sessionId }, '[runtime-store] Failed to release runtime consumer start lock')
+  })
+}
+
+const releaseEngineConsumerStartLockAfterMinHold = (
+  lock: { release: () => Promise<void> },
+  sessionId: string,
+  acquiredAt: number
+) => {
+  const delayMs = Math.max(0, ENGINE_CONSUMER_START_LOCK_MIN_HOLD_MS - (Date.now() - acquiredAt))
+  if (delayMs <= 0) {
+    releaseEngineConsumerStartLock(lock, sessionId)
+    return
+  }
+
+  const timer = setTimeout(() => {
+    releaseEngineConsumerStartLock(lock, sessionId)
+  }, delayMs)
+  timer.unref?.()
+}
 
 const deliverProjectedSessionEvents = async (
   projection: RuntimeProjectionResult,
@@ -112,6 +171,25 @@ const hasActivationCommandAfterRuntimeState = (
   )
 )
 
+const hasRuntimeEventAfterState = (
+  checkpoint: RuntimeEventCheckpoint,
+  state: { lastSeq?: number } | undefined
+) => (
+  typeof checkpoint.lastSeq === 'number' &&
+  typeof state?.lastSeq === 'number' &&
+  checkpoint.lastSeq > state.lastSeq
+)
+
+const isStartupFailureStateWithinGrace = (
+  state: RuntimeSessionState | undefined,
+  now = Date.now()
+) => (
+  state?.status === 'failed' &&
+  (state.lastSeq ?? 0) <= 0 &&
+  typeof state.updatedAt === 'number' &&
+  now - state.updatedAt < STARTUP_FAILURE_STATE_GRACE_MS
+)
+
 export async function replayRuntimeStore(
   store: RuntimeSessionStore,
   options: RuntimeStoreReplayOptions
@@ -145,6 +223,8 @@ export async function replayRuntimeStore(
     state != null &&
     isTerminalRuntimeStatus(state.status) &&
     projectedStateStatus != null &&
+    !hasRuntimeEventAfterState(result.checkpoint, state) &&
+    !isStartupFailureStateWithinGrace(state) &&
     !hasActivationCommandAfterRuntimeState(commands, state.updatedAt) &&
     session?.status !== projectedStateStatus
   ) {
@@ -186,8 +266,16 @@ export async function ensureServerRuntimeConsumerOnce(
     return
   }
 
+  let startLock: Awaited<ReturnType<typeof acquireEngineConsumerStartLock>> | undefined
+  let startLockAcquiredAt = 0
   registry.starting.add(store.storePath)
   try {
+    startLock = await acquireEngineConsumerStartLock(store)
+    if (startLock == null) {
+      return
+    }
+    startLockAcquiredAt = Date.now()
+
     const [metadata, state, heartbeat, queuedCommand] = await Promise.all([
       readRuntimeSessionMetadata(store),
       readRuntimeSessionState(store),
@@ -207,15 +295,24 @@ export async function ensureServerRuntimeConsumerOnce(
     }
 
     registry.consumers.set(store.storePath, child)
+    const ownedStartLock = startLock
+    startLock = undefined
     const cleanup = () => {
       if (registry.consumers.get(store.storePath) === child) {
         registry.consumers.delete(store.storePath)
       }
+      releaseEngineConsumerStartLockAfterMinHold(ownedStartLock, store.sessionId, startLockAcquiredAt)
     }
     child.once('exit', cleanup)
     child.once('error', cleanup)
     child.unref()
+    if (child.exitCode != null || child.signalCode != null) {
+      cleanup()
+    }
   } finally {
+    if (startLock != null) {
+      await startLock.release()
+    }
     registry.starting.delete(store.storePath)
   }
 }

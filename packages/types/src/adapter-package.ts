@@ -1,11 +1,13 @@
+/* eslint-disable max-lines -- adapter package loading keeps package resolution helpers colocated. */
+import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 
 import type { Adapter } from './adapter'
 import type { AdapterCliPreparer } from './adapter-cli-prepare'
 import { resolveExistingAdapterPackageCacheDir } from './adapter-package-cache'
-import type { AdapterBuiltinModel } from './config'
+import type { AdapterBuiltinModel, Config } from './config'
 import type { AdapterPluginInstaller } from './native-plugin'
 
 const ADAPTER_SCOPE = '@oneworks'
@@ -19,6 +21,22 @@ interface AdapterModelsExport {
   loadBuiltinModels?: unknown
 }
 
+export interface AdapterRuntimeTarget {
+  instanceKey: string
+  loadSpecifier: string
+  runtimeAdapter: string
+  packageId?: string
+}
+
+export interface ResolveAdapterRuntimeTargetOptions {
+  config?: Config
+  cwd?: string
+}
+
+export interface AdapterPackageLoadOptions {
+  cwd?: string
+}
+
 const createWorkspaceRequire = (cwd: string) => createRequire(resolve(cwd, '__oneworks_adapter_loader__.cjs'))
 
 const normalizeRuntimePackageDir = (value: string | undefined) => {
@@ -27,6 +45,270 @@ const normalizeRuntimePackageDir = (value: string | undefined) => {
 }
 
 const unique = <T>(values: T[]) => [...new Set(values)]
+
+const normalizeNonEmptyString = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+)
+
+const isPathSpecifier = (value: string) => (
+  value.startsWith('.') ||
+  value.startsWith('/') ||
+  value.startsWith('~') ||
+  (!value.startsWith('@') && /[\\/]/.test(value)) ||
+  /^[a-z]:[\\/]/i.test(value)
+)
+
+const resolvePathSpecifier = (specifier: string, cwd = process.cwd()) => {
+  if (specifier === '~') {
+    return process.env.HOME != null ? resolve(process.env.HOME) : resolve(cwd, specifier)
+  }
+  if (specifier.startsWith('~/')) {
+    return process.env.HOME != null
+      ? resolve(process.env.HOME, specifier.slice(2))
+      : resolve(cwd, specifier)
+  }
+  return isAbsolute(specifier) ? resolve(specifier) : resolve(cwd, specifier)
+}
+
+const readPackageJson = (packageRoot: string) => {
+  const packageJsonPath = resolve(packageRoot, 'package.json')
+  if (!existsSync(packageJsonPath)) return undefined
+
+  try {
+    return {
+      path: packageJsonPath,
+      data: JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+        name?: string
+        main?: string
+        module?: string
+        exports?: unknown
+      }
+    }
+  } catch {
+    return undefined
+  }
+}
+
+const resolvePackageExportTarget = (
+  entry: unknown,
+  preferredConditions: readonly string[],
+  patternMatch?: string
+): string | undefined => {
+  if (typeof entry === 'string') {
+    return patternMatch == null ? entry : entry.replaceAll('*', patternMatch)
+  }
+  if (Array.isArray(entry)) {
+    for (const item of entry) {
+      const resolved = resolvePackageExportTarget(item, preferredConditions, patternMatch)
+      if (resolved != null) return resolved
+    }
+    return undefined
+  }
+  if (entry == null || typeof entry !== 'object') return undefined
+
+  const record = entry as Record<string, unknown>
+  for (const condition of preferredConditions) {
+    const resolved = resolvePackageExportTarget(record[condition], preferredConditions, patternMatch)
+    if (resolved != null) return resolved
+  }
+  for (const value of Object.values(record)) {
+    const resolved = resolvePackageExportTarget(value, preferredConditions, patternMatch)
+    if (resolved != null) return resolved
+  }
+  return undefined
+}
+
+const matchPackageExportPattern = (patternKey: string, exportKey: string) => {
+  const wildcardIndex = patternKey.indexOf('*')
+  if (wildcardIndex < 0) return undefined
+
+  const prefix = patternKey.slice(0, wildcardIndex)
+  const suffix = patternKey.slice(wildcardIndex + 1)
+  if (!exportKey.startsWith(prefix) || !exportKey.endsWith(suffix)) {
+    return undefined
+  }
+
+  return exportKey.slice(prefix.length, exportKey.length - suffix.length)
+}
+
+const comparePackageExportPatternSpecificity = (
+  left: { key: string },
+  right: { key: string }
+) => {
+  const leftWildcardIndex = left.key.indexOf('*')
+  const rightWildcardIndex = right.key.indexOf('*')
+
+  const leftPrefixLength = leftWildcardIndex < 0 ? left.key.length : leftWildcardIndex
+  const rightPrefixLength = rightWildcardIndex < 0 ? right.key.length : rightWildcardIndex
+  if (leftPrefixLength !== rightPrefixLength) {
+    return rightPrefixLength - leftPrefixLength
+  }
+
+  const leftSuffixLength = leftWildcardIndex < 0 ? 0 : left.key.length - leftWildcardIndex - 1
+  const rightSuffixLength = rightWildcardIndex < 0 ? 0 : right.key.length - rightWildcardIndex - 1
+  if (leftSuffixLength !== rightSuffixLength) {
+    return rightSuffixLength - leftSuffixLength
+  }
+
+  return right.key.length - left.key.length
+}
+
+const resolvePackageExportEntry = (
+  exportsField: unknown,
+  exportKey: string
+): { entry: unknown; patternMatch?: string } | undefined => {
+  if (exportKey === '.') {
+    if (
+      exportsField != null &&
+      typeof exportsField === 'object' &&
+      !Array.isArray(exportsField) &&
+      Object.hasOwn(exportsField as Record<string, unknown>, '.')
+    ) {
+      return { entry: (exportsField as Record<string, unknown>)['.'] }
+    }
+    return { entry: exportsField }
+  }
+
+  if (exportsField == null || typeof exportsField !== 'object' || Array.isArray(exportsField)) {
+    return undefined
+  }
+
+  const exportsRecord = exportsField as Record<string, unknown>
+  if (Object.hasOwn(exportsRecord, exportKey)) {
+    return { entry: exportsRecord[exportKey] }
+  }
+
+  const matchedPattern = Object.keys(exportsRecord)
+    .filter(key => key.startsWith('./') && key.includes('*'))
+    .map((key) => {
+      const patternMatch = matchPackageExportPattern(key, exportKey)
+      return patternMatch == null ? undefined : { key, patternMatch }
+    })
+    .filter((match): match is { key: string; patternMatch: string } => match != null)
+    .sort(comparePackageExportPatternSpecificity)[0]
+
+  if (matchedPattern == null) return undefined
+
+  return {
+    entry: exportsRecord[matchedPattern.key],
+    patternMatch: matchedPattern.patternMatch
+  }
+}
+
+const resolvePathPackageExportCandidates = (params: {
+  packageRoot: string
+  exportKey: string
+  workspaceSourcePath: string
+}) => {
+  const packageJson = readPackageJson(params.packageRoot)
+  const candidates: string[] = []
+  const pushCandidate = (value: unknown) => {
+    const normalized = normalizeNonEmptyString(value)
+    if (normalized == null) return
+    candidates.push(resolve(params.packageRoot, normalized))
+  }
+
+  const exportEntry = resolvePackageExportEntry(packageJson?.data.exports, params.exportKey)
+  pushCandidate(resolvePackageExportTarget(exportEntry?.entry, ['__oneworks__', 'default'], exportEntry?.patternMatch))
+  pushCandidate(
+    resolvePackageExportTarget(exportEntry?.entry, ['require', 'node', 'default'], exportEntry?.patternMatch)
+  )
+  if (params.exportKey === '.') {
+    pushCandidate(packageJson?.data.main)
+    pushCandidate(packageJson?.data.module)
+  }
+  pushCandidate(params.workspaceSourcePath)
+
+  return unique(candidates)
+}
+
+const loadPathPackageExport = (params: {
+  packageRoot: string
+  exportKey: string
+  workspaceSourcePath: string
+}) => {
+  const packageRequire = createRequire(resolve(params.packageRoot, 'package.json'))
+  let missingError: unknown
+
+  for (const candidate of resolvePathPackageExportCandidates(params)) {
+    if (!existsSync(candidate)) continue
+    try {
+      return packageRequire(candidate)
+    } catch (error) {
+      if (isWorkspaceDistMissingError(error)) {
+        missingError ??= error
+        continue
+      }
+      throw error
+    }
+  }
+
+  if (params.exportKey !== '.') {
+    if (missingError != null) throw missingError
+    const subpath = params.exportKey.startsWith('./') ? params.exportKey.slice(1) : params.exportKey
+    const error = new Error(`Cannot find module '${params.packageRoot}${subpath}'`)
+    const moduleError = error as NodeJS.ErrnoException
+    moduleError.code = 'MODULE_NOT_FOUND'
+    throw error
+  }
+
+  try {
+    return packageRequire(params.packageRoot)
+  } catch (error) {
+    if (missingError != null) throw missingError
+    throw error
+  }
+}
+
+export const resolveAdapterKeyFromPackageName = (packageName: string) => {
+  const normalized = normalizeNonEmptyString(packageName)
+  if (normalized == null) return undefined
+  if (normalized.startsWith('@oneworks/adapter-')) {
+    return normalizeAdapterPackageId(normalized.slice('@oneworks/'.length)).replace(/^adapter-/, '')
+  }
+  if (normalized.startsWith(ADAPTER_PREFIX)) {
+    return normalizeAdapterPackageId(normalized).replace(/^adapter-/, '')
+  }
+  if (!normalized.startsWith('@')) {
+    return normalizeAdapterPackageId(normalized).replace(/^adapter-/, '')
+  }
+  return normalized
+}
+
+const resolveAdapterKeyFromPathPackage = (packageRoot: string) => {
+  const packageJson = readPackageJson(packageRoot)
+  return packageJson?.data.name == null ? undefined : resolveAdapterKeyFromPackageName(packageJson.data.name)
+}
+
+const readConfiguredAdapterPackageId = (adapterKey: string, config?: Config) => {
+  const adapters = config?.adapters as Record<string, unknown> | undefined
+  const entry = adapters?.[adapterKey]
+  if (entry == null || typeof entry !== 'object' || Array.isArray(entry)) {
+    return undefined
+  }
+  return normalizeNonEmptyString((entry as Record<string, unknown>).packageId)
+}
+
+export const resolveAdapterRuntimeTarget = (
+  adapterKey: string,
+  options: ResolveAdapterRuntimeTargetOptions = {}
+): AdapterRuntimeTarget => {
+  const packageId = readConfiguredAdapterPackageId(adapterKey, options.config)
+  const rawLoadSpecifier = packageId ?? adapterKey
+  const loadSpecifier = isPathSpecifier(rawLoadSpecifier)
+    ? resolvePathSpecifier(rawLoadSpecifier, options.cwd)
+    : rawLoadSpecifier
+  const runtimeAdapter = isPathSpecifier(loadSpecifier)
+    ? resolveAdapterKeyFromPathPackage(loadSpecifier) ?? adapterKey
+    : resolveAdapterKeyFromPackageName(loadSpecifier) ?? adapterKey
+
+  return {
+    instanceKey: adapterKey,
+    loadSpecifier,
+    runtimeAdapter,
+    ...(packageId == null ? {} : { packageId })
+  }
+}
 
 const createAdapterRequires = (packageName: string) => {
   const cliPackageDir = normalizeRuntimePackageDir(process.env.__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__)
@@ -68,8 +350,18 @@ const loadWorkspacePackageExport = (params: {
 const loadAdapterPackageExport = (params: {
   packageName: string
   request: string
+  packageRoot?: string
+  exportKey?: string
   workspaceSourcePath: string
 }) => {
+  if (params.packageRoot != null) {
+    return loadPathPackageExport({
+      packageRoot: params.packageRoot,
+      exportKey: params.exportKey ?? '.',
+      workspaceSourcePath: params.workspaceSourcePath
+    })
+  }
+
   let missingError: unknown
 
   for (const packageRequire of createAdapterRequires(params.packageName)) {
@@ -108,6 +400,22 @@ const loadAdapterPackageExport = (params: {
   }
 }
 
+const resolveAdapterLoadTarget = (type: string, options: AdapterPackageLoadOptions = {}) => {
+  const trimmed = type.trim()
+  if (isPathSpecifier(trimmed)) {
+    const packageRoot = resolvePathSpecifier(trimmed, options.cwd)
+    const packageName = readPackageJson(packageRoot)?.data.name ?? packageRoot
+    return {
+      packageName,
+      packageRoot
+    }
+  }
+  return {
+    packageName: resolveAdapterPackageName(type),
+    packageRoot: undefined
+  }
+}
+
 export const normalizeAdapterPackageId = (type: string) => {
   const trimmed = type.trim()
   if (trimmed.startsWith('@')) return trimmed
@@ -127,22 +435,26 @@ export const resolveAdapterPackageName = (type: string) => {
     : `${ADAPTER_SCOPE}/${ADAPTER_PREFIX}${normalizedType}`
 }
 
-export const loadAdapter = async (type: string) => {
-  const packageName = resolveAdapterPackageName(type)
+export const loadAdapter = async (type: string, options: AdapterPackageLoadOptions = {}) => {
+  const { packageName, packageRoot } = resolveAdapterLoadTarget(type, options)
 
   return loadAdapterPackageExport({
     packageName,
-    request: packageName,
+    request: packageRoot ?? packageName,
+    packageRoot,
+    exportKey: '.',
     workspaceSourcePath: 'src/index.ts'
   }).default as Adapter
 }
 
-export const loadAdapterBuiltinModels = (type: string) => {
-  const packageName = resolveAdapterPackageName(type)
+export const loadAdapterBuiltinModels = (type: string, options: AdapterPackageLoadOptions = {}) => {
+  const { packageName, packageRoot } = resolveAdapterLoadTarget(type, options)
   const exportName = `${packageName}${ADAPTER_MODELS_EXPORT}`
   const mod = loadAdapterPackageExport({
     packageName,
-    request: exportName,
+    request: packageRoot == null ? exportName : `${packageRoot}${ADAPTER_MODELS_EXPORT}`,
+    packageRoot,
+    exportKey: './models',
     workspaceSourcePath: 'src/models.ts'
   }) as AdapterModelsExport
 
@@ -153,14 +465,16 @@ export const loadAdapterBuiltinModels = (type: string) => {
   return Array.isArray(mod.builtinModels) ? mod.builtinModels as AdapterBuiltinModel[] : undefined
 }
 
-export const loadAdapterPluginInstaller = async (type: string) => {
-  const packageName = resolveAdapterPackageName(type)
+export const loadAdapterPluginInstaller = async (type: string, options: AdapterPackageLoadOptions = {}) => {
+  const { packageName, packageRoot } = resolveAdapterLoadTarget(type, options)
   const exportName = `${packageName}${ADAPTER_PLUGIN_EXPORT}`
 
   try {
     return loadAdapterPackageExport({
       packageName,
-      request: exportName,
+      request: packageRoot == null ? exportName : `${packageRoot}${ADAPTER_PLUGIN_EXPORT}`,
+      packageRoot,
+      exportKey: './plugins',
       workspaceSourcePath: 'src/plugins/index.ts'
     }).default as AdapterPluginInstaller
   } catch (error) {
@@ -176,14 +490,16 @@ export const loadAdapterPluginInstaller = async (type: string) => {
   }
 }
 
-export const loadAdapterCliPreparer = async (type: string) => {
-  const packageName = resolveAdapterPackageName(type)
+export const loadAdapterCliPreparer = async (type: string, options: AdapterPackageLoadOptions = {}) => {
+  const { packageName, packageRoot } = resolveAdapterLoadTarget(type, options)
   const exportName = `${packageName}${ADAPTER_CLI_PREPARE_EXPORT}`
 
   try {
     return loadAdapterPackageExport({
       packageName,
-      request: exportName,
+      request: packageRoot == null ? exportName : `${packageRoot}${ADAPTER_CLI_PREPARE_EXPORT}`,
+      packageRoot,
+      exportKey: './cli-prepare',
       workspaceSourcePath: 'src/cli-prepare.ts'
     }).default as AdapterCliPreparer
   } catch (error) {

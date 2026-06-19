@@ -1,10 +1,10 @@
 /* eslint-disable max-lines -- Relay server public types stay in one package-local contract file. */
-export const VERSION = '3.4.0-rc'
 
 export interface RelayServerArgs {
   allowOrigin: string
   adminToken: string
   dataPath: string
+  defaultLoginMethod?: RelayLoginMethod
   deviceMetadataSecret?: string
   deviceOnlineTtlMs?: number
   email?: RelayEmailConfig
@@ -26,6 +26,7 @@ export type RelayConfigProfileStatus = 'disabled' | 'draft' | 'published'
 export type RelayEmailProviderKind = 'disabled' | 'resend'
 export type RelayEmailPurpose = 'email-verification' | 'invite' | 'login'
 export type RelayLocale = 'en' | 'zh-CN'
+export type RelayLoginMethod = 'passkey' | 'password' | 'verification_code'
 export type RelayMessageAudienceScope = 'all' | 'team' | 'users'
 export type RelayMessageKind = 'announcement' | 'personal' | 'system'
 export type RelayPasskeyChallengeKind = 'authentication' | 'registration'
@@ -39,6 +40,7 @@ export type RelayTeamRole = 'owner' | 'admin' | 'editor' | 'member' | 'viewer'
 export type RelayTurnstileMode = 'auto' | 'off' | 'required'
 
 export interface RelayPasskeyConfig {
+  emailVerificationRequired: boolean
   enabled: boolean
   origin?: string
   registrationMode: RelayRegistrationMode
@@ -111,6 +113,7 @@ export interface RelayEmailConfig {
 export interface RelayUser {
   id: string
   email: string
+  loginId?: string
   name: string
   avatarUrl?: string
   disabledAt?: string
@@ -200,6 +203,18 @@ export interface RelayTeamPolicy {
   tenantId: string
   updatedAt?: string
   updatedByUserId?: string
+}
+
+export interface RelayAuthIdentity {
+  id: string
+  userId: string
+  provider: RelayAuthProvider
+  providerUserId: string
+  email?: string
+  emailVerified?: boolean
+  createdAt: string
+  lastUsedAt?: string
+  updatedAt?: string
 }
 
 export interface RelayPasskeyCredential {
@@ -541,6 +556,7 @@ export interface RelayStore {
   messages?: RelayMessage[]
   teamMembers: RelayTeamMember[]
   users: RelayUser[]
+  authIdentities: RelayAuthIdentity[]
   invites: RelayInvite[]
   ssoProviders: RelaySsoProvider[]
   passkeyChallenges: RelayPasskeyChallenge[]

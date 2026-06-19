@@ -4,6 +4,7 @@ import { createServer } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import type { ModelServiceConfig } from '@oneworks/types'
+import { resolveModelServiceConfig } from '@oneworks/utils'
 
 interface GeminiFunctionDeclaration {
   name?: string
@@ -608,22 +609,28 @@ export const resolveGeminiModelServiceRoute = (params: {
   service: ModelServiceConfig
   serviceKey: string
 }): GeminiProxyRouteConfig => {
-  const endpoint = normalizeServiceEndpoint(params.service.apiBaseUrl)
-  const geminiExtra = asPlainObject(asPlainObject(params.service.extra).gemini)
+  const resolved = resolveModelServiceConfig(params.service, ['modelServices', params.serviceKey])
+  if (resolved.service == null) {
+    throw new Error(resolved.issues[0]?.message ?? 'Model service requires apiBaseUrl.')
+  }
+
+  const service = resolved.service
+  const endpoint = normalizeServiceEndpoint(service.apiBaseUrl)
+  const geminiExtra = asPlainObject(asPlainObject(service.extra).gemini)
   const disableThinking = typeof geminiExtra.disableThinking === 'boolean'
     ? geminiExtra.disableThinking
     : params.serviceKey.toLowerCase() === 'kimi' || new URL(endpoint).hostname.endsWith('moonshot.ai')
 
   return {
-    apiKey: params.service.apiKey,
+    apiKey: service.apiKey,
     disableThinking,
     endpoint,
-    headers: normalizeGeminiServiceExtra(params.service),
-    maxOutputTokens: normalizePositiveInteger(params.service.maxOutputTokens),
+    headers: normalizeGeminiServiceExtra(service),
+    maxOutputTokens: normalizePositiveInteger(service.maxOutputTokens),
     model: params.model,
-    queryParams: normalizeGeminiServiceQueryParams(params.service),
+    queryParams: normalizeGeminiServiceQueryParams(service),
     serviceKey: params.serviceKey,
-    timeoutMs: normalizePositiveInteger(params.service.timeoutMs)
+    timeoutMs: normalizePositiveInteger(service.timeoutMs)
   }
 }
 

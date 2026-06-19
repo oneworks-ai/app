@@ -1,3 +1,5 @@
+import type { IconRef } from '@oneworks/types'
+
 export interface ModelSelectOptionData {
   value: string
   title: string
@@ -7,6 +9,8 @@ export interface ModelSelectOptionData {
   tooltipLines: string[]
   serviceKey?: string
   serviceTitle?: string
+  serviceIcon?: IconRef
+  modelIcon?: IconRef
   searchText: string
   displayLabel: string
 }

@@ -8,6 +8,7 @@
 - `oneworks-cli-print-mode`
 - `oneworks-channel`
 - `oneworks-mem`
+- `oneworks-model-services`
 - `create-entity`
 - `update-entity`
 - `create-plugin`
@@ -19,6 +20,7 @@
 - `oneworks config get models` / `oneworks config list models` 在文本模式下会把 `modelServices` 和 `models` metadata 合成可读视图；`--json` 仍返回原始配置结构。
 - `oneworks-channel` 负责说明 agent 如何在 channel session 中按需显式发送文本、图片、文件或平台自定义表情，并强调群聊不会自动透传过程消息；emoji registry 会说明按平台查询、发送、备注和打标签，微信文本 @ 会说明对应 CLI 用法。
 - `oneworks-mem` 负责说明 agent 如何在 channel / user / session / global 维度读写持久记忆，以及什么时候该读取或追加记忆。
+- `oneworks-model-services` 负责说明 OneWorks 模型服务商配置、内置 provider id、默认 API 地址、服务商后台入口、余额/模型/状态能力和写回规则。
 - `create-entity` 负责按用户需求创建新的 OneWorks entity，覆盖文件布局、frontmatter、继承、规则和技能引用。
 - `update-entity` 负责按用户需求更新已有 OneWorks entity，强调最小改动、保留现有内容和维护引用关系。
 - `create-plugin` 负责理解用户想要的 plugin 效果；需求不明确时先列出不确定点让用户确认，再转换为 OneWorks plugin manifest、前端入口、server 入口和验证步骤。

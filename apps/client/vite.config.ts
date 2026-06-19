@@ -151,6 +151,7 @@ export default defineConfig({
     alias: [
       sourceAlias('@oneworks/core/channel', '../../packages/core/src/channel.ts'),
       sourceAlias('@oneworks/plugin-chrome-devtools/schema', '../../packages/plugins/chrome-devtools/src/schema.ts'),
+      sourceAlias('@oneworks/utils/model-providers', '../../packages/utils/src/model-providers.ts'),
       sourceAlias('@oneworks/utils/model-selection', '../../packages/utils/src/model-selection.ts'),
       sourceAlias('@oneworks/utils/log-level', '../../packages/utils/src/log-level.ts'),
       sourceAlias('@oneworks/utils/pinyin-search', '../../packages/utils/src/pinyin-search.ts'),
@@ -172,6 +173,7 @@ export default defineConfig({
       ? {}
       : {
         proxy: {
+          '/__oneworks_chii__': { ...devServerHttpProxy, ws: true },
           '/api': devServerHttpProxy,
           '/channels': devServerHttpProxy,
           '/ws': { ...devServerHttpProxy, ws: true }

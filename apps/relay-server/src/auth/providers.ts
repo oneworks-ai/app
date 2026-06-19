@@ -6,7 +6,9 @@ type BuiltInAuthProvider = 'github' | 'google'
 interface OAuthProfile {
   avatarUrl?: string
   email: string
+  emailVerified: boolean
   id: string
+  loginId?: string
   name: string
 }
 
@@ -123,8 +125,7 @@ const fetchJson = async (url: string, token: string) => {
   return body
 }
 
-const readGithubEmail = async (token: string, fallback: unknown) => {
-  if (typeof fallback === 'string' && fallback.trim() !== '') return fallback.trim()
+const readGithubEmail = async (token: string) => {
   const response = await fetch(providerMeta.github.emailUrl, {
     headers: {
       accept: 'application/json',
@@ -137,6 +138,22 @@ const readGithubEmail = async (token: string, fallback: unknown) => {
   return isRecord(primary) && typeof primary.email === 'string' ? primary.email : ''
 }
 
+const readProviderEmail = async (provider: string, token: string, profile: Record<string, unknown>) => {
+  if (provider === 'github') {
+    const email = await readGithubEmail(token)
+    return {
+      email,
+      verified: email !== ''
+    }
+  }
+  const email = typeof profile.email === 'string' ? profile.email.trim() : ''
+  const verified = profile.email_verified === true
+  return {
+    email: verified ? email : '',
+    verified
+  }
+}
+
 export const fetchOAuthProfile = async (params: {
   client: RelayOAuthClient
   code: string
@@ -146,20 +163,22 @@ export const fetchOAuthProfile = async (params: {
   const token = await fetchAccessToken(params.provider, params.client, params.code, params.redirectUri)
   const config = providerConfig(params.provider, params.client)
   const profile = await fetchJson(config.userUrl, token)
-  const email = params.provider === 'github'
-    ? await readGithubEmail(token, profile.email)
-    : typeof profile.email === 'string'
-    ? profile.email.trim()
-    : ''
-  if (email === '') throw new Error('OAuth profile did not include an email address.')
+  const email = await readProviderEmail(params.provider, token, profile)
+  if (email.email === '') throw new Error('OAuth profile did not include a verified email address.')
   return {
     id: String(params.provider === 'github' ? profile.id : profile.sub ?? profile.id),
-    email,
+    email: email.email,
+    emailVerified: email.verified,
+    loginId: typeof profile.login === 'string' && profile.login.trim() !== ''
+      ? profile.login.trim()
+      : typeof profile.preferred_username === 'string' && profile.preferred_username.trim() !== ''
+      ? profile.preferred_username.trim()
+      : undefined,
     name: typeof profile.name === 'string' && profile.name.trim() !== ''
       ? profile.name.trim()
       : typeof profile.preferred_username === 'string' && profile.preferred_username.trim() !== ''
       ? profile.preferred_username.trim()
-      : email,
+      : email.email,
     avatarUrl: typeof profile.avatar_url === 'string'
       ? profile.avatar_url
       : typeof profile.picture === 'string'

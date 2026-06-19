@@ -1,0 +1,299 @@
+.workspace-opening-overlay {
+  position: fixed;
+  z-index: 2600;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 44px;
+  background: color-mix(in srgb, var(--bg-color) 76%, transparent);
+  color: var(--text-color);
+  -webkit-backdrop-filter: blur(30px) saturate(112%);
+  backdrop-filter: blur(30px) saturate(112%);
+  opacity: 0;
+  pointer-events: auto;
+  text-align: center;
+  visibility: hidden;
+  transition: opacity .42s ease, visibility 0s linear .42s;
+  -webkit-app-region: drag;
+}
+
+.workspace-opening-overlay.is-visible {
+  opacity: 1;
+  visibility: visible;
+  animation: workspace-opening-overlay-enter .28s ease both;
+  transition: opacity .28s ease, visibility 0s;
+}
+
+.workspace-opening-overlay.is-exiting {
+  opacity: 1;
+  pointer-events: none;
+  visibility: visible;
+  animation: workspace-opening-overlay-exit .42s ease both;
+  transition: none;
+}
+
+html.dark .workspace-opening-overlay {
+  background: color-mix(in srgb, var(--bg-color) 78%, transparent);
+}
+
+.workspace-opening-overlay__content {
+  width: min(520px, 100%);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  opacity: 0;
+  transform: translateY(14px) scale(.985);
+  transition: opacity .26s ease, transform .32s cubic-bezier(.2, .8, .2, 1);
+}
+
+.workspace-opening-overlay.is-visible .workspace-opening-overlay__content {
+  opacity: 1;
+  transform: translateY(10px) scale(1);
+  animation: workspace-opening-content-enter .34s cubic-bezier(.2, .8, .2, 1)
+    both;
+}
+
+.workspace-opening-overlay.is-exiting .workspace-opening-overlay__content {
+  opacity: 1;
+  transform: translateY(10px) scale(1);
+  animation: workspace-opening-content-exit .3s ease both;
+  transition-duration: .24s;
+}
+
+.workspace-opening-overlay__icon {
+  position: relative;
+  width: min(24vw, 140px);
+  min-width: 104px;
+  aspect-ratio: 1;
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  isolation: isolate;
+}
+
+.workspace-opening-overlay__icon-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspace-opening-overlay__icon-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.workspace-opening-overlay__icon-fallback--dark {
+  display: none;
+}
+
+html.dark .workspace-opening-overlay__icon-fallback--light {
+  display: none;
+}
+
+html.dark .workspace-opening-overlay__icon-fallback--dark {
+  display: block;
+}
+
+.workspace-opening-overlay__icon.mobiusLoader
+  .workspace-opening-overlay__icon-fallback {
+  display: none;
+}
+
+.workspace-opening-overlay__copy {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.workspace-opening-overlay__eyebrow,
+.workspace-opening-overlay__title,
+.workspace-opening-overlay__subtitle,
+.workspace-opening-overlay__tip {
+  margin: 0;
+}
+
+.workspace-opening-overlay__eyebrow {
+  color: var(--launcher-muted-color, var(--sub-text-color));
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 15px;
+  text-transform: uppercase;
+}
+
+.workspace-opening-overlay__title {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-color);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-opening-overlay__subtitle {
+  max-width: min(460px, 100%);
+  overflow: hidden;
+  color: var(--launcher-muted-color, var(--sub-text-color));
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-opening-overlay__tip {
+  position: absolute;
+  right: 32px;
+  bottom: 24px;
+  left: 32px;
+  color: var(--launcher-muted-color, var(--sub-text-color));
+  font-size: 12px;
+  line-height: 18px;
+  opacity: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  transform: translateY(6px);
+  transition: opacity .26s ease, transform .32s cubic-bezier(.2, .8, .2, 1);
+  white-space: nowrap;
+}
+
+.workspace-opening-overlay.is-visible .workspace-opening-overlay__tip {
+  opacity: 1;
+  transform: translateY(0);
+  animation: workspace-opening-tip-enter .38s ease both;
+}
+
+.workspace-opening-overlay.is-exiting .workspace-opening-overlay__tip {
+  opacity: 1;
+  transform: translateY(0);
+  animation: workspace-opening-tip-exit .24s ease both;
+  transition-duration: .2s;
+}
+
+@keyframes workspace-opening-overlay-enter {
+  from {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  to {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
+@keyframes workspace-opening-overlay-exit {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes workspace-opening-content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(10px) scale(1);
+  }
+}
+
+@keyframes workspace-opening-content-exit {
+  from {
+    opacity: 1;
+    transform: translateY(10px) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(2px) scale(.99);
+  }
+}
+
+@keyframes workspace-opening-tip-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes workspace-opening-tip-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+
+@media (max-width: 520px) {
+  .workspace-opening-overlay {
+    padding: 28px;
+  }
+
+  .workspace-opening-overlay__icon {
+    width: 116px;
+  }
+
+  .workspace-opening-overlay__tip {
+    right: 24px;
+    bottom: 20px;
+    left: 24px;
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-opening-overlay {
+    animation: none;
+    transition: none;
+  }
+
+  .workspace-opening-overlay.is-visible {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .workspace-opening-overlay.is-exiting {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  .workspace-opening-overlay__content,
+  .workspace-opening-overlay__tip {
+    animation: none;
+    transition: none;
+  }
+
+  .workspace-opening-overlay.is-visible .workspace-opening-overlay__content,
+  .workspace-opening-overlay.is-visible .workspace-opening-overlay__tip {
+    opacity: 1;
+    transform: none;
+  }
+}

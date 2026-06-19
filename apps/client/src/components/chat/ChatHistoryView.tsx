@@ -26,7 +26,8 @@ import {
   getApiErrorMessage,
   getConfig,
   openSessionWorkspaceFileInExternalOpener,
-  openWorkspaceFileInExternalOpener
+  openWorkspaceFileInExternalOpener,
+  updateConfig
 } from '#~/api'
 import {
   AgentRoomTranscript,
@@ -43,6 +44,10 @@ import type {
   AgentRoomViewModel
 } from '#~/components/agent-room'
 import { ComposerStack } from '#~/components/composer-landing/ComposerLanding'
+import {
+  buildModelServiceConfigSessionInitialContent,
+  buildModelServiceConfigSessionTitle
+} from '#~/components/config/modelServiceConfigSession'
 import type { ContextReferenceRequest } from '#~/components/workspace/context-file-types'
 import {
   DEFAULT_CHAT_SESSION_TARGET_DRAFT,
@@ -61,6 +66,7 @@ import { resolveSessionCompactionStatus } from '#~/hooks/chat/session-compaction
 import {
   hasPersistedSessionCreationTarget,
   pendingSessionCreationContextAtom,
+  pendingSessionInitialContentAtom,
   shouldUsePendingSessionCreationContext
 } from '#~/hooks/chat/session-creation-context'
 import type { ChatAdapterAccountOption } from '#~/hooks/chat/use-chat-adapter-account-selection'
@@ -259,12 +265,12 @@ export function ChatHistoryView({
   workspaceSourceSessionId?: string
   senderAutoFocusKey?: string
 }) {
-  const { t } = useTranslation()
+  const { i18n, t } = useTranslation()
   const { message } = App.useApp()
   const location = useLocation()
   const navigate = useNavigate()
   const { isCompactLayout } = useResponsiveLayout()
-  const { data: configRes } = useSWR<ConfigResponse>('/api/config', getConfig)
+  const { data: configRes, mutate: mutateConfig } = useSWR<ConfigResponse>('/api/config', getConfig)
   const configWorkspaceDraft = useMemo(
     () => getChatSessionWorkspaceDraftFromConfig(configRes),
     [configRes]
@@ -273,9 +279,12 @@ export function ChatHistoryView({
     () => resolveMessageLinksConfig(configRes?.sources?.merged?.general?.messageLinks),
     [configRes?.sources?.merged?.general?.messageLinks]
   )
+  const showVoiceInputInSender = configRes?.sources?.merged?.voice?.speechToText?.showInSender !== false
   const workspaceDraftDirtyRef = useRef(false)
   const pendingSessionCreationContext = useAtomValue(pendingSessionCreationContextAtom)
+  const pendingSessionInitialContent = useAtomValue(pendingSessionInitialContentAtom)
   const setPendingSessionCreationContext = useSetAtom(pendingSessionCreationContextAtom)
+  const setPendingSessionInitialContent = useSetAtom(pendingSessionInitialContentAtom)
   const [sessionTargetDraft, setSessionTargetDraft] = useState<ChatSessionTargetDraft>(() => ({
     ...DEFAULT_CHAT_SESSION_TARGET_DRAFT
   }))
@@ -291,10 +300,90 @@ export function ChatHistoryView({
     }
     onSessionCreated?.(createdSession)
   }, [onSessionCreated, pendingSessionCreationContext, setPendingSessionCreationContext])
+  const handleOpenVoiceConfig = useCallback(() => {
+    void navigate('/config?section=voice.speechToText')
+  }, [navigate])
+  const handleShowVoiceInputInSender = useCallback(() => {
+    void (async () => {
+      try {
+        const config = await getConfig()
+        const currentVoice = config.sources?.user?.voice ?? {}
+        await updateConfig('user', 'voice', {
+          ...currentVoice,
+          speechToText: {
+            ...(currentVoice.speechToText ?? {}),
+            showInSender: true
+          }
+        })
+        await mutateConfig()
+      } catch (error) {
+        void message.error({
+          content: getApiErrorMessage(error, t('chat.voiceInput.showInSenderFailed')),
+          key: 'chat-voice-input-show-failed'
+        })
+      }
+    })()
+  }, [message, mutateConfig, t])
+  const handleConnectMoreModelServices = useCallback(() => {
+    try {
+      const language = i18n.resolvedLanguage ?? i18n.language
+      const request = {
+        mode: 'create' as const,
+        source: 'global' as const
+      }
+      const title = buildModelServiceConfigSessionTitle(request, { language })
+      const initialContent = buildModelServiceConfigSessionInitialContent(request, {
+        language,
+        globalConfigPath: configRes?.meta?.sourceFiles?.global?.writableConfigPath,
+        projectConfigPath: configRes?.meta?.sourceFiles?.project?.writableConfigPath,
+        userConfigPath: configRes?.meta?.sourceFiles?.user?.writableConfigPath
+      })
+      setPendingSessionCreationContext({
+        initialContent,
+        tags: ['config', 'model-services'],
+        title
+      })
+      navigate({
+        pathname: '/',
+        search: location.search
+      })
+    } catch (error) {
+      void message.error(getApiErrorMessage(error, t('config.actions.modelServiceSessionCreateFailed')))
+    }
+  }, [
+    configRes?.meta?.sourceFiles?.global?.writableConfigPath,
+    configRes?.meta?.sourceFiles?.project?.writableConfigPath,
+    configRes?.meta?.sourceFiles?.user?.writableConfigPath,
+    i18n.language,
+    i18n.resolvedLanguage,
+    location.search,
+    message,
+    navigate,
+    setPendingSessionCreationContext,
+    t
+  ])
+  const handleOpenModelServicesConfig = useCallback(() => {
+    const params = new URLSearchParams(location.search)
+    params.set('tab', 'modelServices')
+    params.set('source', 'global')
+    navigate({
+      pathname: '/config',
+      search: `?${params.toString()}`
+    })
+  }, [location.search, navigate])
   useEffect(() => {
     if (!hasPersistedSession || pendingSessionCreationContext == null) return
     setPendingSessionCreationContext(undefined)
   }, [hasPersistedSession, pendingSessionCreationContext, setPendingSessionCreationContext])
+  useEffect(() => {
+    if (!shouldApplyPendingSessionCreationContext || pendingSessionInitialContent == null) return
+    setNewSessionInitialContent(pendingSessionInitialContent)
+    setPendingSessionInitialContent(undefined)
+  }, [
+    pendingSessionInitialContent,
+    setPendingSessionInitialContent,
+    shouldApplyPendingSessionCreationContext
+  ])
   const {
     creationProgress,
     isCreating,
@@ -593,6 +682,12 @@ export function ChatHistoryView({
         : { ...DEFAULT_CHAT_SESSION_TARGET_DRAFT }
     )
   }, [agentRoomTranscript?.room.id, session?.id, session?.promptName, session?.promptType])
+  useEffect(() => {
+    if (session?.id != null) {
+      return
+    }
+    setNewSessionInitialContent(pendingSessionCreationContext?.initialContent)
+  }, [pendingSessionCreationContext?.initialContent, session?.id])
   useEffect(() => {
     if (session?.id != null) {
       return
@@ -1389,6 +1484,8 @@ export function ChatHistoryView({
             servicePreviewModelOptions={servicePreviewModelOptions}
             onToggleRecommendedModel={onToggleRecommendedModel}
             updatingRecommendedModelValue={updatingRecommendedModelValue}
+            onConnectMoreModelServices={handleConnectMoreModelServices}
+            onOpenModelServicesConfig={handleOpenModelServicesConfig}
             selectedModel={selectedModel}
             onModelChange={onModelChange}
             effort={effort}
@@ -1420,6 +1517,13 @@ export function ChatHistoryView({
             queueMode={isAgentRoomMode ? undefined : queueMode}
             onQueueModeChange={isAgentRoomMode ? undefined : setQueueMode}
             contextReferenceRequest={contextReferenceRequest}
+            enableVoiceInput={showVoiceInputInSender}
+            hiddenVoiceInputActions={!showVoiceInputInSender
+              ? {
+                onConfigure: handleOpenVoiceConfig,
+                onShow: handleShowVoiceInputInSender
+              }
+              : undefined}
           />
           <ChatStatusBar
             draftWorkspace={workspaceDraft}

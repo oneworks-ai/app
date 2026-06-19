@@ -60,6 +60,7 @@
     "@oneworks/runtime-store": "workspace:*",
     "@oneworks/types": "workspace:*",
     "@oneworks/utils": "workspace:*",
+    "chii": "^1.15.5",
     "commander": "^12.1.0",
     "cron-parser": "^4.9.0",
     "koa": "^2.15.0",

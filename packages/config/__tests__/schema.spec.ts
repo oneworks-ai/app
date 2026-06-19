@@ -107,6 +107,7 @@ describe('config schema bundle', () => {
       properties: {}
     })
     expect((adapters.additionalProperties as Record<string, unknown>).properties).toMatchObject({
+      packageId: { type: 'string' },
       defaultModel: { type: 'string' },
       includeModels: { type: 'array' },
       excludeModels: { type: 'array' }
@@ -198,6 +199,66 @@ describe('config schema bundle', () => {
         publicPaths: ['/status/*']
       })
     }
+  })
+
+  it('validates voice speech-to-text services', async () => {
+    const bundle = composeBaseConfigSchemaBundle()
+    const voice = (bundle.jsonSchema.properties as Record<string, unknown>).voice as Record<string, unknown>
+    const speechToText = (voice.properties as Record<string, unknown>).speechToText as Record<string, unknown>
+    const speechToTextProperties = speechToText.properties as Record<string, unknown>
+
+    expect(speechToTextProperties.defaultServiceId).toMatchObject({
+      type: 'string'
+    })
+    expect(speechToTextProperties.services).toMatchObject({
+      type: 'object'
+    })
+
+    const parsed = await validateConfigSection('voice', {
+      speechToText: {
+        defaultServiceId: 'local-asr',
+        services: {
+          openai: {
+            provider: 'openai-transcriptions',
+            model: 'gpt-4o-mini-transcribe',
+            apiKeyEnv: 'OPENAI_API_KEY'
+          },
+          'local-asr': {
+            provider: 'custom-http',
+            request: {
+              url: 'http://127.0.0.1:7000/transcribe',
+              headers: {
+                Authorization: 'Bearer $' + '{env:LOCAL_ASR_TOKEN}'
+              },
+              body: {
+                kind: 'json',
+                audioBase64Field: 'audio'
+              }
+            },
+            response: {
+              textPath: 'data.text'
+            }
+          }
+        }
+      }
+    })
+
+    expect(parsed.success).toBe(true)
+    if (parsed.success) {
+      expect(parsed.data.speechToText?.defaultServiceId).toBe('local-asr')
+      expect(parsed.data.speechToText?.services?.openai.provider).toBe('openai-transcriptions')
+    }
+
+    const invalid = await validateConfigSection('voice', {
+      speechToText: {
+        services: {
+          broken: {
+            provider: 'custom-http'
+          }
+        }
+      }
+    })
+    expect(invalid.success).toBe(false)
   })
 
   it('validates appearance primary color settings', async () => {
@@ -477,6 +538,69 @@ describe('config schema bundle', () => {
       expect(knownInvalid.success).toBe(false)
       expect(knownWithUnknownKey.success).toBe(false)
       expect(unknownAdapter.success).toBe(true)
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('uses a configured adapter packageId path as the schema source for that adapter instance', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-schema-'))
+
+    try {
+      await writeFile(
+        path.join(tempDir, '.oo.config.json'),
+        JSON.stringify(
+          {
+            adapters: {
+              fast: {
+                packageId: './node_modules/@oneworks/adapter-codex'
+              }
+            }
+          },
+          null,
+          2
+        )
+      )
+      await writePackage(tempDir, '@oneworks/adapter-codex', {
+        'config-schema.js': `
+const { z } = require(${JSON.stringify(zodPath)})
+
+module.exports.adapterConfigContribution = {
+  adapterKey: 'codex',
+  title: 'Codex',
+  schema: z.object({
+    localOnlyFlag: z.boolean().optional().describe('Local-only flag')
+  })
+}
+`
+      }, {
+        './config-schema': './config-schema.js'
+      })
+
+      const bundle = await composeWorkspaceConfigSchemaBundle({ cwd: tempDir })
+      const adapters = (bundle.jsonSchema.properties as Record<string, unknown>).adapters as Record<string, unknown>
+      const adapterProperties = adapters.properties as Record<string, unknown>
+      const fastSchema = adapterProperties.fast as Record<string, unknown>
+      const knownValid = await validateConfigSection('adapters', {
+        fast: {
+          packageId: './node_modules/@oneworks/adapter-codex',
+          localOnlyFlag: true
+        }
+      }, { cwd: tempDir })
+      const knownWithUnknownKey = await validateConfigSection('adapters', {
+        fast: {
+          packageId: './node_modules/@oneworks/adapter-codex',
+          customFlag: true
+        }
+      }, { cwd: tempDir })
+
+      expect(bundle.extensions.adapters).toContain('fast')
+      expect(fastSchema.properties).toMatchObject({
+        packageId: { type: 'string' },
+        localOnlyFlag: { type: 'boolean' }
+      })
+      expect(knownValid.success).toBe(true)
+      expect(knownWithUnknownKey.success).toBe(false)
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }

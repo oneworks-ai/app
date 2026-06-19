@@ -9,6 +9,7 @@ import {
 } from '#~/services/workspace/file-manager.js'
 import { listWorkspaceFileOpeners, openWorkspaceFileInExternalOpener } from '#~/services/workspace/file-opener.js'
 import { readWorkspaceFile, resolveWorkspaceImageResource, updateWorkspaceFile } from '#~/services/workspace/file.js'
+import { getWorkspacePanelState, updateWorkspacePanelState } from '#~/services/workspace/panel-state.js'
 import { listWorkspaceTree } from '#~/services/workspace/tree.js'
 import { resolveWorkspaceOpenerIconResource } from '#~/services/workspace/workspace-opener-icons.js'
 import { openWorkspaceInExternalOpener } from '#~/services/workspace/workspace-opener.js'
@@ -32,6 +33,15 @@ export function workspaceRouter(): Router {
 
   router.get('/path-actions', async (ctx) => {
     ctx.body = await getWorkspacePathActionCapabilities()
+  })
+
+  router.get('/panel-state', async (ctx) => {
+    ctx.body = await getWorkspacePanelState()
+  })
+
+  router.patch('/panel-state', async (ctx) => {
+    const { panelState } = ctx.request.body as { panelState?: unknown }
+    ctx.body = await updateWorkspacePanelState(panelState)
   })
 
   router.get('/opener-icon', async (ctx) => {

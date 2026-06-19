@@ -13,6 +13,7 @@ import type {
   SenderToolbarRefs,
   SenderToolbarState
 } from '../../@types/sender-toolbar-types'
+import type { SenderVoiceInputController } from '../../@types/sender-voice-input'
 
 import type { PendingContextFile, PendingImage } from '../../@types/sender-composer'
 import type { SenderEditorHandle } from '../../@types/sender-editor'
@@ -53,7 +54,8 @@ export function SenderBody({
   statusBarGitControlsInMore,
   showContextPicker,
   onCancelContextPicker,
-  onConfirmContextPicker
+  onConfirmContextPicker,
+  voiceInput
 }: {
   isInlineEdit: boolean
   isBusy: boolean
@@ -91,6 +93,7 @@ export function SenderBody({
   showContextPicker: boolean
   onCancelContextPicker: () => void
   onConfirmContextPicker: (files: PendingContextFile[]) => void
+  voiceInput?: SenderVoiceInputController
 }) {
   const { t } = useTranslation()
   const { isCompactLayout } = useResponsiveLayout()
@@ -139,6 +142,7 @@ export function SenderBody({
         showHeaderControlsInMore={showHeaderControlsInMore}
         showStatusBarControlsInMore={showStatusBarControlsInMore === true && !isInlineEdit}
         statusBarGitControlsInMore={statusBarGitControlsInMore}
+        voiceInput={voiceInput}
       />
       {!isInlineEdit && (
         <ContextFilePicker

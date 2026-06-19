@@ -3,8 +3,8 @@ import { dirname } from 'node:path'
 
 import { resolveConfigState } from '@oneworks/config'
 import { NATIVE_HOOK_BRIDGE_ADAPTER_ENV } from '@oneworks/hooks'
-import type { AdapterCtx, AdapterQueryOptions } from '@oneworks/types'
-import { resolveProjectOoPath } from '@oneworks/utils'
+import type { AdapterCtx, AdapterQueryOptions, Config } from '@oneworks/types'
+import { resolveModelServiceConfig, resolveModelServiceModels, resolveProjectOoPath } from '@oneworks/utils'
 import { ensureManagedNpmCli } from '@oneworks/utils/managed-npm-cli'
 
 import { ensureClaudeCodeRouterReady } from '../ccr/daemon'
@@ -96,6 +96,238 @@ const normalizeEffort = (value: unknown): AdapterQueryOptions['effort'] => (
 
 const uniqueStrings = (values: string[]) => [...new Set(values)]
 
+const parseModelServiceModel = (value: unknown) => {
+  if (typeof value !== 'string' || !value.includes(',')) return undefined
+  const [serviceKey, modelName] = value.split(',').map(item => item.trim())
+  return serviceKey !== '' && modelName !== '' ? { serviceKey, modelName } : undefined
+}
+
+type OfficialAnthropicProvider =
+  | 'anthropic'
+  | 'deepseek'
+  | 'minimax'
+  | 'moonshot-cn'
+  | 'moonshot-intl'
+  | 'openrouter'
+  | 'portkey'
+  | 'qwen'
+  | 'requesty'
+  | 'vercel-ai-gateway'
+  | 'zhipu'
+
+const OFFICIAL_ANTHROPIC_PROVIDER_HOSTS: Array<{
+  match: (host: string) => boolean
+  provider: OfficialAnthropicProvider
+}> = [
+  { match: host => host === 'api.anthropic.com', provider: 'anthropic' },
+  { match: host => host === 'api.deepseek.com', provider: 'deepseek' },
+  { match: host => host === 'api.minimax.io' || host === 'api.minimaxi.com', provider: 'minimax' },
+  { match: host => host === 'api.moonshot.cn', provider: 'moonshot-cn' },
+  { match: host => host === 'api.moonshot.ai', provider: 'moonshot-intl' },
+  { match: host => host === 'openrouter.ai', provider: 'openrouter' },
+  { match: host => host === 'api.portkey.ai', provider: 'portkey' },
+  {
+    match: host =>
+      host === 'dashscope.aliyuncs.com' ||
+      host === 'dashscope-intl.aliyuncs.com' ||
+      host === 'dashscope-us.aliyuncs.com' ||
+      host.endsWith('.dashscope.aliyuncs.com') ||
+      host.endsWith('.maas.aliyuncs.com'),
+    provider: 'qwen'
+  },
+  { match: host => host === 'router.requesty.ai', provider: 'requesty' },
+  { match: host => host === 'ai-gateway.vercel.sh', provider: 'vercel-ai-gateway' },
+  { match: host => host === 'open.bigmodel.cn', provider: 'zhipu' }
+]
+
+const OFFICIAL_ANTHROPIC_PROVIDERS = new Set<string>(
+  OFFICIAL_ANTHROPIC_PROVIDER_HOSTS.map(entry => entry.provider)
+)
+
+const resolveOfficialAnthropicProvider = (
+  provider: string | undefined,
+  apiBaseUrl: string
+): OfficialAnthropicProvider | undefined => {
+  if (provider != null && OFFICIAL_ANTHROPIC_PROVIDERS.has(provider)) {
+    return provider as OfficialAnthropicProvider
+  }
+  try {
+    const host = new URL(apiBaseUrl).hostname.toLowerCase()
+    return OFFICIAL_ANTHROPIC_PROVIDER_HOSTS.find(entry => entry.match(host))?.provider
+  } catch {
+    return undefined
+  }
+}
+
+const trimKnownApiPath = (pathname: string) =>
+  pathname
+    .replace(/\/(?:v\d+\/)?(?:chat\/completions|responses|messages)\/?$/u, '')
+    .replace(/\/compatible-mode\/v\d+\/?$/u, '')
+    .replace(/\/api\/paas\/v\d+\/?$/u, '')
+    .replace(/\/v\d+\/?$/u, '')
+    .replace(/\/chat\/completions\/?$/u, '')
+    .replace(/\/responses\/?$/u, '')
+    .replace(/\/messages\/?$/u, '')
+    .replace(/\/+$/u, '')
+
+const formatUrl = (url: URL) => {
+  url.search = ''
+  url.hash = ''
+  return url.toString().replace(/\/$/u, '')
+}
+
+const setPath = (apiBaseUrl: string, pathname: string) => {
+  const url = new URL(apiBaseUrl)
+  url.pathname = pathname
+  return formatUrl(url)
+}
+
+const resolveAnthropicPathBaseUrl = (apiBaseUrl: string) => {
+  const url = new URL(apiBaseUrl)
+  const basePath = trimKnownApiPath(url.pathname)
+  if (/\/anthropic$/u.test(basePath)) {
+    url.pathname = basePath
+  } else {
+    url.pathname = `${basePath}/anthropic`
+  }
+  return formatUrl(url)
+}
+
+const resolveQwenAnthropicBaseUrl = (apiBaseUrl: string) => {
+  const url = new URL(apiBaseUrl)
+  const path = url.pathname.replace(/\/+$/u, '')
+  const existingIndex = path.indexOf('/apps/anthropic')
+  url.pathname = existingIndex >= 0
+    ? path.slice(0, existingIndex + '/apps/anthropic'.length)
+    : '/apps/anthropic'
+  return formatUrl(url)
+}
+
+const resolveOpenRouterAnthropicBaseUrl = (apiBaseUrl: string) => {
+  const url = new URL(apiBaseUrl)
+  url.pathname = '/api'
+  return formatUrl(url)
+}
+
+const resolveRootAnthropicBaseUrl = (apiBaseUrl: string) => {
+  const url = new URL(apiBaseUrl)
+  url.pathname = trimKnownApiPath(url.pathname)
+  return formatUrl(url)
+}
+
+const resolveOfficialAnthropicBaseUrl = (
+  provider: OfficialAnthropicProvider,
+  apiBaseUrl: string
+) => {
+  if (provider === 'qwen') return resolveQwenAnthropicBaseUrl(apiBaseUrl)
+  if (provider === 'zhipu') return setPath(apiBaseUrl, '/api/anthropic')
+  if (provider === 'openrouter') return resolveOpenRouterAnthropicBaseUrl(apiBaseUrl)
+  if (provider === 'requesty' || provider === 'vercel-ai-gateway' || provider === 'portkey') {
+    return resolveRootAnthropicBaseUrl(apiBaseUrl)
+  }
+  if (provider === 'anthropic') return setPath(apiBaseUrl, '')
+  return resolveAnthropicPathBaseUrl(apiBaseUrl)
+}
+
+const normalizeString = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+)
+
+const getExtraRecord = (extra: Record<string, unknown> | undefined, key: string) => (
+  isPlainObject(extra?.[key]) ? extra[key] as Record<string, unknown> : {}
+)
+
+const resolveOfficialAnthropicModelService = (
+  model: unknown,
+  modelServices: Config['modelServices']
+) => {
+  const selection = parseModelServiceModel(model)
+  if (selection == null) return undefined
+  const configuredService = modelServices?.[selection.serviceKey]
+  const resolved = resolveModelServiceConfig(configuredService).service
+  if (resolved == null) return undefined
+  const provider = resolveOfficialAnthropicProvider(resolved.provider, resolved.apiBaseUrl)
+  if (provider == null) return undefined
+  return {
+    apiKey: resolved.apiKey,
+    baseUrl: resolveOfficialAnthropicBaseUrl(provider, resolved.apiBaseUrl),
+    extra: resolved.extra,
+    model: selection.modelName,
+    models: resolveModelServiceModels(resolved),
+    provider
+  }
+}
+
+const buildOfficialAnthropicEnv = (
+  service: NonNullable<ReturnType<typeof resolveOfficialAnthropicModelService>>,
+  currentEnv: Record<string, string | null | undefined>
+) => {
+  const claudeCodeExtra = getExtraRecord(service.extra, 'claudeCode')
+  const providerExtra = getExtraRecord(service.extra, service.provider)
+  const customHeaders = normalizeString(
+    claudeCodeExtra.anthropicCustomHeaders ??
+      claudeCodeExtra.customHeaders ??
+      providerExtra.anthropicCustomHeaders ??
+      providerExtra.customHeaders
+  )
+  const portkeyProvider = normalizeString(
+    claudeCodeExtra.portkeyProvider ??
+      providerExtra.provider ??
+      providerExtra.portkeyProvider
+  )
+  const isZhipuLongContextModel = service.provider === 'zhipu' && /\[1m\]/iu.test(service.model)
+  const zhipuHaikuModel = service.provider === 'zhipu' && service.model !== 'glm-4.5-air' &&
+      service.models?.includes('glm-4.5-air')
+    ? 'glm-4.5-air'
+    : service.model
+
+  return {
+    ANTHROPIC_BASE_URL: service.baseUrl,
+    ...(service.provider === 'anthropic'
+      ? {
+        ANTHROPIC_API_KEY: service.apiKey,
+        ANTHROPIC_AUTH_TOKEN: ''
+      }
+      : {
+        ANTHROPIC_AUTH_TOKEN: service.apiKey,
+        ANTHROPIC_API_KEY: ''
+      }),
+    ANTHROPIC_MODEL: service.model,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: service.model,
+    ANTHROPIC_DEFAULT_SONNET_MODEL: service.model,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: zhipuHaikuModel,
+    CLAUDE_CODE_SUBAGENT_MODEL: service.model,
+    ...(service.provider === 'moonshot-cn' || service.provider === 'moonshot-intl'
+      ? {
+        ENABLE_TOOL_SEARCH: currentEnv.ENABLE_TOOL_SEARCH ?? 'false',
+        CLAUDE_CODE_AUTO_COMPACT_WINDOW: currentEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW ?? '262144'
+      }
+      : {}),
+    ...(service.provider === 'minimax'
+      ? {
+        API_TIMEOUT_MS: currentEnv.API_TIMEOUT_MS ?? '3000000',
+        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: currentEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC ?? '1',
+        CLAUDE_CODE_AUTO_COMPACT_WINDOW: currentEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW ?? '512000'
+      }
+      : {}),
+    ...(service.provider === 'zhipu'
+      ? {
+        ENABLE_TOOL_SEARCH: currentEnv.ENABLE_TOOL_SEARCH ?? '0',
+        CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: currentEnv.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS ?? '1',
+        ...(isZhipuLongContextModel
+          ? { CLAUDE_CODE_AUTO_COMPACT_WINDOW: currentEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW ?? '1000000' }
+          : {})
+      }
+      : {}),
+    ...(service.provider === 'portkey' && (customHeaders != null || portkeyProvider != null)
+      ? {
+        ANTHROPIC_CUSTOM_HEADERS: customHeaders ??
+          `x-portkey-api-key: ${service.apiKey}\nx-portkey-provider: ${portkeyProvider}`
+      }
+      : {})
+  }
+}
+
 export const prepareClaudeExecution = async (
   ctx: AdapterCtx,
   options: AdapterQueryOptions
@@ -176,7 +408,8 @@ export const prepareClaudeExecution = async (
     }
   }
   settings = deepMerge(settings, settingsContent) as ClaudeExecutionSettings
-  const useCCR = typeof model === 'string' && model.includes(',')
+  const officialAnthropicService = resolveOfficialAnthropicModelService(model, mergedConfig.modelServices)
+  const useCCR = officialAnthropicService == null && typeof model === 'string' && model.includes(',')
   if (useCCR) {
     const router = await ensureClaudeCodeRouterReady(ctx)
     settings.env = {
@@ -192,6 +425,12 @@ export const prepareClaudeExecution = async (
       env: ctx.env,
       sessionId
     })
+  }
+  if (officialAnthropicService != null) {
+    settings.env = {
+      ...settings.env,
+      ...buildOfficialAnthropicEnv(officialAnthropicService, settings.env)
+    }
   }
   const { mcpServers, ...unresolvedSettings } = settings
   unresolvedSettings.permissions.allow = [
@@ -276,7 +515,8 @@ export const prepareClaudeExecution = async (
     args.push('--resume', sessionId)
   }
 
-  if (model != null && model !== '') args.push('--model', model)
+  const cliModel = officialAnthropicService?.model ?? model
+  if (cliModel != null && cliModel !== '') args.push('--model', cliModel)
 
   if (systemPrompt != null && systemPrompt !== '') {
     args.push(

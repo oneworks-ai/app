@@ -1,6 +1,8 @@
 import type { InteractionPanelIframePage } from './InteractionPanelIframeView'
 
-const buildIframeStorageKey = (sessionId: string) => `chatInteractionIframePages:${sessionId}`
+const iframePageDevtoolsVariants = new Set<InteractionPanelIframePage['variant']>([
+  'mobile-debug-devtools'
+])
 
 export interface OpenInteractionPanelIframeUrlOptions {
   faviconUrl?: string
@@ -47,12 +49,15 @@ export const getIframePageFallbackFaviconUrl = (url: string) => {
 }
 
 const getIframePageTitleForUrl = (page: InteractionPanelIframePage, url: string) => (
-  page.variant === 'mobile-debug-devtools' ? page.title : getIframePageHostTitle(url, page.title)
+  isIframePageDevtoolsVariant(page) ? page.title : getIframePageHostTitle(url, page.title)
 )
 
 const getIframePageFaviconUrlForUrl = (page: InteractionPanelIframePage, url: string) => (
-  page.variant === 'mobile-debug-devtools' ? page.faviconUrl : getIframePageFallbackFaviconUrl(url)
+  isIframePageDevtoolsVariant(page) ? page.faviconUrl : getIframePageFallbackFaviconUrl(url)
 )
+
+export const isIframePageDevtoolsVariant = (page: Pick<InteractionPanelIframePage, 'variant'>) =>
+  iframePageDevtoolsVariants.has(page.variant)
 
 export const createIframePage = (
   title: string,
@@ -65,47 +70,18 @@ export const createIframePage = (
   ...(options.variant == null ? {} : { variant: options.variant })
 })
 
-const normalizeIframePage = (page: InteractionPanelIframePage): InteractionPanelIframePage => {
+export const normalizeIframePage = (page: InteractionPanelIframePage): InteractionPanelIframePage => {
   const history = Array.isArray(page.history) ? page.history.filter(url => typeof url === 'string') : undefined
   const historyIndex = history == null || history.length === 0
     ? undefined
     : Math.min(Math.max(page.historyIndex ?? history.length - 1, 0), history.length - 1)
-  const variant = page.variant === 'mobile-debug-devtools' ? page.variant : undefined
+  const variant = isIframePageDevtoolsVariant(page) ? page.variant : undefined
   const { variant: _variant, ...basePage } = page
   return {
     ...basePage,
     ...(typeof page.faviconUrl === 'string' && page.faviconUrl !== '' ? { faviconUrl: page.faviconUrl } : {}),
     ...(history == null || historyIndex == null ? {} : { history, historyIndex }),
     ...(variant == null ? {} : { variant })
-  }
-}
-
-export const readIframePages = (sessionId: string): InteractionPanelIframePage[] => {
-  if (typeof window === 'undefined') return []
-  try {
-    const rawValue = window.localStorage.getItem(buildIframeStorageKey(sessionId))
-    const parsedValue = rawValue == null ? [] : JSON.parse(rawValue)
-    if (!Array.isArray(parsedValue)) return []
-    return parsedValue
-      .filter((item): item is InteractionPanelIframePage => (
-        item != null &&
-        typeof item === 'object' &&
-        typeof item.id === 'string' &&
-        typeof item.title === 'string' &&
-        typeof item.url === 'string'
-      ))
-      .map(normalizeIframePage)
-  } catch {
-    return []
-  }
-}
-
-export const writeIframePages = (sessionId: string, pages: InteractionPanelIframePage[]) => {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(buildIframeStorageKey(sessionId), JSON.stringify(pages))
-  } catch {
-    // Persisting iframe pages is best-effort only.
   }
 }
 
@@ -183,10 +159,10 @@ export const updateIframePageMetadata = (
   metadata: { faviconUrl?: string; title?: string }
 ): InteractionPanelIframePage => ({
   ...page,
-  ...(page.variant === 'mobile-debug-devtools' || metadata.title == null || metadata.title.trim() === ''
+  ...(isIframePageDevtoolsVariant(page) || metadata.title == null || metadata.title.trim() === ''
     ? {}
     : { title: metadata.title.trim() }),
-  ...(page.variant === 'mobile-debug-devtools' || metadata.faviconUrl == null || metadata.faviconUrl.trim() === ''
+  ...(isIframePageDevtoolsVariant(page) || metadata.faviconUrl == null || metadata.faviconUrl.trim() === ''
     ? {}
     : { faviconUrl: metadata.faviconUrl })
 })

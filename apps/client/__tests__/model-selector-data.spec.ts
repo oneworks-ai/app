@@ -7,8 +7,9 @@ import type {
   RecommendedModelConfig
 } from '@oneworks/types'
 
-import type { ServiceModelEntry } from '#~/hooks/chat/model-selector'
+import type { ServiceModelEntry, ServiceModelOption } from '#~/hooks/chat/model-selector'
 import { buildModelSelectorData } from '#~/hooks/chat/model-selector-data'
+import { getAdapterDisplay } from '#~/resources/adapters'
 
 const createModelServiceConfig = (config: {
   title: string
@@ -88,6 +89,12 @@ describe('buildModelSelectorData', () => {
       'anthropic,claude-sonnet-4-6'
     ])
     expect(result.recommendedOptions[0]?.serviceTitle).toBe('OpenAI')
+    expect(result.builtinPreviewOptions[0]?.modelIcon).toEqual({
+      kind: 'url',
+      url: getAdapterDisplay('codex').icon,
+      darkUrl: getAdapterDisplay('codex').darkIcon
+    })
+    expect(result.servicePreviewOptions[0]?.serviceIcon).toEqual({ kind: 'builtin', id: 'model-service' })
     expect(result.moreModelGroups.map(group => group.key)).toEqual([
       'builtin:codex',
       'service:openai',
@@ -183,6 +190,44 @@ describe('buildModelSelectorData', () => {
     expect(result.searchOptions[0]).toMatchObject({
       value: 'openai,gpt-5.4-2026-03-05',
       title: 'GPT-5.4'
+    })
+  })
+
+  it('preserves service and model icons from routed model options', () => {
+    const availableServiceModels: ServiceModelOption[] = [{
+      serviceKey: 'kimi',
+      model: 'kimi-k2',
+      selectorValue: 'kimi,kimi-k2',
+      serviceIcon: { kind: 'builtin', id: 'moonshot' },
+      modelIcon: { kind: 'builtin', id: 'kimi-k2' }
+    }]
+    const result = buildModelSelectorData({
+      activeBuiltinModels: {},
+      availableServiceModels,
+      defaultModelService: 'kimi',
+      mergedModels: {},
+      mergedModelServices: {
+        kimi: {
+          provider: 'moonshot-cn',
+          apiKey: 'test-key'
+        }
+      },
+      recommendedModels: [{
+        service: 'kimi',
+        model: 'kimi-k2'
+      }],
+      recommendedGroupTitle: 'Recommended Models',
+      servicePreviewGroupTitle: 'Model Services',
+      builtinGroupTitle: (adapter) => `${adapter} built-in models`
+    })
+
+    expect(result.servicePreviewOptions[0]).toMatchObject({
+      serviceIcon: { kind: 'builtin', id: 'moonshot' },
+      modelIcon: { kind: 'builtin', id: 'kimi-k2' }
+    })
+    expect(result.recommendedOptions[0]).toMatchObject({
+      serviceIcon: { kind: 'builtin', id: 'moonshot' },
+      modelIcon: { kind: 'builtin', id: 'kimi-k2' }
     })
   })
 

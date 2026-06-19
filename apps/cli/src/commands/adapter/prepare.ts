@@ -71,6 +71,7 @@ export const runAdapterPrepareCommand = async (
   const ctx = await createPrepareContext(options.quiet)
   const preparers = await loadAdapterPreparePreparers({
     config: ctx.configState?.mergedConfig ?? {},
+    cwd: ctx.cwd,
     requiredTargets: targets
   })
   const requests = resolveAdapterPrepareRequests({

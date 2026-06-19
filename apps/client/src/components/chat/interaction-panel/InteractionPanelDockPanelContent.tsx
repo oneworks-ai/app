@@ -10,6 +10,7 @@ import { PluginViewHost } from '#~/plugins/PluginHost'
 
 import { InteractionPanelIframeView } from './InteractionPanelIframeView'
 import { InteractionPanelMobileDebugView } from './InteractionPanelMobileDebugView'
+import { InteractionPanelPageDebuggerListView } from './InteractionPanelPageDebuggerListView'
 import { InteractionPanelRunCommandTaskView } from './InteractionPanelRunCommandTaskView'
 import { InteractionPanelSessionView } from './InteractionPanelSessionView'
 import { useInteractionPanelDockContext } from './interaction-panel-dock-context'
@@ -59,7 +60,10 @@ export function InteractionPanelDockPanelContentBody({
     onIframeUrlChange,
     onLocateWorkspacePath,
     onMobileDebugPageChange,
+    onCloseWorkspaceFilePaths,
     onOpenIframeUrl,
+    onPluginTabStateChange,
+    onSelectWorkspaceFilePath,
     onSessionPageChange
   } = useInteractionPanelDockContext()
   const tab = tabById[tabId]
@@ -103,6 +107,12 @@ export function InteractionPanelDockPanelContentBody({
   }
 
   if (tab.kind === 'file') {
+    const closeFilePathsToRight = (path: string) => {
+      const tabIndex = bottomPanel.openWorkspaceFilePaths.indexOf(path)
+      if (tabIndex < 0) return
+      onCloseWorkspaceFilePaths(bottomPanel.openWorkspaceFilePaths.slice(tabIndex + 1))
+    }
+
     return (
       <div className={contentClassName}>
         <WorkspaceFileEditorView
@@ -114,13 +124,14 @@ export function InteractionPanelDockPanelContentBody({
           path={tab.path}
           sessionId={sessionId}
           workspaceRootPath={workspaceRootPath}
-          onClose={bottomPanel.handleCloseWorkspaceFile}
-          onCloseAllPaths={bottomPanel.handleCloseAllWorkspaceFileTabs}
-          onCloseOtherPaths={bottomPanel.handleCloseOtherWorkspaceFileTabs}
-          onClosePath={bottomPanel.handleCloseWorkspaceFileTab}
-          onClosePathsToRight={bottomPanel.handleCloseWorkspaceFileTabsToRight}
+          onClose={() => onCloseWorkspaceFilePaths([tab.path])}
+          onCloseAllPaths={() => onCloseWorkspaceFilePaths(bottomPanel.openWorkspaceFilePaths)}
+          onCloseOtherPaths={path =>
+            onCloseWorkspaceFilePaths(bottomPanel.openWorkspaceFilePaths.filter(item => item !== path))}
+          onClosePath={path => onCloseWorkspaceFilePaths([path])}
+          onClosePathsToRight={closeFilePathsToRight}
           onLocatePath={onLocateWorkspacePath}
-          onSelectPath={bottomPanel.handleSelectWorkspaceFile}
+          onSelectPath={onSelectWorkspaceFilePath}
         />
       </div>
     )
@@ -161,10 +172,30 @@ export function InteractionPanelDockPanelContentBody({
     )
   }
 
+  if (tab.kind === 'page-debugger') {
+    return (
+      <div className={contentClassName}>
+        <InteractionPanelPageDebuggerListView
+          isActive={activeTab.kind === 'page-debugger' && activeTab.id === tab.id}
+        />
+      </div>
+    )
+  }
+
   if (tab.kind === 'plugin') {
     return (
       <div className={contentClassName}>
-        <PluginViewHost scope={tab.pluginScope} routeId={tab.tabId} surface='workbench' viewId={tab.viewId} />
+        <PluginViewHost
+          scope={tab.pluginScope}
+          routeId={tab.tabId}
+          surface='workbench'
+          tab={{
+            id: tab.id,
+            setState: nextState => onPluginTabStateChange(tab.id, nextState),
+            state: tab.state
+          }}
+          viewId={tab.viewId}
+        />
       </div>
     )
   }

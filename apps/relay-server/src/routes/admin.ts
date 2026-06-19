@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+import { ensureAuthIdentity, ensureEmailCodeIdentity, hasEmailCodeIdentity } from '../auth/identities.js'
 import { PasswordValidationError, hashPassword } from '../auth/passwords.js'
 import { requireAuthPermission } from '../auth/permissions.js'
 import { readRequestBody, sendJson } from '../http.js'
@@ -48,9 +49,12 @@ const userTeamSummaries = (store: RelayStore, user: RelayUser) =>
       }
     })
 
+const cleanLoginId = (value: unknown) => cleanString(value).toLowerCase()
+
 const redactUser = (user: RelayUser, store: RelayStore) => ({
   id: user.id,
   email: user.email,
+  loginId: user.loginId ?? null,
   name: user.name,
   avatarUrl: user.avatarUrl ?? null,
   disabled: user.disabledAt != null,
@@ -84,10 +88,29 @@ const pathId = (url: URL, prefix: string) => {
 }
 
 const duplicateEmail = (store: RelayStore, email: string, userId?: string) => (
-  store.users.some(user => user.id !== userId && user.email.toLowerCase() === email)
+  store.authIdentities.some(identity =>
+    identity.userId !== userId &&
+    identity.provider === 'email_code' &&
+    identity.providerUserId.toLowerCase() === email
+  )
 )
 
+const duplicateLoginId = (store: RelayStore, loginId: string, userId?: string) => (
+  loginId !== '' &&
+  store.users.some(user => user.id !== userId && user.loginId?.toLowerCase() === loginId)
+)
+
+const loginIdConflictsWithEmail = (store: RelayStore, loginId: string, userId?: string) => (
+  loginId !== '' &&
+  store.users.some(user => user.id !== userId && user.email.toLowerCase() === loginId)
+)
+
+const sendLoginIdConflict = (res: ServerResponse, args: RelayServerArgs) => {
+  sendJson(res, 409, { error: 'User login ID already exists.' }, args.allowOrigin)
+}
+
 const applyPasswordInput = async (
+  store: RelayStore,
   user: RelayUser,
   passwordValue: unknown,
   fallbackProviderEmail: string
@@ -108,6 +131,13 @@ const applyPasswordInput = async (
     user.provider = 'password'
     user.providerUserId = fallbackProviderEmail
   }
+  ensureAuthIdentity(store, {
+    email: user.email,
+    emailVerified: true,
+    provider: 'password',
+    providerUserId: user.id,
+    userId: user.id
+  })
 }
 
 const findUser = (store: RelayStore, body: Record<string, unknown>, userId: string | undefined) => {
@@ -165,6 +195,11 @@ export const handleAdminUsers = async (
       sendJson(res, 409, { error: 'User email already exists.' }, args.allowOrigin)
       return
     }
+    const loginId = cleanLoginId(body.loginId)
+    if (duplicateLoginId(store, loginId) || loginIdConflictsWithEmail(store, loginId)) {
+      sendLoginIdConflict(res, args)
+      return
+    }
     const id = cleanString(body.id)
     if (id !== '' && store.users.some(user => user.id === id)) {
       sendJson(res, 409, { error: 'User id already exists.' }, args.allowOrigin)
@@ -173,6 +208,7 @@ export const handleAdminUsers = async (
     const user: RelayUser = {
       id: id !== '' ? id : randomUUID(),
       email,
+      loginId: loginId === '' ? undefined : loginId,
       name: cleanString(body.name),
       role: normalizeRole(body.role, 'member'),
       createdAt: now()
@@ -187,7 +223,7 @@ export const handleAdminUsers = async (
     }
     if (hasOwn(body, 'password') && cleanString(body.password) !== '') {
       try {
-        await applyPasswordInput(user, body.password, email)
+        await applyPasswordInput(store, user, body.password, email)
       } catch (error) {
         if (error instanceof PasswordValidationError) {
           sendJson(res, 400, { error: error.message }, args.allowOrigin)
@@ -200,6 +236,7 @@ export const handleAdminUsers = async (
       user.disabledAt = now()
     }
     store.users.push(user)
+    ensureEmailCodeIdentity(store, user)
     await storeRepository.write(store)
     sendJson(res, 200, { user: redactUser(user, store) }, args.allowOrigin)
     return
@@ -221,12 +258,33 @@ export const handleAdminUsers = async (
         sendJson(res, 409, { error: 'User email already exists.' }, args.allowOrigin)
         return
       }
+      if (duplicateLoginId(store, email, user.id)) {
+        sendLoginIdConflict(res, args)
+        return
+      }
+      const currentLoginId = user.loginId ?? ''
+      if (
+        currentLoginId !== '' &&
+        store.users.some(item => item.id !== user.id && item.email.toLowerCase() === currentLoginId)
+      ) {
+        sendLoginIdConflict(res, args)
+        return
+      }
       user.email = email
+      if (hasEmailCodeIdentity(store, user.id)) ensureEmailCodeIdentity(store, user)
+    }
+    if (hasOwn(body, 'loginId')) {
+      const loginId = cleanLoginId(body.loginId)
+      if (duplicateLoginId(store, loginId, user.id) || loginIdConflictsWithEmail(store, loginId, user.id)) {
+        sendLoginIdConflict(res, args)
+        return
+      }
+      user.loginId = loginId === '' ? undefined : loginId
     }
     if (hasOwn(body, 'name')) user.name = cleanString(body.name)
     if (hasOwn(body, 'password')) {
       try {
-        await applyPasswordInput(user, body.password, user.email)
+        await applyPasswordInput(store, user, body.password, user.email)
       } catch (error) {
         if (error instanceof PasswordValidationError) {
           sendJson(res, 400, { error: error.message }, args.allowOrigin)

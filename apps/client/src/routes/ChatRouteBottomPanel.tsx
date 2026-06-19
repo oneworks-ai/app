@@ -1,7 +1,13 @@
+import type { MenuProps } from 'antd'
+import type { ReactNode } from 'react'
+
+import type { Session } from '@oneworks/core'
+
 import { ChatInteractionPanel } from '#~/components/chat/interaction-panel/ChatInteractionPanel'
 import type { InteractionPanelRunCommandTaskStatus } from '#~/components/chat/interaction-panel/interaction-panel-run-commands'
 import type { InteractionPanelShortcutRequest } from '#~/components/chat/interaction-panel/interaction-panel-shortcut-request'
 import type { InteractionTerminalPanesController } from '#~/components/chat/interaction-panel/use-interaction-terminal-panes'
+import type { SessionPanelStateController } from '#~/components/chat/interaction-panel/use-session-panel-state'
 import type {
   ChatWorkspaceDrawerAgentApprovals,
   ChatWorkspaceDrawerAgentRoster
@@ -9,9 +15,6 @@ import type {
 import type { WorkspaceDrawerViewItem } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
 import type { ContextPickerFile } from '#~/components/workspace/context-file-types'
 import type { ChatRouteBottomPanelState } from '#~/hooks/chat/use-chat-route-bottom-panel'
-
-import type { MenuProps } from 'antd'
-import type { ReactNode } from 'react'
 
 export function ChatRouteBottomPanel({
   agentApprovals,
@@ -23,6 +26,7 @@ export function ChatRouteBottomPanel({
   openResourceKeyboardShortcut,
   openResourceShortcut,
   openResourceShortcutLabel,
+  panelStateController,
   shortcutRequest,
   onShortcutRequestHandled,
   onRunCommandTaskStatusesChange,
@@ -32,6 +36,7 @@ export function ChatRouteBottomPanel({
   onReferenceWorkspacePaths,
   onWorkspaceDrawerCreateMenuClick,
   settingsView,
+  session,
   sessionId,
   terminalSessionId,
   terminalPanes,
@@ -48,6 +53,7 @@ export function ChatRouteBottomPanel({
   openResourceKeyboardShortcut?: string | null
   openResourceShortcut?: string
   openResourceShortcutLabel?: string
+  panelStateController: SessionPanelStateController
   shortcutRequest?: InteractionPanelShortcutRequest | null
   onShortcutRequestHandled?: (id: number) => void
   onRunCommandTaskStatusesChange?: (statuses: InteractionPanelRunCommandTaskStatus[]) => void
@@ -57,6 +63,7 @@ export function ChatRouteBottomPanel({
   onReferenceWorkspacePaths?: (files: ContextPickerFile[]) => void
   onWorkspaceDrawerCreateMenuClick?: NonNullable<MenuProps['onClick']>
   settingsView?: ReactNode
+  session?: Session
   sessionId?: string
   terminalSessionId: string
   terminalPanes: InteractionTerminalPanesController
@@ -78,6 +85,7 @@ export function ChatRouteBottomPanel({
       openResourceKeyboardShortcut={openResourceKeyboardShortcut}
       openResourceShortcut={openResourceShortcut}
       openResourceShortcutLabel={openResourceShortcutLabel}
+      panelStateController={panelStateController}
       shortcutRequest={shortcutRequest}
       onShortcutRequestHandled={onShortcutRequestHandled}
       onRunCommandTaskStatusesChange={onRunCommandTaskStatusesChange}
@@ -87,6 +95,7 @@ export function ChatRouteBottomPanel({
       onReferenceWorkspacePaths={onReferenceWorkspacePaths}
       onWorkspaceDrawerCreateMenuClick={onWorkspaceDrawerCreateMenuClick}
       settingsView={settingsView}
+      session={session}
       sessionId={sessionId}
       terminalSessionId={terminalSessionId}
       terminalPanes={terminalPanes}

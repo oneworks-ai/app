@@ -70,6 +70,16 @@ export {
   listWorkspaces
 } from './api/knowledge'
 export {
+  createModelServiceSecret,
+  getModelProviderStatus,
+  getModelServiceBalance,
+  getModelServiceStatus,
+  listModelProviders,
+  listModelServiceModels,
+  probeModelProvider,
+  refreshModelServiceModels
+} from './api/model-providers'
+export {
   checkModuleUpdates,
   getModuleUpdates,
   installModuleUpdate,
@@ -120,10 +130,18 @@ export { installSkillHubItem, searchSkillHub } from './api/skill-hub'
 
 // 基础响应类型与会话交互类型
 export type { ApiOkResponse, ApiRemoveResponse, SessionInteraction, SessionMessagesResponse } from './api/types'
+export { listSpeechToTextServices, transcribeSpeechToText } from './api/voice'
+export type {
+  SpeechToTextServicesResponse,
+  SpeechToTextTranscriptionRequest,
+  SpeechToTextTranscriptionResponse
+} from './api/voice'
 export { readWebpageMetadata } from './api/webpage'
 export type { WebpageMetadataResponse } from './api/webpage'
 export type { WorkspaceFileContent, WorkspaceTreeEntry } from './api/workspace'
 export {
+  getWorkspacePanelState,
+  getWorkspacePanelStateCacheKey,
   getWorkspacePathActionCapabilities,
   getWorkspaceResourceUrl,
   listWorkspaceFileOpeners,
@@ -132,8 +150,10 @@ export {
   openWorkspaceInExternalOpener,
   readWorkspaceFile,
   revealWorkspacePathInFileManager,
-  updateWorkspaceFile
+  updateWorkspaceFile,
+  updateWorkspacePanelState
 } from './api/workspace'
+export type { WorkspacePanelStateResponse } from './api/workspace'
 
 // Worktree 环境脚本 API
 export {

@@ -89,11 +89,13 @@ html.oneworks-launcher-window.dark {
 }
 
 .launcher-route {
+  position: relative;
   height: 100vh;
   min-height: 100%;
   display: flex;
   align-items: flex-start;
   justify-content: center;
+  overflow: hidden;
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--bg-color) 32%, transparent),
@@ -207,6 +209,10 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
   padding: 0;
   box-sizing: border-box;
   -webkit-app-region: no-drag;
+}
+
+.launcher-route.is-opening-workspace .launcher-command-shell {
+  filter: saturate(.92);
 }
 
 .launcher-command-search {
@@ -439,6 +445,9 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 .launcher-command-item__icon {
   width: 20px;
   min-width: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: currentColor;
   font-size: 19px;
   line-height: 1;
@@ -490,6 +499,36 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 
   &.is-test {
     color: #ea580c;
+  }
+
+  &.is-project-running {
+    animation: launcher-project-running-pulse 1.6s ease-in-out infinite;
+    color: #16a34a;
+  }
+
+  &.is-project-starting {
+    color: #0891b2;
+  }
+
+  &.is-project-stopping {
+    color: #ea580c;
+  }
+
+  &.is-project-recent {
+    color: #64748b;
+  }
+}
+
+@keyframes launcher-project-running-pulse {
+  0%,
+  100% {
+    opacity: .86;
+    transform: scale(.92);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
   }
 }
 
@@ -920,5 +959,15 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
   .launcher-command-item__remove,
   .launcher-command-item__secondary {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .launcher-command-item__icon.is-project-running {
+    animation: none;
+  }
+
+  .launcher-route.is-opening-workspace .launcher-command-shell {
+    filter: none;
   }
 }

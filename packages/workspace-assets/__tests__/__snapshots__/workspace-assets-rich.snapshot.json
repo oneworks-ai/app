@@ -20,6 +20,7 @@
       {
         "childDefinitions": {},
         "children": [],
+        "enabled": true,
         "instancePath": "0",
         "options": {},
         "packageId": "@oneworks/plugin-logger",
@@ -31,6 +32,7 @@
       {
         "childDefinitions": {},
         "children": [],
+        "enabled": true,
         "instancePath": "1",
         "options": {},
         "packageId": "@oneworks/plugin-demo",
@@ -43,6 +45,7 @@
       {
         "childDefinitions": {},
         "children": [],
+        "enabled": true,
         "instancePath": "2",
         "options": {
           "mode": "summary"
@@ -695,6 +698,13 @@
           "status": "prompt",
           "source": "project",
           "reason": "Mapped into the generated system prompt."
+        },
+        {
+          "assetId": "skill:workspace:workspace:research:<workspace>/.oo/skills/research/SKILL.md",
+          "adapter": "codex",
+          "status": "native",
+          "source": "project",
+          "reason": "Mirrored into the Codex mock home as a native skill."
         },
         {
           "assetId": "skill:workspace:workspace:research:<workspace>/.oo/skills/research/SKILL.md",

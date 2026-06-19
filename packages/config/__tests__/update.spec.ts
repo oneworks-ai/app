@@ -201,6 +201,68 @@ describe('updateConfigFile', () => {
     }
   })
 
+  it('preserves masked voice credentials when updating config', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-update-voice-'))
+
+    try {
+      const configPath = path.join(tempDir, '.oo.config.json')
+      await writeFile(
+        configPath,
+        JSON.stringify(
+          {
+            voice: {
+              speechToText: {
+                services: {
+                  openai: {
+                    provider: 'openai-transcriptions',
+                    apiKey: 'secret-key',
+                    model: 'gpt-4o-mini-transcribe'
+                  }
+                }
+              }
+            }
+          },
+          null,
+          2
+        )
+      )
+
+      const result = await updateConfigFile({
+        workspaceFolder: tempDir,
+        source: 'project',
+        section: 'voice',
+        value: {
+          speechToText: {
+            defaultServiceId: 'openai',
+            services: {
+              openai: {
+                provider: 'openai-transcriptions',
+                apiKey: '******',
+                model: 'gpt-4o-transcribe'
+              }
+            }
+          }
+        }
+      })
+
+      expect(result.configPath).toBe(configPath)
+      expect(result.updatedConfig.voice?.speechToText?.services?.openai).toEqual({
+        provider: 'openai-transcriptions',
+        apiKey: 'secret-key',
+        model: 'gpt-4o-transcribe'
+      })
+
+      const written = JSON.parse(await readFile(configPath, 'utf-8'))
+      expect(written.voice.speechToText.services.openai).toEqual({
+        provider: 'openai-transcriptions',
+        apiKey: 'secret-key',
+        model: 'gpt-4o-transcribe'
+      })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it('falls back to the primary workspace dev config when the current worktree has none', async () => {
     const primaryDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-update-primary-'))
     const worktreeDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-update-worktree-'))

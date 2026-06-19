@@ -72,6 +72,7 @@ describe('relay storage repository', () => {
     })
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
+      auditEvents: [],
       configAssignments: [],
       configProfileAssignments: [],
       configProfileVersions: [],
@@ -83,7 +84,10 @@ describe('relay storage repository', () => {
       },
       teamPolicy: normalizeRelayTeamPolicy(undefined),
       teams: [],
+      teamInvitations: [],
+      messages: [],
       teamMembers: [],
+      authIdentities: [],
       passkeyChallenges: [],
       passkeys: [],
       users: [
@@ -128,6 +132,7 @@ describe('relay storage repository', () => {
     })
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
+      auditEvents: [],
       configAssignments: [],
       configProfileAssignments: [],
       configProfileVersions: [],
@@ -139,7 +144,10 @@ describe('relay storage repository', () => {
       },
       teamPolicy: normalizeRelayTeamPolicy(undefined),
       teams: [],
+      teamInvitations: [],
+      messages: [],
       teamMembers: [],
+      authIdentities: [],
       passkeyChallenges: [],
       passkeys: [],
       users: [
@@ -201,6 +209,7 @@ describe('relay storage repository', () => {
     const repository = createDurableObjectRelayStoreRepository(new MemoryDurableObjectStorage())
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
+      auditEvents: [],
       configAssignments: [],
       configProfileAssignments: [],
       configProfileVersions: [],
@@ -212,7 +221,10 @@ describe('relay storage repository', () => {
       },
       teamPolicy: normalizeRelayTeamPolicy(undefined),
       teams: [],
+      teamInvitations: [],
+      messages: [],
       teamMembers: [],
+      authIdentities: [],
       passkeyChallenges: [],
       passkeys: [],
       users: [],

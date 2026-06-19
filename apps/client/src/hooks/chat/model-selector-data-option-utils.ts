@@ -1,4 +1,8 @@
+import type { IconRef } from '@oneworks/types'
 import type { ModelSelectOptionData } from './model-selector-data-types'
+
+const DEFAULT_SERVICE_ICON: IconRef = { kind: 'builtin', id: 'model-service' }
+const DEFAULT_MODEL_ICON: IconRef = { kind: 'builtin', id: 'model' }
 
 export const sortOptionsByDisplayLabel = (options: ModelSelectOptionData[]) => {
   return [...options].sort((left, right) => {
@@ -26,10 +30,15 @@ export const buildModelSelectOption = (option: {
   aliases?: string[]
   serviceKey?: string
   serviceTitle?: string
+  serviceIcon?: IconRef
+  modelIcon?: IconRef
   searchTerms?: Array<string | undefined>
 }): ModelSelectOptionData => {
   const description = option.description?.trim()
   const aliases = Array.from(new Set((option.aliases ?? []).filter(Boolean)))
+  const hasService = option.serviceKey != null && option.serviceKey.trim() !== ''
+  const serviceIcon = option.serviceIcon ?? (hasService ? DEFAULT_SERVICE_ICON : undefined)
+  const modelIcon = option.modelIcon ?? (hasService ? undefined : DEFAULT_MODEL_ICON)
   const tooltipLines = [
     ...aliases.filter(alias => alias !== option.title),
     option.modelName !== option.title ? option.modelName : undefined,
@@ -45,6 +54,8 @@ export const buildModelSelectOption = (option: {
     tooltipLines,
     serviceKey: option.serviceKey,
     serviceTitle: option.serviceTitle,
+    serviceIcon,
+    modelIcon,
     searchText: [
       option.title,
       option.modelName,

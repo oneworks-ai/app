@@ -170,11 +170,10 @@ const readLoginConfig = (html: string) => {
   return JSON.parse(match?.[1] ?? '{}') as {
     emailVerificationSendUrl?: string
     messages?: {
-      passkeyRegister?: string
-      passkeySignIn?: string
       passkeyTitle?: string
     }
     passkey?: {
+      emailVerificationRequired?: boolean
       enabled?: boolean
       loginOptionsUrl?: string
       loginVerifyUrl?: string
@@ -189,6 +188,7 @@ describe('relay passkey auth routes', () => {
   it('exposes passkey login config to the localized login page', async () => {
     const { baseUrl } = await listenRelay({
       passkey: {
+        emailVerificationRequired: true,
         enabled: true,
         registrationMode: 'email_verified',
         rpName: 'One Works',
@@ -203,15 +203,14 @@ describe('relay passkey auth routes', () => {
     const config = readLoginConfig(body)
 
     expect(response.status).toBe(200)
-    expect(body).toContain('Passkey')
+    expect(body).toContain('Sign in or register')
     expect(config.emailVerificationSendUrl).toBe('/api/auth/email-verification/send')
     expect(config.messages).toMatchObject({
-      passkeyRegister: 'Create Passkey account',
-      passkeySignIn: 'Sign in with Passkey',
-      passkeyTitle: 'Passkey'
+      passkeyTitle: 'Sign in or register'
     })
     expect(config.passkey).toMatchObject({
       enabled: true,
+      emailVerificationRequired: true,
       loginOptionsUrl: '/api/auth/passkey/login/options',
       loginVerifyUrl: '/api/auth/passkey/login/verify',
       registrationMode: 'email_verified',
@@ -226,6 +225,7 @@ describe('relay passkey auth routes', () => {
       email: emailConfig(),
       emailProvider: provider,
       passkey: {
+        emailVerificationRequired: true,
         enabled: true,
         registrationMode: 'email_verified',
         rpName: 'One Works',
@@ -253,14 +253,23 @@ describe('relay passkey auth routes', () => {
       headers: { 'content-type': 'application/json' },
       method: 'POST'
     })
+    const registrationUser = registration.body.user as { id: string }
+    const loginIdUpdate = await requestJson(baseUrl, '/api/admin/users', {
+      body: JSON.stringify({
+        id: registrationUser.id,
+        loginId: 'owner-login'
+      }),
+      headers: authHeaders(String(registration.body.token)),
+      method: 'PATCH'
+    })
     const loginOptions = await requestJson(baseUrl, '/api/auth/passkey/login/options', {
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ loginId: 'owner-login' }),
       headers: { 'content-type': 'application/json' },
       method: 'POST'
     })
     const login = await requestJson(baseUrl, '/api/auth/passkey/login/verify', {
       body: JSON.stringify({
-        email,
+        loginId: 'owner-login',
         response: fakeAuthenticationResponse()
       }),
       headers: { 'content-type': 'application/json' },
@@ -280,6 +289,11 @@ describe('relay passkey auth routes', () => {
       role: 'owner'
     })
     expect(typeof registration.body.token).toBe('string')
+    expect(loginIdUpdate.response.status).toBe(200)
+    expect(loginIdUpdate.body.user).toMatchObject({
+      email,
+      loginId: 'owner-login'
+    })
     expect(loginOptions.response.status).toBe(200)
     expect(loginOptions.body.options).toMatchObject({
       challenge: 'authentication-challenge'
@@ -287,6 +301,7 @@ describe('relay passkey auth routes', () => {
     expect(login.response.status).toBe(200)
     expect(login.body.user).toMatchObject({
       email,
+      loginId: 'owner-login',
       provider: 'passkey',
       role: 'owner'
     })
@@ -308,6 +323,7 @@ describe('relay passkey auth routes', () => {
       email: emailConfig(),
       emailProvider: provider,
       passkey: {
+        emailVerificationRequired: true,
         enabled: true,
         registrationMode: 'invite_required',
         rpName: 'One Works',
@@ -374,6 +390,50 @@ describe('relay passkey auth routes', () => {
     expect(store.passkeys[0]).toMatchObject({
       id: 'credential-1',
       name: 'Security Key'
+    })
+  })
+
+  it('can register a new passkey account without email verification when explicitly disabled', async () => {
+    const { args, baseUrl } = await listenRelay({
+      passkey: {
+        emailVerificationRequired: false,
+        enabled: true,
+        registrationMode: 'email_verified',
+        rpName: 'One Works',
+        timeoutMs: 60_000
+      }
+    })
+    const email = 'no-code@example.com'
+    const options = await requestJson(baseUrl, '/api/auth/passkey/register/options', {
+      body: JSON.stringify({
+        credentialName: 'Local Passkey',
+        email
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST'
+    })
+    const registration = await requestJson(baseUrl, '/api/auth/passkey/register/verify', {
+      body: JSON.stringify({
+        credentialName: 'Local Passkey',
+        email,
+        response: fakeRegistrationResponse()
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST'
+    })
+    const store = await readRelayStore(args.dataPath)
+
+    expect(options.response.status).toBe(200)
+    expect(registration.response.status).toBe(200)
+    expect(registration.body.user).toMatchObject({
+      email,
+      provider: 'passkey',
+      role: 'owner'
+    })
+    expect(store.emailRisk.challenges).toHaveLength(0)
+    expect(store.passkeys[0]).toMatchObject({
+      id: 'credential-1',
+      name: 'Local Passkey'
     })
   })
 })

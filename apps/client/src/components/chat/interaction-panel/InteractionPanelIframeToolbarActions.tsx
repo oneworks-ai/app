@@ -24,13 +24,21 @@ const copyImageDataUrlToClipboard = async (dataUrl: string) => {
 export function InteractionPanelIframeToolbarActions({
   frameUrl,
   iframeRef,
+  isDeveloperToolsOpen,
+  isViewportToolbarOpen,
   onForceReload,
+  onToggleDeveloperTools,
+  onToggleViewportToolbar,
   shouldUseWebview,
   webviewRef
 }: {
   frameUrl: string
   iframeRef: MutableRefObject<HTMLIFrameElement | null>
+  isDeveloperToolsOpen: boolean
+  isViewportToolbarOpen: boolean
   onForceReload: () => void
+  onToggleDeveloperTools: () => void
+  onToggleViewportToolbar: () => void
   shouldUseWebview: boolean
   webviewRef: MutableRefObject<ElectronWebviewElement | null>
 }) {
@@ -83,10 +91,14 @@ export function InteractionPanelIframeToolbarActions({
           <InteractionPanelIframeBrowserMenu
             canUseFrame={canUseFrame}
             iframeRef={iframeRef}
+            isDeveloperToolsOpen={isDeveloperToolsOpen}
+            isViewportToolbarOpen={isViewportToolbarOpen}
             shouldUseWebview={shouldUseWebview}
             webviewRef={webviewRef}
             onClose={() => setIsMoreOpen(false)}
             onForceReload={onForceReload}
+            onToggleDeveloperTools={onToggleDeveloperTools}
+            onToggleViewportToolbar={onToggleViewportToolbar}
           />
         )}
         onOpenChange={setIsMoreOpen}

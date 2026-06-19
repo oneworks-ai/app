@@ -3,7 +3,11 @@ import { useSWRConfig } from 'swr'
 
 import type { WSEvent } from '@oneworks/core'
 
-import { revalidateConfigRelatedCaches, updateSessionCaches } from '#~/hooks/session-subscription-cache'
+import {
+  revalidateConfigRelatedCaches,
+  updateSessionCaches,
+  updateWorkspacePanelStateCache
+} from '#~/hooks/session-subscription-cache'
 import type { SessionUpdate } from '#~/hooks/session-subscription-cache'
 import { createSocket } from '#~/ws.js'
 
@@ -54,6 +58,14 @@ export function useSessionSubscription() {
 
           if (data.type === 'config_updated') {
             void revalidateConfigRelatedCaches(mutate)
+            return
+          }
+
+          if (data.type === 'workspace_panel_state_updated') {
+            updateWorkspacePanelStateCache(mutate, {
+              panelState: data.panelState,
+              updatedAt: data.updatedAt
+            })
           }
         },
         onClose: (event) => {

@@ -1,6 +1,7 @@
 import './ConfigView.scss'
 
 import { App, Button, Empty, Space, Spin } from 'antd'
+import { useSetAtom } from 'jotai'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -15,6 +16,10 @@ import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
 import { useRouteSidebar } from '#~/components/layout/route-sidebar-context'
 import type { RouteSidebarListItem } from '#~/components/layout/route-sidebar-context'
 import { useRouteContainerSidebarOpener } from '#~/components/layout/use-route-container-sidebar-opener'
+import {
+  pendingSessionCreationContextAtom,
+  pendingSessionInitialContentAtom
+} from '#~/hooks/chat/session-creation-context'
 import { useRoutePluginChrome } from '#~/plugins/route-plugin-chrome'
 
 import {
@@ -42,8 +47,15 @@ import {
   resolveConfigDetailRouteMeta,
   serializeConfigDetailRoute
 } from './config/configDetail'
+import { getPreferredConfigSourceForTab, resolveConfigSourceForMissingQuery } from './config/configSourceDefaults'
 import { cloneValue, collectUnsetPaths, getValueByPath, isEmptyValue } from './config/configUtils'
 import { editableConfigSectionKeys } from './config/editableConfigSections'
+import {
+  buildModelServiceConfigSessionInitialContent,
+  buildModelServiceConfigSessionTitle,
+  getModelServiceConfigSessionActionKey
+} from './config/modelServiceConfigSession'
+import type { ModelServiceConfigSessionRequest } from './config/modelServiceConfigSession'
 import { toDisplayEnvironmentName, toEnvironmentReference } from './config/worktree-environment-panel-model'
 
 interface ConfigDraftConflict {
@@ -55,26 +67,29 @@ interface ConfigDraftConflict {
 
 interface ConfigQueryParams extends Record<string, string> {
   detail: string
+  section: string
   source: string
   tab: string
 }
 
 const configSourceKeys = ['global', 'project', 'user'] as const
-const configQueryKeys: string[] = ['tab', 'source', 'detail']
-const configQueryDefaults: ConfigQueryParams = { tab: 'general', source: 'project', detail: '' }
+const configQueryKeys: string[] = ['tab', 'source', 'detail', 'section']
+const configQueryDefaults: ConfigQueryParams = { tab: 'general', source: '', detail: '', section: '' }
 const configQueryOmit = {
-  detail: (value: string) => value.trim() === ''
+  detail: (value: string) => value.trim() === '',
+  section: (value: string) => value.trim() === ''
 }
 const CONFIG_ROUTE_SIDEBAR_KEY = 'config-view'
-
 const isConfigSourceKey = (value: string): value is ConfigSource => (
   configSourceKeys.includes(value as ConfigSource)
 )
 
 export function ConfigView() {
-  const { t } = useTranslation()
+  const { i18n, t } = useTranslation()
   const { message, modal } = App.useApp()
   const navigate = useNavigate()
+  const setPendingSessionInitialContent = useSetAtom(pendingSessionInitialContentAtom)
+  const setPendingSessionCreationContext = useSetAtom(pendingSessionCreationContextAtom)
   const {
     closeRouteSidebar,
     isCompactView,
@@ -97,12 +112,13 @@ export function ConfigView() {
     keys: configQueryKeys,
     omit: configQueryOmit
   })
-  const querySourceKey: ConfigSource = isConfigSourceKey(queryValues.source) ? queryValues.source : 'project'
+  const configPresent = data?.meta?.configPresent
+  const fallbackSourceKey = resolveConfigSourceForMissingQuery(queryValues.tab, configPresent)
+  const querySourceKey: ConfigSource = isConfigSourceKey(queryValues.source) ? queryValues.source : fallbackSourceKey
   const [sourceKey, setSourceKeyState] = useState<ConfigSource>(querySourceKey)
   const [detailQuery, setDetailQueryState] = useState(queryValues.detail)
   const [navSearchQuery, setNavSearchQuery] = useState('')
   const [drafts, setDrafts] = useState<Record<string, unknown>>({})
-  const configPresent = data?.meta?.configPresent
   const globalSource = data?.sources?.global
   const globalResolvedSource = data?.resolvedSources?.global
   const currentSource = data?.sources?.[sourceKey]
@@ -116,6 +132,7 @@ export function ConfigView() {
   const pendingConflictsRef = useRef<Record<string, ConfigDraftConflict>>({})
   const [pendingConflicts, setPendingConflicts] = useState<Record<string, ConfigDraftConflict>>({})
   const [activeConflictKey, setActiveConflictKey] = useState<string | null>(null)
+  const [creatingModelServiceSessionKey, setCreatingModelServiceSessionKey] = useState<string | null>(null)
   const mergedModelServices = useMemo(() => data?.sources?.merged?.modelServices ?? {}, [
     data?.sources?.merged?.modelServices
   ])
@@ -126,17 +143,6 @@ export function ConfigView() {
     window.oneworksDesktop.updateDesktopSettings != null
   const hasConfigLoadError = !isLoading && data == null && error != null
   const canRenderConfig = !isLoading && data != null
-
-  useEffect(() => {
-    if (searchParams.get('source') != null) return
-    if (configPresent?.project) {
-      updateQuery({ source: 'project' })
-    } else if (configPresent?.user) {
-      updateQuery({ source: 'user' })
-    } else if (configPresent?.global) {
-      updateQuery({ source: 'global' })
-    }
-  }, [configPresent?.global, configPresent?.project, configPresent?.user])
 
   const configTabKeys = useMemo(() => new Set<string>(editableConfigSectionKeys), [])
 
@@ -180,6 +186,7 @@ export function ConfigView() {
     },
     { key: 'plugins', icon: 'extension', label: t('config.sections.plugins'), value: currentSource?.plugins },
     { key: 'mcp', icon: 'account_tree', label: t('config.sections.mcp'), value: currentSource?.mcp },
+    { key: 'voice', icon: 'mic', label: t('config.sections.voice'), value: currentSource?.voice },
     { key: 'shortcuts', icon: 'keyboard', label: t('config.sections.shortcuts'), value: currentSource?.shortcuts },
     { key: 'group-app', type: 'group', label: t('config.groups.app') },
     ...(hasDesktopSettings
@@ -234,8 +241,26 @@ export function ConfigView() {
     return groups.filter(group => group.tabs.length > 0)
   }, [navSearchQuery, t, tabs])
 
-  const queryTabKey = tabKeys.has(queryValues.tab) ? queryValues.tab : 'general'
+  const sectionAliasTab = queryValues.section === 'voice.speechToText' ? 'voice' : undefined
+  const rawTab = searchParams.get('tab')
+  const queryTabKey = sectionAliasTab ??
+    (rawTab != null && tabKeys.has(queryValues.tab) ? queryValues.tab : 'general')
   const [activeTabKey, setActiveTabKeyState] = useState(queryTabKey)
+  useEffect(() => {
+    if (searchParams.get('source') != null) return
+    const preferredSource = getPreferredConfigSourceForTab(activeTabKey)
+    if (preferredSource != null) {
+      updateQuery({ source: preferredSource })
+      return
+    }
+    if (configPresent == null) return
+    updateQuery({ source: resolveConfigSourceForMissingQuery(activeTabKey, configPresent) })
+  }, [
+    activeTabKey,
+    configPresent,
+    searchParams,
+    updateQuery
+  ])
   const setSourceKey = useCallback((next: ConfigSource) => {
     setSourceKeyState(next)
     updateQuery({ source: next })
@@ -245,10 +270,19 @@ export function ConfigView() {
     updateQuery({ detail: next })
   }, [updateQuery])
   const setActiveTabKey = useCallback((key: string) => {
+    const nextPreferredSource = key !== activeTabKey ? getPreferredConfigSourceForTab(key) : undefined
     setActiveTabKeyState(key)
+    if (nextPreferredSource != null) {
+      setSourceKeyState(nextPreferredSource)
+    }
     setDetailQueryState('')
-    updateQuery({ tab: key, detail: '' })
-  }, [updateQuery])
+    updateQuery({
+      tab: key,
+      detail: '',
+      section: '',
+      ...(nextPreferredSource != null ? { source: nextPreferredSource } : {})
+    })
+  }, [activeTabKey, updateQuery])
   const activeTab = useMemo(() => tabs.find(tab => tab.key === activeTabKey), [tabs, activeTabKey])
   const activeContentTab = activeTab != null && activeTab.type !== 'group' ? activeTab : undefined
   const uiSections = schemaData?.workspace.uiSchema?.sections ?? {}
@@ -519,6 +553,44 @@ export function ConfigView() {
     scheduleSave(sectionKey, source, nextValue)
   }
 
+  const handleCreateModelServiceSession = useCallback(async (request: ModelServiceConfigSessionRequest) => {
+    const actionKey = getModelServiceConfigSessionActionKey(request)
+    if (creatingModelServiceSessionKey != null) return
+
+    setCreatingModelServiceSessionKey(actionKey)
+    try {
+      const language = i18n.resolvedLanguage ?? i18n.language
+      const title = buildModelServiceConfigSessionTitle(request, { language })
+      const initialContent = buildModelServiceConfigSessionInitialContent(request, {
+        language,
+        globalConfigPath: data?.meta?.sourceFiles?.global?.writableConfigPath,
+        projectConfigPath: data?.meta?.sourceFiles?.project?.writableConfigPath,
+        userConfigPath: data?.meta?.sourceFiles?.user?.writableConfigPath
+      })
+      setPendingSessionCreationContext({
+        initialContent,
+        tags: ['config', 'model-services'],
+        title
+      })
+      navigate('/')
+    } catch (error) {
+      void message.error(getApiErrorMessage(error, t('config.actions.modelServiceSessionCreateFailed')))
+    } finally {
+      setCreatingModelServiceSessionKey(null)
+    }
+  }, [
+    creatingModelServiceSessionKey,
+    data?.meta?.sourceFiles?.global?.writableConfigPath,
+    data?.meta?.sourceFiles?.project?.writableConfigPath,
+    data?.meta?.sourceFiles?.user?.writableConfigPath,
+    i18n.language,
+    i18n.resolvedLanguage,
+    message,
+    navigate,
+    setPendingSessionCreationContext,
+    t
+  ])
+
   useEffect(() => {
     const nextDrafts: Record<string, unknown> = {}
     let hasDraftUpdates = false
@@ -713,6 +785,11 @@ export function ConfigView() {
     closeRouteSidebar()
   }, [closeRouteSidebar, setActiveTabKey])
 
+  const handleCreateVoiceSetupSession = useCallback(() => {
+    setPendingSessionInitialContent([{ type: 'text', text: t('config.voice.aiAssist.prompt') }])
+    void navigate('/')
+  }, [navigate, setPendingSessionInitialContent, t])
+
   useLayoutEffect(() => {
     if (!hasRouteSidebarProvider) return
 
@@ -787,6 +864,7 @@ export function ConfigView() {
               ? (currentResolvedSource as Record<string, unknown>)[tab.key]
               : undefined
           ) ?? {}}
+          source={sourceKey}
           onChange={(next) => handleDraftChange(tab.key, next)}
           mergedModelServices={mergedModelServices as Record<string, unknown>}
           mergedAdapters={mergedAdapters as Record<string, unknown>}
@@ -795,6 +873,8 @@ export function ConfigView() {
           workspaceFileOpenerOptions={workspaceFileOpenerOptions}
           detailQuery={activeTabKey === tab.key ? detailQuery : ''}
           onDetailQueryChange={activeTabKey === tab.key ? setDetailQuery : undefined}
+          creatingModelServiceSessionKey={creatingModelServiceSessionKey}
+          onCreateModelServiceSession={handleCreateModelServiceSession}
           t={t}
           showHeader={false}
         />
@@ -802,13 +882,26 @@ export function ConfigView() {
     </div>
   )
   const shouldShowSourceSwitch = activeTabKey !== 'appearance' && configTabKeys.has(activeTabKey)
-  const headerActions = shouldShowSourceSwitch
+  const headerActions = shouldShowSourceSwitch || activeTabKey === 'voice'
     ? (
-      <ConfigSourceSwitch
-        value={sourceKey}
-        onChange={setSourceKey}
-        options={sourceOptions}
-      />
+      <>
+        {activeTabKey === 'voice' && (
+          <Button
+            size='small'
+            icon={<span className='material-symbols-rounded'>auto_awesome</span>}
+            onClick={handleCreateVoiceSetupSession}
+          >
+            {t('config.voice.aiAssist.label')}
+          </Button>
+        )}
+        {shouldShowSourceSwitch && (
+          <ConfigSourceSwitch
+            value={sourceKey}
+            onChange={setSourceKey}
+            options={sourceOptions}
+          />
+        )}
+      </>
     )
     : undefined
 

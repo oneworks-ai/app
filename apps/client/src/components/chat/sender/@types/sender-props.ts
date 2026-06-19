@@ -64,6 +64,11 @@ export interface SenderProps {
   hideHeaderControls?: boolean
   hideSelectionControls?: boolean
   hideSubmitAction?: boolean
+  enableVoiceInput?: boolean
+  hiddenVoiceInputActions?: {
+    onConfigure: () => void
+    onShow: () => void
+  }
   autoFocus?: boolean
   autoFocusKey?: string
   modelMenuGroups?: ModelSelectMenuGroup[]
@@ -72,6 +77,8 @@ export interface SenderProps {
   recommendedModelOptions?: ModelSelectOption[]
   servicePreviewModelOptions?: ModelSelectOption[]
   onToggleRecommendedModel?: (option: ModelSelectOption) => void | Promise<void>
+  onConnectMoreModelServices?: () => void
+  onOpenModelServicesConfig?: () => void
   updatingRecommendedModelValue?: string
   selectedModel?: string
   onModelChange?: (model: string) => void

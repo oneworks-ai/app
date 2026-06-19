@@ -1,9 +1,16 @@
 # One Works 0.1.0-alpha.0
 
+- Add embedded web debugger viewport controls for device presets, resizing, media query breakpoints, rulers, and screenshots.
+- Add configurable speech-to-text services with sender recording controls, default service selection, and server-side transcription APIs.
+- Keep web workspace opening covered by a full-screen animated transition until the target route is ready.
+- Persist session panel tabs, active panels, and dock layouts across bottom and right workbench areas.
 - Prefer compatible system Codex CLI installs while keeping the managed install fallback.
 - Show Codex CLI preparation status in sessions so first-run installs are visible.
+- Document the current adapter support matrix and keep native skill capability tests aligned across Codex, Claude Code, Copilot, Gemini, Kimi, and OpenCode.
 - Keep optimistic first user messages visible until their real runtime projection arrives.
 - Launch server-side runtime consumers through the internal run entrypoint so user prompts are not prefixed with command names.
+- Preserve runtime consumer `__run` argv normalization so web-created Codex sessions receive the original user prompt.
+- Prevent competing workspace servers from starting duplicate runtime consumers for the same web session.
 - Align chat workbench sender spacing, panel empty-state actions, side-panel tabs, and workspace drawer resource actions.
 - Move the launcher workflow behind server APIs, add manager/workspace server modes, and expose the launcher overlay from web workspaces.
 - Stabilize workspace-scoped web routes, project-server runtime environments, launcher selection, dock tab activation, and embedded route chrome.
@@ -12,6 +19,8 @@
 - Add a pinned current-session preview dock over fullscreen workspace drawers with matching chrome dividers, blur, and enter/exit animation.
 - Keep workspace drawer chrome actions aligned so the bottom-panel opener sits before the drawer collapse action without duplicate chat-header controls.
 - Show collapsed session status badges in fullscreen workspace navigation so running, unread completed, waiting-input, and failed sessions remain visible.
+- Share workspace terminal panel state across web browser sessions while restoring the terminal pane content from workspace-level state.
+- Let the web launcher stop running workspace server processes, remove stopped project entries, animate running project icons, and keep new-session empty states centered with or without starter lists.
 - Allow the homepage PWA preview to run from the official `oneworks.cloud` domain and update public PWA/docs links to canonical URLs.
 - Preserve homepage preview query parameters when entering the PWA launcher and refresh service worker caches after PWA deployments.
 - Route homepage PWA preview sessions directly into the mock workspace app instead of the launcher gate.
@@ -20,3 +29,6 @@
 - Add the One Works logo to Relay transactional emails with a configurable HTTPS image URL.
 - Localize Relay transactional emails from the login page language and add shared One Works footer links.
 - Add Relay passkey login and verified-email passkey registration with configurable invite gating.
+- Add configurable Relay login methods with browser method memory, email verification code login, and a passkey email-confirmation toggle for new self-registration.
+- Allow configured adapter instances to load runtime adapters from `packageId`, including package names and local package paths, while preserving the user-facing adapter key.
+- Add an outbound-only local macOS iMessage channel package that sends through user-authorized Messages automation and documents inbound/webhook limitations.

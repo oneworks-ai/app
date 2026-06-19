@@ -1,18 +1,40 @@
 import { buildConfigSections } from '@oneworks/config'
 import type { AdapterBuiltinModel, Config } from '@oneworks/types'
-import { loadAdapterBuiltinModels as loadAdapterPackageBuiltinModels } from '@oneworks/types'
+import {
+  loadAdapterBuiltinModels as loadAdapterPackageBuiltinModels,
+  resolveAdapterRuntimeTarget
+} from '@oneworks/types'
 import { BUILTIN_NATIVE_ADAPTERS, normalizeNonEmptyString } from '@oneworks/utils/model-selection'
 
 import { getServerAppInfo } from '#~/utils/app-info.js'
 
-const sanitize = (value: unknown): unknown => {
+const MASKED_VALUE = '******'
+const sensitiveHeaderKeys = new Set([
+  'authorization',
+  'cookie',
+  'proxy-authorization',
+  'set-cookie'
+])
+
+const shouldMaskKey = (key: string) => {
+  const normalized = key.trim().toLowerCase()
+  if (normalized === 'apikeyenv' || normalized === 'api_key_env' || normalized === 'api-key-env') return false
+  return sensitiveHeaderKeys.has(normalized) || /key|token|secret|password/i.test(key)
+}
+
+const sanitize = (value: unknown, path: string[] = []): unknown => {
+  const key = path[path.length - 1]
+  if (key != null && shouldMaskKey(key)) {
+    return typeof value === 'string' && value !== '' ? MASKED_VALUE : value
+  }
+
   if (Array.isArray(value)) {
-    return value.map(item => sanitize(item))
+    return value.map((item, index) => sanitize(item, [...path, String(index)]))
   }
   if (value != null && typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>)
     return entries.reduce<Record<string, unknown>>((acc, [key, val]) => {
-      acc[key] = sanitize(val)
+      acc[key] = sanitize(val, [...path, key])
       return acc
     }, {})
   }
@@ -29,7 +51,8 @@ export const buildSections = (config: Config | undefined) => {
 }
 
 export const loadAdapterBuiltinModels = (
-  config: Config
+  config: Config,
+  cwd?: string
 ): Record<string, AdapterBuiltinModel[]> => {
   const result: Record<string, AdapterBuiltinModel[]> = {}
   const adapterKeys = Array.from(
@@ -45,7 +68,8 @@ export const loadAdapterBuiltinModels = (
   )
   for (const adapterKey of adapterKeys) {
     try {
-      const builtinModels = loadAdapterPackageBuiltinModels(adapterKey)
+      const adapterTarget = resolveAdapterRuntimeTarget(adapterKey, { config, cwd })
+      const builtinModels = loadAdapterPackageBuiltinModels(adapterTarget.loadSpecifier)
       if (Array.isArray(builtinModels)) {
         result[adapterKey] = builtinModels
       }

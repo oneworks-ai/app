@@ -17,6 +17,18 @@ One Works 现在有两套并行的插件使用方式：
 
 全局 package cache 默认位于 `~/.oneworks/bootstrap/npm`；如需调整根目录，可以设置 `__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__`。
 
+自动安装内置插件时，npm 源和鉴权读取标准 npm 配置：用户 `~/.npmrc`、项目 `.npmrc`、环境变量，优先级依次升高。
+支持 `registry=...`、`@oneworks:registry=...` 和 `//registry.example.com/:_authToken=...` 这类标准写法。
+如果没有显式配置 registry，One Works 会先探测默认官方源；官方源发生网络错误、超时或 5xx 时，会自动 fallback 到 `https://registry.npmmirror.com`。
+如果你已经配置了公司私服或其它 registry，One Works 不会自动切到公共镜像；需要兜底时，显式设置 `ONEWORKS_NPM_REGISTRY_FALLBACKS`，多个源用逗号分隔。
+
+项目 `.npmrc` 示例：
+
+```ini
+@oneworks:registry=https://registry.npmmirror.com
+//registry.npmmirror.com/:_authToken=${NPM_TOKEN}
+```
+
 示例：
 
 ```bash

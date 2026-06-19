@@ -105,6 +105,7 @@ export const AdminDashboard = ({
           disabled={disabled}
           invites={dashboard.invites}
           loading={dashboard.loading || dashboard.authStatus === 'checking'}
+          onSetLoginId={dashboard.setUserLoginId}
           teams={dashboard.teams}
           token={dashboard.token}
           onSetMaxDevices={dashboard.setUserMaxDevices}

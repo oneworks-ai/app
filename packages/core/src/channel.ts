@@ -194,6 +194,7 @@ export interface ChannelWebhookRequest {
   headers: Record<string, string | string[] | undefined>
   query: Record<string, string | string[] | undefined>
   body: unknown
+  rawBody?: string | Uint8Array
 }
 
 export interface ChannelWebhookResponse {

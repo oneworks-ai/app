@@ -31,37 +31,39 @@ export interface RelayLoginMessages {
   passwordPlaceholder: string
   passwordRequired: string
   passkeyCodePlaceholder: string
-  passkeyNamePlaceholder: string
-  passkeyRegister: string
-  passkeyRegisterHint: string
   passkeySendCode: string
-  passkeySignIn: string
   passkeyTitle: string
   recentAccounts: string
   rememberAccount: string
   registerWithInvite: string
+  signInWithCode: string
   signInMode: string
   signInWithInvite: string
   signInWithPassword: string
   signInWithSso: string
   signingIn: string
+  switchLoginMethod: string
   tokenMissing: string
+  useLoginMethodPasskey: string
+  useLoginMethodPassword: string
+  useLoginMethodVerificationCode: string
+  verificationCodeSignIn: string
 }
 
 const defaultLocale: RelayLoginLocale = 'zh-CN'
 
 const messages: Record<RelayLoginLocale, RelayLoginMessages> = {
   en: {
-    brandName: 'OneWorks Relay',
+    brandName: 'One Works',
     confirmPasswordPlaceholder: 'Confirm password',
     confirmPasswordRequired: 'Please confirm your password.',
     continueWithInvite: 'Sign in',
     continueWithPassword: 'Sign in',
     continueWithRegistration: 'Create account',
     continueWith: providerName => `Sign in with ${providerName}`,
-    documentTitle: 'Relay Login',
-    emailPlaceholder: 'Email',
-    emailRequired: 'Email is required.',
+    documentTitle: 'One Works',
+    emailPlaceholder: 'Email or account name',
+    emailRequired: 'Email or account name is required.',
     finishingSubtitle: 'Returning to OneWorks...',
     finishingTitle: 'Finishing login',
     htmlLang: 'en',
@@ -78,37 +80,39 @@ const messages: Record<RelayLoginLocale, RelayLoginMessages> = {
     passwordPlaceholder: 'Password',
     passwordRequired: 'Password is required.',
     passkeyCodePlaceholder: 'Verification code',
-    passkeyNamePlaceholder: 'Passkey name',
-    passkeyRegister: 'Create Passkey account',
-    passkeyRegisterHint: 'Verify your email first, then create a passkey for this browser or device.',
     passkeySendCode: 'Send code',
-    passkeySignIn: 'Sign in with Passkey',
-    passkeyTitle: 'Passkey',
+    passkeyTitle: 'Sign in or register',
     recentAccounts: 'Recent accounts',
     rememberAccount: 'Remember account',
     registerWithInvite: 'Create account',
+    signInWithCode: 'Sign in with code',
     signInMode: 'Sign in',
     signInWithInvite: 'Sign in',
     signInWithPassword: 'Sign in',
     signInWithSso: 'Sign in with SSO',
     signingIn: 'Signing in...',
-    tokenMissing: 'Login token was not returned by the relay server.'
+    switchLoginMethod: 'Other sign-in methods',
+    tokenMissing: 'Login token was not returned by the relay server.',
+    useLoginMethodPasskey: 'Use PASS KEY',
+    useLoginMethodPassword: 'Use password',
+    useLoginMethodVerificationCode: 'Use verification code',
+    verificationCodeSignIn: 'Sign in with verification code'
   },
   'zh-CN': {
-    brandName: 'OneWorks Relay',
+    brandName: 'One Works',
     confirmPasswordPlaceholder: '确认密码',
     confirmPasswordRequired: '请再次输入密码。',
-    continueWithInvite: '登录',
-    continueWithPassword: '登录',
+    continueWithInvite: '登陆',
+    continueWithPassword: '登陆',
     continueWithRegistration: '注册',
-    continueWith: providerName => `使用 ${providerName} 登录`,
-    documentTitle: '中继登录',
-    emailPlaceholder: '邮箱',
-    emailRequired: '请输入邮箱。',
+    continueWith: providerName => `使用 ${providerName} 登陆`,
+    documentTitle: 'One Works',
+    emailPlaceholder: '邮箱或账号名',
+    emailRequired: '请输入邮箱或账号名。',
     finishingSubtitle: '正在返回 OneWorks...',
     finishingTitle: '正在完成登录',
     htmlLang: 'zh-CN',
-    inviteRequired: '新账号登录需要邀请码。',
+    inviteRequired: '新账号登陆需要邀请码。',
     inviteCodePlaceholder: '邀请码',
     invalidRedirect: 'redirect_uri 必须使用 http、https、oneworks 或 one-works。',
     invalidTitle: '登录链接无效',
@@ -121,21 +125,23 @@ const messages: Record<RelayLoginLocale, RelayLoginMessages> = {
     passwordPlaceholder: '密码',
     passwordRequired: '请输入密码。',
     passkeyCodePlaceholder: '验证码',
-    passkeyNamePlaceholder: 'Passkey 名称',
-    passkeyRegister: '创建 Passkey 账号',
-    passkeyRegisterHint: '先验证邮箱，然后为这个浏览器或设备创建 Passkey。',
     passkeySendCode: '发送验证码',
-    passkeySignIn: '使用 Passkey 登录',
-    passkeyTitle: 'Passkey',
+    passkeyTitle: '登陆或注册',
     recentAccounts: '最近账号',
     rememberAccount: '记住账号',
     registerWithInvite: '注册',
-    signInMode: '登录',
-    signInWithInvite: '登录',
-    signInWithPassword: '登录',
-    signInWithSso: '使用 SSO 登录',
-    signingIn: '登录中...',
-    tokenMissing: '转发服务没有返回登录令牌。'
+    signInWithCode: '使用验证码登陆',
+    signInMode: '登陆',
+    signInWithInvite: '登陆',
+    signInWithPassword: '登陆',
+    signInWithSso: '使用 SSO 登陆',
+    signingIn: '登陆中...',
+    switchLoginMethod: '其他登陆方式',
+    tokenMissing: '转发服务没有返回登录令牌。',
+    useLoginMethodPasskey: '使用 PASS KEY',
+    useLoginMethodPassword: '使用密码',
+    useLoginMethodVerificationCode: '使用验证码',
+    verificationCodeSignIn: '使用验证码登陆'
   }
 }
 

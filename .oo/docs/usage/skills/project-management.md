@@ -138,6 +138,7 @@ skills:
 
 - `oneworks-cli-quickstart`：说明 CLI 常用命令、配置命令和会话恢复方式。
 - `oneworks-cli-print-mode`：说明 print 模式、stdin 控制和权限确认。
+- `oneworks-model-services`：说明模型服务商配置、内置 provider id、默认 API 地址、后台入口、模型/余额/状态能力和写回规则。
 - `create-entity`：按用户需求创建新的 One Works entity。
 - `update-entity`：按用户需求更新已有 One Works entity，强调最小改动和维护引用关系。
 - `create-plugin`：理解用户想要的 plugin 效果；需求不明确时先列出不确定点让用户确认，再转成 One Works plugin manifest、前端入口、server 入口和验证步骤。

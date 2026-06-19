@@ -38,6 +38,7 @@ export const cleanupSessionRelayFixtures = async () => {
 
 export const createFixtureStore = (): RelayStore => ({
   createdAt: timestamp,
+  auditEvents: [],
   configAssignments: [],
   configProfileAssignments: [],
   configProfileVersions: [],
@@ -49,7 +50,10 @@ export const createFixtureStore = (): RelayStore => ({
   },
   teamPolicy: normalizeRelayTeamPolicy(undefined),
   teams: [],
+  teamInvitations: [],
+  messages: [],
   teamMembers: [],
+  authIdentities: [],
   passkeyChallenges: [],
   passkeys: [],
   users: [

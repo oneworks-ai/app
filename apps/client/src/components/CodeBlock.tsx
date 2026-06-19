@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- code block rendering keeps highlighting, copy actions, and preview affordances together. */
 import './CodeBlock.scss'
 
 import { useAtomValue } from 'jotai'
@@ -6,10 +7,110 @@ import React, { useEffect, useState } from 'react'
 import { themeAtom } from '#~/store/index.js'
 
 let deviconStylesPromise: Promise<unknown> | null = null
+const highlightedCodeCache = new Map<string, string>()
+const highlightedCodePromiseCache = new Map<string, Promise<string>>()
+const HIGHLIGHTED_CODE_CACHE_LIMIT = 200
 
 const loadDeviconStyles = () => {
   deviconStylesPromise ??= import('devicon/devicon.min.css')
   return deviconStylesPromise
+}
+
+const resolveCodeBlockIsDark = (themeMode: string) => {
+  if (themeMode === 'dark') return true
+  if (themeMode !== 'system') return false
+
+  return typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+}
+
+const getHighlightedCodeCacheKey = ({
+  code,
+  isDark,
+  lang,
+  showLineNumbers
+}: {
+  code: string
+  isDark: boolean
+  lang: string
+  showLineNumbers: boolean
+}) =>
+  JSON.stringify({
+    code,
+    lang,
+    showLineNumbers,
+    theme: isDark ? 'github-dark' : 'github-light'
+  })
+
+const rememberHighlightedCode = (key: string, html: string) => {
+  if (highlightedCodeCache.has(key)) {
+    highlightedCodeCache.delete(key)
+  }
+  highlightedCodeCache.set(key, html)
+
+  while (highlightedCodeCache.size > HIGHLIGHTED_CODE_CACHE_LIMIT) {
+    const oldestKey = highlightedCodeCache.keys().next().value
+    if (oldestKey == null) break
+    highlightedCodeCache.delete(oldestKey)
+  }
+}
+
+const getHighlightedCode = async ({
+  code,
+  isDark,
+  key,
+  lang,
+  showLineNumbers
+}: {
+  code: string
+  isDark: boolean
+  key: string
+  lang: string
+  showLineNumbers: boolean
+}) => {
+  const cachedHtml = highlightedCodeCache.get(key)
+  if (cachedHtml != null) return cachedHtml
+
+  const pendingHtml = highlightedCodePromiseCache.get(key)
+  if (pendingHtml != null) return pendingHtml
+
+  const promise = (async () => {
+    const { codeToHtml } = await import('shiki')
+    const html = await codeToHtml(code, {
+      lang,
+      theme: isDark ? 'github-dark' : 'github-light',
+      transformers: showLineNumbers
+        ? [
+          {
+            name: 'line-numbers',
+            line(node, line) {
+              node.children.unshift({
+                type: 'element',
+                tagName: 'span',
+                properties: {
+                  class: 'line-number',
+                  style:
+                    'display: inline-block; width: 2rem; margin-right: 1rem; text-align: right; color: #9ca3af; user-select: none;'
+                },
+                children: [{ type: 'text', value: String(line) }]
+              })
+            }
+          }
+        ]
+        : []
+    })
+
+    rememberHighlightedCode(key, html)
+    return html
+  })()
+
+  highlightedCodePromiseCache.set(key, promise)
+
+  try {
+    return await promise
+  } finally {
+    highlightedCodePromiseCache.delete(key)
+  }
 }
 
 export function CodeBlock({
@@ -23,9 +124,16 @@ export function CodeBlock({
   showLineNumbers?: boolean
   hideHeader?: boolean
 }) {
-  const [html, setHtml] = useState<string>('')
   const [copied, setCopied] = useState(false)
   const themeMode = useAtomValue(themeAtom)
+  const isDark = resolveCodeBlockIsDark(themeMode)
+  const highlightCacheKey = getHighlightedCodeCacheKey({
+    code,
+    isDark,
+    lang,
+    showLineNumbers
+  })
+  const [html, setHtml] = useState<string>(() => highlightedCodeCache.get(highlightCacheKey) ?? '')
 
   const handleCopy = async () => {
     try {
@@ -104,44 +212,35 @@ export function CodeBlock({
 
   useEffect(() => {
     let isMounted = true
-    const isDark = themeMode === 'dark' ||
-      (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
 
     const highlight = async () => {
-      const { codeToHtml } = await import('shiki')
-      const nextHtml = await codeToHtml(code, {
+      const cachedHtml = highlightedCodeCache.get(highlightCacheKey)
+      if (cachedHtml != null) {
+        if (isMounted) setHtml(cachedHtml)
+        return
+      }
+
+      if (isMounted) setHtml('')
+
+      const nextHtml = await getHighlightedCode({
+        code,
+        isDark,
+        key: highlightCacheKey,
         lang,
-        theme: isDark ? 'github-dark' : 'github-light',
-        transformers: showLineNumbers
-          ? [
-            {
-              name: 'line-numbers',
-              line(node, line) {
-                node.children.unshift({
-                  type: 'element',
-                  tagName: 'span',
-                  properties: {
-                    class: 'line-number',
-                    style:
-                      'display: inline-block; width: 2rem; margin-right: 1rem; text-align: right; color: #9ca3af; user-select: none;'
-                  },
-                  children: [{ type: 'text', value: String(line) }]
-                })
-              }
-            }
-          ]
-          : []
+        showLineNumbers
       })
 
       if (isMounted) setHtml(nextHtml)
     }
 
-    void highlight()
+    highlight().catch((err) => {
+      console.error('Failed to highlight code block:', err)
+    })
 
     return () => {
       isMounted = false
     }
-  }, [code, lang, showLineNumbers, themeMode])
+  }, [code, highlightCacheKey, isDark, lang, showLineNumbers])
 
   if (html === '') {
     return (

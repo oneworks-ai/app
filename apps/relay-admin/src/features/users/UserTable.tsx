@@ -122,7 +122,9 @@ export const UserTable = ({
               </span>
               <span className='relay-user-panel__identity-main'>
                 <strong>{user.email}</strong>
-                <span className='relay-user-panel__identity-name'>{user.name === '' ? '-' : user.name}</span>
+                <span className='relay-user-panel__identity-name'>
+                  {user.loginId == null || user.loginId === '' ? user.name || '-' : `@${user.loginId}`}
+                </span>
               </span>
             </Link>
           </Tooltip>
@@ -319,7 +321,7 @@ export const UserTable = ({
         dataSource={filteredUsers}
         emptyText='暂无用户'
         rowKey='id'
-        searchPlaceholder='搜索邮箱、名称、来源、团队'
+        searchPlaceholder='搜索邮箱、Login ID、名称、来源、团队'
         searchValue={searchValue}
         selectedRowKeys={selectedUserKeys}
         visibleColumnKeys={visibleColumnKeys}

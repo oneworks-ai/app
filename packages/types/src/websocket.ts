@@ -1,7 +1,7 @@
 import type { SessionWorkspaceChanges } from './git'
 import type { AskUserQuestionParams } from './interaction'
 import type { ChatMessage } from './message'
-import type { SessionCreationProgressEvent, SessionMessageQueueState } from './session'
+import type { SessionCreationProgressEvent, SessionMessageQueueState, SessionPanelState } from './session'
 
 export type WSEvent<
   TAdapterErrorData = unknown,
@@ -17,6 +17,7 @@ export type WSEvent<
   | { type: 'adapter_event'; data: any }
   | { type: 'session_updated'; session: TSession }
   | { type: 'config_updated'; workspaceFolder: string; updatedAt: number }
+  | { type: 'workspace_panel_state_updated'; panelState: SessionPanelState; updatedAt: number }
   | { type: 'session_creation_progress'; sessionId: string; progress: SessionCreationProgressEvent }
   | { type: 'session_queue_updated'; queue: SessionMessageQueueState }
   | { type: 'workspace_changes'; changes: SessionWorkspaceChanges }

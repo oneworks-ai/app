@@ -1,5 +1,6 @@
+import { resolveRuntimeAdapterConfigState } from '@oneworks/config'
 import type { AdapterCtx } from '@oneworks/types'
-import { loadAdapter, resolveAdapterPackageName } from '@oneworks/types'
+import { loadAdapter, resolveAdapterPackageName, resolveAdapterRuntimeTarget } from '@oneworks/types'
 import { mergeProcessEnvWithProjectEnv } from '@oneworks/utils'
 import { createLogger } from '@oneworks/utils/create-logger'
 
@@ -25,8 +26,18 @@ export const isMissingAdapterPackageError = (error: unknown, adapterKey: string)
 }
 
 export const createServerAdapterAccountContext = async (adapterKey: string) => {
-  const { workspaceFolder, effectiveProjectConfig, projectConfig, userConfig } = await loadConfigState()
-  const adapter = await loadAdapter(adapterKey)
+  const configState = await loadConfigState()
+  const { workspaceFolder } = configState
+  const adapterTarget = resolveAdapterRuntimeTarget(adapterKey, {
+    config: configState.mergedConfig,
+    cwd: workspaceFolder
+  })
+  const runtimeConfigState = resolveRuntimeAdapterConfigState(
+    configState,
+    adapterKey,
+    adapterTarget.runtimeAdapter
+  )
+  const adapter = await loadAdapter(adapterTarget.loadSpecifier)
   const env = mergeProcessEnvWithProjectEnv(undefined, { workspaceFolder })
   const adapterCtx = {
     ctxId: `server-adapter-accounts-${adapterKey}`,
@@ -34,7 +45,11 @@ export const createServerAdapterAccountContext = async (adapterKey: string) => {
     env,
     cache: createTransientCache(),
     logger: createLogger(workspaceFolder, `server/adapter-accounts/${adapterKey}`, 'server', '', 'info', env),
-    configs: [effectiveProjectConfig ?? projectConfig, userConfig]
+    configs: [
+      runtimeConfigState.effectiveProjectConfig ?? runtimeConfigState.projectConfig,
+      runtimeConfigState.userConfig
+    ],
+    configState: runtimeConfigState
   } satisfies AdapterCtx
 
   return {

@@ -56,7 +56,8 @@ export const handleChannelWebhook = async (
       method: input.method,
       headers: input.headers,
       query: input.query,
-      body: input.body
+      body: input.body,
+      rawBody: input.rawBody
     })
   } catch (error) {
     logger.error({

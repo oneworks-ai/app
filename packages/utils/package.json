@@ -109,6 +109,15 @@
         "require": "./dist/model-selection.js"
       }
     },
+    "./model-providers": {
+      "__oneworks__": {
+        "default": "./src/model-providers.ts"
+      },
+      "default": {
+        "import": "./dist/model-providers.mjs",
+        "require": "./dist/model-providers.js"
+      }
+    },
     "./managed-npm-cli": {
       "__oneworks__": {
         "default": "./src/managed-npm-cli.ts"
@@ -205,14 +214,20 @@
     "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/utils/__tests__"
   },
   "dependencies": {
+    "@npmcli/arborist": "^9.7.0",
     "@oneworks/types": "workspace:*",
     "js-yaml": "^4.1.1",
     "node-notifier": "^10.0.1",
+    "pacote": "^21.5.0",
     "pinyin-pro": "^3.28.1",
+    "semver": "^7.7.4",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
-    "@types/node-notifier": "^8.0.5"
+    "@types/node-notifier": "^8.0.5",
+    "@types/npmcli__arborist": "^6.3.3",
+    "@types/pacote": "^11.1.8",
+    "@types/semver": "^7.7.1"
   }
 }

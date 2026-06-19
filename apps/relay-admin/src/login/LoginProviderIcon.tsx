@@ -24,6 +24,21 @@ const GoogleIcon = () => (
   </span>
 )
 
-export const providerIcon = (provider: RelayLoginProviderConfig) => (
-  provider.icon === 'google' ? <GoogleIcon /> : <AdminIcon name='login' />
+const GithubIcon = () => (
+  <span className='relay-login-app__github-icon' aria-hidden='true'>
+    <svg width='18' height='18' viewBox='0 0 98 96' focusable='false'>
+      <path d='M48.9 0C21.9 0 0 21.9 0 48.9c0 21.6 14 39.9 33.4 46.4 2.4.5 3.3-1.1 3.3-2.4 0-1.2 0-5 0-9.1-13.6 3-16.5-5.8-16.5-5.8-2.2-5.7-5.4-7.2-5.4-7.2-4.4-3 .3-3 .3-3 4.9.3 7.5 5 7.5 5 4.3 7.4 11.3 5.3 14.1 4 .4-3.1 1.7-5.3 3.1-6.5-10.8-1.2-22.2-5.4-22.2-24.2 0-5.3 1.9-9.7 5-13.1-.5-1.2-2.2-6.2.5-12.9 0 0 4.1-1.3 13.4 5 3.9-1.1 8.1-1.6 12.3-1.6s8.4.6 12.3 1.6c9.3-6.3 13.4-5 13.4-5 2.7 6.7 1 11.7.5 12.9 3.1 3.4 5 7.8 5 13.1 0 18.8-11.4 22.9-22.3 24.2 1.8 1.5 3.3 4.5 3.3 9.1 0 6.5-.1 11.8-.1 13.4 0 1.3.9 2.8 3.4 2.4 19.4-6.5 33.4-24.8 33.4-46.4C97.8 21.9 75.9 0 48.9 0Z' />
+    </svg>
+  </span>
 )
+
+export const providerIcon = (provider: RelayLoginProviderConfig) => {
+  switch (provider.icon) {
+    case 'github':
+      return <GithubIcon />
+    case 'google':
+      return <GoogleIcon />
+    default:
+      return <AdminIcon name='login' />
+  }
+}

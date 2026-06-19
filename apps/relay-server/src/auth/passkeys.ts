@@ -30,6 +30,7 @@ import type {
   RelayUser
 } from '../types.js'
 import { now } from '../utils.js'
+import { ensureAuthIdentity, ensureEmailCodeIdentity, findEnabledEmailCodeUserByIdentifier } from './identities.js'
 import { consumeInvite, findUsableInvite } from './invites.js'
 
 export class RelayPasskeyError extends Error {
@@ -60,6 +61,7 @@ interface RegistrationCandidate {
 }
 
 const defaultPasskeyConfig: RelayPasskeyConfig = {
+  emailVerificationRequired: true,
   enabled: true,
   registrationMode: 'invite_required',
   rpName: 'One Works',
@@ -201,14 +203,10 @@ export const prepareRelayPasskeyRegistration = async (
   const { config, origin, rpId } = resolvePasskeyRp(req, args)
   ensurePasskeyEnabled(config)
   const candidate = resolveRegistrationCandidate(store, config, input)
-  const emailVerification = verifyRelayEmailChallengeCode(store, {
+  const emailChallengeId = verifyRegistrationEmailIfRequired(store, config, {
     code: input.code,
-    email: candidate.email,
-    purpose: 'email-verification'
+    email: candidate.email
   })
-  if (!emailVerification.verified) {
-    throw new RelayPasskeyError('Invalid verification code.', 400, 'invalid_email_code')
-  }
   const excludeCredentials = passkeysForUser(store, candidate.userId).map(passkey => ({
     id: passkey.id,
     transports: transportsForWebAuthn(passkey.transports)
@@ -229,7 +227,7 @@ export const prepareRelayPasskeyRegistration = async (
   })
   pushPasskeyChallenge(store, {
     challenge: options.challenge,
-    emailChallengeId: emailVerification.challenge.id,
+    emailChallengeId,
     emailHash: hashRelayEmailAddress(candidate.email),
     inviteCode: candidate.inviteCode,
     kind: 'registration',
@@ -295,7 +293,7 @@ export const prepareRelayPasskeyAuthentication = async (
 ): Promise<RelayPasskeyOptionsResult<PublicKeyCredentialRequestOptionsJSON>> => {
   const { config, origin, rpId } = resolvePasskeyRp(req, args)
   ensurePasskeyEnabled(config)
-  const user = findEnabledUserByEmail(store, input.email)
+  const user = findEnabledEmailCodeUserByIdentifier(store, input.email)
   if (user == null) throw new RelayPasskeyError('Passkey login unavailable.', 404, 'passkey_unavailable')
   const credentials = passkeysForUser(store, user.id)
   if (credentials.length === 0) {
@@ -330,7 +328,7 @@ export const verifyRelayPasskeyAuthentication = async (
   }
 ): Promise<RelayPasskeyVerifyResult> => {
   ensurePasskeyEnabled(resolvePasskeyConfig(args))
-  const user = findEnabledUserByEmail(store, input.email)
+  const user = findEnabledEmailCodeUserByIdentifier(store, input.email)
   if (user == null) throw new RelayPasskeyError('Invalid email or passkey.', 401, 'invalid_passkey')
   const credential = store.passkeys.find(passkey => passkey.userId === user.id && passkey.id === input.response.id)
   const challenge = findLatestChallenge(store, {
@@ -373,11 +371,18 @@ const resolveRegistrationCandidate = (
   }
 ): RegistrationCandidate => {
   const email = input.email.trim().toLowerCase()
-  const existing = store.users.find(user => user.email.toLowerCase() === email)
+  const existing = findEnabledEmailCodeUserByIdentifier(store, email)
   if (existing?.disabledAt != null) {
     throw new RelayPasskeyError('User is disabled.', 403, 'user_disabled')
   }
   if (existing != null) {
+    if (!config.emailVerificationRequired) {
+      throw new RelayPasskeyError(
+        'Email verification is required to add a passkey to an existing user.',
+        400,
+        'email_verification_required'
+      )
+    }
     return {
       email,
       existing,
@@ -400,10 +405,24 @@ const resolveRegistrationCandidate = (
   }
 }
 
-const findEnabledUserByEmail = (store: RelayStore, email: string) => {
-  const normalizedEmail = email.trim().toLowerCase()
-  const user = store.users.find(item => item.email.toLowerCase() === normalizedEmail)
-  return user == null || user.disabledAt != null ? undefined : user
+const verifyRegistrationEmailIfRequired = (
+  store: RelayStore,
+  config: RelayPasskeyConfig,
+  input: {
+    code: string
+    email: string
+  }
+) => {
+  if (!config.emailVerificationRequired) return undefined
+  const emailVerification = verifyRelayEmailChallengeCode(store, {
+    code: input.code,
+    email: input.email,
+    purpose: 'email-verification'
+  })
+  if (!emailVerification.verified) {
+    throw new RelayPasskeyError('Invalid verification code.', 400, 'invalid_email_code')
+  }
+  return emailVerification.challenge.id
 }
 
 const upsertPasskeyUser = (
@@ -415,12 +434,13 @@ const upsertPasskeyUser = (
   }
 ) => {
   const timestamp = now()
-  const existing = store.users.find(user => user.email.toLowerCase() === input.email.toLowerCase())
+  const existing = findEnabledEmailCodeUserByIdentifier(store, input.email)
   if (existing != null) {
     if (existing.disabledAt != null) {
       throw new RelayPasskeyError('User is disabled.', 403, 'user_disabled')
     }
     if (existing.provider == null || existing.provider === 'invite') existing.provider = passkeyProvider
+    ensurePasskeyIdentities(store, existing)
     existing.updatedAt = timestamp
     return existing
   }
@@ -440,7 +460,19 @@ const upsertPasskeyUser = (
   }
   consumeInvite(invite)
   store.users.push(user)
+  ensurePasskeyIdentities(store, user)
   return user
+}
+
+const ensurePasskeyIdentities = (store: RelayStore, user: RelayUser) => {
+  ensureEmailCodeIdentity(store, user)
+  ensureAuthIdentity(store, {
+    email: user.email,
+    emailVerified: true,
+    provider: passkeyProvider,
+    providerUserId: user.id,
+    userId: user.id
+  })
 }
 
 const upsertPasskeyCredential = (

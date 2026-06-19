@@ -1,6 +1,9 @@
 import { atom } from 'jotai'
 
+import type { ChatMessageContent } from '@oneworks/types'
+
 export interface PendingSessionCreationContext {
+  initialContent?: ChatMessageContent[]
   source?: {
     groupId?: string
     label?: string
@@ -11,6 +14,7 @@ export interface PendingSessionCreationContext {
 }
 
 export const pendingSessionCreationContextAtom = atom<PendingSessionCreationContext | undefined>(undefined)
+export const pendingSessionInitialContentAtom = atom<ChatMessageContent[] | undefined>(undefined)
 
 export const hasPersistedSessionCreationTarget = (session?: { id?: string }) => (
   session?.id != null && session.id !== ''

@@ -45,6 +45,13 @@ interface DesktopWorkspaceConnection {
   workspaceFolder?: string
 }
 
+interface DesktopWorkspaceStopResponse {
+  ok: true
+  removed: boolean
+  stopped: boolean
+  workspaceFolder: string
+}
+
 interface DesktopWorkspaceFileSearchResult {
   directory: string
   name: string
@@ -242,6 +249,10 @@ interface Window {
     createWorkspace?: () => Promise<string | undefined>
     createWorkspaceInDirectory?: (parentDirectory: string, projectName: string) => Promise<string | undefined>
     forgetWorkspace?: (workspaceFolder: string) => Promise<void>
+    stopWorkspace?: (
+      workspaceFolder: string,
+      input?: { forget?: boolean }
+    ) => Promise<DesktopWorkspaceStopResponse | undefined>
     getDesktopIconPreview?: (
       settings: Pick<DesktopSettings, 'iconAppearance' | 'iconBackground' | 'iconTheme'>
     ) => Promise<string | undefined>

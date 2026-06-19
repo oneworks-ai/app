@@ -1,25 +1,40 @@
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { resolveManagedPluginPackageInstallDir } from '#~/managed-plugin-package.js'
-import { getManagedPluginInstallDir } from '#~/managed-plugin.js'
-import {
+const mocks = vi.hoisted(() => ({
+  Arborist: vi.fn(),
+  manifest: vi.fn()
+}))
+
+vi.mock('pacote', () => ({
+  default: {
+    manifest: mocks.manifest
+  }
+}))
+
+vi.mock('@npmcli/arborist', () => ({
+  default: mocks.Arborist
+}))
+
+const { resolveManagedPluginPackageInstallDir } = await import('#~/managed-plugin-package.js')
+const { getManagedPluginInstallDir } = await import('#~/managed-plugin.js')
+const {
   discoverRuntimePluginConfigs,
   resolveConfiguredPluginInstances,
   resolvePluginConfigEntryPathForInstance,
   resolvePluginHooksEntryPathForInstance,
   resolveRuntimePluginConfig
-} from '#~/plugin-resolver.js'
+} = await import('#~/plugin-resolver.js')
 
 const tempDirs: string[] = []
 
 const writeLoggerPluginPackage = async (
   pluginRoot: string,
   version: string,
-  packageName: string = '@oneworks/plugin-logger'
+  packageName = '@oneworks/plugin-logger'
 ) => {
   await mkdir(join(pluginRoot, 'dist'), { recursive: true })
   await writeFile(
@@ -73,7 +88,11 @@ const writeDirectoryPlugin = async (
   await writeFile(join(pluginRoot, 'hooks/index.js'), 'module.exports = {}\n')
 }
 
+beforeEach(() => vi.stubGlobal('fetch', vi.fn(async () => ({ status: 200 }))))
+
 afterEach(async () => {
+  vi.clearAllMocks()
+  vi.unstubAllGlobals()
   vi.unstubAllEnvs()
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 })
@@ -84,6 +103,7 @@ describe('plugin resolver', () => {
     tempDirs.push(tempDir)
 
     const workspace = join(tempDir, 'workspace')
+    const realHome = join(tempDir, 'home')
     const packageDir = join(tempDir, 'runtime-package')
     const pluginRoot = join(packageDir, 'node_modules/@oneworks/plugin-runtime-only')
     await mkdir(workspace, { recursive: true })
@@ -91,6 +111,7 @@ describe('plugin resolver', () => {
     await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: '@acme/runtime' }, null, 2))
     await writeLoggerPluginPackage(pluginRoot, '1.0.0', '@oneworks/plugin-runtime-only')
 
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', realHome)
     vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', packageDir)
 
     const [instance] = await resolveConfiguredPluginInstances({
@@ -123,7 +144,7 @@ describe('plugin resolver', () => {
         __ONEWORKS_PROJECT_REAL_HOME__: realHome
       },
       packageName: '@oneworks/plugin-logger',
-      version: 'latest'
+      version: '3.2.0'
     })
     await mkdir(workspace, { recursive: true })
     await writeLoggerPluginPackage(pluginRoot, '3.2.0')
@@ -207,7 +228,7 @@ describe('plugin resolver', () => {
         __ONEWORKS_PROJECT_REAL_HOME__: realHome
       },
       packageName: '@oneworks/plugin-logger',
-      version: 'latest'
+      version: '3.2.0'
     })
     await mkdir(workspace, { recursive: true })
     await writeLoggerPluginPackage(workspacePluginRoot, '1.0.0')
@@ -234,46 +255,36 @@ describe('plugin resolver', () => {
 
     const workspace = join(tempDir, 'workspace')
     const realHome = join(tempDir, 'home')
-    const npmPath = join(tempDir, 'npm')
+    const installedVersion = '5.0.0'
     const pluginRoot = resolveManagedPluginPackageInstallDir({
       env: {
         __ONEWORKS_PROJECT_REAL_HOME__: realHome
       },
       packageName: '@oneworks/plugin-remote',
-      version: 'latest'
+      version: installedVersion
     })
     await mkdir(workspace, { recursive: true })
-    await writeFile(
-      npmPath,
-      `#!/usr/bin/env node
-const fs = require('node:fs')
-const path = require('node:path')
-if (process.argv[2] !== 'install') process.exit(1)
-const prefix = process.argv[process.argv.indexOf('--prefix') + 1]
-const spec = process.argv[process.argv.length - 1]
-const lastAt = spec.lastIndexOf('@')
-const packageName = spec.slice(0, lastAt)
-const version = spec.slice(lastAt + 1)
-const packageDir = path.join(prefix, 'node_modules', ...packageName.split('/'))
-fs.mkdirSync(path.join(packageDir, 'dist'), { recursive: true })
-fs.writeFileSync(path.join(packageDir, 'package.json'), JSON.stringify({
-  name: packageName,
-  version,
-  exports: {
-    '.': './dist/index.js',
-    './hooks': './dist/hooks.js',
-    './package.json': './package.json'
-  }
-}))
-fs.writeFileSync(path.join(packageDir, 'dist/index.js'), 'module.exports = { __oneWorksPluginManifest: true }\\n')
-fs.writeFileSync(path.join(packageDir, 'dist/hooks.js'), 'module.exports = {}\\n')
-`,
-      'utf8'
-    )
-    await chmod(npmPath, 0o755)
+
+    mocks.manifest.mockResolvedValueOnce({
+      dist: {
+        integrity: 'sha512-plugin-remote',
+        tarball: 'https://registry.example.test/@oneworks/plugin-remote/-/plugin-remote-5.0.0.tgz'
+      },
+      name: '@oneworks/plugin-remote',
+      version: installedVersion
+    })
+    mocks.Arborist.mockImplementationOnce((options: { path: string }) => ({
+      reify: async (reifyOptions: unknown) => {
+        await writeLoggerPluginPackage(
+          join(options.path, 'node_modules', '@oneworks', 'plugin-remote'),
+          installedVersion,
+          '@oneworks/plugin-remote'
+        )
+        return reifyOptions
+      }
+    }))
 
     vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', realHome)
-    vi.stubEnv('__ONEWORKS_PROJECT_PLUGIN_NPM_PATH__', npmPath)
 
     const [instance] = await resolveConfiguredPluginInstances({
       cwd: workspace,

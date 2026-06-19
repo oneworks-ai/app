@@ -2,11 +2,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { VERSION, parseRelayServerArgs, printRelayServerHelp } from '../src/server.js'
 
+// eslint-disable-next-line ts/no-require-imports
+const relayServerPackage = require('../package.json') as { version: string }
+
 afterEach(() => {
   vi.unstubAllEnvs()
 })
 
 describe('relay server config', () => {
+  it('uses the package version for public server version output', () => {
+    expect(VERSION).toBe(relayServerPackage.version)
+  })
+
   it('parses CLI args and prints help without starting a server', () => {
     vi.stubEnv('ONEWORKS_RELAY_HOST', '0.0.0.0')
     vi.stubEnv('ONEWORKS_RELAY_ADMIN_TOKEN', 'env-admin')
@@ -77,5 +84,17 @@ describe('relay server config', () => {
       }).email?.logoUrl
     ).toBe('https://cdn.example.com/relay-logo.png')
     expect(parseRelayServerArgs([], { ONEWORKS_RELAY_EMAIL_LOGO_URL: 'off' }).email?.logoUrl).toBeUndefined()
+  })
+
+  it('parses login method and passkey email verification environment settings', () => {
+    const args = parseRelayServerArgs([], {
+      ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD: 'verification-code',
+      ONEWORKS_RELAY_PASSKEY_EMAIL_VERIFICATION_REQUIRED: 'off'
+    })
+
+    expect(args.defaultLoginMethod).toBe('verification_code')
+    expect(args.passkey).toMatchObject({
+      emailVerificationRequired: false
+    })
   })
 })

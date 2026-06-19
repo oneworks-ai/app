@@ -6,10 +6,13 @@ import { useTranslation } from 'react-i18next'
 import { OverlayMenu, OverlayPanel, OverlaySearchRow } from '#~/components/overlay'
 import type { OverlayMenuActionItem, OverlayMenuItem } from '#~/components/overlay'
 import type { ModelSelectMenuGroup, ModelSelectOption } from '#~/hooks/chat/use-chat-model-adapter-selection'
+import { renderIconRef } from '#~/utils/model-provider-icons'
 
 import { ModelSelectOptionLabel } from '../@components/model-select/ModelSelectOptionLabel'
 
 const EMPTY_MODEL_OPEN_KEYS: string[] = []
+const CONNECT_MORE_MODEL_SERVICES_KEY = 'model-services:connect-more'
+const OPEN_MODEL_SERVICES_CONFIG_KEY = 'model-services:open-config'
 
 export const useModelSelectBrowser = ({
   builtinPreviewModelOptions,
@@ -23,7 +26,9 @@ export const useModelSelectBrowser = ({
   selectedModel,
   updatingRecommendedModelValue,
   onCloseModelSelect,
-  onSelectModel
+  onSelectModel,
+  onConnectMoreModelServices,
+  onOpenModelServicesConfig
 }: {
   builtinPreviewModelOptions?: ModelSelectOption[]
   modelSearchOptions?: ModelSelectOption[]
@@ -37,6 +42,8 @@ export const useModelSelectBrowser = ({
   updatingRecommendedModelValue?: string
   onCloseModelSelect: () => void
   onSelectModel: (value: string) => void
+  onConnectMoreModelServices?: () => void
+  onOpenModelServicesConfig?: () => void
 }) => {
   const { t } = useTranslation()
   const hasModelSearchQuery = modelSearchValue.trim() !== ''
@@ -51,8 +58,17 @@ export const useModelSelectBrowser = ({
   ), [onToggleRecommendedModel, updatingRecommendedModelValue])
 
   const renderModelMenuGroupLabel = useCallback((group: ModelSelectMenuGroup) => {
+    const firstOption = group.options[0]
+    const icon = group.key.startsWith('service:')
+      ? firstOption?.serviceIcon ?? firstOption?.modelIcon
+      : firstOption?.modelIcon ?? firstOption?.serviceIcon
     const label = (
       <span className='model-menu-group-label'>
+        {renderIconRef({
+          icon,
+          imageClassName: 'model-select-menu-item-icon model-menu-group-icon',
+          symbolClassName: 'model-select-menu-item-icon-symbol model-menu-group-icon'
+        })}
         <span className='model-menu-group-title'>{group.title}</span>
       </span>
     )
@@ -93,7 +109,7 @@ export const useModelSelectBrowser = ({
       className: 'model-select-menu-item'
     }))
 
-    const moreModelChildren = (modelMenuGroups ?? [])
+    const moreModelGroupChildren = (modelMenuGroups ?? [])
       .filter(group => group.options.length > 0)
       .map(group => ({
         key: group.key,
@@ -110,6 +126,31 @@ export const useModelSelectBrowser = ({
           className: 'model-select-menu-item'
         }))
       }))
+    const moreModelActionItems: OverlayMenuItem[] = [
+      ...(moreModelGroupChildren.length > 0
+        ? [{
+          type: 'divider' as const,
+          key: 'model-services-actions-divider'
+        }]
+        : []),
+      ...(onConnectMoreModelServices == null
+        ? []
+        : [{
+          key: CONNECT_MORE_MODEL_SERVICES_KEY,
+          icon: 'add_circle',
+          label: t('chat.modelConnectMoreServices'),
+          className: 'model-select-menu-action-item'
+        }]),
+      ...(onOpenModelServicesConfig == null
+        ? []
+        : [{
+          key: OPEN_MODEL_SERVICES_CONFIG_KEY,
+          icon: 'settings',
+          label: t('chat.modelOpenModelServicesConfig'),
+          className: 'model-select-menu-action-item'
+        }])
+    ]
+    const moreModelChildren = [...moreModelGroupChildren, ...moreModelActionItems]
 
     if (moreModelChildren.length === 0) {
       if (recommendedItems.length === 0) {
@@ -147,6 +188,8 @@ export const useModelSelectBrowser = ({
   }, [
     builtinPreviewModelOptions,
     modelMenuGroups,
+    onConnectMoreModelServices,
+    onOpenModelServicesConfig,
     onToggleRecommendedModel,
     recommendedModelOptions,
     renderCompactModelMenuLabel,
@@ -179,8 +222,26 @@ export const useModelSelectBrowser = ({
   const handleModelMenuClick = useCallback((item: OverlayMenuActionItem) => {
     const { key } = item
     if (key === 'more-models' || item.children != null) return
+    if (key === CONNECT_MORE_MODEL_SERVICES_KEY) {
+      onCloseModelSelect()
+      onModelSearchValueChange('')
+      onConnectMoreModelServices?.()
+      return
+    }
+    if (key === OPEN_MODEL_SERVICES_CONFIG_KEY) {
+      onCloseModelSelect()
+      onModelSearchValueChange('')
+      onOpenModelServicesConfig?.()
+      return
+    }
     onSelectModel(key.replace(/^(service-preview:|builtin-preview:|recommended:|search-results:)/, ''))
-  }, [onSelectModel])
+  }, [
+    onCloseModelSelect,
+    onConnectMoreModelServices,
+    onModelSearchValueChange,
+    onOpenModelServicesConfig,
+    onSelectModel
+  ])
 
   const selectedModelMenuKeys = useMemo(() => {
     if (!selectedModel) return []

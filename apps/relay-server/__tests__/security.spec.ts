@@ -16,6 +16,7 @@ const timestamp = '2026-01-01T00:00:00.000Z'
 
 const createSecurityStore = (): RelayStore => ({
   createdAt: timestamp,
+  auditEvents: [],
   configAssignments: [],
   configProfileAssignments: [],
   configProfileVersions: [],
@@ -27,7 +28,10 @@ const createSecurityStore = (): RelayStore => ({
   },
   teamPolicy: normalizeRelayTeamPolicy(undefined),
   teams: [],
+  teamInvitations: [],
+  messages: [],
   teamMembers: [],
+  authIdentities: [],
   passkeyChallenges: [],
   passkeys: [],
   users: [

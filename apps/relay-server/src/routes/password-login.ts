@@ -1,13 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+import { findEnabledUserByLoginIdentifier, loginIdentifierFromBody } from '../auth/login-identifiers.js'
 import { verifyPassword } from '../auth/passwords.js'
 import { createSession, pruneExpiredAuth, publicUser } from '../auth/sessions.js'
 import { readRequestBody, sendJson } from '../http.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
 import type { RelayServerArgs, RelayStore } from '../types.js'
 import { recordLoginNotificationMessage } from './team-invitations.js'
-
-const cleanString = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 
 const passwordFromBody = (body: Record<string, unknown>) => (
   typeof body.password === 'string' ? body.password : ''
@@ -24,15 +23,21 @@ export const handlePasswordLoginRoute = async (
   if (req.method !== 'POST' || url.pathname !== '/api/auth/password-login') return false
   pruneExpiredAuth(store)
   const body = await readRequestBody(req)
-  const email = cleanString(body.email).toLowerCase()
+  const loginId = loginIdentifierFromBody(body)
   const password = passwordFromBody(body)
-  if (email === '' || password === '') {
-    sendJson(res, 400, { error: 'Email and password are required.' }, args.allowOrigin)
+  if (loginId === '' || password === '') {
+    sendJson(res, 400, { error: 'Login ID and password are required.' }, args.allowOrigin)
     return true
   }
 
-  const user = store.users.find(item => item.email.toLowerCase() === email)
-  if (user == null || user.disabledAt != null || !(await verifyPassword(password, user.passwordHash))) {
+  const user = findEnabledUserByLoginIdentifier(store, loginId, {
+    includeUser: item => item.passwordHash != null
+  })
+  if (user == null) {
+    sendJson(res, 401, { code: 'registration_required', error: 'Invite required.' }, args.allowOrigin)
+    return true
+  }
+  if (!(await verifyPassword(password, user.passwordHash))) {
     sendJson(res, 401, { error: 'Invalid email or password.' }, args.allowOrigin)
     return true
   }

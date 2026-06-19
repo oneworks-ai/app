@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
+import type { Session } from '@oneworks/core'
 import type { GitRepositoryState, TerminalShellKind } from '@oneworks/types'
 
 import { getSessionGitState, getWorkspaceGitState } from '#~/api'
@@ -31,7 +32,11 @@ import type { WorkspaceDrawerView } from '#~/components/chat/workspace-drawer/wo
 import type { WorkspaceDrawerViewItem } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
 import type { WorkspaceMarkdownPreviewMode } from '#~/components/chat/workspace-file-editor/workspace-file-editor-language'
 import { DockPanel } from '#~/components/dock-panel/DockPanel'
-import type { RouteContainerPanelDockActionItem } from '#~/components/layout/RouteContainerPanelTabs'
+import type {
+  RouteContainerPanelDockActionItem,
+  RouteContainerPanelDockLayout
+} from '#~/components/layout/RouteContainerPanelTabs'
+import { areRouteContainerPanelDockLayoutsEquivalent } from '#~/components/layout/RouteContainerPanelTabs'
 import type { ContextPickerFile } from '#~/components/workspace/context-file-types'
 import type { ChatRouteBottomPanelState } from '#~/hooks/chat/use-chat-route-bottom-panel'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
@@ -64,6 +69,7 @@ import { useInteractionPanelShortcuts } from './use-interaction-panel-shortcuts'
 import { useInteractionPanelTabs } from './use-interaction-panel-tabs'
 import { useInteractionPanelWorkspaceUrlKeys } from './use-interaction-panel-workspace-url-keys'
 import type { InteractionTerminalPanesController } from './use-interaction-terminal-panes'
+import type { SessionPanelStateController } from './use-session-panel-state'
 
 type InteractionPanelTabHeaderActionResolver = (
   context: InteractionPanelDockTabHeaderActionContext
@@ -81,6 +87,7 @@ export function ChatInteractionPanel({
   openResourceKeyboardShortcut,
   openResourceShortcut,
   openResourceShortcutLabel,
+  panelStateController,
   shortcutRequest,
   onShortcutRequestHandled,
   onRunCommandTaskStatusesChange,
@@ -90,6 +97,7 @@ export function ChatInteractionPanel({
   onReferenceWorkspacePaths,
   onWorkspaceDrawerCreateMenuClick,
   settingsView,
+  session,
   sessionId,
   terminalSessionId,
   terminalPanes,
@@ -105,6 +113,7 @@ export function ChatInteractionPanel({
   openResourceKeyboardShortcut?: string | null
   openResourceShortcut?: string | null
   openResourceShortcutLabel?: string
+  panelStateController: SessionPanelStateController
   shortcutRequest?: InteractionPanelShortcutRequest | null
   onShortcutRequestHandled?: (id: number) => void
   onRunCommandTaskStatusesChange?: (statuses: InteractionPanelRunCommandTaskStatus[]) => void
@@ -114,6 +123,7 @@ export function ChatInteractionPanel({
   onReferenceWorkspacePaths?: (files: ContextPickerFile[]) => void
   onWorkspaceDrawerCreateMenuClick?: NonNullable<MenuProps['onClick']>
   settingsView?: ReactNode
+  session?: Session
   sessionId?: string
   terminalSessionId: string
   terminalPanes: InteractionTerminalPanesController
@@ -136,6 +146,7 @@ export function ChatInteractionPanel({
   const executePluginCommand = usePluginCommandExecutor()
   const pluginLanguage = i18n.resolvedLanguage ?? i18n.language
   const canCreateSessionTab = sessionId != null && sessionId !== ''
+  const bottomDockLayout = panelStateController.panelState.bottom.layout as RouteContainerPanelDockLayout | undefined
   const [editingPinnedTab, setEditingPinnedTab] = useState<InteractionPanelPinnedTab | null>(null)
   const [markdownPreviewMode, setMarkdownPreviewMode] = useState<WorkspaceMarkdownPreviewMode>('preview')
   const handledShortcutRequestIdRef = useRef<number | null>(null)
@@ -166,6 +177,8 @@ export function ChatInteractionPanel({
   const panelTabs = useInteractionPanelTabs({
     bottomPanel,
     canCreateSessionTab,
+    panelStateController,
+    session,
     terminalPanes,
     terminalSessionId,
     workspaceDrawerItems: workspaceDrawerCreateItems,
@@ -203,6 +216,15 @@ export function ChatInteractionPanel({
       tabHeaderActionResolvers.flatMap(resolve => resolve(context)),
     [tabHeaderActionResolvers]
   )
+  const handleBottomDockLayoutChange = useCallback((layout: RouteContainerPanelDockLayout) => {
+    panelStateController.updateArea('bottom', area => ({
+      ...area,
+      layout:
+        areRouteContainerPanelDockLayoutsEquivalent(area.layout as RouteContainerPanelDockLayout | undefined, layout)
+          ? area.layout
+          : layout as unknown as Record<string, unknown>
+    }))
+  }, [panelStateController])
   const pinnedTabs = useInteractionPanelPinnedTabs({
     maxPinnedTabs,
     tabs: panelTabs.tabs,
@@ -353,7 +375,7 @@ export function ChatInteractionPanel({
     changedLayout: workspaceDrawerDockActions.changedLayout,
     changedTreeCommand: workspaceDrawerDockActions.changedTreeCommand,
     isGitLoading,
-    onOpenFile: bottomPanel.handleOpenWorkspaceFile,
+    onOpenFile: panelTabs.openWorkspaceFile,
     onReferencePaths: onReferenceWorkspacePaths,
     pluginTabs: pluginWorkbenchTabs,
     repoState,
@@ -364,9 +386,9 @@ export function ChatInteractionPanel({
     agentApprovals,
     agentRoster,
     approvalMessages,
-    bottomPanel.handleOpenWorkspaceFile,
     isGitLoading,
     onReferenceWorkspacePaths,
+    panelTabs.openWorkspaceFile,
     pluginWorkbenchTabs,
     repoState,
     settingsView,
@@ -391,6 +413,9 @@ export function ChatInteractionPanel({
         currentRequest.url,
         currentRequest.title == null ? undefined : { title: currentRequest.title }
       )
+    } else if (currentRequest.action === 'open-workspace-file') {
+      onFoldChange(false)
+      panelTabs.openWorkspaceFile(currentRequest.path)
     } else if (currentRequest.action === 'new-terminal') {
       handleNewTerminal()
     } else if (currentRequest.action === 'run-command') {
@@ -499,6 +524,7 @@ export function ChatInteractionPanel({
             isPanelFullscreen={isFullscreen}
             isPanelMinimized={isFolded}
             isVisible={isVisible}
+            layout={bottomDockLayout}
             markdownPreviewMode={markdownPreviewMode}
             mobileDebugPages={panelTabs.mobileDebugPages}
             openResourceShortcut={openResourceShortcut ?? undefined}
@@ -519,11 +545,13 @@ export function ChatInteractionPanel({
             onActivateTab={handleActivateTab}
             onCloseTab={panelTabs.handleCloseTab}
             onCloseTabGroup={panelTabs.handleCloseTabGroup}
+            onCloseWorkspaceFilePaths={panelTabs.handleCloseWorkspaceFilePaths}
             onEditPinnedTab={setEditingPinnedTab}
             onIframeMetadataChange={panelTabs.handleIframeMetadataChange}
             onIframeNavigateHistory={panelTabs.handleIframeNavigateHistory}
             onIframeSelectHistory={panelTabs.handleIframeSelectHistory}
             onIframeUrlChange={panelTabs.handleIframeUrlChange}
+            onLayoutChange={handleBottomDockLayoutChange}
             onLocateWorkspacePath={onLocateWorkspacePath}
             onMarkdownPreviewModeChange={setMarkdownPreviewMode}
             onMobileDebugPageChange={panelTabs.updateMobileDebugPage}
@@ -538,7 +566,9 @@ export function ChatInteractionPanel({
             onPanelClose={handlePanelClose}
             onPanelAction={handlePanelAction}
             onPinTab={pinnedTabs.pinTab}
+            onPluginTabStateChange={panelTabs.updatePluginTabState}
             onRunCommand={handleRunCommand}
+            onSelectWorkspaceFilePath={panelTabs.handleSelectWorkspaceFilePath}
             onSessionPageChange={panelTabs.updateSessionPage}
             onTogglePanelFullscreen={onToggleFullscreen}
             onUnpinTab={pinnedTabs.unpinTab}

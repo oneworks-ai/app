@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 
 import type { RelayRole, RelayStore, RelayUser } from '../types.js'
 import { now } from '../utils.js'
+import { ensureAuthIdentity, ensureEmailCodeIdentity, findEnabledEmailCodeUserByIdentifier } from './identities.js'
 import { consumeInvite, findUsableInvite } from './invites.js'
 
 export interface InviteLoginInput {
@@ -39,6 +40,7 @@ const shouldUpgradeRole = (currentRole: RelayRole, inviteRole: RelayRole) => (
 )
 
 const updateExistingInviteUser = (
+  store: RelayStore,
   user: RelayUser,
   input: InviteLoginInput,
   inviteRole: RelayRole,
@@ -59,7 +61,19 @@ const updateExistingInviteUser = (
   if (user.providerUserId == null) user.providerUserId = input.email
   if (shouldUpgradeRole(user.role, inviteRole)) user.role = inviteRole
   user.updatedAt = timestamp
+  ensureInviteLoginIdentities(store, user)
   return user
+}
+
+const ensureInviteLoginIdentities = (store: RelayStore, user: RelayUser) => {
+  ensureEmailCodeIdentity(store, user)
+  ensureAuthIdentity(store, {
+    email: user.email,
+    emailVerified: true,
+    provider: user.passwordHash == null ? 'invite' : 'password',
+    providerUserId: user.id,
+    userId: user.id
+  })
 }
 
 export const upsertInviteLoginUser = (store: RelayStore, input: InviteLoginInput) => {
@@ -69,9 +83,9 @@ export const upsertInviteLoginUser = (store: RelayStore, input: InviteLoginInput
   }
 
   const timestamp = now()
-  const existing = store.users.find(user => user.email.toLowerCase() === input.email.toLowerCase())
+  const existing = findEnabledEmailCodeUserByIdentifier(store, input.email)
   if (existing != null) {
-    const user = updateExistingInviteUser(existing, input, invite.role, timestamp)
+    const user = updateExistingInviteUser(store, existing, input, invite.role, timestamp)
     consumeInvite(invite)
     return user
   }
@@ -94,5 +108,6 @@ export const upsertInviteLoginUser = (store: RelayStore, input: InviteLoginInput
   }
   consumeInvite(invite)
   store.users.push(user)
+  ensureInviteLoginIdentities(store, user)
   return user
 }

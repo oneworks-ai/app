@@ -1,7 +1,8 @@
 import type {
   LauncherDirectoryList,
   LauncherWorkspaceOpenResponse,
-  LauncherWorkspaceSelectorState
+  LauncherWorkspaceSelectorState,
+  LauncherWorkspaceStopResponse
 } from '@oneworks/types'
 
 import {
@@ -63,6 +64,22 @@ export const forgetLauncherWorkspace = (workspaceFolder: string) => (
     method: 'POST',
     headers: jsonHeaders,
     body: JSON.stringify({ workspaceFolder })
+  })
+)
+
+export const stopLauncherWorkspace = (
+  workspaceFolder: string,
+  input: {
+    forget?: boolean
+  } = {}
+) => (
+  fetchApiJson<LauncherWorkspaceStopResponse>(createLauncherApiUrl('/api/launcher/workspaces/stop'), {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify({
+      workspaceFolder,
+      forget: input.forget === true
+    })
   })
 )
 

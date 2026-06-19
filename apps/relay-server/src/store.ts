@@ -15,6 +15,7 @@ import { normalizeRelaySsoProviders } from './storage/sso-providers.js'
 import { normalizeRelayTeamPolicy, normalizeTeamRole } from './teams.js'
 import type {
   RelayAuditLogEntry,
+  RelayAuthIdentity,
   RelayConfigAssignment,
   RelayConfigProfile,
   RelayConfigProfileAssignment,
@@ -66,6 +67,7 @@ const defaultStore = (): RelayStore => ({
   messages: [],
   teamMembers: [],
   users: [],
+  authIdentities: [],
   invites: [],
   ssoProviders: [],
   passkeyChallenges: [],
@@ -80,6 +82,7 @@ const defaultStore = (): RelayStore => ({
 const normalizeUser = (value: Record<string, unknown>): RelayUser => ({
   id: typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : randomUUID(),
   email: typeof value.email === 'string' ? value.email.trim() : '',
+  loginId: typeof value.loginId === 'string' && value.loginId.trim() !== '' ? value.loginId.trim() : undefined,
   name: typeof value.name === 'string' ? value.name.trim() : '',
   avatarUrl: typeof value.avatarUrl === 'string' && value.avatarUrl.trim() !== '' ? value.avatarUrl.trim() : undefined,
   disabledAt: typeof value.disabledAt === 'string' && value.disabledAt.trim() !== ''
@@ -98,6 +101,84 @@ const normalizeUser = (value: Record<string, unknown>): RelayUser => ({
   createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
   updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined
 })
+
+const normalizeAuthIdentity = (value: Record<string, unknown>): RelayAuthIdentity | undefined => {
+  const provider = typeof value.provider === 'string' && value.provider.trim() !== ''
+    ? value.provider.trim()
+    : undefined
+  const providerUserId = typeof value.providerUserId === 'string' && value.providerUserId.trim() !== ''
+    ? value.providerUserId.trim()
+    : undefined
+  const userId = typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined
+  if (provider == null || providerUserId == null || userId == null) return undefined
+  return {
+    id: typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : randomUUID(),
+    userId,
+    provider,
+    providerUserId,
+    email: typeof value.email === 'string' && value.email.trim() !== '' ? value.email.trim().toLowerCase() : undefined,
+    emailVerified: typeof value.emailVerified === 'boolean' ? value.emailVerified : undefined,
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    lastUsedAt: typeof value.lastUsedAt === 'string' && value.lastUsedAt.trim() !== ''
+      ? value.lastUsedAt.trim()
+      : undefined,
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined
+  }
+}
+
+const authIdentityKey = (identity: Pick<RelayAuthIdentity, 'provider' | 'providerUserId'>) =>
+  `${identity.provider.toLowerCase()}:${identity.providerUserId.toLowerCase()}`
+
+const pushUniqueAuthIdentity = (
+  identities: RelayAuthIdentity[],
+  identity: Omit<RelayAuthIdentity, 'id'>
+) => {
+  const key = authIdentityKey(identity)
+  if (identities.some(item => authIdentityKey(item) === key)) return
+  identities.push({
+    ...identity,
+    id: randomUUID()
+  })
+}
+
+const appendLegacyAuthIdentities = (identities: RelayAuthIdentity[], users: RelayUser[]) => {
+  const nonSsoProviders = new Set(['invite', 'passkey', 'password'])
+  for (const user of users) {
+    const timestamp = user.updatedAt ?? user.createdAt
+    if (user.provider != null && user.providerUserId != null) {
+      pushUniqueAuthIdentity(identities, {
+        createdAt: timestamp,
+        email: user.email === '' ? undefined : user.email.toLowerCase(),
+        provider: user.provider,
+        providerUserId: user.providerUserId,
+        userId: user.id
+      })
+    }
+    if (user.passwordHash != null) {
+      pushUniqueAuthIdentity(identities, {
+        createdAt: timestamp,
+        email: user.email === '' ? undefined : user.email.toLowerCase(),
+        emailVerified: true,
+        provider: 'password',
+        providerUserId: user.id,
+        userId: user.id
+      })
+    }
+    if (user.provider == null || nonSsoProviders.has(user.provider) || user.passwordHash != null) {
+      const email = user.email.trim().toLowerCase()
+      if (email !== '') {
+        pushUniqueAuthIdentity(identities, {
+          createdAt: timestamp,
+          email,
+          emailVerified: true,
+          provider: 'email_code',
+          providerUserId: email,
+          userId: user.id
+        })
+      }
+    }
+  }
+}
 
 const normalizeStringArray = (value: unknown) => (
   Array.isArray(value)
@@ -665,6 +746,12 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
     ): member is RelayTeamMember => member != null)
     : []
   const legacyTeams = addLegacyTeamMemberships(users, teams, teamMembers)
+  const authIdentities = Array.isArray(store.authIdentities)
+    ? store.authIdentities.filter(isRecord).map(normalizeAuthIdentity).filter((
+      value
+    ): value is RelayAuthIdentity => value != null)
+    : []
+  appendLegacyAuthIdentities(authIdentities, users)
   return {
     createdAt: typeof store.createdAt === 'string' ? store.createdAt : now(),
     auditEvents: Array.isArray(store.auditEvents)
@@ -712,6 +799,7 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
       : [],
     teamMembers: legacyTeams.teamMembers,
     users,
+    authIdentities,
     invites: Array.isArray(store.invites) ? store.invites.filter(isRecord).map(normalizeInvite) : [],
     ssoProviders: normalizeRelaySsoProviders(store.ssoProviders),
     passkeyChallenges: Array.isArray(store.passkeyChallenges)

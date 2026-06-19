@@ -1,23 +1,30 @@
-import { createHash } from 'node:crypto'
-import { realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { basename, isAbsolute, join, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import process from 'node:process'
 
 import { clientBase, normalizeText, repoRoot } from './paths'
+import {
+  normalizePathValue,
+  normalizeWorkspaceFolder,
+  resolveDevStartHomeProjectsDir,
+  resolveDevStartInstanceId,
+  resolveProjectHomeDir
+} from './storage'
 import type { RuntimeEnvInput } from './types'
+
+export { resolveDevStartHomeProjectsDir, resolveDevStartInstanceId } from './storage'
 
 interface ConfigStateForPluginRoots {
   globalConfig?: unknown
-  globalSource?: {
-    resolvedConfig?: {
-      disableGlobalConfig?: boolean
-    }
-  }
-  mergedConfig?: {
-    disableGlobalConfig?: boolean
-    plugins?: unknown
-  }
+  globalSource?: { resolvedConfig?: { disableGlobalConfig?: boolean } }
+  mergedConfig?: { disableGlobalConfig?: boolean; plugins?: unknown }
+}
+
+type DevStartRuntimeEnv = NodeJS.ProcessEnv & {
+  DB_PATH: string
+  __ONEWORKS_DEV_START_INSTANCE_ID__?: string
+  __ONEWORKS_PROJECT_HOME_PROJECT_DIR__: string
+  __ONEWORKS_PROJECT_HOME_PROJECTS_DIR__?: string
 }
 
 interface PluginResolverModule {
@@ -32,42 +39,6 @@ interface PluginResolverModule {
     env: NodeJS.ProcessEnv
     plugins?: unknown
   }) => Promise<unknown>
-}
-
-const normalizePathValue = (value: unknown) => normalizeText(value)?.replace(/[\\/]+$/, '')
-
-const normalizeWorkspaceFolder = (value: string) => {
-  const resolved = resolve(value)
-  try {
-    return realpathSync.native(resolved)
-  } catch {
-    return resolved
-  }
-}
-
-const resolveProjectHomeDir = (env: NodeJS.ProcessEnv) => {
-  const realHome = resolve(
-    normalizePathValue(env.__ONEWORKS_PROJECT_REAL_HOME__) ?? normalizePathValue(env.HOME) ?? repoRoot
-  )
-  const projectsDirValue = normalizePathValue(env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__) ?? '.oneworks/projects'
-  const projectsDir = isAbsolute(projectsDirValue) ? resolve(projectsDirValue) : resolve(realHome, projectsDirValue)
-  const explicitProjectDir = normalizePathValue(env.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__)
-
-  if (explicitProjectDir != null) {
-    return isAbsolute(explicitProjectDir) ? resolve(explicitProjectDir) : resolve(projectsDir, explicitProjectDir)
-  }
-
-  const workspaceFolder = normalizeWorkspaceFolder(
-    normalizePathValue(env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__) ??
-      normalizePathValue(env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__) ??
-      repoRoot
-  )
-  const normalizedName = basename(workspaceFolder)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  const stableHash = createHash('sha1').update(workspaceFolder).digest('hex').slice(0, 10)
-  return resolve(projectsDir, normalizedName === '' ? stableHash : `${normalizedName}-${stableHash}`)
 }
 
 const appendNoProxy = (value: unknown) => {
@@ -137,7 +108,7 @@ export const buildRuntimeEnv = async ({
   extra = {},
   serverRole = 'workspace',
   serverPort
-}: RuntimeEnvInput) => {
+}: RuntimeEnvInput): Promise<DevStartRuntimeEnv> => {
   const isManagerServer = serverRole === 'manager'
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -159,6 +130,11 @@ export const buildRuntimeEnv = async ({
     no_proxy: appendNoProxy(process.env.no_proxy),
     ...extra
   }
+
+  if (normalizePathValue(env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__) == null) {
+    env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = resolveDevStartHomeProjectsDir(env)
+  }
+  env.__ONEWORKS_DEV_START_INSTANCE_ID__ = env.__ONEWORKS_DEV_START_INSTANCE_ID__ ?? resolveDevStartInstanceId()
 
   for (const [key, value] of Object.entries(env)) {
     if (value === undefined) delete env[key]
