@@ -117,20 +117,47 @@
   overflow-wrap: anywhere;
 }
 
-.relay-user-detail__devices {
+.relay-user-detail__tabs {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 8px;
-  min-height: 300px;
-  padding: 10px var(--route-container-header-padding-inline);
+  min-height: 0;
+  min-width: 0;
+  padding: 0 var(--route-container-header-padding-inline) 10px;
 }
 
-.relay-user-detail__teams {
-  display: grid;
-  gap: 8px;
+.relay-user-detail__tabs > .ant-tabs-nav {
+  flex: 0 0 auto;
+  margin: 0 0 10px;
+}
+
+.relay-user-detail__tabs > .ant-tabs-content-holder {
+  display: flex;
+  flex: 1;
+  min-height: 0;
   min-width: 0;
-  padding: 10px var(--route-container-header-padding-inline);
+}
+
+.relay-user-detail__tabs > .ant-tabs-content-holder > .ant-tabs-content,
+.relay-user-detail__tabs .ant-tabs-tabpane {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.relay-user-detail__tabs .ant-tabs-tabpane-hidden {
+  display: none;
+}
+
+.relay-user-detail__devices,
+.relay-user-detail__teams {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
 }
 
 .relay-user-detail__team-name {
@@ -168,30 +195,8 @@
   margin: 0;
 }
 
-.relay-user-detail__devices-header {
-  align-items: center;
-  color: var(--sub-text-color);
-  display: flex;
-  flex: 0 0 auto;
-  gap: 8px;
-  justify-content: space-between;
-  min-height: 24px;
-}
-
-.relay-user-detail__devices-header h3 {
-  color: var(--text-color);
-  font-size: 14px;
-  line-height: 1.2;
-  margin: 0;
-}
-
-.relay-user-detail__devices-header span {
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 650;
-}
-
 .relay-user-detail__devices > .relay-admin-list-table {
+  flex: 1;
   min-height: 0;
 }
 

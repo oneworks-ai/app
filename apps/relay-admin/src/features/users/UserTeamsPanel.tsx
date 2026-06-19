@@ -139,10 +139,6 @@ export const UserTeamsPanel = ({ teams, token, userId }: UserTeamsPanelProps) =>
 
   return (
     <div className='relay-user-detail__teams'>
-      <div className='relay-user-detail__devices-header'>
-        <h3>所属团队</h3>
-        <span>{rows.length} 个团队</span>
-      </div>
       {error == null ? null : <p className='relay-user-detail__error'>{error}</p>}
       {rows.length === 0 && !loading && error == null
         ? <Empty className='relay-user-detail__empty' description='暂无团队' />
