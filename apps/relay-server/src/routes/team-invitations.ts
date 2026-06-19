@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Team invitation routes own invite creation, message visibility, and accept/decline flows. */
+
 import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 

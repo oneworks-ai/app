@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Team settings page keeps avatar upload, editable metadata, and platform controls together. */
+
 import './TeamPanel.css'
 
 import { Alert, Avatar, Button, Empty, Form, Input, Switch, Upload } from 'antd'

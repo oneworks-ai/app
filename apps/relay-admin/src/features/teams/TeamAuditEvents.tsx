@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Team audit list keeps filters, table state, and rendering close to the feature page. */
+
 import { Space } from 'antd'
 import type { TableColumnsType } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'

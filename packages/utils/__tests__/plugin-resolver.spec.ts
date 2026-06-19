@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Plugin resolver regression coverage keeps related package and config resolution fixtures together. */
+
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

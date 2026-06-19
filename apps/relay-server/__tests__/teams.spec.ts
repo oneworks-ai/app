@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Team route coverage shares one end-to-end fixture for member, policy, and audit flows. */
+
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { hashPassword } from '../src/auth/passwords.js'
@@ -16,6 +18,10 @@ interface AuditEventSnapshot {
   actor: string
   resource: string
   status: string
+}
+
+interface TeamRouteSnapshot {
+  archivedAt: string | null
 }
 
 const sleep = async (ms: number) => await new Promise<void>(resolve => setTimeout(resolve, ms))
@@ -189,9 +195,9 @@ describe('relay team routes', () => {
       userId: 'user-2'
     })
     expect(ownerArchive.response.status).toBe(200)
-    expect(ownerArchive.body.team.archivedAt).toEqual(expect.any(String))
+    expect((ownerArchive.body.team as TeamRouteSnapshot).archivedAt).toEqual(expect.any(String))
     expect(ownerRestore.response.status).toBe(200)
-    expect(ownerRestore.body.team.archivedAt).toBeNull()
+    expect((ownerRestore.body.team as TeamRouteSnapshot).archivedAt).toBeNull()
     expect(lastOwnerDelete.response.status).toBe(400)
     expect(lastOwnerDelete.body).toEqual({ error: 'Team must keep at least one owner.' })
     expect(auditEvents).toEqual(

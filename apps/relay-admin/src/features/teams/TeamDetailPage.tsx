@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Team detail page coordinates overview, tab routing, and route-level actions. */
+
 import './TeamPanel.css'
 
 import { Avatar, Empty, Tabs } from 'antd'

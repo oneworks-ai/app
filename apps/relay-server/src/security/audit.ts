@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Audit helpers centralize request metadata, resource labels, and security event writes. */
+
 import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 

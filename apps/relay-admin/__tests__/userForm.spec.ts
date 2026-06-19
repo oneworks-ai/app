@@ -12,6 +12,7 @@ describe('createUserInputFromFormData', () => {
       role: 'admin'
     }))).toEqual({
       email: 'admin@example.com',
+      loginId: null,
       name: 'Admin',
       password: 'secret-password',
       role: 'admin'
