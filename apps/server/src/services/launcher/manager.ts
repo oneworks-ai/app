@@ -629,6 +629,48 @@ const resolveImplementationIdentity = (packageDir: string) => {
   }
 }
 
+const isLoopbackHostname = (hostname: string) => (
+  hostname === 'localhost' ||
+  hostname === '127.0.0.1' ||
+  hostname === '::1' ||
+  hostname === '[::1]'
+)
+
+const parseLauncherClientOrigin = (clientOrigin: string | undefined) => {
+  if (clientOrigin == null) return undefined
+  try {
+    return new URL(clientOrigin)
+  } catch {
+    return undefined
+  }
+}
+
+const getLauncherClientOriginIdentityKey = (clientOrigin: string | undefined) => {
+  const url = parseLauncherClientOrigin(clientOrigin)
+  if (url == null) return undefined
+  if (isLoopbackHostname(url.hostname)) {
+    return `${url.protocol}//loopback${url.port === '' ? '' : `:${url.port}`}`
+  }
+  return url.origin
+}
+
+const createOrigin = (protocol: string, hostname: string, port: string) => (
+  `${protocol}//${hostname}${port === '' ? '' : `:${port}`}`
+)
+
+const getLauncherClientCorsOrigins = (clientOrigin: string | undefined) => {
+  const url = parseLauncherClientOrigin(clientOrigin)
+  if (url == null) return []
+  if (!isLoopbackHostname(url.hostname)) return [url.origin]
+  return Array.from(
+    new Set([
+      url.origin,
+      createOrigin(url.protocol, '127.0.0.1', url.port),
+      createOrigin(url.protocol, 'localhost', url.port)
+    ])
+  )
+}
+
 export const resolveLauncherWorkspaceInstanceIdentity = (
   workspaceFolder: string,
   input: {
@@ -640,7 +682,7 @@ export const resolveLauncherWorkspaceInstanceIdentity = (
   const launchConfigHash = createHash('sha256')
     .update(JSON.stringify({
       clientBase: createLauncherWorkspaceClientBase(createLauncherWorkspaceId(workspaceFolder)),
-      clientOrigin: input.clientOrigin ?? null,
+      clientOrigin: getLauncherClientOriginIdentityKey(input.clientOrigin) ?? null,
       host: WORKSPACE_SERVER_HOST,
       workspaceFolder
     }))
@@ -977,11 +1019,12 @@ const createWorkspaceServerEnv = (
   }
 ) => {
   const packageDir = resolvePackageDir()
+  const clientCorsOrigins = getLauncherClientCorsOrigins(input.clientOrigin)
   const env = applyServerRuntimeEnv({
     cwd: workspaceFolder,
     packageDir,
     options: {
-      allowCors: input.clientOrigin != null,
+      allowCors: clientCorsOrigins.length > 0,
       host: WORKSPACE_SERVER_HOST,
       port: String(input.port),
       workspace: workspaceFolder
@@ -1001,8 +1044,8 @@ const createWorkspaceServerEnv = (
   env.__ONEWORKS_PROJECT_CLIENT_BASE__ = createLauncherWorkspaceClientBase(workspaceId)
   env.__ONEWORKS_PROJECT_WORKSPACE_ID__ = workspaceId
   env.__ONEWORKS_PROJECT_WEB_AUTH_ENABLED__ = 'false'
-  if (input.clientOrigin != null) {
-    env.__ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__ = input.clientOrigin
+  if (clientCorsOrigins.length > 0) {
+    env.__ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__ = clientCorsOrigins.join(',')
   }
   return {
     env,

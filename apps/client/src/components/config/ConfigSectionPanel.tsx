@@ -9,6 +9,7 @@ import type { ConfigSource, ConfigUiSection } from '@oneworks/types'
 
 import { SectionForm } from './ConfigSectionForm'
 import { ConfigSectionFrame } from './ConfigSectionFrame'
+import type { ModelServiceProviderPortalRequest } from './ModelServiceProviderPortalBottomPanel'
 import type { ConfigDetailRoute } from './configDetail'
 import {
   getConfigDetailRouteKey,
@@ -40,6 +41,7 @@ export function ConfigSectionPanel({
   workspaceFileOpenerOptions,
   detailQuery = '',
   onDetailQueryChange,
+  onOpenModelServicePortal,
   creatingModelServiceSessionKey,
   onCreateModelServiceSession,
   headerExtra,
@@ -64,6 +66,7 @@ export function ConfigSectionPanel({
   workspaceFileOpenerOptions?: Array<{ value: string; label: ReactNode }>
   detailQuery?: string
   onDetailQueryChange?: (nextQuery: string) => void
+  onOpenModelServicePortal?: (request: ModelServiceProviderPortalRequest) => void
   creatingModelServiceSessionKey?: string | null
   onCreateModelServiceSession?: (request: ModelServiceConfigSessionRequest) => void | Promise<void>
   headerExtra?: ReactNode
@@ -239,6 +242,7 @@ export function ConfigSectionPanel({
         workspaceFileOpenerOptions={workspaceFileOpenerOptions}
         detailRoute={detailRoute}
         onOpenDetailRoute={handleOpenDetail}
+        onOpenModelServicePortal={onOpenModelServicePortal}
         creatingModelServiceSessionKey={creatingModelServiceSessionKey}
         onCreateModelServiceSession={onCreateModelServiceSession}
         t={t}

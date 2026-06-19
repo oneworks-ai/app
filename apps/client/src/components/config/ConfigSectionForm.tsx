@@ -19,6 +19,7 @@ import { ShortcutInput } from './ConfigShortcutInput'
 import { DetailCollectionField } from './DetailListField'
 import { McpServerItemEditor } from './McpServerItemEditor'
 import { ModelServiceProviderActions } from './ModelServiceProviderActions'
+import type { ModelServiceProviderPortalRequest } from './ModelServiceProviderPortalBottomPanel'
 import { RecommendedModelsItemEditor } from './RecommendedModelsItemEditor'
 import type { ConfigDetailRoute } from './configDetail'
 import { resolveConfigDetailRouteMeta } from './configDetail'
@@ -72,6 +73,7 @@ export const SectionForm = ({
   workspaceFileOpenerOptions,
   detailRoute = null,
   onOpenDetailRoute,
+  onOpenModelServicePortal,
   creatingModelServiceSessionKey,
   onCreateModelServiceSession,
   t
@@ -90,6 +92,7 @@ export const SectionForm = ({
   workspaceFileOpenerOptions?: Array<{ value: string; label: ReactNode }>
   detailRoute?: ConfigDetailRoute | null
   onOpenDetailRoute?: (route: ConfigDetailRoute) => void
+  onOpenModelServicePortal?: (request: ModelServiceProviderPortalRequest) => void
   creatingModelServiceSessionKey?: string | null
   onCreateModelServiceSession?: (request: ModelServiceConfigSessionRequest) => void | Promise<void>
   t: TranslationFn
@@ -765,7 +768,7 @@ export const SectionForm = ({
       return nodes
     }
     const groupedFields = currentFields.reduce<Record<string, FieldSpec[]>>((acc, field) => {
-      const key = field.group ?? 'default'
+      const key = field.resolveGroup?.({ currentValue, currentResolvedValue }) ?? field.group ?? 'default'
       if (!acc[key]) acc[key] = []
       acc[key].push(field)
       return acc
@@ -963,6 +966,7 @@ export const SectionForm = ({
     )
     ? detailMeta.itemKey
     : null
+
   const { data: adapterAccountsData } = useSWR(
     adapterDetailKey != null ? `/api/adapters/${adapterDetailKey}/accounts` : null,
     () => getAdapterAccounts(adapterDetailKey!)
@@ -1039,6 +1043,7 @@ export const SectionForm = ({
           canRefreshModels={detailMeta.itemSource !== 'inherited'}
           item={detailMeta.itemSource === 'inherited' ? detailMeta.resolvedItem : detailMeta.item}
           onChange={writeDetailItem}
+          onOpenPortal={onOpenModelServicePortal}
           t={t}
         />
       )

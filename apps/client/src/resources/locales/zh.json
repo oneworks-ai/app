@@ -59,6 +59,8 @@
     "close": "关闭",
     "enterFullscreen": "全屏",
     "exitFullscreen": "退出全屏",
+    "expandPanel": "展开面板",
+    "collapsePanel": "折叠面板",
     "sort": "排序规则",
     "tags": "标签",
     "allTags": "全部标签",
@@ -2053,6 +2055,7 @@
     "modelMoreModels": "更多模型",
     "modelConnectMoreServices": "接入更多",
     "modelOpenModelServicesConfig": "打开配置",
+    "modelOpenModelServiceDetails": "打开服务详情",
     "availableTools": "可用工具",
     "availableToolsEmpty": "当前会话没有可展示的工具。",
     "toolGroupChromeDevtools": "ChromeDevtools",
@@ -2874,7 +2877,11 @@
         "hostMatch": "根据 API 地址识别",
         "custom": "自定义兼容服务"
       },
+      "import": {
+        "created": "已创建模型服务 {{name}}"
+      },
       "actions": {
+        "more": "更多",
         "openHomepage": "管理后台",
         "openExternal": "在外部浏览器打开",
         "createSecret": "创建 Secret",
@@ -2903,11 +2910,46 @@
       "plan": {
         "title": "订阅套餐",
         "labels": {
-          "kind": "计费",
-          "keyKind": "Key",
-          "quota": "额度",
-          "allowedUse": "用途",
-          "defaultModels": "默认模型"
+          "kind": "套餐类型",
+          "keyKind": "密钥类型",
+          "liveQuota": "实时额度",
+          "allowedUse": "适用范围",
+          "endpoints": "专属 Base URL",
+          "defaultModels": "默认模型",
+          "window": "窗口",
+          "periodQuota": "周期额度",
+          "planLevel": "会员等级",
+          "resetTime": "重置时间",
+          "parallelLimit": "并发上限"
+        },
+        "liveQuota": {
+          "failed": "查询失败",
+          "loading": "查询中…",
+          "notQueried": "未查询",
+          "windowSummary": "{{duration}}：{{amount}}"
+        },
+        "quotaProgress": {
+          "percentValue": "{{value}}%",
+          "resetAt": "{{time}} 重置",
+          "weekly": "1 周额度",
+          "monthly": "月额度",
+          "window": "{{duration}}额度"
+        },
+        "duration": {
+          "hours": "{{count}} 小时",
+          "generic": "{{count}} {{unit}}"
+        },
+        "timeUnit": {
+          "minute": "分钟",
+          "hour": "小时",
+          "day": "天",
+          "week": "周",
+          "month": "月"
+        },
+        "restrictions": {
+          "codingToolsOnly": "仅用于交互式编程工具；不要用于后端批量任务、自动化脚本或通用 API 工作负载。",
+          "dedicatedKey": "需要使用套餐专属 Key 和套餐专属 Base URL；不能与按量 API Key 或普通 API Base URL 混用。",
+          "kimiSeparateBaseUrl": "Kimi Code 使用独立 Base URL，不同于 Moonshot 开放平台 API。"
         },
         "links": {
           "purchase": "购买",
@@ -2929,7 +2971,8 @@
         "quotaUnit": {
           "request": "请求数",
           "token": "Token",
-          "credit": "Credit"
+          "credit": "Credit",
+          "percent": "百分比"
         },
         "quotaWindow": {
           "5h": "5 小时",
@@ -2943,8 +2986,9 @@
       },
       "portal": {
         "secretTitle": "{{provider}} Secret 管理",
-        "iframeHint": "浏览器模式使用 iframe 打开；如果平台禁止嵌入，请用外部浏览器打开。",
-        "webviewHint": "Electron 模式使用 webview 打开；如登录或支付页面受限，请用外部浏览器打开。"
+        "tabsLabel": "服务页面",
+        "closePanel": "关闭服务页面",
+        "resizePanel": "调整服务页面高度"
       },
       "status": {
         "operational": "正常",
@@ -3806,7 +3850,13 @@
     },
     "sectionGroups": {
       "base": "基础配置",
+      "profile": "服务信息",
+      "access": "接入配置",
+      "providerAccess": "接入覆盖",
+      "customization": "展示与链接",
       "models": "模型配置",
+      "management": "管理配置",
+      "plan": "套餐信息",
       "advanced": "进阶配置",
       "advancedModels": "高阶模型配置",
       "advancedRuntime": "运行时选项",

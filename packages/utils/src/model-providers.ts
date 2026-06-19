@@ -270,10 +270,14 @@ export const resolveModelServiceApiBaseUrl = (service: ModelServiceConfig | unde
 
 export const resolveModelServiceModels = (service: ModelServiceConfig | undefined) => {
   const configuredModels = normalizeStringArray(service?.models)
-  if (configuredModels.length > 0) return configuredModels
   const codingPlanModels = normalizeStringArray(resolveModelServiceCodingPlan(service)?.defaultModels)
-  if (codingPlanModels.length > 0) return codingPlanModels
-  return normalizeStringArray(getModelProviderDefinition(resolveModelProviderIdentity(service).provider)?.defaultModels)
+  if (codingPlanModels.length > 0) return mergeStringLists(codingPlanModels, configuredModels)
+  const providerModels = normalizeStringArray(
+    getModelProviderDefinition(resolveModelProviderIdentity(service).provider)?.defaultModels
+  )
+  if (providerModels.length > 0) return mergeStringLists(providerModels, configuredModels)
+  if (configuredModels.length > 0) return configuredModels
+  return []
 }
 
 export const resolveModelServiceConfig = (

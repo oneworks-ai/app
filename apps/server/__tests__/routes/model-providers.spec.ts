@@ -368,7 +368,7 @@ describe('model provider routes', () => {
     expect(response.status).toBe(200)
     expect(payload.account).toMatchObject({
       kind: 'quota',
-      unit: 'request',
+      unit: 'percent',
       limit: 100,
       remaining: 99,
       parallelLimit: 20,

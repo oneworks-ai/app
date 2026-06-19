@@ -9,10 +9,16 @@ import type { ModelSelectMenuGroup, ModelSelectOption } from '#~/hooks/chat/use-
 import { renderIconRef } from '#~/utils/model-provider-icons'
 
 import { ModelSelectOptionLabel } from '../@components/model-select/ModelSelectOptionLabel'
+import {
+  buildOpenModelServiceConfigMenuKey,
+  parseOpenModelServiceConfigMenuKey,
+  resolveModelServiceKeyFromMenuGroup
+} from '../@components/model-select/model-service-config-menu'
 
 const EMPTY_MODEL_OPEN_KEYS: string[] = []
 const CONNECT_MORE_MODEL_SERVICES_KEY = 'model-services:connect-more'
 const OPEN_MODEL_SERVICES_CONFIG_KEY = 'model-services:open-config'
+const OPEN_MODEL_SERVICE_CONFIG_DIVIDER_KEY_PREFIX = 'model-services:open-service-config-divider:'
 
 export const useModelSelectBrowser = ({
   builtinPreviewModelOptions,
@@ -43,7 +49,7 @@ export const useModelSelectBrowser = ({
   onCloseModelSelect: () => void
   onSelectModel: (value: string) => void
   onConnectMoreModelServices?: () => void
-  onOpenModelServicesConfig?: () => void
+  onOpenModelServicesConfig?: (serviceKey?: string) => void
 }) => {
   const { t } = useTranslation()
   const hasModelSearchQuery = modelSearchValue.trim() !== ''
@@ -111,10 +117,9 @@ export const useModelSelectBrowser = ({
 
     const moreModelGroupChildren = (modelMenuGroups ?? [])
       .filter(group => group.options.length > 0)
-      .map(group => ({
-        key: group.key,
-        label: renderModelMenuGroupLabel(group),
-        children: group.options.map(option => ({
+      .map((group) => {
+        const serviceKey = resolveModelServiceKeyFromMenuGroup(group)
+        const modelItems: OverlayMenuItem[] = group.options.map(option => ({
           key: option.value,
           label: (
             <ModelSelectOptionLabel
@@ -125,7 +130,27 @@ export const useModelSelectBrowser = ({
           ),
           className: 'model-select-menu-item'
         }))
-      }))
+        const serviceActionItems: OverlayMenuItem[] = serviceKey == null || onOpenModelServicesConfig == null
+          ? []
+          : [
+            {
+              type: 'divider' as const,
+              key: `${OPEN_MODEL_SERVICE_CONFIG_DIVIDER_KEY_PREFIX}${encodeURIComponent(serviceKey)}`
+            },
+            {
+              key: buildOpenModelServiceConfigMenuKey(serviceKey),
+              icon: 'settings',
+              label: t('chat.modelOpenModelServiceDetails'),
+              className: 'model-select-menu-action-item'
+            }
+          ]
+
+        return {
+          key: group.key,
+          label: renderModelMenuGroupLabel(group),
+          children: [...modelItems, ...serviceActionItems]
+        }
+      })
     const moreModelActionItems: OverlayMenuItem[] = [
       ...(moreModelGroupChildren.length > 0
         ? [{
@@ -232,6 +257,13 @@ export const useModelSelectBrowser = ({
       onCloseModelSelect()
       onModelSearchValueChange('')
       onOpenModelServicesConfig?.()
+      return
+    }
+    const serviceConfigKey = parseOpenModelServiceConfigMenuKey(key)
+    if (serviceConfigKey != null) {
+      onCloseModelSelect()
+      onModelSearchValueChange('')
+      onOpenModelServicesConfig?.(serviceConfigKey)
       return
     }
     onSelectModel(key.replace(/^(service-preview:|builtin-preview:|recommended:|search-results:)/, ''))

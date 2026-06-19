@@ -35,6 +35,14 @@ import { resolveWorkspaceFileOpenerSelectModels } from '../utils/workspace-file-
 import { AboutSection, ConfigSectionPanel, ConfigSourceSwitch, DisplayValue } from './config'
 import { AppSettingsPanel } from './config/AppSettingsPanel'
 import { DesktopSettingsPanel } from './config/DesktopSettingsPanel'
+import {
+  ModelServiceProviderPortalBottomPanel,
+  addModelServiceProviderPortalTab,
+  closeModelServiceProviderPortalTab,
+  emptyModelServiceProviderPortalTabsState,
+  syncModelServiceProviderPortalTabs
+} from './config/ModelServiceProviderPortalBottomPanel'
+import type { ModelServiceProviderPortalRequest } from './config/ModelServiceProviderPortalBottomPanel'
 import { WorktreeEnvironmentPanel } from './config/WorktreeEnvironmentPanel'
 import {
   getConfigDraftKey,
@@ -56,6 +64,8 @@ import {
   getModelServiceConfigSessionActionKey
 } from './config/modelServiceConfigSession'
 import type { ModelServiceConfigSessionRequest } from './config/modelServiceConfigSession'
+import { openExternalUrl } from './config/modelServiceProviderActionUtils'
+import { modelServiceImportQueryKeys, parseModelServiceQueryImport } from './config/modelServiceQueryImport'
 import { toDisplayEnvironmentName, toEnvironmentReference } from './config/worktree-environment-panel-model'
 
 interface ConfigDraftConflict {
@@ -73,8 +83,8 @@ interface ConfigQueryParams extends Record<string, string> {
 }
 
 const configSourceKeys = ['global', 'project', 'user'] as const
-const configQueryKeys: string[] = ['tab', 'source', 'detail', 'section']
-const configQueryDefaults: ConfigQueryParams = { tab: 'general', source: '', detail: '', section: '' }
+const configQueryKeys: string[] = ['tab', 'source', 'detail', 'section', ...modelServiceImportQueryKeys]
+const configQueryDefaults: Partial<ConfigQueryParams> = { tab: 'general', source: '', detail: '', section: '' }
 const configQueryOmit = {
   detail: (value: string) => value.trim() === '',
   section: (value: string) => value.trim() === ''
@@ -82,6 +92,22 @@ const configQueryOmit = {
 const CONFIG_ROUTE_SIDEBAR_KEY = 'config-view'
 const isConfigSourceKey = (value: string): value is ConfigSource => (
   configSourceKeys.includes(value as ConfigSource)
+)
+const isRecordObject = (value: unknown): value is Record<string, unknown> => (
+  value != null &&
+  typeof value === 'object' &&
+  !Array.isArray(value)
+)
+const resolveUniqueModelServiceKey = (baseKey: string, modelServices: Record<string, unknown>) => {
+  if (!Object.hasOwn(modelServices, baseKey)) return baseKey
+  for (let index = 2; index < 1000; index += 1) {
+    const nextKey = `${baseKey}-${index}`
+    if (!Object.hasOwn(modelServices, nextKey)) return nextKey
+  }
+  return `${baseKey}-${Date.now()}`
+}
+const getModelServiceImportClearPatch = () => (
+  Object.fromEntries(modelServiceImportQueryKeys.map(key => [key, ''])) as Partial<ConfigQueryParams>
 )
 
 export function ConfigView() {
@@ -133,6 +159,11 @@ export function ConfigView() {
   const [pendingConflicts, setPendingConflicts] = useState<Record<string, ConfigDraftConflict>>({})
   const [activeConflictKey, setActiveConflictKey] = useState<string | null>(null)
   const [creatingModelServiceSessionKey, setCreatingModelServiceSessionKey] = useState<string | null>(null)
+  const [isModelServicePortalPanelOpen, setModelServicePortalPanelOpen] = useState(false)
+  const [modelServicePortalTabsState, setModelServicePortalTabsState] = useState(
+    emptyModelServiceProviderPortalTabsState
+  )
+  const consumedModelServiceImportRef = useRef<string | null>(null)
   const mergedModelServices = useMemo(() => data?.sources?.merged?.modelServices ?? {}, [
     data?.sources?.merged?.modelServices
   ])
@@ -419,6 +450,35 @@ export function ConfigView() {
     sourceKey,
     t
   ])
+  useEffect(() => {
+    if (modelServicePortalTabsState.tabs.length > 0) return
+    setModelServicePortalPanelOpen(false)
+  }, [modelServicePortalTabsState.tabs.length])
+
+  const handleOpenModelServicePortal = useCallback((request: ModelServiceProviderPortalRequest) => {
+    setModelServicePortalTabsState(current => addModelServiceProviderPortalTab(current, request))
+    setModelServicePortalPanelOpen(true)
+  }, [])
+
+  const handleCloseModelServicePortalPanel = useCallback(() => {
+    setModelServicePortalPanelOpen(false)
+  }, [])
+
+  const handleModelServicePortalTabChange = useCallback((tabKey: string | null, openedTabs: string[]) => {
+    setModelServicePortalTabsState(current => syncModelServiceProviderPortalTabs(current, tabKey, openedTabs))
+  }, [])
+
+  const handleModelServicePortalTabClose = useCallback((tabKey: string) => {
+    setModelServicePortalTabsState(current => closeModelServiceProviderPortalTab(current, tabKey))
+  }, [])
+
+  const handleOpenModelServicePortalExternal = useCallback(async (url: string) => {
+    try {
+      await openExternalUrl(url)
+    } catch {
+      void message.error(t('config.modelServices.results.actionFailed'))
+    }
+  }, [message, t])
   const closeConfigDetail = useCallback(() => {
     const route = activeConfigDetail?.route
     if (route != null && (route.nestedPath?.length ?? 0) > 0) {
@@ -552,6 +612,57 @@ export function ConfigView() {
     setDrafts(prev => ({ ...prev, [draftKey]: nextValue }))
     scheduleSave(sectionKey, source, nextValue)
   }
+
+  useEffect(() => {
+    if (!canRenderConfig) return
+
+    const imported = parseModelServiceQueryImport(searchParams)
+    if (imported == null) return
+
+    const importSignature = searchParams.toString()
+    if (consumedModelServiceImportRef.current === importSignature) return
+    consumedModelServiceImportRef.current = importSignature
+
+    const targetSource = isConfigSourceKey(searchParams.get('source') ?? '')
+      ? searchParams.get('source') as ConfigSource
+      : 'global'
+    const draftKey = getConfigDraftKey('modelServices', targetSource)
+    const serverValue = data?.sources?.[targetSource]?.modelServices
+    const currentValue = draftsRef.current[draftKey] ?? cloneValue(serverValue ?? {}) ?? {}
+    const currentModelServices = isRecordObject(currentValue) ? currentValue : {}
+    const itemKey = resolveUniqueModelServiceKey(imported.key, currentModelServices)
+    const nextModelServices = {
+      ...currentModelServices,
+      [itemKey]: imported.service
+    }
+    const detail = serializeConfigDetailRoute({
+      kind: 'detailCollectionItem',
+      fieldPath: [],
+      itemKey
+    })
+
+    setSourceKeyState(targetSource)
+    setActiveTabKeyState('modelServices')
+    setDetailQueryState(detail)
+    setDrafts(prev => ({ ...prev, [draftKey]: nextModelServices }))
+    scheduleSave('modelServices', targetSource, nextModelServices)
+    updateQuery({
+      ...getModelServiceImportClearPatch(),
+      detail,
+      section: '',
+      source: targetSource,
+      tab: 'modelServices'
+    })
+    void message.success(t('config.modelServices.import.created', { name: itemKey }))
+  }, [
+    canRenderConfig,
+    data?.sources,
+    message,
+    searchParams,
+    scheduleSave,
+    t,
+    updateQuery
+  ])
 
   const handleCreateModelServiceSession = useCallback(async (request: ModelServiceConfigSessionRequest) => {
     const actionKey = getModelServiceConfigSessionActionKey(request)
@@ -873,6 +984,7 @@ export function ConfigView() {
           workspaceFileOpenerOptions={workspaceFileOpenerOptions}
           detailQuery={activeTabKey === tab.key ? detailQuery : ''}
           onDetailQueryChange={activeTabKey === tab.key ? setDetailQuery : undefined}
+          onOpenModelServicePortal={activeTabKey === tab.key ? handleOpenModelServicePortal : undefined}
           creatingModelServiceSessionKey={creatingModelServiceSessionKey}
           onCreateModelServiceSession={handleCreateModelServiceSession}
           t={t}
@@ -909,6 +1021,20 @@ export function ConfigView() {
     <RouteContainerLayout
       className={`config-view ${isCompactView ? 'config-view--compact' : ''}`}
       bodyClassName={`config-view__body ${isCompactView ? 'config-view__body--compact' : 'config-view__body--desktop'}`}
+      bottomPanel={isModelServicePortalPanelOpen && modelServicePortalTabsState.tabs.length > 0
+        ? ({ isClosing }) => (
+          <ModelServiceProviderPortalBottomPanel
+            activeTabKey={modelServicePortalTabsState.activeTabKey}
+            isOpen={!isClosing}
+            tabs={modelServicePortalTabsState.tabs}
+            t={t}
+            onClose={handleCloseModelServicePortalPanel}
+            onOpenExternal={(url) => void handleOpenModelServicePortalExternal(url)}
+            onTabChange={handleModelServicePortalTabChange}
+            onTabClose={handleModelServicePortalTabClose}
+          />
+        )
+        : undefined}
       contentInset
       header={
         <RouteContainerHeader

@@ -157,3 +157,19 @@ describe('model select control trigger icon', () => {
     expect(html).not.toContain('model_training')
   })
 })
+
+describe('model service config menu keys', () => {
+  it('round-trips model service keys through menu action keys', async () => {
+    const {
+      buildOpenModelServiceConfigMenuKey,
+      parseOpenModelServiceConfigMenuKey
+    } = await import(
+      '#~/components/chat/sender/@components/model-select/model-service-config-menu'
+    )
+
+    const key = buildOpenModelServiceConfigMenuKey('project/kimi code')
+
+    expect(parseOpenModelServiceConfigMenuKey(key)).toBe('project/kimi code')
+    expect(parseOpenModelServiceConfigMenuKey('model-services:connect-more')).toBeUndefined()
+  })
+})

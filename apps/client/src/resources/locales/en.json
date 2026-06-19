@@ -59,6 +59,8 @@
     "close": "Close",
     "enterFullscreen": "Fullscreen",
     "exitFullscreen": "Exit fullscreen",
+    "expandPanel": "Expand panel",
+    "collapsePanel": "Collapse panel",
     "sort": "Sort order",
     "tags": "Tags",
     "allTags": "All tags",
@@ -2052,6 +2054,7 @@
     "modelMoreModels": "More models",
     "modelConnectMoreServices": "Connect more",
     "modelOpenModelServicesConfig": "Open config",
+    "modelOpenModelServiceDetails": "Open service details",
     "availableTools": "Available Tools",
     "availableToolsEmpty": "No tools are available for this session yet.",
     "toolGroupChromeDevtools": "ChromeDevtools",
@@ -2873,7 +2876,11 @@
         "hostMatch": "Detected from API host",
         "custom": "Custom compatible service"
       },
+      "import": {
+        "created": "Created model service {{name}}"
+      },
       "actions": {
+        "more": "More",
         "openHomepage": "Management Console",
         "openExternal": "Open in external browser",
         "createSecret": "Create Secret",
@@ -2902,11 +2909,46 @@
       "plan": {
         "title": "Subscription plan",
         "labels": {
-          "kind": "Billing",
-          "keyKind": "Key",
-          "quota": "Quota",
-          "allowedUse": "Use",
-          "defaultModels": "Default models"
+          "kind": "Plan type",
+          "keyKind": "Key type",
+          "liveQuota": "Live quota",
+          "allowedUse": "Allowed use",
+          "endpoints": "Dedicated base URLs",
+          "defaultModels": "Default models",
+          "window": "Window",
+          "periodQuota": "Period quota",
+          "planLevel": "Plan level",
+          "resetTime": "Reset time",
+          "parallelLimit": "Parallel limit"
+        },
+        "liveQuota": {
+          "failed": "Query failed",
+          "loading": "Loading...",
+          "notQueried": "Not queried",
+          "windowSummary": "{{duration}}: {{amount}}"
+        },
+        "quotaProgress": {
+          "percentValue": "{{value}}%",
+          "resetAt": "resets at {{time}}",
+          "weekly": "1 week quota",
+          "monthly": "Monthly quota",
+          "window": "{{duration}} quota"
+        },
+        "duration": {
+          "hours": "{{count}}h",
+          "generic": "{{count}} {{unit}}"
+        },
+        "timeUnit": {
+          "minute": "minute",
+          "hour": "hour",
+          "day": "day",
+          "week": "week",
+          "month": "month"
+        },
+        "restrictions": {
+          "codingToolsOnly": "Use only from interactive coding tools; do not use it for backend batch jobs, automation scripts, or general API workloads.",
+          "dedicatedKey": "Use the plan-specific key with the plan-specific base URL. Pay-as-you-go API keys and normal API base URLs are not interchangeable.",
+          "kimiSeparateBaseUrl": "Kimi Code uses a separate base URL from the Moonshot Open Platform API."
         },
         "links": {
           "purchase": "Purchase",
@@ -2928,7 +2970,8 @@
         "quotaUnit": {
           "request": "Requests",
           "token": "Tokens",
-          "credit": "Credits"
+          "credit": "Credits",
+          "percent": "Percent"
         },
         "quotaWindow": {
           "5h": "5h",
@@ -2942,8 +2985,9 @@
       },
       "portal": {
         "secretTitle": "{{provider}} Secret Management",
-        "iframeHint": "Browser mode opens this page in an iframe. Use the external browser if the provider blocks embedding.",
-        "webviewHint": "Electron mode opens this page in a webview. Use the external browser if login or payment pages are restricted."
+        "tabsLabel": "Service pages",
+        "closePanel": "Close service pages",
+        "resizePanel": "Resize service pages"
       },
       "status": {
         "operational": "Operational",
@@ -3805,7 +3849,13 @@
     },
     "sectionGroups": {
       "base": "Base Configuration",
+      "profile": "Service Info",
+      "access": "Access",
+      "providerAccess": "Access Overrides",
+      "customization": "Display & Links",
       "models": "Model Configuration",
+      "management": "Management",
+      "plan": "Plan Metadata",
       "advanced": "Advanced Configuration",
       "advancedModels": "Advanced Model Rules",
       "advancedRuntime": "Runtime Options",

@@ -180,7 +180,7 @@ const getKimiCodeAccountStatus = async (
 
   return {
     kind: 'quota',
-    unit: 'request',
+    unit: 'percent',
     limit: totalQuota.limit ?? usage.limit,
     remaining: totalQuota.remaining ?? usage.remaining,
     resetTime: totalQuota.resetTime ?? usage.resetTime,

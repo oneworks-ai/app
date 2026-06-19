@@ -88,81 +88,26 @@
   border: none;
   border-radius: 0;
   background: transparent;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   box-sizing: border-box;
-  --config-surface-bg-1: #ffffff;
-  --config-surface-border-1: #d8e0ea;
-  --config-surface-hover-bg-1: #f6f9fc;
-  --config-surface-hover-border-1: #c8d5e4;
-  --config-surface-bg-2: #f7f9fc;
-  --config-surface-border-2: #d3dbe6;
-  --config-surface-hover-bg-2: #eef3f8;
-  --config-surface-hover-border-2: #c2cfde;
-  --config-surface-bg-3: #eef3f8;
-  --config-surface-border-3: #c9d5e2;
-  --config-surface-hover-bg-3: #e4ebf3;
-  --config-surface-hover-border-3: #b5c5d8;
-  --config-surface-bg-4: #e6edf5;
-  --config-surface-border-4: #bfccdc;
-  --config-surface-hover-bg-4: #dde6f0;
-  --config-surface-hover-border-4: #acbfd5;
-}
-
-html.dark .config-view__section-body {
-  --config-surface-bg-1: #171b22;
-  --config-surface-border-1: #2d3541;
-  --config-surface-hover-bg-1: #202834;
-  --config-surface-hover-border-1: #3d4a5b;
-  --config-surface-bg-2: #1d242d;
-  --config-surface-border-2: #343f4e;
-  --config-surface-hover-bg-2: #273140;
-  --config-surface-hover-border-2: #48586d;
-  --config-surface-bg-3: #232c37;
-  --config-surface-border-3: #3c495a;
-  --config-surface-hover-bg-3: #2e3948;
-  --config-surface-hover-border-3: #53667d;
-  --config-surface-bg-4: #29333f;
-  --config-surface-border-4: #455365;
-  --config-surface-hover-bg-4: #354253;
-  --config-surface-hover-border-4: #60758d;
+  --config-interactive-bg: var(--app-shell-content-bg);
+  --config-interactive-border: var(--border-color);
+  --config-interactive-hover-bg: var(--bg-color, #fff);
+  --config-interactive-hover-border: var(--border-color);
 }
 
 .config-view__section-body
-  :is(.config-view__field-row, .config-view__record-card, .config-view__array-item, .config-view__complex-editor, .config-view__record-add-inputs, .config-view__detail-list-empty) {
-  --subpage-tertiary-border: 1px solid var(--config-surface-border-1);
-  --subpage-tertiary-bg: var(--config-surface-bg-1);
-  --subpage-tertiary-hover-bg: var(--config-surface-hover-bg-1);
-  --subpage-tertiary-hover-border: var(--config-surface-hover-border-1);
+  :is(.config-view__field-row, .config-view__record-card, .config-view__array-item, .config-view__complex-editor, .config-view__record-add-inputs, .config-view__detail-list-empty, .config-view__detail-notice, .config-view__model-service-actions) {
+  --subpage-tertiary-border: 1px solid var(--config-interactive-border);
+  --subpage-tertiary-bg: var(--config-interactive-bg);
+  --subpage-tertiary-hover-bg: var(--config-interactive-hover-bg);
+  --subpage-tertiary-hover-border: var(--config-interactive-hover-border);
 }
 
 .config-view__section-body
-  :is(.config-view__field-row, .config-view__record-card, .config-view__array-item, .config-view__complex-editor, .config-view__record-add-inputs, .config-view__detail-list-empty)
-  :is(.config-view__field-row, .config-view__record-card, .config-view__array-item, .config-view__complex-editor, .config-view__record-add-inputs, .config-view__detail-list-empty) {
-  --subpage-tertiary-border: 1px solid var(--config-surface-border-2);
-  --subpage-tertiary-bg: var(--config-surface-bg-2);
-  --subpage-tertiary-hover-bg: var(--config-surface-hover-bg-2);
-  --subpage-tertiary-hover-border: var(--config-surface-hover-border-2);
-}
-
-.config-view__section-body
-  :is(.config-view__field-row, .config-view__record-card, .config-view__array-item, .config-view__complex-editor, .config-view__record-add-inputs, .config-view__detail-list-empty)
-  :is(.config-view__field-row, .config-view__record-card, .config-view__array-item, .config-view__complex-editor, .config-view__record-add-inputs, .config-view__detail-list-empty)
-  :is(.config-view__field-row, .config-view__record-card, .config-view__array-item, .config-view__complex-editor, .config-view__record-add-inputs, .config-view__detail-list-empty) {
-  --subpage-tertiary-border: 1px solid var(--config-surface-border-3);
-  --subpage-tertiary-bg: var(--config-surface-bg-3);
-  --subpage-tertiary-hover-bg: var(--config-surface-hover-bg-3);
-  --subpage-tertiary-hover-border: var(--config-surface-hover-border-3);
-}
-
-.config-view__section-body
-  :is(.config-view__field-row, .config-view__record-card, .config-view__array-item, .config-view__complex-editor, .config-view__record-add-inputs, .config-view__detail-list-empty)
-  :is(.config-view__field-row, .config-view__record-card, .config-view__array-item, .config-view__complex-editor, .config-view__record-add-inputs, .config-view__detail-list-empty)
-  :is(.config-view__field-row, .config-view__record-card, .config-view__array-item, .config-view__complex-editor, .config-view__record-add-inputs, .config-view__detail-list-empty)
-  :is(.config-view__field-row, .config-view__record-card, .config-view__array-item, .config-view__complex-editor, .config-view__record-add-inputs, .config-view__detail-list-empty) {
-  --subpage-tertiary-border: 1px solid var(--config-surface-border-4);
-  --subpage-tertiary-bg: var(--config-surface-bg-4);
-  --subpage-tertiary-hover-bg: var(--config-surface-hover-bg-4);
-  --subpage-tertiary-hover-border: var(--config-surface-hover-border-4);
+  :is(.config-view__field-row, .config-view__record-card, .config-view__array-item, .config-view__complex-editor, .config-view__record-add-inputs, .config-view__detail-list-empty, .config-view__detail-notice, .config-view__model-service-actions):is(:hover, :focus-within) {
+  --subpage-tertiary-bg: var(--config-interactive-hover-bg);
 }
 
 .config-view__section-body + .config-view__section-body {
@@ -664,9 +609,281 @@ html.dark .config-view__section-body {
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 76%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--sub-bg-color) 78%, transparent);
+  border: var(--subpage-tertiary-border);
+  border-radius: var(--subpage-tertiary-radius);
+  background: var(--subpage-tertiary-bg);
+}
+
+.config-view__record-card:has(.config-view__model-service-list-tray) {
+  container-type: inline-size;
+  overflow: hidden;
+}
+
+.config-view__model-service-list-tray {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  min-width: 62px;
+  min-height: 34px;
+  overflow: visible;
+  --config-model-service-card-padding: var(--subpage-tertiary-padding, 8px);
+  --config-model-service-list-overlay-width: max(180px, 50cqw);
+}
+
+.config-view__model-service-list-tray:has(.config-view__model-service-list-quota) {
+  height: 34px;
+  min-height: 34px;
+}
+
+.config-view__model-service-list-tray:not(:has(.config-view__model-service-list-quota)) {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+}
+
+.config-view__model-service-list-quota {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 34px;
+  min-width: 0;
+  border-radius: 999px;
+}
+
+.config-view__model-service-list-quota-row {
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: 2px;
+  width: 28px;
+  min-width: 28px;
+  height: 34px;
+}
+
+.config-view__model-service-list-quota-circle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--subpage-tertiary-bg);
+}
+
+.config-view__model-service-list-quota-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform: rotate(0deg);
+  transform-origin: 50% 50%;
+}
+
+.config-view__model-service-list-quota-track,
+.config-view__model-service-list-quota-progress {
+  fill: none;
+  stroke-width: 3px;
+}
+
+.config-view__model-service-list-quota-track {
+  stroke: color-mix(in srgb, var(--border-color) 44%, transparent);
+}
+
+.config-view__model-service-list-quota-progress {
+  stroke: var(--primary-color);
+  stroke-linecap: round;
+  transition: stroke-dashoffset .18s ease;
+}
+
+.config-view__model-service-list-quota-circle.is-loading
+  .config-view__model-service-list-quota-svg {
+  animation: config-view-quota-preview-spin .8s linear infinite;
+}
+
+.config-view__model-service-list-quota-circle.is-loading
+  .config-view__model-service-list-quota-progress {
+  opacity: .84;
+}
+
+.config-view__model-service-list-quota-circle.is-error
+  .config-view__model-service-list-quota-progress {
+  stroke: var(--error-color, #dc2626);
+}
+
+.config-view__model-service-list-quota-circle.is-empty
+  .config-view__model-service-list-quota-progress {
+  opacity: 0;
+}
+
+@keyframes config-view-quota-preview-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.config-view__model-service-list-quota-label {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--sub-text-color);
+  font-size: 9px;
+  line-height: 10px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-view__model-service-list-actions {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  min-width: 0;
+}
+
+.config-view__model-service-list-tray:has(.config-view__model-service-list-quota)
+  .config-view__model-service-list-actions {
+  position: absolute;
+  inset-block: calc(0px - var(--config-model-service-card-padding));
+  inset-inline: auto calc(0px - var(--config-model-service-card-padding));
+  z-index: 1;
+  width: calc(
+    var(--config-model-service-list-overlay-width) +
+      var(--config-model-service-card-padding)
+  );
+  min-height: 100%;
+  padding-inline-end: var(--config-model-service-card-padding);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  opacity: 0;
+  pointer-events: none;
+  transform: none;
+  transition: opacity .16s ease;
+}
+
+.config-view__model-service-list-tray:has(.config-view__model-service-list-quota)
+  .config-view__model-service-list-actions::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    90deg,
+    transparent 0,
+    color-mix(in srgb, var(--subpage-tertiary-bg) 24%, transparent) 18px,
+    color-mix(in srgb, var(--subpage-tertiary-bg) 58%, transparent) 52px,
+    color-mix(in srgb, var(--subpage-tertiary-bg) 82%, transparent) 100%
+  );
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    rgba(0, 0, 0, .26) 18px,
+    rgba(0, 0, 0, .74) 52px,
+    #000 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    rgba(0, 0, 0, .26) 18px,
+    rgba(0, 0, 0, .74) 52px,
+    #000 100%
+  );
+}
+
+.config-view__record-card:hover .config-view__model-service-list-actions,
+.config-view__record-card:focus-within .config-view__model-service-list-actions,
+.config-view__model-service-list-tray:hover
+  .config-view__model-service-list-actions,
+.config-view__model-service-list-tray:focus-within
+  .config-view__model-service-list-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.config-view__model-service-list-actions
+  :is(.config-view__record-actions, .config-view__detail-action-btn) {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transform: none;
+}
+
+.config-view__model-service-list-actions .config-view__icon-button.ant-btn {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--sub-text-color);
+  transition: color .18s ease;
+}
+
+.config-view__model-service-list-actions
+  .config-view__icon-button.ant-btn:not(:disabled):hover,
+.config-view__model-service-list-actions
+  .config-view__icon-button.ant-btn:not(:disabled):focus-visible,
+.config-view__model-service-list-actions
+  .config-view__icon-button.ant-btn:not(:disabled):active {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--primary-color);
+}
+
+.config-view__model-service-list-actions
+  .config-view__icon-button.ant-btn:disabled {
+  border-color: transparent;
+  background: transparent;
+  color: color-mix(in srgb, var(--sub-text-color) 62%, transparent);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.config-view__model-service-list-actions
+  .config-view__icon-button
+  .material-symbols-rounded {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+@media (max-width: 860px) {
+  .config-view__detail-list-row:has(.config-view__model-service-list-tray) {
+    flex-wrap: wrap;
+  }
+
+  .config-view__model-service-list-tray {
+    order: 2;
+    flex: 1 1 100%;
+    place-items: start;
+  }
+
+  .config-view__model-service-list-quota {
+    justify-content: flex-start;
+    max-width: none;
+  }
 }
 
 .config-view__model-service-action-header {
@@ -675,12 +892,14 @@ html.dark .config-view__section-body {
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .config-view__model-service-action-title {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -691,42 +910,120 @@ html.dark .config-view__section-body {
   line-height: 18px;
 }
 
-.config-view__model-service-action-subtitle {
-  overflow: hidden;
-  color: var(--sub-text-color);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .config-view__model-service-action-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   object-fit: contain;
   color: var(--sub-text-color);
-  font-size: 20px;
-  line-height: 22px;
+  font-size: 18px;
+  line-height: 18px;
+}
+
+.config-view__model-service-action-header-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  flex: 0 0 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.config-view__model-service-more-button.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--sub-text-color);
+  transition: color .18s ease;
+}
+
+.config-view__model-service-more-button.ant-btn:not(:disabled):hover,
+.config-view__model-service-more-button.ant-btn:not(:disabled):focus-visible,
+.config-view__model-service-more-button.ant-btn:not(:disabled):active {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--primary-color);
 }
 
 .config-view__model-service-action-buttons {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-end;
+  gap: 2px;
+  min-width: 0;
   flex-wrap: wrap;
 }
 
 .config-view__model-service-action-buttons .ant-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--sub-text-color);
+  transition: color .18s ease;
 }
 
-.config-view__model-service-action-buttons .material-symbols-rounded {
+.config-view__model-service-action-buttons
+  .ant-btn:not(:disabled):not(.ant-btn-primary):hover,
+.config-view__model-service-action-buttons
+  .ant-btn:not(:disabled):not(.ant-btn-primary):focus-visible,
+.config-view__model-service-action-buttons
+  .ant-btn:not(:disabled):not(.ant-btn-primary):active {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--primary-color);
+}
+
+.config-view__model-service-action-buttons .ant-btn-primary {
+  border-color: transparent;
+  background: transparent;
+  color: var(--primary-color);
+}
+
+.config-view__model-service-action-buttons
+  .ant-btn-primary:not(:disabled):hover,
+.config-view__model-service-action-buttons
+  .ant-btn-primary:not(:disabled):focus-visible,
+.config-view__model-service-action-buttons
+  .ant-btn-primary:not(:disabled):active {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--primary-color);
+}
+
+.config-view__model-service-action-buttons .ant-btn:disabled {
+  border-color: transparent;
+  background: transparent;
+  color: color-mix(in srgb, var(--sub-text-color) 62%, transparent);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.config-view__model-service-action-buttons .material-symbols-rounded,
+.config-view__model-service-more-button .material-symbols-rounded {
+  width: 16px;
+  height: 16px;
   font-size: 16px;
   line-height: 1;
 }
@@ -736,101 +1033,66 @@ html.dark .config-view__section-body {
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   min-width: 0;
-  padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--bg-color) 64%, transparent);
 }
 
-.config-view__model-service-plan-header {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  color: var(--text-color);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.config-view__model-service-plan-header .material-symbols-rounded {
-  color: var(--warning-color);
-  font-size: 16px;
-  line-height: 1;
-}
-
-.config-view__model-service-plan-grid {
+.config-view__model-service-quota-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 6px 10px;
-  min-width: 0;
-}
-
-.config-view__model-service-plan-row,
-.config-view__model-service-plan-endpoint {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   min-width: 0;
-  color: var(--sub-text-color);
-  font-size: 12px;
-  line-height: 18px;
 }
 
-.config-view__model-service-plan-row strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-color);
-  font-weight: 600;
-  text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.config-view__model-service-plan-endpoints {
+.config-view__model-service-quota-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
 }
 
-.config-view__model-service-plan-endpoint code {
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  color: var(--text-color);
-  font-size: 11px;
-  text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.config-view__model-service-plan-models {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
-  min-width: 0;
-  color: var(--sub-text-color);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.config-view__model-service-plan-links {
+.config-view__model-service-quota-head {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
   flex-wrap: wrap;
+  color: var(--sub-text-color);
+  font-size: 12px;
+  line-height: 18px;
 }
 
-.config-view__model-service-plan-links .ant-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+.config-view__model-service-quota-head strong {
+  min-width: 0;
+  color: var(--text-color);
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
-.config-view__model-service-plan-links .material-symbols-rounded {
-  font-size: 15px;
-  line-height: 1;
+.config-view__model-service-quota-progress {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border-color) 42%, transparent);
+}
+
+.config-view__model-service-quota-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary-color);
+  transition: width .18s ease;
+}
+
+.config-view__model-service-quota-meta {
+  min-width: 0;
+  color: var(--sub-text-color);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .config-view__model-service-action-results {
@@ -930,25 +1192,45 @@ html.dark .config-view__section-body {
 }
 
 .config-view__model-service-portal {
-  display: grid;
-  grid-template-rows: minmax(360px, 62vh) auto;
-  gap: 8px;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  display: block;
+  flex: 1 1 auto;
   min-height: 0;
 }
 
 .config-view__model-service-portal-frame {
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
-  min-height: 360px;
+  min-height: 320px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
   background: var(--bg-color);
 }
 
-.config-view__model-service-portal-hint {
-  color: var(--sub-text-color);
-  font-size: 12px;
-  line-height: 18px;
+.config-view__model-service-portal-bottom-panel {
+  background: var(--bg-color);
+}
+
+.config-view__model-service-portal-bottom-panel-dock {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.config-view__model-service-portal-bottom-panel
+  .config-view__model-service-portal {
+  height: 100%;
+  padding: 0;
+}
+
+.config-view__model-service-portal-bottom-panel
+  .config-view__model-service-portal-frame {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
 }
 
 .config-view__section-title {

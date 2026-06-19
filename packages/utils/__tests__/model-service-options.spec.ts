@@ -56,7 +56,7 @@ describe('model service options', () => {
     ])
   })
 
-  it('uses fetched Kimi model order before provider catalog fallbacks', () => {
+  it('merges official provider catalog models with fetched service models', () => {
     expect(listServiceModels({
       kimi: {
         provider: 'moonshot-intl',
@@ -66,8 +66,8 @@ describe('model service options', () => {
     })).toEqual([
       {
         serviceKey: 'kimi',
-        model: 'moonshot-v1-128k-vision-preview',
-        selectorValue: 'kimi,moonshot-v1-128k-vision-preview'
+        model: 'kimi-k2.7-code',
+        selectorValue: 'kimi,kimi-k2.7-code'
       },
       {
         serviceKey: 'kimi',
@@ -76,8 +76,23 @@ describe('model service options', () => {
       },
       {
         serviceKey: 'kimi',
-        model: 'kimi-k2.7-code',
-        selectorValue: 'kimi,kimi-k2.7-code'
+        model: 'kimi-k2.5',
+        selectorValue: 'kimi,kimi-k2.5'
+      },
+      {
+        serviceKey: 'kimi',
+        model: 'kimi-k2-0905-preview',
+        selectorValue: 'kimi,kimi-k2-0905-preview'
+      },
+      {
+        serviceKey: 'kimi',
+        model: 'kimi-k2',
+        selectorValue: 'kimi,kimi-k2'
+      },
+      {
+        serviceKey: 'kimi',
+        model: 'moonshot-v1-128k-vision-preview',
+        selectorValue: 'kimi,moonshot-v1-128k-vision-preview'
       }
     ])
   })
@@ -177,22 +192,18 @@ describe('model service options', () => {
     ).toBe('baidu-qianfan-coding-plan')
   })
 
-  it('keeps coding plan catalog models overridable by explicit service models', () => {
+  it('merges coding plan catalog models with explicit service models', () => {
     expect(
       listServiceModels({
         kimiCode: {
           provider: 'kimi-code',
-          apiKey: 'token'
-        },
-        qwenCoding: {
-          provider: 'qwen-coding-plan',
           apiKey: 'token',
-          models: ['qwen3-coder-plus']
+          models: ['kimi-for-coding', 'kimi-custom']
         }
       }).map(option => option.selectorValue)
     ).toEqual([
       'kimiCode,kimi-for-coding',
-      'qwenCoding,qwen3-coder-plus'
+      'kimiCode,kimi-custom'
     ])
   })
 

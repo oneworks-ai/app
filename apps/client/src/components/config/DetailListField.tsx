@@ -13,6 +13,7 @@ import { getAdapterDisplay, resolveAdapterDisplayIcon } from '#~/resources/adapt
 import { renderIconRef } from '#~/utils/model-provider-icons'
 
 import { DetailCollectionFieldActions } from './DetailCollectionFieldActions'
+import { ModelServiceProviderQuotaPreview } from './ModelServiceProviderQuotaPreview'
 import type { ConfigDetailRoute } from './configDetail'
 import { toDetailCollectionEntries } from './configDetail'
 import type { FieldSpec } from './configSchema'
@@ -294,6 +295,79 @@ export const DetailCollectionField = ({
         const displaySubtitle = sectionKey === 'adapters'
           ? resolveAdapterListSubtitle({ item, fallbackSubtitle: subtitle, t })
           : subtitle
+        const summaryControls = renderSummaryControls({
+          item,
+          itemKey: key,
+          title: displayTitle,
+          localIndex,
+          source: itemSource
+        })
+        const detailCollectionActions = (isListCollection || isRecordMapCollection) && itemSource === 'local'
+          ? (
+            <DetailCollectionFieldActions
+              index={localIndex ?? 0}
+              itemCount={isListCollection
+                ? localListItems.length
+                : items.filter(entry => entry.source === 'local').length}
+              onMove={isListCollection
+                ? (direction) => {
+                  if (localIndex == null) return
+                  moveItem(localIndex, direction)
+                }
+                : undefined}
+              onRemove={() => {
+                if (isListCollection) {
+                  if (localIndex == null) return
+                  removeItem(localIndex)
+                  return
+                }
+                removeRecordItem(key)
+              }}
+              t={t}
+            />
+          )
+          : null
+        const modelServiceInlineActions = sectionKey === 'modelServices'
+          ? (
+            <>
+              {onCreateModelServiceSession != null && (
+                <Tooltip title={t('config.actions.configureModelServiceWithSession')}>
+                  <Button
+                    type='text'
+                    size='small'
+                    className='config-view__icon-button config-view__icon-button--compact config-view__detail-action-btn'
+                    aria-label={t('config.actions.configureModelServiceWithSession')}
+                    loading={creatingModelServiceSessionKey === modelServiceUpdateActionKey}
+                    disabled={creatingModelServiceSessionKey != null &&
+                      creatingModelServiceSessionKey !== modelServiceUpdateActionKey}
+                    icon={<span className='material-symbols-rounded'>forum</span>}
+                    onClick={() =>
+                      void onCreateModelServiceSession({
+                        mode: 'update',
+                        service: item,
+                        serviceKey: key,
+                        source
+                      })}
+                  />
+                </Tooltip>
+              )}
+              {modelServiceHomepageUrl != null && (
+                <Tooltip title={t('config.actions.openModelServiceHomepage', { defaultValue: '打开管理主页' })}>
+                  <Button
+                    type='text'
+                    size='small'
+                    className='config-view__icon-button config-view__icon-button--compact config-view__detail-action-btn'
+                    aria-label={t('config.actions.openModelServiceHomepage', { defaultValue: '打开管理主页' })}
+                    icon={<span className='material-symbols-rounded'>open_in_new</span>}
+                    onClick={() => void openExternalUrl(modelServiceHomepageUrl)}
+                  />
+                </Tooltip>
+              )}
+              {summaryControls}
+              {detailCollectionActions}
+            </>
+          )
+          : null
         return (
           <div
             key={`${field.path.join('.')}:${key}:${title}`}
@@ -362,63 +436,28 @@ export const DetailCollectionField = ({
                   </div>
                 </div>
               </button>
-              {sectionKey === 'modelServices' && onCreateModelServiceSession != null && (
-                <Tooltip title={t('config.actions.configureModelServiceWithSession')}>
-                  <Button
-                    type='text'
-                    size='small'
-                    className='config-view__icon-button config-view__icon-button--compact config-view__detail-action-btn'
-                    aria-label={t('config.actions.configureModelServiceWithSession')}
-                    loading={creatingModelServiceSessionKey === modelServiceUpdateActionKey}
-                    disabled={creatingModelServiceSessionKey != null &&
-                      creatingModelServiceSessionKey !== modelServiceUpdateActionKey}
-                    icon={<span className='material-symbols-rounded'>forum</span>}
-                    onClick={() =>
-                      void onCreateModelServiceSession({
-                        mode: 'update',
-                        service: item,
-                        serviceKey: key,
-                        source
-                      })}
-                  />
-                </Tooltip>
-              )}
-              {modelServiceHomepageUrl != null && (
-                <Tooltip title={t('config.actions.openModelServiceHomepage', { defaultValue: '打开管理主页' })}>
-                  <Button
-                    type='text'
-                    size='small'
-                    className='config-view__icon-button config-view__icon-button--compact config-view__detail-action-btn'
-                    aria-label={t('config.actions.openModelServiceHomepage', { defaultValue: '打开管理主页' })}
-                    icon={<span className='material-symbols-rounded'>open_in_new</span>}
-                    onClick={() => void openExternalUrl(modelServiceHomepageUrl)}
-                  />
-                </Tooltip>
-              )}
-              {renderSummaryControls({ item, itemKey: key, title: displayTitle, localIndex, source: itemSource })}
-              {(isListCollection || isRecordMapCollection) && itemSource === 'local' && (
-                <DetailCollectionFieldActions
-                  index={localIndex ?? 0}
-                  itemCount={isListCollection
-                    ? localListItems.length
-                    : items.filter(entry => entry.source === 'local').length}
-                  onMove={isListCollection
-                    ? (direction) => {
-                      if (localIndex == null) return
-                      moveItem(localIndex, direction)
-                    }
-                    : undefined}
-                  onRemove={() => {
-                    if (isListCollection) {
-                      if (localIndex == null) return
-                      removeItem(localIndex)
-                      return
-                    }
-                    removeRecordItem(key)
-                  }}
-                  t={t}
-                />
-              )}
+              {sectionKey === 'modelServices'
+                ? (
+                  <div className='config-view__model-service-list-tray'>
+                    <ModelServiceProviderQuotaPreview
+                      item={item}
+                      serviceKey={key}
+                      source={source}
+                      t={t}
+                    />
+                    {modelServiceInlineActions != null && (
+                      <div className='config-view__model-service-list-actions'>
+                        {modelServiceInlineActions}
+                      </div>
+                    )}
+                  </div>
+                )
+                : (
+                  <>
+                    {summaryControls}
+                    {detailCollectionActions}
+                  </>
+                )}
             </div>
           </div>
         )

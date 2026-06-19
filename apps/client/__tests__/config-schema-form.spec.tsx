@@ -6,7 +6,7 @@ import type { ConfigUiSection } from '@oneworks/types'
 
 import { SectionForm } from '#~/components/config/ConfigSectionForm'
 import { parseConfigDetailRoute, serializeConfigDetailRoute } from '#~/components/config/configDetail'
-import { configSchema } from '#~/components/config/configSchema'
+import { configGroupMeta, configGroupOrder, configSchema } from '#~/components/config/configSchema'
 import { editableConfigSectionKeys } from '#~/components/config/editableConfigSections'
 
 vi.hoisted(() => {
@@ -582,15 +582,88 @@ describe('config schema form', () => {
     )
 
     expect(html).toContain('config.fields.modelServices.item.provider.label')
-    expect(html).toContain('config.fields.modelServices.item.apiBaseUrl.label')
-    expect(html).toContain('config.fields.modelServices.item.models.label')
-    expect(html).toContain('config.fields.modelServices.item.billing.label')
-    expect(html).toContain('config.fields.modelServices.item.codingPlan.label')
-    expect(html).toContain('config.modelServices.actions.queryModels')
-    expect(html).toContain('config.modelServices.actions.queryBalance')
+    expect(html).toContain('config.fields.modelServices.item.apiKey.label')
+    expect(html).toContain('config.sectionGroups.providerAccess')
+    expect(html).toContain('config.sectionGroups.models')
+    expect(html).toContain('config.sectionGroups.plan')
+    expect(html).toContain('config.modelServices.actions.openApiKeys')
+    expect(html).toContain('config.modelServices.actions.more')
   })
 
-  it('renders Coding Plan metadata in model service detail pages', () => {
+  it('groups model service detail fields by function', () => {
+    const itemFields = configSchema.modelServices?.[0]?.detailCollection?.itemFields ?? []
+    const groupFor = (path: string) => itemFields.find(field => field.path.join('.') === path)?.group
+    const resolvedGroupFor = (path: string, currentValue: unknown, currentResolvedValue?: unknown) => {
+      const field = itemFields.find(field => field.path.join('.') === path)
+      return field?.resolveGroup?.({ currentValue, currentResolvedValue }) ?? field?.group
+    }
+
+    expect(configGroupOrder.modelServices).toEqual([
+      'profile',
+      'access',
+      'providerAccess',
+      'customization',
+      'models',
+      'management',
+      'plan',
+      'advanced',
+      'default'
+    ])
+    expect(configGroupMeta.modelServices?.profile).toMatchObject({
+      labelKey: 'config.sectionGroups.profile',
+      defaultExpanded: true
+    })
+    expect(configGroupMeta.modelServices?.access).toMatchObject({
+      labelKey: 'config.sectionGroups.access',
+      defaultExpanded: true
+    })
+    expect(configGroupMeta.modelServices?.providerAccess).toMatchObject({
+      labelKey: 'config.sectionGroups.providerAccess',
+      defaultExpanded: false
+    })
+    expect(configGroupMeta.modelServices?.customization).toMatchObject({
+      labelKey: 'config.sectionGroups.customization',
+      defaultExpanded: false
+    })
+    expect(configGroupMeta.modelServices?.models).toMatchObject({
+      labelKey: 'config.sectionGroups.models',
+      defaultExpanded: false
+    })
+    expect(configGroupMeta.modelServices?.management).toMatchObject({
+      labelKey: 'config.sectionGroups.management',
+      defaultExpanded: false
+    })
+    expect(configGroupMeta.modelServices?.plan).toMatchObject({
+      labelKey: 'config.sectionGroups.plan',
+      defaultExpanded: false
+    })
+    expect(configGroupMeta.modelServices?.advanced).toMatchObject({
+      labelKey: 'config.sectionGroups.advanced',
+      defaultExpanded: false
+    })
+
+    expect(groupFor('provider')).toBe('profile')
+    expect(groupFor('title')).toBe('profile')
+    expect(groupFor('description')).toBe('profile')
+    expect(groupFor('icon')).toBe('customization')
+    expect(groupFor('homepageUrl')).toBe('customization')
+    expect(groupFor('apiBaseUrl')).toBe('access')
+    expect(resolvedGroupFor('apiBaseUrl', { provider: 'kimi-code' })).toBe('providerAccess')
+    expect(resolvedGroupFor('apiBaseUrl', {}, { provider: 'kimi-code' })).toBe('providerAccess')
+    expect(resolvedGroupFor('apiBaseUrl', {})).toBe('access')
+    expect(groupFor('apiKey')).toBe('access')
+    expect(groupFor('models')).toBe('models')
+    expect(groupFor('management.enabled')).toBe('management')
+    expect(groupFor('management.apiKey')).toBe('management')
+    expect(groupFor('billing')).toBe('plan')
+    expect(groupFor('codingPlan')).toBe('plan')
+    expect(groupFor('providerOptions')).toBe('advanced')
+    expect(groupFor('timeoutMs')).toBe('advanced')
+    expect(groupFor('maxOutputTokens')).toBe('advanced')
+    expect(groupFor('extra')).toBe('advanced')
+  })
+
+  it('renders Coding Plan service details without expanding the full plan metadata inline', () => {
     const html = renderToStaticMarkup(
       <SectionForm
         sectionKey='modelServices'
@@ -612,11 +685,37 @@ describe('config schema form', () => {
       />
     )
 
-    expect(html).toContain('Alibaba Cloud Model Studio Coding Plan')
-    expect(html).toContain('https://coding.dashscope.aliyuncs.com/v1')
-    expect(html).toContain('https://coding.dashscope.aliyuncs.com/apps/anthropic')
-    expect(html).toContain('Coding Plan keys commonly use the sk-sp-* prefix.')
-    expect(html).toContain('config.modelServices.plan.links.key')
+    expect(html).toContain('config.options.modelProviders.qwen-coding-plan')
+    expect(html).toContain('config.sectionGroups.providerAccess')
+    expect(html).toContain('config.sectionGroups.plan')
+    expect(html).not.toContain('https://coding.dashscope.aliyuncs.com/apps/anthropic')
+  })
+
+  it('keeps API base URL visible for custom model services without a provider', () => {
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{
+          custom: {
+            title: 'Custom',
+            apiBaseUrl: 'https://example.com/v1',
+            apiKey: 'secret'
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={{
+          kind: 'detailCollectionItem',
+          fieldPath: [],
+          itemKey: 'custom'
+        }}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('config.fields.modelServices.item.apiBaseUrl.label')
+    expect(html).toContain('https://example.com/v1')
   })
 
   it('creates model service entries without default apiBaseUrl or models overrides', () => {
@@ -653,6 +752,50 @@ describe('config schema form', () => {
     )
 
     expect(html).toContain('Official DeepSeek OpenAI-compatible API service.')
+  })
+
+  it('does not render model service keys as summary subtitles when a title exists', () => {
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{
+          'kimi-code': {
+            provider: 'kimi-code',
+            title: 'Kimi Code',
+            apiKey: 'secret'
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('Kimi Code')
+    expect(html).toContain('Kimi Code membership benefit endpoint for coding agents.')
+    expect(html).not.toContain('config-view__record-subtitle')
+  })
+
+  it('renders coding plan quota previews in model service summaries', () => {
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{
+          kimi: {
+            provider: 'kimi-code',
+            apiKey: 'secret'
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('config-view__model-service-list-quota')
+    expect(html.match(/config-view__model-service-list-quota-circle/gu)).toHaveLength(2)
   })
 
   it('renders inherited detail-collection entries as readonly summaries in source views', () => {

@@ -302,6 +302,22 @@ describe('launcher routes', () => {
     }
   })
 
+  it('treats localhost and 127.0.0.1 launcher origins as the same local launch config', async () => {
+    const workspaceFolder = fs.realpathSync.native(await mkdtemp(path.join(tempHome, 'workspace-')))
+    const localhostIdentity = resolveLauncherWorkspaceInstanceIdentity(workspaceFolder, {
+      clientOrigin: 'http://localhost:5174'
+    })
+    const loopbackIdentity = resolveLauncherWorkspaceInstanceIdentity(workspaceFolder, {
+      clientOrigin: 'http://127.0.0.1:5174'
+    })
+    const otherPortIdentity = resolveLauncherWorkspaceInstanceIdentity(workspaceFolder, {
+      clientOrigin: 'http://localhost:5175'
+    })
+
+    expect(localhostIdentity.launchConfigHash).toBe(loopbackIdentity.launchConfigHash)
+    expect(localhostIdentity.launchConfigHash).not.toBe(otherPortIdentity.launchConfigHash)
+  })
+
   itWithGit('keeps workspace server identity stable for client-only edits', async () => {
     const fixture = await createGitRuntimeFixture()
     const firstIdentity = resolveLauncherWorkspaceInstanceIdentity(fixture.workspaceFolder)

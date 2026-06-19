@@ -36,7 +36,7 @@ const planBilling = (
   kind,
   keyKind,
   quotaUnit,
-  quotaWindows: quotaUnit === 'request' ? ['5h', 'weekly', 'monthly'] : ['monthly'],
+  quotaWindows: quotaUnit === 'token' || quotaUnit === 'credit' ? ['monthly'] : ['5h', 'weekly', 'monthly'],
   allowedUse: 'coding_tools_only'
 })
 const codingPlan = (
@@ -51,6 +51,10 @@ const CODING_TOOLS_ONLY_RESTRICTION =
   'Only use this plan from interactive coding tools; do not use it for backend batch jobs, automation scripts, or general API workloads.'
 const DEDICATED_KEY_RESTRICTION =
   'Use the plan-specific key with the plan-specific base URL. Pay-as-you-go API keys and normal API base URLs are not interchangeable.'
+const kimiCodeBilling = (): ModelServiceBillingConfig => ({
+  ...planBilling('coding_plan', 'coding_plan_key', 'percent'),
+  quotaWindows: ['5h', 'weekly']
+})
 
 export const MODEL_PROVIDER_DEFINITIONS = [
   {
@@ -128,14 +132,14 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     description: 'Kimi Code membership benefit endpoint for coding agents.',
     defaultApiBaseUrl: 'https://api.kimi.com/coding/v1',
     defaultModels: ['kimi-for-coding'],
-    billing: planBilling('coding_plan', 'coding_plan_key', 'request'),
+    billing: kimiCodeBilling(),
     codingPlan: codingPlan({
       kind: 'coding_plan',
       title: 'Kimi Code',
       planHomeUrl: 'https://www.kimi.com/code',
       keyHomeUrl: 'https://www.kimi.com/code/console',
       docsUrl: 'https://www.kimi.com/code/docs/en/third-party-tools/other-coding-agents.html',
-      billing: planBilling('coding_plan', 'coding_plan_key', 'request'),
+      billing: kimiCodeBilling(),
       protocols: {
         openai: { baseUrl: 'https://api.kimi.com/coding/v1' },
         anthropic: { baseUrl: 'https://api.kimi.com/coding/' }

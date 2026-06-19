@@ -1,12 +1,12 @@
-.model-provider-icon--theme-dark {
+.model-provider-icon.model-provider-icon--theme-dark {
   display: none;
 }
 
-html.dark .model-provider-icon--theme-light {
+html.dark .model-provider-icon.model-provider-icon--theme-light {
   display: none;
 }
 
-html.dark .model-provider-icon--theme-dark {
+html.dark .model-provider-icon.model-provider-icon--theme-dark {
   display: inline-block;
 }
 

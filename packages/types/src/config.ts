@@ -94,7 +94,7 @@ export type ModelServiceKeyKind =
   | 'coding_plan_key'
   | 'subscription_key'
 
-export type ModelServiceQuotaUnit = 'request' | 'token' | 'credit'
+export type ModelServiceQuotaUnit = 'request' | 'token' | 'credit' | 'percent'
 
 export type ModelServiceQuotaWindow = '5h' | 'weekly' | 'monthly'
 
