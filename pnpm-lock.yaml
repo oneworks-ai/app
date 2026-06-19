@@ -231,9 +231,33 @@ importers:
       '@oneworks/adapter-opencode':
         specifier: workspace:*
         version: link:../../packages/adapters/opencode
+      '@oneworks/channel-discord':
+        specifier: workspace:*
+        version: link:../../packages/channels/discord
+      '@oneworks/channel-imessage':
+        specifier: workspace:*
+        version: link:../../packages/channels/imessage
       '@oneworks/channel-lark':
         specifier: workspace:*
         version: link:../../packages/channels/lark
+      '@oneworks/channel-qq-channel':
+        specifier: workspace:*
+        version: link:../../packages/channels/qq-channel
+      '@oneworks/channel-slack':
+        specifier: workspace:*
+        version: link:../../packages/channels/slack
+      '@oneworks/channel-sms':
+        specifier: workspace:*
+        version: link:../../packages/channels/sms
+      '@oneworks/channel-telegram':
+        specifier: workspace:*
+        version: link:../../packages/channels/telegram
+      '@oneworks/channel-wechat':
+        specifier: workspace:*
+        version: link:../../packages/channels/wechat
+      '@oneworks/channel-wecom':
+        specifier: workspace:*
+        version: link:../../packages/channels/wecom
       '@oneworks/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -482,12 +506,33 @@ importers:
       '@oneworks/app-runtime':
         specifier: workspace:*
         version: link:../../packages/app-runtime
+      '@oneworks/channel-discord':
+        specifier: workspace:*
+        version: link:../../packages/channels/discord
+      '@oneworks/channel-imessage':
+        specifier: workspace:*
+        version: link:../../packages/channels/imessage
       '@oneworks/channel-lark':
         specifier: workspace:*
         version: link:../../packages/channels/lark
+      '@oneworks/channel-qq-channel':
+        specifier: workspace:*
+        version: link:../../packages/channels/qq-channel
+      '@oneworks/channel-slack':
+        specifier: workspace:*
+        version: link:../../packages/channels/slack
+      '@oneworks/channel-sms':
+        specifier: workspace:*
+        version: link:../../packages/channels/sms
+      '@oneworks/channel-telegram':
+        specifier: workspace:*
+        version: link:../../packages/channels/telegram
       '@oneworks/channel-wechat':
         specifier: workspace:*
         version: link:../../packages/channels/wechat
+      '@oneworks/channel-wecom':
+        specifier: workspace:*
+        version: link:../../packages/channels/wecom
       '@oneworks/cli-helper':
         specifier: workspace:*
         version: link:../../packages/cli-helper
@@ -771,6 +816,15 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
 
+  packages/channels/discord:
+    dependencies:
+      '@oneworks/core':
+        specifier: workspace:*
+        version: link:../../core
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+
   packages/channels/imessage:
     dependencies:
       '@oneworks/core':
@@ -805,6 +859,33 @@ importers:
         version: 3.25.76
 
   packages/channels/qq-channel:
+    dependencies:
+      '@oneworks/core':
+        specifier: workspace:*
+        version: link:../../core
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+
+  packages/channels/slack:
+    dependencies:
+      '@oneworks/core':
+        specifier: workspace:*
+        version: link:../../core
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+
+  packages/channels/sms:
+    dependencies:
+      '@oneworks/core':
+        specifier: workspace:*
+        version: link:../../core
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+
+  packages/channels/telegram:
     dependencies:
       '@oneworks/core':
         specifier: workspace:*
