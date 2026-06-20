@@ -15,6 +15,7 @@
   --chat-surface-icon-button-radius: 6px;
   --chat-surface-control-padding-inline: var(--chat-surface-input-padding);
   --chat-surface-control-row-padding-block: var(--chat-surface-input-padding);
+  --chat-surface-composer-content-gap: 0px;
   --chat-surface-panel-radius: 12px;
   --chat-surface-corner-indicator-inset: 5px;
   --chat-surface-corner-indicator-size: calc(
@@ -77,10 +78,17 @@
 }
 
 .sender-container--chat-surface.sender-container--density-compact {
-  --chat-surface-padding: 4px;
+  --chat-surface-padding: 6px;
   --chat-surface-control-font-size: 11px;
   --chat-surface-control-icon-size: 15px;
   --chat-surface-status-overlap: 10px;
+}
+
+@media (max-width: 600px) {
+  .sender-container--chat-surface {
+    --chat-surface-padding: 6px;
+    --chat-surface-composer-content-gap: calc(var(--chat-surface-padding) / 2);
+  }
 }
 
 .sender-container.sender-container--chat-surface,
@@ -349,6 +357,7 @@
 .sender-container--chat-surface .chat-input-composer {
   position: relative;
   z-index: 3;
+  gap: var(--chat-surface-composer-content-gap);
   padding: var(--chat-input-container-padding)
     var(--chat-input-container-padding) var(--chat-input-container-padding);
   border: 1px solid var(--chat-surface-control-border-color);

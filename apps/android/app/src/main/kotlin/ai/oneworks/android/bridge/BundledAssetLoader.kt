@@ -172,6 +172,13 @@ class BundledAssetLoader(private val context: Context) {
               globalThis.oneworksAndroidBridge.request('device.getWorkspaceSelectorState'),
             listCloneDestinationDirectories: directory =>
               globalThis.oneworksAndroidBridge.request('device.listWorkspaceDirectories', { directory }),
+            createWorkspaceInDirectory: async (parentDirectory, projectName) => {
+              const result = await globalThis.oneworksAndroidBridge.request('device.createWorkspaceInDirectory', {
+                parentDirectory,
+                projectName
+              });
+              return typeof result?.workspaceFolder === 'string' ? result.workspaceFolder : undefined;
+            },
             onWorkspaceSelectorStateChange: listener => {
               workspaceSelectorListeners.add(listener);
               return () => workspaceSelectorListeners.delete(listener);

@@ -37,7 +37,7 @@ Supported prototype commands:
 - `target.create`, `target.show`, `target.destroy`, `target.snapshot`
 - `target.evaluate`, `target.inject`, `target.query`, `target.click`, `target.setValue`
 - `accessibility.status`, `accessibility.openSettings`, `accessibility.clickByText`, `accessibility.setTextByText`, `accessibility.globalAction`
-- `device.getWorkspaceSelectorState`, `device.chooseWorkspace`, `device.openWorkspace`, `device.forgetWorkspace`, `device.stopWorkspace`
+- `device.getWorkspaceSelectorState`, `device.chooseWorkspace`, `device.createWorkspaceInDirectory`, `device.openWorkspace`, `device.forgetWorkspace`, `device.stopWorkspace`
 
 Native emits envelopes into the host page through `window.__oneworksNativeBridgeDispatch(envelope)`.
 
@@ -47,5 +47,6 @@ Device shell capabilities exposed to the bundled client should keep their shared
 
 - Local protocol check: `pnpm -C apps/android validate`
 - Android build, when SDK/Gradle are available: open `apps/android` in Android Studio or run `gradle assembleDebug` from this directory.
+- macOS visible emulator window: `pnpm -C apps/android emulator:visible -- --avd OneWorksApi35Visible --install-apk app/build/outputs/apk/debug/app-debug.apk --start-app`. This uses a detached child process with stdio redirected to `.logs/`, matching the repository's dev service startup pattern; prefer it over `&`, `nohup`, or opening Terminal when a non-interactive agent needs the emulator window to remain visible after the command returns.
 
 Keep this app Kotlin-first. Do not add AndroidX, Compose, or native UI frameworks unless a feature actually needs them; the product direction is still WebView-rendered UI with native capability bridges.

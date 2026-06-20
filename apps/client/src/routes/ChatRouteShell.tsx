@@ -86,6 +86,7 @@ import type { PluginContributionWorkbenchTab } from '#~/plugins/plugin-manifest'
 import { usePluginSlot } from '#~/plugins/plugin-slots'
 import { useInstallRoutePluginMoreMenu, useInstallRoutePluginWindowBarActions } from '#~/plugins/route-plugin-chrome'
 import { getRuntimeWorkspaceId } from '#~/runtime-config'
+import { readDeviceShellSimulationMode, useStoredDevShellSimulation } from '#~/utils/device-shell-simulation'
 import { isShortcutMatch } from '#~/utils/shortcutUtils'
 
 import { ChatRouteBottomPanel } from './ChatRouteBottomPanel'
@@ -399,12 +400,18 @@ export function ChatRouteShell({
     workspaceDrawerView
   } = useChatLayoutQueryState()
   const pluginWorkbenchTabs = usePluginSlot<PluginContributionWorkbenchTab>('workbench.tabs')
+  const storedDevShellSimulation = useStoredDevShellSimulation()
   useInstallRoutePluginMoreMenu('chat')
   useInstallRoutePluginWindowBarActions('chat')
   const isAndroidDeviceShell = typeof window !== 'undefined' && (
     window.oneworksDeviceShell?.shellKind === 'android' ||
     window.oneworksDesktop?.shellKind === 'android'
   )
+  const deviceShellSimulationMode = useMemo(
+    () => readDeviceShellSimulationMode(location.search, storedDevShellSimulation),
+    [location.search, storedDevShellSimulation]
+  )
+  const isSimulatedMobileDeviceShell = deviceShellSimulationMode != null
   const [workspaceDrawerLocateRequest, setWorkspaceDrawerLocateRequest] = useState<WorkspaceDrawerLocateRequest>(null)
   const handledLauncherRequestIdRef = useRef<string | null>(null)
   const pendingInteractionPanelShortcutClearIdRef = useRef<number | null>(null)
@@ -1498,7 +1505,7 @@ export function ChatRouteShell({
           : undefined}
         sidePanelClassName='chat-route-layout__workspace-panel'
         sidePanelCompactMode='overlay'
-        sidePanelFullscreen={isWorkspaceDrawerFullscreen || isAndroidDeviceShell}
+        sidePanelFullscreen={isWorkspaceDrawerFullscreen || isAndroidDeviceShell || isSimulatedMobileDeviceShell}
         sidePanelLabel='工作区抽屉'
         sidePanelResize={{
           defaultWidth: WORKSPACE_DRAWER_DEFAULT_WIDTH,

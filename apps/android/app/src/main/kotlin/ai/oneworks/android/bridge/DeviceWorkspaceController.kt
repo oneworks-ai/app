@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Environment
 import android.provider.DocumentsContract
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
@@ -20,6 +21,7 @@ class DeviceWorkspaceController(
         private const val PREFS_NAME = "oneworks_device_workspaces"
         private const val PREFS_ACTIVE_WORKSPACE = "active_workspace"
         private const val PREFS_RECENT_WORKSPACES = "recent_workspaces"
+        private val INVALID_FILE_NAME_CHARACTERS = setOf('<', '>', ':', '"', '/', '\\', '|', '?', '*')
     }
 
     private var pendingChooseWorkspace: BridgeCallback? = null
@@ -115,6 +117,20 @@ class DeviceWorkspaceController(
         return record.toJson()
     }
 
+    fun createWorkspaceInDirectory(params: JSONObject): JSONObject {
+        val parentDirectory = requireExistingDirectory(params, "parentDirectory")
+        val projectName = requireValidProjectName(params)
+        val workspaceDirectory = File(parentDirectory, projectName).normalized()
+        if (workspaceDirectory.parentFile?.normalized()?.absolutePath != parentDirectory.absolutePath) {
+            throw JSONException("A valid project name is required.")
+        }
+        if (!workspaceDirectory.mkdir()) {
+            throw JSONException("Failed to create workspace directory.")
+        }
+        return JSONObject()
+            .put("workspaceFolder", workspaceDirectory.absolutePath)
+    }
+
     fun forgetWorkspace(params: JSONObject): JSONObject {
         val workspaceFolder = BridgeJson.requireString(params, "workspaceFolder")
         val workspaces = listRecentWorkspaces()
@@ -159,6 +175,29 @@ class DeviceWorkspaceController(
         val candidate = File(rawDirectory)
         if (!candidate.isDirectory) return storageRoot()
         return candidate.normalized()
+    }
+
+    private fun requireExistingDirectory(params: JSONObject, key: String): File {
+        val rawDirectory = BridgeJson.requireString(params, key)
+        val directory = File(rawDirectory).normalized()
+        if (!directory.isDirectory) {
+            throw JSONException("A valid parent directory is required.")
+        }
+        return directory
+    }
+
+    private fun requireValidProjectName(params: JSONObject): String {
+        val projectName = BridgeJson.requireString(params, "projectName")
+        if (
+            projectName == "." ||
+            projectName == ".." ||
+            projectName.any { character ->
+                character in INVALID_FILE_NAME_CHARACTERS || character.code == 0
+            }
+        ) {
+            throw JSONException("A valid project name is required.")
+        }
+        return projectName
     }
 
     private fun listChildDirectories(directory: File): List<File> {

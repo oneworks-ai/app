@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.graphics.Color
 import android.os.Build
+import android.os.Message
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
@@ -76,6 +77,26 @@ class TargetWebViewManager(
     fun snapshotTarget(params: JSONObject): JSONObject {
         val targetId = resolveTargetId(params)
         return describeTarget(targetId, requireTarget(targetId))
+    }
+
+    fun createWindow(resultMsg: Message): Boolean {
+        val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
+        val targetId = "target-${nextTargetIndex++}"
+        val webView = createTargetWebView(targetId)
+        targets[targetId] = webView
+        container.visibility = View.VISIBLE
+        container.addView(
+            webView,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+        setActiveTarget(targetId)
+        transport.webView = webView
+        resultMsg.sendToTarget()
+        dispatcher.emit("target.created", describeTarget(targetId, webView))
+        return true
     }
 
     fun evaluate(params: JSONObject, callback: BridgeCallback) {
@@ -226,6 +247,8 @@ class TargetWebViewManager(
         settings.domStorageEnabled = true
         settings.loadWithOverviewMode = true
         settings.mediaPlaybackRequiresUserGesture = false
+        settings.javaScriptCanOpenWindowsAutomatically = true
+        settings.setSupportMultipleWindows(true)
         settings.useWideViewPort = true
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             settings.safeBrowsingEnabled = true
@@ -246,11 +269,32 @@ class TargetWebViewManager(
             ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request)
         }
         webChromeClient = object : WebChromeClient() {
+            override fun onCreateWindow(
+                view: WebView,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: Message
+            ): Boolean = createWindow(resultMsg)
+
+            override fun onCloseWindow(window: WebView) {
+                super.onCloseWindow(window)
+                destroyTargetForWebView(window)
+            }
+
             override fun onReceivedTitle(view: WebView, title: String?) {
                 super.onReceivedTitle(view, title)
                 emitTargetTitle(targetId, title)
             }
         }
+    }
+
+    private fun destroyTargetForWebView(window: WebView) {
+        val targetId = targets.entries.firstOrNull { it.value === window }?.key ?: return
+        destroyTarget(
+            JSONObject().apply {
+                put("targetId", targetId)
+            }
+        )
     }
 
     private fun String.normalizeTargetUrl(): String =

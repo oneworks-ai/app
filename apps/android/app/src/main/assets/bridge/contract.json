@@ -18,6 +18,7 @@
     "device.getWorkspaceSelectorState",
     "device.listWorkspaceDirectories",
     "device.chooseWorkspace",
+    "device.createWorkspaceInDirectory",
     "device.openWorkspace",
     "device.forgetWorkspace",
     "device.stopWorkspace",

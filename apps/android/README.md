@@ -13,7 +13,7 @@ This is the Android WebView shell prototype. It renders the bundled OneWorks cli
 - If `apps/client/dist` exists, Gradle packages it into APK assets under `client/`; the Android host opens that bundle as the main app WebView.
 - Gradle packages a snapshot of `apps/server` into APK assets under `server/source/`; if `apps/server/dist` exists later, it is also packaged under `server/dist/`. Running that Node/Koa backend on Android still needs an embedded Node runtime or a native server port.
 - Accessibility commands are scaffolded through an Android `AccessibilityService`; users must enable the service in Android settings before those commands can operate other apps/pages.
-- The host injects a device shell workspace API aligned with the Electron launcher shape. Open Project reuses the internal OneWorks directory list by default; Android only implements directory enumeration and recent-project state. The system directory picker remains available as a later authorization/fallback path. This validates selection/state flow; starting the OneWorks backend inside Android is still out of scope for this prototype.
+- The host injects a device shell workspace API aligned with the Electron launcher shape. New Project and Open Project reuse the internal OneWorks directory list by default; Android implements directory enumeration, workspace directory creation, and recent-project state. The system directory picker remains available as a later authorization/fallback path. This validates selection/state flow; starting the OneWorks backend inside Android is still out of scope for this prototype.
 
 ## Validate
 
@@ -24,3 +24,13 @@ ANDROID_HOME="$HOME/.codex/android-sdk" ANDROID_SDK_ROOT="$HOME/.codex/android-s
 ```
 
 To build the APK, open `apps/android` in Android Studio or run `gradle assembleDebug` from this directory after installing Android SDK and Gradle.
+
+## Visible Emulator On macOS
+
+Use the detached helper when an agent or non-interactive shell needs to keep a visible Android Emulator window open:
+
+```bash
+pnpm -C apps/android emulator:visible -- --avd OneWorksApi35Visible --install-apk app/build/outputs/apk/debug/app-debug.apk --start-app
+```
+
+The helper starts the emulator with detached stdio redirected into `.logs/`, matching the repository's dev service startup pattern. The window is not tied to a Terminal tab or to the parent command process.

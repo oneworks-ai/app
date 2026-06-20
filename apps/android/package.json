@@ -3,6 +3,7 @@
   "version": "0.1.0-alpha.0",
   "private": true,
   "scripts": {
+    "emulator:visible": "node scripts/launch-visible-emulator.mjs",
     "validate": "node scripts/validate-bridge-contract.mjs"
   }
 }

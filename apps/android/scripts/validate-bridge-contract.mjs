@@ -97,6 +97,12 @@ if (!bundledAssetLoader.includes('listCloneDestinationDirectories')) {
   fail('BundledAssetLoader must map the common launcher directory list API to Android')
 }
 if (
+  !bundledAssetLoader.includes('createWorkspaceInDirectory') ||
+  !bundledAssetLoader.includes('device.createWorkspaceInDirectory')
+) {
+  fail('BundledAssetLoader must map the common launcher workspace creation API to Android')
+}
+if (
   !bundledAssetLoader.includes('getWorkspaceConnection') || !bundledAssetLoader.includes("location.assign('/client/')")
 ) {
   fail('BundledAssetLoader must let Android project opening enter the workspace client')
@@ -116,6 +122,9 @@ if (!deviceWorkspaceController.includes('Intent.ACTION_OPEN_DOCUMENT_TREE')) {
 }
 if (!deviceWorkspaceController.includes('listWorkspaceDirectories')) {
   fail('DeviceWorkspaceController must implement internal launcher directory listing')
+}
+if (!deviceWorkspaceController.includes('createWorkspaceInDirectory')) {
+  fail('DeviceWorkspaceController must implement internal launcher workspace creation')
 }
 if (!deviceWorkspaceController.includes('PREFS_ACTIVE_WORKSPACE')) {
   fail('DeviceWorkspaceController must persist the active Android workspace')

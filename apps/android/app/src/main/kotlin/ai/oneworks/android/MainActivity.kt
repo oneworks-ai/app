@@ -13,11 +13,14 @@ import android.app.Activity
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.Insets
 import android.os.Build
 import android.os.Bundle
+import android.os.Message
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -138,7 +141,14 @@ class MainActivity : Activity() {
                 initialRight + right,
                 initialBottom + bottom
             )
-            insets
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                WindowInsets.Builder(insets)
+                    .setInsets(WindowInsets.Type.systemBars(), Insets.NONE)
+                    .setInsets(WindowInsets.Type.displayCutout(), Insets.NONE)
+                    .build()
+            } else {
+                insets
+            }
         }
     }
 
@@ -176,14 +186,27 @@ class MainActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun createHostWebView(assetLoader: BundledAssetLoader) = WebView(this).apply {
         settings.javaScriptEnabled = true
+        settings.javaScriptCanOpenWindowsAutomatically = true
         settings.domStorageEnabled = true
         settings.loadWithOverviewMode = true
+        settings.setSupportMultipleWindows(true)
         settings.useWideViewPort = true
         webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(
                 view: WebView,
                 request: WebResourceRequest
             ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request)
+        }
+        webChromeClient = object : WebChromeClient() {
+            override fun onCreateWindow(
+                view: WebView,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: Message
+            ): Boolean {
+                if (!::targetWebViews.isInitialized) return false
+                return targetWebViews.createWindow(resultMsg)
+            }
         }
     }
 }

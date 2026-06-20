@@ -47,6 +47,9 @@ class HostBridge(
                 "device.getWorkspaceSelectorState" -> callback.resolve(deviceWorkspaces.getWorkspaceSelectorState())
                 "device.listWorkspaceDirectories" -> callback.resolve(deviceWorkspaces.listWorkspaceDirectories(params))
                 "device.chooseWorkspace" -> deviceWorkspaces.chooseWorkspace(callback)
+                "device.createWorkspaceInDirectory" -> callback.resolve(
+                    deviceWorkspaces.createWorkspaceInDirectory(params)
+                )
                 "device.openWorkspace" -> callback.resolve(deviceWorkspaces.openWorkspace(params))
                 "device.forgetWorkspace" -> callback.resolve(deviceWorkspaces.forgetWorkspace(params))
                 "device.stopWorkspace" -> callback.resolve(deviceWorkspaces.stopWorkspace(params))

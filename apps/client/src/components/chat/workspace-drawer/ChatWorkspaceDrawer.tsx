@@ -9,7 +9,7 @@ import { useAtomValue } from 'jotai'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode, UIEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
 import type { SessionPanelTab } from '@oneworks/core'
@@ -49,6 +49,7 @@ import { PluginViewHost } from '#~/plugins/PluginHost'
 import type { PluginContributionWorkbenchAddMenuItem, PluginContributionWorkbenchTab } from '#~/plugins/plugin-manifest'
 import { usePluginCommandExecutor, usePluginSlot } from '#~/plugins/plugin-slots'
 import { interactionPanelPinnedTabLimitAtom } from '#~/store/index'
+import { readDeviceShellSimulationMode, useStoredDevShellSimulation } from '#~/utils/device-shell-simulation'
 
 import { InteractionPanelEmptyState } from '../interaction-panel/InteractionPanelEmptyState'
 import { InteractionPanelIframeView } from '../interaction-panel/InteractionPanelIframeView'
@@ -428,8 +429,10 @@ export function ChatWorkspaceDrawer({
 }) {
   const { i18n, t } = useTranslation()
   const { message } = App.useApp()
+  const location = useLocation()
   const navigate = useNavigate()
   const responsiveLayout = useResponsiveLayout()
+  const storedDevShellSimulation = useStoredDevShellSimulation()
   const maxPinnedTabs = useAtomValue(interactionPanelPinnedTabLimitAtom)
   const [editingPinnedTab, setEditingPinnedTab] = useState<InteractionPanelPinnedTab | null>(null)
   const [mobileViewMode, setMobileViewMode] = useState<'overview' | 'tab'>('overview')
@@ -461,8 +464,17 @@ export function ChatWorkspaceDrawer({
     window.oneworksDeviceShell?.shellKind === 'android' ||
     window.oneworksDesktop?.shellKind === 'android'
   )
-  const shouldUseMobileTabSwitcher = isAndroidDeviceShell &&
-    (responsiveLayout.isCompactLayout || responsiveLayout.isTouchInteraction)
+  const deviceShellSimulationMode = useMemo(
+    () => readDeviceShellSimulationMode(location.search, storedDevShellSimulation),
+    [location.search, storedDevShellSimulation]
+  )
+  const isSimulatedMobileDeviceShell = deviceShellSimulationMode != null
+  const shouldUseMobileTabSwitcher = (isAndroidDeviceShell || isSimulatedMobileDeviceShell) &&
+    (
+      isSimulatedMobileDeviceShell ||
+      responsiveLayout.isCompactLayout ||
+      responsiveLayout.isTouchInteraction
+    )
 
   useEffect(() => {
     resetDrawerScroll(drawerRef.current)
@@ -630,6 +642,7 @@ export function ChatWorkspaceDrawer({
     activeTabKeyRef.current = view
     locallyActivatedRightTabKeyRef.current = view
     setActiveTabKey(view)
+    setMobileViewMode('tab')
     upsertRightPanelTab(toWorkspaceDrawerPanelTab(item))
   }, [upsertRightPanelTab, viewItemByKey])
 
@@ -1012,6 +1025,7 @@ export function ChatWorkspaceDrawer({
       const nextTab = toRightWebPanelTab(nextPage)
       upsertRightPanelTab(nextTab)
       setActiveTabKey(nextTab.id as WorkspaceDrawerDockTabKey)
+      setMobileViewMode('tab')
       return nextPage
     }
 
@@ -1025,6 +1039,7 @@ export function ChatWorkspaceDrawer({
     const nextTab = toRightWebPanelTab(nextPage)
     upsertRightPanelTab(nextTab)
     setActiveTabKey(nextTab.id as WorkspaceDrawerDockTabKey)
+    setMobileViewMode('tab')
     return nextPage
   }, [iframePages.length, rightPanelTabs, t, upsertRightPanelTab])
 
@@ -1035,6 +1050,7 @@ export function ChatWorkspaceDrawer({
     const pane = terminalPanes.addTerminal(shellKind, { surface: 'workspace-drawer' })
     const tabKey = toWorkspaceDrawerTerminalTabKey(pane.id)
     setActiveTabKey(tabKey)
+    setMobileViewMode('tab')
     upsertRightPanelTab({
       id: tabKey,
       kind: 'terminal',
@@ -1048,6 +1064,7 @@ export function ChatWorkspaceDrawer({
     const page = createIframePage(t('chat.interactionPanel.iframeTitle', { index: iframePages.length + 1 }))
     const tab = toRightWebPanelTab(page)
     setActiveTabKey(tab.id as WorkspaceDrawerDockTabKey)
+    setMobileViewMode('tab')
     upsertRightPanelTab(tab)
   }, [iframePages.length, t, upsertRightPanelTab])
   const handleNewSessionAction = useCallback(() => {
@@ -1058,6 +1075,7 @@ export function ChatWorkspaceDrawer({
     )
     const tab = toRightSessionPanelTab(page)
     setActiveTabKey(tab.id as WorkspaceDrawerDockTabKey)
+    setMobileViewMode('tab')
     upsertRightPanelTab(tab)
   }, [sessionId, sessionPages.length, t, upsertRightPanelTab])
   const handleNewMobileDebugPageAction = useCallback(() => {
@@ -1069,10 +1087,12 @@ export function ChatWorkspaceDrawer({
     } satisfies InteractionPanelMobileDebugPage
     const tab = toRightMobileDebugPanelTab(page)
     setActiveTabKey(tab.id as WorkspaceDrawerDockTabKey)
+    setMobileViewMode('tab')
     upsertRightPanelTab(tab)
   }, [t, upsertRightPanelTab])
   const handleNewPageDebuggerListAction = useCallback(() => {
     setActiveTabKey(WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY)
+    setMobileViewMode('tab')
     upsertRightPanelTab({
       id: WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY,
       kind: 'page-debugger',
@@ -1190,6 +1210,7 @@ export function ChatWorkspaceDrawer({
       if (nextPage != null) {
         const nextTab = toRightPluginPanelTab(nextPage)
         setActiveTabKey(nextTab.id as WorkspaceDrawerDockTabKey)
+        setMobileViewMode('tab')
         upsertRightPanelTab(nextTab)
         return
       }
@@ -1243,6 +1264,7 @@ export function ChatWorkspaceDrawer({
       } satisfies InteractionPanelMobileDebugPage
       const tab = toRightMobileDebugPanelTab(page)
       setActiveTabKey(tab.id as WorkspaceDrawerDockTabKey)
+      setMobileViewMode('tab')
       upsertRightPanelTab(tab)
     }
   }, [
