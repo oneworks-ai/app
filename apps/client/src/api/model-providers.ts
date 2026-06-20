@@ -1,9 +1,15 @@
+/* eslint-disable max-lines -- model provider API wrappers intentionally stay in one typed module. */
 import type {
   ConfigSource,
   ModelProviderDefinition,
   ModelProviderIdentity,
   ModelServiceConfig,
   ProviderAccountStatus,
+  ProviderManagementMutationResult,
+  ProviderManagementSnapshot,
+  ProviderManagementTokenCreateInput,
+  ProviderManagementTokenProfileResult,
+  ProviderManagementTokenUpdateInput,
   ProviderModelInfo,
   ProviderSecretResult,
   ProviderServiceStatus
@@ -67,26 +73,6 @@ export const listModelServiceModels = (
   )
 )
 
-export const refreshModelServiceModels = (params: {
-  service?: ModelServiceConfig
-  serviceKey: string
-  source: ConfigSource
-  models: string[]
-}) => (
-  fetchApiJsonOrThrow<{ ok: true; serviceKey: string; source: ConfigSource; models: string[] }>(
-    `/api/model-services/${encodeURIComponent(params.serviceKey)}/models/refresh`,
-    {
-      method: 'POST',
-      headers: jsonHeaders,
-      body: JSON.stringify({
-        ...buildServiceActionBody({ service: params.service, source: params.source }),
-        models: params.models
-      })
-    },
-    '[api] refresh model service models failed:'
-  )
-)
-
 export const getModelServiceBalance = (
   serviceKey: string,
   params?: { service?: ModelServiceConfig; source?: ConfigSource }
@@ -129,5 +115,91 @@ export const createModelServiceSecret = (
       body: JSON.stringify(buildServiceActionBody(params))
     },
     '[api] create model service secret failed:'
+  )
+)
+
+export const getModelServiceManagementSnapshot = (
+  serviceKey: string,
+  params?: { service?: ModelServiceConfig; source?: ConfigSource }
+) => (
+  fetchApiJsonOrThrow<{ management: ProviderManagementSnapshot }>(
+    `/api/model-services/${encodeURIComponent(serviceKey)}/management`,
+    {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify(buildServiceActionBody(params))
+    },
+    '[api] get model service management snapshot failed:'
+  )
+)
+
+export const createModelServiceManagementToken = (
+  serviceKey: string,
+  input: ProviderManagementTokenCreateInput,
+  params?: { service?: ModelServiceConfig; source?: ConfigSource }
+) => (
+  fetchApiJsonOrThrow<{ result: ProviderManagementMutationResult }>(
+    `/api/model-services/${encodeURIComponent(serviceKey)}/management/tokens`,
+    {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        ...buildServiceActionBody(params),
+        input
+      })
+    },
+    '[api] create model service management token failed:'
+  )
+)
+
+export const updateModelServiceManagementToken = (
+  serviceKey: string,
+  tokenId: string,
+  input: Omit<ProviderManagementTokenUpdateInput, 'id'>,
+  params?: { service?: ModelServiceConfig; source?: ConfigSource }
+) => (
+  fetchApiJsonOrThrow<{ result: ProviderManagementMutationResult }>(
+    `/api/model-services/${encodeURIComponent(serviceKey)}/management/tokens/${encodeURIComponent(tokenId)}`,
+    {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        ...buildServiceActionBody(params),
+        input
+      })
+    },
+    '[api] update model service management token failed:'
+  )
+)
+
+export const deleteModelServiceManagementToken = (
+  serviceKey: string,
+  tokenId: string,
+  params?: { service?: ModelServiceConfig; source?: ConfigSource }
+) => (
+  fetchApiJsonOrThrow<{ result: ProviderManagementMutationResult }>(
+    `/api/model-services/${encodeURIComponent(serviceKey)}/management/tokens/${encodeURIComponent(tokenId)}`,
+    {
+      method: 'DELETE',
+      headers: jsonHeaders,
+      body: JSON.stringify(buildServiceActionBody(params))
+    },
+    '[api] delete model service management token failed:'
+  )
+)
+
+export const getModelServiceManagementTokenProfile = (
+  serviceKey: string,
+  tokenId: string,
+  params?: { service?: ModelServiceConfig; source?: ConfigSource }
+) => (
+  fetchApiJsonOrThrow<ProviderManagementTokenProfileResult>(
+    `/api/model-services/${encodeURIComponent(serviceKey)}/management/tokens/${encodeURIComponent(tokenId)}/profile`,
+    {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify(buildServiceActionBody(params))
+    },
+    '[api] get model service management token profile failed:'
   )
 )

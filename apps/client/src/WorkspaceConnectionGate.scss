@@ -6,6 +6,66 @@
   padding: 24px;
 }
 
+.workspace-connection-gate__details {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.workspace-connection-gate__summary {
+  color: var(--sub-text-color, #4b5563);
+  line-height: 1.5;
+}
+
+.workspace-connection-gate__meta {
+  display: grid;
+  row-gap: 6px;
+  margin: 0;
+  max-width: min(720px, 100%);
+  font-size: 12px;
+  line-height: 1.45;
+
+  > div {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    column-gap: 12px;
+  }
+
+  dt {
+    margin: 0;
+    color: var(--placeholder-color, #6b7280);
+    font-weight: 500;
+  }
+
+  dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--text-color, #111827);
+    font-family: var(
+      --monospace-font-family,
+      ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Monaco,
+      Consolas,
+      monospace
+    );
+  }
+}
+
+.workspace-connection-gate__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workspace-connection-gate__restart-error {
+  color: var(--error-color, #dc2626);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .workspace-connection-gate--loading {
   display: flex;
   align-items: center;

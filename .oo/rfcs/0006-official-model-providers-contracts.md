@@ -18,6 +18,11 @@ interface ModelServiceConfig {
   models?: string[]
   timeoutMs?: number
   maxOutputTokens?: number
+  billing?: ModelServiceBillingConfig
+  codingPlan?: Partial<ModelProviderCodingPlanDefinition> & {
+    enabled?: boolean
+    region?: string
+  }
   providerOptions?: Record<string, unknown>
   management?: ModelServiceManagementConfig
   extra?: Record<string, unknown>
@@ -33,6 +38,8 @@ interface ModelServiceConfig {
 `apiBaseUrl` 是可选覆盖项。配置了 `provider` 时，默认 base URL 来自服务商注册表；只有用户要覆盖区域、代理或私有网关时才写。未配置 `provider` 的自定义服务仍必须写 `apiBaseUrl`。
 
 `models` 也是可选项。官方服务商省略 `models` 时，模型选择器使用服务商目录、远端查询结果或本地缓存。写入 `models` 表示用户要固定模型 allowlist。
+
+`billing` 和 `codingPlan` 是 Coding Plan / Token Plan 等服务商套餐的元数据。这里的 Coding Plan 指服务商计费产品，不是 agent Plan Mode。详细类型、provider id、host 匹配和配置示例见 [Coding Plan 与 Token Plan](./0006-official-model-providers-coding-plans.md)。
 
 ## 管理配置
 
@@ -82,26 +89,13 @@ Host 匹配只在用户提供 `apiBaseUrl` 时执行：
 - `dashscope.aliyuncs.com`、`dashscope-us.aliyuncs.com`、`*.maas.aliyuncs.com` -> `qwen`
 - `open.bigmodel.cn` -> `zhipu`
 
+套餐 endpoint 的更具体 host/path 匹配见 [Coding Plan 与 Token Plan](./0006-official-model-providers-coding-plans.md)。
+
 如果显式 `provider` 与 host 推断冲突，保留显式配置，但返回 warning。
 
 ## 归一化结果
 
-远端模型结果归一化为：
-
-```ts
-interface ProviderModelInfo {
-  id: string
-  title?: string
-  ownedBy?: string
-  createdAt?: number
-  contextLength?: number
-  maxOutputTokens?: number
-  supportsReasoning?: boolean
-  inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'file'>
-  outputModalities?: Array<'text' | 'image' | 'audio' | 'video'>
-  raw?: unknown
-}
-```
+远端模型结果归一化为 `ProviderModelInfo`，至少包含 `id`，可带 `title`、`ownedBy`、`createdAt`、上下文长度、输出上限、推理能力、输入/输出模态和原始响应。
 
 用户选择固定模型列表时，模型选择器只把 `id` 存进 `modelServices.<key>.models`。
 

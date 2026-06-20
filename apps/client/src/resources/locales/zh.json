@@ -59,6 +59,8 @@
     "close": "关闭",
     "enterFullscreen": "全屏",
     "exitFullscreen": "退出全屏",
+    "expandPanel": "展开面板",
+    "collapsePanel": "折叠面板",
     "sort": "排序规则",
     "tags": "标签",
     "allTags": "全部标签",
@@ -655,6 +657,16 @@
       "context": "引用具体文件会让回答少一点猜测，多一点上下文。",
       "glass": "你能透过玻璃看到骨架，说明前端已经在醒了。"
     }
+  },
+  "workspaceConnection": {
+    "processId": "进程",
+    "requestedVersion": "当前请求",
+    "restartFailed": "重启项目服务失败",
+    "restartWorkspaceServer": "重启项目服务",
+    "retry": "重试",
+    "runningVersion": "正在运行",
+    "serverUrl": "服务地址",
+    "versionConflictDescription": "当前页面和已运行的项目服务来自不同版本。纯前端改动会自动复用项目服务；如果服务端运行时代码变了，可以重启项目服务后继续。"
   },
   "launcher": {
     "senderLabel": "启动输入框",
@@ -2043,6 +2055,7 @@
     "modelMoreModels": "更多模型",
     "modelConnectMoreServices": "接入更多",
     "modelOpenModelServicesConfig": "打开配置",
+    "modelOpenModelServiceDetails": "打开服务详情",
     "availableTools": "可用工具",
     "availableToolsEmpty": "当前会话没有可展示的工具。",
     "toolGroupChromeDevtools": "ChromeDevtools",
@@ -2864,32 +2877,176 @@
         "hostMatch": "根据 API 地址识别",
         "custom": "自定义兼容服务"
       },
+      "import": {
+        "created": "已创建模型服务 {{name}}"
+      },
       "actions": {
+        "more": "更多",
         "openHomepage": "管理后台",
         "openExternal": "在外部浏览器打开",
         "createSecret": "创建 Secret",
         "openApiKeys": "打开 API Key 页面",
         "queryBalance": "查询余额",
         "queryStatus": "服务状态",
-        "queryModels": "查询模型",
-        "refreshModels": "写入模型列表"
+        "queryModels": "查询模型"
       },
       "results": {
         "actionFailed": "模型服务操作失败",
         "amountUnknown": "未知",
         "balance": "余额",
+        "cost": "费用",
+        "quota": "额度",
+        "unlimitedQuota": "无限额度",
+        "resetsAt": "{{time}} 重置",
+        "windowQuota": "{{duration}} 窗口 {{amount}}",
+        "parallelLimit": "并发 {{count}}",
         "status": "状态",
         "models": "{{count}} 个模型",
         "modelsMore": "还有 {{count}} 个",
         "modelsLoaded": "已查询 {{count}} 个模型",
-        "modelsRefreshed": "已写入 {{count}} 个模型",
-        "modelsEmpty": "没有可写入的模型",
         "secretCreated": "Secret 已创建并复制到剪贴板"
+      },
+      "plan": {
+        "title": "订阅套餐",
+        "labels": {
+          "kind": "套餐类型",
+          "keyKind": "密钥类型",
+          "liveQuota": "实时额度",
+          "allowedUse": "适用范围",
+          "endpoints": "专属 Base URL",
+          "defaultModels": "默认模型",
+          "window": "窗口",
+          "periodQuota": "周期额度",
+          "planLevel": "会员等级",
+          "resetTime": "重置时间",
+          "parallelLimit": "并发上限"
+        },
+        "liveQuota": {
+          "failed": "查询失败",
+          "loading": "查询中…",
+          "notQueried": "未查询",
+          "windowSummary": "{{duration}}：{{amount}}"
+        },
+        "quotaProgress": {
+          "percentValue": "{{value}}%",
+          "resetAt": "{{time}} 重置",
+          "weekly": "1 周额度",
+          "monthly": "月额度",
+          "window": "{{duration}}额度"
+        },
+        "duration": {
+          "hours": "{{count}} 小时",
+          "generic": "{{count}} {{unit}}"
+        },
+        "timeUnit": {
+          "minute": "分钟",
+          "hour": "小时",
+          "day": "天",
+          "week": "周",
+          "month": "月"
+        },
+        "restrictions": {
+          "codingToolsOnly": "仅用于交互式编程工具；不要用于后端批量任务、自动化脚本或通用 API 工作负载。",
+          "dedicatedKey": "需要使用套餐专属 Key 和套餐专属 Base URL；不能与按量 API Key 或普通 API Base URL 混用。",
+          "kimiSeparateBaseUrl": "Kimi Code 使用独立 Base URL，不同于 Moonshot 开放平台 API。"
+        },
+        "links": {
+          "purchase": "购买",
+          "key": "创建 Key",
+          "docs": "文档"
+        },
+        "kind": {
+          "payg": "按量 API",
+          "product_subscription": "产品订阅",
+          "coding_plan": "Coding Plan",
+          "token_plan": "Token Plan",
+          "relay_coding_plan": "中转 Coding Plan"
+        },
+        "keyKind": {
+          "payg_api_key": "按量 API Key",
+          "coding_plan_key": "Coding Plan Key",
+          "subscription_key": "Subscription Key"
+        },
+        "quotaUnit": {
+          "request": "请求数",
+          "token": "Token",
+          "credit": "Credit",
+          "percent": "百分比"
+        },
+        "quotaWindow": {
+          "5h": "5 小时",
+          "weekly": "每周",
+          "monthly": "每月"
+        },
+        "allowedUse": {
+          "coding_tools_only": "仅编程工具",
+          "general_api": "通用 API"
+        }
+      },
+      "management": {
+        "title": "本地档案",
+        "apiKeyTitle": "远端令牌",
+        "balance": "余额",
+        "groups": "分组",
+        "apiKeys": "远端 Key",
+        "tokens": "远端 Key",
+        "profiles": "档案",
+        "models": "模型",
+        "unknown": "-",
+        "refresh": "刷新平台数据",
+        "actionFailed": "平台管理操作失败",
+        "newTokenName": "新建配置档案名称",
+        "newApiKeyName": "新建令牌名称",
+        "createProfileTitle": "创建配置档案",
+        "createApiKeyTitle": "创建令牌",
+        "createApiKeySuccess": "令牌已创建",
+        "deleteApiKeySuccess": "令牌已删除",
+        "createApiKeyFirst": "创建令牌",
+        "dialogCreate": "对话创建",
+        "deleteApiKeyConfirm": "删除这个远端令牌？",
+        "deleteProfileDesc": "删除这个本地配置档案，不会删除远端令牌。",
+        "groupDesc": "令牌使用的 New API 分组。",
+        "name": "名称",
+        "noApiKeyForProfile": "请先创建远端令牌。",
+        "status": "状态",
+        "groupPlaceholder": "分组",
+        "quotaPlaceholder": "额度",
+        "unlimited": "不限额",
+        "loading": "正在加载平台数据",
+        "empty": "暂无配置档案。",
+        "createSuccess": "配置档案已创建",
+        "updateSuccess": "配置档案已更新",
+        "deleteSuccess": "配置档案已删除",
+        "applyGroup": "更新分组",
+        "importProfile": "配置档案",
+        "openProfile": "配置档案",
+        "selectApiKey": "选择远端令牌",
+        "bindSuccess": "远端令牌已绑定",
+        "boundProfile": "远端令牌：{{key}}",
+        "linkedProfile": "配置档案：{{profile}}",
+        "notLinked": "未配置档案",
+        "unboundProfile": "未选择远端令牌",
+        "deleteConfirm": "删除这个配置档案？",
+        "tokenGroup": "分组：{{group}}",
+        "tokenQuota": "额度：{{amount}}",
+        "tokenStatus": {
+          "enabled": "启用",
+          "disabled": "停用",
+          "expired": "过期",
+          "unknown": "未知"
+        }
+      },
+      "collectionTabs": {
+        "service": "服务信息",
+        "profiles": "本地档案",
+        "apiKeys": "令牌管理",
+        "advanced": "高级配置"
       },
       "portal": {
         "secretTitle": "{{provider}} Secret 管理",
-        "iframeHint": "浏览器模式使用 iframe 打开；如果平台禁止嵌入，请用外部浏览器打开。",
-        "webviewHint": "Electron 模式使用 webview 打开；如登录或支付页面受限，请用外部浏览器打开。"
+        "tabsLabel": "服务页面",
+        "closePanel": "关闭服务页面",
+        "resizePanel": "调整服务页面高度"
       },
       "status": {
         "operational": "正常",
@@ -3249,6 +3406,10 @@
           "desc": "按服务名称平铺配置"
         },
         "item": {
+          "kind": {
+            "label": "服务类型",
+            "desc": "模型服务可直接调用；服务集合用于保存平台管理凭证，并在下级 services 中配置具体模型服务。"
+          },
           "provider": {
             "label": "官方服务商",
             "desc": "选择后会使用内置 API 地址、模型目录、图标和管理入口；自定义服务可留空。"
@@ -3271,32 +3432,48 @@
           },
           "apiBaseUrl": {
             "label": "API 地址",
-            "desc": "模型服务 API 地址覆盖；已选择官方服务商时通常无需填写。"
+            "desc": "模型服务 API 地址覆盖；Coding Plan 和 Token Plan 必须使用套餐专属 Base URL。"
           },
           "apiKey": {
             "label": "API 密钥",
-            "desc": "模型服务的访问密钥"
+            "desc": "模型服务的访问密钥。Coding Plan 或 Token Plan 服务商应填写套餐专属 Key。"
           },
           "models": {
             "label": "模型列表",
             "desc": "该服务支持的模型名称；留空时使用服务商默认模型目录。"
+          },
+          "profiles": {
+            "label": "配置档案",
+            "desc": "服务集合下的具体模型调用配置；运行时会以 collection/profile 的形式展开。"
+          },
+          "billing": {
+            "label": "计费元数据",
+            "desc": "可选覆盖计费类型、Key 类型、额度单位、额度窗口和允许用途。"
+          },
+          "codingPlan": {
+            "label": "Coding Plan 元数据",
+            "desc": "可选覆盖套餐链接、协议 Base URL、地区、默认模型和限制提示。"
           },
           "management": {
             "enabled": {
               "label": "启用管理能力",
               "desc": "开启后可使用查询模型、余额、状态和 Secret 辅助入口。"
             },
+            "endpointKind": {
+              "label": "管理接口类型",
+              "desc": "平台管理 API 类型；New API 平台填写 newapi。"
+            },
+            "baseUrl": {
+              "label": "管理 API 地址",
+              "desc": "平台管理 API 根地址；New API 平台不要带 /v1。"
+            },
             "apiKey": {
               "label": "管理 API Key",
               "desc": "部分平台需要独立的管理 API Key；留空时默认复用模型 API Key。"
             },
-            "organizationId": {
-              "label": "组织 ID",
-              "desc": "用于需要组织维度管理 API 的平台。"
-            },
-            "projectId": {
-              "label": "项目 ID",
-              "desc": "用于需要项目维度管理 API 的平台。"
+            "headers": {
+              "label": "管理请求头",
+              "desc": "调用平台管理 API 时附加的请求头，例如 New-Api-User。"
             }
           },
           "providerOptions": {
@@ -3599,10 +3776,17 @@
         "anthropic": "Anthropic",
         "moonshot-cn": "Moonshot / Kimi 中国站",
         "moonshot-intl": "Moonshot / Kimi 国际站",
+        "kimi-code": "Kimi Code",
         "deepseek": "DeepSeek",
         "minimax": "MiniMax",
+        "minimax-token-plan": "MiniMax Token Plan",
         "qwen": "阿里千问 / 百炼",
+        "qwen-coding-plan": "阿里云 Coding Plan",
         "zhipu": "智谱 GLM",
+        "zhipu-coding-plan": "智谱 GLM Coding Plan",
+        "tencent-tokenhub-coding-plan": "腾讯云 TokenHub Coding Plan",
+        "volcengine-ark-coding-plan": "火山方舟 Coding Plan",
+        "baidu-qianfan-coding-plan": "百度千帆 Coding Plan",
         "azure-openai": "Azure OpenAI",
         "google-gemini": "Google Gemini",
         "aws-bedrock": "AWS Bedrock",
@@ -3615,15 +3799,30 @@
         "apiyi": "APIYI",
         "yunwu": "云雾"
       },
+      "modelServiceKind": {
+        "service": "模型服务",
+        "collection": "服务集合"
+      },
+      "modelServiceManagementEndpointKind": {
+        "none": "不使用管理接口",
+        "newapi": "New API"
+      },
       "modelProviderDescriptions": {
         "openai": "OpenAI 官方 API 平台，用于 GPT 模型和多模态服务。",
         "anthropic": "Anthropic 官方 Claude 模型控制台服务。",
         "moonshot-cn": "Moonshot / Kimi 中国站官方 OpenAI 兼容 API 服务。",
         "moonshot-intl": "Moonshot / Kimi 国际站官方 OpenAI 兼容 API 服务。",
+        "kimi-code": "Kimi Code 会员权益里的编程智能体接入端点。",
         "deepseek": "DeepSeek 官方 OpenAI 兼容 API 服务。",
         "minimax": "MiniMax 官方 API 平台，支持文本、多模态和智能体服务。",
+        "minimax-token-plan": "MiniMax Token Plan 订阅端点，用于 MiniMax M 系列编程模型。",
         "qwen": "阿里云百炼 / DashScope 千问模型 API 服务。",
+        "qwen-coding-plan": "阿里云百炼 Coding Plan 编程智能体接入端点。",
         "zhipu": "智谱 BigModel 官方 GLM 模型 API 服务。",
+        "zhipu-coding-plan": "智谱 GLM Coding Plan 支持工具专用端点。",
+        "tencent-tokenhub-coding-plan": "腾讯云 TokenHub Coding Plan 编程智能体接入端点。",
+        "volcengine-ark-coding-plan": "火山方舟 Coding Plan 编程智能体接入端点。",
+        "baidu-qianfan-coding-plan": "百度千帆 Coding Plan 编程智能体接入端点。",
         "azure-openai": "Azure AI Foundry 托管的 OpenAI 模型部署服务。",
         "google-gemini": "Google AI Studio 和 Gemini API 服务。",
         "aws-bedrock": "AWS Bedrock 托管基础模型服务。",
@@ -3729,7 +3928,14 @@
     },
     "sectionGroups": {
       "base": "基础配置",
+      "profile": "服务信息",
+      "access": "接入配置",
+      "providerAccess": "接入覆盖",
+      "customization": "展示与链接",
       "models": "模型配置",
+      "profiles": "配置档案",
+      "management": "管理配置",
+      "plan": "套餐信息",
       "advanced": "进阶配置",
       "advancedModels": "高阶模型配置",
       "advancedRuntime": "运行时选项",

@@ -78,7 +78,7 @@ export interface SenderProps {
   servicePreviewModelOptions?: ModelSelectOption[]
   onToggleRecommendedModel?: (option: ModelSelectOption) => void | Promise<void>
   onConnectMoreModelServices?: () => void
-  onOpenModelServicesConfig?: () => void
+  onOpenModelServicesConfig?: (serviceKey?: string) => void
   updatingRecommendedModelValue?: string
   selectedModel?: string
   onModelChange?: (model: string) => void

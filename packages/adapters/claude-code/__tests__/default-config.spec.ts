@@ -113,6 +113,35 @@ describe('generateDefaultCCRConfigJSON', () => {
     expect(config.Router.default).toBe('kimi,kimi-k2')
   })
 
+  it('uses chat completions endpoints for Coding Plan OpenAI-compatible roots in CCR', () => {
+    const raw = generateDefaultCCRConfigJSON({
+      cwd: '/tmp/project',
+      userConfig: {
+        defaultModelService: 'qwen-coding',
+        defaultModel: 'qwen3.7-plus',
+        modelServices: {
+          'qwen-coding': {
+            provider: 'qwen-coding-plan',
+            apiKey: 'sk-sp-token'
+          }
+        }
+      }
+    })
+
+    const config = JSON.parse(raw) as {
+      Providers: Array<{ name: string; api_base_url: string }>
+      Router: { default: string }
+    }
+
+    expect(config.Providers).toMatchObject([
+      {
+        name: 'qwen-coding',
+        api_base_url: 'https://coding.dashscope.aliyuncs.com/v1/chat/completions'
+      }
+    ])
+    expect(config.Router.default).toBe('qwen-coding,qwen3.7-plus')
+  })
+
   it('does not append chat completions when an endpoint is already configured', () => {
     const raw = generateDefaultCCRConfigJSON({
       cwd: '/tmp/project',

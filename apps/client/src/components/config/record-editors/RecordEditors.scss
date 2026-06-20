@@ -289,9 +289,9 @@
   align-items: center;
   gap: 8px;
   flex: 1;
-  padding: 10px 12px;
+  padding: var(--subpage-tertiary-padding);
   border: var(--subpage-tertiary-border);
-  border-radius: 8px;
+  border-radius: var(--subpage-tertiary-radius);
   background: var(--subpage-tertiary-bg);
   transition: border-color .2s ease, background-color .2s ease;
 }

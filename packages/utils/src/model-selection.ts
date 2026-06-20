@@ -10,6 +10,7 @@ import type {
 } from '@oneworks/types'
 
 import {
+  flattenModelServices,
   getModelProviderDefinition,
   normalizeIconRef,
   resolveModelServiceConfig,
@@ -158,7 +159,7 @@ export const parseServiceModelSelector = (value: string | undefined) => {
 export const listServiceModels = (modelServices: Record<string, ModelServiceConfig>) => {
   const list: ServiceModelEntry[] = []
 
-  for (const [serviceKey, serviceValue] of Object.entries(modelServices)) {
+  for (const [serviceKey, serviceValue] of Object.entries(flattenModelServices(modelServices))) {
     const normalizedServiceKey = normalizeNonEmptyString(serviceKey)
     if (!normalizedServiceKey) continue
 
@@ -208,7 +209,8 @@ export const listServiceModelOptions = (params: {
 }) => {
   const list: ServiceModelOption[] = []
 
-  for (const [serviceKey, serviceValue] of Object.entries(params.modelServices)) {
+  const modelServices = flattenModelServices(params.modelServices)
+  for (const [serviceKey, serviceValue] of Object.entries(modelServices)) {
     const normalizedServiceKey = normalizeNonEmptyString(serviceKey)
     if (!normalizedServiceKey) continue
 
@@ -290,6 +292,7 @@ export const filterServiceModelsForAdapter = <TEntry extends ServiceModelEntry>(
   const adapter = normalizeNonEmptyString(params.adapter)
   if (!adapter) return params.serviceModels
 
+  const modelServices = flattenModelServices(params.modelServices)
   return params.serviceModels.filter((entry) => {
     const metadataAdapter = resolveModelDefaultAdapter({
       model: entry.selectorValue,
@@ -299,7 +302,7 @@ export const filterServiceModelsForAdapter = <TEntry extends ServiceModelEntry>(
 
     return isModelServiceCompatibleWithAdapter({
       adapter,
-      service: params.modelServices[entry.serviceKey]
+      service: modelServices[entry.serviceKey]
     })
   })
 }

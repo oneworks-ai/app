@@ -11,6 +11,7 @@ import {
   handleSenderMobileSelectOptionKeyDown
 } from '../mobile-select-drawer/SenderMobileSelectDrawer'
 import { ModelSelectOptionLabel } from './ModelSelectOptionLabel'
+import { resolveModelServiceKeyFromMenuGroup } from './model-service-config-menu'
 
 type ModelMobileView =
   | { kind: 'root' }
@@ -48,7 +49,7 @@ export function ModelMobileSelectDrawer({
   onSelectModel: (value: string) => void
   onToggleRecommendedModel?: (option: ModelSelectOption) => void | Promise<void>
   onConnectMoreModelServices?: () => void
-  onOpenModelServicesConfig?: () => void
+  onOpenModelServicesConfig?: (serviceKey?: string) => void
 }) {
   const { t } = useTranslation()
   const [modelView, setModelView] = useState<ModelMobileView>({ kind: 'root' })
@@ -324,14 +325,35 @@ export function ModelMobileSelectDrawer({
     }
 
     if (modelView.kind === 'group') {
-      return activeModelMenuGroup != null && activeModelMenuGroup.options.length > 0
-        ? renderModelSection({
-          key: activeModelMenuGroup.key,
-          title: activeModelMenuGroup.title,
-          description: activeModelMenuGroup.description,
-          options: activeModelMenuGroup.options
+      if (activeModelMenuGroup == null || activeModelMenuGroup.options.length === 0) {
+        return renderEmptyOption()
+      }
+
+      const activeServiceKey = resolveModelServiceKeyFromMenuGroup(activeModelMenuGroup)
+      const serviceAction = activeServiceKey == null || onOpenModelServicesConfig == null
+        ? null
+        : renderModelActionOption({
+          key: `model-services-open-service-config:${activeServiceKey}`,
+          title: t('chat.modelOpenModelServiceDetails'),
+          icon: 'settings',
+          onClick: () => {
+            onClose()
+            onSearchChange('')
+            onOpenModelServicesConfig(activeServiceKey)
+          }
         })
-        : renderEmptyOption()
+
+      return (
+        <>
+          {renderModelSection({
+            key: activeModelMenuGroup.key,
+            title: activeModelMenuGroup.title,
+            description: activeModelMenuGroup.description,
+            options: activeModelMenuGroup.options
+          })}
+          {serviceAction}
+        </>
+      )
     }
 
     const hasModelServiceActions = onConnectMoreModelServices != null || onOpenModelServicesConfig != null

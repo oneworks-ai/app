@@ -291,6 +291,10 @@ export interface RouteContainerPanelDockChromeActionConfig {
  */
 export interface RouteContainerPanelDockChromeActionsConfig {
   /**
+   * Extra panel command rendered immediately before the fullscreen action.
+   */
+  beforeFullscreen?: RouteContainerPanelDockChromeActionConfig
+  /**
    * Extra panel command rendered immediately before the close action.
    */
   beforeClose?: RouteContainerPanelDockChromeActionConfig
@@ -448,6 +452,7 @@ const buildRouteContainerPanelDockChromeActions = (
   actions: RouteContainerPanelDockChromeActionsConfig | undefined
 ): RouteContainerPanelDockActionItem[] =>
   [
+    resolveRouteContainerPanelDockChromeAction('before-fullscreen', 'open_in_new', actions?.beforeFullscreen),
     resolveRouteContainerPanelDockChromeAction('fullscreen', 'fullscreen', actions?.fullscreen, 'fullscreen_exit'),
     resolveRouteContainerPanelDockChromeAction('minimize', 'bottom_panel_close', actions?.minimize),
     resolveRouteContainerPanelDockChromeAction('before-close', 'more_horiz', actions?.beforeClose),

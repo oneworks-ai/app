@@ -6,11 +6,14 @@ import './ModelSelectMenu.scss'
 import './ModelSelectMenuLabels.scss'
 
 import { ShortcutTooltip } from '@oneworks/components/route-layout'
+import type { IconRef } from '@oneworks/types'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useModelSelectBrowser } from '#~/components/chat/sender/@hooks/use-model-select-browser'
+import type { ModelSelectOption } from '#~/hooks/chat/use-chat-model-adapter-selection'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
+import { renderIconRef } from '#~/utils/model-provider-icons'
 
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
 import type {
@@ -24,6 +27,28 @@ import { ModelMobileSelectDrawer } from './ModelMobileSelectDrawer'
 const renderSelectArrow = (onMouseDown: (event: React.MouseEvent<HTMLSpanElement>) => void) => (
   <span className='material-symbols-rounded sender-select-arrow' onMouseDown={onMouseDown}>
     keyboard_arrow_down
+  </span>
+)
+
+const defaultModelTriggerIcon: IconRef = { kind: 'material', name: 'model_training' }
+
+const renderSelectedModelTriggerIcon = (option: ModelSelectOption | undefined) =>
+  renderIconRef({
+    icon: option?.modelIcon ?? option?.serviceIcon ?? defaultModelTriggerIcon,
+    imageClassName: 'model-select-trigger-icon sender-responsive-select-button__icon',
+    symbolClassName: 'model-select-trigger-icon-symbol sender-responsive-select-button__icon'
+  })
+
+const renderSelectedModelTriggerLabel = ({
+  label,
+  option
+}: {
+  label: React.ReactNode
+  option: ModelSelectOption | undefined
+}) => (
+  <span className='model-select-trigger-label'>
+    {renderSelectedModelTriggerIcon(option)}
+    <span className='model-select-trigger-text'>{label}</span>
   </span>
 )
 
@@ -95,9 +120,10 @@ export function ModelSelectControl({
   const isCompactControl = isCompactLayout || isTouchInteraction
   const isModelSelectOpen = showModelSelect
   const defaultModelLabel = t('chat.defaultModelLabel')
+  const selectedModelOption = modelSearchOptions?.find(option => option.value === selectedModel)
   const selectedModelLabel = modelUnavailable
     ? t('chat.modelUnavailable')
-    : modelSearchOptions?.find(option => option.value === selectedModel)?.displayLabel ??
+    : selectedModelOption?.displayLabel ??
       selectedModel ??
       defaultModelLabel
 
@@ -217,7 +243,7 @@ export function ModelSelectControl({
                 openCompactModelSelect()
               }}
             >
-              <span className='material-symbols-rounded sender-responsive-select-button__icon'>model_training</span>
+              {renderSelectedModelTriggerIcon(selectedModelOption)}
               <span className='sender-responsive-select-button__label'>{selectedModelLabel}</span>
               <span className='material-symbols-rounded sender-responsive-select-button__chevron'>
                 keyboard_arrow_down
@@ -249,6 +275,11 @@ export function ModelSelectControl({
               }}
               placeholder={modelUnavailable ? t('chat.modelUnavailable') : defaultModelLabel}
               optionLabelProp='displayLabel'
+              labelRender={() =>
+                renderSelectedModelTriggerLabel({
+                  label: selectedModelLabel,
+                  option: selectedModelOption
+                })}
               popupRender={renderModelPopup}
               popupMatchSelectWidth={false}
               suffixIcon={renderSelectArrow((event) => {

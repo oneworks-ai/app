@@ -30,6 +30,7 @@
 - 用户选择前，该草稿的自动保存必须保持阻断状态，避免背景定时器把另一份内容写回去。
 - `ConfigView.tsx` 与 `use-worktree-environment-auto-save.ts` 的行为需要保持一致；不要只修一条编辑链路，另一条继续静默覆盖。
 - `configConflict.ts` 负责共享比较逻辑；比较时需要归一化对象 key 顺序，避免仅因字段顺序不同而误判冲突。
+- 配置页底部 dock / portal tabs 是 `ConfigView` route 级状态，不属于某个配置 section 或 detail。切换 `tab`、`source`、`detail` 时不要清空已打开的底部 tabs；只有用户关闭 panel 或关闭 tab 时才改变打开状态。
 
 ## 修改建议
 

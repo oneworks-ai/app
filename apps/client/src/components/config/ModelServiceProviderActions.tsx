@@ -1,10 +1,13 @@
+/* eslint-disable max-lines -- provider actions coordinate portal, API actions, live quota, and result rendering. */
 import { App } from 'antd'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { ConfigSource, ProviderAccountStatus, ProviderModelInfo, ProviderServiceStatus } from '@oneworks/types'
 import {
   getModelProviderDefinition,
   resolveModelProviderIdentity,
+  resolveModelServiceBilling,
+  resolveModelServiceCodingPlan,
   resolveModelServiceHomepageUrl
 } from '@oneworks/utils/model-providers'
 
@@ -13,17 +16,22 @@ import {
   getApiErrorMessage,
   getModelServiceBalance,
   getModelServiceStatus,
-  listModelServiceModels,
-  refreshModelServiceModels
+  listModelServiceModels
 } from '#~/api'
 
 import {
   ModelServiceProviderActionButtons,
   ModelServiceProviderActionHeader
 } from './ModelServiceProviderActionContent'
+import type { ModelServiceProviderMoreAction } from './ModelServiceProviderActionContent'
 import { ModelServiceProviderActionResults } from './ModelServiceProviderActionResults'
-import { ModelServiceProviderPortal } from './ModelServiceProviderPortal'
+import { ModelServiceProviderPlanSummary, getModelServicePlanLinks } from './ModelServiceProviderPlanSummary'
+import type { ModelServiceProviderPortalRequest } from './ModelServiceProviderPortalBottomPanel'
 import type { TranslationFn } from './configUtils'
+import {
+  getCachedModelServiceAccountStatus,
+  setCachedModelServiceAccountStatus
+} from './modelServiceAccountStatusCache'
 import {
   buildServiceActionFingerprint,
   normalizePortalUrl,
@@ -34,68 +42,85 @@ import {
 } from './modelServiceProviderActionUtils'
 
 export const ModelServiceProviderActions = ({
-  canRefreshModels = true,
   item,
-  onChange,
+  onOpenPortal,
   serviceKey,
   source,
   t
 }: {
-  canRefreshModels?: boolean
   item: unknown
-  onChange: (nextItem: Record<string, unknown>) => void
+  onOpenPortal?: (request: ModelServiceProviderPortalRequest) => void
   serviceKey: string
   source: ConfigSource
   t: TranslationFn
 }) => {
   const { message } = App.useApp()
-  const service = toModelServiceConfig(item)
+  const service = useMemo(() => toModelServiceConfig(item), [item])
   const identity = resolveModelProviderIdentity(service)
   const provider = identity.provider == null ? undefined : getModelProviderDefinition(identity.provider)
   const providerTitle = provider?.title ?? identity.provider ?? t('config.options.modelProviders.custom')
   const homepageUrl = normalizePortalUrl(resolveModelServiceHomepageUrl(service))
+  const billing = resolveModelServiceBilling(service)
+  const codingPlan = resolveModelServiceCodingPlan(service)
   const managementEnabled = service.management?.enabled !== false
   const providerCapabilities = provider?.capabilities
   const actionCapabilities = resolveProviderActionCapabilities(providerCapabilities, managementEnabled)
+  const hasAutomaticModelCatalog = (codingPlan?.defaultModels?.length ?? 0) > 0 ||
+    (provider?.defaultModels?.length ?? 0) > 0
   const secretActionLabel = providerCapabilities?.secrets === 'manual'
     ? t('config.modelServices.actions.openApiKeys')
     : t('config.modelServices.actions.createSecret')
-  const [portalUrl, setPortalUrl] = useState<string>()
-  const [portalTitle, setPortalTitle] = useState(providerTitle)
   const [loadingAction, setLoadingAction] = useState<string>()
   const [models, setModels] = useState<ProviderModelInfo[]>([])
   const [accountStatus, setAccountStatus] = useState<ProviderAccountStatus | null>(null)
+  const [accountError, setAccountError] = useState<string | null>(null)
   const [serviceStatus, setServiceStatus] = useState<ProviderServiceStatus | null>(null)
+  const autoBalanceFingerprintRef = useRef<string | null>(null)
 
   const modelIds = useMemo(() => normalizeProviderModels(models), [models])
   const serviceFingerprint = buildServiceActionFingerprint(serviceKey, source, service)
+  const showsPlanSummary = codingPlan != null || billing?.kind != null
+  const shouldShowAccountSummary = showsPlanSummary || actionCapabilities.canQueryBalance
+  const canAutoQueryAccountStatus = shouldShowAccountSummary && actionCapabilities.canQueryBalance
 
   useEffect(() => {
+    const cachedAccountStatus = getCachedModelServiceAccountStatus(serviceFingerprint)
     setModels([])
-    setAccountStatus(null)
+    setAccountStatus(cachedAccountStatus)
+    setAccountError(null)
     setServiceStatus(null)
   }, [serviceFingerprint])
 
-  const runAction = async <T,>(actionKey: string, action: () => Promise<T>) => {
+  const runAction = useCallback(async <T,>(
+    actionKey: string,
+    action: () => Promise<T>,
+    options?: { silent?: boolean }
+  ) => {
     setLoadingAction(actionKey)
     try {
       return await action()
     } catch (error) {
-      void message.error(getApiErrorMessage(error, t('config.modelServices.results.actionFailed')))
+      if (options?.silent !== true) {
+        void message.error(getApiErrorMessage(error, t('config.modelServices.results.actionFailed')))
+      }
       return undefined
     } finally {
       setLoadingAction(undefined)
     }
-  }
+  }, [message, t])
 
-  const openPortal = (url: string, title = providerTitle) => {
-    setPortalUrl(url)
-    setPortalTitle(title)
-  }
-
-  const handleOpenExternal = async (url: string) => {
+  const handleOpenExternal = useCallback(async (url: string) => (
     await runAction('external', async () => openExternalUrl(url))
-  }
+  ), [runAction])
+
+  const openPortal = useCallback((url: string, title = providerTitle) => {
+    const normalizedUrl = normalizePortalUrl(url)
+    if (normalizedUrl == null) return
+    onOpenPortal?.({
+      title,
+      url: normalizedUrl
+    })
+  }, [onOpenPortal, providerTitle])
 
   const handleListModels = async () => {
     const result = await runAction('models', () => listModelServiceModels(serviceKey, { service, source }))
@@ -105,31 +130,20 @@ export const ModelServiceProviderActions = ({
     return result.models
   }
 
-  const handleRefreshModels = async () => {
-    const nextModels = modelIds.length > 0 ? models : await handleListModels()
-    const nextModelIds = normalizeProviderModels(nextModels ?? [])
-    if (nextModelIds.length === 0) {
-      void message.warning(t('config.modelServices.results.modelsEmpty'))
+  const handleBalance = useCallback(async (options?: { silent?: boolean }) => {
+    setAccountError(null)
+    const result = await runAction(
+      'balance',
+      () => getModelServiceBalance(serviceKey, { service, source }),
+      options
+    )
+    if (result == null) {
+      setAccountError(t('config.modelServices.plan.liveQuota.failed'))
       return
     }
-
-    const result = await runAction('refreshModels', () =>
-      refreshModelServiceModels({
-        models: nextModelIds,
-        service,
-        serviceKey,
-        source
-      }))
-    if (result == null) return
-    onChange({ ...toModelServiceConfig(item), models: result.models })
-    void message.success(t('config.modelServices.results.modelsRefreshed', { count: result.models.length }))
-  }
-
-  const handleBalance = async () => {
-    const result = await runAction('balance', () => getModelServiceBalance(serviceKey, { service, source }))
-    if (result == null) return
+    setCachedModelServiceAccountStatus(serviceFingerprint, result.account)
     setAccountStatus(result.account)
-  }
+  }, [runAction, service, serviceFingerprint, serviceKey, source, t])
 
   const handleStatus = async () => {
     const result = await runAction('status', () => getModelServiceStatus(serviceKey, { service, source }))
@@ -153,46 +167,92 @@ export const ModelServiceProviderActions = ({
     void message.info(secret.reason)
   }
 
+  useEffect(() => {
+    if (!canAutoQueryAccountStatus) return
+    const cachedAccountStatus = getCachedModelServiceAccountStatus(serviceFingerprint)
+    if (cachedAccountStatus != null) {
+      setAccountStatus(cachedAccountStatus)
+      setAccountError(null)
+      return
+    }
+    if (autoBalanceFingerprintRef.current === serviceFingerprint) return
+    autoBalanceFingerprintRef.current = serviceFingerprint
+    void handleBalance({ silent: true })
+  }, [canAutoQueryAccountStatus, handleBalance, serviceFingerprint])
+
+  const moreActions: ModelServiceProviderMoreAction[] = [
+    ...(!shouldShowAccountSummary && actionCapabilities.canQueryBalance
+      ? [{
+        icon: 'account_balance_wallet',
+        key: 'balance',
+        label: t('config.modelServices.actions.queryBalance'),
+        onClick: () => void handleBalance()
+      }]
+      : []),
+    ...(actionCapabilities.canQueryStatus
+      ? [{
+        icon: 'cloud_sync',
+        key: 'status',
+        label: t('config.modelServices.actions.queryStatus'),
+        onClick: () => void handleStatus()
+      }]
+      : []),
+    ...(!hasAutomaticModelCatalog && actionCapabilities.canQueryModels
+      ? [{
+        icon: 'view_list',
+        key: 'models',
+        label: t('config.modelServices.actions.queryModels'),
+        onClick: () => void handleListModels()
+      }]
+      : []),
+    ...getModelServicePlanLinks({ service, t }).map(link => ({
+      icon: 'open_in_browser',
+      key: `plan:${link.url}`,
+      label: link.label,
+      onClick: () => openPortal(link.url, link.label)
+    })),
+    ...(homepageUrl == null ? [] : [{
+      icon: 'open_in_new',
+      key: `external:${homepageUrl}`,
+      label: t('config.modelServices.actions.openExternal'),
+      onClick: () => void handleOpenExternal(homepageUrl)
+    }])
+  ]
+
   return (
     <div className='config-view__model-service-actions'>
       <ModelServiceProviderActionHeader
-        identity={identity}
+        headerActions={
+          <ModelServiceProviderActionButtons
+            canCreateSecret={actionCapabilities.canCreateSecret}
+            homepageUrl={homepageUrl}
+            loadingAction={loadingAction}
+            onHomepage={openPortal}
+            onSecret={() => void handleSecret()}
+            secretActionLabel={secretActionLabel}
+            t={t}
+          />
+        }
+        moreActions={moreActions}
         providerTitle={providerTitle}
         service={service}
         serviceStatus={serviceStatus}
         t={t}
       />
-      <ModelServiceProviderActionButtons
-        canCreateSecret={actionCapabilities.canCreateSecret}
-        homepageUrl={homepageUrl}
-        loadingAction={loadingAction}
+      <ModelServiceProviderPlanSummary
+        accountError={accountError}
+        accountStatus={accountStatus}
         canQueryBalance={actionCapabilities.canQueryBalance}
-        canQueryModels={actionCapabilities.canQueryModels}
-        canQueryStatus={actionCapabilities.canQueryStatus}
-        canRefreshModels={canRefreshModels && managementEnabled}
-        onBalance={() => void handleBalance()}
-        onExternal={(url) => void handleOpenExternal(url)}
-        onHomepage={openPortal}
-        onListModels={() => void handleListModels()}
-        onRefreshModels={() => void handleRefreshModels()}
-        onSecret={() => void handleSecret()}
-        onStatus={() => void handleStatus()}
-        secretActionLabel={secretActionLabel}
+        loadingBalance={loadingAction === 'balance'}
+        service={service}
         t={t}
       />
       <ModelServiceProviderActionResults
-        accountStatus={accountStatus}
+        accountStatus={shouldShowAccountSummary ? null : accountStatus}
         identity={identity}
         models={models}
         serviceStatus={serviceStatus}
         t={t}
-      />
-      <ModelServiceProviderPortal
-        url={portalUrl}
-        title={portalTitle}
-        t={t}
-        onClose={() => setPortalUrl(undefined)}
-        onOpenExternal={(url) => void handleOpenExternal(url)}
       />
     </div>
   )

@@ -82,6 +82,72 @@ export interface ModelProviderPortalLinks {
   status?: string
 }
 
+export type ModelServiceBillingKind =
+  | 'payg'
+  | 'product_subscription'
+  | 'coding_plan'
+  | 'token_plan'
+  | 'relay_coding_plan'
+
+export type ModelServiceKeyKind =
+  | 'payg_api_key'
+  | 'coding_plan_key'
+  | 'subscription_key'
+
+export type ModelServiceQuotaUnit = 'request' | 'token' | 'credit' | 'percent'
+
+export type ModelServiceQuotaWindow = '5h' | 'weekly' | 'monthly'
+
+export type ModelServiceAllowedUse = 'coding_tools_only' | 'general_api'
+
+export interface ModelServiceBillingConfig {
+  kind?: ModelServiceBillingKind
+  keyKind?: ModelServiceKeyKind
+  quotaUnit?: ModelServiceQuotaUnit
+  quotaWindows?: ModelServiceQuotaWindow[]
+  allowedUse?: ModelServiceAllowedUse
+  notes?: string[]
+}
+
+export interface ModelProviderProtocolEndpoint {
+  baseUrl: string
+  docsUrl?: string
+}
+
+export interface ModelProviderCodingPlanRegion {
+  id: string
+  label: string
+  billing?: ModelServiceBillingConfig
+  protocols?: {
+    openai?: ModelProviderProtocolEndpoint
+    anthropic?: ModelProviderProtocolEndpoint
+  }
+  defaultModels?: string[]
+  planHomeUrl?: string
+  keyHomeUrl?: string
+  docsUrl?: string
+  restrictions?: string[]
+}
+
+export interface ModelProviderCodingPlanDefinition {
+  supported: boolean
+  official?: boolean
+  kind?: ModelServiceBillingKind
+  title?: string
+  planHomeUrl?: string
+  keyHomeUrl?: string
+  docsUrl?: string
+  billing?: ModelServiceBillingConfig
+  protocols?: {
+    openai?: ModelProviderProtocolEndpoint
+    anthropic?: ModelProviderProtocolEndpoint
+  }
+  regions?: ModelProviderCodingPlanRegion[]
+  defaultModels?: string[]
+  restrictions?: string[]
+  notes?: string[]
+}
+
 export type ModelProviderStatusKind = 'statuspage' | 'cloud_status_openapi' | 'page_only' | 'unsupported'
 
 export interface ModelProviderStatusDefinition {
@@ -102,6 +168,8 @@ export interface ModelProviderDefinition {
   icon?: IconRef
   defaultApiBaseUrl?: string
   defaultModels?: string[]
+  billing?: ModelServiceBillingConfig
+  codingPlan?: ModelProviderCodingPlanDefinition
   portal?: ModelProviderPortalLinks
   capabilities?: ModelProviderCapabilities
   status?: ModelProviderStatusDefinition
@@ -110,29 +178,41 @@ export interface ModelProviderDefinition {
 export interface ModelServiceManagementConfig {
   enabled?: boolean
   apiKey?: string
+  baseUrl?: string
+  headers?: Record<string, string>
   organizationId?: string
+  userId?: string
   projectId?: string
   endpointKind?: string
 }
 
 export interface ModelServiceConfig {
+  kind?: 'service' | 'collection'
   title?: string
   description?: string
   provider?: string
   icon?: string
   homepageUrl?: string
   apiBaseUrl?: string
-  apiKey: string
+  apiKey?: string
   models?: string[]
   timeoutMs?: number
   maxOutputTokens?: number
+  billing?: ModelServiceBillingConfig
+  codingPlan?: Partial<ModelProviderCodingPlanDefinition> & {
+    enabled?: boolean
+    region?: string
+  }
   providerOptions?: Record<string, unknown>
   management?: ModelServiceManagementConfig
+  profiles?: Record<string, ModelServiceConfig>
+  services?: Record<string, ModelServiceConfig>
   extra?: Record<string, unknown>
 }
 
 export interface ResolvedModelServiceConfig extends ModelServiceConfig {
   apiBaseUrl: string
+  apiKey: string
   modelSource?: 'configured' | 'provider_catalog' | 'remote_cache'
   providerDefinition?: ModelProviderDefinition
 }
@@ -159,6 +239,26 @@ export interface ProviderModelInfo {
 export type ProviderAccountStatus =
   | { kind: 'balance'; currency?: string; available?: number; raw?: unknown }
   | { kind: 'cost'; currency?: string; amount?: number; period?: string; raw?: unknown }
+  | {
+    kind: 'quota'
+    currency?: string
+    unit?: ModelServiceQuotaUnit
+    limit?: number
+    remaining?: number
+    resetTime?: string
+    unlimited?: boolean
+    used?: number
+    windows?: Array<{
+      duration?: number
+      limit?: number
+      remaining?: number
+      resetTime?: string
+      timeUnit?: string
+    }>
+    parallelLimit?: number
+    plan?: string
+    raw?: unknown
+  }
   | { kind: 'unsupported'; reason: string }
 
 export type ProviderStatusIndicator =
@@ -184,6 +284,73 @@ export type ProviderSecretResult =
   | { kind: 'created'; value: string; id?: string; expiresAt?: number; raw?: unknown }
   | { kind: 'console'; url: string; reason: string }
   | { kind: 'unsupported'; reason: string }
+
+export interface ProviderManagementGroup {
+  id: string
+  title?: string
+  description?: string
+  ratio?: number
+  raw?: unknown
+}
+
+export interface ProviderManagementToken {
+  id: string
+  name?: string
+  key?: string
+  status?: number
+  group?: string
+  quota?: number
+  remaining?: number
+  unlimited?: boolean
+  expiredAt?: number
+  createdAt?: number
+  accessedAt?: number
+  modelLimits?: string[]
+  modelLimitsEnabled?: boolean
+}
+
+export interface ProviderManagementSnapshot {
+  kind: 'newapi'
+  account?: ProviderAccountStatus
+  groups: ProviderManagementGroup[]
+  models: ProviderModelInfo[]
+  tokens: ProviderManagementToken[]
+}
+
+export interface ProviderManagementTokenCreateInput {
+  name: string
+  group?: string
+  quota?: number
+  unlimited?: boolean
+  modelLimits?: string[]
+  modelLimitsEnabled?: boolean
+  allowIps?: string
+  expiredAt?: number
+}
+
+export interface ProviderManagementTokenUpdateInput {
+  id: string
+  name?: string
+  group?: string
+  quota?: number
+  unlimited?: boolean
+  status?: number
+  modelLimits?: string[]
+  modelLimitsEnabled?: boolean
+  allowIps?: string
+  expiredAt?: number
+}
+
+export interface ProviderManagementMutationResult {
+  success: boolean
+  message?: string
+  token?: ProviderManagementToken
+  profile?: ModelServiceConfig
+}
+
+export interface ProviderManagementTokenProfileResult {
+  profile: ModelServiceConfig
+}
 
 export interface RecommendedModelConfig {
   service?: string

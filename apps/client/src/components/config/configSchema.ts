@@ -28,6 +28,11 @@ export interface FieldOption {
   label: string
 }
 
+export interface FieldGroupContext {
+  currentValue: unknown
+  currentResolvedValue?: unknown
+}
+
 export interface FieldSpec {
   path: string[]
   type: FieldValueType
@@ -39,9 +44,11 @@ export interface FieldSpec {
   labelKey?: string
   descriptionKey?: string
   group?: string
+  resolveGroup?: (context: FieldGroupContext) => string | undefined
   recordKind?: RecordKind
   sensitive?: boolean
   hidden?: boolean
+  visible?: (context: FieldGroupContext) => boolean
   unsetWhenEmpty?: boolean
   collapse?: {
     key: string
@@ -136,6 +143,17 @@ const modelProviderOptions: FieldSpec['options'] = [
     }))
 ]
 
+const modelServiceKindOptions: FieldSpec['options'] = [
+  { value: '', label: 'config.options.modelServiceKind.service' },
+  { value: 'service', label: 'config.options.modelServiceKind.service' },
+  { value: 'collection', label: 'config.options.modelServiceKind.collection' }
+]
+
+const modelServiceManagementEndpointKindOptions: FieldSpec['options'] = [
+  { value: '', label: 'config.options.modelServiceManagementEndpointKind.none' },
+  { value: 'newapi', label: 'config.options.modelServiceManagementEndpointKind.newapi' }
+]
+
 const resolveProviderDescriptionTranslation = (
   providerId: string,
   fallback: string | undefined,
@@ -160,6 +178,40 @@ const resolveModelServiceListDescription = (
   if (providerId == null) return fallbackDescription
   return resolveProviderDescriptionTranslation(providerId, fallbackDescription, t)
 }
+
+const getModelServiceProvider = (value: unknown) => {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const provider = (value as { provider?: unknown }).provider
+  return typeof provider === 'string' && provider.trim() !== '' ? provider.trim() : undefined
+}
+
+const hasModelServiceProvider = ({ currentValue, currentResolvedValue }: FieldGroupContext) => (
+  getModelServiceProvider(currentValue) != null || getModelServiceProvider(currentResolvedValue) != null
+)
+
+const resolveModelServiceApiBaseUrlGroup = (context: FieldGroupContext) => (
+  hasModelServiceProvider(context) ? 'providerAccess' : 'access'
+)
+
+const getModelServiceKind = (value: unknown) => {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const kind = (value as { kind?: unknown }).kind
+  return typeof kind === 'string' && kind.trim() !== '' ? kind.trim() : undefined
+}
+
+const hasModelServiceChildren = (value: unknown) => {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as { profiles?: unknown; services?: unknown }
+  const profiles = record.profiles ?? record.services
+  return profiles != null && typeof profiles === 'object' && !Array.isArray(profiles)
+}
+
+const isModelServiceCollectionConfig = ({ currentValue, currentResolvedValue }: FieldGroupContext) => (
+  getModelServiceKind(currentValue) === 'collection' ||
+  getModelServiceKind(currentResolvedValue) === 'collection' ||
+  hasModelServiceChildren(currentValue) ||
+  hasModelServiceChildren(currentResolvedValue)
+)
 
 export const configGroupMeta: Record<string, Record<string, ConfigGroupMeta>> = {
   general: {
@@ -227,13 +279,72 @@ export const configGroupMeta: Record<string, Record<string, ConfigGroupMeta>> = 
       collapsible: true,
       defaultExpanded: true
     }
+  },
+  modelServices: {
+    profile: {
+      labelKey: 'config.sectionGroups.profile',
+      collapsible: true,
+      defaultExpanded: true
+    },
+    access: {
+      labelKey: 'config.sectionGroups.access',
+      collapsible: true,
+      defaultExpanded: true
+    },
+    providerAccess: {
+      labelKey: 'config.sectionGroups.providerAccess',
+      collapsible: true,
+      defaultExpanded: false
+    },
+    customization: {
+      labelKey: 'config.sectionGroups.customization',
+      collapsible: true,
+      defaultExpanded: false
+    },
+    models: {
+      labelKey: 'config.sectionGroups.models',
+      collapsible: true,
+      defaultExpanded: false
+    },
+    profiles: {
+      labelKey: 'config.sectionGroups.profiles',
+      collapsible: true,
+      defaultExpanded: true
+    },
+    management: {
+      labelKey: 'config.sectionGroups.management',
+      collapsible: true,
+      defaultExpanded: false
+    },
+    plan: {
+      labelKey: 'config.sectionGroups.plan',
+      collapsible: true,
+      defaultExpanded: false
+    },
+    advanced: {
+      labelKey: 'config.sectionGroups.advanced',
+      collapsible: true,
+      defaultExpanded: false
+    }
   }
 }
 
 export const configGroupOrder: Record<string, string[]> = {
   general: ['base', 'models', 'links', 'permissions', 'env', 'items', 'advanced', 'default'],
   conversation: ['defaults', 'presets', 'actions', 'default'],
-  voice: ['speechToText', 'services', 'default']
+  voice: ['speechToText', 'services', 'default'],
+  modelServices: [
+    'profile',
+    'access',
+    'providerAccess',
+    'customization',
+    'models',
+    'profiles',
+    'management',
+    'plan',
+    'advanced',
+    'default'
+  ]
 }
 
 const notificationEventDetailFields: FieldSpec[] = [
@@ -265,12 +376,24 @@ const notificationEventDetailFields: FieldSpec[] = [
 
 const modelServiceDetailFields: FieldSpec[] = [
   {
+    path: ['kind'],
+    type: 'select',
+    defaultValue: '',
+    icon: 'category',
+    options: modelServiceKindOptions,
+    unsetWhenEmpty: true,
+    group: 'profile',
+    labelKey: 'config.fields.modelServices.item.kind.label',
+    descriptionKey: 'config.fields.modelServices.item.kind.desc'
+  },
+  {
     path: ['provider'],
     type: 'select',
     defaultValue: '',
     icon: 'hub',
     options: modelProviderOptions,
     unsetWhenEmpty: true,
+    group: 'profile',
     labelKey: 'config.fields.modelServices.item.provider.label',
     descriptionKey: 'config.fields.modelServices.item.provider.desc'
   },
@@ -279,6 +402,7 @@ const modelServiceDetailFields: FieldSpec[] = [
     type: 'string',
     defaultValue: '',
     icon: 'title',
+    group: 'profile',
     labelKey: 'config.fields.modelServices.item.title.label',
     descriptionKey: 'config.fields.modelServices.item.title.desc'
   },
@@ -287,6 +411,7 @@ const modelServiceDetailFields: FieldSpec[] = [
     type: 'multiline',
     defaultValue: '',
     icon: 'notes',
+    group: 'profile',
     labelKey: 'config.fields.modelServices.item.description.label',
     descriptionKey: 'config.fields.modelServices.item.description.desc'
   },
@@ -296,6 +421,7 @@ const modelServiceDetailFields: FieldSpec[] = [
     defaultValue: '',
     icon: 'image',
     unsetWhenEmpty: true,
+    group: 'customization',
     labelKey: 'config.fields.modelServices.item.icon.label',
     descriptionKey: 'config.fields.modelServices.item.icon.desc'
   },
@@ -305,6 +431,7 @@ const modelServiceDetailFields: FieldSpec[] = [
     defaultValue: '',
     icon: 'home',
     unsetWhenEmpty: true,
+    group: 'customization',
     labelKey: 'config.fields.modelServices.item.homepageUrl.label',
     descriptionKey: 'config.fields.modelServices.item.homepageUrl.desc'
   },
@@ -314,6 +441,8 @@ const modelServiceDetailFields: FieldSpec[] = [
     defaultValue: '',
     icon: 'link',
     unsetWhenEmpty: true,
+    group: 'access',
+    resolveGroup: resolveModelServiceApiBaseUrlGroup,
     labelKey: 'config.fields.modelServices.item.apiBaseUrl.label',
     descriptionKey: 'config.fields.modelServices.item.apiBaseUrl.desc'
   },
@@ -323,6 +452,7 @@ const modelServiceDetailFields: FieldSpec[] = [
     defaultValue: '',
     icon: 'key',
     sensitive: true,
+    group: 'access',
     labelKey: 'config.fields.modelServices.item.apiKey.label',
     descriptionKey: 'config.fields.modelServices.item.apiKey.desc'
   },
@@ -332,16 +462,70 @@ const modelServiceDetailFields: FieldSpec[] = [
     defaultValue: [],
     icon: 'view_list',
     unsetWhenEmpty: true,
+    group: 'models',
     labelKey: 'config.fields.modelServices.item.models.label',
     descriptionKey: 'config.fields.modelServices.item.models.desc'
+  },
+  {
+    path: ['profiles'],
+    type: 'record',
+    recordKind: 'modelServices',
+    defaultValue: {},
+    icon: 'account_tree',
+    unsetWhenEmpty: true,
+    group: 'profiles',
+    visible: isModelServiceCollectionConfig,
+    labelKey: 'config.fields.modelServices.item.profiles.label',
+    descriptionKey: 'config.fields.modelServices.item.profiles.desc'
+  },
+  {
+    path: ['billing'],
+    type: 'json',
+    defaultValue: {},
+    icon: 'payments',
+    unsetWhenEmpty: true,
+    group: 'plan',
+    labelKey: 'config.fields.modelServices.item.billing.label',
+    descriptionKey: 'config.fields.modelServices.item.billing.desc'
+  },
+  {
+    path: ['codingPlan'],
+    type: 'json',
+    defaultValue: {},
+    icon: 'workspace_premium',
+    unsetWhenEmpty: true,
+    group: 'plan',
+    labelKey: 'config.fields.modelServices.item.codingPlan.label',
+    descriptionKey: 'config.fields.modelServices.item.codingPlan.desc'
   },
   {
     path: ['management', 'enabled'],
     type: 'boolean',
     defaultValue: true,
     icon: 'admin_panel_settings',
+    group: 'management',
     labelKey: 'config.fields.modelServices.item.management.enabled.label',
     descriptionKey: 'config.fields.modelServices.item.management.enabled.desc'
+  },
+  {
+    path: ['management', 'endpointKind'],
+    type: 'select',
+    defaultValue: '',
+    icon: 'account_tree',
+    options: modelServiceManagementEndpointKindOptions,
+    unsetWhenEmpty: true,
+    group: 'management',
+    labelKey: 'config.fields.modelServices.item.management.endpointKind.label',
+    descriptionKey: 'config.fields.modelServices.item.management.endpointKind.desc'
+  },
+  {
+    path: ['management', 'baseUrl'],
+    type: 'string',
+    defaultValue: '',
+    icon: 'link',
+    group: 'management',
+    labelKey: 'config.fields.modelServices.item.management.baseUrl.label',
+    descriptionKey: 'config.fields.modelServices.item.management.baseUrl.desc'
   },
   {
     path: ['management', 'apiKey'],
@@ -349,30 +533,27 @@ const modelServiceDetailFields: FieldSpec[] = [
     defaultValue: '',
     icon: 'vpn_key',
     sensitive: true,
+    group: 'management',
     labelKey: 'config.fields.modelServices.item.management.apiKey.label',
     descriptionKey: 'config.fields.modelServices.item.management.apiKey.desc'
   },
   {
-    path: ['management', 'organizationId'],
-    type: 'string',
-    defaultValue: '',
-    icon: 'corporate_fare',
-    labelKey: 'config.fields.modelServices.item.management.organizationId.label',
-    descriptionKey: 'config.fields.modelServices.item.management.organizationId.desc'
-  },
-  {
-    path: ['management', 'projectId'],
-    type: 'string',
-    defaultValue: '',
-    icon: 'folder_managed',
-    labelKey: 'config.fields.modelServices.item.management.projectId.label',
-    descriptionKey: 'config.fields.modelServices.item.management.projectId.desc'
+    path: ['management', 'headers'],
+    type: 'record',
+    recordKind: 'keyValue',
+    defaultValue: {},
+    icon: 'notes',
+    unsetWhenEmpty: true,
+    group: 'management',
+    labelKey: 'config.fields.modelServices.item.management.headers.label',
+    descriptionKey: 'config.fields.modelServices.item.management.headers.desc'
   },
   {
     path: ['providerOptions'],
     type: 'json',
     defaultValue: {},
     icon: 'tune',
+    group: 'advanced',
     labelKey: 'config.fields.modelServices.item.providerOptions.label',
     descriptionKey: 'config.fields.modelServices.item.providerOptions.desc'
   },
@@ -381,6 +562,7 @@ const modelServiceDetailFields: FieldSpec[] = [
     type: 'number',
     defaultValue: undefined,
     icon: 'timer',
+    group: 'advanced',
     labelKey: 'config.fields.modelServices.item.timeoutMs.label',
     descriptionKey: 'config.fields.modelServices.item.timeoutMs.desc'
   },
@@ -389,6 +571,7 @@ const modelServiceDetailFields: FieldSpec[] = [
     type: 'number',
     defaultValue: undefined,
     icon: 'numbers',
+    group: 'advanced',
     labelKey: 'config.fields.modelServices.item.maxOutputTokens.label',
     descriptionKey: 'config.fields.modelServices.item.maxOutputTokens.desc'
   },
@@ -397,6 +580,7 @@ const modelServiceDetailFields: FieldSpec[] = [
     type: 'json',
     defaultValue: {},
     icon: 'account_tree',
+    group: 'advanced',
     labelKey: 'config.fields.modelServices.item.extra.label',
     descriptionKey: 'config.fields.modelServices.item.extra.desc'
   }
@@ -1288,10 +1472,7 @@ export const configSchema: Record<string, FieldSpec[]> = {
           const title = typeof item.title === 'string' ? item.title.trim() : ''
           return title !== '' ? title : itemKey
         },
-        getItemSubtitle: (item, itemKey) => {
-          const title = typeof item.title === 'string' ? item.title.trim() : ''
-          return title !== '' ? itemKey : undefined
-        },
+        getItemSubtitle: () => undefined,
         getItemDescription: (item, _itemKey, _itemIndex, { t }) => resolveModelServiceListDescription(item, t),
         getBreadcrumbLabel: (item, itemKey) => {
           const title = typeof item.title === 'string' ? item.title.trim() : ''

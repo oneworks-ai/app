@@ -17,6 +17,7 @@ import type {
 } from '@oneworks/core'
 import type {
   ConfigResponse,
+  ConfigSource,
   ConversationStarterConfig,
   SessionCreationProgressEvent,
   SessionInfo
@@ -117,6 +118,8 @@ import { Sender } from './sender/Sender'
 import { SessionCreationProgressBanner } from './session-creation-progress/SessionCreationProgressBanner'
 import { ChatStatusBar } from './status-bar/ChatStatusBar'
 import { ToolGroup } from './tools/core/ToolGroup'
+
+const modelServiceConfigSourcePriority: ConfigSource[] = ['user', 'project', 'global']
 
 const getCompactionNoticeAnchorId = (id: string) => (
   `status-notice-${id.replace(/[^\w-]/g, '-')}`
@@ -301,7 +304,7 @@ export function ChatHistoryView({
     onSessionCreated?.(createdSession)
   }, [onSessionCreated, pendingSessionCreationContext, setPendingSessionCreationContext])
   const handleOpenVoiceConfig = useCallback(() => {
-    void navigate('/config?section=voice.speechToText')
+    void navigate('/config/voice')
   }, [navigate])
   const handleShowVoiceInputInSender = useCallback(() => {
     void (async () => {
@@ -362,15 +365,37 @@ export function ChatHistoryView({
     setPendingSessionCreationContext,
     t
   ])
-  const handleOpenModelServicesConfig = useCallback(() => {
+  const resolveModelServiceConfigSource = useCallback((serviceKey?: string): ConfigSource => {
+    const normalizedServiceKey = serviceKey?.trim()
+    if (normalizedServiceKey == null || normalizedServiceKey === '') return 'global'
+
+    for (const source of modelServiceConfigSourcePriority) {
+      const modelServices = configRes?.sources?.[source]?.modelServices
+      if (modelServices != null && Object.hasOwn(modelServices, normalizedServiceKey)) {
+        return source
+      }
+    }
+
+    return 'global'
+  }, [
+    configRes?.sources?.global?.modelServices,
+    configRes?.sources?.project?.modelServices,
+    configRes?.sources?.user?.modelServices
+  ])
+  const handleOpenModelServicesConfig = useCallback((serviceKey?: string) => {
+    const normalizedServiceKey = serviceKey?.trim()
     const params = new URLSearchParams(location.search)
-    params.set('tab', 'modelServices')
-    params.set('source', 'global')
+    params.delete('tab')
+    params.delete('detail')
+    params.delete('section')
+    params.set('source', resolveModelServiceConfigSource(normalizedServiceKey))
     navigate({
-      pathname: '/config',
+      pathname: normalizedServiceKey != null && normalizedServiceKey !== ''
+        ? `/config/modelServices/${encodeURIComponent(normalizedServiceKey)}`
+        : '/config/modelServices',
       search: `?${params.toString()}`
     })
-  }, [location.search, navigate])
+  }, [location.search, navigate, resolveModelServiceConfigSource])
   useEffect(() => {
     if (!hasPersistedSession || pendingSessionCreationContext == null) return
     setPendingSessionCreationContext(undefined)

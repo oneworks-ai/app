@@ -795,7 +795,7 @@ export const useSenderVoiceInput = ({
   }, [mutateConfig, mutateServices, notifySuccess, setVoiceError, t])
 
   const openConfig = useCallback(() => {
-    void navigate('/config?section=voice.speechToText')
+    void navigate('/config/voice')
   }, [navigate])
 
   const controller = useMemo<SenderVoiceInputController>(() => ({

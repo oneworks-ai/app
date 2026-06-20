@@ -9,6 +9,7 @@ import type { ConfigSource, ConfigUiSection } from '@oneworks/types'
 
 import { SectionForm } from './ConfigSectionForm'
 import { ConfigSectionFrame } from './ConfigSectionFrame'
+import type { ModelServiceProviderPortalRequest } from './ModelServiceProviderPortalBottomPanel'
 import type { ConfigDetailRoute } from './configDetail'
 import {
   getConfigDetailRouteKey,
@@ -21,6 +22,32 @@ import type { FieldSpec } from './configSchema'
 import type { TranslationFn } from './configUtils'
 import type { ModelServiceConfigSessionRequest } from './modelServiceConfigSession'
 import { toLabel } from './record-editors/schemaRecordUtils'
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  value != null && typeof value === 'object' && !Array.isArray(value)
+)
+
+const getModelServiceProfile = (
+  item: unknown,
+  profileKey: string
+): Record<string, unknown> | undefined => {
+  if (!isRecord(item)) return undefined
+  const profiles = item.profiles
+  if (isRecord(profiles) && isRecord(profiles[profileKey])) return profiles[profileKey]
+  const legacyServices = item.services
+  if (isRecord(legacyServices) && isRecord(legacyServices[profileKey])) return legacyServices[profileKey]
+  return undefined
+}
+
+const getModelServiceProfileLabel = (
+  item: unknown,
+  resolvedItem: unknown,
+  profileKey: string
+) => {
+  const profile = getModelServiceProfile(item, profileKey) ?? getModelServiceProfile(resolvedItem, profileKey)
+  const title = profile?.title
+  return typeof title === 'string' && title.trim() !== '' ? title.trim() : toLabel(profileKey)
+}
 
 export function ConfigSectionPanel({
   sectionKey,
@@ -40,6 +67,7 @@ export function ConfigSectionPanel({
   workspaceFileOpenerOptions,
   detailQuery = '',
   onDetailQueryChange,
+  onOpenModelServicePortal,
   creatingModelServiceSessionKey,
   onCreateModelServiceSession,
   headerExtra,
@@ -64,6 +92,7 @@ export function ConfigSectionPanel({
   workspaceFileOpenerOptions?: Array<{ value: string; label: ReactNode }>
   detailQuery?: string
   onDetailQueryChange?: (nextQuery: string) => void
+  onOpenModelServicePortal?: (request: ModelServiceProviderPortalRequest) => void
   creatingModelServiceSessionKey?: string | null
   onCreateModelServiceSession?: (request: ModelServiceConfigSessionRequest) => void | Promise<void>
   headerExtra?: ReactNode
@@ -107,6 +136,13 @@ export function ConfigSectionPanel({
 
   const handleCloseDetail = () => {
     storeCurrentScroll()
+    if (detailRoute?.nestedPath?.[0] === 'profiles' && detailRoute.nestedPath.length === 1) {
+      onDetailQueryChange?.(serializeConfigDetailRoute({
+        ...detailRoute,
+        nestedPath: []
+      }))
+      return
+    }
     if ((detailRoute?.nestedPath?.length ?? 0) > 0 && detailRoute != null) {
       onDetailQueryChange?.(serializeConfigDetailRoute({
         ...detailRoute,
@@ -117,10 +153,17 @@ export function ConfigSectionPanel({
     onDetailQueryChange?.('')
   }
 
-  const nestedSegments = detailRoute?.nestedPath ?? []
+  const rawNestedSegments = detailRoute?.nestedPath ?? []
+  const nestedSegments = rawNestedSegments.length === 1 && rawNestedSegments[0] === 'profiles'
+    ? []
+    : rawNestedSegments
   const nestedBreadcrumbs = nestedSegments.map((segment, index) => {
     const label = index === 0 && segment === 'accounts'
       ? t('config.accounts.title')
+      : index === 0 && segment === 'profiles'
+      ? t('config.sectionGroups.profiles')
+      : index === 1 && nestedSegments[0] === 'profiles' && sectionKey === 'modelServices' && detailMeta != null
+      ? getModelServiceProfileLabel(detailMeta.item, detailMeta.resolvedItem, segment)
       : toLabel(segment)
     const isCurrent = index === nestedSegments.length - 1
     return {
@@ -239,6 +282,7 @@ export function ConfigSectionPanel({
         workspaceFileOpenerOptions={workspaceFileOpenerOptions}
         detailRoute={detailRoute}
         onOpenDetailRoute={handleOpenDetail}
+        onOpenModelServicePortal={onOpenModelServicePortal}
         creatingModelServiceSessionKey={creatingModelServiceSessionKey}
         onCreateModelServiceSession={onCreateModelServiceSession}
         t={t}

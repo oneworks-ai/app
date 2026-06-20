@@ -81,26 +81,34 @@ export const adapterNativeCliConfigSchema = z.object({
 })
 
 export const modelServiceConfigSchema = z.object({
+  kind: z.enum(['service', 'collection']).optional().describe('Model service entry kind'),
   title: z.string().optional().describe('Display title'),
   description: z.string().optional().describe('Display description'),
   provider: z.string().min(1).optional().describe('Known provider id used to apply defaults'),
   icon: z.string().optional().describe('Service icon override'),
   homepageUrl: z.string().optional().describe('Provider management homepage override'),
   apiBaseUrl: z.string().min(1).optional().describe('Provider API base URL override'),
-  apiKey: z.string().min(1).describe('Provider API key'),
+  apiKey: z.string().min(1).optional().describe('Provider API key'),
   models: z.array(z.string()).optional().describe('Supported model IDs'),
   timeoutMs: z.number().int().positive().optional().describe('Request timeout in milliseconds'),
   maxOutputTokens: z.number().int().positive().optional().describe('Default max output tokens'),
+  billing: jsonValueSchema.optional().describe('Provider billing metadata'),
+  codingPlan: jsonValueSchema.optional().describe('Provider coding-plan metadata'),
   providerOptions: z.record(z.string(), jsonValueSchema).optional().describe('Provider-specific management options'),
   management: z.object({
     enabled: z.boolean().optional().describe('Enable provider management API actions'),
     apiKey: z.string().optional().describe('Provider management API key'),
+    baseUrl: z.string().optional().describe('Provider management API base URL'),
+    headers: z.record(z.string(), z.string()).optional().describe('Provider management API request headers'),
     organizationId: z.string().optional().describe('Provider organization id'),
+    userId: z.string().optional().describe('Provider management user id'),
     projectId: z.string().optional().describe('Provider project id'),
     endpointKind: z.string().optional().describe('Provider management endpoint kind')
-  }).optional().describe('Provider management API credentials and options'),
+  }).passthrough().optional().describe('Provider management API credentials and options'),
+  profiles: z.record(z.string(), jsonValueSchema).optional().describe('Collection child model-service profiles'),
+  services: z.record(z.string(), jsonValueSchema).optional().describe('Legacy alias for collection child services'),
   extra: z.record(z.string(), jsonValueSchema).optional().describe('Provider-specific extra config')
-})
+}).passthrough()
 
 export const recommendedModelConfigSchema = z.object({
   service: z.string().optional().describe('Model service key'),

@@ -32,6 +32,7 @@ import type { WorkspaceDrawerView } from '#~/components/chat/workspace-drawer/wo
 import type { WorkspaceDrawerViewItem } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
 import type { WorkspaceMarkdownPreviewMode } from '#~/components/chat/workspace-file-editor/workspace-file-editor-language'
 import { DockPanel } from '#~/components/dock-panel/DockPanel'
+import { DOCK_PANEL_WORKSPACE_CHROME_MINIMIZED_HEIGHT } from '#~/components/dock-panel/dockPanelConstants'
 import type {
   RouteContainerPanelDockActionItem,
   RouteContainerPanelDockLayout
@@ -74,9 +75,6 @@ import type { SessionPanelStateController } from './use-session-panel-state'
 type InteractionPanelTabHeaderActionResolver = (
   context: InteractionPanelDockTabHeaderActionContext
 ) => RouteContainerPanelDockActionItem[]
-
-const CHAT_INTERACTION_PANEL_MINIMIZED_HEIGHT =
-  'calc(var(--app-chrome-icon-size, 18px) + var(--route-container-header-padding-block, 10px) + var(--route-container-header-padding-block, 10px) + var(--route-container-header-border-width, var(--app-chrome-border-width, 1px)))'
 
 export function ChatInteractionPanel({
   agentApprovals,
@@ -502,7 +500,7 @@ export function ChatInteractionPanel({
         isMinimized={isFolded}
         isOpen={isVisible}
         maxHeight={isCompactView ? 320 : CHAT_BOTTOM_DOCK_MAX_HEIGHT}
-        minimizedHeight={CHAT_INTERACTION_PANEL_MINIMIZED_HEIGHT}
+        minimizedHeight={DOCK_PANEL_WORKSPACE_CHROME_MINIMIZED_HEIGHT}
         minHeight={isCompactView ? 180 : CHAT_BOTTOM_DOCK_MIN_HEIGHT}
         hideHeader={true}
         closeLabel={t(isFolded ? 'chat.interactionPanel.hidePanel' : 'chat.interactionPanel.minimizePanel')}

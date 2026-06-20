@@ -1,8 +1,17 @@
 /* eslint-disable max-lines -- provider HTTP clients share normalization and error handling */
+import { createHash } from 'node:crypto'
+
 import type {
   ModelProviderDefinition,
   ModelServiceConfig,
   ProviderAccountStatus,
+  ProviderManagementGroup,
+  ProviderManagementMutationResult,
+  ProviderManagementSnapshot,
+  ProviderManagementToken,
+  ProviderManagementTokenCreateInput,
+  ProviderManagementTokenProfileResult,
+  ProviderManagementTokenUpdateInput,
   ProviderModelInfo,
   ProviderSecretResult,
   ProviderServiceStatus,
@@ -39,6 +48,14 @@ const normalizeString = (
 ) => (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined)
 const asRecord = (value: unknown): Record<string, unknown> =>
   value != null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+const normalizeStringRecord = (value: unknown) => {
+  const record = asRecord(value)
+  return Object.fromEntries(
+    Object.entries(record)
+      .map(([key, itemValue]) => [normalizeString(key), normalizeString(itemValue)] as const)
+      .filter((entry): entry is [string, string] => entry[0] != null && entry[1] != null)
+  )
+}
 const asNumber = (value: unknown) => {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value !== 'string' || value.trim() === '') return undefined
@@ -46,8 +63,10 @@ const asNumber = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : undefined
 }
 const STATUS_CACHE_TTL_MS = 90_000
+const NEW_API_MANAGEMENT_CACHE_TTL_MS = 60_000
 
 const statusCache = new Map<string, { expiresAt: number; status: ProviderServiceStatus }>()
+const newApiManagementCache = new Map<string, { expiresAt: number; payload: unknown; scope: string }>()
 
 const resolveApiRoot = (service: ResolvedModelServiceConfig) => {
   const url = new URL(service.apiBaseUrl)
@@ -138,9 +157,475 @@ export const listProviderModels = async (serviceConfig: ModelServiceConfig): Pro
 }
 
 const firstBalanceNumber = (...values: unknown[]) => values.map(asNumber).find(value => value != null)
+const NEW_API_QUOTA_PER_USD = 500_000
+
+const normalizeNewApiQuotaAmount = (value: unknown) => {
+  const amount = asNumber(value)
+  return amount == null ? undefined : amount / NEW_API_QUOTA_PER_USD
+}
+
+const toNewApiQuotaAmount = (value: unknown) => {
+  const amount = asNumber(value)
+  return amount == null ? undefined : Math.round(amount * NEW_API_QUOTA_PER_USD)
+}
+
+const parseKimiCodeQuotaDetail = (value: unknown) => {
+  const record = asRecord(value)
+  return {
+    limit: asNumber(record.limit),
+    remaining: asNumber(record.remaining),
+    resetTime: normalizeString(record.resetTime)
+  }
+}
+
+const normalizeKimiTimeUnit = (value: unknown) => {
+  const unit = normalizeString(value)
+  if (unit == null) return undefined
+  return unit.replace(/^TIME_UNIT_/u, '').toLowerCase()
+}
+
+const getKimiCodeAccountStatus = async (
+  service: ResolvedModelServiceConfig
+): Promise<ProviderAccountStatus> => {
+  const payload = await fetchJson(joinApiPath(resolveApiRoot(service), 'usages'), {
+    headers: authHeaders(service)
+  })
+  const record = asRecord(payload)
+  const usage = parseKimiCodeQuotaDetail(record.usage)
+  const totalQuota = parseKimiCodeQuotaDetail(record.totalQuota)
+  const user = asRecord(record.user)
+  const membership = asRecord(user.membership)
+  const parallel = asRecord(record.parallel)
+  const limits = Array.isArray(record.limits) ? record.limits : []
+  const windows = limits.map((item) => {
+    const limit = asRecord(item)
+    const window = asRecord(limit.window)
+    const detail = parseKimiCodeQuotaDetail(limit.detail)
+    return {
+      duration: asNumber(window.duration),
+      timeUnit: normalizeKimiTimeUnit(window.timeUnit),
+      ...detail
+    }
+  })
+
+  return {
+    kind: 'quota',
+    unit: 'percent',
+    limit: totalQuota.limit ?? usage.limit,
+    remaining: totalQuota.remaining ?? usage.remaining,
+    resetTime: totalQuota.resetTime ?? usage.resetTime,
+    windows,
+    parallelLimit: asNumber(parallel.limit),
+    plan: normalizeString(membership.level),
+    raw: payload
+  }
+}
+
+const resolveNewApiRoot = (service: ResolvedModelServiceConfig) => {
+  const url = new URL(service.apiBaseUrl)
+  url.pathname = url.pathname
+    .replace(/\/v1\/?$/u, '')
+    .replace(/\/+$/u, '')
+  url.search = ''
+  url.hash = ''
+  return url.toString().replace(/\/$/u, '')
+}
+
+const normalizeNewApiManagementRoot = (baseUrl: string) => {
+  const url = new URL(baseUrl)
+  url.pathname = url.pathname
+    .replace(/\/v1\/?$/u, '')
+    .replace(/\/+$/u, '')
+  url.search = ''
+  url.hash = ''
+  return url.toString().replace(/\/$/u, '')
+}
+
+const normalizeNewApiTokenKey = (value: unknown) => {
+  const key = normalizeString(value)
+  if (key == null) return undefined
+  return key.startsWith('sk-') ? key : `sk-${key}`
+}
+
+const maskNewApiTokenKey = (value: unknown) => {
+  const key = normalizeNewApiTokenKey(value)
+  if (key == null) return undefined
+  const raw = key.slice('sk-'.length)
+  if (raw.length <= 4) return `sk-${'*'.repeat(raw.length)}`
+  if (raw.length <= 8) return `sk-${raw.slice(0, 2)}****${raw.slice(-2)}`
+  return `sk-${raw.slice(0, 4)}**********${raw.slice(-4)}`
+}
+
+const normalizeNewApiModelLimits = (value: unknown) => {
+  if (Array.isArray(value)) {
+    return value.map(item => normalizeString(item)).filter((item): item is string => item != null)
+  }
+  if (typeof value === 'string') {
+    return value.split(',').map(item => normalizeString(item)).filter((item): item is string => item != null)
+  }
+  if (value != null && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([, enabled]) => enabled === true)
+      .map(([model]) => model)
+  }
+  return undefined
+}
+
+const requireNewApiManagement = (service: ResolvedModelServiceConfig) => {
+  const endpointKind = normalizeString(service.management?.endpointKind)
+  if (endpointKind != null && endpointKind !== 'newapi') {
+    throw new ProviderActionError('provider_unsupported', `Unsupported management endpoint "${endpointKind}".`)
+  }
+  if (service.provider !== 'micu' && endpointKind !== 'newapi') {
+    throw new ProviderActionError('provider_unsupported', 'Provider does not expose a New API management endpoint.')
+  }
+  const managementApiKey = normalizeString(service.management?.apiKey)
+  if (managementApiKey == null) {
+    throw new ProviderActionError('missing_api_key', 'Model service is missing management.apiKey.')
+  }
+  const managementHeaders = normalizeStringRecord(service.management?.headers)
+  const legacyManagementUserId = normalizeString(service.management?.userId)
+  if (legacyManagementUserId != null && managementHeaders['New-Api-User'] == null) {
+    managementHeaders['New-Api-User'] = legacyManagementUserId
+  }
+  const root = normalizeNewApiManagementRoot(
+    normalizeString(service.management?.baseUrl) ?? resolveNewApiRoot(service)
+  )
+  return {
+    headers: {
+      Authorization: `Bearer ${managementApiKey}`,
+      ...managementHeaders
+    },
+    root
+  }
+}
+
+const stableJsonValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(stableJsonValue)
+  if (value != null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, itemValue]) => [key, stableJsonValue(itemValue)])
+    )
+  }
+  return value
+}
+
+const hashCacheKey = (value: unknown) =>
+  createHash('sha256')
+    .update(JSON.stringify(stableJsonValue(value)))
+    .digest('hex')
+
+const getNewApiManagementCacheScope = (
+  management: ReturnType<typeof requireNewApiManagement>
+) =>
+  hashCacheKey({
+    headers: management.headers,
+    root: management.root
+  })
+
+const getNewApiManagementCacheEntry = (
+  service: ResolvedModelServiceConfig,
+  path: string
+) => {
+  const management = requireNewApiManagement(service)
+  const scope = getNewApiManagementCacheScope(management)
+  return {
+    key: `${scope}:${path}`,
+    scope
+  }
+}
+
+const clearNewApiManagementCache = (service: ResolvedModelServiceConfig) => {
+  const management = requireNewApiManagement(service)
+  const scope = getNewApiManagementCacheScope(management)
+  for (const [key, item] of newApiManagementCache.entries()) {
+    if (item.scope === scope) newApiManagementCache.delete(key)
+  }
+}
+
+const fetchNewApiManagementJson = async (
+  service: ResolvedModelServiceConfig,
+  path: string,
+  options?: RequestInit
+) => {
+  const management = requireNewApiManagement(service)
+  const headers = {
+    ...management.headers,
+    ...(options?.body != null ? { 'Content-Type': 'application/json' } : {}),
+    ...(options?.headers ?? {})
+  }
+  const payload = await fetchJson(joinApiPath(management.root, path), {
+    ...options,
+    headers
+  })
+  const record = asRecord(payload)
+  if (record.success === false || record.code === false) {
+    throw new ProviderActionError(
+      'upstream_request_rejected',
+      normalizeString(record.message) ?? 'Provider rejected the New API management request.'
+    )
+  }
+  return payload
+}
+
+const fetchCachedNewApiManagementJson = async (
+  service: ResolvedModelServiceConfig,
+  path: string
+) => {
+  const cache = getNewApiManagementCacheEntry(service, path)
+  const cached = newApiManagementCache.get(cache.key)
+  if (cached != null && cached.expiresAt > Date.now()) return cached.payload
+
+  const payload = await fetchNewApiManagementJson(service, path)
+  newApiManagementCache.set(cache.key, {
+    expiresAt: Date.now() + NEW_API_MANAGEMENT_CACHE_TTL_MS,
+    payload,
+    scope: cache.scope
+  })
+  return payload
+}
+
+const fetchOptionalCachedNewApiManagementJson = async (
+  service: ResolvedModelServiceConfig,
+  path: string
+) => {
+  try {
+    return await fetchCachedNewApiManagementJson(service, path)
+  } catch {
+    return undefined
+  }
+}
+
+const unwrapNewApiData = (payload: unknown) => {
+  const record = asRecord(payload)
+  return record.data ?? payload
+}
+
+const normalizeNewApiAccountStatus = (payload: unknown): ProviderAccountStatus => {
+  const data = asRecord(unwrapNewApiData(payload))
+  return {
+    available: normalizeNewApiQuotaAmount(data.quota),
+    currency: 'CNY',
+    kind: 'balance',
+    raw: payload
+  }
+}
+
+const mapNewApiGroup = (value: unknown): ProviderManagementGroup | undefined => {
+  if (typeof value === 'string') return { id: value, title: value }
+  const record = asRecord(value)
+  const id = normalizeString(record.id) ??
+    normalizeString(record.name) ??
+    normalizeString(record.group) ??
+    normalizeString(record.code)
+  if (id == null) return undefined
+  return {
+    id,
+    title: normalizeString(record.name) ?? normalizeString(record.title) ?? id,
+    description: normalizeString(record.description),
+    ratio: asNumber(record.ratio) ?? asNumber(record.group_ratio),
+    raw: value
+  }
+}
+
+const mapNewApiToken = (value: unknown): ProviderManagementToken | undefined => {
+  const record = asRecord(value)
+  const id = normalizeString(record.id) ?? (asNumber(record.id) == null ? undefined : String(asNumber(record.id)))
+  if (id == null) return undefined
+  return {
+    id,
+    name: normalizeString(record.name),
+    key: maskNewApiTokenKey(record.key),
+    status: asNumber(record.status),
+    group: normalizeString(record.group),
+    quota: normalizeNewApiQuotaAmount(record.quota ?? record.remain_quota),
+    remaining: normalizeNewApiQuotaAmount(record.remain_quota),
+    unlimited: record.unlimited_quota === true,
+    expiredAt: asNumber(record.expired_time) ?? asNumber(record.expires_at),
+    createdAt: asNumber(record.created_time) ?? asNumber(record.created_at),
+    accessedAt: asNumber(record.accessed_time) ?? asNumber(record.accessed_at),
+    modelLimits: normalizeNewApiModelLimits(record.model_limits),
+    modelLimitsEnabled: record.model_limits_enabled === true
+  }
+}
+
+const normalizeNewApiList = (payload: unknown) => {
+  const data = unwrapNewApiData(payload)
+  if (Array.isArray(data)) return data
+  const record = asRecord(data)
+  if (Array.isArray(record.items)) return record.items
+  if (Array.isArray(record.data)) return record.data
+  return []
+}
+
+const buildNewApiTokenPayload = (
+  input: ProviderManagementTokenCreateInput | ProviderManagementTokenUpdateInput
+) => ({
+  ...('id' in input ? { id: asNumber(input.id) ?? input.id } : {}),
+  name: normalizeString(input.name),
+  expired_time: input.expiredAt ?? -1,
+  ...(input.quota == null ? {} : { remain_quota: toNewApiQuotaAmount(input.quota) }),
+  ...(input.unlimited == null ? {} : { unlimited_quota: input.unlimited }),
+  ...(input.modelLimitsEnabled == null ? {} : { model_limits_enabled: input.modelLimitsEnabled }),
+  ...(input.modelLimits == null ? {} : { model_limits: input.modelLimits }),
+  ...(normalizeString(input.allowIps) == null ? {} : { allow_ips: normalizeString(input.allowIps) }),
+  ...(normalizeString(input.group) == null ? {} : { group: normalizeString(input.group) }),
+  ...('status' in input && input.status != null ? { status: input.status } : {})
+})
+
+const buildNewApiTokenProfile = (
+  tokenId: string | undefined,
+  tokenData: Record<string, unknown>,
+  fallbackName: string
+): ModelServiceConfig | undefined => {
+  const tokenKey = normalizeNewApiTokenKey(tokenData.key)
+  if (tokenKey == null) return undefined
+  const group = normalizeString(tokenData.group)
+  return {
+    apiKey: tokenKey,
+    description: group == null ? undefined : `New API token group: ${group}`,
+    extra: {
+      ...(group == null ? {} : { group }),
+      ...(tokenId == null ? {} : { newapiTokenId: tokenId })
+    },
+    title: normalizeString(tokenData.name) ?? fallbackName
+  }
+}
+
+const getMicuAccountStatus = async (
+  service: ResolvedModelServiceConfig
+): Promise<ProviderAccountStatus> => {
+  if (normalizeString(service.management?.apiKey) != null) {
+    return normalizeNewApiAccountStatus(await fetchCachedNewApiManagementJson(service, 'api/user/self'))
+  }
+
+  const payload = await fetchJson(joinApiPath(resolveNewApiRoot(service), 'api/usage/token'), {
+    headers: authHeaders(service)
+  })
+  const record = asRecord(payload)
+  if (record.code !== true) {
+    throw new ProviderActionError(
+      'upstream_request_rejected',
+      normalizeString(record.message) ?? 'Provider rejected the token usage request.'
+    )
+  }
+  const data = asRecord(record.data)
+  return {
+    kind: 'quota',
+    currency: 'USD',
+    limit: normalizeNewApiQuotaAmount(data.total_granted),
+    remaining: normalizeNewApiQuotaAmount(data.total_available),
+    unlimited: data.unlimited_quota === true,
+    used: normalizeNewApiQuotaAmount(data.total_used),
+    raw: payload
+  }
+}
+
+export const getProviderManagementSnapshot = async (
+  serviceConfig: ModelServiceConfig
+): Promise<ProviderManagementSnapshot> => {
+  const service = resolveService(serviceConfig)
+  requireNewApiManagement(service)
+  const [accountPayload, tokensPayload, groupsPayload, modelsPayload] = await Promise.all([
+    fetchCachedNewApiManagementJson(service, 'api/user/self'),
+    fetchCachedNewApiManagementJson(service, 'api/token/?p=0&page_size=100'),
+    fetchOptionalCachedNewApiManagementJson(service, 'api/user/self/groups'),
+    fetchOptionalCachedNewApiManagementJson(service, 'api/user/models')
+  ])
+  return {
+    account: normalizeNewApiAccountStatus(accountPayload),
+    groups: normalizeNewApiList(groupsPayload)
+      .map(mapNewApiGroup)
+      .filter((group): group is ProviderManagementGroup => group != null),
+    kind: 'newapi',
+    models: normalizeNewApiList(modelsPayload)
+      .map(mapModel)
+      .filter((model): model is ProviderModelInfo => model != null),
+    tokens: normalizeNewApiList(tokensPayload)
+      .map(mapNewApiToken)
+      .filter((token): token is ProviderManagementToken => token != null)
+  }
+}
+
+export const createProviderManagementToken = async (
+  serviceConfig: ModelServiceConfig,
+  input: ProviderManagementTokenCreateInput
+): Promise<ProviderManagementMutationResult> => {
+  const service = resolveService(serviceConfig)
+  const payload = await fetchNewApiManagementJson(service, 'api/token/', {
+    body: JSON.stringify(buildNewApiTokenPayload(input)),
+    method: 'POST'
+  })
+  clearNewApiManagementCache(service)
+  const tokenData = asRecord(unwrapNewApiData(payload))
+  const token = mapNewApiToken(tokenData)
+  const profile = buildNewApiTokenProfile(token?.id, tokenData, input.name)
+  return {
+    message: normalizeString(asRecord(payload).message),
+    ...(profile == null ? {} : { profile }),
+    ...(token == null ? {} : { token }),
+    success: true
+  }
+}
+
+export const updateProviderManagementToken = async (
+  serviceConfig: ModelServiceConfig,
+  input: ProviderManagementTokenUpdateInput
+): Promise<ProviderManagementMutationResult> => {
+  const service = resolveService(serviceConfig)
+  const payload = await fetchNewApiManagementJson(service, 'api/token/', {
+    body: JSON.stringify(buildNewApiTokenPayload(input)),
+    method: 'PUT'
+  })
+  clearNewApiManagementCache(service)
+  return {
+    message: normalizeString(asRecord(payload).message),
+    success: true,
+    token: mapNewApiToken(unwrapNewApiData(payload))
+  }
+}
+
+export const deleteProviderManagementToken = async (
+  serviceConfig: ModelServiceConfig,
+  tokenId: string
+): Promise<ProviderManagementMutationResult> => {
+  const service = resolveService(serviceConfig)
+  const payload = await fetchNewApiManagementJson(service, `api/token/${encodeURIComponent(tokenId)}`, {
+    method: 'DELETE'
+  })
+  clearNewApiManagementCache(service)
+  return {
+    message: normalizeString(asRecord(payload).message),
+    success: true
+  }
+}
+
+export const getProviderManagementTokenProfile = async (
+  serviceConfig: ModelServiceConfig,
+  tokenId: string
+): Promise<ProviderManagementTokenProfileResult> => {
+  const service = resolveService(serviceConfig)
+  const payload = await fetchNewApiManagementJson(service, `api/token/${encodeURIComponent(tokenId)}`)
+  const data = asRecord(unwrapNewApiData(payload))
+  const profile = buildNewApiTokenProfile(tokenId, data, `Token ${tokenId}`)
+  if (profile == null) {
+    throw new ProviderActionError('upstream_invalid_response', 'Provider did not return a usable token key.')
+  }
+  return {
+    profile
+  }
+}
 
 export const getProviderAccountStatus = async (serviceConfig: ModelServiceConfig): Promise<ProviderAccountStatus> => {
   const service = resolveService(serviceConfig)
+  if (service.provider === 'kimi-code') {
+    return getKimiCodeAccountStatus(service)
+  }
+  if (service.provider === 'micu') {
+    return getMicuAccountStatus(service)
+  }
   if (service.provider === 'moonshot-cn' || service.provider === 'moonshot-intl') {
     const payload = await fetchJson(joinApiPath(resolveApiRoot(service), 'users/me/balance'), {
       headers: authHeaders(service)
@@ -148,7 +633,7 @@ export const getProviderAccountStatus = async (serviceConfig: ModelServiceConfig
     const data = asRecord(asRecord(payload).data)
     return {
       kind: 'balance',
-      currency: normalizeString(data.currency),
+      currency: normalizeString(data.currency) ?? (service.provider === 'moonshot-intl' ? 'USD' : 'CNY'),
       available: firstBalanceNumber(data.available_balance, data.available)
     }
   }

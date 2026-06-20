@@ -1,6 +1,7 @@
 # One Works 0.1.0-alpha.0
 
 - Add embedded web debugger viewport controls for device presets, resizing, media query breakpoints, rulers, and screenshots.
+- Add Coding Plan and Token Plan model service support for Alibaba Coding Plan, Zhipu GLM Coding Plan, MiniMax Token Plan, Kimi Code, Tencent TokenHub, Volcengine Ark, and Baidu Qianfan, with Claude Code direct Anthropic-compatible routing.
 - Add configurable speech-to-text services with sender recording controls, default service selection, and server-side transcription APIs.
 - Keep web workspace opening covered by a full-screen animated transition until the target route is ready.
 - Persist session panel tabs, active panels, and dock layouts across bottom and right workbench areas.
