@@ -194,9 +194,9 @@
 
 @media (max-width: 600px) {
   .chat-send-btn {
-    width: 24px;
-    min-width: 24px;
-    height: 24px;
+    width: var(--sender-control-height);
+    min-width: var(--sender-control-height);
+    height: var(--sender-control-height);
 
     .material-symbols-rounded {
       font-size: 14px;

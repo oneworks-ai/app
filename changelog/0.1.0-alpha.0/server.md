@@ -8,3 +8,4 @@
 - Return Coding Plan and Token Plan provider metadata from the model provider registry so clients can use static model catalogs without calling provider model-list APIs.
 - Normalize Kimi Code `/coding/v1/usages` responses into model service quota status.
 - Add New API compatible management actions for model service collections, including account snapshots, token listing, token creation, token updates, deletion, and generated token-backed model service profiles.
+- Stabilize launcher workspace server reuse across client-only edits and compatible runtime changes while preserving version-conflict diagnostics.

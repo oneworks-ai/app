@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OneWorks Target WebView</title>
+    <style>
+    :root {
+      font-family: Inter, Roboto, Arial, sans-serif;
+      background: #111827;
+      color: #f8fafc;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(180deg, #172033 0%, #111827 100%);
+    }
+
+    main {
+      display: grid;
+      gap: 14px;
+      padding: 18px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.2;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+      color: #cbd5e1;
+    }
+
+    input {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid #64748b;
+      border-radius: 8px;
+      padding: 9px 10px;
+      background: #0f172a;
+      color: #f8fafc;
+      font: inherit;
+    }
+
+    button {
+      min-height: 42px;
+      border: 0;
+      border-radius: 8px;
+      padding: 0 14px;
+      background: #22c55e;
+      color: #052e16;
+      font: inherit;
+      font-weight: 700;
+    }
+
+    output {
+      display: block;
+      min-height: 54px;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 10px;
+      background: rgba(15, 23, 42, .8);
+      color: #dbeafe;
+      font-size: 13px;
+    }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h2 id="target-title">Target WebView</h2>
+      <label>
+        Name
+        <input id="name-input" autocomplete="off" placeholder="Type here">
+      </label>
+      <button id="primary-action" type="button">Run target action</button>
+      <output id="target-output">Waiting for host command.</output>
+    </main>
+
+    <script>
+    let clickCount = 0
+    const input = document.getElementById('name-input')
+    const output = document.getElementById('target-output')
+    document.getElementById('primary-action').addEventListener(
+      'click',
+      () => {
+        clickCount += 1
+        output.textContent = `Clicked ${clickCount} time(s). Input: ${
+          input.value || '(empty)'
+        }`
+      }
+    )
+    input.addEventListener('input', () => {
+      output.textContent = `Input changed: ${input.value || '(empty)'}`
+    })
+    </script>
+  </body>
+</html>

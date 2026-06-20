@@ -34,6 +34,12 @@ import { useBrowserHistoryNavigationState } from '#~/hooks/use-browser-history-n
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 import { useSidebarQueryState } from '#~/hooks/use-sidebar-query-state'
 import { isMobileSidebarOpenAtom, isSidebarCollapsedAtom } from '#~/store/index'
+import {
+  DESKTOP_SHELL_SIMULATION_QUERY_PARAM,
+  parseDesktopShellSimulationValue,
+  readDesktopShellSimulationMode,
+  useStoredDevShellSimulation
+} from '#~/utils/device-shell-simulation'
 import { isShortcutMatch } from '#~/utils/shortcutUtils'
 
 import { DesktopWorkspaceStartupProvider } from './DesktopWorkspaceStartupOverlay'
@@ -56,45 +62,11 @@ interface AppShellProps extends PropsWithChildren {
 }
 
 const FULLSCREEN_SIZE_TOLERANCE = 2
-const DESKTOP_SIMULATION_QUERY_PARAM = '__oneworks_desktop'
 const DESKTOP_SIMULATION_QUERY_VALUE = 'macos'
 const DESKTOP_SIMULATION_FULLSCREEN_QUERY_PARAM = '__oneworks_fullscreen'
 const DESKTOP_SIMULATION_TOGGLE_KEY_COUNT = 5
 const DESKTOP_SIMULATION_TOGGLE_SEQUENCE_MS = 2_000
 const GLOBAL_MODULE_UPDATE_GROUPS = new Set<ModuleUpdateGroup>(['adapter', 'core'])
-
-type DesktopSimulationMode = 'macos' | 'windows'
-
-const parseDesktopSimulationValue = (value: string | null): DesktopSimulationMode | null => {
-  if (value == null) return null
-
-  const normalizedValue = value.trim().toLowerCase()
-  if (
-    normalizedValue === '' ||
-    normalizedValue === '1' ||
-    normalizedValue === 'true' ||
-    normalizedValue === 'mac' ||
-    normalizedValue === 'macos' ||
-    normalizedValue === 'darwin'
-  ) {
-    return 'macos'
-  }
-
-  if (
-    normalizedValue === 'win' ||
-    normalizedValue === 'windows' ||
-    normalizedValue === 'win32'
-  ) {
-    return 'windows'
-  }
-
-  return null
-}
-
-const readDesktopSimulationMode = (search: string) => {
-  const searchParams = new URLSearchParams(search)
-  return parseDesktopSimulationValue(searchParams.get(DESKTOP_SIMULATION_QUERY_PARAM))
-}
 
 const isSearchParamEnabled = (value: string | null) => {
   if (value == null) return false
@@ -114,10 +86,10 @@ const isDesktopSimulationFullscreenEnabled = (search: string) => {
 
 const toggleMacosDesktopSimulationSearch = (search: string) => {
   const searchParams = new URLSearchParams(search)
-  if (parseDesktopSimulationValue(searchParams.get(DESKTOP_SIMULATION_QUERY_PARAM)) === 'macos') {
-    searchParams.delete(DESKTOP_SIMULATION_QUERY_PARAM)
+  if (parseDesktopShellSimulationValue(searchParams.get(DESKTOP_SHELL_SIMULATION_QUERY_PARAM)) === 'macos') {
+    searchParams.delete(DESKTOP_SHELL_SIMULATION_QUERY_PARAM)
   } else {
-    searchParams.set(DESKTOP_SIMULATION_QUERY_PARAM, DESKTOP_SIMULATION_QUERY_VALUE)
+    searchParams.set(DESKTOP_SHELL_SIMULATION_QUERY_PARAM, DESKTOP_SIMULATION_QUERY_VALUE)
   }
 
   const nextSearch = searchParams.toString()
@@ -168,9 +140,10 @@ export function AppShell({
   const isDesktopSidebarCollapsed = !isCompactLayout && isSidebarCollapsed
   const isMac = navigator.platform.includes('Mac')
   const desktopApi = window.oneworksDesktop
+  const storedDevShellSimulation = useStoredDevShellSimulation()
   const desktopSimulationMode = useMemo(
-    () => readDesktopSimulationMode(location.search),
-    [location.search]
+    () => readDesktopShellSimulationMode(location.search, storedDevShellSimulation),
+    [location.search, storedDevShellSimulation]
   )
   const isDesktopSimulationFullscreen = useMemo(
     () => isDesktopSimulationFullscreenEnabled(location.search),

@@ -24,32 +24,18 @@ interface ImportMeta {
   readonly env: ImportMetaEnv
 }
 
-interface DesktopWorkspaceSelectorProject {
-  description: string
-  isCurrent?: boolean
-  name: string
-  sourceUrl?: string
-  status?: 'ready' | 'starting' | 'stopped' | 'stopping'
-  workspaceId?: string
-  workspaceFolder: string
-}
-
-interface DesktopWorkspaceSelectorState {
-  recentProjects: DesktopWorkspaceSelectorProject[]
-  runningProjects: DesktopWorkspaceSelectorProject[]
-}
+type DesktopWorkspaceSelectorProject = import('@oneworks/types').LauncherWorkspaceSelectorProject
+type DesktopWorkspaceSelectorState = import('@oneworks/types').LauncherWorkspaceSelectorState
+type DesktopWorkspaceStopResponse = import('@oneworks/types').LauncherWorkspaceStopResponse
+type DesktopCloneDestinationDirectory = import('@oneworks/types').LauncherDirectoryEntry
+type DesktopCloneDestinationDirectoryList = import('@oneworks/types').LauncherDirectoryList
+type OneWorksDeviceShellApi = import('@oneworks/types').OneWorksDeviceShellApi
+type OneWorksNativeBridgeRequestApi = import('@oneworks/types').OneWorksNativeBridgeRequestApi
 
 interface DesktopWorkspaceConnection {
   serverBaseUrl: string
   workspaceId?: string
   workspaceFolder?: string
-}
-
-interface DesktopWorkspaceStopResponse {
-  ok: true
-  removed: boolean
-  stopped: boolean
-  workspaceFolder: string
 }
 
 interface DesktopWorkspaceFileSearchResult {
@@ -93,17 +79,6 @@ interface DesktopWorkspaceResourceSearchResponse {
   sessions: DesktopWorkspaceResourceSearchResult[]
   terminals: DesktopWorkspaceResourceSearchResult[]
   websites: DesktopWorkspaceResourceSearchResult[]
-}
-
-interface DesktopCloneDestinationDirectory {
-  name: string
-  path: string
-}
-
-interface DesktopCloneDestinationDirectoryList {
-  currentDirectory: string
-  directories: DesktopCloneDestinationDirectory[]
-  parentDirectory?: string
 }
 
 interface DesktopPluginLauncherSearchResult {
@@ -241,7 +216,8 @@ interface DesktopMobileDebugTargetsResponse {
 }
 
 interface Window {
-  oneworksDesktop?: {
+  oneworksAndroidBridge?: OneWorksNativeBridgeRequestApi
+  oneworksDesktop?: OneWorksDeviceShellApi & {
     chooseWorkspace?: () => Promise<string | undefined>
     checkForUpdates?: (input?: { interactive?: boolean }) => Promise<DesktopUpdateStatus>
     cloneRepository?: (repositoryUrl: string, destinationDirectory: string) => Promise<string | undefined>
@@ -320,6 +296,7 @@ interface Window {
     updateGlobalInterfaceLanguageConfig?: (language: string) => Promise<DesktopInterfaceLanguageConfig>
     writeImageDataUrlToClipboard?: (dataUrl: string) => Promise<void>
   }
+  oneworksDeviceShell?: OneWorksDeviceShellApi
   __ONEWORKS_PROJECT_RUNTIME_ENV__?: Partial<{
     __ONEWORKS_PROJECT_SERVER_BASE_URL__: string
     __ONEWORKS_PROJECT_SERVER_HOST__: string

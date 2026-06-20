@@ -125,14 +125,11 @@ export function AdapterSelectControl({
                 }}
               >
                 <span className='sender-responsive-select-button__value adapter-select__responsive-value'>
-                  {selectedOption?.label ?? (
+                  {selectedOption?.displayLabel ?? (
                     <span className='material-symbols-rounded adapter-option__icon adapter-option__icon--fallback'>
                       deployed_code
                     </span>
                   )}
-                </span>
-                <span className='material-symbols-rounded sender-responsive-select-button__chevron'>
-                  keyboard_arrow_down
                 </span>
               </button>
             )
