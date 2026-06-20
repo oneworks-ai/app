@@ -4,12 +4,13 @@ import { App, Button, Empty, Space, Spin } from 'antd'
 import { useSetAtom } from 'jotai'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
 import type { RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
 import type { ConfigSource } from '@oneworks/core'
 import type { AboutInfo, ConfigResponse, ConfigUiSection } from '@oneworks/types'
+import type { ConfigDetailRoute } from './config/configDetail'
 
 import { RouteContainerHeader } from '#~/components/layout/RouteContainerHeader'
 import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
@@ -30,7 +31,6 @@ import {
   listWorktreeEnvironments,
   updateConfig
 } from '../api'
-import { useQueryParams } from '../hooks/useQueryParams'
 import { resolveWorkspaceFileOpenerSelectModels } from '../utils/workspace-file-openers'
 import { AboutSection, ConfigSectionPanel, ConfigSourceSwitch, DisplayValue } from './config'
 import { AppSettingsPanel } from './config/AppSettingsPanel'
@@ -83,13 +83,19 @@ interface ConfigQueryParams extends Record<string, string> {
 }
 
 const configSourceKeys = ['global', 'project', 'user'] as const
-const configQueryKeys: string[] = ['tab', 'source', 'detail', 'section', ...modelServiceImportQueryKeys]
-const configQueryDefaults: Partial<ConfigQueryParams> = { tab: 'general', source: '', detail: '', section: '' }
-const configQueryOmit = {
-  detail: (value: string) => value.trim() === '',
-  section: (value: string) => value.trim() === ''
-}
+const configLegacyRouteQueryKeys = ['tab', 'detail', 'section']
+const configQueryDefaults: ConfigQueryParams = { tab: 'general', source: '', detail: '', section: '' }
 const CONFIG_ROUTE_SIDEBAR_KEY = 'config-view'
+const modelServiceDetailTabPathSegments = new Set([
+  'access',
+  'advanced',
+  'api-keys',
+  'display',
+  'management',
+  'models',
+  'plan',
+  'profiles'
+])
 const isConfigSourceKey = (value: string): value is ConfigSource => (
   configSourceKeys.includes(value as ConfigSource)
 )
@@ -109,11 +115,105 @@ const resolveUniqueModelServiceKey = (baseKey: string, modelServices: Record<str
 const getModelServiceImportClearPatch = () => (
   Object.fromEntries(modelServiceImportQueryKeys.map(key => [key, ''])) as Partial<ConfigQueryParams>
 )
+const decodeConfigPathSegment = (segment: string) => {
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return segment
+  }
+}
+const encodeConfigPathSegment = (segment: string) => encodeURIComponent(segment)
+const normalizeConfigDetailPath = (detail: string) => {
+  const trimmed = detail.trim()
+  if (trimmed === '') return ''
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(trimmed)
+    } catch {
+      return trimmed
+    }
+  })()
+  return decoded
+    .split('/')
+    .filter(segment => segment !== '')
+    .map(encodeConfigPathSegment)
+    .join('/')
+}
+const parseConfigPathState = (pathname: string) => {
+  const normalizedPathname = pathname === '/config'
+    ? ''
+    : pathname.startsWith('/config/')
+    ? pathname.slice('/config/'.length)
+    : ''
+  const segments = normalizedPathname
+    .split('/')
+    .filter(segment => segment !== '')
+    .map(decodeConfigPathSegment)
+  const tab = segments[0] ?? ''
+  const detail = segments.length > 1
+    ? segments.slice(1).map(encodeConfigPathSegment).join('/')
+    : ''
+  return {
+    detail,
+    hasDetailPath: segments.length > 1,
+    hasTabPath: tab !== '',
+    tab
+  }
+}
+const buildConfigPathname = (tab: string, detail: string) => {
+  const normalizedTab = tab.trim() === '' ? configQueryDefaults.tab : tab.trim()
+  const normalizedDetail = normalizeConfigDetailPath(detail)
+  return normalizedDetail === ''
+    ? `/config/${encodeConfigPathSegment(normalizedTab)}`
+    : `/config/${encodeConfigPathSegment(normalizedTab)}/${normalizedDetail}`
+}
+const getModelServiceProfileEntry = (
+  item: unknown,
+  resolvedItem: unknown,
+  profileKey: string
+) => {
+  const localProfiles = getValueByPath(item, ['profiles'])
+  const legacyLocalServices = getValueByPath(item, ['services'])
+  const resolvedProfiles = getValueByPath(resolvedItem, ['profiles'])
+  const legacyResolvedServices = getValueByPath(resolvedItem, ['services'])
+
+  if (isRecordObject(localProfiles) && isRecordObject(localProfiles[profileKey])) return localProfiles[profileKey]
+  if (isRecordObject(legacyLocalServices) && isRecordObject(legacyLocalServices[profileKey])) {
+    return legacyLocalServices[profileKey]
+  }
+  if (isRecordObject(resolvedProfiles) && isRecordObject(resolvedProfiles[profileKey])) {
+    return resolvedProfiles[profileKey]
+  }
+  if (isRecordObject(legacyResolvedServices) && isRecordObject(legacyResolvedServices[profileKey])) {
+    return legacyResolvedServices[profileKey]
+  }
+  return undefined
+}
+const getModelServiceProfileBreadcrumbLabel = (
+  item: unknown,
+  resolvedItem: unknown,
+  profileKey: string
+) => {
+  const profile = getModelServiceProfileEntry(item, resolvedItem, profileKey)
+  const title = profile?.title
+  return typeof title === 'string' && title.trim() !== '' ? title.trim() : profileKey
+}
+
+const isModelServiceDetailTabRoute = (
+  sectionKey: string | undefined,
+  route: ConfigDetailRoute
+) => (
+  sectionKey === 'modelServices' &&
+  route.fieldPath.length === 0 &&
+  route.nestedPath?.length === 1 &&
+  modelServiceDetailTabPathSegments.has(route.nestedPath[0]!)
+)
 
 export function ConfigView() {
   const { i18n, t } = useTranslation()
   const { message, modal } = App.useApp()
   const navigate = useNavigate()
+  const location = useLocation()
   const setPendingSessionInitialContent = useSetAtom(pendingSessionInitialContentAtom)
   const setPendingSessionCreationContext = useSetAtom(pendingSessionCreationContextAtom)
   const {
@@ -133,11 +233,22 @@ export function ConfigView() {
   const { data: schemaData } = useSWR('/api/config/schema', getConfigSchema)
   const { data: worktreeEnvironmentData } = useSWR('worktree-environments', listWorktreeEnvironments)
   const { data: workspaceFileOpenersData } = useSWR('workspace-file-openers', listWorkspaceFileOpeners)
-  const { values: queryValues, update: updateQuery, searchParams } = useQueryParams<ConfigQueryParams>({
-    defaults: configQueryDefaults,
-    keys: configQueryKeys,
-    omit: configQueryOmit
-  })
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
+  const pathValues = useMemo(() => parseConfigPathState(location.pathname), [location.pathname])
+  const queryValues = useMemo<ConfigQueryParams>(() => {
+    const legacyTab = searchParams.get('tab') ?? ''
+    const legacyDetail = searchParams.get('detail') ?? ''
+    return {
+      detail: pathValues.hasDetailPath
+        ? pathValues.detail
+        : pathValues.hasTabPath
+        ? ''
+        : legacyDetail,
+      section: searchParams.get('section') ?? configQueryDefaults.section,
+      source: searchParams.get('source') ?? configQueryDefaults.source,
+      tab: pathValues.hasTabPath ? pathValues.tab : legacyTab || configQueryDefaults.tab
+    }
+  }, [pathValues.detail, pathValues.hasDetailPath, pathValues.hasTabPath, pathValues.tab, searchParams])
   const configPresent = data?.meta?.configPresent
   const fallbackSourceKey = resolveConfigSourceForMissingQuery(queryValues.tab, configPresent)
   const querySourceKey: ConfigSource = isConfigSourceKey(queryValues.source) ? queryValues.source : fallbackSourceKey
@@ -275,31 +386,92 @@ export function ConfigView() {
   const sectionAliasTab = queryValues.section === 'voice.speechToText' ? 'voice' : undefined
   const rawTab = searchParams.get('tab')
   const queryTabKey = sectionAliasTab ??
-    (rawTab != null && tabKeys.has(queryValues.tab) ? queryValues.tab : 'general')
+    ((pathValues.hasTabPath || rawTab != null) && tabKeys.has(queryValues.tab) ? queryValues.tab : 'general')
   const [activeTabKey, setActiveTabKeyState] = useState(queryTabKey)
+  const hasModelServiceImportQuery = useMemo(() => (
+    modelServiceImportQueryKeys.some(key => searchParams.has(key))
+  ), [searchParams])
+  const updateConfigRoute = useCallback((patch: Partial<ConfigQueryParams>) => {
+    const nextTab = patch.tab ?? activeTabKey
+    const nextDetail = patch.detail ?? detailQuery
+    const nextSource = patch.source ?? sourceKey
+    const nextSearchParams = new URLSearchParams(location.search)
+
+    configLegacyRouteQueryKeys.forEach(key => nextSearchParams.delete(key))
+
+    const defaultSource = resolveConfigSourceForMissingQuery(nextTab, configPresent)
+    if (patch.source != null || nextSearchParams.get('source') === defaultSource) {
+      if (nextSource.trim() === '' || nextSource === defaultSource) {
+        nextSearchParams.delete('source')
+      } else {
+        nextSearchParams.set('source', nextSource)
+      }
+    }
+
+    modelServiceImportQueryKeys.forEach((key) => {
+      if (!Object.hasOwn(patch, key)) return
+      const value = patch[key] ?? ''
+      if (value.trim() === '') {
+        nextSearchParams.delete(key)
+      } else {
+        nextSearchParams.set(key, value)
+      }
+    })
+
+    const target = {
+      pathname: buildConfigPathname(nextTab, nextDetail),
+      search: nextSearchParams.toString() === '' ? '' : `?${nextSearchParams.toString()}`,
+      hash: location.hash
+    }
+
+    if (
+      target.pathname === location.pathname &&
+      target.search === location.search &&
+      target.hash === location.hash
+    ) {
+      return
+    }
+
+    void navigate(target, { replace: true })
+  }, [activeTabKey, configPresent, detailQuery, location.hash, location.pathname, location.search, navigate, sourceKey])
+  useEffect(() => {
+    if (hasModelServiceImportQuery) return
+    if (!configLegacyRouteQueryKeys.some(key => searchParams.has(key))) return
+    updateConfigRoute({
+      detail: queryValues.detail,
+      section: '',
+      tab: queryTabKey
+    })
+  }, [
+    hasModelServiceImportQuery,
+    queryTabKey,
+    queryValues.detail,
+    searchParams,
+    updateConfigRoute
+  ])
   useEffect(() => {
     if (searchParams.get('source') != null) return
     const preferredSource = getPreferredConfigSourceForTab(activeTabKey)
     if (preferredSource != null) {
-      updateQuery({ source: preferredSource })
+      updateConfigRoute({ source: preferredSource })
       return
     }
     if (configPresent == null) return
-    updateQuery({ source: resolveConfigSourceForMissingQuery(activeTabKey, configPresent) })
+    updateConfigRoute({ source: resolveConfigSourceForMissingQuery(activeTabKey, configPresent) })
   }, [
     activeTabKey,
     configPresent,
     searchParams,
-    updateQuery
+    updateConfigRoute
   ])
   const setSourceKey = useCallback((next: ConfigSource) => {
     setSourceKeyState(next)
-    updateQuery({ source: next })
-  }, [updateQuery])
+    updateConfigRoute({ source: next })
+  }, [updateConfigRoute])
   const setDetailQuery = useCallback((next: string) => {
     setDetailQueryState(next)
-    updateQuery({ detail: next })
-  }, [updateQuery])
+    updateConfigRoute({ detail: next })
+  }, [updateConfigRoute])
   const setActiveTabKey = useCallback((key: string) => {
     const nextPreferredSource = key !== activeTabKey ? getPreferredConfigSourceForTab(key) : undefined
     setActiveTabKeyState(key)
@@ -307,13 +479,13 @@ export function ConfigView() {
       setSourceKeyState(nextPreferredSource)
     }
     setDetailQueryState('')
-    updateQuery({
+    updateConfigRoute({
       tab: key,
       detail: '',
       section: '',
       ...(nextPreferredSource != null ? { source: nextPreferredSource } : {})
     })
-  }, [activeTabKey, updateQuery])
+  }, [activeTabKey, updateConfigRoute])
   const activeTab = useMemo(() => tabs.find(tab => tab.key === activeTabKey), [tabs, activeTabKey])
   const activeContentTab = activeTab != null && activeTab.type !== 'group' ? activeTab : undefined
   const uiSections = schemaData?.workspace.uiSchema?.sections ?? {}
@@ -482,6 +654,10 @@ export function ConfigView() {
   const closeConfigDetail = useCallback(() => {
     const route = activeConfigDetail?.route
     if (route != null && (route.nestedPath?.length ?? 0) > 0) {
+      if (isModelServiceDetailTabRoute(activeContentTab?.key, route)) {
+        setDetailQuery('')
+        return
+      }
       setDetailQuery(serializeConfigDetailRoute({
         ...route,
         nestedPath: route.nestedPath?.slice(0, -1) ?? []
@@ -489,16 +665,43 @@ export function ConfigView() {
       return
     }
     setDetailQuery('')
-  }, [activeConfigDetail?.route, setDetailQuery])
+  }, [activeConfigDetail?.route, activeContentTab?.key, setDetailQuery])
   const headerBreadcrumb = useMemo<RouteContainerHeaderBreadcrumb | undefined>(() => {
     if (activeConfigDetail == null || activeContentTab == null) return undefined
+    const route = activeConfigDetail.route
+    const nestedPath = route.nestedPath ?? []
+    const isModelServiceProfileRoute = activeContentTab.key === 'modelServices' &&
+      route.fieldPath.length === 0 &&
+      nestedPath[0] === 'profiles' &&
+      nestedPath[1] != null
+    const currentTitle = isModelServiceProfileRoute
+      ? getModelServiceProfileBreadcrumbLabel(
+        activeConfigDetail.meta.item,
+        activeConfigDetail.meta.resolvedItem,
+        nestedPath[1]!
+      )
+      : activeConfigDetail.meta.itemLabel
+    const ancestors = isModelServiceProfileRoute
+      ? [
+        {
+          title: activeConfigDetail.meta.itemLabel,
+          onSelect: () => {
+            setDetailQuery(serializeConfigDetailRoute({
+              ...route,
+              nestedPath: []
+            }))
+          }
+        }
+      ]
+      : []
 
     return {
-      currentTitle: activeConfigDetail.meta.itemLabel,
+      ancestors,
+      currentTitle,
       parentTitle: activeContentTab.label,
       onBack: closeConfigDetail
     }
-  }, [activeConfigDetail, activeContentTab, closeConfigDetail])
+  }, [activeConfigDetail, activeContentTab, closeConfigDetail, setDetailQuery])
   const generalDraftValue = useMemo(() => {
     const draftKey = getDraftKey('general')
     return (drafts[draftKey] ?? cloneValue(currentSource?.general ?? {}) ?? {}) as Record<string, unknown>
@@ -646,7 +849,7 @@ export function ConfigView() {
     setDetailQueryState(detail)
     setDrafts(prev => ({ ...prev, [draftKey]: nextModelServices }))
     scheduleSave('modelServices', targetSource, nextModelServices)
-    updateQuery({
+    updateConfigRoute({
       ...getModelServiceImportClearPatch(),
       detail,
       section: '',
@@ -661,7 +864,7 @@ export function ConfigView() {
     searchParams,
     scheduleSave,
     t,
-    updateQuery
+    updateConfigRoute
   ])
 
   const handleCreateModelServiceSession = useCallback(async (request: ModelServiceConfigSessionRequest) => {

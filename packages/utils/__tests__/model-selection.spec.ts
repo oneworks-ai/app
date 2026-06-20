@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { flattenModelServices, resolveModelServiceFromMap } from '#~/model-providers.js'
 import {
   BUILTIN_NATIVE_ADAPTERS,
   doesModelMatchSelector,
@@ -34,6 +35,69 @@ const modelServices: Record<string, ModelServiceConfig> = {
 }
 
 describe('model selection utilities', () => {
+  it('expands model service collections into selectable child services', () => {
+    const services: Record<string, ModelServiceConfig> = {
+      micu: {
+        apiKey: '',
+        kind: 'collection',
+        management: {
+          apiKey: 'management-token',
+          endpointKind: 'newapi',
+          userId: '42647'
+        },
+        provider: 'micu',
+        profiles: {
+          codex: {
+            apiBaseUrl: 'https://www.micuapi.ai/v1',
+            apiKey: 'model-token',
+            models: ['gpt-5.4']
+          }
+        }
+      }
+    }
+
+    expect(listServiceModels(services)).toEqual([
+      {
+        model: 'gpt-5.4',
+        selectorValue: 'micu/codex,gpt-5.4',
+        serviceKey: 'micu/codex'
+      }
+    ])
+    expect(flattenModelServices(services)['micu/codex']).toMatchObject({
+      apiKey: 'model-token',
+      provider: 'micu'
+    })
+    expect(flattenModelServices(services)['micu/codex']?.management).toBeUndefined()
+    expect(resolveModelServiceFromMap(services, 'micu/codex')).toMatchObject({
+      apiKey: 'model-token',
+      provider: 'micu'
+    })
+  })
+
+  it('keeps legacy collection services selectable while profiles migrate in', () => {
+    const services: Record<string, ModelServiceConfig> = {
+      relay: {
+        apiKey: '',
+        kind: 'collection',
+        provider: 'micu',
+        services: {
+          legacy: {
+            apiKey: 'model-token',
+            models: ['legacy-model']
+          }
+        }
+      }
+    }
+
+    expect(listServiceModels(services)).toEqual([
+      {
+        model: 'legacy-model',
+        selectorValue: 'relay/legacy,legacy-model',
+        serviceKey: 'relay/legacy'
+      }
+    ])
+  })
+
   it('resolves exact selector metadata before service-level metadata', () => {
     const models: Record<string, ModelMetadataConfig> = {
       serviceA: { defaultAdapter: 'claude-code' },

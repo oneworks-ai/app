@@ -304,7 +304,7 @@ export function ChatHistoryView({
     onSessionCreated?.(createdSession)
   }, [onSessionCreated, pendingSessionCreationContext, setPendingSessionCreationContext])
   const handleOpenVoiceConfig = useCallback(() => {
-    void navigate('/config?section=voice.speechToText')
+    void navigate('/config/voice')
   }, [navigate])
   const handleShowVoiceInputInSender = useCallback(() => {
     void (async () => {
@@ -385,16 +385,14 @@ export function ChatHistoryView({
   const handleOpenModelServicesConfig = useCallback((serviceKey?: string) => {
     const normalizedServiceKey = serviceKey?.trim()
     const params = new URLSearchParams(location.search)
-    params.set('tab', 'modelServices')
-    params.set('source', resolveModelServiceConfigSource(normalizedServiceKey))
+    params.delete('tab')
+    params.delete('detail')
     params.delete('section')
-    if (normalizedServiceKey != null && normalizedServiceKey !== '') {
-      params.set('detail', encodeURIComponent(normalizedServiceKey))
-    } else {
-      params.delete('detail')
-    }
+    params.set('source', resolveModelServiceConfigSource(normalizedServiceKey))
     navigate({
-      pathname: '/config',
+      pathname: normalizedServiceKey != null && normalizedServiceKey !== ''
+        ? `/config/modelServices/${encodeURIComponent(normalizedServiceKey)}`
+        : '/config/modelServices',
       search: `?${params.toString()}`
     })
   }, [location.search, navigate, resolveModelServiceConfigSource])

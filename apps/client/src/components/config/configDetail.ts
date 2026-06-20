@@ -289,9 +289,16 @@ export const parseConfigDetailRoute = ({
   const normalized = raw.trim()
   if (normalized === '') return null
 
-  const segments = normalized
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(normalized)
+    } catch {
+      return normalized
+    }
+  })()
+  const segments = decoded
     .split('/')
-    .map(segment => decodeURIComponent(segment).trim())
+    .map(segment => segment.trim())
     .filter(segment => segment !== '')
   if (segments.length < 1) return null
 

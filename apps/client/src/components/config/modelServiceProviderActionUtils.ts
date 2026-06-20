@@ -43,7 +43,13 @@ export const buildServiceActionFingerprint = (
     service.provider,
     service.apiBaseUrl,
     service.apiKey,
-    service.management?.apiKey
+    service.management?.apiKey,
+    service.management?.baseUrl,
+    service.management?.endpointKind,
+    JSON.stringify(service.management?.headers ?? {}),
+    service.management?.organizationId,
+    service.management?.projectId,
+    service.management?.userId
   ].join('\n')
 
 export const normalizePortalUrl = (url: unknown) => {
@@ -78,13 +84,28 @@ export const normalizeProviderModels = (models: ProviderModelInfo[]) => (
   Array.from(new Set(models.map(model => model.id.trim()).filter(Boolean)))
 )
 
+const currencySymbols: Record<string, string> = {
+  CNY: '¥',
+  USD: '$'
+}
+
+export const formatCurrencyAmount = (currency: string | undefined, amount: string) => {
+  const symbol = currency == null ? undefined : currencySymbols[currency.toUpperCase()]
+  return symbol == null ? [currency, amount].filter(Boolean).join(' ') : `${amount} ${symbol}`
+}
+
 export const formatBalance = (account: ProviderAccountStatus | null, t: TranslationFn) => {
   if (account == null) return undefined
   if (account.kind === 'unsupported') return account.reason
   if (account.kind === 'quota') {
+    if (account.unlimited === true) return t('config.modelServices.results.unlimitedQuota')
+    const unknownAmount = t('config.modelServices.results.amountUnknown')
     const amount = account.remaining == null || account.limit == null
-      ? account.remaining ?? account.limit ?? t('config.modelServices.results.amountUnknown')
+      ? account.remaining ?? account.limit ?? unknownAmount
       : `${account.remaining}/${account.limit}`
+    const formattedAmount = (typeof amount === 'number' || (typeof amount === 'string' && amount !== unknownAmount))
+      ? formatCurrencyAmount(account.currency, String(amount))
+      : amount
     const reset = account.resetTime == null
       ? undefined
       : t('config.modelServices.results.resetsAt', { time: account.resetTime })
@@ -98,7 +119,7 @@ export const formatBalance = (account: ProviderAccountStatus | null, t: Translat
     const parallel = account.parallelLimit == null
       ? undefined
       : t('config.modelServices.results.parallelLimit', { count: account.parallelLimit })
-    return [amount, reset, windowAmount, parallel].filter(Boolean).join(' · ')
+    return [formattedAmount, reset, windowAmount, parallel].filter(Boolean).join(' · ')
   }
   if (account.kind === 'cost') {
     const amount = account.amount == null ? t('config.modelServices.results.amountUnknown') : String(account.amount)
@@ -107,7 +128,7 @@ export const formatBalance = (account: ProviderAccountStatus | null, t: Translat
   const available = account.available == null
     ? t('config.modelServices.results.amountUnknown')
     : String(account.available)
-  return [account.currency, available].filter(Boolean).join(' ')
+  return formatCurrencyAmount(account.currency, available)
 }
 
 export const getAccountStatusLabel = (account: ProviderAccountStatus, t: TranslationFn) => (

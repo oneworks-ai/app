@@ -1,8 +1,8 @@
 import './ConfigSectionForm.scss'
 
-import { Button, Collapse, Empty, Input, InputNumber, Slider, Switch } from 'antd'
+import { Button, Collapse, Empty, Input, InputNumber, Slider, Switch, Tabs } from 'antd'
 import type { ReactNode } from 'react'
-import { Fragment, useMemo } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import useSWR from 'swr'
 
 import type { ConfigSource, ConfigUiObjectSchema, ConfigUiSection } from '@oneworks/types'
@@ -18,6 +18,7 @@ import { FieldRow } from './ConfigFieldRow'
 import { ShortcutInput } from './ConfigShortcutInput'
 import { DetailCollectionField } from './DetailListField'
 import { McpServerItemEditor } from './McpServerItemEditor'
+import { ModelServiceNewApiManagement } from './ModelServiceNewApiManagement'
 import { ModelServiceProviderActions } from './ModelServiceProviderActions'
 import type { ModelServiceProviderPortalRequest } from './ModelServiceProviderPortalBottomPanel'
 import { RecommendedModelsItemEditor } from './RecommendedModelsItemEditor'
@@ -54,8 +55,149 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
 )
 const isTopLevelField = (path: string[], key: string) => path.length === 1 && path[0] === key
+const fieldPathKey = (field: FieldSpec) => field.path.join('.')
+const modelServiceCollectionHiddenFieldKeys = new Set([
+  'apiBaseUrl',
+  'apiKey',
+  'models',
+  'profiles',
+  'timeoutMs',
+  'maxOutputTokens',
+  'extra'
+])
+const modelServiceCollectionServiceFieldKeys = new Set([
+  'provider',
+  'title',
+  'description'
+])
+const modelServiceProfileFieldKeys = new Set([
+  'title',
+  'description',
+  'apiBaseUrl',
+  'apiKey',
+  'models',
+  'timeoutMs',
+  'maxOutputTokens',
+  'extra'
+])
+const toFlatField = (field: FieldSpec): FieldSpec => ({
+  ...field,
+  group: 'default',
+  resolveGroup: undefined,
+  collapse: undefined
+})
+const getModelServiceProfiles = (item: unknown): Record<string, unknown> => {
+  if (!isRecord(item)) return {}
+  const profiles = getValueByPath(item, ['profiles'])
+  if (isRecord(profiles)) return profiles
+  const legacyServices = getValueByPath(item, ['services'])
+  return isRecord(legacyServices) ? legacyServices : {}
+}
+const hasModelServiceProvider = (item: unknown) => (
+  isRecord(item) &&
+  typeof item.provider === 'string' &&
+  item.provider.trim() !== ''
+)
+const getModelServiceString = (item: unknown, path: string[]) => {
+  const value = getValueByPath(item, path)
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+}
+const hasNewApiManagement = (item: unknown, resolvedItem: unknown) => {
+  const endpointKind = getModelServiceString(item, ['management', 'endpointKind']) ??
+    getModelServiceString(resolvedItem, ['management', 'endpointKind'])
+  const provider = getModelServiceString(item, ['provider']) ?? getModelServiceString(resolvedItem, ['provider'])
+  return endpointKind === 'newapi' || provider === 'micu'
+}
+const isModelServiceCollection = (item: unknown, resolvedItem: unknown) => {
+  const itemRecord = isRecord(item) ? item : {}
+  const resolvedItemRecord = isRecord(resolvedItem) ? resolvedItem : {}
+  return itemRecord.kind === 'collection' ||
+    resolvedItemRecord.kind === 'collection' ||
+    Object.keys(getModelServiceProfiles(itemRecord)).length > 0 ||
+    Object.keys(getModelServiceProfiles(resolvedItemRecord)).length > 0
+}
+const setModelServiceProfiles = (
+  item: unknown,
+  profiles: Record<string, unknown>
+): Record<string, unknown> => {
+  const nextItem = isRecord(item) ? { ...item } : {}
+  nextItem.profiles = profiles
+  delete nextItem.services
+  return nextItem
+}
+const getProfileText = (
+  profile: unknown,
+  key: string,
+  fieldName: 'title' | 'description'
+) => {
+  if (!isRecord(profile)) return fieldName === 'title' ? key : ''
+  const value = profile[fieldName]
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : fieldName === 'title' ? key : ''
+}
 const configSelectSuffixIcon = (
   <span className='material-symbols-rounded config-view__select-chevron'>expand_more</span>
+)
+const collectionTabPathByKey = {
+  advanced: ['advanced'],
+  apiKeys: ['api-keys'],
+  profiles: ['profiles'],
+  service: []
+} as const
+type CollectionTabKey = keyof typeof collectionTabPathByKey
+const modelServiceDetailTabPathByKey = {
+  access: ['access'],
+  advanced: ['advanced'],
+  display: ['display'],
+  models: ['models'],
+  plan: ['plan'],
+  service: []
+} as const
+type ModelServiceDetailTabKey = keyof typeof modelServiceDetailTabPathByKey
+
+const collectionTabKeyFromPath = (nestedPath: string[] | undefined): CollectionTabKey => {
+  const segment = nestedPath?.[0]
+  if (segment === 'profiles') return 'profiles'
+  if (segment === 'api-keys') return 'apiKeys'
+  if (segment === 'advanced') return 'advanced'
+  return 'service'
+}
+const modelServiceDetailTabKeyFromPath = (nestedPath: string[] | undefined): ModelServiceDetailTabKey => {
+  const segment = nestedPath?.[0]
+  if (segment === 'access') return 'access'
+  if (segment === 'advanced') return 'advanced'
+  if (segment === 'display') return 'display'
+  if (segment === 'models') return 'models'
+  if (segment === 'plan') return 'plan'
+  return 'service'
+}
+const isVisibleConfigField = (
+  field: FieldSpec,
+  currentValue: unknown,
+  currentResolvedValue: unknown
+) => field.hidden !== true && field.visible?.({ currentValue, currentResolvedValue }) !== false
+const getModelServiceDetailTabKey = (
+  field: FieldSpec,
+  currentValue: unknown,
+  currentResolvedValue: unknown
+): ModelServiceDetailTabKey | undefined => {
+  const key = fieldPathKey(field)
+  if (key === 'kind') return 'advanced'
+
+  const group = field.resolveGroup?.({ currentValue, currentResolvedValue }) ?? field.group ?? 'default'
+  if (group === 'profile') return 'service'
+  if (group === 'access' || group === 'providerAccess') return 'access'
+  if (group === 'customization') return 'display'
+  if (group === 'models') return 'models'
+  if (group === 'management') return undefined
+  if (group === 'plan') return 'plan'
+  if (group === 'advanced' || group === 'default') return 'advanced'
+  return undefined
+}
+const tabLabel = (icon: string, label: string) => (
+  <span className='config-view__collection-tab-label'>
+    <span className='material-symbols-rounded'>{icon}</span>
+    <span>{label}</span>
+  </span>
 )
 
 export const SectionForm = ({
@@ -98,6 +240,7 @@ export const SectionForm = ({
   t: TranslationFn
 }) => {
   const fields = providedFields ?? configSchema[sectionKey] ?? []
+  const [newModelServiceProfileKey, setNewModelServiceProfileKey] = useState('')
   const detailContext = {
     mergedModelServices,
     mergedAdapters,
@@ -725,6 +868,9 @@ export const SectionForm = ({
         })
       )
     )
+    const visibleCurrentFields = currentFields.filter(field =>
+      field.hidden !== true && field.visible?.({ currentValue, currentResolvedValue }) !== false
+    )
     const renderRelatedFieldRuns = (fieldsToRender: FieldSpec[]) => {
       const nodes: ReactNode[] = []
       let index = 0
@@ -767,7 +913,7 @@ export const SectionForm = ({
 
       return nodes
     }
-    const groupedFields = currentFields.reduce<Record<string, FieldSpec[]>>((acc, field) => {
+    const groupedFields = visibleCurrentFields.reduce<Record<string, FieldSpec[]>>((acc, field) => {
       const key = field.resolveGroup?.({ currentValue, currentResolvedValue }) ?? field.group ?? 'default'
       if (!acc[key]) acc[key] = []
       acc[key].push(field)
@@ -829,9 +975,8 @@ export const SectionForm = ({
               : t('config.sectionGroups.items')
           })()
 
-          const visibleFields = groupFields.filter(field => field.hidden !== true)
-          const collapseFields = visibleFields.filter(field => field.collapse != null)
-          const nonCollapseFields = visibleFields.filter(field => field.collapse == null)
+          const collapseFields = groupFields.filter(field => field.collapse != null)
+          const nonCollapseFields = groupFields.filter(field => field.collapse == null)
           const collapseGroups = collapseFields.reduce<
             Map<string, { meta: NonNullable<FieldSpec['collapse']>; fields: FieldSpec[] }>
           >((acc, field) => {
@@ -1040,9 +1185,7 @@ export const SectionForm = ({
           key={`${source}:${detailMeta.itemKey}:${detailMeta.itemSource}`}
           serviceKey={detailMeta.itemKey}
           source={source}
-          canRefreshModels={detailMeta.itemSource !== 'inherited'}
           item={detailMeta.itemSource === 'inherited' ? detailMeta.resolvedItem : detailMeta.item}
-          onChange={writeDetailItem}
           onOpenPortal={onOpenModelServicePortal}
           t={t}
         />
@@ -1072,6 +1215,451 @@ export const SectionForm = ({
         </div>
       )
       : null
+
+    const isModelServiceRootDetail = sectionKey === 'modelServices' && detailMeta.field.path.length === 0
+    const isCollectionDetail = isModelServiceRootDetail &&
+      isModelServiceCollection(detailMeta.item, detailMeta.resolvedItem)
+    if (isCollectionDetail) {
+      const itemFields = detailMeta.field.detailCollection?.itemFields ?? []
+      const localProfiles = getModelServiceProfiles(detailMeta.item)
+      const resolvedProfiles = getModelServiceProfiles(detailMeta.resolvedItem)
+      const profileKeys = Array.from(
+        new Set([
+          ...Object.keys(resolvedProfiles),
+          ...Object.keys(localProfiles)
+        ])
+      ).sort((left, right) => left.localeCompare(right))
+      const profileRouteKey = detailRoute?.nestedPath?.[0] === 'profiles'
+        ? detailRoute.nestedPath[1]
+        : undefined
+      const apiKeyRouteId = detailRoute?.nestedPath?.[0] === 'api-keys'
+        ? detailRoute.nestedPath[1]
+        : undefined
+      const isInheritedCollection = detailMeta.itemSource === 'inherited'
+      const collectionServiceFields = itemFields
+        .filter(field => modelServiceCollectionServiceFieldKeys.has(fieldPathKey(field)))
+        .map(toFlatField)
+      const collectionAdvancedFields = itemFields
+        .filter(field => {
+          const key = fieldPathKey(field)
+          return !modelServiceCollectionHiddenFieldKeys.has(key) &&
+            !modelServiceCollectionServiceFieldKeys.has(key)
+        })
+        .map(toFlatField)
+      const collectionHasProvider = hasModelServiceProvider(detailMeta.item) ||
+        hasModelServiceProvider(detailMeta.resolvedItem)
+      const hasIntegratedProfileManagement = hasNewApiManagement(detailMeta.item, detailMeta.resolvedItem)
+      const profileFields = itemFields.filter((field) => {
+        const key = fieldPathKey(field)
+        if (collectionHasProvider && key === 'apiBaseUrl') return false
+        if (hasIntegratedProfileManagement && (key === 'apiKey' || key === 'extra')) return false
+        return modelServiceProfileFieldKeys.has(key)
+      })
+      const writeProfiles = (nextProfiles: Record<string, unknown>) => {
+        writeDetailItem(setModelServiceProfiles(detailMeta.item, nextProfiles))
+      }
+      const openProfileDetail = (profileKey: string) => {
+        onOpenDetailRoute?.({
+          kind: detailRoute?.kind ?? 'detailCollectionItem',
+          fieldPath: detailMeta.field.path,
+          itemKey: detailMeta.itemKey,
+          nestedPath: ['profiles', profileKey]
+        })
+      }
+      const openApiKeyDetail = (tokenId: string) => {
+        onOpenDetailRoute?.({
+          kind: detailRoute?.kind ?? 'detailCollectionItem',
+          fieldPath: detailMeta.field.path,
+          itemKey: detailMeta.itemKey,
+          nestedPath: ['api-keys', tokenId]
+        })
+      }
+      const openCollectionTab = (tabKey: CollectionTabKey) => {
+        onOpenDetailRoute?.({
+          kind: detailRoute?.kind ?? 'detailCollectionItem',
+          fieldPath: detailMeta.field.path,
+          itemKey: detailMeta.itemKey,
+          nestedPath: [...collectionTabPathByKey[tabKey]]
+        })
+      }
+      const collectionActiveTab = collectionTabKeyFromPath(detailRoute?.nestedPath)
+      const profileList = (
+        <div className='config-view__field-list'>
+          {profileKeys.length > 0
+            ? profileKeys.map((profileKey) => {
+              const localProfile = localProfiles[profileKey]
+              const resolvedProfile = resolvedProfiles[profileKey]
+              const displayProfile = isRecord(localProfile) ? localProfile : resolvedProfile
+              const title = getProfileText(displayProfile, profileKey, 'title')
+              const description = getProfileText(displayProfile, profileKey, 'description')
+              return (
+                <div key={profileKey} className='config-view__record-card'>
+                  <div className='config-view__detail-list-row'>
+                    <button
+                      type='button'
+                      className='config-view__detail-list-main'
+                      onClick={() => openProfileDetail(profileKey)}
+                    >
+                      <div className='config-view__record-heading'>
+                        <span className='material-symbols-rounded config-view__record-icon'>
+                          account_tree
+                        </span>
+                        <div className='config-view__record-heading-text'>
+                          <div className='config-view__record-title'>{title}</div>
+                          <div className='config-view__record-subtitle'>{profileKey}</div>
+                          {description !== '' && (
+                            <div className='config-view__record-desc'>{description}</div>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                    {!isInheritedCollection && (
+                      <div className='config-view__record-actions'>
+                        <Button
+                          size='small'
+                          type='text'
+                          className='config-view__icon-button config-view__detail-action-btn'
+                          aria-label={t('common.delete')}
+                          icon={<span className='material-symbols-rounded'>delete</span>}
+                          onClick={() => {
+                            const nextProfiles = { ...localProfiles }
+                            delete nextProfiles[profileKey]
+                            writeProfiles(nextProfiles)
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })
+            : (
+              <div className='config-view__detail-list-empty'>
+                <div className='config-view__detail-list-empty-title'>
+                  {t('common.noData')}
+                </div>
+                <div className='config-view__detail-list-empty-desc'>
+                  {t('config.fields.modelServices.item.profiles.desc')}
+                </div>
+              </div>
+            )}
+          {!isInheritedCollection && (
+            <div className='config-view__record-add'>
+              <div className='config-view__record-add-inputs'>
+                <Input
+                  value={newModelServiceProfileKey}
+                  onChange={(event) => setNewModelServiceProfileKey(event.target.value)}
+                  placeholder={t('config.editor.newModelServiceName')}
+                  onPressEnter={() => {
+                    const nextKey = newModelServiceProfileKey.trim()
+                    if (nextKey === '' || localProfiles[nextKey] != null || resolvedProfiles[nextKey] != null) return
+                    const nextProfile = { title: nextKey }
+                    writeProfiles({ ...localProfiles, [nextKey]: nextProfile })
+                    setNewModelServiceProfileKey('')
+                    openProfileDetail(nextKey)
+                  }}
+                />
+                <Button
+                  size='small'
+                  className='config-view__icon-button'
+                  icon={<span className='material-symbols-rounded'>check</span>}
+                  onClick={() => {
+                    const nextKey = newModelServiceProfileKey.trim()
+                    if (nextKey === '' || localProfiles[nextKey] != null || resolvedProfiles[nextKey] != null) return
+                    const nextProfile = { title: nextKey }
+                    writeProfiles({ ...localProfiles, [nextKey]: nextProfile })
+                    setNewModelServiceProfileKey('')
+                    openProfileDetail(nextKey)
+                  }}
+                  disabled={newModelServiceProfileKey.trim() === ''}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )
+
+      if (profileRouteKey != null) {
+        const localProfile = localProfiles[profileRouteKey]
+        const resolvedProfile = resolvedProfiles[profileRouteKey]
+        const profileValue = isRecord(localProfile)
+          ? localProfile
+          : isRecord(resolvedProfile) && isInheritedCollection
+          ? undefined
+          : {}
+        const profileResolvedValue = isRecord(resolvedProfile) ? resolvedProfile : undefined
+        const writeProfile = (nextProfile: unknown) => {
+          const resolvedNextProfile = isRecord(nextProfile) ? nextProfile : {}
+          writeProfiles({ ...localProfiles, [profileRouteKey]: resolvedNextProfile })
+        }
+
+        return (
+          <div className='config-view__detail-panel'>
+            {detailNotice}
+            {hasIntegratedProfileManagement && (
+              <ModelServiceNewApiManagement
+                view='profileDetail'
+                onOpenApiKey={openApiKeyDetail}
+                onOpenApiKeysTab={() => openCollectionTab('apiKeys')}
+                onOpenProfile={openProfileDetail}
+                onProfilesChange={writeProfiles}
+                profileKey={profileRouteKey}
+                profiles={localProfiles}
+                readOnly={isInheritedCollection}
+                resolvedProfiles={resolvedProfiles}
+                service={detailMeta.item}
+                serviceKey={detailMeta.itemKey}
+                source={source}
+                t={t}
+              />
+            )}
+            {renderFieldGroups({
+              currentFields: profileFields,
+              currentValue: profileValue,
+              currentResolvedValue: profileResolvedValue,
+              onCurrentValueChange: writeProfile,
+              keyPrefix: `detail:${detailMeta.itemKey}:profile:${profileRouteKey}`,
+              readOnly: isInheritedCollection
+            })}
+          </div>
+        )
+      }
+
+      if (apiKeyRouteId != null && hasIntegratedProfileManagement) {
+        return (
+          <div className='config-view__detail-panel'>
+            {detailNotice}
+            <ModelServiceNewApiManagement
+              view='apiKeyDetail'
+              onOpenApiKey={openApiKeyDetail}
+              onOpenApiKeysTab={() => openCollectionTab('apiKeys')}
+              onOpenProfile={openProfileDetail}
+              onProfilesChange={writeProfiles}
+              profiles={localProfiles}
+              readOnly={isInheritedCollection}
+              resolvedProfiles={resolvedProfiles}
+              service={detailMeta.item}
+              serviceKey={detailMeta.itemKey}
+              source={source}
+              t={t}
+              tokenId={apiKeyRouteId}
+            />
+          </div>
+        )
+      }
+
+      const collectionTabItems = [
+        {
+          key: 'service',
+          label: tabLabel(
+            'info',
+            t('config.modelServices.collectionTabs.service', { defaultValue: '服务信息' })
+          ),
+          children: (
+            <div className='config-view__subsection-body'>
+              {renderFieldGroups({
+                currentFields: collectionServiceFields,
+                currentValue: isInheritedCollection ? undefined : detailMeta.item,
+                currentResolvedValue: detailMeta.resolvedItem,
+                onCurrentValueChange: writeDetailItem,
+                keyPrefix: `detail:${detailMeta.field.path.join('.')}:${detailMeta.itemKey}:service`,
+                readOnly: isInheritedCollection
+              })}
+            </div>
+          )
+        },
+        {
+          key: 'profiles',
+          label: tabLabel(
+            'account_tree',
+            t('config.modelServices.collectionTabs.profiles', { defaultValue: '本地档案' })
+          ),
+          children: hasIntegratedProfileManagement
+            ? (
+              <ModelServiceNewApiManagement
+                view='profiles'
+                onOpenApiKey={openApiKeyDetail}
+                onOpenApiKeysTab={() => openCollectionTab('apiKeys')}
+                onOpenProfile={openProfileDetail}
+                onProfilesChange={writeProfiles}
+                profiles={localProfiles}
+                readOnly={isInheritedCollection}
+                resolvedProfiles={resolvedProfiles}
+                service={detailMeta.item}
+                serviceKey={detailMeta.itemKey}
+                source={source}
+                t={t}
+              />
+            )
+            : profileList
+        },
+        ...(hasIntegratedProfileManagement
+          ? [{
+            key: 'apiKeys',
+            label: tabLabel(
+              'vpn_key',
+              t('config.modelServices.collectionTabs.apiKeys', { defaultValue: '令牌管理' })
+            ),
+            children: (
+              <ModelServiceNewApiManagement
+                view='apiKeys'
+                onOpenApiKey={openApiKeyDetail}
+                onOpenApiKeysTab={() => openCollectionTab('apiKeys')}
+                onOpenProfile={openProfileDetail}
+                onProfilesChange={writeProfiles}
+                profiles={localProfiles}
+                readOnly={isInheritedCollection}
+                resolvedProfiles={resolvedProfiles}
+                service={detailMeta.item}
+                serviceKey={detailMeta.itemKey}
+                source={source}
+                t={t}
+              />
+            )
+          }]
+          : []),
+        ...(collectionAdvancedFields.length > 0
+          ? [{
+            key: 'advanced',
+            label: tabLabel(
+              'tune',
+              t('config.modelServices.collectionTabs.advanced', { defaultValue: '高级配置' })
+            ),
+            children: (
+              <div className='config-view__subsection-body'>
+                {renderFieldGroups({
+                  currentFields: collectionAdvancedFields,
+                  currentValue: isInheritedCollection ? undefined : detailMeta.item,
+                  currentResolvedValue: detailMeta.resolvedItem,
+                  onCurrentValueChange: writeDetailItem,
+                  keyPrefix: `detail:${detailMeta.field.path.join('.')}:${detailMeta.itemKey}:advanced`,
+                  readOnly: isInheritedCollection
+                })}
+              </div>
+            )
+          }]
+          : [])
+      ]
+      const collectionRenderedActiveTab = collectionTabItems.some(item => item.key === collectionActiveTab)
+        ? collectionActiveTab
+        : collectionTabItems[0]?.key
+
+      return (
+        <div className='config-view__detail-panel'>
+          {detailNotice}
+          {modelServiceActions}
+          <Tabs
+            className='config-view__collection-tabs'
+            activeKey={collectionRenderedActiveTab}
+            onChange={key => openCollectionTab(key as CollectionTabKey)}
+            items={collectionTabItems}
+          />
+        </div>
+      )
+    }
+
+    if (isModelServiceRootDetail) {
+      const itemFields = detailMeta.field.detailCollection?.itemFields ?? []
+      const isInheritedModelService = detailMeta.itemSource === 'inherited'
+      const modelServiceCurrentValue = isInheritedModelService ? undefined : detailMeta.item
+      const modelServiceResolvedValue = detailMeta.resolvedItem
+      const tabFields = itemFields.reduce<Record<ModelServiceDetailTabKey, FieldSpec[]>>((acc, field) => {
+        const tabKey = getModelServiceDetailTabKey(field, modelServiceCurrentValue, modelServiceResolvedValue)
+        if (tabKey == null) return acc
+        acc[tabKey].push(toFlatField(field))
+        return acc
+      }, {
+        access: [],
+        advanced: [],
+        display: [],
+        models: [],
+        plan: [],
+        service: []
+      })
+      const openModelServiceTab = (tabKey: ModelServiceDetailTabKey) => {
+        onOpenDetailRoute?.({
+          kind: detailRoute?.kind ?? 'detailCollectionItem',
+          fieldPath: detailMeta.field.path,
+          itemKey: detailMeta.itemKey,
+          nestedPath: [...modelServiceDetailTabPathByKey[tabKey]]
+        })
+      }
+      const modelServiceActiveTab = modelServiceDetailTabKeyFromPath(detailRoute?.nestedPath)
+      const tabDefinitions: Array<{
+        key: ModelServiceDetailTabKey
+        icon: string
+        label: string
+      }> = [
+        {
+          key: 'service',
+          icon: 'info',
+          label: t('config.modelServices.collectionTabs.service', { defaultValue: '服务信息' })
+        },
+        {
+          key: 'access',
+          icon: 'key',
+          label: t('config.sectionGroups.access', { defaultValue: '接入配置' })
+        },
+        {
+          key: 'models',
+          icon: 'view_list',
+          label: t('config.sectionGroups.models', { defaultValue: '模型配置' })
+        },
+        {
+          key: 'display',
+          icon: 'palette',
+          label: t('config.sectionGroups.customization', { defaultValue: '展示与链接' })
+        },
+        {
+          key: 'plan',
+          icon: 'workspace_premium',
+          label: t('config.sectionGroups.plan', { defaultValue: '套餐信息' })
+        },
+        {
+          key: 'advanced',
+          icon: 'tune',
+          label: t('config.modelServices.collectionTabs.advanced', { defaultValue: '高级配置' })
+        }
+      ]
+      const tabItems = tabDefinitions
+        .filter(({ key }) =>
+          tabFields[key].some(field => isVisibleConfigField(field, modelServiceCurrentValue, modelServiceResolvedValue))
+        )
+        .map(({ key, icon, label }) => ({
+          key,
+          label: tabLabel(icon, label),
+          children: (
+            <div className='config-view__subsection-body'>
+              {renderFieldGroups({
+                currentFields: tabFields[key],
+                currentValue: modelServiceCurrentValue,
+                currentResolvedValue: modelServiceResolvedValue,
+                onCurrentValueChange: isInheritedModelService ? () => undefined : writeDetailItem,
+                keyPrefix: `detail:${detailMeta.field.path.join('.')}:${detailMeta.itemKey}:${key}`,
+                readOnly: isInheritedModelService
+              })}
+            </div>
+          )
+        }))
+      const modelServiceRenderedActiveTab = tabItems.some(item => item.key === modelServiceActiveTab)
+        ? modelServiceActiveTab
+        : tabItems[0]?.key
+
+      if (tabItems.length > 0) {
+        return (
+          <div className='config-view__detail-panel'>
+            {detailNotice}
+            {modelServiceActions}
+            <Tabs
+              className='config-view__collection-tabs'
+              activeKey={modelServiceRenderedActiveTab}
+              onChange={key => openModelServiceTab(key as ModelServiceDetailTabKey)}
+              items={tabItems}
+            />
+          </div>
+        )
+      }
+    }
 
     if (detailMeta.itemSource === 'inherited') {
       if ((detailMeta.field.detailCollection?.itemFields?.length ?? 0) > 0) {

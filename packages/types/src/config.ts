@@ -178,19 +178,23 @@ export interface ModelProviderDefinition {
 export interface ModelServiceManagementConfig {
   enabled?: boolean
   apiKey?: string
+  baseUrl?: string
+  headers?: Record<string, string>
   organizationId?: string
+  userId?: string
   projectId?: string
   endpointKind?: string
 }
 
 export interface ModelServiceConfig {
+  kind?: 'service' | 'collection'
   title?: string
   description?: string
   provider?: string
   icon?: string
   homepageUrl?: string
   apiBaseUrl?: string
-  apiKey: string
+  apiKey?: string
   models?: string[]
   timeoutMs?: number
   maxOutputTokens?: number
@@ -201,11 +205,14 @@ export interface ModelServiceConfig {
   }
   providerOptions?: Record<string, unknown>
   management?: ModelServiceManagementConfig
+  profiles?: Record<string, ModelServiceConfig>
+  services?: Record<string, ModelServiceConfig>
   extra?: Record<string, unknown>
 }
 
 export interface ResolvedModelServiceConfig extends ModelServiceConfig {
   apiBaseUrl: string
+  apiKey: string
   modelSource?: 'configured' | 'provider_catalog' | 'remote_cache'
   providerDefinition?: ModelProviderDefinition
 }
@@ -234,10 +241,13 @@ export type ProviderAccountStatus =
   | { kind: 'cost'; currency?: string; amount?: number; period?: string; raw?: unknown }
   | {
     kind: 'quota'
+    currency?: string
     unit?: ModelServiceQuotaUnit
     limit?: number
     remaining?: number
     resetTime?: string
+    unlimited?: boolean
+    used?: number
     windows?: Array<{
       duration?: number
       limit?: number
@@ -274,6 +284,73 @@ export type ProviderSecretResult =
   | { kind: 'created'; value: string; id?: string; expiresAt?: number; raw?: unknown }
   | { kind: 'console'; url: string; reason: string }
   | { kind: 'unsupported'; reason: string }
+
+export interface ProviderManagementGroup {
+  id: string
+  title?: string
+  description?: string
+  ratio?: number
+  raw?: unknown
+}
+
+export interface ProviderManagementToken {
+  id: string
+  name?: string
+  key?: string
+  status?: number
+  group?: string
+  quota?: number
+  remaining?: number
+  unlimited?: boolean
+  expiredAt?: number
+  createdAt?: number
+  accessedAt?: number
+  modelLimits?: string[]
+  modelLimitsEnabled?: boolean
+}
+
+export interface ProviderManagementSnapshot {
+  kind: 'newapi'
+  account?: ProviderAccountStatus
+  groups: ProviderManagementGroup[]
+  models: ProviderModelInfo[]
+  tokens: ProviderManagementToken[]
+}
+
+export interface ProviderManagementTokenCreateInput {
+  name: string
+  group?: string
+  quota?: number
+  unlimited?: boolean
+  modelLimits?: string[]
+  modelLimitsEnabled?: boolean
+  allowIps?: string
+  expiredAt?: number
+}
+
+export interface ProviderManagementTokenUpdateInput {
+  id: string
+  name?: string
+  group?: string
+  quota?: number
+  unlimited?: boolean
+  status?: number
+  modelLimits?: string[]
+  modelLimitsEnabled?: boolean
+  allowIps?: string
+  expiredAt?: number
+}
+
+export interface ProviderManagementMutationResult {
+  success: boolean
+  message?: string
+  token?: ProviderManagementToken
+  profile?: ModelServiceConfig
+}
+
+export interface ProviderManagementTokenProfileResult {
+  profile: ModelServiceConfig
+}
 
 export interface RecommendedModelConfig {
   service?: string

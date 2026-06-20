@@ -16,8 +16,7 @@ import {
   getApiErrorMessage,
   getModelServiceBalance,
   getModelServiceStatus,
-  listModelServiceModels,
-  refreshModelServiceModels
+  listModelServiceModels
 } from '#~/api'
 
 import {
@@ -43,18 +42,14 @@ import {
 } from './modelServiceProviderActionUtils'
 
 export const ModelServiceProviderActions = ({
-  canRefreshModels = true,
   item,
   onOpenPortal,
-  onChange,
   serviceKey,
   source,
   t
 }: {
-  canRefreshModels?: boolean
   item: unknown
   onOpenPortal?: (request: ModelServiceProviderPortalRequest) => void
-  onChange: (nextItem: Record<string, unknown>) => void
   serviceKey: string
   source: ConfigSource
   t: TranslationFn
@@ -85,7 +80,8 @@ export const ModelServiceProviderActions = ({
   const modelIds = useMemo(() => normalizeProviderModels(models), [models])
   const serviceFingerprint = buildServiceActionFingerprint(serviceKey, source, service)
   const showsPlanSummary = codingPlan != null || billing?.kind != null
-  const canAutoQueryPlanQuota = showsPlanSummary && actionCapabilities.canQueryBalance
+  const shouldShowAccountSummary = showsPlanSummary || actionCapabilities.canQueryBalance
+  const canAutoQueryAccountStatus = shouldShowAccountSummary && actionCapabilities.canQueryBalance
 
   useEffect(() => {
     const cachedAccountStatus = getCachedModelServiceAccountStatus(serviceFingerprint)
@@ -134,26 +130,6 @@ export const ModelServiceProviderActions = ({
     return result.models
   }
 
-  const handleRefreshModels = async () => {
-    const nextModels = modelIds.length > 0 ? models : await handleListModels()
-    const nextModelIds = normalizeProviderModels(nextModels ?? [])
-    if (nextModelIds.length === 0) {
-      void message.warning(t('config.modelServices.results.modelsEmpty'))
-      return
-    }
-
-    const result = await runAction('refreshModels', () =>
-      refreshModelServiceModels({
-        models: nextModelIds,
-        service,
-        serviceKey,
-        source
-      }))
-    if (result == null) return
-    onChange({ ...toModelServiceConfig(item), models: result.models })
-    void message.success(t('config.modelServices.results.modelsRefreshed', { count: result.models.length }))
-  }
-
   const handleBalance = useCallback(async (options?: { silent?: boolean }) => {
     setAccountError(null)
     const result = await runAction(
@@ -192,7 +168,7 @@ export const ModelServiceProviderActions = ({
   }
 
   useEffect(() => {
-    if (!canAutoQueryPlanQuota) return
+    if (!canAutoQueryAccountStatus) return
     const cachedAccountStatus = getCachedModelServiceAccountStatus(serviceFingerprint)
     if (cachedAccountStatus != null) {
       setAccountStatus(cachedAccountStatus)
@@ -202,10 +178,10 @@ export const ModelServiceProviderActions = ({
     if (autoBalanceFingerprintRef.current === serviceFingerprint) return
     autoBalanceFingerprintRef.current = serviceFingerprint
     void handleBalance({ silent: true })
-  }, [canAutoQueryPlanQuota, handleBalance, serviceFingerprint])
+  }, [canAutoQueryAccountStatus, handleBalance, serviceFingerprint])
 
   const moreActions: ModelServiceProviderMoreAction[] = [
-    ...(!showsPlanSummary && actionCapabilities.canQueryBalance
+    ...(!shouldShowAccountSummary && actionCapabilities.canQueryBalance
       ? [{
         icon: 'account_balance_wallet',
         key: 'balance',
@@ -251,9 +227,7 @@ export const ModelServiceProviderActions = ({
             canCreateSecret={actionCapabilities.canCreateSecret}
             homepageUrl={homepageUrl}
             loadingAction={loadingAction}
-            canRefreshModels={!hasAutomaticModelCatalog && canRefreshModels && managementEnabled}
             onHomepage={openPortal}
-            onRefreshModels={() => void handleRefreshModels()}
             onSecret={() => void handleSecret()}
             secretActionLabel={secretActionLabel}
             t={t}
@@ -274,7 +248,7 @@ export const ModelServiceProviderActions = ({
         t={t}
       />
       <ModelServiceProviderActionResults
-        accountStatus={showsPlanSummary ? null : accountStatus}
+        accountStatus={shouldShowAccountSummary ? null : accountStatus}
         identity={identity}
         models={models}
         serviceStatus={serviceStatus}

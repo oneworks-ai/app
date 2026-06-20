@@ -1,20 +1,29 @@
-/* eslint-disable max-lines -- model provider service keeps related config actions together */
-import { updateConfigFile } from '@oneworks/config'
-import type { ConfigSource, ModelServiceConfig } from '@oneworks/types'
+import type {
+  ConfigSource,
+  ModelServiceConfig,
+  ProviderManagementTokenCreateInput,
+  ProviderManagementTokenUpdateInput
+} from '@oneworks/types'
 import {
   getModelProviderDefinition,
   listModelProviderDefinitions,
   resolveModelProviderIdentity,
-  resolveModelServiceConfig
+  resolveModelServiceConfig,
+  resolveModelServiceFromMap
 } from '@oneworks/utils'
 
 import { loadConfigState } from '#~/services/config/index.js'
 
 import {
+  createProviderManagementToken,
   createProviderSecret,
+  deleteProviderManagementToken,
   getProviderAccountStatus,
+  getProviderManagementSnapshot,
+  getProviderManagementTokenProfile,
   getProviderServiceStatus,
-  listProviderModels
+  listProviderModels,
+  updateProviderManagementToken
 } from './provider-client.js'
 
 export class ModelProvidersServiceError extends Error {
@@ -31,21 +40,6 @@ export class ModelProvidersServiceError extends Error {
 const normalizeString = (
   value: unknown
 ) => (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined)
-const normalizeModelIds = (value: unknown) =>
-  Array.isArray(value)
-    ? Array.from(new Set(value.map(item => normalizeString(item)).filter((item): item is string => item != null)))
-    : []
-
-const selectRawSourceConfig = (
-  state: Awaited<ReturnType<typeof loadConfigState>>,
-  source: ConfigSource
-) => {
-  if (source === 'global') return state.globalSource?.rawConfig
-  if (source === 'project') return state.projectSource?.rawConfig
-  if (source === 'user') return state.userSource?.rawConfig
-  return undefined
-}
-
 const selectResolvedSourceConfig = (
   state: Awaited<ReturnType<typeof loadConfigState>>,
   source: ConfigSource
@@ -77,15 +71,6 @@ const mergeMaskedDraftValues = (incoming: unknown, existing: unknown): unknown =
   return incoming
 }
 
-const hasMaskedDraftValue = (value: unknown): boolean => {
-  if (value === '******') return true
-  if (Array.isArray(value)) return value.some(hasMaskedDraftValue)
-  if (value != null && typeof value === 'object') {
-    return Object.values(value as Record<string, unknown>).some(hasMaskedDraftValue)
-  }
-  return false
-}
-
 const resolveServiceConfig = async (params: {
   draft?: unknown
   serviceKey: string
@@ -97,8 +82,8 @@ const resolveServiceConfig = async (params: {
   const state = await loadConfigState()
   const sourceConfig = params.source == null ? undefined : selectResolvedSourceConfig(state, params.source)
   const baseService = params.source == null
-    ? state.mergedConfig.modelServices?.[params.serviceKey]
-    : sourceConfig?.modelServices?.[params.serviceKey]
+    ? resolveModelServiceFromMap(state.mergedConfig.modelServices, params.serviceKey)
+    : resolveModelServiceFromMap(sourceConfig?.modelServices, params.serviceKey)
   const service = params.draft != null && typeof params.draft === 'object' && !Array.isArray(params.draft)
     ? mergeMaskedDraftValues(params.draft, baseService) as ModelServiceConfig
     : baseService
@@ -169,53 +154,44 @@ export const createModelServiceSecret = async (params: {
   secret: await createProviderSecret(await resolveServiceConfig(params))
 })
 
-export const refreshModelServiceModels = async (params: {
+export const getModelServiceManagementSnapshot = async (params: {
   draft?: unknown
   serviceKey: string
-  source: ConfigSource
-  models: unknown
-}) => {
-  if (!isConfigSource(params.source)) {
-    throw new ModelProvidersServiceError('invalid_source', 'Invalid config source.', { source: params.source })
-  }
-  const modelIds = normalizeModelIds(params.models)
-  if (modelIds.length === 0) {
-    throw new ModelProvidersServiceError('invalid_models', 'At least one model id is required.')
-  }
+  source?: unknown
+}) => ({
+  management: await getProviderManagementSnapshot(await resolveServiceConfig(params))
+})
 
-  const state = await loadConfigState()
-  const sourceConfig = selectRawSourceConfig(state, params.source)
-  const currentServices = sourceConfig?.modelServices ?? {}
-  const currentService = currentServices[params.serviceKey]
-  if (currentService == null && params.draft == null) {
-    throw new ModelProvidersServiceError(
-      'model_service_not_in_source',
-      `Model service "${params.serviceKey}" does not exist in ${params.source} config.`
-    )
-  }
-  if (currentService == null && hasMaskedDraftValue(params.draft)) {
-    throw new ModelProvidersServiceError(
-      'model_service_not_in_source',
-      `Model service "${params.serviceKey}" does not exist in ${params.source} config.`
-    )
-  }
+export const createModelServiceManagementToken = async (params: {
+  draft?: unknown
+  input: ProviderManagementTokenCreateInput
+  serviceKey: string
+  source?: unknown
+}) => ({
+  result: await createProviderManagementToken(await resolveServiceConfig(params), params.input)
+})
 
-  const nextService = params.draft != null && typeof params.draft === 'object' && !Array.isArray(params.draft)
-    ? mergeMaskedDraftValues(params.draft, currentService) as ModelServiceConfig
-    : currentService
+export const updateModelServiceManagementToken = async (params: {
+  draft?: unknown
+  input: ProviderManagementTokenUpdateInput
+  serviceKey: string
+  source?: unknown
+}) => ({
+  result: await updateProviderManagementToken(await resolveServiceConfig(params), params.input)
+})
 
-  await updateConfigFile({
-    workspaceFolder: state.workspaceFolder,
-    source: params.source,
-    section: 'modelServices',
-    value: {
-      ...currentServices,
-      [params.serviceKey]: {
-        ...nextService,
-        models: modelIds
-      }
-    }
-  })
+export const deleteModelServiceManagementToken = async (params: {
+  draft?: unknown
+  serviceKey: string
+  source?: unknown
+  tokenId: string
+}) => ({
+  result: await deleteProviderManagementToken(await resolveServiceConfig(params), params.tokenId)
+})
 
-  return { ok: true, serviceKey: params.serviceKey, source: params.source, models: modelIds }
-}
+export const getModelServiceManagementTokenProfile = async (params: {
+  draft?: unknown
+  serviceKey: string
+  source?: unknown
+  tokenId: string
+}) => getProviderManagementTokenProfile(await resolveServiceConfig(params), params.tokenId)

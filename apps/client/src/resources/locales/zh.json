@@ -2888,14 +2888,15 @@
         "openApiKeys": "打开 API Key 页面",
         "queryBalance": "查询余额",
         "queryStatus": "服务状态",
-        "queryModels": "查询模型",
-        "refreshModels": "写入模型列表"
+        "queryModels": "查询模型"
       },
       "results": {
         "actionFailed": "模型服务操作失败",
         "amountUnknown": "未知",
         "balance": "余额",
+        "cost": "费用",
         "quota": "额度",
+        "unlimitedQuota": "无限额度",
         "resetsAt": "{{time}} 重置",
         "windowQuota": "{{duration}} 窗口 {{amount}}",
         "parallelLimit": "并发 {{count}}",
@@ -2903,8 +2904,6 @@
         "models": "{{count}} 个模型",
         "modelsMore": "还有 {{count}} 个",
         "modelsLoaded": "已查询 {{count}} 个模型",
-        "modelsRefreshed": "已写入 {{count}} 个模型",
-        "modelsEmpty": "没有可写入的模型",
         "secretCreated": "Secret 已创建并复制到剪贴板"
       },
       "plan": {
@@ -2983,6 +2982,65 @@
           "coding_tools_only": "仅编程工具",
           "general_api": "通用 API"
         }
+      },
+      "management": {
+        "title": "本地档案",
+        "apiKeyTitle": "远端令牌",
+        "balance": "余额",
+        "groups": "分组",
+        "apiKeys": "远端 Key",
+        "tokens": "远端 Key",
+        "profiles": "档案",
+        "models": "模型",
+        "unknown": "-",
+        "refresh": "刷新平台数据",
+        "actionFailed": "平台管理操作失败",
+        "newTokenName": "新建配置档案名称",
+        "newApiKeyName": "新建令牌名称",
+        "createProfileTitle": "创建配置档案",
+        "createApiKeyTitle": "创建令牌",
+        "createApiKeySuccess": "令牌已创建",
+        "deleteApiKeySuccess": "令牌已删除",
+        "createApiKeyFirst": "创建令牌",
+        "dialogCreate": "对话创建",
+        "deleteApiKeyConfirm": "删除这个远端令牌？",
+        "deleteProfileDesc": "删除这个本地配置档案，不会删除远端令牌。",
+        "groupDesc": "令牌使用的 New API 分组。",
+        "name": "名称",
+        "noApiKeyForProfile": "请先创建远端令牌。",
+        "status": "状态",
+        "groupPlaceholder": "分组",
+        "quotaPlaceholder": "额度",
+        "unlimited": "不限额",
+        "loading": "正在加载平台数据",
+        "empty": "暂无配置档案。",
+        "createSuccess": "配置档案已创建",
+        "updateSuccess": "配置档案已更新",
+        "deleteSuccess": "配置档案已删除",
+        "applyGroup": "更新分组",
+        "importProfile": "配置档案",
+        "openProfile": "配置档案",
+        "selectApiKey": "选择远端令牌",
+        "bindSuccess": "远端令牌已绑定",
+        "boundProfile": "远端令牌：{{key}}",
+        "linkedProfile": "配置档案：{{profile}}",
+        "notLinked": "未配置档案",
+        "unboundProfile": "未选择远端令牌",
+        "deleteConfirm": "删除这个配置档案？",
+        "tokenGroup": "分组：{{group}}",
+        "tokenQuota": "额度：{{amount}}",
+        "tokenStatus": {
+          "enabled": "启用",
+          "disabled": "停用",
+          "expired": "过期",
+          "unknown": "未知"
+        }
+      },
+      "collectionTabs": {
+        "service": "服务信息",
+        "profiles": "本地档案",
+        "apiKeys": "令牌管理",
+        "advanced": "高级配置"
       },
       "portal": {
         "secretTitle": "{{provider}} Secret 管理",
@@ -3348,6 +3406,10 @@
           "desc": "按服务名称平铺配置"
         },
         "item": {
+          "kind": {
+            "label": "服务类型",
+            "desc": "模型服务可直接调用；服务集合用于保存平台管理凭证，并在下级 services 中配置具体模型服务。"
+          },
           "provider": {
             "label": "官方服务商",
             "desc": "选择后会使用内置 API 地址、模型目录、图标和管理入口；自定义服务可留空。"
@@ -3380,6 +3442,10 @@
             "label": "模型列表",
             "desc": "该服务支持的模型名称；留空时使用服务商默认模型目录。"
           },
+          "profiles": {
+            "label": "配置档案",
+            "desc": "服务集合下的具体模型调用配置；运行时会以 collection/profile 的形式展开。"
+          },
           "billing": {
             "label": "计费元数据",
             "desc": "可选覆盖计费类型、Key 类型、额度单位、额度窗口和允许用途。"
@@ -3393,17 +3459,21 @@
               "label": "启用管理能力",
               "desc": "开启后可使用查询模型、余额、状态和 Secret 辅助入口。"
             },
+            "endpointKind": {
+              "label": "管理接口类型",
+              "desc": "平台管理 API 类型；New API 平台填写 newapi。"
+            },
+            "baseUrl": {
+              "label": "管理 API 地址",
+              "desc": "平台管理 API 根地址；New API 平台不要带 /v1。"
+            },
             "apiKey": {
               "label": "管理 API Key",
               "desc": "部分平台需要独立的管理 API Key；留空时默认复用模型 API Key。"
             },
-            "organizationId": {
-              "label": "组织 ID",
-              "desc": "用于需要组织维度管理 API 的平台。"
-            },
-            "projectId": {
-              "label": "项目 ID",
-              "desc": "用于需要项目维度管理 API 的平台。"
+            "headers": {
+              "label": "管理请求头",
+              "desc": "调用平台管理 API 时附加的请求头，例如 New-Api-User。"
             }
           },
           "providerOptions": {
@@ -3729,6 +3799,14 @@
         "apiyi": "APIYI",
         "yunwu": "云雾"
       },
+      "modelServiceKind": {
+        "service": "模型服务",
+        "collection": "服务集合"
+      },
+      "modelServiceManagementEndpointKind": {
+        "none": "不使用管理接口",
+        "newapi": "New API"
+      },
       "modelProviderDescriptions": {
         "openai": "OpenAI 官方 API 平台，用于 GPT 模型和多模态服务。",
         "anthropic": "Anthropic 官方 Claude 模型控制台服务。",
@@ -3855,6 +3933,7 @@
       "providerAccess": "接入覆盖",
       "customization": "展示与链接",
       "models": "模型配置",
+      "profiles": "配置档案",
       "management": "管理配置",
       "plan": "套餐信息",
       "advanced": "进阶配置",

@@ -604,8 +604,9 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     description: 'Micu relay platform for OpenAI-compatible model access.',
     category: 'relay',
     icon: builtinIcon('micu'),
-    portal: portal('https://micu.hk', { docs: 'https://micu.hk' }),
-    capabilities: capabilities({ listModels: 'manual', balance: 'manual', status: 'manual' })
+    defaultApiBaseUrl: 'https://www.micuapi.ai/v1',
+    portal: portal('https://www.micuapi.ai', { docs: 'https://docs.micuapi.ai' }),
+    capabilities: capabilities({ listModels: 'manual', balance: 'api', status: 'manual' })
   },
   {
     id: 'apiyi',

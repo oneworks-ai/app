@@ -3,7 +3,7 @@ import type { ModelServiceConfig, ModelServiceQuotaWindow, ProviderAccountStatus
 import { resolveModelServiceBilling, resolveModelServiceCodingPlan } from '@oneworks/utils/model-providers'
 
 import type { TranslationFn } from './configUtils'
-import { formatBalance, normalizePortalUrl } from './modelServiceProviderActionUtils'
+import { formatBalance, formatCurrencyAmount, normalizePortalUrl } from './modelServiceProviderActionUtils'
 
 const translatePlanValue = (t: TranslationFn, namespace: string, value: string | undefined) => (
   value == null ? undefined : t(`config.modelServices.plan.${namespace}.${value}`, { defaultValue: value })
@@ -31,31 +31,44 @@ export interface ModelServiceQuotaDisplayRow {
   label: string
   percent?: number
   resetTime?: string
+  showProgress?: boolean
   value?: string
 }
 
 const formatQuotaAmount = ({
+  currency,
   limit,
   remaining,
   t,
-  unit
+  unit,
+  unlimited
 }: {
   limit?: number
   remaining?: number
   t: TranslationFn
   unit?: string
+  currency?: string
+  unlimited?: boolean
 }) => {
+  if (unlimited === true) return t('config.modelServices.results.unlimitedQuota')
   if (unit === 'percent') {
     const value = remaining ?? limit
     return typeof value === 'number'
       ? t('config.modelServices.plan.quotaProgress.percentValue', { value })
       : t('config.modelServices.results.amountUnknown')
   }
+  const unknownAmount = t('config.modelServices.results.amountUnknown')
+  const formatAmount = (amount: number | string) => formatCurrencyAmount(currency, String(amount))
   const suffix = translatePlanValue(t, 'quotaUnit', unit) ?? unit
   const amount = remaining == null || limit == null
-    ? remaining ?? limit ?? t('config.modelServices.results.amountUnknown')
+    ? remaining ?? limit ?? unknownAmount
     : `${remaining} / ${limit}`
-  return [amount, suffix].filter(Boolean).join(' ')
+  const displayAmount = typeof amount === 'number' || (typeof amount === 'string' && amount !== unknownAmount)
+    ? formatAmount(amount)
+    : amount
+  return [displayAmount, suffix]
+    .filter(Boolean)
+    .join(' ')
 }
 
 const formatQuotaDuration = (duration: number | undefined, t: TranslationFn, timeUnit?: string) => {
@@ -135,7 +148,8 @@ export const buildModelServiceQuotaRows = ({
 }): ModelServiceQuotaDisplayRow[] => {
   const billing = resolveModelServiceBilling(service)
   const plan = resolveModelServiceCodingPlan(service)
-  if (plan == null && billing?.kind == null) return []
+  const shouldShowAccountSummary = plan != null || billing?.kind != null || canQueryBalance || accountStatus != null
+  if (!shouldShowAccountSummary) return []
 
   const pendingQuotaValue = (() => {
     if (loadingBalance || (canQueryBalance && accountStatus == null && accountError == null)) {
@@ -149,9 +163,49 @@ export const buildModelServiceQuotaRows = ({
     if (accountStatus == null) return undefined
     return formatBalance(accountStatus, t)
   })()
-  const configuredWindowRows = getRollingQuotaWindows(billing)
+  const fallbackAccountLabel = (() => {
+    if (accountStatus?.kind === 'cost') {
+      return t('config.modelServices.results.cost')
+    }
+    if (accountStatus?.kind === 'balance' || (plan == null && billing?.kind == null)) {
+      return t('config.modelServices.results.balance')
+    }
+    return t('config.modelServices.plan.labels.liveQuota')
+  })()
   return (() => {
+    if (accountStatus?.kind === 'balance' || accountStatus?.kind === 'cost') {
+      return [
+        {
+          key: 'balance',
+          label: accountStatus.kind === 'cost'
+            ? t('config.modelServices.results.cost')
+            : t('config.modelServices.results.balance'),
+          value: formatBalance(accountStatus, t)
+        }
+      ]
+    }
+
+    const configuredWindowRows = getRollingQuotaWindows(billing)
     if (accountStatus?.kind === 'quota') {
+      if (plan == null && billing?.kind == null && configuredWindowRows.length === 0) {
+        return [
+          {
+            key: 'quota',
+            label: t('config.modelServices.results.quota'),
+            percent: getQuotaPercent(accountStatus.remaining, accountStatus.limit),
+            resetTime: formatResetTime(accountStatus.resetTime, t),
+            showProgress: accountStatus.unlimited !== true && accountStatus.limit != null,
+            value: formatQuotaAmount({
+              currency: accountStatus.currency,
+              limit: accountStatus.limit,
+              remaining: accountStatus.remaining,
+              t,
+              unit: accountStatus.unit,
+              unlimited: accountStatus.unlimited
+            })
+          }
+        ]
+      }
       const accountWindows = accountStatus.windows ?? []
       const quotaUnit = billing?.quotaUnit ?? accountStatus.unit
       const windowRows = configuredWindowRows.length > 0
@@ -166,11 +220,13 @@ export const buildModelServiceQuotaRows = ({
               }),
             percent: getQuotaPercent(window?.remaining, window?.limit),
             resetTime: formatResetTime(window?.resetTime, t),
+            showProgress: true,
             value: formatQuotaAmount({
               limit: window?.limit,
               remaining: window?.remaining,
               t,
-              unit: quotaUnit
+              unit: quotaUnit,
+              unlimited: accountStatus.unlimited
             })
           }
         })
@@ -181,11 +237,13 @@ export const buildModelServiceQuotaRows = ({
           }),
           percent: getQuotaPercent(window.remaining, window.limit),
           resetTime: formatResetTime(window.resetTime, t),
+          showProgress: true,
           value: formatQuotaAmount({
             limit: window.limit,
             remaining: window.remaining,
             t,
-            unit: quotaUnit
+            unit: quotaUnit,
+            unlimited: accountStatus.unlimited
           })
         }))
       return [
@@ -195,11 +253,13 @@ export const buildModelServiceQuotaRows = ({
           label: getPeriodQuotaLabel(billing, t),
           percent: getQuotaPercent(accountStatus.remaining, accountStatus.limit),
           resetTime: formatResetTime(accountStatus.resetTime, t),
+          showProgress: true,
           value: formatQuotaAmount({
             limit: accountStatus.limit,
             remaining: accountStatus.remaining,
             t,
-            unit: quotaUnit
+            unit: quotaUnit,
+            unlimited: accountStatus.unlimited
           })
         }
       ]
@@ -210,12 +270,14 @@ export const buildModelServiceQuotaRows = ({
           key: `window-${window}`,
           label: formatConfiguredQuotaWindowLabel(window, t),
           percent: undefined,
+          showProgress: true,
           value: pendingQuotaValue
         })),
         {
           key: 'period',
           label: getPeriodQuotaLabel(billing, t),
           percent: undefined,
+          showProgress: true,
           value: pendingQuotaValue
         }
       ]
@@ -223,8 +285,9 @@ export const buildModelServiceQuotaRows = ({
     return [
       {
         key: 'fallback',
-        label: t('config.modelServices.plan.labels.liveQuota'),
+        label: fallbackAccountLabel,
         percent: undefined,
+        showProgress: plan != null || billing?.kind != null,
         value: fallbackAccountValue
       }
     ].filter(row => row.value != null && row.value !== '')
@@ -259,27 +322,32 @@ export const ModelServiceProviderPlanSummary = ({
   return (
     <div className='config-view__model-service-plan'>
       <div className='config-view__model-service-quota-list'>
-        {quotaRows.map(row => (
-          <div className='config-view__model-service-quota-row' key={row.key}>
-            <div className='config-view__model-service-quota-head'>
-              <span>{row.label}</span>
-              {row.value != null && row.value !== '' && <strong>{row.value}</strong>}
+        {quotaRows.map((row) => {
+          const showProgress = row.showProgress ?? row.percent != null
+          return (
+            <div className='config-view__model-service-quota-row' key={row.key}>
+              <div className='config-view__model-service-quota-head'>
+                <span>{row.label}</span>
+                {row.value != null && row.value !== '' && <strong>{row.value}</strong>}
+              </div>
+              {showProgress && (
+                <div
+                  className='config-view__model-service-quota-progress'
+                  role={row.percent == null ? undefined : 'progressbar'}
+                  aria-valuemin={row.percent == null ? undefined : 0}
+                  aria-valuemax={row.percent == null ? undefined : 100}
+                  aria-valuenow={row.percent}
+                  aria-label={[row.label, row.value].filter(Boolean).join(' ')}
+                >
+                  <span style={{ width: `${row.percent ?? 0}%` }} />
+                </div>
+              )}
+              {row.resetTime != null && (
+                <div className='config-view__model-service-quota-meta'>{row.resetTime}</div>
+              )}
             </div>
-            <div
-              className='config-view__model-service-quota-progress'
-              role={row.percent == null ? undefined : 'progressbar'}
-              aria-valuemin={row.percent == null ? undefined : 0}
-              aria-valuemax={row.percent == null ? undefined : 100}
-              aria-valuenow={row.percent}
-              aria-label={[row.label, row.value].filter(Boolean).join(' ')}
-            >
-              <span style={{ width: `${row.percent ?? 0}%` }} />
-            </div>
-            {row.resetTime != null && (
-              <div className='config-view__model-service-quota-meta'>{row.resetTime}</div>
-            )}
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

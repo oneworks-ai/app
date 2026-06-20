@@ -2887,14 +2887,15 @@
         "openApiKeys": "Open API Keys",
         "queryBalance": "Check Balance",
         "queryStatus": "Service Status",
-        "queryModels": "List Models",
-        "refreshModels": "Write Model List"
+        "queryModels": "List Models"
       },
       "results": {
         "actionFailed": "Model service action failed",
         "amountUnknown": "Unknown",
         "balance": "Balance",
+        "cost": "Cost",
         "quota": "Quota",
+        "unlimitedQuota": "Unlimited quota",
         "resetsAt": "resets at {{time}}",
         "windowQuota": "{{duration}} window {{amount}}",
         "parallelLimit": "parallel {{count}}",
@@ -2902,8 +2903,6 @@
         "models": "{{count}} models",
         "modelsMore": "{{count}} more",
         "modelsLoaded": "Loaded {{count}} models",
-        "modelsRefreshed": "Wrote {{count}} models",
-        "modelsEmpty": "No models to write",
         "secretCreated": "Secret created and copied to clipboard"
       },
       "plan": {
@@ -2982,6 +2981,65 @@
           "coding_tools_only": "Coding tools only",
           "general_api": "General API"
         }
+      },
+      "management": {
+        "title": "Profiles",
+        "apiKeyTitle": "Remote token",
+        "balance": "Balance",
+        "groups": "Groups",
+        "apiKeys": "Remote keys",
+        "tokens": "Remote keys",
+        "profiles": "Profiles",
+        "models": "Models",
+        "unknown": "-",
+        "refresh": "Refresh platform data",
+        "actionFailed": "Platform management action failed",
+        "newTokenName": "New profile name",
+        "newApiKeyName": "New token name",
+        "createProfileTitle": "Create profile",
+        "createApiKeyTitle": "Create token",
+        "createApiKeySuccess": "Token created",
+        "deleteApiKeySuccess": "Token deleted",
+        "createApiKeyFirst": "Create token",
+        "dialogCreate": "Dialog create",
+        "deleteApiKeyConfirm": "Delete this remote token?",
+        "deleteProfileDesc": "Delete this local profile. The remote token will remain.",
+        "groupDesc": "New API group used by this token.",
+        "name": "Name",
+        "noApiKeyForProfile": "Create a remote token first.",
+        "status": "Status",
+        "groupPlaceholder": "Group",
+        "quotaPlaceholder": "Quota",
+        "unlimited": "Unlimited",
+        "loading": "Loading platform data",
+        "empty": "No profiles yet.",
+        "createSuccess": "Profile created",
+        "updateSuccess": "Profile updated",
+        "deleteSuccess": "Profile deleted",
+        "applyGroup": "Update group",
+        "importProfile": "Profile",
+        "openProfile": "Profile",
+        "selectApiKey": "Select remote token",
+        "bindSuccess": "Remote token bound",
+        "boundProfile": "Remote token: {{key}}",
+        "linkedProfile": "Local profile: {{profile}}",
+        "notLinked": "Not added as a local profile",
+        "unboundProfile": "No remote token selected",
+        "deleteConfirm": "Delete this profile?",
+        "tokenGroup": "Group: {{group}}",
+        "tokenQuota": "Quota: {{amount}}",
+        "tokenStatus": {
+          "enabled": "Enabled",
+          "disabled": "Disabled",
+          "expired": "Expired",
+          "unknown": "Unknown"
+        }
+      },
+      "collectionTabs": {
+        "service": "Service",
+        "profiles": "Local profiles",
+        "apiKeys": "Token management",
+        "advanced": "Advanced"
       },
       "portal": {
         "secretTitle": "{{provider}} Secret Management",
@@ -3347,6 +3405,10 @@
           "desc": "Flattened configuration by service name"
         },
         "item": {
+          "kind": {
+            "label": "Service Type",
+            "desc": "A model service is directly callable. A service collection stores platform management credentials and keeps concrete model services under services."
+          },
           "provider": {
             "label": "Official Provider",
             "desc": "Uses the built-in API base URL, model catalog, icon, and management links. Leave empty for custom services."
@@ -3379,6 +3441,10 @@
             "label": "Models",
             "desc": "Models supported by this service. Leave empty to use the provider default catalog."
           },
+          "profiles": {
+            "label": "Profiles",
+            "desc": "Concrete model invocation profiles under a collection. Runtime expands them as collection/profile."
+          },
           "billing": {
             "label": "Billing Metadata",
             "desc": "Optional override for billing kind, key kind, quota unit, quota windows, and allowed use."
@@ -3392,17 +3458,21 @@
               "label": "Enable Management Actions",
               "desc": "Enable helper actions for models, balance, service status, and secrets."
             },
+            "endpointKind": {
+              "label": "Management API Type",
+              "desc": "Management API type. Use newapi for New API platforms."
+            },
+            "baseUrl": {
+              "label": "Management API URL",
+              "desc": "Management API root URL. New API platforms should not include /v1."
+            },
             "apiKey": {
               "label": "Management API Key",
               "desc": "Some providers require a separate management API key. Leave empty to reuse the model API key."
             },
-            "organizationId": {
-              "label": "Organization ID",
-              "desc": "Used by providers whose management APIs are scoped to an organization."
-            },
-            "projectId": {
-              "label": "Project ID",
-              "desc": "Used by providers whose management APIs are scoped to a project."
+            "headers": {
+              "label": "Management Headers",
+              "desc": "Additional headers sent to the provider management API, such as New-Api-User."
             }
           },
           "providerOptions": {
@@ -3728,6 +3798,14 @@
         "apiyi": "APIYI",
         "yunwu": "Yunwu"
       },
+      "modelServiceKind": {
+        "service": "Model service",
+        "collection": "Service collection"
+      },
+      "modelServiceManagementEndpointKind": {
+        "none": "No management API",
+        "newapi": "New API"
+      },
       "modelProviderDescriptions": {
         "openai": "Official OpenAI API platform for GPT models and multimodal services.",
         "anthropic": "Official Anthropic Console service for Claude models.",
@@ -3854,6 +3932,7 @@
       "providerAccess": "Access Overrides",
       "customization": "Display & Links",
       "models": "Model Configuration",
+      "profiles": "Profiles",
       "management": "Management",
       "plan": "Plan Metadata",
       "advanced": "Advanced Configuration",

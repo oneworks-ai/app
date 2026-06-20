@@ -48,6 +48,7 @@ export interface FieldSpec {
   recordKind?: RecordKind
   sensitive?: boolean
   hidden?: boolean
+  visible?: (context: FieldGroupContext) => boolean
   unsetWhenEmpty?: boolean
   collapse?: {
     key: string
@@ -142,6 +143,17 @@ const modelProviderOptions: FieldSpec['options'] = [
     }))
 ]
 
+const modelServiceKindOptions: FieldSpec['options'] = [
+  { value: '', label: 'config.options.modelServiceKind.service' },
+  { value: 'service', label: 'config.options.modelServiceKind.service' },
+  { value: 'collection', label: 'config.options.modelServiceKind.collection' }
+]
+
+const modelServiceManagementEndpointKindOptions: FieldSpec['options'] = [
+  { value: '', label: 'config.options.modelServiceManagementEndpointKind.none' },
+  { value: 'newapi', label: 'config.options.modelServiceManagementEndpointKind.newapi' }
+]
+
 const resolveProviderDescriptionTranslation = (
   providerId: string,
   fallback: string | undefined,
@@ -179,6 +191,26 @@ const hasModelServiceProvider = ({ currentValue, currentResolvedValue }: FieldGr
 
 const resolveModelServiceApiBaseUrlGroup = (context: FieldGroupContext) => (
   hasModelServiceProvider(context) ? 'providerAccess' : 'access'
+)
+
+const getModelServiceKind = (value: unknown) => {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const kind = (value as { kind?: unknown }).kind
+  return typeof kind === 'string' && kind.trim() !== '' ? kind.trim() : undefined
+}
+
+const hasModelServiceChildren = (value: unknown) => {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as { profiles?: unknown; services?: unknown }
+  const profiles = record.profiles ?? record.services
+  return profiles != null && typeof profiles === 'object' && !Array.isArray(profiles)
+}
+
+const isModelServiceCollectionConfig = ({ currentValue, currentResolvedValue }: FieldGroupContext) => (
+  getModelServiceKind(currentValue) === 'collection' ||
+  getModelServiceKind(currentResolvedValue) === 'collection' ||
+  hasModelServiceChildren(currentValue) ||
+  hasModelServiceChildren(currentResolvedValue)
 )
 
 export const configGroupMeta: Record<string, Record<string, ConfigGroupMeta>> = {
@@ -274,6 +306,11 @@ export const configGroupMeta: Record<string, Record<string, ConfigGroupMeta>> = 
       collapsible: true,
       defaultExpanded: false
     },
+    profiles: {
+      labelKey: 'config.sectionGroups.profiles',
+      collapsible: true,
+      defaultExpanded: true
+    },
     management: {
       labelKey: 'config.sectionGroups.management',
       collapsible: true,
@@ -302,6 +339,7 @@ export const configGroupOrder: Record<string, string[]> = {
     'providerAccess',
     'customization',
     'models',
+    'profiles',
     'management',
     'plan',
     'advanced',
@@ -337,6 +375,17 @@ const notificationEventDetailFields: FieldSpec[] = [
 ]
 
 const modelServiceDetailFields: FieldSpec[] = [
+  {
+    path: ['kind'],
+    type: 'select',
+    defaultValue: '',
+    icon: 'category',
+    options: modelServiceKindOptions,
+    unsetWhenEmpty: true,
+    group: 'profile',
+    labelKey: 'config.fields.modelServices.item.kind.label',
+    descriptionKey: 'config.fields.modelServices.item.kind.desc'
+  },
   {
     path: ['provider'],
     type: 'select',
@@ -418,6 +467,18 @@ const modelServiceDetailFields: FieldSpec[] = [
     descriptionKey: 'config.fields.modelServices.item.models.desc'
   },
   {
+    path: ['profiles'],
+    type: 'record',
+    recordKind: 'modelServices',
+    defaultValue: {},
+    icon: 'account_tree',
+    unsetWhenEmpty: true,
+    group: 'profiles',
+    visible: isModelServiceCollectionConfig,
+    labelKey: 'config.fields.modelServices.item.profiles.label',
+    descriptionKey: 'config.fields.modelServices.item.profiles.desc'
+  },
+  {
     path: ['billing'],
     type: 'json',
     defaultValue: {},
@@ -447,6 +508,26 @@ const modelServiceDetailFields: FieldSpec[] = [
     descriptionKey: 'config.fields.modelServices.item.management.enabled.desc'
   },
   {
+    path: ['management', 'endpointKind'],
+    type: 'select',
+    defaultValue: '',
+    icon: 'account_tree',
+    options: modelServiceManagementEndpointKindOptions,
+    unsetWhenEmpty: true,
+    group: 'management',
+    labelKey: 'config.fields.modelServices.item.management.endpointKind.label',
+    descriptionKey: 'config.fields.modelServices.item.management.endpointKind.desc'
+  },
+  {
+    path: ['management', 'baseUrl'],
+    type: 'string',
+    defaultValue: '',
+    icon: 'link',
+    group: 'management',
+    labelKey: 'config.fields.modelServices.item.management.baseUrl.label',
+    descriptionKey: 'config.fields.modelServices.item.management.baseUrl.desc'
+  },
+  {
     path: ['management', 'apiKey'],
     type: 'string',
     defaultValue: '',
@@ -457,22 +538,15 @@ const modelServiceDetailFields: FieldSpec[] = [
     descriptionKey: 'config.fields.modelServices.item.management.apiKey.desc'
   },
   {
-    path: ['management', 'organizationId'],
-    type: 'string',
-    defaultValue: '',
-    icon: 'corporate_fare',
+    path: ['management', 'headers'],
+    type: 'record',
+    recordKind: 'keyValue',
+    defaultValue: {},
+    icon: 'notes',
+    unsetWhenEmpty: true,
     group: 'management',
-    labelKey: 'config.fields.modelServices.item.management.organizationId.label',
-    descriptionKey: 'config.fields.modelServices.item.management.organizationId.desc'
-  },
-  {
-    path: ['management', 'projectId'],
-    type: 'string',
-    defaultValue: '',
-    icon: 'folder_managed',
-    group: 'management',
-    labelKey: 'config.fields.modelServices.item.management.projectId.label',
-    descriptionKey: 'config.fields.modelServices.item.management.projectId.desc'
+    labelKey: 'config.fields.modelServices.item.management.headers.label',
+    descriptionKey: 'config.fields.modelServices.item.management.headers.desc'
   },
   {
     path: ['providerOptions'],

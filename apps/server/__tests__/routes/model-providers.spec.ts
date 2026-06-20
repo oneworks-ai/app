@@ -10,16 +10,11 @@ import { modelProvidersRouter, modelServicesRouter } from '#~/routes/model-provi
 import { HttpError } from '#~/utils/http.js'
 
 const mocks = vi.hoisted(() => ({
-  loadConfigState: vi.fn(),
-  updateConfigFile: vi.fn()
+  loadConfigState: vi.fn()
 }))
 
 vi.mock('#~/services/config/index.js', () => ({
   loadConfigState: mocks.loadConfigState
-}))
-
-vi.mock('@oneworks/config', () => ({
-  updateConfigFile: mocks.updateConfigFile
 }))
 
 describe('model provider routes', () => {
@@ -82,6 +77,17 @@ describe('model provider routes', () => {
           kimiCode: {
             provider: 'kimi-code',
             apiKey: 'secret-kimi-code'
+          },
+          micu: {
+            apiBaseUrl: 'https://www.micuapi.ai/v1',
+            apiKey: '',
+            management: {
+              apiKey: 'secret-management',
+              headers: {
+                'New-Api-User': '42647'
+              }
+            },
+            provider: 'micu'
           },
           projectKimi: {
             provider: 'moonshot-cn',
@@ -388,6 +394,59 @@ describe('model provider routes', () => {
     expect(JSON.stringify(payload)).not.toContain('secret-kimi-code')
   })
 
+  it('returns Micu New API management snapshot without exposing management secrets', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith('/api/user/self')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: { quota: 100_000_000 }, success: true }), { status: 200 })
+        )
+      }
+      if (url.endsWith('/api/user/self/groups')) {
+        return Promise.resolve(new Response(JSON.stringify({ data: ['default'], success: true }), { status: 200 }))
+      }
+      if (url.includes('/api/token/')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                items: [{
+                  group: 'default',
+                  id: 12,
+                  key: 'sensitive-token-value',
+                  name: 'codex'
+                }]
+              },
+              success: true
+            }),
+            { status: 200 }
+          )
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: [{ id: 'gpt-5.4' }], success: true }), { status: 200 })
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await request(`${baseUrl}/api/model-services/micu/management`, { method: 'POST' })
+    const payload = await response.json() as {
+      management?: {
+        account?: { available?: number; kind?: string }
+        groups?: Array<{ id?: string }>
+        models?: Array<{ id?: string }>
+        tokens?: Array<{ key?: string; name?: string }>
+      }
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.management?.account).toMatchObject({ available: 200, kind: 'balance' })
+    expect(payload.management?.groups).toEqual([{ id: 'default', title: 'default' }])
+    expect(payload.management?.models).toEqual([{ id: 'gpt-5.4' }])
+    expect(payload.management?.tokens).toMatchObject([{ key: 'sk-sens**********alue', name: 'codex' }])
+    expect(JSON.stringify(payload)).not.toContain('secret-management')
+    expect(JSON.stringify(payload)).not.toContain('sensitive-token-value')
+  })
+
   it('preserves upstream rate limit status', async () => {
     vi.stubGlobal(
       'fetch',
@@ -426,69 +485,5 @@ describe('model provider routes', () => {
 
     expect(response.status).toBe(502)
     expect(payload.error?.code).toBe('upstream_request_rejected')
-  })
-
-  it('refreshes selected models in the requested raw config source only', async () => {
-    const response = await request(`${baseUrl}/api/model-services/kimi/models/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source: 'user',
-        models: ['kimi-k2', 'kimi-k2']
-      })
-    })
-
-    expect(response.status).toBe(200)
-    expect(mocks.updateConfigFile).toHaveBeenCalledWith({
-      workspaceFolder: '/workspace',
-      source: 'user',
-      section: 'modelServices',
-      value: {
-        kimi: {
-          provider: 'moonshot-cn',
-          apiKey: 'secret-kimi',
-          models: ['kimi-k2']
-        },
-        sibling: {
-          apiBaseUrl: 'https://sibling.example.com/v1',
-          apiKey: 'secret-sibling'
-        }
-      }
-    })
-  })
-
-  it('refreshes models with the current draft service values', async () => {
-    const response = await request(`${baseUrl}/api/model-services/kimi/models/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source: 'user',
-        models: ['kimi-k2'],
-        service: {
-          title: 'Kimi Draft',
-          provider: 'moonshot-cn',
-          apiKey: '******'
-        }
-      })
-    })
-
-    expect(response.status).toBe(200)
-    expect(mocks.updateConfigFile).toHaveBeenCalledWith({
-      workspaceFolder: '/workspace',
-      source: 'user',
-      section: 'modelServices',
-      value: {
-        kimi: {
-          title: 'Kimi Draft',
-          provider: 'moonshot-cn',
-          apiKey: 'secret-kimi',
-          models: ['kimi-k2']
-        },
-        sibling: {
-          apiBaseUrl: 'https://sibling.example.com/v1',
-          apiKey: 'secret-sibling'
-        }
-      }
-    })
   })
 })

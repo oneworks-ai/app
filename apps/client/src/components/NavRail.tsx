@@ -587,11 +587,11 @@ export function NavRail({
       key: 'app-pages',
       items: [
         {
-          active: currentPath === '/config',
+          active: currentPath === '/config' || currentPath.startsWith('/config/'),
           icon: 'settings',
           key: 'app-page:config',
           label: t('common.settings'),
-          selected: currentPath === '/config',
+          selected: currentPath === '/config' || currentPath.startsWith('/config/'),
           shortcut: 'cmd+,',
           onSelect: () => {
             void navigate('/config')

@@ -19,7 +19,7 @@ const builtinImageIconMap: Record<string, BuiltinImageIcon> = {
   gemini: { src: new URL('../assets/model-providers/gemini.png', import.meta.url).href },
   'kimi-k2': { light: moonshotLightIcon, dark: moonshotDarkIcon },
   litellm: { src: new URL('../assets/model-providers/litellm.png', import.meta.url).href },
-  micu: { src: new URL('../assets/model-providers/micu.svg', import.meta.url).href },
+  micu: { src: new URL('../assets/model-providers/micu.png', import.meta.url).href },
   minimax: { src: new URL('../assets/model-providers/minimax.png', import.meta.url).href },
   moonshot: { light: moonshotLightIcon, dark: moonshotDarkIcon },
   openai: { src: new URL('../assets/model-providers/openai.svg', import.meta.url).href, invertInDark: true },

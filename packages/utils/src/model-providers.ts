@@ -16,6 +16,7 @@ export { MODEL_PROVIDER_DEFINITIONS } from './model-provider-registry'
 
 export const DEFAULT_MODEL_SERVICE_ICON: IconRef = { kind: 'builtin', id: 'model-service' }
 export const DEFAULT_MODEL_ICON: IconRef = { kind: 'builtin', id: 'model' }
+export const MODEL_SERVICE_COLLECTION_SEPARATOR = '/'
 
 export interface ModelServiceResolutionIssue {
   type: 'missing_api_base_url'
@@ -93,6 +94,85 @@ const normalizeStringArray = (value: unknown) =>
   Array.isArray(value)
     ? Array.from(new Set(value.map(item => normalizeString(item)).filter((item): item is string => item != null)))
     : []
+
+const asRecord = (value: unknown): Record<string, unknown> | undefined => (
+  value != null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+)
+
+export const isModelServiceCollection = (service: ModelServiceConfig | undefined) => (
+  service?.kind === 'collection' || asRecord(service?.profiles) != null || asRecord(service?.services) != null
+)
+
+export const buildCollectionModelServiceKey = (collectionKey: string, serviceKey: string) =>
+  `${collectionKey}${MODEL_SERVICE_COLLECTION_SEPARATOR}${serviceKey}`
+
+export const parseCollectionModelServiceKey = (serviceKey: string) => {
+  const separatorIndex = serviceKey.indexOf(MODEL_SERVICE_COLLECTION_SEPARATOR)
+  if (separatorIndex <= 0 || separatorIndex >= serviceKey.length - 1) return undefined
+  const collectionKey = normalizeString(serviceKey.slice(0, separatorIndex))
+  const childServiceKey = normalizeString(serviceKey.slice(separatorIndex + 1))
+  if (collectionKey == null || childServiceKey == null) return undefined
+  return { collectionKey, childServiceKey }
+}
+
+export const resolveCollectionModelService = (
+  collection: ModelServiceConfig,
+  serviceKey: string
+): ModelServiceConfig | undefined => {
+  const profiles = asRecord(collection.profiles) ?? asRecord(collection.services)
+  const child = profiles?.[serviceKey]
+  if (child == null || typeof child !== 'object' || Array.isArray(child)) return undefined
+  const childService = child as ModelServiceConfig
+  return {
+    ...(collection.provider != null ? { provider: collection.provider } : {}),
+    ...(collection.icon != null ? { icon: collection.icon } : {}),
+    ...(collection.homepageUrl != null ? { homepageUrl: collection.homepageUrl } : {}),
+    ...(collection.apiBaseUrl != null ? { apiBaseUrl: collection.apiBaseUrl } : {}),
+    ...(collection.billing != null ? { billing: collection.billing } : {}),
+    ...(collection.codingPlan != null ? { codingPlan: collection.codingPlan } : {}),
+    ...(collection.providerOptions != null ? { providerOptions: collection.providerOptions } : {}),
+    ...childService,
+    kind: 'service'
+  }
+}
+
+export const resolveModelServiceFromMap = (
+  modelServices: Record<string, ModelServiceConfig> | undefined,
+  serviceKey: string
+): ModelServiceConfig | undefined => {
+  const directService = modelServices?.[serviceKey]
+  if (directService != null) return directService
+  const parsed = parseCollectionModelServiceKey(serviceKey)
+  if (parsed == null) return undefined
+  const collection = modelServices?.[parsed.collectionKey]
+  if (collection == null || !isModelServiceCollection(collection)) return undefined
+  return resolveCollectionModelService(collection, parsed.childServiceKey)
+}
+
+export const flattenModelServices = (
+  modelServices: Record<string, ModelServiceConfig>
+): Record<string, ModelServiceConfig> => {
+  const flattened: Record<string, ModelServiceConfig> = {}
+  for (const [serviceKey, service] of Object.entries(modelServices)) {
+    const normalizedServiceKey = normalizeString(serviceKey)
+    if (normalizedServiceKey == null || service == null) continue
+    if (!isModelServiceCollection(service)) {
+      flattened[normalizedServiceKey] = service
+      continue
+    }
+    const profiles = asRecord(service.profiles) ?? asRecord(service.services)
+    for (const childServiceKey of Object.keys(profiles ?? {})) {
+      const normalizedChildServiceKey = normalizeString(childServiceKey)
+      if (normalizedChildServiceKey == null) continue
+      const childService = resolveCollectionModelService(service, normalizedChildServiceKey)
+      if (childService == null) continue
+      flattened[buildCollectionModelServiceKey(normalizedServiceKey, normalizedChildServiceKey)] = childService
+    }
+  }
+  return flattened
+}
 
 const resolveHostProvider = (apiBaseUrl: unknown) => {
   const normalized = normalizeString(apiBaseUrl)
@@ -307,6 +387,7 @@ export const resolveModelServiceConfig = (
       ...service,
       ...(identity.provider != null ? { provider: identity.provider } : {}),
       apiBaseUrl,
+      apiKey: service.apiKey ?? '',
       ...(billing != null ? { billing } : {}),
       ...(codingPlan != null ? { codingPlan } : {}),
       modelSource: configuredModels.length > 0 ? 'configured' : 'provider_catalog',

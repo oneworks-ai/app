@@ -113,7 +113,7 @@ export function SkillsTab({
     buildSkillsTabHeaderActions({
       importInputRef: actions.importInputRef,
       importing: actions.importing,
-      navigateToConfig: () => navigate('/config?tab=general'),
+      navigateToConfig: () => navigate('/config/general'),
       onRefresh: () => void actions.handleRefresh(),
       onViewModeChange,
       t,

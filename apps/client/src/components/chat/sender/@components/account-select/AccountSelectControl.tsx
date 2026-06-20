@@ -71,7 +71,7 @@ export function AccountSelectControl({
 
     setShowAccountSelect(false)
     void navigate(
-      `/config?tab=adapters&source=user&detail=${encodeURIComponent(`${selectedAdapter}/accounts`)}`
+      `/config/adapters/${encodeURIComponent(selectedAdapter)}/accounts?source=user`
     )
   }
 
@@ -139,7 +139,7 @@ export function AccountSelectControl({
 
     setShowAccountSelect(false)
     void navigate(
-      `/config?tab=adapters&source=user&detail=${encodeURIComponent(`${selectedAdapter}/accounts/${accountKey}`)}`
+      `/config/adapters/${encodeURIComponent(selectedAdapter)}/accounts/${encodeURIComponent(accountKey)}?source=user`
     )
   }
 

@@ -582,12 +582,41 @@ describe('config schema form', () => {
     )
 
     expect(html).toContain('config.fields.modelServices.item.provider.label')
-    expect(html).toContain('config.fields.modelServices.item.apiKey.label')
-    expect(html).toContain('config.sectionGroups.providerAccess')
-    expect(html).toContain('config.sectionGroups.models')
-    expect(html).toContain('config.sectionGroups.plan')
+    expect(html).toContain('data-node-key="access"')
+    expect(html).toContain('data-node-key="models"')
+    expect(html).toContain('data-node-key="plan"')
     expect(html).toContain('config.modelServices.actions.openApiKeys')
     expect(html).toContain('config.modelServices.actions.more')
+    expect(html).not.toContain('config.fields.modelServices.item.apiKey.label')
+
+    const accessHtml = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{
+          openai: {
+            provider: 'openai',
+            title: 'OpenAI',
+            description: 'Primary service',
+            apiBaseUrl: 'https://api.openai.com/v1',
+            apiKey: 'secret',
+            models: ['gpt-5.4']
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={{
+          kind: 'detailCollectionItem',
+          fieldPath: [],
+          itemKey: 'openai',
+          nestedPath: ['access']
+        }}
+        t={t}
+      />
+    )
+
+    expect(accessHtml).toContain('config.fields.modelServices.item.apiKey.label')
+    expect(accessHtml).toContain('config.fields.modelServices.item.apiBaseUrl.label')
   })
 
   it('groups model service detail fields by function', () => {
@@ -604,6 +633,7 @@ describe('config schema form', () => {
       'providerAccess',
       'customization',
       'models',
+      'profiles',
       'management',
       'plan',
       'advanced',
@@ -629,6 +659,10 @@ describe('config schema form', () => {
       labelKey: 'config.sectionGroups.models',
       defaultExpanded: false
     })
+    expect(configGroupMeta.modelServices?.profiles).toMatchObject({
+      labelKey: 'config.sectionGroups.profiles',
+      defaultExpanded: true
+    })
     expect(configGroupMeta.modelServices?.management).toMatchObject({
       labelKey: 'config.sectionGroups.management',
       defaultExpanded: false
@@ -653,8 +687,10 @@ describe('config schema form', () => {
     expect(resolvedGroupFor('apiBaseUrl', {})).toBe('access')
     expect(groupFor('apiKey')).toBe('access')
     expect(groupFor('models')).toBe('models')
+    expect(groupFor('profiles')).toBe('profiles')
     expect(groupFor('management.enabled')).toBe('management')
     expect(groupFor('management.apiKey')).toBe('management')
+    expect(groupFor('management.headers')).toBe('management')
     expect(groupFor('billing')).toBe('plan')
     expect(groupFor('codingPlan')).toBe('plan')
     expect(groupFor('providerOptions')).toBe('advanced')
@@ -686,8 +722,8 @@ describe('config schema form', () => {
     )
 
     expect(html).toContain('config.options.modelProviders.qwen-coding-plan')
-    expect(html).toContain('config.sectionGroups.providerAccess')
-    expect(html).toContain('config.sectionGroups.plan')
+    expect(html).toContain('data-node-key="access"')
+    expect(html).toContain('data-node-key="plan"')
     expect(html).not.toContain('https://coding.dashscope.aliyuncs.com/apps/anthropic')
   })
 
@@ -708,7 +744,8 @@ describe('config schema form', () => {
         detailRoute={{
           kind: 'detailCollectionItem',
           fieldPath: [],
-          itemKey: 'custom'
+          itemKey: 'custom',
+          nestedPath: ['access']
         }}
         t={t}
       />
@@ -838,7 +875,8 @@ describe('config schema form', () => {
         detailRoute={{
           kind: 'detailCollectionItem',
           fieldPath: [],
-          itemKey: 'openai'
+          itemKey: 'openai',
+          nestedPath: ['access']
         }}
         t={t}
       />

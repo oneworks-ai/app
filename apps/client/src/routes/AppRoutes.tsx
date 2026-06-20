@@ -99,7 +99,7 @@ export function AppRoutes() {
           />
           <Route path='/knowledge' element={<KnowledgeRoute />} />
           <Route path='/modules' element={<ModuleManagementRoute />} />
-          <Route path='/config' element={<ConfigRoute />} />
+          <Route path='/config/*' element={<ConfigRoute />} />
           <Route path='/plugins' element={<PluginStoreRoute />} />
           <Route path='/plugins/:scope' element={<PluginStoreRoute />} />
           <Route path='/plugins/:scope/:routeId' element={<PluginRoute />} />

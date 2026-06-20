@@ -19,7 +19,10 @@ const messages: Record<string, string> = {
   'config.modelServices.plan.quotaProgress.window': '{{duration}}额度',
   'config.modelServices.plan.quotaUnit.request': '请求数',
   'config.modelServices.plan.quotaWindow.5h': '5 小时',
-  'config.modelServices.results.amountUnknown': '未知'
+  'config.modelServices.results.amountUnknown': '未知',
+  'config.modelServices.results.balance': '余额',
+  'config.modelServices.results.quota': '额度',
+  'config.modelServices.results.unlimitedQuota': '无限额度'
 }
 
 const t: TranslationFn = (key, options) => {
@@ -38,6 +41,16 @@ const kimiCodeService: ModelServiceConfig = {
   },
   codingPlan: { supported: true },
   provider: 'kimi-code'
+}
+
+const kimiApiService: ModelServiceConfig = {
+  apiKey: 'secret',
+  provider: 'moonshot-intl'
+}
+
+const micuService: ModelServiceConfig = {
+  apiKey: 'secret',
+  provider: 'micu'
 }
 
 describe('model service provider plan summary', () => {
@@ -108,5 +121,59 @@ describe('model service provider plan summary', () => {
     expect(html).toContain('width:99%')
     expect(html).toContain('width:98%')
     expect(html.indexOf('5 小时额度')).toBeLessThan(html.indexOf('1 周额度'))
+  })
+
+  it('renders regular Kimi API balance in the same summary area', () => {
+    const html = renderToStaticMarkup(
+      <ModelServiceProviderPlanSummary
+        t={t}
+        service={kimiApiService}
+        accountStatus={{
+          available: 12.34,
+          currency: 'USD',
+          kind: 'balance'
+        }}
+        canQueryBalance
+      />
+    )
+
+    expect(html).toContain('config-view__model-service-plan')
+    expect(html).toContain('余额')
+    expect(html).toContain('12.34 $')
+    expect(html.match(/config-view__model-service-quota-row/gu)).toHaveLength(1)
+    expect(html).not.toContain('config-view__model-service-quota-progress')
+    expect(html).not.toContain('role="progressbar"')
+  })
+
+  it('labels regular Kimi API balance loading as balance', () => {
+    const html = renderToStaticMarkup(
+      <ModelServiceProviderPlanSummary
+        t={t}
+        service={kimiApiService}
+        canQueryBalance
+      />
+    )
+
+    expect(html).toContain('余额')
+    expect(html).toContain('查询中…')
+  })
+
+  it('renders Micu unlimited token usage without a progress bar', () => {
+    const html = renderToStaticMarkup(
+      <ModelServiceProviderPlanSummary
+        t={t}
+        service={micuService}
+        accountStatus={{
+          kind: 'quota',
+          unlimited: true
+        }}
+        canQueryBalance
+      />
+    )
+
+    expect(html).toContain('额度')
+    expect(html).toContain('无限额度')
+    expect(html).not.toContain('config-view__model-service-quota-progress')
+    expect(html).not.toContain('role="progressbar"')
   })
 })

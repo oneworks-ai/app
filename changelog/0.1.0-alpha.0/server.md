@@ -7,3 +7,4 @@
 - Prevent duplicate workspace server startups for the same workspace by recording live launcher instances, reusing matching versions, and returning a conflict for mismatched versions or launch config.
 - Return Coding Plan and Token Plan provider metadata from the model provider registry so clients can use static model catalogs without calling provider model-list APIs.
 - Normalize Kimi Code `/coding/v1/usages` responses into model service quota status.
+- Add New API compatible management actions for model service collections, including account snapshots, token listing, token creation, token updates, deletion, and generated token-backed model service profiles.

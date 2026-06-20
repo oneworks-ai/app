@@ -87,26 +87,22 @@ export const ModelServiceProviderActionHeader = ({
 
 export const ModelServiceProviderActionButtons = ({
   canCreateSecret,
-  canRefreshModels,
   homepageUrl,
   loadingAction,
   onHomepage,
-  onRefreshModels,
   onSecret,
   secretActionLabel,
   t
 }: {
   canCreateSecret: boolean
-  canRefreshModels: boolean
   homepageUrl?: string
   loadingAction?: string
   onHomepage: (url: string) => void
-  onRefreshModels: () => void
   onSecret: () => void
   secretActionLabel: string
   t: TranslationFn
 }) => {
-  if (homepageUrl == null && !canCreateSecret && !canRefreshModels) return null
+  if (homepageUrl == null && !canCreateSecret) return null
 
   return (
     <div className='config-view__model-service-action-buttons'>
@@ -128,18 +124,6 @@ export const ModelServiceProviderActionButtons = ({
             icon={<span className='material-symbols-rounded'>vpn_key</span>}
             loading={loadingAction === 'secret'}
             onClick={onSecret}
-          />
-        </Tooltip>
-      )}
-      {canRefreshModels && (
-        <Tooltip title={t('config.modelServices.actions.refreshModels')}>
-          <Button
-            size='small'
-            type='primary'
-            aria-label={t('config.modelServices.actions.refreshModels')}
-            icon={<span className='material-symbols-rounded'>download_done</span>}
-            loading={loadingAction === 'refreshModels'}
-            onClick={onRefreshModels}
           />
         </Tooltip>
       )}
