@@ -19,6 +19,26 @@
 - `draft`：用户当前正在修改的本地草稿。
 - `server`：收到 `config_updated` 后重新拉取到的最新远端值。
 
+## 配置页通用交互规范
+
+- 复杂 detail 页优先组织为 tabs，而不是把所有字段纵向堆在同一页。tab 应按用户任务分组，例如服务信息、接入配置、模型配置、展示与链接、套餐信息、高级配置；只在对应类型确实需要时显示特定 tab。
+- 列表创建、编辑、删除和进入详情优先复用 `ConfigRecordList` 这类统一记录列表。列表组件必须允许外部决定按钮行为，例如点击行进入详情、打开对话框、执行内联创建或跳转；不要把某个页面的一次性行为写死在通用组件里。
+- 主流程保持简洁，低频或实现视角字段放进高级配置。服务图标、管理主页、Base URL 覆盖、扩展 JSON、服务类型等字段，只有没有 provider 或当前类型必须用户配置时才默认展开。
+- 卡片标题、列表行尾、tab chrome 和配置页工具区的按钮优先使用 icon-only + tooltip + `aria-label`，尺寸和 hover 状态跟随现有 config / sidebar inline action 风格。必要快捷动作放在更多按钮左侧，低频动作收进更多菜单。
+- 外部网页、管理后台和 provider portal 优先接入配置页底部 dock / portal tabs，不使用一次性的 iframe dialog。底部 dock 是 route 级状态，切换配置 section、detail 或 source 时不能被清空。
+- 查询类信息默认自动触发并使用缓存；界面只展示正在查询、查询失败、实际结果三类状态。额度、余额、状态和模型列表要按数据语义分别呈现，不为了复用 UI 把不同含义混成同一种卡片。
+- PR 证据截图必须覆盖本次改动影响到的服务类型和关键交互，例如普通 API、Coding Plan、collection、standalone、profiles / tokens、portal 下方面板。截图前要等待异步加载完成，不能用旧页面、局部错误页面或未加载完成的状态替代。
+
+## 模型服务配置建模经验
+
+- 新增模型服务能力时，先判断产品类型再设计表单：普通 API、Coding Plan / Token Plan、relay / gateway、平台 collection 是不同心智模型，不要在普通服务表单里不断追加特殊字段。
+- provider catalog 只表达服务商默认能力、官方链接、默认 base URL、默认模型和限制提示；具体用户密钥、选择的远端令牌、本地模型参数和展示名属于 `modelServices` 实例或 collection profile。
+- collection 类型代表一个平台账号或管理入口，下面的 profile 才是可被模型选择器消费的模型服务。collection 页默认展示平台信息、profile 列表、令牌管理和高级配置；profile 详情只展示该 profile 真正可编辑的本地补充项。
+- 管理型平台的远端令牌和本地 profile 不要拆成两套用户概念：profile 选择一个远端令牌并补充本地参数。创建 profile 时默认选择第一个可用远端令牌；没有远端令牌时应引导去令牌管理，而不是让用户填一堆无效字段。
+- 普通 API key、Coding Plan key、subscription key、平台管理 token 是不同凭证。界面文案和字段分组必须明确区分，不要把“模型调用密钥”和“平台管理密钥”混用。
+- 能从 provider、collection 或远端令牌推导的模型列表、base URL、provider 图标和默认配置，优先自动生成或合并；不要暴露“写入模型列表”这类实现视角操作。
+- Coding Plan / Token Plan 的专属 base URL 和 key 类型只在对应服务类型里展示和校验；普通 API 服务不因为同一 provider 存在 Coding Plan 就继承其限制。
+
 ## 不变式
 
 - 不要在 `use-session-subscription.ts` 收到 `config_updated` 后直接覆盖本地编辑状态；订阅层只能触发 revalidate。
