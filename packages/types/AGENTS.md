@@ -21,6 +21,8 @@
   - 改字段前同步确认 client view model、server service、db payload 兼容
 - `src/launcher.ts`
   - launcher manager / client / desktop 共用的项目选择、目录浏览与打开 workspace 响应契约。
+- `src/device-shell.ts`
+  - Electron、Android 等 device shell 注入给前端的 workspace 选择 / 打开项目能力契约；具体 IPC、Intent、窗口或系统实现留在各 app。
 
 ## 当前边界
 

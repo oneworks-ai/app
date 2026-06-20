@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "commands": [
+    "target.create",
+    "target.show",
+    "target.destroy",
+    "target.snapshot",
+    "target.evaluate",
+    "target.inject",
+    "target.query",
+    "target.click",
+    "target.setValue",
+    "accessibility.status",
+    "accessibility.openSettings",
+    "accessibility.clickByText",
+    "accessibility.setTextByText",
+    "accessibility.globalAction",
+    "device.getWorkspaceSelectorState",
+    "device.listWorkspaceDirectories",
+    "device.chooseWorkspace",
+    "device.openWorkspace",
+    "device.forgetWorkspace",
+    "device.stopWorkspace",
+    "system.setAppearance"
+  ],
+  "events": [
+    "bridge.response",
+    "device.workspaceSelectorStateChange",
+    "target.domEvent",
+    "target.load",
+    "target.shown",
+    "target.title",
+    "target.destroyed"
+  ]
+}

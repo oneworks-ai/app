@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OneWorks Android Bridge Host</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, Roboto, Arial, sans-serif;
+        background: #f8fafc;
+        color: #111827;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #f8fafc;
+      }
+
+      main {
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        gap: 12px;
+        min-height: 100vh;
+        padding: 14px;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 18px;
+        line-height: 1.2;
+      }
+
+      .status {
+        min-width: 86px;
+        border: 1px solid #cbd5e1;
+        border-radius: 999px;
+        padding: 5px 10px;
+        text-align: center;
+        font-size: 12px;
+        color: #334155;
+        background: #ffffff;
+      }
+
+      .toolbar {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      button {
+        min-height: 38px;
+        border: 1px solid #94a3b8;
+        border-radius: 8px;
+        background: #ffffff;
+        color: #111827;
+        font: inherit;
+        font-size: 13px;
+      }
+
+      button.primary {
+        border-color: #2563eb;
+        background: #2563eb;
+        color: #ffffff;
+      }
+
+      pre {
+        overflow: auto;
+        min-height: 0;
+        margin: 0;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 10px;
+        background: #0f172a;
+        color: #dbeafe;
+        font-size: 12px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>WebView Bridge</h1>
+        <div id="target-status" class="status">idle</div>
+      </header>
+
+      <section class="toolbar" aria-label="Bridge actions">
+        <button id="create-target" class="primary" type="button">Open demo</button>
+        <button id="open-client" class="primary" type="button">Open client</button>
+        <button id="query-title" type="button">Query title</button>
+        <button id="click-action" type="button">Click target</button>
+        <button id="set-input" type="button">Set input</button>
+        <button id="evaluate-script" type="button">Evaluate</button>
+        <button id="accessibility-status" type="button">A11y status</button>
+        <button id="open-accessibility" type="button">Open a11y</button>
+        <button id="destroy-target" type="button">Destroy</button>
+      </section>
+
+      <pre id="log" aria-live="polite"></pre>
+    </main>
+
+    <script>
+      const logNode = document.getElementById('log');
+      const statusNode = document.getElementById('target-status');
+      let activeTargetId = null;
+      let requestIndex = 1;
+      const pendingRequests = new Map();
+
+      const log = (label, value) => {
+        const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+        const line = `[${new Date().toLocaleTimeString()}] ${label}\n${text}\n\n`;
+        logNode.textContent = `${line}${logNode.textContent}`.slice(0, 12000);
+      };
+
+      window.__oneworksNativeBridgeDispatch = envelope => {
+        if (envelope.type === 'bridge.response') {
+          const request = pendingRequests.get(envelope.payload.id);
+          if (!request) return;
+          pendingRequests.delete(envelope.payload.id);
+          if (envelope.payload.ok) {
+            request.resolve(envelope.payload.result);
+          } else {
+            request.reject(envelope.payload.error);
+          }
+          return;
+        }
+
+        if (envelope.type === 'target.load' || envelope.type === 'target.shown') {
+          activeTargetId = envelope.payload.targetId;
+          statusNode.textContent = activeTargetId;
+        }
+        log(envelope.type, envelope.payload);
+      };
+
+      const sendBridgeCommand = (method, params = {}) => {
+        const id = `host-${requestIndex++}`;
+        const message = { id, method, params };
+        log(`send ${method}`, message);
+        return new Promise((resolve, reject) => {
+          pendingRequests.set(id, { resolve, reject });
+          window.OneWorksAndroidBridge.postMessage(JSON.stringify(message));
+        }).then(result => {
+          log(`result ${method}`, result);
+          return result;
+        }).catch(error => {
+          log(`error ${method}`, error);
+          throw error;
+        });
+      };
+
+      document.getElementById('create-target').addEventListener('click', async () => {
+        const target = await sendBridgeCommand('target.create', {
+          url: 'file:///android_asset/target/demo.html'
+        });
+        activeTargetId = target.targetId;
+        statusNode.textContent = activeTargetId;
+      });
+
+      document.getElementById('open-client').addEventListener('click', async () => {
+        const target = await sendBridgeCommand('target.create', {
+          url: 'https://oneworks.local/client/launcher'
+        });
+        activeTargetId = target.targetId;
+        statusNode.textContent = activeTargetId;
+      });
+
+      document.getElementById('query-title').addEventListener('click', () => {
+        sendBridgeCommand('target.query', {
+          targetId: activeTargetId,
+          selector: '#target-title'
+        });
+      });
+
+      document.getElementById('click-action').addEventListener('click', () => {
+        sendBridgeCommand('target.click', {
+          targetId: activeTargetId,
+          selector: '#primary-action'
+        });
+      });
+
+      document.getElementById('set-input').addEventListener('click', () => {
+        sendBridgeCommand('target.setValue', {
+          targetId: activeTargetId,
+          selector: '#name-input',
+          value: 'OneWorks mobile bridge'
+        });
+      });
+
+      document.getElementById('evaluate-script').addEventListener('click', () => {
+        sendBridgeCommand('target.evaluate', {
+          targetId: activeTargetId,
+          script: `(() => {
+            document.body.dataset.lastHostEval = String(Date.now());
+            const root = document.querySelector('#root');
+            return {
+              title: document.title,
+              href: location.href,
+              pathname: location.pathname,
+              readyState: document.readyState,
+              marker: document.body.dataset.lastHostEval,
+              input: document.querySelector('#name-input')?.value || '',
+              rootChildren: root?.childElementCount ?? 0,
+              rootText: (root?.innerText || '').slice(0, 500),
+              bodyText: (document.body.innerText || '').slice(0, 500),
+              diagnostics: globalThis.__ONEWORKS_ANDROID_CLIENT_DIAGNOSTICS__ || null,
+              runtimeEnv: globalThis.__ONEWORKS_PROJECT_RUNTIME_ENV__ || null
+            };
+          })();`
+        });
+      });
+
+      document.getElementById('accessibility-status').addEventListener('click', () => {
+        sendBridgeCommand('accessibility.status');
+      });
+
+      document.getElementById('open-accessibility').addEventListener('click', () => {
+        sendBridgeCommand('accessibility.openSettings');
+      });
+
+      document.getElementById('destroy-target').addEventListener('click', async () => {
+        if (!activeTargetId) return;
+        await sendBridgeCommand('target.destroy', { targetId: activeTargetId });
+        activeTargetId = null;
+        statusNode.textContent = 'idle';
+      });
+
+      log('host-ready', {
+        bridge: typeof window.OneWorksAndroidBridge?.postMessage === 'function'
+      });
+    </script>
+  </body>
+</html>

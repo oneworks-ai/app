@@ -3,7 +3,7 @@
 import '../interaction-panel/ChatInteractionPanel.scss'
 import './ChatWorkspaceDrawer.scss'
 
-import { App } from 'antd'
+import { App, Dropdown, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import { useAtomValue } from 'jotai'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -29,6 +29,7 @@ import {
   parseWorkbenchDrawerViewMenuKey,
   toWorkbenchDrawerViewMenuKey
 } from '#~/components/chat/workbench-create-menu'
+import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import type {
   RouteContainerPanelDockActionItem,
   RouteContainerPanelDockChromeActionsConfig,
@@ -42,6 +43,8 @@ import {
   areRouteContainerPanelDockLayoutsEquivalent
 } from '#~/components/layout/RouteContainerPanelTabs'
 import type { ContextPickerFile } from '#~/components/workspace/context-file-types'
+import { emitDesktopViewShortcut } from '#~/desktop/view-shortcuts'
+import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 import { PluginViewHost } from '#~/plugins/PluginHost'
 import type { PluginContributionWorkbenchAddMenuItem, PluginContributionWorkbenchTab } from '#~/plugins/plugin-manifest'
 import { usePluginCommandExecutor, usePluginSlot } from '#~/plugins/plugin-slots'
@@ -93,6 +96,7 @@ import type { InteractionTerminalPanesController } from '../interaction-panel/us
 import type { SessionPanelStateController } from '../interaction-panel/use-session-panel-state'
 import { WorkspaceDrawerViewPanel } from './WorkspaceDrawerViewPanel'
 import { useWorkspaceDrawerDockActions } from './use-workspace-drawer-dock-actions'
+import { renderMenuIcon } from './workspace-drawer-toolbar-menu'
 import type { WorkspaceDrawerView } from './workspace-drawer-types'
 import { buildWorkspaceDrawerViewItems, getPluginWorkspaceDrawerViews } from './workspace-drawer-view-items'
 import type { WorkspaceDrawerViewItem } from './workspace-drawer-view-items'
@@ -178,6 +182,65 @@ const isWorkspaceDrawerViewTabKey = (
   key: WorkspaceDrawerDockTabKey | null | undefined,
   availableViewSet: ReadonlySet<WorkspaceDrawerView>
 ): key is WorkspaceDrawerView => key != null && availableViewSet.has(key as WorkspaceDrawerView)
+
+const getWorkspaceDrawerDockTabTitle = (
+  tab: RouteContainerPanelDockTabItem<WorkspaceDrawerDockTabKey>
+) => String(tab.title ?? tab.label ?? '')
+
+const renderWorkspaceDrawerDockTabContent = (
+  tab: RouteContainerPanelDockTabItem<WorkspaceDrawerDockTabKey>,
+  isVisible: boolean
+) =>
+  typeof tab.content === 'function'
+    ? tab.content({ isVisible, tab, tabKey: tab.key })
+    : tab.content
+
+function ChatWorkspaceDrawerMobileActionButton({
+  action
+}: {
+  action: RouteContainerPanelDockActionItem
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const icon = action.active && action.activeIcon != null ? action.activeIcon : action.icon
+  const hasMenu = action.menuItems != null && action.menuItems.length > 0
+  const button = (
+    <Tooltip title={action.label} placement='bottom'>
+      <button
+        type='button'
+        className={[
+          'chat-workspace-drawer__mobile-icon-button',
+          action.active ? 'is-active' : '',
+          isOpen ? 'is-open' : ''
+        ].filter(Boolean).join(' ')}
+        aria-label={action.label}
+        aria-pressed={action.active}
+        disabled={action.disabled}
+        title={action.label}
+        onClick={hasMenu ? undefined : action.onSelect}
+      >
+        <MaterialSymbol name={icon} aria-hidden='true' />
+      </button>
+    </Tooltip>
+  )
+
+  if (!hasMenu) return button
+
+  return (
+    <Dropdown
+      overlayClassName='chat-workspace-drawer-context-dropdown'
+      menu={{ items: action.menuItems }}
+      open={isOpen}
+      placement='bottomRight'
+      trigger={['click']}
+      onOpenChange={(open) => {
+        setIsOpen(open)
+        action.onMenuOpenChange?.(open)
+      }}
+    >
+      {button}
+    </Dropdown>
+  )
+}
 
 const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -330,6 +393,7 @@ export function ChatWorkspaceDrawer({
   onOpenBottomPanel,
   onOpenFile,
   onOpenResource,
+  onOpenSidebar,
   openResourceShortcut,
   openResourceShortcutLabel,
   panelStateController,
@@ -351,6 +415,7 @@ export function ChatWorkspaceDrawer({
   onOpenBottomPanel?: () => void
   onOpenFile?: (path: string) => void
   onOpenResource: () => void
+  onOpenSidebar?: () => void
   openResourceShortcut?: string
   openResourceShortcutLabel?: string
   panelStateController: SessionPanelStateController
@@ -364,8 +429,11 @@ export function ChatWorkspaceDrawer({
   const { i18n, t } = useTranslation()
   const { message } = App.useApp()
   const navigate = useNavigate()
+  const responsiveLayout = useResponsiveLayout()
   const maxPinnedTabs = useAtomValue(interactionPanelPinnedTabLimitAtom)
   const [editingPinnedTab, setEditingPinnedTab] = useState<InteractionPanelPinnedTab | null>(null)
+  const [mobileViewMode, setMobileViewMode] = useState<'overview' | 'tab'>('overview')
+  const [mobileSearchQuery, setMobileSearchQuery] = useState('')
   const hasApprovalsTab = agentApprovals != null
   const hasAgentsTab = agentRoster != null
   const hasSettingsTab = settingsView != null
@@ -389,10 +457,23 @@ export function ChatWorkspaceDrawer({
   const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac')
   const { panelState, updateArea } = panelStateController
   const rightPanelTabs = panelState.right.tabs
+  const isAndroidDeviceShell = typeof window !== 'undefined' && (
+    window.oneworksDeviceShell?.shellKind === 'android' ||
+    window.oneworksDesktop?.shellKind === 'android'
+  )
+  const shouldUseMobileTabSwitcher = isAndroidDeviceShell &&
+    (responsiveLayout.isCompactLayout || responsiveLayout.isTouchInteraction)
 
   useEffect(() => {
     resetDrawerScroll(drawerRef.current)
   }, [isFullscreen, resetDrawerScroll])
+
+  useEffect(() => {
+    if (!shouldUseMobileTabSwitcher) {
+      setMobileViewMode('overview')
+      setMobileSearchQuery('')
+    }
+  }, [shouldUseMobileTabSwitcher])
 
   const workspaceDrawerStorageKey = `chat-workspace-drawer:${sessionId ?? 'workspace'}`
   const workspaceDrawerPinnedTabsStorageKey = `${workspaceDrawerStorageKey}:pinned`
@@ -560,7 +641,7 @@ export function ChatWorkspaceDrawer({
     selectedFilePath,
     t
   })
-  const { handleWorkspaceTreeCommand } = workspaceDrawerDockActions
+  const { handleForceSync, handleWorkspaceTreeCommand } = workspaceDrawerDockActions
   const panelChromeActions = useMemo<RouteContainerPanelDockChromeActionsConfig>(() => ({
     ...(onClose == null
       ? {}
@@ -1456,50 +1537,426 @@ export function ChatWorkspaceDrawer({
     workspaceDrawerDockActions.workspaceTreeCommand
   ])
 
+  const dockTabByKey = useMemo(
+    () => new Map(dockTabs.map(tab => [tab.key, tab])),
+    [dockTabs]
+  )
+  const openedDockTabs = useMemo(
+    () =>
+      openedTabKeys.flatMap((key) => {
+        const tab = dockTabByKey.get(key)
+        return tab == null ? [] : [tab]
+      }),
+    [dockTabByKey, openedTabKeys]
+  )
+  const activeMobileTab = resolvedActiveTabKey == null
+    ? null
+    : dockTabByKey.get(resolvedActiveTabKey) ?? null
+  const mobileSearchTerm = mobileSearchQuery.trim().toLocaleLowerCase()
+  const mobileOverviewTabs = useMemo(() => {
+    return dockTabs.filter((tab) => {
+      if (mobileSearchTerm === '') return true
+      return getWorkspaceDrawerDockTabTitle(tab).toLocaleLowerCase().includes(mobileSearchTerm)
+    })
+  }, [dockTabs, mobileSearchTerm])
+  const mobileInactiveTabCount = Math.max(0, dockTabs.length - openedDockTabs.length)
+
+  const openMobileTab = useCallback((tabKey: WorkspaceDrawerDockTabKey) => {
+    handleDockTabChange(tabKey, uniqueWorkspaceDrawerDockTabKeys([...openedTabKeys, tabKey]))
+    setMobileViewMode('tab')
+  }, [handleDockTabChange, openedTabKeys])
+
+  const closeMobileTab = useCallback((tabKey: WorkspaceDrawerDockTabKey) => {
+    const nextOpenedTabKeys = openedTabKeys.filter(key => key !== tabKey)
+    const nextActiveTabKey = resolvedActiveTabKey === tabKey
+      ? nextOpenedTabKeys.at(-1) ?? null
+      : resolvedActiveTabKey
+
+    handleDockTabChange(nextActiveTabKey, nextOpenedTabKeys)
+    if (nextActiveTabKey == null) setMobileViewMode('overview')
+  }, [handleDockTabChange, openedTabKeys, resolvedActiveTabKey])
+
+  const refreshMobileTab = useCallback(() => {
+    if (resolvedActiveTabKey == null) return
+
+    if (isWorkspaceDrawerViewTabKey(resolvedActiveTabKey, availableViewSet)) {
+      handleForceSync()
+      return
+    }
+
+    const currentRightPanelTab = rightPanelTabs.find(tab =>
+      toWorkspaceDrawerDockKeyFromTab(tab) === resolvedActiveTabKey
+    )
+    if (currentRightPanelTab?.kind === 'web') {
+      emitDesktopViewShortcut('reload-browser-page')
+      return
+    }
+
+    handleDockTabChange(
+      resolvedActiveTabKey,
+      uniqueWorkspaceDrawerDockTabKeys([...openedTabKeys, resolvedActiveTabKey])
+    )
+  }, [
+    availableViewSet,
+    handleDockTabChange,
+    openedTabKeys,
+    resolvedActiveTabKey,
+    rightPanelTabs,
+    handleForceSync
+  ])
+
+  const mobileCurrentHeaderActions = useMemo(() => {
+    if (activeMobileTab == null) return []
+
+    return getHeaderActions({
+      activeTab: resolvedActiveTabKey,
+      groupActiveTab: activeMobileTab,
+      groupActiveTabKey: activeMobileTab.key,
+      isTopRightGroup: true,
+      panelKey: 'chat-workspace-drawer'
+    })
+  }, [activeMobileTab, getHeaderActions, resolvedActiveTabKey])
+  const mobileMoreAction = mobileCurrentHeaderActions.find(action => action.icon === 'more_vert')
+  const mobileRegularActions = mobileCurrentHeaderActions.filter(action => action.icon !== 'more_vert')
+  const mobileVisibleHeaderActions = mobileRegularActions.slice(0, 2)
+  const mobileOverflowHeaderActions = mobileRegularActions.slice(2)
+  const mobileMoreMenuItems = useMemo<MenuProps['items']>(() => {
+    const items: MenuProps['items'] = []
+    const moreItems = mobileMoreAction?.menuItems
+    if (moreItems != null && moreItems.length > 0) {
+      items.push(...moreItems)
+    }
+    if (mobileOverflowHeaderActions.length > 0) {
+      if (items.length > 0) items.push({ type: 'divider' })
+      items.push(...mobileOverflowHeaderActions.map(action => ({
+        disabled: action.disabled,
+        icon: renderMenuIcon(action.icon),
+        key: `mobile-overflow:${action.key}`,
+        label: action.label,
+        onClick: action.onSelect
+      })))
+    }
+    if (items.length > 0) items.push({ type: 'divider' })
+    items.push({
+      icon: renderMenuIcon('tab'),
+      key: 'mobile-tabs-overview',
+      label: t('chat.workspaceDrawerTitle'),
+      onClick: () => setMobileViewMode('overview')
+    })
+    items.push({
+      disabled: activeMobileTab == null,
+      icon: renderMenuIcon('close'),
+      key: 'mobile-tabs-close-current',
+      label: t('common.close'),
+      onClick: () => {
+        if (activeMobileTab != null) closeMobileTab(activeMobileTab.key)
+      }
+    })
+    if (onClose != null) {
+      items.push({
+        icon: renderMenuIcon('chat'),
+        key: 'mobile-tabs-back-session',
+        label: t('chat.mobileTabsBackToSession', '返回会话'),
+        onClick: onClose
+      })
+    }
+    return items
+  }, [
+    activeMobileTab,
+    closeMobileTab,
+    mobileMoreAction?.menuItems,
+    mobileOverflowHeaderActions,
+    onClose,
+    t
+  ])
+  const mobileOverviewMoreMenuItems = useMemo<MenuProps['items']>(() => [
+    {
+      icon: renderMenuIcon('language'),
+      key: 'new-web-page',
+      label: t('chat.interactionPanel.addIframe'),
+      onClick: handleNewWebPageAction
+    },
+    {
+      icon: renderMenuIcon('terminal'),
+      key: 'new-terminal',
+      label: t('launcher.resource.newTerminal', '新建终端 Tab'),
+      onClick: () => handleNewTerminalAction()
+    },
+    ...(onClose == null
+      ? []
+      : [
+        { type: 'divider' as const },
+        {
+          icon: renderMenuIcon('chat'),
+          key: 'back-session',
+          label: t('chat.mobileTabsBackToSession', '返回会话'),
+          onClick: onClose
+        }
+      ])
+  ], [handleNewTerminalAction, handleNewWebPageAction, onClose, t])
+  const mobileActiveContent = activeMobileTab == null
+    ? null
+    : renderWorkspaceDrawerDockTabContent(activeMobileTab, true)
+  const mobileDrawerContent = shouldUseMobileTabSwitcher
+    ? (
+      mobileViewMode === 'tab' && activeMobileTab != null
+        ? (
+          <div className='chat-workspace-drawer__mobile-page'>
+            <header className='chat-workspace-drawer__mobile-page-header'>
+              <div className='chat-workspace-drawer__mobile-header-group'>
+                <Tooltip title={t('chat.sidebarOpen', '打开左侧')} placement='bottom'>
+                  <button
+                    type='button'
+                    className='chat-workspace-drawer__mobile-icon-button'
+                    aria-label={t('chat.sidebarOpen', '打开左侧')}
+                    disabled={onOpenSidebar == null}
+                    onClick={onOpenSidebar}
+                  >
+                    <MaterialSymbol name='left_panel_open' aria-hidden='true' />
+                  </button>
+                </Tooltip>
+                <Tooltip title={t('chat.mobileTabsBackToSession', '返回会话')} placement='bottom'>
+                  <button
+                    type='button'
+                    className='chat-workspace-drawer__mobile-icon-button'
+                    aria-label={t('chat.mobileTabsBackToSession', '返回会话')}
+                    disabled={onClose == null}
+                    onClick={onClose}
+                  >
+                    <MaterialSymbol name='arrow_back' aria-hidden='true' />
+                  </button>
+                </Tooltip>
+              </div>
+              <h2 className='chat-workspace-drawer__mobile-page-title'>
+                {getWorkspaceDrawerDockTabTitle(activeMobileTab)}
+              </h2>
+              <div className='chat-workspace-drawer__mobile-header-group is-right'>
+                <Tooltip title={t('common.refresh', '刷新')} placement='bottom'>
+                  <button
+                    type='button'
+                    className='chat-workspace-drawer__mobile-icon-button'
+                    aria-label={t('common.refresh', '刷新')}
+                    onClick={refreshMobileTab}
+                  >
+                    <MaterialSymbol name='refresh' aria-hidden='true' />
+                  </button>
+                </Tooltip>
+                {mobileVisibleHeaderActions.map(action => (
+                  <ChatWorkspaceDrawerMobileActionButton key={action.key} action={action} />
+                ))}
+                <Dropdown
+                  overlayClassName='chat-workspace-drawer-context-dropdown'
+                  menu={{ items: mobileMoreMenuItems }}
+                  placement='bottomRight'
+                  trigger={['click']}
+                >
+                  <button
+                    type='button'
+                    className='chat-workspace-drawer__mobile-icon-button'
+                    aria-label={t('common.moreActions')}
+                    title={t('common.moreActions')}
+                  >
+                    <MaterialSymbol name='more_vert' aria-hidden='true' />
+                  </button>
+                </Dropdown>
+              </div>
+            </header>
+            <div className='chat-workspace-drawer__mobile-page-body'>
+              {mobileActiveContent}
+            </div>
+          </div>
+        )
+        : (
+          <div className='chat-workspace-drawer__mobile-switcher'>
+            <header className='chat-workspace-drawer__mobile-switcher-header'>
+              <Dropdown
+                overlayClassName='chat-workspace-drawer-context-dropdown'
+                menu={{
+                  items: createMenuItems,
+                  onClick: handleCreateMenuClick,
+                  selectedKeys: createMenuSelectedKeys
+                }}
+                placement='bottomLeft'
+                trigger={['click']}
+                onOpenChange={(open) => {
+                  if (open) void refreshDeviceOptions()
+                }}
+              >
+                <button
+                  type='button'
+                  className='chat-workspace-drawer__mobile-add'
+                  aria-label={t('chat.interactionPanel.addTab')}
+                  title={t('chat.interactionPanel.addTab')}
+                >
+                  <MaterialSymbol name='add' aria-hidden='true' />
+                </button>
+              </Dropdown>
+              <div className='chat-workspace-drawer__mobile-mode-switch' aria-label={t('chat.workspaceDrawerTitle')}>
+                <button
+                  type='button'
+                  className='is-active'
+                  aria-label={t('chat.workspaceDrawerTitle')}
+                  aria-pressed='true'
+                >
+                  <MaterialSymbol name='tab' aria-hidden='true' />
+                  <span>{openedDockTabs.length}</span>
+                </button>
+                <button
+                  type='button'
+                  aria-label={t('chat.interactionPanel.allTabs', '所有标签页')}
+                  aria-pressed='false'
+                >
+                  <MaterialSymbol name='grid_view' aria-hidden='true' />
+                </button>
+              </div>
+              <Dropdown
+                overlayClassName='chat-workspace-drawer-context-dropdown'
+                menu={{ items: mobileOverviewMoreMenuItems }}
+                placement='bottomRight'
+                trigger={['click']}
+              >
+                <button
+                  type='button'
+                  className='chat-workspace-drawer__mobile-more'
+                  aria-label={t('common.moreActions')}
+                  title={t('common.moreActions')}
+                >
+                  <MaterialSymbol name='more_vert' aria-hidden='true' />
+                </button>
+              </Dropdown>
+            </header>
+            <label className='chat-workspace-drawer__mobile-search'>
+              <MaterialSymbol name='search' aria-hidden='true' />
+              <input
+                value={mobileSearchQuery}
+                placeholder={t('chat.interactionPanel.searchTabs', '搜索标签页')}
+                onChange={event => setMobileSearchQuery(event.target.value)}
+              />
+            </label>
+            <button
+              type='button'
+              className='chat-workspace-drawer__mobile-inactive-card'
+              onClick={() => setMobileSearchQuery('')}
+            >
+              <span className='chat-workspace-drawer__mobile-inactive-icon' aria-hidden='true'>
+                <MaterialSymbol name='tab_group' />
+              </span>
+              <span className='chat-workspace-drawer__mobile-inactive-copy'>
+                <strong>
+                  {t('chat.interactionPanel.inactiveTabsTitle', {
+                    count: mobileInactiveTabCount,
+                    defaultValue: '({{count}}) 个闲置标签页'
+                  })}
+                </strong>
+                <span>{t('chat.interactionPanel.inactiveTabsDescription', '未使用或重复的标签页和标签页分组')}</span>
+              </span>
+              <MaterialSymbol name='chevron_right' aria-hidden='true' />
+            </button>
+            <div className='chat-workspace-drawer__mobile-tab-grid'>
+              {mobileOverviewTabs.map((tab) => {
+                const title = getWorkspaceDrawerDockTabTitle(tab)
+                const isOpened = openedTabKeys.includes(tab.key)
+                const isActive = resolvedActiveTabKey === tab.key
+                const iconName = tab.activeIcon ?? tab.icon
+
+                return (
+                  <article
+                    key={tab.key}
+                    className={[
+                      'chat-workspace-drawer__mobile-tab-card',
+                      isActive ? 'is-active' : '',
+                      isOpened ? 'is-opened' : ''
+                    ].filter(Boolean).join(' ')}
+                  >
+                    <div className='chat-workspace-drawer__mobile-tab-card-header'>
+                      <button
+                        type='button'
+                        className='chat-workspace-drawer__mobile-tab-card-title'
+                        onClick={() => openMobileTab(tab.key)}
+                      >
+                        {tab.iconNode ?? <MaterialSymbol name={iconName} aria-hidden='true' />}
+                        <span>{title}</span>
+                      </button>
+                      {isOpened
+                        ? (
+                          <button
+                            type='button'
+                            className='chat-workspace-drawer__mobile-tab-card-close'
+                            aria-label={t('common.close')}
+                            onClick={() => closeMobileTab(tab.key)}
+                          >
+                            <MaterialSymbol name='close' aria-hidden='true' />
+                          </button>
+                        )
+                        : null}
+                    </div>
+                    <button
+                      type='button'
+                      className='chat-workspace-drawer__mobile-tab-card-preview'
+                      onClick={() => openMobileTab(tab.key)}
+                    >
+                      <span />
+                      <span />
+                      <span />
+                    </button>
+                  </article>
+                )
+              })}
+            </div>
+          </div>
+        )
+    )
+    : (
+      <RouteContainerPanelDockWorkspace
+        activeTab={resolvedActiveTabKey}
+        ariaLabel={t('chat.workspaceDrawerTitle')}
+        className='chat-workspace-drawer__dock-workspace'
+        closable
+        closeLabel={() => t('common.close')}
+        createMenuItems={createMenuItems}
+        createMenuLabel={t('chat.interactionPanel.addTab')}
+        createMenuSelectedKeys={createMenuSelectedKeys}
+        defaultContent={
+          <InteractionPanelEmptyState
+            canCreateSessionTab={sessionId != null && sessionId !== ''}
+            onNewMobileDebugPage={handleNewMobileDebugPageAction}
+            onNewSession={handleNewSessionAction}
+            onNewTerminal={handleNewTerminalAction}
+            onNewWebPage={handleNewWebPageAction}
+            onOpenResource={handleOpenResourceAction}
+            openResourceShortcutLabel={openResourceShortcutLabel}
+          />
+        }
+        getHeaderActions={getHeaderActions}
+        getTabContextMenuItems={getTabContextMenuItems}
+        labelMode='responsive'
+        layout={panelState.right.layout as RouteContainerPanelDockLayout | undefined}
+        minOpenTabs={0}
+        openedTabs={openedTabKeys}
+        panelChromeActions={panelChromeActions}
+        panelKey='chat-workspace-drawer'
+        tabs={dockTabs}
+        onCreateMenuClick={handleCreateMenuClick}
+        onCreateMenuOpenChange={(open) => {
+          if (open) void refreshDeviceOptions()
+        }}
+        onLayoutChange={handleRightDockLayoutChange}
+        onTabChange={handleDockTabChange}
+      />
+    )
+
   return (
     <>
       <aside
         ref={drawerRef}
-        className='chat-workspace-drawer'
+        className={[
+          'chat-workspace-drawer',
+          shouldUseMobileTabSwitcher ? 'chat-workspace-drawer--mobile-tabs' : ''
+        ].filter(Boolean).join(' ')}
         aria-label={t('chat.workspaceDrawerTitle')}
         onScroll={handleDrawerScroll}
       >
-        <RouteContainerPanelDockWorkspace
-          activeTab={resolvedActiveTabKey}
-          ariaLabel={t('chat.workspaceDrawerTitle')}
-          className='chat-workspace-drawer__dock-workspace'
-          closable
-          closeLabel={() => t('common.close')}
-          createMenuItems={createMenuItems}
-          createMenuLabel={t('chat.interactionPanel.addTab')}
-          createMenuSelectedKeys={createMenuSelectedKeys}
-          defaultContent={
-            <InteractionPanelEmptyState
-              canCreateSessionTab={sessionId != null && sessionId !== ''}
-              onNewMobileDebugPage={handleNewMobileDebugPageAction}
-              onNewSession={handleNewSessionAction}
-              onNewTerminal={handleNewTerminalAction}
-              onNewWebPage={handleNewWebPageAction}
-              onOpenResource={handleOpenResourceAction}
-              openResourceShortcutLabel={openResourceShortcutLabel}
-            />
-          }
-          getHeaderActions={getHeaderActions}
-          getTabContextMenuItems={getTabContextMenuItems}
-          labelMode='responsive'
-          layout={panelState.right.layout as RouteContainerPanelDockLayout | undefined}
-          minOpenTabs={0}
-          openedTabs={openedTabKeys}
-          panelChromeActions={panelChromeActions}
-          panelKey='chat-workspace-drawer'
-          tabs={dockTabs}
-          onCreateMenuClick={handleCreateMenuClick}
-          onCreateMenuOpenChange={(open) => {
-            if (open) void refreshDeviceOptions()
-          }}
-          onLayoutChange={handleRightDockLayoutChange}
-          onTabChange={handleDockTabChange}
-        />
+        {mobileDrawerContent}
       </aside>
       <InteractionPanelPinnedTabEditModal
         pinnedTab={editingPinnedTab}

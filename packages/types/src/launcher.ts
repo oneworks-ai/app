@@ -6,7 +6,7 @@ export interface LauncherWorkspaceSelectorProject {
   name: string
   sourceUrl?: string
   status?: LauncherWorkspaceServiceStatus
-  workspaceId: string
+  workspaceId?: string
   workspaceFolder: string
 }
 

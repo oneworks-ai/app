@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">OneWorks Android</string>
+    <string name="accessibility_service_label">OneWorks Bridge</string>
+    <string name="accessibility_service_description">Lets OneWorks prototype bridge observe and operate visible Android UI during local verification.</string>
+</resources>

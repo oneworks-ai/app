@@ -401,6 +401,10 @@ export function ChatRouteShell({
   const pluginWorkbenchTabs = usePluginSlot<PluginContributionWorkbenchTab>('workbench.tabs')
   useInstallRoutePluginMoreMenu('chat')
   useInstallRoutePluginWindowBarActions('chat')
+  const isAndroidDeviceShell = typeof window !== 'undefined' && (
+    window.oneworksDeviceShell?.shellKind === 'android' ||
+    window.oneworksDesktop?.shellKind === 'android'
+  )
   const [workspaceDrawerLocateRequest, setWorkspaceDrawerLocateRequest] = useState<WorkspaceDrawerLocateRequest>(null)
   const handledLauncherRequestIdRef = useRef<string | null>(null)
   const pendingInteractionPanelShortcutClearIdRef = useRef<number | null>(null)
@@ -1478,6 +1482,7 @@ export function ChatRouteShell({
               terminalPanes={terminalPanes}
               onClose={() => setWorkspaceDrawerOpenWithPanelState(false)}
               onFullscreenChange={handleWorkspaceDrawerFullscreenChange}
+              onOpenSidebar={openRouteSidebar}
               onOpenBottomPanel={() => {
                 if (!bottomPanel.shouldShowBottomPanel) {
                   bottomPanel.handleToggleBottomPanel()
@@ -1493,7 +1498,7 @@ export function ChatRouteShell({
           : undefined}
         sidePanelClassName='chat-route-layout__workspace-panel'
         sidePanelCompactMode='overlay'
-        sidePanelFullscreen={isWorkspaceDrawerFullscreen}
+        sidePanelFullscreen={isWorkspaceDrawerFullscreen || isAndroidDeviceShell}
         sidePanelLabel='工作区抽屉'
         sidePanelResize={{
           defaultWidth: WORKSPACE_DRAWER_DEFAULT_WIDTH,
