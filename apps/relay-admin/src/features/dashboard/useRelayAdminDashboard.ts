@@ -2,17 +2,25 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { canManageRelayAdmin, isRelayAdminRole } from '../../shared/model/adminPermissions'
 import type {
+  CreateAccessGroupInput,
   CreateInviteInput,
   CreateSsoProviderInput,
   CreateUserInput,
+  RelayAdminAccessGroup,
   RelayAdminCurrentUser,
   RelayAdminDevice,
   RelayAdminInvite,
   RelayAdminRole,
   RelayAdminSsoProvider,
   RelayAdminUser,
+  UpdateAccessGroupInput,
   UpdateSsoProviderInput
 } from '../../shared/model/adminTypes'
+import {
+  createRelayAdminAccessGroup,
+  deleteRelayAdminAccessGroup,
+  updateRelayAdminAccessGroup
+} from '../access-groups/accessGroupsApi'
 import {
   buildAdminLoginUrl,
   clearAdminSessionToken,
@@ -61,6 +69,7 @@ export const useRelayAdminDashboard = () => {
   )
   const [currentUser, setCurrentUser] = useState<RelayAdminCurrentUser | undefined>()
   const [devices, setDevices] = useState<RelayAdminDevice[]>([])
+  const [accessGroups, setAccessGroups] = useState<RelayAdminAccessGroup[]>([])
   const [users, setUsers] = useState<RelayAdminUser[]>([])
   const [invites, setInvites] = useState<RelayAdminInvite[]>([])
   const [ssoProviders, setSsoProviders] = useState<RelayAdminSsoProvider[]>([])
@@ -91,6 +100,7 @@ export const useRelayAdminDashboard = () => {
       includeAdminResources: canManageAdmin
     })
     setDevices(snapshot.devices)
+    setAccessGroups(snapshot.accessGroups)
     setUsers(snapshot.users)
     setInvites(snapshot.invites)
     setSsoProviders(snapshot.ssoProviders)
@@ -102,6 +112,7 @@ export const useRelayAdminDashboard = () => {
   const refresh = useCallback(async () => {
     if (!canLoad) {
       setUsers([])
+      setAccessGroups([])
       setDevices([])
       setInvites([])
       setSsoProviders([])
@@ -184,10 +195,39 @@ export const useRelayAdminDashboard = () => {
     })
   }, [loadSnapshot, run, token])
 
+  const createAccessGroup = useCallback(async (input: CreateAccessGroupInput) => {
+    await run(async () => {
+      await createRelayAdminAccessGroup(token, input)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
+  const updateAccessGroup = useCallback(async (input: UpdateAccessGroupInput) => {
+    await run(async () => {
+      await updateRelayAdminAccessGroup(token, input)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
+  const deleteAccessGroup = useCallback(async (group: RelayAdminAccessGroup) => {
+    await run(async () => {
+      await deleteRelayAdminAccessGroup(token, group.id)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
   const setUserRole = useCallback(async (user: RelayAdminUser, role: RelayAdminRole) => {
     if (currentUser?.id === user.id) return
     await run(async () => {
       await updateRelayAdminUser(token, { id: user.id, role })
+      await loadSnapshot()
+    })
+  }, [currentUser?.id, loadSnapshot, run, token])
+
+  const setUserAccessGroups = useCallback(async (user: RelayAdminUser, groupIds: string[]) => {
+    if (currentUser?.id === user.id) return
+    await run(async () => {
+      await updateRelayAdminUser(token, { groupIds, id: user.id })
       await loadSnapshot()
     })
   }, [currentUser?.id, loadSnapshot, run, token])
@@ -304,7 +344,9 @@ export const useRelayAdminDashboard = () => {
 
   return {
     canLoad,
+    accessGroups,
     accounts,
+    createAccessGroup,
     createInvite,
     createSsoProvider,
     createTeam,
@@ -314,6 +356,7 @@ export const useRelayAdminDashboard = () => {
     currentUser,
     devices,
     deleteInvite,
+    deleteAccessGroup,
     deleteSsoProvider,
     error,
     invites,
@@ -329,6 +372,7 @@ export const useRelayAdminDashboard = () => {
     setUserDisabled,
     setUserLoginId,
     setUserPassword,
+    setUserAccessGroups,
     setUserRole,
     snapshotLoaded,
     ssoProviders,
@@ -336,6 +380,7 @@ export const useRelayAdminDashboard = () => {
     teams,
     token,
     updateTeam,
+    updateAccessGroup,
     updateTeamPolicy,
     updateSsoProvider,
     users

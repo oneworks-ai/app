@@ -4,6 +4,8 @@
   flex-direction: column;
   height: 100%;
   gap: 8px;
+  max-width: 100%;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -108,7 +110,7 @@
   color: var(--text-color) !important;
   height: 28px !important;
   min-height: 28px !important;
-  padding: 0 8px !important;
+  padding: 0 var(--relay-admin-padding) !important;
 }
 
 .relay-admin-table .ant-select-selection-item {
@@ -188,8 +190,24 @@
   border-top: 1px solid
     color-mix(in srgb, var(--border-color) 72%, transparent);
   flex: 1 1 0;
+  max-width: 100%;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
+  width: 100%;
+}
+
+.relay-admin-list-table__table-scroll .ant-table-wrapper,
+.relay-admin-list-table__table-scroll .ant-spin-nested-loading,
+.relay-admin-list-table__table-scroll .ant-spin-container,
+.relay-admin-list-table__table-scroll .ant-table {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.relay-admin-list-table__table-scroll .ant-table-container,
+.relay-admin-list-table__table-scroll .ant-table-content {
+  max-width: 100%;
 }
 
 .relay-admin-list-table__table-scroll .ant-table-thead > tr > th {
@@ -207,7 +225,7 @@
   gap: 12px;
   justify-content: space-between;
   min-height: 32px;
-  padding-top: 6px;
+  padding-top: var(--relay-admin-padding);
 }
 
 .relay-admin-list-table__pagination-summary {

@@ -297,16 +297,8 @@ export const TeamConfigProfiles = ({ disabled, team, token }: TeamConfigProfiles
             title='创建配置方案'
             type='primary'
           />
-          <AdminActionButton
-            aria-label='刷新配置方案'
-            disabled={disabled || loading}
-            iconName='refresh'
-            onClick={refreshProfiles}
-            size='small'
-            title='刷新配置方案'
-          />
         </Space>
-      ), [disabled, loading, refreshProfiles, team])
+      ), [disabled, team])
 
   useTeamDetailTabActions('profiles', tabActions)
 

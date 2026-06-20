@@ -79,6 +79,7 @@
   white-space: nowrap;
 }
 
+.relay-user-panel__groups,
 .relay-user-panel__teams {
   align-items: center;
   display: flex;

@@ -1,10 +1,51 @@
+/* eslint-disable max-lines -- Relay Admin API wire contracts are centralized for shared UI typing. */
+
 export type RelayAdminRole = 'owner' | 'admin' | 'member' | 'viewer'
+export type RelayAdminAccessGroupScope = 'platform' | 'team'
 export type RelayAdminSsoProviderType = 'oauth2' | 'oidc'
+
+export interface RelayAdminAccessGroupCapabilities {
+  allow: string[]
+  deny: string[]
+}
+
+export interface RelayAdminEffectiveAccessSource {
+  groupId: string
+  groupName: string
+  inheritedFromGroupId?: string
+  scope: RelayAdminAccessGroupScope
+}
+
+export interface RelayAdminEffectiveAccess {
+  capabilities: string[]
+  deniedCapabilities: string[]
+  quotas: Record<string, number | null>
+  sources: RelayAdminEffectiveAccessSource[]
+}
+
+export interface RelayAdminAccessGroup {
+  builtIn: boolean
+  capabilities: RelayAdminAccessGroupCapabilities
+  createdAt: string
+  description: string | null
+  disabled: boolean
+  disabledAt: string | null
+  id: string
+  localizedDescriptions: Record<string, string>
+  memberCount: number
+  name: string
+  parentGroupId: string | null
+  quotas: Record<string, number | null>
+  scope: RelayAdminAccessGroupScope
+  updatedAt: string | null
+}
 
 export interface RelayAdminCurrentUser {
   avatarUrl?: string | null
   disabledAt?: string | null
   email: string
+  effectiveAccess: RelayAdminEffectiveAccess
+  groupIds: string[]
   id: string
   loginId?: string | null
   name: string
@@ -27,6 +68,8 @@ export interface RelayAdminUser {
   disabled: boolean
   disabledAt: string | null
   email: string
+  effectiveAccess: RelayAdminEffectiveAccess
+  groupIds: string[]
   id: string
   loginId: string | null
   maxDevices: number | null
@@ -52,6 +95,7 @@ export interface RelayAdminInvite {
   code: string
   createdAt: string
   expiresAt: string | null
+  groupIds: string[]
   maxUses: number
   revokedAt: string | null
   role: RelayAdminRole
@@ -107,11 +151,13 @@ export interface CreateUserInput {
   maxDevices?: number | null
   name?: string
   password?: string
+  groupIds?: string[]
   role: RelayAdminRole
 }
 
 export interface UpdateUserInput {
   disabled?: boolean
+  groupIds?: string[]
   id: string
   loginId?: string | null
   maxDevices?: number | null
@@ -121,9 +167,31 @@ export interface UpdateUserInput {
 
 export interface CreateInviteInput {
   code?: string
+  groupIds?: string[]
   maxUses: number
   role: RelayAdminRole
   userId?: string
+}
+
+export interface CreateAccessGroupInput {
+  capabilities: RelayAdminAccessGroupCapabilities
+  description?: string
+  localizedDescriptions?: Record<string, string>
+  name: string
+  parentGroupId?: string | null
+  quotas?: Record<string, number | null>
+  scope: RelayAdminAccessGroupScope
+}
+
+export interface UpdateAccessGroupInput {
+  capabilities?: RelayAdminAccessGroupCapabilities
+  description?: string | null
+  disabled?: boolean
+  id: string
+  localizedDescriptions?: Record<string, string> | null
+  name?: string
+  parentGroupId?: string | null
+  quotas?: Record<string, number | null>
 }
 
 export interface CreateSsoProviderInput {

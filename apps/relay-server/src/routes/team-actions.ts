@@ -1,6 +1,13 @@
+/* eslint-disable max-lines -- Team action route handlers keep invite and creation policy in one file. */
+
 import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+import {
+  defaultTeamAccessGroupIds,
+  normalizeRelayTeamAccessGroups,
+  resolveUserPlatformAccess
+} from '../access-groups.js'
 import type { RelayAuthContext } from '../auth/permissions.js'
 import { readRequestBody, sendJson } from '../http.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
@@ -19,6 +26,13 @@ import {
   policyLimitExceeded,
   serializeTeam
 } from './team-route-utils.js'
+
+const userOwnedTeamCount = (store: RelayStore, userId: string) =>
+  store.teamMembers.filter(member => member.userId === userId && member.role === 'owner').length
+
+const quotaLimitExceeded = (limit: number | null | undefined, count: number) => (
+  limit != null && count >= limit
+)
 
 export const createTeam = async (
   req: IncomingMessage,
@@ -55,6 +69,15 @@ export const createTeam = async (
     sendJson(res, 403, { error: 'User team limit reached.' }, args.allowOrigin)
     return
   }
+  const ownerAccess = resolveUserPlatformAccess(store, owner)
+  if (quotaLimitExceeded(ownerAccess.quotas.maxTeamsJoined, userTeamCount(store, owner.id))) {
+    sendJson(res, 403, { error: 'User joined team quota reached.' }, args.allowOrigin)
+    return
+  }
+  if (quotaLimitExceeded(ownerAccess.quotas.maxTeamsOwned, userOwnedTeamCount(store, owner.id))) {
+    sendJson(res, 403, { error: 'User owned team quota reached.' }, args.allowOrigin)
+    return
+  }
 
   const slug = cleanSlug(body.slug, name)
   if (store.teams.some(team => team.slug === slug)) {
@@ -70,6 +93,7 @@ export const createTeam = async (
     id: randomUUID(),
     slug,
     name,
+    accessGroups: normalizeRelayTeamAccessGroups(undefined),
     ...(cleanString(body.description) === '' ? {} : { description: cleanString(body.description) }),
     ...(avatarUrl.value == null ? {} : { avatarUrl: avatarUrl.value }),
     createdByUserId: owner.id,
@@ -80,6 +104,7 @@ export const createTeam = async (
     teamId: team.id,
     userId: owner.id,
     role: 'owner',
+    groupIds: defaultTeamAccessGroupIds('owner'),
     configEnabled: true,
     defaultForPublishing: true,
     createdByUserId: owner.id,

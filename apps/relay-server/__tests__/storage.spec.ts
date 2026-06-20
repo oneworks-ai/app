@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { defaultRelayAccessGroups } from '../src/access-groups.js'
 import { parseRelayServerArgs } from '../src/config.js'
 import { parseRelayStorageDriver } from '../src/storage/drivers.js'
 import { createDurableObjectRelayStoreRepository } from '../src/storage/durable-object.js'
@@ -72,6 +73,7 @@ describe('relay storage repository', () => {
     })
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
+      accessGroups: defaultRelayAccessGroups(),
       auditEvents: [],
       configAssignments: [],
       configProfileAssignments: [],
@@ -133,6 +135,7 @@ describe('relay storage repository', () => {
     })
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
+      accessGroups: defaultRelayAccessGroups(),
       auditEvents: [],
       configAssignments: [],
       configProfileAssignments: [],
@@ -211,6 +214,7 @@ describe('relay storage repository', () => {
     const repository = createDurableObjectRelayStoreRepository(new MemoryDurableObjectStorage())
     const store: RelayStore = {
       createdAt: '2026-01-01T00:00:00.000Z',
+      accessGroups: defaultRelayAccessGroups(),
       auditEvents: [],
       configAssignments: [],
       configProfileAssignments: [],

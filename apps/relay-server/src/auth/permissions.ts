@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+import { resolveAccessTokenAccess, resolveUserPlatformAccess } from '../access-groups.js'
 import { getBearerToken, sendJson } from '../http.js'
 import {
   adminTokenPrincipal,
@@ -34,7 +35,7 @@ export type RelayAuthContext =
 
 export const resolveAuthContext = (req: IncomingMessage, args: RelayServerArgs, store: RelayStore) => {
   const bearerToken = getBearerToken(req)
-  if (args.adminToken === '' || bearerToken === args.adminToken) {
+  if (args.adminToken !== '' && bearerToken === args.adminToken) {
     return {
       kind: 'admin-token' as const,
       principal: adminTokenPrincipal()
@@ -44,19 +45,30 @@ export const resolveAuthContext = (req: IncomingMessage, args: RelayServerArgs, 
   if (session != null) {
     return {
       kind: 'session' as const,
-      principal: sessionPrincipalForUser(session.user),
+      principal: sessionPrincipalForUser(session.user, resolveUserPlatformAccess(store, session.user).capabilities),
       session: session.session,
       user: session.user
     }
   }
   const accessToken = resolveRelayAccessToken(store, bearerToken)
-  if (accessToken == null) return undefined
-  return {
-    accessToken: accessToken.accessToken,
-    kind: 'access-token' as const,
-    principal: sessionPrincipalForUser(accessToken.user),
-    user: accessToken.user
+  if (accessToken != null) {
+    return {
+      accessToken: accessToken.accessToken,
+      kind: 'access-token' as const,
+      principal: sessionPrincipalForUser(
+        accessToken.user,
+        resolveAccessTokenAccess(store, accessToken.user, accessToken.accessToken).capabilities
+      ),
+      user: accessToken.user
+    }
   }
+  if (args.adminToken === '') {
+    return {
+      kind: 'admin-token' as const,
+      principal: adminTokenPrincipal()
+    }
+  }
+  return undefined
 }
 
 export const authContextHasPermission = (auth: RelayAuthContext, permission: string) => (

@@ -43,8 +43,8 @@ describe('relay admin user table model', () => {
       { label: 'Team Two', value: 'team:team-2' }
     ])
     expect(
-      filterRelayAdminUsers(users, {
-        roleFilter: 'all',
+      filterRelayAdminUsers(users, [], {
+        groupFilter: 'all',
         searchValue: '',
         sourceFilter: 'all',
         statusFilter: 'all',
@@ -52,8 +52,8 @@ describe('relay admin user table model', () => {
       }).map(user => user.id)
     ).toEqual(['user-2'])
     expect(
-      filterRelayAdminUsers(users, {
-        roleFilter: 'all',
+      filterRelayAdminUsers(users, [], {
+        groupFilter: 'all',
         searchValue: 'team one',
         sourceFilter: 'all',
         statusFilter: 'all',

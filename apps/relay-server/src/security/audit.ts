@@ -284,6 +284,9 @@ const openApiPermissionForRequest = (req: IncomingMessage, url: URL) => {
   if (path === '/api/profile/security' && requestMethod === 'GET') return 'profile.security.read'
   if (path === '/api/profile/openapi-audit' && requestMethod === 'GET') return 'profile.openApiAudit.read'
   if (path === '/api/profile/access-tokens' && requestMethod === 'POST') return 'profile.accessTokens.create'
+  if (/^\/api\/profile\/access-tokens\/[^/]+$/.test(path) && requestMethod === 'PATCH') {
+    return 'profile.accessTokens.write'
+  }
   if (/^\/api\/profile\/access-tokens\/[^/]+$/.test(path) && requestMethod === 'DELETE') {
     return 'profile.accessTokens.revoke'
   }

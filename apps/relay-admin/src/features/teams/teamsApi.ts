@@ -1,6 +1,13 @@
 /* eslint-disable max-lines -- Relay Admin team API endpoint mapping stays in one feature-local file. */
 import { requestJson } from '../../shared/api/requestJson'
 import type {
+  CreateAccessGroupInput,
+  RelayAdminAccessGroup,
+  UpdateAccessGroupInput
+} from '../../shared/model/adminTypes'
+import { defaultTeamGroupIds } from '../access-groups/accessGroupModel'
+import { normalizeRelayAdminAccessGroup } from '../access-groups/accessGroupsApi'
+import type {
   CreateConfigProfileAssignmentInput,
   CreateConfigProfileInput,
   CreateConfigProfileVersionInput,
@@ -36,8 +43,32 @@ export interface RelayAdminConfigProfileDetailResponse {
   versions: RelayAdminConfigProfileVersion[]
 }
 
+const normalizeTeamMember = (member: RelayAdminTeamMember): RelayAdminTeamMember => ({
+  ...member,
+  effectiveAccess: member.effectiveAccess ?? { capabilities: [], deniedCapabilities: [], quotas: {}, sources: [] },
+  groupIds: Array.isArray(member.groupIds) && member.groupIds.length > 0
+    ? member.groupIds
+    : defaultTeamGroupIds(member.role)
+})
+
+const normalizeTeam = (team: RelayAdminTeam): RelayAdminTeam => ({
+  ...team,
+  accessGroups: Array.isArray(team.accessGroups)
+    ? team.accessGroups.map(normalizeRelayAdminAccessGroup)
+    : [],
+  membership: team.membership == null
+    ? null
+    : {
+      ...team.membership,
+      groupIds: Array.isArray(team.membership.groupIds) && team.membership.groupIds.length > 0
+        ? team.membership.groupIds
+        : defaultTeamGroupIds(team.membership.role)
+    }
+})
+
 export const fetchRelayAdminTeams = async (token: string) =>
   await requestJson<RelayAdminTeamsResponse>(token, '/api/admin/teams')
+    .then(body => ({ ...body, teams: body.teams.map(normalizeTeam) }))
 
 export const fetchRelayAdminMessages = async (token: string, options?: { view?: 'sent' }) => {
   const searchParams = new URLSearchParams()
@@ -59,7 +90,7 @@ export const createRelayAdminTeam = async (token: string, input: CreateTeamInput
   await requestJson<{ team: RelayAdminTeam }>(token, '/api/admin/teams', {
     body: JSON.stringify(input),
     method: 'POST'
-  })
+  }).then(body => ({ team: normalizeTeam(body.team) }))
 
 export const updateRelayAdminTeam = async (token: string, team: RelayAdminTeam, input: UpdateTeamInput) =>
   await requestJson<{ team: RelayAdminTeam }>(
@@ -69,27 +100,27 @@ export const updateRelayAdminTeam = async (token: string, team: RelayAdminTeam, 
       body: JSON.stringify(input),
       method: 'PATCH'
     }
-  )
+  ).then(body => ({ team: normalizeTeam(body.team) }))
 
 export const archiveRelayAdminTeam = async (token: string, teamId: string) =>
   await requestJson<{ team: RelayAdminTeam }>(
     token,
     `/api/admin/teams/${encodeURIComponent(teamId)}/archive`,
     { method: 'POST' }
-  )
+  ).then(body => ({ team: normalizeTeam(body.team) }))
 
 export const restoreRelayAdminTeam = async (token: string, teamId: string) =>
   await requestJson<{ team: RelayAdminTeam }>(
     token,
     `/api/admin/teams/${encodeURIComponent(teamId)}/restore`,
     { method: 'POST' }
-  )
+  ).then(body => ({ team: normalizeTeam(body.team) }))
 
 export const fetchRelayAdminTeamMembers = async (token: string, teamId: string) =>
   await requestJson<{ members: RelayAdminTeamMember[] }>(
     token,
     `/api/admin/teams/${encodeURIComponent(teamId)}/members`
-  )
+  ).then(body => ({ members: body.members.map(normalizeTeamMember) }))
 
 export const fetchRelayAdminTeamInvitations = async (token: string, teamId: string) =>
   await requestJson<{ invitations: RelayAdminTeamInvitation[] }>(
@@ -103,6 +134,47 @@ export const fetchRelayAdminTeamAuditEvents = async (token: string, teamId: stri
     `/api/admin/teams/${encodeURIComponent(teamId)}/audit-events`
   )
 
+export const fetchRelayAdminTeamAccessGroups = async (token: string, teamId: string) =>
+  await requestJson<{ groups: RelayAdminAccessGroup[] }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(teamId)}/access-groups`
+  ).then(body => ({ groups: body.groups.map(normalizeRelayAdminAccessGroup) }))
+
+export const createRelayAdminTeamAccessGroup = async (
+  token: string,
+  teamId: string,
+  input: CreateAccessGroupInput
+) =>
+  await requestJson<{ group: RelayAdminAccessGroup }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(teamId)}/access-groups`,
+    {
+      body: JSON.stringify(input),
+      method: 'POST'
+    }
+  ).then(body => ({ group: normalizeRelayAdminAccessGroup(body.group) }))
+
+export const updateRelayAdminTeamAccessGroup = async (
+  token: string,
+  teamId: string,
+  input: UpdateAccessGroupInput
+) =>
+  await requestJson<{ group: RelayAdminAccessGroup }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(teamId)}/access-groups/${encodeURIComponent(input.id)}`,
+    {
+      body: JSON.stringify(input),
+      method: 'PATCH'
+    }
+  ).then(body => ({ group: normalizeRelayAdminAccessGroup(body.group) }))
+
+export const deleteRelayAdminTeamAccessGroup = async (token: string, teamId: string, groupId: string) =>
+  await requestJson<{ deleted: boolean; group: RelayAdminAccessGroup }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(teamId)}/access-groups/${encodeURIComponent(groupId)}`,
+    { method: 'DELETE' }
+  ).then(body => ({ ...body, group: normalizeRelayAdminAccessGroup(body.group) }))
+
 export const createRelayAdminTeamMember = async (token: string, input: CreateTeamMemberInput) =>
   await requestJson<{ member: RelayAdminTeamMember }>(
     token,
@@ -111,7 +183,7 @@ export const createRelayAdminTeamMember = async (token: string, input: CreateTea
       body: JSON.stringify(input),
       method: 'POST'
     }
-  )
+  ).then(body => ({ member: normalizeTeamMember(body.member) }))
 
 export const createRelayAdminTeamInvitation = async (token: string, input: CreateTeamInvitationInput) =>
   await requestJson<{ invitation: RelayAdminTeamInvitation }>(
@@ -149,14 +221,14 @@ export const updateRelayAdminTeamMember = async (
       body: JSON.stringify(input),
       method: 'PATCH'
     }
-  )
+  ).then(body => ({ member: normalizeTeamMember(body.member) }))
 
 export const deleteRelayAdminTeamMember = async (token: string, member: RelayAdminTeamMember) =>
   await requestJson<{ deleted: boolean; member: RelayAdminTeamMember }>(
     token,
     `/api/admin/teams/${encodeURIComponent(member.teamId)}/members/${encodeURIComponent(member.userId)}`,
     { method: 'DELETE' }
-  )
+  ).then(body => ({ ...body, member: normalizeTeamMember(body.member) }))
 
 export const updateRelayAdminTeamPolicy = async (token: string, input: UpdateTeamPolicyInput) =>
   await requestJson<{ policy: RelayAdminTeamPolicy }>(token, '/api/admin/team-policy', {
