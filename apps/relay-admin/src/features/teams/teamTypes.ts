@@ -1,4 +1,6 @@
 /* eslint-disable max-lines -- Relay Admin team contracts stay in one feature-local type file. */
+import type { RelayAdminAccessGroup, RelayAdminEffectiveAccess } from '../../shared/model/adminTypes'
+
 export type RelayAdminTeamMemberRole = 'admin' | 'editor' | 'member' | 'owner' | 'viewer'
 export type RelayAdminTeamInvitationStatus = 'accepted' | 'declined' | 'pending' | 'revoked'
 export type RelayAdminConfigAssignmentMode = 'default' | 'override'
@@ -37,6 +39,7 @@ export interface RelayAdminTeamPolicy {
 }
 
 export interface RelayAdminTeam {
+  accessGroups: RelayAdminAccessGroup[]
   archivedAt: string | null
   avatarUrl: string | null
   createdAt: string
@@ -47,6 +50,7 @@ export interface RelayAdminTeam {
   membership: {
     configEnabled: boolean
     defaultForPublishing: boolean
+    groupIds: string[]
     role: RelayAdminTeamMemberRole
   } | null
   name: string
@@ -62,6 +66,8 @@ export interface RelayAdminTeamMember {
   createdByUserId: string
   defaultForPublishing: boolean
   email: string | null
+  effectiveAccess: RelayAdminEffectiveAccess
+  groupIds: string[]
   id: string
   name: string | null
   role: RelayAdminTeamMemberRole
@@ -85,6 +91,7 @@ export interface RelayAdminTeamInvitation {
   createdByUserId: string
   defaultForPublishing: boolean
   email: string | null
+  groupIds: string[]
   id: string
   inviter: RelayAdminTeamInvitationUser | null
   respondedAt: string | null
@@ -240,6 +247,7 @@ export interface CreateTeamMemberInput {
   configEnabled?: boolean
   defaultForPublishing?: boolean
   email?: string
+  groupIds?: string[]
   role: RelayAdminTeamMemberRole
   teamId: string
   userId?: string
@@ -249,6 +257,7 @@ export interface CreateTeamInvitationInput {
   configEnabled?: boolean
   defaultForPublishing?: boolean
   email?: string
+  groupIds?: string[]
   role: RelayAdminTeamMemberRole
   teamId: string
   userId?: string
@@ -267,6 +276,7 @@ export interface CreateRelayAdminMessageInput {
 export interface UpdateTeamMemberInput {
   configEnabled?: boolean
   defaultForPublishing?: boolean
+  groupIds?: string[]
   role?: RelayAdminTeamMemberRole
 }
 

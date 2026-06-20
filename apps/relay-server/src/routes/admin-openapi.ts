@@ -308,10 +308,42 @@ const buildAllComponents = (bearerFormat: string) => ({
     },
     RelayProfileAccessToken: {
       type: 'object',
-      required: ['id', 'name', 'tokenPreview', 'createdAt', 'lastUsedAt', 'revokedAt'],
+      required: [
+        'id',
+        'name',
+        'permissionGroupIds',
+        'permissionGroupMode',
+        'scope',
+        'teamId',
+        'tokenPreview',
+        'createdAt',
+        'lastUsedAt',
+        'revokedAt'
+      ],
       properties: {
         id: { type: 'string' },
         name: { type: 'string' },
+        permissionGroupIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Platform or team access group ids granted to this token when permissionGroupMode is custom.'
+        },
+        permissionGroupMode: {
+          type: 'string',
+          enum: ['all', 'custom'],
+          description:
+            'all follows the current account platform groups or the bound team member groups; custom restricts the token to listed groups.'
+        },
+        scope: {
+          type: 'string',
+          enum: ['user', 'team', 'platform'],
+          description:
+            'Token scope. user can call current-account APIs, team is restricted to one team, platform can call platform APIs granted by platform groups.'
+        },
+        teamId: {
+          ...nullableString,
+          description: 'Bound team id for team-scoped tokens. Null for user and platform tokens.'
+        },
         tokenPreview: { type: 'string' },
         createdAt: { type: 'string', format: 'date-time' },
         lastUsedAt: nullableString,
@@ -362,7 +394,48 @@ const buildAllComponents = (bearerFormat: string) => ({
     RelayProfileAccessTokenCreate: {
       type: 'object',
       properties: {
-        name: { type: 'string' }
+        name: { type: 'string' },
+        permissionGroupIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Platform group ids for platform tokens or team member group ids for team tokens.'
+        },
+        permissionGroupMode: {
+          type: 'string',
+          enum: ['all', 'custom']
+        },
+        scope: {
+          type: 'string',
+          enum: ['user', 'team', 'platform'],
+          description: 'Defaults to platform for backward compatibility.'
+        },
+        teamId: {
+          type: 'string',
+          description: 'Required when scope is team.'
+        }
+      }
+    },
+    RelayProfileAccessTokenUpdate: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        permissionGroupIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Platform group ids for platform tokens or team member group ids for team tokens.'
+        },
+        permissionGroupMode: {
+          type: 'string',
+          enum: ['all', 'custom']
+        },
+        scope: {
+          type: 'string',
+          enum: ['user', 'team', 'platform']
+        },
+        teamId: {
+          type: 'string',
+          description: 'Required when scope is team.'
+        }
       }
     },
     RelayProfileAccessTokenCreateResponse: {
@@ -372,7 +445,7 @@ const buildAllComponents = (bearerFormat: string) => ({
         accessToken: {
           type: 'string',
           writeOnly: true,
-          description: 'Full system access token. Returned only once.'
+          description: 'Full API access token. Returned only once.'
         },
         token: { $ref: '#/components/schemas/RelayProfileAccessToken' }
       }
@@ -438,6 +511,85 @@ const buildAllComponents = (bearerFormat: string) => ({
         devices: { type: 'object', additionalProperties: true },
         forwarding: { type: 'object', additionalProperties: true },
         traces: { type: 'object', additionalProperties: true }
+      }
+    },
+    RelayAccessGroup: {
+      type: 'object',
+      required: [
+        'id',
+        'scope',
+        'name',
+        'localizedDescriptions',
+        'builtIn',
+        'parentGroupId',
+        'disabled',
+        'disabledAt',
+        'capabilities',
+        'quotas',
+        'memberCount',
+        'createdAt',
+        'updatedAt'
+      ],
+      properties: {
+        id: { type: 'string' },
+        scope: { type: 'string', enum: ['platform', 'team'] },
+        name: { type: 'string' },
+        description: nullableString,
+        localizedDescriptions: {
+          type: 'object',
+          additionalProperties: { type: 'string' },
+          description: 'Localized descriptions keyed by BCP 47 locale.'
+        },
+        builtIn: { type: 'boolean' },
+        parentGroupId: nullableString,
+        disabled: { type: 'boolean' },
+        disabledAt: nullableString,
+        capabilities: {
+          type: 'object',
+          required: ['allow', 'deny'],
+          properties: {
+            allow: { type: 'array', items: { type: 'string' } },
+            deny: { type: 'array', items: { type: 'string' } }
+          }
+        },
+        quotas: {
+          type: 'object',
+          additionalProperties: {
+            oneOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }]
+          }
+        },
+        memberCount: { type: 'integer', minimum: 0 },
+        createdAt: { type: 'string', format: 'date-time' },
+        updatedAt: nullableString
+      }
+    },
+    RelayAccessGroupInput: {
+      type: 'object',
+      additionalProperties: true,
+      properties: {
+        id: { type: 'string', description: 'Optional operator supplied group id.' },
+        scope: { type: 'string', enum: ['platform', 'team'] },
+        name: { type: 'string' },
+        description: { type: 'string' },
+        localizedDescriptions: {
+          type: 'object',
+          additionalProperties: { type: 'string' }
+        },
+        parentGroupId: { type: 'string' },
+        capabilities: {
+          type: 'object',
+          properties: {
+            allow: { type: 'array', items: { type: 'string' } },
+            deny: { type: 'array', items: { type: 'string' } }
+          }
+        },
+        quotas: {
+          type: 'object',
+          additionalProperties: {
+            oneOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }]
+          }
+        },
+        disabled: { type: 'boolean' }
       }
     },
     RelayTeamPolicy: {
@@ -754,14 +906,14 @@ const buildProfilePaths = () => ({
         200: jsonResponse('Current account security summary.', {
           $ref: '#/components/schemas/RelayProfileSecuritySummary'
         }),
-        401: errorResponse('A Relay login session or system access token is required.')
+        401: errorResponse('A Relay login session or API access token is required.')
       }
     })
   },
   '/api/profile/access-tokens': {
     post: bearerOperation({
       operationId: 'createRelayProfileAccessToken',
-      summary: 'Create a system access token for the current account',
+      summary: 'Create an API access token for the current account',
       tags: ['Profile security'],
       requestBody: requestBody({ $ref: '#/components/schemas/RelayProfileAccessTokenCreate' }),
       responses: {
@@ -769,16 +921,36 @@ const buildProfilePaths = () => ({
           $ref: '#/components/schemas/RelayProfileAccessTokenCreateResponse'
         }),
         401: errorResponse('A Relay login session is required.'),
-        403: errorResponse('System access tokens cannot create more access tokens.')
+        403: errorResponse('API access tokens cannot create more access tokens.')
       }
     })
   },
   '/api/profile/access-tokens/{tokenId}': {
+    patch: bearerOperation({
+      operationId: 'updateRelayProfileAccessToken',
+      summary: 'Update a current-account API access token permission grant',
+      tags: ['Profile security'],
+      parameters: [pathIdParameter('tokenId', 'API access token id.')],
+      requestBody: requestBody({ $ref: '#/components/schemas/RelayProfileAccessTokenUpdate' }),
+      responses: {
+        200: jsonResponse('Updated token metadata.', {
+          type: 'object',
+          required: ['token'],
+          properties: {
+            token: { $ref: '#/components/schemas/RelayProfileAccessToken' }
+          }
+        }),
+        400: errorResponse('The permission group grant is invalid.'),
+        401: errorResponse('A Relay login session is required.'),
+        403: errorResponse('API access tokens cannot update access tokens.'),
+        404: errorResponse('The access token was not found.')
+      }
+    }),
     delete: bearerOperation({
       operationId: 'revokeRelayProfileAccessToken',
-      summary: 'Revoke a system access token owned by the current account',
+      summary: 'Revoke an API access token owned by the current account',
       tags: ['Profile security'],
-      parameters: [pathIdParameter('tokenId', 'System access token id.')],
+      parameters: [pathIdParameter('tokenId', 'API access token id.')],
       responses: {
         200: jsonResponse('Revoked token metadata.', {
           type: 'object',
@@ -789,15 +961,35 @@ const buildProfilePaths = () => ({
           }
         }),
         401: errorResponse('A Relay login session is required.'),
-        403: errorResponse('System access tokens cannot revoke access tokens.'),
+        403: errorResponse('API access tokens cannot revoke access tokens.'),
         404: errorResponse('The access token was not found.')
+      }
+    })
+  },
+  '/api/profile/account': {
+    delete: bearerOperation({
+      operationId: 'deleteRelayProfileAccount',
+      summary: 'Delete the current Relay account',
+      description:
+        'Deletes the authenticated current account and removes its sessions, API access tokens, passkeys, devices, team memberships, user-targeted assignments, and profile audit entries. A Relay login session token or a current-user API access token may call this endpoint.',
+      tags: ['Profile security'],
+      responses: {
+        200: jsonResponse('Deleted current account.', {
+          type: 'object',
+          required: ['deleted', 'userId'],
+          properties: {
+            deleted: { type: 'boolean' },
+            userId: { type: 'string' }
+          }
+        }),
+        401: errorResponse('A Relay login session token or current-user API access token is required.')
       }
     })
   },
   '/api/profile/openapi-audit': {
     get: bearerOperation({
       operationId: 'listRelayProfileOpenApiAuditEvents',
-      summary: 'List OpenAPI calls made through current-account system access tokens',
+      summary: 'List OpenAPI calls made through current-account API access tokens',
       tags: ['Profile security'],
       parameters: [
         {
@@ -832,7 +1024,7 @@ const buildProfilePaths = () => ({
         }
       ],
       responses: {
-        200: jsonResponse('OpenAPI audit events for current-account system access tokens.', {
+        200: jsonResponse('OpenAPI audit events for current-account API access tokens.', {
           type: 'object',
           required: ['events'],
           properties: {
@@ -843,7 +1035,7 @@ const buildProfilePaths = () => ({
           }
         }),
         401: errorResponse('A Relay login session is required.'),
-        403: errorResponse('System access tokens cannot read audit history.')
+        403: errorResponse('API access tokens cannot read audit history.')
       }
     })
   },
@@ -914,6 +1106,7 @@ const teamManagementPaths = (prefix: '/api/admin' | '/api/relay', scope: 'Admin'
   const policyTag = scope === 'Admin' ? 'Admin team policy' : 'User team policy'
   const messageTag = 'Admin messages'
   const teamId = pathIdParameter('teamId', 'Relay team id or slug.')
+  const accessGroupId = pathIdParameter('accessGroupId', 'Relay access group id.')
   const memberId = pathIdParameter('memberId', 'Relay team member id.')
   const profileId = pathIdParameter('profileId', 'Relay configuration profile id.')
   const assignmentId = pathIdParameter('assignmentId', 'Relay configuration assignment id.')
@@ -1091,6 +1284,88 @@ const teamManagementPaths = (prefix: '/api/admin' | '/api/relay', scope: 'Admin'
           }),
           ...adminAuthResponses,
           404: errorResponse('The team was not found.')
+        }
+      })
+    },
+    [`${prefix}/teams/{teamId}/access-groups`]: {
+      get: bearerOperation({
+        operationId: `listRelay${scope}TeamAccessGroups`,
+        summary: 'List Relay team member access groups',
+        tags: [teamTag],
+        parameters: [teamId],
+        responses: {
+          200: jsonResponse('Relay team member access groups.', {
+            type: 'object',
+            required: ['groups'],
+            properties: {
+              groups: {
+                type: 'array',
+                items: { $ref: '#/components/schemas/RelayAccessGroup' }
+              }
+            }
+          }),
+          ...adminAuthResponses,
+          404: errorResponse('The team was not found.')
+        }
+      }),
+      post: bearerOperation({
+        operationId: `createRelay${scope}TeamAccessGroup`,
+        summary: 'Create a Relay team member access group',
+        tags: [teamTag],
+        parameters: [teamId],
+        requestBody: requestBody({ $ref: '#/components/schemas/RelayAccessGroupInput' }),
+        responses: {
+          200: jsonResponse('Created Relay team member access group.', {
+            type: 'object',
+            required: ['group'],
+            properties: {
+              group: { $ref: '#/components/schemas/RelayAccessGroup' }
+            }
+          }),
+          ...adminAuthResponses,
+          ...validationResponses,
+          404: errorResponse('The team was not found.')
+        }
+      })
+    },
+    [`${prefix}/teams/{teamId}/access-groups/{accessGroupId}`]: {
+      patch: bearerOperation({
+        operationId: `updateRelay${scope}TeamAccessGroup`,
+        summary: 'Update a Relay team member access group',
+        tags: [teamTag],
+        parameters: [teamId, accessGroupId],
+        requestBody: requestBody({ $ref: '#/components/schemas/RelayAccessGroupInput' }),
+        responses: {
+          200: jsonResponse('Updated Relay team member access group.', {
+            type: 'object',
+            required: ['group'],
+            properties: {
+              group: { $ref: '#/components/schemas/RelayAccessGroup' }
+            }
+          }),
+          ...adminAuthResponses,
+          ...validationResponses,
+          404: errorResponse('The team or access group was not found.')
+        }
+      }),
+      delete: bearerOperation({
+        operationId: `deleteRelay${scope}TeamAccessGroup`,
+        summary: 'Delete a Relay team member access group',
+        tags: [teamTag],
+        parameters: [teamId, accessGroupId],
+        responses: {
+          200: jsonResponse('Deleted Relay team member access group.', {
+            type: 'object',
+            required: ['deleted', 'group'],
+            properties: {
+              deleted: { type: 'boolean' },
+              group: { $ref: '#/components/schemas/RelayAccessGroup' }
+            }
+          }),
+          ...adminAuthResponses,
+          403: errorResponse('The group is built-in, the owner group, or cannot be changed by the caller.'),
+          404: errorResponse('The team or access group was not found.'),
+          409: errorResponse('The access group is still assigned or used as a parent.')
         }
       })
     },
@@ -1582,6 +1857,84 @@ const buildRelayUserPaths = () => ({
 
 const buildAdminPaths = () => ({
   ...teamManagementPaths('/api/admin', 'Admin'),
+  '/api/admin/access-groups': {
+    get: bearerOperation({
+      operationId: 'listRelayAdminAccessGroups',
+      summary: 'List platform access groups',
+      tags: ['Admin access groups'],
+      responses: {
+        200: jsonResponse('Platform access groups.', {
+          type: 'object',
+          required: ['groups'],
+          properties: {
+            groups: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/RelayAccessGroup' }
+            }
+          }
+        }),
+        ...adminAuthResponses
+      }
+    }),
+    post: bearerOperation({
+      operationId: 'createRelayAdminAccessGroup',
+      summary: 'Create a platform access group',
+      tags: ['Admin access groups'],
+      requestBody: requestBody({ $ref: '#/components/schemas/RelayAccessGroupInput' }),
+      responses: {
+        200: jsonResponse('Created platform access group.', {
+          type: 'object',
+          required: ['group'],
+          properties: {
+            group: { $ref: '#/components/schemas/RelayAccessGroup' }
+          }
+        }),
+        ...adminAuthResponses,
+        ...validationResponses
+      }
+    })
+  },
+  '/api/admin/access-groups/{accessGroupId}': {
+    patch: bearerOperation({
+      operationId: 'updateRelayAdminAccessGroup',
+      summary: 'Update a platform access group',
+      tags: ['Admin access groups'],
+      parameters: [pathIdParameter('accessGroupId', 'Relay platform access group id.')],
+      requestBody: requestBody({ $ref: '#/components/schemas/RelayAccessGroupInput' }),
+      responses: {
+        200: jsonResponse('Updated platform access group.', {
+          type: 'object',
+          required: ['group'],
+          properties: {
+            group: { $ref: '#/components/schemas/RelayAccessGroup' }
+          }
+        }),
+        ...adminAuthResponses,
+        ...validationResponses,
+        404: errorResponse('The access group was not found.')
+      }
+    }),
+    delete: bearerOperation({
+      operationId: 'deleteRelayAdminAccessGroup',
+      summary: 'Delete a platform access group',
+      tags: ['Admin access groups'],
+      parameters: [pathIdParameter('accessGroupId', 'Relay platform access group id.')],
+      responses: {
+        200: jsonResponse('Deleted platform access group.', {
+          type: 'object',
+          required: ['deleted', 'group'],
+          properties: {
+            deleted: { type: 'boolean' },
+            group: { $ref: '#/components/schemas/RelayAccessGroup' }
+          }
+        }),
+        ...adminAuthResponses,
+        403: errorResponse('The group is built-in, the owner group, or cannot be changed by the caller.'),
+        404: errorResponse('The access group was not found.'),
+        409: errorResponse('The access group is still assigned or used as a parent.')
+      }
+    })
+  },
   '/api/admin/users': {
     get: bearerOperation({
       operationId: 'listRelayAdminUsers',
@@ -1958,6 +2311,8 @@ const commonSchemas = [
 
 const adminSchemas = [
   ...commonSchemas,
+  'RelayAccessGroup',
+  'RelayAccessGroupInput',
   'RelayAuditEvent',
   'RelayAdminInvite',
   'RelayAdminInviteCreate',
@@ -1993,6 +2348,8 @@ const adminSchemas = [
 
 const profileSchemas = [
   ...commonSchemas,
+  'RelayAccessGroup',
+  'RelayAccessGroupInput',
   'RelayAuditEvent',
   'RelayConfigAssignment',
   'RelayConfigAssignmentInput',
@@ -2006,6 +2363,7 @@ const profileSchemas = [
   'RelayProfileAccessToken',
   'RelayProfileAccessTokenCreate',
   'RelayProfileAccessTokenCreateResponse',
+  'RelayProfileAccessTokenUpdate',
   'RelayOpenApiAuditEvent',
   'RelayProfilePasswordChange',
   'RelayProfilePasskeyOptions',
@@ -2022,8 +2380,7 @@ const profileSchemas = [
 
 export const buildRelayAdminOpenApiDocument = (baseUrl: string) =>
   buildRelayOpenApiDocument(baseUrl, {
-    bearerFormat:
-      'Deployment admin token, Relay login session token, or user system access token with admin permissions',
+    bearerFormat: 'Deployment admin token, Relay login session token, or user API access token with admin permissions',
     description:
       'Machine-readable REST API contract for OneWorks Relay platform administration. Protected endpoints use `Authorization: Bearer <token>` and require admin permissions.',
     paths: {
@@ -2038,6 +2395,7 @@ export const buildRelayAdminOpenApiDocument = (baseUrl: string) =>
     schemaNames: adminSchemas,
     tags: [
       ...commonTags,
+      { name: 'Admin access groups', description: 'Platform user group capability and quota management.' },
       { name: 'Admin team policy', description: 'Tenant team and managed configuration policy.' },
       { name: 'Admin teams', description: 'Platform team, member, invitation, and audit management.' },
       { name: 'Admin configuration', description: 'Platform managed configuration profiles and secrets.' },
@@ -2053,9 +2411,9 @@ export const buildRelayAdminOpenApiDocument = (baseUrl: string) =>
 
 export const buildRelayProfileOpenApiDocument = (baseUrl: string) =>
   buildRelayOpenApiDocument(baseUrl, {
-    bearerFormat: 'Relay login session token or user system access token',
+    bearerFormat: 'Relay login session token or user API access token',
     description:
-      'Machine-readable REST API contract for the current Relay user account. Profile security mutations require a normal Relay login session.',
+      'Machine-readable REST API contract for the current Relay user account. API access token management, password changes, and passkey registration require a normal Relay login session; account deletion also accepts a current-user API access token.',
     paths: {
       ...buildOpenApiPaths(
         '/api/profile/openapi.json',
@@ -2069,7 +2427,7 @@ export const buildRelayProfileOpenApiDocument = (baseUrl: string) =>
     schemaNames: profileSchemas,
     tags: [
       ...commonTags,
-      { name: 'Profile security', description: 'Current-account security and system access token operations.' },
+      { name: 'Profile security', description: 'Current-account security and API access token operations.' },
       { name: 'User team policy', description: 'Current-user team and managed configuration policy.' },
       { name: 'User teams', description: 'Current-user team, member, invitation, and audit operations.' },
       {

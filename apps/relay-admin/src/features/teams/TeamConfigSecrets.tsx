@@ -175,16 +175,8 @@ export const TeamConfigSecrets = ({ disabled, team, token }: TeamConfigSecretsPr
         title='创建密钥'
         type='primary'
       />
-      <AdminActionButton
-        aria-label='刷新密钥'
-        disabled={disabled || loading}
-        iconName='refresh'
-        onClick={refreshSecrets}
-        size='small'
-        title='刷新密钥'
-      />
     </Space>
-  ), [disabled, loading, refreshSecrets])
+  ), [disabled])
 
   useTeamDetailTabActions('secrets', tabActions)
 

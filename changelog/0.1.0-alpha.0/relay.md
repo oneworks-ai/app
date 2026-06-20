@@ -11,4 +11,5 @@
 - Add Relay team configuration distribution APIs, Admin team/message management surfaces, and plugin-side team config snapshot consumption.
 - Combine Relay Admin user detail team memberships and devices into a tabbed detail area.
 - Add separated Relay Admin/Profile OpenAPI documents, profile system access tokens, token management, and OpenAPI audit trails.
+- Add Relay access groups, team member groups, scoped API tokens, and OpenAPI documentation for their management APIs.
 - Document the official domain, DNS, and email topology for public, dev, Cloudflare, Vercel, and support-mail deployments.

@@ -1,10 +1,13 @@
+/* eslint-disable max-lines -- Team member route handlers keep member mutation policy together. */
+
 import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+import { defaultTeamAccessGroupIds, resolveUserPlatformAccess, teamAccessGroupsForTeam } from '../access-groups.js'
 import type { RelayAuthContext } from '../auth/permissions.js'
 import { readRequestBody, sendJson } from '../http.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
-import { findRelayTeamMember, isRelayTeamRole, teamMemberCount } from '../teams.js'
+import { findRelayTeamMember, isRelayTeamRole, teamMemberCount, userTeamCount } from '../teams.js'
 import type { RelayServerArgs, RelayStore, RelayTeam, RelayTeamMember } from '../types.js'
 import { now } from '../utils.js'
 import {
@@ -16,6 +19,27 @@ import {
   policyLimitExceeded,
   serializeTeamMember
 } from './team-route-utils.js'
+
+const readGroupIds = (value: unknown) => (
+  Array.isArray(value)
+    ? [
+      ...new Set(
+        value.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map(item => item.trim())
+      )
+    ]
+    : undefined
+)
+
+const validateTeamGroupIds = (team: RelayTeam, groupIds: string[]) => (
+  groupIds.every(groupId => teamAccessGroupsForTeam(team).some(group => group.id === groupId && group.scope === 'team'))
+)
+
+const userJoinedTeamQuotaExceeded = (store: RelayStore, userId: string) => {
+  const user = store.users.find(item => item.id === userId)
+  if (user == null) return false
+  const limit = resolveUserPlatformAccess(store, user).quotas.maxTeamsJoined
+  return limit != null && userTeamCount(store, user.id) >= limit
+}
 
 export const listMembers = (
   res: ServerResponse,
@@ -30,7 +54,7 @@ export const listMembers = (
   }
   const members = store.teamMembers
     .filter(member => member.teamId === team.id)
-    .map(member => serializeTeamMember(member, store.users.find(user => user.id === member.userId)))
+    .map(member => serializeTeamMember(member, store, store.users.find(user => user.id === member.userId)))
   sendJson(res, 200, { members }, args.allowOrigin)
 }
 
@@ -61,12 +85,22 @@ export const createMember = async (
     sendJson(res, 409, { error: 'Team member already exists.' }, args.allowOrigin)
     return
   }
+  if (userJoinedTeamQuotaExceeded(store, user.id)) {
+    sendJson(res, 403, { error: 'User joined team quota reached.' }, args.allowOrigin)
+    return
+  }
   const role = isRelayTeamRole(body.role) ? body.role : 'member'
+  const groupIds = readGroupIds(body.groupIds) ?? defaultTeamAccessGroupIds(role)
+  if (!validateTeamGroupIds(team, groupIds)) {
+    sendJson(res, 400, { error: 'Invalid team access group.' }, args.allowOrigin)
+    return
+  }
   const member: RelayTeamMember = {
     id: randomUUID(),
     teamId: team.id,
     userId: user.id,
     role,
+    groupIds,
     configEnabled: body.configEnabled !== false,
     defaultForPublishing: body.defaultForPublishing === true,
     createdByUserId: authUserId(auth) ?? 'system',
@@ -74,7 +108,7 @@ export const createMember = async (
   }
   store.teamMembers.push(member)
   await storeRepository.write(store)
-  sendJson(res, 200, { member: serializeTeamMember(member, user) }, args.allowOrigin)
+  sendJson(res, 200, { member: serializeTeamMember(member, store, user) }, args.allowOrigin)
 }
 
 export const updateMember = async (
@@ -107,6 +141,19 @@ export const updateMember = async (
       return
     }
     member.role = body.role
+    if (!Object.prototype.hasOwnProperty.call(body, 'groupIds')) member.groupIds = defaultTeamAccessGroupIds(body.role)
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'groupIds')) {
+    const groupIds = readGroupIds(body.groupIds)
+    if (groupIds == null) {
+      sendJson(res, 400, { error: 'Team group IDs must be an array.' }, args.allowOrigin)
+      return
+    }
+    if (!validateTeamGroupIds(team, groupIds)) {
+      sendJson(res, 400, { error: 'Invalid team access group.' }, args.allowOrigin)
+      return
+    }
+    member.groupIds = groupIds.length === 0 ? defaultTeamAccessGroupIds(member.role) : groupIds
   }
   if (Object.prototype.hasOwnProperty.call(body, 'configEnabled')) {
     if (typeof body.configEnabled !== 'boolean') {
@@ -125,7 +172,7 @@ export const updateMember = async (
   member.updatedAt = now()
   await storeRepository.write(store)
   sendJson(res, 200, {
-    member: serializeTeamMember(member, store.users.find(user => user.id === member.userId))
+    member: serializeTeamMember(member, store, store.users.find(user => user.id === member.userId))
   }, args.allowOrigin)
 }
 
@@ -153,5 +200,5 @@ export const deleteMember = async (
   }
   const [member] = store.teamMembers.splice(index, 1)
   await storeRepository.write(store)
-  sendJson(res, 200, { deleted: true, member: serializeTeamMember(member, undefined) }, args.allowOrigin)
+  sendJson(res, 200, { deleted: true, member: serializeTeamMember(member, store, undefined) }, args.allowOrigin)
 }

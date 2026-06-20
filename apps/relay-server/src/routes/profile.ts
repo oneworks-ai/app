@@ -3,11 +3,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import type { RegistrationResponseJSON } from '@simplewebauthn/server'
 
+import { defaultPlatformAccessGroupIds, defaultTeamAccessGroupIds } from '../access-groups.js'
 import {
   createRelayAccessToken,
   listPublicRelayAccessTokens,
   publicRelayAccessToken,
-  revokeRelayAccessToken
+  revokeRelayAccessToken,
+  updateRelayAccessToken
 } from '../auth/access-tokens.js'
 import { ensureAuthIdentity } from '../auth/identities.js'
 import {
@@ -19,7 +21,7 @@ import { PasswordValidationError, hashPassword, verifyPassword } from '../auth/p
 import { resolveAuthContext } from '../auth/permissions.js'
 import { readRequestBody, sendJson } from '../http.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
-import type { RelayOpenApiAuditEvent, RelayServerArgs, RelayStore, RelayUser } from '../types.js'
+import type { RelayAccessTokenScope, RelayOpenApiAuditEvent, RelayServerArgs, RelayStore, RelayUser } from '../types.js'
 import { now } from '../utils.js'
 
 const cleanString = (value: unknown) => typeof value === 'string' ? value.trim() : ''
@@ -60,6 +62,54 @@ const requireProfileUser = (
     auth,
     user: auth.user
   }
+}
+
+const normalizeStringArray = (value: unknown) => (
+  Array.isArray(value)
+    ? [...new Set(value.map(cleanString).filter((item): item is string => item !== ''))]
+    : []
+)
+
+const normalizeAccessTokenScope = (value: unknown): RelayAccessTokenScope => {
+  if (value === 'team' || value === 'user') return value
+  return 'platform'
+}
+
+const accessTokenPermissionGrantFromBody = (body: Record<string, unknown>, store: RelayStore, user: RelayUser) => {
+  const scope = normalizeAccessTokenScope(body.scope)
+  if (scope === 'user') {
+    return {
+      permissionGroupIds: [],
+      permissionGroupMode: 'all' as const,
+      scope
+    }
+  }
+
+  const permissionGroupMode = body.permissionGroupMode === 'custom' ? 'custom' : 'all'
+  const permissionGroupIds = permissionGroupMode === 'custom'
+    ? normalizeStringArray(body.permissionGroupIds)
+    : []
+  if (scope === 'team') {
+    const teamId = cleanString(body.teamId)
+    if (teamId === '') return { error: 'Team access token requires a team id.' }
+    const team = store.teams.find(item => item.id === teamId)
+    if (team == null) return { error: 'Team not found.' }
+    const member = store.teamMembers.find(item => item.teamId === teamId && item.userId === user.id)
+    if (member == null) return { error: 'Access token cannot grant groups for a team the user has not joined.' }
+    const memberGroupIds = member.groupIds ?? defaultTeamAccessGroupIds(member.role)
+    const memberGroupIdSet = new Set(memberGroupIds)
+    const unknownGroupIds = permissionGroupIds.filter(groupId => !memberGroupIdSet.has(groupId))
+    return unknownGroupIds.length === 0
+      ? { permissionGroupIds, permissionGroupMode, scope, teamId }
+      : { error: `Access token cannot grant unassigned team member groups: ${unknownGroupIds.join(', ')}` }
+  }
+
+  const userGroupIds = user.groupIds ?? defaultPlatformAccessGroupIds(user.role)
+  const userGroupIdSet = new Set(userGroupIds)
+  const unknownGroupIds = permissionGroupIds.filter(groupId => !userGroupIdSet.has(groupId))
+  return unknownGroupIds.length === 0
+    ? { permissionGroupIds, permissionGroupMode, scope }
+    : { error: `Access token cannot grant unassigned access groups: ${unknownGroupIds.join(', ')}` }
 }
 
 const passkeySummary = (store: RelayStore, user: RelayUser, args: RelayServerArgs) => {
@@ -145,7 +195,7 @@ const sendSecuritySummary = (
   sendJson(res, 200, {
     accessTokens: listPublicRelayAccessTokens(store, profile.user.id),
     accountDeletion: {
-      available: false
+      available: true
     },
     password: {
       enabled: profile.user.passwordHash != null
@@ -158,6 +208,70 @@ const sendSecuritySummary = (
   }, args.allowOrigin)
 }
 
+const deleteUserFromMessageAudience = (message: NonNullable<RelayStore['messages']>[number], userId: string) => {
+  if (message.audience.scope !== 'users') return message
+  const userIds = (message.audience.userIds ?? []).filter(item => item !== userId)
+  return userIds.length === 0
+    ? undefined
+    : {
+      ...message,
+      audience: {
+        ...message.audience,
+        userIds
+      }
+    }
+}
+
+const deleteProfileAccount = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  args: RelayServerArgs,
+  store: RelayStore,
+  storeRepository: RelayStoreRepository
+) => {
+  const profile = requireProfileUser(req, res, args, store)
+  if (profile == null) return
+  const userId = profile.user.id
+  store.users = store.users.filter(user => user.id !== userId)
+  store.authIdentities = store.authIdentities.filter(identity => identity.userId !== userId)
+  store.sessions = store.sessions.filter(session => session.userId !== userId)
+  store.accessTokens = store.accessTokens.filter(token => token.userId !== userId)
+  store.openApiAuditEvents = (store.openApiAuditEvents ?? []).filter(event => event.userId !== userId)
+  store.passkeys = store.passkeys.filter(passkey => passkey.userId !== userId)
+  store.passkeyChallenges = store.passkeyChallenges.filter(challenge => challenge.userId !== userId)
+  store.devices = store.devices.filter(device => device.userId !== userId)
+  store.deviceSessions = store.deviceSessions.filter(session => session.userId !== userId)
+  store.forwardingJobs = store.forwardingJobs.filter(job => job.userId !== userId)
+  store.teamMembers = store.teamMembers.filter(member => member.userId !== userId)
+  store.teamInvitations = (store.teamInvitations ?? []).filter(invitation =>
+    invitation.userId !== userId && invitation.createdByUserId !== userId
+  )
+  store.messages = (store.messages ?? [])
+    .filter(message => message.createdByUserId !== userId)
+    .map(message => deleteUserFromMessageAudience(message, userId))
+    .filter((message): message is NonNullable<RelayStore['messages']>[number] => message != null)
+  store.configAssignments = store.configAssignments.map(assignment => ({
+    ...assignment,
+    target: assignment.target?.userIds == null
+      ? assignment.target
+      : {
+        ...assignment.target,
+        userIds: assignment.target.userIds.filter(item => item !== userId)
+      }
+  }))
+  store.configProfileAssignments = store.configProfileAssignments.map(assignment => ({
+    ...assignment,
+    target: assignment.target?.userIds == null
+      ? assignment.target
+      : {
+        ...assignment.target,
+        userIds: assignment.target.userIds.filter(item => item !== userId)
+      }
+  }))
+  await storeRepository.write(store)
+  sendJson(res, 200, { deleted: true, userId }, args.allowOrigin)
+}
+
 const createAccessToken = async (
   req: IncomingMessage,
   res: ServerResponse,
@@ -168,8 +282,17 @@ const createAccessToken = async (
   const profile = requireProfileUser(req, res, args, store, { sessionOnly: true })
   if (profile == null) return
   const body = await readRequestBody(req)
+  const permissionGrant = accessTokenPermissionGrantFromBody(body, store, profile.user)
+  if ('error' in permissionGrant) {
+    sendJson(res, 400, { error: permissionGrant.error }, args.allowOrigin)
+    return
+  }
   const result = createRelayAccessToken(store, {
     name: body.name,
+    permissionGroupIds: permissionGrant.permissionGroupIds,
+    permissionGroupMode: permissionGrant.permissionGroupMode,
+    scope: permissionGrant.scope,
+    teamId: permissionGrant.teamId,
     userId: profile.user.id
   })
   await storeRepository.write(store)
@@ -177,6 +300,44 @@ const createAccessToken = async (
     accessToken: result.token,
     token: publicRelayAccessToken(result.accessToken)
   }, args.allowOrigin)
+}
+
+const updateAccessToken = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  args: RelayServerArgs,
+  store: RelayStore,
+  storeRepository: RelayStoreRepository,
+  url: URL
+) => {
+  const profile = requireProfileUser(req, res, args, store, { sessionOnly: true })
+  if (profile == null) return
+  const tokenId = pathId(url, '/api/profile/access-tokens')
+  if (tokenId == null || tokenId === '') {
+    sendJson(res, 400, { error: 'Access token id is required.' }, args.allowOrigin)
+    return
+  }
+  const body = await readRequestBody(req)
+  const permissionGrant = accessTokenPermissionGrantFromBody(body, store, profile.user)
+  if ('error' in permissionGrant) {
+    sendJson(res, 400, { error: permissionGrant.error }, args.allowOrigin)
+    return
+  }
+  const updated = updateRelayAccessToken(store, {
+    name: body.name,
+    permissionGroupIds: permissionGrant.permissionGroupIds,
+    permissionGroupMode: permissionGrant.permissionGroupMode,
+    scope: permissionGrant.scope,
+    teamId: permissionGrant.teamId,
+    tokenId,
+    userId: profile.user.id
+  })
+  if (updated == null) {
+    sendJson(res, 404, { error: 'Access token not found.' }, args.allowOrigin)
+    return
+  }
+  await storeRepository.write(store)
+  sendJson(res, 200, { token: publicRelayAccessToken(updated) }, args.allowOrigin)
 }
 
 const revokeAccessToken = async (
@@ -333,12 +494,20 @@ export const handleProfileRoute = async (
     await createAccessToken(req, res, args, store, storeRepository)
     return true
   }
+  if (req.method === 'PATCH' && url.pathname.startsWith('/api/profile/access-tokens/')) {
+    await updateAccessToken(req, res, args, store, storeRepository, url)
+    return true
+  }
   if (req.method === 'DELETE' && url.pathname.startsWith('/api/profile/access-tokens/')) {
     await revokeAccessToken(req, res, args, store, storeRepository, url)
     return true
   }
   if (req.method === 'POST' && url.pathname === '/api/profile/password') {
     await changePassword(req, res, args, store, storeRepository)
+    return true
+  }
+  if (req.method === 'DELETE' && url.pathname === '/api/profile/account') {
+    await deleteProfileAccount(req, res, args, store, storeRepository)
     return true
   }
   if (req.method === 'POST' && url.pathname === '/api/profile/passkeys/register/options') {

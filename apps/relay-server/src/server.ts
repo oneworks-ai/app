@@ -6,6 +6,7 @@ import process from 'node:process'
 
 import { enabledRelayAuthProviders } from './auth/sso-provider-registry.js'
 import { sendJson } from './http.js'
+import { handleAdminAccessGroups } from './routes/access-groups.js'
 import { handleRelayAdminOpenApi, handleRelayProfileOpenApi } from './routes/admin-openapi.js'
 import { handleAdminSsoProviders } from './routes/admin-sso-providers.js'
 import { handleAdminInvites, handleAdminUsers } from './routes/admin.js'
@@ -202,6 +203,10 @@ const handleRelayRequestWithStore = async (
     }
     if (url.pathname.startsWith('/api/admin/security/tokens')) {
       await handleAdminSecurityTokens(req, res, args, store, storeRepository, url)
+      return
+    }
+    if (url.pathname === '/api/admin/access-groups' || url.pathname.startsWith('/api/admin/access-groups/')) {
+      await handleAdminAccessGroups(req, res, args, store, storeRepository, url)
       return
     }
     if (url.pathname === '/api/admin/users' || url.pathname.startsWith('/api/admin/users/')) {

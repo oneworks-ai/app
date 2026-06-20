@@ -23,7 +23,8 @@
 .relay-device-detail-panel {
   display: grid;
   gap: 10px;
-  padding: 14px var(--route-container-header-padding-inline);
+  padding: var(--relay-admin-padding)
+    var(--route-container-header-padding-inline);
 }
 
 .relay-device-detail {
@@ -127,7 +128,7 @@
   border-top: 1px solid var(--border-color);
   display: grid;
   gap: 10px;
-  padding-top: 14px;
+  padding-top: var(--relay-admin-padding);
 }
 
 .relay-device-detail__sessions-header h3 {
@@ -143,7 +144,7 @@
 }
 
 .relay-device-detail__empty {
-  padding: 28px 0;
+  padding: var(--relay-admin-padding) 0;
 }
 
 @media (max-width: 720px) {

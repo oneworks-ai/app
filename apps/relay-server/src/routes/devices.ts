@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+import { resolveUserPlatformAccess } from '../access-groups.js'
 import { authContextHasPermission, resolveAuthContext } from '../auth/permissions.js'
 import { publicUser } from '../auth/sessions.js'
 import {
@@ -78,8 +79,15 @@ const enforceDeviceLimit = (
   if (ownerUserId == null) return true
   if (existing != null && existing.userId === ownerUserId) return true
   const user = store.users.find(item => item.id === ownerUserId)
-  if (user?.maxDevices == null) return true
-  if (userDeviceCount(store, ownerUserId) < user.maxDevices) return true
+  if (user == null) return true
+  const quota = resolveUserPlatformAccess(store, user).quotas.maxDevices
+  const maxDevices = user.maxDevices == null
+    ? quota
+    : quota == null
+    ? user.maxDevices
+    : Math.min(user.maxDevices, quota)
+  if (maxDevices == null) return true
+  if (userDeviceCount(store, ownerUserId) < maxDevices) return true
   sendJson(res, 403, { error: 'Device limit reached.' }, args.allowOrigin)
   return false
 }

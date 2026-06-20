@@ -4,6 +4,12 @@ import { dirname } from 'node:path'
 import process from 'node:process'
 
 import {
+  defaultPlatformAccessGroupIds,
+  defaultTeamAccessGroupIds,
+  normalizeRelayAccessGroups,
+  normalizeRelayTeamAccessGroups
+} from './access-groups.js'
+import {
   normalizeRelayConfigProfile,
   normalizeRelayConfigProfileAssignment,
   normalizeRelayConfigProfileVersion
@@ -53,6 +59,7 @@ import { createToken, isRecord, normalizeRole, now } from './utils.js'
 
 const defaultStore = (): RelayStore => ({
   createdAt: now(),
+  accessGroups: normalizeRelayAccessGroups(undefined),
   auditEvents: [],
   openApiAuditEvents: [],
   configAssignments: [],
@@ -92,6 +99,7 @@ const normalizeUser = (value: Record<string, unknown>): RelayUser => ({
   disabledAt: typeof value.disabledAt === 'string' && value.disabledAt.trim() !== ''
     ? value.disabledAt.trim()
     : undefined,
+  groupIds: normalizeStringArray(value.groupIds) ?? defaultPlatformAccessGroupIds(value.role),
   maxDevices: Number.isFinite(Number(value.maxDevices)) ? Math.max(0, Math.trunc(Number(value.maxDevices))) : undefined,
   passwordHash: typeof value.passwordHash === 'string' && value.passwordHash.trim() !== ''
     ? value.passwordHash.trim()
@@ -228,6 +236,7 @@ const normalizeTeam = (value: Record<string, unknown>): RelayTeam | undefined =>
       ? value.description.trim()
       : undefined,
     avatarUrl: normalizeAvatarSource(value.avatarUrl),
+    accessGroups: normalizeRelayTeamAccessGroups(value.accessGroups),
     ...(typeof value.proxyModeEnabled === 'boolean' ? { proxyModeEnabled: value.proxyModeEnabled } : {}),
     createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
       ? value.createdByUserId.trim()
@@ -249,6 +258,8 @@ const normalizeTeamMember = (value: Record<string, unknown>): RelayTeamMember | 
     teamId,
     userId,
     role: normalizeTeamRole(value.role, 'member'),
+    groupIds: normalizeStringArray(value.groupIds) ??
+      defaultTeamAccessGroupIds(normalizeTeamRole(value.role, 'member')),
     ...(typeof value.configEnabled === 'boolean' ? { configEnabled: value.configEnabled } : {}),
     ...(typeof value.defaultForPublishing === 'boolean' ? { defaultForPublishing: value.defaultForPublishing } : {}),
     createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
@@ -280,6 +291,8 @@ const normalizeTeamInvitation = (value: Record<string, unknown>): RelayTeamInvit
     ...(rawUserId == null ? {} : { userId: rawUserId }),
     ...(rawEmail == null ? {} : { email: rawEmail }),
     role: normalizeTeamRole(value.role, 'member'),
+    groupIds: normalizeStringArray(value.groupIds) ??
+      defaultTeamAccessGroupIds(normalizeTeamRole(value.role, 'member')),
     ...(typeof value.configEnabled === 'boolean' ? { configEnabled: value.configEnabled } : {}),
     ...(typeof value.defaultForPublishing === 'boolean' ? { defaultForPublishing: value.defaultForPublishing } : {}),
     status: normalizeTeamInvitationStatus(value.status),
@@ -353,6 +366,7 @@ const addLegacyTeamMemberships = (
           id: teamId,
           slug: normalizeSlug(teamId, teamId),
           name: teamId,
+          accessGroups: normalizeRelayTeamAccessGroups(undefined),
           createdByUserId: user.id,
           createdAt: user.createdAt
         })
@@ -447,6 +461,7 @@ const normalizePasskeyChallenge = (value: Record<string, unknown>): RelayPasskey
 const normalizeInvite = (value: Record<string, unknown>): RelayInvite => ({
   code: typeof value.code === 'string' && value.code.trim() !== '' ? value.code.trim() : createToken(),
   role: normalizeRole(value.role, 'member'),
+  groupIds: normalizeStringArray(value.groupIds) ?? defaultPlatformAccessGroupIds(value.role),
   userId: typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined,
   maxUses: Number.isFinite(Number(value.maxUses)) ? Math.max(1, Number(value.maxUses)) : 1,
   used: Number.isFinite(Number(value.used)) ? Math.max(0, Number(value.used)) : 0,
@@ -711,11 +726,27 @@ const normalizeAccessToken = (value: Record<string, unknown>): RelayAccessToken 
   const tokenHash = typeof value.tokenHash === 'string' && value.tokenHash.trim() !== ''
     ? value.tokenHash.trim()
     : undefined
+  const scope = value.scope === 'team' || value.scope === 'user' ? value.scope : 'platform'
+  const teamId = typeof value.teamId === 'string' && value.teamId.trim() !== '' ? value.teamId.trim() : undefined
+  const permissionGroupMode = value.permissionGroupMode === 'custom' ? 'custom' : 'all'
+  const permissionGroupIds = Array.isArray(value.permissionGroupIds)
+    ? [
+      ...new Set(
+        value.permissionGroupIds.filter((item): item is string => (
+          typeof item === 'string' && item.trim() !== ''
+        )).map(item => item.trim())
+      )
+    ]
+    : []
   if (id == null || userId == null || tokenHash == null) return undefined
   return {
     id,
     userId,
     name: typeof value.name === 'string' && value.name.trim() !== '' ? value.name.trim() : 'System access token',
+    permissionGroupIds,
+    permissionGroupMode,
+    scope,
+    ...(scope === 'team' && teamId != null ? { teamId } : {}),
     tokenHash,
     tokenPreview: typeof value.tokenPreview === 'string' && value.tokenPreview.trim() !== ''
       ? value.tokenPreview.trim()
@@ -806,6 +837,7 @@ const normalizeEmailRiskState = (value: unknown): RelayEmailRiskState => {
 
 export const normalizeRelayStore = (value: unknown): RelayStore => {
   const store = isRecord(value) ? value : {}
+  const accessGroups = normalizeRelayAccessGroups(store.accessGroups)
   const users = Array.isArray(store.users) ? store.users.filter(isRecord).map(normalizeUser) : []
   const teams = Array.isArray(store.teams)
     ? store.teams.filter(isRecord).map(normalizeTeam).filter((team): team is RelayTeam => team != null)
@@ -824,6 +856,7 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
   appendLegacyAuthIdentities(authIdentities, users)
   return {
     createdAt: typeof store.createdAt === 'string' ? store.createdAt : now(),
+    accessGroups,
     auditEvents: Array.isArray(store.auditEvents)
       ? store.auditEvents.filter(isRecord).map(normalizeAuditLogEntry).filter((
         value

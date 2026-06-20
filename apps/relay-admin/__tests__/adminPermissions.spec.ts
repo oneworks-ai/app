@@ -34,6 +34,7 @@ describe('relay admin frontend permissions', () => {
     )
 
     await expect(fetchRelayAdminSnapshot('member-token', { includeAdminResources: false })).resolves.toEqual({
+      accessGroups: [],
       devices: [],
       invites: [],
       ssoProviders: [],

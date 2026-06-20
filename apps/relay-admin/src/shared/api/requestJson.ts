@@ -3,6 +3,17 @@ const parseJson = async (response: Response) => {
   return body != null && typeof body === 'object' ? body as Record<string, unknown> : {}
 }
 
+export class RequestJsonError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly body: Record<string, unknown>
+  ) {
+    super(message)
+    this.name = 'RequestJsonError'
+  }
+}
+
 export const requestJson = async <T>(
   token: string,
   path: string,
@@ -21,7 +32,7 @@ export const requestJson = async <T>(
     const message = typeof body.error === 'string' && body.error.trim() !== ''
       ? body.error.trim()
       : `Request failed with ${response.status}.`
-    throw new Error(message)
+    throw new RequestJsonError(message, response.status, body)
   }
   return body as T
 }

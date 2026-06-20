@@ -57,7 +57,7 @@ const getUserDetailIdFromPath = (pathname: string) => {
 }
 
 const getTeamDetailIdFromPath = (pathname: string) => {
-  const match = /^\/teams\/([^/]+)(?:\/(?:audit|members|profiles|secrets))?$/.exec(pathname)
+  const match = /^\/teams\/([^/]+)(?:\/(?:audit|groups|members|profiles|secrets)(?:\/[^/]+)?)?$/.exec(pathname)
   return match == null ? undefined : decodeURIComponent(match[1])
 }
 
@@ -129,6 +129,7 @@ export const AdminApp = () => {
   const headerBreadcrumb = useAdminRouteHeaderBreadcrumb(location.pathname, dashboard)
   const normalizedPathname = location.pathname === '/' ? '/' : location.pathname.replace(/\/+$/, '')
   const isProfileRoute = normalizedPathname === '/profile' || normalizedPathname.startsWith('/profile/')
+  const shouldShowProfileLogoutAction = normalizedPathname === '/profile' || normalizedPathname === '/profile/account'
   const isOpenApiRoute = normalizedPathname === '/openapi'
   const isMessagesRoute = normalizedPathname === '/messages'
   const isMessagePushRoute = normalizedPathname === '/message-pushes'
@@ -172,7 +173,9 @@ export const AdminApp = () => {
     ? <AdminIcon name='fact_check' />
     : activeSection.icon
   const isCreateActionActive = activeCreateSectionId != null && createSectionId === activeCreateSectionId
-  const canRenderSection = useCallback((sectionId: 'devices' | 'invites' | 'openapi' | 'sso' | 'teams' | 'users') => (
+  const canRenderSection = useCallback((
+    sectionId: 'access-groups' | 'devices' | 'invites' | 'openapi' | 'sso' | 'teams' | 'users'
+  ) => (
     dashboard.authStatus === 'checking' ||
     canAccessRelayAdminSection(dashboard.currentUser?.role, sectionId)
   ), [dashboard.authStatus, dashboard.currentUser?.role])
@@ -194,7 +197,7 @@ export const AdminApp = () => {
   const headerActionItems = useMemo(() => {
     const items: RouteContainerHeaderActionItem[] = []
 
-    if (isProfileRoute) {
+    if (shouldShowProfileLogoutAction) {
       items.push({
         danger: true,
         disabled: dashboard.token === '',
@@ -234,6 +237,17 @@ export const AdminApp = () => {
         label: '团队设置',
         title: '团队设置',
         onSelect: () => void navigate(`/teams/${encodeURIComponent(activeTeamDetail.id)}/settings`)
+      })
+    }
+
+    if (normalizedPathname === '/access-groups') {
+      items.push({
+        disabled: !dashboard.canLoad || dashboard.loading,
+        icon: <AdminIcon name='add' />,
+        key: 'access-groups:create',
+        label: '新建用户组',
+        title: '新建用户组',
+        onSelect: () => void navigate('/access-groups/new')
       })
     }
 
@@ -312,11 +326,11 @@ export const AdminApp = () => {
     activeCreateSectionId,
     activeTeamDetail,
     activeUserDetail,
+    shouldShowProfileLogoutAction,
     dashboard.canLoad,
     dashboard.currentUser?.role,
     dashboard.loading,
     dashboard.logout,
-    dashboard.refresh,
     dashboard.setUserDisabled,
     dashboard.token,
     canSendMessages,
@@ -330,6 +344,7 @@ export const AdminApp = () => {
     isProfileRoute,
     isTeamListRoute,
     isTeamDetailSettingsRoute,
+    normalizedPathname,
     navigate
   ])
 
@@ -455,9 +470,43 @@ export const AdminApp = () => {
                   ? <AdminDashboard dashboard={dashboard} sectionId='user-detail' />
                   : <Navigate to='/devices' replace />}
               />
+              <Route
+                path='access-groups'
+                element={canRenderSection('access-groups')
+                  ? <AdminDashboard dashboard={dashboard} sectionId='access-groups' />
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
+                path='access-groups/new'
+                element={canRenderSection('access-groups')
+                  ? (
+                    <AdminDashboard
+                      accessGroupEditorMode='create'
+                      dashboard={dashboard}
+                      sectionId='access-group-editor'
+                    />
+                  )
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
+                path='access-groups/:groupId'
+                element={canRenderSection('access-groups')
+                  ? (
+                    <AdminDashboard
+                      accessGroupEditorMode='edit'
+                      dashboard={dashboard}
+                      sectionId='access-group-editor'
+                    />
+                  )
+                  : <Navigate to='/devices' replace />}
+              />
               <Route path='profile' element={<AdminDashboard dashboard={dashboard} sectionId='profile' />} />
               <Route
                 path='profile/:profileTab'
+                element={<AdminDashboard dashboard={dashboard} sectionId='profile' />}
+              />
+              <Route
+                path='profile/:profileTab/:profileItemId'
                 element={<AdminDashboard dashboard={dashboard} sectionId='profile' />}
               />
               <Route
@@ -594,6 +643,30 @@ export const AdminApp = () => {
                       dashboard={dashboard}
                       resetTeamDetailSettingsSignal={teamDetailSettingsResetSignal}
                       sectionId='team-detail-settings'
+                    />
+                  )
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
+                path='teams/:teamId/groups/new'
+                element={canRenderSection('teams')
+                  ? (
+                    <AdminDashboard
+                      accessGroupEditorMode='create'
+                      dashboard={dashboard}
+                      sectionId='team-access-group-editor'
+                    />
+                  )
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
+                path='teams/:teamId/groups/:groupId'
+                element={canRenderSection('teams')
+                  ? (
+                    <AdminDashboard
+                      accessGroupEditorMode='edit'
+                      dashboard={dashboard}
+                      sectionId='team-access-group-editor'
                     />
                   )
                   : <Navigate to='/devices' replace />}

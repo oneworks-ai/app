@@ -7,8 +7,11 @@ import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { AdminIcon } from '../../shared/ui/AdminIcon'
+import type { AdminIconName } from '../../shared/ui/AdminIcon'
 import { DataPanel } from '../../shared/ui/DataPanel'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
+import { TeamAccessGroups } from './TeamAccessGroups'
 import { TeamAuditEvents } from './TeamAuditEvents'
 import { TeamConfigProfiles } from './TeamConfigProfiles'
 import { TeamConfigSecrets } from './TeamConfigSecrets'
@@ -26,7 +29,7 @@ export interface TeamDetailPageProps {
 }
 
 const isTeamDetailTabKey = (value: string): value is TeamDetailTabKey =>
-  value === 'members' || value === 'profiles' || value === 'secrets' || value === 'audit'
+  value === 'members' || value === 'groups' || value === 'profiles' || value === 'secrets' || value === 'audit'
 
 const formatTimestamp = (value: string | null | undefined) => {
   if (value == null || value === '') return '-'
@@ -61,6 +64,13 @@ const teamRoleLabel = (role: RelayAdminTeamMemberRole | undefined) => {
   }
 }
 
+const teamTabLabel = (iconName: AdminIconName, label: string) => (
+  <span className='relay-team-panel__tab-label'>
+    <AdminIcon name={iconName} />
+    <span>{label}</span>
+  </span>
+)
+
 export const TeamDetailPage = ({
   disabled,
   loading,
@@ -71,6 +81,7 @@ export const TeamDetailPage = ({
   const { tabKey, teamId } = useParams()
   const navigate = useNavigate()
   const team = teams.find(item => item.id === teamId)
+  const [teamAccessGroups, setTeamAccessGroups] = useState(team?.accessGroups ?? [])
   const configDisabled = disabled || policy?.teamsEnabled === false
   const normalizedTabKey = tabKey ?? ''
   const activeTabKey: TeamDetailTabKey = isTeamDetailTabKey(normalizedTabKey) ? normalizedTabKey : 'members'
@@ -82,13 +93,21 @@ export const TeamDetailPage = ({
     }
   }, [])
   const tabActionsContext = useMemo(() => ({ registerTabActions }), [registerTabActions])
+  const teamWithAccessGroups = useMemo(
+    () => team == null ? undefined : { ...team, accessGroups: teamAccessGroups },
+    [team, teamAccessGroups]
+  )
+
+  useEffect(() => {
+    setTeamAccessGroups(team?.accessGroups ?? [])
+  }, [team?.accessGroups, team?.id])
 
   useEffect(() => {
     if (teamId == null || tabKey == null || isTeamDetailTabKey(tabKey)) return
     void navigate(`/teams/${encodeURIComponent(teamId)}/members`, { replace: true })
   }, [navigate, tabKey, teamId])
 
-  if (team == null) {
+  if (teamWithAccessGroups == null) {
     return (
       <DataPanel id='team-detail'>
         <section className='relay-team-detail'>
@@ -110,44 +129,48 @@ export const TeamDetailPage = ({
               className='relay-team-detail__avatar'
               shape='square'
               size={48}
-              src={team.avatarUrl ?? undefined}
+              src={teamWithAccessGroups.avatarUrl ?? undefined}
             >
-              {teamInitials(team.name)}
+              {teamInitials(teamWithAccessGroups.name)}
             </Avatar>
             <div className='relay-team-detail__identity-copy'>
               <div className='relay-team-detail__name-row'>
-                <h2>{team.name}</h2>
-                {team.archivedAt == null
+                <h2>{teamWithAccessGroups.name}</h2>
+                {teamWithAccessGroups.archivedAt == null
                   ? <StatusBadge tone='success'>启用</StatusBadge>
                   : <StatusBadge tone='warning'>已归档</StatusBadge>}
               </div>
-              <p className='relay-team-detail__slug'>{team.slug}</p>
+              <p className='relay-team-detail__slug'>{teamWithAccessGroups.slug}</p>
               <p
                 className={[
                   'relay-team-detail__description',
-                  team.description == null || team.description.trim() === '' ? 'is-empty' : ''
+                  teamWithAccessGroups.description == null || teamWithAccessGroups.description.trim() === ''
+                    ? 'is-empty'
+                    : ''
                 ].filter(Boolean).join(' ')}
               >
-                {team.description == null || team.description.trim() === '' ? '暂无团队介绍' : team.description}
+                {teamWithAccessGroups.description == null || teamWithAccessGroups.description.trim() === ''
+                  ? '暂无团队介绍'
+                  : teamWithAccessGroups.description}
               </p>
             </div>
           </div>
           <dl className='relay-team-detail__meta-list'>
             <div className='relay-team-detail__meta-item'>
               <dt>成员</dt>
-              <dd>{team.memberCount}</dd>
+              <dd>{teamWithAccessGroups.memberCount}</dd>
             </div>
             <div className='relay-team-detail__meta-item'>
               <dt>我的角色</dt>
-              <dd>{teamRoleLabel(team.membership?.role)}</dd>
+              <dd>{teamRoleLabel(teamWithAccessGroups.membership?.role)}</dd>
             </div>
             <div className='relay-team-detail__meta-item'>
               <dt>Proxy 模式</dt>
-              <dd>{team.proxyModeEnabled ? '允许' : '关闭'}</dd>
+              <dd>{teamWithAccessGroups.proxyModeEnabled ? '允许' : '关闭'}</dd>
             </div>
             <div className='relay-team-detail__meta-item'>
               <dt>创建时间</dt>
-              <dd>{formatTimestamp(team.createdAt)}</dd>
+              <dd>{formatTimestamp(teamWithAccessGroups.createdAt)}</dd>
             </div>
           </dl>
         </div>
@@ -160,46 +183,60 @@ export const TeamDetailPage = ({
               {
                 children: (
                   <TeamMembers
+                    accessGroups={teamWithAccessGroups.accessGroups}
                     disabled={configDisabled}
-                    team={team}
+                    team={teamWithAccessGroups}
                     token={token}
                   />
                 ),
                 key: 'members',
-                label: '成员'
+                label: teamTabLabel('group', '成员')
+              },
+              {
+                children: (
+                  <TeamAccessGroups
+                    disabled={configDisabled}
+                    groups={teamWithAccessGroups.accessGroups}
+                    team={teamWithAccessGroups}
+                    token={token}
+                    onGroupsChange={setTeamAccessGroups}
+                  />
+                ),
+                key: 'groups',
+                label: teamTabLabel('badge', '成员组')
               },
               {
                 children: (
                   <TeamConfigProfiles
                     disabled={configDisabled}
-                    team={team}
+                    team={teamWithAccessGroups}
                     token={token}
                   />
                 ),
                 key: 'profiles',
-                label: '配置方案'
+                label: teamTabLabel('admin_panel_settings', '配置方案')
               },
               {
                 children: (
                   <TeamConfigSecrets
                     disabled={configDisabled}
-                    team={team}
+                    team={teamWithAccessGroups}
                     token={token}
                   />
                 ),
                 key: 'secrets',
-                label: '密钥'
+                label: teamTabLabel('key', '密钥')
               },
               {
                 children: (
                   <TeamAuditEvents
                     disabled={configDisabled}
-                    team={team}
+                    team={teamWithAccessGroups}
                     token={token}
                   />
                 ),
                 key: 'audit',
-                label: '操作审计'
+                label: teamTabLabel('fact_check', '操作审计')
               }
             ]}
             tabBarExtraContent={tabActions[activeTabKey] == null
@@ -207,7 +244,7 @@ export const TeamDetailPage = ({
               : <div className='relay-team-panel__tab-actions'>{tabActions[activeTabKey]}</div>}
             onChange={key => {
               if (isTeamDetailTabKey(key)) {
-                void navigate(`/teams/${encodeURIComponent(team.id)}/${key}`)
+                void navigate(`/teams/${encodeURIComponent(teamWithAccessGroups.id)}/${key}`)
               }
             }}
           />

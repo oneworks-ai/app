@@ -4,7 +4,7 @@ import { authContextHasPermission } from '../auth/permissions.js'
 import type { RelayAuthContext } from '../auth/permissions.js'
 import { sendJson } from '../http.js'
 import { relayPermissions } from '../permissions/index.js'
-import { canWriteRelayTeamConfigs, findRelayTeam, findRelayTeamMember } from '../teams.js'
+import { findRelayTeam } from '../teams.js'
 import type {
   RelayConfigProfile,
   RelayConfigProfileAssignment,
@@ -12,22 +12,23 @@ import type {
   RelayServerArgs,
   RelayStore
 } from '../types.js'
-import { authUserId, isAdminAuth } from './team-route-utils.js'
+import { isAdminAuth, teamMemberHasCapability, teamMembershipForAuth } from './team-route-utils.js'
 
 export const canReadConfigProfileTeam = (store: RelayStore, auth: RelayAuthContext, teamId: string) => (
-  isAdminAuth(auth) || (() => {
-    const userId = authUserId(auth)
-    return authContextHasPermission(auth, relayPermissions.relayTeamsRead) &&
-      userId != null &&
-      findRelayTeamMember(store, teamId, userId) != null
-  })()
+  isAdminAuth(auth) ||
+  (
+    authContextHasPermission(auth, relayPermissions.relayTeamsRead) &&
+    teamMembershipForAuth(store, auth, teamId) != null
+  )
 )
 
 export const canWriteConfigProfileTeam = (store: RelayStore, auth: RelayAuthContext, teamId: string) => (
-  isAdminAuth(auth) || (() => {
-    const userId = authUserId(auth)
-    return canWriteRelayTeamConfigs(userId == null ? undefined : findRelayTeamMember(store, teamId, userId))
-  })()
+  isAdminAuth(auth) ||
+  teamMemberHasCapability(
+    store,
+    teamMembershipForAuth(store, auth, teamId),
+    relayPermissions.relayTeamConfigProfilesWrite
+  )
 )
 
 export const ensureWritableConfigProfileTeam = (

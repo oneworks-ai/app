@@ -4,11 +4,18 @@ import type { TableColumnsType } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Key } from 'react'
 
+import type { RelayAdminAccessGroup } from '../../shared/model/adminTypes'
 import { AdminActionButton } from '../../shared/ui/AdminActionButton'
 import { AdminColumnFilter } from '../../shared/ui/AdminColumnFilter'
 import { AdminListTable } from '../../shared/ui/AdminListTable'
 import type { AdminListColumnOption } from '../../shared/ui/AdminListTable'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
+import {
+  accessGroupName,
+  accessGroupOptions,
+  defaultTeamGroupIds,
+  roleFromTeamGroupIds
+} from '../access-groups/accessGroupModel'
 import { useTeamDetailTabActions } from './TeamDetailTabActions'
 import type {
   CreateTeamInvitationInput,
@@ -25,6 +32,7 @@ import {
 } from './teamsApi'
 
 export interface TeamMembersProps {
+  accessGroups: RelayAdminAccessGroup[]
   disabled: boolean
   team?: RelayAdminTeam
   token: string
@@ -34,17 +42,18 @@ interface TeamMemberFormValues {
   configEnabled: boolean
   defaultForPublishing: boolean
   email?: string
-  role: RelayAdminTeamMemberRole
+  groupIds: string[]
+  role?: RelayAdminTeamMemberRole
   userId?: string
 }
 
-const roleOptions: Array<{ label: string; value: RelayAdminTeamMemberRole }> = [
-  { label: 'owner', value: 'owner' },
-  { label: 'admin', value: 'admin' },
-  { label: 'editor', value: 'editor' },
-  { label: 'member', value: 'member' },
-  { label: 'viewer', value: 'viewer' }
-]
+type TeamMemberGroupFilter = 'all' | `group:${string}`
+
+const groupFilterValue = (groupId: string): TeamMemberGroupFilter => `group:${groupId}`
+
+const groupIdFromFilter = (value: TeamMemberGroupFilter) => (
+  value === 'all' ? undefined : value.slice('group:'.length)
+)
 
 const cleanText = (value: string | undefined) => value?.trim() ?? ''
 
@@ -60,11 +69,13 @@ const formatTimestamp = (value: string | null | undefined) => {
 }
 
 const TeamMemberInviteForm = ({
+  accessGroups,
   disabled,
   onInviteMember,
   onInvited,
   team
 }: {
+  accessGroups: RelayAdminAccessGroup[]
   disabled: boolean
   team: RelayAdminTeam
   onInviteMember: (input: CreateTeamInvitationInput) => Promise<void>
@@ -76,11 +87,13 @@ const TeamMemberInviteForm = ({
     const email = cleanText(values.email)
     const userId = cleanText(values.userId)
     if (email === '' && userId === '') return
+    const groupIds = values.groupIds.length === 0 ? defaultTeamGroupIds('member') : values.groupIds
     await onInviteMember({
       configEnabled: values.configEnabled,
       defaultForPublishing: values.defaultForPublishing,
       email,
-      role: values.role,
+      groupIds,
+      role: roleFromTeamGroupIds(groupIds, 'member'),
       teamId: team.id,
       userId
     })
@@ -91,7 +104,7 @@ const TeamMemberInviteForm = ({
   return (
     <Form
       form={form}
-      initialValues={{ configEnabled: true, defaultForPublishing: false, role: 'member' }}
+      initialValues={{ configEnabled: true, defaultForPublishing: false, groupIds: defaultTeamGroupIds('member') }}
       layout='vertical'
       onFinish={handleInvite}
     >
@@ -101,8 +114,13 @@ const TeamMemberInviteForm = ({
       <Form.Item label='用户 ID' name='userId'>
         <Input disabled={disabled} />
       </Form.Item>
-      <Form.Item label='团队角色' name='role' rules={[{ required: true }]}>
-        <Select disabled={disabled} options={roleOptions} />
+      <Form.Item label='成员组' name='groupIds' rules={[{ required: true }]}>
+        <Select
+          disabled={disabled}
+          mode='multiple'
+          optionFilterProp='label'
+          options={accessGroupOptions(accessGroups, 'team')}
+        />
       </Form.Item>
       <Form.Item label='启用团队配置' name='configEnabled' valuePropName='checked'>
         <Switch disabled={disabled} />
@@ -117,17 +135,17 @@ const TeamMemberInviteForm = ({
   )
 }
 
-export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
+export const TeamMembers = ({ accessGroups, disabled, team, token }: TeamMembersProps) => {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [error, setError] = useState<string | undefined>()
   const [loading, setLoading] = useState(false)
   const [members, setMembers] = useState<RelayAdminTeamMember[]>([])
   const [notice, setNotice] = useState<string | undefined>()
   const [revision, setRevision] = useState(0)
-  const [roleFilter, setRoleFilter] = useState<RelayAdminTeamMemberRole | 'all'>('all')
+  const [groupFilter, setGroupFilter] = useState<TeamMemberGroupFilter>('all')
   const [searchValue, setSearchValue] = useState('')
   const [selectedMemberKeys, setSelectedMemberKeys] = useState<Key[]>([])
-  const [visibleColumnKeys, setVisibleColumnKeys] = useState(['identity', 'role', 'config', 'createdAt'])
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState(['identity', 'groups', 'config', 'createdAt'])
   const refreshMembers = useCallback(() => setRevision(value => value + 1), [])
 
   useEffect(() => {
@@ -159,14 +177,21 @@ export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
 
   const filteredMembers = useMemo(() => {
     const search = searchValue.trim().toLowerCase()
+    const selectedGroupId = groupIdFromFilter(groupFilter)
     return members.filter(member => {
-      const values = [member.email ?? '', member.name ?? '', member.role, member.userId]
+      const values = [
+        member.email ?? '',
+        member.name ?? '',
+        member.role,
+        member.userId,
+        ...member.groupIds.flatMap(groupId => [groupId, accessGroupName(accessGroups, groupId)])
+      ]
       return (
-        (roleFilter === 'all' || member.role === roleFilter) &&
+        (selectedGroupId == null || member.groupIds.includes(selectedGroupId)) &&
         (search === '' || values.some(value => value.toLowerCase().includes(search)))
       )
     })
-  }, [members, roleFilter, searchValue])
+  }, [accessGroups, groupFilter, members, searchValue])
   const selectedMembers = useMemo(
     () => members.filter(member => selectedMemberKeys.includes(member.userId)),
     [members, selectedMemberKeys]
@@ -212,29 +237,37 @@ export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
       width: 300
     },
     {
-      dataIndex: 'role',
-      key: 'role',
+      key: 'groups',
       render: (_, member) => (
         <Select
-          aria-label={`团队角色 ${member.email ?? member.userId}`}
+          aria-label={`团队成员组 ${member.email ?? member.userId}`}
           disabled={disabled}
-          options={roleOptions}
+          mode='multiple'
+          optionFilterProp='label'
+          options={accessGroupOptions(accessGroups, 'team')}
           size='small'
-          value={member.role}
-          onChange={role => void updateMember(member, { role })}
+          value={member.groupIds.length === 0 ? defaultTeamGroupIds(member.role) : member.groupIds}
+          onChange={groupIds =>
+            void updateMember(member, { groupIds, role: roleFromTeamGroupIds(groupIds, member.role) })}
         />
       ),
       title: (
-        <AdminColumnFilter<RelayAdminTeamMemberRole | 'all'>
+        <AdminColumnFilter<TeamMemberGroupFilter>
           allValue='all'
-          ariaLabel='按团队角色过滤'
-          label='角色'
-          options={[{ label: '全部角色', value: 'all' }, ...roleOptions]}
-          value={roleFilter}
-          onChange={setRoleFilter}
+          ariaLabel='按成员组过滤'
+          label='成员组'
+          options={[
+            { label: '全部成员组', value: 'all' },
+            ...accessGroupOptions(accessGroups, 'team').map(option => ({
+              label: option.label,
+              value: groupFilterValue(option.value)
+            }))
+          ]}
+          value={groupFilter}
+          onChange={setGroupFilter}
         />
       ),
-      width: 130
+      width: 210
     },
     {
       key: 'config',
@@ -304,7 +337,7 @@ export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
   ]
   const columnOptions: AdminListColumnOption[] = [
     { key: 'identity', label: '成员', required: true },
-    { key: 'role', label: '角色' },
+    { key: 'groups', label: '成员组' },
     { key: 'config', label: '配置' },
     { key: 'createdAt', label: '加入时间' }
   ]
@@ -344,16 +377,8 @@ export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
             title='邀请成员'
             type='primary'
           />
-          <AdminActionButton
-            aria-label='刷新成员'
-            disabled={disabled || loading}
-            iconName='refresh'
-            onClick={refreshMembers}
-            size='small'
-            title='刷新成员'
-          />
         </Space>
-      ), [disabled, loading, refreshMembers, team])
+      ), [disabled, team])
 
   useTeamDetailTabActions('members', tabActions)
 
@@ -389,6 +414,7 @@ export const TeamMembers = ({ disabled, team, token }: TeamMembersProps) => {
       >
         <TeamMemberInviteForm
           disabled={disabled}
+          accessGroups={accessGroups}
           team={team}
           onInviteMember={inviteMember}
           onInvited={() => setDrawerOpen(false)}

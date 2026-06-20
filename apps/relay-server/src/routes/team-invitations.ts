@@ -3,10 +3,11 @@
 import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+import { defaultTeamAccessGroupIds, resolveUserPlatformAccess, teamAccessGroupsForTeam } from '../access-groups.js'
 import { resolveAuthContext } from '../auth/permissions.js'
 import { readRequestBody, sendJson } from '../http.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
-import { canManageRelayTeamMembers, findRelayTeamMember, isRelayTeamRole, teamMemberCount } from '../teams.js'
+import { findRelayTeamMember, isRelayTeamRole, teamMemberCount, userTeamCount } from '../teams.js'
 import type {
   RelayAuthProvider,
   RelayMessage,
@@ -41,6 +42,25 @@ const relayMessages = (store: RelayStore) => {
 }
 
 const cleanEmail = (value: unknown) => cleanString(value).toLowerCase()
+
+const readGroupIds = (value: unknown) => (
+  Array.isArray(value)
+    ? [
+      ...new Set(
+        value.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map(item => item.trim())
+      )
+    ]
+    : undefined
+)
+
+const validateTeamGroupIds = (team: RelayTeam, groupIds: string[]) => (
+  groupIds.every(groupId => teamAccessGroupsForTeam(team).some(group => group.id === groupId && group.scope === 'team'))
+)
+
+const userJoinedTeamQuotaExceeded = (store: RelayStore, user: RelayUser) => {
+  const limit = resolveUserPlatformAccess(store, user).quotas.maxTeamsJoined
+  return limit != null && userTeamCount(store, user.id) >= limit
+}
 
 const isPendingInvitation = (invitation: RelayTeamInvitation) => invitation.status === 'pending'
 
@@ -90,6 +110,7 @@ export const serializeTeamInvitation = (invitation: RelayTeamInvitation, store: 
     user: serializeUserSummary(targetUser),
     inviter: serializeUserSummary(inviter),
     role: invitation.role,
+    groupIds: invitation.groupIds ?? defaultTeamAccessGroupIds(invitation.role),
     configEnabled: invitation.configEnabled !== false,
     defaultForPublishing: invitation.defaultForPublishing === true,
     status: invitation.status,
@@ -209,7 +230,7 @@ const authCanManageMessageTeam = (
   auth: ReturnType<typeof resolveAuthContext>,
   teamId: string
 ) => (
-  auth?.kind === 'session' && canManageRelayTeamMembers(findRelayTeamMember(store, teamId, auth.user.id))
+  auth != null && canWriteTeamMembers(store, auth, teamId)
 )
 
 const isPlatformScopedMessageAudience = (audience: RelayMessageAudience) => (
@@ -389,12 +410,19 @@ export const createTeamInvitation = async (
     return
   }
 
+  const role = isRelayTeamRole(body.role) ? body.role : 'member'
+  const groupIds = readGroupIds(body.groupIds) ?? defaultTeamAccessGroupIds(role)
+  if (!validateTeamGroupIds(team, groupIds)) {
+    sendJson(res, 400, { error: 'Invalid team invitation access group.' }, args.allowOrigin)
+    return
+  }
   const invitation: RelayTeamInvitation = {
     id: randomUUID(),
     teamId: team.id,
     ...(userId == null || userId === '' ? {} : { userId }),
     ...(targetEmail === '' ? {} : { email: targetEmail }),
-    role: isRelayTeamRole(body.role) ? body.role : 'member',
+    role,
+    groupIds,
     configEnabled: body.configEnabled !== false,
     defaultForPublishing: body.defaultForPublishing === true,
     status: 'pending',
@@ -450,6 +478,10 @@ const acceptTeamInvitation = async (
     sendJson(res, 403, { error: 'Team member limit reached.' }, args.allowOrigin)
     return
   }
+  if (userJoinedTeamQuotaExceeded(store, targetUser)) {
+    sendJson(res, 403, { error: 'User joined team quota reached.' }, args.allowOrigin)
+    return
+  }
 
   const acceptedAt = now()
   const member: RelayTeamMember = {
@@ -457,6 +489,7 @@ const acceptTeamInvitation = async (
     teamId: invitation.teamId,
     userId: targetUser.id,
     role: invitation.role,
+    groupIds: invitation.groupIds ?? defaultTeamAccessGroupIds(invitation.role),
     configEnabled: invitation.configEnabled !== false,
     defaultForPublishing: invitation.defaultForPublishing === true,
     createdByUserId: invitation.createdByUserId,
