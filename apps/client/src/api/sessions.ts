@@ -24,6 +24,101 @@ export async function listSessions(
   return fetchApiJson<{ sessions: Session[] }>(path)
 }
 
+export type NativeHistoryAdapter = 'codex' | 'claude-code'
+
+export interface NativeHistoryImportSession {
+  adapter: NativeHistoryAdapter
+  createdAt: number
+  importedEvents: number
+  sessionId: string
+  sourcePath: string
+  title: string
+  updatedAt: number
+}
+
+export interface NativeHistoryImportResult {
+  importedEvents: number
+  importedSessions: number
+  matchedFiles: number
+  scannedFiles: number
+  sessions: NativeHistoryImportSession[]
+}
+
+export interface NativeHistoryImportPreviewCandidate {
+  adapter: NativeHistoryAdapter
+  createdAt: number
+  cwd: string
+  fileSizeBytes: number
+  importedSessionId?: string
+  isArchived: boolean
+  isImported: boolean
+  isLarge: boolean
+  nativeSessionId: string
+  sourcePath: string
+  title: string
+  updatedAt: number
+}
+
+export interface NativeHistoryImportAdapterPreview {
+  adapter: NativeHistoryAdapter
+  candidates: NativeHistoryImportPreviewCandidate[]
+  largeFiles: number
+  largestFileBytes: number
+  matchedFiles: number
+  scannedFiles: number
+  totalBytes: number
+}
+
+export interface NativeHistoryImportPreviewResult {
+  adapters: NativeHistoryImportAdapterPreview[]
+  largeFileThresholdBytes: number
+  largeFiles: number
+  largestFileBytes: number
+  matchedFiles: number
+  scannedFiles: number
+  totalBytes: number
+}
+
+export async function previewNativeProjectHistory(request?: {
+  adapters?: NativeHistoryAdapter[]
+  signal?: AbortSignal
+  sourcePaths?: string[]
+}): Promise<NativeHistoryImportPreviewResult> {
+  return fetchApiJson<NativeHistoryImportPreviewResult>('/api/sessions/native-history-import/preview', {
+    method: 'POST',
+    ...(request?.adapters != null || request?.sourcePaths != null
+      ? {
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          adapters: request.adapters,
+          sourcePaths: request.sourcePaths
+        })
+      }
+      : {}),
+    signal: request?.signal
+  })
+}
+
+export async function runNativeProjectHistoryImport(request?: {
+  adapters?: NativeHistoryAdapter[]
+  signal?: AbortSignal
+  sourcePaths?: string[]
+}): Promise<NativeHistoryImportResult> {
+  return fetchApiJson<NativeHistoryImportResult>('/api/sessions/native-history-import/run', {
+    method: 'POST',
+    ...(request?.adapters != null || request?.sourcePaths != null
+      ? {
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          adapters: request.adapters,
+          sourcePaths: request.sourcePaths
+        })
+      }
+      : {}),
+    signal: request?.signal
+  })
+}
+
 export function getSessionCacheKey(id: string) {
   return `/api/sessions/${encodeURIComponent(id)}`
 }

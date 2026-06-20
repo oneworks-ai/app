@@ -3,6 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getDb } from '#~/db/index.js'
 import { sessionsRouter } from '#~/routes/sessions.js'
+import {
+  consumeNativeProjectHistoryImportPrompt,
+  importNativeProjectHistoryAndReplay,
+  previewNativeProjectHistory
+} from '#~/services/runtime-store/history-import.js'
 import { createServerRuntimeSession } from '#~/services/runtime-store/session-control.js'
 import { deleteRuntimeSessionStores } from '#~/services/runtime-store/session-delete.js'
 import { createSessionWithInitialMessage } from '#~/services/session/create.js'
@@ -42,6 +47,12 @@ vi.mock('#~/services/runtime-store/session-control.js', () => ({
     typeof content === 'string'
       ? content.trim()
       : content.flatMap(item => item.type === 'text' && item.text != null ? [item.text.trim()] : []).join('\n')
+}))
+
+vi.mock('#~/services/runtime-store/history-import.js', () => ({
+  consumeNativeProjectHistoryImportPrompt: vi.fn(),
+  importNativeProjectHistoryAndReplay: vi.fn(),
+  previewNativeProjectHistory: vi.fn()
 }))
 
 vi.mock('#~/services/runtime-store/session-delete.js', () => ({
@@ -137,6 +148,141 @@ describe('sessionsRouter', () => {
 
     expect(db.getSession).toHaveBeenCalledWith(session.id)
     expect(ctx.body).toEqual({ session })
+  })
+
+  it('triggers native project history import', async () => {
+    const result = {
+      importedEvents: 2,
+      importedSessions: 1,
+      matchedFiles: 1,
+      scannedFiles: 3,
+      sessions: [{
+        adapter: 'codex',
+        createdAt: 1000,
+        importedEvents: 2,
+        sessionId: 'imported_codex_1',
+        sourcePath: '/home/.codex/sessions/1.jsonl',
+        title: 'Imported Codex session',
+        updatedAt: 2000
+      }]
+    }
+    vi.mocked(getDb).mockReturnValue({} as any)
+    vi.mocked(consumeNativeProjectHistoryImportPrompt).mockResolvedValue(result as any)
+
+    const handleImport = findRouteHandler('/native-history-import', 'POST')
+    const ctx = {
+      body: undefined
+    }
+
+    await handleImport(ctx)
+
+    expect(consumeNativeProjectHistoryImportPrompt).toHaveBeenCalledWith()
+    expect(ctx.body).toEqual(result)
+  })
+
+  it('runs native project history import manually', async () => {
+    const result = {
+      importedEvents: 0,
+      importedSessions: 0,
+      matchedFiles: 1,
+      scannedFiles: 1,
+      sessions: [{
+        adapter: 'claude-code',
+        createdAt: 1000,
+        importedEvents: 0,
+        sessionId: 'imported_claude_code_1',
+        sourcePath: '/home/.claude/projects/app/1.jsonl',
+        title: 'Already imported Claude session',
+        updatedAt: 2000
+      }]
+    }
+    vi.mocked(getDb).mockReturnValue({} as any)
+    vi.mocked(importNativeProjectHistoryAndReplay).mockResolvedValue(result as any)
+
+    const handleImport = findRouteHandler('/native-history-import/run', 'POST')
+    const ctx = {
+      request: {
+        body: {
+          adapters: ['claude-code'],
+          sourcePaths: ['/home/.claude/projects/app/1.jsonl']
+        }
+      },
+      body: undefined
+    }
+
+    await handleImport(ctx)
+
+    expect(importNativeProjectHistoryAndReplay).toHaveBeenCalledWith({
+      adapters: ['claude-code'],
+      sourcePaths: ['/home/.claude/projects/app/1.jsonl']
+    })
+    expect(ctx.body).toEqual(result)
+  })
+
+  it('previews native project history candidates without importing', async () => {
+    const result = {
+      adapters: [{
+        adapter: 'codex',
+        candidates: [{
+          adapter: 'codex',
+          createdAt: 1000,
+          cwd: '/workspace/root',
+          fileSizeBytes: 1024,
+          isImported: false,
+          isLarge: false,
+          nativeSessionId: 'codex-native-1',
+          sourcePath: '/home/.codex/sessions/1.jsonl',
+          title: 'Preview Codex session',
+          updatedAt: 2000
+        }],
+        largeFiles: 0,
+        largestFileBytes: 1024,
+        matchedFiles: 1,
+        scannedFiles: 2,
+        totalBytes: 1024
+      }],
+      largeFileThresholdBytes: 26214400,
+      largeFiles: 0,
+      largestFileBytes: 1024,
+      matchedFiles: 1,
+      scannedFiles: 2,
+      totalBytes: 1024
+    }
+    vi.mocked(getDb).mockReturnValue({} as any)
+    vi.mocked(previewNativeProjectHistory).mockResolvedValue(result as any)
+
+    const handlePreview = findRouteHandler('/native-history-import/preview', 'POST')
+    const ctx = {
+      request: {
+        body: {
+          adapters: ['codex']
+        }
+      },
+      body: undefined
+    }
+
+    await handlePreview(ctx)
+
+    expect(previewNativeProjectHistory).toHaveBeenCalledWith({ adapters: ['codex'] })
+    expect(importNativeProjectHistoryAndReplay).not.toHaveBeenCalled()
+    expect(ctx.body).toEqual(result)
+  })
+
+  it('rejects invalid native history import adapters', async () => {
+    vi.mocked(getDb).mockReturnValue({} as any)
+
+    const handleImport = findRouteHandler('/native-history-import/run', 'POST')
+    const ctx = {
+      request: {
+        body: {
+          adapters: ['codex', 'cursor']
+        }
+      },
+      body: undefined
+    }
+
+    await expect(handleImport(ctx)).rejects.toThrow('Invalid native history adapter')
+    expect(importNativeProjectHistoryAndReplay).not.toHaveBeenCalled()
   })
 
   it('throws session_not_found when a single session does not exist', () => {

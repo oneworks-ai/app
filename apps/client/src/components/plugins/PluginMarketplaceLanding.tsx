@@ -18,6 +18,7 @@ import type {
 } from '@oneworks/types'
 
 import { getApiErrorMessage, getConfig, updateConfig } from '#~/api.js'
+import { ActionSearchToolbar } from '#~/components/action-search-toolbar/ActionSearchToolbar'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import { listPluginMarketplaceCatalog } from '#~/plugins/api'
 
@@ -282,38 +283,31 @@ export function PluginMarketplaceLanding({
 
   return (
     <div className='plugin-marketplace'>
-      <div className='plugin-marketplace__toolbar'>
-        <Input
-          className='plugin-marketplace__search'
-          allowClear
-          prefix={<MaterialSymbol name='search' />}
-          placeholder={t('pluginStore.marketplaceSearchPlaceholder')}
-          value={query}
-          onChange={event => onQueryChange(event.target.value)}
-        />
-        <div className='plugin-marketplace__toolbar-actions'>
-          <Tooltip title={t('pluginStore.marketplaceFilter')}>
-            <Button
-              className={`plugin-marketplace__toolbar-button${expandedPanel === 'filter' ? ' is-active' : ''}`}
-              type='text'
-              aria-label={t('pluginStore.marketplaceFilter')}
-              aria-pressed={expandedPanel === 'filter'}
-              icon={<MaterialSymbol name='filter_alt' />}
-              onClick={() => togglePanel('filter')}
-            />
-          </Tooltip>
-          <Tooltip title={t('pluginStore.marketplaceConfig')}>
-            <Button
-              className={`plugin-marketplace__toolbar-button${expandedPanel === 'config' ? ' is-active' : ''}`}
-              type='text'
-              aria-label={t('pluginStore.marketplaceConfig')}
-              aria-pressed={expandedPanel === 'config'}
-              icon={<MaterialSymbol name='tune' />}
-              onClick={() => togglePanel('config')}
-            />
-          </Tooltip>
-        </div>
-      </div>
+      <ActionSearchToolbar
+        query={query}
+        placeholder={t('pluginStore.marketplaceSearchPlaceholder')}
+        onQueryChange={onQueryChange}
+        actions={[
+          {
+            active: expandedPanel === 'filter',
+            ariaLabel: t('pluginStore.marketplaceFilter'),
+            icon: 'filter_alt',
+            key: 'filter',
+            onClick: () => togglePanel('filter'),
+            pressed: expandedPanel === 'filter',
+            title: t('pluginStore.marketplaceFilter')
+          },
+          {
+            active: expandedPanel === 'config',
+            ariaLabel: t('pluginStore.marketplaceConfig'),
+            icon: 'tune',
+            key: 'config',
+            onClick: () => togglePanel('config'),
+            pressed: expandedPanel === 'config',
+            title: t('pluginStore.marketplaceConfig')
+          }
+        ]}
+      />
 
       {expandedPanel === 'filter' && (
         <div className='plugin-marketplace__panel plugin-marketplace__panel--filter'>

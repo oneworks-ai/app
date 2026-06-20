@@ -12,6 +12,7 @@ import type { ProjectHomeMigratedSegment } from '@oneworks/utils/project-home-mi
 import { loadConfigState } from '#~/services/config/index.js'
 import { acquireConfigWatchRuntime } from '#~/services/config/watch.js'
 import { getPluginManager } from '#~/services/plugins/index.js'
+import { autoImportNativeProjectHistoryAndReplay } from '#~/services/runtime-store/history-import.js'
 import { startRuntimeStoreWatcher } from '#~/services/runtime-store/watcher.js'
 import { installWebDebugChii } from '#~/services/web-debug/chii.js'
 
@@ -236,6 +237,21 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
       try {
         runtimeStoreWatcher = startRuntimeStoreWatcher({ deliverSessionEvent: handleChannelSessionEvent })
         logStartup('runtime store watcher start invoked')
+        void runtimeStoreWatcher.scanAndReplay()
+          .then(() => autoImportNativeProjectHistoryAndReplay(config))
+          .then((result) => {
+            if (result.importedEvents > 0 || result.matchedFiles > 0) {
+              logger.info({
+                importedEvents: result.importedEvents,
+                importedSessions: result.importedSessions,
+                matchedFiles: result.matchedFiles,
+                scannedFiles: result.scannedFiles
+              }, '[runtime-store] Native project history auto import complete')
+            }
+          })
+          .catch(error => {
+            logger.warn({ error }, '[runtime-store] Runtime store initial replay or native history auto import failed')
+          })
       } catch (error) {
         logStartup('runtime store watcher start failed')
         logger.warn({ error }, '[runtime-store] Failed to start watcher')

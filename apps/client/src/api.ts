@@ -112,10 +112,12 @@ export {
   listSessions,
   moveQueuedMessage,
   openSessionWorkspaceFileInExternalOpener,
+  previewNativeProjectHistory,
   readSessionWorkspaceFile,
   reorderQueuedMessages,
   respondSessionInteraction,
   revealSessionWorkspacePathInFileManager,
+  runNativeProjectHistoryImport,
   sendSessionMessage,
   terminateSession,
   transferSessionWorkspaceToLocal,
@@ -123,6 +125,14 @@ export {
   updateSession,
   updateSessionTitle,
   updateSessionWorkspaceFile
+} from './api/sessions'
+export type {
+  NativeHistoryAdapter,
+  NativeHistoryImportAdapterPreview,
+  NativeHistoryImportPreviewCandidate,
+  NativeHistoryImportPreviewResult,
+  NativeHistoryImportResult,
+  NativeHistoryImportSession
 } from './api/sessions'
 export type {
   SkillHubConfigSource,

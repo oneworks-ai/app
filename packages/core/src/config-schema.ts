@@ -312,6 +312,22 @@ export const serverConfigSchema = z.object({
     .describe('Extra public paths allowed on non-local hosts; channel webhook paths are always allowed')
 })
 
+const nativeHistoryImportAdapterSchema = z.enum(['codex', 'claude-code'])
+
+const nativeHistoryImportAdapterConfigSchema = z.object({
+  autoImport: z.boolean().optional().describe('Override automatic native history import for this adapter'),
+  maxFileSizeBytes: z.number().int().nonnegative().nullable().optional()
+    .describe('Override automatic native history import file size limit for this adapter')
+})
+
+export const nativeHistoryImportConfigSchema = z.object({
+  autoImport: z.boolean().optional().describe('Enable automatic native history import for all adapters by default'),
+  maxFileSizeBytes: z.number().int().nonnegative().nullable().optional()
+    .describe('Default automatic native history import file size limit'),
+  adapters: z.record(nativeHistoryImportAdapterSchema, nativeHistoryImportAdapterConfigSchema).optional()
+    .describe('Per-adapter automatic native history import overrides')
+})
+
 export const speechToTextCapabilitiesConfigSchema = z.object({
   streaming: z.boolean().optional().describe('Whether this service supports streaming transcription'),
   diarization: z.boolean().optional().describe('Whether this service can identify speakers'),
@@ -619,6 +635,8 @@ export const generalConfigSectionSchema = z.object({
   skillsMeta: skillsMetaConfigSchema.optional(),
   skillRegistries: z.array(configuredSkillRegistrySchema).optional()
     .describe('Skills CLI sources shown in the Knowledge Base skill market'),
+  nativeHistoryImport: nativeHistoryImportConfigSchema.optional()
+    .describe('Native Codex and Claude Code history import settings'),
   webAuth: webAuthConfigSchema.optional()
 })
 
@@ -711,6 +729,7 @@ export const baseConfigFileSchema = z.object({
   skillsMeta: skillsMetaConfigSchema.optional(),
   skillRegistries: z.array(configuredSkillRegistrySchema).optional()
     .describe('Skills CLI sources shown in the Knowledge Base skill market'),
+  nativeHistoryImport: nativeHistoryImportConfigSchema.optional(),
   webAuth: webAuthConfigSchema.optional(),
   conversation: conversationConfigSchema.optional(),
   plugins: pluginConfigSchema.optional(),

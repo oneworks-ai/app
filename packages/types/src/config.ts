@@ -688,6 +688,19 @@ export interface ServerConfig {
   publicPaths?: string[]
 }
 
+export type NativeHistoryImportAdapter = 'codex' | 'claude-code'
+
+export interface NativeHistoryImportAdapterConfig {
+  autoImport?: boolean
+  maxFileSizeBytes?: number | null
+}
+
+export interface NativeHistoryImportConfig {
+  autoImport?: boolean
+  maxFileSizeBytes?: number | null
+  adapters?: Partial<Record<NativeHistoryImportAdapter, NativeHistoryImportAdapterConfig>>
+}
+
 export type ConversationStarterMode = 'default' | 'workspace' | 'entity' | 'agent' | 'spec'
 
 export interface ConversationStarterWorktreeConfig {
@@ -836,6 +849,7 @@ export interface Config {
   skills?: SkillsConfig
   skillsMeta?: SkillsMetaConfig
   skillRegistries?: ConfiguredSkillRegistry[]
+  nativeHistoryImport?: NativeHistoryImportConfig
   webAuth?: WebAuthConfig
   conversation?: {
     style?: 'friendly' | 'programmatic'
@@ -900,6 +914,7 @@ export interface ConfigSection {
     skills?: Config['skills']
     skillsMeta?: Config['skillsMeta']
     skillRegistries?: Config['skillRegistries']
+    nativeHistoryImport?: Config['nativeHistoryImport']
     webAuth?: Config['webAuth']
   }
   conversation?: Config['conversation']

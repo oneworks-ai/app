@@ -35,6 +35,7 @@ import { resolveWorkspaceFileOpenerSelectModels } from '../utils/workspace-file-
 import { AboutSection, ConfigSectionPanel, ConfigSourceSwitch, DisplayValue } from './config'
 import { AppSettingsPanel } from './config/AppSettingsPanel'
 import { DesktopSettingsPanel } from './config/DesktopSettingsPanel'
+import { ExternalSessionsPanel } from './config/ExternalSessionsPanel'
 import {
   ModelServiceProviderPortalBottomPanel,
   addModelServiceProviderPortalTab,
@@ -43,6 +44,7 @@ import {
   syncModelServiceProviderPortalTabs
 } from './config/ModelServiceProviderPortalBottomPanel'
 import type { ModelServiceProviderPortalRequest } from './config/ModelServiceProviderPortalBottomPanel'
+import { NativeHistoryImportQuickEntry } from './config/NativeHistoryImportQuickEntry'
 import { WorktreeEnvironmentPanel } from './config/WorktreeEnvironmentPanel'
 import {
   getConfigDraftKey,
@@ -58,6 +60,7 @@ import {
 import { getPreferredConfigSourceForTab, resolveConfigSourceForMissingQuery } from './config/configSourceDefaults'
 import { cloneValue, collectUnsetPaths, getValueByPath, isEmptyValue } from './config/configUtils'
 import { editableConfigSectionKeys } from './config/editableConfigSections'
+import type { NativeHistoryImportSettings } from './config/external-sessions-panel-model'
 import {
   buildModelServiceConfigSessionInitialContent,
   buildModelServiceConfigSessionTitle,
@@ -331,6 +334,7 @@ export function ConfigView() {
     { key: 'voice', icon: 'mic', label: t('config.sections.voice'), value: currentSource?.voice },
     { key: 'shortcuts', icon: 'keyboard', label: t('config.sections.shortcuts'), value: currentSource?.shortcuts },
     { key: 'group-app', type: 'group', label: t('config.groups.app') },
+    { key: 'externalSessions', icon: 'history', label: t('config.sections.externalSessions') },
     ...(hasDesktopSettings
       ? [{ key: 'desktop', icon: 'desktop_windows', label: t('config.sections.desktop') }]
       : []),
@@ -1159,9 +1163,27 @@ export function ConfigView() {
       {tab.key === 'worktreeEnvironments' && (
         <WorktreeEnvironmentPanel t={t} />
       )}
+      {tab.key === 'general' && (
+        <NativeHistoryImportQuickEntry
+          onManage={() => setActiveTabKey('externalSessions')}
+        />
+      )}
+      {tab.key === 'externalSessions' && (
+        <ExternalSessionsPanel
+          config={generalDraftValue.nativeHistoryImport as NativeHistoryImportSettings | undefined}
+          showHeader={false}
+          onConfigChange={(next) => {
+            handleDraftChange('general', {
+              ...generalDraftValue,
+              nativeHistoryImport: next
+            })
+          }}
+        />
+      )}
       {tab.key !== 'about' &&
         tab.key !== 'desktop' &&
         tab.key !== 'appearance' &&
+        tab.key !== 'externalSessions' &&
         tab.key !== 'worktreeEnvironments' &&
         !configTabKeys.has(tab.key) && (
           <DisplayValue value={tab.value} sectionKey={tab.key} t={t} />
@@ -1196,7 +1218,8 @@ export function ConfigView() {
       )}
     </div>
   )
-  const shouldShowSourceSwitch = activeTabKey !== 'appearance' && configTabKeys.has(activeTabKey)
+  const shouldShowSourceSwitch = activeTabKey !== 'appearance' &&
+    (configTabKeys.has(activeTabKey) || activeTabKey === 'externalSessions')
   const headerActions = shouldShowSourceSwitch || activeTabKey === 'voice'
     ? (
       <>

@@ -14,6 +14,18 @@ html, body, #root, .ant-app {
   justify-content: center;
 }
 
+.ant-tabs.ant-tabs .ant-tabs-tab {
+  margin-left: 0;
+  padding: 0 0 var(--subpage-tertiary-padding, 10px);
+}
+
+.ant-tabs.ant-tabs .ant-tabs-tab + .ant-tabs-tab {
+  margin-left: var(
+    --subpage-tertiary-gap,
+    var(--subpage-tertiary-padding, 10px)
+  );
+}
+
 * {
   box-sizing: border-box;
 }

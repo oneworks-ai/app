@@ -14,6 +14,12 @@ import type { GitBranchKind, SessionInfo, SessionInitInfo, SessionPromptType } f
 
 import { getDb } from '#~/db/index.js'
 import {
+  consumeNativeProjectHistoryImportPrompt,
+  importNativeProjectHistoryAndReplay,
+  previewNativeProjectHistory
+} from '#~/services/runtime-store/history-import.js'
+import type { NativeHistoryAdapter } from '#~/services/runtime-store/history-import.js'
+import {
   createServerRuntimeSession,
   summarizeRuntimeSessionContent
 } from '#~/services/runtime-store/session-control.js'
@@ -72,6 +78,7 @@ export function sessionsRouter(): Router {
     'dontAsk',
     'bypassPermissions'
   ])
+  const nativeHistoryAdapters = new Set<NativeHistoryAdapter>(['codex', 'claude-code'])
   const normalizeTags = (value: unknown) => (
     Array.isArray(value)
       ? value
@@ -107,12 +114,83 @@ export function sessionsRouter(): Router {
     return undefined
   }
 
+  const normalizeNativeHistoryAdapters = (value: unknown) => {
+    if (value === undefined) {
+      return undefined
+    }
+    if (!Array.isArray(value)) {
+      throw badRequest('Invalid native history adapters', { adapters: value }, 'invalid_native_history_adapters')
+    }
+
+    const adapters = Array.from(new Set(value))
+    const invalidAdapter = adapters.find(adapter => (
+      typeof adapter !== 'string' ||
+      !nativeHistoryAdapters.has(adapter as NativeHistoryAdapter)
+    ))
+    if (invalidAdapter != null) {
+      throw badRequest(
+        'Invalid native history adapter',
+        { adapter: invalidAdapter },
+        'invalid_native_history_adapter'
+      )
+    }
+
+    return adapters as NativeHistoryAdapter[]
+  }
+
+  const normalizeNativeHistorySourcePaths = (value: unknown) => {
+    if (value === undefined) {
+      return undefined
+    }
+    if (!Array.isArray(value)) {
+      throw badRequest(
+        'Invalid native history source paths',
+        { sourcePaths: value },
+        'invalid_native_history_source_paths'
+      )
+    }
+
+    const sourcePaths = value.map(sourcePath => typeof sourcePath === 'string' ? sourcePath.trim() : '')
+    if (sourcePaths.includes('')) {
+      throw badRequest(
+        'Invalid native history source path',
+        { sourcePaths: value },
+        'invalid_native_history_source_path'
+      )
+    }
+    return Array.from(new Set(sourcePaths))
+  }
+
   router.get(['/', ''], (ctx) => {
     ctx.body = { sessions: db.getSessions('active') }
   })
 
   router.get('/archived', (ctx) => {
     ctx.body = { sessions: db.getSessions('archived') }
+  })
+
+  router.post('/native-history-import', async (ctx) => {
+    ctx.body = await consumeNativeProjectHistoryImportPrompt()
+  })
+
+  router.post('/native-history-import/preview', async (ctx) => {
+    const body = (ctx.request.body ?? {}) as { adapters?: unknown; sourcePaths?: unknown }
+    const adapters = normalizeNativeHistoryAdapters(body.adapters)
+    const sourcePaths = normalizeNativeHistorySourcePaths(body.sourcePaths)
+    ctx.body = await previewNativeProjectHistory({
+      ...(adapters == null ? {} : { adapters }),
+      ...(sourcePaths == null ? {} : { sourcePaths })
+    })
+  })
+
+  router.post('/native-history-import/run', async (ctx) => {
+    const body = (ctx.request.body ?? {}) as { adapters?: unknown; sourcePaths?: unknown }
+    const adapters = normalizeNativeHistoryAdapters(body.adapters)
+    const sourcePaths = normalizeNativeHistorySourcePaths(body.sourcePaths)
+    ctx.body = await importNativeProjectHistoryAndReplay({
+      ...(adapters == null ? {} : { adapters }),
+      ...(sourcePaths == null ? {} : { sourcePaths })
+    })
   })
 
   router.get('/:id', (ctx) => {

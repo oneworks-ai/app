@@ -3,6 +3,7 @@
 本目录承载配置页与 worktree environment 编辑器；涉及以下入口时，先读本文件：
 
 - `../ConfigView.tsx`
+- `ExternalSessionsPanel.tsx`
 - `WorktreeEnvironmentPanel.tsx`
 - `use-worktree-environment-auto-save.ts`
 - `configConflict.ts`
@@ -12,6 +13,8 @@
 ## 当前设计
 
 配置文件被 CLI、手动编辑或 extends 链路中的文件改动后，后端会通过 websocket 广播 `config_updated`。前端订阅层只负责刷新 `/api/config` 及其派生缓存，不直接覆盖本地草稿；真正的冲突处理留在配置编辑器内部完成。
+
+外部软件会话历史管理属于配置页的独立 app 级入口：`ExternalSessionsPanel.tsx` 负责当前项目维度的 Codex / Claude Code 历史导入、平台选择和已导入外部会话列表；不要把这类管理入口塞进 NavRail More 菜单或一次性弹窗。
 
 配置页和 worktree environment 编辑器都遵循相同的“三份状态”模型：
 

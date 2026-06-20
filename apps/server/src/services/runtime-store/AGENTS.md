@@ -5,6 +5,7 @@
 ## 快速入口
 
 - `watcher.ts`：runtime store watcher，发现 session store、读取增量事件并触发投影。
+- `history-import.ts`：扫描当前 workspace 对应的 Codex / Claude Code 原生 JSONL 历史，并导入成只读 runtime store session。
 - `projection.ts`：总投影入口，协调 metadata、session event、room event。
 - `metadata-projection.ts`：meta/state 到 session 与 room 初始状态的投影。
 - `session-projection.ts`：runtime status 到 server session status 的映射。

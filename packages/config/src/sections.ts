@@ -41,6 +41,7 @@ export interface ConfigSections {
     skills?: Config['skills']
     skillsMeta?: Config['skillsMeta']
     skillRegistries?: Config['skillRegistries']
+    nativeHistoryImport?: Config['nativeHistoryImport']
     webAuth?: Config['webAuth']
     shortcuts?: Config['shortcuts']
   }
@@ -103,6 +104,7 @@ export const buildConfigSections = (config: Config | undefined): ConfigSections 
     skills: config?.skills,
     skillsMeta: config?.skillsMeta,
     skillRegistries: config?.skillRegistries,
+    nativeHistoryImport: config?.nativeHistoryImport,
     webAuth: config?.webAuth,
     shortcuts: config?.shortcuts
   },
