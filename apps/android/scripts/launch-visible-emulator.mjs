@@ -3,6 +3,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { resolve } from 'node:path'
+import process from 'node:process'
 
 const repoRoot = resolve(new URL('../../../', import.meta.url).pathname)
 const logDir = resolve(repoRoot, '.logs')

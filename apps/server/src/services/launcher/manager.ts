@@ -71,31 +71,6 @@ interface LauncherWorkspaceInstanceState extends LauncherWorkspaceInstanceIdenti
   workspaceFolder: string
 }
 
-interface LauncherWorkspaceVersionConflictDetails {
-  existing: {
-    implementationId: string
-    launchConfigHash: string
-    packageDir: string
-    pid?: number
-    repoRoot?: string
-    serverBaseUrl?: string
-    sourceVersionId?: string
-    startedAt?: string
-    workspaceFolder: string
-  }
-  reason: 'implementation' | 'launch-config' | 'workspace'
-  requested: {
-    implementationId: string
-    launchConfigHash: string
-    packageDir: string
-    repoRoot?: string
-    sourceVersionId?: string
-    workspaceFolder: string
-  }
-  restartable: boolean
-  workspaceFolder: string
-}
-
 const services = new Map<string, LauncherWorkspaceService>()
 let workspaceServiceCleanupRegistered = false
 
