@@ -19,7 +19,7 @@ const builtinImageIconMap: Record<string, BuiltinImageIcon> = {
   gemini: { src: new URL('../assets/model-providers/gemini.png', import.meta.url).href },
   'kimi-k2': { light: moonshotLightIcon, dark: moonshotDarkIcon },
   litellm: { src: new URL('../assets/model-providers/litellm.png', import.meta.url).href },
-  micu: { src: new URL('../assets/model-providers/micu.svg', import.meta.url).href },
+  micu: { src: new URL('../assets/model-providers/micu.png', import.meta.url).href },
   minimax: { src: new URL('../assets/model-providers/minimax.png', import.meta.url).href },
   moonshot: { light: moonshotLightIcon, dark: moonshotDarkIcon },
   openai: { src: new URL('../assets/model-providers/openai.svg', import.meta.url).href, invertInDark: true },
@@ -38,6 +38,7 @@ const builtinMaterialIconMap: Record<string, string> = {
   apiyi: 'api',
   aws: 'deployed_code',
   azure: 'cloud',
+  baidu: 'travel_explore',
   deepseek: 'search_insights',
   gemini: 'diamond',
   litellm: 'account_tree',
@@ -51,7 +52,9 @@ const builtinMaterialIconMap: Record<string, string> = {
   portkey: 'vpn_key',
   qwen: 'cloud',
   requesty: 'sync_alt',
+  tencent: 'cloud_circle',
   vercel: 'change_history',
+  volcengine: 'local_fire_department',
   yunwu: 'cloud',
   zhipu: 'neurology'
 }

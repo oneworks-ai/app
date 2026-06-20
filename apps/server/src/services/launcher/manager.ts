@@ -18,7 +18,8 @@ import type {
   LauncherWorkspaceSelectorProject,
   LauncherWorkspaceSelectorState,
   LauncherWorkspaceServiceStatus,
-  LauncherWorkspaceStopResponse
+  LauncherWorkspaceStopResponse,
+  LauncherWorkspaceVersionConflictDetails
 } from '@oneworks/types'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
@@ -138,6 +139,30 @@ const killChildProcess = async (child?: ChildProcess) => {
       cleanup()
     }
   })
+}
+
+const killPid = async (pid: number) => {
+  if (!isPidRunning(pid)) return
+
+  try {
+    process.kill(pid, 'SIGTERM')
+  } catch {
+    return
+  }
+
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < WORKSPACE_SERVER_STOP_TIMEOUT_MS) {
+    if (!isPidRunning(pid)) return
+    await sleep(WORKSPACE_SERVER_READY_POLL_MS)
+  }
+
+  try {
+    if (isPidRunning(pid)) {
+      process.kill(pid, 'SIGKILL')
+    }
+  } catch {
+    // The process may exit between the liveness check and SIGKILL.
+  }
 }
 
 const stopWorkspaceServiceChildren = () => {
@@ -1019,11 +1044,12 @@ const createWorkspaceServerEnv = (
   }
 ) => {
   const packageDir = resolvePackageDir()
+  const clientCorsOrigins = getLauncherClientCorsOrigins(input.clientOrigin)
   const env = applyServerRuntimeEnv({
     cwd: workspaceFolder,
     packageDir,
     options: {
-      allowCors: input.clientOrigin != null,
+      allowCors: clientCorsOrigins.length > 0,
       host: WORKSPACE_SERVER_HOST,
       port: String(input.port),
       workspace: workspaceFolder
@@ -1043,9 +1069,8 @@ const createWorkspaceServerEnv = (
   env.__ONEWORKS_PROJECT_CLIENT_BASE__ = createLauncherWorkspaceClientBase(workspaceId)
   env.__ONEWORKS_PROJECT_WORKSPACE_ID__ = workspaceId
   env.__ONEWORKS_PROJECT_WEB_AUTH_ENABLED__ = 'false'
-  const corsOrigins = getLauncherClientCorsOrigins(input.clientOrigin)
-  if (corsOrigins.length > 0) {
-    env.__ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__ = corsOrigins.join(',')
+  if (clientCorsOrigins.length > 0) {
+    env.__ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__ = clientCorsOrigins.join(',')
   }
   return {
     env,
@@ -1188,6 +1213,17 @@ const stopLauncherWorkspaceService = async (service: LauncherWorkspaceService) =
   await service.stopPromise
 }
 
+const stopPersistedWorkspaceInstance = async (workspaceFolder: string) => {
+  const state = await readWorkspaceInstanceState(workspaceFolder)
+  if (state == null) return false
+
+  if (typeof state.pid === 'number' && state.pid !== process.pid) {
+    await killPid(state.pid)
+  }
+  await removeWorkspaceInstanceState(workspaceFolder)
+  return true
+}
+
 export const listLauncherWorkspaces = async (): Promise<LauncherWorkspaceSelectorState> => {
   const runningWorkspaceFolders = new Set(services.keys())
   const runningProjects = Array.from(services.values())
@@ -1267,6 +1303,21 @@ export const openLauncherWorkspaceById = async (
   return await openLauncherWorkspace(workspaceFolder, input)
 }
 
+export const restartLauncherWorkspaceById = async (
+  rawWorkspaceId: unknown,
+  input: {
+    clientOrigin?: string
+  } = {}
+): Promise<LauncherWorkspaceOpenResponse> => {
+  const workspaceFolder = await resolveLauncherWorkspaceFolderById(rawWorkspaceId)
+  if (workspaceFolder == null) {
+    throw notFound('Workspace not found.', { workspaceId: rawWorkspaceId }, 'workspace_not_found')
+  }
+
+  await stopLauncherWorkspace(workspaceFolder)
+  return await openLauncherWorkspace(workspaceFolder, input)
+}
+
 export const forgetLauncherWorkspace = async (rawWorkspaceFolder: unknown) => {
   const workspaceFolder = normalizePathForRemoval(rawWorkspaceFolder)
   if (workspaceFolder == null) {
@@ -1289,9 +1340,11 @@ export const stopLauncherWorkspace = async (
   }
 
   const service = services.get(workspaceFolder)
-  const stopped = service != null
+  let stopped = service != null
   if (service != null) {
     await stopLauncherWorkspaceService(service)
+  } else {
+    stopped = await stopPersistedWorkspaceInstance(workspaceFolder)
   }
 
   const removed = input.forget === true

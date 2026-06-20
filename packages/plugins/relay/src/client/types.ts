@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- relay client types mirror account status, config sharing, and source controls. */
 import type { RelayClientI18nHost } from './i18n.js'
 
 export interface Disposable {
@@ -45,6 +46,8 @@ export interface PluginViewContext {
 }
 
 export interface RelayStatus {
+  configDistribution?: RelayConfigDistributionStatus
+  configSync?: RelayConfigDistributionStatus
   connection?: {
     activeServerId?: string
     remoteBaseUrl?: string
@@ -65,6 +68,37 @@ export interface RelayStatus {
   }
   servers?: RelayServerStatus[]
   [key: string]: unknown
+}
+
+export interface RelayConfigDistributionStatus {
+  allowedFields?: string[]
+  hash?: string | null
+  lastAppliedAt?: string | null
+  lastError?: string | null
+  lastSyncedAt?: string | null
+  marketplaceKeys?: string[]
+  matchedProject?: boolean | string | null
+  modelServiceKeys?: string[]
+  pluginKeys?: string[]
+  skillKeys?: string[]
+  skillRegistryKeys?: string[]
+  sourceServerId?: string | null
+  sources?: RelayConfigDistributionSourceStatus[]
+  version?: string | null
+}
+
+export interface RelayConfigDistributionSourceStatus {
+  assignmentId?: string
+  disabledBy?: Array<'assignment' | 'profile' | 'team'>
+  enabled?: boolean
+  fields?: string[]
+  mode?: 'default' | 'override'
+  profileId?: string
+  profileName?: string
+  teamId?: string
+  teamName?: string
+  version?: number
+  versionId?: string
 }
 
 export interface RelayServerStatus {
@@ -98,6 +132,8 @@ export interface RelayServerStatus {
   registeredAt?: string | null
   remoteBaseUrl?: string
   server?: string
+  sessionAuthenticated?: boolean
+  sessionExpiresAt?: string | null
 }
 
 export interface RelayDeviceSummary {
@@ -114,6 +150,51 @@ export interface RelayViewState {
   error: string | null
   loading: boolean
   status: RelayStatus | null
+}
+
+export interface RelayConfigShareDraft {
+  allowedFields?: string[]
+  configPatch?: Record<string, unknown>
+  fieldSummaries?: Array<{
+    field?: string
+    itemCount?: number
+    secretCount?: number
+  }>
+  issues?: Array<{
+    code?: string
+    message?: string
+    path?: string
+    severity?: string
+  }>
+  rejectedFields?: string[]
+  secretItems?: Array<{
+    displayName?: string
+    path?: string
+    ref?: string
+  }>
+}
+
+export interface RelayConfigShareTargets {
+  profilesByTeamId?: Record<string, unknown[]>
+  teams?: Array<{
+    id?: string
+    membership?: {
+      role?: string
+    } | null
+    name?: string
+    slug?: string
+  }>
+}
+
+export interface RelayConfigShareViewState {
+  draft: RelayConfigShareDraft | null
+  error: string | null
+  loading: boolean
+  profileName: string
+  publishing: boolean
+  targets: RelayConfigShareTargets | null
+  teamId: string
+  text: string
 }
 
 export interface RelayLoginCallback {

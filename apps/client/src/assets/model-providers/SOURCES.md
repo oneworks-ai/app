@@ -20,7 +20,7 @@ These assets are local copies of provider logos or favicons from official provid
 | `requesty.ico`      | Requesty favicon: `https://www.requesty.ai/favicon.ico`                                                                                                 |
 | `portkey.png`       | Portkey homepage favicon: `https://framerusercontent.com/images/pkFK3AGXHirogqiN67JGtlnMVM.png`                                                         |
 | `litellm.png`       | LiteLLM homepage favicon: `https://framerusercontent.com/images/GtfMdzyrMj6FQY6lGLqI6bh2LYM.png`                                                        |
-| `micu.svg`          | Micu homepage favicon: `https://micu.hk/upload/2023/01/sakura.svg`                                                                                      |
+| `micu.png`          | Micu docs logo and favicon: `https://docs.micuapi.ai/logo.png?v=2`                                                                                      |
 | `yunwu.png`         | Yunwu homepage favicon: `https://assets.wlai.vip/logo.png`                                                                                              |
 
 `apiyi` currently does not expose a usable favicon or logo link from `https://apiyi.com`, so the UI falls back to the generic API symbol until an official asset is available.

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+import { defaultPlatformAccessGroupIds, resolveUserPlatformAccess } from '../access-groups.js'
 import { ensureAuthIdentity, ensureEmailCodeIdentity, hasEmailCodeIdentity } from '../auth/identities.js'
 import { PasswordValidationError, hashPassword } from '../auth/passwords.js'
 import { requireAuthPermission } from '../auth/permissions.js'
@@ -30,8 +31,34 @@ const readMaxDevicesPatch = (value: unknown) => {
     : { error: 'User max devices must be a non-negative number.', ok: false as const }
 }
 
+const readGroupIds = (value: unknown) => (
+  Array.isArray(value)
+    ? [...new Set(value.map(cleanString).filter(item => item !== ''))]
+    : undefined
+)
+
+const validatePlatformGroupIds = (store: RelayStore, groupIds: string[]) => (
+  groupIds.every(groupId => store.accessGroups.some(group => group.id === groupId && group.scope === 'platform'))
+)
+
 const userDeviceCount = (store: RelayStore, user: RelayUser) =>
   store.devices.filter(device => device.userId === user.id).length
+
+const userTeamSummaries = (store: RelayStore, user: RelayUser) =>
+  store.teamMembers
+    .filter(member => member.userId === user.id)
+    .map(member => {
+      const team = store.teams.find(item => item.id === member.teamId)
+      return {
+        id: member.teamId,
+        archivedAt: team?.archivedAt ?? null,
+        configEnabled: member.configEnabled !== false,
+        defaultForPublishing: member.defaultForPublishing === true,
+        name: team?.name ?? member.teamId,
+        role: member.role,
+        slug: team?.slug ?? member.teamId
+      }
+    })
 
 const cleanLoginId = (value: unknown) => cleanString(value).toLowerCase()
 
@@ -44,10 +71,13 @@ const redactUser = (user: RelayUser, store: RelayStore) => ({
   disabled: user.disabledAt != null,
   disabledAt: user.disabledAt ?? null,
   deviceCount: userDeviceCount(store, user),
+  groupIds: user.groupIds ?? defaultPlatformAccessGroupIds(user.role),
+  effectiveAccess: resolveUserPlatformAccess(store, user),
   maxDevices: user.maxDevices ?? null,
   passwordEnabled: user.passwordHash != null,
   provider: user.provider ?? null,
   role: user.role,
+  teams: userTeamSummaries(store, user),
   createdAt: user.createdAt,
   updatedAt: user.updatedAt ?? null
 })
@@ -55,6 +85,7 @@ const redactUser = (user: RelayUser, store: RelayStore) => ({
 const redactInvite = (invite: RelayInvite) => ({
   code: invite.code,
   role: invite.role,
+  groupIds: invite.groupIds ?? defaultPlatformAccessGroupIds(invite.role),
   userId: invite.userId ?? null,
   maxUses: invite.maxUses,
   used: invite.used,
@@ -194,7 +225,12 @@ export const handleAdminUsers = async (
       loginId: loginId === '' ? undefined : loginId,
       name: cleanString(body.name),
       role: normalizeRole(body.role, 'member'),
+      groupIds: readGroupIds(body.groupIds) ?? defaultPlatformAccessGroupIds(body.role),
       createdAt: now()
+    }
+    if (!validatePlatformGroupIds(store, user.groupIds ?? [])) {
+      sendJson(res, 400, { error: 'Invalid user access group.' }, args.allowOrigin)
+      return
     }
     if (hasOwn(body, 'maxDevices')) {
       const maxDevices = readMaxDevices(body.maxDevices)
@@ -281,11 +317,28 @@ export const handleAdminUsers = async (
         sendJson(res, 400, { error: 'Invalid user role.' }, args.allowOrigin)
         return
       }
-      if (auth.kind === 'session' && auth.user.id === user.id) {
+      if ((auth.kind === 'session' || auth.kind === 'access-token') && auth.user.id === user.id) {
         sendJson(res, 403, { error: 'Cannot change your own role.' }, args.allowOrigin)
         return
       }
       user.role = body.role
+      if (!hasOwn(body, 'groupIds')) user.groupIds = defaultPlatformAccessGroupIds(body.role)
+    }
+    if (hasOwn(body, 'groupIds')) {
+      const groupIds = readGroupIds(body.groupIds)
+      if (groupIds == null) {
+        sendJson(res, 400, { error: 'User group IDs must be an array.' }, args.allowOrigin)
+        return
+      }
+      if (!validatePlatformGroupIds(store, groupIds)) {
+        sendJson(res, 400, { error: 'Invalid user access group.' }, args.allowOrigin)
+        return
+      }
+      if (auth.kind === 'session' && auth.user.id === user.id) {
+        sendJson(res, 403, { error: 'Cannot change your own access groups.' }, args.allowOrigin)
+        return
+      }
+      user.groupIds = groupIds.length === 0 ? defaultPlatformAccessGroupIds(user.role) : groupIds
     }
     if (hasOwn(body, 'maxDevices')) {
       const maxDevices = readMaxDevicesPatch(body.maxDevices)
@@ -350,11 +403,16 @@ export const handleAdminInvites = async (
     const invite: RelayInvite = {
       code,
       role: normalizeRole(body.role, 'member'),
+      groupIds: readGroupIds(body.groupIds) ?? defaultPlatformAccessGroupIds(body.role),
       userId: cleanString(body.userId) !== '' ? cleanString(body.userId) : undefined,
       maxUses: Number.isFinite(Number(body.maxUses)) ? Math.max(1, Math.trunc(Number(body.maxUses))) : 1,
       used: 0,
       expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : undefined,
       createdAt: now()
+    }
+    if (!validatePlatformGroupIds(store, invite.groupIds ?? [])) {
+      sendJson(res, 400, { error: 'Invalid invite access group.' }, args.allowOrigin)
+      return
     }
     store.invites.push(invite)
     await storeRepository.write(store)
@@ -381,6 +439,19 @@ export const handleAdminInvites = async (
         return
       }
       invite.role = body.role
+      if (!hasOwn(body, 'groupIds')) invite.groupIds = defaultPlatformAccessGroupIds(body.role)
+    }
+    if (hasOwn(body, 'groupIds')) {
+      const groupIds = readGroupIds(body.groupIds)
+      if (groupIds == null) {
+        sendJson(res, 400, { error: 'Invite group IDs must be an array.' }, args.allowOrigin)
+        return
+      }
+      if (!validatePlatformGroupIds(store, groupIds)) {
+        sendJson(res, 400, { error: 'Invalid invite access group.' }, args.allowOrigin)
+        return
+      }
+      invite.groupIds = groupIds.length === 0 ? defaultPlatformAccessGroupIds(invite.role) : groupIds
     }
     if (Number.isFinite(Number(body.maxUses))) invite.maxUses = Math.max(1, Math.trunc(Number(body.maxUses)))
     invite.updatedAt = now()

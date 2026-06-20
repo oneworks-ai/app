@@ -3,14 +3,18 @@ import type { RelayAdminInvite, RelayAdminSsoProvider, RelayAdminUser } from '..
 export const createUser = (overrides: Partial<RelayAdminUser> = {}): RelayAdminUser => ({
   avatarUrl: null,
   createdAt: '2026-05-29T00:00:00.000Z',
+  deviceCount: 0,
   disabled: false,
   disabledAt: null,
   email: 'user@example.com',
   id: 'user-1',
+  maxDevices: null,
   name: 'User',
   passwordEnabled: false,
   provider: null,
+  groupIds: [],
   role: 'member',
+  teams: [],
   updatedAt: null,
   ...overrides
 })

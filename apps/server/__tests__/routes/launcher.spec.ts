@@ -166,10 +166,10 @@ describe('launcher routes', () => {
       path.join(serverPackageDir, 'package.json'),
       JSON.stringify(
         {
+          name: '@oneworks/server',
           dependencies: {
             '@oneworks/types': 'workspace:*'
-          },
-          name: '@oneworks/server'
+          }
         },
         null,
         2

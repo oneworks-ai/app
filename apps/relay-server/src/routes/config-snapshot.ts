@@ -1,0 +1,123 @@
+import type { IncomingMessage, ServerResponse } from 'node:http'
+
+import { authContextHasPermission, resolveAuthContext } from '../auth/permissions.js'
+import { createRelayConfigSnapshotForUser } from '../config-snapshot.js'
+import { deviceTokenMatches, visibleDevicePrivateMetadata } from '../devices/private-metadata.js'
+import { getBearerToken, sendJson } from '../http.js'
+import { devicePrincipalForDevice, hasRelayPermission, relayPermissions } from '../permissions/index.js'
+import type { RelayConfigProjectContext, RelayDevice, RelayServerArgs, RelayStore, RelayUser } from '../types.js'
+
+const queryText = (url: URL, key: string) => {
+  const value = url.searchParams.get(key)
+  return value == null || value.trim() === '' ? undefined : value.trim()
+}
+
+const findDeviceByToken = (store: RelayStore, token: string) => (
+  token === '' ? undefined : store.devices.find(device => deviceTokenMatches(device, token))
+)
+
+const findActiveUser = (store: RelayStore, userId: string | undefined): RelayUser | undefined => {
+  if (userId == null || userId === '') return undefined
+  const user = store.users.find(item => item.id === userId)
+  return user == null || user.disabledAt != null ? undefined : user
+}
+
+const resolveConfigSnapshotDeviceUser = (
+  req: IncomingMessage,
+  store: RelayStore
+) => {
+  const device = findDeviceByToken(store, getBearerToken(req))
+  if (device == null) return undefined
+  const principal = devicePrincipalForDevice(device)
+  if (!hasRelayPermission(principal, relayPermissions.relayConfigSnapshotRead)) {
+    return { denied: true as const, device }
+  }
+  return {
+    device,
+    user: findActiveUser(store, device.userId)
+  }
+}
+
+const resolveConfigSnapshotAccountUser = (
+  req: IncomingMessage,
+  args: RelayServerArgs,
+  store: RelayStore
+) => {
+  const auth = resolveAuthContext(req, args, store)
+  if (auth == null) return undefined
+  if (auth.kind === 'admin-token') return { denied: true as const }
+  if (!authContextHasPermission(auth, relayPermissions.relayConfigSnapshotRead)) {
+    return { denied: true as const }
+  }
+  return {
+    user: auth.user
+  }
+}
+
+const projectContextFromRequest = (
+  url: URL,
+  args: RelayServerArgs,
+  device: RelayDevice | undefined
+): RelayConfigProjectContext => {
+  const metadata = device == null ? undefined : visibleDevicePrivateMetadata(args, device)
+  return {
+    cwd: queryText(url, 'cwd'),
+    projectId: queryText(url, 'projectId') ?? queryText(url, 'project'),
+    projectName: queryText(url, 'projectName'),
+    workspaceFolder: queryText(url, 'workspaceFolder') ?? metadata?.workspaceFolder
+  }
+}
+
+export const handleRelayConfigSnapshot = (
+  req: IncomingMessage,
+  res: ServerResponse,
+  args: RelayServerArgs,
+  store: RelayStore,
+  url: URL
+) => {
+  const deviceResult = resolveConfigSnapshotDeviceUser(req, store)
+  if (deviceResult?.denied === true) {
+    sendJson(res, 403, { error: 'Permission denied.' }, args.allowOrigin)
+    return
+  }
+  if (deviceResult != null) {
+    if (deviceResult.user == null) {
+      sendJson(res, 403, { error: 'User context required.' }, args.allowOrigin)
+      return
+    }
+    const recipientDeviceToken = getBearerToken(req)
+    sendJson(
+      res,
+      200,
+      createRelayConfigSnapshotForUser(store, deviceResult.user, {
+        projectContext: projectContextFromRequest(url, args, deviceResult.device),
+        recipientDevice: deviceResult.device,
+        recipientDeviceToken,
+        serverArgs: args,
+        sourceServerId: args.publicBaseUrl
+      }),
+      args.allowOrigin
+    )
+    return
+  }
+
+  const accountResult = resolveConfigSnapshotAccountUser(req, args, store)
+  if (accountResult?.denied === true) {
+    sendJson(res, 403, { error: 'Permission denied.' }, args.allowOrigin)
+    return
+  }
+  if (accountResult == null) {
+    sendJson(res, 401, { error: 'Authentication required.' }, args.allowOrigin)
+    return
+  }
+
+  sendJson(
+    res,
+    200,
+    createRelayConfigSnapshotForUser(store, accountResult.user, {
+      projectContext: projectContextFromRequest(url, args, undefined),
+      sourceServerId: args.publicBaseUrl
+    }),
+    args.allowOrigin
+  )
+}

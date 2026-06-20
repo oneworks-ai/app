@@ -1136,6 +1136,202 @@ defaultModel: package-model
     }
   })
 
+  it('merges config patches returned by configured plugin config hooks into the final user layer', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-plugin-hook-'))
+
+    try {
+      const pluginRoot = path.join(tempDir, 'node_modules', '@oneworks', 'plugin-relay')
+      await mkdir(path.join(pluginRoot, 'dist'), { recursive: true })
+      await writeFile(
+        path.join(pluginRoot, 'package.json'),
+        JSON.stringify(
+          {
+            name: '@oneworks/plugin-relay',
+            version: '1.0.0',
+            exports: {
+              '.': './dist/index.js',
+              './config': './dist/config.js',
+              './package.json': './package.json'
+            }
+          },
+          null,
+          2
+        )
+      )
+      await writeFile(
+        path.join(pluginRoot, 'dist', 'index.js'),
+        'module.exports = { __oneWorksPluginManifest: true }\n'
+      )
+      await writeFile(
+        path.join(pluginRoot, 'dist', 'config.js'),
+        `
+module.exports = async (ctx) => {
+  const serviceKey = ctx.plugin.options.serviceKey || 'relay'
+  return {
+    extend: './ignored-by-loader.json',
+    defaultModelService: serviceKey,
+    modelServices: {
+      [serviceKey]: {
+        title: 'Relay assigned service',
+        apiBaseUrl: ctx.jsonVariables.RELAY_BASE_URL,
+        apiKey: ctx.jsonVariables.RELAY_API_KEY,
+        models: ['relay-model']
+      }
+    },
+    permissions: {
+      allow: ['RelayTool']
+    }
+  }
+}
+`
+      )
+      await writeFile(
+        path.join(tempDir, '.oo.config.json'),
+        JSON.stringify(
+          {
+            plugins: [
+              {
+                id: '@oneworks/plugin-relay',
+                options: {
+                  serviceKey: 'relay-team'
+                }
+              }
+            ]
+          },
+          null,
+          2
+        )
+      )
+      await writeFile(
+        path.join(tempDir, '.oo.dev.config.json'),
+        JSON.stringify(
+          {
+            defaultModelService: 'local-service'
+          },
+          null,
+          2
+        )
+      )
+
+      resetConfigCache()
+      const state = await loadConfigState({
+        cwd: tempDir,
+        env: {
+          __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1'
+        },
+        jsonVariables: {
+          RELAY_API_KEY: 'relay-secret',
+          RELAY_BASE_URL: 'https://relay.example.com/v1'
+        }
+      })
+
+      expect(state.projectConfig?.plugins).toEqual([
+        {
+          id: '@oneworks/plugin-relay',
+          options: {
+            serviceKey: 'relay-team'
+          }
+        }
+      ])
+      expect(state.userConfig?.defaultModelService).toBe('relay-team')
+      expect(state.userConfig?.modelServices?.['relay-team']).toEqual({
+        title: 'Relay assigned service',
+        apiBaseUrl: 'https://relay.example.com/v1',
+        apiKey: 'relay-secret',
+        models: ['relay-model']
+      })
+      expect(state.userConfig?.extend).toBeUndefined()
+      expect(state.userSource?.resolvedConfig?.defaultModelService).toBe('local-service')
+      expect(state.mergedConfig.defaultModelService).toBe('relay-team')
+      expect(state.mergedConfig.permissions?.allow).toEqual(['OneWorks', 'RelayTool'])
+    } finally {
+      resetConfigCache()
+      await rm(tempDir, { force: true, recursive: true })
+    }
+  })
+
+  it('loads ESM-only plugin config hooks through dynamic import fallback', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-plugin-hook-esm-'))
+
+    try {
+      const pluginRoot = path.join(tempDir, 'node_modules', '@oneworks', 'plugin-esm-relay')
+      await mkdir(path.join(pluginRoot, 'dist'), { recursive: true })
+      await writeFile(
+        path.join(pluginRoot, 'package.json'),
+        JSON.stringify(
+          {
+            name: '@oneworks/plugin-esm-relay',
+            version: '1.0.0',
+            __oneWorksPluginManifest: true,
+            configHook: {
+              entry: './dist/config.mjs'
+            },
+            exports: {
+              '.': './package.json',
+              './package.json': './package.json'
+            }
+          },
+          null,
+          2
+        )
+      )
+      await writeFile(
+        path.join(pluginRoot, 'dist', 'config.mjs'),
+        `
+export default async (ctx) => {
+  const serviceKey = ctx.plugin.options.serviceKey || 'esm-relay'
+  return {
+    defaultModelService: serviceKey,
+    modelServices: {
+      [serviceKey]: {
+        apiBaseUrl: ctx.jsonVariables.RELAY_BASE_URL,
+        apiKey: ctx.jsonVariables.RELAY_API_KEY
+      }
+    }
+  }
+}
+`
+      )
+      await writeFile(
+        path.join(tempDir, '.oo.config.json'),
+        JSON.stringify(
+          {
+            plugins: [
+              {
+                id: '@oneworks/plugin-esm-relay',
+                options: {
+                  serviceKey: 'esm-team'
+                }
+              }
+            ]
+          },
+          null,
+          2
+        )
+      )
+
+      resetConfigCache()
+      const state = await loadConfigState({
+        cwd: tempDir,
+        disableGlobalConfig: true,
+        jsonVariables: {
+          RELAY_API_KEY: 'esm-secret',
+          RELAY_BASE_URL: 'https://relay.example.com/v1'
+        }
+      })
+
+      expect(state.userConfig?.defaultModelService).toBe('esm-team')
+      expect(state.userConfig?.modelServices?.['esm-team']).toEqual({
+        apiBaseUrl: 'https://relay.example.com/v1',
+        apiKey: 'esm-secret'
+      })
+      expect(state.mergedConfig.defaultModelService).toBe('esm-team')
+    } finally {
+      resetConfigCache()
+      await rm(tempDir, { force: true, recursive: true })
+    }
+  })
+
   it('returns an empty project config when extend chain is circular', async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-extend-cycle-'))
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})

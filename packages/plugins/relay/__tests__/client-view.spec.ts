@@ -6,7 +6,6 @@ import {
   createRelayDeviceSessionGroupTagPrefix,
   createRelaySessionGroupTag
 } from '../src/client/index.js'
-import { buildRelayServerOptionsUpdate } from '../src/client/options.js'
 
 class FakeContainer {
   innerHTML = ''
@@ -135,6 +134,8 @@ const statusPayload = {
     id: 'local',
     name: 'Local Relay SSO',
     platform: 'Cloudflare',
+    sessionAuthenticated: true,
+    sessionExpiresAt: '2999-01-01T00:00:00.000Z',
     devices: [{
       capabilities: {
         sessions: true,
@@ -157,8 +158,8 @@ const statusPayload = {
   }]
 }
 
-const statusResponse = () =>
-  new Response(JSON.stringify(statusPayload), {
+const statusResponse = (payload: Record<string, unknown> = statusPayload) =>
+  new Response(JSON.stringify(payload), {
     headers: { 'content-type': 'application/json' },
     status: 200
   })
@@ -306,6 +307,149 @@ describe('relay plugin client view', () => {
     cleanup?.dispose()
   })
 
+  it('renders Relay configuration distribution details when status is synced', async () => {
+    installBrowser()
+    const apiFetch = vi.fn(async (path: string) => {
+      if (path === 'relay/status') {
+        return statusResponse({
+          ...statusPayload,
+          configDistribution: {
+            allowedFields: ['modelServices', 'models'],
+            hash: 'sha256:abc123',
+            lastAppliedAt: '2026-06-15T09:12:00.000Z',
+            lastSyncedAt: '2026-06-15T09:10:00.000Z',
+            matchedProject: true,
+            modelServiceKeys: ['openai', 'anthropic'],
+            sourceServerId: 'oneworks-cloudflare',
+            sources: [{
+              assignmentId: 'assignment-1',
+              disabledBy: [],
+              enabled: true,
+              fields: ['modelServices'],
+              mode: 'default',
+              profileId: 'profile-1',
+              profileName: 'Base Profile',
+              teamId: 'team-1',
+              teamName: 'Team One',
+              version: 1,
+              versionId: 'version-1'
+            }],
+            version: '2026.06.15'
+          }
+        })
+      }
+      return new Response('{}', { status: 404 })
+    })
+    const { cleanup, renderHome } = await createClientHarness(apiFetch)
+    const container = new FakeContainer()
+
+    renderHome(container as unknown as HTMLElement)
+    await flushPromises()
+
+    expect(container.innerHTML).toContain('Relay configuration')
+    expect(container.innerHTML).toContain('synced')
+    expect(container.innerHTML).toContain('2026-06-15T09:10:00.000Z')
+    expect(container.innerHTML).toContain('2026-06-15T09:12:00.000Z')
+    expect(container.innerHTML).toContain('2026.06.15')
+    expect(container.innerHTML).toContain('sha256:abc123')
+    expect(container.innerHTML).toContain('oneworks-cloudflare')
+    expect(container.innerHTML).toContain('matched')
+    expect(container.innerHTML).toContain('openai, anthropic')
+    expect(container.innerHTML).toContain('modelServices, models')
+    expect(container.innerHTML).toContain('Team One / Base Profile')
+    expect(container.innerHTML).toContain('data-action="toggle-config-source"')
+    expect(container.innerHTML).toContain('data-source-kind="team"')
+    expect(container.innerHTML).toContain('data-source-kind="profile"')
+    cleanup?.dispose()
+  })
+
+  it('renders an empty Relay configuration state before distribution is available', async () => {
+    installBrowser()
+    const apiFetch = vi.fn(async (path: string) => {
+      if (path === 'relay/status') return statusResponse()
+      return new Response('{}', { status: 404 })
+    })
+    const { cleanup, renderHome } = await createClientHarness(apiFetch)
+    const container = new FakeContainer()
+
+    renderHome(container as unknown as HTMLElement)
+    await flushPromises()
+
+    expect(container.innerHTML).toContain('No Relay configuration received yet.')
+    expect(container.innerHTML).toContain('aria-label="Refresh Relay configuration"')
+    expect(container.innerHTML).toContain('data-action="refresh-config"')
+    expect(container.innerHTML).toContain('published_with_changes')
+    cleanup?.dispose()
+  })
+
+  it('renders explicit Relay config sharing controls', async () => {
+    installBrowser()
+    const apiFetch = vi.fn(async (path: string) => {
+      if (path === 'relay/status') return statusResponse()
+      return new Response('{}', { status: 404 })
+    })
+    const { cleanup, renderHome } = await createClientHarness(apiFetch)
+    const container = new FakeContainer()
+
+    renderHome(container as unknown as HTMLElement)
+    await flushPromises()
+
+    expect(container.innerHTML).toContain('Team config share')
+    expect(container.innerHTML).toContain('data-action="share-preview"')
+    expect(container.innerHTML).toContain('data-action="share-load-targets"')
+    expect(container.innerHTML).toContain('data-action="share-publish"')
+    expect(container.innerHTML).toContain('data-field="share-config"')
+    expect(container.innerHTML).toContain('data-field="share-team"')
+    expect(container.innerHTML).toContain('data-field="share-profile-name"')
+    cleanup?.dispose()
+  })
+
+  it('renders the last Relay configuration sync error', async () => {
+    installBrowser()
+    const apiFetch = vi.fn(async (path: string) => {
+      if (path === 'relay/status') {
+        return statusResponse({
+          ...statusPayload,
+          configDistribution: {
+            lastError: 'Project rules checksum mismatch.',
+            lastSyncedAt: '2026-06-15T09:10:00.000Z',
+            sourceServerId: 'oneworks-cloudflare'
+          }
+        })
+      }
+      return new Response('{}', { status: 404 })
+    })
+    const { cleanup, renderHome } = await createClientHarness(apiFetch)
+    const container = new FakeContainer()
+
+    renderHome(container as unknown as HTMLElement)
+    await flushPromises()
+
+    expect(container.innerHTML).toContain('Sync failed')
+    expect(container.innerHTML).toContain('Project rules checksum mismatch.')
+    expect(container.innerHTML).toContain('oneworks-cloudflare')
+    cleanup?.dispose()
+  })
+
+  it('registers a Relay configuration refresh command with status fallback', async () => {
+    installBrowser()
+    const apiFetch = vi.fn(async (path: string) => {
+      if (path === 'relay/config-refresh') return new Response('{}', { status: 404 })
+      if (path === 'relay/status') return statusResponse()
+      return new Response('{}', { status: 404 })
+    })
+    const { cleanup, commands } = await createClientHarness(apiFetch)
+
+    await expect(commands.get('config-refresh')?.()).resolves.toMatchObject({
+      connection: {
+        activeServerId: 'local'
+      }
+    })
+    expect(apiFetch).toHaveBeenCalledWith('relay/config-refresh', { method: 'POST' })
+    expect(apiFetch).toHaveBeenCalledWith('relay/status')
+    cleanup?.dispose()
+  })
+
   it('renders labels and tooltips with the active locale', async () => {
     installBrowser('en')
     const apiFetch = vi.fn(async (path: string) => {
@@ -338,70 +482,5 @@ describe('relay plugin client view', () => {
       }
     }])
     cleanup?.dispose()
-  })
-})
-
-describe('relay plugin options update', () => {
-  it('builds a scoped multi-server options update for the active relay server', () => {
-    const nextOptions = buildRelayServerOptionsUpdate({
-      activeServerId: 'local',
-      autoConnect: true,
-      servers: [
-        {
-          id: 'local',
-          name: 'Local Relay SSO',
-          pairingToken: 'secret',
-          protocol: 'http',
-          server: '127.0.0.1',
-          port: 48888
-        },
-        {
-          id: 'prod',
-          name: 'Production',
-          baseUrl: 'https://relay.example.com'
-        }
-      ]
-    }, {
-      id: 'local',
-      name: 'Local Lab',
-      remoteBaseUrl: 'http://localhost:49000/api/'
-    })
-
-    expect(nextOptions).toEqual({
-      activeServerId: 'local',
-      autoConnect: true,
-      servers: [
-        {
-          id: 'local',
-          name: 'Local Lab',
-          pairingToken: 'secret',
-          path: '/api',
-          port: 49000,
-          protocol: 'http',
-          server: 'localhost'
-        },
-        {
-          id: 'prod',
-          name: 'Production',
-          baseUrl: 'https://relay.example.com'
-        }
-      ]
-    })
-  })
-
-  it('creates a servers list when the relay plugin is not configured yet', () => {
-    expect(buildRelayServerOptionsUpdate({}, {
-      name: '',
-      remoteBaseUrl: 'http://127.0.0.1:48888'
-    })).toEqual({
-      activeServerId: 'http-127-0-0-1-48888',
-      servers: [{
-        id: 'http-127-0-0-1-48888',
-        name: '127.0.0.1:48888',
-        port: 48888,
-        protocol: 'http',
-        server: '127.0.0.1'
-      }]
-    })
   })
 })

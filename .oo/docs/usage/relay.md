@@ -37,6 +37,21 @@ curl -i https://<relay-origin>/api/admin/users
 
 `/health.version` 应等于实际部署的 `@oneworks/relay-server` 包版本。只返回 `ok` 还不够，还要确认 public URL、登录方式、SSO provider、邮件验证码、passkey 和插件设备注册都在最终域名上工作。
 
+## OpenAPI 与系统访问令牌
+
+Relay Admin 提供两份隔离的机器可读 OpenAPI 文档：
+
+```text
+<relay-origin>/api/admin/openapi.json
+<relay-origin>/api/profile/openapi.json
+```
+
+`/api/admin/openapi.json` 只描述平台管理员 API，包括用户、用户组、邀请码、SSO、团队策略、团队、团队成员组、消息、配置 profile / secret 和运维指标。`/api/profile/openapi.json` 只描述当前用户自己的个人 API，包括个人安全、当前用户团队自助流程、团队成员组和托管配置读取 / 管理。也可以在 Admin 的 `/admin/openapi` 页面直接查看、下载或打开这两份 JSON。受保护接口使用 `Authorization: Bearer <token>`；token 可以是部署级 Admin token、登录 session token，或用户在 `/admin/profile` 个人页面生成的 API 访问令牌。密码、Passkey 和访问令牌管理仍必须使用正常登录 session；删除当前账号接口也允许当前用户 API 访问令牌调用。
+
+API 访问令牌属于当前登录用户，分为 `user`、`team`、`platform` 三种作用域：用户级令牌只操作当前账号数据；团队级令牌绑定一个团队，并按团队成员组授权；平台级令牌按平台用户组授权。`permissionGroupMode=all` 表示跟随账号当前拥有的全部用户组，`custom` 表示只授予指定用户组。服务端只保存令牌 hash 和 preview，完整令牌只在生成时显示一次；遗失后需要撤销并重新生成。API 访问令牌不能继续生成或撤销其他 API 访问令牌，这类安全操作必须使用正常登录 session。
+
+平台管理员通过 `/admin/access-groups` 管理平台用户组及其能力、配额；团队负责人通过团队详情的“成员组”子页管理当前团队内的成员组。团队成员组只作用于当前团队，平台管理员不会因此获得跨团队查看或管理团队私有信息的权限。
+
 ## 登录方式
 
 `/login` 是 Relay 插件、Admin 和 Web 回跳共用的登录页。部署方可以通过 `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD` 设置默认方式，浏览器也会记住用户上次选择的方式。

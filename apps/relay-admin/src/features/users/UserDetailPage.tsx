@@ -1,32 +1,38 @@
 /* eslint-disable max-lines -- user detail keeps account settings, metadata, and device list together. */
 import './UserDetailPage.css'
 
-import { Avatar, Empty, Input, InputNumber, Select } from 'antd'
+import { Avatar, Empty, Input, InputNumber, Tabs } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
 
-import { relayAdminRoles } from '../../shared/model/adminRoles'
 import type {
+  RelayAdminAccessGroup,
   RelayAdminCurrentUser,
   RelayAdminDevice,
   RelayAdminInvite,
-  RelayAdminRole,
   RelayAdminUser
 } from '../../shared/model/adminTypes'
 import { AdminIcon } from '../../shared/ui/AdminIcon'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
+import { accessGroupName } from '../access-groups/accessGroupModel'
 import { DeviceTable } from '../devices/DeviceTable'
+import type { RelayAdminTeam } from '../teams/teamTypes'
+import { UserAccessPanel } from './UserAccessPanel'
+import { UserTeamsPanel } from './UserTeamsPanel'
 
 export interface UserDetailPageProps {
+  accessGroups: RelayAdminAccessGroup[]
   currentUser?: RelayAdminCurrentUser
   devices: RelayAdminDevice[]
   disabled: boolean
   invites: RelayAdminInvite[]
   loading: boolean
   onSetLoginId: (user: RelayAdminUser, loginId: string | null) => Promise<void>
+  teams: RelayAdminTeam[]
+  token: string
   onSetMaxDevices: (user: RelayAdminUser, maxDevices: number | null) => Promise<void>
-  onSetRole: (user: RelayAdminUser, role: RelayAdminRole) => Promise<void>
+  onSetAccessGroups: (user: RelayAdminUser, groupIds: string[]) => Promise<void>
   users: RelayAdminUser[]
 }
 
@@ -62,14 +68,17 @@ const userMaxDevices = (user: RelayAdminUser) => {
 }
 
 export const UserDetailPage = ({
+  accessGroups,
   currentUser,
   devices,
   disabled,
   invites,
   loading,
   onSetLoginId,
+  teams,
+  token,
   onSetMaxDevices,
-  onSetRole,
+  onSetAccessGroups,
   users
 }: UserDetailPageProps) => {
   const { userId } = useParams()
@@ -129,19 +138,9 @@ export const UserDetailPage = ({
       )
     },
     {
-      key: 'role',
-      label: '权限',
-      value: (
-        <Select
-          aria-label={isCurrentUser ? '不能修改自己的权限' : `Role for ${user.email}`}
-          className='relay-user-detail__role'
-          disabled={disabled || isCurrentUser}
-          onChange={role => void onSetRole(user, role)}
-          options={relayAdminRoles.map(role => ({ label: role, value: role }))}
-          size='small'
-          value={user.role}
-        />
-      )
+      key: 'groups',
+      label: '用户组',
+      value: user.groupIds.map(groupId => accessGroupName(accessGroups, groupId)).join(', ')
     },
     {
       key: 'deviceLimit',
@@ -207,26 +206,57 @@ export const UserDetailPage = ({
           ))}
         </dl>
 
-        <div className='relay-user-detail__devices'>
-          <div className='relay-user-detail__devices-header'>
-            <h3>设备</h3>
-            <span>已连接 {deviceCount} · 上限 {maxDevices ?? '不限'}</span>
-          </div>
-          {canViewDeviceDetails
-            ? (
-              <DeviceTable
-                devices={visibleDevices}
-                initialVisibleColumnKeys={['name', 'status', 'lastSeenAt', 'capabilities']}
-                searchPlaceholder='搜索设备、支持功能'
-              />
-            )
-            : (
-              <div className='relay-user-detail__private-devices'>
-                <StatusBadge tone='muted'>{`${deviceCount} 台设备`}</StatusBadge>
-                <span>设备明细仅账号本人可见</span>
-              </div>
-            )}
-        </div>
+        <Tabs
+          className='relay-user-detail__tabs'
+          items={[
+            {
+              children: (
+                <UserTeamsPanel
+                  teams={teams}
+                  token={token}
+                  userId={user.id}
+                />
+              ),
+              key: 'teams',
+              label: '所属团队'
+            },
+            {
+              children: (
+                <UserAccessPanel
+                  accessGroups={accessGroups}
+                  disabled={disabled}
+                  isCurrentUser={isCurrentUser}
+                  user={user}
+                  onSetAccessGroups={onSetAccessGroups}
+                />
+              ),
+              key: 'access',
+              label: '能力与配额'
+            },
+            {
+              children: (
+                <div className='relay-user-detail__devices'>
+                  {canViewDeviceDetails
+                    ? (
+                      <DeviceTable
+                        devices={visibleDevices}
+                        initialVisibleColumnKeys={['name', 'status', 'lastSeenAt', 'capabilities']}
+                        searchPlaceholder='搜索设备、支持功能'
+                      />
+                    )
+                    : (
+                      <div className='relay-user-detail__private-devices'>
+                        <StatusBadge tone='muted'>{`${deviceCount} 台设备`}</StatusBadge>
+                        <span>设备明细仅账号本人可见</span>
+                      </div>
+                    )}
+                </div>
+              ),
+              key: 'devices',
+              label: '设备'
+            }
+          ]}
+        />
       </div>
     </section>
   )

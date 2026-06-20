@@ -1,0 +1,101 @@
+name: Relay Admin Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - apps/relay-admin/**
+      - packages/components/**
+      - packages/route-layout/**
+      - packages/tsconfigs/**
+      - packages/types/**
+      - packages/utils/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .node-version
+      - .github/workflows/deploy-relay-admin.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: relay-admin-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: deploy-relay-admin
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test Relay Admin
+        run: pnpm -C apps/relay-admin test
+
+      - name: Typecheck Relay Admin
+        run: pnpm -C apps/relay-admin typecheck
+
+      - name: Build Relay Admin platform artifact
+        run: pnpm -C apps/relay-admin build:platform
+
+      - name: Upload Relay Admin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: relay-admin-platform-artifact
+          path: apps/relay-admin/dist
+          if-no-files-found: error
+
+      - name: Trigger Relay Admin deployment
+        env:
+          GH_TOKEN: ${{ secrets.RELAY_ADMIN_DEPLOY_TOKEN }}
+          RELAY_ADMIN_DEPLOY_REPOSITORY: ${{ vars.RELAY_ADMIN_DEPLOY_REPOSITORY }}
+          RELAY_ADMIN_DEPLOY_WORKFLOW: ${{ vars.RELAY_ADMIN_DEPLOY_WORKFLOW }}
+          SOURCE_REF: main
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN}" ] || [ -z "${RELAY_ADMIN_DEPLOY_REPOSITORY}" ] || [ -z "${RELAY_ADMIN_DEPLOY_WORKFLOW}" ]; then
+            echo "::notice::Relay Admin deployment target is not configured; build artifact passed."
+            exit 0
+          fi
+
+          run_url="$(gh workflow run "${RELAY_ADMIN_DEPLOY_WORKFLOW}" \
+            --repo "${RELAY_ADMIN_DEPLOY_REPOSITORY}" \
+            --ref main \
+            -f source_ref="${SOURCE_REF}" \
+            -f source_sha="${SOURCE_SHA}")"
+
+          echo "$run_url"
+          run_id="${run_url##*/}"
+          if [ -z "$run_id" ] || [ "$run_id" = "$run_url" ]; then
+            echo "Unable to resolve Relay Admin workflow run id from: $run_url" >&2
+            exit 1
+          fi
+
+          gh run watch "$run_id" \
+            --repo "${RELAY_ADMIN_DEPLOY_REPOSITORY}" \
+            --exit-status \
+            --interval 10

@@ -2,7 +2,7 @@ import { Avatar, Dropdown } from 'antd'
 import type { MenuProps } from 'antd'
 import { useCallback, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import {
   HostNavRail,
@@ -70,6 +70,7 @@ export const AdminNavRail = ({
   onSelectAccount
 }: AdminNavRailProps) => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { isDarkMode, setThemeMode, themeMode } = useAdminTheme()
   const [language, setLanguage] = useState('zh-CN')
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
@@ -129,9 +130,15 @@ export const AdminNavRail = ({
   }, [activeToken, visibleAccounts])
   const openCurrentAccountProfile = useCallback(() => {
     if (currentUser == null) return
-    void navigate('/profile')
+    void navigate('/profile/account')
     setAccountMenuOpen(false)
   }, [currentUser, navigate])
+  const openMessageCenter = useCallback(() => {
+    void navigate('/messages')
+    setAccountMenuOpen(false)
+  }, [navigate])
+  const normalizedPathname = location.pathname.replace(/\/+$/u, '')
+  const isMessageCenterActive = normalizedPathname === '/messages' || normalizedPathname.startsWith('/messages/')
   const accountMenuItems = useMemo<MenuProps['items']>(() => {
     const accountItems = visibleAccounts.length === 0
       ? [{
@@ -165,7 +172,7 @@ export const AdminNavRail = ({
           ),
           onClick: () => {
             if (isActive) {
-              void navigate('/profile')
+              void navigate('/profile/account')
               setAccountMenuOpen(false)
               return
             }
@@ -187,6 +194,13 @@ export const AdminNavRail = ({
         key: 'account:detail',
         label: '个人资料',
         onClick: openCurrentAccountProfile
+      },
+      {
+        disabled: currentUser == null,
+        icon: <AdminIcon name='notifications' />,
+        key: 'account:messages',
+        label: '消息中心',
+        onClick: openMessageCenter
       },
       {
         icon: <AdminIcon name='login' />,
@@ -215,6 +229,7 @@ export const AdminNavRail = ({
     navigate,
     onLogout,
     onSelectAccount,
+    openMessageCenter,
     openCurrentAccountProfile,
     visibleAccounts
   ])
@@ -352,27 +367,42 @@ export const AdminNavRail = ({
       onPointerLeave={onPointerLeave}
       footerMenu={
         <div className='relay-admin-nav-footer-actions'>
-          <Dropdown
-            destroyOnHidden
-            overlayClassName='relay-admin-nav-menu-dropdown relay-admin-account-menu-dropdown'
-            open={accountMenuOpen}
-            placement='topLeft'
-            trigger={['click']}
-            onOpenChange={setAccountMenuOpen}
-            menu={{
-              items: accountMenuItems,
-              selectedKeys: activeAccountKey == null ? [] : [activeAccountKey]
-            }}
-          >
-            <HostNavRailFooterButton
-              active={accountMenuOpen}
-              aria-expanded={accountMenuOpen}
-              aria-haspopup='menu'
-              icon={currentUserAvatarNode}
-              label={accountLabel}
-              title={accountLabel}
-            />
-          </Dropdown>
+          <div className='relay-admin-nav-account-footer-row'>
+            <Dropdown
+              destroyOnHidden
+              overlayClassName='relay-admin-nav-menu-dropdown relay-admin-account-menu-dropdown'
+              open={accountMenuOpen}
+              placement='topLeft'
+              trigger={['click']}
+              onOpenChange={setAccountMenuOpen}
+              menu={{
+                items: accountMenuItems,
+                selectedKeys: activeAccountKey == null ? [] : [activeAccountKey]
+              }}
+            >
+              <HostNavRailFooterButton
+                active={accountMenuOpen}
+                aria-expanded={accountMenuOpen}
+                aria-haspopup='menu'
+                icon={currentUserAvatarNode}
+                label={accountLabel}
+                title={accountLabel}
+              />
+            </Dropdown>
+            <button
+              type='button'
+              aria-label='消息中心'
+              className={[
+                'relay-admin-nav-message-button',
+                isMessageCenterActive ? 'is-active' : ''
+              ].filter(Boolean).join(' ')}
+              disabled={currentUser == null}
+              title='消息中心'
+              onClick={openMessageCenter}
+            >
+              <AdminIcon name='notifications' />
+            </button>
+          </div>
           <Dropdown
             destroyOnHidden
             overlayClassName='relay-admin-nav-menu-dropdown'

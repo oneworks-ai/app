@@ -1,12 +1,24 @@
 import { AdminIcon } from '../shared/ui/AdminIcon'
 import type { AdminIconName } from '../shared/ui/AdminIcon'
 
-export type AdminNavIconName = 'devices' | 'users' | 'invites' | 'sso'
+export type AdminNavIconName =
+  | 'access-groups'
+  | 'devices'
+  | 'users'
+  | 'invites'
+  | 'message-pushes'
+  | 'openapi'
+  | 'sso'
+  | 'teams'
 
 const iconByName: Record<AdminNavIconName, AdminIconName> = {
+  'access-groups': 'badge',
   devices: 'hub',
   invites: 'key',
+  'message-pushes': 'notifications',
+  openapi: 'fact_check',
   sso: 'link',
+  teams: 'admin_panel_settings',
   users: 'group'
 }
 

@@ -1,0 +1,548 @@
+.relay-team-panel {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.relay-team-panel__detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.relay-team-panel__detail-header h3 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--ant-color-text, #1f2328);
+  font: 700 15px/1.35 ui-sans-serif, system-ui, sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-team-panel__detail-header p {
+  overflow: hidden;
+  margin: 4px 0 0;
+  color: var(--ant-color-text-secondary, #57606a);
+  font: 500 12px/1.35 ui-sans-serif, system-ui, sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-team-panel__tabs {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.relay-team-panel__tabs > .ant-tabs-nav {
+  margin: 0 0 12px;
+}
+
+.relay-team-panel__tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.relay-team-panel__tab-label .relay-admin-icon {
+  flex: 0 0 auto;
+  height: 16px;
+  width: 16px;
+}
+
+.relay-team-panel__tabs > .ant-tabs-nav .ant-tabs-extra-content {
+  display: flex;
+  align-items: center;
+}
+
+.relay-team-panel__tabs > .ant-tabs-content-holder {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.relay-team-panel__tabs > .ant-tabs-content-holder > .ant-tabs-content,
+.relay-team-panel__tabs .ant-tabs-tabpane {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+}
+
+.relay-team-panel__tabs .ant-tabs-tabpane-hidden {
+  display: none;
+}
+
+.relay-team-panel__tab-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.relay-team-panel__policy-form {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+
+.relay-team-panel__team-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  border-top: 1px solid
+    color-mix(
+      in srgb,
+      var(--border-color, var(--ant-color-border-secondary, #f0f0f0)) 70%,
+      transparent
+    );
+}
+
+.relay-team-panel__settings-row,
+.relay-team-panel__settings-actions-row {
+  display: grid;
+  grid-template-columns: 156px minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+  min-width: 0;
+  padding: var(--relay-admin-padding) 0;
+  border-bottom: 1px solid
+    color-mix(
+      in srgb,
+      var(--border-color, var(--ant-color-border-secondary, #f0f0f0)) 70%,
+      transparent
+    );
+}
+
+.relay-team-panel__settings-actions-row {
+  border-bottom: 0;
+  margin-top: auto;
+  padding: var(--relay-admin-padding) 0 0;
+}
+
+.relay-team-panel__settings-row--avatar {
+  align-items: center;
+  padding: var(--relay-admin-padding) 0;
+}
+
+.relay-team-panel__settings-row--avatar .relay-team-panel__settings-control {
+  justify-items: end;
+}
+
+.relay-team-panel__settings-row--description {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.relay-team-panel__settings-row--description .relay-team-panel__settings-label {
+  min-height: 0;
+}
+
+.relay-team-panel__settings-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  min-width: 0;
+  color: var(--sub-text-color, var(--ant-color-text-secondary, #57606a));
+  font: 650 12px/1.35 ui-sans-serif, system-ui, sans-serif;
+}
+
+.relay-team-panel__settings-required {
+  color: var(--ant-color-error, #cf222e);
+  margin-right: 4px;
+}
+
+.relay-team-panel__settings-control {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  min-width: 0;
+}
+
+.relay-team-panel__settings-control-item.ant-form-item {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.relay-team-panel__settings-control-item .ant-form-item-control-input {
+  min-height: 34px;
+}
+
+.relay-team-panel__team-settings-form .ant-input {
+  border-color: color-mix(in srgb, var(--border-color) 84%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-color) 94%, var(--text-color) 6%);
+}
+
+.relay-team-panel__team-settings-form textarea.ant-input {
+  min-height: 104px;
+  resize: vertical;
+}
+
+.relay-team-panel__avatar-upload.ant-upload-wrapper,
+.relay-team-panel__avatar-upload .ant-upload {
+  display: block;
+  width: 76px;
+  height: 76px;
+}
+
+.relay-team-panel__avatar-trigger {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  padding: 0;
+  overflow: hidden;
+  color: inherit;
+  background: color-mix(in srgb, var(--bg-color) 88%, var(--text-color) 12%);
+  border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.relay-team-panel__avatar-trigger:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+}
+
+.relay-team-panel__avatar-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  color: #fff;
+  background: rgb(0 0 0 / 64%);
+  opacity: 0;
+  transition: opacity 160ms ease;
+  font: 700 12px/1.2 ui-sans-serif, system-ui, sans-serif;
+}
+
+.relay-team-panel__avatar-overlay .relay-admin-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.relay-team-panel__avatar-trigger:not(:disabled):hover
+  .relay-team-panel__avatar-overlay,
+.relay-team-panel__avatar-trigger:not(:disabled):focus-visible
+  .relay-team-panel__avatar-overlay {
+  opacity: 1;
+}
+
+.relay-team-panel__avatar-trigger:focus-visible {
+  outline: 2px solid var(--ant-color-primary, #1677ff);
+  outline-offset: 2px;
+}
+
+.relay-team-panel__avatar-error.ant-alert {
+  width: max-content;
+  max-width: 220px;
+  padding: var(--relay-admin-padding);
+  font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif;
+}
+
+.relay-team-panel__settings-switch-item.ant-form-item {
+  justify-self: end;
+  width: max-content;
+}
+
+.relay-team-panel__settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0;
+}
+
+.relay-team-panel__settings-submit.ant-btn {
+  height: 34px;
+  min-width: 148px;
+}
+
+.relay-team-panel--settings {
+  align-items: stretch;
+}
+
+.relay-team-panel__policy-switches,
+.relay-team-panel__policy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+.relay-team-panel__policy-grid .ant-input-number {
+  width: 100%;
+}
+
+.relay-team-panel__team-link,
+.relay-team-panel__profile-button {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.relay-team-panel__profile-button {
+  border: 0;
+  color: var(--ant-color-link, #1677ff);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.relay-team-panel__profile-button.is-active {
+  color: var(--ant-color-primary, #1677ff);
+  font-weight: 700;
+}
+
+.relay-team-panel__team-link {
+  color: var(--ant-color-link, #1677ff);
+}
+
+.relay-team-detail {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.relay-team-detail__overview {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(360px, auto);
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 18px;
+  min-width: 0;
+  border-bottom: 1px solid
+    var(--border-color, var(--ant-color-border-secondary, #f0f0f0));
+  padding: 0 0 var(--relay-admin-padding);
+}
+
+.relay-team-detail__identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.relay-team-detail__avatar {
+  flex: 0 0 auto;
+  border: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+  color: var(--ant-color-primary, #1677ff);
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 8%), transparent),
+    var(--ant-color-fill-secondary, #f6f8fa);
+  font: 800 15px/1 ui-sans-serif, system-ui, sans-serif;
+}
+
+.relay-team-detail__identity-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.relay-team-detail__name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.relay-team-detail__name-row h2 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-color, var(--ant-color-text, #1f2328));
+  font: 750 16px/1.3 ui-sans-serif, system-ui, sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-team-detail__slug {
+  overflow: hidden;
+  margin: 0;
+  color: var(--sub-text-color, var(--ant-color-text-tertiary, #8c959f));
+  font: 600 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-team-detail__description {
+  max-width: 640px;
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-color, var(--ant-color-text, #1f2328));
+  font: 500 12px/1.45 ui-sans-serif, system-ui, sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-team-detail__description.is-empty {
+  color: var(--sub-text-color, var(--ant-color-text-tertiary, #8c959f));
+}
+
+.relay-team-detail__meta-list {
+  display: grid;
+  flex: 0 1 auto;
+  grid-template-columns: repeat(4, minmax(72px, auto));
+  gap: 10px 16px;
+  min-width: 0;
+  margin: 0;
+}
+
+.relay-team-detail__meta-item {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.relay-team-detail__meta-item dt {
+  color: var(--sub-text-color, var(--ant-color-text-tertiary, #8c959f));
+  font: 600 11px/1.3 ui-sans-serif, system-ui, sans-serif;
+}
+
+.relay-team-detail__meta-item dd {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-color, var(--ant-color-text, #1f2328));
+  font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-team-detail__empty {
+  padding: var(--relay-admin-padding) 0;
+}
+
+.relay-team-panel__secondary {
+  color: var(--ant-color-text-secondary, #57606a);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.relay-team-panel__profiles,
+.relay-team-panel__members,
+.relay-team-panel__profile-detail,
+.relay-team-panel__secrets,
+.relay-team-panel__audit {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.relay-team-panel__profile-table,
+.relay-team-panel__assignment-table,
+.relay-team-panel__secret-table,
+.relay-team-panel__audit-table {
+  flex: 0 0 auto;
+}
+
+.relay-team-panel__member-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.relay-team-panel__member-avatar.ant-avatar {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+  color: var(--sub-text-color);
+  background: color-mix(in srgb, var(--text-color) 8%, transparent);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.relay-team-panel__member-identity-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.relay-team-panel__member-identity-copy strong,
+.relay-team-panel__member-email,
+.relay-team-panel__member-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-team-panel__member-email {
+  color: var(--ant-color-text-secondary, #57606a);
+  font-size: 12px;
+}
+
+.relay-team-panel__member-id {
+  color: var(--ant-color-text-tertiary, #8c959f);
+  font: 600 11px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.relay-team-panel__json-inline {
+  max-width: 260px;
+  max-height: 72px;
+  overflow: auto;
+  margin: 0;
+  color: var(--ant-color-text-secondary, #57606a);
+  font: 600 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.relay-team-panel__error {
+  margin: 0;
+  color: var(--ant-color-error, #cf222e);
+  font: 600 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+}
+
+.relay-team-panel__notice {
+  margin: 0;
+  color: var(--ant-color-success, #1a7f37);
+  font: 600 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+}
+
+@media (max-width: 640px) {
+  .relay-team-detail__overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .relay-team-detail__description {
+    max-width: none;
+  }
+
+  .relay-team-detail__meta-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .relay-team-panel__settings-row,
+  .relay-team-panel__settings-actions-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .relay-team-panel__settings-row--avatar .relay-team-panel__settings-control,
+  .relay-team-panel__settings-switch-item.ant-form-item {
+    justify-self: start;
+    justify-items: start;
+  }
+
+  .relay-team-panel__policy-switches,
+  .relay-team-panel__policy-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

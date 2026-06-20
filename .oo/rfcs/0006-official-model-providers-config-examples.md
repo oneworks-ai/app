@@ -113,6 +113,12 @@ modelServices:
       workspaceId: ws_xxx
 ```
 
+## Coding Plan / Token Plan 示例
+
+Coding Plan / Token Plan 是服务商的计费套餐，不是 agent Plan Mode。套餐服务使用独立 provider id，避免把普通 API key/base URL 和套餐 key/base URL 混用。
+
+详细 provider id、endpoint、区域覆盖和 YAML 示例见 [Coding Plan 与 Token Plan](./0006-official-model-providers-coding-plans.md)。
+
 ## 云资源型服务
 
 Azure OpenAI、Vertex AI、Bedrock 这类不是简单 `provider + apiKey`。它们需要在 `providerOptions` 里记录资源、区域、部署或认证方式。

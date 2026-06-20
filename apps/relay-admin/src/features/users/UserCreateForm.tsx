@@ -1,9 +1,14 @@
 import { Button, Form, Input, InputNumber, Select } from 'antd'
 
-import { relayAdminRoles } from '../../shared/model/adminRoles'
-import type { CreateUserInput, RelayAdminRole } from '../../shared/model/adminTypes'
+import type { CreateUserInput, RelayAdminAccessGroup, RelayAdminRole } from '../../shared/model/adminTypes'
+import {
+  accessGroupOptions,
+  defaultPlatformGroupIds,
+  roleFromPlatformGroupIds
+} from '../access-groups/accessGroupModel'
 
 export interface UserCreateFormProps {
+  accessGroups: RelayAdminAccessGroup[]
   disabled: boolean
   onCreateUser: (input: CreateUserInput) => Promise<void>
   onCreated?: () => void
@@ -11,23 +16,26 @@ export interface UserCreateFormProps {
 
 interface UserCreateFormValues {
   email: string
+  groupIds: string[]
   loginId?: string
   maxDevices?: number | null
   name?: string
   password?: string
-  role: RelayAdminRole
+  role?: RelayAdminRole
 }
 
-export const UserCreateForm = ({ disabled, onCreated, onCreateUser }: UserCreateFormProps) => {
+export const UserCreateForm = ({ accessGroups, disabled, onCreated, onCreateUser }: UserCreateFormProps) => {
   const [form] = Form.useForm<UserCreateFormValues>()
 
   const handleCreate = async (values: UserCreateFormValues) => {
+    const groupIds = values.groupIds?.length === 0 ? defaultPlatformGroupIds('member') : values.groupIds
     const input: CreateUserInput = {
       email: values.email.trim(),
+      groupIds,
       loginId: values.loginId?.trim() === '' ? null : values.loginId?.trim(),
       maxDevices: values.maxDevices ?? null,
       name: values.name?.trim() ?? '',
-      role: values.role
+      role: roleFromPlatformGroupIds(groupIds, 'member')
     }
     const password = values.password ?? ''
     if (password !== '') input.password = password
@@ -41,7 +49,7 @@ export const UserCreateForm = ({ disabled, onCreated, onCreateUser }: UserCreate
     <Form
       form={form}
       layout='vertical'
-      initialValues={{ role: 'member' }}
+      initialValues={{ groupIds: defaultPlatformGroupIds('member') }}
       onFinish={handleCreate}
     >
       <Form.Item label='邮箱' name='email' rules={[{ required: true, type: 'email' }]}>
@@ -56,8 +64,13 @@ export const UserCreateForm = ({ disabled, onCreated, onCreateUser }: UserCreate
       <Form.Item label='登录密码' name='password' rules={[{ min: 8 }]}>
         <Input.Password autoComplete='new-password' disabled={disabled} placeholder='至少 8 位，留空则暂不启用' />
       </Form.Item>
-      <Form.Item label='权限' name='role' rules={[{ required: true }]}>
-        <Select disabled={disabled} options={relayAdminRoles.map(role => ({ label: role, value: role }))} />
+      <Form.Item label='用户组' name='groupIds' rules={[{ required: true }]}>
+        <Select
+          disabled={disabled}
+          mode='multiple'
+          optionFilterProp='label'
+          options={accessGroupOptions(accessGroups, 'platform')}
+        />
       </Form.Item>
       <Form.Item label='设备上限' name='maxDevices'>
         <InputNumber

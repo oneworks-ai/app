@@ -14,6 +14,7 @@ export interface RelayPermissionPrincipal {
 }
 
 export const deviceTokenPermissions = Object.freeze([
+  relayPermissions.relayConfigSnapshotRead,
   relayPermissions.relayDevicesHeartbeat,
   relayPermissions.relayDevicesRead,
   relayPermissions.relayDevicesRegister,
@@ -28,9 +29,12 @@ export const adminTokenPrincipal = (): RelayPermissionPrincipal => ({
   permissions: relayPermissionList
 })
 
-export const sessionPrincipalForUser = (user: RelayUser): RelayPermissionPrincipal => ({
+export const sessionPrincipalForUser = (
+  user: RelayUser,
+  permissions: readonly string[] = permissionsForRole(user.role)
+): RelayPermissionPrincipal => ({
   kind: 'session',
-  permissions: permissionsForRole(user.role),
+  permissions: permissions.filter(isRelayPermission),
   role: user.role,
   userId: user.id
 })

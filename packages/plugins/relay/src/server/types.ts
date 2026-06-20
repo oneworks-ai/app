@@ -1,5 +1,6 @@
 import type { Buffer } from 'node:buffer'
 
+import type { RelayConfigSourcePreferences } from './config-source-preferences.js'
 import type { RelayLocalSessionAdapter } from './session-types.js'
 
 export type RelayLocalizedText = string | Record<string, string>
@@ -18,6 +19,10 @@ export interface RelayPluginContext {
   workspaceFolder: string
   projectHome: string
   options: Record<string, unknown>
+  configDistribution?: {
+    getStatus?: () => RelayConfigDistributionStatus | Promise<RelayConfigDistributionStatus>
+    refresh?: () => RelayConfigDistributionStatus | Promise<RelayConfigDistributionStatus>
+  }
   logger: {
     warn: (...args: unknown[]) => void
   }
@@ -71,10 +76,13 @@ export interface RelayOptions {
 
 export interface RelayStoredServer {
   account?: RelayAccountProfile
+  configDisabledSources?: RelayConfigSourcePreferences
   deviceToken: string
   id: string
   registeredAt?: string
   remoteBaseUrl: string
+  sessionExpiresAt?: string
+  sessionToken?: string
   updatedAt?: string
 }
 
@@ -111,4 +119,67 @@ export interface RelayConnectionState {
   lastConnectedAt: string | null
   lastError: string | null
   remoteBaseUrl?: string
+}
+
+export interface RelayConfigDistributionStatus {
+  allowedFields: string[]
+  hash: string | null
+  lastAppliedAt: string | null
+  lastError: string | null
+  lastSyncedAt: string | null
+  marketplaceKeys: string[]
+  matchedProject: boolean | string | null
+  modelServiceKeys: string[]
+  pluginKeys: string[]
+  skillKeys: string[]
+  skillRegistryKeys: string[]
+  sourceServerId: string | null
+  sources?: RelayConfigDistributionSourceStatus[]
+  version: string | null
+}
+
+export interface RelayConfigDistributionSourceStatus {
+  assignmentId: string
+  disabledBy: Array<'assignment' | 'profile' | 'team'>
+  enabled: boolean
+  fields: string[]
+  mode: 'default' | 'override'
+  profileId: string
+  profileName: string
+  teamId: string
+  teamName?: string
+  version: number
+  versionId: string
+}
+
+export interface RelayPublicServerStatus extends RelayServerOptions {
+  account?: RelayAccountProfile
+  active: boolean
+  connected: boolean
+  connection: RelayConnectionState
+  devices?: RelayRemoteDeviceSummary[]
+  devicesError?: string
+  hasToken: boolean
+  registeredAt: string | null
+  sessionExpiresAt: string | null
+  sessionAuthenticated: boolean
+  updatedAt: string | null
+}
+
+export interface RelayPublicStatus {
+  configDistribution: RelayConfigDistributionStatus
+  connection: RelayConnectionState & {
+    activeServerId?: string
+    remoteBaseUrl?: string
+  }
+  device: {
+    hasToken: boolean
+    id: string
+    name: string
+    registeredAt: string | null
+    updatedAt: string | null
+  }
+  options: RelayOptions
+  servers: RelayPublicServerStatus[]
+  storePath: string
 }

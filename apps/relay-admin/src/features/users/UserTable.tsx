@@ -1,25 +1,27 @@
 /* eslint-disable max-lines -- user table keeps admin list controls, editable columns, and row actions together. */
-import { Avatar, InputNumber, Select, Space, Tooltip } from 'antd'
+import { Avatar, InputNumber, Space, Tooltip } from 'antd'
 import type { TableColumnsType } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import type { Key } from 'react'
 import { Link } from 'react-router-dom'
 
-import { relayAdminRoles } from '../../shared/model/adminRoles'
-import type { RelayAdminCurrentUser, RelayAdminRole, RelayAdminUser } from '../../shared/model/adminTypes'
+import type { RelayAdminAccessGroup, RelayAdminUser } from '../../shared/model/adminTypes'
 import { AdminActionButton } from '../../shared/ui/AdminActionButton'
 import { AdminColumnFilter } from '../../shared/ui/AdminColumnFilter'
 import { AdminListTable } from '../../shared/ui/AdminListTable'
 import type { AdminListColumnOption } from '../../shared/ui/AdminListTable'
+import { StatusBadge } from '../../shared/ui/StatusBadge'
+import { accessGroupName } from '../access-groups/accessGroupModel'
 import { UserPasswordModal } from './UserPasswordModal'
+import type { UserTableGroupFilter, UserTableTeamFilter } from './userTableModel'
+import { createUserGroupFilterOptions, createUserTeamFilterOptions, filterRelayAdminUsers } from './userTableModel'
 
 export interface UserTableProps {
-  currentUser?: RelayAdminCurrentUser
+  accessGroups: RelayAdminAccessGroup[]
   disabled: boolean
   onSetDisabled: (user: RelayAdminUser, disabled: boolean) => Promise<void>
   onSetMaxDevices: (user: RelayAdminUser, maxDevices: number | null) => Promise<void>
   onSetPassword: (user: RelayAdminUser, password: string) => Promise<void>
-  onSetRole: (user: RelayAdminUser, role: RelayAdminRole) => Promise<void>
   users: RelayAdminUser[]
 }
 
@@ -36,23 +38,24 @@ const userAvatarFallback = (user: RelayAdminUser) => (
 const userStatus = (user: RelayAdminUser) => user.disabled ? 'disabled' : 'active'
 
 export const UserTable = ({
-  currentUser,
+  accessGroups,
   disabled,
   onSetDisabled,
   onSetMaxDevices,
   onSetPassword,
-  onSetRole,
   users
 }: UserTableProps) => {
   const [passwordUser, setPasswordUser] = useState<RelayAdminUser | undefined>()
-  const [roleFilter, setRoleFilter] = useState<RelayAdminRole | 'all'>('all')
+  const [groupFilter, setGroupFilter] = useState<UserTableGroupFilter>('all')
   const [searchValue, setSearchValue] = useState('')
   const [selectedUserKeys, setSelectedUserKeys] = useState<Key[]>([])
   const [sourceFilter, setSourceFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'disabled'>('all')
+  const [teamFilter, setTeamFilter] = useState<UserTableTeamFilter>('all')
   const [visibleColumnKeys, setVisibleColumnKeys] = useState([
     'identity',
-    'role',
+    'groups',
+    'teams',
     'devices',
     'provider'
   ])
@@ -60,30 +63,17 @@ export const UserTable = ({
     () => Array.from(new Set(users.map(user => user.provider ?? 'local'))).sort(),
     [users]
   )
+  const groupOptions = useMemo(() => createUserGroupFilterOptions(accessGroups), [accessGroups])
+  const teamOptions = useMemo(() => createUserTeamFilterOptions(users), [users])
   const filteredUsers = useMemo(() => {
-    const normalizedSearch = searchValue.trim().toLowerCase()
-    return users.filter(user => {
-      const source = user.provider ?? 'local'
-      const status = user.disabled ? 'disabled' : 'active'
-      const searchableValues = [
-        user.email,
-        user.id,
-        user.loginId ?? '',
-        user.name,
-        `${user.deviceCount}`,
-        user.maxDevices == null ? 'unlimited' : `${user.maxDevices}`,
-        user.role,
-        source,
-        status
-      ]
-      return (
-        (normalizedSearch === '' || searchableValues.some(value => value.toLowerCase().includes(normalizedSearch))) &&
-        (roleFilter === 'all' || user.role === roleFilter) &&
-        (sourceFilter === 'all' || source === sourceFilter) &&
-        (statusFilter === 'all' || status === statusFilter)
-      )
+    return filterRelayAdminUsers(users, accessGroups, {
+      groupFilter,
+      searchValue,
+      sourceFilter,
+      statusFilter,
+      teamFilter
     })
-  }, [roleFilter, searchValue, sourceFilter, statusFilter, users])
+  }, [accessGroups, groupFilter, searchValue, sourceFilter, statusFilter, teamFilter, users])
   const filteredUserIds = useMemo(() => new Set(filteredUsers.map(user => user.id)), [filteredUsers])
   const selectedUsers = useMemo(
     () => users.filter(user => selectedUserKeys.includes(user.id)),
@@ -98,7 +88,8 @@ export const UserTable = ({
   const columnOptions: AdminListColumnOption[] = [
     { key: 'identity', label: '用户', required: true },
     { key: 'id', label: '用户 ID' },
-    { key: 'role', label: '权限' },
+    { key: 'groups', label: '用户组' },
+    { key: 'teams', label: '团队' },
     { key: 'devices', label: '设备' },
     { key: 'provider', label: '来源' }
   ]
@@ -162,35 +153,60 @@ export const UserTable = ({
       width: 280
     },
     {
-      dataIndex: 'role',
-      key: 'role',
-      render: (_, user) => {
-        const isCurrentUser = currentUser?.id === user.id
-        return (
-          <Select
-            aria-label={isCurrentUser ? '不能修改自己的权限' : `Role for ${user.email}`}
-            disabled={disabled || isCurrentUser}
-            onChange={role => void onSetRole(user, role)}
-            options={relayAdminRoles.map(role => ({ label: role, value: role }))}
-            size='small'
-            value={user.role}
-          />
-        )
-      },
+      key: 'groups',
+      render: (_, user) => (
+        <span className='relay-user-panel__groups'>
+          {user.groupIds.length === 0
+            ? <span className='relay-user-panel__secondary'>-</span>
+            : user.groupIds.map(groupId => (
+              <StatusBadge key={groupId} tone='muted'>
+                {accessGroupName(accessGroups, groupId)}
+              </StatusBadge>
+            ))}
+        </span>
+      ),
       title: (
-        <AdminColumnFilter<RelayAdminRole | 'all'>
+        <AdminColumnFilter<UserTableGroupFilter>
           allValue='all'
-          ariaLabel='按权限过滤用户'
-          label='权限'
+          ariaLabel='按用户组过滤用户'
+          label='用户组'
           options={[
-            { label: '全部权限', value: 'all' },
-            ...relayAdminRoles.map(role => ({ label: role, value: role }))
+            { label: '全部用户组', value: 'all' },
+            ...groupOptions
           ]}
-          value={roleFilter}
-          onChange={setRoleFilter}
+          value={groupFilter}
+          onChange={setGroupFilter}
         />
       ),
-      width: 106
+      width: 180
+    },
+    {
+      key: 'teams',
+      render: (_, user) => (
+        <span className='relay-user-panel__teams'>
+          {user.teams.length === 0
+            ? <span className='relay-user-panel__secondary'>-</span>
+            : user.teams.map(team => (
+              <StatusBadge key={team.id} tone={team.configEnabled ? 'success' : 'warning'}>
+                {team.name}
+              </StatusBadge>
+            ))}
+        </span>
+      ),
+      title: (
+        <AdminColumnFilter<UserTableTeamFilter>
+          allValue='all'
+          ariaLabel='按团队过滤用户'
+          label='团队'
+          options={[
+            { label: '全部团队', value: 'all' },
+            ...teamOptions
+          ]}
+          value={teamFilter}
+          onChange={setTeamFilter}
+        />
+      ),
+      width: 190
     },
     {
       dataIndex: 'deviceCount',
@@ -301,7 +317,7 @@ export const UserTable = ({
         dataSource={filteredUsers}
         emptyText='暂无用户'
         rowKey='id'
-        searchPlaceholder='搜索邮箱、Login ID、名称、来源'
+        searchPlaceholder='搜索邮箱、Login ID、名称、来源、用户组、团队'
         searchValue={searchValue}
         selectedRowKeys={selectedUserKeys}
         visibleColumnKeys={visibleColumnKeys}

@@ -1,37 +1,72 @@
+/* eslint-disable max-lines -- dashboard owns route-section composition for the admin workbench. */
+
+import { AccessGroupEditorPage } from '../access-groups/AccessGroupEditorPage'
+import { AccessGroupPanel } from '../access-groups/AccessGroupPanel'
 import { DeviceDetailPage } from '../devices/DeviceDetailPage'
 import { DevicePanel } from '../devices/DevicePanel'
 import { InvitePanel } from '../invites/InvitePanel'
+import { MessageCenterPage } from '../messages/MessageCenterPage'
+import { OpenApiPage } from '../openapi/OpenApiPage'
 import { ProfilePage } from '../profile/ProfilePage'
 import { SsoProviderPanel } from '../sso/SsoProviderPanel'
+import { TeamAccessGroupEditorPage } from '../teams/TeamAccessGroupEditorPage'
+import { TeamDetailPage } from '../teams/TeamDetailPage'
+import { TeamDetailSettingsPage } from '../teams/TeamDetailSettingsPage'
+import { TeamPanel } from '../teams/TeamPanel'
+import { TeamSettingsPage } from '../teams/TeamSettingsPage'
 import { UserDetailPage } from '../users/UserDetailPage'
 import { UserPanel } from '../users/UserPanel'
 import { AdminStatusBar } from './AdminStatusBar'
 import type { RelayAdminDashboardState } from './useRelayAdminDashboard'
 
+export type AdminDashboardMessageMode = 'center' | 'create' | 'history'
 export type AdminDashboardSectionId =
+  | 'access-groups'
+  | 'access-group-editor'
   | 'device-detail'
   | 'devices'
   | 'profile'
   | 'user-detail'
   | 'users'
   | 'invites'
+  | 'messages'
+  | 'openapi'
   | 'sso'
-export type AdminDashboardCreateSectionId = Extract<AdminDashboardSectionId, 'invites' | 'sso' | 'users'>
+  | 'team-detail'
+  | 'team-access-group-editor'
+  | 'team-detail-settings'
+  | 'team-settings'
+  | 'teams'
+export type AdminDashboardCreateSectionId = Extract<
+  AdminDashboardSectionId,
+  'invites' | 'sso' | 'teams' | 'users'
+>
 
 export interface AdminDashboardProps {
+  accessGroupEditorMode?: 'create' | 'edit'
   createSectionId?: AdminDashboardCreateSectionId
   dashboard: RelayAdminDashboardState
+  messageDetailBasePath?: '/message-pushes' | '/messages'
+  messageId?: string
+  messageMode?: AdminDashboardMessageMode
+  resetTeamDetailSettingsSignal?: number
   sectionId: AdminDashboardSectionId
   onCreateSectionChange?: (sectionId: AdminDashboardCreateSectionId | undefined) => void
 }
 
 export const AdminDashboard = ({
   createSectionId,
+  accessGroupEditorMode = 'edit',
   dashboard,
+  messageDetailBasePath,
+  messageId,
+  messageMode,
+  resetTeamDetailSettingsSignal,
   sectionId,
   onCreateSectionChange
 }: AdminDashboardProps) => {
   const disabled = dashboard.loading || !dashboard.canLoad
+  const platformAccessGroups = dashboard.accessGroups.filter(group => group.scope === 'platform')
   const statusBar = (
     <AdminStatusBar
       authError={dashboard.authError}
@@ -56,6 +91,25 @@ export const AdminDashboard = ({
           devices={dashboard.devices}
         />
       )}
+      {sectionId === 'access-groups' && (
+        <AccessGroupPanel
+          disabled={disabled}
+          getGroupPath={group => `/access-groups/${encodeURIComponent(group.id)}`}
+          groups={platformAccessGroups}
+          scope='platform'
+          onDeleteGroup={dashboard.deleteAccessGroup}
+          onUpdateGroup={dashboard.updateAccessGroup}
+        />
+      )}
+      {sectionId === 'access-group-editor' && (
+        <AccessGroupEditorPage
+          disabled={disabled}
+          groups={platformAccessGroups}
+          mode={accessGroupEditorMode}
+          onCreateGroup={dashboard.createAccessGroup}
+          onUpdateGroup={dashboard.updateAccessGroup}
+        />
+      )}
       {sectionId === 'device-detail' && (
         <DeviceDetailPage
           currentUser={dashboard.currentUser}
@@ -67,7 +121,7 @@ export const AdminDashboard = ({
       )}
       {sectionId === 'users' && (
         <UserPanel
-          currentUser={dashboard.currentUser}
+          accessGroups={platformAccessGroups}
           disabled={disabled}
           isCreateOpen={createSectionId === 'users'}
           onCreateUser={dashboard.createUser}
@@ -75,20 +129,22 @@ export const AdminDashboard = ({
           onSetDisabled={dashboard.setUserDisabled}
           onSetMaxDevices={dashboard.setUserMaxDevices}
           onSetPassword={dashboard.setUserPassword}
-          onSetRole={dashboard.setUserRole}
           users={dashboard.users}
         />
       )}
       {sectionId === 'user-detail' && (
         <UserDetailPage
+          accessGroups={platformAccessGroups}
           currentUser={dashboard.currentUser}
           devices={dashboard.devices}
           disabled={disabled}
           invites={dashboard.invites}
           loading={dashboard.loading || dashboard.authStatus === 'checking'}
           onSetLoginId={dashboard.setUserLoginId}
+          teams={dashboard.teams}
+          token={dashboard.token}
+          onSetAccessGroups={dashboard.setUserAccessGroups}
           onSetMaxDevices={dashboard.setUserMaxDevices}
-          onSetRole={dashboard.setUserRole}
           users={dashboard.users}
         />
       )}
@@ -96,7 +152,28 @@ export const AdminDashboard = ({
         <ProfilePage
           accounts={dashboard.accounts}
           activeToken={dashboard.token}
+          accessGroups={dashboard.accessGroups}
           currentUser={dashboard.currentUser}
+          devices={dashboard.devices}
+          teams={dashboard.teams}
+          onAccountDeleted={dashboard.logout}
+        />
+      )}
+      {sectionId === 'openapi' && (
+        <OpenApiPage currentUser={dashboard.currentUser} />
+      )}
+      {sectionId === 'messages' && (
+        <MessageCenterPage
+          accounts={dashboard.accounts}
+          activeToken={dashboard.token}
+          currentUser={dashboard.currentUser}
+          detailBasePath={messageDetailBasePath}
+          messageId={messageId}
+          mode={messageMode}
+          teams={dashboard.teams}
+          token={dashboard.token}
+          users={dashboard.users}
+          onTeamInvitationChanged={dashboard.refresh}
         />
       )}
       {sectionId === 'invites' && (
@@ -120,6 +197,51 @@ export const AdminDashboard = ({
           onSetEnabled={dashboard.setSsoProviderEnabled}
           onUpdateProvider={dashboard.updateSsoProvider}
           providers={dashboard.ssoProviders}
+        />
+      )}
+      {sectionId === 'teams' && (
+        <TeamPanel
+          disabled={disabled}
+          isCreateOpen={createSectionId === 'teams'}
+          teams={dashboard.teams}
+          onCreateOpenChange={open => onCreateSectionChange?.(open ? 'teams' : undefined)}
+          onCreateTeam={dashboard.createTeam}
+          onSetArchived={dashboard.setTeamArchived}
+        />
+      )}
+      {sectionId === 'team-settings' && (
+        <TeamSettingsPage
+          disabled={disabled}
+          policy={dashboard.teamPolicy}
+          onUpdatePolicy={dashboard.updateTeamPolicy}
+        />
+      )}
+      {sectionId === 'team-detail' && (
+        <TeamDetailPage
+          disabled={disabled}
+          loading={dashboard.loading || dashboard.authStatus === 'checking'}
+          policy={dashboard.teamPolicy}
+          teams={dashboard.teams}
+          token={dashboard.token}
+        />
+      )}
+      {sectionId === 'team-detail-settings' && (
+        <TeamDetailSettingsPage
+          disabled={disabled}
+          loading={dashboard.loading || dashboard.authStatus === 'checking'}
+          resetSignal={resetTeamDetailSettingsSignal}
+          teams={dashboard.teams}
+          onUpdateTeam={dashboard.updateTeam}
+        />
+      )}
+      {sectionId === 'team-access-group-editor' && (
+        <TeamAccessGroupEditorPage
+          disabled={disabled}
+          loading={dashboard.loading || dashboard.authStatus === 'checking'}
+          mode={accessGroupEditorMode}
+          teams={dashboard.teams}
+          token={dashboard.token}
+          onSaved={dashboard.refresh}
         />
       )}
     </div>

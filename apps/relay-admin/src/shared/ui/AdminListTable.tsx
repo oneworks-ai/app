@@ -1,12 +1,16 @@
 import './AdminListTable.css'
 
-import { Checkbox, Input, Pagination, Popover, Table } from 'antd'
+import { Input, Popover, Table } from 'antd'
 import type { TableColumnsType, TableProps } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import type { Key, ReactNode } from 'react'
 
 import { AdminActionButton } from './AdminActionButton'
 import { AdminIcon } from './AdminIcon'
+import { AdminListTableColumnPicker } from './AdminListTableColumnPicker'
+import { AdminListTablePagination } from './AdminListTablePagination'
+import { sortAdminListData, sorterCompare } from './AdminListTableSort'
+import type { AdminListSortOrder, AdminListSortState } from './AdminListTableSort'
 
 export interface AdminListColumnOption {
   key: string
@@ -26,6 +30,7 @@ export interface AdminListTableProps<T extends object> {
   searchPlaceholder: string
   searchValue: string
   selectedRowKeys?: Key[]
+  toolbarActions?: ReactNode
   visibleColumnKeys: string[]
   onSearchChange: (value: string) => void
   onSelectedRowKeysChange?: (keys: Key[]) => void
@@ -46,6 +51,7 @@ export const AdminListTable = <T extends object>({
   searchPlaceholder,
   searchValue,
   selectedRowKeys = [],
+  toolbarActions,
   visibleColumnKeys,
   onSearchChange,
   onSelectedRowKeysChange,
@@ -54,6 +60,7 @@ export const AdminListTable = <T extends object>({
   const [isColumnPickerOpen, setIsColumnPickerOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [sortState, setSortState] = useState<AdminListSortState | undefined>()
   const maxPage = Math.max(1, Math.ceil(dataSource.length / pageSize))
   const requiredColumnKeys = useMemo(
     () => columnOptions.filter(option => option.required).map(option => option.key),
@@ -65,37 +72,40 @@ export const AdminListTable = <T extends object>({
   )
   const visibleColumns = useMemo(
     () =>
-      columns.filter(column => {
-        if (column.key == null) return true
-        const key = String(column.key)
-        return key === 'actions' || resolvedVisibleColumnKeys.has(key)
-      }),
-    [columns, resolvedVisibleColumnKeys]
+      columns
+        .filter(column => {
+          if (column.key == null) return true
+          const key = String(column.key)
+          return key === 'actions' || resolvedVisibleColumnKeys.has(key)
+        })
+        .map(column => {
+          if (column.key == null || sorterCompare(column) == null) return column
+          const key = String(column.key)
+          return {
+            ...column,
+            sortOrder: sortState?.columnKey === key ? sortState.order : undefined
+          }
+        }),
+    [columns, resolvedVisibleColumnKeys, sortState]
   )
+  const sortedData = useMemo(() => sortAdminListData(dataSource, columns, sortState), [columns, dataSource, sortState])
+  const handleTableChange: TableProps<T>['onChange'] = (_pagination, _filters, sorter) => {
+    const sorters = Array.isArray(sorter) ? sorter : [sorter]
+    const activeSorter = sorters.find(item => item.order != null && item.columnKey != null)
+    if (activeSorter?.order == null || activeSorter.columnKey == null) {
+      setSortState(undefined)
+      return
+    }
+    setSortState({
+      columnKey: String(activeSorter.columnKey),
+      order: activeSorter.order as AdminListSortOrder
+    })
+  }
   const pageData = useMemo(() => {
     const start = (currentPage - 1) * pageSize
-    return dataSource.slice(start, start + pageSize)
-  }, [currentPage, dataSource, pageSize])
+    return sortedData.slice(start, start + pageSize)
+  }, [currentPage, pageSize, sortedData])
   const hasSelection = selectedRowKeys.length > 0
-  const columnPicker = (
-    <div className='relay-admin-list-table__column-menu' role='group' aria-label='展示列'>
-      {columnOptions.map(option => (
-        <Checkbox
-          key={option.key}
-          checked={resolvedVisibleColumnKeys.has(option.key)}
-          disabled={option.required}
-          onChange={event => {
-            const nextKeys = event.target.checked
-              ? [...visibleColumnKeys, option.key]
-              : visibleColumnKeys.filter(key => key !== option.key)
-            onVisibleColumnKeysChange(Array.from(new Set([...requiredColumnKeys, ...nextKeys])))
-          }}
-        >
-          {option.label}
-        </Checkbox>
-      ))}
-    </div>
-  )
 
   useEffect(() => {
     setCurrentPage(page => Math.min(page, maxPage))
@@ -103,7 +113,7 @@ export const AdminListTable = <T extends object>({
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [dataSource, pageSize, searchValue])
+  }, [dataSource, pageSize, searchValue, sortState])
 
   return (
     <div className='relay-admin-list-table' aria-label={ariaLabel}>
@@ -116,8 +126,19 @@ export const AdminListTable = <T extends object>({
           value={searchValue}
           onChange={event => onSearchChange(event.target.value)}
         />
+        {toolbarActions == null
+          ? null
+          : <div className='relay-admin-list-table__toolbar-actions'>{toolbarActions}</div>}
         <Popover
-          content={columnPicker}
+          content={
+            <AdminListTableColumnPicker
+              columnOptions={columnOptions}
+              requiredColumnKeys={requiredColumnKeys}
+              resolvedVisibleColumnKeys={resolvedVisibleColumnKeys}
+              visibleColumnKeys={visibleColumnKeys}
+              onVisibleColumnKeysChange={onVisibleColumnKeysChange}
+            />
+          }
           open={isColumnPickerOpen}
           overlayClassName='relay-admin-list-table__column-popover'
           placement='bottomRight'
@@ -126,11 +147,9 @@ export const AdminListTable = <T extends object>({
         >
           <AdminActionButton
             aria-label='配置展示列'
-            className={[
-              'route-container-header__action-button',
-              'relay-admin-list-table__column-trigger',
-              isColumnPickerOpen ? 'is-active' : ''
-            ].filter(Boolean).join(' ')}
+            className={`route-container-header__action-button relay-admin-list-table__column-trigger${
+              isColumnPickerOpen ? ' is-active' : ''
+            }`}
             iconName='view_week'
             title='配置展示列'
             type='text'
@@ -160,25 +179,19 @@ export const AdminListTable = <T extends object>({
             }}
           scroll={{ x: 'max-content' }}
           size='middle'
+          onChange={handleTableChange}
         />
       </div>
-      <div className='relay-admin-list-table__pagination'>
-        <span className='relay-admin-list-table__pagination-summary'>
-          共 {dataSource.length} 条
-        </span>
-        <Pagination
-          current={Math.min(currentPage, maxPage)}
-          pageSize={pageSize}
-          pageSizeOptions={[10, 20, 50]}
-          showSizeChanger={false}
-          size='small'
-          total={dataSource.length}
-          onChange={(page, nextPageSize) => {
-            setCurrentPage(page)
-            setPageSize(nextPageSize)
-          }}
-        />
-      </div>
+      <AdminListTablePagination
+        currentPage={currentPage}
+        maxPage={maxPage}
+        pageSize={pageSize}
+        total={dataSource.length}
+        onChange={(page, nextPageSize) => {
+          setCurrentPage(page)
+          setPageSize(nextPageSize)
+        }}
+      />
     </div>
   )
 }

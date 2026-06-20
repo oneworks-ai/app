@@ -47,7 +47,7 @@
     0 18px 44px color-mix(in srgb, #0f172a 18%, transparent),
     0 2px 10px color-mix(in srgb, #0f172a 8%, transparent);
   color: var(--text-color);
-  padding: 6px;
+  padding: var(--relay-admin-padding);
 }
 
 .relay-admin-column-filter__popover .ant-popover-arrow::before {
@@ -71,7 +71,7 @@
   font-weight: 600;
   line-height: 24px;
   min-height: 24px;
-  padding: 0 8px;
+  padding: 0 var(--relay-admin-padding);
   text-align: left;
   white-space: nowrap;
 }

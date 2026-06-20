@@ -62,6 +62,58 @@ describe('relay server admin routes', () => {
     })
   })
 
+  it('includes team membership summaries in admin users responses', async () => {
+    const { args, baseUrl } = await listenRelay()
+    const store = await readRelayStore(args.dataPath)
+    store.users.push({
+      createdAt: '2026-01-01T00:00:00.000Z',
+      email: 'member@example.com',
+      id: 'member-1',
+      name: 'Member One',
+      role: 'member'
+    })
+    store.teams.push({
+      createdAt: '2026-01-01T00:00:00.000Z',
+      createdByUserId: 'member-1',
+      id: 'team-1',
+      name: 'Team One',
+      slug: 'team-one'
+    })
+    store.teamMembers.push({
+      configEnabled: false,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      createdByUserId: 'member-1',
+      defaultForPublishing: true,
+      id: 'member-team-1',
+      role: 'editor',
+      teamId: 'team-1',
+      userId: 'member-1'
+    })
+    await writeRelayStore(args.dataPath, store)
+
+    const users = await requestJson(baseUrl, '/api/admin/users', {
+      headers: authHeaders('admin-token')
+    })
+
+    expect(users.response.status).toBe(200)
+    expect(users.body.users).toEqual([
+      expect.objectContaining({
+        email: 'member@example.com',
+        teams: [
+          {
+            archivedAt: null,
+            configEnabled: false,
+            defaultForPublishing: true,
+            id: 'team-1',
+            name: 'Team One',
+            role: 'editor',
+            slug: 'team-one'
+          }
+        ]
+      })
+    ])
+  })
+
   it('updates users and rejects duplicate emails', async () => {
     const { baseUrl } = await listenRelay()
     const created = await requestJson(baseUrl, '/api/admin/users', {

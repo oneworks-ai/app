@@ -6,8 +6,21 @@ import type { ConfigUiSection } from '@oneworks/types'
 
 import { SectionForm } from '#~/components/config/ConfigSectionForm'
 import { parseConfigDetailRoute, serializeConfigDetailRoute } from '#~/components/config/configDetail'
-import { configSchema } from '#~/components/config/configSchema'
+import { configGroupMeta, configGroupOrder, configSchema } from '#~/components/config/configSchema'
 import { editableConfigSectionKeys } from '#~/components/config/editableConfigSections'
+
+vi.hoisted(() => {
+  const storage = new Map<string, string>()
+  vi.stubGlobal('localStorage', {
+    getItem: vi.fn((key: string) => storage.get(key) ?? null),
+    removeItem: vi.fn((key: string) => {
+      storage.delete(key)
+    }),
+    setItem: vi.fn((key: string, value: string) => {
+      storage.set(key, value)
+    })
+  })
+})
 
 vi.mock('#~/i18n', () => ({
   appLanguageOptions: [
@@ -569,10 +582,177 @@ describe('config schema form', () => {
     )
 
     expect(html).toContain('config.fields.modelServices.item.provider.label')
+    expect(html).toContain('data-node-key="access"')
+    expect(html).toContain('data-node-key="models"')
+    expect(html).toContain('data-node-key="plan"')
+    expect(html).toContain('config.modelServices.actions.openApiKeys')
+    expect(html).toContain('config.modelServices.actions.more')
+    expect(html).not.toContain('config.fields.modelServices.item.apiKey.label')
+
+    const accessHtml = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{
+          openai: {
+            provider: 'openai',
+            title: 'OpenAI',
+            description: 'Primary service',
+            apiBaseUrl: 'https://api.openai.com/v1',
+            apiKey: 'secret',
+            models: ['gpt-5.4']
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={{
+          kind: 'detailCollectionItem',
+          fieldPath: [],
+          itemKey: 'openai',
+          nestedPath: ['access']
+        }}
+        t={t}
+      />
+    )
+
+    expect(accessHtml).toContain('config.fields.modelServices.item.apiKey.label')
+    expect(accessHtml).toContain('config.fields.modelServices.item.apiBaseUrl.label')
+  })
+
+  it('groups model service detail fields by function', () => {
+    const itemFields = configSchema.modelServices?.[0]?.detailCollection?.itemFields ?? []
+    const groupFor = (path: string) => itemFields.find(field => field.path.join('.') === path)?.group
+    const resolvedGroupFor = (path: string, currentValue: unknown, currentResolvedValue?: unknown) => {
+      const field = itemFields.find(field => field.path.join('.') === path)
+      return field?.resolveGroup?.({ currentValue, currentResolvedValue }) ?? field?.group
+    }
+
+    expect(configGroupOrder.modelServices).toEqual([
+      'profile',
+      'access',
+      'providerAccess',
+      'customization',
+      'models',
+      'profiles',
+      'management',
+      'plan',
+      'advanced',
+      'default'
+    ])
+    expect(configGroupMeta.modelServices?.profile).toMatchObject({
+      labelKey: 'config.sectionGroups.profile',
+      defaultExpanded: true
+    })
+    expect(configGroupMeta.modelServices?.access).toMatchObject({
+      labelKey: 'config.sectionGroups.access',
+      defaultExpanded: true
+    })
+    expect(configGroupMeta.modelServices?.providerAccess).toMatchObject({
+      labelKey: 'config.sectionGroups.providerAccess',
+      defaultExpanded: false
+    })
+    expect(configGroupMeta.modelServices?.customization).toMatchObject({
+      labelKey: 'config.sectionGroups.customization',
+      defaultExpanded: false
+    })
+    expect(configGroupMeta.modelServices?.models).toMatchObject({
+      labelKey: 'config.sectionGroups.models',
+      defaultExpanded: false
+    })
+    expect(configGroupMeta.modelServices?.profiles).toMatchObject({
+      labelKey: 'config.sectionGroups.profiles',
+      defaultExpanded: true
+    })
+    expect(configGroupMeta.modelServices?.management).toMatchObject({
+      labelKey: 'config.sectionGroups.management',
+      defaultExpanded: false
+    })
+    expect(configGroupMeta.modelServices?.plan).toMatchObject({
+      labelKey: 'config.sectionGroups.plan',
+      defaultExpanded: false
+    })
+    expect(configGroupMeta.modelServices?.advanced).toMatchObject({
+      labelKey: 'config.sectionGroups.advanced',
+      defaultExpanded: false
+    })
+
+    expect(groupFor('provider')).toBe('profile')
+    expect(groupFor('title')).toBe('profile')
+    expect(groupFor('description')).toBe('profile')
+    expect(groupFor('icon')).toBe('customization')
+    expect(groupFor('homepageUrl')).toBe('customization')
+    expect(groupFor('apiBaseUrl')).toBe('access')
+    expect(resolvedGroupFor('apiBaseUrl', { provider: 'kimi-code' })).toBe('providerAccess')
+    expect(resolvedGroupFor('apiBaseUrl', {}, { provider: 'kimi-code' })).toBe('providerAccess')
+    expect(resolvedGroupFor('apiBaseUrl', {})).toBe('access')
+    expect(groupFor('apiKey')).toBe('access')
+    expect(groupFor('models')).toBe('models')
+    expect(groupFor('profiles')).toBe('profiles')
+    expect(groupFor('management.enabled')).toBe('management')
+    expect(groupFor('management.apiKey')).toBe('management')
+    expect(groupFor('management.headers')).toBe('management')
+    expect(groupFor('billing')).toBe('plan')
+    expect(groupFor('codingPlan')).toBe('plan')
+    expect(groupFor('providerOptions')).toBe('advanced')
+    expect(groupFor('timeoutMs')).toBe('advanced')
+    expect(groupFor('maxOutputTokens')).toBe('advanced')
+    expect(groupFor('extra')).toBe('advanced')
+  })
+
+  it('renders Coding Plan service details without expanding the full plan metadata inline', () => {
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{
+          qwen: {
+            provider: 'qwen-coding-plan',
+            apiKey: 'sk-sp-token'
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={{
+          kind: 'detailCollectionItem',
+          fieldPath: [],
+          itemKey: 'qwen'
+        }}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('config.options.modelProviders.qwen-coding-plan')
+    expect(html).toContain('data-node-key="access"')
+    expect(html).toContain('data-node-key="plan"')
+    expect(html).not.toContain('https://coding.dashscope.aliyuncs.com/apps/anthropic')
+  })
+
+  it('keeps API base URL visible for custom model services without a provider', () => {
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{
+          custom: {
+            title: 'Custom',
+            apiBaseUrl: 'https://example.com/v1',
+            apiKey: 'secret'
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={{
+          kind: 'detailCollectionItem',
+          fieldPath: [],
+          itemKey: 'custom',
+          nestedPath: ['access']
+        }}
+        t={t}
+      />
+    )
+
     expect(html).toContain('config.fields.modelServices.item.apiBaseUrl.label')
-    expect(html).toContain('config.fields.modelServices.item.models.label')
-    expect(html).toContain('config.modelServices.actions.queryModels')
-    expect(html).toContain('config.modelServices.actions.queryBalance')
+    expect(html).toContain('https://example.com/v1')
   })
 
   it('creates model service entries without default apiBaseUrl or models overrides', () => {
@@ -609,6 +789,50 @@ describe('config schema form', () => {
     )
 
     expect(html).toContain('Official DeepSeek OpenAI-compatible API service.')
+  })
+
+  it('does not render model service keys as summary subtitles when a title exists', () => {
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{
+          'kimi-code': {
+            provider: 'kimi-code',
+            title: 'Kimi Code',
+            apiKey: 'secret'
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('Kimi Code')
+    expect(html).toContain('Kimi Code membership benefit endpoint for coding agents.')
+    expect(html).not.toContain('config-view__record-subtitle')
+  })
+
+  it('renders coding plan quota previews in model service summaries', () => {
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{
+          kimi: {
+            provider: 'kimi-code',
+            apiKey: 'secret'
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('config-view__model-service-list-quota')
+    expect(html.match(/config-view__model-service-list-quota-circle/gu)).toHaveLength(2)
   })
 
   it('renders inherited detail-collection entries as readonly summaries in source views', () => {
@@ -651,7 +875,8 @@ describe('config schema form', () => {
         detailRoute={{
           kind: 'detailCollectionItem',
           fieldPath: [],
-          itemKey: 'openai'
+          itemKey: 'openai',
+          nestedPath: ['access']
         }}
         t={t}
       />

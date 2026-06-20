@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- central client API barrel keeps imports stable across the app. */
 export { getAdapterAccountDetail, getAdapterAccounts, manageAdapterAccount } from './api/adapters'
 export {
   getAgentRoom,
@@ -70,14 +71,18 @@ export {
   listWorkspaces
 } from './api/knowledge'
 export {
+  createModelServiceManagementToken,
   createModelServiceSecret,
+  deleteModelServiceManagementToken,
   getModelProviderStatus,
   getModelServiceBalance,
+  getModelServiceManagementSnapshot,
+  getModelServiceManagementTokenProfile,
   getModelServiceStatus,
   listModelProviders,
   listModelServiceModels,
   probeModelProvider,
-  refreshModelServiceModels
+  updateModelServiceManagementToken
 } from './api/model-providers'
 export {
   checkModuleUpdates,

@@ -114,6 +114,20 @@ webAuth:
   - `claude-code` 对 Anthropic、Kimi、DeepSeek、百炼/Qwen、智谱 GLM、MiniMax、OpenRouter、Requesty、Vercel AI Gateway、Portkey 等已知 Anthropic-compatible 官方入口优先直连；其它 OpenAI-compatible `service,model` 继续回退 Claude Code Router
   - `codex` 与 `gemini` 走 adapter 自己的本地代理
   - 部分 adapter 会把 provider 配置写进 session 级或原生配置文件
+- Coding Plan / Token Plan 指服务商的计费套餐，不是 agent Plan Mode。选择这类服务时优先使用专属 provider id，例如 `qwen-coding-plan`、`zhipu-coding-plan`、`minimax-token-plan`、`kimi-code`、`tencent-tokenhub-coding-plan`、`volcengine-ark-coding-plan`、`baidu-qianfan-coding-plan`；不要把套餐 key 和普通 API key、套餐 base URL 和普通 API base URL 混用。
+- 套餐模型列表默认来自内置目录，不假设 `/v1/models` 可用。只有想固定 allowlist 时才写 `models`：
+
+```yaml
+modelServices:
+  qwen-coding:
+    provider: qwen-coding-plan
+    apiKey: ${ALIYUN_CODING_PLAN_KEY}
+
+  minimax-token:
+    provider: minimax-token-plan
+    apiKey: ${MINIMAX_SUBSCRIPTION_KEY}
+```
+
 - 未选择 routed `service,model` 时，adapter 继续使用自己的原生模型/二进制路径。
 
 ## 默认内建 MCP

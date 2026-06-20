@@ -79,6 +79,15 @@
   white-space: nowrap;
 }
 
+.relay-user-panel__groups,
+.relay-user-panel__teams {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
 .relay-user-panel__device-limit {
   align-items: center;
   display: inline-flex;

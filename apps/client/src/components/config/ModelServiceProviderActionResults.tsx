@@ -6,7 +6,12 @@ import type {
 } from '@oneworks/types'
 
 import type { TranslationFn } from './configUtils'
-import { formatBalance, formatStatus, normalizeProviderModels } from './modelServiceProviderActionUtils'
+import {
+  formatBalance,
+  formatStatus,
+  getAccountStatusLabel,
+  normalizeProviderModels
+} from './modelServiceProviderActionUtils'
 
 export const ModelServiceProviderActionResults = ({
   accountStatus,
@@ -30,7 +35,7 @@ export const ModelServiceProviderActionResults = ({
     <div className='config-view__model-service-action-results'>
       {accountStatus != null && (
         <div className='config-view__model-service-result'>
-          <span>{t('config.modelServices.results.balance')}</span>
+          <span>{getAccountStatusLabel(accountStatus, t)}</span>
           <strong>{formatBalance(accountStatus, t)}</strong>
         </div>
       )}

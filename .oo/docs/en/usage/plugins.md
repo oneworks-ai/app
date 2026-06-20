@@ -13,7 +13,7 @@ For Claude Code plugins and marketplaces, see [Adapter Native Plugins and Market
 
 - Built-in One Works plugins resolve from the global package cache at the version declared by the runtime. Missing packages are installed into that cache.
 - Other plugins are installed into your project workspace through npm or referenced by directory path. Resolution failure is an error.
-- `id` supports shorthand. For example, `logger` first resolves as `logger`, then as `@oneworks/plugin-logger`.
+- `id` supports shorthand. For example, `logger` first resolves as `logger`, then as `@oneworks/plugin-logger`; legacy `@vibe-forge/plugin-logger` remains a compatibility fallback.
 
 The global package cache defaults to `~/.oneworks/bootstrap/npm`. Override it with `__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__`.
 
@@ -124,6 +124,58 @@ The plugin detail page `/ui/plugins/<scope>?tab=config` renders `config.schema` 
 ```
 
 Supported form fields include strings, numbers, integers, booleans, string arrays, enums, string `const` options in `oneOf` / `anyOf`, and JSON fallback fields. Sensitive fields use `format: "password"`, `writeOnly: true`, or `x-oneworks-ui.sensitive: true`. For full UI control, a manifest can provide `config.uiSchema`.
+
+## Config Hook
+
+Plugins can also provide a config hook. After One Works reads global/project/user config, the hook can return a temporary config patch. That patch is merged into the final user layer, so runtime code, Web UI, and adapters see the resulting `modelServices`, default model, MCP, permissions, and other effective config.
+
+Good fits for this hook include:
+
+- Relay services assigning `modelServices` by user, team, or project allowlist
+- A plugin using `plugins[].options` to decide which fields may be merged
+- A plugin reading config that a service has already synced to a local directory before startup
+
+These rules should not be edited in the ordinary settings page. User-facing rules, project allow/deny lists, merge-field allowlists, and local-change sync should live in that plugin's own plugin page or service protocol. The ordinary config page should only show the final merged config.
+
+A package can expose `./config` through package exports:
+
+```json
+{
+  "exports": {
+    ".": "./dist/index.js",
+    "./config": "./dist/config.js"
+  }
+}
+```
+
+It can also declare a relative entry in the manifest. The manifest `config` field is still reserved for plugin instance configuration UI schema; config hooks use the separate `configHook` field:
+
+```js
+module.exports = {
+  __oneWorksPluginManifest: true,
+  configHook: { entry: './dist/config.js' }
+}
+```
+
+The `./config` entry exports a function that returns the patch to merge:
+
+```js
+module.exports = async (ctx) => {
+  const service = ctx.plugin.options.serviceKey || 'relay'
+  return {
+    defaultModelService: service,
+    modelServices: {
+      [service]: {
+        apiBaseUrl: ctx.jsonVariables.RELAY_BASE_URL,
+        apiKey: ctx.jsonVariables.RELAY_API_KEY,
+        models: ['gpt-relay']
+      }
+    }
+  }
+}
+```
+
+`ctx` includes `cwd`, `env`, `jsonVariables`, `projectConfig`, `userConfig`, `mergedConfig`, and the current plugin instance metadata. Prefer reading locally synced data; if a hook needs network access, the plugin should provide its own cache and failure fallback.
 
 ## Scope and Resource References
 

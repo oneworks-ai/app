@@ -57,6 +57,23 @@ export const classifyRateLimitedRequest = (req: IncomingMessage, url: URL): Rela
       key: `${ip}:email-verification-send`
     }
   }
+  if (['DELETE', 'POST'].includes(requestMethod) && /^\/api\/profile\//.test(url.pathname)) {
+    return {
+      category: 'auth',
+      key: `${ip}:profile:${tokenHash}:${requestMethod}:${url.pathname}`
+    }
+  }
+  if (
+    ['DELETE', 'PATCH', 'POST'].includes(requestMethod) &&
+    /^\/api\/relay\/(?:teams(?:\/|$)|team-policy$|config-(?:assignments|profiles|secrets)(?:\/|$))/u.test(
+      url.pathname
+    )
+  ) {
+    return {
+      category: 'auth',
+      key: `${ip}:relay-user:${tokenHash}:${requestMethod}:${url.pathname}`
+    }
+  }
   const passkeyMatch = /^\/api\/auth\/passkey\/(register|login)\/(options|verify)$/.exec(url.pathname)
   if (requestMethod === 'POST' && passkeyMatch != null) {
     return {

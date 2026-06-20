@@ -1,20 +1,27 @@
 import './WorkspaceConnectionGate.scss'
 
-import { Alert } from 'antd'
 import type { PropsWithChildren } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { getLauncherWorkspaceConnection } from '#~/api/launcher'
+import type { LauncherWorkspaceVersionConflictDetails } from '@oneworks/types'
+
+import { getApiErrorMessage } from '#~/api/base'
+import { getLauncherWorkspaceConnection, restartLauncherWorkspace } from '#~/api/launcher'
 import { DesktopWorkspaceStartupReadyContext } from '#~/components/layout/desktop-workspace-startup-ready'
 import { WorkspaceOpeningOverlay } from '#~/components/workspace/WorkspaceOpeningOverlay'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
-import { mergeRuntimeEnv, normalizeServerBaseUrl } from '#~/runtime-config'
+import { applyWorkspaceConnection, getWorkspaceVersionConflictDetails } from '#~/workspace-connection-state'
+import { WorkspaceConnectionErrorView } from './WorkspaceConnectionErrorView'
 
 type ConnectionState =
   | { status: 'loading' }
   | { status: 'ready' }
-  | { message: string; status: 'error' }
+  | {
+    details?: LauncherWorkspaceVersionConflictDetails
+    message: string
+    status: 'error'
+  }
 
 type OpeningOverlayPhase = 'visible' | 'exiting' | 'hidden'
 
@@ -29,6 +36,8 @@ export function WorkspaceConnectionGate({
   const { t } = useTranslation()
   const { resolvedThemeMode } = useResolvedThemeMode()
   const [state, setState] = useState<ConnectionState>({ status: 'loading' })
+  const [restartErrorMessage, setRestartErrorMessage] = useState<string | undefined>()
+  const [isRestarting, setIsRestarting] = useState(false)
   const [overlayPhase, setOverlayPhase] = useState<OpeningOverlayPhase>('visible')
   const overlayMountedAtRef = useRef(performance.now())
   const overlayExitRequestedRef = useRef(false)
@@ -70,43 +79,73 @@ export function WorkspaceConnectionGate({
     }, delayMs)
   }, [])
 
-  useEffect(() => {
-    let disposed = false
+  const connectWorkspace = useCallback(async () => {
     resetOpeningOverlay()
     setState({ status: 'loading' })
+    setRestartErrorMessage(undefined)
 
-    void getLauncherWorkspaceConnection(workspaceId)
-      .then((connection) => {
-        if (disposed) return
-
-        const serverBaseUrl = normalizeServerBaseUrl(connection.serverBaseUrl)
-        if (serverBaseUrl == null) {
-          setState({ status: 'error', message: 'Workspace server returned an invalid URL.' })
-          return
-        }
-
-        mergeRuntimeEnv({
-          __ONEWORKS_PROJECT_SERVER_BASE_URL__: serverBaseUrl,
-          __ONEWORKS_PROJECT_SERVER_ROLE__: 'workspace',
-          __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: connection.workspaceFolder,
-          __ONEWORKS_PROJECT_WORKSPACE_ID__: connection.workspaceId
-        })
-        setState({ status: 'ready' })
+    try {
+      const connection = await getLauncherWorkspaceConnection(workspaceId)
+      applyWorkspaceConnection(connection)
+      setState({ status: 'ready' })
+    } catch (error) {
+      const details = getWorkspaceVersionConflictDetails(error)
+      setState({
+        details,
+        message: error instanceof Error && error.message.trim() !== ''
+          ? error.message
+          : 'Failed to open workspace.',
+        status: 'error'
       })
-      .catch((error) => {
+    }
+  }, [resetOpeningOverlay, workspaceId])
+
+  useEffect(() => {
+    let disposed = false
+
+    void (async () => {
+      resetOpeningOverlay()
+      setState({ status: 'loading' })
+      setRestartErrorMessage(undefined)
+
+      try {
+        const connection = await getLauncherWorkspaceConnection(workspaceId)
         if (disposed) return
+        applyWorkspaceConnection(connection)
+        setState({ status: 'ready' })
+      } catch (error) {
+        if (disposed) return
+        const details = getWorkspaceVersionConflictDetails(error)
         setState({
+          details,
           status: 'error',
           message: error instanceof Error && error.message.trim() !== ''
             ? error.message
             : 'Failed to open workspace.'
         })
-      })
+      }
+    })()
 
     return () => {
       disposed = true
     }
   }, [resetOpeningOverlay, workspaceId])
+
+  const restartWorkspaceServer = useCallback(async () => {
+    if (state.status !== 'error' || state.details?.restartable !== true) return
+
+    setIsRestarting(true)
+    setRestartErrorMessage(undefined)
+    try {
+      const connection = await restartLauncherWorkspace(workspaceId)
+      applyWorkspaceConnection(connection)
+      setState({ status: 'ready' })
+    } catch (error) {
+      setRestartErrorMessage(getApiErrorMessage(error, t('workspaceConnection.restartFailed')))
+    } finally {
+      setIsRestarting(false)
+    }
+  }, [state, t, workspaceId])
 
   useEffect(() => () => clearOverlayTimers(), [clearOverlayTimers])
 
@@ -122,9 +161,14 @@ export function WorkspaceConnectionGate({
 
   if (state.status === 'error') {
     return (
-      <div className='workspace-connection-gate workspace-connection-gate--error'>
-        <Alert type='error' showIcon message={state.message} />
-      </div>
+      <WorkspaceConnectionErrorView
+        details={state.details}
+        isRestarting={isRestarting}
+        message={state.message}
+        restartErrorMessage={restartErrorMessage}
+        onRestart={() => void restartWorkspaceServer()}
+        onRetry={() => void connectWorkspace()}
+      />
     )
   }
 

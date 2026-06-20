@@ -10,6 +10,7 @@ export function activatePlugin(ctx: RelayPluginContext) {
 
   ctx.registerCommand('connect', async payload => await controller.connect(payload))
   ctx.registerCommand('disconnect', async payload => await controller.disconnect(payload))
+  ctx.registerCommand('refresh-config', async payload => await controller.refreshConfigDistribution(payload))
   ctx.registerCommand('status', async () => await controller.getPublicStatus())
   ctx.registerCommand('search', payload => controller.search(payload))
   ctx.registerApi('relay', {

@@ -2,17 +2,25 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { canManageRelayAdmin, isRelayAdminRole } from '../../shared/model/adminPermissions'
 import type {
+  CreateAccessGroupInput,
   CreateInviteInput,
   CreateSsoProviderInput,
   CreateUserInput,
+  RelayAdminAccessGroup,
   RelayAdminCurrentUser,
   RelayAdminDevice,
   RelayAdminInvite,
   RelayAdminRole,
   RelayAdminSsoProvider,
   RelayAdminUser,
+  UpdateAccessGroupInput,
   UpdateSsoProviderInput
 } from '../../shared/model/adminTypes'
+import {
+  createRelayAdminAccessGroup,
+  deleteRelayAdminAccessGroup,
+  updateRelayAdminAccessGroup
+} from '../access-groups/accessGroupsApi'
 import {
   buildAdminLoginUrl,
   clearAdminSessionToken,
@@ -32,6 +40,20 @@ import {
   deleteRelayAdminSsoProvider,
   updateRelayAdminSsoProvider
 } from '../sso/ssoProvidersApi'
+import type {
+  CreateTeamInput,
+  RelayAdminTeam,
+  RelayAdminTeamPolicy,
+  UpdateTeamInput,
+  UpdateTeamPolicyInput
+} from '../teams/teamTypes'
+import {
+  archiveRelayAdminTeam,
+  createRelayAdminTeam,
+  restoreRelayAdminTeam,
+  updateRelayAdminTeam,
+  updateRelayAdminTeamPolicy
+} from '../teams/teamsApi'
 import { createRelayAdminUser, updateRelayAdminUser } from '../users/usersApi'
 import { fetchRelayAdminSnapshot } from './adminSnapshot'
 
@@ -47,9 +69,13 @@ export const useRelayAdminDashboard = () => {
   )
   const [currentUser, setCurrentUser] = useState<RelayAdminCurrentUser | undefined>()
   const [devices, setDevices] = useState<RelayAdminDevice[]>([])
+  const [accessGroups, setAccessGroups] = useState<RelayAdminAccessGroup[]>([])
   const [users, setUsers] = useState<RelayAdminUser[]>([])
   const [invites, setInvites] = useState<RelayAdminInvite[]>([])
   const [ssoProviders, setSsoProviders] = useState<RelayAdminSsoProvider[]>([])
+  const [teams, setTeams] = useState<RelayAdminTeam[]>([])
+  const [teamPolicy, setTeamPolicy] = useState<RelayAdminTeamPolicy | undefined>()
+  const [snapshotLoaded, setSnapshotLoaded] = useState(false)
   const [error, setError] = useState<string | undefined>()
   const [loading, setLoading] = useState(false)
   const [loginUrl] = useState(buildAdminLoginUrl)
@@ -74,17 +100,25 @@ export const useRelayAdminDashboard = () => {
       includeAdminResources: canManageAdmin
     })
     setDevices(snapshot.devices)
+    setAccessGroups(snapshot.accessGroups)
     setUsers(snapshot.users)
     setInvites(snapshot.invites)
     setSsoProviders(snapshot.ssoProviders)
+    setTeams(snapshot.teams)
+    setTeamPolicy(snapshot.teamPolicy)
+    setSnapshotLoaded(true)
   }, [canManageAdmin, token])
 
   const refresh = useCallback(async () => {
     if (!canLoad) {
       setUsers([])
+      setAccessGroups([])
       setDevices([])
       setInvites([])
       setSsoProviders([])
+      setTeams([])
+      setTeamPolicy(undefined)
+      setSnapshotLoaded(false)
       return
     }
     await run(loadSnapshot)
@@ -105,11 +139,13 @@ export const useRelayAdminDashboard = () => {
       clearAdminSessionToken()
       setAuthStatus('missing')
       setCurrentUser(undefined)
+      setSnapshotLoaded(false)
       return
     }
 
     setAuthStatus('checking')
     setAuthError(undefined)
+    setSnapshotLoaded(false)
     void fetchRelayAdminMe(nextToken)
       .then(body => {
         if (!active) return
@@ -124,6 +160,7 @@ export const useRelayAdminDashboard = () => {
         setTokenState('')
         setCurrentUser(undefined)
         setAuthStatus('missing')
+        setSnapshotLoaded(false)
         setAuthError(reason instanceof Error ? reason.message : String(reason))
       })
 
@@ -139,6 +176,7 @@ export const useRelayAdminDashboard = () => {
     setCurrentUser(account.user)
     setAuthStatus('checking')
     setAuthError(undefined)
+    setSnapshotLoaded(false)
   }, [])
 
   const logout = useCallback(() => {
@@ -147,6 +185,7 @@ export const useRelayAdminDashboard = () => {
     setCurrentUser(undefined)
     setAuthStatus('missing')
     setAuthError(undefined)
+    setSnapshotLoaded(false)
   }, [token])
 
   const createUser = useCallback(async (input: CreateUserInput) => {
@@ -156,10 +195,39 @@ export const useRelayAdminDashboard = () => {
     })
   }, [loadSnapshot, run, token])
 
+  const createAccessGroup = useCallback(async (input: CreateAccessGroupInput) => {
+    await run(async () => {
+      await createRelayAdminAccessGroup(token, input)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
+  const updateAccessGroup = useCallback(async (input: UpdateAccessGroupInput) => {
+    await run(async () => {
+      await updateRelayAdminAccessGroup(token, input)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
+  const deleteAccessGroup = useCallback(async (group: RelayAdminAccessGroup) => {
+    await run(async () => {
+      await deleteRelayAdminAccessGroup(token, group.id)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
   const setUserRole = useCallback(async (user: RelayAdminUser, role: RelayAdminRole) => {
     if (currentUser?.id === user.id) return
     await run(async () => {
       await updateRelayAdminUser(token, { id: user.id, role })
+      await loadSnapshot()
+    })
+  }, [currentUser?.id, loadSnapshot, run, token])
+
+  const setUserAccessGroups = useCallback(async (user: RelayAdminUser, groupIds: string[]) => {
+    if (currentUser?.id === user.id) return
+    await run(async () => {
+      await updateRelayAdminUser(token, { groupIds, id: user.id })
       await loadSnapshot()
     })
   }, [currentUser?.id, loadSnapshot, run, token])
@@ -241,17 +309,54 @@ export const useRelayAdminDashboard = () => {
     })
   }, [loadSnapshot, run, token])
 
+  const createTeam = useCallback(async (input: CreateTeamInput) => {
+    await run(async () => {
+      await createRelayAdminTeam(token, input)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
+  const setTeamArchived = useCallback(async (team: RelayAdminTeam, archived: boolean) => {
+    await run(async () => {
+      if (archived) {
+        await archiveRelayAdminTeam(token, team.id)
+      } else {
+        await restoreRelayAdminTeam(token, team.id)
+      }
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
+  const updateTeam = useCallback(async (team: RelayAdminTeam, input: UpdateTeamInput) => {
+    await run(async () => {
+      await updateRelayAdminTeam(token, team, input)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
+  const updateTeamPolicy = useCallback(async (input: UpdateTeamPolicyInput) => {
+    await run(async () => {
+      const body = await updateRelayAdminTeamPolicy(token, input)
+      setTeamPolicy(body.policy)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
   return {
     canLoad,
+    accessGroups,
     accounts,
+    createAccessGroup,
     createInvite,
     createSsoProvider,
+    createTeam,
     createUser,
     authError,
     authStatus,
     currentUser,
     devices,
     deleteInvite,
+    deleteAccessGroup,
     deleteSsoProvider,
     error,
     invites,
@@ -261,14 +366,22 @@ export const useRelayAdminDashboard = () => {
     refresh,
     selectAccount,
     setInviteRevoked,
+    setTeamArchived,
     setUserMaxDevices,
     setSsoProviderEnabled,
     setUserDisabled,
     setUserLoginId,
     setUserPassword,
+    setUserAccessGroups,
     setUserRole,
+    snapshotLoaded,
     ssoProviders,
+    teamPolicy,
+    teams,
     token,
+    updateTeam,
+    updateAccessGroup,
+    updateTeamPolicy,
     updateSsoProvider,
     users
   }

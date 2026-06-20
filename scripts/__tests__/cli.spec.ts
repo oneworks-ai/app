@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- CLI command dispatch tests stay together to keep command coverage searchable. */
 import { describe, expect, it, vi } from 'vitest'
 
 import { createScriptsCli } from '../cli'
@@ -314,6 +315,85 @@ describe('scripts cli', () => {
     })
   })
 
+  it('dispatches demo video scenario listing', async () => {
+    const runDemoVideoList = vi.fn(async () => [])
+    const cli = createScriptsCli({
+      runDemoVideoList
+    })
+
+    await cli.parseAsync(['node', 'oneworks-dev', 'demo-video', 'list', '--json'])
+
+    expect(runDemoVideoList).toHaveBeenCalledWith({
+      json: true
+    })
+  })
+
+  it('dispatches demo video recording options', async () => {
+    const runDemoVideoRecord = vi.fn(async () => ({
+      colorScheme: 'dark' as const,
+      durationMs: 9_000,
+      fps: 6,
+      frameCount: 54,
+      framesDir: '/repo/.logs/demo/frames',
+      height: 1000,
+      keptFrames: true,
+      posterPath: '/repo/.logs/demo/relay-demo-poster.png',
+      scenarioId: 'relay-team-config-tabs',
+      scenarioTitle: 'Relay 团队配置 Tabs',
+      videoPath: '/repo/.logs/demo/relay-demo.mp4',
+      width: 1600
+    }))
+    const cli = createScriptsCli({
+      runDemoVideoRecord
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'demo-video',
+      'record',
+      'relay-team-config-tabs',
+      '--url',
+      'http://127.0.0.1:8787/admin/teams',
+      '--out-dir',
+      '.logs/demo',
+      '--name',
+      'relay-demo',
+      '--width',
+      '1600',
+      '--height',
+      '1000',
+      '--fps',
+      '6',
+      '--duration-ms',
+      '9000',
+      '--chrome-path',
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '--ffmpeg-path',
+      '/opt/homebrew/bin/ffmpeg',
+      '--color-scheme',
+      'dark',
+      '--keep-frames',
+      '--json'
+    ])
+
+    expect(runDemoVideoRecord).toHaveBeenCalledWith({
+      scenarioId: 'relay-team-config-tabs',
+      chromePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      colorScheme: 'dark',
+      durationMs: 9_000,
+      ffmpegPath: '/opt/homebrew/bin/ffmpeg',
+      fps: 6,
+      height: 1000,
+      json: true,
+      keepFrames: true,
+      name: 'relay-demo',
+      outDir: '.logs/demo',
+      url: 'http://127.0.0.1:8787/admin/teams',
+      width: 1600
+    })
+  })
+
   it('dispatches agent room resume smoke', async () => {
     const runAgentRoomResumeSmoke = vi.fn(async () => ({
       ok: true as const,
@@ -361,6 +441,82 @@ describe('scripts cli', () => {
 
     expect(runAgentRoomResumeSmoke).toHaveBeenCalledWith({
       json: true
+    })
+  })
+
+  it('dispatches relay config smoke with pending and debug options', async () => {
+    const runRelayConfigSmoke = vi.fn(async () => ({
+      cachePath: '/tmp/oneworks-relay-config-smoke/project-home/.local/plugins/relay/config-snapshot.json',
+      ok: false,
+      pending: ['pending hook'],
+      projectHome: '/tmp/oneworks-relay-config-smoke/project-home',
+      tempRoot: '/tmp/oneworks-relay-config-smoke',
+      workspaceDir: '/tmp/oneworks-relay-config-smoke/workspace'
+    }))
+    const cli = createScriptsCli({
+      runRelayConfigSmoke
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'relay-config',
+      'smoke',
+      '--allow-pending',
+      '--json',
+      '--keep-temp'
+    ])
+
+    expect(runRelayConfigSmoke).toHaveBeenCalledWith({
+      allowPending: true,
+      json: true,
+      keepTemp: true
+    })
+  })
+
+  it('dispatches relay config live smoke with CI debug options', async () => {
+    const runRelayConfigLiveSmoke = vi.fn(async () => ({
+      adminAssetBytes: {
+        css: 1024,
+        js: 2048
+      },
+      adminShellOk: true,
+      assignmentId: 'assignment',
+      checks: {
+        adminAssets: true,
+        adminUserTeamSummary: true,
+        configHookMerged: true,
+        deviceSnapshot: true,
+        secretEnvelopeOnly: true,
+        teamPolicy: true
+      },
+      ok: true as const,
+      profileId: 'profile',
+      projectHome: '/tmp/oneworks-relay-config-live-smoke/project-home',
+      relayUrl: 'http://127.0.0.1:8788',
+      snapshotHash: 'sha256:live-smoke',
+      teamId: 'team',
+      tempRoot: '/tmp/oneworks-relay-config-live-smoke',
+      workspaceDir: '/tmp/oneworks-relay-config-live-smoke/workspace'
+    }))
+    const cli = createScriptsCli({
+      runRelayConfigLiveSmoke
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'relay-config',
+      'live-smoke',
+      '--json',
+      '--keep-temp',
+      '--skip-admin-build'
+    ])
+
+    expect(runRelayConfigLiveSmoke).toHaveBeenCalledWith({
+      json: true,
+      keepTemp: true,
+      skipAdminBuild: true
     })
   })
 

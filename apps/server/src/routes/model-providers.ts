@@ -1,17 +1,26 @@
+/* eslint-disable max-lines -- provider action routes keep related model-service endpoints together. */
 import Router from '@koa/router'
 
-import type { ConfigSource, ModelServiceConfig } from '@oneworks/types'
+import type {
+  ModelServiceConfig,
+  ProviderManagementTokenCreateInput,
+  ProviderManagementTokenUpdateInput
+} from '@oneworks/types'
 
 import {
   ModelProvidersServiceError,
+  createModelServiceManagementToken,
   createModelServiceSecret,
+  deleteModelServiceManagementToken,
   getModelProviderStatus,
   getModelServiceBalance,
+  getModelServiceManagementSnapshot,
+  getModelServiceManagementTokenProfile,
   getModelServiceStatus,
   listModelServiceModels,
   listProviderCatalog,
   probeModelProvider,
-  refreshModelServiceModels
+  updateModelServiceManagementToken
 } from '#~/services/model-providers/index.js'
 import { ProviderActionError } from '#~/services/model-providers/provider-client.js'
 import { HttpError, badRequest, internalServerError, notFound } from '#~/utils/http.js'
@@ -95,20 +104,6 @@ export function modelServicesRouter(): Router {
     }
   })
 
-  router.post('/:serviceKey/models/refresh', async (ctx) => {
-    try {
-      const body = asBodyRecord(ctx.request.body)
-      ctx.body = await refreshModelServiceModels({
-        serviceKey: ctx.params.serviceKey,
-        source: body.source as ConfigSource,
-        models: body.models,
-        draft: body.service
-      })
-    } catch (error) {
-      handleProviderError(error)
-    }
-  })
-
   router.post('/:serviceKey/balance', async (ctx) => {
     try {
       ctx.body = await getModelServiceBalance({
@@ -139,6 +134,77 @@ export function modelServicesRouter(): Router {
         serviceKey: ctx.params.serviceKey,
         draft: asBodyRecord(ctx.request.body).service,
         source: asBodyRecord(ctx.request.body).source
+      })
+    } catch (error) {
+      handleProviderError(error)
+    }
+  })
+
+  router.post('/:serviceKey/management', async (ctx) => {
+    try {
+      ctx.body = await getModelServiceManagementSnapshot({
+        serviceKey: ctx.params.serviceKey,
+        draft: asBodyRecord(ctx.request.body).service,
+        source: asBodyRecord(ctx.request.body).source
+      })
+    } catch (error) {
+      handleProviderError(error)
+    }
+  })
+
+  router.post('/:serviceKey/management/tokens', async (ctx) => {
+    const body = asBodyRecord(ctx.request.body)
+    try {
+      ctx.body = await createModelServiceManagementToken({
+        serviceKey: ctx.params.serviceKey,
+        draft: body.service,
+        input: asBodyRecord(body.input) as unknown as ProviderManagementTokenCreateInput,
+        source: body.source
+      })
+    } catch (error) {
+      handleProviderError(error)
+    }
+  })
+
+  router.post('/:serviceKey/management/tokens/:tokenId/profile', async (ctx) => {
+    const body = asBodyRecord(ctx.request.body)
+    try {
+      ctx.body = await getModelServiceManagementTokenProfile({
+        serviceKey: ctx.params.serviceKey,
+        draft: body.service,
+        source: body.source,
+        tokenId: ctx.params.tokenId
+      })
+    } catch (error) {
+      handleProviderError(error)
+    }
+  })
+
+  router.put('/:serviceKey/management/tokens/:tokenId', async (ctx) => {
+    const body = asBodyRecord(ctx.request.body)
+    try {
+      ctx.body = await updateModelServiceManagementToken({
+        serviceKey: ctx.params.serviceKey,
+        draft: body.service,
+        input: {
+          ...asBodyRecord(body.input),
+          id: ctx.params.tokenId
+        } as ProviderManagementTokenUpdateInput,
+        source: body.source
+      })
+    } catch (error) {
+      handleProviderError(error)
+    }
+  })
+
+  router.delete('/:serviceKey/management/tokens/:tokenId', async (ctx) => {
+    const body = asBodyRecord(ctx.request.body)
+    try {
+      ctx.body = await deleteModelServiceManagementToken({
+        serviceKey: ctx.params.serviceKey,
+        draft: body.service,
+        source: body.source,
+        tokenId: ctx.params.tokenId
       })
     } catch (error) {
       handleProviderError(error)

@@ -420,9 +420,15 @@ importers:
       antd:
         specifier: ^5.29.3
         version: 5.29.3(luxon@3.7.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react-markdown:
+        specifier: ^10.1.0
+        version: 10.1.0(@types/react@18.3.27)(react@18.3.1)
       react-router-dom:
         specifier: ^7.12.0
         version: 7.12.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      remark-gfm:
+        specifier: ^4.0.1
+        version: 4.0.1
     devDependencies:
       '@oneworks/route-layout':
         specifier: workspace:*
@@ -1012,7 +1018,11 @@ importers:
         specifier: workspace:*
         version: link:../../types
 
-  packages/plugins/relay: {}
+  packages/plugins/relay:
+    dependencies:
+      '@oneworks/utils':
+        specifier: workspace:*
+        version: link:../../utils
 
   packages/plugins/standard-dev: {}
 

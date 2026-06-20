@@ -15,6 +15,8 @@
   - workspace 共享的路径规范化 helper
 - `src/model-selection.ts`
   - model service、defaultModel、adapter/model 兼容性处理
+- `src/plugin-resolver.ts`
+  - 统一插件实例解析、简写包名解析、manifest / hooks / config hook 入口解析
 - `src/managed-plugin-package.ts`
   - `@oneworks/plugin-*` package 的 bootstrap cache、registry fallback、metadata 解析与安装 helper
 - `src/cache.ts`
@@ -36,6 +38,7 @@
   - 通用路径 helper
   - 通用 cache helper
   - 通用 model selection helper
+  - 通用插件解析 helper
   - managed plugin package cache / installer helper
   - 通用 system helper
 - 本包不负责：
@@ -47,4 +50,4 @@
 
 - 只放可复用、无业务编排的 helper；带产品语义的逻辑留在消费包。
 - 优先依赖 `@oneworks/types`，不要反向依赖 `core`、`hooks` 或 `mcp`。
-- 修改 logger、log level 或 managed plugin package installer 后，至少回归 `packages/utils/__tests__` 和相关消费方测试。
+- 修改 logger、log level、插件解析或 managed plugin package installer 后，至少回归 `packages/utils/__tests__` 和相关消费方测试。

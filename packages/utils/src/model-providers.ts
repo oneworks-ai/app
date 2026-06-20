@@ -1,4 +1,14 @@
-import type { IconRef, ModelProviderIdentity, ModelServiceConfig, ResolvedModelServiceConfig } from '@oneworks/types'
+/* eslint-disable max-lines -- model provider resolution keeps host matching, defaults, and plan metadata together. */
+import type {
+  IconRef,
+  ModelProviderCodingPlanDefinition,
+  ModelProviderCodingPlanRegion,
+  ModelProviderIdentity,
+  ModelProviderProtocolEndpoint,
+  ModelServiceBillingConfig,
+  ModelServiceConfig,
+  ResolvedModelServiceConfig
+} from '@oneworks/types'
 
 import { MODEL_PROVIDER_DEFINITIONS } from './model-provider-registry'
 
@@ -6,6 +16,7 @@ export { MODEL_PROVIDER_DEFINITIONS } from './model-provider-registry'
 
 export const DEFAULT_MODEL_SERVICE_ICON: IconRef = { kind: 'builtin', id: 'model-service' }
 export const DEFAULT_MODEL_ICON: IconRef = { kind: 'builtin', id: 'model' }
+export const MODEL_SERVICE_COLLECTION_SEPARATOR = '/'
 
 export interface ModelServiceResolutionIssue {
   type: 'missing_api_base_url'
@@ -19,25 +30,61 @@ export interface ModelServiceResolutionResult {
 
 const MODEL_PROVIDER_DEFINITION_MAP = new Map(MODEL_PROVIDER_DEFINITIONS.map(provider => [provider.id, provider]))
 
-const PROVIDER_HOST_MATCHERS: Array<{ provider: string; match: (host: string) => boolean }> = [
-  { provider: 'openai', match: host => host === 'api.openai.com' },
-  { provider: 'anthropic', match: host => host === 'api.anthropic.com' },
-  { provider: 'moonshot-cn', match: host => host === 'api.moonshot.cn' },
-  { provider: 'moonshot-intl', match: host => host === 'api.moonshot.ai' },
-  { provider: 'deepseek', match: host => host === 'api.deepseek.com' },
-  { provider: 'minimax', match: host => host === 'api.minimax.io' || host === 'api.minimaxi.com' },
+const matchHost = (url: URL, host: string) => url.hostname.toLowerCase() === host
+const matchHostSuffix = (url: URL, suffix: string) => url.hostname.toLowerCase().endsWith(suffix)
+const matchPathPrefix = (url: URL, prefix: string) => url.pathname.replace(/\/+$/u, '').startsWith(prefix)
+
+const PROVIDER_HOST_MATCHERS: Array<{ provider: string; match: (url: URL) => boolean }> = [
+  { provider: 'openai', match: url => matchHost(url, 'api.openai.com') },
+  { provider: 'anthropic', match: url => matchHost(url, 'api.anthropic.com') },
+  { provider: 'moonshot-cn', match: url => matchHost(url, 'api.moonshot.cn') },
+  { provider: 'moonshot-intl', match: url => matchHost(url, 'api.moonshot.ai') },
+  { provider: 'kimi-code', match: url => matchHost(url, 'api.kimi.com') && matchPathPrefix(url, '/coding') },
+  { provider: 'deepseek', match: url => matchHost(url, 'api.deepseek.com') },
+  {
+    provider: 'minimax-token-plan',
+    match: url =>
+      (matchHost(url, 'api.minimax.io') || matchHost(url, 'api.minimaxi.com')) &&
+      matchPathPrefix(url, '/anthropic')
+  },
+  {
+    provider: 'minimax',
+    match: url => matchHost(url, 'api.minimax.io') || matchHost(url, 'api.minimaxi.com')
+  },
+  {
+    provider: 'qwen-coding-plan',
+    match: url =>
+      matchHost(url, 'coding.dashscope.aliyuncs.com') ||
+      matchHost(url, 'coding-intl.dashscope.aliyuncs.com')
+  },
   {
     provider: 'qwen',
-    match: host =>
-      host === 'dashscope.aliyuncs.com' || host === 'dashscope-intl.aliyuncs.com' ||
-      host === 'dashscope-us.aliyuncs.com' || host.endsWith('.dashscope.aliyuncs.com') ||
-      host.endsWith('.maas.aliyuncs.com')
+    match: url =>
+      matchHost(url, 'dashscope.aliyuncs.com') || matchHost(url, 'dashscope-intl.aliyuncs.com') ||
+      matchHost(url, 'dashscope-us.aliyuncs.com') || matchHostSuffix(url, '.dashscope.aliyuncs.com') ||
+      matchHostSuffix(url, '.maas.aliyuncs.com')
   },
-  { provider: 'zhipu', match: host => host === 'open.bigmodel.cn' },
-  { provider: 'openrouter', match: host => host === 'openrouter.ai' },
-  { provider: 'vercel-ai-gateway', match: host => host === 'ai-gateway.vercel.sh' },
-  { provider: 'requesty', match: host => host === 'router.requesty.ai' },
-  { provider: 'portkey', match: host => host === 'api.portkey.ai' }
+  {
+    provider: 'zhipu-coding-plan',
+    match: url => matchHost(url, 'open.bigmodel.cn') && matchPathPrefix(url, '/api/coding')
+  },
+  { provider: 'zhipu', match: url => matchHost(url, 'open.bigmodel.cn') },
+  {
+    provider: 'tencent-tokenhub-coding-plan',
+    match: url => matchHost(url, 'api.lkeap.cloud.tencent.com') && matchPathPrefix(url, '/coding')
+  },
+  {
+    provider: 'volcengine-ark-coding-plan',
+    match: url => matchHost(url, 'ark.cn-beijing.volces.com') && matchPathPrefix(url, '/api/coding')
+  },
+  {
+    provider: 'baidu-qianfan-coding-plan',
+    match: url => matchHost(url, 'qianfan.baidubce.com') && url.pathname.includes('/coding')
+  },
+  { provider: 'openrouter', match: url => matchHost(url, 'openrouter.ai') },
+  { provider: 'vercel-ai-gateway', match: url => matchHost(url, 'ai-gateway.vercel.sh') },
+  { provider: 'requesty', match: url => matchHost(url, 'router.requesty.ai') },
+  { provider: 'portkey', match: url => matchHost(url, 'api.portkey.ai') }
 ]
 
 const normalizeString = (
@@ -48,12 +95,91 @@ const normalizeStringArray = (value: unknown) =>
     ? Array.from(new Set(value.map(item => normalizeString(item)).filter((item): item is string => item != null)))
     : []
 
+const asRecord = (value: unknown): Record<string, unknown> | undefined => (
+  value != null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+)
+
+export const isModelServiceCollection = (service: ModelServiceConfig | undefined) => (
+  service?.kind === 'collection' || asRecord(service?.profiles) != null || asRecord(service?.services) != null
+)
+
+export const buildCollectionModelServiceKey = (collectionKey: string, serviceKey: string) =>
+  `${collectionKey}${MODEL_SERVICE_COLLECTION_SEPARATOR}${serviceKey}`
+
+export const parseCollectionModelServiceKey = (serviceKey: string) => {
+  const separatorIndex = serviceKey.indexOf(MODEL_SERVICE_COLLECTION_SEPARATOR)
+  if (separatorIndex <= 0 || separatorIndex >= serviceKey.length - 1) return undefined
+  const collectionKey = normalizeString(serviceKey.slice(0, separatorIndex))
+  const childServiceKey = normalizeString(serviceKey.slice(separatorIndex + 1))
+  if (collectionKey == null || childServiceKey == null) return undefined
+  return { collectionKey, childServiceKey }
+}
+
+export const resolveCollectionModelService = (
+  collection: ModelServiceConfig,
+  serviceKey: string
+): ModelServiceConfig | undefined => {
+  const profiles = asRecord(collection.profiles) ?? asRecord(collection.services)
+  const child = profiles?.[serviceKey]
+  if (child == null || typeof child !== 'object' || Array.isArray(child)) return undefined
+  const childService = child as ModelServiceConfig
+  return {
+    ...(collection.provider != null ? { provider: collection.provider } : {}),
+    ...(collection.icon != null ? { icon: collection.icon } : {}),
+    ...(collection.homepageUrl != null ? { homepageUrl: collection.homepageUrl } : {}),
+    ...(collection.apiBaseUrl != null ? { apiBaseUrl: collection.apiBaseUrl } : {}),
+    ...(collection.billing != null ? { billing: collection.billing } : {}),
+    ...(collection.codingPlan != null ? { codingPlan: collection.codingPlan } : {}),
+    ...(collection.providerOptions != null ? { providerOptions: collection.providerOptions } : {}),
+    ...childService,
+    kind: 'service'
+  }
+}
+
+export const resolveModelServiceFromMap = (
+  modelServices: Record<string, ModelServiceConfig> | undefined,
+  serviceKey: string
+): ModelServiceConfig | undefined => {
+  const directService = modelServices?.[serviceKey]
+  if (directService != null) return directService
+  const parsed = parseCollectionModelServiceKey(serviceKey)
+  if (parsed == null) return undefined
+  const collection = modelServices?.[parsed.collectionKey]
+  if (collection == null || !isModelServiceCollection(collection)) return undefined
+  return resolveCollectionModelService(collection, parsed.childServiceKey)
+}
+
+export const flattenModelServices = (
+  modelServices: Record<string, ModelServiceConfig>
+): Record<string, ModelServiceConfig> => {
+  const flattened: Record<string, ModelServiceConfig> = {}
+  for (const [serviceKey, service] of Object.entries(modelServices)) {
+    const normalizedServiceKey = normalizeString(serviceKey)
+    if (normalizedServiceKey == null || service == null) continue
+    if (!isModelServiceCollection(service)) {
+      flattened[normalizedServiceKey] = service
+      continue
+    }
+    const profiles = asRecord(service.profiles) ?? asRecord(service.services)
+    for (const childServiceKey of Object.keys(profiles ?? {})) {
+      const normalizedChildServiceKey = normalizeString(childServiceKey)
+      if (normalizedChildServiceKey == null) continue
+      const childService = resolveCollectionModelService(service, normalizedChildServiceKey)
+      if (childService == null) continue
+      flattened[buildCollectionModelServiceKey(normalizedServiceKey, normalizedChildServiceKey)] = childService
+    }
+  }
+  return flattened
+}
+
 const resolveHostProvider = (apiBaseUrl: unknown) => {
   const normalized = normalizeString(apiBaseUrl)
   if (normalized == null) return undefined
   try {
-    const host = new URL(normalized).hostname.toLowerCase()
-    return PROVIDER_HOST_MATCHERS.find(entry => entry.match(host))?.provider
+    const url = new URL(normalized)
+    return PROVIDER_HOST_MATCHERS.find(entry => entry.match(url))?.provider
   } catch {
     return undefined
   }
@@ -118,14 +244,120 @@ export const resolveModelServiceDescription = (service: ModelServiceConfig | und
 export const resolveModelServiceHomepageUrl = (service: ModelServiceConfig | undefined) =>
   normalizeString(service?.homepageUrl) ??
     getModelProviderDefinition(resolveModelProviderIdentity(service).provider)?.portal?.homepage
+
+const mergeBilling = (
+  base: ModelServiceBillingConfig | undefined,
+  override: ModelServiceBillingConfig | undefined
+): ModelServiceBillingConfig | undefined => {
+  if (base == null) return override
+  if (override == null) return base
+  return {
+    ...base,
+    ...override,
+    quotaWindows: override.quotaWindows ?? base.quotaWindows,
+    notes: override.notes ?? base.notes
+  }
+}
+
+const mergeProtocols = (
+  base: ModelProviderCodingPlanDefinition['protocols'] | undefined,
+  override: ModelProviderCodingPlanDefinition['protocols'] | undefined
+): ModelProviderCodingPlanDefinition['protocols'] | undefined => {
+  if (base == null) return override
+  if (override == null) return base
+  return {
+    openai: {
+      ...base.openai,
+      ...override.openai
+    } as ModelProviderProtocolEndpoint,
+    anthropic: {
+      ...base.anthropic,
+      ...override.anthropic
+    } as ModelProviderProtocolEndpoint
+  }
+}
+
+const mergeStringLists = (
+  ...values: Array<string[] | undefined>
+) => Array.from(new Set(values.flatMap(value => value ?? []).map(item => item.trim()).filter(Boolean)))
+
+const resolveCodingPlanRegion = (
+  plan: ModelProviderCodingPlanDefinition | undefined,
+  regionId: unknown
+): ModelProviderCodingPlanRegion | undefined => {
+  const regions = plan?.regions ?? []
+  const normalizedRegionId = normalizeString(regionId)
+  if (normalizedRegionId != null) return regions.find(region => region.id === normalizedRegionId)
+  return regions.length === 1 && plan?.protocols == null ? regions[0] : undefined
+}
+
+export const resolveModelServiceCodingPlan = (
+  service: ModelServiceConfig | undefined
+): ModelProviderCodingPlanDefinition | undefined => {
+  const providerPlan = getModelProviderDefinition(resolveModelProviderIdentity(service).provider)?.codingPlan
+  const servicePlan = service?.codingPlan
+  if (providerPlan == null && servicePlan == null) return undefined
+  const region = resolveCodingPlanRegion(providerPlan, servicePlan?.region)
+  const billing = mergeBilling(
+    mergeBilling(providerPlan?.billing, region?.billing),
+    servicePlan?.billing
+  )
+  const defaultModels = normalizeStringArray(servicePlan?.defaultModels).length > 0
+    ? normalizeStringArray(servicePlan?.defaultModels)
+    : normalizeStringArray(region?.defaultModels).length > 0
+    ? normalizeStringArray(region?.defaultModels)
+    : normalizeStringArray(providerPlan?.defaultModels)
+  const protocols = mergeProtocols(
+    mergeProtocols(providerPlan?.protocols, region?.protocols),
+    servicePlan?.protocols
+  )
+  return {
+    supported: servicePlan?.supported ?? providerPlan?.supported ?? true,
+    official: servicePlan?.official ?? providerPlan?.official,
+    kind: servicePlan?.kind ?? region?.billing?.kind ?? providerPlan?.kind,
+    title: normalizeString(servicePlan?.title) ?? providerPlan?.title,
+    planHomeUrl: normalizeString(servicePlan?.planHomeUrl) ??
+      normalizeString(region?.planHomeUrl) ??
+      providerPlan?.planHomeUrl,
+    keyHomeUrl: normalizeString(servicePlan?.keyHomeUrl) ?? normalizeString(region?.keyHomeUrl) ??
+      providerPlan?.keyHomeUrl,
+    docsUrl: normalizeString(servicePlan?.docsUrl) ?? normalizeString(region?.docsUrl) ?? providerPlan?.docsUrl,
+    ...(billing != null ? { billing } : {}),
+    ...(protocols != null ? { protocols } : {}),
+    ...(providerPlan?.regions != null ? { regions: providerPlan.regions } : {}),
+    ...(defaultModels.length > 0 ? { defaultModels } : {}),
+    restrictions: mergeStringLists(providerPlan?.restrictions, region?.restrictions, servicePlan?.restrictions),
+    notes: mergeStringLists(providerPlan?.notes, servicePlan?.notes)
+  }
+}
+
+export const resolveModelServiceBilling = (service: ModelServiceConfig | undefined) => (
+  mergeBilling(
+    getModelProviderDefinition(resolveModelProviderIdentity(service).provider)?.billing,
+    mergeBilling(resolveModelServiceCodingPlan(service)?.billing, service?.billing)
+  )
+)
+
+export const resolveModelServicePlanProtocolBaseUrl = (
+  service: ModelServiceConfig | undefined,
+  protocol: 'openai' | 'anthropic'
+) => normalizeString(resolveModelServiceCodingPlan(service)?.protocols?.[protocol]?.baseUrl)
+
 export const resolveModelServiceApiBaseUrl = (service: ModelServiceConfig | undefined) =>
   normalizeString(service?.apiBaseUrl) ??
-    getModelProviderDefinition(resolveModelProviderIdentity(service).provider)?.defaultApiBaseUrl
+    getModelProviderDefinition(resolveModelProviderIdentity(service).provider)?.defaultApiBaseUrl ??
+    resolveModelServicePlanProtocolBaseUrl(service, 'openai')
 
 export const resolveModelServiceModels = (service: ModelServiceConfig | undefined) => {
   const configuredModels = normalizeStringArray(service?.models)
+  const codingPlanModels = normalizeStringArray(resolveModelServiceCodingPlan(service)?.defaultModels)
+  if (codingPlanModels.length > 0) return mergeStringLists(codingPlanModels, configuredModels)
+  const providerModels = normalizeStringArray(
+    getModelProviderDefinition(resolveModelProviderIdentity(service).provider)?.defaultModels
+  )
+  if (providerModels.length > 0) return mergeStringLists(providerModels, configuredModels)
   if (configuredModels.length > 0) return configuredModels
-  return normalizeStringArray(getModelProviderDefinition(resolveModelProviderIdentity(service).provider)?.defaultModels)
+  return []
 }
 
 export const resolveModelServiceConfig = (
@@ -138,6 +370,8 @@ export const resolveModelServiceConfig = (
   const identity = resolveModelProviderIdentity(service)
   const providerDefinition = getModelProviderDefinition(identity.provider)
   const apiBaseUrl = resolveModelServiceApiBaseUrl(service)
+  const billing = resolveModelServiceBilling(service)
+  const codingPlan = resolveModelServiceCodingPlan(service)
   const configuredModels = normalizeStringArray(service.models)
   if (apiBaseUrl == null) {
     return {
@@ -153,6 +387,9 @@ export const resolveModelServiceConfig = (
       ...service,
       ...(identity.provider != null ? { provider: identity.provider } : {}),
       apiBaseUrl,
+      apiKey: service.apiKey ?? '',
+      ...(billing != null ? { billing } : {}),
+      ...(codingPlan != null ? { codingPlan } : {}),
       modelSource: configuredModels.length > 0 ? 'configured' : 'provider_catalog',
       ...(providerDefinition != null ? { providerDefinition } : {})
     },

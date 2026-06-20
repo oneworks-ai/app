@@ -14,6 +14,9 @@ export const rolePermissionMatrix = {
   owner: relayPermissionList,
   admin: relayPermissionList,
   member: [
+    relayPermissions.relayConfigSnapshotRead,
+    relayPermissions.relayTeamMembersRead,
+    relayPermissions.relayTeamsRead,
     relayPermissions.relayDevicesRead,
     relayPermissions.relayDevicesRegister,
     relayPermissions.relayJobsRead,
@@ -22,6 +25,9 @@ export const rolePermissionMatrix = {
     relayPermissions.relaySessionsSubmit
   ],
   viewer: [
+    relayPermissions.relayConfigSnapshotRead,
+    relayPermissions.relayTeamMembersRead,
+    relayPermissions.relayTeamsRead,
     relayPermissions.relayDevicesRead,
     relayPermissions.relayJobsRead,
     relayPermissions.relayJobsResultRead,

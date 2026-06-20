@@ -2,6 +2,10 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
+import {
+  normalizeRelayConfigSourcePreferences,
+  serializeRelayConfigSourcePreferences
+} from './config-source-preferences.js'
 import type { RelayStore, RelayStoredServer } from './types.js'
 import { isRecord, normalizeRemoteBaseUrl, parseJson, toString } from './utils.js'
 
@@ -38,12 +42,18 @@ const normalizeStoredServers = (value: unknown): Record<string, RelayStoredServe
     const deviceToken = toString(raw.deviceToken)
     if (id === '' || remoteBaseUrl === '') continue
     const account = normalizeStoredAccount(raw.account)
+    const configDisabledSources = normalizeRelayConfigSourcePreferences(raw.configDisabledSources)
     servers[id] = {
       ...(account == null ? {} : { account }),
+      ...(configDisabledSources == null
+        ? {}
+        : { configDisabledSources: serializeRelayConfigSourcePreferences(configDisabledSources) }),
       deviceToken,
       id,
       registeredAt: typeof raw.registeredAt === 'string' ? raw.registeredAt : undefined,
       remoteBaseUrl,
+      sessionExpiresAt: typeof raw.sessionExpiresAt === 'string' ? raw.sessionExpiresAt : undefined,
+      sessionToken: toString(raw.sessionToken) || undefined,
       updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
     }
   }

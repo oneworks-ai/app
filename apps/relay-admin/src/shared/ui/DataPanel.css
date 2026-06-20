@@ -7,7 +7,9 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  scroll-margin-top: calc(var(--route-container-header-overlay-height) + 8px);
+  scroll-margin-top: calc(
+    var(--route-container-header-overlay-height) + var(--relay-admin-padding)
+  );
 }
 
 .relay-data-panel.ant-card .ant-card-head {
@@ -18,7 +20,8 @@
   gap: 12px;
   justify-content: space-between;
   min-height: 44px;
-  padding: 8px var(--route-container-header-padding-inline);
+  padding: var(--relay-admin-padding)
+    var(--route-container-header-padding-inline);
 }
 
 .relay-data-panel.ant-card .ant-card-head-title {
@@ -54,7 +57,7 @@
   height: 22px;
   justify-content: center;
   min-width: 22px;
-  padding: 0 8px;
+  padding: 0 var(--relay-admin-padding);
 }
 
 .relay-data-panel__actions {
@@ -72,7 +75,8 @@
   flex-direction: column;
   gap: 8px;
   min-height: 0;
-  padding: 8px var(--route-container-header-padding-inline) 10px;
+  padding: var(--relay-admin-padding)
+    var(--route-container-header-padding-inline);
 }
 
 .relay-admin-table .ant-table,
@@ -89,14 +93,15 @@
   color: var(--sub-text-color);
   font-size: 12px;
   font-weight: 650;
-  padding: 8px;
+  padding: var(--relay-admin-padding);
 }
 
 .relay-admin-table .ant-table-tbody > tr > td {
   background: transparent;
   border-color: color-mix(in srgb, var(--border-color) 64%, transparent);
   color: var(--text-color);
-  padding: 9px 8px;
+  padding: var(--relay-admin-padding);
+  vertical-align: middle;
 }
 
 .relay-admin-table .ant-table-thead > tr > th.ant-table-cell-fix-right,

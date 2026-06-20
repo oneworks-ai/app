@@ -2,7 +2,10 @@
   display: flex;
   flex: 1;
   flex-direction: column;
+  height: 100%;
   gap: 8px;
+  max-width: 100%;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -13,6 +16,13 @@
   gap: 6px;
   min-height: 28px;
   min-width: 0;
+}
+
+.relay-admin-list-table__toolbar-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
 }
 
 .relay-admin-list-table__search {
@@ -100,7 +110,7 @@
   color: var(--text-color) !important;
   height: 28px !important;
   min-height: 28px !important;
-  padding: 0 8px !important;
+  padding: 0 var(--relay-admin-padding) !important;
 }
 
 .relay-admin-table .ant-select-selection-item {
@@ -125,7 +135,8 @@
   ) !important;
 }
 
-.relay-admin-list-table .relay-admin-list-table__column-trigger.ant-btn {
+.relay-admin-list-table .relay-admin-list-table__column-trigger.ant-btn,
+.relay-admin-list-table .relay-admin-list-table__toolbar-action-button.ant-btn {
   --route-container-header-icon-size: var(--app-chrome-icon-size, 18px);
   --route-container-header-icon-button-size: var(
     --route-container-header-icon-size
@@ -143,6 +154,9 @@
 
 .relay-admin-list-table
   .relay-admin-list-table__column-trigger
+  .relay-admin-icon,
+.relay-admin-list-table
+  .relay-admin-list-table__toolbar-action-button
   .relay-admin-icon {
   height: var(--app-chrome-icon-size, 18px);
   width: var(--app-chrome-icon-size, 18px);
@@ -150,9 +164,15 @@
 
 .relay-admin-list-table .relay-admin-list-table__column-trigger.ant-btn:hover,
 .relay-admin-list-table
+  .relay-admin-list-table__toolbar-action-button.ant-btn:hover,
+.relay-admin-list-table
   .relay-admin-list-table__column-trigger.ant-btn:focus-visible,
 .relay-admin-list-table
+  .relay-admin-list-table__toolbar-action-button.ant-btn:focus-visible,
+.relay-admin-list-table
   .relay-admin-list-table__column-trigger.ant-btn.ant-btn-text:not(:disabled):not(.ant-btn-disabled):hover,
+.relay-admin-list-table
+  .relay-admin-list-table__toolbar-action-button.ant-btn.ant-btn-text:not(:disabled):not(.ant-btn-disabled):hover,
 .relay-admin-list-table
   .relay-admin-list-table__column-trigger.ant-btn.is-active {
   background: transparent !important;
@@ -169,9 +189,25 @@
 .relay-admin-list-table__table-scroll {
   border-top: 1px solid
     color-mix(in srgb, var(--border-color) 72%, transparent);
-  flex: 1;
+  flex: 1 1 0;
+  max-width: 100%;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
+  width: 100%;
+}
+
+.relay-admin-list-table__table-scroll .ant-table-wrapper,
+.relay-admin-list-table__table-scroll .ant-spin-nested-loading,
+.relay-admin-list-table__table-scroll .ant-spin-container,
+.relay-admin-list-table__table-scroll .ant-table {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.relay-admin-list-table__table-scroll .ant-table-container,
+.relay-admin-list-table__table-scroll .ant-table-content {
+  max-width: 100%;
 }
 
 .relay-admin-list-table__table-scroll .ant-table-thead > tr > th {
@@ -189,7 +225,7 @@
   gap: 12px;
   justify-content: space-between;
   min-height: 32px;
-  padding-top: 6px;
+  padding-top: var(--relay-admin-padding);
 }
 
 .relay-admin-list-table__pagination-summary {

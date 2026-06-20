@@ -190,6 +190,18 @@ export async function activatePlugin(ctx: PluginClientContext) {
       const response = await ctx.api.fetch('relay/disconnect', { method: 'POST' })
       return await response.json()
     }),
+    ctx.commands.register('config-refresh', async () => {
+      const response = await ctx.api.fetch('relay/config-refresh', { method: 'POST' })
+      if (response.ok) return await response.json()
+      if (response.status === 404 || response.status === 405) {
+        const statusResponse = await ctx.api.fetch('relay/status')
+        return await statusResponse.json()
+      }
+      const text = await response.text()
+      throw new Error(
+        text || createRelayClientI18n(ctx.i18n).errors.relayActionFailed('config-refresh', response.status)
+      )
+    }),
     ctx.commands.register('login', async () => {
       try {
         return await openRelayLogin(ctx, { forcePluginHomeRedirect: true })

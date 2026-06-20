@@ -22,6 +22,44 @@
   }
 }
 
+.model-select-trigger-label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  gap: 5px;
+  color: currentColor;
+}
+
+.model-select-trigger-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-select-trigger-icon,
+.model-select-trigger-icon-symbol {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 16px;
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.model-select-trigger-icon {
+  object-fit: contain;
+}
+
+.model-select-trigger-icon-symbol {
+  color: currentColor;
+  font-size: 16px;
+  line-height: 16px;
+}
+
 .model-select--compact {
   min-width: var(--sender-control-height);
   max-width: var(--sender-control-height);
@@ -39,23 +77,20 @@
     position: relative;
   }
 
-  .ant-select-selector::before {
-    content: 'model_training';
-    font-family: 'Material Symbols Rounded';
-    font-size: 16px;
-    font-weight: 300;
-    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
-    line-height: 1;
-    display: inline-flex;
-    align-items: center;
+  .model-select-trigger-label {
+    width: 100%;
     justify-content: center;
-    position: absolute;
-    inset: 0;
-    color: currentColor;
-    pointer-events: none;
   }
 
-  .ant-select-selection-wrap,
+  .model-select-trigger-text {
+    display: none;
+  }
+
+  .ant-select-selection-wrap {
+    display: flex !important;
+    width: 100%;
+  }
+
   .ant-select-selection-search {
     display: none !important;
   }
@@ -64,13 +99,14 @@
   &.ant-select-single .ant-select-selector .ant-select-selection-placeholder,
   .ant-select-selection-item,
   .ant-select-selection-placeholder {
-    display: none !important;
-    width: 0 !important;
+    display: inline-flex !important;
+    justify-content: center;
+    width: 100% !important;
     min-width: 0 !important;
-    max-width: 0 !important;
+    max-width: 100% !important;
     padding: 0 !important;
     margin: 0 !important;
-    opacity: 0 !important;
+    opacity: 1 !important;
     overflow: hidden !important;
   }
 }
@@ -104,23 +140,20 @@
       position: relative;
     }
 
-    .ant-select-selector::before {
-      content: 'model_training';
-      font-family: 'Material Symbols Rounded';
-      font-size: 16px;
-      font-weight: 300;
-      font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
-      line-height: 1;
-      display: inline-flex;
-      align-items: center;
+    .model-select-trigger-label {
+      width: 100%;
       justify-content: center;
-      position: absolute;
-      inset: 0;
-      color: currentColor;
-      pointer-events: none;
     }
 
-    .ant-select-selection-wrap,
+    .model-select-trigger-text {
+      display: none;
+    }
+
+    .ant-select-selection-wrap {
+      display: flex !important;
+      width: 100%;
+    }
+
     .ant-select-selection-search,
     .ant-select-arrow {
       display: none !important;
@@ -130,13 +163,14 @@
     &.ant-select-single .ant-select-selector .ant-select-selection-placeholder,
     .ant-select-selection-item,
     .ant-select-selection-placeholder {
-      display: none !important;
-      width: 0 !important;
+      display: inline-flex !important;
+      justify-content: center;
+      width: 100% !important;
       min-width: 0 !important;
-      max-width: 0 !important;
+      max-width: 100% !important;
       padding: 0 !important;
       margin: 0 !important;
-      opacity: 0 !important;
+      opacity: 1 !important;
       overflow: hidden !important;
     }
   }

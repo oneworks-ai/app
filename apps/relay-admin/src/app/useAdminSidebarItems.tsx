@@ -6,7 +6,19 @@ import { canAccessRelayAdminSection } from '../shared/model/adminPermissions'
 import type { RelayAdminRole } from '../shared/model/adminTypes'
 import { AdminNavIcon } from './AdminNavIcon'
 
-export type AdminSectionId = 'devices' | 'users' | 'invites' | 'sso'
+export type AdminSectionId =
+  | 'access-groups'
+  | 'devices'
+  | 'users'
+  | 'invites'
+  | 'message-pushes'
+  | 'openapi'
+  | 'sso'
+  | 'teams'
+
+export interface AdminSectionNavigationOptions {
+  canManageMessages?: boolean
+}
 
 type AdminSectionDefinition = Omit<HostSidebarQuickLinkItem, 'active' | 'disabled' | 'key' | 'onSelect'> & {
   id: AdminSectionId
@@ -27,6 +39,12 @@ export const adminSections = [
     path: '/users'
   },
   {
+    icon: <AdminNavIcon name='access-groups' />,
+    id: 'access-groups',
+    label: '用户组',
+    path: '/access-groups'
+  },
+  {
     icon: <AdminNavIcon name='invites' />,
     id: 'invites',
     label: '邀请码',
@@ -37,19 +55,42 @@ export const adminSections = [
     id: 'sso',
     label: 'SSO',
     path: '/sso'
+  },
+  {
+    icon: <AdminNavIcon name='teams' />,
+    id: 'teams',
+    label: '团队',
+    path: '/teams'
+  },
+  {
+    icon: <AdminNavIcon name='openapi' />,
+    id: 'openapi',
+    label: 'API 文档',
+    path: '/openapi'
+  },
+  {
+    icon: <AdminNavIcon name='message-pushes' />,
+    id: 'message-pushes',
+    label: '消息推送',
+    path: '/message-pushes'
   }
 ] satisfies AdminSectionDefinition[]
 
 const normalizeAdminPath = (pathname: string) =>
   pathname === '' || pathname === '/' ? '/' : pathname.replace(/\/+$/, '')
 
-export const useAdminSectionNavigation = (role?: RelayAdminRole) => {
+export const useAdminSectionNavigation = (role?: RelayAdminRole, options: AdminSectionNavigationOptions = {}) => {
   const location = useLocation()
   const navigate = useNavigate()
   const activePath = normalizeAdminPath(location.pathname)
   const permittedSections = useMemo(
-    () => adminSections.filter(section => canAccessRelayAdminSection(role, section.id)),
-    [role]
+    () =>
+      adminSections.filter(section => (
+        section.id === 'message-pushes'
+          ? options.canManageMessages === true
+          : canAccessRelayAdminSection(role, section.id)
+      )),
+    [options.canManageMessages, role]
   )
   const matchedSection = permittedSections.find(section => (
     activePath === section.path || activePath.startsWith(`${section.path}/`)
@@ -77,4 +118,5 @@ export const useAdminSectionNavigation = (role?: RelayAdminRole) => {
   }
 }
 
-export const useAdminSidebarItems = (role?: RelayAdminRole) => useAdminSectionNavigation(role).sidebarItems
+export const useAdminSidebarItems = (role?: RelayAdminRole, options?: AdminSectionNavigationOptions) =>
+  useAdminSectionNavigation(role, options).sidebarItems

@@ -129,6 +129,7 @@ For production, serve `/login` over HTTPS and set `ONEWORKS_RELAY_PUBLIC_URL`, `
 
 Admin APIs require `Authorization: Bearer <token>`. The token can be the deployment-level `ONEWORKS_RELAY_ADMIN_TOKEN` or a Relay login session token whose user role has admin capabilities (`owner` or `admin`). If the admin token is intentionally empty, admin endpoints remain open.
 
+- `GET /api/admin/openapi.json`: read the machine-readable OpenAPI 3.1 contract for platform admin endpoints and public discovery. Import this URL into API clients such as Swagger UI, Apifox, Postman, or an AI coding assistant.
 - `GET /api/admin/users`: list users with stable, redacted user records, including `deviceCount` and `maxDevices`.
 - `POST /api/admin/users`: create a non-SSO user. Email is required and must not conflict with another `email_code` login identity.
 - `PATCH /api/admin/users`: update a user by `id` or a legacy email lookup; prefer `id` because email is not a global account key. Supports `email`, `name`, `role`, `maxDevices`, and boolean `disabled`.
@@ -144,6 +145,27 @@ Admin APIs require `Authorization: Bearer <token>`. The token can be the deploym
 - `POST /api/admin/security/tokens/rotate`: rotate a `session` token by token value or a `device` token by device id. `admin` token rotation is explicit but unsupported because it is environment-managed.
 - `POST /api/admin/security/tokens/revoke`: revoke a `session` token by token value or user id, or revoke a `device` token by rotating it without returning the replacement token.
 - `GET /api/relay/metrics`: read in-process relay metrics and recent trace metadata with the same admin authorization.
+
+The Admin OpenAPI document also includes platform user group, platform team, team member group, team policy, message, configuration profile, and configuration secret management endpoints under `/api/admin/access-groups*`, `/api/admin/teams*`, `/api/admin/teams/<teamId>/access-groups*`, `/api/admin/team-policy`, `/api/admin/messages`, `/api/admin/config-profiles*`, `/api/admin/config-assignments*`, and `/api/admin/config-secrets*`.
+
+The Admin API docs page at `/admin/openapi` reads both OpenAPI documents, keeps personal user APIs and platform admin APIs in separate tabs, and offers raw JSON links for API clients. The Admin profile page at `/admin/profile` lets a logged-in user create API access tokens for API clients. Tokens are shown only once, stored server-side as hashes, and authorize requests according to their scope and granted groups: `user` tokens can call current-account APIs, `team` tokens are bound to one team and use team member groups, and `platform` tokens use platform user groups. `permissionGroupMode=all` follows the account's current groups; `custom` restricts the token to listed group ids. Use them as Bearer tokens when calling the OpenAPI endpoints. An API access token cannot create or revoke other API access tokens; use a normal Relay login session for those profile security actions.
+
+Personal user APIs are documented separately from platform admin APIs:
+
+- `GET /api/profile/openapi.json`: read the machine-readable OpenAPI 3.1 contract for current-user profile security, self-service team, managed configuration, and public discovery endpoints.
+
+Profile security endpoints:
+
+- `GET /api/profile/security`: list current-account security state, including system access token metadata, password state, passkey count, and disabled placeholders for features that are not yet available.
+- `POST /api/profile/access-tokens`: create a system access token for the current account. The full token is returned only in this response.
+- `DELETE /api/profile/access-tokens/<id>`: revoke one current-account system access token.
+- `DELETE /api/profile/account`: delete the current account and invalidate related sessions, API access tokens, passkeys, devices, team memberships, user-targeted assignments, and profile audit entries. A normal login session or current-user API access token can call this endpoint.
+- `POST /api/profile/password`: set or change the current account password. Existing password accounts must provide `currentPassword`.
+- `POST /api/profile/passkeys/register/options` and `POST /api/profile/passkeys/register/verify`: bind a new passkey to the current account from the Admin profile page.
+
+The personal user OpenAPI document also includes current-user team, team member group, and managed configuration endpoints under `/api/relay/teams*`, `/api/relay/teams/<teamId>/access-groups*`, `/api/relay/team-policy`, `/api/relay/config-snapshot`, `/api/relay/config-profiles*`, `/api/relay/config-assignments*`, and `/api/relay/config-secrets*`.
+
+OpenAPI coverage is guarded by `apps/relay-server/__tests__/profile.spec.ts`: the test inventory checks exact paths, schema isolation, `$ref` closure, operation tags, bearer security declarations, and the visibility matrix (`platform-admin`, `current-user`, `common-auth`, internal runtime excluded).
 
 `GET /admin` serves the React admin client from `@oneworks/relay-admin` (`apps/relay-admin`). The server route only returns the HTML shell and static assets under `/admin/assets/*`; the React client is built by Vite, consumes the `/login` callback `relay_token`, verifies the session through `/api/auth/me`, and calls the admin APIs above only for `owner` or `admin` users.
 
@@ -315,12 +337,13 @@ The response is process-local and resets when the relay-server process restarts.
 
 Run the service behind TLS and a reverse proxy. Set long random values for `ONEWORKS_RELAY_ADMIN_TOKEN` and `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`, store OAuth client secrets outside source control, and restrict `ONEWORKS_RELAY_ALLOW_ORIGIN` to the web app origin instead of using `*`.
 
-Built-in rate limits are enabled by default for OAuth start/callback, invite redeem, email verification sends, device registration, admin mutating APIs, and device session-job claims. A blocked request returns `429` with `Retry-After` and `X-RateLimit-*` headers. Keep nginx, load balancer, or CDN limits in front of the service as the first line of defense, especially for `/api/auth/*`, `/api/relay/devices/register`, `/api/relay/devices/<deviceId>/session-jobs`, `/api/relay/metrics`, and `/api/admin/*`.
+Built-in rate limits are enabled by default for OAuth start/callback, invite redeem, email verification sends, device registration, profile security mutating APIs, current-user team / configuration mutating APIs, admin mutating APIs, and device session-job claims. A blocked request returns `429` with `Retry-After` and `X-RateLimit-*` headers. Keep nginx, load balancer, or CDN limits in front of the service as the first line of defense, especially for `/api/auth/*`, `/api/profile/*`, `/api/relay/teams*`, `/api/relay/config-*`, `/api/relay/devices/register`, `/api/relay/devices/<deviceId>/session-jobs`, `/api/relay/metrics`, and `/api/admin/*`.
 
 Token boundaries:
 
 - Admin token: `ONEWORKS_RELAY_ADMIN_TOKEN` is a process secret. Rotate it by changing the environment value and restarting all relay-server processes. The admin security endpoint reports this boundary instead of storing an alternate admin token.
 - Session token: issued after OAuth / SSO / invite login and stored in relay metadata. Admins can revoke a session token, revoke all sessions for a user id, or rotate a specific session token through `/api/admin/security/tokens/*`.
+- System access token: issued from `/admin/profile`, shown once, stored only as a hash plus preview, and authorized with the owning user's role. It can call APIs allowed by that user role but cannot create or revoke other system access tokens.
 - Device token: issued after pairing and returned once to the registering device. New device tokens are stored as hashes. Admins can rotate a device token and return the replacement, or revoke it by rotating without returning the replacement token.
 
 Audit events are emitted through the same pino logger as relay trace events with event name `relay.audit`. Audit records contain only `actor`, `action`, `resource`, `status`, `ip`, `userAgent`, and `requestId`; they do not include request bodies, session content, OAuth codes, bearer tokens, admin tokens, device tokens, or payload/result data.

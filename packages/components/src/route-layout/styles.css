@@ -112,6 +112,32 @@
   line-height: 1;
 }
 
+.route-container-header__breadcrumb-ancestor {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--placeholder-color, #66707a);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-container-header__breadcrumb-ancestor-button {
+  border: 0;
+  padding: 0;
+  color: var(--placeholder-color, #66707a);
+  background: transparent;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.route-container-header__breadcrumb-ancestor-button:hover,
+.route-container-header__breadcrumb-ancestor-button:focus-visible {
+  color: var(--primary-color, #2563eb);
+  outline: 0;
+}
+
 .route-container-header__action-button.ant-btn.ant-btn-text {
   width: var(--route-container-header-icon-button-size);
   height: var(--route-container-header-icon-button-size);
