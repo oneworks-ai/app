@@ -14,6 +14,7 @@ import { sanitizeRelayStorageValue } from './storage/content-boundary.js'
 import { normalizeRelaySsoProviders } from './storage/sso-providers.js'
 import { normalizeRelayTeamPolicy, normalizeTeamRole } from './teams.js'
 import type {
+  RelayAccessToken,
   RelayAuditLogEntry,
   RelayAuthIdentity,
   RelayConfigAssignment,
@@ -36,6 +37,7 @@ import type {
   RelayMessageAudienceScope,
   RelayMessageKind,
   RelayOAuthState,
+  RelayOpenApiAuditEvent,
   RelayPasskeyChallenge,
   RelayPasskeyChallengeKind,
   RelayPasskeyCredential,
@@ -52,6 +54,7 @@ import { createToken, isRecord, normalizeRole, now } from './utils.js'
 const defaultStore = (): RelayStore => ({
   createdAt: now(),
   auditEvents: [],
+  openApiAuditEvents: [],
   configAssignments: [],
   configProfileAssignments: [],
   configSecrets: [],
@@ -76,6 +79,7 @@ const defaultStore = (): RelayStore => ({
   deviceSessions: [],
   forwardingJobs: [],
   oauthStates: [],
+  accessTokens: [],
   sessions: []
 })
 
@@ -660,6 +664,72 @@ const normalizeAuditLogEntry = (value: Record<string, unknown>): RelayAuditLogEn
   }
 }
 
+const normalizeOpenApiAuditEvent = (value: Record<string, unknown>): RelayOpenApiAuditEvent | undefined => {
+  const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
+  const tokenId = typeof value.tokenId === 'string' && value.tokenId.trim() !== '' ? value.tokenId.trim() : undefined
+  const tokenPreview = typeof value.tokenPreview === 'string' && value.tokenPreview.trim() !== ''
+    ? value.tokenPreview.trim()
+    : undefined
+  const userId = typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined
+  const method = typeof value.method === 'string' && value.method.trim() !== ''
+    ? value.method.trim().toUpperCase()
+    : undefined
+  const path = typeof value.path === 'string' && value.path.trim() !== '' ? value.path.trim() : undefined
+  const createdAt = typeof value.createdAt === 'string' && value.createdAt.trim() !== ''
+    ? value.createdAt.trim()
+    : undefined
+  const status = Number(value.status)
+  if (
+    id == null || tokenId == null || tokenPreview == null || userId == null || method == null || path == null ||
+    createdAt == null || !Number.isFinite(status)
+  ) {
+    return undefined
+  }
+  return {
+    id,
+    tokenId,
+    tokenPreview,
+    userId,
+    method,
+    path,
+    status: Math.max(0, Math.trunc(status)),
+    ip: typeof value.ip === 'string' && value.ip.trim() !== '' ? value.ip.trim() : undefined,
+    userAgent: typeof value.userAgent === 'string' && value.userAgent.trim() !== ''
+      ? value.userAgent.trim()
+      : undefined,
+    permission: typeof value.permission === 'string' && value.permission.trim() !== ''
+      ? value.permission.trim()
+      : undefined,
+    error: typeof value.error === 'string' && value.error.trim() !== '' ? value.error.trim() : undefined,
+    createdAt
+  }
+}
+
+const normalizeAccessToken = (value: Record<string, unknown>): RelayAccessToken | undefined => {
+  const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : undefined
+  const userId = typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined
+  const tokenHash = typeof value.tokenHash === 'string' && value.tokenHash.trim() !== ''
+    ? value.tokenHash.trim()
+    : undefined
+  if (id == null || userId == null || tokenHash == null) return undefined
+  return {
+    id,
+    userId,
+    name: typeof value.name === 'string' && value.name.trim() !== '' ? value.name.trim() : 'System access token',
+    tokenHash,
+    tokenPreview: typeof value.tokenPreview === 'string' && value.tokenPreview.trim() !== ''
+      ? value.tokenPreview.trim()
+      : 'owrt_********',
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now(),
+    lastUsedAt: typeof value.lastUsedAt === 'string' && value.lastUsedAt.trim() !== ''
+      ? value.lastUsedAt.trim()
+      : undefined,
+    revokedAt: typeof value.revokedAt === 'string' && value.revokedAt.trim() !== ''
+      ? value.revokedAt.trim()
+      : undefined
+  }
+}
+
 const relayEmailPurposes = new Set<RelayEmailPurpose>([
   'email-verification',
   'invite',
@@ -759,6 +829,11 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
         value
       ): value is RelayAuditLogEntry => value != null)
       : [],
+    openApiAuditEvents: Array.isArray(store.openApiAuditEvents)
+      ? store.openApiAuditEvents.filter(isRecord).map(normalizeOpenApiAuditEvent).filter((
+        value
+      ): value is RelayOpenApiAuditEvent => value != null)
+      : [],
     configAssignments: Array.isArray(store.configAssignments)
       ? store.configAssignments.filter(isRecord).map(normalizeRelayConfigAssignment).filter((
         value
@@ -825,6 +900,11 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
       : [],
     oauthStates: Array.isArray(store.oauthStates)
       ? store.oauthStates.filter(isRecord).map(normalizeOAuthState).filter((value): value is RelayOAuthState =>
+        value != null
+      )
+      : [],
+    accessTokens: Array.isArray(store.accessTokens)
+      ? store.accessTokens.filter(isRecord).map(normalizeAccessToken).filter((value): value is RelayAccessToken =>
         value != null
       )
       : [],

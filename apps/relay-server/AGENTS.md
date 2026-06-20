@@ -11,6 +11,8 @@
 - `src/routes/email-code-login.ts`：现有用户邮箱验证码登录 endpoint；发码继续走 `src/routes/email-verification.ts` 且使用 `purpose=login`。
 - `src/routes/admin-sso-providers.ts`：B 端托管 SSO provider 管理 API。
 - `src/routes/teams.ts`、`src/routes/team-*.ts`、`src/routes/config-secrets.ts`、`src/teams.ts`、`src/config-secrets.ts`：团队、成员、租户团队策略、配置 secret 加密存储 / 轮换 / 撤销 API 与团队配置消费权限 helper；`/api/relay/teams` 面向用户自助团队流程，`/api/admin/teams` 和 `/api/admin/team-policy` 只给站点管理员。
+- `src/routes/admin-openapi.ts`：Relay 机器可读 OpenAPI 3.1 文档；平台管理员 API 挂载在 `/api/admin/openapi.json`，个人用户 API 挂载在 `/api/profile/openapi.json`，不要写入真实 token 或部署 secret。Admin 前端只读取这两份文档，不在 `apps/relay-admin` 复制 paths / schema。
+- `src/routes/profile.ts`：当前登录用户自己的 profile 安全 API，包括系统访问令牌、OpenAPI 调用审计查询、密码修改和 passkey 绑定；不要在这里实现他人用户管理动作。
 - `src/devices/private-metadata.ts`：设备私有元数据加密、解密和 device token hash 工具。
 - `src/auth/sso-provider-*`：SSO provider 元数据校验、redaction、OAuth client 解析与 env / store 合并。
 - `src/email/`：验证码 / 邀请 / 登录邮件的 provider 抽象、Turnstile 校验、域名 evaluator 和发送风控；Admin UI 黑白名单管理留给 `apps/relay-admin` 后续任务，不要在这里写界面。
@@ -32,6 +34,9 @@
 - Relay store 不保存会话正文或结果正文，只保存 trace/status/size/timestamp/errorCode 等元数据；新增存储 driver 必须复用 `content-boundary.ts` 的过滤。
 - Relay device 的 name / capabilities / workspaceFolder / pluginScope 是用户私有元数据。新写入必须加密存储，device token 只存 hash；admin 用户管理只返回 `deviceCount` / `maxDevices` 这类聚合字段，不返回其他用户设备详情。
 - `/api/relay/devices` 是当前 session 用户自己的设备列表。不要因为 owner/admin 有管理权限就把其他用户设备详情从这个接口返回。
+- 系统访问令牌属于当前登录用户，落库只存 hash 和 preview；生成接口只返回一次明文。权限按令牌所属用户的 role/capability 解析，不要给系统访问令牌绕过当前用户保护，例如禁止修改自己的 role。
+- 通过系统访问令牌调用 `/api/*` 时，`src/security/audit.ts` 需要记录 OpenAPI audit event，查询入口是 `/api/profile/openapi-audit` 且只能由登录 session 查看。
+- 新增、删除或改名 `/api/admin/*` 平台管理员 API、`/api/profile/*` 当前用户 API，或面向用户自助团队 / 配置管理的 `/api/relay/teams*`、`/api/relay/team-policy`、`/api/relay/config-*` API 时，必须同步更新 `src/routes/admin-openapi.ts` 的对应 OpenAPI 文档、`apps/relay-server/__tests__/profile.spec.ts` 的路径 / schema 隔离清单 / visibility matrix / `$ref` contract 检查，以及面向用户的 `README.md` / `.oo/docs/usage/relay.md` / `.oo/docs/en/usage/relay.md`。插件设备转发、登录提交和 OAuth callback 等运行时内部接口不要塞进这两份用户可导入的 OpenAPI，除非它们明确变成公开产品 API。
 - SSO provider 的 `clientSecret` 可以由 admin API 写入 / 更新，但 list/detail 响应必须只返回 redacted 值，不能把明文 secret 返回给管理端。
 - `users.email` 是联系邮箱，不是全局唯一登录键。登录来源归属以 `store.authIdentities` 为准：SSO 用 `(provider, providerUserId)` 绑定用户，Google / GitHub 等同邮箱登录也创建独立用户；`loginId` 必须全局唯一并可由用户后续改名；邮箱验证码只允许命中 `email_code` 身份，不能借同邮箱登录 SSO-only 账号。
 - 发信入口必须先经过 `src/email/` 的 Turnstile、域名策略、同邮箱 / 同 IP / 同域名和全局预算检查，再调用 Resend 或后续 provider。域名 allowlist 只能解除域名封禁，不能绕过 Turnstile、频率或预算。

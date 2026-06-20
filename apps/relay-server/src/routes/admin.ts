@@ -298,7 +298,7 @@ export const handleAdminUsers = async (
         sendJson(res, 400, { error: 'Invalid user role.' }, args.allowOrigin)
         return
       }
-      if (auth.kind === 'session' && auth.user.id === user.id) {
+      if ((auth.kind === 'session' || auth.kind === 'access-token') && auth.user.id === user.id) {
         sendJson(res, 403, { error: 'Cannot change your own role.' }, args.allowOrigin)
         return
       }

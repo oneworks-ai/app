@@ -37,6 +37,19 @@ curl -i https://<relay-origin>/api/admin/users
 
 `/health.version` should match the deployed `@oneworks/relay-server` package version. Returning `ok` is not enough; also verify the public URL, login methods, SSO providers, email codes, passkey flow, and plugin device registration on the final domain.
 
+## OpenAPI and System Access Tokens
+
+Relay Admin exposes two separated machine-readable OpenAPI documents:
+
+```text
+<relay-origin>/api/admin/openapi.json
+<relay-origin>/api/profile/openapi.json
+```
+
+`/api/admin/openapi.json` describes only platform admin APIs, including users, invites, SSO, team policy, teams, messages, configuration profiles / secrets, and operational metrics. `/api/profile/openapi.json` describes only current-user personal APIs, including profile security, current-user team self-service flows, and managed configuration read / management endpoints. The Admin `/admin/openapi` page can also display, download, or open both JSON documents. Protected endpoints use `Authorization: Bearer <token>`; the token can be the deployment Admin token, a login session token, or a system access token generated from `/admin/profile`. Personal security write operations still require a normal login session.
+
+System access tokens belong to the current logged-in user and work only with that user's role and permissions. The server stores only a token hash and preview, and the full token is shown once when it is created; revoke and recreate it if it is lost. A system access token cannot create or revoke other system access tokens, so those security actions require a normal login session.
+
 ## Login Methods
 
 `/login` is shared by the Relay plugin, Admin, and Web redirect flows. Operators can set the default method with `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD`, and the browser remembers the last method selected by the user.

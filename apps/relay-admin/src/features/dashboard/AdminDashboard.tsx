@@ -1,7 +1,9 @@
+/* eslint-disable max-lines -- dashboard owns route-section composition for the admin workbench. */
 import { DeviceDetailPage } from '../devices/DeviceDetailPage'
 import { DevicePanel } from '../devices/DevicePanel'
 import { InvitePanel } from '../invites/InvitePanel'
 import { MessageCenterPage } from '../messages/MessageCenterPage'
+import { OpenApiPage } from '../openapi/OpenApiPage'
 import { ProfilePage } from '../profile/ProfilePage'
 import { SsoProviderPanel } from '../sso/SsoProviderPanel'
 import { TeamDetailPage } from '../teams/TeamDetailPage'
@@ -22,6 +24,7 @@ export type AdminDashboardSectionId =
   | 'users'
   | 'invites'
   | 'messages'
+  | 'openapi'
   | 'sso'
   | 'team-detail'
   | 'team-detail-settings'
@@ -118,7 +121,11 @@ export const AdminDashboard = ({
           accounts={dashboard.accounts}
           activeToken={dashboard.token}
           currentUser={dashboard.currentUser}
+          devices={dashboard.devices}
         />
+      )}
+      {sectionId === 'openapi' && (
+        <OpenApiPage currentUser={dashboard.currentUser} />
       )}
       {sectionId === 'messages' && (
         <MessageCenterPage

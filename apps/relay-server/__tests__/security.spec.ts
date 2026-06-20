@@ -59,6 +59,7 @@ const createSecurityStore = (): RelayStore => ({
   deviceSessions: [],
   forwardingJobs: [],
   oauthStates: [],
+  accessTokens: [],
   sessions: [
     {
       token: 'session-token',

@@ -130,7 +130,7 @@ export const AdminNavRail = ({
   }, [activeToken, visibleAccounts])
   const openCurrentAccountProfile = useCallback(() => {
     if (currentUser == null) return
-    void navigate('/profile')
+    void navigate('/profile/account')
     setAccountMenuOpen(false)
   }, [currentUser, navigate])
   const openMessageCenter = useCallback(() => {
@@ -172,7 +172,7 @@ export const AdminNavRail = ({
           ),
           onClick: () => {
             if (isActive) {
-              void navigate('/profile')
+              void navigate('/profile/account')
               setAccountMenuOpen(false)
               return
             }

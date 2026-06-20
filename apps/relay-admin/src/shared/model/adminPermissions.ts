@@ -1,6 +1,6 @@
 import type { RelayAdminRole } from './adminTypes'
 
-export type RelayAdminSectionAccessId = 'devices' | 'invites' | 'message-pushes' | 'sso' | 'teams' | 'users'
+export type RelayAdminSectionAccessId = 'devices' | 'invites' | 'message-pushes' | 'openapi' | 'sso' | 'teams' | 'users'
 
 export const relayAdminRoles = ['owner', 'admin', 'member', 'viewer'] as const satisfies readonly RelayAdminRole[]
 
@@ -28,5 +28,7 @@ export const canAccessRelayAdminSection = (
   role: RelayAdminRole | undefined,
   sectionId: RelayAdminSectionAccessId
 ) => (
-  sectionId === 'devices' || (sectionId !== 'message-pushes' && canManageRelayAdmin(role))
+  sectionId === 'devices' ||
+  sectionId === 'openapi' ||
+  (sectionId !== 'message-pushes' && canManageRelayAdmin(role))
 )

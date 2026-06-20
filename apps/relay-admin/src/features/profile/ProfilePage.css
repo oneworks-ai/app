@@ -1,17 +1,23 @@
 .relay-profile-panel {
-  display: grid;
-  gap: 10px;
-  padding: 14px var(--route-container-header-padding-inline);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 14px var(--route-container-header-padding-inline) 10px;
 }
 
 .relay-profile {
-  display: grid;
-  gap: 18px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
 }
 
 .relay-profile__hero {
   align-items: center;
   display: grid;
+  flex: 0 0 auto;
   gap: 14px;
   grid-template-columns: auto minmax(0, 1fr);
   min-width: 0;
@@ -67,6 +73,240 @@
   font-weight: 650;
 }
 
+.relay-profile-tabs.ant-tabs {
+  color: var(--text-color);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.relay-profile-tabs.ant-tabs > .ant-tabs-nav {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.relay-profile-tabs.ant-tabs > .ant-tabs-nav::before {
+  border-color: var(--border-color);
+}
+
+.relay-profile-tabs .ant-tabs-tab {
+  color: var(--sub-text-color);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 10px 0 12px;
+}
+
+.relay-profile-tabs .ant-tabs-tab + .ant-tabs-tab {
+  margin-left: 34px;
+}
+
+.relay-profile-tab-label {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.relay-profile-tab-label .relay-admin-icon {
+  flex: 0 0 auto;
+  height: 15px;
+  width: 15px;
+}
+
+.relay-profile-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn,
+.relay-profile-tabs .ant-tabs-tab:hover {
+  color: var(--primary-color);
+}
+
+.relay-profile-tabs .ant-tabs-ink-bar {
+  background: var(--primary-color);
+  height: 2px;
+}
+
+.relay-profile-tabs.ant-tabs > .ant-tabs-content-holder {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  padding-top: 8px;
+}
+
+.relay-profile-tabs.ant-tabs > .ant-tabs-content-holder > .ant-tabs-content,
+.relay-profile-tabs .ant-tabs-tabpane {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.relay-profile-tabs .ant-tabs-tabpane-hidden {
+  display: none;
+}
+
+.relay-profile-tab-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.relay-profile-security__rows {
+  border-top: 1px solid
+    color-mix(in srgb, var(--border-color) 72%, transparent);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.relay-profile-security-row {
+  align-items: center;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border-color) 64%, transparent);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  min-height: 68px;
+  padding: 10px 0;
+}
+
+.relay-profile-security-row__icon {
+  align-items: center;
+  color: var(--sub-text-color);
+  display: inline-grid;
+  font-size: 18px;
+  justify-content: center;
+}
+
+.relay-profile-security-row__body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.relay-profile-security-row__title {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.relay-profile-security-row__title strong {
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.relay-profile-security-row__body p {
+  color: var(--sub-text-color);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.relay-profile-security-row__action {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.relay-profile-security-row__action .ant-btn {
+  min-height: 28px;
+}
+
+.relay-profile-token-preview-cell {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.relay-profile-token-preview {
+  color: var(--sub-text-color);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-profile-token-actions {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+  min-height: var(--app-chrome-icon-size, 18px);
+  width: 100%;
+}
+
+.relay-profile-time-filter-menu {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.relay-profile-time-filter-input.ant-input {
+  color-scheme: dark;
+  font-size: 12px;
+  height: 24px;
+  line-height: 22px;
+  padding: 0 6px;
+}
+
+.relay-profile-audit-path,
+.relay-profile-audit-secondary {
+  color: var(--sub-text-color);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.relay-profile-audit-path {
+  color: var(--text-color);
+}
+
+.relay-profile-audit-error {
+  color: var(--danger-color);
+}
+
+.relay-profile-token-reveal {
+  display: grid;
+  gap: 12px;
+}
+
+.relay-profile-token-reveal textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
 .relay-profile__empty {
   padding: 28px 0;
+}
+
+@media (max-width: 720px) {
+  .relay-profile-security-row {
+    align-items: stretch;
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .relay-profile-security-row__action {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+
+  .relay-profile-security-row__action .ant-btn {
+    width: 100%;
+  }
+
+  .relay-profile-tabs .ant-tabs-tab + .ant-tabs-tab {
+    margin-left: 18px;
+  }
+
+  .relay-profile-tab-panel .relay-admin-list-table__toolbar-actions {
+    flex: 1 1 auto;
+  }
 }

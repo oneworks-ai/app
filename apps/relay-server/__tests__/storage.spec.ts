@@ -106,6 +106,7 @@ describe('relay storage repository', () => {
       deviceSessions: [],
       forwardingJobs: [],
       oauthStates: [],
+      accessTokens: [],
       sessions: []
     }
 
@@ -186,6 +187,7 @@ describe('relay storage repository', () => {
         }
       ],
       oauthStates: [],
+      accessTokens: [],
       sessions: []
     }
 
@@ -234,6 +236,7 @@ describe('relay storage repository', () => {
       deviceSessions: [],
       forwardingJobs: [],
       oauthStates: [],
+      accessTokens: [],
       sessions: []
     }
 
@@ -271,6 +274,7 @@ describe('relay storage repository', () => {
       deviceSessions: [],
       forwardingJobs: [],
       oauthStates: [],
+      accessTokens: [],
       sessions: []
     })
 
@@ -333,6 +337,7 @@ describe('relay storage repository', () => {
         }
       ],
       oauthStates: [],
+      accessTokens: [],
       sessions: []
     } as unknown as RelayStore
 
@@ -408,6 +413,7 @@ describe('relay storage repository', () => {
         }
       ],
       oauthStates: [],
+      accessTokens: [],
       sessions: []
     } as unknown as RelayStore
 

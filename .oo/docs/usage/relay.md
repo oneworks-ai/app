@@ -37,6 +37,19 @@ curl -i https://<relay-origin>/api/admin/users
 
 `/health.version` 应等于实际部署的 `@oneworks/relay-server` 包版本。只返回 `ok` 还不够，还要确认 public URL、登录方式、SSO provider、邮件验证码、passkey 和插件设备注册都在最终域名上工作。
 
+## OpenAPI 与系统访问令牌
+
+Relay Admin 提供两份隔离的机器可读 OpenAPI 文档：
+
+```text
+<relay-origin>/api/admin/openapi.json
+<relay-origin>/api/profile/openapi.json
+```
+
+`/api/admin/openapi.json` 只描述平台管理员 API，包括用户、邀请码、SSO、团队策略、团队、消息、配置 profile / secret 和运维指标。`/api/profile/openapi.json` 只描述当前用户自己的个人 API，包括个人安全、当前用户团队自助流程和托管配置读取 / 管理。也可以在 Admin 的 `/admin/openapi` 页面直接查看、下载或打开这两份 JSON。受保护接口使用 `Authorization: Bearer <token>`；token 可以是部署级 Admin token、登录 session token，或用户在 `/admin/profile` 个人页面生成的系统访问令牌。个人安全类写操作仍必须使用正常登录 session。
+
+系统访问令牌属于当前登录用户，只按该用户的角色和权限工作。服务端只保存令牌 hash 和 preview，完整令牌只在生成时显示一次；遗失后需要撤销并重新生成。系统访问令牌不能继续生成或撤销其他系统访问令牌，这类安全操作必须使用正常登录 session。
+
 ## 登录方式
 
 `/login` 是 Relay 插件、Admin 和 Web 回跳共用的登录页。部署方可以通过 `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD` 设置默认方式，浏览器也会记住用户上次选择的方式。

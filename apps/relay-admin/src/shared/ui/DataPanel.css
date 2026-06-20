@@ -97,6 +97,7 @@
   border-color: color-mix(in srgb, var(--border-color) 64%, transparent);
   color: var(--text-color);
   padding: 9px 8px;
+  vertical-align: middle;
 }
 
 .relay-admin-table .ant-table-thead > tr > th.ant-table-cell-fix-right,

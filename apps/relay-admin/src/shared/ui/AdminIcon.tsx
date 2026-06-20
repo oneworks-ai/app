@@ -7,6 +7,7 @@ import checkSvg from '@material-symbols/svg-400/rounded/check.svg?raw'
 import chevronLeftSvg from '@material-symbols/svg-400/rounded/chevron_left.svg?raw'
 import chevronRightSvg from '@material-symbols/svg-400/rounded/chevron_right.svg?raw'
 import closeSvg from '@material-symbols/svg-400/rounded/close.svg?raw'
+import contentCopySvg from '@material-symbols/svg-400/rounded/content_copy.svg?raw'
 import darkModeSvg from '@material-symbols/svg-400/rounded/dark_mode.svg?raw'
 import deleteSvg from '@material-symbols/svg-400/rounded/delete.svg?raw'
 import desktopWindowsSvg from '@material-symbols/svg-400/rounded/desktop_windows.svg?raw'
@@ -47,6 +48,7 @@ export type AdminIconName =
   | 'chevron_left'
   | 'chevron_right'
   | 'close'
+  | 'content_copy'
   | 'dark_mode'
   | 'delete'
   | 'desktop_windows'
@@ -85,6 +87,7 @@ const adminIconSvgByName: Record<AdminIconName, string> = {
   chevron_left: chevronLeftSvg,
   chevron_right: chevronRightSvg,
   close: closeSvg,
+  content_copy: contentCopySvg,
   dark_mode: darkModeSvg,
   delete: deleteSvg,
   desktop_windows: desktopWindowsSvg,

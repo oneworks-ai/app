@@ -456,6 +456,21 @@ export interface RelayAuditLogEntry {
   createdAt: string
 }
 
+export interface RelayOpenApiAuditEvent {
+  id: string
+  tokenId: string
+  tokenPreview: string
+  userId: string
+  method: string
+  path: string
+  status: number
+  ip?: string
+  userAgent?: string
+  permission?: string
+  error?: string
+  createdAt: string
+}
+
 export interface RelayConfigProjectContext {
   cwd?: string
   projectId?: string
@@ -478,6 +493,17 @@ export interface RelaySession {
   createdAt: string
   expiresAt: string
   lastSeenAt: string
+}
+
+export interface RelayAccessToken {
+  id: string
+  userId: string
+  name: string
+  tokenHash: string
+  tokenPreview: string
+  createdAt: string
+  lastUsedAt?: string
+  revokedAt?: string
 }
 
 export interface RelayEmailRiskBucket {
@@ -544,6 +570,7 @@ export interface RelayForwardingJob {
 export interface RelayStore {
   createdAt: string
   auditEvents: RelayAuditLogEntry[]
+  openApiAuditEvents?: RelayOpenApiAuditEvent[]
   configAssignments: RelayConfigAssignment[]
   configProfileAssignments: RelayConfigProfileAssignment[]
   configSecrets: RelayConfigSecret[]
@@ -565,5 +592,6 @@ export interface RelayStore {
   deviceSessions: RelayDeviceSession[]
   forwardingJobs: RelayForwardingJob[]
   oauthStates: RelayOAuthState[]
+  accessTokens: RelayAccessToken[]
   sessions: RelaySession[]
 }
