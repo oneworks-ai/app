@@ -616,7 +616,7 @@ export function ChatHeader({
     )
   const shouldShowCompactMoreActions = compactMoreItems.length > 0
   const workspaceDrawerAction: RouteContainerHeaderActionItem = {
-    icon: 'right_panel_open',
+    icon: isCompactLayout ? 'select_window' : 'right_panel_open',
     key: 'chat-workspace-drawer',
     label: t('chat.workspaceDrawerToggle'),
     onSelect: onToggleWorkspaceDrawer

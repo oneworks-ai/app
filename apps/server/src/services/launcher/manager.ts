@@ -59,6 +59,7 @@ interface LauncherWorkspaceInstanceIdentity {
   launchConfigHash: string
   packageDir: string
   repoRoot?: string
+  sourceVersionId?: string
 }
 
 interface LauncherWorkspaceInstanceState extends LauncherWorkspaceInstanceIdentity {
@@ -66,6 +67,31 @@ interface LauncherWorkspaceInstanceState extends LauncherWorkspaceInstanceIdenti
   protocolVersion: number
   serverBaseUrl?: string
   startedAt: string
+  workspaceFolder: string
+}
+
+interface LauncherWorkspaceVersionConflictDetails {
+  existing: {
+    implementationId: string
+    launchConfigHash: string
+    packageDir: string
+    pid?: number
+    repoRoot?: string
+    serverBaseUrl?: string
+    sourceVersionId?: string
+    startedAt?: string
+    workspaceFolder: string
+  }
+  reason: 'implementation' | 'launch-config' | 'workspace'
+  requested: {
+    implementationId: string
+    launchConfigHash: string
+    packageDir: string
+    repoRoot?: string
+    sourceVersionId?: string
+    workspaceFolder: string
+  }
+  restartable: boolean
   workspaceFolder: string
 }
 
@@ -400,30 +426,249 @@ const resolvePackageDir = () => (
   process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__ ?? resolve(process.cwd(), 'apps/server')
 )
 
+const readJsonFileSync = (filePath: string) => {
+  try {
+    const value = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown
+    return value != null && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const collectPackageJsonFiles = (root: string, output: string[] = []) => {
+  let entries: fs.Dirent[]
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true })
+  } catch {
+    return output
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name.startsWith('.')) continue
+
+    const directory = path.join(root, entry.name)
+    const packageJsonPath = path.join(directory, 'package.json')
+    if (fs.existsSync(packageJsonPath)) {
+      output.push(packageJsonPath)
+    }
+    collectPackageJsonFiles(directory, output)
+  }
+
+  return output
+}
+
+const readWorkspacePackageDirs = (repoRoot: string) => {
+  const packageDirsByName = new Map<string, string>()
+  const packageJsonFiles = [
+    path.join(repoRoot, 'package.json'),
+    path.join(repoRoot, 'apps', 'server', 'package.json'),
+    ...collectPackageJsonFiles(path.join(repoRoot, 'packages'))
+  ]
+
+  for (const packageJsonPath of packageJsonFiles) {
+    const packageJson = readJsonFileSync(packageJsonPath)
+    const name = typeof packageJson?.name === 'string' ? packageJson.name.trim() : ''
+    if (name !== '') {
+      packageDirsByName.set(name, path.dirname(packageJsonPath))
+    }
+  }
+
+  return packageDirsByName
+}
+
+const readPackageDependencyNames = (packageDir: string) => {
+  const packageJson = readJsonFileSync(path.join(packageDir, 'package.json'))
+  const dependencySections = [
+    packageJson?.dependencies,
+    packageJson?.optionalDependencies,
+    packageJson?.peerDependencies
+  ]
+  const dependencyNames = new Set<string>()
+  for (const section of dependencySections) {
+    if (section == null || typeof section !== 'object' || Array.isArray(section)) continue
+    for (const dependencyName of Object.keys(section)) {
+      dependencyNames.add(dependencyName)
+    }
+  }
+  return dependencyNames
+}
+
+const collectServerRuntimePackageDirs = (repoRoot: string, packageDir: string) => {
+  const packageDirsByName = readWorkspacePackageDirs(repoRoot)
+  const packageDirs = new Set<string>()
+  const queue = [fs.realpathSync.native(packageDir)]
+
+  while (queue.length > 0) {
+    const currentPackageDir = queue.shift()
+    if (currentPackageDir == null || packageDirs.has(currentPackageDir)) {
+      continue
+    }
+
+    packageDirs.add(currentPackageDir)
+    for (const dependencyName of readPackageDependencyNames(currentPackageDir)) {
+      const dependencyPackageDir = packageDirsByName.get(dependencyName)
+      if (dependencyPackageDir != null) {
+        queue.push(fs.realpathSync.native(dependencyPackageDir))
+      }
+    }
+  }
+
+  return Array.from(packageDirs).sort()
+}
+
+const toGitPath = (repoRoot: string, absolutePath: string) => (
+  path.relative(repoRoot, absolutePath).replaceAll(path.sep, '/')
+)
+
+const getServerRuntimeGitPaths = (repoRoot: string, packageDir: string) => {
+  const dynamicRuntimePaths = [
+    'packages/adapters',
+    'packages/channels',
+    'packages/plugins'
+  ].filter(relativePath => fs.existsSync(path.join(repoRoot, relativePath)))
+  const runtimePackagePaths = collectServerRuntimePackageDirs(repoRoot, packageDir)
+    .map(packagePath => toGitPath(repoRoot, packagePath))
+    .filter(relativePath => relativePath !== '' && !relativePath.startsWith('..'))
+  const rootRuntimeFiles = [
+    'package.json',
+    'pnpm-lock.yaml',
+    'pnpm-workspace.yaml',
+    'tsconfig.json'
+  ].filter(relativePath => fs.existsSync(path.join(repoRoot, relativePath)))
+
+  return Array.from(new Set([...runtimePackagePaths, ...dynamicRuntimePaths, ...rootRuntimeFiles])).sort()
+}
+
+const hashGitServerRuntime = (
+  repoRoot: string,
+  packageDir: string,
+  input: {
+    includeDirty: boolean
+    treeish: string
+  }
+) => {
+  const runtimePaths = getServerRuntimeGitPaths(repoRoot, packageDir)
+  const treeSnapshot = readGitLargeCommand(repoRoot, [
+    'ls-tree',
+    '-r',
+    '--full-tree',
+    input.treeish,
+    '--',
+    ...runtimePaths
+  ])
+  if (treeSnapshot == null) return undefined
+
+  const status = input.includeDirty
+    ? readGitCommand(repoRoot, ['status', '--porcelain=v1', '--', ...runtimePaths])
+    : ''
+  const diff = input.includeDirty && status != null && status !== ''
+    ? readGitLargeCommand(repoRoot, ['diff', '--binary', input.treeish, '--', ...runtimePaths])
+    : ''
+  const untracked = input.includeDirty && status != null && status !== ''
+    ? readGitLargeCommand(repoRoot, ['ls-files', '--others', '--exclude-standard', '--', ...runtimePaths])
+    : ''
+  return createHash('sha256')
+    .update(`${runtimePaths.join('\n')}\n${treeSnapshot}\n${status ?? ''}\n${diff ?? ''}\n${untracked ?? ''}`)
+    .digest('hex')
+    .slice(0, 16)
+}
+
+const createGitSourceVersionId = (repoRoot: string, head: string) => {
+  const status = readGitCommand(repoRoot, ['status', '--porcelain=v1'])
+  const diff = status == null || status === ''
+    ? ''
+    : readGitLargeCommand(repoRoot, ['diff', '--binary', 'HEAD', '--'])
+  const untracked = status == null || status === ''
+    ? ''
+    : readGitLargeCommand(repoRoot, ['ls-files', '--others', '--exclude-standard'])
+  const dirtyHash = status == null || status === ''
+    ? 'clean'
+    : createHash('sha256').update(`${status}\n${diff ?? ''}\n${untracked ?? ''}`).digest('hex').slice(0, 12)
+  return `git:${head}:${dirtyHash}`
+}
+
+const createGitServerRuntimeImplementationId = (
+  repoRoot: string,
+  packageDir: string,
+  input: {
+    includeDirty: boolean
+    treeish: string
+  }
+) => {
+  const runtimeHash = hashGitServerRuntime(repoRoot, packageDir, input)
+  return runtimeHash == null ? undefined : `git-runtime:${runtimeHash}`
+}
+
 const resolveImplementationIdentity = (packageDir: string) => {
   const normalizedPackageDir = fs.realpathSync.native(packageDir)
   const repoRoot = readGitCommand(normalizedPackageDir, ['rev-parse', '--path-format=absolute', '--show-toplevel'])
   const head = repoRoot == null ? undefined : readGitCommand(repoRoot, ['rev-parse', 'HEAD'])
   if (repoRoot != null && head != null) {
-    const status = readGitCommand(repoRoot, ['status', '--porcelain=v1'])
-    const diff = status == null || status === ''
-      ? ''
-      : readGitLargeCommand(repoRoot, ['diff', '--binary', 'HEAD', '--'])
-    const untracked = status == null || status === ''
-      ? ''
-      : readGitLargeCommand(repoRoot, ['ls-files', '--others', '--exclude-standard'])
-    const dirtyHash = status == null || status === ''
-      ? 'clean'
-      : createHash('sha256').update(`${status}\n${diff ?? ''}\n${untracked ?? ''}`).digest('hex').slice(0, 12)
+    const normalizedRepoRoot = fs.realpathSync.native(repoRoot)
+    const serverRuntimeImplementationId = createGitServerRuntimeImplementationId(
+      normalizedRepoRoot,
+      normalizedPackageDir,
+      {
+        includeDirty: true,
+        treeish: 'HEAD'
+      }
+    )
+    const sourceVersionId = createGitSourceVersionId(normalizedRepoRoot, head)
     return {
-      implementationId: `git:${head}:${dirtyHash}`,
-      repoRoot: fs.realpathSync.native(repoRoot)
+      implementationId: serverRuntimeImplementationId ?? sourceVersionId,
+      repoRoot: normalizedRepoRoot,
+      sourceVersionId
     }
   }
 
   return {
     implementationId: `path:${normalizedPackageDir}`
   }
+}
+
+const isLoopbackHostname = (hostname: string) => (
+  hostname === 'localhost' ||
+  hostname === '127.0.0.1' ||
+  hostname === '::1' ||
+  hostname === '[::1]'
+)
+
+const parseLauncherClientOrigin = (clientOrigin: string | undefined) => {
+  if (clientOrigin == null) return undefined
+  try {
+    return new URL(clientOrigin)
+  } catch {
+    return undefined
+  }
+}
+
+const getLauncherClientOriginIdentityKey = (clientOrigin: string | undefined) => {
+  const url = parseLauncherClientOrigin(clientOrigin)
+  if (url == null) return undefined
+  if (isLoopbackHostname(url.hostname)) {
+    return `${url.protocol}//loopback${url.port === '' ? '' : `:${url.port}`}`
+  }
+  return url.origin
+}
+
+const createOrigin = (protocol: string, hostname: string, port: string) => (
+  `${protocol}//${hostname}${port === '' ? '' : `:${port}`}`
+)
+
+const getLauncherClientCorsOrigins = (clientOrigin: string | undefined) => {
+  const url = parseLauncherClientOrigin(clientOrigin)
+  if (url == null) return []
+  if (!isLoopbackHostname(url.hostname)) return [url.origin]
+  return Array.from(
+    new Set([
+      url.origin,
+      createOrigin(url.protocol, '127.0.0.1', url.port),
+      createOrigin(url.protocol, 'localhost', url.port)
+    ])
+  )
 }
 
 export const resolveLauncherWorkspaceInstanceIdentity = (
@@ -437,7 +682,7 @@ export const resolveLauncherWorkspaceInstanceIdentity = (
   const launchConfigHash = createHash('sha256')
     .update(JSON.stringify({
       clientBase: createLauncherWorkspaceClientBase(createLauncherWorkspaceId(workspaceFolder)),
-      clientOrigin: input.clientOrigin ?? null,
+      clientOrigin: getLauncherClientOriginIdentityKey(input.clientOrigin) ?? null,
       host: WORKSPACE_SERVER_HOST,
       workspaceFolder
     }))
@@ -448,7 +693,8 @@ export const resolveLauncherWorkspaceInstanceIdentity = (
     implementationId: implementation.implementationId,
     launchConfigHash,
     packageDir,
-    ...(implementation.repoRoot == null ? {} : { repoRoot: implementation.repoRoot })
+    ...(implementation.repoRoot == null ? {} : { repoRoot: implementation.repoRoot }),
+    ...(implementation.sourceVersionId == null ? {} : { sourceVersionId: implementation.sourceVersionId })
   }
 }
 
@@ -595,6 +841,44 @@ const isWorkspaceInstanceReady = async (state: LauncherWorkspaceInstanceState | 
   }
 }
 
+const legacyGitImplementationIdPattern = /^git:([a-f0-9]{40}):clean$/u
+
+const isLegacyGitRuntimeImplementationCompatible = (
+  state: LauncherWorkspaceInstanceIdentity,
+  identity: LauncherWorkspaceInstanceIdentity
+) => {
+  if (!identity.implementationId.startsWith('git-runtime:')) return false
+  if (state.repoRoot == null || identity.repoRoot == null || state.repoRoot !== identity.repoRoot) return false
+  if (state.packageDir !== identity.packageDir) return false
+
+  const match = legacyGitImplementationIdPattern.exec(state.implementationId)
+  const legacyHead = match?.[1]
+  if (legacyHead == null) return false
+
+  return createGitServerRuntimeImplementationId(state.repoRoot, state.packageDir, {
+    includeDirty: false,
+    treeish: legacyHead
+  }) === identity.implementationId
+}
+
+const isWorkspaceImplementationCompatible = (
+  state: LauncherWorkspaceInstanceIdentity,
+  identity: LauncherWorkspaceInstanceIdentity
+) => (
+  state.implementationId === identity.implementationId ||
+  isLegacyGitRuntimeImplementationCompatible(state, identity)
+)
+
+const resolveWorkspaceVersionConflictReason = (
+  workspaceFolder: string,
+  state: LauncherWorkspaceInstanceIdentity & { workspaceFolder: string },
+  identity: LauncherWorkspaceInstanceIdentity
+): LauncherWorkspaceVersionConflictDetails['reason'] => {
+  if (state.workspaceFolder !== workspaceFolder) return 'workspace'
+  if (!isWorkspaceImplementationCompatible(state, identity)) return 'implementation'
+  return 'launch-config'
+}
+
 const assertCompatibleWorkspaceInstance = (
   workspaceFolder: string,
   state: LauncherWorkspaceInstanceIdentity & {
@@ -607,34 +891,42 @@ const assertCompatibleWorkspaceInstance = (
 ) => {
   if (
     state.workspaceFolder === workspaceFolder &&
-    state.implementationId === identity.implementationId &&
+    isWorkspaceImplementationCompatible(state, identity) &&
     state.launchConfigHash === identity.launchConfigHash
   ) {
     return
   }
 
-  throw conflict(
-    'Workspace is already served by a different One Works version.',
-    {
-      existing: {
-        implementationId: state.implementationId,
-        launchConfigHash: state.launchConfigHash,
-        packageDir: state.packageDir,
-        pid: state.pid,
-        repoRoot: state.repoRoot,
-        serverBaseUrl: state.serverBaseUrl,
-        startedAt: state.startedAt,
-        workspaceFolder: state.workspaceFolder
-      },
-      requested: {
-        implementationId: identity.implementationId,
-        launchConfigHash: identity.launchConfigHash,
-        packageDir: identity.packageDir,
-        repoRoot: identity.repoRoot,
-        workspaceFolder
-      },
+  const details: LauncherWorkspaceVersionConflictDetails = {
+    existing: {
+      implementationId: state.implementationId,
+      launchConfigHash: state.launchConfigHash,
+      packageDir: state.packageDir,
+      pid: state.pid,
+      repoRoot: state.repoRoot,
+      serverBaseUrl: state.serverBaseUrl,
+      sourceVersionId: state.sourceVersionId,
+      startedAt: state.startedAt,
+      workspaceFolder: state.workspaceFolder
+    },
+    reason: resolveWorkspaceVersionConflictReason(workspaceFolder, state, identity),
+    requested: {
+      implementationId: identity.implementationId,
+      launchConfigHash: identity.launchConfigHash,
+      packageDir: identity.packageDir,
+      repoRoot: identity.repoRoot,
+      sourceVersionId: identity.sourceVersionId,
       workspaceFolder
     },
+    restartable: state.workspaceFolder === workspaceFolder &&
+      state.packageDir === identity.packageDir &&
+      state.repoRoot === identity.repoRoot,
+    workspaceFolder
+  }
+
+  throw conflict(
+    'Workspace is already served by a different One Works version.',
+    details,
     'workspace_server_version_conflict'
   )
 }
@@ -751,8 +1043,9 @@ const createWorkspaceServerEnv = (
   env.__ONEWORKS_PROJECT_CLIENT_BASE__ = createLauncherWorkspaceClientBase(workspaceId)
   env.__ONEWORKS_PROJECT_WORKSPACE_ID__ = workspaceId
   env.__ONEWORKS_PROJECT_WEB_AUTH_ENABLED__ = 'false'
-  if (input.clientOrigin != null) {
-    env.__ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__ = input.clientOrigin
+  const corsOrigins = getLauncherClientCorsOrigins(input.clientOrigin)
+  if (corsOrigins.length > 0) {
+    env.__ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__ = corsOrigins.join(',')
   }
   return {
     env,
