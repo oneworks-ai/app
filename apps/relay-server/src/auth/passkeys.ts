@@ -283,6 +283,85 @@ export const verifyRelayPasskeyRegistration = async (
   }
 }
 
+export const prepareRelayCurrentUserPasskeyRegistration = async (
+  req: IncomingMessage,
+  args: RelayServerArgs,
+  store: RelayStore,
+  input: {
+    user: RelayUser
+  }
+): Promise<RelayPasskeyOptionsResult<PublicKeyCredentialCreationOptionsJSON>> => {
+  const { config, origin, rpId } = resolvePasskeyRp(req, args)
+  ensurePasskeyEnabled(config)
+  const excludeCredentials = passkeysForUser(store, input.user.id).map(passkey => ({
+    id: passkey.id,
+    transports: transportsForWebAuthn(passkey.transports)
+  }))
+  const options = await generateRegistrationOptions({
+    attestationType: 'none',
+    authenticatorSelection: {
+      residentKey: 'preferred',
+      userVerification: 'preferred'
+    },
+    excludeCredentials,
+    rpID: rpId,
+    rpName: config.rpName,
+    timeout: config.timeoutMs,
+    userDisplayName: input.user.name.trim() || input.user.email,
+    userID: bytesFromUserId(input.user.id),
+    userName: input.user.email
+  })
+  pushPasskeyChallenge(store, {
+    challenge: options.challenge,
+    kind: 'registration',
+    origin,
+    rpId,
+    userId: input.user.id
+  }, config.timeoutMs)
+  return { options }
+}
+
+export const verifyRelayCurrentUserPasskeyRegistration = async (
+  args: RelayServerArgs,
+  store: RelayStore,
+  input: {
+    credentialName?: string
+    response: RegistrationResponseJSON
+    user: RelayUser
+  }
+): Promise<RelayPasskeyVerifyResult> => {
+  ensurePasskeyEnabled(resolvePasskeyConfig(args))
+  const challenge = findLatestChallenge(store, {
+    kind: 'registration',
+    userId: input.user.id
+  })
+  if (challenge == null) {
+    throw new RelayPasskeyError('Passkey registration expired.', 400, 'passkey_challenge_expired')
+  }
+  const verification = await verifyRegistrationResponse({
+    expectedChallenge: challenge.challenge,
+    expectedOrigin: challenge.origin,
+    expectedRPID: challenge.rpId,
+    response: input.response
+  })
+  if (!verification.verified) {
+    throw new RelayPasskeyError('Passkey registration failed.', 401, 'passkey_registration_failed')
+  }
+  if (input.user.provider == null || input.user.provider === 'invite') input.user.provider = passkeyProvider
+  input.user.updatedAt = now()
+  ensurePasskeyIdentities(store, input.user)
+  const credential = upsertPasskeyCredential(store, {
+    credentialName: input.credentialName,
+    registrationInfo: verification.registrationInfo,
+    userId: input.user.id
+  })
+  removeChallenge(store, challenge)
+  return {
+    credential,
+    tokenUser: input.user
+  }
+}
+
 export const prepareRelayPasskeyAuthentication = async (
   req: IncomingMessage,
   args: RelayServerArgs,

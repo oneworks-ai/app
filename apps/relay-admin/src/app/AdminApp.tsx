@@ -128,7 +128,8 @@ export const AdminApp = () => {
   } as CSSProperties), [isCompactLayout, sidebarCollapsed, sidebarWidth])
   const headerBreadcrumb = useAdminRouteHeaderBreadcrumb(location.pathname, dashboard)
   const normalizedPathname = location.pathname === '/' ? '/' : location.pathname.replace(/\/+$/, '')
-  const isProfileRoute = normalizedPathname === '/profile'
+  const isProfileRoute = normalizedPathname === '/profile' || normalizedPathname.startsWith('/profile/')
+  const isOpenApiRoute = normalizedPathname === '/openapi'
   const isMessagesRoute = normalizedPathname === '/messages'
   const isMessagePushRoute = normalizedPathname === '/message-pushes'
   const isMessagePushCreateRoute = normalizedPathname === '/message-pushes/create'
@@ -159,15 +160,19 @@ export const AdminApp = () => {
     ? '消息详情'
     : isProfileRoute
     ? '个人资料'
+    : isOpenApiRoute
+    ? 'API 文档'
     : activeSection.label
   const headerIcon = isMessagesRoute || isMessageDetailRoute || isMessagePushRoute || isMessagePushCreateRoute ||
       isMessagePushDetailRoute
     ? <AdminIcon name='notifications' />
     : isProfileRoute
     ? <AdminIcon name='account_circle' />
+    : isOpenApiRoute
+    ? <AdminIcon name='fact_check' />
     : activeSection.icon
   const isCreateActionActive = activeCreateSectionId != null && createSectionId === activeCreateSectionId
-  const canRenderSection = useCallback((sectionId: 'devices' | 'invites' | 'sso' | 'teams' | 'users') => (
+  const canRenderSection = useCallback((sectionId: 'devices' | 'invites' | 'openapi' | 'sso' | 'teams' | 'users') => (
     dashboard.authStatus === 'checking' ||
     canAccessRelayAdminSection(dashboard.currentUser?.role, sectionId)
   ), [dashboard.authStatus, dashboard.currentUser?.role])
@@ -288,7 +293,8 @@ export const AdminApp = () => {
       !isMessageDetailRoute &&
       !isMessagePushRoute &&
       !isMessagePushCreateRoute &&
-      !isMessagePushDetailRoute
+      !isMessagePushDetailRoute &&
+      !isOpenApiRoute
     ) {
       items.push({
         disabled: !dashboard.canLoad || dashboard.loading,
@@ -320,6 +326,7 @@ export const AdminApp = () => {
     isMessagePushRoute,
     isCreateActionActive,
     isMessagesRoute,
+    isOpenApiRoute,
     isProfileRoute,
     isTeamListRoute,
     isTeamDetailSettingsRoute,
@@ -449,6 +456,16 @@ export const AdminApp = () => {
                   : <Navigate to='/devices' replace />}
               />
               <Route path='profile' element={<AdminDashboard dashboard={dashboard} sectionId='profile' />} />
+              <Route
+                path='profile/:profileTab'
+                element={<AdminDashboard dashboard={dashboard} sectionId='profile' />}
+              />
+              <Route
+                path='openapi'
+                element={canRenderSection('openapi')
+                  ? <AdminDashboard dashboard={dashboard} sectionId='openapi' />
+                  : <Navigate to='/devices' replace />}
+              />
               <Route
                 path='messages'
                 element={

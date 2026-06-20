@@ -7,11 +7,11 @@ The page shell uses `@oneworks/route-layout`'s `AppShellFrame` so the admin surf
 The app is built as static assets and served by `@oneworks/relay-server` at:
 
 - `GET /admin`
-- `GET /admin/users`, `/admin/users/:userId`, `/admin/profile`, `/admin/invites`, `/admin/sso`
+- `GET /admin/users`, `/admin/users/:userId`, `/admin/profile`, `/admin/openapi`, `/admin/invites`, `/admin/sso`
 - `GET /admin/assets/admin.js`
 - `GET /admin/assets/admin.css`
 
-It manages Relay users, roles, disabled status, invitation codes, and SSO providers through the server's `/api/admin/*` endpoints. The admin UI consumes the Relay login callback token from `#relay_token`, stores that session token locally, verifies it with `/api/auth/me`, and only loads admin data for `owner` or `admin` users.
+It manages Relay users, roles, disabled status, invitation codes, and SSO providers through the server's `/api/admin/*` endpoints. The profile page manages current-account security actions through `/api/profile/*`, including system access tokens, password changes, and passkey binding. The API docs page reads the server-owned `/api/profile/openapi.json` and `/api/admin/openapi.json` documents without duplicating the contract in the client. The admin UI consumes the Relay login callback token from `#relay_token`, stores that session token locally, verifies it with `/api/auth/me`, and only loads admin data for `owner` or `admin` users.
 
 ## Development
 
@@ -23,7 +23,7 @@ pnpm -C apps/relay-admin build
 pnpm -C apps/relay-admin build:platform
 ```
 
-The development server is a normal Vite React app with HMR. Open `/admin`, `/admin/users`, `/admin/profile`, `/admin/invites`, or `/admin/sso` on the Vite origin during UI work. In dev, `/api/*` proxies to `http://127.0.0.1:48888` by default; set `ONEWORKS_RELAY_ADMIN_DEV_PROXY_TARGET` when the relay server uses another origin. `/login` and `/login/complete` are generated locally by the Vite dev server from relay-server source; `/login` loads `src/login/main.tsx` with HMR, while relay-server shell/config changes trigger a full reload on the Vite origin. The production build must use Vite. `vite.config.ts` fixes the main output filenames to `admin.js`, `login.js`, and `admin.css`; shared hashed JS chunks are served from the same `/admin/assets/` directory.
+The development server is a normal Vite React app with HMR. Open `/admin`, `/admin/users`, `/admin/profile`, `/admin/openapi`, `/admin/invites`, or `/admin/sso` on the Vite origin during UI work. In dev, `/api/*` proxies to `http://127.0.0.1:48888` by default; set `ONEWORKS_RELAY_ADMIN_DEV_PROXY_TARGET` when the relay server uses another origin. `/login` and `/login/complete` are generated locally by the Vite dev server from relay-server source; `/login` loads `src/login/main.tsx` with HMR, while relay-server shell/config changes trigger a full reload on the Vite origin. The production build must use Vite. `vite.config.ts` fixes the main output filenames to `admin.js`, `login.js`, and `admin.css`; shared hashed JS chunks are served from the same `/admin/assets/` directory.
 
 ## Standalone Pages
 
@@ -81,6 +81,7 @@ For SSO and password-login redirects to stay on the Admin domain, configure the 
 - `src/app/`: React Router shell, shared app frame wiring, route header actions, and global app styles.
 - `src/features/dashboard/`: snapshot loading, route page orchestration, stats, and status UI.
 - `src/features/auth/`: Relay login callback token consumption, local session-token storage, and `/api/auth/me` client.
+- `src/features/openapi/`: API docs page that reads the server-owned admin and current-user OpenAPI documents.
 - `src/features/profile/`: current-account profile page for the footer account entry.
 - `src/features/users/`: user API, form parsing, create form, table, and panel composition.
 - `src/features/invites/`: invite API, form parsing, create form, table, and panel composition.

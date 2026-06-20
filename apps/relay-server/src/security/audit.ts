@@ -3,16 +3,19 @@
 import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+import { resolveRelayAccessToken } from '../auth/access-tokens.js'
 import { deviceTokenMatches } from '../devices/private-metadata.js'
-import { getBearerToken } from '../http.js'
+import { getBearerToken, responseJsonBody } from '../http.js'
+import { relayPermissions } from '../permissions/index.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
 import { logRelayEvent } from '../telemetry/logger.js'
-import type { RelayAuditLogEntry, RelayServerArgs, RelayStore } from '../types.js'
+import type { RelayAuditLogEntry, RelayOpenApiAuditEvent, RelayServerArgs, RelayStore } from '../types.js'
 import { requestId, requestIp, requestUserAgent } from './request.js'
 
 export type RelayAuditEvent = Omit<RelayAuditLogEntry, 'createdAt' | 'id'>
 
 const MAX_AUDIT_EVENTS = 1000
+const MAX_OPEN_API_AUDIT_EVENTS = 5000
 
 const cleanAuditText = (value: unknown, fallback: string, maxLength: number) => {
   if (typeof value !== 'string') return fallback
@@ -264,6 +267,104 @@ export const rememberAuditEvent = (store: RelayStore, input: Record<string, unkn
   }
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  value != null && typeof value === 'object' && !Array.isArray(value)
+)
+
+const responseErrorMessage = (res: ServerResponse) => {
+  if (res.statusCode < 400) return undefined
+  const body = responseJsonBody(res)
+  if (!isRecord(body) || typeof body.error !== 'string' || body.error.trim() === '') return undefined
+  return body.error.trim().slice(0, 500)
+}
+
+const openApiPermissionForRequest = (req: IncomingMessage, url: URL) => {
+  const requestMethod = req.method ?? 'GET'
+  const path = url.pathname
+  if (path === '/api/profile/security' && requestMethod === 'GET') return 'profile.security.read'
+  if (path === '/api/profile/openapi-audit' && requestMethod === 'GET') return 'profile.openApiAudit.read'
+  if (path === '/api/profile/access-tokens' && requestMethod === 'POST') return 'profile.accessTokens.create'
+  if (/^\/api\/profile\/access-tokens\/[^/]+$/.test(path) && requestMethod === 'DELETE') {
+    return 'profile.accessTokens.revoke'
+  }
+  if (path === '/api/profile/password' && requestMethod === 'POST') return 'profile.password.write'
+  if (/^\/api\/profile\/passkeys\/register\//.test(path) && requestMethod === 'POST') return 'profile.passkeys.write'
+  if (path === '/api/relay/config-snapshot' && requestMethod === 'GET') return relayPermissions.relayConfigSnapshotRead
+  if (path === '/api/relay/team-policy') {
+    return requestMethod === 'GET' ? relayPermissions.relayTeamsRead : relayPermissions.relayTeamsWrite
+  }
+  if (/^\/api\/relay\/teams(?:\/|$)/.test(path)) {
+    if (path.includes('/members')) {
+      return ['DELETE', 'PATCH', 'POST'].includes(requestMethod)
+        ? relayPermissions.relayTeamMembersWrite
+        : relayPermissions.relayTeamMembersRead
+    }
+    return ['DELETE', 'PATCH', 'POST'].includes(requestMethod)
+      ? relayPermissions.relayTeamsWrite
+      : relayPermissions.relayTeamsRead
+  }
+  if (/^\/api\/relay\/config-(?:assignments|profiles|secrets)(?:\/|$)/.test(path)) {
+    return ['DELETE', 'PATCH', 'POST'].includes(requestMethod)
+      ? relayPermissions.relayTeamsWrite
+      : relayPermissions.relayTeamsRead
+  }
+  if (path === '/api/admin/users' || path.startsWith('/api/admin/users/')) {
+    return ['DELETE', 'PATCH', 'POST'].includes(requestMethod)
+      ? relayPermissions.adminUsersWrite
+      : relayPermissions.adminUsersRead
+  }
+  if (path === '/api/admin/invites' || path.startsWith('/api/admin/invites/')) {
+    return ['DELETE', 'PATCH', 'POST'].includes(requestMethod)
+      ? relayPermissions.adminInvitesWrite
+      : relayPermissions.adminInvitesRead
+  }
+  if (path === '/api/admin/sso-providers' || path.startsWith('/api/admin/sso-providers/')) {
+    return ['DELETE', 'PATCH', 'POST'].includes(requestMethod)
+      ? relayPermissions.adminSsoWrite
+      : relayPermissions.adminSsoRead
+  }
+  if (path.startsWith('/api/admin/')) {
+    return ['DELETE', 'PATCH', 'POST'].includes(requestMethod)
+      ? relayPermissions.adminSettingsWrite
+      : relayPermissions.adminSettingsRead
+  }
+  return undefined
+}
+
+export const rememberOpenApiAuditEvent = (
+  store: RelayStore,
+  input: Omit<RelayOpenApiAuditEvent, 'createdAt' | 'id'>
+) => {
+  const events = store.openApiAuditEvents ?? []
+  events.push({
+    ...input,
+    id: randomUUID(),
+    createdAt: new Date().toISOString()
+  })
+  if (events.length > MAX_OPEN_API_AUDIT_EVENTS) {
+    events.splice(0, events.length - MAX_OPEN_API_AUDIT_EVENTS)
+  }
+  store.openApiAuditEvents = events
+}
+
+const buildOpenApiAuditEvent = (
+  req: IncomingMessage,
+  res: ServerResponse,
+  accessToken: NonNullable<ReturnType<typeof resolveRelayAccessToken>>['accessToken'],
+  url: URL
+): Omit<RelayOpenApiAuditEvent, 'createdAt' | 'id'> => ({
+  tokenId: accessToken.id,
+  tokenPreview: accessToken.tokenPreview,
+  userId: accessToken.userId,
+  method: (req.method ?? 'GET').toUpperCase(),
+  path: url.pathname,
+  status: res.statusCode,
+  ip: requestIp(req),
+  userAgent: requestUserAgent(req),
+  permission: openApiPermissionForRequest(req, url),
+  error: responseErrorMessage(res)
+})
+
 export const recordRequestAuditEvent = (
   req: IncomingMessage,
   input: Pick<RelayAuditEvent, 'actor' | 'action' | 'resource' | 'status'>
@@ -274,22 +375,6 @@ export const recordRequestAuditEvent = (
     requestId: requestId(req),
     userAgent: requestUserAgent(req)
   })
-}
-
-const persistRequestAuditEvent = async (
-  req: IncomingMessage,
-  store: RelayStore,
-  storeRepository: RelayStoreRepository,
-  input: Pick<RelayAuditEvent, 'actor' | 'action' | 'resource' | 'status'>
-) => {
-  const event = {
-    ...input,
-    ip: requestIp(req),
-    requestId: requestId(req),
-    userAgent: requestUserAgent(req)
-  }
-  rememberAuditEvent(store, event)
-  await storeRepository.write(store)
 }
 
 const shouldRememberAuditEvent = (input: Pick<RelayAuditEvent, 'resource'>) => input.resource.startsWith('team:')
@@ -307,22 +392,41 @@ export const attachAuditLogger = (
   url: URL
 ) => {
   const target = classifyAuditTarget(req, url, store)
-  if (target == null) return createNoopAuditLogger()
-  const actor = resolveAuditActor(req, args, store)
+  const bearerToken = getBearerToken(req)
+  const shouldInspectOpenApiAudit = bearerToken.startsWith('owrt_') && url.pathname.startsWith('/api/')
+  if (target == null && !shouldInspectOpenApiAudit) return createNoopAuditLogger()
+  const actor = target == null ? 'bearer' : resolveAuditActor(req, args, store)
   let flushed = false
   return {
     flush: async () => {
       if (flushed || !res.headersSent) return
       flushed = true
-      const event = {
-        actor,
-        action: target.action,
-        resource: target.resource,
-        status: auditStatusFromHttpStatus(res.statusCode)
+      let shouldWriteStore = false
+      if (target != null) {
+        const event = {
+          actor,
+          action: target.action,
+          resource: target.resource,
+          status: auditStatusFromHttpStatus(res.statusCode)
+        }
+        recordRequestAuditEvent(req, event)
+        if (shouldRememberAuditEvent(event)) {
+          rememberAuditEvent(store, {
+            ...event,
+            ip: requestIp(req),
+            requestId: requestId(req),
+            userAgent: requestUserAgent(req)
+          })
+          shouldWriteStore = true
+        }
       }
-      recordRequestAuditEvent(req, event)
-      if (shouldRememberAuditEvent(event)) {
-        await persistRequestAuditEvent(req, store, storeRepository, event)
+      const accessToken = shouldInspectOpenApiAudit ? resolveRelayAccessToken(store, bearerToken) : undefined
+      if (accessToken != null && url.pathname.startsWith('/api/')) {
+        rememberOpenApiAuditEvent(store, buildOpenApiAuditEvent(req, res, accessToken.accessToken, url))
+        shouldWriteStore = true
+      }
+      if (shouldWriteStore) {
+        await storeRepository.write(store)
       }
     }
   }

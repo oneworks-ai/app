@@ -6,6 +6,7 @@ import process from 'node:process'
 
 import { enabledRelayAuthProviders } from './auth/sso-provider-registry.js'
 import { sendJson } from './http.js'
+import { handleRelayAdminOpenApi, handleRelayProfileOpenApi } from './routes/admin-openapi.js'
 import { handleAdminSsoProviders } from './routes/admin-sso-providers.js'
 import { handleAdminInvites, handleAdminUsers } from './routes/admin.js'
 import { handleAuthRoute } from './routes/auth.js'
@@ -24,6 +25,7 @@ import { handleLoginRoute } from './routes/login.js'
 import { handleRelayMetrics } from './routes/metrics.js'
 import { handlePasskeyRoute } from './routes/passkeys.js'
 import { handlePasswordLoginRoute } from './routes/password-login.js'
+import { handleProfileRoute } from './routes/profile.js'
 import { handleRelaySessionsRoute } from './routes/sessions.js'
 import { handleAdminMessagesRoute, handleTeamInvitationActionsRoute } from './routes/team-invitations.js'
 import { handleRelayTeamPolicyRoute } from './routes/team-policy.js'
@@ -124,6 +126,17 @@ const handleRelayRequestWithStore = async (
     }
     if (req.method === 'GET' && url.pathname === '/api/relay/info') {
       handleInfo(res, args, store)
+      return
+    }
+    if (url.pathname === '/api/admin/openapi.json') {
+      handleRelayAdminOpenApi(req, res, args)
+      return
+    }
+    if (url.pathname === '/api/profile/openapi.json') {
+      handleRelayProfileOpenApi(req, res, args)
+      return
+    }
+    if (await handleProfileRoute(req, res, args, store, storeRepository, url)) {
       return
     }
     if (req.method === 'GET' && url.pathname === '/api/relay/config-snapshot') {

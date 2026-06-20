@@ -104,6 +104,7 @@ export const createFixtureStore = (): RelayStore => ({
   deviceSessions: [],
   forwardingJobs: [],
   oauthStates: [],
+  accessTokens: [],
   sessions: [
     {
       token: 'member-token-1',

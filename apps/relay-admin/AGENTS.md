@@ -10,6 +10,7 @@
 - `src/features/auth/`：Relay 登录回跳 token 消费、管理端 session token 本地保存和 `/api/auth/me` 客户端。
 - `src/login/`：Relay `/login` 页面的 React + AntD 入口；通过 relay-server 注入的 JSON config 渲染最近账号、默认登录方式、登录方式切换、passkey 登录 / 注册、邮箱验证码登录、邀请码表单和 SSO provider 按钮。Passkey WebAuthn 调用只放在这里的登录 UI；邮箱验证码、邀请码策略、credential 存储和 session 发放由 `apps/relay-server/src/auth/passkeys.ts`、`src/routes/passkeys.ts` 和 `src/routes/email-code-login.ts` 处理。
 - `src/platform/`、`api/`、`functions/`：独立 Vercel / Cloudflare Pages 静态部署的同源代理入口；只转发 `/health`、`/api/*`、`/login` 和 `/login/complete` 到真实 Relay Server，不在 Admin 里重新实现 Relay API。Vercel 推荐部署形态优先看 `apps/relay-server` 的单项目 `/admin` 构建。
+- `src/features/openapi/`：`/admin/openapi` 的 API 文档页，只读取 Relay Server 的 `/api/profile/openapi.json` 与 `/api/admin/openapi.json`，不要在前端复制 OpenAPI 契约。
 - `src/features/users/`：用户列表、用户表单、用户 API 和表单解析。
 - `src/features/invites/`：邀请码列表、邀请码表单、邀请码 API 和表单解析。
 - `src/features/sso/`：SSO provider 列表、创建、编辑、启用 / 禁用、secret 轮换和 API。
@@ -25,11 +26,12 @@
 ## 约定
 
 - 构建必须走 Vite：`pnpm -C apps/relay-admin build`。
-- 开发预览走 Vite dev server 和 HMR：`pnpm -C apps/relay-admin dev`，React Router 页面包括 `/admin/users`、`/admin/invites` 和 `/admin/sso`。开发态 `/api/*` 默认代理到 `http://127.0.0.1:48888`；`/login` 与 `/login/complete` 在 Vite 内本地生成 shell/config 并注入 Vite client，登录页 React 源码走 HMR，relay-server 登录 shell 源码变化会 full reload。需要指向其他 relay-server API / provider 来源时设置 `ONEWORKS_RELAY_ADMIN_DEV_PROXY_TARGET`。
+- 开发预览走 Vite dev server 和 HMR：`pnpm -C apps/relay-admin dev`，React Router 页面包括 `/admin/users`、`/admin/invites`、`/admin/sso` 和 `/admin/openapi`。开发态 `/api/*` 默认代理到 `http://127.0.0.1:48888`；`/login` 与 `/login/complete` 在 Vite 内本地生成 shell/config 并注入 Vite client，登录页 React 源码走 HMR，relay-server 登录 shell 源码变化会 full reload。需要指向其他 relay-server API / provider 来源时设置 `ONEWORKS_RELAY_ADMIN_DEV_PROXY_TARGET`。
 - 管理端单测：`pnpm -C apps/relay-admin test`。
 - 组件与样式按模块职责拆分，不把页面重新堆成单体文件。
 - 新增管理域时优先建 `src/features/<domain>/`，并补最近的 `AGENTS.md`；只有两个以上 feature 复用的代码才放进 `src/shared/`。
-- 新增或改造 Admin 列表页时按统一列表标准走：必须提供搜索、过滤、展示列配置、批量操作和分页；表格 header 始终可见，分页器固定在列表底部，中间数据区滚动。行内操作默认图标化，不展示“详情 / 删除 / 禁用”这类文字；详情入口优先放在主识别字段链接上。UUID、内部 ID、secret 等低频排查字段不默认展示，只放详情页或展示列配置。
+- 新增或改造 Admin 列表页时按统一列表标准走：必须提供搜索、过滤、展示列配置、批量操作和分页；表格 header 始终可见，分页器固定在列表底部，中间数据区滚动。toolbar 只放全局搜索、刷新 / 创建 / 展示列这类列表级动作；列过滤条件必须放到对应 table header，用图标按钮打开浮层，不要把状态、时间范围等列过滤塞到 toolbar。排序只加在用户确实需要比较顺序的列上，典型是创建时间、更新时间、最后使用时间；状态、名称、Preview、操作列不要为了“功能完整”硬加排序。行内操作默认图标化，不展示“详情 / 删除 / 禁用”这类文字；详情入口优先放在主识别字段链接上。UUID、内部 ID、secret 等低频排查字段不默认展示，只放详情页或展示列配置。
+- Admin 页面内的 tabs 必须可被 URL 表达：稳定业务 tabs 用 path segment，例如 `/profile/:tab`、`/teams/:teamId/:tab`；当前 tab 的搜索、状态、时间范围等可回放筛选条件写入 query，刷新、复制链接和浏览器前进后退后应恢复同一视图。不要只把 tab 或筛选状态存在组件 state 里。
 - 新增或改造 Admin 创建页 / 设置页时按统一创建表单标准走：不要直接堆 AntD `Form` 的裸 `layout="vertical"` 表单，也不要把提交按钮做成横跨整页的大色块。页面主体应使用紧凑工作台式行布局，短字段采用左侧固定宽度 label、右侧控件的两列表单行；长文本、Markdown 内容、介绍等特殊字段可独占一行并把 label 放在控件上方。Admin 创建 / 设置表单默认不设固定宽度上限，应撑满内容区并只保留页面 10px 级 padding；不要用 `min(760px, 100%)`、`max-width` 等窄表单上限复刻对象详情卡。主操作按钮放在表单底部右侧，移动端再自然折为单列。提交前必须用真实页面或截图检查：字段高度没有异常放大、控件宽度撑满但不溢出、底部操作不漂在内容中间。
 - API 调用按 feature 拆在各自目录，例如 users 用 `features/users/usersApi.ts`，invites 用 `features/invites/invitesApi.ts`；通用 fetch 逻辑才放 `shared/api/`。
 - 表单解析这类纯逻辑放到 feature 内的 `*Form.ts` 并配套 `__tests__/`，React 组件只负责交互和渲染。

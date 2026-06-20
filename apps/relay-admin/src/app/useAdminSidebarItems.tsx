@@ -6,7 +6,7 @@ import { canAccessRelayAdminSection } from '../shared/model/adminPermissions'
 import type { RelayAdminRole } from '../shared/model/adminTypes'
 import { AdminNavIcon } from './AdminNavIcon'
 
-export type AdminSectionId = 'devices' | 'users' | 'invites' | 'message-pushes' | 'sso' | 'teams'
+export type AdminSectionId = 'devices' | 'users' | 'invites' | 'message-pushes' | 'openapi' | 'sso' | 'teams'
 
 export interface AdminSectionNavigationOptions {
   canManageMessages?: boolean
@@ -47,6 +47,12 @@ export const adminSections = [
     id: 'teams',
     label: '团队',
     path: '/teams'
+  },
+  {
+    icon: <AdminNavIcon name='openapi' />,
+    id: 'openapi',
+    label: 'API 文档',
+    path: '/openapi'
   },
   {
     icon: <AdminNavIcon name='message-pushes' />,

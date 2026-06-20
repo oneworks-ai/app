@@ -8,12 +8,19 @@ import {
   sessionPrincipalForUser
 } from '../permissions/index.js'
 import type { RelayPermission, RelayPermissionPrincipal } from '../permissions/index.js'
-import type { RelayServerArgs, RelaySession, RelayStore, RelayUser } from '../types.js'
+import type { RelayAccessToken, RelayServerArgs, RelaySession, RelayStore, RelayUser } from '../types.js'
+import { resolveRelayAccessToken } from './access-tokens.js'
 import { resolveSession } from './sessions.js'
 
 export { isElevatedRole } from '../permissions/index.js'
 
 export type RelayAuthContext =
+  | {
+    accessToken: RelayAccessToken
+    kind: 'access-token'
+    principal: RelayPermissionPrincipal
+    user: RelayUser
+  }
   | {
     kind: 'admin-token'
     principal: RelayPermissionPrincipal
@@ -26,19 +33,29 @@ export type RelayAuthContext =
   }
 
 export const resolveAuthContext = (req: IncomingMessage, args: RelayServerArgs, store: RelayStore) => {
-  if (args.adminToken === '' || getBearerToken(req) === args.adminToken) {
+  const bearerToken = getBearerToken(req)
+  if (args.adminToken === '' || bearerToken === args.adminToken) {
     return {
       kind: 'admin-token' as const,
       principal: adminTokenPrincipal()
     }
   }
   const session = resolveSession(req, store)
-  if (session == null) return undefined
+  if (session != null) {
+    return {
+      kind: 'session' as const,
+      principal: sessionPrincipalForUser(session.user),
+      session: session.session,
+      user: session.user
+    }
+  }
+  const accessToken = resolveRelayAccessToken(store, bearerToken)
+  if (accessToken == null) return undefined
   return {
-    kind: 'session' as const,
-    principal: sessionPrincipalForUser(session.user),
-    session: session.session,
-    user: session.user
+    accessToken: accessToken.accessToken,
+    kind: 'access-token' as const,
+    principal: sessionPrincipalForUser(accessToken.user),
+    user: accessToken.user
   }
 }
 

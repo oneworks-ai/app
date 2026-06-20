@@ -1,6 +1,12 @@
 import { Buffer } from 'node:buffer'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+export const relayJsonResponseBodySymbol = Symbol('relayJsonResponseBody')
+
+export const responseJsonBody = (res: ServerResponse) => (
+  (res as ServerResponse & { [relayJsonResponseBodySymbol]?: unknown })[relayJsonResponseBodySymbol]
+)
+
 export const readRequestBody = async (req: IncomingMessage): Promise<Record<string, unknown>> => {
   const chunks = []
   for await (const chunk of req) {
@@ -17,6 +23,8 @@ export const readRequestBody = async (req: IncomingMessage): Promise<Record<stri
 }
 
 export const sendJson = (res: ServerResponse, status: number, body: unknown, allowOrigin: string) => {
+  const response = res as ServerResponse & { [relayJsonResponseBodySymbol]?: unknown }
+  response[relayJsonResponseBodySymbol] = body
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'access-control-allow-origin': allowOrigin,

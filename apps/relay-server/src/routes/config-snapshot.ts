@@ -1,15 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
-import { resolveSession } from '../auth/sessions.js'
+import { authContextHasPermission, resolveAuthContext } from '../auth/permissions.js'
 import { createRelayConfigSnapshotForUser } from '../config-snapshot.js'
 import { deviceTokenMatches, visibleDevicePrivateMetadata } from '../devices/private-metadata.js'
 import { getBearerToken, sendJson } from '../http.js'
-import {
-  devicePrincipalForDevice,
-  hasRelayPermission,
-  relayPermissions,
-  sessionPrincipalForUser
-} from '../permissions/index.js'
+import { devicePrincipalForDevice, hasRelayPermission, relayPermissions } from '../permissions/index.js'
 import type { RelayConfigProjectContext, RelayDevice, RelayServerArgs, RelayStore, RelayUser } from '../types.js'
 
 const queryText = (url: URL, key: string) => {
@@ -43,18 +38,19 @@ const resolveConfigSnapshotDeviceUser = (
   }
 }
 
-const resolveConfigSnapshotSessionUser = (
+const resolveConfigSnapshotAccountUser = (
   req: IncomingMessage,
+  args: RelayServerArgs,
   store: RelayStore
 ) => {
-  const session = resolveSession(req, store)
-  if (session == null) return undefined
-  const principal = sessionPrincipalForUser(session.user)
-  if (!hasRelayPermission(principal, relayPermissions.relayConfigSnapshotRead)) {
+  const auth = resolveAuthContext(req, args, store)
+  if (auth == null) return undefined
+  if (auth.kind === 'admin-token') return { denied: true as const }
+  if (!authContextHasPermission(auth, relayPermissions.relayConfigSnapshotRead)) {
     return { denied: true as const }
   }
   return {
-    user: session.user
+    user: auth.user
   }
 }
 
@@ -105,12 +101,12 @@ export const handleRelayConfigSnapshot = (
     return
   }
 
-  const sessionResult = resolveConfigSnapshotSessionUser(req, store)
-  if (sessionResult?.denied === true) {
+  const accountResult = resolveConfigSnapshotAccountUser(req, args, store)
+  if (accountResult?.denied === true) {
     sendJson(res, 403, { error: 'Permission denied.' }, args.allowOrigin)
     return
   }
-  if (sessionResult == null) {
+  if (accountResult == null) {
     sendJson(res, 401, { error: 'Authentication required.' }, args.allowOrigin)
     return
   }
@@ -118,7 +114,7 @@ export const handleRelayConfigSnapshot = (
   sendJson(
     res,
     200,
-    createRelayConfigSnapshotForUser(store, sessionResult.user, {
+    createRelayConfigSnapshotForUser(store, accountResult.user, {
       projectContext: projectContextFromRequest(url, args, undefined),
       sourceServerId: args.publicBaseUrl
     }),
