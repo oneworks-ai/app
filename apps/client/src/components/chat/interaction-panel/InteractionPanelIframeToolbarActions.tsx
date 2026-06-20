@@ -2,6 +2,9 @@ import { App, Button, Dropdown, Tooltip } from 'antd'
 import type { MutableRefObject } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
+
+import { BrowserDataSyncModal } from '#~/components/browser-data-sync/BrowserDataSyncModal'
 
 import { InteractionPanelIframeBrowserMenu } from './InteractionPanelIframeBrowserMenu'
 import type { ElectronWebviewElement } from './use-interaction-panel-webview'
@@ -44,7 +47,9 @@ export function InteractionPanelIframeToolbarActions({
 }) {
   const { message } = App.useApp()
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [isMoreOpen, setIsMoreOpen] = useState(false)
+  const [browserDataSyncOpen, setBrowserDataSyncOpen] = useState(false)
   const canUseFrame = frameUrl !== ''
 
   const notifyUnsupported = () => {
@@ -67,6 +72,10 @@ export function InteractionPanelIframeToolbarActions({
     } catch {
       void message.error(t('chat.interactionPanel.iframeScreenshotFailed'))
     }
+  }
+
+  const handleOpenSavedPasswords = () => {
+    void navigate('/config/savedPasswords')
   }
 
   return (
@@ -97,6 +106,8 @@ export function InteractionPanelIframeToolbarActions({
             webviewRef={webviewRef}
             onClose={() => setIsMoreOpen(false)}
             onForceReload={onForceReload}
+            onOpenBrowserDataSync={() => setBrowserDataSyncOpen(true)}
+            onOpenSavedPasswords={handleOpenSavedPasswords}
             onToggleDeveloperTools={onToggleDeveloperTools}
             onToggleViewportToolbar={onToggleViewportToolbar}
           />
@@ -110,6 +121,10 @@ export function InteractionPanelIframeToolbarActions({
           icon={<span className='material-symbols-rounded'>more_vert</span>}
         />
       </Dropdown>
+      <BrowserDataSyncModal
+        open={browserDataSyncOpen}
+        onClose={() => setBrowserDataSyncOpen(false)}
+      />
     </div>
   )
 }

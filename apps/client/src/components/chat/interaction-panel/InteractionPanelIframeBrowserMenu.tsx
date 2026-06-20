@@ -23,6 +23,8 @@ export function InteractionPanelIframeBrowserMenu({
   isViewportToolbarOpen,
   onClose,
   onForceReload,
+  onOpenBrowserDataSync,
+  onOpenSavedPasswords,
   onToggleDeveloperTools,
   onToggleViewportToolbar,
   shouldUseWebview,
@@ -34,6 +36,8 @@ export function InteractionPanelIframeBrowserMenu({
   isViewportToolbarOpen: boolean
   onClose: () => void
   onForceReload: () => void
+  onOpenBrowserDataSync: () => void
+  onOpenSavedPasswords: () => void
   onToggleDeveloperTools: () => void
   onToggleViewportToolbar: () => void
   shouldUseWebview: boolean
@@ -78,6 +82,16 @@ export function InteractionPanelIframeBrowserMenu({
 
   const handleToggleDeveloperTools = () => {
     onToggleDeveloperTools()
+    onClose()
+  }
+
+  const handleOpenBrowserDataSync = () => {
+    onOpenBrowserDataSync()
+    onClose()
+  }
+
+  const handleOpenSavedPasswords = () => {
+    onOpenSavedPasswords()
     onClose()
   }
 
@@ -184,6 +198,21 @@ export function InteractionPanelIframeBrowserMenu({
           restart_alt
         </button>
       </div>
+      <OverlayDivider className='chat-interaction-panel-browser-menu__divider' decorative />
+      <OverlayAction
+        className='chat-interaction-panel-browser-menu__item'
+        onClick={handleOpenBrowserDataSync}
+      >
+        <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>sync</span>
+        <span>{t('browserDataSync.open')}</span>
+      </OverlayAction>
+      <OverlayAction
+        className='chat-interaction-panel-browser-menu__item'
+        onClick={handleOpenSavedPasswords}
+      >
+        <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>password</span>
+        <span>{t('browserDataSync.savedPasswords.openManager')}</span>
+      </OverlayAction>
       <OverlayDivider className='chat-interaction-panel-browser-menu__divider' decorative />
       <OverlayAction
         className='chat-interaction-panel-browser-menu__item'

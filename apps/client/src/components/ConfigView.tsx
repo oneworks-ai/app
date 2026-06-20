@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
-import type { RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
+import type { RouteContainerHeaderActionItem, RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
 import type { ConfigSource } from '@oneworks/core'
 import type { AboutInfo, ConfigResponse, ConfigUiSection } from '@oneworks/types'
 import type { ConfigDetailRoute } from './config/configDetail'
@@ -32,6 +32,7 @@ import {
   updateConfig
 } from '../api'
 import { resolveWorkspaceFileOpenerSelectModels } from '../utils/workspace-file-openers'
+import { SavedPasswordManagerPanel } from './browser-data-sync/SavedPasswordManagerPanel'
 import { AboutSection, ConfigSectionPanel, ConfigSourceSwitch, DisplayValue } from './config'
 import { AppSettingsPanel } from './config/AppSettingsPanel'
 import { DesktopSettingsPanel } from './config/DesktopSettingsPanel'
@@ -274,6 +275,9 @@ export function ConfigView() {
   const [modelServicePortalTabsState, setModelServicePortalTabsState] = useState(
     emptyModelServiceProviderPortalTabsState
   )
+  const [savedPasswordDetailKey, setSavedPasswordDetailKey] = useState<string | null>(null)
+  const [savedPasswordDetailTitle, setSavedPasswordDetailTitle] = useState<string | null>(null)
+  const [savedPasswordSettingsOpen, setSavedPasswordSettingsOpen] = useState(false)
   const consumedModelServiceImportRef = useRef<string | null>(null)
   const mergedModelServices = useMemo(() => data?.sources?.merged?.modelServices ?? {}, [
     data?.sources?.merged?.modelServices
@@ -283,6 +287,7 @@ export function ConfigView() {
   ])
   const hasDesktopSettings = window.oneworksDesktop?.getDesktopSettings != null &&
     window.oneworksDesktop.updateDesktopSettings != null
+  const hasSavedPasswords = window.oneworksDesktop?.listSavedPasswords != null
   const hasConfigLoadError = !isLoading && data == null && error != null
   const canRenderConfig = !isLoading && data != null
 
@@ -334,10 +339,13 @@ export function ConfigView() {
     ...(hasDesktopSettings
       ? [{ key: 'desktop', icon: 'desktop_windows', label: t('config.sections.desktop') }]
       : []),
+    ...(hasSavedPasswords
+      ? [{ key: 'savedPasswords', icon: 'password', label: t('config.sections.savedPasswords') }]
+      : []),
     { key: 'appearance', icon: 'tune', label: t('config.sections.appearance'), value: globalSource?.appearance },
     { key: 'experiments', icon: 'science', label: t('config.sections.experiments'), value: currentSource?.experiments },
     { key: 'about', icon: 'info', label: t('config.sections.about'), value: data?.meta?.about }
-  ], [currentSource, data?.meta?.about, globalSource?.appearance, hasDesktopSettings, t])
+  ], [currentSource, data?.meta?.about, globalSource?.appearance, hasDesktopSettings, hasSavedPasswords, t])
   const tabKeys = useMemo(() => new Set(tabs.filter(tab => tab.type !== 'group').map(tab => tab.key)), [tabs])
   const desktopNavGroups = useMemo(() => {
     type NavTab = Exclude<(typeof tabs)[number], { type: 'group' }>
@@ -627,6 +635,13 @@ export function ConfigView() {
     setModelServicePortalPanelOpen(false)
   }, [modelServicePortalTabsState.tabs.length])
 
+  useEffect(() => {
+    if (activeTabKey === 'savedPasswords') return
+    setSavedPasswordDetailKey(null)
+    setSavedPasswordDetailTitle(null)
+    setSavedPasswordSettingsOpen(false)
+  }, [activeTabKey])
+
   const handleOpenModelServicePortal = useCallback((request: ModelServiceProviderPortalRequest) => {
     setModelServicePortalTabsState(current => addModelServiceProviderPortalTab(current, request))
     setModelServicePortalPanelOpen(true)
@@ -667,6 +682,27 @@ export function ConfigView() {
     setDetailQuery('')
   }, [activeConfigDetail?.route, activeContentTab?.key, setDetailQuery])
   const headerBreadcrumb = useMemo<RouteContainerHeaderBreadcrumb | undefined>(() => {
+    if (activeTabKey === 'savedPasswords' && savedPasswordSettingsOpen) {
+      return {
+        currentTitle: t('browserDataSync.savedPasswords.settingsTitle'),
+        parentTitle: t('config.sections.savedPasswords'),
+        onBack: () => {
+          setSavedPasswordSettingsOpen(false)
+          setSavedPasswordDetailTitle(null)
+        }
+      }
+    }
+    if (activeTabKey === 'savedPasswords' && savedPasswordDetailTitle != null) {
+      return {
+        currentTitle: savedPasswordDetailTitle,
+        parentTitle: t('config.sections.savedPasswords'),
+        onBack: () => {
+          setSavedPasswordDetailKey(null)
+          setSavedPasswordDetailTitle(null)
+          setSavedPasswordSettingsOpen(false)
+        }
+      }
+    }
     if (activeConfigDetail == null || activeContentTab == null) return undefined
     const route = activeConfigDetail.route
     const nestedPath = route.nestedPath ?? []
@@ -701,7 +737,16 @@ export function ConfigView() {
       parentTitle: activeContentTab.label,
       onBack: closeConfigDetail
     }
-  }, [activeConfigDetail, activeContentTab, closeConfigDetail, setDetailQuery])
+  }, [
+    activeConfigDetail,
+    activeContentTab,
+    activeTabKey,
+    closeConfigDetail,
+    savedPasswordSettingsOpen,
+    savedPasswordDetailTitle,
+    setDetailQuery,
+    t
+  ])
   const generalDraftValue = useMemo(() => {
     const draftKey = getDraftKey('general')
     return (drafts[draftKey] ?? cloneValue(currentSource?.general ?? {}) ?? {}) as Record<string, unknown>
@@ -1156,11 +1201,22 @@ export function ConfigView() {
       {tab.key === 'desktop' && (
         <DesktopSettingsPanel showHeader={false} t={t} />
       )}
+      {tab.key === 'savedPasswords' && (
+        <SavedPasswordManagerPanel
+          selectedGroupKey={savedPasswordDetailKey}
+          settingsOpen={savedPasswordSettingsOpen}
+          showHeader={false}
+          onDetailTitleChange={setSavedPasswordDetailTitle}
+          onSelectedGroupKeyChange={setSavedPasswordDetailKey}
+          onSettingsOpenChange={setSavedPasswordSettingsOpen}
+        />
+      )}
       {tab.key === 'worktreeEnvironments' && (
         <WorktreeEnvironmentPanel t={t} />
       )}
       {tab.key !== 'about' &&
         tab.key !== 'desktop' &&
+        tab.key !== 'savedPasswords' &&
         tab.key !== 'appearance' &&
         tab.key !== 'worktreeEnvironments' &&
         !configTabKeys.has(tab.key) && (
@@ -1197,6 +1253,27 @@ export function ConfigView() {
     </div>
   )
   const shouldShowSourceSwitch = activeTabKey !== 'appearance' && configTabKeys.has(activeTabKey)
+  const shouldShowSavedPasswordSettingsAction = activeTabKey === 'savedPasswords' && !savedPasswordSettingsOpen
+  const savedPasswordHeaderTitle = savedPasswordSettingsOpen
+    ? t('browserDataSync.savedPasswords.settingsTitle')
+    : savedPasswordDetailTitle
+  const savedPasswordHeaderActions = useMemo<RouteContainerHeaderActionItem[]>(() => (
+    shouldShowSavedPasswordSettingsAction
+      ? [{
+        icon: 'settings',
+        key: 'saved-password-settings',
+        label: t('browserDataSync.savedPasswords.settingsTitle'),
+        onSelect: () => {
+          setSavedPasswordDetailKey(null)
+          setSavedPasswordSettingsOpen(true)
+        }
+      }]
+      : []
+  ), [shouldShowSavedPasswordSettingsAction, t])
+  const headerActionItems = useMemo(
+    () => [...routePluginHeaderActions, ...savedPasswordHeaderActions],
+    [routePluginHeaderActions, savedPasswordHeaderActions]
+  )
   const headerActions = shouldShowSourceSwitch || activeTabKey === 'voice'
     ? (
       <>
@@ -1241,12 +1318,13 @@ export function ConfigView() {
       contentInset
       header={
         <RouteContainerHeader
-          actionItems={routePluginHeaderActions}
+          actionItems={headerActionItems}
           actions={headerActions}
           breadcrumb={headerBreadcrumb}
           icon={activeContentTab?.icon ?? 'settings'}
           onOpenSidebar={openRouteSidebar}
-          title={activeConfigDetail?.meta.itemLabel ?? activeContentTab?.label ?? t('common.settings')}
+          title={savedPasswordHeaderTitle ?? activeConfigDetail?.meta.itemLabel ?? activeContentTab?.label ??
+            t('common.settings')}
         />
       }
     >

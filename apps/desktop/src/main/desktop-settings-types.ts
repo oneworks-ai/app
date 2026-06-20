@@ -14,6 +14,9 @@ export interface DesktopState {
   launcherShortcut: string
   autoUpdate: boolean
   openLastWorkspaceOnStartup: boolean
+  savedPasswordsAutoSignIn: boolean
+  savedPasswordsOfferToSave: boolean
+  savedPasswordsRequireAuth: boolean
   recentWorkspaces: string[]
   updateChannel: DesktopUpdateChannel
 }
@@ -39,5 +42,8 @@ export interface DesktopSettings {
   launcherShortcutRegistered: boolean
   autoUpdate: boolean
   openLastWorkspaceOnStartup: boolean
+  savedPasswordsAutoSignIn: boolean
+  savedPasswordsOfferToSave: boolean
+  savedPasswordsRequireAuth: boolean
   updateChannel: DesktopUpdateChannel
 }

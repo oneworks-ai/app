@@ -186,6 +186,12 @@ export const desktopConfigSchema = z.object({
   launcherShortcut: z.string().optional().describe('Global desktop launcher shortcut'),
   openLastWorkspaceOnStartup: z.boolean().optional()
     .describe('Open the most recent desktop workspace when the app starts without an explicit workspace'),
+  savedPasswordsAutoSignIn: z.boolean().optional()
+    .describe('Enable saved-password auto sign-in and autofill behavior in desktop webviews'),
+  savedPasswordsOfferToSave: z.boolean().optional()
+    .describe('Offer to save passwords and verification codes during web sign-in flows'),
+  savedPasswordsRequireAuth: z.boolean().optional()
+    .describe('Require system authentication before viewing, copying, editing, or deleting saved passwords'),
   syncAppIcon: z.boolean().optional().describe('Sync the desktop app icon with the selected icon style'),
   iconAppearance: desktopIconAppearanceSchema.optional().describe('Desktop app icon appearance mode'),
   iconBackground: iconBackgroundSchema.optional().describe('Desktop app icon background style'),

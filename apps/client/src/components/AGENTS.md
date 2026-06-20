@@ -20,6 +20,7 @@
 - `Sidebar.tsx`：侧边栏数据装配、route sidebar 接入和列表状态。
 - `sidebar/SidebarHeader.tsx`：侧边栏顶部入口区、搜索区、入口 actions 和入口右键菜单触发。
 - `interaction-list/`：通用交互列表，只处理 selection、item 渲染、context menu 触发和外部 action 调用，不承载具体业务语义。
+- `browser-data-sync/`：桌面端浏览器数据迁移与密码管理 UI。设置页和网页 tab 更多菜单共用的“同步数据”弹窗只承载导入 / 同步动作；已保存密码的查看、搜索、复制和显示入口是设置页左侧独立 tab。Chrome 密码、密码管理器扩展、Authenticator / 验证码导入这类浏览器数据迁移 UI 放这里，不放到普通插件配置页或单个 webview 菜单组件里。
 
 ## 验证
 

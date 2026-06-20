@@ -109,6 +109,9 @@ export const readDesktopState = (): DesktopState => {
     launcherShortcut: getLauncherShortcutFromState(state),
     autoUpdate: DEFAULT_DESKTOP_AUTO_UPDATE,
     openLastWorkspaceOnStartup: getOpenLastWorkspaceOnStartupFromState(state),
+    savedPasswordsAutoSignIn: true,
+    savedPasswordsOfferToSave: true,
+    savedPasswordsRequireAuth: true,
     recentWorkspaces: getRecentWorkspaceFoldersFromState(state),
     updateChannel: DEFAULT_DESKTOP_UPDATE_CHANNEL
   }

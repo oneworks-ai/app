@@ -2,6 +2,20 @@
 import { clipboard, ipcMain, nativeImage, session, shell } from 'electron'
 import type { WebContents } from 'electron'
 
+import {
+  authenticateSavedPasswordsAccess,
+  copySavedPasswordField,
+  deleteSavedPassword,
+  getBrowserDataSyncState,
+  importAuthenticatorBackup,
+  importBrowserPasswords,
+  importChromePasswords,
+  importPasswordCsv,
+  listBrowserPasswordImportSources,
+  listSavedPasswords,
+  revealSavedPassword,
+  updateSavedPassword
+} from './browser-data-sync'
 import { SERVER_READY_TIMEOUT_MS, WORKSPACE_CONNECTION_CHANNEL, WORKSPACE_STARTUP_READY_CHANNEL } from './constants'
 import { openFilesystemFileInExternalOpener } from './filesystem-file-opener'
 import { listMobileDebugTargets } from './mobile-debug'
@@ -205,6 +219,33 @@ export const registerIpcHandlers = ({
     (_event, directory: unknown) => listCloneDestinationDirectories(directory)
   )
   ipcMain.handle('desktop:get-global-interface-language-config', () => getGlobalInterfaceLanguageConfig())
+  ipcMain.handle('desktop:get-browser-data-sync-state', () => getBrowserDataSyncState())
+  ipcMain.handle('desktop:list-browser-password-import-sources', () => listBrowserPasswordImportSources())
+  ipcMain.handle(
+    'desktop:import-browser-passwords',
+    (event, input: unknown) => importBrowserPasswords(event.sender, input)
+  )
+  ipcMain.handle(
+    'desktop:import-chrome-passwords',
+    (event, input: unknown) => importChromePasswords(event.sender, input)
+  )
+  ipcMain.handle('desktop:import-password-csv', (event, input: unknown) => importPasswordCsv(event.sender, input))
+  ipcMain.handle('desktop:import-authenticator-backup', event => importAuthenticatorBackup(event.sender))
+  ipcMain.handle('desktop:list-saved-passwords', (_event, query: unknown) => listSavedPasswords(query))
+  ipcMain.handle(
+    'desktop:authenticate-saved-passwords-access',
+    (_event, reason: unknown) => authenticateSavedPasswordsAccess(reason)
+  )
+  ipcMain.handle('desktop:reveal-saved-password', (_event, id: unknown) => revealSavedPassword(id))
+  ipcMain.handle(
+    'desktop:copy-saved-password-field',
+    (_event, id: unknown, field: unknown) => copySavedPasswordField(id, field)
+  )
+  ipcMain.handle(
+    'desktop:update-saved-password',
+    (_event, id: unknown, input: unknown) => updateSavedPassword(id, input)
+  )
+  ipcMain.handle('desktop:delete-saved-password', (_event, id: unknown) => deleteSavedPassword(id))
 
   ipcMain.handle(WORKSPACE_STARTUP_READY_CHANNEL, (event) => {
     const windowRecord = findWindowRecordForWebContents(event.sender)

@@ -8,6 +8,7 @@ import { emptyDesktopUpdateStatus, normalizeDesktopUpdateStatus } from '#~/deskt
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { getDesktopShortcutFromEvent, parseShortcut } from '#~/utils/shortcutUtils'
 
+import { BrowserDataSyncModal } from '../browser-data-sync/BrowserDataSyncModal'
 import { FieldRow } from './ConfigFieldRow'
 import { ConfigSectionFrame } from './ConfigSectionFrame'
 import { ShortcutInput } from './ConfigShortcutInput'
@@ -38,6 +39,7 @@ export function DesktopSettingsPanel({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [checkingUpdates, setCheckingUpdates] = useState(false)
+  const [browserDataSyncOpen, setBrowserDataSyncOpen] = useState(false)
   const canUpdate = desktopApi?.updateDesktopSettings != null
   const canCheckUpdates = desktopApi?.checkForUpdates != null
   const canOpenKeyboardSettings = isMac && desktopApi?.openKeyboardShortcutsSettings != null
@@ -353,6 +355,19 @@ export function DesktopSettingsPanel({
               </div>
             </div>
             <FieldRow
+              title={t('browserDataSync.settingsTitle')}
+              description={t('browserDataSync.settingsDescription')}
+              icon='sync'
+            >
+              <Button
+                size='small'
+                icon={<span className='material-symbols-rounded'>sync</span>}
+                onClick={() => setBrowserDataSyncOpen(true)}
+              >
+                {t('browserDataSync.open')}
+              </Button>
+            </FieldRow>
+            <FieldRow
               title={t('config.desktopSettings.launcherShortcut.label')}
               description={t('config.desktopSettings.launcherShortcut.desc')}
               icon='keyboard'
@@ -434,6 +449,10 @@ export function DesktopSettingsPanel({
                 </Space>
               </div>
             )}
+            <BrowserDataSyncModal
+              open={browserDataSyncOpen}
+              onClose={() => setBrowserDataSyncOpen(false)}
+            />
           </div>
         )}
     </ConfigSectionFrame>
