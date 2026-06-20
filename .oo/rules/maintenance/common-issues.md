@@ -7,6 +7,7 @@
 - [Subagent 启动 Web 服务超过 1 分钟](#subagent-启动-web-服务超过-1-分钟)
 - [开发服务 ready 后仍继续验证](#开发服务-ready-后仍继续验证)
 - [开发服务启动入口混用历史脚本](#开发服务启动入口混用历史脚本)
+- [移动端 WebView / 工作区 tabs 反复返工](#移动端-webview--工作区-tabs-反复返工)
 
 ## Subagent 启动 Web 服务超过 1 分钟
 
@@ -60,3 +61,20 @@
 - Docs：`pnpm tools dev-start docs`。
 
 不要恢复根目录 `start.sh`，不要用 `screen` 管理本仓开发服务。需要查看启动器实现时，从 `scripts/cli.ts` 的 `dev-start` command 和 `scripts/dev-start.ts` 入口开始。
+
+## 移动端 WebView / 工作区 tabs 反复返工
+
+症状关键词：`移动端 WebView`、`workspace tabs`、`工作区抽屉`、`手机 sender`、`状态栏截断`、`IME`、`RouteChromeHeader`、`RouteChromeInput`、`截图呢`、`PR change policy`。
+
+标准处理：
+
+- 开始前先读 [移动端 WebView 与工作区标签页经验](./mobile-workspace-webview.md)。
+- 先分层判断 native shell、shared shell contract、shared chrome、client route 和业务 tab 的职责。
+- UI chrome 优先复用 `RouteChromeHeader`、`RouteChromeInput`、`RouteHeaderActionButton`，不要复制截图里的 DOM 和像素。
+- sender / status bar / toolbar 的小屏密度用局部 CSS variable 覆盖，不改全局 token。
+- Android IME、status bar、cutout 分开处理；不要为输入法修复改坏窗口 inset。
+- 收尾必须补 changelog、PR 截图资产、PR body，并跑 `pr-change-check`。
+
+原因：
+
+这类任务同时跨 native WebView、前端 compact layout、共享 route chrome、真实设备验证和 CI policy。只凭单个浏览器截图或单点样式 patch 很容易修一个问题引出重复图标、padding 不一致、主题不一致、状态栏裁切、PR policy 失败等连锁问题。

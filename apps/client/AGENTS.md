@@ -91,6 +91,7 @@ import 约定：
 前端调试入口：
 
 - 如果任务涉及 tooltip / popover / select / theme / sender / focus / hover / 样式回归 / 真实 Chrome 验证 / CDP 调试，开始修改前必须先读 `../../.oo/rules/frontend-standard/debugging.md`。
+- 如果任务涉及移动端 WebView、手机端工作区 tabs overview、WebView / iframe chrome、sender compact 密度、Android IME / status bar 或 device shell simulation，还必须先读 `../../.oo/rules/maintenance/mobile-workspace-webview.md`。
 - 需要通过 Chrome DevTools Protocol 调试页面时，必须使用独立 profile 和冷启动的调试 Chrome，不要直接复用用户已经打开的日常浏览器实例。
 - 样式和交互问题不要只看代码；至少做一次真实 Chrome 的 computed style、open state 和 focus 回归。
 
