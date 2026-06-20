@@ -17,7 +17,6 @@ import { getConfig, updateConfig } from '#~/api'
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import type { IconAsset } from '#~/components/icons/IconAsset'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
-import { OverlayPanel, OverlaySegmentedControl } from '#~/components/overlay'
 import {
   NAV_RAIL_MORE_CLOSE_DEFER_MS,
   NAV_RAIL_MORE_DROPDOWN_CLASS,
@@ -26,6 +25,7 @@ import {
   getNavRailMoreMenuSelectedKeys
 } from '#~/components/nav-rail-more-menu'
 import type { NavRailMoreMenuItem, NavRailMoreMenuSection } from '#~/components/nav-rail-more-menu'
+import { OverlayPanel, OverlaySegmentedControl } from '#~/components/overlay'
 import { getDesktopViewShortcut } from '#~/desktop/view-shortcuts'
 import { getGlobalThemePrimaryColor } from '#~/hooks/use-app-preferences'
 import { useExperiments } from '#~/hooks/use-experiments'
@@ -37,10 +37,7 @@ import { resolvePluginContributionText } from '#~/plugins/plugin-i18n'
 import type { PluginContributionMenuItem, PluginContributionNavItem } from '#~/plugins/plugin-manifest'
 import { usePluginCommandExecutor, usePluginSlot } from '#~/plugins/plugin-slots'
 import type { DevShellKind, DevShellOs } from '#~/utils/device-shell-simulation'
-import {
-  useStoredDevShellSimulation,
-  writeStoredDevShellSimulation
-} from '#~/utils/device-shell-simulation'
+import { useStoredDevShellSimulation, writeStoredDevShellSimulation } from '#~/utils/device-shell-simulation'
 import { createOneWorksIconDataUri } from '#~/utils/oneworks-icon'
 import { isSidebarResizingAtom, sidebarWidthAtom, themeAtom } from '../store'
 import type { ThemeMode } from '../store'
@@ -786,7 +783,7 @@ export function NavRail({
       writeStoredDevShellSimulation({
         shellKind,
         os: storedDevShellSimulation.shellKind === 'electron' &&
-          storedDevShellSimulation.os === 'windows'
+            storedDevShellSimulation.os === 'windows'
           ? 'windows'
           : 'macos'
       })
@@ -796,7 +793,7 @@ export function NavRail({
     writeStoredDevShellSimulation({
       shellKind,
       os: storedDevShellSimulation.shellKind === 'mobile' &&
-        storedDevShellSimulation.os === 'ios'
+          storedDevShellSimulation.os === 'ios'
         ? 'ios'
         : 'android'
     })
@@ -811,11 +808,13 @@ export function NavRail({
       writeStoredDevShellSimulation({ shellKind: 'mobile', os })
     }
   }, [])
-  const shellSimulationKindOptions = React.useMemo<Array<{
-    icon: string
-    value: DevShellKind
-    label: string
-  }>>(() => [
+  const shellSimulationKindOptions = React.useMemo<
+    Array<{
+      icon: string
+      value: DevShellKind
+      label: string
+    }>
+  >(() => [
     {
       icon: 'language',
       value: 'web',
@@ -832,11 +831,13 @@ export function NavRail({
       label: t('navRail.devShellKindMobile', 'Mobile')
     }
   ], [t])
-  const shellSimulationOsOptions = React.useMemo<Array<{
-    icon: string
-    value: DevShellOs
-    label: string
-  }>>(() => {
+  const shellSimulationOsOptions = React.useMemo<
+    Array<{
+      icon: string
+      value: DevShellOs
+      label: string
+    }>
+  >(() => {
     if (storedDevShellSimulation.shellKind === 'electron') {
       return [
         {
@@ -874,9 +875,7 @@ export function NavRail({
     const selectedKindLabel = shellSimulationKindOptions.find(option =>
       option.value === storedDevShellSimulation.shellKind
     )?.label
-    const selectedOsLabel = shellSimulationOsOptions.find(option =>
-      option.value === storedDevShellSimulation.os
-    )?.label
+    const selectedOsLabel = shellSimulationOsOptions.find(option => option.value === storedDevShellSimulation.os)?.label
 
     return (
       <OverlayPanel

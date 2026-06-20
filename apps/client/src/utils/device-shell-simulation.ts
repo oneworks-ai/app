@@ -254,8 +254,9 @@ const subscribeStoredDevShellSimulation = (listener: () => void) => {
   }
 }
 
-export const useStoredDevShellSimulation = () => useSyncExternalStore(
-  subscribeStoredDevShellSimulation,
-  readStoredDevShellSimulation,
-  () => DEFAULT_DEV_SHELL_SIMULATION
-)
+export const useStoredDevShellSimulation = () =>
+  useSyncExternalStore(
+    subscribeStoredDevShellSimulation,
+    readStoredDevShellSimulation,
+    () => DEFAULT_DEV_SHELL_SIMULATION
+  )
