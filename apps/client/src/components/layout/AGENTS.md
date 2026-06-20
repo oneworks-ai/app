@@ -115,6 +115,7 @@ const panelTabs = pluginRegistry.resolvePanelTabs(routeContext)
 ## Route Container Header
 
 - `RouteContainerHeader` supports normal title mode, breadcrumb mode, collapsed sidebar mode, and externally supplied right-side action items. Do not infer route business state inside the component; pass breadcrumb/action configuration from the route layer.
+- Mobile static workspace headers, WebView page headers, and tabs overview headers should reuse the shared route chrome shape through `RouteChromeHeader` instead of cloning `RouteContainerHeader` markup or hard-coding a second header. `RouteContainerHeader` remains the route-level overlay/breadcrumb adapter; static in-content chrome should use the shared static chrome variant and receive business actions from the route/drawer layer.
 - Header content height, icon visuals, and icon button slots ultimately use the single global chrome size token `--app-chrome-icon-size`, currently `18px`. `--app-chrome-content-height`, `--route-container-header-icon-size`, and `--route-container-header-icon-button-size` are only semantic aliases; title icons, breadcrumb back icons, breadcrumb separators, and action icons must share this fixed visual size.
 - Do not introduce local `20px`, `22px`, `24px`, or a new `*-icon-button-size` token for route header / panel chrome without changing `--app-chrome-icon-size` and verifying every header and panel mode.
 - Collapsed-sidebar header mode must keep the same overlay height as normal mode. The left `NavRail` collapsed window bar should use the same global chrome tokens for height, button size, action gap, max width, and trailing padding. Its width calculation belongs on the shared shell scope, not on the bar element alone, because `RouteContainerHeader` also needs the same computed width for its collapsed margin.
@@ -154,5 +155,6 @@ const panelTabs = pluginRegistry.resolvePanelTabs(routeContext)
 ## Verification
 
 - After changing route header layout, verify normal title mode, breadcrumb mode, collapsed sidebar mode, and right-side active action icons in the browser.
+- After changing mobile workspace / WebView chrome, also read `../../../../../.oo/rules/maintenance/mobile-workspace-webview.md` and verify the tabs overview header, opened tab header, search / URL input, card preview, and duplicate header actions.
 - For breadcrumb changes, inspect both the selected element box size and computed icon size; they should match the header token rather than relying on inherited AntD button defaults.
 - After changing route panel slots, verify main-only, right-panel, bottom-panel, and right-plus-bottom states in the browser.
