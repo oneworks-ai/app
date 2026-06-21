@@ -17,6 +17,7 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - [Team / Agent Room 冒烟验证](./maintenance/agent-room-team-smoke.md)
 - [能力展示录屏工具](./maintenance/demo-video.md)
 - [Homepage Docs 维护经验](./maintenance/homepage-docs.md)
+- [PR 经验复盘门禁](./maintenance/pr-experience-review.md)
 - [Relay 托管与私有化部署](./RELAY-DEPLOYMENT.md)
 
 ## 常见问题索引
@@ -25,6 +26,7 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - 开发服务输出 `[dev-start] ready` 后仍继续 `ps` / `curl` / 读 log：见 [开发服务 ready 后仍继续验证](./maintenance/common-issues.md#开发服务-ready-后仍继续验证)。
 - 启动入口混用 `start.sh`、`screen` 或旧脚本：见 [开发服务启动入口混用历史脚本](./maintenance/common-issues.md#开发服务启动入口混用历史脚本)。
 - 复杂任务需要拆 PR、开子线程、监控或沉淀经验：见 [任务规划、委派与经验沉淀](./maintenance/task-planning.md)。
+- PR body 缺少经验复盘确认或需要维护提醒评论：见 [PR 经验复盘门禁](./maintenance/pr-experience-review.md)。
 - 移动端 WebView、工作区 tabs overview、sender compact 样式或相关 PR 收口：见 [移动端 WebView 与工作区标签页经验](./maintenance/mobile-workspace-webview.md)。
 
 ## 开发环境启动

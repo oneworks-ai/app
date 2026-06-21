@@ -9,10 +9,12 @@
 - [发布步骤](../.oo/rules/release/process.md)
 - [tag 与经验沉淀](../.oo/rules/release/tags.md)
 - [Homepage Docs 维护经验](../.oo/rules/maintenance/homepage-docs.md)
+- [PR 经验复盘门禁](../.oo/rules/maintenance/pr-experience-review.md)
 
 ## Workflow 地图
 
 - `quality.yml`：所有 `main` push / PR / 手动触发都会跑 lint、format、typecheck、commit message 检查。
+- `pr-experience-review.yml`：PR 创建、编辑或同步时 upsert 经验复盘提醒评论；硬门禁仍由 `quality.yml` 的 `pr-change-policy` 调用 `pnpm tools pr-change-check` 执行。
 - `release-tags.yml`：按 package version / scripts 相关路径触发，创建 `pkg/*/v*` release tags，并按 tag 显式调度对应发布 workflow。
 - `npm-publish-alpha.yml`：手动发布 npm alpha 包；默认走 Trusted Publishing，新增包 bootstrap 才允许显式使用 `NPM_TOKEN`。
 - `vscode-extension-ci.yml`：按 VS Code 扩展相关路径触发，构建并上传 VSIX artifact，不发布商店。

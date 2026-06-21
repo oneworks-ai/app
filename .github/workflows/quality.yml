@@ -132,5 +132,5 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
 
-      - name: Check PR changelog and screenshots
+      - name: Check PR changelog, screenshots, and experience review
         run: pnpm tools pr-change-check "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" --body-file "$RUNNER_TEMP/pr-body.md"
