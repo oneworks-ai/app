@@ -3,6 +3,15 @@ import { clipboard, ipcMain, nativeImage, session, shell } from 'electron'
 import type { WebContents } from 'electron'
 
 import {
+  interactionPanelWebviewPartition,
+  listBrowserDownloads,
+  listBrowserHistory,
+  openBrowserDownload,
+  recordBrowserHistory,
+  registerInteractionPanelWebviewScope,
+  revealBrowserDownload
+} from './browser-activity'
+import {
   authenticateSavedPasswordsAccess,
   copySavedPasswordField,
   deleteSavedPassword,
@@ -37,7 +46,6 @@ import {
 import { createWorkspaceFolderInDirectory } from './workspace-folder-create'
 import { cloneGitRepositoryIntoDirectory, isGitAvailable, listCloneDestinationDirectories } from './workspace-git-clone'
 
-const interactionPanelWebviewPartition = 'persist:oneworks-interaction-panel'
 const workspaceConnectionPollMs = 50
 
 const clearInteractionPanelWebviewData = async (dataType: unknown) => {
@@ -220,6 +228,15 @@ export const registerIpcHandlers = ({
   )
   ipcMain.handle('desktop:get-global-interface-language-config', () => getGlobalInterfaceLanguageConfig())
   ipcMain.handle('desktop:get-browser-data-sync-state', () => getBrowserDataSyncState())
+  ipcMain.handle('desktop:list-browser-history', (_event, input: unknown) => listBrowserHistory(input))
+  ipcMain.handle('desktop:record-browser-history', (_event, input: unknown) => recordBrowserHistory(input))
+  ipcMain.handle(
+    'desktop:register-interaction-panel-webview-scope',
+    (_event, input: unknown) => registerInteractionPanelWebviewScope(input)
+  )
+  ipcMain.handle('desktop:list-browser-downloads', (_event, input: unknown) => listBrowserDownloads(input))
+  ipcMain.handle('desktop:open-browser-download', (_event, id: unknown) => openBrowserDownload(id))
+  ipcMain.handle('desktop:reveal-browser-download', (_event, id: unknown) => revealBrowserDownload(id))
   ipcMain.handle('desktop:list-browser-password-import-sources', () => listBrowserPasswordImportSources())
   ipcMain.handle(
     'desktop:import-browser-passwords',

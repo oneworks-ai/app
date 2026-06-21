@@ -9,6 +9,7 @@ import useSWR from 'swr'
 import type { ConfigResponse } from '@oneworks/types'
 
 import { getConfig, updateConfig } from '#~/api'
+import { getCurrentWorkspaceBrowserActivityRouteState } from '#~/components/browser-activity/browser-activity-route-state'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import { useInterfaceLanguageConfig } from '#~/hooks/use-interface-language-config'
 import { themeAtom } from '#~/store'
@@ -51,6 +52,17 @@ export function SidebarUtilityFooter() {
       themeMode
     }), [t, themeMode, updateGlobalThemeMode])
 
+  const navigateToWorkspaceConfig = useCallback(() => {
+    void getCurrentWorkspaceBrowserActivityRouteState()
+      .then((state) => {
+        void navigate('/config', state == null ? undefined : { state })
+      })
+      .catch((error) => {
+        console.warn('[sidebar] failed to resolve workspace config context', error)
+        void navigate('/config')
+      })
+  }, [navigate])
+
   return (
     <div className='sidebar-utility-footer'>
       <Dropdown
@@ -89,7 +101,7 @@ export function SidebarUtilityFooter() {
         type='text'
         className='sidebar-utility-footer__action'
         icon={<MaterialSymbol name='settings' />}
-        onClick={() => void navigate('/config')}
+        onClick={navigateToWorkspaceConfig}
       >
         <span>{t('common.settings')}</span>
       </Button>

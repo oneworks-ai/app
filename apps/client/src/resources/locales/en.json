@@ -223,6 +223,61 @@
       "importFailed": "Failed to import the verification-code backup. Make sure the file contains standard otpauth:// records."
     }
   },
+  "browserActivity": {
+    "filters": {
+      "all": "All",
+      "activeProject": "Project: {{project}}",
+      "activeSession": "Session: {{session}}",
+      "activeSessionStatus": "Status: {{status}}",
+      "activeSessions": "Active",
+      "allSessionStatuses": "All",
+      "allProjects": "All Projects",
+      "allSessions": "All Sessions",
+      "archivedSessions": "Archived",
+      "currentProject": "Current Project",
+      "filter": "Filter records",
+      "filterActive": "Filtered: {{scope}}",
+      "noProjects": "No projects",
+      "noSessions": "No sessions",
+      "projectLabel": "Project",
+      "scopeLabel": "Scope",
+      "sessionLabel": "Session",
+      "sessionStatusLabel": "Status"
+    },
+    "scope": {
+      "project": "Project",
+      "session": "Session"
+    },
+    "history": {
+      "title": "History",
+      "searchPlaceholder": "Search history",
+      "empty": "No history yet",
+      "emptyFiltered": "No history matches the current filters",
+      "unavailable": "History is only available in the desktop app",
+      "loadFailed": "Failed to load history",
+      "openFailed": "Failed to open history item",
+      "visitCount": "{{count}} visits"
+    },
+    "downloads": {
+      "title": "Downloads",
+      "searchPlaceholder": "Search downloads",
+      "empty": "No downloads yet",
+      "emptyFiltered": "No downloads match the current filters",
+      "unavailable": "Downloads are only available in the desktop app",
+      "loadFailed": "Failed to load downloads",
+      "openFailed": "Failed to open download",
+      "revealFailed": "Failed to reveal download",
+      "unknownFile": "Untitled download",
+      "open": "Open",
+      "reveal": "Show in folder",
+      "status": {
+        "cancelled": "Cancelled",
+        "completed": "Completed",
+        "interrupted": "Interrupted",
+        "progressing": "Downloading"
+      }
+    }
+  },
   "navRail": {
     "newChat": "New Chat",
     "conversations": "Conversations",
@@ -4165,6 +4220,8 @@
       "mcp": "MCP",
       "shortcuts": "Shortcuts",
       "desktop": "Desktop",
+      "browserHistory": "History",
+      "browserDownloads": "Downloads",
       "savedPasswords": "Saved passwords",
       "appearance": "Appearance",
       "experiments": "Experiments",

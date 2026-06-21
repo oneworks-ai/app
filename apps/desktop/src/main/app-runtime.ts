@@ -9,6 +9,7 @@ import {
   resolveDesktopLaunchWorkspaceFolder,
   resolveProjectWorkspaceFolder
 } from '../workspace-state.cjs'
+import { installBrowserActivityDownloadTracking } from './browser-activity'
 import { updateSavedPasswordsRuntimeSettings } from './browser-data-sync'
 import { readDesktopBuildSource } from './build-source'
 import { DESKTOP_SETTINGS_CHANNEL, DESKTOP_UPDATE_STATUS_CHANNEL, GLOBAL_INTERFACE_LANGUAGE_CHANNEL } from './constants'
@@ -718,6 +719,7 @@ export const createDesktopApp = () => {
     await loadDesktopStateIntoMemory()
     applyDesktopIcon()
     registerDesktopIpcHandlers()
+    installBrowserActivityDownloadTracking()
     registerLauncherGlobalShortcut()
     await loadQuitConfirmationLanguage()
     refreshAppMenu()

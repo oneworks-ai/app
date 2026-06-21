@@ -224,6 +224,61 @@
       "importFailed": "导入验证码备份失败。请确认文件包含标准 otpauth:// 记录。"
     }
   },
+  "browserActivity": {
+    "filters": {
+      "all": "全部",
+      "activeProject": "项目：{{project}}",
+      "activeSession": "会话：{{session}}",
+      "activeSessionStatus": "状态：{{status}}",
+      "activeSessions": "活跃",
+      "allSessionStatuses": "全部",
+      "allProjects": "全部项目",
+      "allSessions": "全部会话",
+      "archivedSessions": "已归档",
+      "currentProject": "当前项目",
+      "filter": "筛选记录",
+      "filterActive": "已筛选：{{scope}}",
+      "noProjects": "暂无项目",
+      "noSessions": "暂无会话",
+      "projectLabel": "项目",
+      "scopeLabel": "范围",
+      "sessionLabel": "会话",
+      "sessionStatusLabel": "状态"
+    },
+    "scope": {
+      "project": "项目",
+      "session": "会话"
+    },
+    "history": {
+      "title": "历史记录",
+      "searchPlaceholder": "搜索历史记录",
+      "empty": "暂无历史记录",
+      "emptyFiltered": "当前筛选没有匹配的历史记录",
+      "unavailable": "历史记录仅在桌面端可用",
+      "loadFailed": "加载历史记录失败",
+      "openFailed": "打开历史记录失败",
+      "visitCount": "{{count}} 次"
+    },
+    "downloads": {
+      "title": "下载内容",
+      "searchPlaceholder": "搜索下载内容",
+      "empty": "暂无下载内容",
+      "emptyFiltered": "当前筛选没有匹配的下载内容",
+      "unavailable": "下载内容仅在桌面端可用",
+      "loadFailed": "加载下载内容失败",
+      "openFailed": "打开下载内容失败",
+      "revealFailed": "显示文件位置失败",
+      "unknownFile": "未命名下载",
+      "open": "打开",
+      "reveal": "显示位置",
+      "status": {
+        "cancelled": "已取消",
+        "completed": "已完成",
+        "interrupted": "已中断",
+        "progressing": "下载中"
+      }
+    }
+  },
   "navRail": {
     "newChat": "新建会话",
     "conversations": "会话",
@@ -4166,6 +4221,8 @@
       "mcp": "MCP",
       "shortcuts": "快捷键",
       "desktop": "桌面端",
+      "browserHistory": "历史记录",
+      "browserDownloads": "下载内容",
       "savedPasswords": "已保存的密码",
       "appearance": "外观",
       "experiments": "实验功能",

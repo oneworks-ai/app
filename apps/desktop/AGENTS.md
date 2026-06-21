@@ -18,6 +18,7 @@
   - `menu.ts`、`ipc-handlers.ts`、`shortcuts.ts`：菜单、IPC 与桌面快捷键
   - `updates.ts`：自动更新检查
   - `browser-data-sync.ts`：桌面端浏览器数据同步与本机加密 vault；Authenticator 备份导入、未来 Chrome 密码导入和扩展同步的 main-process 落点
+  - `browser-activity.ts`：interaction panel webview 的历史记录、下载记录和项目 / 会话 scope 追踪；配置页历史 / 下载内容入口通过 preload IPC 读取这里的数据
 - `src/workspace-state.cjs`
   - 桌面最近项目、workspace 显示名、启动 workspace 解析入口。
   - 作为 project/workspace 打开或记录时，会把 Git linked worktree 归一到 common `.git` 对应的原始 project 目录；普通目录浏览仍使用真实路径。

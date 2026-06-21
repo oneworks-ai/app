@@ -204,6 +204,13 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
   getDesktopIconPreview: (settings: unknown) => ipcRenderer.invoke('desktop:get-icon-preview', settings),
   getDesktopSettings: () => ipcRenderer.invoke('desktop:get-settings'),
   getBrowserDataSyncState: () => ipcRenderer.invoke('desktop:get-browser-data-sync-state'),
+  listBrowserHistory: (input?: unknown) => ipcRenderer.invoke('desktop:list-browser-history', input),
+  recordBrowserHistory: (input: unknown) => ipcRenderer.invoke('desktop:record-browser-history', input),
+  registerInteractionPanelWebviewScope: (input: unknown) =>
+    ipcRenderer.invoke('desktop:register-interaction-panel-webview-scope', input),
+  listBrowserDownloads: (input?: unknown) => ipcRenderer.invoke('desktop:list-browser-downloads', input),
+  openBrowserDownload: (id: string) => ipcRenderer.invoke('desktop:open-browser-download', id),
+  revealBrowserDownload: (id: string) => ipcRenderer.invoke('desktop:reveal-browser-download', id),
   getUpdateStatus: () => ipcRenderer.invoke('desktop:get-update-status'),
   getGlobalInterfaceLanguageConfig: () => ipcRenderer.invoke('desktop:get-global-interface-language-config'),
   getWindowFullscreenState: () => ipcRenderer.invoke('desktop:get-window-fullscreen-state'),

@@ -309,6 +309,53 @@ interface DesktopSavedPasswordUpdateInput {
   username?: string
 }
 
+type DesktopBrowserActivityScopeFilter = 'all' | 'project' | 'session'
+
+interface DesktopBrowserActivityListOptions {
+  query?: string
+  scope?: DesktopBrowserActivityScopeFilter
+}
+
+interface DesktopBrowserActivityScope {
+  projectKey?: string
+  sessionKey?: string
+}
+
+interface DesktopBrowserHistoryRecord extends DesktopBrowserActivityScope {
+  faviconUrl?: string
+  firstVisitedAt: string
+  id: string
+  lastVisitedAt: string
+  title?: string
+  url: string
+  visitCount: number
+}
+
+interface DesktopBrowserHistoryRecordInput extends DesktopBrowserActivityScope {
+  faviconUrl?: string
+  incrementVisit?: boolean
+  title?: string
+  url: string
+}
+
+interface DesktopBrowserDownloadRecord extends DesktopBrowserActivityScope {
+  completedAt?: string
+  fileName: string
+  filePath?: string
+  id: string
+  mimeType?: string
+  receivedBytes: number
+  startedAt: string
+  state: 'cancelled' | 'completed' | 'interrupted' | 'progressing'
+  totalBytes: number
+  updatedAt: string
+  url: string
+}
+
+interface DesktopInteractionPanelWebviewScopeInput extends DesktopBrowserActivityScope {
+  webContentsId: number
+}
+
 interface Window {
   oneworksAndroidBridge?: OneWorksNativeBridgeRequestApi
   oneworksDesktop?: OneWorksDeviceShellApi & {
@@ -328,6 +375,12 @@ interface Window {
     ) => Promise<string | undefined>
     getDesktopSettings?: () => Promise<DesktopSettings>
     getBrowserDataSyncState?: () => Promise<DesktopBrowserDataSyncState>
+    listBrowserHistory?: (input?: DesktopBrowserActivityListOptions) => Promise<DesktopBrowserHistoryRecord[]>
+    recordBrowserHistory?: (input: DesktopBrowserHistoryRecordInput) => Promise<DesktopBrowserHistoryRecord | undefined>
+    registerInteractionPanelWebviewScope?: (input: DesktopInteractionPanelWebviewScopeInput) => Promise<void>
+    listBrowserDownloads?: (input?: DesktopBrowserActivityListOptions) => Promise<DesktopBrowserDownloadRecord[]>
+    openBrowserDownload?: (id: string) => Promise<void>
+    revealBrowserDownload?: (id: string) => Promise<void>
     getUpdateStatus?: () => Promise<DesktopUpdateStatus>
     getGlobalInterfaceLanguageConfig?: () => Promise<DesktopInterfaceLanguageConfig>
     getWindowFullscreenState?: () => Promise<boolean>

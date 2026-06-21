@@ -32,6 +32,7 @@ import {
   updateConfig
 } from '../api'
 import { resolveWorkspaceFileOpenerSelectModels } from '../utils/workspace-file-openers'
+import { BrowserActivityPanel } from './browser-activity/BrowserActivityPanel'
 import { SavedPasswordManagerPanel } from './browser-data-sync/SavedPasswordManagerPanel'
 import { AboutSection, ConfigSectionPanel, ConfigSourceSwitch, DisplayValue } from './config'
 import { AppSettingsPanel } from './config/AppSettingsPanel'
@@ -105,6 +106,25 @@ const isRecordObject = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' &&
   !Array.isArray(value)
 )
+const resolveBrowserActivityRouteContext = (state: unknown) => {
+  if (!isRecordObject(state) || !isRecordObject(state.browserActivity)) {
+    return {
+      projectKeys: [] as string[],
+      sessionKey: undefined as string | undefined
+    }
+  }
+
+  const rawProjectKeys = state.browserActivity.projectKeys
+  const rawSessionKey = state.browserActivity.sessionKey
+  return {
+    projectKeys: Array.isArray(rawProjectKeys)
+      ? rawProjectKeys.filter((value): value is string => typeof value === 'string' && value.trim() !== '')
+      : [],
+    sessionKey: typeof rawSessionKey === 'string' && rawSessionKey.trim() !== ''
+      ? rawSessionKey
+      : undefined
+  }
+}
 const resolveUniqueModelServiceKey = (baseKey: string, modelServices: Record<string, unknown>) => {
   if (!Object.hasOwn(modelServices, baseKey)) return baseKey
   for (let index = 2; index < 1000; index += 1) {
@@ -234,6 +254,9 @@ export function ConfigView() {
   const { data: schemaData } = useSWR('/api/config/schema', getConfigSchema)
   const { data: worktreeEnvironmentData } = useSWR('worktree-environments', listWorktreeEnvironments)
   const { data: workspaceFileOpenersData } = useSWR('workspace-file-openers', listWorkspaceFileOpeners)
+  const browserActivityRouteContext = useMemo(() => resolveBrowserActivityRouteContext(location.state), [
+    location.state
+  ])
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const pathValues = useMemo(() => parseConfigPathState(location.pathname), [location.pathname])
   const queryValues = useMemo<ConfigQueryParams>(() => {
@@ -288,6 +311,8 @@ export function ConfigView() {
   const hasDesktopSettings = window.oneworksDesktop?.getDesktopSettings != null &&
     window.oneworksDesktop.updateDesktopSettings != null
   const hasSavedPasswords = window.oneworksDesktop?.listSavedPasswords != null
+  const hasBrowserHistory = window.oneworksDesktop?.listBrowserHistory != null
+  const hasBrowserDownloads = window.oneworksDesktop?.listBrowserDownloads != null
   const hasConfigLoadError = !isLoading && data == null && error != null
   const canRenderConfig = !isLoading && data != null
 
@@ -339,13 +364,28 @@ export function ConfigView() {
     ...(hasDesktopSettings
       ? [{ key: 'desktop', icon: 'desktop_windows', label: t('config.sections.desktop') }]
       : []),
+    ...(hasBrowserHistory
+      ? [{ key: 'browserHistory', icon: 'history', label: t('config.sections.browserHistory') }]
+      : []),
+    ...(hasBrowserDownloads
+      ? [{ key: 'browserDownloads', icon: 'download', label: t('config.sections.browserDownloads') }]
+      : []),
     ...(hasSavedPasswords
       ? [{ key: 'savedPasswords', icon: 'password', label: t('config.sections.savedPasswords') }]
       : []),
     { key: 'appearance', icon: 'tune', label: t('config.sections.appearance'), value: globalSource?.appearance },
     { key: 'experiments', icon: 'science', label: t('config.sections.experiments'), value: currentSource?.experiments },
     { key: 'about', icon: 'info', label: t('config.sections.about'), value: data?.meta?.about }
-  ], [currentSource, data?.meta?.about, globalSource?.appearance, hasDesktopSettings, hasSavedPasswords, t])
+  ], [
+    currentSource,
+    data?.meta?.about,
+    globalSource?.appearance,
+    hasBrowserDownloads,
+    hasBrowserHistory,
+    hasDesktopSettings,
+    hasSavedPasswords,
+    t
+  ])
   const tabKeys = useMemo(() => new Set(tabs.filter(tab => tab.type !== 'group').map(tab => tab.key)), [tabs])
   const desktopNavGroups = useMemo(() => {
     type NavTab = Exclude<(typeof tabs)[number], { type: 'group' }>
@@ -399,7 +439,7 @@ export function ConfigView() {
   const hasModelServiceImportQuery = useMemo(() => (
     modelServiceImportQueryKeys.some(key => searchParams.has(key))
   ), [searchParams])
-  const updateConfigRoute = useCallback((patch: Partial<ConfigQueryParams>) => {
+  const updateConfigRoute = useCallback((patch: Partial<ConfigQueryParams>, options?: { state?: unknown }) => {
     const nextTab = patch.tab ?? activeTabKey
     const nextDetail = patch.detail ?? detailQuery
     const nextSource = patch.source ?? sourceKey
@@ -440,8 +480,18 @@ export function ConfigView() {
       return
     }
 
-    void navigate(target, { replace: true })
-  }, [activeTabKey, configPresent, detailQuery, location.hash, location.pathname, location.search, navigate, sourceKey])
+    void navigate(target, { replace: true, state: options?.state ?? location.state })
+  }, [
+    activeTabKey,
+    configPresent,
+    detailQuery,
+    location.hash,
+    location.pathname,
+    location.search,
+    location.state,
+    navigate,
+    sourceKey
+  ])
   useEffect(() => {
     if (hasModelServiceImportQuery) return
     if (!configLegacyRouteQueryKeys.some(key => searchParams.has(key))) return
@@ -1201,6 +1251,22 @@ export function ConfigView() {
       {tab.key === 'desktop' && (
         <DesktopSettingsPanel showHeader={false} t={t} />
       )}
+      {tab.key === 'browserHistory' && (
+        <BrowserActivityPanel
+          initialProjectKeys={browserActivityRouteContext.projectKeys}
+          initialSessionKey={browserActivityRouteContext.sessionKey}
+          kind='history'
+          showHeader={false}
+        />
+      )}
+      {tab.key === 'browserDownloads' && (
+        <BrowserActivityPanel
+          initialProjectKeys={browserActivityRouteContext.projectKeys}
+          initialSessionKey={browserActivityRouteContext.sessionKey}
+          kind='downloads'
+          showHeader={false}
+        />
+      )}
       {tab.key === 'savedPasswords' && (
         <SavedPasswordManagerPanel
           selectedGroupKey={savedPasswordDetailKey}
@@ -1215,6 +1281,8 @@ export function ConfigView() {
         <WorktreeEnvironmentPanel t={t} />
       )}
       {tab.key !== 'about' &&
+        tab.key !== 'browserDownloads' &&
+        tab.key !== 'browserHistory' &&
         tab.key !== 'desktop' &&
         tab.key !== 'savedPasswords' &&
         tab.key !== 'appearance' &&

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
+import { createBrowserActivityRouteState } from '#~/components/browser-activity/browser-activity-route-state'
 import { BrowserDataSyncModal } from '#~/components/browser-data-sync/BrowserDataSyncModal'
 
 import { InteractionPanelIframeBrowserMenu } from './InteractionPanelIframeBrowserMenu'
@@ -29,7 +30,9 @@ export function InteractionPanelIframeToolbarActions({
   iframeRef,
   isDeveloperToolsOpen,
   isViewportToolbarOpen,
+  projectUrlHistoryKey,
   onForceReload,
+  sessionUrlHistoryKey,
   onToggleDeveloperTools,
   onToggleViewportToolbar,
   shouldUseWebview,
@@ -39,7 +42,9 @@ export function InteractionPanelIframeToolbarActions({
   iframeRef: MutableRefObject<HTMLIFrameElement | null>
   isDeveloperToolsOpen: boolean
   isViewportToolbarOpen: boolean
+  projectUrlHistoryKey: string
   onForceReload: () => void
+  sessionUrlHistoryKey: string
   onToggleDeveloperTools: () => void
   onToggleViewportToolbar: () => void
   shouldUseWebview: boolean
@@ -51,6 +56,8 @@ export function InteractionPanelIframeToolbarActions({
   const [isMoreOpen, setIsMoreOpen] = useState(false)
   const [browserDataSyncOpen, setBrowserDataSyncOpen] = useState(false)
   const canUseFrame = frameUrl !== ''
+  const canOpenBrowserHistory = window.oneworksDesktop?.listBrowserHistory != null
+  const canOpenBrowserDownloads = window.oneworksDesktop?.listBrowserDownloads != null
 
   const notifyUnsupported = () => {
     void message.warning(t('common.notSupportedYet'))
@@ -76,6 +83,20 @@ export function InteractionPanelIframeToolbarActions({
 
   const handleOpenSavedPasswords = () => {
     void navigate('/config/savedPasswords')
+  }
+
+  const getBrowserActivityRouteState = () =>
+    createBrowserActivityRouteState({
+      projectKeys: [projectUrlHistoryKey],
+      sessionKey: sessionUrlHistoryKey
+    })
+
+  const handleOpenBrowserHistory = () => {
+    void navigate('/config/browserHistory', { state: getBrowserActivityRouteState() })
+  }
+
+  const handleOpenBrowserDownloads = () => {
+    void navigate('/config/browserDownloads', { state: getBrowserActivityRouteState() })
   }
 
   return (
@@ -107,6 +128,8 @@ export function InteractionPanelIframeToolbarActions({
             onClose={() => setIsMoreOpen(false)}
             onForceReload={onForceReload}
             onOpenBrowserDataSync={() => setBrowserDataSyncOpen(true)}
+            onOpenBrowserDownloads={canOpenBrowserDownloads ? handleOpenBrowserDownloads : undefined}
+            onOpenBrowserHistory={canOpenBrowserHistory ? handleOpenBrowserHistory : undefined}
             onOpenSavedPasswords={handleOpenSavedPasswords}
             onToggleDeveloperTools={onToggleDeveloperTools}
             onToggleViewportToolbar={onToggleViewportToolbar}

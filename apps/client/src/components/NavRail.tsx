@@ -14,6 +14,7 @@ import { HostNavRail } from '@oneworks/route-layout'
 import type { ConfigResponse } from '@oneworks/types'
 
 import { getConfig, updateConfig } from '#~/api'
+import { getCurrentWorkspaceBrowserActivityRouteState } from '#~/components/browser-activity/browser-activity-route-state'
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import type { IconAsset } from '#~/components/icons/IconAsset'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
@@ -570,6 +571,17 @@ export function NavRail({
   const currentLanguageLabel = getActiveAppLanguageOption(i18n.resolvedLanguage ?? i18n.language)?.label ??
     i18n.language
 
+  const navigateToWorkspaceConfig = React.useCallback(() => {
+    void getCurrentWorkspaceBrowserActivityRouteState()
+      .then((state) => {
+        void navigate('/config', state == null ? undefined : { state })
+      })
+      .catch((error) => {
+        console.warn('[nav-rail] failed to resolve workspace config context', error)
+        void navigate('/config')
+      })
+  }, [navigate])
+
   const themeModeOptions = React.useMemo(() => [
     {
       icon: 'desktop_windows',
@@ -598,9 +610,7 @@ export function NavRail({
           label: t('common.settings'),
           selected: currentPath === '/config' || currentPath.startsWith('/config/'),
           shortcut: 'cmd+,',
-          onSelect: () => {
-            void navigate('/config')
-          }
+          onSelect: navigateToWorkspaceConfig
         },
         {
           active: currentPath === '/archive',
@@ -614,7 +624,7 @@ export function NavRail({
         }
       ]
     }
-  ], [currentPath, navigate, t])
+  ], [currentPath, navigate, navigateToWorkspaceConfig, t])
   const pluginNavItems = usePluginSlot<PluginContributionNavItem>('nav.items')
   const pluginMoreItems = usePluginSlot<PluginContributionMenuItem>('nav.moreMenu')
   const pluginFooterBeforeItems = usePluginSlot<PluginContributionMenuItem>('nav.footer.before')
