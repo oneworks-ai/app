@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import type { GitRepositoryState, TerminalShellKind } from '@oneworks/types'
 
 import type { AgentRoomMessageView } from '#~/components/agent-room/@types/agent-room-view'
+import type { PendingAnnotation } from '#~/components/chat/sender/@types/sender-composer'
 import type { WorkspaceDrawerViewItem } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
 import type { WorkspaceMarkdownPreviewMode } from '#~/components/chat/workspace-file-editor/workspace-file-editor-language'
 import type {
@@ -66,6 +67,7 @@ export interface InteractionPanelDockWorkspaceProps {
   isPanelMinimized: boolean
   isVisible: boolean
   layout?: RouteContainerPanelDockLayout | null
+  hasPendingAnnotationReferences?: boolean
   markdownPreviewMode: WorkspaceMarkdownPreviewMode
   mobileDebugPages: InteractionPanelMobileDebugPage[]
   pinnedTabs: InteractionPanelPinnedTab[]
@@ -119,6 +121,7 @@ export interface InteractionPanelDockWorkspaceProps {
   onPinTab: (tab: InteractionPanelTab) => void
   onPluginTabStateChange: (tabId: string, state: unknown) => void
   onRunCommand: (command: InteractionPanelRunCommand) => void
+  onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
   onSelectWorkspaceFilePath: (path: string) => void
   onSessionPageChange: (
     pageId: string,

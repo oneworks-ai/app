@@ -15,7 +15,12 @@ import type {
 } from '../../@types/sender-toolbar-types'
 import type { SenderVoiceInputController } from '../../@types/sender-voice-input'
 
-import type { PendingContextFile, PendingImage } from '../../@types/sender-composer'
+import type {
+  PendingAnnotation,
+  PendingContextFile,
+  PendingImage,
+  PendingTextSelection
+} from '../../@types/sender-composer'
 import type { SenderEditorHandle } from '../../@types/sender-editor'
 import type { SenderProps } from '../../@types/sender-props'
 import type { SenderCompletionMatch, SenderTokenDecoration } from '../../@utils/sender-completion'
@@ -28,8 +33,13 @@ export function SenderBody({
   modelUnavailable,
   pendingImages,
   pendingFiles,
+  pendingAnnotations,
+  pendingTextSelections,
   onRemovePendingImage,
   onRemovePendingFile,
+  onRemovePendingAnnotation,
+  onRemovePendingTextSelection,
+  onClearPendingTextSelections,
   editorRef,
   sessionId,
   sessionInfo,
@@ -62,8 +72,13 @@ export function SenderBody({
   modelUnavailable?: boolean
   pendingImages: PendingImage[]
   pendingFiles: PendingContextFile[]
+  pendingAnnotations: PendingAnnotation[]
+  pendingTextSelections: PendingTextSelection[]
   onRemovePendingImage: (id: string) => void
   onRemovePendingFile: (path: string) => void
+  onRemovePendingAnnotation: (id: string) => void
+  onRemovePendingTextSelection: (id: string) => void
+  onClearPendingTextSelections: () => void
   editorRef: MutableRefObject<SenderEditorHandle | null>
   sessionId?: string
   sessionInfo?: SessionInfo | null
@@ -120,8 +135,13 @@ export function SenderBody({
         sessionInfo={sessionInfo}
         pendingImages={pendingImages}
         pendingFiles={pendingFiles}
+        pendingAnnotations={pendingAnnotations}
+        pendingTextSelections={pendingTextSelections}
         onRemovePendingImage={onRemovePendingImage}
         onRemovePendingFile={onRemovePendingFile}
+        onRemovePendingAnnotation={onRemovePendingAnnotation}
+        onRemovePendingTextSelection={onRemovePendingTextSelection}
+        onClearPendingTextSelections={onClearPendingTextSelections}
         input={input}
         placeholder={placeholder || t('chat.inputPlaceholder')}
         disabled={(!isInlineEdit && modelUnavailable) || (isInlineEdit && isBusy)}

@@ -1,6 +1,6 @@
 import { App } from 'antd'
 import { useAtomValue, useSetAtom } from 'jotai'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
@@ -114,6 +114,18 @@ import {
   getNewSessionGuideData
 } from './new-session-guide-config'
 import { SenderInteractionPanel } from './sender/@components/sender-interaction-panel/SenderInteractionPanel'
+import type {
+  AnnotationReferenceRequest,
+  PendingReferenceDraft,
+  PendingReferenceDraftRequest,
+  TextSelectionReferenceRequest
+} from './sender/@types/sender-composer'
+import {
+  getSenderPendingReferenceDraftStorageKey,
+  hasPendingReferenceDraft,
+  readPendingReferenceDraft,
+  writePendingReferenceDraft
+} from './sender/@utils/sender-pending-reference-draft'
 import { Sender } from './sender/Sender'
 import { SessionCreationProgressBanner } from './session-creation-progress/SessionCreationProgressBanner'
 import { ChatStatusBar } from './status-bar/ChatStatusBar'
@@ -128,6 +140,42 @@ const getCompactionNoticeAnchorId = (id: string) => (
 const getWorkspaceChangesAnchorId = (id: string) => (
   `workspace-changes-${id.replace(/[^\w-]/g, '-')}`
 )
+
+type ChatTextSelectionToolbarPlacement = 'above' | 'below'
+
+interface ChatTextSelectionToolbarState {
+  left: number
+  placement: ChatTextSelectionToolbarPlacement
+  sourceLabel: string
+  text: string
+  top: number
+}
+
+const chatTextSelectionToolbarEstimatedWidth = 260
+
+const normalizeChatSelectedText = (value: string) => value.replace(/\u00A0/g, ' ').trim()
+
+const createChatTextSelectionId = () => {
+  const randomId = typeof globalThis.crypto?.randomUUID === 'function'
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  return `chat-text-selection-${randomId}`
+}
+
+const getRangeVisibleRect = (range: Range) => {
+  const rangeRect = range.getBoundingClientRect()
+  if (rangeRect.width > 0 || rangeRect.height > 0) {
+    return rangeRect
+  }
+
+  return Array.from(range.getClientRects()).find(rect => rect.width > 0 || rect.height > 0) ?? null
+}
+
+const isSelectionNodeInside = (node: Node | null, root: HTMLElement) => {
+  if (node == null) return false
+  const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement
+  return element != null && root.contains(element)
+}
 
 export function ChatHistoryView({
   isReady,
@@ -181,6 +229,8 @@ export function ChatHistoryView({
   hasAvailableModels,
   agentRoomTranscript,
   contextReferenceRequest,
+  annotationReferenceRequest,
+  onPendingAnnotationCountChange,
   hideHistoryTimeline = false,
   onOpenUrlInAppBrowser,
   onOpenWorkspaceFile,
@@ -258,6 +308,8 @@ export function ChatHistoryView({
     onSubmitMessage: (request: AgentRoomSenderSubmit) => Promise<void> | void
   }
   contextReferenceRequest?: ContextReferenceRequest | null
+  annotationReferenceRequest?: AnnotationReferenceRequest | null
+  onPendingAnnotationCountChange?: (count: number) => void
   hideHistoryTimeline?: boolean
   onOpenUrlInAppBrowser?: (url: string, title?: string) => void
   onOpenWorkspaceFile?: (path: string) => void
@@ -504,6 +556,15 @@ export function ChatHistoryView({
     } | null
   >(null)
   const [activeInteractionOptionIndex, setActiveInteractionOptionIndex] = useState(0)
+  const [textSelectionReferenceRequest, setTextSelectionReferenceRequest] = useState<
+    TextSelectionReferenceRequest | null
+  >(null)
+  const [pendingReferenceDraftRequest, setPendingReferenceDraftRequest] = useState<
+    PendingReferenceDraftRequest | null
+  >(null)
+  const hydratedPendingReferenceDraftStorageKeyRef = useRef<string | null>(null)
+  const hydratingPendingReferenceDraftStorageKeyRef = useRef<string | null>(null)
+  const [chatTextSelectionToolbar, setChatTextSelectionToolbar] = useState<ChatTextSelectionToolbarState | null>(null)
   const interactionOptions = interactionRequest?.payload.options ?? []
   const baseNewSessionGuide = useMemo(
     () => getNewSessionGuideData(configRes),
@@ -1037,6 +1098,51 @@ export function ChatHistoryView({
     )
     : null
   const senderSessionId = isAgentRoomMode ? agentRoomTranscript.workspaceSessionId : session?.id
+  const pendingReferenceDraftStorageKey = useMemo(() => (
+    senderSessionId == null || senderSessionId === ''
+      ? null
+      : getSenderPendingReferenceDraftStorageKey(senderSessionId)
+  ), [senderSessionId])
+  useLayoutEffect(() => {
+    if (pendingReferenceDraftStorageKey == null) {
+      hydratedPendingReferenceDraftStorageKeyRef.current = null
+      hydratingPendingReferenceDraftStorageKeyRef.current = null
+      setPendingReferenceDraftRequest(null)
+      return
+    }
+
+    const pendingReferenceDraft = readPendingReferenceDraft(pendingReferenceDraftStorageKey)
+    hydratedPendingReferenceDraftStorageKeyRef.current = pendingReferenceDraftStorageKey
+    if (!hasPendingReferenceDraft(pendingReferenceDraft)) {
+      hydratingPendingReferenceDraftStorageKeyRef.current = null
+      setPendingReferenceDraftRequest(null)
+      return
+    }
+
+    hydratingPendingReferenceDraftStorageKeyRef.current = pendingReferenceDraftStorageKey
+    setPendingReferenceDraftRequest(current => ({
+      ...pendingReferenceDraft,
+      id: (current?.id ?? 0) + 1
+    }))
+  }, [pendingReferenceDraftStorageKey])
+  const handlePendingReferenceDraftChange = useCallback((draft: PendingReferenceDraft) => {
+    if (
+      pendingReferenceDraftStorageKey == null ||
+      hydratedPendingReferenceDraftStorageKeyRef.current !== pendingReferenceDraftStorageKey
+    ) {
+      return
+    }
+
+    if (
+      hydratingPendingReferenceDraftStorageKeyRef.current === pendingReferenceDraftStorageKey &&
+      !hasPendingReferenceDraft(draft)
+    ) {
+      return
+    }
+
+    hydratingPendingReferenceDraftStorageKeyRef.current = null
+    writePendingReferenceDraft(pendingReferenceDraftStorageKey, draft)
+  }, [pendingReferenceDraftStorageKey])
   const senderAdapterLocked = senderSessionId != null && senderSessionId !== ''
   const senderSessionStatus = isAgentRoomMode ? undefined : isCreating ? 'running' : session?.status
   const senderIsThinking = !isAgentRoomMode && (isCreating || session?.status === 'running')
@@ -1058,6 +1164,102 @@ export function ChatHistoryView({
     hasScrollableContent &&
     shouldShowMessages &&
     historyTimeline.nodes.length >= 2
+
+  const updateChatTextSelectionToolbar = useCallback(() => {
+    const contentElement = messagesContentRef.current
+    const selection = window.getSelection()
+    if (contentElement == null || selection == null || selection.rangeCount === 0 || selection.isCollapsed) {
+      setChatTextSelectionToolbar(null)
+      return
+    }
+    if (
+      !isSelectionNodeInside(selection.anchorNode, contentElement) ||
+      !isSelectionNodeInside(selection.focusNode, contentElement)
+    ) {
+      setChatTextSelectionToolbar(null)
+      return
+    }
+
+    const selectedText = normalizeChatSelectedText(selection.toString())
+    if (selectedText === '') {
+      setChatTextSelectionToolbar(null)
+      return
+    }
+
+    const rect = getRangeVisibleRect(selection.getRangeAt(0))
+    if (rect == null) {
+      setChatTextSelectionToolbar(null)
+      return
+    }
+
+    const toolbarHalfWidth = chatTextSelectionToolbarEstimatedWidth / 2
+    const minLeft = Math.min(toolbarHalfWidth + 12, window.innerWidth / 2)
+    const maxLeft = Math.max(window.innerWidth - toolbarHalfWidth - 12, minLeft)
+    const centerLeft = rect.left + rect.width / 2
+    const left = Math.min(Math.max(centerLeft, minLeft), maxLeft)
+    const canPlaceAbove = rect.top >= 48
+    const placement: ChatTextSelectionToolbarPlacement = canPlaceAbove ? 'above' : 'below'
+    const top = canPlaceAbove ? rect.top - 8 : rect.bottom + 8
+
+    setChatTextSelectionToolbar({
+      left,
+      placement,
+      sourceLabel: t('chat.textSelections.sourceChatTranscript'),
+      text: selectedText,
+      top
+    })
+  }, [messagesContentRef, t])
+
+  useEffect(() => {
+    let frameId: number | null = null
+    const scheduleUpdate = () => {
+      if (frameId != null) {
+        window.cancelAnimationFrame(frameId)
+      }
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null
+        updateChatTextSelectionToolbar()
+      })
+    }
+    const hideToolbar = () => {
+      setChatTextSelectionToolbar(null)
+    }
+    const containerElement = messagesContainerRef.current
+
+    document.addEventListener('selectionchange', scheduleUpdate)
+    document.addEventListener('mouseup', scheduleUpdate)
+    document.addEventListener('keyup', scheduleUpdate)
+    window.addEventListener('resize', scheduleUpdate)
+    containerElement?.addEventListener('scroll', hideToolbar, { passive: true })
+
+    return () => {
+      if (frameId != null) {
+        window.cancelAnimationFrame(frameId)
+      }
+      document.removeEventListener('selectionchange', scheduleUpdate)
+      document.removeEventListener('mouseup', scheduleUpdate)
+      document.removeEventListener('keyup', scheduleUpdate)
+      window.removeEventListener('resize', scheduleUpdate)
+      containerElement?.removeEventListener('scroll', hideToolbar)
+    }
+  }, [messagesContainerRef, updateChatTextSelectionToolbar])
+
+  const handleAddSelectedTextToConversation = useCallback(() => {
+    if (chatTextSelectionToolbar == null || chatTextSelectionToolbar.text === '') {
+      return
+    }
+
+    setTextSelectionReferenceRequest(current => ({
+      id: (current?.id ?? 0) + 1,
+      selections: [{
+        id: createChatTextSelectionId(),
+        sourceLabel: chatTextSelectionToolbar.sourceLabel,
+        text: chatTextSelectionToolbar.text
+      }]
+    }))
+    setChatTextSelectionToolbar(null)
+    window.getSelection()?.removeAllRanges()
+  }, [chatTextSelectionToolbar])
 
   const scrollHistoryTimelineNodeIntoView = useCallback((nodeId: string, behavior: ScrollBehavior = 'smooth') => {
     const anchorId = historyTimeline.anchorIdByNodeId.get(nodeId)
@@ -1542,6 +1744,11 @@ export function ChatHistoryView({
             queueMode={isAgentRoomMode ? undefined : queueMode}
             onQueueModeChange={isAgentRoomMode ? undefined : setQueueMode}
             contextReferenceRequest={contextReferenceRequest}
+            annotationReferenceRequest={annotationReferenceRequest}
+            textSelectionReferenceRequest={textSelectionReferenceRequest}
+            pendingReferenceDraftRequest={pendingReferenceDraftRequest}
+            onPendingReferenceDraftChange={handlePendingReferenceDraftChange}
+            onPendingAnnotationCountChange={onPendingAnnotationCountChange}
             enableVoiceInput={showVoiceInputInSender}
             hiddenVoiceInputActions={!showVoiceInputInSender
               ? {
@@ -1577,6 +1784,32 @@ export function ChatHistoryView({
 
   return (
     <>
+      {chatTextSelectionToolbar != null && (
+        <div
+          className={[
+            'chat-text-selection-toolbar',
+            `is-${chatTextSelectionToolbar.placement}`
+          ].join(' ')}
+          role='toolbar'
+          aria-label={t('chat.textSelections.toolbarAriaLabel')}
+          style={{
+            left: chatTextSelectionToolbar.left,
+            top: chatTextSelectionToolbar.top
+          }}
+          onMouseDown={(event) => {
+            event.preventDefault()
+          }}
+        >
+          <button
+            type='button'
+            className='chat-text-selection-toolbar__button'
+            onClick={handleAddSelectedTextToConversation}
+          >
+            <span className='material-symbols-rounded' aria-hidden='true'>add_comment</span>
+            <span>{t('chat.textSelections.addToConversation')}</span>
+          </button>
+        </div>
+      )}
       <div
         className={[
           'chat-history-view__messages-frame',

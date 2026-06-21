@@ -335,6 +335,38 @@ const getTomlRootAssignmentKey = (line: string) => {
   return key?.replaceAll(/\s*\.\s*/g, '.')
 }
 
+const normalizeLegacyCodexServiceTierLine = (line: string) => {
+  const match = /^(\s*service_tier\s*=\s*)(["'])priority\2(\s*(?:#.*)?)$/.exec(line)
+  if (match == null) return line
+
+  return `${match[1]}${match[2]}fast${match[2]}${match[3]}`
+}
+
+const normalizeCodexConfigCliCompatibility = (content: string) => {
+  const scan = scanTomlSections(content)
+  const rootSection = scan.sections.find(section => section.header == null)
+  if (rootSection == null) return content
+
+  let changed = false
+  const nextLines = scan.lines.map(line => line.text)
+
+  for (let lineIndex = rootSection.startLine; lineIndex < rootSection.endLine; lineIndex += 1) {
+    const line = scan.lines[lineIndex]
+    const key = line?.stringStateBefore === 'none'
+      ? getTomlRootAssignmentKey(line.text)
+      : undefined
+    if (key !== 'service_tier') continue
+
+    const nextLine = normalizeLegacyCodexServiceTierLine(line.text)
+    if (nextLine === line.text) continue
+
+    nextLines[lineIndex] = nextLine
+    changed = true
+  }
+
+  return changed ? nextLines.join('\n') : content
+}
+
 const getTomlRootAssignmentKeys = (content: string) => {
   const scan = scanTomlSections(content)
   const rootSection = scan.sections.find(section => section.header == null)
@@ -726,6 +758,10 @@ export const writeManagedCodexConfigFile = async (params: {
     }
   }
 
+  const compatibleContent = normalizeCodexConfigCliCompatibility(currentContent)
+  const shouldForceCompatibilityWrite = compatibleContent !== currentContent
+  currentContent = compatibleContent
+
   const configOverrides = resolveCodexConfigOverrides({
     configs: params.configs,
     configState: params.configState
@@ -739,7 +775,7 @@ export const writeManagedCodexConfigFile = async (params: {
     workspacePath: params.workspacePath
   })
 
-  if (!params.forceWrite && nextContent === currentContent) return
+  if (!params.forceWrite && !shouldForceCompatibilityWrite && nextContent === currentContent) return
 
   await mkdir(dirname(params.configPath), { recursive: true })
   await writeFile(params.configPath, nextContent, 'utf8')

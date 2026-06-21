@@ -21,6 +21,7 @@ import {
   CHAT_BOTTOM_DOCK_MAX_HEIGHT,
   CHAT_BOTTOM_DOCK_MIN_HEIGHT
 } from '#~/components/chat/bottom-dock-constants'
+import type { PendingAnnotation } from '#~/components/chat/sender/@types/sender-composer'
 import { isTerminalPaneOnSurface } from '#~/components/chat/terminal/@utils/terminal-panes'
 import { parseWorkbenchDrawerViewMenuKey } from '#~/components/chat/workbench-create-menu'
 import type {
@@ -80,6 +81,7 @@ export function ChatInteractionPanel({
   agentApprovals,
   agentRoster,
   bottomPanel,
+  hasPendingAnnotationReferences,
   isFolded,
   isVisible,
   openResourceKeyboardShortcut,
@@ -93,6 +95,7 @@ export function ChatInteractionPanel({
   onLocateWorkspacePath,
   onOpenResource,
   onReferenceWorkspacePaths,
+  onReferenceAnnotations,
   onWorkspaceDrawerCreateMenuClick,
   settingsView,
   session,
@@ -106,6 +109,7 @@ export function ChatInteractionPanel({
   agentApprovals?: ChatWorkspaceDrawerAgentApprovals
   agentRoster?: ChatWorkspaceDrawerAgentRoster
   bottomPanel: ChatRouteBottomPanelState
+  hasPendingAnnotationReferences?: boolean
   isFolded: boolean
   isVisible: boolean
   openResourceKeyboardShortcut?: string | null
@@ -119,6 +123,7 @@ export function ChatInteractionPanel({
   onLocateWorkspacePath: (path: string) => void
   onOpenResource: () => void
   onReferenceWorkspacePaths?: (files: ContextPickerFile[]) => void
+  onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
   onWorkspaceDrawerCreateMenuClick?: NonNullable<MenuProps['onClick']>
   settingsView?: ReactNode
   session?: Session
@@ -566,6 +571,8 @@ export function ChatInteractionPanel({
             onPinTab={pinnedTabs.pinTab}
             onPluginTabStateChange={panelTabs.updatePluginTabState}
             onRunCommand={handleRunCommand}
+            onReferenceAnnotations={onReferenceAnnotations}
+            hasPendingAnnotationReferences={hasPendingAnnotationReferences}
             onSelectWorkspaceFilePath={panelTabs.handleSelectWorkspaceFilePath}
             onSessionPageChange={panelTabs.updateSessionPage}
             onTogglePanelFullscreen={onToggleFullscreen}

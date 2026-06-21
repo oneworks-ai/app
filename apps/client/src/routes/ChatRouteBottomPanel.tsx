@@ -8,6 +8,7 @@ import type { InteractionPanelRunCommandTaskStatus } from '#~/components/chat/in
 import type { InteractionPanelShortcutRequest } from '#~/components/chat/interaction-panel/interaction-panel-shortcut-request'
 import type { InteractionTerminalPanesController } from '#~/components/chat/interaction-panel/use-interaction-terminal-panes'
 import type { SessionPanelStateController } from '#~/components/chat/interaction-panel/use-session-panel-state'
+import type { PendingAnnotation } from '#~/components/chat/sender/@types/sender-composer'
 import type {
   ChatWorkspaceDrawerAgentApprovals,
   ChatWorkspaceDrawerAgentRoster
@@ -21,6 +22,7 @@ export function ChatRouteBottomPanel({
   agentRoster,
   bottomPanel,
   isFolded,
+  hasPendingAnnotationReferences,
   isRendered,
   isVisible,
   openResourceKeyboardShortcut,
@@ -34,6 +36,7 @@ export function ChatRouteBottomPanel({
   onLocateWorkspacePath,
   onOpenResource,
   onReferenceWorkspacePaths,
+  onReferenceAnnotations,
   onWorkspaceDrawerCreateMenuClick,
   settingsView,
   session,
@@ -48,6 +51,7 @@ export function ChatRouteBottomPanel({
   agentRoster?: ChatWorkspaceDrawerAgentRoster
   bottomPanel: ChatRouteBottomPanelState
   isFolded: boolean
+  hasPendingAnnotationReferences?: boolean
   isRendered: boolean
   isVisible: boolean
   openResourceKeyboardShortcut?: string | null
@@ -61,6 +65,7 @@ export function ChatRouteBottomPanel({
   onLocateWorkspacePath: (path: string) => void
   onOpenResource: () => void
   onReferenceWorkspacePaths?: (files: ContextPickerFile[]) => void
+  onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
   onWorkspaceDrawerCreateMenuClick?: NonNullable<MenuProps['onClick']>
   settingsView?: ReactNode
   session?: Session
@@ -93,6 +98,8 @@ export function ChatRouteBottomPanel({
       onLocateWorkspacePath={onLocateWorkspacePath}
       onOpenResource={onOpenResource}
       onReferenceWorkspacePaths={onReferenceWorkspacePaths}
+      onReferenceAnnotations={onReferenceAnnotations}
+      hasPendingAnnotationReferences={hasPendingAnnotationReferences}
       onWorkspaceDrawerCreateMenuClick={onWorkspaceDrawerCreateMenuClick}
       settingsView={settingsView}
       session={session}

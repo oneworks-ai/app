@@ -523,8 +523,13 @@
   flex-direction: column;
 }
 
+.chat-interaction-panel__iframe-workspace.is-annotation-mode {
+  cursor: crosshair;
+}
+
 .chat-interaction-panel__iframe-page-pane {
   display: flex;
+  position: relative;
   flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
@@ -745,6 +750,13 @@
   color: var(--placeholder-color);
   transition: color .18s ease;
 
+  &.is-annotation-active {
+    width: auto;
+    min-width: var(--interaction-panel-chrome-icon-size);
+    gap: 4px;
+    padding: 0 6px;
+  }
+
   .material-symbols-rounded {
     font-size: var(--interaction-panel-chrome-icon-size);
     line-height: 1;
@@ -766,6 +778,514 @@
 
   &:focus-visible {
     outline: none;
+  }
+}
+
+.chat-interaction-panel__iframe-tool-btn-label {
+  overflow: hidden;
+  max-width: 52px;
+  color: currentcolor;
+  font-size: 12px;
+  line-height: var(--interaction-panel-chrome-icon-size);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-interaction-panel__annotation-editor {
+  box-sizing: border-box;
+  position: absolute;
+  z-index: 2147483605;
+  width: min(340px, calc(100% - 16px));
+  padding: 6px;
+  border: 1px solid
+    color-mix(in srgb, var(--primary-color) 28%, var(--border-color));
+  border-radius: 8px;
+  background: var(--bg-color);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 18%);
+  color: var(--text-color);
+}
+
+.chat-interaction-panel__annotation-dismiss-layer {
+  position: absolute;
+  z-index: 2147483600;
+  inset: 0;
+  background: transparent;
+}
+
+.chat-interaction-panel__annotation-capture-layer {
+  position: absolute;
+  z-index: 2147483602;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 48%, transparent);
+  background: color-mix(in srgb, var(--primary-color) 8%, transparent);
+  cursor: crosshair;
+}
+
+.chat-interaction-panel__annotation-highlight {
+  box-sizing: border-box;
+  position: absolute;
+  z-index: 2147483603;
+  border: 2px solid color-mix(in srgb, var(--primary-color) 72%, #fff);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--primary-color) 32%, transparent),
+    0 6px 18px color-mix(in srgb, var(--primary-color) 12%, transparent);
+  pointer-events: none;
+}
+
+.chat-interaction-panel__annotation-highlight.is-selected {
+  border-color: color-mix(in srgb, var(--primary-color) 82%, #fff);
+  background: color-mix(in srgb, var(--primary-color) 16%, transparent);
+}
+
+.chat-interaction-panel__annotation-info-card {
+  position: absolute;
+  z-index: 2147483604;
+  box-sizing: border-box;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 86%, transparent);
+  border-radius: 8px;
+  background: var(--bg-color);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 18%);
+  color: var(--text-color);
+  font-size: 12px;
+  line-height: 1.3;
+  pointer-events: none;
+}
+
+.chat-interaction-panel__annotation-info-card::after {
+  position: absolute;
+  left: var(--annotation-info-card-arrow-left, 24px);
+  width: 10px;
+  height: 10px;
+  border: inherit;
+  border-top: 0;
+  border-left: 0;
+  background: inherit;
+  content: '';
+}
+
+.chat-interaction-panel__annotation-info-card.is-above {
+  transform: translateY(-100%);
+
+  &::after {
+    bottom: -6px;
+    transform: rotate(45deg);
+  }
+}
+
+.chat-interaction-panel__annotation-info-card.is-below::after {
+  top: -6px;
+  transform: rotate(225deg);
+}
+
+.chat-interaction-panel__annotation-info-card-title-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+
+  .material-symbols-rounded {
+    color: var(--primary-color);
+    font-size: 18px;
+    line-height: 1;
+  }
+}
+
+.chat-interaction-panel__annotation-info-card-title {
+  overflow: hidden;
+  color: var(--primary-color);
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-interaction-panel__annotation-info-card-size {
+  color: var(--sub-text-color);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-interaction-panel__annotation-info-card-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--sub-text-color);
+}
+
+.chat-interaction-panel__annotation-info-card-row.is-muted {
+  min-height: 16px;
+}
+
+.chat-interaction-panel__annotation-info-card-value {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 180px;
+  gap: 5px;
+  overflow: hidden;
+  color: var(--text-color);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  .material-symbols-rounded {
+    color: var(--sub-text-color);
+    font-size: 16px;
+    line-height: 1;
+  }
+}
+
+.chat-interaction-panel__annotation-info-card-swatch {
+  width: 11px;
+  height: 11px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.chat-interaction-panel__annotation-info-card-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+  color: var(--text-color);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+
+  &::after {
+    height: 1px;
+    min-width: 0;
+    background: var(--border-color);
+    content: '';
+    flex: 1 1 auto;
+  }
+}
+
+.chat-interaction-panel__annotation-marker {
+  display: inline-flex;
+  position: absolute;
+  z-index: 2147483604;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 42%, #fff);
+  border-radius: 999px;
+  background: var(--primary-color);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 18%);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in srgb, var(--primary-color) 88%, #000);
+  }
+
+  &:focus-visible {
+    outline: 2px solid
+      color-mix(in srgb, var(--primary-color) 36%, transparent);
+    outline-offset: 2px;
+  }
+}
+
+.chat-interaction-panel__annotation-editor::before {
+  content: '';
+  position: absolute;
+  top: 15px;
+  width: 8px;
+  height: 8px;
+  border: inherit;
+  border-top: 0;
+  border-right: 0;
+  background: inherit;
+}
+
+.chat-interaction-panel__annotation-editor.is-right::before {
+  left: -5px;
+  transform: rotate(45deg);
+}
+
+.chat-interaction-panel__annotation-editor.is-left::before {
+  right: -5px;
+  transform: rotate(225deg);
+}
+
+.chat-interaction-panel__annotation-editor-input-row {
+  display: grid;
+  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.chat-interaction-panel__annotation-editor.is-expanded
+  .chat-interaction-panel__annotation-editor-input-row {
+  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.chat-interaction-panel__annotation-editor-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  max-height: 86px;
+  padding: 6px 4px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-color);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  resize: none;
+  scrollbar-width: thin;
+
+  &::placeholder {
+    color: var(--placeholder-color);
+  }
+
+  &:disabled {
+    opacity: .72;
+    cursor: wait;
+  }
+}
+
+.chat-interaction-panel__annotation-editor.is-expanded
+  .chat-interaction-panel__annotation-editor-input {
+  min-height: 76px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(
+    --surface-secondary-color,
+    color-mix(in srgb, var(--bg-color) 94%, var(--text-color))
+  );
+}
+
+.chat-interaction-panel__annotation-editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-color);
+}
+
+.chat-interaction-panel__annotation-editor-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.chat-interaction-panel__annotation-editor-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--placeholder-color);
+  cursor: pointer;
+  transition: background-color .16s ease, color .16s ease, opacity .16s ease;
+
+  .material-symbols-rounded {
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  &:hover,
+  &:focus-visible,
+  &[aria-expanded='true'] {
+    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+    color: var(--primary-color);
+  }
+
+  &:focus-visible {
+    outline: 2px solid
+      color-mix(in srgb, var(--primary-color) 45%, transparent);
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+  }
+
+  &.is-loading .material-symbols-rounded {
+    animation: annotation-editor-spin .9s linear infinite;
+  }
+
+  &.is-recording {
+    background: color-mix(in srgb, #ef4444 12%, transparent);
+    color: #dc2626;
+  }
+}
+
+.chat-interaction-panel__annotation-editor-icon-btn.is-primary {
+  background: var(--primary-color);
+  color: #fff;
+
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in srgb, var(--primary-color) 88%, #000);
+    color: #fff;
+  }
+
+  &:disabled {
+    background: color-mix(
+      in srgb,
+      var(--primary-color) 42%,
+      var(--border-color)
+    );
+    color: color-mix(in srgb, #fff 78%, var(--text-color));
+  }
+}
+
+.chat-interaction-panel__annotation-editor-config {
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(
+    --surface-secondary-color,
+    color-mix(in srgb, var(--bg-color) 94%, var(--text-color))
+  );
+  color: var(--text-secondary-color);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.chat-interaction-panel__annotation-editor-voice-status {
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--primary-color) 8%, transparent);
+}
+
+.chat-interaction-panel__annotation-editor-waveform {
+  display: flex;
+  overflow: hidden;
+  align-items: center;
+  gap: 2px;
+  height: 18px;
+  min-width: 0;
+}
+
+.chat-interaction-panel__annotation-editor-waveform-bar {
+  width: 3px;
+  min-width: 3px;
+  height: 14px;
+  flex: 0 0 3px;
+  border-radius: 999px;
+  background: color-mix(
+    in srgb,
+    var(--primary-color) 76%,
+    var(--text-color) 24%
+  );
+  transform-origin: center;
+  transition: transform .12s linear;
+}
+
+.chat-interaction-panel__annotation-editor-voice-time {
+  min-width: 34px;
+  color: var(--text-secondary-color);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.chat-interaction-panel__annotation-editor-voice-notice {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-top: 6px;
+  color: var(--text-secondary-color);
+  font-size: 12px;
+  line-height: 1.2;
+
+  &.is-error {
+    color: #b45309;
+  }
+
+  .material-symbols-rounded {
+    font-size: 15px;
+    line-height: 1;
+  }
+}
+
+.chat-interaction-panel__annotation-editor-text-btn,
+.chat-interaction-panel__annotation-editor-notice-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--primary-color);
+  }
+
+  &:focus-visible {
+    outline: 2px solid
+      color-mix(in srgb, var(--primary-color) 35%, transparent);
+    outline-offset: 1px;
+  }
+}
+
+.chat-interaction-panel__annotation-editor-notice-btn {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  padding: 0;
+}
+
+.chat-interaction-panel__annotation-editor-voice-error-text {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1 1 auto;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes annotation-editor-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
   }
 }
 

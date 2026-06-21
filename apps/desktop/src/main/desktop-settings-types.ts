@@ -6,7 +6,17 @@ import type {
 } from './desktop-icon-settings'
 import type { DesktopUpdateChannel } from './update-types'
 
+export type DesktopContextCaptureOverlayPlacement = 'auto' | 'above' | 'below'
+
+export interface DesktopContextCaptureSettings {
+  allowApplications: string[]
+  denyApplications: string[]
+  enabled: boolean
+  overlayPlacement: DesktopContextCaptureOverlayPlacement
+}
+
 export interface DesktopState {
+  contextCapture: DesktopContextCaptureSettings
   iconAppearance: DesktopIconAppearance
   iconBackground: DesktopIconBackground
   syncAppIcon: DesktopIconSync
@@ -30,6 +40,7 @@ export interface DesktopBuildSource {
 }
 
 export interface DesktopSettings {
+  contextCapture: DesktopContextCaptureSettings
   iconAppearance: DesktopIconAppearance
   iconBackground: DesktopIconBackground
   syncAppIcon: DesktopIconSync

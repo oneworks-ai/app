@@ -3,6 +3,7 @@ import type { MenuProps } from 'antd'
 
 import type { TerminalShellKind } from '@oneworks/types'
 
+import type { PendingAnnotation } from '#~/components/chat/sender/@types/sender-composer'
 import type { WorkspaceDrawerViewItem } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
 import type { WorkspaceMarkdownPreviewMode } from '#~/components/chat/workspace-file-editor/workspace-file-editor-language'
 import type {
@@ -32,6 +33,7 @@ export function InteractionPanelContent({
   activeSessionFocusRequestId,
   activeSessionFocusSessionId,
   bottomPanel,
+  hasPendingAnnotationReferences,
   canCreateSessionTab,
   canFullscreenPanel,
   canPinMoreTabs,
@@ -83,6 +85,7 @@ export function InteractionPanelContent({
   onPinTab,
   onPluginTabStateChange,
   onRunCommand,
+  onReferenceAnnotations,
   onSelectWorkspaceFilePath,
   onSessionPageChange,
   onTogglePanelFullscreen,
@@ -92,6 +95,7 @@ export function InteractionPanelContent({
   activeSessionFocusRequestId?: string
   activeSessionFocusSessionId?: string
   bottomPanel: ChatRouteBottomPanelState
+  hasPendingAnnotationReferences?: boolean
   canCreateSessionTab: boolean
   canFullscreenPanel: boolean
   canPinMoreTabs: boolean
@@ -148,6 +152,7 @@ export function InteractionPanelContent({
   onPinTab: (tab: InteractionPanelTab) => void
   onPluginTabStateChange: (tabId: string, state: unknown) => void
   onRunCommand: (command: InteractionPanelRunCommand) => void
+  onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
   onSelectWorkspaceFilePath: (path: string) => void
   onSessionPageChange: (
     pageId: string,
@@ -236,6 +241,8 @@ export function InteractionPanelContent({
       onPinTab={onPinTab}
       onPluginTabStateChange={onPluginTabStateChange}
       onRunCommand={onRunCommand}
+      onReferenceAnnotations={onReferenceAnnotations}
+      hasPendingAnnotationReferences={hasPendingAnnotationReferences}
       onSelectWorkspaceFilePath={onSelectWorkspaceFilePath}
       onSessionPageChange={onSessionPageChange}
       onTogglePanelFullscreen={onTogglePanelFullscreen}

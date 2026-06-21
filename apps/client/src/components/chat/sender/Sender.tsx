@@ -58,10 +58,17 @@ export function Sender(props: SenderProps) {
           modelUnavailable={controller.modelUnavailable}
           pendingImages={controller.composer.pendingImages}
           pendingFiles={controller.composer.pendingFiles}
+          pendingAnnotations={controller.composer.pendingAnnotations}
+          pendingTextSelections={controller.composer.pendingTextSelections}
           onRemovePendingImage={(id) =>
             controller.composer.setPendingImages(prev => prev.filter(image => image.id !== id))}
           onRemovePendingFile={(path) =>
             controller.composer.setPendingFiles(prev => prev.filter(file => file.path !== path))}
+          onRemovePendingAnnotation={(id) =>
+            controller.composer.setPendingAnnotations(prev => prev.filter(annotation => annotation.id !== id))}
+          onRemovePendingTextSelection={(id) =>
+            controller.composer.setPendingTextSelections(prev => prev.filter(selection => selection.id !== id))}
+          onClearPendingTextSelections={() => controller.composer.setPendingTextSelections([])}
           editorRef={controller.editorRef}
           sessionId={props.sessionId}
           sessionInfo={props.sessionInfo}

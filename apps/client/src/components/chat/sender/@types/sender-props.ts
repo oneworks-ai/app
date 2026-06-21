@@ -17,6 +17,12 @@ import type {
 } from '#~/hooks/chat/use-chat-model-adapter-selection'
 import type { PermissionMode } from '#~/hooks/chat/use-chat-permission-mode'
 
+import type {
+  AnnotationReferenceRequest,
+  PendingReferenceDraft,
+  PendingReferenceDraftRequest,
+  TextSelectionReferenceRequest
+} from './sender-composer'
 import type { SenderInitialContent, SenderSubmitResult, SenderVariant } from './sender-types'
 
 export type SenderStatusBarGitControlsInMore =
@@ -109,4 +115,9 @@ export interface SenderProps {
   queueMode?: SessionQueuedMessageMode
   onQueueModeChange?: (mode: SessionQueuedMessageMode) => void
   contextReferenceRequest?: ContextReferenceRequest | null
+  annotationReferenceRequest?: AnnotationReferenceRequest | null
+  textSelectionReferenceRequest?: TextSelectionReferenceRequest | null
+  pendingReferenceDraftRequest?: PendingReferenceDraftRequest | null
+  onPendingReferenceDraftChange?: (draft: PendingReferenceDraft) => void
+  onPendingAnnotationCountChange?: (count: number) => void
 }

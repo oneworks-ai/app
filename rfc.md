@@ -2,6 +2,10 @@
 
 较长 RFC 按短章节拆分，便于评审，也避免触发文档行数限制。
 
+## 上下文捕获与发送 RFC
+
+- [上下文捕获并发送到对话](.oo/rfcs/0007-context-capture-to-chat.md)
+
 ## 标准语音能力 RFC
 
 - [总览与范围](.oo/rfcs/0006-standard-voice-capability.md)

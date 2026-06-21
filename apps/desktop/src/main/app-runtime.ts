@@ -15,6 +15,8 @@ import { readDesktopBuildSource } from './build-source'
 import { DESKTOP_SETTINGS_CHANNEL, DESKTOP_UPDATE_STATUS_CHANNEL, GLOBAL_INTERFACE_LANGUAGE_CHANNEL } from './constants'
 import { desktopDeepLinkSchemes, findDesktopDeepLinkArg, parseDesktopDeepLinkLaunchRequest } from './deep-link'
 import { applyDesktopIconToAllWindows, readDesktopIconPreviewDataUrl } from './desktop-app-icon'
+import { normalizeDesktopContextCaptureSettingsPatch } from './context-capture-settings'
+import { createDesktopContextCaptureOverlayController } from './context-capture-overlay'
 import { normalizeDesktopIconSettingsPatch } from './desktop-icon-settings'
 import {
   loadGlobalAppearanceSettings,
@@ -62,6 +64,7 @@ export const createDesktopApp = () => {
   let menuManager: ReturnType<typeof createAppMenuManager>
   let windowManager: WindowManager
   let autoUpdateManager: ReturnType<typeof createAutoUpdateManager>
+  const contextCaptureOverlayController = createDesktopContextCaptureOverlayController()
   let registeredLauncherAccelerator: string | undefined
   let launcherShortcutError: string | undefined
   let launcherShortcutRegistered = false
@@ -146,6 +149,7 @@ export const createDesktopApp = () => {
     return {
       ...(buildSource != null ? { buildSource } : {}),
       ...appearanceSettings,
+      contextCapture: runtimeState.desktopState.contextCapture,
       iconAppearance: runtimeState.desktopState.iconAppearance,
       iconBackground: runtimeState.desktopState.iconBackground,
       syncAppIcon: runtimeState.desktopState.syncAppIcon,
@@ -497,6 +501,7 @@ export const createDesktopApp = () => {
         buildDesktopSettings(windowRecord, { applyProjectUpdateChannel: true }),
       getUpdateStatus: autoUpdateManager.getStatus,
       getGlobalInterfaceLanguageConfig: readGlobalInterfaceLanguageConfig,
+      hideDesktopContextCaptureOverlay: contextCaptureOverlayController.hide,
       isWindowRecordUsable: windowManager.isWindowRecordUsable,
       invokeCurrentWorkspacePluginResult: windowManager.invokeCurrentWorkspacePluginResult,
       listCurrentWorkspaceFileOpeners: windowManager.listCurrentWorkspaceFileOpeners,
@@ -517,6 +522,9 @@ export const createDesktopApp = () => {
       searchCurrentWorkspacePlugins: windowManager.searchCurrentWorkspacePlugins,
       searchCurrentWorkspaceResources: windowManager.searchCurrentWorkspaceResources,
       setThemeSource: setDesktopThemeSource,
+      showDesktopContextCaptureOverlay: (input: unknown) => contextCaptureOverlayController.show(input, {
+        defaultPlacement: runtimeState.desktopState.contextCapture.overlayPlacement
+      }),
       stopWorkspaceFolder,
       updateDesktopSettings,
       updateGlobalAppearanceConfig,
@@ -651,6 +659,7 @@ export const createDesktopApp = () => {
       ...(typeof nextSettings.savedPasswordsRequireAuth === 'boolean'
         ? { savedPasswordsRequireAuth: nextSettings.savedPasswordsRequireAuth }
         : {}),
+      ...normalizeDesktopContextCaptureSettingsPatch(nextSettings, runtimeState.desktopState.contextCapture),
       ...normalizeDesktopIconSettingsPatch(nextSettings)
     }
     const hasDesktopSettingsPatch = Object.keys(desktopSettingsPatch).length > 0
@@ -795,6 +804,7 @@ export const createDesktopApp = () => {
 
     app.on('will-quit', () => {
       nativeTheme.off('updated', handleNativeThemeUpdated)
+      contextCaptureOverlayController.dispose()
       unregisterLauncherGlobalShortcut()
     })
 

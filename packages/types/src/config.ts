@@ -428,8 +428,17 @@ export type DesktopIconBackground = IconBackground
 export type DesktopIconTheme = 'industrial' | 'metal' | 'matrix'
 export type DesktopUpdateChannel = 'stable' | 'rc' | 'beta' | 'alpha'
 export type DesktopModuleUpdateChannels = Record<string, DesktopUpdateChannel>
+export type DesktopContextCaptureOverlayPlacement = 'auto' | 'above' | 'below'
+
+export interface DesktopContextCaptureConfig {
+  allowApplications?: string[]
+  denyApplications?: string[]
+  enabled?: boolean
+  overlayPlacement?: DesktopContextCaptureOverlayPlacement
+}
 
 export interface DesktopConfig {
+  contextCapture?: DesktopContextCaptureConfig
   launcherShortcut?: string
   openLastWorkspaceOnStartup?: boolean
   savedPasswordsAutoSignIn?: boolean

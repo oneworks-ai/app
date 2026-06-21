@@ -2,7 +2,13 @@ import './SenderAttachments.scss'
 
 import { useTranslation } from 'react-i18next'
 
-import type { PendingContextFile, PendingImage } from '../../@types/sender-composer'
+import type {
+  PendingAnnotation,
+  PendingContextFile,
+  PendingImage,
+  PendingTextSelection
+} from '../../@types/sender-composer'
+import { PendingAnnotationGroup, PendingTextSelectionGroup } from './SenderReferenceAttachmentGroups'
 
 const formatAttachmentSize = (size?: number) => {
   if (size == null || Number.isNaN(size) || size <= 0) {
@@ -42,78 +48,106 @@ const getFileParentPath = (path: string) => {
 export function SenderAttachments({
   pendingImages,
   pendingFiles,
+  pendingAnnotations,
+  pendingTextSelections,
   onRemovePendingImage,
-  onRemovePendingFile
+  onRemovePendingFile,
+  onRemovePendingAnnotation,
+  onRemovePendingTextSelection,
+  onClearPendingTextSelections
 }: {
   pendingImages: PendingImage[]
   pendingFiles: PendingContextFile[]
+  pendingAnnotations: PendingAnnotation[]
+  pendingTextSelections: PendingTextSelection[]
   onRemovePendingImage: (id: string) => void
   onRemovePendingFile: (path: string) => void
+  onRemovePendingAnnotation: (id: string) => void
+  onRemovePendingTextSelection: (id: string) => void
+  onClearPendingTextSelections: () => void
 }) {
   const { t } = useTranslation()
 
+  if (
+    pendingImages.length === 0 &&
+    pendingFiles.length === 0 &&
+    pendingAnnotations.length === 0 &&
+    pendingTextSelections.length === 0
+  ) {
+    return null
+  }
+
   return (
-    <>
-      {(pendingImages.length > 0 || pendingFiles.length > 0) && (
-        <div className='pending-attachments'>
-          {pendingFiles.length > 0 && (
-            <div className='pending-attachments__files'>
-              {pendingFiles.map((file) => {
-                const sizeLabel = formatAttachmentSize(file.size)
+    <div className='pending-attachments'>
+      {pendingTextSelections.length > 0 && (
+        <PendingTextSelectionGroup
+          pendingTextSelections={pendingTextSelections}
+          onRemovePendingTextSelection={onRemovePendingTextSelection}
+          onClearPendingTextSelections={onClearPendingTextSelections}
+        />
+      )}
+      {pendingAnnotations.length > 0 && (
+        <PendingAnnotationGroup
+          pendingAnnotations={pendingAnnotations}
+          onRemovePendingAnnotation={onRemovePendingAnnotation}
+        />
+      )}
+      {pendingFiles.length > 0 && (
+        <div className='pending-attachments__files'>
+          {pendingFiles.map((file) => {
+            const sizeLabel = formatAttachmentSize(file.size)
 
-                return (
-                  <div key={file.path} className='pending-context-file'>
-                    <div className='pending-context-file__meta'>
-                      <span className='material-symbols-rounded pending-context-file__icon'>attach_file</span>
-                      <div className='pending-context-file__copy'>
-                        <span className='pending-context-file__name'>{getFileDisplayName(file)}</span>
-                        <code className='pending-context-file__path'>{getFileParentPath(file.path)}</code>
-                      </div>
-                    </div>
-                    <div className='pending-context-file__actions'>
-                      {sizeLabel != null && <span className='pending-context-file__size'>{sizeLabel}</span>}
-                      <button
-                        type='button'
-                        className='pending-context-file__remove'
-                        onClick={() => onRemovePendingFile(file.path)}
-                      >
-                        <span className='material-symbols-rounded'>close</span>
-                      </button>
-                    </div>
+            return (
+              <div key={file.path} className='pending-context-file'>
+                <div className='pending-context-file__meta'>
+                  <span className='material-symbols-rounded pending-context-file__icon'>attach_file</span>
+                  <div className='pending-context-file__copy'>
+                    <span className='pending-context-file__name'>{getFileDisplayName(file)}</span>
+                    <code className='pending-context-file__path'>{getFileParentPath(file.path)}</code>
                   </div>
-                )
-              })}
-            </div>
-          )}
-          {pendingImages.length > 0 && (
-            <div className='pending-attachments__images'>
-              {pendingImages.map((image) => {
-                const displayName = image.name ?? t('chat.attachments.pastedImage')
-                const sizeLabel = formatAttachmentSize(image.size)
-
-                return (
-                  <div key={image.id} className='pending-image'>
-                    <img src={image.url} alt={image.name ?? ''} />
-                    <div className='pending-image__overlay'>
-                      <div className='pending-image__meta'>
-                        <span className='pending-image__name'>{displayName}</span>
-                        {sizeLabel != null && <span className='pending-image__size'>{sizeLabel}</span>}
-                      </div>
-                    </div>
-                    <button
-                      type='button'
-                      className='pending-image-remove'
-                      onClick={() => onRemovePendingImage(image.id)}
-                    >
-                      <span className='material-symbols-rounded'>close</span>
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+                </div>
+                <div className='pending-context-file__actions'>
+                  {sizeLabel != null && <span className='pending-context-file__size'>{sizeLabel}</span>}
+                  <button
+                    type='button'
+                    className='pending-context-file__remove'
+                    onClick={() => onRemovePendingFile(file.path)}
+                  >
+                    <span className='material-symbols-rounded'>close</span>
+                  </button>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
-    </>
+      {pendingImages.length > 0 && (
+        <div className='pending-attachments__images'>
+          {pendingImages.map((image) => {
+            const displayName = image.name ?? t('chat.attachments.pastedImage')
+            const sizeLabel = formatAttachmentSize(image.size)
+
+            return (
+              <div key={image.id} className='pending-image'>
+                <img src={image.url} alt={image.name ?? ''} />
+                <div className='pending-image__overlay'>
+                  <div className='pending-image__meta'>
+                    <span className='pending-image__name'>{displayName}</span>
+                    {sizeLabel != null && <span className='pending-image__size'>{sizeLabel}</span>}
+                  </div>
+                </div>
+                <button
+                  type='button'
+                  className='pending-image-remove'
+                  onClick={() => onRemovePendingImage(image.id)}
+                >
+                  <span className='material-symbols-rounded'>close</span>
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }

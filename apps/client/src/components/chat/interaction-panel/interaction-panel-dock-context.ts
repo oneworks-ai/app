@@ -3,6 +3,7 @@ import { createContext, useContext } from 'react'
 
 import type { TerminalShellKind } from '@oneworks/types'
 
+import type { PendingAnnotation } from '#~/components/chat/sender/@types/sender-composer'
 import type { WorkspaceMarkdownPreviewMode } from '#~/components/chat/workspace-file-editor/workspace-file-editor-language'
 import type { ChatRouteBottomPanelState } from '#~/hooks/chat/use-chat-route-bottom-panel'
 
@@ -26,6 +27,7 @@ export interface InteractionPanelDockContextValue {
   canFullscreenPanel: boolean
   canPinMoreTabs: boolean
   iframePages: InteractionPanelIframePage[]
+  hasPendingAnnotationReferences?: boolean
   isPanelFullscreen: boolean
   isVisible: boolean
   markdownPreviewMode: WorkspaceMarkdownPreviewMode
@@ -63,6 +65,7 @@ export interface InteractionPanelDockContextValue {
   onPinTab: (tab: InteractionPanelTab) => void
   onPluginTabStateChange: (tabId: string, state: unknown) => void
   onRunCommand: (command: InteractionPanelRunCommand) => void
+  onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
   onSelectWorkspaceFilePath: (path: string) => void
   onSessionPageChange: (
     pageId: string,

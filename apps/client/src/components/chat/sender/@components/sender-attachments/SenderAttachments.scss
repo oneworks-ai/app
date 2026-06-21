@@ -1,12 +1,17 @@
 .pending-attachments {
+  position: relative;
+  z-index: 20;
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 2px 0 8px;
   align-items: flex-start;
   min-width: 0;
+  overflow: visible;
 }
 
+.pending-attachments__text-selections,
+.pending-attachments__annotations,
 .pending-attachments__files,
 .pending-attachments__images {
   width: 100%;
@@ -18,6 +23,265 @@
 
 .pending-attachments__files {
   flex-direction: column;
+}
+
+.pending-attachments__text-selections,
+.pending-attachments__annotations {
+  position: relative;
+}
+
+.pending-text-selection-group,
+.pending-annotation-group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  z-index: 2;
+
+  &:hover,
+  &:focus-within,
+  &.is-pinned {
+    .pending-text-selection-group__popover,
+    .pending-annotation-group__popover {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+  }
+}
+
+.pending-text-selection-group__chip,
+.pending-annotation-group__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  max-width: 100%;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--tag-bg, #f3f4f6) 72%, var(--bg-color));
+  color: var(--text-color);
+  box-shadow: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+
+  .material-symbols-rounded {
+    color: var(--sub-text-color);
+    font-size: 16px;
+    line-height: 1;
+  }
+}
+
+.pending-text-selection-group__chip {
+  overflow: hidden;
+  gap: 6px;
+  padding: 0;
+}
+
+.pending-text-selection-group__chip-main,
+.pending-text-selection-group__clear {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+
+  .material-symbols-rounded {
+    color: var(--sub-text-color);
+    font-size: 16px;
+    line-height: 1;
+  }
+}
+
+.pending-text-selection-group__chip-main {
+  min-width: 0;
+  gap: 6px;
+  padding: 4px 7px 4px 9px;
+
+  span:not(.material-symbols-rounded) {
+    overflow: hidden;
+    min-width: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.pending-text-selection-group__clear {
+  justify-content: center;
+  width: 24px;
+  min-width: 24px;
+  padding: 0;
+  border-left: 1px solid
+    color-mix(in srgb, var(--border-color) 62%, transparent);
+
+  &:hover,
+  &:focus-visible {
+    background: var(--tag-hover-bg, #f3f4f6);
+    color: var(--text-color);
+  }
+}
+
+.pending-text-selection-group__popover,
+.pending-annotation-group__popover {
+  position: absolute;
+  z-index: 1200;
+  left: 0;
+  bottom: calc(100% + 8px);
+  display: grid;
+  width: max-content;
+  min-width: 300px;
+  max-width: min(560px, calc(100vw - 36px));
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+  border-radius: 8px;
+  background: var(--bg-color, #fff);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .1);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity .14s ease, transform .14s ease;
+  backdrop-filter: blur(18px);
+}
+
+.pending-text-selection-group__popover {
+  min-width: min(280px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+}
+
+.pending-text-selection-group__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22px;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 7px 8px;
+
+  & + & {
+    border-top: 1px solid
+      color-mix(
+        in srgb,
+        var(--border-color, rgba(148, 163, 184, .28)) 64%,
+        transparent
+      );
+  }
+}
+
+.pending-text-selection-group__content {
+  min-width: 0;
+}
+
+.pending-text-selection-group__text {
+  min-width: 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.pending-text-selection-group__text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--text-color);
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+}
+
+.pending-annotation-group__row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 22px;
+  gap: 9px;
+  align-items: start;
+  min-width: 0;
+  padding: 8px;
+
+  & + & {
+    border-top: 1px solid
+      color-mix(
+        in srgb,
+        var(--border-color, rgba(148, 163, 184, .28)) 64%,
+        transparent
+      );
+  }
+}
+
+.pending-annotation-group__preview {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 32px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  border-radius: 6px;
+  background: var(--tag-bg, #f3f4f6);
+  color: var(--sub-text-color);
+  overflow: hidden;
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .material-symbols-rounded {
+    font-size: 16px;
+    line-height: 1;
+  }
+}
+
+.pending-annotation-group__body,
+.pending-annotation-group__target,
+.pending-annotation-group__comment {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+.pending-annotation-group__target {
+  color: var(--sub-text-color);
+  font-size: 11px;
+}
+
+.pending-annotation-group__comment {
+  color: var(--text-color);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pending-text-selection-group__remove,
+.pending-annotation-group__remove {
+  width: 22px;
+  height: 22px;
+  border: none;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sub-text-color);
+  background: transparent;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--tag-hover-bg, #f3f4f6);
+    color: var(--text-color);
+  }
+
+  .material-symbols-rounded {
+    font-size: 15px;
+    line-height: 1;
+  }
 }
 
 .pending-attachments__images {
@@ -208,6 +472,17 @@
 }
 
 html.dark {
+  .pending-text-selection-group__chip,
+  .pending-annotation-group__chip {
+    border-color: rgba(71, 85, 105, .55);
+    background: rgba(30, 41, 59, .72);
+  }
+
+  .pending-text-selection-group__popover,
+  .pending-annotation-group__popover {
+    border-color: rgba(71, 85, 105, .55);
+  }
+
   .pending-image {
     border-color: rgba(71, 85, 105, .55);
   }

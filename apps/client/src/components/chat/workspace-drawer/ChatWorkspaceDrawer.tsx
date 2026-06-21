@@ -95,6 +95,7 @@ import { useInteractionPanelMobileDebugDeviceOptions } from '../interaction-pane
 import { useInteractionPanelPinnedTabs } from '../interaction-panel/use-interaction-panel-pinned-tabs'
 import type { InteractionTerminalPanesController } from '../interaction-panel/use-interaction-terminal-panes'
 import type { SessionPanelStateController } from '../interaction-panel/use-session-panel-state'
+import type { PendingAnnotation } from '../sender/@types/sender-composer'
 import { WorkspaceDrawerViewPanel } from './WorkspaceDrawerViewPanel'
 import { useWorkspaceDrawerDockActions } from './use-workspace-drawer-dock-actions'
 import { renderMenuIcon } from './workspace-drawer-toolbar-menu'
@@ -380,6 +381,7 @@ export function ChatWorkspaceDrawer({
   agentApprovals,
   agentRoster,
   defaultView,
+  hasPendingAnnotationReferences,
   isBottomPanelOpen = false,
   isFullscreen = false,
   locateFileRequest,
@@ -392,6 +394,7 @@ export function ChatWorkspaceDrawer({
   openResourceShortcut,
   openResourceShortcutLabel,
   panelStateController,
+  onReferenceAnnotations,
   onReferencePaths,
   selectedFilePath,
   settingsView,
@@ -402,6 +405,7 @@ export function ChatWorkspaceDrawer({
   agentApprovals?: ChatWorkspaceDrawerAgentApprovals
   agentRoster?: ChatWorkspaceDrawerAgentRoster
   defaultView?: WorkspaceDrawerView
+  hasPendingAnnotationReferences?: boolean
   isBottomPanelOpen?: boolean
   isFullscreen?: boolean
   locateFileRequest?: ChatWorkspaceDrawerLocateFileRequest | null
@@ -414,6 +418,7 @@ export function ChatWorkspaceDrawer({
   openResourceShortcut?: string
   openResourceShortcutLabel?: string
   panelStateController: SessionPanelStateController
+  onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
   onReferencePaths?: (files: ContextPickerFile[]) => void
   selectedFilePath?: string | null
   settingsView?: ReactNode
@@ -1477,7 +1482,10 @@ export function ChatWorkspaceDrawer({
                   isActive={isVisible && resolvedActiveTabKey === tabKey}
                   page={page}
                   projectUrlHistoryKey={`${workspaceDrawerIframeSessionId}:project`}
+                  sessionId={sessionId}
                   sessionUrlHistoryKey={`${workspaceDrawerIframeSessionId}:session`}
+                  onReferenceAnnotations={onReferenceAnnotations}
+                  hasPendingAnnotationReferences={hasPendingAnnotationReferences}
                   onChangeMetadata={(pageId, metadata) =>
                     updateRightWebTab(pageId, current => updateIframePageMetadata(current, metadata))}
                   onSelectHistory={(pageId, index) =>
@@ -1521,11 +1529,13 @@ export function ChatWorkspaceDrawer({
     approvalMessages,
     drawerPinnedTabById,
     drawerTerminalPanes,
+    hasPendingAnnotationReferences,
     iframePages,
     isPageDebuggerListOpen,
     isGitLoading,
     mobileDebugPages,
     onOpenFile,
+    onReferenceAnnotations,
     onReferencePaths,
     openRightIframeUrl,
     pluginPages,

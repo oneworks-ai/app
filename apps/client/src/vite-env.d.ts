@@ -110,7 +110,42 @@ interface DesktopBuildSource {
   gitHash: string
 }
 
+type DesktopContextCaptureOverlayPlacement = 'auto' | 'above' | 'below'
+
+interface DesktopContextCaptureSettings {
+  allowApplications: string[]
+  denyApplications: string[]
+  enabled: boolean
+  overlayPlacement: DesktopContextCaptureOverlayPlacement
+}
+
+interface DesktopContextCapturePoint {
+  x: number
+  y: number
+}
+
+interface DesktopContextCaptureScreenRect extends DesktopContextCapturePoint {
+  height: number
+  width: number
+}
+
+interface DesktopContextCaptureOverlayInput {
+  placement?: DesktopContextCaptureOverlayPlacement
+  snapshot: {
+    capturedAt?: string
+    cursorPoint?: DesktopContextCapturePoint
+    selectionRect?: DesktopContextCaptureScreenRect
+    sourceApplication?: {
+      bundleId?: string
+      name?: string
+      path?: string
+    }
+    text: string
+  }
+}
+
 interface DesktopSettings {
+  contextCapture: DesktopContextCaptureSettings
   iconAppearance?: 'system' | 'light' | 'dark'
   iconBackground?: 'transparent' | 'solid' | 'textured'
   syncAppIcon?: boolean
@@ -386,6 +421,7 @@ interface Window {
     getWindowFullscreenState?: () => Promise<boolean>
     getWorkspaceConnection?: () => Promise<DesktopWorkspaceConnection | undefined>
     getWorkspaceSelectorState?: () => Promise<DesktopWorkspaceSelectorState>
+    hideDesktopContextCaptureOverlay?: () => Promise<void>
     hideLauncherWindow?: () => Promise<void>
     importAuthenticatorBackup?: () => Promise<DesktopAuthenticatorImportResult>
     importBrowserPasswords?: (
@@ -455,6 +491,7 @@ interface Window {
     ) => Promise<{ files: DesktopWorkspaceFileSearchResult[] }>
     searchCurrentWorkspaceResources?: (query: string) => Promise<DesktopWorkspaceResourceSearchResponse>
     setThemeSource?: (themeSource: 'system' | 'light' | 'dark') => Promise<'system' | 'light' | 'dark'>
+    showDesktopContextCaptureOverlay?: (input: DesktopContextCaptureOverlayInput) => Promise<unknown>
     supportsWebviewTag?: boolean
     systemLocale?: string
     updateDesktopSettings?: (settings: Partial<DesktopSettings>) => Promise<DesktopSettings>
