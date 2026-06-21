@@ -2,7 +2,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--subpage-tertiary-gap);
+  min-width: 0;
   padding: var(--subpage-tertiary-padding);
   border-radius: var(--subpage-tertiary-radius);
   border: var(--subpage-tertiary-border);
@@ -39,7 +40,7 @@
 .config-view__field-row--stacked .config-view__field-meta {
   display: flex;
   flex: 0 0 auto;
-  margin-bottom: 10px;
+  margin-bottom: var(--subpage-tertiary-gap);
 }
 
 .config-view__field-row--stacked .config-view__field-control {
@@ -106,7 +107,7 @@
 .config-view__field-meta {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--subpage-tertiary-gap);
   min-width: 0;
 }
 
@@ -146,9 +147,13 @@
   display: flex;
   flex: 0 1 220px;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--subpage-tertiary-gap);
   min-width: 0;
   max-width: min(320px, 100%);
+}
+
+.config-view__field-control > * {
+  min-width: 0;
 }
 
 .config-view__field-control .ant-input,
@@ -212,7 +217,10 @@
 }
 
 .config-view__field-icon {
-  font-size: 16px;
+  flex: 0 0 auto;
+  width: 18px;
+  font-size: 18px;
+  line-height: 1;
   color: var(--sub-text-color);
 }
 
@@ -221,17 +229,17 @@
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-    gap: 8px;
+    gap: var(--subpage-tertiary-gap);
     height: auto;
     min-height: 0;
-    padding: 10px 12px;
+    padding: var(--subpage-tertiary-padding);
     border-radius: 10px;
   }
 
   .config-view__field-meta {
     align-items: flex-start;
     flex: 0 0 auto;
-    gap: 8px;
+    gap: var(--subpage-tertiary-gap);
   }
 
   .config-view__field-icon {
@@ -274,7 +282,7 @@
   .config-view__field-row:has(.ant-switch) {
     flex-direction: row;
     align-items: center;
-    gap: 10px;
+    gap: var(--subpage-tertiary-gap);
   }
 
   .config-view__field-row:has(.ant-switch) .config-view__field-meta {

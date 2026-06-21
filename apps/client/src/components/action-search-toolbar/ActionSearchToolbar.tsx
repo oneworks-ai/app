@@ -41,7 +41,7 @@ export function ActionSearchToolbar({
     <div className={['action-search-toolbar', className].filter(Boolean).join(' ')}>
       <Input
         className='action-search-toolbar__search'
-        allowClear
+        allowClear={query !== ''}
         prefix={<MaterialSymbol name='search' />}
         placeholder={placeholder}
         value={query}

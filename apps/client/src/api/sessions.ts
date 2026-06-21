@@ -24,6 +24,148 @@ export async function listSessions(
   return fetchApiJson<{ sessions: Session[] }>(path)
 }
 
+export type NativeHistoryAdapter = 'codex' | 'claude-code'
+export type NativeHistoryCandidateScope = 'all' | 'unarchived' | 'archived'
+export type NativeHistoryProjectScope = 'current-project' | 'all-projects'
+export type NativeHistoryThreadScope = 'all' | 'user' | 'subagent'
+export type NativeHistoryTimeSort = 'activity' | 'createdAt' | 'updatedAt'
+
+export interface NativeHistoryTimeRange {
+  from?: number
+  to?: number
+}
+
+export interface NativeHistoryTimeFilter {
+  createdAt?: NativeHistoryTimeRange
+  updatedAt?: NativeHistoryTimeRange
+}
+
+export interface NativeHistoryImportSession {
+  adapter: NativeHistoryAdapter
+  createdAt: number
+  importedEvents: number
+  sessionId: string
+  sourcePath: string
+  title: string
+  updatedAt: number
+}
+
+export interface NativeHistoryImportResult {
+  importedEvents: number
+  importedSessions: number
+  matchedFiles: number
+  scannedFiles: number
+  sessions: NativeHistoryImportSession[]
+}
+
+export interface NativeHistoryImportPreviewCandidate {
+  adapter: NativeHistoryAdapter
+  createdAt: number
+  cwd: string
+  fileSizeBytes: number
+  importedSessionId?: string
+  isArchived: boolean
+  isImported: boolean
+  isLarge: boolean
+  isPinned: boolean
+  nativeSessionId: string
+  sourcePath: string
+  threadSource?: string
+  title: string
+  updatedAt: number
+}
+
+export interface NativeHistoryImportAdapterPreview {
+  adapter: NativeHistoryAdapter
+  candidates: NativeHistoryImportPreviewCandidate[]
+  hasMore: boolean
+  isComplete: boolean
+  largeFiles: number
+  largestFileBytes: number
+  matchedFiles: number
+  nextCursor?: string
+  scannedFiles: number
+  totalBytes: number
+}
+
+export interface NativeHistoryImportPreviewResult {
+  adapters: NativeHistoryImportAdapterPreview[]
+  hasMore: boolean
+  isComplete: boolean
+  largeFileThresholdBytes: number
+  largeFiles: number
+  largestFileBytes: number
+  matchedFiles: number
+  nextCursor?: string
+  scannedFiles: number
+  totalBytes: number
+}
+
+export async function previewNativeProjectHistory(request?: {
+  adapters?: NativeHistoryAdapter[]
+  candidateScope?: NativeHistoryCandidateScope
+  cursor?: string
+  limit?: number
+  projectScope?: NativeHistoryProjectScope
+  signal?: AbortSignal
+  sourcePaths?: string[]
+  threadScope?: NativeHistoryThreadScope
+  timeFilter?: NativeHistoryTimeFilter
+  timeSort?: NativeHistoryTimeSort
+}): Promise<NativeHistoryImportPreviewResult> {
+  return fetchApiJson<NativeHistoryImportPreviewResult>('/api/sessions/native-history-import/preview', {
+    method: 'POST',
+    ...(request?.adapters != null || request?.candidateScope != null || request?.cursor != null ||
+        request?.limit != null || request?.projectScope != null || request?.sourcePaths != null ||
+        request?.threadScope != null || request?.timeFilter != null || request?.timeSort != null
+      ? {
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          adapters: request.adapters,
+          candidateScope: request.candidateScope,
+          cursor: request.cursor,
+          limit: request.limit,
+          projectScope: request.projectScope,
+          sourcePaths: request.sourcePaths,
+          threadScope: request.threadScope,
+          timeFilter: request.timeFilter,
+          timeSort: request.timeSort
+        })
+      }
+      : {}),
+    signal: request?.signal
+  })
+}
+
+export async function runNativeProjectHistoryImport(request?: {
+  adapters?: NativeHistoryAdapter[]
+  projectScope?: NativeHistoryProjectScope
+  signal?: AbortSignal
+  sourcePaths?: string[]
+  threadScope?: NativeHistoryThreadScope
+  timeFilter?: NativeHistoryTimeFilter
+  timeSort?: NativeHistoryTimeSort
+}): Promise<NativeHistoryImportResult> {
+  return fetchApiJson<NativeHistoryImportResult>('/api/sessions/native-history-import/run', {
+    method: 'POST',
+    ...(request?.adapters != null || request?.projectScope != null || request?.sourcePaths != null ||
+        request?.threadScope != null || request?.timeFilter != null || request?.timeSort != null
+      ? {
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          adapters: request.adapters,
+          projectScope: request.projectScope,
+          sourcePaths: request.sourcePaths,
+          threadScope: request.threadScope,
+          timeFilter: request.timeFilter,
+          timeSort: request.timeSort
+        })
+      }
+      : {}),
+    signal: request?.signal
+  })
+}
+
 export function getSessionCacheKey(id: string) {
   return `/api/sessions/${encodeURIComponent(id)}`
 }

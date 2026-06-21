@@ -3,6 +3,7 @@
 
   &__body {
     flex: 1;
+    min-width: 0;
     min-height: 0;
   }
 
@@ -37,8 +38,9 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  gap: 12px;
+  gap: var(--subpage-tertiary-gap);
   height: 100%;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -46,7 +48,8 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  gap: 12px;
+  gap: var(--subpage-tertiary-gap);
+  min-width: 0;
   min-height: 0;
   padding: 0;
   box-sizing: border-box;
@@ -56,7 +59,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--subpage-tertiary-gap);
   min-height: 24px;
   padding-inline: 0;
   box-sizing: border-box;
@@ -74,7 +77,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--subpage-tertiary-gap);
   min-width: 0;
   flex-wrap: wrap;
   margin-left: auto;
@@ -82,6 +85,7 @@
 
 .config-view__section-body {
   flex-grow: 1;
+  min-width: 0;
   min-height: 0;
   padding: 0;
   padding-inline: 0;
@@ -111,13 +115,394 @@
 }
 
 .config-view__section-body + .config-view__section-body {
-  margin-top: 14px;
+  margin-top: var(--subpage-tertiary-gap);
 }
 
 .config-view__app-settings-list {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--subpage-tertiary-gap);
+  min-width: 0;
+  min-height: 0;
+}
+
+.config-view__external-session-body {
+  overflow: hidden;
+}
+
+.config-view__external-session-body > .config-view__app-settings-list {
+  height: 100%;
+  overflow: hidden;
+}
+
+.config-view__external-session-tabs {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.config-view__external-session-tabs > .ant-tabs-content-holder {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.config-view__external-session-tabs
+  > .ant-tabs-content-holder
+  > .ant-tabs-content {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  transform: none !important;
+}
+
+.config-view__external-session-tabs
+  > .ant-tabs-content-holder
+  > .ant-tabs-content
+  > .ant-tabs-tabpane {
+  width: 100%;
+  max-width: 100%;
+  flex: none;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.config-view__external-session-tabs
+  > .ant-tabs-content-holder
+  > .ant-tabs-content
+  > .ant-tabs-tabpane-hidden {
+  display: none;
+}
+
+.config-view__external-session-tabs > .ant-tabs-nav {
+  flex: 0 0 auto;
+  margin-bottom: var(--subpage-tertiary-gap);
+}
+
+.config-view__external-session-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--subpage-tertiary-gap) * .6);
+  min-width: 0;
+}
+
+.config-view__external-session-tab-icon {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.config-view__external-session-tab-icon--fallback {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.config-view__external-session-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--subpage-tertiary-gap);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.config-view__external-session-size-control {
+  width: 100%;
+}
+
+.config-view__external-session-size-control .ant-space-item:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.config-view__external-session-size-control .ant-input-number-affix-wrapper {
+  width: 100%;
+}
+
+.config-view__external-session-switch-control {
+  justify-content: flex-end;
+}
+
+.config-view__external-session-switch-control .ant-space-item {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.config-view__external-session-switch.ant-switch {
+  flex: 0 0 44px;
+  width: 44px;
+  min-width: 44px;
+  height: 22px;
+}
+
+.config-view__external-session-candidates {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: var(--subpage-tertiary-border);
+  border-radius: var(--subpage-tertiary-radius);
+  background: var(--subpage-tertiary-bg);
+  overflow: hidden;
+}
+
+.config-view__external-session-toolbar {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0 var(--subpage-tertiary-padding);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.config-view__external-session-candidate-list {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.config-view__external-session-panel {
+  flex: 0 0 auto;
+  padding: var(--subpage-tertiary-padding) var(--subpage-tertiary-padding)
+    calc(var(--subpage-tertiary-padding) + 2px);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.config-view__external-session-panel--filter {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--subpage-tertiary-gap) * .8);
+}
+
+.config-view__external-session-filter-row {
+  --config-external-session-filter-label-width: 72px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns:
+    var(--config-external-session-filter-label-width) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.config-view__external-session-filter-row--time {
+  align-items: start;
+}
+
+.config-view__external-session-filter-row--time
+  .config-view__external-session-filter-label {
+  padding-top: 6px;
+}
+
+.config-view__external-session-filter-label {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--subpage-tertiary-gap) * .6);
+  width: 100%;
+  color: var(--sub-text-color);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.config-view__external-session-filter-label-icon {
+  flex: 0 0 18px;
+  width: 18px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.config-view__external-session-filter-options {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--subpage-tertiary-gap) * .6);
+}
+
+.config-view__external-session-date-range.ant-picker {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  border-radius: 7px;
+  background: var(--config-interactive-bg);
+}
+
+.config-view__external-session-time-range {
+  min-width: 0;
+  width: 100%;
+}
+
+.config-view__external-session-picker-presets {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--subpage-tertiary-gap) * .6);
+  padding: 4px 0;
+}
+
+.config-view__external-session-filter-option.ant-btn {
+  min-width: 0;
+  height: 26px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 7px;
+  color: var(--sub-text-color);
+  font-size: 12px;
+
+  &:hover,
+  &:focus-visible,
+  &.is-active {
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 14%, transparent);
+  }
+
+  .material-symbols-rounded {
+    flex: 0 0 auto;
+    font-size: 18px;
+    line-height: 1;
+  }
+}
+
+.config-view__external-session-candidate-list
+  > .config-view__detail-list-empty {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.config-view__external-session-candidate-group > .config-view__field-row {
+  border-right: 0;
+  border-left: 0;
+}
+
+.config-view__external-session-candidate-group
+  > .config-view__field-row:first-child {
+  border-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.config-view__external-session-candidate-group
+  > .config-view__field-row:last-child {
+  border-bottom: 0;
+}
+
+.config-view__external-session-candidate-group .config-view__field-control {
+  flex: 0 0 auto;
+}
+
+.config-view__external-session-candidate-group .config-view__field-title {
+  overflow: visible;
+}
+
+.config-view__external-session-candidate-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.config-view__external-session-candidate-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-view__external-session-worktree-placeholder {
+  display: inline-flex;
+  flex: 0 0 18px;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--sub-text-color);
+  cursor: help;
+}
+
+.config-view__external-session-worktree-placeholder
+  > .material-symbols-rounded {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.config-view__external-session-worktree-tooltip {
+  flex: 0 0 auto;
+}
+
+.config-view__external-session-path-tooltip {
+  display: block;
+  max-width: min(720px, calc(100vw - 48px));
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.config-view__external-session-candidate-desc {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.config-view__external-session-size-tooltip {
+  flex: 0 0 auto;
+}
+
+.config-view__external-session-desc-separator {
+  color: var(--sub-text-color);
+}
+
+.config-view__external-session-candidate-size--warning {
+  color: var(--warning-color, #f59e0b);
+}
+
+.config-view__external-session-copy-link-button.ant-btn {
+  flex: 0 0 30px;
+  width: 30px;
+  min-width: 30px;
+  justify-content: center;
+}
+
+.config-view__external-session-import-button.ant-btn {
+  flex: 0 0 70px;
+  width: 70px;
+  min-width: 70px;
+  justify-content: center;
+}
+
+.config-view__external-session-load-more {
+  flex: 0 0 auto;
+  padding: var(--subpage-tertiary-padding);
+  border-top: 1px solid var(--border-color);
+}
+
+.config-view__external-session-load-more .ant-btn {
+  height: 30px;
+  border-radius: 7px;
+  color: var(--sub-text-color);
 }
 
 .config-view__app-settings-group,
@@ -166,6 +551,14 @@
   > .config-view__field-row:not(:last-child) {
   border-bottom-right-radius: 0;
   border-bottom-left-radius: 0;
+}
+
+.config-view__external-session-candidate-group > .config-view__field-row,
+.config-view__external-session-candidate-group
+  > .config-view__field-row:first-child,
+.config-view__external-session-candidate-group
+  > .config-view__field-row:last-child {
+  border-radius: 0;
 }
 
 .config-view__theme-preset-list {
@@ -1022,9 +1415,9 @@
 
 .config-view__model-service-action-buttons .material-symbols-rounded,
 .config-view__model-service-more-button .material-symbols-rounded {
-  width: 16px;
-  height: 16px;
-  font-size: 16px;
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
   line-height: 1;
 }
 
@@ -1245,7 +1638,7 @@
 }
 
 .config-view__section-icon {
-  font-size: 20px;
+  font-size: 18px;
   color: var(--sub-text-color);
 }
 
@@ -1360,12 +1753,12 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 14px;
+  width: 18px;
   color: color-mix(in srgb, var(--sub-text-color) 72%, transparent);
 }
 
 .config-view__detail-separator .material-symbols-rounded {
-  font-size: 16px;
+  font-size: 18px;
 }
 
 .config-view__source-option {

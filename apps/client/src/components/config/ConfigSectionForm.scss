@@ -139,10 +139,6 @@
   border-bottom-color: var(--border-color);
 }
 
-.config-view__collection-tabs .ant-tabs-tab {
-  padding: 8px 0;
-}
-
 .config-view__collection-tab-label {
   display: inline-flex;
   align-items: center;
@@ -151,7 +147,7 @@
 }
 
 .config-view__collection-tab-label .material-symbols-rounded {
-  font-size: 17px;
+  font-size: 18px;
 }
 
 .config-view__collection-tabs .ant-tabs-content-holder,

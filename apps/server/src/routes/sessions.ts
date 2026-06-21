@@ -14,6 +14,20 @@ import type { GitBranchKind, SessionInfo, SessionInitInfo, SessionPromptType } f
 
 import { getDb } from '#~/db/index.js'
 import {
+  consumeNativeProjectHistoryImportPrompt,
+  importNativeProjectHistoryAndReplay,
+  previewNativeProjectHistory
+} from '#~/services/runtime-store/history-import.js'
+import type {
+  NativeHistoryAdapter,
+  NativeHistoryCandidateScope,
+  NativeHistoryProjectScope,
+  NativeHistoryThreadScope,
+  NativeHistoryTimeFilter,
+  NativeHistoryTimeRange,
+  NativeHistoryTimeSort
+} from '#~/services/runtime-store/history-import.js'
+import {
   createServerRuntimeSession,
   summarizeRuntimeSessionContent
 } from '#~/services/runtime-store/session-control.js'
@@ -72,6 +86,11 @@ export function sessionsRouter(): Router {
     'dontAsk',
     'bypassPermissions'
   ])
+  const nativeHistoryAdapters = new Set<NativeHistoryAdapter>(['codex', 'claude-code'])
+  const nativeHistoryCandidateScopes = new Set<NativeHistoryCandidateScope>(['all', 'unarchived', 'archived'])
+  const nativeHistoryProjectScopes = new Set<NativeHistoryProjectScope>(['current-project', 'all-projects'])
+  const nativeHistoryThreadScopes = new Set<NativeHistoryThreadScope>(['all', 'user', 'subagent'])
+  const nativeHistoryTimeSorts = new Set<NativeHistoryTimeSort>(['activity', 'createdAt', 'updatedAt'])
   const normalizeTags = (value: unknown) => (
     Array.isArray(value)
       ? value
@@ -107,12 +126,272 @@ export function sessionsRouter(): Router {
     return undefined
   }
 
+  const normalizeNativeHistoryAdapters = (value: unknown) => {
+    if (value === undefined) {
+      return undefined
+    }
+    if (!Array.isArray(value)) {
+      throw badRequest('Invalid native history adapters', { adapters: value }, 'invalid_native_history_adapters')
+    }
+
+    const adapters = Array.from(new Set(value))
+    const invalidAdapter = adapters.find(adapter => (
+      typeof adapter !== 'string' ||
+      !nativeHistoryAdapters.has(adapter as NativeHistoryAdapter)
+    ))
+    if (invalidAdapter != null) {
+      throw badRequest(
+        'Invalid native history adapter',
+        { adapter: invalidAdapter },
+        'invalid_native_history_adapter'
+      )
+    }
+
+    return adapters as NativeHistoryAdapter[]
+  }
+
+  const normalizeNativeHistorySourcePaths = (value: unknown) => {
+    if (value === undefined) {
+      return undefined
+    }
+    if (!Array.isArray(value)) {
+      throw badRequest(
+        'Invalid native history source paths',
+        { sourcePaths: value },
+        'invalid_native_history_source_paths'
+      )
+    }
+
+    const sourcePaths = value.map(sourcePath => typeof sourcePath === 'string' ? sourcePath.trim() : '')
+    if (sourcePaths.includes('')) {
+      throw badRequest(
+        'Invalid native history source path',
+        { sourcePaths: value },
+        'invalid_native_history_source_path'
+      )
+    }
+    return Array.from(new Set(sourcePaths))
+  }
+
+  const normalizeNativeHistoryProjectScope = (value: unknown) => {
+    if (value === undefined) {
+      return undefined
+    }
+    if (typeof value !== 'string' || !nativeHistoryProjectScopes.has(value as NativeHistoryProjectScope)) {
+      throw badRequest(
+        'Invalid native history project scope',
+        { projectScope: value },
+        'invalid_native_history_project_scope'
+      )
+    }
+    return value as NativeHistoryProjectScope
+  }
+
+  const normalizeNativeHistoryCandidateScope = (value: unknown) => {
+    if (value === undefined) {
+      return undefined
+    }
+    if (typeof value !== 'string' || !nativeHistoryCandidateScopes.has(value as NativeHistoryCandidateScope)) {
+      throw badRequest(
+        'Invalid native history candidate scope',
+        { candidateScope: value },
+        'invalid_native_history_candidate_scope'
+      )
+    }
+    return value as NativeHistoryCandidateScope
+  }
+
+  const normalizeNativeHistoryThreadScope = (value: unknown) => {
+    if (value === undefined) {
+      return undefined
+    }
+    if (typeof value !== 'string' || !nativeHistoryThreadScopes.has(value as NativeHistoryThreadScope)) {
+      throw badRequest(
+        'Invalid native history thread scope',
+        { threadScope: value },
+        'invalid_native_history_thread_scope'
+      )
+    }
+    return value as NativeHistoryThreadScope
+  }
+
+  const normalizeNativeHistoryTimestamp = (value: unknown, field: string) => {
+    if (value === undefined) {
+      return undefined
+    }
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+      throw badRequest(
+        'Invalid native history time filter',
+        { field, value },
+        'invalid_native_history_time_filter'
+      )
+    }
+    return value
+  }
+
+  const normalizeNativeHistoryTimeRange = (
+    value: unknown,
+    field: string
+  ): NativeHistoryTimeRange | undefined => {
+    if (value === undefined) {
+      return undefined
+    }
+    if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+      throw badRequest(
+        'Invalid native history time filter',
+        { field, value },
+        'invalid_native_history_time_filter'
+      )
+    }
+
+    const range = value as { from?: unknown; to?: unknown }
+    const from = normalizeNativeHistoryTimestamp(range.from, `${field}.from`)
+    const to = normalizeNativeHistoryTimestamp(range.to, `${field}.to`)
+    if (from != null && to != null && from > to) {
+      throw badRequest(
+        'Invalid native history time filter range',
+        { field, from, to },
+        'invalid_native_history_time_filter'
+      )
+    }
+    return {
+      ...(from == null ? {} : { from }),
+      ...(to == null ? {} : { to })
+    }
+  }
+
+  const normalizeNativeHistoryTimeFilter = (value: unknown): NativeHistoryTimeFilter | undefined => {
+    if (value === undefined) {
+      return undefined
+    }
+    if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+      throw badRequest(
+        'Invalid native history time filter',
+        { timeFilter: value },
+        'invalid_native_history_time_filter'
+      )
+    }
+
+    const filter = value as { createdAt?: unknown; updatedAt?: unknown }
+    const createdAt = normalizeNativeHistoryTimeRange(filter.createdAt, 'createdAt')
+    const updatedAt = normalizeNativeHistoryTimeRange(filter.updatedAt, 'updatedAt')
+    return {
+      ...(createdAt == null ? {} : { createdAt }),
+      ...(updatedAt == null ? {} : { updatedAt })
+    }
+  }
+
+  const normalizeNativeHistoryTimeSort = (value: unknown) => {
+    if (value === undefined) {
+      return undefined
+    }
+    if (typeof value !== 'string' || !nativeHistoryTimeSorts.has(value as NativeHistoryTimeSort)) {
+      throw badRequest(
+        'Invalid native history time sort',
+        { timeSort: value },
+        'invalid_native_history_time_sort'
+      )
+    }
+    return value as NativeHistoryTimeSort
+  }
+
+  const normalizeNativeHistoryPreviewCursor = (value: unknown) => {
+    if (value === undefined) {
+      return undefined
+    }
+    if (typeof value !== 'string' || value.trim() === '') {
+      throw badRequest(
+        'Invalid native history preview cursor',
+        { cursor: value },
+        'invalid_native_history_preview_cursor'
+      )
+    }
+    return value
+  }
+
+  const normalizeNativeHistoryPreviewLimit = (value: unknown) => {
+    if (value === undefined) {
+      return undefined
+    }
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 100) {
+      throw badRequest(
+        'Invalid native history preview limit',
+        { limit: value },
+        'invalid_native_history_preview_limit'
+      )
+    }
+    return value
+  }
+
   router.get(['/', ''], (ctx) => {
     ctx.body = { sessions: db.getSessions('active') }
   })
 
   router.get('/archived', (ctx) => {
     ctx.body = { sessions: db.getSessions('archived') }
+  })
+
+  router.post('/native-history-import', async (ctx) => {
+    ctx.body = await consumeNativeProjectHistoryImportPrompt()
+  })
+
+  router.post('/native-history-import/preview', async (ctx) => {
+    const body = (ctx.request.body ?? {}) as {
+      adapters?: unknown
+      candidateScope?: unknown
+      cursor?: unknown
+      limit?: unknown
+      projectScope?: unknown
+      sourcePaths?: unknown
+      threadScope?: unknown
+      timeFilter?: unknown
+      timeSort?: unknown
+    }
+    const adapters = normalizeNativeHistoryAdapters(body.adapters)
+    const candidateScope = normalizeNativeHistoryCandidateScope(body.candidateScope)
+    const previewCursor = normalizeNativeHistoryPreviewCursor(body.cursor)
+    const previewLimit = normalizeNativeHistoryPreviewLimit(body.limit)
+    const projectScope = normalizeNativeHistoryProjectScope(body.projectScope)
+    const sourcePaths = normalizeNativeHistorySourcePaths(body.sourcePaths)
+    const threadScope = normalizeNativeHistoryThreadScope(body.threadScope)
+    const timeFilter = normalizeNativeHistoryTimeFilter(body.timeFilter)
+    const timeSort = normalizeNativeHistoryTimeSort(body.timeSort)
+    ctx.body = await previewNativeProjectHistory({
+      ...(adapters == null ? {} : { adapters }),
+      ...(candidateScope == null ? {} : { candidateScope }),
+      ...(previewCursor == null ? {} : { previewCursor }),
+      ...(previewLimit == null ? {} : { previewLimit }),
+      ...(projectScope == null ? {} : { projectScope }),
+      ...(sourcePaths == null ? {} : { sourcePaths }),
+      ...(threadScope == null ? {} : { threadScope }),
+      ...(timeFilter == null ? {} : { timeFilter }),
+      ...(timeSort == null ? {} : { timeSort })
+    })
+  })
+
+  router.post('/native-history-import/run', async (ctx) => {
+    const body = (ctx.request.body ?? {}) as {
+      adapters?: unknown
+      projectScope?: unknown
+      sourcePaths?: unknown
+      threadScope?: unknown
+      timeFilter?: unknown
+      timeSort?: unknown
+    }
+    const adapters = normalizeNativeHistoryAdapters(body.adapters)
+    const projectScope = normalizeNativeHistoryProjectScope(body.projectScope)
+    const sourcePaths = normalizeNativeHistorySourcePaths(body.sourcePaths)
+    const threadScope = normalizeNativeHistoryThreadScope(body.threadScope)
+    const timeFilter = normalizeNativeHistoryTimeFilter(body.timeFilter)
+    const timeSort = normalizeNativeHistoryTimeSort(body.timeSort)
+    ctx.body = await importNativeProjectHistoryAndReplay({
+      ...(adapters == null ? {} : { adapters }),
+      ...(projectScope == null ? {} : { projectScope }),
+      ...(sourcePaths == null ? {} : { sourcePaths }),
+      ...(threadScope == null ? {} : { threadScope }),
+      ...(timeFilter == null ? {} : { timeFilter }),
+      ...(timeSort == null ? {} : { timeSort })
+    })
   })
 
   router.get('/:id', (ctx) => {

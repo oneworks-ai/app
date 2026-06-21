@@ -264,6 +264,14 @@ const updateConfigSection = (config: Config, section: string, value: unknown): C
         hasOwn(sectionValue, 'skillRegistries')
       )
       updateField(
+        'nativeHistoryImport',
+        mergeMaskedValues(
+          sectionValue.nativeHistoryImport,
+          config.nativeHistoryImport
+        ) as Config['nativeHistoryImport'],
+        hasOwn(sectionValue, 'nativeHistoryImport')
+      )
+      updateField(
         'webAuth',
         mergeMaskedValues(sectionValue.webAuth, config.webAuth) as Config['webAuth'],
         hasOwn(sectionValue, 'webAuth')

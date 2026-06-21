@@ -9,3 +9,4 @@
 - Normalize Kimi Code `/coding/v1/usages` responses into model service quota status.
 - Add New API compatible management actions for model service collections, including account snapshots, token listing, token creation, token updates, deletion, and generated token-backed model service profiles.
 - Stabilize launcher workspace server reuse across client-only edits and compatible runtime changes while preserving version-conflict diagnostics.
+- Add native history import APIs that preview, paginate, and import Codex and Claude Code sessions using Codex sqlite metadata for archived, pinned, title, and project matching.

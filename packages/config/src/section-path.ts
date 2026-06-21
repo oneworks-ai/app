@@ -28,6 +28,7 @@ const GENERAL_FIELD_KEYS = new Set([
   'skills',
   'skillsMeta',
   'skillRegistries',
+  'nativeHistoryImport',
   'shortcuts'
 ])
 

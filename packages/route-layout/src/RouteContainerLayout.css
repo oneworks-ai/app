@@ -20,8 +20,8 @@
   --subpage-content-card-gap: 6px;
   --subpage-content-card-radius: 12px;
   --subpage-content-card-bg: var(--bg-color, #fff);
-  --subpage-tertiary-padding: 8px;
-  --subpage-tertiary-gap: 8px;
+  --subpage-tertiary-padding: 10px;
+  --subpage-tertiary-gap: var(--subpage-tertiary-padding);
   --subpage-tertiary-radius: 8px;
   --subpage-tertiary-border: 1px solid var(--border-color, #d8dee4);
   --subpage-tertiary-bg: var(--bg-color, #fff);
