@@ -3,7 +3,13 @@ import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { getApiErrorMessage, runNativeProjectHistoryImport } from '#~/api'
-import type { NativeHistoryAdapter } from '#~/api'
+import type {
+  NativeHistoryAdapter,
+  NativeHistoryProjectScope,
+  NativeHistoryThreadScope,
+  NativeHistoryTimeFilter,
+  NativeHistoryTimeSort
+} from '#~/api'
 import { useNativeHistoryImportNotification } from '#~/hooks/use-native-history-import-notification'
 
 export function useNativeHistoryImportAction() {
@@ -14,7 +20,11 @@ export function useNativeHistoryImportAction() {
 
   const runImport = useCallback(async (request?: {
     adapters?: NativeHistoryAdapter[]
+    projectScope?: NativeHistoryProjectScope
     sourcePaths?: string[]
+    threadScope?: NativeHistoryThreadScope
+    timeFilter?: NativeHistoryTimeFilter
+    timeSort?: NativeHistoryTimeSort
   }) => {
     if (isImporting) {
       return undefined

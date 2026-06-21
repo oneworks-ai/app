@@ -1,12 +1,15 @@
 /* eslint-disable max-lines -- native history import needs parser compatibility in one place. */
+import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import { createReadStream, existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
-import type { Dirent } from 'node:fs'
+import type { Dirent, Stats } from 'node:fs'
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 import { createInterface } from 'node:readline'
+import type { DatabaseSync as NodeDatabaseSync } from 'node:sqlite'
 
 import type { RuntimeContentItem } from '@oneworks/runtime-protocol'
 import {
@@ -18,7 +21,10 @@ import {
 import type { RuntimeEvent, RuntimeEventDraft, RuntimeMeta, RuntimeState } from '@oneworks/runtime-store'
 import type { Config } from '@oneworks/types'
 import { resolveProjectHomePath, resolveProjectWorkspaceFolder } from '@oneworks/utils/ai-path'
-import { resolveProjectPrimaryWorkspaceFolder } from '@oneworks/utils/project-cache-path'
+import {
+  resolveProjectPrimaryWorkspaceFolder,
+  resolveProjectSharedWorkspaceFolder
+} from '@oneworks/utils/project-cache-path'
 
 import { getDb } from '#~/db/index.js'
 import { logger } from '#~/utils/logger.js'
@@ -27,7 +33,24 @@ import { discoverRuntimeSessionStores } from './discovery.js'
 import { getRuntimeStoreWatcher, replayRuntimeStore, watchRuntimeStoreRoot } from './watcher.js'
 import { createWorkspaceRuntimeEnv, resolveWorkspaceRuntimeStoreRoot } from './workspace-env.js'
 
+const require = createRequire(__filename)
+const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite')
+
 export type NativeHistoryAdapter = 'codex' | 'claude-code'
+export type NativeHistoryCandidateScope = 'all' | 'unarchived' | 'archived'
+export type NativeHistoryProjectScope = 'current-project' | 'all-projects'
+export type NativeHistoryThreadScope = 'all' | 'user' | 'subagent'
+export type NativeHistoryTimeSort = 'activity' | 'createdAt' | 'updatedAt'
+
+export interface NativeHistoryTimeRange {
+  from?: number
+  to?: number
+}
+
+export interface NativeHistoryTimeFilter {
+  createdAt?: NativeHistoryTimeRange
+  updatedAt?: NativeHistoryTimeRange
+}
 
 export interface NativeHistoryImportOptions {
   adapters?: NativeHistoryAdapter[]
@@ -36,8 +59,15 @@ export interface NativeHistoryImportOptions {
   homeDir?: string
   maxFileSizeBytes?: number
   maxFileSizeBytesByAdapter?: Partial<Record<NativeHistoryAdapter, number | null>>
+  candidateScope?: NativeHistoryCandidateScope
+  threadScope?: NativeHistoryThreadScope
+  previewCursor?: string
+  previewLimit?: number
+  projectScope?: NativeHistoryProjectScope
   sourceDirs?: Partial<Record<NativeHistoryAdapter, string[]>>
   sourcePaths?: string[]
+  timeFilter?: NativeHistoryTimeFilter
+  timeSort?: NativeHistoryTimeSort
 }
 
 export interface NativeHistoryImportSessionResult {
@@ -67,8 +97,10 @@ export interface NativeHistoryImportPreviewCandidate {
   isArchived: boolean
   isImported: boolean
   isLarge: boolean
+  isPinned: boolean
   nativeSessionId: string
   sourcePath: string
+  threadSource?: string
   title: string
   updatedAt: number
 }
@@ -76,19 +108,25 @@ export interface NativeHistoryImportPreviewCandidate {
 export interface NativeHistoryImportAdapterPreview {
   adapter: NativeHistoryAdapter
   candidates: NativeHistoryImportPreviewCandidate[]
+  hasMore: boolean
+  isComplete: boolean
   largeFiles: number
   largestFileBytes: number
   matchedFiles: number
+  nextCursor?: string
   scannedFiles: number
   totalBytes: number
 }
 
 export interface NativeHistoryImportPreviewResult {
   adapters: NativeHistoryImportAdapterPreview[]
+  hasMore: boolean
+  isComplete: boolean
   largeFileThresholdBytes: number
   largeFiles: number
   largestFileBytes: number
   matchedFiles: number
+  nextCursor?: string
   scannedFiles: number
   totalBytes: number
 }
@@ -114,6 +152,7 @@ interface NativeHistoryConversation {
   nativeSessionId: string
   sourcePath: string
   title?: string
+  titleIsAuthoritative?: boolean
   updatedAt: number
 }
 
@@ -127,16 +166,58 @@ interface ProjectMatchContext {
   roots: string[]
 }
 
+interface CodexThreadMetadata {
+  createdAt?: number
+  cwd?: string
+  gitOriginUrl?: string
+  isArchived?: boolean
+  isListed?: boolean
+  isPinned?: boolean
+  nativeSessionId: string
+  sourcePath?: string
+  spawnStatus?: string
+  threadSource?: string
+  title?: string
+  updatedAt?: number
+}
+
+interface CodexThreadMetadataIndex {
+  byNativeSessionId: Map<string, CodexThreadMetadata>
+  bySourcePath: Map<string, CodexThreadMetadata>
+  pinnedThreadIds: Set<string>
+}
+
+interface CodexSpawnEdge {
+  parentThreadId: string
+  status: string
+}
+
+interface NativeHistorySourceFile {
+  codexThreadMetadata?: CodexThreadMetadata
+  createdAt: number
+  filePath: string
+  isArchived: boolean
+  isPinned: boolean
+  stat: Stats
+  updatedAt: number
+}
+
+interface NativeHistoryPreviewCursor {
+  offsets: Partial<Record<NativeHistoryAdapter, number>>
+}
+
 const HISTORY_IMPORT_SOURCE = 'native-history-import'
 const HISTORY_IMPORT_MARKER_SEGMENTS = ['caches', 'native-history-import'] as const
 const LARGE_NATIVE_HISTORY_FILE_BYTES = 25 * 1024 * 1024
 export const DEFAULT_NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
+const MAX_NATIVE_HISTORY_PREVIEW_LIMIT = 100
 const MAX_HISTORY_WALK_DEPTH = 8
 const IMPORT_SESSION_PREFIX = 'imported_'
 const TITLE_MAX_LENGTH = 80
 let defaultNativeHistoryImportInFlight: Promise<NativeHistoryImportResult> | undefined
 let defaultFirstOpenImportInFlight: Promise<NativeHistoryImportResult> | undefined
 let pendingFirstOpenPromptResult: NativeHistoryImportResult | undefined
+const nativeHistoryImportRuntimeRoots = Symbol('nativeHistoryImportRuntimeRoots')
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -144,6 +225,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 
 const asString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+)
+
+const asStringArray = (value: unknown) => (
+  Array.isArray(value)
+    ? value.map(asString).filter((item): item is string => item != null)
+    : []
 )
 
 const unique = <T>(values: T[]) => Array.from(new Set(values))
@@ -265,6 +352,408 @@ const readOriginRemoteUrl = (commonGitDir: string) => {
   }
 }
 
+const createEmptyCodexThreadMetadataIndex = (
+  pinnedThreadIds = new Set<string>()
+): CodexThreadMetadataIndex => ({
+  byNativeSessionId: new Map(),
+  bySourcePath: new Map(),
+  pinnedThreadIds
+})
+
+const applyCodexSessionIndexThreadNames = (
+  index: CodexThreadMetadataIndex,
+  threadNames: Map<string, string>
+) => {
+  for (const [nativeSessionId, title] of threadNames) {
+    const existing = index.byNativeSessionId.get(nativeSessionId)
+    if (existing != null) {
+      existing.isListed = true
+      existing.title = title
+      continue
+    }
+    index.byNativeSessionId.set(nativeSessionId, {
+      isListed: true,
+      isPinned: index.pinnedThreadIds.has(nativeSessionId),
+      nativeSessionId,
+      title
+    })
+  }
+  return index
+}
+
+const resolveCodexStateDatabasePaths = (homeDir: string) =>
+  unique([
+    path.join(homeDir, '.codex', 'state_5.sqlite'),
+    path.join(homeDir, '.codex', 'sqlite', 'state_5.sqlite')
+  ])
+
+const resolveCodexSessionIndexPaths = (homeDir: string) =>
+  unique([
+    path.join(homeDir, '.codex', 'session_index.jsonl')
+  ])
+
+const resolveCodexGlobalStatePaths = (homeDir: string) =>
+  unique([
+    path.join(homeDir, '.codex', '.codex-global-state.json')
+  ])
+
+const readCodexSessionIndexThreadNames = (homeDir: string) => {
+  const threadNames = new Map<string, string>()
+  const indexPath = resolveCodexSessionIndexPaths(homeDir).find(filePath => existsSync(filePath))
+  if (indexPath == null) {
+    return threadNames
+  }
+
+  try {
+    for (const line of readFileSync(indexPath, 'utf8').split('\n')) {
+      const trimmed = line.trim()
+      if (trimmed === '') {
+        continue
+      }
+      const record = parseJson(trimmed)
+      if (!isRecord(record)) {
+        continue
+      }
+      const nativeSessionId = asString(record.id)
+      const threadName = asString(record.thread_name) ?? asString(record.threadName)
+      if (nativeSessionId != null && threadName != null) {
+        threadNames.set(nativeSessionId, threadName)
+      }
+    }
+  } catch (error) {
+    logger.warn({ error, indexPath }, '[runtime-store] Failed to read Codex session index')
+  }
+  return threadNames
+}
+
+const readCodexPinnedThreadIds = (homeDir: string) => {
+  const statePath = resolveCodexGlobalStatePaths(homeDir).find(filePath => existsSync(filePath))
+  if (statePath == null) {
+    return new Set<string>()
+  }
+
+  try {
+    const state = parseJson(readFileSync(statePath, 'utf8'))
+    if (!isRecord(state)) {
+      return new Set<string>()
+    }
+    const persistedState = isRecord(state['electron-persisted-atom-state'])
+      ? state['electron-persisted-atom-state']
+      : undefined
+    return new Set(unique([
+      ...asStringArray(state['pinned-thread-ids']),
+      ...asStringArray(state.pinnedThreadIds),
+      ...asStringArray(persistedState?.['pinned-thread-ids']),
+      ...asStringArray(persistedState?.pinnedThreadIds)
+    ]))
+  } catch (error) {
+    logger.warn({ error, statePath }, '[runtime-store] Failed to read Codex pinned thread ids')
+    return new Set<string>()
+  }
+}
+
+const readCodexThreadTimestamp = (primaryMs: unknown, fallbackSeconds: unknown) => {
+  const value = typeof primaryMs === 'number' && Number.isFinite(primaryMs) && primaryMs > 0
+    ? primaryMs
+    : typeof fallbackSeconds === 'number' && Number.isFinite(fallbackSeconds) && fallbackSeconds > 0
+    ? fallbackSeconds
+    : undefined
+  if (value == null) {
+    return undefined
+  }
+  return value < 10_000_000_000 ? value * 1000 : value
+}
+
+const readCodexThreadMetadataColumns = (database: NodeDatabaseSync) =>
+  new Set(
+    (database.prepare('PRAGMA table_info(threads)').all() as Array<Record<string, unknown>>)
+      .map(row => asString(row.name))
+      .filter((value): value is string => value != null)
+  )
+
+const readCodexTableNames = (database: NodeDatabaseSync) =>
+  new Set(
+    (database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<Record<string, unknown>>)
+      .map(row => asString(row.name))
+      .filter((value): value is string => value != null)
+  )
+
+const readCodexSpawnEdges = (database: NodeDatabaseSync, tableNames: Set<string>) => {
+  const edges = new Map<string, CodexSpawnEdge>()
+  if (!tableNames.has('thread_spawn_edges')) {
+    return edges
+  }
+
+  const rows = database.prepare(`
+    SELECT parent_thread_id, child_thread_id, status
+    FROM thread_spawn_edges
+  `).all() as Array<Record<string, unknown>>
+  for (const row of rows) {
+    const parentThreadId = asString(row.parent_thread_id)
+    const childThreadId = asString(row.child_thread_id)
+    const status = asString(row.status)
+    if (parentThreadId != null && childThreadId != null && status != null) {
+      edges.set(childThreadId, {
+        parentThreadId,
+        status
+      })
+    }
+  }
+  return edges
+}
+
+const buildCodexThreadMetadataSelect = (columns: Set<string>) => {
+  const selectColumn = (name: string) => columns.has(name) ? name : `NULL AS ${name}`
+  return [
+    selectColumn('id'),
+    selectColumn('rollout_path'),
+    selectColumn('cwd'),
+    selectColumn('title'),
+    selectColumn('archived'),
+    selectColumn('git_origin_url'),
+    selectColumn('created_at'),
+    selectColumn('updated_at'),
+    selectColumn('created_at_ms'),
+    selectColumn('updated_at_ms'),
+    selectColumn('thread_source')
+  ].join(', ')
+}
+
+const readCodexSubagentNotificationTexts = (record: Record<string, unknown>) => {
+  const payload = isRecord(record.payload) ? record.payload : undefined
+  const content = Array.isArray(payload?.content) ? payload.content : []
+  return content.flatMap((item) => {
+    if (!isRecord(item) || typeof item.text !== 'string') {
+      return []
+    }
+    return [item.text]
+  })
+}
+
+const CODEX_SUBAGENT_NOTIFICATION_OPEN_TAG = '<subagent_notification>'
+const CODEX_SUBAGENT_NOTIFICATION_CLOSE_TAG = '</subagent_notification>'
+
+const readCodexSubagentNotificationPayloads = (text: string) => {
+  const payloads: string[] = []
+  let offset = 0
+  while (offset < text.length) {
+    const openIndex = text.indexOf(CODEX_SUBAGENT_NOTIFICATION_OPEN_TAG, offset)
+    if (openIndex < 0) {
+      break
+    }
+    const payloadStartIndex = openIndex + CODEX_SUBAGENT_NOTIFICATION_OPEN_TAG.length
+    const closeIndex = text.indexOf(CODEX_SUBAGENT_NOTIFICATION_CLOSE_TAG, payloadStartIndex)
+    if (closeIndex < 0) {
+      break
+    }
+    const payload = text.slice(payloadStartIndex, closeIndex).trim()
+    if (payload !== '') {
+      payloads.push(payload)
+    }
+    offset = closeIndex + CODEX_SUBAGENT_NOTIFICATION_CLOSE_TAG.length
+  }
+  return payloads
+}
+
+const readCodexSubagentNotificationCompletedChildId = (
+  notification: Record<string, unknown>,
+  childThreadIds: Set<string>
+) => {
+  const agentPath = asString(notification.agent_path) ?? asString(notification.agentPath)
+  const status = notification.status
+  const isCompleted = asString(status) === 'completed' ||
+    (isRecord(status) && hasOwn(status, 'completed') && status.completed != null)
+  if (agentPath == null || !isCompleted) {
+    return undefined
+  }
+
+  const candidateIds = unique([
+    agentPath,
+    path.basename(agentPath),
+    path.basename(agentPath, '.jsonl')
+  ])
+  return candidateIds.find(candidateId => childThreadIds.has(candidateId))
+}
+
+const readCodexCompletedSubagentNotificationIdsFromRollout = async (
+  filePath: string,
+  childThreadIds: Set<string>
+) => {
+  const completedChildThreadIds = new Set<string>()
+  const lines = createInterface({
+    crlfDelay: Infinity,
+    input: createReadStream(filePath, { encoding: 'utf8' })
+  })
+
+  try {
+    for await (const line of lines) {
+      if (!line.includes('<subagent_notification>')) {
+        continue
+      }
+
+      let record: unknown
+      try {
+        record = JSON.parse(line) as unknown
+      } catch {
+        continue
+      }
+      if (!isRecord(record)) {
+        continue
+      }
+
+      for (const text of readCodexSubagentNotificationTexts(record)) {
+        for (const payload of readCodexSubagentNotificationPayloads(text)) {
+          const notification = parseJson(payload)
+          if (!isRecord(notification)) {
+            continue
+          }
+          const completedChildThreadId = readCodexSubagentNotificationCompletedChildId(notification, childThreadIds)
+          if (completedChildThreadId != null) {
+            completedChildThreadIds.add(completedChildThreadId)
+            if (completedChildThreadIds.size >= childThreadIds.size) {
+              lines.close()
+              return completedChildThreadIds
+            }
+          }
+        }
+      }
+    }
+  } finally {
+    lines.close()
+  }
+
+  return completedChildThreadIds
+}
+
+const readCodexCompletedSubagentNotificationIds = async (
+  spawnEdges: Map<string, CodexSpawnEdge>,
+  threadRolloutPaths: Map<string, string>
+) => {
+  const childThreadIdsByParent = new Map<string, Set<string>>()
+  for (const [childThreadId, edge] of spawnEdges) {
+    if (edge.status === 'closed') {
+      continue
+    }
+    const childThreadIds = childThreadIdsByParent.get(edge.parentThreadId) ?? new Set<string>()
+    childThreadIds.add(childThreadId)
+    childThreadIdsByParent.set(edge.parentThreadId, childThreadIds)
+  }
+
+  const completedChildThreadIds = new Set<string>()
+  for (const [parentThreadId, childThreadIds] of childThreadIdsByParent) {
+    const rolloutPath = threadRolloutPaths.get(parentThreadId)
+    if (rolloutPath == null || !existsSync(rolloutPath)) {
+      continue
+    }
+    try {
+      const completedIds = await readCodexCompletedSubagentNotificationIdsFromRollout(rolloutPath, childThreadIds)
+      for (const completedId of completedIds) {
+        completedChildThreadIds.add(completedId)
+      }
+    } catch (error) {
+      logger.warn({ error, rolloutPath }, '[runtime-store] Failed to read Codex subagent notifications')
+    }
+  }
+
+  return completedChildThreadIds
+}
+
+const readCodexThreadMetadataIndex = async (homeDir: string): Promise<CodexThreadMetadataIndex> => {
+  const pinnedThreadIds = readCodexPinnedThreadIds(homeDir)
+  const sessionIndexThreadNames = readCodexSessionIndexThreadNames(homeDir)
+  const databasePath = resolveCodexStateDatabasePaths(homeDir).find(filePath => existsSync(filePath))
+  if (databasePath == null) {
+    return applyCodexSessionIndexThreadNames(
+      createEmptyCodexThreadMetadataIndex(pinnedThreadIds),
+      sessionIndexThreadNames
+    )
+  }
+
+  let database: NodeDatabaseSync | undefined
+  try {
+    database = new DatabaseSync(databasePath, { readOnly: true })
+    const columns = readCodexThreadMetadataColumns(database)
+    if (!columns.has('id') || !columns.has('rollout_path')) {
+      return applyCodexSessionIndexThreadNames(
+        createEmptyCodexThreadMetadataIndex(pinnedThreadIds),
+        sessionIndexThreadNames
+      )
+    }
+    const spawnEdges = readCodexSpawnEdges(database, readCodexTableNames(database))
+
+    const index = createEmptyCodexThreadMetadataIndex(pinnedThreadIds)
+    const rows = database.prepare(`
+      SELECT ${buildCodexThreadMetadataSelect(columns)}
+      FROM threads
+    `).all() as Array<Record<string, unknown>>
+    const threadRolloutPaths = new Map<string, string>()
+    for (const row of rows) {
+      const nativeSessionId = asString(row.id)
+      const sourcePath = asString(row.rollout_path)
+      if (nativeSessionId != null && sourcePath != null) {
+        threadRolloutPaths.set(nativeSessionId, sourcePath)
+      }
+    }
+    const completedSubagentThreadIds = await readCodexCompletedSubagentNotificationIds(spawnEdges, threadRolloutPaths)
+
+    for (const row of rows) {
+      const nativeSessionId = asString(row.id)
+      if (nativeSessionId == null) {
+        continue
+      }
+      const sourcePath = asString(row.rollout_path)
+      const gitOriginUrl = asString(row.git_origin_url)
+      const spawnStatus = spawnEdges.get(nativeSessionId)?.status
+      const threadSource = asString(row.thread_source)
+      const isArchived = typeof row.archived === 'number' ? row.archived !== 0 : undefined
+      const isCompletedSubagent = completedSubagentThreadIds.has(nativeSessionId)
+      const metadata: CodexThreadMetadata = {
+        createdAt: readCodexThreadTimestamp(row.created_at_ms, row.created_at),
+        cwd: asString(row.cwd),
+        gitOriginUrl: gitOriginUrl == null ? undefined : normalizeRemoteUrl(gitOriginUrl),
+        isArchived: isArchived === true || spawnStatus === 'closed' || isCompletedSubagent ? true : isArchived,
+        isListed: sessionIndexThreadNames.has(nativeSessionId),
+        isPinned: pinnedThreadIds.has(nativeSessionId),
+        nativeSessionId,
+        sourcePath,
+        spawnStatus,
+        threadSource,
+        title: sessionIndexThreadNames.get(nativeSessionId) ?? asString(row.title),
+        updatedAt: readCodexThreadTimestamp(row.updated_at_ms, row.updated_at)
+      }
+
+      index.byNativeSessionId.set(nativeSessionId, metadata)
+      if (sourcePath != null) {
+        index.bySourcePath.set(normalizeRealPath(sourcePath), metadata)
+      }
+    }
+
+    return applyCodexSessionIndexThreadNames(index, sessionIndexThreadNames)
+  } catch (error) {
+    logger.warn({ databasePath, error }, '[runtime-store] Failed to read Codex thread metadata')
+    return applyCodexSessionIndexThreadNames(
+      createEmptyCodexThreadMetadataIndex(pinnedThreadIds),
+      sessionIndexThreadNames
+    )
+  } finally {
+    if (database?.isOpen === true) {
+      database.close()
+    }
+  }
+}
+
+const getCodexThreadMetadata = (
+  index: CodexThreadMetadataIndex | undefined,
+  filePath: string,
+  nativeSessionId?: string
+) =>
+  index?.bySourcePath.get(normalizeRealPath(filePath)) ??
+    (nativeSessionId == null ? undefined : index?.byNativeSessionId.get(nativeSessionId))
+
+const getVisibleCodexThreadSource = (metadata: CodexThreadMetadata | undefined) => (
+  metadata?.isListed === true ? undefined : metadata?.threadSource
+)
+
 const resolveGitProjectIdentity = (startPath: string): GitProjectIdentity | undefined => {
   const gitDir = findGitMetadataDir(startPath)
   if (gitDir == null) {
@@ -317,8 +806,9 @@ const getFirstText = (content: string | RuntimeContentItem[]) => {
 }
 
 const buildTitle = (conversation: NativeHistoryConversation) => {
-  const title = conversation.messages.find(message => message.role === 'user' && getFirstText(message.content) != null)
-    ?.content ?? conversation.title?.trim()
+  const title = (conversation.titleIsAuthoritative === true ? conversation.title?.trim() : undefined) ??
+    conversation.messages.find(message => message.role === 'user' && getFirstText(message.content) != null)?.content ??
+    conversation.title?.trim()
   const text = typeof title === 'string' ? title : title == null ? undefined : getFirstText(title)
   const normalized = text?.replace(/\s+/g, ' ').trim()
   if (normalized == null || normalized === '') {
@@ -440,18 +930,83 @@ const gitIdentitiesMatch = (left: GitProjectIdentity, right: GitProjectIdentity)
   return false
 }
 
-const isProjectConversation = (conversationCwd: string | undefined, projectContext: ProjectMatchContext) => {
-  if (conversationCwd == null) {
-    return false
+const gitOriginMatchesProject = (
+  gitOriginUrl: string | undefined,
+  projectContext: ProjectMatchContext
+) => {
+  const normalizedGitOriginUrl = gitOriginUrl == null ? undefined : normalizeRemoteUrl(gitOriginUrl)
+  return normalizedGitOriginUrl != null &&
+    projectContext.gitIdentities.some(identity => identity.remoteUrl === normalizedGitOriginUrl)
+}
+
+const isProjectConversation = (
+  conversationCwd: string | undefined,
+  projectContext: ProjectMatchContext,
+  gitOriginUrl?: string
+) => {
+  if (conversationCwd != null) {
+    const normalizedCwd = normalizeRealPath(conversationCwd)
+    if (projectContext.roots.some(root => isPathInside(root, normalizedCwd))) {
+      return true
+    }
+
+    const conversationGitIdentity = resolveGitProjectIdentity(normalizedCwd)
+    if (
+      conversationGitIdentity != null &&
+      projectContext.gitIdentities.some(identity => gitIdentitiesMatch(identity, conversationGitIdentity))
+    ) {
+      return true
+    }
   }
-  const normalizedCwd = normalizeRealPath(conversationCwd)
-  if (projectContext.roots.some(root => isPathInside(root, normalizedCwd))) {
+
+  if (gitOriginMatchesProject(gitOriginUrl, projectContext)) {
     return true
   }
 
-  const conversationGitIdentity = resolveGitProjectIdentity(normalizedCwd)
-  return conversationGitIdentity != null &&
-    projectContext.gitIdentities.some(identity => gitIdentitiesMatch(identity, conversationGitIdentity))
+  return false
+}
+
+const resolveNativeHistoryProjectScope = (
+  options: NativeHistoryImportOptions
+): NativeHistoryProjectScope => options.projectScope ?? 'current-project'
+
+const isConversationInProjectScope = (
+  conversationCwd: string | undefined,
+  projectContext: ProjectMatchContext,
+  projectScope: NativeHistoryProjectScope,
+  gitOriginUrl?: string
+) => {
+  if (projectScope === 'all-projects') {
+    return conversationCwd != null
+  }
+  return isProjectConversation(conversationCwd, projectContext, gitOriginUrl)
+}
+
+const resolveConversationWorkspaceCwd = (
+  conversationCwd: string,
+  fallbackCwd: string,
+  env: NodeJS.ProcessEnv,
+  projectScope: NativeHistoryProjectScope
+) => {
+  if (projectScope !== 'all-projects') {
+    return fallbackCwd
+  }
+  const conversationEnv = createWorkspaceRuntimeEnv(conversationCwd, env)
+  return resolveProjectSharedWorkspaceFolder(conversationCwd, conversationEnv)
+}
+
+const resolveNativeHistoryImportTarget = (
+  conversationCwd: string,
+  fallbackCwd: string,
+  env: NodeJS.ProcessEnv,
+  projectScope: NativeHistoryProjectScope
+) => {
+  const workspaceCwd = resolveConversationWorkspaceCwd(conversationCwd, fallbackCwd, env, projectScope)
+  const runtimeEnv = createWorkspaceRuntimeEnv(workspaceCwd, env)
+  return {
+    runtimeRoot: resolveWorkspaceRuntimeStoreRoot(workspaceCwd, runtimeEnv),
+    workspaceCwd
+  }
 }
 
 const readContentText = (value: unknown): string | undefined => {
@@ -487,19 +1042,44 @@ const buildPreviewTitle = (adapter: NativeHistoryAdapter, title: string | undefi
 const readConversationPreview = async (
   adapter: NativeHistoryAdapter,
   filePath: string,
-  isArchived: boolean
+  isArchived: boolean,
+  codexThreadMetadata?: CodexThreadMetadata,
+  fileStat?: Stats,
+  codexThreadMetadataIndex?: CodexThreadMetadataIndex
 ): Promise<NativeHistoryImportPreviewCandidate | undefined> => {
-  const stat = statSync(filePath)
+  const stat = fileStat ?? statSync(filePath)
+
+  if (adapter === 'codex' && codexThreadMetadata?.cwd != null) {
+    const createdAt = codexThreadMetadata.createdAt ?? stat.birthtimeMs ?? stat.mtimeMs
+    return {
+      adapter,
+      createdAt,
+      cwd: codexThreadMetadata.cwd,
+      fileSizeBytes: stat.size,
+      isArchived: codexThreadMetadata.isArchived ?? isArchived,
+      isImported: false,
+      isLarge: stat.size >= LARGE_NATIVE_HISTORY_FILE_BYTES,
+      isPinned: codexThreadMetadata.isPinned === true,
+      nativeSessionId: codexThreadMetadata.nativeSessionId,
+      sourcePath: filePath,
+      ...(getVisibleCodexThreadSource(codexThreadMetadata) == null
+        ? {}
+        : { threadSource: getVisibleCodexThreadSource(codexThreadMetadata) }),
+      title: buildPreviewTitle(adapter, codexThreadMetadata.title),
+      updatedAt: codexThreadMetadata.updatedAt ?? createdAt
+    }
+  }
+
   const lines = createInterface({
     crlfDelay: Infinity,
     input: createReadStream(filePath, { encoding: 'utf8' })
   })
-  let createdAt = 0
-  let cwd: string | undefined
-  let nativeSessionId: string | undefined
+  let createdAt = codexThreadMetadata?.createdAt ?? 0
+  let cwd: string | undefined = codexThreadMetadata?.cwd
+  let nativeSessionId: string | undefined = codexThreadMetadata?.nativeSessionId
   let parsedRecords = 0
-  let title: string | undefined
-  let updatedAt = stat.mtimeMs
+  let title: string | undefined = codexThreadMetadata?.title
+  let updatedAt = codexThreadMetadata?.updatedAt ?? 0
 
   try {
     for await (const line of lines) {
@@ -522,7 +1102,7 @@ const readConversationPreview = async (
       }
       parsedRecords += 1
 
-      const timestamp = getEventTime(value.timestamp, updatedAt)
+      const timestamp = getEventTime(value.timestamp, stat.mtimeMs)
       updatedAt = Math.max(updatedAt, timestamp)
 
       if (adapter === 'codex') {
@@ -558,22 +1138,33 @@ const readConversationPreview = async (
     lines.close()
   }
 
-  if (cwd == null) {
+  const effectiveCodexThreadMetadata = adapter === 'codex'
+    ? getCodexThreadMetadata(codexThreadMetadataIndex, filePath, nativeSessionId) ?? codexThreadMetadata
+    : codexThreadMetadata
+  const resolvedNativeSessionId = effectiveCodexThreadMetadata?.nativeSessionId ?? nativeSessionId ??
+    path.basename(filePath, '.jsonl')
+  const resolvedCwd = effectiveCodexThreadMetadata?.cwd ?? cwd
+  if (resolvedCwd == null) {
     return undefined
   }
 
   return {
     adapter,
-    createdAt: createdAt || stat.birthtimeMs || stat.mtimeMs,
-    cwd,
+    createdAt: effectiveCodexThreadMetadata?.createdAt ?? (createdAt || stat.birthtimeMs || stat.mtimeMs),
+    cwd: resolvedCwd,
     fileSizeBytes: stat.size,
-    isArchived,
+    isArchived: effectiveCodexThreadMetadata?.isArchived ?? isArchived,
     isImported: false,
     isLarge: stat.size >= LARGE_NATIVE_HISTORY_FILE_BYTES,
-    nativeSessionId: nativeSessionId ?? path.basename(filePath, '.jsonl'),
+    isPinned: effectiveCodexThreadMetadata?.isPinned === true ||
+      codexThreadMetadataIndex?.pinnedThreadIds.has(resolvedNativeSessionId) === true,
+    nativeSessionId: resolvedNativeSessionId,
     sourcePath: filePath,
-    title: buildPreviewTitle(adapter, title),
-    updatedAt
+    ...(getVisibleCodexThreadSource(effectiveCodexThreadMetadata) == null
+      ? {}
+      : { threadSource: getVisibleCodexThreadSource(effectiveCodexThreadMetadata) }),
+    title: buildPreviewTitle(adapter, effectiveCodexThreadMetadata?.title ?? title),
+    updatedAt: effectiveCodexThreadMetadata?.updatedAt ?? (updatedAt || createdAt || stat.mtimeMs)
   }
 }
 
@@ -621,7 +1212,9 @@ const toRuntimeContentItems = (items: unknown): RuntimeContentItem[] | undefined
 const parseCodexConversation = (
   sourcePath: string,
   records: JsonlRecord[],
-  projectContext: ProjectMatchContext
+  projectContext: ProjectMatchContext,
+  projectScope: NativeHistoryProjectScope,
+  codexThreadMetadata?: CodexThreadMetadata
 ): NativeHistoryConversation | undefined => {
   let sessionMeta: Record<string, unknown> | undefined
   const messages: NativeHistoryMessage[] = []
@@ -706,13 +1299,20 @@ const parseCodexConversation = (
     }
   }
 
-  const cwd = asString(sessionMeta?.cwd)
-  if (!isProjectConversation(cwd, projectContext) || messages.length === 0) {
+  const cwd = codexThreadMetadata?.cwd ?? asString(sessionMeta?.cwd)
+  if (
+    !isConversationInProjectScope(cwd, projectContext, projectScope, codexThreadMetadata?.gitOriginUrl) ||
+    messages.length === 0
+  ) {
     return undefined
   }
 
-  const nativeSessionId = asString(sessionMeta?.id) ?? path.basename(sourcePath, '.jsonl')
-  const createdAt = getEventTime(sessionMeta?.timestamp, messages[0]?.ts ?? Date.now())
+  const nativeSessionId = codexThreadMetadata?.nativeSessionId ?? asString(sessionMeta?.id) ?? path.basename(
+    sourcePath,
+    '.jsonl'
+  )
+  const createdAt = codexThreadMetadata?.createdAt ??
+    getEventTime(sessionMeta?.timestamp, messages[0]?.ts ?? Date.now())
   return {
     adapter: 'codex',
     createdAt,
@@ -721,8 +1321,9 @@ const parseCodexConversation = (
     model: asString(sessionMeta?.model) ?? asString(sessionMeta?.model_provider),
     nativeSessionId,
     sourcePath,
-    title: asString(sessionMeta?.thread_name),
-    updatedAt: updatedAt || createdAt
+    title: codexThreadMetadata?.title ?? asString(sessionMeta?.thread_name),
+    titleIsAuthoritative: codexThreadMetadata?.title != null,
+    updatedAt: (codexThreadMetadata?.updatedAt ?? updatedAt) || createdAt
   }
 }
 
@@ -752,7 +1353,8 @@ const readClaudeMessage = (record: Record<string, unknown>) => {
 const parseClaudeConversation = (
   sourcePath: string,
   records: JsonlRecord[],
-  projectContext: ProjectMatchContext
+  projectContext: ProjectMatchContext,
+  projectScope: NativeHistoryProjectScope
 ): NativeHistoryConversation | undefined => {
   const messages: NativeHistoryMessage[] = []
   let cwd: string | undefined
@@ -795,7 +1397,7 @@ const parseClaudeConversation = (
     })
   }
 
-  if (!isProjectConversation(cwd, projectContext) || messages.length === 0) {
+  if (!isConversationInProjectScope(cwd, projectContext, projectScope) || messages.length === 0) {
     return undefined
   }
 
@@ -945,53 +1547,58 @@ const parseConversation = (
   adapter: NativeHistoryAdapter,
   filePath: string,
   records: JsonlRecord[],
-  projectContext: ProjectMatchContext
+  projectContext: ProjectMatchContext,
+  projectScope: NativeHistoryProjectScope,
+  codexThreadMetadata?: CodexThreadMetadata
 ) =>
   adapter === 'codex'
-    ? parseCodexConversation(filePath, records, projectContext)
-    : parseClaudeConversation(filePath, records, projectContext)
+    ? parseCodexConversation(filePath, records, projectContext, projectScope, codexThreadMetadata)
+    : parseClaudeConversation(filePath, records, projectContext, projectScope)
 
-const readConversationCwd = async (adapter: NativeHistoryAdapter, filePath: string) => {
-  const lines = createInterface({
-    crlfDelay: Infinity,
-    input: createReadStream(filePath, { encoding: 'utf8' })
-  })
+const readCodexNativeSessionIdFromRecords = (records: JsonlRecord[]) => {
+  for (const record of records) {
+    if (!isRecord(record.value)) {
+      continue
+    }
+    const payload = isRecord(record.value.payload) ? record.value.payload : undefined
+    const nativeSessionId = record.value.type === 'session_meta' ? asString(payload?.id) : undefined
+    if (nativeSessionId != null) {
+      return nativeSessionId
+    }
+  }
+  return undefined
+}
 
-  try {
-    for await (const line of lines) {
-      const trimmed = line.trim()
-      if (trimmed === '') {
-        continue
+const readConversationCwdFromRecords = (
+  adapter: NativeHistoryAdapter,
+  records: JsonlRecord[]
+) => {
+  for (const record of records) {
+    if (!isRecord(record.value)) {
+      continue
+    }
+    if (adapter === 'codex') {
+      const payload = isRecord(record.value.payload) ? record.value.payload : undefined
+      const cwd = record.value.type === 'session_meta' ? asString(payload?.cwd) : undefined
+      if (cwd != null) {
+        return cwd
       }
-      let value: unknown
-      try {
-        value = JSON.parse(trimmed) as unknown
-      } catch {
-        continue
-      }
-      if (!isRecord(value)) {
-        continue
-      }
-
-      if (adapter === 'codex') {
-        const payload = isRecord(value.payload) ? value.payload : undefined
-        const cwd = value.type === 'session_meta' ? asString(payload?.cwd) : undefined
-        if (cwd != null) {
-          lines.close()
-          return cwd
-        }
-      } else {
-        const cwd = asString(value.cwd)
-        if (cwd != null) {
-          lines.close()
-          return cwd
-        }
+    } else {
+      const cwd = asString(record.value.cwd)
+      if (cwd != null) {
+        return cwd
       }
     }
-  } finally {
-    lines.close()
   }
+  return undefined
 }
+
+const getCodexThreadMetadataFromRecords = (
+  index: CodexThreadMetadataIndex | undefined,
+  filePath: string,
+  records: JsonlRecord[],
+  fallback?: CodexThreadMetadata
+) => getCodexThreadMetadata(index, filePath, readCodexNativeSessionIdFromRecords(records)) ?? fallback
 
 const hasCustomImportOptions = (options: NativeHistoryImportOptions) => (
   options.adapters != null ||
@@ -1000,8 +1607,12 @@ const hasCustomImportOptions = (options: NativeHistoryImportOptions) => (
   options.homeDir != null ||
   options.maxFileSizeBytes != null ||
   options.maxFileSizeBytesByAdapter != null ||
+  options.projectScope != null ||
   options.sourceDirs != null ||
-  options.sourcePaths != null
+  options.sourcePaths != null ||
+  options.threadScope != null ||
+  options.timeFilter != null ||
+  options.timeSort != null
 )
 
 const createEmptyImportResult = (): NativeHistoryImportResult => ({
@@ -1033,6 +1644,178 @@ const matchesSourcePathFilter = (sourcePathFilter: Set<string> | undefined, file
   sourcePathFilter == null || sourcePathFilter.has(normalizeRealPath(filePath))
 )
 
+const matchesNativeHistoryCandidateScope = (
+  candidate: Pick<NativeHistoryImportPreviewCandidate, 'isArchived'>,
+  candidateScope: NativeHistoryCandidateScope | undefined
+) => (
+  candidateScope == null ||
+  candidateScope === 'all' ||
+  (candidateScope === 'archived' ? candidate.isArchived : !candidate.isArchived)
+)
+
+const isNativeHistorySubagentThread = (value: { isListed?: boolean; threadSource?: string } | undefined) => (
+  value?.threadSource === 'subagent' && value.isListed !== true
+)
+
+const matchesNativeHistoryThreadScope = (
+  value: { isListed?: boolean; threadSource?: string } | undefined,
+  threadScope: NativeHistoryThreadScope | undefined
+) => (
+  threadScope == null ||
+  threadScope === 'all' ||
+  (
+    threadScope === 'subagent'
+      ? isNativeHistorySubagentThread(value)
+      : !isNativeHistorySubagentThread(value)
+  )
+)
+
+const normalizeNativeHistoryPreviewLimit = (value: number | undefined) => {
+  if (value == null) {
+    return undefined
+  }
+  if (!Number.isFinite(value)) {
+    return undefined
+  }
+  return Math.min(MAX_NATIVE_HISTORY_PREVIEW_LIMIT, Math.max(1, Math.floor(value)))
+}
+
+const parseNativeHistoryPreviewCursor = (cursor: string | undefined): NativeHistoryPreviewCursor => {
+  if (cursor == null || cursor.trim() === '') {
+    return { offsets: {} }
+  }
+  try {
+    const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as unknown
+    if (!isRecord(decoded) || !isRecord(decoded.offsets)) {
+      return { offsets: {} }
+    }
+    const offsets: Partial<Record<NativeHistoryAdapter, number>> = {}
+    for (const adapter of ['codex', 'claude-code'] satisfies NativeHistoryAdapter[]) {
+      const offset = decoded.offsets[adapter]
+      if (typeof offset === 'number' && Number.isInteger(offset) && offset > 0) {
+        offsets[adapter] = offset
+      }
+    }
+    return { offsets }
+  } catch {
+    return { offsets: {} }
+  }
+}
+
+const createNativeHistoryPreviewCursor = (
+  offsets: Partial<Record<NativeHistoryAdapter, number>>
+) => Buffer.from(JSON.stringify({ offsets }), 'utf8').toString('base64url')
+
+const normalizeTimestamp = (value: number | undefined) => (
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined
+)
+
+const getCandidateActivityTime = (value: Pick<NativeHistoryImportPreviewCandidate, 'createdAt' | 'updatedAt'>) => (
+  normalizeTimestamp(value.updatedAt) ?? normalizeTimestamp(value.createdAt) ?? 0
+)
+
+const getImportSessionActivityTime = (value: Pick<NativeHistoryImportSessionResult, 'createdAt' | 'updatedAt'>) => (
+  normalizeTimestamp(value.updatedAt) ?? normalizeTimestamp(value.createdAt) ?? 0
+)
+
+const comparePinnedFirst = (
+  left: { isPinned?: boolean },
+  right: { isPinned?: boolean }
+) => Number(right.isPinned === true) - Number(left.isPinned === true)
+
+const matchesNativeHistoryTimeRange = (
+  value: number,
+  range: NativeHistoryTimeRange | undefined
+) => {
+  if (range == null) {
+    return true
+  }
+  if (range.from != null && value < range.from) {
+    return false
+  }
+  if (range.to != null && value > range.to) {
+    return false
+  }
+  return true
+}
+
+const matchesNativeHistoryTimeFilter = (
+  candidate: Pick<NativeHistoryImportPreviewCandidate, 'createdAt' | 'updatedAt'>,
+  timeFilter: NativeHistoryTimeFilter | undefined
+) => (
+  timeFilter == null ||
+  (
+    matchesNativeHistoryTimeRange(candidate.createdAt, timeFilter.createdAt) &&
+    matchesNativeHistoryTimeRange(candidate.updatedAt, timeFilter.updatedAt)
+  )
+)
+
+const compareNativeHistoryCandidates = (
+  timeSort: NativeHistoryTimeSort | undefined
+) =>
+(
+  left: NativeHistoryImportPreviewCandidate,
+  right: NativeHistoryImportPreviewCandidate
+) => {
+  const leftTime = timeSort === 'createdAt'
+    ? left.createdAt
+    : timeSort === 'updatedAt'
+    ? left.updatedAt
+    : getCandidateActivityTime(left)
+  const rightTime = timeSort === 'createdAt'
+    ? right.createdAt
+    : timeSort === 'updatedAt'
+    ? right.updatedAt
+    : getCandidateActivityTime(right)
+  return comparePinnedFirst(left, right) ||
+    rightTime - leftTime ||
+    right.createdAt - left.createdAt ||
+    right.sourcePath.localeCompare(left.sourcePath)
+}
+
+const compareNativeHistorySourceFiles = (
+  timeSort: NativeHistoryTimeSort | undefined
+) =>
+(
+  left: NativeHistorySourceFile,
+  right: NativeHistorySourceFile
+) => {
+  const leftTime = timeSort === 'createdAt'
+    ? left.createdAt
+    : timeSort === 'updatedAt'
+    ? left.updatedAt
+    : normalizeTimestamp(left.updatedAt) ?? normalizeTimestamp(left.createdAt) ?? 0
+  const rightTime = timeSort === 'createdAt'
+    ? right.createdAt
+    : timeSort === 'updatedAt'
+    ? right.updatedAt
+    : normalizeTimestamp(right.updatedAt) ?? normalizeTimestamp(right.createdAt) ?? 0
+  return comparePinnedFirst(left, right) ||
+    rightTime - leftTime ||
+    right.createdAt - left.createdAt ||
+    right.filePath.localeCompare(left.filePath)
+}
+
+const compareNativeHistoryImportSessions = (
+  timeSort: NativeHistoryTimeSort | undefined
+) =>
+(
+  left: NativeHistoryImportSessionResult,
+  right: NativeHistoryImportSessionResult
+) => {
+  const leftTime = timeSort === 'createdAt'
+    ? left.createdAt
+    : timeSort === 'updatedAt'
+    ? left.updatedAt
+    : getImportSessionActivityTime(left)
+  const rightTime = timeSort === 'createdAt'
+    ? right.createdAt
+    : timeSort === 'updatedAt'
+    ? right.updatedAt
+    : getImportSessionActivityTime(right)
+  return rightTime - leftTime || right.createdAt - left.createdAt || right.sourcePath.localeCompare(left.sourcePath)
+}
+
 const isWithinImportFileSizeLimit = (
   filePath: string,
   limitBytes: number | undefined
@@ -1041,12 +1824,35 @@ const isWithinImportFileSizeLimit = (
 const createAdapterPreview = (adapter: NativeHistoryAdapter): NativeHistoryImportAdapterPreview => ({
   adapter,
   candidates: [],
+  hasMore: false,
+  isComplete: true,
   largeFiles: 0,
   largestFileBytes: 0,
   matchedFiles: 0,
   scannedFiles: 0,
   totalBytes: 0
 })
+
+const createNativeHistorySourceFile = (
+  adapter: NativeHistoryAdapter,
+  homeDir: string,
+  filePath: string,
+  codexThreadMetadataIndex: CodexThreadMetadataIndex | undefined
+): NativeHistorySourceFile => {
+  const stat = statSync(filePath)
+  const codexThreadMetadata = adapter === 'codex'
+    ? getCodexThreadMetadata(codexThreadMetadataIndex, filePath)
+    : undefined
+  return {
+    codexThreadMetadata,
+    createdAt: codexThreadMetadata?.createdAt ?? stat.birthtimeMs ?? stat.mtimeMs,
+    filePath,
+    isArchived: isArchivedNativeHistoryFile(adapter, homeDir, filePath),
+    isPinned: codexThreadMetadata?.isPinned === true,
+    stat,
+    updatedAt: codexThreadMetadata?.updatedAt ?? stat.mtimeMs
+  }
+}
 
 export async function previewNativeProjectHistory(
   options: NativeHistoryImportOptions = {}
@@ -1058,12 +1864,20 @@ export async function previewNativeProjectHistory(
   const homeDir = path.resolve(options.homeDir ?? env.__ONEWORKS_PROJECT_REAL_HOME__ ?? env.HOME ?? homedir())
   const adapters = options.adapters ?? ['codex', 'claude-code']
   const projectContext = resolveProjectMatchContext(cwd, runtimeEnv)
+  const projectScope = resolveNativeHistoryProjectScope(options)
   const adapterPreviews: NativeHistoryImportAdapterPreview[] = []
   const sourcePathFilter = createSourcePathFilter(options.sourcePaths)
+  const previewLimit = normalizeNativeHistoryPreviewLimit(options.previewLimit)
+  const previewCursor = parseNativeHistoryPreviewCursor(options.previewCursor)
+  const nextCursorOffsets: Partial<Record<NativeHistoryAdapter, number>> = {}
 
   for (const adapter of adapters) {
     const preview = createAdapterPreview(adapter)
     const sourceDirs = resolveSourceDirs(adapter, homeDir, options.sourceDirs)
+    const codexThreadMetadataIndex = adapter === 'codex'
+      ? await readCodexThreadMetadataIndex(homeDir)
+      : undefined
+    const sourceFiles: NativeHistorySourceFile[] = []
 
     for (const sourceDir of sourceDirs) {
       if (!existsSync(sourceDir)) {
@@ -1073,51 +1887,110 @@ export async function previewNativeProjectHistory(
       preview.scannedFiles += files.length
 
       for (const filePath of files) {
+        if (!matchesSourcePathFilter(sourcePathFilter, filePath)) {
+          continue
+        }
         try {
-          if (!matchesSourcePathFilter(sourcePathFilter, filePath)) {
-            continue
-          }
-          const candidate = await readConversationPreview(
-            adapter,
-            filePath,
-            isArchivedNativeHistoryFile(adapter, homeDir, filePath)
-          )
-          if (candidate == null || !isProjectConversation(candidate.cwd, projectContext)) {
-            continue
-          }
-
-          const importedSessionId = findImportedNativeHistorySessionId(runtimeRoot, candidate)
-          if (importedSessionId != null) {
-            continue
-          }
-
-          preview.candidates.push(candidate)
-          preview.matchedFiles += 1
-          preview.totalBytes += candidate.fileSizeBytes
-          preview.largestFileBytes = Math.max(preview.largestFileBytes, candidate.fileSizeBytes)
-          if (candidate.isLarge) {
-            preview.largeFiles += 1
-          }
+          sourceFiles.push(createNativeHistorySourceFile(adapter, homeDir, filePath, codexThreadMetadataIndex))
         } catch (error) {
           logger.warn({
             adapter,
             error,
             filePath
-          }, '[runtime-store] Failed to preview native history file')
+          }, '[runtime-store] Failed to inspect native history file')
         }
       }
     }
 
-    preview.candidates.sort((a, b) => b.updatedAt - a.updatedAt)
+    sourceFiles.sort(compareNativeHistorySourceFiles(options.timeSort))
+
+    const startOffset = previewCursor.offsets[adapter] ?? 0
+    for (let index = startOffset; index < sourceFiles.length; index += 1) {
+      const sourceFile = sourceFiles[index]!
+      try {
+        const codexThreadMetadata = sourceFile.codexThreadMetadata
+        const candidate = await readConversationPreview(
+          adapter,
+          sourceFile.filePath,
+          sourceFile.isArchived,
+          codexThreadMetadata,
+          sourceFile.stat,
+          codexThreadMetadataIndex
+        )
+        if (
+          candidate == null ||
+          !isConversationInProjectScope(
+            candidate.cwd,
+            projectContext,
+            projectScope,
+            codexThreadMetadata?.gitOriginUrl
+          ) ||
+          !matchesNativeHistoryThreadScope(candidate, options.threadScope) ||
+          !matchesNativeHistoryTimeFilter(candidate, options.timeFilter) ||
+          !matchesNativeHistoryCandidateScope(candidate, options.candidateScope)
+        ) {
+          continue
+        }
+
+        const importTarget = projectScope === 'all-projects'
+          ? resolveNativeHistoryImportTarget(candidate.cwd, cwd, env, projectScope)
+          : { runtimeRoot, workspaceCwd: cwd }
+        const importedSessionId = findImportedNativeHistorySessionId(importTarget.runtimeRoot, candidate)
+        if (importedSessionId != null) {
+          continue
+        }
+
+        preview.candidates.push(candidate)
+        preview.matchedFiles += 1
+        preview.totalBytes += candidate.fileSizeBytes
+        preview.largestFileBytes = Math.max(preview.largestFileBytes, candidate.fileSizeBytes)
+        if (candidate.isLarge) {
+          preview.largeFiles += 1
+        }
+
+        if (previewLimit != null && preview.candidates.length >= previewLimit) {
+          const nextOffset = index + 1
+          if (nextOffset < sourceFiles.length) {
+            preview.hasMore = true
+            preview.isComplete = false
+            preview.nextCursor = createNativeHistoryPreviewCursor({
+              ...previewCursor.offsets,
+              ...nextCursorOffsets,
+              [adapter]: nextOffset
+            })
+            nextCursorOffsets[adapter] = nextOffset
+          }
+          break
+        }
+      } catch (error) {
+        logger.warn({
+          adapter,
+          error,
+          filePath: sourceFile.filePath
+        }, '[runtime-store] Failed to preview native history file')
+      }
+    }
+
+    preview.candidates.sort(compareNativeHistoryCandidates(options.timeSort))
     adapterPreviews.push(preview)
   }
 
+  const nextCursor = Object.keys(nextCursorOffsets).length === 0
+    ? undefined
+    : createNativeHistoryPreviewCursor({
+      ...previewCursor.offsets,
+      ...nextCursorOffsets
+    })
+
   return {
     adapters: adapterPreviews,
+    hasMore: adapterPreviews.some(preview => preview.hasMore),
+    isComplete: adapterPreviews.every(preview => preview.isComplete),
     largeFileThresholdBytes: LARGE_NATIVE_HISTORY_FILE_BYTES,
     largeFiles: adapterPreviews.reduce((sum, preview) => sum + preview.largeFiles, 0),
     largestFileBytes: Math.max(0, ...adapterPreviews.map(preview => preview.largestFileBytes)),
     matchedFiles: adapterPreviews.reduce((sum, preview) => sum + preview.matchedFiles, 0),
+    ...(nextCursor == null ? {} : { nextCursor }),
     scannedFiles: adapterPreviews.reduce((sum, preview) => sum + preview.scannedFiles, 0),
     totalBytes: adapterPreviews.reduce((sum, preview) => sum + preview.totalBytes, 0)
   }
@@ -1128,6 +2001,29 @@ const resolveNativeHistoryImportRuntimeRoot = (options: NativeHistoryImportOptio
   const env = options.env ?? process.env
   const runtimeEnv = createWorkspaceRuntimeEnv(cwd, env)
   return resolveWorkspaceRuntimeStoreRoot(cwd, runtimeEnv)
+}
+
+const setNativeHistoryImportRuntimeRoots = (
+  result: NativeHistoryImportResult,
+  runtimeRoots: string[]
+) => {
+  Object.defineProperty(result, nativeHistoryImportRuntimeRoots, {
+    configurable: true,
+    enumerable: false,
+    value: runtimeRoots
+  })
+}
+
+const getNativeHistoryImportRuntimeRoots = (
+  result: NativeHistoryImportResult,
+  options: NativeHistoryImportOptions
+) => {
+  const roots = (result as NativeHistoryImportResult & {
+    [nativeHistoryImportRuntimeRoots]?: string[]
+  })[nativeHistoryImportRuntimeRoots]
+  return roots == null || roots.length === 0
+    ? [resolveNativeHistoryImportRuntimeRoot(options)]
+    : roots
 }
 
 const resolveNativeHistoryImportMarkerDir = (options: NativeHistoryImportOptions = {}) => {
@@ -1229,6 +2125,7 @@ const resolveNativeHistoryAutoImportOptions = (config: Config): NativeHistoryImp
 
   return {
     adapters,
+    threadScope: 'user',
     ...(maxFileSizeBytes == null ? {} : { maxFileSizeBytes }),
     ...(Object.keys(maxFileSizeBytesByAdapter).length === 0 ? {} : { maxFileSizeBytesByAdapter })
   }
@@ -1252,7 +2149,9 @@ async function importNativeProjectHistoryInternal(
   const homeDir = path.resolve(options.homeDir ?? env.__ONEWORKS_PROJECT_REAL_HOME__ ?? env.HOME ?? homedir())
   const adapters = options.adapters ?? ['codex', 'claude-code']
   const projectContext = resolveProjectMatchContext(cwd, runtimeEnv)
+  const projectScope = resolveNativeHistoryProjectScope(options)
   const sourcePathFilter = createSourcePathFilter(options.sourcePaths)
+  const changedRuntimeRoots = new Set<string>()
   const result: NativeHistoryImportResult = {
     importedEvents: 0,
     importedSessions: 0,
@@ -1265,6 +2164,9 @@ async function importNativeProjectHistoryInternal(
 
   for (const adapter of adapters) {
     const sourceDirs = resolveSourceDirs(adapter, homeDir, options.sourceDirs)
+    const codexThreadMetadataIndex = adapter === 'codex'
+      ? await readCodexThreadMetadataIndex(homeDir)
+      : undefined
     for (const sourceDir of sourceDirs) {
       if (!existsSync(sourceDir)) {
         continue
@@ -1279,26 +2181,52 @@ async function importNativeProjectHistoryInternal(
           if (!isWithinImportFileSizeLimit(filePath, getImportFileSizeLimit(options, adapter))) {
             continue
           }
-          const conversationCwd = await readConversationCwd(adapter, filePath)
-          if (!isProjectConversation(conversationCwd, projectContext)) {
-            continue
-          }
+          const pathCodexThreadMetadata = getCodexThreadMetadata(codexThreadMetadataIndex, filePath)
           const records = await readJsonlRecords(filePath, adapter)
-          const conversation = parseConversation(adapter, filePath, records, projectContext)
-          if (conversation == null) {
+          const codexThreadMetadata = adapter === 'codex'
+            ? getCodexThreadMetadataFromRecords(codexThreadMetadataIndex, filePath, records, pathCodexThreadMetadata)
+            : pathCodexThreadMetadata
+          if (!matchesNativeHistoryThreadScope(codexThreadMetadata, options.threadScope)) {
             continue
           }
-          if (findImportedNativeHistorySessionId(runtimeRoot, conversation) != null) {
+          const conversationCwd = codexThreadMetadata?.cwd ?? readConversationCwdFromRecords(adapter, records)
+          if (
+            !isConversationInProjectScope(
+              conversationCwd,
+              projectContext,
+              projectScope,
+              codexThreadMetadata?.gitOriginUrl
+            )
+          ) {
             continue
           }
+          const conversation = parseConversation(
+            adapter,
+            filePath,
+            records,
+            projectContext,
+            projectScope,
+            codexThreadMetadata
+          )
+          if (conversation == null || !matchesNativeHistoryTimeFilter(conversation, options.timeFilter)) {
+            continue
+          }
+          const importTarget = projectScope === 'all-projects'
+            ? resolveNativeHistoryImportTarget(conversation.cwd, cwd, env, projectScope)
+            : { runtimeRoot, workspaceCwd: cwd }
+          if (findImportedNativeHistorySessionId(importTarget.runtimeRoot, conversation) != null) {
+            continue
+          }
+          await mkdir(importTarget.runtimeRoot, { recursive: true })
           result.matchedFiles += 1
           const sessionResult = await importConversation(conversation, {
-            runtimeRoot,
-            workspaceCwd: cwd
+            runtimeRoot: importTarget.runtimeRoot,
+            workspaceCwd: importTarget.workspaceCwd
           })
           result.importedEvents += sessionResult.importedEvents
           if (sessionResult.importedEvents > 0) {
             result.importedSessions += 1
+            changedRuntimeRoots.add(importTarget.runtimeRoot)
           }
           result.sessions.push(sessionResult)
         } catch (error) {
@@ -1313,8 +2241,10 @@ async function importNativeProjectHistoryInternal(
   }
 
   if (result.sessions.length > 0) {
-    result.sessions.sort((a, b) => b.updatedAt - a.updatedAt)
-    await watchRuntimeStoreRoot(runtimeRoot)
+    result.sessions.sort(compareNativeHistoryImportSessions(options.timeSort))
+    const runtimeRoots = Array.from(changedRuntimeRoots)
+    setNativeHistoryImportRuntimeRoots(result, runtimeRoots)
+    await Promise.all(runtimeRoots.map(root => watchRuntimeStoreRoot(root)))
   }
 
   return result
@@ -1338,7 +2268,9 @@ export async function importNativeProjectHistoryAndReplay(
 ): Promise<NativeHistoryImportResult> {
   const result = await importNativeProjectHistory(options)
   if (result.sessions.length > 0) {
-    await replayNativeHistoryRuntimeRoot(resolveNativeHistoryImportRuntimeRoot(options))
+    await Promise.all(
+      getNativeHistoryImportRuntimeRoots(result, options).map(root => replayNativeHistoryRuntimeRoot(root))
+    )
   }
   return result
 }

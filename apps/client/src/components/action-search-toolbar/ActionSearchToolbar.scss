@@ -30,9 +30,14 @@
     background: transparent;
   }
 
+  .ant-input-suffix:empty {
+    display: none;
+    margin-inline-start: 0;
+  }
+
   .material-symbols-rounded {
     color: var(--sub-text-color);
-    font-size: 16px;
+    font-size: 18px;
   }
 }
 
@@ -66,7 +71,7 @@
   }
 
   .material-symbols-rounded {
-    font-size: 17px;
+    font-size: 18px;
   }
 }
 

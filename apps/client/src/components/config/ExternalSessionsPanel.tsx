@@ -2,9 +2,10 @@ import { InputNumber, Switch, Tabs } from 'antd'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { NativeHistoryAdapter } from '#~/api'
+import type { NativeHistoryAdapter, NativeHistoryProjectScope } from '#~/api'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { getAdapterDisplay, resolveAdapterDisplayIcon } from '#~/resources/adapters'
+import { getRuntimeWorkspaceId } from '#~/runtime-config'
 
 import { FieldRow } from './ConfigFieldRow'
 import { ConfigSectionFrame } from './ConfigSectionFrame'
@@ -33,7 +34,11 @@ export function ExternalSessionsPanel({
 }) {
   const { i18n, t } = useTranslation()
   const { resolvedThemeMode } = useResolvedThemeMode()
+  const hasCurrentProjectScope = getRuntimeWorkspaceId() != null
   const [activeAdapter, setActiveAdapter] = useState<NativeHistoryAdapter>('codex')
+  const [projectScope, setProjectScope] = useState<NativeHistoryProjectScope>(
+    hasCurrentProjectScope ? 'current-project' : 'all-projects'
+  )
   const { isImporting, runImport } = useNativeHistoryImportAction()
   const globalSizeLimit = config != null && hasOwn(config, 'maxFileSizeBytes')
     ? config.maxFileSizeBytes
@@ -101,6 +106,7 @@ export function ExternalSessionsPanel({
           icon='autorenew'
         >
           <Switch
+            className='config-view__external-session-switch'
             checked={config?.autoImport === true}
             onChange={checked => updateConfig({ autoImport: checked })}
           />
@@ -163,7 +169,10 @@ export function ExternalSessionsPanel({
                 formatTimestamp={formatTimestamp}
                 isActive={activeAdapter === adapter}
                 isImporting={isImporting}
+                hasCurrentProjectScope={hasCurrentProjectScope}
                 onAdapterConfigChange={patch => updateAdapterConfig(adapter, patch)}
+                onProjectScopeChange={setProjectScope}
+                projectScope={projectScope}
                 runImport={runImport}
               />
             )

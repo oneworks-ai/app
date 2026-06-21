@@ -128,11 +128,17 @@ export {
 } from './api/sessions'
 export type {
   NativeHistoryAdapter,
+  NativeHistoryCandidateScope,
   NativeHistoryImportAdapterPreview,
   NativeHistoryImportPreviewCandidate,
   NativeHistoryImportPreviewResult,
   NativeHistoryImportResult,
-  NativeHistoryImportSession
+  NativeHistoryImportSession,
+  NativeHistoryProjectScope,
+  NativeHistoryThreadScope,
+  NativeHistoryTimeFilter,
+  NativeHistoryTimeRange,
+  NativeHistoryTimeSort
 } from './api/sessions'
 export type {
   SkillHubConfigSource,

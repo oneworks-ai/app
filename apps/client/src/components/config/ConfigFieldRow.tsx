@@ -9,8 +9,8 @@ export const FieldRow = ({
   layout = 'inline',
   children
 }: {
-  title: string
-  description?: string
+  title: ReactNode
+  description?: ReactNode
   icon?: string
   layout?: 'inline' | 'stacked'
   children: ReactNode
@@ -24,7 +24,7 @@ export const FieldRow = ({
       )}
       <div className='config-view__field-text'>
         <div className='config-view__field-title'>{title}</div>
-        {description != null && description !== '' && (
+        {description != null && description !== false && description !== '' && (
           <div className='config-view__field-desc'>{description}</div>
         )}
       </div>

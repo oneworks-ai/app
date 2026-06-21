@@ -217,7 +217,10 @@
 }
 
 .config-view__field-icon {
-  font-size: 16px;
+  flex: 0 0 auto;
+  width: 18px;
+  font-size: 18px;
+  line-height: 1;
   color: var(--sub-text-color);
 }
 
