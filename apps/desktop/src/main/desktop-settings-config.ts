@@ -16,6 +16,9 @@ import { normalizeDesktopAutoUpdate, normalizeDesktopUpdateChannel } from './upd
 const desktopSettingsKeys = [
   'launcherShortcut',
   'openLastWorkspaceOnStartup',
+  'savedPasswordsAutoSignIn',
+  'savedPasswordsOfferToSave',
+  'savedPasswordsRequireAuth',
   'iconAppearance',
   'iconBackground',
   'syncAppIcon',
@@ -76,6 +79,10 @@ const normalizeOpenLastWorkspaceOnStartup = (value: unknown) => (
   typeof value === 'boolean' ? value : false
 )
 
+const normalizeEnabledByDefault = (value: unknown) => (
+  typeof value === 'boolean' ? value : true
+)
+
 const normalizeDesktopSettings = (value: unknown): DesktopSettingsState => {
   const source = isRecord(value) ? value : {}
   return {
@@ -83,6 +90,9 @@ const normalizeDesktopSettings = (value: unknown): DesktopSettingsState => {
     launcherShortcut: normalizeLauncherShortcut(source.launcherShortcut),
     autoUpdate: normalizeDesktopAutoUpdate(source.autoUpdate),
     openLastWorkspaceOnStartup: normalizeOpenLastWorkspaceOnStartup(source.openLastWorkspaceOnStartup),
+    savedPasswordsAutoSignIn: normalizeEnabledByDefault(source.savedPasswordsAutoSignIn),
+    savedPasswordsOfferToSave: normalizeEnabledByDefault(source.savedPasswordsOfferToSave),
+    savedPasswordsRequireAuth: normalizeEnabledByDefault(source.savedPasswordsRequireAuth),
     updateChannel: normalizeDesktopUpdateChannel(source.updateChannel)
   }
 }

@@ -134,9 +134,6 @@ const getProfileText = (
   const value = profile[fieldName]
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : fieldName === 'title' ? key : ''
 }
-const configSelectSuffixIcon = (
-  <span className='material-symbols-rounded config-view__select-chevron'>expand_more</span>
-)
 const collectionTabPathByKey = {
   advanced: ['advanced'],
   apiKeys: ['api-keys'],
@@ -707,7 +704,6 @@ export const SectionForm = ({
           options={options}
           onChange={(next) => handleValueChange(next)}
           allowClear
-          suffixIcon={configSelectSuffixIcon}
           disabled={isDefaultModel && modelOptions.length === 0}
           placeholder={t(
             isDefaultAdapter

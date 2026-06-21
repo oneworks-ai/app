@@ -24,6 +24,7 @@ export interface ElectronWebviewElement extends HTMLElement {
   executeJavaScript: (code: string, userGesture?: boolean) => Promise<unknown>
   getTitle: () => string
   getURL: () => string
+  getWebContentsId?: () => number
   getZoomFactor?: () => number
   goBack: () => void
   goForward: () => void

@@ -9,6 +9,8 @@ import {
   resolveDesktopLaunchWorkspaceFolder,
   resolveProjectWorkspaceFolder
 } from '../workspace-state.cjs'
+import { installBrowserActivityDownloadTracking } from './browser-activity'
+import { updateSavedPasswordsRuntimeSettings } from './browser-data-sync'
 import { readDesktopBuildSource } from './build-source'
 import { DESKTOP_SETTINGS_CHANNEL, DESKTOP_UPDATE_STATUS_CHANNEL, GLOBAL_INTERFACE_LANGUAGE_CHANNEL } from './constants'
 import { desktopDeepLinkSchemes, findDesktopDeepLinkArg, parseDesktopDeepLinkLaunchRequest } from './deep-link'
@@ -153,6 +155,9 @@ export const createDesktopApp = () => {
       launcherShortcutRegistered,
       autoUpdate: desktopUpdateSettings.autoUpdate,
       openLastWorkspaceOnStartup: runtimeState.desktopState.openLastWorkspaceOnStartup,
+      savedPasswordsAutoSignIn: runtimeState.desktopState.savedPasswordsAutoSignIn,
+      savedPasswordsOfferToSave: runtimeState.desktopState.savedPasswordsOfferToSave,
+      savedPasswordsRequireAuth: runtimeState.desktopState.savedPasswordsRequireAuth,
       updateChannel: desktopUpdateSettings.updateChannel
     }
   }
@@ -411,6 +416,10 @@ export const createDesktopApp = () => {
       ...desktopState,
       ...desktopSettingsState.settings
     }
+    updateSavedPasswordsRuntimeSettings({
+      autoSignIn: runtimeState.desktopState.savedPasswordsAutoSignIn,
+      requireAuth: runtimeState.desktopState.savedPasswordsRequireAuth
+    })
   }
 
   const resolveStartupWorkspaceFolder = () => (
@@ -633,6 +642,15 @@ export const createDesktopApp = () => {
       ...(typeof nextSettings.openLastWorkspaceOnStartup === 'boolean'
         ? { openLastWorkspaceOnStartup: nextSettings.openLastWorkspaceOnStartup }
         : {}),
+      ...(typeof nextSettings.savedPasswordsAutoSignIn === 'boolean'
+        ? { savedPasswordsAutoSignIn: nextSettings.savedPasswordsAutoSignIn }
+        : {}),
+      ...(typeof nextSettings.savedPasswordsOfferToSave === 'boolean'
+        ? { savedPasswordsOfferToSave: nextSettings.savedPasswordsOfferToSave }
+        : {}),
+      ...(typeof nextSettings.savedPasswordsRequireAuth === 'boolean'
+        ? { savedPasswordsRequireAuth: nextSettings.savedPasswordsRequireAuth }
+        : {}),
       ...normalizeDesktopIconSettingsPatch(nextSettings)
     }
     const hasDesktopSettingsPatch = Object.keys(desktopSettingsPatch).length > 0
@@ -657,6 +675,10 @@ export const createDesktopApp = () => {
 
     const previousDesktopState = runtimeState.desktopState
     runtimeState.desktopState = nextDesktopState
+    updateSavedPasswordsRuntimeSettings({
+      autoSignIn: nextDesktopState.savedPasswordsAutoSignIn,
+      requireAuth: nextDesktopState.savedPasswordsRequireAuth
+    })
     try {
       if (hasDesktopSettingsPatch) {
         await saveGlobalDesktopSettingsPatch(desktopSettingsPatch)
@@ -670,6 +692,10 @@ export const createDesktopApp = () => {
       }
     } catch (error) {
       runtimeState.desktopState = previousDesktopState
+      updateSavedPasswordsRuntimeSettings({
+        autoSignIn: previousDesktopState.savedPasswordsAutoSignIn,
+        requireAuth: previousDesktopState.savedPasswordsRequireAuth
+      })
       if (shouldUpdateLauncherShortcut) {
         registerLauncherGlobalShortcut(previousDesktopState.launcherShortcut)
       }
@@ -693,6 +719,7 @@ export const createDesktopApp = () => {
     await loadDesktopStateIntoMemory()
     applyDesktopIcon()
     registerDesktopIpcHandlers()
+    installBrowserActivityDownloadTracking()
     registerLauncherGlobalShortcut()
     await loadQuitConfirmationLanguage()
     refreshAppMenu()

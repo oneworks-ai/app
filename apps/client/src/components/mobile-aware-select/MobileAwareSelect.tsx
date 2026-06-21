@@ -5,13 +5,16 @@ import { Drawer, Select as AntdSelect } from 'antd'
 import type { RefSelectProps, SelectProps } from 'antd'
 import type { BaseOptionType, DefaultOptionType } from 'antd/es/select'
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactElement, ReactNode, Ref } from 'react'
-import { forwardRef, isValidElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, isValidElement, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 
 const DRAG_CLOSE_THRESHOLD = 72
 const SEARCH_OPTION_THRESHOLD = 8
+const defaultSuffixIcon = (
+  <span className='material-symbols-rounded oneworks-select__suffix-icon'>keyboard_arrow_down</span>
+)
 
 interface DrawerDragState {
   pointerId: number
@@ -215,12 +218,14 @@ function MobileAwareSelectInner<
     popupClassName,
     showSearch,
     filterOption,
+    suffixIcon,
     onChange,
     onClear,
     onSelect,
     onDeselect,
     onOpenChange,
     onSearch,
+    onInputKeyDown,
     open: controlledOpen,
     searchValue: controlledSearchValue,
     ...selectProps
@@ -237,16 +242,23 @@ function MobileAwareSelectInner<
   const [isDragging, setIsDragging] = useState(false)
   const isMobileSelect = isCompactLayout || isTouchInteraction
   const drawerOpen = controlledOpen ?? open
+  const reactId = useId()
+  const selectInstanceClass = useMemo(
+    () => `oneworks-select-instance-${reactId.replace(/[^\w-]/g, '-')}`,
+    [reactId]
+  )
   const activeSearchValue = controlledSearchValue ?? searchValue
   const multiple = mode === 'multiple' || mode === 'tags'
   const selectClassName = mergeClassNames(
     'oneworks-select',
+    selectInstanceClass,
     multiple ? 'oneworks-select--multiple' : undefined,
     className
   )
   const popupRootClassName = mergeClassNames(
     'oneworks-overlay',
     'oneworks-select-popup',
+    selectInstanceClass,
     multiple ? 'oneworks-overlay--multiple' : undefined,
     popupClassName,
     classNames?.popup?.root
@@ -300,6 +312,27 @@ function MobileAwareSelectInner<
       setIsDragging(false)
     }
   }, [controlledSearchValue, drawerOpen])
+
+  useEffect(() => {
+    if (isMobileSelect || !drawerOpen) {
+      return undefined
+    }
+
+    const handleOutsidePointerDown = (event: globalThis.PointerEvent) => {
+      if (!(event.target instanceof Element)) {
+        return
+      }
+      if (event.target.closest(`.${selectInstanceClass}`) != null) {
+        return
+      }
+      setDrawerOpen(false)
+    }
+
+    window.addEventListener('pointerdown', handleOutsidePointerDown, true)
+    return () => {
+      window.removeEventListener('pointerdown', handleOutsidePointerDown, true)
+    }
+  }, [drawerOpen, isMobileSelect, selectInstanceClass, setDrawerOpen])
 
   const updateDragOffset = useCallback((clientY: number) => {
     const dragState = dragStateRef.current
@@ -395,6 +428,28 @@ function MobileAwareSelectInner<
     onChange?.(nextValue as ValueType, nextOptions as OptionType | OptionType[])
   }
 
+  const handleDesktopOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      setDrawerOpen(true)
+    }
+  }
+
+  const handleDesktopChange: SelectProps<ValueType, OptionType>['onChange'] = (nextValue, nextOptions) => {
+    onChange?.(nextValue, nextOptions)
+    if (!multiple) {
+      setDrawerOpen(false)
+    }
+  }
+
+  const handleDesktopInputKeyDown: SelectProps<ValueType, OptionType>['onInputKeyDown'] = (event) => {
+    onInputKeyDown?.(event)
+    if (event.defaultPrevented || event.key !== 'Escape' || !drawerOpen) {
+      return
+    }
+    event.preventDefault()
+    setDrawerOpen(false)
+  }
+
   const selectOption = (option: NormalizedSelectOption<OptionType | RawSelectOption>) => {
     if (option.disabled) {
       return
@@ -446,14 +501,17 @@ function MobileAwareSelectInner<
         placeholder={placeholder}
         showSearch={showSearch}
         searchValue={controlledSearchValue}
+        suffixIcon={suffixIcon === undefined ? defaultSuffixIcon : suffixIcon}
         value={value}
-        onChange={onChange}
+        virtual={selectProps.virtual ?? false}
+        onChange={handleDesktopChange}
         onClear={onClear}
         onDeselect={onDeselect}
-        onOpenChange={onOpenChange}
+        onInputKeyDown={handleDesktopInputKeyDown}
+        onOpenChange={handleDesktopOpenChange}
         onSearch={onSearch}
         onSelect={onSelect}
-        open={controlledOpen}
+        open={drawerOpen}
       />
     )
   }
@@ -474,6 +532,7 @@ function MobileAwareSelectInner<
           options={options}
           placeholder={placeholder}
           showSearch={false}
+          suffixIcon={suffixIcon === undefined ? defaultSuffixIcon : suffixIcon}
           value={value}
         />
         {!disabled && (

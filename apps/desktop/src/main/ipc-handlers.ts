@@ -2,6 +2,29 @@
 import { clipboard, ipcMain, nativeImage, session, shell } from 'electron'
 import type { WebContents } from 'electron'
 
+import {
+  interactionPanelWebviewPartition,
+  listBrowserDownloads,
+  listBrowserHistory,
+  openBrowserDownload,
+  recordBrowserHistory,
+  registerInteractionPanelWebviewScope,
+  revealBrowserDownload
+} from './browser-activity'
+import {
+  authenticateSavedPasswordsAccess,
+  copySavedPasswordField,
+  deleteSavedPassword,
+  getBrowserDataSyncState,
+  importAuthenticatorBackup,
+  importBrowserPasswords,
+  importChromePasswords,
+  importPasswordCsv,
+  listBrowserPasswordImportSources,
+  listSavedPasswords,
+  revealSavedPassword,
+  updateSavedPassword
+} from './browser-data-sync'
 import { SERVER_READY_TIMEOUT_MS, WORKSPACE_CONNECTION_CHANNEL, WORKSPACE_STARTUP_READY_CHANNEL } from './constants'
 import { openFilesystemFileInExternalOpener } from './filesystem-file-opener'
 import { listMobileDebugTargets } from './mobile-debug'
@@ -23,7 +46,6 @@ import {
 import { createWorkspaceFolderInDirectory } from './workspace-folder-create'
 import { cloneGitRepositoryIntoDirectory, isGitAvailable, listCloneDestinationDirectories } from './workspace-git-clone'
 
-const interactionPanelWebviewPartition = 'persist:oneworks-interaction-panel'
 const workspaceConnectionPollMs = 50
 
 const clearInteractionPanelWebviewData = async (dataType: unknown) => {
@@ -205,6 +227,42 @@ export const registerIpcHandlers = ({
     (_event, directory: unknown) => listCloneDestinationDirectories(directory)
   )
   ipcMain.handle('desktop:get-global-interface-language-config', () => getGlobalInterfaceLanguageConfig())
+  ipcMain.handle('desktop:get-browser-data-sync-state', () => getBrowserDataSyncState())
+  ipcMain.handle('desktop:list-browser-history', (_event, input: unknown) => listBrowserHistory(input))
+  ipcMain.handle('desktop:record-browser-history', (_event, input: unknown) => recordBrowserHistory(input))
+  ipcMain.handle(
+    'desktop:register-interaction-panel-webview-scope',
+    (_event, input: unknown) => registerInteractionPanelWebviewScope(input)
+  )
+  ipcMain.handle('desktop:list-browser-downloads', (_event, input: unknown) => listBrowserDownloads(input))
+  ipcMain.handle('desktop:open-browser-download', (_event, id: unknown) => openBrowserDownload(id))
+  ipcMain.handle('desktop:reveal-browser-download', (_event, id: unknown) => revealBrowserDownload(id))
+  ipcMain.handle('desktop:list-browser-password-import-sources', () => listBrowserPasswordImportSources())
+  ipcMain.handle(
+    'desktop:import-browser-passwords',
+    (event, input: unknown) => importBrowserPasswords(event.sender, input)
+  )
+  ipcMain.handle(
+    'desktop:import-chrome-passwords',
+    (event, input: unknown) => importChromePasswords(event.sender, input)
+  )
+  ipcMain.handle('desktop:import-password-csv', (event, input: unknown) => importPasswordCsv(event.sender, input))
+  ipcMain.handle('desktop:import-authenticator-backup', event => importAuthenticatorBackup(event.sender))
+  ipcMain.handle('desktop:list-saved-passwords', (_event, query: unknown) => listSavedPasswords(query))
+  ipcMain.handle(
+    'desktop:authenticate-saved-passwords-access',
+    (_event, reason: unknown) => authenticateSavedPasswordsAccess(reason)
+  )
+  ipcMain.handle('desktop:reveal-saved-password', (_event, id: unknown) => revealSavedPassword(id))
+  ipcMain.handle(
+    'desktop:copy-saved-password-field',
+    (_event, id: unknown, field: unknown) => copySavedPasswordField(id, field)
+  )
+  ipcMain.handle(
+    'desktop:update-saved-password',
+    (_event, id: unknown, input: unknown) => updateSavedPassword(id, input)
+  )
+  ipcMain.handle('desktop:delete-saved-password', (_event, id: unknown) => deleteSavedPassword(id))
 
   ipcMain.handle(WORKSPACE_STARTUP_READY_CHANNEL, (event) => {
     const windowRecord = findWindowRecordForWebContents(event.sender)
