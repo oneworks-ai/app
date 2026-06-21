@@ -50,6 +50,7 @@ export interface RelayAccessGroup {
   id: string
   scope: RelayAccessGroupScope
   name: string
+  localizedNames?: Record<string, string>
   description?: string
   localizedDescriptions?: Record<string, string>
   builtIn?: boolean

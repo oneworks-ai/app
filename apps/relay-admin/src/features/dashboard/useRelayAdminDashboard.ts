@@ -50,8 +50,11 @@ import type {
 import {
   archiveRelayAdminTeam,
   createRelayAdminTeam,
+  createRelayAdminTeamAccessGroup,
+  deleteRelayAdminTeamAccessGroup,
   restoreRelayAdminTeam,
   updateRelayAdminTeam,
+  updateRelayAdminTeamAccessGroup,
   updateRelayAdminTeamPolicy
 } from '../teams/teamsApi'
 import { createRelayAdminUser, updateRelayAdminUser } from '../users/usersApi'
@@ -216,6 +219,27 @@ export const useRelayAdminDashboard = () => {
     })
   }, [loadSnapshot, run, token])
 
+  const createTeamAccessGroup = useCallback(async (teamId: string, input: CreateAccessGroupInput) => {
+    await run(async () => {
+      await createRelayAdminTeamAccessGroup(token, teamId, input)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
+  const updateTeamAccessGroup = useCallback(async (teamId: string, input: UpdateAccessGroupInput) => {
+    await run(async () => {
+      await updateRelayAdminTeamAccessGroup(token, teamId, input)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
+  const deleteTeamAccessGroup = useCallback(async (teamId: string, group: RelayAdminAccessGroup) => {
+    await run(async () => {
+      await deleteRelayAdminTeamAccessGroup(token, teamId, group.id)
+      await loadSnapshot()
+    })
+  }, [loadSnapshot, run, token])
+
   const setUserRole = useCallback(async (user: RelayAdminUser, role: RelayAdminRole) => {
     if (currentUser?.id === user.id) return
     await run(async () => {
@@ -350,6 +374,7 @@ export const useRelayAdminDashboard = () => {
     createInvite,
     createSsoProvider,
     createTeam,
+    createTeamAccessGroup,
     createUser,
     authError,
     authStatus,
@@ -358,6 +383,7 @@ export const useRelayAdminDashboard = () => {
     deleteInvite,
     deleteAccessGroup,
     deleteSsoProvider,
+    deleteTeamAccessGroup,
     error,
     invites,
     loginUrl,
@@ -381,6 +407,7 @@ export const useRelayAdminDashboard = () => {
     token,
     updateTeam,
     updateAccessGroup,
+    updateTeamAccessGroup,
     updateTeamPolicy,
     updateSsoProvider,
     users

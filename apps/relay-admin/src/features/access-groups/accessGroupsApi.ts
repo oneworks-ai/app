@@ -5,15 +5,15 @@ import type {
   UpdateAccessGroupInput
 } from '../../shared/model/adminTypes'
 
-const normalizeLocalizedDescriptions = (value: unknown) => {
+const normalizeLocalizedTextMap = (value: unknown) => {
   if (value == null || typeof value !== 'object' || Array.isArray(value)) return {}
-  const localizedDescriptions: Record<string, string> = {}
-  for (const [rawLocale, rawDescription] of Object.entries(value)) {
+  const localizedText: Record<string, string> = {}
+  for (const [rawLocale, rawText] of Object.entries(value)) {
     const locale = rawLocale.trim()
-    const description = typeof rawDescription === 'string' ? rawDescription.trim() : ''
-    if (locale !== '' && description !== '') localizedDescriptions[locale] = description
+    const text = typeof rawText === 'string' ? rawText.trim() : ''
+    if (locale !== '' && text !== '') localizedText[locale] = text
   }
-  return localizedDescriptions
+  return localizedText
 }
 
 export const normalizeRelayAdminAccessGroup = (group: RelayAdminAccessGroup): RelayAdminAccessGroup => ({
@@ -27,7 +27,8 @@ export const normalizeRelayAdminAccessGroup = (group: RelayAdminAccessGroup): Re
     : null,
   disabled: group.disabled === true || group.disabledAt != null,
   disabledAt: group.disabledAt ?? null,
-  localizedDescriptions: normalizeLocalizedDescriptions(group.localizedDescriptions),
+  localizedDescriptions: normalizeLocalizedTextMap(group.localizedDescriptions),
+  localizedNames: normalizeLocalizedTextMap(group.localizedNames),
   memberCount: Number.isFinite(Number(group.memberCount)) ? Math.max(0, Math.trunc(Number(group.memberCount))) : 0,
   parentGroupId: typeof group.parentGroupId === 'string' && group.parentGroupId.trim() !== ''
     ? group.parentGroupId.trim()

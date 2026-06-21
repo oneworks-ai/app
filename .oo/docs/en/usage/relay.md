@@ -50,7 +50,7 @@ Relay Admin exposes two separated machine-readable OpenAPI documents:
 
 API access tokens belong to the current logged-in user and support `user`, `team`, and `platform` scopes. User tokens can call current-account APIs only; team tokens are bound to one team and are authorized through team member groups; platform tokens are authorized through platform access groups. `permissionGroupMode=all` follows the account's current groups, while `custom` restricts the token to listed group ids. The server stores only a token hash and preview, and the full token is shown once when it is created; revoke and recreate it if it is lost. An API access token cannot create or revoke other API access tokens, so those security actions require a normal login session.
 
-Platform admins manage platform access groups and their capabilities / quotas from `/admin/access-groups`. Team owners manage member groups from the team's member-group subpage. Team member groups apply only inside that team, and they do not grant platform admins cross-team access to private team information.
+Platform admins manage platform access groups and their capabilities / quotas from `/admin/access-groups`. Team owners manage member groups from the team's member-group subpage. Team member groups apply only inside that team, and they do not grant platform admins cross-team access to private team information. Both platform access groups and team member groups support default name / description fields plus `localizedNames` / `localizedDescriptions` keyed by supported locale tags; built-in system groups automatically include default copy for every supported language. The UI prefers the user's language and falls back to the default fields.
 
 ## Login Methods
 

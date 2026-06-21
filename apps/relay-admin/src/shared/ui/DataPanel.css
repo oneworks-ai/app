@@ -88,7 +88,9 @@
 }
 
 .relay-admin-table .ant-table-thead > tr > th {
-  background: var(--bg-color);
+  -webkit-backdrop-filter: var(--relay-admin-table-header-backdrop);
+  backdrop-filter: var(--relay-admin-table-header-backdrop);
+  background: var(--relay-admin-table-header-bg);
   border-color: color-mix(in srgb, var(--border-color) 72%, transparent);
   color: var(--sub-text-color);
   font-size: 12px;
@@ -104,7 +106,13 @@
   vertical-align: middle;
 }
 
-.relay-admin-table .ant-table-thead > tr > th.ant-table-cell-fix-right,
+.relay-admin-table .ant-table-thead > tr > th.ant-table-cell-fix-right {
+  -webkit-backdrop-filter: var(--relay-admin-table-header-backdrop);
+  backdrop-filter: var(--relay-admin-table-header-backdrop);
+  background: var(--relay-admin-table-header-bg);
+  z-index: 3;
+}
+
 .relay-admin-table .ant-table-tbody > tr > td.ant-table-cell-fix-right {
   background: var(--bg-color);
   z-index: 3;

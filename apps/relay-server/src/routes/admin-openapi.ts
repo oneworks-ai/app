@@ -519,6 +519,7 @@ const buildAllComponents = (bearerFormat: string) => ({
         'id',
         'scope',
         'name',
+        'localizedNames',
         'localizedDescriptions',
         'builtIn',
         'parentGroupId',
@@ -534,11 +535,18 @@ const buildAllComponents = (bearerFormat: string) => ({
         id: { type: 'string' },
         scope: { type: 'string', enum: ['platform', 'team'] },
         name: { type: 'string' },
+        localizedNames: {
+          type: 'object',
+          additionalProperties: { type: 'string' },
+          description:
+            'Locale-tagged display names keyed by BCP 47 locale. Built-in groups include every supported locale; the plain name remains the default fallback.'
+        },
         description: nullableString,
         localizedDescriptions: {
           type: 'object',
           additionalProperties: { type: 'string' },
-          description: 'Localized descriptions keyed by BCP 47 locale.'
+          description:
+            'Locale-tagged descriptions keyed by BCP 47 locale. Built-in groups include every supported locale; the plain description remains the default fallback.'
         },
         builtIn: { type: 'boolean' },
         parentGroupId: nullableString,
@@ -570,10 +578,18 @@ const buildAllComponents = (bearerFormat: string) => ({
         id: { type: 'string', description: 'Optional operator supplied group id.' },
         scope: { type: 'string', enum: ['platform', 'team'] },
         name: { type: 'string' },
+        localizedNames: {
+          type: 'object',
+          additionalProperties: { type: 'string' },
+          description:
+            'Locale-tagged display names keyed by BCP 47 locale. Use only locales supported by the Relay Admin deployment.'
+        },
         description: { type: 'string' },
         localizedDescriptions: {
           type: 'object',
-          additionalProperties: { type: 'string' }
+          additionalProperties: { type: 'string' },
+          description:
+            'Locale-tagged descriptions keyed by BCP 47 locale. Use only locales supported by the Relay Admin deployment.'
         },
         parentGroupId: { type: 'string' },
         capabilities: {

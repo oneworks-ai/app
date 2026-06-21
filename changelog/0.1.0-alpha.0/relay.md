@@ -12,4 +12,5 @@
 - Combine Relay Admin user detail team memberships and devices into a tabbed detail area.
 - Add separated Relay Admin/Profile OpenAPI documents, profile system access tokens, token management, and OpenAPI audit trails.
 - Add Relay access groups, team member groups, scoped API tokens, and OpenAPI documentation for their management APIs.
+- Polish Relay Admin access-group permission editing with scoped capability lists, quota controls, localized copy, and team/platform-specific permission catalogs.
 - Document the official domain, DNS, and email topology for public, dev, Cloudflare, Vercel, and support-mail deployments.

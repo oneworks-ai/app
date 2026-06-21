@@ -13,16 +13,23 @@ import {
   usePanelResize,
   useResponsiveLayout
 } from '@oneworks/route-layout'
+import { App as AntdApp } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 
+import {
+  accessGroupDeleteBlockReason,
+  accessGroupDisableBlockReason,
+  createAccessGroupCopyInput,
+  localizedAccessGroupName
+} from '../features/access-groups/accessGroupModel'
 import { AdminDashboard } from '../features/dashboard/AdminDashboard'
 import type { AdminDashboardCreateSectionId } from '../features/dashboard/AdminDashboard'
 import { useRelayAdminDashboard } from '../features/dashboard/useRelayAdminDashboard'
 import { UserPasswordModal } from '../features/users/UserPasswordModal'
 import { canAccessRelayAdminSection, canManageRelayMessages } from '../shared/model/adminPermissions'
-import type { RelayAdminUser } from '../shared/model/adminTypes'
+import type { CreateAccessGroupInput, RelayAdminAccessGroup, RelayAdminUser } from '../shared/model/adminTypes'
 import { AdminIcon } from '../shared/ui/AdminIcon'
 import { AdminNavRail } from './AdminNavRail'
 import { useAdminRouteHeaderBreadcrumb } from './useAdminRouteHeaderBreadcrumb'
@@ -72,6 +79,21 @@ const getMessageIdFromPath = (pathname: string, basePath: '/message-pushes' | '/
   return match == null ? undefined : decodeURIComponent(match[1])
 }
 
+const getPlatformAccessGroupIdFromPath = (pathname: string) => {
+  const match = /^\/access-groups\/([^/]+)$/.exec(pathname)
+  if (match == null || match[1] === 'new') return undefined
+  return decodeURIComponent(match[1])
+}
+
+const getTeamAccessGroupRouteFromPath = (pathname: string) => {
+  const match = /^\/teams\/([^/]+)\/groups\/([^/]+)$/.exec(pathname)
+  if (match == null || match[2] === 'new') return undefined
+  return {
+    groupId: decodeURIComponent(match[2]),
+    teamId: decodeURIComponent(match[1])
+  }
+}
+
 const TeamDetailDefaultRoute = () => {
   const { teamId } = useParams()
   if (teamId == null) return <Navigate to='/teams' replace />
@@ -89,6 +111,7 @@ const readAdminSidebarWidth = () => {
 }
 
 export const AdminApp = () => {
+  const { modal } = AntdApp.useApp()
   const dashboard = useRelayAdminDashboard()
   const location = useLocation()
   const navigate = useNavigate()
@@ -143,12 +166,25 @@ export const AdminApp = () => {
   const activeUserDetailId = getUserDetailIdFromPath(normalizedPathname)
   const activeTeamDetailId = getTeamDetailIdFromPath(normalizedPathname)
   const activeTeamDetailSettingsId = getTeamDetailSettingsIdFromPath(normalizedPathname)
+  const activePlatformAccessGroupId = getPlatformAccessGroupIdFromPath(normalizedPathname)
+  const activeTeamAccessGroupRoute = getTeamAccessGroupRouteFromPath(normalizedPathname)
   const activeUserDetail = activeUserDetailId == null
     ? undefined
     : dashboard.users.find(user => user.id === activeUserDetailId)
   const activeTeamDetail = activeTeamDetailId == null
     ? undefined
     : dashboard.teams.find(team => team.id === activeTeamDetailId)
+  const activePlatformAccessGroup = activePlatformAccessGroupId == null
+    ? undefined
+    : dashboard.accessGroups.find(group => group.scope === 'platform' && group.id === activePlatformAccessGroupId)
+  const activeTeamAccessGroupTeam = activeTeamAccessGroupRoute == null
+    ? undefined
+    : dashboard.teams.find(team => team.id === activeTeamAccessGroupRoute.teamId)
+  const activeTeamAccessGroup = activeTeamAccessGroupRoute == null
+    ? undefined
+    : activeTeamAccessGroupTeam?.accessGroups.find(group =>
+      group.scope === 'team' && group.id === activeTeamAccessGroupRoute.groupId
+    )
   const isTeamDetailSettingsRoute = activeTeamDetailSettingsId != null
   const canRenderMessagePushes = dashboard.authStatus === 'checking' || !dashboard.snapshotLoaded || canSendMessages
   const headerTitle = isMessagesRoute
@@ -196,6 +232,77 @@ export const AdminApp = () => {
       : undefined, [headerBreadcrumb, headerIcon, headerTitle])
   const headerActionItems = useMemo(() => {
     const items: RouteContainerHeaderActionItem[] = []
+    const appendAccessGroupActions = ({
+      createGroup,
+      deleteGroup,
+      group,
+      groupNoun,
+      keyPrefix,
+      returnPath,
+      updateGroup
+    }: {
+      createGroup: (input: CreateAccessGroupInput) => Promise<void>
+      deleteGroup: (group: RelayAdminAccessGroup) => Promise<void>
+      group: RelayAdminAccessGroup
+      groupNoun: '成员组' | '用户组'
+      keyPrefix: string
+      returnPath: string
+      updateGroup: (input: { disabled: boolean; id: string }) => Promise<void>
+    }) => {
+      const groupName = localizedAccessGroupName(group)
+      const copyLabel = `复制${groupNoun}`
+      const deleteBlockReason = accessGroupDeleteBlockReason(group, groupNoun)
+      const toggleDisabledLabel = group.disabled ? `启用${groupNoun}` : `禁用${groupNoun}`
+      const toggleDisabledBlockReason = accessGroupDisableBlockReason(group, groupNoun)
+      const isDisabled = !dashboard.canLoad || dashboard.loading
+
+      items.push({
+        disabled: isDisabled,
+        icon: <AdminIcon name='content_copy' />,
+        key: `${keyPrefix}:copy`,
+        label: copyLabel,
+        title: copyLabel,
+        onSelect: () => {
+          void createGroup(createAccessGroupCopyInput(group)).then(() => navigate(returnPath))
+        }
+      })
+      items.push({
+        danger: !group.disabled,
+        disabled: isDisabled || toggleDisabledBlockReason != null,
+        icon: <AdminIcon name={group.disabled ? 'check' : 'disabled_by_default'} />,
+        key: `${keyPrefix}:toggle-disabled`,
+        label: toggleDisabledLabel,
+        title: toggleDisabledBlockReason ?? toggleDisabledLabel,
+        onSelect: () => {
+          if (toggleDisabledBlockReason != null) return
+          void modal.confirm({
+            cancelText: '取消',
+            okButtonProps: { danger: !group.disabled },
+            okText: toggleDisabledLabel,
+            title: `${toggleDisabledLabel}“${groupName}”？`,
+            onOk: () => updateGroup({ disabled: !group.disabled, id: group.id })
+          })
+        }
+      })
+      items.push({
+        danger: true,
+        disabled: isDisabled || deleteBlockReason != null,
+        icon: <AdminIcon name='delete' />,
+        key: `${keyPrefix}:delete`,
+        label: `删除${groupNoun}`,
+        title: deleteBlockReason ?? `删除${groupNoun}`,
+        onSelect: () => {
+          if (deleteBlockReason != null) return
+          void modal.confirm({
+            cancelText: '取消',
+            okButtonProps: { danger: true },
+            okText: '删除',
+            title: `删除“${groupName}”？`,
+            onOk: () => deleteGroup(group).then(() => navigate(returnPath))
+          })
+        }
+      })
+    }
 
     if (shouldShowProfileLogoutAction) {
       items.push({
@@ -237,6 +344,31 @@ export const AdminApp = () => {
         label: '团队设置',
         title: '团队设置',
         onSelect: () => void navigate(`/teams/${encodeURIComponent(activeTeamDetail.id)}/settings`)
+      })
+    }
+
+    if (activePlatformAccessGroup != null) {
+      appendAccessGroupActions({
+        createGroup: dashboard.createAccessGroup,
+        deleteGroup: dashboard.deleteAccessGroup,
+        group: activePlatformAccessGroup,
+        groupNoun: '用户组',
+        keyPrefix: 'access-group',
+        returnPath: '/access-groups',
+        updateGroup: dashboard.updateAccessGroup
+      })
+    }
+
+    if (activeTeamAccessGroup != null && activeTeamAccessGroupTeam != null) {
+      const teamGroupsPath = `/teams/${encodeURIComponent(activeTeamAccessGroupTeam.id)}/groups`
+      appendAccessGroupActions({
+        createGroup: input => dashboard.createTeamAccessGroup(activeTeamAccessGroupTeam.id, input),
+        deleteGroup: group => dashboard.deleteTeamAccessGroup(activeTeamAccessGroupTeam.id, group),
+        group: activeTeamAccessGroup,
+        groupNoun: '成员组',
+        keyPrefix: 'team-access-group',
+        returnPath: teamGroupsPath,
+        updateGroup: input => dashboard.updateTeamAccessGroup(activeTeamAccessGroupTeam.id, input)
       })
     }
 
@@ -324,15 +456,24 @@ export const AdminApp = () => {
     return items
   }, [
     activeCreateSectionId,
+    activePlatformAccessGroup,
+    activeTeamAccessGroup,
+    activeTeamAccessGroupTeam,
     activeTeamDetail,
     activeUserDetail,
     shouldShowProfileLogoutAction,
     dashboard.canLoad,
+    dashboard.createAccessGroup,
+    dashboard.createTeamAccessGroup,
     dashboard.currentUser?.role,
+    dashboard.deleteAccessGroup,
+    dashboard.deleteTeamAccessGroup,
     dashboard.loading,
     dashboard.logout,
     dashboard.setUserDisabled,
     dashboard.token,
+    dashboard.updateAccessGroup,
+    dashboard.updateTeamAccessGroup,
     canSendMessages,
     isMessageDetailRoute,
     isMessagePushCreateRoute,
@@ -344,6 +485,7 @@ export const AdminApp = () => {
     isProfileRoute,
     isTeamListRoute,
     isTeamDetailSettingsRoute,
+    modal,
     normalizedPathname,
     navigate
   ])

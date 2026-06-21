@@ -169,6 +169,7 @@ export const serializeTeamAccessGroup = (
   id: group.id,
   scope: group.scope,
   name: group.name,
+  localizedNames: group.localizedNames ?? {},
   description: group.description ?? null,
   localizedDescriptions: group.localizedDescriptions ?? {},
   builtIn: group.builtIn === true,

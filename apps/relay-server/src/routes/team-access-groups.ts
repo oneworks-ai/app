@@ -36,15 +36,15 @@ const cleanCapabilities = (value: unknown) => {
   }
 }
 
-const cleanLocalizedDescriptions = (value: unknown) => {
+const cleanLocalizedTextMap = (value: unknown) => {
   if (!isRecord(value)) return undefined
-  const localizedDescriptions: Record<string, string> = {}
-  for (const [rawLocale, rawDescription] of Object.entries(value)) {
+  const localizedText: Record<string, string> = {}
+  for (const [rawLocale, rawText] of Object.entries(value)) {
     const locale = cleanString(rawLocale)
-    const description = cleanString(rawDescription)
-    if (locale !== '' && description !== '') localizedDescriptions[locale] = description
+    const text = cleanString(rawText)
+    if (locale !== '' && text !== '') localizedText[locale] = text
   }
-  return Object.keys(localizedDescriptions).length === 0 ? undefined : localizedDescriptions
+  return Object.keys(localizedText).length === 0 ? undefined : localizedText
 }
 
 const cleanQuotaValue = (value: unknown) => {
@@ -170,8 +170,9 @@ export const createTeamAccessGroup = async (
     id,
     scope: 'team',
     name,
+    localizedNames: cleanLocalizedTextMap(body.localizedNames),
     description: cleanString(body.description) || undefined,
-    localizedDescriptions: cleanLocalizedDescriptions(body.localizedDescriptions),
+    localizedDescriptions: cleanLocalizedTextMap(body.localizedDescriptions),
     parentGroupId,
     capabilities: cleanCapabilities(body.capabilities),
     quotas: quotas.value,
@@ -215,8 +216,11 @@ export const updateTeamAccessGroup = async (
   if (Object.prototype.hasOwnProperty.call(body, 'description')) {
     group.description = cleanString(body.description) || undefined
   }
+  if (Object.prototype.hasOwnProperty.call(body, 'localizedNames')) {
+    group.localizedNames = cleanLocalizedTextMap(body.localizedNames)
+  }
   if (Object.prototype.hasOwnProperty.call(body, 'localizedDescriptions')) {
-    group.localizedDescriptions = cleanLocalizedDescriptions(body.localizedDescriptions)
+    group.localizedDescriptions = cleanLocalizedTextMap(body.localizedDescriptions)
   }
   if (Object.prototype.hasOwnProperty.call(body, 'parentGroupId')) {
     const parentGroupId = cleanString(body.parentGroupId) || undefined
