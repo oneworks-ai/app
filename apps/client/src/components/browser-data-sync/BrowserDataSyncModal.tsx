@@ -2,26 +2,12 @@ import { Alert, App, Button, Modal, Space } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { InlineActionButton } from '#~/components/inline-action-button'
-
-import type { BrowserDataSyncDataType } from './BrowserDataSyncDataList'
 import { BrowserDataSyncDataList } from './BrowserDataSyncDataList'
-
-const fallbackChromePasswordSource: DesktopBrowserPasswordImportSource = {
-  icon: 'public',
-  id: 'google-chrome',
-  name: 'Google Chrome',
-  profiles: 0
-}
-
-const emptyBrowserDataSyncState: DesktopBrowserDataSyncState = {
-  authenticator: {
-    total: 0
-  },
-  savedPasswords: {
-    total: 0
-  }
-}
+import {
+  emptyBrowserDataSyncState,
+  fallbackChromePasswordSource,
+  useBrowserDataSyncModalDataTypes
+} from './BrowserDataSyncModalDataTypes'
 
 export function BrowserDataSyncModal({ onClose, open }: { onClose: () => void; open: boolean }) {
   const { message } = App.useApp()
@@ -34,14 +20,10 @@ export function BrowserDataSyncModal({ onClose, open }: { onClose: () => void; o
   const [importingPasswordCsv, setImportingPasswordCsv] = useState(false)
   const [importingPasswordSourceId, setImportingPasswordSourceId] = useState<
     DesktopBrowserPasswordImportSourceId | null
-  >(
-    null
-  )
+  >(null)
   const canImportAuthenticator = desktopApi?.importAuthenticatorBackup != null
   const canImportPasswords = desktopApi?.importBrowserPasswords != null || desktopApi?.importChromePasswords != null
   const canImportPasswordCsv = desktopApi?.importPasswordCsv != null
-  const canLoadState = desktopApi?.getBrowserDataSyncState != null
-  const canLoadPasswordSources = desktopApi?.listBrowserPasswordImportSources != null
   const visiblePasswordSources = useMemo(() => {
     if (passwordSources.some(source => source.id === fallbackChromePasswordSource.id)) {
       return passwordSources
@@ -50,7 +32,7 @@ export function BrowserDataSyncModal({ onClose, open }: { onClose: () => void; o
   }, [passwordSources])
 
   const loadState = useCallback(() => {
-    if (!canLoadState || desktopApi?.getBrowserDataSyncState == null) {
+    if (desktopApi?.getBrowserDataSyncState == null) {
       setState(emptyBrowserDataSyncState)
       return
     }
@@ -63,10 +45,10 @@ export function BrowserDataSyncModal({ onClose, open }: { onClose: () => void; o
         setState(emptyBrowserDataSyncState)
       })
       .finally(() => setLoading(false))
-  }, [canLoadState, desktopApi])
+  }, [desktopApi])
 
   const loadPasswordSources = useCallback(() => {
-    if (!canLoadPasswordSources || desktopApi?.listBrowserPasswordImportSources == null) {
+    if (desktopApi?.listBrowserPasswordImportSources == null) {
       setPasswordSources([])
       return
     }
@@ -76,7 +58,7 @@ export function BrowserDataSyncModal({ onClose, open }: { onClose: () => void; o
         console.error('[browser-data-sync] failed to load browser password sources', error)
         setPasswordSources([])
       })
-  }, [canLoadPasswordSources, desktopApi])
+  }, [desktopApi])
 
   useEffect(() => {
     if (!open) return
@@ -172,91 +154,17 @@ export function BrowserDataSyncModal({ onClose, open }: { onClose: () => void; o
       .finally(() => setImportingPasswordCsv(false))
   }, [canImportPasswordCsv, desktopApi, loadPasswordSources, loadState, message, t])
 
-  const dataTypes = useMemo<BrowserDataSyncDataType[]>(() => [
-    {
-      action: (
-        <InlineActionButton
-          loading={importingPasswordCsv}
-          icon='upload_file'
-          onClick={handleImportPasswordCsv}
-        >
-          {t('browserDataSync.actions.chooseFile')}
-        </InlineActionButton>
-      ),
-      description: t('browserDataSync.savedPasswords.csvDescription'),
-      icon: 'file_upload',
-      status: t('browserDataSync.status.available'),
-      title: t('browserDataSync.savedPasswords.csvTitle')
-    },
-    ...visiblePasswordSources.map(source => ({
-      action: (
-        <InlineActionButton
-          loading={importingPasswordSourceId === source.id}
-          disabled={importingPasswordSourceId != null && importingPasswordSourceId !== source.id}
-          icon='sync'
-          onClick={() => handleImportPasswords(source)}
-        >
-          {t('browserDataSync.actions.sync')}
-        </InlineActionButton>
-      ),
-      description: t(
-        source.profiles > 0
-          ? 'browserDataSync.savedPasswords.sourceDescription'
-          : 'browserDataSync.savedPasswords.sourceFallbackDescription',
-        {
-          profiles: source.profiles,
-          source: source.name
-        }
-      ),
-      icon: source.icon,
-      status: t('browserDataSync.status.available'),
-      title: t('browserDataSync.savedPasswords.sourceTitle', {
-        source: source.name
-      })
-    })),
-    {
-      action: (
-        <InlineActionButton icon='hourglass_empty' disabled>
-          {t('browserDataSync.actions.comingSoon')}
-        </InlineActionButton>
-      ),
-      description: t('browserDataSync.passwordManagerExtensions.description'),
-      icon: 'extension',
-      status: t('browserDataSync.status.planned'),
-      title: t('browserDataSync.passwordManagerExtensions.title')
-    },
-    {
-      action: (
-        <InlineActionButton
-          loading={importingAuthenticator}
-          disabled={!canImportAuthenticator}
-          icon='upload_file'
-          onClick={handleImportAuthenticator}
-        >
-          {t('browserDataSync.actions.importBackup')}
-        </InlineActionButton>
-      ),
-      description: t('browserDataSync.authenticator.description', {
-        count: state.authenticator.total
-      }),
-      icon: 'pin',
-      status: t('browserDataSync.status.available'),
-      title: t('browserDataSync.authenticator.title')
-    }
-  ], [
+  const dataTypes = useBrowserDataSyncModalDataTypes({
     canImportAuthenticator,
-    canImportPasswords,
-    canImportPasswordCsv,
-    handleImportAuthenticator,
-    handleImportPasswordCsv,
-    handleImportPasswords,
     importingAuthenticator,
     importingPasswordCsv,
     importingPasswordSourceId,
-    state.authenticator.total,
-    t,
+    onImportAuthenticator: handleImportAuthenticator,
+    onImportPasswordCsv: handleImportPasswordCsv,
+    onImportPasswords: handleImportPasswords,
+    state,
     visiblePasswordSources
-  ])
+  })
 
   return (
     <Modal
