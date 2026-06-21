@@ -8,9 +8,7 @@ on:
       - synchronize
 
 permissions:
-  contents: read
-  issues: write
-  pull-requests: read
+  pull-requests: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -51,16 +49,23 @@ jobs:
           EOF
           )"
 
-          comment_id="$(
-            gh api "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate \
-              --jq ".[] | select(.body | contains(\"${marker}\")) | .id" \
-              | head -n 1
-          )"
+          upsert_reminder() {
+            review_id="$(
+              gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews" --paginate \
+                --jq ".[] | select((.body // \"\") | contains(\"${marker}\")) | .id" \
+                | tail -n 1
+            )" || return
 
-          if [ -n "$comment_id" ]; then
-            gh api --method PATCH "repos/${REPOSITORY}/issues/comments/${comment_id}" \
-              --field body="$body" >/dev/null
-          else
-            gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
-              --field body="$body" >/dev/null
+            if [ -n "$review_id" ]; then
+              gh api --method PUT "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews/${review_id}" \
+                --field body="$body" >/dev/null || return
+            else
+              gh api --method POST "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
+                --field event=COMMENT \
+                --field body="$body" >/dev/null || return
+            fi
+          }
+
+          if ! upsert_reminder; then
+            echo "::warning::Experience review reminder could not be posted. The pr-change-policy check still enforces the PR body checklist."
           fi
