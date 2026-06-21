@@ -64,15 +64,15 @@ const normalizeCapabilities = (value: unknown) => {
   }
 }
 
-const normalizeLocalizedDescriptions = (value: unknown) => {
+const normalizeLocalizedTextMap = (value: unknown) => {
   if (!isRecord(value)) return undefined
-  const descriptions: Record<string, string> = {}
-  for (const [rawLocale, rawDescription] of Object.entries(value)) {
+  const localizedText: Record<string, string> = {}
+  for (const [rawLocale, rawText] of Object.entries(value)) {
     const locale = normalizeString(rawLocale)
-    const description = normalizeString(rawDescription)
-    if (locale != null && description != null) descriptions[locale] = description
+    const text = normalizeString(rawText)
+    if (locale != null && text != null) localizedText[locale] = text
   }
-  return Object.keys(descriptions).length === 0 ? undefined : descriptions
+  return Object.keys(localizedText).length === 0 ? undefined : localizedText
 }
 
 export const defaultRelayAccessGroups = (): RelayAccessGroup[] => [
@@ -80,7 +80,15 @@ export const defaultRelayAccessGroups = (): RelayAccessGroup[] => [
     id: platformAccessGroupIdForRole('owner'),
     scope: 'platform',
     name: 'Owner',
+    localizedNames: {
+      'zh-Hans': '平台所有者',
+      en: 'Owner'
+    },
     description: '平台最高权限内置用户组。',
+    localizedDescriptions: {
+      'zh-Hans': '平台最高权限内置用户组。',
+      en: 'Built-in group with the highest platform permissions.'
+    },
     builtIn: true,
     capabilities: { allow: [...relayPermissionList] },
     quotas: {
@@ -95,7 +103,15 @@ export const defaultRelayAccessGroups = (): RelayAccessGroup[] => [
     id: platformAccessGroupIdForRole('admin'),
     scope: 'platform',
     name: 'Admin',
+    localizedNames: {
+      'zh-Hans': '平台管理员',
+      en: 'Admin'
+    },
     description: '平台管理内置用户组。',
+    localizedDescriptions: {
+      'zh-Hans': '平台管理内置用户组。',
+      en: 'Built-in group for platform administration.'
+    },
     builtIn: true,
     capabilities: { allow: [...relayPermissionList] },
     quotas: {
@@ -110,7 +126,15 @@ export const defaultRelayAccessGroups = (): RelayAccessGroup[] => [
     id: platformAccessGroupIdForRole('member'),
     scope: 'platform',
     name: 'Member',
+    localizedNames: {
+      'zh-Hans': '普通用户',
+      en: 'Member'
+    },
     description: '普通已登录用户默认用户组。',
+    localizedDescriptions: {
+      'zh-Hans': '普通已登录用户默认用户组。',
+      en: 'Default group for signed-in users.'
+    },
     builtIn: true,
     capabilities: { allow: [...rolePermissionMatrix.member] },
     quotas: {
@@ -124,7 +148,15 @@ export const defaultRelayAccessGroups = (): RelayAccessGroup[] => [
     id: platformAccessGroupIdForRole('viewer'),
     scope: 'platform',
     name: 'Viewer',
+    localizedNames: {
+      'zh-Hans': '只读用户',
+      en: 'Viewer'
+    },
     description: '只读访问内置用户组。',
+    localizedDescriptions: {
+      'zh-Hans': '只读访问内置用户组。',
+      en: 'Built-in read-only access group.'
+    },
     builtIn: true,
     capabilities: { allow: [...rolePermissionMatrix.viewer] },
     quotas: {
@@ -141,7 +173,15 @@ export const defaultRelayTeamAccessGroups = (): RelayAccessGroup[] => [
     id: teamAccessGroupIdForRole('owner'),
     scope: 'team',
     name: '团队所有者',
+    localizedNames: {
+      'zh-Hans': '团队所有者',
+      en: 'Team Owner'
+    },
     description: '当前团队内最高权限成员组。',
+    localizedDescriptions: {
+      'zh-Hans': '当前团队内最高权限成员组。',
+      en: 'Highest-privilege member group in the current team.'
+    },
     builtIn: true,
     capabilities: {
       allow: [
@@ -164,7 +204,15 @@ export const defaultRelayTeamAccessGroups = (): RelayAccessGroup[] => [
     id: teamAccessGroupIdForRole('admin'),
     scope: 'team',
     name: '团队管理员',
+    localizedNames: {
+      'zh-Hans': '团队管理员',
+      en: 'Team Admin'
+    },
     description: '当前团队内成员和配置管理成员组。',
+    localizedDescriptions: {
+      'zh-Hans': '当前团队内成员和配置管理成员组。',
+      en: 'Member group for managing members and configuration in the current team.'
+    },
     builtIn: true,
     capabilities: {
       allow: [
@@ -186,7 +234,15 @@ export const defaultRelayTeamAccessGroups = (): RelayAccessGroup[] => [
     id: teamAccessGroupIdForRole('editor'),
     scope: 'team',
     name: '配置编辑者',
+    localizedNames: {
+      'zh-Hans': '配置编辑者',
+      en: 'Config Editor'
+    },
     description: '当前团队内配置方案和密钥维护成员组。',
+    localizedDescriptions: {
+      'zh-Hans': '当前团队内配置方案和密钥维护成员组。',
+      en: 'Member group for maintaining configuration profiles and secrets in the current team.'
+    },
     builtIn: true,
     capabilities: {
       allow: [
@@ -204,7 +260,15 @@ export const defaultRelayTeamAccessGroups = (): RelayAccessGroup[] => [
     id: teamAccessGroupIdForRole('member'),
     scope: 'team',
     name: '团队成员',
+    localizedNames: {
+      'zh-Hans': '团队成员',
+      en: 'Team Member'
+    },
     description: '当前团队内普通成员组。',
+    localizedDescriptions: {
+      'zh-Hans': '当前团队内普通成员组。',
+      en: 'Standard member group in the current team.'
+    },
     builtIn: true,
     capabilities: {
       allow: [
@@ -220,7 +284,15 @@ export const defaultRelayTeamAccessGroups = (): RelayAccessGroup[] => [
     id: teamAccessGroupIdForRole('viewer'),
     scope: 'team',
     name: '只读成员',
+    localizedNames: {
+      'zh-Hans': '只读成员',
+      en: 'Read-only Member'
+    },
     description: '当前团队内只读成员组。',
+    localizedDescriptions: {
+      'zh-Hans': '当前团队内只读成员组。',
+      en: 'Read-only member group in the current team.'
+    },
     builtIn: true,
     capabilities: {
       allow: [
@@ -241,8 +313,9 @@ export const normalizeRelayAccessGroup = (value: Record<string, unknown>): Relay
     id,
     scope,
     name,
+    localizedNames: normalizeLocalizedTextMap(value.localizedNames),
     description: normalizeString(value.description),
-    localizedDescriptions: normalizeLocalizedDescriptions(value.localizedDescriptions),
+    localizedDescriptions: normalizeLocalizedTextMap(value.localizedDescriptions),
     builtIn: value.builtIn === true,
     parentGroupId: normalizeString(value.parentGroupId),
     disabledAt: typeof value.disabledAt === 'string' ? value.disabledAt : undefined,
@@ -271,7 +344,14 @@ const normalizeScopedRelayAccessGroups = (
         ...builtin,
         name: group.name,
         description: group.description ?? builtin.description,
-        localizedDescriptions: group.localizedDescriptions ?? builtin.localizedDescriptions,
+        localizedDescriptions: {
+          ...(builtin.localizedDescriptions ?? {}),
+          ...(group.localizedDescriptions ?? {})
+        },
+        localizedNames: {
+          ...(builtin.localizedNames ?? {}),
+          ...(group.localizedNames ?? {})
+        },
         parentGroupId: undefined,
         disabledAt: group.disabledAt,
         capabilities: group.capabilities,

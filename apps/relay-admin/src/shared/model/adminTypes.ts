@@ -32,6 +32,7 @@ export interface RelayAdminAccessGroup {
   disabledAt: string | null
   id: string
   localizedDescriptions: Record<string, string>
+  localizedNames: Record<string, string>
   memberCount: number
   name: string
   parentGroupId: string | null
@@ -177,6 +178,7 @@ export interface CreateAccessGroupInput {
   capabilities: RelayAdminAccessGroupCapabilities
   description?: string
   localizedDescriptions?: Record<string, string>
+  localizedNames?: Record<string, string>
   name: string
   parentGroupId?: string | null
   quotas?: Record<string, number | null>
@@ -189,6 +191,7 @@ export interface UpdateAccessGroupInput {
   disabled?: boolean
   id: string
   localizedDescriptions?: Record<string, string> | null
+  localizedNames?: Record<string, string> | null
   name?: string
   parentGroupId?: string | null
   quotas?: Record<string, number | null>

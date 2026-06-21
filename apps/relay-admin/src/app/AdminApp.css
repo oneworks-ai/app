@@ -1,6 +1,32 @@
 :root {
   --host-app-content-bg: var(--sub-bg-color);
   --relay-admin-padding: 10px;
+  --relay-admin-menu-radius: 8px;
+  --relay-admin-menu-item-gap: 6px;
+  --relay-admin-menu-item-radius: 6px;
+  --relay-admin-menu-icon-size: 14px;
+  --relay-admin-menu-line-height: 16px;
+  --relay-admin-menu-muted: color-mix(
+    in srgb,
+    var(--sub-text-color) 76%,
+    transparent
+  );
+  --relay-admin-menu-surface: color-mix(
+    in srgb,
+    var(--bg-color) 72%,
+    transparent
+  );
+  --relay-admin-menu-border: color-mix(
+    in srgb,
+    var(--border-color) 72%,
+    transparent
+  );
+  --relay-admin-table-header-bg: color-mix(
+    in srgb,
+    var(--bg-color) 78%,
+    transparent
+  );
+  --relay-admin-table-header-backdrop: blur(18px) saturate(150%);
 }
 
 * {
@@ -70,6 +96,22 @@ body {
   padding-inline-end: calc(var(--relay-admin-padding) * 4);
 }
 
+.relay-admin-nav-footer-link-group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.relay-admin-nav-footer-link-group .host-nav-rail__footer-button {
+  color: var(--text-color);
+}
+
+.relay-admin-nav-footer-link-group .host-nav-rail__footer-button:hover,
+.relay-admin-nav-footer-link-group .host-nav-rail__footer-button:focus-visible {
+  color: var(--primary-color);
+}
+
 .relay-admin-nav-message-button {
   position: absolute;
   top: 50%;
@@ -126,27 +168,6 @@ body {
 
 .relay-admin-nav-menu-dropdown.ant-dropdown,
 .relay-admin-nav-submenu-dropdown.ant-dropdown-menu-submenu-popup {
-  --relay-admin-menu-radius: 8px;
-  --relay-admin-menu-item-gap: 6px;
-  --relay-admin-menu-item-radius: 6px;
-  --relay-admin-menu-icon-size: 14px;
-  --relay-admin-menu-line-height: 16px;
-  --relay-admin-menu-muted: color-mix(
-    in srgb,
-    var(--sub-text-color) 76%,
-    transparent
-  );
-  --relay-admin-menu-surface: color-mix(
-    in srgb,
-    var(--bg-color) 72%,
-    transparent
-  );
-  --relay-admin-menu-border: color-mix(
-    in srgb,
-    var(--border-color) 72%,
-    transparent
-  );
-
   background: transparent !important;
   box-shadow: none !important;
 }

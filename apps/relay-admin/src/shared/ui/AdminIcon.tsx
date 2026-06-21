@@ -16,6 +16,7 @@ import editSvg from '@material-symbols/svg-400/rounded/edit.svg?raw'
 import factCheckSvg from '@material-symbols/svg-400/rounded/fact_check.svg?raw'
 import filterListSvg from '@material-symbols/svg-400/rounded/filter_list.svg?raw'
 import groupSvg from '@material-symbols/svg-400/rounded/group.svg?raw'
+import homeSvg from '@material-symbols/svg-400/rounded/home.svg?raw'
 import hubSvg from '@material-symbols/svg-400/rounded/hub.svg?raw'
 import keySvg from '@material-symbols/svg-400/rounded/key.svg?raw'
 import languageSvg from '@material-symbols/svg-400/rounded/language.svg?raw'
@@ -27,6 +28,7 @@ import lightModeSvg from '@material-symbols/svg-400/rounded/light_mode.svg?raw'
 import linkSvg from '@material-symbols/svg-400/rounded/link.svg?raw'
 import loginSvg from '@material-symbols/svg-400/rounded/login.svg?raw'
 import logoutSvg from '@material-symbols/svg-400/rounded/logout.svg?raw'
+import menuBookSvg from '@material-symbols/svg-400/rounded/menu_book.svg?raw'
 import moreHorizSvg from '@material-symbols/svg-400/rounded/more_horiz.svg?raw'
 import notificationsSvg from '@material-symbols/svg-400/rounded/notifications.svg?raw'
 import personSvg from '@material-symbols/svg-400/rounded/person.svg?raw'
@@ -57,6 +59,7 @@ export type AdminIconName =
   | 'fact_check'
   | 'filter_list'
   | 'group'
+  | 'home'
   | 'hub'
   | 'key'
   | 'language'
@@ -66,6 +69,7 @@ export type AdminIconName =
   | 'light_mode'
   | 'login'
   | 'logout'
+  | 'menu_book'
   | 'more_horiz'
   | 'notifications'
   | 'person'
@@ -96,6 +100,7 @@ const adminIconSvgByName: Record<AdminIconName, string> = {
   fact_check: factCheckSvg,
   filter_list: filterListSvg,
   group: groupSvg,
+  home: homeSvg,
   hub: hubSvg,
   key: keySvg,
   language: languageSvg,
@@ -105,6 +110,7 @@ const adminIconSvgByName: Record<AdminIconName, string> = {
   light_mode: lightModeSvg,
   login: loginSvg,
   logout: logoutSvg,
+  menu_book: menuBookSvg,
   more_horiz: moreHorizSvg,
   notifications: notificationsSvg,
   person: personSvg,
