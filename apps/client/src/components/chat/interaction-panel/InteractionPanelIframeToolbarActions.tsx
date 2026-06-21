@@ -2,6 +2,10 @@ import { App, Button, Dropdown, Tooltip } from 'antd'
 import type { MutableRefObject } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
+
+import { createBrowserActivityRouteState } from '#~/components/browser-activity/browser-activity-route-state'
+import { BrowserDataSyncModal } from '#~/components/browser-data-sync/BrowserDataSyncModal'
 
 import { InteractionPanelIframeBrowserMenu } from './InteractionPanelIframeBrowserMenu'
 import type { ElectronWebviewElement } from './use-interaction-panel-webview'
@@ -26,7 +30,9 @@ export function InteractionPanelIframeToolbarActions({
   iframeRef,
   isDeveloperToolsOpen,
   isViewportToolbarOpen,
+  projectUrlHistoryKey,
   onForceReload,
+  sessionUrlHistoryKey,
   onToggleDeveloperTools,
   onToggleViewportToolbar,
   shouldUseWebview,
@@ -36,7 +42,9 @@ export function InteractionPanelIframeToolbarActions({
   iframeRef: MutableRefObject<HTMLIFrameElement | null>
   isDeveloperToolsOpen: boolean
   isViewportToolbarOpen: boolean
+  projectUrlHistoryKey: string
   onForceReload: () => void
+  sessionUrlHistoryKey: string
   onToggleDeveloperTools: () => void
   onToggleViewportToolbar: () => void
   shouldUseWebview: boolean
@@ -44,8 +52,12 @@ export function InteractionPanelIframeToolbarActions({
 }) {
   const { message } = App.useApp()
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [isMoreOpen, setIsMoreOpen] = useState(false)
+  const [browserDataSyncOpen, setBrowserDataSyncOpen] = useState(false)
   const canUseFrame = frameUrl !== ''
+  const canOpenBrowserHistory = window.oneworksDesktop?.listBrowserHistory != null
+  const canOpenBrowserDownloads = window.oneworksDesktop?.listBrowserDownloads != null
 
   const notifyUnsupported = () => {
     void message.warning(t('common.notSupportedYet'))
@@ -67,6 +79,24 @@ export function InteractionPanelIframeToolbarActions({
     } catch {
       void message.error(t('chat.interactionPanel.iframeScreenshotFailed'))
     }
+  }
+
+  const handleOpenSavedPasswords = () => {
+    void navigate('/config/savedPasswords')
+  }
+
+  const getBrowserActivityRouteState = () =>
+    createBrowserActivityRouteState({
+      projectKeys: [projectUrlHistoryKey],
+      sessionKey: sessionUrlHistoryKey
+    })
+
+  const handleOpenBrowserHistory = () => {
+    void navigate('/config/browserHistory', { state: getBrowserActivityRouteState() })
+  }
+
+  const handleOpenBrowserDownloads = () => {
+    void navigate('/config/browserDownloads', { state: getBrowserActivityRouteState() })
   }
 
   return (
@@ -97,6 +127,10 @@ export function InteractionPanelIframeToolbarActions({
             webviewRef={webviewRef}
             onClose={() => setIsMoreOpen(false)}
             onForceReload={onForceReload}
+            onOpenBrowserDataSync={() => setBrowserDataSyncOpen(true)}
+            onOpenBrowserDownloads={canOpenBrowserDownloads ? handleOpenBrowserDownloads : undefined}
+            onOpenBrowserHistory={canOpenBrowserHistory ? handleOpenBrowserHistory : undefined}
+            onOpenSavedPasswords={handleOpenSavedPasswords}
             onToggleDeveloperTools={onToggleDeveloperTools}
             onToggleViewportToolbar={onToggleViewportToolbar}
           />
@@ -110,6 +144,10 @@ export function InteractionPanelIframeToolbarActions({
           icon={<span className='material-symbols-rounded'>more_vert</span>}
         />
       </Dropdown>
+      <BrowserDataSyncModal
+        open={browserDataSyncOpen}
+        onClose={() => setBrowserDataSyncOpen(false)}
+      />
     </div>
   )
 }

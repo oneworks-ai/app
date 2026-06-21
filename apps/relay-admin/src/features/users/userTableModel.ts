@@ -1,9 +1,11 @@
-import type { RelayAdminRole, RelayAdminUser } from '../../shared/model/adminTypes'
+import type { RelayAdminAccessGroup, RelayAdminUser } from '../../shared/model/adminTypes'
+import { accessGroupName } from '../access-groups/accessGroupModel'
 
+export type UserTableGroupFilter = 'all' | `group:${string}`
 export type UserTableTeamFilter = 'all' | `team:${string}`
 
 export interface UserTableFilters {
-  roleFilter: RelayAdminRole | 'all'
+  groupFilter: UserTableGroupFilter
   searchValue: string
   sourceFilter: string
   statusFilter: 'active' | 'all' | 'disabled'
@@ -12,8 +14,14 @@ export interface UserTableFilters {
 
 export const teamFilterValue = (teamId: string): UserTableTeamFilter => `team:${teamId}`
 
+export const groupFilterValue = (groupId: string): UserTableGroupFilter => `group:${groupId}`
+
 const teamIdFromFilter = (value: UserTableTeamFilter) => (
   value === 'all' ? undefined : value.slice('team:'.length)
+)
+
+const groupIdFromFilter = (value: UserTableGroupFilter) => (
+  value === 'all' ? undefined : value.slice('group:'.length)
 )
 
 export const createUserTeamFilterOptions = (users: RelayAdminUser[]) => {
@@ -28,8 +36,18 @@ export const createUserTeamFilterOptions = (users: RelayAdminUser[]) => {
     .map(([id, label]) => ({ label, value: teamFilterValue(id) }))
 }
 
-export const filterRelayAdminUsers = (users: RelayAdminUser[], filters: UserTableFilters) => {
+export const createUserGroupFilterOptions = (groups: RelayAdminAccessGroup[]) =>
+  groups
+    .filter(group => group.scope === 'platform')
+    .map(group => ({ label: group.name, value: groupFilterValue(group.id) }))
+
+export const filterRelayAdminUsers = (
+  users: RelayAdminUser[],
+  groups: RelayAdminAccessGroup[],
+  filters: UserTableFilters
+) => {
   const normalizedSearch = filters.searchValue.trim().toLowerCase()
+  const selectedGroupId = groupIdFromFilter(filters.groupFilter)
   const selectedTeamId = teamIdFromFilter(filters.teamFilter)
   return users.filter(user => {
     const source = user.provider ?? 'local'
@@ -42,6 +60,7 @@ export const filterRelayAdminUsers = (users: RelayAdminUser[], filters: UserTabl
       `${user.deviceCount}`,
       user.maxDevices == null ? 'unlimited' : `${user.maxDevices}`,
       user.role,
+      ...user.groupIds.flatMap(groupId => [groupId, accessGroupName(groups, groupId)]),
       source,
       status,
       ...user.teams.flatMap(team => [
@@ -54,7 +73,7 @@ export const filterRelayAdminUsers = (users: RelayAdminUser[], filters: UserTabl
     ]
     return (
       (normalizedSearch === '' || searchableValues.some(value => value.toLowerCase().includes(normalizedSearch))) &&
-      (filters.roleFilter === 'all' || user.role === filters.roleFilter) &&
+      (selectedGroupId == null || user.groupIds.includes(selectedGroupId)) &&
       (filters.sourceFilter === 'all' || source === filters.sourceFilter) &&
       (filters.statusFilter === 'all' || status === filters.statusFilter) &&
       (selectedTeamId == null || user.teams.some(team => team.id === selectedTeamId))

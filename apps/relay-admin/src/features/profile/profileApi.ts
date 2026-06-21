@@ -2,9 +2,15 @@ import type { PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/bro
 
 import { requestJson } from '../../shared/api/requestJson'
 
+export type RelayProfileAccessTokenScope = 'platform' | 'team' | 'user'
+
 export interface RelayProfileAccessToken {
   id: string
   name: string
+  permissionGroupIds: string[]
+  permissionGroupMode: 'all' | 'custom'
+  scope: RelayProfileAccessTokenScope
+  teamId: string | null
   tokenPreview: string
   createdAt: string
   lastUsedAt: string | null
@@ -58,12 +64,25 @@ export interface RelayProfileAccessTokenCreateResponse {
   token: RelayProfileAccessToken
 }
 
+export interface RelayProfileAccessTokenGrantInput {
+  name?: string
+  permissionGroupIds?: string[]
+  permissionGroupMode: 'all' | 'custom'
+  scope: RelayProfileAccessTokenScope
+  teamId?: string
+}
+
 export interface RelayProfilePasskeyOptionsResponse {
   options: PublicKeyCredentialCreationOptionsJSON
 }
 
 export const fetchRelayProfileSecurity = async (token: string) =>
   await requestJson<RelayProfileSecuritySummary>(token, '/api/profile/security')
+
+export const deleteRelayProfileAccount = async (token: string) =>
+  await requestJson<{ deleted: boolean; userId: string }>(token, '/api/profile/account', {
+    method: 'DELETE'
+  })
 
 export const fetchRelayProfileOpenApiAuditEvents = async (
   token: string,
@@ -81,11 +100,25 @@ export const fetchRelayProfileOpenApiAuditEvents = async (
   )
 }
 
-export const createRelayProfileAccessToken = async (token: string, name: string) =>
+export const createRelayProfileAccessToken = async (token: string, input: RelayProfileAccessTokenGrantInput) =>
   await requestJson<RelayProfileAccessTokenCreateResponse>(token, '/api/profile/access-tokens', {
     method: 'POST',
-    body: JSON.stringify({ name })
+    body: JSON.stringify(input)
   })
+
+export const updateRelayProfileAccessToken = async (
+  token: string,
+  tokenId: string,
+  input: RelayProfileAccessTokenGrantInput
+) =>
+  await requestJson<{ token: RelayProfileAccessToken }>(
+    token,
+    `/api/profile/access-tokens/${encodeURIComponent(tokenId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(input)
+    }
+  )
 
 export const revokeRelayProfileAccessToken = async (token: string, tokenId: string) =>
   await requestJson<{ revoked: boolean; token: RelayProfileAccessToken }>(

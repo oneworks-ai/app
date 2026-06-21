@@ -12,6 +12,7 @@ export const createUser = (overrides: Partial<RelayAdminUser> = {}): RelayAdminU
   name: 'User',
   passwordEnabled: false,
   provider: null,
+  groupIds: [],
   role: 'member',
   teams: [],
   updatedAt: null,

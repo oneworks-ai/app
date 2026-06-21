@@ -2,6 +2,8 @@
 
 `src/components/` 承载跨 route 复用的前端视图组件、应用壳、NavRail、Sidebar、通用列表与通用浮层入口。页面私有内容优先留在 route 或模块私有目录；只有跨多个页面或布局复用时才提升到这里。
 
+桌面端浏览器数据同步、密码管理、历史记录、下载内容和项目 / 会话范围过滤的完整经验见 `../../../../.oo/rules/maintenance/browser-data-management.md`；这里仅保留组件落点。
+
 ## Overlay / Menu 约定
 
 - 修改 `NavRail`、`Sidebar`、右键菜单、底部菜单、二级菜单或其它通用浮层前，先确认是否已有通用渲染组件可以复用。
@@ -17,13 +19,19 @@
 - `Sidebar.tsx` / `sidebar/SidebarHeader.tsx`：主导航 quick links 承载会话、定时任务和插件的唯一父入口，不要再额外渲染同语义 primary action。父入口按路由变形：创建态显示创建中的文案并激活，具体子项详情态显示创建动作但不激活，其他页面显示列表 / 市场文案且右侧 action 才提供独立创建按钮。
 - `PluginStoreRoute.tsx`：插件市场 / 创建插件的切换入口归属侧栏插件父入口右侧 action；不要在 route header 里再放市场 / 创建的双按钮切换。
 - `nav-rail-more-menu.tsx`：底部菜单、外部注入菜单和可复用菜单 item builder。
+- `action-search-toolbar/`：配置页、管理页和列表页共用的搜索 + 紧凑 action toolbar。新增历史、下载、导入记录这类带搜索和筛选 action 的页面时优先复用它，不要在业务组件里各自拼 AntD `Input` / 图标按钮样式。
+- `mobile-aware-select/`：项目通用 Select 入口，统一桌面 AntD Select 的基础 selector 尺寸、padding、下拉箭头、点击外部关闭策略和移动端抽屉行为；下拉滚动底部留白归属 `src/styles/global.scss` 的 `oneworks-overlay` 公共规则。普通下拉默认关闭 AntD virtual scroll，避免两行或带图标 option 被固定高度估算截断；确有大列表性能需求时由调用方显式传 `virtual`。配置页、筛选器、设置弹窗等普通下拉优先复用 `MobileAwareSelect`，不要在业务组件里各自传 `suffixIcon`、覆盖 AntD 默认 `11px` padding，或局部修 popup blur / scroll padding；聊天输入栏、侧栏批量筛选这类高度特殊的紧凑控件可以在自己的模块样式里覆盖变量或 selector。
+- `workspace-scope-select/`：项目 / 会话范围选择的通用 Select。历史、下载、运行记录、审计记录这类需要按 workspace project 或 session 过滤的页面优先复用 `WorkspaceProjectSelect` / `WorkspaceSessionSelect`，并显式提供“全部项目 / 全部会话”选项；不要在业务组件里再临时拼一排 project/session chip。
 - `Sidebar.tsx`：侧边栏数据装配、route sidebar 接入和列表状态。
 - `sidebar/SidebarHeader.tsx`：侧边栏顶部入口区、搜索区、入口 actions 和入口右键菜单触发。
 - `interaction-list/`：通用交互列表，只处理 selection、item 渲染、context menu 触发和外部 action 调用，不承载具体业务语义。
+- `browser-data-sync/`：桌面端浏览器数据迁移与密码管理 UI。设置页和网页 tab 更多菜单共用的“同步数据”弹窗只承载导入 / 同步动作；已保存密码的查看、搜索、复制和显示入口是设置页左侧独立 tab。Chrome 密码、密码管理器扩展、Authenticator / 验证码导入这类浏览器数据迁移 UI 放这里，不放到普通插件配置页或单个 webview 菜单组件里。
+- `browser-activity/`：桌面端网页历史和下载内容 UI。只负责配置页里的搜索、项目 / 会话选择过滤、打开历史和打开 / 显示下载文件；记录、持久化与下载监听在 desktop main 进程。项目 / 会话不是页面级 tab，也不是“记录里是否带有项目 / 会话字段”的泛过滤；配置侧栏进入默认全局，从具体网页 tab 入口进入时通过 route state 默认选中当前项目和会话。
 
 ## 验证
 
 - 浮层、右键菜单、submenu、hover、focus 和 active 图标态改动后，必须在真实浏览器里打开对应页面验证，不只跑类型检查。
+- 改浏览器数据同步、密码管理、历史记录、下载内容或范围过滤时，同时按 `../../../../.oo/rules/maintenance/browser-data-management.md` 的验证清单检查 Electron-only 入口、webview 入口默认 scope、Select 滚动和重复账号处理。
 - 至少验证：popup 是否打开、submenu 是否使用统一样式、hover 后图标颜色是否正确、点击 action 是否只触发外部传入回调。
 - 顶部 chrome 图标、图标按钮和 header 内容高度只有一个全局来源：`--app-chrome-icon-size`。`--app-chrome-content-height` 只能作为它的语义别名，整条 chrome 高度只能从 `--app-chrome-overlay-height` / `--route-container-header-overlay-height` 派生，并且该 overlay 高度必须包含 `--app-chrome-border-width`。Route header、带红绿灯的折叠窗口栏、route panel tabs / close actions 都必须引用这些 token 或引用只从它们派生的本地别名。不要再新增独立的 `*-icon-button-size`、`*-bar-height` 或局部 `20px` / `18px` / `40px` 覆盖。
 - 顶部 chrome 动作按钮间距统一走 `--app-chrome-action-gap`，折叠窗口栏和 route header actions 要同步引用，不要分别硬编码 gap。

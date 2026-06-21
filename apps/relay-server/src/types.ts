@@ -38,6 +38,43 @@ export type RelayTeamInvitationStatus = 'accepted' | 'declined' | 'pending' | 'r
 export type RelayStorageDriver = 'cloudflare-do' | 'json' | 'postgres' | 'sqlite'
 export type RelayTeamRole = 'owner' | 'admin' | 'editor' | 'member' | 'viewer'
 export type RelayTurnstileMode = 'auto' | 'off' | 'required'
+export type RelayAccessGroupScope = 'platform' | 'team'
+export type RelayAccessTokenScope = 'platform' | 'team' | 'user'
+
+export interface RelayAccessGroupCapabilities {
+  allow?: string[]
+  deny?: string[]
+}
+
+export interface RelayAccessGroup {
+  id: string
+  scope: RelayAccessGroupScope
+  name: string
+  localizedNames?: Record<string, string>
+  description?: string
+  localizedDescriptions?: Record<string, string>
+  builtIn?: boolean
+  parentGroupId?: string
+  disabledAt?: string
+  capabilities: RelayAccessGroupCapabilities
+  quotas?: Record<string, number | null>
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface RelayEffectiveAccessSource {
+  groupId: string
+  groupName: string
+  inheritedFromGroupId?: string
+  scope: RelayAccessGroupScope
+}
+
+export interface RelayEffectiveAccess {
+  capabilities: string[]
+  deniedCapabilities: string[]
+  quotas: Record<string, number | null>
+  sources: RelayEffectiveAccessSource[]
+}
 
 export interface RelayPasskeyConfig {
   emailVerificationRequired: boolean
@@ -117,6 +154,7 @@ export interface RelayUser {
   name: string
   avatarUrl?: string
   disabledAt?: string
+  groupIds?: string[]
   maxDevices?: number
   passwordHash?: string
   provider?: RelayAuthProvider
@@ -132,6 +170,7 @@ export interface RelayTeam {
   slug: string
   name: string
   description?: string
+  accessGroups?: RelayAccessGroup[]
   avatarUrl?: string
   proxyModeEnabled?: boolean
   createdByUserId: string
@@ -145,6 +184,7 @@ export interface RelayTeamMember {
   teamId: string
   userId: string
   role: RelayTeamRole
+  groupIds?: string[]
   configEnabled?: boolean
   defaultForPublishing?: boolean
   createdByUserId: string
@@ -158,6 +198,7 @@ export interface RelayTeamInvitation {
   userId?: string
   email?: string
   role: RelayTeamRole
+  groupIds?: string[]
   configEnabled?: boolean
   defaultForPublishing?: boolean
   status: RelayTeamInvitationStatus
@@ -248,6 +289,7 @@ export interface RelayPasskeyChallenge {
 export interface RelayInvite {
   code: string
   role: RelayRole
+  groupIds?: string[]
   userId?: string
   maxUses: number
   used: number
@@ -499,6 +541,10 @@ export interface RelayAccessToken {
   id: string
   userId: string
   name: string
+  permissionGroupIds?: string[]
+  permissionGroupMode?: 'all' | 'custom'
+  scope?: RelayAccessTokenScope
+  teamId?: string
   tokenHash: string
   tokenPreview: string
   createdAt: string
@@ -569,6 +615,7 @@ export interface RelayForwardingJob {
 
 export interface RelayStore {
   createdAt: string
+  accessGroups: RelayAccessGroup[]
   auditEvents: RelayAuditLogEntry[]
   openApiAuditEvents?: RelayOpenApiAuditEvent[]
   configAssignments: RelayConfigAssignment[]

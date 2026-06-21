@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { defaultRelayAccessGroups } from '../src/access-groups.js'
 import { sendJson } from '../src/http.js'
 import { handleRelaySessionsRoute } from '../src/routes/sessions.js'
 import { readRelayStore } from '../src/server.js'
@@ -38,6 +39,7 @@ export const cleanupSessionRelayFixtures = async () => {
 
 export const createFixtureStore = (): RelayStore => ({
   createdAt: timestamp,
+  accessGroups: defaultRelayAccessGroups(),
   auditEvents: [],
   configAssignments: [],
   configProfileAssignments: [],

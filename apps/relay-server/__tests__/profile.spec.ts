@@ -1,5 +1,12 @@
+/* eslint-disable max-lines -- Profile route tests cover auth, tokens, account deletion, and OpenAPI inventory together. */
+
 import { afterEach, describe, expect, it } from 'vitest'
 
+import {
+  defaultRelayAccessGroups,
+  defaultTeamAccessGroupIds,
+  normalizeRelayTeamAccessGroups
+} from '../src/access-groups.js'
 import { hashPassword, verifyPassword } from '../src/auth/passwords.js'
 import { buildRelayAdminOpenApiDocument, buildRelayProfileOpenApiDocument } from '../src/routes/admin-openapi.js'
 import { readRelayStore, writeRelayStore } from '../src/store.js'
@@ -127,6 +134,7 @@ const expectVisibilityClasses = (document: OpenApiDocumentForTest, allowedClasse
 
 const createProfileStore = (): RelayStore => ({
   createdAt: timestamp,
+  accessGroups: defaultRelayAccessGroups(),
   auditEvents: [],
   configAssignments: [],
   configProfileAssignments: [],
@@ -196,6 +204,8 @@ describe('relay profile security routes', () => {
     const profileSpec = openApiDocument(buildRelayProfileOpenApiDocument('https://relay.example.com'))
 
     expect(sortedPathNames(adminSpec)).toEqual([
+      '/api/admin/access-groups',
+      '/api/admin/access-groups/{accessGroupId}',
       '/api/admin/config-assignments/{assignmentId}',
       '/api/admin/config-profiles/{profileId}',
       '/api/admin/config-profiles/{profileId}/assignments',
@@ -217,6 +227,8 @@ describe('relay profile security routes', () => {
       '/api/admin/team-policy',
       '/api/admin/teams',
       '/api/admin/teams/{teamId}',
+      '/api/admin/teams/{teamId}/access-groups',
+      '/api/admin/teams/{teamId}/access-groups/{accessGroupId}',
       '/api/admin/teams/{teamId}/archive',
       '/api/admin/teams/{teamId}/audit-events',
       '/api/admin/teams/{teamId}/config-profiles',
@@ -240,6 +252,7 @@ describe('relay profile security routes', () => {
       '/api/auth/providers',
       '/api/profile/access-tokens',
       '/api/profile/access-tokens/{tokenId}',
+      '/api/profile/account',
       '/api/profile/openapi-audit',
       '/api/profile/openapi.json',
       '/api/profile/passkeys/register/options',
@@ -259,6 +272,8 @@ describe('relay profile security routes', () => {
       '/api/relay/team-policy',
       '/api/relay/teams',
       '/api/relay/teams/{teamId}',
+      '/api/relay/teams/{teamId}/access-groups',
+      '/api/relay/teams/{teamId}/access-groups/{accessGroupId}',
       '/api/relay/teams/{teamId}/archive',
       '/api/relay/teams/{teamId}/audit-events',
       '/api/relay/teams/{teamId}/config-profiles',
@@ -287,14 +302,227 @@ describe('relay profile security routes', () => {
     }
   })
 
-  it('creates system access tokens without storing the full token and authorizes admin APIs', async () => {
+  it('resolves login sessions before open admin fallback in local dev mode', async () => {
+    const { args, baseUrl } = await listenRelay({ adminToken: '' })
+    await writeRelayStore(args.dataPath, createProfileStore())
+
+    const profileSecurity = await requestJson(baseUrl, '/api/profile/security', {
+      headers: authHeaders('admin-session-token')
+    })
+    const adminUsers = await requestJson(baseUrl, '/api/admin/users')
+
+    expect(profileSecurity.response.status).toBe(200)
+    expect(profileSecurity.body.accessTokens).toEqual([])
+    expect(profileSecurity.body.accountDeletion).toEqual({ available: true })
+    expect(profileSecurity.body.password).toEqual({ enabled: false })
+    expect(adminUsers.response.status).toBe(200)
+    expect(adminUsers.body.users).toMatchObject([
+      {
+        id: 'admin-user'
+      }
+    ])
+  })
+
+  it('deletes the current profile account and invalidates related login data', async () => {
+    const { args, baseUrl } = await listenRelay()
+    const store = createProfileStore()
+    store.authIdentities.push({
+      id: 'identity-1',
+      userId: 'admin-user',
+      provider: 'password',
+      providerUserId: 'admin-user',
+      email: 'admin@example.com',
+      emailVerified: true,
+      createdAt: timestamp
+    })
+    store.accessTokens.push({
+      id: 'access-token-1',
+      userId: 'admin-user',
+      name: 'Delete Me',
+      tokenHash: 'sha256:delete-me',
+      tokenPreview: 'owrt_delete',
+      createdAt: timestamp
+    })
+    store.openApiAuditEvents = [
+      {
+        id: 'audit-1',
+        tokenId: 'access-token-1',
+        tokenPreview: 'owrt_delete',
+        userId: 'admin-user',
+        method: 'GET',
+        path: '/api/admin/users',
+        status: 200,
+        createdAt: timestamp
+      }
+    ]
+    store.passkeys.push({
+      backedUp: false,
+      counter: 0,
+      createdAt: timestamp,
+      deviceType: 'singleDevice',
+      id: 'passkey-1',
+      publicKey: 'public-key',
+      userId: 'admin-user'
+    })
+    store.passkeyChallenges.push({
+      challenge: 'challenge-1',
+      createdAt: timestamp,
+      expiresAt: future,
+      id: 'challenge-1',
+      kind: 'registration',
+      origin: 'https://relay.example.com',
+      rpId: 'relay.example.com',
+      userId: 'admin-user'
+    })
+    store.devices.push({
+      id: 'device-1',
+      userId: 'admin-user',
+      createdAt: timestamp,
+      lastSeenAt: timestamp
+    })
+    store.deviceSessions.push({
+      id: 'device-session-1',
+      deviceId: 'device-1',
+      userId: 'admin-user',
+      title: 'Workspace',
+      createdAt: timestamp,
+      updatedAt: timestamp
+    })
+    store.teams.push({
+      id: 'team-1',
+      name: 'Team 1',
+      slug: 'team-1',
+      createdByUserId: 'admin-user',
+      createdAt: timestamp
+    })
+    store.teamMembers.push({
+      id: 'member-1',
+      teamId: 'team-1',
+      userId: 'admin-user',
+      role: 'owner',
+      createdByUserId: 'admin-user',
+      createdAt: timestamp
+    })
+    store.teamInvitations = [
+      {
+        id: 'team-invitation-1',
+        teamId: 'team-1',
+        userId: 'admin-user',
+        role: 'member',
+        status: 'pending',
+        createdByUserId: 'system',
+        createdAt: timestamp
+      }
+    ]
+    store.messages = [
+      {
+        id: 'message-1',
+        kind: 'personal',
+        title: 'Keep for other user',
+        body: 'Body',
+        audience: { scope: 'users', userIds: ['admin-user', 'other-user'] },
+        createdByUserId: 'system',
+        createdAt: timestamp
+      },
+      {
+        id: 'message-2',
+        kind: 'personal',
+        title: 'Only admin',
+        body: 'Body',
+        audience: { scope: 'users', userIds: ['admin-user'] },
+        createdByUserId: 'system',
+        createdAt: timestamp
+      },
+      {
+        id: 'message-3',
+        kind: 'announcement',
+        title: 'Created by admin',
+        body: 'Body',
+        audience: { scope: 'all' },
+        createdByUserId: 'admin-user',
+        createdAt: timestamp
+      }
+    ]
+    store.configAssignments.push({
+      id: 'assignment-1',
+      target: { userIds: ['admin-user', 'other-user'] }
+    })
+    store.configProfileAssignments.push({
+      id: 'profile-assignment-1',
+      profileId: 'profile-1',
+      priority: 10,
+      mode: 'default',
+      enabled: true,
+      target: { userIds: ['admin-user', 'other-user'] },
+      createdAt: timestamp
+    })
+    await writeRelayStore(args.dataPath, store)
+
+    const deleted = await requestJson(baseUrl, '/api/profile/account', {
+      method: 'DELETE',
+      headers: authHeaders('admin-session-token')
+    })
+    const rejected = await requestJson(baseUrl, '/api/profile/security', {
+      headers: authHeaders('admin-session-token')
+    })
+    const nextStore = await readRelayStore(args.dataPath)
+
+    expect(deleted.response.status).toBe(200)
+    expect(deleted.body).toEqual({ deleted: true, userId: 'admin-user' })
+    expect(rejected.response.status).toBe(401)
+    expect(nextStore.users.some(user => user.id === 'admin-user')).toBe(false)
+    expect(nextStore.authIdentities.some(identity => identity.userId === 'admin-user')).toBe(false)
+    expect(nextStore.sessions.some(session => session.userId === 'admin-user')).toBe(false)
+    expect(nextStore.accessTokens.some(token => token.userId === 'admin-user')).toBe(false)
+    expect(nextStore.openApiAuditEvents?.some(event => event.userId === 'admin-user')).toBe(false)
+    expect(nextStore.passkeys.some(passkey => passkey.userId === 'admin-user')).toBe(false)
+    expect(nextStore.passkeyChallenges.some(challenge => challenge.userId === 'admin-user')).toBe(false)
+    expect(nextStore.devices.some(device => device.userId === 'admin-user')).toBe(false)
+    expect(nextStore.deviceSessions.some(session => session.userId === 'admin-user')).toBe(false)
+    expect(nextStore.teamMembers.some(member => member.userId === 'admin-user')).toBe(false)
+    expect(nextStore.teamInvitations?.some(invitation => invitation.userId === 'admin-user')).toBe(false)
+    expect(nextStore.messages?.map(message => message.id)).toEqual(['message-1'])
+    expect(nextStore.messages?.[0].audience).toEqual({ scope: 'users', userIds: ['other-user'] })
+    expect(nextStore.configAssignments[0].target?.userIds).toEqual(['other-user'])
+    expect(nextStore.configProfileAssignments[0].target?.userIds).toEqual(['other-user'])
+  })
+
+  it('allows profile access tokens to delete the current account', async () => {
     const { args, baseUrl } = await listenRelay()
     await writeRelayStore(args.dataPath, createProfileStore())
 
     const created = await requestJson(baseUrl, '/api/profile/access-tokens', {
       method: 'POST',
       headers: authHeaders('admin-session-token'),
-      body: JSON.stringify({ name: 'Codex OpenAPI' })
+      body: JSON.stringify({ name: 'Self delete', scope: 'user' })
+    })
+    const accessToken = String(created.body.accessToken)
+    const listed = await requestJson(baseUrl, '/api/profile/security', {
+      headers: authHeaders(accessToken)
+    })
+    const deleted = await requestJson(baseUrl, '/api/profile/account', {
+      method: 'DELETE',
+      headers: authHeaders(accessToken)
+    })
+    const nextStore = await readRelayStore(args.dataPath)
+
+    expect(created.response.status).toBe(200)
+    expect(listed.response.status).toBe(200)
+    expect(listed.body.accountDeletion).toEqual({ available: true })
+    expect(deleted.response.status).toBe(200)
+    expect(deleted.body).toEqual({ deleted: true, userId: 'admin-user' })
+    expect(nextStore.users.some(user => user.id === 'admin-user')).toBe(false)
+    expect(nextStore.accessTokens.some(token => token.userId === 'admin-user')).toBe(false)
+  })
+
+  it('creates platform API access tokens without storing the full token and authorizes admin APIs', async () => {
+    const { args, baseUrl } = await listenRelay()
+    await writeRelayStore(args.dataPath, createProfileStore())
+
+    const created = await requestJson(baseUrl, '/api/profile/access-tokens', {
+      method: 'POST',
+      headers: authHeaders('admin-session-token'),
+      body: JSON.stringify({ name: 'Codex OpenAPI', scope: 'platform' })
     })
     const accessToken = String(created.body.accessToken)
     const store = await readRelayStore(args.dataPath)
@@ -333,14 +561,108 @@ describe('relay profile security routes', () => {
     expect(recursiveCreate.body).toEqual({ error: 'Relay login session required.' })
   })
 
-  it('records and filters system access token OpenAPI audit events', async () => {
+  it('separates user, team, and platform access token scopes', async () => {
+    const { args, baseUrl } = await listenRelay()
+    const store = createProfileStore()
+    store.teams.push(
+      {
+        id: 'team-a',
+        name: 'Team A',
+        slug: 'team-a',
+        accessGroups: normalizeRelayTeamAccessGroups(undefined),
+        createdByUserId: 'admin-user',
+        createdAt: timestamp
+      },
+      {
+        id: 'team-b',
+        name: 'Team B',
+        slug: 'team-b',
+        accessGroups: normalizeRelayTeamAccessGroups(undefined),
+        createdByUserId: 'admin-user',
+        createdAt: timestamp
+      }
+    )
+    store.teamMembers.push(
+      {
+        id: 'member-a',
+        teamId: 'team-a',
+        userId: 'admin-user',
+        role: 'viewer',
+        groupIds: defaultTeamAccessGroupIds('viewer'),
+        configEnabled: true,
+        defaultForPublishing: false,
+        createdByUserId: 'admin-user',
+        createdAt: timestamp
+      },
+      {
+        id: 'member-b',
+        teamId: 'team-b',
+        userId: 'admin-user',
+        role: 'owner',
+        groupIds: defaultTeamAccessGroupIds('owner'),
+        configEnabled: true,
+        defaultForPublishing: true,
+        createdByUserId: 'admin-user',
+        createdAt: timestamp
+      }
+    )
+    await writeRelayStore(args.dataPath, store)
+
+    const userCreated = await requestJson(baseUrl, '/api/profile/access-tokens', {
+      method: 'POST',
+      headers: authHeaders('admin-session-token'),
+      body: JSON.stringify({ name: 'Personal API', scope: 'user' })
+    })
+    const teamCreated = await requestJson(baseUrl, '/api/profile/access-tokens', {
+      method: 'POST',
+      headers: authHeaders('admin-session-token'),
+      body: JSON.stringify({ name: 'Team A API', scope: 'team', teamId: 'team-a' })
+    })
+    const userAccessToken = String(userCreated.body.accessToken)
+    const teamAccessToken = String(teamCreated.body.accessToken)
+    const userProfile = await requestJson(baseUrl, '/api/profile/security', {
+      headers: authHeaders(userAccessToken)
+    })
+    const userAdminUsers = await requestJson(baseUrl, '/api/admin/users', {
+      headers: authHeaders(userAccessToken)
+    })
+    const teamList = await requestJson(baseUrl, '/api/relay/teams', {
+      headers: authHeaders(teamAccessToken)
+    })
+    const otherTeam = await requestJson(baseUrl, '/api/relay/teams/team-b', {
+      headers: authHeaders(teamAccessToken)
+    })
+    await waitForOpenApiAuditEvents(args.dataPath, 4)
+
+    expect(userCreated.body.token).toMatchObject({
+      name: 'Personal API',
+      permissionGroupIds: [],
+      permissionGroupMode: 'all',
+      scope: 'user',
+      teamId: null
+    })
+    expect(teamCreated.body.token).toMatchObject({
+      name: 'Team A API',
+      permissionGroupIds: [],
+      permissionGroupMode: 'all',
+      scope: 'team',
+      teamId: 'team-a'
+    })
+    expect(userProfile.response.status).toBe(200)
+    expect(userAdminUsers.response.status).toBe(403)
+    expect(teamList.response.status).toBe(200)
+    expect(teamList.body.teams).toMatchObject([{ id: 'team-a' }])
+    expect(otherTeam.response.status).toBe(403)
+  })
+
+  it('records and filters API access token OpenAPI audit events', async () => {
     const { args, baseUrl } = await listenRelay()
     await writeRelayStore(args.dataPath, createProfileStore())
 
     const created = await requestJson(baseUrl, '/api/profile/access-tokens', {
       method: 'POST',
       headers: authHeaders('admin-session-token'),
-      body: JSON.stringify({ name: 'Audit Key' })
+      body: JSON.stringify({ name: 'Audit Key', scope: 'platform' })
     })
     const accessToken = String(created.body.accessToken)
     const token = created.body.token as { id: string; tokenPreview: string }

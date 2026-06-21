@@ -36,6 +36,17 @@ interface AdminNavMenuSection {
   label?: ReactNode
 }
 
+const OFFICIAL_HOMEPAGE_URL = 'https://oneworks.cloud/'
+const OFFICIAL_DOCS_URL = 'https://oneworks.cloud/docs/'
+const LOCAL_ADMIN_HOSTS = new Set(['localhost', '127.0.0.1', '::1'])
+
+const resolveAdminFooterLink = (localPath: string, officialUrl: string) => {
+  if (typeof window === 'undefined') return localPath
+  const hostname = window.location.hostname
+  if (LOCAL_ADMIN_HOSTS.has(hostname) || hostname.endsWith('.localhost')) return officialUrl
+  return localPath
+}
+
 export interface AdminNavRailProps {
   accounts?: AdminSessionAccount[]
   activeToken?: string
@@ -137,6 +148,12 @@ export const AdminNavRail = ({
     void navigate('/messages')
     setAccountMenuOpen(false)
   }, [navigate])
+  const openHomepage = useCallback(() => {
+    window.location.assign(resolveAdminFooterLink('/', OFFICIAL_HOMEPAGE_URL))
+  }, [])
+  const openDocsSite = useCallback(() => {
+    window.location.assign(resolveAdminFooterLink('/docs', OFFICIAL_DOCS_URL))
+  }, [])
   const normalizedPathname = location.pathname.replace(/\/+$/u, '')
   const isMessageCenterActive = normalizedPathname === '/messages' || normalizedPathname.startsWith('/messages/')
   const accountMenuItems = useMemo<MenuProps['items']>(() => {
@@ -402,6 +419,20 @@ export const AdminNavRail = ({
             >
               <AdminIcon name='notifications' />
             </button>
+          </div>
+          <div className='relay-admin-nav-footer-link-group'>
+            <HostNavRailFooterButton
+              icon={<AdminIcon name='home' />}
+              label='首页'
+              title='首页'
+              onClick={openHomepage}
+            />
+            <HostNavRailFooterButton
+              icon={<AdminIcon name='menu_book' />}
+              label='文档站'
+              title='文档站'
+              onClick={openDocsSite}
+            />
           </div>
           <Dropdown
             destroyOnHidden

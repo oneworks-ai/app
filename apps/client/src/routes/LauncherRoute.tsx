@@ -1054,8 +1054,24 @@ export function LauncherRoute({
     showDesktopActionUnavailable
   ])
 
-  const enterOpenWorkspaceDirectoryMode = useCallback(() => {
-    if (desktopApi?.listCloneDestinationDirectories == null && !canUseServerLauncher) {
+  const enterOpenWorkspaceDirectoryMode = useCallback(async () => {
+    const canListDirectories = desktopApi?.listCloneDestinationDirectories != null || canUseServerLauncher
+    if (!canListDirectories) {
+      if (desktopApi?.chooseWorkspace != null) {
+        try {
+          const workspaceFolder = await desktopApi.chooseWorkspace()
+          if (workspaceFolder == null || workspaceFolder.trim() === '') {
+            focusSearchInput()
+            return
+          }
+          await openWorkspace(workspaceFolder)
+        } catch (error) {
+          console.error('[launcher] failed to choose workspace', error)
+          void message.error(t('launcher.openWorkspaceFailed'))
+          focusSearchInput()
+        }
+        return
+      }
       showDesktopActionUnavailable()
       return
     }
@@ -1080,9 +1096,12 @@ export function LauncherRoute({
     canUseServerLauncher,
     desktopApi,
     focusSearchInput,
+    message,
+    openWorkspace,
     projects,
     recentCloneDestinationDirectories,
-    showDesktopActionUnavailable
+    showDesktopActionUnavailable,
+    t
   ])
 
   const openCloneDestinationDirectory = useCallback((directory: string | undefined) => {

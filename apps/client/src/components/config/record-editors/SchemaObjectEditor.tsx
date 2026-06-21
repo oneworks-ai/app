@@ -17,10 +17,6 @@ const buildSelectOptions = (options: ConfigUiFieldOption[] = []) => (
     label: option.label ?? option.value
   }))
 )
-const configSelectSuffixIcon = (
-  <span className='material-symbols-rounded config-view__select-chevron'>expand_more</span>
-)
-
 const resolveFieldIcon = (field: ConfigUiField) => {
   if (field.icon != null) return field.icon
   if (field.type === 'json') return getTypeIcon('object')
@@ -93,7 +89,6 @@ export const SchemaObjectEditor = ({
           value={typeof valueToUse === 'string' && valueToUse !== '' ? valueToUse : undefined}
           options={buildSelectOptions(resolvedOptions)}
           placeholder={field.placeholder}
-          suffixIcon={configSelectSuffixIcon}
           onChange={(selected) => nextValue(typeof selected === 'string' ? selected : undefined)}
         />
       )
@@ -150,7 +145,6 @@ export const SchemaObjectEditor = ({
         <Select
           value={typeof valueToUse === 'string' ? valueToUse : undefined}
           options={buildSelectOptions(resolvedOptions ?? field.options ?? [])}
-          suffixIcon={configSelectSuffixIcon}
           onChange={(selected) => nextValue(selected)}
         />
       )

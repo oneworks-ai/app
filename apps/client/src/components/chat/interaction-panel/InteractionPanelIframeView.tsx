@@ -38,6 +38,7 @@ import {
   normalizeFrameUrl
 } from './interaction-panel-iframe-pages'
 import { findWebDebugTargetForUrl } from './interaction-panel-page-debugger'
+import type { InteractionPanelUrlHistoryEntry } from './interaction-panel-url-history'
 import { normalizeWebviewUrlForCompare } from './interaction-panel-webview-navigation'
 import { useInteractionPanelUrlHistory } from './use-interaction-panel-url-history'
 import { useInteractionPanelWebview } from './use-interaction-panel-webview'
@@ -506,19 +507,51 @@ export function InteractionPanelIframeView({
   const developerToolsResizeCleanupRef = useRef<(() => void) | null>(null)
   const webviewRef = useRef<ElectronWebviewElement | null>(null)
   const onChangeMetadataRef = useRef(onChangeMetadata)
+  const latestPageMetadataRef = useRef<{ faviconUrl?: string; title?: string }>({})
   const { history: urlHistory, record: recordUrlHistory } = useInteractionPanelUrlHistory({
     projectKey: projectUrlHistoryKey,
     sessionKey: sessionUrlHistoryKey
   })
   const frameUrl = useMemo(() => normalizeFrameUrl(page.url), [page.url])
   const isMobileDebugDevtools = isIframePageDevtoolsVariant(page)
+  const recordBrowserActivityHistory = useCallback((
+    entry: Omit<InteractionPanelUrlHistoryEntry, 'updatedAt'>,
+    incrementVisit: boolean
+  ) => {
+    const desktopApi = window.oneworksDesktop
+    if (desktopApi?.recordBrowserHistory == null) return
+    const normalizedUrl = normalizeFrameUrl(entry.url)
+    if (normalizedUrl === '') return
+
+    const title = entry.title?.trim() || latestPageMetadataRef.current.title
+    const faviconUrl = entry.faviconUrl?.trim() || latestPageMetadataRef.current.faviconUrl
+    void desktopApi.recordBrowserHistory({
+      url: normalizedUrl,
+      incrementVisit,
+      ...(title == null || title.trim() === '' ? {} : { title: title.trim() }),
+      ...(faviconUrl == null || faviconUrl.trim() === '' ? {} : { faviconUrl: faviconUrl.trim() }),
+      ...(projectUrlHistoryKey.trim() === '' ? {} : { projectKey: projectUrlHistoryKey }),
+      ...(sessionUrlHistoryKey.trim() === '' ? {} : { sessionKey: sessionUrlHistoryKey })
+    }).catch((error) => {
+      console.warn('[browser-activity] failed to record browser history', error)
+    })
+  }, [projectUrlHistoryKey, sessionUrlHistoryKey])
+  const recordPanelUrlHistory = useCallback((entry: Omit<InteractionPanelUrlHistoryEntry, 'updatedAt'>) => {
+    recordUrlHistory(entry)
+    latestPageMetadataRef.current = {
+      ...latestPageMetadataRef.current,
+      ...(entry.title == null || entry.title.trim() === '' ? {} : { title: entry.title.trim() }),
+      ...(entry.faviconUrl == null || entry.faviconUrl.trim() === '' ? {} : { faviconUrl: entry.faviconUrl.trim() })
+    }
+    recordBrowserActivityHistory(entry, false)
+  }, [recordBrowserActivityHistory, recordUrlHistory])
   const webview = useInteractionPanelWebview({
     frameUrl,
     isMobileDebugDevtools,
     onChangeMetadata,
     onChangeUrl,
     pageId: page.id,
-    recordUrlHistory,
+    recordUrlHistory: recordPanelUrlHistory,
     resolvedThemeMode,
     webviewRef
   })
@@ -590,6 +623,21 @@ export function InteractionPanelIframeView({
   }, [page.url])
 
   useEffect(() => {
+    latestPageMetadataRef.current = {
+      ...(page.title.trim() === '' ? {} : { title: page.title.trim() }),
+      ...(page.faviconUrl == null || page.faviconUrl.trim() === '' ? {} : { faviconUrl: page.faviconUrl.trim() })
+    }
+  }, [page.faviconUrl, page.title])
+
+  useEffect(() => {
+    if (frameUrl === '' || isMobileDebugDevtools) return
+    recordBrowserActivityHistory({
+      url: frameUrl,
+      ...latestPageMetadataRef.current
+    }, true)
+  }, [frameUrl, isMobileDebugDevtools, recordBrowserActivityHistory])
+
+  useEffect(() => {
     if (!webview.shouldUseWebview) return
     if (frameUrl === '') {
       setWebviewFrameUrl('')
@@ -627,11 +675,11 @@ export function InteractionPanelIframeView({
         if (metadata.faviconUrl != null) nextMetadata.faviconUrl = metadata.faviconUrl
         if (metadata.title != null) nextMetadata.title = metadata.title
         onChangeMetadataRef.current(page.id, nextMetadata)
-        recordUrlHistory({ url: frameUrl, ...nextMetadata })
+        recordPanelUrlHistory({ url: frameUrl, ...nextMetadata })
       })
       .catch(() => undefined)
     return () => abortController.abort()
-  }, [frameUrl, page.id, recordUrlHistory, webview.shouldUseWebview])
+  }, [frameUrl, page.id, recordPanelUrlHistory, webview.shouldUseWebview])
 
   const handleOpen = (event?: KeyboardEvent<HTMLInputElement>) => {
     if (!isEditingUrl) {
@@ -640,7 +688,7 @@ export function InteractionPanelIframeView({
     }
 
     onChangeUrl(page.id, normalizedDraftUrl)
-    recordUrlHistory({
+    recordPanelUrlHistory({
       url: normalizedDraftUrl,
       title: getIframePageHostTitle(normalizedDraftUrl, normalizedDraftUrl)
     })
@@ -1027,9 +1075,27 @@ export function InteractionPanelIframeView({
     setIsViewportMoreOpen(false)
   }
 
+  const registerWebviewScope = useCallback(() => {
+    const webContentsId = webviewRef.current?.getWebContentsId?.()
+    if (typeof webContentsId !== 'number' || !Number.isFinite(webContentsId)) return
+    void window.oneworksDesktop?.registerInteractionPanelWebviewScope?.({
+      webContentsId,
+      ...(projectUrlHistoryKey.trim() === '' ? {} : { projectKey: projectUrlHistoryKey }),
+      ...(sessionUrlHistoryKey.trim() === '' ? {} : { sessionKey: sessionUrlHistoryKey })
+    }).catch((error) => {
+      console.warn('[browser-activity] failed to register webview scope', error)
+    })
+  }, [projectUrlHistoryKey, sessionUrlHistoryKey])
+
   const handleWebviewAttached = useCallback(() => {
     setWebviewAttachVersion(current => current + 1)
-  }, [])
+    registerWebviewScope()
+  }, [registerWebviewScope])
+
+  useEffect(() => {
+    if (!webview.shouldUseWebview || webviewRef.current == null) return
+    registerWebviewScope()
+  }, [registerWebviewScope, webview.shouldUseWebview, webviewAttachVersion])
 
   const postDeveloperToolsDockSide = useCallback(() => {
     const targetOrigin = getLoadedFrameOrigin(developerToolsFrameRef.current, developerToolsUrl)
@@ -1164,7 +1230,7 @@ export function InteractionPanelIframeView({
 
     if (title != null || faviconUrl != null) {
       onChangeMetadataRef.current(page.id, { faviconUrl, title })
-      recordUrlHistory({ faviconUrl, title, url: frameUrl })
+      recordPanelUrlHistory({ faviconUrl, title, url: frameUrl })
     }
     void autoInjectCurrentPageTarget()
   }
@@ -1375,6 +1441,8 @@ export function InteractionPanelIframeView({
                 iframeRef={iframeRef}
                 isDeveloperToolsOpen={isDeveloperToolsOpen}
                 isViewportToolbarOpen={isViewportToolbarOpen}
+                projectUrlHistoryKey={projectUrlHistoryKey}
+                sessionUrlHistoryKey={sessionUrlHistoryKey}
                 shouldUseWebview={webview.shouldUseWebview}
                 webviewRef={webviewRef}
                 onForceReload={handleRefresh}

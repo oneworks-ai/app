@@ -2,13 +2,34 @@
 import './ProfilePage.css'
 
 import { startRegistration } from '@simplewebauthn/browser'
-import { Alert, Avatar, Button, Descriptions, Empty, Form, Input, Modal, Popover, Spin, Tabs, Tag } from 'antd'
+import {
+  Alert,
+  Avatar,
+  Button,
+  Descriptions,
+  Empty,
+  Form,
+  Input,
+  Modal,
+  Popover,
+  Select,
+  Spin,
+  Tabs,
+  Tag,
+  notification
+} from 'antd'
 import type { DescriptionsProps, TableColumnsType } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
 import type { MouseEvent } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 
-import type { RelayAdminCurrentUser, RelayAdminDevice, RelayAdminDeviceStatus } from '../../shared/model/adminTypes'
+import { RequestJsonError } from '../../shared/api/requestJson'
+import type {
+  RelayAdminAccessGroup,
+  RelayAdminCurrentUser,
+  RelayAdminDevice,
+  RelayAdminDeviceStatus
+} from '../../shared/model/adminTypes'
 import { AdminActionButton } from '../../shared/ui/AdminActionButton'
 import { AdminColumnFilter } from '../../shared/ui/AdminColumnFilter'
 import { AdminIcon } from '../../shared/ui/AdminIcon'
@@ -18,22 +39,33 @@ import type { AdminListColumnOption } from '../../shared/ui/AdminListTable'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 import type { AdminSessionAccount } from '../auth/adminSessionStorage'
 import { DeviceTable } from '../devices/DeviceTable'
+import type { RelayAdminTeam } from '../teams/teamTypes'
 import {
   changeRelayProfilePassword,
   createRelayProfileAccessToken,
   createRelayProfilePasskeyOptions,
+  deleteRelayProfileAccount,
   fetchRelayProfileOpenApiAuditEvents,
   fetchRelayProfileSecurity,
   revokeRelayProfileAccessToken,
+  updateRelayProfileAccessToken,
   verifyRelayProfilePasskey
 } from './profileApi'
-import type { RelayProfileAccessToken, RelayProfileOpenApiAuditEvent, RelayProfileSecuritySummary } from './profileApi'
+import type {
+  RelayProfileAccessToken,
+  RelayProfileAccessTokenScope,
+  RelayProfileOpenApiAuditEvent,
+  RelayProfileSecuritySummary
+} from './profileApi'
 
 export interface ProfilePageProps {
   accounts: AdminSessionAccount[]
   activeToken: string
+  accessGroups: RelayAdminAccessGroup[]
   currentUser?: RelayAdminCurrentUser
   devices: RelayAdminDevice[]
+  teams: RelayAdminTeam[]
+  onAccountDeleted?: () => void
 }
 
 const formatTimestamp = (value: string | null | undefined) => {
@@ -72,9 +104,22 @@ const profileTabKeySet = new Set<string>(profileTabKeys)
 const isProfileTabKey = (value: string | undefined): value is ProfileTabKey =>
   value != null && profileTabKeySet.has(value)
 const profileTabPath = (tabKey: ProfileTabKey) => `/profile/${tabKey}`
+const isMissingProfileSecurityEndpoint = (error: unknown) => (
+  error instanceof RequestJsonError
+    ? error.status === 404
+    : error instanceof Error && error.message === 'Not found.'
+)
 const queryValue = (params: URLSearchParams, key: string) => params.get(key)?.trim() ?? ''
 
-const defaultTokenVisibleColumnKeys = ['name', 'tokenPreview', 'createdAt', 'lastUsedAt', 'status']
+const defaultTokenVisibleColumnKeys = [
+  'name',
+  'scope',
+  'tokenPreview',
+  'permissionGroups',
+  'createdAt',
+  'lastUsedAt',
+  'status'
+]
 const defaultAuditVisibleColumnKeys = [
   'createdAt',
   'tokenPreview',
@@ -87,7 +132,9 @@ const defaultAuditVisibleColumnKeys = [
 
 const tokenColumnOptions: AdminListColumnOption[] = [
   { key: 'name', label: '名称', required: true },
+  { key: 'scope', label: '类型' },
   { key: 'tokenPreview', label: 'Preview' },
+  { key: 'permissionGroups', label: '权限范围' },
   { key: 'createdAt', label: '创建时间' },
   { key: 'lastUsedAt', label: '最后使用' },
   { key: 'status', label: '状态', required: true }
@@ -108,6 +155,15 @@ const readTokenStatusFilter = (params: URLSearchParams): TokenStatusFilter => {
 }
 
 const tokenStatus = (token: RelayProfileAccessToken) => token.revokedAt == null ? 'active' : 'revoked'
+
+const accessTokenScopeLabel = (scope: RelayProfileAccessTokenScope) => {
+  if (scope === 'team') return '团队级'
+  if (scope === 'user') return '用户级'
+  return '平台级'
+}
+
+const normalizeAccessTokenScope = (scope: RelayProfileAccessToken['scope'] | undefined): RelayProfileAccessTokenScope =>
+  scope === 'team' || scope === 'user' ? scope : 'platform'
 
 const timestampValue = (value: string | null | undefined) => {
   if (value == null || value === '') return 0
@@ -246,6 +302,10 @@ const readAuditStatusFilter = (params: URLSearchParams) => {
 
 interface AccessTokenFormValues {
   name?: string
+  permissionGroupIds?: string[]
+  permissionGroupMode: 'all' | 'custom'
+  scope: RelayProfileAccessTokenScope
+  teamId?: string
 }
 
 interface PasswordFormValues {
@@ -275,12 +335,15 @@ const defaultSecuritySummary = (currentUser: RelayAdminCurrentUser): RelayProfil
 export const ProfilePage = ({
   accounts,
   activeToken,
+  accessGroups,
   currentUser,
-  devices
+  devices,
+  teams,
+  onAccountDeleted
 }: ProfilePageProps) => {
   const location = useLocation()
   const navigate = useNavigate()
-  const { profileTab } = useParams()
+  const { profileItemId, profileTab } = useParams()
   const activeProfileTab = isProfileTabKey(profileTab) ? profileTab : defaultProfileTabKey
   const initialProfileQuery = new URLSearchParams(location.search)
   const [accessTokenForm] = Form.useForm<AccessTokenFormValues>()
@@ -288,11 +351,13 @@ export const ProfilePage = ({
   const [security, setSecurity] = useState<RelayProfileSecuritySummary | undefined>()
   const [isLoadingSecurity, setIsLoadingSecurity] = useState(false)
   const [securityError, setSecurityError] = useState<string | undefined>()
-  const [isAccessTokenModalOpen, setIsAccessTokenModalOpen] = useState(false)
   const [createdAccessToken, setCreatedAccessToken] = useState<string | undefined>()
-  const [isCreatingAccessToken, setIsCreatingAccessToken] = useState(false)
+  const [isSavingAccessToken, setIsSavingAccessToken] = useState(false)
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
   const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [isDeleteAccountModalOpen, setIsDeleteAccountModalOpen] = useState(false)
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false)
+  const [deleteAccountConfirmValue, setDeleteAccountConfirmValue] = useState('')
   const [passkeyLoading, setPasskeyLoading] = useState(false)
   const [deviceSearchValue, setDeviceSearchValue] = useState(() =>
     activeProfileTab === 'devices' ? queryValue(initialProfileQuery, 'q') : ''
@@ -336,8 +401,18 @@ export const ProfilePage = ({
   const [isLoadingAudit, setIsLoadingAudit] = useState(false)
   const [auditError, setAuditError] = useState<string | undefined>()
   const [auditRevision, setAuditRevision] = useState(0)
-  const [actionMessage, setActionMessage] = useState<string | undefined>()
   const [actionError, setActionError] = useState<string | undefined>()
+  const [notificationApi, notificationContextHolder] = notification.useNotification()
+  const accessTokenPermissionMode = Form.useWatch('permissionGroupMode', accessTokenForm)
+  const accessTokenScope = Form.useWatch('scope', accessTokenForm)
+  const accessTokenTeamId = Form.useWatch('teamId', accessTokenForm)
+  const showActionMessage = useCallback((message: string) => {
+    notificationApi.success({
+      duration: 3,
+      message,
+      placement: 'bottomRight'
+    })
+  }, [notificationApi])
 
   const buildProfileTabSearch = useCallback((tabKey: ProfileTabKey) => {
     const params = new URLSearchParams()
@@ -415,6 +490,7 @@ export const ProfilePage = ({
 
   useEffect(() => {
     if (profileTab !== activeProfileTab) return
+    if (profileItemId != null) return
 
     const nextPathname = profileTabPath(activeProfileTab)
     const nextSearch = buildProfileTabSearch(activeProfileTab)
@@ -424,7 +500,7 @@ export const ProfilePage = ({
       pathname: nextPathname,
       search: nextSearch
     }, { replace: true })
-  }, [activeProfileTab, buildProfileTabSearch, location.pathname, navigate, profileTab])
+  }, [activeProfileTab, buildProfileTabSearch, location.pathname, navigate, profileItemId, profileTab])
 
   const handleProfileTabChange = (key: string) => {
     if (!isProfileTabKey(key)) return
@@ -445,7 +521,13 @@ export const ProfilePage = ({
       setSecurity(await fetchRelayProfileSecurity(activeToken))
     } catch (error) {
       setSecurity(defaultSecuritySummary(currentUser))
-      setSecurityError(error instanceof Error ? error.message : String(error))
+      setSecurityError(
+        isMissingProfileSecurityEndpoint(error)
+          ? undefined
+          : error instanceof Error
+          ? error.message
+          : String(error)
+      )
     } finally {
       setIsLoadingSecurity(false)
     }
@@ -454,6 +536,33 @@ export const ProfilePage = ({
   useEffect(() => {
     void loadSecurity()
   }, [loadSecurity])
+
+  useEffect(() => {
+    if (activeProfileTab !== 'tokens' || profileItemId !== 'new') return
+    setActionError(undefined)
+    setCreatedAccessToken(undefined)
+    accessTokenForm.setFieldsValue({
+      name: '',
+      permissionGroupIds: [],
+      permissionGroupMode: 'all',
+      scope: 'user',
+      teamId: undefined
+    })
+  }, [accessTokenForm, activeProfileTab, profileItemId])
+
+  useEffect(() => {
+    if (activeProfileTab !== 'tokens' || profileItemId == null || profileItemId === 'new') return
+    const token = security?.accessTokens.find(item => item.id === profileItemId)
+    if (token == null) return
+    setCreatedAccessToken(undefined)
+    accessTokenForm.setFieldsValue({
+      name: token.name,
+      permissionGroupIds: token.permissionGroupIds,
+      permissionGroupMode: token.permissionGroupMode,
+      scope: normalizeAccessTokenScope(token.scope),
+      teamId: token.teamId ?? undefined
+    })
+  }, [accessTokenForm, activeProfileTab, profileItemId, security?.accessTokens])
 
   const loadOpenApiAudit = useCallback(async () => {
     if (activeToken === '' || currentUser == null) {
@@ -483,9 +592,12 @@ export const ProfilePage = ({
 
   if (currentUser == null) {
     return (
-      <section className='relay-profile-panel'>
-        <Empty className='relay-profile__empty' description='未登录账号' />
-      </section>
+      <>
+        {notificationContextHolder}
+        <section className='relay-profile-panel'>
+          <Empty className='relay-profile__empty' description='未登录账号' />
+        </section>
+      </>
     )
   }
 
@@ -541,15 +653,90 @@ export const ProfilePage = ({
     ? `已注册 ${securitySummary.passkeys.count} 个`
     : '尚未注册'
   const passkeyLastUsed = formatTimestamp(securitySummary.passkeys.lastUsedAt)
+  const isDeleteAccountConfirmValid = deleteAccountConfirmValue.trim() === currentUser.id
+  const isAccessTokenEditorRoute = activeProfileTab === 'tokens' && profileItemId != null
+  const isAccessTokenCreateRoute = isAccessTokenEditorRoute && profileItemId === 'new'
+  const editingAccessToken = !isAccessTokenCreateRoute && profileItemId != null
+    ? securitySummary.accessTokens.find(token => token.id === profileItemId)
+    : undefined
+  const currentUserGroupIds = currentUser.groupIds ?? []
+  const currentUserAccessSources = currentUser.effectiveAccess?.sources ?? []
+  const userPlatformGroupIdsFromSources = currentUserAccessSources
+    .filter(source => source.scope === 'platform')
+    .map(source => source.groupId)
+  const userPlatformGroupIds = currentUserGroupIds.length > 0
+    ? currentUserGroupIds
+    : userPlatformGroupIdsFromSources.length > 0
+    ? userPlatformGroupIdsFromSources
+    : [`platform:${currentUser.role}`]
+  const userPlatformGroupIdSet = new Set(userPlatformGroupIds)
+  const platformAccessGroups = accessGroups.filter(group =>
+    group.scope === 'platform' && !group.disabled && userPlatformGroupIdSet.has(group.id)
+  )
+  const userTeams = teams.filter(team => team.archivedAt == null && team.membership != null)
+  const teamById = new Map(teams.map(team => [team.id, team]))
+  const tokenEditorScope = accessTokenScope ??
+    (isAccessTokenCreateRoute ? 'user' : normalizeAccessTokenScope(editingAccessToken?.scope))
+  const tokenEditorTeamId = accessTokenTeamId ?? editingAccessToken?.teamId ?? userTeams[0]?.id
+  const selectedAccessTokenTeam = userTeams.find(team => team.id === tokenEditorTeamId)
+  const selectedAccessTokenTeamGroupIds = selectedAccessTokenTeam?.membership?.groupIds ?? []
+  const selectedAccessTokenTeamGroupIdSet = new Set(selectedAccessTokenTeamGroupIds)
+  const platformAccessTokenGroupOptions = platformAccessGroups.map(group => ({
+    label: group.name,
+    value: group.id
+  }))
+  const teamAccessTokenGroupOptions = (selectedAccessTokenTeam?.accessGroups ?? [])
+    .filter(group => group.scope === 'team' && !group.disabled && selectedAccessTokenTeamGroupIdSet.has(group.id))
+    .map(group => ({
+      label: group.name,
+      value: group.id
+    }))
+  const accessTokenGroupOptions = tokenEditorScope === 'team'
+    ? teamAccessTokenGroupOptions
+    : tokenEditorScope === 'platform'
+    ? platformAccessTokenGroupOptions
+    : []
+  const accessTokenTeamOptions = userTeams.map(team => ({
+    label: team.name,
+    value: team.id
+  }))
+  const accessTokenPermissionGroupLabel = (token: RelayProfileAccessToken) => {
+    const scope = normalizeAccessTokenScope(token.scope)
+    if (scope === 'user') return '个人 API'
+    const team = token.teamId == null ? undefined : teamById.get(token.teamId)
+    if ((token.permissionGroupMode ?? 'all') === 'all') {
+      return scope === 'team'
+        ? `${team?.name ?? '团队'} · 全部成员组`
+        : '全部当前用户组'
+    }
+    const groupSource = scope === 'team' ? team?.accessGroups ?? [] : accessGroups
+    const groupById = new Map(groupSource.map(group => [group.id, group]))
+    const groupNames = (token.permissionGroupIds ?? [])
+      .map(groupId => groupById.get(groupId)?.name ?? groupId)
+      .filter(name => name !== '')
+    return groupNames.length === 0 ? '未授权' : groupNames.join('、')
+  }
+  const accessTokenModeDescription = tokenEditorScope === 'team'
+    ? '全部表示跟随你在所选团队内拥有的全部成员组；指定表示只授予选中的团队成员组。'
+    : '全部表示跟随当前账号拥有的所有平台用户组；指定表示只授予选中的平台用户组。'
+  const accessTokenGroupFieldLabel = tokenEditorScope === 'team' ? '授权成员组' : '授权用户组'
+  const accessTokenGroupDescription = tokenEditorScope === 'team'
+    ? '只能选择你在该团队内已经拥有的成员组，token 不会获得额外权限。'
+    : '只能选择当前账号已经拥有的平台用户组，token 不会获得额外权限。'
   const normalizedTokenSearch = tokenSearchValue.trim().toLowerCase()
   const filteredTokenRows = securitySummary.accessTokens.filter(token => {
     const status = tokenStatus(token)
+    const scope = normalizeAccessTokenScope(token.scope)
+    const teamName = token.teamId == null ? '' : teamById.get(token.teamId)?.name ?? ''
     if (tokenStatusFilter !== 'all' && status !== tokenStatusFilter) return false
     if (!isTimestampWithinRange(token.createdAt, tokenCreatedFrom, tokenCreatedTo)) return false
     if (!isTimestampWithinRange(token.lastUsedAt, tokenLastUsedFrom, tokenLastUsedTo)) return false
     if (normalizedTokenSearch === '') return true
     return [
       token.name,
+      accessTokenScopeLabel(scope),
+      teamName,
+      accessTokenPermissionGroupLabel(token),
       token.tokenPreview,
       token.createdAt,
       token.lastUsedAt ?? '',
@@ -575,43 +762,55 @@ export const ProfilePage = ({
         event.createdAt
       ].some(value => value.toLowerCase().includes(normalizedAuditSearch))
     )
-
-  const openAccessTokenModal = () => {
-    setActionError(undefined)
-    setActionMessage(undefined)
-    setCreatedAccessToken(undefined)
-    accessTokenForm.resetFields()
-    setIsAccessTokenModalOpen(true)
+  const navigateToAccessTokenList = () => {
+    void navigate({
+      pathname: profileTabPath('tokens'),
+      search: buildProfileTabSearch('tokens')
+    })
   }
 
-  const closeAccessTokenModal = () => {
-    if (isCreatingAccessToken) return
-    setIsAccessTokenModalOpen(false)
-    setCreatedAccessToken(undefined)
+  const navigateToAccessTokenCreate = () => {
+    void navigate('/profile/tokens/new')
   }
 
-  const handleCreateAccessToken = async (values: AccessTokenFormValues) => {
-    setIsCreatingAccessToken(true)
+  const accessTokenGrantInput = (values: AccessTokenFormValues) => {
+    const scope = values.scope ?? 'platform'
+    return {
+      name: values.name?.trim() ?? '',
+      permissionGroupIds: scope === 'user' || values.permissionGroupMode !== 'custom'
+        ? []
+        : values.permissionGroupIds ?? [],
+      permissionGroupMode: scope === 'user' ? 'all' as const : values.permissionGroupMode ?? 'all',
+      scope,
+      teamId: scope === 'team' ? values.teamId : undefined
+    }
+  }
+
+  const handleSaveAccessToken = async (values: AccessTokenFormValues) => {
+    setIsSavingAccessToken(true)
     setActionError(undefined)
-    setActionMessage(undefined)
     try {
-      const result = await createRelayProfileAccessToken(activeToken, values.name?.trim() ?? '')
-      setCreatedAccessToken(result.accessToken)
-      setActionMessage('系统访问令牌已生成')
+      if (profileItemId == null || profileItemId === 'new') {
+        const result = await createRelayProfileAccessToken(activeToken, accessTokenGrantInput(values))
+        setCreatedAccessToken(result.accessToken)
+        showActionMessage('API 令牌已生成')
+      } else {
+        await updateRelayProfileAccessToken(activeToken, profileItemId, accessTokenGrantInput(values))
+        showActionMessage('API 令牌权限已保存')
+      }
       await loadSecurity()
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error))
     } finally {
-      setIsCreatingAccessToken(false)
+      setIsSavingAccessToken(false)
     }
   }
 
   const handleRevokeAccessToken = async (token: RelayProfileAccessToken) => {
     setActionError(undefined)
-    setActionMessage(undefined)
     try {
       await revokeRelayProfileAccessToken(activeToken, token.id)
-      setActionMessage('系统访问令牌已撤销')
+      showActionMessage('API 令牌已撤销')
       await loadSecurity()
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error))
@@ -621,15 +820,14 @@ export const ProfilePage = ({
   const handleCopyCreatedToken = async () => {
     if (createdAccessToken == null) return
     await navigator.clipboard?.writeText(createdAccessToken)
-    setActionMessage('系统访问令牌已复制')
+    showActionMessage('API 令牌已复制')
   }
 
   const handleCopyTokenPreview = async (token: RelayProfileAccessToken) => {
     setActionError(undefined)
-    setActionMessage(undefined)
     try {
       await navigator.clipboard.writeText(token.tokenPreview)
-      setActionMessage('令牌 Preview 已复制')
+      showActionMessage('令牌 Preview 已复制')
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error))
     }
@@ -637,7 +835,6 @@ export const ProfilePage = ({
 
   const openPasswordModal = () => {
     setActionError(undefined)
-    setActionMessage(undefined)
     passwordForm.resetFields()
     setIsPasswordModalOpen(true)
   }
@@ -650,13 +847,12 @@ export const ProfilePage = ({
   const handleChangePassword = async (values: PasswordFormValues) => {
     setIsChangingPassword(true)
     setActionError(undefined)
-    setActionMessage(undefined)
     try {
       await changeRelayProfilePassword(activeToken, {
         currentPassword: values.currentPassword,
         password: values.password
       })
-      setActionMessage(securitySummary.password.enabled ? '密码已修改' : '密码已设置')
+      showActionMessage(securitySummary.password.enabled ? '密码已修改' : '密码已设置')
       setIsPasswordModalOpen(false)
       await loadSecurity()
     } catch (error) {
@@ -669,7 +865,6 @@ export const ProfilePage = ({
   const handleRegisterPasskey = async () => {
     setPasskeyLoading(true)
     setActionError(undefined)
-    setActionMessage(undefined)
     try {
       const optionsPayload = await createRelayProfilePasskeyOptions(activeToken)
       const response = await startRegistration({ optionsJSON: optionsPayload.options })
@@ -677,7 +872,7 @@ export const ProfilePage = ({
         credentialName: `${userDisplayName(currentUser)} Passkey`,
         response
       })
-      setActionMessage('Passkey 已注册')
+      showActionMessage('Passkey 已注册')
       await loadSecurity()
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error))
@@ -686,14 +881,63 @@ export const ProfilePage = ({
     }
   }
 
+  const openDeleteAccountModal = () => {
+    setActionError(undefined)
+    setDeleteAccountConfirmValue('')
+    setIsDeleteAccountModalOpen(true)
+  }
+
+  const closeDeleteAccountModal = () => {
+    if (isDeletingAccount) return
+    setIsDeleteAccountModalOpen(false)
+  }
+
+  const handleDeleteAccount = async () => {
+    if (!isDeleteAccountConfirmValid) return
+    setIsDeletingAccount(true)
+    setActionError(undefined)
+    try {
+      await deleteRelayProfileAccount(activeToken)
+      showActionMessage('账号已删除')
+      setIsDeleteAccountModalOpen(false)
+      window.setTimeout(() => onAccountDeleted?.(), 300)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setIsDeletingAccount(false)
+    }
+  }
+
   const tokenColumns: TableColumnsType<RelayProfileAccessToken> = [
     {
       dataIndex: 'name',
       ellipsis: true,
       key: 'name',
-      render: value => <strong>{value}</strong>,
+      render: (_, token) => (
+        <button
+          className='relay-profile-token-name-button'
+          type='button'
+          onClick={() => void navigate(`/profile/tokens/${encodeURIComponent(token.id)}`)}
+        >
+          {token.name}
+        </button>
+      ),
       title: '名称',
       width: 180
+    },
+    {
+      dataIndex: 'scope',
+      key: 'scope',
+      render: (_, token) => {
+        const scope = normalizeAccessTokenScope(token.scope)
+        return (
+          <StatusBadge tone={scope === 'user' ? 'success' : scope === 'team' ? 'warning' : 'muted'}>
+            {accessTokenScopeLabel(scope)}
+          </StatusBadge>
+        )
+      },
+      title: '类型',
+      width: 110
     },
     {
       dataIndex: 'tokenPreview',
@@ -715,6 +959,16 @@ export const ProfilePage = ({
       ),
       title: 'Preview',
       width: 260
+    },
+    {
+      key: 'permissionGroups',
+      render: (_, token) => (
+        <span className='relay-profile-token-permission'>
+          {accessTokenPermissionGroupLabel(token)}
+        </span>
+      ),
+      title: '权限范围',
+      width: 220
     },
     {
       dataIndex: 'createdAt',
@@ -776,6 +1030,16 @@ export const ProfilePage = ({
       key: 'actions',
       render: (_, token) => (
         <span className='relay-profile-token-actions'>
+          <AdminActionButton
+            aria-label={`配置令牌 ${token.name}`}
+            disabled={token.revokedAt != null}
+            iconName='edit'
+            size='small'
+            title='配置令牌'
+            tooltip='配置令牌'
+            type='text'
+            onClick={() => void navigate(`/profile/tokens/${encodeURIComponent(token.id)}`)}
+          />
           <AdminActionButton
             aria-label={`撤销令牌 ${token.name}`}
             danger
@@ -913,7 +1177,7 @@ export const ProfilePage = ({
           size='small'
           onClick={openPasswordModal}
         >
-          {securitySummary.password.enabled ? '修改密码' : '设置密码'}
+          {securitySummary.password.enabled ? '修改' : '设置密码'}
         </Button>
       ),
       description: securitySummary.password.enabled ? '密码登录已启用' : '当前账号尚未设置密码登录',
@@ -930,7 +1194,7 @@ export const ProfilePage = ({
           size='small'
           onClick={() => void handleRegisterPasskey()}
         >
-          注册 Passkey
+          注册
         </Button>
       ),
       description: `${passkeyStatus} · 最后使用时间：${passkeyLastUsed}`,
@@ -941,7 +1205,7 @@ export const ProfilePage = ({
     {
       action: (
         <Button disabled icon={<AdminIcon name='admin_panel_settings' />} size='small'>
-          启用验证
+          启用
         </Button>
       ),
       description: 'TOTP 与恢复码后端尚未启用',
@@ -952,19 +1216,244 @@ export const ProfilePage = ({
     },
     {
       action: (
-        <Button danger disabled icon={<AdminIcon name='delete' />} size='small'>
-          删除账号
+        <Button
+          danger
+          disabled={!securitySummary.accountDeletion.available}
+          icon={<AdminIcon name='delete' />}
+          loading={isDeletingAccount}
+          size='small'
+          onClick={openDeleteAccountModal}
+        >
+          删除
         </Button>
       ),
-      description: '账号删除涉及设备、会话和审计数据归属，当前版本暂不开放',
+      description: securitySummary.accountDeletion.available
+        ? '删除后会退出当前账号，并移除会话、设备和令牌。'
+        : '当前账号暂不支持删除',
       icon: <AdminIcon name='delete' />,
       key: 'delete-account',
       title: '删除账号'
     }
   ]
+  const tokenEditorPermissionMode = tokenEditorScope === 'user'
+    ? 'all'
+    : accessTokenPermissionMode ?? editingAccessToken?.permissionGroupMode ?? 'all'
+  const isAccessTokenEditorDisabled = editingAccessToken?.revokedAt != null
+
+  if (isAccessTokenEditorRoute) {
+    const isMissingAccessToken = !isAccessTokenCreateRoute && editingAccessToken == null
+
+    return (
+      <section className='relay-profile-panel'>
+        {notificationContextHolder}
+        <div className='relay-profile-token-editor'>
+          {securityError == null ? null : (
+            <Alert
+              showIcon
+              message='令牌信息加载失败'
+              description={securityError}
+              type='warning'
+            />
+          )}
+          {actionError == null ? null : <Alert showIcon message={actionError} type='error' />}
+
+          {isMissingAccessToken && isLoadingSecurity ? <Spin size='small' /> : null}
+          {isMissingAccessToken && !isLoadingSecurity
+            ? <Empty className='relay-profile__empty' description='未找到 API 令牌' />
+            : (
+              <Form
+                className='relay-profile-token-editor__form'
+                form={accessTokenForm}
+                initialValues={{
+                  name: editingAccessToken?.name ?? '',
+                  permissionGroupIds: editingAccessToken?.permissionGroupIds ?? [],
+                  permissionGroupMode: editingAccessToken?.permissionGroupMode ?? 'all',
+                  scope: isAccessTokenCreateRoute ? 'user' : normalizeAccessTokenScope(editingAccessToken?.scope),
+                  teamId: editingAccessToken?.teamId ?? undefined
+                }}
+                onFinish={handleSaveAccessToken}
+              >
+                {isAccessTokenEditorDisabled
+                  ? <Alert showIcon message='该令牌已撤销，不能继续修改权限范围。' type='warning' />
+                  : null}
+
+                <div className='relay-profile-token-editor__row'>
+                  <div className='relay-profile-token-editor__label'>
+                    <strong>令牌类型</strong>
+                    <span>用户级操作当前账号数据，团队级绑定一个团队，平台级使用平台用户组授权。</span>
+                  </div>
+                  <Form.Item
+                    className='relay-profile-token-editor__control'
+                    name='scope'
+                    rules={[{ required: true }]}
+                  >
+                    <Select
+                      disabled={isSavingAccessToken || isAccessTokenEditorDisabled}
+                      options={[
+                        { label: '用户级', value: 'user' },
+                        { label: '团队级', value: 'team' },
+                        { label: '平台级', value: 'platform' }
+                      ]}
+                      onChange={(scope: RelayProfileAccessTokenScope) => {
+                        accessTokenForm.setFieldsValue({
+                          permissionGroupIds: [],
+                          permissionGroupMode: 'all',
+                          teamId: scope === 'team' ? tokenEditorTeamId : undefined
+                        })
+                      }}
+                    />
+                  </Form.Item>
+                </div>
+
+                <div className='relay-profile-token-editor__row'>
+                  <div className='relay-profile-token-editor__label'>
+                    <strong>令牌名称</strong>
+                    <span>用于区分 OpenAPI 调用来源。</span>
+                  </div>
+                  <Form.Item
+                    className='relay-profile-token-editor__control'
+                    name='name'
+                    rules={[{ max: 80, required: true }]}
+                  >
+                    <Input autoFocus disabled={isSavingAccessToken || isAccessTokenEditorDisabled} />
+                  </Form.Item>
+                </div>
+
+                {tokenEditorScope === 'team'
+                  ? (
+                    <div className='relay-profile-token-editor__row'>
+                      <div className='relay-profile-token-editor__label'>
+                        <strong>所属团队</strong>
+                        <span>团队级令牌只能访问绑定团队，不能跨团队读取或写入。</span>
+                      </div>
+                      <Form.Item
+                        className='relay-profile-token-editor__control'
+                        name='teamId'
+                        rules={[{ message: '请选择团队', required: true }]}
+                      >
+                        <Select
+                          disabled={isSavingAccessToken || isAccessTokenEditorDisabled}
+                          options={accessTokenTeamOptions}
+                          placeholder='选择团队'
+                          onChange={() => accessTokenForm.setFieldsValue({ permissionGroupIds: [] })}
+                        />
+                      </Form.Item>
+                    </div>
+                  )
+                  : null}
+
+                {tokenEditorScope === 'user'
+                  ? (
+                    <div className='relay-profile-token-editor__row'>
+                      <div className='relay-profile-token-editor__label'>
+                        <strong>权限范围</strong>
+                        <span>仅可调用当前账号的个人数据和自助 API，不使用平台或团队用户组。</span>
+                      </div>
+                      <div className='relay-profile-token-editor__control relay-profile-token-editor__scope-summary'>
+                        <StatusBadge tone='success'>个人 API</StatusBadge>
+                      </div>
+                    </div>
+                  )
+                  : (
+                    <div className='relay-profile-token-editor__row'>
+                      <div className='relay-profile-token-editor__label'>
+                        <strong>授权模式</strong>
+                        <span>{accessTokenModeDescription}</span>
+                      </div>
+                      <Form.Item className='relay-profile-token-editor__control' name='permissionGroupMode'>
+                        <Select
+                          disabled={isSavingAccessToken || isAccessTokenEditorDisabled}
+                          options={[
+                            {
+                              label: tokenEditorScope === 'team' ? '全部当前团队成员组' : '全部当前用户组',
+                              value: 'all'
+                            },
+                            {
+                              label: tokenEditorScope === 'team' ? '指定成员组' : '指定用户组',
+                              value: 'custom'
+                            }
+                          ]}
+                        />
+                      </Form.Item>
+                    </div>
+                  )}
+
+                {tokenEditorScope !== 'user' && tokenEditorPermissionMode === 'custom'
+                  ? (
+                    <div className='relay-profile-token-editor__row'>
+                      <div className='relay-profile-token-editor__label'>
+                        <strong>{accessTokenGroupFieldLabel}</strong>
+                        <span>{accessTokenGroupDescription}</span>
+                      </div>
+                      <Form.Item
+                        className='relay-profile-token-editor__control'
+                        name='permissionGroupIds'
+                        rules={[
+                          {
+                            validator: (_, value: unknown) => (
+                              Array.isArray(value) && value.length > 0
+                                ? Promise.resolve()
+                                : Promise.reject(new Error('请选择授权范围'))
+                            )
+                          }
+                        ]}
+                      >
+                        <Select
+                          disabled={isSavingAccessToken || isAccessTokenEditorDisabled}
+                          mode='multiple'
+                          options={accessTokenGroupOptions}
+                          placeholder={tokenEditorScope === 'team' ? '选择授权成员组' : '选择授权用户组'}
+                        />
+                      </Form.Item>
+                    </div>
+                  )
+                  : null}
+
+                {createdAccessToken == null
+                  ? null
+                  : (
+                    <div className='relay-profile-token-editor__row relay-profile-token-editor__row--token'>
+                      <div className='relay-profile-token-editor__label'>
+                        <strong>完整令牌</strong>
+                        <span>只展示一次，离开页面后无法再次查看。</span>
+                      </div>
+                      <div className='relay-profile-token-editor__control'>
+                        <Input.TextArea autoSize readOnly value={createdAccessToken} />
+                      </div>
+                    </div>
+                  )}
+
+                <div className='relay-profile-token-editor__actions'>
+                  <Button disabled={isSavingAccessToken} onClick={navigateToAccessTokenList}>
+                    {createdAccessToken == null ? '取消' : '返回列表'}
+                  </Button>
+                  {createdAccessToken == null
+                    ? (
+                      <Button
+                        htmlType='submit'
+                        loading={isSavingAccessToken}
+                        type='primary'
+                        disabled={isAccessTokenEditorDisabled}
+                      >
+                        {isAccessTokenCreateRoute ? '生成令牌' : '保存令牌配置'}
+                      </Button>
+                    )
+                    : (
+                      <Button type='primary' onClick={() => void handleCopyCreatedToken()}>
+                        复制令牌
+                      </Button>
+                    )}
+                </div>
+              </Form>
+            )}
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section className='relay-profile-panel'>
+      {notificationContextHolder}
       <div className='relay-profile'>
         <div className='relay-profile__hero'>
           <Avatar
@@ -1032,7 +1521,6 @@ export const ProfilePage = ({
                     />
                   )}
                   {actionError == null ? null : <Alert showIcon message={actionError} type='error' />}
-                  {actionMessage == null ? null : <Alert showIcon message={actionMessage} type='success' />}
 
                   <div className='relay-profile-security__rows'>
                     {securityRows.map(row => (
@@ -1066,17 +1554,16 @@ export const ProfilePage = ({
                     />
                   )}
                   {actionError == null ? null : <Alert showIcon message={actionError} type='error' />}
-                  {actionMessage == null ? null : <Alert showIcon message={actionMessage} type='success' />}
 
                   <AdminListTable<RelayProfileAccessToken>
-                    ariaLabel='系统访问令牌列表'
+                    ariaLabel='API 令牌列表'
                     className='relay-profile-token-table'
                     columnOptions={tokenColumnOptions}
                     columns={tokenColumns}
                     dataSource={filteredTokenRows}
-                    emptyText='暂无系统访问令牌'
+                    emptyText='暂无 API 令牌'
                     rowKey='id'
-                    searchPlaceholder='搜索令牌名称、Preview、状态'
+                    searchPlaceholder='搜索令牌名称、类型、团队、Preview、状态'
                     searchValue={tokenSearchValue}
                     toolbarActions={
                       <AdminActionButton
@@ -1089,7 +1576,7 @@ export const ProfilePage = ({
                         size='small'
                         title='生成令牌'
                         type='text'
-                        onClick={openAccessTokenModal}
+                        onClick={navigateToAccessTokenCreate}
                       />
                     }
                     visibleColumnKeys={tokenVisibleColumnKeys}
@@ -1146,43 +1633,8 @@ export const ProfilePage = ({
 
       <Modal
         destroyOnHidden
-        confirmLoading={isCreatingAccessToken}
-        okText={createdAccessToken == null ? '生成令牌' : '复制令牌'}
-        open={isAccessTokenModalOpen}
-        title='系统访问令牌'
-        onCancel={closeAccessTokenModal}
-        onOk={() => {
-          if (createdAccessToken == null) {
-            accessTokenForm.submit()
-            return
-          }
-          void handleCopyCreatedToken()
-        }}
-      >
-        {createdAccessToken == null
-          ? (
-            <Form form={accessTokenForm} layout='vertical' onFinish={handleCreateAccessToken}>
-              <Form.Item label='令牌名称' name='name'>
-                <Input autoFocus placeholder='例如：Codex OpenAPI' />
-              </Form.Item>
-            </Form>
-          )
-          : (
-            <div className='relay-profile-token-reveal'>
-              <Alert
-                showIcon
-                message='请立即复制令牌。关闭后不会再次显示完整值。'
-                type='warning'
-              />
-              <Input.TextArea autoSize readOnly value={createdAccessToken} />
-            </div>
-          )}
-      </Modal>
-
-      <Modal
-        destroyOnHidden
         confirmLoading={isChangingPassword}
-        okText={securitySummary.password.enabled ? '修改密码' : '设置密码'}
+        okText={securitySummary.password.enabled ? '修改' : '设置密码'}
         open={isPasswordModalOpen}
         title='密码管理'
         onCancel={closePasswordModal}
@@ -1200,6 +1652,32 @@ export const ProfilePage = ({
             <Input.Password autoComplete='new-password' disabled={isChangingPassword} />
           </Form.Item>
         </Form>
+      </Modal>
+      <Modal
+        cancelText='取消'
+        destroyOnHidden
+        confirmLoading={isDeletingAccount}
+        okButtonProps={{ danger: true, disabled: !isDeleteAccountConfirmValid }}
+        okText='删除账号'
+        open={isDeleteAccountModalOpen}
+        title='删除账号'
+        onCancel={closeDeleteAccountModal}
+        onOk={() => void handleDeleteAccount()}
+      >
+        <div className='relay-profile-security__delete-confirm'>
+          <p>删除后会移除当前账号、登录会话、API 令牌、Passkey、设备和团队成员关系。</p>
+          <p>
+            请输入账号 ID <Tag>{currentUser.id}</Tag> 确认删除。
+          </p>
+          {actionError == null ? null : <Alert showIcon message={actionError} type='error' />}
+          <Input
+            autoComplete='off'
+            disabled={isDeletingAccount}
+            placeholder='输入账号 ID'
+            value={deleteAccountConfirmValue}
+            onChange={event => setDeleteAccountConfirmValue(event.target.value)}
+          />
+        </div>
       </Modal>
     </section>
   )

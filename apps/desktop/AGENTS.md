@@ -2,6 +2,8 @@
 
 `@oneworks/desktop` 是 Electron 桌面壳，负责窗口生命周期、内置 server 生命周期、本地 workspace 选择与安装包产物；业务逻辑仍复用 server 与 client workspace 包。
 
+桌面端浏览器数据同步、密码管理、历史记录、下载内容和对应 client 入口的完整维护经验见 `../../.oo/rules/maintenance/browser-data-management.md`。
+
 ## 先看哪里
 
 - `src/main/index.ts`
@@ -17,6 +19,8 @@
   - `deep-link.ts`：`oneworks://` / `one-works://` schema URL 解析，目前用于 Relay SSO 回跳到 workspace 插件页
   - `menu.ts`、`ipc-handlers.ts`、`shortcuts.ts`：菜单、IPC 与桌面快捷键
   - `updates.ts`：自动更新检查
+  - `browser-data-sync.ts`：桌面端浏览器数据同步与本机加密 vault；密码 CSV / Chromium profile / Authenticator 备份导入和扩展状态同步的 main-process 落点
+  - `browser-activity.ts`：interaction panel webview 的历史记录、下载记录和项目 / 会话 scope 追踪；配置页历史 / 下载内容入口通过 preload IPC 读取这里的数据
 - `src/workspace-state.cjs`
   - 桌面最近项目、workspace 显示名、启动 workspace 解析入口。
   - 作为 project/workspace 打开或记录时，会把 Git linked worktree 归一到 common `.git` 对应的原始 project 目录；普通目录浏览仍使用真实路径。

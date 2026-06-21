@@ -1,0 +1,46 @@
+.workspace-scope-select {
+  width: 100%;
+}
+
+.workspace-scope-select__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.workspace-scope-select__option-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  color: var(--placeholder-color);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.workspace-scope-select__option-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.workspace-scope-select__option-title,
+.workspace-scope-select__option-description {
+  min-width: 0;
+  overflow: hidden;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-scope-select__option-title {
+  color: var(--text-color);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.workspace-scope-select__option-description {
+  color: var(--placeholder-color);
+  font-size: 11px;
+}

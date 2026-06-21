@@ -338,6 +338,7 @@ const demoTeamInvitation = (
     role: 'admin'
   },
   role: 'member',
+  groupIds: ['team:member'],
   configEnabled: true,
   defaultForPublishing: false,
   status,

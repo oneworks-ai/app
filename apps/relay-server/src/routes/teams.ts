@@ -6,6 +6,12 @@ import { relayPermissions } from '../permissions/index.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
 import { findRelayTeam } from '../teams.js'
 import type { RelayAuditLogEntry, RelayServerArgs, RelayStore } from '../types.js'
+import {
+  createTeamAccessGroup,
+  deleteTeamAccessGroup,
+  listTeamAccessGroups,
+  updateTeamAccessGroup
+} from './team-access-groups.js'
 import { archiveTeam, createTeam, restoreTeam, updateTeam } from './team-actions.js'
 import { createTeamInvitation, listTeamInvitations } from './team-invitations.js'
 import { createMember, deleteMember, listMembers, updateMember } from './team-members.js'
@@ -126,6 +132,16 @@ export const handleTeamsRoute = async (
     listTeamAuditEvents(res, args, store, team.id)
     return true
   }
+  if (segments.length === 2 && segments[1] === 'access-groups') {
+    if (req.method === 'GET') {
+      listTeamAccessGroups(res, args, store, auth, team)
+      return true
+    }
+    if (req.method === 'POST') {
+      await createTeamAccessGroup(req, res, args, store, storeRepository, auth, team)
+      return true
+    }
+  }
   if (segments.length === 2 && segments[1] === 'members') {
     if (req.method === 'GET') {
       listMembers(res, args, store, auth, team)
@@ -153,6 +169,16 @@ export const handleTeamsRoute = async (
     }
     if (req.method === 'DELETE') {
       await deleteMember(res, args, store, storeRepository, auth, team, segments[2])
+      return true
+    }
+  }
+  if (segments.length === 3 && segments[1] === 'access-groups') {
+    if (req.method === 'PATCH') {
+      await updateTeamAccessGroup(req, res, args, store, storeRepository, auth, team, segments[2])
+      return true
+    }
+    if (req.method === 'DELETE') {
+      await deleteTeamAccessGroup(res, args, store, storeRepository, auth, team, segments[2])
       return true
     }
   }

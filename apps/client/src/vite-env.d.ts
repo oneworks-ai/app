@@ -24,32 +24,18 @@ interface ImportMeta {
   readonly env: ImportMetaEnv
 }
 
-interface DesktopWorkspaceSelectorProject {
-  description: string
-  isCurrent?: boolean
-  name: string
-  sourceUrl?: string
-  status?: 'ready' | 'starting' | 'stopped' | 'stopping'
-  workspaceId?: string
-  workspaceFolder: string
-}
-
-interface DesktopWorkspaceSelectorState {
-  recentProjects: DesktopWorkspaceSelectorProject[]
-  runningProjects: DesktopWorkspaceSelectorProject[]
-}
+type DesktopWorkspaceSelectorProject = import('@oneworks/types').LauncherWorkspaceSelectorProject
+type DesktopWorkspaceSelectorState = import('@oneworks/types').LauncherWorkspaceSelectorState
+type DesktopWorkspaceStopResponse = import('@oneworks/types').LauncherWorkspaceStopResponse
+type DesktopCloneDestinationDirectory = import('@oneworks/types').LauncherDirectoryEntry
+type DesktopCloneDestinationDirectoryList = import('@oneworks/types').LauncherDirectoryList
+type OneWorksDeviceShellApi = import('@oneworks/types').OneWorksDeviceShellApi
+type OneWorksNativeBridgeRequestApi = import('@oneworks/types').OneWorksNativeBridgeRequestApi
 
 interface DesktopWorkspaceConnection {
   serverBaseUrl: string
   workspaceId?: string
   workspaceFolder?: string
-}
-
-interface DesktopWorkspaceStopResponse {
-  ok: true
-  removed: boolean
-  stopped: boolean
-  workspaceFolder: string
 }
 
 interface DesktopWorkspaceFileSearchResult {
@@ -95,17 +81,6 @@ interface DesktopWorkspaceResourceSearchResponse {
   websites: DesktopWorkspaceResourceSearchResult[]
 }
 
-interface DesktopCloneDestinationDirectory {
-  name: string
-  path: string
-}
-
-interface DesktopCloneDestinationDirectoryList {
-  currentDirectory: string
-  directories: DesktopCloneDestinationDirectory[]
-  parentDirectory?: string
-}
-
 interface DesktopPluginLauncherSearchResult {
   badge?: string
   description?: string
@@ -148,6 +123,9 @@ interface DesktopSettings {
   launcherShortcutRegistered: boolean
   autoUpdate: boolean
   openLastWorkspaceOnStartup: boolean
+  savedPasswordsAutoSignIn: boolean
+  savedPasswordsOfferToSave: boolean
+  savedPasswordsRequireAuth: boolean
   updateChannel: 'stable' | 'rc' | 'beta' | 'alpha'
 }
 
@@ -240,8 +218,147 @@ interface DesktopMobileDebugTargetsResponse {
   targets: DesktopMobileDebugTarget[]
 }
 
+interface DesktopBrowserDataSyncState {
+  authenticator: {
+    total: number
+    updatedAt?: string
+  }
+  savedPasswords: {
+    total: number
+    updatedAt?: string
+  }
+}
+
+interface DesktopAuthenticatorImportResult {
+  canceled: boolean
+  fileName?: string
+  imported: number
+  skipped: number
+  total: number
+  updated: number
+}
+
+type DesktopBrowserPasswordImportSourceId =
+  | 'arc'
+  | 'brave'
+  | 'chromium'
+  | 'google-chrome'
+  | 'microsoft-edge'
+  | 'vivaldi'
+type DesktopPasswordImportSourceId = DesktopBrowserPasswordImportSourceId | 'csv'
+
+type DesktopBrowserPasswordSourceName =
+  | 'Arc'
+  | 'Brave'
+  | 'Chromium'
+  | 'Google Chrome'
+  | 'Microsoft Edge'
+  | 'Vivaldi'
+type DesktopPasswordSourceName = DesktopBrowserPasswordSourceName | 'CSV File'
+
+interface DesktopBrowserPasswordImportSource {
+  icon: string
+  id: DesktopBrowserPasswordImportSourceId
+  name: DesktopBrowserPasswordSourceName
+  profiles: number
+}
+
+interface DesktopBrowserPasswordImportResult {
+  canceled: boolean
+  duplicates: number
+  failed: number
+  imported: number
+  profiles: number
+  sourceId: DesktopPasswordImportSourceId
+  sourceName: DesktopPasswordSourceName
+  skipped: number
+  total: number
+  updated: number
+}
+
+interface DesktopPasswordCsvImportResult extends DesktopBrowserPasswordImportResult {
+  fileName?: string
+  sourceId: 'csv'
+  sourceName: 'CSV File'
+}
+
+interface DesktopSavedPasswordRecord {
+  actionUrl?: string
+  dateCreated?: number
+  id: string
+  importedAt: string
+  note?: string
+  originUrl: string
+  signonRealm?: string
+  sourceBrowser: DesktopPasswordSourceName
+  sourceProfile: string
+  updatedAt?: string
+  username: string
+}
+
+interface DesktopSavedPasswordAccessAuthenticationResult {
+  authenticated: boolean
+  expiresAt: string
+  method: 'cached' | 'touch-id'
+}
+
+interface DesktopSavedPasswordUpdateInput {
+  note?: string
+  originUrl?: string
+  password?: string
+  username?: string
+}
+
+type DesktopBrowserActivityScopeFilter = 'all' | 'project' | 'session'
+
+interface DesktopBrowserActivityListOptions {
+  query?: string
+  scope?: DesktopBrowserActivityScopeFilter
+}
+
+interface DesktopBrowserActivityScope {
+  projectKey?: string
+  sessionKey?: string
+}
+
+interface DesktopBrowserHistoryRecord extends DesktopBrowserActivityScope {
+  faviconUrl?: string
+  firstVisitedAt: string
+  id: string
+  lastVisitedAt: string
+  title?: string
+  url: string
+  visitCount: number
+}
+
+interface DesktopBrowserHistoryRecordInput extends DesktopBrowserActivityScope {
+  faviconUrl?: string
+  incrementVisit?: boolean
+  title?: string
+  url: string
+}
+
+interface DesktopBrowserDownloadRecord extends DesktopBrowserActivityScope {
+  completedAt?: string
+  fileName: string
+  filePath?: string
+  id: string
+  mimeType?: string
+  receivedBytes: number
+  startedAt: string
+  state: 'cancelled' | 'completed' | 'interrupted' | 'progressing'
+  totalBytes: number
+  updatedAt: string
+  url: string
+}
+
+interface DesktopInteractionPanelWebviewScopeInput extends DesktopBrowserActivityScope {
+  webContentsId: number
+}
+
 interface Window {
-  oneworksDesktop?: {
+  oneworksAndroidBridge?: OneWorksNativeBridgeRequestApi
+  oneworksDesktop?: OneWorksDeviceShellApi & {
     chooseWorkspace?: () => Promise<string | undefined>
     checkForUpdates?: (input?: { interactive?: boolean }) => Promise<DesktopUpdateStatus>
     cloneRepository?: (repositoryUrl: string, destinationDirectory: string) => Promise<string | undefined>
@@ -257,12 +374,39 @@ interface Window {
       settings: Pick<DesktopSettings, 'iconAppearance' | 'iconBackground' | 'iconTheme'>
     ) => Promise<string | undefined>
     getDesktopSettings?: () => Promise<DesktopSettings>
+    getBrowserDataSyncState?: () => Promise<DesktopBrowserDataSyncState>
+    listBrowserHistory?: (input?: DesktopBrowserActivityListOptions) => Promise<DesktopBrowserHistoryRecord[]>
+    recordBrowserHistory?: (input: DesktopBrowserHistoryRecordInput) => Promise<DesktopBrowserHistoryRecord | undefined>
+    registerInteractionPanelWebviewScope?: (input: DesktopInteractionPanelWebviewScopeInput) => Promise<void>
+    listBrowserDownloads?: (input?: DesktopBrowserActivityListOptions) => Promise<DesktopBrowserDownloadRecord[]>
+    openBrowserDownload?: (id: string) => Promise<void>
+    revealBrowserDownload?: (id: string) => Promise<void>
     getUpdateStatus?: () => Promise<DesktopUpdateStatus>
     getGlobalInterfaceLanguageConfig?: () => Promise<DesktopInterfaceLanguageConfig>
     getWindowFullscreenState?: () => Promise<boolean>
     getWorkspaceConnection?: () => Promise<DesktopWorkspaceConnection | undefined>
     getWorkspaceSelectorState?: () => Promise<DesktopWorkspaceSelectorState>
     hideLauncherWindow?: () => Promise<void>
+    importAuthenticatorBackup?: () => Promise<DesktopAuthenticatorImportResult>
+    importBrowserPasswords?: (
+      input?: {
+        duplicateResolution?: 'overwrite' | 'skip'
+        sourceId?: DesktopBrowserPasswordImportSourceId
+      }
+    ) => Promise<DesktopBrowserPasswordImportResult>
+    importChromePasswords?: (input?: { duplicateResolution?: 'overwrite' | 'skip' }) => Promise<
+      DesktopBrowserPasswordImportResult
+    >
+    importPasswordCsv?: (input?: { duplicateResolution?: 'overwrite' | 'skip' }) => Promise<
+      DesktopPasswordCsvImportResult
+    >
+    listBrowserPasswordImportSources?: () => Promise<DesktopBrowserPasswordImportSource[]>
+    listSavedPasswords?: (query?: string) => Promise<DesktopSavedPasswordRecord[]>
+    authenticateSavedPasswordsAccess?: (reason?: string) => Promise<DesktopSavedPasswordAccessAuthenticationResult>
+    revealSavedPassword?: (id: string) => Promise<string>
+    copySavedPasswordField?: (id: string, field: 'username' | 'password') => Promise<void>
+    updateSavedPassword?: (id: string, input: DesktopSavedPasswordUpdateInput) => Promise<DesktopSavedPasswordRecord>
+    deleteSavedPassword?: (id: string) => Promise<void>
     isGitAvailable?: () => Promise<boolean>
     listCloneDestinationDirectories?: (directory?: string) => Promise<DesktopCloneDestinationDirectoryList>
     listCurrentWorkspaceFileOpeners?: () => Promise<DesktopWorkspaceFileOpenersResponse>
@@ -320,6 +464,7 @@ interface Window {
     updateGlobalInterfaceLanguageConfig?: (language: string) => Promise<DesktopInterfaceLanguageConfig>
     writeImageDataUrlToClipboard?: (dataUrl: string) => Promise<void>
   }
+  oneworksDeviceShell?: OneWorksDeviceShellApi
   __ONEWORKS_PROJECT_RUNTIME_ENV__?: Partial<{
     __ONEWORKS_PROJECT_SERVER_BASE_URL__: string
     __ONEWORKS_PROJECT_SERVER_HOST__: string

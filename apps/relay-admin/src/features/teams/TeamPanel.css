@@ -43,6 +43,19 @@
   margin: 0 0 12px;
 }
 
+.relay-team-panel__tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.relay-team-panel__tab-label .relay-admin-icon {
+  flex: 0 0 auto;
+  height: 16px;
+  width: 16px;
+}
+
 .relay-team-panel__tabs > .ant-tabs-nav .ant-tabs-extra-content {
   display: flex;
   align-items: center;
@@ -104,7 +117,7 @@
   align-items: start;
   gap: 18px;
   min-width: 0;
-  padding: 14px 0;
+  padding: var(--relay-admin-padding) 0;
   border-bottom: 1px solid
     color-mix(
       in srgb,
@@ -116,12 +129,12 @@
 .relay-team-panel__settings-actions-row {
   border-bottom: 0;
   margin-top: auto;
-  padding: 16px 0 0;
+  padding: var(--relay-admin-padding) 0 0;
 }
 
 .relay-team-panel__settings-row--avatar {
   align-items: center;
-  padding: 16px 0;
+  padding: var(--relay-admin-padding) 0;
 }
 
 .relay-team-panel__settings-row--avatar .relay-team-panel__settings-control {
@@ -238,7 +251,7 @@
 .relay-team-panel__avatar-error.ant-alert {
   width: max-content;
   max-width: 220px;
-  padding: 4px 8px;
+  padding: var(--relay-admin-padding);
   font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -320,7 +333,7 @@
   min-width: 0;
   border-bottom: 1px solid
     var(--border-color, var(--ant-color-border-secondary, #f0f0f0));
-  padding: 0 0 14px;
+  padding: 0 0 var(--relay-admin-padding);
 }
 
 .relay-team-detail__identity {
@@ -415,7 +428,7 @@
 }
 
 .relay-team-detail__empty {
-  padding: 48px 0;
+  padding: var(--relay-admin-padding) 0;
 }
 
 .relay-team-panel__secondary {

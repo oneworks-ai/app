@@ -2,7 +2,7 @@
   display: grid;
   gap: 0;
   min-width: 0;
-  padding: 0 10px 10px;
+  padding: 0 var(--relay-admin-padding) var(--relay-admin-padding);
 }
 
 .relay-message-center__team-avatar.ant-avatar {
@@ -53,7 +53,7 @@
   display: grid;
   gap: 8px;
   min-width: 0;
-  padding: 0 0 10px;
+  padding: 0 0 var(--relay-admin-padding);
 }
 
 .relay-message-center__filter-row {
@@ -151,7 +151,7 @@
 }
 
 .relay-message-center__empty {
-  padding: 32px 0;
+  padding: var(--relay-admin-padding) 0;
 }
 
 .relay-message-center__list {
@@ -166,7 +166,7 @@
   column-gap: 12px;
   row-gap: 8px;
   min-width: 0;
-  padding: 10px 0;
+  padding: var(--relay-admin-padding) 0;
   border-bottom: 1px solid var(--border-color);
   cursor: pointer;
 }
@@ -269,7 +269,7 @@
 }
 
 .relay-message-center--create .relay-message-center__error {
-  padding: 10px 0 0;
+  padding: var(--relay-admin-padding) 0 0;
 }
 
 .relay-message-center__create-form.ant-form {
@@ -294,7 +294,7 @@
   align-items: start;
   gap: 18px;
   min-width: 0;
-  padding: 10px 0;
+  padding: var(--relay-admin-padding) 0;
   border-bottom: 1px solid
     color-mix(
       in srgb,
@@ -350,7 +350,7 @@
 .relay-message-center__create-actions-row {
   margin-top: auto;
   border-bottom: 0;
-  padding: 10px 0 0;
+  padding: var(--relay-admin-padding) 0 0;
 }
 
 .relay-message-center__create-actions {
@@ -375,7 +375,7 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
-  padding: 10px 0;
+  padding: var(--relay-admin-padding) 0;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -392,7 +392,7 @@
 
 .relay-message-center__detail-body {
   margin: 0;
-  padding: 14px 0;
+  padding: var(--relay-admin-padding) 0;
   border-bottom: 1px solid var(--border-color);
   color: var(--text-color);
   font: 600 13px/1.6 ui-sans-serif, system-ui, sans-serif;
@@ -416,14 +416,14 @@
 
 .relay-message-center__detail-body ul,
 .relay-message-center__detail-body ol {
-  padding-left: 18px;
+  padding-left: var(--relay-admin-padding);
 }
 
 .relay-message-center__detail-body code {
   border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
   border-radius: 4px;
   background: color-mix(in srgb, var(--text-color) 7%, transparent);
-  padding: 1px 4px;
+  padding: var(--relay-admin-padding);
   font:
     650 12px/1.4 ui-monospace,
     SFMono-Regular,
@@ -438,7 +438,7 @@
   border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
   border-radius: 6px;
   background: color-mix(in srgb, var(--text-color) 6%, transparent);
-  padding: 10px;
+  padding: var(--relay-admin-padding);
 }
 
 .relay-message-center__detail-body pre code {
@@ -451,7 +451,7 @@
   border-left: 2px solid
     color-mix(in srgb, var(--primary-color) 72%, transparent);
   color: var(--sub-text-color);
-  padding-left: 10px;
+  padding-left: var(--relay-admin-padding);
 }
 
 .relay-message-center__detail-body a {
@@ -469,7 +469,7 @@
   display: grid;
   gap: 4px;
   min-width: 0;
-  padding: 10px 0;
+  padding: var(--relay-admin-padding) 0;
 }
 
 .relay-message-center__detail-meta dt {
@@ -492,7 +492,7 @@
   justify-content: flex-end;
   gap: 10px;
   margin-top: auto;
-  padding: 12px 0 0;
+  padding: var(--relay-admin-padding) 0 0;
   border-top: 1px solid var(--border-color);
 }
 

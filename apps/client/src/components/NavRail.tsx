@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- nav rail coordinates desktop controls and compact drawer placement. */
 import './NavRail.scss'
 
-import { Button } from 'antd'
+import { Button, Dropdown } from 'antd'
 import { useAtom, useSetAtom } from 'jotai'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
@@ -14,16 +14,19 @@ import { HostNavRail } from '@oneworks/route-layout'
 import type { ConfigResponse } from '@oneworks/types'
 
 import { getConfig, updateConfig } from '#~/api'
+import { getCurrentWorkspaceBrowserActivityRouteState } from '#~/components/browser-activity/browser-activity-route-state'
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import type { IconAsset } from '#~/components/icons/IconAsset'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import {
   NAV_RAIL_MORE_CLOSE_DEFER_MS,
+  NAV_RAIL_MORE_DROPDOWN_CLASS,
   NavRailMoreDropdown,
   buildNavRailMoreMenuItems,
   getNavRailMoreMenuSelectedKeys
 } from '#~/components/nav-rail-more-menu'
 import type { NavRailMoreMenuItem, NavRailMoreMenuSection } from '#~/components/nav-rail-more-menu'
+import { OverlayPanel, OverlaySegmentedControl } from '#~/components/overlay'
 import { getDesktopViewShortcut } from '#~/desktop/view-shortcuts'
 import { getGlobalThemePrimaryColor } from '#~/hooks/use-app-preferences'
 import { useExperiments } from '#~/hooks/use-experiments'
@@ -34,6 +37,8 @@ import { appLanguageOptions, getActiveAppLanguageOption } from '#~/i18n'
 import { resolvePluginContributionText } from '#~/plugins/plugin-i18n'
 import type { PluginContributionMenuItem, PluginContributionNavItem } from '#~/plugins/plugin-manifest'
 import { usePluginCommandExecutor, usePluginSlot } from '#~/plugins/plugin-slots'
+import type { DevShellKind, DevShellOs } from '#~/utils/device-shell-simulation'
+import { useStoredDevShellSimulation, writeStoredDevShellSimulation } from '#~/utils/device-shell-simulation'
 import { createOneWorksIconDataUri } from '#~/utils/oneworks-icon'
 import { isSidebarResizingAtom, sidebarWidthAtom, themeAtom } from '../store'
 import type { ThemeMode } from '../store'
@@ -437,6 +442,7 @@ export function NavRail({
   const { data: configRes, mutate: mutateConfig } = useSWR<ConfigResponse>('/api/config', getConfig)
   const { compactAccountActions } = useNavRailAccountActions()
   const { updateGlobalInterfaceLanguage } = useInterfaceLanguageConfig()
+  const storedDevShellSimulation = useStoredDevShellSimulation()
   const isMac = navigator.platform.includes('Mac')
   const moreButtonRef = React.useRef<HTMLButtonElement | null>(null)
   const moreMenuCloseTimerRef = React.useRef<number | null>(null)
@@ -565,6 +571,17 @@ export function NavRail({
   const currentLanguageLabel = getActiveAppLanguageOption(i18n.resolvedLanguage ?? i18n.language)?.label ??
     i18n.language
 
+  const navigateToWorkspaceConfig = React.useCallback(() => {
+    void getCurrentWorkspaceBrowserActivityRouteState()
+      .then((state) => {
+        void navigate('/config', state == null ? undefined : { state })
+      })
+      .catch((error) => {
+        console.warn('[nav-rail] failed to resolve workspace config context', error)
+        void navigate('/config')
+      })
+  }, [navigate])
+
   const themeModeOptions = React.useMemo(() => [
     {
       icon: 'desktop_windows',
@@ -593,9 +610,7 @@ export function NavRail({
           label: t('common.settings'),
           selected: currentPath === '/config' || currentPath.startsWith('/config/'),
           shortcut: 'cmd+,',
-          onSelect: () => {
-            void navigate('/config')
-          }
+          onSelect: navigateToWorkspaceConfig
         },
         {
           active: currentPath === '/archive',
@@ -609,7 +624,7 @@ export function NavRail({
         }
       ]
     }
-  ], [currentPath, navigate, t])
+  ], [currentPath, navigate, navigateToWorkspaceConfig, t])
   const pluginNavItems = usePluginSlot<PluginContributionNavItem>('nav.items')
   const pluginMoreItems = usePluginSlot<PluginContributionMenuItem>('nav.moreMenu')
   const pluginFooterBeforeItems = usePluginSlot<PluginContributionMenuItem>('nav.footer.before')
@@ -680,27 +695,6 @@ export function NavRail({
     )
   }, [currentPath, pluginFooterBeforeItems, pluginLanguage, runPluginMenuItem])
 
-  const moduleManagementMenuItem = React.useMemo<NavRailMoreMenuItem>(() => ({
-    active: currentPath === '/modules',
-    icon: 'sync',
-    key: 'app-action:module-updates',
-    label: t('moduleUpdates.menuLabel'),
-    onSelect: () => {
-      void navigate('/modules')
-    }
-  }), [currentPath, navigate, t])
-
-  const resolvedDrawerFooterBefore = React.useMemo(() => {
-    if (drawerFooterBefore == null && pluginFooterBeforeNode == null) return undefined
-
-    return (
-      <>
-        {drawerFooterBefore}
-        {pluginFooterBeforeNode}
-      </>
-    )
-  }, [drawerFooterBefore, pluginFooterBeforeNode])
-
   const preferenceMoreMenuSections = React.useMemo<NavRailMoreMenuSection[]>(() => [
     {
       items: [
@@ -764,6 +758,256 @@ export function NavRail({
     themeMode,
     themeModeOptions
   ])
+
+  const shellSimulationSummary = React.useMemo(() => {
+    if (storedDevShellSimulation.shellKind === 'electron') {
+      return {
+        icon: storedDevShellSimulation.os === 'windows' ? 'desktop_windows' : 'desktop_mac',
+        label: storedDevShellSimulation.os === 'windows'
+          ? t('navRail.devShellElectronWindows', 'Electron App · Windows')
+          : t('navRail.devShellElectronMacos', 'Electron App · macOS')
+      }
+    }
+
+    if (storedDevShellSimulation.shellKind === 'mobile') {
+      return {
+        icon: storedDevShellSimulation.os === 'ios' ? 'phone_iphone' : 'smartphone',
+        label: storedDevShellSimulation.os === 'ios'
+          ? t('navRail.devShellMobileIos', 'Mobile App · iOS')
+          : t('navRail.devShellMobileAndroid', 'Mobile App · Android')
+      }
+    }
+
+    return {
+      icon: 'language',
+      label: t('navRail.devShellWeb', 'Web 默认')
+    }
+  }, [storedDevShellSimulation.os, storedDevShellSimulation.shellKind, t])
+  const selectShellSimulationKind = React.useCallback((shellKind: DevShellKind) => {
+    if (shellKind === 'web') {
+      writeStoredDevShellSimulation({ shellKind: 'web' })
+      return
+    }
+
+    if (shellKind === 'electron') {
+      writeStoredDevShellSimulation({
+        shellKind,
+        os: storedDevShellSimulation.shellKind === 'electron' &&
+            storedDevShellSimulation.os === 'windows'
+          ? 'windows'
+          : 'macos'
+      })
+      return
+    }
+
+    writeStoredDevShellSimulation({
+      shellKind,
+      os: storedDevShellSimulation.shellKind === 'mobile' &&
+          storedDevShellSimulation.os === 'ios'
+        ? 'ios'
+        : 'android'
+    })
+  }, [storedDevShellSimulation.os, storedDevShellSimulation.shellKind])
+  const selectShellSimulationOs = React.useCallback((os: DevShellOs) => {
+    if (os === 'macos' || os === 'windows') {
+      writeStoredDevShellSimulation({ shellKind: 'electron', os })
+      return
+    }
+
+    if (os === 'android' || os === 'ios') {
+      writeStoredDevShellSimulation({ shellKind: 'mobile', os })
+    }
+  }, [])
+  const shellSimulationKindOptions = React.useMemo<
+    Array<{
+      icon: string
+      value: DevShellKind
+      label: string
+    }>
+  >(() => [
+    {
+      icon: 'language',
+      value: 'web',
+      label: t('navRail.devShellKindWeb', 'Web')
+    },
+    {
+      icon: 'desktop_mac',
+      value: 'electron',
+      label: t('navRail.devShellKindElectron', 'Electron')
+    },
+    {
+      icon: 'smartphone',
+      value: 'mobile',
+      label: t('navRail.devShellKindMobile', 'Mobile')
+    }
+  ], [t])
+  const shellSimulationOsOptions = React.useMemo<
+    Array<{
+      icon: string
+      value: DevShellOs
+      label: string
+    }>
+  >(() => {
+    if (storedDevShellSimulation.shellKind === 'electron') {
+      return [
+        {
+          icon: 'desktop_mac',
+          value: 'macos',
+          label: t('navRail.devShellOsMacos', 'macOS')
+        },
+        {
+          icon: 'desktop_windows',
+          value: 'windows',
+          label: t('navRail.devShellOsWindows', 'Windows')
+        }
+      ]
+    }
+
+    if (storedDevShellSimulation.shellKind === 'mobile') {
+      return [
+        {
+          icon: 'smartphone',
+          value: 'android',
+          label: t('navRail.devShellOsAndroid', 'Android')
+        },
+        {
+          icon: 'phone_iphone',
+          value: 'ios',
+          label: t('navRail.devShellOsIos', 'iOS')
+        }
+      ]
+    }
+
+    return []
+  }, [storedDevShellSimulation.shellKind, t])
+  const shellSimulationPanelNode = React.useMemo(() => {
+    if (!import.meta.env.DEV) return null
+    const selectedKindLabel = shellSimulationKindOptions.find(option =>
+      option.value === storedDevShellSimulation.shellKind
+    )?.label
+    const selectedOsLabel = shellSimulationOsOptions.find(option => option.value === storedDevShellSimulation.os)?.label
+
+    return (
+      <OverlayPanel
+        className='nav-rail-more-overlay-panel nav-rail-dev-shell-panel'
+        role='dialog'
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className='nav-rail-dev-shell-panel__row'>
+          <span className='nav-rail-dev-shell-panel__text'>
+            <span className='nav-rail-dev-shell-panel__label'>
+              {t('navRail.devShellKind', '类型')}
+            </span>
+            <span className='nav-rail-dev-shell-panel__value'>
+              {selectedKindLabel}
+            </span>
+          </span>
+          <OverlaySegmentedControl
+            className='nav-rail-dev-shell-panel__segmented nav-rail-dev-shell-panel__segmented--kind'
+            ariaLabel={t('navRail.devShellKind', '类型')}
+            options={shellSimulationKindOptions}
+            value={storedDevShellSimulation.shellKind}
+            onChange={selectShellSimulationKind}
+          />
+        </div>
+        {shellSimulationOsOptions.length > 0 && (
+          <div className='nav-rail-dev-shell-panel__row'>
+            <span className='nav-rail-dev-shell-panel__text'>
+              <span className='nav-rail-dev-shell-panel__label'>
+                {t('navRail.devShellOs', '系统')}
+              </span>
+              <span className='nav-rail-dev-shell-panel__value'>
+                {selectedOsLabel}
+              </span>
+            </span>
+            <OverlaySegmentedControl
+              className='nav-rail-dev-shell-panel__segmented'
+              ariaLabel={t('navRail.devShellOs', '系统')}
+              options={shellSimulationOsOptions}
+              value={storedDevShellSimulation.os ?? shellSimulationOsOptions[0]!.value}
+              onChange={selectShellSimulationOs}
+            />
+          </div>
+        )}
+      </OverlayPanel>
+    )
+  }, [
+    selectShellSimulationKind,
+    selectShellSimulationOs,
+    shellSimulationKindOptions,
+    shellSimulationOsOptions,
+    storedDevShellSimulation.os,
+    storedDevShellSimulation.shellKind,
+    t
+  ])
+  const shellSimulationFooterNode = React.useMemo(() => {
+    if (!import.meta.env.DEV || shellSimulationPanelNode == null) return null
+
+    return (
+      <div className='nav-rail-dev-shell-simulation'>
+        <Dropdown
+          destroyOnHidden
+          overlayClassName={`${NAV_RAIL_MORE_DROPDOWN_CLASS} nav-rail-dev-shell-simulation-dropdown`}
+          menu={{ items: [] }}
+          placement='topLeft'
+          popupRender={() => shellSimulationPanelNode}
+          trigger={['click']}
+          transitionName='ant-slide-down'
+        >
+          <Button
+            type='default'
+            className='nav-rail-dev-shell-simulation__button'
+            aria-haspopup='dialog'
+            block
+          >
+            <span className='nav-rail-dev-shell-simulation__content'>
+              <MaterialSymbol
+                className='nav-rail-dev-shell-simulation__icon'
+                name={shellSimulationSummary.icon}
+                aria-hidden='true'
+              />
+              <span className='nav-rail-dev-shell-simulation__label'>
+                {shellSimulationSummary.label}
+              </span>
+              <MaterialSymbol
+                className='nav-rail-dev-shell-simulation__chevron'
+                name='expand_more'
+                aria-hidden='true'
+              />
+            </span>
+          </Button>
+        </Dropdown>
+      </div>
+    )
+  }, [
+    shellSimulationPanelNode,
+    shellSimulationSummary.icon,
+    shellSimulationSummary.label
+  ])
+
+  const moduleManagementMenuItem = React.useMemo<NavRailMoreMenuItem>(() => ({
+    active: currentPath === '/modules',
+    icon: 'sync',
+    key: 'app-action:module-updates',
+    label: t('moduleUpdates.menuLabel'),
+    onSelect: () => {
+      void navigate('/modules')
+    }
+  }), [currentPath, navigate, t])
+
+  const resolvedDrawerFooterBefore = React.useMemo(() => {
+    if (drawerFooterBefore == null && pluginFooterBeforeNode == null && shellSimulationFooterNode == null) {
+      return undefined
+    }
+
+    return (
+      <>
+        {drawerFooterBefore}
+        {pluginFooterBeforeNode}
+        {shellSimulationFooterNode}
+      </>
+    )
+  }, [drawerFooterBefore, pluginFooterBeforeNode, shellSimulationFooterNode])
 
   const moreMenuRouteSections = React.useMemo<NavRailMoreMenuSection[]>(() => [
     ...moreMenuSections,
@@ -899,7 +1143,12 @@ export function NavRail({
       ],
       moduleManagementMenuItem
     )
-  ], [appPageMoreMenuSections, moduleManagementMenuItem, moreMenuSections, pluginMoreMenuSections])
+  ], [
+    appPageMoreMenuSections,
+    moduleManagementMenuItem,
+    moreMenuSections,
+    pluginMoreMenuSections
+  ])
 
   if (isCompactLayout) {
     return (

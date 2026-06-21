@@ -17,6 +17,9 @@ export const createDesktopRuntimeState = (): DesktopRuntimeState => ({
     launcherShortcut: DEFAULT_LAUNCHER_SHORTCUT,
     autoUpdate: DEFAULT_DESKTOP_AUTO_UPDATE,
     openLastWorkspaceOnStartup: false,
+    savedPasswordsAutoSignIn: true,
+    savedPasswordsOfferToSave: true,
+    savedPasswordsRequireAuth: true,
     recentWorkspaces: [],
     updateChannel: DEFAULT_DESKTOP_UPDATE_CHANNEL
   },

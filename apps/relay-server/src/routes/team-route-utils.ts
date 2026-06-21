@@ -1,13 +1,24 @@
+/* eslint-disable max-lines -- Team route helpers centralize authorization, loading, and response mapping. */
+
 import { randomUUID } from 'node:crypto'
 import type { ServerResponse } from 'node:http'
 import { URL } from 'node:url'
 
+import { defaultTeamAccessGroupIds, resolveTeamMemberAccess, teamAccessGroupsForTeam } from '../access-groups.js'
 import { authContextHasPermission } from '../auth/permissions.js'
 import type { RelayAuthContext } from '../auth/permissions.js'
 import { sendJson } from '../http.js'
 import { relayPermissions } from '../permissions/index.js'
 import { canManageRelayTeamMembers, canUpdateRelayTeam, findRelayTeamMember, teamMemberCount } from '../teams.js'
-import type { RelayServerArgs, RelayStore, RelayTeam, RelayTeamMember, RelayTeamPolicy, RelayUser } from '../types.js'
+import type {
+  RelayAccessGroup,
+  RelayServerArgs,
+  RelayStore,
+  RelayTeam,
+  RelayTeamMember,
+  RelayTeamPolicy,
+  RelayUser
+} from '../types.js'
 
 export const cleanString = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 
@@ -71,7 +82,12 @@ export const isAdminAuth = (auth: RelayAuthContext) => (
   auth.kind === 'admin-token' || authContextHasPermission(auth, relayPermissions.adminSettingsWrite)
 )
 
-export const authUserId = (auth: RelayAuthContext) => auth.kind === 'session' ? auth.user.id : undefined
+export const authUserId = (auth: RelayAuthContext) =>
+  auth.kind === 'session' || auth.kind === 'access-token' ? auth.user.id : undefined
+
+const accessTokenTeamId = (auth: RelayAuthContext) => (
+  auth.kind === 'access-token' && auth.accessToken.scope === 'team' ? auth.accessToken.teamId : undefined
+)
 
 export const findUserByInput = (store: RelayStore, body: Record<string, unknown>) => {
   const userId = cleanString(body.userId)
@@ -82,20 +98,40 @@ export const findUserByInput = (store: RelayStore, body: Record<string, unknown>
 }
 
 export const teamMembershipForAuth = (store: RelayStore, auth: RelayAuthContext, teamId: string) => {
+  const tokenTeamId = accessTokenTeamId(auth)
+  if (tokenTeamId != null && tokenTeamId !== teamId) return undefined
   const userId = authUserId(auth)
   return userId == null ? undefined : findRelayTeamMember(store, teamId, userId)
 }
+
+export const teamMemberHasCapability = (
+  store: Pick<RelayStore, 'teams'>,
+  member: RelayTeamMember | undefined,
+  capability: string
+) => (
+  member != null && (
+    resolveTeamMemberAccess(store, member).capabilities.includes(capability) ||
+    (capability === relayPermissions.relayTeamsWrite && canUpdateRelayTeam(member)) ||
+    (capability === relayPermissions.relayTeamMembersWrite && canManageRelayTeamMembers(member)) ||
+    (
+      capability === relayPermissions.relayTeamConfigProfilesWrite &&
+      (member.role === 'owner' || member.role === 'admin' || member.role === 'editor')
+    )
+  )
+)
 
 export const canReadTeam = (store: RelayStore, auth: RelayAuthContext, teamId: string) => (
   isAdminAuth(auth) || teamMembershipForAuth(store, auth, teamId) != null
 )
 
 export const canWriteTeam = (store: RelayStore, auth: RelayAuthContext, teamId: string) => (
-  isAdminAuth(auth) || canUpdateRelayTeam(teamMembershipForAuth(store, auth, teamId))
+  isAdminAuth(auth) ||
+  teamMemberHasCapability(store, teamMembershipForAuth(store, auth, teamId), relayPermissions.relayTeamsWrite)
 )
 
 export const canWriteTeamMembers = (store: RelayStore, auth: RelayAuthContext, teamId: string) => (
-  isAdminAuth(auth) || canManageRelayTeamMembers(teamMembershipForAuth(store, auth, teamId))
+  isAdminAuth(auth) ||
+  teamMemberHasCapability(store, teamMembershipForAuth(store, auth, teamId), relayPermissions.relayTeamMembersWrite)
 )
 
 export const serializePolicy = (policy: RelayTeamPolicy) => ({
@@ -119,6 +155,40 @@ export const serializePolicy = (policy: RelayTeamPolicy) => ({
   updatedByUserId: policy.updatedByUserId ?? null
 })
 
+const teamAccessGroupMemberCount = (store: RelayStore, teamId: string, groupId: string) => (
+  store.teamMembers.filter(member =>
+    member.teamId === teamId && (member.groupIds ?? defaultTeamAccessGroupIds(member.role)).includes(groupId)
+  ).length
+)
+
+export const serializeTeamAccessGroup = (
+  store: RelayStore,
+  team: RelayTeam,
+  group: RelayAccessGroup
+) => ({
+  id: group.id,
+  scope: group.scope,
+  name: group.name,
+  localizedNames: group.localizedNames ?? {},
+  description: group.description ?? null,
+  localizedDescriptions: group.localizedDescriptions ?? {},
+  builtIn: group.builtIn === true,
+  parentGroupId: group.parentGroupId ?? null,
+  disabled: group.disabledAt != null,
+  disabledAt: group.disabledAt ?? null,
+  capabilities: {
+    allow: group.capabilities.allow ?? [],
+    deny: group.capabilities.deny ?? []
+  },
+  quotas: group.quotas ?? {},
+  memberCount: teamAccessGroupMemberCount(store, team.id, group.id),
+  createdAt: group.createdAt,
+  updatedAt: group.updatedAt ?? null
+})
+
+export const serializeTeamAccessGroups = (store: RelayStore, team: RelayTeam) =>
+  teamAccessGroupsForTeam(team).map(group => serializeTeamAccessGroup(store, team, group))
+
 export const serializeTeam = (
   team: RelayTeam,
   store: RelayStore,
@@ -131,6 +201,7 @@ export const serializeTeam = (
     name: team.name,
     description: team.description ?? null,
     avatarUrl: team.avatarUrl ?? null,
+    accessGroups: serializeTeamAccessGroups(store, team),
     proxyModeEnabled: team.proxyModeEnabled === true,
     archivedAt: team.archivedAt ?? null,
     memberCount: teamMemberCount(store, team.id),
@@ -139,6 +210,7 @@ export const serializeTeam = (
       : {
         configEnabled: membership.configEnabled !== false,
         defaultForPublishing: membership.defaultForPublishing === true,
+        groupIds: membership.groupIds ?? defaultTeamAccessGroupIds(membership.role),
         role: membership.role
       },
     createdByUserId: team.createdByUserId,
@@ -147,7 +219,11 @@ export const serializeTeam = (
   }
 }
 
-export const serializeTeamMember = (member: RelayTeamMember, user: RelayUser | undefined) => ({
+export const serializeTeamMember = (
+  member: RelayTeamMember,
+  store: RelayStore,
+  user: RelayUser | undefined
+) => ({
   id: member.id,
   teamId: member.teamId,
   userId: member.userId,
@@ -155,6 +231,8 @@ export const serializeTeamMember = (member: RelayTeamMember, user: RelayUser | u
   email: user?.email ?? null,
   name: user?.name ?? null,
   role: member.role,
+  groupIds: member.groupIds ?? defaultTeamAccessGroupIds(member.role),
+  effectiveAccess: resolveTeamMemberAccess(store, member),
   configEnabled: member.configEnabled !== false,
   defaultForPublishing: member.defaultForPublishing === true,
   createdByUserId: member.createdByUserId,
@@ -164,6 +242,12 @@ export const serializeTeamMember = (member: RelayTeamMember, user: RelayUser | u
 
 export const visibleTeams = (store: RelayStore, auth: RelayAuthContext, adminRoute: boolean) => {
   if (adminRoute || isAdminAuth(auth)) return store.teams
+  const tokenTeamId = accessTokenTeamId(auth)
+  if (tokenTeamId != null) {
+    return teamMembershipForAuth(store, auth, tokenTeamId) == null
+      ? []
+      : store.teams.filter(team => team.id === tokenTeamId)
+  }
   const userId = authUserId(auth)
   if (userId == null) return []
   const teamIds = new Set(store.teamMembers.filter(member => member.userId === userId).map(member => member.teamId))

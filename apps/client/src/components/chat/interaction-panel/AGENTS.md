@@ -2,6 +2,8 @@
 
 本目录承载聊天页底部 / 右侧复用的交互面板，包括 iframe/webview 页面、页面调试器、移动调试、运行命令、workspace tabs 和 dock workspace。
 
+涉及 webview / iframe 更多菜单里的“同步数据”“密码管理”“历史记录”“下载内容”入口、Electron-only gating 或从当前网页 tab 进入管理页的默认项目 / 会话范围时，同时阅读 `../../../../../../.oo/rules/maintenance/browser-data-management.md`。
+
 ## 关键入口
 
 - `InteractionPanelIframeView.tsx`

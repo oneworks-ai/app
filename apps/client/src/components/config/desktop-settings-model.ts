@@ -11,6 +11,9 @@ export const emptyDesktopSettings: DesktopSettings = {
   launcherShortcutRegistered: false,
   autoUpdate: true,
   openLastWorkspaceOnStartup: false,
+  savedPasswordsAutoSignIn: true,
+  savedPasswordsOfferToSave: true,
+  savedPasswordsRequireAuth: true,
   updateChannel: 'stable'
 }
 
@@ -39,6 +42,15 @@ export const normalizeDesktopSettings = (value: unknown): DesktopSettings => {
     openLastWorkspaceOnStartup: typeof value.openLastWorkspaceOnStartup === 'boolean'
       ? value.openLastWorkspaceOnStartup
       : false,
+    savedPasswordsAutoSignIn: typeof value.savedPasswordsAutoSignIn === 'boolean'
+      ? value.savedPasswordsAutoSignIn
+      : true,
+    savedPasswordsOfferToSave: typeof value.savedPasswordsOfferToSave === 'boolean'
+      ? value.savedPasswordsOfferToSave
+      : true,
+    savedPasswordsRequireAuth: typeof value.savedPasswordsRequireAuth === 'boolean'
+      ? value.savedPasswordsRequireAuth
+      : true,
     updateChannel: typeof value.updateChannel === 'string' &&
         updateChannels.has(value.updateChannel as DesktopSettings['updateChannel'])
       ? value.updateChannel as DesktopSettings['updateChannel']

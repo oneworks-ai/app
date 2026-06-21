@@ -1,6 +1,8 @@
 // dprint-ignore-file
 export * from './IconAsset.js'
 export * from './MaterialSymbol.js'
+export * from './RouteChromeHeader.js'
+export * from './RouteChromeInput.js'
 export * from './RouteContainerHeader.js'
 export * from './RouteContainerHeaderActionButton.js'
 export * from './RouteContainerHeaderBreadcrumb.js'

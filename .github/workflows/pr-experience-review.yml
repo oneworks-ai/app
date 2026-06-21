@@ -1,0 +1,71 @@
+name: PR Experience Review
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - edited
+      - synchronize
+
+permissions:
+  pull-requests: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  reminder:
+    name: experience-review-reminder
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upsert experience review reminder
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          marker='<!-- oneworks:experience-review-reminder -->'
+          body="$(cat <<'EOF'
+          <!-- oneworks:experience-review-reminder -->
+          ## Experience Review
+
+          Before merge, make sure the PR body contains this completed checklist:
+
+          ```md
+          ## Experience Review
+          - [x] 已判断是否需要沉淀经验
+          - [x] 如需要，已运行 `$post-task-experience-review`
+          - [x] reviewer PASS 后才进入 merge
+          ```
+
+          Checklist to confirm:
+
+          - Decide whether this PR produced reusable project experience.
+          - If experience should be captured, run `$post-task-experience-review`.
+          - Merge only after the independent reviewer reports PASS.
+          EOF
+          )"
+
+          upsert_reminder() {
+            review_id="$(
+              gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews" --paginate \
+                --jq ".[] | select((.body // \"\") | contains(\"${marker}\")) | .id" \
+                | tail -n 1
+            )" || return
+
+            if [ -n "$review_id" ]; then
+              gh api --method PUT "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews/${review_id}" \
+                --field body="$body" >/dev/null || return
+            else
+              gh api --method POST "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
+                --field event=COMMENT \
+                --field body="$body" >/dev/null || return
+            fi
+          }
+
+          if ! upsert_reminder; then
+            echo "::warning::Experience review reminder could not be posted. The pr-change-policy check still enforces the PR body checklist."
+          fi

@@ -1,5 +1,32 @@
 :root {
   --host-app-content-bg: var(--sub-bg-color);
+  --relay-admin-padding: 10px;
+  --relay-admin-menu-radius: 8px;
+  --relay-admin-menu-item-gap: 6px;
+  --relay-admin-menu-item-radius: 6px;
+  --relay-admin-menu-icon-size: 14px;
+  --relay-admin-menu-line-height: 16px;
+  --relay-admin-menu-muted: color-mix(
+    in srgb,
+    var(--sub-text-color) 76%,
+    transparent
+  );
+  --relay-admin-menu-surface: color-mix(
+    in srgb,
+    var(--bg-color) 72%,
+    transparent
+  );
+  --relay-admin-menu-border: color-mix(
+    in srgb,
+    var(--border-color) 72%,
+    transparent
+  );
+  --relay-admin-table-header-bg: color-mix(
+    in srgb,
+    var(--bg-color) 78%,
+    transparent
+  );
+  --relay-admin-table-header-backdrop: blur(18px) saturate(150%);
 }
 
 * {
@@ -29,6 +56,7 @@ body {
 
 .relay-admin-workbench {
   --nav-rail-drawer-width: 212px;
+  --route-container-header-padding-inline: var(--relay-admin-padding);
 
   height: 100%;
 }
@@ -65,7 +93,23 @@ body {
 
 .relay-admin-nav-account-footer-row > .host-nav-rail__footer-button {
   width: 100%;
-  padding-inline-end: 34px;
+  padding-inline-end: calc(var(--relay-admin-padding) * 4);
+}
+
+.relay-admin-nav-footer-link-group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.relay-admin-nav-footer-link-group .host-nav-rail__footer-button {
+  color: var(--text-color);
+}
+
+.relay-admin-nav-footer-link-group .host-nav-rail__footer-button:hover,
+.relay-admin-nav-footer-link-group .host-nav-rail__footer-button:focus-visible {
+  color: var(--primary-color);
 }
 
 .relay-admin-nav-message-button {
@@ -124,27 +168,6 @@ body {
 
 .relay-admin-nav-menu-dropdown.ant-dropdown,
 .relay-admin-nav-submenu-dropdown.ant-dropdown-menu-submenu-popup {
-  --relay-admin-menu-radius: 8px;
-  --relay-admin-menu-item-gap: 6px;
-  --relay-admin-menu-item-radius: 6px;
-  --relay-admin-menu-icon-size: 14px;
-  --relay-admin-menu-line-height: 16px;
-  --relay-admin-menu-muted: color-mix(
-    in srgb,
-    var(--sub-text-color) 76%,
-    transparent
-  );
-  --relay-admin-menu-surface: color-mix(
-    in srgb,
-    var(--bg-color) 72%,
-    transparent
-  );
-  --relay-admin-menu-border: color-mix(
-    in srgb,
-    var(--border-color) 72%,
-    transparent
-  );
-
   background: transparent !important;
   box-shadow: none !important;
 }
@@ -153,7 +176,7 @@ body {
 .relay-admin-nav-submenu-dropdown.ant-dropdown-menu-submenu-popup
   > .ant-dropdown-menu {
   min-width: 220px;
-  padding: 8px 0 !important;
+  padding: var(--relay-admin-padding) 0 !important;
   border: 0;
   border-radius: var(--relay-admin-menu-radius) !important;
   outline: 1px solid var(--relay-admin-menu-border);
@@ -176,7 +199,7 @@ body {
 
 .relay-admin-nav-menu-dropdown.ant-dropdown
   .ant-dropdown-menu-item-group-title {
-  padding: 0 8px !important;
+  padding: 0 var(--relay-admin-padding) !important;
   color: var(--relay-admin-menu-muted) !important;
   font-size: 11px !important;
   font-weight: 600 !important;
@@ -206,7 +229,7 @@ body {
   position: relative;
   min-height: 0 !important;
   height: auto !important;
-  padding: 0 8px !important;
+  padding: 0 var(--relay-admin-padding) !important;
   border-radius: var(--relay-admin-menu-item-radius) !important;
   background: transparent !important;
   color: var(--text-color) !important;
@@ -326,7 +349,7 @@ body {
 }
 
 .relay-admin-nav-menu-dropdown.ant-dropdown .ant-dropdown-menu-submenu-title {
-  padding-inline-end: 26px !important;
+  padding-inline-end: calc(var(--relay-admin-padding) * 3) !important;
 }
 
 .relay-admin-nav-menu-dropdown.ant-dropdown
@@ -347,7 +370,7 @@ body {
 }
 
 .relay-admin-nav-menu-theme-item.ant-dropdown-menu-item {
-  padding: 0 8px !important;
+  padding: 0 var(--relay-admin-padding) !important;
   cursor: default;
 }
 
@@ -404,7 +427,7 @@ body {
   flex: 0 0 auto;
   gap: 2px;
   min-height: 24px;
-  padding: 2px;
+  padding: var(--relay-admin-padding);
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -520,8 +543,8 @@ body {
 }
 
 .relay-admin-account-menu-item.ant-dropdown-menu-item {
-  padding-top: 3px !important;
-  padding-bottom: 3px !important;
+  padding-top: var(--relay-admin-padding) !important;
+  padding-bottom: var(--relay-admin-padding) !important;
 }
 
 .relay-admin-account-menu-item.ant-dropdown-menu-item
@@ -534,7 +557,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 2px 0;
 }
 
 .relay-admin-account-menu-name,
@@ -649,7 +671,9 @@ body {
   align-items: stretch;
   overflow: auto;
   padding: var(--route-container-header-overlay-height) 0 0;
-  scroll-padding-top: calc(var(--route-container-header-overlay-height) + 8px);
+  scroll-padding-top: calc(
+    var(--route-container-header-overlay-height) + var(--relay-admin-padding)
+  );
 }
 
 .relay-admin {
@@ -696,7 +720,8 @@ body {
   flex-wrap: wrap;
   gap: 8px;
   min-height: 0;
-  padding: 8px var(--route-container-header-padding-inline);
+  padding: var(--relay-admin-padding)
+    var(--route-container-header-padding-inline);
 }
 
 .relay-admin__status-action {
@@ -710,9 +735,19 @@ body {
   gap: 6px;
   line-height: 1;
   min-height: 24px;
-  padding: 0 9px;
+  padding: 0 var(--relay-admin-padding);
   text-decoration: none;
   white-space: nowrap;
+}
+
+.relay-admin .ant-tabs-tab {
+  padding: 0;
+}
+
+.relay-admin .ant-tabs-tab-btn {
+  align-items: center;
+  display: inline-flex;
+  padding: var(--relay-admin-padding) 0;
 }
 
 .relay-admin__status-action:hover {
@@ -726,10 +761,4 @@ body {
 
 .relay-admin__status-action .relay-admin-icon {
   --app-chrome-icon-size: 14px;
-}
-
-@media (max-width: 720px) {
-  .relay-admin-route.has-content-inset .relay-admin-route__body {
-    padding-top: var(--route-container-header-overlay-height);
-  }
 }

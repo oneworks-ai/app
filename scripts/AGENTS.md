@@ -57,7 +57,7 @@
 - `pnpm tools commitmsg-check [base] [head]`
   - 校验一个 git range 里的 commit title 是否符合 Conventional Commit；GitHub 默认 merge commit 例外
 - `pnpm tools pr-change-check [base] [head] --body-file <path>`
-  - 检查功能新增 / bug 修复类 PR 是否更新了对应 changelog；如果改动 UI 交互面，还会要求 PR 正文包含截图
+  - 检查 PR body 是否包含已勾选的 `Experience Review` checklist；功能新增 / bug 修复类 PR 如果改动产品代码，还会要求对应 changelog；如果改动 UI 交互面，还会要求 PR 正文包含截图
 - `pnpm tools release-tags plan <base> <head> [--json]`
   - 比较两个提交之间 workspace package manifest 的版本变化，生成需要创建的 `pkg/<normalized-package-name>/v<version>` tag 候选
   - release PR 合入 `main` 后由 `.github/workflows/release-tags.yml` 调用；不会把根目录开发用 `package.json` 纳入候选

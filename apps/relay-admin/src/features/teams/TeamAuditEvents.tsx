@@ -1,14 +1,9 @@
-/* eslint-disable max-lines -- Team audit list keeps filters, table state, and rendering close to the feature page. */
-
-import { Space } from 'antd'
 import type { TableColumnsType } from 'antd'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
-import { AdminActionButton } from '../../shared/ui/AdminActionButton'
 import { AdminListTable } from '../../shared/ui/AdminListTable'
 import type { AdminListColumnOption } from '../../shared/ui/AdminListTable'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
-import { useTeamDetailTabActions } from './TeamDetailTabActions'
 import type { RelayAdminAuditEvent, RelayAdminTeam } from './teamTypes'
 import { fetchRelayAdminTeamAuditEvents } from './teamsApi'
 
@@ -68,14 +63,12 @@ const formatAuditActor = (actor: string) => {
   return actor
 }
 
-export const TeamAuditEvents = ({ disabled, team, token }: TeamAuditEventsProps) => {
+export const TeamAuditEvents = ({ team, token }: TeamAuditEventsProps) => {
   const [auditEvents, setAuditEvents] = useState<RelayAdminAuditEvent[]>([])
   const [error, setError] = useState<string | undefined>()
   const [loading, setLoading] = useState(false)
-  const [revision, setRevision] = useState(0)
   const [searchValue, setSearchValue] = useState('')
   const [visibleColumnKeys, setVisibleColumnKeys] = useState(['createdAt', 'action', 'status', 'actor', 'ip'])
-  const refreshAuditEvents = useCallback(() => setRevision(value => value + 1), [])
 
   useEffect(() => {
     let active = true
@@ -102,7 +95,7 @@ export const TeamAuditEvents = ({ disabled, team, token }: TeamAuditEventsProps)
     return () => {
       active = false
     }
-  }, [revision, team.id, token])
+  }, [team.id, token])
 
   const filteredEvents = useMemo(() => {
     const search = searchValue.trim().toLowerCase()
@@ -179,21 +172,6 @@ export const TeamAuditEvents = ({ disabled, team, token }: TeamAuditEventsProps)
     { key: 'ip', label: '来源 IP' },
     { key: 'requestId', label: '请求 ID' }
   ]
-  const tabActions = useMemo(() => (
-    <Space size={4}>
-      <AdminActionButton
-        aria-label='刷新审计'
-        disabled={disabled || loading}
-        iconName='refresh'
-        onClick={refreshAuditEvents}
-        size='small'
-        title='刷新审计'
-      />
-    </Space>
-  ), [disabled, loading, refreshAuditEvents])
-
-  useTeamDetailTabActions('audit', tabActions)
-
   return (
     <div className='relay-team-panel__audit'>
       {error == null ? null : <p className='relay-team-panel__error'>{error}</p>}

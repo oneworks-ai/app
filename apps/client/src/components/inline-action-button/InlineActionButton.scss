@@ -1,0 +1,52 @@
+.oneworks-inline-action-button.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  padding: 0 !important;
+  border: 0;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--sub-text-color);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  box-shadow: none !important;
+}
+
+.oneworks-inline-action-button.ant-btn::before {
+  display: none;
+}
+
+.oneworks-inline-action-button.ant-btn > .ant-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-inline-end: 0 !important;
+  line-height: 1;
+}
+
+.oneworks-inline-action-button.ant-btn .material-symbols-rounded {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.oneworks-inline-action-button.ant-btn:not(:disabled):hover,
+.oneworks-inline-action-button.ant-btn:not(:disabled):focus-visible {
+  background: transparent !important;
+  color: var(--primary-color);
+}
+
+.oneworks-inline-action-button.ant-btn.is-danger:not(:disabled):hover,
+.oneworks-inline-action-button.ant-btn.is-danger:not(:disabled):focus-visible {
+  color: var(--danger-color);
+}
+
+.oneworks-inline-action-button.ant-btn:disabled {
+  background: transparent !important;
+  color: var(--disabled-text-color, var(--placeholder-color));
+  cursor: not-allowed;
+}

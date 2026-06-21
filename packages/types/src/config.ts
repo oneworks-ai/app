@@ -432,6 +432,9 @@ export type DesktopModuleUpdateChannels = Record<string, DesktopUpdateChannel>
 export interface DesktopConfig {
   launcherShortcut?: string
   openLastWorkspaceOnStartup?: boolean
+  savedPasswordsAutoSignIn?: boolean
+  savedPasswordsOfferToSave?: boolean
+  savedPasswordsRequireAuth?: boolean
   syncAppIcon?: boolean
   iconAppearance?: DesktopIconAppearance
   iconBackground?: DesktopIconBackground

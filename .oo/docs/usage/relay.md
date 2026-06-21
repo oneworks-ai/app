@@ -46,9 +46,11 @@ Relay Admin 提供两份隔离的机器可读 OpenAPI 文档：
 <relay-origin>/api/profile/openapi.json
 ```
 
-`/api/admin/openapi.json` 只描述平台管理员 API，包括用户、邀请码、SSO、团队策略、团队、消息、配置 profile / secret 和运维指标。`/api/profile/openapi.json` 只描述当前用户自己的个人 API，包括个人安全、当前用户团队自助流程和托管配置读取 / 管理。也可以在 Admin 的 `/admin/openapi` 页面直接查看、下载或打开这两份 JSON。受保护接口使用 `Authorization: Bearer <token>`；token 可以是部署级 Admin token、登录 session token，或用户在 `/admin/profile` 个人页面生成的系统访问令牌。个人安全类写操作仍必须使用正常登录 session。
+`/api/admin/openapi.json` 只描述平台管理员 API，包括用户、用户组、邀请码、SSO、团队策略、团队、团队成员组、消息、配置 profile / secret 和运维指标。`/api/profile/openapi.json` 只描述当前用户自己的个人 API，包括个人安全、当前用户团队自助流程、团队成员组和托管配置读取 / 管理。也可以在 Admin 的 `/admin/openapi` 页面直接查看、下载或打开这两份 JSON。受保护接口使用 `Authorization: Bearer <token>`；token 可以是部署级 Admin token、登录 session token，或用户在 `/admin/profile` 个人页面生成的 API 访问令牌。密码、Passkey 和访问令牌管理仍必须使用正常登录 session；删除当前账号接口也允许当前用户 API 访问令牌调用。
 
-系统访问令牌属于当前登录用户，只按该用户的角色和权限工作。服务端只保存令牌 hash 和 preview，完整令牌只在生成时显示一次；遗失后需要撤销并重新生成。系统访问令牌不能继续生成或撤销其他系统访问令牌，这类安全操作必须使用正常登录 session。
+API 访问令牌属于当前登录用户，分为 `user`、`team`、`platform` 三种作用域：用户级令牌只操作当前账号数据；团队级令牌绑定一个团队，并按团队成员组授权；平台级令牌按平台用户组授权。`permissionGroupMode=all` 表示跟随账号当前拥有的全部用户组，`custom` 表示只授予指定用户组。服务端只保存令牌 hash 和 preview，完整令牌只在生成时显示一次；遗失后需要撤销并重新生成。API 访问令牌不能继续生成或撤销其他 API 访问令牌，这类安全操作必须使用正常登录 session。
+
+平台管理员通过 `/admin/access-groups` 管理平台用户组及其能力、配额；团队负责人通过团队详情的“成员组”子页管理当前团队内的成员组。团队成员组只作用于当前团队，平台管理员不会因此获得跨团队查看或管理团队私有信息的权限。平台用户组和团队成员组都支持默认名称 / 说明，以及按系统支持语言填写的 `localizedNames` / `localizedDescriptions`；内置系统默认组会自动补齐所有支持语言的默认文案。界面会优先按用户语言展示多语言文案，未命中时回退到默认字段。
 
 ## 登录方式
 

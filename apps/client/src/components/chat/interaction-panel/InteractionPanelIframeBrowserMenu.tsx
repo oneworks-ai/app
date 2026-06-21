@@ -22,7 +22,11 @@ export function InteractionPanelIframeBrowserMenu({
   isDeveloperToolsOpen,
   isViewportToolbarOpen,
   onClose,
+  onOpenBrowserDownloads,
   onForceReload,
+  onOpenBrowserDataSync,
+  onOpenBrowserHistory,
+  onOpenSavedPasswords,
   onToggleDeveloperTools,
   onToggleViewportToolbar,
   shouldUseWebview,
@@ -33,7 +37,11 @@ export function InteractionPanelIframeBrowserMenu({
   isDeveloperToolsOpen: boolean
   isViewportToolbarOpen: boolean
   onClose: () => void
+  onOpenBrowserDownloads?: () => void
   onForceReload: () => void
+  onOpenBrowserDataSync: () => void
+  onOpenBrowserHistory?: () => void
+  onOpenSavedPasswords: () => void
   onToggleDeveloperTools: () => void
   onToggleViewportToolbar: () => void
   shouldUseWebview: boolean
@@ -78,6 +86,28 @@ export function InteractionPanelIframeBrowserMenu({
 
   const handleToggleDeveloperTools = () => {
     onToggleDeveloperTools()
+    onClose()
+  }
+
+  const handleOpenBrowserDataSync = () => {
+    onOpenBrowserDataSync()
+    onClose()
+  }
+
+  const handleOpenSavedPasswords = () => {
+    onOpenSavedPasswords()
+    onClose()
+  }
+
+  const handleOpenBrowserHistory = () => {
+    if (onOpenBrowserHistory == null) return
+    onOpenBrowserHistory()
+    onClose()
+  }
+
+  const handleOpenBrowserDownloads = () => {
+    if (onOpenBrowserDownloads == null) return
+    onOpenBrowserDownloads()
     onClose()
   }
 
@@ -184,6 +214,39 @@ export function InteractionPanelIframeBrowserMenu({
           restart_alt
         </button>
       </div>
+      <OverlayDivider className='chat-interaction-panel-browser-menu__divider' decorative />
+      <OverlayAction
+        className='chat-interaction-panel-browser-menu__item'
+        onClick={handleOpenBrowserDataSync}
+      >
+        <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>sync</span>
+        <span>{t('browserDataSync.open')}</span>
+      </OverlayAction>
+      <OverlayAction
+        className='chat-interaction-panel-browser-menu__item'
+        onClick={handleOpenSavedPasswords}
+      >
+        <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>password</span>
+        <span>{t('browserDataSync.savedPasswords.openManager')}</span>
+      </OverlayAction>
+      {onOpenBrowserHistory != null && (
+        <OverlayAction
+          className='chat-interaction-panel-browser-menu__item'
+          onClick={handleOpenBrowserHistory}
+        >
+          <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>history</span>
+          <span>{t('config.sections.browserHistory')}</span>
+        </OverlayAction>
+      )}
+      {onOpenBrowserDownloads != null && (
+        <OverlayAction
+          className='chat-interaction-panel-browser-menu__item'
+          onClick={handleOpenBrowserDownloads}
+        >
+          <span className='material-symbols-rounded chat-interaction-panel__menu-icon'>download</span>
+          <span>{t('config.sections.browserDownloads')}</span>
+        </OverlayAction>
+      )}
       <OverlayDivider className='chat-interaction-panel-browser-menu__divider' decorative />
       <OverlayAction
         className='chat-interaction-panel-browser-menu__item'

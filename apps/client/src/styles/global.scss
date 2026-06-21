@@ -318,10 +318,14 @@ html, body, #root, .ant-app {
   -webkit-backdrop-filter: blur(24px) saturate(160%);
   backdrop-filter: blur(24px) saturate(160%);
 
+  .rc-virtual-list-holder {
+    scroll-padding-block-end: var(--oneworks-overlay-select-panel-padding-y);
+  }
+
   .rc-virtual-list-holder-inner {
+    padding-block-end: var(--oneworks-overlay-select-panel-padding-y);
     display: flex !important;
     flex-direction: column;
-    gap: var(--oneworks-overlay-item-gap);
   }
 
   .ant-select-item {

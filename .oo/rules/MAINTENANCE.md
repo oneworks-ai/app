@@ -11,11 +11,14 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - [日志消费与排查](./maintenance/logs.md)
 - [会话终止与创建取消排查](./maintenance/session-termination.md)
 - [任务规划、委派与经验沉淀](./maintenance/task-planning.md)
+- [移动端 WebView 与工作区标签页经验](./maintenance/mobile-workspace-webview.md)
 - [消息级操作开发经验](./maintenance/message-actions.md)
 - [消息级操作维护工具](./maintenance/tooling.md)
 - [Team / Agent Room 冒烟验证](./maintenance/agent-room-team-smoke.md)
 - [能力展示录屏工具](./maintenance/demo-video.md)
 - [Homepage Docs 维护经验](./maintenance/homepage-docs.md)
+- [PR 经验复盘门禁](./maintenance/pr-experience-review.md)
+- [桌面端浏览器数据管理经验](./maintenance/browser-data-management.md)
 - [Relay 托管与私有化部署](./RELAY-DEPLOYMENT.md)
 
 ## 常见问题索引
@@ -24,6 +27,9 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - 开发服务输出 `[dev-start] ready` 后仍继续 `ps` / `curl` / 读 log：见 [开发服务 ready 后仍继续验证](./maintenance/common-issues.md#开发服务-ready-后仍继续验证)。
 - 启动入口混用 `start.sh`、`screen` 或旧脚本：见 [开发服务启动入口混用历史脚本](./maintenance/common-issues.md#开发服务启动入口混用历史脚本)。
 - 复杂任务需要拆 PR、开子线程、监控或沉淀经验：见 [任务规划、委派与经验沉淀](./maintenance/task-planning.md)。
+- PR body 缺少经验复盘确认或需要维护提醒评论：见 [PR 经验复盘门禁](./maintenance/pr-experience-review.md)。
+- 桌面端浏览器数据同步、密码管理、历史记录、下载内容或项目 / 会话范围过滤：见 [桌面端浏览器数据管理经验](./maintenance/browser-data-management.md)。
+- 移动端 WebView、工作区 tabs overview、sender compact 样式或相关 PR 收口：见 [移动端 WebView 与工作区标签页经验](./maintenance/mobile-workspace-webview.md)。
 
 ## 开发环境启动
 
@@ -53,7 +59,8 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
   - 场景：在 CI 中校验一个 commit range 内的提交标题是否符合 Conventional Commit 约定；GitHub merge commit 例外。
 - **PR 合并检查**: `gh pr view <pr> --repo oneworks-ai/app --json statusCheckRollup`
   - 场景：PR 合并前后确认远端 Quality Checks 状态，尤其是 `lint` / `format-check` / `typecheck` / `commit-message`。
-  - 注意：多 worktree 下 `gh pr merge` 可能因为本地 `main` 已在其他 worktree checkout 而失败；使用带 `--repo oneworks-ai/app` 的命令避免 GitHub CLI 尝试切本地分支，例如 `gh pr merge <pr> --repo oneworks-ai/app --merge --auto --delete-branch`。
+  - 注意：先用 `statusCheckRollup` 确认 required checks 结束。仓库允许 auto-merge 时再使用 `--auto`；如果返回 `Auto merge is not allowed for this repository`，等待 checks 全绿后执行 direct merge，例如 `gh pr merge <pr> --repo oneworks-ai/app --squash --delete-branch`。
+  - 注意：多 worktree 下 `gh pr merge` 可能在远端已经合并后，因为本地 `main` 已在其他 worktree checkout 而报错；这时先查 `gh pr view <pr> --repo oneworks-ai/app --json state,mergedAt,mergeCommit`，确认已合并后只需要单独清理远端分支。
   - 注意：如果仓库允许 checks 结束前合并，merge 后仍要确认远端结果；失败时补 follow-up PR，不要只凭本地检查判断已经完成。
 - **消息级操作回归**: `pnpm tools message-actions verify`
   - 场景：修改消息级 `编辑 / 撤回 / 分叉 / 复制原文` 后，固定跑一遍质量检查与回归测试组合，并拿到真实 Chrome 回归清单。

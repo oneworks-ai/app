@@ -160,8 +160,8 @@ describe('launcher routes', () => {
     await mkdir(path.join(serverPackageDir, 'src'), { recursive: true })
     await mkdir(path.join(repoRoot, 'apps', 'client', 'src'), { recursive: true })
     await mkdir(path.join(typesPackageDir, 'src'), { recursive: true })
-    await writeFile(path.join(repoRoot, 'package.json'), '{"name":"fixture","private":true}\\n')
-    await writeFile(path.join(repoRoot, 'pnpm-workspace.yaml'), 'packages:\\n  - apps/*\\n  - packages/*\\n')
+    await writeFile(path.join(repoRoot, 'package.json'), '{"name":"fixture","private":true}\n')
+    await writeFile(path.join(repoRoot, 'pnpm-workspace.yaml'), 'packages:\n  - apps/*\n  - packages/*\n')
     await writeFile(
       path.join(serverPackageDir, 'package.json'),
       JSON.stringify(

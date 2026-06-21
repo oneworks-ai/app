@@ -2,6 +2,7 @@ import type { KeyboardEvent, ReactNode, Ref } from 'react'
 
 import { renderIconAsset } from './IconAsset.js'
 import type { IconAsset } from './IconAsset.js'
+import { RouteChromeHeader } from './RouteChromeHeader.js'
 import { RouteContainerHeaderActionButton, readRouteHeaderIsMac } from './RouteContainerHeaderActionButton.js'
 import type { RouteContainerHeaderActionItem } from './RouteContainerHeaderActionButton.js'
 import { RouteContainerHeaderBreadcrumbContent } from './RouteContainerHeaderBreadcrumb.js'
@@ -104,55 +105,55 @@ export function RouteContainerHeader({
       />
     )
 
-  return (
-    <div
-      ref={rootRef}
+  const leading = (
+    <RouteContainerHeaderLeadingActions
+      collapsed={collapsed}
+      createSessionShortcut={createSessionShortcut}
+      historyNavigation={historyNavigation}
+      isCompactLayout={isCompactLayout}
+      isMac={isMac}
+      labels={resolvedLabels}
+      leadingActions={leadingActions}
+      sidebarToggleShortcut={sidebarToggleShortcut}
+      onCollapsedSidebarOpen={onCollapsedSidebarOpen}
+      onCreateSession={onCreateSession}
+      onOpenSidebar={onOpenSidebar}
+    />
+  )
+  const renderedActions = actionItems.length > 0 || actions != null
+    ? (
+      <>
+        {actionItems.map(item => <RouteContainerHeaderActionButton key={item.key} isMac={isMac} item={item} />)}
+        {actions}
+      </>
+    )
+    : undefined
+  const renderedTitle = (
+    <span
       className={[
-        'route-container-header',
-        collapsed ? 'is-collapsed' : '',
-        breadcrumb != null ? 'is-breadcrumb' : '',
-        isResizing ? 'is-resizing' : '',
-        isHeaderCompact ? 'is-compact' : '',
-        className
+        'route-container-header__title-click-target',
+        onTitleClick != null ? 'is-clickable' : ''
       ].filter(Boolean).join(' ')}
+      role={onTitleClick == null ? undefined : 'button'}
+      tabIndex={onTitleClick == null ? undefined : 0}
+      onClick={onTitleClick}
+      onKeyDown={handleTitleKeyDown}
     >
-      <div className='route-container-header__main'>
-        <RouteContainerHeaderLeadingActions
-          collapsed={collapsed}
-          createSessionShortcut={createSessionShortcut}
-          historyNavigation={historyNavigation}
-          isCompactLayout={isCompactLayout}
-          isMac={isMac}
-          labels={resolvedLabels}
-          leadingActions={leadingActions}
-          sidebarToggleShortcut={sidebarToggleShortcut}
-          onCollapsedSidebarOpen={onCollapsedSidebarOpen}
-          onCreateSession={onCreateSession}
-          onOpenSidebar={onOpenSidebar}
-        />
-        <div className='route-container-header__info'>
-          <div className='route-container-header__title'>
-            <span
-              className={[
-                'route-container-header__title-click-target',
-                onTitleClick != null ? 'is-clickable' : ''
-              ].filter(Boolean).join(' ')}
-              role={onTitleClick == null ? undefined : 'button'}
-              tabIndex={onTitleClick == null ? undefined : 0}
-              onClick={onTitleClick}
-              onKeyDown={handleTitleKeyDown}
-            >
-              {renderedTitleContent}
-            </span>
-          </div>
-        </div>
-      </div>
-      {(actionItems.length > 0 || actions != null) && (
-        <div className='route-container-header__actions'>
-          {actionItems.map(item => <RouteContainerHeaderActionButton key={item.key} isMac={isMac} item={item} />)}
-          {actions}
-        </div>
-      )}
-    </div>
+      {renderedTitleContent}
+    </span>
+  )
+
+  return (
+    <RouteChromeHeader
+      actions={renderedActions}
+      className={className}
+      collapsed={collapsed}
+      compact={isHeaderCompact}
+      isBreadcrumb={breadcrumb != null}
+      isResizing={isResizing}
+      leading={leading}
+      rootRef={rootRef}
+      title={renderedTitle}
+    />
   )
 }
