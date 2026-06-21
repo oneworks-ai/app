@@ -9,6 +9,8 @@
 - `../../hooks/use-session-subscription.ts`
 - `../../hooks/session-subscription-cache.ts`
 
+涉及设置页左侧的“同步数据 / 已保存的密码 / 历史记录 / 下载内容”入口、桌面端专属配置或浏览器数据管理面板时，同时阅读 `../../../../../.oo/rules/maintenance/browser-data-management.md`。
+
 ## 当前设计
 
 配置文件被 CLI、手动编辑或 extends 链路中的文件改动后，后端会通过 websocket 广播 `config_updated`。前端订阅层只负责刷新 `/api/config` 及其派生缓存，不直接覆盖本地草稿；真正的冲突处理留在配置编辑器内部完成。

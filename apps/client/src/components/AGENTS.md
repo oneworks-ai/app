@@ -2,6 +2,8 @@
 
 `src/components/` 承载跨 route 复用的前端视图组件、应用壳、NavRail、Sidebar、通用列表与通用浮层入口。页面私有内容优先留在 route 或模块私有目录；只有跨多个页面或布局复用时才提升到这里。
 
+桌面端浏览器数据同步、密码管理、历史记录、下载内容和项目 / 会话范围过滤的完整经验见 `../../../../.oo/rules/maintenance/browser-data-management.md`；这里仅保留组件落点。
+
 ## Overlay / Menu 约定
 
 - 修改 `NavRail`、`Sidebar`、右键菜单、底部菜单、二级菜单或其它通用浮层前，先确认是否已有通用渲染组件可以复用。
@@ -29,6 +31,7 @@
 ## 验证
 
 - 浮层、右键菜单、submenu、hover、focus 和 active 图标态改动后，必须在真实浏览器里打开对应页面验证，不只跑类型检查。
+- 改浏览器数据同步、密码管理、历史记录、下载内容或范围过滤时，同时按 `../../../../.oo/rules/maintenance/browser-data-management.md` 的验证清单检查 Electron-only 入口、webview 入口默认 scope、Select 滚动和重复账号处理。
 - 至少验证：popup 是否打开、submenu 是否使用统一样式、hover 后图标颜色是否正确、点击 action 是否只触发外部传入回调。
 - 顶部 chrome 图标、图标按钮和 header 内容高度只有一个全局来源：`--app-chrome-icon-size`。`--app-chrome-content-height` 只能作为它的语义别名，整条 chrome 高度只能从 `--app-chrome-overlay-height` / `--route-container-header-overlay-height` 派生，并且该 overlay 高度必须包含 `--app-chrome-border-width`。Route header、带红绿灯的折叠窗口栏、route panel tabs / close actions 都必须引用这些 token 或引用只从它们派生的本地别名。不要再新增独立的 `*-icon-button-size`、`*-bar-height` 或局部 `20px` / `18px` / `40px` 覆盖。
 - 顶部 chrome 动作按钮间距统一走 `--app-chrome-action-gap`，折叠窗口栏和 route header actions 要同步引用，不要分别硬编码 gap。
