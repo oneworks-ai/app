@@ -11,6 +11,7 @@ export interface PrChangePolicyInput {
 }
 
 export interface PrChangePolicyResult {
+  hasExperienceReview: boolean
   requiresChangelog: boolean
   requiresScreenshot: boolean
   violations: string[]
@@ -88,10 +89,30 @@ const hasScreenshotEvidence = (body: string | undefined) => {
     /\.(?:png|jpe?g|webp|gif)(?:\)|\s|$)/iu.test(body)
 }
 
+const hasCheckedItem = (section: string, pattern: RegExp) => (
+  section.split('\n').some(line => /^\s*[-*]\s+\[x\]\s+/iu.test(line) && pattern.test(line))
+)
+
+export const hasExperienceReviewChecklist = (body: string | undefined) => {
+  if (body == null || body.trim() === '') return false
+  const sectionMatch = /^##\s+Experience Review\s*$/imu.exec(body)
+  if (sectionMatch == null) return false
+
+  const sectionStart = sectionMatch.index + sectionMatch[0].length
+  const nextSectionOffset = body.slice(sectionStart).search(/^##\s+/mu)
+  const sectionEnd = nextSectionOffset < 0 ? undefined : sectionStart + nextSectionOffset
+  const section = body.slice(sectionStart, sectionEnd)
+
+  return hasCheckedItem(section, /已判断是否需要沉淀经验/u) &&
+    hasCheckedItem(section, /\$post-task-experience-review/u) &&
+    hasCheckedItem(section, /reviewer\s+PASS/u)
+}
+
 export const evaluatePrChangePolicy = (input: PrChangePolicyInput): PrChangePolicyResult => {
   const isProductFeatureOrFix = isFeatureOrFixPr(input.commitSubjects) && input.changedFiles.some(isProductPath)
   const requiresChangelog = isProductFeatureOrFix
   const requiresScreenshot = isProductFeatureOrFix && input.changedFiles.some(isUiSurfacePath)
+  const hasExperienceReview = hasExperienceReviewChecklist(input.prBody)
   const violations: string[] = []
 
   if (requiresChangelog && !input.changedFiles.some(isChangelogFile)) {
@@ -104,7 +125,14 @@ export const evaluatePrChangePolicy = (input: PrChangePolicyInput): PrChangePoli
     violations.push('Feature/fix PRs that change UI surfaces must include a screenshot in the PR body.')
   }
 
+  if (!hasExperienceReview) {
+    violations.push(
+      'PR body must include a completed ## Experience Review checklist confirming experience judgment, $post-task-experience-review when needed, and reviewer PASS before merge.'
+    )
+  }
+
   return {
+    hasExperienceReview,
     requiresChangelog,
     requiresScreenshot,
     violations

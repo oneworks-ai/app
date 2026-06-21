@@ -29,6 +29,7 @@
 - 功能新增和 bug 修复类 PR，若改动产品代码，必须同步更新对应的 `changelog/<version>/readme.md` 或 `changelog/<version>/<package>.md`。
 - 文档更新、测试补充、工具链升级、CI 调整等非产品行为默认不需要 changelog。
 - 如果 PR 涉及新的界面交互或可见 UI 变化，PR 正文必须附带对应截图；AI 创建 PR 后也应主动生成并加入截图。
+- 所有 PR 正文必须包含并勾选 `## Experience Review` checklist；需要沉淀经验时，先运行 `$post-task-experience-review` 并等待 reviewer PASS。
 - CI 使用 `pnpm tools pr-change-check <base> <head> --body-file <path>` 检查上述规则。
 
 ## publish-plan
