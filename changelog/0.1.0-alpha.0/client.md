@@ -7,4 +7,5 @@
 - Display Kimi Code usage-plan results as request quota instead of pay-as-you-go balance.
 - Add tabbed model service detail pages, reusable config record list controls, bottom-panel provider portals, and New API collection management for local profiles and remote API keys.
 - Add desktop browser history and download management pages with project/session filters, search, and shared select styling.
+- Add external session import management for Codex and Claude Code, including candidate search, filters, per-adapter import controls, and path/size tooltips.
 - Polish the mobile workspace tab switcher, webview tab chrome, compact sender spacing, and development shell simulation controls.
