@@ -26,6 +26,7 @@ interface AppMenuManagerInput {
   findWindowRecord: (window: BrowserWindow | null) => WindowRecord | undefined
   getQuitConfirmationLanguage: () => QuitConfirmationLanguage
   handleDesktopError: (error: unknown) => void
+  openStandaloneTabWindow: (routePath: string) => Promise<WindowRecord>
   openWorkspaceDialog: (input?: OpenWorkspaceDialogInput) => Promise<string | undefined>
   openWorkspaceWindow: (workspaceFolder: string) => Promise<WindowRecord>
   requestQuitConfirmation: () => void
@@ -39,6 +40,7 @@ export const createAppMenuManager = ({
   findWindowRecord,
   getQuitConfirmationLanguage,
   handleDesktopError,
+  openStandaloneTabWindow,
   openWorkspaceDialog,
   openWorkspaceWindow,
   requestQuitConfirmation,
@@ -55,6 +57,10 @@ export const createAppMenuManager = ({
 
   const openLauncher = () => {
     void createLauncherWindow().catch(handleDesktopError)
+  }
+
+  const openStandaloneMobileDebug = () => {
+    void openStandaloneTabWindow('/standalone/mobile-debug').catch(handleDesktopError)
   }
 
   const openUpdateCheck = () => {
@@ -146,6 +152,10 @@ export const createAppMenuManager = ({
             label: 'Default Profile'
           }
         ]
+      },
+      {
+        click: openStandaloneMobileDebug,
+        label: 'Debug Phone'
       },
       { type: 'separator' },
       {

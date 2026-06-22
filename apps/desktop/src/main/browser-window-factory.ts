@@ -15,6 +15,7 @@ import { installWebviewSecurityHandlers } from './webview-security'
 import {
   getSystemLocaleArgument,
   getWindowChromeOptions,
+  restoreWorkspaceReadyWindowBackground,
   setWorkspaceLoadingWindowBackground
 } from './window-chrome-options'
 import { installWindowCloseLifecycle } from './window-close-lifecycle'
@@ -99,18 +100,26 @@ export const createBrowserWindowFactory = ({
 
     window.webContents.setWindowOpenHandler(({ url }) => {
       if (windowRecord.currentServerUrl != null && url.startsWith(windowRecord.currentServerUrl)) {
-        const childWindowRecord = createWindowRecord({ kind: 'workspace' })
-        childWindowRecord.kind = 'workspace'
+        const childWindowKind = windowRecord.kind === 'standalone' ? 'standalone' : 'workspace'
+        const childWindowRecord = createWindowRecord({ kind: childWindowKind })
+        childWindowRecord.kind = childWindowKind
         childWindowRecord.selectorMode = undefined
-        childWindowRecord.workspaceFolder = windowRecord.workspaceFolder
         childWindowRecord.currentServerUrl = windowRecord.currentServerUrl
-        childWindowRecord.workspaceServerUrl = windowRecord.workspaceServerUrl
+        if (childWindowKind === 'standalone') {
+          childWindowRecord.standaloneRoutePath = windowRecord.standaloneRoutePath
+        } else {
+          childWindowRecord.workspaceFolder = windowRecord.workspaceFolder
+          childWindowRecord.workspaceServerUrl = windowRecord.workspaceServerUrl
+        }
         childWindowRecord.window.setTitle(windowRecord.window.getTitle())
         setWorkspaceLoadingWindowBackground(childWindowRecord.window)
 
         void childWindowRecord.window.loadURL(url).then(() => {
           if (childWindowRecord.window.isDestroyed()) {
             return
+          }
+          if (childWindowKind === 'standalone') {
+            restoreWorkspaceReadyWindowBackground(childWindowRecord.window)
           }
           childWindowRecord.window.show()
           childWindowRecord.window.focus()

@@ -1,4 +1,6 @@
 /* eslint-disable max-lines -- centralizes desktop IPC registration for workspace, launcher, and window actions. */
+import process from 'node:process'
+
 import { clipboard, ipcMain, nativeImage, session, shell } from 'electron'
 import type { WebContents } from 'electron'
 
@@ -109,6 +111,30 @@ const normalizeGlobalAppearancePatch = (
     ...(value.themeMode === 'light' || value.themeMode === 'dark' || value.themeMode === 'system'
       ? { themeMode: value.themeMode }
       : {})
+  }
+}
+
+const MIN_WINDOW_OPACITY = 0.55
+const MAX_WINDOW_OPACITY = 1
+
+const normalizeWindowOpacity = (value: unknown) => {
+  const numericValue = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(numericValue)) return MAX_WINDOW_OPACITY
+  return Math.min(MAX_WINDOW_OPACITY, Math.max(MIN_WINDOW_OPACITY, numericValue))
+}
+
+const getCurrentWindowPresentationState = (windowRecord?: WindowRecord) => {
+  const window = windowRecord?.window
+  if (window == null || window.isDestroyed()) {
+    return {
+      alwaysOnTop: false,
+      opacity: MAX_WINDOW_OPACITY
+    }
+  }
+
+  return {
+    alwaysOnTop: window.isAlwaysOnTop(),
+    opacity: normalizeWindowOpacity(window.getOpacity())
   }
 }
 
@@ -589,6 +615,30 @@ export const registerIpcHandlers = ({
   ipcMain.handle('desktop:get-window-fullscreen-state', (event) => (
     findWindowRecordForWebContents(event.sender)?.window.isFullScreen() ?? false
   ))
+
+  ipcMain.handle('desktop:get-current-window-presentation-state', (event) => (
+    getCurrentWindowPresentationState(findWindowRecordForWebContents(event.sender))
+  ))
+
+  ipcMain.handle('desktop:set-current-window-always-on-top', (event, value: unknown) => {
+    const windowRecord = findWindowRecordForWebContents(event.sender)
+    if (windowRecord == null || !isWindowRecordUsable(windowRecord)) {
+      return getCurrentWindowPresentationState(windowRecord)
+    }
+
+    windowRecord.window.setAlwaysOnTop(value === true, process.platform === 'darwin' ? 'floating' : undefined)
+    return getCurrentWindowPresentationState(windowRecord)
+  })
+
+  ipcMain.handle('desktop:set-current-window-opacity', (event, value: unknown) => {
+    const windowRecord = findWindowRecordForWebContents(event.sender)
+    if (windowRecord == null || !isWindowRecordUsable(windowRecord)) {
+      return getCurrentWindowPresentationState(windowRecord)
+    }
+
+    windowRecord.window.setOpacity(normalizeWindowOpacity(value))
+    return getCurrentWindowPresentationState(windowRecord)
+  })
 
   ipcMain.handle('desktop:hide-launcher-window', (event) => {
     const windowRecord = findWindowRecordForWebContents(event.sender)

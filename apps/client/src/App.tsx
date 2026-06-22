@@ -14,6 +14,10 @@ const LauncherApp = lazy(async () => ({
   default: (await import('#~/LauncherApp')).LauncherApp
 }))
 
+const StandaloneMobileDebugRoute = lazy(async () => ({
+  default: (await import('#~/routes/StandaloneMobileDebugRoute')).StandaloneMobileDebugRoute
+}))
+
 const WorkspaceApp = lazy(async () => ({
   default: (await import('#~/WorkspaceApp')).WorkspaceApp
 }))
@@ -49,6 +53,14 @@ export default function App() {
 
   if (location.pathname === '/__component-lab') {
     return <DevComponentLabApp />
+  }
+
+  if (location.pathname === '/standalone/mobile-debug') {
+    return (
+      <Suspense fallback={null}>
+        <StandaloneMobileDebugRoute />
+      </Suspense>
+    )
   }
 
   if (workspaceId != null) {

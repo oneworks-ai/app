@@ -452,6 +452,10 @@ interface Window {
     getDesktopIconPreview?: (
       settings: Pick<DesktopSettings, 'iconAppearance' | 'iconBackground' | 'iconTheme'>
     ) => Promise<string | undefined>
+    getCurrentWindowPresentationState?: () => Promise<{
+      alwaysOnTop: boolean
+      opacity: number
+    }>
     getDesktopSettings?: () => Promise<DesktopSettings>
     getBrowserDataSyncState?: () => Promise<DesktopBrowserDataSyncState>
     listBrowserHistory?: (input?: DesktopBrowserActivityListOptions) => Promise<DesktopBrowserHistoryRecord[]>
@@ -540,6 +544,14 @@ interface Window {
       options?: { includeDirectories?: boolean }
     ) => Promise<{ files: DesktopWorkspaceFileSearchResult[] }>
     searchCurrentWorkspaceResources?: (query: string) => Promise<DesktopWorkspaceResourceSearchResponse>
+    setCurrentWindowAlwaysOnTop?: (value: boolean) => Promise<{
+      alwaysOnTop: boolean
+      opacity: number
+    }>
+    setCurrentWindowOpacity?: (value: number) => Promise<{
+      alwaysOnTop: boolean
+      opacity: number
+    }>
     setThemeSource?: (themeSource: 'system' | 'light' | 'dark') => Promise<'system' | 'light' | 'dark'>
     showDesktopContextCaptureOverlay?: (input: DesktopContextCaptureOverlayInput) => Promise<unknown>
     supportsWebviewTag?: boolean

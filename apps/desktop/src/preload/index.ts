@@ -204,6 +204,7 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
   getDesktopIconPreview: (settings: unknown) => ipcRenderer.invoke('desktop:get-icon-preview', settings),
   getDesktopSettings: () => ipcRenderer.invoke('desktop:get-settings'),
   getBrowserDataSyncState: () => ipcRenderer.invoke('desktop:get-browser-data-sync-state'),
+  getCurrentWindowPresentationState: () => ipcRenderer.invoke('desktop:get-current-window-presentation-state'),
   listBrowserHistory: (input?: unknown) => ipcRenderer.invoke('desktop:list-browser-history', input),
   recordBrowserHistory: (input: unknown) => ipcRenderer.invoke('desktop:record-browser-history', input),
   registerInteractionPanelWebviewScope: (input: unknown) =>
@@ -348,6 +349,9 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
     ipcRenderer.invoke('desktop:search-filesystem-files', query, options),
   searchCurrentWorkspaceResources: (query: string) =>
     ipcRenderer.invoke('desktop:search-current-workspace-resources', query),
+  setCurrentWindowAlwaysOnTop: (value: boolean) =>
+    ipcRenderer.invoke('desktop:set-current-window-always-on-top', value),
+  setCurrentWindowOpacity: (value: number) => ipcRenderer.invoke('desktop:set-current-window-opacity', value),
   setThemeSource: (themeSource: unknown) => ipcRenderer.invoke('desktop:set-theme-source', themeSource),
   showDesktopContextCaptureOverlay: (input: unknown) =>
     ipcRenderer.invoke('desktop:context-capture:show-overlay', input),

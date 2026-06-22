@@ -9,6 +9,16 @@ const readHashToken = (url: URL) => {
   return hash.get('relay_token') || url.searchParams.get('relay_token') || ''
 }
 
+const buildStandaloneRoutePath = (url: URL) => {
+  if (url.hostname !== 'standalone') return undefined
+  const pathname = url.pathname.replace(/\/+$/, '')
+  if (pathname !== '/mobile-debug') return undefined
+  const route = new URL('/standalone/mobile-debug', 'http://localhost')
+  const deviceId = url.searchParams.get('deviceId')?.trim()
+  if (deviceId != null && deviceId !== '') route.searchParams.set('deviceId', deviceId)
+  return `${route.pathname}${route.search}`
+}
+
 const buildRelayPluginRoutePath = (url: URL) => {
   const token = readHashToken(url)
   const scope = url.searchParams.get('scope')?.trim() || 'relay'
@@ -33,6 +43,9 @@ export const parseDesktopDeepLinkLaunchRequest = (rawUrl: string): LaunchRequest
   }
 
   if (!desktopDeepLinkProtocols.has(url.protocol)) return undefined
+  const standaloneRoutePath = buildStandaloneRoutePath(url)
+  if (standaloneRoutePath != null) return { standaloneRoutePath }
+
   const isRelayAuthRoute = url.hostname === 'relay' && url.pathname.replace(/\/+$/, '') === '/auth'
   if (!isRelayAuthRoute) return undefined
 
