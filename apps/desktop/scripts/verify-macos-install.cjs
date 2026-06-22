@@ -113,6 +113,7 @@ const assertInstalledBuildSource = (appPath) => {
   const branch = assertTextField({ field: 'branch', metadata })
   const buildTime = assertTextField({ field: 'buildTime', metadata })
   const gitHash = assertTextField({ field: 'gitHash', metadata })
+  const runtimePackageCacheVersion = assertTextField({ field: 'runtimePackageCacheVersion', metadata })
   assertExpectedBuildSourceValue({
     actual: branch,
     expected: process.env.ONEWORKS_DESKTOP_BUILD_GIT_BRANCH,
@@ -128,7 +129,10 @@ const assertInstalledBuildSource = (appPath) => {
     expected: process.env.ONEWORKS_DESKTOP_BUILD_GIT_HASH,
     field: 'gitHash'
   })
-  console.log(`[desktop] installed app build source ${gitHash.slice(0, 12)} on ${branch} at ${buildTime}`)
+  console.log(
+    `[desktop] installed app build source ${gitHash.slice(0, 12)} on ${branch} at ${buildTime} ` +
+      `runtimeCache=${runtimePackageCacheVersion}`
+  )
 }
 
 const copyAppBundle = ({ sourceAppPath, targetAppPath }) => {

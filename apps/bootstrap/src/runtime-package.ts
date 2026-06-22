@@ -1,5 +1,10 @@
 import { resolvePublishedPackageVersion } from './npm-package'
-import { resolvePackageCacheDir, resolvePackageInstallDir } from './npm-package-cache'
+import {
+  normalizePackageCacheVersion,
+  resolvePackageCacheDir,
+  resolvePackageInstallDir,
+  resolveRuntimePackageCacheVersion
+} from './npm-package-cache'
 import {
   findInstalledPublishedPackageVersion,
   installPublishedPackage,
@@ -10,10 +15,12 @@ export type RuntimePackageAction = 'check' | 'install'
 export type RuntimePackageTarget = 'cli' | 'client' | 'server' | 'web'
 
 export interface RuntimePackageOptions {
+  cacheVersion?: string
   version?: string
 }
 
 export interface RuntimePackageStatus {
+  cacheVersion?: string
   installed: boolean
   installedVersion?: string
   latestInstalled: boolean
@@ -56,8 +63,11 @@ export const resolveRuntimePackageTarget = (value: string | undefined): RuntimeP
   )
 }
 
-const readVersionInstalledAt = async (packageName: string, version: string) => {
-  const packageDir = resolvePackageInstallDir(resolvePackageCacheDir(packageName, version), packageName)
+const readVersionInstalledAt = async (packageName: string, version: string, cacheVersion = version) => {
+  const packageDir = resolvePackageInstallDir(
+    resolvePackageCacheDir(packageName, version, { cacheVersion }),
+    packageName
+  )
   return await readInstalledPackageVersion(packageDir)
 }
 
@@ -70,12 +80,19 @@ const createRuntimePackageStatus = async (
   target: RuntimePackageTarget,
   packageName: string,
   targetVersion: string,
-  requestedVersion: string | undefined
+  requestedVersion: string | undefined,
+  requestedCacheVersion: string | undefined
 ): Promise<RuntimePackageStatus> => {
-  const installedVersion = await findInstalledPublishedPackageVersion(packageName)
-  const targetInstalled = await readVersionInstalledAt(packageName, targetVersion) === targetVersion
+  const cacheVersion = normalizePackageCacheVersion(requestedCacheVersion)
+  const resolvedCacheVersion = cacheVersion ?? targetVersion
+  const installedVersion = cacheVersion == null
+    ? await findInstalledPublishedPackageVersion(packageName)
+    : await readVersionInstalledAt(packageName, targetVersion, resolvedCacheVersion)
+  const targetInstalled =
+    await readVersionInstalledAt(packageName, targetVersion, resolvedCacheVersion) === targetVersion
 
   return {
+    ...(cacheVersion != null ? { cacheVersion } : {}),
     installed: installedVersion != null,
     ...(installedVersion != null ? { installedVersion } : {}),
     latestInstalled: targetInstalled,
@@ -83,7 +100,9 @@ const createRuntimePackageStatus = async (
     packageName,
     ...(requestedVersion != null ? { requestedVersion } : {}),
     target,
-    updateAvailable: requestedVersion != null ? !targetInstalled : installedVersion !== targetVersion
+    updateAvailable: requestedVersion != null || cacheVersion != null
+      ? !targetInstalled
+      : installedVersion !== targetVersion
   }
 }
 
@@ -94,8 +113,9 @@ export const checkRuntimePackage = async (
   const target = resolveRuntimePackageTarget(targetValue)
   const packageName = RUNTIME_PACKAGE_NAMES[target]
   const requestedVersion = normalizeRequestedVersion(options.version)
+  const cacheVersion = normalizePackageCacheVersion(options.cacheVersion) ?? resolveRuntimePackageCacheVersion()
   const targetVersion = requestedVersion ?? await resolveRuntimePackageVersion(packageName, options)
-  return await createRuntimePackageStatus(target, packageName, targetVersion, requestedVersion)
+  return await createRuntimePackageStatus(target, packageName, targetVersion, requestedVersion, cacheVersion)
 }
 
 export const installRuntimePackage = async (
@@ -105,17 +125,29 @@ export const installRuntimePackage = async (
   const target = resolveRuntimePackageTarget(targetValue)
   const packageName = RUNTIME_PACKAGE_NAMES[target]
   const requestedVersion = normalizeRequestedVersion(options.version)
+  const cacheVersion = normalizePackageCacheVersion(options.cacheVersion) ?? resolveRuntimePackageCacheVersion()
   const targetVersion = requestedVersion ?? await resolveRuntimePackageVersion(packageName, options)
-  await installPublishedPackage(packageName, targetVersion)
-  return await createRuntimePackageStatus(target, packageName, targetVersion, requestedVersion)
+  await installPublishedPackage(packageName, targetVersion, cacheVersion == null ? {} : { cacheVersion })
+  return await createRuntimePackageStatus(target, packageName, targetVersion, requestedVersion, cacheVersion)
 }
 
 export const formatRuntimePackageStatus = (status: RuntimePackageStatus) => {
   const current = status.installedVersion ?? 'not installed'
   if (status.requestedVersion != null) {
+    if (status.cacheVersion != null) {
+      return status.latestInstalled
+        ? `${status.packageName}@${status.requestedVersion} cached as ${status.cacheVersion}`
+        : `${status.packageName}@${status.requestedVersion} not cached as ${status.cacheVersion} (${current})`
+    }
     return status.latestInstalled
       ? `${status.packageName}@${status.requestedVersion} cached`
       : `${status.packageName}@${status.requestedVersion} not cached (${current})`
+  }
+
+  if (status.cacheVersion != null) {
+    return status.latestInstalled
+      ? `${status.packageName}@${status.latestVersion} cached as ${status.cacheVersion}`
+      : `${status.packageName}@${status.latestVersion} not cached as ${status.cacheVersion} (${current})`
   }
 
   const suffix = status.updateAvailable

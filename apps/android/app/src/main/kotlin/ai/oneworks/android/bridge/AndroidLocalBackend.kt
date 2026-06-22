@@ -10,7 +10,8 @@ import java.nio.charset.StandardCharsets
 import java.util.Locale
 
 class AndroidLocalBackend(
-    private val workspaces: DeviceWorkspaceController
+    private val workspaces: DeviceWorkspaceController,
+    private val runtimePackageCacheMetadata: JSONObject? = null
 ) {
     fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? {
         val uri = request.url ?: return null
@@ -29,12 +30,14 @@ class AndroidLocalBackend(
 
         if (path == "/api/auth/status" && method == "GET") {
             return jsonResponse(
-                JSONObject()
-                    .put("enabled", false)
-                    .put("authenticated", true)
-                    .put("usernames", JSONArray().put("android"))
-                    .put("passwordSource", "config")
-                    .put("version", "android-local")
+                withRuntimePackageCacheMetadata(
+                    JSONObject()
+                        .put("enabled", false)
+                        .put("authenticated", true)
+                        .put("usernames", JSONArray().put("android"))
+                        .put("passwordSource", "config")
+                        .put("version", "android-local")
+                )
             )
         }
 
@@ -200,12 +203,14 @@ class AndroidLocalBackend(
             (method == "GET" || method == "POST")
         ) {
             return jsonResponse(
-                JSONObject()
-                    .put("checkedAt", System.currentTimeMillis())
-                    .put("channel", "stable")
-                    .put("moduleChannels", JSONObject())
-                    .put("modules", JSONArray())
-                    .put("npmTag", "latest")
+                withRuntimePackageCacheMetadata(
+                    JSONObject()
+                        .put("checkedAt", System.currentTimeMillis())
+                        .put("channel", "stable")
+                        .put("moduleChannels", JSONObject())
+                        .put("modules", JSONArray())
+                        .put("npmTag", "latest")
+                )
             )
         }
 
@@ -247,6 +252,12 @@ class AndroidLocalBackend(
             )
             .put("models", JSONObject())
 
+        val about = withRuntimePackageCacheMetadata(
+            JSONObject()
+                .put("version", "android-local")
+                .put("platform", "android")
+        )
+
         return JSONObject()
             .put(
                 "sources",
@@ -274,9 +285,7 @@ class AndroidLocalBackend(
                     )
                     .put(
                         "about",
-                        JSONObject()
-                            .put("version", "android-local")
-                            .put("platform", "android")
+                        about
                     )
             )
     }
@@ -391,6 +400,27 @@ class AndroidLocalBackend(
             current = current.parentFile
         }
         return false
+    }
+
+    private fun runtimePackageCacheVersion(): String? =
+        runtimePackageCacheMetadata
+            ?.optString("cacheVersion", "")
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+
+    private fun runtimePackageCacheMetadataCopy(): JSONObject? =
+        runtimePackageCacheMetadata?.let { JSONObject(it.toString()) }
+
+    private fun withRuntimePackageCacheMetadata(body: JSONObject): JSONObject {
+        val cacheVersion = runtimePackageCacheVersion()
+        if (cacheVersion != null) {
+            body.put("runtimePackageCacheVersion", cacheVersion)
+        }
+        val metadata = runtimePackageCacheMetadataCopy()
+        if (metadata != null) {
+            body.put("runtimePackageCache", metadata)
+        }
+        return body
     }
 
     private fun jsonResponse(body: JSONObject, statusCode: Int = 200): WebResourceResponse =

@@ -25,6 +25,7 @@
 - `app/build.gradle.kts`
   - Syncs `apps/client/dist` into APK assets at `client/` when that dist exists.
   - Syncs a source snapshot of `apps/server` into APK assets at `server/source/`; when `apps/server/dist` exists, it also syncs those artifacts into `server/dist/`. This packages backend code/assets but does not make Node/Koa runnable on Android by itself.
+  - Generates `runtime/package-cache.json` with the packaged Android/client/server versions and runtime cacheVersion metadata. Debug builds default to a `dev-<worktree path hash>` fingerprint; `ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION` or `-PoneworksRuntimePackageCacheVersion=...` can override it.
 - Bundled client pages should be built with `__ONEWORKS_PROJECT_CLIENT_BASE__=/client/`; `TargetWebViewManager.kt` maps `https://oneworks.local/client/` back to APK assets so module scripts, CSS, fonts, and CSP use a real origin instead of `file://`.
 - Shared-storage project validation currently requires Android all-files access (`MANAGE_EXTERNAL_STORAGE`) when the internal directory list opens a path such as `/storage/emulated/0/Download/...`; otherwise Android scoped storage can expose directories while hiding source files. Treat this as prototype validation plumbing, not a final distribution policy.
 

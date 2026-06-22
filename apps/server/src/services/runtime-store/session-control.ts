@@ -179,6 +179,7 @@ export async function createServerRuntimeSession(params: {
   return {
     runtimeRoot,
     sessionId: params.sessionId,
+    startCommand: shouldStart ? startCommand : undefined,
     storePath: session.sessionPath
   }
 }

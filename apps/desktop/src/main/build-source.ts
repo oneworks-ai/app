@@ -18,12 +18,25 @@ const normalizeText = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
 
+const runtimePackageCacheVersionPattern = /^[\w.+-]+$/u
+
+const normalizeRuntimePackageCacheVersion = (value: unknown) => {
+  const normalized = normalizeText(value)
+  return normalized != null &&
+      runtimePackageCacheVersionPattern.test(normalized) &&
+      normalized !== '.' &&
+      normalized !== '..'
+    ? normalized
+    : undefined
+}
+
 const normalizeDesktopBuildSource = (value: unknown): DesktopBuildSource | undefined => {
   if (!isRecord(value)) return undefined
 
   const branch = normalizeText(value.branch)
   const buildTime = normalizeText(value.buildTime)
   const gitHash = normalizeText(value.gitHash)
+  const runtimePackageCacheVersion = normalizeRuntimePackageCacheVersion(value.runtimePackageCacheVersion)
   if (branch == null || buildTime == null || gitHash == null) {
     return undefined
   }
@@ -31,7 +44,8 @@ const normalizeDesktopBuildSource = (value: unknown): DesktopBuildSource | undef
   return {
     branch,
     buildTime,
-    gitHash
+    gitHash,
+    ...(runtimePackageCacheVersion == null ? {} : { runtimePackageCacheVersion })
   }
 }
 
@@ -60,3 +74,5 @@ export const readDesktopBuildSource = (): DesktopBuildSource | undefined => {
 
   return buildSourceCache ?? undefined
 }
+
+export const readDesktopBuildRuntimePackageCacheVersion = () => readDesktopBuildSource()?.runtimePackageCacheVersion

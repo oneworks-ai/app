@@ -1,16 +1,30 @@
 /* eslint-disable max-lines -- shared client service owns dev and packaged client startup timing. */
 import { spawn } from 'node:child_process'
 import type { Server } from 'node:http'
+import { createRequire } from 'node:module'
 import process from 'node:process'
 
 import { app } from 'electron'
 
 import { CLIENT_BASE, SERVER_HOST } from './constants'
 import { startPackagedLauncherStaticServer } from './launcher-static-server'
-import { clientCliPath, isDev, resolveClientDevExecutable, resolveClientDistPath } from './paths'
+import {
+  builtinPackageCachePath,
+  clientCliPath,
+  isDev,
+  resolveClientDevExecutable,
+  resolveClientDistPath
+} from './paths'
 import { isChildProcessRunning, killChildProcess, writePrefixedChunk } from './process-utils'
 import { getAvailablePort, waitForClientStartup } from './ready-checks'
+import { resolveDesktopRuntimePackageCacheVersionEnv } from './runtime-cache-version'
 import type { DesktopRuntimeState, LauncherClientService } from './types'
+
+const nodeRequire = createRequire(__filename)
+
+interface BuiltinPackageCacheModule {
+  ensureBuiltinRuntimePackageCache?: (options?: { env?: NodeJS.ProcessEnv }) => unknown
+}
 
 interface LauncherClientServiceManagerInput {
   getIsQuitting: () => boolean
@@ -21,6 +35,24 @@ const elapsedMs = (startedAt: number) => `${Date.now() - startedAt}ms`
 
 const logClientStartup = (message: string) => {
   process.stdout.write(`[oneworks-client:desktop] ${message}\n`)
+}
+
+export const resolvePackagedLauncherClientRuntimeEnv = (
+  env: NodeJS.ProcessEnv = process.env
+): NodeJS.ProcessEnv => ({
+  ...env,
+  ...resolveDesktopRuntimePackageCacheVersionEnv(env)
+})
+
+const ensurePackagedRuntimePackageCache = (env: NodeJS.ProcessEnv) => {
+  if (isDev) return
+
+  try {
+    const cacheModule = nodeRequire(builtinPackageCachePath) as BuiltinPackageCacheModule
+    cacheModule.ensureBuiltinRuntimePackageCache?.({ env })
+  } catch (error) {
+    console.error('[oneworks-runtime] failed to refresh bundled runtime package cache', error)
+  }
 }
 
 const closeServer = (server: Server) =>
@@ -131,7 +163,9 @@ export const createLauncherClientServiceManager = ({
   const startPackagedLauncherClient = async (service: LauncherClientService) => {
     const startedAt = Date.now()
     logClientStartup('startup begin mode=packaged')
-    const distPath = resolveClientDistPath()
+    const packagedClientRuntimeEnv = resolvePackagedLauncherClientRuntimeEnv()
+    ensurePackagedRuntimePackageCache(packagedClientRuntimeEnv)
+    const distPath = resolveClientDistPath(packagedClientRuntimeEnv)
     if (distPath == null) {
       throw new Error('Client dist was not found. Run `pnpm -C apps/desktop build:client` first.')
     }

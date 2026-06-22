@@ -213,6 +213,32 @@ describe('createCodexSession RPC approval policy mapping', () => {
     expect(events.some((event: AdapterOutputEvent) => event.type === 'exit')).toBe(true)
   })
 
+  it('injects One Works chat guard into Codex developer instructions', async () => {
+    process.env.HOME = '/tmp'
+    const { proc } = makeProc()
+    spawnMock.mockReturnValue(proc)
+
+    const session = await createCodexSession(makeCtx(), {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'session-developer-instructions',
+      description: 'hi',
+      systemPrompt: 'Project-specific rule.',
+      onEvent: () => {}
+    } as any)
+
+    const spawnArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    const overrides = getConfigOverrides(spawnArgs)
+    const developerInstructions = getConfigOverride(overrides, 'developer_instructions=')
+    expect(developerInstructions).toContain(
+      'Treat greetings, acknowledgements, and other plain conversational messages'
+    )
+    expect(developerInstructions).toContain('Do not run Bash or other tools merely because')
+    expect(developerInstructions).toContain('Project-specific rule.')
+
+    session.kill()
+  })
+
   it('exits stream sessions when Codex reports a failed turn', async () => {
     process.env.HOME = '/tmp'
     const { proc } = makeProc()

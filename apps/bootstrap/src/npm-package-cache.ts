@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- package cache resolution keeps shared cache lookup and version fallback policy together. */
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { access, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
@@ -9,6 +10,12 @@ import { resolveBootstrapPackageCacheDir, resolveRealHomeDir } from './paths'
 const DEFAULT_PACKAGE_TAG = 'latest'
 const DEFAULT_PACKAGE_LOOKUP_TIMEOUT_MS = 1_000
 const DEFAULT_CACHE_FIRST = true
+const PACKAGE_CACHE_VERSION_PATTERN = /^[\w.+-]+$/u
+
+export const RUNTIME_PACKAGE_CACHE_VERSION_ENV = '__ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__'
+export const PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV = 'ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION'
+export const DESKTOP_DEV_RUNTIME_VERSION_ENV = '__ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__'
+export const PUBLIC_DESKTOP_DEV_RUNTIME_VERSION_ENV = 'ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION'
 
 interface PublishedPackageVersionMetadata {
   lookupKey: string
@@ -58,8 +65,33 @@ export const shouldUseCachedPackageVersionFirst = () => {
   return !['0', 'false', 'no', 'off'].includes(rawValue)
 }
 
-export const resolvePackageCacheDir = (packageName: string, version: string) => (
-  path.join(resolveBootstrapPackageCacheDir(), 'npm', sanitizePackageName(packageName), version)
+export const normalizePackageCacheVersion = (value: string | undefined) => {
+  const normalized = value?.trim()
+  if (normalized == null || normalized === '') return undefined
+  if (!PACKAGE_CACHE_VERSION_PATTERN.test(normalized) || normalized === '.' || normalized === '..') {
+    throw new Error(`Runtime package cache version contains unsupported characters: ${normalized}.`)
+  }
+  return normalized
+}
+
+export const resolveRuntimePackageCacheVersion = () => (
+  normalizePackageCacheVersion(process.env[RUNTIME_PACKAGE_CACHE_VERSION_ENV]) ??
+    normalizePackageCacheVersion(process.env[PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV]) ??
+    normalizePackageCacheVersion(process.env[DESKTOP_DEV_RUNTIME_VERSION_ENV]) ??
+    normalizePackageCacheVersion(process.env[PUBLIC_DESKTOP_DEV_RUNTIME_VERSION_ENV])
+)
+
+export const resolvePackageCacheDir = (
+  packageName: string,
+  version: string,
+  options: { cacheVersion?: string } = {}
+) => (
+  path.join(
+    resolveBootstrapPackageCacheDir(),
+    'npm',
+    sanitizePackageName(packageName),
+    normalizePackageCacheVersion(options.cacheVersion) ?? version
+  )
 )
 
 export const resolvePackageCacheRootDir = (packageName: string) => (

@@ -1,13 +1,16 @@
 /* eslint-disable max-lines -- service manager keeps child-process startup and shutdown transitions together. */
 import { spawn } from 'node:child_process'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 import process from 'node:process'
 
 import { resolvePrimaryWorkspaceFolder, resolveProjectHomePath } from '@oneworks/register/dotenv'
 
 import { getWorkspaceDescription, getWorkspaceDisplayName } from '../workspace-state.cjs'
+import { resolvePackagedCliPathEnv } from './cli-path-env'
 import { CLIENT_BASE, SERVER_HOST } from './constants'
 import {
+  builtinPackageCachePath,
   isDev,
   repoRoot,
   resolveBundledRuntimeConsumerBootstrapPath,
@@ -18,6 +21,7 @@ import {
 } from './paths'
 import { isChildProcessRunning, killChildProcess, writePrefixedChunk } from './process-utils'
 import { getAvailablePort, waitForServerStartup } from './ready-checks'
+import { resolveDesktopRuntimePackageCacheVersionEnv } from './runtime-cache-version'
 import type {
   DesktopRuntimeState,
   WindowRecord,
@@ -26,6 +30,12 @@ import type {
   WorkspaceService
 } from './types'
 import { refreshWorkspaceRuntimeCacheInBackground } from './updates'
+
+const nodeRequire = createRequire(__filename)
+
+interface BuiltinPackageCacheModule {
+  ensureBuiltinRuntimePackageCache?: (options?: { env?: NodeJS.ProcessEnv }) => unknown
+}
 
 interface WorkspaceServiceManagerInput {
   broadcastWorkspaceSelectorState: () => void
@@ -125,20 +135,44 @@ const resolveDirectSourceLoaderEnv = (
 export const resolveRuntimeConsumerBootstrapEnv = ():
   | Pick<
     NodeJS.ProcessEnv,
-    '__ONEWORKS_RUNTIME_PROTOCOL_FALLBACK_BOOTSTRAP_PATH__'
+    | '__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__'
+    | '__ONEWORKS_RUNTIME_PROTOCOL_FALLBACK_BOOTSTRAP_PATH__'
   >
   | {} =>
 {
   const bootstrapPath = resolveBundledRuntimeConsumerBootstrapPath()
+  if (bootstrapPath == null) return {}
+
   return {
-    ...(bootstrapPath == null ? {} : { __ONEWORKS_RUNTIME_PROTOCOL_FALLBACK_BOOTSTRAP_PATH__: bootstrapPath })
+    __ONEWORKS_RUNTIME_PROTOCOL_FALLBACK_BOOTSTRAP_PATH__: bootstrapPath,
+    ...(isDev ? {} : { __ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__: bootstrapPath })
   }
 }
+
+export const resolveDesktopDevRuntimeVersionEnv = (
+  env: NodeJS.ProcessEnv = process.env
+):
+  | Pick<
+    NodeJS.ProcessEnv,
+    '__ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__' | '__ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__'
+  >
+  | {} => resolveDesktopRuntimePackageCacheVersionEnv(env)
 
 const elapsedMs = (startedAt: number) => `${Date.now() - startedAt}ms`
 
 const logServerStartup = (displayName: string, message: string) => {
   process.stdout.write(`[oneworks-server:${displayName}] ${message}\n`)
+}
+
+const ensurePackagedRuntimePackageCache = (env: NodeJS.ProcessEnv) => {
+  if (isDev) return
+
+  try {
+    const cacheModule = nodeRequire(builtinPackageCachePath) as BuiltinPackageCacheModule
+    cacheModule.ensureBuiltinRuntimePackageCache?.({ env })
+  } catch (error) {
+    console.error('[oneworks-runtime] failed to refresh bundled runtime package cache', error)
+  }
 }
 
 export const createWorkspaceServiceManager = ({
@@ -248,11 +282,6 @@ export const createWorkspaceServiceManager = ({
     service.startPromise = (async () => {
       const startedAt = Date.now()
       logServerStartup(service.displayName, `startup begin workspace=${workspaceFolder}`)
-      const clientDistPath = isDev ? undefined : resolveClientDistPath()
-      if (!isDev && clientDistPath == null) {
-        throw new Error('Client dist was not found. Run `pnpm -C apps/desktop build:client` first.')
-      }
-
       const port = await getAvailablePort()
       logServerStartup(service.displayName, `startup port allocated port=${port} elapsed=${elapsedMs(startedAt)}`)
       const desktopClientOrigin = getDesktopClientOrigin()
@@ -264,14 +293,26 @@ export const createWorkspaceServiceManager = ({
       )
       const workspaceServiceDataPaths = getWorkspaceServiceDataPaths(workspaceFolder)
       const directSourceLoaderEnv = resolveDirectSourceLoaderEnv(serverExecutable)
+      const workspaceRuntimeEnv = createWorkspaceRuntimeEnv(workspaceFolder)
+      const runtimePackageCacheVersionEnv = resolveDesktopDevRuntimeVersionEnv(workspaceRuntimeEnv)
+      const packagedWorkspaceRuntimeEnv = {
+        ...workspaceRuntimeEnv,
+        ...runtimePackageCacheVersionEnv
+      }
+      ensurePackagedRuntimePackageCache(packagedWorkspaceRuntimeEnv)
+      const clientDistPath = isDev ? undefined : resolveClientDistPath(packagedWorkspaceRuntimeEnv)
+      if (!isDev && clientDistPath == null) {
+        throw new Error('Client dist was not found. Run `pnpm -C apps/desktop build:client` first.')
+      }
       const child = spawn(serverExecutable, [serverChildPath], {
         cwd: workspaceFolder,
         env: {
-          ...createWorkspaceRuntimeEnv(workspaceFolder),
+          ...packagedWorkspaceRuntimeEnv,
           DB_PATH: workspaceServiceDataPaths.dbPath,
           ELECTRON_RUN_AS_NODE: serverExecutable === process.execPath ? '1' : process.env.ELECTRON_RUN_AS_NODE,
+          ...resolvePackagedCliPathEnv(packagedWorkspaceRuntimeEnv),
           ...resolveRuntimeConsumerBootstrapEnv(),
-          ...resolveCachedServerPackageEnv(),
+          ...resolveCachedServerPackageEnv(packagedWorkspaceRuntimeEnv),
           ...directSourceLoaderEnv,
           __ONEWORKS_PROJECT_CLIENT_BASE__: CLIENT_BASE,
           __ONEWORKS_PROJECT_CLIENT_DIST_PATH__: clientDistPath ?? '',

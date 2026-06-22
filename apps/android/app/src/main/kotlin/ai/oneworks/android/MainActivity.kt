@@ -74,7 +74,7 @@ class MainActivity : Activity() {
         val dispatcher = NativeEventDispatcher(hostWebView)
         targetWebViews = TargetWebViewManager(this, targetContainer, dispatcher, assetLoader)
         deviceWorkspaces = DeviceWorkspaceController(this, dispatcher)
-        assetLoader.localBackend = AndroidLocalBackend(deviceWorkspaces)
+        assetLoader.localBackend = AndroidLocalBackend(deviceWorkspaces, assetLoader.getRuntimePackageCacheMetadata())
         hostWebView.addJavascriptInterface(
             HostBridge(
                 dispatcher = dispatcher,

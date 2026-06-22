@@ -69,6 +69,23 @@ describe('bootstrap cli', () => {
     })
   })
 
+  it('routes runtime package cache versions from flags', () => {
+    expect(routeBootstrapCommand('runtime', [
+      'install',
+      'server',
+      '--version=2.3.4',
+      '--cache-version',
+      'dev-local'
+    ])).toEqual({
+      action: 'install',
+      cacheVersion: 'dev-local',
+      json: false,
+      kind: 'runtime-package',
+      target: 'server',
+      version: '2.3.4'
+    })
+  })
+
   it('routes unknown commands through the CLI package', () => {
     expect(routeBootstrapCommand('hello', [])).toEqual({
       commandName: 'oneworks',
@@ -195,6 +212,46 @@ describe('bootstrap cli', () => {
     expect(installRuntimePackage).toHaveBeenCalledWith('cli', { version: '1.2.3' })
     expect(checkRuntimePackage).not.toHaveBeenCalled()
     expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining('"requestedVersion":"1.2.3"'))
+  })
+
+  it('dispatches runtime package installation with a cache version', async () => {
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const installRuntimePackage = vi.fn(async () => ({
+      cacheVersion: 'dev-local',
+      installed: true,
+      installedVersion: '1.2.3',
+      latestInstalled: true,
+      latestVersion: '1.2.3',
+      packageName: '@oneworks/server',
+      requestedVersion: '1.2.3',
+      target: 'server' as const,
+      updateAvailable: false
+    }))
+    const cli = createBootstrapCli({
+      checkRuntimePackage: vi.fn(async () => {
+        throw new Error('unexpected check')
+      }),
+      installRuntimePackage,
+      launchDesktopApp: vi.fn(async () => {}),
+      launchInstalledPackage: vi.fn(async () => 0)
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks',
+      'runtime',
+      'install',
+      'server',
+      '--version=1.2.3',
+      '--cache-version=dev-local',
+      '--json'
+    ])
+
+    expect(installRuntimePackage).toHaveBeenCalledWith('server', {
+      cacheVersion: 'dev-local',
+      version: '1.2.3'
+    })
+    expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining('"cacheVersion":"dev-local"'))
   })
 
   it('forwards --help after a routed command', async () => {

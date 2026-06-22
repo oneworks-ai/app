@@ -17,20 +17,38 @@ const BUILTIN_PLUGIN_PACKAGES = [
   '@oneworks/plugin-logger',
   '@oneworks/plugin-standard-dev'
 ]
+const BUILTIN_RUNTIME_SERVER_PACKAGE = '@oneworks/server'
+const BUILTIN_RUNTIME_CLIENT_PACKAGE = '@oneworks/client'
 
 const MANIFEST_FILE = '.oneworks-adapter-cache.json'
 const NPM_PACKAGE_MANIFEST_FILE = '.oneworks-package-cache.json'
+const PACKAGE_CACHE_LAYOUT_VERSION = 3
 const BUILTIN_ADAPTER_PACKAGE_ENV = '__ONEWORKS_DESKTOP_BUILTIN_ADAPTER_PACKAGES__'
+const RUNTIME_PACKAGE_CACHE_VERSION_ENV = '__ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__'
+const PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV = 'ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION'
+const DESKTOP_DEV_RUNTIME_VERSION_ENV = '__ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__'
+const PUBLIC_DESKTOP_DEV_RUNTIME_VERSION_ENV = 'ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION'
+const PACKAGE_CACHE_VERSION_PATTERN = /^[\w.+-]+$/u
 const SKIPPED_PACKAGE_ENTRIES = new Set(['node_modules'])
-const CACHE_LAYOUT_VERSION = 2
 
 const normalizeEnvPath = value => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
 
+const normalizePackageCacheVersion = (value) => {
+  const normalized = normalizeEnvPath(value)
+  if (normalized == null) return undefined
+  if (!PACKAGE_CACHE_VERSION_PATTERN.test(normalized) || normalized === '.' || normalized === '..') {
+    throw new Error(`Runtime package cache version contains unsupported characters: ${normalized}.`)
+  }
+  return normalized
+}
+
 const sanitizePackageName = packageName => packageName.replace(/^@/, '').replace(/[\\/]/g, '__')
 
 const splitPackageName = packageName => packageName.split('/')
+
+const hashString = value => crypto.createHash('sha256').update(value).digest('hex')
 
 const resolveRealHomeDir = (env = process.env) => (
   normalizeEnvPath(env.__ONEWORKS_PROJECT_REAL_HOME__) ??
@@ -41,6 +59,13 @@ const resolveRealHomeDir = (env = process.env) => (
 
 const resolvePackageCacheRootDir = (env = process.env, homeDir = resolveRealHomeDir(env)) => (
   normalizeEnvPath(env.__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__) ?? path.join(homeDir, '.oneworks', 'bootstrap')
+)
+
+const resolveDesktopDevRuntimeVersion = (env = process.env) => (
+  normalizePackageCacheVersion(env[RUNTIME_PACKAGE_CACHE_VERSION_ENV]) ??
+    normalizePackageCacheVersion(env[PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV]) ??
+    normalizePackageCacheVersion(env[DESKTOP_DEV_RUNTIME_VERSION_ENV]) ??
+    normalizePackageCacheVersion(env[PUBLIC_DESKTOP_DEV_RUNTIME_VERSION_ENV])
 )
 
 const resolveAdapterPackagesRoot = (homeDir = resolveRealHomeDir(), packageCacheRootDir) => (
@@ -184,17 +209,21 @@ const resolvePackageDirFromNodeModules = (packageDir, packageName) => {
 const resolvePackageClosure = (packageName, packageDir) => {
   const packages = []
   const seen = new Set()
-  const queue = [{ packageDir, packageName }]
+  const queue = [{ packageDir, packageName, root: true }]
 
   while (queue.length > 0) {
     const current = queue.shift()
     const packageInfo = readPackageInfo(current.packageDir)
-    if (packageInfo?.name !== current.packageName) continue
+    if (packageInfo?.name == null) continue
+    if (current.root && packageInfo.name !== current.packageName) continue
 
     const key = `${packageInfo.name}@${packageInfo.version ?? ''}:${current.packageDir}`
     if (seen.has(key)) continue
     seen.add(key)
-    packages.push(current)
+    packages.push({
+      packageDir: current.packageDir,
+      packageName: packageInfo.name
+    })
 
     for (const dependency of resolvePackageDependencyEntries(current.packageDir)) {
       const dependencyDir = resolveDependencyPackageDir(current.packageDir, dependency.name)
@@ -204,7 +233,8 @@ const resolvePackageClosure = (packageName, packageDir) => {
       if (dependencyDir != null) {
         queue.push({
           packageDir: dependencyDir,
-          packageName: dependency.name
+          packageName: dependency.name,
+          root: false
         })
       }
     }
@@ -253,55 +283,86 @@ const copyPackageBody = (sourcePackageDir, targetPackageDir) => {
   }
 }
 
-const resolveTargetPackageDir = (targetNodeModulesDir, packageName) => (
-  path.join(targetNodeModulesDir, ...splitPackageName(packageName))
+const createPackageStoreDirName = ({ packageDir, packageInfo }) => (
+  `${sanitizePackageName(packageInfo.name)}@${packageInfo.version ?? 'unknown'}-${hashString(packageDir).slice(0, 16)}`
 )
 
-const copyPackageClosure = (packageName, sourcePackageDir, targetNodeModulesDir) => {
-  const packages = resolvePackageClosure(packageName, sourcePackageDir)
-  const primaryPackageDirs = new Map()
-  for (const item of packages) {
-    if (!primaryPackageDirs.has(item.packageName)) {
-      primaryPackageDirs.set(item.packageName, item.packageDir)
+const resolvePackageStoreDir = ({ packageDir, packageInfo, targetNodeModulesDir }) => (
+  path.join(
+    targetNodeModulesDir,
+    '.oneworks-packages',
+    createPackageStoreDirName({ packageDir, packageInfo }),
+    'node_modules',
+    ...splitPackageName(packageInfo.name)
+  )
+)
+
+const createPackageGraphEntries = (packageName, sourcePackageDir, targetNodeModulesDir) => (
+  resolvePackageClosure(packageName, sourcePackageDir).map((item) => {
+    const packageDir = fs.realpathSync(item.packageDir)
+    const packageInfo = readPackageInfo(packageDir)
+    if (packageInfo?.name !== item.packageName) {
+      throw new Error(`Invalid package dependency ${item.packageName}.`)
     }
+
+    return {
+      packageDir,
+      packageInfo,
+      packageName: item.packageName,
+      storePackageDir: resolvePackageStoreDir({
+        packageDir,
+        packageInfo,
+        targetNodeModulesDir
+      })
+    }
+  })
+)
+
+const symlinkPackageDir = (targetPackageDir, sourcePackageDir) => {
+  fs.rmSync(targetPackageDir, { force: true, recursive: true })
+  fs.mkdirSync(path.dirname(targetPackageDir), { recursive: true })
+  const linkTarget = process.platform === 'win32'
+    ? sourcePackageDir
+    : path.relative(path.dirname(targetPackageDir), sourcePackageDir) || '.'
+  fs.symlinkSync(linkTarget, targetPackageDir, process.platform === 'win32' ? 'junction' : 'dir')
+}
+
+const copyPackageClosure = (packageName, sourcePackageDir, targetNodeModulesDir) => {
+  const entries = createPackageGraphEntries(packageName, sourcePackageDir, targetNodeModulesDir)
+  const entryByPackageDir = new Map(entries.map(entry => [entry.packageDir, entry]))
+
+  for (const entry of entries) {
+    copyPackageBody(entry.packageDir, entry.storePackageDir)
   }
 
-  for (const [currentPackageName, currentPackageDir] of primaryPackageDirs) {
-    copyPackageBody(currentPackageDir, resolveTargetPackageDir(targetNodeModulesDir, currentPackageName))
-  }
-
-  const copiedDependencyTargets = new Set()
-  const copyNestedDependencies = (currentPackageDir, targetPackageDir, sourceStack = new Set()) => {
-    if (sourceStack.has(currentPackageDir)) return
-    const nextSourceStack = new Set(sourceStack)
-    nextSourceStack.add(currentPackageDir)
-
-    for (const dependency of resolvePackageDependencyEntries(currentPackageDir)) {
-      const dependencyDir = resolveDependencyPackageDir(currentPackageDir, dependency.name)
+  for (const entry of entries) {
+    for (const dependency of resolvePackageDependencyEntries(entry.packageDir)) {
+      const dependencyDir = resolveDependencyPackageDir(entry.packageDir, dependency.name)
       if (dependencyDir == null && !dependency.optional) {
-        throw new Error(`Failed to resolve dependency ${dependency.name} for ${currentPackageDir}.`)
+        throw new Error(`Failed to resolve dependency ${dependency.name} for ${entry.packageName}.`)
       }
       if (dependencyDir == null) continue
 
-      const primaryPackageDir = primaryPackageDirs.get(dependency.name)
-      const dependencyTargetDir = primaryPackageDir === dependencyDir
-        ? resolveTargetPackageDir(targetNodeModulesDir, dependency.name)
-        : path.join(targetPackageDir, 'node_modules', ...splitPackageName(dependency.name))
-
-      const targetKey = `${dependencyDir}\0${dependencyTargetDir}`
-      if (primaryPackageDir !== dependencyDir && !copiedDependencyTargets.has(targetKey)) {
-        copyPackageBody(dependencyDir, dependencyTargetDir)
-        copiedDependencyTargets.add(targetKey)
-      }
-
-      copyNestedDependencies(dependencyDir, dependencyTargetDir, nextSourceStack)
+      const dependencyEntry = entryByPackageDir.get(fs.realpathSync(dependencyDir))
+      if (dependencyEntry == null) continue
+      symlinkPackageDir(
+        path.join(entry.storePackageDir, 'node_modules', ...splitPackageName(dependency.name)),
+        dependencyEntry.storePackageDir
+      )
     }
   }
 
-  copyNestedDependencies(sourcePackageDir, resolveTargetPackageDir(targetNodeModulesDir, packageName))
+  const rootEntry = entryByPackageDir.get(fs.realpathSync(sourcePackageDir))
+  if (rootEntry == null) {
+    throw new Error(`Failed to materialize package graph for ${packageName}.`)
+  }
+  symlinkPackageDir(
+    path.join(targetNodeModulesDir, ...splitPackageName(packageName)),
+    rootEntry.storePackageDir
+  )
 }
 
-const isCurrentCachedPackage = ({ cacheDir, integrity, packageName, version }) => {
+const isCurrentCachedPackage = ({ cacheDir, cacheVersion, integrity, packageName, version }) => {
   const packageDir = resolveAdapterPackageInstallDir(cacheDir, packageName)
   const packageInfo = readPackageInfo(packageDir)
   if (packageInfo?.name !== packageName || packageInfo.version !== version) {
@@ -311,13 +372,18 @@ const isCurrentCachedPackage = ({ cacheDir, integrity, packageName, version }) =
   const manifest = readManifest(cacheDir)
   if (
     manifest?.source === 'builtin' &&
-    manifest.layoutVersion === CACHE_LAYOUT_VERSION &&
+    (manifest.cacheVersion ?? manifest.version) === cacheVersion &&
+    manifest.layoutVersion === PACKAGE_CACHE_LAYOUT_VERSION &&
     manifest.name === packageName &&
     manifest.version === version &&
     manifest.integrity === integrity
   ) {
     return true
   }
+
+  if (manifest?.source === 'builtin') return false
+
+  if (cacheVersion !== version) return false
 
   try {
     return hashPackageClosure(packageName, packageDir) === integrity
@@ -337,13 +403,15 @@ const isCurrentCachedNpmPackage = ({ cacheDir, cacheVersion, integrity, packageN
   if (
     manifest?.source === 'builtin' &&
     manifest.cacheVersion === cacheVersion &&
-    manifest.layoutVersion === CACHE_LAYOUT_VERSION &&
+    manifest.layoutVersion === PACKAGE_CACHE_LAYOUT_VERSION &&
     manifest.name === packageName &&
     manifest.version === version &&
     manifest.integrity === integrity
   ) {
     return true
   }
+
+  if (manifest?.source === 'builtin') return false
 
   try {
     return hashPackageClosure(packageName, packageDir) === integrity
@@ -352,23 +420,32 @@ const isCurrentCachedNpmPackage = ({ cacheDir, cacheVersion, integrity, packageN
   }
 }
 
-const materializeBuiltinAdapterPackage = ({ homeDir, packageCacheRootDir, packageName, sourcePackageDir }) => {
+const materializeBuiltinAdapterPackage = ({
+  cacheVersion,
+  homeDir,
+  packageCacheRootDir,
+  packageName,
+  sourcePackageDir
+}) => {
   const packageInfo = readPackageInfo(sourcePackageDir)
   if (packageInfo?.name !== packageName || packageInfo.version == null) {
     throw new Error(`Invalid built-in adapter package: ${packageName}`)
   }
 
+  const resolvedCacheVersion = normalizePackageCacheVersion(cacheVersion) ?? packageInfo.version
   const integrity = hashPackageClosure(packageName, sourcePackageDir)
-  const cacheDir = resolveAdapterPackageCacheDir(packageName, packageInfo.version, homeDir, packageCacheRootDir)
+  const cacheDir = resolveAdapterPackageCacheDir(packageName, resolvedCacheVersion, homeDir, packageCacheRootDir)
   if (
     isCurrentCachedPackage({
       cacheDir,
+      cacheVersion: resolvedCacheVersion,
       integrity,
       packageName,
       version: packageInfo.version
     })
   ) {
     return {
+      cacheVersion: resolvedCacheVersion,
       cacheDir,
       packageDir: resolveAdapterPackageInstallDir(cacheDir, packageName),
       seeded: false,
@@ -382,9 +459,10 @@ const materializeBuiltinAdapterPackage = ({ homeDir, packageCacheRootDir, packag
   try {
     copyPackageClosure(packageName, sourcePackageDir, path.join(stagingDir, 'node_modules'))
     writeManifest(stagingDir, {
+      cacheVersion: resolvedCacheVersion,
       createdAt: new Date().toISOString(),
       integrity,
-      layoutVersion: CACHE_LAYOUT_VERSION,
+      layoutVersion: PACKAGE_CACHE_LAYOUT_VERSION,
       name: packageName,
       source: 'builtin',
       version: packageInfo.version
@@ -399,6 +477,7 @@ const materializeBuiltinAdapterPackage = ({ homeDir, packageCacheRootDir, packag
   }
 
   return {
+    cacheVersion: resolvedCacheVersion,
     cacheDir,
     packageDir: resolveAdapterPackageInstallDir(cacheDir, packageName),
     seeded: true,
@@ -445,7 +524,68 @@ const materializeBuiltinPluginPackage = ({
       cacheVersion,
       createdAt: new Date().toISOString(),
       integrity,
-      layoutVersion: CACHE_LAYOUT_VERSION,
+      layoutVersion: PACKAGE_CACHE_LAYOUT_VERSION,
+      name: packageName,
+      source: 'builtin',
+      version: packageInfo.version
+    }, NPM_PACKAGE_MANIFEST_FILE)
+
+    fs.mkdirSync(path.dirname(cacheDir), { recursive: true })
+    fs.rmSync(cacheDir, { recursive: true, force: true })
+    fs.renameSync(stagingDir, cacheDir)
+  } catch (error) {
+    fs.rmSync(stagingDir, { recursive: true, force: true })
+    throw error
+  }
+
+  return {
+    cacheDir,
+    packageDir: resolveNpmPackageInstallDir(cacheDir, packageName),
+    seeded: true
+  }
+}
+
+const materializeBuiltinStaticNpmPackage = ({
+  cacheVersion,
+  homeDir,
+  packageCacheRootDir,
+  packageName,
+  sourcePackageDir
+}) => {
+  const packageInfo = readPackageInfo(sourcePackageDir)
+  if (packageInfo?.name !== packageName || packageInfo.version == null) {
+    throw new Error(`Invalid built-in static package: ${packageName}`)
+  }
+
+  const integrity = hashPackageDirectory(sourcePackageDir)
+  const cacheDir = resolveNpmPackageCacheDir(packageName, cacheVersion, homeDir, packageCacheRootDir)
+  if (
+    isCurrentCachedNpmPackage({
+      cacheDir,
+      cacheVersion,
+      integrity,
+      packageName,
+      version: packageInfo.version
+    })
+  ) {
+    return {
+      cacheDir,
+      packageDir: resolveNpmPackageInstallDir(cacheDir, packageName),
+      seeded: false
+    }
+  }
+
+  const stagingDir = `${cacheDir}.tmp-${process.pid}-${Date.now()}`
+  fs.rmSync(stagingDir, { recursive: true, force: true })
+  fs.mkdirSync(stagingDir, { recursive: true })
+  try {
+    const targetPackageDir = resolveNpmPackageInstallDir(stagingDir, packageName)
+    copyPackageBody(sourcePackageDir, targetPackageDir)
+    writeManifest(stagingDir, {
+      cacheVersion,
+      createdAt: new Date().toISOString(),
+      integrity,
+      layoutVersion: PACKAGE_CACHE_LAYOUT_VERSION,
       name: packageName,
       source: 'builtin',
       version: packageInfo.version
@@ -474,12 +614,19 @@ const resolveBuiltinPluginPackageDir = (packageName) => (
   fs.realpathSync(path.dirname(require.resolve(`${packageName}/package.json`)))
 )
 
+const resolveBundledRuntimeClientPackageDir = () => {
+  const packageDir = path.resolve(__dirname, '..', 'runtime-packages', '@oneworks', 'client')
+  return fs.existsSync(path.join(packageDir, 'package.json')) ? packageDir : undefined
+}
+
 const ensureBuiltinAdapterPackageCache = (options = {}) => {
   const homeDir = options.homeDir ?? resolveRealHomeDir(options.env)
   const packageCacheRootDir = options.packageCacheRootDir ?? resolvePackageCacheRootDir(options.env, homeDir)
   const packages = options.packages ?? BUILTIN_ADAPTER_PACKAGES
+  const cacheVersion = options.cacheVersion ?? resolveDesktopDevRuntimeVersion(options.env)
   const seededPackages = packages.map((packageName) =>
     materializeBuiltinAdapterPackage({
+      cacheVersion,
       homeDir,
       packageCacheRootDir,
       packageName,
@@ -492,6 +639,7 @@ const ensureBuiltinAdapterPackageCache = (options = {}) => {
       return [
         packageName,
         {
+          cacheVersion: seededPackage.cacheVersion,
           cacheDir: seededPackage.cacheDir,
           packageDir: seededPackage.packageDir,
           version: seededPackage.version
@@ -528,22 +676,65 @@ const ensureBuiltinPluginPackageCache = (options = {}) => {
   })
 }
 
+const ensureBuiltinRuntimePackageCache = (options = {}) => {
+  const cacheVersion = normalizePackageCacheVersion(options.cacheVersion) ??
+    resolveDesktopDevRuntimeVersion(options.env)
+  if (cacheVersion == null) return []
+
+  const homeDir = options.homeDir ?? resolveRealHomeDir(options.env)
+  const packageCacheRootDir = options.packageCacheRootDir ?? resolvePackageCacheRootDir(options.env, homeDir)
+  const seeded = []
+
+  const serverPackageDir = options.resolvePackageDir?.(BUILTIN_RUNTIME_SERVER_PACKAGE) ??
+    resolveBuiltinPluginPackageDir(BUILTIN_RUNTIME_SERVER_PACKAGE)
+  seeded.push(materializeBuiltinPluginPackage({
+    cacheVersion,
+    homeDir,
+    packageCacheRootDir,
+    packageName: BUILTIN_RUNTIME_SERVER_PACKAGE,
+    sourcePackageDir: serverPackageDir
+  }))
+
+  const clientPackageDir = options.resolvePackageDir?.(BUILTIN_RUNTIME_CLIENT_PACKAGE) ??
+    resolveBundledRuntimeClientPackageDir()
+  if (clientPackageDir != null) {
+    seeded.push(materializeBuiltinStaticNpmPackage({
+      cacheVersion,
+      homeDir,
+      packageCacheRootDir,
+      packageName: BUILTIN_RUNTIME_CLIENT_PACKAGE,
+      sourcePackageDir: clientPackageDir
+    }))
+  }
+
+  return seeded
+}
+
 module.exports = {
   BUILTIN_ADAPTER_PACKAGES,
   BUILTIN_ADAPTER_PACKAGE_ENV,
   BUILTIN_PLUGIN_PACKAGES,
-  CACHE_LAYOUT_VERSION,
+  BUILTIN_RUNTIME_CLIENT_PACKAGE,
+  BUILTIN_RUNTIME_SERVER_PACKAGE,
+  DESKTOP_DEV_RUNTIME_VERSION_ENV,
   MANIFEST_FILE,
   NPM_PACKAGE_MANIFEST_FILE,
+  PACKAGE_CACHE_LAYOUT_VERSION,
+  PUBLIC_DESKTOP_DEV_RUNTIME_VERSION_ENV,
+  PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV,
+  RUNTIME_PACKAGE_CACHE_VERSION_ENV,
   ensureBuiltinAdapterPackageCache,
   ensureBuiltinPluginPackageCache,
+  ensureBuiltinRuntimePackageCache,
   hashPackageDirectory,
   hashPackageClosure,
   materializeBuiltinAdapterPackage,
   materializeBuiltinPluginPackage,
+  materializeBuiltinStaticNpmPackage,
   resolveAdapterPackageCacheDir,
   resolveAdapterPackageInstallDir,
   resolveAdapterPackagesRoot,
+  resolveDesktopDevRuntimeVersion,
   resolveNpmPackageCacheDir,
   resolveNpmPackageInstallDir,
   resolvePackageCacheRootDir,

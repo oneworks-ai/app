@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 const { spawn } = require('node:child_process')
+const { createHash } = require('node:crypto')
 const process = require('node:process')
 
 const shouldOpenCurrentWorkspace = process.argv.includes('--workspace')
@@ -12,6 +13,12 @@ if (shouldOpenCurrentWorkspace) {
 } else if (env.ONEWORKS_DESKTOP_LAUNCH_MODE == null || env.ONEWORKS_DESKTOP_LAUNCH_MODE.trim() === '') {
   env.ONEWORKS_DESKTOP_LAUNCH_MODE = 'empty'
 }
+
+const runtimePackageCacheVersion = env.ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION?.trim() ||
+  env.ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION?.trim() ||
+  `dev-${createHash('sha256').update(process.cwd()).digest('hex').slice(0, 12)}`
+env.ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION = runtimePackageCacheVersion
+env.ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION = runtimePackageCacheVersion
 
 const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
 const child = spawn(pnpmCommand, ['-C', 'apps/desktop', 'dev'], {

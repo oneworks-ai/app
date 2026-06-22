@@ -37,6 +37,7 @@ export interface DesktopBuildSource {
   branch: string
   buildTime: string
   gitHash: string
+  runtimePackageCacheVersion?: string
 }
 
 export interface DesktopSettings {
