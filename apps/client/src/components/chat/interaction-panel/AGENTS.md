@@ -38,3 +38,14 @@
   - `[iframe-debug]`：宿主侧注入、target 轮询、postMessage 收发和 dock/device 状态同步。
   - `[oneworks-devtools]`：devtools iframe 内部 bootstrap、toolbar registry rewrite、dock menu 注入、shadow root style 注入和父层 message。
 - DevTools 原生 toolbar 有自己的尺寸规则。Chii 的 `.tabbed-pane-header-tab` 原生高度是 `26px`，外层 `.tabbed-pane-header` 可能因为分隔线显示为 `27px`；遇到高度问题先区分“原生值回来了”还是“我们的覆盖没加载”。
+
+## 上下文捕获与页面标注经验
+
+- 页面标注的目标会话必须来自创建标注入口所属的 session / interaction panel owner，不要从被标注页面的 URL 反推。iframe 里打开 One Works、其他页面或嵌套会话时，页面 URL 只作为证据来源。
+- 标注输入框和标注点都应锚定用户点击位置。元素 rect 只用于 hover 高亮、信息卡和截图 overlay；不要把输入框固定贴到元素边缘，否则大元素或容器边界附近会显得跳位。
+- 标注模式里打开输入框后要暂停 hover capture layer。此时不应继续检测其他元素，也不应触发底层页面 hover 效果；Esc 先关闭当前选中 / 输入框，再决定是否退出标注模式。
+- 待发送的标注点必须和 sender 上方 pending annotation 引用绑定。进入标注模式时展示点，退出时隐藏；从 sender 移除引用后，iframe/webview 侧对应点也要消失。
+- pending text selection、annotation chip、message comment chip 这类浮层预览应通过全局 portal / fixed positioning 展示，避免被 iframe/webview、split pane 或 sender 容器裁剪。
+- iframe 场景不要承诺可用页面截图：同源 iframe 可以读 DOM，但 canvas / foreignObject 截图容易受跨域图片、字体、样式和浏览器安全策略影响。Electron webview 场景优先用 `capturePage()`，普通 iframe 标注可以只发送结构化证据。
+- 标注 hover 高亮的圆角应跟随目标元素 computed `border-radius`，但 overlay 自身必须 `pointer-events: none`，避免改变目标页面 hover 状态。
+- 标注 toolbar 状态要成组处理：进入标注模式后隐藏截图按钮，注释按钮变为 active 并显示“注释中”；再次点击或按 Esc 能退出。新增 toolbar action 时同步检查标注 active 态，不要让多个互斥捕获入口同时可用。
