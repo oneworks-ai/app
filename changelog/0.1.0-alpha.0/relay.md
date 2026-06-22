@@ -14,3 +14,4 @@
 - Add Relay access groups, team member groups, scoped API tokens, and OpenAPI documentation for their management APIs.
 - Polish Relay Admin access-group permission editing with scoped capability lists, quota controls, localized copy, and team/platform-specific permission catalogs.
 - Document the official domain, DNS, and email topology for public, dev, Cloudflare, Vercel, and support-mail deployments.
+- Add Feishu SSO support with an Admin preset, branded login icon, Feishu-specific OAuth profile handling, and setup documentation for self-built enterprise apps.

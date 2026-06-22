@@ -6,17 +6,17 @@ Relay connects One Works plugin devices with cloud sessions. Most users should u
 
 Before creating platform projects, OAuth clients, mail domains, or passkeys, decide these settings first:
 
-| Setting          | Recommendation                                                                                                                                        |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public domain    | Choose the final user-facing domain such as `https://relay.example.com` before configuring SSO or passkeys.                                           |
-| Deployment shape | Use Postgres for a Vercel single-project deployment, Pages + Worker / Durable Object for Cloudflare, and usually SQLite for single-host Node.         |
-| `PUBLIC_URL`     | Set `ONEWORKS_RELAY_PUBLIC_URL` to the real browser-facing Admin / login / API origin.                                                                |
-| CORS             | In production, set `ONEWORKS_RELAY_ALLOW_ORIGIN` to the allowed frontend origin instead of `*`.                                                       |
-| Secrets          | Store admin tokens, device metadata secrets, database URLs, mail keys, and OAuth secrets in the platform secret store.                                |
-| Mail             | Send verification, invite, and system emails from a stable sending domain with a role-address Reply-To; do not attach mail DNS to the Relay web host. |
-| SSO              | Callback URLs must exactly match the URL Relay sends; built-in GitHub and Google providers use their dedicated env vars.                              |
-| Passkey          | Enroll on the final HTTPS origin; set `ONEWORKS_RELAY_PASSKEY_ORIGIN` / `ONEWORKS_RELAY_PASSKEY_RP_ID` when they must be explicit.                    |
-| Plugin servers   | Put only final public origins in Relay plugin `servers[]`; dev, prod, and company services can coexist.                                               |
+| Setting          | Recommendation                                                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Public domain    | Choose the final user-facing domain such as `https://relay.example.com` before configuring SSO or passkeys.                                            |
+| Deployment shape | Use Postgres for a Vercel single-project deployment, Pages + Worker / Durable Object for Cloudflare, and usually SQLite for single-host Node.          |
+| `PUBLIC_URL`     | Set `ONEWORKS_RELAY_PUBLIC_URL` to the real browser-facing Admin / login / API origin.                                                                 |
+| CORS             | In production, set `ONEWORKS_RELAY_ALLOW_ORIGIN` to the allowed frontend origin instead of `*`.                                                        |
+| Secrets          | Store admin tokens, device metadata secrets, database URLs, mail keys, and OAuth secrets in the platform secret store.                                 |
+| Mail             | Send verification, invite, and system emails from a stable sending domain with a role-address Reply-To; do not attach mail DNS to the Relay web host.  |
+| SSO              | Callback URLs must exactly match the URL Relay sends; built-in GitHub and Google providers use dedicated env vars, while Feishu uses the Admin preset. |
+| Passkey          | Enroll on the final HTTPS origin; set `ONEWORKS_RELAY_PASSKEY_ORIGIN` / `ONEWORKS_RELAY_PASSKEY_RP_ID` when they must be explicit.                     |
+| Plugin servers   | Put only final public origins in Relay plugin `servers[]`; dev, prod, and company services can coexist.                                                |
 
 Configuration belongs to the deployment environment, not to code constants. Do not put real account IDs, project IDs, personal emails, database URLs, OAuth secrets, Resend keys, verification codes, or temporary deployment URLs into README files, `.oo/docs`, rules, screenshots, or example config.
 
@@ -59,7 +59,7 @@ Platform admins manage platform access groups and their capabilities / quotas fr
 - Password: for existing non-SSO accounts with a password.
 - Verification code: for existing non-SSO / `email_code` accounts only. It sends a login code to that account email. It does not create accounts and cannot sign in SSO-only accounts that share the same email.
 - Passkey: one entry supports both sign-in and registration. The user first enters an email or account name and clicks "Use PASS KEY"; if a passkey exists, the browser authentication prompt opens; if none exists and registration is allowed, registration begins.
-- SSO: uses Google, GitHub, or custom OAuth/OIDC providers configured by an admin.
+- SSO: uses Google, GitHub, Feishu, or custom OAuth/OIDC providers configured by an admin.
 
 ## Passkey Registration UX
 
@@ -81,8 +81,8 @@ Existing users must still verify email before adding a new passkey, even when ne
 Relay does not treat email as the global account key. `users.email` is a contact address; the server-side auth identities decide which login source belongs to which user.
 
 - `loginId` is a user-visible, globally unique account name and can be changed after login.
-- SSO accounts bind by `(provider, providerUserId)`. The same email through Google and GitHub creates separate Relay users.
-- Google and generic OIDC providers must return a verified email. GitHub uses the verified primary email.
+- SSO accounts bind by `(provider, providerUserId)`. The same email through Google, GitHub, and Feishu creates separate Relay users.
+- Google and generic OIDC providers must return a verified email. GitHub uses the verified primary email. Feishu contact email is used only as display/contact metadata, not as Relay-verified email, and Relay uses a `.invalid` placeholder contact email when Feishu omits it.
 - Email verification-code login matches only `email_code` identities and cannot sign in SSO-only accounts just because the email matches.
 - Non-SSO users created by password, invite, passkey, or admin flows receive an `email_code` identity and can use verification-code login.
 
@@ -102,7 +102,7 @@ Common callback paths:
 
 Provider secrets managed from Admin are stored server-side. List and detail APIs return only redacted values. User-facing SSO buttons should use branded provider icons instead of the generic login icon.
 
-Built-in GitHub and Google login use dedicated environment variables. Do not put `github` or `google` into `ONEWORKS_RELAY_SSO_PROVIDERS`; those provider ids are reserved. If an existing deployment has the old value, remove it from every Vercel, Cloudflare, or equivalent platform env / secret store, redeploy, and verify `/health`, `/api/auth/providers`, and the OAuth start `302` on each public origin.
+Built-in GitHub and Google login use dedicated environment variables. Do not put `github` or `google` into `ONEWORKS_RELAY_SSO_PROVIDERS`; those provider ids are reserved. If an existing deployment has the old value, remove it from every Vercel, Cloudflare, or equivalent platform env / secret store, redeploy, and verify `/health`, `/api/auth/providers`, and the OAuth start `302` on each public origin. For a Feishu self-built app, use the Feishu Admin preset, put App ID in Client ID and App Secret in Client Secret, then add `<relay-origin>/api/auth/oauth/feishu/callback` in the Feishu developer console. Local loopback callbacks such as `http://127.0.0.1:<port>/api/auth/oauth/feishu/callback` are valid when they exactly match the URL Relay sends. Feishu self-built apps are normally scoped to users in the current enterprise tenant; after an administrator publishes the app version and approves the requested permissions, users must belong to that Feishu tenant and have access to the app to complete login. Do not treat this path as a public OAuth entry for arbitrary external users.
 
 For private deployment, choose the final public domain before configuring SSO and passkeys. A Vercel single-project deployment usually serves Admin, API, and login from one domain. In a Cloudflare Pages + Worker split deployment, register OAuth callbacks on the Pages/custom domain that users open, not on a hidden Worker URL. Whether dev, test, and production share one OAuth client is a deployment decision; use separate clients when secrets, callbacks, or audiences need isolation.
 

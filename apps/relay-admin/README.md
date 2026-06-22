@@ -93,7 +93,7 @@ Keep new admin areas in their own `src/features/<area>/` directory. The top-leve
 
 SSO provider list/detail responses only include a redacted `clientSecret`. The edit form leaves the secret unchanged when the secret field is empty and rotates it only when a new value is submitted.
 
-The SSO create form includes a Google preset. Selecting it fills the Google OAuth/OIDC endpoints and scope, keeps the secret field empty for the operator to paste locally, and shows the exact Redirect URI that must be registered on the Google OAuth Web application client.
+The SSO create form includes Google and Feishu presets. Selecting a preset fills the OAuth endpoints and scope, keeps the secret field empty for the operator to paste locally, and shows the exact Redirect URI that must be registered in the provider console. Feishu uses the self-built app OAuth endpoints and should register `/api/auth/oauth/feishu/callback` for the Relay origin being tested.
 
 ## Current Handoff
 

@@ -352,6 +352,7 @@ body,
 }
 
 .relay-login-app .relay-admin-icon,
+.relay-login-app__feishu-icon,
 .relay-login-app__github-icon,
 .relay-login-app__google-icon {
   width: 18px;
@@ -372,6 +373,13 @@ body,
   height: 100%;
   display: block;
   fill: currentColor;
+}
+
+.relay-login-app__feishu-icon img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
 }
 
 .relay-login-app .relay-admin-icon svg * {

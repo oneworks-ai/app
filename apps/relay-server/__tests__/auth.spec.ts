@@ -23,6 +23,18 @@ const githubOauth = {
   }
 }
 
+const feishuOauth = {
+  feishu: {
+    authorizationUrl: 'https://accounts.feishu.cn/open-apis/authen/v1/authorize',
+    clientId: 'feishu-client-id',
+    clientSecret: 'feishu-client-secret',
+    displayName: '飞书',
+    scope: 'contact:user.email:readonly',
+    tokenUrl: 'https://open.feishu.cn/open-apis/authen/v2/oauth/token',
+    userInfoUrl: 'https://open.feishu.cn/open-apis/authen/v1/user_info'
+  }
+}
+
 const stubGoogleProfile = (email: string, options: { emailVerified?: boolean } = {}) => {
   vi.stubGlobal(
     'fetch',
@@ -86,6 +98,53 @@ const stubGithubProfile = (input: {
       return new Response(JSON.stringify({ error: 'unexpected fetch' }), { status: 500 })
     })
   )
+}
+
+const stubFeishuProfile = (input: {
+  email?: string | null
+  openId?: string
+  tenantKey?: string
+  unionId?: string
+} = {}) => {
+  const requests: Array<{ body: unknown; contentType: string | null; url: string }> = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (requestInput: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(requestInput)
+      requests.push({
+        body: init?.body,
+        contentType: init?.headers instanceof Headers
+          ? init.headers.get('content-type')
+          : init?.headers != null && !Array.isArray(init.headers)
+          ? String((init.headers as Record<string, string>)['content-type'] ?? '')
+          : null,
+        url
+      })
+      if (url === 'https://open.feishu.cn/open-apis/authen/v2/oauth/token') {
+        return new Response(JSON.stringify({ code: 0, access_token: 'feishu-access-token' }), { status: 200 })
+      }
+      if (url === 'https://open.feishu.cn/open-apis/authen/v1/user_info') {
+        const email = input.email === undefined ? 'owner@feishu.example' : input.email
+        return new Response(
+          JSON.stringify({
+            code: 0,
+            msg: 'success',
+            data: {
+              avatar_url: 'https://feishu.example/avatar.png',
+              ...(email == null ? {} : { email }),
+              name: 'Feishu Owner',
+              open_id: input.openId ?? 'ou-owner',
+              tenant_key: input.tenantKey ?? 'tenant-demo',
+              union_id: input.unionId ?? 'on-owner'
+            }
+          }),
+          { status: 200 }
+        )
+      }
+      return new Response(JSON.stringify({ error: 'unexpected fetch' }), { status: 500 })
+    })
+  )
+  return requests
 }
 
 const readLoginConfig = (html: string) => {
@@ -288,6 +347,79 @@ describe('relay server auth routes', () => {
 
     expect(callback.response.status).toBe(403)
     expect(callback.body).toEqual({ error: 'OAuth profile did not include a verified email address.' })
+  })
+
+  it('creates a Feishu SSO user from Feishu user_info without treating email as verified', async () => {
+    const { args, baseUrl } = await listenRelay({
+      oauth: feishuOauth,
+      publicBaseUrl: 'http://127.0.0.1:8788'
+    })
+    const start = await requestRaw(baseUrl, '/api/auth/oauth/feishu/start', { redirect: 'manual' })
+    const state = (await readRelayStore(args.dataPath)).oauthStates[0].state
+    const requests = stubFeishuProfile()
+
+    const callback = await requestJson(baseUrl, `/api/auth/oauth/feishu/callback?code=ok&state=${state}`)
+    const store = await readRelayStore(args.dataPath)
+    const tokenRequest = requests.find(request => request.url.endsWith('/oauth/token'))
+
+    expect(start.status).toBe(302)
+    expect(start.headers.get('location')).toContain('https://accounts.feishu.cn/open-apis/authen/v1/authorize')
+    expect(start.headers.get('location')).toContain('client_id=feishu-client-id')
+    expect(start.headers.get('location')).toContain('scope=contact%3Auser.email%3Areadonly')
+    expect(start.headers.get('location')).toContain(
+      encodeURIComponent('http://127.0.0.1:8788/api/auth/oauth/feishu/callback')
+    )
+    expect(tokenRequest?.contentType).toBe('application/json; charset=utf-8')
+    expect(JSON.parse(String(tokenRequest?.body))).toMatchObject({
+      client_id: 'feishu-client-id',
+      client_secret: 'feishu-client-secret',
+      code: 'ok',
+      grant_type: 'authorization_code',
+      redirect_uri: 'http://127.0.0.1:8788/api/auth/oauth/feishu/callback'
+    })
+    expect(callback.response.status).toBe(200)
+    expect(callback.body.user).toMatchObject({
+      avatarUrl: 'https://feishu.example/avatar.png',
+      email: 'owner@feishu.example',
+      name: 'Feishu Owner',
+      provider: 'feishu',
+      role: 'owner'
+    })
+    expect(store.authIdentities).toEqual([expect.objectContaining({
+      email: 'owner@feishu.example',
+      emailVerified: false,
+      provider: 'feishu',
+      providerUserId: 'tenant-demo:on-owner'
+    })])
+  })
+
+  it('creates a Feishu SSO user with a local placeholder email when Feishu omits email', async () => {
+    const { args, baseUrl } = await listenRelay({
+      oauth: feishuOauth,
+      publicBaseUrl: 'http://127.0.0.1:8788'
+    })
+    await requestRaw(baseUrl, '/api/auth/oauth/feishu/start', { redirect: 'manual' })
+    const state = (await readRelayStore(args.dataPath)).oauthStates[0].state
+    stubFeishuProfile({ email: null })
+
+    const callback = await requestJson(baseUrl, `/api/auth/oauth/feishu/callback?code=ok&state=${state}`)
+    const store = await readRelayStore(args.dataPath)
+    const user = store.users[0]
+
+    expect(callback.response.status).toBe(200)
+    expect(callback.body.user).toMatchObject({
+      name: 'Feishu Owner',
+      provider: 'feishu',
+      role: 'owner'
+    })
+    expect(user.email).toMatch(/^feishu-[a-f0-9]{16}@feishu\.relay\.invalid$/)
+    expect(user.loginId).toMatch(/^feishu-[a-f0-9]{16}$/)
+    expect(store.authIdentities).toEqual([expect.objectContaining({
+      email: user.email,
+      emailVerified: false,
+      provider: 'feishu',
+      providerUserId: 'tenant-demo:on-owner'
+    })])
   })
 
   it('creates email invite login sessions and enforces max uses with the invite role', async () => {
@@ -603,6 +735,19 @@ describe('relay server auth routes', () => {
       icon: 'github',
       id: 'github',
       startUrl: expect.stringContaining('/api/auth/oauth/github/start')
+    })])
+  })
+
+  it('marks 飞书 login providers with the Feishu icon', async () => {
+    const { baseUrl } = await listenRelay({ oauth: feishuOauth })
+    const response = await requestRaw(baseUrl, '/login?redirect_uri=https%3A%2F%2Fapp.example%2Fcallback')
+    const config = readLoginConfig(await response.text())
+
+    expect(response.status).toBe(200)
+    expect(config.providers).toEqual([expect.objectContaining({
+      icon: 'feishu',
+      id: 'feishu',
+      startUrl: expect.stringContaining('/api/auth/oauth/feishu/start')
     })])
   })
 

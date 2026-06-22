@@ -69,9 +69,19 @@ describe('sso provider form parsing', () => {
     }))).toBeUndefined()
   })
 
-  it('provides a Google SSO preset and callback URL', () => {
+  it('provides Google and 飞书 SSO presets and callback URLs', () => {
+    const feishuPreset = getSsoProviderPreset('feishu')
     const preset = getSsoProviderPreset('google')
 
+    expect(feishuPreset?.values).toMatchObject({
+      id: 'feishu',
+      name: '飞书',
+      type: 'oauth2',
+      authorizationUrl: 'https://accounts.feishu.cn/open-apis/authen/v1/authorize',
+      tokenUrl: 'https://open.feishu.cn/open-apis/authen/v2/oauth/token',
+      userInfoUrl: 'https://open.feishu.cn/open-apis/authen/v1/user_info',
+      scope: 'contact:user.email:readonly'
+    })
     expect(preset?.values).toMatchObject({
       id: 'google-sso',
       name: 'Google',

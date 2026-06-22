@@ -51,7 +51,7 @@ Environment variables:
 - `ONEWORKS_RELAY_PASSKEY_TIMEOUT_SECONDS`: passkey ceremony and challenge timeout, default `60`.
 - `ONEWORKS_RELAY_GITHUB_CLIENT_ID` / `ONEWORKS_RELAY_GITHUB_CLIENT_SECRET`: GitHub OAuth
 - `ONEWORKS_RELAY_GOOGLE_CLIENT_ID` / `ONEWORKS_RELAY_GOOGLE_CLIENT_SECRET`: Google OAuth
-- `ONEWORKS_RELAY_SSO_PROVIDERS`: JSON object or array for multiple custom OAuth/OIDC SSO providers
+- `ONEWORKS_RELAY_SSO_PROVIDERS`: JSON object or array for multiple custom OAuth/OIDC SSO providers, including Feishu self-built app OAuth when not configured from Admin
 - `ONEWORKS_RELAY_SESSION_TTL_SECONDS`: login session lifetime
 
 ## Managed service and private deployment
@@ -105,6 +105,16 @@ Add this callback URL to the GitHub app/client:
 
 Use a product-facing app name such as `OneWorks Login` or your own brand. If one GitHub app/client is shared by local, dev, and production, every callback URL added to it becomes part of that app's trust surface; use separate apps/clients when environments need separate secrets, audiences, or callback slots.
 
+## Feishu SSO
+
+For an enterprise self-built Feishu app, open `/admin`, choose the Feishu preset in the SSO provider form, then fill the Feishu App ID as Client ID and App Secret as Client Secret. Add this redirect URL in the Feishu developer console:
+
+```text
+<relay origin>/api/auth/oauth/feishu/callback
+```
+
+For local development, a loopback callback such as `http://127.0.0.1:8788/api/auth/oauth/feishu/callback` is valid as long as Relay sends that exact URL and it is listed in the Feishu app security settings. Self-built Feishu apps are normally an enterprise-tenant login path: publish the app version, have the tenant admin approve the requested permission, and expect only users in that Feishu tenant with app access to complete login. The preset uses `contact:user.email:readonly` so Relay can store a contact email when Feishu returns one, but Feishu email is not treated as a verified login proof. If the Feishu account has no email field, Relay still logs in by Feishu tenant/user id and stores a `.invalid` placeholder contact email. Relay binds Feishu users by the Feishu tenant/user id returned from `user_info`, not by email.
+
 ## Passkey login
 
 The `/login` page supports password, passkey, and email verification code sign-in. `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD` chooses the first method shown, and the browser stores the last selected method for the next visit. Email verification code sign-in uses `POST /api/auth/email-verification/send` with `purpose=login`, then `POST /api/auth/email-code-login`; it only signs in existing enabled users.
@@ -113,7 +123,7 @@ Passkey sign-in and passkey account creation run on the same origin as the Relay
 
 Passkey registration requires a verified email code by default. Set `ONEWORKS_RELAY_PASSKEY_EMAIL_VERIFICATION_REQUIRED=off` only when the deployment intentionally allows new passkey self-registration without email confirmation; existing users must still verify email before adding a new passkey. With the default `ONEWORKS_RELAY_REGISTRATION_MODE=invite_required`, a new user must also enter a valid invite code; with `email_verified`, a verified email can self-register without an invite; with `admin_created_only`, only existing Relay users can bind passkeys after email verification.
 
-Relay does not treat `users.email` as the global account key. `users.email` is a contact address; login ownership is stored in auth identities. SSO users are keyed by `(provider, providerUserId)`, so the same verified email from Google and GitHub creates separate Relay users. Email-code login is limited to `email_code` identities and cannot sign in SSO-only users that merely share the same email. `loginId` is the user-visible unique account name and can be changed after login.
+Relay does not treat `users.email` as the global account key. `users.email` is a contact address; login ownership is stored in auth identities. SSO users are keyed by `(provider, providerUserId)`, so the same verified email from Google and GitHub creates separate Relay users. Feishu contact email is stored for display/contact only and is not marked as Relay-verified; when Feishu omits email, Relay uses a `.invalid` placeholder contact email. Email-code login is limited to `email_code` identities and cannot sign in SSO-only users that merely share the same email. `loginId` is the user-visible unique account name and can be changed after login.
 
 The passkey API surface is:
 
@@ -215,7 +225,7 @@ The admin token principal receives all known capabilities. Device tokens receive
 
 Capability names live in `src/permissions/capabilities.ts`; the role matrix lives in `src/permissions/roles.ts`; principal helpers live in `src/permissions/principals.ts`. Add new domains by defining a capability first, assigning it in the role matrix, and then using the shared permission helpers in the route or forwarding access helper. Do not add ad hoc role checks in routes.
 
-Custom OAuth/OIDC-compatible providers are configured with explicit authorization, token, and userinfo endpoints. Relay expects a stable provider user id and verified email metadata from the userinfo/profile response; automatic OIDC discovery, JWKS fetching, and ID token validation are not part of the generic provider path unless that support is added explicitly.
+Custom OAuth/OIDC-compatible providers are configured with explicit authorization, token, and userinfo endpoints. Relay expects a stable provider user id and verified email metadata from the userinfo/profile response; automatic OIDC discovery, JWKS fetching, and ID token validation are not part of the generic provider path unless that support is added explicitly. Feishu is handled as a provider-specific profile shape because its token request uses JSON and its `user_info` response wraps profile fields under `data`.
 
 Custom SSO example:
 

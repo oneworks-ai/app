@@ -1,9 +1,10 @@
 import type { RelayOAuthClient } from '../types.js'
 import { isRecord } from '../utils.js'
+import { isFeishuProvider, readFeishuProfile } from './feishu-provider.js'
 
 type BuiltInAuthProvider = 'github' | 'google'
 
-interface OAuthProfile {
+export interface OAuthProfile {
   avatarUrl?: string
   email: string
   emailVerified: boolean
@@ -90,19 +91,21 @@ export const buildOAuthAuthorizeUrl = (params: {
 
 const fetchAccessToken = async (provider: string, client: RelayOAuthClient, code: string, redirectUri: string) => {
   const config = providerConfig(provider, client)
+  const requestBody = {
+    client_id: client.clientId,
+    client_secret: client.clientSecret,
+    code,
+    grant_type: 'authorization_code',
+    redirect_uri: redirectUri
+  }
+  const feishu = isFeishuProvider(provider, client)
   const response = await fetch(config.tokenUrl, {
     method: 'POST',
     headers: {
       accept: 'application/json',
-      'content-type': 'application/x-www-form-urlencoded'
+      'content-type': feishu ? 'application/json; charset=utf-8' : 'application/x-www-form-urlencoded'
     },
-    body: new URLSearchParams({
-      client_id: client.clientId,
-      client_secret: client.clientSecret,
-      code,
-      grant_type: 'authorization_code',
-      redirect_uri: redirectUri
-    })
+    body: feishu ? JSON.stringify(requestBody) : new URLSearchParams(requestBody)
   })
   const body = await response.json().catch(() => ({}))
   if (!response.ok || !isRecord(body) || typeof body.access_token !== 'string') {
@@ -163,6 +166,7 @@ export const fetchOAuthProfile = async (params: {
   const token = await fetchAccessToken(params.provider, params.client, params.code, params.redirectUri)
   const config = providerConfig(params.provider, params.client)
   const profile = await fetchJson(config.userUrl, token)
+  if (isFeishuProvider(params.provider, params.client)) return readFeishuProfile(profile)
   const email = await readProviderEmail(params.provider, token, profile)
   if (email.email === '') throw new Error('OAuth profile did not include a verified email address.')
   return {
