@@ -26,6 +26,7 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - Subagent 执行“取最新代码并启动 web 服务”超过 1 分钟：见 [Subagent 启动 Web 服务超过 1 分钟](./maintenance/common-issues.md#subagent-启动-web-服务超过-1-分钟)。
 - 开发服务输出 `[dev-start] ready` 后仍继续 `ps` / `curl` / 读 log：见 [开发服务 ready 后仍继续验证](./maintenance/common-issues.md#开发服务-ready-后仍继续验证)。
 - 启动入口混用 `start.sh`、`screen` 或旧脚本：见 [开发服务启动入口混用历史脚本](./maintenance/common-issues.md#开发服务启动入口混用历史脚本)。
+- PR 截图证据断链、引用已删除分支或截图来源不真实：见 [PR 截图证据断链或来源不真实](./maintenance/common-issues.md#pr-截图证据断链或来源不真实)。
 - 复杂任务需要拆 PR、开子线程、监控或沉淀经验：见 [任务规划、委派与经验沉淀](./maintenance/task-planning.md)。
 - PR body 缺少经验复盘确认或需要维护提醒评论：见 [PR 经验复盘门禁](./maintenance/pr-experience-review.md)。
 - 桌面端浏览器数据同步、密码管理、历史记录、下载内容或项目 / 会话范围过滤：见 [桌面端浏览器数据管理经验](./maintenance/browser-data-management.md)。

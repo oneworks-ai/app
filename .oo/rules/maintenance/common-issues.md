@@ -7,6 +7,7 @@
 - [Subagent 启动 Web 服务超过 1 分钟](#subagent-启动-web-服务超过-1-分钟)
 - [开发服务 ready 后仍继续验证](#开发服务-ready-后仍继续验证)
 - [开发服务启动入口混用历史脚本](#开发服务启动入口混用历史脚本)
+- [PR 截图证据断链或来源不真实](#pr-截图证据断链或来源不真实)
 - [移动端 WebView / 工作区 tabs 反复返工](#移动端-webview--工作区-tabs-反复返工)
 
 ## Subagent 启动 Web 服务超过 1 分钟
@@ -61,6 +62,21 @@
 - Docs：`pnpm tools dev-start docs`。
 
 不要恢复根目录 `start.sh`，不要用 `screen` 管理本仓开发服务。需要查看启动器实现时，从 `scripts/cli.ts` 的 `dev-start` command 和 `scripts/dev-start.ts` 入口开始。
+
+## PR 截图证据断链或来源不真实
+
+症状关键词：`PR 截图看不到`、`Screenshots 断图`、`github blob head 分支`、`删除 PR 分支后图片失效`、`截图不是实时效果`、`PR change policy screenshot`。
+
+标准处理：
+
+- PR body 里的截图链接不要指向计划删除的 head 分支，例如 `blob/codex/...`。如果截图作为仓库资产提交，优先在 PR 合并后改成 merge commit 固定链接，或在合并前指向不会被删除的稳定 ref。
+- 如果使用 `.github/pr-screenshots/<pr>/...` 这类仓库内截图资产，合并并删除分支后必须复查 PR body 是否仍能渲染图片；断图时用 `gh pr edit` 改到 merge commit 或 `main` 上的 URL。
+- 如果截图不是本次运行环境的新鲜真实截图，而是复用用户提供的截图、旧截图或示意图，但仍作为 PR 截图证据使用，必须在 PR body 的截图区域明确说明图片来源以及“不是本次新鲜运行截图”。聊天回复可以补充说明，但不能替代 PR body 里的披露。不要把复用截图说成“已用真实效果截图验证”。
+- 本地缺少截图工具时，先说明限制，再选择：用 in-app browser / Chrome 自动化截图、上传 GitHub user attachment、或提交仓库内截图资产。不要静默用旧图替代真实验证。
+
+原因：
+
+UI PR 的 `pr-change-policy` 只检查 PR body 是否有截图证据，不会判断图片是否真实可见或是否来自当前实现。把图片链接写到会被删除的 PR 分支上，会在 merge 后变成断图；复用旧图但不说明来源，会误导 reviewer 对 UI 实际状态的判断。
 
 ## 移动端 WebView / 工作区 tabs 反复返工
 
