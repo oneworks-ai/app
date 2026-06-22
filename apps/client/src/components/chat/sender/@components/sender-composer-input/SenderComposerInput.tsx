@@ -10,7 +10,13 @@ import type {
 } from '../../@types/sender-toolbar-types'
 import type { SenderVoiceInputController } from '../../@types/sender-voice-input'
 
-import type { PendingContextFile, PendingImage } from '../../@types/sender-composer'
+import type {
+  PendingAnnotation,
+  PendingAnnotationPreviewState,
+  PendingContextFile,
+  PendingImage,
+  PendingTextSelection
+} from '../../@types/sender-composer'
 import type { SenderEditorHandle } from '../../@types/sender-editor'
 import type { SenderProps } from '../../@types/sender-props'
 import type { SenderCompletionMatch, SenderTokenDecoration } from '../../@utils/sender-completion'
@@ -23,8 +29,15 @@ export function SenderComposerInput({
   sessionInfo,
   pendingImages,
   pendingFiles,
+  pendingAnnotations,
+  pendingTextSelections,
   onRemovePendingImage,
   onRemovePendingFile,
+  onRemovePendingAnnotation,
+  onRemovePendingTextSelection,
+  onClearPendingAnnotations,
+  onClearPendingTextSelections,
+  onPendingAnnotationPreviewChange,
   placeholder,
   input,
   disabled,
@@ -51,8 +64,15 @@ export function SenderComposerInput({
   sessionInfo?: SessionInfo | null
   pendingImages: PendingImage[]
   pendingFiles: PendingContextFile[]
+  pendingAnnotations: PendingAnnotation[]
+  pendingTextSelections: PendingTextSelection[]
   onRemovePendingImage: (id: string) => void
   onRemovePendingFile: (path: string) => void
+  onRemovePendingAnnotation: (id: string) => void
+  onRemovePendingTextSelection: (id: string) => void
+  onClearPendingAnnotations: () => void
+  onClearPendingTextSelections: () => void
+  onPendingAnnotationPreviewChange?: (state: PendingAnnotationPreviewState) => void
   placeholder: string
   input: string
   disabled: boolean
@@ -86,8 +106,15 @@ export function SenderComposerInput({
       <SenderAttachments
         pendingImages={pendingImages}
         pendingFiles={pendingFiles}
+        pendingAnnotations={pendingAnnotations}
+        pendingTextSelections={pendingTextSelections}
         onRemovePendingImage={onRemovePendingImage}
         onRemovePendingFile={onRemovePendingFile}
+        onRemovePendingAnnotation={onRemovePendingAnnotation}
+        onRemovePendingTextSelection={onRemovePendingTextSelection}
+        onClearPendingAnnotations={onClearPendingAnnotations}
+        onClearPendingTextSelections={onClearPendingTextSelections}
+        onPendingAnnotationPreviewChange={onPendingAnnotationPreviewChange}
       />
       <SenderMonacoEditor
         editorRef={editorRef}

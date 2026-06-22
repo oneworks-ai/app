@@ -174,6 +174,17 @@ const iconBackgroundSchema = z.enum(['transparent', 'solid', 'textured'])
 const desktopIconAppearanceSchema = z.enum(['system', 'light', 'dark'])
 const desktopIconThemeSchema = z.enum(['industrial', 'metal', 'matrix'])
 const desktopUpdateChannelSchema = z.enum(['stable', 'rc', 'beta', 'alpha'])
+const desktopContextCaptureOverlayPlacementSchema = z.enum(['auto', 'above', 'below'])
+
+const desktopContextCaptureConfigSchema = z.object({
+  allowApplications: z.array(z.string()).optional()
+    .describe('Application names or bundle ids where desktop text selection capture may show'),
+  denyApplications: z.array(z.string()).optional()
+    .describe('Application names or bundle ids where desktop text selection capture must stay hidden'),
+  enabled: z.boolean().optional().describe('Enable desktop text selection capture overlay'),
+  overlayPlacement: desktopContextCaptureOverlayPlacementSchema.optional()
+    .describe('Preferred selection overlay placement relative to selected text')
+})
 
 export const appearanceConfigSchema = z.object({
   primaryColor: appearancePrimaryColorSchema.optional()
@@ -183,6 +194,8 @@ export const appearanceConfigSchema = z.object({
 })
 
 export const desktopConfigSchema = z.object({
+  contextCapture: desktopContextCaptureConfigSchema.optional()
+    .describe('Desktop text selection capture and floating overlay settings'),
   launcherShortcut: z.string().optional().describe('Global desktop launcher shortcut'),
   openLastWorkspaceOnStartup: z.boolean().optional()
     .describe('Open the most recent desktop workspace when the app starts without an explicit workspace'),

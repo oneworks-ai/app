@@ -22,6 +22,7 @@ const MANIFEST_FILE = '.oneworks-adapter-cache.json'
 const NPM_PACKAGE_MANIFEST_FILE = '.oneworks-package-cache.json'
 const BUILTIN_ADAPTER_PACKAGE_ENV = '__ONEWORKS_DESKTOP_BUILTIN_ADAPTER_PACKAGES__'
 const SKIPPED_PACKAGE_ENTRIES = new Set(['node_modules'])
+const CACHE_LAYOUT_VERSION = 2
 
 const normalizeEnvPath = value => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
@@ -252,10 +253,52 @@ const copyPackageBody = (sourcePackageDir, targetPackageDir) => {
   }
 }
 
+const resolveTargetPackageDir = (targetNodeModulesDir, packageName) => (
+  path.join(targetNodeModulesDir, ...splitPackageName(packageName))
+)
+
 const copyPackageClosure = (packageName, sourcePackageDir, targetNodeModulesDir) => {
-  for (const item of resolvePackageClosure(packageName, sourcePackageDir)) {
-    copyPackageBody(item.packageDir, path.join(targetNodeModulesDir, ...splitPackageName(item.packageName)))
+  const packages = resolvePackageClosure(packageName, sourcePackageDir)
+  const primaryPackageDirs = new Map()
+  for (const item of packages) {
+    if (!primaryPackageDirs.has(item.packageName)) {
+      primaryPackageDirs.set(item.packageName, item.packageDir)
+    }
   }
+
+  for (const [currentPackageName, currentPackageDir] of primaryPackageDirs) {
+    copyPackageBody(currentPackageDir, resolveTargetPackageDir(targetNodeModulesDir, currentPackageName))
+  }
+
+  const copiedDependencyTargets = new Set()
+  const copyNestedDependencies = (currentPackageDir, targetPackageDir, sourceStack = new Set()) => {
+    if (sourceStack.has(currentPackageDir)) return
+    const nextSourceStack = new Set(sourceStack)
+    nextSourceStack.add(currentPackageDir)
+
+    for (const dependency of resolvePackageDependencyEntries(currentPackageDir)) {
+      const dependencyDir = resolveDependencyPackageDir(currentPackageDir, dependency.name)
+      if (dependencyDir == null && !dependency.optional) {
+        throw new Error(`Failed to resolve dependency ${dependency.name} for ${currentPackageDir}.`)
+      }
+      if (dependencyDir == null) continue
+
+      const primaryPackageDir = primaryPackageDirs.get(dependency.name)
+      const dependencyTargetDir = primaryPackageDir === dependencyDir
+        ? resolveTargetPackageDir(targetNodeModulesDir, dependency.name)
+        : path.join(targetPackageDir, 'node_modules', ...splitPackageName(dependency.name))
+
+      const targetKey = `${dependencyDir}\0${dependencyTargetDir}`
+      if (primaryPackageDir !== dependencyDir && !copiedDependencyTargets.has(targetKey)) {
+        copyPackageBody(dependencyDir, dependencyTargetDir)
+        copiedDependencyTargets.add(targetKey)
+      }
+
+      copyNestedDependencies(dependencyDir, dependencyTargetDir, nextSourceStack)
+    }
+  }
+
+  copyNestedDependencies(sourcePackageDir, resolveTargetPackageDir(targetNodeModulesDir, packageName))
 }
 
 const isCurrentCachedPackage = ({ cacheDir, integrity, packageName, version }) => {
@@ -268,6 +311,7 @@ const isCurrentCachedPackage = ({ cacheDir, integrity, packageName, version }) =
   const manifest = readManifest(cacheDir)
   if (
     manifest?.source === 'builtin' &&
+    manifest.layoutVersion === CACHE_LAYOUT_VERSION &&
     manifest.name === packageName &&
     manifest.version === version &&
     manifest.integrity === integrity
@@ -293,6 +337,7 @@ const isCurrentCachedNpmPackage = ({ cacheDir, cacheVersion, integrity, packageN
   if (
     manifest?.source === 'builtin' &&
     manifest.cacheVersion === cacheVersion &&
+    manifest.layoutVersion === CACHE_LAYOUT_VERSION &&
     manifest.name === packageName &&
     manifest.version === version &&
     manifest.integrity === integrity
@@ -339,6 +384,7 @@ const materializeBuiltinAdapterPackage = ({ homeDir, packageCacheRootDir, packag
     writeManifest(stagingDir, {
       createdAt: new Date().toISOString(),
       integrity,
+      layoutVersion: CACHE_LAYOUT_VERSION,
       name: packageName,
       source: 'builtin',
       version: packageInfo.version
@@ -399,6 +445,7 @@ const materializeBuiltinPluginPackage = ({
       cacheVersion,
       createdAt: new Date().toISOString(),
       integrity,
+      layoutVersion: CACHE_LAYOUT_VERSION,
       name: packageName,
       source: 'builtin',
       version: packageInfo.version
@@ -485,6 +532,7 @@ module.exports = {
   BUILTIN_ADAPTER_PACKAGES,
   BUILTIN_ADAPTER_PACKAGE_ENV,
   BUILTIN_PLUGIN_PACKAGES,
+  CACHE_LAYOUT_VERSION,
   MANIFEST_FILE,
   NPM_PACKAGE_MANIFEST_FILE,
   ensureBuiltinAdapterPackageCache,

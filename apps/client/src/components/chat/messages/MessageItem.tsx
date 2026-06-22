@@ -21,6 +21,7 @@ import { Sender } from '../sender/Sender'
 import { ToolRenderer } from '../tools/core/ToolRenderer'
 import { AgentRoomChildRequestCard } from './AgentRoomChildRequestCard'
 import { AgentRoomEnvelopeCard } from './AgentRoomEnvelopeCard'
+import { BrowserCommentMessage } from './BrowserCommentMessage'
 import { MessageContextMenu } from './MessageContextMenu'
 import { MessageFooter } from './MessageFooter'
 import { MessageImage } from './MessageImage'
@@ -28,6 +29,7 @@ import type { MessagePreviewImage } from './MessageImage'
 import { MessageImagePreviewModal } from './MessageImagePreviewModal'
 import { parseAgentRoomChildRequest } from './agent-room-child-request'
 import { parseAgentRoomEnvelope } from './agent-room-envelope'
+import { isBrowserCommentScreenshotName, parseBrowserCommentMessage } from './browser-comment-message'
 import type { MessageBranchNavigation } from './message-branch-navigation'
 import {
   getCopyableMessageText,
@@ -289,6 +291,39 @@ function MessageItemComponent({
     renderMarkdownImage,
     resolvedWorkspaceRootPath
   ])
+  const browserCommentSource = useMemo(() => {
+    if (typeof msg.content === 'string') return msg.content
+    if (!Array.isArray(msg.content)) return ''
+    return msg.content
+      .filter((item): item is Extract<ChatMessageContent, { type: 'text' }> => item.type === 'text')
+      .map(item => item.text)
+      .join('\n\n')
+  }, [msg.content])
+  const browserCommentScreenshotUrls = useMemo(() => {
+    if (!Array.isArray(msg.content)) return []
+    return msg.content
+      .filter((item): item is Extract<ChatMessageContent, { type: 'image' }> => (
+        item.type === 'image' && isBrowserCommentScreenshotName(item.name)
+      ))
+      .map(item => item.url)
+  }, [msg.content])
+  const browserCommentMessage = useMemo(() => {
+    const parsedMessage = parseBrowserCommentMessage(browserCommentSource)
+    if (parsedMessage == null) return null
+
+    return {
+      ...parsedMessage,
+      comments: parsedMessage.comments.map((comment, index) => ({
+        ...comment,
+        screenshotUrl: browserCommentScreenshotUrls[index]
+      }))
+    }
+  }, [browserCommentScreenshotUrls, browserCommentSource])
+  const renderTextContent = useCallback((content: string) => {
+    const parsed = parseBrowserCommentMessage(content)
+    const textContent = parsed == null || parsed.comments.length === 0 ? content.trim() : parsed.remainingText
+    return textContent === '' ? null : renderMarkdownContent(textContent)
+  }, [renderMarkdownContent])
 
   const renderContent = () => {
     if (msg.content == null) return null
@@ -303,15 +338,19 @@ function MessageItemComponent({
 
     if (typeof msg.content === 'string') {
       return (
-        renderMarkdownContent(msg.content)
+        renderTextContent(msg.content)
       )
     }
 
     if (!Array.isArray(msg.content)) return null
 
-    const hasContent = msg.content.some((c: ChatMessageContent) => (
-      c.type === 'text' || c.type === 'image' || c.type === 'file'
-    )) ||
+    const hasContent = msg.content.some((c: ChatMessageContent) => {
+      if (c.type === 'text') {
+        const parsedText = parseBrowserCommentMessage(c.text)
+        return (parsedText == null ? c.text.trim() : parsedText.remainingText) !== ''
+      }
+      return (c.type === 'image' && !isBrowserCommentScreenshotName(c.name)) || c.type === 'file'
+    }) ||
       msg.toolCall != null
     if (!hasContent) return null
 
@@ -321,11 +360,15 @@ function MessageItemComponent({
           if (item.type === 'text') {
             return (
               <React.Fragment key={i}>
-                {renderMarkdownContent(item.text)}
+                {renderTextContent(item.text)}
               </React.Fragment>
             )
           }
           if (item.type === 'image') {
+            if (isBrowserCommentScreenshotName(item.name)) {
+              return null
+            }
+
             return (
               <MessageImage
                 key={i}
@@ -369,7 +412,8 @@ function MessageItemComponent({
   }
 
   const content = renderContent()
-  if (content == null) return null
+  const hasBrowserComments = browserCommentMessage != null && browserCommentMessage.comments.length > 0
+  if (content == null && !hasBrowserComments) return null
 
   const handleStartEdit = () => {
     if (editableContent == null) return
@@ -481,65 +525,70 @@ function MessageItemComponent({
           data-message-id={originalMessage.id}
         >
           <div className={`message-body-container ${isEditing ? 'is-editing' : ''}`}>
-            <div className={`bubble ${isEditing ? 'is-editing' : ''}`}>
-              {isEditing
-                ? (
-                  <div className='message-inline-editor'>
-                    <Sender
-                      variant='inline-edit'
-                      sessionId={sessionId}
-                      sessionInfo={sessionInfo}
-                      initialContent={editableContent}
-                      submitLabel={t('chat.send')}
-                      submitLoading={isSubmitting}
-                      autoFocus
-                      onCancel={() => {
-                        onCancelEditing(actionMessageId)
-                      }}
-                      onSend={handleSubmitEditText}
-                      onSendContent={handleSubmitEditContent}
-                      onInterrupt={() => {}}
-                    />
-                  </div>
-                )
-                : (
-                  <>
-                    {agentRoomMessageSource != null && (
-                      <div
-                        className={[
-                          'message-source-line',
-                          `message-source-line--${agentRoomMessageSource.kind}`,
-                          agentRoomMessageSource.source === 'leader' ? 'message-source-line--leader' : ''
-                        ].filter(Boolean).join(' ')}
-                        data-agent-room-source={agentRoomMessageSource.source}
-                        aria-label={`${agentRoomMessageSourceLabel}${agentRoomMessageSourceSeparator}`}
-                        title={`${agentRoomMessageSourceLabel}${agentRoomMessageSourceSeparator}`}
-                      >
-                        {agentRoomMessageSource.avatarLabel != null
-                          ? (
-                            <span
-                              className='message-source-line__avatar message-source-line__avatar--configured'
-                              aria-hidden='true'
-                            >
-                              {agentRoomMessageSource.avatarLabel}
-                            </span>
-                          )
-                          : (
-                            <RoomPixelAvatar
-                              className='message-source-line__avatar message-source-line__avatar--pixel'
-                              seed={agentRoomMessageSource.avatarSeed}
-                            />
-                          )}
-                        <span className='message-source-line__text'>
-                          {agentRoomMessageSourceLabel}
-                          {agentRoomMessageSourceSeparator}
-                        </span>
-                      </div>
-                    )}
-                    {content}
-                  </>
-                )}
-            </div>
+            {!isEditing && browserCommentMessage != null && browserCommentMessage.comments.length > 0 && (
+              <BrowserCommentMessage message={browserCommentMessage} />
+            )}
+            {(isEditing || content != null) && (
+              <div className={`bubble ${isEditing ? 'is-editing' : ''}`}>
+                {isEditing
+                  ? (
+                    <div className='message-inline-editor'>
+                      <Sender
+                        variant='inline-edit'
+                        sessionId={sessionId}
+                        sessionInfo={sessionInfo}
+                        initialContent={editableContent}
+                        submitLabel={t('chat.send')}
+                        submitLoading={isSubmitting}
+                        autoFocus
+                        onCancel={() => {
+                          onCancelEditing(actionMessageId)
+                        }}
+                        onSend={handleSubmitEditText}
+                        onSendContent={handleSubmitEditContent}
+                        onInterrupt={() => {}}
+                      />
+                    </div>
+                  )
+                  : (
+                    <>
+                      {agentRoomMessageSource != null && (
+                        <div
+                          className={[
+                            'message-source-line',
+                            `message-source-line--${agentRoomMessageSource.kind}`,
+                            agentRoomMessageSource.source === 'leader' ? 'message-source-line--leader' : ''
+                          ].filter(Boolean).join(' ')}
+                          data-agent-room-source={agentRoomMessageSource.source}
+                          aria-label={`${agentRoomMessageSourceLabel}${agentRoomMessageSourceSeparator}`}
+                          title={`${agentRoomMessageSourceLabel}${agentRoomMessageSourceSeparator}`}
+                        >
+                          {agentRoomMessageSource.avatarLabel != null
+                            ? (
+                              <span
+                                className='message-source-line__avatar message-source-line__avatar--configured'
+                                aria-hidden='true'
+                              >
+                                {agentRoomMessageSource.avatarLabel}
+                              </span>
+                            )
+                            : (
+                              <RoomPixelAvatar
+                                className='message-source-line__avatar message-source-line__avatar--pixel'
+                                seed={agentRoomMessageSource.avatarSeed}
+                              />
+                            )}
+                          <span className='message-source-line__text'>
+                            {agentRoomMessageSourceLabel}
+                            {agentRoomMessageSourceSeparator}
+                          </span>
+                        </div>
+                      )}
+                      {content}
+                    </>
+                  )}
+              </div>
+            )}
             {branchNavigationControl}
             {!isEditing && (
               <MessageFooter msg={originalMessage} isUser={isUser} />

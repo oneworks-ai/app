@@ -12,6 +12,7 @@ import { ChatHistoryView } from '#~/components/chat/ChatHistoryView.js'
 import { ChatSettingsView } from '#~/components/chat/ChatSettingsView.js'
 import { ChatTimelineView } from '#~/components/chat/ChatTimelineView.js'
 import { buildChatHistoryStatusNotices } from '#~/components/chat/messages/build-chat-history-status-notices'
+import type { PendingAnnotation, PendingAnnotationPreviewState } from '#~/components/chat/sender/@types/sender-composer'
 import type { ContextPickerFile, ContextReferenceRequest } from '#~/components/workspace/context-file-types'
 import { useChatRouteDeepLinkView } from '#~/hooks/chat/use-chat-route-deep-link-view'
 import { useChatSession } from '#~/hooks/chat/use-chat-session'
@@ -135,6 +136,18 @@ export function ChatRouteView({
   const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const [contextReferenceRequest, setContextReferenceRequest] = useState<ContextReferenceRequest | null>(null)
+  const [annotationReferenceRequest, setAnnotationReferenceRequest] = useState<
+    {
+      annotations: PendingAnnotation[]
+      id: number
+    } | null
+  >(null)
+  const [pendingAnnotationReferenceCount, setPendingAnnotationReferenceCount] = useState(0)
+  const [pendingAnnotations, setPendingAnnotations] = useState<PendingAnnotation[]>([])
+  const [pendingAnnotationPreview, setPendingAnnotationPreview] = useState<PendingAnnotationPreviewState>({
+    activeAnnotationId: null,
+    isActive: false
+  })
   const [hiddenHistoryTimelineSessionIds, setHiddenHistoryTimelineSessionIds] = useState(
     readHiddenHistoryTimelineSessionIds
   )
@@ -220,6 +233,12 @@ export function ChatRouteView({
       setContextReferenceRequest(current => ({ id: (current?.id ?? 0) + 1, files }))
     }
   }
+  const handleReferenceAnnotations = (annotations: PendingAnnotation[]) => {
+    if (annotations.length > 0) {
+      setAnnotationReferenceRequest(current => ({ id: (current?.id ?? 0) + 1, annotations }))
+      setPendingAnnotationReferenceCount(current => current + annotations.length)
+    }
+  }
   const handleHistoryTimelineHiddenChange = useCallback((hidden: boolean) => {
     if (currentSessionId == null || currentSessionId === '') {
       return
@@ -299,6 +318,10 @@ export function ChatRouteView({
       hasAvailableModels={hasAvailableModels}
       agentRoomTranscript={agentRoomTranscript}
       contextReferenceRequest={contextReferenceRequest}
+      annotationReferenceRequest={annotationReferenceRequest}
+      onPendingAnnotationCountChange={setPendingAnnotationReferenceCount}
+      onPendingAnnotationsChange={setPendingAnnotations}
+      onPendingAnnotationPreviewChange={setPendingAnnotationPreview}
       hideHistoryTimeline={isHistoryTimelineHidden}
       onOpenUrlInAppBrowser={onOpenUrlInAppBrowser}
       onOpenWorkspaceFile={onOpenWorkspaceFile}
@@ -310,6 +333,7 @@ export function ChatRouteView({
     agentRoomTranscript,
     builtinPreviewModelOptions,
     canonicalSessionId,
+    annotationReferenceRequest,
     contextReferenceRequest,
     creationProgress,
     currentSessionId,
@@ -332,6 +356,8 @@ export function ChatRouteView({
     newSessionGuide,
     panelIndependentSession,
     panelIndependentSessions,
+    pendingAnnotationReferenceCount,
+    setPendingAnnotationPreview,
     permissionMode,
     permissionModeOptions,
     placeholder,
@@ -414,6 +440,10 @@ export function ChatRouteView({
       timelineView={isAgentRoomMode ? undefined : <ChatTimelineView messages={messages} />}
       onHistoryTimelineHiddenChange={isAgentRoomMode ? undefined : handleHistoryTimelineHiddenChange}
       onReferenceWorkspacePaths={handleReferenceWorkspacePaths}
+      onReferenceAnnotations={handleReferenceAnnotations}
+      hasPendingAnnotationReferences={pendingAnnotationReferenceCount > 0}
+      pendingAnnotations={pendingAnnotations}
+      pendingAnnotationPreview={pendingAnnotationPreview}
       workspaceDrawerDefaultView={workspaceDrawerDefaultView}
       workspaceSessionId={agentRoomTranscript?.workspaceSessionId}
     />

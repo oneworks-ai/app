@@ -147,6 +147,7 @@ interface IpcHandlersInput {
   getDesktopSettings: (windowRecord?: WindowRecord) => Promise<DesktopSettings>
   getUpdateStatus: () => DesktopUpdateStatus
   getGlobalInterfaceLanguageConfig: () => Promise<DesktopInterfaceLanguageConfig>
+  hideDesktopContextCaptureOverlay: () => void
   isWindowRecordUsable: (windowRecord?: WindowRecord) => boolean
   invokeCurrentWorkspacePluginResult: (windowRecord: WindowRecord, resultId: string) => Promise<unknown>
   listCurrentWorkspaceFileOpeners: (windowRecord: WindowRecord) => Promise<unknown>
@@ -173,6 +174,7 @@ interface IpcHandlersInput {
   ) => Promise<LauncherWorkspaceResourceSearchResponse>
   searchCurrentWorkspacePlugins: (windowRecord: WindowRecord, query: string) => Promise<unknown>
   setThemeSource: (themeSource: unknown) => string
+  showDesktopContextCaptureOverlay: (input: unknown) => Promise<unknown>
   stopWorkspaceFolder: (workspaceFolder: string, input?: { forget?: boolean }) => Promise<unknown>
   updateDesktopSettings: (settings: Partial<DesktopSettings>, windowRecord?: WindowRecord) => Promise<DesktopSettings>
   updateGlobalAppearanceConfig: (
@@ -190,6 +192,7 @@ export const registerIpcHandlers = ({
   getDesktopSettings,
   getUpdateStatus,
   getGlobalInterfaceLanguageConfig,
+  hideDesktopContextCaptureOverlay,
   isWindowRecordUsable,
   invokeCurrentWorkspacePluginResult,
   listCurrentWorkspaceFileOpeners,
@@ -209,6 +212,7 @@ export const registerIpcHandlers = ({
   searchCurrentWorkspaceResources,
   searchCurrentWorkspacePlugins,
   setThemeSource,
+  showDesktopContextCaptureOverlay,
   stopWorkspaceFolder,
   updateDesktopSettings,
   updateGlobalAppearanceConfig,
@@ -305,6 +309,13 @@ export const registerIpcHandlers = ({
   ipcMain.handle('desktop:open-external-url', async (_event, url: unknown) => {
     await shell.openExternal(normalizeExternalUrl(url))
   })
+
+  ipcMain.handle(
+    'desktop:context-capture:show-overlay',
+    (_event, input: unknown) => showDesktopContextCaptureOverlay(input)
+  )
+
+  ipcMain.handle('desktop:context-capture:hide-overlay', () => hideDesktopContextCaptureOverlay())
 
   ipcMain.handle('desktop:list-mobile-debug-targets', (_event, config: unknown) => listMobileDebugTargets(config))
 

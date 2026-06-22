@@ -63,6 +63,10 @@ export function InteractionPanelDockPanelContentBody({
     onCloseWorkspaceFilePaths,
     onOpenIframeUrl,
     onPluginTabStateChange,
+    onReferenceAnnotations,
+    hasPendingAnnotationReferences,
+    pendingAnnotationPreview,
+    pendingAnnotations,
     onSelectWorkspaceFilePath,
     onSessionPageChange
   } = useInteractionPanelDockContext()
@@ -236,11 +240,16 @@ export function InteractionPanelDockPanelContentBody({
         isActive={activeTab.kind === 'iframe' && activeTab.id === tab.id}
         page={page}
         projectUrlHistoryKey={projectUrlHistoryKey}
+        sessionId={sessionId}
         sessionUrlHistoryKey={sessionUrlHistoryKey}
         onChangeMetadata={onIframeMetadataChange}
         onSelectHistory={onIframeSelectHistory}
         onChangeUrl={onIframeUrlChange}
         onNavigateHistory={onIframeNavigateHistory}
+        onReferenceAnnotations={onReferenceAnnotations}
+        hasPendingAnnotationReferences={hasPendingAnnotationReferences}
+        pendingAnnotationPreview={pendingAnnotationPreview}
+        pendingAnnotations={pendingAnnotations}
       />
     </div>
   )

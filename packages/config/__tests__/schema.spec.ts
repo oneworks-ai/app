@@ -336,8 +336,23 @@ describe('config schema bundle', () => {
     expect(properties.updateChannel).toMatchObject({
       enum: ['stable', 'rc', 'beta', 'alpha']
     })
+    expect(properties.contextCapture).toMatchObject({
+      type: 'object'
+    })
+    const contextCaptureProperties = (
+      properties.contextCapture as { properties: Record<string, unknown> }
+    ).properties
+    expect(contextCaptureProperties.overlayPlacement).toMatchObject({
+      enum: ['auto', 'above', 'below']
+    })
 
     const parsed = await validateConfigSection('desktop', {
+      contextCapture: {
+        allowApplications: ['com.apple.Safari'],
+        denyApplications: ['com.tinyspeck.slackmacgap'],
+        enabled: true,
+        overlayPlacement: 'above'
+      },
       launcherShortcut: 'option+space',
       openLastWorkspaceOnStartup: true,
       syncAppIcon: true,

@@ -5,6 +5,7 @@ import { app } from 'electron'
 
 import { getRecentWorkspaceFoldersFromState } from '../workspace-state.cjs'
 import { DEFAULT_LAUNCHER_SHORTCUT } from './constants'
+import { DEFAULT_DESKTOP_CONTEXT_CAPTURE_SETTINGS } from './context-capture-settings'
 import { normalizeDesktopIconSettings } from './desktop-icon-settings'
 import { toElectronAccelerator } from './launcher-shortcut'
 import type { DesktopSettingsState, DesktopState } from './types'
@@ -105,6 +106,7 @@ export const readLegacyDesktopSettings = (): Partial<DesktopSettingsState> => {
 export const readDesktopState = (): DesktopState => {
   const state = readJsonFile(getDesktopStatePath())
   return {
+    contextCapture: DEFAULT_DESKTOP_CONTEXT_CAPTURE_SETTINGS,
     ...normalizeDesktopIconSettings(state),
     launcherShortcut: getLauncherShortcutFromState(state),
     autoUpdate: DEFAULT_DESKTOP_AUTO_UPDATE,

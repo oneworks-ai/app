@@ -52,6 +52,7 @@ import { buildInteractionPanelWebsiteResources } from '#~/components/chat/intera
 import { useInteractionPanelWorkspaceUrlKeys } from '#~/components/chat/interaction-panel/use-interaction-panel-workspace-url-keys'
 import { useInteractionTerminalPanes } from '#~/components/chat/interaction-panel/use-interaction-terminal-panes'
 import { useSessionPanelState } from '#~/components/chat/interaction-panel/use-session-panel-state'
+import type { PendingAnnotation, PendingAnnotationPreviewState } from '#~/components/chat/sender/@types/sender-composer'
 import {
   getSessionNotificationFingerprint,
   isSessionNotificationMarkedRead,
@@ -327,6 +328,7 @@ export function ChatRouteShell({
   headerBreadcrumb,
   headerMoreItems,
   historyTimelineHidden,
+  hasPendingAnnotationReferences,
   historyView,
   isNewSession = false,
   isReady = true,
@@ -335,6 +337,9 @@ export function ChatRouteShell({
   messages,
   modeSwitch,
   onReferenceWorkspacePaths,
+  onReferenceAnnotations,
+  pendingAnnotationPreview,
+  pendingAnnotations,
   projectWorkspaceFolder,
   roomIconSeed,
   roomIconStatus,
@@ -362,6 +367,7 @@ export function ChatRouteShell({
   headerBreadcrumb?: ChatHeaderBreadcrumb
   headerMoreItems?: ChatHeaderMoreItems
   historyTimelineHidden?: boolean
+  hasPendingAnnotationReferences?: boolean
   historyView: ChatRouteHistoryView
   isNewSession?: boolean
   isReady?: boolean
@@ -370,6 +376,9 @@ export function ChatRouteShell({
   messages?: ChatMessage[]
   modeSwitch?: ChatHeaderModeSwitch
   onReferenceWorkspacePaths?: (files: ContextPickerFile[]) => void
+  onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
+  pendingAnnotationPreview?: PendingAnnotationPreviewState
+  pendingAnnotations?: PendingAnnotation[]
   projectWorkspaceFolder?: string
   roomIconSeed?: string
   roomIconStatus?: ChatHeaderRoomIconStatus
@@ -1478,6 +1487,9 @@ export function ChatRouteShell({
               agentApprovals={agentApprovals}
               agentRoster={agentRoster}
               defaultView={activeWorkspaceDrawerView}
+              hasPendingAnnotationReferences={hasPendingAnnotationReferences}
+              pendingAnnotationPreview={pendingAnnotationPreview}
+              pendingAnnotations={pendingAnnotations}
               isBottomPanelOpen={bottomPanel.shouldShowBottomPanel}
               isFullscreen={isWorkspaceDrawerFullscreen}
               locateFileRequest={workspaceDrawerLocateRequest}
@@ -1495,6 +1507,7 @@ export function ChatRouteShell({
                   bottomPanel.handleToggleBottomPanel()
                 }
               }}
+              onReferenceAnnotations={onReferenceAnnotations}
               onReferencePaths={onReferenceWorkspacePaths}
               onOpenFile={handleOpenWorkspaceFileInInteractionPanel}
               onOpenResource={handleOpenWebLauncher}
@@ -1547,6 +1560,10 @@ export function ChatRouteShell({
               onRunCommandTaskStatusesChange={setRunCommandTaskStatuses}
               onFoldChange={setIsTerminalPanelFolded}
               onReferenceWorkspacePaths={onReferenceWorkspacePaths}
+              onReferenceAnnotations={onReferenceAnnotations}
+              hasPendingAnnotationReferences={hasPendingAnnotationReferences}
+              pendingAnnotationPreview={pendingAnnotationPreview}
+              pendingAnnotations={pendingAnnotations}
               onOpenResource={handleOpenWebLauncher}
               settingsView={settingsView}
               terminalSessionId={terminalSessionId}

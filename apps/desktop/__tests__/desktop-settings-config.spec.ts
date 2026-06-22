@@ -144,6 +144,12 @@ describe('desktop global settings config', () => {
 
     await saveGlobalDesktopSettingsPatch({
       autoUpdate: false,
+      contextCapture: {
+        allowApplications: ['com.apple.Safari'],
+        denyApplications: [],
+        enabled: true,
+        overlayPlacement: 'below'
+      },
       syncAppIcon: false,
       updateChannel: 'rc'
     })
@@ -152,6 +158,12 @@ describe('desktop global settings config', () => {
     expect(config.desktop).toEqual({
       launcherShortcut: 'cmd+shift+p',
       iconTheme: 'metal',
+      contextCapture: {
+        allowApplications: ['com.apple.Safari'],
+        denyApplications: [],
+        enabled: true,
+        overlayPlacement: 'below'
+      },
       syncAppIcon: false
     })
   })

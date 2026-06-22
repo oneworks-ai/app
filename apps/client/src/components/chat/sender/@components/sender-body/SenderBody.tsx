@@ -15,7 +15,13 @@ import type {
 } from '../../@types/sender-toolbar-types'
 import type { SenderVoiceInputController } from '../../@types/sender-voice-input'
 
-import type { PendingContextFile, PendingImage } from '../../@types/sender-composer'
+import type {
+  PendingAnnotation,
+  PendingAnnotationPreviewState,
+  PendingContextFile,
+  PendingImage,
+  PendingTextSelection
+} from '../../@types/sender-composer'
 import type { SenderEditorHandle } from '../../@types/sender-editor'
 import type { SenderProps } from '../../@types/sender-props'
 import type { SenderCompletionMatch, SenderTokenDecoration } from '../../@utils/sender-completion'
@@ -28,8 +34,15 @@ export function SenderBody({
   modelUnavailable,
   pendingImages,
   pendingFiles,
+  pendingAnnotations,
+  pendingTextSelections,
   onRemovePendingImage,
   onRemovePendingFile,
+  onRemovePendingAnnotation,
+  onRemovePendingTextSelection,
+  onClearPendingAnnotations,
+  onClearPendingTextSelections,
+  onPendingAnnotationPreviewChange,
   editorRef,
   sessionId,
   sessionInfo,
@@ -62,8 +75,15 @@ export function SenderBody({
   modelUnavailable?: boolean
   pendingImages: PendingImage[]
   pendingFiles: PendingContextFile[]
+  pendingAnnotations: PendingAnnotation[]
+  pendingTextSelections: PendingTextSelection[]
   onRemovePendingImage: (id: string) => void
   onRemovePendingFile: (path: string) => void
+  onRemovePendingAnnotation: (id: string) => void
+  onRemovePendingTextSelection: (id: string) => void
+  onClearPendingAnnotations: () => void
+  onClearPendingTextSelections: () => void
+  onPendingAnnotationPreviewChange?: (state: PendingAnnotationPreviewState) => void
   editorRef: MutableRefObject<SenderEditorHandle | null>
   sessionId?: string
   sessionInfo?: SessionInfo | null
@@ -120,8 +140,15 @@ export function SenderBody({
         sessionInfo={sessionInfo}
         pendingImages={pendingImages}
         pendingFiles={pendingFiles}
+        pendingAnnotations={pendingAnnotations}
+        pendingTextSelections={pendingTextSelections}
         onRemovePendingImage={onRemovePendingImage}
         onRemovePendingFile={onRemovePendingFile}
+        onRemovePendingAnnotation={onRemovePendingAnnotation}
+        onRemovePendingTextSelection={onRemovePendingTextSelection}
+        onClearPendingAnnotations={onClearPendingAnnotations}
+        onClearPendingTextSelections={onClearPendingTextSelections}
+        onPendingAnnotationPreviewChange={onPendingAnnotationPreviewChange}
         input={input}
         placeholder={placeholder || t('chat.inputPlaceholder')}
         disabled={(!isInlineEdit && modelUnavailable) || (isInlineEdit && isBusy)}

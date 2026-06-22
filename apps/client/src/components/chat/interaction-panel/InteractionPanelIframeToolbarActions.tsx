@@ -28,11 +28,13 @@ const copyImageDataUrlToClipboard = async (dataUrl: string) => {
 export function InteractionPanelIframeToolbarActions({
   frameUrl,
   iframeRef,
+  isAnnotationMode,
   isDeveloperToolsOpen,
   isViewportToolbarOpen,
   projectUrlHistoryKey,
   onForceReload,
   sessionUrlHistoryKey,
+  onToggleAnnotationMode,
   onToggleDeveloperTools,
   onToggleViewportToolbar,
   shouldUseWebview,
@@ -40,11 +42,13 @@ export function InteractionPanelIframeToolbarActions({
 }: {
   frameUrl: string
   iframeRef: MutableRefObject<HTMLIFrameElement | null>
+  isAnnotationMode: boolean
   isDeveloperToolsOpen: boolean
   isViewportToolbarOpen: boolean
   projectUrlHistoryKey: string
   onForceReload: () => void
   sessionUrlHistoryKey: string
+  onToggleAnnotationMode: () => void
   onToggleDeveloperTools: () => void
   onToggleViewportToolbar: () => void
   shouldUseWebview: boolean
@@ -58,6 +62,9 @@ export function InteractionPanelIframeToolbarActions({
   const canUseFrame = frameUrl !== ''
   const canOpenBrowserHistory = window.oneworksDesktop?.listBrowserHistory != null
   const canOpenBrowserDownloads = window.oneworksDesktop?.listBrowserDownloads != null
+  const annotationButtonLabel = isAnnotationMode
+    ? t('chat.interactionPanel.iframeAnnotationStop')
+    : t('chat.interactionPanel.iframeAddComment')
 
   const notifyUnsupported = () => {
     void message.warning(t('common.notSupportedYet'))
@@ -101,15 +108,36 @@ export function InteractionPanelIframeToolbarActions({
 
   return (
     <div className='chat-interaction-panel__iframe-actions'>
-      <Tooltip title={t('chat.interactionPanel.iframeScreenshot')}>
+      {!isAnnotationMode && (
+        <Tooltip title={t('chat.interactionPanel.iframeScreenshot')}>
+          <Button
+            type='text'
+            className='chat-interaction-panel__iframe-tool-btn'
+            disabled={!canUseFrame}
+            aria-label={t('chat.interactionPanel.iframeScreenshot')}
+            icon={<span className='material-symbols-rounded'>center_focus_weak</span>}
+            onClick={() => void handleScreenshot()}
+          />
+        </Tooltip>
+      )}
+      <Tooltip title={annotationButtonLabel}>
         <Button
           type='text'
-          className='chat-interaction-panel__iframe-tool-btn'
+          className={[
+            'chat-interaction-panel__iframe-tool-btn',
+            isAnnotationMode ? 'is-open is-annotation-active' : ''
+          ].filter(Boolean).join(' ')}
           disabled={!canUseFrame}
-          aria-label={t('chat.interactionPanel.iframeScreenshot')}
-          icon={<span className='material-symbols-rounded'>center_focus_weak</span>}
-          onClick={() => void handleScreenshot()}
-        />
+          aria-label={annotationButtonLabel}
+          icon={<span className='material-symbols-rounded'>add_comment</span>}
+          onClick={onToggleAnnotationMode}
+        >
+          {isAnnotationMode && (
+            <span className='chat-interaction-panel__iframe-tool-btn-label'>
+              {t('chat.interactionPanel.iframeAnnotationActive')}
+            </span>
+          )}
+        </Button>
       </Tooltip>
       <Dropdown
         trigger={['click']}

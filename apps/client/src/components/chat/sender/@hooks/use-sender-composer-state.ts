@@ -8,18 +8,24 @@ export const useSenderComposerState = (initialContent: SenderInitialContent) => 
   const [input, setInput] = useState(() => initialState.input)
   const [pendingImages, setPendingImages] = useState(() => initialState.pendingImages)
   const [pendingFiles, setPendingFiles] = useState(() => initialState.pendingFiles)
+  const [pendingAnnotations, setPendingAnnotations] = useState(() => initialState.pendingAnnotations)
+  const [pendingTextSelections, setPendingTextSelections] = useState(() => initialState.pendingTextSelections)
 
   useEffect(() => {
     const nextState = getInitialComposerState(initialContent)
     setInput(nextState.input)
     setPendingImages(nextState.pendingImages)
     setPendingFiles(nextState.pendingFiles)
+    setPendingAnnotations(nextState.pendingAnnotations)
+    setPendingTextSelections(nextState.pendingTextSelections)
   }, [initialContent])
 
   const resetComposerContent = () => {
     setInput('')
     setPendingImages([])
     setPendingFiles([])
+    setPendingAnnotations([])
+    setPendingTextSelections([])
   }
 
   return {
@@ -29,6 +35,10 @@ export const useSenderComposerState = (initialContent: SenderInitialContent) => 
     setPendingImages,
     pendingFiles,
     setPendingFiles,
+    pendingAnnotations,
+    setPendingAnnotations,
+    pendingTextSelections,
+    setPendingTextSelections,
     resetComposerContent
   }
 }

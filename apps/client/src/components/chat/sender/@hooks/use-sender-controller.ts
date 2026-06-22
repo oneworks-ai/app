@@ -40,6 +40,9 @@ export const useSenderController = (props: SenderProps) => {
   const { message } = App.useApp()
   const { editorRef, fileInputRef, modelSelectRef, effortSelectRef } = useSenderRefs()
   const handledContextReferenceRequestIdRef = useRef<number | null>(null)
+  const handledAnnotationReferenceRequestIdRef = useRef<number | null>(null)
+  const handledTextSelectionReferenceRequestIdRef = useRef<number | null>(null)
+  const handledPendingReferenceDraftRequestIdRef = useRef<number | null>(null)
   const { isInlineEdit, isMac, isThinking, isBusy, supportsEffort } = getSenderRuntimeState(props)
   const composer = useSenderComposerState(props.initialContent)
   const completion = useSenderCompletion({
@@ -123,6 +126,8 @@ export const useSenderController = (props: SenderProps) => {
     getInput: () => editorRef.current?.getValue() ?? composer.input,
     pendingImages: composer.pendingImages,
     pendingFiles: composer.pendingFiles,
+    pendingAnnotations: composer.pendingAnnotations,
+    pendingTextSelections: composer.pendingTextSelections,
     isBusy,
     allowWhileBusy: isThinking,
     isInlineEdit,
@@ -209,6 +214,119 @@ export const useSenderController = (props: SenderProps) => {
     t
   ])
 
+  useEffect(() => {
+    const request = props.annotationReferenceRequest
+    if (request == null || request.annotations.length === 0 || isInlineEdit) {
+      return
+    }
+    if (handledAnnotationReferenceRequestIdRef.current === request.id) {
+      return
+    }
+    handledAnnotationReferenceRequestIdRef.current = request.id
+    if (props.modelUnavailable) {
+      void message.warning(t('chat.modelConfigRequired'))
+      return
+    }
+    if (props.interactionRequest != null) {
+      void message.warning(t('chat.fileNotSupportedInInteraction'))
+      return
+    }
+
+    composer.setPendingAnnotations(current => [...current, ...request.annotations])
+    focusRestore.queueEditorFocusRestore()
+  }, [
+    composer.setPendingAnnotations,
+    focusRestore,
+    isInlineEdit,
+    message,
+    props.annotationReferenceRequest,
+    props.interactionRequest,
+    props.modelUnavailable,
+    t
+  ])
+
+  useEffect(() => {
+    const request = props.textSelectionReferenceRequest
+    if (request == null || request.selections.length === 0 || isInlineEdit) {
+      return
+    }
+    if (handledTextSelectionReferenceRequestIdRef.current === request.id) {
+      return
+    }
+    handledTextSelectionReferenceRequestIdRef.current = request.id
+    if (props.modelUnavailable) {
+      void message.warning(t('chat.modelConfigRequired'))
+      return
+    }
+    if (props.interactionRequest != null) {
+      void message.warning(t('chat.fileNotSupportedInInteraction'))
+      return
+    }
+
+    composer.setPendingTextSelections(current => [...current, ...request.selections])
+    focusRestore.queueEditorFocusRestore()
+  }, [
+    composer.setPendingTextSelections,
+    focusRestore,
+    isInlineEdit,
+    message,
+    props.interactionRequest,
+    props.modelUnavailable,
+    props.textSelectionReferenceRequest,
+    t
+  ])
+
+  useEffect(() => {
+    const request = props.pendingReferenceDraftRequest
+    if (request == null || isInlineEdit) {
+      return
+    }
+    if (handledPendingReferenceDraftRequestIdRef.current === request.id) {
+      return
+    }
+    handledPendingReferenceDraftRequestIdRef.current = request.id
+
+    composer.setPendingImages(request.pendingImages)
+    composer.setPendingFiles(request.pendingFiles)
+    composer.setPendingAnnotations(request.pendingAnnotations)
+    composer.setPendingTextSelections(request.pendingTextSelections)
+    focusRestore.queueEditorFocusRestore()
+  }, [
+    composer.setPendingAnnotations,
+    composer.setPendingFiles,
+    composer.setPendingImages,
+    composer.setPendingTextSelections,
+    focusRestore,
+    isInlineEdit,
+    props.pendingReferenceDraftRequest
+  ])
+
+  useEffect(() => {
+    if (isInlineEdit) return
+    props.onPendingReferenceDraftChange?.({
+      pendingImages: composer.pendingImages,
+      pendingFiles: composer.pendingFiles,
+      pendingAnnotations: composer.pendingAnnotations,
+      pendingTextSelections: composer.pendingTextSelections
+    })
+  }, [
+    composer.pendingAnnotations,
+    composer.pendingFiles,
+    composer.pendingImages,
+    composer.pendingTextSelections,
+    isInlineEdit,
+    props.onPendingReferenceDraftChange
+  ])
+
+  useEffect(() => {
+    if (isInlineEdit) return
+    props.onPendingAnnotationCountChange?.(composer.pendingAnnotations.length)
+  }, [
+    composer.pendingAnnotations.length,
+    isInlineEdit,
+    props.onPendingAnnotationCountChange
+  ])
+
   useSenderAutofocus({ autoFocus: props.autoFocus === true, autoFocusKey: props.autoFocusKey, editorRef })
   useSenderReferenceFocusRestore({ focusRestore, referenceActions })
 
@@ -220,7 +338,8 @@ export const useSenderController = (props: SenderProps) => {
     isThinking,
     input: composer.input,
     pendingImageCount: composer.pendingImages.length,
-    pendingFileCount: composer.pendingFiles.length,
+    pendingFileCount: composer.pendingFiles.length + composer.pendingAnnotations.length +
+      composer.pendingTextSelections.length,
     interactionOptionCount: props.interactionOptionNavigation?.optionCount ?? 0,
     onCancel: props.onCancel,
     onClear: props.onClear,
@@ -259,7 +378,8 @@ export const useSenderController = (props: SenderProps) => {
     composer: {
       input: composer.input,
       pendingImageCount: composer.pendingImages.length,
-      pendingFileCount: composer.pendingFiles.length
+      pendingFileCount: composer.pendingFiles.length + composer.pendingAnnotations.length +
+        composer.pendingTextSelections.length
     },
     composerControlShortcuts,
     focusRestore,

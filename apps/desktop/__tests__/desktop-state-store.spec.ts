@@ -45,6 +45,12 @@ describe('desktop state store', () => {
     )
 
     saveDesktopState({
+      contextCapture: {
+        allowApplications: [],
+        denyApplications: [],
+        enabled: false,
+        overlayPlacement: 'auto'
+      },
       iconAppearance: 'system',
       iconBackground: 'solid',
       syncAppIcon: true,

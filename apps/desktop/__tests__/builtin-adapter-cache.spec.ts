@@ -129,6 +129,94 @@ const writeSourcePluginPackage = async (rootDir: string, packageName: string, ve
   return packageDir
 }
 
+const writePackageJson = async (packageDir: string, value: Record<string, unknown>) => {
+  await writeFile(path.join(packageDir, 'package.json'), JSON.stringify(value, null, 2))
+}
+
+const writeSourceAdapterPackageWithDuplicateDependencyVersions = async (rootDir: string) => {
+  const packageName = '@acme/adapter-conflict'
+  const packageDir = path.join(rootDir, sanitizePackageName(packageName))
+  const nodeModulesDir = path.join(packageDir, 'node_modules')
+  const collectorDir = path.join(nodeModulesDir, '@acme/collector')
+  const legacyDir = path.join(nodeModulesDir, '@acme/legacy')
+  const minipassCollectDir = path.join(nodeModulesDir, 'minipass-collect')
+  const minipassLegacyDir = path.join(nodeModulesDir, 'minipass')
+  const minipassModernDir = path.join(minipassCollectDir, 'node_modules', 'minipass')
+
+  await mkdir(path.join(packageDir, 'dist'), { recursive: true })
+  await mkdir(collectorDir, { recursive: true })
+  await mkdir(legacyDir, { recursive: true })
+  await mkdir(minipassCollectDir, { recursive: true })
+  await mkdir(minipassLegacyDir, { recursive: true })
+  await mkdir(minipassModernDir, { recursive: true })
+
+  await writePackageJson(packageDir, {
+    name: packageName,
+    version: '1.0.0',
+    exports: './dist/index.js',
+    dependencies: {
+      '@acme/collector': '1.0.0',
+      '@acme/legacy': '1.0.0'
+    }
+  })
+  await writeFile(
+    path.join(packageDir, 'dist', 'index.js'),
+    "module.exports = { collector: require('@acme/collector'), legacy: require('@acme/legacy') }\n"
+  )
+
+  await writePackageJson(collectorDir, {
+    name: '@acme/collector',
+    version: '1.0.0',
+    main: './index.js',
+    dependencies: {
+      'minipass-collect': '2.0.1'
+    }
+  })
+  await writeFile(path.join(collectorDir, 'index.js'), "module.exports = require('minipass-collect')\n")
+
+  await writePackageJson(legacyDir, {
+    name: '@acme/legacy',
+    version: '1.0.0',
+    main: './index.js',
+    dependencies: {
+      minipass: '3.3.6'
+    }
+  })
+  await writeFile(path.join(legacyDir, 'index.js'), "module.exports = require('minipass/package.json').version\n")
+
+  await writePackageJson(minipassCollectDir, {
+    name: 'minipass-collect',
+    version: '2.0.1',
+    main: './index.js',
+    dependencies: {
+      minipass: '^7.0.3'
+    }
+  })
+  await writeFile(
+    path.join(minipassCollectDir, 'index.js'),
+    "module.exports = require('minipass/package.json').version\n"
+  )
+
+  await writePackageJson(minipassLegacyDir, {
+    name: 'minipass',
+    version: '3.3.6',
+    main: './index.js'
+  })
+  await writeFile(path.join(minipassLegacyDir, 'index.js'), 'module.exports = {}\n')
+
+  await writePackageJson(minipassModernDir, {
+    name: 'minipass',
+    version: '7.1.2',
+    main: './index.js'
+  })
+  await writeFile(path.join(minipassModernDir, 'index.js'), 'module.exports = {}\n')
+
+  return {
+    packageDir,
+    packageName
+  }
+}
+
 describe('desktop built-in adapter package cache', () => {
   it('materializes a built-in adapter package into the user-home version cache', async () => {
     const tempDir = await createTempDir('oneworks-desktop-adapter-cache-')
@@ -194,6 +282,31 @@ describe('desktop built-in adapter package cache', () => {
     const packageDir = resolveAdapterPackageInstallDir(cacheDir, packageName)
     expect(refreshed.seeded).toBe(true)
     await expect(readFile(path.join(packageDir, 'src', 'models.ts'), 'utf8')).resolves.toContain('second')
+  })
+
+  it('preserves nested dependency versions when copying a package closure', async () => {
+    const tempDir = await createTempDir('oneworks-desktop-adapter-conflict-')
+    const homeDir = path.join(tempDir, 'home')
+    const { packageDir: sourcePackageDir, packageName } =
+      await writeSourceAdapterPackageWithDuplicateDependencyVersions(tempDir)
+
+    const result = materializeBuiltinAdapterPackage({
+      homeDir,
+      packageName,
+      sourcePackageDir
+    })
+
+    const packageDir = resolveAdapterPackageInstallDir(result.cacheDir, packageName)
+    expect(require(path.join(packageDir, 'dist', 'index.js'))).toEqual({
+      collector: '7.1.2',
+      legacy: '3.3.6'
+    })
+    await expect(
+      readFile(
+        path.join(result.cacheDir, 'node_modules', 'minipass-collect', 'node_modules', 'minipass', 'package.json'),
+        'utf8'
+      )
+    ).resolves.toContain('"version": "7.1.2"')
   })
 
   it('can seed multiple packages through the startup helper', async () => {

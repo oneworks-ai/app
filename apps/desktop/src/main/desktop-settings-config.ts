@@ -7,6 +7,7 @@ import type { Config } from '@oneworks/types'
 import { app } from 'electron'
 
 import { DEFAULT_LAUNCHER_SHORTCUT } from './constants'
+import { normalizeDesktopContextCaptureSettings } from './context-capture-settings'
 import { normalizeDesktopIconSettings } from './desktop-icon-settings'
 import { toElectronAccelerator } from './launcher-shortcut'
 import type { DesktopSettingsState } from './types'
@@ -14,6 +15,7 @@ import type { DesktopUpdateChannel } from './update-types'
 import { normalizeDesktopAutoUpdate, normalizeDesktopUpdateChannel } from './update-types'
 
 const desktopSettingsKeys = [
+  'contextCapture',
   'launcherShortcut',
   'openLastWorkspaceOnStartup',
   'savedPasswordsAutoSignIn',
@@ -86,6 +88,7 @@ const normalizeEnabledByDefault = (value: unknown) => (
 const normalizeDesktopSettings = (value: unknown): DesktopSettingsState => {
   const source = isRecord(value) ? value : {}
   return {
+    contextCapture: normalizeDesktopContextCaptureSettings(source.contextCapture),
     ...normalizeDesktopIconSettings(source),
     launcherShortcut: normalizeLauncherShortcut(source.launcherShortcut),
     autoUpdate: normalizeDesktopAutoUpdate(source.autoUpdate),

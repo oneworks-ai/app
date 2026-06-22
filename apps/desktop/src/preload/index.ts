@@ -216,6 +216,7 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
   getWindowFullscreenState: () => ipcRenderer.invoke('desktop:get-window-fullscreen-state'),
   getWorkspaceConnection: () => ipcRenderer.invoke(workspaceConnectionChannel),
   getWorkspaceSelectorState: () => ipcRenderer.invoke('desktop:get-workspace-selector-state'),
+  hideDesktopContextCaptureOverlay: () => ipcRenderer.invoke('desktop:context-capture:hide-overlay'),
   hideLauncherWindow: () => ipcRenderer.invoke('desktop:hide-launcher-window'),
   importAuthenticatorBackup: () => ipcRenderer.invoke('desktop:import-authenticator-backup'),
   importBrowserPasswords: (input?: unknown) => ipcRenderer.invoke('desktop:import-browser-passwords', input),
@@ -343,6 +344,8 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
   searchCurrentWorkspaceResources: (query: string) =>
     ipcRenderer.invoke('desktop:search-current-workspace-resources', query),
   setThemeSource: (themeSource: unknown) => ipcRenderer.invoke('desktop:set-theme-source', themeSource),
+  showDesktopContextCaptureOverlay: (input: unknown) =>
+    ipcRenderer.invoke('desktop:context-capture:show-overlay', input),
   supportsWebviewTag: true,
   systemLocale: getSystemLocale(),
   updateDesktopSettings: (settings: unknown) => ipcRenderer.invoke('desktop:update-settings', settings),
