@@ -6,6 +6,10 @@
 
 - [上下文捕获并发送到对话](.oo/rfcs/0007-context-capture-to-chat.md)
 
+## 移动设备与桌面应用预览与元素检查 RFC
+
+- [移动设备与桌面应用预览与元素检查](.oo/rfcs/0008-mobile-device-preview-inspector.md)
+
 ## 标准语音能力 RFC
 
 - [总览与范围](.oo/rfcs/0006-standard-voice-capability.md)
