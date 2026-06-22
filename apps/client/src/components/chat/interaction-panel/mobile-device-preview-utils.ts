@@ -16,6 +16,12 @@ export const maxVisibleElementRows = 160
 
 export const getReadyDevice = (devices: DesktopMobileDebugDevice[]) => devices.find(device => device.state === 'device')
 
+export const getDeviceWindowTitle = (device: DesktopMobileDebugDevice) => {
+  const emulatorPort = /^emulator-(\d+)$/u.exec(device.id)?.[1]
+  const deviceKind = emulatorPort == null ? 'Android Device' : 'Android Emulator'
+  return `${deviceKind} - ${device.label}:${emulatorPort ?? device.id}`
+}
+
 export const flattenElementNodes = (
   node: DesktopMobileElementNode | undefined,
   depth = 0,

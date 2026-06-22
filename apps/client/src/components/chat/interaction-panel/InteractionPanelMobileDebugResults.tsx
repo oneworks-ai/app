@@ -28,6 +28,7 @@ export function InteractionPanelMobileDebugResults({
   const errors = state?.errors.filter(Boolean) ?? []
   const portForwarding = state?.portForwarding ?? []
   const isAdbMissing = state?.adbMissing === true || errors.includes('ADB was not found.')
+  const hasDevicePreview = !isAdbMissing && devices.length > 0
 
   return (
     <div className='chat-interaction-panel-mobile-debug__body'>
@@ -37,10 +38,56 @@ export function InteractionPanelMobileDebugResults({
           {t('chat.interactionPanel.mobileDebugScanning')}
         </div>
       )}
-      <PortForwardingList portForwarding={portForwarding} />
-      {!isAdbMissing && devices.length > 0 && (
-        <InteractionPanelMobileDevicePreview devices={devices} />
+      {hasDevicePreview && (
+        <InteractionPanelMobileDevicePreview
+          details={
+            <MobileDebugDetailsContent
+              errors={errors}
+              isAdbMissing={isAdbMissing}
+              onOpenDebugUrl={onOpenDebugUrl}
+              portForwarding={portForwarding}
+              state={state}
+              targets={targets}
+            />
+          }
+          devices={devices}
+        />
       )}
+      {!hasDevicePreview && (
+        <MobileDebugDetailsContent
+          errors={errors}
+          isAdbMissing={isAdbMissing}
+          onOpenDebugUrl={onOpenDebugUrl}
+          portForwarding={portForwarding}
+          state={state}
+          targets={targets}
+        />
+      )}
+    </div>
+  )
+}
+
+function MobileDebugDetailsContent({
+  errors,
+  isAdbMissing,
+  onOpenDebugUrl,
+  portForwarding,
+  state,
+  targets
+}: {
+  errors: string[]
+  isAdbMissing: boolean
+  onOpenDebugUrl: (url: string, options?: OpenInteractionPanelIframeUrlOptions) => void
+  portForwarding: DesktopMobileDebugPortForwardStatus[]
+  state: DesktopMobileDebugTargetsResponse | null
+  targets: DesktopMobileDebugTarget[]
+}) {
+  const { t } = useTranslation()
+  const devices = state?.devices ?? []
+
+  return (
+    <>
+      <PortForwardingList portForwarding={portForwarding} />
       {targets.length > 0 && (
         <InteractionPanelMobileDebugTargetList targets={targets} onOpenDebugUrl={onOpenDebugUrl} />
       )}
@@ -56,7 +103,7 @@ export function InteractionPanelMobileDebugResults({
         </div>
       )}
       <ErrorList errors={errors} />
-    </div>
+    </>
   )
 }
 

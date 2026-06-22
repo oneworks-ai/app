@@ -1,6 +1,5 @@
-import { Button, Input } from 'antd'
-import type { PointerEvent } from 'react'
-import { useCallback, useRef, useState } from 'react'
+import type { CSSProperties, PointerEvent } from 'react'
+import { useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { InteractionPanelMobileDeviceControls } from './InteractionPanelMobileDeviceControls'
@@ -9,7 +8,6 @@ import type { PointerDevicePoint } from './mobile-device-preview-utils'
 
 export function InteractionPanelMobileDeviceScreen({
   deviceTitle,
-  error,
   hoverNode,
   isInspecting,
   screenshot,
@@ -19,10 +17,10 @@ export function InteractionPanelMobileDeviceScreen({
   onPointerLeave,
   onRefresh,
   onSendInput,
-  onToggleInspect
+  onToggleInspect,
+  screenRatio
 }: {
   deviceTitle: string
-  error: string | null
   hoverNode: DesktopMobileElementNode | undefined
   isInspecting: boolean
   screenshot: DesktopMobileDeviceScreenshotResponse | null
@@ -33,9 +31,9 @@ export function InteractionPanelMobileDeviceScreen({
   onRefresh: () => void
   onSendInput: (input: DesktopMobileDeviceInputEvent) => void
   onToggleInspect: () => void
+  screenRatio: number | undefined
 }) {
   const { t } = useTranslation()
-  const [textInput, setTextInput] = useState('')
   const pointerStartRef = useRef<PointerDevicePoint | null>(null)
 
   const handlePointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
@@ -81,15 +79,13 @@ export function InteractionPanelMobileDeviceScreen({
     onSendInput({ kind: 'tap', x: endPoint.x, y: endPoint.y })
   }, [isInspecting, onInspectPoint, onSendInput, screenshot])
 
-  const sendText = useCallback(() => {
-    const trimmedText = textInput.trim()
-    if (trimmedText === '') return
-    onSendInput({ kind: 'text', text: trimmedText })
-    setTextInput('')
-  }, [onSendInput, textInput])
-
   return (
-    <div className='chat-interaction-panel-mobile-debug__screen-column'>
+    <div
+      className='chat-interaction-panel-mobile-debug__screen-column'
+      style={screenRatio == null
+        ? undefined
+        : { '--mobile-debug-screen-ratio': String(screenRatio) } as CSSProperties}
+    >
       <div className='chat-interaction-panel-mobile-debug__device-window'>
         <div className='chat-interaction-panel-mobile-debug__device-shell'>
           <div className='chat-interaction-panel-mobile-debug__device-titlebar' title={deviceTitle}>
@@ -139,26 +135,6 @@ export function InteractionPanelMobileDeviceScreen({
           onToggleInspect={onToggleInspect}
         />
       </div>
-      <div className='chat-interaction-panel-mobile-debug__text-input'>
-        <Input
-          size='small'
-          value={textInput}
-          placeholder={t('chat.interactionPanel.mobileDebugTextPlaceholder')}
-          prefix={<span className='material-symbols-rounded' aria-hidden='true'>text_fields</span>}
-          onChange={event => setTextInput(event.target.value)}
-          onPressEnter={sendText}
-        />
-        <Button
-          type='text'
-          size='small'
-          title={t('chat.interactionPanel.mobileDebugSendText')}
-          aria-label={t('chat.interactionPanel.mobileDebugSendText')}
-          onClick={sendText}
-        >
-          <span className='material-symbols-rounded' aria-hidden='true'>keyboard_return</span>
-        </Button>
-      </div>
-      {error != null && <div className='chat-interaction-panel-mobile-debug__preview-error'>{error}</div>}
     </div>
   )
 }

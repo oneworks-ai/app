@@ -2213,6 +2213,7 @@
       "mobileDebugPortForwardingStatus": "Port forwarding",
       "mobileDebugAppSwitch": "Apps",
       "mobileDebugBack": "Back",
+      "mobileDebugDetails": "Details",
       "mobileDebugElementAttributes": "Element attributes",
       "mobileDebugElementTree": "Element tree",
       "mobileDebugHome": "Home",

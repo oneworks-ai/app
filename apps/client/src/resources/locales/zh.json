@@ -2214,6 +2214,7 @@
       "mobileDebugPortForwardingStatus": "端口转发",
       "mobileDebugAppSwitch": "任务",
       "mobileDebugBack": "返回",
+      "mobileDebugDetails": "详情",
       "mobileDebugElementAttributes": "元素属性",
       "mobileDebugElementTree": "元素树",
       "mobileDebugHome": "Home",

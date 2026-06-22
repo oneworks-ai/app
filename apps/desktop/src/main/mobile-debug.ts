@@ -11,6 +11,10 @@ import type { Duplex } from 'node:stream'
 
 const ADB_TIMEOUT_MS = 10000
 const FETCH_TIMEOUT_MS = 5000
+const ADB_INPUT_TIMEOUT_MS = 3000
+const ADB_SCREENSHOT_TIMEOUT_MS = 12000
+const ADB_UIAUTOMATOR_DUMP_TIMEOUT_MS = 10000
+const ADB_UIAUTOMATOR_READ_TIMEOUT_MS = 3500
 
 export interface MobileDebugDevice {
   detail: string
@@ -180,6 +184,7 @@ const socketForwardByTarget = new Map<string, Promise<SocketForwardRecord>>()
 const activeReversePortsByDevice = new Map<string, Map<number, string>>()
 const faviconUrlByPageUrl = new Map<string, string>()
 const deviceAdbQueueById = new Map<string, Promise<void>>()
+const deviceElementTreeQueueById = new Map<string, Promise<void>>()
 
 const runCommand = (file: string, args: string[], timeout = ADB_TIMEOUT_MS) =>
   new Promise<CommandResult>((resolve, reject) => {
@@ -224,6 +229,26 @@ const runQueuedDeviceAdbTask = async <T>(deviceId: string, task: () => Promise<T
     releaseCurrentTask()
     if (deviceAdbQueueById.get(deviceId) === queuedTask) {
       deviceAdbQueueById.delete(deviceId)
+    }
+  }
+}
+
+const runQueuedElementTreeTask = async <T>(deviceId: string, task: () => Promise<T>): Promise<T> => {
+  const previousTask = deviceElementTreeQueueById.get(deviceId) ?? Promise.resolve()
+  let releaseCurrentTask: () => void = () => undefined
+  const currentTask = new Promise<void>(resolve => {
+    releaseCurrentTask = resolve
+  })
+  const queuedTask = previousTask.catch(() => undefined).then(() => currentTask)
+  deviceElementTreeQueueById.set(deviceId, queuedTask)
+
+  await previousTask.catch(() => undefined)
+  try {
+    return await task()
+  } finally {
+    releaseCurrentTask()
+    if (deviceElementTreeQueueById.get(deviceId) === queuedTask) {
+      deviceElementTreeQueueById.delete(deviceId)
     }
   }
 }
@@ -1435,16 +1460,18 @@ export const listMobileDebugTargets = async (inputConfig?: unknown): Promise<Mob
 
 export const captureMobileDeviceScreenshot = async (deviceId: unknown): Promise<MobileDeviceScreenshotResponse> => {
   const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
-  return await runQueuedDeviceAdbTask(device.id, async () => {
-    const result = await runCommandBuffer(adbPath, ['-s', device.id, 'exec-out', 'screencap', '-p'], 15000)
-    const size = readPngSize(result.stdout)
-    return {
-      capturedAt: Date.now(),
-      deviceId: device.id,
-      imageDataUrl: `data:image/png;base64,${result.stdout.toString('base64')}`,
-      ...(size == null ? {} : size)
-    }
-  })
+  const result = await runCommandBuffer(
+    adbPath,
+    ['-s', device.id, 'exec-out', 'screencap', '-p'],
+    ADB_SCREENSHOT_TIMEOUT_MS
+  )
+  const size = readPngSize(result.stdout)
+  return {
+    capturedAt: Date.now(),
+    deviceId: device.id,
+    imageDataUrl: `data:image/png;base64,${result.stdout.toString('base64')}`,
+    ...(size == null ? {} : size)
+  }
 }
 
 export const sendMobileDeviceInput = async (
@@ -1454,51 +1481,66 @@ export const sendMobileDeviceInput = async (
   const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
   const inputEvent = toInputEventRecord(input)
 
-  return await runQueuedDeviceAdbTask(device.id, async () => {
-    if (inputEvent.kind === 'tap') {
-      const x = normalizeCoordinate(inputEvent.x)
-      const y = normalizeCoordinate(inputEvent.y)
-      if (x == null || y == null) throw new Error('Tap input requires x and y.')
-      await runCommand(adbPath, ['-s', device.id, 'shell', 'input', 'tap', String(x), String(y)])
-    } else if (inputEvent.kind === 'swipe') {
-      const x = normalizeCoordinate(inputEvent.x)
-      const y = normalizeCoordinate(inputEvent.y)
-      const endX = normalizeCoordinate(inputEvent.endX)
-      const endY = normalizeCoordinate(inputEvent.endY)
-      if (x == null || y == null || endX == null || endY == null) {
-        throw new Error('Swipe input requires x, y, endX and endY.')
-      }
-      await runCommand(adbPath, [
-        '-s',
-        device.id,
-        'shell',
-        'input',
-        'swipe',
-        String(x),
-        String(y),
-        String(endX),
-        String(endY),
-        String(normalizeDurationMs(inputEvent.durationMs, 220))
-      ])
-    } else if (inputEvent.kind === 'text') {
-      const text = inputEvent.text?.trim()
-      if (text == null || text === '') throw new Error('Text input requires text.')
-      await runCommand(adbPath, ['-s', device.id, 'shell', 'input', 'text', encodeAndroidInputText(text)])
-    } else {
-      await runCommand(adbPath, ['-s', device.id, 'shell', 'input', 'keyevent', getInputKeyCode(inputEvent.key)])
+  if (inputEvent.kind === 'tap') {
+    const x = normalizeCoordinate(inputEvent.x)
+    const y = normalizeCoordinate(inputEvent.y)
+    if (x == null || y == null) throw new Error('Tap input requires x and y.')
+    await runCommand(adbPath, ['-s', device.id, 'shell', 'input', 'tap', String(x), String(y)], ADB_INPUT_TIMEOUT_MS)
+  } else if (inputEvent.kind === 'swipe') {
+    const x = normalizeCoordinate(inputEvent.x)
+    const y = normalizeCoordinate(inputEvent.y)
+    const endX = normalizeCoordinate(inputEvent.endX)
+    const endY = normalizeCoordinate(inputEvent.endY)
+    if (x == null || y == null || endX == null || endY == null) {
+      throw new Error('Swipe input requires x, y, endX and endY.')
     }
+    await runCommand(adbPath, [
+      '-s',
+      device.id,
+      'shell',
+      'input',
+      'swipe',
+      String(x),
+      String(y),
+      String(endX),
+      String(endY),
+      String(normalizeDurationMs(inputEvent.durationMs, 220))
+    ], ADB_INPUT_TIMEOUT_MS)
+  } else if (inputEvent.kind === 'text') {
+    const text = inputEvent.text?.trim()
+    if (text == null || text === '') throw new Error('Text input requires text.')
+    await runCommand(
+      adbPath,
+      ['-s', device.id, 'shell', 'input', 'text', encodeAndroidInputText(text)],
+      ADB_INPUT_TIMEOUT_MS
+    )
+  } else {
+    await runCommand(
+      adbPath,
+      ['-s', device.id, 'shell', 'input', 'keyevent', getInputKeyCode(inputEvent.key)],
+      ADB_INPUT_TIMEOUT_MS
+    )
+  }
 
-    return { deviceId: device.id, sentAt: Date.now() }
-  })
+  return { deviceId: device.id, sentAt: Date.now() }
 }
 
 export const dumpMobileElementTree = async (deviceId: unknown): Promise<MobileElementTreeResponse> => {
   const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
-  return await runQueuedDeviceAdbTask(device.id, async () => {
+  return await runQueuedElementTreeTask(device.id, async () => {
     const remotePath = `/sdcard/oneworks-window-${Date.now().toString(36)}.xml`
-    await runCommand(adbPath, ['-s', device.id, 'shell', 'uiautomator', 'dump', remotePath], 15000)
-    const result = await runCommand(adbPath, ['-s', device.id, 'exec-out', 'cat', remotePath], 15000)
-    void runCommand(adbPath, ['-s', device.id, 'shell', 'rm', '-f', remotePath]).catch(() => undefined)
+    await runCommand(
+      adbPath,
+      ['-s', device.id, 'shell', 'uiautomator', 'dump', '--compressed', remotePath],
+      ADB_UIAUTOMATOR_DUMP_TIMEOUT_MS
+    )
+    const result = await runCommand(
+      adbPath,
+      ['-s', device.id, 'exec-out', 'cat', remotePath],
+      ADB_UIAUTOMATOR_READ_TIMEOUT_MS
+    )
+    void runCommand(adbPath, ['-s', device.id, 'shell', 'rm', '-f', remotePath], ADB_INPUT_TIMEOUT_MS)
+      .catch(() => undefined)
     const root = parseUiautomatorXml(result.stdout)
     return {
       capturedAt: Date.now(),
