@@ -391,6 +391,14 @@ interface DesktopInteractionPanelWebviewScopeInput extends DesktopBrowserActivit
   webContentsId: number
 }
 
+interface DesktopInteractionPanelWebviewElementCommentRequest {
+  frameUrl?: string
+  pageUrl?: string
+  webContentsId: number
+  x: number
+  y: number
+}
+
 interface Window {
   oneworksAndroidBridge?: OneWorksNativeBridgeRequestApi
   oneworksDesktop?: OneWorksDeviceShellApi & {
@@ -452,6 +460,9 @@ interface Window {
     onDesktopSettingsChange?: (listener: (value: unknown) => void) => () => void
     onUpdateStatusChange?: (listener: (value: unknown) => void) => () => void
     onGlobalInterfaceLanguageConfigChange?: (listener: (value: unknown) => void) => () => void
+    onInteractionPanelWebviewElementCommentRequest?: (
+      listener: (value: DesktopInteractionPanelWebviewElementCommentRequest) => void
+    ) => () => void
     onWorkspaceSelectorStateChange?: (listener: (value: unknown) => void) => () => void
     onToggleSidebarShortcut?: (listener: () => void) => () => void
     onViewShortcut?: (listener: (action: string) => void) => () => void

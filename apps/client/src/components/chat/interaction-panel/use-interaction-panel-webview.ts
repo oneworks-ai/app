@@ -49,6 +49,7 @@ export function useInteractionPanelWebview({
   isMobileDebugDevtools,
   onChangeMetadata,
   onChangeUrl,
+  onDomReady,
   pageId,
   recordUrlHistory,
   resolvedThemeMode,
@@ -58,6 +59,7 @@ export function useInteractionPanelWebview({
   isMobileDebugDevtools: boolean
   onChangeMetadata: (pageId: string, metadata: { faviconUrl?: string; title?: string }) => void
   onChangeUrl: (pageId: string, url: string) => void
+  onDomReady?: () => void
   pageId: string
   recordUrlHistory: (entry: Omit<InteractionPanelUrlHistoryEntry, 'updatedAt'>) => void
   resolvedThemeMode: ResolvedThemeMode
@@ -106,6 +108,7 @@ export function useInteractionPanelWebview({
       void readWebviewDocumentMetadata(webview).then(commitMetadata)
     }
     const handleDomReady = () => {
+      onDomReady?.()
       refreshDocumentState()
       updateHistoryState()
     }
@@ -144,7 +147,6 @@ export function useInteractionPanelWebview({
     webview.addEventListener('did-stop-loading', updateHistoryState)
     webview.addEventListener('page-title-updated', handleTitleChange)
     webview.addEventListener('page-favicon-updated', handleFaviconChange)
-    updateHistoryState()
 
     return () => {
       webview.removeEventListener('dom-ready', handleDomReady)
@@ -161,6 +163,7 @@ export function useInteractionPanelWebview({
     isMobileDebugDevtools,
     onChangeMetadata,
     onChangeUrl,
+    onDomReady,
     pageId,
     recordUrlHistory,
     resolvedThemeMode,

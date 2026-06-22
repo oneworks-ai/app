@@ -9,6 +9,7 @@
 - [开发服务启动入口混用历史脚本](#开发服务启动入口混用历史脚本)
 - [PR 截图证据断链或来源不真实](#pr-截图证据断链或来源不真实)
 - [移动端 WebView / 工作区 tabs 反复返工](#移动端-webview--工作区-tabs-反复返工)
+- [Electron WebView 右键元素评论坐标偏移](#electron-webview-右键元素评论坐标偏移)
 
 ## Subagent 启动 Web 服务超过 1 分钟
 
@@ -94,3 +95,19 @@ UI PR 的 `pr-change-policy` 只检查 PR body 是否有截图证据，不会判
 原因：
 
 这类任务同时跨 native WebView、前端 compact layout、共享 route chrome、真实设备验证和 CI policy。只凭单个浏览器截图或单点样式 patch 很容易修一个问题引出重复图标、padding 不一致、主题不一致、状态栏裁切、PR policy 失败等连锁问题。
+
+## Electron WebView 右键元素评论坐标偏移
+
+症状关键词：`webview 评论此元素`、`右键评论选错元素`、`评论到右下角`、`无法读取当前页面结构`、`context-menu params x y`、`webview annotation target`。
+
+标准处理：
+
+- 不要把 Electron main 进程 `context-menu` 事件里的 `ContextMenuParams.x/y` 直接传给页面脚本当作 `document.elementsFromPoint()` 坐标。不同 Electron / webview 场景下它容易和页面 viewport 坐标不一致，表现为右键左上元素却高亮右下元素。
+- 右键菜单只负责发出“评论此元素”意图；目标解析应回到 client renderer，复用注释模式点击时的同一套 webview viewport 坐标换算与注入脚本。
+- renderer 侧应在 webview 元素上记录最近一次 `contextmenu` / `mousedown` / `pointerdown` 的 host 坐标，并换算成 webview viewport 坐标；收到 main 进程 IPC 后，用该坐标解析元素，并用 `webContentsId` 防止多个 webview tab 串坐标。
+- 如果 hover 注释正常但右键评论偏移，优先检查两条路径是否复用了同一套坐标转换和 `elementsFromPoint()` 目标选择逻辑，不要只调元素打分权重。
+- desktop main / preload 改动需要重启 Electron workspace；仅前端热更新不足以验证 native context menu 行为。
+
+原因：
+
+webview 右键菜单发生在 Electron guest / main 边界，`ContextMenuParams` 的坐标语义不等价于 client renderer 中 webview DOM 元素换算出的页面 viewport 坐标。把目标选择拆成 main 进程一套、renderer 注释层一套，会让 hover / 点击路径正常而右键路径漂移，维护成本也会持续上升。
