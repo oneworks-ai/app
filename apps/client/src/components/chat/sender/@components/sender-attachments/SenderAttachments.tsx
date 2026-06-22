@@ -6,10 +6,15 @@ import type {
   PendingAnnotation,
   PendingAnnotationPreviewState,
   PendingContextFile,
+  PendingFileComment,
   PendingImage,
   PendingTextSelection
 } from '../../@types/sender-composer'
-import { PendingAnnotationGroup, PendingTextSelectionGroup } from './SenderReferenceAttachmentGroups'
+import {
+  PendingAnnotationGroup,
+  PendingFileCommentGroup,
+  PendingTextSelectionGroup
+} from './SenderReferenceAttachmentGroups'
 
 const formatAttachmentSize = (size?: number) => {
   if (size == null || Number.isNaN(size) || size <= 0) {
@@ -51,25 +56,33 @@ export function SenderAttachments({
   pendingFiles,
   pendingAnnotations,
   pendingTextSelections,
+  pendingFileComments,
   onRemovePendingImage,
   onRemovePendingFile,
   onRemovePendingAnnotation,
   onRemovePendingTextSelection,
+  onRemovePendingFileComment,
   onClearPendingAnnotations,
   onClearPendingTextSelections,
-  onPendingAnnotationPreviewChange
+  onClearPendingFileComments,
+  onPendingAnnotationPreviewChange,
+  onOpenPendingFileComment
 }: {
   pendingImages: PendingImage[]
   pendingFiles: PendingContextFile[]
   pendingAnnotations: PendingAnnotation[]
   pendingTextSelections: PendingTextSelection[]
+  pendingFileComments: PendingFileComment[]
   onRemovePendingImage: (id: string) => void
   onRemovePendingFile: (path: string) => void
   onRemovePendingAnnotation: (id: string) => void
   onRemovePendingTextSelection: (id: string) => void
+  onRemovePendingFileComment: (id: string) => void
   onClearPendingAnnotations: () => void
   onClearPendingTextSelections: () => void
+  onClearPendingFileComments: () => void
   onPendingAnnotationPreviewChange?: (state: PendingAnnotationPreviewState) => void
+  onOpenPendingFileComment?: (comment: PendingFileComment) => void
 }) {
   const { t } = useTranslation()
 
@@ -77,7 +90,8 @@ export function SenderAttachments({
     pendingImages.length === 0 &&
     pendingFiles.length === 0 &&
     pendingAnnotations.length === 0 &&
-    pendingTextSelections.length === 0
+    pendingTextSelections.length === 0 &&
+    pendingFileComments.length === 0
   ) {
     return null
   }
@@ -97,6 +111,14 @@ export function SenderAttachments({
           onRemovePendingAnnotation={onRemovePendingAnnotation}
           onClearPendingAnnotations={onClearPendingAnnotations}
           onPreviewStateChange={onPendingAnnotationPreviewChange}
+        />
+      )}
+      {pendingFileComments.length > 0 && (
+        <PendingFileCommentGroup
+          pendingFileComments={pendingFileComments}
+          onRemovePendingFileComment={onRemovePendingFileComment}
+          onClearPendingFileComments={onClearPendingFileComments}
+          onOpenPendingFileComment={onOpenPendingFileComment}
         />
       )}
       {pendingFiles.length > 0 && (

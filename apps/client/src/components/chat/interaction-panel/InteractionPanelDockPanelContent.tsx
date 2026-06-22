@@ -53,6 +53,7 @@ export function InteractionPanelDockPanelContentBody({
     terminalPanes,
     terminalSessionId,
     workspaceDrawerState,
+    workspaceFileFocusRequest,
     workspaceRootPath,
     onIframeMetadataChange,
     onIframeNavigateHistory,
@@ -60,13 +61,16 @@ export function InteractionPanelDockPanelContentBody({
     onIframeUrlChange,
     onLocateWorkspacePath,
     onMobileDebugPageChange,
+    onWorkspaceFileCommentDraftStateChange,
     onCloseWorkspaceFilePaths,
     onOpenIframeUrl,
     onPluginTabStateChange,
     onReferenceAnnotations,
+    onReferenceFileComments,
     hasPendingAnnotationReferences,
     pendingAnnotationPreview,
     pendingAnnotations,
+    pendingFileComments,
     onSelectWorkspaceFilePath,
     onSessionPageChange
   } = useInteractionPanelDockContext()
@@ -128,6 +132,9 @@ export function InteractionPanelDockPanelContentBody({
           path={tab.path}
           sessionId={sessionId}
           workspaceRootPath={workspaceRootPath}
+          focusRequest={workspaceFileFocusRequest?.path === tab.path ? workspaceFileFocusRequest : null}
+          pendingFileComments={pendingFileComments}
+          onCommentDraftStateChange={onWorkspaceFileCommentDraftStateChange}
           onClose={() => onCloseWorkspaceFilePaths([tab.path])}
           onCloseAllPaths={() => onCloseWorkspaceFilePaths(bottomPanel.openWorkspaceFilePaths)}
           onCloseOtherPaths={path =>
@@ -135,6 +142,8 @@ export function InteractionPanelDockPanelContentBody({
           onClosePath={path => onCloseWorkspaceFilePaths([path])}
           onClosePathsToRight={closeFilePathsToRight}
           onLocatePath={onLocateWorkspacePath}
+          onReferenceFileComments={onReferenceFileComments}
+          onReferenceWorkspacePaths={workspaceDrawerState.onReferencePaths}
           onSelectPath={onSelectWorkspaceFilePath}
         />
       </div>

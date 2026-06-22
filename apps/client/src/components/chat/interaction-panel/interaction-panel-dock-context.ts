@@ -3,8 +3,16 @@ import { createContext, useContext } from 'react'
 
 import type { TerminalShellKind } from '@oneworks/types'
 
-import type { PendingAnnotation, PendingAnnotationPreviewState } from '#~/components/chat/sender/@types/sender-composer'
+import type {
+  PendingAnnotation,
+  PendingAnnotationPreviewState,
+  PendingFileComment
+} from '#~/components/chat/sender/@types/sender-composer'
+import type {
+  WorkspaceFileCodeCommentDraftState
+} from '#~/components/chat/workspace-file-editor/workspace-file-code-comment-controller'
 import type { WorkspaceMarkdownPreviewMode } from '#~/components/chat/workspace-file-editor/workspace-file-editor-language'
+import type { WorkspaceFileFocusRequest } from '#~/components/chat/workspace-file-editor/workspace-file-focus-request'
 import type { ChatRouteBottomPanelState } from '#~/hooks/chat/use-chat-route-bottom-panel'
 
 import type { InteractionPanelWorkspaceDrawerState } from './InteractionPanelDockWorkspace.types'
@@ -42,6 +50,7 @@ export interface InteractionPanelDockContextValue {
   terminalPanes: ReturnType<typeof useInteractionTerminalPanes>
   terminalSessionId: string
   workspaceDrawerState: InteractionPanelWorkspaceDrawerState
+  workspaceFileFocusRequest?: WorkspaceFileFocusRequest | null
   workspaceRootPath?: string
   onAddMenuClick: NonNullable<MenuProps['onClick']>
   onCloseTab: (tab: InteractionPanelTab) => void
@@ -54,6 +63,7 @@ export interface InteractionPanelDockContextValue {
   onIframeUrlChange: (pageId: string, url: string) => void
   onLocateWorkspacePath: (path: string) => void
   onMarkdownPreviewModeChange: (mode: WorkspaceMarkdownPreviewMode) => void
+  onWorkspaceFileCommentDraftStateChange: (path: string, state: WorkspaceFileCodeCommentDraftState) => void
   onMobileDebugPageChange: (
     pageId: string,
     updater: (page: InteractionPanelMobileDebugPage) => InteractionPanelMobileDebugPage
@@ -66,8 +76,10 @@ export interface InteractionPanelDockContextValue {
   onPluginTabStateChange: (tabId: string, state: unknown) => void
   onRunCommand: (command: InteractionPanelRunCommand) => void
   onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
+  onReferenceFileComments?: (comments: PendingFileComment[]) => void
   pendingAnnotationPreview?: PendingAnnotationPreviewState
   pendingAnnotations?: PendingAnnotation[]
+  pendingFileComments?: PendingFileComment[]
   onSelectWorkspaceFilePath: (path: string) => void
   onSessionPageChange: (
     pageId: string,

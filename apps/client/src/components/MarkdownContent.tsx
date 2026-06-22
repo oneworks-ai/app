@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- central markdown renderer keeps node overrides and source-position attributes consistent. */
 import React from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -27,6 +28,31 @@ interface MarkdownContentProps {
   onLinkClick?: (href: string, event: React.MouseEvent<HTMLAnchorElement>) => void
   onOpenUrlInAppBrowser?: (url: string, title?: string) => void
   onOpenWorkspaceFileLink?: (target: WorkspaceFileLinkTarget) => void
+}
+
+interface MarkdownNodePosition {
+  end?: {
+    column?: number
+    line?: number
+  }
+  start?: {
+    column?: number
+    line?: number
+  }
+}
+
+const getSourcePositionProps = (node: unknown) => {
+  const position = (node as { position?: MarkdownNodePosition } | undefined)?.position
+  const startLine = position?.start?.line
+  const endLine = position?.end?.line
+  if (startLine == null || endLine == null) return {}
+
+  return {
+    'data-source-end-column': position?.end?.column ?? 1,
+    'data-source-end-line': endLine,
+    'data-source-start-column': position?.start?.column ?? 1,
+    'data-source-start-line': startLine
+  }
 }
 
 const getNodeText = (node: React.ReactNode): string => {
@@ -67,6 +93,9 @@ export function MarkdownContent({
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         components={{
+          blockquote({ node, ...props }: any) {
+            return <blockquote {...props} {...getSourcePositionProps(node)} />
+          },
           a({ href, children, node: _node, ...props }: any) {
             const linkHref = typeof href === 'string' ? href : ''
             const linkText = getNodeText(children).trim()
@@ -162,21 +191,64 @@ export function MarkdownContent({
           pre({ children }) {
             return <>{children}</>
           },
-          table({ children, node: _node, ...props }: any) {
+          h1({ node, ...props }: any) {
+            return <h1 {...props} {...getSourcePositionProps(node)} />
+          },
+          h2({ node, ...props }: any) {
+            return <h2 {...props} {...getSourcePositionProps(node)} />
+          },
+          h3({ node, ...props }: any) {
+            return <h3 {...props} {...getSourcePositionProps(node)} />
+          },
+          h4({ node, ...props }: any) {
+            return <h4 {...props} {...getSourcePositionProps(node)} />
+          },
+          h5({ node, ...props }: any) {
+            return <h5 {...props} {...getSourcePositionProps(node)} />
+          },
+          h6({ node, ...props }: any) {
+            return <h6 {...props} {...getSourcePositionProps(node)} />
+          },
+          li({ node, ...props }: any) {
+            return <li {...props} {...getSourcePositionProps(node)} />
+          },
+          ol({ node, ...props }: any) {
+            return <ol {...props} {...getSourcePositionProps(node)} />
+          },
+          p({ node, ...props }: any) {
+            return <p {...props} {...getSourcePositionProps(node)} />
+          },
+          table({ children, node, ...props }: any) {
             return (
-              <div className='markdown-table-wrapper'>
+              <div className='markdown-table-wrapper' {...getSourcePositionProps(node)}>
                 <table {...props}>{children}</table>
               </div>
             )
           },
-          code({ inline, className, children, node: _node, ...props }: any) {
+          td({ node, ...props }: any) {
+            return <td {...props} {...getSourcePositionProps(node)} />
+          },
+          th({ node, ...props }: any) {
+            return <th {...props} {...getSourcePositionProps(node)} />
+          },
+          tr({ node, ...props }: any) {
+            return <tr {...props} {...getSourcePositionProps(node)} />
+          },
+          ul({ node, ...props }: any) {
+            return <ul {...props} {...getSourcePositionProps(node)} />
+          },
+          code({ inline, className, children, node, ...props }: any) {
             const langClass = typeof className === 'string' ? className : ''
             const match = /language-(\w+)/.exec(langClass)
             const isInline = inline === true
             const codeContent = String(children).replace(/\n$/, '')
             return !isInline && match != null
-              ? <CodeBlock code={codeContent} lang={match[1]} />
-              : <code className={langClass} {...props}>{children}</code>
+              ? (
+                <div {...getSourcePositionProps(node)}>
+                  <CodeBlock code={codeContent} lang={match[1]} />
+                </div>
+              )
+              : <code className={langClass} {...props} {...getSourcePositionProps(node)}>{children}</code>
           }
         }}
       >

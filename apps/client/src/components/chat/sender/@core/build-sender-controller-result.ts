@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type {
   PendingAnnotation,
   PendingContextFile,
+  PendingFileComment,
   PendingImage,
   PendingTextSelection
 } from '../@types/sender-composer'
@@ -42,10 +43,12 @@ interface SenderControllerComposer {
   pendingFiles: PendingContextFile[]
   pendingAnnotations: PendingAnnotation[]
   pendingTextSelections: PendingTextSelection[]
+  pendingFileComments: PendingFileComment[]
   setPendingImages: Dispatch<SetStateAction<PendingImage[]>>
   setPendingFiles: Dispatch<SetStateAction<PendingContextFile[]>>
   setPendingAnnotations: Dispatch<SetStateAction<PendingAnnotation[]>>
   setPendingTextSelections: Dispatch<SetStateAction<PendingTextSelection[]>>
+  setPendingFileComments: Dispatch<SetStateAction<PendingFileComment[]>>
 }
 
 interface SenderControllerToolbar {

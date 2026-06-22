@@ -28,6 +28,8 @@ import {
   getConfig,
   openSessionWorkspaceFileInExternalOpener,
   openWorkspaceFileInExternalOpener,
+  readSessionWorkspaceFile,
+  readWorkspaceFile,
   updateConfig
 } from '#~/api'
 import {
@@ -116,8 +118,10 @@ import {
 import { SenderInteractionPanel } from './sender/@components/sender-interaction-panel/SenderInteractionPanel'
 import type {
   AnnotationReferenceRequest,
+  FileCommentReferenceRequest,
   PendingAnnotation,
   PendingAnnotationPreviewState,
+  PendingFileComment,
   PendingReferenceDraft,
   PendingReferenceDraftRequest,
   TextSelectionReferenceRequest
@@ -232,8 +236,10 @@ export function ChatHistoryView({
   agentRoomTranscript,
   contextReferenceRequest,
   annotationReferenceRequest,
+  fileCommentReferenceRequest,
   onPendingAnnotationCountChange,
   onPendingAnnotationsChange,
+  onPendingFileCommentsChange,
   onPendingAnnotationPreviewChange,
   hideHistoryTimeline = false,
   onOpenUrlInAppBrowser,
@@ -313,12 +319,14 @@ export function ChatHistoryView({
   }
   contextReferenceRequest?: ContextReferenceRequest | null
   annotationReferenceRequest?: AnnotationReferenceRequest | null
+  fileCommentReferenceRequest?: FileCommentReferenceRequest | null
   onPendingAnnotationCountChange?: (count: number) => void
   onPendingAnnotationsChange?: (annotations: PendingAnnotation[]) => void
+  onPendingFileCommentsChange?: (comments: PendingFileComment[]) => void
   onPendingAnnotationPreviewChange?: (state: PendingAnnotationPreviewState) => void
   hideHistoryTimeline?: boolean
   onOpenUrlInAppBrowser?: (url: string, title?: string) => void
-  onOpenWorkspaceFile?: (path: string) => void
+  onOpenWorkspaceFile?: (path: string, target?: Pick<WorkspaceFileLinkTarget, 'column' | 'line'>) => void
   workspaceRootPath?: string
   embeddedSessionChrome?: boolean
   navigateOnCreate?: boolean
@@ -327,7 +335,7 @@ export function ChatHistoryView({
   senderAutoFocusKey?: string
 }) {
   const { i18n, t } = useTranslation()
-  const { message } = App.useApp()
+  const { message, modal } = App.useApp()
   const location = useLocation()
   const navigate = useNavigate()
   const { isCompactLayout } = useResponsiveLayout()
@@ -1104,6 +1112,38 @@ export function ChatHistoryView({
     )
     : null
   const senderSessionId = isAgentRoomMode ? agentRoomTranscript.workspaceSessionId : session?.id
+  const handleOpenPendingFileComment = useCallback(async (
+    comment: PendingFileComment,
+    actions: { remove: () => void }
+  ) => {
+    const range = comment.selections?.find(selection => selection.range != null)?.range ?? comment.range
+    try {
+      if (senderSessionId != null && senderSessionId !== '') {
+        await readSessionWorkspaceFile(senderSessionId, comment.path)
+      } else {
+        await readWorkspaceFile(comment.path)
+      }
+    } catch {
+      modal.confirm({
+        title: t('chat.fileComments.missingFileTitle'),
+        content: t('chat.fileComments.missingFileContent', { path: comment.path }),
+        okText: t('chat.fileComments.missingFileRemove'),
+        cancelText: t('common.cancel'),
+        onOk: actions.remove
+      })
+      return
+    }
+
+    onOpenWorkspaceFile?.(
+      comment.path,
+      range == null
+        ? undefined
+        : {
+          column: range.startColumn,
+          line: range.startLineNumber
+        }
+    )
+  }, [modal, onOpenWorkspaceFile, senderSessionId, t])
   const pendingReferenceDraftStorageKey = useMemo(() => (
     senderSessionId == null || senderSessionId === ''
       ? null
@@ -1133,6 +1173,7 @@ export function ChatHistoryView({
   }, [pendingReferenceDraftStorageKey])
   const handlePendingReferenceDraftChange = useCallback((draft: PendingReferenceDraft) => {
     onPendingAnnotationsChange?.(draft.pendingAnnotations)
+    onPendingFileCommentsChange?.(draft.pendingFileComments)
     if (
       pendingReferenceDraftStorageKey == null ||
       hydratedPendingReferenceDraftStorageKeyRef.current !== pendingReferenceDraftStorageKey
@@ -1149,7 +1190,7 @@ export function ChatHistoryView({
 
     hydratingPendingReferenceDraftStorageKeyRef.current = null
     writePendingReferenceDraft(pendingReferenceDraftStorageKey, draft)
-  }, [onPendingAnnotationsChange, pendingReferenceDraftStorageKey])
+  }, [onPendingAnnotationsChange, onPendingFileCommentsChange, pendingReferenceDraftStorageKey])
   const senderAdapterLocked = senderSessionId != null && senderSessionId !== ''
   const senderSessionStatus = isAgentRoomMode ? undefined : isCreating ? 'running' : session?.status
   const senderIsThinking = !isAgentRoomMode && (isCreating || session?.status === 'running')
@@ -1753,10 +1794,12 @@ export function ChatHistoryView({
             contextReferenceRequest={contextReferenceRequest}
             annotationReferenceRequest={annotationReferenceRequest}
             textSelectionReferenceRequest={textSelectionReferenceRequest}
+            fileCommentReferenceRequest={fileCommentReferenceRequest}
             pendingReferenceDraftRequest={pendingReferenceDraftRequest}
             onPendingReferenceDraftChange={handlePendingReferenceDraftChange}
             onPendingAnnotationCountChange={onPendingAnnotationCountChange}
             onPendingAnnotationPreviewChange={onPendingAnnotationPreviewChange}
+            onOpenPendingFileComment={handleOpenPendingFileComment}
             enableVoiceInput={showVoiceInputInSender}
             hiddenVoiceInputActions={!showVoiceInputInSender
               ? {

@@ -30,6 +30,8 @@ import {
   parseWorkbenchDrawerViewMenuKey,
   toWorkbenchDrawerViewMenuKey
 } from '#~/components/chat/workbench-create-menu'
+import { WorkspaceFileEditorView } from '#~/components/chat/workspace-file-editor/WorkspaceFileEditorView'
+import type { WorkspaceFileFocusRequest } from '#~/components/chat/workspace-file-editor/workspace-file-focus-request'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import type {
   RouteContainerPanelDockActionItem,
@@ -88,16 +90,21 @@ import {
   parseInteractionPanelMobileDebugDeviceMenuKey,
   parseInteractionPanelPluginAddMenuKey
 } from '../interaction-panel/interaction-panel-tab-menu'
-import { toWorkspaceDrawerInteractionTabId } from '../interaction-panel/interaction-panel-tabs'
+import { getFileName, toWorkspaceDrawerInteractionTabId } from '../interaction-panel/interaction-panel-tabs'
 import type { InteractionPanelTab } from '../interaction-panel/interaction-panel-tabs'
 import { useCopyTextWithFeedback } from '../interaction-panel/use-copy-text-with-feedback'
 import { useInteractionPanelMobileDebugDeviceOptions } from '../interaction-panel/use-interaction-panel-mobile-debug-device-options'
 import { useInteractionPanelPinnedTabs } from '../interaction-panel/use-interaction-panel-pinned-tabs'
 import type { InteractionTerminalPanesController } from '../interaction-panel/use-interaction-terminal-panes'
 import type { SessionPanelStateController } from '../interaction-panel/use-session-panel-state'
-import type { PendingAnnotation, PendingAnnotationPreviewState } from '../sender/@types/sender-composer'
+import type {
+  PendingAnnotation,
+  PendingAnnotationPreviewState,
+  PendingFileComment
+} from '../sender/@types/sender-composer'
 import { WorkspaceDrawerViewPanel } from './WorkspaceDrawerViewPanel'
 import { useWorkspaceDrawerDockActions } from './use-workspace-drawer-dock-actions'
+import { getWorkspaceFileIconMeta } from './workspace-drawer-icons'
 import { renderMenuIcon } from './workspace-drawer-toolbar-menu'
 import type { WorkspaceDrawerView } from './workspace-drawer-types'
 import { buildWorkspaceDrawerViewItems, getPluginWorkspaceDrawerViews } from './workspace-drawer-view-items'
@@ -119,6 +126,7 @@ export interface ChatWorkspaceDrawerLocateFileRequest {
 }
 
 const WORKSPACE_DRAWER_IFRAME_TAB_PREFIX = 'workspace-drawer:iframe:'
+const WORKSPACE_DRAWER_FILE_TAB_PREFIX = 'workspace-drawer:file:'
 const WORKSPACE_DRAWER_MOBILE_DEBUG_TAB_PREFIX = 'workspace-drawer:mobile-debug:'
 const WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY = 'workspace-drawer:page-debugger'
 const WORKSPACE_DRAWER_PLUGIN_TAB_PREFIX = 'workspace-drawer:plugin:'
@@ -143,6 +151,7 @@ const debugWorkspaceDrawer = (message: string, data?: unknown) => {
 type WorkspaceDrawerDockTabKey =
   | WorkspaceDrawerView
   | `${typeof WORKSPACE_DRAWER_IFRAME_TAB_PREFIX}${string}`
+  | `${typeof WORKSPACE_DRAWER_FILE_TAB_PREFIX}${string}`
   | `${typeof WORKSPACE_DRAWER_MOBILE_DEBUG_TAB_PREFIX}${string}`
   | typeof WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY
   | `${typeof WORKSPACE_DRAWER_PLUGIN_TAB_PREFIX}${string}`
@@ -151,6 +160,9 @@ type WorkspaceDrawerDockTabKey =
 
 const toWorkspaceDrawerIframeTabKey = (pageId: string): WorkspaceDrawerDockTabKey =>
   `${WORKSPACE_DRAWER_IFRAME_TAB_PREFIX}${encodeURIComponent(pageId)}`
+
+const toWorkspaceDrawerFileTabKey = (path: string): WorkspaceDrawerDockTabKey =>
+  `${WORKSPACE_DRAWER_FILE_TAB_PREFIX}${encodeURIComponent(path)}`
 
 const toWorkspaceDrawerMobileDebugTabKey = (pageId: string): WorkspaceDrawerDockTabKey =>
   `${WORKSPACE_DRAWER_MOBILE_DEBUG_TAB_PREFIX}${encodeURIComponent(pageId)}`
@@ -250,8 +262,20 @@ const toWorkspaceDrawerPanelTab = (
   view: item.key
 })
 
+const toWorkspaceDrawerFilePanelTab = (path: string): Extract<SessionPanelTab, { kind: 'file' }> => ({
+  id: toWorkspaceDrawerFileTabKey(path),
+  kind: 'file',
+  path,
+  title: getFileName(path)
+})
+
 const toWorkspaceDrawerDockKeyFromTab = (tab: SessionPanelTab): WorkspaceDrawerDockTabKey | null => {
   if (tab.kind === 'workspace-drawer') return tab.view as WorkspaceDrawerDockTabKey
+  if (tab.kind === 'file') {
+    return tab.id.startsWith(WORKSPACE_DRAWER_FILE_TAB_PREFIX)
+      ? tab.id as WorkspaceDrawerDockTabKey
+      : toWorkspaceDrawerFileTabKey(tab.path)
+  }
   if (tab.kind === 'terminal') {
     return tab.id.startsWith(WORKSPACE_DRAWER_TERMINAL_TAB_PREFIX)
       ? tab.id as WorkspaceDrawerDockTabKey
@@ -396,13 +420,16 @@ export function ChatWorkspaceDrawer({
   panelStateController,
   pendingAnnotationPreview,
   pendingAnnotations,
+  pendingFileComments,
   onReferenceAnnotations,
+  onReferenceFileComments,
   onReferencePaths,
   selectedFilePath,
   settingsView,
   sessionId,
   terminalSessionId,
-  terminalPanes
+  terminalPanes,
+  workspaceFileFocusRequest
 }: {
   agentApprovals?: ChatWorkspaceDrawerAgentApprovals
   agentRoster?: ChatWorkspaceDrawerAgentRoster
@@ -422,13 +449,16 @@ export function ChatWorkspaceDrawer({
   panelStateController: SessionPanelStateController
   pendingAnnotationPreview?: PendingAnnotationPreviewState
   pendingAnnotations?: PendingAnnotation[]
+  pendingFileComments?: PendingFileComment[]
   onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
+  onReferenceFileComments?: (comments: PendingFileComment[]) => void
   onReferencePaths?: (files: ContextPickerFile[]) => void
   selectedFilePath?: string | null
   settingsView?: ReactNode
   sessionId?: string
   terminalSessionId: string
   terminalPanes: InteractionTerminalPanesController
+  workspaceFileFocusRequest?: WorkspaceFileFocusRequest | null
 }) {
   const { i18n, t } = useTranslation()
   const { message } = App.useApp()
@@ -510,6 +540,10 @@ export function ChatWorkspaceDrawer({
     rightPanelTabs
       .filter((tab): tab is Extract<SessionPanelTab, { kind: 'plugin' }> => tab.kind === 'plugin')
       .map(toRightPluginPage), [rightPanelTabs])
+  const rightFilePaths = useMemo(() =>
+    rightPanelTabs
+      .filter((tab): tab is Extract<SessionPanelTab, { kind: 'file' }> => tab.kind === 'file')
+      .map(tab => tab.path), [rightPanelTabs])
   const isPageDebuggerListOpen = rightPanelTabs.some(tab => tab.kind === 'page-debugger')
   const mobileDebugPage = mobileDebugPages[0]
   const { deviceOptions, refreshDeviceOptions } = useInteractionPanelMobileDebugDeviceOptions(
@@ -745,6 +779,7 @@ export function ChatWorkspaceDrawer({
     )
     const pluginPageByKey = new Map(pluginPages.map(page => [toWorkspaceDrawerPluginTabKey(page.id), page]))
     const sessionPageByKey = new Map(sessionPages.map(page => [toWorkspaceDrawerSessionTabKey(page.id), page]))
+    const filePathByKey = new Map(rightFilePaths.map(path => [toWorkspaceDrawerFileTabKey(path), path]))
 
     return openedTabKeys.flatMap((key): InteractionPanelTab[] => {
       if (isWorkspaceDrawerViewTabKey(key, availableViewSet)) {
@@ -758,6 +793,18 @@ export function ChatWorkspaceDrawer({
           kind: 'workspace-drawer',
           label: item.label,
           view: key
+        }]
+      }
+
+      const filePath = filePathByKey.get(key)
+      if (filePath != null) {
+        return [{
+          canClose: true,
+          icon: getWorkspaceFileIconMeta(getFileName(filePath)).icon,
+          id: key,
+          kind: 'file',
+          label: getFileName(filePath),
+          path: filePath
         }]
       }
 
@@ -848,6 +895,7 @@ export function ChatWorkspaceDrawer({
     mobileDebugPages,
     openedTabKeys,
     pluginPages,
+    rightFilePaths,
     sessionPages,
     t,
     terminalPanes.infoById,
@@ -1007,6 +1055,43 @@ export function ChatWorkspaceDrawer({
       activeTabId
     }))
   }, [updateRightArea])
+
+  const closeRightWorkspaceFilePaths = useCallback((paths: string[]) => {
+    const pathSet = new Set(paths.filter(path => path.trim() !== ''))
+    if (pathSet.size <= 0) return
+
+    updateRightArea((current, activeTabId) => {
+      const targetKeys = new Set(
+        current
+          .filter((tab): tab is Extract<SessionPanelTab, { kind: 'file' }> =>
+            tab.kind === 'file' && pathSet.has(tab.path)
+          )
+          .map(tab => toWorkspaceDrawerFileTabKey(tab.path))
+      )
+      const nextTabs = current.filter(tab => {
+        const key = toWorkspaceDrawerDockKeyFromTab(tab)
+        return key == null || !targetKeys.has(key)
+      })
+      const nextActiveTabId = activeTabId != null && !targetKeys.has(activeTabId as WorkspaceDrawerDockTabKey)
+        ? activeTabId
+        : nextTabs[0]?.id
+      return {
+        tabs: nextTabs,
+        ...(nextActiveTabId == null ? {} : { activeTabId: nextActiveTabId })
+      }
+    })
+  }, [updateRightArea])
+
+  const openRightWorkspaceFilePath = useCallback((path: string) => {
+    const normalizedPath = path.trim()
+    if (normalizedPath === '') return
+
+    const tab = toWorkspaceDrawerFilePanelTab(normalizedPath)
+    const tabKey = toWorkspaceDrawerFileTabKey(normalizedPath)
+    setActiveTabKey(tabKey)
+    setMobileViewMode('tab')
+    upsertRightPanelTab(tab)
+  }, [upsertRightPanelTab])
 
   const openRightIframeUrl = useCallback((
     url: string,
@@ -1334,6 +1419,51 @@ export function ChatWorkspaceDrawer({
       }
     })
     const terminalPaneById = new Map(drawerTerminalPanes.map(pane => [pane.id, pane]))
+    const fileTabs: Array<RouteContainerPanelDockTabItem<WorkspaceDrawerDockTabKey>> = rightPanelTabs.flatMap((tab) => {
+      if (tab.kind !== 'file') return []
+      const tabKey = toWorkspaceDrawerFileTabKey(tab.path)
+      const pinnedTab = drawerPinnedTabById[tabKey]
+      const closeFilePathsToRight = (path: string) => {
+        const tabIndex = rightFilePaths.indexOf(path)
+        if (tabIndex < 0) return
+        closeRightWorkspaceFilePaths(rightFilePaths.slice(tabIndex + 1))
+      }
+
+      return [{
+        activeIcon: pinnedTab?.icon ?? getWorkspaceFileIconMeta(getFileName(tab.path)).icon,
+        content: ({ isVisible }) => (
+          <div className={`chat-interaction-panel__dock-panel-content ${isVisible ? 'is-visible' : 'is-hidden'}`}>
+            <WorkspaceFileEditorView
+              variant='content'
+              showTabs={false}
+              isOpen={isVisible && resolvedActiveTabKey === tabKey}
+              markdownPreviewMode={workspaceFileFocusRequest?.path === tab.path ? 'editor' : 'preview'}
+              openPaths={rightFilePaths}
+              path={tab.path}
+              sessionId={sessionId}
+              pendingFileComments={pendingFileComments}
+              focusRequest={workspaceFileFocusRequest?.path === tab.path ? workspaceFileFocusRequest : null}
+              onClose={() => closeRightWorkspaceFilePaths([tab.path])}
+              onCloseAllPaths={() => closeRightWorkspaceFilePaths(rightFilePaths)}
+              onCloseOtherPaths={path => closeRightWorkspaceFilePaths(rightFilePaths.filter(item => item !== path))}
+              onClosePath={path => closeRightWorkspaceFilePaths([path])}
+              onClosePathsToRight={closeFilePathsToRight}
+              onLocatePath={path => {
+                setTreeActivePath(path)
+                handleWorkspaceTreeCommand('locate', path)
+              }}
+              onReferenceFileComments={onReferenceFileComments}
+              onReferenceWorkspacePaths={onReferencePaths}
+              onSelectPath={openRightWorkspaceFilePath}
+            />
+          </div>
+        ),
+        icon: pinnedTab?.icon ?? getWorkspaceFileIconMeta(getFileName(tab.path)).icon,
+        key: tabKey,
+        label: pinnedTab?.title ?? getFileName(tab.path),
+        title: pinnedTab?.originalTitle ?? tab.path
+      }]
+    })
     const terminalTabs: Array<RouteContainerPanelDockTabItem<WorkspaceDrawerDockTabKey>> = rightPanelTabs.flatMap(
       (tab) => {
         if (tab.kind !== 'terminal') return []
@@ -1522,6 +1652,7 @@ export function ChatWorkspaceDrawer({
 
     return [
       ...drawerTabs,
+      ...fileTabs,
       ...terminalTabs,
       ...sessionTabs,
       ...mobileDebugTabs,
@@ -1535,21 +1666,27 @@ export function ChatWorkspaceDrawer({
     approvalMessages,
     drawerPinnedTabById,
     drawerTerminalPanes,
+    closeRightWorkspaceFilePaths,
     hasPendingAnnotationReferences,
+    handleWorkspaceTreeCommand,
     iframePages,
     isPageDebuggerListOpen,
     isGitLoading,
     mobileDebugPages,
     onOpenFile,
+    onReferenceFileComments,
     pendingAnnotationPreview,
     pendingAnnotations,
+    pendingFileComments,
     onReferenceAnnotations,
     onReferencePaths,
+    openRightWorkspaceFilePath,
     openRightIframeUrl,
     pluginPages,
     pluginTabs,
     repoState,
     resolvedActiveTabKey,
+    rightFilePaths,
     rightPanelTabs,
     selectedFilePath,
     sessionId,

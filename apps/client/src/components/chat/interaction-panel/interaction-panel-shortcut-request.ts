@@ -8,7 +8,7 @@ export type InteractionPanelShortcutRequest =
   | { action: 'open-terminal'; id: number; terminalId: string }
   | { action: 'terminate-run-command-task'; id: number; terminalId: string }
   | { action: 'open-website'; id: number; title?: string; url: string }
-  | { action: 'open-workspace-file'; id: number; path: string }
+  | { action: 'open-workspace-file'; column?: number; id: number; line?: number; path: string }
   | { action: 'create-menu-item'; id: number; menuKey: string }
   | { action: 'run-command'; command: InteractionPanelRunCommand; id: number }
 

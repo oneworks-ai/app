@@ -60,6 +60,7 @@ export function Sender(props: SenderProps) {
           pendingFiles={controller.composer.pendingFiles}
           pendingAnnotations={controller.composer.pendingAnnotations}
           pendingTextSelections={controller.composer.pendingTextSelections}
+          pendingFileComments={controller.composer.pendingFileComments}
           onRemovePendingImage={(id) =>
             controller.composer.setPendingImages(prev => prev.filter(image => image.id !== id))}
           onRemovePendingFile={(path) =>
@@ -68,9 +69,19 @@ export function Sender(props: SenderProps) {
             controller.composer.setPendingAnnotations(prev => prev.filter(annotation => annotation.id !== id))}
           onRemovePendingTextSelection={(id) =>
             controller.composer.setPendingTextSelections(prev => prev.filter(selection => selection.id !== id))}
+          onRemovePendingFileComment={(id) =>
+            controller.composer.setPendingFileComments(prev => prev.filter(comment => comment.id !== id))}
           onClearPendingAnnotations={() => controller.composer.setPendingAnnotations([])}
           onClearPendingTextSelections={() => controller.composer.setPendingTextSelections([])}
+          onClearPendingFileComments={() => controller.composer.setPendingFileComments([])}
           onPendingAnnotationPreviewChange={props.onPendingAnnotationPreviewChange}
+          onOpenPendingFileComment={props.onOpenPendingFileComment == null
+            ? undefined
+            : comment =>
+              props.onOpenPendingFileComment?.(comment, {
+                remove: () =>
+                  controller.composer.setPendingFileComments(current => current.filter(item => item.id !== comment.id))
+              })}
           editorRef={controller.editorRef}
           sessionId={props.sessionId}
           sessionInfo={props.sessionInfo}

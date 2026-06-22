@@ -12,11 +12,16 @@ import { ChatHistoryView } from '#~/components/chat/ChatHistoryView.js'
 import { ChatSettingsView } from '#~/components/chat/ChatSettingsView.js'
 import { ChatTimelineView } from '#~/components/chat/ChatTimelineView.js'
 import { buildChatHistoryStatusNotices } from '#~/components/chat/messages/build-chat-history-status-notices'
-import type { PendingAnnotation, PendingAnnotationPreviewState } from '#~/components/chat/sender/@types/sender-composer'
+import type {
+  PendingAnnotation,
+  PendingAnnotationPreviewState,
+  PendingFileComment
+} from '#~/components/chat/sender/@types/sender-composer'
 import type { ContextPickerFile, ContextReferenceRequest } from '#~/components/workspace/context-file-types'
 import { useChatRouteDeepLinkView } from '#~/hooks/chat/use-chat-route-deep-link-view'
 import { useChatSession } from '#~/hooks/chat/use-chat-session'
 import { useSessionTimelineExperiment } from '#~/hooks/chat/use-session-timeline-experiment'
+import type { WorkspaceFileLinkTarget } from '#~/utils/link-targets'
 
 import { ChatRouteShell } from './ChatRouteShell'
 import { CHAT_ROUTE_SENDER_FOCUS_QUERY_PARAM } from './chat-route-query'
@@ -142,8 +147,15 @@ export function ChatRouteView({
       id: number
     } | null
   >(null)
+  const [fileCommentReferenceRequest, setFileCommentReferenceRequest] = useState<
+    {
+      comments: PendingFileComment[]
+      id: number
+    } | null
+  >(null)
   const [pendingAnnotationReferenceCount, setPendingAnnotationReferenceCount] = useState(0)
   const [pendingAnnotations, setPendingAnnotations] = useState<PendingAnnotation[]>([])
+  const [pendingFileComments, setPendingFileComments] = useState<PendingFileComment[]>([])
   const [pendingAnnotationPreview, setPendingAnnotationPreview] = useState<PendingAnnotationPreviewState>({
     activeAnnotationId: null,
     isActive: false
@@ -239,6 +251,11 @@ export function ChatRouteView({
       setPendingAnnotationReferenceCount(current => current + annotations.length)
     }
   }
+  const handleReferenceFileComments = (comments: PendingFileComment[]) => {
+    if (comments.length > 0) {
+      setFileCommentReferenceRequest(current => ({ id: (current?.id ?? 0) + 1, comments }))
+    }
+  }
   const handleHistoryTimelineHiddenChange = useCallback((hidden: boolean) => {
     if (currentSessionId == null || currentSessionId === '') {
       return
@@ -262,7 +279,7 @@ export function ChatRouteView({
     workspaceRootPath
   }: {
     onOpenUrlInAppBrowser: (url: string, title?: string) => void
-    onOpenWorkspaceFile: (path: string) => void
+    onOpenWorkspaceFile: (path: string, target?: Pick<WorkspaceFileLinkTarget, 'column' | 'line'>) => void
     workspaceRootPath?: string
   }) => (
     <PanelIndependentChatHistoryView
@@ -319,8 +336,10 @@ export function ChatRouteView({
       agentRoomTranscript={agentRoomTranscript}
       contextReferenceRequest={contextReferenceRequest}
       annotationReferenceRequest={annotationReferenceRequest}
+      fileCommentReferenceRequest={fileCommentReferenceRequest}
       onPendingAnnotationCountChange={setPendingAnnotationReferenceCount}
       onPendingAnnotationsChange={setPendingAnnotations}
+      onPendingFileCommentsChange={setPendingFileComments}
       onPendingAnnotationPreviewChange={setPendingAnnotationPreview}
       hideHistoryTimeline={isHistoryTimelineHidden}
       onOpenUrlInAppBrowser={onOpenUrlInAppBrowser}
@@ -335,6 +354,7 @@ export function ChatRouteView({
     canonicalSessionId,
     annotationReferenceRequest,
     contextReferenceRequest,
+    fileCommentReferenceRequest,
     creationProgress,
     currentSessionId,
     effort,
@@ -441,8 +461,10 @@ export function ChatRouteView({
       onHistoryTimelineHiddenChange={isAgentRoomMode ? undefined : handleHistoryTimelineHiddenChange}
       onReferenceWorkspacePaths={handleReferenceWorkspacePaths}
       onReferenceAnnotations={handleReferenceAnnotations}
+      onReferenceFileComments={handleReferenceFileComments}
       hasPendingAnnotationReferences={pendingAnnotationReferenceCount > 0}
       pendingAnnotations={pendingAnnotations}
+      pendingFileComments={pendingFileComments}
       pendingAnnotationPreview={pendingAnnotationPreview}
       workspaceDrawerDefaultView={workspaceDrawerDefaultView}
       workspaceSessionId={agentRoomTranscript?.workspaceSessionId}

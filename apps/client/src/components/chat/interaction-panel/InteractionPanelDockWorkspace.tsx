@@ -1,10 +1,13 @@
 /* eslint-disable max-lines -- Chat dock business bindings stay colocated while common chrome lives in RouteContainerPanelDockWorkspace. */
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { App } from 'antd'
 
 import { buildWorkbenchCreateMenuItems, toWorkbenchDrawerViewMenuKey } from '#~/components/chat/workbench-create-menu'
+import type {
+  WorkspaceFileCodeCommentDraftState
+} from '#~/components/chat/workspace-file-editor/workspace-file-code-comment-controller'
 import { isWorkspaceMarkdownPreviewPath } from '#~/components/chat/workspace-file-editor/workspace-file-editor-language'
 import type {
   WorkspaceMarkdownPreviewMode
@@ -23,8 +26,11 @@ import { InteractionPanelDockPanelContentBody } from './InteractionPanelDockPane
 import type { InteractionPanelDockWorkspaceProps } from './InteractionPanelDockWorkspace.types'
 import { InteractionPanelDockContext } from './interaction-panel-dock-context'
 import { buildInteractionPanelDockTabContextMenuItems } from './interaction-panel-dock-tab-context-menu'
+import { getTabsForCloseScope } from './interaction-panel-tab-groups'
+import type { InteractionPanelTabCloseScope } from './interaction-panel-tab-groups'
 import { buildInteractionPanelTabHeaderActions } from './interaction-panel-tab-header-actions'
 import { isActiveTab } from './interaction-panel-tabs'
+import type { InteractionPanelTab } from './interaction-panel-tabs'
 import { useCopyTextWithFeedback } from './use-copy-text-with-feedback'
 import { useInteractionPanelMobileDebugDeviceOptions } from './use-interaction-panel-mobile-debug-device-options'
 
@@ -64,6 +70,7 @@ export function InteractionPanelDockWorkspace({
   workspaceDrawerCreateItems,
   workspaceDrawerCreateSelectedKeys,
   workspaceDrawerState,
+  workspaceFileFocusRequest,
   workspaceRootPath,
   openResourceShortcut,
   getTabHeaderActions,
@@ -91,16 +98,21 @@ export function InteractionPanelDockWorkspace({
   onPluginTabStateChange,
   onRunCommand,
   onReferenceAnnotations,
+  onReferenceFileComments,
   hasPendingAnnotationReferences,
   pendingAnnotationPreview,
   pendingAnnotations,
+  pendingFileComments,
   onSelectWorkspaceFilePath,
   onSessionPageChange,
   onTogglePanelFullscreen,
   onUnpinTab
 }: InteractionPanelDockWorkspaceProps) {
   const { i18n, t } = useTranslation()
-  const { message } = App.useApp()
+  const { message, modal } = App.useApp()
+  const [fileCommentDraftStateByPath, setFileCommentDraftStateByPath] = useState<
+    Record<string, WorkspaceFileCodeCommentDraftState>
+  >({})
   const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac')
   const tabById = useMemo(() => Object.fromEntries(tabs.map(tab => [tab.id, tab])), [tabs])
   const iframePageById = useMemo(() => Object.fromEntries(iframePages.map(page => [page.id, page])), [iframePages])
@@ -147,6 +159,70 @@ export function InteractionPanelDockWorkspace({
       )
       .map(tab => toWorkbenchDrawerViewMenuKey(tab.view))
   ], [tabs, workspaceDrawerCreateSelectedKeys])
+  useEffect(() => {
+    const openFilePaths = new Set(
+      tabs
+        .filter((tab): tab is Extract<InteractionPanelDockWorkspaceProps['tabs'][number], { kind: 'file' }> =>
+          tab.kind === 'file'
+        )
+        .map(tab => tab.path)
+    )
+    setFileCommentDraftStateByPath((previous) => {
+      const nextEntries = Object.entries(previous).filter(([path]) => openFilePaths.has(path))
+      if (nextEntries.length === Object.keys(previous).length) return previous
+      return Object.fromEntries(nextEntries)
+    })
+  }, [tabs])
+  const handleWorkspaceFileCommentDraftStateChange = useCallback((
+    path: string,
+    state: WorkspaceFileCodeCommentDraftState
+  ) => {
+    setFileCommentDraftStateByPath((previous) => {
+      const previousState = previous[path]
+      if (previousState?.hasContent === state.hasContent && previousState.hasDraft === state.hasDraft) {
+        return previous
+      }
+      if (!state.hasDraft) {
+        if (previousState == null) return previous
+        const nextState = { ...previous }
+        delete nextState[path]
+        return nextState
+      }
+      return {
+        ...previous,
+        [path]: state
+      }
+    })
+  }, [])
+  const confirmFileCommentDraftClose = useCallback((targetTabs: InteractionPanelTab[], action: () => void) => {
+    const targetFileDraftStates = targetTabs
+      .filter((tab): tab is Extract<InteractionPanelTab, { kind: 'file' }> => tab.kind === 'file')
+      .map(tab => fileCommentDraftStateByPath[tab.path])
+      .filter((state): state is WorkspaceFileCodeCommentDraftState => state?.hasDraft === true)
+
+    if (targetFileDraftStates.length === 0) {
+      return false
+    }
+
+    modal.confirm({
+      title: t('chat.fileComments.discardDraftTitle'),
+      content: targetFileDraftStates.some(state => state.hasContent)
+        ? t('chat.fileComments.discardDraftContent')
+        : t('chat.fileComments.discardDraftEmptyContent'),
+      okText: t('chat.fileComments.discardDraftOk'),
+      cancelText: t('common.cancel'),
+      onOk: action
+    })
+    return true
+  }, [fileCommentDraftStateByPath, modal, t])
+  const runWithFileCommentDraftCloseGuard = useCallback((
+    targetTabs: InteractionPanelTab[],
+    action: () => void
+  ) => {
+    if (!confirmFileCommentDraftClose(targetTabs, action)) {
+      action()
+    }
+  }, [confirmFileCommentDraftClose])
   const dockTabs = useMemo<Array<RouteContainerPanelDockTabItem<string>>>(() =>
     tabs.map(tab => {
       const pinnedTab = pinnedTabById[tab.id]
@@ -260,6 +336,13 @@ export function InteractionPanelDockWorkspace({
     workspaceRootPath
   ])
 
+  const handleCloseTabGroup = useCallback((tab: InteractionPanelTab, scope: InteractionPanelTabCloseScope) => {
+    runWithFileCommentDraftCloseGuard(
+      getTabsForCloseScope(tabs, tab, scope),
+      () => onCloseTabGroup(tab, scope)
+    )
+  }, [onCloseTabGroup, runWithFileCommentDraftCloseGuard, tabs])
+
   const getTabContextMenuItems = useCallback(
     (context: RouteContainerPanelTabMenuContext<string>) =>
       buildInteractionPanelDockTabContextMenuItems({
@@ -267,7 +350,7 @@ export function InteractionPanelDockWorkspace({
         canPinMoreTabs,
         iframePage: iframePageById[context.tab.key],
         onCopyText: copyContextText,
-        onCloseTabGroup,
+        onCloseTabGroup: handleCloseTabGroup,
         onEditPinnedTab,
         onNewTerminal,
         onPinTab,
@@ -280,8 +363,8 @@ export function InteractionPanelDockWorkspace({
     [
       canPinMoreTabs,
       copyContextText,
+      handleCloseTabGroup,
       iframePageById,
-      onCloseTabGroup,
       onEditPinnedTab,
       onNewTerminal,
       onPinTab,
@@ -302,8 +385,12 @@ export function InteractionPanelDockWorkspace({
 
   const handleTabClose = useCallback((tabKey: string) => {
     const tab = tabById[tabKey]
-    if (tab != null) onCloseTab(tab)
-  }, [onCloseTab, tabById])
+    if (tab != null) {
+      if (confirmFileCommentDraftClose([tab], () => onCloseTab(tab))) return false
+      onCloseTab(tab)
+    }
+    return undefined
+  }, [confirmFileCommentDraftClose, onCloseTab, tabById])
 
   const contextValue = {
     activeTab,
@@ -329,10 +416,11 @@ export function InteractionPanelDockWorkspace({
     terminalPanes,
     terminalSessionId,
     workspaceDrawerState,
+    workspaceFileFocusRequest,
     workspaceRootPath,
     onAddMenuClick,
-    onCloseTab,
-    onCloseTabGroup,
+    onCloseTab: (tab: InteractionPanelTab) => runWithFileCommentDraftCloseGuard([tab], () => onCloseTab(tab)),
+    onCloseTabGroup: handleCloseTabGroup,
     onCloseWorkspaceFilePaths,
     onEditPinnedTab,
     onIframeMetadataChange,
@@ -341,6 +429,7 @@ export function InteractionPanelDockWorkspace({
     onIframeUrlChange,
     onLocateWorkspacePath,
     onMarkdownPreviewModeChange,
+    onWorkspaceFileCommentDraftStateChange: handleWorkspaceFileCommentDraftStateChange,
     onMobileDebugPageChange,
     onNewSession,
     onNewTerminal,
@@ -351,8 +440,10 @@ export function InteractionPanelDockWorkspace({
     onPluginTabStateChange,
     onRunCommand,
     onReferenceAnnotations,
+    onReferenceFileComments,
     pendingAnnotationPreview,
     pendingAnnotations,
+    pendingFileComments,
     onSelectWorkspaceFilePath,
     onSessionPageChange,
     onTogglePanelFullscreen,

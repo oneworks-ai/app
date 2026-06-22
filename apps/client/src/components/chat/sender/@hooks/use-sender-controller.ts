@@ -42,6 +42,7 @@ export const useSenderController = (props: SenderProps) => {
   const handledContextReferenceRequestIdRef = useRef<number | null>(null)
   const handledAnnotationReferenceRequestIdRef = useRef<number | null>(null)
   const handledTextSelectionReferenceRequestIdRef = useRef<number | null>(null)
+  const handledFileCommentReferenceRequestIdRef = useRef<number | null>(null)
   const handledPendingReferenceDraftRequestIdRef = useRef<number | null>(null)
   const { isInlineEdit, isMac, isThinking, isBusy, supportsEffort } = getSenderRuntimeState(props)
   const composer = useSenderComposerState(props.initialContent)
@@ -128,6 +129,7 @@ export const useSenderController = (props: SenderProps) => {
     pendingFiles: composer.pendingFiles,
     pendingAnnotations: composer.pendingAnnotations,
     pendingTextSelections: composer.pendingTextSelections,
+    pendingFileComments: composer.pendingFileComments,
     isBusy,
     allowWhileBusy: isThinking,
     isInlineEdit,
@@ -277,6 +279,48 @@ export const useSenderController = (props: SenderProps) => {
   ])
 
   useEffect(() => {
+    const request = props.fileCommentReferenceRequest
+    if (request == null || request.comments.length === 0 || isInlineEdit) {
+      return
+    }
+    if (handledFileCommentReferenceRequestIdRef.current === request.id) {
+      return
+    }
+    handledFileCommentReferenceRequestIdRef.current = request.id
+    if (props.modelUnavailable) {
+      void message.warning(t('chat.modelConfigRequired'))
+      return
+    }
+    if (props.interactionRequest != null) {
+      void message.warning(t('chat.fileNotSupportedInInteraction'))
+      return
+    }
+
+    composer.setPendingFileComments(current => {
+      const next = [...current]
+      for (const comment of request.comments) {
+        const existingIndex = next.findIndex(item => item.id === comment.id)
+        if (existingIndex >= 0) {
+          next[existingIndex] = comment
+        } else {
+          next.push(comment)
+        }
+      }
+      return next
+    })
+    focusRestore.queueEditorFocusRestore()
+  }, [
+    composer.setPendingFileComments,
+    focusRestore,
+    isInlineEdit,
+    message,
+    props.fileCommentReferenceRequest,
+    props.interactionRequest,
+    props.modelUnavailable,
+    t
+  ])
+
+  useEffect(() => {
     const request = props.pendingReferenceDraftRequest
     if (request == null || isInlineEdit) {
       return
@@ -290,10 +334,12 @@ export const useSenderController = (props: SenderProps) => {
     composer.setPendingFiles(request.pendingFiles)
     composer.setPendingAnnotations(request.pendingAnnotations)
     composer.setPendingTextSelections(request.pendingTextSelections)
+    composer.setPendingFileComments(request.pendingFileComments)
     focusRestore.queueEditorFocusRestore()
   }, [
     composer.setPendingAnnotations,
     composer.setPendingFiles,
+    composer.setPendingFileComments,
     composer.setPendingImages,
     composer.setPendingTextSelections,
     focusRestore,
@@ -307,11 +353,13 @@ export const useSenderController = (props: SenderProps) => {
       pendingImages: composer.pendingImages,
       pendingFiles: composer.pendingFiles,
       pendingAnnotations: composer.pendingAnnotations,
-      pendingTextSelections: composer.pendingTextSelections
+      pendingTextSelections: composer.pendingTextSelections,
+      pendingFileComments: composer.pendingFileComments
     })
   }, [
     composer.pendingAnnotations,
     composer.pendingFiles,
+    composer.pendingFileComments,
     composer.pendingImages,
     composer.pendingTextSelections,
     isInlineEdit,

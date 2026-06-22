@@ -19,6 +19,7 @@ import type {
   PendingAnnotation,
   PendingAnnotationPreviewState,
   PendingContextFile,
+  PendingFileComment,
   PendingImage,
   PendingTextSelection
 } from '../../@types/sender-composer'
@@ -36,13 +37,17 @@ export function SenderBody({
   pendingFiles,
   pendingAnnotations,
   pendingTextSelections,
+  pendingFileComments,
   onRemovePendingImage,
   onRemovePendingFile,
   onRemovePendingAnnotation,
   onRemovePendingTextSelection,
+  onRemovePendingFileComment,
   onClearPendingAnnotations,
   onClearPendingTextSelections,
+  onClearPendingFileComments,
   onPendingAnnotationPreviewChange,
+  onOpenPendingFileComment,
   editorRef,
   sessionId,
   sessionInfo,
@@ -77,13 +82,17 @@ export function SenderBody({
   pendingFiles: PendingContextFile[]
   pendingAnnotations: PendingAnnotation[]
   pendingTextSelections: PendingTextSelection[]
+  pendingFileComments: PendingFileComment[]
   onRemovePendingImage: (id: string) => void
   onRemovePendingFile: (path: string) => void
   onRemovePendingAnnotation: (id: string) => void
   onRemovePendingTextSelection: (id: string) => void
+  onRemovePendingFileComment: (id: string) => void
   onClearPendingAnnotations: () => void
   onClearPendingTextSelections: () => void
+  onClearPendingFileComments: () => void
   onPendingAnnotationPreviewChange?: (state: PendingAnnotationPreviewState) => void
+  onOpenPendingFileComment?: (comment: PendingFileComment) => void
   editorRef: MutableRefObject<SenderEditorHandle | null>
   sessionId?: string
   sessionInfo?: SessionInfo | null
@@ -142,13 +151,17 @@ export function SenderBody({
         pendingFiles={pendingFiles}
         pendingAnnotations={pendingAnnotations}
         pendingTextSelections={pendingTextSelections}
+        pendingFileComments={pendingFileComments}
         onRemovePendingImage={onRemovePendingImage}
         onRemovePendingFile={onRemovePendingFile}
         onRemovePendingAnnotation={onRemovePendingAnnotation}
         onRemovePendingTextSelection={onRemovePendingTextSelection}
+        onRemovePendingFileComment={onRemovePendingFileComment}
         onClearPendingAnnotations={onClearPendingAnnotations}
         onClearPendingTextSelections={onClearPendingTextSelections}
+        onClearPendingFileComments={onClearPendingFileComments}
         onPendingAnnotationPreviewChange={onPendingAnnotationPreviewChange}
+        onOpenPendingFileComment={onOpenPendingFileComment}
         input={input}
         placeholder={placeholder || t('chat.inputPlaceholder')}
         disabled={(!isInlineEdit && modelUnavailable) || (isInlineEdit && isBusy)}

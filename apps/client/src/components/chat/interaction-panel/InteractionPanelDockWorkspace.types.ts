@@ -4,9 +4,14 @@ import type { ReactNode } from 'react'
 import type { GitRepositoryState, TerminalShellKind } from '@oneworks/types'
 
 import type { AgentRoomMessageView } from '#~/components/agent-room/@types/agent-room-view'
-import type { PendingAnnotation, PendingAnnotationPreviewState } from '#~/components/chat/sender/@types/sender-composer'
+import type {
+  PendingAnnotation,
+  PendingAnnotationPreviewState,
+  PendingFileComment
+} from '#~/components/chat/sender/@types/sender-composer'
 import type { WorkspaceDrawerViewItem } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
 import type { WorkspaceMarkdownPreviewMode } from '#~/components/chat/workspace-file-editor/workspace-file-editor-language'
+import type { WorkspaceFileFocusRequest } from '#~/components/chat/workspace-file-editor/workspace-file-focus-request'
 import type {
   RouteContainerPanelDockActionItem,
   RouteContainerPanelDockLayout
@@ -81,6 +86,7 @@ export interface InteractionPanelDockWorkspaceProps {
   workspaceDrawerCreateItems?: WorkspaceDrawerViewItem[]
   workspaceDrawerCreateSelectedKeys?: string[]
   workspaceDrawerState: InteractionPanelWorkspaceDrawerState
+  workspaceFileFocusRequest?: WorkspaceFileFocusRequest | null
   workspaceRootPath?: string
   openResourceShortcut?: string
   /**
@@ -122,8 +128,10 @@ export interface InteractionPanelDockWorkspaceProps {
   onPluginTabStateChange: (tabId: string, state: unknown) => void
   onRunCommand: (command: InteractionPanelRunCommand) => void
   onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
+  onReferenceFileComments?: (comments: PendingFileComment[]) => void
   pendingAnnotationPreview?: PendingAnnotationPreviewState
   pendingAnnotations?: PendingAnnotation[]
+  pendingFileComments?: PendingFileComment[]
   onSelectWorkspaceFilePath: (path: string) => void
   onSessionPageChange: (
     pageId: string,

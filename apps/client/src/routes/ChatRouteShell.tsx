@@ -46,13 +46,18 @@ import type { InteractionPanelShortcutRequest } from '#~/components/chat/interac
 import { formatInteractionPanelShortcut } from '#~/components/chat/interaction-panel/interaction-panel-shortcuts'
 import {
   WORKSPACE_DRAWER_INTERACTION_TAB_PREFIX,
+  getFileName,
   toWorkspaceDrawerInteractionTabId
 } from '#~/components/chat/interaction-panel/interaction-panel-tabs'
 import { buildInteractionPanelWebsiteResources } from '#~/components/chat/interaction-panel/interaction-panel-website-resources'
 import { useInteractionPanelWorkspaceUrlKeys } from '#~/components/chat/interaction-panel/use-interaction-panel-workspace-url-keys'
 import { useInteractionTerminalPanes } from '#~/components/chat/interaction-panel/use-interaction-terminal-panes'
 import { useSessionPanelState } from '#~/components/chat/interaction-panel/use-session-panel-state'
-import type { PendingAnnotation, PendingAnnotationPreviewState } from '#~/components/chat/sender/@types/sender-composer'
+import type {
+  PendingAnnotation,
+  PendingAnnotationPreviewState,
+  PendingFileComment
+} from '#~/components/chat/sender/@types/sender-composer'
 import {
   getSessionNotificationFingerprint,
   isSessionNotificationMarkedRead,
@@ -73,6 +78,7 @@ import { ChatWorkspaceDrawer } from '#~/components/chat/workspace-drawer/ChatWor
 import type { WorkspaceDrawerView } from '#~/components/chat/workspace-drawer/workspace-drawer-types'
 import { buildWorkspaceDrawerViewItems } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
 import type { WorkspaceDrawerViewItem } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
+import type { WorkspaceFileFocusRequest } from '#~/components/chat/workspace-file-editor/workspace-file-focus-request'
 import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
 import { useDesktopWorkspaceStartupReady } from '#~/components/layout/desktop-workspace-startup-ready'
 import { useRouteSidebar } from '#~/components/layout/route-sidebar-context'
@@ -88,6 +94,7 @@ import { usePluginSlot } from '#~/plugins/plugin-slots'
 import { useInstallRoutePluginMoreMenu, useInstallRoutePluginWindowBarActions } from '#~/plugins/route-plugin-chrome'
 import { getRuntimeWorkspaceId } from '#~/runtime-config'
 import { readDeviceShellSimulationMode, useStoredDevShellSimulation } from '#~/utils/device-shell-simulation'
+import type { WorkspaceFileLinkTarget } from '#~/utils/link-targets'
 import { isShortcutMatch } from '#~/utils/shortcutUtils'
 
 import { ChatRouteBottomPanel } from './ChatRouteBottomPanel'
@@ -101,6 +108,7 @@ const WORKSPACE_DRAWER_DEFAULT_WIDTH = 340
 const WORKSPACE_DRAWER_MIN_WIDTH = 220
 const WORKSPACE_DRAWER_MIN_CONTENT_WIDTH = 300
 const WORKSPACE_DRAWER_MAX_WIDTH_RATIO = 0.7
+const WORKSPACE_DRAWER_FILE_TAB_PREFIX = 'workspace-drawer:file:'
 const CHAT_ROUTE_STARTUP_READY_SELECTOR = [
   '.chat-container.ready .chat-input-monaco[data-oneworks-sender-editor-ready="true"]',
   '.chat-container.ready .chat-messages.ready',
@@ -115,6 +123,8 @@ const isChatRouteDebugEnabled = () => {
     return false
   }
 }
+
+const toRightWorkspaceFileTabId = (path: string) => `${WORKSPACE_DRAWER_FILE_TAB_PREFIX}${encodeURIComponent(path)}`
 
 const logChatRouteDebug = (message: string, data?: unknown) => {
   if (!isChatRouteDebugEnabled()) return
@@ -222,7 +232,7 @@ type ChatRouteHistoryView =
   | ReactNode
   | ((controls: {
     onOpenUrlInAppBrowser: (url: string, title?: string) => void
-    onOpenWorkspaceFile: (path: string) => void
+    onOpenWorkspaceFile: (path: string, target?: Pick<WorkspaceFileLinkTarget, 'column' | 'line'>) => void
     workspaceRootPath?: string
   }) => ReactNode)
 type WorkspaceDrawerLocateRequest = ChatWorkspaceDrawerLocateFileRequest | null
@@ -338,8 +348,10 @@ export function ChatRouteShell({
   modeSwitch,
   onReferenceWorkspacePaths,
   onReferenceAnnotations,
+  onReferenceFileComments,
   pendingAnnotationPreview,
   pendingAnnotations,
+  pendingFileComments,
   projectWorkspaceFolder,
   roomIconSeed,
   roomIconStatus,
@@ -377,8 +389,10 @@ export function ChatRouteShell({
   modeSwitch?: ChatHeaderModeSwitch
   onReferenceWorkspacePaths?: (files: ContextPickerFile[]) => void
   onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
+  onReferenceFileComments?: (comments: PendingFileComment[]) => void
   pendingAnnotationPreview?: PendingAnnotationPreviewState
   pendingAnnotations?: PendingAnnotation[]
+  pendingFileComments?: PendingFileComment[]
   projectWorkspaceFolder?: string
   roomIconSeed?: string
   roomIconStatus?: ChatHeaderRoomIconStatus
@@ -426,6 +440,9 @@ export function ChatRouteShell({
   const pendingInteractionPanelShortcutClearIdRef = useRef<number | null>(null)
   const [interactionPanelShortcutRequest, setInteractionPanelShortcutRequest] = useState<
     InteractionPanelShortcutRequest | null
+  >(null)
+  const [rightWorkspaceFileFocusRequest, setRightWorkspaceFileFocusRequest] = useState<
+    WorkspaceFileFocusRequest | null
   >(null)
   const [isWebLauncherOpen, setIsWebLauncherOpen] = useState(false)
   const [isSessionDockPreviewOpen, setIsSessionDockPreviewOpen] = useState(false)
@@ -1013,14 +1030,101 @@ export function ChatRouteShell({
         : {})
     })
   }, [requestInteractionPanelShortcut, setIsTerminalOpen, setIsTerminalPanelFolded])
-  const handleOpenWorkspaceFileInInteractionPanel = useCallback((path: string) => {
+  const handleOpenWorkspaceFileInInteractionPanel = useCallback((
+    path: string,
+    target?: Pick<WorkspaceFileLinkTarget, 'column' | 'line'>
+  ) => {
     const normalizedPath = path.trim()
     if (normalizedPath === '') return
+    const bottomExistingTab = sessionPanelState.bottom.tabs.find(tab =>
+      tab.kind === 'file' && tab.path === normalizedPath
+    )
+    const rightExistingTab = sessionPanelState.right.tabs.find(tab =>
+      tab.kind === 'file' && tab.path === normalizedPath
+    )
+    const hasFocusTarget = target?.line != null || target?.column != null
+
+    if (bottomExistingTab != null && (bottomPanel.shouldShowBottomPanel || rightExistingTab == null)) {
+      setIsTerminalPanelFolded(false)
+      setIsTerminalOpen(true)
+      requestInteractionPanelShortcut('open-workspace-file', {
+        path: normalizedPath,
+        ...(target?.column == null ? {} : { column: target.column }),
+        ...(target?.line == null ? {} : { line: target.line })
+      })
+      return
+    }
+
+    if (rightExistingTab != null) {
+      setWorkspaceDrawerOpenWithPanelState(true)
+      updateSessionPanelArea('right', area => ({
+        ...(area.layout == null ? {} : { layout: area.layout }),
+        tabs: area.tabs,
+        activeTabId: rightExistingTab.id
+      }))
+      if (hasFocusTarget) {
+        setRightWorkspaceFileFocusRequest({
+          requestId: ++nextInteractionPanelShortcutRequestId,
+          path: normalizedPath,
+          ...(target?.column == null ? {} : { column: target.column }),
+          ...(target?.line == null ? {} : { line: target.line })
+        })
+      }
+      return
+    }
+
+    if (
+      isWorkspaceDrawerOpen &&
+      sessionPanelState.right.tabs.length > 0 &&
+      !bottomPanel.shouldShowBottomPanel
+    ) {
+      const tab = {
+        id: toRightWorkspaceFileTabId(normalizedPath),
+        kind: 'file' as const,
+        path: normalizedPath,
+        title: getFileName(normalizedPath)
+      }
+      setWorkspaceDrawerOpenWithPanelState(true)
+      updateSessionPanelArea('right', area => {
+        const existingIndex = area.tabs.findIndex(candidate => candidate.id === tab.id)
+        const tabs = existingIndex < 0
+          ? [...area.tabs, tab]
+          : area.tabs.map(candidate => candidate.id === tab.id ? tab : candidate)
+        return {
+          ...(area.layout == null ? {} : { layout: area.layout }),
+          tabs,
+          activeTabId: tab.id
+        }
+      })
+      if (hasFocusTarget) {
+        setRightWorkspaceFileFocusRequest({
+          requestId: ++nextInteractionPanelShortcutRequestId,
+          path: normalizedPath,
+          ...(target?.column == null ? {} : { column: target.column }),
+          ...(target?.line == null ? {} : { line: target.line })
+        })
+      }
+      return
+    }
 
     setIsTerminalPanelFolded(false)
     setIsTerminalOpen(true)
-    requestInteractionPanelShortcut('open-workspace-file', { path: normalizedPath })
-  }, [requestInteractionPanelShortcut, setIsTerminalOpen, setIsTerminalPanelFolded])
+    requestInteractionPanelShortcut('open-workspace-file', {
+      path: normalizedPath,
+      ...(target?.column == null ? {} : { column: target.column }),
+      ...(target?.line == null ? {} : { line: target.line })
+    })
+  }, [
+    bottomPanel.shouldShowBottomPanel,
+    isWorkspaceDrawerOpen,
+    requestInteractionPanelShortcut,
+    sessionPanelState.bottom.tabs,
+    sessionPanelState.right.tabs,
+    setIsTerminalOpen,
+    setIsTerminalPanelFolded,
+    setWorkspaceDrawerOpenWithPanelState,
+    updateSessionPanelArea
+  ])
   const handleOpenSessionLog = () => {
     if (debugSessionLogPath == null) return
     handleOpenWorkspaceFileInInteractionPanel(debugSessionLogPath)
@@ -1490,6 +1594,7 @@ export function ChatRouteShell({
               hasPendingAnnotationReferences={hasPendingAnnotationReferences}
               pendingAnnotationPreview={pendingAnnotationPreview}
               pendingAnnotations={pendingAnnotations}
+              pendingFileComments={pendingFileComments}
               isBottomPanelOpen={bottomPanel.shouldShowBottomPanel}
               isFullscreen={isWorkspaceDrawerFullscreen}
               locateFileRequest={workspaceDrawerLocateRequest}
@@ -1508,11 +1613,13 @@ export function ChatRouteShell({
                 }
               }}
               onReferenceAnnotations={onReferenceAnnotations}
+              onReferenceFileComments={onReferenceFileComments}
               onReferencePaths={onReferenceWorkspacePaths}
               onOpenFile={handleOpenWorkspaceFileInInteractionPanel}
               onOpenResource={handleOpenWebLauncher}
               openResourceShortcut={openResourceShortcut}
               openResourceShortcutLabel={openResourceShortcutLabel}
+              workspaceFileFocusRequest={rightWorkspaceFileFocusRequest}
             />
           )
           : undefined}
@@ -1561,9 +1668,11 @@ export function ChatRouteShell({
               onFoldChange={setIsTerminalPanelFolded}
               onReferenceWorkspacePaths={onReferenceWorkspacePaths}
               onReferenceAnnotations={onReferenceAnnotations}
+              onReferenceFileComments={onReferenceFileComments}
               hasPendingAnnotationReferences={hasPendingAnnotationReferences}
               pendingAnnotationPreview={pendingAnnotationPreview}
               pendingAnnotations={pendingAnnotations}
+              pendingFileComments={pendingFileComments}
               onOpenResource={handleOpenWebLauncher}
               settingsView={settingsView}
               terminalSessionId={terminalSessionId}
