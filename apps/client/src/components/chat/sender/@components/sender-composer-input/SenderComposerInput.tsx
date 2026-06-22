@@ -12,6 +12,7 @@ import type { SenderVoiceInputController } from '../../@types/sender-voice-input
 
 import type {
   PendingAnnotation,
+  PendingAnnotationPreviewState,
   PendingContextFile,
   PendingImage,
   PendingTextSelection
@@ -34,7 +35,9 @@ export function SenderComposerInput({
   onRemovePendingFile,
   onRemovePendingAnnotation,
   onRemovePendingTextSelection,
+  onClearPendingAnnotations,
   onClearPendingTextSelections,
+  onPendingAnnotationPreviewChange,
   placeholder,
   input,
   disabled,
@@ -67,7 +70,9 @@ export function SenderComposerInput({
   onRemovePendingFile: (path: string) => void
   onRemovePendingAnnotation: (id: string) => void
   onRemovePendingTextSelection: (id: string) => void
+  onClearPendingAnnotations: () => void
   onClearPendingTextSelections: () => void
+  onPendingAnnotationPreviewChange?: (state: PendingAnnotationPreviewState) => void
   placeholder: string
   input: string
   disabled: boolean
@@ -107,7 +112,9 @@ export function SenderComposerInput({
         onRemovePendingFile={onRemovePendingFile}
         onRemovePendingAnnotation={onRemovePendingAnnotation}
         onRemovePendingTextSelection={onRemovePendingTextSelection}
+        onClearPendingAnnotations={onClearPendingAnnotations}
         onClearPendingTextSelections={onClearPendingTextSelections}
+        onPendingAnnotationPreviewChange={onPendingAnnotationPreviewChange}
       />
       <SenderMonacoEditor
         editorRef={editorRef}

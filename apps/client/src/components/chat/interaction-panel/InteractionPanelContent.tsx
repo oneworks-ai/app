@@ -3,7 +3,7 @@ import type { MenuProps } from 'antd'
 
 import type { TerminalShellKind } from '@oneworks/types'
 
-import type { PendingAnnotation } from '#~/components/chat/sender/@types/sender-composer'
+import type { PendingAnnotation, PendingAnnotationPreviewState } from '#~/components/chat/sender/@types/sender-composer'
 import type { WorkspaceDrawerViewItem } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
 import type { WorkspaceMarkdownPreviewMode } from '#~/components/chat/workspace-file-editor/workspace-file-editor-language'
 import type {
@@ -46,6 +46,8 @@ export function InteractionPanelContent({
   mobileDebugPages,
   openResourceShortcut,
   openResourceShortcutLabel,
+  pendingAnnotationPreview,
+  pendingAnnotations,
   pinnedTabs,
   tabs,
   onActivateTab,
@@ -108,6 +110,8 @@ export function InteractionPanelContent({
   mobileDebugPages: InteractionPanelMobileDebugPage[]
   openResourceShortcut?: string
   openResourceShortcutLabel?: string
+  pendingAnnotationPreview?: PendingAnnotationPreviewState
+  pendingAnnotations?: PendingAnnotation[]
   pinnedTabs: InteractionPanelPinnedTab[]
   tabs: InteractionPanelTab[]
   onIframeUrlChange: (pageId: string, url: string) => void
@@ -243,6 +247,8 @@ export function InteractionPanelContent({
       onRunCommand={onRunCommand}
       onReferenceAnnotations={onReferenceAnnotations}
       hasPendingAnnotationReferences={hasPendingAnnotationReferences}
+      pendingAnnotationPreview={pendingAnnotationPreview}
+      pendingAnnotations={pendingAnnotations}
       onSelectWorkspaceFilePath={onSelectWorkspaceFilePath}
       onSessionPageChange={onSessionPageChange}
       onTogglePanelFullscreen={onTogglePanelFullscreen}

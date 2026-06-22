@@ -2104,6 +2104,7 @@
     "bottomPanelResizePanel": "Drag to resize bottom panel height",
     "browserComments": {
       "ariaLabel": "{{count}} comments",
+      "clearAll": "Clear comments",
       "count": "{{count}} comments",
       "targetFallback": "Page element"
     },

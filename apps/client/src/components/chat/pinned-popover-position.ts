@@ -10,10 +10,12 @@ export const hiddenPinnedPopoverStyle: CSSProperties = {
 }
 
 export const resolvePinnedPopoverStyle = ({
+  align = 'start',
   matchWidthSelector,
   popoverElement,
   rootElement
 }: {
+  align?: 'center' | 'start'
   matchWidthSelector?: string
   popoverElement: HTMLDivElement
   rootElement: HTMLElement
@@ -37,7 +39,10 @@ export const resolvePinnedPopoverStyle = ({
     floatingPopoverViewportMargin,
     viewportWidth - popoverWidth - floatingPopoverViewportMargin
   )
-  const left = Math.min(Math.max(anchorRect.left, floatingPopoverViewportMargin), maxLeft)
+  const preferredLeft = align === 'center' && matchedWidthElement == null
+    ? anchorRect.left + anchorRect.width / 2 - popoverWidth / 2
+    : anchorRect.left
+  const left = Math.min(Math.max(preferredLeft, floatingPopoverViewportMargin), maxLeft)
   const aboveTop = anchorRect.top - popoverHeight - floatingPopoverGap
   const belowTop = anchorRect.bottom + floatingPopoverGap
   const top = aboveTop >= floatingPopoverViewportMargin
@@ -55,7 +60,7 @@ export const resolvePinnedPopoverStyle = ({
     bottom: 'auto',
     left,
     width: matchedWidth ?? undefined,
-    maxWidth,
+    maxWidth: matchedWidth == null ? undefined : maxWidth,
     opacity: 1,
     pointerEvents: 'auto',
     transform: 'none',

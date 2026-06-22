@@ -52,7 +52,7 @@ import { buildInteractionPanelWebsiteResources } from '#~/components/chat/intera
 import { useInteractionPanelWorkspaceUrlKeys } from '#~/components/chat/interaction-panel/use-interaction-panel-workspace-url-keys'
 import { useInteractionTerminalPanes } from '#~/components/chat/interaction-panel/use-interaction-terminal-panes'
 import { useSessionPanelState } from '#~/components/chat/interaction-panel/use-session-panel-state'
-import type { PendingAnnotation } from '#~/components/chat/sender/@types/sender-composer'
+import type { PendingAnnotation, PendingAnnotationPreviewState } from '#~/components/chat/sender/@types/sender-composer'
 import {
   getSessionNotificationFingerprint,
   isSessionNotificationMarkedRead,
@@ -338,6 +338,8 @@ export function ChatRouteShell({
   modeSwitch,
   onReferenceWorkspacePaths,
   onReferenceAnnotations,
+  pendingAnnotationPreview,
+  pendingAnnotations,
   projectWorkspaceFolder,
   roomIconSeed,
   roomIconStatus,
@@ -375,6 +377,8 @@ export function ChatRouteShell({
   modeSwitch?: ChatHeaderModeSwitch
   onReferenceWorkspacePaths?: (files: ContextPickerFile[]) => void
   onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
+  pendingAnnotationPreview?: PendingAnnotationPreviewState
+  pendingAnnotations?: PendingAnnotation[]
   projectWorkspaceFolder?: string
   roomIconSeed?: string
   roomIconStatus?: ChatHeaderRoomIconStatus
@@ -1484,6 +1488,8 @@ export function ChatRouteShell({
               agentRoster={agentRoster}
               defaultView={activeWorkspaceDrawerView}
               hasPendingAnnotationReferences={hasPendingAnnotationReferences}
+              pendingAnnotationPreview={pendingAnnotationPreview}
+              pendingAnnotations={pendingAnnotations}
               isBottomPanelOpen={bottomPanel.shouldShowBottomPanel}
               isFullscreen={isWorkspaceDrawerFullscreen}
               locateFileRequest={workspaceDrawerLocateRequest}
@@ -1556,6 +1562,8 @@ export function ChatRouteShell({
               onReferenceWorkspacePaths={onReferenceWorkspacePaths}
               onReferenceAnnotations={onReferenceAnnotations}
               hasPendingAnnotationReferences={hasPendingAnnotationReferences}
+              pendingAnnotationPreview={pendingAnnotationPreview}
+              pendingAnnotations={pendingAnnotations}
               onOpenResource={handleOpenWebLauncher}
               settingsView={settingsView}
               terminalSessionId={terminalSessionId}

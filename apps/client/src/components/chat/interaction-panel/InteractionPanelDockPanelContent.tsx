@@ -65,6 +65,8 @@ export function InteractionPanelDockPanelContentBody({
     onPluginTabStateChange,
     onReferenceAnnotations,
     hasPendingAnnotationReferences,
+    pendingAnnotationPreview,
+    pendingAnnotations,
     onSelectWorkspaceFilePath,
     onSessionPageChange
   } = useInteractionPanelDockContext()
@@ -246,6 +248,8 @@ export function InteractionPanelDockPanelContentBody({
         onNavigateHistory={onIframeNavigateHistory}
         onReferenceAnnotations={onReferenceAnnotations}
         hasPendingAnnotationReferences={hasPendingAnnotationReferences}
+        pendingAnnotationPreview={pendingAnnotationPreview}
+        pendingAnnotations={pendingAnnotations}
       />
     </div>
   )

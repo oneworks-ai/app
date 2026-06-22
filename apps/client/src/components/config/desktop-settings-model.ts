@@ -12,12 +12,14 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 
 const normalizeApplicationList = (value: unknown): string[] => {
   if (!Array.isArray(value)) return []
-  return [...new Set(
-    value
-      .filter((item): item is string => typeof item === 'string')
-      .map(item => item.trim())
-      .filter(item => item !== '')
-  )]
+  return [
+    ...new Set(
+      value
+        .filter((item): item is string => typeof item === 'string')
+        .map(item => item.trim())
+        .filter(item => item !== '')
+    )
+  ]
 }
 
 const normalizeDesktopContextCaptureSettings = (value: unknown): DesktopContextCaptureSettings => {
@@ -27,7 +29,7 @@ const normalizeDesktopContextCaptureSettings = (value: unknown): DesktopContextC
     denyApplications: normalizeApplicationList(source.denyApplications),
     enabled: typeof source.enabled === 'boolean' ? source.enabled : false,
     overlayPlacement: typeof source.overlayPlacement === 'string' &&
-      contextCaptureOverlayPlacements.has(source.overlayPlacement as DesktopContextCaptureOverlayPlacement)
+        contextCaptureOverlayPlacements.has(source.overlayPlacement as DesktopContextCaptureOverlayPlacement)
       ? source.overlayPlacement as DesktopContextCaptureOverlayPlacement
       : 'auto'
   }

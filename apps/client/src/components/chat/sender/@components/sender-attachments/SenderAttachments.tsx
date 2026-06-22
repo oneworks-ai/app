@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 
 import type {
   PendingAnnotation,
+  PendingAnnotationPreviewState,
   PendingContextFile,
   PendingImage,
   PendingTextSelection
@@ -54,7 +55,9 @@ export function SenderAttachments({
   onRemovePendingFile,
   onRemovePendingAnnotation,
   onRemovePendingTextSelection,
-  onClearPendingTextSelections
+  onClearPendingAnnotations,
+  onClearPendingTextSelections,
+  onPendingAnnotationPreviewChange
 }: {
   pendingImages: PendingImage[]
   pendingFiles: PendingContextFile[]
@@ -64,7 +67,9 @@ export function SenderAttachments({
   onRemovePendingFile: (path: string) => void
   onRemovePendingAnnotation: (id: string) => void
   onRemovePendingTextSelection: (id: string) => void
+  onClearPendingAnnotations: () => void
   onClearPendingTextSelections: () => void
+  onPendingAnnotationPreviewChange?: (state: PendingAnnotationPreviewState) => void
 }) {
   const { t } = useTranslation()
 
@@ -90,6 +95,8 @@ export function SenderAttachments({
         <PendingAnnotationGroup
           pendingAnnotations={pendingAnnotations}
           onRemovePendingAnnotation={onRemovePendingAnnotation}
+          onClearPendingAnnotations={onClearPendingAnnotations}
+          onPreviewStateChange={onPendingAnnotationPreviewChange}
         />
       )}
       {pendingFiles.length > 0 && (

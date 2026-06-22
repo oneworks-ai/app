@@ -30,60 +30,31 @@
   position: relative;
 }
 
-.pending-text-selection-group,
-.pending-annotation-group {
+.pending-reference-group {
   position: relative;
   display: inline-flex;
   align-items: center;
   max-width: 100%;
   z-index: 2;
-
-  &:hover,
-  &:focus-within,
-  &.is-pinned {
-    .pending-text-selection-group__popover,
-    .pending-annotation-group__popover {
-      opacity: 1;
-      transform: translateY(0);
-      pointer-events: auto;
-    }
-  }
 }
 
-.pending-text-selection-group__chip,
-.pending-annotation-group__chip {
+.pending-reference-group__chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-height: 28px;
   max-width: 100%;
-  padding: 4px 9px;
+  padding: 0;
   border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
   border-radius: 6px;
   background: color-mix(in srgb, var(--tag-bg, #f3f4f6) 72%, var(--bg-color));
   color: var(--text-color);
   box-shadow: none;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.25;
-
-  .material-symbols-rounded {
-    color: var(--sub-text-color);
-    font-size: 16px;
-    line-height: 1;
-  }
-}
-
-.pending-text-selection-group__chip {
   overflow: hidden;
-  gap: 6px;
-  padding: 0;
 }
 
-.pending-text-selection-group__chip-main,
-.pending-text-selection-group__clear {
+.pending-reference-group__chip-main,
+.pending-reference-group__clear {
   display: inline-flex;
   align-items: center;
   min-height: 26px;
@@ -103,7 +74,7 @@
   }
 }
 
-.pending-text-selection-group__chip-main {
+.pending-reference-group__chip-main {
   min-width: 0;
   gap: 6px;
   padding: 4px 7px 4px 9px;
@@ -116,7 +87,7 @@
   }
 }
 
-.pending-text-selection-group__clear {
+.pending-reference-group__clear {
   justify-content: center;
   width: 24px;
   min-width: 24px;
@@ -131,16 +102,15 @@
   }
 }
 
-.pending-text-selection-group__popover,
-.pending-annotation-group__popover {
+.pending-reference-group__popover {
   position: absolute;
   z-index: 1200;
   left: 0;
   bottom: calc(100% + 8px);
   display: grid;
   width: max-content;
-  min-width: 300px;
-  max-width: min(560px, calc(100vw - 36px));
+  min-width: min(300px, calc(100vw - 24px));
+  max-width: min(520px, calc(100vw - 24px));
   overflow: hidden;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
@@ -156,7 +126,10 @@
 
 .pending-text-selection-group__popover {
   min-width: min(280px, calc(100vw - 24px));
-  max-width: calc(100vw - 24px);
+}
+
+.pending-annotation-group__popover {
+  min-width: min(340px, calc(100vw - 24px));
 }
 
 .pending-text-selection-group__row {
@@ -199,11 +172,18 @@
 
 .pending-annotation-group__row {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 22px;
+  grid-template-columns: 58px minmax(0, 1fr) 22px;
   gap: 9px;
   align-items: start;
   min-width: 0;
   padding: 8px;
+  border-radius: 6px;
+
+  &.is-active {
+    background: color-mix(in srgb, var(--primary-color) 8%, transparent);
+    box-shadow: inset 0 0 0 1px
+      color-mix(in srgb, var(--primary-color) 18%, transparent);
+  }
 
   & + & {
     border-top: 1px solid
@@ -219,8 +199,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 32px;
+  width: 58px;
+  height: 38px;
   border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
   border-radius: 6px;
   background: var(--tag-bg, #f3f4f6);
@@ -231,7 +211,7 @@
     display: block;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
   }
 
   .material-symbols-rounded {
@@ -249,8 +229,12 @@
 }
 
 .pending-annotation-group__target {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   color: var(--sub-text-color);
   font-size: 11px;
+  overflow: hidden;
 }
 
 .pending-annotation-group__comment {
@@ -472,14 +456,12 @@
 }
 
 html.dark {
-  .pending-text-selection-group__chip,
-  .pending-annotation-group__chip {
+  .pending-reference-group__chip {
     border-color: rgba(71, 85, 105, .55);
     background: rgba(30, 41, 59, .72);
   }
 
-  .pending-text-selection-group__popover,
-  .pending-annotation-group__popover {
+  .pending-reference-group__popover {
     border-color: rgba(71, 85, 105, .55);
   }
 

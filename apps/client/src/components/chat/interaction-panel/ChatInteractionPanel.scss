@@ -815,9 +815,9 @@
 .chat-interaction-panel__annotation-capture-layer {
   position: absolute;
   z-index: 2147483602;
-  border: 1px solid color-mix(in srgb, var(--primary-color) 48%, transparent);
-  background: color-mix(in srgb, var(--primary-color) 8%, transparent);
+  background: transparent;
   cursor: crosshair;
+  touch-action: none;
 }
 
 .chat-interaction-panel__annotation-highlight {
@@ -825,7 +825,7 @@
   position: absolute;
   z-index: 2147483603;
   border: 2px solid color-mix(in srgb, var(--primary-color) 72%, #fff);
-  border-radius: 3px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--primary-color) 12%, transparent);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--primary-color) 32%, transparent),
@@ -836,6 +836,15 @@
 .chat-interaction-panel__annotation-highlight.is-selected {
   border-color: color-mix(in srgb, var(--primary-color) 82%, #fff);
   background: color-mix(in srgb, var(--primary-color) 16%, transparent);
+}
+
+.chat-interaction-panel__annotation-highlight.is-pending-preview {
+  z-index: 2147483603;
+  border-color: color-mix(in srgb, var(--primary-color) 86%, #fff);
+  background: color-mix(in srgb, var(--primary-color) 18%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--primary-color) 38%, transparent),
+    0 8px 22px color-mix(in srgb, var(--primary-color) 16%, transparent);
 }
 
 .chat-interaction-panel__annotation-info-card {
@@ -970,16 +979,17 @@
 }
 
 .chat-interaction-panel__annotation-marker {
+  box-sizing: border-box;
   display: inline-flex;
   position: absolute;
   z-index: 2147483604;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
   border: 1px solid color-mix(in srgb, var(--primary-color) 42%, #fff);
-  border-radius: 999px;
+  border-radius: 6px;
   background: var(--primary-color);
   box-shadow: 0 4px 12px rgb(0 0 0 / 18%);
   color: #fff;
@@ -989,9 +999,28 @@
   transform: translate(-50%, -50%);
   cursor: pointer;
 
+  &::after {
+    position: absolute;
+    bottom: -5px;
+    left: 2px;
+    width: 0;
+    height: 0;
+    border-top: 6px solid var(--primary-color);
+    border-right: 6px solid transparent;
+    content: '';
+  }
+
   &:hover,
-  &:focus-visible {
+  &:focus-visible,
+  &.is-active {
     background: color-mix(in srgb, var(--primary-color) 88%, #000);
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--primary-color) 20%, transparent),
+      0 6px 16px rgb(0 0 0 / 22%);
+
+    &::after {
+      border-top-color: color-mix(in srgb, var(--primary-color) 88%, #000);
+    }
   }
 
   &:focus-visible {
@@ -1001,26 +1030,96 @@
   }
 }
 
+.chat-interaction-panel__annotation-marker-tooltip {
+  position: absolute;
+  z-index: 2147483606;
+  box-sizing: border-box;
+  display: grid;
+  width: min(260px, calc(100% - 24px));
+  max-width: 260px;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 84%, transparent);
+  border-radius: 8px;
+  background: var(--bg-color);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 18%);
+  color: var(--text-color);
+  font-size: 12px;
+  line-height: 1.35;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 12px));
+}
+
+.chat-interaction-panel__annotation-marker-tooltip::after {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  border: inherit;
+  border-top: 0;
+  border-left: 0;
+  background: inherit;
+  content: '';
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.chat-interaction-panel__annotation-marker-tooltip-target {
+  overflow: hidden;
+  color: var(--sub-text-color);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-interaction-panel__annotation-marker-tooltip-comment {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 .chat-interaction-panel__annotation-editor::before {
   content: '';
   position: absolute;
-  top: 15px;
   width: 8px;
   height: 8px;
   border: inherit;
-  border-top: 0;
-  border-right: 0;
   background: inherit;
 }
 
 .chat-interaction-panel__annotation-editor.is-right::before {
+  top: var(--annotation-editor-arrow-top, 18px);
   left: -5px;
-  transform: rotate(45deg);
+  border-top: 0;
+  border-right: 0;
+  transform: translateY(-50%) rotate(45deg);
 }
 
 .chat-interaction-panel__annotation-editor.is-left::before {
+  top: var(--annotation-editor-arrow-top, 18px);
   right: -5px;
-  transform: rotate(225deg);
+  border-top: 0;
+  border-right: 0;
+  transform: translateY(-50%) rotate(225deg);
+}
+
+.chat-interaction-panel__annotation-editor.is-below::before {
+  top: -5px;
+  left: var(--annotation-editor-arrow-left, 18px);
+  border-right: 0;
+  border-bottom: 0;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.chat-interaction-panel__annotation-editor.is-above::before {
+  bottom: -5px;
+  left: var(--annotation-editor-arrow-left, 18px);
+  border-top: 0;
+  border-left: 0;
+  transform: translateX(-50%) rotate(45deg);
 }
 
 .chat-interaction-panel__annotation-editor-input-row {

@@ -17,7 +17,11 @@ import type { WebDebugChiiRuntime, WebDebugDevtoolsDockSide, WebDebugTarget } fr
 import { readWebpageMetadata } from '#~/api/webpage'
 import { createBrowserCommentScreenshotName } from '#~/components/chat/messages/browser-comment-message'
 import { useSenderVoiceInput } from '#~/components/chat/sender/@hooks/use-sender-voice-input'
-import type { PendingAnnotation } from '#~/components/chat/sender/@types/sender-composer'
+import type {
+  PendingAnnotation,
+  PendingAnnotationPreviewState,
+  PendingAnnotationTarget
+} from '#~/components/chat/sender/@types/sender-composer'
 import type { SenderEditorHandle, SenderEditorSelection } from '#~/components/chat/sender/@types/sender-editor'
 import { OverlayAction, OverlayDivider, OverlayPanel } from '#~/components/overlay'
 import { addDesktopViewShortcutListener } from '#~/desktop/view-shortcuts'
@@ -79,23 +83,8 @@ interface IframeViewportPreset {
   size: InteractionPanelEmbeddedFrameViewportSize | null
 }
 
-interface IframeAnnotationTarget {
-  frameUrl: string
+interface IframeAnnotationTarget extends PendingAnnotationTarget {
   inspector?: IframeAnnotationTargetInspector
-  kind: 'element' | 'point'
-  nodeText?: string
-  rect: {
-    height: number
-    width: number
-    x: number
-    y: number
-  }
-  selector?: string
-  targetPath: string
-  viewport: {
-    height: number
-    width: number
-  }
 }
 
 interface IframeAnnotationTargetInspector {
@@ -108,12 +97,6 @@ interface IframeAnnotationTargetInspector {
   role: string
 }
 
-interface IframeAnnotationMarker {
-  comment: string
-  id: number
-  target: IframeAnnotationTarget
-}
-
 interface IframeAnnotationTargetRect {
   height: number
   width: number
@@ -122,8 +105,10 @@ interface IframeAnnotationTargetRect {
 }
 
 interface IframeAnnotationEditorPlacement {
+  arrowLeft: number
+  arrowTop: number
   left: number
-  side: 'left' | 'right'
+  side: 'above' | 'below' | 'left' | 'right'
   top: number
 }
 
@@ -133,6 +118,12 @@ interface IframeAnnotationInfoCardPlacement {
   side: 'above' | 'below'
   top: number
   width: number
+}
+
+interface PendingAnnotationMarkerView {
+  annotation: PendingAnnotation
+  number: number
+  target: PendingAnnotationTarget
 }
 
 const ANNOTATION_EDITOR_COLLAPSED_HEIGHT = 44
@@ -161,8 +152,8 @@ const areAnnotationTargetRectsEqual = (
 }
 
 const areAnnotationTargetsEqual = (
-  left: IframeAnnotationTarget | null,
-  right: IframeAnnotationTarget | null
+  left: PendingAnnotationTarget | null,
+  right: PendingAnnotationTarget | null
 ) => (
   left === right ||
   (
@@ -405,15 +396,50 @@ const escapeHtmlAttribute = (value: string) => (
     .replaceAll('>', '&gt;')
 )
 
-const readIframeScreenshotDataUrl = async (
+const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
+
+const debugIframeDevtools = (...args: unknown[]) => {
+  if (!isWebDebugDevtoolsDebugEnabled()) return
+  console.debug('[iframe-debug]', ...args) // eslint-disable-line no-console
+}
+
+const debugIframeDevtoolsJson = (label: string, payload: unknown) => {
+  if (!isWebDebugDevtoolsDebugEnabled()) return
+  let serializedPayload = ''
+  try {
+    serializedPayload = typeof payload === 'string' ? payload : JSON.stringify(payload)
+  } catch (error) {
+    serializedPayload = JSON.stringify({ error: String(error) })
+  }
+  console.debug('[iframe-debug]', label, serializedPayload) // eslint-disable-line no-console
+}
+
+const readIframeScreenshotDataUrlWithForeignObject = async (
   iframe: HTMLIFrameElement,
-  fullSize: boolean
+  fullSize: boolean,
+  options: { sanitizeExternalResources?: boolean } = {}
 ) => {
   const iframeDocument = iframe.contentDocument
   if (iframeDocument == null) throw new Error('Iframe document is unavailable.')
 
   const clonedDocumentElement = iframeDocument.documentElement.cloneNode(true) as HTMLElement
   clonedDocumentElement.querySelectorAll('script').forEach(script => script.remove())
+  if (options.sanitizeExternalResources === true) {
+    clonedDocumentElement.querySelectorAll('link[rel~="stylesheet"], link[rel~="preload"]').forEach(link =>
+      link.remove()
+    )
+    clonedDocumentElement.querySelectorAll('style').forEach(style => style.remove())
+    clonedDocumentElement.querySelectorAll('img').forEach((image) => {
+      const src = image.getAttribute('src') ?? ''
+      if (!src.startsWith('data:')) image.removeAttribute('src')
+      image.removeAttribute('srcset')
+    })
+    clonedDocumentElement.querySelectorAll('source, video, audio').forEach(media => media.remove())
+    clonedDocumentElement.querySelector('head')?.insertAdjacentHTML(
+      'beforeend',
+      '<style>*{background-image:none!important}body{background:Canvas;color:CanvasText}</style>'
+    )
+  }
   clonedDocumentElement.querySelector('head')?.insertAdjacentHTML(
     'afterbegin',
     `<base href="${escapeHtmlAttribute(iframeDocument.location.href)}">`
@@ -430,7 +456,10 @@ const readIframeScreenshotDataUrl = async (
     iframe.clientHeight
   )
   const width = Math.min(12_000, Math.max(1, Math.round(fullSize ? documentWidth : iframe.clientWidth)))
-  const height = Math.min(12_000, Math.max(1, Math.round(fullSize ? documentHeight : iframe.clientHeight)))
+  const height = Math.min(
+    12_000,
+    Math.max(1, Math.round(fullSize ? documentHeight : iframe.clientHeight))
+  )
   const html = new XMLSerializer().serializeToString(clonedDocumentElement)
   const svg = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">`,
@@ -459,23 +488,13 @@ const readIframeScreenshotDataUrl = async (
   }
 }
 
+const readIframeScreenshotDataUrl = async (
+  iframe: HTMLIFrameElement,
+  fullSize: boolean,
+  options: { sanitizeExternalResources?: boolean } = {}
+) => await readIframeScreenshotDataUrlWithForeignObject(iframe, fullSize, options)
+
 const delay = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
-
-const debugIframeDevtools = (...args: unknown[]) => {
-  if (!isWebDebugDevtoolsDebugEnabled()) return
-  console.debug('[iframe-debug]', ...args) // eslint-disable-line no-console
-}
-
-const debugIframeDevtoolsJson = (label: string, payload: unknown) => {
-  if (!isWebDebugDevtoolsDebugEnabled()) return
-  let serializedPayload = ''
-  try {
-    serializedPayload = typeof payload === 'string' ? payload : JSON.stringify(payload)
-  } catch (error) {
-    serializedPayload = JSON.stringify({ error: String(error) })
-  }
-  console.debug('[iframe-debug]', label, serializedPayload) // eslint-disable-line no-console
-}
 
 const getUrlOrigin = (url: string | null) => {
   if (typeof window === 'undefined') return ''
@@ -653,6 +672,18 @@ const getElementLabel = (element: Element) => {
   return classNames.length > 0 ? `${tagName}.${classNames.join('.')}` : tagName
 }
 
+const getElementClassLabel = (element: Element) => {
+  const classNames = Array.from(element.classList)
+    .map(className => className.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+  if (classNames.length > 0) return `.${classNames.join('.')}`
+
+  const id = element.id.trim()
+  if (id !== '') return `#${id}`
+  return element.tagName.toLowerCase()
+}
+
 const formatCssLength = (value: string) => {
   const numberValue = Number.parseFloat(value)
   if (!Number.isFinite(numberValue)) return value
@@ -666,6 +697,31 @@ const formatCssPadding = (style: CSSStyleDeclaration) => {
   if (numericValues.every(value => Number.isFinite(value) && value === 0)) return undefined
   if (normalizedValues.every(value => value === normalizedValues[0])) return normalizedValues[0]
   return normalizedValues.join(' ')
+}
+
+const normalizeCssBorderRadius = (value: string) => {
+  const normalizedValue = value.trim()
+  if (normalizedValue === '') return undefined
+
+  const tokens = normalizedValue.split(/[\s/]+/).filter(Boolean)
+  if (
+    tokens.length > 0 && tokens.every(token => {
+      const numericValue = Number.parseFloat(token)
+      return Number.isFinite(numericValue) && numericValue === 0
+    })
+  ) return undefined
+
+  return normalizedValue
+}
+
+const scaleCssPixelLengths = (value: string, scale: number) => {
+  if (!Number.isFinite(scale) || scale <= 0 || scale === 1) return value
+
+  return value.replace(/(-?(?:\d+(?:\.\d+)?|\.\d+))px/gi, (_, rawNumber: string) => {
+    const numericValue = Number.parseFloat(rawNumber)
+    if (!Number.isFinite(numericValue)) return `${rawNumber}px`
+    return `${Math.round(numericValue * scale * 100) / 100}px`
+  })
 }
 
 const formatRgbChannelAsHex = (value: number) =>
@@ -737,10 +793,16 @@ const getElementInspector = (element: Element): IframeAnnotationTargetInspector 
     backgroundColor: formattedBackground?.label,
     backgroundColorSwatch: formattedBackground?.swatch,
     keyboardFocusable: isElementKeyboardFocusable(element),
-    label: getElementLabel(element),
+    label: getElementClassLabel(element),
     padding: computedStyle == null ? undefined : formatCssPadding(computedStyle),
     role: getElementInspectorRole(element)
   }
+}
+
+const getElementAnnotationStyle = (element: Element): IframeAnnotationTarget['style'] => {
+  const computedStyle = element.ownerDocument.defaultView?.getComputedStyle(element)
+  const borderRadius = computedStyle == null ? undefined : normalizeCssBorderRadius(computedStyle.borderRadius)
+  return borderRadius == null ? undefined : { borderRadius }
 }
 
 const getElementIndexOfType = (element: Element) => {
@@ -818,7 +880,11 @@ const isSensitiveAnnotationElement = (element: Element) => {
   return sensitive != null
 }
 
-const buildAnnotationTarget = (element: Element, frameUrl: string): IframeAnnotationTarget | null => {
+const buildAnnotationTarget = (
+  element: Element,
+  frameUrl: string,
+  marker?: PendingAnnotationTarget['marker']
+): IframeAnnotationTarget | null => {
   if (isSensitiveAnnotationElement(element)) return null
   const rect = element.getBoundingClientRect()
   const ownerDocument = element.ownerDocument
@@ -828,6 +894,7 @@ const buildAnnotationTarget = (element: Element, frameUrl: string): IframeAnnota
     frameUrl,
     inspector: getElementInspector(element),
     kind: 'element',
+    marker,
     nodeText: nodeText === '' ? undefined : nodeText,
     rect: {
       height: Math.round(rect.height),
@@ -836,6 +903,7 @@ const buildAnnotationTarget = (element: Element, frameUrl: string): IframeAnnota
       y: Math.round(rect.y)
     },
     selector: buildElementSelector(element),
+    style: getElementAnnotationStyle(element),
     targetPath: buildTargetPath(element),
     viewport: {
       height: ownerWindow?.innerHeight ?? ownerDocument.documentElement.clientHeight,
@@ -859,6 +927,10 @@ const buildAnnotationPointTarget = ({
 }): IframeAnnotationTarget => ({
   frameUrl,
   kind: 'point',
+  marker: {
+    x: Math.round(pointX),
+    y: Math.round(pointY)
+  },
   rect: {
     height: 1,
     width: 1,
@@ -906,8 +978,11 @@ const createAnnotationId = () => {
 }
 
 const getAnnotationTargetLabel = (target: IframeAnnotationTarget) => {
+  const inspectorLabel = target.inspector?.label.trim()
+  if (inspectorLabel != null && inspectorLabel !== '') return inspectorLabel
+
   const nodeText = target.nodeText?.trim()
-  if (nodeText != null && nodeText !== '') return nodeText
+  if (nodeText != null && nodeText !== '' && nodeText.length <= 64) return nodeText
 
   const pathParts = target.targetPath.split('>').map(part => part.trim()).filter(Boolean)
   return pathParts.at(-1) ?? target.selector ?? target.targetPath
@@ -921,7 +996,30 @@ const readImageElementFromDataUrl = async (dataUrl: string) => {
   return image
 }
 
-const cropAnnotationScreenshotDataUrl = async (
+const resolveCanvasBorderRadius = (
+  target: IframeAnnotationTarget,
+  rectWidth: number,
+  rectHeight: number,
+  scale: number
+) => {
+  const maxRadius = Math.min(rectWidth, rectHeight) / 2
+  if (target.kind === 'point') return maxRadius
+
+  const borderRadius = target.style?.borderRadius
+  if (borderRadius == null) return 0
+
+  const firstToken = borderRadius.split(/[\s/]+/).find(Boolean)
+  if (firstToken == null) return 0
+  if (firstToken.endsWith('%')) {
+    const percent = Number.parseFloat(firstToken)
+    return Number.isFinite(percent) ? clampNumber(maxRadius * percent / 50, 0, maxRadius) : 0
+  }
+
+  const pixelValue = Number.parseFloat(firstToken)
+  return Number.isFinite(pixelValue) ? clampNumber(pixelValue * scale, 0, maxRadius) : 0
+}
+
+const drawAnnotationOverlayScreenshotDataUrl = async (
   dataUrl: string,
   target: IframeAnnotationTarget
 ) => {
@@ -934,26 +1032,63 @@ const cropAnnotationScreenshotDataUrl = async (
   const viewportHeight = Math.max(1, target.viewport.height)
   const scaleX = sourceWidth / viewportWidth
   const scaleY = sourceHeight / viewportHeight
-  const rectX = target.rect.x * scaleX
-  const rectY = target.rect.y * scaleY
-  const rectWidth = Math.max(1, target.rect.width * scaleX)
-  const rectHeight = Math.max(1, target.rect.height * scaleY)
-  const centerX = rectX + rectWidth / 2
-  const centerY = rectY + rectHeight / 2
-  const paddingX = Math.max(32 * scaleX, rectWidth * 0.45)
-  const paddingY = Math.max(24 * scaleY, rectHeight * 0.65)
-  const cropWidth = Math.min(sourceWidth, Math.max(rectWidth + paddingX * 2, 180 * scaleX))
-  const cropHeight = Math.min(sourceHeight, Math.max(rectHeight + paddingY * 2, 112 * scaleY))
-  const cropX = clampNumber(centerX - cropWidth / 2, 0, Math.max(0, sourceWidth - cropWidth))
-  const cropY = clampNumber(centerY - cropHeight / 2, 0, Math.max(0, sourceHeight - cropHeight))
-  const outputWidth = Math.max(1, Math.round(Math.min(420, cropWidth)))
-  const outputHeight = Math.max(1, Math.round(outputWidth * (cropHeight / cropWidth)))
   const canvas = document.createElement('canvas')
-  canvas.width = outputWidth
-  canvas.height = outputHeight
+  canvas.width = Math.round(sourceWidth)
+  canvas.height = Math.round(sourceHeight)
   const context = canvas.getContext('2d')
   if (context == null) return dataUrl
-  context.drawImage(image, cropX, cropY, cropWidth, cropHeight, 0, 0, outputWidth, outputHeight)
+  context.drawImage(image, 0, 0, canvas.width, canvas.height)
+
+  const rawRectWidth = Math.max(1, target.rect.width * scaleX)
+  const rawRectHeight = Math.max(1, target.rect.height * scaleY)
+  const markerSize = Math.max(22, Math.min(34, Math.round(Math.min(sourceWidth, sourceHeight) * 0.04)))
+  const rectWidth = Math.max(rawRectWidth, target.kind === 'point' ? markerSize : 1)
+  const rectHeight = Math.max(rawRectHeight, target.kind === 'point' ? markerSize : 1)
+  const rectX = clampNumber(
+    target.rect.x * scaleX - (rectWidth - rawRectWidth) / 2,
+    0,
+    Math.max(0, sourceWidth - rectWidth)
+  )
+  const rectY = clampNumber(
+    target.rect.y * scaleY - (rectHeight - rawRectHeight) / 2,
+    0,
+    Math.max(0, sourceHeight - rectHeight)
+  )
+  const lineWidth = Math.max(2, Math.round(Math.min(sourceWidth, sourceHeight) * 0.003))
+  const radius = resolveCanvasBorderRadius(target, rectWidth, rectHeight, Math.min(scaleX, scaleY))
+
+  context.save()
+  context.fillStyle = 'rgba(63, 126, 143, 0.24)'
+  context.strokeStyle = 'rgba(63, 126, 143, 0.96)'
+  context.lineWidth = lineWidth
+  context.setLineDash([lineWidth * 3, lineWidth * 2])
+  context.beginPath()
+  context.roundRect(rectX, rectY, rectWidth, rectHeight, radius)
+  context.fill()
+  context.stroke()
+
+  const badgeRadius = Math.max(10, Math.min(18, markerSize / 2))
+  const markerX = target.marker == null ? rectX + rectWidth : target.marker.x * scaleX
+  const markerY = target.marker == null ? rectY : target.marker.y * scaleY
+  const badgeX = clampNumber(markerX, badgeRadius + 2, sourceWidth - badgeRadius - 2)
+  const badgeY = clampNumber(markerY, badgeRadius + 2, sourceHeight - badgeRadius - 2)
+  context.setLineDash([])
+  context.fillStyle = '#3F7E8F'
+  context.strokeStyle = '#fff'
+  context.lineWidth = Math.max(2, lineWidth)
+  context.beginPath()
+  context.arc(badgeX, badgeY, badgeRadius, 0, Math.PI * 2)
+  context.fill()
+  context.stroke()
+  context.fillStyle = '#fff'
+  context.font = `700 ${
+    Math.round(badgeRadius * 1.1)
+  }px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.fillText('1', badgeX, badgeY + 0.5)
+  context.restore()
+
   return canvas.toDataURL('image/png')
 }
 
@@ -995,6 +1130,8 @@ export function InteractionPanelIframeView({
   projectUrlHistoryKey,
   onReferenceAnnotations,
   hasPendingAnnotationReferences = false,
+  pendingAnnotationPreview,
+  pendingAnnotations = [],
   sessionId,
   sessionUrlHistoryKey
 }: {
@@ -1005,6 +1142,8 @@ export function InteractionPanelIframeView({
   onChangeUrl: (pageId: string, url: string) => void
   onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
   hasPendingAnnotationReferences?: boolean
+  pendingAnnotationPreview?: PendingAnnotationPreviewState
+  pendingAnnotations?: PendingAnnotation[]
   page: InteractionPanelIframePage
   projectUrlHistoryKey: string
   sessionId?: string
@@ -1051,14 +1190,23 @@ export function InteractionPanelIframeView({
   const [annotationCaptureRect, setAnnotationCaptureRect] = useState<IframeAnnotationTargetRect | null>(null)
   const [annotationHoverRect, setAnnotationHoverRect] = useState<IframeAnnotationTargetRect | null>(null)
   const [annotationHoverTarget, setAnnotationHoverTarget] = useState<IframeAnnotationTarget | null>(null)
-  const [annotationMarkers, setAnnotationMarkers] = useState<IframeAnnotationMarker[]>([])
   const [annotationTarget, setAnnotationTarget] = useState<IframeAnnotationTarget | null>(null)
+  const [hoveredPendingAnnotationMarkerId, setHoveredPendingAnnotationMarkerId] = useState<string | null>(null)
+  const [hoveredPendingAnnotationTargetId, setHoveredPendingAnnotationTargetId] = useState<string | null>(null)
   const chiiTargetId = useMemo(() => createChiiTargetId(page.id), [page.id])
+  const visiblePendingAnnotationMarkers = useMemo<PendingAnnotationMarkerView[]>(() => (
+    pendingAnnotations.flatMap((annotation, index) => (
+      annotation.target != null && annotation.sourcePageId === page.id
+        ? [{ annotation, number: index + 1, target: annotation.target }]
+        : []
+    ))
+  ), [page.id, pendingAnnotations])
+  const isPendingAnnotationPreviewActive = pendingAnnotationPreview?.isActive === true
+  const requestedPendingAnnotationId = pendingAnnotationPreview?.activeAnnotationId ?? null
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const annotationCommentRef = useRef(annotationComment)
   const annotationEditorRef = useRef<HTMLDivElement | null>(null)
   const annotationInputRef = useRef<HTMLTextAreaElement | null>(null)
-  const annotationMarkerSequenceRef = useRef(1)
   const annotationTargetRef = useRef<IframeAnnotationTarget | null>(annotationTarget)
   const annotationVoiceEditorRef = useRef<SenderEditorHandle | null>(null)
   const isMountedRef = useRef(false)
@@ -1502,30 +1650,33 @@ export function InteractionPanelIframeView({
     setAnnotationHoverTarget(current => areAnnotationTargetsEqual(current, nextTarget) ? current : nextTarget)
   }, [])
 
-  const handleToggleAnnotationMode = useCallback(() => {
-    if (isAnnotationMode) {
-      setIsAnnotationMode(false)
-      setAnnotationTarget(null)
-      setAnnotationComment('')
-      setAnnotationEditorPlacement(null)
-      setAnnotationEditorExpanded(false)
-      setIsAnnotationConfigOpen(false)
-      setAnnotationHoverRectIfChanged(null)
-      return
-    }
-    if (frameUrl === '') {
-      void message.warning(t('chat.interactionPanel.iframeAnnotationNoPage'))
-      return
-    }
+  const resetAnnotationSelection = useCallback(() => {
     setAnnotationTarget(null)
     setAnnotationComment('')
     setAnnotationEditorPlacement(null)
     setAnnotationEditorExpanded(false)
     setIsAnnotationConfigOpen(false)
     setAnnotationHoverRectIfChanged(null)
+  }, [setAnnotationHoverRectIfChanged])
+
+  const exitAnnotationMode = useCallback(() => {
+    setIsAnnotationMode(false)
+    resetAnnotationSelection()
+  }, [resetAnnotationSelection])
+
+  const handleToggleAnnotationMode = useCallback(() => {
+    if (isAnnotationMode) {
+      exitAnnotationMode()
+      return
+    }
+    if (frameUrl === '') {
+      void message.warning(t('chat.interactionPanel.iframeAnnotationNoPage'))
+      return
+    }
+    resetAnnotationSelection()
     setIsAnnotationMode(true)
     void message.info(t('chat.interactionPanel.iframeAnnotationStarted'))
-  }, [frameUrl, isAnnotationMode, message, setAnnotationHoverRectIfChanged, t])
+  }, [exitAnnotationMode, frameUrl, isAnnotationMode, message, resetAnnotationSelection, t])
 
   const getAnnotationFrameElement = useCallback((): ElectronWebviewElement | HTMLIFrameElement | null => (
     webview.shouldUseWebview ? webviewRef.current : iframeRef.current
@@ -1567,8 +1718,96 @@ export function InteractionPanelIframeView({
     }
   }, [resolveAnnotationFramePaneRect])
 
+  const readCurrentIframeUrl = useCallback(() => {
+    try {
+      return iframeRef.current?.contentDocument?.location.href ?? frameUrl
+    } catch {
+      return frameUrl
+    }
+  }, [frameUrl])
+
+  const resolveIframeViewportPointFromCapturePoint = useCallback((
+    clientX: number,
+    clientY: number
+  ): PendingAnnotationTarget['marker'] | null => {
+    const iframeElement = iframeRef.current
+    if (iframeElement == null || webview.shouldUseWebview) return null
+
+    let ownerDocument: Document | null | undefined
+    try {
+      ownerDocument = iframeElement.contentDocument
+    } catch {
+      ownerDocument = null
+    }
+    const ownerWindow = ownerDocument?.defaultView
+    if (ownerDocument == null || ownerWindow == null) return null
+
+    const frameRect = iframeElement.getBoundingClientRect()
+    if (
+      clientX < frameRect.left ||
+      clientX > frameRect.right ||
+      clientY < frameRect.top ||
+      clientY > frameRect.bottom
+    ) return null
+
+    const viewportWidth = ownerWindow.innerWidth || ownerDocument.documentElement.clientWidth || frameRect.width
+    const viewportHeight = ownerWindow.innerHeight || ownerDocument.documentElement.clientHeight || frameRect.height
+    return {
+      x: Math.round(clampNumber(
+        (clientX - frameRect.left) * viewportWidth / Math.max(1, frameRect.width),
+        0,
+        Math.max(0, viewportWidth - 1)
+      )),
+      y: Math.round(clampNumber(
+        (clientY - frameRect.top) * viewportHeight / Math.max(1, frameRect.height),
+        0,
+        Math.max(0, viewportHeight - 1)
+      ))
+    }
+  }, [webview.shouldUseWebview])
+
+  const resolveIframeElementFromCapturePoint = useCallback((
+    clientX: number,
+    clientY: number
+  ): Element | null => {
+    const iframeElement = iframeRef.current
+    if (iframeElement == null || webview.shouldUseWebview) return null
+
+    let ownerDocument: Document | null | undefined
+    try {
+      ownerDocument = iframeElement.contentDocument
+    } catch {
+      ownerDocument = null
+    }
+    const ownerWindow = ownerDocument?.defaultView
+    if (ownerDocument == null || ownerWindow == null) return null
+
+    const frameRect = iframeElement.getBoundingClientRect()
+    if (
+      clientX < frameRect.left ||
+      clientX > frameRect.right ||
+      clientY < frameRect.top ||
+      clientY > frameRect.bottom
+    ) return null
+
+    const viewportWidth = ownerWindow.innerWidth || ownerDocument.documentElement.clientWidth || frameRect.width
+    const viewportHeight = ownerWindow.innerHeight || ownerDocument.documentElement.clientHeight || frameRect.height
+    const localX = clampNumber(
+      (clientX - frameRect.left) * viewportWidth / Math.max(1, frameRect.width),
+      0,
+      Math.max(0, viewportWidth - 1)
+    )
+    const localY = clampNumber(
+      (clientY - frameRect.top) * viewportHeight / Math.max(1, frameRect.height),
+      0,
+      Math.max(0, viewportHeight - 1)
+    )
+    const element = ownerDocument.elementFromPoint(localX, localY)
+    return element instanceof ownerWindow.Element ? element : null
+  }, [webview.shouldUseWebview])
+
   const resolveAnnotationTargetRect = useCallback(
-    (target: IframeAnnotationTarget): IframeAnnotationTargetRect | null => {
+    (target: PendingAnnotationTarget): IframeAnnotationTargetRect | null => {
       const framePaneRect = resolveAnnotationFramePaneRect()
       if (framePaneRect == null) return null
 
@@ -1584,42 +1823,109 @@ export function InteractionPanelIframeView({
     [resolveAnnotationFramePaneRect]
   )
 
+  const resolveAnnotationTargetBorderRadius = useCallback((target: PendingAnnotationTarget) => {
+    if (target.kind === 'point') return '999px'
+
+    const borderRadius = target.style?.borderRadius
+    if (borderRadius == null) return undefined
+
+    const framePaneRect = resolveAnnotationFramePaneRect()
+    if (framePaneRect == null || target.viewport.width <= 0 || target.viewport.height <= 0) return borderRadius
+
+    const scaleX = framePaneRect.width / target.viewport.width
+    const scaleY = framePaneRect.height / target.viewport.height
+    return scaleCssPixelLengths(borderRadius, Math.min(scaleX, scaleY))
+  }, [resolveAnnotationFramePaneRect])
+
+  const resolveAnnotationAnchorPoint = useCallback((target: PendingAnnotationTarget) => {
+    const framePaneRect = resolveAnnotationFramePaneRect()
+    if (framePaneRect != null && target.marker != null) {
+      const scaleX = target.viewport.width > 0 ? framePaneRect.width / target.viewport.width : 1
+      const scaleY = target.viewport.height > 0 ? framePaneRect.height / target.viewport.height : 1
+      return {
+        left: framePaneRect.x + target.marker.x * scaleX,
+        top: framePaneRect.y + target.marker.y * scaleY
+      }
+    }
+
+    const targetRect = resolveAnnotationTargetRect(target)
+    if (targetRect == null) return null
+    return {
+      left: targetRect.x + targetRect.width / 2,
+      top: targetRect.y + targetRect.height / 2
+    }
+  }, [resolveAnnotationFramePaneRect, resolveAnnotationTargetRect])
+
   const resolveAnnotationEditorPlacement = useCallback((
     target: IframeAnnotationTarget,
     isExpanded: boolean
   ): IframeAnnotationEditorPlacement => {
     const paneRect = pagePaneRef.current?.getBoundingClientRect()
-    const targetRect = resolveAnnotationTargetRect(target)
-    if (paneRect == null || targetRect == null) {
+    const anchorPoint = resolveAnnotationAnchorPoint(target)
+    if (paneRect == null || anchorPoint == null) {
       return {
+        arrowLeft: 18,
+        arrowTop: 18,
         left: ANNOTATION_EDITOR_MARGIN,
-        side: 'right',
+        side: 'below',
         top: ANNOTATION_EDITOR_MARGIN
       }
     }
 
     const editorHeight = isExpanded ? ANNOTATION_EDITOR_EXPANDED_HEIGHT : ANNOTATION_EDITOR_COLLAPSED_HEIGHT
-    const maxLeft = Math.max(
-      ANNOTATION_EDITOR_MARGIN,
-      paneRect.width - ANNOTATION_EDITOR_WIDTH - ANNOTATION_EDITOR_MARGIN
-    )
+    const editorWidth = Math.min(ANNOTATION_EDITOR_WIDTH, Math.max(0, paneRect.width - ANNOTATION_EDITOR_MARGIN * 2))
+    const maxLeft = Math.max(ANNOTATION_EDITOR_MARGIN, paneRect.width - editorWidth - ANNOTATION_EDITOR_MARGIN)
     const maxTop = Math.max(
       ANNOTATION_EDITOR_MARGIN,
       paneRect.height - editorHeight - ANNOTATION_EDITOR_MARGIN
     )
-    const rightLeft = targetRect.x + targetRect.width + ANNOTATION_EDITOR_GAP
-    const leftLeft = targetRect.x - ANNOTATION_EDITOR_WIDTH - ANNOTATION_EDITOR_GAP
-    const hasRightSpace = rightLeft + ANNOTATION_EDITOR_WIDTH + ANNOTATION_EDITOR_MARGIN <= paneRect.width
-    const hasLeftSpace = leftLeft >= ANNOTATION_EDITOR_MARGIN
-    const side = hasRightSpace || !hasLeftSpace ? 'right' : 'left'
-    const preferredLeft = side === 'right' ? rightLeft : leftLeft
+    const candidates = {
+      above: {
+        fits: anchorPoint.top - editorHeight - ANNOTATION_EDITOR_GAP >= ANNOTATION_EDITOR_MARGIN,
+        left: anchorPoint.left - editorWidth / 2,
+        top: anchorPoint.top - editorHeight - ANNOTATION_EDITOR_GAP
+      },
+      below: {
+        fits: anchorPoint.top + ANNOTATION_EDITOR_GAP + editorHeight + ANNOTATION_EDITOR_MARGIN <= paneRect.height,
+        left: anchorPoint.left - editorWidth / 2,
+        top: anchorPoint.top + ANNOTATION_EDITOR_GAP
+      },
+      left: {
+        fits: anchorPoint.left - editorWidth - ANNOTATION_EDITOR_GAP >= ANNOTATION_EDITOR_MARGIN,
+        left: anchorPoint.left - editorWidth - ANNOTATION_EDITOR_GAP,
+        top: anchorPoint.top - editorHeight / 2
+      },
+      right: {
+        fits: anchorPoint.left + ANNOTATION_EDITOR_GAP + editorWidth + ANNOTATION_EDITOR_MARGIN <= paneRect.width,
+        left: anchorPoint.left + ANNOTATION_EDITOR_GAP,
+        top: anchorPoint.top - editorHeight / 2
+      }
+    } satisfies Record<IframeAnnotationEditorPlacement['side'], {
+      fits: boolean
+      left: number
+      top: number
+    }>
+    const horizontalPrimary = anchorPoint.left <= paneRect.width / 2 ? 'right' : 'left'
+    const verticalPrimary = anchorPoint.top <= paneRect.height / 2 ? 'below' : 'above'
+    const sideOrder: IframeAnnotationEditorPlacement['side'][] = [
+      horizontalPrimary,
+      verticalPrimary,
+      horizontalPrimary === 'right' ? 'left' : 'right',
+      verticalPrimary === 'below' ? 'above' : 'below'
+    ]
+    const side = sideOrder.find(candidateSide => candidates[candidateSide].fits) ?? sideOrder[0]
+    const selectedCandidate = candidates[side]
+    const left = clampNumber(selectedCandidate.left, ANNOTATION_EDITOR_MARGIN, maxLeft)
+    const top = clampNumber(selectedCandidate.top, ANNOTATION_EDITOR_MARGIN, maxTop)
 
     return {
-      left: clampNumber(preferredLeft, ANNOTATION_EDITOR_MARGIN, maxLeft),
+      arrowLeft: clampNumber(anchorPoint.left - left, 14, Math.max(14, editorWidth - 14)),
+      arrowTop: clampNumber(anchorPoint.top - top, 14, Math.max(14, editorHeight - 14)),
+      left,
       side,
-      top: clampNumber(targetRect.y, ANNOTATION_EDITOR_MARGIN, maxTop)
+      top
     }
-  }, [resolveAnnotationTargetRect])
+  }, [resolveAnnotationAnchorPoint])
 
   const resolveAnnotationInfoCardPlacement = useCallback((
     targetRect: IframeAnnotationTargetRect
@@ -1649,24 +1955,26 @@ export function InteractionPanelIframeView({
     }
   }, [])
 
-  const resolveAnnotationMarkerPosition = useCallback((target: IframeAnnotationTarget) => {
-    const targetRect = resolveAnnotationTargetRect(target)
-    if (targetRect == null) return null
-    return {
-      left: targetRect.x + targetRect.width / 2,
-      top: targetRect.y + targetRect.height / 2
-    }
-  }, [resolveAnnotationTargetRect])
+  const resolveAnnotationMarkerPosition = useCallback((target: PendingAnnotationTarget) => {
+    return resolveAnnotationAnchorPoint(target)
+  }, [resolveAnnotationAnchorPoint])
+
+  const findPendingAnnotationMarkerForTarget = useCallback((target: PendingAnnotationTarget) => (
+    visiblePendingAnnotationMarkers.find(marker => areAnnotationTargetsEqual(marker.target, target)) ?? null
+  ), [visiblePendingAnnotationMarkers])
 
   const openAnnotationEditorForTarget = useCallback((target: IframeAnnotationTarget, initialComment = '') => {
     setAnnotationEditorPlacement(resolveAnnotationEditorPlacement(target, false))
     setAnnotationEditorExpanded(false)
     setIsAnnotationConfigOpen(false)
     setAnnotationHoverRectIfChanged(null)
+    setAnnotationHoverTargetIfChanged(null)
+    setHoveredPendingAnnotationMarkerId(null)
+    setHoveredPendingAnnotationTargetId(null)
     setAnnotationTarget(target)
     setAnnotationComment(initialComment)
     setIsAnnotationMode(true)
-  }, [resolveAnnotationEditorPlacement, setAnnotationHoverRectIfChanged])
+  }, [resolveAnnotationEditorPlacement, setAnnotationHoverRectIfChanged, setAnnotationHoverTargetIfChanged])
 
   const handleAnnotationPointCapturePointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
@@ -1694,6 +2002,87 @@ export function InteractionPanelIframeView({
     }))
   }, [getCurrentInspectableUrl, openAnnotationEditorForTarget, resolveAnnotationFramePaneRect])
 
+  const updateAnnotationHoverFromCapturePoint = useCallback((clientX: number, clientY: number) => {
+    if (annotationTargetRef.current != null) return
+    if (webview.shouldUseWebview) return
+
+    const element = resolveIframeElementFromCapturePoint(clientX, clientY)
+    const nextTarget = element == null ? null : buildAnnotationTarget(element, readCurrentIframeUrl())
+
+    if (!isAnnotationMode && isPendingAnnotationPreviewActive) {
+      const matchedMarker = nextTarget == null ? null : findPendingAnnotationMarkerForTarget(nextTarget)
+      setHoveredPendingAnnotationTargetId(matchedMarker?.annotation.id ?? null)
+      return
+    }
+
+    setAnnotationHoverTargetIfChanged(nextTarget)
+    setAnnotationHoverRectIfChanged(
+      nextTarget == null || element == null ? null : resolveAnnotationElementPaneRect(element)
+    )
+  }, [
+    findPendingAnnotationMarkerForTarget,
+    isAnnotationMode,
+    isPendingAnnotationPreviewActive,
+    readCurrentIframeUrl,
+    resolveAnnotationElementPaneRect,
+    resolveIframeElementFromCapturePoint,
+    setAnnotationHoverRectIfChanged,
+    setAnnotationHoverTargetIfChanged,
+    webview.shouldUseWebview
+  ])
+
+  const handleAnnotationCapturePointerMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    updateAnnotationHoverFromCapturePoint(event.clientX, event.clientY)
+  }, [updateAnnotationHoverFromCapturePoint])
+
+  const handleAnnotationCapturePointerLeave = useCallback(() => {
+    setAnnotationHoverRectIfChanged(null)
+    setHoveredPendingAnnotationTargetId(null)
+  }, [setAnnotationHoverRectIfChanged])
+
+  const handleAnnotationCapturePointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (!isAnnotationMode && isPendingAnnotationPreviewActive) {
+      setHoveredPendingAnnotationTargetId(null)
+      return
+    }
+
+    if (webview.shouldUseWebview) {
+      handleAnnotationPointCapturePointerDown(event)
+      return
+    }
+
+    const marker = resolveIframeViewportPointFromCapturePoint(event.clientX, event.clientY)
+    const element = resolveIframeElementFromCapturePoint(event.clientX, event.clientY)
+    const nextTarget = element == null
+      ? null
+      : buildAnnotationTarget(element, readCurrentIframeUrl(), marker ?? undefined)
+    if (nextTarget == null) {
+      void message.warning(t('chat.interactionPanel.iframeAnnotationSensitiveTarget'))
+      setAnnotationHoverRectIfChanged(null)
+      return
+    }
+
+    openAnnotationEditorForTarget(nextTarget)
+  }, [
+    handleAnnotationPointCapturePointerDown,
+    isAnnotationMode,
+    isPendingAnnotationPreviewActive,
+    message,
+    openAnnotationEditorForTarget,
+    readCurrentIframeUrl,
+    resolveIframeElementFromCapturePoint,
+    resolveIframeViewportPointFromCapturePoint,
+    setAnnotationHoverRectIfChanged,
+    t,
+    webview.shouldUseWebview
+  ])
+
   const applyAnnotationCommentValue = useCallback((value: string, selection?: SenderEditorSelection | null) => {
     setAnnotationComment(value)
     if (value.includes('\n')) setAnnotationEditorExpanded(true)
@@ -1709,26 +2098,47 @@ export function InteractionPanelIframeView({
 
   const handleCloseAnnotationEditor = useCallback(() => {
     if (isSubmittingAnnotation) return
-    setAnnotationTarget(null)
-    setAnnotationComment('')
-    setAnnotationEditorPlacement(null)
-    setAnnotationEditorExpanded(false)
-    setIsAnnotationConfigOpen(false)
-    setAnnotationHoverRectIfChanged(null)
-  }, [isSubmittingAnnotation, setAnnotationHoverRectIfChanged])
+    resetAnnotationSelection()
+  }, [isSubmittingAnnotation, resetAnnotationSelection])
+
+  const handleAnnotationEscape = useCallback(() => {
+    if (annotationTargetRef.current != null) {
+      handleCloseAnnotationEditor()
+      return
+    }
+
+    exitAnnotationMode()
+  }, [exitAnnotationMode, handleCloseAnnotationEditor])
 
   const readAnnotationScreenshotDataUrl = useCallback(async (target: IframeAnnotationTarget) => {
-    try {
-      const webviewElement = webviewRef.current
-      const dataUrl = webview.shouldUseWebview && webviewElement?.capturePage != null
-        ? (await webviewElement.capturePage()).toDataURL()
-        : await readIframeScreenshotDataUrl(iframeRef.current as HTMLIFrameElement, false)
-      if (dataUrl.trim() === '') return undefined
-      return await cropAnnotationScreenshotDataUrl(dataUrl, target)
-    } catch {
+    if (!webview.shouldUseWebview) {
+      debugIframeDevtools('skip iframe annotation screenshot', {
+        frameUrl,
+        reason: 'browser-iframe',
+        targetLabel: target.inspector?.label ?? target.targetPath
+      })
       return undefined
     }
-  }, [webview.shouldUseWebview])
+
+    const decorateDataUrl = async (dataUrl: string) => {
+      if (dataUrl.trim() === '') return undefined
+      return await drawAnnotationOverlayScreenshotDataUrl(dataUrl, target)
+    }
+
+    try {
+      const webviewElement = webviewRef.current
+      if (webviewElement?.capturePage == null) return undefined
+      const dataUrl = (await webviewElement.capturePage()).toDataURL()
+      return await decorateDataUrl(dataUrl)
+    } catch (error) {
+      debugIframeDevtools('webview annotation screenshot capture failed', {
+        error: getErrorMessage(error),
+        frameUrl,
+        targetLabel: target.inspector?.label ?? target.targetPath
+      })
+      return undefined
+    }
+  }, [frameUrl, webview.shouldUseWebview])
 
   const buildPendingAnnotationForTarget = useCallback(async (
     target: IframeAnnotationTarget,
@@ -1742,26 +2152,13 @@ export function InteractionPanelIframeView({
     }),
     id: createAnnotationId(),
     screenshotDataUrl: await readAnnotationScreenshotDataUrl(target),
+    sourcePageId: page.id,
+    target,
     targetLabel: getAnnotationTargetLabel(target)
   }), [page, readAnnotationScreenshotDataUrl])
 
   const closeSubmittedAnnotationEditor = () => {
-    setAnnotationTarget(null)
-    setAnnotationComment('')
-    setAnnotationEditorPlacement(null)
-    setAnnotationEditorExpanded(false)
-    setIsAnnotationConfigOpen(false)
-  }
-
-  const addAnnotationMarker = (target: IframeAnnotationTarget, comment: string) => {
-    const markerId = annotationMarkerSequenceRef.current
-    annotationMarkerSequenceRef.current += 1
-    setAnnotationMarkers(current => [...current, { comment, id: markerId, target }])
-  }
-
-  const resetAnnotationMarkers = () => {
-    annotationMarkerSequenceRef.current = 1
-    setAnnotationMarkers([])
+    resetAnnotationSelection()
   }
 
   const handleSubmitAnnotation = async (mode: 'auto' | 'reference' | 'send' = 'auto') => {
@@ -1787,7 +2184,6 @@ export function InteractionPanelIframeView({
       const annotation = await buildPendingAnnotationForTarget(target, comment)
       if (shouldReference) {
         onReferenceAnnotations?.([annotation])
-        addAnnotationMarker(target, comment)
         closeSubmittedAnnotationEditor()
         void message.success(t('chat.interactionPanel.iframeAnnotationAddedToSender'))
         return
@@ -1798,7 +2194,6 @@ export function InteractionPanelIframeView({
         buildAnnotationMessageContent(annotation)
       )
       void message.success(t('chat.interactionPanel.iframeAnnotationSent'))
-      resetAnnotationMarkers()
       closeSubmittedAnnotationEditor()
     } catch {
       void message.error(t('chat.interactionPanel.iframeAnnotationSendFailed'))
@@ -1814,8 +2209,8 @@ export function InteractionPanelIframeView({
   const handleAnnotationInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault()
-      handleCloseAnnotationEditor()
-      setIsAnnotationMode(false)
+      event.stopPropagation()
+      handleAnnotationEscape()
       return
     }
 
@@ -2451,8 +2846,7 @@ export function InteractionPanelIframeView({
       setAnnotationHoverRectIfChanged(null)
       return
     }
-    const ownerWindow = ownerDocument.defaultView
-    if (ownerWindow == null) {
+    if (ownerDocument.defaultView == null) {
       setAnnotationHoverRectIfChanged(null)
       return
     }
@@ -2464,96 +2858,25 @@ export function InteractionPanelIframeView({
     ownerDocument.head?.append(styleElement)
     ownerDocument.documentElement.classList.add('oneworks-annotation-mode')
 
-    let hoveredElement: Element | null = null
-    const updateHoveredElementRect = () => {
-      const nextTarget = hoveredElement == null ? null : buildAnnotationTarget(hoveredElement, readCurrentFrameUrl())
-      setAnnotationHoverTargetIfChanged(nextTarget)
-      setAnnotationHoverRectIfChanged(
-        nextTarget == null || hoveredElement == null ? null : resolveAnnotationElementPaneRect(hoveredElement)
-      )
-    }
-    const setHoveredElement = (element: Element | null) => {
-      if (element !== hoveredElement) {
-        hoveredElement = element
-      }
-      updateHoveredElementRect()
-    }
-    const clearHoveredElement = () => {
-      hoveredElement = null
-      setAnnotationHoverRectIfChanged(null)
-    }
-    const readCurrentFrameUrl = () => {
-      try {
-        return ownerDocument?.location.href ?? frameUrl
-      } catch {
-        return frameUrl
-      }
-    }
-
-    const handlePointerMove = (event: globalThis.PointerEvent) => {
-      const target = event.target
-      setHoveredElement(target instanceof ownerWindow.Element ? target : null)
-    }
-    const handlePointerOut = (event: globalThis.PointerEvent) => {
-      if (event.relatedTarget != null) return
-      clearHoveredElement()
-    }
-    const handleClick = (event: globalThis.MouseEvent) => {
-      const target = event.target
-      if (!(target instanceof ownerWindow.Element)) return
-
-      event.preventDefault()
-      event.stopPropagation()
-      event.stopImmediatePropagation()
-
-      const nextTarget = buildAnnotationTarget(target, readCurrentFrameUrl())
-      if (nextTarget == null) {
-        void message.warning(t('chat.interactionPanel.iframeAnnotationSensitiveTarget'))
-        return
-      }
-
-      openAnnotationEditorForTarget(nextTarget)
-    }
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape') return
       event.preventDefault()
-      setIsAnnotationMode(false)
-      setAnnotationTarget(null)
-      setAnnotationComment('')
-      setAnnotationEditorPlacement(null)
-      setAnnotationEditorExpanded(false)
-      setIsAnnotationConfigOpen(false)
-      clearHoveredElement()
+      event.stopPropagation()
+      handleAnnotationEscape()
     }
-    const handleLayoutChange = () => updateHoveredElementRect()
 
-    ownerDocument.addEventListener('pointermove', handlePointerMove, true)
-    ownerDocument.addEventListener('pointerout', handlePointerOut, true)
-    ownerDocument.addEventListener('click', handleClick, true)
     ownerDocument.addEventListener('keydown', handleKeyDown, true)
-    ownerWindow.addEventListener('resize', handleLayoutChange)
-    ownerWindow.addEventListener('scroll', handleLayoutChange, true)
 
     return () => {
-      ownerDocument?.removeEventListener('pointermove', handlePointerMove, true)
-      ownerDocument?.removeEventListener('pointerout', handlePointerOut, true)
-      ownerDocument?.removeEventListener('click', handleClick, true)
       ownerDocument?.removeEventListener('keydown', handleKeyDown, true)
-      ownerWindow.removeEventListener('resize', handleLayoutChange)
-      ownerWindow.removeEventListener('scroll', handleLayoutChange, true)
-      clearHoveredElement()
+      setAnnotationHoverRectIfChanged(null)
       ownerDocument?.documentElement.classList.remove('oneworks-annotation-mode')
       styleElement.remove()
     }
   }, [
-    frameUrl,
+    handleAnnotationEscape,
     isAnnotationMode,
-    message,
-    openAnnotationEditorForTarget,
-    resolveAnnotationElementPaneRect,
     setAnnotationHoverRectIfChanged,
-    setAnnotationHoverTargetIfChanged,
-    t,
     webview.shouldUseWebview
   ])
 
@@ -2561,6 +2884,14 @@ export function InteractionPanelIframeView({
     if (annotationTarget == null) return
     setAnnotationEditorPlacement(resolveAnnotationEditorPlacement(annotationTarget, annotationEditorExpanded))
   }, [annotationEditorExpanded, annotationTarget, resolveAnnotationEditorPlacement])
+
+  useEffect(() => {
+    if (annotationTarget == null) return
+    setAnnotationHoverRectIfChanged(null)
+    setAnnotationHoverTargetIfChanged(null)
+    setHoveredPendingAnnotationMarkerId(null)
+    setHoveredPendingAnnotationTargetId(null)
+  }, [annotationTarget, setAnnotationHoverRectIfChanged, setAnnotationHoverTargetIfChanged])
 
   useEffect(() => {
     if (annotationTarget == null) return
@@ -2589,18 +2920,12 @@ export function InteractionPanelIframeView({
       if (event.key !== 'Escape') return
       event.preventDefault()
       event.stopPropagation()
-      setIsAnnotationMode(false)
-      setAnnotationTarget(null)
-      setAnnotationComment('')
-      setAnnotationEditorPlacement(null)
-      setAnnotationEditorExpanded(false)
-      setIsAnnotationConfigOpen(false)
-      setAnnotationHoverRectIfChanged(null)
+      handleAnnotationEscape()
     }
 
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [isActive, isAnnotationMode, setAnnotationHoverRectIfChanged])
+  }, [handleAnnotationEscape, isActive, isAnnotationMode])
 
   useEffect(() => {
     if (!isActive || !webview.shouldUseWebview) return
@@ -2623,8 +2948,7 @@ export function InteractionPanelIframeView({
       if (input.type != null && input.type !== 'keyDown') return
       if (isAnnotationMode && input.key === 'Escape') {
         event.preventDefault()
-        setIsAnnotationMode(false)
-        setAnnotationHoverRectIfChanged(null)
+        handleAnnotationEscape()
         return
       }
       if (input.meta !== true || input.control === true || input.alt === true || input.shift === true) return
@@ -2636,16 +2960,16 @@ export function InteractionPanelIframeView({
     webviewElement.addEventListener('before-input-event', handleBeforeInput)
     return () => webviewElement.removeEventListener('before-input-event', handleBeforeInput)
   }, [
+    handleAnnotationEscape,
     handleToggleAnnotationMode,
     isActive,
     isAnnotationMode,
-    setAnnotationHoverRectIfChanged,
     webview.shouldUseWebview,
     webviewAttachVersion
   ])
 
   useEffect(() => {
-    if (!isAnnotationMode || !webview.shouldUseWebview) {
+    if (!isAnnotationMode && !isPendingAnnotationPreviewActive) {
       setAnnotationCaptureRect(null)
       return undefined
     }
@@ -2667,11 +2991,11 @@ export function InteractionPanelIframeView({
   }, [
     getAnnotationFrameElement,
     isAnnotationMode,
+    isPendingAnnotationPreviewActive,
     resolveAnnotationFramePaneRect,
     resolvedViewportScale,
     viewportSize.height,
     viewportSize.width,
-    webview.shouldUseWebview,
     webviewAttachVersion
   ])
 
@@ -2702,6 +3026,22 @@ export function InteractionPanelIframeView({
   }, [annotationTarget, annotationVoiceInput])
 
   useEffect(() => {
+    if (isPendingAnnotationPreviewActive) return
+    setHoveredPendingAnnotationMarkerId(null)
+    setHoveredPendingAnnotationTargetId(null)
+  }, [isPendingAnnotationPreviewActive])
+
+  useEffect(() => {
+    const visibleAnnotationIds = new Set(visiblePendingAnnotationMarkers.map(marker => marker.annotation.id))
+    setHoveredPendingAnnotationMarkerId(current =>
+      current != null && visibleAnnotationIds.has(current) ? current : null
+    )
+    setHoveredPendingAnnotationTargetId(current =>
+      current != null && visibleAnnotationIds.has(current) ? current : null
+    )
+  }, [visiblePendingAnnotationMarkers])
+
+  useEffect(() => {
     isMountedRef.current = true
     return () => {
       isMountedRef.current = false
@@ -2713,6 +3053,34 @@ export function InteractionPanelIframeView({
     ? { height: developerToolsHeight }
     : { width: developerToolsWidth }
   const annotationSelectedRect = annotationTarget == null ? null : resolveAnnotationTargetRect(annotationTarget)
+  const annotationHoverBorderRadius = annotationHoverTarget == null
+    ? undefined
+    : resolveAnnotationTargetBorderRadius(annotationHoverTarget)
+  const annotationSelectedBorderRadius = annotationTarget == null
+    ? undefined
+    : resolveAnnotationTargetBorderRadius(annotationTarget)
+  const activePendingAnnotationId = hoveredPendingAnnotationMarkerId ??
+    hoveredPendingAnnotationTargetId ??
+    requestedPendingAnnotationId
+  const activePendingAnnotationMarker = activePendingAnnotationId == null
+    ? null
+    : visiblePendingAnnotationMarkers.find(marker => marker.annotation.id === activePendingAnnotationId) ?? null
+  const hoveredPendingAnnotationMarker = hoveredPendingAnnotationMarkerId == null
+    ? null
+    : visiblePendingAnnotationMarkers.find(marker => marker.annotation.id === hoveredPendingAnnotationMarkerId) ?? null
+  const pendingAnnotationPreviewRect = activePendingAnnotationMarker == null
+    ? null
+    : resolveAnnotationTargetRect(activePendingAnnotationMarker.target)
+  const pendingAnnotationPreviewBorderRadius = activePendingAnnotationMarker == null
+    ? undefined
+    : resolveAnnotationTargetBorderRadius(activePendingAnnotationMarker.target)
+  const pendingAnnotationTooltipPosition = hoveredPendingAnnotationMarker == null
+    ? null
+    : resolveAnnotationMarkerPosition(hoveredPendingAnnotationMarker.target)
+  const shouldShowPendingAnnotationMarkers = annotationTarget == null &&
+    (isAnnotationMode || isPendingAnnotationPreviewActive)
+  const shouldUseAnnotationCaptureLayer = annotationTarget == null &&
+    (isAnnotationMode || isPendingAnnotationPreviewActive)
   const annotationInfoCardPlacement = annotationHoverRect == null
     ? null
     : resolveAnnotationInfoCardPlacement(annotationHoverRect)
@@ -2996,7 +3364,7 @@ export function InteractionPanelIframeView({
               onPointerDown={handleCloseAnnotationEditor}
             />
           )}
-          {isAnnotationMode && webview.shouldUseWebview && annotationCaptureRect != null && (
+          {shouldUseAnnotationCaptureLayer && annotationCaptureRect != null && (
             <div
               className='chat-interaction-panel__annotation-capture-layer'
               data-dock-panel-no-resize='true'
@@ -3006,7 +3374,9 @@ export function InteractionPanelIframeView({
                 top: annotationCaptureRect.y,
                 width: annotationCaptureRect.width
               }}
-              onPointerDown={handleAnnotationPointCapturePointerDown}
+              onPointerDown={handleAnnotationCapturePointerDown}
+              onPointerLeave={handleAnnotationCapturePointerLeave}
+              onPointerMove={handleAnnotationCapturePointerMove}
             />
           )}
           {isAnnotationMode && annotationHoverRect != null && (
@@ -3014,6 +3384,7 @@ export function InteractionPanelIframeView({
               className='chat-interaction-panel__annotation-highlight is-hovered'
               data-dock-panel-no-resize='true'
               style={{
+                borderRadius: annotationHoverBorderRadius,
                 height: annotationHoverRect.height,
                 left: annotationHoverRect.x,
                 top: annotationHoverRect.y,
@@ -3094,6 +3465,7 @@ export function InteractionPanelIframeView({
               className='chat-interaction-panel__annotation-highlight is-selected'
               data-dock-panel-no-resize='true'
               style={{
+                borderRadius: annotationSelectedBorderRadius,
                 height: annotationSelectedRect.height,
                 left: annotationSelectedRect.x,
                 top: annotationSelectedRect.y,
@@ -3101,29 +3473,67 @@ export function InteractionPanelIframeView({
               }}
             />
           )}
-          {isAnnotationMode && annotationMarkers.map(marker => {
+          {pendingAnnotationPreviewRect != null && (
+            <div
+              className='chat-interaction-panel__annotation-highlight is-pending-preview'
+              data-dock-panel-no-resize='true'
+              style={{
+                borderRadius: pendingAnnotationPreviewBorderRadius,
+                height: pendingAnnotationPreviewRect.height,
+                left: pendingAnnotationPreviewRect.x,
+                top: pendingAnnotationPreviewRect.y,
+                width: pendingAnnotationPreviewRect.width
+              }}
+            />
+          )}
+          {shouldShowPendingAnnotationMarkers && visiblePendingAnnotationMarkers.map(marker => {
             const markerPosition = resolveAnnotationMarkerPosition(marker.target)
             if (markerPosition == null) return null
+            const isActiveMarker = activePendingAnnotationId === marker.annotation.id
             return (
               <button
-                key={marker.id}
+                key={marker.annotation.id}
                 type='button'
-                className='chat-interaction-panel__annotation-marker'
+                className={[
+                  'chat-interaction-panel__annotation-marker',
+                  isActiveMarker ? 'is-active' : ''
+                ].filter(Boolean).join(' ')}
                 data-dock-panel-no-resize='true'
                 style={{
                   left: markerPosition.left,
                   top: markerPosition.top
                 }}
-                aria-label={t('chat.interactionPanel.iframeAnnotationMarker', { number: marker.id })}
+                aria-label={t('chat.interactionPanel.iframeAnnotationMarker', { number: marker.number })}
                 onClick={event => {
                   event.stopPropagation()
-                  openAnnotationEditorForTarget(marker.target, marker.comment)
+                  if (!isAnnotationMode) return
+                  openAnnotationEditorForTarget(marker.target, marker.annotation.comment)
                 }}
+                onPointerEnter={() => setHoveredPendingAnnotationMarkerId(marker.annotation.id)}
+                onPointerLeave={() => setHoveredPendingAnnotationMarkerId(null)}
               >
-                {marker.id}
+                {marker.number}
               </button>
             )
           })}
+          {hoveredPendingAnnotationMarker != null && pendingAnnotationTooltipPosition != null && (
+            <div
+              className='chat-interaction-panel__annotation-marker-tooltip'
+              data-dock-panel-no-resize='true'
+              style={{
+                left: pendingAnnotationTooltipPosition.left,
+                top: pendingAnnotationTooltipPosition.top
+              }}
+            >
+              <div className='chat-interaction-panel__annotation-marker-tooltip-target'>
+                {hoveredPendingAnnotationMarker.annotation.targetLabel.trim() ||
+                  hoveredPendingAnnotationMarker.target.targetPath}
+              </div>
+              <div className='chat-interaction-panel__annotation-marker-tooltip-comment'>
+                {hoveredPendingAnnotationMarker.annotation.comment}
+              </div>
+            </div>
+          )}
           {annotationTarget != null && annotationEditorPlacement != null && (
             <div
               ref={annotationEditorRef}
@@ -3137,9 +3547,11 @@ export function InteractionPanelIframeView({
               role='dialog'
               aria-label={t('chat.interactionPanel.iframeAnnotationCommentTitle')}
               style={{
+                '--annotation-editor-arrow-left': `${annotationEditorPlacement.arrowLeft}px`,
+                '--annotation-editor-arrow-top': `${annotationEditorPlacement.arrowTop}px`,
                 left: annotationEditorPlacement.left,
                 top: annotationEditorPlacement.top
-              }}
+              } as CSSProperties}
               onClick={event => event.stopPropagation()}
               onMouseDown={event => event.stopPropagation()}
             >

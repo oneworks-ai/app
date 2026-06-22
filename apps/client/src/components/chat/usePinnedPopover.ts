@@ -17,10 +17,12 @@ export interface PinnedPopoverController<TElement extends HTMLElement = HTMLElem
 }
 
 export interface UsePinnedPopoverOptions {
+  align?: 'center' | 'start'
   matchWidthSelector?: string
 }
 
 export const usePinnedPopover = <TElement extends HTMLElement>({
+  align,
   matchWidthSelector
 }: UsePinnedPopoverOptions = {}): PinnedPopoverController<TElement> => {
   const rootRef = useRef<TElement>(null)
@@ -42,8 +44,8 @@ export const usePinnedPopover = <TElement extends HTMLElement>({
     const popoverElement = popoverRef.current
     if (rootElement == null || popoverElement == null) return
 
-    setPopoverStyle(resolvePinnedPopoverStyle({ matchWidthSelector, popoverElement, rootElement }))
-  }, [matchWidthSelector])
+    setPopoverStyle(resolvePinnedPopoverStyle({ align, matchWidthSelector, popoverElement, rootElement }))
+  }, [align, matchWidthSelector])
 
   const blurActiveElement = useCallback(() => {
     const activeElement = document.activeElement

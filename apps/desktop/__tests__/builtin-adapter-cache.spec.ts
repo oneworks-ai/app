@@ -192,7 +192,10 @@ const writeSourceAdapterPackageWithDuplicateDependencyVersions = async (rootDir:
       minipass: '^7.0.3'
     }
   })
-  await writeFile(path.join(minipassCollectDir, 'index.js'), "module.exports = require('minipass/package.json').version\n")
+  await writeFile(
+    path.join(minipassCollectDir, 'index.js'),
+    "module.exports = require('minipass/package.json').version\n"
+  )
 
   await writePackageJson(minipassLegacyDir, {
     name: 'minipass',
@@ -299,7 +302,10 @@ describe('desktop built-in adapter package cache', () => {
       legacy: '3.3.6'
     })
     await expect(
-      readFile(path.join(result.cacheDir, 'node_modules', 'minipass-collect', 'node_modules', 'minipass', 'package.json'), 'utf8')
+      readFile(
+        path.join(result.cacheDir, 'node_modules', 'minipass-collect', 'node_modules', 'minipass', 'package.json'),
+        'utf8'
+      )
     ).resolves.toContain('"version": "7.1.2"')
   })
 

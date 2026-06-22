@@ -13,10 +13,10 @@ import { installBrowserActivityDownloadTracking } from './browser-activity'
 import { updateSavedPasswordsRuntimeSettings } from './browser-data-sync'
 import { readDesktopBuildSource } from './build-source'
 import { DESKTOP_SETTINGS_CHANNEL, DESKTOP_UPDATE_STATUS_CHANNEL, GLOBAL_INTERFACE_LANGUAGE_CHANNEL } from './constants'
+import { createDesktopContextCaptureOverlayController } from './context-capture-overlay'
+import { normalizeDesktopContextCaptureSettingsPatch } from './context-capture-settings'
 import { desktopDeepLinkSchemes, findDesktopDeepLinkArg, parseDesktopDeepLinkLaunchRequest } from './deep-link'
 import { applyDesktopIconToAllWindows, readDesktopIconPreviewDataUrl } from './desktop-app-icon'
-import { normalizeDesktopContextCaptureSettingsPatch } from './context-capture-settings'
-import { createDesktopContextCaptureOverlayController } from './context-capture-overlay'
 import { normalizeDesktopIconSettingsPatch } from './desktop-icon-settings'
 import {
   loadGlobalAppearanceSettings,
@@ -522,9 +522,10 @@ export const createDesktopApp = () => {
       searchCurrentWorkspacePlugins: windowManager.searchCurrentWorkspacePlugins,
       searchCurrentWorkspaceResources: windowManager.searchCurrentWorkspaceResources,
       setThemeSource: setDesktopThemeSource,
-      showDesktopContextCaptureOverlay: (input: unknown) => contextCaptureOverlayController.show(input, {
-        defaultPlacement: runtimeState.desktopState.contextCapture.overlayPlacement
-      }),
+      showDesktopContextCaptureOverlay: (input: unknown) =>
+        contextCaptureOverlayController.show(input, {
+          defaultPlacement: runtimeState.desktopState.contextCapture.overlayPlacement
+        }),
       stopWorkspaceFolder,
       updateDesktopSettings,
       updateGlobalAppearanceConfig,

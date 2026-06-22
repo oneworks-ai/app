@@ -12,7 +12,7 @@ import { ChatHistoryView } from '#~/components/chat/ChatHistoryView.js'
 import { ChatSettingsView } from '#~/components/chat/ChatSettingsView.js'
 import { ChatTimelineView } from '#~/components/chat/ChatTimelineView.js'
 import { buildChatHistoryStatusNotices } from '#~/components/chat/messages/build-chat-history-status-notices'
-import type { PendingAnnotation } from '#~/components/chat/sender/@types/sender-composer'
+import type { PendingAnnotation, PendingAnnotationPreviewState } from '#~/components/chat/sender/@types/sender-composer'
 import type { ContextPickerFile, ContextReferenceRequest } from '#~/components/workspace/context-file-types'
 import { useChatRouteDeepLinkView } from '#~/hooks/chat/use-chat-route-deep-link-view'
 import { useChatSession } from '#~/hooks/chat/use-chat-session'
@@ -143,6 +143,11 @@ export function ChatRouteView({
     } | null
   >(null)
   const [pendingAnnotationReferenceCount, setPendingAnnotationReferenceCount] = useState(0)
+  const [pendingAnnotations, setPendingAnnotations] = useState<PendingAnnotation[]>([])
+  const [pendingAnnotationPreview, setPendingAnnotationPreview] = useState<PendingAnnotationPreviewState>({
+    activeAnnotationId: null,
+    isActive: false
+  })
   const [hiddenHistoryTimelineSessionIds, setHiddenHistoryTimelineSessionIds] = useState(
     readHiddenHistoryTimelineSessionIds
   )
@@ -315,6 +320,8 @@ export function ChatRouteView({
       contextReferenceRequest={contextReferenceRequest}
       annotationReferenceRequest={annotationReferenceRequest}
       onPendingAnnotationCountChange={setPendingAnnotationReferenceCount}
+      onPendingAnnotationsChange={setPendingAnnotations}
+      onPendingAnnotationPreviewChange={setPendingAnnotationPreview}
       hideHistoryTimeline={isHistoryTimelineHidden}
       onOpenUrlInAppBrowser={onOpenUrlInAppBrowser}
       onOpenWorkspaceFile={onOpenWorkspaceFile}
@@ -350,6 +357,7 @@ export function ChatRouteView({
     panelIndependentSession,
     panelIndependentSessions,
     pendingAnnotationReferenceCount,
+    setPendingAnnotationPreview,
     permissionMode,
     permissionModeOptions,
     placeholder,
@@ -434,6 +442,8 @@ export function ChatRouteView({
       onReferenceWorkspacePaths={handleReferenceWorkspacePaths}
       onReferenceAnnotations={handleReferenceAnnotations}
       hasPendingAnnotationReferences={pendingAnnotationReferenceCount > 0}
+      pendingAnnotations={pendingAnnotations}
+      pendingAnnotationPreview={pendingAnnotationPreview}
       workspaceDrawerDefaultView={workspaceDrawerDefaultView}
       workspaceSessionId={agentRoomTranscript?.workspaceSessionId}
     />

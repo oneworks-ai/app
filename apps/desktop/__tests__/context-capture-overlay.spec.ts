@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
 import { BrowserWindow, screen } from 'electron'
+import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({
   BrowserWindow: vi.fn(),
@@ -47,11 +47,13 @@ describe('desktop context capture overlay', () => {
   })
 
   it('rejects empty snapshots', () => {
-    expect(() => normalizeDesktopContextCaptureOverlayInput({
-      snapshot: {
-        text: '   '
-      }
-    })).toThrow('Desktop context capture text is required.')
+    expect(() =>
+      normalizeDesktopContextCaptureOverlayInput({
+        snapshot: {
+          text: '   '
+        }
+      })
+    ).toThrow('Desktop context capture text is required.')
     expect(() => normalizeDesktopContextCaptureOverlayInput({})).toThrow(
       'A desktop context capture snapshot is required.'
     )

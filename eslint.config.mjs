@@ -92,6 +92,14 @@ export default config(
   },
   {
     files: [
+      '.oo/rfcs/**/*.md'
+    ],
+    rules: {
+      'max-lines': 'off'
+    }
+  },
+  {
+    files: [
       'apps/desktop/**/*.cjs'
     ],
     rules: {

@@ -2105,6 +2105,7 @@
     "bottomPanelResizePanel": "拖拽调整下方面板高度",
     "browserComments": {
       "ariaLabel": "{{count}} 条注释",
+      "clearAll": "清空注释",
       "count": "{{count}} 条注释",
       "targetFallback": "页面元素"
     },

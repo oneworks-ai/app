@@ -17,6 +17,7 @@ import type { SenderVoiceInputController } from '../../@types/sender-voice-input
 
 import type {
   PendingAnnotation,
+  PendingAnnotationPreviewState,
   PendingContextFile,
   PendingImage,
   PendingTextSelection
@@ -39,7 +40,9 @@ export function SenderBody({
   onRemovePendingFile,
   onRemovePendingAnnotation,
   onRemovePendingTextSelection,
+  onClearPendingAnnotations,
   onClearPendingTextSelections,
+  onPendingAnnotationPreviewChange,
   editorRef,
   sessionId,
   sessionInfo,
@@ -78,7 +81,9 @@ export function SenderBody({
   onRemovePendingFile: (path: string) => void
   onRemovePendingAnnotation: (id: string) => void
   onRemovePendingTextSelection: (id: string) => void
+  onClearPendingAnnotations: () => void
   onClearPendingTextSelections: () => void
+  onPendingAnnotationPreviewChange?: (state: PendingAnnotationPreviewState) => void
   editorRef: MutableRefObject<SenderEditorHandle | null>
   sessionId?: string
   sessionInfo?: SessionInfo | null
@@ -141,7 +146,9 @@ export function SenderBody({
         onRemovePendingFile={onRemovePendingFile}
         onRemovePendingAnnotation={onRemovePendingAnnotation}
         onRemovePendingTextSelection={onRemovePendingTextSelection}
+        onClearPendingAnnotations={onClearPendingAnnotations}
         onClearPendingTextSelections={onClearPendingTextSelections}
+        onPendingAnnotationPreviewChange={onPendingAnnotationPreviewChange}
         input={input}
         placeholder={placeholder || t('chat.inputPlaceholder')}
         disabled={(!isInlineEdit && modelUnavailable) || (isInlineEdit && isBusy)}

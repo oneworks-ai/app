@@ -95,7 +95,7 @@ import { useInteractionPanelMobileDebugDeviceOptions } from '../interaction-pane
 import { useInteractionPanelPinnedTabs } from '../interaction-panel/use-interaction-panel-pinned-tabs'
 import type { InteractionTerminalPanesController } from '../interaction-panel/use-interaction-terminal-panes'
 import type { SessionPanelStateController } from '../interaction-panel/use-session-panel-state'
-import type { PendingAnnotation } from '../sender/@types/sender-composer'
+import type { PendingAnnotation, PendingAnnotationPreviewState } from '../sender/@types/sender-composer'
 import { WorkspaceDrawerViewPanel } from './WorkspaceDrawerViewPanel'
 import { useWorkspaceDrawerDockActions } from './use-workspace-drawer-dock-actions'
 import { renderMenuIcon } from './workspace-drawer-toolbar-menu'
@@ -394,6 +394,8 @@ export function ChatWorkspaceDrawer({
   openResourceShortcut,
   openResourceShortcutLabel,
   panelStateController,
+  pendingAnnotationPreview,
+  pendingAnnotations,
   onReferenceAnnotations,
   onReferencePaths,
   selectedFilePath,
@@ -418,6 +420,8 @@ export function ChatWorkspaceDrawer({
   openResourceShortcut?: string
   openResourceShortcutLabel?: string
   panelStateController: SessionPanelStateController
+  pendingAnnotationPreview?: PendingAnnotationPreviewState
+  pendingAnnotations?: PendingAnnotation[]
   onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
   onReferencePaths?: (files: ContextPickerFile[]) => void
   selectedFilePath?: string | null
@@ -1486,6 +1490,8 @@ export function ChatWorkspaceDrawer({
                   sessionUrlHistoryKey={`${workspaceDrawerIframeSessionId}:session`}
                   onReferenceAnnotations={onReferenceAnnotations}
                   hasPendingAnnotationReferences={hasPendingAnnotationReferences}
+                  pendingAnnotationPreview={pendingAnnotationPreview}
+                  pendingAnnotations={pendingAnnotations}
                   onChangeMetadata={(pageId, metadata) =>
                     updateRightWebTab(pageId, current => updateIframePageMetadata(current, metadata))}
                   onSelectHistory={(pageId, index) =>
@@ -1535,6 +1541,8 @@ export function ChatWorkspaceDrawer({
     isGitLoading,
     mobileDebugPages,
     onOpenFile,
+    pendingAnnotationPreview,
+    pendingAnnotations,
     onReferenceAnnotations,
     onReferencePaths,
     openRightIframeUrl,

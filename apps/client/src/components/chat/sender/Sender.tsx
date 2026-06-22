@@ -68,7 +68,9 @@ export function Sender(props: SenderProps) {
             controller.composer.setPendingAnnotations(prev => prev.filter(annotation => annotation.id !== id))}
           onRemovePendingTextSelection={(id) =>
             controller.composer.setPendingTextSelections(prev => prev.filter(selection => selection.id !== id))}
+          onClearPendingAnnotations={() => controller.composer.setPendingAnnotations([])}
           onClearPendingTextSelections={() => controller.composer.setPendingTextSelections([])}
+          onPendingAnnotationPreviewChange={props.onPendingAnnotationPreviewChange}
           editorRef={controller.editorRef}
           sessionId={props.sessionId}
           sessionInfo={props.sessionInfo}

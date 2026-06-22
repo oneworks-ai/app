@@ -8,7 +8,7 @@ import type { InteractionPanelRunCommandTaskStatus } from '#~/components/chat/in
 import type { InteractionPanelShortcutRequest } from '#~/components/chat/interaction-panel/interaction-panel-shortcut-request'
 import type { InteractionTerminalPanesController } from '#~/components/chat/interaction-panel/use-interaction-terminal-panes'
 import type { SessionPanelStateController } from '#~/components/chat/interaction-panel/use-session-panel-state'
-import type { PendingAnnotation } from '#~/components/chat/sender/@types/sender-composer'
+import type { PendingAnnotation, PendingAnnotationPreviewState } from '#~/components/chat/sender/@types/sender-composer'
 import type {
   ChatWorkspaceDrawerAgentApprovals,
   ChatWorkspaceDrawerAgentRoster
@@ -29,6 +29,8 @@ export function ChatRouteBottomPanel({
   openResourceShortcut,
   openResourceShortcutLabel,
   panelStateController,
+  pendingAnnotationPreview,
+  pendingAnnotations,
   shortcutRequest,
   onShortcutRequestHandled,
   onRunCommandTaskStatusesChange,
@@ -58,6 +60,8 @@ export function ChatRouteBottomPanel({
   openResourceShortcut?: string
   openResourceShortcutLabel?: string
   panelStateController: SessionPanelStateController
+  pendingAnnotationPreview?: PendingAnnotationPreviewState
+  pendingAnnotations?: PendingAnnotation[]
   shortcutRequest?: InteractionPanelShortcutRequest | null
   onShortcutRequestHandled?: (id: number) => void
   onRunCommandTaskStatusesChange?: (statuses: InteractionPanelRunCommandTaskStatus[]) => void
@@ -91,6 +95,8 @@ export function ChatRouteBottomPanel({
       openResourceShortcut={openResourceShortcut}
       openResourceShortcutLabel={openResourceShortcutLabel}
       panelStateController={panelStateController}
+      pendingAnnotationPreview={pendingAnnotationPreview}
+      pendingAnnotations={pendingAnnotations}
       shortcutRequest={shortcutRequest}
       onShortcutRequestHandled={onShortcutRequestHandled}
       onRunCommandTaskStatusesChange={onRunCommandTaskStatusesChange}

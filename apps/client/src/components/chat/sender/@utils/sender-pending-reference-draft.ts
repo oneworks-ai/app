@@ -1,5 +1,6 @@
 import type {
   PendingAnnotation,
+  PendingAnnotationTarget,
   PendingContextFile,
   PendingImage,
   PendingReferenceDraft,
@@ -44,7 +45,46 @@ const readOptionalNumberField = (value: Record<string, unknown>, key: string) =>
   return typeof field === 'number' && Number.isFinite(field) ? field : undefined
 }
 
+const readNumberField = (value: Record<string, unknown>, key: string) => {
+  const field = value[key]
+  return typeof field === 'number' && Number.isFinite(field) ? field : 0
+}
+
 const createDraftItemId = (prefix: string, index: number) => `${prefix}-${index}`
+
+const normalizePendingAnnotationTarget = (value: unknown): PendingAnnotationTarget | undefined => {
+  if (!isRecord(value) || !isRecord(value.rect) || !isRecord(value.viewport)) return undefined
+  const kind = readStringField(value, 'kind')
+  if (kind !== 'element' && kind !== 'point') return undefined
+  const borderRadius = isRecord(value.style)
+    ? readOptionalStringField(value.style, 'borderRadius')
+    : undefined
+
+  return {
+    frameUrl: readStringField(value, 'frameUrl'),
+    kind,
+    marker: isRecord(value.marker)
+      ? {
+        x: readNumberField(value.marker, 'x'),
+        y: readNumberField(value.marker, 'y')
+      }
+      : undefined,
+    nodeText: readOptionalStringField(value, 'nodeText'),
+    rect: {
+      height: readNumberField(value.rect, 'height'),
+      width: readNumberField(value.rect, 'width'),
+      x: readNumberField(value.rect, 'x'),
+      y: readNumberField(value.rect, 'y')
+    },
+    selector: readOptionalStringField(value, 'selector'),
+    style: borderRadius == null ? undefined : { borderRadius },
+    targetPath: readStringField(value, 'targetPath'),
+    viewport: {
+      height: readNumberField(value.viewport, 'height'),
+      width: readNumberField(value.viewport, 'width')
+    }
+  }
+}
 
 const normalizePendingImages = (value: unknown): PendingImage[] => {
   if (!Array.isArray(value)) return []
@@ -91,6 +131,8 @@ const normalizePendingAnnotations = (value: unknown): PendingAnnotation[] => {
       comment,
       evidence,
       screenshotDataUrl: readOptionalStringField(item, 'screenshotDataUrl'),
+      sourcePageId: readOptionalStringField(item, 'sourcePageId'),
+      target: normalizePendingAnnotationTarget(item.target),
       targetLabel: readStringField(item, 'targetLabel')
     }]
   })

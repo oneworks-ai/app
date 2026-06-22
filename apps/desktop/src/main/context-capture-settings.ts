@@ -22,12 +22,14 @@ const normalizeOverlayPlacement = (value: unknown): DesktopContextCaptureSetting
 const normalizeApplicationList = (value: unknown): string[] => {
   if (!Array.isArray(value)) return []
 
-  return [...new Set(
-    value
-      .filter((item): item is string => typeof item === 'string')
-      .map(item => item.trim())
-      .filter(item => item !== '')
-  )]
+  return [
+    ...new Set(
+      value
+        .filter((item): item is string => typeof item === 'string')
+        .map(item => item.trim())
+        .filter(item => item !== '')
+    )
+  ]
 }
 
 export const normalizeDesktopContextCaptureSettings = (

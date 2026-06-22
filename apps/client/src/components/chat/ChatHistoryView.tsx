@@ -116,6 +116,8 @@ import {
 import { SenderInteractionPanel } from './sender/@components/sender-interaction-panel/SenderInteractionPanel'
 import type {
   AnnotationReferenceRequest,
+  PendingAnnotation,
+  PendingAnnotationPreviewState,
   PendingReferenceDraft,
   PendingReferenceDraftRequest,
   TextSelectionReferenceRequest
@@ -231,6 +233,8 @@ export function ChatHistoryView({
   contextReferenceRequest,
   annotationReferenceRequest,
   onPendingAnnotationCountChange,
+  onPendingAnnotationsChange,
+  onPendingAnnotationPreviewChange,
   hideHistoryTimeline = false,
   onOpenUrlInAppBrowser,
   onOpenWorkspaceFile,
@@ -310,6 +314,8 @@ export function ChatHistoryView({
   contextReferenceRequest?: ContextReferenceRequest | null
   annotationReferenceRequest?: AnnotationReferenceRequest | null
   onPendingAnnotationCountChange?: (count: number) => void
+  onPendingAnnotationsChange?: (annotations: PendingAnnotation[]) => void
+  onPendingAnnotationPreviewChange?: (state: PendingAnnotationPreviewState) => void
   hideHistoryTimeline?: boolean
   onOpenUrlInAppBrowser?: (url: string, title?: string) => void
   onOpenWorkspaceFile?: (path: string) => void
@@ -1126,6 +1132,7 @@ export function ChatHistoryView({
     }))
   }, [pendingReferenceDraftStorageKey])
   const handlePendingReferenceDraftChange = useCallback((draft: PendingReferenceDraft) => {
+    onPendingAnnotationsChange?.(draft.pendingAnnotations)
     if (
       pendingReferenceDraftStorageKey == null ||
       hydratedPendingReferenceDraftStorageKeyRef.current !== pendingReferenceDraftStorageKey
@@ -1142,7 +1149,7 @@ export function ChatHistoryView({
 
     hydratingPendingReferenceDraftStorageKeyRef.current = null
     writePendingReferenceDraft(pendingReferenceDraftStorageKey, draft)
-  }, [pendingReferenceDraftStorageKey])
+  }, [onPendingAnnotationsChange, pendingReferenceDraftStorageKey])
   const senderAdapterLocked = senderSessionId != null && senderSessionId !== ''
   const senderSessionStatus = isAgentRoomMode ? undefined : isCreating ? 'running' : session?.status
   const senderIsThinking = !isAgentRoomMode && (isCreating || session?.status === 'running')
@@ -1749,6 +1756,7 @@ export function ChatHistoryView({
             pendingReferenceDraftRequest={pendingReferenceDraftRequest}
             onPendingReferenceDraftChange={handlePendingReferenceDraftChange}
             onPendingAnnotationCountChange={onPendingAnnotationCountChange}
+            onPendingAnnotationPreviewChange={onPendingAnnotationPreviewChange}
             enableVoiceInput={showVoiceInputInSender}
             hiddenVoiceInputActions={!showVoiceInputInSender
               ? {

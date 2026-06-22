@@ -19,6 +19,7 @@ import type { PermissionMode } from '#~/hooks/chat/use-chat-permission-mode'
 
 import type {
   AnnotationReferenceRequest,
+  PendingAnnotationPreviewState,
   PendingReferenceDraft,
   PendingReferenceDraftRequest,
   TextSelectionReferenceRequest
@@ -120,4 +121,5 @@ export interface SenderProps {
   pendingReferenceDraftRequest?: PendingReferenceDraftRequest | null
   onPendingReferenceDraftChange?: (draft: PendingReferenceDraft) => void
   onPendingAnnotationCountChange?: (count: number) => void
+  onPendingAnnotationPreviewChange?: (state: PendingAnnotationPreviewState) => void
 }

@@ -198,8 +198,8 @@ export const resolveDesktopContextCaptureOverlayBounds = (input: {
   const autoY = belowY <= maxY
     ? belowY
     : aboveY >= minY
-      ? aboveY
-      : belowY
+    ? aboveY
+    : belowY
 
   return {
     height,
@@ -209,20 +209,21 @@ export const resolveDesktopContextCaptureOverlayBounds = (input: {
       input.placement === 'above'
         ? aboveY
         : input.placement === 'below'
-          ? belowY
-          : autoY,
+        ? belowY
+        : autoY,
       minY,
       maxY
     ))
   }
 }
 
-const escapeHtml = (value: string) => value
-  .replaceAll('&', '&amp;')
-  .replaceAll('<', '&lt;')
-  .replaceAll('>', '&gt;')
-  .replaceAll('"', '&quot;')
-  .replaceAll("'", '&#39;')
+const escapeHtml = (value: string) =>
+  value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
 
 const getOverlayTextPreview = (value: string) => {
   const preview = value.replace(/\s+/g, ' ').trim()
@@ -231,8 +232,8 @@ const getOverlayTextPreview = (value: string) => {
 
 const getSourceApplicationLabel = (snapshot: DesktopContextCaptureSnapshot) => (
   snapshot.sourceApplication?.name ??
-  snapshot.sourceApplication?.bundleId ??
-  'Desktop selection'
+    snapshot.sourceApplication?.bundleId ??
+    'Desktop selection'
 )
 
 const buildOverlayDataUrl = (snapshot: DesktopContextCaptureSnapshot) => {
@@ -390,7 +391,7 @@ export const createDesktopContextCaptureOverlayController = () => {
     show: async (input: unknown, options: DesktopContextCaptureOverlayShowOptions = {}) => {
       const normalizedInput = normalizeDesktopContextCaptureOverlayInput(input, options)
       const snapshotWithAnchor = normalizedInput.snapshot.selectionRect != null ||
-        normalizedInput.snapshot.cursorPoint != null
+          normalizedInput.snapshot.cursorPoint != null
         ? normalizedInput.snapshot
         : {
           ...normalizedInput.snapshot,

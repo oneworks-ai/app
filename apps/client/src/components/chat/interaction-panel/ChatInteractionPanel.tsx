@@ -21,7 +21,7 @@ import {
   CHAT_BOTTOM_DOCK_MAX_HEIGHT,
   CHAT_BOTTOM_DOCK_MIN_HEIGHT
 } from '#~/components/chat/bottom-dock-constants'
-import type { PendingAnnotation } from '#~/components/chat/sender/@types/sender-composer'
+import type { PendingAnnotation, PendingAnnotationPreviewState } from '#~/components/chat/sender/@types/sender-composer'
 import { isTerminalPaneOnSurface } from '#~/components/chat/terminal/@utils/terminal-panes'
 import { parseWorkbenchDrawerViewMenuKey } from '#~/components/chat/workbench-create-menu'
 import type {
@@ -88,6 +88,8 @@ export function ChatInteractionPanel({
   openResourceShortcut,
   openResourceShortcutLabel,
   panelStateController,
+  pendingAnnotationPreview,
+  pendingAnnotations,
   shortcutRequest,
   onShortcutRequestHandled,
   onRunCommandTaskStatusesChange,
@@ -116,6 +118,8 @@ export function ChatInteractionPanel({
   openResourceShortcut?: string | null
   openResourceShortcutLabel?: string
   panelStateController: SessionPanelStateController
+  pendingAnnotationPreview?: PendingAnnotationPreviewState
+  pendingAnnotations?: PendingAnnotation[]
   shortcutRequest?: InteractionPanelShortcutRequest | null
   onShortcutRequestHandled?: (id: number) => void
   onRunCommandTaskStatusesChange?: (statuses: InteractionPanelRunCommandTaskStatus[]) => void
@@ -573,6 +577,8 @@ export function ChatInteractionPanel({
             onRunCommand={handleRunCommand}
             onReferenceAnnotations={onReferenceAnnotations}
             hasPendingAnnotationReferences={hasPendingAnnotationReferences}
+            pendingAnnotationPreview={pendingAnnotationPreview}
+            pendingAnnotations={pendingAnnotations}
             onSelectWorkspaceFilePath={panelTabs.handleSelectWorkspaceFilePath}
             onSessionPageChange={panelTabs.updateSessionPage}
             onTogglePanelFullscreen={onToggleFullscreen}
