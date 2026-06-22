@@ -29,8 +29,16 @@ const isGithubProvider = (provider: RelayLoginProvider) => (
     .some(value => typeof value === 'string' && value.toLowerCase().includes('github'))
 )
 
+const isFeishuProvider = (provider: RelayLoginProvider) => (
+  [provider.id, provider.displayName]
+    .some(value => typeof value === 'string' && value.toLowerCase().includes('feishu')) ||
+  [provider.id, provider.displayName]
+    .some(value => typeof value === 'string' && value.includes('飞书'))
+)
+
 const providerIcon = (provider: RelayLoginProvider) => {
   if (isGithubProvider(provider)) return 'github'
+  if (isFeishuProvider(provider)) return 'feishu'
   if (isGoogleProvider(provider)) return 'google'
   return 'login'
 }

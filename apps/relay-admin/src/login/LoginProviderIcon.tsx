@@ -1,6 +1,8 @@
 import { AdminIcon } from '../shared/ui/AdminIcon'
 import type { RelayLoginProviderConfig } from './types'
 
+const feishuLogoUrl = new URL('./assets/feishu-logo.png', import.meta.url).href
+
 const GoogleIcon = () => (
   <span className='relay-login-app__google-icon' aria-hidden='true'>
     <svg width='18' height='18' viewBox='0 0 48 48' focusable='false'>
@@ -32,8 +34,16 @@ const GithubIcon = () => (
   </span>
 )
 
+const FeishuIcon = () => (
+  <span className='relay-login-app__feishu-icon' aria-hidden='true'>
+    <img src={feishuLogoUrl} alt='' />
+  </span>
+)
+
 export const providerIcon = (provider: RelayLoginProviderConfig) => {
   switch (provider.icon) {
+    case 'feishu':
+      return <FeishuIcon />
     case 'github':
       return <GithubIcon />
     case 'google':

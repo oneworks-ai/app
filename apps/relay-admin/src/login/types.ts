@@ -51,7 +51,7 @@ export interface RelayLoginPasskeyConfig {
 
 export interface RelayLoginProviderConfig {
   displayName?: string
-  icon: 'github' | 'google' | 'login'
+  icon: 'feishu' | 'github' | 'google' | 'login'
   id: string
   label: string
   startUrl: string

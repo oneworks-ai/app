@@ -1,6 +1,6 @@
 import type { CreateSsoProviderInput } from '../../shared/model/adminTypes'
 
-export type SsoProviderPresetId = 'google'
+export type SsoProviderPresetId = 'feishu' | 'google'
 
 export interface SsoProviderPreset {
   id: SsoProviderPresetId
@@ -9,6 +9,19 @@ export interface SsoProviderPreset {
 }
 
 export const ssoProviderPresets: SsoProviderPreset[] = [
+  {
+    id: 'feishu',
+    label: '飞书',
+    values: {
+      id: 'feishu',
+      name: '飞书',
+      type: 'oauth2',
+      authorizationUrl: 'https://accounts.feishu.cn/open-apis/authen/v1/authorize',
+      tokenUrl: 'https://open.feishu.cn/open-apis/authen/v2/oauth/token',
+      userInfoUrl: 'https://open.feishu.cn/open-apis/authen/v1/user_info',
+      scope: 'contact:user.email:readonly'
+    }
+  },
   {
     id: 'google',
     label: 'Google',

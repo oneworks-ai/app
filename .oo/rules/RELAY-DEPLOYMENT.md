@@ -88,6 +88,7 @@ The official topology is not a template for user private deployments. Private de
 - Always read `.oo/rules/relay-deployment/sso-common.md` before creating or editing any SSO provider.
 - For built-in GitHub login, continue with `.oo/rules/relay-deployment/sso-github.md`.
 - For built-in Google login or Google managed provider setup, continue with `.oo/rules/relay-deployment/sso-google.md`.
+- For Feishu managed provider setup, continue with `.oo/rules/relay-deployment/sso-feishu.md`.
 - For custom OAuth/OIDC providers, continue with `.oo/rules/relay-deployment/sso-oidc.md`.
 - If a new provider gets branded UI support, create a provider-specific rule file next to these and link it here instead of mixing its lessons into the common file.
 
