@@ -11,6 +11,12 @@ import {
 } from './mobile-device-preview-utils'
 import type { PointerDevicePoint } from './mobile-device-preview-utils'
 
+const getDeviceWindowTitle = (device: DesktopMobileDebugDevice) => {
+  const emulatorPort = /^emulator-(\d+)$/.exec(device.id)?.[1]
+  const deviceKind = emulatorPort == null ? 'Android Device' : 'Android Emulator'
+  return `${deviceKind} - ${device.label}:${emulatorPort ?? device.id}`
+}
+
 export function InteractionPanelMobileDevicePreview({
   devices
 }: {
@@ -53,25 +59,31 @@ export function InteractionPanelMobileDevicePreview({
 
     isRefreshingRef.current = true
     try {
-      const [screenshotResult, treeResult] = await Promise.allSettled([
-        desktopApi.captureMobileDeviceScreenshot(deviceId),
-        desktopApi.dumpMobileElementTree(deviceId)
-      ])
-      if (screenshotResult.status === 'fulfilled') {
-        setScreenshot(screenshotResult.value)
-      } else {
-        setError(t('chat.interactionPanel.mobileDebugPreviewFailed'))
+      let didRefreshPreview = false
+      try {
+        setScreenshot(await desktopApi.captureMobileDeviceScreenshot(deviceId))
+        didRefreshPreview = true
+      } catch {
+        // Keep the previous screenshot visible when a transient ADB read fails.
       }
-      if (treeResult.status === 'fulfilled') {
-        setElementTree(treeResult.value)
+
+      try {
+        const treeResult = await desktopApi.dumpMobileElementTree(deviceId)
+        setElementTree(treeResult)
         setSelectedNodeId(current =>
-          current == null || flattenElementNodes(treeResult.value.root).some(item => item.node.id === current)
+          current == null || flattenElementNodes(treeResult.root).some(item => item.node.id === current)
             ? current
             : undefined
         )
+        didRefreshPreview = true
+      } catch {
+        // Keep the previous element tree visible when the platform inspector is temporarily unavailable.
       }
-      if (screenshotResult.status === 'fulfilled' || treeResult.status === 'fulfilled') {
+
+      if (didRefreshPreview) {
         setError(null)
+      } else {
+        setError(t('chat.interactionPanel.mobileDebugPreviewFailed'))
       }
     } finally {
       isRefreshingRef.current = false
@@ -115,15 +127,9 @@ export function InteractionPanelMobileDevicePreview({
 
   return (
     <section className='chat-interaction-panel-mobile-debug__preview-section'>
-      <div className='chat-interaction-panel-mobile-debug__preview-toolbar'>
-        <div className='chat-interaction-panel-mobile-debug__device-summary'>
-          <span className='material-symbols-rounded' aria-hidden='true'>adb</span>
-          <span>{readyDevice.label}</span>
-        </div>
-      </div>
-
       <div className='chat-interaction-panel-mobile-debug__preview-grid'>
         <InteractionPanelMobileDeviceScreen
+          deviceTitle={getDeviceWindowTitle(readyDevice)}
           error={error}
           hoverNode={hoverNode}
           isInspecting={isInspecting}

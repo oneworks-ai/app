@@ -179,6 +179,7 @@ const tcpProxyByTarget = new Map<string, Promise<TcpProxyRecord>>()
 const socketForwardByTarget = new Map<string, Promise<SocketForwardRecord>>()
 const activeReversePortsByDevice = new Map<string, Map<number, string>>()
 const faviconUrlByPageUrl = new Map<string, string>()
+const deviceAdbQueueById = new Map<string, Promise<void>>()
 
 const runCommand = (file: string, args: string[], timeout = ADB_TIMEOUT_MS) =>
   new Promise<CommandResult>((resolve, reject) => {
@@ -206,6 +207,33 @@ const runCommandBuffer = (file: string, args: string[], timeout = ADB_TIMEOUT_MS
       })
     })
   })
+
+const runQueuedDeviceAdbTask = async <T>(deviceId: string, task: () => Promise<T>): Promise<T> => {
+  const previousTask = deviceAdbQueueById.get(deviceId) ?? Promise.resolve()
+  let releaseCurrentTask: () => void = () => undefined
+  const currentTask = new Promise<void>(resolve => {
+    releaseCurrentTask = resolve
+  })
+  const queuedTask = previousTask.catch(() => undefined).then(() => currentTask)
+  deviceAdbQueueById.set(deviceId, queuedTask)
+
+  await previousTask.catch(() => undefined)
+  try {
+    return await task()
+  } finally {
+    releaseCurrentTask()
+    if (deviceAdbQueueById.get(deviceId) === queuedTask) {
+      deviceAdbQueueById.delete(deviceId)
+    }
+  }
+}
+
+const runDeviceCommand = (
+  adbPath: string,
+  deviceId: string,
+  args: string[],
+  timeout = ADB_TIMEOUT_MS
+) => runQueuedDeviceAdbTask(deviceId, () => runCommand(adbPath, ['-s', deviceId, ...args], timeout))
 
 const toErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
 
@@ -412,7 +440,7 @@ const readSocketAppName = async (adbPath: string, deviceId: string, socketName: 
   if (processId == null) return undefined
 
   try {
-    const result = await runCommand(adbPath, ['-s', deviceId, 'shell', 'cat', `/proc/${processId}/cmdline`])
+    const result = await runDeviceCommand(adbPath, deviceId, ['shell', 'cat', `/proc/${processId}/cmdline`])
     return result.stdout.split('\0')[0]?.trim() || undefined
   } catch {
     return undefined
@@ -420,7 +448,7 @@ const readSocketAppName = async (adbPath: string, deviceId: string, socketName: 
 }
 
 const listDevtoolsSockets = async (adbPath: string, deviceId: string) => {
-  const result = await runCommand(adbPath, ['-s', deviceId, 'shell', 'cat', '/proc/net/unix'])
+  const result = await runDeviceCommand(adbPath, deviceId, ['shell', 'cat', '/proc/net/unix'])
   const sockets = Array.from(
     new Set(
       result.stdout
@@ -932,7 +960,7 @@ const ensureSocketForward = async ({
 
   const nextForward = (async () => {
     const localPort = await getFreePort()
-    await runCommand(adbPath, ['-s', device.id, 'forward', `tcp:${localPort}`, `localabstract:${socketName}`])
+    await runDeviceCommand(adbPath, device.id, ['forward', `tcp:${localPort}`, `localabstract:${socketName}`])
     const webSocketProxyPort = (await ensureWebSocketProxy({ host: '127.0.0.1', port: localPort })).port
     return { localPort, webSocketProxyPort }
   })().catch(error => {
@@ -945,7 +973,7 @@ const ensureSocketForward = async ({
 
 const removeReversePort = async (adbPath: string, deviceId: string, devicePort: number) => {
   try {
-    await runCommand(adbPath, ['-s', deviceId, 'reverse', '--remove', `tcp:${devicePort}`])
+    await runDeviceCommand(adbPath, deviceId, ['reverse', '--remove', `tcp:${devicePort}`])
   } catch {
     // Removing a missing reverse mapping is harmless.
   }
@@ -1084,7 +1112,11 @@ const applyPortForwardingRules = async ({
       const proxy = await ensureTcpProxy(endpoint)
       for (const device of matchingDevices) {
         try {
-          await runCommand(adbPath, ['-s', device.id, 'reverse', `tcp:${rule.devicePort}`, `tcp:${proxy.localPort}`])
+          await runDeviceCommand(adbPath, device.id, [
+            'reverse',
+            `tcp:${rule.devicePort}`,
+            `tcp:${proxy.localPort}`
+          ])
           rememberReversePort(device.id, rule.devicePort, rule.localAddress)
           statuses.push({
             deviceId: device.id,
@@ -1403,14 +1435,16 @@ export const listMobileDebugTargets = async (inputConfig?: unknown): Promise<Mob
 
 export const captureMobileDeviceScreenshot = async (deviceId: unknown): Promise<MobileDeviceScreenshotResponse> => {
   const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
-  const result = await runCommandBuffer(adbPath, ['-s', device.id, 'exec-out', 'screencap', '-p'], 15000)
-  const size = readPngSize(result.stdout)
-  return {
-    capturedAt: Date.now(),
-    deviceId: device.id,
-    imageDataUrl: `data:image/png;base64,${result.stdout.toString('base64')}`,
-    ...(size == null ? {} : size)
-  }
+  return await runQueuedDeviceAdbTask(device.id, async () => {
+    const result = await runCommandBuffer(adbPath, ['-s', device.id, 'exec-out', 'screencap', '-p'], 15000)
+    const size = readPngSize(result.stdout)
+    return {
+      capturedAt: Date.now(),
+      deviceId: device.id,
+      imageDataUrl: `data:image/png;base64,${result.stdout.toString('base64')}`,
+      ...(size == null ? {} : size)
+    }
+  })
 }
 
 export const sendMobileDeviceInput = async (
@@ -1420,54 +1454,58 @@ export const sendMobileDeviceInput = async (
   const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
   const inputEvent = toInputEventRecord(input)
 
-  if (inputEvent.kind === 'tap') {
-    const x = normalizeCoordinate(inputEvent.x)
-    const y = normalizeCoordinate(inputEvent.y)
-    if (x == null || y == null) throw new Error('Tap input requires x and y.')
-    await runCommand(adbPath, ['-s', device.id, 'shell', 'input', 'tap', String(x), String(y)])
-  } else if (inputEvent.kind === 'swipe') {
-    const x = normalizeCoordinate(inputEvent.x)
-    const y = normalizeCoordinate(inputEvent.y)
-    const endX = normalizeCoordinate(inputEvent.endX)
-    const endY = normalizeCoordinate(inputEvent.endY)
-    if (x == null || y == null || endX == null || endY == null) {
-      throw new Error('Swipe input requires x, y, endX and endY.')
+  return await runQueuedDeviceAdbTask(device.id, async () => {
+    if (inputEvent.kind === 'tap') {
+      const x = normalizeCoordinate(inputEvent.x)
+      const y = normalizeCoordinate(inputEvent.y)
+      if (x == null || y == null) throw new Error('Tap input requires x and y.')
+      await runCommand(adbPath, ['-s', device.id, 'shell', 'input', 'tap', String(x), String(y)])
+    } else if (inputEvent.kind === 'swipe') {
+      const x = normalizeCoordinate(inputEvent.x)
+      const y = normalizeCoordinate(inputEvent.y)
+      const endX = normalizeCoordinate(inputEvent.endX)
+      const endY = normalizeCoordinate(inputEvent.endY)
+      if (x == null || y == null || endX == null || endY == null) {
+        throw new Error('Swipe input requires x, y, endX and endY.')
+      }
+      await runCommand(adbPath, [
+        '-s',
+        device.id,
+        'shell',
+        'input',
+        'swipe',
+        String(x),
+        String(y),
+        String(endX),
+        String(endY),
+        String(normalizeDurationMs(inputEvent.durationMs, 220))
+      ])
+    } else if (inputEvent.kind === 'text') {
+      const text = inputEvent.text?.trim()
+      if (text == null || text === '') throw new Error('Text input requires text.')
+      await runCommand(adbPath, ['-s', device.id, 'shell', 'input', 'text', encodeAndroidInputText(text)])
+    } else {
+      await runCommand(adbPath, ['-s', device.id, 'shell', 'input', 'keyevent', getInputKeyCode(inputEvent.key)])
     }
-    await runCommand(adbPath, [
-      '-s',
-      device.id,
-      'shell',
-      'input',
-      'swipe',
-      String(x),
-      String(y),
-      String(endX),
-      String(endY),
-      String(normalizeDurationMs(inputEvent.durationMs, 220))
-    ])
-  } else if (inputEvent.kind === 'text') {
-    const text = inputEvent.text?.trim()
-    if (text == null || text === '') throw new Error('Text input requires text.')
-    await runCommand(adbPath, ['-s', device.id, 'shell', 'input', 'text', encodeAndroidInputText(text)])
-  } else {
-    await runCommand(adbPath, ['-s', device.id, 'shell', 'input', 'keyevent', getInputKeyCode(inputEvent.key)])
-  }
 
-  return { deviceId: device.id, sentAt: Date.now() }
+    return { deviceId: device.id, sentAt: Date.now() }
+  })
 }
 
 export const dumpMobileElementTree = async (deviceId: unknown): Promise<MobileElementTreeResponse> => {
   const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
-  const remotePath = `/sdcard/oneworks-window-${Date.now().toString(36)}.xml`
-  await runCommand(adbPath, ['-s', device.id, 'shell', 'uiautomator', 'dump', remotePath], 15000)
-  const result = await runCommand(adbPath, ['-s', device.id, 'exec-out', 'cat', remotePath], 15000)
-  void runCommand(adbPath, ['-s', device.id, 'shell', 'rm', '-f', remotePath]).catch(() => undefined)
-  const root = parseUiautomatorXml(result.stdout)
-  return {
-    capturedAt: Date.now(),
-    deviceId: device.id,
-    nodeCount: countElementNodes(root),
-    root,
-    source: 'uiautomator'
-  }
+  return await runQueuedDeviceAdbTask(device.id, async () => {
+    const remotePath = `/sdcard/oneworks-window-${Date.now().toString(36)}.xml`
+    await runCommand(adbPath, ['-s', device.id, 'shell', 'uiautomator', 'dump', remotePath], 15000)
+    const result = await runCommand(adbPath, ['-s', device.id, 'exec-out', 'cat', remotePath], 15000)
+    void runCommand(adbPath, ['-s', device.id, 'shell', 'rm', '-f', remotePath]).catch(() => undefined)
+    const root = parseUiautomatorXml(result.stdout)
+    return {
+      capturedAt: Date.now(),
+      deviceId: device.id,
+      nodeCount: countElementNodes(root),
+      root,
+      source: 'uiautomator'
+    }
+  })
 }
