@@ -212,7 +212,7 @@ export interface RouteContainerPanelTabsProps<TabKey extends string> {
   tabs: Array<RouteContainerPanelTabItem<TabKey>>
   tooltipPlacement?: 'bottom' | 'left' | 'right' | 'top'
   onTabChange: (tabKey: TabKey, openedTabs: TabKey[]) => void
-  onTabClose?: (tabKey: TabKey) => void
+  onTabClose?: (tabKey: TabKey) => boolean | void
 }
 
 /**
@@ -385,7 +385,7 @@ export interface RouteContainerPanelDockProps<TabKey extends string> {
   onCreateMenuOpenChange?: (open: boolean) => void
   onLayoutChange?: (layout: RouteContainerPanelDockLayout) => void
   onTabChange: (tabKey: TabKey | null, openedTabs: TabKey[]) => void
-  onTabClose?: (tabKey: TabKey) => void
+  onTabClose?: (tabKey: TabKey) => boolean | void
 }
 
 interface RouteContainerPanelDockContextValue {
@@ -1295,7 +1295,7 @@ export function RouteContainerPanelTabs<TabKey extends string>({
     const fallbackTab = nextOpenedTabs[Math.max(0, tabIndex - 1)] ?? nextOpenedTabs[0] ?? activeTab
     const nextActiveTab = activeTab === tabKey ? fallbackTab : activeTab
 
-    onTabClose?.(tabKey)
+    if (onTabClose?.(tabKey) === false) return
     onTabChange(nextActiveTab, nextOpenedTabs)
   }
 
@@ -1753,7 +1753,7 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
     const fallbackTab = nextOpenedTabs[Math.max(0, tabIndex - 1)] ?? nextOpenedTabs[0] ?? null
     const nextActiveTab = activeTabRef.current === typedTabKey ? fallbackTab : activeTabRef.current
 
-    onTabClose?.(typedTabKey)
+    if (onTabClose?.(typedTabKey) === false) return
     onTabChange(nextActiveTab, nextOpenedTabs)
   }, [onTabChange, onTabClose])
 

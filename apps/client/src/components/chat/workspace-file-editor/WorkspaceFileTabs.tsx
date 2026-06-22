@@ -3,6 +3,8 @@ import type { MenuProps } from 'antd'
 import { useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import type { PendingFileComment } from '#~/components/chat/sender/@types/sender-composer'
+import type { ContextPickerFile } from '#~/components/workspace/context-file-types'
 import {
   buildWorkspacePathCopyOptions,
   getWorkspacePathName
@@ -10,6 +12,8 @@ import {
 import { copyTextWithFeedback } from '#~/utils/copy'
 
 import { getWorkspaceFileIconMeta } from '../workspace-drawer/workspace-drawer-icons'
+import { createPendingWorkspaceFileComment } from './workspace-file-comments'
+import { isWorkspaceMarkdownPreviewPath } from './workspace-file-editor-language'
 
 const renderMenuIcon = (icon: string) =>
   <span className='material-symbols-rounded workspace-file-editor__menu-icon'>{icon}</span>
@@ -20,6 +24,8 @@ export function WorkspaceFileTabs({
   onCloseOtherPaths,
   onClosePath,
   onClosePathsToRight,
+  onReferenceFileComments,
+  onReferenceWorkspacePaths,
   onSelectPath,
   paths,
   workspaceRootPath
@@ -29,6 +35,8 @@ export function WorkspaceFileTabs({
   onCloseOtherPaths: (path: string) => void
   onClosePath: (path: string) => void
   onClosePathsToRight: (path: string) => void
+  onReferenceFileComments?: (comments: PendingFileComment[]) => void
+  onReferenceWorkspacePaths?: (files: ContextPickerFile[]) => void
   onSelectPath: (path: string) => void
   paths: string[]
   workspaceRootPath?: string
@@ -52,6 +60,34 @@ export function WorkspaceFileTabs({
         })
       }
     })),
+    { type: 'divider' as const },
+    {
+      key: 'reference-file',
+      label: t('chat.workspaceFileReferenceFile'),
+      icon: renderMenuIcon('attach_file'),
+      disabled: onReferenceWorkspacePaths == null,
+      onClick: () => {
+        onReferenceWorkspacePaths?.([{ path, name: getWorkspacePathName(path) }])
+      }
+    },
+    {
+      key: 'comment-file',
+      label: t('chat.workspaceFileCommentFile'),
+      icon: renderMenuIcon('edit_note'),
+      disabled: onReferenceFileComments == null,
+      onClick: () => {
+        onReferenceFileComments?.([
+          createPendingWorkspaceFileComment({
+            comment: '',
+            isMarkdown: isWorkspaceMarkdownPreviewPath(path),
+            path,
+            selectedText: '',
+            sourceLabel: t('chat.fileComments.sourceEditor'),
+            targetLabel: t('chat.fileComments.wholeFile')
+          })
+        ])
+      }
+    },
     { type: 'divider' as const },
     {
       key: 'close',
@@ -85,6 +121,8 @@ export function WorkspaceFileTabs({
     onCloseOtherPaths,
     onClosePath,
     onClosePathsToRight,
+    onReferenceFileComments,
+    onReferenceWorkspacePaths,
     paths.length,
     t,
     workspaceRootPath

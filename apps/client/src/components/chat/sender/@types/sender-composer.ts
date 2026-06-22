@@ -68,11 +68,41 @@ export interface TextSelectionReferenceRequest {
   selections: PendingTextSelection[]
 }
 
+export interface PendingFileCommentRange {
+  endColumn: number
+  endLineNumber: number
+  startColumn: number
+  startLineNumber: number
+}
+
+export interface PendingFileCommentSelection {
+  range?: PendingFileCommentRange
+  selectedText: string
+}
+
+export interface PendingFileComment {
+  comment: string
+  id: string
+  isMarkdown?: boolean
+  path: string
+  range?: PendingFileCommentRange
+  selections?: PendingFileCommentSelection[]
+  selectedText: string
+  sourceLabel?: string
+  targetLabel?: string
+}
+
+export interface FileCommentReferenceRequest {
+  comments: PendingFileComment[]
+  id: number
+}
+
 export interface PendingReferenceDraft {
   pendingImages: PendingImage[]
   pendingFiles: PendingContextFile[]
   pendingAnnotations: PendingAnnotation[]
   pendingTextSelections: PendingTextSelection[]
+  pendingFileComments: PendingFileComment[]
 }
 
 export interface PendingReferenceDraftRequest extends PendingReferenceDraft {
@@ -85,4 +115,5 @@ export interface SenderComposerState {
   pendingFiles: PendingContextFile[]
   pendingAnnotations: PendingAnnotation[]
   pendingTextSelections: PendingTextSelection[]
+  pendingFileComments: PendingFileComment[]
 }

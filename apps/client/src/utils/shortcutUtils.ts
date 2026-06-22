@@ -143,11 +143,20 @@ export const getShortcutDisplayTokens = (shortcut: string | undefined, isMac: bo
   })
 }
 
+export const isImeComposingKeyboardEvent = (
+  e: KeyboardEvent | ReactKeyboardEvent,
+  composing = false
+) => {
+  const nativeEvent = 'nativeEvent' in e ? e.nativeEvent : e
+  return composing || nativeEvent.isComposing || e.key === 'Process' || e.keyCode === 229
+}
+
 export const isShortcutMatch = (
   e: KeyboardEvent | ReactKeyboardEvent,
   shortcut: string | undefined,
   isMac: boolean
 ) => {
+  if (isImeComposingKeyboardEvent(e)) return false
   const parsed = parseShortcut(shortcut, isMac)
   if (parsed == null) return false
   if (e.metaKey !== parsed.metaKey) return false

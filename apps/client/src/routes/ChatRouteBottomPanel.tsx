@@ -8,7 +8,11 @@ import type { InteractionPanelRunCommandTaskStatus } from '#~/components/chat/in
 import type { InteractionPanelShortcutRequest } from '#~/components/chat/interaction-panel/interaction-panel-shortcut-request'
 import type { InteractionTerminalPanesController } from '#~/components/chat/interaction-panel/use-interaction-terminal-panes'
 import type { SessionPanelStateController } from '#~/components/chat/interaction-panel/use-session-panel-state'
-import type { PendingAnnotation, PendingAnnotationPreviewState } from '#~/components/chat/sender/@types/sender-composer'
+import type {
+  PendingAnnotation,
+  PendingAnnotationPreviewState,
+  PendingFileComment
+} from '#~/components/chat/sender/@types/sender-composer'
 import type {
   ChatWorkspaceDrawerAgentApprovals,
   ChatWorkspaceDrawerAgentRoster
@@ -31,6 +35,7 @@ export function ChatRouteBottomPanel({
   panelStateController,
   pendingAnnotationPreview,
   pendingAnnotations,
+  pendingFileComments,
   shortcutRequest,
   onShortcutRequestHandled,
   onRunCommandTaskStatusesChange,
@@ -39,6 +44,7 @@ export function ChatRouteBottomPanel({
   onOpenResource,
   onReferenceWorkspacePaths,
   onReferenceAnnotations,
+  onReferenceFileComments,
   onWorkspaceDrawerCreateMenuClick,
   settingsView,
   session,
@@ -62,6 +68,7 @@ export function ChatRouteBottomPanel({
   panelStateController: SessionPanelStateController
   pendingAnnotationPreview?: PendingAnnotationPreviewState
   pendingAnnotations?: PendingAnnotation[]
+  pendingFileComments?: PendingFileComment[]
   shortcutRequest?: InteractionPanelShortcutRequest | null
   onShortcutRequestHandled?: (id: number) => void
   onRunCommandTaskStatusesChange?: (statuses: InteractionPanelRunCommandTaskStatus[]) => void
@@ -70,6 +77,7 @@ export function ChatRouteBottomPanel({
   onOpenResource: () => void
   onReferenceWorkspacePaths?: (files: ContextPickerFile[]) => void
   onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
+  onReferenceFileComments?: (comments: PendingFileComment[]) => void
   onWorkspaceDrawerCreateMenuClick?: NonNullable<MenuProps['onClick']>
   settingsView?: ReactNode
   session?: Session
@@ -97,6 +105,7 @@ export function ChatRouteBottomPanel({
       panelStateController={panelStateController}
       pendingAnnotationPreview={pendingAnnotationPreview}
       pendingAnnotations={pendingAnnotations}
+      pendingFileComments={pendingFileComments}
       shortcutRequest={shortcutRequest}
       onShortcutRequestHandled={onShortcutRequestHandled}
       onRunCommandTaskStatusesChange={onRunCommandTaskStatusesChange}
@@ -105,6 +114,7 @@ export function ChatRouteBottomPanel({
       onOpenResource={onOpenResource}
       onReferenceWorkspacePaths={onReferenceWorkspacePaths}
       onReferenceAnnotations={onReferenceAnnotations}
+      onReferenceFileComments={onReferenceFileComments}
       hasPendingAnnotationReferences={hasPendingAnnotationReferences}
       onWorkspaceDrawerCreateMenuClick={onWorkspaceDrawerCreateMenuClick}
       settingsView={settingsView}

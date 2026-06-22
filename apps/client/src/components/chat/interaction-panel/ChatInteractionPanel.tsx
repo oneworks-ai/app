@@ -21,7 +21,11 @@ import {
   CHAT_BOTTOM_DOCK_MAX_HEIGHT,
   CHAT_BOTTOM_DOCK_MIN_HEIGHT
 } from '#~/components/chat/bottom-dock-constants'
-import type { PendingAnnotation, PendingAnnotationPreviewState } from '#~/components/chat/sender/@types/sender-composer'
+import type {
+  PendingAnnotation,
+  PendingAnnotationPreviewState,
+  PendingFileComment
+} from '#~/components/chat/sender/@types/sender-composer'
 import { isTerminalPaneOnSurface } from '#~/components/chat/terminal/@utils/terminal-panes'
 import { parseWorkbenchDrawerViewMenuKey } from '#~/components/chat/workbench-create-menu'
 import type {
@@ -31,7 +35,9 @@ import type {
 import { useWorkspaceDrawerDockActions } from '#~/components/chat/workspace-drawer/use-workspace-drawer-dock-actions'
 import type { WorkspaceDrawerView } from '#~/components/chat/workspace-drawer/workspace-drawer-types'
 import type { WorkspaceDrawerViewItem } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
+import { isWorkspaceMarkdownPreviewPath } from '#~/components/chat/workspace-file-editor/workspace-file-editor-language'
 import type { WorkspaceMarkdownPreviewMode } from '#~/components/chat/workspace-file-editor/workspace-file-editor-language'
+import type { WorkspaceFileFocusRequest } from '#~/components/chat/workspace-file-editor/workspace-file-focus-request'
 import { DockPanel } from '#~/components/dock-panel/DockPanel'
 import { DOCK_PANEL_WORKSPACE_CHROME_MINIMIZED_HEIGHT } from '#~/components/dock-panel/dockPanelConstants'
 import type {
@@ -90,6 +96,7 @@ export function ChatInteractionPanel({
   panelStateController,
   pendingAnnotationPreview,
   pendingAnnotations,
+  pendingFileComments,
   shortcutRequest,
   onShortcutRequestHandled,
   onRunCommandTaskStatusesChange,
@@ -98,6 +105,7 @@ export function ChatInteractionPanel({
   onOpenResource,
   onReferenceWorkspacePaths,
   onReferenceAnnotations,
+  onReferenceFileComments,
   onWorkspaceDrawerCreateMenuClick,
   settingsView,
   session,
@@ -120,6 +128,7 @@ export function ChatInteractionPanel({
   panelStateController: SessionPanelStateController
   pendingAnnotationPreview?: PendingAnnotationPreviewState
   pendingAnnotations?: PendingAnnotation[]
+  pendingFileComments?: PendingFileComment[]
   shortcutRequest?: InteractionPanelShortcutRequest | null
   onShortcutRequestHandled?: (id: number) => void
   onRunCommandTaskStatusesChange?: (statuses: InteractionPanelRunCommandTaskStatus[]) => void
@@ -128,6 +137,7 @@ export function ChatInteractionPanel({
   onOpenResource: () => void
   onReferenceWorkspacePaths?: (files: ContextPickerFile[]) => void
   onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
+  onReferenceFileComments?: (comments: PendingFileComment[]) => void
   onWorkspaceDrawerCreateMenuClick?: NonNullable<MenuProps['onClick']>
   settingsView?: ReactNode
   session?: Session
@@ -156,6 +166,7 @@ export function ChatInteractionPanel({
   const bottomDockLayout = panelStateController.panelState.bottom.layout as RouteContainerPanelDockLayout | undefined
   const [editingPinnedTab, setEditingPinnedTab] = useState<InteractionPanelPinnedTab | null>(null)
   const [markdownPreviewMode, setMarkdownPreviewMode] = useState<WorkspaceMarkdownPreviewMode>('preview')
+  const [workspaceFileFocusRequest, setWorkspaceFileFocusRequest] = useState<WorkspaceFileFocusRequest | null>(null)
   const handledShortcutRequestIdRef = useRef<number | null>(null)
   const bottomTerminalPanes = useMemo(
     () => terminalPanes.panes.filter(pane => isTerminalPaneOnSurface(pane, 'bottom')),
@@ -423,6 +434,17 @@ export function ChatInteractionPanel({
     } else if (currentRequest.action === 'open-workspace-file') {
       onFoldChange(false)
       panelTabs.openWorkspaceFile(currentRequest.path)
+      if (currentRequest.line != null || currentRequest.column != null) {
+        if (isWorkspaceMarkdownPreviewPath(currentRequest.path)) {
+          setMarkdownPreviewMode('editor')
+        }
+        setWorkspaceFileFocusRequest({
+          requestId: currentRequest.id,
+          path: currentRequest.path,
+          ...(currentRequest.column == null ? {} : { column: currentRequest.column }),
+          ...(currentRequest.line == null ? {} : { line: currentRequest.line })
+        })
+      }
     } else if (currentRequest.action === 'new-terminal') {
       handleNewTerminal()
     } else if (currentRequest.action === 'run-command') {
@@ -547,6 +569,7 @@ export function ChatInteractionPanel({
             workspaceDrawerCreateItems={workspaceDrawerCreateItems}
             workspaceDrawerCreateSelectedKeys={workspaceDrawerCreateSelectedKeys}
             workspaceDrawerState={workspaceDrawerState}
+            workspaceFileFocusRequest={workspaceFileFocusRequest}
             workspaceRootPath={workspaceRootPath}
             getTabHeaderActions={getTabHeaderActions}
             onActivateTab={handleActivateTab}
@@ -576,9 +599,11 @@ export function ChatInteractionPanel({
             onPluginTabStateChange={panelTabs.updatePluginTabState}
             onRunCommand={handleRunCommand}
             onReferenceAnnotations={onReferenceAnnotations}
+            onReferenceFileComments={onReferenceFileComments}
             hasPendingAnnotationReferences={hasPendingAnnotationReferences}
             pendingAnnotationPreview={pendingAnnotationPreview}
             pendingAnnotations={pendingAnnotations}
+            pendingFileComments={pendingFileComments}
             onSelectWorkspaceFilePath={panelTabs.handleSelectWorkspaceFilePath}
             onSessionPageChange={panelTabs.updateSessionPage}
             onTogglePanelFullscreen={onToggleFullscreen}

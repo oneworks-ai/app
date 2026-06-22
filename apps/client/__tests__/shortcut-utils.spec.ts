@@ -3,9 +3,21 @@ import { describe, expect, it } from 'vitest'
 import {
   formatShortcutLabel,
   getShortcutDisplayTokens,
+  isShortcutMatch,
   normalizeSendShortcut,
   resolveSendShortcut
 } from '#~/utils/shortcutUtils'
+
+const createKeyboardEvent = (overrides: Partial<KeyboardEvent>) => ({
+  altKey: false,
+  ctrlKey: false,
+  isComposing: false,
+  key: 'Enter',
+  keyCode: 13,
+  metaKey: false,
+  shiftKey: false,
+  ...overrides
+} as KeyboardEvent)
 
 describe('formatShortcutLabel', () => {
   it('formats enter and modifiers for mac', () => {
@@ -54,6 +66,14 @@ describe('normalizeSendShortcut', () => {
     expect(normalizeSendShortcut('ctrl+enter', true)).toBeNull()
     expect(normalizeSendShortcut('alt+enter', true)).toBeNull()
     expect(normalizeSendShortcut('mod+enter', false)).toBeNull()
+  })
+})
+
+describe('isShortcutMatch', () => {
+  it('ignores IME composition enter events', () => {
+    expect(isShortcutMatch(createKeyboardEvent({}), 'enter', true)).toBe(true)
+    expect(isShortcutMatch(createKeyboardEvent({ isComposing: true }), 'enter', true)).toBe(false)
+    expect(isShortcutMatch(createKeyboardEvent({ keyCode: 229 }), 'enter', true)).toBe(false)
   })
 })
 

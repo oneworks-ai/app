@@ -9,6 +9,7 @@ import { usePinnedPopover } from '#~/components/chat/usePinnedPopover'
 import type {
   PendingAnnotation,
   PendingAnnotationPreviewState,
+  PendingFileComment,
   PendingTextSelection
 } from '../../@types/sender-composer'
 
@@ -39,6 +40,34 @@ const getAnnotationTargetPreview = (annotation: PendingAnnotation, fallback: str
   if (/^[.#]?[-_a-z][\w.-]*$/i.test(targetLabel) && targetLabel.length <= 80) return targetLabel
   return fallback
 }
+
+const getFileName = (path: string) => {
+  const normalized = path.replace(/\\/g, '/')
+  return normalized.split('/').filter(Boolean).at(-1) ?? path
+}
+
+const formatFileCommentRangeLabel = (range: PendingFileComment['range']) => {
+  if (range == null) return null
+  return range.startLineNumber === range.endLineNumber
+    ? `L${range.startLineNumber}`
+    : `L${range.startLineNumber}-L${range.endLineNumber}`
+}
+
+const getFileCommentRangeLabel = (comment: PendingFileComment) => {
+  const selections = comment.selections
+  if (selections != null && selections.length > 1) {
+    const firstRange = formatFileCommentRangeLabel(selections[0]?.range)
+    return firstRange == null ? null : `${firstRange} +${selections.length - 1}`
+  }
+
+  return formatFileCommentRangeLabel(selections?.[0]?.range ?? comment.range)
+}
+
+const getFileCommentPreview = (comment: PendingFileComment) => (
+  getSelectionPreview(
+    comment.comment || comment.targetLabel || comment.selectedText || comment.selections?.[0]?.selectedText || ''
+  )
+)
 
 function PendingReferenceGroup({
   children,
@@ -221,6 +250,59 @@ export function PendingAnnotationGroup({
               className='pending-annotation-group__remove'
               aria-label={t('common.remove')}
               onClick={() => onRemovePendingAnnotation(annotation.id)}
+            >
+              <span className='material-symbols-rounded' aria-hidden='true'>close</span>
+            </button>
+          </div>
+        ))}
+      </PendingReferenceGroup>
+    </div>
+  )
+}
+
+export function PendingFileCommentGroup({
+  pendingFileComments,
+  onRemovePendingFileComment,
+  onClearPendingFileComments,
+  onOpenPendingFileComment
+}: {
+  pendingFileComments: PendingFileComment[]
+  onRemovePendingFileComment: (id: string) => void
+  onClearPendingFileComments: () => void
+  onOpenPendingFileComment?: (comment: PendingFileComment) => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className='pending-attachments__file-comments'>
+      <PendingReferenceGroup
+        className='pending-file-comment-group'
+        clearLabel={t('chat.fileComments.clearAll')}
+        icon='edit_note'
+        label={t('chat.fileComments.count', { count: pendingFileComments.length })}
+        onClear={onClearPendingFileComments}
+      >
+        {pendingFileComments.map(comment => (
+          <div key={comment.id} className='pending-file-comment-group__row'>
+            <button
+              type='button'
+              className='pending-file-comment-group__body'
+              disabled={onOpenPendingFileComment == null}
+              onClick={() => onOpenPendingFileComment?.(comment)}
+            >
+              <div className='pending-file-comment-group__source'>
+                <span className='pending-file-comment-group__file'>{getFileName(comment.path)}</span>
+                {getFileCommentRangeLabel(comment) != null && (
+                  <span className='pending-file-comment-group__range'>{getFileCommentRangeLabel(comment)}</span>
+                )}
+              </div>
+              <div className='pending-file-comment-group__comment'>{getFileCommentPreview(comment)}</div>
+            </button>
+            <button
+              type='button'
+              className='pending-file-comment-group__remove'
+              aria-label={t('common.remove')}
+              onClick={() => onRemovePendingFileComment(comment.id)}
             >
               <span className='material-symbols-rounded' aria-hidden='true'>close</span>
             </button>

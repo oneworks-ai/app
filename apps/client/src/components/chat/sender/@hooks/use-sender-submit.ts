@@ -4,7 +4,11 @@ import type { TFunction } from 'i18next'
 import type { MessageInstance } from 'antd/es/message/interface'
 
 import { buildMessageContent } from '#~/components/chat/sender/@core/content-attachments'
-import type { PendingAnnotation, PendingTextSelection } from '#~/components/chat/sender/@types/sender-composer'
+import type {
+  PendingAnnotation,
+  PendingFileComment,
+  PendingTextSelection
+} from '#~/components/chat/sender/@types/sender-composer'
 import type { SenderSubmitResult } from '#~/components/chat/sender/@types/sender-types'
 import { saveChatHistoryEntry } from '#~/components/chat/sender/@utils/sender-utils'
 
@@ -14,6 +18,7 @@ export const useSenderSubmit = ({
   pendingFiles,
   pendingAnnotations,
   pendingTextSelections,
+  pendingFileComments,
   isBusy,
   allowWhileBusy,
   isInlineEdit,
@@ -31,6 +36,7 @@ export const useSenderSubmit = ({
   pendingFiles: Parameters<typeof buildMessageContent>[2]
   pendingAnnotations: PendingAnnotation[]
   pendingTextSelections: PendingTextSelection[]
+  pendingFileComments: PendingFileComment[]
   isBusy: boolean
   allowWhileBusy: boolean
   isInlineEdit: boolean
@@ -52,7 +58,7 @@ export const useSenderSubmit = ({
     if (
       ((isBusy && !allowWhileBusy) ||
         (input.trim() === '' && pendingImages.length === 0 && pendingFiles.length === 0 &&
-          pendingAnnotations.length === 0 && pendingTextSelections.length === 0))
+          pendingAnnotations.length === 0 && pendingTextSelections.length === 0 && pendingFileComments.length === 0))
     ) {
       return
     }
@@ -65,7 +71,8 @@ export const useSenderSubmit = ({
         pendingImages.length > 0 ||
         pendingFiles.length > 0 ||
         pendingAnnotations.length > 0 ||
-        pendingTextSelections.length > 0
+        pendingTextSelections.length > 0 ||
+        pendingFileComments.length > 0
       ) {
         void message.warning(
           pendingImages.length > 0 ? t('chat.imageNotSupportedInInteraction') : t('chat.fileNotSupportedInInteraction')
@@ -82,9 +89,17 @@ export const useSenderSubmit = ({
       pendingImages.length > 0 ||
       pendingFiles.length > 0 ||
       pendingAnnotations.length > 0 ||
-      pendingTextSelections.length > 0
+      pendingTextSelections.length > 0 ||
+      pendingFileComments.length > 0
     ) {
-      const content = buildMessageContent(input, pendingImages, pendingFiles, pendingAnnotations, pendingTextSelections)
+      const content = buildMessageContent(
+        input,
+        pendingImages,
+        pendingFiles,
+        pendingAnnotations,
+        pendingTextSelections,
+        pendingFileComments
+      )
       didSubmit = (await onSendContent(content, mode)) !== false
     } else if (isInlineEdit) {
       didSubmit = (await onSend(input, mode)) !== false

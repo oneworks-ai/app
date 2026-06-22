@@ -3,9 +3,14 @@ import type { MenuProps } from 'antd'
 
 import type { TerminalShellKind } from '@oneworks/types'
 
-import type { PendingAnnotation, PendingAnnotationPreviewState } from '#~/components/chat/sender/@types/sender-composer'
+import type {
+  PendingAnnotation,
+  PendingAnnotationPreviewState,
+  PendingFileComment
+} from '#~/components/chat/sender/@types/sender-composer'
 import type { WorkspaceDrawerViewItem } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
 import type { WorkspaceMarkdownPreviewMode } from '#~/components/chat/workspace-file-editor/workspace-file-editor-language'
+import type { WorkspaceFileFocusRequest } from '#~/components/chat/workspace-file-editor/workspace-file-focus-request'
 import type {
   RouteContainerPanelDockActionItem,
   RouteContainerPanelDockLayout
@@ -48,6 +53,7 @@ export function InteractionPanelContent({
   openResourceShortcutLabel,
   pendingAnnotationPreview,
   pendingAnnotations,
+  pendingFileComments,
   pinnedTabs,
   tabs,
   onActivateTab,
@@ -79,6 +85,7 @@ export function InteractionPanelContent({
   workspaceDrawerCreateItems,
   workspaceDrawerCreateSelectedKeys,
   workspaceDrawerState,
+  workspaceFileFocusRequest,
   workspaceRootPath,
   getTabHeaderActions,
   onEditPinnedTab,
@@ -88,6 +95,7 @@ export function InteractionPanelContent({
   onPluginTabStateChange,
   onRunCommand,
   onReferenceAnnotations,
+  onReferenceFileComments,
   onSelectWorkspaceFilePath,
   onSessionPageChange,
   onTogglePanelFullscreen,
@@ -112,6 +120,7 @@ export function InteractionPanelContent({
   openResourceShortcutLabel?: string
   pendingAnnotationPreview?: PendingAnnotationPreviewState
   pendingAnnotations?: PendingAnnotation[]
+  pendingFileComments?: PendingFileComment[]
   pinnedTabs: InteractionPanelPinnedTab[]
   tabs: InteractionPanelTab[]
   onIframeUrlChange: (pageId: string, url: string) => void
@@ -142,6 +151,7 @@ export function InteractionPanelContent({
   workspaceDrawerCreateItems?: WorkspaceDrawerViewItem[]
   workspaceDrawerCreateSelectedKeys?: string[]
   workspaceDrawerState: InteractionPanelWorkspaceDrawerState
+  workspaceFileFocusRequest?: WorkspaceFileFocusRequest | null
   workspaceRootPath?: string
   getTabHeaderActions?: (
     context: InteractionPanelDockTabHeaderActionContext
@@ -157,6 +167,7 @@ export function InteractionPanelContent({
   onPluginTabStateChange: (tabId: string, state: unknown) => void
   onRunCommand: (command: InteractionPanelRunCommand) => void
   onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
+  onReferenceFileComments?: (comments: PendingFileComment[]) => void
   onSelectWorkspaceFilePath: (path: string) => void
   onSessionPageChange: (
     pageId: string,
@@ -220,6 +231,7 @@ export function InteractionPanelContent({
       workspaceDrawerCreateItems={workspaceDrawerCreateItems}
       workspaceDrawerCreateSelectedKeys={workspaceDrawerCreateSelectedKeys}
       workspaceDrawerState={workspaceDrawerState}
+      workspaceFileFocusRequest={workspaceFileFocusRequest}
       workspaceRootPath={workspaceRootPath}
       getTabHeaderActions={getTabHeaderActions}
       onActivateTab={onActivateTab}
@@ -246,9 +258,11 @@ export function InteractionPanelContent({
       onPluginTabStateChange={onPluginTabStateChange}
       onRunCommand={onRunCommand}
       onReferenceAnnotations={onReferenceAnnotations}
+      onReferenceFileComments={onReferenceFileComments}
       hasPendingAnnotationReferences={hasPendingAnnotationReferences}
       pendingAnnotationPreview={pendingAnnotationPreview}
       pendingAnnotations={pendingAnnotations}
+      pendingFileComments={pendingFileComments}
       onSelectWorkspaceFilePath={onSelectWorkspaceFilePath}
       onSessionPageChange={onSessionPageChange}
       onTogglePanelFullscreen={onTogglePanelFullscreen}

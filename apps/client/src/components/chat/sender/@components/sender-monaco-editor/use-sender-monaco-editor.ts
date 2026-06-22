@@ -2,7 +2,7 @@
 import type { SenderEditorHandle } from '#~/components/chat/sender/@types/sender-editor'
 import type { SenderCompletionMatch, SenderTokenDecoration } from '#~/components/chat/sender/@utils/sender-completion'
 import { emitDesktopViewShortcut, getDesktopViewShortcutActionFromEvent } from '#~/desktop/view-shortcuts'
-import { isShortcutMatch } from '#~/utils/shortcutUtils'
+import { isImeComposingKeyboardEvent, isShortcutMatch } from '#~/utils/shortcutUtils'
 import type { SessionInfo } from '@oneworks/types'
 import type { IDisposable, editor as MonacoEditorNamespace } from 'monaco-editor'
 import type { MutableRefObject } from 'react'
@@ -80,6 +80,7 @@ export const useSenderMonacoEditor = ({
   const onKeyDownRef = useRef(onKeyDown)
   const onPasteRef = useRef(onPaste)
   const lastHandledViewShortcutRef = useRef<string | null>(null)
+  const imeComposingRef = useRef(false)
   const resolveCompletionMatchRef = useRef(resolveCompletionMatch)
   const resolveTokenDecorationsRef = useRef(resolveTokenDecorations)
   const sessionInfoRef = useRef(sessionInfo)
@@ -195,6 +196,23 @@ export const useSenderMonacoEditor = ({
       const inputTargets = Array.from(
         domNode.querySelectorAll<HTMLElement>('.native-edit-context, textarea.inputarea')
       )
+      let compositionEndTimer: number | null = null
+      const markImeCompositionStart = () => {
+        if (compositionEndTimer != null) {
+          window.clearTimeout(compositionEndTimer)
+          compositionEndTimer = null
+        }
+        imeComposingRef.current = true
+      }
+      const markImeCompositionEnd = () => {
+        if (compositionEndTimer != null) {
+          window.clearTimeout(compositionEndTimer)
+        }
+        compositionEndTimer = window.setTimeout(() => {
+          imeComposingRef.current = false
+          compositionEndTimer = null
+        }, 0)
+      }
       const shouldHandleImagePaste = (event: ClipboardEvent, requireFocus: boolean) => {
         if (!hasPastedImageFile(event.clipboardData)) {
           return false
@@ -245,6 +263,9 @@ export const useSenderMonacoEditor = ({
         if (!(event instanceof KeyboardEvent)) {
           return
         }
+        if (isImeComposingKeyboardEvent(event, imeComposingRef.current)) {
+          return
+        }
         if (handleViewShortcutKeyDown(event)) {
           return
         }
@@ -272,13 +293,21 @@ export const useSenderMonacoEditor = ({
       for (const inputTarget of inputTargets) {
         inputTarget.addEventListener('paste', handleNativePaste, true)
         inputTarget.addEventListener('keydown', handleNativeKeyDown, true)
+        inputTarget.addEventListener('compositionstart', markImeCompositionStart, true)
+        inputTarget.addEventListener('compositionend', markImeCompositionEnd, true)
       }
       disposables.push({
         dispose: () => {
+          if (compositionEndTimer != null) {
+            window.clearTimeout(compositionEndTimer)
+          }
+          imeComposingRef.current = false
           document.removeEventListener('paste', handleDocumentPaste, true)
           for (const inputTarget of inputTargets) {
             inputTarget.removeEventListener('paste', handleNativePaste, true)
             inputTarget.removeEventListener('keydown', handleNativeKeyDown, true)
+            inputTarget.removeEventListener('compositionstart', markImeCompositionStart, true)
+            inputTarget.removeEventListener('compositionend', markImeCompositionEnd, true)
           }
         }
       })
@@ -306,6 +335,10 @@ export const useSenderMonacoEditor = ({
         onCursorChangeRef.current(getSelectionOffsets(editor)?.end ?? null)
       }),
       editor.onKeyDown((event) => {
+        if (isImeComposingKeyboardEvent(event.browserEvent, imeComposingRef.current)) {
+          return
+        }
+
         if (handleViewShortcutKeyDown(event.browserEvent)) {
           return
         }

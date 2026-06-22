@@ -12,6 +12,7 @@
 
 .pending-attachments__text-selections,
 .pending-attachments__annotations,
+.pending-attachments__file-comments,
 .pending-attachments__files,
 .pending-attachments__images {
   width: 100%;
@@ -26,7 +27,8 @@
 }
 
 .pending-attachments__text-selections,
-.pending-attachments__annotations {
+.pending-attachments__annotations,
+.pending-attachments__file-comments {
   position: relative;
 }
 
@@ -132,6 +134,10 @@
   min-width: min(340px, calc(100vw - 24px));
 }
 
+.pending-file-comment-group__popover {
+  min-width: min(320px, calc(100vw - 24px));
+}
+
 .pending-text-selection-group__row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 22px;
@@ -148,6 +154,86 @@
         transparent
       );
   }
+}
+
+.pending-file-comment-group__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22px;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 7px 8px;
+
+  & + & {
+    border-top: 1px solid
+      color-mix(
+        in srgb,
+        var(--border-color, rgba(148, 163, 184, .28)) 64%,
+        transparent
+      );
+  }
+}
+
+.pending-file-comment-group__source,
+.pending-file-comment-group__comment {
+  min-width: 0;
+}
+
+.pending-file-comment-group__body {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+
+  &:disabled {
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: 1px solid var(--primary-color);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+.pending-file-comment-group__source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sub-text-color);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.pending-file-comment-group__file {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending-file-comment-group__range {
+  flex: 0 0 auto;
+  font-family:
+    ui-monospace, sfmono-regular, 'SF Mono', menlo, consolas, monospace;
+}
+
+.pending-file-comment-group__comment {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--text-color);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .pending-text-selection-group__content {
@@ -244,7 +330,8 @@
 }
 
 .pending-text-selection-group__remove,
-.pending-annotation-group__remove {
+.pending-annotation-group__remove,
+.pending-file-comment-group__remove {
   width: 22px;
   height: 22px;
   border: none;

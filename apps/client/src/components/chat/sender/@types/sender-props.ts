@@ -19,7 +19,9 @@ import type { PermissionMode } from '#~/hooks/chat/use-chat-permission-mode'
 
 import type {
   AnnotationReferenceRequest,
+  FileCommentReferenceRequest,
   PendingAnnotationPreviewState,
+  PendingFileComment,
   PendingReferenceDraft,
   PendingReferenceDraftRequest,
   TextSelectionReferenceRequest
@@ -37,6 +39,10 @@ export type SenderStatusBarGitControlsInMore =
     draftWorkspace: ChatSessionWorkspaceDraft
     onDraftWorkspaceChange: (nextDraft: ChatSessionWorkspaceDraft) => void
   }
+
+export interface SenderPendingFileCommentOpenActions {
+  remove: () => void
+}
 
 export interface SenderProps {
   onSend: (text: string, mode?: SessionQueuedMessageMode) => SenderSubmitResult | Promise<SenderSubmitResult>
@@ -118,8 +124,13 @@ export interface SenderProps {
   contextReferenceRequest?: ContextReferenceRequest | null
   annotationReferenceRequest?: AnnotationReferenceRequest | null
   textSelectionReferenceRequest?: TextSelectionReferenceRequest | null
+  fileCommentReferenceRequest?: FileCommentReferenceRequest | null
   pendingReferenceDraftRequest?: PendingReferenceDraftRequest | null
   onPendingReferenceDraftChange?: (draft: PendingReferenceDraft) => void
   onPendingAnnotationCountChange?: (count: number) => void
   onPendingAnnotationPreviewChange?: (state: PendingAnnotationPreviewState) => void
+  onOpenPendingFileComment?: (
+    comment: PendingFileComment,
+    actions: SenderPendingFileCommentOpenActions
+  ) => void | Promise<void>
 }

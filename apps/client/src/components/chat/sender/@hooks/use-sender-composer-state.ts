@@ -10,6 +10,7 @@ export const useSenderComposerState = (initialContent: SenderInitialContent) => 
   const [pendingFiles, setPendingFiles] = useState(() => initialState.pendingFiles)
   const [pendingAnnotations, setPendingAnnotations] = useState(() => initialState.pendingAnnotations)
   const [pendingTextSelections, setPendingTextSelections] = useState(() => initialState.pendingTextSelections)
+  const [pendingFileComments, setPendingFileComments] = useState(() => initialState.pendingFileComments)
 
   useEffect(() => {
     const nextState = getInitialComposerState(initialContent)
@@ -18,6 +19,7 @@ export const useSenderComposerState = (initialContent: SenderInitialContent) => 
     setPendingFiles(nextState.pendingFiles)
     setPendingAnnotations(nextState.pendingAnnotations)
     setPendingTextSelections(nextState.pendingTextSelections)
+    setPendingFileComments(nextState.pendingFileComments)
   }, [initialContent])
 
   const resetComposerContent = () => {
@@ -26,6 +28,7 @@ export const useSenderComposerState = (initialContent: SenderInitialContent) => 
     setPendingFiles([])
     setPendingAnnotations([])
     setPendingTextSelections([])
+    setPendingFileComments([])
   }
 
   return {
@@ -39,6 +42,8 @@ export const useSenderComposerState = (initialContent: SenderInitialContent) => 
     setPendingAnnotations,
     pendingTextSelections,
     setPendingTextSelections,
+    pendingFileComments,
+    setPendingFileComments,
     resetComposerContent
   }
 }

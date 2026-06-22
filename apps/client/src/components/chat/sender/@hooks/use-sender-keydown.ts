@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 
 import type { SenderEditorHandle } from '#~/components/chat/sender/@types/sender-editor'
 import { loadChatHistory } from '#~/components/chat/sender/@utils/sender-utils'
-import { isShortcutMatch } from '#~/utils/shortcutUtils'
+import { isImeComposingKeyboardEvent, isShortcutMatch } from '#~/utils/shortcutUtils'
 
 export const useSenderKeydown = ({
   editorRef,
@@ -69,6 +69,8 @@ export const useSenderKeydown = ({
   }, [input, isThinking, pendingFileCount, pendingImageCount])
 
   return (event: KeyboardEvent) => {
+    if (isImeComposingKeyboardEvent(event)) return
+
     if (showReferenceActions && event.key === 'Escape') {
       event.preventDefault()
       onCloseReferenceActions()

@@ -9,4 +9,5 @@
 - Add desktop browser history and download management pages with project/session filters, search, and shared select styling.
 - Add external session import management for Codex and Claude Code, including candidate search, filters, per-adapter import controls, and path/size tooltips.
 - Add context capture annotations for interaction panel pages, including element comments, pending sender references, selection chips, and annotation hover previews.
+- Add workspace file and Markdown comment references, including Monaco line comments, sender attachment previews, tab navigation to referenced lines, and IME-safe comment shortcuts.
 - Polish the mobile workspace tab switcher, webview tab chrome, compact sender spacing, and development shell simulation controls.
