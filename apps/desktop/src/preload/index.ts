@@ -10,6 +10,7 @@ const selectorStateChannel = 'desktop:workspace-selector-state'
 const desktopSettingsChannel = 'desktop:settings'
 const desktopUpdateStatusChannel = 'desktop:update-status'
 const globalInterfaceLanguageChannel = 'desktop:global-interface-language'
+const interactionPanelWebviewCommentElementChannel = 'desktop:interaction-panel-webview-comment-element'
 const toggleSidebarChannel = 'desktop:toggle-sidebar'
 const viewShortcutChannel = 'desktop:view-shortcut'
 const windowFullscreenStateChannel = 'desktop:window-fullscreen-state'
@@ -264,6 +265,15 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
     ipcRenderer.on(globalInterfaceLanguageChannel, wrappedListener)
     return () => {
       ipcRenderer.off(globalInterfaceLanguageChannel, wrappedListener)
+    }
+  },
+  onInteractionPanelWebviewElementCommentRequest: (listener: (value: unknown) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      listener(value)
+    }
+    ipcRenderer.on(interactionPanelWebviewCommentElementChannel, wrappedListener)
+    return () => {
+      ipcRenderer.off(interactionPanelWebviewCommentElementChannel, wrappedListener)
     }
   },
   onToggleSidebarShortcut: (listener: () => void) => {

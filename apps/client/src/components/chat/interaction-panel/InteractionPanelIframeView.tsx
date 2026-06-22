@@ -120,10 +120,24 @@ interface IframeAnnotationInfoCardPlacement {
   width: number
 }
 
+interface NormalizedWebviewElementCommentRequest {
+  frameUrl?: string
+  webContentsId: number
+  x: number
+  y: number
+}
+
 interface PendingAnnotationMarkerView {
   annotation: PendingAnnotation
   number: number
   target: PendingAnnotationTarget
+}
+
+type WebviewViewportPoint = NonNullable<PendingAnnotationTarget['marker']>
+
+interface WebviewViewportPointSnapshot {
+  point: WebviewViewportPoint
+  webContentsId?: number
 }
 
 const ANNOTATION_EDITOR_COLLAPSED_HEIGHT = 44
@@ -137,6 +151,18 @@ const ANNOTATION_INFO_CARD_MARGIN = 8
 const ANNOTATION_INFO_CARD_WIDTH = 320
 
 const clampNumber = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  value != null && typeof value === 'object' && !Array.isArray(value)
+)
+
+const readFiniteNumber = (value: unknown) => (
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined
+)
+
+const readOptionalString = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
 
 const areAnnotationTargetRectsEqual = (
   left: IframeAnnotationTargetRect | null,
@@ -912,37 +938,438 @@ const buildAnnotationTarget = (
   }
 }
 
-const buildAnnotationPointTarget = ({
-  frameUrl,
-  pointX,
-  pointY,
-  viewportHeight,
-  viewportWidth
-}: {
-  frameUrl: string
-  pointX: number
-  pointY: number
-  viewportHeight: number
-  viewportWidth: number
-}): IframeAnnotationTarget => ({
-  frameUrl,
-  kind: 'point',
-  marker: {
-    x: Math.round(pointX),
-    y: Math.round(pointY)
-  },
-  rect: {
-    height: 1,
-    width: 1,
-    x: Math.round(pointX),
-    y: Math.round(pointY)
-  },
-  targetPath: `point(${Math.round(pointX)}, ${Math.round(pointY)})`,
-  viewport: {
-    height: Math.round(viewportHeight),
-    width: Math.round(viewportWidth)
+const buildWebviewAnnotationTargetScript = (x: number, y: number) =>
+  `(() => {
+  const clampNumber = (value, min, max) => Math.min(max, Math.max(min, value))
+  const escapeCssIdentifier = (value) => {
+    if (window.CSS?.escape != null) return window.CSS.escape(value)
+    return String(value).replace(/[^\\w-]/g, character => '\\\\' + character)
   }
-})
+  const getElementLabel = (element) => {
+    const tagName = element.tagName.toLowerCase()
+    const id = element.id.trim()
+    if (id !== '') return tagName + '#' + id
+    const classNames = Array.from(element.classList).slice(0, 3)
+    return classNames.length > 0 ? tagName + '.' + classNames.join('.') : tagName
+  }
+  const getElementClassLabel = (element) => {
+    const classNames = Array.from(element.classList)
+      .map(className => className.trim())
+      .filter(Boolean)
+      .slice(0, 3)
+    if (classNames.length > 0) return '.' + classNames.join('.')
+    const id = element.id.trim()
+    if (id !== '') return '#' + id
+    return element.tagName.toLowerCase()
+  }
+  const formatCssLength = (value) => {
+    const numberValue = Number.parseFloat(value)
+    if (!Number.isFinite(numberValue)) return value
+    return Math.round(numberValue * 100) / 100 + 'px'
+  }
+  const formatCssPadding = (style) => {
+    const values = [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft]
+    const normalizedValues = values.map(formatCssLength)
+    const numericValues = values.map(value => Number.parseFloat(value))
+    if (numericValues.every(value => Number.isFinite(value) && value === 0)) return undefined
+    if (normalizedValues.every(value => value === normalizedValues[0])) return normalizedValues[0]
+    return normalizedValues.join(' ')
+  }
+  const normalizeCssBorderRadius = (value) => {
+    const normalizedValue = String(value ?? '').trim()
+    if (normalizedValue === '') return undefined
+    const tokens = normalizedValue.split(/[\\s/]+/).filter(Boolean)
+    if (tokens.length > 0 && tokens.every(token => {
+      const numericValue = Number.parseFloat(token)
+      return Number.isFinite(numericValue) && numericValue === 0
+    })) return undefined
+    return normalizedValue
+  }
+  const formatRgbChannelAsHex = (value) =>
+    clampNumber(Math.round(value), 0, 255).toString(16).padStart(2, '0')
+  const formatCssColor = (value) => {
+    const match = String(value ?? '').match(/^rgba?\\(([^)]+)\\)$/i)
+    if (match == null) return value === 'transparent' ? null : { label: value, swatch: value }
+    const parts = (match[1] ?? '').split(',').map(part => part.trim())
+    const red = Number.parseFloat(parts[0] ?? '')
+    const green = Number.parseFloat(parts[1] ?? '')
+    const blue = Number.parseFloat(parts[2] ?? '')
+    const alpha = parts[3] == null ? 1 : Number.parseFloat(parts[3])
+    if (![red, green, blue, alpha].every(Number.isFinite) || alpha <= 0) return null
+    const hex = ('#' + formatRgbChannelAsHex(red) + formatRgbChannelAsHex(green) + formatRgbChannelAsHex(blue))
+      .toUpperCase()
+    return {
+      label: alpha >= 1 ? hex : hex + ' ' + Math.round(alpha * 100) + '%',
+      swatch: value
+    }
+  }
+  const getElementAccessibilityName = (element) => {
+    const explicitName = element.getAttribute('aria-label') ?? element.getAttribute('title')
+    if (explicitName != null && explicitName.trim() !== '') return explicitName.trim()
+    const alt = element.tagName.toLowerCase() === 'img' ? element.getAttribute('alt') : null
+    if (alt != null && alt.trim() !== '') return alt.trim()
+    return undefined
+  }
+  const getElementInspectorRole = (element) => {
+    const explicitRole = element.getAttribute('role')
+    if (explicitRole != null && explicitRole.trim() !== '') return explicitRole.trim()
+    const tagName = element.tagName.toLowerCase()
+    if (tagName === 'a' && element.hasAttribute('href')) return 'link'
+    if (tagName === 'button') return 'button'
+    if (tagName === 'img') return 'image'
+    if (tagName === 'input' || tagName === 'textarea') return 'textbox'
+    if (tagName === 'select') return 'combobox'
+    if (tagName === 'nav') return 'navigation'
+    if (tagName === 'main') return 'main'
+    if (tagName === 'header') return 'banner'
+    if (tagName === 'footer') return 'contentinfo'
+    if (tagName === 'form') return 'form'
+    return 'generic'
+  }
+  const isElementKeyboardFocusable = (element) => (
+    element instanceof HTMLElement &&
+    !element.matches('[disabled], [aria-disabled="true"]') &&
+    (
+      element.tabIndex >= 0 ||
+      element.matches('a[href], button, input, select, textarea, summary, [contenteditable="true"]')
+    )
+  )
+  const getElementInspector = (element) => {
+    const computedStyle = window.getComputedStyle(element)
+    const formattedBackground = formatCssColor(computedStyle.backgroundColor)
+    return {
+      accessibilityName: getElementAccessibilityName(element),
+      backgroundColor: formattedBackground?.label,
+      backgroundColorSwatch: formattedBackground?.swatch,
+      keyboardFocusable: isElementKeyboardFocusable(element),
+      label: getElementClassLabel(element),
+      padding: formatCssPadding(computedStyle),
+      role: getElementInspectorRole(element)
+    }
+  }
+  const getElementAnnotationStyle = (element) => {
+    const borderRadius = normalizeCssBorderRadius(window.getComputedStyle(element).borderRadius)
+    return borderRadius == null ? undefined : { borderRadius }
+  }
+  const getElementIndexOfType = (element) => {
+    let index = 1
+    let sibling = element.previousElementSibling
+    while (sibling != null) {
+      if (sibling.tagName === element.tagName) index += 1
+      sibling = sibling.previousElementSibling
+    }
+    return index
+  }
+  const buildElementSelectorPart = (element) => {
+    const tagName = element.tagName.toLowerCase()
+    const id = element.id.trim()
+    if (id !== '') return tagName + '#' + escapeCssIdentifier(id)
+    const classNames = Array.from(element.classList)
+      .filter(className => className.trim() !== '')
+      .slice(0, 3)
+      .map(className => '.' + escapeCssIdentifier(className))
+      .join('')
+    return tagName + classNames + ':nth-of-type(' + getElementIndexOfType(element) + ')'
+  }
+  const buildElementSelector = (element) => {
+    const id = element.id.trim()
+    if (id !== '') {
+      const selector = '#' + escapeCssIdentifier(id)
+      try {
+        if (document.querySelectorAll(selector).length === 1) return selector
+      } catch {}
+    }
+    const parts = []
+    let current = element
+    while (current != null && current !== document.documentElement && parts.length < 6) {
+      parts.unshift(buildElementSelectorPart(current))
+      const selector = parts.join(' > ')
+      try {
+        if (document.querySelectorAll(selector).length === 1) return selector
+      } catch {
+        break
+      }
+      current = current.parentElement
+    }
+    return parts.join(' > ') || undefined
+  }
+  const buildTargetPath = (element) => {
+    const path = []
+    let current = element
+    while (current != null && current !== document.documentElement && path.length < 8) {
+      path.unshift(getElementLabel(current))
+      current = current.parentElement
+    }
+    return path.join(' > ')
+  }
+  const semanticAnnotationSelector = [
+    'a[href]',
+    'button',
+    'input',
+    'textarea',
+    'select',
+    'summary',
+    'label',
+    '[contenteditable="true"]',
+    '[role="button"]',
+    '[role="link"]',
+    '[role="checkbox"]',
+    '[role="menuitem"]',
+    '[role="option"]',
+    '[role="tab"]'
+  ].join(',')
+  const isRootElement = (element) => {
+    const tagName = element.tagName.toLowerCase()
+    return tagName === 'html' || tagName === 'body'
+  }
+  const rectContainsPoint = (rect, x, y) => (
+    x >= rect.left &&
+    x <= rect.right &&
+    y >= rect.top &&
+    y <= rect.bottom
+  )
+  const isVisibleAnnotationElement = (element, pointX, pointY) => {
+    if (isRootElement(element)) return false
+    const rect = element.getBoundingClientRect()
+    if (rect.width < 2 || rect.height < 2 || !rectContainsPoint(rect, pointX, pointY)) return false
+    const style = window.getComputedStyle(element)
+    return style.display !== 'none' && style.visibility !== 'hidden'
+  }
+  const isSemanticAnnotationElement = (element) => {
+    try {
+      return element.matches(semanticAnnotationSelector)
+    } catch {
+      return false
+    }
+  }
+  const isIconLikeElement = (element) => {
+    const tagName = element.tagName.toLowerCase()
+    if (tagName === 'svg' || tagName === 'path' || tagName === 'use' || tagName === 'i') return true
+    const className = typeof element.className === 'string' ? element.className : ''
+    return /(^|\\s)(icon|material-symbols|material-icons)(\\s|$)/i.test(className)
+  }
+  const hasVisibleBoxStyle = (style) => {
+    const borderWidth = [
+      style.borderTopWidth,
+      style.borderRightWidth,
+      style.borderBottomWidth,
+      style.borderLeftWidth
+    ].some(value => Number.parseFloat(value) > 0)
+    const background = formatCssColor(style.backgroundColor)
+    return background != null ||
+      borderWidth ||
+      style.boxShadow !== 'none' ||
+      normalizeCssBorderRadius(style.borderRadius) != null
+  }
+  const getAnnotationCandidateScore = (element, pointX, pointY, order) => {
+    if (!isVisibleAnnotationElement(element, pointX, pointY)) return Number.NEGATIVE_INFINITY
+
+    const rect = element.getBoundingClientRect()
+    const style = window.getComputedStyle(element)
+    const tagName = element.tagName.toLowerCase()
+    const area = rect.width * rect.height
+    const viewportArea = Math.max(1, (window.innerWidth || 1) * (window.innerHeight || 1))
+    let score = 1600 - order * 24
+
+    if (order === 0) score += 700
+    if (isSemanticAnnotationElement(element)) score += 900
+    if (tagName === 'img' || tagName === 'video' || tagName === 'canvas' || tagName === 'svg') score += 360
+    if (/^(block|flex|inline-flex|grid|inline-grid|list-item|table-cell)$/.test(style.display)) score += 20
+    if (element.id.trim() !== '' || element.classList.length > 0) score += 30
+    if (hasVisibleBoxStyle(style)) score += 30
+    if (style.display === 'inline' && !isSemanticAnnotationElement(element)) score -= 80
+    if (isIconLikeElement(element) && !isSemanticAnnotationElement(element)) score -= 520
+    if (area < 36) score -= 240
+    score -= Math.min(480, Math.log10(Math.max(1, area)) * 72)
+    if (area > viewportArea * 0.75) score -= 1000
+    if (area > viewportArea * 0.35 && !isSemanticAnnotationElement(element)) score -= 600
+    if (area > viewportArea * 0.18 && !isSemanticAnnotationElement(element)) score -= 360
+
+    return score
+  }
+  const resolveAnnotationElementFromPoint = (pointX, pointY) => {
+    const hitElements = document.elementsFromPoint(pointX, pointY)
+    const candidates = []
+    const seen = new Set()
+    const addCandidate = (element) => {
+      if (!(element instanceof Element) || seen.has(element)) return
+      seen.add(element)
+      candidates.push(element)
+    }
+
+    for (const hitElement of hitElements) {
+      addCandidate(hitElement)
+      const semanticElement = hitElement.closest(semanticAnnotationSelector)
+      if (semanticElement != null) addCandidate(semanticElement)
+
+      let current = hitElement.parentElement
+      let depth = 0
+      while (current != null && current !== document.documentElement && depth < 8) {
+        addCandidate(current)
+        current = current.parentElement
+        depth += 1
+      }
+    }
+
+    let bestElement = null
+    let bestScore = Number.NEGATIVE_INFINITY
+    candidates.forEach((candidate, order) => {
+      const score = getAnnotationCandidateScore(candidate, pointX, pointY, order)
+      if (score > bestScore) {
+        bestElement = candidate
+        bestScore = score
+      }
+    })
+
+    return bestElement
+  }
+  const isSensitiveAnnotationElement = (element) => (
+    element.closest([
+      '[data-sensitive]',
+      '[aria-hidden="true"]',
+      'input[type="password"]',
+      'input[type="hidden"]',
+      'textarea[data-sensitive]',
+      '[contenteditable="true"][data-sensitive]'
+    ].join(',')) != null
+  )
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 1
+  const pointX = clampNumber(${JSON.stringify(x)}, 0, Math.max(0, viewportWidth - 1))
+  const pointY = clampNumber(${JSON.stringify(y)}, 0, Math.max(0, viewportHeight - 1))
+  const element = resolveAnnotationElementFromPoint(pointX, pointY)
+  if (!(element instanceof Element)) return { ok: false, reason: 'missing-target' }
+  if (isSensitiveAnnotationElement(element)) return { ok: false, reason: 'sensitive-target' }
+  const rect = element.getBoundingClientRect()
+  const nodeText = (element.textContent ?? '').replace(/\\s+/g, ' ').trim().slice(0, 300)
+  return {
+    ok: true,
+    target: {
+      frameUrl: window.location.href,
+      inspector: getElementInspector(element),
+      kind: 'element',
+      marker: {
+        x: Math.round(pointX),
+        y: Math.round(pointY)
+      },
+      nodeText: nodeText === '' ? undefined : nodeText,
+      rect: {
+        height: Math.round(rect.height),
+        width: Math.round(rect.width),
+        x: Math.round(rect.x),
+        y: Math.round(rect.y)
+      },
+      selector: buildElementSelector(element),
+      style: getElementAnnotationStyle(element),
+      targetPath: buildTargetPath(element),
+      viewport: {
+        height: viewportHeight,
+        width: viewportWidth
+      }
+    }
+  }
+})()`
+
+const normalizeWebviewElementCommentRequest = (value: unknown): NormalizedWebviewElementCommentRequest | null => {
+  if (!isRecord(value)) return null
+  const webContentsId = readFiniteNumber(value.webContentsId)
+  const x = readFiniteNumber(value.x)
+  const y = readFiniteNumber(value.y)
+  if (webContentsId == null || x == null || y == null) return null
+  return {
+    frameUrl: readOptionalString(value.frameUrl),
+    webContentsId,
+    x,
+    y
+  }
+}
+
+const normalizeWebviewAnnotationRect = (value: unknown): IframeAnnotationTargetRect | null => {
+  if (!isRecord(value)) return null
+  const height = readFiniteNumber(value.height)
+  const width = readFiniteNumber(value.width)
+  const x = readFiniteNumber(value.x)
+  const y = readFiniteNumber(value.y)
+  if (height == null || width == null || x == null || y == null) return null
+  return { height, width, x, y }
+}
+
+const normalizeWebviewAnnotationViewport = (
+  value: unknown
+): PendingAnnotationTarget['viewport'] | null => {
+  if (!isRecord(value)) return null
+  const height = readFiniteNumber(value.height)
+  const width = readFiniteNumber(value.width)
+  if (height == null || width == null) return null
+  return { height, width }
+}
+
+const normalizeWebviewAnnotationMarker = (
+  value: unknown
+): PendingAnnotationTarget['marker'] | undefined => {
+  if (!isRecord(value)) return undefined
+  const x = readFiniteNumber(value.x)
+  const y = readFiniteNumber(value.y)
+  if (x == null || y == null) return undefined
+  return { x, y }
+}
+
+const normalizeWebviewAnnotationInspector = (
+  value: unknown,
+  fallbackLabel: string
+): IframeAnnotationTargetInspector | undefined => {
+  if (!isRecord(value)) return undefined
+  return {
+    accessibilityName: readOptionalString(value.accessibilityName),
+    backgroundColor: readOptionalString(value.backgroundColor),
+    backgroundColorSwatch: readOptionalString(value.backgroundColorSwatch),
+    keyboardFocusable: value.keyboardFocusable === true,
+    label: readOptionalString(value.label) ?? fallbackLabel,
+    padding: readOptionalString(value.padding),
+    role: readOptionalString(value.role) ?? 'generic'
+  }
+}
+
+const normalizeWebviewAnnotationStyle = (value: unknown): IframeAnnotationTarget['style'] => {
+  if (!isRecord(value)) return undefined
+  const borderRadius = readOptionalString(value.borderRadius)
+  return borderRadius == null ? undefined : { borderRadius }
+}
+
+const normalizeWebviewAnnotationTarget = (
+  value: unknown,
+  fallbackFrameUrl: string
+): IframeAnnotationTarget | null => {
+  if (!isRecord(value) || value.kind !== 'element') return null
+  const rect = normalizeWebviewAnnotationRect(value.rect)
+  const viewport = normalizeWebviewAnnotationViewport(value.viewport)
+  const targetPath = readOptionalString(value.targetPath)
+  if (rect == null || viewport == null || targetPath == null) return null
+
+  return {
+    frameUrl: readOptionalString(value.frameUrl) ?? fallbackFrameUrl,
+    inspector: normalizeWebviewAnnotationInspector(value.inspector, targetPath),
+    kind: 'element',
+    marker: normalizeWebviewAnnotationMarker(value.marker),
+    nodeText: readOptionalString(value.nodeText),
+    rect,
+    selector: readOptionalString(value.selector),
+    style: normalizeWebviewAnnotationStyle(value.style),
+    targetPath,
+    viewport
+  }
+}
+
+const normalizeWebviewAnnotationTargetScriptResult = (
+  value: unknown,
+  fallbackFrameUrl: string
+): { reason?: string; target: IframeAnnotationTarget | null } => {
+  if (!isRecord(value)) return { reason: 'invalid-result', target: null }
+  return {
+    reason: readOptionalString(value.reason),
+    target: normalizeWebviewAnnotationTarget(value.target, fallbackFrameUrl)
+  }
+}
 
 const formatAnnotationEvidenceBlock = ({
   comment,
@@ -1181,6 +1608,7 @@ export function InteractionPanelIframeView({
   const [viewportPresetId, setViewportPresetId] = useState<IframeViewportPresetId>('responsive')
   const [webviewFrameUrl, setWebviewFrameUrl] = useState(() => normalizeFrameUrl(page.url))
   const [webviewAttachVersion, setWebviewAttachVersion] = useState(0)
+  const [webviewReadyVersion, setWebviewReadyVersion] = useState(0)
   const [annotationComment, setAnnotationComment] = useState('')
   const [annotationEditorExpanded, setAnnotationEditorExpanded] = useState(false)
   const [annotationEditorPlacement, setAnnotationEditorPlacement] = useState<IframeAnnotationEditorPlacement | null>(
@@ -1209,6 +1637,8 @@ export function InteractionPanelIframeView({
   const annotationInputRef = useRef<HTMLTextAreaElement | null>(null)
   const annotationTargetRef = useRef<IframeAnnotationTarget | null>(annotationTarget)
   const annotationVoiceEditorRef = useRef<SenderEditorHandle | null>(null)
+  const webviewAnnotationHoverRequestIdRef = useRef(0)
+  const webviewContextMenuViewportPointRef = useRef<WebviewViewportPointSnapshot | null>(null)
   const isMountedRef = useRef(false)
   const pagePaneRef = useRef<HTMLDivElement | null>(null)
   const toolbarRef = useRef<HTMLDivElement | null>(null)
@@ -1257,11 +1687,15 @@ export function InteractionPanelIframeView({
     }
     recordBrowserActivityHistory(entry, false)
   }, [recordBrowserActivityHistory, recordUrlHistory])
+  const handleWebviewDomReady = useCallback(() => {
+    setWebviewReadyVersion(current => current + 1)
+  }, [])
   const webview = useInteractionPanelWebview({
     frameUrl,
     isMobileDebugDevtools,
     onChangeMetadata,
     onChangeUrl,
+    onDomReady: handleWebviewDomReady,
     pageId: page.id,
     recordUrlHistory: recordPanelUrlHistory,
     resolvedThemeMode,
@@ -1359,6 +1793,7 @@ export function InteractionPanelIframeView({
 
   useEffect(() => {
     if (!webview.shouldUseWebview) return
+    setWebviewReadyVersion(0)
     if (frameUrl === '') {
       setWebviewFrameUrl('')
       return
@@ -1806,6 +2241,75 @@ export function InteractionPanelIframeView({
     return element instanceof ownerWindow.Element ? element : null
   }, [webview.shouldUseWebview])
 
+  const resolveWebviewViewportPointFromCapturePoint = useCallback((
+    clientX: number,
+    clientY: number
+  ): PendingAnnotationTarget['marker'] | null => {
+    const webviewElement = webviewRef.current
+    if (webviewElement == null || !webview.shouldUseWebview) return null
+
+    const frameRect = webviewElement.getBoundingClientRect()
+    if (
+      clientX < frameRect.left ||
+      clientX > frameRect.right ||
+      clientY < frameRect.top ||
+      clientY > frameRect.bottom
+    ) return null
+
+    const viewportWidth = webviewElement.offsetWidth || frameRect.width
+    const viewportHeight = webviewElement.offsetHeight || frameRect.height
+    return {
+      x: Math.round(clampNumber(
+        (clientX - frameRect.left) * viewportWidth / Math.max(1, frameRect.width),
+        0,
+        Math.max(0, viewportWidth - 1)
+      )),
+      y: Math.round(clampNumber(
+        (clientY - frameRect.top) * viewportHeight / Math.max(1, frameRect.height),
+        0,
+        Math.max(0, viewportHeight - 1)
+      ))
+    }
+  }, [webview.shouldUseWebview])
+
+  const resolveWebviewAnnotationTargetFromViewportPoint = useCallback(async (
+    point: WebviewViewportPoint
+  ): Promise<{ reason?: string; target: IframeAnnotationTarget | null }> => {
+    const webviewElement = webviewRef.current
+    if (!webview.shouldUseWebview || webviewElement == null) {
+      return { reason: 'webview-unavailable', target: null }
+    }
+
+    try {
+      const result = await webviewElement.executeJavaScript(
+        buildWebviewAnnotationTargetScript(point.x, point.y),
+        false
+      )
+      return normalizeWebviewAnnotationTargetScriptResult(result, getCurrentInspectableUrl())
+    } catch {
+      return { reason: 'script-failed', target: null }
+    }
+  }, [getCurrentInspectableUrl, webview.shouldUseWebview])
+
+  const rememberWebviewViewportPointFromMouseEvent = useCallback((event: Event) => {
+    if (!(event instanceof MouseEvent)) return
+
+    const point = resolveWebviewViewportPointFromCapturePoint(event.clientX, event.clientY)
+    if (point == null) return
+
+    let webContentsId: number | undefined
+    try {
+      webContentsId = webviewRef.current?.getWebContentsId?.()
+    } catch {
+      webContentsId = undefined
+    }
+
+    webviewContextMenuViewportPointRef.current = {
+      point,
+      ...(webContentsId == null || !Number.isFinite(webContentsId) ? {} : { webContentsId })
+    }
+  }, [resolveWebviewViewportPointFromCapturePoint])
+
   const resolveAnnotationTargetRect = useCallback(
     (target: PendingAnnotationTarget): IframeAnnotationTargetRect | null => {
       const framePaneRect = resolveAnnotationFramePaneRect()
@@ -1976,35 +2480,86 @@ export function InteractionPanelIframeView({
     setIsAnnotationMode(true)
   }, [resolveAnnotationEditorPlacement, setAnnotationHoverRectIfChanged, setAnnotationHoverTargetIfChanged])
 
-  const handleAnnotationPointCapturePointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return
-    const frameRect = resolveAnnotationFramePaneRect()
-    if (frameRect == null) return
+  const openWebviewAnnotationEditorFromContextMenu = useCallback(async (value: unknown) => {
+    const request = normalizeWebviewElementCommentRequest(value)
+    if (request == null || !isActive || !webview.shouldUseWebview || isMobileDebugDevtools) return
 
-    event.preventDefault()
-    event.stopPropagation()
-    const pointX = clampNumber(
-      event.clientX - (pagePaneRef.current?.getBoundingClientRect().left ?? 0) - frameRect.x,
-      0,
-      frameRect.width
+    const webviewElement = webviewRef.current
+    if (webviewElement == null) return
+    let currentWebContentsId: number | undefined
+    try {
+      currentWebContentsId = webviewElement.getWebContentsId?.()
+    } catch {
+      currentWebContentsId = undefined
+    }
+    if (
+      currentWebContentsId != null &&
+      Number.isFinite(currentWebContentsId) &&
+      currentWebContentsId !== request.webContentsId
+    ) return
+
+    const rememberedPoint = webviewContextMenuViewportPointRef.current
+    const hasMatchingRememberedPoint = rememberedPoint != null &&
+      (
+        rememberedPoint.webContentsId == null ||
+        rememberedPoint.webContentsId === request.webContentsId
+      )
+    const fallbackPoint = resolveWebviewViewportPointFromCapturePoint(request.x, request.y) ?? {
+      x: request.x,
+      y: request.y
+    }
+    const point = hasMatchingRememberedPoint ? rememberedPoint.point : fallbackPoint
+    const { reason, target } = await resolveWebviewAnnotationTargetFromViewportPoint(point)
+    if (target != null) {
+      openAnnotationEditorForTarget(target)
+      return
+    }
+
+    void message.warning(
+      reason === 'sensitive-target'
+        ? t('chat.interactionPanel.iframeAnnotationSensitiveTarget')
+        : t('chat.interactionPanel.iframeAnnotationUnavailable')
     )
-    const pointY = clampNumber(
-      event.clientY - (pagePaneRef.current?.getBoundingClientRect().top ?? 0) - frameRect.y,
-      0,
-      frameRect.height
-    )
-    openAnnotationEditorForTarget(buildAnnotationPointTarget({
-      frameUrl: getCurrentInspectableUrl(),
-      pointX,
-      pointY,
-      viewportHeight: frameRect.height,
-      viewportWidth: frameRect.width
-    }))
-  }, [getCurrentInspectableUrl, openAnnotationEditorForTarget, resolveAnnotationFramePaneRect])
+  }, [
+    isActive,
+    isMobileDebugDevtools,
+    message,
+    getCurrentInspectableUrl,
+    openAnnotationEditorForTarget,
+    resolveWebviewAnnotationTargetFromViewportPoint,
+    resolveWebviewViewportPointFromCapturePoint,
+    t,
+    webview.shouldUseWebview
+  ])
 
   const updateAnnotationHoverFromCapturePoint = useCallback((clientX: number, clientY: number) => {
     if (annotationTargetRef.current != null) return
-    if (webview.shouldUseWebview) return
+
+    if (webview.shouldUseWebview) {
+      const point = resolveWebviewViewportPointFromCapturePoint(clientX, clientY)
+      if (point == null) {
+        setAnnotationHoverTargetIfChanged(null)
+        setAnnotationHoverRectIfChanged(null)
+        return
+      }
+
+      const requestId = webviewAnnotationHoverRequestIdRef.current + 1
+      webviewAnnotationHoverRequestIdRef.current = requestId
+      void resolveWebviewAnnotationTargetFromViewportPoint(point).then(({ target }) => {
+        if (webviewAnnotationHoverRequestIdRef.current !== requestId) return
+        if (annotationTargetRef.current != null) return
+
+        if (!isAnnotationMode && isPendingAnnotationPreviewActive) {
+          const matchedMarker = target == null ? null : findPendingAnnotationMarkerForTarget(target)
+          setHoveredPendingAnnotationTargetId(matchedMarker?.annotation.id ?? null)
+          return
+        }
+
+        setAnnotationHoverTargetIfChanged(target)
+        setAnnotationHoverRectIfChanged(target == null ? null : resolveAnnotationTargetRect(target))
+      })
+      return
+    }
 
     const element = resolveIframeElementFromCapturePoint(clientX, clientY)
     const nextTarget = element == null ? null : buildAnnotationTarget(element, readCurrentIframeUrl())
@@ -2025,7 +2580,10 @@ export function InteractionPanelIframeView({
     isPendingAnnotationPreviewActive,
     readCurrentIframeUrl,
     resolveAnnotationElementPaneRect,
+    resolveAnnotationTargetRect,
     resolveIframeElementFromCapturePoint,
+    resolveWebviewAnnotationTargetFromViewportPoint,
+    resolveWebviewViewportPointFromCapturePoint,
     setAnnotationHoverRectIfChanged,
     setAnnotationHoverTargetIfChanged,
     webview.shouldUseWebview
@@ -2038,6 +2596,7 @@ export function InteractionPanelIframeView({
   }, [updateAnnotationHoverFromCapturePoint])
 
   const handleAnnotationCapturePointerLeave = useCallback(() => {
+    webviewAnnotationHoverRequestIdRef.current += 1
     setAnnotationHoverRectIfChanged(null)
     setHoveredPendingAnnotationTargetId(null)
   }, [setAnnotationHoverRectIfChanged])
@@ -2053,7 +2612,25 @@ export function InteractionPanelIframeView({
     }
 
     if (webview.shouldUseWebview) {
-      handleAnnotationPointCapturePointerDown(event)
+      const point = resolveWebviewViewportPointFromCapturePoint(event.clientX, event.clientY)
+      if (point == null) {
+        setAnnotationHoverRectIfChanged(null)
+        return
+      }
+
+      void resolveWebviewAnnotationTargetFromViewportPoint(point).then(({ reason, target }) => {
+        if (target != null) {
+          openAnnotationEditorForTarget(target)
+          return
+        }
+
+        void message.warning(
+          reason === 'sensitive-target'
+            ? t('chat.interactionPanel.iframeAnnotationSensitiveTarget')
+            : t('chat.interactionPanel.iframeAnnotationUnavailable')
+        )
+        setAnnotationHoverRectIfChanged(null)
+      })
       return
     }
 
@@ -2070,7 +2647,6 @@ export function InteractionPanelIframeView({
 
     openAnnotationEditorForTarget(nextTarget)
   }, [
-    handleAnnotationPointCapturePointerDown,
     isAnnotationMode,
     isPendingAnnotationPreviewActive,
     message,
@@ -2078,6 +2654,8 @@ export function InteractionPanelIframeView({
     readCurrentIframeUrl,
     resolveIframeElementFromCapturePoint,
     resolveIframeViewportPointFromCapturePoint,
+    resolveWebviewAnnotationTargetFromViewportPoint,
+    resolveWebviewViewportPointFromCapturePoint,
     setAnnotationHoverRectIfChanged,
     t,
     webview.shouldUseWebview
@@ -2505,7 +3083,12 @@ export function InteractionPanelIframeView({
   }
 
   const registerWebviewScope = useCallback(() => {
-    const webContentsId = webviewRef.current?.getWebContentsId?.()
+    let webContentsId: number | undefined
+    try {
+      webContentsId = webviewRef.current?.getWebContentsId?.()
+    } catch {
+      return
+    }
     if (typeof webContentsId !== 'number' || !Number.isFinite(webContentsId)) return
     void window.oneworksDesktop?.registerInteractionPanelWebviewScope?.({
       webContentsId,
@@ -2518,13 +3101,13 @@ export function InteractionPanelIframeView({
 
   const handleWebviewAttached = useCallback(() => {
     setWebviewAttachVersion(current => current + 1)
-    registerWebviewScope()
-  }, [registerWebviewScope])
+    setWebviewReadyVersion(0)
+  }, [])
 
   useEffect(() => {
-    if (!webview.shouldUseWebview || webviewRef.current == null) return
+    if (!webview.shouldUseWebview || webviewReadyVersion <= 0 || webviewRef.current == null) return
     registerWebviewScope()
-  }, [registerWebviewScope, webview.shouldUseWebview, webviewAttachVersion])
+  }, [registerWebviewScope, webview.shouldUseWebview, webviewReadyVersion])
 
   const postDeveloperToolsDockSide = useCallback(() => {
     const targetOrigin = getLoadedFrameOrigin(developerToolsFrameRef.current, developerToolsUrl)
@@ -2682,7 +3265,6 @@ export function InteractionPanelIframeView({
     const handleReady = () => void autoInjectCurrentPageTarget()
     webviewElement.addEventListener('dom-ready', handleReady)
     webviewElement.addEventListener('did-finish-load', handleReady)
-    handleReady()
 
     return () => {
       webviewElement.removeEventListener('dom-ready', handleReady)
@@ -2698,6 +3280,7 @@ export function InteractionPanelIframeView({
 
   useEffect(() => {
     if (!isActive || frameUrl === '' || isMobileDebugDevtools) return
+    if (webview.shouldUseWebview && webviewReadyVersion <= 0) return
 
     void autoInjectCurrentPageTarget()
     const timer = window.setInterval(
@@ -2710,7 +3293,9 @@ export function InteractionPanelIframeView({
     autoInjectCurrentPageTarget,
     frameUrl,
     isActive,
-    isMobileDebugDevtools
+    isMobileDebugDevtools,
+    webview.shouldUseWebview,
+    webviewReadyVersion
   ])
 
   useEffect(() => {
@@ -2969,6 +3554,37 @@ export function InteractionPanelIframeView({
   ])
 
   useEffect(() => {
+    if (!isActive || !webview.shouldUseWebview) {
+      webviewContextMenuViewportPointRef.current = null
+      return undefined
+    }
+    const webviewElement = webviewRef.current
+    if (webviewElement == null) return undefined
+
+    webviewElement.addEventListener('contextmenu', rememberWebviewViewportPointFromMouseEvent, true)
+    webviewElement.addEventListener('mousedown', rememberWebviewViewportPointFromMouseEvent, true)
+    webviewElement.addEventListener('pointerdown', rememberWebviewViewportPointFromMouseEvent, true)
+
+    return () => {
+      webviewElement.removeEventListener('contextmenu', rememberWebviewViewportPointFromMouseEvent, true)
+      webviewElement.removeEventListener('mousedown', rememberWebviewViewportPointFromMouseEvent, true)
+      webviewElement.removeEventListener('pointerdown', rememberWebviewViewportPointFromMouseEvent, true)
+    }
+  }, [
+    isActive,
+    rememberWebviewViewportPointFromMouseEvent,
+    webview.shouldUseWebview,
+    webviewAttachVersion
+  ])
+
+  useEffect(() => {
+    const unsubscribe = window.oneworksDesktop?.onInteractionPanelWebviewElementCommentRequest?.(
+      openWebviewAnnotationEditorFromContextMenu
+    )
+    return () => unsubscribe?.()
+  }, [openWebviewAnnotationEditorFromContextMenu])
+
+  useEffect(() => {
     if (!isAnnotationMode && !isPendingAnnotationPreviewActive) {
       setAnnotationCaptureRect(null)
       return undefined
@@ -2996,7 +3612,8 @@ export function InteractionPanelIframeView({
     resolvedViewportScale,
     viewportSize.height,
     viewportSize.width,
-    webviewAttachVersion
+    webviewAttachVersion,
+    webviewReadyVersion
   ])
 
   useEffect(() => {
