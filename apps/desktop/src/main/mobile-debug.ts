@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- Android CDP discovery needs adb, socket forwarding, and target normalization together. */
+import { Buffer } from 'node:buffer'
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import http from 'node:http'
@@ -84,9 +85,58 @@ export interface MobileDebugTargetsResponse {
   targets: MobileDebugTarget[]
 }
 
+export interface MobileDeviceScreenshotResponse {
+  capturedAt: number
+  deviceId: string
+  height?: number
+  imageDataUrl: string
+  width?: number
+}
+
+export interface MobileElementBounds {
+  height: number
+  width: number
+  x: number
+  y: number
+}
+
+export interface MobileElementNode {
+  attributes: Record<string, string | number | boolean | null>
+  bounds?: MobileElementBounds
+  children: MobileElementNode[]
+  id: string
+  label?: string
+  source: 'uiautomator'
+  type: string
+}
+
+export interface MobileElementTreeResponse {
+  capturedAt: number
+  deviceId: string
+  nodeCount: number
+  root?: MobileElementNode
+  source: 'uiautomator'
+}
+
+export interface MobileDeviceInputEvent {
+  durationMs?: number
+  endX?: number
+  endY?: number
+  key?: 'app-switch' | 'back' | 'delete' | 'enter' | 'home'
+  kind: 'key' | 'swipe' | 'tap' | 'text'
+  text?: string
+  x?: number
+  y?: number
+}
+
 interface CommandResult {
   stderr: string
   stdout: string
+}
+
+interface BufferCommandResult {
+  stderr: string
+  stdout: Buffer
 }
 
 interface CdpTarget {
@@ -139,6 +189,21 @@ const runCommand = (file: string, args: string[], timeout = ADB_TIMEOUT_MS) =>
       }
 
       resolve({ stderr: String(stderr), stdout: String(stdout) })
+    })
+  })
+
+const runCommandBuffer = (file: string, args: string[], timeout = ADB_TIMEOUT_MS) =>
+  new Promise<BufferCommandResult>((resolve, reject) => {
+    execFile(file, args, { encoding: 'buffer', maxBuffer: 1024 * 1024 * 24, timeout }, (error, stdout, stderr) => {
+      if (error != null) {
+        reject(error)
+        return
+      }
+
+      resolve({
+        stderr: Buffer.isBuffer(stderr) ? stderr.toString('utf8') : String(stderr),
+        stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout)
+      })
     })
   })
 
@@ -296,6 +361,36 @@ const parseAdbDevices = (stdout: string): MobileDebugDevice[] =>
       }
     })
     .filter(device => device.id !== '')
+
+const normalizeDeviceId = (value: unknown) =>
+  typeof value === 'string' && value.trim() !== ''
+    ? value.trim()
+    : undefined
+
+const resolveReadyAdbDevice = async (deviceId: unknown) => {
+  const adb = await resolveAdbPath()
+  if (adb.adbPath == null) {
+    throw new Error(['ADB was not found.', ...adb.errors].join('\n'))
+  }
+
+  const normalizedDeviceId = normalizeDeviceId(deviceId)
+  const devices = parseAdbDevices((await runCommand(adb.adbPath, ['devices', '-l'])).stdout)
+  const device = normalizedDeviceId == null
+    ? devices.find(item => item.state === 'device')
+    : devices.find(item => item.id === normalizedDeviceId)
+  if (device == null) {
+    throw new Error(
+      normalizedDeviceId == null
+        ? 'No connected Android device found.'
+        : `Android device not found: ${normalizedDeviceId}`
+    )
+  }
+  if (device.state !== 'device') {
+    throw new Error(`${device.label}: ${device.state}`)
+  }
+
+  return { adbPath: adb.adbPath, device }
+}
 
 const extractSocketName = (line: string) => {
   const match = line.match(/@?([\w.:-]*devtools_remote[\w.:-]*)$/u)
@@ -1061,6 +1156,173 @@ const listNetworkTargets = async (targetConfig: MobileDebugNetworkTargetConfig):
   return normalizedTargets.filter((target): target is MobileDebugTarget => target != null)
 }
 
+const readPngSize = (buffer: Buffer) => {
+  const pngSignature = '89504e470d0a1a0a'
+  if (buffer.length < 24 || buffer.subarray(0, 8).toString('hex') !== pngSignature) return undefined
+  return {
+    height: buffer.readUInt32BE(20),
+    width: buffer.readUInt32BE(16)
+  }
+}
+
+const normalizeCoordinate = (value: unknown) => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  return Math.max(0, Math.round(value))
+}
+
+const normalizeDurationMs = (value: unknown, fallback: number) => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  return Math.max(0, Math.min(60000, Math.round(value)))
+}
+
+const toInputEventRecord = (input: unknown): MobileDeviceInputEvent => {
+  if (input == null || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('Invalid mobile input event.')
+  }
+  const record = input as Record<string, unknown>
+  const kind = record.kind
+  if (kind !== 'key' && kind !== 'swipe' && kind !== 'tap' && kind !== 'text') {
+    throw new Error('Invalid mobile input kind.')
+  }
+  return {
+    durationMs: typeof record.durationMs === 'number' ? record.durationMs : undefined,
+    endX: typeof record.endX === 'number' ? record.endX : undefined,
+    endY: typeof record.endY === 'number' ? record.endY : undefined,
+    key: record.key === 'app-switch' ||
+        record.key === 'back' ||
+        record.key === 'delete' ||
+        record.key === 'enter' ||
+        record.key === 'home'
+      ? record.key
+      : undefined,
+    kind,
+    text: typeof record.text === 'string' ? record.text : undefined,
+    x: typeof record.x === 'number' ? record.x : undefined,
+    y: typeof record.y === 'number' ? record.y : undefined
+  }
+}
+
+const getInputKeyCode = (key: MobileDeviceInputEvent['key']) => {
+  if (key === 'app-switch') return 'KEYCODE_APP_SWITCH'
+  if (key === 'back') return 'KEYCODE_BACK'
+  if (key === 'delete') return 'KEYCODE_DEL'
+  if (key === 'enter') return 'KEYCODE_ENTER'
+  if (key === 'home') return 'KEYCODE_HOME'
+  throw new Error('Invalid mobile input key.')
+}
+
+const encodeAndroidInputText = (text: string) =>
+  text
+    .replaceAll('%', '%25')
+    .replaceAll(' ', '%s')
+    .replaceAll('"', '\\"')
+    .replaceAll("'", "\\'")
+    .replaceAll('\\', '\\\\')
+
+const decodeXmlAttribute = (value: string) =>
+  value
+    .replaceAll('&quot;', '"')
+    .replaceAll('&apos;', "'")
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&amp;', '&')
+
+const parseXmlAttributes = (value: string) => {
+  const attributes: Record<string, string | number | boolean | null> = {}
+  const attributePattern = /([^\s=/>]+)\s*=\s*"([^"]*)"/gu
+  for (const match of value.matchAll(attributePattern)) {
+    const name = match[1]
+    const rawValue = match[2]
+    if (name == null || rawValue == null) continue
+    const decodedValue = decodeXmlAttribute(rawValue)
+    if (decodedValue === 'true') {
+      attributes[name] = true
+    } else if (decodedValue === 'false') {
+      attributes[name] = false
+    } else {
+      attributes[name] = decodedValue
+    }
+  }
+  return attributes
+}
+
+const parseBoundsAttribute = (value: unknown): MobileElementBounds | undefined => {
+  if (typeof value !== 'string') return undefined
+  const match = value.match(/^\[(\d+),(\d+)\]\[(\d+),(\d+)\]$/u)
+  if (match == null) return undefined
+  const left = Number.parseInt(match[1] ?? '', 10)
+  const top = Number.parseInt(match[2] ?? '', 10)
+  const right = Number.parseInt(match[3] ?? '', 10)
+  const bottom = Number.parseInt(match[4] ?? '', 10)
+  if (![left, top, right, bottom].every(Number.isFinite)) return undefined
+  return {
+    height: Math.max(0, bottom - top),
+    width: Math.max(0, right - left),
+    x: left,
+    y: top
+  }
+}
+
+const getElementLabel = (attributes: Record<string, string | number | boolean | null>) => {
+  const candidates = [attributes.text, attributes['content-desc'], attributes['resource-id']]
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim() !== '') return candidate.trim()
+  }
+  return undefined
+}
+
+const parseUiautomatorXml = (xml: string): MobileElementTreeResponse['root'] => {
+  const root: MobileElementNode = {
+    attributes: {},
+    children: [],
+    id: 'uiautomator:root',
+    label: 'hierarchy',
+    source: 'uiautomator',
+    type: 'hierarchy'
+  }
+  const stack: MobileElementNode[] = [root]
+  const nodeIndexByDepth: number[] = []
+  const nodePattern = /<\/node>|<node\b([^>]*?)(\/?)>/gu
+
+  for (const match of xml.matchAll(nodePattern)) {
+    if (match[0] === '</node>') {
+      if (stack.length > 1) stack.pop()
+      continue
+    }
+
+    const attributeText = match[1] ?? ''
+    const isSelfClosing = match[2] === '/'
+    const attributes = parseXmlAttributes(attributeText)
+    const parent = stack.at(-1) ?? root
+    const depth = stack.length
+    const siblingIndex = nodeIndexByDepth[depth] ?? 0
+    nodeIndexByDepth[depth] = siblingIndex + 1
+    nodeIndexByDepth.length = depth + 1
+    const pathParts = [
+      ...stack.slice(1).map(node => node.id.split('/').at(-1) ?? '0'),
+      String(siblingIndex)
+    ]
+    const node: MobileElementNode = {
+      attributes,
+      bounds: parseBoundsAttribute(attributes.bounds),
+      children: [],
+      id: `uiautomator:${pathParts.join('/')}`,
+      label: getElementLabel(attributes),
+      source: 'uiautomator',
+      type: typeof attributes.class === 'string' && attributes.class !== '' ? attributes.class : 'node'
+    }
+    parent.children.push(node)
+    if (!isSelfClosing) stack.push(node)
+  }
+
+  return root.children[0] ?? root
+}
+
+const countElementNodes = (root: MobileElementNode | undefined): number => {
+  if (root == null) return 0
+  return 1 + root.children.reduce((count, child) => count + countElementNodes(child), 0)
+}
+
 export const listMobileDebugTargets = async (inputConfig?: unknown): Promise<MobileDebugTargetsResponse> => {
   const config = normalizeMobileDebugConfig(inputConfig)
   const targets: MobileDebugTarget[] = []
@@ -1136,5 +1398,76 @@ export const listMobileDebugTargets = async (inputConfig?: unknown): Promise<Mob
     portForwarding,
     scannedAt: Date.now(),
     targets
+  }
+}
+
+export const captureMobileDeviceScreenshot = async (deviceId: unknown): Promise<MobileDeviceScreenshotResponse> => {
+  const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
+  const result = await runCommandBuffer(adbPath, ['-s', device.id, 'exec-out', 'screencap', '-p'], 15000)
+  const size = readPngSize(result.stdout)
+  return {
+    capturedAt: Date.now(),
+    deviceId: device.id,
+    imageDataUrl: `data:image/png;base64,${result.stdout.toString('base64')}`,
+    ...(size == null ? {} : size)
+  }
+}
+
+export const sendMobileDeviceInput = async (
+  deviceId: unknown,
+  input: unknown
+): Promise<{ deviceId: string; sentAt: number }> => {
+  const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
+  const inputEvent = toInputEventRecord(input)
+
+  if (inputEvent.kind === 'tap') {
+    const x = normalizeCoordinate(inputEvent.x)
+    const y = normalizeCoordinate(inputEvent.y)
+    if (x == null || y == null) throw new Error('Tap input requires x and y.')
+    await runCommand(adbPath, ['-s', device.id, 'shell', 'input', 'tap', String(x), String(y)])
+  } else if (inputEvent.kind === 'swipe') {
+    const x = normalizeCoordinate(inputEvent.x)
+    const y = normalizeCoordinate(inputEvent.y)
+    const endX = normalizeCoordinate(inputEvent.endX)
+    const endY = normalizeCoordinate(inputEvent.endY)
+    if (x == null || y == null || endX == null || endY == null) {
+      throw new Error('Swipe input requires x, y, endX and endY.')
+    }
+    await runCommand(adbPath, [
+      '-s',
+      device.id,
+      'shell',
+      'input',
+      'swipe',
+      String(x),
+      String(y),
+      String(endX),
+      String(endY),
+      String(normalizeDurationMs(inputEvent.durationMs, 220))
+    ])
+  } else if (inputEvent.kind === 'text') {
+    const text = inputEvent.text?.trim()
+    if (text == null || text === '') throw new Error('Text input requires text.')
+    await runCommand(adbPath, ['-s', device.id, 'shell', 'input', 'text', encodeAndroidInputText(text)])
+  } else {
+    await runCommand(adbPath, ['-s', device.id, 'shell', 'input', 'keyevent', getInputKeyCode(inputEvent.key)])
+  }
+
+  return { deviceId: device.id, sentAt: Date.now() }
+}
+
+export const dumpMobileElementTree = async (deviceId: unknown): Promise<MobileElementTreeResponse> => {
+  const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
+  const remotePath = `/sdcard/oneworks-window-${Date.now().toString(36)}.xml`
+  await runCommand(adbPath, ['-s', device.id, 'shell', 'uiautomator', 'dump', remotePath], 15000)
+  const result = await runCommand(adbPath, ['-s', device.id, 'exec-out', 'cat', remotePath], 15000)
+  void runCommand(adbPath, ['-s', device.id, 'shell', 'rm', '-f', remotePath]).catch(() => undefined)
+  const root = parseUiautomatorXml(result.stdout)
+  return {
+    capturedAt: Date.now(),
+    deviceId: device.id,
+    nodeCount: countElementNodes(root),
+    root,
+    source: 'uiautomator'
   }
 }

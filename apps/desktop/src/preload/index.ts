@@ -238,6 +238,11 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
   listWorkspaceFileOpeners: (workspaceFolder: string) =>
     ipcRenderer.invoke('desktop:list-workspace-file-openers', workspaceFolder),
   listMobileDebugTargets: (config: unknown) => ipcRenderer.invoke('desktop:list-mobile-debug-targets', config),
+  captureMobileDeviceScreenshot: (deviceId: string) =>
+    ipcRenderer.invoke('desktop:capture-mobile-device-screenshot', deviceId),
+  dumpMobileElementTree: (deviceId: string) => ipcRenderer.invoke('desktop:dump-mobile-element-tree', deviceId),
+  sendMobileDeviceInput: (deviceId: string, input: unknown) =>
+    ipcRenderer.invoke('desktop:send-mobile-device-input', deviceId, input),
   markWorkspaceStartupReady,
   onDesktopSettingsChange: (listener: (value: unknown) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, value: unknown) => {

@@ -27,7 +27,12 @@ import {
 } from './browser-data-sync'
 import { SERVER_READY_TIMEOUT_MS, WORKSPACE_CONNECTION_CHANNEL, WORKSPACE_STARTUP_READY_CHANNEL } from './constants'
 import { openFilesystemFileInExternalOpener } from './filesystem-file-opener'
-import { listMobileDebugTargets } from './mobile-debug'
+import {
+  captureMobileDeviceScreenshot,
+  dumpMobileElementTree,
+  listMobileDebugTargets,
+  sendMobileDeviceInput
+} from './mobile-debug'
 import type {
   DesktopInterfaceLanguageConfig,
   DesktopSettings,
@@ -318,6 +323,18 @@ export const registerIpcHandlers = ({
   ipcMain.handle('desktop:context-capture:hide-overlay', () => hideDesktopContextCaptureOverlay())
 
   ipcMain.handle('desktop:list-mobile-debug-targets', (_event, config: unknown) => listMobileDebugTargets(config))
+  ipcMain.handle(
+    'desktop:capture-mobile-device-screenshot',
+    (_event, deviceId: unknown) => captureMobileDeviceScreenshot(deviceId)
+  )
+  ipcMain.handle(
+    'desktop:dump-mobile-element-tree',
+    (_event, deviceId: unknown) => dumpMobileElementTree(deviceId)
+  )
+  ipcMain.handle(
+    'desktop:send-mobile-device-input',
+    (_event, deviceId: unknown, input: unknown) => sendMobileDeviceInput(deviceId, input)
+  )
 
   ipcMain.handle('desktop:retry-launcher-shortcut-registration', () => retryLauncherShortcutRegistration())
 

@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 
 import { InteractionPanelMobileDebugTargetList } from './InteractionPanelMobileDebugTargetList'
+import { InteractionPanelMobileDevicePreview } from './InteractionPanelMobileDevicePreview'
 import type { OpenInteractionPanelIframeUrlOptions } from './interaction-panel-iframe-pages'
 
 const getPortForwardingStatusLabelKey = (status: DesktopMobileDebugPortForwardStatus['status']) => {
@@ -37,6 +38,9 @@ export function InteractionPanelMobileDebugResults({
         </div>
       )}
       <PortForwardingList portForwarding={portForwarding} />
+      {!isAdbMissing && devices.length > 0 && (
+        <InteractionPanelMobileDevicePreview devices={devices} />
+      )}
       {targets.length > 0 && (
         <InteractionPanelMobileDebugTargetList targets={targets} onOpenDebugUrl={onOpenDebugUrl} />
       )}

@@ -253,6 +253,50 @@ interface DesktopMobileDebugTargetsResponse {
   targets: DesktopMobileDebugTarget[]
 }
 
+interface DesktopMobileDeviceScreenshotResponse {
+  capturedAt: number
+  deviceId: string
+  height?: number
+  imageDataUrl: string
+  width?: number
+}
+
+interface DesktopMobileElementBounds {
+  height: number
+  width: number
+  x: number
+  y: number
+}
+
+interface DesktopMobileElementNode {
+  attributes: Record<string, string | number | boolean | null>
+  bounds?: DesktopMobileElementBounds
+  children: DesktopMobileElementNode[]
+  id: string
+  label?: string
+  source: 'uiautomator'
+  type: string
+}
+
+interface DesktopMobileElementTreeResponse {
+  capturedAt: number
+  deviceId: string
+  nodeCount: number
+  root?: DesktopMobileElementNode
+  source: 'uiautomator'
+}
+
+interface DesktopMobileDeviceInputEvent {
+  durationMs?: number
+  endX?: number
+  endY?: number
+  key?: 'app-switch' | 'back' | 'delete' | 'enter' | 'home'
+  kind: 'key' | 'swipe' | 'tap' | 'text'
+  text?: string
+  x?: number
+  y?: number
+}
+
 interface DesktopBrowserDataSyncState {
   authenticator: {
     total: number
@@ -448,6 +492,12 @@ interface Window {
     listCurrentWorkspaceFileOpeners?: () => Promise<DesktopWorkspaceFileOpenersResponse>
     listWorkspaceFileOpeners?: (workspaceFolder: string) => Promise<DesktopWorkspaceFileOpenersResponse>
     listMobileDebugTargets?: (config?: DesktopMobileDebugConfig) => Promise<DesktopMobileDebugTargetsResponse>
+    captureMobileDeviceScreenshot?: (deviceId: string) => Promise<DesktopMobileDeviceScreenshotResponse>
+    dumpMobileElementTree?: (deviceId: string) => Promise<DesktopMobileElementTreeResponse>
+    sendMobileDeviceInput?: (
+      deviceId: string,
+      input: DesktopMobileDeviceInputEvent
+    ) => Promise<{ deviceId: string; sentAt: number }>
     markWorkspaceStartupReady?: () => void
     onDesktopSettingsChange?: (listener: (value: unknown) => void) => () => void
     onUpdateStatusChange?: (listener: (value: unknown) => void) => () => void
