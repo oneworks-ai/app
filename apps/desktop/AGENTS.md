@@ -4,6 +4,8 @@
 
 桌面端浏览器数据同步、密码管理、历史记录、下载内容和对应 client 入口的完整维护经验见 `../../.oo/rules/maintenance/browser-data-management.md`。
 
+本地 dev 安装包 runtime cache、安装后仍像旧代码、`Switch Project` 兜底页和 packaged client/server cacheVersion 排查见 `../../.oo/rules/maintenance/desktop-packaged-runtime-cache.md`。
+
 ## 先看哪里
 
 - `src/main/index.ts`
@@ -30,6 +32,7 @@
   - dev / packaged 场景下如何桥接到 server workspace package
 - `scripts/package.cjs`
   - `pnpm deploy --prod` staging；当前 pnpm 支持 `--legacy` 时脚本会自动加上
+  - 本地 dev 打包会把 workspace 包 overlay 到 staging，并把当前 client dist 写入 `runtime-packages/@oneworks/client`
   - multi-arch 预打包
   - auto-update 资源注入
   - 原生依赖裁剪
@@ -53,6 +56,7 @@
 ## 当前边界
 
 - Electron main 进程不重复实现 server 业务逻辑；桌面端 server 仍通过 `src/server-child.cjs` 复用 server workspace package。
+- 本地 dev 安装包启动 workspace 时，安装包内 server/client 是 runtime cache 的来源：`src/main/workspace-service-manager.ts` 和 `src/server-child.cjs` 会通过 `src/builtin-adapter-cache.cjs` 按 `desktop-build-source.json` 里的 dev cacheVersion 刷新 `~/.oneworks/bootstrap/npm/oneworks__server/<cacheVersion>` 与 `oneworks__client/<cacheVersion>`。排查“安装包还是旧代码”时必须核对这个 cache 里的真实文件，不要只看 `/Applications/.../Resources/app`。
 - `pnpm desktop:dev` 默认打开不绑定 workspace 的空项目启动页；`pnpm desktop:dev:workspace` 才以当前仓库作为 workspace 启动。两者都转发到 `pnpm tools dev-start`，由 Electron 启动一个共享 Vite client，并为每个 workspace 启动独立本机 server；前端改动应走共享 client 的 HMR，不需要重复构建静态 dist。
 - 多 worktree / 多 AI 会话可能同时运行桌面开发态实例；排查崩溃或端口占用时，不要因为看到其他 worktree 的 Electron、`apps/desktop/src/server-child.cjs` 或 `apps/client/cli.cjs` 进程就直接清理。先列出 PID、启动时间、worktree 路径和命令来源，只有确认属于当前终端会话、明确是当前崩溃实例残留，或用户同意后才停止。
 - 桌面 main / preload 使用 `electron-vite` 构建，Electron 运行入口是 `dist/main/index.js`。
@@ -95,6 +99,7 @@
 - 改菜单或快捷键时，`src/main/menu.ts` 与 `apps/client/src/desktop/view-shortcuts.ts` 要一起看；菜单项、tooltip 展示和 Monaco 内快捷键转发要保持同一套 action 名称。
 - 改 launcher 全局快捷键时，还要检查 `src/main/app-runtime.ts` 的 `globalShortcut` 注册 / 注销逻辑、`src/main/desktop-state-store.ts` 的持久化，以及 preload 注入给前端的 `getDesktopSettings` / `updateDesktopSettings`，避免 app 退出后快捷键残留或普通 Web 前端误展示桌面配置。
 - 改打包资源布局时，`scripts/package.cjs`、`scripts/make.cjs`、`scripts/sync-icons.cjs`、`scripts/mac-*.cjs`、`electron-builder.yml` 与 smoke test 要一起看；不要只改其中一个入口。
+- 改本地 dev 打包、workspace server 启动或 runtime package cache 时，必须同时检查 `scripts/package.cjs`、`src/builtin-adapter-cache.cjs`、`src/main/workspace-service-manager.ts`、`src/main/updates.ts`、`src/server-child.cjs` 和 `packages/types/src/adapter-package-cache.ts`；验证时至少核对安装后的 `desktop-build-source.json`、`/Applications/.../Resources/app/runtime-packages/@oneworks/client`、以及 `~/.oneworks/bootstrap/npm/oneworks__server/<cacheVersion>` / `oneworks__client/<cacheVersion>` 里的真实文件内容。
 - 改打包脚本、图标同步脚本或生成资产时，提交前跑全仓 `pnpm exec dprint check` 和 `pnpm exec eslint .`，不要只跑改动文件范围；CI 的 format / lint 就是全仓检查。
 - 改图标生成资产时，同时检查 `dprint.json` 与 `.gitattributes`：生成 SVG 可按产物排除，`.icns` / `.ico` / `.png` 等二进制图标必须使用 `-text`，避免 Git EOL 规范化破坏文件。
 - 改 make target 校验时，要对照 `.github/workflows/desktop-package.yml`：当前 macOS job 会用 `ONEWORKS_DESKTOP_MAKE_TARGETS=dmg,zip,pkg`，并依赖 `dmg` 产物做安装验证。

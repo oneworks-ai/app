@@ -12,14 +12,15 @@ const desktopRoot = app.getAppPath()
 export const repoRoot = path.resolve(desktopRoot, '../..')
 export const clientCliPath = path.join(repoRoot, 'apps/client/cli.cjs')
 export const serverChildPath = path.join(desktopRoot, 'src/server-child.cjs')
+export const builtinPackageCachePath = path.join(desktopRoot, 'src/builtin-adapter-cache.cjs')
 export const preloadPath = path.join(desktopRoot, 'dist/preload/index.js')
 export const isDev = !app.isPackaged
 
 const CLIENT_PACKAGE_NAME = '@oneworks/client'
 const SERVER_PACKAGE_NAME = '@oneworks/server'
 
-export const resolveClientDistPath = (): string | undefined => {
-  const cachedClientPackageDir = app.isPackaged ? resolveExistingNpmPackageDir(CLIENT_PACKAGE_NAME) : undefined
+export const resolveClientDistPath = (env: NodeJS.ProcessEnv = process.env): string | undefined => {
+  const cachedClientPackageDir = app.isPackaged ? resolveExistingNpmPackageDir(CLIENT_PACKAGE_NAME, env) : undefined
   const packagedClientDistPath = typeof process.resourcesPath === 'string'
     ? path.join(process.resourcesPath, 'dist')
     : undefined
@@ -45,15 +46,15 @@ export const resolveServerExecutable = () => {
   return app.isPackaged ? process.execPath : 'node'
 }
 
-export const resolveCachedServerPackageDir = () => (
-  app.isPackaged ? resolveExistingNpmPackageDir(SERVER_PACKAGE_NAME) : undefined
+export const resolveCachedServerPackageDir = (env: NodeJS.ProcessEnv = process.env) => (
+  app.isPackaged ? resolveExistingNpmPackageDir(SERVER_PACKAGE_NAME, env) : undefined
 )
 
-export const resolveCachedServerPackageEnv = ():
+export const resolveCachedServerPackageEnv = (env: NodeJS.ProcessEnv = process.env):
   | Pick<NodeJS.ProcessEnv, '__ONEWORKS_DESKTOP_SERVER_PACKAGE_DIR__'>
   | {} =>
 {
-  const packageDir = resolveCachedServerPackageDir()
+  const packageDir = resolveCachedServerPackageDir(env)
   return packageDir == null ? {} : { __ONEWORKS_DESKTOP_SERVER_PACKAGE_DIR__: packageDir }
 }
 

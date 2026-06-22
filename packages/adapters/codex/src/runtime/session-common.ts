@@ -148,6 +148,21 @@ export function toCodexOutboundApprovalPolicy(
  */
 const toToml = (value: string) => JSON.stringify(value)
 
+const ONEWORKS_CODEX_DEVELOPER_INSTRUCTIONS = [
+  'One Works runtime behavior:',
+  '- Treat greetings, acknowledgements, and other plain conversational messages as chat. Reply directly.',
+  '- Do not run Bash or other tools merely because the user message is a bare word, command name, or short phrase.',
+  '- Use tools only when execution, inspection, or file changes are clearly needed for the user request.'
+].join('\n')
+
+const mergeDeveloperInstructions = (systemPrompt: string | undefined) => {
+  const trimmedPrompt = systemPrompt?.trim()
+  return [
+    ONEWORKS_CODEX_DEVELOPER_INSTRUCTIONS,
+    ...(trimmedPrompt == null || trimmedPrompt === '' ? [] : [trimmedPrompt])
+  ].join('\n\n')
+}
+
 interface CodexModelProviderExtra {
   wireApi?: string
   queryParams?: Record<string, string>
@@ -391,9 +406,7 @@ function buildCodexConfigOverrides(params: {
     pushFingerprintArgs(value)
   }
 
-  if (systemPrompt) {
-    pushBoth(`developer_instructions=${toToml(systemPrompt)}`)
-  }
+  pushBoth(`developer_instructions=${toToml(mergeDeveloperInstructions(systemPrompt))}`)
 
   let resolvedModel: string | undefined
   let resolvedMaxOutputTokens: number | null | undefined

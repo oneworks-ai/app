@@ -5,6 +5,7 @@ const path = require('node:path')
 const { isReleaseBuild } = require('./desktop-app-metadata.cjs')
 
 const DESKTOP_BUILD_SOURCE_FILE = 'desktop-build-source.json'
+const RUNTIME_PACKAGE_CACHE_VERSION_PATTERN = /^[\w.+-]+$/
 
 const normalizeText = value => (typeof value === 'string' ? value.trim() : '')
 
@@ -48,6 +49,38 @@ const resolveBuildTime = ({ env, now }) => {
   return buildTime.toISOString()
 }
 
+const normalizeRuntimePackageCacheVersion = (value) => {
+  const normalized = normalizeText(value)
+  if (normalized === '') return undefined
+  if (
+    !RUNTIME_PACKAGE_CACHE_VERSION_PATTERN.test(normalized) ||
+    normalized === '.' ||
+    normalized === '..'
+  ) {
+    throw new TypeError(`Invalid runtime package cache version: ${normalized}`)
+  }
+  return normalized
+}
+
+const resolveRuntimePackageCacheVersion = ({ buildSource, env }) => {
+  const explicitVersion = firstEnvValue(env, [
+    'ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION',
+    '__ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__',
+    'ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION',
+    '__ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__',
+    'ONEWORKS_DESKTOP_BUILD_RUNTIME_CACHE_VERSION'
+  ])
+  if (explicitVersion != null) {
+    return normalizeRuntimePackageCacheVersion(explicitVersion)
+  }
+
+  const hashPart = buildSource.gitHash === 'unknown'
+    ? 'unknown'
+    : buildSource.gitHash.replace(/[^0-9A-Za-z]/g, '').slice(0, 12)
+  const timePart = buildSource.buildTime.replace(/[^0-9]/g, '').slice(0, 14)
+  return normalizeRuntimePackageCacheVersion(`dev-${hashPart}-${timePart}`)
+}
+
 const resolveDesktopBuildSource = ({
   cwd = process.cwd(),
   env = process.env,
@@ -58,7 +91,7 @@ const resolveDesktopBuildSource = ({
     return undefined
   }
 
-  return {
+  const buildSource = {
     branch: firstEnvValue(env, [
       'ONEWORKS_DESKTOP_BUILD_GIT_BRANCH',
       'GITHUB_HEAD_REF',
@@ -76,6 +109,10 @@ const resolveDesktopBuildSource = ({
       'ONEWORKS_DESKTOP_BUILD_GIT_HASH',
       'GITHUB_SHA'
     ]) ?? runGitCommand(['rev-parse', 'HEAD'], cwd) ?? 'unknown'
+  }
+  return {
+    ...buildSource,
+    runtimePackageCacheVersion: resolveRuntimePackageCacheVersion({ buildSource, env })
   }
 }
 

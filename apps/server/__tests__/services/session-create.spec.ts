@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   checkoutSessionGitBranch: vi.fn(),
   createSessionGitBranch: vi.fn(),
   createServerRuntimeSession: vi.fn(),
+  broadcastSessionEvent: vi.fn(),
   notifySessionUpdated: vi.fn(),
   deleteSessionWorkspace: vi.fn(),
   provisionSessionWorkspace: vi.fn(),
@@ -42,6 +43,7 @@ vi.mock('#~/services/runtime-store/session-control.js', () => ({
 }))
 
 vi.mock('#~/services/session/runtime.js', () => ({
+  broadcastSessionEvent: mocks.broadcastSessionEvent,
   notifySessionUpdated: mocks.notifySessionUpdated
 }))
 
@@ -56,6 +58,7 @@ describe('createSessionWithInitialMessage', () => {
   const updateSession = vi.fn()
   const updateSessionRuntimeState = vi.fn()
   const getSession = vi.fn()
+  const saveMessage = vi.fn()
   const updateSessionTags = vi.fn()
   const deleteSession = vi.fn()
   const createAgentRoom = vi.fn()
@@ -74,11 +77,13 @@ describe('createSessionWithInitialMessage', () => {
       id,
       createdAt: Date.now()
     }))
+    saveMessage.mockReturnValue(true)
     vi.mocked(getDb).mockReturnValue({
       createSession,
       updateSession,
       updateSessionRuntimeState,
       getSession,
+      saveMessage,
       updateSessionTags,
       deleteSession,
       createAgentRoom,
@@ -100,6 +105,21 @@ describe('createSessionWithInitialMessage', () => {
     mocks.resolveSessionWorkspace.mockResolvedValue({
       sessionId: 'sess-1',
       workspaceFolder: '/workspace/root'
+    })
+    mocks.createServerRuntimeSession.mockResolvedValue({
+      runtimeRoot: '/runtime',
+      sessionId: 'sess-1',
+      startCommand: {
+        id: 'cmd-start-1',
+        commandId: 'session-start-1',
+        sessionId: 'sess-1',
+        source: 'web',
+        ts: 123,
+        type: 'start',
+        content: 'hello',
+        message: 'hello'
+      },
+      storePath: '/runtime/sess-1'
     })
   })
 
@@ -254,12 +274,50 @@ describe('createSessionWithInitialMessage', () => {
       promptName: 'client'
     })
     expect(updateSessionRuntimeState).toHaveBeenCalledWith('sess-1', { runtimeKind: 'external' })
+    expect(saveMessage).toHaveBeenCalledWith('sess-1', {
+      type: 'message',
+      message: {
+        id: 'session-start-1',
+        role: 'user',
+        content: 'hello',
+        agentRoom: {
+          source: 'user',
+          commandId: 'session-start-1',
+          causedByCommandId: 'cmd-start-1'
+        },
+        createdAt: 123
+      }
+    })
+    expect(updateSession).toHaveBeenCalledWith('sess-1', {
+      lastMessage: 'hello',
+      lastUserMessage: 'hello',
+      status: 'running'
+    })
+    expect(mocks.broadcastSessionEvent).toHaveBeenCalledWith('sess-1', {
+      type: 'message',
+      message: {
+        id: 'session-start-1',
+        role: 'user',
+        content: 'hello',
+        agentRoom: {
+          source: 'user',
+          commandId: 'session-start-1',
+          causedByCommandId: 'cmd-start-1'
+        },
+        createdAt: 123
+      }
+    })
+    expect(mocks.notifySessionUpdated).toHaveBeenCalledWith('sess-1', {
+      id: 'sess-1',
+      createdAt: expect.any(Number)
+    })
     expect(mocks.createServerRuntimeSession).toHaveBeenCalledWith({
       sessionId: 'sess-1',
       cwd: '/workspace/root',
       title: 'Demo',
       content: 'hello',
       message: 'hello',
+      runtimeContent: 'hello',
       model: undefined,
       effort: undefined,
       permissionMode: undefined,

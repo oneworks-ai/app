@@ -26,13 +26,13 @@ describe('bootstrap runtime package commands', () => {
     await rm(tempDir, { force: true, recursive: true })
   })
 
-  const writeCachedPackage = async (packageName: string, version: string) => {
+  const writeCachedPackage = async (packageName: string, version: string, cacheVersion = version) => {
     const sanitizedName = packageName.replace(/^@/, '').replace(/[\\/]/g, '__')
     const packageDir = path.join(
       tempDir,
       '.oneworks/bootstrap/npm',
       sanitizedName,
-      version,
+      cacheVersion,
       'node_modules',
       ...packageName.split('/')
     )
@@ -190,6 +190,49 @@ process.exit(1)
     ).resolves.toBeUndefined()
   })
 
+  it('installs a runtime package under an explicit cache version', async () => {
+    vi.stubEnv('ONEWORKS_TEST_NPM_VERSION', '9.9.9')
+
+    await expect(installRuntimePackage('server', {
+      cacheVersion: 'dev-local',
+      version: '2.2.0'
+    })).resolves.toMatchObject({
+      cacheVersion: 'dev-local',
+      installedVersion: '2.2.0',
+      latestInstalled: true,
+      latestVersion: '2.2.0',
+      packageName: '@oneworks/server',
+      requestedVersion: '2.2.0',
+      target: 'server',
+      updateAvailable: false
+    })
+    await expect(
+      writeFile(
+        path.join(
+          tempDir,
+          '.oneworks/bootstrap/npm/oneworks__server/dev-local/node_modules/@oneworks/server/probe'
+        ),
+        'ok'
+      )
+    ).resolves.toBeUndefined()
+  })
+
+  it('uses the runtime package cache version env for check and install', async () => {
+    await writeCachedPackage('@oneworks/server', '2.2.0', 'dev-env')
+    vi.stubEnv('ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION', 'dev-env')
+    vi.stubEnv('ONEWORKS_TEST_NPM_VERSION', '2.2.0')
+
+    await expect(checkRuntimePackage('server')).resolves.toMatchObject({
+      cacheVersion: 'dev-env',
+      installedVersion: '2.2.0',
+      latestInstalled: true,
+      latestVersion: '2.2.0',
+      packageName: '@oneworks/server',
+      target: 'server',
+      updateAvailable: false
+    })
+  })
+
   it('installs the latest client runtime package target', async () => {
     vi.stubEnv('ONEWORKS_TEST_NPM_VERSION', '2.2.0')
 
@@ -206,6 +249,12 @@ process.exit(1)
   it('rejects non-exact runtime package versions', async () => {
     await expect(checkRuntimePackage('cli', { version: 'latest' })).rejects.toThrow(
       'Runtime package version must be an exact semver version'
+    )
+  })
+
+  it('rejects unsafe runtime package cache versions', async () => {
+    await expect(checkRuntimePackage('cli', { cacheVersion: '../dev', version: '1.0.0' })).rejects.toThrow(
+      'Runtime package cache version contains unsupported characters'
     )
   })
 })

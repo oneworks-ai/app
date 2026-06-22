@@ -5,6 +5,7 @@ import android.webkit.ServiceWorkerClient
 import android.webkit.ServiceWorkerController
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import org.json.JSONObject
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.nio.charset.StandardCharsets
@@ -13,16 +14,31 @@ class BundledAssetLoader(private val context: Context) {
     companion object {
         private const val ASSET_HOST = "oneworks.local"
         private const val CLIENT_INDEX_PATH = "client/index.html"
+        private const val RUNTIME_PACKAGE_CACHE_PATH = "runtime/package-cache.json"
         const val CLIENT_ENTRY_URL = "https://oneworks.local/client/launcher"
         const val DEMO_HOST_URL = "file:///android_asset/host/index.html"
     }
 
     var localBackend: AndroidLocalBackend? = null
 
+    private val runtimePackageCacheMetadataText: String? by lazy {
+        readAssetText(RUNTIME_PACKAGE_CACHE_PATH)?.trim()?.takeIf { it.isNotEmpty() }
+    }
+    private val runtimePackageCacheMetadataJson: JSONObject? by lazy {
+        runtimePackageCacheMetadataText?.let { metadata ->
+            runCatching { JSONObject(metadata) }.getOrNull()
+        }
+    }
+
     private val bundledClientRuntimeScript = """
         <script>
         ;(() => {
           const androidServerBaseUrl = 'https://oneworks.local';
+          const androidRuntimePackageCache = ${runtimePackageCacheMetadataScript()};
+          const androidRuntimePackageCacheVersion =
+            typeof androidRuntimePackageCache?.cacheVersion === 'string'
+              ? androidRuntimePackageCache.cacheVersion.trim()
+              : '';
           const activeWorkspaceStorageKey = 'oneworks_android_active_workspace';
           const parseStoredWorkspace = value => {
             if (typeof value !== 'string' || value.trim() === '') return undefined;
@@ -68,10 +84,19 @@ class BundledAssetLoader(private val context: Context) {
             location.pathname.replace(/\/+$/u, '').endsWith('/launcher');
           const activeWorkspace = normalizeWorkspaceSelection(readActiveWorkspace());
           const isWorkspacePage = activeWorkspace != null && !isLauncherPath();
+          if (androidRuntimePackageCache != null) {
+            globalThis.__ONEWORKS_ANDROID_RUNTIME_PACKAGE_CACHE__ = androidRuntimePackageCache;
+          }
           globalThis.__ONEWORKS_PROJECT_RUNTIME_ENV__ = {
             ...(globalThis.__ONEWORKS_PROJECT_RUNTIME_ENV__ || {}),
             __ONEWORKS_PROJECT_CLIENT_BASE__: '/client',
             __ONEWORKS_PROJECT_SERVER_BASE_URL__: androidServerBaseUrl,
+            ...(androidRuntimePackageCacheVersion === ''
+              ? {}
+              : {
+                __ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__: androidRuntimePackageCacheVersion,
+                ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION: androidRuntimePackageCacheVersion
+              }),
             ...(isWorkspacePage
               ? {
                 __ONEWORKS_PROJECT_CLIENT_MODE__: 'desktop',
@@ -256,6 +281,9 @@ class BundledAssetLoader(private val context: Context) {
 
     fun hasBundledClient(): Boolean = CLIENT_INDEX_PATH.assetExists()
 
+    fun getRuntimePackageCacheMetadata(): JSONObject? =
+        runtimePackageCacheMetadataJson?.let { JSONObject(it.toString()) }
+
     fun installServiceWorkerClient() {
         ServiceWorkerController.getInstance().setServiceWorkerClient(
             object : ServiceWorkerClient() {
@@ -302,7 +330,7 @@ class BundledAssetLoader(private val context: Context) {
         if (endsWith("/")) "${this}index.html" else this
 
     private fun String.isAllowedBundledAssetPath(): Boolean =
-        startsWith("client/") || startsWith("server/")
+        startsWith("client/") || startsWith("runtime/") || startsWith("server/")
 
     private fun findBundledAssetPath(assetPath: String): String? {
         if (assetPath.assetExists()) return assetPath
@@ -324,6 +352,18 @@ class BundledAssetLoader(private val context: Context) {
         } catch (_: IOException) {
             false
         }
+
+    private fun readAssetText(path: String): String? =
+        try {
+            context.assets.open(path).use { stream ->
+                stream.readBytes().toString(StandardCharsets.UTF_8)
+            }
+        } catch (_: IOException) {
+            null
+        }
+
+    private fun runtimePackageCacheMetadataScript(): String =
+        runtimePackageCacheMetadataText?.let { "JSON.parse(${JSONObject.quote(it)})" } ?: "null"
 
     private fun String.toMimeType(): String = when (substringAfterLast('.', "").lowercase()) {
         "css" -> "text/css"

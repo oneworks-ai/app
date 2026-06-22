@@ -19,6 +19,7 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - [Homepage Docs 维护经验](./maintenance/homepage-docs.md)
 - [PR 经验复盘门禁](./maintenance/pr-experience-review.md)
 - [桌面端浏览器数据管理经验](./maintenance/browser-data-management.md)
+- [桌面本地打包 Runtime Cache 经验](./maintenance/desktop-packaged-runtime-cache.md)
 - [Relay 托管与私有化部署](./RELAY-DEPLOYMENT.md)
 
 ## 常见问题索引
@@ -30,6 +31,7 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - 复杂任务需要拆 PR、开子线程、监控或沉淀经验：见 [任务规划、委派与经验沉淀](./maintenance/task-planning.md)。
 - PR body 缺少经验复盘确认或需要维护提醒评论：见 [PR 经验复盘门禁](./maintenance/pr-experience-review.md)。
 - 桌面端浏览器数据同步、密码管理、历史记录、下载内容或项目 / 会话范围过滤：见 [桌面端浏览器数据管理经验](./maintenance/browser-data-management.md)。
+- 桌面本地 dev 安装包仍像旧代码、`Switch Project` 兜底页或 packaged runtime cache 排查：见 [桌面本地打包 Runtime Cache 经验](./maintenance/desktop-packaged-runtime-cache.md)。
 - 移动端 WebView、工作区 tabs overview、sender compact 样式或相关 PR 收口：见 [移动端 WebView 与工作区标签页经验](./maintenance/mobile-workspace-webview.md)。
 
 ## 开发环境启动

@@ -8,6 +8,7 @@ interface DesktopBuildSource {
   branch: string
   buildTime: string
   gitHash: string
+  runtimePackageCacheVersion: string
 }
 
 interface ResolveDesktopBuildSourceOptions {
@@ -41,7 +42,8 @@ describe('desktop build source metadata', () => {
     })).toEqual({
       branch: 'codex/macos-desktop-dmg-ci',
       buildTime: '2026-05-19T01:02:03.000Z',
-      gitHash: 'abcdef1234567890'
+      gitHash: 'abcdef1234567890',
+      runtimePackageCacheVersion: 'dev-abcdef123456-20260519010203'
     })
   })
 
@@ -56,7 +58,8 @@ describe('desktop build source metadata', () => {
     })).toEqual({
       branch: 'feature/source-branch',
       buildTime: '2026-05-19T01:02:03.000Z',
-      gitHash: 'github-sha'
+      gitHash: 'github-sha',
+      runtimePackageCacheVersion: 'dev-githubsha-20260519010203'
     })
   })
 
@@ -74,7 +77,27 @@ describe('desktop build source metadata', () => {
     })).toEqual({
       branch: 'local-branch',
       buildTime: '2026-05-19T01:02:03.000Z',
-      gitHash: 'local-hash'
+      gitHash: 'local-hash',
+      runtimePackageCacheVersion: 'dev-localhash-20260519010203'
+    })
+  })
+
+  it('allows an explicit packaged runtime cache version', () => {
+    expect(resolveDesktopBuildSource({
+      env: {
+        ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION: 'dev-local'
+      },
+      now: () => fixedBuildDate,
+      runGitCommand: args =>
+        ({
+          'branch --show-current': 'local-branch',
+          'rev-parse HEAD': 'local-hash'
+        })[args.join(' ')]
+    })).toEqual({
+      branch: 'local-branch',
+      buildTime: '2026-05-19T01:02:03.000Z',
+      gitHash: 'local-hash',
+      runtimePackageCacheVersion: 'dev-local'
     })
   })
 

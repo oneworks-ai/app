@@ -12,6 +12,7 @@ This is the Android WebView shell prototype. It renders the bundled OneWorks cli
 - Android system bars and safe-area background follow the bundled client's light/dark theme via the injected bridge helper.
 - If `apps/client/dist` exists, Gradle packages it into APK assets under `client/`; the Android host opens that bundle as the main app WebView.
 - Gradle packages a snapshot of `apps/server` into APK assets under `server/source/`; if `apps/server/dist` exists later, it is also packaged under `server/dist/`. Running that Node/Koa backend on Android still needs an embedded Node runtime or a native server port.
+- Gradle writes packaged runtime metadata to `runtime/package-cache.json` in APK assets. Debug builds default to a `dev-<worktree path hash>` cacheVersion; set `ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION` or `-PoneworksRuntimePackageCacheVersion=...` to pin a specific local build fingerprint.
 - Accessibility commands are scaffolded through an Android `AccessibilityService`; users must enable the service in Android settings before those commands can operate other apps/pages.
 - The host injects a device shell workspace API aligned with the Electron launcher shape. New Project and Open Project reuse the internal OneWorks directory list by default; Android implements directory enumeration, workspace directory creation, and recent-project state. The system directory picker remains available as a later authorization/fallback path. This validates selection/state flow; starting the OneWorks backend inside Android is still out of scope for this prototype.
 
@@ -21,6 +22,7 @@ This is the Android WebView shell prototype. It renders the bundled OneWorks cli
 pnpm -C apps/android validate
 __ONEWORKS_PROJECT_CLIENT_MODE__=standalone __ONEWORKS_PROJECT_CLIENT_BASE__=/client/ pnpm -C apps/client exec vite build
 ANDROID_HOME="$HOME/.codex/android-sdk" ANDROID_SDK_ROOT="$HOME/.codex/android-sdk" ./gradlew assembleDebug
+ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION=dev-local ANDROID_HOME="$HOME/.codex/android-sdk" ANDROID_SDK_ROOT="$HOME/.codex/android-sdk" ./gradlew assembleDebug
 ```
 
 To build the APK, open `apps/android` in Android Studio or run `gradle assembleDebug` from this directory after installing Android SDK and Gradle.

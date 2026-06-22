@@ -6,10 +6,12 @@ import {
   compareVersionLike,
   ensureDirectory,
   isExistingPath,
+  normalizePackageCacheVersion,
   resolvePackageCacheDir,
   resolvePackageCacheRootDir,
   resolvePackageInstallDir,
-  resolvePackageManagerEnv
+  resolvePackageManagerEnv,
+  resolveRuntimePackageCacheVersion
 } from './npm-package-cache'
 import { runBufferedCommand } from './process-utils'
 import { createBootstrapProgress } from './progress'
@@ -17,6 +19,7 @@ import { createBootstrapProgress } from './progress'
 const NPM_BIN = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
 interface InstalledPackageInfo {
+  cacheVersion: string
   packageDir: string
   version: string
 }
@@ -63,12 +66,19 @@ const formatInstallError = (message: string, stderr: string) => {
   return detail ? `${message}\n${detail}` : message
 }
 
-export const installPublishedPackage = async (packageName: string, version: string): Promise<InstalledPackageInfo> => {
-  const cacheDir = resolvePackageCacheDir(packageName, version)
+export const installPublishedPackage = async (
+  packageName: string,
+  version: string,
+  options: { cacheVersion?: string } = {}
+): Promise<InstalledPackageInfo> => {
+  const cacheVersion = normalizePackageCacheVersion(options.cacheVersion) ??
+    resolveRuntimePackageCacheVersion() ??
+    version
+  const cacheDir = resolvePackageCacheDir(packageName, version, { cacheVersion })
   const packageDir = resolvePackageInstallDir(cacheDir, packageName)
   const installedVersion = await readInstalledPackageVersion(packageDir)
   if (installedVersion === version) {
-    return { packageDir, version }
+    return { cacheVersion, packageDir, version }
   }
 
   const stagingDir = `${cacheDir}.tmp-${process.pid}-${Date.now()}`
@@ -76,7 +86,9 @@ export const installPublishedPackage = async (packageName: string, version: stri
   await ensureDirectory(stagingDir)
 
   const progress = createBootstrapProgress({
-    label: `installing ${packageName}@${version} into bootstrap cache`
+    label: cacheVersion === version
+      ? `installing ${packageName}@${version} into bootstrap cache`
+      : `installing ${packageName}@${version} into bootstrap cache ${cacheVersion}`
   })
   try {
     const result = await runBufferedCommand({
@@ -100,7 +112,11 @@ export const installPublishedPackage = async (packageName: string, version: stri
     await ensureDirectory(path.dirname(cacheDir))
     await rm(cacheDir, { recursive: true, force: true })
     await rename(stagingDir, cacheDir)
-    progress.finish(`cached ${packageName}@${version}`)
+    progress.finish(
+      cacheVersion === version
+        ? `cached ${packageName}@${version}`
+        : `cached ${packageName}@${version} as ${cacheVersion}`
+    )
   } catch (error) {
     progress.fail(`failed to cache ${packageName}@${version}`)
     await rm(stagingDir, { recursive: true, force: true }).catch(() => {})
@@ -108,6 +124,7 @@ export const installPublishedPackage = async (packageName: string, version: stri
   }
 
   return {
+    cacheVersion,
     packageDir: resolvePackageInstallDir(cacheDir, packageName),
     version
   }

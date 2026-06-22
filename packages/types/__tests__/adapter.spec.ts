@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- adapter package cache tests cover cache lookup, fallback, and env precedence together. */
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -277,6 +278,49 @@ describe('adapter package helpers', () => {
     ])
   })
 
+  it('uses only the selected dev runtime version for cached npm runtime packages', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-npm-dev-cache-resolver-'))
+    tempDirs.push(tempDir)
+
+    const packageCacheRoot = join(tempDir, 'package-cache')
+    const packageName = '@oneworks/server'
+    const releasePackageDir = join(
+      packageCacheRoot,
+      'npm',
+      sanitizePackageName(packageName),
+      '3.5.0',
+      'node_modules',
+      ...packageName.split('/')
+    )
+    const devPackageDir = join(
+      packageCacheRoot,
+      'npm',
+      sanitizePackageName(packageName),
+      'dev-local',
+      'node_modules',
+      ...packageName.split('/')
+    )
+    await mkdir(releasePackageDir, { recursive: true })
+    await mkdir(devPackageDir, { recursive: true })
+    await writeFile(
+      join(releasePackageDir, 'package.json'),
+      JSON.stringify({ name: packageName, version: '3.5.0' }, null, 2)
+    )
+    await writeFile(
+      join(devPackageDir, 'package.json'),
+      JSON.stringify({ name: packageName, version: '3.4.0' }, null, 2)
+    )
+
+    expect(resolveExistingNpmPackageDirs(packageName, {
+      ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION: 'dev-local',
+      __ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__: packageCacheRoot
+    })).toEqual([devPackageDir])
+    expect(resolveExistingNpmPackageDirs(packageName, {
+      ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION: 'dev-missing',
+      __ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__: packageCacheRoot
+    })).toEqual([])
+  })
+
   it('prefers the user-home adapter package cache over the default runtime package dir', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-cache-priority-'))
     tempDirs.push(tempDir)
@@ -386,6 +430,58 @@ describe('adapter package helpers', () => {
     vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', homeDir)
 
     expect(loadAdapterBuiltinModels(adapterPackageName)?.map(model => model.value)).toEqual(['builtin-model'])
+  })
+
+  it('prefers the built-in desktop adapter dev cache when a dev runtime version is selected', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-cache-builtin-dev-'))
+    tempDirs.push(tempDir)
+
+    const homeDir = join(tempDir, 'home')
+    const serverPackageDir = join(tempDir, 'server-package')
+    const adapterPackageName = '@acme/builtin-dev-adapter'
+    const releaseCacheDir = join(
+      homeDir,
+      '.oneworks',
+      'bootstrap',
+      'adapter-packages',
+      sanitizePackageName(adapterPackageName),
+      '2.1.0'
+    )
+    const builtinDevCacheDir = join(
+      homeDir,
+      '.oneworks',
+      'bootstrap',
+      'adapter-packages',
+      sanitizePackageName(adapterPackageName),
+      'dev-local'
+    )
+    await mkdir(serverPackageDir, { recursive: true })
+    await writeFile(join(serverPackageDir, 'package.json'), JSON.stringify({ name: '@oneworks/server' }, null, 2))
+    await writeAdapterPackage(releaseCacheDir, 'release-adapter', adapterPackageName, {
+      models: ['release-model'],
+      version: '2.1.0'
+    })
+    await writeAdapterPackage(builtinDevCacheDir, 'dev-adapter', adapterPackageName, {
+      models: ['dev-model'],
+      version: '2.0.0'
+    })
+
+    vi.stubEnv(
+      '__ONEWORKS_DESKTOP_BUILTIN_ADAPTER_PACKAGES__',
+      JSON.stringify({
+        [adapterPackageName]: {
+          cacheDir: builtinDevCacheDir,
+          cacheVersion: 'dev-local',
+          version: '2.0.0'
+        }
+      })
+    )
+    vi.stubEnv('ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION', 'dev-local')
+    vi.stubEnv('__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__', serverPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', serverPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', homeDir)
+
+    expect(loadAdapterBuiltinModels(adapterPackageName)?.map(model => model.value)).toEqual(['dev-model'])
   })
 
   it('preserves an explicit external CLI package dir ahead of the user-home adapter cache', async () => {

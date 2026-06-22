@@ -38,13 +38,14 @@ const writeCachedAdapterPackage = async (
   rootDir: string,
   packageName: string,
   version: string,
-  rootKind: 'home' | 'packageCache' = 'home'
+  rootKind: 'home' | 'packageCache' = 'home',
+  cacheVersion = version
 ) => {
   const cacheDir = path.join(
     rootKind === 'home' ? path.join(rootDir, '.oneworks', 'bootstrap') : rootDir,
     'adapter-packages',
     packageName.replace(/^@/, '').replace(/[\\/]/g, '__'),
-    version
+    cacheVersion
   )
   const packageDir = path.join(cacheDir, 'node_modules', ...packageName.split('/'))
   await mkdir(packageDir, { recursive: true })
@@ -746,6 +747,56 @@ describe('runtime store engine consumer', () => {
     })
 
     expect(plan.env.__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__).toBe(compatibleCacheDir)
+    expect(plan.env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_ADAPTER__).toBe('codex')
+  })
+
+  it('uses the built-in desktop adapter dev cache ahead of compatible global caches', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-dev-adapter-cache-'))
+    const homeDir = path.join(root, 'home')
+    const appPackageDir = path.join(root, 'app-package')
+    const store = createStore(root)
+    await mkdir(appPackageDir, { recursive: true })
+    const builtinDevCacheDir = await writeCachedAdapterPackage(
+      homeDir,
+      '@oneworks/adapter-codex',
+      '3.4.0-rc',
+      'home',
+      'dev-local'
+    )
+    await writeCachedAdapterPackage(homeDir, '@oneworks/adapter-codex', '3.4.1')
+    const metadata = {
+      sessionId: 'sess-web',
+      cwd: '/workspace',
+      adapter: 'codex',
+      needsEngineConsumer: true,
+      createdAt: 100
+    } as RuntimeSessionMetadata
+
+    const plan = buildRuntimeConsumerSpawnPlan({
+      baseEnv: {
+        PATH: '',
+        __ONEWORKS_DESKTOP_BUILTIN_ADAPTER_PACKAGES__: JSON.stringify({
+          '@oneworks/adapter-codex': {
+            cacheDir: builtinDevCacheDir,
+            cacheVersion: 'dev-local',
+            version: '3.4.0-rc'
+          }
+        }),
+        __ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__: 'dev-local',
+        __ONEWORKS_PROJECT_CLI_PACKAGE_DIR__: appPackageDir,
+        __ONEWORKS_PROJECT_PACKAGE_DIR__: appPackageDir,
+        __ONEWORKS_PROJECT_REAL_HOME__: homeDir,
+        __ONEWORKS_RUNTIME_PROTOCOL_FALLBACK_BOOTSTRAP_PATH__: '/opt/oneworks/bootstrap.js'
+      } as NodeJS.ProcessEnv,
+      command: {
+        message: 'Run web task'
+      },
+      cwd: '/workspace',
+      metadata,
+      store
+    })
+
+    expect(plan.env.__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__).toBe(builtinDevCacheDir)
     expect(plan.env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_ADAPTER__).toBe('codex')
   })
 

@@ -202,6 +202,143 @@ const removeIfExists = (targetPath) => {
   fs.rmSync(targetPath, { recursive: true, force: true })
 }
 
+const workspacePackageSourceIgnoreNames = new Set([
+  '.git',
+  '.turbo',
+  'coverage',
+  'node_modules'
+])
+
+const readJsonFile = (filePath) => {
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'))
+}
+
+const resolveWorkspacePackageSources = () => {
+  const result = spawnPnpm(['m', 'ls', '-r', '--depth', '-1', '--json'], {
+    encoding: 'utf8',
+    stdio: 'pipe'
+  })
+  if (result.error != null) {
+    throw result.error
+  }
+  if (result.status !== 0) {
+    throw new Error(`pnpm m ls -r --depth -1 --json failed with exit code ${result.status}`)
+  }
+
+  const packages = JSON.parse(result.stdout)
+  if (!Array.isArray(packages)) {
+    throw new TypeError('pnpm workspace package list did not return an array')
+  }
+
+  const sources = new Map()
+  for (const item of packages) {
+    if (typeof item?.name !== 'string' || typeof item?.path !== 'string') {
+      continue
+    }
+    if (item.path !== workspaceRoot && !item.path.startsWith(`${workspaceRoot}${path.sep}`)) {
+      continue
+    }
+    sources.set(item.name, item.path)
+  }
+  return sources
+}
+
+const collectPnpmPackageRoots = (stagingDir) => {
+  const pnpmDir = path.join(stagingDir, 'node_modules', '.pnpm')
+  if (!fs.existsSync(pnpmDir)) {
+    return []
+  }
+
+  const packageRoots = []
+  const seen = new Set()
+  const addPackageRoot = (packageRoot) => {
+    if (seen.has(packageRoot)) return
+    seen.add(packageRoot)
+    packageRoots.push(packageRoot)
+  }
+
+  for (const entry of fs.readdirSync(pnpmDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) {
+      continue
+    }
+
+    const packageNodeModules = path.join(pnpmDir, entry.name, 'node_modules')
+    if (!fs.existsSync(packageNodeModules)) {
+      continue
+    }
+
+    for (const packageEntry of fs.readdirSync(packageNodeModules, { withFileTypes: true })) {
+      const packageEntryPath = path.join(packageNodeModules, packageEntry.name)
+      if (packageEntry.isDirectory() && packageEntry.name.startsWith('@')) {
+        for (const scopedEntry of fs.readdirSync(packageEntryPath, { withFileTypes: true })) {
+          const packageRoot = path.join(packageEntryPath, scopedEntry.name)
+          if (
+            scopedEntry.isDirectory() &&
+            !fs.lstatSync(packageRoot).isSymbolicLink() &&
+            fs.existsSync(path.join(packageRoot, 'package.json'))
+          ) {
+            addPackageRoot(packageRoot)
+          }
+        }
+        continue
+      }
+
+      const packageRoot = packageEntryPath
+      if (
+        packageEntry.isDirectory() &&
+        !fs.lstatSync(packageRoot).isSymbolicLink() &&
+        fs.existsSync(path.join(packageRoot, 'package.json'))
+      ) {
+        addPackageRoot(packageRoot)
+      }
+    }
+  }
+
+  return packageRoots
+}
+
+const copyWorkspacePackageSource = (sourceDir, targetDir) => {
+  for (const entry of fs.readdirSync(targetDir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules') {
+      continue
+    }
+    fs.rmSync(path.join(targetDir, entry.name), { recursive: true, force: true })
+  }
+
+  for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+    if (workspacePackageSourceIgnoreNames.has(entry.name)) {
+      continue
+    }
+    fs.cpSync(path.join(sourceDir, entry.name), path.join(targetDir, entry.name), {
+      dereference: false,
+      force: true,
+      recursive: true
+    })
+  }
+}
+
+const overlayWorkspacePackages = (stagingDir) => {
+  const workspacePackageSources = resolveWorkspacePackageSources()
+  const packageRoots = collectPnpmPackageRoots(stagingDir)
+  const overlaid = []
+
+  for (const packageRoot of packageRoots) {
+    const packageJson = readJsonFile(path.join(packageRoot, 'package.json'))
+    const sourceDir = workspacePackageSources.get(packageJson.name)
+    if (sourceDir == null) {
+      continue
+    }
+
+    copyWorkspacePackageSource(sourceDir, packageRoot)
+    overlaid.push(packageJson.name)
+  }
+
+  if (overlaid.length > 0) {
+    const packageList = [...new Set(overlaid)].sort().join(', ')
+    console.log(`[desktop] overlaid local workspace packages: ${packageList}`)
+  }
+}
+
 const ensureExecutableIfExists = (targetPath) => {
   if (!fs.existsSync(targetPath)) return
 
@@ -225,6 +362,32 @@ const prepareDesktopBuildSourceResources = () => {
     : buildSource.gitHash.slice(0, 12)
   console.log(`[desktop] embedding build source ${shortHash} on ${buildSource.branch} at ${buildSource.buildTime}`)
   return [buildSourcePath]
+}
+
+const prepareBundledClientRuntimePackage = (stagingDir) => {
+  const clientPackageJson = readJsonFile(path.join(workspaceRoot, 'apps', 'client', 'package.json'))
+  const targetDir = path.join(stagingDir, 'runtime-packages', '@oneworks', 'client')
+  fs.rmSync(targetDir, { recursive: true, force: true })
+  fs.mkdirSync(targetDir, { recursive: true })
+  fs.writeFileSync(
+    path.join(targetDir, 'package.json'),
+    `${
+      JSON.stringify(
+        {
+          name: clientPackageJson.name,
+          type: clientPackageJson.type,
+          version: clientPackageJson.version
+        },
+        null,
+        2
+      )
+    }\n`
+  )
+  fs.cpSync(clientDistPath, path.join(targetDir, 'dist'), {
+    dereference: true,
+    force: true,
+    recursive: true
+  })
 }
 
 const resolveStagingPackageRoot = (stagingDir, packageName) => {
@@ -375,6 +538,8 @@ const packageDesktopArch = async (targetArch, { buildSourceResources }) => {
   try {
     console.log(`[desktop] preparing production app staging (${targetArch})`)
     runPnpm(buildDeployArgs(stagingDir))
+    overlayWorkspacePackages(stagingDir)
+    prepareBundledClientRuntimePackage(stagingDir)
     pruneUnusedPlatformBinaries(stagingDir, targetArch)
 
     const iconPath = resolvePackageIconPath()

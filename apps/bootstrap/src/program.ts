@@ -35,6 +35,7 @@ type BootstrapTarget =
   }
   | {
     action: RuntimePackageAction
+    cacheVersion?: string
     json: boolean
     kind: 'runtime-package'
     target?: string
@@ -88,6 +89,7 @@ const parseRuntimePackageTarget = (args: string[]): BootstrapTarget => {
   }
 
   let version: string | undefined
+  let cacheVersion: string | undefined
   for (let index = 0; index < forwardedArgs.length; index += 1) {
     const arg = forwardedArgs[index]
     if (arg === '--version') {
@@ -107,6 +109,28 @@ const parseRuntimePackageTarget = (args: string[]): BootstrapTarget => {
         throw new Error('Runtime package --version requires a value.')
       }
       version = value
+      forwardedArgs.splice(index, 1)
+      index -= 1
+      continue
+    }
+
+    if (arg === '--cache-version') {
+      const value = forwardedArgs[index + 1]
+      if (value == null || value.trim() === '') {
+        throw new Error('Runtime package --cache-version requires a value.')
+      }
+      cacheVersion = value
+      forwardedArgs.splice(index, 2)
+      index -= 1
+      continue
+    }
+
+    if (arg?.startsWith('--cache-version=')) {
+      const value = arg.slice('--cache-version='.length)
+      if (value.trim() === '') {
+        throw new Error('Runtime package --cache-version requires a value.')
+      }
+      cacheVersion = value
       forwardedArgs.splice(index, 1)
       index -= 1
     }
@@ -130,6 +154,7 @@ const parseRuntimePackageTarget = (args: string[]): BootstrapTarget => {
 
   return {
     action,
+    ...(cacheVersion != null ? { cacheVersion } : {}),
     json,
     kind: 'runtime-package',
     target: selectorTarget,
@@ -216,6 +241,7 @@ Examples:
   npx oneworks runtime check cli@0.1.0-alpha.0
   npx oneworks runtime install server
   npx oneworks runtime install server --version 0.1.0-alpha.0
+  npx oneworks runtime install server --version 0.1.0-alpha.0 --cache-version dev-local
   npx oneworks app
   npx oneworks app cache
   npx oneworks app --no-cache
@@ -240,15 +266,20 @@ Examples:
       }
 
       if (target.kind === 'runtime-package') {
+        const runtimeOptions: RuntimePackageOptions = {
+          ...(target.version == null ? {} : { version: target.version }),
+          ...(target.cacheVersion == null ? {} : { cacheVersion: target.cacheVersion })
+        }
+        const hasRuntimeOptions = Object.keys(runtimeOptions).length > 0
         let status: RuntimePackageStatus
         if (target.action === 'install') {
-          status = target.version == null
+          status = !hasRuntimeOptions
             ? await deps.installRuntimePackage(target.target)
-            : await deps.installRuntimePackage(target.target, { version: target.version })
+            : await deps.installRuntimePackage(target.target, runtimeOptions)
         } else {
-          status = target.version == null
+          status = !hasRuntimeOptions
             ? await deps.checkRuntimePackage(target.target)
-            : await deps.checkRuntimePackage(target.target, { version: target.version })
+            : await deps.checkRuntimePackage(target.target, runtimeOptions)
         }
         const output = target.json ? JSON.stringify(status) : formatRuntimePackageStatus(status)
         process.stdout.write(`${output}\n`)

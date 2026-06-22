@@ -8,6 +8,7 @@ export type PackageCacheEnv = Record<string, string | null | undefined>
 
 interface ExistingPackageCacheEntry {
   cacheDir: string
+  cacheVersion: string
   packageDir: string
   version: string
 }
@@ -15,6 +16,16 @@ interface ExistingPackageCacheEntry {
 const normalizeEnvPath = (value: string | null | undefined) => {
   const trimmed = value?.trim()
   return trimmed != null && trimmed !== '' ? trimmed : undefined
+}
+
+const PACKAGE_CACHE_VERSION_PATTERN = /^[\w.+-]+$/u
+
+const normalizePackageCacheVersion = (value: string | null | undefined) => {
+  const normalized = normalizeEnvPath(value)
+  if (normalized == null) return undefined
+  return PACKAGE_CACHE_VERSION_PATTERN.test(normalized) && normalized !== '.' && normalized !== '..'
+    ? normalized
+    : undefined
 }
 
 export const sanitizePackageName = (packageName: string) => packageName.replace(/^@/, '').replace(/[\\/]/g, '__')
@@ -27,6 +38,10 @@ const compareVersionLike = (left: string, right: string) => (
 )
 
 const DESKTOP_BUILTIN_ADAPTER_PACKAGES_ENV = '__ONEWORKS_DESKTOP_BUILTIN_ADAPTER_PACKAGES__'
+const RUNTIME_PACKAGE_CACHE_VERSION_ENV = '__ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__'
+const PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV = 'ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION'
+const DESKTOP_DEV_RUNTIME_VERSION_ENV = '__ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__'
+const PUBLIC_DESKTOP_DEV_RUNTIME_VERSION_ENV = 'ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION'
 
 interface ParsedSemver {
   major: number
@@ -137,12 +152,15 @@ const readDesktopBuiltinAdapterPackageInfo = (packageName: string, env: PackageC
   try {
     const parsed = JSON.parse(normalizeEnvPath(env[DESKTOP_BUILTIN_ADAPTER_PACKAGES_ENV]) ?? '{}') as Record<
       string,
-      { cacheDir?: unknown; version?: unknown }
+      { cacheDir?: unknown; cacheVersion?: unknown; version?: unknown }
     >
     const info = parsed[packageName]
     if (info == null) return undefined
     return {
       cacheDir: typeof info.cacheDir === 'string' && info.cacheDir.trim() !== '' ? info.cacheDir.trim() : undefined,
+      cacheVersion: typeof info.cacheVersion === 'string' && info.cacheVersion.trim() !== ''
+        ? info.cacheVersion.trim()
+        : undefined,
       version: typeof info.version === 'string' && info.version.trim() !== '' ? info.version.trim() : undefined
     }
   } catch {
@@ -150,10 +168,51 @@ const readDesktopBuiltinAdapterPackageInfo = (packageName: string, env: PackageC
   }
 }
 
+const resolveRuntimePackageCacheVersion = (env: PackageCacheEnv = process.env) => (
+  normalizePackageCacheVersion(env[RUNTIME_PACKAGE_CACHE_VERSION_ENV]) ??
+    normalizePackageCacheVersion(env[PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV]) ??
+    normalizePackageCacheVersion(env[DESKTOP_DEV_RUNTIME_VERSION_ENV]) ??
+    normalizePackageCacheVersion(env[PUBLIC_DESKTOP_DEV_RUNTIME_VERSION_ENV])
+)
+
 const isInstalledAdapterPackage = (cacheDir: string, packageName: string, version: string) => {
   const packageDir = join(cacheDir, 'node_modules', ...packageName.split('/'))
   const packageInfo = readInstalledPackageInfo(packageDir)
   return packageInfo?.name === packageName && packageInfo.version === version
+}
+
+const resolvePackageCacheDir = (
+  namespace: 'adapter-packages' | 'npm',
+  packageName: string,
+  cacheVersion: string,
+  env: PackageCacheEnv = process.env
+) => (
+  join(
+    resolveBootstrapPackageCacheRootDir(env),
+    namespace,
+    sanitizePackageName(packageName),
+    cacheVersion
+  )
+)
+
+const resolvePackageInstallDir = (cacheDir: string, packageName: string) => (
+  join(cacheDir, 'node_modules', ...packageName.split('/'))
+)
+
+const resolveExistingDevPackageCacheEntry = (
+  namespace: 'adapter-packages' | 'npm',
+  packageName: string,
+  env: PackageCacheEnv = process.env
+): ExistingPackageCacheEntry | undefined => {
+  const cacheVersion = resolveRuntimePackageCacheVersion(env)
+  if (cacheVersion == null) return undefined
+
+  const cacheDir = resolvePackageCacheDir(namespace, packageName, cacheVersion, env)
+  const packageDir = resolvePackageInstallDir(cacheDir, packageName)
+  const packageInfo = readInstalledPackageInfo(packageDir)
+  return packageInfo?.name === packageName && packageInfo.version != null
+    ? { cacheDir, cacheVersion, packageDir, version: packageInfo.version }
+    : undefined
 }
 
 const resolveExistingPackageCacheEntries = (
@@ -178,10 +237,10 @@ const resolveExistingPackageCacheEntries = (
   return versions
     .map((version) => {
       const cacheDir = join(packageCacheRoot, version)
-      const packageDir = join(cacheDir, 'node_modules', ...packageName.split('/'))
+      const packageDir = resolvePackageInstallDir(cacheDir, packageName)
       const packageInfo = readInstalledPackageInfo(packageDir)
       return packageInfo?.name === packageName && packageInfo.version === version
-        ? { cacheDir, packageDir, version }
+        ? { cacheDir, cacheVersion: version, packageDir, version }
         : undefined
     })
     .filter((value): value is ExistingPackageCacheEntry => value != null)
@@ -191,9 +250,14 @@ const resolveExistingPackageCacheEntries = (
 export const resolveExistingNpmPackageDirs = (
   packageName: string,
   env: PackageCacheEnv = process.env
-) => (
-  resolveExistingPackageCacheEntries('npm', packageName, env)?.map(entry => entry.packageDir) ?? []
-)
+) => {
+  if (resolveRuntimePackageCacheVersion(env) != null) {
+    const devEntry = resolveExistingDevPackageCacheEntry('npm', packageName, env)
+    return devEntry == null ? [] : [devEntry.packageDir]
+  }
+
+  return resolveExistingPackageCacheEntries('npm', packageName, env)?.map(entry => entry.packageDir) ?? []
+}
 
 export const resolveExistingNpmPackageDir = (
   packageName: string,
@@ -212,6 +276,16 @@ export const resolveExistingAdapterPackageCacheDir = (
       ? builtinPackage.cacheDir
       : undefined
   )
+  const runtimePackageCacheVersion = resolveRuntimePackageCacheVersion(env)
+  const builtinCacheVersion = builtinPackage?.cacheVersion ?? builtinPackage?.version
+  if (
+    runtimePackageCacheVersion != null &&
+    builtinCacheVersion === runtimePackageCacheVersion
+  ) {
+    const builtinCacheDir = resolveBuiltinPackageCacheDir()
+    if (builtinCacheDir != null) return builtinCacheDir
+  }
+
   const entries = resolveExistingPackageCacheEntries('adapter-packages', packageName, env)
     .filter(entry =>
       builtinPackage?.version == null || isCompatibleWithMinimumVersion(entry.version, builtinPackage.version)

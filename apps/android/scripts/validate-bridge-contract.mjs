@@ -81,11 +81,19 @@ if (!hostPage.includes('https://oneworks.local/client/')) {
 }
 
 const appBuild = readText('app/build.gradle.kts')
+const gradleDevFingerprintSnippet = 'dev-$' + '{sha256Text(repositoryRoot.absolutePath).take(12)}'
 if (!appBuild.includes('../client/dist') || !appBuild.includes('../server')) {
   fail('Android Gradle build must sync client/server assets')
 }
 if (!appBuild.includes('into("source")') || !appBuild.includes('into("dist")')) {
   fail('Android Gradle build must package server source and optional dist assets')
+}
+if (
+  !appBuild.includes('ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION') ||
+  !appBuild.includes('runtime/package-cache.json') ||
+  !appBuild.includes(gradleDevFingerprintSnippet)
+) {
+  fail('Android Gradle build must package runtime cache metadata with a local dev fingerprint')
 }
 if (!bundledAssetLoader.includes('oneworks.local') || !bundledAssetLoader.includes('oneworksAndroidBridge')) {
   fail('BundledAssetLoader must serve assets through the local HTTPS origin and inject the web bridge helper')
@@ -113,6 +121,13 @@ if (
   fail('BundledAssetLoader must point Android workspace clients at the local backend origin')
 }
 if (
+  !bundledAssetLoader.includes('__ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__') ||
+  !bundledAssetLoader.includes('ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION') ||
+  !bundledAssetLoader.includes('__ONEWORKS_ANDROID_RUNTIME_PACKAGE_CACHE__')
+) {
+  fail('BundledAssetLoader must inject packaged runtime cache metadata into the Android client')
+}
+if (
   !bundledAssetLoader.includes('system.setAppearance') || !bundledAssetLoader.includes("classList.contains('dark')")
 ) {
   fail('BundledAssetLoader must sync native appearance from the bundled client theme')
@@ -136,6 +151,13 @@ if (
 ) {
   fail('AndroidLocalBackend must provide the minimal in-emulator workspace API surface')
 }
+if (
+  !androidLocalBackend.includes('runtimePackageCacheVersion') ||
+  !androidLocalBackend.includes('runtimePackageCache') ||
+  !androidLocalBackend.includes('/api/module-updates')
+) {
+  fail('AndroidLocalBackend must expose packaged runtime cache metadata through status APIs')
+}
 if (!systemAppearance.includes('APPEARANCE_LIGHT_STATUS_BARS') || !systemAppearance.includes('navigationBarColor')) {
   fail('SystemAppearanceController must update status/navigation bar appearance')
 }
@@ -145,7 +167,7 @@ if (!targetManager.includes('assetLoader.shouldInterceptRequest')) {
 if (
   !mainActivity.includes('BundledAssetLoader.CLIENT_ENTRY_URL') ||
   !mainActivity.includes('BundledAssetLoader.DEMO_HOST_URL') ||
-  !mainActivity.includes('AndroidLocalBackend(deviceWorkspaces)')
+  !mainActivity.includes('AndroidLocalBackend(deviceWorkspaces, assetLoader.getRuntimePackageCacheMetadata())')
 ) {
   fail('MainActivity must load bundled OneWorks client as the host WebView with a demo fallback and local backend')
 }

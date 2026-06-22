@@ -5,6 +5,7 @@ import type { GitBranchKind, SessionCreationProgressEvent, SessionPromptType } f
 import { getDb } from '#~/db/index.js'
 import { getWorkspaceFolder, loadConfigState } from '#~/services/config/index.js'
 import { checkoutSessionGitBranch, createSessionGitBranch } from '#~/services/git/index.js'
+import { projectRuntimeCommand } from '#~/services/runtime-store/session-command-projection.js'
 import {
   createServerRuntimeSession,
   summarizeRuntimeSessionContent
@@ -183,7 +184,7 @@ export async function createSessionWithInitialMessage(options: {
       if (initialDisplayContent != null && (Array.isArray(initialDisplayContent) || initialText !== '')) {
         db.updateSessionRuntimeState(session.id, { runtimeKind: 'external' })
         throwIfSessionCreationCancelled(session.id, creationCancellation.signal)
-        await createServerRuntimeSession({
+        const runtimeSession = await createServerRuntimeSession({
           sessionId: session.id,
           cwd: workspace.workspaceFolder,
           title,
@@ -201,6 +202,9 @@ export async function createSessionWithInitialMessage(options: {
           promptName,
           updateConfiguredSkills: updateSkills === true
         })
+        if (runtimeSession?.startCommand != null) {
+          projectRuntimeCommand(db, runtimeSession.startCommand, true)
+        }
         throwIfSessionCreationCancelled(session.id, creationCancellation.signal)
       }
 

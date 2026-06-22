@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -26,6 +27,10 @@ const buildStaticClient = async (target: DevStartTarget, config: TargetConfig) =
     })
   })
 }
+
+const resolveDefaultDesktopDevRuntimeVersion = () => (
+  `dev-${createHash('sha256').update(repoRoot).digest('hex').slice(0, 12)}`
+)
 
 interface RunMainLinks {
   linkedDocsUrl?: string
@@ -91,6 +96,11 @@ const startElectron = async (target: DevStartTarget, config: TargetConfig) => {
   } else {
     env.ONEWORKS_DESKTOP_LAUNCH_MODE = env.ONEWORKS_DESKTOP_LAUNCH_MODE?.trim() || 'empty'
   }
+  const runtimePackageCacheVersion = env.ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION?.trim() ||
+    env.ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION?.trim() ||
+    resolveDefaultDesktopDevRuntimeVersion()
+  env.ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION = runtimePackageCacheVersion
+  env.ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION = runtimePackageCacheVersion
 
   const child = spawnDetachedLogged({
     args: ['apps/desktop/scripts/dev.cjs', ...(config.desktopWorkspace === true ? ['--workspace'] : [])],

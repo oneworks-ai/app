@@ -58,8 +58,10 @@ try {
   logServerChildStartup('builtin package cache prepare begin')
   const {
     ensureBuiltinAdapterPackageCache,
-    ensureBuiltinPluginPackageCache
+    ensureBuiltinPluginPackageCache,
+    ensureBuiltinRuntimePackageCache
   } = require('./builtin-adapter-cache.cjs')
+  ensureBuiltinRuntimePackageCache()
   ensureBuiltinAdapterPackageCache()
   ensureBuiltinPluginPackageCache()
   logServerChildStartup('builtin package cache prepare complete')
