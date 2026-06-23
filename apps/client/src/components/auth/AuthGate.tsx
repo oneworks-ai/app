@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- auth gate keeps status, login, and desktop startup fallback in one flow. */
 import './AuthGate.scss'
 
-import { Alert, Button, Checkbox, Form, Input, Spin } from 'antd'
+import { Button, Checkbox, Form, Input, Spin } from 'antd'
 import type { PropsWithChildren } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -10,6 +10,7 @@ import useSWR from 'swr'
 import { getAuthStatus, login } from '#~/api/auth'
 import { setAuthToken } from '#~/api/auth-token'
 import { getApiErrorMessage, isApiRequestTimeoutError } from '#~/api/base'
+import { AppErrorState, FullscreenErrorState } from '#~/components/error-state'
 import {
   isDesktopClientMode,
   isServerConnectionManagedClientMode,
@@ -81,36 +82,30 @@ export function AuthGate({ children }: PropsWithChildren) {
 
   if (error != null && !hasAuthStatus) {
     return (
-      <div className='auth-gate'>
-        <div className='auth-gate__panel'>
-          <Alert
-            type='error'
-            showIcon
-            message={t('auth.statusFailed')}
-            description={statusErrorDescription}
-          />
-          <div className='auth-gate__actions'>
-            <Button
-              type='primary'
-              htmlType='button'
-              loading={isValidating}
-              onClick={() => void mutate()}
-              block
-            >
-              {t('auth.retryStatus')}
-            </Button>
-            {connectionManagedMode && (
-              <Button
-                htmlType='button'
-                onClick={handleChangeServer}
-                block
-              >
-                {t('auth.changeServer')}
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
+      <FullscreenErrorState
+        actions={[
+          {
+            kind: 'retry',
+            loading: isValidating,
+            onClick: () => void mutate()
+          },
+          ...(connectionManagedMode
+            ? [{
+              kind: 'changeServer' as const,
+              onClick: handleChangeServer
+            }]
+            : [])
+        ]}
+        compact
+        description={statusErrorDescription}
+        details={{
+          copyText: statusErrorDescription,
+          items: [{ label: t('errorState.diagnostics'), value: statusErrorDescription }],
+          title: t('errorState.diagnostics')
+        }}
+        mobileDescription={statusErrorDescription}
+        title={t('auth.statusFailed')}
+      />
     )
   }
 
@@ -148,11 +143,12 @@ export function AuthGate({ children }: PropsWithChildren) {
         </div>
 
         {submitError != null && (
-          <Alert
-            type='error'
-            showIcon
+          <AppErrorState
             className='auth-gate__notice'
-            message={submitError}
+            description={submitError}
+            focusOnMount={false}
+            title={t('auth.loginFailed')}
+            variant='inline'
           />
         )}
 

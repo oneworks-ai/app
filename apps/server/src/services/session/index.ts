@@ -22,7 +22,8 @@ import type {
   AskUserQuestionParams,
   PermissionInteractionDecision,
   SessionInfo,
-  SessionPromptType
+  SessionPromptType,
+  WorkspaceActivityResponse
 } from '@oneworks/types'
 import { resolveProjectOoBaseDir } from '@oneworks/utils'
 
@@ -102,6 +103,7 @@ const PROJECT_LAUNCH_CWD_ENV = '__ONEWORKS_PROJECT_LAUNCH_CWD__'
 const PROJECT_WORKSPACE_FOLDER_ENV = '__ONEWORKS_PROJECT_WORKSPACE_FOLDER__'
 const PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD_ENV = '__ONEWORKS_PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD__'
 const ADAPTER_CLI_PREPARE_OPERATION_ID = 'adapter-cli-prepare'
+const WORKSPACE_ACTIVE_SESSION_STATUSES = new Set(['running', 'waiting_input'])
 
 const SESSION_PERMISSION_MODES = new Set<SessionPermissionMode>([
   'default',
@@ -527,6 +529,50 @@ export const resetSessionServiceState = () => {
   pendingPermissionRecoveryStore.clear()
   recentPermissionToolUseStore.clear()
   clearSessionWorkspaceChangeTracking()
+}
+
+export function getWorkspaceActivitySnapshot(): WorkspaceActivityResponse {
+  const db = getDb()
+  const activeSessionIds = new Set<string>()
+  const activeSessions: WorkspaceActivityResponse['activeSessions'] = []
+
+  const pushActiveSession = (session: Session | undefined, fallbackId?: string) => {
+    const id = session?.id ?? fallbackId
+    if (id == null || id === '' || activeSessionIds.has(id)) {
+      return
+    }
+
+    const status = session?.status
+    if (session != null && !WORKSPACE_ACTIVE_SESSION_STATUSES.has(status ?? '')) {
+      return
+    }
+
+    activeSessionIds.add(id)
+    activeSessions.push({
+      id,
+      ...(status == null ? {} : { status }),
+      ...(session?.title == null ? {} : { title: session.title })
+    })
+  }
+
+  for (const session of db.getSessions('all')) {
+    pushActiveSession(session)
+  }
+  for (const sessionId of adapterSessionStartStore.keys()) {
+    pushActiveSession(db.getSession(sessionId), sessionId)
+  }
+  for (const sessionId of activeAdapterRunStore.keys()) {
+    pushActiveSession(db.getSession(sessionId), sessionId)
+  }
+  for (const sessionId of pendingPermissionRecoveryStore.keys()) {
+    pushActiveSession(db.getSession(sessionId), sessionId)
+  }
+
+  return {
+    activeSessionCount: activeSessions.length,
+    activeSessions,
+    idle: activeSessions.length === 0
+  }
 }
 
 const clearPendingPermissionRecovery = (sessionId: string) => {

@@ -13,6 +13,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { SWRConfig } from 'swr'
 
 import { fetchApiJson } from '#~/api/base.js'
+import { AppErrorBoundary } from '#~/components/error-state'
 import { installHomepagePreviewRuntimeIfEnabled } from '#~/homepage-preview/runtime-loader'
 import { setupPwa } from '#~/pwa.js'
 import {
@@ -92,7 +93,9 @@ function AppProviders() {
           }}
         >
           <BrowserRouter basename={appClientBase}>
-            <App />
+            <AppErrorBoundary>
+              <App />
+            </AppErrorBoundary>
           </BrowserRouter>
         </SWRConfig>
       </AntdApp>

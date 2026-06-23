@@ -27,6 +27,7 @@ export interface LauncherWorkspaceVersionIdentity {
   launchConfigHash?: string
   packageDir?: string
   repoRoot?: string
+  runtimeCompatibilityVersion?: string
   sourceVersionId?: string
 }
 

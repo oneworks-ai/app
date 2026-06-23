@@ -13,6 +13,7 @@
 - `web-debug.ts`：跨入口浏览器调试 API；只返回 server 管理的调试 runtime 信息，业务逻辑放在 `../services/web-debug/`。
 - `launcher.ts`：manager role 的 launcher 控制面 API；只挂项目选择、目录浏览、创建目录、启动 workspace server 等 daemon 能力。
 - `static-client.ts`：Web client 静态挂载与 runtime env 注入；manager role 下不要注入 workspace folder，默认入口由 client 导向 `/launcher`。
+- `workspace.ts`：workspace server 自身的文件 / Git / 面板状态 / 活动状态 API；跨 session 生命周期的忙闲判断仍调用 `../services/session/`。
 
 ## Agent Room Route
 

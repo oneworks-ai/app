@@ -1,6 +1,6 @@
 import './ConfigView.scss'
 
-import { App, Button, Empty, Space, Spin } from 'antd'
+import { App, Button, Spin } from 'antd'
 import { useSetAtom } from 'jotai'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -12,6 +12,7 @@ import type { ConfigSource } from '@oneworks/core'
 import type { AboutInfo, ConfigResponse, ConfigUiSection } from '@oneworks/types'
 import type { ConfigDetailRoute } from './config/configDetail'
 
+import { RouteErrorState } from '#~/components/error-state'
 import { RouteContainerHeader } from '#~/components/layout/RouteContainerHeader'
 import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
 import { useRouteSidebar } from '#~/components/layout/route-sidebar-context'
@@ -1425,29 +1426,27 @@ export function ConfigView() {
         </div>
       )}
       {hasConfigLoadError && (
-        <div className='config-view__state'>
-          <div className='config-view__state-content'>
-            <Empty description={t('config.loadFailed')} />
-            <Space>
-              <Button
-                type='primary'
-                className='config-view__state-action'
-                loading={isValidating}
-                icon={<span className='material-symbols-rounded'>refresh</span>}
-                onClick={() => void mutate()}
-              >
-                {t('config.reload')}
-              </Button>
-              <Button
-                className='config-view__state-action'
-                icon={<span className='material-symbols-rounded'>home</span>}
-                onClick={() => void navigate('/')}
-              >
-                {t('common.backToHome')}
-              </Button>
-            </Space>
-          </div>
-        </div>
+        <RouteErrorState
+          actions={[
+            {
+              kind: 'reload',
+              loading: isValidating,
+              onClick: () => void mutate()
+            },
+            {
+              kind: 'home',
+              onClick: () => void navigate('/')
+            }
+          ]}
+          description={t('errorState.configLoadFailedDescription')}
+          details={{
+            copyText: getApiErrorMessage(error, t('config.loadFailed')),
+            items: [{ label: t('errorState.diagnostics'), value: getApiErrorMessage(error, t('config.loadFailed')) }],
+            title: t('errorState.diagnostics')
+          }}
+          mobileDescription={t('config.loadFailed')}
+          title={t('config.loadFailed')}
+        />
       )}
       {canRenderConfig && activeTab != null ? renderTabContent(activeTab) : null}
     </RouteContainerLayout>

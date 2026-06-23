@@ -2,6 +2,7 @@
 import type { Config, MessageWorkspaceFileOpener } from './config'
 import type { Definition, DefinitionSource, Entity, Filter, Rule, Skill, Spec } from './definition'
 import type { PluginConfig, ResolvedPluginInstanceMetadata } from './plugin'
+import type { SessionStatus } from './session'
 
 export type WorkspaceAssetKind =
   | 'rule'
@@ -176,6 +177,18 @@ export interface WorkspaceFileOpenResponse {
   ok: true
   opener: WorkspaceFileOpenerInfo
   path: string
+}
+
+export interface WorkspaceActivitySession {
+  id: string
+  status?: SessionStatus
+  title?: string
+}
+
+export interface WorkspaceActivityResponse {
+  activeSessionCount: number
+  activeSessions: WorkspaceActivitySession[]
+  idle: boolean
 }
 
 export type WorkspaceTerminalOpenerId = 'terminal' | 'warp'

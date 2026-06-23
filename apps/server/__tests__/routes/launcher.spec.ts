@@ -333,6 +333,59 @@ describe('launcher routes', () => {
     expect(serverIdentity.implementationId).not.toBe(firstIdentity.implementationId)
   })
 
+  itWithGit('reuses runtime hash changes within the same workspace server compatibility version', async () => {
+    const fixture = await createGitRuntimeFixture()
+    const statusServer = await startWorkspaceStatusServer()
+    try {
+      const firstIdentity = resolveLauncherWorkspaceInstanceIdentity(fixture.workspaceFolder)
+      await writeFile(path.join(fixture.serverPackageDir, 'src', 'index.ts'), 'export const server = false\n')
+      const nextIdentity = resolveLauncherWorkspaceInstanceIdentity(fixture.workspaceFolder)
+      expect(nextIdentity.implementationId).not.toBe(firstIdentity.implementationId)
+      expect(nextIdentity.runtimeCompatibilityVersion).toBe(firstIdentity.runtimeCompatibilityVersion)
+
+      await writeWorkspaceInstanceState(fixture.workspaceFolder, {
+        ...firstIdentity,
+        pid: process.pid,
+        protocolVersion: 1,
+        serverBaseUrl: statusServer.serverBaseUrl,
+        startedAt: new Date().toISOString(),
+        workspaceFolder: fixture.workspaceFolder
+      })
+
+      const response = await openLauncherWorkspace(fixture.workspaceFolder)
+
+      expect(response.serverBaseUrl).toBe(statusServer.serverBaseUrl)
+      expect(response.project.status).toBe('ready')
+    } finally {
+      await statusServer.close()
+    }
+  })
+
+  itWithGit('rejects runtime hash changes across workspace server compatibility versions', async () => {
+    const fixture = await createGitRuntimeFixture()
+    const statusServer = await startWorkspaceStatusServer()
+    try {
+      const identity = resolveLauncherWorkspaceInstanceIdentity(fixture.workspaceFolder)
+      await writeWorkspaceInstanceState(fixture.workspaceFolder, {
+        ...identity,
+        implementationId: 'git-runtime:other',
+        pid: process.pid,
+        protocolVersion: 1,
+        runtimeCompatibilityVersion: '0.2.0',
+        serverBaseUrl: statusServer.serverBaseUrl,
+        startedAt: new Date().toISOString(),
+        workspaceFolder: fixture.workspaceFolder
+      })
+
+      await expect(openLauncherWorkspace(fixture.workspaceFolder)).rejects.toMatchObject({
+        code: 'workspace_server_version_conflict',
+        status: 409
+      })
+    } finally {
+      await statusServer.close()
+    }
+  })
+
   itWithGit('reuses legacy clean git instances when the server runtime did not change', async () => {
     const fixture = await createGitRuntimeFixture()
     const statusServer = await startWorkspaceStatusServer()

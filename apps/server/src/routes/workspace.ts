@@ -3,6 +3,7 @@ import { createReadStream } from 'node:fs'
 import Router from '@koa/router'
 
 import { getWorkspaceGitState, listWorkspaceGitBranches, listWorkspaceGitWorktrees } from '#~/services/git/index.js'
+import { getWorkspaceActivitySnapshot } from '#~/services/session/index.js'
 import {
   getWorkspacePathActionCapabilities,
   revealWorkspacePathInFileManager
@@ -33,6 +34,10 @@ export function workspaceRouter(): Router {
 
   router.get('/path-actions', async (ctx) => {
     ctx.body = await getWorkspacePathActionCapabilities()
+  })
+
+  router.get('/activity', (ctx) => {
+    ctx.body = getWorkspaceActivitySnapshot()
   })
 
   router.get('/panel-state', async (ctx) => {
