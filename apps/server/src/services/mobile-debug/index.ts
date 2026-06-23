@@ -30,6 +30,7 @@ import type { WebSocket } from 'ws'
 const ADB_TIMEOUT_MS = 10000
 const FETCH_TIMEOUT_MS = 5000
 const ADB_INPUT_TIMEOUT_MS = 3000
+const ADB_ENVIRONMENT_TIMEOUT_MS = 5000
 const ADB_LOGCAT_TIMEOUT_MS = 5000
 const ADB_SCREENSHOT_TIMEOUT_MS = 4000
 const ADB_UIAUTOMATOR_DUMP_TIMEOUT_MS = 10000
@@ -201,6 +202,61 @@ export interface MobileDeviceInputEvent {
   touchPhase?: 'down' | 'move' | 'up'
   x?: number
   y?: number
+}
+
+export type MobileDeviceBatteryHealth = 'cold' | 'dead' | 'failure' | 'good' | 'overheat' | 'overvoltage' | 'unknown'
+export type MobileDeviceBatteryStatus = 'charging' | 'discharging' | 'full' | 'not-charging' | 'unknown'
+export type MobileDeviceCellularRegistration = 'denied' | 'home' | 'off' | 'on' | 'roaming' | 'searching' | 'unregistered'
+export type MobileDeviceChargerConnection = 'ac' | 'none' | 'usb' | 'wireless'
+export type MobileDeviceMeterStatus = 'metered' | 'unmetered'
+export type MobileDeviceNetworkDelay = 'edge' | 'gprs' | 'none' | 'umts'
+export type MobileDeviceNetworkSpeed = 'edge' | 'full' | 'gprs' | 'gsm' | 'hscsd' | 'hsdpa' | 'lte' | 'umts'
+export type MobileDeviceSignalProfile = 'great' | 'good' | 'moderate' | 'none' | 'poor'
+
+export type MobileDeviceEnvironmentAction =
+  | {
+    charger?: MobileDeviceChargerConnection
+    health?: MobileDeviceBatteryHealth
+    kind: 'battery'
+    level?: number
+    reset?: boolean
+    status?: MobileDeviceBatteryStatus
+  }
+  | {
+    dataStatus?: MobileDeviceCellularRegistration
+    delay?: MobileDeviceNetworkDelay
+    kind: 'cellular'
+    meterStatus?: MobileDeviceMeterStatus
+    signalProfile?: MobileDeviceSignalProfile
+    speed?: MobileDeviceNetworkSpeed
+    voiceStatus?: MobileDeviceCellularRegistration
+  }
+  | {
+    altitude?: number
+    kind: 'location'
+    latitude: number
+    longitude: number
+  }
+  | {
+    action: 'accept' | 'call' | 'cancel' | 'hold'
+    kind: 'phone'
+    phoneNumber: string
+  }
+  | {
+    kind: 'sms'
+    message: string
+    phoneNumber: string
+  }
+  | {
+    fingerId: number
+    kind: 'fingerprint'
+  }
+
+export interface MobileDeviceEnvironmentActionResponse {
+  appliedAt: number
+  deviceId: string
+  emulatorOnly: boolean
+  kind: MobileDeviceEnvironmentAction['kind']
 }
 
 interface CommandResult {
@@ -533,6 +589,242 @@ const resolveReadyAdbDevice = async (deviceId: unknown) => {
   }
 
   return { adbPath: adb.adbPath, device }
+}
+
+const isAndroidEmulatorDevice = (deviceId: string) => /^emulator-\d+$/u.test(deviceId)
+
+const toEnvironmentActionRecord = (action: unknown): Record<string, unknown> => {
+  if (action == null || typeof action !== 'object' || Array.isArray(action)) {
+    throw new Error('Invalid mobile environment action.')
+  }
+  return action as Record<string, unknown>
+}
+
+const normalizeStringOption = <T extends string>(
+  value: unknown,
+  allowedValues: readonly T[],
+  label: string
+): T | undefined => {
+  if (value == null) return undefined
+  if (typeof value !== 'string' || !allowedValues.includes(value as T)) {
+    throw new Error(`Invalid ${label}.`)
+  }
+  return value as T
+}
+
+const normalizeRequiredStringOption = <T extends string>(
+  value: unknown,
+  allowedValues: readonly T[],
+  label: string
+): T => {
+  const normalizedValue = normalizeStringOption(value, allowedValues, label)
+  if (normalizedValue == null) throw new Error(`Missing ${label}.`)
+  return normalizedValue
+}
+
+const normalizeBoundedNumber = (
+  value: unknown,
+  label: string,
+  minimum: number,
+  maximum: number,
+  options: { integer?: boolean } = {}
+) => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`Invalid ${label}.`)
+  }
+  const normalizedValue = options.integer === true ? Math.round(value) : value
+  if (normalizedValue < minimum || normalizedValue > maximum) {
+    throw new Error(`${label} must be between ${minimum} and ${maximum}.`)
+  }
+  return normalizedValue
+}
+
+const normalizeOptionalBoundedNumber = (
+  value: unknown,
+  label: string,
+  minimum: number,
+  maximum: number,
+  options: { integer?: boolean } = {}
+) => value == null ? undefined : normalizeBoundedNumber(value, label, minimum, maximum, options)
+
+const normalizeRequiredText = (value: unknown, label: string, maximumLength: number) => {
+  if (typeof value !== 'string') throw new Error(`Missing ${label}.`)
+  const trimmedValue = value.trim()
+  if (trimmedValue === '') throw new Error(`Missing ${label}.`)
+  if (trimmedValue.length > maximumLength) throw new Error(`${label} is too long.`)
+  return trimmedValue
+}
+
+const batteryStatuses = ['charging', 'discharging', 'full', 'not-charging', 'unknown'] as const
+const batteryHealthValues = ['cold', 'dead', 'failure', 'good', 'overheat', 'overvoltage', 'unknown'] as const
+const chargerConnections = ['ac', 'none', 'usb', 'wireless'] as const
+const cellularRegistrations = ['denied', 'home', 'off', 'on', 'roaming', 'searching', 'unregistered'] as const
+const meterStatuses = ['metered', 'unmetered'] as const
+const networkDelays = ['edge', 'gprs', 'none', 'umts'] as const
+const networkSpeeds = ['edge', 'full', 'gprs', 'gsm', 'hscsd', 'hsdpa', 'lte', 'umts'] as const
+const phoneActions = ['accept', 'call', 'cancel', 'hold'] as const
+const signalProfiles = ['great', 'good', 'moderate', 'none', 'poor'] as const
+
+const shellBatteryStatusByName: Record<MobileDeviceBatteryStatus, string> = {
+  charging: '2',
+  discharging: '3',
+  full: '5',
+  'not-charging': '4',
+  unknown: '1'
+}
+
+const shellBatteryHealthByName: Record<MobileDeviceBatteryHealth, string> = {
+  cold: '7',
+  dead: '4',
+  failure: '6',
+  good: '2',
+  overheat: '3',
+  overvoltage: '5',
+  unknown: '1'
+}
+
+const signalProfileValueByName: Record<MobileDeviceSignalProfile, string> = {
+  great: '4',
+  good: '3',
+  moderate: '2',
+  none: '0',
+  poor: '1'
+}
+
+const runEmulatorCommand = (
+  adbPath: string,
+  deviceId: string,
+  args: string[]
+) => runDeviceCommand(adbPath, deviceId, ['emu', ...args], ADB_ENVIRONMENT_TIMEOUT_MS)
+
+const runBatteryShellCommand = (
+  adbPath: string,
+  deviceId: string,
+  args: string[]
+) => runDeviceCommand(adbPath, deviceId, ['shell', 'dumpsys', 'battery', ...args], ADB_ENVIRONMENT_TIMEOUT_MS)
+
+const requireEmulatorDevice = (deviceId: string) => {
+  if (!isAndroidEmulatorDevice(deviceId)) {
+    throw new Error('This control is only available for Android Emulator devices.')
+  }
+}
+
+const applyBatteryEnvironmentAction = async (
+  adbPath: string,
+  deviceId: string,
+  action: Record<string, unknown>
+) => {
+  const reset = action.reset === true
+  if (reset) {
+    await runBatteryShellCommand(adbPath, deviceId, ['reset'])
+    return
+  }
+
+  const isEmulator = isAndroidEmulatorDevice(deviceId)
+  const level = normalizeOptionalBoundedNumber(action.level, 'battery level', 0, 100, { integer: true })
+  const charger = normalizeStringOption(action.charger, chargerConnections, 'charger connection')
+  const status = normalizeStringOption(action.status, batteryStatuses, 'battery status')
+  const health = normalizeStringOption(action.health, batteryHealthValues, 'battery health')
+
+  if (level != null) {
+    if (isEmulator) {
+      await runEmulatorCommand(adbPath, deviceId, ['power', 'capacity', String(level)])
+    } else {
+      await runBatteryShellCommand(adbPath, deviceId, ['set', 'level', String(level)])
+    }
+  }
+  if (charger != null) {
+    if (isEmulator) {
+      await runEmulatorCommand(adbPath, deviceId, ['power', 'ac', charger === 'none' ? 'off' : 'on'])
+    } else {
+      await runBatteryShellCommand(adbPath, deviceId, ['set', 'ac', charger === 'ac' ? '1' : '0'])
+      await runBatteryShellCommand(adbPath, deviceId, ['set', 'usb', charger === 'usb' ? '1' : '0'])
+      await runBatteryShellCommand(adbPath, deviceId, ['set', 'wireless', charger === 'wireless' ? '1' : '0'])
+    }
+  }
+  if (status != null) {
+    if (isEmulator) {
+      await runEmulatorCommand(adbPath, deviceId, ['power', 'status', status])
+    } else {
+      await runBatteryShellCommand(adbPath, deviceId, ['set', 'status', shellBatteryStatusByName[status]])
+    }
+  }
+  if (health != null) {
+    if (isEmulator) {
+      await runEmulatorCommand(adbPath, deviceId, ['power', 'health', health])
+    } else {
+      await runBatteryShellCommand(adbPath, deviceId, ['set', 'health', shellBatteryHealthByName[health]])
+    }
+  }
+}
+
+const applyCellularEnvironmentAction = async (
+  adbPath: string,
+  deviceId: string,
+  action: Record<string, unknown>
+) => {
+  requireEmulatorDevice(deviceId)
+  const speed = normalizeStringOption(action.speed, networkSpeeds, 'network speed')
+  const delay = normalizeStringOption(action.delay, networkDelays, 'network delay')
+  const signalProfile = normalizeStringOption(action.signalProfile, signalProfiles, 'signal profile')
+  const voiceStatus = normalizeStringOption(action.voiceStatus, cellularRegistrations, 'voice status')
+  const dataStatus = normalizeStringOption(action.dataStatus, cellularRegistrations, 'data status')
+  const meterStatus = normalizeStringOption(action.meterStatus, meterStatuses, 'meter status')
+
+  if (speed != null) await runEmulatorCommand(adbPath, deviceId, ['network', 'speed', speed])
+  if (delay != null) await runEmulatorCommand(adbPath, deviceId, ['network', 'delay', delay])
+  if (signalProfile != null) {
+    await runEmulatorCommand(adbPath, deviceId, ['gsm', 'signal-profile', signalProfileValueByName[signalProfile]])
+  }
+  if (voiceStatus != null) await runEmulatorCommand(adbPath, deviceId, ['gsm', 'voice', voiceStatus])
+  if (dataStatus != null) await runEmulatorCommand(adbPath, deviceId, ['gsm', 'data', dataStatus])
+  if (meterStatus != null) await runEmulatorCommand(adbPath, deviceId, ['gsm', 'meter', meterStatus])
+}
+
+const applyLocationEnvironmentAction = async (
+  adbPath: string,
+  deviceId: string,
+  action: Record<string, unknown>
+) => {
+  requireEmulatorDevice(deviceId)
+  const latitude = normalizeBoundedNumber(action.latitude, 'latitude', -90, 90)
+  const longitude = normalizeBoundedNumber(action.longitude, 'longitude', -180, 180)
+  const altitude = normalizeOptionalBoundedNumber(action.altitude, 'altitude', -1000, 100000)
+  const command = ['geo', 'fix', String(longitude), String(latitude)]
+  if (altitude != null) command.push(String(altitude))
+  await runEmulatorCommand(adbPath, deviceId, command)
+}
+
+const applyPhoneEnvironmentAction = async (
+  adbPath: string,
+  deviceId: string,
+  action: Record<string, unknown>
+) => {
+  requireEmulatorDevice(deviceId)
+  const phoneAction = normalizeRequiredStringOption(action.action, phoneActions, 'phone action')
+  const phoneNumber = normalizeRequiredText(action.phoneNumber, 'phone number', 64)
+  await runEmulatorCommand(adbPath, deviceId, ['gsm', phoneAction, phoneNumber])
+}
+
+const applySmsEnvironmentAction = async (
+  adbPath: string,
+  deviceId: string,
+  action: Record<string, unknown>
+) => {
+  requireEmulatorDevice(deviceId)
+  const phoneNumber = normalizeRequiredText(action.phoneNumber, 'phone number', 64)
+  const message = normalizeRequiredText(action.message, 'SMS message', 512)
+  await runEmulatorCommand(adbPath, deviceId, ['sms', 'send', phoneNumber, message])
+}
+
+const applyFingerprintEnvironmentAction = async (
+  adbPath: string,
+  deviceId: string,
+  action: Record<string, unknown>
+) => {
+  requireEmulatorDevice(deviceId)
+  const fingerId = normalizeBoundedNumber(action.fingerId, 'finger ID', 1, 10, { integer: true })
+  await runEmulatorCommand(adbPath, deviceId, ['finger', 'touch', String(fingerId)])
 }
 
 const extractSocketName = (line: string) => {
@@ -1886,6 +2178,46 @@ const sendAdbAction = async (adbPath: string, deviceId: string, action: MobileDe
     return
   }
   throw new Error('Invalid mobile input action.')
+}
+
+export const applyMobileDeviceEnvironmentAction = async (
+  deviceId: unknown,
+  action: unknown
+): Promise<MobileDeviceEnvironmentActionResponse> => {
+  const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
+  const actionRecord = toEnvironmentActionRecord(action)
+  const kind = actionRecord.kind
+  if (
+    kind !== 'battery' &&
+    kind !== 'cellular' &&
+    kind !== 'fingerprint' &&
+    kind !== 'location' &&
+    kind !== 'phone' &&
+    kind !== 'sms'
+  ) {
+    throw new Error('Invalid mobile environment action kind.')
+  }
+
+  if (kind === 'battery') {
+    await applyBatteryEnvironmentAction(adbPath, device.id, actionRecord)
+  } else if (kind === 'cellular') {
+    await applyCellularEnvironmentAction(adbPath, device.id, actionRecord)
+  } else if (kind === 'location') {
+    await applyLocationEnvironmentAction(adbPath, device.id, actionRecord)
+  } else if (kind === 'phone') {
+    await applyPhoneEnvironmentAction(adbPath, device.id, actionRecord)
+  } else if (kind === 'sms') {
+    await applySmsEnvironmentAction(adbPath, device.id, actionRecord)
+  } else {
+    await applyFingerprintEnvironmentAction(adbPath, device.id, actionRecord)
+  }
+
+  return {
+    appliedAt: Date.now(),
+    deviceId: device.id,
+    emulatorOnly: kind !== 'battery',
+    kind
+  }
 }
 
 const decodeXmlAttribute = (value: string) =>

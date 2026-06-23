@@ -1,6 +1,7 @@
 import Router from '@koa/router'
 
 import {
+  applyMobileDeviceEnvironmentAction,
   captureMobileDeviceScreenshot,
   dumpMobileElementTree,
   listMobileDebugTargets,
@@ -71,6 +72,18 @@ export function mobileDebugRouter(): Router {
         throw badRequest('Invalid mobile debug input body', undefined, 'invalid_mobile_debug_input')
       }
       ctx.body = await sendMobileDeviceInput(getDeviceId(body), body.input)
+    } catch (error) {
+      normalizeMobileDebugError(error)
+    }
+  })
+
+  router.post('/environment', async (ctx) => {
+    try {
+      const body = ctx.request.body
+      if (!isRecord(body)) {
+        throw badRequest('Invalid mobile debug environment body', undefined, 'invalid_mobile_debug_environment')
+      }
+      ctx.body = await applyMobileDeviceEnvironmentAction(getDeviceId(body), body.action)
     } catch (error) {
       normalizeMobileDebugError(error)
     }

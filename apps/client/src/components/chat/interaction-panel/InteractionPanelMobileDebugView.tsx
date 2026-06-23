@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -33,11 +33,19 @@ export function InteractionPanelMobileDebugView({
   const { t } = useTranslation()
   const isConfigMode = page.mode === 'config'
   const isDevicesMode = page.mode === 'devices'
-  const { config, error, isAdbMissing, isLoading, state, updateConfig } = useMobileDebugTargetsState({
+  const { config, error, isAdbMissing, isLoading, refreshTargets, state, updateConfig } = useMobileDebugTargetsState({
     isActive,
     isConfigMode,
     selectedDeviceId: page.selectedDeviceId
   })
+  const [lastReadyDebugState, setLastReadyDebugState] = useState<DesktopMobileDebugTargetsResponse | null>(null)
+  const openDeviceList = useCallback(() => {
+    if (onOpenDeviceList != null) {
+      onOpenDeviceList()
+      return
+    }
+    onChangePage(current => ({ ...current, mode: 'devices' }))
+  }, [onChangePage, onOpenDeviceList])
 
   useEffect(() => {
     if (!isConfigMode && !isDevicesMode) return
@@ -54,6 +62,18 @@ export function InteractionPanelMobileDebugView({
       targets: state.targets.filter(target => target.deviceId === page.selectedDeviceId || target.source === 'network')
     }
   }, [page.selectedDeviceId, state])
+  const hasReadyVisibleDevice = visibleState?.devices.some(device => device.state === 'device') === true
+
+  useEffect(() => {
+    if (isConfigMode || isDevicesMode || visibleState == null || !hasReadyVisibleDevice) return
+    setLastReadyDebugState(visibleState)
+  }, [hasReadyVisibleDevice, isConfigMode, isDevicesMode, visibleState])
+
+  const displayState = useMemo(() => {
+    if (page.selectedDeviceId == null || visibleState == null || hasReadyVisibleDevice) return visibleState
+    const cachedStateMatchesDevice = lastReadyDebugState?.devices.some(device => device.id === page.selectedDeviceId) === true
+    return cachedStateMatchesDevice ? lastReadyDebugState : visibleState
+  }, [hasReadyVisibleDevice, lastReadyDebugState, page.selectedDeviceId, visibleState])
 
   useEffect(() => {
     if (state == null || isConfigMode) return
@@ -122,9 +142,13 @@ export function InteractionPanelMobileDebugView({
             error={error}
             isActive={isActive}
             isLoading={isLoading}
-            state={visibleState}
+            connectionState={visibleState}
+            state={displayState}
+            selectedDeviceId={page.selectedDeviceId}
+            selectedDeviceLabel={page.selectedDeviceLabel}
             onOpenDebugUrl={onOpenDebugUrl}
-            onOpenDeviceList={onOpenDeviceList}
+            onOpenDeviceList={openDeviceList}
+            onReconnect={refreshTargets}
             onStandaloneDeviceTitleChange={onStandaloneDeviceTitleChange}
             onStandaloneHeaderActionsChange={onStandaloneHeaderActionsChange}
           />

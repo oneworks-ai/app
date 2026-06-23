@@ -53,17 +53,21 @@ function StandaloneDeviceHeaderActionButton({
 
 export function MobileDeviceStandaloneHeaderActions({
   deviceId,
+  isEnvironmentPanelOpen,
   isSidePanelVisible,
   onOpenDeviceList,
   onRefresh,
   onSendInput,
+  onToggleEnvironmentPanel,
   onToggleSidePanel
 }: {
   deviceId: string
+  isEnvironmentPanelOpen: boolean
   isSidePanelVisible: boolean
   onOpenDeviceList?: () => void
   onRefresh: () => void
   onSendInput: (input: DesktopMobileDeviceInputEvent) => void
+  onToggleEnvironmentPanel: () => void
   onToggleSidePanel: () => void
 }) {
   const { t } = useTranslation()
@@ -82,6 +86,12 @@ export function MobileDeviceStandaloneHeaderActions({
         icon='restart_alt'
         label={t('chat.interactionPanel.mobileDebugRotate')}
         onClick={() => onSendInput({ action: 'rotate', kind: 'action' })}
+      />
+      <StandaloneDeviceHeaderActionButton
+        active={isEnvironmentPanelOpen}
+        icon='settings'
+        label={t('chat.interactionPanel.mobileDebugEnvironmentTitle')}
+        onClick={onToggleEnvironmentPanel}
       />
       <StandaloneDeviceHeaderActionButton
         active={!isSidePanelVisible}

@@ -110,6 +110,7 @@ export function useMobileDebugTargetsState({
     error,
     isAdbMissing: state?.adbMissing === true || state?.errors.includes('ADB was not found.') === true,
     isLoading,
+    refreshTargets,
     state,
     updateConfig
   }

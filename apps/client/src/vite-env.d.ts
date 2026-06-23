@@ -342,6 +342,61 @@ interface DesktopMobileDeviceInputEvent {
   y?: number
 }
 
+type DesktopMobileDeviceBatteryHealth = 'cold' | 'dead' | 'failure' | 'good' | 'overheat' | 'overvoltage' | 'unknown'
+type DesktopMobileDeviceBatteryStatus = 'charging' | 'discharging' | 'full' | 'not-charging' | 'unknown'
+type DesktopMobileDeviceCellularRegistration = 'denied' | 'home' | 'off' | 'on' | 'roaming' | 'searching' | 'unregistered'
+type DesktopMobileDeviceChargerConnection = 'ac' | 'none' | 'usb' | 'wireless'
+type DesktopMobileDeviceMeterStatus = 'metered' | 'unmetered'
+type DesktopMobileDeviceNetworkDelay = 'edge' | 'gprs' | 'none' | 'umts'
+type DesktopMobileDeviceNetworkSpeed = 'edge' | 'full' | 'gprs' | 'gsm' | 'hscsd' | 'hsdpa' | 'lte' | 'umts'
+type DesktopMobileDeviceSignalProfile = 'great' | 'good' | 'moderate' | 'none' | 'poor'
+
+type DesktopMobileDeviceEnvironmentAction =
+  | {
+    charger?: DesktopMobileDeviceChargerConnection
+    health?: DesktopMobileDeviceBatteryHealth
+    kind: 'battery'
+    level?: number
+    reset?: boolean
+    status?: DesktopMobileDeviceBatteryStatus
+  }
+  | {
+    dataStatus?: DesktopMobileDeviceCellularRegistration
+    delay?: DesktopMobileDeviceNetworkDelay
+    kind: 'cellular'
+    meterStatus?: DesktopMobileDeviceMeterStatus
+    signalProfile?: DesktopMobileDeviceSignalProfile
+    speed?: DesktopMobileDeviceNetworkSpeed
+    voiceStatus?: DesktopMobileDeviceCellularRegistration
+  }
+  | {
+    altitude?: number
+    kind: 'location'
+    latitude: number
+    longitude: number
+  }
+  | {
+    action: 'accept' | 'call' | 'cancel' | 'hold'
+    kind: 'phone'
+    phoneNumber: string
+  }
+  | {
+    kind: 'sms'
+    message: string
+    phoneNumber: string
+  }
+  | {
+    fingerId: number
+    kind: 'fingerprint'
+  }
+
+interface DesktopMobileDeviceEnvironmentActionResponse {
+  appliedAt: number
+  deviceId: string
+  emulatorOnly: boolean
+  kind: DesktopMobileDeviceEnvironmentAction['kind']
+}
+
 interface DesktopBrowserDataSyncState {
   authenticator: {
     total: number

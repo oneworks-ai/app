@@ -64,21 +64,6 @@ export function StandaloneMobileDebugRoute() {
   }, [deviceRoute?.deviceId, deviceRoute?.mode])
 
   useEffect(() => {
-    if (deviceRoute?.mode !== 'debug') return
-    const deviceOptions = page.deviceOptions
-    if (deviceOptions == null) return
-    if (deviceOptions.some(device => device.id === deviceRoute.deviceId)) return
-
-    const readyDevices = deviceOptions.filter(device => device.state === 'device')
-    navigate(
-      readyDevices.length === 1
-        ? buildStandaloneDeviceDebugRoutePath(readyDevices[0].id)
-        : standaloneDevicesRoutePath,
-      { replace: true }
-    )
-  }, [deviceRoute, navigate, page.deviceOptions])
-
-  useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       window.oneworksDesktop?.markWorkspaceStartupReady?.()
     })

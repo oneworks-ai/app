@@ -1,4 +1,5 @@
 import {
+  applyMobileDeviceEnvironmentAction as applyMobileDeviceEnvironmentActionFromServer,
   captureMobileDeviceScreenshot as captureMobileDeviceScreenshotFromServer,
   dumpMobileElementTree as dumpMobileElementTreeFromServer,
   listMobileDebugTargets as listMobileDebugTargetsFromServer,
@@ -25,3 +26,8 @@ export const readMobileDeviceLogs = (deviceId: string, lineLimit?: number) => (
 export const sendMobileDeviceInput = (deviceId: string, input: DesktopMobileDeviceInputEvent) => (
   window.oneworksDesktop?.sendMobileDeviceInput?.(deviceId, input) ?? sendMobileDeviceInputFromServer(deviceId, input)
 )
+
+export const applyMobileDeviceEnvironmentAction = (
+  deviceId: string,
+  action: DesktopMobileDeviceEnvironmentAction
+) => applyMobileDeviceEnvironmentActionFromServer(deviceId, action)

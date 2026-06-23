@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { InteractionPanelMobileDeviceEnvironmentPanel } from './InteractionPanelMobileDeviceEnvironmentPanel'
 import { InteractionPanelMobileDeviceScreen } from './InteractionPanelMobileDeviceScreen'
 import { InteractionPanelMobileDeviceSideTabs } from './InteractionPanelMobileDeviceSideTabs'
 import type { MobileDeviceDockPosition } from './InteractionPanelMobileDeviceSideTabs'
@@ -39,6 +40,7 @@ export function InteractionPanelMobileDevicePreview({
   const deviceTitle = readyDevice == null ? undefined : getDeviceWindowTitle(readyDevice)
   const preview = useMobileDevicePreviewController(readyDeviceId, isActive)
   const [isSidePanelVisible, setIsSidePanelVisible] = useState(true)
+  const [isEnvironmentPanelOpen, setIsEnvironmentPanelOpen] = useState(false)
   const [dockPosition, setDockPosition] = useState<MobileDeviceDockPosition>('right')
   const usesStandaloneHeaderActions = onStandaloneHeaderActionsChange != null
   const scheduleStandaloneWindowFit = useCallback((
@@ -52,6 +54,7 @@ export function InteractionPanelMobileDevicePreview({
   }, [usesStandaloneHeaderActions])
   const hideSidePanel = useCallback(() => {
     const hiddenScreenWidth = readStandaloneScreenWidth()
+    setIsEnvironmentPanelOpen(false)
     setIsSidePanelVisible(false)
     scheduleStandaloneWindowFit({ hiddenScreenWidth, hiddenWidthMode: 'device' })
   }, [scheduleStandaloneWindowFit])
@@ -63,6 +66,14 @@ export function InteractionPanelMobileDevicePreview({
       hiddenWidthMode: isSidePanelVisible ? 'device' : 'current-window'
     })
   }, [isSidePanelVisible, scheduleStandaloneWindowFit])
+  const toggleEnvironmentPanel = useCallback(() => {
+    const willOpen = !isEnvironmentPanelOpen
+    setIsEnvironmentPanelOpen(willOpen)
+    if (willOpen) {
+      setIsSidePanelVisible(true)
+    }
+    scheduleStandaloneWindowFit(willOpen && !isSidePanelVisible ? { hiddenWidthMode: 'current-window' } : {})
+  }, [isEnvironmentPanelOpen, isSidePanelVisible, scheduleStandaloneWindowFit])
   const sendInput = useCallback((input: DesktopMobileDeviceInputEvent) => {
     void preview.sendInput(input)
   }, [preview.sendInput])
@@ -76,19 +87,23 @@ export function InteractionPanelMobileDevicePreview({
       ? (
         <MobileDeviceStandaloneHeaderActions
           deviceId={readyDevice.id}
+          isEnvironmentPanelOpen={isEnvironmentPanelOpen}
           isSidePanelVisible={isSidePanelVisible}
           onOpenDeviceList={onOpenDeviceList}
           onRefresh={preview.refreshPreview}
           onSendInput={sendInput}
+          onToggleEnvironmentPanel={toggleEnvironmentPanel}
           onToggleSidePanel={toggleSidePanel}
         />
       )
       : null, [
+    isEnvironmentPanelOpen,
     isSidePanelVisible,
     onOpenDeviceList,
     preview.refreshPreview,
     readyDevice,
     sendInput,
+    toggleEnvironmentPanel,
     toggleSidePanel,
     usesStandaloneHeaderActions
   ])
@@ -155,24 +170,33 @@ export function InteractionPanelMobileDevicePreview({
         />
         {isSidePanelVisible
           ? (
-            <InteractionPanelMobileDeviceSideTabs
-              details={details}
-              deviceId={readyDevice.id}
-              dockPosition={dockPosition}
-              elementTree={preview.elementTree}
-              error={preview.error}
-              flattenedNodes={preview.flattenedNodes}
-              isInspecting={preview.isInspecting}
-              selectedNode={preview.selectedNode}
-              selectedNodeId={preview.selectedNodeId}
-              onDockPositionChange={changeDockPosition}
-              onRefresh={preview.refreshPreview}
-              onSelectNode={preview.setSelectedNodeId}
-              onSendInput={sendInput}
-              showInlineActions={!usesStandaloneHeaderActions}
-              onToggleInspect={preview.toggleInspect}
-              onToggleSidePanel={hideSidePanel}
-            />
+            isEnvironmentPanelOpen
+              ? (
+                <InteractionPanelMobileDeviceEnvironmentPanel
+                  deviceId={readyDevice.id}
+                  onApplied={preview.refreshPreview}
+                />
+              )
+              : (
+                <InteractionPanelMobileDeviceSideTabs
+                  details={details}
+                  deviceId={readyDevice.id}
+                  dockPosition={dockPosition}
+                  elementTree={preview.elementTree}
+                  error={preview.error}
+                  flattenedNodes={preview.flattenedNodes}
+                  isInspecting={preview.isInspecting}
+                  selectedNode={preview.selectedNode}
+                  selectedNodeId={preview.selectedNodeId}
+                  onDockPositionChange={changeDockPosition}
+                  onRefresh={preview.refreshPreview}
+                  onSelectNode={preview.setSelectedNodeId}
+                  onSendInput={sendInput}
+                  showInlineActions={!usesStandaloneHeaderActions}
+                  onToggleInspect={preview.toggleInspect}
+                  onToggleSidePanel={hideSidePanel}
+                />
+              )
           )
           : usesStandaloneHeaderActions
           ? null

@@ -55,3 +55,18 @@ export async function sendMobileDeviceInput(
     timeoutMs: 6000
   })
 }
+
+export async function applyMobileDeviceEnvironmentAction(
+  deviceId: string,
+  action: DesktopMobileDeviceEnvironmentAction
+): Promise<DesktopMobileDeviceEnvironmentActionResponse> {
+  return fetchApiJson<DesktopMobileDeviceEnvironmentActionResponse>(
+    buildMobileDebugApiUrl('/api/mobile-debug/environment'),
+    {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ action, deviceId }),
+      timeoutMs: 8000
+    }
+  )
+}
