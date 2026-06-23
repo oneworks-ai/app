@@ -34,6 +34,8 @@ export function StandaloneMobileDebugRoute() {
     selectedDeviceId: initialDeviceId
   }))
   const [headerActions, setHeaderActions] = useState<ReactNode | null>(null)
+  const [deviceTitle, setDeviceTitle] = useState<string | null>(null)
+  const headerTitle = deviceTitle ?? title
 
   useEffect(() => {
     setPage(current => ({ ...current, title }))
@@ -63,7 +65,7 @@ export function StandaloneMobileDebugRoute() {
         <StandaloneWindowHeader
           actions={headerActions}
           routeKey={STANDALONE_MOBILE_DEBUG_ROUTE_KEY}
-          title={title}
+          title={headerTitle}
         />
         <section className='standalone-mobile-debug-route__content'>
           <InteractionPanelMobileDebugView
@@ -71,6 +73,7 @@ export function StandaloneMobileDebugRoute() {
             page={page}
             onChangePage={changePage}
             onOpenDebugUrl={openDebugUrl}
+            onStandaloneDeviceTitleChange={setDeviceTitle}
             onStandaloneHeaderActionsChange={setHeaderActions}
           />
         </section>

@@ -111,6 +111,11 @@ const buildStandaloneTabUrl = (clientUrl: string, routePath: string) => {
   return targetUrl.toString()
 }
 
+const mobileDebugStandaloneInitialContentSize = {
+  height: 720,
+  width: 820
+}
+
 const appendWorkspaceResourceTargetParams = (url: URL, target: WorkspaceResourceTarget) => {
   url.searchParams.set('launcherAction', target.kind)
   url.searchParams.set('launcherRequestId', `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`)
@@ -641,6 +646,12 @@ export const createWindowManager = ({
     const clientUrl = await ensureSharedClientUrl()
     const targetUrl = buildStandaloneTabUrl(clientUrl, standaloneRoutePath)
     const windowRecord = createWindowRecord({ kind: 'standalone' })
+    if (standaloneRoutePath === '/standalone/mobile-debug') {
+      windowRecord.window.setContentSize(
+        mobileDebugStandaloneInitialContentSize.width,
+        mobileDebugStandaloneInitialContentSize.height
+      )
+    }
     windowRecord.kind = 'standalone'
     windowRecord.selectorMode = undefined
     windowRecord.workspaceFolder = undefined

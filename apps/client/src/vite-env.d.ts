@@ -492,6 +492,9 @@ interface Window {
       alwaysOnTop: boolean
       opacity: number
     }>
+    setCurrentWindowContentSize?: (size: { height: number; width: number }) => Promise<
+      { height: number; width: number } | undefined
+    >
     getDesktopSettings?: () => Promise<DesktopSettings>
     getBrowserDataSyncState?: () => Promise<DesktopBrowserDataSyncState>
     listBrowserHistory?: (input?: DesktopBrowserActivityListOptions) => Promise<DesktopBrowserHistoryRecord[]>

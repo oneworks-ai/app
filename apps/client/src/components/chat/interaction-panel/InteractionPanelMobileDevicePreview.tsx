@@ -6,25 +6,45 @@ import { MobileDeviceStandaloneHeaderActions } from './InteractionPanelMobileDev
 import { InteractionPanelMobileDeviceScreen } from './InteractionPanelMobileDeviceScreen'
 import { InteractionPanelMobileDeviceSideTabs } from './InteractionPanelMobileDeviceSideTabs'
 import { getDeviceWindowTitle, getReadyDevice } from './mobile-device-preview-utils'
+import {
+  fitStandaloneMobileDebugWindow,
+  useFitStandaloneMobileDebugWindow
+} from './use-fit-standalone-mobile-debug-window'
 import { useMobileDevicePreviewController } from './use-mobile-device-preview-controller'
 
 export function InteractionPanelMobileDevicePreview({
   details,
   devices,
+  onStandaloneDeviceTitleChange,
   onStandaloneHeaderActionsChange
 }: {
   details: ReactNode
   devices: DesktopMobileDebugDevice[]
+  onStandaloneDeviceTitleChange?: (title: string | null) => void
   onStandaloneHeaderActionsChange?: (actions: ReactNode | null) => void
 }) {
   const { t } = useTranslation()
   const readyDevice = getReadyDevice(devices)
   const readyDeviceId = readyDevice?.id
+  const deviceTitle = readyDevice == null ? undefined : getDeviceWindowTitle(readyDevice)
   const preview = useMobileDevicePreviewController(readyDeviceId)
   const [isSidePanelVisible, setIsSidePanelVisible] = useState(true)
   const usesStandaloneHeaderActions = onStandaloneHeaderActionsChange != null
-  const hideSidePanel = useCallback(() => setIsSidePanelVisible(false), [])
-  const toggleSidePanel = useCallback(() => setIsSidePanelVisible(current => !current), [])
+  const scheduleStandaloneWindowFit = useCallback(() => {
+    if (!usesStandaloneHeaderActions) return
+    window.requestAnimationFrame(() => {
+      fitStandaloneMobileDebugWindow()
+      window.setTimeout(fitStandaloneMobileDebugWindow, 120)
+    })
+  }, [usesStandaloneHeaderActions])
+  const hideSidePanel = useCallback(() => {
+    setIsSidePanelVisible(false)
+    scheduleStandaloneWindowFit()
+  }, [scheduleStandaloneWindowFit])
+  const toggleSidePanel = useCallback(() => {
+    setIsSidePanelVisible(current => !current)
+    scheduleStandaloneWindowFit()
+  }, [scheduleStandaloneWindowFit])
   const sendInput = useCallback((input: DesktopMobileDeviceInputEvent) => {
     void preview.sendInput(input)
   }, [preview.sendInput])
@@ -54,7 +74,26 @@ export function InteractionPanelMobileDevicePreview({
     return () => onStandaloneHeaderActionsChange(null)
   }, [onStandaloneHeaderActionsChange, standaloneHeaderActions])
 
+  useFitStandaloneMobileDebugWindow({
+    isEnabled: usesStandaloneHeaderActions,
+    isSidePanelVisible,
+    readyDeviceId,
+    videoHeight: preview.videoSize?.height,
+    videoWidth: preview.videoSize?.width
+  })
+
+  useEffect(() => {
+    if (!usesStandaloneHeaderActions || onStandaloneDeviceTitleChange == null) return
+    if (deviceTitle == null) {
+      onStandaloneDeviceTitleChange(null)
+      return
+    }
+    onStandaloneDeviceTitleChange(deviceTitle)
+    return () => onStandaloneDeviceTitleChange(null)
+  }, [deviceTitle, onStandaloneDeviceTitleChange, usesStandaloneHeaderActions])
+
   if (readyDevice == null) return null
+  const visibleDeviceTitle = deviceTitle ?? getDeviceWindowTitle(readyDevice)
   const screenRatio = preview.videoSize?.width != null && preview.videoSize.height > 0
     ? preview.videoSize.width / preview.videoSize.height
     : preview.screenshot?.width != null && preview.screenshot.height != null && preview.screenshot.height > 0
@@ -69,7 +108,7 @@ export function InteractionPanelMobileDevicePreview({
         }`}
       >
         <InteractionPanelMobileDeviceScreen
-          deviceTitle={getDeviceWindowTitle(readyDevice)}
+          deviceTitle={visibleDeviceTitle}
           elementScreen={preview.elementTree?.root?.bounds}
           hoverNode={preview.hoverNode}
           isInspecting={preview.isInspecting}
@@ -87,6 +126,7 @@ export function InteractionPanelMobileDevicePreview({
           onVideoSizeChange={preview.setVideoSize}
           onVideoStatusChange={preview.setVideoStatus}
           screenRatio={screenRatio}
+          showDeviceTitlebar={!usesStandaloneHeaderActions}
         />
         {isSidePanelVisible
           ? (
@@ -106,6 +146,8 @@ export function InteractionPanelMobileDevicePreview({
               onToggleSidePanel={hideSidePanel}
             />
           )
+          : usesStandaloneHeaderActions
+          ? null
           : (
             <button
               type='button'

@@ -16,12 +16,14 @@ const getPortForwardingStatusLabelKey = (status: DesktopMobileDebugPortForwardSt
 export function InteractionPanelMobileDebugResults({
   error,
   isLoading,
+  onStandaloneDeviceTitleChange,
   onStandaloneHeaderActionsChange,
   onOpenDebugUrl,
   state
 }: {
   error: string | null
   isLoading: boolean
+  onStandaloneDeviceTitleChange?: (title: string | null) => void
   onStandaloneHeaderActionsChange?: (actions: ReactNode | null) => void
   onOpenDebugUrl: (url: string, options?: OpenInteractionPanelIframeUrlOptions) => void
   state: DesktopMobileDebugTargetsResponse | null
@@ -35,8 +37,10 @@ export function InteractionPanelMobileDebugResults({
   const hasDevicePreview = !isAdbMissing && devices.length > 0
 
   useEffect(() => {
-    if (!hasDevicePreview) onStandaloneHeaderActionsChange?.(null)
-  }, [hasDevicePreview, onStandaloneHeaderActionsChange])
+    if (hasDevicePreview) return
+    onStandaloneHeaderActionsChange?.(null)
+    onStandaloneDeviceTitleChange?.(null)
+  }, [hasDevicePreview, onStandaloneDeviceTitleChange, onStandaloneHeaderActionsChange])
 
   return (
     <div className='chat-interaction-panel-mobile-debug__body'>
@@ -59,6 +63,7 @@ export function InteractionPanelMobileDebugResults({
             />
           }
           devices={devices}
+          onStandaloneDeviceTitleChange={onStandaloneDeviceTitleChange}
           onStandaloneHeaderActionsChange={onStandaloneHeaderActionsChange}
         />
       )}

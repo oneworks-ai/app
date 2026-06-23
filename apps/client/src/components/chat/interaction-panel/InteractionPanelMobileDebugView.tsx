@@ -14,12 +14,14 @@ export function InteractionPanelMobileDebugView({
   page,
   onChangePage,
   onOpenDebugUrl,
+  onStandaloneDeviceTitleChange,
   onStandaloneHeaderActionsChange
 }: {
   isActive: boolean
   page: InteractionPanelMobileDebugPage
   onChangePage: (updater: (page: InteractionPanelMobileDebugPage) => InteractionPanelMobileDebugPage) => void
   onOpenDebugUrl: (url: string, options?: OpenInteractionPanelIframeUrlOptions) => void
+  onStandaloneDeviceTitleChange?: (title: string | null) => void
   onStandaloneHeaderActionsChange?: (actions: ReactNode | null) => void
 }) {
   const { t } = useTranslation()
@@ -100,8 +102,10 @@ export function InteractionPanelMobileDebugView({
   }, [isActive, isConfigMode, refreshAdbStatus])
 
   useEffect(() => {
-    if (isConfigMode) onStandaloneHeaderActionsChange?.(null)
-  }, [isConfigMode, onStandaloneHeaderActionsChange])
+    if (!isConfigMode) return
+    onStandaloneHeaderActionsChange?.(null)
+    onStandaloneDeviceTitleChange?.(null)
+  }, [isConfigMode, onStandaloneDeviceTitleChange, onStandaloneHeaderActionsChange])
 
   const visibleState = useMemo(() => {
     if (state == null || page.selectedDeviceId == null) return state
@@ -170,6 +174,7 @@ export function InteractionPanelMobileDebugView({
             isLoading={isLoading}
             state={visibleState}
             onOpenDebugUrl={onOpenDebugUrl}
+            onStandaloneDeviceTitleChange={onStandaloneDeviceTitleChange}
             onStandaloneHeaderActionsChange={onStandaloneHeaderActionsChange}
           />
         )}

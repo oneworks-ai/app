@@ -118,11 +118,30 @@ const normalizeGlobalAppearancePatch = (
 
 const MIN_WINDOW_OPACITY = 0.55
 const MAX_WINDOW_OPACITY = 1
+const MIN_WINDOW_CONTENT_SIZE = 300
+const MAX_WINDOW_CONTENT_SIZE = 2400
 
 const normalizeWindowOpacity = (value: unknown) => {
   const numericValue = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(numericValue)) return MAX_WINDOW_OPACITY
   return Math.min(MAX_WINDOW_OPACITY, Math.max(MIN_WINDOW_OPACITY, numericValue))
+}
+
+const normalizeWindowContentSize = (value: unknown) => {
+  if (!isRecord(value)) {
+    throw new TypeError('Window content size is required.')
+  }
+
+  const width = typeof value.width === 'number' ? value.width : Number(value.width)
+  const height = typeof value.height === 'number' ? value.height : Number(value.height)
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    throw new TypeError('Window content width and height are required.')
+  }
+
+  return {
+    height: Math.min(MAX_WINDOW_CONTENT_SIZE, Math.max(MIN_WINDOW_CONTENT_SIZE, Math.round(height))),
+    width: Math.min(MAX_WINDOW_CONTENT_SIZE, Math.max(MIN_WINDOW_CONTENT_SIZE, Math.round(width)))
+  }
 }
 
 const getCurrentWindowPresentationState = (windowRecord?: WindowRecord) => {
@@ -648,6 +667,16 @@ export const registerIpcHandlers = ({
 
     windowRecord.window.setOpacity(normalizeWindowOpacity(value))
     return getCurrentWindowPresentationState(windowRecord)
+  })
+
+  ipcMain.handle('desktop:set-current-window-content-size', (event, value: unknown) => {
+    const windowRecord = findWindowRecordForWebContents(event.sender)
+    if (windowRecord == null || !isWindowRecordUsable(windowRecord)) return undefined
+
+    const size = normalizeWindowContentSize(value)
+    windowRecord.window.setContentSize(size.width, size.height)
+    const [width, height] = windowRecord.window.getContentSize()
+    return { height, width }
   })
 
   ipcMain.handle('desktop:hide-launcher-window', (event) => {

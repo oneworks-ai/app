@@ -29,7 +29,8 @@ export function InteractionPanelMobileDeviceScreen({
   onVideoError,
   onVideoSizeChange,
   onVideoStatusChange,
-  screenRatio
+  screenRatio,
+  showDeviceTitlebar = true
 }: {
   deviceTitle: string
   elementScreen: DesktopMobileElementBounds | undefined
@@ -49,6 +50,7 @@ export function InteractionPanelMobileDeviceScreen({
   onVideoSizeChange: (size: MobileDeviceVideoPreviewSize) => void
   onVideoStatusChange: (status: MobileDeviceVideoPreviewStatus) => void
   screenRatio: number | undefined
+  showDeviceTitlebar?: boolean
 }) {
   const { t } = useTranslation()
   const pointerStartRef = useRef<PointerDevicePoint | null>(null)
@@ -119,11 +121,13 @@ export function InteractionPanelMobileDeviceScreen({
         ? undefined
         : { '--mobile-debug-screen-ratio': String(screenRatio) } as CSSProperties}
     >
-      <div className='chat-interaction-panel-mobile-debug__device-window'>
+      <div className='chat-interaction-panel-mobile-debug__device-window' aria-label={deviceTitle}>
         <div className='chat-interaction-panel-mobile-debug__device-shell'>
-          <div className='chat-interaction-panel-mobile-debug__device-titlebar' title={deviceTitle}>
-            {deviceTitle}
-          </div>
+          {showDeviceTitlebar && (
+            <div className='chat-interaction-panel-mobile-debug__device-titlebar' title={deviceTitle}>
+              {deviceTitle}
+            </div>
+          )}
           <div
             className={`chat-interaction-panel-mobile-debug__screen ${isInspecting ? 'is-inspecting' : ''}`}
             style={screen?.width != null && screen.height != null
