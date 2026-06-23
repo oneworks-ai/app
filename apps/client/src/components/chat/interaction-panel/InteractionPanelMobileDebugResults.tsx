@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { InteractionPanelMobileDebugTargetList } from './InteractionPanelMobileDebugTargetList'
@@ -14,11 +16,13 @@ const getPortForwardingStatusLabelKey = (status: DesktopMobileDebugPortForwardSt
 export function InteractionPanelMobileDebugResults({
   error,
   isLoading,
+  onStandaloneHeaderActionsChange,
   onOpenDebugUrl,
   state
 }: {
   error: string | null
   isLoading: boolean
+  onStandaloneHeaderActionsChange?: (actions: ReactNode | null) => void
   onOpenDebugUrl: (url: string, options?: OpenInteractionPanelIframeUrlOptions) => void
   state: DesktopMobileDebugTargetsResponse | null
 }) {
@@ -29,6 +33,10 @@ export function InteractionPanelMobileDebugResults({
   const portForwarding = state?.portForwarding ?? []
   const isAdbMissing = state?.adbMissing === true || errors.includes('ADB was not found.')
   const hasDevicePreview = !isAdbMissing && devices.length > 0
+
+  useEffect(() => {
+    if (!hasDevicePreview) onStandaloneHeaderActionsChange?.(null)
+  }, [hasDevicePreview, onStandaloneHeaderActionsChange])
 
   return (
     <div className='chat-interaction-panel-mobile-debug__body'>
@@ -51,6 +59,7 @@ export function InteractionPanelMobileDebugResults({
             />
           }
           devices={devices}
+          onStandaloneHeaderActionsChange={onStandaloneHeaderActionsChange}
         />
       )}
       {!hasDevicePreview && (

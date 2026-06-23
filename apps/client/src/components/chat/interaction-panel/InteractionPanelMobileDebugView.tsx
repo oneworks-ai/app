@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { InteractionPanelMobileDebugResults } from './InteractionPanelMobileDebugResults'
@@ -12,12 +13,14 @@ export function InteractionPanelMobileDebugView({
   isActive,
   page,
   onChangePage,
-  onOpenDebugUrl
+  onOpenDebugUrl,
+  onStandaloneHeaderActionsChange
 }: {
   isActive: boolean
   page: InteractionPanelMobileDebugPage
   onChangePage: (updater: (page: InteractionPanelMobileDebugPage) => InteractionPanelMobileDebugPage) => void
   onOpenDebugUrl: (url: string, options?: OpenInteractionPanelIframeUrlOptions) => void
+  onStandaloneHeaderActionsChange?: (actions: ReactNode | null) => void
 }) {
   const { t } = useTranslation()
   const [config, setConfig] = useState(readMobileDebugConfig)
@@ -96,6 +99,10 @@ export function InteractionPanelMobileDebugView({
     return () => window.clearInterval(refreshTimer)
   }, [isActive, isConfigMode, refreshAdbStatus])
 
+  useEffect(() => {
+    if (isConfigMode) onStandaloneHeaderActionsChange?.(null)
+  }, [isConfigMode, onStandaloneHeaderActionsChange])
+
   const visibleState = useMemo(() => {
     if (state == null || page.selectedDeviceId == null) return state
     return {
@@ -163,6 +170,7 @@ export function InteractionPanelMobileDebugView({
             isLoading={isLoading}
             state={visibleState}
             onOpenDebugUrl={onOpenDebugUrl}
+            onStandaloneHeaderActionsChange={onStandaloneHeaderActionsChange}
           />
         )}
     </div>

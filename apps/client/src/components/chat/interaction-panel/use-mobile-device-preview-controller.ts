@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-
 import type {
   MobileDeviceVideoPreviewSize,
   MobileDeviceVideoPreviewStatus
@@ -9,10 +8,10 @@ import {
   findDeepestNodeAtPoint,
   flattenElementNodes,
   screenshotRefreshDelayMs,
-  toPhysicalMobileDeviceInput
+  toPhysicalMobileDevicePoint,
+  withPhysicalMobileDeviceInput
 } from './mobile-device-preview-utils'
 import type { PointerDevicePoint } from './mobile-device-preview-utils'
-
 export const useMobileDevicePreviewController = (readyDeviceId: string | undefined) => {
   const { t } = useTranslation()
   const [screenshot, setScreenshot] = useState<DesktopMobileDeviceScreenshotResponse | null>(null)
@@ -31,12 +30,10 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
   const lastReadyDeviceIdRef = useRef<string | undefined>()
   const shouldUseScreenshotFallback = videoStatus === 'unavailable'
   const previewFailedMessage = t('chat.interactionPanel.mobileDebugPreviewFailed')
-
   const flattenedNodes = useMemo(
     () => flattenElementNodes(elementTree?.root).filter(item => item.node.bounds != null),
     [elementTree]
   )
-
   const refreshScreenshot = useCallback(async () => {
     const captureMobileDeviceScreenshot = window.oneworksDesktop?.captureMobileDeviceScreenshot
     if (readyDeviceId == null || captureMobileDeviceScreenshot == null || isScreenshotRefreshingRef.current) return
@@ -53,7 +50,6 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
       isScreenshotRefreshingRef.current = false
     }
   }, [previewFailedMessage, readyDeviceId])
-
   const refreshElementTree = useCallback(async () => {
     const dumpMobileElementTree = window.oneworksDesktop?.dumpMobileElementTree
     if (readyDeviceId == null || dumpMobileElementTree == null || isElementTreeRefreshingRef.current) return
@@ -73,19 +69,22 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
       isElementTreeRefreshingRef.current = false
     }
   }, [readyDeviceId])
-
   const restartVideoStream = useCallback(() => {
     setVideoSize(undefined)
     setVideoStatus('starting')
     setVideoStreamKey(current => current + 1)
   }, [])
-
   const refreshPreview = useCallback(() => {
     if (shouldUseScreenshotFallback) void refreshScreenshot()
     else restartVideoStream()
     void refreshElementTree()
   }, [refreshElementTree, refreshScreenshot, restartVideoStream, shouldUseScreenshotFallback])
-
+  const toPhysicalPoint = useCallback((point: PointerDevicePoint) =>
+    toPhysicalMobileDevicePoint(point, {
+      rootBounds: elementTree?.root?.bounds,
+      screen: videoSize,
+      shouldScale: !shouldUseScreenshotFallback
+    }), [elementTree?.root?.bounds, shouldUseScreenshotFallback, videoSize])
   useEffect(() => {
     let isCancelled = false
     const queueNextScreenshot = () => {
@@ -121,7 +120,6 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
       if (screenshotLoopTimerRef.current != null) window.clearTimeout(screenshotLoopTimerRef.current)
     }
   }, [readyDeviceId, refreshElementTree, refreshScreenshot, restartVideoStream, shouldUseScreenshotFallback])
-
   const sendInput = useCallback(async (input: DesktopMobileDeviceInputEvent) => {
     const sendMobileDeviceInput = window.oneworksDesktop?.sendMobileDeviceInput
     if (readyDeviceId == null || sendMobileDeviceInput == null) return
@@ -129,7 +127,7 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
     try {
       await sendMobileDeviceInput(
         readyDeviceId,
-        toPhysicalMobileDeviceInput(input, {
+        withPhysicalMobileDeviceInput(input, {
           rootBounds: elementTree?.root?.bounds,
           screen: videoSize,
           shouldScale: !shouldUseScreenshotFallback
@@ -152,15 +150,6 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
     t,
     videoSize
   ])
-
-  const selectElementAtPoint = useCallback((point: PointerDevicePoint) => {
-    setSelectedNodeId(findDeepestNodeAtPoint(elementTree?.root, point)?.id)
-  }, [elementTree?.root])
-
-  const hoverElementAtPoint = useCallback((point: PointerDevicePoint) => {
-    setHoverNodeId(findDeepestNodeAtPoint(elementTree?.root, point)?.id)
-  }, [elementTree?.root])
-
   const toggleInspect = useCallback(() => {
     setIsInspecting(current => {
       const nextIsInspecting = !current
@@ -168,15 +157,20 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
       return nextIsInspecting
     })
   }, [refreshElementTree])
-
-  const handleVideoError = useCallback((message: string) => setError(message || previewFailedMessage), [
-    previewFailedMessage
-  ])
-
+  const handleVideoError = useCallback((message: string) => {
+    setError(message || previewFailedMessage)
+  }, [previewFailedMessage])
+  const hoverElementAtPoint = useCallback((point: PointerDevicePoint) => {
+    setHoverNodeId(findDeepestNodeAtPoint(elementTree?.root, toPhysicalPoint(point))?.id)
+  }, [elementTree?.root, toPhysicalPoint])
+  const selectElementAtPoint = useCallback((point: PointerDevicePoint) => {
+    setSelectedNodeId(findDeepestNodeAtPoint(elementTree?.root, toPhysicalPoint(point))?.id)
+  }, [elementTree?.root, toPhysicalPoint])
   return {
     elementTree,
     error,
     flattenedNodes,
+    handleVideoError,
     hoverElementAtPoint,
     hoverNode: flattenedNodes.find(item => item.node.id === hoverNodeId)?.node,
     isInspecting,
@@ -190,7 +184,6 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
     setSelectedNodeId,
     setVideoSize,
     setVideoStatus,
-    handleVideoError,
     toggleInspect,
     videoSize,
     videoStatus,

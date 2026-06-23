@@ -100,6 +100,20 @@
   -webkit-app-region: no-drag;
 }
 
+.standalone-mobile-debug-route__header-action-group,
+.chat-interaction-panel-mobile-debug__standalone-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.standalone-mobile-debug-route__header-action-group {
+  padding-right: 4px;
+  margin-right: 2px;
+  border-right: 1px solid var(--border-color);
+}
+
 .standalone-mobile-debug-route__popover-trigger {
   display: inline-flex;
 }
@@ -184,6 +198,13 @@
   .chat-interaction-panel-mobile-debug__preview-grid {
   height: 100%;
   grid-template-columns: auto minmax(320px, 1fr);
+}
+
+.standalone-mobile-debug-route
+  .chat-interaction-panel-mobile-debug__preview-grid.is-side-panel-hidden {
+  width: max-content;
+  max-width: 100%;
+  grid-template-columns: auto;
 }
 
 .standalone-mobile-debug-route

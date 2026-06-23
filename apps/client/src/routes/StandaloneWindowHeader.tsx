@@ -1,20 +1,18 @@
 import { Button, Popover, Slider, Tooltip } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import type { IconAsset } from '#~/components/icons/IconAsset'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import { useRoutePluginWindowBarActions } from '#~/plugins/route-plugin-chrome'
-
 const WINDOW_OPACITY_MIN_PERCENT = 55
 const WINDOW_OPACITY_MAX_PERCENT = 100
-
 interface WindowPresentationState {
   alwaysOnTop: boolean
   opacity: number
 }
-
 const normalizeWindowPresentationState = (value: unknown): WindowPresentationState => {
   const state = value != null && typeof value === 'object' && !Array.isArray(value)
     ? value as Partial<WindowPresentationState>
@@ -22,20 +20,17 @@ const normalizeWindowPresentationState = (value: unknown): WindowPresentationSta
   const opacity = typeof state.opacity === 'number' && Number.isFinite(state.opacity)
     ? state.opacity
     : 1
-
   return {
     alwaysOnTop: state.alwaysOnTop === true,
     opacity: Math.min(1, Math.max(WINDOW_OPACITY_MIN_PERCENT / 100, opacity))
   }
 }
-
 function useStandaloneWindowPresentation() {
   const desktopApi = window.oneworksDesktop
   const [state, setState] = useState<WindowPresentationState>(() => ({
     alwaysOnTop: false,
     opacity: 1
   }))
-
   useEffect(() => {
     let disposed = false
     void desktopApi?.getCurrentWindowPresentationState?.()
@@ -45,7 +40,6 @@ function useStandaloneWindowPresentation() {
         }
       })
       .catch(() => undefined)
-
     return () => {
       disposed = true
     }
@@ -128,12 +122,19 @@ function StandaloneHeaderActionButton({
   )
 }
 
-export function StandaloneWindowHeader({ routeKey, title }: { routeKey: string; title: string }) {
+export function StandaloneWindowHeader({
+  actions,
+  routeKey,
+  title
+}: {
+  actions?: ReactNode
+  routeKey: string
+  title: string
+}) {
   const { t } = useTranslation()
   const pluginActions = useRoutePluginWindowBarActions(routeKey)
   const presentation = useStandaloneWindowPresentation()
   const opacityPercent = Math.round(presentation.state.opacity * 100)
-
   return (
     <header className='standalone-mobile-debug-route__header'>
       <div className='standalone-mobile-debug-route__traffic-space' aria-hidden='true' />
@@ -143,6 +144,11 @@ export function StandaloneWindowHeader({ routeKey, title }: { routeKey: string; 
       </div>
       <div className='standalone-mobile-debug-route__header-drag-fill' aria-hidden='true' />
       <div className='standalone-mobile-debug-route__header-actions' aria-label={t('common.actions', 'Actions')}>
+        {actions != null && (
+          <div className='standalone-mobile-debug-route__header-action-group'>
+            {actions}
+          </div>
+        )}
         {presentation.canControlWindow && (
           <>
             <StandaloneHeaderActionButton

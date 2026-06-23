@@ -1,4 +1,4 @@
-import type { CSSProperties, PointerEvent } from 'react'
+import type { CSSProperties, PointerEvent, WheelEvent } from 'react'
 import { useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -13,6 +13,7 @@ import type { MobileDeviceScreenDimensions, PointerDevicePoint } from './mobile-
 
 export function InteractionPanelMobileDeviceScreen({
   deviceTitle,
+  elementScreen,
   hoverNode,
   isInspecting,
   screenshot,
@@ -24,15 +25,14 @@ export function InteractionPanelMobileDeviceScreen({
   onHoverPoint,
   onInspectPoint,
   onPointerLeave,
-  onRefresh,
   onSendInput,
-  onToggleInspect,
   onVideoError,
   onVideoSizeChange,
   onVideoStatusChange,
   screenRatio
 }: {
   deviceTitle: string
+  elementScreen: DesktopMobileElementBounds | undefined
   hoverNode: DesktopMobileElementNode | undefined
   isInspecting: boolean
   screenshot: DesktopMobileDeviceScreenshotResponse | null
@@ -44,9 +44,7 @@ export function InteractionPanelMobileDeviceScreen({
   onHoverPoint: (point: PointerDevicePoint) => void
   onInspectPoint: (point: PointerDevicePoint) => void
   onPointerLeave: () => void
-  onRefresh: () => void
   onSendInput: (input: DesktopMobileDeviceInputEvent) => void
-  onToggleInspect: () => void
   onVideoError: (message: string) => void
   onVideoSizeChange: (size: MobileDeviceVideoPreviewSize) => void
   onVideoStatusChange: (status: MobileDeviceVideoPreviewStatus) => void
@@ -56,6 +54,7 @@ export function InteractionPanelMobileDeviceScreen({
   const pointerStartRef = useRef<PointerDevicePoint | null>(null)
   const isVideoEnabled = videoDeviceId != null && videoStatus !== 'unavailable'
   const screen: MobileDeviceScreenDimensions | null = videoSize ?? screenshot
+  const overlayScreen: MobileDeviceScreenDimensions | null = elementScreen ?? screen
 
   const handlePointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (screen == null) return
@@ -100,6 +99,19 @@ export function InteractionPanelMobileDeviceScreen({
     onSendInput({ kind: 'tap', x: endPoint.x, y: endPoint.y })
   }, [isInspecting, onInspectPoint, onSendInput, screen])
 
+  const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
+    if (screen == null || isInspecting) return
+    event.preventDefault()
+    const point = toPointerDevicePoint(event, screen)
+    onSendInput({
+      kind: 'scroll',
+      scrollX: -Math.max(-1, Math.min(1, event.deltaX / 500)),
+      scrollY: -Math.max(-1, Math.min(1, event.deltaY / 500)),
+      x: point.x,
+      y: point.y
+    })
+  }, [isInspecting, onSendInput, screen])
+
   return (
     <div
       className='chat-interaction-panel-mobile-debug__screen-column'
@@ -121,6 +133,7 @@ export function InteractionPanelMobileDeviceScreen({
             onPointerMove={handlePointerMove}
             onPointerLeave={onPointerLeave}
             onPointerUp={handlePointerUp}
+            onWheel={handleWheel}
           >
             {isVideoEnabled && (
               <InteractionPanelMobileDeviceVideoCanvas
@@ -145,25 +158,22 @@ export function InteractionPanelMobileDeviceScreen({
                 {t('chat.interactionPanel.mobileDebugPreviewLoading')}
               </div>
             )}
-            {screen != null && hoverNode?.bounds != null && (
+            {overlayScreen != null && hoverNode?.bounds != null && (
               <span
                 className='chat-interaction-panel-mobile-debug__element-overlay is-hover'
-                style={getOverlayStyle(hoverNode.bounds, screen)}
+                style={getOverlayStyle(hoverNode.bounds, overlayScreen)}
               />
             )}
-            {screen != null && selectedNode?.bounds != null && (
+            {overlayScreen != null && selectedNode?.bounds != null && (
               <span
                 className='chat-interaction-panel-mobile-debug__element-overlay is-selected'
-                style={getOverlayStyle(selectedNode.bounds, screen)}
+                style={getOverlayStyle(selectedNode.bounds, overlayScreen)}
               />
             )}
           </div>
         </div>
         <InteractionPanelMobileDeviceControls
-          isInspecting={isInspecting}
-          onRefresh={onRefresh}
           onSendInput={onSendInput}
-          onToggleInspect={onToggleInspect}
         />
       </div>
     </div>

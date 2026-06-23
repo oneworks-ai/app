@@ -15,8 +15,17 @@ import type { WebContents } from 'electron'
 import { AdbServerClient } from '@yume-chan/adb'
 import { AdbScrcpyClient, AdbScrcpyOptions3_3_3 } from '@yume-chan/adb-scrcpy'
 import { AdbServerNodeTcpConnector } from '@yume-chan/adb-server-node-tcp'
-import { ScrcpyInstanceId, ScrcpyVideoCodecNameMap } from '@yume-chan/scrcpy'
-import type { ScrcpyMediaStreamPacket } from '@yume-chan/scrcpy'
+import {
+  AndroidKeyCode,
+  AndroidKeyEventAction,
+  AndroidKeyEventMeta,
+  AndroidMotionEventAction,
+  AndroidMotionEventButton,
+  ScrcpyInstanceId,
+  ScrcpyPointerId,
+  ScrcpyVideoCodecNameMap
+} from '@yume-chan/scrcpy'
+import type { ScrcpyControlMessageWriter, ScrcpyMediaStreamPacket } from '@yume-chan/scrcpy'
 import { ReadableStream } from '@yume-chan/stream-extra'
 
 const ADB_TIMEOUT_MS = 10000
@@ -170,11 +179,18 @@ export interface MobileElementTreeResponse {
 }
 
 export interface MobileDeviceInputEvent {
+  action?: 'collapse-panels' | 'notifications' | 'quick-settings' | 'rotate'
   durationMs?: number
   endX?: number
   endY?: number
-  key?: 'app-switch' | 'back' | 'delete' | 'enter' | 'home'
-  kind: 'key' | 'swipe' | 'tap' | 'text'
+  key?: 'app-switch' | 'back' | 'delete' | 'enter' | 'home' | 'power' | 'volume-down' | 'volume-up'
+  kind: 'action' | 'key' | 'scroll' | 'swipe' | 'tap' | 'text'
+  physicalEndX?: number
+  physicalEndY?: number
+  physicalX?: number
+  physicalY?: number
+  scrollX?: number
+  scrollY?: number
   text?: string
   x?: number
   y?: number
@@ -237,11 +253,14 @@ const deviceScreenshotTaskById = new Map<string, Promise<MobileDeviceScreenshotR
 interface MobileDeviceVideoStreamSession {
   adb: Awaited<ReturnType<AdbServerClient['createAdb']>>
   client: Awaited<ReturnType<typeof AdbScrcpyClient.start>>
+  controller: ScrcpyControlMessageWriter | undefined
   deviceId: string
   isClosed: boolean
   ownerWebContentsId: number
   removeDestroyedListener: () => void
   streamId: string
+  videoHeight?: number
+  videoWidth?: number
 }
 
 const mobileDeviceVideoStreamById = new Map<string, MobileDeviceVideoStreamSession>()
@@ -1427,16 +1446,29 @@ const normalizeDurationMs = (value: unknown, fallback: number) => {
   return Math.max(0, Math.min(60000, Math.round(value)))
 }
 
+const normalizeScrollDelta = (value: unknown) => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0
+  return Math.max(-1, Math.min(1, value))
+}
+
 const toInputEventRecord = (input: unknown): MobileDeviceInputEvent => {
   if (input == null || typeof input !== 'object' || Array.isArray(input)) {
     throw new Error('Invalid mobile input event.')
   }
   const record = input as Record<string, unknown>
   const kind = record.kind
-  if (kind !== 'key' && kind !== 'swipe' && kind !== 'tap' && kind !== 'text') {
+  if (
+    kind !== 'action' && kind !== 'key' && kind !== 'scroll' && kind !== 'swipe' && kind !== 'tap' && kind !== 'text'
+  ) {
     throw new Error('Invalid mobile input kind.')
   }
   return {
+    action: record.action === 'collapse-panels' ||
+        record.action === 'notifications' ||
+        record.action === 'quick-settings' ||
+        record.action === 'rotate'
+      ? record.action
+      : undefined,
     durationMs: typeof record.durationMs === 'number' ? record.durationMs : undefined,
     endX: typeof record.endX === 'number' ? record.endX : undefined,
     endY: typeof record.endY === 'number' ? record.endY : undefined,
@@ -1444,10 +1476,19 @@ const toInputEventRecord = (input: unknown): MobileDeviceInputEvent => {
         record.key === 'back' ||
         record.key === 'delete' ||
         record.key === 'enter' ||
-        record.key === 'home'
+        record.key === 'home' ||
+        record.key === 'power' ||
+        record.key === 'volume-down' ||
+        record.key === 'volume-up'
       ? record.key
       : undefined,
     kind,
+    physicalEndX: typeof record.physicalEndX === 'number' ? record.physicalEndX : undefined,
+    physicalEndY: typeof record.physicalEndY === 'number' ? record.physicalEndY : undefined,
+    physicalX: typeof record.physicalX === 'number' ? record.physicalX : undefined,
+    physicalY: typeof record.physicalY === 'number' ? record.physicalY : undefined,
+    scrollX: typeof record.scrollX === 'number' ? record.scrollX : undefined,
+    scrollY: typeof record.scrollY === 'number' ? record.scrollY : undefined,
     text: typeof record.text === 'string' ? record.text : undefined,
     x: typeof record.x === 'number' ? record.x : undefined,
     y: typeof record.y === 'number' ? record.y : undefined
@@ -1460,6 +1501,21 @@ const getInputKeyCode = (key: MobileDeviceInputEvent['key']) => {
   if (key === 'delete') return 'KEYCODE_DEL'
   if (key === 'enter') return 'KEYCODE_ENTER'
   if (key === 'home') return 'KEYCODE_HOME'
+  if (key === 'power') return 'KEYCODE_POWER'
+  if (key === 'volume-down') return 'KEYCODE_VOLUME_DOWN'
+  if (key === 'volume-up') return 'KEYCODE_VOLUME_UP'
+  throw new Error('Invalid mobile input key.')
+}
+
+const getScrcpyInputKeyCode = (key: MobileDeviceInputEvent['key']) => {
+  if (key === 'app-switch') return AndroidKeyCode.AndroidAppSwitch
+  if (key === 'back') return AndroidKeyCode.AndroidBack
+  if (key === 'delete') return AndroidKeyCode.Backspace
+  if (key === 'enter') return AndroidKeyCode.Enter
+  if (key === 'home') return AndroidKeyCode.AndroidHome
+  if (key === 'power') return AndroidKeyCode.Power
+  if (key === 'volume-down') return AndroidKeyCode.VolumeDown
+  if (key === 'volume-up') return AndroidKeyCode.VolumeUp
   throw new Error('Invalid mobile input key.')
 }
 
@@ -1470,6 +1526,165 @@ const encodeAndroidInputText = (text: string) =>
     .replaceAll('"', '\\"')
     .replaceAll("'", "\\'")
     .replaceAll('\\', '\\\\')
+
+const delayMs = (durationMs: number) => new Promise(resolve => setTimeout(resolve, durationMs))
+
+const findMobileDeviceVideoStreamSession = (deviceId: string, webContents?: WebContents) => {
+  const sessions = [...mobileDeviceVideoStreamById.values()]
+    .filter(session => !session.isClosed && session.deviceId === deviceId)
+  if (sessions.length <= 0) return undefined
+  if (webContents != null) {
+    const ownedSession = sessions.find(session => session.ownerWebContentsId === webContents.id)
+    if (ownedSession != null) return ownedSession
+  }
+  return sessions.at(-1)
+}
+
+const getScrcpyVideoSize = (session: MobileDeviceVideoStreamSession) => {
+  const videoWidth = session.videoWidth
+  const videoHeight = session.videoHeight
+  if (videoWidth == null || videoHeight == null || videoWidth <= 0 || videoHeight <= 0) {
+    throw new Error('scrcpy video size is not ready.')
+  }
+  return { videoHeight, videoWidth }
+}
+
+const toScrcpyPointer = (
+  session: MobileDeviceVideoStreamSession,
+  xValue: unknown,
+  yValue: unknown
+) => {
+  const x = normalizeCoordinate(xValue)
+  const y = normalizeCoordinate(yValue)
+  if (x == null || y == null) throw new Error('Pointer input requires x and y.')
+  const { videoHeight, videoWidth } = getScrcpyVideoSize(session)
+  return {
+    pointerX: Math.max(0, Math.min(videoWidth, x)),
+    pointerY: Math.max(0, Math.min(videoHeight, y)),
+    videoHeight,
+    videoWidth
+  }
+}
+
+const createScrcpyTouchMessage = (
+  session: MobileDeviceVideoStreamSession,
+  action: AndroidMotionEventAction,
+  x: unknown,
+  y: unknown,
+  pressure: number
+) => ({
+  ...toScrcpyPointer(session, x, y),
+  action,
+  actionButton: AndroidMotionEventButton.Primary,
+  buttons: pressure > 0 ? AndroidMotionEventButton.Primary : AndroidMotionEventButton.None,
+  pointerId: ScrcpyPointerId.Finger,
+  pressure
+})
+
+const sendScrcpyKeyInput = async (
+  controller: ScrcpyControlMessageWriter,
+  key: MobileDeviceInputEvent['key']
+) => {
+  const keyCode = getScrcpyInputKeyCode(key)
+  await controller.injectKeyCode({
+    action: AndroidKeyEventAction.Down,
+    keyCode,
+    metaState: AndroidKeyEventMeta.None,
+    repeat: 0
+  })
+  await controller.injectKeyCode({
+    action: AndroidKeyEventAction.Up,
+    keyCode,
+    metaState: AndroidKeyEventMeta.None,
+    repeat: 0
+  })
+}
+
+const sendScrcpySwipeInput = async (
+  session: MobileDeviceVideoStreamSession,
+  inputEvent: MobileDeviceInputEvent
+) => {
+  const controller = session.controller
+  if (controller == null) throw new Error('scrcpy control stream is not available.')
+
+  const durationMs = normalizeDurationMs(inputEvent.durationMs, 220)
+  const steps = Math.max(1, Math.min(24, Math.round(durationMs / 16)))
+  const startX = normalizeCoordinate(inputEvent.x)
+  const startY = normalizeCoordinate(inputEvent.y)
+  const endX = normalizeCoordinate(inputEvent.endX)
+  const endY = normalizeCoordinate(inputEvent.endY)
+  if (startX == null || startY == null || endX == null || endY == null) {
+    throw new Error('Swipe input requires x, y, endX and endY.')
+  }
+
+  await controller.injectTouch(createScrcpyTouchMessage(session, AndroidMotionEventAction.Down, startX, startY, 1))
+  for (let index = 1; index < steps; index += 1) {
+    const progress = index / steps
+    await delayMs(Math.max(1, Math.round(durationMs / steps)))
+    await controller.injectTouch(createScrcpyTouchMessage(
+      session,
+      AndroidMotionEventAction.Move,
+      startX + (endX - startX) * progress,
+      startY + (endY - startY) * progress,
+      1
+    ))
+  }
+  await delayMs(Math.max(1, Math.round(durationMs / steps)))
+  await controller.injectTouch(createScrcpyTouchMessage(session, AndroidMotionEventAction.Up, endX, endY, 0))
+}
+
+const trySendScrcpyMobileDeviceInput = async (
+  webContents: WebContents | undefined,
+  deviceId: string,
+  inputEvent: MobileDeviceInputEvent
+) => {
+  const session = findMobileDeviceVideoStreamSession(deviceId, webContents)
+  const controller = session?.controller
+  if (session == null || controller == null) return false
+
+  if (inputEvent.kind === 'tap') {
+    await controller.injectTouch(
+      createScrcpyTouchMessage(session, AndroidMotionEventAction.Down, inputEvent.x, inputEvent.y, 1)
+    )
+    await delayMs(20)
+    await controller.injectTouch(
+      createScrcpyTouchMessage(session, AndroidMotionEventAction.Up, inputEvent.x, inputEvent.y, 0)
+    )
+  } else if (inputEvent.kind === 'swipe') {
+    await sendScrcpySwipeInput(session, inputEvent)
+  } else if (inputEvent.kind === 'scroll') {
+    const pointer = toScrcpyPointer(session, inputEvent.x, inputEvent.y)
+    await controller.injectScroll({
+      ...pointer,
+      buttons: AndroidMotionEventButton.None,
+      scrollX: normalizeScrollDelta(inputEvent.scrollX),
+      scrollY: normalizeScrollDelta(inputEvent.scrollY)
+    })
+  } else if (inputEvent.kind === 'text') {
+    const text = inputEvent.text
+    if (text == null || text === '') throw new Error('Text input requires text.')
+    await controller.injectText(text)
+  } else if (inputEvent.kind === 'action') {
+    if (inputEvent.action === 'collapse-panels') await controller.collapseNotificationPanel()
+    else if (inputEvent.action === 'notifications') await controller.expandNotificationPanel()
+    else if (inputEvent.action === 'quick-settings') await controller.expandSettingPanel()
+    else if (inputEvent.action === 'rotate') await controller.rotateDevice()
+    else throw new Error('Invalid mobile input action.')
+  } else {
+    await sendScrcpyKeyInput(controller, inputEvent.key)
+  }
+  return true
+}
+
+const getAdbInputCoordinate = (
+  inputEvent: MobileDeviceInputEvent,
+  videoField: 'endX' | 'endY' | 'x' | 'y'
+) => {
+  if (videoField === 'endX') return normalizeCoordinate(inputEvent.physicalEndX ?? inputEvent.endX)
+  if (videoField === 'endY') return normalizeCoordinate(inputEvent.physicalEndY ?? inputEvent.endY)
+  if (videoField === 'x') return normalizeCoordinate(inputEvent.physicalX ?? inputEvent.x)
+  return normalizeCoordinate(inputEvent.physicalY ?? inputEvent.y)
+}
 
 const decodeXmlAttribute = (value: string) =>
   value
@@ -1672,8 +1887,9 @@ export const startMobileDeviceVideoStream = async (
 
     const options = new AdbScrcpyOptions3_3_3({
       audio: false,
+      cleanup: false,
       clipboardAutosync: false,
-      control: false,
+      control: true,
       logLevel: 'info',
       maxFps: SCRCPY_MAX_FPS,
       maxSize: SCRCPY_MAX_SIZE,
@@ -1691,6 +1907,8 @@ export const startMobileDeviceVideoStream = async (
     if (videoStream == null) {
       throw new Error('scrcpy video stream is disabled.')
     }
+    const videoHeight = videoStream.height || videoStream.metadata.height
+    const videoWidth = videoStream.width || videoStream.metadata.width
 
     const handleDestroyed = () => {
       const session = mobileDeviceVideoStreamById.get(streamId)
@@ -1701,11 +1919,14 @@ export const startMobileDeviceVideoStream = async (
     const session: MobileDeviceVideoStreamSession = {
       adb,
       client,
+      controller: client.controller,
       deviceId: device.id,
       isClosed: false,
       ownerWebContentsId: webContents.id,
       removeDestroyedListener: () => webContents.off('destroyed', handleDestroyed),
-      streamId
+      streamId,
+      videoHeight,
+      videoWidth
     }
     mobileDeviceVideoStreamById.set(streamId, session)
     void consumeScrcpyOutput(client.output)
@@ -1716,11 +1937,11 @@ export const startMobileDeviceVideoStream = async (
       codec,
       codecName: getScrcpyVideoCodecName(codec),
       deviceId: device.id,
-      height: videoStream.height || videoStream.metadata.height,
+      height: videoHeight,
       source: 'scrcpy',
       startedAt: Date.now(),
       streamId,
-      width: videoStream.width || videoStream.metadata.width
+      width: videoWidth
     }
   } catch (error) {
     await Promise.allSettled([
@@ -1779,22 +2000,27 @@ export const captureMobileDeviceScreenshot = async (deviceId: unknown): Promise<
 }
 
 export const sendMobileDeviceInput = async (
+  webContents: WebContents | undefined,
   deviceId: unknown,
   input: unknown
 ): Promise<{ deviceId: string; sentAt: number }> => {
   const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
   const inputEvent = toInputEventRecord(input)
 
+  if (await trySendScrcpyMobileDeviceInput(webContents, device.id, inputEvent)) {
+    return { deviceId: device.id, sentAt: Date.now() }
+  }
+
   if (inputEvent.kind === 'tap') {
-    const x = normalizeCoordinate(inputEvent.x)
-    const y = normalizeCoordinate(inputEvent.y)
+    const x = getAdbInputCoordinate(inputEvent, 'x')
+    const y = getAdbInputCoordinate(inputEvent, 'y')
     if (x == null || y == null) throw new Error('Tap input requires x and y.')
     await runCommand(adbPath, ['-s', device.id, 'shell', 'input', 'tap', String(x), String(y)], ADB_INPUT_TIMEOUT_MS)
   } else if (inputEvent.kind === 'swipe') {
-    const x = normalizeCoordinate(inputEvent.x)
-    const y = normalizeCoordinate(inputEvent.y)
-    const endX = normalizeCoordinate(inputEvent.endX)
-    const endY = normalizeCoordinate(inputEvent.endY)
+    const x = getAdbInputCoordinate(inputEvent, 'x')
+    const y = getAdbInputCoordinate(inputEvent, 'y')
+    const endX = getAdbInputCoordinate(inputEvent, 'endX')
+    const endY = getAdbInputCoordinate(inputEvent, 'endY')
     if (x == null || y == null || endX == null || endY == null) {
       throw new Error('Swipe input requires x, y, endX and endY.')
     }
@@ -1818,6 +2044,26 @@ export const sendMobileDeviceInput = async (
       ['-s', device.id, 'shell', 'input', 'text', encodeAndroidInputText(text)],
       ADB_INPUT_TIMEOUT_MS
     )
+  } else if (inputEvent.kind === 'scroll') {
+    const x = getAdbInputCoordinate(inputEvent, 'x')
+    const y = getAdbInputCoordinate(inputEvent, 'y')
+    if (x == null || y == null) throw new Error('Scroll input requires x and y.')
+    const distance = Math.max(160, Math.min(720, Math.round(Math.abs(inputEvent.scrollY ?? 0) * 520)))
+    const direction = (inputEvent.scrollY ?? 0) >= 0 ? -1 : 1
+    await runCommand(adbPath, [
+      '-s',
+      device.id,
+      'shell',
+      'input',
+      'swipe',
+      String(x),
+      String(y),
+      String(x),
+      String(Math.max(0, y + direction * distance)),
+      '180'
+    ], ADB_INPUT_TIMEOUT_MS)
+  } else if (inputEvent.kind === 'action') {
+    throw new Error('This mobile input action requires a scrcpy control stream.')
   } else {
     await runCommand(
       adbPath,

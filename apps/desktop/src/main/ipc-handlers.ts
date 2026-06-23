@@ -369,7 +369,7 @@ export const registerIpcHandlers = ({
   )
   ipcMain.handle(
     'desktop:send-mobile-device-input',
-    (_event, deviceId: unknown, input: unknown) => sendMobileDeviceInput(deviceId, input)
+    (event, deviceId: unknown, input: unknown) => sendMobileDeviceInput(event.sender, deviceId, input)
   )
 
   ipcMain.handle('desktop:retry-launcher-shortcut-registration', () => retryLauncherShortcutRegistration())

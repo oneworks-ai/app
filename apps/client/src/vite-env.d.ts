@@ -316,11 +316,18 @@ interface DesktopMobileElementTreeResponse {
 }
 
 interface DesktopMobileDeviceInputEvent {
+  action?: 'collapse-panels' | 'notifications' | 'quick-settings' | 'rotate'
   durationMs?: number
   endX?: number
   endY?: number
-  key?: 'app-switch' | 'back' | 'delete' | 'enter' | 'home'
-  kind: 'key' | 'swipe' | 'tap' | 'text'
+  key?: 'app-switch' | 'back' | 'delete' | 'enter' | 'home' | 'power' | 'volume-down' | 'volume-up'
+  kind: 'action' | 'key' | 'scroll' | 'swipe' | 'tap' | 'text'
+  physicalEndX?: number
+  physicalEndY?: number
+  physicalX?: number
+  physicalY?: number
+  scrollX?: number
+  scrollY?: number
   text?: string
   x?: number
   y?: number

@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
+import { MobileDeviceStandaloneHeaderActions } from './InteractionPanelMobileDeviceActions'
 import { InteractionPanelMobileDeviceScreen } from './InteractionPanelMobileDeviceScreen'
 import { InteractionPanelMobileDeviceSideTabs } from './InteractionPanelMobileDeviceSideTabs'
 import { getDeviceWindowTitle, getReadyDevice } from './mobile-device-preview-utils'
@@ -7,14 +10,49 @@ import { useMobileDevicePreviewController } from './use-mobile-device-preview-co
 
 export function InteractionPanelMobileDevicePreview({
   details,
-  devices
+  devices,
+  onStandaloneHeaderActionsChange
 }: {
   details: ReactNode
   devices: DesktopMobileDebugDevice[]
+  onStandaloneHeaderActionsChange?: (actions: ReactNode | null) => void
 }) {
+  const { t } = useTranslation()
   const readyDevice = getReadyDevice(devices)
   const readyDeviceId = readyDevice?.id
   const preview = useMobileDevicePreviewController(readyDeviceId)
+  const [isSidePanelVisible, setIsSidePanelVisible] = useState(true)
+  const usesStandaloneHeaderActions = onStandaloneHeaderActionsChange != null
+  const hideSidePanel = useCallback(() => setIsSidePanelVisible(false), [])
+  const toggleSidePanel = useCallback(() => setIsSidePanelVisible(current => !current), [])
+  const sendInput = useCallback((input: DesktopMobileDeviceInputEvent) => {
+    void preview.sendInput(input)
+  }, [preview.sendInput])
+
+  const standaloneHeaderActions = useMemo(() =>
+    usesStandaloneHeaderActions && readyDevice != null
+      ? (
+        <MobileDeviceStandaloneHeaderActions
+          isSidePanelVisible={isSidePanelVisible}
+          onRefresh={preview.refreshPreview}
+          onSendInput={sendInput}
+          onToggleSidePanel={toggleSidePanel}
+        />
+      )
+      : null, [
+    isSidePanelVisible,
+    preview.refreshPreview,
+    readyDevice,
+    sendInput,
+    toggleSidePanel,
+    usesStandaloneHeaderActions
+  ])
+
+  useEffect(() => {
+    if (onStandaloneHeaderActionsChange == null) return
+    onStandaloneHeaderActionsChange(standaloneHeaderActions)
+    return () => onStandaloneHeaderActionsChange(null)
+  }, [onStandaloneHeaderActionsChange, standaloneHeaderActions])
 
   if (readyDevice == null) return null
   const screenRatio = preview.videoSize?.width != null && preview.videoSize.height > 0
@@ -25,9 +63,14 @@ export function InteractionPanelMobileDevicePreview({
 
   return (
     <section className='chat-interaction-panel-mobile-debug__preview-section'>
-      <div className='chat-interaction-panel-mobile-debug__preview-grid'>
+      <div
+        className={`chat-interaction-panel-mobile-debug__preview-grid ${
+          isSidePanelVisible ? '' : 'is-side-panel-hidden'
+        }`}
+      >
         <InteractionPanelMobileDeviceScreen
           deviceTitle={getDeviceWindowTitle(readyDevice)}
+          elementScreen={preview.elementTree?.root?.bounds}
           hoverNode={preview.hoverNode}
           isInspecting={preview.isInspecting}
           screenshot={preview.screenshot}
@@ -39,24 +82,41 @@ export function InteractionPanelMobileDevicePreview({
           onHoverPoint={preview.hoverElementAtPoint}
           onInspectPoint={preview.selectElementAtPoint}
           onPointerLeave={() => preview.setHoverNodeId(undefined)}
-          onRefresh={preview.refreshPreview}
-          onSendInput={input => void preview.sendInput(input)}
-          onToggleInspect={preview.toggleInspect}
+          onSendInput={sendInput}
           onVideoError={preview.handleVideoError}
           onVideoSizeChange={preview.setVideoSize}
           onVideoStatusChange={preview.setVideoStatus}
           screenRatio={screenRatio}
         />
-        <InteractionPanelMobileDeviceSideTabs
-          details={details}
-          elementTree={preview.elementTree}
-          error={preview.error}
-          flattenedNodes={preview.flattenedNodes}
-          selectedNode={preview.selectedNode}
-          selectedNodeId={preview.selectedNodeId}
-          onSelectNode={preview.setSelectedNodeId}
-          onSendInput={input => void preview.sendInput(input)}
-        />
+        {isSidePanelVisible
+          ? (
+            <InteractionPanelMobileDeviceSideTabs
+              details={details}
+              elementTree={preview.elementTree}
+              error={preview.error}
+              flattenedNodes={preview.flattenedNodes}
+              isInspecting={preview.isInspecting}
+              selectedNode={preview.selectedNode}
+              selectedNodeId={preview.selectedNodeId}
+              onRefresh={preview.refreshPreview}
+              onSelectNode={preview.setSelectedNodeId}
+              onSendInput={sendInput}
+              showInlineActions={!usesStandaloneHeaderActions}
+              onToggleInspect={preview.toggleInspect}
+              onToggleSidePanel={hideSidePanel}
+            />
+          )
+          : (
+            <button
+              type='button'
+              className='chat-interaction-panel-mobile-debug__side-panel-restore'
+              aria-label={t('chat.interactionPanel.mobileDebugShowSidePanel')}
+              title={t('chat.interactionPanel.mobileDebugShowSidePanel')}
+              onClick={() => setIsSidePanelVisible(true)}
+            >
+              <span className='material-symbols-rounded' aria-hidden='true'>right_panel_open</span>
+            </button>
+          )}
       </div>
     </section>
   )

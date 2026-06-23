@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 
@@ -32,6 +33,7 @@ export function StandaloneMobileDebugRoute() {
     ...createInteractionPanelMobileDebugPage(title),
     selectedDeviceId: initialDeviceId
   }))
+  const [headerActions, setHeaderActions] = useState<ReactNode | null>(null)
 
   useEffect(() => {
     setPage(current => ({ ...current, title }))
@@ -59,6 +61,7 @@ export function StandaloneMobileDebugRoute() {
     <StandaloneRouteThemeProvider>
       <main className='standalone-mobile-debug-route'>
         <StandaloneWindowHeader
+          actions={headerActions}
           routeKey={STANDALONE_MOBILE_DEBUG_ROUTE_KEY}
           title={title}
         />
@@ -68,6 +71,7 @@ export function StandaloneMobileDebugRoute() {
             page={page}
             onChangePage={changePage}
             onOpenDebugUrl={openDebugUrl}
+            onStandaloneHeaderActionsChange={setHeaderActions}
           />
         </section>
       </main>

@@ -1,4 +1,4 @@
-import type { CSSProperties, PointerEvent } from 'react'
+import type { CSSProperties, PointerEvent, WheelEvent } from 'react'
 
 export interface FlattenedElementNode {
   depth: number
@@ -88,7 +88,7 @@ export const getOverlayStyle = (
 })
 
 export const toPointerDevicePoint = (
-  event: PointerEvent<HTMLDivElement>,
+  event: PointerEvent<HTMLDivElement> | WheelEvent<HTMLDivElement>,
   screen: MobileDeviceScreenDimensions
 ): PointerDevicePoint => {
   const rect = event.currentTarget.getBoundingClientRect()
@@ -130,7 +130,19 @@ const toPhysicalInputCoordinate = ({
   return Math.round(value / sourceSize * targetSize)
 }
 
-export const toPhysicalMobileDeviceInput = (
+export const toPhysicalMobileDevicePoint = (
+  point: PointerDevicePoint,
+  options: {
+    rootBounds: DesktopMobileElementBounds | undefined
+    screen: MobileDeviceScreenDimensions | undefined
+    shouldScale: boolean
+  }
+): PointerDevicePoint => ({
+  x: toPhysicalInputCoordinate({ ...options, axis: 'x', value: point.x }) ?? point.x,
+  y: toPhysicalInputCoordinate({ ...options, axis: 'y', value: point.y }) ?? point.y
+})
+
+export const withPhysicalMobileDeviceInput = (
   input: DesktopMobileDeviceInputEvent,
   options: {
     rootBounds: DesktopMobileElementBounds | undefined
@@ -139,8 +151,8 @@ export const toPhysicalMobileDeviceInput = (
   }
 ): DesktopMobileDeviceInputEvent => ({
   ...input,
-  endX: toPhysicalInputCoordinate({ ...options, axis: 'x', value: input.endX }),
-  endY: toPhysicalInputCoordinate({ ...options, axis: 'y', value: input.endY }),
-  x: toPhysicalInputCoordinate({ ...options, axis: 'x', value: input.x }),
-  y: toPhysicalInputCoordinate({ ...options, axis: 'y', value: input.y })
+  physicalEndX: toPhysicalInputCoordinate({ ...options, axis: 'x', value: input.endX }),
+  physicalEndY: toPhysicalInputCoordinate({ ...options, axis: 'y', value: input.endY }),
+  physicalX: toPhysicalInputCoordinate({ ...options, axis: 'x', value: input.x }),
+  physicalY: toPhysicalInputCoordinate({ ...options, axis: 'y', value: input.y })
 })
