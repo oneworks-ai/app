@@ -12,6 +12,11 @@ import {
 } from './use-fit-standalone-mobile-debug-window'
 import { useMobileDevicePreviewController } from './use-mobile-device-preview-controller'
 
+const readStandaloneScreenWidth = () => (
+  document.querySelector<HTMLElement>('.standalone-mobile-debug-route .chat-interaction-panel-mobile-debug__screen')
+    ?.getBoundingClientRect().width
+)
+
 export function InteractionPanelMobileDevicePreview({
   details,
   devices,
@@ -30,21 +35,28 @@ export function InteractionPanelMobileDevicePreview({
   const preview = useMobileDevicePreviewController(readyDeviceId)
   const [isSidePanelVisible, setIsSidePanelVisible] = useState(true)
   const usesStandaloneHeaderActions = onStandaloneHeaderActionsChange != null
-  const scheduleStandaloneWindowFit = useCallback(() => {
+  const scheduleStandaloneWindowFit = useCallback((
+    options: { hiddenScreenWidth?: number; hiddenWidthMode?: 'current-window' | 'device' } = {}
+  ) => {
     if (!usesStandaloneHeaderActions) return
     window.requestAnimationFrame(() => {
-      fitStandaloneMobileDebugWindow()
-      window.setTimeout(fitStandaloneMobileDebugWindow, 120)
+      fitStandaloneMobileDebugWindow(options)
+      window.setTimeout(() => fitStandaloneMobileDebugWindow(options), 120)
     })
   }, [usesStandaloneHeaderActions])
   const hideSidePanel = useCallback(() => {
+    const hiddenScreenWidth = readStandaloneScreenWidth()
     setIsSidePanelVisible(false)
-    scheduleStandaloneWindowFit()
+    scheduleStandaloneWindowFit({ hiddenScreenWidth, hiddenWidthMode: 'device' })
   }, [scheduleStandaloneWindowFit])
   const toggleSidePanel = useCallback(() => {
+    const hiddenScreenWidth = isSidePanelVisible ? readStandaloneScreenWidth() : undefined
     setIsSidePanelVisible(current => !current)
-    scheduleStandaloneWindowFit()
-  }, [scheduleStandaloneWindowFit])
+    scheduleStandaloneWindowFit({
+      hiddenScreenWidth,
+      hiddenWidthMode: isSidePanelVisible ? 'device' : 'current-window'
+    })
+  }, [isSidePanelVisible, scheduleStandaloneWindowFit])
   const sendInput = useCallback((input: DesktopMobileDeviceInputEvent) => {
     void preview.sendInput(input)
   }, [preview.sendInput])
