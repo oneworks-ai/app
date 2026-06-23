@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- route coordinates session, room, branch, and optimistic navigation state. */
 import './ChatRoute.scss'
 
-import { Button, Empty, Spin } from 'antd'
+import { Spin } from 'antd'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -11,7 +11,8 @@ import useSWR from 'swr'
 import type { AgentRoomListResponse, Session } from '@oneworks/core'
 import type { ConfigResponse } from '@oneworks/types'
 
-import { getConfig, getSession, getSessionCacheKey, listAgentRooms, listSessions } from '#~/api'
+import { getApiErrorMessage, getConfig, getSession, getSessionCacheKey, listAgentRooms, listSessions } from '#~/api'
+import { RouteErrorState } from '#~/components/error-state'
 import { useDesktopWorkspaceStartupReady } from '#~/components/layout/desktop-workspace-startup-ready'
 import {
   clearOptimisticSessionDiscarded,
@@ -55,7 +56,7 @@ export function ChatRoute() {
   const enableTimelineView = configRes == null
     ? undefined
     : isSessionTimelineExperimentEnabled(configRes)
-  const { data: sessionRes, error: sessionError, isLoading } = useSWR<{ session: Session }>(
+  const { data: sessionRes, error: sessionError, isLoading, mutate: mutateSession } = useSWR<{ session: Session }>(
     sessionId ? getSessionCacheKey(sessionId) : null,
     () => getSession(sessionId ?? '')
   )
@@ -224,10 +225,33 @@ export function ChatRoute() {
   if (isSessionNotFound) {
     return (
       <ChatRouteStatusShell title={t('common.sessionNotFound')}>
-        <div className='chat-route__empty-state'>
-          <Empty description={t('common.sessionNotFound')} />
-          <Button type='primary' onClick={() => void navigate('/')}>{t('common.backToHome')}</Button>
-        </div>
+        <RouteErrorState
+          actions={[
+            {
+              kind: 'home',
+              onClick: () => void navigate('/')
+            },
+            {
+              kind: 'retry',
+              onClick: () => void mutateSession()
+            }
+          ]}
+          description={t('errorState.sessionNotFoundDescription')}
+          details={{
+            copyText: [
+              `${t('errorState.sessionId')}: ${sessionId ?? 'n/a'}`,
+              `${t('errorState.diagnostics')}: ${getApiErrorMessage(sessionError, 'n/a')}`
+            ].join('\n'),
+            items: [
+              { label: t('errorState.sessionId'), mono: true, value: sessionId ?? 'n/a' },
+              { label: t('errorState.diagnostics'), value: getApiErrorMessage(sessionError, 'n/a') }
+            ],
+            title: t('errorState.diagnostics')
+          }}
+          mobileDescription={t('common.sessionNotFound')}
+          severity='info'
+          title={t('common.sessionNotFound')}
+        />
       </ChatRouteStatusShell>
     )
   }

@@ -116,6 +116,35 @@
       "waiting_input": "Waiting"
     }
   },
+  "errorState": {
+    "actions": {
+      "changeServer": "Switch",
+      "connect": "Connect",
+      "home": "Home",
+      "reload": "Reload",
+      "restart": "Restart",
+      "retry": "Retry"
+    },
+    "appCrashDescription": "The interface hit a rendering error. The current page state may be incomplete; reloading usually restores it.",
+    "appCrashMobileDescription": "The interface hit an error. Reload the page to continue.",
+    "appCrashTitle": "Page error",
+    "configLoadFailedDescription": "Configuration data is temporarily unavailable. Reload configuration or return home and continue other work.",
+    "connectionIssueTitle": "Connection failed",
+    "copyDiagnostics": "Copy",
+    "copyDiagnosticsFailed": "Failed to copy diagnostics",
+    "copyDiagnosticsSuccess": "Diagnostics copied",
+    "details": "Details",
+    "diagnostics": "Diagnostics",
+    "collapseDiagnostics": "Collapse diagnostics",
+    "expandDiagnostics": "Expand diagnostics",
+    "roomNotFoundDescription": "This agent room was not found. It may have been deleted, archived, or not synced by the current service yet.",
+    "roomId": "Room ID",
+    "routeNotFoundDescription": "No page matches the current address. Return home or check whether the link is complete.",
+    "routeNotFoundMobileDescription": "No page matches this address.",
+    "routeNotFoundTitle": "Page not found",
+    "sessionNotFoundDescription": "This session was not found. It may have been deleted, archived, or not synced by the current service yet.",
+    "sessionId": "Session ID"
+  },
   "browserDataSync": {
     "open": "Sync Data",
     "title": "Sync Data",

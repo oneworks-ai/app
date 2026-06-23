@@ -117,6 +117,35 @@
       "waiting_input": "等待输入"
     }
   },
+  "errorState": {
+    "actions": {
+      "changeServer": "切换",
+      "connect": "连接",
+      "home": "首页",
+      "reload": "刷新",
+      "restart": "重启",
+      "retry": "重试"
+    },
+    "appCrashDescription": "界面渲染时发生异常。当前页面状态可能已经不完整，重新加载通常可以恢复。",
+    "appCrashMobileDescription": "界面发生异常；请重新加载页面。",
+    "appCrashTitle": "页面出现异常",
+    "configLoadFailedDescription": "配置数据暂时无法读取。你可以重新加载配置，或先返回首页继续其它工作。",
+    "connectionIssueTitle": "连接失败",
+    "copyDiagnostics": "复制",
+    "copyDiagnosticsFailed": "复制诊断失败",
+    "copyDiagnosticsSuccess": "诊断信息已复制",
+    "details": "详情",
+    "diagnostics": "诊断信息",
+    "collapseDiagnostics": "收起诊断信息",
+    "expandDiagnostics": "展开诊断信息",
+    "roomNotFoundDescription": "没有找到这个 Agent Room。它可能已经被删除、归档，或当前服务尚未同步到这条记录。",
+    "roomId": "Agent Room ID",
+    "routeNotFoundDescription": "当前地址没有对应的页面。你可以返回首页，或检查链接是否完整。",
+    "routeNotFoundMobileDescription": "当前地址没有对应页面。",
+    "routeNotFoundTitle": "页面不存在",
+    "sessionNotFoundDescription": "没有找到这个会话。它可能已经被删除、归档，或当前服务尚未同步到这条记录。",
+    "sessionId": "会话 ID"
+  },
   "browserDataSync": {
     "open": "同步数据",
     "title": "同步数据",

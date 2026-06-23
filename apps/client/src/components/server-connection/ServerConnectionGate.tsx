@@ -1,10 +1,11 @@
 import './ServerConnectionGate.scss'
 
-import { Alert, Button, Form } from 'antd'
+import { Button, Form } from 'antd'
 import type { PropsWithChildren } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { AppErrorState } from '#~/components/error-state'
 import { isHomepagePreviewRuntimeEnabled } from '#~/homepage-preview/mock-runtime'
 import {
   clearServerConnectionPickerRequest,
@@ -153,11 +154,21 @@ export function ServerConnectionGate({ children }: PropsWithChildren) {
           )}
 
         {submitError != null && (
-          <Alert
-            type='error'
-            showIcon
+          <AppErrorState
             className='server-connection-gate__notice'
-            message={submitError}
+            description={submitError}
+            details={{
+              copyText: submitError,
+              items: [{
+                label: t('serverConnection.serverUrl'),
+                mono: true,
+                value: String(form.getFieldValue('serverUrl') ?? '')
+              }],
+              title: t('errorState.diagnostics')
+            }}
+            focusOnMount={false}
+            title={t('errorState.connectionIssueTitle')}
+            variant='inline'
           />
         )}
 
