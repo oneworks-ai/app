@@ -120,6 +120,8 @@ const MIN_WINDOW_OPACITY = 0.55
 const MAX_WINDOW_OPACITY = 1
 const MIN_WINDOW_CONTENT_SIZE = 300
 const MAX_WINDOW_CONTENT_SIZE = 2400
+const MAX_WINDOW_ASPECT_RATIO = 10
+const MAX_WINDOW_ASPECT_RATIO_EXTRA_SIZE = 1200
 
 const normalizeWindowOpacity = (value: unknown) => {
   const numericValue = typeof value === 'number' ? value : Number(value)
@@ -141,6 +143,30 @@ const normalizeWindowContentSize = (value: unknown) => {
   return {
     height: Math.min(MAX_WINDOW_CONTENT_SIZE, Math.max(MIN_WINDOW_CONTENT_SIZE, Math.round(height))),
     width: Math.min(MAX_WINDOW_CONTENT_SIZE, Math.max(MIN_WINDOW_CONTENT_SIZE, Math.round(width)))
+  }
+}
+
+const normalizeWindowAspectRatioInput = (value: unknown) => {
+  if (!isRecord(value)) {
+    throw new TypeError('Window aspect ratio input is required.')
+  }
+
+  const aspectRatio = typeof value.aspectRatio === 'number' ? value.aspectRatio : Number(value.aspectRatio)
+  if (!Number.isFinite(aspectRatio) || aspectRatio < 0) {
+    throw new TypeError('Window aspect ratio must be zero or a positive number.')
+  }
+
+  const extraSize = isRecord(value.extraSize) ? value.extraSize : {}
+  const width = typeof extraSize.width === 'number' ? extraSize.width : Number(extraSize.width ?? 0)
+  const height = typeof extraSize.height === 'number' ? extraSize.height : Number(extraSize.height ?? 0)
+  return {
+    aspectRatio: Math.min(MAX_WINDOW_ASPECT_RATIO, aspectRatio),
+    extraSize: {
+      height: Number.isFinite(height)
+        ? Math.min(MAX_WINDOW_ASPECT_RATIO_EXTRA_SIZE, Math.max(0, Math.round(height)))
+        : 0,
+      width: Number.isFinite(width) ? Math.min(MAX_WINDOW_ASPECT_RATIO_EXTRA_SIZE, Math.max(0, Math.round(width))) : 0
+    }
   }
 }
 
@@ -677,6 +703,14 @@ export const registerIpcHandlers = ({
     windowRecord.window.setContentSize(size.width, size.height)
     const [width, height] = windowRecord.window.getContentSize()
     return { height, width }
+  })
+
+  ipcMain.handle('desktop:set-current-window-aspect-ratio', (event, value: unknown) => {
+    const windowRecord = findWindowRecordForWebContents(event.sender)
+    if (windowRecord == null || !isWindowRecordUsable(windowRecord)) return undefined
+
+    const { aspectRatio, extraSize } = normalizeWindowAspectRatioInput(value)
+    windowRecord.window.setAspectRatio(aspectRatio, extraSize)
   })
 
   ipcMain.handle('desktop:hide-launcher-window', (event) => {

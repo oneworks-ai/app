@@ -20,9 +20,7 @@ const readScreenRatio = (route: HTMLElement) => {
   if (Number.isFinite(cssRatio) && cssRatio > 0) return cssRatio
 
   const canvas = route.querySelector<HTMLCanvasElement>('.chat-interaction-panel-mobile-debug__video-canvas')
-  if (canvas != null && canvas.width > 0 && canvas.height > 0) {
-    return canvas.width / canvas.height
-  }
+  if (canvas != null && canvas.width > 0 && canvas.height > 0) return canvas.width / canvas.height
 
   return standaloneFallbackScreenRatio
 }
@@ -64,10 +62,7 @@ const resolveStandaloneMobileDebugWindowFitSize = (
     const minimumExpandedWidth = Math.ceil(
       Math.max(deviceRect.width + gridGap + sidePanelWidth + bodyHorizontalPadding, headerContentWidth)
     )
-    return {
-      height: window.innerHeight,
-      width: Math.max(window.innerWidth, minimumExpandedWidth)
-    }
+    return { height: window.innerHeight, width: Math.max(window.innerWidth, minimumExpandedWidth) }
   }
 
   const controlsHeight = deviceControls?.getBoundingClientRect().height ?? standaloneFallbackControlsHeight
@@ -84,9 +79,28 @@ const resolveStandaloneMobileDebugWindowFitSize = (
 }
 
 export const fitStandaloneMobileDebugWindow = (options?: StandaloneMobileDebugWindowFitOptions) => {
+  applyStandaloneMobileDebugWindowAspectRatio()
   const nextSize = resolveStandaloneMobileDebugWindowFitSize(options)
   if (nextSize == null) return
   void window.oneworksDesktop?.setCurrentWindowContentSize?.(nextSize).catch(() => undefined)
+}
+
+const applyStandaloneMobileDebugWindowAspectRatio = () => {
+  const setAspectRatio = window.oneworksDesktop?.setCurrentWindowAspectRatio
+  const route = document.querySelector<HTMLElement>('.standalone-mobile-debug-route')
+  const grid = route?.querySelector<HTMLElement>('.chat-interaction-panel-mobile-debug__preview-grid')
+  if (setAspectRatio == null || route == null || grid == null) return
+  if (!grid.classList.contains('is-side-panel-hidden')) {
+    void setAspectRatio({ aspectRatio: 0 }).catch(() => undefined)
+    return
+  }
+
+  const header = route.querySelector<HTMLElement>('.standalone-mobile-debug-route__header')
+  const controls = route.querySelector<HTMLElement>('.chat-interaction-panel-mobile-debug__device-controls')
+  const extraHeight = (header?.getBoundingClientRect().height ?? 0) +
+    (controls?.getBoundingClientRect().height ?? standaloneFallbackControlsHeight)
+  const extraSize = { height: Math.ceil(extraHeight), width: 0 }
+  void setAspectRatio({ aspectRatio: readScreenRatio(route), extraSize }).catch(() => undefined)
 }
 
 export function useFitStandaloneMobileDebugWindow({
@@ -111,6 +125,21 @@ export function useFitStandaloneMobileDebugWindow({
 
     let animationFrame: number | undefined
     let resizeTimer: number | undefined
+    const fitWindow = () => {
+      applyStandaloneMobileDebugWindowAspectRatio()
+      const nextSize = resolveStandaloneMobileDebugWindowFitSize()
+      if (nextSize == null) return
+      const previousSize = fitSizeRef.current
+      const hasSamePreviousSize = previousSize != null &&
+        Math.abs(previousSize.width - nextSize.width) < standaloneWindowResizeThreshold &&
+        Math.abs(previousSize.height - nextSize.height) < standaloneWindowResizeThreshold
+      const hasSameWindowSize = Math.abs(window.innerWidth - nextSize.width) < standaloneWindowResizeThreshold &&
+        Math.abs(window.innerHeight - nextSize.height) < standaloneWindowResizeThreshold
+      if (hasSamePreviousSize && hasSameWindowSize) return
+
+      fitSizeRef.current = nextSize
+      void setWindowContentSize(nextSize).catch(() => undefined)
+    }
     const scheduleFitWindow = ({ defer = false }: { defer?: boolean } = {}) => {
       if (resizeTimer != null) window.clearTimeout(resizeTimer)
       if (defer) {
@@ -123,19 +152,19 @@ export function useFitStandaloneMobileDebugWindow({
       if (animationFrame != null) window.cancelAnimationFrame(animationFrame)
       animationFrame = window.requestAnimationFrame(() => {
         animationFrame = undefined
-        const nextSize = resolveStandaloneMobileDebugWindowFitSize()
-        if (nextSize == null) return
-        const previousSize = fitSizeRef.current
-        const hasSamePreviousSize = previousSize != null &&
-          Math.abs(previousSize.width - nextSize.width) < standaloneWindowResizeThreshold &&
-          Math.abs(previousSize.height - nextSize.height) < standaloneWindowResizeThreshold
-        const hasSameWindowSize = Math.abs(window.innerWidth - nextSize.width) < standaloneWindowResizeThreshold &&
-          Math.abs(window.innerHeight - nextSize.height) < standaloneWindowResizeThreshold
-        if (hasSamePreviousSize && hasSameWindowSize) return
-
-        fitSizeRef.current = nextSize
-        void setWindowContentSize(nextSize).catch(() => undefined)
+        fitWindow()
       })
+    }
+    const fitWindowImmediately = () => {
+      if (resizeTimer != null) {
+        window.clearTimeout(resizeTimer)
+        resizeTimer = undefined
+      }
+      if (animationFrame != null) {
+        window.cancelAnimationFrame(animationFrame)
+        animationFrame = undefined
+      }
+      fitWindow()
     }
 
     scheduleFitWindow()
@@ -145,29 +174,24 @@ export function useFitStandaloneMobileDebugWindow({
     const resizeObserver = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(
       scheduleDeferredFitWindow
     )
-    for (
-      const element of document.querySelectorAll<HTMLElement>(
-        [
-          '.standalone-mobile-debug-route__header',
-          '.chat-interaction-panel-mobile-debug__body',
-          '.chat-interaction-panel-mobile-debug__device-controls',
-          '.chat-interaction-panel-mobile-debug__preview-grid',
-          '.chat-interaction-panel-mobile-debug__device-window',
-          '.chat-interaction-panel-mobile-debug__screen-column',
-          '.chat-interaction-panel-mobile-debug__side-tabs'
-        ].join(',')
-      )
-    ) {
-      resizeObserver?.observe(element)
-    }
-    window.addEventListener('resize', scheduleDeferredFitWindow)
+    document.querySelectorAll<HTMLElement>([
+      '.standalone-mobile-debug-route__header',
+      '.chat-interaction-panel-mobile-debug__body',
+      '.chat-interaction-panel-mobile-debug__device-controls',
+      '.chat-interaction-panel-mobile-debug__preview-grid',
+      '.chat-interaction-panel-mobile-debug__device-window',
+      '.chat-interaction-panel-mobile-debug__screen-column',
+      '.chat-interaction-panel-mobile-debug__side-tabs'
+    ].join(',')).forEach(element => resizeObserver?.observe(element))
+    window.addEventListener('resize', fitWindowImmediately)
     return () => {
       if (resizeTimer != null) window.clearTimeout(resizeTimer)
+      void window.oneworksDesktop?.setCurrentWindowAspectRatio?.({ aspectRatio: 0 }).catch(() => undefined)
       window.clearTimeout(settleTimer)
       window.clearTimeout(finalSettleTimer)
       if (animationFrame != null) window.cancelAnimationFrame(animationFrame)
       resizeObserver?.disconnect()
-      window.removeEventListener('resize', scheduleDeferredFitWindow)
+      window.removeEventListener('resize', fitWindowImmediately)
     }
   }, [isEnabled, isSidePanelVisible, readyDeviceId, videoHeight, videoWidth])
 }

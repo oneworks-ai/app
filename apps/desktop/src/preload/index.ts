@@ -375,6 +375,8 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
     ipcRenderer.invoke('desktop:search-current-workspace-resources', query),
   setCurrentWindowAlwaysOnTop: (value: boolean) =>
     ipcRenderer.invoke('desktop:set-current-window-always-on-top', value),
+  setCurrentWindowAspectRatio: (input: { aspectRatio: number; extraSize?: { height: number; width: number } }) =>
+    ipcRenderer.invoke('desktop:set-current-window-aspect-ratio', input),
   setCurrentWindowContentSize: (size: { height: number; width: number }) =>
     ipcRenderer.invoke('desktop:set-current-window-content-size', size),
   setCurrentWindowOpacity: (value: number) => ipcRenderer.invoke('desktop:set-current-window-opacity', value),

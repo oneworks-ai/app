@@ -492,6 +492,10 @@ interface Window {
       alwaysOnTop: boolean
       opacity: number
     }>
+    setCurrentWindowAspectRatio?: (input: {
+      aspectRatio: number
+      extraSize?: { height: number; width: number }
+    }) => Promise<void>
     setCurrentWindowContentSize?: (size: { height: number; width: number }) => Promise<
       { height: number; width: number } | undefined
     >
