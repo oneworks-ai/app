@@ -38,6 +38,7 @@ const WORKSPACE_SERVER_STOP_TIMEOUT_MS = 5_000
 const WORKSPACE_INSTANCE_LOCK_TIMEOUT_MS = 30_000
 const WORKSPACE_INSTANCE_LOCK_STALE_MS = 60_000
 const WORKSPACE_INSTANCE_PROTOCOL_VERSION = 1
+const WORKSPACE_SERVER_RUNTIME_COMPATIBILITY_VERSION = '0.1.0'
 const invalidFileNameCharacters = new Set(['<', '>', ':', '"', '/', '\\', '|', '?', '*'])
 
 interface LauncherManagerState {
@@ -60,6 +61,7 @@ interface LauncherWorkspaceInstanceIdentity {
   launchConfigHash: string
   packageDir: string
   repoRoot?: string
+  runtimeCompatibilityVersion: string
   sourceVersionId?: string
 }
 
@@ -694,6 +696,7 @@ export const resolveLauncherWorkspaceInstanceIdentity = (
     launchConfigHash,
     packageDir,
     ...(implementation.repoRoot == null ? {} : { repoRoot: implementation.repoRoot }),
+    runtimeCompatibilityVersion: WORKSPACE_SERVER_RUNTIME_COMPATIBILITY_VERSION,
     ...(implementation.sourceVersionId == null ? {} : { sourceVersionId: implementation.sourceVersionId })
   }
 }
@@ -842,6 +845,28 @@ const isWorkspaceInstanceReady = async (state: LauncherWorkspaceInstanceState | 
 }
 
 const legacyGitImplementationIdPattern = /^git:([a-f0-9]{40}):clean$/u
+const semverPattern = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u
+
+const readSemverCompatibilityFamily = (version: string | undefined) => {
+  if (version == null) return undefined
+  const match = semverPattern.exec(version)
+  if (match == null) return undefined
+  const major = Number(match[1])
+  const minor = Number(match[2])
+  if (!Number.isSafeInteger(major) || !Number.isSafeInteger(minor)) return undefined
+  return major === 0 ? `0.${minor}` : String(major)
+}
+
+const isWorkspaceRuntimeCompatibilityVersionCompatible = (
+  state: LauncherWorkspaceInstanceIdentity,
+  identity: LauncherWorkspaceInstanceIdentity
+) => {
+  if (state.packageDir !== identity.packageDir) return false
+  if (state.repoRoot !== identity.repoRoot) return false
+  const stateFamily = readSemverCompatibilityFamily(state.runtimeCompatibilityVersion)
+  if (stateFamily == null) return false
+  return stateFamily === readSemverCompatibilityFamily(identity.runtimeCompatibilityVersion)
+}
 
 const isLegacyGitRuntimeImplementationCompatible = (
   state: LauncherWorkspaceInstanceIdentity,
@@ -866,6 +891,7 @@ const isWorkspaceImplementationCompatible = (
   identity: LauncherWorkspaceInstanceIdentity
 ) => (
   state.implementationId === identity.implementationId ||
+  isWorkspaceRuntimeCompatibilityVersionCompatible(state, identity) ||
   isLegacyGitRuntimeImplementationCompatible(state, identity)
 )
 
@@ -904,6 +930,7 @@ const assertCompatibleWorkspaceInstance = (
       packageDir: state.packageDir,
       pid: state.pid,
       repoRoot: state.repoRoot,
+      runtimeCompatibilityVersion: state.runtimeCompatibilityVersion,
       serverBaseUrl: state.serverBaseUrl,
       sourceVersionId: state.sourceVersionId,
       startedAt: state.startedAt,
@@ -915,6 +942,7 @@ const assertCompatibleWorkspaceInstance = (
       launchConfigHash: identity.launchConfigHash,
       packageDir: identity.packageDir,
       repoRoot: identity.repoRoot,
+      runtimeCompatibilityVersion: identity.runtimeCompatibilityVersion,
       sourceVersionId: identity.sourceVersionId,
       workspaceFolder
     },

@@ -1,6 +1,6 @@
 # Session 服务目录说明
 
-- index.ts：会话生命周期主入口，负责 Adapter 会话启动、用户消息注入、状态更新、中断与终止
+- index.ts：会话生命周期主入口，负责 Adapter 会话启动、用户消息注入、状态更新、中断与终止；`getWorkspaceActivitySnapshot` 汇总 workspace 是否仍有运行中 / 等待输入的会话
 - create.ts：会话创建编排，负责初始消息注入、标签初始化与按需启动会话
 - events.ts：会话事件落库与状态派生，负责从消息中提取摘要并更新会话元信息
 - interaction.ts：交互请求/响应服务，负责等待用户输入、超时处理与 external session 交互闭环

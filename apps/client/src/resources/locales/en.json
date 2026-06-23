@@ -923,14 +923,26 @@
     }
   },
   "workspaceConnection": {
+    "autoRestartPaused": "Auto restart paused",
+    "busyDescription": "Background restart was skipped to avoid interrupting work in progress. Finish or stop these sessions, then retry.",
+    "busyStatsLabel": "Active session statistics",
+    "busyTitle": "Active sessions: {{count}}",
+    "busyTotal": "Total {{count}}",
+    "diagnosticsTitle": "Service diagnostics",
+    "hideActiveSessions": "Hide sessions",
+    "mobileVersionConflictSummary": "The service version differs. Restart the workspace server or retry later.",
     "processId": "Process",
     "requestedVersion": "Requested",
     "restartFailed": "Failed to restart the workspace server",
     "restartWorkspaceServer": "Restart workspace server",
     "retry": "Retry",
+    "runtimeCompatibilityVersion": "Compatibility version",
     "runningVersion": "Running",
     "serverUrl": "Server URL",
-    "versionConflictDescription": "This page and the running workspace server come from different versions. Client-only edits can reuse the workspace server; if server runtime code changed, restart the workspace server to continue."
+    "showActiveSessions": "View sessions",
+    "unknownStatus": "Unknown",
+    "versionConflictDescription": "This page and the running workspace server come from different versions. Client-only or compatible server edits can reuse the workspace server; restart the workspace server when the runtime compatibility versions differ.",
+    "versionConflictTitle": "Workspace server version mismatch"
   },
   "launcher": {
     "senderLabel": "Launcher input",

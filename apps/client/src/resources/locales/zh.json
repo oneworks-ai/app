@@ -924,14 +924,26 @@
     }
   },
   "workspaceConnection": {
+    "autoRestartPaused": "自动重启已暂停",
+    "busyDescription": "为避免中断正在进行的动作，已跳过后台重启。结束或停止这些会话后再重试。",
+    "busyStatsLabel": "正在工作的会话统计",
+    "busyTitle": "仍有 {{count}} 个会话在工作",
+    "busyTotal": "总计 {{count}}",
+    "diagnosticsTitle": "服务诊断",
+    "hideActiveSessions": "收起会话",
+    "mobileVersionConflictSummary": "服务版本不一致；可重启项目服务，或稍后重试。",
     "processId": "进程",
     "requestedVersion": "当前请求",
     "restartFailed": "重启项目服务失败",
     "restartWorkspaceServer": "重启项目服务",
     "retry": "重试",
+    "runtimeCompatibilityVersion": "兼容版本",
     "runningVersion": "正在运行",
     "serverUrl": "服务地址",
-    "versionConflictDescription": "当前页面和已运行的项目服务来自不同版本。纯前端改动会自动复用项目服务；如果服务端运行时代码变了，可以重启项目服务后继续。"
+    "showActiveSessions": "查看会话",
+    "unknownStatus": "未知",
+    "versionConflictDescription": "当前页面和已运行的项目服务来自不同版本。纯前端或兼容的服务端改动会自动复用项目服务；如果运行时兼容版本不一致，可以重启项目服务后继续。",
+    "versionConflictTitle": "项目服务版本不一致"
   },
   "launcher": {
     "senderLabel": "启动输入框",
