@@ -46,6 +46,7 @@ export default defineConfig({
           '@oneworks/icon',
           '@oneworks/types',
           '@oneworks/utils',
+          /^@yume-chan\//,
           'pinyin-pro'
         ]
       },
@@ -69,6 +70,7 @@ export default defineConfig({
         '@oneworks/icon',
         '@oneworks/types',
         '@oneworks/utils',
+        /^@yume-chan\//,
         'pinyin-pro'
       ]
     }

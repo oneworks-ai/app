@@ -18,6 +18,8 @@ const workspaceStartupReadyChannel = 'desktop:workspace-startup-ready'
 const workspaceConnectionChannel = 'desktop:workspace-connection'
 const workspacePluginSearchChannel = 'desktop:plugins:search-current-workspace'
 const workspacePluginInvokeChannel = 'desktop:plugins:invoke-current-workspace-result'
+const mobileDeviceVideoFrameChannel = 'desktop:mobile-device-video-frame'
+const mobileDeviceVideoStreamStatusChannel = 'desktop:mobile-device-video-stream-status'
 const systemLocaleArgPrefix = '--oneworks-system-locale='
 const workspaceStartupOverlayId = 'oneworks-desktop-startup-overlay'
 const workspaceStartupIconSelector = '[data-oneworks-desktop-startup-icon="true"]'
@@ -241,9 +243,31 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
   listMobileDebugTargets: (config: unknown) => ipcRenderer.invoke('desktop:list-mobile-debug-targets', config),
   captureMobileDeviceScreenshot: (deviceId: string) =>
     ipcRenderer.invoke('desktop:capture-mobile-device-screenshot', deviceId),
+  startMobileDeviceVideoStream: (deviceId: string) =>
+    ipcRenderer.invoke('desktop:start-mobile-device-video-stream', deviceId),
+  stopMobileDeviceVideoStream: (streamId: string) =>
+    ipcRenderer.invoke('desktop:stop-mobile-device-video-stream', streamId),
   dumpMobileElementTree: (deviceId: string) => ipcRenderer.invoke('desktop:dump-mobile-element-tree', deviceId),
   sendMobileDeviceInput: (deviceId: string, input: unknown) =>
     ipcRenderer.invoke('desktop:send-mobile-device-input', deviceId, input),
+  onMobileDeviceVideoFrame: (listener: (value: unknown) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      listener(value)
+    }
+    ipcRenderer.on(mobileDeviceVideoFrameChannel, wrappedListener)
+    return () => {
+      ipcRenderer.off(mobileDeviceVideoFrameChannel, wrappedListener)
+    }
+  },
+  onMobileDeviceVideoStreamStatus: (listener: (value: unknown) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      listener(value)
+    }
+    ipcRenderer.on(mobileDeviceVideoStreamStatusChannel, wrappedListener)
+    return () => {
+      ipcRenderer.off(mobileDeviceVideoStreamStatusChannel, wrappedListener)
+    }
+  },
   markWorkspaceStartupReady,
   onDesktopSettingsChange: (listener: (value: unknown) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, value: unknown) => {

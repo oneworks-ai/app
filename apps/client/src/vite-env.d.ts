@@ -261,6 +261,35 @@ interface DesktopMobileDeviceScreenshotResponse {
   width?: number
 }
 
+interface DesktopMobileDeviceVideoStreamStartResponse {
+  codec: number
+  codecName: string
+  deviceId: string
+  height?: number
+  source: 'scrcpy'
+  startedAt: number
+  streamId: string
+  width?: number
+}
+
+interface DesktopMobileDeviceVideoFrameEvent {
+  data: Uint8Array
+  deviceId: string
+  height?: number
+  keyframe?: boolean
+  receivedAt: number
+  streamId: string
+  type: 'configuration' | 'data'
+  width?: number
+}
+
+interface DesktopMobileDeviceVideoStreamStatusEvent {
+  deviceId: string
+  message?: string
+  status: 'closed' | 'error'
+  streamId: string
+}
+
 interface DesktopMobileElementBounds {
   height: number
   width: number
@@ -497,11 +526,17 @@ interface Window {
     listWorkspaceFileOpeners?: (workspaceFolder: string) => Promise<DesktopWorkspaceFileOpenersResponse>
     listMobileDebugTargets?: (config?: DesktopMobileDebugConfig) => Promise<DesktopMobileDebugTargetsResponse>
     captureMobileDeviceScreenshot?: (deviceId: string) => Promise<DesktopMobileDeviceScreenshotResponse>
+    startMobileDeviceVideoStream?: (deviceId: string) => Promise<DesktopMobileDeviceVideoStreamStartResponse>
+    stopMobileDeviceVideoStream?: (streamId: string) => Promise<{ stoppedAt: number; streamId: string }>
     dumpMobileElementTree?: (deviceId: string) => Promise<DesktopMobileElementTreeResponse>
     sendMobileDeviceInput?: (
       deviceId: string,
       input: DesktopMobileDeviceInputEvent
     ) => Promise<{ deviceId: string; sentAt: number }>
+    onMobileDeviceVideoFrame?: (listener: (value: DesktopMobileDeviceVideoFrameEvent) => void) => () => void
+    onMobileDeviceVideoStreamStatus?: (
+      listener: (value: DesktopMobileDeviceVideoStreamStatusEvent) => void
+    ) => () => void
     markWorkspaceStartupReady?: () => void
     onDesktopSettingsChange?: (listener: (value: unknown) => void) => () => void
     onUpdateStatusChange?: (listener: (value: unknown) => void) => () => void

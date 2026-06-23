@@ -9,12 +9,30 @@ import path from 'node:path'
 import process from 'node:process'
 import type { Duplex } from 'node:stream'
 
+import { app } from 'electron'
+import type { WebContents } from 'electron'
+
+import { AdbServerClient } from '@yume-chan/adb'
+import { AdbScrcpyClient, AdbScrcpyOptions3_3_3 } from '@yume-chan/adb-scrcpy'
+import { AdbServerNodeTcpConnector } from '@yume-chan/adb-server-node-tcp'
+import { ScrcpyInstanceId, ScrcpyVideoCodecNameMap } from '@yume-chan/scrcpy'
+import type { ScrcpyMediaStreamPacket } from '@yume-chan/scrcpy'
+import { ReadableStream } from '@yume-chan/stream-extra'
+
 const ADB_TIMEOUT_MS = 10000
 const FETCH_TIMEOUT_MS = 5000
 const ADB_INPUT_TIMEOUT_MS = 3000
-const ADB_SCREENSHOT_TIMEOUT_MS = 12000
+const ADB_SCREENSHOT_TIMEOUT_MS = 4000
 const ADB_UIAUTOMATOR_DUMP_TIMEOUT_MS = 10000
 const ADB_UIAUTOMATOR_READ_TIMEOUT_MS = 3500
+const SCRCPY_SERVER_VERSION = '3.3.3'
+const SCRCPY_SERVER_REMOTE_PATH = `/data/local/tmp/oneworks-scrcpy-server-v${SCRCPY_SERVER_VERSION}.jar`
+const SCRCPY_VIDEO_BIT_RATE = 6_000_000
+const SCRCPY_MAX_FPS = 60
+const SCRCPY_MAX_SIZE = 1600
+
+export const MOBILE_DEVICE_VIDEO_FRAME_CHANNEL = 'desktop:mobile-device-video-frame'
+export const MOBILE_DEVICE_VIDEO_STREAM_STATUS_CHANNEL = 'desktop:mobile-device-video-stream-status'
 
 export interface MobileDebugDevice {
   detail: string
@@ -95,6 +113,35 @@ export interface MobileDeviceScreenshotResponse {
   height?: number
   imageDataUrl: string
   width?: number
+}
+
+export interface MobileDeviceVideoStreamStartResponse {
+  codec: number
+  codecName: string
+  deviceId: string
+  height?: number
+  source: 'scrcpy'
+  startedAt: number
+  streamId: string
+  width?: number
+}
+
+export interface MobileDeviceVideoFrameEvent {
+  data: Uint8Array
+  deviceId: string
+  height?: number
+  keyframe?: boolean
+  receivedAt: number
+  streamId: string
+  type: ScrcpyMediaStreamPacket['type']
+  width?: number
+}
+
+export interface MobileDeviceVideoStreamStatusEvent {
+  deviceId: string
+  message?: string
+  status: 'closed' | 'error'
+  streamId: string
 }
 
 export interface MobileElementBounds {
@@ -185,6 +232,19 @@ const activeReversePortsByDevice = new Map<string, Map<number, string>>()
 const faviconUrlByPageUrl = new Map<string, string>()
 const deviceAdbQueueById = new Map<string, Promise<void>>()
 const deviceElementTreeQueueById = new Map<string, Promise<void>>()
+const deviceScreenshotTaskById = new Map<string, Promise<MobileDeviceScreenshotResponse>>()
+
+interface MobileDeviceVideoStreamSession {
+  adb: Awaited<ReturnType<AdbServerClient['createAdb']>>
+  client: Awaited<ReturnType<typeof AdbScrcpyClient.start>>
+  deviceId: string
+  isClosed: boolean
+  ownerWebContentsId: number
+  removeDestroyedListener: () => void
+  streamId: string
+}
+
+const mobileDeviceVideoStreamById = new Map<string, MobileDeviceVideoStreamSession>()
 
 const runCommand = (file: string, args: string[], timeout = ADB_TIMEOUT_MS) =>
   new Promise<CommandResult>((resolve, reject) => {
@@ -1222,6 +1282,141 @@ const readPngSize = (buffer: Buffer) => {
   }
 }
 
+const createBufferReadableStream = (buffer: Uint8Array) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(buffer)
+      controller.close()
+    }
+  })
+
+const getScrcpyVideoCodecName = (codec: number) => ScrcpyVideoCodecNameMap.get(codec) ?? `codec-${codec}`
+
+const getScrcpyServerPathCandidates = () => {
+  const fileName = `scrcpy-server-v${SCRCPY_SERVER_VERSION}`
+  const resourceRelativePath = path.join('resources', 'scrcpy', fileName)
+  return [
+    process.env.ONEWORKS_SCRCPY_SERVER_PATH,
+    path.join(app.getAppPath(), resourceRelativePath),
+    path.join(process.cwd(), resourceRelativePath),
+    path.resolve(__dirname, '..', resourceRelativePath),
+    path.resolve(__dirname, '..', '..', resourceRelativePath),
+    path.resolve(__dirname, '..', '..', '..', resourceRelativePath)
+  ].filter((candidate): candidate is string => candidate != null && candidate.trim() !== '')
+}
+
+const resolveScrcpyServerPath = () => {
+  for (const candidate of getScrcpyServerPathCandidates()) {
+    if (fs.existsSync(candidate)) return candidate
+  }
+  throw new Error(`scrcpy server v${SCRCPY_SERVER_VERSION} was not found.`)
+}
+
+const resolveAdbServerTcpSpec = () => {
+  const rawSocket = process.env.ADB_SERVER_SOCKET?.trim()
+  if (rawSocket != null && rawSocket.startsWith('tcp:')) {
+    const socketParts = rawSocket.slice('tcp:'.length).split(':')
+    const [hostValue, portValue = socketParts.length === 1 ? socketParts[0] : '5037'] = socketParts
+    const host = socketParts.length === 1 ? '127.0.0.1' : hostValue
+    const port = normalizePort(portValue)
+    if (port != null) return { host: host === '' ? '127.0.0.1' : host, port }
+  }
+
+  const envPort = normalizePort(process.env.ADB_SERVER_PORT)
+  return {
+    host: '127.0.0.1',
+    port: envPort ?? 5037
+  }
+}
+
+const sendMobileDeviceVideoStreamStatus = (
+  webContents: WebContents,
+  event: MobileDeviceVideoStreamStatusEvent
+) => {
+  if (webContents.isDestroyed()) return
+  webContents.send(MOBILE_DEVICE_VIDEO_STREAM_STATUS_CHANNEL, event)
+}
+
+const closeMobileDeviceVideoStreamSession = async (
+  session: MobileDeviceVideoStreamSession,
+  webContents: WebContents | undefined,
+  status: MobileDeviceVideoStreamStatusEvent['status'],
+  message?: string
+) => {
+  if (session.isClosed) return
+  session.isClosed = true
+  mobileDeviceVideoStreamById.delete(session.streamId)
+  session.removeDestroyedListener()
+
+  await Promise.allSettled([
+    session.client.close(),
+    session.adb.close()
+  ])
+
+  if (webContents != null) {
+    sendMobileDeviceVideoStreamStatus(webContents, {
+      deviceId: session.deviceId,
+      message,
+      status,
+      streamId: session.streamId
+    })
+  }
+}
+
+const consumeScrcpyOutput = async (output: Awaited<ReturnType<typeof AdbScrcpyClient.start>>['output']) => {
+  const reader = output.getReader()
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) return
+      void value
+    }
+  } catch {
+    // The scrcpy output stream closes when its process is stopped.
+  }
+}
+
+const toMobileDeviceVideoFrameEvent = (
+  session: MobileDeviceVideoStreamSession,
+  packet: ScrcpyMediaStreamPacket,
+  size: { height?: number; width?: number }
+): MobileDeviceVideoFrameEvent => ({
+  data: packet.data,
+  deviceId: session.deviceId,
+  height: size.height,
+  keyframe: packet.type === 'data' ? packet.keyframe : undefined,
+  receivedAt: Date.now(),
+  streamId: session.streamId,
+  type: packet.type,
+  width: size.width
+})
+
+const pumpMobileDeviceVideoStream = async (
+  webContents: WebContents,
+  session: MobileDeviceVideoStreamSession,
+  videoStream: Awaited<Awaited<ReturnType<typeof AdbScrcpyClient.start>>['videoStream']>
+) => {
+  const reader = videoStream.stream.getReader()
+  try {
+    while (!session.isClosed) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (webContents.isDestroyed()) break
+
+      webContents.send(
+        MOBILE_DEVICE_VIDEO_FRAME_CHANNEL,
+        toMobileDeviceVideoFrameEvent(session, value, {
+          height: videoStream.height || videoStream.metadata.height,
+          width: videoStream.width || videoStream.metadata.width
+        })
+      )
+    }
+    await closeMobileDeviceVideoStreamSession(session, webContents, 'closed')
+  } catch (error) {
+    await closeMobileDeviceVideoStreamSession(session, webContents, 'error', toErrorMessage(error))
+  }
+}
+
 const normalizeCoordinate = (value: unknown) => {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
   return Math.max(0, Math.round(value))
@@ -1458,19 +1653,128 @@ export const listMobileDebugTargets = async (inputConfig?: unknown): Promise<Mob
   }
 }
 
+export const startMobileDeviceVideoStream = async (
+  webContents: WebContents,
+  deviceId: unknown
+): Promise<MobileDeviceVideoStreamStartResponse> => {
+  const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
+  const scrcpyServerPath = resolveScrcpyServerPath()
+  await runCommand(adbPath, ['start-server'], ADB_TIMEOUT_MS)
+
+  const adbServerClient = new AdbServerClient(new AdbServerNodeTcpConnector(resolveAdbServerTcpSpec()))
+  const adb = await adbServerClient.createAdb({ serial: device.id })
+  const streamId = `scrcpy:${device.id}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`
+  let client: Awaited<ReturnType<typeof AdbScrcpyClient.start>> | undefined
+
+  try {
+    const serverBuffer = await fs.promises.readFile(scrcpyServerPath)
+    await AdbScrcpyClient.pushServer(adb, createBufferReadableStream(serverBuffer), SCRCPY_SERVER_REMOTE_PATH)
+
+    const options = new AdbScrcpyOptions3_3_3({
+      audio: false,
+      clipboardAutosync: false,
+      control: false,
+      logLevel: 'info',
+      maxFps: SCRCPY_MAX_FPS,
+      maxSize: SCRCPY_MAX_SIZE,
+      powerOn: true,
+      scid: ScrcpyInstanceId.random(),
+      sendFrameMeta: true,
+      stayAwake: true,
+      tunnelForward: true,
+      video: true,
+      videoBitRate: SCRCPY_VIDEO_BIT_RATE,
+      videoCodec: 'h264'
+    }, { version: SCRCPY_SERVER_VERSION })
+    client = await AdbScrcpyClient.start(adb, SCRCPY_SERVER_REMOTE_PATH, options)
+    const videoStream = await client.videoStream
+    if (videoStream == null) {
+      throw new Error('scrcpy video stream is disabled.')
+    }
+
+    const handleDestroyed = () => {
+      const session = mobileDeviceVideoStreamById.get(streamId)
+      if (session == null) return
+      void closeMobileDeviceVideoStreamSession(session, undefined, 'closed')
+    }
+    webContents.once('destroyed', handleDestroyed)
+    const session: MobileDeviceVideoStreamSession = {
+      adb,
+      client,
+      deviceId: device.id,
+      isClosed: false,
+      ownerWebContentsId: webContents.id,
+      removeDestroyedListener: () => webContents.off('destroyed', handleDestroyed),
+      streamId
+    }
+    mobileDeviceVideoStreamById.set(streamId, session)
+    void consumeScrcpyOutput(client.output)
+    void pumpMobileDeviceVideoStream(webContents, session, videoStream)
+
+    const codec = videoStream.metadata.codec
+    return {
+      codec,
+      codecName: getScrcpyVideoCodecName(codec),
+      deviceId: device.id,
+      height: videoStream.height || videoStream.metadata.height,
+      source: 'scrcpy',
+      startedAt: Date.now(),
+      streamId,
+      width: videoStream.width || videoStream.metadata.width
+    }
+  } catch (error) {
+    await Promise.allSettled([
+      client?.close(),
+      adb.close()
+    ])
+    throw error
+  }
+}
+
+export const stopMobileDeviceVideoStream = async (
+  webContents: WebContents,
+  streamId: unknown
+): Promise<{ stoppedAt: number; streamId: string }> => {
+  if (typeof streamId !== 'string' || streamId.trim() === '') {
+    throw new TypeError('A mobile video stream id is required.')
+  }
+
+  const session = mobileDeviceVideoStreamById.get(streamId)
+  if (session != null) {
+    if (session.ownerWebContentsId !== webContents.id) {
+      throw new Error('Mobile video stream is owned by another window.')
+    }
+    await closeMobileDeviceVideoStreamSession(session, webContents, 'closed')
+  }
+  return { stoppedAt: Date.now(), streamId }
+}
+
 export const captureMobileDeviceScreenshot = async (deviceId: unknown): Promise<MobileDeviceScreenshotResponse> => {
   const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
-  const result = await runCommandBuffer(
-    adbPath,
-    ['-s', device.id, 'exec-out', 'screencap', '-p'],
-    ADB_SCREENSHOT_TIMEOUT_MS
-  )
-  const size = readPngSize(result.stdout)
-  return {
-    capturedAt: Date.now(),
-    deviceId: device.id,
-    imageDataUrl: `data:image/png;base64,${result.stdout.toString('base64')}`,
-    ...(size == null ? {} : size)
+  const currentTask = deviceScreenshotTaskById.get(device.id)
+  if (currentTask != null) return await currentTask
+
+  const nextTask = (async () => {
+    const result = await runCommandBuffer(
+      adbPath,
+      ['-s', device.id, 'exec-out', 'screencap', '-p'],
+      ADB_SCREENSHOT_TIMEOUT_MS
+    )
+    const size = readPngSize(result.stdout)
+    return {
+      capturedAt: Date.now(),
+      deviceId: device.id,
+      imageDataUrl: `data:image/png;base64,${result.stdout.toString('base64')}`,
+      ...(size == null ? {} : size)
+    }
+  })()
+  deviceScreenshotTaskById.set(device.id, nextTask)
+  try {
+    return await nextTask
+  } finally {
+    if (deviceScreenshotTaskById.get(device.id) === nextTask) {
+      deviceScreenshotTaskById.delete(device.id)
+    }
   }
 }
 

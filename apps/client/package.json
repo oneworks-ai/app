@@ -35,6 +35,9 @@
     "@oneworks/icon": "workspace:*",
     "@oneworks/register": "workspace:*",
     "@oneworks/route-layout": "workspace:*",
+    "@yume-chan/scrcpy": "2.3.0",
+    "@yume-chan/scrcpy-decoder-webcodecs": "2.5.3",
+    "@yume-chan/stream-extra": "2.6.1",
     "dockview": "6.2.2"
   },
   "devDependencies": {

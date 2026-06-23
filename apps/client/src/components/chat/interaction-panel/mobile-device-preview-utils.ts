@@ -10,7 +10,12 @@ export interface PointerDevicePoint {
   y: number
 }
 
-export const screenshotRefreshMs = 1400
+export interface MobileDeviceScreenDimensions {
+  height?: number
+  width?: number
+}
+
+export const screenshotRefreshDelayMs = 250
 export const dragThresholdPx = 10
 export const maxVisibleElementRows = 160
 
@@ -74,23 +79,68 @@ export const stringifyAttributeValue = (value: string | number | boolean | null)
 
 export const getOverlayStyle = (
   bounds: DesktopMobileElementBounds,
-  screenshot: DesktopMobileDeviceScreenshotResponse
+  screen: MobileDeviceScreenDimensions
 ): CSSProperties => ({
-  height: `${bounds.height / Math.max(1, screenshot.height ?? bounds.height) * 100}%`,
-  left: `${bounds.x / Math.max(1, screenshot.width ?? bounds.width) * 100}%`,
-  top: `${bounds.y / Math.max(1, screenshot.height ?? bounds.height) * 100}%`,
-  width: `${bounds.width / Math.max(1, screenshot.width ?? bounds.width) * 100}%`
+  height: `${bounds.height / Math.max(1, screen.height ?? bounds.height) * 100}%`,
+  left: `${bounds.x / Math.max(1, screen.width ?? bounds.width) * 100}%`,
+  top: `${bounds.y / Math.max(1, screen.height ?? bounds.height) * 100}%`,
+  width: `${bounds.width / Math.max(1, screen.width ?? bounds.width) * 100}%`
 })
 
 export const toPointerDevicePoint = (
   event: PointerEvent<HTMLDivElement>,
-  screenshot: DesktopMobileDeviceScreenshotResponse
+  screen: MobileDeviceScreenDimensions
 ): PointerDevicePoint => {
   const rect = event.currentTarget.getBoundingClientRect()
-  const width = screenshot.width ?? rect.width
-  const height = screenshot.height ?? rect.height
+  const width = screen.width ?? rect.width
+  const height = screen.height ?? rect.height
   return {
     x: Math.max(0, Math.min(width, Math.round((event.clientX - rect.left) / rect.width * width))),
     y: Math.max(0, Math.min(height, Math.round((event.clientY - rect.top) / rect.height * height)))
   }
 }
+
+const toPhysicalInputCoordinate = ({
+  rootBounds,
+  screen,
+  shouldScale,
+  value,
+  axis
+}: {
+  axis: 'x' | 'y'
+  rootBounds: DesktopMobileElementBounds | undefined
+  screen: MobileDeviceScreenDimensions | undefined
+  shouldScale: boolean
+  value: number | undefined
+}) => {
+  if (
+    !shouldScale ||
+    value == null ||
+    screen == null ||
+    rootBounds == null ||
+    rootBounds.width <= 0 ||
+    rootBounds.height <= 0
+  ) {
+    return value
+  }
+
+  const sourceSize = axis === 'x' ? screen.width : screen.height
+  const targetSize = axis === 'x' ? rootBounds.width : rootBounds.height
+  if (sourceSize == null || sourceSize <= 0) return value
+  return Math.round(value / sourceSize * targetSize)
+}
+
+export const toPhysicalMobileDeviceInput = (
+  input: DesktopMobileDeviceInputEvent,
+  options: {
+    rootBounds: DesktopMobileElementBounds | undefined
+    screen: MobileDeviceScreenDimensions | undefined
+    shouldScale: boolean
+  }
+): DesktopMobileDeviceInputEvent => ({
+  ...input,
+  endX: toPhysicalInputCoordinate({ ...options, axis: 'x', value: input.endX }),
+  endY: toPhysicalInputCoordinate({ ...options, axis: 'y', value: input.endY }),
+  x: toPhysicalInputCoordinate({ ...options, axis: 'x', value: input.x }),
+  y: toPhysicalInputCoordinate({ ...options, axis: 'y', value: input.y })
+})

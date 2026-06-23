@@ -3,8 +3,13 @@ import { useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { InteractionPanelMobileDeviceControls } from './InteractionPanelMobileDeviceControls'
+import { InteractionPanelMobileDeviceVideoCanvas } from './InteractionPanelMobileDeviceVideoCanvas'
+import type {
+  MobileDeviceVideoPreviewSize,
+  MobileDeviceVideoPreviewStatus
+} from './InteractionPanelMobileDeviceVideoCanvas'
 import { getOverlayStyle, toPointerDevicePoint } from './mobile-device-preview-utils'
-import type { PointerDevicePoint } from './mobile-device-preview-utils'
+import type { MobileDeviceScreenDimensions, PointerDevicePoint } from './mobile-device-preview-utils'
 
 export function InteractionPanelMobileDeviceScreen({
   deviceTitle,
@@ -12,12 +17,19 @@ export function InteractionPanelMobileDeviceScreen({
   isInspecting,
   screenshot,
   selectedNode,
+  videoDeviceId,
+  videoStreamKey,
+  videoSize,
+  videoStatus,
   onHoverPoint,
   onInspectPoint,
   onPointerLeave,
   onRefresh,
   onSendInput,
   onToggleInspect,
+  onVideoError,
+  onVideoSizeChange,
+  onVideoStatusChange,
   screenRatio
 }: {
   deviceTitle: string
@@ -25,39 +37,48 @@ export function InteractionPanelMobileDeviceScreen({
   isInspecting: boolean
   screenshot: DesktopMobileDeviceScreenshotResponse | null
   selectedNode: DesktopMobileElementNode | undefined
+  videoDeviceId: string | undefined
+  videoStreamKey: number
+  videoSize: MobileDeviceVideoPreviewSize | undefined
+  videoStatus: MobileDeviceVideoPreviewStatus
   onHoverPoint: (point: PointerDevicePoint) => void
   onInspectPoint: (point: PointerDevicePoint) => void
   onPointerLeave: () => void
   onRefresh: () => void
   onSendInput: (input: DesktopMobileDeviceInputEvent) => void
   onToggleInspect: () => void
+  onVideoError: (message: string) => void
+  onVideoSizeChange: (size: MobileDeviceVideoPreviewSize) => void
+  onVideoStatusChange: (status: MobileDeviceVideoPreviewStatus) => void
   screenRatio: number | undefined
 }) {
   const { t } = useTranslation()
   const pointerStartRef = useRef<PointerDevicePoint | null>(null)
+  const isVideoEnabled = videoDeviceId != null && videoStatus !== 'unavailable'
+  const screen: MobileDeviceScreenDimensions | null = videoSize ?? screenshot
 
   const handlePointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (screenshot == null) return
-    pointerStartRef.current = toPointerDevicePoint(event, screenshot)
+    if (screen == null) return
+    pointerStartRef.current = toPointerDevicePoint(event, screen)
     try {
       event.currentTarget.setPointerCapture(event.pointerId)
     } catch {
       // Pointer capture is best effort for embedded webviews.
     }
-  }, [screenshot])
+  }, [screen])
 
   const handlePointerMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (screenshot == null || !isInspecting) return
-    onHoverPoint(toPointerDevicePoint(event, screenshot))
-  }, [isInspecting, onHoverPoint, screenshot])
+    if (screen == null || !isInspecting) return
+    onHoverPoint(toPointerDevicePoint(event, screen))
+  }, [isInspecting, onHoverPoint, screen])
 
   const handlePointerUp = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (screenshot == null) return
+    if (screen == null) return
     const startPoint = pointerStartRef.current
     pointerStartRef.current = null
     if (startPoint == null) return
 
-    const endPoint = toPointerDevicePoint(event, screenshot)
+    const endPoint = toPointerDevicePoint(event, screen)
     if (isInspecting) {
       onInspectPoint(endPoint)
       return
@@ -77,7 +98,7 @@ export function InteractionPanelMobileDeviceScreen({
       return
     }
     onSendInput({ kind: 'tap', x: endPoint.x, y: endPoint.y })
-  }, [isInspecting, onInspectPoint, onSendInput, screenshot])
+  }, [isInspecting, onInspectPoint, onSendInput, screen])
 
   return (
     <div
@@ -93,39 +114,49 @@ export function InteractionPanelMobileDeviceScreen({
           </div>
           <div
             className={`chat-interaction-panel-mobile-debug__screen ${isInspecting ? 'is-inspecting' : ''}`}
-            style={screenshot?.width != null && screenshot.height != null
-              ? { aspectRatio: `${screenshot.width} / ${screenshot.height}` }
+            style={screen?.width != null && screen.height != null
+              ? { aspectRatio: `${screen.width} / ${screen.height}` }
               : undefined}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerLeave={onPointerLeave}
             onPointerUp={handlePointerUp}
           >
-            {screenshot == null
-              ? <div className='chat-interaction-panel-mobile-debug__screen-placeholder'>
+            {isVideoEnabled && (
+              <InteractionPanelMobileDeviceVideoCanvas
+                key={`${videoDeviceId}:${videoStreamKey}`}
+                deviceId={videoDeviceId}
+                onError={onVideoError}
+                onSizeChange={onVideoSizeChange}
+                onStatusChange={onVideoStatusChange}
+              />
+            )}
+            {!isVideoEnabled && screenshot != null && (
+              <>
+                <img
+                  draggable={false}
+                  src={screenshot.imageDataUrl}
+                  alt={t('chat.interactionPanel.mobileDebugPreviewAlt')}
+                />
+              </>
+            )}
+            {(screen == null || (isVideoEnabled && videoStatus !== 'active')) && (
+              <div className='chat-interaction-panel-mobile-debug__screen-placeholder'>
                 {t('chat.interactionPanel.mobileDebugPreviewLoading')}
               </div>
-              : (
-                <>
-                  <img
-                    draggable={false}
-                    src={screenshot.imageDataUrl}
-                    alt={t('chat.interactionPanel.mobileDebugPreviewAlt')}
-                  />
-                  {hoverNode?.bounds != null && (
-                    <span
-                      className='chat-interaction-panel-mobile-debug__element-overlay is-hover'
-                      style={getOverlayStyle(hoverNode.bounds, screenshot)}
-                    />
-                  )}
-                  {selectedNode?.bounds != null && (
-                    <span
-                      className='chat-interaction-panel-mobile-debug__element-overlay is-selected'
-                      style={getOverlayStyle(selectedNode.bounds, screenshot)}
-                    />
-                  )}
-                </>
-              )}
+            )}
+            {screen != null && hoverNode?.bounds != null && (
+              <span
+                className='chat-interaction-panel-mobile-debug__element-overlay is-hover'
+                style={getOverlayStyle(hoverNode.bounds, screen)}
+              />
+            )}
+            {screen != null && selectedNode?.bounds != null && (
+              <span
+                className='chat-interaction-panel-mobile-debug__element-overlay is-selected'
+                style={getOverlayStyle(selectedNode.bounds, screen)}
+              />
+            )}
           </div>
         </div>
         <InteractionPanelMobileDeviceControls

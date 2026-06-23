@@ -33,7 +33,9 @@ import {
   captureMobileDeviceScreenshot,
   dumpMobileElementTree,
   listMobileDebugTargets,
-  sendMobileDeviceInput
+  sendMobileDeviceInput,
+  startMobileDeviceVideoStream,
+  stopMobileDeviceVideoStream
 } from './mobile-debug'
 import type {
   DesktopInterfaceLanguageConfig,
@@ -352,6 +354,14 @@ export const registerIpcHandlers = ({
   ipcMain.handle(
     'desktop:capture-mobile-device-screenshot',
     (_event, deviceId: unknown) => captureMobileDeviceScreenshot(deviceId)
+  )
+  ipcMain.handle(
+    'desktop:start-mobile-device-video-stream',
+    (event, deviceId: unknown) => startMobileDeviceVideoStream(event.sender, deviceId)
+  )
+  ipcMain.handle(
+    'desktop:stop-mobile-device-video-stream',
+    (event, streamId: unknown) => stopMobileDeviceVideoStream(event.sender, streamId)
   )
   ipcMain.handle(
     'desktop:dump-mobile-element-tree',
