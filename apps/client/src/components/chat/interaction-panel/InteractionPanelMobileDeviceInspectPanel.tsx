@@ -1,97 +1,12 @@
-import type { CSSProperties } from 'react'
+import type { CSSProperties, MouseEvent } from 'react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { InteractionPanelMobileDeviceElementDetails } from './InteractionPanelMobileDeviceElementDetails'
-import { getBoundsLabel, maxVisibleElementRows, stringifyAttributeValue } from './mobile-device-preview-utils'
+import { InteractionPanelMobileDeviceElementTreeRow } from './InteractionPanelMobileDeviceElementTreeRow'
+import { maxVisibleElementRows } from './mobile-device-preview-utils'
 import type { FlattenedElementNode } from './mobile-device-preview-utils'
-
-const visibleAttributeNames = [
-  'resource-id',
-  'text',
-  'content-desc',
-  'clickable',
-  'enabled',
-  'selected',
-  'checked'
-]
-
-const getElementNodeName = (node: DesktopMobileElementNode) => node.type.split('.').at(-1) ?? node.type
-
-const getElementNodeAttributes = (node: DesktopMobileElementNode) =>
-  visibleAttributeNames
-    .map(name => [name, node.attributes[name]] as const)
-    .filter(([name, value]) => {
-      if (value == null || String(value).trim() === '') return false
-      if (typeof value !== 'boolean') return true
-      if (name === 'enabled') return !value
-      return value
-    })
-    .slice(0, 4)
-
-function ElementTreeRow({
-  depth,
-  isCollapsed,
-  isSelected,
-  node,
-  onSelectNode,
-  onToggleNode
-}: {
-  depth: number
-  isCollapsed: boolean
-  isSelected: boolean
-  node: DesktopMobileElementNode
-  onSelectNode: (nodeId: string) => void
-  onToggleNode: (nodeId: string) => void
-}) {
-  const nodeName = getElementNodeName(node)
-  const attributes = getElementNodeAttributes(node)
-  const hasChildren = node.children.length > 0
-
-  return (
-    <button
-      type='button'
-      role='treeitem'
-      aria-level={depth + 1}
-      aria-expanded={hasChildren ? !isCollapsed : undefined}
-      aria-selected={isSelected}
-      className={`chat-interaction-panel-mobile-debug__element-row ${isSelected ? 'is-selected' : ''}`}
-      style={{ '--mobile-debug-node-depth': `${Math.min(depth, 12) * 14}px` } as CSSProperties}
-      onClick={() => onSelectNode(node.id)}
-    >
-      <span
-        className={`chat-interaction-panel-mobile-debug__element-disclosure ${hasChildren ? 'has-children' : ''} ${
-          hasChildren && !isCollapsed ? 'is-expanded' : ''
-        }`}
-        onClick={event => {
-          if (!hasChildren) return
-          event.stopPropagation()
-          onToggleNode(node.id)
-        }}
-        aria-hidden='true'
-      />
-      <span className='chat-interaction-panel-mobile-debug__element-source'>
-        <span className='chat-interaction-panel-mobile-debug__syntax-punctuation'>&lt;</span>
-        <span className='chat-interaction-panel-mobile-debug__syntax-tag'>{nodeName}</span>
-        {attributes.map(([name, value]) => (
-          <span key={name} className='chat-interaction-panel-mobile-debug__syntax-attribute'>
-            <span className='chat-interaction-panel-mobile-debug__syntax-attribute-name'>{name}</span>
-            <span className='chat-interaction-panel-mobile-debug__syntax-punctuation'>=</span>
-            <span className='chat-interaction-panel-mobile-debug__syntax-attribute-value'>
-              "{stringifyAttributeValue(value)}"
-            </span>
-          </span>
-        ))}
-        <span className='chat-interaction-panel-mobile-debug__syntax-punctuation'>&gt;</span>
-      </span>
-      {node.bounds != null && (
-        <span className='chat-interaction-panel-mobile-debug__element-bounds'>
-          {getBoundsLabel(node.bounds)}
-        </span>
-      )}
-    </button>
-  )
-}
+import { useMobileDeviceElementSplitter } from './use-mobile-device-element-splitter'
 
 const getVisibleElementRows = (
   flattenedNodes: FlattenedElementNode[],
@@ -127,10 +42,17 @@ export function InteractionPanelMobileDeviceInspectPanel({
   flattenedNodes: FlattenedElementNode[]
   selectedNode: DesktopMobileElementNode | undefined
   selectedNodeId: string | undefined
-  onSelectNode: (nodeId: string) => void
+  onSelectNode: (nodeId: string | undefined) => void
 }) {
   const { t } = useTranslation()
   const [collapsedNodeIds, setCollapsedNodeIds] = useState(() => new Set<string>())
+  const {
+    elementDetailsColumn,
+    elementListColumn,
+    handleSplitterKeyDown,
+    handleSplitterPointerDown,
+    inspectWorkspaceRef
+  } = useMobileDeviceElementSplitter()
   const visibleNodes = useMemo(
     () => getVisibleElementRows(flattenedNodes, collapsedNodeIds).slice(0, maxVisibleElementRows),
     [collapsedNodeIds, flattenedNodes]
@@ -146,11 +68,25 @@ export function InteractionPanelMobileDeviceInspectPanel({
       return nextNodeIds
     })
   }
+  const handleElementListClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (!(event.target instanceof Element)) return
+    if (event.target.closest('.chat-interaction-panel-mobile-debug__element-row') != null) return
+    onSelectNode(undefined)
+  }
 
   return (
     <div className='chat-interaction-panel-mobile-debug__inspect-column'>
-      <div className='chat-interaction-panel-mobile-debug__inspect-workspace'>
-        <div className='chat-interaction-panel-mobile-debug__element-list'>
+      <div
+        ref={inspectWorkspaceRef}
+        className='chat-interaction-panel-mobile-debug__inspect-workspace'
+        style={elementListColumn == null || elementDetailsColumn == null
+          ? undefined
+          : {
+            '--mobile-debug-element-details-column': elementDetailsColumn,
+            '--mobile-debug-element-list-column': elementListColumn
+          } as CSSProperties}
+      >
+        <div className='chat-interaction-panel-mobile-debug__element-list' onClick={handleElementListClick}>
           {visibleNodes.length === 0
             ? (
               <div className='chat-interaction-panel-mobile-debug__element-empty'>
@@ -160,7 +96,7 @@ export function InteractionPanelMobileDeviceInspectPanel({
             : (
               <div className='chat-interaction-panel-mobile-debug__element-tree' role='tree'>
                 {visibleNodes.map(({ depth, node }) => (
-                  <ElementTreeRow
+                  <InteractionPanelMobileDeviceElementTreeRow
                     key={node.id}
                     depth={depth}
                     isCollapsed={collapsedNodeIds.has(node.id)}
@@ -173,6 +109,15 @@ export function InteractionPanelMobileDeviceInspectPanel({
               </div>
             )}
         </div>
+        <div
+          className='chat-interaction-panel-mobile-debug__element-splitter'
+          role='separator'
+          aria-label={t('chat.interactionPanel.mobileDebugResizeElementDetails')}
+          aria-orientation='vertical'
+          tabIndex={0}
+          onKeyDown={handleSplitterKeyDown}
+          onPointerDown={handleSplitterPointerDown}
+        />
         <InteractionPanelMobileDeviceElementDetails elementTree={elementTree} node={selectedNode} />
       </div>
     </div>

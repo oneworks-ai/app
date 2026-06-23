@@ -132,23 +132,27 @@ export function StandaloneWindowHeader({
   title: string
 }) {
   const { t } = useTranslation()
+  const shouldReserveTrafficSpace = window.oneworksDesktop?.platform === 'darwin'
   const pluginActions = useRoutePluginWindowBarActions(routeKey)
   const presentation = useStandaloneWindowPresentation()
   const opacityPercent = Math.round(presentation.state.opacity * 100)
   return (
     <header className='standalone-mobile-debug-route__header'>
-      <div className='standalone-mobile-debug-route__traffic-space' aria-hidden='true' />
+      {shouldReserveTrafficSpace && (
+        <div className='standalone-mobile-debug-route__traffic-space' aria-hidden='true' />
+      )}
       <div className='standalone-mobile-debug-route__title' title={title}>
         <MaterialSymbol className='standalone-mobile-debug-route__title-icon' name='mobile' aria-hidden='true' />
         <span className='standalone-mobile-debug-route__title-text'>{title}</span>
       </div>
       <div className='standalone-mobile-debug-route__header-drag-fill' aria-hidden='true' />
       <div className='standalone-mobile-debug-route__header-actions' aria-label={t('common.actions', 'Actions')}>
-        {actions != null && (
-          <div className='standalone-mobile-debug-route__header-action-group'>
-            {actions}
-          </div>
-        )}
+        {pluginActions.map(action => (
+          <StandaloneHeaderActionButton
+            key={action.key}
+            {...action}
+          />
+        ))}
         {presentation.canControlWindow && (
           <>
             <StandaloneHeaderActionButton
@@ -184,12 +188,11 @@ export function StandaloneWindowHeader({
             </Popover>
           </>
         )}
-        {pluginActions.map(action => (
-          <StandaloneHeaderActionButton
-            key={action.key}
-            {...action}
-          />
-        ))}
+        {actions != null && (
+          <div className='standalone-mobile-debug-route__header-action-group'>
+            {actions}
+          </div>
+        )}
       </div>
     </header>
   )

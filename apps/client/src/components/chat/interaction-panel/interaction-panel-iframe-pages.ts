@@ -6,6 +6,7 @@ const iframePageDevtoolsVariants = new Set<InteractionPanelIframePage['variant']
 
 export interface OpenInteractionPanelIframeUrlOptions {
   faviconUrl?: string
+  openMode?: 'reuse-or-create' | 'new-tab'
   title?: string
   variant?: InteractionPanelIframePage['variant']
 }

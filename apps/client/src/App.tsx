@@ -1,7 +1,7 @@
 import { Suspense, lazy, useRef } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 
-import { isStandaloneDeviceRoutePath } from '@oneworks/types'
+import { isStandaloneDeviceRoutePath } from '@oneworks/types/standalone-route'
 
 import { WorkspaceConnectionGate } from '#~/WorkspaceConnectionGate'
 import { getRuntimeWorkspaceId, isDesktopClientMode, isServerManagerRole } from '#~/runtime-config'

@@ -17,6 +17,15 @@
         "require": "./dist/index.js"
       }
     },
+    "./standalone-route": {
+      "__oneworks__": {
+        "default": "./src/standalone-route.ts"
+      },
+      "default": {
+        "import": "./dist/standalone-route.mjs",
+        "require": "./dist/standalone-route.js"
+      }
+    },
     "./package.json": "./package.json"
   }
 }

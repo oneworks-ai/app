@@ -47,7 +47,9 @@ export function useInteractionPanelIframePages({
     const normalizedUrl = normalizeFrameUrl(url)
     const optionFaviconUrl = options.faviconUrl?.trim()
     const optionTitle = options.title?.trim()
-    const existingPage = iframePagesRef.current.find(page => normalizeFrameUrl(page.url) === normalizedUrl)
+    const existingPage = options.openMode === 'new-tab'
+      ? undefined
+      : iframePagesRef.current.find(page => normalizeFrameUrl(page.url) === normalizedUrl)
     if (existingPage != null) {
       const shouldUpdateFavicon = options.variant === 'mobile-debug-devtools'
         ? existingPage.faviconUrl !== optionFaviconUrl

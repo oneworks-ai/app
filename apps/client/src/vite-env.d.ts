@@ -261,6 +261,14 @@ interface DesktopMobileDeviceScreenshotResponse {
   width?: number
 }
 
+interface DesktopMobileDeviceLogsResponse {
+  capturedAt: number
+  deviceId: string
+  lineLimit: number
+  lines: string[]
+  source: 'logcat'
+}
+
 interface DesktopMobileDeviceVideoStreamStartResponse {
   codec: number
   codecName: string

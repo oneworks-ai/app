@@ -15,17 +15,21 @@ const getPortForwardingStatusLabelKey = (status: DesktopMobileDebugPortForwardSt
 
 export function InteractionPanelMobileDebugResults({
   error,
+  isActive,
   isLoading,
   onStandaloneDeviceTitleChange,
   onStandaloneHeaderActionsChange,
   onOpenDebugUrl,
+  onOpenDeviceList,
   state
 }: {
   error: string | null
+  isActive: boolean
   isLoading: boolean
   onStandaloneDeviceTitleChange?: (title: string | null) => void
   onStandaloneHeaderActionsChange?: (actions: ReactNode | null) => void
   onOpenDebugUrl: (url: string, options?: OpenInteractionPanelIframeUrlOptions) => void
+  onOpenDeviceList?: () => void
   state: DesktopMobileDebugTargetsResponse | null
 }) {
   const { t } = useTranslation()
@@ -52,6 +56,7 @@ export function InteractionPanelMobileDebugResults({
       )}
       {hasDevicePreview && (
         <InteractionPanelMobileDevicePreview
+          isActive={isActive}
           details={
             <MobileDebugDetailsContent
               errors={errors}
@@ -63,6 +68,7 @@ export function InteractionPanelMobileDebugResults({
             />
           }
           devices={devices}
+          onOpenDeviceList={onOpenDeviceList}
           onStandaloneDeviceTitleChange={onStandaloneDeviceTitleChange}
           onStandaloneHeaderActionsChange={onStandaloneHeaderActionsChange}
         />

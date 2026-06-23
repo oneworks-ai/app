@@ -1098,9 +1098,11 @@ export function ChatWorkspaceDrawer({
     options: OpenInteractionPanelIframeUrlOptions = {}
   ) => {
     const normalizedUrl = normalizeFrameUrl(url)
-    const existingTab = rightPanelTabs.find((tab): tab is Extract<SessionPanelTab, { kind: 'web' }> =>
-      tab.kind === 'web' && normalizeFrameUrl(tab.url) === normalizedUrl
-    )
+    const existingTab = options.openMode === 'new-tab'
+      ? undefined
+      : rightPanelTabs.find((tab): tab is Extract<SessionPanelTab, { kind: 'web' }> =>
+        tab.kind === 'web' && normalizeFrameUrl(tab.url) === normalizedUrl
+      )
 
     if (existingTab != null) {
       const page = toRightIframePage(existingTab)

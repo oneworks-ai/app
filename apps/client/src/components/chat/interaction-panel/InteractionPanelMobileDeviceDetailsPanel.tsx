@@ -3,12 +3,22 @@ import type { ReactNode } from 'react'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-export function InteractionPanelMobileDeviceDetailsPanel({
-  details,
+export function InteractionPanelMobileDeviceTargetsPanel({
+  details
+}: {
+  details: ReactNode
+}) {
+  return (
+    <div className='chat-interaction-panel-mobile-debug__targets-tab'>
+      {details}
+    </div>
+  )
+}
+
+export function InteractionPanelMobileDeviceInputPanel({
   error,
   onSendInput
 }: {
-  details: ReactNode
   error: string | null
   onSendInput: (input: DesktopMobileDeviceInputEvent) => void
 }) {
@@ -23,7 +33,7 @@ export function InteractionPanelMobileDeviceDetailsPanel({
   }, [onSendInput, textInput])
 
   return (
-    <div className='chat-interaction-panel-mobile-debug__details-tab'>
+    <div className='chat-interaction-panel-mobile-debug__input-tab'>
       {error != null && <div className='chat-interaction-panel-mobile-debug__preview-error'>{error}</div>}
       <div className='chat-interaction-panel-mobile-debug__text-input'>
         <Input
@@ -44,7 +54,6 @@ export function InteractionPanelMobileDeviceDetailsPanel({
           <span className='material-symbols-rounded' aria-hidden='true'>keyboard_return</span>
         </Button>
       </div>
-      {details}
     </div>
   )
 }

@@ -16,6 +16,7 @@ export interface MobileDeviceScreenDimensions {
 }
 
 export const screenshotRefreshDelayMs = 250
+export const elementTreeRefreshDelayMs = 1500
 export const dragThresholdPx = 10
 export const maxVisibleElementRows = 160
 

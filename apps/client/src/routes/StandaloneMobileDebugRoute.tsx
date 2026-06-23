@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 
-import { parseStandaloneDeviceRoutePath } from '@oneworks/types'
+import {
+  buildStandaloneDeviceDebugRoutePath,
+  parseStandaloneDeviceRoutePath,
+  standaloneDeviceSettingsRoutePath,
+  standaloneDevicesRoutePath
+} from '@oneworks/types/standalone-route'
+import type { StandaloneDeviceRouteMode } from '@oneworks/types/standalone-route'
 
 import '#~/components/chat/interaction-panel/ChatInteractionPanel.scss'
 import { InteractionPanelMobileDebugView } from '#~/components/chat/interaction-panel/InteractionPanelMobileDebugView'
@@ -21,9 +27,16 @@ import './StandaloneMobileDebugRoute.scss'
 
 const STANDALONE_MOBILE_DEBUG_ROUTE_KEY = 'standalone.devices'
 
+const getMobileDebugPageMode = (deviceRouteMode: StandaloneDeviceRouteMode | undefined) => {
+  if (deviceRouteMode === 'settings') return 'config'
+  if (deviceRouteMode === 'devices') return 'devices'
+  return 'targets'
+}
+
 export function StandaloneMobileDebugRoute() {
   const { t } = useTranslation()
   const location = useLocation()
+  const navigate = useNavigate()
   const deviceRoute = useMemo(
     () => parseStandaloneDeviceRoutePath(`${location.pathname}${location.search}`),
     [location.pathname, location.search]
@@ -31,8 +44,8 @@ export function StandaloneMobileDebugRoute() {
   const title = t('chat.interactionPanel.mobileDebugTitle')
   const [page, setPage] = useState<InteractionPanelMobileDebugPage>(() => ({
     ...createInteractionPanelMobileDebugPage(title),
-    mode: deviceRoute?.mode === 'settings' ? 'config' : 'targets',
-    selectedDeviceId: deviceRoute?.deviceId
+    mode: getMobileDebugPageMode(deviceRoute?.mode),
+    selectedDeviceId: deviceRoute?.mode === 'debug' ? deviceRoute.deviceId : undefined
   }))
   const [headerActions, setHeaderActions] = useState<ReactNode | null>(null)
   const [deviceTitle, setDeviceTitle] = useState<string | null>(null)
@@ -45,10 +58,25 @@ export function StandaloneMobileDebugRoute() {
   useEffect(() => {
     setPage(current => ({
       ...current,
-      mode: deviceRoute?.mode === 'settings' ? 'config' : 'targets',
-      selectedDeviceId: deviceRoute?.deviceId
+      mode: getMobileDebugPageMode(deviceRoute?.mode),
+      selectedDeviceId: deviceRoute?.mode === 'debug' ? deviceRoute.deviceId : undefined
     }))
   }, [deviceRoute?.deviceId, deviceRoute?.mode])
+
+  useEffect(() => {
+    if (deviceRoute?.mode !== 'debug') return
+    const deviceOptions = page.deviceOptions
+    if (deviceOptions == null) return
+    if (deviceOptions.some(device => device.id === deviceRoute.deviceId)) return
+
+    const readyDevices = deviceOptions.filter(device => device.state === 'device')
+    navigate(
+      readyDevices.length === 1
+        ? buildStandaloneDeviceDebugRoutePath(readyDevices[0].id)
+        : standaloneDevicesRoutePath,
+      { replace: true }
+    )
+  }, [deviceRoute, navigate, page.deviceOptions])
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -68,6 +96,18 @@ export function StandaloneMobileDebugRoute() {
     window.open(url, '_blank', 'noopener,noreferrer')
   }, [])
 
+  const openDeviceDebug = useCallback((deviceId: string) => {
+    navigate(buildStandaloneDeviceDebugRoutePath(deviceId))
+  }, [navigate])
+
+  const openDeviceList = useCallback(() => {
+    navigate(standaloneDevicesRoutePath)
+  }, [navigate])
+
+  const openDeviceSettings = useCallback(() => {
+    navigate(standaloneDeviceSettingsRoutePath)
+  }, [navigate])
+
   return (
     <StandaloneRouteThemeProvider>
       <main className='standalone-mobile-debug-route'>
@@ -82,6 +122,9 @@ export function StandaloneMobileDebugRoute() {
             page={page}
             onChangePage={changePage}
             onOpenDebugUrl={openDebugUrl}
+            onOpenDeviceDebug={openDeviceDebug}
+            onOpenDeviceList={openDeviceList}
+            onOpenDeviceSettings={openDeviceSettings}
             onStandaloneDeviceTitleChange={setDeviceTitle}
             onStandaloneHeaderActionsChange={setHeaderActions}
           />

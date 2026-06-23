@@ -2,10 +2,10 @@ import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { MobileDeviceStandaloneHeaderActions } from './InteractionPanelMobileDeviceActions'
 import { InteractionPanelMobileDeviceScreen } from './InteractionPanelMobileDeviceScreen'
 import { InteractionPanelMobileDeviceSideTabs } from './InteractionPanelMobileDeviceSideTabs'
 import type { MobileDeviceDockPosition } from './InteractionPanelMobileDeviceSideTabs'
+import { MobileDeviceStandaloneHeaderActions } from './InteractionPanelMobileDeviceStandaloneHeaderActions'
 import { getDeviceWindowTitle, getReadyDevice } from './mobile-device-preview-utils'
 import {
   fitStandaloneMobileDebugWindow,
@@ -21,11 +21,15 @@ const readStandaloneScreenWidth = () => (
 export function InteractionPanelMobileDevicePreview({
   details,
   devices,
+  isActive,
+  onOpenDeviceList,
   onStandaloneDeviceTitleChange,
   onStandaloneHeaderActionsChange
 }: {
   details: ReactNode
   devices: DesktopMobileDebugDevice[]
+  isActive: boolean
+  onOpenDeviceList?: () => void
   onStandaloneDeviceTitleChange?: (title: string | null) => void
   onStandaloneHeaderActionsChange?: (actions: ReactNode | null) => void
 }) {
@@ -33,7 +37,7 @@ export function InteractionPanelMobileDevicePreview({
   const readyDevice = getReadyDevice(devices)
   const readyDeviceId = readyDevice?.id
   const deviceTitle = readyDevice == null ? undefined : getDeviceWindowTitle(readyDevice)
-  const preview = useMobileDevicePreviewController(readyDeviceId)
+  const preview = useMobileDevicePreviewController(readyDeviceId, isActive)
   const [isSidePanelVisible, setIsSidePanelVisible] = useState(true)
   const [dockPosition, setDockPosition] = useState<MobileDeviceDockPosition>('right')
   const usesStandaloneHeaderActions = onStandaloneHeaderActionsChange != null
@@ -71,7 +75,9 @@ export function InteractionPanelMobileDevicePreview({
     usesStandaloneHeaderActions && readyDevice != null
       ? (
         <MobileDeviceStandaloneHeaderActions
+          deviceId={readyDevice.id}
           isSidePanelVisible={isSidePanelVisible}
+          onOpenDeviceList={onOpenDeviceList}
           onRefresh={preview.refreshPreview}
           onSendInput={sendInput}
           onToggleSidePanel={toggleSidePanel}
@@ -79,6 +85,7 @@ export function InteractionPanelMobileDevicePreview({
       )
       : null, [
     isSidePanelVisible,
+    onOpenDeviceList,
     preview.refreshPreview,
     readyDevice,
     sendInput,
@@ -150,6 +157,7 @@ export function InteractionPanelMobileDevicePreview({
           ? (
             <InteractionPanelMobileDeviceSideTabs
               details={details}
+              deviceId={readyDevice.id}
               dockPosition={dockPosition}
               elementTree={preview.elementTree}
               error={preview.error}

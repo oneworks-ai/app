@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { InteractionPanelMobileDebugDeviceOption } from './interaction-panel-mobile-debug-pages'
+import { listMobileDebugTargets } from './mobile-debug-platform'
 
 const toDeviceOptions = (devices: DesktopMobileDebugDevice[]): InteractionPanelMobileDebugDeviceOption[] =>
   devices.map(device => ({
@@ -37,9 +38,6 @@ export function useInteractionPanelMobileDebugDeviceOptions(
 
   const refreshDeviceOptions = useCallback(async () => {
     if (isRefreshingRef.current) return
-
-    const listMobileDebugTargets = window.oneworksDesktop?.listMobileDebugTargets
-    if (listMobileDebugTargets == null) return
 
     isRefreshingRef.current = true
     try {

@@ -1,19 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { InteractionPanelMobileDebugDeviceList } from './InteractionPanelMobileDebugDeviceList'
 import { InteractionPanelMobileDebugResults } from './InteractionPanelMobileDebugResults'
 import { InteractionPanelMobileDebugSettings } from './InteractionPanelMobileDebugSettings'
 import type { OpenInteractionPanelIframeUrlOptions } from './interaction-panel-iframe-pages'
 import type { InteractionPanelMobileDebugPage } from './interaction-panel-mobile-debug-pages'
-import { readMobileDebugConfig, writeMobileDebugConfig } from './mobile-debug-config-state'
-import type { MobileDebugConfigState } from './mobile-debug-config-state'
+import { useMobileDebugTargetsState } from './use-mobile-debug-targets-state'
 
 export function InteractionPanelMobileDebugView({
   isActive,
   page,
   onChangePage,
   onOpenDebugUrl,
+  onOpenDeviceDebug,
+  onOpenDeviceList,
+  onOpenDeviceSettings,
   onStandaloneDeviceTitleChange,
   onStandaloneHeaderActionsChange
 }: {
@@ -21,91 +24,26 @@ export function InteractionPanelMobileDebugView({
   page: InteractionPanelMobileDebugPage
   onChangePage: (updater: (page: InteractionPanelMobileDebugPage) => InteractionPanelMobileDebugPage) => void
   onOpenDebugUrl: (url: string, options?: OpenInteractionPanelIframeUrlOptions) => void
+  onOpenDeviceDebug?: (deviceId: string) => void
+  onOpenDeviceList?: () => void
+  onOpenDeviceSettings?: () => void
   onStandaloneDeviceTitleChange?: (title: string | null) => void
   onStandaloneHeaderActionsChange?: (actions: ReactNode | null) => void
 }) {
   const { t } = useTranslation()
-  const [config, setConfig] = useState(readMobileDebugConfig)
-  const [state, setState] = useState<DesktopMobileDebugTargetsResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const isRefreshingRef = useRef(false)
   const isConfigMode = page.mode === 'config'
-  const isAdbMissing = state?.adbMissing === true || state?.errors.includes('ADB was not found.') === true
-
-  const updateConfig = useCallback((updater: (current: MobileDebugConfigState) => MobileDebugConfigState) => {
-    setConfig(current => {
-      const nextConfig = updater(current)
-      writeMobileDebugConfig(nextConfig)
-      return nextConfig
-    })
-  }, [])
-
-  const refreshTargets = useCallback(async () => {
-    if (isRefreshingRef.current) return
-
-    const listMobileDebugTargets = window.oneworksDesktop?.listMobileDebugTargets
-    if (listMobileDebugTargets == null) {
-      setState(null)
-      setError(t('chat.interactionPanel.mobileDebugDesktopOnly'))
-      return
-    }
-
-    isRefreshingRef.current = true
-    setIsLoading(true)
-    setError(null)
-    try {
-      setState(await listMobileDebugTargets({ ...config, selectedDeviceId: page.selectedDeviceId }))
-    } catch {
-      setError(t('common.operationFailed'))
-    } finally {
-      isRefreshingRef.current = false
-      setIsLoading(false)
-    }
-  }, [config, page.selectedDeviceId, t])
-
-  const refreshAdbStatus = useCallback(async () => {
-    if (isRefreshingRef.current) return
-
-    const listMobileDebugTargets = window.oneworksDesktop?.listMobileDebugTargets
-    if (listMobileDebugTargets == null) return
-
-    isRefreshingRef.current = true
-    try {
-      setState(
-        await listMobileDebugTargets({
-          discoverNetworkTargets: false,
-          discoverUsbDevices: true,
-          networkTargets: [],
-          portForwardingRules: []
-        })
-      )
-    } catch {
-      // Keep the existing settings page visible when lightweight status probing fails.
-    } finally {
-      isRefreshingRef.current = false
-    }
-  }, [])
+  const isDevicesMode = page.mode === 'devices'
+  const { config, error, isAdbMissing, isLoading, state, updateConfig } = useMobileDebugTargetsState({
+    isActive,
+    isConfigMode,
+    selectedDeviceId: page.selectedDeviceId
+  })
 
   useEffect(() => {
-    if (!isActive || isConfigMode) return
-    void refreshTargets()
-    const refreshTimer = window.setInterval(() => void refreshTargets(), 3000)
-    return () => window.clearInterval(refreshTimer)
-  }, [isActive, isConfigMode, refreshTargets])
-
-  useEffect(() => {
-    if (!isActive || !isConfigMode) return
-    void refreshAdbStatus()
-    const refreshTimer = window.setInterval(() => void refreshAdbStatus(), 3000)
-    return () => window.clearInterval(refreshTimer)
-  }, [isActive, isConfigMode, refreshAdbStatus])
-
-  useEffect(() => {
-    if (!isConfigMode) return
+    if (!isConfigMode && !isDevicesMode) return
     onStandaloneHeaderActionsChange?.(null)
     onStandaloneDeviceTitleChange?.(null)
-  }, [isConfigMode, onStandaloneDeviceTitleChange, onStandaloneHeaderActionsChange])
+  }, [isConfigMode, isDevicesMode, onStandaloneDeviceTitleChange, onStandaloneHeaderActionsChange])
 
   const visibleState = useMemo(() => {
     if (state == null || page.selectedDeviceId == null) return state
@@ -168,12 +106,25 @@ export function InteractionPanelMobileDebugView({
             onChangeConfig={updateConfig}
           />
         )
+        : isDevicesMode
+        ? (
+          <InteractionPanelMobileDebugDeviceList
+            error={error}
+            isAdbMissing={isAdbMissing}
+            isLoading={isLoading}
+            state={state}
+            onOpenDeviceDebug={onOpenDeviceDebug ?? (() => undefined)}
+            onOpenSettings={onOpenDeviceSettings ?? (() => undefined)}
+          />
+        )
         : (
           <InteractionPanelMobileDebugResults
             error={error}
+            isActive={isActive}
             isLoading={isLoading}
             state={visibleState}
             onOpenDebugUrl={onOpenDebugUrl}
+            onOpenDeviceList={onOpenDeviceList}
             onStandaloneDeviceTitleChange={onStandaloneDeviceTitleChange}
             onStandaloneHeaderActionsChange={onStandaloneHeaderActionsChange}
           />

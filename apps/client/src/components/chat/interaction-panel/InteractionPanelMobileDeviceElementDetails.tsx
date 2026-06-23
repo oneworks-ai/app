@@ -1,16 +1,17 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { InteractionPanelMobileDeviceBoundsModel } from './InteractionPanelMobileDeviceBoundsModel'
 import { stringifyAttributeValue } from './mobile-device-preview-utils'
 
 type ElementDetailTabKey = 'overview' | 'attributes' | 'bounds'
 type ElementDetailValue = string | number | boolean | null
 type ElementDetailRow = readonly [string, ElementDetailValue]
 
-const elementDetailTabs: Array<{ key: ElementDetailTabKey; labelKey: string }> = [
-  { key: 'overview', labelKey: 'mobileDebugElementOverview' },
-  { key: 'attributes', labelKey: 'mobileDebugElementAttributes' },
-  { key: 'bounds', labelKey: 'mobileDebugElementBounds' }
+const elementDetailTabs: Array<{ icon: string; key: ElementDetailTabKey; labelKey: string }> = [
+  { icon: 'subject', key: 'overview', labelKey: 'mobileDebugElementOverview' },
+  { icon: 'data_object', key: 'attributes', labelKey: 'mobileDebugElementAttributes' },
+  { icon: 'crop_free', key: 'bounds', labelKey: 'mobileDebugElementBounds' }
 ]
 
 const stateAttributeNames = [
@@ -53,20 +54,6 @@ const getOverviewRows = (
     ...getElementStateRows(node)
   ])
 
-const getBoundsRows = (node: DesktopMobileElementNode | undefined): ElementDetailRow[] =>
-  node?.bounds == null
-    ? []
-    : [
-      ['x', node.bounds.x],
-      ['y', node.bounds.y],
-      ['width', node.bounds.width],
-      ['height', node.bounds.height],
-      ['right', node.bounds.x + node.bounds.width],
-      ['bottom', node.bounds.y + node.bounds.height],
-      ['center-x', Math.round(node.bounds.x + node.bounds.width / 2)],
-      ['center-y', Math.round(node.bounds.y + node.bounds.height / 2)]
-    ]
-
 const getAttributeRows = (node: DesktopMobileElementNode | undefined): ElementDetailRow[] =>
   Object.entries(node?.attributes ?? {})
     .filter((row): row is ElementDetailRow => row[1] != null && String(row[1]) !== '')
@@ -81,12 +68,10 @@ export function InteractionPanelMobileDeviceElementDetails({
 }) {
   const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState<ElementDetailTabKey>('overview')
-  const rows = node == null
+  const rows = node == null || activeTab === 'bounds'
     ? []
     : activeTab === 'overview'
     ? getOverviewRows(node, elementTree)
-    : activeTab === 'bounds'
-    ? getBoundsRows(node)
     : getAttributeRows(node)
 
   return (
@@ -109,7 +94,10 @@ export function InteractionPanelMobileDeviceElementDetails({
             }`}
             onClick={() => setActiveTab(tab.key)}
           >
-            {t(`chat.interactionPanel.${tab.labelKey}`)}
+            <span className='chat-interaction-panel-mobile-debug__element-detail-tab-label'>
+              <span className='material-symbols-rounded' aria-hidden='true'>{tab.icon}</span>
+              <span>{t(`chat.interactionPanel.${tab.labelKey}`)}</span>
+            </span>
           </button>
         ))}
       </div>
@@ -124,6 +112,10 @@ export function InteractionPanelMobileDeviceElementDetails({
             <div className='chat-interaction-panel-mobile-debug__element-empty'>
               {t('chat.interactionPanel.mobileDebugSelectElement')}
             </div>
+          )
+          : activeTab === 'bounds'
+          ? (
+            <InteractionPanelMobileDeviceBoundsModel elementTree={elementTree} node={node} />
           )
           : (
             <ElementDetailRows rows={rows} />

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- video preview keeps desktop IPC and server websocket stream lifecycles together. */
 import { useEffect, useRef } from 'react'
 
 import { ScrcpyVideoCodecId } from '@yume-chan/scrcpy'
@@ -7,6 +8,8 @@ import {
   WebCodecsVideoDecoder,
   WebGLVideoFrameRenderer
 } from '@yume-chan/scrcpy-decoder-webcodecs'
+
+import { getServerWsPath } from '#~/runtime-config'
 
 export type MobileDeviceVideoPreviewStatus = 'active' | 'starting' | 'unavailable'
 
@@ -34,6 +37,46 @@ const toMediaStreamPacket = (event: DesktopMobileDeviceVideoFrameEvent): ScrcpyM
   }
 }
 
+const decodeServerVideoFramePacket = (value: ArrayBuffer): DesktopMobileDeviceVideoFrameEvent | undefined => {
+  const headerSize = 10
+  if (value.byteLength < headerSize) return undefined
+  const view = new DataView(value)
+  if (view.getUint8(0) !== 1) return undefined
+  const packetKind = view.getUint8(1)
+  const width = view.getUint32(2)
+  const height = view.getUint32(6)
+  const data = new Uint8Array(value.slice(headerSize))
+  return {
+    data,
+    deviceId: '',
+    height: height > 0 ? height : undefined,
+    keyframe: packetKind === 2,
+    receivedAt: Date.now(),
+    streamId: 'server',
+    type: packetKind === 0 ? 'configuration' : 'data',
+    width: width > 0 ? width : undefined
+  }
+}
+
+const createDecoder = (canvas: HTMLCanvasElement) => {
+  const decoder = new WebCodecsVideoDecoder({
+    codec: ScrcpyVideoCodecId.H264,
+    renderer: createRenderer(canvas)
+  })
+  return {
+    decoder,
+    writer: decoder.writable.getWriter()
+  }
+}
+
+const createMobileDebugVideoSocketUrl = (deviceId: string) => {
+  const url = new URL(getServerWsPath(), window.location.origin)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  url.searchParams.set('channel', 'mobile-debug-video')
+  url.searchParams.set('deviceId', deviceId)
+  return url.toString()
+}
+
 export function InteractionPanelMobileDeviceVideoCanvas({
   deviceId,
   onError,
@@ -50,22 +93,20 @@ export function InteractionPanelMobileDeviceVideoCanvas({
   useEffect(() => {
     const canvas = canvasRef.current
     const desktopApi = window.oneworksDesktop
-    if (
-      canvas == null ||
-      desktopApi?.startMobileDeviceVideoStream == null ||
-      desktopApi.stopMobileDeviceVideoStream == null ||
-      desktopApi.onMobileDeviceVideoFrame == null ||
-      desktopApi.onMobileDeviceVideoStreamStatus == null ||
-      !WebCodecsVideoDecoder.isSupported
-    ) {
+    if (canvas == null || !WebCodecsVideoDecoder.isSupported) {
       onStatusChange('unavailable')
       return
     }
+    const canUseDesktopStream = desktopApi?.startMobileDeviceVideoStream != null &&
+      desktopApi.stopMobileDeviceVideoStream != null &&
+      desktopApi.onMobileDeviceVideoFrame != null &&
+      desktopApi.onMobileDeviceVideoStreamStatus != null
 
     let isDisposed = false
     let streamId: string | undefined
     let decoder: WebCodecsVideoDecoder | undefined
     let writer: ReturnType<WebCodecsVideoDecoder['writable']['getWriter']> | undefined
+    let serverSocket: WebSocket | undefined
 
     const fail = (message: string) => {
       if (isDisposed) return
@@ -74,11 +115,9 @@ export function InteractionPanelMobileDeviceVideoCanvas({
     }
 
     try {
-      decoder = new WebCodecsVideoDecoder({
-        codec: ScrcpyVideoCodecId.H264,
-        renderer: createRenderer(canvas)
-      })
-      writer = decoder.writable.getWriter()
+      const nextDecoder = createDecoder(canvas)
+      decoder = nextDecoder.decoder
+      writer = nextDecoder.writer
     } catch (error) {
       fail(error instanceof Error ? error.message : String(error))
       return
@@ -88,6 +127,71 @@ export function InteractionPanelMobileDeviceVideoCanvas({
       onSizeChange(size)
       onStatusChange('active')
     })
+
+    if (!canUseDesktopStream) {
+      onStatusChange('starting')
+      const ws = new WebSocket(createMobileDebugVideoSocketUrl(deviceId))
+      serverSocket = ws
+      ws.binaryType = 'arraybuffer'
+      ws.addEventListener('message', event => {
+        if (isDisposed || writer == null) return
+        if (typeof event.data === 'string') {
+          try {
+            const message = JSON.parse(event.data) as {
+              data?: DesktopMobileDeviceVideoStreamStartResponse | DesktopMobileDeviceVideoStreamStatusEvent
+              type?: string
+            }
+            if (message.type === 'mobile-debug-video-started') {
+              const result = message.data as DesktopMobileDeviceVideoStreamStartResponse | undefined
+              streamId = result?.streamId
+              if (result?.width != null && result.height != null) {
+                onSizeChange({ height: result.height, width: result.width })
+              }
+            } else if (message.type === 'mobile-debug-video-status') {
+              const status = message.data as DesktopMobileDeviceVideoStreamStatusEvent | undefined
+              if (status?.status === 'error') fail(status.message ?? '')
+              else fail('')
+            }
+          } catch (error) {
+            fail(error instanceof Error ? error.message : String(error))
+          }
+          return
+        }
+
+        const writeFrame = (buffer: ArrayBuffer) => {
+          const frame = decodeServerVideoFramePacket(buffer)
+          if (frame == null || writer == null) return
+          if (frame.width != null && frame.height != null) {
+            onSizeChange({ height: frame.height, width: frame.width })
+          }
+          writer.write(toMediaStreamPacket(frame))
+            .then(() => {
+              if (!isDisposed) onStatusChange('active')
+            })
+            .catch(error => fail(error instanceof Error ? error.message : String(error)))
+        }
+
+        if (event.data instanceof ArrayBuffer) {
+          writeFrame(event.data)
+        } else if (event.data instanceof Blob) {
+          void event.data.arrayBuffer().then(writeFrame).catch(error => {
+            fail(error instanceof Error ? error.message : String(error))
+          })
+        }
+      })
+      ws.addEventListener('error', () => fail(''))
+      ws.addEventListener('close', event => {
+        if (!isDisposed && event.code !== 1000) fail(event.reason)
+      })
+
+      return () => {
+        isDisposed = true
+        removeSizeListener()
+        serverSocket?.close()
+        void writer?.close().catch(() => undefined)
+        decoder?.dispose()
+      }
+    }
 
     const unsubscribeFrame = desktopApi.onMobileDeviceVideoFrame(event => {
       if (isDisposed || event.streamId !== streamId || writer == null) return

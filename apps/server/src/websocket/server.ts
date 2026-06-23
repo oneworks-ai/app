@@ -20,6 +20,7 @@ import {
   resolveWebAuthConfig,
   verifySessionToken
 } from '#~/services/auth/index.js'
+import { handleMobileDeviceVideoStreamSocket } from '#~/services/mobile-debug/index.js'
 import { getPluginManager } from '#~/services/plugins/index.js'
 import { interruptSession, killSession, processUserMessage, startAdapterSession } from '#~/services/session/index.js'
 import { handleInteractionResponse } from '#~/services/session/interaction.js'
@@ -97,6 +98,11 @@ export function setupWebSocket(server: Server, env: ServerEnv) {
 
     const subscribeMode = params.get('subscribe')
     const channel = params.get('channel')
+
+    if (channel === 'mobile-debug-video') {
+      await handleMobileDeviceVideoStreamSocket(ws, params.get('deviceId'))
+      return
+    }
 
     if (subscribeMode === 'sessions') {
       addSessionSubscriberSocket(ws)

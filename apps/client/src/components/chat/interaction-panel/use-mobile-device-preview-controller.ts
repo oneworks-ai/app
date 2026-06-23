@@ -4,7 +4,9 @@ import type {
   MobileDeviceVideoPreviewSize,
   MobileDeviceVideoPreviewStatus
 } from './InteractionPanelMobileDeviceVideoCanvas'
+import { captureMobileDeviceScreenshot, dumpMobileElementTree, sendMobileDeviceInput } from './mobile-debug-platform'
 import {
+  elementTreeRefreshDelayMs,
   findDeepestNodeAtPoint,
   flattenElementNodes,
   screenshotRefreshDelayMs,
@@ -12,7 +14,7 @@ import {
   withPhysicalMobileDeviceInput
 } from './mobile-device-preview-utils'
 import type { PointerDevicePoint } from './mobile-device-preview-utils'
-export const useMobileDevicePreviewController = (readyDeviceId: string | undefined) => {
+export const useMobileDevicePreviewController = (readyDeviceId: string | undefined, isActive: boolean) => {
   const { t } = useTranslation()
   const [screenshot, setScreenshot] = useState<DesktopMobileDeviceScreenshotResponse | null>(null)
   const [elementTree, setElementTree] = useState<DesktopMobileElementTreeResponse | null>(null)
@@ -26,6 +28,7 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
   const screenshotRef = useRef<DesktopMobileDeviceScreenshotResponse | null>(null)
   const isScreenshotRefreshingRef = useRef(false)
   const isElementTreeRefreshingRef = useRef(false)
+  const elementTreeLoopTimerRef = useRef<number>()
   const screenshotLoopTimerRef = useRef<number>()
   const lastReadyDeviceIdRef = useRef<string | undefined>()
   const shouldUseScreenshotFallback = videoStatus === 'unavailable'
@@ -35,8 +38,7 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
     [elementTree]
   )
   const refreshScreenshot = useCallback(async () => {
-    const captureMobileDeviceScreenshot = window.oneworksDesktop?.captureMobileDeviceScreenshot
-    if (readyDeviceId == null || captureMobileDeviceScreenshot == null || isScreenshotRefreshingRef.current) return
+    if (readyDeviceId == null || isScreenshotRefreshingRef.current) return
 
     isScreenshotRefreshingRef.current = true
     try {
@@ -51,8 +53,7 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
     }
   }, [previewFailedMessage, readyDeviceId])
   const refreshElementTree = useCallback(async () => {
-    const dumpMobileElementTree = window.oneworksDesktop?.dumpMobileElementTree
-    if (readyDeviceId == null || dumpMobileElementTree == null || isElementTreeRefreshingRef.current) return
+    if (readyDeviceId == null || isElementTreeRefreshingRef.current) return
 
     isElementTreeRefreshingRef.current = true
     try {
@@ -93,6 +94,9 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
         void runScreenshotLoop()
       }, screenshotRefreshDelayMs)
     }
+    const runElementTreeLoop = () => {
+      if (!isCancelled && document.visibilityState !== 'hidden') void refreshElementTree()
+    }
     const runScreenshotLoop = async () => {
       await refreshScreenshot()
       queueNextScreenshot()
@@ -108,21 +112,18 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
       restartVideoStream()
       setError(null)
     }
-    if (readyDeviceId == null) return
-    if (!shouldUseScreenshotFallback) {
-      void refreshElementTree()
-      return
-    }
-    void runScreenshotLoop()
-    void refreshElementTree()
+    if (readyDeviceId == null || !isActive) return
+    if (shouldUseScreenshotFallback) void runScreenshotLoop()
+    runElementTreeLoop()
+    elementTreeLoopTimerRef.current = window.setInterval(runElementTreeLoop, elementTreeRefreshDelayMs)
     return () => {
       isCancelled = true
+      if (elementTreeLoopTimerRef.current != null) window.clearInterval(elementTreeLoopTimerRef.current)
       if (screenshotLoopTimerRef.current != null) window.clearTimeout(screenshotLoopTimerRef.current)
     }
-  }, [readyDeviceId, refreshElementTree, refreshScreenshot, restartVideoStream, shouldUseScreenshotFallback])
+  }, [isActive, readyDeviceId, refreshElementTree, refreshScreenshot, restartVideoStream, shouldUseScreenshotFallback])
   const sendInput = useCallback(async (input: DesktopMobileDeviceInputEvent) => {
-    const sendMobileDeviceInput = window.oneworksDesktop?.sendMobileDeviceInput
-    if (readyDeviceId == null || sendMobileDeviceInput == null) return
+    if (readyDeviceId == null) return
 
     try {
       await sendMobileDeviceInput(
@@ -136,12 +137,12 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
       if (shouldUseScreenshotFallback) {
         window.setTimeout(() => void refreshScreenshot(), 180)
       }
-      if (isInspecting) window.setTimeout(() => void refreshElementTree(), 420)
+      window.setTimeout(() => void refreshElementTree(), 420)
+      window.setTimeout(() => void refreshElementTree(), 1100)
     } catch {
       setError(t('chat.interactionPanel.mobileDebugInputFailed'))
     }
   }, [
-    isInspecting,
     elementTree?.root?.bounds,
     readyDeviceId,
     refreshElementTree,

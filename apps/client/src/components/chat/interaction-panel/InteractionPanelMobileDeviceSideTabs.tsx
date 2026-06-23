@@ -2,9 +2,14 @@ import { Tabs } from 'antd'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { MobileDeviceInlineTabActions, MobileDeviceTabActionButton } from './InteractionPanelMobileDeviceActions'
-import { InteractionPanelMobileDeviceDetailsPanel } from './InteractionPanelMobileDeviceDetailsPanel'
+import { MobileDeviceInlineTabActions } from './InteractionPanelMobileDeviceActions'
+import {
+  InteractionPanelMobileDeviceInputPanel,
+  InteractionPanelMobileDeviceTargetsPanel
+} from './InteractionPanelMobileDeviceDetailsPanel'
 import { InteractionPanelMobileDeviceInspectPanel } from './InteractionPanelMobileDeviceInspectPanel'
+import { InteractionPanelMobileDeviceLogsPanel } from './InteractionPanelMobileDeviceLogsPanel'
+import { MobileDeviceTabActionButton } from './InteractionPanelMobileDeviceTabActionButton'
 import type { FlattenedElementNode } from './mobile-device-preview-utils'
 
 export type MobileDeviceDockPosition = 'bottom' | 'left' | 'right'
@@ -52,6 +57,7 @@ function MobileDeviceDockPositionSwitch({
 
 export function InteractionPanelMobileDeviceSideTabs({
   details,
+  deviceId,
   dockPosition,
   elementTree,
   error,
@@ -68,6 +74,7 @@ export function InteractionPanelMobileDeviceSideTabs({
   onToggleSidePanel
 }: {
   details: ReactNode
+  deviceId: string
   dockPosition: MobileDeviceDockPosition
   elementTree: DesktopMobileElementTreeResponse | null
   error: string | null
@@ -78,7 +85,7 @@ export function InteractionPanelMobileDeviceSideTabs({
   showInlineActions?: boolean
   onDockPositionChange: (position: MobileDeviceDockPosition) => void
   onRefresh: () => void
-  onSelectNode: (nodeId: string) => void
+  onSelectNode: (nodeId: string | undefined) => void
   onSendInput: (input: DesktopMobileDeviceInputEvent) => void
   onToggleInspect: () => void
   onToggleSidePanel: () => void
@@ -98,11 +105,6 @@ export function InteractionPanelMobileDeviceSideTabs({
                 icon='highlight_mouse_cursor'
                 label={t('chat.interactionPanel.mobileDebugInspectMode')}
                 onClick={onToggleInspect}
-              />
-              <MobileDeviceTabActionButton
-                icon='screen_rotation'
-                label={t('chat.interactionPanel.mobileDebugRotate')}
-                onClick={() => onSendInput({ action: 'rotate', kind: 'action' })}
               />
             </div>
           ),
@@ -134,18 +136,31 @@ export function InteractionPanelMobileDeviceSideTabs({
               />
             ),
             key: 'elements',
-            label: renderMobileDebugTabLabel('account_tree', 'Elements')
+            label: renderMobileDebugTabLabel('account_tree', t('chat.interactionPanel.mobileDebugElements'))
           },
           {
             children: (
-              <InteractionPanelMobileDeviceDetailsPanel
+              <InteractionPanelMobileDeviceTargetsPanel
                 details={details}
+              />
+            ),
+            key: 'targets',
+            label: renderMobileDebugTabLabel('web_asset', t('chat.interactionPanel.mobileDebugTargetTab'))
+          },
+          {
+            children: (
+              <InteractionPanelMobileDeviceInputPanel
                 error={error}
                 onSendInput={onSendInput}
               />
             ),
-            key: 'details',
-            label: renderMobileDebugTabLabel('info', t('chat.interactionPanel.mobileDebugDetails'))
+            key: 'input',
+            label: renderMobileDebugTabLabel('keyboard', t('chat.interactionPanel.mobileDebugInputTab'))
+          },
+          {
+            children: <InteractionPanelMobileDeviceLogsPanel deviceId={deviceId} />,
+            key: 'logs',
+            label: renderMobileDebugTabLabel('terminal', t('chat.interactionPanel.mobileDebugLogs'))
           }
         ]}
       />

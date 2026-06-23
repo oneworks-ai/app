@@ -20,6 +20,7 @@ import { gitRouter } from './git'
 import { interactRouter } from './interact'
 import { launcherRouter } from './launcher'
 import { modelProvidersRouter, modelServicesRouter } from './model-providers'
+import { mobileDebugRouter } from './mobile-debug'
 import { moduleUpdatesRouter } from './module-updates'
 import { pluginsRouter } from './plugins'
 import { sessionsRouter } from './sessions'
@@ -60,6 +61,7 @@ export const mountRoutes = async (
     { prefix: '/api/module-updates', router: moduleUpdatesRouter() },
     { prefix: '/api/model-providers', router: modelProvidersRouter() },
     { prefix: '/api/model-services', router: modelServicesRouter() },
+    { prefix: '/api/mobile-debug', router: mobileDebugRouter() },
     { prefix: '/api/plugins', router: pluginsRouter() },
     { prefix: '/api/auth', router: authRouter(env) },
     { prefix: '/api/ai', router: aiRouter() },
