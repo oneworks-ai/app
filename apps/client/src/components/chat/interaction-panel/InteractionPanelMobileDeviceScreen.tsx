@@ -1,5 +1,4 @@
-import type { CSSProperties, PointerEvent, WheelEvent } from 'react'
-import { useCallback, useRef } from 'react'
+import type { CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { InteractionPanelMobileDeviceControls } from './InteractionPanelMobileDeviceControls'
@@ -8,8 +7,9 @@ import type {
   MobileDeviceVideoPreviewSize,
   MobileDeviceVideoPreviewStatus
 } from './InteractionPanelMobileDeviceVideoCanvas'
-import { getOverlayStyle, toPointerDevicePoint } from './mobile-device-preview-utils'
+import { getOverlayStyle } from './mobile-device-preview-utils'
 import type { MobileDeviceScreenDimensions, PointerDevicePoint } from './mobile-device-preview-utils'
+import { useMobileDeviceScreenPointer } from './use-mobile-device-screen-pointer'
 
 export function InteractionPanelMobileDeviceScreen({
   deviceTitle,
@@ -53,66 +53,24 @@ export function InteractionPanelMobileDeviceScreen({
   showDeviceTitlebar?: boolean
 }) {
   const { t } = useTranslation()
-  const pointerStartRef = useRef<PointerDevicePoint | null>(null)
   const isVideoEnabled = videoDeviceId != null && videoStatus !== 'unavailable'
   const screen: MobileDeviceScreenDimensions | null = videoSize ?? screenshot
   const overlayScreen: MobileDeviceScreenDimensions | null = elementScreen ?? screen
-
-  const handlePointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (screen == null) return
-    pointerStartRef.current = toPointerDevicePoint(event, screen)
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId)
-    } catch {
-      // Pointer capture is best effort for embedded webviews.
-    }
-  }, [screen])
-
-  const handlePointerMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (screen == null || !isInspecting) return
-    onHoverPoint(toPointerDevicePoint(event, screen))
-  }, [isInspecting, onHoverPoint, screen])
-
-  const handlePointerUp = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (screen == null) return
-    const startPoint = pointerStartRef.current
-    pointerStartRef.current = null
-    if (startPoint == null) return
-
-    const endPoint = toPointerDevicePoint(event, screen)
-    if (isInspecting) {
-      onInspectPoint(endPoint)
-      return
-    }
-
-    const deltaX = endPoint.x - startPoint.x
-    const deltaY = endPoint.y - startPoint.y
-    if (Math.hypot(deltaX, deltaY) > 10) {
-      onSendInput({
-        durationMs: 240,
-        endX: endPoint.x,
-        endY: endPoint.y,
-        kind: 'swipe',
-        x: startPoint.x,
-        y: startPoint.y
-      })
-      return
-    }
-    onSendInput({ kind: 'tap', x: endPoint.x, y: endPoint.y })
-  }, [isInspecting, onInspectPoint, onSendInput, screen])
-
-  const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
-    if (screen == null || isInspecting) return
-    event.preventDefault()
-    const point = toPointerDevicePoint(event, screen)
-    onSendInput({
-      kind: 'scroll',
-      scrollX: -Math.max(-1, Math.min(1, event.deltaX / 500)),
-      scrollY: -Math.max(-1, Math.min(1, event.deltaY / 500)),
-      x: point.x,
-      y: point.y
-    })
-  }, [isInspecting, onSendInput, screen])
+  const {
+    handlePointerCancel,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+    handleWheel,
+    isTouching
+  } = useMobileDeviceScreenPointer({
+    canStreamTouch: isVideoEnabled && videoStatus === 'active',
+    isInspecting,
+    onHoverPoint,
+    onInspectPoint,
+    onSendInput,
+    screen
+  })
 
   return (
     <div
@@ -129,7 +87,11 @@ export function InteractionPanelMobileDeviceScreen({
             </div>
           )}
           <div
-            className={`chat-interaction-panel-mobile-debug__screen ${isInspecting ? 'is-inspecting' : ''}`}
+            className={[
+              'chat-interaction-panel-mobile-debug__screen',
+              isInspecting ? 'is-inspecting' : '',
+              isTouching ? 'is-touching' : ''
+            ].filter(Boolean).join(' ')}
             style={screen?.width != null && screen.height != null
               ? { aspectRatio: `${screen.width} / ${screen.height}` }
               : undefined}
@@ -137,6 +99,7 @@ export function InteractionPanelMobileDeviceScreen({
             onPointerMove={handlePointerMove}
             onPointerLeave={onPointerLeave}
             onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
             onWheel={handleWheel}
           >
             {isVideoEnabled && (
@@ -149,13 +112,11 @@ export function InteractionPanelMobileDeviceScreen({
               />
             )}
             {!isVideoEnabled && screenshot != null && (
-              <>
-                <img
-                  draggable={false}
-                  src={screenshot.imageDataUrl}
-                  alt={t('chat.interactionPanel.mobileDebugPreviewAlt')}
-                />
-              </>
+              <img
+                draggable={false}
+                src={screenshot.imageDataUrl}
+                alt={t('chat.interactionPanel.mobileDebugPreviewAlt')}
+              />
             )}
             {(screen == null || (isVideoEnabled && videoStatus !== 'active')) && (
               <div className='chat-interaction-panel-mobile-debug__screen-placeholder'>
@@ -176,9 +137,7 @@ export function InteractionPanelMobileDeviceScreen({
             )}
           </div>
         </div>
-        <InteractionPanelMobileDeviceControls
-          onSendInput={onSendInput}
-        />
+        <InteractionPanelMobileDeviceControls onSendInput={onSendInput} />
       </div>
     </div>
   )

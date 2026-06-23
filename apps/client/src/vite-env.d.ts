@@ -329,7 +329,7 @@ interface DesktopMobileDeviceInputEvent {
   endX?: number
   endY?: number
   key?: 'app-switch' | 'back' | 'delete' | 'enter' | 'home' | 'power' | 'volume-down' | 'volume-up'
-  kind: 'action' | 'key' | 'scroll' | 'swipe' | 'tap' | 'text'
+  kind: 'action' | 'key' | 'scroll' | 'swipe' | 'tap' | 'text' | 'touch'
   physicalEndX?: number
   physicalEndY?: number
   physicalX?: number
@@ -337,6 +337,7 @@ interface DesktopMobileDeviceInputEvent {
   scrollX?: number
   scrollY?: number
   text?: string
+  touchPhase?: 'down' | 'move' | 'up'
   x?: number
   y?: number
 }

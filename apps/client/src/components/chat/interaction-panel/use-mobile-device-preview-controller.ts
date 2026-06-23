@@ -7,13 +7,14 @@ import type {
 import { captureMobileDeviceScreenshot, dumpMobileElementTree, sendMobileDeviceInput } from './mobile-debug-platform'
 import {
   elementTreeRefreshDelayMs,
-  findDeepestNodeAtPoint,
   flattenElementNodes,
   screenshotRefreshDelayMs,
   toPhysicalMobileDevicePoint,
   withPhysicalMobileDeviceInput
 } from './mobile-device-preview-utils'
 import type { PointerDevicePoint } from './mobile-device-preview-utils'
+import { queueMobileDeviceTouchInput } from './mobile-device-touch-input-queue'
+import { useMobileDeviceElementSelection } from './use-mobile-device-element-selection'
 export const useMobileDevicePreviewController = (readyDeviceId: string | undefined, isActive: boolean) => {
   const { t } = useTranslation()
   const [screenshot, setScreenshot] = useState<DesktopMobileDeviceScreenshotResponse | null>(null)
@@ -30,6 +31,7 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
   const isElementTreeRefreshingRef = useRef(false)
   const elementTreeLoopTimerRef = useRef<number>()
   const screenshotLoopTimerRef = useRef<number>()
+  const touchInputQueueRef = useRef<Promise<void>>(Promise.resolve())
   const lastReadyDeviceIdRef = useRef<string | undefined>()
   const shouldUseScreenshotFallback = videoStatus === 'unavailable'
   const previewFailedMessage = t('chat.interactionPanel.mobileDebugPreviewFailed')
@@ -122,7 +124,7 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
       if (screenshotLoopTimerRef.current != null) window.clearTimeout(screenshotLoopTimerRef.current)
     }
   }, [isActive, readyDeviceId, refreshElementTree, refreshScreenshot, restartVideoStream, shouldUseScreenshotFallback])
-  const sendInput = useCallback(async (input: DesktopMobileDeviceInputEvent) => {
+  const sendInputRequest = useCallback(async (input: DesktopMobileDeviceInputEvent) => {
     if (readyDeviceId == null) return
 
     try {
@@ -137,10 +139,12 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
       if (shouldUseScreenshotFallback) {
         window.setTimeout(() => void refreshScreenshot(), 180)
       }
-      window.setTimeout(() => void refreshElementTree(), 420)
-      window.setTimeout(() => void refreshElementTree(), 1100)
+      if (input.kind !== 'touch' || input.touchPhase === 'up') {
+        window.setTimeout(() => void refreshElementTree(), 420)
+        window.setTimeout(() => void refreshElementTree(), 1100)
+      }
     } catch {
-      setError(t('chat.interactionPanel.mobileDebugInputFailed'))
+      if (input.kind !== 'touch') setError(t('chat.interactionPanel.mobileDebugInputFailed'))
     }
   }, [
     elementTree?.root?.bounds,
@@ -151,6 +155,10 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
     t,
     videoSize
   ])
+  const sendInput = useCallback(
+    (input: DesktopMobileDeviceInputEvent) => queueMobileDeviceTouchInput(touchInputQueueRef, input, sendInputRequest),
+    [sendInputRequest]
+  )
   const toggleInspect = useCallback(() => {
     setIsInspecting(current => {
       const nextIsInspecting = !current
@@ -158,15 +166,15 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
       return nextIsInspecting
     })
   }, [refreshElementTree])
-  const handleVideoError = useCallback((message: string) => {
-    setError(message || previewFailedMessage)
-  }, [previewFailedMessage])
-  const hoverElementAtPoint = useCallback((point: PointerDevicePoint) => {
-    setHoverNodeId(findDeepestNodeAtPoint(elementTree?.root, toPhysicalPoint(point))?.id)
-  }, [elementTree?.root, toPhysicalPoint])
-  const selectElementAtPoint = useCallback((point: PointerDevicePoint) => {
-    setSelectedNodeId(findDeepestNodeAtPoint(elementTree?.root, toPhysicalPoint(point))?.id)
-  }, [elementTree?.root, toPhysicalPoint])
+  const handleVideoError = useCallback((message: string) => setError(message || previewFailedMessage), [
+    previewFailedMessage
+  ])
+  const { hoverElementAtPoint, selectElementAtPoint } = useMobileDeviceElementSelection({
+    elementTree,
+    setHoverNodeId,
+    setSelectedNodeId,
+    toPhysicalPoint
+  })
   return {
     elementTree,
     error,

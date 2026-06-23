@@ -184,7 +184,7 @@ export interface MobileDeviceInputEvent {
   endX?: number
   endY?: number
   key?: 'app-switch' | 'back' | 'delete' | 'enter' | 'home' | 'power' | 'volume-down' | 'volume-up'
-  kind: 'action' | 'key' | 'scroll' | 'swipe' | 'tap' | 'text'
+  kind: 'action' | 'key' | 'scroll' | 'swipe' | 'tap' | 'text' | 'touch'
   physicalEndX?: number
   physicalEndY?: number
   physicalX?: number
@@ -192,6 +192,7 @@ export interface MobileDeviceInputEvent {
   scrollX?: number
   scrollY?: number
   text?: string
+  touchPhase?: 'down' | 'move' | 'up'
   x?: number
   y?: number
 }
@@ -249,6 +250,7 @@ const faviconUrlByPageUrl = new Map<string, string>()
 const deviceAdbQueueById = new Map<string, Promise<void>>()
 const deviceElementTreeQueueById = new Map<string, Promise<void>>()
 const deviceScreenshotTaskById = new Map<string, Promise<MobileDeviceScreenshotResponse>>()
+const adbTouchGestureByDeviceId = new Map<string, { startedAt: number; x: number; y: number }>()
 
 interface MobileDeviceVideoStreamSession {
   adb: Awaited<ReturnType<AdbServerClient['createAdb']>>
@@ -1458,7 +1460,13 @@ const toInputEventRecord = (input: unknown): MobileDeviceInputEvent => {
   const record = input as Record<string, unknown>
   const kind = record.kind
   if (
-    kind !== 'action' && kind !== 'key' && kind !== 'scroll' && kind !== 'swipe' && kind !== 'tap' && kind !== 'text'
+    kind !== 'action' &&
+    kind !== 'key' &&
+    kind !== 'scroll' &&
+    kind !== 'swipe' &&
+    kind !== 'tap' &&
+    kind !== 'text' &&
+    kind !== 'touch'
   ) {
     throw new Error('Invalid mobile input kind.')
   }
@@ -1490,6 +1498,9 @@ const toInputEventRecord = (input: unknown): MobileDeviceInputEvent => {
     scrollX: typeof record.scrollX === 'number' ? record.scrollX : undefined,
     scrollY: typeof record.scrollY === 'number' ? record.scrollY : undefined,
     text: typeof record.text === 'string' ? record.text : undefined,
+    touchPhase: record.touchPhase === 'down' || record.touchPhase === 'move' || record.touchPhase === 'up'
+      ? record.touchPhase
+      : undefined,
     x: typeof record.x === 'number' ? record.x : undefined,
     y: typeof record.y === 'number' ? record.y : undefined
   }
@@ -1581,6 +1592,30 @@ const createScrcpyTouchMessage = (
   pressure
 })
 
+const getScrcpyTouchAction = (phase: MobileDeviceInputEvent['touchPhase']) => {
+  if (phase === 'down') return AndroidMotionEventAction.Down
+  if (phase === 'move') return AndroidMotionEventAction.Move
+  if (phase === 'up') return AndroidMotionEventAction.Up
+  throw new Error('Touch input requires a valid phase.')
+}
+
+const sendScrcpyTouchInput = async (
+  session: MobileDeviceVideoStreamSession,
+  inputEvent: MobileDeviceInputEvent
+) => {
+  const controller = session.controller
+  if (controller == null) throw new Error('scrcpy control stream is not available.')
+
+  const action = getScrcpyTouchAction(inputEvent.touchPhase)
+  await controller.injectTouch(createScrcpyTouchMessage(
+    session,
+    action,
+    inputEvent.x,
+    inputEvent.y,
+    action === AndroidMotionEventAction.Up ? 0 : 1
+  ))
+}
+
 const sendScrcpyKeyInput = async (
   controller: ScrcpyControlMessageWriter,
   key: MobileDeviceInputEvent['key']
@@ -1642,7 +1677,9 @@ const trySendScrcpyMobileDeviceInput = async (
   const controller = session?.controller
   if (session == null || controller == null) return false
 
-  if (inputEvent.kind === 'tap') {
+  if (inputEvent.kind === 'touch') {
+    await sendScrcpyTouchInput(session, inputEvent)
+  } else if (inputEvent.kind === 'tap') {
     await controller.injectTouch(
       createScrcpyTouchMessage(session, AndroidMotionEventAction.Down, inputEvent.x, inputEvent.y, 1)
     )
@@ -1684,6 +1721,44 @@ const getAdbInputCoordinate = (
   if (videoField === 'endY') return normalizeCoordinate(inputEvent.physicalEndY ?? inputEvent.endY)
   if (videoField === 'x') return normalizeCoordinate(inputEvent.physicalX ?? inputEvent.x)
   return normalizeCoordinate(inputEvent.physicalY ?? inputEvent.y)
+}
+
+const sendAdbTouchInput = async (
+  adbPath: string,
+  deviceId: string,
+  inputEvent: MobileDeviceInputEvent
+) => {
+  const phase = inputEvent.touchPhase
+  const x = getAdbInputCoordinate(inputEvent, 'x')
+  const y = getAdbInputCoordinate(inputEvent, 'y')
+  if (phase == null) throw new Error('Touch input requires a valid phase.')
+  if (x == null || y == null) throw new Error('Touch input requires x and y.')
+
+  if (phase === 'down') {
+    adbTouchGestureByDeviceId.set(deviceId, { startedAt: Date.now(), x, y })
+    return
+  }
+  if (phase === 'move') return
+
+  const startPoint = adbTouchGestureByDeviceId.get(deviceId)
+  adbTouchGestureByDeviceId.delete(deviceId)
+  if (startPoint == null || Math.hypot(x - startPoint.x, y - startPoint.y) <= 10) {
+    await runCommand(adbPath, ['-s', deviceId, 'shell', 'input', 'tap', String(x), String(y)], ADB_INPUT_TIMEOUT_MS)
+    return
+  }
+
+  await runCommand(adbPath, [
+    '-s',
+    deviceId,
+    'shell',
+    'input',
+    'swipe',
+    String(startPoint.x),
+    String(startPoint.y),
+    String(x),
+    String(y),
+    String(normalizeDurationMs(Date.now() - startPoint.startedAt, 220))
+  ], ADB_INPUT_TIMEOUT_MS)
 }
 
 const decodeXmlAttribute = (value: string) =>
@@ -2011,7 +2086,9 @@ export const sendMobileDeviceInput = async (
     return { deviceId: device.id, sentAt: Date.now() }
   }
 
-  if (inputEvent.kind === 'tap') {
+  if (inputEvent.kind === 'touch') {
+    await sendAdbTouchInput(adbPath, device.id, inputEvent)
+  } else if (inputEvent.kind === 'tap') {
     const x = getAdbInputCoordinate(inputEvent, 'x')
     const y = getAdbInputCoordinate(inputEvent, 'y')
     if (x == null || y == null) throw new Error('Tap input requires x and y.')
