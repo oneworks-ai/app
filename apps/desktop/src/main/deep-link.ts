@@ -1,3 +1,5 @@
+import { normalizeStandaloneDeviceRoutePath } from '@oneworks/types'
+
 import type { LaunchRequest } from './types'
 
 export const desktopDeepLinkSchemes = ['oneworks', 'one-works'] as const
@@ -11,12 +13,7 @@ const readHashToken = (url: URL) => {
 
 const buildStandaloneRoutePath = (url: URL) => {
   if (url.hostname !== 'standalone') return undefined
-  const pathname = url.pathname.replace(/\/+$/, '')
-  if (pathname !== '/mobile-debug') return undefined
-  const route = new URL('/standalone/mobile-debug', 'http://localhost')
-  const deviceId = url.searchParams.get('deviceId')?.trim()
-  if (deviceId != null && deviceId !== '') route.searchParams.set('deviceId', deviceId)
-  return `${route.pathname}${route.search}`
+  return normalizeStandaloneDeviceRoutePath(`/standalone${url.pathname}${url.search}`)
 }
 
 const buildRelayPluginRoutePath = (url: URL) => {

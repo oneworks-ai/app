@@ -52,6 +52,28 @@ One Works 需要在 Electron 桌面端内调试移动设备，并在后续扩展
 
 ## 使用方式
 
+### Standalone Route 标准
+
+Standalone 页面使用资源型路径，避免把某个功能名写死成唯一入口。路径规范由 `@oneworks/types` 的 standalone route contract 维护，Electron、Web / IAB 和后续插件入口都应复用这套 builder / parser。
+
+全局设备能力：
+
+- `/standalone/devices`：设备管理页，展示可用 Android 设备、模拟器、网络设备和调试配置入口。
+- `/standalone/devices/settings`：设备调试配置页，例如 ADB 路径、端口转发、网络目标。
+- `/standalone/devices/:deviceId/debug`：指定设备的调试页，用于多设备场景下直接打开某一台设备。
+
+Session 级独立 tab：
+
+- `/standalone/sessions/:sessionId/panels/:area/tabs/:tabId`：从某个对话 session 的 panel 中独立打开一个 tab。
+- `area` 当前取值为 `bottom` 或 `right`，避免不同 panel 里出现同名 `tabId` 时无法定位。
+- `tabId` 使用 URL segment 编码，可指向 WebView、terminal、file、mobile-debug、plugin 等 session panel tab。
+
+这套路径让三类入口保持一致：
+
+- Electron 独立窗口：调用 `openStandaloneTabWindow(routePath)`。
+- Web / IAB：直接打开同一个 standalone URL。
+- 插件或对话页 action：用 builder 生成 URL，不手写路径。
+
 ### 设备控制模式
 
 面向任意设备和任意 App。用户只需要连接设备并完成系统要求的授权。
@@ -121,24 +143,24 @@ One Works 需要在 Electron 桌面端内调试移动设备，并在后续扩展
 
 ## 能力分级
 
-| Level | 名称 | Android 落点 | iOS 落点 | 说明 |
-| --- | --- | --- | --- | --- |
-| L0 | Screen Preview | scrcpy / Tango / ADB stream | idb video-stream / simulator stream | 实时画面、截图、录屏 |
-| L1 | Device Control | scrcpy input / ADB input / HID | WDA / XCUITest / idb | tap、swipe、text、硬件键 |
-| L2 | Generic Element Inspect | UIAutomator / Appium UiAutomator2 | WDA / XCUITest | 通用 accessibility 元素树 |
-| L3 | WebView Inspect | Chrome DevTools Protocol | Safari Web Inspector / ios-webkit-debug-proxy | Web DOM / CSS / Network |
-| L4 | First-Party Deep Inspect | One Works Android debug agent | One Works iOS debug agent | 框架级树、状态、source hint |
+| Level | 名称                     | Android 落点                      | iOS 落点                                      | 说明                        |
+| ----- | ------------------------ | --------------------------------- | --------------------------------------------- | --------------------------- |
+| L0    | Screen Preview           | scrcpy / Tango / ADB stream       | idb video-stream / simulator stream           | 实时画面、截图、录屏        |
+| L1    | Device Control           | scrcpy input / ADB input / HID    | WDA / XCUITest / idb                          | tap、swipe、text、硬件键    |
+| L2    | Generic Element Inspect  | UIAutomator / Appium UiAutomator2 | WDA / XCUITest                                | 通用 accessibility 元素树   |
+| L3    | WebView Inspect          | Chrome DevTools Protocol          | Safari Web Inspector / ios-webkit-debug-proxy | Web DOM / CSS / Network     |
+| L4    | First-Party Deep Inspect | One Works Android debug agent     | One Works iOS debug agent                     | 框架级树、状态、source hint |
 
 桌面能力复用同一套前端概念，但平台落点不同：
 
-| Level | 名称 | 桌面落点 | 说明 |
-| --- | --- | --- | --- |
-| D0 | Window Preview | ScreenCaptureKit / Windows Graphics Capture / PipeWire portal | 捕获目标 App 窗口或虚拟桌面画面 |
-| D1 | Desktop Control | CGEvent / AX action / SendInput / xdotool-like backend | 点击、拖拽、滚轮、文本输入、快捷键注入 |
-| D2 | Desktop Element Inspect | AXUIElement / UI Automation / AT-SPI | 系统 accessibility 元素树、bounds、role、label、value |
-| D3 | Browser Inspect | Electron WebContents / Chrome DevTools Protocol | 嵌入浏览器或外部 Chrome 的 DOM / CSS / Network 调试 |
-| D4 | First-Party Deep Inspect | One Works desktop debug agent | 框架级组件树、状态、路由、source hint |
-| D5 | Virtual Desktop Lab | Apple Virtualization.framework / Hyper-V / KVM | 独立桌面、快捷键命名空间、快照、重置、隔离运行 |
+| Level | 名称                     | 桌面落点                                                      | 说明                                                  |
+| ----- | ------------------------ | ------------------------------------------------------------- | ----------------------------------------------------- |
+| D0    | Window Preview           | ScreenCaptureKit / Windows Graphics Capture / PipeWire portal | 捕获目标 App 窗口或虚拟桌面画面                       |
+| D1    | Desktop Control          | CGEvent / AX action / SendInput / xdotool-like backend        | 点击、拖拽、滚轮、文本输入、快捷键注入                |
+| D2    | Desktop Element Inspect  | AXUIElement / UI Automation / AT-SPI                          | 系统 accessibility 元素树、bounds、role、label、value |
+| D3    | Browser Inspect          | Electron WebContents / Chrome DevTools Protocol               | 嵌入浏览器或外部 Chrome 的 DOM / CSS / Network 调试   |
+| D4    | First-Party Deep Inspect | One Works desktop debug agent                                 | 框架级组件树、状态、路由、source hint                 |
+| D5    | Virtual Desktop Lab      | Apple Virtualization.framework / Hyper-V / KVM                | 独立桌面、快捷键命名空间、快照、重置、隔离运行        |
 
 ## Android 技术选型
 
@@ -643,7 +665,14 @@ export interface DesktopElementNode {
 }
 
 export interface DesktopInputEvent {
-  kind: 'click' | 'doubleClick' | 'drag' | 'scroll' | 'text' | 'key' | 'shortcut'
+  kind:
+    | 'click'
+    | 'doubleClick'
+    | 'drag'
+    | 'scroll'
+    | 'text'
+    | 'key'
+    | 'shortcut'
   x?: number
   y?: number
   endX?: number

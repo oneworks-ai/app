@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
+
+import { parseStandaloneDeviceRoutePath } from '@oneworks/types'
 
 import '#~/components/chat/interaction-panel/ChatInteractionPanel.scss'
 import { InteractionPanelMobileDebugView } from '#~/components/chat/interaction-panel/InteractionPanelMobileDebugView'
@@ -17,21 +19,20 @@ import { StandaloneRouteThemeProvider } from './StandaloneRouteThemeProvider'
 import { StandaloneWindowHeader } from './StandaloneWindowHeader'
 import './StandaloneMobileDebugRoute.scss'
 
-const STANDALONE_MOBILE_DEBUG_ROUTE_KEY = 'standalone.mobile-debug'
-
-const getSearchParamText = (searchParams: URLSearchParams, key: string) => {
-  const value = searchParams.get(key)?.trim()
-  return value == null || value === '' ? undefined : value
-}
+const STANDALONE_MOBILE_DEBUG_ROUTE_KEY = 'standalone.devices'
 
 export function StandaloneMobileDebugRoute() {
   const { t } = useTranslation()
-  const [searchParams] = useSearchParams()
+  const location = useLocation()
+  const deviceRoute = useMemo(
+    () => parseStandaloneDeviceRoutePath(`${location.pathname}${location.search}`),
+    [location.pathname, location.search]
+  )
   const title = t('chat.interactionPanel.mobileDebugTitle')
-  const initialDeviceId = useMemo(() => getSearchParamText(searchParams, 'deviceId'), [searchParams])
   const [page, setPage] = useState<InteractionPanelMobileDebugPage>(() => ({
     ...createInteractionPanelMobileDebugPage(title),
-    selectedDeviceId: initialDeviceId
+    mode: deviceRoute?.mode === 'settings' ? 'config' : 'targets',
+    selectedDeviceId: deviceRoute?.deviceId
   }))
   const [headerActions, setHeaderActions] = useState<ReactNode | null>(null)
   const [deviceTitle, setDeviceTitle] = useState<string | null>(null)
@@ -40,6 +41,14 @@ export function StandaloneMobileDebugRoute() {
   useEffect(() => {
     setPage(current => ({ ...current, title }))
   }, [title])
+
+  useEffect(() => {
+    setPage(current => ({
+      ...current,
+      mode: deviceRoute?.mode === 'settings' ? 'config' : 'targets',
+      selectedDeviceId: deviceRoute?.deviceId
+    }))
+  }, [deviceRoute?.deviceId, deviceRoute?.mode])
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {

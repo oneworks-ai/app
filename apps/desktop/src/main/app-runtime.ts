@@ -3,6 +3,8 @@ import process from 'node:process'
 
 import { BrowserWindow, app, dialog, globalShortcut, nativeTheme, shell } from 'electron'
 
+import { standaloneDevicesRoutePath } from '@oneworks/types'
+
 import {
   rememberRecentWorkspaceFolder,
   removeRecentWorkspaceFolder,
@@ -57,7 +59,7 @@ import { createWorkspaceServiceManager } from './workspace-service-manager'
 const resolveStandaloneTabLaunchRequest = (rawTab: string | undefined): LaunchRequest | undefined => {
   const tab = rawTab?.trim()
   if (tab == null || tab === '') return undefined
-  if (tab === 'mobile-debug') return { standaloneRoutePath: '/standalone/mobile-debug' }
+  if (tab === 'devices') return { standaloneRoutePath: standaloneDevicesRoutePath }
   if (tab.startsWith('/standalone/')) return { standaloneRoutePath: tab }
   return undefined
 }

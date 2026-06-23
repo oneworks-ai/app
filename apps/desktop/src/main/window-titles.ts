@@ -1,3 +1,5 @@
+import { isStandaloneDeviceRoutePath } from '@oneworks/types'
+
 import { getWorkspaceDisplayName } from '../workspace-state.cjs'
 
 export const ensureTrailingSlash = (value: string) => (
@@ -8,6 +10,6 @@ export const buildWorkspaceWindowTitle = (workspaceFolder: string) =>
   `${getWorkspaceDisplayName(workspaceFolder)} - One Works`
 export const buildLauncherWindowTitle = () => 'One Works'
 export const buildStandaloneTabWindowTitle = (routePath: string) => (
-  routePath.startsWith('/standalone/mobile-debug') ? 'Debug Phone - One Works' : 'One Works'
+  isStandaloneDeviceRoutePath(routePath) ? 'Debug Phone - One Works' : 'One Works'
 )
 export const buildWorkspaceSelectorWindowTitle = () => 'Choose Project - One Works'

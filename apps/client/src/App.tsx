@@ -1,6 +1,8 @@
 import { Suspense, lazy, useRef } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 
+import { isStandaloneDeviceRoutePath } from '@oneworks/types'
+
 import { WorkspaceConnectionGate } from '#~/WorkspaceConnectionGate'
 import { getRuntimeWorkspaceId, isDesktopClientMode, isServerManagerRole } from '#~/runtime-config'
 
@@ -55,7 +57,7 @@ export default function App() {
     return <DevComponentLabApp />
   }
 
-  if (location.pathname === '/standalone/mobile-debug') {
+  if (isStandaloneDeviceRoutePath(`${location.pathname}${location.search}`)) {
     return (
       <Suspense fallback={null}>
         <StandaloneMobileDebugRoute />

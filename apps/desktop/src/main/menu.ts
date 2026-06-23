@@ -4,6 +4,8 @@ import process from 'node:process'
 import { BrowserWindow, Menu, app } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
 
+import { standaloneDevicesRoutePath } from '@oneworks/types'
+
 import { getWorkspaceDescription, getWorkspaceDisplayName } from '../workspace-state.cjs'
 import { DEVTOOLS_MENU_ACCELERATOR, RELOAD_WINDOW_MENU_ACCELERATOR, VIEW_SHORTCUT_ACTIONS } from './constants'
 import type { ViewShortcutAction } from './constants'
@@ -60,7 +62,7 @@ export const createAppMenuManager = ({
   }
 
   const openStandaloneMobileDebug = () => {
-    void openStandaloneTabWindow('/standalone/mobile-debug').catch(handleDesktopError)
+    void openStandaloneTabWindow(standaloneDevicesRoutePath).catch(handleDesktopError)
   }
 
   const openUpdateCheck = () => {

@@ -4,6 +4,10 @@ import process from 'node:process'
 import { BrowserWindow } from 'electron'
 import type { WebContents } from 'electron'
 
+import {
+  isStandaloneDeviceRoutePath,
+  normalizeStandaloneRoutePath as normalizeKnownStandaloneRoutePath
+} from '@oneworks/types'
 import { matchesPinyinSearch, normalizePinyinSearchQuery } from '@oneworks/utils/pinyin-search'
 
 import { createWorkspaceSelectorHtml as createWorkspaceSelectorHtmlBase } from '../workspace-selector-page.cjs'
@@ -92,7 +96,8 @@ const isWorkspaceChatRoute = (clientUrl: string, rawUrl?: string) => {
 
 const normalizeStandaloneRoutePath = (routePath: string) => {
   const trimmedRoutePath = routePath.trim()
-  if (trimmedRoutePath === 'mobile-debug') return '/standalone/mobile-debug'
+  const normalizedKnownRoutePath = normalizeKnownStandaloneRoutePath(trimmedRoutePath)
+  if (normalizedKnownRoutePath != null) return normalizedKnownRoutePath
   const normalizedRoutePath = trimmedRoutePath.startsWith('/') ? trimmedRoutePath : `/${trimmedRoutePath}`
   if (!normalizedRoutePath.startsWith('/standalone/')) {
     throw new Error('Standalone tab route must be under /standalone/.')
@@ -646,7 +651,7 @@ export const createWindowManager = ({
     const clientUrl = await ensureSharedClientUrl()
     const targetUrl = buildStandaloneTabUrl(clientUrl, standaloneRoutePath)
     const windowRecord = createWindowRecord({ kind: 'standalone' })
-    if (standaloneRoutePath === '/standalone/mobile-debug') {
+    if (isStandaloneDeviceRoutePath(standaloneRoutePath)) {
       windowRecord.window.setContentSize(
         mobileDebugStandaloneInitialContentSize.width,
         mobileDebugStandaloneInitialContentSize.height
