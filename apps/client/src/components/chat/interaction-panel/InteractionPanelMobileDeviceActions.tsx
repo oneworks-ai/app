@@ -61,6 +61,7 @@ export function MobileDeviceTabActionButton({
       className={`chat-interaction-panel-mobile-debug__tab-action ${active ? 'is-active' : ''}`}
       title={label}
       aria-label={label}
+      aria-pressed={active == null ? undefined : active}
       onClick={event => {
         if (onClick == null) return
         event.preventDefault()

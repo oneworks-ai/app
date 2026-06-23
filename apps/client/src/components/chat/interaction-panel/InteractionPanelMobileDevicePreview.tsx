@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { MobileDeviceStandaloneHeaderActions } from './InteractionPanelMobileDeviceActions'
 import { InteractionPanelMobileDeviceScreen } from './InteractionPanelMobileDeviceScreen'
 import { InteractionPanelMobileDeviceSideTabs } from './InteractionPanelMobileDeviceSideTabs'
+import type { MobileDeviceDockPosition } from './InteractionPanelMobileDeviceSideTabs'
 import { getDeviceWindowTitle, getReadyDevice } from './mobile-device-preview-utils'
 import {
   fitStandaloneMobileDebugWindow,
@@ -34,6 +35,7 @@ export function InteractionPanelMobileDevicePreview({
   const deviceTitle = readyDevice == null ? undefined : getDeviceWindowTitle(readyDevice)
   const preview = useMobileDevicePreviewController(readyDeviceId)
   const [isSidePanelVisible, setIsSidePanelVisible] = useState(true)
+  const [dockPosition, setDockPosition] = useState<MobileDeviceDockPosition>('right')
   const usesStandaloneHeaderActions = onStandaloneHeaderActionsChange != null
   const scheduleStandaloneWindowFit = useCallback((
     options: { hiddenScreenWidth?: number; hiddenWidthMode?: 'current-window' | 'device' } = {}
@@ -60,6 +62,10 @@ export function InteractionPanelMobileDevicePreview({
   const sendInput = useCallback((input: DesktopMobileDeviceInputEvent) => {
     void preview.sendInput(input)
   }, [preview.sendInput])
+  const changeDockPosition = useCallback((position: MobileDeviceDockPosition) => {
+    setDockPosition(position)
+    scheduleStandaloneWindowFit()
+  }, [scheduleStandaloneWindowFit])
 
   const standaloneHeaderActions = useMemo(() =>
     usesStandaloneHeaderActions && readyDevice != null
@@ -111,14 +117,14 @@ export function InteractionPanelMobileDevicePreview({
     : preview.screenshot?.width != null && preview.screenshot.height != null && preview.screenshot.height > 0
     ? preview.screenshot.width / preview.screenshot.height
     : undefined
+  const previewGridClassName = [
+    'chat-interaction-panel-mobile-debug__preview-grid',
+    isSidePanelVisible ? `is-dock-${dockPosition}` : 'is-side-panel-hidden'
+  ].join(' ')
 
   return (
     <section className='chat-interaction-panel-mobile-debug__preview-section'>
-      <div
-        className={`chat-interaction-panel-mobile-debug__preview-grid ${
-          isSidePanelVisible ? '' : 'is-side-panel-hidden'
-        }`}
-      >
+      <div className={previewGridClassName}>
         <InteractionPanelMobileDeviceScreen
           deviceTitle={visibleDeviceTitle}
           elementScreen={preview.elementTree?.root?.bounds}
@@ -144,12 +150,14 @@ export function InteractionPanelMobileDevicePreview({
           ? (
             <InteractionPanelMobileDeviceSideTabs
               details={details}
+              dockPosition={dockPosition}
               elementTree={preview.elementTree}
               error={preview.error}
               flattenedNodes={preview.flattenedNodes}
               isInspecting={preview.isInspecting}
               selectedNode={preview.selectedNode}
               selectedNodeId={preview.selectedNodeId}
+              onDockPositionChange={changeDockPosition}
               onRefresh={preview.refreshPreview}
               onSelectNode={preview.setSelectedNodeId}
               onSendInput={sendInput}

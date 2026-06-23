@@ -55,13 +55,13 @@ const resolveStandaloneMobileDebugWindowFitSize = (
     (headerActions?.getBoundingClientRect().width ?? 0) +
     24
   const deviceRect = deviceWindow.getBoundingClientRect()
-  const sideTabsRect = sideTabs?.getBoundingClientRect()
-  const sidePanelWidth = Math.max(sideTabsRect?.width ?? 0, standaloneSidePanelMinWidth)
   const isCurrentSidePanelVisible = !grid.classList.contains('is-side-panel-hidden')
   if (isCurrentSidePanelVisible) {
-    const minimumExpandedWidth = Math.ceil(
-      Math.max(deviceRect.width + gridGap + sidePanelWidth + bodyHorizontalPadding, headerContentWidth)
-    )
+    const sidePanelWidth = Math.max(sideTabs?.getBoundingClientRect().width ?? 0, standaloneSidePanelMinWidth)
+    const minimumExpandedContentWidth = grid.classList.contains('is-dock-bottom')
+      ? Math.max(deviceRect.width + bodyHorizontalPadding, standaloneSidePanelMinWidth, headerContentWidth)
+      : Math.max(deviceRect.width + gridGap + sidePanelWidth + bodyHorizontalPadding, headerContentWidth)
+    const minimumExpandedWidth = Math.ceil(minimumExpandedContentWidth)
     return { height: window.innerHeight, width: Math.max(window.innerWidth, minimumExpandedWidth) }
   }
 

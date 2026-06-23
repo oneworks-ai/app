@@ -7,8 +7,52 @@ import { InteractionPanelMobileDeviceDetailsPanel } from './InteractionPanelMobi
 import { InteractionPanelMobileDeviceInspectPanel } from './InteractionPanelMobileDeviceInspectPanel'
 import type { FlattenedElementNode } from './mobile-device-preview-utils'
 
+export type MobileDeviceDockPosition = 'bottom' | 'left' | 'right'
+
+const dockPositionItems: Array<{ icon: string; key: MobileDeviceDockPosition; labelKey: string }> = [
+  { icon: 'left_panel_open', key: 'left', labelKey: 'mobileDebugDockLeft' },
+  { icon: 'bottom_panel_open', key: 'bottom', labelKey: 'mobileDebugDockBottom' },
+  { icon: 'right_panel_open', key: 'right', labelKey: 'mobileDebugDockRight' }
+]
+
+const renderMobileDebugTabLabel = (icon: string, label: ReactNode) => (
+  <span className='chat-interaction-panel-mobile-debug__tab-label'>
+    <span className='material-symbols-rounded' aria-hidden='true'>{icon}</span>
+    <span>{label}</span>
+  </span>
+)
+
+function MobileDeviceDockPositionSwitch({
+  dockPosition,
+  onDockPositionChange
+}: {
+  dockPosition: MobileDeviceDockPosition
+  onDockPositionChange: (position: MobileDeviceDockPosition) => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div
+      className='chat-interaction-panel-mobile-debug__dock-switch'
+      role='group'
+      aria-label={t('chat.interactionPanel.mobileDebugDockPosition')}
+    >
+      {dockPositionItems.map(item => (
+        <MobileDeviceTabActionButton
+          key={item.key}
+          active={dockPosition === item.key}
+          icon={item.icon}
+          label={t(`chat.interactionPanel.${item.labelKey}`)}
+          onClick={() => onDockPositionChange(item.key)}
+        />
+      ))}
+    </div>
+  )
+}
+
 export function InteractionPanelMobileDeviceSideTabs({
   details,
+  dockPosition,
   elementTree,
   error,
   flattenedNodes,
@@ -16,6 +60,7 @@ export function InteractionPanelMobileDeviceSideTabs({
   selectedNode,
   selectedNodeId,
   showInlineActions = true,
+  onDockPositionChange,
   onRefresh,
   onSelectNode,
   onSendInput,
@@ -23,6 +68,7 @@ export function InteractionPanelMobileDeviceSideTabs({
   onToggleSidePanel
 }: {
   details: ReactNode
+  dockPosition: MobileDeviceDockPosition
   elementTree: DesktopMobileElementTreeResponse | null
   error: string | null
   flattenedNodes: FlattenedElementNode[]
@@ -30,6 +76,7 @@ export function InteractionPanelMobileDeviceSideTabs({
   selectedNode: DesktopMobileElementNode | undefined
   selectedNodeId: string | undefined
   showInlineActions?: boolean
+  onDockPositionChange: (position: MobileDeviceDockPosition) => void
   onRefresh: () => void
   onSelectNode: (nodeId: string) => void
   onSendInput: (input: DesktopMobileDeviceInputEvent) => void
@@ -45,22 +92,35 @@ export function InteractionPanelMobileDeviceSideTabs({
         size='small'
         tabBarExtraContent={{
           left: (
-            <MobileDeviceTabActionButton
-              active={isInspecting}
-              icon={isInspecting ? 'select_check_box' : 'select'}
-              label={t('chat.interactionPanel.mobileDebugInspectMode')}
-              onClick={onToggleInspect}
-            />
-          ),
-          right: showInlineActions
-            ? (
-              <MobileDeviceInlineTabActions
-                onRefresh={onRefresh}
-                onSendInput={onSendInput}
-                onToggleSidePanel={onToggleSidePanel}
+            <div className='chat-interaction-panel-mobile-debug__tab-left-actions'>
+              <MobileDeviceTabActionButton
+                active={isInspecting}
+                icon='highlight_mouse_cursor'
+                label={t('chat.interactionPanel.mobileDebugInspectMode')}
+                onClick={onToggleInspect}
               />
-            )
-            : undefined
+              <MobileDeviceTabActionButton
+                icon='screen_rotation'
+                label={t('chat.interactionPanel.mobileDebugRotate')}
+                onClick={() => onSendInput({ action: 'rotate', kind: 'action' })}
+              />
+            </div>
+          ),
+          right: (
+            <div className='chat-interaction-panel-mobile-debug__tab-right-actions'>
+              <MobileDeviceDockPositionSwitch
+                dockPosition={dockPosition}
+                onDockPositionChange={onDockPositionChange}
+              />
+              {showInlineActions && (
+                <MobileDeviceInlineTabActions
+                  onRefresh={onRefresh}
+                  onSendInput={onSendInput}
+                  onToggleSidePanel={onToggleSidePanel}
+                />
+              )}
+            </div>
+          )
         }}
         items={[
           {
@@ -74,7 +134,7 @@ export function InteractionPanelMobileDeviceSideTabs({
               />
             ),
             key: 'elements',
-            label: 'Elements'
+            label: renderMobileDebugTabLabel('account_tree', 'Elements')
           },
           {
             children: (
@@ -85,7 +145,7 @@ export function InteractionPanelMobileDeviceSideTabs({
               />
             ),
             key: 'details',
-            label: t('chat.interactionPanel.mobileDebugDetails')
+            label: renderMobileDebugTabLabel('info', t('chat.interactionPanel.mobileDebugDetails'))
           }
         ]}
       />
