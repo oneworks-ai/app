@@ -16,6 +16,15 @@
   - Chii runtime / targets API 封装和 devtools URL 构造。
 - `apps/server/src/services/web-debug/chii-devtools-assets.ts`
   - Chii devtools HTML / legacy script / patch script / CSS 注入层。修改 DevTools 内部 toolbar、dock menu 或设备按钮时从这里开始。
+- `InteractionPanelMobileDebugView.tsx` / `InteractionPanelMobileDebugResults.tsx`
+  - Android 设备调试入口、设备列表和目标列表编排。修改 standalone 设备页或 mobile debug 状态流时从这里开始。
+- `InteractionPanelMobileDevicePreview.tsx` / `InteractionPanelMobileDeviceSideTabs.tsx`
+  - Android 设备预览、右侧 Elements / Targets / Input / Logs tab、dock 和 standalone header action 编排。
+- `InteractionPanelMobileDeviceEnvironmentPanel.tsx`
+  - Android Emulator 设备状态面板入口；Battery / Cellular / Location / Phone / Fingerprint 必须继续按独立组件维护。
+- `use-mobile-device-preview-controller.ts`
+  - 设备截图 fallback、元素树刷新、触摸输入队列和视频状态协调。修改 ADB preview 刷新节奏或输入映射时从这里开始。
+- 相关维护经验见 `.oo/rules/maintenance/mobile-device-debugging.md`。
 
 ## 页面调试器排查经验
 

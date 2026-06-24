@@ -8,6 +8,7 @@
 - [开发服务 ready 后仍继续验证](#开发服务-ready-后仍继续验证)
 - [开发服务启动入口混用历史脚本](#开发服务启动入口混用历史脚本)
 - [Android 模拟器启动排查耗时](#android-模拟器启动排查耗时)
+- [Android 设备调试页改错 worktree 或 CI 收口失败](#android-设备调试页改错-worktree-或-ci-收口失败)
 - [PR 截图证据断链或来源不真实](#pr-截图证据断链或来源不真实)
 - [移动端 WebView / 工作区 tabs 反复返工](#移动端-webview--工作区-tabs-反复返工)
 - [Electron WebView 右键元素评论坐标偏移](#electron-webview-右键元素评论坐标偏移)
@@ -122,6 +123,23 @@ node -e 'const fs=require("fs"); const cp=require("child_process"); fs.mkdirSync
 原因：
 
 UI PR 的 `pr-change-policy` 只检查 PR body 是否有截图证据，不会判断图片是否真实可见或是否来自当前实现。把图片链接写到会被删除的 PR 分支上，会在 merge 后变成断图；复用旧图但不说明来源，会误导 reviewer 对 UI 实际状态的判断。
+
+## Android 设备调试页改错 worktree 或 CI 收口失败
+
+症状关键词：`standalone devices debug`、`设备状态`、`Android Emulator`、`emulator-5554`、`IAB tab not found`、`/api/mobile-debug/environment 404`、`max-lines`、`macOS installer pending`。
+
+标准处理：
+
+- 先读 [Android 设备调试页维护经验](./mobile-device-debugging.md)。
+- 如果设备还没启动或 ADB 不可见，先走 [Android 模拟器启动排查耗时](#android-模拟器启动排查耗时)，不要直接改调试页。
+- 不要只凭当前 `cwd` 改代码。先确认 IAB 页面实际由哪个 worktree 的 dev server 提供；必要时用 `rg` 在 `.codex/worktrees` 内定位目标文件。
+- 后端 mobile-debug route / service 修改后，如果 API 仍 404，先重启或复用 `pnpm tools dev-start web`，不要把旧 server 误判成前端路由问题。
+- 设备状态面板要拆 Battery / Cellular / Location / Phone / Fingerprint 组件；状态型控制实时生效，事件型控制保留按钮。
+- PR 收口必须补 changelog、截图、Experience Review checklist，并跑 `pr-change-check`。远端如果只剩 `macOS installer` pending，用 `gh run view <run> --json jobs` 看具体步骤，避免长时间 `gh pr checks --watch` 刷屏。
+
+原因：
+
+Android 设备调试页同时跨 IAB、前端 interaction panel、desktop preload、server ADB service、scrcpy 视频流和 PR policy。最常见失败不是单点代码错误，而是改错 worktree、旧 server 未重启、组件堆到 lint 超行、PR body 缺 policy 材料或误判长时间 installer 为卡死。
 
 ## 移动端 WebView / 工作区 tabs 反复返工
 
