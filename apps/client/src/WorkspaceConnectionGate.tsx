@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- workspace connection gate keeps startup overlay, conflict handling, and retry flow together. */
 import './WorkspaceConnectionGate.scss'
 
 import type { PropsWithChildren } from 'react'
@@ -11,7 +12,12 @@ import { getLauncherWorkspaceConnection, restartLauncherWorkspace } from '#~/api
 import { DesktopWorkspaceStartupReadyContext } from '#~/components/layout/desktop-workspace-startup-ready'
 import { WorkspaceOpeningOverlay } from '#~/components/workspace/WorkspaceOpeningOverlay'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
-import { applyWorkspaceConnection, getWorkspaceVersionConflictDetails } from '#~/workspace-connection-state'
+import type { WorkspaceServerRestartActivity } from '#~/workspace-connection-state'
+import {
+  applyWorkspaceConnection,
+  getWorkspaceServerRestartActivity,
+  getWorkspaceVersionConflictDetails
+} from '#~/workspace-connection-state'
 import { WorkspaceConnectionErrorView } from './WorkspaceConnectionErrorView'
 
 type ConnectionState =
@@ -20,6 +26,7 @@ type ConnectionState =
   | {
     details?: LauncherWorkspaceVersionConflictDetails
     message: string
+    restartActivity?: WorkspaceServerRestartActivity
     status: 'error'
   }
 
@@ -28,6 +35,17 @@ type OpeningOverlayPhase = 'visible' | 'exiting' | 'hidden'
 const OPENING_OVERLAY_MIN_VISIBLE_MS = 720
 const OPENING_OVERLAY_EXIT_MS = 420
 const OPENING_OVERLAY_READY_FALLBACK_MS = 8_000
+
+const createVersionConflictRestartKey = (details: LauncherWorkspaceVersionConflictDetails) => (
+  JSON.stringify({
+    existingImplementationId: details.existing.implementationId,
+    existingLaunchConfigHash: details.existing.launchConfigHash,
+    existingServerBaseUrl: details.existing.serverBaseUrl,
+    requestedImplementationId: details.requested.implementationId,
+    requestedLaunchConfigHash: details.requested.launchConfigHash,
+    workspaceFolder: details.workspaceFolder
+  })
+)
 
 export function WorkspaceConnectionGate({
   children,
@@ -43,6 +61,8 @@ export function WorkspaceConnectionGate({
   const overlayExitRequestedRef = useRef(false)
   const overlayExitTimerRef = useRef<number | null>(null)
   const overlayHiddenTimerRef = useRef<number | null>(null)
+  const autoRestartAttemptKeyRef = useRef<string | undefined>()
+  const restartActivityRef = useRef<WorkspaceServerRestartActivity | undefined>()
 
   const clearOverlayTimers = useCallback(() => {
     if (overlayExitTimerRef.current != null) {
@@ -79,26 +99,71 @@ export function WorkspaceConnectionGate({
     }, delayMs)
   }, [])
 
+  const maybeRestartIdleWorkspaceServer = useCallback(async (
+    details: LauncherWorkspaceVersionConflictDetails
+  ) => {
+    if (details.restartable !== true) {
+      return undefined
+    }
+
+    const restartKey = createVersionConflictRestartKey(details)
+    if (autoRestartAttemptKeyRef.current === restartKey) {
+      return undefined
+    }
+
+    const activity = await getWorkspaceServerRestartActivity(details)
+    restartActivityRef.current = activity
+    if (activity.status !== 'idle') {
+      return undefined
+    }
+
+    autoRestartAttemptKeyRef.current = restartKey
+    return await restartLauncherWorkspace(workspaceId)
+  }, [workspaceId])
+
+  const getWorkspaceConnection = useCallback(async () => {
+    try {
+      return await getLauncherWorkspaceConnection(workspaceId)
+    } catch (error) {
+      const details = getWorkspaceVersionConflictDetails(error)
+      if (details != null) {
+        try {
+          const restartedConnection = await maybeRestartIdleWorkspaceServer(details)
+          if (restartedConnection != null) {
+            return restartedConnection
+          }
+        } catch {
+          // Keep the original version conflict visible; manual restart still reports its own error.
+        }
+      }
+      throw error
+    }
+  }, [maybeRestartIdleWorkspaceServer, workspaceId])
+
   const connectWorkspace = useCallback(async () => {
     resetOpeningOverlay()
     setState({ status: 'loading' })
     setRestartErrorMessage(undefined)
+    restartActivityRef.current = undefined
 
     try {
-      const connection = await getLauncherWorkspaceConnection(workspaceId)
+      const connection = await getWorkspaceConnection()
       applyWorkspaceConnection(connection)
       setState({ status: 'ready' })
     } catch (error) {
       const details = getWorkspaceVersionConflictDetails(error)
+      const restartActivity = restartActivityRef.current
+      restartActivityRef.current = undefined
       setState({
         details,
         message: error instanceof Error && error.message.trim() !== ''
           ? error.message
           : 'Failed to open workspace.',
+        ...(restartActivity == null ? {} : { restartActivity }),
         status: 'error'
       })
     }
-  }, [resetOpeningOverlay, workspaceId])
+  }, [getWorkspaceConnection, resetOpeningOverlay])
 
   useEffect(() => {
     let disposed = false
@@ -107,18 +172,22 @@ export function WorkspaceConnectionGate({
       resetOpeningOverlay()
       setState({ status: 'loading' })
       setRestartErrorMessage(undefined)
+      restartActivityRef.current = undefined
 
       try {
-        const connection = await getLauncherWorkspaceConnection(workspaceId)
+        const connection = await getWorkspaceConnection()
         if (disposed) return
         applyWorkspaceConnection(connection)
         setState({ status: 'ready' })
       } catch (error) {
         if (disposed) return
         const details = getWorkspaceVersionConflictDetails(error)
+        const restartActivity = restartActivityRef.current
+        restartActivityRef.current = undefined
         setState({
           details,
           status: 'error',
+          ...(restartActivity == null ? {} : { restartActivity }),
           message: error instanceof Error && error.message.trim() !== ''
             ? error.message
             : 'Failed to open workspace.'
@@ -129,7 +198,7 @@ export function WorkspaceConnectionGate({
     return () => {
       disposed = true
     }
-  }, [resetOpeningOverlay, workspaceId])
+  }, [getWorkspaceConnection, resetOpeningOverlay])
 
   const restartWorkspaceServer = useCallback(async () => {
     if (state.status !== 'error' || state.details?.restartable !== true) return
@@ -165,6 +234,7 @@ export function WorkspaceConnectionGate({
         details={state.details}
         isRestarting={isRestarting}
         message={state.message}
+        restartActivity={state.restartActivity}
         restartErrorMessage={restartErrorMessage}
         onRestart={() => void restartWorkspaceServer()}
         onRetry={() => void connectWorkspace()}

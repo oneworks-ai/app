@@ -1,6 +1,7 @@
+/* eslint-disable max-lines -- agent room route owns detail loading, empty state, and room actions together. */
 import './AgentRoomRoute.scss'
 
-import { App, Button, Empty, Spin } from 'antd'
+import { App, Spin } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import useSWR from 'swr'
@@ -13,6 +14,7 @@ import {
   updateAgentRoomMetadata
 } from '#~/api'
 import type { AgentRoomMessageView, AgentRoomRunView } from '#~/components/agent-room'
+import { RouteErrorState } from '#~/components/error-state'
 import { useDesktopWorkspaceStartupReady } from '#~/components/layout/desktop-workspace-startup-ready'
 
 import { ChatRouteStatusShell } from './ChatRouteStatusShell'
@@ -71,10 +73,27 @@ export function AgentRoomRoute() {
   if (roomDetail == null) {
     return (
       <ChatRouteStatusShell title={t('common.roomNotFound')}>
-        <div className='agent-room-route__empty-state'>
-          <Empty description={t('common.roomNotFound')} />
-          <Button type='primary' onClick={() => void navigate('/')}>{t('common.backToHome')}</Button>
-        </div>
+        <RouteErrorState
+          actions={[
+            {
+              kind: 'home',
+              onClick: () => void navigate('/')
+            },
+            {
+              kind: 'retry',
+              onClick: () => void mutate()
+            }
+          ]}
+          description={t('errorState.roomNotFoundDescription')}
+          details={{
+            copyText: `${t('errorState.roomId')}: ${roomId ?? 'n/a'}`,
+            items: [{ label: t('errorState.roomId'), mono: true, value: roomId ?? 'n/a' }],
+            title: t('errorState.diagnostics')
+          }}
+          mobileDescription={t('common.roomNotFound')}
+          severity='info'
+          title={t('common.roomNotFound')}
+        />
       </ChatRouteStatusShell>
     )
   }

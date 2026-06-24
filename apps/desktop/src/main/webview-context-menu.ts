@@ -1,10 +1,127 @@
 /* eslint-disable max-lines -- webview context menu groups are intentionally centralized. */
-import { Menu, clipboard, shell } from 'electron'
+import { Menu, app, clipboard, shell } from 'electron'
 import type { BrowserWindow, ContextMenuParams, MenuItemConstructorOptions, WebContents } from 'electron'
+
+import { readGlobalInterfaceLanguageConfig } from './interface-language-config'
+
+type WebviewContextMenuLanguage = 'en' | 'zh'
+
+interface WebviewContextMenuLabels {
+  back: string
+  commentElement: string
+  copy: string
+  copyImage: string
+  copyImageAddress: string
+  copyLinkAddress: string
+  cut: string
+  delete: string
+  forward: string
+  inspectElement: string
+  openImageExternal: string
+  openLinkExternal: string
+  paste: string
+  pasteAndMatchStyle: string
+  redo: string
+  reload: string
+  selectAll: string
+  undo: string
+}
+
+const webviewContextMenuLabels = {
+  en: {
+    back: 'Back',
+    commentElement: 'Comment on Element',
+    copy: 'Copy',
+    copyImage: 'Copy Image',
+    copyImageAddress: 'Copy Image Address',
+    copyLinkAddress: 'Copy Link Address',
+    cut: 'Cut',
+    delete: 'Delete',
+    forward: 'Forward',
+    inspectElement: 'Inspect Element',
+    openImageExternal: 'Open Image in External Browser',
+    openLinkExternal: 'Open Link in External Browser',
+    paste: 'Paste',
+    pasteAndMatchStyle: 'Paste and Match Style',
+    redo: 'Redo',
+    reload: 'Reload',
+    selectAll: 'Select All',
+    undo: 'Undo'
+  },
+  zh: {
+    back: '后退',
+    commentElement: '评论此元素',
+    copy: '复制',
+    copyImage: '复制图片',
+    copyImageAddress: '复制图片地址',
+    copyLinkAddress: '复制链接地址',
+    cut: '剪切',
+    delete: '删除',
+    forward: '前进',
+    inspectElement: '检查元素',
+    openImageExternal: '在外部浏览器打开图片',
+    openLinkExternal: '在外部浏览器打开链接',
+    paste: '粘贴',
+    pasteAndMatchStyle: '粘贴并匹配样式',
+    redo: '重做',
+    reload: '重新加载',
+    selectAll: '全选',
+    undo: '撤销'
+  }
+} satisfies Record<WebviewContextMenuLanguage, WebviewContextMenuLabels>
+
+const fallbackWebviewContextMenuLanguage: WebviewContextMenuLanguage = 'en'
 
 const separator = (): MenuItemConstructorOptions => ({ type: 'separator' })
 
 const isNonEmptyText = (value: string) => value.trim() !== ''
+
+const normalizeLanguageCode = (value: unknown) => {
+  if (typeof value !== 'string') return undefined
+  const language = value.trim().replaceAll('_', '-').toLowerCase()
+  return language === '' ? undefined : language
+}
+
+const resolveWebviewContextMenuLanguageFromCode = (value: unknown): WebviewContextMenuLanguage | undefined => {
+  const language = normalizeLanguageCode(value)
+  if (language == null) return undefined
+  if (language.startsWith('zh')) return 'zh'
+  if (language.startsWith('en')) return 'en'
+  return undefined
+}
+
+const readHostDocumentLanguage = async (window: BrowserWindow) => {
+  if (window.isDestroyed()) return undefined
+
+  try {
+    return await window.webContents.executeJavaScript(
+      'document.documentElement.lang || navigator.language || ""',
+      false
+    ) as unknown
+  } catch {
+    return undefined
+  }
+}
+
+const resolveWebviewContextMenuLanguage = async (window: BrowserWindow): Promise<WebviewContextMenuLanguage> => {
+  const appLocale = app.getLocale()
+  const hostDocumentLanguage = await readHostDocumentLanguage(window)
+  try {
+    const config = await readGlobalInterfaceLanguageConfig()
+    return resolveWebviewContextMenuLanguageFromCode(hostDocumentLanguage) ??
+      resolveWebviewContextMenuLanguageFromCode(config.effectiveLanguage) ??
+      resolveWebviewContextMenuLanguageFromCode(appLocale) ??
+      fallbackWebviewContextMenuLanguage
+  } catch {
+    return resolveWebviewContextMenuLanguageFromCode(hostDocumentLanguage) ??
+      resolveWebviewContextMenuLanguageFromCode(appLocale) ??
+      fallbackWebviewContextMenuLanguage
+  }
+}
+
+const readWebviewContextMenuLabels = async (window: BrowserWindow) => (
+  webviewContextMenuLabels[await resolveWebviewContextMenuLanguage(window)]
+)
 
 const toExternalUrl = (url: string) => {
   const trimmedUrl = url.trim()
@@ -64,27 +181,29 @@ const openExternalUrl = (url: string) => {
 }
 
 const buildNavigationItems = (
-  webContents: WebContents
+  webContents: WebContents,
+  labels: WebviewContextMenuLabels
 ): MenuItemConstructorOptions[] => [
   {
     click: () => runWebContentsAction(webContents, () => webContents.goBack()),
     enabled: canRunWebContentsAction(webContents, () => webContents.canGoBack()),
-    label: 'Back'
+    label: labels.back
   },
   {
     click: () => runWebContentsAction(webContents, () => webContents.goForward()),
     enabled: canRunWebContentsAction(webContents, () => webContents.canGoForward()),
-    label: 'Forward'
+    label: labels.forward
   },
   {
     click: () => runWebContentsAction(webContents, () => webContents.reload()),
-    label: 'Reload'
+    label: labels.reload
   }
 ]
 
 const appendLinkItems = (
   template: MenuItemConstructorOptions[],
-  params: ContextMenuParams
+  params: ContextMenuParams,
+  labels: WebviewContextMenuLabels
 ) => {
   const linkUrl = toExternalUrl(params.linkURL)
   if (linkUrl == null) return
@@ -93,11 +212,11 @@ const appendLinkItems = (
   template.push(
     {
       click: () => openExternalUrl(linkUrl),
-      label: 'Open Link in External Browser'
+      label: labels.openLinkExternal
     },
     {
       click: () => copyText(linkUrl),
-      label: 'Copy Link Address'
+      label: labels.copyLinkAddress
     }
   )
 }
@@ -105,7 +224,8 @@ const appendLinkItems = (
 const appendImageItems = (
   template: MenuItemConstructorOptions[],
   webContents: WebContents,
-  params: ContextMenuParams
+  params: ContextMenuParams,
+  labels: WebviewContextMenuLabels
 ) => {
   if (params.mediaType !== 'image' && !params.hasImageContents && params.srcURL.trim() === '') {
     return
@@ -115,21 +235,21 @@ const appendImageItems = (
   if (params.hasImageContents) {
     template.push({
       click: () => runWebContentsAction(webContents, () => webContents.copyImageAt(params.x, params.y)),
-      label: 'Copy Image'
+      label: labels.copyImage
     })
   }
 
   if (isNonEmptyText(params.srcURL)) {
     template.push({
       click: () => copyText(params.srcURL),
-      label: 'Copy Image Address'
+      label: labels.copyImageAddress
     })
 
     const imageUrl = toExternalUrl(params.srcURL)
     if (imageUrl != null) {
       template.push({
         click: () => openExternalUrl(imageUrl),
-        label: 'Open Image in External Browser'
+        label: labels.openImageExternal
       })
     }
   }
@@ -138,7 +258,8 @@ const appendImageItems = (
 const appendSelectionItems = (
   template: MenuItemConstructorOptions[],
   webContents: WebContents,
-  params: ContextMenuParams
+  params: ContextMenuParams,
+  labels: WebviewContextMenuLabels
 ) => {
   if (!isNonEmptyText(params.selectionText) && !params.editFlags.canCopy) return
 
@@ -146,14 +267,38 @@ const appendSelectionItems = (
   template.push({
     click: () => runWebContentsAction(webContents, () => webContents.copy()),
     enabled: params.editFlags.canCopy || isNonEmptyText(params.selectionText),
-    label: 'Copy'
+    label: labels.copy
+  })
+}
+
+const appendCommentElementItem = (
+  template: MenuItemConstructorOptions[],
+  window: BrowserWindow,
+  webContents: WebContents,
+  params: ContextMenuParams,
+  labels: WebviewContextMenuLabels
+) => {
+  pushSeparator(template)
+  template.push({
+    click: () => {
+      if (window.isDestroyed() || webContents.isDestroyed()) return
+      window.webContents.send('desktop:interaction-panel-webview-comment-element', {
+        frameUrl: params.frameURL,
+        pageUrl: params.pageURL,
+        webContentsId: webContents.id,
+        x: params.x,
+        y: params.y
+      })
+    },
+    label: labels.commentElement
   })
 }
 
 const appendEditableItems = (
   template: MenuItemConstructorOptions[],
   webContents: WebContents,
-  params: ContextMenuParams
+  params: ContextMenuParams,
+  labels: WebviewContextMenuLabels
 ) => {
   if (!params.isEditable) return
 
@@ -162,44 +307,44 @@ const appendEditableItems = (
     {
       click: () => runWebContentsAction(webContents, () => webContents.undo()),
       enabled: params.editFlags.canUndo,
-      label: 'Undo'
+      label: labels.undo
     },
     {
       click: () => runWebContentsAction(webContents, () => webContents.redo()),
       enabled: params.editFlags.canRedo,
-      label: 'Redo'
+      label: labels.redo
     },
     separator(),
     {
       click: () => runWebContentsAction(webContents, () => webContents.cut()),
       enabled: params.editFlags.canCut,
-      label: 'Cut'
+      label: labels.cut
     },
     {
       click: () => runWebContentsAction(webContents, () => webContents.copy()),
       enabled: params.editFlags.canCopy,
-      label: 'Copy'
+      label: labels.copy
     },
     {
       click: () => runWebContentsAction(webContents, () => webContents.paste()),
       enabled: params.editFlags.canPaste,
-      label: 'Paste'
+      label: labels.paste
     },
     {
       click: () => runWebContentsAction(webContents, () => webContents.pasteAndMatchStyle()),
       enabled: params.editFlags.canPaste,
-      label: 'Paste and Match Style'
+      label: labels.pasteAndMatchStyle
     },
     {
       click: () => runWebContentsAction(webContents, () => webContents.delete()),
       enabled: params.editFlags.canDelete,
-      label: 'Delete'
+      label: labels.delete
     },
     separator(),
     {
       click: () => runWebContentsAction(webContents, () => webContents.selectAll()),
       enabled: params.editFlags.canSelectAll,
-      label: 'Select All'
+      label: labels.selectAll
     }
   )
 }
@@ -207,12 +352,13 @@ const appendEditableItems = (
 const appendInspectElementItem = (
   template: MenuItemConstructorOptions[],
   webContents: WebContents,
-  params: ContextMenuParams
+  params: ContextMenuParams,
+  labels: WebviewContextMenuLabels
 ) => {
   pushSeparator(template)
   template.push({
     click: () => runWebContentsAction(webContents, () => webContents.inspectElement(params.x, params.y)),
-    label: 'Inspect Element'
+    label: labels.inspectElement
   })
 }
 
@@ -223,23 +369,29 @@ const compactTemplate = (template: MenuItemConstructorOptions[]) => {
   return template
 }
 
+const showWebviewContextMenu = async (window: BrowserWindow, webContents: WebContents, params: ContextMenuParams) => {
+  const labels = await readWebviewContextMenuLabels(window)
+  const template: MenuItemConstructorOptions[] = [
+    ...buildNavigationItems(webContents, labels)
+  ]
+
+  appendLinkItems(template, params, labels)
+  appendImageItems(template, webContents, params, labels)
+  if (params.isEditable) {
+    appendEditableItems(template, webContents, params, labels)
+  } else {
+    appendSelectionItems(template, webContents, params, labels)
+  }
+  appendCommentElementItem(template, window, webContents, params, labels)
+  appendInspectElementItem(template, webContents, params, labels)
+
+  const menuTemplate = compactTemplate(template)
+  if (menuTemplate.length === 0 || window.isDestroyed()) return
+  Menu.buildFromTemplate(menuTemplate).popup({ window })
+}
+
 export const installWebviewContextMenu = (window: BrowserWindow, webContents: WebContents) => {
   webContents.on('context-menu', (_event, params) => {
-    const template: MenuItemConstructorOptions[] = [
-      ...buildNavigationItems(webContents)
-    ]
-
-    appendLinkItems(template, params)
-    appendImageItems(template, webContents, params)
-    if (params.isEditable) {
-      appendEditableItems(template, webContents, params)
-    } else {
-      appendSelectionItems(template, webContents, params)
-    }
-    appendInspectElementItem(template, webContents, params)
-
-    const menuTemplate = compactTemplate(template)
-    if (menuTemplate.length === 0 || window.isDestroyed()) return
-    Menu.buildFromTemplate(menuTemplate).popup({ window })
+    void showWebviewContextMenu(window, webContents, params)
   })
 }

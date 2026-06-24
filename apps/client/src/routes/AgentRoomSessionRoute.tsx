@@ -1,14 +1,16 @@
+/* eslint-disable max-lines -- room-scoped session route owns room/session lookup and not-found actions together. */
 import './ChatRoute.scss'
 
-import { Button, Empty, Spin } from 'antd'
+import { Spin } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import useSWR from 'swr'
 
 import type { Session } from '@oneworks/core'
 
-import { getAgentRoom, getSession, getSessionCacheKey } from '#~/api'
+import { getAgentRoom, getApiErrorMessage, getSession, getSessionCacheKey } from '#~/api'
 import type { AgentRoomMemberView } from '#~/components/agent-room'
+import { RouteErrorState } from '#~/components/error-state'
 import { useDesktopWorkspaceStartupReady } from '#~/components/layout/desktop-workspace-startup-ready'
 
 import { ChatRouteStatusShell } from './ChatRouteStatusShell'
@@ -55,19 +57,53 @@ const getAgentRoomSessionSourceMembers = (
 
 function AgentRoomSessionNotFound({
   description,
-  onBack
+  diagnostics,
+  onBack,
+  onRetry
 }: {
   description: string
+  diagnostics: {
+    roomId?: string
+    sessionId?: string
+    message: string
+  }
   onBack: () => void
+  onRetry: () => void
 }) {
   const { t } = useTranslation()
 
   return (
     <ChatRouteStatusShell title={description}>
-      <div className='chat-route__empty-state'>
-        <Empty description={description} />
-        <Button type='primary' onClick={onBack}>{t('agentRoom.actions.backToRoom')}</Button>
-      </div>
+      <RouteErrorState
+        actions={[
+          {
+            kind: 'home',
+            label: t('agentRoom.actions.backToRoom'),
+            onClick: onBack
+          },
+          {
+            kind: 'retry',
+            onClick: onRetry
+          }
+        ]}
+        description={t('errorState.sessionNotFoundDescription')}
+        details={{
+          copyText: [
+            `${t('errorState.roomId')}: ${diagnostics.roomId ?? 'n/a'}`,
+            `${t('errorState.sessionId')}: ${diagnostics.sessionId ?? 'n/a'}`,
+            `${t('errorState.diagnostics')}: ${diagnostics.message}`
+          ].join('\n'),
+          items: [
+            { label: t('errorState.roomId'), mono: true, value: diagnostics.roomId ?? 'n/a' },
+            { label: t('errorState.sessionId'), mono: true, value: diagnostics.sessionId ?? 'n/a' },
+            { label: t('errorState.diagnostics'), value: diagnostics.message }
+          ],
+          title: t('errorState.diagnostics')
+        }}
+        mobileDescription={description}
+        severity='info'
+        title={description}
+      />
     </ChatRouteStatusShell>
   )
 }
@@ -93,7 +129,8 @@ export function AgentRoomSessionRoute() {
   const {
     data: roomDetail,
     error: roomError,
-    isLoading: isRoomLoading
+    isLoading: isRoomLoading,
+    mutate: mutateRoom
   } = useSWR(
     roomId == null ? null : getAgentRoomSessionDetailCacheKey(roomId),
     () => getAgentRoom(roomId ?? '')
@@ -101,7 +138,8 @@ export function AgentRoomSessionRoute() {
   const {
     data: sessionDetail,
     error: sessionError,
-    isLoading: isSessionLoading
+    isLoading: isSessionLoading,
+    mutate: mutateSession
   } = useSWR<{ session: Session }>(
     sessionId == null ? null : getSessionCacheKey(sessionId),
     () => getSession(sessionId ?? '')
@@ -137,10 +175,33 @@ export function AgentRoomSessionRoute() {
   if (roomDetail == null || roomError != null) {
     return (
       <ChatRouteStatusShell title={t('common.roomNotFound')}>
-        <div className='chat-route__empty-state'>
-          <Empty description={t('common.roomNotFound')} />
-          <Button type='primary' onClick={() => void navigate('/')}>{t('common.backToHome')}</Button>
-        </div>
+        <RouteErrorState
+          actions={[
+            {
+              kind: 'home',
+              onClick: () => void navigate('/')
+            },
+            {
+              kind: 'retry',
+              onClick: () => void mutateRoom()
+            }
+          ]}
+          description={t('errorState.roomNotFoundDescription')}
+          details={{
+            copyText: [
+              `${t('errorState.roomId')}: ${roomId}`,
+              `${t('errorState.diagnostics')}: ${getApiErrorMessage(roomError, 'n/a')}`
+            ].join('\n'),
+            items: [
+              { label: t('errorState.roomId'), mono: true, value: roomId },
+              { label: t('errorState.diagnostics'), value: getApiErrorMessage(roomError, 'n/a') }
+            ],
+            title: t('errorState.diagnostics')
+          }}
+          mobileDescription={t('common.roomNotFound')}
+          severity='info'
+          title={t('common.roomNotFound')}
+        />
       </ChatRouteStatusShell>
     )
   }
@@ -148,8 +209,14 @@ export function AgentRoomSessionRoute() {
   if (roomRun == null || session == null || sessionError != null) {
     return (
       <AgentRoomSessionNotFound
+        diagnostics={{
+          message: getApiErrorMessage(sessionError, 'n/a'),
+          roomId,
+          sessionId
+        }}
         description={t('common.sessionNotFound')}
         onBack={backToRoom}
+        onRetry={() => void mutateSession()}
       />
     )
   }

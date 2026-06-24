@@ -32,6 +32,7 @@ const InteractionStructureRoute = lazyNamedRoute(
 )
 const KnowledgeRoute = lazyNamedRoute(() => import('#~/routes/KnowledgeRoute'), 'KnowledgeRoute')
 const ModuleManagementRoute = lazyNamedRoute(() => import('#~/routes/ModuleManagementRoute'), 'ModuleManagementRoute')
+const NotFoundRoute = lazyNamedRoute(() => import('#~/routes/NotFoundRoute'), 'NotFoundRoute')
 const PluginStoreRoute = lazyNamedRoute(() => import('#~/routes/PluginStoreRoute'), 'PluginStoreRoute')
 
 function ExperimentalRoute({
@@ -103,6 +104,7 @@ export function AppRoutes() {
           <Route path='/plugins' element={<PluginStoreRoute />} />
           <Route path='/plugins/:scope' element={<PluginStoreRoute />} />
           <Route path='/plugins/:scope/:routeId' element={<PluginRoute />} />
+          <Route path='*' element={<NotFoundRoute />} />
         </Routes>
       </Suspense>
     </>

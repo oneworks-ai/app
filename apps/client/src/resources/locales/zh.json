@@ -117,6 +117,35 @@
       "waiting_input": "等待输入"
     }
   },
+  "errorState": {
+    "actions": {
+      "changeServer": "切换",
+      "connect": "连接",
+      "home": "首页",
+      "reload": "刷新",
+      "restart": "重启",
+      "retry": "重试"
+    },
+    "appCrashDescription": "界面渲染时发生异常。当前页面状态可能已经不完整，重新加载通常可以恢复。",
+    "appCrashMobileDescription": "界面发生异常；请重新加载页面。",
+    "appCrashTitle": "页面出现异常",
+    "configLoadFailedDescription": "配置数据暂时无法读取。你可以重新加载配置，或先返回首页继续其它工作。",
+    "connectionIssueTitle": "连接失败",
+    "copyDiagnostics": "复制",
+    "copyDiagnosticsFailed": "复制诊断失败",
+    "copyDiagnosticsSuccess": "诊断信息已复制",
+    "details": "详情",
+    "diagnostics": "诊断信息",
+    "collapseDiagnostics": "收起诊断信息",
+    "expandDiagnostics": "展开诊断信息",
+    "roomNotFoundDescription": "没有找到这个 Agent Room。它可能已经被删除、归档，或当前服务尚未同步到这条记录。",
+    "roomId": "Agent Room ID",
+    "routeNotFoundDescription": "当前地址没有对应的页面。你可以返回首页，或检查链接是否完整。",
+    "routeNotFoundMobileDescription": "当前地址没有对应页面。",
+    "routeNotFoundTitle": "页面不存在",
+    "sessionNotFoundDescription": "没有找到这个会话。它可能已经被删除、归档，或当前服务尚未同步到这条记录。",
+    "sessionId": "会话 ID"
+  },
   "browserDataSync": {
     "open": "同步数据",
     "title": "同步数据",
@@ -924,14 +953,26 @@
     }
   },
   "workspaceConnection": {
+    "autoRestartPaused": "自动重启已暂停",
+    "busyDescription": "为避免中断正在进行的动作，已跳过后台重启。结束或停止这些会话后再重试。",
+    "busyStatsLabel": "正在工作的会话统计",
+    "busyTitle": "仍有 {{count}} 个会话在工作",
+    "busyTotal": "总计 {{count}}",
+    "diagnosticsTitle": "服务诊断",
+    "hideActiveSessions": "收起会话",
+    "mobileVersionConflictSummary": "服务版本不一致；可重启项目服务，或稍后重试。",
     "processId": "进程",
     "requestedVersion": "当前请求",
     "restartFailed": "重启项目服务失败",
     "restartWorkspaceServer": "重启项目服务",
     "retry": "重试",
+    "runtimeCompatibilityVersion": "兼容版本",
     "runningVersion": "正在运行",
     "serverUrl": "服务地址",
-    "versionConflictDescription": "当前页面和已运行的项目服务来自不同版本。纯前端改动会自动复用项目服务；如果服务端运行时代码变了，可以重启项目服务后继续。"
+    "showActiveSessions": "查看会话",
+    "unknownStatus": "未知",
+    "versionConflictDescription": "当前页面和已运行的项目服务来自不同版本。纯前端或兼容的服务端改动会自动复用项目服务；如果运行时兼容版本不一致，可以重启项目服务后继续。",
+    "versionConflictTitle": "项目服务版本不一致"
   },
   "launcher": {
     "senderLabel": "启动输入框",

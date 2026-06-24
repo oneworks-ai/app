@@ -33,6 +33,7 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - PR body 缺少经验复盘确认或需要维护提醒评论：见 [PR 经验复盘门禁](./maintenance/pr-experience-review.md)。
 - 桌面端浏览器数据同步、密码管理、历史记录、下载内容或项目 / 会话范围过滤：见 [桌面端浏览器数据管理经验](./maintenance/browser-data-management.md)。
 - 桌面本地 dev 安装包仍像旧代码、`Switch Project` 兜底页或 packaged runtime cache 排查：见 [桌面本地打包 Runtime Cache 经验](./maintenance/desktop-packaged-runtime-cache.md)。
+- Electron WebView 右键“评论此元素”选错元素、坐标偏移或 hover / 右键路径不一致：见 [Electron WebView 右键元素评论坐标偏移](./maintenance/common-issues.md#electron-webview-右键元素评论坐标偏移)。
 - 移动端 WebView、工作区 tabs overview、sender compact 样式或相关 PR 收口：见 [移动端 WebView 与工作区标签页经验](./maintenance/mobile-workspace-webview.md)。
 
 ## 开发环境启动
