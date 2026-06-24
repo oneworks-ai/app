@@ -2282,6 +2282,7 @@
       "mobileDebugEnvironmentLatitude": "Latitude",
       "mobileDebugEnvironmentLocation": "Location",
       "mobileDebugEnvironmentLongitude": "Longitude",
+      "mobileDebugEnvironmentMapPicker": "Click the map to update coordinates",
       "mobileDebugEnvironmentMeterStatus": "Metered network",
       "mobileDebugEnvironmentNetworkDelay": "Network delay",
       "mobileDebugEnvironmentNetworkSpeed": "Network speed",

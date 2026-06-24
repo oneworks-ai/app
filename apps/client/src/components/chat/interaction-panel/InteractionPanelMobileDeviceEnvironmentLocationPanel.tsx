@@ -7,7 +7,9 @@ import {
   MobileEnvironmentFieldGrid,
   MobileEnvironmentSection
 } from './InteractionPanelMobileDeviceEnvironmentLayout'
+import { InteractionPanelMobileDeviceLocationMap } from './InteractionPanelMobileDeviceLocationMap'
 import type { MobileEnvironmentActionRunner } from './mobile-device-environment-options'
+import type { MobileLocationCoordinate } from './mobile-device-location-map'
 import { useMobileEnvironmentAutoApply } from './use-mobile-environment-auto-apply'
 
 export function InteractionPanelMobileDeviceEnvironmentLocationPanel({
@@ -28,10 +30,10 @@ export function InteractionPanelMobileDeviceEnvironmentLocationPanel({
     longitude
   }), [altitude, latitude, longitude])
   const locationSignature = `${latitude}:${longitude}:${altitude}`
-  const mapsUrl = useMemo(() => {
-    const query = `${latitude.toFixed(6)},${longitude.toFixed(6)}`
-    return `https://www.google.com/maps?q=${encodeURIComponent(query)}&z=15&output=embed`
-  }, [latitude, longitude])
+  const handleCoordinateChange = ({ latitude, longitude }: MobileLocationCoordinate) => {
+    setLatitude(latitude)
+    setLongitude(longitude)
+  }
 
   useMobileEnvironmentAutoApply({
     action: locationAction,
@@ -43,14 +45,14 @@ export function InteractionPanelMobileDeviceEnvironmentLocationPanel({
 
   return (
     <MobileEnvironmentSection>
-      <div className='chat-interaction-panel-mobile-debug__environment-map'>
-        <iframe
-          title={t('chat.interactionPanel.mobileDebugEnvironmentGoogleMap')}
-          src={mapsUrl}
-          loading='lazy'
-          referrerPolicy='no-referrer-when-downgrade'
-        />
-      </div>
+      <InteractionPanelMobileDeviceLocationMap
+        disabled={isEmulatorControlDisabled}
+        latitude={latitude}
+        longitude={longitude}
+        mapTitle={t('chat.interactionPanel.mobileDebugEnvironmentGoogleMap')}
+        pickerLabel={t('chat.interactionPanel.mobileDebugEnvironmentMapPicker')}
+        onCoordinateChange={handleCoordinateChange}
+      />
       <MobileEnvironmentFieldGrid>
         <MobileEnvironmentField label={t('chat.interactionPanel.mobileDebugEnvironmentLatitude')}>
           <InputNumber
