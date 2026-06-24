@@ -48,11 +48,12 @@ export function InteractionPanelMobileDeviceEnvironmentPhonePanel({
           type='primary'
           loading={pendingActionKey === 'phone'}
           disabled={isEmulatorControlDisabled || isPhoneNumberEmpty}
-          onClick={() => void runEnvironmentAction('phone', {
-            action: phoneAction,
-            kind: 'phone',
-            phoneNumber
-          })}
+          onClick={() =>
+            void runEnvironmentAction('phone', {
+              action: phoneAction,
+              kind: 'phone',
+              phoneNumber
+            })}
         >
           {t('chat.interactionPanel.mobileDebugEnvironmentApplyPhone')}
         </Button>
@@ -69,11 +70,12 @@ export function InteractionPanelMobileDeviceEnvironmentPhonePanel({
         <Button
           loading={pendingActionKey === 'sms'}
           disabled={isEmulatorControlDisabled || isPhoneNumberEmpty || smsMessage.trim() === ''}
-          onClick={() => void runEnvironmentAction('sms', {
-            kind: 'sms',
-            message: smsMessage,
-            phoneNumber
-          })}
+          onClick={() =>
+            void runEnvironmentAction('sms', {
+              kind: 'sms',
+              message: smsMessage,
+              phoneNumber
+            })}
         >
           {t('chat.interactionPanel.mobileDebugEnvironmentSendSms')}
         </Button>

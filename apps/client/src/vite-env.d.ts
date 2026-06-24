@@ -344,7 +344,14 @@ interface DesktopMobileDeviceInputEvent {
 
 type DesktopMobileDeviceBatteryHealth = 'cold' | 'dead' | 'failure' | 'good' | 'overheat' | 'overvoltage' | 'unknown'
 type DesktopMobileDeviceBatteryStatus = 'charging' | 'discharging' | 'full' | 'not-charging' | 'unknown'
-type DesktopMobileDeviceCellularRegistration = 'denied' | 'home' | 'off' | 'on' | 'roaming' | 'searching' | 'unregistered'
+type DesktopMobileDeviceCellularRegistration =
+  | 'denied'
+  | 'home'
+  | 'off'
+  | 'on'
+  | 'roaming'
+  | 'searching'
+  | 'unregistered'
 type DesktopMobileDeviceChargerConnection = 'ac' | 'none' | 'usb' | 'wireless'
 type DesktopMobileDeviceMeterStatus = 'metered' | 'unmetered'
 type DesktopMobileDeviceNetworkDelay = 'edge' | 'gprs' | 'none' | 'umts'

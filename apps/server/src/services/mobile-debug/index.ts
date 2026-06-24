@@ -206,7 +206,14 @@ export interface MobileDeviceInputEvent {
 
 export type MobileDeviceBatteryHealth = 'cold' | 'dead' | 'failure' | 'good' | 'overheat' | 'overvoltage' | 'unknown'
 export type MobileDeviceBatteryStatus = 'charging' | 'discharging' | 'full' | 'not-charging' | 'unknown'
-export type MobileDeviceCellularRegistration = 'denied' | 'home' | 'off' | 'on' | 'roaming' | 'searching' | 'unregistered'
+export type MobileDeviceCellularRegistration =
+  | 'denied'
+  | 'home'
+  | 'off'
+  | 'on'
+  | 'roaming'
+  | 'searching'
+  | 'unregistered'
 export type MobileDeviceChargerConnection = 'ac' | 'none' | 'usb' | 'wireless'
 export type MobileDeviceMeterStatus = 'metered' | 'unmetered'
 export type MobileDeviceNetworkDelay = 'edge' | 'gprs' | 'none' | 'umts'

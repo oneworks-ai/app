@@ -71,7 +71,9 @@ export function InteractionPanelMobileDebugView({
 
   const displayState = useMemo(() => {
     if (page.selectedDeviceId == null || visibleState == null || hasReadyVisibleDevice) return visibleState
-    const cachedStateMatchesDevice = lastReadyDebugState?.devices.some(device => device.id === page.selectedDeviceId) === true
+    const cachedStateMatchesDevice = lastReadyDebugState?.devices.some(device =>
+      device.id === page.selectedDeviceId
+    ) === true
     return cachedStateMatchesDevice ? lastReadyDebugState : visibleState
   }, [hasReadyVisibleDevice, lastReadyDebugState, page.selectedDeviceId, visibleState])
 

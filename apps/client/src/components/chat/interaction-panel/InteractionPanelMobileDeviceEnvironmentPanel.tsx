@@ -7,15 +7,13 @@ import { getApiErrorMessage } from '#~/api'
 import { InteractionPanelMobileDeviceEnvironmentBatteryPanel } from './InteractionPanelMobileDeviceEnvironmentBatteryPanel'
 import { InteractionPanelMobileDeviceEnvironmentCellularPanel } from './InteractionPanelMobileDeviceEnvironmentCellularPanel'
 import { InteractionPanelMobileDeviceEnvironmentFingerprintPanel } from './InteractionPanelMobileDeviceEnvironmentFingerprintPanel'
-import {
-  renderMobileEnvironmentTabLabel
-} from './InteractionPanelMobileDeviceEnvironmentLayout'
+import { renderMobileEnvironmentTabLabel } from './InteractionPanelMobileDeviceEnvironmentLayout'
 import { InteractionPanelMobileDeviceEnvironmentLocationPanel } from './InteractionPanelMobileDeviceEnvironmentLocationPanel'
 import { InteractionPanelMobileDeviceEnvironmentPhonePanel } from './InteractionPanelMobileDeviceEnvironmentPhonePanel'
+import { applyMobileDeviceEnvironmentAction } from './mobile-debug-platform'
 import { isAndroidEmulatorDevice } from './mobile-device-environment-options'
 import type { MobileEnvironmentActionRunnerOptions } from './mobile-device-environment-options'
 import type { MobileEnvironmentTabKey } from './mobile-device-environment-options'
-import { applyMobileDeviceEnvironmentAction } from './mobile-debug-platform'
 
 export function InteractionPanelMobileDeviceEnvironmentPanel({
   deviceId,

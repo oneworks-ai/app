@@ -2,10 +2,7 @@ import { Select } from 'antd'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import {
-  MobileEnvironmentField,
-  MobileEnvironmentSection
-} from './InteractionPanelMobileDeviceEnvironmentLayout'
+import { MobileEnvironmentField, MobileEnvironmentSection } from './InteractionPanelMobileDeviceEnvironmentLayout'
 import {
   cellularRegistrations,
   meterStatuses,

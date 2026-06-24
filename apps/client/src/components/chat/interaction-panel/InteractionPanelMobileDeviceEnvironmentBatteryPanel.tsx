@@ -7,11 +7,7 @@ import {
   MobileEnvironmentField,
   MobileEnvironmentSection
 } from './InteractionPanelMobileDeviceEnvironmentLayout'
-import {
-  batteryHealthValues,
-  batteryStatuses,
-  chargerConnections
-} from './mobile-device-environment-options'
+import { batteryHealthValues, batteryStatuses, chargerConnections } from './mobile-device-environment-options'
 import type { MobileEnvironmentActionRunner } from './mobile-device-environment-options'
 import { useMobileEnvironmentAutoApply } from './use-mobile-environment-auto-apply'
 
@@ -53,12 +49,12 @@ export function InteractionPanelMobileDeviceEnvironmentBatteryPanel({
   return (
     <MobileEnvironmentSection>
       <MobileEnvironmentField
-        label={(
+        label={
           <span className='chat-interaction-panel-mobile-debug__environment-field-label-row'>
             <span>{t('chat.interactionPanel.mobileDebugEnvironmentBatteryLevel')}</span>
             <span>{level}%</span>
           </span>
-        )}
+        }
       >
         <Slider
           min={0}

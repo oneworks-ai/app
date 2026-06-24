@@ -3432,7 +3432,9 @@
     color: var(--primary-color);
   }
 
-  > .ant-tabs.ant-tabs-small > .ant-tabs-nav .ant-tabs-tab.ant-tabs-tab-active::after {
+  > .ant-tabs.ant-tabs-small
+    > .ant-tabs-nav
+    .ant-tabs-tab.ant-tabs-tab-active::after {
     background: var(--primary-color);
   }
 
@@ -3523,7 +3525,9 @@
     color: var(--primary-color);
   }
 
-  > .ant-tabs.ant-tabs-small > .ant-tabs-nav .ant-tabs-tab.ant-tabs-tab-active::after {
+  > .ant-tabs.ant-tabs-small
+    > .ant-tabs-nav
+    .ant-tabs-tab.ant-tabs-tab-active::after {
     background: var(--primary-color);
   }
 

@@ -36,10 +36,11 @@ export function InteractionPanelMobileDeviceEnvironmentFingerprintPanel({
           type='primary'
           loading={pendingActionKey === 'fingerprint'}
           disabled={isEmulatorControlDisabled}
-          onClick={() => void runEnvironmentAction('fingerprint', {
-            fingerId,
-            kind: 'fingerprint'
-          })}
+          onClick={() =>
+            void runEnvironmentAction('fingerprint', {
+              fingerId,
+              kind: 'fingerprint'
+            })}
         >
           {t('chat.interactionPanel.mobileDebugEnvironmentTouchFingerprint')}
         </Button>
