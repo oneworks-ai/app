@@ -26,6 +26,7 @@
 - `src/workspace-state.cjs`
   - 桌面最近项目、workspace 显示名、启动 workspace 解析入口。
   - 作为 project/workspace 打开或记录时，只规约到当前 Git worktree 的 top-level；linked worktree 必须保留为独立 workspace，不能折回 common `.git` 对应的原始 project 目录。
+  - 验证 Electron workspace 启动链路时，要同时看启动日志里的 `workspace=...`、窗口首屏是否无需 Cmd+R 退出 loading、以及会话状态栏 / runtime 日志中的 session cwd；三者必须指向同一个当前 worktree。
 - `electron.vite.config.ts`
   - 使用 `electron-vite` 编译 main / preload TypeScript 到 `dist/`
 - `src/server-child.cjs`

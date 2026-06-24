@@ -20,6 +20,7 @@
 - `pnpm tools dev-start electron-workspace`
   - Electron 当前仓库 workspace 开发态：后台启动桌面开发进程并打开当前仓库
   - workspace 路径必须来自当前 `dev-start` 进程所在仓库根；不要用继承环境里的 `INIT_CWD`，嵌套 pnpm / 多 worktree 会话里它可能指向另一个 checkout。
+  - 在 linked worktree 中验证时，检查输出的 workspace、Electron 窗口标题、会话 workspace title 和 runtime consumer cwd；如果任一项回到主 checkout，先排查 dev-start 环境变量和 desktop workspace-state 的 Git 路径归一化。
 - `pnpm tools dev-start pwa`
   - PWA 独立前端预览：构建 standalone client，后台启动 server + 静态 client preview
 - `pnpm tools dev-start homepage`
