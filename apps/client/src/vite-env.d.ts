@@ -253,6 +253,157 @@ interface DesktopMobileDebugTargetsResponse {
   targets: DesktopMobileDebugTarget[]
 }
 
+interface DesktopMobileDeviceScreenshotResponse {
+  capturedAt: number
+  deviceId: string
+  height?: number
+  imageDataUrl: string
+  width?: number
+}
+
+interface DesktopMobileDeviceLogsResponse {
+  capturedAt: number
+  deviceId: string
+  lineLimit: number
+  lines: string[]
+  source: 'logcat'
+}
+
+interface DesktopMobileDeviceVideoStreamStartResponse {
+  codec: number
+  codecName: string
+  deviceId: string
+  height?: number
+  source: 'scrcpy'
+  startedAt: number
+  streamId: string
+  width?: number
+}
+
+interface DesktopMobileDeviceVideoFrameEvent {
+  data: Uint8Array
+  deviceId: string
+  height?: number
+  keyframe?: boolean
+  receivedAt: number
+  streamId: string
+  type: 'configuration' | 'data'
+  width?: number
+}
+
+interface DesktopMobileDeviceVideoStreamStatusEvent {
+  deviceId: string
+  message?: string
+  status: 'closed' | 'error'
+  streamId: string
+}
+
+interface DesktopMobileElementBounds {
+  height: number
+  width: number
+  x: number
+  y: number
+}
+
+interface DesktopMobileElementNode {
+  attributes: Record<string, string | number | boolean | null>
+  bounds?: DesktopMobileElementBounds
+  children: DesktopMobileElementNode[]
+  id: string
+  label?: string
+  source: 'uiautomator'
+  type: string
+}
+
+interface DesktopMobileElementTreeResponse {
+  capturedAt: number
+  deviceId: string
+  nodeCount: number
+  root?: DesktopMobileElementNode
+  source: 'uiautomator'
+}
+
+interface DesktopMobileDeviceInputEvent {
+  action?: 'collapse-panels' | 'notifications' | 'quick-settings' | 'rotate'
+  durationMs?: number
+  endX?: number
+  endY?: number
+  key?: 'app-switch' | 'back' | 'delete' | 'enter' | 'home' | 'power' | 'volume-down' | 'volume-up'
+  kind: 'action' | 'key' | 'scroll' | 'swipe' | 'tap' | 'text' | 'touch'
+  physicalEndX?: number
+  physicalEndY?: number
+  physicalX?: number
+  physicalY?: number
+  scrollX?: number
+  scrollY?: number
+  text?: string
+  touchPhase?: 'down' | 'move' | 'up'
+  x?: number
+  y?: number
+}
+
+type DesktopMobileDeviceBatteryHealth = 'cold' | 'dead' | 'failure' | 'good' | 'overheat' | 'overvoltage' | 'unknown'
+type DesktopMobileDeviceBatteryStatus = 'charging' | 'discharging' | 'full' | 'not-charging' | 'unknown'
+type DesktopMobileDeviceCellularRegistration =
+  | 'denied'
+  | 'home'
+  | 'off'
+  | 'on'
+  | 'roaming'
+  | 'searching'
+  | 'unregistered'
+type DesktopMobileDeviceChargerConnection = 'ac' | 'none' | 'usb' | 'wireless'
+type DesktopMobileDeviceMeterStatus = 'metered' | 'unmetered'
+type DesktopMobileDeviceNetworkDelay = 'edge' | 'gprs' | 'none' | 'umts'
+type DesktopMobileDeviceNetworkSpeed = 'edge' | 'full' | 'gprs' | 'gsm' | 'hscsd' | 'hsdpa' | 'lte' | 'umts'
+type DesktopMobileDeviceSignalProfile = 'great' | 'good' | 'moderate' | 'none' | 'poor'
+
+type DesktopMobileDeviceEnvironmentAction =
+  | {
+    charger?: DesktopMobileDeviceChargerConnection
+    health?: DesktopMobileDeviceBatteryHealth
+    kind: 'battery'
+    level?: number
+    reset?: boolean
+    status?: DesktopMobileDeviceBatteryStatus
+  }
+  | {
+    dataStatus?: DesktopMobileDeviceCellularRegistration
+    delay?: DesktopMobileDeviceNetworkDelay
+    kind: 'cellular'
+    meterStatus?: DesktopMobileDeviceMeterStatus
+    signalProfile?: DesktopMobileDeviceSignalProfile
+    speed?: DesktopMobileDeviceNetworkSpeed
+    voiceStatus?: DesktopMobileDeviceCellularRegistration
+  }
+  | {
+    altitude?: number
+    kind: 'location'
+    latitude: number
+    longitude: number
+  }
+  | {
+    action: 'accept' | 'call' | 'cancel' | 'hold'
+    kind: 'phone'
+    phoneNumber: string
+  }
+  | {
+    kind: 'sms'
+    message: string
+    phoneNumber: string
+  }
+  | {
+    fingerId: number
+    kind: 'fingerprint'
+  }
+
+interface DesktopMobileDeviceEnvironmentActionResponse {
+  appliedAt: number
+  deviceId: string
+  emulatorOnly: boolean
+  kind: DesktopMobileDeviceEnvironmentAction['kind']
+}
+
 interface DesktopBrowserDataSyncState {
   authenticator: {
     total: number
@@ -416,6 +567,17 @@ interface Window {
     getDesktopIconPreview?: (
       settings: Pick<DesktopSettings, 'iconAppearance' | 'iconBackground' | 'iconTheme'>
     ) => Promise<string | undefined>
+    getCurrentWindowPresentationState?: () => Promise<{
+      alwaysOnTop: boolean
+      opacity: number
+    }>
+    setCurrentWindowAspectRatio?: (input: {
+      aspectRatio: number
+      extraSize?: { height: number; width: number }
+    }) => Promise<void>
+    setCurrentWindowContentSize?: (size: { height: number; width: number }) => Promise<
+      { height: number; width: number } | undefined
+    >
     getDesktopSettings?: () => Promise<DesktopSettings>
     getBrowserDataSyncState?: () => Promise<DesktopBrowserDataSyncState>
     listBrowserHistory?: (input?: DesktopBrowserActivityListOptions) => Promise<DesktopBrowserHistoryRecord[]>
@@ -456,6 +618,18 @@ interface Window {
     listCurrentWorkspaceFileOpeners?: () => Promise<DesktopWorkspaceFileOpenersResponse>
     listWorkspaceFileOpeners?: (workspaceFolder: string) => Promise<DesktopWorkspaceFileOpenersResponse>
     listMobileDebugTargets?: (config?: DesktopMobileDebugConfig) => Promise<DesktopMobileDebugTargetsResponse>
+    captureMobileDeviceScreenshot?: (deviceId: string) => Promise<DesktopMobileDeviceScreenshotResponse>
+    startMobileDeviceVideoStream?: (deviceId: string) => Promise<DesktopMobileDeviceVideoStreamStartResponse>
+    stopMobileDeviceVideoStream?: (streamId: string) => Promise<{ stoppedAt: number; streamId: string }>
+    dumpMobileElementTree?: (deviceId: string) => Promise<DesktopMobileElementTreeResponse>
+    sendMobileDeviceInput?: (
+      deviceId: string,
+      input: DesktopMobileDeviceInputEvent
+    ) => Promise<{ deviceId: string; sentAt: number }>
+    onMobileDeviceVideoFrame?: (listener: (value: DesktopMobileDeviceVideoFrameEvent) => void) => () => void
+    onMobileDeviceVideoStreamStatus?: (
+      listener: (value: DesktopMobileDeviceVideoStreamStatusEvent) => void
+    ) => () => void
     markWorkspaceStartupReady?: () => void
     onDesktopSettingsChange?: (listener: (value: unknown) => void) => () => void
     onUpdateStatusChange?: (listener: (value: unknown) => void) => () => void
@@ -501,6 +675,14 @@ interface Window {
       options?: { includeDirectories?: boolean }
     ) => Promise<{ files: DesktopWorkspaceFileSearchResult[] }>
     searchCurrentWorkspaceResources?: (query: string) => Promise<DesktopWorkspaceResourceSearchResponse>
+    setCurrentWindowAlwaysOnTop?: (value: boolean) => Promise<{
+      alwaysOnTop: boolean
+      opacity: number
+    }>
+    setCurrentWindowOpacity?: (value: number) => Promise<{
+      alwaysOnTop: boolean
+      opacity: number
+    }>
     setThemeSource?: (themeSource: 'system' | 'light' | 'dark') => Promise<'system' | 'light' | 'dark'>
     showDesktopContextCaptureOverlay?: (input: DesktopContextCaptureOverlayInput) => Promise<unknown>
     supportsWebviewTag?: boolean

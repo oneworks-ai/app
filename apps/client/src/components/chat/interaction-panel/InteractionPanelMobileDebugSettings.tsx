@@ -2,7 +2,7 @@ import { Checkbox } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { NetworkTargetConfigPanel, PortForwardingConfigPanel } from './InteractionPanelMobileDebugConfigPanels'
-import { InteractionPanelMobileDebugAdbInstallGuide } from './InteractionPanelMobileDebugResults'
+import { InteractionPanelMobileDebugAdbInstallGuide } from './InteractionPanelMobileDebugDetailsContent'
 import type { MobileDebugConfigState } from './mobile-debug-config-state'
 
 export function InteractionPanelMobileDebugSettings({

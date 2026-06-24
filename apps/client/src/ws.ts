@@ -13,7 +13,7 @@ export interface WSHandlers<TMessage = WSEvent> {
   shouldReconnect?: (event: CloseEvent) => boolean
 }
 
-const createWebSocketUrl = (params?: Record<string, string>) => {
+export const createWebSocketUrl = (params?: Record<string, string>) => {
   const url = new URL(createServerUrl(getServerWsPath()))
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
 

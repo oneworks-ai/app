@@ -1,3 +1,5 @@
+import { normalizeStandaloneDeviceRoutePath } from '@oneworks/types'
+
 import type { LaunchRequest } from './types'
 
 export const desktopDeepLinkSchemes = ['oneworks', 'one-works'] as const
@@ -7,6 +9,11 @@ const desktopDeepLinkProtocols = new Set(desktopDeepLinkSchemes.map(scheme => `$
 const readHashToken = (url: URL) => {
   const hash = new URLSearchParams(url.hash.replace(/^#/, ''))
   return hash.get('relay_token') || url.searchParams.get('relay_token') || ''
+}
+
+const buildStandaloneRoutePath = (url: URL) => {
+  if (url.hostname !== 'standalone') return undefined
+  return normalizeStandaloneDeviceRoutePath(`/standalone${url.pathname}${url.search}`)
 }
 
 const buildRelayPluginRoutePath = (url: URL) => {
@@ -33,6 +40,9 @@ export const parseDesktopDeepLinkLaunchRequest = (rawUrl: string): LaunchRequest
   }
 
   if (!desktopDeepLinkProtocols.has(url.protocol)) return undefined
+  const standaloneRoutePath = buildStandaloneRoutePath(url)
+  if (standaloneRoutePath != null) return { standaloneRoutePath }
+
   const isRelayAuthRoute = url.hostname === 'relay' && url.pathname.replace(/\/+$/, '') === '/auth'
   if (!isRelayAuthRoute) return undefined
 

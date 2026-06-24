@@ -7,7 +7,7 @@ export interface InteractionPanelMobileDebugDeviceOption {
 export interface InteractionPanelMobileDebugPage {
   deviceOptions?: InteractionPanelMobileDebugDeviceOption[]
   id: string
-  mode?: 'config' | 'targets'
+  mode?: 'config' | 'devices' | 'targets'
   selectedDeviceId?: string
   selectedDeviceLabel?: string
   title: string

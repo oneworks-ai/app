@@ -73,6 +73,7 @@ pnpm tools dev-start <target>
 - 用户要求拉取最新代码：先确认工作区干净；`git fetch --prune origin` 后，如果当前是 detached HEAD 且用户没有指定分支，可对齐到 `origin/main`；如果在本地分支上，优先 `git pull --ff-only`。遇到本地改动先停下来说明，不要重置。
 - 用户要求运行测试、构建、CLI、server、client 或 Electron：如果 `node_modules` 缺失，先在当前 worktree 根目录执行 `pnpm install`；如果任务依赖私有配置而 `.oo.dev.config.json` / `.env` 缺失，优先从已有本地副本确认可复用来源，不能确认时向用户说明缺口。
 - 用户要求启动桌面端 / Electron：继续阅读 `apps/desktop/AGENTS.md` 与 `.oo/docs/usage/desktop.md`；如果已有正式版或其他 worktree 的 Electron 在运行，先列出 PID、启动时间、命令路径和 worktree 来源。需要并行启动开发态时，使用独立 `--user-data-dir`，避免被单实例锁转发到已有应用。
+- 用户要求启动 Android 模拟器 / AVD / 虚拟机用于调试：继续阅读 `.oo/rules/maintenance/common-issues.md` 的 “Android 模拟器启动排查耗时” 与 `.oo/rules/maintenance/mobile-workspace-webview.md`；先查 `adb devices -l`、`sdkmanager --list_installed`、`avdmanager list avd`，优先复用已有 AVD 并 detached 启动，不要全盘搜索 SDK 或让前台命令长期挂住模拟器。
 - 用户要求启动前端或调试页面：继续阅读 `.oo/rules/FRONTEND-STANDARD.md`、`.oo/rules/frontend-standard/debugging.md` 和 `apps/client/AGENTS.md`；涉及聊天页 / sender / 消息级交互时，再读 `apps/client/src/components/chat/AGENTS.md`。
 - 用户要求启动后端、改 API、数据库、adapter 或 MCP：继续阅读 `.oo/rules/BACKEND-STANDARD.md`；按影响范围进入 `apps/server/src/routes/AGENTS.md`、`apps/server/src/services/*/AGENTS.md` 或相关 package 的 `AGENTS.md`。
 - 用户要求改配置语义、配置页、加载 / 写回 / 分层合并：继续阅读 `.oo/rules/CONFIG.md`，再按前端或后端落点补读对应规则。

@@ -8,7 +8,7 @@ import type { DesktopState } from './desktop-settings-types'
 export type { DesktopBuildSource, DesktopSettings, DesktopSettingsState, DesktopState } from './desktop-settings-types'
 
 export type WorkspaceSelectorMode = 'dialog' | 'initial'
-export type WindowRecordKind = 'launcher' | 'selector' | 'workspace'
+export type WindowRecordKind = 'launcher' | 'selector' | 'standalone' | 'workspace'
 export type WorkspaceServiceStatus = 'ready' | 'starting' | 'stopped' | 'stopping'
 export interface DesktopInterfaceLanguageConfig {
   configuredLanguage?: string
@@ -16,6 +16,7 @@ export interface DesktopInterfaceLanguageConfig {
 }
 
 export interface LaunchRequest {
+  standaloneRoutePath?: string
   routePath?: string
   workspaceFolder?: string
 }
@@ -28,6 +29,7 @@ export interface WindowRecord {
   launcherSourceUrl?: string
   launcherSourceWindowId?: number
   selectorMode?: WorkspaceSelectorMode
+  standaloneRoutePath?: string
   window: BrowserWindow
   workspaceFolder?: string
   workspaceServerUrl?: string

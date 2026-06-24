@@ -558,9 +558,11 @@ export function useInteractionPanelTabs({
     const normalizedUrl = normalizeFrameUrl(url)
     const optionFaviconUrl = options.faviconUrl?.trim()
     const optionTitle = options.title?.trim()
-    const existingTab = panelTabs.find((tab): tab is Extract<SessionPanelTab, { kind: 'web' }> =>
-      tab.kind === 'web' && normalizeFrameUrl(tab.url) === normalizedUrl
-    )
+    const existingTab = options.openMode === 'new-tab'
+      ? undefined
+      : panelTabs.find((tab): tab is Extract<SessionPanelTab, { kind: 'web' }> =>
+        tab.kind === 'web' && normalizeFrameUrl(tab.url) === normalizedUrl
+      )
 
     if (existingTab != null) {
       const existingPage = toIframePage(existingTab)

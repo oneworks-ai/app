@@ -1,6 +1,8 @@
 import { Suspense, lazy, useRef } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 
+import { isStandaloneDeviceRoutePath } from '@oneworks/types/standalone-route'
+
 import { WorkspaceConnectionGate } from '#~/WorkspaceConnectionGate'
 import { getRuntimeWorkspaceId, isDesktopClientMode, isServerManagerRole } from '#~/runtime-config'
 
@@ -12,6 +14,10 @@ const DevComponentLabRoute = import.meta.env.DEV
 
 const LauncherApp = lazy(async () => ({
   default: (await import('#~/LauncherApp')).LauncherApp
+}))
+
+const StandaloneMobileDebugRoute = lazy(async () => ({
+  default: (await import('#~/routes/StandaloneMobileDebugRoute')).StandaloneMobileDebugRoute
 }))
 
 const WorkspaceApp = lazy(async () => ({
@@ -49,6 +55,14 @@ export default function App() {
 
   if (location.pathname === '/__component-lab') {
     return <DevComponentLabApp />
+  }
+
+  if (isStandaloneDeviceRoutePath(`${location.pathname}${location.search}`)) {
+    return (
+      <Suspense fallback={null}>
+        <StandaloneMobileDebugRoute />
+      </Suspense>
+    )
   }
 
   if (workspaceId != null) {

@@ -4,6 +4,8 @@ import process from 'node:process'
 import { BrowserWindow, Menu, app } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
 
+import { standaloneDevicesRoutePath } from '@oneworks/types'
+
 import { getWorkspaceDescription, getWorkspaceDisplayName } from '../workspace-state.cjs'
 import { DEVTOOLS_MENU_ACCELERATOR, RELOAD_WINDOW_MENU_ACCELERATOR, VIEW_SHORTCUT_ACTIONS } from './constants'
 import type { ViewShortcutAction } from './constants'
@@ -26,6 +28,7 @@ interface AppMenuManagerInput {
   findWindowRecord: (window: BrowserWindow | null) => WindowRecord | undefined
   getQuitConfirmationLanguage: () => QuitConfirmationLanguage
   handleDesktopError: (error: unknown) => void
+  openStandaloneTabWindow: (routePath: string) => Promise<WindowRecord>
   openWorkspaceDialog: (input?: OpenWorkspaceDialogInput) => Promise<string | undefined>
   openWorkspaceWindow: (workspaceFolder: string) => Promise<WindowRecord>
   requestQuitConfirmation: () => void
@@ -39,6 +42,7 @@ export const createAppMenuManager = ({
   findWindowRecord,
   getQuitConfirmationLanguage,
   handleDesktopError,
+  openStandaloneTabWindow,
   openWorkspaceDialog,
   openWorkspaceWindow,
   requestQuitConfirmation,
@@ -55,6 +59,10 @@ export const createAppMenuManager = ({
 
   const openLauncher = () => {
     void createLauncherWindow().catch(handleDesktopError)
+  }
+
+  const openStandaloneMobileDebug = () => {
+    void openStandaloneTabWindow(standaloneDevicesRoutePath).catch(handleDesktopError)
   }
 
   const openUpdateCheck = () => {
@@ -146,6 +154,10 @@ export const createAppMenuManager = ({
             label: 'Default Profile'
           }
         ]
+      },
+      {
+        click: openStandaloneMobileDebug,
+        label: 'Debug Phone'
       },
       { type: 'separator' },
       {

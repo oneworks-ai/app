@@ -19,6 +19,8 @@ const workspaceStartupReadyChannel = 'desktop:workspace-startup-ready'
 const workspaceConnectionChannel = 'desktop:workspace-connection'
 const workspacePluginSearchChannel = 'desktop:plugins:search-current-workspace'
 const workspacePluginInvokeChannel = 'desktop:plugins:invoke-current-workspace-result'
+const mobileDeviceVideoFrameChannel = 'desktop:mobile-device-video-frame'
+const mobileDeviceVideoStreamStatusChannel = 'desktop:mobile-device-video-stream-status'
 const systemLocaleArgPrefix = '--oneworks-system-locale='
 const workspaceStartupOverlayId = 'oneworks-desktop-startup-overlay'
 const workspaceStartupIconSelector = '[data-oneworks-desktop-startup-icon="true"]'
@@ -205,6 +207,7 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
   getDesktopIconPreview: (settings: unknown) => ipcRenderer.invoke('desktop:get-icon-preview', settings),
   getDesktopSettings: () => ipcRenderer.invoke('desktop:get-settings'),
   getBrowserDataSyncState: () => ipcRenderer.invoke('desktop:get-browser-data-sync-state'),
+  getCurrentWindowPresentationState: () => ipcRenderer.invoke('desktop:get-current-window-presentation-state'),
   listBrowserHistory: (input?: unknown) => ipcRenderer.invoke('desktop:list-browser-history', input),
   recordBrowserHistory: (input: unknown) => ipcRenderer.invoke('desktop:record-browser-history', input),
   registerInteractionPanelWebviewScope: (input: unknown) =>
@@ -239,6 +242,33 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
   listWorkspaceFileOpeners: (workspaceFolder: string) =>
     ipcRenderer.invoke('desktop:list-workspace-file-openers', workspaceFolder),
   listMobileDebugTargets: (config: unknown) => ipcRenderer.invoke('desktop:list-mobile-debug-targets', config),
+  captureMobileDeviceScreenshot: (deviceId: string) =>
+    ipcRenderer.invoke('desktop:capture-mobile-device-screenshot', deviceId),
+  startMobileDeviceVideoStream: (deviceId: string) =>
+    ipcRenderer.invoke('desktop:start-mobile-device-video-stream', deviceId),
+  stopMobileDeviceVideoStream: (streamId: string) =>
+    ipcRenderer.invoke('desktop:stop-mobile-device-video-stream', streamId),
+  dumpMobileElementTree: (deviceId: string) => ipcRenderer.invoke('desktop:dump-mobile-element-tree', deviceId),
+  sendMobileDeviceInput: (deviceId: string, input: unknown) =>
+    ipcRenderer.invoke('desktop:send-mobile-device-input', deviceId, input),
+  onMobileDeviceVideoFrame: (listener: (value: unknown) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      listener(value)
+    }
+    ipcRenderer.on(mobileDeviceVideoFrameChannel, wrappedListener)
+    return () => {
+      ipcRenderer.off(mobileDeviceVideoFrameChannel, wrappedListener)
+    }
+  },
+  onMobileDeviceVideoStreamStatus: (listener: (value: unknown) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      listener(value)
+    }
+    ipcRenderer.on(mobileDeviceVideoStreamStatusChannel, wrappedListener)
+    return () => {
+      ipcRenderer.off(mobileDeviceVideoStreamStatusChannel, wrappedListener)
+    }
+  },
   markWorkspaceStartupReady,
   onDesktopSettingsChange: (listener: (value: unknown) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, value: unknown) => {
@@ -353,6 +383,13 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
     ipcRenderer.invoke('desktop:search-filesystem-files', query, options),
   searchCurrentWorkspaceResources: (query: string) =>
     ipcRenderer.invoke('desktop:search-current-workspace-resources', query),
+  setCurrentWindowAlwaysOnTop: (value: boolean) =>
+    ipcRenderer.invoke('desktop:set-current-window-always-on-top', value),
+  setCurrentWindowAspectRatio: (input: { aspectRatio: number; extraSize?: { height: number; width: number } }) =>
+    ipcRenderer.invoke('desktop:set-current-window-aspect-ratio', input),
+  setCurrentWindowContentSize: (size: { height: number; width: number }) =>
+    ipcRenderer.invoke('desktop:set-current-window-content-size', size),
+  setCurrentWindowOpacity: (value: number) => ipcRenderer.invoke('desktop:set-current-window-opacity', value),
   setThemeSource: (themeSource: unknown) => ipcRenderer.invoke('desktop:set-theme-source', themeSource),
   showDesktopContextCaptureOverlay: (input: unknown) =>
     ipcRenderer.invoke('desktop:context-capture:show-overlay', input),

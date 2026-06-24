@@ -3,6 +3,8 @@ import process from 'node:process'
 
 import { BrowserWindow, app, dialog, globalShortcut, nativeTheme, shell } from 'electron'
 
+import { standaloneDevicesRoutePath } from '@oneworks/types'
+
 import {
   rememberRecentWorkspaceFolder,
   removeRecentWorkspaceFolder,
@@ -54,12 +56,21 @@ import { createWindowManager } from './window-manager'
 import type { WindowManager } from './window-manager'
 import { createWorkspaceServiceManager } from './workspace-service-manager'
 
+const resolveStandaloneTabLaunchRequest = (rawTab: string | undefined): LaunchRequest | undefined => {
+  const tab = rawTab?.trim()
+  if (tab == null || tab === '') return undefined
+  if (tab === 'devices') return { standaloneRoutePath: standaloneDevicesRoutePath }
+  if (tab.startsWith('/standalone/')) return { standaloneRoutePath: tab }
+  return undefined
+}
+
 export const createDesktopApp = () => {
   const runtimeState = createDesktopRuntimeState()
   const initialWorkspaceFolder = resolveDesktopLaunchWorkspaceFolder({
     env: process.env
   })
   const initialDeepLinkRequest = parseDesktopDeepLinkLaunchRequest(findDesktopDeepLinkArg(process.argv) ?? '')
+  const initialStandaloneLaunchRequest = resolveStandaloneTabLaunchRequest(process.env.ONEWORKS_DESKTOP_STANDALONE_TAB)
 
   let menuManager: ReturnType<typeof createAppMenuManager>
   let windowManager: WindowManager
@@ -282,6 +293,7 @@ export const createDesktopApp = () => {
   const normalizeLaunchRequest = (launchRequest: LaunchRequest): LaunchRequest => {
     const workspaceFolder = resolveProjectWorkspaceFolder(launchRequest.workspaceFolder)
     return {
+      ...(launchRequest.standaloneRoutePath == null ? {} : { standaloneRoutePath: launchRequest.standaloneRoutePath }),
       ...(launchRequest.routePath == null ? {} : { routePath: launchRequest.routePath }),
       ...(workspaceFolder == null ? {} : { workspaceFolder })
     }
@@ -289,6 +301,10 @@ export const createDesktopApp = () => {
 
   const openLaunchRequest = async (launchRequest: LaunchRequest) => {
     const normalizedLaunchRequest = normalizeLaunchRequest(launchRequest)
+    if (normalizedLaunchRequest.standaloneRoutePath != null) {
+      await windowManager.openStandaloneTabWindow(normalizedLaunchRequest.standaloneRoutePath)
+      return
+    }
     if (normalizedLaunchRequest.workspaceFolder != null && normalizedLaunchRequest.routePath != null) {
       await windowManager.openWorkspaceRouteWindow(
         normalizedLaunchRequest.workspaceFolder,
@@ -406,6 +422,7 @@ export const createDesktopApp = () => {
     findWindowRecord: windowManager.findWindowRecord,
     getQuitConfirmationLanguage,
     handleDesktopError,
+    openStandaloneTabWindow: windowManager.openStandaloneTabWindow,
     openWorkspaceDialog: windowManager.openWorkspaceDialog,
     openWorkspaceWindow: windowManager.openWorkspaceWindow,
     requestQuitConfirmation,
@@ -470,10 +487,15 @@ export const createDesktopApp = () => {
     additionalData: unknown
   ) => {
     const deepLinkRequest = parseDesktopDeepLinkLaunchRequest(findDesktopDeepLinkArg(_argv) ?? '')
+    const additionalStandaloneRoutePath = (additionalData as { standaloneRoutePath?: unknown } | undefined)
+      ?.standaloneRoutePath
     const workspaceFolder = resolveProjectWorkspaceFolder(
       (additionalData as { workspaceFolder?: unknown } | undefined)?.workspaceFolder
     )
-    const launchRequest = deepLinkRequest ?? { workspaceFolder }
+    const launchRequest = deepLinkRequest ??
+      (typeof additionalStandaloneRoutePath === 'string'
+        ? { standaloneRoutePath: additionalStandaloneRoutePath }
+        : { workspaceFolder })
 
     queueOrOpenLaunchRequest(launchRequest)
   }
@@ -736,11 +758,9 @@ export const createDesktopApp = () => {
 
     const startupWorkspaceFolder = resolveStartupWorkspaceFolder()
     await applyProjectDesktopUpdateSettings(startupWorkspaceFolder)
-    const hasPendingWorkspaceLaunch = runtimeState.pendingLaunchRequests.some(request =>
-      request.workspaceFolder != null
-    )
+    const hasPendingLaunchRequest = runtimeState.pendingLaunchRequests.length > 0
 
-    if (startupWorkspaceFolder != null && !hasPendingWorkspaceLaunch) {
+    if (startupWorkspaceFolder != null && !hasPendingLaunchRequest) {
       try {
         await windowManager.openWorkspaceWindow(startupWorkspaceFolder)
       } catch (error) {
@@ -751,7 +771,7 @@ export const createDesktopApp = () => {
         await windowManager.createLauncherWindow()
       }
       preloadLauncherWindow()
-    } else if (!hasPendingWorkspaceLaunch) {
+    } else if (!hasPendingLaunchRequest) {
       await windowManager.createLauncherWindow()
     }
 
@@ -780,6 +800,7 @@ export const createDesktopApp = () => {
   const bootstrap = () => {
     registerDesktopDeepLinkProtocols()
     const hasSingleInstanceLock = app.requestSingleInstanceLock({
+      standaloneRoutePath: initialStandaloneLaunchRequest?.standaloneRoutePath ?? null,
       workspaceFolder: initialWorkspaceFolder ?? null
     })
 
@@ -790,6 +811,8 @@ export const createDesktopApp = () => {
 
     if (initialDeepLinkRequest != null) {
       runtimeState.pendingLaunchRequests.push(normalizeLaunchRequest(initialDeepLinkRequest))
+    } else if (initialStandaloneLaunchRequest != null) {
+      runtimeState.pendingLaunchRequests.push(normalizeLaunchRequest(initialStandaloneLaunchRequest))
     }
     app.on('second-instance', handleSecondInstance)
     app.on('open-url', handleOpenUrl)

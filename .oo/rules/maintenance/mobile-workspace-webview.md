@@ -27,6 +27,7 @@
 - Android 代码使用 Kotlin 和现代 AndroidX / Compose / WebView 能力，不新增 Java 入口。
 - WebView 远端调试需要开发态打开 `WebView.setWebContentsDebuggingEnabled(true)`，并确认 Chrome DevTools 能看到真实页面 target、URL、console 和 network 请求。
 - 真机插入后优先用当前 APK 安装验证真实输入法、状态栏、安全区和 Chrome inspect；模拟器通过的 UI 不代表真机一定通过。
+- 需要启动 Android 模拟器 / AVD / 虚拟机时，先读 [Android 模拟器启动排查耗时](./common-issues.md#android-模拟器启动排查耗时)。不要全盘找 SDK，不要先创建新系统镜像，不要用前台命令长期挂住模拟器。
 - 模拟器访问宿主机服务通常走 `10.0.2.2` 或 `adb reverse`；真机优先用 `adb reverse tcp:<port> tcp:<port>`。不要让前端硬编码 `127.0.0.1` 作为手机端唯一地址。
 - 输入法问题不要按每个输入框单独补逻辑。原生壳应在 WebView focus / input connection 层做通用 IME show/hide，前端只负责正常 focus。
 - 修 IME 时不要顺手改全局 edge-to-edge / inset 策略。状态栏、cutout、IME inset 是独立问题；一次改混在一起，很容易把 status bar 内容裁掉。

@@ -4,6 +4,10 @@ import process from 'node:process'
 import { BrowserWindow } from 'electron'
 import type { WebContents } from 'electron'
 
+import {
+  isStandaloneDeviceRoutePath,
+  normalizeStandaloneRoutePath as normalizeKnownStandaloneRoutePath
+} from '@oneworks/types'
 import { matchesPinyinSearch, normalizePinyinSearchQuery } from '@oneworks/utils/pinyin-search'
 
 import { createWorkspaceSelectorHtml as createWorkspaceSelectorHtmlBase } from '../workspace-selector-page.cjs'
@@ -25,6 +29,7 @@ import { restoreWorkspaceReadyWindowBackground, setWorkspaceLoadingWindowBackgro
 import { isLoadUrlAbortError, showWindowLoadFailureScreen } from './window-load-failure'
 import {
   buildLauncherWindowTitle,
+  buildStandaloneTabWindowTitle,
   buildWorkspaceSelectorWindowTitle,
   buildWorkspaceWindowTitle,
   ensureTrailingSlash
@@ -87,6 +92,33 @@ const getWorkspaceClientAnyRoutePath = (clientUrl: string, rawUrl?: string) => {
 const isWorkspaceChatRoute = (clientUrl: string, rawUrl?: string) => {
   const routePath = getWorkspaceClientAnyRoutePath(clientUrl, rawUrl)
   return routePath === '/' || /^\/session\/[^/]+/.test(routePath)
+}
+
+const normalizeStandaloneRoutePath = (routePath: string) => {
+  const trimmedRoutePath = routePath.trim()
+  const normalizedKnownRoutePath = normalizeKnownStandaloneRoutePath(trimmedRoutePath)
+  if (normalizedKnownRoutePath != null) return normalizedKnownRoutePath
+  const normalizedRoutePath = trimmedRoutePath.startsWith('/') ? trimmedRoutePath : `/${trimmedRoutePath}`
+  if (!normalizedRoutePath.startsWith('/standalone/')) {
+    throw new Error('Standalone tab route must be under /standalone/.')
+  }
+  return normalizedRoutePath
+}
+
+const buildStandaloneTabUrl = (clientUrl: string, routePath: string) => {
+  const standaloneRoutePath = normalizeStandaloneRoutePath(routePath)
+  const clientBaseUrl = new URL(ensureTrailingSlash(clientUrl))
+  const route = standaloneRoutePath.replace(/^\/+/, '')
+  const targetUrl = new URL(route, clientBaseUrl)
+  if (targetUrl.origin !== clientBaseUrl.origin) {
+    throw new Error('Standalone tab route must stay within the desktop client.')
+  }
+  return targetUrl.toString()
+}
+
+const mobileDebugStandaloneInitialContentSize = {
+  height: 720,
+  width: 820
 }
 
 const appendWorkspaceResourceTargetParams = (url: URL, target: WorkspaceResourceTarget) => {
@@ -614,8 +646,38 @@ export const createWindowManager = ({
     return windowRecord
   }
 
+  const openStandaloneTabWindow = async (routePath: string) => {
+    const standaloneRoutePath = normalizeStandaloneRoutePath(routePath)
+    const clientUrl = await ensureSharedClientUrl()
+    const targetUrl = buildStandaloneTabUrl(clientUrl, standaloneRoutePath)
+    const windowRecord = createWindowRecord({ kind: 'standalone' })
+    if (isStandaloneDeviceRoutePath(standaloneRoutePath)) {
+      windowRecord.window.setContentSize(
+        mobileDebugStandaloneInitialContentSize.width,
+        mobileDebugStandaloneInitialContentSize.height
+      )
+    }
+    windowRecord.kind = 'standalone'
+    windowRecord.selectorMode = undefined
+    windowRecord.workspaceFolder = undefined
+    windowRecord.workspaceServerUrl = undefined
+    windowRecord.currentServerUrl = clientUrl
+    windowRecord.standaloneRoutePath = standaloneRoutePath
+    windowRecord.window.setTitle(buildStandaloneTabWindowTitle(standaloneRoutePath))
+    setWorkspaceLoadingWindowBackground(windowRecord.window)
+    await windowRecord.window.loadURL(targetUrl)
+    restoreWorkspaceReadyWindowBackground(windowRecord.window)
+    focusWindowRecord(windowRecord)
+    return windowRecord
+  }
+
   const markWorkspaceStartupWindowReady = (windowRecord: WindowRecord) => {
-    if (!isWindowRecordUsable(windowRecord) || windowRecord.kind !== 'workspace') return
+    if (
+      !isWindowRecordUsable(windowRecord) ||
+      (windowRecord.kind !== 'workspace' && windowRecord.kind !== 'standalone')
+    ) {
+      return
+    }
 
     restoreWorkspaceReadyWindowBackground(windowRecord.window)
   }
@@ -985,6 +1047,7 @@ export const createWindowManager = ({
     openCurrentWorkspaceResource,
     openWorkspaceFileInExternalOpener,
     openWorkspaceDialog: workspaceDialogController.openWorkspaceDialog,
+    openStandaloneTabWindow,
     openWorkspaceRouteWindow,
     openWorkspaceUrlWindow,
     openWorkspaceWindow,

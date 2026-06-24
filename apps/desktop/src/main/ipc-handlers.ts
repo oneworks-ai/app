@@ -1,4 +1,6 @@
 /* eslint-disable max-lines -- centralizes desktop IPC registration for workspace, launcher, and window actions. */
+import process from 'node:process'
+
 import { clipboard, ipcMain, nativeImage, session, shell } from 'electron'
 import type { WebContents } from 'electron'
 
@@ -27,7 +29,14 @@ import {
 } from './browser-data-sync'
 import { SERVER_READY_TIMEOUT_MS, WORKSPACE_CONNECTION_CHANNEL, WORKSPACE_STARTUP_READY_CHANNEL } from './constants'
 import { openFilesystemFileInExternalOpener } from './filesystem-file-opener'
-import { listMobileDebugTargets } from './mobile-debug'
+import {
+  captureMobileDeviceScreenshot,
+  dumpMobileElementTree,
+  listMobileDebugTargets,
+  sendMobileDeviceInput,
+  startMobileDeviceVideoStream,
+  stopMobileDeviceVideoStream
+} from './mobile-debug'
 import type {
   DesktopInterfaceLanguageConfig,
   DesktopSettings,
@@ -104,6 +113,75 @@ const normalizeGlobalAppearancePatch = (
     ...(value.themeMode === 'light' || value.themeMode === 'dark' || value.themeMode === 'system'
       ? { themeMode: value.themeMode }
       : {})
+  }
+}
+
+const MIN_WINDOW_OPACITY = 0.55
+const MAX_WINDOW_OPACITY = 1
+const MIN_WINDOW_CONTENT_SIZE = 300
+const MAX_WINDOW_CONTENT_SIZE = 2400
+const MAX_WINDOW_ASPECT_RATIO = 10
+const MAX_WINDOW_ASPECT_RATIO_EXTRA_SIZE = 1200
+
+const normalizeWindowOpacity = (value: unknown) => {
+  const numericValue = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(numericValue)) return MAX_WINDOW_OPACITY
+  return Math.min(MAX_WINDOW_OPACITY, Math.max(MIN_WINDOW_OPACITY, numericValue))
+}
+
+const normalizeWindowContentSize = (value: unknown) => {
+  if (!isRecord(value)) {
+    throw new TypeError('Window content size is required.')
+  }
+
+  const width = typeof value.width === 'number' ? value.width : Number(value.width)
+  const height = typeof value.height === 'number' ? value.height : Number(value.height)
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    throw new TypeError('Window content width and height are required.')
+  }
+
+  return {
+    height: Math.min(MAX_WINDOW_CONTENT_SIZE, Math.max(MIN_WINDOW_CONTENT_SIZE, Math.round(height))),
+    width: Math.min(MAX_WINDOW_CONTENT_SIZE, Math.max(MIN_WINDOW_CONTENT_SIZE, Math.round(width)))
+  }
+}
+
+const normalizeWindowAspectRatioInput = (value: unknown) => {
+  if (!isRecord(value)) {
+    throw new TypeError('Window aspect ratio input is required.')
+  }
+
+  const aspectRatio = typeof value.aspectRatio === 'number' ? value.aspectRatio : Number(value.aspectRatio)
+  if (!Number.isFinite(aspectRatio) || aspectRatio < 0) {
+    throw new TypeError('Window aspect ratio must be zero or a positive number.')
+  }
+
+  const extraSize = isRecord(value.extraSize) ? value.extraSize : {}
+  const width = typeof extraSize.width === 'number' ? extraSize.width : Number(extraSize.width ?? 0)
+  const height = typeof extraSize.height === 'number' ? extraSize.height : Number(extraSize.height ?? 0)
+  return {
+    aspectRatio: Math.min(MAX_WINDOW_ASPECT_RATIO, aspectRatio),
+    extraSize: {
+      height: Number.isFinite(height)
+        ? Math.min(MAX_WINDOW_ASPECT_RATIO_EXTRA_SIZE, Math.max(0, Math.round(height)))
+        : 0,
+      width: Number.isFinite(width) ? Math.min(MAX_WINDOW_ASPECT_RATIO_EXTRA_SIZE, Math.max(0, Math.round(width))) : 0
+    }
+  }
+}
+
+const getCurrentWindowPresentationState = (windowRecord?: WindowRecord) => {
+  const window = windowRecord?.window
+  if (window == null || window.isDestroyed()) {
+    return {
+      alwaysOnTop: false,
+      opacity: MAX_WINDOW_OPACITY
+    }
+  }
+
+  return {
+    alwaysOnTop: window.isAlwaysOnTop(),
+    opacity: normalizeWindowOpacity(window.getOpacity())
   }
 }
 
@@ -318,6 +396,26 @@ export const registerIpcHandlers = ({
   ipcMain.handle('desktop:context-capture:hide-overlay', () => hideDesktopContextCaptureOverlay())
 
   ipcMain.handle('desktop:list-mobile-debug-targets', (_event, config: unknown) => listMobileDebugTargets(config))
+  ipcMain.handle(
+    'desktop:capture-mobile-device-screenshot',
+    (_event, deviceId: unknown) => captureMobileDeviceScreenshot(deviceId)
+  )
+  ipcMain.handle(
+    'desktop:start-mobile-device-video-stream',
+    (event, deviceId: unknown) => startMobileDeviceVideoStream(event.sender, deviceId)
+  )
+  ipcMain.handle(
+    'desktop:stop-mobile-device-video-stream',
+    (event, streamId: unknown) => stopMobileDeviceVideoStream(event.sender, streamId)
+  )
+  ipcMain.handle(
+    'desktop:dump-mobile-element-tree',
+    (_event, deviceId: unknown) => dumpMobileElementTree(deviceId)
+  )
+  ipcMain.handle(
+    'desktop:send-mobile-device-input',
+    (event, deviceId: unknown, input: unknown) => sendMobileDeviceInput(event.sender, deviceId, input)
+  )
 
   ipcMain.handle('desktop:retry-launcher-shortcut-registration', () => retryLauncherShortcutRegistration())
 
@@ -572,6 +670,48 @@ export const registerIpcHandlers = ({
   ipcMain.handle('desktop:get-window-fullscreen-state', (event) => (
     findWindowRecordForWebContents(event.sender)?.window.isFullScreen() ?? false
   ))
+
+  ipcMain.handle('desktop:get-current-window-presentation-state', (event) => (
+    getCurrentWindowPresentationState(findWindowRecordForWebContents(event.sender))
+  ))
+
+  ipcMain.handle('desktop:set-current-window-always-on-top', (event, value: unknown) => {
+    const windowRecord = findWindowRecordForWebContents(event.sender)
+    if (windowRecord == null || !isWindowRecordUsable(windowRecord)) {
+      return getCurrentWindowPresentationState(windowRecord)
+    }
+
+    windowRecord.window.setAlwaysOnTop(value === true, process.platform === 'darwin' ? 'floating' : undefined)
+    return getCurrentWindowPresentationState(windowRecord)
+  })
+
+  ipcMain.handle('desktop:set-current-window-opacity', (event, value: unknown) => {
+    const windowRecord = findWindowRecordForWebContents(event.sender)
+    if (windowRecord == null || !isWindowRecordUsable(windowRecord)) {
+      return getCurrentWindowPresentationState(windowRecord)
+    }
+
+    windowRecord.window.setOpacity(normalizeWindowOpacity(value))
+    return getCurrentWindowPresentationState(windowRecord)
+  })
+
+  ipcMain.handle('desktop:set-current-window-content-size', (event, value: unknown) => {
+    const windowRecord = findWindowRecordForWebContents(event.sender)
+    if (windowRecord == null || !isWindowRecordUsable(windowRecord)) return undefined
+
+    const size = normalizeWindowContentSize(value)
+    windowRecord.window.setContentSize(size.width, size.height)
+    const [width, height] = windowRecord.window.getContentSize()
+    return { height, width }
+  })
+
+  ipcMain.handle('desktop:set-current-window-aspect-ratio', (event, value: unknown) => {
+    const windowRecord = findWindowRecordForWebContents(event.sender)
+    if (windowRecord == null || !isWindowRecordUsable(windowRecord)) return undefined
+
+    const { aspectRatio, extraSize } = normalizeWindowAspectRatioInput(value)
+    windowRecord.window.setAspectRatio(aspectRatio, extraSize)
+  })
 
   ipcMain.handle('desktop:hide-launcher-window', (event) => {
     const windowRecord = findWindowRecordForWebContents(event.sender)
