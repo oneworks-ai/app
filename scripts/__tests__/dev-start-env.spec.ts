@@ -5,6 +5,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { buildRuntimeEnv, resolveDevStartHomeProjectsDir, resolveDevStartInstanceId } from '../dev-start/env'
+import { resolveDesktopWorkspaceLaunchFolder } from '../dev-start/manager'
 import { repoRoot } from '../dev-start/paths'
 
 describe('dev-start runtime env', () => {
@@ -72,5 +73,12 @@ describe('dev-start runtime env', () => {
       HOME: '/tmp/home',
       __ONEWORKS_PROJECT_REAL_HOME__: '/tmp/home'
     }, '/tmp/oneworks-a/app')).toContain('/tmp/home/.oneworks/dev-instances/app-')
+  })
+
+  it('launches electron-workspace against the dev-start root instead of inherited INIT_CWD', () => {
+    vi.stubEnv('INIT_CWD', '/tmp/stale-main-checkout')
+
+    expect(resolveDesktopWorkspaceLaunchFolder('/tmp/current-validation-worktree'))
+      .toBe('/tmp/current-validation-worktree')
   })
 })

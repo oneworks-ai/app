@@ -32,6 +32,8 @@ const resolveDefaultDesktopDevRuntimeVersion = () => (
   `dev-${createHash('sha256').update(repoRoot).digest('hex').slice(0, 12)}`
 )
 
+export const resolveDesktopWorkspaceLaunchFolder = (root = repoRoot) => root
+
 interface RunMainLinks {
   linkedDocsUrl?: string
 }
@@ -91,7 +93,7 @@ const startElectron = async (target: DevStartTarget, config: TargetConfig) => {
 
   const env: NodeJS.ProcessEnv = { ...process.env }
   if (config.desktopWorkspace === true) {
-    env.ONEWORKS_DESKTOP_WORKSPACE = env.INIT_CWD?.trim() || repoRoot
+    env.ONEWORKS_DESKTOP_WORKSPACE = resolveDesktopWorkspaceLaunchFolder()
     delete env.ONEWORKS_DESKTOP_LAUNCH_MODE
   } else {
     env.ONEWORKS_DESKTOP_LAUNCH_MODE = env.ONEWORKS_DESKTOP_LAUNCH_MODE?.trim() || 'empty'

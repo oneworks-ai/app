@@ -30,7 +30,7 @@ const normalizeWorkspaceFolder = (value) => {
   }
 }
 
-const readGitProjectRoot = (workspaceFolder) => {
+const readGitWorkspaceRoot = (workspaceFolder) => {
   try {
     const output = execFileSync(
       'git',
@@ -39,8 +39,7 @@ const readGitProjectRoot = (workspaceFolder) => {
         workspaceFolder,
         'rev-parse',
         '--path-format=absolute',
-        '--show-toplevel',
-        '--git-common-dir'
+        '--show-toplevel'
       ],
       {
         encoding: 'utf8',
@@ -48,15 +47,10 @@ const readGitProjectRoot = (workspaceFolder) => {
         timeout: 2_000
       }
     )
-    const [topLevel, gitCommonDir] = output
+    const [topLevel] = output
       .split(/\r?\n/u)
       .map(line => line.trim())
       .filter(Boolean)
-    const commonGitDir = gitCommonDir == null ? undefined : normalizeWorkspaceFolder(gitCommonDir)
-    if (commonGitDir != null && path.basename(commonGitDir) === '.git') {
-      const commonProjectFolder = normalizeWorkspaceFolder(path.dirname(commonGitDir))
-      if (commonProjectFolder != null) return commonProjectFolder
-    }
 
     return normalizeWorkspaceFolder(topLevel)
   } catch {
@@ -68,7 +62,7 @@ const resolveProjectWorkspaceFolder = (value) => {
   const workspaceFolder = normalizeWorkspaceFolder(value)
   if (workspaceFolder == null) return undefined
 
-  return readGitProjectRoot(workspaceFolder) ?? workspaceFolder
+  return readGitWorkspaceRoot(workspaceFolder) ?? workspaceFolder
 }
 
 const dedupeWorkspaceFolders = (values) => {

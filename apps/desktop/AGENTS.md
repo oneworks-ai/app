@@ -25,7 +25,7 @@
   - `browser-activity.ts`：interaction panel webview 的历史记录、下载记录和项目 / 会话 scope 追踪；配置页历史 / 下载内容入口通过 preload IPC 读取这里的数据
 - `src/workspace-state.cjs`
   - 桌面最近项目、workspace 显示名、启动 workspace 解析入口。
-  - 作为 project/workspace 打开或记录时，会把 Git linked worktree 归一到 common `.git` 对应的原始 project 目录；普通目录浏览仍使用真实路径。
+  - 作为 project/workspace 打开或记录时，只规约到当前 Git worktree 的 top-level；linked worktree 必须保留为独立 workspace，不能折回 common `.git` 对应的原始 project 目录。
 - `electron.vite.config.ts`
   - 使用 `electron-vite` 编译 main / preload TypeScript 到 `dist/`
 - `src/server-child.cjs`

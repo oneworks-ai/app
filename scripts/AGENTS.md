@@ -19,6 +19,7 @@
   - Electron 空 launcher 开发态：后台启动桌面开发进程并输出 PID / log
 - `pnpm tools dev-start electron-workspace`
   - Electron 当前仓库 workspace 开发态：后台启动桌面开发进程并打开当前仓库
+  - workspace 路径必须来自当前 `dev-start` 进程所在仓库根；不要用继承环境里的 `INIT_CWD`，嵌套 pnpm / 多 worktree 会话里它可能指向另一个 checkout。
 - `pnpm tools dev-start pwa`
   - PWA 独立前端预览：构建 standalone client，后台启动 server + 静态 client preview
 - `pnpm tools dev-start homepage`
