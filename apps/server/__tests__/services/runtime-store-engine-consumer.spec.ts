@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   buildRuntimeConsumerSpawnPlan,
+  ensureRuntimeConsumerCodexConfigCliCompatibility,
   readLatestRuntimeConsumerQueuedCommand,
   readRuntimeConsumerStartCommand,
   shouldStartServerRuntimeConsumer,
@@ -669,6 +670,43 @@ describe('runtime store engine consumer', () => {
     expect(plan.env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_ADAPTER__).toBe('codex')
   })
 
+  it('prefers the workspace adapter package over a stale user-home adapter cache for server consumers', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-workspace-adapter-'))
+    const homeDir = path.join(root, 'home')
+    const workspaceDir = path.join(root, 'workspace')
+    const appPackageDir = path.join(root, 'app-package')
+    const store = createStore(root)
+    await mkdir(appPackageDir, { recursive: true })
+    await writeCachedAdapterPackage(homeDir, '@oneworks/adapter-codex', '3.3.1')
+    await writeRuntimeAdapterPackage(workspaceDir, '@oneworks/adapter-codex', '3.4.0')
+    const metadata = {
+      sessionId: 'sess-web',
+      cwd: workspaceDir,
+      adapter: 'codex',
+      needsEngineConsumer: true,
+      createdAt: 100
+    } as RuntimeSessionMetadata
+
+    const plan = buildRuntimeConsumerSpawnPlan({
+      baseEnv: {
+        PATH: '',
+        __ONEWORKS_PROJECT_CLI_PACKAGE_DIR__: appPackageDir,
+        __ONEWORKS_PROJECT_PACKAGE_DIR__: appPackageDir,
+        __ONEWORKS_PROJECT_REAL_HOME__: homeDir,
+        __ONEWORKS_RUNTIME_PROTOCOL_FALLBACK_BOOTSTRAP_PATH__: '/opt/oneworks/bootstrap.js'
+      } as NodeJS.ProcessEnv,
+      command: {
+        message: 'Run web task'
+      },
+      cwd: workspaceDir,
+      metadata,
+      store
+    })
+
+    expect(plan.env.__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__).toBe(workspaceDir)
+    expect(plan.env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_ADAPTER__).toBe('codex')
+  })
+
   it('injects an adapter package cache from the configured package cache root', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-configured-adapter-cache-'))
     const packageCacheRoot = path.join(root, 'package-cache')
@@ -905,6 +943,35 @@ describe('runtime store engine consumer', () => {
 
     expect(plan.env.__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__).toBe(runtimePackageDir)
     expect(plan.env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_ADAPTER__).toBe('codex')
+  })
+
+  it('normalizes unsupported Codex service tiers in the runtime consumer mock home', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-codex-config-'))
+    const homeDir = path.join(root, 'mock-home')
+    const configPath = path.join(homeDir, '.codex', 'config.toml')
+    await mkdir(path.dirname(configPath), { recursive: true })
+    await writeFile(
+      configPath,
+      [
+        'model = "gpt-5-codex"',
+        'service_tier = "default"',
+        'experimental = true'
+      ].join('\n')
+    )
+
+    const changed = await ensureRuntimeConsumerCodexConfigCliCompatibility({
+      adapter: 'codex',
+      env: {
+        HOME: homeDir
+      } as NodeJS.ProcessEnv
+    })
+
+    expect(changed).toBe(true)
+
+    const normalizedContent = await readFile(configPath, 'utf8')
+    expect(normalizedContent).toContain('# One Works removed unsupported Codex service_tier "default"')
+    expect(normalizedContent).not.toContain('service_tier = "default"')
+    expect(normalizedContent).toContain('experimental = true')
   })
 
   it('uses the bundled fallback bootstrap when no user runtime command is available', async () => {

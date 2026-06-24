@@ -192,6 +192,57 @@ describe('initCodexAdapter', () => {
     expect(mockConfigContent).toContain('check_for_update_on_startup = false')
   })
 
+  it('removes inherited unsupported Codex service tiers from the mock-home config only', async () => {
+    const workspace = await createWorkspace()
+    const realHome = join(workspace, 'real-home')
+    const mockHome = resolveTestMockHome(workspace, realHome)
+    const realConfigPath = join(realHome, '.codex', 'config.toml')
+    const mockConfigPath = join(mockHome, '.codex', 'config.toml')
+
+    await mkdir(join(realHome, '.codex'), { recursive: true })
+    const realConfigContent = [
+      'model = "gpt-5.5"',
+      '',
+      '# BEGIN VIBE FORGE MANAGED CODEX ROOT CONFIG',
+      '# This root-level block is managed by Vibe Forge.',
+      'service_tier = "default"',
+      '# END VIBE FORGE MANAGED CODEX ROOT CONFIG',
+      '',
+      '[notice]',
+      'hide_full_access_warning = true',
+      ''
+    ].join('\n')
+    await writeFile(realConfigPath, realConfigContent)
+
+    await initCodexAdapter({
+      cwd: workspace,
+      env: {
+        HOME: mockHome,
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+        __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: '/bin/codex'
+      },
+      logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn()
+      },
+      assets: {
+        hookPlugins: []
+      }
+    } as any)
+
+    expect(await readFile(realConfigPath, 'utf8')).toBe(realConfigContent)
+
+    const mockConfigContent = await readFile(mockConfigPath, 'utf8')
+    expect(mockConfigContent).toContain('# BEGIN VIBE FORGE MANAGED CODEX ROOT CONFIG')
+    expect(mockConfigContent).toContain('# One Works removed unsupported Codex service_tier "default"')
+    expect(mockConfigContent).not.toContain('service_tier = "default"')
+    expect(mockConfigContent).toContain('[notice]')
+    expect(mockConfigContent).toContain('hide_full_access_warning = true')
+    expect(mockConfigContent).toContain('check_for_update_on_startup = false')
+  })
+
   it('rehydrates a managed-only mock Codex config from the real user config', async () => {
     const workspace = await createWorkspace()
     const realHome = join(workspace, 'real-home')

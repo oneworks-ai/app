@@ -41,6 +41,7 @@ import { createLogger } from '@oneworks/utils/create-logger'
 
 import { resolveCodexBinaryPath } from '#~/paths.js'
 import { CodexRpcClient } from '#~/protocol/rpc.js'
+import { ensureCodexConfigCliCompatibility } from '#~/runtime/config.js'
 import { ensureCodexNativeHookTrustState } from '#~/runtime/native-hooks.js'
 
 interface CodexConfiguredAccount {
@@ -1928,6 +1929,7 @@ const syncSharedCodexSessionHomeFiles = async (
     configPath: join(mockHome, '.codex', 'config.toml'),
     hooksPath: join(homeDir, '.codex', 'hooks.json')
   })
+  await ensureCodexConfigCliCompatibility(join(homeDir, '.codex', 'config.toml'))
 }
 
 export const prepareCodexSessionHome = async (params: {

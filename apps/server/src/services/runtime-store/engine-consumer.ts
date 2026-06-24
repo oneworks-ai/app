@@ -161,6 +161,68 @@ const sanitizeRuntimeConsumerEnv = (env: NodeJS.ProcessEnv) => {
   return nextEnv
 }
 
+const SUPPORTED_CODEX_SERVICE_TIERS = new Set(['fast', 'flex'])
+const CODEX_SERVICE_TIER_COMPATIBILITY_REPLACEMENTS = new Map([
+  ['priority', 'fast']
+])
+
+const normalizeCodexServiceTierLineForCli = (line: string) => {
+  const match = /^(\s*)service_tier(\s*=\s*)(["'])([^"']+)\3(\s*(?:#.*)?)$/.exec(line)
+  if (match == null) return line
+
+  const [, indent, assignment, quote, value, suffix] = match
+  if (SUPPORTED_CODEX_SERVICE_TIERS.has(value)) return line
+
+  const replacement = CODEX_SERVICE_TIER_COMPATIBILITY_REPLACEMENTS.get(value)
+  if (replacement != null) {
+    return `${indent}service_tier${assignment}${quote}${replacement}${quote}${suffix}`
+  }
+
+  return `${indent}# One Works removed unsupported Codex service_tier ${quote}${value}${quote}${suffix}`
+}
+
+export const normalizeRuntimeConsumerCodexConfigCompatibility = (content: string) => {
+  const lines = content.split('\n')
+  let changed = false
+  const normalizedLines = lines.map(line => {
+    const normalizedLine = normalizeCodexServiceTierLineForCli(line)
+    if (normalizedLine !== line) {
+      changed = true
+    }
+    return normalizedLine
+  })
+
+  return changed ? normalizedLines.join('\n') : content
+}
+
+export const ensureRuntimeConsumerCodexConfigCliCompatibility = async (params: {
+  adapter?: string
+  env: NodeJS.ProcessEnv
+}) => {
+  const adapter = readString(params.adapter ?? params.env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_ADAPTER__)
+  if (adapter !== 'codex') return false
+
+  const homeDir = readString(params.env.HOME)
+  if (homeDir == null) return false
+
+  const configPath = path.join(homeDir, '.codex', 'config.toml')
+  let content: string
+  try {
+    content = await readFile(configPath, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false
+    }
+    throw error
+  }
+
+  const normalizedContent = normalizeRuntimeConsumerCodexConfigCompatibility(content)
+  if (normalizedContent === content) return false
+
+  await writeFile(configPath, normalizedContent)
+  return true
+}
+
 const pushOption = (args: string[], flag: string, value: string | undefined) => {
   if (value != null) {
     args.push(flag, value)
@@ -645,14 +707,22 @@ export function buildRuntimeConsumerSpawnPlan(params: {
 
   const cli = resolveRuntimeConsumerCli(cwd, baseEnv)
   const existingCliPackageDir = readString(baseEnv.__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__)
+  const existingCliPackageHasAdapter = adapter != null &&
+    existingCliPackageDir != null &&
+    hasAdapterPackageInRuntimePackageDir(existingCliPackageDir, adapter)
+  const workspacePackageDir = adapter != null &&
+      !existingCliPackageHasAdapter &&
+      hasAdapterPackageInRuntimePackageDir(cwd, adapter)
+    ? cwd
+    : undefined
   const adapterPackageDir = adapter != null &&
-      (existingCliPackageDir == null || !hasAdapterPackageInRuntimePackageDir(existingCliPackageDir, adapter))
-    ? resolveExistingRuntimeAdapterPackageCacheDir(adapter, baseEnv)
+      !existingCliPackageHasAdapter
+    ? workspacePackageDir ?? resolveExistingRuntimeAdapterPackageCacheDir(adapter, baseEnv)
     : undefined
   const shouldClearInheritedCliPackageDir = adapter != null &&
     adapterPackageDir == null &&
     existingCliPackageDir != null &&
-    !hasAdapterPackageInRuntimePackageDir(existingCliPackageDir, adapter)
+    !existingCliPackageHasAdapter
   const args = [
     ...cli.args,
     RUNTIME_CONSUMER_RUN_COMMAND,
@@ -766,6 +836,18 @@ export async function startServerRuntimeConsumer(params: {
       metadata: params.metadata,
       store: params.store
     })
+
+    try {
+      await ensureRuntimeConsumerCodexConfigCliCompatibility({
+        adapter: readString(plan.env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_ADAPTER__),
+        env: plan.env
+      })
+    } catch (error) {
+      logger.warn({
+        error: errorMessage(error),
+        sessionId: params.metadata.sessionId
+      }, '[runtime-store] Failed to normalize Codex config before starting server runtime consumer')
+    }
 
     const missingSpawnPath = findMissingSpawnPath(plan)
     if (missingSpawnPath != null) {

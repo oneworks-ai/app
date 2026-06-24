@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { launcherRouter } from '#~/routes/launcher.js'
 import {
+  createWorkspaceServerEnv,
   createLauncherWorkspaceClientBase,
   createLauncherWorkspaceId,
   openLauncherWorkspace,
@@ -443,7 +444,7 @@ describe('launcher routes', () => {
     expect(response.status).toBe(404)
   })
 
-  itWithGit('resolves linked git worktrees to the common project folder', async () => {
+  itWithGit('preserves linked git worktree folders as launcher workspaces', async () => {
     const projectFolder = await mkdtemp(path.join(tempHome, 'git-project-'))
     fs.writeFileSync(path.join(projectFolder, 'README.md'), 'test\n')
     execFileSync('git', ['-C', projectFolder, 'init'], { stdio: 'ignore' })
@@ -470,6 +471,14 @@ describe('launcher routes', () => {
       { stdio: 'ignore' }
     )
 
-    expect(resolveLauncherProjectWorkspaceFolder(linkedWorktree)).toBe(fs.realpathSync.native(projectFolder))
+    const normalizedWorktree = fs.realpathSync.native(linkedWorktree)
+
+    expect(resolveLauncherProjectWorkspaceFolder(linkedWorktree)).toBe(normalizedWorktree)
+
+    const { env } = createWorkspaceServerEnv(normalizedWorktree, {
+      port: 8788
+    })
+    expect(env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__).toBe(normalizedWorktree)
+    expect(env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__).toBe(normalizedWorktree)
   })
 })

@@ -1,15 +1,28 @@
 import './SenderMonacoEditor.scss'
 
 import Editor from '@monaco-editor/react'
-import { useCallback, useId, useState } from 'react'
-import type { MutableRefObject } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import type {
+  ChangeEvent,
+  ClipboardEvent as ReactClipboardEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  MutableRefObject
+} from 'react'
 
 import type { SessionInfo } from '@oneworks/types'
 
 import type { SenderEditorHandle } from '#~/components/chat/sender/@types/sender-editor'
 import type { SenderCompletionMatch, SenderTokenDecoration } from '#~/components/chat/sender/@utils/sender-completion'
+import { isImeComposingKeyboardEvent, isShortcutMatch } from '#~/utils/shortcutUtils'
 import { FONT_SIZE, LINE_HEIGHT, SENDER_UNICODE_HIGHLIGHT_OPTIONS } from './monaco-runtime'
 import { useSenderMonacoEditor } from './use-sender-monaco-editor'
+
+const AUTOMATION_INPUT_POLL_INTERVAL_MS = 150
+
+const hasPastedImageFile = (clipboardData?: DataTransfer | null) => {
+  return Array.from(clipboardData?.items ?? [])
+    .some(item => item.kind === 'file' && item.type.startsWith('image/'))
+}
 
 export function SenderMonacoEditor({
   editorRef,
@@ -54,6 +67,8 @@ export function SenderMonacoEditor({
 }) {
   const editorId = useId()
   const modelPath = `inmemory://oneworks-chat-sender/${editorId}.md`
+  const automationInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const valueRef = useRef(value)
   const {
     themeName,
     editorHeight,
@@ -78,13 +93,127 @@ export function SenderMonacoEditor({
     resolveTokenDecorations
   })
   const [isEditorReady, setIsEditorReady] = useState(false)
+  const shouldExposeAutomationInput = typeof window !== 'undefined' && window.oneworksDesktop != null
+
+  valueRef.current = value
+
   const handleStartupEditorMount = useCallback((...args: Parameters<typeof handleEditorMount>) => {
     setIsEditorReady(true)
     handleEditorMount(...args)
   }, [handleEditorMount])
 
+  const applyAutomationValue = useCallback((nextValue: string) => {
+    if (disabled) {
+      const automationInput = automationInputRef.current
+
+      if (automationInput != null && automationInput.value !== valueRef.current) {
+        automationInput.value = valueRef.current
+      }
+      return
+    }
+
+    const cursorOffset = nextValue.length
+    const editor = editorRef.current
+
+    valueRef.current = nextValue
+
+    if (editor != null && !editor.isDisabled()) {
+      const previousValue = editor.getValue()
+      editor.setValue(nextValue, { start: cursorOffset, end: cursorOffset })
+
+      if (previousValue === nextValue) {
+        onInputChange(nextValue, cursorOffset)
+        onCursorChange(cursorOffset)
+      }
+      return
+    }
+
+    onInputChange(nextValue, cursorOffset)
+    onCursorChange(cursorOffset)
+  }, [disabled, editorRef, onCursorChange, onInputChange])
+
+  const syncAutomationInputValue = useCallback(() => {
+    const automationInput = automationInputRef.current
+
+    if (automationInput == null || automationInput.value === valueRef.current) {
+      return
+    }
+
+    applyAutomationValue(automationInput.value)
+  }, [applyAutomationValue])
+
+  useEffect(() => {
+    if (!shouldExposeAutomationInput) return
+
+    const intervalId = window.setInterval(syncAutomationInputValue, AUTOMATION_INPUT_POLL_INTERVAL_MS)
+
+    return () => window.clearInterval(intervalId)
+  }, [shouldExposeAutomationInput, syncAutomationInputValue])
+
+  const handleAutomationInputChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
+    applyAutomationValue(event.currentTarget.value)
+  }, [applyAutomationValue])
+
+  const handleAutomationInputKeyDown = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (disabled || isImeComposingKeyboardEvent(event)) return
+
+    const isMac = navigator.platform.includes('Mac')
+
+    if (
+      secondarySendShortcut != null &&
+      onSecondarySendShortcut != null &&
+      isShortcutMatch(event, secondarySendShortcut, isMac)
+    ) {
+      event.preventDefault()
+      event.stopPropagation()
+      onSecondarySendShortcut()
+      return
+    }
+
+    if (!sendShortcutDisabled && isShortcutMatch(event, sendShortcut, isMac)) {
+      event.preventDefault()
+      event.stopPropagation()
+      onSendShortcut()
+      return
+    }
+
+    onKeyDown(event.nativeEvent)
+  }, [
+    disabled,
+    onKeyDown,
+    onSecondarySendShortcut,
+    onSendShortcut,
+    secondarySendShortcut,
+    sendShortcut,
+    sendShortcutDisabled
+  ])
+
+  const handleAutomationInputPaste = useCallback((event: ReactClipboardEvent<HTMLTextAreaElement>) => {
+    if (!hasPastedImageFile(event.clipboardData)) return
+
+    void onPaste(event.nativeEvent)
+  }, [onPaste])
+
   return (
     <div className='chat-input-monaco' data-oneworks-sender-editor-ready={isEditorReady ? 'true' : undefined}>
+      {shouldExposeAutomationInput && (
+        <textarea
+          ref={automationInputRef}
+          aria-label={placeholder}
+          autoCapitalize='off'
+          autoCorrect='off'
+          className='chat-input-monaco__automation-input'
+          data-oneworks-sender-automation-input='true'
+          readOnly={disabled}
+          spellCheck={false}
+          tabIndex={-1}
+          value={value}
+          onChange={handleAutomationInputChange}
+          onInput={handleAutomationInputChange}
+          onKeyDown={handleAutomationInputKeyDown}
+          onPaste={handleAutomationInputPaste}
+        />
+      )}
       <div className='chat-input-monaco__editor' style={{ height: `${editorHeight}px` }}>
         <Editor
           path={modelPath}

@@ -191,47 +191,11 @@ const normalizeWorkspaceFolder = (value: unknown) => {
   }
 }
 
-const readGitProjectRoot = (workspaceFolder: string) => {
-  try {
-    const output = execFileSync(
-      'git',
-      [
-        '-C',
-        workspaceFolder,
-        'rev-parse',
-        '--path-format=absolute',
-        '--show-toplevel',
-        '--git-common-dir'
-      ],
-      {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-        timeout: 2_000
-      }
-    )
-    const [topLevel, gitCommonDir] = output
-      .split(/\r?\n/u)
-      .map(line => line.trim())
-      .filter(Boolean)
-    const commonGitDir = gitCommonDir == null
-      ? undefined
-      : normalizeWorkspaceFolder(gitCommonDir)
-    if (commonGitDir != null && path.basename(commonGitDir) === '.git') {
-      const commonProjectFolder = normalizeWorkspaceFolder(path.dirname(commonGitDir))
-      if (commonProjectFolder != null) return commonProjectFolder
-    }
-
-    return normalizeWorkspaceFolder(topLevel)
-  } catch {
-    return undefined
-  }
-}
-
 export const resolveLauncherProjectWorkspaceFolder = (value: unknown) => {
   const workspaceFolder = normalizeWorkspaceFolder(value)
   if (workspaceFolder == null) return undefined
 
-  return readGitProjectRoot(workspaceFolder) ?? workspaceFolder
+  return workspaceFolder
 }
 
 const normalizePathForRemoval = (value: unknown) => {
@@ -1039,7 +1003,7 @@ const writePrefixedChunk = (prefix: string, chunk: Buffer | string) => {
   }
 }
 
-const createWorkspaceServerEnv = (
+export const createWorkspaceServerEnv = (
   workspaceFolder: string,
   input: {
     clientOrigin?: string
@@ -1050,6 +1014,16 @@ const createWorkspaceServerEnv = (
   const clientCorsOrigins = getLauncherClientCorsOrigins(input.clientOrigin)
   const env = applyServerRuntimeEnv({
     cwd: workspaceFolder,
+    baseEnv: {
+      ...process.env,
+      DB_PATH: undefined,
+      __ONEWORKS_PROJECT_HOME_PROJECT_DIR__: undefined,
+      __ONEWORKS_PROJECT_SERVER_DATA_DIR__: undefined,
+      __ONEWORKS_PROJECT_SERVER_LOG_DIR__: undefined,
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspaceFolder,
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD__: workspaceFolder,
+      __ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__: workspaceFolder
+    },
     packageDir,
     options: {
       allowCors: clientCorsOrigins.length > 0,
