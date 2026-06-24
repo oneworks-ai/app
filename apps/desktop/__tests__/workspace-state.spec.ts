@@ -53,7 +53,7 @@ describe('workspace-state helpers', () => {
     expect(normalizeWorkspaceFolder(aliasFolder)).toBe(fs.realpathSync.native(workspaceFolder))
   })
 
-  itWithGit('resolves linked git worktrees to the common project folder', () => {
+  itWithGit('preserves linked git worktrees as distinct workspaces', () => {
     const projectFolder = createWorkspace('git-project')
     fs.writeFileSync(path.join(projectFolder, 'README.md'), 'test\n')
     execFileSync('git', ['-C', projectFolder, 'init'], { stdio: 'ignore' })
@@ -81,9 +81,13 @@ describe('workspace-state helpers', () => {
       { stdio: 'ignore' }
     )
     const realProjectFolder = fs.realpathSync.native(projectFolder)
+    const realLinkedWorktree = fs.realpathSync.native(linkedWorktree)
 
-    expect(resolveProjectWorkspaceFolder(linkedWorktree)).toBe(realProjectFolder)
-    expect(rememberRecentWorkspaceFolder([linkedWorktree], projectFolder)).toEqual([realProjectFolder])
+    expect(resolveProjectWorkspaceFolder(linkedWorktree)).toBe(realLinkedWorktree)
+    expect(rememberRecentWorkspaceFolder([linkedWorktree], projectFolder)).toEqual([
+      realProjectFolder,
+      realLinkedWorktree
+    ])
   })
 
   it('dedupes recent workspaces and migrates the legacy workspace field', () => {

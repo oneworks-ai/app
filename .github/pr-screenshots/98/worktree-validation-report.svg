@@ -1,0 +1,158 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="1280"
+  height="720"
+  viewBox="0 0 1280 720"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">Worktree validation report</title>
+  <desc id="desc"
+  >Independent Web and Electron validation results for worktree-scoped session startup and sender flow.</desc>
+  <rect width="1280" height="720" fill="#f7f8fb" />
+  <rect
+    x="64"
+    y="56"
+    width="1152"
+    height="608"
+    rx="16"
+    fill="#ffffff"
+    stroke="#d9dee8"
+  />
+  <text
+    x="112"
+    y="128"
+    fill="#101828"
+    font-family="Arial, sans-serif"
+    font-size="34"
+    font-weight="700"
+  >Worktree-scoped message validation</text>
+  <text
+    x="112"
+    y="170"
+    fill="#475467"
+    font-family="Arial, sans-serif"
+    font-size="20"
+  >Independent clean validation threads pulled codex/fix-runtime-worktree-validation and sent real UI messages.</text>
+
+  <rect
+    x="112"
+    y="224"
+    width="492"
+    height="300"
+    rx="12"
+    fill="#eef8f2"
+    stroke="#a7d8b8"
+  />
+  <text
+    x="152"
+    y="278"
+    fill="#075e35"
+    font-family="Arial, sans-serif"
+    font-size="28"
+    font-weight="700"
+  >Web</text>
+  <text
+    x="152"
+    y="326"
+    fill="#123524"
+    font-family="Arial, sans-serif"
+    font-size="20"
+  >Worktree: /Users/yijie/.codex/worktrees/1f07/app</text>
+  <text
+    x="152"
+    y="368"
+    fill="#123524"
+    font-family="Arial, sans-serif"
+    font-size="20"
+  >UI sender created session successfully</text>
+  <text
+    x="152"
+    y="410"
+    fill="#123524"
+    font-family="Arial, sans-serif"
+    font-size="20"
+  >Session workspace matched current worktree</text>
+  <text
+    x="152"
+    y="452"
+    fill="#123524"
+    font-family="Arial, sans-serif"
+    font-size="20"
+  >Assistant response: OK</text>
+  <text
+    x="152"
+    y="494"
+    fill="#123524"
+    font-family="Arial, sans-serif"
+    font-size="20"
+  >No task failed / config / variant errors</text>
+
+  <rect
+    x="676"
+    y="224"
+    width="492"
+    height="300"
+    rx="12"
+    fill="#eef4ff"
+    stroke="#abc7ff"
+  />
+  <text
+    x="716"
+    y="278"
+    fill="#123c7c"
+    font-family="Arial, sans-serif"
+    font-size="28"
+    font-weight="700"
+  >Electron</text>
+  <text
+    x="716"
+    y="326"
+    fill="#182b4d"
+    font-family="Arial, sans-serif"
+    font-size="20"
+  >Worktree: /Users/yijie/.codex/worktrees/39b8/app</text>
+  <text
+    x="716"
+    y="368"
+    fill="#182b4d"
+    font-family="Arial, sans-serif"
+    font-size="20"
+  >Opened without Cmd+R after startup</text>
+  <text
+    x="716"
+    y="410"
+    fill="#182b4d"
+    font-family="Arial, sans-serif"
+    font-size="20"
+  >Runtime consumer cwd matched current worktree</text>
+  <text
+    x="716"
+    y="452"
+    fill="#182b4d"
+    font-family="Arial, sans-serif"
+    font-size="20"
+  >Assistant response: OK</text>
+  <text
+    x="716"
+    y="494"
+    fill="#182b4d"
+    font-family="Arial, sans-serif"
+    font-size="20"
+  >No task failed / config / variant errors</text>
+
+  <text
+    x="112"
+    y="592"
+    fill="#344054"
+    font-family="Arial, sans-serif"
+    font-size="20"
+  >Commit under test: b747cc5 before rebase, equivalent rebased commit in PR head.</text>
+  <text
+    x="112"
+    y="626"
+    fill="#344054"
+    font-family="Arial, sans-serif"
+    font-size="20"
+  >Both validation threads closed their services and were archived after reporting.</text>
+</svg>

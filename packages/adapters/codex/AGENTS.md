@@ -41,6 +41,7 @@ Primary implementation entrypoints for Codex hooks:
 - `src/runtime/accounts.ts`
   - imports the current `~/.codex/auth.json` into `<project-home>/.local/adapters/codex/accounts/<key>/auth.json`
   - prepares per-session HOME roots under `<project-home>/caches/<ctxId>/<sessionId>/adapter-codex-home`
+  - normalizes the imported Codex config before using that HOME with the CLI, so unsupported values from a user's real config do not break One Works sessions.
   - queries Codex account info and rate-limit/quota snapshots through `codex app-server`
   - exposes standard adapter account management actions: add via `codex login`, detail lookup, refresh, and remove
 - `src/models.ts`
@@ -103,6 +104,7 @@ Validation checklist:
 Codex maintenance notes:
 
 - native hooks should stay entirely inside mock home; do not write to the real Codex home
+- session HOME preparation may copy user Codex config, but runtime-facing config must remain compatible with the Codex CLI version One Works starts; normalize or comment unsupported scalar values rather than letting the session fail at config parse time
 - Codex 官方文档里的用户级 skills 入口仍是 `<project-home>/.mock/.agents/skills`
 - 但当前真实 runtime 会在 `<project-home>/.mock/.codex/skills/.system` 下维护系统技能，所以 workspace skills 也要镜像进 `<project-home>/.mock/.codex/skills/<name>`
 - Codex 2026-03-27 official hooks docs say `~/.codex/hooks.json` and `<repo>/.codex/hooks.json` are both loaded, so project-level managed hooks must be deduped before writing mock-home hooks

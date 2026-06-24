@@ -7,8 +7,9 @@
 - `manager.ts`
   - 维护 manager project-home 下的最近 workspace 状态。
   - 提供 launcher 目录浏览、创建 workspace 目录、打开 workspace。
-  - 作为 workspace 打开或记录前，会把 Git linked worktree 归一到 common `.git` 所在的原始 project 目录；多个同项目 worktree 只算一个 launcher 项目。
+  - 作为 workspace 打开或记录前，只规约到当前 Git worktree 的 top-level；linked worktree 必须保留为独立 workspace，不能折回 common `.git` 对应的原始 project 目录。
   - 打开 workspace 时按需启动独立 workspace server，并返回该 workspace server 的 `serverBaseUrl` 给共享 client 使用。
+  - 启动 workspace server 时，传入的 `workspaceFolder`、primary/current project 目录、home/db/log 目录必须全部来自被打开的 workspace；不要继承 manager 或外层 shell 的旧目录。
 
 ## 边界
 

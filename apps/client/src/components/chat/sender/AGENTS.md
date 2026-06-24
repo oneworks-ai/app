@@ -13,6 +13,12 @@
 - `@types/`：sender 私有类型定义。
 - `@utils/`：sender 私有常量和轻量工具。
 
+## 自动化输入与编辑器状态
+
+- sender 的真实提交状态来自 React / editor model，不等于 DOM 上看起来有文字。
+- 给 Electron、Computer Use 或其他可访问性自动化暴露输入路径时，必须把值写回同一套 composer/editor state，并触发正常 submit 前置校验；只改 contenteditable / Monaco DOM 会出现“看起来有字但点发送不创建会话”。
+- 涉及 IME、富文本层或隐藏 automation input 的改动，要同时验证真实键盘输入、可访问性 `set_value`、点击发送后是否创建会话，以及首条用户消息是否保持原文。
+
 ## 响应式边界
 
 - `useResponsiveLayout` 的 `isCompactLayout` 只代表 `600px` 以下的窄屏 / 手机端布局。

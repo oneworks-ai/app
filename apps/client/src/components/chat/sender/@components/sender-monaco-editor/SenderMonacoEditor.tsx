@@ -8,6 +8,7 @@ import type { SessionInfo } from '@oneworks/types'
 
 import type { SenderEditorHandle } from '#~/components/chat/sender/@types/sender-editor'
 import type { SenderCompletionMatch, SenderTokenDecoration } from '#~/components/chat/sender/@utils/sender-completion'
+import { SenderAutomationInput } from './SenderAutomationInput'
 import { FONT_SIZE, LINE_HEIGHT, SENDER_UNICODE_HIGHLIGHT_OPTIONS } from './monaco-runtime'
 import { useSenderMonacoEditor } from './use-sender-monaco-editor'
 
@@ -78,6 +79,7 @@ export function SenderMonacoEditor({
     resolveTokenDecorations
   })
   const [isEditorReady, setIsEditorReady] = useState(false)
+
   const handleStartupEditorMount = useCallback((...args: Parameters<typeof handleEditorMount>) => {
     setIsEditorReady(true)
     handleEditorMount(...args)
@@ -85,6 +87,21 @@ export function SenderMonacoEditor({
 
   return (
     <div className='chat-input-monaco' data-oneworks-sender-editor-ready={isEditorReady ? 'true' : undefined}>
+      <SenderAutomationInput
+        editorRef={editorRef}
+        value={value}
+        placeholder={placeholder}
+        disabled={disabled}
+        sendShortcut={sendShortcut}
+        sendShortcutDisabled={sendShortcutDisabled}
+        onSendShortcut={onSendShortcut}
+        secondarySendShortcut={secondarySendShortcut}
+        onSecondarySendShortcut={onSecondarySendShortcut}
+        onInputChange={onInputChange}
+        onCursorChange={onCursorChange}
+        onKeyDown={onKeyDown}
+        onPaste={onPaste}
+      />
       <div className='chat-input-monaco__editor' style={{ height: `${editorHeight}px` }}>
         <Editor
           path={modelPath}

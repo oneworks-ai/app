@@ -191,6 +191,46 @@ describe('prepareCodexSessionHome', () => {
     expect(await readFile(join(realHome, '.codex', 'config.toml'), 'utf8')).toBe('model = "real"\n')
   })
 
+  it('normalizes unsupported service tiers from shared Codex config during session home preparation', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-session-config-compat-'))
+    const realHome = join(workspace, 'real-home')
+    const mockHome = resolveTestMockHome(workspace, realHome)
+    tempDirs.push(workspace)
+
+    await mkdir(join(mockHome, '.codex'), { recursive: true })
+    await writeFile(
+      join(mockHome, '.codex', 'config.toml'),
+      [
+        'model = "gpt-5.5"',
+        '',
+        '# BEGIN VIBE FORGE MANAGED CODEX ROOT CONFIG',
+        'service_tier = "default"',
+        '# END VIBE FORGE MANAGED CODEX ROOT CONFIG',
+        ''
+      ].join('\n')
+    )
+
+    const result = await prepareCodexSessionHome({
+      ctx: {
+        cwd: workspace,
+        env: {
+          HOME: mockHome,
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome
+        },
+        ctxId: 'ctx',
+        configs: []
+      },
+      sessionId: 'session'
+    })
+
+    const mockConfigContent = await readFile(join(mockHome, '.codex', 'config.toml'), 'utf8')
+    const sessionConfigContent = await readFile(join(result.homeDir, '.codex', 'config.toml'), 'utf8')
+
+    expect(mockConfigContent).toContain('# One Works removed unsupported Codex service_tier "default"')
+    expect(mockConfigContent).not.toContain('service_tier = "default"')
+    expect(sessionConfigContent).toBe(mockConfigContent)
+  })
+
   it('shares Codex session storage across sessionIds via mockHome symlinks so resume can find prior rollouts', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-session-share-'))
     const realHome = join(workspace, 'missing-real-home')

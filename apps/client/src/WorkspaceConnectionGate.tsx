@@ -2,7 +2,7 @@
 import './WorkspaceConnectionGate.scss'
 
 import type { PropsWithChildren } from 'react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { LauncherWorkspaceVersionConflictDetails } from '@oneworks/types'
@@ -57,6 +57,7 @@ export function WorkspaceConnectionGate({
   const [restartErrorMessage, setRestartErrorMessage] = useState<string | undefined>()
   const [isRestarting, setIsRestarting] = useState(false)
   const [overlayPhase, setOverlayPhase] = useState<OpeningOverlayPhase>('visible')
+  const parentMarkWorkspaceStartupReady = useContext(DesktopWorkspaceStartupReadyContext)
   const overlayMountedAtRef = useRef(performance.now())
   const overlayExitRequestedRef = useRef(false)
   const overlayExitTimerRef = useRef<number | null>(null)
@@ -98,6 +99,11 @@ export function WorkspaceConnectionGate({
       }, OPENING_OVERLAY_EXIT_MS)
     }, delayMs)
   }, [])
+
+  const markWorkspaceStartupReady = useCallback(() => {
+    requestOpeningOverlayExit()
+    parentMarkWorkspaceStartupReady?.()
+  }, [parentMarkWorkspaceStartupReady, requestOpeningOverlayExit])
 
   const maybeRestartIdleWorkspaceServer = useCallback(async (
     details: LauncherWorkspaceVersionConflictDetails
@@ -222,11 +228,11 @@ export function WorkspaceConnectionGate({
     if (state.status !== 'ready') return
 
     const fallbackTimerId = window.setTimeout(
-      requestOpeningOverlayExit,
+      markWorkspaceStartupReady,
       OPENING_OVERLAY_READY_FALLBACK_MS
     )
     return () => window.clearTimeout(fallbackTimerId)
-  }, [requestOpeningOverlayExit, state.status])
+  }, [markWorkspaceStartupReady, state.status])
 
   if (state.status === 'error') {
     return (
@@ -247,7 +253,7 @@ export function WorkspaceConnectionGate({
 
   return (
     <DesktopWorkspaceStartupReadyContext.Provider
-      value={shouldRenderChildren ? requestOpeningOverlayExit : null}
+      value={shouldRenderChildren ? markWorkspaceStartupReady : null}
     >
       {shouldRenderChildren
         ? children

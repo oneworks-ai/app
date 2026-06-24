@@ -335,14 +335,22 @@ const getTomlRootAssignmentKey = (line: string) => {
   return key?.replaceAll(/\s*\.\s*/g, '.')
 }
 
-const normalizeLegacyCodexServiceTierLine = (line: string) => {
-  const match = /^(\s*service_tier\s*=\s*)(["'])priority\2(\s*(?:#.*)?)$/.exec(line)
+const normalizeCodexServiceTierCompatibilityLine = (line: string) => {
+  const match = /^(\s*)service_tier(\s*=\s*)(["'])([^"']+)\3(\s*(?:#.*)?)$/.exec(line)
   if (match == null) return line
 
-  return `${match[1]}${match[2]}fast${match[2]}${match[3]}`
+  const [, indent, assignment, quote, value, suffix] = match
+  if (value === 'fast' || value === 'flex') {
+    return line
+  }
+  if (value === 'priority') {
+    return `${indent}service_tier${assignment}${quote}fast${quote}${suffix}`
+  }
+
+  return `${indent}# One Works removed unsupported Codex service_tier ${quote}${value}${quote}${suffix}`
 }
 
-const normalizeCodexConfigCliCompatibility = (content: string) => {
+export const normalizeCodexConfigCliCompatibility = (content: string) => {
   const scan = scanTomlSections(content)
   const rootSection = scan.sections.find(section => section.header == null)
   if (rootSection == null) return content
@@ -357,7 +365,7 @@ const normalizeCodexConfigCliCompatibility = (content: string) => {
       : undefined
     if (key !== 'service_tier') continue
 
-    const nextLine = normalizeLegacyCodexServiceTierLine(line.text)
+    const nextLine = normalizeCodexServiceTierCompatibilityLine(line.text)
     if (nextLine === line.text) continue
 
     nextLines[lineIndex] = nextLine
@@ -365,6 +373,21 @@ const normalizeCodexConfigCliCompatibility = (content: string) => {
   }
 
   return changed ? nextLines.join('\n') : content
+}
+
+export const ensureCodexConfigCliCompatibility = async (configPath: string) => {
+  let currentContent: string
+  try {
+    currentContent = await readFile(configPath, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw error
+  }
+
+  const compatibleContent = normalizeCodexConfigCliCompatibility(currentContent)
+  if (compatibleContent === currentContent) return
+
+  await writeFile(configPath, compatibleContent, 'utf8')
 }
 
 const getTomlRootAssignmentKeys = (content: string) => {
