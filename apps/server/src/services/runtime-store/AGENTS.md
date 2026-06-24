@@ -12,6 +12,8 @@
 - `session-event-projection.ts`：runtime events 到 session message / interaction / status 的投影。
 - `room-projection.ts`：runtime events 到 Agent Room room/member/run/message 的投影。
 - `engine-consumer.ts`：把 runtime protocol command 交给具体 adapter / engine 执行。
+  - Codex consumer 启动前要在 session HOME 里做 CLI 兼容配置归一化，避免旧 `~/.codex/config.toml` 值让 runtime 因 `unknown variant` / configuration load failed 提前退出。
+  - 在多 worktree / 本地验证场景，consumer cwd、`__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__`、project home 和 adapter cache 都必须优先来自当前 workspace；不要让用户 home 下的旧 adapter cache 或 manager cwd 抢先。
 - `jsonl.ts`、`types.ts`、`content.ts`：store 读取、局部类型和 content 文本提取工具。
 
 ## Agent Room 投影规则
@@ -52,3 +54,4 @@ Agent Room service 再通过这些 metadata 判断 leader prompt 是否应该公
 
 - 改 room 投影时同时看 `apps/server/__tests__/services/agent-room.spec.ts` 中 host projection / child request 用例。
 - 改 protocol 字段时同步跑 `packages/runtime-protocol` 测试，并检查 adapter 事件输出。
+- 改 consumer 启动环境、adapter package 解析或 Codex 配置归一化时，同步跑 `apps/server/__tests__/services/runtime-store-engine-consumer.spec.ts`，并检查新会话的 runtime 日志 cwd 是否仍等于当前 workspace。
