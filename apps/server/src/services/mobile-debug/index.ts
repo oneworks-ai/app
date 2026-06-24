@@ -637,7 +637,7 @@ const normalizeBoundedNumber = (
   options: { integer?: boolean } = {}
 ) => {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new Error(`Invalid ${label}.`)
+    throw new TypeError(`Invalid ${label}.`)
   }
   const normalizedValue = options.integer === true ? Math.round(value) : value
   if (normalizedValue < minimum || normalizedValue > maximum) {
@@ -1213,7 +1213,7 @@ const getProxiedWebSocketDebuggerUrl = (target: CdpTarget, webSocketProxyPort: n
 
 const evaluateCdpStringExpression = (webSocketUrl: string, expression: string) =>
   new Promise<string | undefined>((resolve) => {
-    if (typeof WebSocket !== 'function') {
+    if (typeof WebSocketImpl !== 'function') {
       resolve(undefined)
       return
     }
@@ -1221,7 +1221,7 @@ const evaluateCdpStringExpression = (webSocketUrl: string, expression: string) =
     const requestId = 1
     let socket: WebSocket
     try {
-      socket = new WebSocket(webSocketUrl)
+      socket = new WebSocketImpl(webSocketUrl)
     } catch {
       resolve(undefined)
       return

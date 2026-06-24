@@ -41,7 +41,6 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
   )
   const refreshScreenshot = useCallback(async () => {
     if (readyDeviceId == null || isScreenshotRefreshingRef.current) return
-
     isScreenshotRefreshingRef.current = true
     try {
       const nextScreenshot = await captureMobileDeviceScreenshot(readyDeviceId)

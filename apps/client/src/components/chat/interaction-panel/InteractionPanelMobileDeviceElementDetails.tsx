@@ -56,7 +56,11 @@ const getOverviewRows = (
 
 const getAttributeRows = (node: DesktopMobileElementNode | undefined): ElementDetailRow[] =>
   Object.entries(node?.attributes ?? {})
-    .filter((row): row is ElementDetailRow => row[1] != null && String(row[1]) !== '')
+    .flatMap(([name, value]) =>
+      value == null || String(value) === ''
+        ? []
+        : [[name, value] as const]
+    )
     .slice(0, 48)
 
 export function InteractionPanelMobileDeviceElementDetails({

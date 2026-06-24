@@ -40,7 +40,7 @@ const resolveStandaloneMobileDebugWindowFitSize = (
   const deviceWindow = route?.querySelector<HTMLElement>('.chat-interaction-panel-mobile-debug__device-window')
   const deviceControls = route?.querySelector<HTMLElement>('.chat-interaction-panel-mobile-debug__device-controls')
   const sideTabs = route?.querySelector<HTMLElement>('.chat-interaction-panel-mobile-debug__side-tabs')
-  if (header == null || body == null || grid == null || deviceWindow == null) return undefined
+  if (route == null || header == null || body == null || grid == null || deviceWindow == null) return undefined
 
   const bodyStyle = window.getComputedStyle(body)
   const gridStyle = window.getComputedStyle(grid)

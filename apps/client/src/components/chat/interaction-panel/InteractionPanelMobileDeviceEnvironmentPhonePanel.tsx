@@ -8,8 +8,7 @@ import {
   MobileEnvironmentSection
 } from './InteractionPanelMobileDeviceEnvironmentLayout'
 import { phoneActions } from './mobile-device-environment-options'
-import type { MobileEnvironmentActionRunner } from './mobile-device-environment-options'
-import type { MobileEnvironmentPhoneAction } from './mobile-device-environment-options'
+import type { MobileEnvironmentActionRunner, MobileEnvironmentPhoneAction } from './mobile-device-environment-options'
 
 export function InteractionPanelMobileDeviceEnvironmentPhonePanel({
   isEmulatorControlDisabled,

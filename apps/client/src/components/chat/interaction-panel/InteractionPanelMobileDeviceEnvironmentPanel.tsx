@@ -12,8 +12,7 @@ import { InteractionPanelMobileDeviceEnvironmentLocationPanel } from './Interact
 import { InteractionPanelMobileDeviceEnvironmentPhonePanel } from './InteractionPanelMobileDeviceEnvironmentPhonePanel'
 import { applyMobileDeviceEnvironmentAction } from './mobile-debug-platform'
 import { isAndroidEmulatorDevice } from './mobile-device-environment-options'
-import type { MobileEnvironmentActionRunnerOptions } from './mobile-device-environment-options'
-import type { MobileEnvironmentTabKey } from './mobile-device-environment-options'
+import type { MobileEnvironmentActionRunnerOptions, MobileEnvironmentTabKey } from './mobile-device-environment-options'
 
 export function InteractionPanelMobileDeviceEnvironmentPanel({
   deviceId,

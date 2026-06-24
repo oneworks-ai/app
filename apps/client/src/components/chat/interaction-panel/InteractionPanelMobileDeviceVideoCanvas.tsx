@@ -97,10 +97,10 @@ export function InteractionPanelMobileDeviceVideoCanvas({
       onStatusChange('unavailable')
       return
     }
-    const canUseDesktopStream = desktopApi?.startMobileDeviceVideoStream != null &&
-      desktopApi.stopMobileDeviceVideoStream != null &&
-      desktopApi.onMobileDeviceVideoFrame != null &&
-      desktopApi.onMobileDeviceVideoStreamStatus != null
+    const startMobileDeviceVideoStream = desktopApi?.startMobileDeviceVideoStream
+    const stopMobileDeviceVideoStream = desktopApi?.stopMobileDeviceVideoStream
+    const onMobileDeviceVideoFrame = desktopApi?.onMobileDeviceVideoFrame
+    const onMobileDeviceVideoStreamStatus = desktopApi?.onMobileDeviceVideoStreamStatus
 
     let isDisposed = false
     let streamId: string | undefined
@@ -128,7 +128,12 @@ export function InteractionPanelMobileDeviceVideoCanvas({
       onStatusChange('active')
     })
 
-    if (!canUseDesktopStream) {
+    if (
+      startMobileDeviceVideoStream == null ||
+      stopMobileDeviceVideoStream == null ||
+      onMobileDeviceVideoFrame == null ||
+      onMobileDeviceVideoStreamStatus == null
+    ) {
       onStatusChange('starting')
       const ws = new WebSocket(createMobileDebugVideoSocketUrl(deviceId))
       serverSocket = ws
@@ -193,7 +198,7 @@ export function InteractionPanelMobileDeviceVideoCanvas({
       }
     }
 
-    const unsubscribeFrame = desktopApi.onMobileDeviceVideoFrame(event => {
+    const unsubscribeFrame = onMobileDeviceVideoFrame(event => {
       if (isDisposed || event.streamId !== streamId || writer == null) return
       if (event.width != null && event.height != null) {
         onSizeChange({ height: event.height, width: event.width })
@@ -205,7 +210,7 @@ export function InteractionPanelMobileDeviceVideoCanvas({
         .catch(error => fail(error instanceof Error ? error.message : String(error)))
     })
 
-    const unsubscribeStatus = desktopApi.onMobileDeviceVideoStreamStatus(event => {
+    const unsubscribeStatus = onMobileDeviceVideoStreamStatus(event => {
       if (event.streamId !== streamId || isDisposed) return
       if (event.status === 'error') {
         fail(event.message ?? '')
@@ -215,10 +220,10 @@ export function InteractionPanelMobileDeviceVideoCanvas({
     })
 
     onStatusChange('starting')
-    desktopApi.startMobileDeviceVideoStream(deviceId)
+    startMobileDeviceVideoStream(deviceId)
       .then(result => {
         if (isDisposed) {
-          void desktopApi.stopMobileDeviceVideoStream?.(result.streamId).catch(() => undefined)
+          void stopMobileDeviceVideoStream(result.streamId).catch(() => undefined)
           return
         }
         streamId = result.streamId
@@ -235,7 +240,7 @@ export function InteractionPanelMobileDeviceVideoCanvas({
       removeSizeListener()
       const currentStreamId = streamId
       if (currentStreamId != null) {
-        void desktopApi.stopMobileDeviceVideoStream(currentStreamId).catch(() => undefined)
+        void stopMobileDeviceVideoStream(currentStreamId).catch(() => undefined)
       }
       void writer?.close().catch(() => undefined)
       decoder?.dispose()

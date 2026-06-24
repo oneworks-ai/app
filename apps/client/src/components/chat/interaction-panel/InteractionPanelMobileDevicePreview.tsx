@@ -1,10 +1,8 @@
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 
-import { InteractionPanelMobileDeviceEnvironmentPanel } from './InteractionPanelMobileDeviceEnvironmentPanel'
+import { InteractionPanelMobileDevicePreviewSidePanel } from './InteractionPanelMobileDevicePreviewSidePanel'
 import { InteractionPanelMobileDeviceScreen } from './InteractionPanelMobileDeviceScreen'
-import { InteractionPanelMobileDeviceSideTabs } from './InteractionPanelMobileDeviceSideTabs'
 import type { MobileDeviceDockPosition } from './InteractionPanelMobileDeviceSideTabs'
 import { MobileDeviceStandaloneHeaderActions } from './InteractionPanelMobileDeviceStandaloneHeaderActions'
 import { getDeviceWindowTitle, getReadyDevice } from './mobile-device-preview-utils'
@@ -34,7 +32,6 @@ export function InteractionPanelMobileDevicePreview({
   onStandaloneDeviceTitleChange?: (title: string | null) => void
   onStandaloneHeaderActionsChange?: (actions: ReactNode | null) => void
 }) {
-  const { t } = useTranslation()
   const readyDevice = getReadyDevice(devices)
   const readyDeviceId = readyDevice?.id
   const deviceTitle = readyDevice == null ? undefined : getDeviceWindowTitle(readyDevice)
@@ -168,49 +165,28 @@ export function InteractionPanelMobileDevicePreview({
           screenRatio={screenRatio}
           showDeviceTitlebar={!usesStandaloneHeaderActions}
         />
-        {isSidePanelVisible
-          ? (
-            isEnvironmentPanelOpen
-              ? (
-                <InteractionPanelMobileDeviceEnvironmentPanel
-                  deviceId={readyDevice.id}
-                  onApplied={preview.refreshPreview}
-                />
-              )
-              : (
-                <InteractionPanelMobileDeviceSideTabs
-                  details={details}
-                  deviceId={readyDevice.id}
-                  dockPosition={dockPosition}
-                  elementTree={preview.elementTree}
-                  error={preview.error}
-                  flattenedNodes={preview.flattenedNodes}
-                  isInspecting={preview.isInspecting}
-                  selectedNode={preview.selectedNode}
-                  selectedNodeId={preview.selectedNodeId}
-                  onDockPositionChange={changeDockPosition}
-                  onRefresh={preview.refreshPreview}
-                  onSelectNode={preview.setSelectedNodeId}
-                  onSendInput={sendInput}
-                  showInlineActions={!usesStandaloneHeaderActions}
-                  onToggleInspect={preview.toggleInspect}
-                  onToggleSidePanel={hideSidePanel}
-                />
-              )
-          )
-          : usesStandaloneHeaderActions
-          ? null
-          : (
-            <button
-              type='button'
-              className='chat-interaction-panel-mobile-debug__side-panel-restore'
-              aria-label={t('chat.interactionPanel.mobileDebugShowSidePanel')}
-              title={t('chat.interactionPanel.mobileDebugShowSidePanel')}
-              onClick={() => setIsSidePanelVisible(true)}
-            >
-              <span className='material-symbols-rounded' aria-hidden='true'>right_panel_open</span>
-            </button>
-          )}
+        <InteractionPanelMobileDevicePreviewSidePanel
+          details={details}
+          deviceId={readyDevice.id}
+          dockPosition={dockPosition}
+          elementTree={preview.elementTree}
+          error={preview.error}
+          flattenedNodes={preview.flattenedNodes}
+          isEnvironmentPanelOpen={isEnvironmentPanelOpen}
+          isInspecting={preview.isInspecting}
+          isSidePanelVisible={isSidePanelVisible}
+          selectedNode={preview.selectedNode}
+          selectedNodeId={preview.selectedNodeId}
+          showInlineActions={!usesStandaloneHeaderActions}
+          onAppliedEnvironment={preview.refreshPreview}
+          onDockPositionChange={changeDockPosition}
+          onRefresh={preview.refreshPreview}
+          onRestoreSidePanel={() => setIsSidePanelVisible(true)}
+          onSelectNode={preview.setSelectedNodeId}
+          onSendInput={sendInput}
+          onToggleInspect={preview.toggleInspect}
+          onToggleSidePanel={hideSidePanel}
+        />
       </div>
     </section>
   )

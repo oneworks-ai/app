@@ -147,9 +147,9 @@ export function StandaloneWindowHeader({
       </div>
       <div className='standalone-mobile-debug-route__header-drag-fill' aria-hidden='true' />
       <div className='standalone-mobile-debug-route__header-actions' aria-label={t('common.actions', 'Actions')}>
-        {pluginActions.map(action => (
+        {pluginActions.map(({ key, ...action }) => (
           <StandaloneHeaderActionButton
-            key={action.key}
+            key={key}
             {...action}
           />
         ))}
