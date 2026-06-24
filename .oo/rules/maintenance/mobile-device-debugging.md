@@ -45,8 +45,8 @@
 位置控制经验：
 
 - 可以用 Google Maps `output=embed` iframe 做当前经纬度预览。
-- 不要承诺“点地图直接回写坐标”，普通 Google Maps iframe 是跨域内容，没有 Maps JS API key 时不能可靠读取点击坐标。
-- 坐标仍由本地输入框控制，地图只负责预览当前值。
+- 普通 Google Maps iframe 是跨域内容，没有 Maps JS API key 时不能可靠读取内部点击坐标。需要点地图回写时，用本地 overlay 捕获点击，再按当前 zoom 的 Web Mercator 近似换算经纬度；不要把点击事件绑定到 iframe 内部。
+- 坐标输入框仍是精确编辑入口；地图点击只负责快速定位并触发同一套实时状态更新。
 
 ## ADB / 视频预览类型安全
 

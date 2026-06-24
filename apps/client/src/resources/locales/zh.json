@@ -2283,6 +2283,7 @@
       "mobileDebugEnvironmentLatitude": "纬度",
       "mobileDebugEnvironmentLocation": "位置",
       "mobileDebugEnvironmentLongitude": "经度",
+      "mobileDebugEnvironmentMapPicker": "点击地图更新坐标",
       "mobileDebugEnvironmentMeterStatus": "计费网络",
       "mobileDebugEnvironmentNetworkDelay": "网络延迟",
       "mobileDebugEnvironmentNetworkSpeed": "网络速度",
