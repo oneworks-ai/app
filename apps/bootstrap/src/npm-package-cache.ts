@@ -141,22 +141,29 @@ const readOptionalFile = async (filePath: string | undefined) => {
   }
 }
 
-const resolvePackageLookupKey = async (packageName: string) => {
+const resolvePackageLookupKey = async (
+  packageName: string,
+  options: { lookupScope?: string } = {}
+) => {
   const env = resolvePackageManagerEnv()
   const userConfig = env.npm_config_userconfig ?? env.NPM_CONFIG_USERCONFIG
   const userConfigContent = await readOptionalFile(userConfig)
+  const packageTag = options.lookupScope?.trim() || resolvePackageTag()
 
   return JSON.stringify({
     packageName,
-    packageTag: resolvePackageTag(),
+    packageTag,
     registry: env.npm_config_registry ?? env.NPM_CONFIG_REGISTRY ?? '',
     userConfig: userConfig ?? '',
     userConfigContentHash: userConfigContent == null ? '' : hashValue(userConfigContent)
   })
 }
 
-const resolvePackageVersionMetadataPath = async (packageName: string) => {
-  const lookupKey = await resolvePackageLookupKey(packageName)
+const resolvePackageVersionMetadataPath = async (
+  packageName: string,
+  options: { lookupScope?: string } = {}
+) => {
+  const lookupKey = await resolvePackageLookupKey(packageName, options)
   return {
     lookupKey,
     metadataPath: path.join(
@@ -166,8 +173,12 @@ const resolvePackageVersionMetadataPath = async (packageName: string) => {
   }
 }
 
-export const readPublishedPackageVersionMetadata = async (packageName: string) => {
-  const { lookupKey, metadataPath } = await resolvePackageVersionMetadataPath(packageName)
+export const readPublishedPackageVersionMetadata = async (
+  packageName: string,
+  options: { lookupScope?: string } = {}
+) => {
+  const packageTag = options.lookupScope?.trim() || resolvePackageTag()
+  const { lookupKey, metadataPath } = await resolvePackageVersionMetadataPath(packageName, options)
 
   try {
     const content = await readFile(metadataPath, 'utf8')
@@ -175,7 +186,7 @@ export const readPublishedPackageVersionMetadata = async (packageName: string) =
     if (
       parsed.lookupKey === lookupKey &&
       parsed.packageName === packageName &&
-      parsed.packageTag === resolvePackageTag() &&
+      parsed.packageTag === packageTag &&
       typeof parsed.version === 'string' &&
       parsed.version.trim()
     ) {
@@ -191,15 +202,20 @@ export const readPublishedPackageVersionMetadata = async (packageName: string) =
   return undefined
 }
 
-export const writePublishedPackageVersionMetadata = async (packageName: string, version: string) => {
-  const { lookupKey, metadataPath } = await resolvePackageVersionMetadataPath(packageName)
+export const writePublishedPackageVersionMetadata = async (
+  packageName: string,
+  version: string,
+  options: { lookupScope?: string } = {}
+) => {
+  const packageTag = options.lookupScope?.trim() || resolvePackageTag()
+  const { lookupKey, metadataPath } = await resolvePackageVersionMetadataPath(packageName, options)
   await ensureDirectory(path.dirname(metadataPath))
 
   const tempPath = `${metadataPath}.${process.pid}.${Date.now()}.tmp`
   const metadata: PublishedPackageVersionMetadata = {
     lookupKey,
     packageName,
-    packageTag: resolvePackageTag(),
+    packageTag,
     resolvedAt: new Date().toISOString(),
     version
   }

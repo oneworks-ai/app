@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/workspace-assets",
-  "version": "0.1.0-beta.0",
+  "version": "0.1.0-beta.1",
   "description": "Workspace asset resolution and adapter asset planning for OneWorks",
   "repository": {
     "type": "git",

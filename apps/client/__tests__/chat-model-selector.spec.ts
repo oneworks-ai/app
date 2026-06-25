@@ -164,6 +164,31 @@ describe('chat model selector helpers', () => {
     })).toBe('serviceB,modelX')
   })
 
+  it('uses native adapter default before global default model service', () => {
+    const serviceModels = listServiceModels(modelServices)
+
+    expect(resolveModelForChatAdapterSelection({
+      adapter: 'codex',
+      adapters: {},
+      defaultModelService: 'serviceB',
+      builtinModels: ['default', 'gpt-5.5'],
+      serviceModels
+    })).toBe('default')
+  })
+
+  it('keeps explicit global default model before native adapter default', () => {
+    const serviceModels = listServiceModels(modelServices)
+
+    expect(resolveModelForChatAdapterSelection({
+      adapter: 'codex',
+      adapters: {},
+      defaultModel: 'serviceB,modelBOnly',
+      defaultModelService: 'serviceA',
+      builtinModels: ['default', 'gpt-5.5'],
+      serviceModels
+    })).toBe('serviceB,modelBOnly')
+  })
+
   it('falls back to the first matching service when no default service is provided', () => {
     const serviceModels = listServiceModels(modelServices)
 

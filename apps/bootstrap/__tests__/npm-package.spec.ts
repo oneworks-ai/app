@@ -20,6 +20,8 @@ describe('bootstrap npm package env', () => {
     vi.stubEnv('ONEWORKS_BOOTSTRAP_DISABLE_BACKGROUND_REFRESH', '1')
     vi.stubEnv('ONEWORKS_BOOTSTRAP_PACKAGE_CACHE_FIRST', undefined)
     vi.stubEnv('ONEWORKS_BOOTSTRAP_PACKAGE_LOOKUP_TIMEOUT_MS', '1000')
+    vi.stubEnv('ONEWORKS_BOOTSTRAP_PACKAGE_TAG', undefined)
+    vi.stubEnv('ONEWORKS_BOOTSTRAP_PACKAGE_VERSION', undefined)
     vi.stubEnv('NPM_CONFIG_USERCONFIG', undefined)
     vi.stubEnv('npm_config_userconfig', undefined)
   })
@@ -40,8 +42,25 @@ describe('bootstrap npm package env', () => {
       `#!/usr/bin/env node
 const delay = Number.parseInt(process.env.ONEWORKS_TEST_NPM_VIEW_DELAY_MS || '0', 10)
 const version = process.env.ONEWORKS_TEST_NPM_VIEW_VERSION || '1.0.0'
+const exactVersions = JSON.parse(process.env.ONEWORKS_TEST_NPM_VIEW_EXACT_VERSIONS || '{}')
+const versions = JSON.parse(process.env.ONEWORKS_TEST_NPM_VIEW_VERSIONS || '[]')
 if (process.argv[2] === 'view') {
+  const spec = process.argv[3]
+  const field = process.argv[4]
   setTimeout(() => {
+    if (field === 'versions') {
+      process.stdout.write(JSON.stringify(versions.length > 0 ? versions : [version]) + '\\n')
+      return
+    }
+    if (Object.prototype.hasOwnProperty.call(exactVersions, spec)) {
+      process.stdout.write(JSON.stringify(exactVersions[spec]) + '\\n')
+      return
+    }
+    if (process.env.ONEWORKS_TEST_NPM_VIEW_FAIL_EXACT === '1' && /@\\d+\\.\\d+\\.\\d+/.test(spec)) {
+      process.stderr.write('not found\\n')
+      process.exitCode = 1
+      return
+    }
     process.stdout.write(JSON.stringify(version) + '\\n')
   }, delay)
 } else {
@@ -118,6 +137,7 @@ if (process.argv[2] === 'view') {
   })
 
   it('uses installed package cache before npm view when no metadata exists', async () => {
+    vi.stubEnv('ONEWORKS_BOOTSTRAP_PACKAGE_TAG', 'latest')
     await writeCachedPackage('@scope/pkg', '4.5.6')
 
     await expect(resolvePublishedPackageVersion('@scope/pkg')).resolves.toBe('4.5.6')
@@ -137,6 +157,55 @@ if (process.argv[2] === 'view') {
     await expect(resolvePublishedPackageVersion('@scope/pkg')).resolves.toBe('1.2.3')
 
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('timed out after 20ms'))
+  })
+
+  it('prefers the exact bootstrap prerelease version for runtime package resolution', async () => {
+    await installFakeNpm()
+    vi.stubEnv('ONEWORKS_BOOTSTRAP_PACKAGE_CACHE_FIRST', '0')
+    vi.stubEnv('ONEWORKS_BOOTSTRAP_PACKAGE_VERSION', '0.1.0-beta.0')
+    vi.stubEnv('ONEWORKS_TEST_NPM_VIEW_VERSION', '0.1.0-alpha.0')
+    vi.stubEnv(
+      'ONEWORKS_TEST_NPM_VIEW_EXACT_VERSIONS',
+      JSON.stringify({
+        '@scope/pkg@0.1.0-beta.0': '0.1.0-beta.0'
+      })
+    )
+
+    await expect(resolvePublishedPackageVersion('@scope/pkg')).resolves.toBe('0.1.0-beta.0')
+  })
+
+  it('falls back to the highest same-core bootstrap prerelease version', async () => {
+    await installFakeNpm()
+    vi.stubEnv('ONEWORKS_BOOTSTRAP_PACKAGE_CACHE_FIRST', '0')
+    vi.stubEnv('ONEWORKS_BOOTSTRAP_PACKAGE_VERSION', '0.1.0-beta.0')
+    vi.stubEnv('ONEWORKS_TEST_NPM_VIEW_FAIL_EXACT', '1')
+    vi.stubEnv(
+      'ONEWORKS_TEST_NPM_VIEW_VERSIONS',
+      JSON.stringify([
+        '0.1.0-alpha.9',
+        '0.1.0-beta.1',
+        '0.1.0-beta.2',
+        '0.1.0-rc.0',
+        '0.1.0',
+        '0.1.1-beta.0'
+      ])
+    )
+
+    await expect(resolvePublishedPackageVersion('@scope/pkg')).resolves.toBe('0.1.0-beta.2')
+  })
+
+  it('does not use an installed alpha cache for bootstrap beta resolution', async () => {
+    await installFakeNpm()
+    await writeCachedPackage('@scope/pkg', '0.1.0-alpha.0')
+    vi.stubEnv('ONEWORKS_BOOTSTRAP_PACKAGE_VERSION', '0.1.0-beta.0')
+    vi.stubEnv(
+      'ONEWORKS_TEST_NPM_VIEW_EXACT_VERSIONS',
+      JSON.stringify({
+        '@scope/pkg@0.1.0-beta.0': '0.1.0-beta.0'
+      })
+    )
+
+    await expect(resolvePublishedPackageVersion('@scope/pkg')).resolves.toBe('0.1.0-beta.0')
   })
 
   it('waits for npm view when no cached package version exists yet', async () => {

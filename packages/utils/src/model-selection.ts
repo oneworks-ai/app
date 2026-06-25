@@ -43,6 +43,14 @@ export const normalizeNonEmptyString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
 
+const normalizeStringList = (value: unknown) => (
+  typeof value === 'string'
+    ? [value]
+      .map(item => normalizeNonEmptyString(item))
+      .filter((item): item is string => Boolean(item))
+    : asStringArray(value)
+)
+
 export const DEFAULT_NATIVE_ADAPTER = 'codex'
 
 export const BUILTIN_NATIVE_ADAPTERS = [
@@ -257,6 +265,23 @@ const getModelServiceExtraRecord = (service: ModelServiceConfig | undefined, ada
   return asRecord(extra[adapter])
 }
 
+const resolveAdapterCompatibilityOverride = (params: {
+  adapter?: string
+  supportedAdapters?: unknown
+  unsupportedAdapters?: unknown
+}) => {
+  const adapter = normalizeNonEmptyString(params.adapter)
+  if (!adapter) return undefined
+
+  const unsupportedAdapters = normalizeStringList(params.unsupportedAdapters)
+  if (unsupportedAdapters.includes(adapter)) return false
+
+  const supportedAdapters = normalizeStringList(params.supportedAdapters)
+  if (supportedAdapters.length > 0) return supportedAdapters.includes(adapter)
+
+  return undefined
+}
+
 const hasResponsesModelServiceBaseUrl = (service: ModelServiceConfig | undefined) => (
   normalizeNonEmptyString(resolveModelServiceConfig(service).service?.apiBaseUrl)?.replace(/\/+$/u, '').endsWith(
     '/responses'
@@ -269,6 +294,13 @@ export const isModelServiceCompatibleWithAdapter = (params: {
 }) => {
   const adapter = normalizeNonEmptyString(params.adapter)
   if (!adapter || params.service == null) return true
+
+  const explicitCompatibility = resolveAdapterCompatibilityOverride({
+    adapter,
+    supportedAdapters: params.service.supportedAdapters,
+    unsupportedAdapters: params.service.unsupportedAdapters
+  })
+  if (explicitCompatibility != null) return explicitCompatibility
 
   if (adapter === 'codex') {
     const codexExtra = getModelServiceExtraRecord(params.service, 'codex')
@@ -283,6 +315,32 @@ export const isModelServiceCompatibleWithAdapter = (params: {
   return true
 }
 
+const resolveModelAdapterCompatibilityOverride = (params: {
+  adapter?: string
+  model?: string
+  models?: Record<string, ModelMetadataConfig>
+}) => {
+  const normalizedModel = normalizeNonEmptyString(params.model)
+  if (!normalizedModel) return undefined
+
+  const parsed = parseServiceModelSelector(normalizedModel)
+  const candidates = parsed == null
+    ? [normalizedModel]
+    : [parsed.selectorValue, parsed.modelName, parsed.serviceKey]
+
+  for (const key of candidates) {
+    const metadata = asRecord(params.models?.[key])
+    const compatibility = resolveAdapterCompatibilityOverride({
+      adapter: params.adapter,
+      supportedAdapters: metadata.supportedAdapters,
+      unsupportedAdapters: metadata.unsupportedAdapters
+    })
+    if (compatibility != null) return compatibility
+  }
+
+  return undefined
+}
+
 export const filterServiceModelsForAdapter = <TEntry extends ServiceModelEntry>(params: {
   adapter?: string
   modelServices: Record<string, ModelServiceConfig>
@@ -294,11 +352,12 @@ export const filterServiceModelsForAdapter = <TEntry extends ServiceModelEntry>(
 
   const modelServices = flattenModelServices(params.modelServices)
   return params.serviceModels.filter((entry) => {
-    const metadataAdapter = resolveModelDefaultAdapter({
+    const modelCompatibility = resolveModelAdapterCompatibilityOverride({
+      adapter,
       model: entry.selectorValue,
       models: params.models
     })
-    if (metadataAdapter != null) return metadataAdapter === adapter
+    if (modelCompatibility != null) return modelCompatibility
 
     return isModelServiceCompatibleWithAdapter({
       adapter,
@@ -473,7 +532,12 @@ export const resolveModelDisplayMetadata = (params: {
 export const resolveModelDefaultAdapter = (params: {
   model?: string
   models?: Record<string, ModelMetadataConfig>
-}) => normalizeNonEmptyString(resolveModelMetadata(params)?.defaultAdapter)
+}) => {
+  const metadata = resolveModelMetadata(params)
+  return normalizeNonEmptyString(metadata?.preferredAdapter) ??
+    normalizeStringList(metadata?.preferredAdapters)[0] ??
+    normalizeNonEmptyString(metadata?.defaultAdapter)
+}
 
 export const resolveModelConfiguredEffort = (params: {
   model?: string

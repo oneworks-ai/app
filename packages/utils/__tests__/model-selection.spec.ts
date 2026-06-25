@@ -194,7 +194,7 @@ describe('model selection utilities', () => {
     })).toBe('serviceB,modelX')
   })
 
-  it('filters routed services by adapter compatibility and metadata', () => {
+  it('filters routed services by explicit adapter compatibility', () => {
     const routedModelServices: Record<string, ModelServiceConfig> = {
       responses: {
         apiBaseUrl: 'https://service.example.com/v1/responses',
@@ -237,6 +237,22 @@ describe('model selection utilities', () => {
         models: {
           responses: {
             defaultAdapter: 'gemini'
+          }
+        },
+        serviceModels
+      }).map(entry => entry.selectorValue)
+    ).toEqual([
+      'responses,gpt-5',
+      'explicit,explicit-model'
+    ])
+
+    expect(
+      filterServiceModelsForAdapter({
+        adapter: 'codex',
+        modelServices: routedModelServices,
+        models: {
+          responses: {
+            unsupportedAdapters: ['codex']
           }
         },
         serviceModels

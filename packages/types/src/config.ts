@@ -196,6 +196,8 @@ export interface ModelServiceConfig {
   apiBaseUrl?: string
   apiKey?: string
   models?: string[]
+  supportedAdapters?: string[]
+  unsupportedAdapters?: string[]
   timeoutMs?: number
   maxOutputTokens?: number
   billing?: ModelServiceBillingConfig
@@ -365,7 +367,11 @@ export interface ModelMetadataConfig {
   title?: string
   description?: string
   icon?: string
+  preferredAdapter?: string
+  preferredAdapters?: string[]
   defaultAdapter?: string
+  supportedAdapters?: string[]
+  unsupportedAdapters?: string[]
   effort?: EffortLevel
 }
 

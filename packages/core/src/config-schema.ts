@@ -90,6 +90,8 @@ export const modelServiceConfigSchema = z.object({
   apiBaseUrl: z.string().min(1).optional().describe('Provider API base URL override'),
   apiKey: z.string().min(1).optional().describe('Provider API key'),
   models: z.array(z.string()).optional().describe('Supported model IDs'),
+  supportedAdapters: z.array(z.string()).optional().describe('Adapter keys this service explicitly supports'),
+  unsupportedAdapters: z.array(z.string()).optional().describe('Adapter keys this service explicitly does not support'),
   timeoutMs: z.number().int().positive().optional().describe('Request timeout in milliseconds'),
   maxOutputTokens: z.number().int().positive().optional().describe('Default max output tokens'),
   billing: jsonValueSchema.optional().describe('Provider billing metadata'),
@@ -123,7 +125,11 @@ export const modelMetadataConfigSchema = z.object({
   title: z.string().optional().describe('Display title'),
   description: z.string().optional().describe('Display description'),
   icon: z.string().optional().describe('Model icon override'),
-  defaultAdapter: z.string().optional().describe('Preferred adapter key'),
+  preferredAdapter: z.string().optional().describe('Preferred adapter key'),
+  preferredAdapters: z.array(z.string()).optional().describe('Preferred adapter keys'),
+  defaultAdapter: z.string().optional().describe('Legacy preferred adapter key'),
+  supportedAdapters: z.array(z.string()).optional().describe('Adapter keys this model explicitly supports'),
+  unsupportedAdapters: z.array(z.string()).optional().describe('Adapter keys this model explicitly does not support'),
   effort: effortLevelSchema.optional().describe('Recommended effort level')
 })
 
