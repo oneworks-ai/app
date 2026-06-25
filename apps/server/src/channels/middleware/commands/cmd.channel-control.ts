@@ -1,4 +1,5 @@
 import type { ChannelContext } from '../@types'
+import { getInboundAccessChannelId } from '../@utils'
 import { defineMessages } from '../i18n'
 import { addToAccessList, removeFromAccessList, updateChannelConfig } from './access'
 import { command, optionalArg, requiredArg } from './command-system'
@@ -142,8 +143,9 @@ export const channelControlCommands = () => [
       const isCurrentSession = await ensureCurrentSessionTarget(ctx, targetSessionId)
       if (!isGroupChat || !isCurrentSession) return
 
-      await addToAccessList(ctx, 'blockedGroups', ctx.inbound.channelId)
-      await ctx.reply(ctx.t('channelControl.stop.success', { groupId: ctx.inbound.channelId }))
+      const groupId = getInboundAccessChannelId(ctx.inbound)
+      await addToAccessList(ctx, 'blockedGroups', groupId)
+      await ctx.reply(ctx.t('channelControl.stop.success', { groupId }))
     }),
 
   command<ChannelContext>('start')
@@ -156,8 +158,9 @@ export const channelControlCommands = () => [
       const isCurrentSession = await ensureCurrentSessionTarget(ctx, targetSessionId)
       if (!isGroupChat || !isCurrentSession) return
 
-      await removeFromAccessList(ctx, 'blockedGroups', ctx.inbound.channelId)
-      await ctx.reply(ctx.t('channelControl.start.success', { groupId: ctx.inbound.channelId }))
+      const groupId = getInboundAccessChannelId(ctx.inbound)
+      await removeFromAccessList(ctx, 'blockedGroups', groupId)
+      await ctx.reply(ctx.t('channelControl.start.success', { groupId }))
     }),
 
   command<ChannelContext>('ban')

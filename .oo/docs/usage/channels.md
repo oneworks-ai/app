@@ -68,7 +68,7 @@ oneworks channel erjie send "oneworks 主命令也支持同样能力"
 - 需要覆盖目标时使用 `--to <receiveId>` 和 `--receive-id-type <type>`；本地 server 地址可用 `--server <baseUrl>` 覆盖。
 - One Works Chat History 是 agent 的内部工作记录和简短思路摘要，不等同于已经发送给外部频道用户的消息。对外可见的回复、澄清、通知、图片、文件或表情应通过 `oneworks channel` / `oneworks channel` CLI 触发；发送后 stop 文本只保留简短内部总结，避免复述已经发出的完整话术。
 - 文本包含 Markdown 反引号、`$`、括号等 shell 敏感字符时，不要用双引号包住整段正文；优先使用单引号 JSON payload（如上面的 `type: "text"` 示例），避免 shell 命令替换触发额外权限请求。
-- 文本载荷直接发送文本；对象载荷支持 `type: "image"` / `type: "file"` 和 `src`。WeChat 图片走 WechatApi `/message/postImage`，因此 `src` 应是平台可访问的图片 URL；支持文件发送的频道可以由 server 读取本地文件或下载 URL 后发送。
+- 文本载荷直接发送文本；对象载荷支持 `type: "image"` / `type: "file"` 和 `src`。WeChat 图片走 WechatApi `/message/postImage`，因此 `src` 应是平台可访问的图片 URL；Slack / Discord / Telegram 等支持文件发送的频道可以由 server 读取本地文件或下载 URL 后发送。
 - 平台自定义表情按通用 emoji registry 复用：`oneworks channel emoji list --platform wechat --sendable` 查看可发送素材，`oneworks channel emoji list --platform wechat --tag 赞同` 按标签找素材，`oneworks channel emoji list --platform wechat --recent --limit 5` 查看最近自动登记的素材，`oneworks channel emoji get thumbs-up-bear --platform wechat` 读取备注，`oneworks channel emoji send thumbs-up-bear --platform wechat` 发送。保存技术字段用 `oneworks channel emoji save thumbs-up-bear --platform wechat --emoji-md5 ... --emoji-size 102357 --label 点赞小熊 --alias 赞`；补充语义用 `oneworks channel emoji annotate thumbs-up-bear --platform wechat --tag 赞同 --note "适合回应认可、赞赏或没问题"`。WeChat 底层走 `/message/postEmoji`；只有在素材表里有 `emojiMd5` 和 `emojiSize` 时才能发送自定义表情，否则用普通文本或 Unicode emoji 回复。
 - WeChat 群聊里如果要发送文本并 @ 成员，正文里必须包含可见 `@昵称` / `@群名片` / `@所有人`，同时通过 CLI 参数传递真实 wxid：`oneworks channel send --at wxid_target "@张三 已处理"`；多人可重复 `--at` 或用 `--ats wxid_a,wxid_b`；@所有人使用 `--at-all "@所有人 服务已恢复"`，底层会转成 WechatApi `ats: "notify@all"`。
 - 所有 channel 群聊都不会自动发送 runtime 过程消息，只有 agent 显式调用 `oneworks channel` 才会往群里发普通内容；权限确认和 fatal error 仍会自动发送，避免任务无反馈地卡住或失败。
@@ -80,7 +80,7 @@ oneworks channel erjie send "oneworks 主命令也支持同样能力"
 以下指令都需要频道管理员权限。
 
 - `/silent [sessionId]`：静默当前或指定 One Works session。被静默的 session 仍可在 Chat History 里处理上下文，但不能再通过 `oneworks channel` / `oneworks channel` CLI 主动发送频道消息。
-- `/stop [sessionId]`：在群聊里停止接收当前群的普通消息。实现上会把当前群 `channelId` 写入 `access.blockedGroups`；管理员仍可发送 `/start` 恢复。
+- `/stop [sessionId]`：在群聊里停止接收当前群的普通消息。实现上会把当前平台根群 ID 写入 `access.blockedGroups`；Slack thread / Telegram topic 等更细绑定仍使用根群 ID 做访问控制。管理员仍可发送 `/start` 恢复。
 - `/start [sessionId]`：从 `access.blockedGroups` 移除当前群，恢复接收消息。
 - `/ban @senderId`：把指定 sender ID 写入 `access.blockedSenders`，后续该发送者消息会在进入会话上下文前被过滤。`@` 前缀会自动去掉；在 WeChat 群里建议使用聊天上下文里显示的原始 `wxid`。
 - 运行中的 agent 进程停止改用 `/session stop`，避免和群聊接收控制的 `/stop` 混淆。
@@ -106,6 +106,22 @@ oneworks channel erjie send "oneworks 主命令也支持同样能力"
 设为 `0` 可关闭群聊普通消息防抖。合并后的内容会保留每条消息的发送者前缀，例如 `[wxid_a]: ...` 与 `[wxid_b]: ...` 会一起进入同一次 agent 输入。包含图片等非纯文本 `contentItems` 的群聊消息会立即放行，避免合并时丢失附件。
 
 `multimodalModel` 可选；配置后，频道消息里包含图片附件时会用该模型创建或恢复会话。适合默认模型偏向低延迟文本、但不稳定支持视觉输入的场景；未配置时继续使用项目默认模型。
+
+## Hermes 对照覆盖
+
+Hermes gateway 的 platform 列表里包含 Telegram、Discord、Slack、WhatsApp、Signal、Matrix、Mattermost、Email、SMS、DingTalk、WeCom、Weixin、BlueBubbles、QQBot、Yuanbao、API Server、Webhook、MSGraph Webhook、Feishu 等通道。OneWorks 当前按自己的 channel 架构落地，不直接搬迁 Hermes adapter。
+
+当前已覆盖或已有替代实现：
+
+- `lark`：覆盖 Hermes `FEISHU` / Lark 场景。
+- `wechat`：覆盖 Hermes `WEIXIN` 场景。
+- `wecom`：覆盖 Hermes `WECOM` / `WECOM_CALLBACK` 场景。
+- `qq-channel`：覆盖 Hermes `QQBOT` 的频道机器人场景。
+- `imessage`：覆盖 Apple Messages / BlueBubbles 类个人消息场景的一部分。
+- `slack`、`discord`、`telegram`：覆盖 Hermes 同名平台的基础收发、会话绑定和工具摘要。
+- `sms`：覆盖 Hermes `SMS` 的 Twilio 短信 webhook 与回复场景。
+
+尚未内置的 Hermes-like 频道包括 DingTalk、Matrix、Email、WhatsApp / WhatsApp Cloud、Signal、Mattermost、BlueBubbles、Yuanbao、通用 API Server / Webhook / MSGraph Webhook / Relay。这些应按 OneWorks 的 `packages/channels/<type>` 包、统一 webhook route、channel access 和 session binding 约定逐个实现。
 
 ## WeChat 频道
 
@@ -156,3 +172,145 @@ WeChat 频道基于 WechatApi 回调接入，公网入口固定为：
 - 如果 WechatApi 账号在线但重启后不再推送真实用户消息，可配置 `"autoReconnectOnStart": true`；频道启动时会先对配置的 `appId` 调用 `/login/reconnection`，再重新注册 callback。
 - 如果 `access.admins` 缺失或为空，频道启动时 server 会在日志里打印 `/authorize-admin <token>` 授权指令。该指令不会通过微信自动下发；未授权用户只会收到“管理员尚未初始化，请联系服务维护者获取授权指令。”。维护者从启动日志中取出指令后，通过可信渠道交给目标用户，由对方在同一个 channel 发送该指令完成首次管理员授权。服务重启会生成新的内存 token。
 - package 级维护与配置细节见 `packages/channels/wechat/README.md`。
+
+## Slack 频道
+
+Slack 频道基于 Socket Mode 接收入站消息，使用 Slack Web API 发送回复。
+
+最小配置示例：
+
+```json
+{
+  "channels": {
+    "slack": {
+      "type": "slack",
+      "botToken": "xoxb-...",
+      "appToken": "xapp-...",
+      "botUserId": "U123456",
+      "access": {
+        "admins": ["U_ADMIN"]
+      }
+    }
+  }
+}
+```
+
+- Slack App 需要启用 Socket Mode，并给 bot token 配置发送消息、读取消息、添加 reaction、上传文件所需权限。
+- 私聊 bot 会直接进入 One Works session；频道里默认只处理 `@bot`、同一 thread 里的续聊消息，或 slash 风格的 channel 命令。专用频道如果希望所有普通消息都触发，可设置 `"respondToAllChannelMessages": true`。
+- 群聊中会按 Slack thread 生成独立绑定，例如 `C123#thread=1700000000.000001`；`access.allowedGroups` / `blockedGroups` 仍按根频道 ID（如 `C123`）判断。
+- 回复会默认发回触发消息所在 thread；`oneworks channel send --to 'C123#thread=...' --receive-id-type channel` 可主动发到指定 thread。
+- 当前支持基础收发、thread 绑定、reaction ack、文件上传，以及 One Works 工具调用摘要消息结构；工具摘要会由结构化数据渲染为 Slack 文本，Slack Block Kit 富展示可在 `packages/channels/slack` 内继续演进。
+- package 级配置和排障细节见 `packages/channels/slack/README.md`。
+
+## Discord 频道
+
+Discord 频道基于 Discord Gateway 接收入站消息，使用 Discord REST API 发送回复。
+
+最小配置示例：
+
+```json
+{
+  "channels": {
+    "discord": {
+      "type": "discord",
+      "botToken": "discord-bot-token",
+      "botUserId": "1234567890",
+      "access": {
+        "admins": ["1234567890"]
+      }
+    }
+  }
+}
+```
+
+- Discord Bot 需要打开 Gateway intent：Guild Messages、Direct Messages 和 Message Content。
+- DM 会直接进入 One Works session；服务器频道默认只处理 `@bot` 或 `/` 开头的文本。专用频道如果希望所有普通消息触发，可设置 `"respondToAllGuildMessages": true`。
+- 文本回复通过 `/channels/{channel_id}/messages` 发送，超过 Discord 单条限制时会拆分；文件通过 multipart 上传。
+- 纯 sticker / embed 消息会转成结构化文本摘要，避免进入 agent 时变成空消息。
+- 当前支持基础收发、mention / slash 文本触发、typing ack、文件上传、sticker/embed 结构化摘要，以及 One Works 工具调用摘要消息结构；工具摘要会由结构化数据渲染为 Discord 文本，Discord embed 富展示可在 `packages/channels/discord` 内继续演进。
+- 当前不包含 Discord slash command 注册、buttons/modal、thread 深度绑定或 Discord 专属 companion MCP。
+- package 级配置和排障细节见 `packages/channels/discord/README.md`。
+
+## Telegram 频道
+
+Telegram 频道基于 Bot API webhook 接入，公网入口固定为：
+
+```text
+<server public endpoint>/channels/telegram/<channelKey>/webhook?secret=<webhookSecret>
+```
+
+最小配置示例：
+
+```json
+{
+  "server": {
+    "public": {
+      "schema": "https",
+      "domain": "bot.example.com",
+      "port": 443
+    }
+  },
+  "channels": {
+    "telegram": {
+      "type": "telegram",
+      "botToken": "123456:ABC",
+      "botUsername": "oneworks_bot",
+      "webhookSecret": "replace-with-a-random-secret",
+      "autoSetWebhook": true,
+      "access": {
+        "admins": ["123456"]
+      }
+    }
+  }
+}
+```
+
+- 如果配置 `"autoSetWebhook": true`，频道启动时会用 `server.public` 或 channel 级 `serverBaseUrl` 调用 Telegram `setWebhook`；也可以手动在 Telegram Bot API 配置 webhook。
+- `webhookSecret` 可通过 query `secret`、`x-oneworks-channel-secret` 或 Telegram 的 `x-telegram-bot-api-secret-token` 校验。
+- 私聊、群组、supergroup 都会转成 One Works channel 入站消息；`/help@bot_username` 会归一化为 `/help`。
+- forum topic 会作为独立绑定，例如 `-1001#thread=42`，避免同一个 supergroup 下不同 topic 共用同一个 session/tag；`access.allowedGroups` / `blockedGroups` 仍按根 chat ID（如 `-1001`）判断。
+- 回复会带 Telegram 原生 `reply_parameters`，并在 topic 中保留 `message_thread_id`。
+- 当前支持文本/文件发送、webhook 入站、topic 绑定、reply 链，以及 One Works 工具调用摘要消息结构；工具摘要会由结构化数据渲染为 Telegram 文本，Telegram 原生格式化可在 `packages/channels/telegram` 内继续演进。
+- 当前不包含 topic 管理、pin/unpin、General topic 管理等 Telegram 管理员写操作。
+- package 级配置和排障细节见 `packages/channels/telegram/README.md`。
+
+## SMS 频道
+
+SMS 频道基于 Twilio Programmable Messaging 接收入站 webhook，并通过 Twilio Messages REST API 发送回复。公网入口固定为：
+
+```text
+<server public endpoint>/channels/sms/<channelKey>/webhook
+```
+
+最小配置示例：
+
+```json
+{
+  "server": {
+    "public": {
+      "schema": "https",
+      "domain": "bot.example.com",
+      "port": 443
+    }
+  },
+  "channels": {
+    "sms": {
+      "type": "sms",
+      "accountSid": "AC...",
+      "authToken": "twilio-auth-token",
+      "fromNumber": "+15550000000",
+      "webhookUrl": "https://bot.example.com/channels/sms/sms/webhook",
+      "access": {
+        "admins": ["+15551112222"]
+      }
+    }
+  }
+}
+```
+
+- Twilio 控制台的 Messaging webhook URL 必须与 `webhookUrl` 完全一致；如果不配置 `webhookUrl`，频道会用 `server.public` 或 channel 级 `serverBaseUrl` 和 channel key 推导。
+- `X-Twilio-Signature` 默认会被校验；本地开发临时调试才应设置 `"verifyWebhookSignature": false`。
+- 入站短信按发送方手机号建立 direct session，`access.admins` / `allowedSenders` / `blockedSenders` 也使用 E.164 手机号。
+- MMS 附件不会在第一版自动下载；Twilio media URL 和 content type 会作为结构化文本摘要进入 agent。
+- 出站短信会按 1600 字符拆分后逐条发送；工具调用摘要会渲染为适合短信的纯文本。
+- package 级配置和排障细节见 `packages/channels/sms/README.md`。
