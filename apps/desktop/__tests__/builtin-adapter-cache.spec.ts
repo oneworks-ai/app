@@ -724,11 +724,13 @@ describe('desktop built-in adapter package cache', () => {
     await expect(readFile(path.join(packageDir, 'dist', 'index.html'), 'utf8')).resolves.toBe('second')
   })
 
-  it('seeds bundled server and client runtime packages into the selected dev npm cache', async () => {
+  it('seeds bundled cli, server, and client runtime packages into the selected dev npm cache', async () => {
     const tempDir = await createTempDir('oneworks-desktop-runtime-cache-')
     const homeDir = path.join(tempDir, 'home')
+    const cliPackage = '@oneworks/cli'
     const serverPackage = '@oneworks/server'
     const clientPackage = '@oneworks/client'
+    const cliSource = await writeSourcePluginPackage(tempDir, cliPackage, '1.2.3')
     const serverSource = await writeSourcePluginPackage(tempDir, serverPackage, '1.2.3')
     const clientSource = await writeSourceStaticPackage(tempDir, clientPackage, '1.2.3', 'client-dist')
 
@@ -737,9 +739,15 @@ describe('desktop built-in adapter package cache', () => {
         [PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV]: 'dev-runtime'
       },
       homeDir,
-      resolvePackageDir: packageName => packageName === serverPackage ? serverSource : clientSource
+      resolvePackageDir: (packageName) => {
+        if (packageName === cliPackage) return cliSource
+        if (packageName === serverPackage) return serverSource
+        return clientSource
+      }
     })
 
+    const cliCacheDir = resolveNpmPackageCacheDir(cliPackage, 'dev-runtime', homeDir)
+    const cliPackageDir = resolveNpmPackageInstallDir(cliCacheDir, cliPackage)
     const serverCacheDir = resolveNpmPackageCacheDir(serverPackage, 'dev-runtime', homeDir)
     const serverPackageDir = resolveNpmPackageInstallDir(serverCacheDir, serverPackage)
     const clientPackageDir = resolveNpmPackageInstallDir(
@@ -747,9 +755,11 @@ describe('desktop built-in adapter package cache', () => {
       clientPackage
     )
     expect(seeded.map(item => item.cacheDir)).toEqual([
+      cliCacheDir,
       serverCacheDir,
       resolveNpmPackageCacheDir(clientPackage, 'dev-runtime', homeDir)
     ])
+    expect(require(path.join(cliPackageDir, 'dist', 'hooks.js'))).toEqual({ ok: true })
     expect(require(path.join(serverPackageDir, 'dist', 'hooks.js'))).toEqual({ ok: true })
     await expect(readFile(path.join(clientPackageDir, 'dist', 'index.html'), 'utf8')).resolves.toBe('client-dist')
   })

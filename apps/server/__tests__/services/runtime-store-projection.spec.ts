@@ -327,6 +327,43 @@ describe('runtime store projection', () => {
     }))
   })
 
+  it('does not mark sessions terminal when adapter operations complete or fail', () => {
+    project({
+      id: 'evt-started',
+      seq: 1,
+      sessionId: 'sess-dev',
+      type: 'session_started',
+      status: 'running'
+    })
+    project({
+      id: 'evt-operation-completed',
+      seq: 2,
+      sessionId: 'sess-dev',
+      type: 'operation_completed',
+      status: 'completed',
+      operationId: 'adapter-cli-prepare',
+      message: 'Adapter CLI is ready.'
+    })
+
+    expect(db.getSession('sess-dev')).toEqual(expect.objectContaining({
+      status: 'running'
+    }))
+
+    project({
+      id: 'evt-operation-failed',
+      seq: 3,
+      sessionId: 'sess-dev',
+      type: 'operation_failed',
+      status: 'failed',
+      operationId: 'adapter-cli-prepare',
+      message: 'Adapter CLI preparation failed.'
+    })
+
+    expect(db.getSession('sess-dev')).toEqual(expect.objectContaining({
+      status: 'running'
+    }))
+  })
+
   it('does not regress completed sessions to running when old start and message events replay', () => {
     project({
       id: 'evt-completed',

@@ -53,6 +53,8 @@ worktree 场景下，旧项目共享 CLI cache 会通过 [`packages/utils/src/pr
 用户侧版本控制入口：
 
 - npm adapter：`adapters.<name>.cli.package`、`adapters.<name>.cli.version`、`adapters.<name>.cli.npmPath`
+- Codex adapter 使用 `>=0.130.0` 作为兼容范围；默认 managed 安装 `@openai/codex@latest`，已有系统 / 显式 path CLI 只要满足兼容范围即可复用；fallback 还会检查用户登录 shell 里的 `codex`，macOS 额外把 Codex.app 包内 CLI 作为系统候选，所有 fallback 候选都必须先通过版本兼容校验
+- Claude Code adapter 使用 `>=2.1.114` 作为 `claude` 兼容范围、`>=1.0.73` 作为 `ccr` 兼容范围；默认 managed 安装 latest，并检查用户登录 shell 里的 `claude` / `ccr` fallback，所有 fallback 候选同样必须先通过版本兼容校验
 - `claude-code` 有两套 CLI：`cli` 是 Claude Code，`routerCli` 是 Claude Code Router
 - Kimi：`adapters.kimi.cli.package`、`adapters.kimi.cli.version`、`adapters.kimi.cli.python`、`adapters.kimi.cli.uvPath`
 - 环境变量覆盖遵循 `__ONEWORKS_PROJECT_ADAPTER_<NAME>_INSTALL_PACKAGE__`、`__ONEWORKS_PROJECT_ADAPTER_<NAME>_INSTALL_VERSION__`、`__ONEWORKS_PROJECT_ADAPTER_<NAME>_AUTO_INSTALL__`
@@ -193,8 +195,6 @@ CLI / client / server / hook 入口在切换 `HOME` 到 project mock home 后，
 
 ## 共享层职责边界
 
-- [`packages/task/src/run.ts`](../../../packages/task/src/run.ts)
-  - 负责 adapter/model 选择、asset plan 和 hook bridge 去重
-- [`packages/workspace-assets/src/adapter-asset-plan.ts`](../../../packages/workspace-assets/src/adapter-asset-plan.ts)
-  - 负责“这个资产对该 adapter 应该是 native / translated / prompt / skipped”
+- [`packages/task/src/run.ts`](../../../packages/task/src/run.ts) 负责 adapter/model 选择、asset plan 和 hook bridge 去重
+- [`packages/workspace-assets/src/adapter-asset-plan.ts`](../../../packages/workspace-assets/src/adapter-asset-plan.ts) 负责“这个资产对该 adapter 应该是 native / translated / prompt / skipped”
 - adapter 自己负责最终的原生目录、参数和 env

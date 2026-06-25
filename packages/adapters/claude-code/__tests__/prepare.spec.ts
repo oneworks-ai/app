@@ -12,8 +12,10 @@ import { ensureClaudeCodeRouterReady } from '../src/ccr/daemon'
 import { prepareClaudeExecution } from '../src/claude/prepare'
 
 vi.mock('../src/ccr/paths', () => ({
+  CLAUDE_CODE_CLI_COMPATIBILITY_RANGE: '>=0.0.0-test',
   CLAUDE_CODE_CLI_PACKAGE: '@anthropic-ai/claude-code',
   CLAUDE_CODE_CLI_VERSION: '0.0.0-test',
+  resolveClaudeCodeSystemBinaryPaths: vi.fn(async () => []),
   resolveClaudeCliPath: vi.fn(() => '/mock/claude')
 }))
 

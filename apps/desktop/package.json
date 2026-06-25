@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/desktop",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-beta.0",
   "private": true,
   "description": "One Works desktop shell",
   "author": "One Works contributors",
@@ -35,6 +35,7 @@
     "@oneworks/adapter-gemini": "workspace:*",
     "@oneworks/adapter-kimi": "workspace:*",
     "@oneworks/adapter-opencode": "workspace:*",
+    "@oneworks/cli": "workspace:*",
     "@oneworks/cli-helper": "workspace:*",
     "@oneworks/config": "workspace:*",
     "@oneworks/icon": "workspace:*",

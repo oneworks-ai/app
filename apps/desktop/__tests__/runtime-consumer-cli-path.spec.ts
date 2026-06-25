@@ -6,12 +6,13 @@ import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const electronMock = vi.hoisted(() => ({
+  appPath: undefined as string | undefined,
   isPackaged: false
 }))
 
 vi.mock('electron', () => ({
   app: {
-    getAppPath: () => path.resolve(__dirname, '..'),
+    getAppPath: () => electronMock.appPath ?? path.resolve(__dirname, '..'),
     getPath: () => path.join('/tmp', 'oneworks-desktop-test'),
     get isPackaged() {
       return electronMock.isPackaged
@@ -22,6 +23,7 @@ vi.mock('electron', () => ({
 const bundledBootstrapPattern = /(?:oneworks|apps[\\/]bootstrap)[\\/]cli\.js$/
 
 afterEach(() => {
+  electronMock.appPath = undefined
   electronMock.isPackaged = false
   vi.resetModules()
   vi.unstubAllEnvs()
@@ -113,6 +115,43 @@ describe('desktop runtime consumer bootstrap path', () => {
       expect(resolveDesktopDevRuntimeVersionEnv({})).toEqual({
         __ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__: 'dev-packaged',
         __ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__: 'dev-packaged'
+      })
+    } finally {
+      if (previousResourcesPath == null) {
+        delete (process as { resourcesPath?: string }).resourcesPath
+      } else {
+        Object.defineProperty(process, 'resourcesPath', previousResourcesPath)
+      }
+      await rm(tempDir, { force: true, recursive: true })
+    }
+  })
+
+  it('uses the packaged app version as the release runtime cache version', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'oneworks-desktop-release-runtime-version-'))
+    const previousResourcesPath = Object.getOwnPropertyDescriptor(process, 'resourcesPath')
+    try {
+      const appDir = path.join(tempDir, 'app')
+      const resourcesDir = path.join(tempDir, 'resources')
+      await mkdir(appDir, { recursive: true })
+      await mkdir(resourcesDir, { recursive: true })
+      await writeFile(
+        path.join(appDir, 'package.json'),
+        JSON.stringify({ name: '@oneworks/desktop', version: '9.8.7-beta.0' }),
+        'utf8'
+      )
+      Object.defineProperty(process, 'resourcesPath', {
+        configurable: true,
+        value: resourcesDir
+      })
+      electronMock.appPath = appDir
+      electronMock.isPackaged = true
+      vi.resetModules()
+
+      const { resolveDesktopDevRuntimeVersionEnv } = await import('../src/main/workspace-service-manager')
+
+      expect(resolveDesktopDevRuntimeVersionEnv({})).toEqual({
+        __ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__: '9.8.7-beta.0',
+        __ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__: '9.8.7-beta.0'
       })
     } finally {
       if (previousResourcesPath == null) {

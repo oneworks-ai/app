@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/managed-plugins",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-beta.0",
   "description": "Managed native plugin installation and sync for One Works",
   "repository": {
     "type": "git",

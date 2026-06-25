@@ -1858,7 +1858,7 @@
       "transcribeFailed": "Speech recognition failed"
     },
     "sessionOperation": {
-      "codexCliPrepare": "Preparing Codex CLI. If no compatible system install is available, it will be installed now…"
+      "adapterCliPrepare": "Preparing adapter CLI. If no compatible system install is available, it will be installed now…"
     },
     "stop": "Stop",
     "result": "Result",

@@ -76,6 +76,13 @@ type PrintInputCapableSession = ExitControllableSession & {
   respondInteraction?: (id: string, data: string | string[]) => void | Promise<void>
 }
 
+const ADAPTER_CLI_PREPARE_OPERATION_ID = 'adapter-cli-prepare'
+const ADAPTER_CLI_PREPARE_OPERATION_TITLE = 'Adapter CLI'
+const ADAPTER_CLI_PREPARE_STARTED_MESSAGE =
+  'Preparing adapter CLI. If no compatible system installation is available, One Works will install it now.'
+const ADAPTER_CLI_PREPARE_COMPLETED_MESSAGE = 'Adapter CLI is ready.'
+const ADAPTER_CLI_PREPARE_FAILED_MESSAGE = 'Adapter CLI preparation failed.'
+
 const resolveRunPrimaryWorkspaceFolder = (
   workspaceFolder: string,
   fallbackWorkspaceFolder: string
@@ -216,6 +223,7 @@ Notes:
         }
         | undefined
       let activeRuntimeEventSink: Awaited<ReturnType<typeof createRuntimeEventSink>> | undefined
+      let adapterCliPrepareOperationActive = false
       try {
         const description = descriptionArgs.join(' ')
         opts.permissionMode = resolvePermissionModeOption(opts.permissionMode, opts.yolo)
@@ -799,7 +807,23 @@ Notes:
           printIdleTimeoutController.start()
         }
 
+        const recordAdapterCliPrepareOperation = (
+          type: 'operation_started' | 'operation_completed' | 'operation_failed',
+          message: string,
+          error?: string
+        ) => {
+          adapterCliPrepareOperationActive = type === 'operation_started'
+          return runtimeEventSink?.recordOperation({
+            type,
+            operationId: ADAPTER_CLI_PREPARE_OPERATION_ID,
+            title: ADAPTER_CLI_PREPARE_OPERATION_TITLE,
+            message,
+            ...(error != null ? { error } : {})
+          }) ?? Promise.resolve()
+        }
+
         const runStartedAt = startupProfiler.now()
+        await recordAdapterCliPrepareOperation('operation_started', ADAPTER_CLI_PREPARE_STARTED_MESSAGE)
         const { session, resolvedAdapter } = await run({
           adapter: record.resume.resolvedAdapter ?? record.resume.taskOptions.adapter,
           cwd: record.resume.taskOptions.cwd ?? record.resume.cwd,
@@ -813,6 +837,15 @@ Notes:
             printIdleTimeoutController?.recordEvent()
             void runtimeEventSink?.handleAdapterEvent(event)
             if (event.type === 'init') {
+              if (adapterCliPrepareOperationActive) {
+                adapterCliPrepareOperationActive = false
+                void runtimeEventSink?.recordOperation({
+                  type: 'operation_completed',
+                  operationId: ADAPTER_CLI_PREPARE_OPERATION_ID,
+                  title: ADAPTER_CLI_PREPARE_OPERATION_TITLE,
+                  message: ADAPTER_CLI_PREPARE_COMPLETED_MESSAGE
+                })
+              }
               updateInitRecord(event.data, boundSession?.pid)
             }
             if (event.type === 'message') {
@@ -948,6 +981,7 @@ Notes:
           })
         }
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
         const failureSink = activeRuntimeEventSink ??
           (runtimeConsumerContext == null
             ? undefined
@@ -959,6 +993,16 @@ Notes:
               }))
         if (failureSink != null) {
           try {
+            if (adapterCliPrepareOperationActive) {
+              adapterCliPrepareOperationActive = false
+              await failureSink.recordOperation({
+                type: 'operation_failed',
+                operationId: ADAPTER_CLI_PREPARE_OPERATION_ID,
+                title: ADAPTER_CLI_PREPARE_OPERATION_TITLE,
+                message: ADAPTER_CLI_PREPARE_FAILED_MESSAGE,
+                error: message
+              })
+            }
             await failureSink.recordFailure(error)
             await failureSink.flush()
           } catch (sinkError) {
@@ -966,7 +1010,6 @@ Notes:
             console.error(`[runtime-protocol] Failed to record runtime failure: ${message}`)
           }
         }
-        const message = error instanceof Error ? error.message : String(error)
         console.error(message)
         process.exit(1)
       }

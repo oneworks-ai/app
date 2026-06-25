@@ -529,7 +529,12 @@ export function ChatHistoryView({
       title: agentRoomTranscript.room.title
     }
   }, [agentRoomTranscript])
-  const showThinkingIndicator = isCreating || session?.status === 'running' || sessionActivityLabel != null
+  const isInitialSessionRunWithoutAssistant = !isAgentRoomMode &&
+    session?.status === 'running' &&
+    !messages.some(message => message.role === 'assistant')
+  const resolvedSessionActivityLabel = sessionActivityLabel ??
+    (isInitialSessionRunWithoutAssistant ? t('chat.sessionOperation.adapterCliPrepare') : undefined)
+  const showThinkingIndicator = isCreating || session?.status === 'running' || resolvedSessionActivityLabel != null
   const historyRenderCount = (
     isAgentRoomMode ? agentRoomTranscript.room.messages.length : messages.length
   ) +
@@ -1927,7 +1932,9 @@ export function ChatHistoryView({
             ))}
             {showThinkingIndicator && (
               <div className='chat-thinking-indicator' role='status' aria-live='polite'>
-                <span className='chat-thinking-indicator__text'>{sessionActivityLabel ?? t('chat.thinking')}</span>
+                <span className='chat-thinking-indicator__text'>
+                  {resolvedSessionActivityLabel ?? t('chat.thinking')}
+                </span>
               </div>
             )}
             <div ref={messagesEndRef} />

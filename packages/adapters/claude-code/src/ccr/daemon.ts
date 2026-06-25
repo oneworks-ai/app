@@ -12,9 +12,11 @@ import { ensureManagedNpmCli } from '@oneworks/utils/managed-npm-cli'
 import { resolveClaudeCodeAdapterConfig } from '../runtime-config'
 import { generateDefaultCCRConfigJSON } from './config'
 import {
+  CLAUDE_CODE_ROUTER_CLI_COMPATIBILITY_RANGE,
   CLAUDE_CODE_ROUTER_CLI_PACKAGE,
   CLAUDE_CODE_ROUTER_CLI_VERSION,
   resolveAdapterCliPath,
+  resolveClaudeCodeRouterSystemBinaryPaths,
   resolveTransformerRuntimePreloadPath
 } from './paths'
 
@@ -271,6 +273,9 @@ export const ensureClaudeCodeRouterReady = async (
         logger: {
           info: () => undefined
         },
+        preferSystem: adapterOptions.routerCli?.source == null,
+        systemBinaryPaths: await resolveClaudeCodeRouterSystemBinaryPaths(env),
+        versionRange: CLAUDE_CODE_ROUTER_CLI_COMPATIBILITY_RANGE,
         versionArgs: ['version']
       })
       : await routerDeps.resolveCliPath()

@@ -327,6 +327,19 @@ export const shouldApplyHistoryRefreshResult = ({
   sessionId: string
 }) => activeSessionId === sessionId && requestSeq >= appliedRequestSeq
 
+export const shouldRefreshHistoryForSessionUpdate = (
+  currentSession: Session,
+  updatedSession: SessionUpdate
+) => {
+  if (isDeletedSessionUpdate(updatedSession) || updatedSession.id !== currentSession.id) {
+    return false
+  }
+
+  return updatedSession.status !== currentSession.status ||
+    updatedSession.lastMessage !== currentSession.lastMessage ||
+    updatedSession.messageCount !== currentSession.messageCount
+}
+
 const getHistoryRefreshRetryDelay = (retryAttempt: number) => 800 * 2 ** retryAttempt
 
 const applyMessageEvent = (currentMessages: ChatMessage[], data: WSEvent, context?: MessageEventContext) => {
@@ -936,6 +949,7 @@ export function useChatSessionMessages({
 
     let isDisposed = false
     let cleanup: (() => void) | undefined
+    const openHistoryRefreshTimers: Array<ReturnType<typeof setTimeout>> = []
     const normalizedModel = modelForQuery ?? ''
     const modelChanged = modelForQuery != null &&
       lastConnectedModelRef.current != null &&
@@ -1006,6 +1020,15 @@ export function useChatSessionMessages({
             })
             return next
           })
+          if (session.status === 'running') {
+            for (const delayMs of [500, 1500, 3000]) {
+              const refreshTimer = setTimeout(() => {
+                if (isDisposed) return
+                void refreshHistory({ updateReadiness: false })
+              }, delayMs)
+              openHistoryRefreshTimers.push(refreshTimer)
+            }
+          }
         },
         onMessage(data: WSEvent) {
           if (isDisposed) return
@@ -1050,6 +1073,9 @@ export function useChatSessionMessages({
               removeSessionViewCache(updatedSession.id)
             } else if (isSessionCompactionCompleteStatus(updatedSession.status)) {
               updateSessionCompactionEvents(markSessionCompactionsCompressed)
+            }
+            if (shouldRefreshHistoryForSessionUpdate(session, updatedSession)) {
+              void refreshHistory({ updateReadiness: false })
             }
             updateSessionCaches(mutate, updatedSession)
             return
@@ -1187,6 +1213,9 @@ export function useChatSessionMessages({
     return () => {
       isDisposed = true
       clearTimeout(timer)
+      for (const refreshTimer of openHistoryRefreshTimers) {
+        clearTimeout(refreshTimer)
+      }
       cleanup?.()
     }
   }, [

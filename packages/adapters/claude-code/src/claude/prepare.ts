@@ -13,7 +13,13 @@ import {
 import { ensureManagedNpmCli } from '@oneworks/utils/managed-npm-cli'
 
 import { ensureClaudeCodeRouterReady } from '../ccr/daemon'
-import { CLAUDE_CODE_CLI_PACKAGE, CLAUDE_CODE_CLI_VERSION, resolveClaudeCliPath } from '../ccr/paths'
+import {
+  CLAUDE_CODE_CLI_COMPATIBILITY_RANGE,
+  CLAUDE_CODE_CLI_PACKAGE,
+  CLAUDE_CODE_CLI_VERSION,
+  resolveClaudeCliPath,
+  resolveClaudeCodeSystemBinaryPaths
+} from '../ccr/paths'
 import { resolveClaudeCodeAdapterConfig } from '../runtime-config'
 import { stageClaudePluginDirs } from './plugins'
 
@@ -615,7 +621,10 @@ export const prepareClaudeExecution = async (
     defaultPackageName: CLAUDE_CODE_CLI_PACKAGE,
     defaultVersion: CLAUDE_CODE_CLI_VERSION,
     env: executionEnv,
-    logger: ctx.logger
+    logger: ctx.logger,
+    preferSystem: nativeConfig.cli?.source == null,
+    systemBinaryPaths: await resolveClaudeCodeSystemBinaryPaths(executionEnv),
+    versionRange: CLAUDE_CODE_CLI_COMPATIBILITY_RANGE
   })
   ctx.env.__ONEWORKS_PROJECT_ADAPTER_CLAUDE_CODE_CLI_PATH__ = cliPath
 
