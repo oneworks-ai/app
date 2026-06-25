@@ -4,14 +4,17 @@ import { dirname, extname, resolve } from 'node:path'
 import process from 'node:process'
 
 import type { ManagedNpmCliConfig } from '@oneworks/utils/managed-npm-cli'
-import { resolveManagedNpmCliBinaryPath } from '@oneworks/utils/managed-npm-cli'
+import { resolveManagedNpmCliBinaryPath, resolveUserShellBinaryPath } from '@oneworks/utils/managed-npm-cli'
 
 const require = createRequire(import.meta.url ?? __filename)
 
 export const CLAUDE_CODE_CLI_PACKAGE = '@anthropic-ai/claude-code'
-export const CLAUDE_CODE_CLI_VERSION = '2.1.114'
+export const CLAUDE_CODE_CLI_VERSION = 'latest'
+export const CLAUDE_CODE_CLI_COMPATIBILITY_RANGE = '>=2.1.114'
 export const CLAUDE_CODE_ROUTER_CLI_PACKAGE = '@musistudio/claude-code-router'
-export const CLAUDE_CODE_ROUTER_CLI_VERSION = '1.0.73'
+export const CLAUDE_CODE_ROUTER_CLI_VERSION = 'latest'
+export const CLAUDE_CODE_ROUTER_CLI_COMPATIBILITY_RANGE = '>=1.0.73'
+const USER_SHELL_CHECK_TIMEOUT_MS = 3000
 
 export const toRealPath = (targetPath: string) => {
   try {
@@ -55,6 +58,28 @@ const resolvePackageBinPathOrUndefined = (packageName: string, binName?: string)
   } catch {
     return undefined
   }
+}
+
+export const resolveClaudeCodeSystemBinaryPaths = async (
+  env: Record<string, string | null | undefined> = process.env
+) => {
+  const userShellClaudePath = await resolveUserShellBinaryPath({
+    binaryName: 'claude',
+    env,
+    timeoutMs: USER_SHELL_CHECK_TIMEOUT_MS
+  })
+  return userShellClaudePath == null ? [] : [userShellClaudePath]
+}
+
+export const resolveClaudeCodeRouterSystemBinaryPaths = async (
+  env: Record<string, string | null | undefined> = process.env
+) => {
+  const userShellRouterPath = await resolveUserShellBinaryPath({
+    binaryName: 'ccr',
+    env,
+    timeoutMs: USER_SHELL_CHECK_TIMEOUT_MS
+  })
+  return userShellRouterPath == null ? [] : [userShellRouterPath]
 }
 
 /**

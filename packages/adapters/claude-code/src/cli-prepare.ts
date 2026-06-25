@@ -2,12 +2,16 @@ import { defineAdapterCliPreparer } from '@oneworks/types'
 import { ensureManagedNpmCli } from '@oneworks/utils/managed-npm-cli'
 
 import {
+  CLAUDE_CODE_CLI_COMPATIBILITY_RANGE,
   CLAUDE_CODE_CLI_PACKAGE,
   CLAUDE_CODE_CLI_VERSION,
+  CLAUDE_CODE_ROUTER_CLI_COMPATIBILITY_RANGE,
   CLAUDE_CODE_ROUTER_CLI_PACKAGE,
   CLAUDE_CODE_ROUTER_CLI_VERSION,
   resolveAdapterCliPath,
-  resolveClaudeCliPath
+  resolveClaudeCliPath,
+  resolveClaudeCodeRouterSystemBinaryPaths,
+  resolveClaudeCodeSystemBinaryPaths
 } from './ccr/paths'
 import { resolveClaudeCodeAdapterConfig } from './runtime-config'
 
@@ -19,15 +23,15 @@ const prepareClaudeCli = async (
     adapterKey: 'claude_code',
     binaryName: 'claude',
     bundledPath: resolveClaudeCliPath(ctx.cwd, ctx.env, adapterConfig.cli),
-    config: {
-      ...adapterConfig.cli,
-      source: adapterConfig.cli?.source ?? 'managed'
-    },
+    config: adapterConfig.cli,
     cwd: ctx.cwd,
     defaultPackageName: CLAUDE_CODE_CLI_PACKAGE,
     defaultVersion: CLAUDE_CODE_CLI_VERSION,
     env: ctx.env,
-    logger: ctx.logger
+    logger: ctx.logger,
+    preferSystem: adapterConfig.cli?.source == null,
+    systemBinaryPaths: await resolveClaudeCodeSystemBinaryPaths(ctx.env),
+    versionRange: CLAUDE_CODE_CLI_COMPATIBILITY_RANGE
   })
 
   return {
@@ -46,15 +50,15 @@ const prepareRouterCli = async (
     adapterKey: 'claude_code_router',
     binaryName: 'ccr',
     bundledPath: resolveAdapterCliPath(ctx.cwd, ctx.env, adapterConfig.routerCli),
-    config: {
-      ...adapterConfig.routerCli,
-      source: adapterConfig.routerCli?.source ?? 'managed'
-    },
+    config: adapterConfig.routerCli,
     cwd: ctx.cwd,
     defaultPackageName: CLAUDE_CODE_ROUTER_CLI_PACKAGE,
     defaultVersion: CLAUDE_CODE_ROUTER_CLI_VERSION,
     env: ctx.env,
     logger: ctx.logger,
+    preferSystem: adapterConfig.routerCli?.source == null,
+    systemBinaryPaths: await resolveClaudeCodeRouterSystemBinaryPaths(ctx.env),
+    versionRange: CLAUDE_CODE_ROUTER_CLI_COMPATIBILITY_RANGE,
     versionArgs: ['version']
   })
 

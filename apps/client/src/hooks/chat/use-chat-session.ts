@@ -96,10 +96,13 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
   const handlePermissionModeChange = useSessionPermissionModeChange(session?.id, setPermissionMode)
   const lastObservedSessionRef = useRef<ObservedSessionSelection | null>(null)
   const isThinking = session?.status === 'running'
+  const isInitialRunWithoutAssistant = isThinking && !messages.some(message => message.role === 'assistant')
   const sessionActivityLabel = sessionOperationInfo == null
-    ? undefined
-    : sessionOperationInfo.operationId === 'adapter-cli-prepare' && sessionOperationInfo.adapter === 'codex'
-    ? t('chat.sessionOperation.codexCliPrepare')
+    ? isInitialRunWithoutAssistant
+      ? t('chat.sessionOperation.adapterCliPrepare')
+      : undefined
+    : sessionOperationInfo.operationId === 'adapter-cli-prepare'
+    ? t('chat.sessionOperation.adapterCliPrepare')
     : sessionOperationInfo.message ?? sessionOperationInfo.title ?? sessionOperationInfo.summary ?? t('chat.thinking')
 
   useEffect(() => {

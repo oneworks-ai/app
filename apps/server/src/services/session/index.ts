@@ -742,9 +742,6 @@ export async function startAdapterSession(
       type: 'operation_started' | 'operation_completed' | 'operation_failed',
       message?: string
     ) => {
-      if ((resolvedAdapter ?? options.adapter) !== 'codex') {
-        return
-      }
       if (activeAdapterRunStore.get(sessionId) !== runId) {
         return
       }
@@ -878,7 +875,7 @@ export async function startAdapterSession(
 
       emitAdapterCliPrepareOperation(
         'operation_started',
-        'Preparing Codex CLI. If no compatible system installation is available, One Works will install it now.'
+        'Preparing adapter CLI. If no compatible system installation is available, One Works will install it now.'
       )
 
       const { session } = await run({
@@ -924,7 +921,7 @@ export async function startAdapterSession(
           switch (event.type) {
             case 'init':
               if (adapterCliPrepareOperationActive) {
-                emitAdapterCliPrepareOperation('operation_completed', 'Codex CLI is ready.')
+                emitAdapterCliPrepareOperation('operation_completed', 'Adapter CLI is ready.')
               }
               if ('model' in (event.data as any)) {
                 const reportedModel = typeof (event.data as any).model === 'string'
@@ -1366,7 +1363,7 @@ export async function startAdapterSession(
       if (adapterCliPrepareOperationActive) {
         emitAdapterCliPrepareOperation(
           'operation_failed',
-          err instanceof Error ? err.message : 'Codex CLI preparation failed.'
+          err instanceof Error ? err.message : 'Adapter CLI preparation failed.'
         )
       }
       if (activeAdapterRunStore.get(sessionId) === runId) {

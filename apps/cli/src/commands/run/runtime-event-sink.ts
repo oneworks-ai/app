@@ -24,6 +24,14 @@ type RuntimeEventAppendDraft = Omit<RuntimeEventDraft, 'sessionId'> & {
   sessionId?: string
 }
 
+export interface RuntimeOperationEventInput {
+  error?: string
+  message: string
+  operationId: string
+  title: string
+  type: 'operation_started' | 'operation_completed' | 'operation_failed'
+}
+
 export interface RuntimeEventSinkOptions {
   cwd: string
   env?: NodeJS.ProcessEnv
@@ -264,6 +272,24 @@ export class RuntimeEventSink {
       commandId: command.commandId,
       ...(command.source != null ? { source: command.source } : {}),
       visibility: 'private'
+    })
+  }
+
+  recordOperation(input: RuntimeOperationEventInput) {
+    const status = input.type === 'operation_started'
+      ? 'running'
+      : input.type === 'operation_completed'
+      ? 'completed'
+      : 'failed'
+    return this.append({
+      type: input.type,
+      status,
+      operationId: input.operationId,
+      title: input.title,
+      message: input.message,
+      summary: input.message,
+      ...(input.error != null ? { error: input.error } : {}),
+      visibility: 'system'
     })
   }
 

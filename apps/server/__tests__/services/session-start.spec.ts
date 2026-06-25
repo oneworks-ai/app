@@ -3,6 +3,7 @@ import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getDb } from '#~/db/index.js'
+import { resolveSessionRuntimeStoreRoot } from '#~/services/runtime-store/session-control.js'
 import { processUserMessage, resetSessionServiceState, startAdapterSession } from '#~/services/session/index.js'
 import {
   adapterSessionStore,
@@ -10,7 +11,6 @@ import {
   externalSessionStore,
   notifySessionUpdated
 } from '#~/services/session/runtime.js'
-import { resolveProjectHomePath } from '@oneworks/utils'
 
 const mocks = vi.hoisted(() => ({
   run: vi.fn(),
@@ -371,15 +371,7 @@ describe('startAdapterSession', () => {
     const previousProjectOoBaseDir = process.env.__ONEWORKS_PROJECT_BASE_DIR__
     const workspaceFolder = '/Users/yijie/codes/oneworks-app/.oo/worktrees/sessions/sess-1/oneworks-app'
     const staleProjectOoBaseDir = '/Users/yijie/.codex/worktrees/0042/oneworks-app/.oneworks'
-    const runtimeRoot = resolveProjectHomePath(
-      workspaceFolder,
-      {
-        ...process.env,
-        __ONEWORKS_PROJECT_LAUNCH_CWD__: workspaceFolder,
-        __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspaceFolder
-      },
-      'runtime'
-    )
+    const runtimeRoot = resolveSessionRuntimeStoreRoot(workspaceFolder)
     process.env.__ONEWORKS_PROJECT_BASE_DIR__ = staleProjectOoBaseDir
     mocks.resolveSessionWorkspace.mockResolvedValueOnce({
       workspaceFolder
@@ -1079,7 +1071,12 @@ describe('startAdapterSession', () => {
         title: 'Codex generated title'
       })
     )
-    expect(saveMessage).not.toHaveBeenCalled()
+    expect(saveMessage).not.toHaveBeenCalledWith(
+      'sess-1',
+      expect.objectContaining({
+        type: 'message'
+      })
+    )
   })
 
   it('keeps the session failed when a fatal error is followed by stop', async () => {

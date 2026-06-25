@@ -46,8 +46,20 @@ const runtimeEventTypeToSessionStatus = (type: RuntimeEvent['type']): SessionSta
   }
 }
 
+const runtimeEventStatusAffectsSession = (type: RuntimeEvent['type']) => {
+  switch (type) {
+    case 'operation_started':
+    case 'operation_completed':
+    case 'operation_failed':
+      return false
+    default:
+      return true
+  }
+}
+
 export const getRuntimeEventSessionStatus = (event: RuntimeEvent) =>
-  runtimeStatusToSessionStatus(event.status) ?? runtimeEventTypeToSessionStatus(event.type)
+  (runtimeEventStatusAffectsSession(event.type) ? runtimeStatusToSessionStatus(event.status) : undefined) ??
+    runtimeEventTypeToSessionStatus(event.type)
 
 export const getEventTime = (event: RuntimeEvent) => event.ts ?? Date.now()
 

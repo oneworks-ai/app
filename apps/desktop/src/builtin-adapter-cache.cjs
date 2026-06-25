@@ -17,6 +17,7 @@ const BUILTIN_PLUGIN_PACKAGES = [
   '@oneworks/plugin-logger',
   '@oneworks/plugin-standard-dev'
 ]
+const BUILTIN_RUNTIME_CLI_PACKAGE = '@oneworks/cli'
 const BUILTIN_RUNTIME_SERVER_PACKAGE = '@oneworks/server'
 const BUILTIN_RUNTIME_CLIENT_PACKAGE = '@oneworks/client'
 
@@ -685,6 +686,16 @@ const ensureBuiltinRuntimePackageCache = (options = {}) => {
   const packageCacheRootDir = options.packageCacheRootDir ?? resolvePackageCacheRootDir(options.env, homeDir)
   const seeded = []
 
+  const cliPackageDir = options.resolvePackageDir?.(BUILTIN_RUNTIME_CLI_PACKAGE) ??
+    resolveBuiltinPluginPackageDir(BUILTIN_RUNTIME_CLI_PACKAGE)
+  seeded.push(materializeBuiltinPluginPackage({
+    cacheVersion,
+    homeDir,
+    packageCacheRootDir,
+    packageName: BUILTIN_RUNTIME_CLI_PACKAGE,
+    sourcePackageDir: cliPackageDir
+  }))
+
   const serverPackageDir = options.resolvePackageDir?.(BUILTIN_RUNTIME_SERVER_PACKAGE) ??
     resolveBuiltinPluginPackageDir(BUILTIN_RUNTIME_SERVER_PACKAGE)
   seeded.push(materializeBuiltinPluginPackage({
@@ -714,6 +725,7 @@ module.exports = {
   BUILTIN_ADAPTER_PACKAGES,
   BUILTIN_ADAPTER_PACKAGE_ENV,
   BUILTIN_PLUGIN_PACKAGES,
+  BUILTIN_RUNTIME_CLI_PACKAGE,
   BUILTIN_RUNTIME_CLIENT_PACKAGE,
   BUILTIN_RUNTIME_SERVER_PACKAGE,
   DESKTOP_DEV_RUNTIME_VERSION_ENV,

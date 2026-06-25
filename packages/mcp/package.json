@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/mcp",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-beta.0",
   "description": "One Works MCP server",
   "repository": {
     "type": "git",

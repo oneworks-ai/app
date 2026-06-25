@@ -15,6 +15,7 @@ import {
   restoreChatMessagesFromSessionHistoryEvents,
   restoreSessionWorkspaceChangesFromHistoryEvents,
   shouldApplyHistoryRefreshResult,
+  shouldRefreshHistoryForSessionUpdate,
   shouldTerminateSessionForConfigChange
 } from '#~/hooks/chat/use-chat-session-messages'
 
@@ -425,6 +426,56 @@ describe('chat session interaction state', () => {
       appliedRequestSeq: 0,
       requestSeq: 1,
       sessionId: 'sess-1'
+    })).toBe(false)
+  })
+
+  it('refreshes history when the current session update can contain unseen messages', () => {
+    const currentSession = {
+      id: 'sess-1',
+      title: 'Runtime check',
+      status: 'running',
+      lastMessage: 'user prompt',
+      messageCount: 1,
+      createdAt: 1
+    } as const
+
+    expect(shouldRefreshHistoryForSessionUpdate(currentSession, {
+      ...currentSession,
+      status: 'completed',
+      lastMessage: 'assistant reply',
+      messageCount: 2
+    })).toBe(true)
+    expect(shouldRefreshHistoryForSessionUpdate(currentSession, {
+      ...currentSession,
+      lastMessage: 'assistant reply'
+    })).toBe(true)
+    expect(shouldRefreshHistoryForSessionUpdate(currentSession, {
+      ...currentSession,
+      messageCount: 2
+    })).toBe(true)
+  })
+
+  it('does not refresh history for unrelated or deleted session updates', () => {
+    const currentSession = {
+      id: 'sess-1',
+      title: 'Runtime check',
+      status: 'completed',
+      lastMessage: 'assistant reply',
+      messageCount: 2,
+      createdAt: 1
+    } as const
+
+    expect(shouldRefreshHistoryForSessionUpdate(currentSession, {
+      ...currentSession
+    })).toBe(false)
+    expect(shouldRefreshHistoryForSessionUpdate(currentSession, {
+      ...currentSession,
+      id: 'sess-2',
+      lastMessage: 'other reply'
+    })).toBe(false)
+    expect(shouldRefreshHistoryForSessionUpdate(currentSession, {
+      id: 'sess-1',
+      isDeleted: true
     })).toBe(false)
   })
 

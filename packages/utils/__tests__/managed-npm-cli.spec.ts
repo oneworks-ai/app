@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- managed CLI resolver tests cover several source fallback combinations. */
-import { access, chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { access, chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -302,6 +302,196 @@ exit 42
       })
 
       expect(binaryPath).toBe('tool')
+    } finally {
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it('can prefer a user PATH binary when it satisfies a semver range', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-managed-npm-cli-'))
+    const systemBinDir = join(workspace, 'system-bin')
+    const systemToolPath = join(systemBinDir, 'tool')
+    await mkdir(systemBinDir, { recursive: true })
+    await writeFile(
+      systemToolPath,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "tool 0.142.0-alpha.6"
+  exit 0
+fi
+exit 42
+`
+    )
+    await chmod(systemToolPath, 0o755)
+
+    try {
+      const binaryPath = await ensureManagedNpmCli({
+        adapterKey: 'custom_tool',
+        binaryName: 'tool',
+        cwd: workspace,
+        defaultPackageName: '@example/tool',
+        defaultVersion: 'latest',
+        env: {
+          HOME: workspace,
+          PATH: `${systemBinDir}:${process.env.PATH ?? ''}`
+        },
+        logger: {
+          info: () => undefined
+        },
+        preferSystem: true,
+        versionRange: '>=0.130.0'
+      })
+
+      expect(binaryPath).toBe('tool')
+    } finally {
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it('can prefer an extra system binary path when PATH is below range', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-managed-npm-cli-'))
+    const systemBinDir = join(workspace, 'system-bin')
+    const systemToolPath = join(systemBinDir, 'tool')
+    const appToolPath = join(workspace, 'Applications/Tool.app/Contents/Resources/tool')
+    await mkdir(systemBinDir, { recursive: true })
+    await mkdir(join(workspace, 'Applications/Tool.app/Contents/Resources'), { recursive: true })
+    await writeFile(
+      systemToolPath,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "tool 0.120.0"
+  exit 0
+fi
+exit 42
+`
+    )
+    await writeFile(
+      appToolPath,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "tool 0.142.0-alpha.6"
+  exit 0
+fi
+exit 42
+`
+    )
+    await chmod(systemToolPath, 0o755)
+    await chmod(appToolPath, 0o755)
+
+    try {
+      const binaryPath = await ensureManagedNpmCli({
+        adapterKey: 'custom_tool',
+        binaryName: 'tool',
+        cwd: workspace,
+        defaultPackageName: '@example/tool',
+        defaultVersion: 'latest',
+        env: {
+          HOME: workspace,
+          PATH: `${systemBinDir}:${process.env.PATH ?? ''}`
+        },
+        logger: {
+          info: () => undefined
+        },
+        preferSystem: true,
+        systemBinaryPaths: [appToolPath],
+        versionRange: '>=0.130.0'
+      })
+
+      expect(binaryPath).toBe(await realpath(appToolPath))
+    } finally {
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects an extra system binary path when it is outside range', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-managed-npm-cli-'))
+    const appToolPath = join(workspace, 'Applications/Tool.app/Contents/Resources/tool')
+    await mkdir(join(workspace, 'Applications/Tool.app/Contents/Resources'), { recursive: true })
+    await writeFile(
+      appToolPath,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "tool 0.120.0"
+  exit 0
+fi
+exit 42
+`
+    )
+    await chmod(appToolPath, 0o755)
+
+    try {
+      await expect(ensureManagedNpmCli({
+        adapterKey: 'custom_tool',
+        binaryName: 'tool',
+        cwd: workspace,
+        defaultPackageName: '@example/tool',
+        defaultVersion: 'latest',
+        env: {
+          HOME: workspace,
+          PATH: '',
+          __ONEWORKS_PROJECT_ADAPTER_CUSTOM_TOOL_CLI_SOURCE__: 'system'
+        },
+        logger: {
+          info: () => undefined
+        },
+        systemBinaryPaths: [appToolPath],
+        versionRange: '>=0.130.0'
+      })).rejects.toThrow('version requirement >=0.130.0')
+    } finally {
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it('skips a bundled fallback when it is outside range', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-managed-npm-cli-'))
+    const bundledToolPath = join(workspace, 'bundled', 'tool')
+    const systemToolPath = join(workspace, 'system', 'tool')
+    await mkdir(join(workspace, 'bundled'), { recursive: true })
+    await mkdir(join(workspace, 'system'), { recursive: true })
+    await writeFile(
+      bundledToolPath,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "tool 0.120.0"
+  exit 0
+fi
+exit 42
+`
+    )
+    await writeFile(
+      systemToolPath,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "tool 0.142.0"
+  exit 0
+fi
+exit 42
+`
+    )
+    await chmod(bundledToolPath, 0o755)
+    await chmod(systemToolPath, 0o755)
+
+    try {
+      const binaryPath = await ensureManagedNpmCli({
+        adapterKey: 'custom_tool',
+        binaryName: 'tool',
+        bundledPath: bundledToolPath,
+        cwd: workspace,
+        defaultPackageName: '@example/tool',
+        defaultVersion: 'latest',
+        env: {
+          HOME: workspace,
+          PATH: '',
+          __ONEWORKS_PROJECT_ADAPTER_CUSTOM_TOOL_AUTO_INSTALL__: 'false'
+        },
+        logger: {
+          info: () => undefined
+        },
+        systemBinaryPaths: [systemToolPath],
+        versionRange: '>=0.130.0'
+      })
+
+      expect(binaryPath).toBe(await realpath(systemToolPath))
     } finally {
       await rm(workspace, { recursive: true, force: true })
     }

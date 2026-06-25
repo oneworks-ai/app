@@ -1,7 +1,13 @@
 import { defineAdapterCliPreparer } from '@oneworks/types'
 import { ensureManagedNpmCli } from '@oneworks/utils/managed-npm-cli'
 
-import { CODEX_CLI_MIN_VERSION, CODEX_CLI_PACKAGE, CODEX_CLI_VERSION, resolveCodexBinaryPath } from '#~/paths.js'
+import {
+  CODEX_CLI_COMPATIBILITY_RANGE,
+  CODEX_CLI_PACKAGE,
+  CODEX_CLI_VERSION,
+  resolveCodexBinaryPath,
+  resolveCodexSystemBinaryPaths
+} from '#~/paths.js'
 import { resolveCodexAdapterConfig } from '#~/runtime/config.js'
 
 export default defineAdapterCliPreparer({
@@ -25,8 +31,9 @@ export default defineAdapterCliPreparer({
       defaultVersion: CODEX_CLI_VERSION,
       env: ctx.env,
       logger: ctx.logger,
-      minimumVersion: CODEX_CLI_MIN_VERSION,
-      preferSystem: adapterConfig.cli?.source == null
+      preferSystem: adapterConfig.cli?.source == null,
+      systemBinaryPaths: await resolveCodexSystemBinaryPaths(ctx.env),
+      versionRange: CODEX_CLI_COMPATIBILITY_RANGE
     })
 
     return {
