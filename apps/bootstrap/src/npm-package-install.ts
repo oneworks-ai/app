@@ -39,7 +39,13 @@ export const readInstalledPackageVersion = async (packageDir: string) => {
   }
 }
 
-export const findInstalledPublishedPackageVersion = async (packageName: string) => {
+export const findInstalledPublishedPackageVersion = async (
+  packageName: string,
+  options: {
+    preferredVersion?: string
+    versionFilter?: (version: string) => boolean
+  } = {}
+) => {
   let versions: string[]
   try {
     versions = (await readdir(resolvePackageCacheRootDir(packageName), { withFileTypes: true }))
@@ -51,11 +57,18 @@ export const findInstalledPublishedPackageVersion = async (packageName: string) 
 
   const installedVersions: string[] = []
   for (const version of versions) {
+    if (options.versionFilter != null && !options.versionFilter(version)) {
+      continue
+    }
     const packageDir = resolvePackageInstallDir(resolvePackageCacheDir(packageName, version), packageName)
     const installedVersion = await readInstalledPackageVersion(packageDir)
     if (installedVersion === version) {
       installedVersions.push(version)
     }
+  }
+
+  if (options.preferredVersion != null && installedVersions.includes(options.preferredVersion)) {
+    return options.preferredVersion
   }
 
   return installedVersions.sort(compareVersionLike).at(-1)

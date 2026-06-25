@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/adapter-claude-code",
-  "version": "0.1.0-beta.0",
+  "version": "0.1.0-beta.1",
   "description": "Claude Code Adapter for One Works",
   "repository": {
     "type": "git",

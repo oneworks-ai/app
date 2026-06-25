@@ -168,6 +168,14 @@ export const resolveModelForChatAdapterSelection = (params: {
   })
   if (adapterConfiguredModel) return adapterConfiguredModel
 
+  const normalizedDefaultModel = normalizeNonEmptyString(params.defaultModel)
+  if (!normalizedDefaultModel) {
+    const nativeDefaultModel = Array.from(params.builtinModels ?? [])
+      .map(model => normalizeNonEmptyString(model))
+      .find(model => model === 'default')
+    if (nativeDefaultModel) return nativeDefaultModel
+  }
+
   return resolveDefaultChatModelSelection({
     defaultModel: params.defaultModel,
     defaultModelService: params.defaultModelService,

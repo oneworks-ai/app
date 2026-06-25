@@ -8,14 +8,12 @@ import {
   readPublishedPackageVersionMetadata,
   resolvePackageLookupTimeoutMs,
   resolvePackageManagerEnv,
-  resolvePackageTag,
   shouldUseCachedPackageVersionFirst,
   writePublishedPackageVersionMetadata
 } from './npm-package-cache'
 import { findInstalledPublishedPackageVersion } from './npm-package-install'
-import { runBufferedCommand } from './process-utils'
-
-const NPM_BIN = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+import { resolvePublishedPackageVersionFromRegistry } from './npm-registry'
+import { resolvePackageVersionRequest } from './package-version-request'
 
 export { resolvePackageManagerEnv } from './npm-package-cache'
 export { installPublishedPackage, resolvePackageBinEntrypoint } from './npm-package-install'
@@ -52,68 +50,21 @@ const spawnPackageVersionRefresh = (packageName: string) => {
   }
 }
 
-const resolvePublishedPackageVersionFromRegistry = async (
-  packageName: string,
-  options: { timeoutMs?: number } = {}
-) => {
-  const spec = `${packageName}@${resolvePackageTag()}`
-  const result = await runBufferedCommand({
-    command: NPM_BIN,
-    args: ['view', spec, 'version', '--json'],
-    env: resolvePackageManagerEnv(),
-    timeoutMs: options.timeoutMs
-  })
-
-  if (result.timedOut === true) {
-    return {
-      spec,
-      timedOut: true as const
-    }
-  }
-
-  if (result.code !== 0) {
-    throw new Error(`Failed to resolve published version for ${spec}:\n${result.stderr.trim()}`)
-  }
-
-  const normalizedOutput = result.stdout.trim()
-  if (!normalizedOutput) {
-    throw new Error(`No version was returned for ${spec}.`)
-  }
-
-  try {
-    const parsed = JSON.parse(normalizedOutput) as unknown
-    if (typeof parsed === 'string' && parsed.trim()) {
-      return {
-        spec,
-        version: parsed.trim()
-      }
-    }
-  } catch {
-    // fall through
-  }
-
-  const unquotedOutput = normalizedOutput.replace(/^"|"$/g, '').trim()
-  if (!unquotedOutput) {
-    throw new Error(`Invalid published version for ${spec}: ${normalizedOutput}`)
-  }
-
-  return {
-    spec,
-    version: unquotedOutput
-  }
-}
-
 export const resolvePublishedPackageVersion = async (
   packageName: string,
   options: { cacheFirst?: boolean } = {}
 ) => {
-  const cachedMetadata = await readPublishedPackageVersionMetadata(packageName)
+  const request = resolvePackageVersionRequest(packageName)
+  const cachedMetadata = await readPublishedPackageVersionMetadata(packageName, { lookupScope: request.lookupScope })
   if (cachedMetadata != null && (options.cacheFirst ?? shouldUseCachedPackageVersionFirst())) {
     spawnPackageVersionRefresh(packageName)
     return cachedMetadata.version
   }
 
-  const cachedInstalledVersion = await findInstalledPublishedPackageVersion(packageName)
+  const cachedInstalledVersion = await findInstalledPublishedPackageVersion(packageName, {
+    preferredVersion: request.exactVersion,
+    versionFilter: request.versionFilter
+  })
   if (cachedInstalledVersion != null && (options.cacheFirst ?? shouldUseCachedPackageVersionFirst())) {
     spawnPackageVersionRefresh(packageName)
     return cachedInstalledVersion
@@ -121,6 +72,7 @@ export const resolvePublishedPackageVersion = async (
 
   const registryResult = await resolvePublishedPackageVersionFromRegistry(
     packageName,
+    request,
     cachedMetadata == null
       ? {}
       : {
@@ -129,15 +81,17 @@ export const resolvePublishedPackageVersion = async (
   )
 
   if ('version' in registryResult) {
-    await writePublishedPackageVersionMetadata(packageName, registryResult.version)
+    await writePublishedPackageVersionMetadata(packageName, registryResult.version, {
+      lookupScope: request.lookupScope
+    })
     return registryResult.version
   }
 
   if (cachedMetadata == null) {
     // This is not expected because uncached lookups do not use a timeout.
-    const retryResult = await resolvePublishedPackageVersionFromRegistry(packageName)
+    const retryResult = await resolvePublishedPackageVersionFromRegistry(packageName, request)
     if ('version' in retryResult) {
-      await writePublishedPackageVersionMetadata(packageName, retryResult.version)
+      await writePublishedPackageVersionMetadata(packageName, retryResult.version, { lookupScope: request.lookupScope })
       return retryResult.version
     }
     throw new Error(`Failed to resolve published version for ${retryResult.spec}.`)
