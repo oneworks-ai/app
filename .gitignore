@@ -16,6 +16,10 @@
 .vercel/
 .oo.dev.config.json
 apps/desktop/release/
+apps/idea-plugin/.gradle/
+apps/idea-plugin/.intellijPlatform/
+apps/idea-plugin/build/
+apps/idea-plugin/out/
 apps/relay-server/public/
 .oo/rules/*.local.md
 .oo/rules/*.dev.md

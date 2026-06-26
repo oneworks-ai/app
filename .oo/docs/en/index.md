@@ -10,6 +10,7 @@ This documentation is the user-facing entry point for integrating One Works into
 - [Adapter CLI Installation and Versions](./usage/adapter-cli.md)
 - [Desktop App](./usage/desktop.md)
 - [VS Code Extension](./usage/vscode-extension.md)
+- [JetBrains IDE Plugin](./usage/idea-plugin.md)
 - [Web UI and Terminal View](./usage/web.md)
 - [Adapter Configuration and Multiple Accounts](./usage/adapters.md)
 - [PWA and Standalone Deployment](./usage/pwa.md)
