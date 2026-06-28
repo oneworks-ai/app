@@ -5,6 +5,7 @@ import {
   captureMobileDeviceScreenshot,
   dumpMobileElementTree,
   listMobileDebugTargets,
+  openMobileDeviceMjpegStream,
   readMobileDeviceLogs,
   sendMobileDeviceInput
 } from '#~/services/mobile-debug/index.js'
@@ -72,6 +73,19 @@ export function mobileDebugRouter(): Router {
         throw badRequest('Invalid mobile debug input body', undefined, 'invalid_mobile_debug_input')
       }
       ctx.body = await sendMobileDeviceInput(getDeviceId(body), body.input)
+    } catch (error) {
+      normalizeMobileDebugError(error)
+    }
+  })
+
+  router.get('/video.mjpeg', async (ctx) => {
+    try {
+      const deviceId = typeof ctx.query.deviceId === 'string' ? ctx.query.deviceId : undefined
+      const stream = await openMobileDeviceMjpegStream(deviceId)
+      ctx.state.skipApiEnvelope = true
+      ctx.set('cache-control', 'no-store')
+      ctx.set('content-type', stream.contentType)
+      ctx.body = stream.body
     } catch (error) {
       normalizeMobileDebugError(error)
     }

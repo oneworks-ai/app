@@ -2266,8 +2266,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  min-height: 50px;
-  padding: 0 14px;
+  height: var(--standalone-mobile-debug-header-height, 44px);
+  min-height: var(--standalone-mobile-debug-header-height, 44px);
+  padding: 0 12px;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -2296,8 +2297,11 @@
 }
 
 .chat-interaction-panel-mobile-debug__device-list-action {
-  height: 30px;
-  padding: 0 8px;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -2474,6 +2478,15 @@
 
   &.is-network-target {
     grid-template-columns: auto minmax(130px, 1fr) auto;
+  }
+
+  &.is-ios-wda-target {
+    grid-template-columns:
+      auto
+      minmax(82px, .42fr)
+      minmax(130px, 1fr)
+      minmax(130px, 1fr)
+      auto;
   }
 
   .ant-input {
@@ -2738,6 +2751,7 @@
   overflow: hidden;
   background: #050816;
   cursor: default;
+  overflow-anchor: none;
   user-select: none;
   touch-action: none;
 
@@ -2772,9 +2786,32 @@
   pointer-events: none;
 }
 
+.chat-interaction-panel-mobile-debug__element-comment-target {
+  position: absolute;
+  box-sizing: border-box;
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / .001);
+  border-radius: 0;
+  background: rgb(255 255 255 / .001);
+  color: transparent;
+  cursor: inherit;
+  outline: none;
+  overflow-anchor: none;
+  touch-action: none;
+  user-select: none;
+
+  &:focus {
+    outline: none;
+  }
+}
+
 .chat-interaction-panel-mobile-debug__element-overlay {
   position: absolute;
-  z-index: 3;
+  z-index: 10000;
   box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--primary-color) 86%, white);
   background-color: color-mix(in srgb, var(--primary-color) 16%, transparent);
@@ -2787,6 +2824,36 @@
 
   &.is-selected {
     border-width: 2px;
+  }
+}
+
+.chat-interaction-panel-mobile-debug__element-highlight-anchor {
+  position: absolute;
+  z-index: 10000;
+  box-sizing: border-box;
+  display: block;
+  background: transparent;
+  pointer-events: none;
+  user-select: none;
+
+  &.is-hover {
+    border: 1px solid transparent;
+  }
+
+  &.is-selected {
+    border: 2px solid transparent;
+  }
+}
+
+.chat-interaction-panel-mobile-debug__luna-highlighter-layer.luna-dom-highlighter {
+  pointer-events: none;
+
+  &.is-hover {
+    z-index: 100000;
+  }
+
+  &.is-selected {
+    z-index: 100001;
   }
 }
 
@@ -2935,14 +3002,111 @@
   flex: 1 1 auto;
   min-height: 0;
   flex-direction: column;
-  overflow: auto;
+  overflow: hidden;
   border-bottom: 1px solid var(--border-color);
   background: transparent;
+}
+
+.chat-interaction-panel-mobile-debug__element-tree-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 
 .chat-interaction-panel-mobile-debug__element-tree {
   min-width: max-content;
   padding: 2px 0;
+}
+
+.chat-interaction-panel-mobile-debug__luna-dom-viewer {
+  min-width: max-content;
+  padding: 2px 0 8px;
+
+  > .luna-dom-viewer {
+    min-width: max-content;
+    padding-left: 18px;
+    font-family: var(--font-mono, 'SFMono-Regular', Consolas, monospace);
+    font-size: 12px;
+  }
+
+  .luna-dom-viewer-tree-item {
+    min-width: max-content;
+    line-height: 23px;
+    min-height: 23px;
+  }
+
+  .luna-dom-viewer-selection {
+    right: -100vw;
+  }
+}
+
+.chat-interaction-panel-mobile-debug__element-path-bar {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  min-height: 28px;
+  overflow: hidden;
+  padding: 0 10px;
+  border-top: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-color) 92%, var(--text-color) 8%);
+  font-family: var(--font-mono, 'SFMono-Regular', Consolas, monospace);
+  font-size: 11px;
+  line-height: 28px;
+}
+
+.chat-interaction-panel-mobile-debug__element-path-value {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  color: var(--text-color);
+  white-space: nowrap;
+  scrollbar-width: thin;
+
+  &:focus-visible {
+    outline: 1px solid
+      color-mix(in srgb, var(--primary-color) 72%, transparent);
+    outline-offset: -1px;
+  }
+
+  &.is-empty {
+    display: block;
+    overflow: hidden;
+    color: var(--placeholder-color);
+  }
+}
+
+.chat-interaction-panel-mobile-debug__element-path-item {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.chat-interaction-panel-mobile-debug__element-path-separator {
+  margin: 0 5px;
+  color: var(--placeholder-color);
+}
+
+.chat-interaction-panel-mobile-debug__element-path-node {
+  height: 20px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+  font: inherit;
+  line-height: 20px;
+  white-space: nowrap;
+
+  &:hover,
+  &:focus-visible {
+    outline: none;
+    background-color: color-mix(in srgb, var(--primary-color) 14%, transparent);
+    color: var(--primary-color);
+  }
 }
 
 .chat-interaction-panel-mobile-debug__element-splitter {
@@ -3269,40 +3433,99 @@
   display: flex;
   min-height: 34px;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 10px;
+  gap: 8px;
+  justify-content: flex-start;
+  padding: 0;
   border-bottom: 1px solid var(--border-color);
   color: var(--sub-text-color);
   font-size: 12px;
 
-  .ant-btn.ant-btn-text {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    min-width: 26px;
-    height: 26px;
-    padding: 0;
-    color: var(--sub-text-color);
+  .chat-interaction-panel-mobile-debug__logs-search.ant-input-affix-wrapper {
+    width: 100%;
+    min-width: 0;
+    min-height: 34px;
+    flex: 1 1 auto;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    outline: 0;
+    box-shadow: none;
+    color: var(--text-color);
+
+    &:hover,
+    &:focus,
+    &.ant-input-affix-wrapper-focused {
+      border: 0;
+      outline: 0;
+      box-shadow: none;
+    }
+
+    .ant-input {
+      background: transparent;
+      color: var(--text-color);
+      font-size: 12px;
+    }
+
+    .ant-input-prefix {
+      margin-inline-end: 8px;
+    }
+
+    .ant-input::placeholder {
+      color: var(--placeholder-color);
+    }
 
     .material-symbols-rounded {
+      color: var(--placeholder-color);
       font-size: 18px;
       line-height: 18px;
     }
   }
 }
 
-.chat-interaction-panel-mobile-debug__logs-output {
+.chat-interaction-panel-mobile-debug__luna-console {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 8px 10px;
-  margin: 0;
-  overflow: auto;
-  color: var(--text-color);
-  font-family: var(--font-mono, 'SFMono-Regular', Consolas, monospace);
-  font-size: 11px;
-  line-height: 17px;
-  white-space: pre-wrap;
+  overflow: hidden;
+
+  &.luna-console,
+  .luna-console {
+    height: 100%;
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-mono, 'SFMono-Regular', Consolas, monospace);
+    font-size: 11px;
+  }
+
+  &.luna-console .luna-console-log-item,
+  .luna-console .luna-console-log-item {
+    background: transparent;
+    border-bottom-color: var(--border-color);
+    color: var(--text-color);
+  }
+
+  &.luna-console
+    .luna-console-log-container.luna-console-selected
+    .luna-console-log-item,
+  .luna-console
+    .luna-console-log-container.luna-console-selected
+    .luna-console-log-item {
+    background: var(--interaction-panel-active-bg);
+  }
+
+  &.luna-console
+    .luna-console-log-container.luna-console-selected
+    .luna-console-log-item:not(.luna-console-error):not(.luna-console-warn),
+  .luna-console
+    .luna-console-log-container.luna-console-selected
+    .luna-console-log-item:not(.luna-console-error):not(.luna-console-warn) {
+    border-color: var(--border-color);
+  }
+
+  .luna-console-log-item .luna-console-log-content {
+    margin: 0 10px;
+    padding: 3px 0;
+  }
 }
 
 @container mobile-debug-inspect (min-width: 600px) {
@@ -3342,7 +3565,6 @@
   > .ant-tabs > .ant-tabs-nav {
     align-items: center;
     box-sizing: border-box;
-    min-height: 52px;
     padding: 10px;
     margin: 0 0 10px;
   }
@@ -3353,7 +3575,6 @@
   }
 
   > .ant-tabs > .ant-tabs-nav > .ant-tabs-extra-content:first-child {
-    height: 32px;
     margin-right: 8px;
     gap: 8px;
 
@@ -3367,7 +3588,6 @@
   }
 
   > .ant-tabs > .ant-tabs-nav > .ant-tabs-extra-content:last-child {
-    height: 32px;
     margin-left: 8px;
   }
 
@@ -3387,7 +3607,6 @@
     position: relative;
     display: inline-flex;
     align-items: center;
-    height: 32px;
     padding: 0;
     color: var(--sub-text-color);
     font-size: 12px;
@@ -3406,7 +3625,6 @@
   > .ant-tabs > .ant-tabs-nav .ant-tabs-tab-btn {
     display: inline-flex;
     align-items: center;
-    height: 28px;
     line-height: 20px;
   }
 
@@ -3414,14 +3632,11 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    height: 28px;
 
     .material-symbols-rounded {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 18px;
-      height: 18px;
       font-size: 18px;
       line-height: 18px;
     }
@@ -3476,7 +3691,6 @@
   > .ant-tabs > .ant-tabs-nav {
     align-items: center;
     box-sizing: border-box;
-    min-height: 52px;
     padding: 10px;
     margin: 0 0 10px;
   }
@@ -3493,7 +3707,6 @@
     position: relative;
     display: inline-flex;
     align-items: center;
-    height: 32px;
     padding: 0;
     color: var(--sub-text-color);
     font-size: 12px;
@@ -3512,7 +3725,6 @@
   > .ant-tabs > .ant-tabs-nav .ant-tabs-tab-btn {
     display: inline-flex;
     align-items: center;
-    height: 28px;
     line-height: 20px;
   }
 
@@ -3564,14 +3776,11 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 28px;
 
   .material-symbols-rounded {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
     font-size: 18px;
     line-height: 18px;
   }
@@ -3772,29 +3981,20 @@
 }
 
 .chat-interaction-panel-mobile-debug__tab-left-actions,
-.chat-interaction-panel-mobile-debug__tab-right-actions,
-.chat-interaction-panel-mobile-debug__dock-switch {
+.chat-interaction-panel-mobile-debug__tab-right-actions {
   display: inline-flex;
   align-items: center;
-  height: 32px;
   min-width: 0;
 }
 
 .chat-interaction-panel-mobile-debug__tab-left-actions,
 .chat-interaction-panel-mobile-debug__tab-right-actions {
-  gap: 10px;
-}
-
-.chat-interaction-panel-mobile-debug__dock-switch {
-  box-sizing: border-box;
   gap: 2px;
-  padding: 2px 6px;
-  border: 1px solid var(--border-color);
-  border-radius: 7px;
 }
 
 .chat-interaction-panel-mobile-debug__tab-right-actions
   .chat-interaction-panel-mobile-debug__tab-actions {
+  margin-left: 8px;
   padding-left: 6px;
   border-left: 1px solid var(--border-color);
 }
@@ -3811,9 +4011,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
+  width: auto;
+  min-width: 0;
+  height: auto;
   padding: 0;
   border: 0;
   border-radius: 6px;
@@ -3831,8 +4031,6 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
     font-size: 18px;
     line-height: 18px;
   }
@@ -3848,33 +4046,39 @@
 
 .chat-interaction-panel-mobile-debug__tab-left-actions
   .chat-interaction-panel-mobile-debug__tab-action.ant-btn.ant-btn-text {
-  width: 18px;
-  min-width: 18px;
-  height: 18px;
   padding: 0 !important;
   border-radius: 0;
   background: transparent !important;
 
   &:hover,
-  &:focus-visible,
+  &:focus-visible {
+    background: transparent !important;
+    color: var(--text-color);
+  }
+
   &.is-active {
     background: transparent !important;
     color: var(--primary-color);
   }
 }
 
-.chat-interaction-panel-mobile-debug__dock-switch
-  .chat-interaction-panel-mobile-debug__tab-action.ant-btn.ant-btn-text {
-  width: 24px;
-  min-width: 24px;
-  height: 24px;
+.chat-interaction-panel-mobile-debug__tab-right-actions
+  > .chat-interaction-panel-mobile-debug__tab-action.ant-btn.ant-btn-text {
   border-radius: 5px;
 
   .material-symbols-rounded {
-    width: 18px;
-    height: 18px;
     font-size: 18px;
     line-height: 18px;
+  }
+
+  &.is-active {
+    background: transparent;
+    color: var(--primary-color);
+  }
+
+  &:hover,
+  &:focus-visible {
+    background: transparent;
   }
 }
 

@@ -7,6 +7,7 @@ import type { MobileDeviceDockPosition } from './InteractionPanelMobileDeviceSid
 
 export function InteractionPanelMobileDevicePreviewSidePanel({
   details,
+  devicePlatform,
   deviceId,
   dockPosition,
   elementTree,
@@ -28,6 +29,7 @@ export function InteractionPanelMobileDevicePreviewSidePanel({
   onToggleSidePanel
 }: {
   details: ReactNode
+  devicePlatform?: DesktopMobileDebugDevice['platform']
   deviceId: string
   dockPosition: MobileDeviceDockPosition
   elementTree: DesktopMobileElementTreeResponse | null
@@ -65,13 +67,14 @@ export function InteractionPanelMobileDevicePreviewSidePanel({
     )
   }
 
-  if (isEnvironmentPanelOpen) {
+  if (isEnvironmentPanelOpen && devicePlatform !== 'ios') {
     return <InteractionPanelMobileDeviceEnvironmentPanel deviceId={deviceId} onApplied={onAppliedEnvironment} />
   }
 
   return (
     <InteractionPanelMobileDeviceSideTabs
       details={details}
+      devicePlatform={devicePlatform}
       deviceId={deviceId}
       dockPosition={dockPosition}
       elementTree={elementTree}

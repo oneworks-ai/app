@@ -52,6 +52,7 @@ function StandaloneDeviceHeaderActionButton({
 }
 
 export function MobileDeviceStandaloneHeaderActions({
+  devicePlatform,
   deviceId,
   isEnvironmentPanelOpen,
   isSidePanelVisible,
@@ -61,6 +62,7 @@ export function MobileDeviceStandaloneHeaderActions({
   onToggleEnvironmentPanel,
   onToggleSidePanel
 }: {
+  devicePlatform?: DesktopMobileDebugDevice['platform']
   deviceId: string
   isEnvironmentPanelOpen: boolean
   isSidePanelVisible: boolean
@@ -71,7 +73,7 @@ export function MobileDeviceStandaloneHeaderActions({
   onToggleSidePanel: () => void
 }) {
   const { t } = useTranslation()
-  const moreMenu = useMobileDeviceMoreMenu({ onOpenDeviceList, onReconnect: onRefresh, onSendInput })
+  const moreMenu = useMobileDeviceMoreMenu({ devicePlatform, onOpenDeviceList, onReconnect: onRefresh, onSendInput })
 
   return (
     <div className='chat-interaction-panel-mobile-debug__standalone-header-actions'>
@@ -87,12 +89,14 @@ export function MobileDeviceStandaloneHeaderActions({
         label={t('chat.interactionPanel.mobileDebugRotate')}
         onClick={() => onSendInput({ action: 'rotate', kind: 'action' })}
       />
-      <StandaloneDeviceHeaderActionButton
-        active={isEnvironmentPanelOpen}
-        icon='settings'
-        label={t('chat.interactionPanel.mobileDebugEnvironmentTitle')}
-        onClick={onToggleEnvironmentPanel}
-      />
+      {devicePlatform !== 'ios' && (
+        <StandaloneDeviceHeaderActionButton
+          active={isEnvironmentPanelOpen}
+          icon='settings'
+          label={t('chat.interactionPanel.mobileDebugEnvironmentTitle')}
+          onClick={onToggleEnvironmentPanel}
+        />
+      )}
       <StandaloneDeviceHeaderActionButton
         active={!isSidePanelVisible}
         icon={isSidePanelVisible ? 'right_panel_close' : 'right_panel_open'}

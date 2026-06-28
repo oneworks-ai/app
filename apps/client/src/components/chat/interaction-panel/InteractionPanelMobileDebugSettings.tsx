@@ -1,7 +1,11 @@
 import { Checkbox } from 'antd'
 import { useTranslation } from 'react-i18next'
 
-import { NetworkTargetConfigPanel, PortForwardingConfigPanel } from './InteractionPanelMobileDebugConfigPanels'
+import {
+  IosWdaConfigPanel,
+  NetworkTargetConfigPanel,
+  PortForwardingConfigPanel
+} from './InteractionPanelMobileDebugConfigPanels'
 import { InteractionPanelMobileDebugAdbInstallGuide } from './InteractionPanelMobileDebugDetailsContent'
 import type { MobileDebugConfigState } from './mobile-debug-config-state'
 
@@ -35,7 +39,16 @@ export function InteractionPanelMobileDebugSettings({
           {t('chat.interactionPanel.mobileDebugDiscoverNetworkTargets')}
         </Checkbox>
       </div>
+      <div className='chat-interaction-panel-mobile-debug__settings-row'>
+        <Checkbox
+          checked={config.discoverIosDevices}
+          onChange={event => onChangeConfig(current => ({ ...current, discoverIosDevices: event.target.checked }))}
+        >
+          {t('chat.interactionPanel.mobileDebugDiscoverIosDevices')}
+        </Checkbox>
+      </div>
 
+      <IosWdaConfigPanel config={config} onChangeConfig={onChangeConfig} />
       <PortForwardingConfigPanel config={config} onChangeConfig={onChangeConfig} />
       <NetworkTargetConfigPanel config={config} onChangeConfig={onChangeConfig} />
     </section>

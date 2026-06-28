@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Mobile debug config panels keep related Android, iOS, and WDA forms together. */
+
 import { Button, Checkbox, Input } from 'antd'
 import { useTranslation } from 'react-i18next'
 
@@ -162,6 +164,106 @@ export function NetworkTargetConfigPanel({
           }))}
       >
         {t('chat.interactionPanel.mobileDebugAddNetworkTarget')}
+      </Button>
+    </div>
+  )
+}
+
+export function IosWdaConfigPanel({
+  config,
+  onChangeConfig
+}: {
+  config: MobileDebugConfigState
+  onChangeConfig: (updater: (current: MobileDebugConfigState) => MobileDebugConfigState) => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className='chat-interaction-panel-mobile-debug__config-panel'>
+      <div className='chat-interaction-panel-mobile-debug__config-title'>
+        {t('chat.interactionPanel.mobileDebugIosWdaTargets')}
+      </div>
+      {config.iosWdaTargets.length === 0 && (
+        <div className='chat-interaction-panel-mobile-debug__config-empty'>
+          {t('chat.interactionPanel.mobileDebugNoIosWdaTargetsConfigured')}
+        </div>
+      )}
+      {config.iosWdaTargets.map(target => (
+        <div key={target.id} className='chat-interaction-panel-mobile-debug__config-row is-ios-wda-target'>
+          <Checkbox
+            checked={target.enabled !== false}
+            onChange={event =>
+              onChangeConfig(current => ({
+                ...current,
+                iosWdaTargets: current.iosWdaTargets.map(item =>
+                  item.id === target.id ? { ...item, enabled: event.target.checked } : item
+                )
+              }))}
+          />
+          <Input
+            value={target.label ?? ''}
+            placeholder={t('chat.interactionPanel.mobileDebugIosWdaLabel')}
+            onChange={event =>
+              onChangeConfig(current => ({
+                ...current,
+                iosWdaTargets: current.iosWdaTargets.map(item =>
+                  item.id === target.id ? { ...item, label: event.target.value } : item
+                )
+              }))}
+          />
+          <Input
+            value={target.wdaUrl}
+            placeholder={t('chat.interactionPanel.mobileDebugIosWdaUrl')}
+            onChange={event =>
+              onChangeConfig(current => ({
+                ...current,
+                iosWdaTargets: current.iosWdaTargets.map(item =>
+                  item.id === target.id ? { ...item, wdaUrl: event.target.value } : item
+                )
+              }))}
+          />
+          <Input
+            value={target.mjpegUrl ?? ''}
+            placeholder={t('chat.interactionPanel.mobileDebugIosMjpegUrl')}
+            onChange={event =>
+              onChangeConfig(current => ({
+                ...current,
+                iosWdaTargets: current.iosWdaTargets.map(item =>
+                  item.id === target.id ? { ...item, mjpegUrl: event.target.value } : item
+                )
+              }))}
+          />
+          <RemoveConfigButton
+            onClick={() =>
+              onChangeConfig(current => ({
+                ...current,
+                iosWdaTargets: current.iosWdaTargets.filter(item => item.id !== target.id)
+              }))}
+          />
+        </div>
+      ))}
+      <Button
+        type='text'
+        className='chat-interaction-panel-mobile-debug__add-rule'
+        icon={<span className='material-symbols-rounded'>add</span>}
+        onClick={() =>
+          onChangeConfig(current => ({
+            ...current,
+            iosWdaTargets: [
+              ...current.iosWdaTargets,
+              {
+                autoStart: true,
+                destinationPlatform: 'device',
+                enabled: true,
+                id: createMobileDebugConfigId('ios-wda'),
+                label: 'iOS WDA',
+                mjpegUrl: '127.0.0.1:9100',
+                wdaUrl: '127.0.0.1:8100'
+              }
+            ]
+          }))}
+      >
+        {t('chat.interactionPanel.mobileDebugAddIosWdaTarget')}
       </Button>
     </div>
   )

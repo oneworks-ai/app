@@ -13,6 +13,7 @@ const getPortForwardingStatusLabelKey = (status: DesktopMobileDebugPortForwardSt
 export function MobileDebugDetailsContent({
   errors,
   isAdbMissing,
+  notice,
   onOpenDebugUrl,
   portForwarding,
   state,
@@ -20,6 +21,7 @@ export function MobileDebugDetailsContent({
 }: {
   errors: string[]
   isAdbMissing: boolean
+  notice?: string
   onOpenDebugUrl: (url: string, options?: OpenInteractionPanelIframeUrlOptions) => void
   portForwarding: DesktopMobileDebugPortForwardStatus[]
   state: DesktopMobileDebugTargetsResponse | null
@@ -30,12 +32,17 @@ export function MobileDebugDetailsContent({
 
   return (
     <>
+      {notice != null && (
+        <div className='chat-interaction-panel-mobile-debug__notice'>
+          {notice}
+        </div>
+      )}
       <PortForwardingList portForwarding={portForwarding} />
       {targets.length > 0 && (
         <InteractionPanelMobileDebugTargetList targets={targets} onOpenDebugUrl={onOpenDebugUrl} />
       )}
-      {isAdbMissing && <InteractionPanelMobileDebugAdbInstallGuide />}
-      {state != null && !isAdbMissing && devices.length === 0 && targets.length === 0 && (
+      {isAdbMissing && devices.length === 0 && <InteractionPanelMobileDebugAdbInstallGuide />}
+      {state != null && devices.length === 0 && targets.length === 0 && (
         <div className='chat-interaction-panel-mobile-debug__empty'>
           {t('chat.interactionPanel.mobileDebugNoDevices')}
         </div>

@@ -42,6 +42,7 @@ export const createBrowserWindowFactory = ({
     const selectorMode = input.selectorMode ?? 'dialog'
     const isLauncherWindow = input.kind === 'launcher'
     const isSelectorWindow = input.kind === 'selector'
+    const isStandaloneWindow = input.kind === 'standalone'
     const isInitialSelectorWindow = isSelectorWindow && selectorMode === 'initial'
     const window = new BrowserWindow({
       height: isLauncherWindow ? 560 : isInitialSelectorWindow ? 760 : isSelectorWindow ? 700 : 900,
@@ -57,7 +58,7 @@ export const createBrowserWindowFactory = ({
         ? buildWorkspaceSelectorWindowTitle()
         : 'One Works',
       width: isLauncherWindow ? 760 : isInitialSelectorWindow ? 920 : isSelectorWindow ? 720 : 1280,
-      ...getWindowChromeOptions({ isLauncherWindow }),
+      ...getWindowChromeOptions({ isLauncherWindow, isStandaloneWindow }),
       webPreferences: {
         additionalArguments: [getSystemLocaleArgument()],
         contextIsolation: true,

@@ -47,7 +47,6 @@ export function InteractionPanelMobileDebugDeviceList({
           onClick={onOpenSettings}
         >
           <span className='material-symbols-rounded' aria-hidden='true'>tune</span>
-          <span>{t('chat.interactionPanel.mobileDebugConfig')}</span>
         </button>
       </header>
       {error != null && <div className='chat-interaction-panel-mobile-debug__notice is-error'>{error}</div>}
@@ -56,7 +55,7 @@ export function InteractionPanelMobileDebugDeviceList({
           {t('chat.interactionPanel.mobileDebugScanning')}
         </div>
       )}
-      {isAdbMissing && <MobileDebugDeviceListAdbGuide />}
+      {isAdbMissing && devices.length === 0 && <MobileDebugDeviceListAdbGuide />}
       {state != null && !isAdbMissing && devices.length === 0 && (
         <div className='chat-interaction-panel-mobile-debug__empty'>
           {t('chat.interactionPanel.mobileDebugNoDevices')}

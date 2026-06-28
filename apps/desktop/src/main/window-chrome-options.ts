@@ -29,6 +29,7 @@ export const restoreWorkspaceReadyWindowBackground = (window: BrowserWindow) => 
 
 export const getWindowChromeOptions = (input: {
   isLauncherWindow: boolean
+  isStandaloneWindow: boolean
 }): BrowserWindowConstructorOptions => {
   if (process.platform !== 'darwin') return {}
 
@@ -50,7 +51,7 @@ export const getWindowChromeOptions = (input: {
   return {
     backgroundColor: transparentWindowBackgroundColor,
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 12, y: 12 },
+    trafficLightPosition: input.isStandaloneWindow ? { x: 11, y: 12 } : { x: 12, y: 12 },
     transparent: true,
     vibrancy: 'sidebar',
     visualEffectState: 'active'

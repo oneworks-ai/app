@@ -131,3 +131,10 @@ merge 经验：
 5. IAB 截图验证关键状态。
 6. PR 前补 changelog、截图、Experience Review checklist 和 `pr-change-check`。
 7. 等远端 lint / format-check / typecheck / pr-change-policy / installer 全部通过后再 merge。
+
+## Luna DOM Viewer 刷新经验
+
+- 移动端元素树是高频轮询数据。不要每次接口返回就替换整棵 React state 或重建 Luna viewer；内容没变时保持节点引用不变，内容变更时做结构共享 merge。
+- Luna DOM Viewer 的展开、选中和滚动状态绑定在内部 DOM 上。更新元素树时优先 patch synthetic DOM attribute / child list，让 `MutationObserver` 驱动 Luna 局部刷新；只有 root tag 改变这类结构断裂场景才重建 viewer。
+- 不要用 viewer destroy 阶段的 `onDeselect` 清空业务选中态。React effect 重跑、设备树轮询或 tab 切换都可能触发 destroy；业务选择应由用户操作、设备切换或节点确实消失来清理。
+- 选中行自动定位只做垂直滚动。横向 `scrollIntoView` 会把长 XML 行推到右侧，破坏 Elements 面板的可读性。

@@ -20,6 +20,8 @@
   - Android 设备调试入口、设备列表和目标列表编排。修改 standalone 设备页或 mobile debug 状态流时从这里开始。
 - `InteractionPanelMobileDevicePreview.tsx` / `InteractionPanelMobileDeviceSideTabs.tsx`
   - Android 设备预览、右侧 Elements / Targets / Input / Logs tab、dock 和 standalone header action 编排。
+- `InteractionPanelMobileDeviceScreen.tsx` / `mobile-device-preview-utils.ts`
+  - 移动设备画面、hover / selected 可视 overlay 和透明 `.is-comment-target` DOM 命中层都在这里维护；修改 Codex 浏览器注释命中、元素坐标映射或屏幕点击转发时优先从这里开始。
 - `InteractionPanelMobileDeviceEnvironmentPanel.tsx`
   - Android Emulator 设备状态面板入口；Battery / Cellular / Location / Phone / Fingerprint 必须继续按独立组件维护。
 - `use-mobile-device-preview-controller.ts`

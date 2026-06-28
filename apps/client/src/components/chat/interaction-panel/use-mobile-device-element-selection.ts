@@ -18,6 +18,8 @@ export const useMobileDeviceElementSelection = ({
     setHoverNodeId(findDeepestNodeAtPoint(elementTree?.root, toPhysicalPoint(point))?.id)
   }, [elementTree?.root, setHoverNodeId, toPhysicalPoint]),
   selectElementAtPoint: useCallback((point: PointerDevicePoint) => {
-    setSelectedNodeId(findDeepestNodeAtPoint(elementTree?.root, toPhysicalPoint(point))?.id)
+    const nodeId = findDeepestNodeAtPoint(elementTree?.root, toPhysicalPoint(point))?.id
+    setSelectedNodeId(nodeId)
+    return nodeId != null
   }, [elementTree?.root, setSelectedNodeId, toPhysicalPoint])
 })

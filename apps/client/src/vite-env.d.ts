@@ -2,6 +2,84 @@
 
 declare const __ONEWORKS_PROJECT_HOMEPAGE_PREVIEW__: boolean
 
+declare module 'luna-dom-viewer' {
+  export interface LunaDomViewerOptions {
+    hotkey?: boolean
+    lowerCaseTagName?: boolean
+    node?: ChildNode
+    observe?: boolean
+    theme?: string
+  }
+
+  export default class LunaDomViewer {
+    constructor(container: HTMLElement, options?: LunaDomViewerOptions)
+    destroy(): void
+    select(node?: ChildNode): void
+  }
+}
+
+declare module 'luna-dom-viewer/react' {
+  import type { FC } from 'react'
+  import type LunaDomViewer from 'luna-dom-viewer'
+
+  interface LunaDomViewerReactProps {
+    hotkey?: boolean
+    lowerCaseTagName?: boolean
+    node?: ChildNode
+    observe?: boolean
+    theme?: string
+    onCreate?: (domViewer: LunaDomViewer) => void
+    onDeselect?: () => void
+    onSelect?: (node: Node) => void
+  }
+
+  const LunaDomViewerReact: FC<LunaDomViewerReactProps>
+  export default LunaDomViewerReact
+}
+
+declare module 'luna-console' {
+  export interface LunaConsoleOptions {
+    asyncRender?: boolean
+    maxNum?: number
+    showHeader?: boolean
+    theme?: string
+  }
+
+  export default class LunaConsole {
+    constructor(container: HTMLElement, options?: LunaConsoleOptions)
+    clear(silent?: boolean): void
+    debug(...args: unknown[]): void
+    destroy(): void
+    error(...args: unknown[]): void
+    info(...args: unknown[]): void
+    log(...args: unknown[]): void
+    warn(...args: unknown[]): void
+  }
+}
+
+declare module 'luna-dom-highlighter' {
+  export interface LunaDomHighlighterOptions {
+    borderColor?: string | { a?: number; b: number; g: number; r: number }
+    colorFormat?: 'hex' | 'hsl' | 'rgb'
+    contentColor?: string | { a?: number; b: number; g: number; r: number }
+    marginColor?: string | { a?: number; b: number; g: number; r: number }
+    monitorResize?: boolean
+    paddingColor?: string | { a?: number; b: number; g: number; r: number }
+    showAccessibilityInfo?: boolean
+    showExtensionLines?: boolean
+    showInfo?: boolean
+    showRulers?: boolean
+    showStyles?: boolean
+  }
+
+  export default class LunaDomHighlighter {
+    constructor(container: HTMLElement, options?: LunaDomHighlighterOptions)
+    destroy(): void
+    hide(): void
+    highlight(target: HTMLElement | Text, options?: LunaDomHighlighterOptions): void
+  }
+}
+
 interface ImportMetaEnv {
   readonly __ONEWORKS_PROJECT_SERVER_BASE_URL__: string
   readonly __ONEWORKS_PROJECT_SERVER_HOST__: string
@@ -188,7 +266,30 @@ interface DesktopMobileDebugDevice {
   detail: string
   id: string
   label: string
+  platform?: 'android' | 'ios'
+  screen?: {
+    height: number
+    scale?: number
+    width: number
+  }
   state: string
+  videoSource?: 'mjpeg' | 'screenshot' | 'scrcpy'
+}
+
+interface DesktopMobileDebugIosWdaTargetConfig {
+  autoStart?: boolean
+  derivedDataPath?: string
+  destinationPlatform?: 'device' | 'simulator'
+  enabled?: boolean
+  developerDir?: string
+  developmentTeam?: string
+  id?: string
+  label?: string
+  mjpegUrl?: string
+  productBundleIdentifier?: string
+  udid?: string
+  wdaProjectPath?: string
+  wdaUrl: string
 }
 
 interface DesktopMobileDebugNetworkTargetConfig {
@@ -206,8 +307,10 @@ interface DesktopMobileDebugPortForwardRuleConfig {
 }
 
 interface DesktopMobileDebugConfig {
+  discoverIosDevices?: boolean
   discoverNetworkTargets?: boolean
   discoverUsbDevices?: boolean
+  iosWdaTargets?: DesktopMobileDebugIosWdaTargetConfig[]
   networkTargets?: DesktopMobileDebugNetworkTargetConfig[]
   portForwardingRules?: DesktopMobileDebugPortForwardRuleConfig[]
   selectedDeviceId?: string
@@ -266,7 +369,7 @@ interface DesktopMobileDeviceLogsResponse {
   deviceId: string
   lineLimit: number
   lines: string[]
-  source: 'logcat'
+  source: 'logcat' | 'wda'
 }
 
 interface DesktopMobileDeviceVideoStreamStartResponse {
@@ -311,7 +414,7 @@ interface DesktopMobileElementNode {
   children: DesktopMobileElementNode[]
   id: string
   label?: string
-  source: 'uiautomator'
+  source: 'uiautomator' | 'wda'
   type: string
 }
 
@@ -320,7 +423,7 @@ interface DesktopMobileElementTreeResponse {
   deviceId: string
   nodeCount: number
   root?: DesktopMobileElementNode
-  source: 'uiautomator'
+  source: 'uiautomator' | 'wda'
 }
 
 interface DesktopMobileDeviceInputEvent {
@@ -329,7 +432,7 @@ interface DesktopMobileDeviceInputEvent {
   endX?: number
   endY?: number
   key?: 'app-switch' | 'back' | 'delete' | 'enter' | 'home' | 'power' | 'volume-down' | 'volume-up'
-  kind: 'action' | 'key' | 'scroll' | 'swipe' | 'tap' | 'text' | 'touch'
+  kind: 'action' | 'drag' | 'key' | 'scroll' | 'swipe' | 'tap' | 'text' | 'touch'
   physicalEndX?: number
   physicalEndY?: number
   physicalX?: number

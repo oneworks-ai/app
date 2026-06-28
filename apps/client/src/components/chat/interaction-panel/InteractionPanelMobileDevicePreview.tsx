@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Mobile device preview coordinates screen, tabs, dock state, and device refresh actions. */
+
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
@@ -35,11 +37,12 @@ export function InteractionPanelMobileDevicePreview({
   const readyDevice = getReadyDevice(devices)
   const readyDeviceId = readyDevice?.id
   const deviceTitle = readyDevice == null ? undefined : getDeviceWindowTitle(readyDevice)
-  const preview = useMobileDevicePreviewController(readyDeviceId, isActive)
+  const preview = useMobileDevicePreviewController(readyDevice, isActive)
   const [isSidePanelVisible, setIsSidePanelVisible] = useState(true)
   const [isEnvironmentPanelOpen, setIsEnvironmentPanelOpen] = useState(false)
   const [dockPosition, setDockPosition] = useState<MobileDeviceDockPosition>('right')
   const usesStandaloneHeaderActions = onStandaloneHeaderActionsChange != null
+  const supportsEnvironmentPanel = readyDevice?.platform !== 'ios'
   const scheduleStandaloneWindowFit = useCallback((
     options: { hiddenScreenWidth?: number; hiddenWidthMode?: 'current-window' | 'device' } = {}
   ) => {
@@ -64,13 +67,14 @@ export function InteractionPanelMobileDevicePreview({
     })
   }, [isSidePanelVisible, scheduleStandaloneWindowFit])
   const toggleEnvironmentPanel = useCallback(() => {
+    if (!supportsEnvironmentPanel) return
     const willOpen = !isEnvironmentPanelOpen
     setIsEnvironmentPanelOpen(willOpen)
     if (willOpen) {
       setIsSidePanelVisible(true)
     }
     scheduleStandaloneWindowFit(willOpen && !isSidePanelVisible ? { hiddenWidthMode: 'current-window' } : {})
-  }, [isEnvironmentPanelOpen, isSidePanelVisible, scheduleStandaloneWindowFit])
+  }, [isEnvironmentPanelOpen, isSidePanelVisible, scheduleStandaloneWindowFit, supportsEnvironmentPanel])
   const sendInput = useCallback((input: DesktopMobileDeviceInputEvent) => {
     void preview.sendInput(input)
   }, [preview.sendInput])
@@ -83,6 +87,7 @@ export function InteractionPanelMobileDevicePreview({
     usesStandaloneHeaderActions && readyDevice != null
       ? (
         <MobileDeviceStandaloneHeaderActions
+          devicePlatform={readyDevice.platform}
           deviceId={readyDevice.id}
           isEnvironmentPanelOpen={isEnvironmentPanelOpen}
           isSidePanelVisible={isSidePanelVisible}
@@ -146,16 +151,24 @@ export function InteractionPanelMobileDevicePreview({
       <div className={previewGridClassName}>
         <InteractionPanelMobileDeviceScreen
           deviceTitle={visibleDeviceTitle}
+          devicePlatform={readyDevice.platform}
           elementScreen={preview.elementTree?.root?.bounds}
+          elementTreeRoot={preview.elementTree?.root}
           hoverNode={preview.hoverNode}
+          inputScreen={readyDevice.screen}
           isInspecting={preview.isInspecting}
           screenshot={preview.screenshot}
           selectedNode={preview.selectedNode}
           videoDeviceId={readyDeviceId}
+          videoSource={preview.videoSource}
           videoSize={preview.videoSize}
           videoStatus={preview.videoStatus}
           videoStreamKey={preview.videoStreamKey}
+          onCancelInspect={preview.cancelInspect}
+          onClearSelectedElement={preview.clearSelectedElement}
+          onHoverElementId={preview.hoverElementById}
           onHoverPoint={preview.hoverElementAtPoint}
+          onInspectElementId={preview.selectElementById}
           onInspectPoint={preview.selectElementAtPoint}
           onPointerLeave={() => preview.setHoverNodeId(undefined)}
           onSendInput={sendInput}
@@ -167,6 +180,7 @@ export function InteractionPanelMobileDevicePreview({
         />
         <InteractionPanelMobileDevicePreviewSidePanel
           details={details}
+          devicePlatform={readyDevice.platform}
           deviceId={readyDevice.id}
           dockPosition={dockPosition}
           elementTree={preview.elementTree}

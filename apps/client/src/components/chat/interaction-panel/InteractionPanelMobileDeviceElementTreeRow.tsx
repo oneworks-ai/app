@@ -14,6 +14,15 @@ const visibleAttributeNames = [
 
 const getElementNodeName = (node: DesktopMobileElementNode) => node.type.split('.').at(-1) ?? node.type
 
+const getElementNodeIndent = (depth: number) => {
+  const fullStepLimit = 12
+  const fullStepPx = 14
+  const compactStepPx = 8
+
+  if (depth <= fullStepLimit) return depth * fullStepPx
+  return fullStepLimit * fullStepPx + (depth - fullStepLimit) * compactStepPx
+}
+
 const getElementNodeAttributes = (node: DesktopMobileElementNode) =>
   visibleAttributeNames
     .map(name => [name, node.attributes[name]] as const)
@@ -52,7 +61,8 @@ export function InteractionPanelMobileDeviceElementTreeRow({
       aria-expanded={hasChildren ? !isCollapsed : undefined}
       aria-selected={isSelected}
       className={`chat-interaction-panel-mobile-debug__element-row ${isSelected ? 'is-selected' : ''}`}
-      style={{ '--mobile-debug-node-depth': `${Math.min(depth, 12) * 14}px` } as CSSProperties}
+      data-mobile-debug-node-id={node.id}
+      style={{ '--mobile-debug-node-depth': `${getElementNodeIndent(depth)}px` } as CSSProperties}
       onClick={() => onSelectNode(node.id)}
     >
       <span
