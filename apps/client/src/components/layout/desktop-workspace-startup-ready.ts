@@ -8,6 +8,7 @@ interface DesktopWorkspaceStartupReadyOptions {
 }
 
 const DEFAULT_VISIBLE_READY_TIMEOUT_MS = 8_000
+const READY_PAINT_FALLBACK_MS = 250
 
 const isElementVisible = (element: Element) => {
   const rect = element.getBoundingClientRect()
@@ -37,6 +38,7 @@ export function useDesktopWorkspaceStartupReady(
     let isDone = false
     let firstFrame: number | null = null
     let secondFrame: number | null = null
+    let paintFallbackTimer: number | null = null
     let visibleObserver: MutationObserver | null = null
     let visibleTimeout: number | null = null
 
@@ -49,18 +51,27 @@ export function useDesktopWorkspaceStartupReady(
       }
     }
 
+    const markReadyOnce = () => {
+      if (isDisposed || isDone) return
+
+      isDone = true
+      stopWatchingVisibleElement()
+      if (paintFallbackTimer != null) {
+        window.clearTimeout(paintFallbackTimer)
+        paintFallbackTimer = null
+      }
+      markReady()
+    }
+
     const finishAfterPaint = () => {
       if (isDisposed || isDone || firstFrame != null || secondFrame != null) return
 
+      paintFallbackTimer = window.setTimeout(markReadyOnce, READY_PAINT_FALLBACK_MS)
       firstFrame = window.requestAnimationFrame(() => {
         firstFrame = null
         secondFrame = window.requestAnimationFrame(() => {
           secondFrame = null
-          if (isDisposed || isDone) return
-
-          isDone = true
-          stopWatchingVisibleElement()
-          markReady()
+          markReadyOnce()
         })
       })
     }
@@ -93,6 +104,9 @@ export function useDesktopWorkspaceStartupReady(
       }
       if (secondFrame != null) {
         window.cancelAnimationFrame(secondFrame)
+      }
+      if (paintFallbackTimer != null) {
+        window.clearTimeout(paintFallbackTimer)
       }
     }
   }, [markReady, ready, timeoutMs, visibleSelector])
