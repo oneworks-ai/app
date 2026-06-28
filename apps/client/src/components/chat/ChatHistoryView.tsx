@@ -529,11 +529,7 @@ export function ChatHistoryView({
       title: agentRoomTranscript.room.title
     }
   }, [agentRoomTranscript])
-  const isInitialSessionRunWithoutAssistant = !isAgentRoomMode &&
-    session?.status === 'running' &&
-    !messages.some(message => message.role === 'assistant')
-  const resolvedSessionActivityLabel = sessionActivityLabel ??
-    (isInitialSessionRunWithoutAssistant ? t('chat.sessionOperation.adapterCliPrepare') : undefined)
+  const resolvedSessionActivityLabel = sessionActivityLabel
   const showThinkingIndicator = isCreating || session?.status === 'running' || resolvedSessionActivityLabel != null
   const historyRenderCount = (
     isAgentRoomMode ? agentRoomTranscript.room.messages.length : messages.length

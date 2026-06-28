@@ -1859,7 +1859,7 @@
       "transcribeFailed": "语音识别失败"
     },
     "sessionOperation": {
-      "adapterCliPrepare": "正在准备适配器 CLI；如果本机没有可用版本，会自动安装…"
+      "adapterCliPrepare": "正在检查适配器 CLI…"
     },
     "stop": "停止",
     "result": "结果",

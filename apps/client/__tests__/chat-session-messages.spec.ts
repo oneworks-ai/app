@@ -6,13 +6,16 @@ import {
   getFatalSessionError,
   restoreInteractionStateFromHistory
 } from '#~/hooks/chat/interaction-state'
+import { getSessionActivityLabel } from '#~/hooks/chat/session-activity-label'
 import {
   restoreSessionCompactionEventsFromHistoryEvents,
   restoreSessionCompactionInfoFromHistoryEvents
 } from '#~/hooks/chat/session-compaction'
 import {
+  applySessionOperationEvent,
   getChatMessageFromSessionHistoryEvent,
   restoreChatMessagesFromSessionHistoryEvents,
+  restoreSessionOperationInfoFromHistoryEvents,
   restoreSessionWorkspaceChangesFromHistoryEvents,
   shouldApplyHistoryRefreshResult,
   shouldRefreshHistoryForSessionUpdate,
@@ -427,6 +430,58 @@ describe('chat session interaction state', () => {
       requestSeq: 1,
       sessionId: 'sess-1'
     })).toBe(false)
+  })
+
+  it('clears adapter CLI operation state after the matching completion event', () => {
+    const startedEvent = {
+      type: 'adapter_event',
+      data: {
+        runtimeEvent: {
+          type: 'operation_started',
+          operationId: 'adapter-cli-prepare',
+          message: 'Checking adapter CLI.',
+          ts: 100
+        }
+      }
+    } as const
+    const completedEvent = {
+      type: 'adapter_event',
+      data: {
+        runtimeEvent: {
+          type: 'operation_completed',
+          operationId: 'adapter-cli-prepare',
+          message: 'Adapter CLI is ready.',
+          ts: 120
+        }
+      }
+    } as const
+
+    const activeOperation = applySessionOperationEvent(null, startedEvent)
+
+    expect(activeOperation).toEqual(expect.objectContaining({
+      operationId: 'adapter-cli-prepare',
+      message: 'Checking adapter CLI.'
+    }))
+    expect(applySessionOperationEvent(activeOperation, completedEvent)).toBeNull()
+    expect(restoreSessionOperationInfoFromHistoryEvents([
+      startedEvent,
+      completedEvent
+    ])).toBeNull()
+  })
+
+  it('only labels adapter CLI preparation while the operation is active', () => {
+    const t = (key: string) => key
+
+    expect(getSessionActivityLabel(null, t)).toBeUndefined()
+    expect(getSessionActivityLabel({
+      operationId: 'adapter-cli-prepare',
+      startedAt: 100
+    }, t)).toBe('chat.sessionOperation.adapterCliPrepare')
+    expect(getSessionActivityLabel({
+      operationId: 'tool-run',
+      message: 'Running tool',
+      startedAt: 100
+    }, t)).toBe('Running tool')
   })
 
   it('refreshes history when the current session update can contain unseen messages', () => {
