@@ -1,4 +1,5 @@
 import { Tabs } from 'antd'
+import { Fragment } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -37,11 +38,7 @@ function MobileDeviceDockPositionSwitch({
   const { t } = useTranslation()
 
   return (
-    <div
-      className='chat-interaction-panel-mobile-debug__dock-switch'
-      role='group'
-      aria-label={t('chat.interactionPanel.mobileDebugDockPosition')}
-    >
+    <Fragment>
       {dockPositionItems.map(item => (
         <MobileDeviceTabActionButton
           key={item.key}
@@ -51,12 +48,13 @@ function MobileDeviceDockPositionSwitch({
           onClick={() => onDockPositionChange(item.key)}
         />
       ))}
-    </div>
+    </Fragment>
   )
 }
 
 export function InteractionPanelMobileDeviceSideTabs({
   details,
+  devicePlatform,
   deviceId,
   dockPosition,
   elementTree,
@@ -74,6 +72,7 @@ export function InteractionPanelMobileDeviceSideTabs({
   onToggleSidePanel
 }: {
   details: ReactNode
+  devicePlatform?: DesktopMobileDebugDevice['platform']
   deviceId: string
   dockPosition: MobileDeviceDockPosition
   elementTree: DesktopMobileElementTreeResponse | null
@@ -116,6 +115,7 @@ export function InteractionPanelMobileDeviceSideTabs({
               />
               {showInlineActions && (
                 <MobileDeviceInlineTabActions
+                  devicePlatform={devicePlatform}
                   onRefresh={onRefresh}
                   onSendInput={onSendInput}
                   onToggleSidePanel={onToggleSidePanel}

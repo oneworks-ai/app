@@ -27,12 +27,25 @@ import { ReadableStream } from '@yume-chan/stream-extra'
 import { WebSocket as WebSocketImpl } from 'ws'
 import type { WebSocket } from 'ws'
 
+import {
+  captureIosWdaScreenshot,
+  dumpIosWdaElementTree,
+  isIosWdaDeviceId,
+  listIosWdaDevices,
+  normalizeIosWdaTargetConfigs,
+  openIosWdaMjpegStream,
+  readIosWdaLogs,
+  sendIosWdaInput
+} from './ios-wda.js'
+import type { NormalizedIosWdaTargetConfig } from './ios-wda.js'
+
 const ADB_TIMEOUT_MS = 10000
 const FETCH_TIMEOUT_MS = 5000
 const ADB_INPUT_TIMEOUT_MS = 3000
 const ADB_ENVIRONMENT_TIMEOUT_MS = 5000
 const ADB_LOGCAT_TIMEOUT_MS = 5000
 const ADB_SCREENSHOT_TIMEOUT_MS = 4000
+const ANDROID_DEVTOOLS_SOCKET_SCAN_TIMEOUT_MS = 1500
 const ADB_UIAUTOMATOR_DUMP_TIMEOUT_MS = 10000
 const ADB_UIAUTOMATOR_READ_TIMEOUT_MS = 3500
 const SCRCPY_SERVER_VERSION = '3.3.3'
@@ -46,7 +59,30 @@ export interface MobileDebugDevice {
   detail: string
   id: string
   label: string
+  platform?: 'android' | 'ios'
+  screen?: {
+    height: number
+    scale?: number
+    width: number
+  }
   state: string
+  videoSource?: 'mjpeg' | 'screenshot' | 'scrcpy'
+}
+
+export interface MobileDebugIosWdaTargetConfig {
+  autoStart?: boolean
+  derivedDataPath?: string
+  destinationPlatform?: 'device' | 'simulator'
+  enabled?: boolean
+  developerDir?: string
+  developmentTeam?: string
+  id?: string
+  label?: string
+  mjpegUrl?: string
+  productBundleIdentifier?: string
+  udid?: string
+  wdaProjectPath?: string
+  wdaUrl: string
 }
 
 export interface MobileDebugNetworkTargetConfig {
@@ -64,15 +100,18 @@ export interface MobileDebugPortForwardRuleConfig {
 }
 
 export interface MobileDebugConfig {
+  discoverIosDevices?: boolean
   discoverNetworkTargets?: boolean
   discoverUsbDevices?: boolean
+  iosWdaTargets?: MobileDebugIosWdaTargetConfig[]
   networkTargets?: MobileDebugNetworkTargetConfig[]
   portForwardingRules?: MobileDebugPortForwardRuleConfig[]
   selectedDeviceId?: string
 }
 
 type NormalizedMobileDebugConfig =
-  & Omit<Required<MobileDebugConfig>, 'selectedDeviceId'>
+  & Omit<Required<MobileDebugConfig>, 'iosWdaTargets' | 'selectedDeviceId'>
+  & { iosWdaTargets: NormalizedIosWdaTargetConfig[] }
   & Pick<MobileDebugConfig, 'selectedDeviceId'>
 
 export interface MobileDebugPortForwardStatus {
@@ -128,7 +167,7 @@ export interface MobileDeviceLogsResponse {
   deviceId: string
   lineLimit: number
   lines: string[]
-  source: 'logcat'
+  source: 'logcat' | 'wda'
 }
 
 export interface MobileDeviceVideoStreamStartResponse {
@@ -173,7 +212,7 @@ export interface MobileElementNode {
   children: MobileElementNode[]
   id: string
   label?: string
-  source: 'uiautomator'
+  source: 'uiautomator' | 'wda'
   type: string
 }
 
@@ -182,7 +221,7 @@ export interface MobileElementTreeResponse {
   deviceId: string
   nodeCount: number
   root?: MobileElementNode
-  source: 'uiautomator'
+  source: 'uiautomator' | 'wda'
 }
 
 export interface MobileDeviceInputEvent {
@@ -191,7 +230,7 @@ export interface MobileDeviceInputEvent {
   endX?: number
   endY?: number
   key?: 'app-switch' | 'back' | 'delete' | 'enter' | 'home' | 'power' | 'volume-down' | 'volume-up'
-  kind: 'action' | 'key' | 'scroll' | 'swipe' | 'tap' | 'text' | 'touch'
+  kind: 'action' | 'drag' | 'key' | 'scroll' | 'swipe' | 'tap' | 'text' | 'touch'
   physicalEndX?: number
   physicalEndY?: number
   physicalX?: number
@@ -335,7 +374,7 @@ const adbTouchGestureByDeviceId = new Map<string, { startedAt: number; x: number
 
 const runCommand = (file: string, args: string[], timeout = ADB_TIMEOUT_MS) =>
   new Promise<CommandResult>((resolve, reject) => {
-    execFile(file, args, { maxBuffer: 1024 * 1024 * 4, timeout }, (error, stdout, stderr) => {
+    execFile(file, args, { killSignal: 'SIGKILL', maxBuffer: 1024 * 1024 * 4, timeout }, (error, stdout, stderr) => {
       if (error != null) {
         reject(error)
         return
@@ -346,16 +385,26 @@ const runCommand = (file: string, args: string[], timeout = ADB_TIMEOUT_MS) =>
 
 const runCommandBuffer = (file: string, args: string[], timeout = ADB_TIMEOUT_MS) =>
   new Promise<BufferCommandResult>((resolve, reject) => {
-    execFile(file, args, { encoding: 'buffer', maxBuffer: 1024 * 1024 * 24, timeout }, (error, stdout, stderr) => {
-      if (error != null) {
-        reject(error)
-        return
+    execFile(
+      file,
+      args,
+      {
+        encoding: 'buffer',
+        killSignal: 'SIGKILL',
+        maxBuffer: 1024 * 1024 * 24,
+        timeout
+      },
+      (error, stdout, stderr) => {
+        if (error != null) {
+          reject(error)
+          return
+        }
+        resolve({
+          stderr: Buffer.isBuffer(stderr) ? stderr.toString('utf8') : String(stderr),
+          stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout)
+        })
       }
-      resolve({
-        stderr: Buffer.isBuffer(stderr) ? stderr.toString('utf8') : String(stderr),
-        stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout)
-      })
-    })
+    )
   })
 
 const runQueuedDeviceAdbTask = async <T>(deviceId: string, task: () => Promise<T>): Promise<T> => {
@@ -404,6 +453,13 @@ const runDeviceCommand = (
   args: string[],
   timeout = ADB_TIMEOUT_MS
 ) => runQueuedDeviceAdbTask(deviceId, () => runCommand(adbPath, ['-s', deviceId, ...args], timeout))
+
+const runDeviceCommandBuffer = (
+  adbPath: string,
+  deviceId: string,
+  args: string[],
+  timeout = ADB_TIMEOUT_MS
+) => runQueuedDeviceAdbTask(deviceId, () => runCommandBuffer(adbPath, ['-s', deviceId, ...args], timeout))
 
 const toErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
 
@@ -483,8 +539,10 @@ const normalizeMobileDebugConfig = (config: unknown): NormalizedMobileDebugConfi
     : []
 
   return {
+    discoverIosDevices: normalizeEnabled(record.discoverIosDevices),
     discoverNetworkTargets: normalizeEnabled(record.discoverNetworkTargets),
     discoverUsbDevices: normalizeEnabled(record.discoverUsbDevices),
+    iosWdaTargets: normalizeIosWdaTargetConfigs(record),
     networkTargets,
     portForwardingRules,
     selectedDeviceId: typeof record.selectedDeviceId === 'string' && record.selectedDeviceId.trim() !== ''
@@ -847,6 +905,12 @@ const classifySocket = (socketName: string): MobileDebugTarget['socketType'] => 
   return 'other'
 }
 
+const isTransientDevtoolsSocketScanError = (socketName: string, error: unknown) => {
+  if (classifySocket(socketName) !== 'webview') return false
+  return /abort|operation was aborted|timed out|timeout|socket hang up|ECONNRESET|ECONNREFUSED/iu
+    .test(toErrorMessage(error))
+}
+
 const getSocketProcessId = (socketName: string) => socketName.match(/_(\d+)$/u)?.[1]
 
 const readSocketAppName = async (adbPath: string, deviceId: string, socketName: string) => {
@@ -862,7 +926,12 @@ const readSocketAppName = async (adbPath: string, deviceId: string, socketName: 
 }
 
 const listDevtoolsSockets = async (adbPath: string, deviceId: string) => {
-  const result = await runDeviceCommand(adbPath, deviceId, ['shell', 'cat', '/proc/net/unix'])
+  const result = await runDeviceCommand(
+    adbPath,
+    deviceId,
+    ['shell', 'cat', '/proc/net/unix'],
+    ANDROID_DEVTOOLS_SOCKET_SCAN_TIMEOUT_MS
+  )
   const sockets = Array.from(
     new Set(
       result.stdout
@@ -2072,7 +2141,7 @@ const trySendScrcpyMobileDeviceInput = async (
     await controller.injectTouch(
       createScrcpyTouchMessage(session, AndroidMotionEventAction.Up, inputEvent.x, inputEvent.y, 0)
     )
-  } else if (inputEvent.kind === 'swipe') {
+  } else if (inputEvent.kind === 'swipe' || inputEvent.kind === 'drag') {
     await sendScrcpySwipeInput(session, inputEvent)
   } else if (inputEvent.kind === 'scroll') {
     const pointer = toScrcpyPointer(session, inputEvent.x, inputEvent.y)
@@ -2336,57 +2405,64 @@ export const listMobileDebugTargets = async (inputConfig?: unknown): Promise<Mob
   const targets: MobileDebugTarget[] = []
   const scanErrors: string[] = []
   let adbPath: string | undefined
+  let adbMissing = false
   let devices: MobileDebugDevice[] = []
   let adbErrors: string[] = []
   let portForwarding: MobileDebugPortForwardStatus[] = []
-  const needsAdb = config.discoverUsbDevices || config.portForwardingRules.length > 0
+  const isSelectedIosDevice = isIosWdaDeviceId(config.selectedDeviceId)
+  const needsAdb = !isSelectedIosDevice && (config.discoverUsbDevices || config.portForwardingRules.length > 0)
 
   if (needsAdb) {
     const adb = await resolveAdbPath()
     adbPath = adb.adbPath
     adbErrors = adb.errors
     if (adbPath == null) {
-      return {
-        adbMissing: true,
-        devices: [],
-        errors: ['ADB was not found.', ...adbErrors],
-        portForwarding,
-        scannedAt: Date.now(),
-        targets
-      }
-    }
+      adbMissing = true
+      adbErrors = ['ADB was not found.', ...adbErrors]
+    } else {
+      devices = parseAdbDevices((await runCommand(adbPath, ['devices', '-l'])).stdout)
+        .map(device => ({ ...device, platform: 'android' as const, videoSource: 'scrcpy' as const }))
+      const targetDevices = config.selectedDeviceId == null
+        ? devices
+        : devices.filter(device => device.id === config.selectedDeviceId)
+      portForwarding = await applyPortForwardingRules({
+        adbPath,
+        devices: targetDevices,
+        rules: config.portForwardingRules
+      })
 
-    devices = parseAdbDevices((await runCommand(adbPath, ['devices', '-l'])).stdout)
-    const targetDevices = config.selectedDeviceId == null
-      ? devices
-      : devices.filter(device => device.id === config.selectedDeviceId)
-    portForwarding = await applyPortForwardingRules({
-      adbPath,
-      devices: targetDevices,
-      rules: config.portForwardingRules
-    })
-
-    if (config.discoverUsbDevices) {
-      for (const device of targetDevices) {
-        if (device.state !== 'device') {
-          scanErrors.push(`${device.label}: ${device.state}`)
-          continue
-        }
-
-        try {
-          const sockets = await listDevtoolsSockets(adbPath, device.id)
-          for (const socketName of sockets) {
-            try {
-              targets.push(...await listSocketTargets({ adbPath, device, socketName }))
-            } catch (error) {
-              scanErrors.push(`${device.label} ${socketName}: ${toErrorMessage(error)}`)
-            }
+      if (config.discoverUsbDevices) {
+        for (const device of targetDevices) {
+          if (device.state !== 'device') {
+            scanErrors.push(`${device.label}: ${device.state}`)
+            continue
           }
-        } catch (error) {
-          scanErrors.push(`${device.label}: ${toErrorMessage(error)}`)
+
+          try {
+            const sockets = await listDevtoolsSockets(adbPath, device.id)
+            for (const socketName of sockets) {
+              try {
+                targets.push(...await listSocketTargets({ adbPath, device, socketName }))
+              } catch (error) {
+                if (isTransientDevtoolsSocketScanError(socketName, error)) continue
+                scanErrors.push(`${device.label} ${socketName}: ${toErrorMessage(error)}`)
+              }
+            }
+          } catch {
+            // WebView/CDP discovery is optional; native device control can still work.
+          }
         }
       }
     }
+  }
+
+  if (config.discoverIosDevices || isSelectedIosDevice) {
+    const iosResult = await listIosWdaDevices({
+      selectedDeviceId: config.selectedDeviceId,
+      targets: config.iosWdaTargets
+    })
+    devices.push(...iosResult.devices)
+    scanErrors.push(...iosResult.errors)
   }
 
   if (config.discoverNetworkTargets) {
@@ -2400,6 +2476,7 @@ export const listMobileDebugTargets = async (inputConfig?: unknown): Promise<Mob
   }
 
   return {
+    adbMissing,
     adbPath,
     devices,
     errors: [...adbErrors, ...scanErrors],
@@ -2410,14 +2487,17 @@ export const listMobileDebugTargets = async (inputConfig?: unknown): Promise<Mob
 }
 
 export const captureMobileDeviceScreenshot = async (deviceId: unknown): Promise<MobileDeviceScreenshotResponse> => {
+  if (isIosWdaDeviceId(deviceId)) return await captureIosWdaScreenshot(deviceId)
+
   const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
   const currentTask = deviceScreenshotTaskById.get(device.id)
   if (currentTask != null) return await currentTask
 
   const nextTask = (async () => {
-    const result = await runCommandBuffer(
+    const result = await runDeviceCommandBuffer(
       adbPath,
-      ['-s', device.id, 'exec-out', 'screencap', '-p'],
+      device.id,
+      ['exec-out', 'screencap', '-p'],
       ADB_SCREENSHOT_TIMEOUT_MS
     )
     const size = readPngSize(result.stdout)
@@ -2442,6 +2522,8 @@ export const readMobileDeviceLogs = async (
   deviceId: unknown,
   input: unknown
 ): Promise<MobileDeviceLogsResponse> => {
+  if (isIosWdaDeviceId(deviceId)) return await readIosWdaLogs(deviceId, input)
+
   const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
   const record = input != null && typeof input === 'object' && !Array.isArray(input)
     ? input as Record<string, unknown>
@@ -2466,6 +2548,8 @@ export const sendMobileDeviceInput = async (
   deviceId: unknown,
   input: unknown
 ): Promise<{ deviceId: string; sentAt: number }> => {
+  if (isIosWdaDeviceId(deviceId)) return await sendIosWdaInput(deviceId, input)
+
   const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
   const inputEvent = toInputEventRecord(input)
 
@@ -2480,7 +2564,7 @@ export const sendMobileDeviceInput = async (
     const y = getAdbInputCoordinate(inputEvent, 'y')
     if (x == null || y == null) throw new Error('Tap input requires x and y.')
     await runCommand(adbPath, ['-s', device.id, 'shell', 'input', 'tap', String(x), String(y)], ADB_INPUT_TIMEOUT_MS)
-  } else if (inputEvent.kind === 'swipe') {
+  } else if (inputEvent.kind === 'swipe' || inputEvent.kind === 'drag') {
     const x = getAdbInputCoordinate(inputEvent, 'x')
     const y = getAdbInputCoordinate(inputEvent, 'y')
     const endX = getAdbInputCoordinate(inputEvent, 'endX')
@@ -2498,7 +2582,7 @@ export const sendMobileDeviceInput = async (
       String(y),
       String(endX),
       String(endY),
-      String(normalizeDurationMs(inputEvent.durationMs, 220))
+      String(normalizeDurationMs(inputEvent.durationMs, inputEvent.kind === 'drag' ? 520 : 220))
     ], ADB_INPUT_TIMEOUT_MS)
   } else if (inputEvent.kind === 'text') {
     const text = inputEvent.text?.trim()
@@ -2540,20 +2624,24 @@ export const sendMobileDeviceInput = async (
 }
 
 export const dumpMobileElementTree = async (deviceId: unknown): Promise<MobileElementTreeResponse> => {
+  if (isIosWdaDeviceId(deviceId)) return await dumpIosWdaElementTree(deviceId)
+
   const { adbPath, device } = await resolveReadyAdbDevice(deviceId)
   return await runQueuedElementTreeTask(device.id, async () => {
     const remotePath = `/sdcard/oneworks-window-${Date.now().toString(36)}.xml`
-    await runCommand(
+    await runDeviceCommand(
       adbPath,
-      ['-s', device.id, 'shell', 'uiautomator', 'dump', '--compressed', remotePath],
+      device.id,
+      ['shell', 'uiautomator', 'dump', '--compressed', remotePath],
       ADB_UIAUTOMATOR_DUMP_TIMEOUT_MS
     )
-    const result = await runCommand(
+    const result = await runDeviceCommand(
       adbPath,
-      ['-s', device.id, 'exec-out', 'cat', remotePath],
+      device.id,
+      ['exec-out', 'cat', remotePath],
       ADB_UIAUTOMATOR_READ_TIMEOUT_MS
     )
-    void runCommand(adbPath, ['-s', device.id, 'shell', 'rm', '-f', remotePath], ADB_INPUT_TIMEOUT_MS)
+    void runDeviceCommand(adbPath, device.id, ['shell', 'rm', '-f', remotePath], ADB_INPUT_TIMEOUT_MS)
       .catch(() => undefined)
     const root = parseUiautomatorXml(result.stdout)
     return {
@@ -2564,6 +2652,11 @@ export const dumpMobileElementTree = async (deviceId: unknown): Promise<MobileEl
       source: 'uiautomator'
     }
   })
+}
+
+export const openMobileDeviceMjpegStream = async (deviceId: unknown) => {
+  if (isIosWdaDeviceId(deviceId)) return await openIosWdaMjpegStream(deviceId)
+  throw new Error('MJPEG stream is only available for iOS WDA devices.')
 }
 
 export const handleMobileDeviceVideoStreamSocket = async (

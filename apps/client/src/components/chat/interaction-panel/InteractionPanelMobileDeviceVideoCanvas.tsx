@@ -77,6 +77,8 @@ const createMobileDebugVideoSocketUrl = (deviceId: string) => {
   return url.toString()
 }
 
+const videoStreamStartupTimeoutMs = 10000
+
 export function InteractionPanelMobileDeviceVideoCanvas({
   deviceId,
   onError,
@@ -107,9 +109,17 @@ export function InteractionPanelMobileDeviceVideoCanvas({
     let decoder: WebCodecsVideoDecoder | undefined
     let writer: ReturnType<WebCodecsVideoDecoder['writable']['getWriter']> | undefined
     let serverSocket: WebSocket | undefined
+    let startupTimer: number | undefined
+
+    const clearStartupTimer = () => {
+      if (startupTimer == null) return
+      window.clearTimeout(startupTimer)
+      startupTimer = undefined
+    }
 
     const fail = (message: string) => {
       if (isDisposed) return
+      clearStartupTimer()
       onError(message)
       onStatusChange('unavailable')
     }
@@ -138,6 +148,9 @@ export function InteractionPanelMobileDeviceVideoCanvas({
       const ws = new WebSocket(createMobileDebugVideoSocketUrl(deviceId))
       serverSocket = ws
       ws.binaryType = 'arraybuffer'
+      startupTimer = window.setTimeout(() => {
+        fail('Mobile debug video stream timed out.')
+      }, videoStreamStartupTimeoutMs)
       ws.addEventListener('message', event => {
         if (isDisposed || writer == null) return
         if (typeof event.data === 'string') {
@@ -171,7 +184,10 @@ export function InteractionPanelMobileDeviceVideoCanvas({
           }
           writer.write(toMediaStreamPacket(frame))
             .then(() => {
-              if (!isDisposed) onStatusChange('active')
+              if (!isDisposed) {
+                clearStartupTimer()
+                onStatusChange('active')
+              }
             })
             .catch(error => fail(error instanceof Error ? error.message : String(error)))
         }
@@ -191,6 +207,7 @@ export function InteractionPanelMobileDeviceVideoCanvas({
 
       return () => {
         isDisposed = true
+        clearStartupTimer()
         removeSizeListener()
         serverSocket?.close()
         void writer?.close().catch(() => undefined)

@@ -1,6 +1,7 @@
 .standalone-mobile-debug-route {
   --standalone-mobile-debug-controls-height: 30px;
-  --standalone-mobile-debug-header-height: 44px;
+  --standalone-mobile-debug-header-height: 38px;
+  --standalone-mobile-debug-header-content-height: 18px;
   --interaction-panel-hover-bg: color-mix(
     in srgb,
     var(--primary-color) 9%,
@@ -39,17 +40,17 @@
   z-index: 5;
   display: flex;
   align-items: center;
-  min-height: 44px;
-  height: 44px;
-  padding: 0 12px;
+  min-height: var(--standalone-mobile-debug-header-height);
+  height: var(--standalone-mobile-debug-header-height);
+  padding: 10px;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-color);
   -webkit-app-region: drag;
 }
 
 .standalone-mobile-debug-route__traffic-space {
-  flex: 0 0 78px;
-  width: 78px;
+  flex: 0 0 66px;
+  width: 66px;
   height: 100%;
 }
 
@@ -59,20 +60,22 @@
   min-width: 0;
   max-width: min(420px, 48vw);
   gap: 8px;
+  height: var(--standalone-mobile-debug-header-content-height);
   color: var(--text-color);
   font-size: 13px;
   font-weight: 650;
+  line-height: var(--standalone-mobile-debug-header-content-height);
   letter-spacing: 0;
   white-space: nowrap;
   overflow: hidden;
 }
 
 .standalone-mobile-debug-route__title-icon {
-  width: 17px;
-  height: 17px;
-  min-width: 17px;
-  font-size: 17px;
-  line-height: 1;
+  width: var(--standalone-mobile-debug-header-content-height);
+  height: var(--standalone-mobile-debug-header-content-height);
+  min-width: var(--standalone-mobile-debug-header-content-height);
+  font-size: var(--standalone-mobile-debug-header-content-height);
+  line-height: var(--standalone-mobile-debug-header-content-height);
   color: var(--primary-color);
 }
 
@@ -102,7 +105,7 @@
 .chat-interaction-panel-mobile-debug__standalone-header-actions {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -112,33 +115,35 @@
 
 .standalone-mobile-debug-route__popover-trigger {
   display: inline-flex;
+  height: var(--standalone-mobile-debug-header-content-height);
 }
 
 .standalone-mobile-debug-route__header-action.ant-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
+  width: var(--standalone-mobile-debug-header-content-height);
+  min-width: var(--standalone-mobile-debug-header-content-height);
+  height: var(--standalone-mobile-debug-header-content-height);
   padding: 0 !important;
   border: 0;
-  border-radius: 6px;
+  border-radius: 0;
   color: var(--secondary-text-color);
   background: transparent !important;
   box-shadow: none;
-  transition: background-color .16s ease, color .16s ease;
+  line-height: var(--standalone-mobile-debug-header-content-height);
+  transition: color .16s ease;
 
   &:hover,
   &:focus-visible {
     color: var(--primary-color) !important;
-    background: var(--interaction-panel-hover-bg) !important;
+    background: transparent !important;
   }
 
   &:active,
   &.is-active {
     color: var(--primary-color) !important;
-    background: var(--interaction-panel-active-bg) !important;
+    background: transparent !important;
   }
 
   &.is-danger:hover,
@@ -156,11 +161,11 @@
 }
 
 .standalone-mobile-debug-route__header-action-icon {
-  width: 18px;
-  height: 18px;
-  min-width: 18px;
-  font-size: 18px;
-  line-height: 1;
+  width: var(--standalone-mobile-debug-header-content-height);
+  height: var(--standalone-mobile-debug-header-content-height);
+  min-width: var(--standalone-mobile-debug-header-content-height);
+  font-size: var(--standalone-mobile-debug-header-content-height);
+  line-height: var(--standalone-mobile-debug-header-content-height);
 }
 
 .standalone-mobile-debug-route__content {

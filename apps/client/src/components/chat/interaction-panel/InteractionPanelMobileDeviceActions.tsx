@@ -34,17 +34,31 @@ const moreControlItems = [
   ['collapse-panels', 'keyboard_arrow_up', 'mobileDebugCollapsePanels']
 ] as const
 
+const isMoreControlItemVisible = (
+  item: (typeof moreControlItems)[number],
+  devicePlatform: DesktopMobileDebugDevice['platform'] | undefined
+) => {
+  if (item === 'divider') return true
+  if (devicePlatform !== 'ios') return true
+  const [key] = item
+  return key === 'reconnect' || key === 'power' || key === 'volume-up' || key === 'volume-down'
+}
+
 export const useMobileDeviceMoreMenu = ({
+  devicePlatform,
   onOpenDeviceList,
   onReconnect,
   onSendInput
 }: {
+  devicePlatform?: DesktopMobileDebugDevice['platform']
   onOpenDeviceList?: () => void
   onReconnect: () => void
   onSendInput: (input: DesktopMobileDeviceInputEvent) => void
 }) => {
   const { t } = useTranslation()
-  const controlItems: MenuProps['items'] = moreControlItems.map((item) => {
+  const controlItems: MenuProps['items'] = moreControlItems.filter(item =>
+    isMoreControlItemVisible(item, devicePlatform)
+  ).map((item) => {
     if (item === 'divider') return { type: 'divider' }
     const [key, icon, labelKey] = item
     return {
@@ -78,16 +92,18 @@ export const useMobileDeviceMoreMenu = ({
 }
 
 export function MobileDeviceInlineTabActions({
+  devicePlatform,
   onRefresh,
   onSendInput,
   onToggleSidePanel
 }: {
+  devicePlatform?: DesktopMobileDebugDevice['platform']
   onRefresh: () => void
   onSendInput: (input: DesktopMobileDeviceInputEvent) => void
   onToggleSidePanel: () => void
 }) {
   const { t } = useTranslation()
-  const moreMenu = useMobileDeviceMoreMenu({ onReconnect: onRefresh, onSendInput })
+  const moreMenu = useMobileDeviceMoreMenu({ devicePlatform, onReconnect: onRefresh, onSendInput })
 
   return (
     <div className='chat-interaction-panel-mobile-debug__tab-actions'>

@@ -1,34 +1,53 @@
 import type { CSSProperties, MouseEvent } from 'react'
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { InteractionPanelMobileDeviceElementDetails } from './InteractionPanelMobileDeviceElementDetails'
-import { InteractionPanelMobileDeviceElementTreeRow } from './InteractionPanelMobileDeviceElementTreeRow'
-import { maxVisibleElementRows } from './mobile-device-preview-utils'
+import { InteractionPanelMobileDeviceLunaDomViewer } from './InteractionPanelMobileDeviceLunaDomViewer'
 import type { FlattenedElementNode } from './mobile-device-preview-utils'
 import { useMobileDeviceElementSplitter } from './use-mobile-device-element-splitter'
 
-const getVisibleElementRows = (
+interface ElementPathItem {
+  label: string
+  node: DesktopMobileElementNode
+}
+
+const getElementNodeName = (node: DesktopMobileElementNode) => node.type.split('.').at(-1) ?? node.type
+
+const getElementNodeIndexSuffix = (node: DesktopMobileElementNode) => {
+  const rawIndex = node.id.split(':').at(-1)?.split('/').at(-1)
+  if (rawIndex == null || !/^\d+$/u.test(rawIndex)) return ''
+  return `[${Number(rawIndex) + 1}]`
+}
+
+const getElementNodePathSegment = (node: DesktopMobileElementNode) =>
+  `${getElementNodeName(node)}${getElementNodeIndexSuffix(node)}`
+
+const getSelectedElementPathItems = (
   flattenedNodes: FlattenedElementNode[],
-  collapsedNodeIds: Set<string>
-) => {
-  const visibleNodes: FlattenedElementNode[] = []
-  let hiddenAncestorDepth: number | undefined
+  selectedNode: DesktopMobileElementNode | undefined,
+  selectedNodeId: string | undefined
+): ElementPathItem[] => {
+  if (selectedNodeId == null) return []
 
+  const pathStack: FlattenedElementNode[] = []
   for (const item of flattenedNodes) {
-    if (hiddenAncestorDepth != null) {
-      if (item.depth > hiddenAncestorDepth) continue
-      hiddenAncestorDepth = undefined
-    }
-
-    visibleNodes.push(item)
-
-    if (item.node.children.length > 0 && collapsedNodeIds.has(item.node.id)) {
-      hiddenAncestorDepth = item.depth
+    pathStack[item.depth] = item
+    pathStack.length = item.depth + 1
+    if (item.node.id === selectedNodeId) {
+      return pathStack.map(pathItem => ({
+        label: getElementNodePathSegment(pathItem.node),
+        node: pathItem.node
+      }))
     }
   }
 
-  return visibleNodes
+  return selectedNode == null
+    ? []
+    : [{
+      label: getElementNodePathSegment(selectedNode),
+      node: selectedNode
+    }]
 }
 
 export function InteractionPanelMobileDeviceInspectPanel({
@@ -45,7 +64,10 @@ export function InteractionPanelMobileDeviceInspectPanel({
   onSelectNode: (nodeId: string | undefined) => void
 }) {
   const { t } = useTranslation()
-  const [collapsedNodeIds, setCollapsedNodeIds] = useState(() => new Set<string>())
+  const elementPathAutoScrollRef = useRef(false)
+  const elementPathUserScrolledRef = useRef(false)
+  const previousSelectedElementPathRef = useRef('')
+  const elementPathValueRef = useRef<HTMLSpanElement>(null)
   const {
     elementDetailsColumn,
     elementListColumn,
@@ -53,25 +75,46 @@ export function InteractionPanelMobileDeviceInspectPanel({
     handleSplitterPointerDown,
     inspectWorkspaceRef
   } = useMobileDeviceElementSplitter()
-  const visibleNodes = useMemo(
-    () => getVisibleElementRows(flattenedNodes, collapsedNodeIds).slice(0, maxVisibleElementRows),
-    [collapsedNodeIds, flattenedNodes]
+  const selectedElementPathItems = useMemo(
+    () => getSelectedElementPathItems(flattenedNodes, selectedNode, selectedNodeId),
+    [flattenedNodes, selectedNode, selectedNodeId]
   )
-  const handleToggleNode = (nodeId: string) => {
-    setCollapsedNodeIds(previousNodeIds => {
-      const nextNodeIds = new Set(previousNodeIds)
-      if (nextNodeIds.has(nodeId)) {
-        nextNodeIds.delete(nodeId)
-      } else {
-        nextNodeIds.add(nodeId)
-      }
-      return nextNodeIds
+  const selectedElementPath = useMemo(
+    () => selectedElementPathItems.map(item => item.label).join(' > '),
+    [selectedElementPathItems]
+  )
+
+  useLayoutEffect(() => {
+    if (previousSelectedElementPathRef.current !== selectedElementPath) {
+      previousSelectedElementPathRef.current = selectedElementPath
+      elementPathUserScrolledRef.current = false
+    }
+
+    const element = elementPathValueRef.current
+    if (element == null || selectedElementPath === '' || elementPathUserScrolledRef.current) return
+
+    elementPathAutoScrollRef.current = true
+    element.scrollLeft = element.scrollWidth
+    const frameId = window.requestAnimationFrame(() => {
+      elementPathAutoScrollRef.current = false
     })
-  }
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      elementPathAutoScrollRef.current = false
+    }
+  }, [selectedElementPath])
+
   const handleElementListClick = (event: MouseEvent<HTMLDivElement>) => {
     if (!(event.target instanceof Element)) return
     if (event.target.closest('.chat-interaction-panel-mobile-debug__element-row') != null) return
+    if (event.target.closest('.luna-dom-viewer-tree-item') != null) return
+    if (event.target.closest('.chat-interaction-panel-mobile-debug__element-path-bar') != null) return
     onSelectNode(undefined)
+  }
+  const handleElementPathScroll = () => {
+    if (elementPathAutoScrollRef.current) return
+    elementPathUserScrolledRef.current = true
   }
 
   return (
@@ -87,27 +130,55 @@ export function InteractionPanelMobileDeviceInspectPanel({
           } as CSSProperties}
       >
         <div className='chat-interaction-panel-mobile-debug__element-list' onClick={handleElementListClick}>
-          {visibleNodes.length === 0
-            ? (
-              <div className='chat-interaction-panel-mobile-debug__element-empty'>
-                {t('chat.interactionPanel.mobileDebugNoElements')}
-              </div>
-            )
-            : (
-              <div className='chat-interaction-panel-mobile-debug__element-tree' role='tree'>
-                {visibleNodes.map(({ depth, node }) => (
-                  <InteractionPanelMobileDeviceElementTreeRow
-                    key={node.id}
-                    depth={depth}
-                    isCollapsed={collapsedNodeIds.has(node.id)}
-                    isSelected={selectedNodeId === node.id}
-                    node={node}
-                    onSelectNode={onSelectNode}
-                    onToggleNode={handleToggleNode}
-                  />
+          <div className='chat-interaction-panel-mobile-debug__element-tree-scroll'>
+            {elementTree?.root == null
+              ? (
+                <div className='chat-interaction-panel-mobile-debug__element-empty'>
+                  {t('chat.interactionPanel.mobileDebugNoElements')}
+                </div>
+              )
+              : (
+                <InteractionPanelMobileDeviceLunaDomViewer
+                  rootNode={elementTree.root}
+                  selectedNodeId={selectedNodeId}
+                  onSelectNode={onSelectNode}
+                />
+              )}
+          </div>
+          <div className='chat-interaction-panel-mobile-debug__element-path-bar'>
+            <span
+              ref={elementPathValueRef}
+              className={`chat-interaction-panel-mobile-debug__element-path-value ${
+                selectedElementPath === '' ? 'is-empty' : ''
+              }`}
+              onScroll={handleElementPathScroll}
+              tabIndex={selectedElementPath === '' ? undefined : 0}
+              title={selectedElementPath}
+            >
+              {selectedElementPathItems.length === 0
+                ? t('chat.interactionPanel.mobileDebugSelectElement')
+                : selectedElementPathItems.map((item, index) => (
+                  <span
+                    key={`${item.node.id}:${index}`}
+                    className='chat-interaction-panel-mobile-debug__element-path-item'
+                  >
+                    {index > 0 && (
+                      <span className='chat-interaction-panel-mobile-debug__element-path-separator' aria-hidden='true'>
+                        &gt;
+                      </span>
+                    )}
+                    <button
+                      type='button'
+                      className='chat-interaction-panel-mobile-debug__element-path-node'
+                      title={item.label}
+                      onClick={() => onSelectNode(item.node.id)}
+                    >
+                      {item.label}
+                    </button>
+                  </span>
                 ))}
-              </div>
-            )}
+            </span>
+          </div>
         </div>
         <div
           className='chat-interaction-panel-mobile-debug__element-splitter'

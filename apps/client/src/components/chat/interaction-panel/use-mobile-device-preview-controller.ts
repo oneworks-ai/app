@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- Mobile preview controller coordinates screenshot, tree polling, input queueing, and video state. */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type {
@@ -8,6 +10,10 @@ import { captureMobileDeviceScreenshot, dumpMobileElementTree, sendMobileDeviceI
 import {
   elementTreeRefreshDelayMs,
   flattenElementNodes,
+  hasElementNodeId,
+  iosElementTreeRefreshDelayMs,
+  iosScreenshotRefreshDelayMs,
+  mergeElementNodeTree,
   screenshotRefreshDelayMs,
   toPhysicalMobileDevicePoint,
   withPhysicalMobileDeviceInput
@@ -15,25 +21,51 @@ import {
 import type { PointerDevicePoint } from './mobile-device-preview-utils'
 import { queueMobileDeviceTouchInput } from './mobile-device-touch-input-queue'
 import { useMobileDeviceElementSelection } from './use-mobile-device-element-selection'
-export const useMobileDevicePreviewController = (readyDeviceId: string | undefined, isActive: boolean) => {
+
+const getInitialVideoStatus = (
+  videoSource: DesktopMobileDebugDevice['videoSource'] | undefined
+): MobileDeviceVideoPreviewStatus => videoSource === 'screenshot' ? 'unavailable' : 'starting'
+
+const iosElementTreeInputQuietMs = 4200
+const iosMjpegReconnectDelayMs = 2500
+
+export const useMobileDevicePreviewController = (
+  readyDevice: DesktopMobileDebugDevice | undefined,
+  isActive: boolean
+) => {
   const { t } = useTranslation()
+  const readyDeviceId = readyDevice?.id
+  const readyDevicePlatform = readyDevice?.platform
+  const videoSource = readyDevice?.videoSource ?? 'scrcpy'
   const [screenshot, setScreenshot] = useState<DesktopMobileDeviceScreenshotResponse | null>(null)
   const [elementTree, setElementTree] = useState<DesktopMobileElementTreeResponse | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string>()
   const [hoverNodeId, setHoverNodeId] = useState<string>()
   const [isInspecting, setIsInspecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [videoStatus, setVideoStatus] = useState<MobileDeviceVideoPreviewStatus>('starting')
+  const [videoStatus, setVideoStatus] = useState<MobileDeviceVideoPreviewStatus>(() =>
+    getInitialVideoStatus(videoSource)
+  )
   const [videoSize, setVideoSize] = useState<MobileDeviceVideoPreviewSize>()
   const [videoStreamKey, setVideoStreamKey] = useState(0)
   const screenshotRef = useRef<DesktopMobileDeviceScreenshotResponse | null>(null)
+  const elementTreeRef = useRef<DesktopMobileElementTreeResponse | null>(null)
   const isScreenshotRefreshingRef = useRef(false)
   const isElementTreeRefreshingRef = useRef(false)
   const elementTreeLoopTimerRef = useRef<number>()
   const screenshotLoopTimerRef = useRef<number>()
   const touchInputQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const lastInputRequestedAtRef = useRef(0)
   const lastReadyDeviceIdRef = useRef<string | undefined>()
-  const shouldUseScreenshotFallback = videoStatus === 'unavailable'
+  const lastVideoSourceRef = useRef<DesktopMobileDebugDevice['videoSource'] | undefined>()
+  const shouldUseScreenshotFallback = videoSource === 'screenshot' ||
+    (videoStatus === 'unavailable' && readyDevicePlatform !== 'ios')
+  const resolvedScreenshotRefreshDelayMs = readyDevicePlatform === 'ios'
+    ? iosScreenshotRefreshDelayMs
+    : screenshotRefreshDelayMs
+  const resolvedElementTreeRefreshDelayMs = readyDevicePlatform === 'ios'
+    ? iosElementTreeRefreshDelayMs
+    : elementTreeRefreshDelayMs
   const previewFailedMessage = t('chat.interactionPanel.mobileDebugPreviewFailed')
   const flattenedNodes = useMemo(
     () => flattenElementNodes(elementTree?.root).filter(item => item.node.bounds != null),
@@ -59,9 +91,21 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
     isElementTreeRefreshingRef.current = true
     try {
       const treeResult = await dumpMobileElementTree(readyDeviceId)
-      setElementTree(treeResult)
+      if (treeResult.root == null) {
+        if (elementTreeRef.current?.root == null) return
+        elementTreeRef.current = treeResult
+        setElementTree(treeResult)
+        setSelectedNodeId(undefined)
+        return
+      }
+      const currentTree = elementTreeRef.current
+      const mergedRoot = mergeElementNodeTree(currentTree?.root, treeResult.root)
+      if (currentTree != null && mergedRoot === currentTree.root) return
+      const nextTree = currentTree == null ? treeResult : { ...treeResult, root: mergedRoot }
+      elementTreeRef.current = nextTree
+      setElementTree(nextTree)
       setSelectedNodeId(current =>
-        current == null || flattenElementNodes(treeResult.root).some(item => item.node.id === current)
+        current == null || hasElementNodeId(mergedRoot, current)
           ? current
           : undefined
       )
@@ -73,39 +117,49 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
   }, [readyDeviceId])
   const restartVideoStream = useCallback(() => {
     setVideoSize(undefined)
-    setVideoStatus('starting')
+    setVideoStatus(getInitialVideoStatus(videoSource))
     setVideoStreamKey(current => current + 1)
-  }, [])
+  }, [videoSource])
   const refreshPreview = useCallback(() => {
     if (shouldUseScreenshotFallback) void refreshScreenshot()
     else restartVideoStream()
     void refreshElementTree()
   }, [refreshElementTree, refreshScreenshot, restartVideoStream, shouldUseScreenshotFallback])
+  const selectionInputScreen = readyDevice?.screen ?? videoSize ?? screenshot ?? elementTree?.root?.bounds
   const toPhysicalPoint = useCallback((point: PointerDevicePoint) =>
     toPhysicalMobileDevicePoint(point, {
       rootBounds: elementTree?.root?.bounds,
-      screen: videoSize,
-      shouldScale: !shouldUseScreenshotFallback
-    }), [elementTree?.root?.bounds, shouldUseScreenshotFallback, videoSize])
+      screen: selectionInputScreen,
+      shouldScale: selectionInputScreen != null
+    }), [elementTree?.root?.bounds, selectionInputScreen])
   useEffect(() => {
     let isCancelled = false
     const queueNextScreenshot = () => {
       if (isCancelled) return
       screenshotLoopTimerRef.current = window.setTimeout(() => {
         void runScreenshotLoop()
-      }, screenshotRefreshDelayMs)
+      }, resolvedScreenshotRefreshDelayMs)
     }
     const runElementTreeLoop = () => {
-      if (!isCancelled && document.visibilityState !== 'hidden') void refreshElementTree()
+      if (isCancelled || document.visibilityState === 'hidden') return
+      if (
+        readyDevicePlatform === 'ios' &&
+        Date.now() - lastInputRequestedAtRef.current < iosElementTreeInputQuietMs
+      ) {
+        return
+      }
+      void refreshElementTree()
     }
     const runScreenshotLoop = async () => {
       await refreshScreenshot()
       queueNextScreenshot()
     }
 
-    if (lastReadyDeviceIdRef.current !== readyDeviceId) {
+    if (lastReadyDeviceIdRef.current !== readyDeviceId || lastVideoSourceRef.current !== videoSource) {
       lastReadyDeviceIdRef.current = readyDeviceId
+      lastVideoSourceRef.current = videoSource
       screenshotRef.current = null
+      elementTreeRef.current = null
       setScreenshot(null)
       setElementTree(null)
       setSelectedNodeId(undefined)
@@ -115,18 +169,55 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
     }
     if (readyDeviceId == null || !isActive) return
     if (shouldUseScreenshotFallback) void runScreenshotLoop()
-    runElementTreeLoop()
-    elementTreeLoopTimerRef.current = window.setInterval(runElementTreeLoop, elementTreeRefreshDelayMs)
+    if (readyDevicePlatform !== 'ios') {
+      runElementTreeLoop()
+      elementTreeLoopTimerRef.current = window.setInterval(runElementTreeLoop, resolvedElementTreeRefreshDelayMs)
+    }
     return () => {
       isCancelled = true
       if (elementTreeLoopTimerRef.current != null) window.clearInterval(elementTreeLoopTimerRef.current)
       if (screenshotLoopTimerRef.current != null) window.clearTimeout(screenshotLoopTimerRef.current)
     }
-  }, [isActive, readyDeviceId, refreshElementTree, refreshScreenshot, restartVideoStream, shouldUseScreenshotFallback])
+  }, [
+    isActive,
+    readyDeviceId,
+    readyDevicePlatform,
+    refreshElementTree,
+    refreshScreenshot,
+    resolvedElementTreeRefreshDelayMs,
+    resolvedScreenshotRefreshDelayMs,
+    restartVideoStream,
+    shouldUseScreenshotFallback,
+    videoSource
+  ])
+  useEffect(() => {
+    if (
+      !isActive ||
+      readyDeviceId == null ||
+      readyDevicePlatform !== 'ios' ||
+      videoSource !== 'mjpeg' ||
+      videoStatus !== 'unavailable'
+    ) {
+      return
+    }
+    const reconnectTimer = window.setTimeout(() => {
+      setError(null)
+      restartVideoStream()
+    }, iosMjpegReconnectDelayMs)
+    return () => window.clearTimeout(reconnectTimer)
+  }, [
+    isActive,
+    readyDeviceId,
+    readyDevicePlatform,
+    restartVideoStream,
+    videoSource,
+    videoStatus
+  ])
   const sendInputRequest = useCallback(async (input: DesktopMobileDeviceInputEvent) => {
     if (readyDeviceId == null) return
 
     try {
+      lastInputRequestedAtRef.current = Date.now()
       await sendMobileDeviceInput(
         readyDeviceId,
         withPhysicalMobileDeviceInput(input, {
@@ -138,7 +229,9 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
       if (shouldUseScreenshotFallback) {
         window.setTimeout(() => void refreshScreenshot(), 180)
       }
-      if (input.kind !== 'touch' || input.touchPhase === 'up') {
+      // WDA source snapshots can monopolize XCTest for seconds on complex apps.
+      // Keep iOS input responsive; users can refresh the tree explicitly when needed.
+      if (readyDevicePlatform !== 'ios' && (input.kind !== 'touch' || input.touchPhase === 'up')) {
         window.setTimeout(() => void refreshElementTree(), 420)
         window.setTimeout(() => void refreshElementTree(), 1100)
       }
@@ -148,6 +241,7 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
   }, [
     elementTree?.root?.bounds,
     readyDeviceId,
+    readyDevicePlatform,
     refreshElementTree,
     refreshScreenshot,
     shouldUseScreenshotFallback,
@@ -165,6 +259,14 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
       return nextIsInspecting
     })
   }, [refreshElementTree])
+  const cancelInspect = useCallback(() => {
+    setIsInspecting(false)
+    setHoverNodeId(undefined)
+  }, [])
+  const clearSelectedElement = useCallback(() => {
+    setSelectedNodeId(undefined)
+    setHoverNodeId(undefined)
+  }, [])
   const handleVideoError = useCallback((message: string) => setError(message || previewFailedMessage), [
     previewFailedMessage
   ])
@@ -174,17 +276,36 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
     setSelectedNodeId,
     toPhysicalPoint
   })
+  const hoverElementById = useCallback((nodeId: string) => {
+    if (!flattenedNodes.some(item => item.node.id === nodeId)) return
+    setHoverNodeId(nodeId)
+  }, [flattenedNodes])
+  const inspectElementAtPoint = useCallback((point: PointerDevicePoint) => {
+    if (!selectElementAtPoint(point)) return
+    setHoverNodeId(undefined)
+    setIsInspecting(false)
+  }, [selectElementAtPoint])
+  const inspectElementById = useCallback((nodeId: string) => {
+    if (!flattenedNodes.some(item => item.node.id === nodeId)) return
+    setSelectedNodeId(nodeId)
+    setHoverNodeId(undefined)
+    setIsInspecting(false)
+  }, [flattenedNodes])
   return {
+    cancelInspect,
+    clearSelectedElement,
     elementTree,
     error,
     flattenedNodes,
     handleVideoError,
+    hoverElementById,
     hoverElementAtPoint,
     hoverNode: flattenedNodes.find(item => item.node.id === hoverNodeId)?.node,
     isInspecting,
     refreshPreview,
     screenshot,
-    selectElementAtPoint,
+    selectElementById: inspectElementById,
+    selectElementAtPoint: inspectElementAtPoint,
     selectedNode: flattenedNodes.find(item => item.node.id === selectedNodeId)?.node,
     selectedNodeId,
     sendInput,
@@ -194,6 +315,7 @@ export const useMobileDevicePreviewController = (readyDeviceId: string | undefin
     setVideoStatus,
     toggleInspect,
     videoSize,
+    videoSource,
     videoStatus,
     videoStreamKey
   }
