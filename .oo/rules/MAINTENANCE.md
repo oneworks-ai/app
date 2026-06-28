@@ -20,7 +20,7 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - [PR 经验复盘门禁](./maintenance/pr-experience-review.md)
 - [桌面端浏览器数据管理经验](./maintenance/browser-data-management.md)
 - [桌面本地打包 Runtime Cache 经验](./maintenance/desktop-packaged-runtime-cache.md)
-- [Android 设备调试页维护经验](./maintenance/mobile-device-debugging.md)
+- [移动设备调试页维护经验](./maintenance/mobile-device-debugging.md)
 - [Relay 托管与私有化部署](./RELAY-DEPLOYMENT.md)
 
 ## 常见问题索引
@@ -36,7 +36,7 @@ description: 仓库通用维护与验证规则，包含启动、lint、格式化
 - 桌面本地 dev 安装包仍像旧代码、`Switch Project` 兜底页或 packaged runtime cache 排查：见 [桌面本地打包 Runtime Cache 经验](./maintenance/desktop-packaged-runtime-cache.md)。
 - Electron WebView 右键“评论此元素”选错元素、坐标偏移或 hover / 右键路径不一致：见 [Electron WebView 右键元素评论坐标偏移](./maintenance/common-issues.md#electron-webview-右键元素评论坐标偏移)。
 - 移动端 WebView、工作区 tabs overview、sender compact 样式或相关 PR 收口：见 [移动端 WebView 与工作区标签页经验](./maintenance/mobile-workspace-webview.md)。
-- Android 设备 standalone 调试页、设备状态面板、ADB / scrcpy 预览或相关 PR 收口：见 [Android 设备调试页维护经验](./maintenance/mobile-device-debugging.md)。
+- Android / iOS 设备 standalone 调试页、设备状态面板、ADB / scrcpy / WDA 预览或相关 PR 收口：见 [移动设备调试页维护经验](./maintenance/mobile-device-debugging.md)。
 
 ## 开发环境启动
 

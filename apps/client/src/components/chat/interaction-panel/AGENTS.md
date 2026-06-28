@@ -22,10 +22,14 @@
   - Android 设备预览、右侧 Elements / Targets / Input / Logs tab、dock 和 standalone header action 编排。
 - `InteractionPanelMobileDeviceScreen.tsx` / `mobile-device-preview-utils.ts`
   - 移动设备画面、hover / selected 可视 overlay 和透明 `.is-comment-target` DOM 命中层都在这里维护；修改 Codex 浏览器注释命中、元素坐标映射或屏幕点击转发时优先从这里开始。
+- `InteractionPanelMobileDeviceLunaDomViewer.tsx` / `InteractionPanelMobileDeviceLunaConsole.tsx` / `InteractionPanelMobileDeviceLunaHighlighter.tsx`
+  - Luna DOM Viewer / Console / Highlighter 的 React wrapper、synthetic DOM patch、日志对象展示和高亮覆盖层；修改 Elements 树刷新、展开状态、日志面板或选中高亮时从这里开始。
 - `InteractionPanelMobileDeviceEnvironmentPanel.tsx`
   - Android Emulator 设备状态面板入口；Battery / Cellular / Location / Phone / Fingerprint 必须继续按独立组件维护。
 - `use-mobile-device-preview-controller.ts`
   - 设备截图 fallback、元素树刷新、触摸输入队列和视频状态协调。修改 ADB preview 刷新节奏或输入映射时从这里开始。
+- `use-mobile-device-screen-pointer.ts`
+  - 移动画面 tap / drag / wheel / long press 的输入状态机。修改普通交互、inspect、评论透明命中层的事件冲突时从这里开始。
 - 相关维护经验见 `.oo/rules/maintenance/mobile-device-debugging.md`。
 
 ## 页面调试器排查经验
