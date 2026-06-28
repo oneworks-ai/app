@@ -875,7 +875,7 @@ export async function startAdapterSession(
 
       emitAdapterCliPrepareOperation(
         'operation_started',
-        'Preparing adapter CLI. If no compatible system installation is available, One Works will install it now.'
+        'Checking adapter CLI.'
       )
 
       const { session } = await run({

@@ -1858,7 +1858,7 @@
       "transcribeFailed": "Speech recognition failed"
     },
     "sessionOperation": {
-      "adapterCliPrepare": "Preparing adapter CLI. If no compatible system install is available, it will be installed now…"
+      "adapterCliPrepare": "Checking adapter CLI…"
     },
     "stop": "Stop",
     "result": "Result",

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import type { Session } from '@oneworks/core'
 
 import { getActiveOptimisticSessionCreation, optimisticSessionCreationsAtom } from './optimistic-session-creation'
+import { getSessionActivityLabel } from './session-activity-label'
 import { useChatAdapterAccountSelection } from './use-chat-adapter-account-selection'
 import { useChatEffort } from './use-chat-effort'
 import { useChatInteraction } from './use-chat-interaction'
@@ -96,14 +97,7 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
   const handlePermissionModeChange = useSessionPermissionModeChange(session?.id, setPermissionMode)
   const lastObservedSessionRef = useRef<ObservedSessionSelection | null>(null)
   const isThinking = session?.status === 'running'
-  const isInitialRunWithoutAssistant = isThinking && !messages.some(message => message.role === 'assistant')
-  const sessionActivityLabel = sessionOperationInfo == null
-    ? isInitialRunWithoutAssistant
-      ? t('chat.sessionOperation.adapterCliPrepare')
-      : undefined
-    : sessionOperationInfo.operationId === 'adapter-cli-prepare'
-    ? t('chat.sessionOperation.adapterCliPrepare')
-    : sessionOperationInfo.message ?? sessionOperationInfo.title ?? sessionOperationInfo.summary ?? t('chat.thinking')
+  const sessionActivityLabel = getSessionActivityLabel(sessionOperationInfo, t)
 
   useEffect(() => {
     if (session?.id == null || session.id === '') {
