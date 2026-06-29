@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { LauncherWorkspaceVersionConflictDetails } from '@oneworks/types'
 
-import { getWorkspaceServerRestartActivity } from '#~/workspace-connection-state'
+import { getRuntimeEnv, getRuntimeWorkspaceId } from '#~/runtime-config'
+import {
+  applyWorkspaceConnection,
+  getWorkspaceServerRestartActivity,
+  isWorkspaceConnectionResponse
+} from '#~/workspace-connection-state'
 
 const createConflictDetails = (
   patch: Partial<LauncherWorkspaceVersionConflictDetails> = {}
@@ -32,16 +37,22 @@ const createJsonResponse = (body: unknown, init?: ResponseInit) => (
   })
 )
 
+const clearRuntimeEnv = () => {
+  delete (globalThis as { __ONEWORKS_PROJECT_RUNTIME_ENV__?: unknown }).__ONEWORKS_PROJECT_RUNTIME_ENV__
+}
+
 describe('workspace connection state', () => {
   const fetchMock = vi.fn<typeof fetch>()
 
   beforeEach(() => {
+    clearRuntimeEnv()
     fetchMock.mockReset()
     vi.stubGlobal('fetch', fetchMock)
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    clearRuntimeEnv()
   })
 
   it('uses workspace activity when the running server exposes it', async () => {
@@ -100,5 +111,29 @@ describe('workspace connection state', () => {
       }))
     ).resolves.toEqual({ status: 'unknown' })
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('accepts desktop workspace connections without a launcher workspace id', () => {
+    const connection = {
+      serverBaseUrl: 'http://127.0.0.1:52520',
+      workspaceFolder: '/tmp/oneworks-workspace'
+    }
+
+    expect(isWorkspaceConnectionResponse(connection)).toBe(true)
+
+    applyWorkspaceConnection(connection)
+
+    expect(getRuntimeEnv()).toMatchObject({
+      __ONEWORKS_PROJECT_SERVER_BASE_URL__: 'http://127.0.0.1:52520',
+      __ONEWORKS_PROJECT_SERVER_ROLE__: 'workspace',
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: '/tmp/oneworks-workspace'
+    })
+    expect(getRuntimeWorkspaceId()).toBeUndefined()
+  })
+
+  it('rejects missing or invalid server URLs', () => {
+    expect(isWorkspaceConnectionResponse(undefined)).toBe(false)
+    expect(isWorkspaceConnectionResponse({ serverBaseUrl: '' })).toBe(false)
+    expect(isWorkspaceConnectionResponse({ serverBaseUrl: 'file:///tmp/server' })).toBe(false)
   })
 })

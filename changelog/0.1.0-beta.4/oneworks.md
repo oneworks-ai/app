@@ -1,0 +1,1 @@
+- Updated adapter CLI preparation runtime events to use the neutral "Checking adapter CLI." status message.

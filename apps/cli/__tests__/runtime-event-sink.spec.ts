@@ -49,7 +49,7 @@ describe('runtime event sink', () => {
       type: 'operation_started',
       operationId: 'adapter-cli-prepare',
       title: 'Adapter CLI',
-      message: 'Preparing adapter CLI.'
+      message: 'Checking adapter CLI.'
     })
     await sink.recordOperation({
       type: 'operation_completed',

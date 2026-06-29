@@ -97,7 +97,9 @@ export default function App() {
   if (window.oneworksDesktop != null && isDesktopClientMode() && !isManagerLauncher) {
     return (
       <Suspense fallback={null}>
-        <WorkspaceApp />
+        <WorkspaceConnectionGate>
+          <WorkspaceApp />
+        </WorkspaceConnectionGate>
       </Suspense>
     )
   }

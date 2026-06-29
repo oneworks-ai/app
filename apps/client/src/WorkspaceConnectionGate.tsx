@@ -16,7 +16,8 @@ import type { WorkspaceServerRestartActivity } from '#~/workspace-connection-sta
 import {
   applyWorkspaceConnection,
   getWorkspaceServerRestartActivity,
-  getWorkspaceVersionConflictDetails
+  getWorkspaceVersionConflictDetails,
+  isWorkspaceConnectionResponse
 } from '#~/workspace-connection-state'
 import { WorkspaceConnectionErrorView } from './WorkspaceConnectionErrorView'
 
@@ -50,7 +51,7 @@ const createVersionConflictRestartKey = (details: LauncherWorkspaceVersionConfli
 export function WorkspaceConnectionGate({
   children,
   workspaceId
-}: PropsWithChildren<{ workspaceId: string }>) {
+}: PropsWithChildren<{ workspaceId?: string }>) {
   const { t } = useTranslation()
   const { resolvedThemeMode } = useResolvedThemeMode()
   const [state, setState] = useState<ConnectionState>({ status: 'loading' })
@@ -108,6 +109,9 @@ export function WorkspaceConnectionGate({
   const maybeRestartIdleWorkspaceServer = useCallback(async (
     details: LauncherWorkspaceVersionConflictDetails
   ) => {
+    if (workspaceId == null) {
+      return undefined
+    }
     if (details.restartable !== true) {
       return undefined
     }
@@ -128,6 +132,14 @@ export function WorkspaceConnectionGate({
   }, [workspaceId])
 
   const getWorkspaceConnection = useCallback(async () => {
+    if (workspaceId == null) {
+      const connection = await window.oneworksDesktop?.getWorkspaceConnection?.()
+      if (isWorkspaceConnectionResponse(connection)) {
+        return connection
+      }
+      throw new Error(t('workspaceConnection.desktopConnectionUnavailable'))
+    }
+
     try {
       return await getLauncherWorkspaceConnection(workspaceId)
     } catch (error) {
@@ -144,7 +156,7 @@ export function WorkspaceConnectionGate({
       }
       throw error
     }
-  }, [maybeRestartIdleWorkspaceServer, workspaceId])
+  }, [maybeRestartIdleWorkspaceServer, t, workspaceId])
 
   const connectWorkspace = useCallback(async () => {
     resetOpeningOverlay()
@@ -207,7 +219,7 @@ export function WorkspaceConnectionGate({
   }, [getWorkspaceConnection, resetOpeningOverlay])
 
   const restartWorkspaceServer = useCallback(async () => {
-    if (state.status !== 'error' || state.details?.restartable !== true) return
+    if (workspaceId == null || state.status !== 'error' || state.details?.restartable !== true) return
 
     setIsRestarting(true)
     setRestartErrorMessage(undefined)
@@ -223,6 +235,12 @@ export function WorkspaceConnectionGate({
   }, [state, t, workspaceId])
 
   useEffect(() => () => clearOverlayTimers(), [clearOverlayTimers])
+
+  useEffect(() => {
+    if (state.status === 'error') {
+      markWorkspaceStartupReady()
+    }
+  }, [markWorkspaceStartupReady, state.status])
 
   useEffect(() => {
     if (state.status !== 'ready') return

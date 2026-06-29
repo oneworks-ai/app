@@ -1,0 +1,1 @@
+- Fixed Electron desktop workspace first-open loading by routing root workspace windows through the workspace connection gate instead of a one-shot pre-render server URL probe.

@@ -958,6 +958,7 @@
     "busyTitle": "Active sessions: {{count}}",
     "busyTotal": "Total {{count}}",
     "diagnosticsTitle": "Service diagnostics",
+    "desktopConnectionUnavailable": "Workspace server is still starting. Retry after a moment.",
     "hideActiveSessions": "Hide sessions",
     "mobileVersionConflictSummary": "The service version differs. Restart the workspace server or retry later.",
     "processId": "Process",

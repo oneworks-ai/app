@@ -20,7 +20,6 @@ import {
   buildWorkspaceClientBase,
   getClientBase,
   mergeRuntimeEnv,
-  normalizeServerBaseUrl,
   resolveDevDocumentTitle,
   resolveWorkspaceIdFromPathname
 } from '#~/runtime-config.js'
@@ -44,24 +43,6 @@ document.title = resolveDevDocumentTitle(document.title, {
   isDev: import.meta.env.DEV,
   gitRef: import.meta.env.__ONEWORKS_PROJECT_DEV_GIT_REF__
 })
-
-const installDesktopWorkspaceRuntimeIfAvailable = async () => {
-  const connection = await window.oneworksDesktop?.getWorkspaceConnection?.()
-    .catch((error) => {
-      console.warn('[desktop] failed to load workspace connection', error)
-      return undefined
-    })
-  const serverBaseUrl = normalizeServerBaseUrl(connection?.serverBaseUrl)
-  if (serverBaseUrl == null) return
-
-  mergeRuntimeEnv({
-    __ONEWORKS_PROJECT_CLIENT_MODE__: 'desktop',
-    __ONEWORKS_PROJECT_SERVER_BASE_URL__: serverBaseUrl,
-    ...(connection?.workspaceFolder == null
-      ? {}
-      : { __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: connection.workspaceFolder })
-  })
-}
 
 const installWorkspaceRouteRuntimeIfAvailable = () => {
   const workspaceId = resolveWorkspaceIdFromPathname(window.location.pathname)
@@ -113,7 +94,6 @@ const renderApp = () => {
 
 const startApp = async () => {
   installWorkspaceRouteRuntimeIfAvailable()
-  await installDesktopWorkspaceRuntimeIfAvailable()
   setupMobileViewport()
 
   appClientBase = getClientBase()
