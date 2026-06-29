@@ -1,5 +1,4 @@
 import type {
-  LauncherWorkspaceOpenResponse,
   LauncherWorkspaceVersionConflictDetails,
   WorkspaceActivityResponse,
   WorkspaceActivitySession
@@ -13,6 +12,12 @@ export type WorkspaceServerRestartActivity =
   | { status: 'idle' }
   | { status: 'unknown' }
 
+export interface WorkspaceConnectionResponse {
+  serverBaseUrl: string
+  workspaceFolder?: string
+  workspaceId?: string
+}
+
 interface WorkspaceSessionsResponse {
   sessions?: unknown
 }
@@ -22,6 +27,16 @@ const ACTIVE_WORKSPACE_SESSION_STATUSES = new Set(['running', 'waiting_input'])
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
+)
+
+export const isWorkspaceConnectionResponse = (
+  value: unknown
+): value is WorkspaceConnectionResponse => (
+  isRecord(value) &&
+  typeof value.serverBaseUrl === 'string' &&
+  normalizeServerBaseUrl(value.serverBaseUrl) != null &&
+  (value.workspaceFolder == null || typeof value.workspaceFolder === 'string') &&
+  (value.workspaceId == null || typeof value.workspaceId === 'string')
 )
 
 const isLauncherWorkspaceVersionConflictDetails = (
@@ -160,7 +175,7 @@ export const getWorkspaceServerRestartActivity = async (
     : activity
 }
 
-export const applyWorkspaceConnection = (connection: LauncherWorkspaceOpenResponse) => {
+export const applyWorkspaceConnection = (connection: WorkspaceConnectionResponse) => {
   const serverBaseUrl = normalizeServerBaseUrl(connection.serverBaseUrl)
   if (serverBaseUrl == null) {
     throw new Error('Workspace server returned an invalid URL.')

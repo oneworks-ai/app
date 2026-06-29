@@ -78,8 +78,7 @@ type PrintInputCapableSession = ExitControllableSession & {
 
 const ADAPTER_CLI_PREPARE_OPERATION_ID = 'adapter-cli-prepare'
 const ADAPTER_CLI_PREPARE_OPERATION_TITLE = 'Adapter CLI'
-const ADAPTER_CLI_PREPARE_STARTED_MESSAGE =
-  'Preparing adapter CLI. If no compatible system installation is available, One Works will install it now.'
+const ADAPTER_CLI_PREPARE_STARTED_MESSAGE = 'Checking adapter CLI.'
 const ADAPTER_CLI_PREPARE_COMPLETED_MESSAGE = 'Adapter CLI is ready.'
 const ADAPTER_CLI_PREPARE_FAILED_MESSAGE = 'Adapter CLI preparation failed.'
 

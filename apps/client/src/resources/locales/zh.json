@@ -959,6 +959,7 @@
     "busyTitle": "仍有 {{count}} 个会话在工作",
     "busyTotal": "总计 {{count}}",
     "diagnosticsTitle": "服务诊断",
+    "desktopConnectionUnavailable": "项目服务还在启动，请稍后重试。",
     "hideActiveSessions": "收起会话",
     "mobileVersionConflictSummary": "服务版本不一致；可重启项目服务，或稍后重试。",
     "processId": "进程",
