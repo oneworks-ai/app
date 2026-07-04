@@ -5,3 +5,5 @@
 - `avatar/`: preview/export page for the shared pixel-rect SVG avatar system in `packages/avatar`.
 
 Asset projects that also publish standalone sites should live in their own repository and be mounted here as submodules. Keep reusable runtime APIs in `packages/*`; asset repositories should own preview/export UX and GitHub Pages deployment only.
+
+Do not add submodule asset sites such as `assets/avatar` to the root `pnpm-workspace.yaml`. They may have their own app dependencies and lockfile; including them in the root workspace makes unrelated Vercel / CI installs fail when the submodule package changes.
