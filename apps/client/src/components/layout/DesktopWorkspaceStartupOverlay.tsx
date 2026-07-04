@@ -22,8 +22,9 @@ export function DesktopWorkspaceStartupProvider({ children }: PropsWithChildren)
     readyTimerRef.current = window.setTimeout(() => {
       readyTimerRef.current = null
       markWorkspaceStartupReady()
+      parentMarkReady?.()
     }, delayMs)
-  }, [hasStartupOverlay, markWorkspaceStartupReady])
+  }, [hasStartupOverlay, markWorkspaceStartupReady, parentMarkReady])
 
   useEffect(() => () => {
     if (readyTimerRef.current != null) {

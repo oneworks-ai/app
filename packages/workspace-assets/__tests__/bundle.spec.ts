@@ -231,6 +231,28 @@ describe('resolveWorkspaceAssetBundle', () => {
     }))
   })
 
+  it('injects an isolated mock home into the default OneWorks MCP server', async () => {
+    const workspace = await createWorkspace()
+    const realHome = process.env.__ONEWORKS_PROJECT_REAL_HOME__
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [undefined, undefined]
+    })
+
+    expect(bundle.mcpServers.OneWorks.payload.config).toMatchObject({
+      env: {
+        HOME: resolveProjectHomePath(workspace, { HOME: realHome, __ONEWORKS_PROJECT_REAL_HOME__: realHome }, '.mock'),
+        USERPROFILE: resolveProjectHomePath(
+          workspace,
+          { HOME: realHome, __ONEWORKS_PROJECT_REAL_HOME__: realHome },
+          '.mock'
+        ),
+        __ONEWORKS_DISABLE_MOCK_HOME_BRIDGE: '1'
+      }
+    })
+  })
+
   it('skips invalid home-bridged skill frontmatter and keeps resolving other skills', async () => {
     const workspace = await createWorkspace()
     const realHome = process.env.__ONEWORKS_PROJECT_REAL_HOME__

@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path'
 import process from 'node:process'
 
 import type { Config } from '@oneworks/types'
-import { CANONICAL_ONEWORKS_MCP_SERVER_NAME } from '@oneworks/utils'
+import { CANONICAL_ONEWORKS_MCP_SERVER_NAME, resolveProjectHomePath } from '@oneworks/utils'
 
 import { mergeUniqueList } from './merge'
 
@@ -26,19 +26,31 @@ export const resolveUseDefaultOneworksMcpServer = (options: {
     true
 )
 
-export const resolveDefaultOneworksMcpServerConfig = () => {
+export const resolveDefaultOneworksMcpServerConfig = (options: {
+  cwd?: string
+  env?: NodeJS.ProcessEnv
+} = {}) => {
+  const cwd = options.cwd ?? process.cwd()
+  const env = options.env ?? process.env
+
   try {
     const packageResolver = typeof require === 'function'
       ? require
-      : createRequire(resolve(process.cwd(), '__oneworks_config_mcp_resolver__.js'))
-    const workspacePackageJsonPath = resolve(process.cwd(), 'packages/mcp/package.json')
+      : createRequire(resolve(cwd, '__oneworks_config_mcp_resolver__.js'))
+    const workspacePackageJsonPath = resolve(cwd, 'packages/mcp/package.json')
     const packageJsonPath = existsSync(workspacePackageJsonPath)
       ? workspacePackageJsonPath
       : resolvePublishedMcpPackageJsonPath(packageResolver)
     const packageDir = dirname(packageJsonPath)
+    const mockHome = resolveProjectHomePath(cwd, env, '.mock')
     return {
       command: process.execPath,
-      args: [resolve(packageDir, 'cli.js')]
+      args: [resolve(packageDir, 'cli.js')],
+      env: {
+        HOME: mockHome,
+        USERPROFILE: mockHome,
+        __ONEWORKS_DISABLE_MOCK_HOME_BRIDGE: '1'
+      }
     } satisfies NonNullable<Config['mcpServers']>[string]
   } catch {
     return undefined

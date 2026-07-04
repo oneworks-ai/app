@@ -49,6 +49,128 @@ const launcherShowAnimation = {
   duration: 180,
   frameMs: 16
 }
+const launcherStartupShellHtml = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="color-scheme" content="light dark" />
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+      background: transparent;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      color: rgba(31, 35, 31, 0.86);
+    }
+
+    .shell {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-rows: 1fr auto;
+      padding: 34px;
+      border: 1px solid rgba(255, 255, 255, 0.54);
+      border-radius: 24px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(246, 248, 243, 0.78)),
+        rgba(248, 250, 246, 0.78);
+      box-shadow: inset 0 1px rgba(255, 255, 255, 0.78);
+      -webkit-app-region: drag;
+    }
+
+    .brand {
+      align-self: center;
+      display: grid;
+      justify-items: center;
+      gap: 14px;
+    }
+
+    .mark {
+      width: 52px;
+      height: 52px;
+      display: grid;
+      place-items: center;
+      border-radius: 16px;
+      color: white;
+      background: linear-gradient(135deg, #2d8ea0, #38566b);
+      box-shadow: 0 16px 34px rgba(20, 43, 52, 0.22);
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .title {
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    .status {
+      font-size: 13px;
+      color: rgba(31, 35, 31, 0.54);
+      letter-spacing: 0;
+    }
+
+    .bar {
+      height: 44px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.56);
+      border: 1px solid rgba(31, 35, 31, 0.08);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      body {
+        color: rgba(242, 244, 239, 0.9);
+      }
+
+      .shell {
+        border-color: rgba(255, 255, 255, 0.1);
+        background:
+          linear-gradient(180deg, rgba(43, 48, 45, 0.88), rgba(29, 33, 31, 0.84)),
+          rgba(32, 35, 33, 0.82);
+        box-shadow: inset 0 1px rgba(255, 255, 255, 0.08);
+      }
+
+      .status {
+        color: rgba(242, 244, 239, 0.56);
+      }
+
+      .bar {
+        background: rgba(255, 255, 255, 0.07);
+        border-color: rgba(255, 255, 255, 0.08);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell" aria-label="One Works is starting">
+    <section class="brand">
+      <div class="mark">1</div>
+      <div class="title">One Works</div>
+      <div class="status">Starting...</div>
+    </section>
+    <div class="bar"></div>
+  </main>
+</body>
+</html>`
+const launcherStartupShellUrl = `data:text/html;charset=utf-8,${encodeURIComponent(launcherStartupShellHtml)}`
 
 const easeOutCubic = (progress: number) => 1 - (1 - progress) ** 3
 
@@ -343,6 +465,21 @@ export const createWindowManager = ({
     setTimeout(animate, launcherShowAnimation.frameMs)
   }
 
+  const loadLauncherStartupShell = async (windowRecord: WindowRecord, startedAt: number) => {
+    if (!isWindowRecordUsable(windowRecord)) return false
+
+    logDesktopTiming(`launcher shell loadURL begin elapsed=${elapsedMs(startedAt)}`)
+    await windowRecord.window.loadURL(launcherStartupShellUrl)
+    if (!isWindowRecordUsable(windowRecord)) return false
+
+    logDesktopTiming(`launcher shell loadURL complete elapsed=${elapsedMs(startedAt)}`)
+    if (!windowRecord.window.isVisible()) {
+      showLauncherWindowRecord(windowRecord)
+      logDesktopTiming(`launcher shell visible elapsed=${elapsedMs(startedAt)}`)
+    }
+    return true
+  }
+
   const findWorkspaceWindowRecord = (workspaceFolder: string) => (
     getWindowRecords()
       .find(candidate => candidate.kind === 'workspace' && candidate.workspaceFolder === workspaceFolder)
@@ -420,6 +557,9 @@ export const createWindowManager = ({
       return
     }
 
+    const startedAt = Date.now()
+    const shouldShow = input.show !== false
+    logDesktopTiming(`launcher load begin show=${shouldShow}`)
     windowRecord.currentServerUrl = undefined
     windowRecord.workspaceServerUrl = undefined
     windowRecord.kind = 'launcher'
@@ -429,9 +569,22 @@ export const createWindowManager = ({
     windowRecord.launcherSourceWindowId = input.sourceWindowId
     windowRecord.window.setTitle(buildLauncherWindowTitle())
 
+    let shellShown = false
+    if (shouldShow) {
+      try {
+        shellShown = await loadLauncherStartupShell(windowRecord, startedAt)
+      } catch (error) {
+        console.warn('[oneworks-desktop] failed to show launcher startup shell', error)
+      }
+    }
+
     let service: Awaited<ReturnType<typeof ensureLauncherClientService>>
     try {
+      logDesktopTiming(`launcher waiting for shared client elapsed=${elapsedMs(startedAt)}`)
       service = await ensureLauncherClientService()
+      logDesktopTiming(
+        `launcher shared client ready url=${service.clientUrl ?? 'none'} elapsed=${elapsedMs(startedAt)}`
+      )
       if (!isWindowRecordUsable(windowRecord)) {
         return
       }
@@ -451,24 +604,34 @@ export const createWindowManager = ({
         errorMessage: getErrorMessage(error),
         mode: 'initial'
       })
+      if (shouldShow && !windowRecord.window.isVisible()) {
+        showLauncherWindowRecord(windowRecord)
+      }
       return
     }
 
     windowRecord.currentServerUrl = service.clientUrl
     const launcherUrl = `${ensureTrailingSlash(service.clientUrl)}launcher`
     try {
+      logDesktopTiming(`launcher loadURL begin url=${launcherUrl} elapsed=${elapsedMs(startedAt)}`)
       await windowRecord.window.loadURL(launcherUrl)
-      if (input.show !== false) {
+      logDesktopTiming(`launcher loadURL complete elapsed=${elapsedMs(startedAt)}`)
+      if (shouldShow && !shellShown) {
         showLauncherWindowRecord(windowRecord)
       } else if (windowRecord.window.isVisible()) {
-        windowRecord.window.hide()
+        if (!shouldShow) {
+          windowRecord.window.hide()
+        }
+      }
+      if (shouldShow) {
+        logDesktopTiming(`launcher ready visible=${windowRecord.window.isVisible()} elapsed=${elapsedMs(startedAt)}`)
       }
       selectorStateController.broadcastWorkspaceSelectorState()
     } catch (error) {
       if (!isWindowRecordUsable(windowRecord)) {
         return
       }
-      if (input.show === false) {
+      if (!shouldShow) {
         console.warn('[oneworks-desktop] failed to preload launcher window', error)
         windowRecord.window.close()
         return
@@ -477,7 +640,9 @@ export const createWindowManager = ({
         errorDescription: getErrorMessage(error),
         targetUrl: launcherUrl
       })
-      showLauncherWindowRecord(windowRecord)
+      if (!shellShown) {
+        showLauncherWindowRecord(windowRecord)
+      }
     }
   }
 
@@ -499,6 +664,7 @@ export const createWindowManager = ({
     windowRecord.kind = 'workspace'
     windowRecord.selectorMode = undefined
     windowRecord.workspaceFolder = normalizedWorkspaceFolder
+    windowRecord.workspaceStartupStartedAt = startedAt
     windowRecord.currentServerUrl = undefined
     windowRecord.workspaceServerUrl = undefined
 
@@ -679,6 +845,12 @@ export const createWindowManager = ({
       return
     }
 
+    const startupElapsed = windowRecord.workspaceStartupStartedAt == null
+      ? 'unknown'
+      : elapsedMs(windowRecord.workspaceStartupStartedAt)
+    logDesktopTiming(
+      `workspace renderer ready workspace=${windowRecord.workspaceFolder ?? 'none'} elapsed=${startupElapsed}`
+    )
     restoreWorkspaceReadyWindowBackground(windowRecord.window)
   }
 
@@ -1007,6 +1179,7 @@ export const createWindowManager = ({
     const sourceWindowId = focusedWorkspaceWindowRecord?.window.id
     const existingLauncherWindowRecord = findLauncherWindowRecord()
     if (input.forceNew !== true && existingLauncherWindowRecord != null) {
+      logDesktopTiming(`launcher reuse existing show=${input.show !== false}`)
       existingLauncherWindowRecord.workspaceFolder = sourceWorkspaceFolder
       existingLauncherWindowRecord.launcherSourceUrl = sourceUrl
       existingLauncherWindowRecord.launcherSourceWindowId = sourceWindowId

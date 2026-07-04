@@ -1,4 +1,5 @@
-import { lstat, mkdir, mkdtemp, readFile, readlink, rm, stat, writeFile } from 'node:fs/promises'
+/* eslint-disable max-lines -- codex account coverage keeps migration and credential scenarios together. */
+import { lstat, mkdir, mkdtemp, readFile, readlink, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -185,10 +186,101 @@ describe('prepareCodexSessionHome', () => {
         )
     }
     expect(await readFile(join(result.homeDir, '.lark-cli', 'config.json'), 'utf8')).toBe('{"profile":"real"}\n')
-    expect(await readlink(join(result.homeDir, '.codex', 'config.toml'))).toBe(
-      join(mockHome, '.codex', 'config.toml')
-    )
+    await expect(readlink(join(result.homeDir, '.codex', 'config.toml'))).rejects.toMatchObject({ code: 'EINVAL' })
+    expect(await readFile(join(result.homeDir, '.codex', 'config.toml'), 'utf8')).toContain('model = "mock"')
     expect(await readFile(join(realHome, '.codex', 'config.toml'), 'utf8')).toBe('model = "real"\n')
+  })
+
+  it('keeps global Codex runtime caches out of the isolated session home', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-session-home-pruned-'))
+    const realHome = join(workspace, 'real-home')
+    const mockHome = resolveTestMockHome(workspace, realHome)
+    tempDirs.push(workspace)
+
+    await mkdir(join(mockHome, '.codex', '.tmp', 'plugins', 'ngs-analysis'), { recursive: true })
+    await mkdir(join(mockHome, '.codex', 'plugins', 'cache'), { recursive: true })
+    await mkdir(join(mockHome, '.codex', 'vendor_imports', 'skills'), { recursive: true })
+    await mkdir(join(mockHome, '.codex', 'worktrees', 'old-session'), { recursive: true })
+    await mkdir(join(mockHome, '.codex', 'cache', 'remote_plugin_catalog'), { recursive: true })
+    await writeFile(join(mockHome, '.codex', 'config.toml'), 'model = "mock"\n')
+
+    const result = await prepareCodexSessionHome({
+      ctx: {
+        cwd: workspace,
+        env: {
+          HOME: mockHome,
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome
+        },
+        ctxId: 'ctx',
+        configs: []
+      },
+      sessionId: 'session'
+    })
+
+    const sessionCodexHome = join(result.homeDir, '.codex')
+    for (const entry of ['.tmp', 'plugins', 'vendor_imports', 'worktrees', 'cache']) {
+      await expect(lstat(join(sessionCodexHome, entry))).rejects.toMatchObject({ code: 'ENOENT' })
+    }
+    await expect(readlink(join(sessionCodexHome, 'config.toml'))).rejects.toMatchObject({ code: 'EINVAL' })
+    expect(await readFile(join(sessionCodexHome, 'config.toml'), 'utf8')).toContain('model = "mock"')
+  })
+
+  it('prunes stale Codex global-state bridges from an existing isolated session home', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-session-home-stale-'))
+    const realHome = join(workspace, 'missing-real-home')
+    const mockHome = resolveTestMockHome(workspace, realHome)
+    tempDirs.push(workspace)
+
+    await mkdir(join(mockHome, '.codex', 'archived_sessions'), { recursive: true })
+    await mkdir(join(mockHome, '.codex', 'cache'), { recursive: true })
+    await mkdir(join(mockHome, '.codex', 'log'), { recursive: true })
+    await mkdir(join(mockHome, '.codex', 'sqlite'), { recursive: true })
+    await mkdir(join(mockHome, '.codex', 'sessions'), { recursive: true })
+    await writeFile(join(mockHome, '.codex', 'config.toml'), 'model = "mock"\n')
+    await writeFile(join(mockHome, '.codex', 'history.jsonl'), '{"event":"history"}\n')
+    await writeFile(join(mockHome, '.codex', 'session_index.jsonl'), '{"event":"index"}\n')
+    await writeFile(join(mockHome, '.codex', 'state_5.sqlite'), 'mock state\n')
+    await writeFile(join(mockHome, '.codex', 'logs_2.sqlite'), 'mock logs\n')
+    await writeFile(join(mockHome, '.codex', 'goals_1.sqlite'), 'mock goals\n')
+    await writeFile(join(mockHome, '.codex', 'memories_1.sqlite'), 'mock memories\n')
+
+    const ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId' | 'configs'> = {
+      cwd: workspace,
+      env: {
+        HOME: mockHome,
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome
+      },
+      ctxId: 'ctx',
+      configs: []
+    }
+
+    const first = await prepareCodexSessionHome({ ctx, sessionId: 'session' })
+    const firstCodexHome = join(first.homeDir, '.codex')
+    const staleEntries = [
+      'archived_sessions',
+      'cache',
+      'history.jsonl',
+      'log',
+      'session_index.jsonl',
+      'sqlite',
+      'state_5.sqlite',
+      'logs_2.sqlite',
+      'goals_1.sqlite',
+      'memories_1.sqlite'
+    ]
+    for (const entry of staleEntries) {
+      await symlink(join(mockHome, '.codex', entry), join(firstCodexHome, entry))
+    }
+
+    const second = await prepareCodexSessionHome({ ctx, sessionId: 'session' })
+    const secondCodexHome = join(second.homeDir, '.codex')
+
+    for (const entry of staleEntries) {
+      await expect(lstat(join(secondCodexHome, entry))).rejects.toMatchObject({ code: 'ENOENT' })
+    }
+    await expect(readlink(join(secondCodexHome, 'config.toml'))).rejects.toMatchObject({ code: 'EINVAL' })
+    await expect(readlink(join(secondCodexHome, 'sessions'))).rejects.toMatchObject({ code: 'EINVAL' })
+    expect((await stat(join(secondCodexHome, 'sessions'))).isDirectory()).toBe(true)
   })
 
   it('normalizes unsupported service tiers from shared Codex config during session home preparation', async () => {
@@ -223,15 +315,15 @@ describe('prepareCodexSessionHome', () => {
       sessionId: 'session'
     })
 
-    const mockConfigContent = await readFile(join(mockHome, '.codex', 'config.toml'), 'utf8')
     const sessionConfigContent = await readFile(join(result.homeDir, '.codex', 'config.toml'), 'utf8')
+    const mockConfigContent = await readFile(join(mockHome, '.codex', 'config.toml'), 'utf8')
 
-    expect(mockConfigContent).toContain('# One Works removed unsupported Codex service_tier "default"')
-    expect(mockConfigContent).not.toContain('service_tier = "default"')
-    expect(sessionConfigContent).toBe(mockConfigContent)
+    expect(mockConfigContent).toContain('service_tier = "default"')
+    expect(sessionConfigContent).not.toContain('service_tier = "default"')
+    expect(sessionConfigContent).toContain('model = "gpt-5.5"')
   })
 
-  it('shares Codex session storage across sessionIds via mockHome symlinks so resume can find prior rollouts', async () => {
+  it('keeps Codex session storage local to each isolated session home', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-session-share-'))
     const realHome = join(workspace, 'missing-real-home')
     const mockHome = resolveTestMockHome(workspace, realHome)
@@ -252,17 +344,15 @@ describe('prepareCodexSessionHome', () => {
 
     expect(first.homeDir).not.toBe(second.homeDir)
 
-    const expectedSessionsDir = join(mockHome, '.codex', 'sessions')
-
-    expect(await readlink(join(first.homeDir, '.codex', 'sessions'))).toBe(expectedSessionsDir)
-    expect(await readlink(join(second.homeDir, '.codex', 'sessions'))).toBe(expectedSessionsDir)
-
-    const sessionsStat = await stat(expectedSessionsDir)
-    expect(sessionsStat.isDirectory()).toBe(true)
+    await expect(readlink(join(first.homeDir, '.codex', 'sessions'))).rejects.toMatchObject({ code: 'EINVAL' })
+    await expect(readlink(join(second.homeDir, '.codex', 'sessions'))).rejects.toMatchObject({ code: 'EINVAL' })
+    expect((await stat(join(first.homeDir, '.codex', 'sessions'))).isDirectory()).toBe(true)
+    expect((await stat(join(second.homeDir, '.codex', 'sessions'))).isDirectory()).toBe(true)
 
     const rolloutBytes = '{"event":"start"}\n'
     await writeFile(join(first.homeDir, '.codex', 'sessions', 'rollout.jsonl'), rolloutBytes)
-    expect(await readFile(join(second.homeDir, '.codex', 'sessions', 'rollout.jsonl'), 'utf8')).toBe(rolloutBytes)
+    await expect(readFile(join(second.homeDir, '.codex', 'sessions', 'rollout.jsonl'), 'utf8')).rejects
+      .toMatchObject({ code: 'ENOENT' })
   })
 
   it('trusts Codex native hooks through the isolated session home path', async () => {
@@ -307,7 +397,7 @@ describe('prepareCodexSessionHome', () => {
       sessionId: 'session-a'
     })
 
-    const configContent = await readFile(join(mockHome, '.codex', 'config.toml'), 'utf8')
+    const configContent = await readFile(join(result.homeDir, '.codex', 'config.toml'), 'utf8')
     const stateHeader = `[hooks.state.${
       JSON.stringify(`${join(result.homeDir, '.codex', 'hooks.json')}:pre_tool_use:0:0`)
     }]`
@@ -316,7 +406,7 @@ describe('prepareCodexSessionHome', () => {
     expect(configContent).toContain('trusted_hash = "sha256:')
   })
 
-  it('keeps Codex runtime sqlite state local while preserving shared resume storage', async () => {
+  it('keeps Codex runtime sqlite state and session storage local', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-runtime-state-'))
     const realHome = join(workspace, 'missing-real-home')
     const mockHome = resolveTestMockHome(workspace, realHome)
@@ -369,7 +459,8 @@ describe('prepareCodexSessionHome', () => {
       await expect(lstat(join(sessionCodexHome, entry))).rejects.toMatchObject({ code: 'ENOENT' })
     }
 
-    expect(await readlink(join(sessionCodexHome, 'sessions'))).toBe(join(mockHome, '.codex', 'sessions'))
+    await expect(readlink(join(sessionCodexHome, 'sessions'))).rejects.toMatchObject({ code: 'EINVAL' })
+    expect((await stat(join(sessionCodexHome, 'sessions'))).isDirectory()).toBe(true)
 
     await writeFile(join(sessionCodexHome, 'state_5.sqlite'), 'local state\n')
     await mkdir(join(sessionCodexHome, 'state'), { recursive: true })
@@ -410,7 +501,8 @@ describe('prepareCodexSessionHome', () => {
     await expect(readFile(join(mockHome, '.codex', 'sessions', 'rollout.jsonl'), 'utf8')).rejects
       .toMatchObject({ code: 'ENOENT' })
     await expect(readFile(legacyRollout, 'utf8')).resolves.toBe(rolloutBytes)
-    expect(await readlink(join(result.homeDir, '.codex', 'sessions'))).toBe(join(mockHome, '.codex', 'sessions'))
+    await expect(readlink(join(result.homeDir, '.codex', 'sessions'))).rejects.toMatchObject({ code: 'EINVAL' })
+    expect((await stat(join(result.homeDir, '.codex', 'sessions'))).isDirectory()).toBe(true)
   })
 })
 

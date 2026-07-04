@@ -21,6 +21,7 @@
 - 本地 package 只跑了 `pnpm deploy`，没有把当前 workspace package overlay 到 staging，导致安装包仍携带发布版本代码。
 - server-child 刷新了 dev runtime cache，但 shared client 静态服务仍按默认版本解析 `@oneworks/client`，导致前端旧、后端新。
 - runtime package closure 复制依赖时只按 `package.json.name` 匹配依赖名，漏掉 pnpm alias 依赖，例如依赖键是 `function-bind`，真实包名是 `@nolyfill/function-bind`。这种情况下 cache 目录看似存在，server 启动时才报 `Cannot find module ...`。
+- packaged launcher 首屏期间可以提前预热 workspace package cache，但预热必须在 `ELECTRON_RUN_AS_NODE` 子进程里执行，覆盖 cli / server / client runtime、内置 adapters 和内置 plugins。不要在 Electron main 进程里同步 seed 这些包；首次 3/3 或 9/13 changed 时会抢占 launcher renderer，造成首屏 ready 变慢。
 - 只验证 Electron 窗口能打开，没有验证 packaged server 是否真正响应 `/api/auth/status`。
 
 ## 修改入口

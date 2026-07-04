@@ -6,6 +6,10 @@ const readDesktopServerChildStartedAt = () => {
   return Number.isFinite(startedAt) && startedAt > 0 ? startedAt : undefined
 }
 
+const shouldDisableMockHomeBridge = () => (
+  process.env.__ONEWORKS_DISABLE_MOCK_HOME_BRIDGE === '1'
+)
+
 const logDesktopEntryTiming = (message) => {
   const childStartedAt = readDesktopServerChildStartedAt()
   if (childStartedAt == null) return
@@ -63,7 +67,9 @@ const runCliPackageEntrypoint = (options) => {
   }
   logDesktopEntryTiming('resolve mock home begin')
   process.env.HOME = resolveProjectMockHome(process.cwd(), process.env)
-  bridgeRealHomeToMockHome()
+  if (!shouldDisableMockHomeBridge()) {
+    bridgeRealHomeToMockHome()
+  }
   logDesktopEntryTiming('resolve mock home complete')
   process.env.__ONEWORKS_PROJECT_CLI_BIN_SOURCE_ENTRY__ = sourceEntry
   process.env.__ONEWORKS_PROJECT_CLI_BIN_DIST_ENTRY__ = distEntry

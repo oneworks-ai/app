@@ -43,6 +43,7 @@ import {
 import { isShortcutMatch } from '#~/utils/shortcutUtils'
 
 import { DesktopWorkspaceStartupProvider } from './DesktopWorkspaceStartupOverlay'
+import { useDesktopWorkspaceStartupReady } from './desktop-workspace-startup-ready'
 import { MOBILE_SIDEBAR_DIALOG_ID } from './mobile-sidebar-constants'
 import {
   RouteSidebarProvider,
@@ -67,6 +68,7 @@ const DESKTOP_SIMULATION_FULLSCREEN_QUERY_PARAM = '__oneworks_fullscreen'
 const DESKTOP_SIMULATION_TOGGLE_KEY_COUNT = 5
 const DESKTOP_SIMULATION_TOGGLE_SEQUENCE_MS = 2_000
 const GLOBAL_MODULE_UPDATE_GROUPS = new Set<ModuleUpdateGroup>(['adapter', 'core'])
+const APP_SHELL_STARTUP_READY_SELECTOR = '.app-shell'
 
 const isSearchParamEnabled = (value: string | null) => {
   if (value == null) return false
@@ -116,6 +118,11 @@ const readWindowFullscreenState = () => (
   window.matchMedia?.('(display-mode: fullscreen)').matches === true ||
   isLikelyNativeFullscreen()
 )
+
+function AppShellStartupReadySignal() {
+  useDesktopWorkspaceStartupReady(true, { visibleSelector: APP_SHELL_STARTUP_READY_SELECTOR })
+  return null
+}
 
 export function AppShell({
   activeId,
@@ -632,6 +639,7 @@ export function AppShell({
 
   return (
     <DesktopWorkspaceStartupProvider>
+      <AppShellStartupReadySignal />
       <RouteSidebarProvider value={routeSidebarContextValue}>
         <HostAppShell
           className={shellClassName}

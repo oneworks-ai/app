@@ -33,6 +33,27 @@
   - 跑 `scripts/__tests__/adapter-e2e/adapter-e2e.spec.ts`
 - `pnpm tools adapter-e2e test [selection] --update`
   - 更新对应 case 的 file snapshot
+- `pnpm tools desktop-control launch [--app <path>] [--workspace <path>]`
+  - 面向 agent 的 Electron 控制入口，默认 JSON 输出；冷启动隔离 `userData` 的桌面实例，返回 CDP endpoint、targets、profile 路径和可直接继续执行的 command hints
+  - 这个命令的用户是模型，不是人；新增桌面 UI 自动验证能力时优先复用返回的 `control` / `agentCommands`，不要让上层手写 `--remote-debugging-port`、app executable 路径或 profile 初始化逻辑
+  - 默认会拒绝不含 `external-cdp` hook 的旧安装包，避免旧 Electron 包在验证中崩溃；只有明确排查 legacy Electron 行为时才使用 `--allow-unsupported-app`
+- `pnpm tools desktop-control serve`
+  - 面向 agent 的本地 JSON protocol bridge，启动后通过 `/protocol`、`/v1/electron/sessions`、`/v1/electron/sessions/:sessionId/recordings` 和 `/v1/evidence/wait-reply` 桥接 Electron、CDP、demo-video 录屏与 runtime evidence
+  - `/recordings` 只用于已有 Electron session 的临时诊断录制；正式 Electron 验证 / 产品素材必须走 `desktop-control record-batch --use-deskpad-display`
+  - Electron 验证视频不允许用 CDP 截帧作为画面 fallback；正式画面来源必须是通过可见性验证的 macOS 系统 display capture
+  - 协议见 `scripts/desktop-control-protocol.md`；场景验证工具应调用这个 bridge，而不是重复实现端口选择、隔离 profile、CDP target discovery、demo-video URL 拼接或 runtime evidence discovery
+- `pnpm tools desktop-control record-batch launcher-open-workspace-ui-tour --workspace <path> --app <app>`
+  - 真实 Electron launcher/workspace 展示素材的批量入口；每个明暗 / 中英 variant 都冷启动隔离 Electron session，用专用 recording display 做系统连续录屏源，输出裁成 app 窗口区域后再结束 app
+  - 这个入口的画面来源必须是系统录屏；CDP 只能用于自动化控制和等待条件，不作为录屏输出来源。不要交付整张 DeskPad 虚拟桌面
+  - 正式验证 / 产品素材必须加 `--use-deskpad-display` 跑在专用虚拟桌面上；工具会查找系统显示器列表里的 `DeskPad Display`，把 launcher 和 workspace BrowserWindow bounds 注入到该 display，并验证 display capture 里确实包含 app window；找不到或验证失败时必须失败，不要占用用户当前桌面
+  - display capture 可见性验证要比较解码后的像素相似度，不要用 `cmp` 比较 PNG 文件字节；透明 / vibrancy / 毛玻璃窗口必须同时支持结构边缘重合度，不能只用 RGB 相似度误杀真实 app window；失败时保留 probe 图和指标，先排查坐标、window level、空间归属和 provider 行为，再决定是否换 recording display provider
+  - AppKit `NSScreen.frame` 的 y 是 bottom-origin，Electron window bounds 和 display crop 是 top-origin；写 bounds / crop 前必须转换 y，避免窗口被夹到虚拟屏顶部导致视频不居中
+  - 录制前要让 recorder 校验 ffmpeg 真的可运行；不要把第三方 app bundle 里会崩溃的私有 ffmpeg 当默认候选，避免场景录完后才在编码阶段失败
+  - `--use-deskpad-display` 会启动真实背景窗口展示固定批准壁纸，优先读取 `.logs/demo-videos/display-region-prototype/ventura-graphic-light-hq/ventura-background-full-3174x2232.png`，缺失时回退到系统 Ventura Graphic Light 候选；不要默认读取用户当前桌面 wallpaper，不要主动换背景。只有用户明确要求换背景时，才列候选让用户选择
+  - 不要在正式 batch 入口使用 `system-window`、窗口级 ScreenCaptureKit、固定 region crop、CDP 截帧、假圆角合成或只有壁纸的 display capture；这些都会重新引入 traffic light、圆角、桌面占用或错误画面问题
+  - 不要用 `demo-video batch url-tour --url .../ui/launcher --page-background ...` 代替这个入口；那只录 Web renderer，不能跟随真实 Electron workspace BrowserWindow，也无法保证窗口位置 / bounds 一致
+  - 系统 display capture 的 `recordDuring(durationMs, action)` 里，`durationMs` 是最小录制窗口，不是 action 的硬截止；action 未结束时必须继续录，否则 cursor 事件会跑到 segment 外并在视频里表现为鼠标瞬跳。改动后用抽帧 / 坐标检测检查 launcher -> workspace 切换处的光标连续性
+  - 交付 Electron / workspace 录屏时必须同步加载耗时分析：至少说明录制器启动、app spawn 到首窗、workspace server ready、renderer/chat ready、runtime package cache 命中状态，以及 stills / 抽帧是否证明已进入对话界面
 - `pnpm tools chrome-debug targets [--port 9222]`
   - 查看本机 Chrome DevTools 目标页，确认当前 remote debugging 端口上有哪些页面
 - `pnpm tools chrome-debug messenger-conversations`
@@ -50,6 +71,12 @@
   - 列出能力展示录屏场景；录屏规则见 `.oo/rules/maintenance/demo-video.md`
 - `pnpm tools demo-video record <scenario> --url <url> [--out-dir <path>] [--name <name>] [--keep-frames]`
   - 冷启动独立 Chrome profile 执行场景动作，按帧截图并用 `ffmpeg` 合成 MP4；默认输出到 `.logs/demo-videos/<scenario>`
+  - 默认 headless；传 `--headed` 只用于调试可视浏览器。单条录制可用 `--language zh|en` 固定界面语言。
+  - 录 launcher / 浮层类页面素材时可传 `--page-background macos-wallpaper`，让 headless/CDP 录制使用本机 macOS 系统壁纸背景；需要固定素材时传 `--page-background-image <path>`
+  - 录真实 Electron 从 launcher 点击打开项目时，不要用这个底层入口交付正式素材；使用 `desktop-control record-batch launcher-open-workspace-ui-tour --use-deskpad-display`。`demo-video record` 的 `captureSource` 选项只保留给底层诊断。
+- `pnpm tools demo-video batch <scenario> --url <url> [--out-dir <path>]`
+  - 批量生成展示素材，默认输出 `light/dark x zh/en` 四个变体；用 `--color-schemes` / `--languages` 覆盖矩阵，产物仍包含 MP4、poster 和按秒 stills manifest
+  - 仅用于纯 Web / headless CDP 页面；真实 Electron launcher 打开 workspace 的四变体素材用 `pnpm tools desktop-control record-batch ...`
 - `pnpm tools agent-room-smoke resume [--json]`
   - 跑真实 `StartTasks -> agent room 消息 -> inactive task resume` smoke；启动临时 server / SQLite / MCP / Codex adapter，LLM 只用 mock，结束后清理临时进程
 - `pnpm tools relay-config smoke [--allow-pending] [--json]`
@@ -63,6 +90,19 @@
 - `pnpm tools release-tags plan <base> <head> [--json]`
   - 比较两个提交之间 workspace package manifest 的版本变化，生成需要创建的 `pkg/<normalized-package-name>/v<version>` tag 候选
   - release PR 合入 `main` 后由 `.github/workflows/release-tags.yml` 调用；不会把根目录开发用 `package.json` 纳入候选
+- `pnpm tools runtime-evidence list [--project-home <path>] [--limit <count>] [--json]`
+  - 通用 runtime session 证据入口：有界列出最近的 `runtime/sessions/*/events.jsonl`，用于 UI smoke、Electron 验证、adapter 调试和 release 验证，不要为 nonce/session discovery 在各脚本里重复写 parser
+- `pnpm tools runtime-evidence wait-reply --expected-reply <text> [--session-id <id>]`
+  - 等待已完成 runtime session 的 assistant 回复；不传 `--session-id` 时按期望回复在有界 runtime store 中自动发现 session
+- `pnpm tools release-verify agent --channel beta --version auto`
+  - AI-native 发布验证主入口：默认 `desktop-chat`，自动生成期望回复 nonce，打印 Electron UI action，随后在有界 runtime store 中自动发现匹配会话，不要求手动传 `--session-id`
+  - 上层 agent 应先按输出的 UI action 操作 Electron，再让命令继续等待证据；如果已经知道 session id，可直接带 `--session-id` 缩短等待
+- `pnpm tools release-verify run --channel beta --version auto [--scenario desktop-installed|desktop-chat]`
+  - 面向脚本 / agent 的可控 runner：自动从 `oneworks@<channel>` 解析版本，运行确定性 probe，并输出 verdict / evidence / recommendations
+- `pnpm tools release-verify beta --version <version> [--session-id <id>] [--expected-reply <text>]`
+  - 底层 deterministic probe：发布后把 npm beta dist-tag、桌面 GitHub Release asset、已安装 `/Applications/One Works.app`、内置 runtime package、`~/.oneworks/bootstrap` cache 和可选 UI 会话回复收敛成一条验证命令
+  - UI 仍负责真实发消息；命令直接轮询对应 `runtime/sessions/<id>/events.jsonl` 判断是否完成和是否出现期望回复，避免人工等界面或递归翻 cache
+  - runtime 子包默认按各自 `@beta` dist-tag 校验，不要求都等于桌面版本；需要强制同版本时才加 `--runtime-exact-version`
 - `pnpm tools homebrew-tap sync-oneworks --version <version>`
   - 根据已发布的 `oneworks@<version>` npm tarball 更新 `infra/homebrew-tap/Formula/oneworks.rb` 的 `url` 和 `sha256`
   - One Works CLI 发版后执行；随后在 `infra/homebrew-tap` 内提交并 push，再回到主仓库提交 submodule 指针
@@ -115,6 +155,19 @@
   - hook 日志 parser 和 snapshot projection 单测
 - `scripts/__tests__/adapter-e2e/mock-llm.spec.ts`
   - mock LLM 规则 DSL 单测
+
+## desktop-control / runtime evidence 结构
+
+- `scripts/desktop-control-server.ts`
+  - agent-facing 本地 JSON protocol bridge，负责 `/protocol`、Electron control session、CDP target refresh 和 runtime evidence endpoint
+- `scripts/desktop-control-protocol.md`
+  - bridge protocol 文档；新增场景验证能力时先扩展这里的 endpoint / phase 约定，再让 scenario runner 组合调用
+- `scripts/desktop-cdp.ts`
+  - 冷启动隔离 Electron 实例、分配 CDP endpoint、返回 `control` 和 `agentCommands`
+- `scripts/runtime-evidence.ts`
+  - 通用 runtime session evidence discovery / wait-reply；release、Electron smoke、adapter 调试不要重复解析 `events.jsonl`
+- `apps/desktop/src/main/external-cdp.ts`
+  - Electron app 侧 bootstrap 前 opt-in CDP hook；默认关闭，协议和编排仍归 `scripts/` 层维护
 
 ## Lark 调试约定
 

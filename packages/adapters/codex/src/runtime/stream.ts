@@ -11,6 +11,7 @@ import type {
 import {
   CANONICAL_ONEWORKS_MCP_SERVER_NAME,
   TRUSTED_ONEWORKS_CLI_PERMISSION_BASH_LOOKUP_KEYS,
+  createStartupProfiler,
   resolveMcpPermissionServerKey,
   resolveMcpPermissionServerKeys,
   resolveTrustedOneworksCliPermissionSubjectFromCommand,
@@ -288,6 +289,13 @@ export async function createStreamCodexSession(
   const { onEvent, description, sessionId, extraOptions, type: sessionType } = options
   const model = resolvedModel
   const rpcApprovalPolicy = toCodexOutboundApprovalPolicy(approvalPolicy)
+  const startupProfiler = createStartupProfiler({
+    config: ctx.configState?.mergedConfig,
+    cwd,
+    ctxId: ctx.ctxId,
+    env: ctx.env,
+    sessionId
+  })
 
   const {
     experimentalApi = false,
@@ -307,6 +315,7 @@ export async function createStreamCodexSession(
 
   logger.info('[codex session] spawning app-server (stream mode)', { binaryPath, cwd })
 
+  const nativeSpawnStartedAt = startupProfiler.now()
   const proc = spawn(
     String(binaryPath),
     [
@@ -318,6 +327,16 @@ export async function createStreamCodexSession(
     ],
     { env: spawnEnv, cwd, stdio: ['pipe', 'pipe', 'inherit'] }
   )
+  startupProfiler.mark('codex.native.spawn', nativeSpawnStartedAt, {
+    binaryPath: String(binaryPath)
+  })
+  if (typeof proc.once === 'function') {
+    proc.once('spawn', () => {
+      startupProfiler.mark('codex.native.spawnEvent', nativeSpawnStartedAt, {
+        pid: proc.pid
+      })
+    })
+  }
 
   const rpc = new CodexRpcClient(proc, logger)
   const msgAcc = new AgentMessageAccumulator()
@@ -587,6 +606,7 @@ export async function createStreamCodexSession(
 
   const startNewThread = async () => {
     logger.info('[codex session] starting new thread', { cwd, sessionId })
+    const threadStartStartedAt = startupProfiler.now()
     const startResult = await rpc.request<{ thread: CodexThread }>('thread/start', {
       cwd,
       approvalPolicy: rpcApprovalPolicy,
@@ -594,6 +614,7 @@ export async function createStreamCodexSession(
       serviceName: CANONICAL_ONEWORKS_MCP_SERVER_NAME,
       ...(model ? { model } : {})
     })
+    startupProfiler.mark('codex.native.threadStart', threadStartStartedAt)
     threadId = startResult.thread.id
     usedCachedThread = false
     await writeThreadCache(threadId)
@@ -617,10 +638,12 @@ export async function createStreamCodexSession(
 
   const resumeCachedThread = async (nextThreadId: string) => {
     logger.info('[codex session] resuming thread', { threadId: nextThreadId, sessionId })
+    const threadResumeStartedAt = startupProfiler.now()
     const resumeResult = await rpc.request<{ thread: CodexThread }>('thread/resume', {
       threadId: nextThreadId,
       ...(model ? { model } : {})
     })
+    startupProfiler.mark('codex.native.threadResume', threadResumeStartedAt)
     threadId = resumeResult.thread.id
     usedCachedThread = true
     await writeThreadCache(threadId)
@@ -640,7 +663,11 @@ export async function createStreamCodexSession(
 
     try {
       logger.info('[codex session] starting turn', { threadId, input, source })
+      const turnStartStartedAt = startupProfiler.now()
       const turnResult = await rpc.request<{ turn: CodexTurn }>('turn/start', turnParams)
+      startupProfiler.mark('codex.native.turnStart', turnStartStartedAt, {
+        source
+      })
       logger.info('[codex session] turn started', { turnId: turnResult.turn.id, source })
       return turnResult
     } catch (err) {
@@ -651,7 +678,11 @@ export async function createStreamCodexSession(
           threadId: threadId!
         }
         logger.info('[codex session] retrying turn on fresh thread', { threadId, source })
+        const retryTurnStartStartedAt = startupProfiler.now()
         const retryResult = await rpc.request<{ turn: CodexTurn }>('turn/start', retryParams)
+        startupProfiler.mark('codex.native.turnStartRetry', retryTurnStartStartedAt, {
+          source
+        })
         logger.info('[codex session] turn started after retry', { turnId: retryResult.turn.id, source })
         return retryResult
       }
@@ -660,6 +691,7 @@ export async function createStreamCodexSession(
   }
 
   try {
+    const initializeStartedAt = startupProfiler.now()
     const initResult = await rpc.request<{ userAgent?: string }>('initialize', {
       clientInfo,
       capabilities: {
@@ -671,6 +703,7 @@ export async function createStreamCodexSession(
         ]
       }
     })
+    startupProfiler.mark('codex.native.initialize', initializeStartedAt)
     logger.info('[codex session] initialized', { userAgent: initResult?.userAgent })
     rpc.notify('initialized', {})
 

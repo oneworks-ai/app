@@ -115,6 +115,16 @@ const normalizeWorkspaceStartupAppearance = (value: unknown): WorkspaceStartupAp
   return 'system'
 }
 
+const recordingThemeMode = normalizeWorkspaceStartupAppearance(process.env.ONEWORKS_DESKTOP_RECORDING_THEME_MODE)
+
+const applyInitialDesktopThemeMode = () => {
+  if (recordingThemeMode === 'system') return
+  runWithDocumentElement((root) => {
+    root.classList.toggle('dark', recordingThemeMode === 'dark')
+    root.dataset.oneworksDesktopStartupTheme = recordingThemeMode
+  })
+}
+
 const resolveWorkspaceStartupAppearance = (): WorkspaceStartupAppearance => {
   return normalizeWorkspaceStartupAppearance(document.documentElement.dataset.oneworksDesktopStartupTheme)
 }
@@ -189,6 +199,7 @@ const markWorkspaceStartupReady = () => {
   }, workspaceStartupExitMs)
 }
 
+applyInitialDesktopThemeMode()
 installWorkspaceStartupOverlay()
 
 contextBridge.exposeInMainWorld('oneworksDesktop', {
@@ -206,6 +217,7 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
     ipcRenderer.invoke('desktop:stop-workspace', workspaceFolder, input),
   getDesktopIconPreview: (settings: unknown) => ipcRenderer.invoke('desktop:get-icon-preview', settings),
   getDesktopSettings: () => ipcRenderer.invoke('desktop:get-settings'),
+  initialThemeMode: recordingThemeMode === 'system' ? undefined : recordingThemeMode,
   getBrowserDataSyncState: () => ipcRenderer.invoke('desktop:get-browser-data-sync-state'),
   getCurrentWindowPresentationState: () => ipcRenderer.invoke('desktop:get-current-window-presentation-state'),
   listBrowserHistory: (input?: unknown) => ipcRenderer.invoke('desktop:list-browser-history', input),

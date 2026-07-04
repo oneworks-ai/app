@@ -2,7 +2,7 @@
 import { Buffer } from 'node:buffer'
 import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { access, cp, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
+import { access, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
@@ -27,7 +27,6 @@ import {
   getAdapterConfiguredDefaultAccount,
   mergeAdapterConfigs,
   mergeProcessEnvWithProjectEnv,
-  migrateProjectHomeSegment,
   migrateStoredAdapterAccounts,
   normalizeNonEmptyString,
   resolveAdapterAccountReadDirs,
@@ -154,18 +153,6 @@ const readDirSafe = async (targetPath: string) => {
   }
 }
 
-const getDirectoryMtimeMs = async (targetPath: string) => {
-  try {
-    const stats = await lstat(targetPath)
-    return stats.isDirectory() && !stats.isSymbolicLink() ? stats.mtimeMs : undefined
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return undefined
-    }
-    throw error
-  }
-}
-
 const createAbortError = () => {
   const error = new Error('Codex login canceled.')
   error.name = 'AbortError'
@@ -220,11 +207,22 @@ const resolveCodexProbeHomeDir = (
 
 const MISSING_AUTH_SENTINEL_FILE = '.oneworks-missing-auth.json'
 const CODEX_RUNTIME_STATE_BRIDGE_PATHS = [
+  '.codex/archived_sessions',
+  '.codex/history.jsonl',
+  '.codex/log',
+  '.codex/session_index.jsonl',
   '.codex/state',
-  '.codex/sqlite'
+  '.codex/sqlite',
+  '.codex/transcription-history.jsonl'
+] as const
+const CODEX_SESSION_HOME_BRIDGE_EXCLUDED_ENTRIES = [
+  '.oneworks',
+  '.codex'
 ] as const
 const isCodexRuntimeStateBridgeEntry = (entryName: string) => (
+  entryName.startsWith('goals_') ||
   entryName.startsWith('state') ||
+  entryName.startsWith('memories_') ||
   entryName.startsWith('logs_')
 )
 
@@ -1778,86 +1776,25 @@ const runCodexLogin = async (params: {
   }
 }
 
-const copyDirectoryContentsWithoutOverwrite = async (params: {
-  sourceDir: string
-  targetDir: string
-}) => {
-  const sourceDir = resolve(params.sourceDir)
-  const targetDir = resolve(params.targetDir)
-  if (sourceDir === targetDir) return
-
-  const stats = await getDirectoryMtimeMs(sourceDir)
-  if (stats == null) return
-
-  await mkdir(targetDir, { recursive: true })
-  const entries = await readDirSafe(sourceDir)
-  await Promise.all(entries.map(entry =>
-    cp(join(sourceDir, entry.name), join(targetDir, entry.name), {
-      errorOnExist: false,
-      force: false,
-      recursive: true
-    })
-  ))
-}
-
-const resolveLegacyCodexSessionStorageDirs = async (
-  ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId'>,
-  sessionId: string
-) => {
-  await migrateProjectHomeSegment(ctx.cwd, ctx.env, 'caches')
-  const cacheRoot = resolveProjectOoPath(ctx.cwd, ctx.env, 'caches')
-  const candidates: Array<{ mtimeMs: number; sourceDir: string }> = []
-
-  const entries = await readDirSafe(cacheRoot)
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-
-    const sourceDir = resolve(
-      cacheRoot,
-      entry.name,
-      sessionId,
-      'adapter-codex-home',
-      '.codex',
-      'sessions'
-    )
-    const mtimeMs = await getDirectoryMtimeMs(sourceDir)
-    if (mtimeMs != null) {
-      candidates.push({ mtimeMs, sourceDir })
-    }
-  }
-
-  return candidates
-    .sort((left, right) => right.mtimeMs - left.mtimeMs || left.sourceDir.localeCompare(right.sourceDir))
-    .map(candidate => candidate.sourceDir)
-}
-
-const migrateCodexSessionStorageToMockHome = async (params: {
-  ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId'>
-  homeDir: string
-  sessionId: string
-  targetDir: string
-}) => {
-  await copyDirectoryContentsWithoutOverwrite({
-    sourceDir: join(params.homeDir, '.codex', 'sessions'),
-    targetDir: params.targetDir
-  })
-
-  const legacyDirs = await resolveLegacyCodexSessionStorageDirs(params.ctx, params.sessionId)
-  for (const sourceDir of legacyDirs) {
-    await copyDirectoryContentsWithoutOverwrite({
-      sourceDir,
-      targetDir: params.targetDir
-    })
-  }
-}
-
 const resolveCodexRuntimeStateBridgePaths = async (homeDir: string) => {
   const codexDir = join(homeDir, '.codex')
   const entries = await readDirSafe(codexDir)
+  const staleBridgePaths = await Promise.all(entries.map(async entry => {
+    const relativePath = join('.codex', entry.name)
+    try {
+      const entryStat = await lstat(join(codexDir, entry.name))
+      return entryStat.isSymbolicLink()
+        ? relativePath
+        : undefined
+    } catch {
+      return undefined
+    }
+  }))
 
   return [
     ...new Set([
       ...CODEX_RUNTIME_STATE_BRIDGE_PATHS,
+      ...staleBridgePaths.filter((path): path is string => path != null),
       ...entries
         .filter(entry => isCodexRuntimeStateBridgeEntry(entry.name))
         .map(entry => join('.codex', entry.name))
@@ -1872,24 +1809,82 @@ const unlinkCodexRuntimeStateBridgePaths = async (homeDir: string) => {
   })
 }
 
+const CODEX_SESSION_CONFIG_ROOT_KEYS = new Set([
+  'model',
+  'model_reasoning_effort',
+  'model_reasoning_summary',
+  'model_verbosity',
+  'personality',
+  'reasoning_effort'
+])
+
+const extractCodexSessionRootConfigLines = (content: string | undefined) => {
+  if (content == null) return []
+
+  const lines: string[] = []
+  for (const line of content.replaceAll('\r\n', '\n').split('\n')) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith('[')) break
+    if (trimmed === '' || trimmed.startsWith('#')) continue
+
+    const key = /^([\w-]+)\s*=/iu.exec(trimmed)?.[1]
+    if (key != null && CODEX_SESSION_CONFIG_ROOT_KEYS.has(key)) {
+      lines.push(line)
+    }
+  }
+  return lines
+}
+
+const buildCodexSessionConfigContent = (params: {
+  cwd: string
+  sharedConfigContent?: string
+}) => {
+  const rootLines = extractCodexSessionRootConfigLines(params.sharedConfigContent)
+  return [
+    ...rootLines,
+    'check_for_update_on_startup = false',
+    '',
+    `[projects.${JSON.stringify(resolve(params.cwd))}]`,
+    'trust_level = "trusted"',
+    ''
+  ].join('\n')
+}
+
+const writeCodexSessionConfigFile = async (params: {
+  ctx: Pick<AdapterCtx, 'cwd' | 'env'>
+  homeDir: string
+}) => {
+  const mockHome = resolveMockHome(params.ctx.cwd, params.ctx.env)
+  const sharedConfigPath = join(mockHome, '.codex', 'config.toml')
+  let sharedConfigContent: string | undefined
+  try {
+    sharedConfigContent = await readFile(sharedConfigPath, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+
+  const configPath = join(params.homeDir, '.codex', 'config.toml')
+  await mkdir(dirname(configPath), { recursive: true })
+  await rm(configPath, { force: true })
+  await writeFile(
+    configPath,
+    buildCodexSessionConfigContent({
+      cwd: params.ctx.cwd,
+      sharedConfigContent
+    }),
+    'utf8'
+  )
+
+  return configPath
+}
+
 const syncSharedCodexSessionHomeFiles = async (
   ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId'>,
   homeDir: string,
   sessionId: string
 ) => {
   const mockHome = resolveMockHome(ctx.cwd, ctx.env)
-  const sharedSessionsDir = join(mockHome, '.codex', 'sessions')
-  await unlinkMockHomeBridgePaths({
-    mockHome,
-    paths: ['.codex/sessions']
-  })
-  await mkdir(sharedSessionsDir, { recursive: true })
-  await migrateCodexSessionStorageToMockHome({
-    ctx,
-    homeDir,
-    sessionId,
-    targetDir: sharedSessionsDir
-  })
+  await mkdir(join(homeDir, '.codex', 'sessions'), { recursive: true })
 
   const sharedMappings: Array<{ sourcePath: string; targetPath: string; type: 'dir' | 'file' }> = [
     {
@@ -1901,16 +1896,6 @@ const syncSharedCodexSessionHomeFiles = async (
       sourcePath: join(mockHome, '.codex', 'skills'),
       targetPath: join(homeDir, '.codex', 'skills'),
       type: 'dir'
-    },
-    {
-      sourcePath: sharedSessionsDir,
-      targetPath: join(homeDir, '.codex', 'sessions'),
-      type: 'dir'
-    },
-    {
-      sourcePath: join(mockHome, '.codex', 'config.toml'),
-      targetPath: join(homeDir, '.codex', 'config.toml'),
-      type: 'file'
     },
     {
       sourcePath: join(mockHome, '.codex', 'hooks.json'),
@@ -1925,11 +1910,6 @@ const syncSharedCodexSessionHomeFiles = async (
       onMissingSource: 'remove'
     })
   ))
-  await ensureCodexNativeHookTrustState({
-    configPath: join(mockHome, '.codex', 'config.toml'),
-    hooksPath: join(homeDir, '.codex', 'hooks.json')
-  })
-  await ensureCodexConfigCliCompatibility(join(homeDir, '.codex', 'config.toml'))
 }
 
 export const prepareCodexSessionHome = async (params: {
@@ -1964,7 +1944,8 @@ export const prepareCodexSessionHome = async (params: {
   const bridgeStartedAt = startupProfiler.now()
   bridgeRealHomeToMockHome({
     realHome: mockHome,
-    mockHome: homeDir
+    mockHome: homeDir,
+    excludeEntries: [...CODEX_SESSION_HOME_BRIDGE_EXCLUDED_ENTRIES]
   })
   startupProfiler.mark('codex.accounts.bridgeSessionHome', bridgeStartedAt)
   const unlinkStartedAt = startupProfiler.now()
@@ -1987,6 +1968,14 @@ export const prepareCodexSessionHome = async (params: {
   const sharedFilesStartedAt = startupProfiler.now()
   await syncSharedCodexSessionHomeFiles(ctx, homeDir, sessionId)
   startupProfiler.mark('codex.accounts.syncSharedSessionHomeFiles', sharedFilesStartedAt)
+  const sessionConfigStartedAt = startupProfiler.now()
+  const sessionConfigPath = await writeCodexSessionConfigFile({ ctx, homeDir })
+  await ensureCodexNativeHookTrustState({
+    configPath: sessionConfigPath,
+    hooksPath: join(homeDir, '.codex', 'hooks.json')
+  })
+  await ensureCodexConfigCliCompatibility(sessionConfigPath)
+  startupProfiler.mark('codex.accounts.writeSessionConfig', sessionConfigStartedAt)
   const authStartedAt = startupProfiler.now()
   await syncSymlinkTarget({
     sourcePath: selectedAccount?.authFilePath ?? join(homeDir, MISSING_AUTH_SENTINEL_FILE),

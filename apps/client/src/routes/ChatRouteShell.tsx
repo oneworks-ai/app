@@ -110,7 +110,7 @@ const WORKSPACE_DRAWER_MIN_CONTENT_WIDTH = 300
 const WORKSPACE_DRAWER_MAX_WIDTH_RATIO = 0.7
 const WORKSPACE_DRAWER_FILE_TAB_PREFIX = 'workspace-drawer:file:'
 const CHAT_ROUTE_STARTUP_READY_SELECTOR = [
-  '.chat-container.ready .chat-input-monaco[data-oneworks-sender-editor-ready="true"]',
+  '.chat-container.ready',
   '.chat-container.ready .chat-messages.ready',
   '.chat-container.ready .chat-settings-panel',
   '.chat-container.ready .chat-timeline-view'

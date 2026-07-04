@@ -66,7 +66,9 @@ try {
   migrateProjectHomeSegmentsSync(process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__, process.env, ['.mock'])
 } catch {}
 process.env.HOME = resolveProjectMockHome(process.cwd(), process.env)
-bridgeRealHomeToMockHome()
+if (process.env.__ONEWORKS_DISABLE_MOCK_HOME_BRIDGE !== '1') {
+  bridgeRealHomeToMockHome()
+}
 
 const sourceEntrypoint = path.resolve(__dirname, './src/worker.ts')
 const distEntrypoint = path.resolve(__dirname, './dist/worker.js')

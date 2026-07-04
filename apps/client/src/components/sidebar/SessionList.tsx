@@ -20,11 +20,14 @@ import { SessionItem } from './SessionItem'
 import type { SidebarConversationGroup, SidebarRoomItem } from './conversation-items'
 import { buildGroupedSidebarConversationItems, getCollapsibleSidebarSessionIds } from './conversation-items'
 
+const SESSION_LIST_LOADING_ROW_COUNT = 8
+
 interface SessionListProps {
   sessions: Session[]
   rooms?: SidebarRoomItem[]
   activeId?: string
   hasActiveFilters: boolean
+  isLoading?: boolean
   isBatchMode: boolean
   isCompactLayout: boolean
   selectedIds: Set<string>
@@ -44,11 +47,32 @@ interface SessionListProps {
   onToggleSelect: (id: string) => void
 }
 
+function SessionListLoadingSkeleton({ label }: { label: string }) {
+  return (
+    <div
+      className='session-list-loading'
+      role='status'
+      aria-label={label}
+    >
+      {Array.from({ length: SESSION_LIST_LOADING_ROW_COUNT }, (_, index) => (
+        <div key={index} className='session-list-loading__row'>
+          <span className='session-list-loading__avatar' />
+          <span className='session-list-loading__body'>
+            <span className='session-list-loading__line' />
+            <span className='session-list-loading__line session-list-loading__line--short' />
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function SessionList({
   sessions,
   rooms = [],
   activeId,
   hasActiveFilters,
+  isLoading = false,
   isBatchMode,
   isCompactLayout,
   selectedIds,
@@ -108,6 +132,7 @@ export function SessionList({
     sessions,
     sortOrder
   })
+  const showInitialLoading = isLoading && conversationItems.length === 0
 
   const resolveTooltipTitle = (title?: string) => isTouchInteraction ? undefined : title
 
@@ -179,9 +204,13 @@ export function SessionList({
           className='session-list'
           size='small'
           locale={{
-            emptyText: <div className='empty-text'>
-              {searchQuery || hasActiveFilters ? t('common.noSessions') : t('common.startNewChat')}
-            </div>
+            emptyText: showInitialLoading
+              ? <SessionListLoadingSkeleton label={t('chat.newSessionGuide.loading')} />
+              : (
+                <div className='empty-text'>
+                  {searchQuery || hasActiveFilters ? t('common.noSessions') : t('common.startNewChat')}
+                </div>
+              )
           }}
           dataSource={conversationItems}
           renderItem={(item) => {

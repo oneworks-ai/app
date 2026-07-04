@@ -1,6 +1,5 @@
 /* eslint-disable max-lines -- service manager keeps child-process startup and shutdown transitions together. */
 import { spawn } from 'node:child_process'
-import { createRequire } from 'node:module'
 import path from 'node:path'
 import process from 'node:process'
 
@@ -10,7 +9,6 @@ import { getWorkspaceDescription, getWorkspaceDisplayName } from '../workspace-s
 import { resolvePackagedCliPathEnv } from './cli-path-env'
 import { CLIENT_BASE, SERVER_HOST } from './constants'
 import {
-  builtinPackageCachePath,
   isDev,
   repoRoot,
   resolveBundledRuntimeConsumerBootstrapPath,
@@ -30,12 +28,6 @@ import type {
   WorkspaceService
 } from './types'
 import { refreshWorkspaceRuntimeCacheInBackground } from './updates'
-
-const nodeRequire = createRequire(__filename)
-
-interface BuiltinPackageCacheModule {
-  ensureBuiltinRuntimePackageCache?: (options?: { env?: NodeJS.ProcessEnv }) => unknown
-}
 
 interface WorkspaceServiceManagerInput {
   broadcastWorkspaceSelectorState: () => void
@@ -164,17 +156,6 @@ const logServerStartup = (displayName: string, message: string) => {
   process.stdout.write(`[oneworks-server:${displayName}] ${message}\n`)
 }
 
-const ensurePackagedRuntimePackageCache = (env: NodeJS.ProcessEnv) => {
-  if (isDev) return
-
-  try {
-    const cacheModule = nodeRequire(builtinPackageCachePath) as BuiltinPackageCacheModule
-    cacheModule.ensureBuiltinRuntimePackageCache?.({ env })
-  } catch (error) {
-    console.error('[oneworks-runtime] failed to refresh bundled runtime package cache', error)
-  }
-}
-
 export const createWorkspaceServiceManager = ({
   broadcastWorkspaceSelectorState,
   findWorkspaceWindowRecord,
@@ -299,7 +280,6 @@ export const createWorkspaceServiceManager = ({
         ...workspaceRuntimeEnv,
         ...runtimePackageCacheVersionEnv
       }
-      ensurePackagedRuntimePackageCache(packagedWorkspaceRuntimeEnv)
       const clientDistPath = isDev ? undefined : resolveClientDistPath(packagedWorkspaceRuntimeEnv)
       if (!isDev && clientDistPath == null) {
         throw new Error('Client dist was not found. Run `pnpm -C apps/desktop build:client` first.')

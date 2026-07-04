@@ -11,6 +11,7 @@ import {
   prepareManagedHookRuntime,
   readJsonFileOrDefault,
   resolveManagedHookScriptPath,
+  shellQuote,
   writeJsonFile
 } from '@oneworks/hooks'
 import type { NativeHookMatcherGroup } from '@oneworks/hooks'
@@ -295,6 +296,14 @@ const createManagedGroup = (
   }]
 })
 
+const withProjectHomeEnv = (command: string, mockHome: string) =>
+  [
+    `HOME=${shellQuote(mockHome)}`,
+    `USERPROFILE=${shellQuote(mockHome)}`,
+    '__ONEWORKS_DISABLE_MOCK_HOME_BRIDGE=1',
+    command
+  ].join(' ')
+
 export const ensureCodexNativeHooksInstalled = async (
   ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'logger' | 'assets'>
 ) => {
@@ -322,13 +331,14 @@ export const ensureCodexNativeHooksInstalled = async (
       nodePath,
       scriptPath: MANAGED_COMMAND_PATH
     })
+    const commandWithProjectHome = withProjectHomeEnv(command, mockHome)
 
     const merged = mergeManagedHookGroups({
       existing,
       eventNames: CODEX_NATIVE_HOOK_EVENTS,
       enabled,
       isManagedGroup,
-      createGroup: (eventName: string) => createManagedGroup(command, eventName as CodexNativeHookEvent),
+      createGroup: (eventName: string) => createManagedGroup(commandWithProjectHome, eventName as CodexNativeHookEvent),
       shouldManageEvent: (eventName: string) => !projectManagedEvents.has(eventName as CodexNativeHookEvent)
     })
     await unlinkMockHomeBridgePaths({
