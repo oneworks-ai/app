@@ -104,12 +104,13 @@ The official topology is not a template for user private deployments. Private de
 
 - Preferred private Vercel shape is the `apps/relay-server` single project.
 - Official OneWorks Vercel slots use `dev.vc.oneworks.cloud` for dev and `vc.oneworks.cloud` for production. Private Vercel deployments should use the user's own Vercel project domain or custom domain.
+- The official dev Vercel slot deploys through the Vercel GitHub App, connected to `oneworks-ai/app`, production branch `main`, root directory `apps/relay-server`. GitHub Actions verifies the deployment after Vercel finishes; it does not publish Vercel with a repository-stored CLI token.
 - `pnpm build:vercel` builds `apps/relay-admin`, embeds Admin under `/admin`, and builds the serverless function.
 - Vercel serverless must use the Postgres storage driver. Do not rely on local JSON, SQLite files, or process memory for durable cloud state.
 - Required env: `ONEWORKS_RELAY_STORAGE_DRIVER=postgres`, `ONEWORKS_RELAY_POSTGRES_URL` or `DATABASE_URL`, `ONEWORKS_RELAY_ADMIN_TOKEN`, `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`, `ONEWORKS_RELAY_PUBLIC_URL`, and `ONEWORKS_RELAY_ALLOW_ORIGIN`.
 - Passkeys work on Vercel when `/login`, `/api/auth/passkey/*`, and `/admin` share the same final HTTPS origin. Set `ONEWORKS_RELAY_PASSKEY_ORIGIN` / `ONEWORKS_RELAY_PASSKEY_RP_ID` only if the inferred origin is wrong.
 - SSO callbacks on Vercel should be registered against the same final Vercel project or custom domain used for `ONEWORKS_RELAY_PUBLIC_URL`; if a custom domain will replace the default `.vercel.app` domain, do that before production passkey enrollment and OAuth rollout.
-- Local prebuilt CLI deploys should run `vercel build --prod`, `pnpm prepare:vercel-output`, then `vercel deploy --prebuilt --prod`.
+- Local prebuilt CLI deploys are only for private deployments or emergency maintenance. They should run `vercel build --prod`, `pnpm prepare:vercel-output`, then `vercel deploy --prebuilt --prod`.
 - The Vercel project domain decides the default `.vercel.app` origin. Users can add their own custom domain and should then set public URL and CORS to that custom origin.
 
 ## Cloudflare Notes

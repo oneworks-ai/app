@@ -1,6 +1,7 @@
 import process from 'node:process'
 
 const origin = (process.env.RELAY_DEV_ORIGIN ?? '').trim().replace(/\/+$/, '')
+const expectedVersion = (process.env.RELAY_DEV_EXPECTED_VERSION ?? '').trim()
 const expectedProviders = (process.env.RELAY_DEV_EXPECTED_SSO_PROVIDERS ?? '')
   .split(',')
   .map(item => item.trim())
@@ -30,6 +31,12 @@ const assert = (condition, message) => {
 
 const health = await fetchJson('/health')
 assert(health.ok === true, `/health did not return ok=true: ${JSON.stringify(health)}`)
+if (expectedVersion !== '') {
+  assert(
+    health.version === expectedVersion,
+    `/health.version should be "${expectedVersion}", got "${String(health.version ?? '')}".`
+  )
+}
 
 const providerPayload = await fetchJson('/api/auth/providers')
 const providerIds = Array.isArray(providerPayload.providers)
