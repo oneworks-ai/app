@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/benchmark",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.5",
   "description": "Benchmark discovery and execution for One Works",
   "repository": {
     "type": "git",

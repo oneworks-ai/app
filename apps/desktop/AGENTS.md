@@ -19,6 +19,7 @@
   - `workspace-service-manager.ts`：每个 workspace 的内置 server 生命周期
   - `window-titles.ts`：workspace、launcher、selector 的窗口标题和加载页 URL 组装
   - `deep-link.ts`：`oneworks://` / `one-works://` schema URL 解析，目前用于 Relay SSO 回跳到 workspace 插件页
+  - `external-cdp.ts`：agent / 验证工具 opt-in 暴露 Electron CDP，本机默认关闭；必须在 app bootstrap / 单实例锁之前应用
   - `menu.ts`、`ipc-handlers.ts`、`shortcuts.ts`：菜单、IPC 与桌面快捷键
   - `updates.ts`：自动更新检查
   - `browser-data-sync.ts`：桌面端浏览器数据同步与本机加密 vault；密码 CSV / Chromium profile / Authenticator 备份导入和扩展状态同步的 main-process 落点
@@ -61,6 +62,8 @@
 - `pnpm desktop:dev` 默认打开不绑定 workspace 的空项目启动页；`pnpm desktop:dev:workspace` 才以当前仓库作为 workspace 启动。两者都转发到 `pnpm tools dev-start`，由 Electron 启动一个共享 Vite client，并为每个 workspace 启动独立本机 server；前端改动应走共享 client 的 HMR，不需要重复构建静态 dist。
 - 多 worktree / 多 AI 会话可能同时运行桌面开发态实例；排查崩溃或端口占用时，不要因为看到其他 worktree 的 Electron、`apps/desktop/src/server-child.cjs` 或 `apps/client/cli.cjs` 进程就直接清理。先列出 PID、启动时间、worktree 路径和命令来源，只有确认属于当前终端会话、明确是当前崩溃实例残留，或用户同意后才停止。
 - 桌面 main / preload 使用 `electron-vite` 构建，Electron 运行入口是 `dist/main/index.js`。
+- 外部 CDP 只作为 agent 控制面使用，默认关闭；通过 `ONEWORKS_DESKTOP_CDP_PORT` / `--oneworks-cdp-port` 显式启用，并优先配合独立 `ONEWORKS_DESKTOP_USER_DATA_DIR` / `--oneworks-user-data-dir` 冷启动，避免被单实例锁转发到真实用户实例。
+- 完整 agent bridge protocol、runtime evidence 编排和 `desktop-control` CLI 属于仓库 `scripts/` 层，入口见 `scripts/AGENTS.md` 和 `scripts/desktop-control-protocol.md`；桌面 app 侧只维护 bootstrap 前的 opt-in CDP hook。
 - 空项目启动页和所有 workspace 窗口共用 launcher client service 管理的 client；workspace service 只启动 server。打开 workspace 后，main/preload 通过 IPC 告诉对应 renderer 当前窗口绑定的 `serverBaseUrl`，请求仍由前端直连 server HTTP / WebSocket。不要再为每个 workspace 启动独立 client。
 - 空项目启动页默认可通过 `CommandOrControl+Space` 全局快捷键打开；快捷键值来自 Electron 注入的 desktop settings，可在桌面端配置页更新。macOS 上如果系统快捷键占用了 `Command+Space`，Electron 注册会失败并只打印 warning，不要在代码里静默换成另一个快捷键。
 - 桌面窗口统一使用隐藏 titlebar / traffic light 风格；新建窗口、右键会话新窗口、launcher 和 workspace selector 都必须通过 `browser-window-factory` 创建，避免出现系统默认标题栏。

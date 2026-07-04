@@ -91,7 +91,9 @@ process.env.HOME = resolveProjectMockHome(process.cwd(), process.env)
 setProfileDuration('RESOLVE_MOCK_HOME', resolveMockHomeStartedAt)
 
 const bridgeMockHomeStartedAt = performance.now()
-bridgeRealHomeToMockHome()
+if (process.env.__ONEWORKS_DISABLE_MOCK_HOME_BRIDGE !== '1') {
+  bridgeRealHomeToMockHome()
+}
 setProfileDuration('BRIDGE_MOCK_HOME', bridgeMockHomeStartedAt)
 
 const resolveEntrypointStartedAt = performance.now()

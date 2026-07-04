@@ -868,7 +868,10 @@ export async function collectWorkspaceAssets(params: {
   }
 
   if (params.useDefaultOneworksMcpServer !== false) {
-    const defaultOneworksMcpServer = resolveDefaultOneworksMcpServerConfig()
+    const defaultOneworksMcpServer = resolveDefaultOneworksMcpServerConfig({
+      cwd: params.cwd,
+      env
+    })
     if (defaultOneworksMcpServer != null) {
       addMcpAsset(createMcpAsset({
         cwd: params.cwd,

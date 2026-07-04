@@ -1294,6 +1294,7 @@ describe('createCodexSession RPC approval policy mapping', () => {
     expect(mcpEnvOverride).toContain('__ONEWORKS_PROJECT_ENTITIES_DIR__ = "entities"')
     expect(mcpEnvOverride).toContain('__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__ = "/tmp/project"')
     expect(mcpEnvOverride).toContain('__ONEWORKS_PROJECT_REAL_HOME__ = "/tmp/real-home"')
+    expect(mcpEnvOverride).toContain('__ONEWORKS_DISABLE_MOCK_HOME_BRIDGE = "1"')
     expect(mcpEnvOverride).toContain('__ONEWORKS_PROJECT_DOTENV_FILES__ = ".env,.env.dev"')
     expect(mcpEnvOverride).toContain('EXPLICIT_ENV = "1"')
     expect(mcpEnvOverride).not.toContain('IGNORED_ENV')

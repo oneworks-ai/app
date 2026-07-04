@@ -47,14 +47,20 @@ import {
 } from './quit-confirmation'
 import type { QuitConfirmationLanguage } from './quit-confirmation'
 import { createDesktopRuntimeState } from './runtime-state'
-import { setDesktopThemeSource } from './theme-source'
+import { resolveDesktopRecordingThemeSource, setDesktopThemeSource } from './theme-source'
 import type { DesktopSettings, LaunchRequest, WindowRecord, WorkspaceSelectorWindowInput } from './types'
 import { DEFAULT_DESKTOP_AUTO_UPDATE, DEFAULT_DESKTOP_UPDATE_CHANNEL, isDesktopUpdateChannel } from './update-types'
 import type { DesktopUpdateStatus } from './update-types'
-import { createAutoUpdateManager } from './updates'
+import { createAutoUpdateManager, refreshWorkspaceRuntimeCacheInBackground } from './updates'
 import { createWindowManager } from './window-manager'
 import type { WindowManager } from './window-manager'
 import { createWorkspaceServiceManager } from './workspace-service-manager'
+
+const elapsedMs = (startedAt: number) => `${Date.now() - startedAt}ms`
+
+const logDesktopStartup = (message: string) => {
+  process.stdout.write(`[oneworks-desktop] ${message}\n`)
+}
 
 const resolveStandaloneTabLaunchRequest = (rawTab: string | undefined): LaunchRequest | undefined => {
   const tab = rawTab?.trim()
@@ -71,6 +77,7 @@ export const createDesktopApp = () => {
   })
   const initialDeepLinkRequest = parseDesktopDeepLinkLaunchRequest(findDesktopDeepLinkArg(process.argv) ?? '')
   const initialStandaloneLaunchRequest = resolveStandaloneTabLaunchRequest(process.env.ONEWORKS_DESKTOP_STANDALONE_TAB)
+  const recordingThemeSource = resolveDesktopRecordingThemeSource()
 
   let menuManager: ReturnType<typeof createAppMenuManager>
   let windowManager: WindowManager
@@ -144,10 +151,14 @@ export const createDesktopApp = () => {
     options: { applyProjectUpdateChannel?: boolean } = {}
   ): Promise<DesktopSettings> => {
     const buildSource = readDesktopBuildSource()
-    const appearanceSettings = await loadGlobalAppearanceSettings().catch((error) => {
+    const globalAppearanceSettings = await loadGlobalAppearanceSettings().catch((error) => {
       console.warn('[oneworks-desktop] failed to load global appearance config', error)
       return {}
     })
+    const appearanceSettings = {
+      ...globalAppearanceSettings,
+      ...(recordingThemeSource == null ? {} : { themeMode: recordingThemeSource })
+    }
     const updateSettings = await loadWorkspaceDesktopUpdateSettings(windowRecord?.workspaceFolder)
     const desktopUpdateSettings = {
       autoUpdate: updateSettings.autoUpdate ?? DEFAULT_DESKTOP_AUTO_UPDATE,
@@ -586,6 +597,11 @@ export const createDesktopApp = () => {
     await shell.openExternal('x-apple.systempreferences:com.apple.Keyboard-Settings.extension')
   }
 
+  const warmWorkspaceRuntimeCacheSoon = () => {
+    if (!app.isPackaged) return
+    setTimeout(() => refreshWorkspaceRuntimeCacheInBackground(), 250)
+  }
+
   const findLauncherWindowRecord = () => (
     Array.from(runtimeState.windows.values())
       .find(candidate => candidate.kind === 'launcher' && !candidate.window.isDestroyed())
@@ -593,6 +609,7 @@ export const createDesktopApp = () => {
 
   const preloadLauncherWindow = () => {
     if (process.platform !== 'darwin') return
+    if (process.env.ONEWORKS_DESKTOP_SHOW_LAUNCHER_ON_STARTUP === '1') return
     void windowManager.createLauncherWindow({ show: false }).catch((error) => {
       console.warn('[oneworks-desktop] failed to preload launcher window', error)
     })
@@ -748,17 +765,39 @@ export const createDesktopApp = () => {
   }
 
   const startApp = async () => {
+    const startedAt = Date.now()
+    logDesktopStartup('startup begin')
     await loadDesktopStateIntoMemory()
+    logDesktopStartup(`startup desktop state ready elapsed=${elapsedMs(startedAt)}`)
     applyDesktopIcon()
     registerDesktopIpcHandlers()
     installBrowserActivityDownloadTracking()
     registerLauncherGlobalShortcut()
-    await loadQuitConfirmationLanguage()
+    logDesktopStartup(`startup shell services registered elapsed=${elapsedMs(startedAt)}`)
+    const quitConfirmationLanguagePromise = loadQuitConfirmationLanguage()
+      .then(() => {
+        refreshAppMenu()
+        logDesktopStartup(`startup quit language ready elapsed=${elapsedMs(startedAt)}`)
+      })
+      .catch((error) => {
+        console.warn('[oneworks-desktop] failed to initialize quit confirmation language', error)
+      })
     refreshAppMenu()
 
     const startupWorkspaceFolder = resolveStartupWorkspaceFolder()
-    await applyProjectDesktopUpdateSettings(startupWorkspaceFolder)
+    const projectDesktopUpdateSettingsPromise = applyProjectDesktopUpdateSettings(startupWorkspaceFolder)
+      .then(() => {
+        logDesktopStartup(`startup update settings ready elapsed=${elapsedMs(startedAt)}`)
+      })
+      .catch((error) => {
+        console.warn('[oneworks-desktop] failed to initialize project desktop update settings', error)
+      })
     const hasPendingLaunchRequest = runtimeState.pendingLaunchRequests.length > 0
+    const opensLauncherOnStartup = startupWorkspaceFolder == null && !hasPendingLaunchRequest
+    if (opensLauncherOnStartup) {
+      warmWorkspaceRuntimeCacheSoon()
+      logDesktopStartup(`startup workspace package cache warm scheduled elapsed=${elapsedMs(startedAt)}`)
+    }
 
     if (startupWorkspaceFolder != null && !hasPendingLaunchRequest) {
       try {
@@ -775,6 +814,12 @@ export const createDesktopApp = () => {
       await windowManager.createLauncherWindow()
     }
 
+    if (!opensLauncherOnStartup) {
+      warmWorkspaceRuntimeCacheSoon()
+      logDesktopStartup(`startup workspace package cache warm scheduled elapsed=${elapsedMs(startedAt)}`)
+    }
+    await projectDesktopUpdateSettingsPromise
+    await quitConfirmationLanguagePromise
     autoUpdateManager.start()
     await flushPendingLaunchRequests()
     preloadLauncherWindow()

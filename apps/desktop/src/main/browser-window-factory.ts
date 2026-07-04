@@ -1,3 +1,6 @@
+/* eslint-disable max-lines -- Electron window factory keeps window lifecycle wiring in one boundary. */
+import process from 'node:process'
+
 import { BrowserWindow, shell } from 'electron'
 
 import { applyDesktopIconToWindow } from './desktop-app-icon'
@@ -31,6 +34,54 @@ interface BrowserWindowFactoryInput {
   stopWorkspaceService: (service: WorkspaceService) => Promise<void>
 }
 
+const parseBoundsEnv = (value: string | undefined) => {
+  const normalized = value?.trim()
+  if (normalized == null || normalized === '') return undefined
+
+  const match = /^(?<x>-?\d+),(?<y>-?\d+),(?<width>\d+),(?<height>\d+)$/u.exec(normalized)
+  if (match?.groups == null) {
+    console.warn(`[oneworks-desktop] invalid window bounds env ignored: ${normalized}`)
+    return undefined
+  }
+
+  const bounds = {
+    height: Number.parseInt(match.groups.height, 10),
+    width: Number.parseInt(match.groups.width, 10),
+    x: Number.parseInt(match.groups.x, 10),
+    y: Number.parseInt(match.groups.y, 10)
+  }
+  if (bounds.width < 300 || bounds.height < 360) {
+    console.warn(`[oneworks-desktop] too small window bounds env ignored: ${normalized}`)
+    return undefined
+  }
+  return bounds
+}
+
+const resolveInitialWindowBounds = (input: CreateWindowRecordInput) => {
+  const kind = input.kind ?? 'workspace'
+  const specificEnv = kind === 'launcher'
+    ? process.env.ONEWORKS_DESKTOP_LAUNCHER_WINDOW_BOUNDS
+    : kind === 'workspace' || kind === 'standalone'
+    ? process.env.ONEWORKS_DESKTOP_WORKSPACE_WINDOW_BOUNDS
+    : kind === 'selector'
+    ? process.env.ONEWORKS_DESKTOP_SELECTOR_WINDOW_BOUNDS
+    : undefined
+
+  return parseBoundsEnv(specificEnv) ?? parseBoundsEnv(process.env.ONEWORKS_DESKTOP_WINDOW_BOUNDS)
+}
+
+const isRecordableLauncherWindow = () => process.env.ONEWORKS_DESKTOP_RECORDABLE_LAUNCHER_WINDOW === '1'
+
+const isRecordableWindowMode = () => (
+  process.env.ONEWORKS_DESKTOP_RECORDABLE_WINDOWS === '1' ||
+  process.env.ONEWORKS_DESKTOP_RECORDABLE_LAUNCHER_WINDOW === '1'
+)
+
+const prepareRecordableWindowForSystemCapture = (window: BrowserWindow) => {
+  if (process.platform !== 'darwin' || !isRecordableWindowMode()) return
+  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+}
+
 export const createBrowserWindowFactory = ({
   broadcastWorkspaceSelectorState,
   getWindowRecords,
@@ -44,20 +95,27 @@ export const createBrowserWindowFactory = ({
     const isSelectorWindow = input.kind === 'selector'
     const isStandaloneWindow = input.kind === 'standalone'
     const isInitialSelectorWindow = isSelectorWindow && selectorMode === 'initial'
+    const initialBounds = resolveInitialWindowBounds(input)
+    const defaultMinHeight = isLauncherWindow ? 360 : isSelectorWindow ? 620 : 720
+    const minHeight = initialBounds?.height == null
+      ? defaultMinHeight
+      : Math.min(defaultMinHeight, initialBounds.height)
+    const recordableLauncherWindow = isLauncherWindow && isRecordableLauncherWindow()
     const window = new BrowserWindow({
       height: isLauncherWindow ? 560 : isInitialSelectorWindow ? 760 : isSelectorWindow ? 700 : 900,
-      minHeight: isLauncherWindow ? 360 : isSelectorWindow ? 620 : 720,
+      minHeight,
       minWidth: 300,
       parent: input.parentWindow?.window,
       resizable: !isLauncherWindow,
       show: false,
-      skipTaskbar: isLauncherWindow,
+      skipTaskbar: isLauncherWindow && !recordableLauncherWindow,
       title: isLauncherWindow
         ? buildLauncherWindowTitle()
         : isSelectorWindow
         ? buildWorkspaceSelectorWindowTitle()
         : 'One Works',
       width: isLauncherWindow ? 760 : isInitialSelectorWindow ? 920 : isSelectorWindow ? 720 : 1280,
+      ...initialBounds,
       ...getWindowChromeOptions({ isLauncherWindow, isStandaloneWindow }),
       webPreferences: {
         additionalArguments: [getSystemLocaleArgument()],
@@ -68,6 +126,7 @@ export const createBrowserWindowFactory = ({
         webviewTag: true
       }
     })
+    prepareRecordableWindowForSystemCapture(window)
     applyDesktopIconToWindow(window, runtimeState.desktopState)
 
     const windowRecord: WindowRecord = {
@@ -85,6 +144,9 @@ export const createBrowserWindowFactory = ({
     window.once('ready-to-show', () => {
       if (shouldShowOnReady && !window.isDestroyed()) {
         window.show()
+        if (isRecordableWindowMode()) {
+          window.moveTop()
+        }
       }
     })
 

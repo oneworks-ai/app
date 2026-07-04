@@ -1,6 +1,10 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import process from 'node:process'
 
-import { describe, expect, it } from 'vitest'
+import { resolveProjectHomePath } from '@oneworks/utils'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   DEFAULT_ONEWORKS_MCP_PERMISSION_NAME,
@@ -9,6 +13,12 @@ import {
   resolveDefaultOneworksMcpServerConfig,
   resolveUseDefaultOneworksMcpServer
 } from '#~/default-oneworks-mcp.js'
+
+const tempDirs: string[] = []
+
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
+})
 
 describe('default OneWorks MCP', () => {
   it('enables the built-in MCP server by default', () => {
@@ -34,7 +44,34 @@ describe('default OneWorks MCP', () => {
     expect(DEFAULT_ONEWORKS_MCP_SERVER_NAME).toBe('OneWorks')
     expect(resolveDefaultOneworksMcpServerConfig()).toEqual({
       command: process.execPath,
-      args: [expect.stringMatching(/packages\/mcp\/cli\.js$/)]
+      args: [expect.stringMatching(/packages\/mcp\/cli\.js$/)],
+      env: {
+        HOME: expect.any(String),
+        USERPROFILE: expect.any(String),
+        __ONEWORKS_DISABLE_MOCK_HOME_BRIDGE: '1'
+      }
+    })
+  })
+
+  it('runs the managed MCP against the workspace mock home without re-bridging global state', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'oneworks-config-mcp-'))
+    const realHome = await mkdtemp(join(tmpdir(), 'oneworks-config-home-'))
+    tempDirs.push(cwd, realHome)
+    const env = {
+      HOME: realHome,
+      __ONEWORKS_PROJECT_REAL_HOME__: realHome
+    } as NodeJS.ProcessEnv
+    const mockHome = resolveProjectHomePath(cwd, env, '.mock')
+
+    expect(
+      resolveDefaultOneworksMcpServerConfig({
+        cwd,
+        env
+      })?.env
+    ).toEqual({
+      HOME: mockHome,
+      USERPROFILE: mockHome,
+      __ONEWORKS_DISABLE_MOCK_HOME_BRIDGE: '1'
     })
   })
 

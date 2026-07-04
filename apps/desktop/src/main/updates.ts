@@ -1,7 +1,6 @@
 /* eslint-disable max-lines -- update manager centralizes updater state, dialogs, and scheduling. */
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
-import { createRequire } from 'node:module'
 import path from 'node:path'
 import process from 'node:process'
 import { promisify } from 'node:util'
@@ -24,7 +23,6 @@ import type { DesktopUpdateChannel, DesktopUpdateStatus } from './update-types'
 
 const execFileAsync = promisify(execFile)
 const BOOTSTRAP_BUFFER_BYTES = 1024 * 1024
-const nodeRequire = createRequire(__filename)
 
 interface RuntimePackageStatus {
   installedVersion?: string
@@ -41,8 +39,8 @@ interface BundledRuntimePackageCacheEntry {
   seeded?: boolean
 }
 
-interface BuiltinPackageCacheModule {
-  ensureBuiltinRuntimePackageCache?: (options?: { env?: NodeJS.ProcessEnv }) => BundledRuntimePackageCacheEntry[]
+interface BundledRuntimeCacheRefreshResult {
+  entries: BundledRuntimePackageCacheEntry[]
 }
 
 let workspaceRuntimeRefreshComplete = false
@@ -698,7 +696,29 @@ export const installCliRuntimeUpdates = async () => {
   })
 }
 
-const refreshBundledWorkspaceRuntimeCache = () => {
+const buildBundledRuntimeCacheRefreshScript = () => `
+const cacheModule = require(${JSON.stringify(builtinPackageCachePath)})
+const entries = [
+  ...(cacheModule.ensureBuiltinRuntimePackageCache?.({ env: process.env, trustManifest: true }) ?? []),
+  ...(cacheModule.ensureBuiltinAdapterPackageCache?.({ env: process.env, trustManifest: true }) ?? []),
+  ...(cacheModule.ensureBuiltinPluginPackageCache?.({ env: process.env, trustManifest: true }) ?? [])
+]
+process.stdout.write(JSON.stringify({ entries }) + '\\n')
+`
+
+const readBundledRuntimeCacheRefreshResult = (stdout: string): BundledRuntimeCacheRefreshResult => {
+  const line = stdout
+    .split(/\r?\n/u)
+    .map(item => item.trim())
+    .filter(Boolean)
+    .at(-1)
+  if (line == null) {
+    throw new Error('Bundled workspace runtime cache refresh did not return a result.')
+  }
+  return JSON.parse(line) as BundledRuntimeCacheRefreshResult
+}
+
+const refreshBundledWorkspaceRuntimeCache = async () => {
   if (!app.isPackaged) return false
 
   const runtimePackageCacheVersionEnv = resolveDesktopRuntimePackageCacheVersionEnv()
@@ -708,14 +728,20 @@ const refreshBundledWorkspaceRuntimeCache = () => {
     ...process.env,
     ...runtimePackageCacheVersionEnv
   }
-  const cacheModule = nodeRequire(builtinPackageCachePath) as BuiltinPackageCacheModule
-  const entries = cacheModule.ensureBuiltinRuntimePackageCache?.({ env: runtimeEnv }) ?? []
+  const result = await execFileAsync(process.execPath, ['-e', buildBundledRuntimeCacheRefreshScript()], {
+    env: {
+      ...runtimeEnv,
+      ELECTRON_RUN_AS_NODE: '1'
+    },
+    maxBuffer: BOOTSTRAP_BUFFER_BYTES
+  })
+  const { entries } = readBundledRuntimeCacheRefreshResult(result.stdout)
   if (entries.length === 0) return false
 
   const seededCount = entries.filter(entry => entry.seeded === true).length
   writeProcessLine(
     process.stdout,
-    `[oneworks-runtime] refreshed bundled workspace runtime cache (${seededCount}/${entries.length} changed)`
+    `[oneworks-runtime] refreshed bundled workspace package cache (${seededCount}/${entries.length} changed)`
   )
   return true
 }
@@ -724,8 +750,8 @@ export const refreshWorkspaceRuntimeCacheInBackground = () => {
   if (workspaceRuntimeRefreshComplete || workspaceRuntimeRefreshPromise != null) return
 
   workspaceRuntimeRefreshPromise = Promise.resolve()
-    .then(() => {
-      if (refreshBundledWorkspaceRuntimeCache()) {
+    .then(async () => {
+      if (await refreshBundledWorkspaceRuntimeCache()) {
         workspaceRuntimeRefreshComplete = true
         return
       }

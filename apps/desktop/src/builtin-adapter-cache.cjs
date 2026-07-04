@@ -393,6 +393,25 @@ const isCurrentCachedPackage = ({ cacheDir, cacheVersion, integrity, packageName
   }
 }
 
+const isCurrentCachedPackageManifest = (
+  { cacheDir, cacheVersion, manifestFile = MANIFEST_FILE, packageName, version }
+) => {
+  const packageDir = manifestFile === MANIFEST_FILE
+    ? resolveAdapterPackageInstallDir(cacheDir, packageName)
+    : resolveNpmPackageInstallDir(cacheDir, packageName)
+  const packageInfo = readPackageInfo(packageDir)
+  if (packageInfo?.name !== packageName || packageInfo.version !== version) {
+    return false
+  }
+
+  const manifest = readManifest(cacheDir, manifestFile)
+  return manifest?.source === 'builtin' &&
+    (manifest.cacheVersion ?? manifest.version) === cacheVersion &&
+    manifest.layoutVersion === PACKAGE_CACHE_LAYOUT_VERSION &&
+    manifest.name === packageName &&
+    manifest.version === version
+}
+
 const isCurrentCachedNpmPackage = ({ cacheDir, cacheVersion, integrity, packageName, version }) => {
   const packageDir = resolveNpmPackageInstallDir(cacheDir, packageName)
   const packageInfo = readPackageInfo(packageDir)
@@ -400,7 +419,7 @@ const isCurrentCachedNpmPackage = ({ cacheDir, cacheVersion, integrity, packageN
     return false
   }
 
-  const manifest = readManifest(cacheDir)
+  const manifest = readManifest(cacheDir, NPM_PACKAGE_MANIFEST_FILE)
   if (
     manifest?.source === 'builtin' &&
     manifest.cacheVersion === cacheVersion &&
@@ -426,7 +445,8 @@ const materializeBuiltinAdapterPackage = ({
   homeDir,
   packageCacheRootDir,
   packageName,
-  sourcePackageDir
+  sourcePackageDir,
+  trustManifest = false
 }) => {
   const packageInfo = readPackageInfo(sourcePackageDir)
   if (packageInfo?.name !== packageName || packageInfo.version == null) {
@@ -434,8 +454,26 @@ const materializeBuiltinAdapterPackage = ({
   }
 
   const resolvedCacheVersion = normalizePackageCacheVersion(cacheVersion) ?? packageInfo.version
-  const integrity = hashPackageClosure(packageName, sourcePackageDir)
   const cacheDir = resolveAdapterPackageCacheDir(packageName, resolvedCacheVersion, homeDir, packageCacheRootDir)
+  if (
+    trustManifest === true &&
+    isCurrentCachedPackageManifest({
+      cacheDir,
+      cacheVersion: resolvedCacheVersion,
+      packageName,
+      version: packageInfo.version
+    })
+  ) {
+    return {
+      cacheVersion: resolvedCacheVersion,
+      cacheDir,
+      packageDir: resolveAdapterPackageInstallDir(cacheDir, packageName),
+      seeded: false,
+      version: packageInfo.version
+    }
+  }
+
+  const integrity = hashPackageClosure(packageName, sourcePackageDir)
   if (
     isCurrentCachedPackage({
       cacheDir,
@@ -491,15 +529,33 @@ const materializeBuiltinPluginPackage = ({
   homeDir,
   packageCacheRootDir,
   packageName,
-  sourcePackageDir
+  sourcePackageDir,
+  trustManifest = false
 }) => {
   const packageInfo = readPackageInfo(sourcePackageDir)
   if (packageInfo?.name !== packageName || packageInfo.version == null) {
     throw new Error(`Invalid built-in plugin package: ${packageName}`)
   }
 
-  const integrity = hashPackageClosure(packageName, sourcePackageDir)
   const cacheDir = resolveNpmPackageCacheDir(packageName, cacheVersion, homeDir, packageCacheRootDir)
+  if (
+    trustManifest === true &&
+    isCurrentCachedPackageManifest({
+      cacheDir,
+      cacheVersion,
+      manifestFile: NPM_PACKAGE_MANIFEST_FILE,
+      packageName,
+      version: packageInfo.version
+    })
+  ) {
+    return {
+      cacheDir,
+      packageDir: resolveNpmPackageInstallDir(cacheDir, packageName),
+      seeded: false
+    }
+  }
+
+  const integrity = hashPackageClosure(packageName, sourcePackageDir)
   if (
     isCurrentCachedNpmPackage({
       cacheDir,
@@ -551,15 +607,33 @@ const materializeBuiltinStaticNpmPackage = ({
   homeDir,
   packageCacheRootDir,
   packageName,
-  sourcePackageDir
+  sourcePackageDir,
+  trustManifest = false
 }) => {
   const packageInfo = readPackageInfo(sourcePackageDir)
   if (packageInfo?.name !== packageName || packageInfo.version == null) {
     throw new Error(`Invalid built-in static package: ${packageName}`)
   }
 
-  const integrity = hashPackageDirectory(sourcePackageDir)
   const cacheDir = resolveNpmPackageCacheDir(packageName, cacheVersion, homeDir, packageCacheRootDir)
+  if (
+    trustManifest === true &&
+    isCurrentCachedPackageManifest({
+      cacheDir,
+      cacheVersion,
+      manifestFile: NPM_PACKAGE_MANIFEST_FILE,
+      packageName,
+      version: packageInfo.version
+    })
+  ) {
+    return {
+      cacheDir,
+      packageDir: resolveNpmPackageInstallDir(cacheDir, packageName),
+      seeded: false
+    }
+  }
+
+  const integrity = hashPackageDirectory(sourcePackageDir)
   if (
     isCurrentCachedNpmPackage({
       cacheDir,
@@ -631,7 +705,8 @@ const ensureBuiltinAdapterPackageCache = (options = {}) => {
       homeDir,
       packageCacheRootDir,
       packageName,
-      sourcePackageDir: options.resolvePackageDir?.(packageName) ?? resolveBuiltinAdapterPackageDir(packageName)
+      sourcePackageDir: options.resolvePackageDir?.(packageName) ?? resolveBuiltinAdapterPackageDir(packageName),
+      trustManifest: options.trustManifest === true
     })
   )
   const packageMetadata = Object.fromEntries(
@@ -671,7 +746,8 @@ const ensureBuiltinPluginPackageCache = (options = {}) => {
         homeDir,
         packageCacheRootDir,
         packageName,
-        sourcePackageDir
+        sourcePackageDir,
+        trustManifest: options.trustManifest === true
       })
     )
   })
@@ -693,7 +769,8 @@ const ensureBuiltinRuntimePackageCache = (options = {}) => {
     homeDir,
     packageCacheRootDir,
     packageName: BUILTIN_RUNTIME_CLI_PACKAGE,
-    sourcePackageDir: cliPackageDir
+    sourcePackageDir: cliPackageDir,
+    trustManifest: options.trustManifest === true
   }))
 
   const serverPackageDir = options.resolvePackageDir?.(BUILTIN_RUNTIME_SERVER_PACKAGE) ??
@@ -703,7 +780,8 @@ const ensureBuiltinRuntimePackageCache = (options = {}) => {
     homeDir,
     packageCacheRootDir,
     packageName: BUILTIN_RUNTIME_SERVER_PACKAGE,
-    sourcePackageDir: serverPackageDir
+    sourcePackageDir: serverPackageDir,
+    trustManifest: options.trustManifest === true
   }))
 
   const clientPackageDir = options.resolvePackageDir?.(BUILTIN_RUNTIME_CLIENT_PACKAGE) ??
@@ -714,7 +792,8 @@ const ensureBuiltinRuntimePackageCache = (options = {}) => {
       homeDir,
       packageCacheRootDir,
       packageName: BUILTIN_RUNTIME_CLIENT_PACKAGE,
-      sourcePackageDir: clientPackageDir
+      sourcePackageDir: clientPackageDir,
+      trustManifest: options.trustManifest === true
     }))
   }
 

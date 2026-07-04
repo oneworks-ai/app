@@ -14,8 +14,28 @@ import {
   runChromeDebugMessengerSend,
   runChromeDebugTargets
 } from './chrome-debug'
-import { parseDemoVideoColorScheme, runDemoVideoList, runDemoVideoRecord } from './demo-video'
-import type { DemoVideoColorScheme } from './demo-video'
+import {
+  parseDemoVideoBackgroundColor,
+  parseDemoVideoCaptureSource,
+  parseDemoVideoColorScheme,
+  parseDemoVideoColorSchemeList,
+  parseDemoVideoLanguage,
+  parseDemoVideoLanguageList,
+  parseDemoVideoPageBackground,
+  parseDemoVideoSystemWindowCaptureBackend,
+  runDemoVideoBatch,
+  runDemoVideoList,
+  runDemoVideoRecord
+} from './demo-video'
+import type {
+  DemoVideoCaptureSource,
+  DemoVideoColorScheme,
+  DemoVideoPageBackground,
+  DemoVideoSystemWindowCaptureBackend
+} from './demo-video'
+import { runDesktopCdpLaunch } from './desktop-cdp'
+import { runDesktopControlRecordBatch } from './desktop-control-record-batch'
+import { runDesktopControlServe } from './desktop-control-server'
 import type { DevStartTarget } from './dev-start'
 import { devStartTargets, parseDevStartTarget, runDevStart as runDevStartCommand } from './dev-start'
 import { runHomebrewTapSyncOneWorks } from './homebrew-tap'
@@ -24,6 +44,19 @@ import { runPrChangeCheck } from './pr-change-check'
 import { runRelayConfigLiveSmoke } from './relay-config-live-smoke'
 import { runRelayConfigSmoke } from './relay-config-smoke'
 import { runReleaseTagsPlan } from './release-tags'
+import {
+  DEFAULT_DESKTOP_APP_PATH,
+  DEFAULT_DESKTOP_BUNDLE_ID,
+  DEFAULT_RELEASE_VERIFY_NPM_PACKAGES,
+  DEFAULT_RELEASE_VERIFY_REPO,
+  DEFAULT_RELEASE_VERIFY_RUNTIME_PACKAGES,
+  parseReleaseVerifyList,
+  parseReleaseVerifyScenario,
+  runReleaseVerify,
+  runReleaseVerifyAgent,
+  runReleaseVerifyBeta
+} from './release-verify'
+import { runRuntimeEvidenceList, runRuntimeEvidenceWait } from './runtime-evidence'
 import { runWindowsInstallSyncOneWorks } from './windows-install'
 
 const runVitestAdapterE2E = async (input: {
@@ -71,11 +104,20 @@ interface ScriptsCliDeps {
   }) => Promise<void>
   runPrChangeCheck: typeof runPrChangeCheck
   runReleaseTagsPlan: typeof runReleaseTagsPlan
+  runReleaseVerify: typeof runReleaseVerify
+  runReleaseVerifyAgent: typeof runReleaseVerifyAgent
+  runReleaseVerifyBeta: typeof runReleaseVerifyBeta
+  runRuntimeEvidenceList: typeof runRuntimeEvidenceList
+  runRuntimeEvidenceWait: typeof runRuntimeEvidenceWait
+  runDesktopCdpLaunch: typeof runDesktopCdpLaunch
+  runDesktopControlRecordBatch: typeof runDesktopControlRecordBatch
+  runDesktopControlServe: typeof runDesktopControlServe
   runChromeDebugTargets: typeof runChromeDebugTargets
   runChromeDebugMessengerConversations: typeof runChromeDebugMessengerConversations
   runChromeDebugMessengerSend: typeof runChromeDebugMessengerSend
   runChromeDebugMessengerClickReply: typeof runChromeDebugMessengerClickReply
   runChromeDebugMessengerClickText: typeof runChromeDebugMessengerClickText
+  runDemoVideoBatch: typeof runDemoVideoBatch
   runDemoVideoList: typeof runDemoVideoList
   runDemoVideoRecord: typeof runDemoVideoRecord
   runMessageActionsVerify: typeof runMessageActionsVerify
@@ -111,11 +153,20 @@ const defaultDeps: ScriptsCliDeps = {
   },
   runPrChangeCheck,
   runReleaseTagsPlan,
+  runReleaseVerify,
+  runReleaseVerifyAgent,
+  runReleaseVerifyBeta,
+  runRuntimeEvidenceList,
+  runRuntimeEvidenceWait,
+  runDesktopCdpLaunch,
+  runDesktopControlRecordBatch,
+  runDesktopControlServe,
   runChromeDebugTargets,
   runChromeDebugMessengerConversations,
   runChromeDebugMessengerSend,
   runChromeDebugMessengerClickReply,
   runChromeDebugMessengerClickText,
+  runDemoVideoBatch,
   runDemoVideoList,
   runDemoVideoRecord,
   runMessageActionsVerify,
@@ -138,6 +189,45 @@ const devStartTargetDescriptions: Record<DevStartTarget, string> = {
   pwa: 'server + standalone PWA preview',
   homepage: 'Astro homepage with embedded PWA preview',
   docs: 'local markdown docs preview'
+}
+
+const parseNonNegativeIntegerOption = (value: string, label: string) => {
+  if (!/^\d+$/u.test(value)) {
+    throw new Error(`${label} must be a non-negative integer.`)
+  }
+  return Number.parseInt(value, 10)
+}
+
+const isStructuredCliError = (error: unknown): error is Error & {
+  code: string
+  statusCode?: number
+} => (
+  error instanceof Error &&
+  'code' in error &&
+  typeof error.code === 'string'
+)
+
+const writeStructuredCliError = (
+  error: Error & {
+    code: string
+    statusCode?: number
+  }
+) => {
+  process.stdout.write(`${
+    JSON.stringify(
+      {
+        ok: false,
+        error: {
+          code: error.code,
+          message: error.message,
+          ...(typeof error.statusCode === 'number' ? { statusCode: error.statusCode } : {})
+        }
+      },
+      null,
+      2
+    )
+  }\n`)
+  process.exitCode = 1
 }
 
 export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
@@ -205,6 +295,180 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
         selection: parseAdapterE2ESelection(selection),
         updateSnapshots: options.update ?? false,
         verbose: options.verbose ?? false
+      })
+    })
+
+  const desktopControlCommand = program
+    .command('desktop-control')
+    .description('Create AI-agent control targets for the Electron desktop app')
+
+  desktopControlCommand
+    .command('serve')
+    .description('Start a local JSON protocol bridge between agents and the Electron app')
+    .option('--host <host>', 'Bridge bind host', '127.0.0.1')
+    .option(
+      '--port <port>',
+      'Bridge port; defaults to a free local port',
+      value => parseNonNegativeIntegerOption(value, 'port')
+    )
+    .option('--json', 'Print machine-readable ready payload', true)
+    .option('--text', 'Print concise text output instead of JSON', false)
+    .action(async (options: {
+      host: string
+      json?: boolean
+      port?: number
+      text?: boolean
+    }) => {
+      await deps.runDesktopControlServe({
+        host: options.host,
+        json: options.text === true ? false : options.json ?? true,
+        port: options.port,
+        text: options.text ?? false
+      })
+    })
+
+  desktopControlCommand
+    .command('launch')
+    .description('Cold-launch an isolated Electron app instance and return a CDP control endpoint')
+    .option(
+      '--allow-unsupported-app',
+      'Unsafe: bypass the external CDP hook check for legacy Electron apps',
+      false
+    )
+    .option('--app <path>', 'Installed macOS .app path or executable path', DEFAULT_DESKTOP_APP_PATH)
+    .option('--executable <path>', 'Explicit executable path; defaults to the executable inside --app')
+    .option('--workspace <path>', 'Workspace folder to open on launch')
+    .option('--user-data-dir <path>', 'Isolated Electron userData directory; defaults to a temp directory')
+    .option('--address <host>', 'CDP bind address', '127.0.0.1')
+    .option(
+      '--port <port>',
+      'CDP port; defaults to a free local port',
+      value => parsePositiveIntegerOption(value, 'port')
+    )
+    .option(
+      '--wait-ms <ms>',
+      'How long to wait for the CDP target list',
+      value => parsePositiveIntegerOption(value, 'wait-ms'),
+      30_000
+    )
+    .option('--json', 'Print machine-readable JSON', true)
+    .option('--text', 'Print concise text output instead of JSON', false)
+    .action(async (options: {
+      address: string
+      allowUnsupportedApp?: boolean
+      app: string
+      executable?: string
+      json?: boolean
+      port?: number
+      text?: boolean
+      userDataDir?: string
+      waitMs: number
+      workspace?: string
+    }) => {
+      const json = options.text === true ? false : options.json ?? true
+      try {
+        await deps.runDesktopCdpLaunch({
+          address: options.address,
+          allowUnsupportedApp: options.allowUnsupportedApp ?? false,
+          appPath: options.app,
+          executable: options.executable,
+          json,
+          port: options.port,
+          userDataDir: options.userDataDir,
+          waitMs: options.waitMs,
+          workspace: options.workspace
+        })
+      } catch (error) {
+        if (json && isStructuredCliError(error)) {
+          writeStructuredCliError(error)
+          return
+        }
+        throw error
+      }
+    })
+
+  desktopControlCommand
+    .command('record-batch <scenario>')
+    .description('Record light/dark x zh/en variants through real Electron sessions')
+    .option(
+      '--allow-unsupported-app',
+      'Unsafe: bypass the external CDP hook check for legacy Electron apps',
+      false
+    )
+    .option('--app <path>', 'Installed macOS .app path or executable path', DEFAULT_DESKTOP_APP_PATH)
+    .option('--executable <path>', 'Explicit executable path; defaults to the executable inside --app')
+    .option('--workspace <path>', 'Workspace folder for launcher/workspace scenarios')
+    .option('--out-dir <path>', 'Output root directory')
+    .option('--name <name>', 'Output file basename prefix')
+    .option('--ffmpeg-path <path>', 'ffmpeg executable path', 'ffmpeg')
+    .option('--use-deskpad-display', 'Place Electron recording windows on the DeskPad Display virtual desktop', false)
+    .option(
+      '--recording-display-name <name>',
+      'macOS display name used for recording window bounds; defaults to DeskPad Display with --use-deskpad-display'
+    )
+    .option('--fps <fps>', 'Recording frame rate', value => parsePositiveIntegerOption(value, 'fps'))
+    .option(
+      '--duration-ms <ms>',
+      'Scenario-controlled recording duration',
+      value => parsePositiveIntegerOption(value, 'duration-ms')
+    )
+    .option(
+      '--wait-ms <ms>',
+      'How long to wait for each Electron CDP target list',
+      value => parsePositiveIntegerOption(value, 'wait-ms'),
+      30_000
+    )
+    .option('--video-background-image <path>', 'Approved wallpaper image for the recording display background')
+    .option(
+      '--color-schemes <list>',
+      'Comma-separated color schemes, for example light,dark',
+      value => parseDemoVideoColorSchemeList(value)
+    )
+    .option(
+      '--languages <list>',
+      'Comma-separated interface languages, for example zh,en',
+      value => parseDemoVideoLanguageList(value)
+    )
+    .option('--keep-frames', 'Keep raw PNG frames next to the MP4', false)
+    .option('--json', 'Print machine-readable JSON', false)
+    .action(async (scenarioId: string, options: {
+      allowUnsupportedApp?: boolean
+      app: string
+      colorSchemes?: DemoVideoColorScheme[]
+      durationMs?: number
+      executable?: string
+      ffmpegPath?: string
+      fps?: number
+      json?: boolean
+      keepFrames?: boolean
+      languages?: string[]
+      name?: string
+      outDir?: string
+      recordingDisplayName?: string
+      useDeskpadDisplay?: boolean
+      videoBackgroundImage?: string
+      waitMs: number
+      workspace?: string
+    }) => {
+      await deps.runDesktopControlRecordBatch({
+        allowUnsupportedApp: options.allowUnsupportedApp ?? false,
+        appPath: options.app,
+        colorSchemes: options.colorSchemes,
+        durationMs: options.durationMs,
+        executable: options.executable,
+        ffmpegPath: options.ffmpegPath,
+        fps: options.fps,
+        json: options.json ?? false,
+        keepFrames: options.keepFrames ?? false,
+        languages: options.languages,
+        name: options.name,
+        outDir: options.outDir,
+        recordingDisplayName: options.recordingDisplayName,
+        scenarioId,
+        useDeskpadDisplay: options.useDeskpadDisplay ?? false,
+        videoBackgroundImage: options.videoBackgroundImage,
+        waitMs: options.waitMs,
+        workspace: options.workspace
       })
     })
 
@@ -390,43 +654,245 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
       'Scenario-controlled recording duration for generic scenarios',
       value => parsePositiveIntegerOption(value, 'duration-ms')
     )
+    .option(
+      '--capture-source <source>',
+      'Capture source: cdp, system-window, or system-display',
+      value => parseDemoVideoCaptureSource(value)
+    )
+    .option(
+      '--system-display-id <id>',
+      'macOS display id for system-display capture',
+      value => parsePositiveIntegerOption(value, 'system-display-id')
+    )
+    .option('--workspace <path>', 'Workspace path for scenarios that open a desktop workspace')
     .option('--chrome-path <path>', 'Chrome executable path')
     .option('--ffmpeg-path <path>', 'ffmpeg executable path', 'ffmpeg')
+    .option('--headed', 'Launch Chrome with a visible browser window instead of headless mode', false)
+    .option(
+      '--video-background-color <hex>',
+      'Matte color for transparent system-window video regions, for example #323232',
+      value => parseDemoVideoBackgroundColor(value)
+    )
+    .option('--video-background-image <path>', 'Image path for transparent system-window video regions')
+    .option(
+      '--system-window-capture-backend <backend>',
+      'system-window backend: video for continuous local recording, frames for slower alpha PNG capture',
+      value => parseDemoVideoSystemWindowCaptureBackend(value)
+    )
     .option(
       '--color-scheme <scheme>',
       'Emulated prefers-color-scheme: light, dark, or system',
       value => parseDemoVideoColorScheme(value),
       'light' as DemoVideoColorScheme
     )
+    .option(
+      '--language <language>',
+      'Interface language override, for example zh, en, zh-Hans, or en-US',
+      value => parseDemoVideoLanguage(value)
+    )
+    .option(
+      '--page-background <background>',
+      'Page background behind the app: app or macos-wallpaper',
+      value => parseDemoVideoPageBackground(value)
+    )
+    .option('--page-background-image <path>', 'Explicit image path for the page background')
     .option('--keep-frames', 'Keep raw PNG frames next to the MP4', false)
+    .option('--wait-for-text <text>', 'Wait for visible text before capturing the first frame')
+    .option('--wait-for-text-absent <text>', 'Wait for text to disappear before capturing the first frame')
+    .option(
+      '--wait-for-text-absent-timeout-ms <ms>',
+      'Timeout for --wait-for-text-absent',
+      value => parsePositiveIntegerOption(value, 'wait-for-text-absent-timeout-ms')
+    )
+    .option(
+      '--wait-for-text-timeout-ms <ms>',
+      'Timeout for --wait-for-text',
+      value => parsePositiveIntegerOption(value, 'wait-for-text-timeout-ms')
+    )
     .option('--json', 'Print machine-readable JSON', false)
     .action(async (scenarioId: string, options: {
+      captureSource?: DemoVideoCaptureSource
       chromePath?: string
       colorScheme: DemoVideoColorScheme
       durationMs?: number
       ffmpegPath?: string
       fps?: number
       height?: number
+      headed?: boolean
       json?: boolean
       keepFrames?: boolean
+      language?: string
       name?: string
       outDir?: string
+      pageBackground?: DemoVideoPageBackground
+      pageBackgroundImage?: string
+      systemDisplayId?: number
+      systemWindowCaptureBackend?: DemoVideoSystemWindowCaptureBackend
       url?: string
+      videoBackgroundColor?: string
+      videoBackgroundImage?: string
+      waitForText?: string
+      waitForTextAbsent?: string
+      waitForTextAbsentTimeoutMs?: number
+      waitForTextTimeoutMs?: number
+      workspace?: string
       width?: number
     }) => {
       await deps.runDemoVideoRecord({
         scenarioId,
+        captureSource: options.captureSource,
         chromePath: options.chromePath,
         colorScheme: options.colorScheme,
         durationMs: options.durationMs,
         ffmpegPath: options.ffmpegPath,
         fps: options.fps,
         height: options.height,
+        headless: options.headed !== true,
         json: options.json ?? false,
         keepFrames: options.keepFrames ?? false,
+        language: options.language,
         name: options.name,
         outDir: options.outDir,
+        pageBackground: options.pageBackground,
+        pageBackgroundImage: options.pageBackgroundImage,
+        systemDisplayId: options.systemDisplayId,
+        systemWindowCaptureBackend: options.systemWindowCaptureBackend,
         url: options.url,
+        videoBackgroundColor: options.videoBackgroundColor,
+        videoBackgroundImage: options.videoBackgroundImage,
+        waitForText: options.waitForText,
+        waitForTextAbsent: options.waitForTextAbsent,
+        waitForTextAbsentTimeoutMs: options.waitForTextAbsentTimeoutMs,
+        waitForTextTimeoutMs: options.waitForTextTimeoutMs,
+        workspace: options.workspace,
+        width: options.width
+      })
+    })
+
+  demoVideoCommand
+    .command('batch <scenario>')
+    .description('Record demo video variants, defaulting to light/dark x zh/en')
+    .option('--url <url>', 'Prepared page URL or service base URL for the scenario')
+    .option('--out-dir <path>', 'Output root directory')
+    .option('--name <name>', 'Output file basename prefix')
+    .option('--width <px>', 'Viewport width', value => parsePositiveIntegerOption(value, 'width'))
+    .option('--height <px>', 'Viewport height', value => parsePositiveIntegerOption(value, 'height'))
+    .option('--fps <fps>', 'Recording frame rate', value => parsePositiveIntegerOption(value, 'fps'))
+    .option(
+      '--duration-ms <ms>',
+      'Scenario-controlled recording duration for generic scenarios',
+      value => parsePositiveIntegerOption(value, 'duration-ms')
+    )
+    .option(
+      '--capture-source <source>',
+      'Capture source: cdp, system-window, or system-display',
+      value => parseDemoVideoCaptureSource(value)
+    )
+    .option(
+      '--system-display-id <id>',
+      'macOS display id for system-display capture',
+      value => parsePositiveIntegerOption(value, 'system-display-id')
+    )
+    .option('--workspace <path>', 'Workspace path for scenarios that open a desktop workspace')
+    .option('--chrome-path <path>', 'Chrome executable path')
+    .option('--ffmpeg-path <path>', 'ffmpeg executable path', 'ffmpeg')
+    .option('--headed', 'Launch Chrome with a visible browser window instead of headless mode', false)
+    .option(
+      '--video-background-color <hex>',
+      'Matte color for transparent system-window video regions, for example #323232',
+      value => parseDemoVideoBackgroundColor(value)
+    )
+    .option('--video-background-image <path>', 'Image path for transparent system-window video regions')
+    .option(
+      '--system-window-capture-backend <backend>',
+      'system-window backend: video for continuous local recording, frames for slower alpha PNG capture',
+      value => parseDemoVideoSystemWindowCaptureBackend(value)
+    )
+    .option(
+      '--color-schemes <list>',
+      'Comma-separated color schemes, for example light,dark',
+      value => parseDemoVideoColorSchemeList(value)
+    )
+    .option(
+      '--languages <list>',
+      'Comma-separated interface languages, for example zh,en',
+      value => parseDemoVideoLanguageList(value)
+    )
+    .option(
+      '--page-background <background>',
+      'Page background behind the app: app or macos-wallpaper',
+      value => parseDemoVideoPageBackground(value)
+    )
+    .option('--page-background-image <path>', 'Explicit image path for the page background')
+    .option('--keep-frames', 'Keep raw PNG frames next to the MP4', false)
+    .option('--wait-for-text <text>', 'Wait for visible text before capturing the first frame')
+    .option('--wait-for-text-absent <text>', 'Wait for text to disappear before capturing the first frame')
+    .option(
+      '--wait-for-text-absent-timeout-ms <ms>',
+      'Timeout for --wait-for-text-absent',
+      value => parsePositiveIntegerOption(value, 'wait-for-text-absent-timeout-ms')
+    )
+    .option(
+      '--wait-for-text-timeout-ms <ms>',
+      'Timeout for --wait-for-text',
+      value => parsePositiveIntegerOption(value, 'wait-for-text-timeout-ms')
+    )
+    .option('--json', 'Print machine-readable JSON', false)
+    .action(async (scenarioId: string, options: {
+      captureSource?: DemoVideoCaptureSource
+      chromePath?: string
+      colorSchemes?: DemoVideoColorScheme[]
+      durationMs?: number
+      ffmpegPath?: string
+      fps?: number
+      height?: number
+      headed?: boolean
+      json?: boolean
+      keepFrames?: boolean
+      languages?: string[]
+      name?: string
+      outDir?: string
+      pageBackground?: DemoVideoPageBackground
+      pageBackgroundImage?: string
+      systemDisplayId?: number
+      systemWindowCaptureBackend?: DemoVideoSystemWindowCaptureBackend
+      url?: string
+      videoBackgroundColor?: string
+      videoBackgroundImage?: string
+      waitForText?: string
+      waitForTextAbsent?: string
+      waitForTextAbsentTimeoutMs?: number
+      waitForTextTimeoutMs?: number
+      workspace?: string
+      width?: number
+    }) => {
+      await deps.runDemoVideoBatch({
+        scenarioId,
+        captureSource: options.captureSource,
+        chromePath: options.chromePath,
+        colorSchemes: options.colorSchemes,
+        durationMs: options.durationMs,
+        ffmpegPath: options.ffmpegPath,
+        fps: options.fps,
+        height: options.height,
+        headless: options.headed !== true,
+        json: options.json ?? false,
+        keepFrames: options.keepFrames ?? false,
+        languages: options.languages,
+        name: options.name,
+        outDir: options.outDir,
+        pageBackground: options.pageBackground,
+        pageBackgroundImage: options.pageBackgroundImage,
+        systemDisplayId: options.systemDisplayId,
+        systemWindowCaptureBackend: options.systemWindowCaptureBackend,
+        url: options.url,
+        videoBackgroundColor: options.videoBackgroundColor,
+        videoBackgroundImage: options.videoBackgroundImage,
+        waitForText: options.waitForText,
+        waitForTextAbsent: options.waitForTextAbsent,
+        waitForTextAbsentTimeoutMs: options.waitForTextAbsentTimeoutMs,
+        waitForTextTimeoutMs: options.waitForTextTimeoutMs,
+        workspace: options.workspace,
         width: options.width
       })
     })
@@ -536,6 +1002,339 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
       await deps.runReleaseTagsPlan({
         base,
         head,
+        json: options.json ?? false
+      })
+    })
+
+  const runtimeEvidenceCommand = program
+    .command('runtime-evidence')
+    .description('Inspect runtime session events as reusable UI/agent evidence')
+
+  runtimeEvidenceCommand
+    .command('list')
+    .option('--home <path>', 'Real HOME containing .oneworks/projects')
+    .option('--project-home <path>', 'Project home to inspect before bounded home discovery')
+    .option(
+      '--limit <count>',
+      'Maximum sessions to print',
+      value => parsePositiveIntegerOption(value, 'limit'),
+      50
+    )
+    .option('--json', 'Print machine-readable JSON', false)
+    .description('List bounded runtime session event files and their last assistant/completion state')
+    .action(async (options: {
+      home?: string
+      json?: boolean
+      limit: number
+      projectHome?: string
+    }) => {
+      await deps.runRuntimeEvidenceList({
+        homeDir: options.home,
+        limit: options.limit,
+        projectHome: options.projectHome,
+        json: options.json ?? false
+      })
+    })
+
+  runtimeEvidenceCommand
+    .command('wait-reply')
+    .option('--expected-reply <text>', 'Assistant reply text or substring to wait for')
+    .option('--session-id <id>', 'Optional session id; omitted means bounded discovery by expected reply')
+    .option('--home <path>', 'Real HOME containing .oneworks/projects')
+    .option('--project-home <path>', 'Project home to inspect before bounded home discovery')
+    .option(
+      '--wait-ms <ms>',
+      'How long to poll events.jsonl',
+      value => parsePositiveIntegerOption(value, 'wait-ms'),
+      60_000
+    )
+    .option('--json', 'Print machine-readable JSON', false)
+    .description('Wait for a completed runtime session reply, optionally discovering the session by nonce')
+    .action(async (options: {
+      expectedReply?: string
+      home?: string
+      json?: boolean
+      projectHome?: string
+      sessionId?: string
+      waitMs: number
+    }) => {
+      await deps.runRuntimeEvidenceWait({
+        expectedReply: options.expectedReply,
+        homeDir: options.home,
+        projectHome: options.projectHome,
+        sessionId: options.sessionId,
+        waitMs: options.waitMs,
+        json: options.json ?? false
+      })
+    })
+
+  const releaseVerifyCommand = program
+    .command('release-verify')
+    .description('Run reusable post-publish release verification checks')
+
+  releaseVerifyCommand
+    .command('agent')
+    .option('--channel <tag>', 'Release channel / npm dist-tag to verify', 'beta')
+    .option('--version <version>', 'Expected version, or auto to resolve from oneworks@channel', 'auto')
+    .option(
+      '--scenario <name>',
+      'Verification scenario: desktop-installed or desktop-chat',
+      value => parseReleaseVerifyScenario(value),
+      'desktop-chat'
+    )
+    .option('--repo <repo>', 'GitHub repository for desktop releases', DEFAULT_RELEASE_VERIFY_REPO)
+    .option('--no-desktop-release', 'Skip GitHub desktop release asset checks')
+    .option('--skip-desktop-app', 'Skip installed desktop app bundle checks', false)
+    .option('--desktop-app <path>', 'Installed macOS app path', DEFAULT_DESKTOP_APP_PATH)
+    .option('--desktop-bundle-id <id>', 'Expected installed app bundle id', DEFAULT_DESKTOP_BUNDLE_ID)
+    .option('--no-runtime-cache', 'Skip bootstrap runtime cache package checks')
+    .option('--runtime-cache-home <path>', 'Real HOME that owns .oneworks/bootstrap and runtime stores')
+    .option('--package-cache-root <path>', 'Explicit .oneworks/bootstrap cache root')
+    .option('--session-id <id>', 'Optional runtime session id; omitted means discover by expected reply')
+    .option('--expected-reply <text>', 'Expected assistant reply text; defaults to a generated nonce')
+    .option('--project-home <path>', 'Optional project home to narrow runtime session discovery')
+    .option(
+      '--wait-session-ms <ms>',
+      'How long to poll events.jsonl for session completion',
+      value => parsePositiveIntegerOption(value, 'wait-session-ms'),
+      90_000
+    )
+    .option('--json', 'Print machine-readable JSON', false)
+    .description('Agent-first release verification: print a UI task, discover chat evidence, and report diagnosis')
+    .action(async (options: {
+      channel: string
+      desktopApp: string
+      desktopBundleId: string
+      desktopRelease?: boolean
+      expectedReply?: string
+      json?: boolean
+      packageCacheRoot?: string
+      projectHome?: string
+      repo: string
+      runtimeCache?: boolean
+      runtimeCacheHome?: string
+      scenario: ReturnType<typeof parseReleaseVerifyScenario>
+      sessionId?: string
+      skipDesktopApp?: boolean
+      version: string
+      waitSessionMs: number
+    }) => {
+      await deps.runReleaseVerifyAgent({
+        channel: options.channel,
+        version: options.version,
+        scenario: options.scenario,
+        repo: options.repo,
+        desktopRelease: options.desktopRelease ?? true,
+        desktopApp: !(options.skipDesktopApp ?? false),
+        desktopAppPath: options.desktopApp,
+        desktopBundleId: options.desktopBundleId,
+        runtimeCache: options.runtimeCache ?? true,
+        runtimeCacheHome: options.runtimeCacheHome,
+        packageCacheRoot: options.packageCacheRoot,
+        sessionId: options.sessionId,
+        expectedReply: options.expectedReply,
+        projectHome: options.projectHome,
+        waitSessionMs: options.waitSessionMs,
+        json: options.json ?? false
+      })
+    })
+
+  releaseVerifyCommand
+    .command('run')
+    .option('--channel <tag>', 'Release channel / npm dist-tag to verify', 'beta')
+    .option('--version <version>', 'Expected version, or auto to resolve from oneworks@channel', 'auto')
+    .option(
+      '--scenario <name>',
+      'Verification scenario: desktop-installed or desktop-chat',
+      value => parseReleaseVerifyScenario(value),
+      'desktop-installed'
+    )
+    .option('--repo <repo>', 'GitHub repository for desktop releases', DEFAULT_RELEASE_VERIFY_REPO)
+    .option(
+      '--npm-packages <list>',
+      'Comma-separated npm packages that must resolve from the selected dist-tag',
+      value => parseReleaseVerifyList(value),
+      DEFAULT_RELEASE_VERIFY_NPM_PACKAGES
+    )
+    .option(
+      '--runtime-packages <list>',
+      'Comma-separated runtime packages to verify in the app bundle and bootstrap cache',
+      value => parseReleaseVerifyList(value),
+      DEFAULT_RELEASE_VERIFY_RUNTIME_PACKAGES
+    )
+    .option('--no-desktop-release', 'Skip GitHub desktop release asset checks')
+    .option('--skip-desktop-app', 'Skip installed desktop app bundle checks', false)
+    .option('--desktop-app <path>', 'Installed macOS app path', DEFAULT_DESKTOP_APP_PATH)
+    .option('--desktop-bundle-id <id>', 'Expected installed app bundle id', DEFAULT_DESKTOP_BUNDLE_ID)
+    .option('--allow-build-source', 'Allow desktop-build-source.json in the installed app', false)
+    .option('--no-runtime-cache', 'Skip bootstrap runtime cache package checks')
+    .option(
+      '--runtime-exact-version',
+      'Require runtime packages to equal --version instead of each package@channel',
+      false
+    )
+    .option('--runtime-cache-home <path>', 'Real HOME that owns .oneworks/bootstrap')
+    .option('--package-cache-root <path>', 'Explicit .oneworks/bootstrap cache root')
+    .option('--session-id <id>', 'Runtime session id created by the UI send flow')
+    .option('--expected-reply <text>', 'Expected assistant reply text or substring')
+    .option('--project-home <path>', 'Project home that owns runtime/sessions/<id>/events.jsonl')
+    .option(
+      '--wait-session-ms <ms>',
+      'How long to poll events.jsonl for session completion',
+      value => parsePositiveIntegerOption(value, 'wait-session-ms'),
+      60_000
+    )
+    .option('--json', 'Print machine-readable JSON', false)
+    .description('AI-oriented release verification runner with auto version discovery and evidence reporting')
+    .action(async (options: {
+      allowBuildSource?: boolean
+      channel: string
+      desktopApp: string
+      desktopBundleId: string
+      desktopRelease?: boolean
+      expectedReply?: string
+      json?: boolean
+      npmPackages: string[]
+      packageCacheRoot?: string
+      projectHome?: string
+      repo: string
+      runtimeCache?: boolean
+      runtimeCacheHome?: string
+      runtimeExactVersion?: boolean
+      runtimePackages: string[]
+      scenario: ReturnType<typeof parseReleaseVerifyScenario>
+      sessionId?: string
+      skipDesktopApp?: boolean
+      version: string
+      waitSessionMs: number
+    }) => {
+      await deps.runReleaseVerify({
+        channel: options.channel,
+        version: options.version,
+        scenario: options.scenario,
+        repo: options.repo,
+        npmPackages: options.npmPackages,
+        runtimePackages: options.runtimePackages,
+        desktopRelease: options.desktopRelease ?? true,
+        desktopApp: !(options.skipDesktopApp ?? false),
+        desktopAppPath: options.desktopApp,
+        desktopBundleId: options.desktopBundleId,
+        withoutBuildSource: !(options.allowBuildSource ?? false),
+        runtimeCache: options.runtimeCache ?? true,
+        runtimeVersionMode: options.runtimeExactVersion ? 'exact' : 'dist-tag',
+        runtimeCacheHome: options.runtimeCacheHome,
+        packageCacheRoot: options.packageCacheRoot,
+        sessionId: options.sessionId,
+        expectedReply: options.expectedReply,
+        projectHome: options.projectHome,
+        waitSessionMs: options.waitSessionMs,
+        json: options.json ?? false
+      })
+    })
+
+  releaseVerifyCommand
+    .command('beta')
+    .requiredOption('--version <version>', 'Expected beta version, e.g. 0.1.0-beta.4')
+    .option('--tag <tag>', 'npm dist-tag to verify', 'beta')
+    .option('--repo <repo>', 'GitHub repository for desktop releases', DEFAULT_RELEASE_VERIFY_REPO)
+    .option(
+      '--npm-packages <list>',
+      'Comma-separated npm packages that must resolve from the selected dist-tag',
+      value => parseReleaseVerifyList(value),
+      DEFAULT_RELEASE_VERIFY_NPM_PACKAGES
+    )
+    .option(
+      '--runtime-packages <list>',
+      'Comma-separated runtime packages to verify in the app bundle and bootstrap cache',
+      value => parseReleaseVerifyList(value),
+      DEFAULT_RELEASE_VERIFY_RUNTIME_PACKAGES
+    )
+    .option('--no-desktop-release', 'Skip GitHub desktop release asset checks')
+    .option(
+      '--desktop-assets <list>',
+      'Exact desktop release asset names to require',
+      value => parseReleaseVerifyList(value)
+    )
+    .option(
+      '--desktop-asset-archs <list>',
+      'Desktop release asset archs to require',
+      value => parseReleaseVerifyList(value)
+    )
+    .option(
+      '--desktop-asset-exts <list>',
+      'Desktop release asset extensions to require',
+      value => parseReleaseVerifyList(value)
+    )
+    .option('--skip-desktop-app', 'Skip installed desktop app bundle checks', false)
+    .option('--desktop-app <path>', 'Installed macOS app path', DEFAULT_DESKTOP_APP_PATH)
+    .option('--desktop-bundle-id <id>', 'Expected installed app bundle id', DEFAULT_DESKTOP_BUNDLE_ID)
+    .option('--desktop-app-name <name>', 'Expected installed app name')
+    .option('--allow-build-source', 'Allow desktop-build-source.json in the installed app', false)
+    .option('--no-runtime-cache', 'Skip bootstrap runtime cache package checks')
+    .option('--runtime-exact-version', 'Require runtime packages to equal --version instead of each package@tag', false)
+    .option('--runtime-cache-home <path>', 'Real HOME that owns .oneworks/bootstrap')
+    .option('--package-cache-root <path>', 'Explicit .oneworks/bootstrap cache root')
+    .option('--session-id <id>', 'Runtime session id created by the UI send flow')
+    .option('--expected-reply <text>', 'Expected assistant reply text or substring')
+    .option('--project-home <path>', 'Project home that owns runtime/sessions/<id>/events.jsonl')
+    .option(
+      '--wait-session-ms <ms>',
+      'How long to poll events.jsonl for session completion',
+      value => parsePositiveIntegerOption(value, 'wait-session-ms'),
+      60_000
+    )
+    .option('--json', 'Print machine-readable JSON', false)
+    .description(
+      'Verify the published beta npm packages, desktop release, installed app, runtime cache, and optional UI session'
+    )
+    .action(async (options: {
+      allowBuildSource?: boolean
+      desktopAppName?: string
+      desktopApp: string
+      desktopAssets?: string[]
+      desktopAssetArchs?: string[]
+      desktopAssetExts?: string[]
+      desktopBundleId: string
+      desktopRelease?: boolean
+      expectedReply?: string
+      json?: boolean
+      npmPackages: string[]
+      packageCacheRoot?: string
+      projectHome?: string
+      repo: string
+      runtimeCache?: boolean
+      runtimeCacheHome?: string
+      runtimeExactVersion?: boolean
+      runtimePackages: string[]
+      sessionId?: string
+      skipDesktopApp?: boolean
+      tag: string
+      version: string
+      waitSessionMs: number
+    }) => {
+      await deps.runReleaseVerifyBeta({
+        version: options.version,
+        tag: options.tag,
+        repo: options.repo,
+        npmPackages: options.npmPackages,
+        runtimePackages: options.runtimePackages,
+        desktopRelease: options.desktopRelease ?? true,
+        desktopAssetNames: options.desktopAssets,
+        desktopAssetArchs: options.desktopAssetArchs,
+        desktopAssetExts: options.desktopAssetExts,
+        desktopApp: !(options.skipDesktopApp ?? false),
+        desktopAppPath: options.desktopApp,
+        desktopBundleId: options.desktopBundleId,
+        desktopAppName: options.desktopAppName,
+        withoutBuildSource: !(options.allowBuildSource ?? false),
+        runtimeCache: options.runtimeCache ?? true,
+        runtimeVersionMode: options.runtimeExactVersion ? 'exact' : 'dist-tag',
+        runtimeCacheHome: options.runtimeCacheHome,
+        packageCacheRoot: options.packageCacheRoot,
+        sessionId: options.sessionId,
+        expectedReply: options.expectedReply,
+        projectHome: options.projectHome,
+        waitSessionMs: options.waitSessionMs,
         json: options.json ?? false
       })
     })

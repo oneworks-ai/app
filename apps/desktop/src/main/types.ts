@@ -32,6 +32,7 @@ export interface WindowRecord {
   standaloneRoutePath?: string
   window: BrowserWindow
   workspaceFolder?: string
+  workspaceStartupStartedAt?: number
   workspaceServerUrl?: string
 }
 

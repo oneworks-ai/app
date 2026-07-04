@@ -61,9 +61,9 @@ try {
     ensureBuiltinPluginPackageCache,
     ensureBuiltinRuntimePackageCache
   } = require('./builtin-adapter-cache.cjs')
-  ensureBuiltinRuntimePackageCache()
-  ensureBuiltinAdapterPackageCache()
-  ensureBuiltinPluginPackageCache()
+  ensureBuiltinRuntimePackageCache({ trustManifest: true })
+  ensureBuiltinAdapterPackageCache({ trustManifest: true })
+  ensureBuiltinPluginPackageCache({ trustManifest: true })
   logServerChildStartup('builtin package cache prepare complete')
 } catch (error) {
   console.error('[desktop] failed to prepare built-in package cache:', error)

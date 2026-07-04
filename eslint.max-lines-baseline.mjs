@@ -8,6 +8,7 @@ export default [
   '.oo/rules/adapter-error-debugging.md',
   '.oo/docs/usage/plugins.md',
   '.oo/docs/usage/plugins/ui-runtime.md',
+  '.oo/rules/adapter-design/debugging.md',
   '.oo/rfcs/0001-copilot-adapter.md',
   '.oo/rfcs/0001-gemini-cli-adapter.md',
   '.oo/rfcs/0003-agent-room-aggregated-conversation.md',
@@ -174,6 +175,7 @@ export default [
   'scripts/adapter-e2e/snapshot.ts',
   'scripts/chrome-debug.ts',
   'scripts/cli.ts',
+  'scripts/desktop-control-protocol.md',
   'scripts/mock-responses-host.mjs',
   'scripts/publish-plan-core.mjs'
 ]

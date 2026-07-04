@@ -27,7 +27,12 @@ export const normalizeThemeMode = (value: unknown): ThemeMode => (
   isThemeMode(value) ? value : 'system'
 )
 
-const themeBaseAtom = atom<ThemeMode>('system')
+const getInitialThemeMode = (): ThemeMode => {
+  if (typeof window === 'undefined') return 'system'
+  return normalizeThemeMode(window.oneworksDesktop?.initialThemeMode)
+}
+
+const themeBaseAtom = atom<ThemeMode>(getInitialThemeMode())
 
 export const themeAtom = atom(
   get => get(themeBaseAtom),

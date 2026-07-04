@@ -682,6 +682,7 @@ interface Window {
       { height: number; width: number } | undefined
     >
     getDesktopSettings?: () => Promise<DesktopSettings>
+    initialThemeMode?: DesktopSettings['themeMode']
     getBrowserDataSyncState?: () => Promise<DesktopBrowserDataSyncState>
     listBrowserHistory?: (input?: DesktopBrowserActivityListOptions) => Promise<DesktopBrowserHistoryRecord[]>
     recordBrowserHistory?: (input: DesktopBrowserHistoryRecordInput) => Promise<DesktopBrowserHistoryRecord | undefined>

@@ -302,10 +302,18 @@ export function Sidebar({
     ? interactionQueryValues.item
     : undefined
 
-  const { data: sessionsRes, mutate: mutateSessions } = useSWR<{ sessions: Session[] }>(
+  const {
+    data: sessionsRes,
+    isLoading: isSessionsLoading,
+    mutate: mutateSessions
+  } = useSWR<{ sessions: Session[] }>(
     `/api/sessions`
   )
-  const { data: roomsRes, mutate: mutateRooms } = useSWR<AgentRoomListResponse>('/api/agent-rooms', listAgentRooms, {
+  const {
+    data: roomsRes,
+    isLoading: isRoomsLoading,
+    mutate: mutateRooms
+  } = useSWR<AgentRoomListResponse>('/api/agent-rooms', listAgentRooms, {
     refreshInterval: 3000,
     revalidateOnFocus: true
   })
@@ -1450,6 +1458,7 @@ export function Sidebar({
           : (
             <SessionList
               hasActiveFilters={hasActiveFilterConditions}
+              isLoading={isSessionsLoading || isRoomsLoading}
               rooms={filteredRooms}
               sessions={filteredSessions}
               activeId={activeId}

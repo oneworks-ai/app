@@ -86,6 +86,7 @@ pnpm tools dev-start <target>
 - 配置加载、写回、分层合并或配置页 source 语义：`.oo/rules/CONFIG.md`
 - 前端 / 后端约束：`.oo/rules/FRONTEND-STANDARD.md`、`.oo/rules/BACKEND-STANDARD.md`
 - 桌面端 / Electron 打包、发布与本地调试：`apps/desktop/AGENTS.md`、`.oo/docs/usage/desktop.md`
+- Electron agent 控制、UI 自动验证、外部 CDP bridge 或 runtime evidence 验证：先读 `scripts/AGENTS.md` 和 `scripts/desktop-control-protocol.md`，再读 `apps/desktop/AGENTS.md`；优先复用 `pnpm tools desktop-control serve`，不要在场景工具里重复实现端口选择、隔离 profile、CDP target discovery 或 `events.jsonl` discovery。
 - 仓库开发与贡献：`.oo/rules/DEVELOPMENT.md`
 - 复杂任务拆分、子线程协作、交叉审阅或经验沉淀：`.oo/rules/maintenance/task-planning.md`
 - 项目接入方式：`.oo/docs/` 公开文档内容源或对应模块 README
@@ -124,6 +125,7 @@ Agent Room / runtime 快速入口：
 维护约定：
 
 - `.oo/rules/` 是 `AGENTS.md` 的模块化组织目录：当 `AGENTS.md` 单文件过大，或模块内部组织、稳定入口、agent 记忆需要拆分时，把细节拆到最近的 `.oo/rules/` 下，并在最近的 `AGENTS.md` 保留入口链接。
+- `.oo/rules/*.md` 一级规则会进入默认规则目录，`alwaysApply: true` 正文还会直接进入默认会话上下文；一级规则只写短入口、硬约束和阅读路由，详细经验放到同名子目录，避免规则文件造成上下文膨胀。
 - `.oo/docs/` 是主仓公开文档内容源，只放 Markdown 与文档图片 / 素材；中文 root locale 放在 `.oo/docs/index.md`、`.oo/docs/usage/`，英文 locale 放在 `.oo/docs/en/index.md`、`.oo/docs/en/usage/`。不要在 `.oo/docs/` 放 `package.json`、`.vitepress/`、Vue 组件、theme、构建脚本或 README 占位说明。VitePress 壳层、部署、构建和导航装配信息沉淀在 homepage / docs app 侧的 `AGENTS.md` 或规则文档中。
 - 强制边界：`AGENTS.md` / `.oo/rules/` 只描述模块内部组织结构、内部入口信息和 agent 对这个模块的稳定记忆；`README.md` / `.oo/docs/` 只描述模块外部如何使用。修改任意 `README.md`、`AGENTS.md` 或 `.oo/docs/` 内容时，必须先按这个边界判断内容归属，发现不符合边界的内容应同步迁移到正确位置。
 - README 必须保持多语言支持：根 README 使用 `README.md` 作为英文入口、`README.zh-Hans.md` 作为中文入口，并在顶部互链；模块 README 如果面向外部用户，也应优先保留或补齐同等多语言入口。`.oo/docs/` 作为 homepage docs 文档站内容源时，也必须保留 i18n 设计。`AGENTS.md` 不强制多语言，按模块内部协作效率选择中文、英文或混合表达。

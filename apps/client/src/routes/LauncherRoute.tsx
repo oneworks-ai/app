@@ -250,6 +250,7 @@ const launcherIconThemes = new Set<LauncherDesktopIconSettings['iconTheme']>(['i
 interface LauncherCommand {
   action: () => Promise<void> | void
   actionLabel?: 'back' | 'clone' | 'create' | 'open'
+  automationPath?: string
   badge?: string
   contextMenuItems?: MenuProps['items']
   favoriteAction?: () => void
@@ -1866,6 +1867,7 @@ export function LauncherRoute({
             : t('launcher.favoriteDirectory'),
           icon,
           id: `clone-destination:${encodeURIComponent(`${name}:${path}`)}`,
+          automationPath: path,
           isFavorite,
           keywords: [name, path],
           secondaryAction: hasSecondaryAction ? () => openCloneDestinationDirectory(path) : undefined,
@@ -2188,6 +2190,7 @@ export function LauncherRoute({
           icon: getProjectStatusIcon(project.status),
           iconTone: getProjectStatusIconTone(project.status),
           id: `project:${encodeURIComponent(project.workspaceFolder)}`,
+          automationPath: project.workspaceFolder,
           keywords: [project.name, project.description, project.workspaceFolder],
           removeAction: project.status == null ? () => confirmForgetWorkspace(project) : undefined,
           removeLabel: t('launcher.projects.remove'),
@@ -2952,6 +2955,10 @@ export function LauncherRoute({
                       id={command.id}
                       key={command.id}
                       role='option'
+                      data-launcher-command-action-label={command.actionLabel}
+                      data-launcher-command-id={command.id}
+                      data-launcher-command-path={command.automationPath}
+                      data-launcher-command-title={command.title}
                       aria-selected={command.id === activeCommandId}
                       onMouseDown={(event) => {
                         if (event.button === 0) {

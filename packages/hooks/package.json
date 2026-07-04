@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/hooks",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.5",
   "description": "One Works hooks runtime and bridge helpers",
   "repository": {
     "type": "git",

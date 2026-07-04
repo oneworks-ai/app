@@ -91,6 +91,220 @@ describe('scripts cli', () => {
     expect(runPublishPlan).toHaveBeenCalledWith(['--publish', '--tag', 'next'])
   })
 
+  it('dispatches desktop control launch with an isolated CDP target', async () => {
+    const runDesktopCdpLaunch = vi.fn(async () => ({
+      address: '127.0.0.1',
+      agentCommands: [],
+      appPath: '/Applications/One Works.app',
+      control: {
+        cdpEndpoint: 'http://127.0.0.1:9333',
+        protocol: 'cdp' as const,
+        target: 'electron' as const
+      },
+      endpoint: 'http://127.0.0.1:9333',
+      executablePath: '/Applications/One Works.app/Contents/MacOS/One Works',
+      nextActions: [],
+      ok: true,
+      phase: 'ready' as const,
+      port: 9333,
+      targetCount: 1,
+      targets: [],
+      userDataDir: '/tmp/ow-desktop-control'
+    }))
+    const cli = createScriptsCli({
+      runDesktopCdpLaunch
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'desktop-control',
+      'launch',
+      '--app',
+      '/Applications/One Works.app',
+      '--workspace',
+      '/tmp/workspace',
+      '--user-data-dir',
+      '/tmp/ow-desktop-control',
+      '--port',
+      '9333',
+      '--wait-ms',
+      '5000',
+      '--json'
+    ])
+
+    expect(runDesktopCdpLaunch).toHaveBeenCalledWith({
+      address: '127.0.0.1',
+      allowUnsupportedApp: false,
+      appPath: '/Applications/One Works.app',
+      executable: undefined,
+      json: true,
+      port: 9333,
+      userDataDir: '/tmp/ow-desktop-control',
+      waitMs: 5000,
+      workspace: '/tmp/workspace'
+    })
+  })
+
+  it('prints structured JSON when desktop control launch rejects with a structured error', async () => {
+    const error = Object.assign(
+      new Error('Desktop app does not include the external CDP control hook.'),
+      {
+        code: 'UNSUPPORTED_ELECTRON_APP',
+        statusCode: 409
+      }
+    )
+    const runDesktopCdpLaunch = vi.fn(async () => {
+      throw error
+    })
+    const cli = createScriptsCli({
+      runDesktopCdpLaunch
+    })
+    const previousExitCode = process.exitCode
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    try {
+      process.exitCode = undefined
+      await cli.parseAsync([
+        'node',
+        'oneworks-dev',
+        'desktop-control',
+        'launch',
+        '--app',
+        '/Applications/One Works.app',
+        '--json'
+      ])
+
+      expect(process.exitCode).toBe(1)
+      const payload = JSON.parse(String(write.mock.calls.at(-1)?.[0]))
+      expect(payload).toMatchObject({
+        ok: false,
+        error: {
+          code: 'UNSUPPORTED_ELECTRON_APP',
+          message: 'Desktop app does not include the external CDP control hook.',
+          statusCode: 409
+        }
+      })
+    } finally {
+      process.exitCode = previousExitCode
+      write.mockRestore()
+    }
+  })
+
+  it('dispatches desktop control protocol server with JSON defaults', async () => {
+    const runDesktopControlServe = vi.fn(async () => {
+      await Promise.resolve()
+    })
+    const cli = createScriptsCli({
+      runDesktopControlServe
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'desktop-control',
+      'serve',
+      '--port',
+      '9777'
+    ])
+
+    expect(runDesktopControlServe).toHaveBeenCalledWith({
+      host: '127.0.0.1',
+      json: true,
+      port: 9777,
+      text: false
+    })
+  })
+
+  it('allows desktop control protocol server to request an ephemeral port', async () => {
+    const runDesktopControlServe = vi.fn(async () => {
+      await Promise.resolve()
+    })
+    const cli = createScriptsCli({
+      runDesktopControlServe
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'desktop-control',
+      'serve',
+      '--port',
+      '0'
+    ])
+
+    expect(runDesktopControlServe).toHaveBeenCalledWith({
+      host: '127.0.0.1',
+      json: true,
+      port: 0,
+      text: false
+    })
+  })
+
+  it('dispatches real Electron desktop recording batches', async () => {
+    const runDesktopControlRecordBatch = vi.fn(async () => ({
+      scenarioId: 'launcher-open-workspace-ui-tour',
+      variants: []
+    }))
+    const cli = createScriptsCli({
+      runDesktopControlRecordBatch
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'desktop-control',
+      'record-batch',
+      'launcher-open-workspace-ui-tour',
+      '--app',
+      '/Applications/One Works.app',
+      '--workspace',
+      '/tmp/workspace',
+      '--out-dir',
+      '/tmp/recordings',
+      '--name',
+      'electron-tour',
+      '--use-deskpad-display',
+      '--recording-display-name',
+      'DeskPad Display',
+      '--duration-ms',
+      '26000',
+      '--fps',
+      '30',
+      '--wait-ms',
+      '45000',
+      '--video-background-image',
+      '/System/Library/Desktop Pictures/.thumbnails/Valley Light.heic',
+      '--color-schemes',
+      'light,dark',
+      '--languages',
+      'zh,en',
+      '--keep-frames',
+      '--json'
+    ])
+
+    expect(runDesktopControlRecordBatch).toHaveBeenCalledWith({
+      allowUnsupportedApp: false,
+      appPath: '/Applications/One Works.app',
+      colorSchemes: ['light', 'dark'],
+      durationMs: 26000,
+      executable: undefined,
+      ffmpegPath: 'ffmpeg',
+      fps: 30,
+      json: true,
+      keepFrames: true,
+      languages: ['zh', 'en'],
+      name: 'electron-tour',
+      outDir: '/tmp/recordings',
+      recordingDisplayName: 'DeskPad Display',
+      scenarioId: 'launcher-open-workspace-ui-tour',
+      useDeskpadDisplay: true,
+      videoBackgroundImage: '/System/Library/Desktop Pictures/.thumbnails/Valley Light.heic',
+      waitMs: 45000,
+      workspace: '/tmp/workspace'
+    })
+  })
+
   it('dispatches release tag planning with json output', async () => {
     const runReleaseTagsPlan = vi.fn(async () => ({
       base: 'base-sha',
@@ -115,6 +329,187 @@ describe('scripts cli', () => {
       base: 'base-sha',
       head: 'head-sha',
       json: true
+    })
+  })
+
+  it('dispatches beta release verification with fast UI-session options', async () => {
+    const runReleaseVerifyBeta = vi.fn(async () => ({
+      checks: [],
+      elapsedMs: 0,
+      ok: true
+    }))
+    const cli = createScriptsCli({
+      runReleaseVerifyBeta
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'release-verify',
+      'beta',
+      '--version',
+      '0.1.0-beta.4',
+      '--no-desktop-release',
+      '--skip-desktop-app',
+      '--no-runtime-cache',
+      '--session-id',
+      'sess-ui',
+      '--expected-reply',
+      'OK_BETA',
+      '--wait-session-ms',
+      '5000',
+      '--json'
+    ])
+
+    expect(runReleaseVerifyBeta).toHaveBeenCalledWith(expect.objectContaining({
+      desktopApp: false,
+      desktopRelease: false,
+      expectedReply: 'OK_BETA',
+      json: true,
+      runtimeCache: false,
+      sessionId: 'sess-ui',
+      version: '0.1.0-beta.4',
+      waitSessionMs: 5000
+    }))
+  })
+
+  it('dispatches AI-oriented release verification runner with auto version', async () => {
+    const runReleaseVerify = vi.fn(async () => ({
+      channel: 'beta',
+      checks: [],
+      elapsedMs: 0,
+      ok: true,
+      recommendations: [],
+      scenario: 'desktop-installed' as const,
+      version: '0.1.0-beta.4'
+    }))
+    const cli = createScriptsCli({
+      runReleaseVerify
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'release-verify',
+      'run',
+      '--channel',
+      'beta',
+      '--version',
+      'auto',
+      '--scenario',
+      'desktop-chat',
+      '--skip-desktop-app',
+      '--no-runtime-cache',
+      '--session-id',
+      'sess-ui'
+    ])
+
+    expect(runReleaseVerify).toHaveBeenCalledWith(expect.objectContaining({
+      channel: 'beta',
+      desktopApp: false,
+      runtimeCache: false,
+      scenario: 'desktop-chat',
+      sessionId: 'sess-ui',
+      version: 'auto'
+    }))
+  })
+
+  it('dispatches agent release verification with discovery defaults', async () => {
+    const runReleaseVerifyAgent = vi.fn(async () => ({
+      channel: 'beta',
+      checks: [],
+      elapsedMs: 0,
+      ok: true,
+      recommendations: [],
+      scenario: 'desktop-chat' as const,
+      version: '0.1.0-beta.4'
+    }))
+    const cli = createScriptsCli({
+      runReleaseVerifyAgent
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'release-verify',
+      'agent',
+      '--channel',
+      'beta',
+      '--expected-reply',
+      'OK_AGENT',
+      '--skip-desktop-app',
+      '--no-runtime-cache'
+    ])
+
+    expect(runReleaseVerifyAgent).toHaveBeenCalledWith(expect.objectContaining({
+      channel: 'beta',
+      desktopApp: false,
+      expectedReply: 'OK_AGENT',
+      runtimeCache: false,
+      scenario: 'desktop-chat',
+      version: 'auto'
+    }))
+  })
+
+  it('dispatches runtime evidence wait-reply with bounded discovery options', async () => {
+    const runRuntimeEvidenceWait = vi.fn(async () => ({
+      completed: true,
+      elapsedMs: 0,
+      message: 'matched',
+      ok: true,
+      scannedFiles: 1
+    }))
+    const cli = createScriptsCli({
+      runRuntimeEvidenceWait
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'runtime-evidence',
+      'wait-reply',
+      '--expected-reply',
+      'OK_WAIT',
+      '--project-home',
+      '/tmp/project-home',
+      '--wait-ms',
+      '5000',
+      '--json'
+    ])
+
+    expect(runRuntimeEvidenceWait).toHaveBeenCalledWith({
+      expectedReply: 'OK_WAIT',
+      homeDir: undefined,
+      json: true,
+      projectHome: '/tmp/project-home',
+      sessionId: undefined,
+      waitMs: 5000
+    })
+  })
+
+  it('dispatches runtime evidence list with a bounded default limit', async () => {
+    const runRuntimeEvidenceList = vi.fn(async () => ({
+      sessions: []
+    }))
+    const cli = createScriptsCli({
+      runRuntimeEvidenceList
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'runtime-evidence',
+      'list',
+      '--home',
+      '/tmp/home',
+      '--json'
+    ])
+
+    expect(runRuntimeEvidenceList).toHaveBeenCalledWith({
+      homeDir: '/tmp/home',
+      json: true,
+      limit: 50,
+      projectHome: undefined
     })
   })
 
@@ -340,6 +735,14 @@ describe('scripts cli', () => {
       posterPath: '/repo/.logs/demo/relay-demo-poster.png',
       scenarioId: 'relay-team-config-tabs',
       scenarioTitle: 'Relay 团队配置 Tabs',
+      stillFramePaths: ['/repo/.logs/demo/stills/second_0000.png'],
+      stills: [{
+        imagePath: '/repo/.logs/demo/stills/second_0000.png',
+        index: 0,
+        timestampMs: 0
+      }],
+      stillsDir: '/repo/.logs/demo/stills',
+      stillsManifestPath: '/repo/.logs/demo/relay-demo-stills.json',
       videoPath: '/repo/.logs/demo/relay-demo.mp4',
       width: 1600
     }))
@@ -371,26 +774,122 @@ describe('scripts cli', () => {
       '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
       '--ffmpeg-path',
       '/opt/homebrew/bin/ffmpeg',
+      '--video-background-color',
+      '#323232',
+      '--video-background-image',
+      '/System/Library/Desktop Pictures/Sonoma Light.heic',
       '--color-scheme',
       'dark',
+      '--language',
+      'en',
+      '--page-background',
+      'macos-wallpaper',
+      '--page-background-image',
+      '/System/Library/Desktop Pictures/Sonoma.heic',
       '--keep-frames',
       '--json'
     ])
 
     expect(runDemoVideoRecord).toHaveBeenCalledWith({
       scenarioId: 'relay-team-config-tabs',
+      captureSource: undefined,
       chromePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
       colorScheme: 'dark',
       durationMs: 9_000,
       ffmpegPath: '/opt/homebrew/bin/ffmpeg',
       fps: 6,
       height: 1000,
+      headless: true,
       json: true,
       keepFrames: true,
+      language: 'en',
       name: 'relay-demo',
       outDir: '.logs/demo',
+      pageBackground: 'macos-wallpaper',
+      pageBackgroundImage: '/System/Library/Desktop Pictures/Sonoma.heic',
+      systemDisplayId: undefined,
+      systemWindowCaptureBackend: undefined,
       url: 'http://127.0.0.1:8787/admin/teams',
+      videoBackgroundColor: '0x323232',
+      videoBackgroundImage: '/System/Library/Desktop Pictures/Sonoma Light.heic',
+      waitForText: undefined,
+      waitForTextAbsent: undefined,
+      waitForTextAbsentTimeoutMs: undefined,
+      waitForTextTimeoutMs: undefined,
+      workspace: undefined,
       width: 1600
+    })
+  })
+
+  it('dispatches demo video batch variants', async () => {
+    const runDemoVideoBatch = vi.fn(async () => ({
+      scenarioId: 'url-tour',
+      variants: []
+    }))
+    const cli = createScriptsCli({
+      runDemoVideoBatch
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'demo-video',
+      'batch',
+      'url-tour',
+      '--url',
+      'http://127.0.0.1:5173/',
+      '--out-dir',
+      '.logs/demo-batch',
+      '--name',
+      'oneworks-overview',
+      '--width',
+      '1440',
+      '--height',
+      '900',
+      '--fps',
+      '30',
+      '--duration-ms',
+      '1200',
+      '--color-schemes',
+      'light,dark',
+      '--languages',
+      'zh,en',
+      '--page-background',
+      'macos-wallpaper',
+      '--page-background-image',
+      '/System/Library/Desktop Pictures/Sonoma.heic',
+      '--headed',
+      '--json'
+    ])
+
+    expect(runDemoVideoBatch).toHaveBeenCalledWith({
+      scenarioId: 'url-tour',
+      captureSource: undefined,
+      chromePath: undefined,
+      colorSchemes: ['light', 'dark'],
+      durationMs: 1_200,
+      ffmpegPath: 'ffmpeg',
+      fps: 30,
+      height: 900,
+      headless: false,
+      json: true,
+      keepFrames: false,
+      languages: ['zh', 'en'],
+      name: 'oneworks-overview',
+      outDir: '.logs/demo-batch',
+      pageBackground: 'macos-wallpaper',
+      pageBackgroundImage: '/System/Library/Desktop Pictures/Sonoma.heic',
+      systemDisplayId: undefined,
+      systemWindowCaptureBackend: undefined,
+      url: 'http://127.0.0.1:5173/',
+      videoBackgroundColor: undefined,
+      videoBackgroundImage: undefined,
+      waitForText: undefined,
+      waitForTextAbsent: undefined,
+      waitForTextAbsentTimeoutMs: undefined,
+      waitForTextTimeoutMs: undefined,
+      workspace: undefined,
+      width: 1440
     })
   })
 

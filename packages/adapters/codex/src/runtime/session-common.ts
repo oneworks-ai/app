@@ -5,7 +5,7 @@ import { resolve } from 'node:path'
 import process from 'node:process'
 
 import { resolveConfigState } from '@oneworks/config'
-import { NATIVE_HOOK_BRIDGE_ADAPTER_ENV } from '@oneworks/hooks'
+import { NATIVE_HOOK_BRIDGE_ADAPTER_ENV, resolveMockHome } from '@oneworks/hooks'
 import type { AdapterCtx, AdapterQueryOptions, Config, ModelServiceConfig } from '@oneworks/types'
 import { createStartupProfiler, mergeProcessEnvWithProjectEnv, resolveModelServiceConfig } from '@oneworks/utils'
 import { createLogger } from '@oneworks/utils/create-logger'
@@ -313,6 +313,8 @@ const toTomlInlineTable = (obj: Record<string, string>) =>
   `{${Object.entries(obj).map(([k, v]) => `${k} = ${JSON.stringify(v)}`).join(', ')}}`
 
 const MCP_INHERITED_ENV_KEYS = [
+  'HOME',
+  'USERPROFILE',
   '__ONEWORKS_PROJECT_LAUNCH_CWD__',
   '__ONEWORKS_PROJECT_WORKSPACE_FOLDER__',
   '__ONEWORKS_PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD__',
@@ -332,7 +334,8 @@ const MCP_INHERITED_ENV_KEYS = [
   '__ONEWORKS_PROJECT_PERMISSION_MODE__',
   '__ONEWORKS_PROJECT_SERVER_HOST__',
   '__ONEWORKS_PROJECT_SERVER_PORT__',
-  '__ONEWORKS_PROJECT_LOG_PREFIX__'
+  '__ONEWORKS_PROJECT_LOG_PREFIX__',
+  '__ONEWORKS_DISABLE_MOCK_HOME_BRIDGE'
 ] as const
 
 const pickInheritedMcpEnv = (env: Record<string, string | null | undefined>) => (
@@ -875,9 +878,15 @@ export async function resolveSessionBase(
   })()
 
   const mcpArgsStartedAt = startupProfiler.now()
+  const mcpRuntimeEnv = {
+    ...env,
+    HOME: resolveMockHome(cwd, env),
+    USERPROFILE: resolveMockHome(cwd, env),
+    __ONEWORKS_DISABLE_MOCK_HOME_BRIDGE: '1'
+  }
   const mcpConfigArgs = buildMcpConfigArgs(
     withManagedMcpServerApprovalModes(filteredMcpServers, mergedConfig.permissions),
-    env
+    mcpRuntimeEnv
   )
   startupProfiler.mark('codex.session.buildMcpConfigArgs', mcpArgsStartedAt)
   configOverrideArgs.push(...mcpConfigArgs)
@@ -885,6 +894,7 @@ export async function resolveSessionBase(
 
   const binaryPath = resolveCodexBinaryPath(env, cwd)
   const spawnEnv = buildSpawnEnv(ctx)
+  spawnEnv.__ONEWORKS_DISABLE_MOCK_HOME_BRIDGE = '1'
   const sessionHomeStartedAt = startupProfiler.now()
   const runtimeHome = await prepareCodexSessionHome({
     ctx,
