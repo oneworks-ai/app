@@ -1,8 +1,8 @@
 # Relay Dev Deploy GitHub Actions
 
-`.github/workflows/deploy-relay-dev.yml` deploys the official Relay dev slots when Relay-related paths change on `main`. It also supports manual dispatch with `cloudflare`, `vercel`, or `both`.
+`.github/workflows/deploy-relay-dev.yml` deploys or verifies the official Relay dev slots when Relay-related paths change on `main`. It also supports manual dispatch with `cloudflare`, `vercel`, or `both`.
 
-If repository deploy secrets are missing, the matching job emits a notice and skips deployment. This keeps `main` green while credentials are being installed; after secrets exist, the same workflow performs the deployment and smoke checks.
+Cloudflare is deployed by GitHub Actions because its dev slot is owned by repository credentials. Vercel is deployed by the Vercel GitHub App; GitHub Actions must not keep a long-lived Vercel CLI token for the normal dev deployment path. The Vercel job only waits for the GitHub App deployment to reach the expected Relay version, then runs smoke checks.
 
 ## Cloudflare
 
@@ -21,17 +21,30 @@ The Cloudflare Pages Admin project must have `ONEWORKS_RELAY_ADMIN_PROXY_TARGET`
 
 ## Vercel
 
-Required repository secrets:
+Required Vercel project setup:
 
-- `RELAY_DEV_VERCEL_TOKEN`
-- `RELAY_DEV_VERCEL_ORG_ID`
-- `RELAY_DEV_VERCEL_PROJECT_ID`
+- Install and authorize the Vercel GitHub App for `oneworks-ai/app`.
+- Connect the official dev project to the `main` production branch.
+- Set the Vercel project root directory to `apps/relay-server`.
+- Keep the dev custom domain `dev.vc.oneworks.cloud` attached to that project.
+- Configure production environment variables on the Vercel project, because the dev slot deploys from the production branch.
+
+DNS for `dev.vc.oneworks.cloud` is managed in Cloudflare under `oneworks.cloud`. The Vercel project Domains page is the source of truth for the CNAME target; as of the GitHub App migration it recommended:
+
+- Type: `CNAME`
+- Name: `dev.vc`
+- Value: `32482b6d2f2f42a1.vercel-dns-017.com.`
+- Proxy: disabled / DNS-only
+
+If `dev.vc.oneworks.cloud` times out while `oneworks-dev.vercel.app` works, check the Vercel Domains page before changing workflow code. A custom-domain DNS issue should not be worked around by restoring GitHub Actions Vercel CLI token deployment.
 
 Optional repository variables:
 
 - `RELAY_DEV_VC_ORIGIN`: defaults to `https://dev.vc.oneworks.cloud`.
 
 The official Vercel dev slot uses `apps/relay-server` as a single project: Admin, API, and login are same-origin, and `ONEWORKS_RELAY_PUBLIC_URL` should point to the final dev Vercel custom domain.
+
+Do not reintroduce `RELAY_DEV_VERCEL_TOKEN`, `RELAY_DEV_VERCEL_ORG_ID`, or `RELAY_DEV_VERCEL_PROJECT_ID` for routine dev deploys. A temporary local CLI token can still be used for emergency manual Vercel maintenance, but it should live in the operator's Vercel login/session or ignored scratch files, not GitHub repository secrets.
 
 ## Shared Smoke Config
 
@@ -64,17 +77,17 @@ Vercel:
 
 ```bash
 cd apps/relay-server
-pnpm dlx vercel@<version> env ls production --token "$RELAY_DEV_VERCEL_TOKEN"
-pnpm dlx vercel@<version> env remove ONEWORKS_RELAY_SSO_PROVIDERS production --token "$RELAY_DEV_VERCEL_TOKEN"
-pnpm dlx vercel@<version> env add ONEWORKS_RELAY_GITHUB_CLIENT_ID production --token "$RELAY_DEV_VERCEL_TOKEN" < /path/to/ignored-client-id.txt
-pnpm dlx vercel@<version> env add ONEWORKS_RELAY_GITHUB_CLIENT_SECRET production --token "$RELAY_DEV_VERCEL_TOKEN" < /path/to/ignored-client-secret.txt
+pnpm dlx vercel@<version> env ls production
+pnpm dlx vercel@<version> env remove ONEWORKS_RELAY_SSO_PROVIDERS production
+pnpm dlx vercel@<version> env add ONEWORKS_RELAY_GITHUB_CLIENT_ID production < /path/to/ignored-client-id.txt
+pnpm dlx vercel@<version> env add ONEWORKS_RELAY_GITHUB_CLIENT_SECRET production < /path/to/ignored-client-secret.txt
 ```
 
-- The official Vercel dev slot deploys with `vercel build --prod` and `vercel deploy --prebuilt --prod`, so inspect and update the Vercel `production` environment for that dev project, not `development` or `preview`.
+- The official Vercel dev slot deploys from the Vercel GitHub App on the `main` production branch, so inspect and update the Vercel `production` environment for that dev project, not `development` or `preview`.
 - `vercel env ls` confirms names and target environment, not secret values. Use it to prove stale keys are gone.
 - `vercel env pull --environment=production <file>` writes secrets to disk; use an ignored scratch file only when necessary, and delete it after the check.
 - `vercel pull` writes `.vercel/project.json` and `.vercel/.env.*.local`. Do not commit `.vercel/`; avoid changing the repository's deployment binding unless the PR is explicitly about Vercel project setup.
-- Updating a Vercel env var does not mutate an already deployed serverless function. Run the deploy workflow or a new production deployment before checking `dev.vc.oneworks.cloud`.
+- Updating a Vercel env var does not mutate an already deployed serverless function. Trigger a new Vercel GitHub App deployment from the Vercel dashboard or by merging a new `main` commit before checking `dev.vc.oneworks.cloud`.
 
 Cloudflare Worker:
 
@@ -116,6 +129,7 @@ pnpm dlx wrangler@<version> pages secret put <KEY> --project-name "<pages-projec
 After deploy, the workflow checks:
 
 - `/health` returns `ok=true`.
+- `/health.version` matches `apps/relay-server/package.json`.
 - `/api/auth/providers` contains expected SSO providers when configured.
 - `/api/admin/users` returns `401` without authentication.
 - `/login` injects Relay login config and contains expected SSO provider ids when configured.
