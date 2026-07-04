@@ -24,7 +24,7 @@
 - `deploy-relay-server.yml`：只监听 Relay Server runtime 和构建依赖，构建 server 部署 artifact 并可按变量触发外部 Relay Server 部署；纯 Admin 前端改动不会触发它。
 - `deploy-relay-admin.yml`：只监听 Relay Admin 前端及其 UI 依赖，构建独立 Admin 平台 artifact 并可按变量触发外部前端部署。
 - `deploy-pwa.yml`：从 app 仓库触发 `oneworks-ai/pwa` 的部署 workflow。
-- `deploy-avatar.yml`：从 app 仓库触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow，只监听 avatar 相关路径。
+- `deploy-avatar.yml`：从 app 仓库触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow，只监听 avatar 相关路径；目标仓库独立安装构建，不应依赖 app 根 workspace install。
 - `deploy-homepage.yml`：从 app 仓库触发 `oneworks-ai/oneworks-ai.github.io` 的 GitHub Pages 部署 workflow，只监听 `.oo/docs` 和自身 workflow。
 
 ## 当前 Secrets / Variables

@@ -34,3 +34,9 @@ gh workflow run deploy-avatar.yml --repo oneworks-ai/app --ref main
 ```
 
 确认 `oneworks-ai/app` 的 Trigger Avatar Deploy 成功、`oneworks-ai/avatar` 的 Deploy Avatar 被触发并成功、`https://oneworks-ai.github.io/avatar/` 返回 `200`。如果 `AVATAR_DEPLOY_TOKEN` 缺失，app 仓库 workflow 必须失败，不能 warning 后成功退出。
+
+## 部署边界
+
+`assets/avatar` 是 `oneworks-ai/avatar` 的 submodule，但不属于 app 仓库根 `pnpm-workspace.yaml`。Avatar Pages workflow 应独立安装和构建自己的站点：checkout app 仓库指定 commit 到 `app-source`，安装 Avatar 仓库自己的依赖，然后用 `ONEWORKS_APP_SOURCE_DIR=app-source` alias 读取 `packages/avatar` 源码与 `packages/route-layout` CSS。
+
+不要在 Avatar Pages workflow 里 checkout app 仓库后执行根目录 `pnpm install --frozen-lockfile`。这会把 submodule 的 `package.json` 纳入 app workspace 校验，容易因为 app 根锁文件没有记录 asset site importer 而导致部署失败。
