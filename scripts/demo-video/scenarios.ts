@@ -51,6 +51,10 @@ const chatEditorSelector = [
 
 const chatSendButtonSelector = '.chat-send-btn.active:not(.disabled)'
 const launcherSearchInputSelector = '.launcher-command-search__input'
+const launcherWorkspaceStartedSelector = [
+  '.workspace-opening-overlay',
+  chatRouteReadySelector
+].join(',')
 const launcherOpenWorkspaceActionMinRecordMs = 1_200
 const shortSettleMs = 160
 
@@ -161,6 +165,34 @@ const replaceLauncherSearch = async (
   await ctx.typeText(query, { settleMs: input.settleMs ?? 140 })
 }
 
+const tryOpenLauncherCommandFromVisibleRow = async (
+  ctx: DemoVideoScenarioContext,
+  selectorInput: DemoVideoSelectorInput,
+  input: {
+    startupTimeoutMs?: number
+    timeoutMs?: number
+  } = {}
+) => {
+  const waitForWorkspaceStarted = async (timeoutMs: number) => {
+    try {
+      await ctx.recordUntilSelector(launcherWorkspaceStartedSelector, { timeoutMs })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const clicked = await tryClickSelector(ctx, selectorInput, {
+    settleMs: 80,
+    timeoutMs: input.timeoutMs ?? 2_000
+  })
+  if (!clicked) return false
+
+  await ctx.pressKey('Enter', { settleMs: 180 })
+
+  return waitForWorkspaceStarted(input.startupTimeoutMs ?? 12_000)
+}
+
 const searchAndOpenWorkspace = async (
   ctx: DemoVideoScenarioContext,
   workspace: string,
@@ -177,15 +209,16 @@ const searchAndOpenWorkspace = async (
 
   for (const query of searchQueries) {
     await replaceLauncherSearch(ctx, query)
-    const opened = await tryClickSelector(
+    const commandSelector = launcherCommandPathSelector(workspacePath)
+    const openedFromRow = await tryOpenLauncherCommandFromVisibleRow(
       ctx,
-      launcherCommandPrimarySelector(launcherCommandPathSelector(workspacePath)),
+      commandSelector,
       {
-        settleMs: 180,
+        startupTimeoutMs: 12_000,
         timeoutMs: input.timeoutMs ?? 2_000
       }
     )
-    if (opened) return true
+    if (openedFromRow) return true
   }
 
   return false

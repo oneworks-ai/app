@@ -117,11 +117,12 @@ interface SystemCursorTimeline {
 interface SystemCursorFrameSample extends Point {
   action: CursorAction
   frameIndex: number
+  scale: number
   timestampMs: number
 }
 
 interface SystemCursorContinuityIssue {
-  code: 'cursor_event_source_jump' | 'cursor_frame_jump' | 'cursor_speed_jump'
+  code: 'cursor_event_overlap' | 'cursor_event_source_jump' | 'cursor_frame_jump' | 'cursor_speed_jump'
   message: string
   severity: 'error' | 'warning'
   frameIndex?: number
@@ -170,8 +171,22 @@ const MIN_SYSTEM_WINDOW_VIDEO_PADDING_Y = 180
 const DEFAULT_OUTPUT_ROOT = '.logs/demo-videos'
 const DEFAULT_CHROME_TIMEOUT_MS = 15_000
 const DEFAULT_ACTION_TIMEOUT_MS = 10_000
-const DEFAULT_CLICK_SETTLE_MS = 160
-const DEFAULT_KEY_SETTLE_MS = 180
+const DEFAULT_CLICK_SETTLE_MS = 260
+const DEFAULT_KEY_SETTLE_MS = 220
+const SYSTEM_CURSOR_PRESS_LEAD_MS = 90
+const SYSTEM_CURSOR_PRESS_HOLD_MS = 150
+const SYSTEM_CURSOR_CLICK_DURATION_MS = SYSTEM_CURSOR_PRESS_LEAD_MS + SYSTEM_CURSOR_PRESS_HOLD_MS
+const SYSTEM_CURSOR_RELEASE_DURATION_MS = 360
+const SYSTEM_CURSOR_INPUT_AFTER_VISUAL_DELAY_MS = 420
+const SYSTEM_CURSOR_INPUT_HOLD_MS = 40
+const SYSTEM_CURSOR_PRESS_SCALE = 0.88
+const SYSTEM_CURSOR_MOVE_BASE_MS = 620
+const SYSTEM_CURSOR_MOVE_DISTANCE_MS_PER_PX = 0.5
+const SYSTEM_CURSOR_MOVE_MIN_MS = 720
+const SYSTEM_CURSOR_MOVE_MAX_MS = 1_320
+const SYSTEM_CURSOR_MOVE_RECORD_PADDING_MS = 60
+const SYSTEM_CURSOR_STATIONARY_MOVE_MS = 140
+const SYSTEM_DISPLAY_CAPTURE_TIMELINE_OFFSET_MS = 260
 const APP_LANGUAGE_OVERRIDE_STORAGE_KEY = 'oneworks.interfaceLanguageOverride'
 const DEFAULT_PAGE_BACKGROUND: DemoVideoPageBackground = 'app'
 const MACOS_WALLPAPER_CANDIDATES = [
@@ -207,6 +222,36 @@ export const shouldContinueSystemCaptureDuringAction = (input: {
   capturedMs: number
   requestedDurationMs: number
 }) => input.capturedMs < input.requestedDurationMs || !input.actionSettled
+
+export const getSystemCaptureTimelineElapsedMs = (input: {
+  captureSource: DemoVideoCaptureSource
+  elapsedWallMs: number
+}) => Math.max(
+  0,
+  input.elapsedWallMs - (input.captureSource === 'system-display'
+    ? SYSTEM_DISPLAY_CAPTURE_TIMELINE_OFFSET_MS
+    : 0)
+)
+
+export const buildSystemCursorClickTimingPlan = (input: {
+  startMs: number
+}) => ({
+  cursorClickStartMs: input.startMs,
+  cursorClickDurationMs: SYSTEM_CURSOR_CLICK_DURATION_MS,
+  cursorReleaseStartMs: input.startMs + SYSTEM_CURSOR_PRESS_LEAD_MS + SYSTEM_CURSOR_PRESS_HOLD_MS,
+  cursorReleaseDurationMs: SYSTEM_CURSOR_RELEASE_DURATION_MS,
+  mousePressedMs: input.startMs +
+    SYSTEM_CURSOR_PRESS_LEAD_MS +
+    SYSTEM_CURSOR_PRESS_HOLD_MS +
+    SYSTEM_CURSOR_RELEASE_DURATION_MS +
+    SYSTEM_CURSOR_INPUT_AFTER_VISUAL_DELAY_MS,
+  mouseReleasedMs: input.startMs +
+    SYSTEM_CURSOR_PRESS_LEAD_MS +
+    SYSTEM_CURSOR_PRESS_HOLD_MS +
+    SYSTEM_CURSOR_RELEASE_DURATION_MS +
+    SYSTEM_CURSOR_INPUT_AFTER_VISUAL_DELAY_MS +
+    SYSTEM_CURSOR_INPUT_HOLD_MS
+})
 
 const macWindowListScript = `
 import Foundation
@@ -1468,23 +1513,20 @@ const installOverlayExpression = `
         0% {
           transform: scale(1) rotate(-.4deg);
         }
-        38% {
-          transform: scale(.88) translate3d(1px, 1px, 0) rotate(-1.8deg);
-        }
-        74% {
-          transform: scale(1.04) translate3d(-.4px, -.5px, 0) rotate(.7deg);
+        45% {
+          transform: scale(.93) translate3d(.8px, .8px, 0) rotate(-1.2deg);
         }
         100% {
-          transform: scale(1) rotate(0deg);
+          transform: scale(${SYSTEM_CURSOR_PRESS_SCALE}) translate3d(1.1px, 1.1px, 0) rotate(-1.6deg);
         }
       }
 
       @keyframes oneworks-demo-cursor-release {
         0% {
-          transform: scale(.94) translate3d(1px, 1px, 0) rotate(-1deg);
+          transform: scale(${SYSTEM_CURSOR_PRESS_SCALE}) translate3d(1.1px, 1.1px, 0) rotate(-1.6deg);
         }
         55% {
-          transform: scale(1.05) translate3d(-.5px, -.6px, 0) rotate(.8deg);
+          transform: scale(1.07) translate3d(-.7px, -.8px, 0) rotate(.9deg);
         }
         100% {
           transform: scale(1) rotate(0deg);
@@ -1528,14 +1570,14 @@ const installOverlayExpression = `
         filter:
           drop-shadow(0 5px 8px rgba(25, 34, 52, .22))
           drop-shadow(0 1px 2px rgba(13, 18, 28, .20));
-        animation: oneworks-demo-cursor-click 260ms cubic-bezier(.2, .82, .28, 1) both;
+        animation: oneworks-demo-cursor-click ${SYSTEM_CURSOR_CLICK_DURATION_MS}ms cubic-bezier(.2, .82, .28, 1) both;
       }
 
       #__oneworks_demo_video_cursor[data-action="release"] .oneworks-demo-video-cursor-graphic {
         filter:
           drop-shadow(0 7px 11px rgba(25, 34, 52, .20))
           drop-shadow(0 2px 2px rgba(13, 18, 28, .18));
-        animation: oneworks-demo-cursor-release 220ms cubic-bezier(.18, .78, .26, 1) both;
+        animation: oneworks-demo-cursor-release ${SYSTEM_CURSOR_RELEASE_DURATION_MS}ms cubic-bezier(.18, .78, .26, 1) both;
       }
     \`;
     document.documentElement.appendChild(cursorStyle);
@@ -1560,8 +1602,8 @@ const installOverlayExpression = `
     cursor.innerHTML = \`
       <span class="oneworks-demo-video-cursor-idle">
         <svg class="oneworks-demo-video-cursor-graphic" viewBox="0 0 272 344" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M48 40C38 31 30 37 30 52L30 284C30 306 43 313 56 295L101 235C108 225 117 221 129 220L220 211C244 209 251 193 232 178L48 40Z" fill="#428DF4" stroke="rgba(14, 19, 29, .14)" stroke-width="16" stroke-linejoin="round"/>
-          <path d="M48 40C38 31 30 37 30 52L30 284C30 306 43 313 56 295L101 235C108 225 117 221 129 220L220 211C244 209 251 193 232 178L48 40Z" fill="#428DF4" stroke="rgba(255, 255, 255, .96)" stroke-width="10" stroke-linejoin="round"/>
+          <path d="M48 40C38 31 30 37 30 52L30 284C30 306 43 313 56 295L99 241C107 231 117 226 130 224L222 204C246 199 251 183 231 168L48 40Z" fill="#428DF4" stroke="rgba(14, 19, 29, .14)" stroke-width="16" stroke-linejoin="round"/>
+          <path d="M48 40C38 31 30 37 30 52L30 284C30 306 43 313 56 295L99 241C107 231 117 226 130 224L222 204C246 199 251 183 231 168L48 40Z" fill="#428DF4" stroke="rgba(255, 255, 255, .96)" stroke-width="10" stroke-linejoin="round"/>
         </svg>
       </span>
     \`;
@@ -1591,7 +1633,11 @@ const installOverlayExpression = `
     const dx = x - fromX;
     const dy = y - fromY;
     const distance = Math.hypot(dx, dy);
-    const durationMs = options.durationMs ?? clamp(460 + distance * .42, 560, 1080);
+    const durationMs = options.durationMs ?? clamp(
+      ${SYSTEM_CURSOR_MOVE_BASE_MS} + distance * ${SYSTEM_CURSOR_MOVE_DISTANCE_MS_PER_PX},
+      ${SYSTEM_CURSOR_MOVE_MIN_MS},
+      ${SYSTEM_CURSOR_MOVE_MAX_MS}
+    );
     const sequence = cursorState.sequence + 1;
     cursorState.sequence = sequence;
     if (cursorState.animationFrame) cancelAnimationFrame(cursorState.animationFrame);
@@ -1630,7 +1676,9 @@ const installOverlayExpression = `
     cursor.dataset.action = 'idle';
     void cursor.offsetWidth;
     cursor.dataset.action = action;
-    const durationMs = action === 'release' ? 220 : 260;
+    const durationMs = action === 'release'
+      ? ${SYSTEM_CURSOR_RELEASE_DURATION_MS}
+      : ${SYSTEM_CURSOR_CLICK_DURATION_MS};
     const sequence = cursorState.sequence;
     window.setTimeout(() => {
       if (cursorState.sequence === sequence) cursor.dataset.action = 'idle';
@@ -1880,6 +1928,7 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
   private readonly systemVideoSegments: SystemVideoSegment[] = []
   private readonly systemCursorEvents: SystemCursorEvent[] = []
   private systemCursorInitialPoint: Point | undefined
+  private systemCursorTimelineMs: number | undefined
   private activeSystemSegment:
     | {
       startedAtMs: number
@@ -2074,7 +2123,7 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
 
     if (this.usesSystemWindowFrameCapture()) {
       if (this.systemActionCaptureDepth > 0) {
-        await sleep(durationMs)
+        await this.sleepAndAdvanceSystemCursorTimeline(durationMs)
         return
       }
       await this.captureSystemWindowFrames(durationMs)
@@ -2083,7 +2132,7 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
 
     if (isSystemCaptureSource(this.input.captureSource)) {
       if (this.systemActionCaptureDepth > 0) {
-        await sleep(durationMs)
+        await this.sleepAndAdvanceSystemCursorTimeline(durationMs)
         return
       }
       if (this.input.captureSource === 'system-window' && this.input.systemWindowOwnerPid != null) {
@@ -2377,8 +2426,27 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
   }
 
   private getSystemTimelineMs() {
-    if (this.activeSystemSegment == null) return this.recordedDurationMs
-    return this.activeSystemSegment.timelineStartMs + Math.max(0, Date.now() - this.activeSystemSegment.startedAtMs)
+    const captureTimelineMs = this.activeSystemSegment == null
+      ? this.recordedDurationMs
+      : this.activeSystemSegment.timelineStartMs + getSystemCaptureTimelineElapsedMs({
+        captureSource: this.input.captureSource,
+        elapsedWallMs: Date.now() - this.activeSystemSegment.startedAtMs
+      })
+    return this.systemCursorTimelineMs == null
+      ? captureTimelineMs
+      : Math.max(captureTimelineMs, this.systemCursorTimelineMs)
+  }
+
+  private getLastSystemCursorEventEndMs() {
+    const lastEvent = this.systemCursorEvents.at(-1)
+    if (lastEvent == null) return 0
+    return lastEvent.startMs + lastEvent.durationMs
+  }
+
+  private async sleepAndAdvanceSystemCursorTimeline(durationMs: number) {
+    const startedAtMs = this.systemCursorTimelineMs ?? this.getSystemTimelineMs()
+    await sleep(durationMs)
+    this.systemCursorTimelineMs = Math.max(startedAtMs + durationMs, this.getLastSystemCursorEventEndMs())
   }
 
   private async resolveSystemCursorPoint(point: Point): Promise<Point> {
@@ -2415,14 +2483,20 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
     durationMs: number
   ) {
     const from = this.getCurrentSystemCursorPoint()
+    const startMs = Math.max(this.getSystemTimelineMs(), this.getLastSystemCursorEventEndMs())
+    const previousEvent = this.systemCursorEvents.at(-1)
+    if (action === 'release' && previousEvent?.action === 'click') {
+      previousEvent.durationMs = Math.max(previousEvent.durationMs, startMs - previousEvent.startMs)
+    }
     const event = {
       action,
       durationMs,
       from,
-      startMs: this.getSystemTimelineMs(),
+      startMs,
       to
     }
     this.systemCursorEvents.push(event)
+    this.systemCursorTimelineMs = startMs
     this.systemCursorPoint = to
     return durationMs
   }
@@ -2430,7 +2504,14 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
   private recordSystemCursorMove(to: Point) {
     const from = this.getCurrentSystemCursorPoint()
     const distance = Math.hypot(to.x - from.x, to.y - from.y)
-    const durationMs = clamp(460 + distance * 0.42, 560, 1080)
+    if (distance < 4) {
+      return this.recordSystemCursorEvent(to, 'idle', SYSTEM_CURSOR_STATIONARY_MOVE_MS)
+    }
+    const durationMs = clamp(
+      SYSTEM_CURSOR_MOVE_BASE_MS + distance * SYSTEM_CURSOR_MOVE_DISTANCE_MS_PER_PX,
+      SYSTEM_CURSOR_MOVE_MIN_MS,
+      SYSTEM_CURSOR_MOVE_MAX_MS
+    )
     return this.recordSystemCursorEvent(to, distance < 4 ? 'idle' : 'move', durationMs)
   }
 
@@ -2438,7 +2519,13 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
     if (this.usesVideoLayerCursor()) {
       const videoPoint = await this.resolveSystemCursorPoint(point)
       const moveDurationMs = this.recordSystemCursorMove(videoPoint)
-      await this.recordFor(Math.max(560, Math.round(moveDurationMs) + 80))
+      const minMoveRecordMs = moveDurationMs <= SYSTEM_CURSOR_STATIONARY_MOVE_MS
+        ? SYSTEM_CURSOR_STATIONARY_MOVE_MS
+        : SYSTEM_CURSOR_MOVE_MIN_MS
+      await this.recordFor(Math.max(
+        minMoveRecordMs,
+        Math.round(moveDurationMs) + SYSTEM_CURSOR_MOVE_RECORD_PADDING_MS
+      ))
       await this.client.send('Input.dispatchMouseEvent', {
         button: 'none',
         buttons: 0,
@@ -2446,7 +2533,19 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
         x: point.x,
         y: point.y
       })
-      const clickDurationMs = this.recordSystemCursorEvent(videoPoint, 'click', 260)
+      const clickDurationMs = this.recordSystemCursorEvent(
+        videoPoint,
+        'click',
+        SYSTEM_CURSOR_CLICK_DURATION_MS
+      )
+      await this.recordFor(Math.max(SYSTEM_CURSOR_CLICK_DURATION_MS, Math.round(clickDurationMs)))
+      const releaseDurationMs = this.recordSystemCursorEvent(
+        videoPoint,
+        'release',
+        SYSTEM_CURSOR_RELEASE_DURATION_MS
+      )
+      await this.recordFor(Math.max(SYSTEM_CURSOR_RELEASE_DURATION_MS, Math.round(releaseDurationMs)))
+      await this.recordFor(SYSTEM_CURSOR_INPUT_AFTER_VISUAL_DELAY_MS)
       await this.client.send('Input.dispatchMouseEvent', {
         button: 'left',
         buttons: 1,
@@ -2455,7 +2554,7 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
         x: point.x,
         y: point.y
       })
-      await this.recordFor(Math.max(140, Math.round(clickDurationMs)))
+      await this.recordFor(SYSTEM_CURSOR_INPUT_HOLD_MS)
       await this.client.send('Input.dispatchMouseEvent', {
         button: 'left',
         buttons: 0,
@@ -2464,14 +2563,15 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
         x: point.x,
         y: point.y
       })
-      const releaseDurationMs = this.recordSystemCursorEvent(videoPoint, 'release', 220)
-      await this.recordFor(Math.max(160, Math.round(releaseDurationMs)))
       await this.recordFor(settleMs)
       return
     }
 
     const moveDurationMs = await this.evaluate<number>(setCursorExpression(point, 'move'))
-    await this.recordFor(Math.max(560, Math.round(moveDurationMs) + 80))
+    await this.recordFor(Math.max(
+      SYSTEM_CURSOR_MOVE_MIN_MS,
+      Math.round(moveDurationMs) + SYSTEM_CURSOR_MOVE_RECORD_PADDING_MS
+    ))
     await this.client.send('Input.dispatchMouseEvent', {
       button: 'none',
       buttons: 0,
@@ -2480,6 +2580,10 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
       y: point.y
     })
     const clickDurationMs = await this.evaluate<number>(setCursorExpression(point, 'click'))
+    await this.recordFor(Math.max(SYSTEM_CURSOR_CLICK_DURATION_MS, Math.round(clickDurationMs)))
+    const releaseDurationMs = await this.evaluate<number>(setCursorExpression(point, 'release'))
+    await this.recordFor(Math.max(SYSTEM_CURSOR_RELEASE_DURATION_MS, Math.round(releaseDurationMs)))
+    await this.recordFor(SYSTEM_CURSOR_INPUT_AFTER_VISUAL_DELAY_MS)
     await this.client.send('Input.dispatchMouseEvent', {
       button: 'left',
       buttons: 1,
@@ -2488,7 +2592,7 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
       x: point.x,
       y: point.y
     })
-    await this.recordFor(Math.max(140, Math.round(clickDurationMs)))
+    await this.recordFor(SYSTEM_CURSOR_INPUT_HOLD_MS)
     await this.client.send('Input.dispatchMouseEvent', {
       button: 'left',
       buttons: 0,
@@ -2497,8 +2601,6 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
       x: point.x,
       y: point.y
     })
-    const releaseDurationMs = await this.evaluate<number>(setCursorExpression(point, 'release'))
-    await this.recordFor(Math.max(160, Math.round(releaseDurationMs)))
     await this.evaluate(setCursorExpression(point, 'idle'))
     await this.recordFor(settleMs)
   }
@@ -3083,8 +3185,8 @@ const encodeRgbaPng = (input: {
 
 const demoCursorPolygon = [
   { x: 14, y: 10 },
-  { x: 71, y: 56 },
-  { x: 46, y: 58 },
+  { x: 72, y: 54 },
+  { x: 45, y: 63 },
   { x: 29, y: 86 }
 ] satisfies Point[]
 
@@ -3227,6 +3329,16 @@ export const writeDemoCursorPng = async (cursorPath: string) => {
 
 const ffmpegNumber = (value: number) => Number.isFinite(value) ? value.toFixed(3) : '0'
 
+const smootherStep = (value: number) => {
+  const progress = clamp(value, 0, 1)
+  return progress * progress * progress * (progress * (progress * 6 - 15) + 10)
+}
+
+const sampleClickScale = (value: number) => {
+  const progress = clamp(value / SYSTEM_CURSOR_CLICK_DURATION_MS, 0, 1)
+  return 1 - (1 - SYSTEM_CURSOR_PRESS_SCALE) * Math.pow(progress, 0.72)
+}
+
 const sampleSystemCursorMovePoint = (
   event: SystemCursorEvent,
   timestampMs: number
@@ -3240,13 +3352,37 @@ const sampleSystemCursorMovePoint = (
   const perpendicularY = dx / distance
   const curveSign = Math.round(event.from.x + event.from.y + event.to.x + event.to.y) % 2 === 0 ? 1 : -1
   const curve = clamp(distance * 0.16, 14, 72) * curveSign
-  const eased = 0.5 - 0.5 * Math.cos(Math.PI * progress)
+  const eased = smootherStep(progress)
   const arc = Math.sin(Math.PI * progress) * curve
   const micro = Math.sin(Math.PI * 3 * progress) * Math.min(2.4, Math.max(0.4, distance / 260))
   return {
     x: event.from.x + dx * eased + perpendicularX * arc + perpendicularY * micro,
     y: event.from.y + dy * eased + perpendicularY * arc - perpendicularX * micro
   }
+}
+
+const sampleSystemCursorScaleAt = (
+  timeline: SystemCursorTimeline,
+  timestampMs: number,
+  index = 0
+): number => {
+  const event = timeline.events[index]
+  if (event == null) return 1
+  if (timestampMs < event.startMs) return 1
+
+  if (timestampMs <= event.startMs + event.durationMs) {
+    const progress = clamp((timestampMs - event.startMs) / Math.max(1, event.durationMs), 0, 1)
+    if (event.action === 'move') return 1.012
+    if (event.action === 'click') {
+      return sampleClickScale(timestampMs - event.startMs)
+    }
+    if (event.action === 'release') {
+      const eased = 0.5 - 0.5 * Math.cos(Math.PI * progress)
+      return SYSTEM_CURSOR_PRESS_SCALE + (1 - SYSTEM_CURSOR_PRESS_SCALE) * eased + 0.055 * Math.sin(Math.PI * progress)
+    }
+  }
+
+  return sampleSystemCursorScaleAt(timeline, timestampMs, index + 1)
 }
 
 const sampleSystemCursorPointAt = (
@@ -3291,6 +3427,7 @@ export const sampleSystemCursorTimeline = (input: {
     const timestampMs = Math.min(input.durationMs, frameIndex * frameIntervalMs)
     return {
       frameIndex,
+      scale: Number(sampleSystemCursorScaleAt(input.timeline, timestampMs).toFixed(4)),
       timestampMs,
       ...sampleSystemCursorPointAt(input.timeline, timestampMs)
     }
@@ -3315,6 +3452,18 @@ export const buildSystemCursorContinuityReport = (input: {
   for (const [index, event] of input.timeline.events.entries()) {
     const previousEvent = input.timeline.events[index - 1]
     const expectedFrom = previousEvent?.to ?? input.timeline.initialPoint
+    if (previousEvent != null) {
+      const previousEndMs = previousEvent.startMs + previousEvent.durationMs
+      if (event.startMs < previousEndMs - 1) {
+        issues.push({
+          code: 'cursor_event_overlap',
+          message: `Cursor event ${index} starts ${(previousEndMs - event.startMs).toFixed(1)}ms before the previous cursor event ends.`,
+          severity: 'error',
+          timestampMs: event.startMs,
+          value: Number((previousEndMs - event.startMs).toFixed(3))
+        })
+      }
+    }
     const sourceDelta = Math.hypot(event.from.x - expectedFrom.x, event.from.y - expectedFrom.y)
     if (sourceDelta > 1) {
       issues.push({
@@ -3441,6 +3590,42 @@ const buildCursorAxisExpression = (
   return `if(lt(t,${ffmpegNumber(start)}),${before},if(lte(t,${ffmpegNumber(end)}),${during},${after}))`
 }
 
+const buildCursorScaleExpression = (
+  input: {
+    events: SystemCursorEvent[]
+  },
+  index = 0
+): string => {
+  const event = input.events[index]
+  if (event == null) return '1'
+
+  const start = event.startMs / 1_000
+  const duration = Math.max(0.001, event.durationMs / 1_000)
+  const end = start + duration
+  const after = buildCursorScaleExpression(input, index + 1)
+  const during = buildCursorScaleDuringExpression(event, start, duration)
+  return `if(lt(t,${ffmpegNumber(start)}),1,if(lte(t,${ffmpegNumber(end)}),${during},${after}))`
+}
+
+const buildCursorScaleDuringExpression = (
+  event: SystemCursorEvent,
+  start: number,
+  duration: number
+) => {
+  const progress = `min(max((t-${ffmpegNumber(start)})/${ffmpegNumber(duration)},0),1)`
+  if (event.action === 'move') return '1.012'
+  if (event.action === 'click') {
+    const clickProgress = `min(max((t-${ffmpegNumber(start)})/${ffmpegNumber(SYSTEM_CURSOR_CLICK_DURATION_MS / 1_000)},0),1)`
+    const eased = `pow(${clickProgress},0.72)`
+    return `(1-${ffmpegNumber(1 - SYSTEM_CURSOR_PRESS_SCALE)}*${eased})`
+  }
+  if (event.action === 'release') {
+    const eased = `(0.5-0.5*cos(PI*${progress}))`
+    return `(${ffmpegNumber(SYSTEM_CURSOR_PRESS_SCALE)}+${ffmpegNumber(1 - SYSTEM_CURSOR_PRESS_SCALE)}*${eased}+0.055*sin(PI*${progress}))`
+  }
+  return '1'
+}
+
 const buildCursorMoveAxisExpression = (
   axis: 'x' | 'y',
   event: SystemCursorEvent,
@@ -3455,7 +3640,7 @@ const buildCursorMoveAxisExpression = (
   const curveSign = Math.round(event.from.x + event.from.y + event.to.x + event.to.y) % 2 === 0 ? 1 : -1
   const curve = clamp(distance * 0.16, 14, 72) * curveSign
   const progress = `min(max((t-${ffmpegNumber(start)})/${ffmpegNumber(duration)},0),1)`
-  const eased = `(0.5-0.5*cos(PI*${progress}))`
+  const eased = `(${progress}*${progress}*${progress}*(${progress}*(${progress}*6-15)+10))`
   const arc = `(sin(PI*${progress})*${ffmpegNumber(curve)})`
   const micro = `(sin(PI*3*${progress})*${ffmpegNumber(Math.min(2.4, Math.max(0.4, distance / 260)))})`
   if (axis === 'x') {
@@ -3470,6 +3655,7 @@ const buildCursorMoveAxisExpression = (
 
 const overlaySystemCursorVideo = async (input: {
   ffmpegPath: string
+  fps: number
   outputPath: string
   segmentsDir: string
   timeline: SystemCursorTimeline
@@ -3477,8 +3663,9 @@ const overlaySystemCursorVideo = async (input: {
 }) => {
   const cursorPath = path.join(input.segmentsDir, 'demo-cursor.png')
   await writeDemoCursorPng(cursorPath)
-  const xExpression = `(${buildCursorAxisExpression('x', input.timeline)})-${demoCursor.hotspotX}`
-  const yExpression = `(${buildCursorAxisExpression('y', input.timeline)})-${demoCursor.hotspotY}`
+  const scaleExpression = buildCursorScaleExpression(input.timeline)
+  const xExpression = `(${buildCursorAxisExpression('x', input.timeline)})-${demoCursor.hotspotX}*(${scaleExpression})`
+  const yExpression = `(${buildCursorAxisExpression('y', input.timeline)})-${demoCursor.hotspotY}*(${scaleExpression})`
   const result = await runCommand({
     args: [
       '-y',
@@ -3486,10 +3673,17 @@ const overlaySystemCursorVideo = async (input: {
       input.videoPath,
       '-loop',
       '1',
+      '-framerate',
+      String(input.fps),
       '-i',
       cursorPath,
       '-filter_complex',
-      `[0:v][1:v]overlay=x='${xExpression}':y='${yExpression}':eval=frame:shortest=1:format=auto,format=yuv420p[out]`,
+      [
+        `[1:v]format=rgba,scale=w='${demoCursor.width}*(${scaleExpression})':h='${
+          demoCursor.height
+        }*(${scaleExpression})':eval=frame[cursor]`,
+        `[0:v][cursor]overlay=x='${xExpression}':y='${yExpression}':eval=frame:shortest=1:format=auto,format=yuv420p[out]`
+      ].join(';'),
       '-map',
       '[out]',
       '-map',
@@ -3766,6 +3960,7 @@ const encodeSystemWindowVideo = async (input: {
   if (input.cursorTimeline?.enabled === true) {
     await overlaySystemCursorVideo({
       ffmpegPath: input.ffmpegPath,
+      fps: input.fps,
       outputPath: input.videoPath,
       segmentsDir: input.segmentsDir,
       timeline: input.cursorTimeline,
