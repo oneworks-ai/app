@@ -191,6 +191,9 @@ jobs:
           ONEWORKS_DESKTOP_SMOKE_ARCH: ${{ runner.os == 'macOS' && 'arm64' || '' }}
           ONEWORKS_DESKTOP_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
 
+      - name: Restore desktop build dependencies
+        run: pnpm install --frozen-lockfile --prod=false
+
       - name: Validate desktop signing credentials
         shell: bash
         env:
