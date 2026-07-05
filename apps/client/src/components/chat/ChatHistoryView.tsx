@@ -161,6 +161,16 @@ const chatTextSelectionToolbarEstimatedWidth = 260
 
 const normalizeChatSelectedText = (value: string) => value.replace(/\u00A0/g, ' ').trim()
 
+const getLastNonSystemMessageRole = (messages: ChatMessage[]) => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const role = messages[index]?.role
+    if (role != null && role !== 'system') {
+      return role
+    }
+  }
+  return undefined
+}
+
 const createChatTextSelectionId = () => {
   const randomId = typeof globalThis.crypto?.randomUUID === 'function'
     ? globalThis.crypto.randomUUID()
@@ -529,8 +539,15 @@ export function ChatHistoryView({
       title: agentRoomTranscript.room.title
     }
   }, [agentRoomTranscript])
-  const resolvedSessionActivityLabel = sessionActivityLabel
-  const showThinkingIndicator = isCreating || session?.status === 'running' || resolvedSessionActivityLabel != null
+  const lastNonSystemMessageRole = getLastNonSystemMessageRole(messages)
+  const waitingForAssistantResponse = lastNonSystemMessageRole !== 'assistant'
+  const runningSessionActivityLabel = session?.status === 'running' && waitingForAssistantResponse
+    ? session.adapter === 'codex'
+      ? t('chat.sessionOperation.codexStartup')
+      : t('chat.thinking')
+    : undefined
+  const resolvedSessionActivityLabel = sessionActivityLabel ?? runningSessionActivityLabel
+  const showThinkingIndicator = isCreating || resolvedSessionActivityLabel != null
   const historyRenderCount = (
     isAgentRoomMode ? agentRoomTranscript.room.messages.length : messages.length
   ) +

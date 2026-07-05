@@ -11,6 +11,19 @@ export type WSEvent<
 > =
   | { type: 'error'; data: TAdapterErrorData; message?: string }
   | { type: 'message'; message: ChatMessage }
+  | {
+    type: 'operation_started' | 'operation_completed' | 'operation_failed'
+    adapter?: string
+    error?: string
+    id?: string
+    message?: string
+    operationId?: string
+    sessionId?: string
+    status?: string
+    summary?: string
+    title?: string
+    ts?: number
+  }
   | { type: 'session_info'; info: TSessionInfo }
   | { type: 'tool_result'; toolCallId: string; output: any; isError: boolean }
   | { type: 'adapter_result'; result: any; usage?: any }

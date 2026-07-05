@@ -5,6 +5,7 @@ import type {
   AdapterCtx,
   AdapterEvent,
   AdapterInteractionRequest,
+  AdapterOperationData,
   AdapterOutputEvent,
   AdapterQueryOptions
 } from '@oneworks/types'
@@ -101,6 +102,25 @@ const buildCodexPermissionInteraction = (params: {
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
 )
+
+const CODEX_INITIALIZE_OPERATION_ID = 'codex-app-server-initialize'
+const CODEX_RESPONSE_WAIT_OPERATION_ID = 'codex-response-wait'
+const CODEX_THREAD_OPERATION_ID = 'codex-thread'
+const CODEX_TURN_START_OPERATION_ID = 'codex-turn-start'
+
+const isAssistantTextMessageEvent = (event: AdapterOutputEvent) => {
+  if (event.type !== 'message' || event.data.role !== 'assistant') return false
+  const content = event.data.content
+  if (typeof content === 'string') {
+    return content.trim() !== ''
+  }
+  return Array.isArray(content) && content.some(item =>
+    isRecord(item) &&
+    item.type === 'text' &&
+    typeof item.text === 'string' &&
+    item.text.trim() !== ''
+  )
+}
 
 const extractMcpToolNameFromMessage = (message: string | undefined) => {
   const trimmed = message?.trim()
@@ -346,6 +366,8 @@ export async function createStreamCodexSession(
   let usedCachedThread = false
   let didEmitExit = false
   let didEmitFatalError = false
+  const activeOperationIds = new Set<string>()
+  const activeOperationTimers = new Map<string, Array<ReturnType<typeof setTimeout>>>()
   const pendingApprovals = new Map<string, {
     rpcId: number
     availableDecisions?: string[]
@@ -355,13 +377,95 @@ export async function createStreamCodexSession(
     if (event.type === 'error' && event.data.fatal !== false) {
       didEmitFatalError = true
     }
+    if (isAssistantTextMessageEvent(event)) {
+      finishOperation(
+        'operation_completed',
+        CODEX_RESPONSE_WAIT_OPERATION_ID,
+        'Codex returned an assistant response.'
+      )
+    }
     onEvent(event)
+  }
+  const clearOperationTimers = (operationId: string) => {
+    const timers = activeOperationTimers.get(operationId)
+    if (timers == null) return
+    for (const timer of timers) {
+      clearTimeout(timer)
+    }
+    activeOperationTimers.delete(operationId)
+  }
+  const emitOperation = (data: Omit<AdapterOperationData, 'adapter'>) => {
+    emitEvent({
+      type: 'operation',
+      data: {
+        adapter: 'codex',
+        ...data
+      }
+    })
+  }
+  const startOperation = (params: {
+    delayedMessages?: Array<{ afterMs: number; message: string }>
+    message: string
+    operationId: string
+    title: string
+  }) => {
+    clearOperationTimers(params.operationId)
+    emitOperation({
+      type: 'operation_started',
+      operationId: params.operationId,
+      title: params.title,
+      message: params.message
+    })
+    activeOperationIds.add(params.operationId)
+    if (params.delayedMessages == null || params.delayedMessages.length === 0) {
+      return
+    }
+    activeOperationTimers.set(
+      params.operationId,
+      params.delayedMessages.map(delayedMessage =>
+        setTimeout(() => {
+          emitOperation({
+            type: 'operation_started',
+            operationId: params.operationId,
+            title: params.title,
+            message: delayedMessage.message
+          })
+        }, delayedMessage.afterMs)
+      )
+    )
+  }
+  const finishOperation = (
+    type: 'operation_completed' | 'operation_failed',
+    operationId: string,
+    message: string,
+    error?: string
+  ) => {
+    const wasActive = activeOperationIds.has(operationId) || activeOperationTimers.has(operationId)
+    clearOperationTimers(operationId)
+    activeOperationIds.delete(operationId)
+    if (!wasActive) return
+    emitOperation({
+      type,
+      operationId,
+      message,
+      ...(error != null ? { error } : {})
+    })
+  }
+  const finishAllActiveOperations = (
+    type: 'operation_completed' | 'operation_failed',
+    message: string,
+    error?: string
+  ) => {
+    for (const operationId of [...activeOperationIds]) {
+      finishOperation(type, operationId, message, error)
+    }
   }
 
   const emitFailureAndExit = (err: unknown) => {
     if (didEmitExit) return
     didEmitExit = true
     const stderr = getErrorMessage(err)
+    finishAllActiveOperations('operation_failed', 'Codex session failed.', stderr)
     logger.error('[codex session] stream session failed', { err, sessionId, threadId })
     if (!didEmitFatalError) {
       emitEvent({ type: 'error', data: toAdapterErrorData(err) })
@@ -403,6 +507,11 @@ export async function createStreamCodexSession(
         activeTurnId = undefined
         return
       }
+      finishOperation(
+        'operation_completed',
+        CODEX_RESPONSE_WAIT_OPERATION_ID,
+        'Codex completed the turn.'
+      )
       activeTurnId = undefined
     } else if (method === 'item/started') {
       const item = (params as { item?: { type?: string; tokenCount?: unknown; trigger?: unknown } }).item
@@ -590,6 +699,10 @@ export async function createStreamCodexSession(
   proc.on('exit', (code) => {
     if (didEmitExit) return
     didEmitExit = true
+    finishAllActiveOperations(
+      (code ?? 0) === 0 ? 'operation_completed' : 'operation_failed',
+      (code ?? 0) === 0 ? 'Codex session stopped.' : `Codex process exited with code ${code ?? 1}.`
+    )
     if ((code ?? 0) !== 0 && !didEmitFatalError) {
       emitEvent({
         type: 'error',
@@ -606,6 +719,11 @@ export async function createStreamCodexSession(
 
   const startNewThread = async () => {
     logger.info('[codex session] starting new thread', { cwd, sessionId })
+    startOperation({
+      operationId: CODEX_THREAD_OPERATION_ID,
+      title: 'Starting Codex thread',
+      message: '正在创建 Codex 会话线程…'
+    })
     const threadStartStartedAt = startupProfiler.now()
     const startResult = await rpc.request<{ thread: CodexThread }>('thread/start', {
       cwd,
@@ -618,6 +736,11 @@ export async function createStreamCodexSession(
     threadId = startResult.thread.id
     usedCachedThread = false
     await writeThreadCache(threadId)
+    finishOperation(
+      'operation_completed',
+      CODEX_THREAD_OPERATION_ID,
+      'Codex thread is ready.'
+    )
     logger.info('[codex session] thread started', { threadId, sessionId })
   }
 
@@ -638,6 +761,11 @@ export async function createStreamCodexSession(
 
   const resumeCachedThread = async (nextThreadId: string) => {
     logger.info('[codex session] resuming thread', { threadId: nextThreadId, sessionId })
+    startOperation({
+      operationId: CODEX_THREAD_OPERATION_ID,
+      title: 'Resuming Codex thread',
+      message: '正在恢复 Codex 会话线程…'
+    })
     const threadResumeStartedAt = startupProfiler.now()
     const resumeResult = await rpc.request<{ thread: CodexThread }>('thread/resume', {
       threadId: nextThreadId,
@@ -647,6 +775,11 @@ export async function createStreamCodexSession(
     threadId = resumeResult.thread.id
     usedCachedThread = true
     await writeThreadCache(threadId)
+    finishOperation(
+      'operation_completed',
+      CODEX_THREAD_OPERATION_ID,
+      'Codex thread is ready.'
+    )
   }
 
   const startTurn = async (input: CodexInputItem[], source: string) => {
@@ -663,14 +796,61 @@ export async function createStreamCodexSession(
 
     try {
       logger.info('[codex session] starting turn', { threadId, input, source })
+      startOperation({
+        operationId: CODEX_TURN_START_OPERATION_ID,
+        title: 'Starting Codex turn',
+        message: source === 'initial'
+          ? '正在启动 Codex 首轮处理…'
+          : '正在把消息发送给 Codex…',
+        delayedMessages: [
+          {
+            afterMs: 5_000,
+            message: 'Codex 仍在启动本轮处理，通常是在加载工具、MCP 或连接 ChatGPT…'
+          },
+          {
+            afterMs: 20_000,
+            message: 'Codex 本轮启动耗时较长，可能正在初始化远程插件或等待 ChatGPT 连接…'
+          },
+          {
+            afterMs: 45_000,
+            message: 'Codex 仍未确认本轮开始，可能正在重试 ChatGPT 连接。'
+          }
+        ]
+      })
       const turnStartStartedAt = startupProfiler.now()
       const turnResult = await rpc.request<{ turn: CodexTurn }>('turn/start', turnParams)
       startupProfiler.mark('codex.native.turnStart', turnStartStartedAt, {
         source
       })
+      finishOperation(
+        'operation_completed',
+        CODEX_TURN_START_OPERATION_ID,
+        'Codex accepted the turn.'
+      )
+      startOperation({
+        operationId: CODEX_RESPONSE_WAIT_OPERATION_ID,
+        title: 'Waiting for Codex response',
+        message: 'Codex 已接收消息，正在等待 ChatGPT 返回…',
+        delayedMessages: [
+          {
+            afterMs: 15_000,
+            message: 'Codex 已开始处理，仍在等待 ChatGPT 生成或网络返回…'
+          },
+          {
+            afterMs: 45_000,
+            message: 'Codex 回复耗时较长，仍在等待模型队列、生成或网络返回…'
+          }
+        ]
+      })
       logger.info('[codex session] turn started', { turnId: turnResult.turn.id, source })
       return turnResult
     } catch (err) {
+      finishOperation(
+        'operation_failed',
+        CODEX_TURN_START_OPERATION_ID,
+        'Codex failed to start the turn.',
+        getErrorMessage(err)
+      )
       if (usedCachedThread && isRecoverableCachedThreadError(err)) {
         await recoverFromCachedThreadError(source, err)
         const retryParams = {
@@ -679,9 +859,24 @@ export async function createStreamCodexSession(
         }
         logger.info('[codex session] retrying turn on fresh thread', { threadId, source })
         const retryTurnStartStartedAt = startupProfiler.now()
+        startOperation({
+          operationId: CODEX_TURN_START_OPERATION_ID,
+          title: 'Retrying Codex turn',
+          message: 'Codex 缓存线程不可用，正在用新线程重试…'
+        })
         const retryResult = await rpc.request<{ turn: CodexTurn }>('turn/start', retryParams)
         startupProfiler.mark('codex.native.turnStartRetry', retryTurnStartStartedAt, {
           source
+        })
+        finishOperation(
+          'operation_completed',
+          CODEX_TURN_START_OPERATION_ID,
+          'Codex accepted the retried turn.'
+        )
+        startOperation({
+          operationId: CODEX_RESPONSE_WAIT_OPERATION_ID,
+          title: 'Waiting for Codex response',
+          message: 'Codex 已接收重试消息，正在等待 ChatGPT 返回…'
         })
         logger.info('[codex session] turn started after retry', { turnId: retryResult.turn.id, source })
         return retryResult
@@ -692,6 +887,11 @@ export async function createStreamCodexSession(
 
   try {
     const initializeStartedAt = startupProfiler.now()
+    startOperation({
+      operationId: CODEX_INITIALIZE_OPERATION_ID,
+      title: 'Initializing Codex app-server',
+      message: '正在初始化 Codex app-server…'
+    })
     const initResult = await rpc.request<{ userAgent?: string }>('initialize', {
       clientInfo,
       capabilities: {
@@ -704,6 +904,11 @@ export async function createStreamCodexSession(
       }
     })
     startupProfiler.mark('codex.native.initialize', initializeStartedAt)
+    finishOperation(
+      'operation_completed',
+      CODEX_INITIALIZE_OPERATION_ID,
+      'Codex app-server is initialized.'
+    )
     logger.info('[codex session] initialized', { userAgent: initResult?.userAgent })
     rpc.notify('initialized', {})
 
@@ -764,6 +969,7 @@ export async function createStreamCodexSession(
       }
 
       case 'stop': {
+        finishAllActiveOperations('operation_completed', 'Codex session stopped.')
         proc.kill()
         break
       }
@@ -777,6 +983,7 @@ export async function createStreamCodexSession(
   return {
     kill: () => {
       rpc.destroy('killed by caller')
+      finishAllActiveOperations('operation_completed', 'Codex session stopped.')
       proc.kill()
     },
     emit,

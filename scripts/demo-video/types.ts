@@ -57,6 +57,8 @@ export interface DemoVideoRecordOptions {
 
 export interface DemoVideoRecordResult {
   colorScheme: DemoVideoColorScheme
+  cursorContinuityPath?: string
+  cursorTimelinePath?: string
   durationMs: number
   fps: number
   frameCount: number

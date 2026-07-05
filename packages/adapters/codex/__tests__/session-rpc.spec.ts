@@ -213,6 +213,51 @@ describe('createCodexSession RPC approval policy mapping', () => {
     expect(events.some((event: AdapterOutputEvent) => event.type === 'exit')).toBe(true)
   })
 
+  it('emits user-visible operation events while starting Codex stream turns', async () => {
+    process.env.HOME = '/tmp'
+    const { proc } = makeProc()
+    spawnMock.mockReturnValue(proc)
+
+    const events: AdapterOutputEvent[] = []
+    const session = await createCodexSession(makeCtx(), {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'session-operation-status',
+      description: 'Reply with pong.',
+      onEvent: (event: AdapterOutputEvent) => events.push(event)
+    } as any)
+
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'operation',
+      data: expect.objectContaining({
+        adapter: 'codex',
+        type: 'operation_started',
+        operationId: 'codex-app-server-initialize',
+        message: '正在初始化 Codex app-server…'
+      })
+    }))
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'operation',
+      data: expect.objectContaining({
+        adapter: 'codex',
+        type: 'operation_started',
+        operationId: 'codex-turn-start',
+        message: '正在启动 Codex 首轮处理…'
+      })
+    }))
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'operation',
+      data: expect.objectContaining({
+        adapter: 'codex',
+        type: 'operation_started',
+        operationId: 'codex-response-wait',
+        message: 'Codex 已接收消息，正在等待 ChatGPT 返回…'
+      })
+    }))
+
+    session.kill()
+  })
+
   it('injects One Works chat guard into Codex developer instructions', async () => {
     process.env.HOME = '/tmp'
     const { proc } = makeProc()
@@ -277,15 +322,24 @@ describe('createCodexSession RPC approval policy mapping', () => {
 
     await waitForWrites()
 
-    expect(events.map(event => event.type)).toEqual(['init', 'error', 'stop', 'exit'])
-    expect(events[1]).toMatchObject({
+    const nonOperationEvents = events.filter(event => event.type !== 'operation')
+    expect(nonOperationEvents.map(event => event.type)).toEqual(['init', 'error', 'stop', 'exit'])
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'operation',
+      data: expect.objectContaining({
+        type: 'operation_failed',
+        operationId: 'codex-response-wait',
+        error: expect.stringContaining('429 Too Many Requests')
+      })
+    }))
+    expect(nonOperationEvents[1]).toMatchObject({
       type: 'error',
       data: {
         fatal: true,
         message: expect.stringContaining('429 Too Many Requests')
       }
     })
-    expect(events[3]).toMatchObject({
+    expect(nonOperationEvents[3]).toMatchObject({
       type: 'exit',
       data: {
         exitCode: 1,

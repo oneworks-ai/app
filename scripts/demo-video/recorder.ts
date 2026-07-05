@@ -114,6 +114,37 @@ interface SystemCursorTimeline {
   initialPoint: Point
 }
 
+interface SystemCursorFrameSample extends Point {
+  action: CursorAction
+  frameIndex: number
+  timestampMs: number
+}
+
+interface SystemCursorContinuityIssue {
+  code: 'cursor_event_source_jump' | 'cursor_frame_jump' | 'cursor_speed_jump'
+  message: string
+  severity: 'error' | 'warning'
+  frameIndex?: number
+  timestampMs?: number
+  value?: number
+}
+
+interface SystemCursorContinuityReport {
+  fps: number
+  issueCount: number
+  issues: SystemCursorContinuityIssue[]
+  maxFrameDistancePx: number
+  maxSpeedPxPerSecond: number
+  ok: boolean
+  sampleCount: number
+  thresholds: {
+    maxFrameDistanceErrorPx: number
+    maxFrameDistanceWarningPx: number
+    maxSpeedErrorPxPerSecond: number
+    maxSpeedWarningPxPerSecond: number
+  }
+}
+
 interface ModifierKeyDefinition extends KeyDefinition {
   modifierBit: number
 }
@@ -682,6 +713,8 @@ const resolveOutputPaths = (input: {
   const outputName = sanitizeFileSegment(input.name ?? input.scenarioId)
   const outDir = path.resolve(process.cwd(), input.outDir ?? path.join(DEFAULT_OUTPUT_ROOT, input.scenarioId))
   return {
+    cursorContinuityPath: path.join(outDir, `${outputName}-cursor-continuity.json`),
+    cursorTimelinePath: path.join(outDir, `${outputName}-cursor-timeline.json`),
     framesDir: path.join(outDir, 'frames'),
     outDir,
     posterPath: path.join(outDir, `${outputName}-poster.png`),
@@ -1799,6 +1832,7 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
   private systemWindowId: number | undefined
   private readonly systemVideoSegments: SystemVideoSegment[] = []
   private readonly systemCursorEvents: SystemCursorEvent[] = []
+  private systemCursorInitialPoint: Point | undefined
   private activeSystemSegment:
     | {
       startedAtMs: number
@@ -2266,13 +2300,20 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
   }
 
   private getInitialSystemCursorPoint(): Point {
-    if (this.systemCursorPoint != null) return this.systemCursorPoint
+    if (this.systemCursorInitialPoint != null) return this.systemCursorInitialPoint
     const width = this.input.systemDisplayCrop?.width ?? this.input.width
     const height = this.input.systemDisplayCrop?.height ?? this.input.height
-    this.systemCursorPoint = {
+    this.systemCursorInitialPoint = {
       x: Math.round(width / 2),
       y: Math.round(height / 2)
     }
+    this.systemCursorPoint ??= this.systemCursorInitialPoint
+    return this.systemCursorInitialPoint
+  }
+
+  private getCurrentSystemCursorPoint(): Point {
+    if (this.systemCursorPoint != null) return this.systemCursorPoint
+    this.systemCursorPoint = this.getInitialSystemCursorPoint()
     return this.systemCursorPoint
   }
 
@@ -2314,7 +2355,7 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
     action: CursorAction,
     durationMs: number
   ) {
-    const from = this.getInitialSystemCursorPoint()
+    const from = this.getCurrentSystemCursorPoint()
     const event = {
       action,
       durationMs,
@@ -2328,7 +2369,7 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
   }
 
   private recordSystemCursorMove(to: Point) {
-    const from = this.getInitialSystemCursorPoint()
+    const from = this.getCurrentSystemCursorPoint()
     const distance = Math.hypot(to.x - from.x, to.y - from.y)
     const durationMs = clamp(460 + distance * 0.42, 560, 1080)
     return this.recordSystemCursorEvent(to, distance < 4 ? 'idle' : 'move', durationMs)
@@ -3127,6 +3168,196 @@ export const writeDemoCursorPng = async (cursorPath: string) => {
 
 const ffmpegNumber = (value: number) => Number.isFinite(value) ? value.toFixed(3) : '0'
 
+const sampleSystemCursorMovePoint = (
+  event: SystemCursorEvent,
+  timestampMs: number
+): Point => {
+  const durationMs = Math.max(1, event.durationMs)
+  const progress = clamp((timestampMs - event.startMs) / durationMs, 0, 1)
+  const dx = event.to.x - event.from.x
+  const dy = event.to.y - event.from.y
+  const distance = Math.max(1, Math.hypot(dx, dy))
+  const perpendicularX = -dy / distance
+  const perpendicularY = dx / distance
+  const curveSign = Math.round(event.from.x + event.from.y + event.to.x + event.to.y) % 2 === 0 ? 1 : -1
+  const curve = clamp(distance * 0.16, 14, 72) * curveSign
+  const eased = 0.5 - 0.5 * Math.cos(Math.PI * progress)
+  const arc = Math.sin(Math.PI * progress) * curve
+  const micro = Math.sin(Math.PI * 3 * progress) * Math.min(2.4, Math.max(0.4, distance / 260))
+  return {
+    x: event.from.x + dx * eased + perpendicularX * arc + perpendicularY * micro,
+    y: event.from.y + dy * eased + perpendicularY * arc - perpendicularX * micro
+  }
+}
+
+const sampleSystemCursorPointAt = (
+  timeline: SystemCursorTimeline,
+  timestampMs: number,
+  index = 0,
+  pointBefore = timeline.initialPoint
+): Pick<SystemCursorFrameSample, 'action' | 'x' | 'y'> => {
+  const event = timeline.events[index]
+  if (event == null) {
+    return {
+      action: 'idle',
+      ...pointBefore
+    }
+  }
+
+  if (timestampMs < event.startMs) {
+    return {
+      action: 'idle',
+      ...pointBefore
+    }
+  }
+
+  if (timestampMs <= event.startMs + event.durationMs) {
+    return {
+      action: event.action,
+      ...(event.action === 'move' ? sampleSystemCursorMovePoint(event, timestampMs) : event.to)
+    }
+  }
+
+  return sampleSystemCursorPointAt(timeline, timestampMs, index + 1, event.to)
+}
+
+export const sampleSystemCursorTimeline = (input: {
+  durationMs: number
+  fps: number
+  timeline: SystemCursorTimeline
+}): SystemCursorFrameSample[] => {
+  const frameIntervalMs = 1_000 / input.fps
+  const sampleCount = Math.max(1, Math.ceil(input.durationMs / frameIntervalMs))
+  return Array.from({ length: sampleCount }, (_value, frameIndex) => {
+    const timestampMs = Math.min(input.durationMs, frameIndex * frameIntervalMs)
+    return {
+      frameIndex,
+      timestampMs,
+      ...sampleSystemCursorPointAt(input.timeline, timestampMs)
+    }
+  })
+}
+
+export const buildSystemCursorContinuityReport = (input: {
+  fps: number
+  samples: SystemCursorFrameSample[]
+  timeline: SystemCursorTimeline
+}): SystemCursorContinuityReport => {
+  const thresholds = {
+    maxFrameDistanceErrorPx: 120,
+    maxFrameDistanceWarningPx: 72,
+    maxSpeedErrorPxPerSecond: 7_200,
+    maxSpeedWarningPxPerSecond: 4_320
+  }
+  const issues: SystemCursorContinuityIssue[] = []
+  let maxFrameDistancePx = 0
+  let maxSpeedPxPerSecond = 0
+
+  for (const [index, event] of input.timeline.events.entries()) {
+    const previousEvent = input.timeline.events[index - 1]
+    const expectedFrom = previousEvent?.to ?? input.timeline.initialPoint
+    const sourceDelta = Math.hypot(event.from.x - expectedFrom.x, event.from.y - expectedFrom.y)
+    if (sourceDelta > 1) {
+      issues.push({
+        code: 'cursor_event_source_jump',
+        message: `Cursor event ${index} starts ${sourceDelta.toFixed(1)}px away from the previous cursor endpoint.`,
+        severity: 'error',
+        timestampMs: event.startMs,
+        value: Number(sourceDelta.toFixed(3))
+      })
+    }
+  }
+
+  for (let index = 1; index < input.samples.length; index += 1) {
+    const previous = input.samples[index - 1]!
+    const current = input.samples[index]!
+    const distance = Math.hypot(current.x - previous.x, current.y - previous.y)
+    const elapsedSeconds = Math.max(0.001, (current.timestampMs - previous.timestampMs) / 1_000)
+    const speed = distance / elapsedSeconds
+    maxFrameDistancePx = Math.max(maxFrameDistancePx, distance)
+    maxSpeedPxPerSecond = Math.max(maxSpeedPxPerSecond, speed)
+
+    if (distance > thresholds.maxFrameDistanceErrorPx || speed > thresholds.maxSpeedErrorPxPerSecond) {
+      issues.push({
+        code: distance > thresholds.maxFrameDistanceErrorPx ? 'cursor_frame_jump' : 'cursor_speed_jump',
+        frameIndex: current.frameIndex,
+        message: `Cursor moved ${distance.toFixed(1)}px in one frame (${speed.toFixed(0)}px/s).`,
+        severity: 'error',
+        timestampMs: current.timestampMs,
+        value: Number(distance.toFixed(3))
+      })
+    } else if (distance > thresholds.maxFrameDistanceWarningPx || speed > thresholds.maxSpeedWarningPxPerSecond) {
+      issues.push({
+        code: distance > thresholds.maxFrameDistanceWarningPx ? 'cursor_frame_jump' : 'cursor_speed_jump',
+        frameIndex: current.frameIndex,
+        message: `Cursor moved ${distance.toFixed(1)}px in one frame (${speed.toFixed(0)}px/s).`,
+        severity: 'warning',
+        timestampMs: current.timestampMs,
+        value: Number(distance.toFixed(3))
+      })
+    }
+  }
+
+  return {
+    fps: input.fps,
+    issueCount: issues.length,
+    issues,
+    maxFrameDistancePx: Number(maxFrameDistancePx.toFixed(3)),
+    maxSpeedPxPerSecond: Number(maxSpeedPxPerSecond.toFixed(3)),
+    ok: !issues.some(issue => issue.severity === 'error'),
+    sampleCount: input.samples.length,
+    thresholds
+  }
+}
+
+const writeSystemCursorArtifacts = async (input: {
+  continuityPath: string
+  durationMs: number
+  fps: number
+  timeline: SystemCursorTimeline | undefined
+  timelinePath: string
+}) => {
+  if (input.timeline?.enabled !== true) {
+    return undefined
+  }
+
+  const samples = sampleSystemCursorTimeline({
+    durationMs: input.durationMs,
+    fps: input.fps,
+    timeline: input.timeline
+  })
+  const continuity = buildSystemCursorContinuityReport({
+    fps: input.fps,
+    samples,
+    timeline: input.timeline
+  })
+  await writeFile(
+    input.timelinePath,
+    `${JSON.stringify({
+      durationMs: input.durationMs,
+      events: input.timeline.events,
+      fps: input.fps,
+      initialPoint: input.timeline.initialPoint,
+      samples
+    }, null, 2)}\n`
+  )
+  await writeFile(input.continuityPath, `${JSON.stringify(continuity, null, 2)}\n`)
+  if (!continuity.ok) {
+    throw new Error(
+      [
+        'System cursor trajectory failed continuity checks.',
+        `timeline=${input.timelinePath}`,
+        `continuity=${input.continuityPath}`,
+        ...continuity.issues
+          .filter(issue => issue.severity === 'error')
+          .slice(0, 5)
+          .map(issue => `- ${issue.message}`)
+      ].join('\n')
+    )
+  }
+  return continuity
+}
+
 const buildCursorAxisExpression = (
   axis: 'x' | 'y',
   input: {
@@ -3664,6 +3895,8 @@ export const recordDemoVideoScenario = async (
   await rm(outputPaths.segmentsDir, { force: true, recursive: true })
   await rm(outputPaths.stillsDir, { force: true, recursive: true })
   await rm(outputPaths.stillsManifestPath, { force: true })
+  await rm(outputPaths.cursorTimelinePath, { force: true })
+  await rm(outputPaths.cursorContinuityPath, { force: true })
   await mkdir(outputPaths.framesDir, { recursive: true })
 
   const chrome = options.cdpWebSocketDebuggerUrl == null
@@ -3714,12 +3947,21 @@ export const recordDemoVideoScenario = async (
     const frameCount = recorder.getFrameCount()
     if (frameCount <= 0) throw new Error(`Scenario "${scenario.id}" did not capture any frames.`)
 
+    const recordedDurationMs = recorder.getRecordedDurationMs()
+    const systemCursorTimeline = recorder.getSystemCursorTimeline()
+    const cursorContinuity = await writeSystemCursorArtifacts({
+      continuityPath: outputPaths.cursorContinuityPath,
+      durationMs: recordedDurationMs,
+      fps,
+      timeline: systemCursorTimeline,
+      timelinePath: outputPaths.cursorTimelinePath
+    })
     let frameSize = recorder.getFrameSize()
     let stills: Awaited<ReturnType<typeof writeSecondStillFrames>>
     if (isSystemCaptureSource(captureSource) && !systemWindowFrameCapture) {
       await encodeSystemWindowVideo({
-        cursorTimeline: recorder.getSystemCursorTimeline(),
-        durationMs: recorder.getRecordedDurationMs(),
+        cursorTimeline: systemCursorTimeline,
+        durationMs: recordedDurationMs,
         ffmpegPath,
         fps,
         roundedWindowCorners: captureSource === 'system-window',
@@ -3787,7 +4029,7 @@ export const recordDemoVideoScenario = async (
     return {
       colorScheme,
       durationMs: isSystemCaptureSource(captureSource)
-        ? recorder.getRecordedDurationMs()
+        ? recordedDurationMs
         : Math.round(frameCount / fps * 1_000),
       fps,
       frameCount,
@@ -3795,6 +4037,12 @@ export const recordDemoVideoScenario = async (
       height: frameSize?.height ?? height,
       keptFrames: options.keepFrames === true,
       ...(language == null ? {} : { language }),
+      ...(cursorContinuity == null
+        ? {}
+        : {
+          cursorContinuityPath: outputPaths.cursorContinuityPath,
+          cursorTimelinePath: outputPaths.cursorTimelinePath
+        }),
       posterPath: outputPaths.posterPath,
       scenarioId: scenario.id,
       scenarioTitle: scenario.title,

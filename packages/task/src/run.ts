@@ -401,7 +401,9 @@ export const run = async (
   })
   let taskStopQueue = Promise.resolve()
   const wrappedOnEvent = (event: AdapterOutputEvent) => {
-    hookBridge.handleOutput(event)
+    if (event.type !== 'operation') {
+      hookBridge.handleOutput(event)
+    }
 
     if (event.type === 'init') {
       originalOnEvent({

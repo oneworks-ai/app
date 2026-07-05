@@ -76,6 +76,7 @@ pnpm tools desktop-control record-batch launcher-open-workspace-ui-tour \
 - `<name>-poster.png`：首帧 poster。
 - `<name>-stills.json`：按秒切图 manifest，供 agent 逐秒读取关键帧。
 - `stills/second_0000.png`、`stills/second_0001.png` 等：按秒抽取的 PNG 关键帧。
+- 系统 display capture 录屏还会输出 `<name>-cursor-timeline.json` 和 `<name>-cursor-continuity.json`：前者是按帧采样后的完整合成光标轨迹，后者记录单帧位移、速度和事件起点连续性检查结果。`cursor-continuity.ok=false` 时必须 fail-fast，不能交付视频。
 - `frames/` / `segments/`：仅在传 `--keep-frames` 时保留。
 
 交付 Electron / workspace 录屏时，必须同时给出加载耗时分析，不能只贴视频。分析至少包含：
@@ -99,6 +100,8 @@ pnpm tools desktop-control record-batch launcher-open-workspace-ui-tour \
 需要复杂准备时，把准备逻辑做成独立 smoke / setup 工具，先产出可访问 URL 或可启动 app，再把 URL / app / workspace 交给录制入口。这样同一录制框架可以复用于 Relay、PWA、Electron webview、插件能力页和以后更多产品展示。
 
 系统 display capture 下的 `recordDuring(durationMs, action)` 里，`durationMs` 只能表示最小录制时长，不能当成硬截止。只要 `action` 仍在点击、等待或切换窗口，recorder 就必须继续录到 action settle；否则 action 结束后的 cursor 事件会落在已关闭的录屏 segment 之后，被压缩到同一时间点，最终视频里会出现鼠标瞬跳。改动这段逻辑时必须保留单测覆盖，并用 10fps 以上抽帧或 cursor 坐标检测检查 launcher -> workspace 切换附近是否连续。
+
+合成光标的初始位置和当前位置必须分开保存。导出的 timeline `initialPoint` 永远是录制开始时的初始位置；每个 cursor event 的 `from` 必须等于上一个事件的 `to`，首个 event 的 `from` 必须等于 `initialPoint`。不要在录制结束后用当前光标位置回填 `initialPoint`，否则视频开头会出现一帧级别的瞬移，`cursor-continuity` 必须能抓出这类问题。
 
 发布纯 Web 展示素材时优先使用 `demo-video batch`。真实 Electron launcher 打开 workspace 的素材不要用 `demo-video batch url-tour --url .../ui/launcher`，必须使用 `desktop-control record-batch launcher-open-workspace-ui-tour`，这样每个 variant 都有真实 Electron pid、真实 BrowserWindow 和真实系统显示合成。
 

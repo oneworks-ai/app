@@ -26,9 +26,9 @@ type RuntimeEventAppendDraft = Omit<RuntimeEventDraft, 'sessionId'> & {
 
 export interface RuntimeOperationEventInput {
   error?: string
-  message: string
+  message?: string
   operationId: string
-  title: string
+  title?: string
   type: 'operation_started' | 'operation_completed' | 'operation_failed'
 }
 
@@ -335,6 +335,16 @@ export class RuntimeEventSink {
           : {}),
         publicSummary: event.data.payload.question,
         visibility: 'room'
+      })
+    }
+
+    if (event.type === 'operation') {
+      return this.recordOperation({
+        type: event.data.type,
+        operationId: event.data.operationId,
+        title: event.data.title,
+        message: event.data.message ?? event.data.summary,
+        ...(event.data.error != null ? { error: event.data.error } : {})
       })
     }
 

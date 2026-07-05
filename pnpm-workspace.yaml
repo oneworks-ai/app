@@ -28,6 +28,7 @@ onlyBuiltDependencies:
   - esbuild
   - node-pty
 allowBuilds:
+  '@oneworks/cli@file:apps/cli': true
   '@parcel/watcher': true
   '@swc/core': true
   '@vscode/vsce-sign': true

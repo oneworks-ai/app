@@ -18,9 +18,14 @@ import {
   restoreSessionOperationInfoFromHistoryEvents,
   restoreSessionWorkspaceChangesFromHistoryEvents,
   shouldApplyHistoryRefreshResult,
+  shouldUseOptimisticSessionOnlyView,
   shouldRefreshHistoryForSessionUpdate,
   shouldTerminateSessionForConfigChange
 } from '#~/hooks/chat/use-chat-session-messages'
+import {
+  createOptimisticSessionCreation,
+  markOptimisticSessionCreationFailed
+} from '#~/hooks/chat/optimistic-session-creation'
 
 describe('chat session interaction state', () => {
   it('restores workspace change events in history order and deduplicates by id', () => {
@@ -469,6 +474,78 @@ describe('chat session interaction state', () => {
     ])).toBeNull()
   })
 
+  it('restores flat runtime operation events from session history', () => {
+    const startedEvent = {
+      type: 'operation_started',
+      operationId: 'codex-response-wait',
+      message: 'Codex 已接收消息，正在等待 ChatGPT 返回…',
+      summary: 'Codex 已接收消息，正在等待 ChatGPT 返回…',
+      ts: 100
+    } as const
+    const delayedEvent = {
+      type: 'operation_started',
+      operationId: 'codex-response-wait',
+      message: 'Codex 已开始处理，仍在等待 ChatGPT 生成或网络返回…',
+      summary: 'Codex 已开始处理，仍在等待 ChatGPT 生成或网络返回…',
+      ts: 200
+    } as const
+    const completedEvent = {
+      type: 'operation_completed',
+      operationId: 'codex-response-wait',
+      message: 'Codex returned an assistant response.',
+      ts: 300
+    } as const
+
+    expect(applySessionOperationEvent(null, startedEvent)).toEqual(expect.objectContaining({
+      operationId: 'codex-response-wait',
+      message: 'Codex 已接收消息，正在等待 ChatGPT 返回…',
+      startedAt: 100
+    }))
+    expect(applySessionOperationEvent(
+      applySessionOperationEvent(null, startedEvent),
+      delayedEvent
+    )).toEqual(expect.objectContaining({
+      message: 'Codex 已开始处理，仍在等待 ChatGPT 生成或网络返回…',
+      startedAt: 200
+    }))
+    expect(restoreSessionOperationInfoFromHistoryEvents([
+      startedEvent,
+      delayedEvent
+    ])).toEqual(expect.objectContaining({
+      message: 'Codex 已开始处理，仍在等待 ChatGPT 生成或网络返回…'
+    }))
+    expect(restoreSessionOperationInfoFromHistoryEvents([
+      startedEvent,
+      delayedEvent,
+      completedEvent
+    ])).toBeNull()
+  })
+
+  it('clears runtime operation state as soon as an assistant message arrives', () => {
+    const startedEvent = {
+      type: 'operation_started',
+      operationId: 'codex-response-wait',
+      message: 'Codex 已开始处理，仍在等待 ChatGPT 生成或网络返回…',
+      ts: 100
+    } as const
+    const assistantMessageEvent = {
+      type: 'message',
+      role: 'assistant',
+      content: 'OK',
+      ts: 200
+    } as const
+    const activeOperation = applySessionOperationEvent(null, startedEvent)
+
+    expect(activeOperation).toEqual(expect.objectContaining({
+      operationId: 'codex-response-wait'
+    }))
+    expect(applySessionOperationEvent(activeOperation, assistantMessageEvent)).toBeNull()
+    expect(restoreSessionOperationInfoFromHistoryEvents([
+      startedEvent,
+      assistantMessageEvent
+    ])).toBeNull()
+  })
+
   it('only labels adapter CLI preparation while the operation is active', () => {
     const t = (key: string) => key
 
@@ -482,6 +559,20 @@ describe('chat session interaction state', () => {
       message: 'Running tool',
       startedAt: 100
     }, t)).toBe('Running tool')
+  })
+
+  it('does not let an optimistic creating session hide runtime history state', () => {
+    const creating = createOptimisticSessionCreation({
+      id: 'session-creating',
+      initialMessage: 'hello',
+      options: { id: 'session-creating' }
+    }, 100)
+
+    expect(shouldUseOptimisticSessionOnlyView(creating)).toBe(false)
+    expect(shouldUseOptimisticSessionOnlyView(markOptimisticSessionCreationFailed(
+      creating,
+      'creation failed'
+    ))).toBe(true)
   })
 
   it('refreshes history when the current session update can contain unseen messages', () => {

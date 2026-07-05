@@ -74,4 +74,38 @@ describe('runtime event sink', () => {
       })
     ])
   })
+
+  it('records adapter operation output events for UI progress', async () => {
+    const cwd = await createTempDir()
+    const sessionId = 'sess-adapter-operation-progress'
+    const sink = await createCliRuntimeEventSink({
+      adapter: 'codex',
+      cwd,
+      sessionId,
+      title: 'Adapter operation progress'
+    })
+
+    await sink.handleAdapterEvent({
+      type: 'operation',
+      data: {
+        adapter: 'codex',
+        type: 'operation_started',
+        operationId: 'codex-turn-start',
+        title: 'Starting Codex turn',
+        message: '正在启动 Codex 首轮处理…'
+      }
+    })
+    await sink.flush()
+
+    expect(await readRuntimeEvents(cwd, sessionId)).toEqual([
+      expect.objectContaining({
+        type: 'operation_started',
+        operationId: 'codex-turn-start',
+        title: 'Starting Codex turn',
+        message: '正在启动 Codex 首轮处理…',
+        status: 'running',
+        visibility: 'system'
+      })
+    ])
+  })
 })

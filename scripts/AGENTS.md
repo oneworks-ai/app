@@ -53,6 +53,7 @@
   - 不要在正式 batch 入口使用 `system-window`、窗口级 ScreenCaptureKit、固定 region crop、CDP 截帧、假圆角合成或只有壁纸的 display capture；这些都会重新引入 traffic light、圆角、桌面占用或错误画面问题
   - 不要用 `demo-video batch url-tour --url .../ui/launcher --page-background ...` 代替这个入口；那只录 Web renderer，不能跟随真实 Electron workspace BrowserWindow，也无法保证窗口位置 / bounds 一致
   - 系统 display capture 的 `recordDuring(durationMs, action)` 里，`durationMs` 是最小录制窗口，不是 action 的硬截止；action 未结束时必须继续录，否则 cursor 事件会跑到 segment 外并在视频里表现为鼠标瞬跳。改动后用抽帧 / 坐标检测检查 launcher -> workspace 切换处的光标连续性
+  - 系统 display capture 录屏必须输出 `<name>-cursor-timeline.json` 和 `<name>-cursor-continuity.json`；`cursor-continuity.ok=false` 时必须失败，不能交付视频。光标 `initialPoint` 是录制开始的初始位置，不要用录制结束后的当前位置回填
   - 交付 Electron / workspace 录屏时必须同步加载耗时分析：至少说明录制器启动、app spawn 到首窗、workspace server ready、renderer/chat ready、runtime package cache 命中状态，以及 stills / 抽帧是否证明已进入对话界面
 - `pnpm tools chrome-debug targets [--port 9222]`
   - 查看本机 Chrome DevTools 目标页，确认当前 remote debugging 端口上有哪些页面
