@@ -105,7 +105,9 @@ pnpm tools desktop-control record-batch launcher-open-workspace-ui-tour \
 
 发布纯 Web 展示素材时优先使用 `demo-video batch`。真实 Electron launcher 打开 workspace 的素材不要用 `demo-video batch url-tour --url .../ui/launcher`，必须使用 `desktop-control record-batch launcher-open-workspace-ui-tour`，这样每个 variant 都有真实 Electron pid、真实 BrowserWindow 和真实系统显示合成。
 
-如果需要录 launcher 打开 workspace 的完整过渡，创建 Electron control session 时不要传 `workspace`。需要证明真实 UI 操作时使用 `launcher-open-workspace-ui-tour`，它会点击“打开项目”并在目录浏览器里逐级选择目标 workspace；需要发送消息并等待回复时使用 `launcher-open-workspace-chat-smoke`。
+如果需要录 launcher 打开 workspace 的完整过渡，创建 Electron control session 时不要传 `workspace`。需要证明真实 UI 操作时使用 `launcher-open-workspace-ui-tour`，它会从 launcher 进入“打开项目”，搜索目标 workspace 绝对路径并打开；需要发送消息并等待回复时使用 `launcher-open-workspace-chat-smoke`。
+
+launcher 打开 workspace 的展示路径应优先使用搜索，而不是滚动目录列表：默认先进入“打开项目”，直接搜索目标目录的绝对路径并打开；搜索仍找不到时才回退目录浏览器逐级选择。只有需要展示“最近项目”能力时，才在 launcher 首页搜索项目名。人类操作视频不要用 `scrollIntoView` 驱动长列表跳动，也不要为了稳定性在开头固定录 2 秒空镜头；应等待 launcher/search input ready 后只保留短视觉缓冲。
 
 录制已有 Electron target 时必须保留目标窗口环境：不要对 renderer 强制 `Emulation.setDeviceMetricsOverride` 或 `prefers-color-scheme`，否则会把真实窗口尺寸 / 主题覆盖成 demo-video 默认值，导致录屏样式和用户看到的 Electron 界面不一致。
 

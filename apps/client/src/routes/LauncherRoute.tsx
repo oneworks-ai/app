@@ -156,6 +156,11 @@ const getDirectoryDisplayName = (directory: string) => {
   return name == null || name === '' ? directory : name
 }
 
+const isLikelyAbsoluteDirectoryPath = (directory: string) => {
+  const trimmedDirectory = directory.trim()
+  return trimmedDirectory.startsWith('/') || /^[a-z]:[\\/]/iu.test(trimmedDirectory)
+}
+
 const normalizeDirectoryPathKey = (directory: string) => {
   const normalizedDirectory = directory
     .trim()
@@ -1881,6 +1886,17 @@ export function LauncherRoute({
           ? []
           : [{ name: '..', path: cloneDestinationList.parentDirectory }])
       ]
+      const directQueryDirectory = query.trim()
+      const directQueryDirectories: DesktopCloneDestinationDirectory[] = (
+        isOpenWorkspaceDirectoryMode &&
+        isLikelyAbsoluteDirectoryPath(directQueryDirectory) &&
+        normalizeDirectoryPathKey(directQueryDirectory) !== normalizeDirectoryPathKey(currentDirectory)
+      )
+        ? [{
+          name: getDirectoryDisplayName(directQueryDirectory),
+          path: directQueryDirectory
+        }]
+        : []
       const fixedDirectoryKeys = new Set(fixedDirectories.map(directory => normalizeDirectoryPathKey(directory.path)))
       const childDirectoryKeys = new Set(
         cloneDestinationList.directories.map(directory => normalizeDirectoryPathKey(directory.path))
@@ -1915,6 +1931,14 @@ export function LauncherRoute({
           path: directory
         }))
       const commands = [
+        ...directQueryDirectories.map(directory =>
+          toDestinationCommand({
+            ...directory,
+            icon: 'folder_open',
+            showFavoriteAction: false,
+            showSecondaryAction: false
+          })
+        ),
         ...fixedDirectories.map(directory =>
           toDestinationCommand({
             ...directory,
@@ -2224,6 +2248,7 @@ export function LauncherRoute({
     isDirectoryBrowserMode,
     isCloneRepositoryMode,
     isFileSearchMode,
+    isOpenWorkspaceDirectoryMode,
     filesystemManagerName,
     message,
     openCloneDestinationDirectory,
@@ -2233,6 +2258,7 @@ export function LauncherRoute({
     openWorkspace,
     projects,
     pluginResults,
+    query,
     recentCloneDestinationDirectories,
     revealFilesystemPath,
     resourceResults.files,

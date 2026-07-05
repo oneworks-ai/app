@@ -50,6 +50,13 @@ const chatEditorSelector = [
 ].join(',')
 
 const chatSendButtonSelector = '.chat-send-btn.active:not(.disabled)'
+const launcherSearchInputSelector = '.launcher-command-search__input'
+const launcherOpenWorkspaceActionMinRecordMs = 1_200
+const shortSettleMs = 160
+
+const uniqueSearchQueries = (values: string[]) => [
+  ...new Set(values.map(value => value.trim()).filter(value => value !== ''))
+]
 
 const buildPathChain = (inputPath: string) => {
   const resolvedPath = path.resolve(inputPath)
@@ -75,7 +82,7 @@ const tryClickSelector = async (
   for (const selector of toSelectorList(selectorInput)) {
     try {
       await ctx.clickSelector(selector, {
-        settleMs: input.settleMs ?? 500,
+        settleMs: input.settleMs ?? shortSettleMs,
         timeoutMs: input.timeoutMs ?? 650
       })
       return true
@@ -99,7 +106,7 @@ const openWorkspaceThroughLauncherDirectoryBrowser = async (
       ctx,
       launcherCommandPrimarySelector(launcherCommandPathSelector(workspacePath)),
       {
-        settleMs: 700,
+        settleMs: 220,
         timeoutMs: 700
       }
     )
@@ -111,7 +118,7 @@ const openWorkspaceThroughLauncherDirectoryBrowser = async (
         ctx,
         launcherCommandSecondarySelector(launcherCommandPathSelector(candidate)),
         {
-          settleMs: 500,
+          settleMs: shortSettleMs,
           timeoutMs: 250
         }
       )
@@ -123,7 +130,7 @@ const openWorkspaceThroughLauncherDirectoryBrowser = async (
       ctx,
       launcherCommandPrimarySelector(launcherCommandActionSelector('back')),
       {
-        settleMs: 500,
+        settleMs: shortSettleMs,
         timeoutMs: 250
       }
     )
@@ -133,6 +140,55 @@ const openWorkspaceThroughLauncherDirectoryBrowser = async (
   }
 
   throw new Error(`Timed out opening workspace from launcher directory browser: ${workspacePath}`)
+}
+
+const replaceLauncherSearch = async (
+  ctx: DemoVideoScenarioContext,
+  query: string,
+  input: {
+    settleMs?: number
+  } = {}
+) => {
+  await ctx.clickSelector(launcherSearchInputSelector, {
+    settleMs: 80,
+    timeoutMs: 10_000
+  })
+  await ctx.selectTextInSelector(launcherSearchInputSelector, { timeoutMs: 2_000 })
+  if (query === '') {
+    await ctx.pressKey('Backspace', { settleMs: input.settleMs ?? 80 })
+    return
+  }
+  await ctx.typeText(query, { settleMs: input.settleMs ?? 140 })
+}
+
+const searchAndOpenWorkspace = async (
+  ctx: DemoVideoScenarioContext,
+  workspace: string,
+  input: {
+    queries?: string[]
+    timeoutMs?: number
+  } = {}
+) => {
+  const workspacePath = path.resolve(workspace)
+  const searchQueries = uniqueSearchQueries(input.queries ?? [
+    path.basename(workspacePath),
+    workspacePath
+  ])
+
+  for (const query of searchQueries) {
+    await replaceLauncherSearch(ctx, query)
+    const opened = await tryClickSelector(
+      ctx,
+      launcherCommandPrimarySelector(launcherCommandPathSelector(workspacePath)),
+      {
+        settleMs: 180,
+        timeoutMs: input.timeoutMs ?? 2_000
+      }
+    )
+    if (opened) return true
+  }
+
+  return false
 }
 
 const openWorkspaceThroughLauncherUi = async (
@@ -145,24 +201,32 @@ const openWorkspaceThroughLauncherUi = async (
   if (ctx.url != null) {
     await ctx.navigate(ctx.url)
   }
-  await ctx.recordFor(2_000)
-  await ctx.recordDuring(10_000, async () => {
+  await ctx.recordUntilSelector(launcherSearchInputSelector, { timeoutMs: 30_000 })
+  const workspacePath = path.resolve(workspace)
+  await ctx.recordDuring(launcherOpenWorkspaceActionMinRecordMs, async () => {
     const enteredOpenWorkspaceMode = await tryClickSelector(
       ctx,
       launcherCommandPrimarySelector(launcherCommandIdSelector('open-folder')),
       {
-        settleMs: 800,
+        settleMs: 180,
         timeoutMs: 20_000
       }
     )
     if (!enteredOpenWorkspaceMode) {
       throw new Error('Launcher Open Project command is not visible.')
     }
-    await openWorkspaceThroughLauncherDirectoryBrowser(ctx, workspace)
+    const openedFromDirectorySearch = await searchAndOpenWorkspace(ctx, workspace, {
+      queries: [workspacePath],
+      timeoutMs: 1_000
+    })
+    if (!openedFromDirectorySearch) {
+      await replaceLauncherSearch(ctx, '')
+      await openWorkspaceThroughLauncherDirectoryBrowser(ctx, workspace)
+    }
   })
   await ctx.recordUntilSelector(chatRouteReadySelector, { timeoutMs: 90_000 })
   await ctx.recordUntilSelectorAbsent('.workspace-opening-overlay', { timeoutMs: 90_000 })
-  const settleMs = input.settleMs ?? 2_500
+  const settleMs = input.settleMs ?? 500
   if (settleMs > 0) {
     await ctx.recordFor(settleMs)
   }
@@ -237,7 +301,7 @@ export const demoVideoScenarios = [
       height: 900,
       width: 1440
     },
-    description: '通过 launcher UI 点击“打开项目”，逐级选择目录并打开 workspace。',
+    description: '通过 launcher UI 点击“打开项目”，搜索目标目录并打开 workspace。',
     id: 'launcher-open-workspace-ui-tour',
     requiresUrl: false,
     title: 'Launcher UI 打开 Workspace',
@@ -257,13 +321,12 @@ export const demoVideoScenarios = [
     requiresUrl: false,
     title: 'Launcher UI 打开 Workspace 并发送消息',
     run: async (ctx) => {
-      await openWorkspaceThroughLauncherUi(ctx, { settleMs: 600 })
+      await openWorkspaceThroughLauncherUi(ctx, { settleMs: 300 })
       const expectedReply = buildChatSmokeExpectedReply()
-      await ctx.clickSelector(chatEditorSelector, { settleMs: 400, timeoutMs: 15_000 })
+      await ctx.clickSelector(chatEditorSelector, { settleMs: 120, timeoutMs: 15_000 })
       await ctx.focusSelector(chatEditorSelector, { timeoutMs: 15_000 })
-      await ctx.typeText(buildChatSmokePrompt(expectedReply), { settleMs: 500 })
-      await ctx.recordFor(500)
-      await ctx.clickSelector(chatSendButtonSelector, { settleMs: 500, timeoutMs: 15_000 })
+      await ctx.typeText(buildChatSmokePrompt(expectedReply), { settleMs: 160 })
+      await ctx.clickSelector(chatSendButtonSelector, { settleMs: 160, timeoutMs: 15_000 })
       await ctx.recordUntilText(expectedReply, { timeoutMs: 90_000 })
       await ctx.recordFor(3_000)
     }

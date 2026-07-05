@@ -170,6 +170,8 @@ const MIN_SYSTEM_WINDOW_VIDEO_PADDING_Y = 180
 const DEFAULT_OUTPUT_ROOT = '.logs/demo-videos'
 const DEFAULT_CHROME_TIMEOUT_MS = 15_000
 const DEFAULT_ACTION_TIMEOUT_MS = 10_000
+const DEFAULT_CLICK_SETTLE_MS = 160
+const DEFAULT_KEY_SETTLE_MS = 180
 const APP_LANGUAGE_OVERRIDE_STORAGE_KEY = 'oneworks.interfaceLanguageOverride'
 const DEFAULT_PAGE_BACKGROUND: DemoVideoPageBackground = 'app'
 const MACOS_WALLPAPER_CANDIDATES = [
@@ -1358,7 +1360,15 @@ const findPointByTextExpression = (input: {
     .sort((a, b) => a.score - b.score);
   const target = candidates[0];
   if (target == null) return null;
-  target.element.scrollIntoView({ block: 'center', inline: 'center' });
+  const isInViewport = (rect) => (
+    rect.bottom > 0 &&
+    rect.right > 0 &&
+    rect.top < window.innerHeight &&
+    rect.left < window.innerWidth
+  );
+  if (!isInViewport(target.element.getBoundingClientRect())) {
+    target.element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
   const rect = target.element.getBoundingClientRect();
   return {
     x: rect.x + rect.width / 2,
@@ -1371,7 +1381,16 @@ const findPointBySelectorExpression = (selector: string) => `
 (() => {
   const element = document.querySelector(${JSON.stringify(selector)});
   if (!(element instanceof Element)) return null;
-  element.scrollIntoView({ block: 'center', inline: 'center' });
+  const initialRect = element.getBoundingClientRect();
+  const isInViewport = (
+    initialRect.bottom > 0 &&
+    initialRect.right > 0 &&
+    initialRect.top < window.innerHeight &&
+    initialRect.left < window.innerWidth
+  );
+  if (!isInViewport) {
+    element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
   const rect = element.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return null;
   return {
@@ -1395,6 +1414,34 @@ const focusSelectorExpression = (selector: string) => `
   if (!(focusTarget instanceof HTMLElement)) return false;
   focusTarget.focus({ preventScroll: true });
   return document.activeElement === focusTarget || root.contains(document.activeElement);
+})()
+`
+
+const selectTextInSelectorExpression = (selector: string) => `
+(() => {
+  const root = document.querySelector(${JSON.stringify(selector)});
+  if (!(root instanceof Element)) return false;
+  const focusTarget = root.matches('textarea, input, [contenteditable="true"]')
+    ? root
+    : root.querySelector('textarea, input, [contenteditable="true"]');
+  if (!(focusTarget instanceof HTMLElement)) return false;
+  focusTarget.focus({ preventScroll: true });
+  if (
+    focusTarget instanceof HTMLInputElement ||
+    focusTarget instanceof HTMLTextAreaElement
+  ) {
+    focusTarget.select();
+    return true;
+  }
+  if (focusTarget.isContentEditable) {
+    const range = document.createRange();
+    range.selectNodeContents(focusTarget);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    return true;
+  }
+  return false;
 })()
 `
 
@@ -2218,6 +2265,18 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
     throw new Error(`Timed out focusing selector "${selector}".`)
   }
 
+  async selectTextInSelector(selector: string, options: DemoVideoTextOptions = {}) {
+    const timeoutMs = options.timeoutMs ?? DEFAULT_ACTION_TIMEOUT_MS
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < timeoutMs) {
+      await this.followCdpTargetIfNeeded()
+      const selected = await this.evaluate<boolean>(selectTextInSelectorExpression(selector))
+      if (selected) return
+      await sleep(150)
+    }
+    throw new Error(`Timed out selecting text in selector "${selector}".`)
+  }
+
   async pressKey(key: string, options: DemoVideoKeyOptions = {}) {
     const parsed = parseKeyCombo(key)
     await this.showKeys(parsed.displayLabels)
@@ -2238,14 +2297,14 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
       modifiers &= ~modifier.modifierBit
     }
 
-    await sleep(options.settleMs ?? 500)
+    await sleep(options.settleMs ?? DEFAULT_KEY_SETTLE_MS)
   }
 
   async typeText(text: string, options: DemoVideoTypeOptions = {}) {
     await this.showKeys(['Type', formatTypedText(text)])
     await this.recordFor(300)
     await this.client.send('Input.insertText', { text })
-    await sleep(options.settleMs ?? 500)
+    await sleep(options.settleMs ?? DEFAULT_KEY_SETTLE_MS)
   }
 
   private async waitForReadyState(timeoutMs = DEFAULT_ACTION_TIMEOUT_MS) {
@@ -2375,7 +2434,7 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
     return this.recordSystemCursorEvent(to, distance < 4 ? 'idle' : 'move', durationMs)
   }
 
-  private async clickPoint(point: Point, settleMs = 500) {
+  private async clickPoint(point: Point, settleMs = DEFAULT_CLICK_SETTLE_MS) {
     if (this.usesVideoLayerCursor()) {
       const videoPoint = await this.resolveSystemCursorPoint(point)
       const moveDurationMs = this.recordSystemCursorMove(videoPoint)
