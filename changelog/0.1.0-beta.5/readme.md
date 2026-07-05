@@ -5,3 +5,4 @@
 - Add adapter CLI preparation visibility and compatibility-aware runtime fallback for bundled, cached, user-installed, and auto-installed adapter CLIs.
 - Extend Codex and Claude Code adapter support with account/model compatibility fixes and clearer runtime evidence for packaged app verification.
 - Add the desktop control and demo-video tooling used for AI-native packaged app validation, including system-recorded Electron demos, load timing reports, per-second frames, and documented recording standards.
+- Refine Electron demo-video cursor timing, motion continuity checks, and launcher workspace selection so visual click feedback aligns with the resulting UI transition.
