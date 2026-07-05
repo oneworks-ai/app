@@ -1888,10 +1888,10 @@ export function LauncherRoute({
       ]
       const directQueryDirectory = query.trim()
       const directQueryDirectories: DesktopCloneDestinationDirectory[] = (
-        isOpenWorkspaceDirectoryMode &&
-        isLikelyAbsoluteDirectoryPath(directQueryDirectory) &&
-        normalizeDirectoryPathKey(directQueryDirectory) !== normalizeDirectoryPathKey(currentDirectory)
-      )
+          isOpenWorkspaceDirectoryMode &&
+          isLikelyAbsoluteDirectoryPath(directQueryDirectory) &&
+          normalizeDirectoryPathKey(directQueryDirectory) !== normalizeDirectoryPathKey(currentDirectory)
+        )
         ? [{
           name: getDirectoryDisplayName(directQueryDirectory),
           path: directQueryDirectory

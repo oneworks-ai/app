@@ -202,10 +202,12 @@ const searchAndOpenWorkspace = async (
   } = {}
 ) => {
   const workspacePath = path.resolve(workspace)
-  const searchQueries = uniqueSearchQueries(input.queries ?? [
-    path.basename(workspacePath),
-    workspacePath
-  ])
+  const searchQueries = uniqueSearchQueries(
+    input.queries ?? [
+      path.basename(workspacePath),
+      workspacePath
+    ]
+  )
 
   for (const query of searchQueries) {
     await replaceLauncherSearch(ctx, query)

@@ -226,12 +226,13 @@ export const shouldContinueSystemCaptureDuringAction = (input: {
 export const getSystemCaptureTimelineElapsedMs = (input: {
   captureSource: DemoVideoCaptureSource
   elapsedWallMs: number
-}) => Math.max(
-  0,
-  input.elapsedWallMs - (input.captureSource === 'system-display'
-    ? SYSTEM_DISPLAY_CAPTURE_TIMELINE_OFFSET_MS
-    : 0)
-)
+}) =>
+  Math.max(
+    0,
+    input.elapsedWallMs - (input.captureSource === 'system-display'
+      ? SYSTEM_DISPLAY_CAPTURE_TIMELINE_OFFSET_MS
+      : 0)
+  )
 
 export const buildSystemCursorClickTimingPlan = (input: {
   startMs: number
@@ -3336,7 +3337,7 @@ const smootherStep = (value: number) => {
 
 const sampleClickScale = (value: number) => {
   const progress = clamp(value / SYSTEM_CURSOR_CLICK_DURATION_MS, 0, 1)
-  return 1 - (1 - SYSTEM_CURSOR_PRESS_SCALE) * Math.pow(progress, 0.72)
+  return 1 - (1 - SYSTEM_CURSOR_PRESS_SCALE) * progress ** 0.72
 }
 
 const sampleSystemCursorMovePoint = (
@@ -3457,7 +3458,9 @@ export const buildSystemCursorContinuityReport = (input: {
       if (event.startMs < previousEndMs - 1) {
         issues.push({
           code: 'cursor_event_overlap',
-          message: `Cursor event ${index} starts ${(previousEndMs - event.startMs).toFixed(1)}ms before the previous cursor event ends.`,
+          message: `Cursor event ${index} starts ${
+            (previousEndMs - event.startMs).toFixed(1)
+          }ms before the previous cursor event ends.`,
           severity: 'error',
           timestampMs: event.startMs,
           value: Number((previousEndMs - event.startMs).toFixed(3))
@@ -3541,13 +3544,19 @@ const writeSystemCursorArtifacts = async (input: {
   })
   await writeFile(
     input.timelinePath,
-    `${JSON.stringify({
-      durationMs: input.durationMs,
-      events: input.timeline.events,
-      fps: input.fps,
-      initialPoint: input.timeline.initialPoint,
-      samples
-    }, null, 2)}\n`
+    `${
+      JSON.stringify(
+        {
+          durationMs: input.durationMs,
+          events: input.timeline.events,
+          fps: input.fps,
+          initialPoint: input.timeline.initialPoint,
+          samples
+        },
+        null,
+        2
+      )
+    }\n`
   )
   await writeFile(input.continuityPath, `${JSON.stringify(continuity, null, 2)}\n`)
   if (!continuity.ok) {
@@ -3615,13 +3624,17 @@ const buildCursorScaleDuringExpression = (
   const progress = `min(max((t-${ffmpegNumber(start)})/${ffmpegNumber(duration)},0),1)`
   if (event.action === 'move') return '1.012'
   if (event.action === 'click') {
-    const clickProgress = `min(max((t-${ffmpegNumber(start)})/${ffmpegNumber(SYSTEM_CURSOR_CLICK_DURATION_MS / 1_000)},0),1)`
+    const clickProgress = `min(max((t-${ffmpegNumber(start)})/${
+      ffmpegNumber(SYSTEM_CURSOR_CLICK_DURATION_MS / 1_000)
+    },0),1)`
     const eased = `pow(${clickProgress},0.72)`
     return `(1-${ffmpegNumber(1 - SYSTEM_CURSOR_PRESS_SCALE)}*${eased})`
   }
   if (event.action === 'release') {
     const eased = `(0.5-0.5*cos(PI*${progress}))`
-    return `(${ffmpegNumber(SYSTEM_CURSOR_PRESS_SCALE)}+${ffmpegNumber(1 - SYSTEM_CURSOR_PRESS_SCALE)}*${eased}+0.055*sin(PI*${progress}))`
+    return `(${ffmpegNumber(SYSTEM_CURSOR_PRESS_SCALE)}+${
+      ffmpegNumber(1 - SYSTEM_CURSOR_PRESS_SCALE)
+    }*${eased}+0.055*sin(PI*${progress}))`
   }
   return '1'
 }
@@ -3679,9 +3692,7 @@ const overlaySystemCursorVideo = async (input: {
       cursorPath,
       '-filter_complex',
       [
-        `[1:v]format=rgba,scale=w='${demoCursor.width}*(${scaleExpression})':h='${
-          demoCursor.height
-        }*(${scaleExpression})':eval=frame[cursor]`,
+        `[1:v]format=rgba,scale=w='${demoCursor.width}*(${scaleExpression})':h='${demoCursor.height}*(${scaleExpression})':eval=frame[cursor]`,
         `[0:v][cursor]overlay=x='${xExpression}':y='${yExpression}':eval=frame:shortest=1:format=auto,format=yuv420p[out]`
       ].join(';'),
       '-map',

@@ -70,7 +70,7 @@ jobs:
         if: steps.credentials.outputs.available == 'true'
         uses: pnpm/action-setup@v4
         with:
-          version: 10.28.0
+          version: 11.7.0
 
       - name: Setup Node.js
         if: steps.credentials.outputs.available == 'true'

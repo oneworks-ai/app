@@ -6,6 +6,10 @@ import {
   getFatalSessionError,
   restoreInteractionStateFromHistory
 } from '#~/hooks/chat/interaction-state'
+import {
+  createOptimisticSessionCreation,
+  markOptimisticSessionCreationFailed
+} from '#~/hooks/chat/optimistic-session-creation'
 import { getSessionActivityLabel } from '#~/hooks/chat/session-activity-label'
 import {
   restoreSessionCompactionEventsFromHistoryEvents,
@@ -18,14 +22,10 @@ import {
   restoreSessionOperationInfoFromHistoryEvents,
   restoreSessionWorkspaceChangesFromHistoryEvents,
   shouldApplyHistoryRefreshResult,
-  shouldUseOptimisticSessionOnlyView,
   shouldRefreshHistoryForSessionUpdate,
-  shouldTerminateSessionForConfigChange
+  shouldTerminateSessionForConfigChange,
+  shouldUseOptimisticSessionOnlyView
 } from '#~/hooks/chat/use-chat-session-messages'
-import {
-  createOptimisticSessionCreation,
-  markOptimisticSessionCreationFailed
-} from '#~/hooks/chat/optimistic-session-creation'
 
 describe('chat session interaction state', () => {
   it('restores workspace change events in history order and deduplicates by id', () => {
