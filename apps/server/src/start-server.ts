@@ -228,6 +228,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
   logStartup('config watch acquire complete')
   let runtimeStoreWatcher: ReturnType<typeof startRuntimeStoreWatcher> | undefined
   let runtimeStoreWatcherTimer: ReturnType<typeof setTimeout> | undefined
+  let pluginRuntimePreloadTimer: ReturnType<typeof setTimeout> | undefined
 
   const scheduleRuntimeStoreWatcher = () => {
     logStartup(`runtime store watcher start scheduled delay=${RUNTIME_STORE_WATCHER_DELAY_MS}ms`)
@@ -257,6 +258,23 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
         logger.warn({ error }, '[runtime-store] Failed to start watcher')
       }
     }, RUNTIME_STORE_WATCHER_DELAY_MS)
+  }
+
+  const schedulePluginRuntimePreload = () => {
+    if (env.__ONEWORKS_PROJECT_SERVER_ROLE__ !== 'manager') return
+    logStartup('plugin runtime preload scheduled')
+    pluginRuntimePreloadTimer = setTimeout(() => {
+      pluginRuntimePreloadTimer = undefined
+      logStartup('plugin runtime preload begin')
+      void getPluginManager().load()
+        .then(() => {
+          logStartup('plugin runtime preload complete')
+        })
+        .catch(error => {
+          logStartup('plugin runtime preload failed')
+          logger.warn({ error }, '[plugins] Failed to preload plugin runtime')
+        })
+    }, 0)
   }
 
   try {
@@ -318,12 +336,17 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     } else {
       logStartup('runtime store watcher skipped for manager role')
     }
+    schedulePluginRuntimePreload()
     scheduleProjectHomeSegmentMigration(logStartup)
 
     server.once('close', () => {
       if (runtimeStoreWatcherTimer != null) {
         clearTimeout(runtimeStoreWatcherTimer)
         runtimeStoreWatcherTimer = undefined
+      }
+      if (pluginRuntimePreloadTimer != null) {
+        clearTimeout(pluginRuntimePreloadTimer)
+        pluginRuntimePreloadTimer = undefined
       }
       runtimeStoreWatcher?.stop()
       configWatch.release()
@@ -335,6 +358,10 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     if (runtimeStoreWatcherTimer != null) {
       clearTimeout(runtimeStoreWatcherTimer)
       runtimeStoreWatcherTimer = undefined
+    }
+    if (pluginRuntimePreloadTimer != null) {
+      clearTimeout(pluginRuntimePreloadTimer)
+      pluginRuntimePreloadTimer = undefined
     }
     runtimeStoreWatcher?.stop()
     configWatch.release()

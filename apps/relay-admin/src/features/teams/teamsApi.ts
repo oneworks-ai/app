@@ -23,6 +23,7 @@ import type {
   RelayAdminConfigSecret,
   RelayAdminMessage,
   RelayAdminTeam,
+  RelayAdminTeamDocumentSnapshot,
   RelayAdminTeamInvitation,
   RelayAdminTeamMember,
   RelayAdminTeamPolicy,
@@ -246,6 +247,12 @@ export const fetchRelayAdminTeamConfigSecrets = async (token: string, teamId: st
   await requestJson<{ secrets: RelayAdminConfigSecret[] }>(
     token,
     `/api/admin/teams/${encodeURIComponent(teamId)}/config-secrets`
+  )
+
+export const fetchRelayAdminTeamDocuments = async (token: string, teamId: string) =>
+  await requestJson<{ teamDocumentSnapshot: RelayAdminTeamDocumentSnapshot | null }>(
+    token,
+    `/api/admin/teams/${encodeURIComponent(teamId)}/documents`
   )
 
 export const createRelayAdminConfigSecret = async (token: string, input: CreateConfigSecretInput) =>

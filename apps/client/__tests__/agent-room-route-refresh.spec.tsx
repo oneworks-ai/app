@@ -72,6 +72,13 @@ vi.mock('../src/routes/ChatRouteView', () => ({
   ChatRouteView: mocks.chatRouteView
 }))
 
+vi.mock('../src/routes/ChatRouteStatusShell', async () => {
+  const React = await vi.importActual<typeof import('react')>('react')
+  return {
+    ChatRouteStatusShell: ({ children }: { children?: ReactNode }) => React.createElement('div', null, children)
+  }
+})
+
 const roomDetail: AgentRoomDetailResponse = {
   room: {
     id: 'room-live',
@@ -114,8 +121,9 @@ describe('agent room route detail refresh', () => {
       expect.any(Function),
       agentRoomDetailRevalidateOptions
     )
-    expect(agentRoomDetailRevalidateOptions.refreshInterval).toBe(AGENT_ROOM_DETAIL_REFRESH_INTERVAL_MS)
-    expect(agentRoomDetailRevalidateOptions.refreshInterval).toBeGreaterThan(0)
+    expect(agentRoomDetailRevalidateOptions.refreshInterval(roomDetail)).toBe(AGENT_ROOM_DETAIL_REFRESH_INTERVAL_MS)
+    expect(agentRoomDetailRevalidateOptions.refreshInterval(undefined)).toBeGreaterThan(0)
+    expect(agentRoomDetailRevalidateOptions.refreshWhenHidden).toBe(false)
     expect(agentRoomDetailRevalidateOptions.revalidateOnFocus).toBe(true)
     expect(mocks.chatRouteView).toHaveBeenCalledWith(
       expect.objectContaining({

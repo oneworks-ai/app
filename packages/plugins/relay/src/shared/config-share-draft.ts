@@ -1,6 +1,11 @@
 /* eslint-disable max-lines -- Relay share drafts need one boundary for extraction, sanitization, and preview metadata. */
-import { filterRelayConfigPatch, isRecord, normalizeRelayConfigSafeFields, unique } from './config-assignment-patch.js'
-import { RELAY_CONFIG_SAFE_FIELDS } from './config-assignment-types.js'
+import {
+  filterRelayConfigPatch,
+  isRecord,
+  normalizeRelayTeamConfigSafeFields,
+  unique
+} from './config-assignment-patch.js'
+import { RELAY_TEAM_CONFIG_SAFE_FIELDS } from './config-assignment-types.js'
 import type { RelayConfigPatch, RelayConfigSafeField } from './config-assignment-types.js'
 
 export type RelayConfigShareDraftIssueCode =
@@ -59,13 +64,14 @@ interface RelayConfigShareDraftBuildResult {
   secretValues: Record<string, string>
 }
 
-const SAFE_FIELD_SET = new Set<string>(RELAY_CONFIG_SAFE_FIELDS)
+const TEAM_SAFE_FIELD_SET = new Set<string>(RELAY_TEAM_CONFIG_SAFE_FIELDS)
 const rejectedRootNames = new Set([
   'adapters',
   'adapterNativeSecrets',
   'auth',
   'baseDir',
   'channels',
+  'defaultModelService',
   'desktop',
   'diagnostics',
   'env',
@@ -84,6 +90,7 @@ const rejectedRootNames = new Set([
 
 const rejectedGeneralFields = new Set([
   'baseDir',
+  'defaultModelService',
   'disableGlobalConfig',
   'env',
   'permissions',
@@ -345,7 +352,7 @@ const extractShareableConfig = (
     : undefined
 
   for (const [key, value] of Object.entries(source)) {
-    if (SAFE_FIELD_SET.has(key)) continue
+    if (TEAM_SAFE_FIELD_SET.has(key)) continue
     if (key === 'general' || key === 'plugins') continue
     if (value === undefined) continue
     addRejectedField(params.rejectedFields, [key])
@@ -360,7 +367,7 @@ const extractShareableConfig = (
   }
 
   for (const [key, value] of Object.entries(general)) {
-    if (['defaultModelService', 'recommendedModels', 'skills', 'skillsMeta', 'skillRegistries'].includes(key)) continue
+    if (['recommendedModels', 'skills', 'skillsMeta', 'skillRegistries'].includes(key)) continue
     if (value === undefined) continue
     addRejectedField(params.rejectedFields, ['general', key])
     addIssue(params.issues, {
@@ -374,7 +381,6 @@ const extractShareableConfig = (
   }
 
   return {
-    defaultModelService: source.defaultModelService ?? general.defaultModelService,
     marketplaces: source.marketplaces ?? pluginSection?.marketplaces,
     modelServices: source.modelServices,
     plugins: pluginSection?.plugins ?? source.plugins,
@@ -396,7 +402,7 @@ const sanitizeShareableConfig = (
   }
 ): RelayConfigPatch => {
   const sanitized: RelayConfigPatch = {}
-  for (const field of RELAY_CONFIG_SAFE_FIELDS) {
+  for (const field of RELAY_TEAM_CONFIG_SAFE_FIELDS) {
     const value = extracted[field]
     if (value === undefined) continue
     const nextValue = field === 'plugins'
@@ -420,15 +426,6 @@ const validateModelServiceReferences = (
 ) => {
   if (patch == null) return patch
   const serviceKeys = new Set(Object.keys(isRecord(patch.modelServices) ? patch.modelServices : {}))
-  if (typeof patch.defaultModelService === 'string' && !serviceKeys.has(patch.defaultModelService)) {
-    addIssue(issues, {
-      code: 'model_service_not_visible',
-      message: 'defaultModelService must reference a model service included in the same share draft.',
-      path: 'defaultModelService',
-      severity: 'error'
-    })
-    delete patch.defaultModelService
-  }
   if (Array.isArray(patch.recommendedModels)) {
     patch.recommendedModels = patch.recommendedModels.filter((item, index) => {
       if (!isRecord(item) || typeof item.service !== 'string') return true
@@ -474,7 +471,7 @@ const buildRelayConfigShareDraftInternal = (
   const secretItems: RelayConfigShareDraftSecretItem[] = []
   const secretValues: Record<string, string> = {}
   const pluginSchemas = readPluginSchemas(body.pluginSchemas)
-  const allowedFields = normalizeRelayConfigSafeFields(body.allowedFields)
+  const allowedFields = normalizeRelayTeamConfigSafeFields(body.allowedFields)
   const sanitized = sanitizeShareableConfig(
     extractShareableConfig(source, {
       issues,
@@ -495,7 +492,7 @@ const buildRelayConfigShareDraftInternal = (
     filterRelayConfigPatch(sanitized, allowedFields),
     issues
   )
-  const presentFields = RELAY_CONFIG_SAFE_FIELDS.filter(field => filtered?.[field] !== undefined)
+  const presentFields = RELAY_TEAM_CONFIG_SAFE_FIELDS.filter(field => filtered?.[field] !== undefined)
   const fieldSummaries = presentFields.map(field => ({
     field,
     itemCount: itemCount(filtered?.[field]),

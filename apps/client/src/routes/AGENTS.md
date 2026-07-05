@@ -6,10 +6,12 @@
 
 - `LauncherRoute.tsx`
   - launcher / 空项目启动页入口；Electron preload 提供 `window.oneworksDesktop` 时走桌面 host，Web manager role 下也可作为 daemon launcher 入口。
-  - 使用 Raycast-like 命令面板：顶部搜索自动聚焦，列表按 action / project 分组，支持上下键切换和 Enter 执行。
+  - 使用 Raycast-like 命令面板：顶部搜索自动聚焦，列表按 action / project 分组，支持上下键切换和 Enter 执行。列表行单击只负责选中和更新操作提示；执行动作必须走 Enter 或显式的右侧 action button，避免误开项目或远端资源。
   - 桌面环境通过 `window.oneworksDesktop.getWorkspaceSelectorState()` 获取 running / recent projects。
   - Android 等 device shell 也复用 `window.oneworksDesktop` 的共享 launcher 子集；优先实现 `listCloneDestinationDirectories()` 复用内部列表 UI，只有没有目录浏览能力但有 `chooseWorkspace()` 时才走系统目录选择器兜底。
   - Web manager role 通过 `/api/launcher/workspaces` 获取 running / recent projects，并通过 `/api/launcher/workspaces/open` 启动 workspace server。
+  - Relay 远程项目展示由 `launcher-relay-projects.ts` 从 Relay status 归一化；列表项必须看起来是远程服务上的项目，并携带 `serverId / deviceId / workspaceFolder`，不要创建本地 session tags 伪装远端 workspace。真正打开远程项目需要 relay workspace job 和 HTTP/WS proxy 链路。
+  - Relay 远程目录选择只从带 `capabilities.workspaceLauncher === true` 的 manager daemon 生成 target；workspace server 只能作为已打开项目出现在项目列表里，不承担“列目录 / 新建项目 / 启动 workspace server”的 launcher 控制面。
   - 桌面环境通过 `window.oneworksDesktop.openWorkspace()` 打开已有项目；Web manager role 打开后把当前 tab 的 server base 切到返回的 workspace server。
   - Web workspace 页内 launcher 由 `ChatRouteShell` 渲染 `LauncherOverlay` 并复用 `LauncherRoute`；只在非 Electron Web 下注册 `Cmd/Ctrl+Shift+P`。
   - 左下角只承载 app 级菜单入口；右下角只承载当前选中项的可用操作提示。

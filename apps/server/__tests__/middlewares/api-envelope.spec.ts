@@ -17,6 +17,7 @@ const runMiddleware = async ({
   method = 'GET',
   status = 404,
   body,
+  headers = {},
   type,
   next = async () => {}
 }: {
@@ -24,16 +25,26 @@ const runMiddleware = async ({
   method?: string
   status?: number
   body?: unknown
+  headers?: Record<string, string>
   type?: string
   next?: (ctx: any) => Promise<void>
 } = {}) => {
+  const requestHeaders = new Map(
+    Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value])
+  )
+  const responseHeaders = new Map<string, string>()
   const ctx = {
     path,
     method,
     status,
     body,
     state: {},
-    type
+    type,
+    get: (name: string) => requestHeaders.get(name.toLowerCase()) ?? '',
+    response: {
+      get: (name: string) => responseHeaders.get(name.toLowerCase()) ?? ''
+    },
+    set: (name: string, value: string) => responseHeaders.set(name.toLowerCase(), value)
   } as any
 
   await apiEnvelopeMiddleware()(ctx, async () => next(ctx))
@@ -85,6 +96,35 @@ describe('apiEnvelopeMiddleware', () => {
         ok: true
       }
     })
+  })
+
+  it('returns not modified for matching api response etags', async () => {
+    const next = async (ctx: any) => {
+      ctx.status = 200
+      ctx.body = { sessions: [{ id: 'sess-1' }] }
+    }
+    const first = await runMiddleware({
+      path: '/api/sessions',
+      next
+    })
+    const etag = first.response.get('ETag')
+
+    expect(etag).not.toBe('')
+    expect(first.body).toEqual({
+      success: true,
+      data: {
+        sessions: [{ id: 'sess-1' }]
+      }
+    })
+
+    const second = await runMiddleware({
+      headers: { 'if-none-match': etag },
+      path: '/api/sessions',
+      next
+    })
+
+    expect(second.status).toBe(304)
+    expect(second.body).toBeUndefined()
   })
 
   it('normalizes legacy api error bodies', async () => {

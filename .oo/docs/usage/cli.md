@@ -36,6 +36,10 @@
 - `oneworks config get [path]`：读取配置值
 - `oneworks config set [path] [value]`：写入配置值
 - `oneworks config unset [path]`：删除配置值
+- `oneworks login [-s cf|vercel|<url>]`：登录 One Works Relay 账号，默认使用托管 Cloudflare 服务
+- `oneworks users [-s cf|vercel|<url>]`：列出本机保存的 Relay 登录账号
+- `oneworks users enable [user]` / `oneworks users disable [user]`：启用或停用某个 Relay 账号
+- `oneworks logout [user]`：删除本机保存的 Relay 登录态
 - `oneworks accounts add <adapter> [accountName]`：触发 adapter 原生登录流程，并把返回的凭据快照保存到 `<project-home>/.local/adapters/<adapter>/accounts/<key>/`
 - `oneworks accounts show <adapter> <accountName>`：查看某个 adapter 账号的详情和最新额度摘要（CLI 当前会强制刷新）
 - `oneworks accounts remove <adapter> <accountName>`：删除某个 adapter 账号在当前 workspace 下保存的凭据快照
@@ -138,8 +142,6 @@ oneworks --resume <sessionId> --yolo
 oneworks --resume <sessionId> --effort high --include-tool read_file
 ```
 
-说明：
-
 - `--resume` 会继续使用缓存里的 adapter、model、workspace 等启动参数。
 - 如果只想调整下一次恢复时的权限模式，可以单独传 `--permission-mode <mode>`，或用 `--yolo` 切到 `bypassPermissions`；新的模式会用于本次恢复，并写回该会话的 CLI cache，后续继续 `resume` 时沿用。
 
@@ -182,19 +184,17 @@ ONEWORKS_STARTUP_PROFILE=1 ONEWORKS_STARTUP_PROFILE_CONSOLE=1 oneworks "hi"
 
 日志会写入当前 workspace 的 project home：`<project-home>/logs/<ctx>/startup/`。`__ONEWORKS_PROJECT_BASE_DIR__` 只影响 rules / skills / plugins 等项目资产目录，不影响 logs / caches / mock home 这类运行态目录。
 
-### 管理 adapter 账号
+### 管理 Relay 登录账号
 
 ```bash
-npx oneworks accounts add codex
-npx oneworks accounts add codex work
-npx oneworks accounts show codex work
-npx oneworks accounts remove codex work
+oneworks login
+oneworks login -s vercel
+oneworks users
+oneworks users enable alice
+oneworks users disable --account oneworks-cloudflare:user-1
+oneworks logout -s cf alice
 ```
 
-说明：
+`login`、`logout`、`users` 是官方 Relay 能力提供的顶层命令。`-s, --server` 默认是 `cf`，也支持 `cloudflare`、`vercel` / `vc`、服务 id，或 `https://relay.example.com` 这样的完整 URL。登录凭据保存在本机 `~/.oneworks/auth.json`。
 
-- `oneworks accounts add` 会调用对应 adapter 暴露的账号接入能力；当前内建先支持 `codex`。
-- `codex` 会在隔离 HOME 下执行一次 `codex login`，读取生成的 `auth.json`，再落到 `<project-home>/.local/adapters/codex/accounts/<key>/`。
-- `accountName` 可选；不传时会尽量根据登录后的邮箱或凭据摘要自动生成账号 key。
-- `oneworks accounts show` 当前会强制刷新 adapter 账号详情；如果你只想看 Web UI 的最近快照，配置页会按 adapter 自己的缓存策略展示。
-- 更完整的 adapter 配置与多账号说明见 [Adapter 配置与多账号](./adapters.md)。
+如果某个 server 下只有一个账号，`users enable`、`users disable`、`logout` 可以不传用户；如果有多个匹配账号，交互终端会让你选择。脚本或 AI 工具应使用 `--json` 获取结构化输出，并用 `--account serverId:userId` 精确指定账号，避免不同 server 上同名用户被误操作。`--input <json>` 和 `--stdin` 可以把 JSON payload 合并到命令请求里。

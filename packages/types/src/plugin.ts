@@ -139,10 +139,15 @@ export interface PluginContributionNavItem extends PluginContributionBase {
 export interface PluginContributionMenuItem extends PluginContributionBase {
   id: string
   title: string
+  children?: PluginContributionMenuItem[]
   icon?: string
   command?: string
+  danger?: boolean
+  disabled?: boolean
   href?: string
   route?: string
+  selected?: boolean
+  shortcut?: string
 }
 
 export interface PluginContributionChatHeaderAction extends PluginContributionBase {
@@ -297,6 +302,15 @@ export interface PluginContributionLauncherSearchProvider extends PluginContribu
   command: string
 }
 
+export interface PluginContributionCliCommand extends PluginContributionBase {
+  aliases?: string[]
+  command: string
+  id: string
+  path?: string[]
+  root?: boolean
+  title?: string
+}
+
 export interface PluginContributionRoute extends PluginContributionBase {
   id: string
   title?: string
@@ -370,6 +384,7 @@ export interface PluginContributionManifest {
   workbenchTabs?: PluginContributionWorkbenchTab[]
   workbenchAddMenu?: PluginContributionWorkbenchAddMenuItem[]
   workspaceDrawerTabs?: PluginContributionWorkspaceDrawerTab[]
+  cliCommands?: PluginContributionCliCommand[]
   launcherSearchProviders?: PluginContributionLauncherSearchProvider[]
   routes?: PluginContributionRoute[]
 }

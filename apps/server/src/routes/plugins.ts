@@ -280,6 +280,23 @@ export function pluginsRouter(): Router {
     ctx.body = asset.stream
   })
 
+  router.get('/:scope/shared/:assetPath(.*)', async (ctx) => {
+    const asset = await getPluginManager().resolveClientSharedAsset(
+      String(ctx.params.scope ?? ''),
+      toAssetPath(ctx.params.assetPath)
+    )
+    if (asset == null) {
+      throw notFound('Plugin client shared asset not found', undefined, 'plugin_asset_not_found')
+    }
+
+    ctx.state.skipApiEnvelope = true
+    ctx.type = contentTypeForPath(asset.filePath)
+    ctx.length = asset.size
+    ctx.set('Cache-Control', 'private, no-cache')
+    ctx.set('X-Content-Type-Options', 'nosniff')
+    ctx.body = asset.stream
+  })
+
   router.all('/:scope/dev/:devPath(.*)', async (ctx) => {
     try {
       const manager = getPluginManager()

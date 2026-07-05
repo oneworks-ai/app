@@ -1,18 +1,23 @@
 /* eslint-disable max-lines -- Relay config sharing coordinates remote teams, profiles, versions, secrets, and assignments. */
+import { readOneWorksAuthStore } from '@oneworks/utils/auth-store'
+import type { OneWorksAuthAccount } from '@oneworks/utils/auth-store'
+
 import { buildRelayConfigShareDraft, collectRelayConfigShareSecretValues } from '../shared/config-share-draft.js'
 import type { RelayConfigShareDraftInput } from '../shared/config-share-draft.js'
 
 import { resolveActiveRelayServer } from './options.js'
 import type { ResolvedRelayServer } from './options.js'
 import { createRelayDeviceStore } from './store.js'
-import type { RelayPluginContext, RelayStoredServer } from './types.js'
-import { isRecord, toString } from './utils.js'
+import type { RelayPluginContext } from './types.js'
+import { isRecord, normalizeRemoteBaseUrl, toString } from './utils.js'
 
 interface RelayShareAuth {
+  account?: OneWorksAuthAccount
   server: ResolvedRelayServer
-  storedServer: RelayStoredServer
   sessionToken: string
 }
+
+const RELAY_FIXTURE_SESSION_TOKEN_PREFIX = 'relay-fixture:'
 
 const readOptionalText = (value: unknown) => {
   const text = toString(value)
@@ -31,6 +36,257 @@ const readServerId = (payload?: unknown) => {
   return toString(body.serverId)
 }
 
+const readAccountKey = (payload?: unknown) => {
+  const body = readPayload(payload)
+  return toString(body.accountKey)
+}
+
+const readTeamId = (payload?: unknown) => {
+  const body = readPayload(payload)
+  return toString(body.teamId)
+}
+
+const accountMatchesRelayServer = (
+  account: OneWorksAuthAccount,
+  server: Pick<ResolvedRelayServer, 'id' | 'remoteBaseUrl'>
+) => (
+  account.serverId === server.id ||
+  normalizeRemoteBaseUrl(account.serverUrl) === normalizeRemoteBaseUrl(server.remoteBaseUrl)
+)
+
+const accountHasValidSession = (account: Pick<OneWorksAuthAccount, 'sessionExpiresAt' | 'sessionToken'>) => (
+  (account.sessionToken ?? '') !== '' &&
+  (account.sessionExpiresAt == null || Date.parse(account.sessionExpiresAt) > Date.now())
+)
+
+const fixtureTeamSlug = (teamName: string) => (
+  teamName.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-|-$/gu, '') || 'fixture'
+)
+
+const fixtureConfigShareTargets = (auth: RelayShareAuth, payload?: unknown) => {
+  const account = auth.account
+  if (account == null) return undefined
+  const now = new Date().toISOString()
+  const requestedTeamId = readTeamId(payload)
+  const teamId = requestedTeamId === '' ? `${account.serverId}:team` : requestedTeamId
+  const teamName = auth.server.name === '' ? 'Fixture Workspace' : auth.server.name
+  const profiles = [{
+    activeVersionId: 'version-1',
+    assignmentCount: 1,
+    createdAt: now,
+    createdByUserId: account.userId,
+    description: 'Local Relay fixture config profile.',
+    id: `${teamId}:base-profile`,
+    name: 'Base Profile',
+    status: 'published',
+    teamId,
+    teamName,
+    updatedAt: now,
+    updatedByUserId: account.userId,
+    versionCount: 1
+  }]
+  return {
+    policy: null,
+    profilesByTeamId: {
+      [teamId]: profiles
+    },
+    remoteBaseUrl: auth.server.remoteBaseUrl,
+    serverId: auth.server.id,
+    teams: [{
+      id: teamId,
+      membership: {
+        role: account.role ?? 'member'
+      },
+      name: teamName,
+      slug: fixtureTeamSlug(teamName)
+    }]
+  }
+}
+
+const fixtureConfigShareProfileDetail = (auth: RelayShareAuth, payload?: unknown) => {
+  const body = readPayload(payload)
+  const profileId = readOptionalText(body.profileId)
+  const targets = fixtureConfigShareTargets(auth, payload)
+  const profiles = Object.values(targets?.profilesByTeamId ?? {}).flat()
+  const profile = profiles.find(item => readOptionalText(item.id) === profileId) ?? profiles[0]
+  if (profile == null) {
+    throw new Error('Fixture config profile not found.')
+  }
+  const now = new Date().toISOString()
+  const detailTeamId = readOptionalText(profile.teamId) ?? readOptionalText(body.teamId) ?? 'fixture-team'
+  const version = {
+    allowedFields: [
+      'modelServices',
+      'recommendedModels',
+      'plugins',
+      'marketplaces',
+      'skills',
+      'skillsMeta',
+      'skillRegistries'
+    ],
+    changeNote: 'Fixture config profile version.',
+    configPatch: {
+      marketplaces: {
+        official: {
+          enabled: true,
+          source: 'oneworks',
+          title: 'OneWorks Marketplace'
+        },
+        team: {
+          enabled: true,
+          source: 'relay',
+          teamId: detailTeamId,
+          title: 'Team Marketplace'
+        }
+      },
+      modelServices: {
+        'relay-fixture-openai': {
+          apiBaseUrl: 'https://api.openai.com/v1',
+          description: 'Shared model service for team smoke testing.',
+          extra: {
+            provider: 'openai',
+            routing: {
+              priority: 10,
+              tags: ['team', 'default']
+            }
+          },
+          maxOutputTokens: 8192,
+          models: ['gpt-4.1', 'gpt-4.1-mini'],
+          timeoutMs: 120000,
+          title: 'Relay Fixture OpenAI'
+        },
+        'relay-fixture-anthropic': {
+          apiBaseUrl: 'https://api.anthropic.com/v1',
+          description: 'Secondary shared model service.',
+          extra: {
+            provider: 'anthropic',
+            routing: {
+              priority: 20,
+              tags: ['team', 'fallback']
+            }
+          },
+          models: ['claude-sonnet-4'],
+          title: 'Relay Fixture Anthropic'
+        }
+      },
+      plugins: [
+        {
+          enabled: true,
+          key: 'relay-demo',
+          options: {
+            channels: ['stable', 'beta'],
+            features: {
+              documents: true,
+              teamConfigs: true
+            }
+          }
+        },
+        {
+          enabled: true,
+          key: 'workspace-insights',
+          options: {
+            dashboards: ['usage', 'quality'],
+            refreshIntervalMinutes: 30
+          }
+        }
+      ],
+      recommendedModels: [
+        {
+          description: 'Default coding and review model for the team.',
+          model: 'gpt-4.1',
+          service: 'relay-fixture-openai',
+          title: 'Team GPT-4.1'
+        },
+        {
+          description: 'Fast model for lightweight edits.',
+          model: 'gpt-4.1-mini',
+          placement: 'modelSelector',
+          service: 'relay-fixture-openai',
+          title: 'Team GPT-4.1 Mini'
+        },
+        {
+          description: 'Fallback model for long-form analysis.',
+          model: 'claude-sonnet-4',
+          service: 'relay-fixture-anthropic',
+          title: 'Team Claude Sonnet'
+        }
+      ],
+      skillRegistries: [
+        {
+          enabled: true,
+          registry: 'https://skills.oneworks.cloud',
+          source: 'oneworks',
+          title: 'OneWorks Skills'
+        },
+        {
+          enabled: true,
+          registry: 'https://relay.example.com/teams/skills',
+          source: 'relay',
+          title: 'Team Skills'
+        }
+      ],
+      skills: [
+        {
+          enabled: true,
+          name: 'code-review',
+          registry: 'https://skills.oneworks.cloud',
+          version: '^1.0.0'
+        },
+        {
+          enabled: true,
+          name: 'release-notes',
+          registry: 'https://relay.example.com/teams/skills',
+          version: '^2.1.0'
+        }
+      ],
+      skillsMeta: {
+        defaults: {
+          enabled: ['code-review'],
+          suggested: ['release-notes']
+        },
+        policy: {
+          allowPrerelease: false,
+          autoUpdate: true
+        }
+      }
+    },
+    createdAt: now,
+    createdByUserId: auth.account?.userId ?? 'fixture-user',
+    id: 'version-1',
+    profileId: readOptionalText(profile.id) ?? 'fixture-profile',
+    secretRefs: {},
+    sourceHash: 'fixture-config-version',
+    version: 1
+  }
+  return {
+    assignments: [],
+    profile,
+    versions: [version]
+  }
+}
+
+const isFixtureShareAuth = (auth: RelayShareAuth) => (
+  auth.sessionToken.startsWith(RELAY_FIXTURE_SESSION_TOKEN_PREFIX)
+)
+
+const selectShareAuthAccount = async (
+  server: ResolvedRelayServer,
+  payload?: unknown
+) => {
+  const requestedAccountKey = readAccountKey(payload)
+  const authStore = await readOneWorksAuthStore()
+  const enabledAccounts = authStore.accounts.filter(account => account.enabled !== false)
+  const requestedAccount = requestedAccountKey === ''
+    ? undefined
+    : enabledAccounts.find(account =>
+      account.accountKey === requestedAccountKey &&
+      accountMatchesRelayServer(account, server)
+    )
+  if (requestedAccount != null) return requestedAccount
+  const serverAccounts = enabledAccounts.filter(account => accountMatchesRelayServer(account, server))
+  return serverAccounts.find(accountHasValidSession) ?? serverAccounts[0]
+}
+
 const requireShareAuth = async (
   ctx: RelayPluginContext,
   payload?: unknown
@@ -44,6 +300,17 @@ const requireShareAuth = async (
         : `Unknown relay server: ${requestedServerId}.`
     )
   }
+  const authAccount = await selectShareAuthAccount(server, payload)
+  if (authAccount != null) {
+    const sessionToken = authAccount.sessionToken ?? ''
+    if (sessionToken === '') {
+      throw new Error('Relay login session is required before sharing team config.')
+    }
+    if (authAccount.sessionExpiresAt != null && Date.parse(authAccount.sessionExpiresAt) <= Date.now()) {
+      throw new Error('Relay login session expired. Login again before sharing team config.')
+    }
+    return { account: authAccount, server, sessionToken }
+  }
   const store = await createRelayDeviceStore(ctx.projectHome).readStore()
   const storedServer = store.servers[server.id]
   const sessionToken = storedServer?.sessionToken ?? ''
@@ -53,7 +320,7 @@ const requireShareAuth = async (
   if (storedServer.sessionExpiresAt != null && Date.parse(storedServer.sessionExpiresAt) <= Date.now()) {
     throw new Error('Relay login session expired. Login again before sharing team config.')
   }
-  return { server, sessionToken, storedServer }
+  return { server, sessionToken }
 }
 
 const relayJson = async (
@@ -142,6 +409,10 @@ export const getRelayConfigShareTargets = async (
   payload?: unknown
 ) => {
   const auth = await requireShareAuth(ctx, payload)
+  if (isFixtureShareAuth(auth)) {
+    const fixtureTargets = fixtureConfigShareTargets(auth, payload)
+    if (fixtureTargets != null) return fixtureTargets
+  }
   const teamsBody = await relayJson(auth, '/api/relay/teams')
   const teams = Array.isArray(teamsBody.teams) ? teamsBody.teams : []
   const profilesByTeamId: Record<string, unknown[]> = {}
@@ -158,6 +429,22 @@ export const getRelayConfigShareTargets = async (
     serverId: auth.server.id,
     teams
   }
+}
+
+export const getRelayConfigShareProfileDetail = async (
+  ctx: RelayPluginContext,
+  payload?: unknown
+) => {
+  const body = readPayload(payload)
+  const profileId = readOptionalText(body.profileId)
+  if (profileId == null) {
+    throw new Error('profileId is required to load relay config profile detail.')
+  }
+  const auth = await requireShareAuth(ctx, payload)
+  if (isFixtureShareAuth(auth)) {
+    return fixtureConfigShareProfileDetail(auth, payload)
+  }
+  return await relayJson(auth, `/api/relay/config-profiles/${encodeURIComponent(profileId)}`)
 }
 
 export const publishRelayConfigShareDraft = async (

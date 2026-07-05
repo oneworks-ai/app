@@ -387,7 +387,7 @@ describe('sessionsRouter', () => {
   it('throws session_not_found when messages are requested for a missing session', () => {
     const db = {
       getSession: vi.fn(() => undefined),
-      getMessages: vi.fn()
+      getMessageWindowWithCursor: vi.fn()
     }
     vi.mocked(getDb).mockReturnValue(db as any)
 
@@ -399,7 +399,71 @@ describe('sessionsRouter', () => {
     }
 
     expect(() => handleGetMessages(ctx)).toThrow('Session not found')
-    expect(db.getMessages).not.toHaveBeenCalled()
+    expect(db.getMessageWindowWithCursor).not.toHaveBeenCalled()
+  })
+
+  it('uses the full cursor message window when no message window query is provided', () => {
+    const session = { id: 'session-full', title: 'Full history' }
+    const db = {
+      getMessageWindowWithCursor: vi.fn(() => ({
+        cursor: { firstId: 1, lastId: 1 },
+        messages: [{ type: 'message', id: 'message-full' }]
+      })),
+      getSession: vi.fn(() => session)
+    }
+    vi.mocked(getDb).mockReturnValue(db as any)
+
+    const handleGetMessages = findRouteHandler('/:id/messages', 'GET')
+    const ctx = {
+      params: { id: 'session-full' },
+      query: {},
+      body: undefined
+    }
+
+    handleGetMessages(ctx)
+
+    expect(db.getMessageWindowWithCursor).toHaveBeenCalledWith('session-full', {})
+    expect(ctx.body).toMatchObject({
+      cursor: { firstId: 1, lastId: 1 },
+      messages: [{ type: 'message', id: 'message-full' }],
+      session
+    })
+  })
+
+  it('uses a bounded DB message window when message pagination query is provided', () => {
+    const session = { id: 'session-window', title: 'Windowed history' }
+    const db = {
+      getMessageWindowWithCursor: vi.fn(() => ({
+        cursor: { firstId: 13, lastId: 13 },
+        messages: [{ type: 'message', id: 'message-window' }]
+      })),
+      getSession: vi.fn(() => session)
+    }
+    vi.mocked(getDb).mockReturnValue(db as any)
+
+    const handleGetMessages = findRouteHandler('/:id/messages', 'GET')
+    const ctx = {
+      params: { id: 'session-window' },
+      query: {
+        afterId: '12',
+        beforeId: '9',
+        limit: '3000'
+      },
+      body: undefined
+    }
+
+    handleGetMessages(ctx)
+
+    expect(db.getMessageWindowWithCursor).toHaveBeenCalledWith('session-window', {
+      afterId: 12,
+      beforeId: 9,
+      limit: 1000
+    })
+    expect(ctx.body).toMatchObject({
+      cursor: { firstId: 13, lastId: 13 },
+      messages: [{ type: 'message', id: 'message-window' }],
+      session
+    })
   })
 
   it('passes normalized tags when creating a session', async () => {

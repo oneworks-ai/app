@@ -1,3 +1,4 @@
+import { adminListSurfaceClassNames } from '@oneworks/components/admin-list-surface'
 import { Checkbox } from 'antd'
 
 import type { AdminListColumnOption } from './AdminListTable'
@@ -17,7 +18,7 @@ export const AdminListTableColumnPicker = ({
   visibleColumnKeys,
   onVisibleColumnKeysChange
 }: AdminListTableColumnPickerProps) => (
-  <div className='relay-admin-list-table__column-menu' role='group' aria-label='展示列'>
+  <div className={adminListSurfaceClassNames.columnMenu} role='group' aria-label='展示列'>
     {columnOptions.map(option => (
       <Checkbox
         key={option.key}

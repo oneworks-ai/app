@@ -11,7 +11,7 @@ import bodyParser from 'koa-bodyparser'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { pluginsRouter } from '#~/routes/plugins.js'
-import { resetPluginManagerForTests } from '#~/services/plugins/index.js'
+import { getPluginManager, resetPluginManagerForTests } from '#~/services/plugins/index.js'
 
 const mocks = vi.hoisted(() => ({
   loadConfigState: vi.fn()
@@ -87,6 +87,40 @@ describe('pluginsRouter', () => {
     devServers = []
     await rm(workspaceFolder, { recursive: true, force: true })
     vi.clearAllMocks()
+    vi.unstubAllEnvs()
+  })
+
+  it('does not load the official relay plugin by default', async () => {
+    mockConfig([])
+
+    const response = await fetch(`${baseUrl}/api/plugins`)
+    const payload = await response.json() as {
+      plugins: Array<{ packageId?: string; scope: string }>
+      diagnostics: unknown[]
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.diagnostics).toEqual([])
+    expect(payload.plugins).toEqual([])
+  })
+
+  it('loads the official relay plugin when configured', async () => {
+    mockConfig([{ id: '@oneworks/plugin-relay' }])
+
+    const response = await fetch(`${baseUrl}/api/plugins`)
+    const payload = await response.json() as {
+      plugins: Array<{ packageId?: string; scope: string }>
+      diagnostics: unknown[]
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.diagnostics).toEqual([])
+    expect(payload.plugins).toEqual([
+      expect.objectContaining({
+        packageId: '@oneworks/plugin-relay',
+        scope: 'relay'
+      })
+    ])
   })
 
   it('lists configured plugins and exposes client entries', async () => {
@@ -142,6 +176,7 @@ describe('pluginsRouter', () => {
         },
         mergedConfig: { disableGlobalConfig: true }
       })
+      vi.stubEnv('__ONEWORKS_PROJECT_DISABLE_DEFAULT_OFFICIAL_PLUGINS__', '1')
 
       const response = await fetch(`${baseUrl}/api/plugins`)
       const payload = await response.json() as {
@@ -558,6 +593,56 @@ describe('pluginsRouter', () => {
     expect(listPayload.plugins.find(plugin => plugin.scope === 'good')).toMatchObject({ enabled: true })
 
     const commandResponse = await fetch(`${baseUrl}/api/plugins/good/commands/ping`, { method: 'POST' })
+    await expect(commandResponse.text()).resolves.toBe('pong')
+  })
+
+  it('clears partial runtime registrations when activation fails', async () => {
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'flaky')
+    await createPlugin(
+      pluginRoot,
+      {
+        name: 'flaky',
+        plugin: { server: { entry: './server.mjs' } }
+      },
+      `
+      globalThis.__oneworksFlakyPluginActivationCount ??= 0
+      export async function activatePlugin(ctx) {
+        ctx.registerCommand('connect', () => 'connected')
+        globalThis.__oneworksFlakyPluginActivationCount += 1
+        if (globalThis.__oneworksFlakyPluginActivationCount === 1) {
+          throw new Error('first activation failed')
+        }
+        ctx.registerCommand('ping', () => 'pong')
+      }
+    `
+    )
+    mockConfig([{ id: pluginRoot, scope: 'flaky' }])
+
+    const listResponse = await fetch(`${baseUrl}/api/plugins`)
+    const listPayload = await listResponse.json() as {
+      plugins: Array<{ scope: string; enabled: boolean; diagnostics: Array<{ code: string }> }>
+    }
+    expect(listPayload.plugins.find(plugin => plugin.scope === 'flaky')).toMatchObject({
+      enabled: false,
+      diagnostics: [{ code: 'plugin_activation_failed' }]
+    })
+
+    const manager = getPluginManager()
+    const record = manager.getRecord('flaky') as unknown as {
+      apis: Map<string, unknown>
+      commands: Map<string, unknown>
+      instance: { enabled: boolean }
+    }
+    expect(record.commands.size).toBe(0)
+    expect(record.apis.size).toBe(0)
+
+    record.instance.enabled = true
+    await (manager as unknown as {
+      activateRecord: (runtimeRecord: unknown) => Promise<void>
+    }).activateRecord(record)
+
+    expect(record.instance.enabled).toBe(true)
+    const commandResponse = await fetch(`${baseUrl}/api/plugins/flaky/commands/ping`, { method: 'POST' })
     await expect(commandResponse.text()).resolves.toBe('pong')
   })
 

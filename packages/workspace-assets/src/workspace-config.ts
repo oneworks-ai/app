@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises'
 
 import type { Config, WorkspaceConfigEntry } from '@oneworks/types'
-import { glob } from 'fast-glob'
+import fg from 'fast-glob'
 
 const DEFAULT_WORKSPACE_IGNORES = [
   '**/.git/**',
@@ -118,7 +118,7 @@ export const scanWorkspacePatterns = async (
 ) => {
   if (patterns.length === 0) return []
 
-  return await glob(patterns, {
+  return await fg(patterns, {
     cwd,
     absolute: true,
     onlyDirectories: true,

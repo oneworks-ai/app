@@ -6,6 +6,7 @@ import type { MenuProps } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import { DEFAULT_ICON_THEME } from '@oneworks/icon/presets'
 import { matchesPinyinSearch, normalizePinyinSearchQuery } from '@oneworks/utils/pinyin-search'
@@ -14,11 +15,19 @@ import { getApiErrorMessage } from '#~/api'
 import {
   createLauncherWorkspaceInDirectory,
   forgetLauncherWorkspace,
+  getLauncherManagerServerBaseUrl,
   getLauncherWorkspaceSelectorState,
   listLauncherDirectories,
   openLauncherWorkspace,
   stopLauncherWorkspace
 } from '#~/api/launcher'
+import {
+  createLauncherRelayLoginUrl,
+  createLauncherRelayWorkspaceInDirectory,
+  getLauncherRelayStatus,
+  listLauncherRelayDirectories,
+  openLauncherRelayWorkspace
+} from '#~/api/launcher-relay'
 import { LauncherAboutView } from '#~/components/launcher/LauncherAboutView'
 import { LauncherSettingsView } from '#~/components/launcher/LauncherSettingsView'
 import type { LauncherKeyboardHint, LauncherSettingsResetAction } from '#~/components/launcher/LauncherSettingsView'
@@ -27,12 +36,19 @@ import { getProjectFileIconMeta } from '#~/components/workspace/project-file-tre
 import { useInterfaceLanguageConfig } from '#~/hooks/use-interface-language-config'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { appLanguageOptions, getActiveAppLanguageOption } from '#~/i18n'
-import { buildWorkspaceClientBase, isServerManagerRole, mergeRuntimeEnv } from '#~/runtime-config'
+import { buildWorkspaceClientBase, getClientBase, isServerManagerRole, mergeRuntimeEnv } from '#~/runtime-config'
 import { copyTextWithFeedback } from '#~/utils/copy'
 import { deferImeCompositionEnd, isImeCompositionKeyEvent } from '#~/utils/keyboard-events'
 import { createOneWorksIconDataUri } from '#~/utils/oneworks-icon'
 import { resolveWorkspaceFileOpenerSelectModels } from '#~/utils/workspace-file-openers'
+import { rememberWorkspaceConnection } from '#~/workspace-connection-state'
 import { normalizePluginLauncherSearchResults } from './launcher-plugin-search'
+import type {
+  LauncherRelayDeviceProject,
+  LauncherRelayDeviceProjectGroup,
+  LauncherRelayDirectoryTarget
+} from './launcher-relay-projects'
+import { normalizeLauncherRelayDirectoryTargets, normalizeLauncherRelayProjectGroups } from './launcher-relay-projects'
 
 const emptyWorkspaceSelectorState: DesktopWorkspaceSelectorState = {
   recentProjects: [],
@@ -49,6 +65,11 @@ const emptyWorkspaceResourceSearchResponse: DesktopWorkspaceResourceSearchRespon
 const FILE_SEARCH_DEBOUNCE_MS = 160
 const FILE_SEARCH_RESULT_LIMIT = 80
 const LAUNCHER_SEARCH_HISTORY_LIMIT = 50
+const LAUNCHER_RECENT_SELECTION_LIMIT = 24
+const LAUNCHER_RECENT_SELECTION_DISPLAY_LIMIT = 3
+const LAUNCHER_RECENT_SELECTIONS_STORAGE_KEY = 'oneworks_launcher_recent_selections'
+const LAUNCHER_QUERY_SEARCH_PARAM = 'q'
+const LAUNCHER_VIEW_SEARCH_PARAM = 'view'
 const CLONE_DESTINATION_FAVORITE_LIMIT = 24
 const CLONE_DESTINATION_RECENT_LIMIT = 12
 const CLONE_DESTINATION_FAVORITES_STORAGE_KEY = 'oneworks_launcher_clone_destination_favorites'
@@ -73,6 +94,156 @@ const getCloneRepositoryUrlCandidate = (value: string) => {
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
 )
+
+interface LauncherRelayAccount {
+  accountKey?: string
+  avatarUrl?: string
+  email?: string
+  enabled?: boolean
+  loginId?: string
+  name?: string
+  role?: string
+  serverAlias?: string
+  serverId?: string
+  serverUrl?: string
+  sessionAuthenticated?: boolean
+  userId?: string
+}
+
+interface LauncherRelayServer {
+  active?: boolean
+  id?: string
+  name?: string
+  official?: boolean
+  remoteBaseUrl?: string
+}
+
+const cleanLauncherText = (value: unknown) => {
+  const text = typeof value === 'string' ? value.trim() : ''
+  return text === '' ? undefined : text
+}
+
+const readLauncherRelayAccounts = (status: unknown): LauncherRelayAccount[] => {
+  if (!isRecord(status) || !Array.isArray(status.accounts)) return []
+
+  return status.accounts
+    .filter(isRecord)
+    .map(account => ({
+      accountKey: cleanLauncherText(account.accountKey),
+      avatarUrl: cleanLauncherText(account.avatarUrl),
+      email: cleanLauncherText(account.email),
+      enabled: typeof account.enabled === 'boolean' ? account.enabled : undefined,
+      loginId: cleanLauncherText(account.loginId),
+      name: cleanLauncherText(account.name),
+      role: cleanLauncherText(account.role),
+      serverAlias: cleanLauncherText(account.serverAlias),
+      serverId: cleanLauncherText(account.serverId),
+      serverUrl: cleanLauncherText(account.serverUrl),
+      sessionAuthenticated: typeof account.sessionAuthenticated === 'boolean'
+        ? account.sessionAuthenticated
+        : undefined,
+      userId: cleanLauncherText(account.userId)
+    }))
+}
+
+const readLauncherRelayServers = (status: unknown): LauncherRelayServer[] => {
+  if (!isRecord(status) || !Array.isArray(status.servers)) return []
+
+  return status.servers
+    .filter(isRecord)
+    .map(server => ({
+      active: typeof server.active === 'boolean' ? server.active : undefined,
+      id: cleanLauncherText(server.id),
+      name: cleanLauncherText(server.name),
+      official: typeof server.official === 'boolean' ? server.official : undefined,
+      remoteBaseUrl: cleanLauncherText(server.remoteBaseUrl)
+    }))
+}
+
+const readLauncherRelayActiveServerId = (status: unknown) => {
+  if (!isRecord(status)) return undefined
+
+  const connection = isRecord(status.connection) ? status.connection : {}
+  const activeServerId = cleanLauncherText(connection.activeServerId)
+  if (activeServerId != null) return activeServerId
+
+  const servers = readLauncherRelayServers(status)
+  return cleanLauncherText(servers.find(server => server.active === true)?.id) ?? cleanLauncherText(servers[0]?.id)
+}
+
+const normalizeRelayComparableUrl = (value: unknown) => {
+  const text = cleanLauncherText(value)
+  if (text == null) return undefined
+
+  try {
+    const url = new URL(text)
+    url.hash = ''
+    url.search = ''
+    return url.toString().replace(/\/+$/u, '').toLowerCase()
+  } catch {
+    return text.replace(/\/+$/u, '').toLowerCase()
+  }
+}
+
+const getLauncherRelayAccountDisplayName = (account: LauncherRelayAccount) => (
+  cleanLauncherText(account.name) ??
+    cleanLauncherText(account.loginId) ??
+    cleanLauncherText(account.email) ??
+    cleanLauncherText(account.userId) ??
+    'OneWorks'
+)
+
+const getLauncherRelayAccountSubtitle = (account: LauncherRelayAccount) => {
+  const name = getLauncherRelayAccountDisplayName(account)
+  const meta = [
+    cleanLauncherText(account.email),
+    cleanLauncherText(account.loginId),
+    cleanLauncherText(account.userId)
+  ].find(value => value != null && value !== name)
+  return meta ?? ''
+}
+
+const getLauncherRelayAccountInitials = (name: string) => {
+  const segments = name
+    .split(/[\s._-]+/u)
+    .map(segment => segment.trim())
+    .filter(Boolean)
+  const initials = segments.length > 1
+    ? `${segments[0]?.[0] ?? ''}${segments[1]?.[0] ?? ''}`
+    : name.slice(0, 2)
+  return initials.toUpperCase()
+}
+
+const getLauncherRelayAccountServerKey = (account: LauncherRelayAccount) => (
+  cleanLauncherText(account.serverId) ??
+    normalizeRelayComparableUrl(account.serverUrl) ??
+    cleanLauncherText(account.serverAlias) ??
+    'default'
+)
+
+const findLauncherRelayServerForAccount = (
+  account: LauncherRelayAccount,
+  servers: LauncherRelayServer[]
+) => {
+  const serverId = cleanLauncherText(account.serverId)
+  if (serverId != null) {
+    const server = servers.find(item => cleanLauncherText(item.id) === serverId)
+    if (server != null) return server
+  }
+
+  const serverUrl = normalizeRelayComparableUrl(account.serverUrl)
+  if (serverUrl == null) return undefined
+
+  return servers.find(item => normalizeRelayComparableUrl(item.remoteBaseUrl) === serverUrl)
+}
+
+const buildRelayPluginRoutePath = (suffix = 'accounts') => `/plugins/relay/home/${suffix.replace(/^\/+/u, '')}`
+
+const buildRelayPluginClientUrl = (suffix = 'accounts') => {
+  const base = getClientBase().replace(/\/+$/u, '')
+  const route = buildRelayPluginRoutePath(suffix)
+  return new URL(`${base}${route}`, window.location.origin).toString()
+}
 
 const emptyCloneDestinationDirectoryList: DesktopCloneDestinationDirectoryList = {
   currentDirectory: '',
@@ -121,6 +292,47 @@ const getStoredCloneDestinationDirectories = () =>
 
 const getStoredCloneDestinationFavoriteDirectories = () =>
   getStoredCloneDestinationDirectoryList(CLONE_DESTINATION_FAVORITES_STORAGE_KEY)
+
+const getStoredLauncherRecentSelectionIds = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LAUNCHER_RECENT_SELECTIONS_STORAGE_KEY) ?? '[]') as unknown
+    if (!Array.isArray(parsed)) return []
+
+    const seenIds = new Set<string>()
+    return parsed.flatMap((value) => {
+      const id = typeof value === 'string'
+        ? value.trim()
+        : isRecord(value)
+        ? cleanLauncherText(value.id)
+        : undefined
+      if (id == null || seenIds.has(id)) return []
+
+      seenIds.add(id)
+      return [id]
+    }).slice(0, LAUNCHER_RECENT_SELECTION_LIMIT)
+  } catch {
+    return []
+  }
+}
+
+const persistLauncherRecentSelectionIds = (ids: string[]) => {
+  try {
+    localStorage.setItem(
+      LAUNCHER_RECENT_SELECTIONS_STORAGE_KEY,
+      JSON.stringify(ids.slice(0, LAUNCHER_RECENT_SELECTION_LIMIT))
+    )
+  } catch {}
+}
+
+const rememberLauncherRecentSelectionId = (ids: string[], id: string) => {
+  const normalizedId = id.trim()
+  if (normalizedId === '') return ids
+
+  return [
+    normalizedId,
+    ...ids.filter(candidate => candidate !== normalizedId)
+  ].slice(0, LAUNCHER_RECENT_SELECTION_LIMIT)
+}
 
 const persistCloneDestinationDirectories = (directories: string[]) => {
   try {
@@ -255,6 +467,8 @@ const launcherIconThemes = new Set<LauncherDesktopIconSettings['iconTheme']>(['i
 interface LauncherCommand {
   action: () => Promise<void> | void
   actionLabel?: 'back' | 'clone' | 'create' | 'open'
+  avatarInitials?: string
+  avatarUrl?: string
   automationPath?: string
   badge?: string
   contextMenuItems?: MenuProps['items']
@@ -267,6 +481,7 @@ interface LauncherCommand {
   keywords: string[]
   removeAction?: () => Promise<void> | void
   removeLabel?: string
+  recentSelectionId?: string
   secondaryAction?: () => Promise<void> | void
   subtitle?: string
   title: string
@@ -278,12 +493,51 @@ interface LauncherCommandSection {
   title: string
 }
 
-type LauncherViewMode = 'about' | 'commands' | 'settings'
+type LauncherViewMode = 'about' | 'account' | 'commands' | 'preview' | 'settings'
+
+const launcherUrlViewModes = new Set<LauncherViewMode>(['about', 'account', 'preview', 'settings'])
+
+const readLauncherViewModeFromSearch = (search: string): LauncherViewMode => {
+  const mode = new URLSearchParams(search).get(LAUNCHER_VIEW_SEARCH_PARAM) as LauncherViewMode | null
+  return mode != null && launcherUrlViewModes.has(mode) ? mode : 'commands'
+}
+
+const readLauncherQueryFromSearch = (search: string) => (
+  new URLSearchParams(search).get(LAUNCHER_QUERY_SEARCH_PARAM) ?? ''
+)
+
+const buildLauncherSearchForState = (
+  search: string,
+  input: {
+    mode?: LauncherViewMode
+    query?: string
+  }
+) => {
+  const searchParams = new URLSearchParams(search)
+  if (input.mode != null) {
+    if (input.mode === 'commands') {
+      searchParams.delete(LAUNCHER_VIEW_SEARCH_PARAM)
+    } else {
+      searchParams.set(LAUNCHER_VIEW_SEARCH_PARAM, input.mode)
+    }
+  }
+  if (input.query != null) {
+    if (input.query === '') {
+      searchParams.delete(LAUNCHER_QUERY_SEARCH_PARAM)
+    } else {
+      searchParams.set(LAUNCHER_QUERY_SEARCH_PARAM, input.query)
+    }
+  }
+
+  const nextSearch = searchParams.toString()
+  return nextSearch === '' ? '' : `?${nextSearch}`
+}
 
 interface LauncherSearchHistoryEntry {
   cloneDestinationDirectory?: string
   directoryBrowserHomeDirectory?: string
   directoryBrowserMode?: LauncherDirectoryBrowserMode
+  directoryBrowserTargetId?: string
   dismissedProjectContextFolder?: string
   isFileSearchMode: boolean
   launcherViewMode: LauncherViewMode
@@ -300,6 +554,23 @@ interface LauncherOpeningWorkspace {
   path: string
 }
 
+type LauncherDirectoryBrowserTarget =
+  | {
+    id: 'local'
+    kind: 'local'
+    label: string
+  }
+  | {
+    deviceId: string
+    deviceName: string
+    id: string
+    initialDirectory?: string
+    kind: 'relay'
+    label: string
+    serverId: string
+    serverName: string
+  }
+
 const initialLauncherSearchHistoryEntry: LauncherSearchHistoryEntry = {
   isFileSearchMode: false,
   launcherViewMode: 'commands',
@@ -313,6 +584,7 @@ const areLauncherSearchHistoryScopesEqual = (
   left.launcherViewMode === right.launcherViewMode &&
   left.isFileSearchMode === right.isFileSearchMode &&
   left.directoryBrowserMode === right.directoryBrowserMode &&
+  left.directoryBrowserTargetId === right.directoryBrowserTargetId &&
   left.cloneDestinationDirectory === right.cloneDestinationDirectory &&
   left.directoryBrowserHomeDirectory === right.directoryBrowserHomeDirectory &&
   left.dismissedProjectContextFolder === right.dismissedProjectContextFolder
@@ -530,13 +802,22 @@ export function LauncherRoute({
   searchWorkspaceResources
 }: LauncherRouteProps = {}) {
   const { i18n, t } = useTranslation()
+  const navigate = useNavigate()
+  const location = useLocation()
   const { message, modal } = App.useApp()
   const [selectorState, setSelectorState] = useState<DesktopWorkspaceSelectorState>(emptyWorkspaceSelectorState)
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(() => readLauncherQueryFromSearch(location.search))
   const [activeCommandId, setActiveCommandId] = useState<string>()
   const [canCloneRepository, setCanCloneRepository] = useState(false)
   const [directoryBrowserMode, setDirectoryBrowserMode] = useState<LauncherDirectoryBrowserMode>()
   const [directoryBrowserHomeDirectory, setDirectoryBrowserHomeDirectory] = useState<string>()
+  const [directoryBrowserTargetId, setDirectoryBrowserTargetId] = useState<string>('local')
+  const [directoryBrowserDirectoriesByTarget, setDirectoryBrowserDirectoriesByTarget] = useState<
+    Record<string, string>
+  >({})
+  const [directoryBrowserVisitedTargets, setDirectoryBrowserVisitedTargets] = useState<Record<string, true>>({
+    local: true
+  })
   const [cloneDestinationDirectory, setCloneDestinationDirectory] = useState<string>()
   const [cloneDestinationList, setCloneDestinationList] = useState<DesktopCloneDestinationDirectoryList>(
     emptyCloneDestinationDirectoryList
@@ -544,6 +825,7 @@ export function LauncherRoute({
   const [recentCloneDestinationDirectories, setRecentCloneDestinationDirectories] = useState(() =>
     getStoredCloneDestinationDirectories()
   )
+  const [recentSelectionIds, setRecentSelectionIds] = useState(() => getStoredLauncherRecentSelectionIds())
   const [favoriteCloneDestinationDirectories, setFavoriteCloneDestinationDirectories] = useState(() =>
     getStoredCloneDestinationFavoriteDirectories()
   )
@@ -552,6 +834,13 @@ export function LauncherRoute({
   const [resourceResults, setResourceResults] = useState<DesktopWorkspaceResourceSearchResponse>(
     emptyWorkspaceResourceSearchResponse
   )
+  const [relayProjectGroups, setRelayProjectGroups] = useState<LauncherRelayDeviceProjectGroup[]>([])
+  const [relayDirectoryTargets, setRelayDirectoryTargets] = useState<LauncherRelayDirectoryTarget[]>([])
+  const [relayAccounts, setRelayAccounts] = useState<LauncherRelayAccount[]>([])
+  const [relayServers, setRelayServers] = useState<LauncherRelayServer[]>([])
+  const [relayActiveServerId, setRelayActiveServerId] = useState<string>()
+  const [isRelayAccountLoading, setIsRelayAccountLoading] = useState(false)
+  const [hasRelayAccountError, setHasRelayAccountError] = useState(false)
   const [pluginResults, setPluginResults] = useState<DesktopPluginLauncherSearchResult[]>([])
   const [fileSearchResults, setFileSearchResults] = useState<LauncherFileSearchItem[]>([])
   const [fileOpeners, setFileOpeners] = useState<DesktopWorkspaceFileOpenersResponse | null>(null)
@@ -562,16 +851,20 @@ export function LauncherRoute({
   const [hasResourceSearchError, setHasResourceSearchError] = useState(false)
   const [dismissedProjectContextFolder, setDismissedProjectContextFolder] = useState<string>()
   const [isLauncherMenuOpen, setIsLauncherMenuOpen] = useState(false)
-  const [launcherViewMode, setLauncherViewMode] = useState<LauncherViewMode>('commands')
+  const [launcherViewMode, setLauncherViewMode] = useState<LauncherViewMode>(() =>
+    readLauncherViewModeFromSearch(location.search)
+  )
   const [openingWorkspace, setOpeningWorkspace] = useState<LauncherOpeningWorkspace>()
   const [settingsOperationHints, setSettingsOperationHints] = useState<LauncherKeyboardHint[]>([])
   const [settingsResetAction, setSettingsResetAction] = useState<LauncherSettingsResetAction>()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const commandListRef = useRef<HTMLDivElement>(null)
+  const pendingLauncherSearchRef = useRef<string | undefined>(undefined)
   const searchHistoryRef = useRef<LauncherSearchHistoryState>({
     entries: [initialLauncherSearchHistoryEntry],
     index: 0
   })
+  const directoryBrowserTargetIdRef = useRef(directoryBrowserTargetId)
   const isLauncherActiveRef = useRef(active)
   const isSearchComposingRef = useRef(false)
   const isSearchInputComposing = useCallback(() => isSearchComposingRef.current, [])
@@ -592,6 +885,62 @@ export function LauncherRoute({
   const isCreateWorkspaceDirectoryMode = directoryBrowserMode === 'create-workspace'
   const isOpenWorkspaceDirectoryMode = directoryBrowserMode === 'open-workspace'
   const isDirectoryBrowserMode = directoryBrowserMode != null
+  const urlLauncherViewMode = useMemo(
+    () => readLauncherViewModeFromSearch(location.search),
+    [location.search]
+  )
+  const urlLauncherQuery = useMemo(
+    () => readLauncherQueryFromSearch(location.search),
+    [location.search]
+  )
+  const syncLauncherStateToUrl = useCallback((
+    input: {
+      mode?: LauncherViewMode
+      query?: string
+      replace?: boolean
+    } = {}
+  ) => {
+    const nextSearch = buildLauncherSearchForState(location.search, input)
+    if (nextSearch === location.search) return
+
+    pendingLauncherSearchRef.current = nextSearch
+    void navigate({
+      hash: location.hash,
+      pathname: location.pathname,
+      search: nextSearch
+    }, { replace: input.replace === true })
+  }, [location.hash, location.pathname, location.search, navigate])
+  const setLauncherViewModeWithUrl = useCallback((
+    mode: LauncherViewMode,
+    input: {
+      query?: string
+      replace?: boolean
+    } = {}
+  ) => {
+    setLauncherViewMode(mode)
+    if (input.query != null) {
+      setQuery(input.query)
+    }
+    syncLauncherStateToUrl({
+      mode,
+      query: input.query,
+      replace: input.replace
+    })
+  }, [syncLauncherStateToUrl])
+  const setLauncherQueryWithUrl = useCallback((
+    nextQuery: string,
+    input: {
+      replace?: boolean
+    } = {}
+  ) => {
+    setQuery(nextQuery)
+    if (isDirectoryBrowserMode || isFileSearchMode) return
+
+    syncLauncherStateToUrl({
+      query: nextQuery,
+      replace: input.replace ?? true
+    })
+  }, [isDirectoryBrowserMode, isFileSearchMode, syncLauncherStateToUrl])
   const injectedWorkspaceContext = useMemo(() => {
     if (workspaceContext == null || workspaceContext.workspaceFolder.trim() === '') return undefined
 
@@ -617,10 +966,47 @@ export function LauncherRoute({
   const contextProject = useMemo(() => (
     currentProject?.workspaceFolder === dismissedProjectContextFolder ? undefined : currentProject
   ), [currentProject, dismissedProjectContextFolder])
+  const directoryBrowserTargets = useMemo<LauncherDirectoryBrowserTarget[]>(() => {
+    const targets: LauncherDirectoryBrowserTarget[] = [{
+      id: 'local',
+      kind: 'local',
+      label: t('launcher.directoryTargets.local')
+    }]
+    for (const target of relayDirectoryTargets) {
+      targets.push({
+        deviceId: target.deviceId,
+        deviceName: target.deviceName,
+        id: target.id,
+        initialDirectory: target.initialDirectory,
+        kind: 'relay',
+        label: target.deviceName,
+        serverId: target.serverId,
+        serverName: target.serverName
+      })
+    }
+    return targets
+  }, [relayDirectoryTargets, t])
+  const visibleDirectoryBrowserTargets = useMemo(
+    () =>
+      isCloneRepositoryMode
+        ? directoryBrowserTargets.filter(target => target.kind === 'local')
+        : directoryBrowserTargets,
+    [directoryBrowserTargets, isCloneRepositoryMode]
+  )
+  const localDirectoryBrowserTarget = useMemo(
+    () => directoryBrowserTargets.find(target => target.kind === 'local') ?? directoryBrowserTargets[0],
+    [directoryBrowserTargets]
+  )
+  const activeDirectoryBrowserTarget = useMemo(() => (
+    visibleDirectoryBrowserTargets.find(target => target.id === directoryBrowserTargetId) ??
+      visibleDirectoryBrowserTargets[0] ??
+      directoryBrowserTargets[0]
+  ), [directoryBrowserTargetId, directoryBrowserTargets, visibleDirectoryBrowserTargets])
   const currentSearchHistoryEntry = useMemo<LauncherSearchHistoryEntry>(() => ({
     ...(cloneDestinationDirectory == null ? {} : { cloneDestinationDirectory }),
     ...(directoryBrowserHomeDirectory == null ? {} : { directoryBrowserHomeDirectory }),
     ...(directoryBrowserMode == null ? {} : { directoryBrowserMode }),
+    ...(directoryBrowserMode == null ? {} : { directoryBrowserTargetId }),
     ...(dismissedProjectContextFolder == null ? {} : { dismissedProjectContextFolder }),
     isFileSearchMode,
     launcherViewMode,
@@ -629,11 +1015,16 @@ export function LauncherRoute({
     cloneDestinationDirectory,
     directoryBrowserHomeDirectory,
     directoryBrowserMode,
+    directoryBrowserTargetId,
     dismissedProjectContextFolder,
     isFileSearchMode,
     launcherViewMode,
     query
   ])
+  useEffect(() => {
+    directoryBrowserTargetIdRef.current = directoryBrowserTargetId
+  }, [directoryBrowserTargetId])
+
   useEffect(() => {
     const wasActive = isLauncherActiveRef.current
     isLauncherActiveRef.current = active
@@ -650,6 +1041,51 @@ export function LauncherRoute({
   }, [])
 
   useEffect(() => {
+    const pendingLauncherSearch = pendingLauncherSearchRef.current
+    if (pendingLauncherSearch != null) {
+      if (pendingLauncherSearch !== location.search) return
+      pendingLauncherSearchRef.current = undefined
+    }
+
+    const shouldApplyUrlQuery = !isDirectoryBrowserMode && !isFileSearchMode
+    const shouldUpdateViewMode = urlLauncherViewMode !== launcherViewMode
+    const shouldUpdateQuery = shouldApplyUrlQuery && urlLauncherQuery !== query
+    if (!shouldUpdateViewMode && !shouldUpdateQuery) return
+
+    if (shouldUpdateViewMode) {
+      setLauncherViewMode(urlLauncherViewMode)
+      setDirectoryBrowserMode(undefined)
+      setDirectoryBrowserTargetId('local')
+      setCloneDestinationDirectory(undefined)
+      setDirectoryBrowserHomeDirectory(undefined)
+      setCloneDestinationList(emptyCloneDestinationDirectoryList)
+      setIsCloneDestinationLoading(false)
+      setHasCloneDestinationError(false)
+      setIsFileSearchMode(false)
+      setFileSearchResults([])
+      setIsFileSearchLoading(false)
+      setHasFileSearchError(false)
+    }
+    if (shouldUpdateQuery) {
+      setQuery(urlLauncherQuery)
+    }
+    setActiveCommandId(undefined)
+    setIsLauncherMenuOpen(false)
+    focusSearchInput()
+  }, [
+    focusSearchInput,
+    isDirectoryBrowserMode,
+    isFileSearchMode,
+    launcherViewMode,
+    location.search,
+    query,
+    urlLauncherQuery,
+    urlLauncherViewMode
+  ])
+
+  useEffect(() => {
+    if (!active) return
+
     let disposed = false
     const statePromise = desktopApi?.getWorkspaceSelectorState?.() ??
       (desktopApi == null ? getLauncherWorkspaceSelectorState() : undefined)
@@ -682,7 +1118,7 @@ export function LauncherRoute({
       disposed = true
       dispose?.()
     }
-  }, [desktopApi])
+  }, [active, desktopApi])
 
   useEffect(() => {
     if (
@@ -722,10 +1158,80 @@ export function LauncherRoute({
   }, [currentSearchHistoryEntry])
 
   useEffect(() => {
+    if (!isDirectoryBrowserMode) return
+    if (visibleDirectoryBrowserTargets.some(target => target.id === directoryBrowserTargetId)) return
+    const fallbackTarget = visibleDirectoryBrowserTargets[0]
+    setDirectoryBrowserTargetId(fallbackTarget?.id ?? 'local')
+    setCloneDestinationDirectory(fallbackTarget?.kind === 'relay' ? fallbackTarget.initialDirectory : undefined)
+    setDirectoryBrowserHomeDirectory(undefined)
+  }, [directoryBrowserTargetId, isDirectoryBrowserMode, visibleDirectoryBrowserTargets])
+
+  useEffect(() => {
     if (!active) return
 
     focusSearchInput()
   }, [active, focusSearchInput])
+
+  useEffect(() => {
+    const shouldLoadRelayStatus = active &&
+      desktopApi == null &&
+      (launcherViewMode === 'commands' || launcherViewMode === 'account')
+
+    if (!shouldLoadRelayStatus) {
+      if (desktopApi != null) {
+        setRelayProjectGroups([])
+        setRelayDirectoryTargets([])
+        setRelayAccounts([])
+        setRelayServers([])
+        setRelayActiveServerId(undefined)
+      }
+      setIsRelayAccountLoading(false)
+      return
+    }
+
+    let disposed = false
+    if (launcherViewMode === 'account') {
+      setIsRelayAccountLoading(true)
+      setHasRelayAccountError(false)
+    }
+
+    void getLauncherRelayStatus()
+      .then((status) => {
+        if (disposed) return
+
+        if (launcherViewMode === 'commands') {
+          setRelayProjectGroups(normalizeLauncherRelayProjectGroups(status))
+          setRelayDirectoryTargets(normalizeLauncherRelayDirectoryTargets(status))
+        }
+        setRelayAccounts(readLauncherRelayAccounts(status))
+        setRelayServers(readLauncherRelayServers(status))
+        setRelayActiveServerId(readLauncherRelayActiveServerId(status))
+      })
+      .catch((error) => {
+        if (disposed) return
+
+        console.warn('[launcher] failed to load relay status', error)
+        if (launcherViewMode === 'commands') {
+          setRelayProjectGroups([])
+          setRelayDirectoryTargets([])
+        }
+        if (launcherViewMode === 'account') {
+          setRelayAccounts([])
+          setRelayServers([])
+          setRelayActiveServerId(undefined)
+          setHasRelayAccountError(true)
+        }
+      })
+      .finally(() => {
+        if (!disposed && launcherViewMode === 'account') {
+          setIsRelayAccountLoading(false)
+        }
+      })
+
+    return () => {
+      disposed = true
+    }
+  }, [active, desktopApi, launcherViewMode])
 
   useEffect(() => {
     const checkGitAvailability = desktopApi?.isGitAvailable
@@ -761,8 +1267,15 @@ export function LauncherRoute({
       return
     }
 
-    const listCloneDestinationDirectories = desktopApi?.listCloneDestinationDirectories ??
-      (canUseServerLauncher ? listLauncherDirectories : undefined)
+    const listCloneDestinationDirectories = activeDirectoryBrowserTarget?.kind === 'relay'
+      ? (directory?: string) =>
+        listLauncherRelayDirectories({
+          deviceId: activeDirectoryBrowserTarget.deviceId,
+          directory,
+          serverId: activeDirectoryBrowserTarget.serverId
+        })
+      : desktopApi?.listCloneDestinationDirectories ??
+        (canUseServerLauncher ? listLauncherDirectories : undefined)
     if (listCloneDestinationDirectories == null) {
       setCloneDestinationList(emptyCloneDestinationDirectoryList)
       setIsCloneDestinationLoading(false)
@@ -770,19 +1283,33 @@ export function LauncherRoute({
       return
     }
 
+    const requestTargetId = activeDirectoryBrowserTarget?.id ?? 'local'
     let disposed = false
     setIsCloneDestinationLoading(true)
     setHasCloneDestinationError(false)
     void listCloneDestinationDirectories(cloneDestinationDirectory)
       .then((value) => {
         if (disposed) return
+        if (directoryBrowserTargetIdRef.current !== requestTargetId) return
         const nextList = normalizeCloneDestinationDirectoryList(value)
         setCloneDestinationList(nextList)
         setCloneDestinationDirectory(prev => prev === nextList.currentDirectory ? prev : nextList.currentDirectory)
+        setDirectoryBrowserDirectoriesByTarget(prev =>
+          prev[requestTargetId] === nextList.currentDirectory
+            ? prev
+            : {
+              ...prev,
+              [requestTargetId]: nextList.currentDirectory
+            }
+        )
+        setDirectoryBrowserVisitedTargets(prev =>
+          prev[requestTargetId] === true ? prev : { ...prev, [requestTargetId]: true }
+        )
         setDirectoryBrowserHomeDirectory(prev => prev ?? nextList.currentDirectory)
       })
       .catch((error) => {
         if (disposed) return
+        if (directoryBrowserTargetIdRef.current !== requestTargetId) return
         console.error('[launcher] failed to list clone destination directories', error)
         setCloneDestinationList(emptyCloneDestinationDirectoryList)
         setHasCloneDestinationError(true)
@@ -796,7 +1323,13 @@ export function LauncherRoute({
     return () => {
       disposed = true
     }
-  }, [canUseServerLauncher, cloneDestinationDirectory, desktopApi, isDirectoryBrowserMode])
+  }, [
+    activeDirectoryBrowserTarget,
+    canUseServerLauncher,
+    cloneDestinationDirectory,
+    desktopApi,
+    isDirectoryBrowserMode
+  ])
 
   useEffect(() => {
     const handleWindowFocus = () => {
@@ -848,6 +1381,9 @@ export function LauncherRoute({
       if (canUseServerLauncher) {
         const result = await openLauncherWorkspace(normalizedWorkspaceFolder)
         const workspaceClientBase = buildWorkspaceClientBase(result.workspaceId)
+        rememberWorkspaceConnection(result, 'local', {
+          managerServerBaseUrl: getLauncherManagerServerBaseUrl()
+        })
         mergeRuntimeEnv({
           __ONEWORKS_PROJECT_CLIENT_BASE__: workspaceClientBase,
           __ONEWORKS_PROJECT_SERVER_BASE_URL__: result.serverBaseUrl,
@@ -996,14 +1532,29 @@ export function LauncherRoute({
     })
   }, [modal, stopWorkspace, t])
 
+  const readDirectoryBrowserInitialDirectory = useCallback((target?: LauncherDirectoryBrowserTarget) => {
+    if (target != null && directoryBrowserVisitedTargets[target.id] === true) {
+      const rememberedDirectory = directoryBrowserDirectoriesByTarget[target.id]
+      if (rememberedDirectory != null && rememberedDirectory.trim() !== '') return rememberedDirectory
+    }
+    if (target?.kind === 'relay') return target.initialDirectory
+    return recentCloneDestinationDirectories[0] ?? projects[0]?.workspaceFolder
+  }, [
+    directoryBrowserDirectoriesByTarget,
+    directoryBrowserVisitedTargets,
+    projects,
+    recentCloneDestinationDirectories
+  ])
+
   const enterCloneRepositoryMode = useCallback(() => {
     if (!canCloneRepository || desktopApi?.cloneRepository == null) {
       showDesktopActionUnavailable()
       return
     }
 
-    setLauncherViewMode('commands')
+    setLauncherViewModeWithUrl('commands', { query: '', replace: true })
     setDirectoryBrowserMode('clone')
+    setDirectoryBrowserTargetId('local')
     setDirectoryBrowserHomeDirectory(undefined)
     setIsFileSearchMode(false)
     setFileSearchResults([])
@@ -1024,19 +1575,26 @@ export function LauncherRoute({
     focusSearchInput,
     query,
     recentCloneDestinationDirectories,
+    setLauncherViewModeWithUrl,
     showDesktopActionUnavailable
   ])
 
   const enterCreateWorkspaceDirectoryMode = useCallback(() => {
-    const canCreateWorkspace = desktopApi?.createWorkspaceInDirectory != null || canUseServerLauncher
-    const canListDirectories = desktopApi?.listCloneDestinationDirectories != null || canUseServerLauncher
+    const hasRelayDirectoryTargets = directoryBrowserTargets.some(target => target.kind === 'relay')
+    const canCreateWorkspace = desktopApi?.createWorkspaceInDirectory != null || canUseServerLauncher ||
+      hasRelayDirectoryTargets
+    const canListDirectories = desktopApi?.listCloneDestinationDirectories != null || canUseServerLauncher ||
+      hasRelayDirectoryTargets
     if (!canListDirectories || !canCreateWorkspace) {
       showDesktopActionUnavailable()
       return
     }
 
-    setLauncherViewMode('commands')
+    setLauncherViewModeWithUrl('commands', { query: '', replace: true })
     setDirectoryBrowserMode('create-workspace')
+    const initialTarget = localDirectoryBrowserTarget ?? activeDirectoryBrowserTarget
+    setDirectoryBrowserTargetId(initialTarget?.id ?? 'local')
+    setDirectoryBrowserVisitedTargets({ [initialTarget?.id ?? 'local']: true })
     setDirectoryBrowserHomeDirectory(undefined)
     setIsFileSearchMode(false)
     setFileSearchResults([])
@@ -1047,21 +1605,26 @@ export function LauncherRoute({
     setIsResourceSearchLoading(false)
     setHasResourceSearchError(false)
     setQuery('')
-    setCloneDestinationDirectory(recentCloneDestinationDirectories[0] ?? projects[0]?.workspaceFolder)
+    setCloneDestinationDirectory(readDirectoryBrowserInitialDirectory(initialTarget))
     setActiveCommandId(undefined)
     setIsLauncherMenuOpen(false)
     focusSearchInput()
   }, [
+    activeDirectoryBrowserTarget,
     canUseServerLauncher,
     desktopApi,
+    directoryBrowserTargets,
     focusSearchInput,
-    projects,
-    recentCloneDestinationDirectories,
+    localDirectoryBrowserTarget,
+    readDirectoryBrowserInitialDirectory,
+    setLauncherViewModeWithUrl,
     showDesktopActionUnavailable
   ])
 
   const enterOpenWorkspaceDirectoryMode = useCallback(async () => {
-    const canListDirectories = desktopApi?.listCloneDestinationDirectories != null || canUseServerLauncher
+    const hasRelayDirectoryTargets = directoryBrowserTargets.some(target => target.kind === 'relay')
+    const canListDirectories = desktopApi?.listCloneDestinationDirectories != null || canUseServerLauncher ||
+      hasRelayDirectoryTargets
     if (!canListDirectories) {
       if (desktopApi?.chooseWorkspace != null) {
         try {
@@ -1082,8 +1645,11 @@ export function LauncherRoute({
       return
     }
 
-    setLauncherViewMode('commands')
+    setLauncherViewModeWithUrl('commands', { query: '', replace: true })
     setDirectoryBrowserMode('open-workspace')
+    const initialTarget = localDirectoryBrowserTarget ?? activeDirectoryBrowserTarget
+    setDirectoryBrowserTargetId(initialTarget?.id ?? 'local')
+    setDirectoryBrowserVisitedTargets({ [initialTarget?.id ?? 'local']: true })
     setDirectoryBrowserHomeDirectory(undefined)
     setIsFileSearchMode(false)
     setFileSearchResults([])
@@ -1094,31 +1660,72 @@ export function LauncherRoute({
     setIsResourceSearchLoading(false)
     setHasResourceSearchError(false)
     setQuery('')
-    setCloneDestinationDirectory(recentCloneDestinationDirectories[0] ?? projects[0]?.workspaceFolder)
+    setCloneDestinationDirectory(readDirectoryBrowserInitialDirectory(initialTarget))
     setActiveCommandId(undefined)
     setIsLauncherMenuOpen(false)
     focusSearchInput()
   }, [
+    activeDirectoryBrowserTarget,
     canUseServerLauncher,
     desktopApi,
+    directoryBrowserTargets,
     focusSearchInput,
+    localDirectoryBrowserTarget,
     message,
     openWorkspace,
-    projects,
-    recentCloneDestinationDirectories,
+    readDirectoryBrowserInitialDirectory,
+    setLauncherViewModeWithUrl,
     showDesktopActionUnavailable,
     t
   ])
 
   const openCloneDestinationDirectory = useCallback((directory: string | undefined) => {
     if (directory == null || directory.trim() === '') return
+    const targetId = activeDirectoryBrowserTarget?.id ?? directoryBrowserTargetId
     setCloneDestinationDirectory(directory)
+    setDirectoryBrowserDirectoriesByTarget(prev =>
+      prev[targetId] === directory
+        ? prev
+        : {
+          ...prev,
+          [targetId]: directory
+        }
+    )
     if (directoryBrowserMode === 'open-workspace') {
       setQuery('')
     }
     setActiveCommandId(undefined)
     focusSearchInput()
-  }, [directoryBrowserMode, focusSearchInput])
+  }, [activeDirectoryBrowserTarget?.id, directoryBrowserMode, directoryBrowserTargetId, focusSearchInput])
+
+  const selectDirectoryBrowserTarget = useCallback((target: LauncherDirectoryBrowserTarget) => {
+    const targetChanged = target.id !== directoryBrowserTargetId
+    const nextDirectory = target.id !== directoryBrowserTargetId && target.kind === 'relay'
+      ? target.initialDirectory
+      : readDirectoryBrowserInitialDirectory(target)
+    setDirectoryBrowserTargetId(target.id)
+    setDirectoryBrowserVisitedTargets(prev => prev[target.id] === true ? prev : { ...prev, [target.id]: true })
+    setDirectoryBrowserHomeDirectory(undefined)
+    if (targetChanged) {
+      setCloneDestinationList(emptyCloneDestinationDirectoryList)
+      setHasCloneDestinationError(false)
+      setIsCloneDestinationLoading(true)
+    }
+    setCloneDestinationDirectory(nextDirectory)
+    if (nextDirectory != null && nextDirectory.trim() !== '') {
+      setDirectoryBrowserDirectoriesByTarget(prev =>
+        prev[target.id] === nextDirectory
+          ? prev
+          : {
+            ...prev,
+            [target.id]: nextDirectory
+          }
+      )
+    }
+    setActiveCommandId(undefined)
+    setQuery('')
+    focusSearchInput()
+  }, [directoryBrowserTargetId, focusSearchInput, readDirectoryBrowserInitialDirectory])
 
   const toggleCloneDestinationFavoriteDirectory = useCallback((directory: string) => {
     const normalizedDirectory = directory.trim()
@@ -1205,9 +1812,60 @@ export function LauncherRoute({
     t
   ])
 
+  const openRemoteWorkspaceTarget = useCallback(async (target: {
+    deviceId: string
+    deviceName: string
+    name: string
+    serverId: string
+    serverName: string
+    workspaceFolder: string
+  }) => {
+    setOpeningWorkspace({
+      name: target.name,
+      path: `${target.deviceName} · ${target.workspaceFolder}`
+    })
+
+    try {
+      const result = await openLauncherRelayWorkspace({
+        deviceId: target.deviceId,
+        deviceName: target.deviceName,
+        serverId: target.serverId,
+        serverName: target.serverName,
+        workspaceFolder: target.workspaceFolder
+      })
+      const workspaceClientBase = buildWorkspaceClientBase(result.workspaceId)
+      rememberWorkspaceConnection(result, 'relay', {
+        managerServerBaseUrl: getLauncherManagerServerBaseUrl(),
+        relay: {
+          deviceId: target.deviceId,
+          deviceName: target.deviceName,
+          serverId: target.serverId,
+          serverName: target.serverName,
+          workspaceFolder: result.workspaceFolder
+        }
+      })
+      mergeRuntimeEnv({
+        __ONEWORKS_PROJECT_CLIENT_BASE__: workspaceClientBase,
+        __ONEWORKS_PROJECT_SERVER_BASE_URL__: result.serverBaseUrl,
+        __ONEWORKS_PROJECT_SERVER_ROLE__: 'workspace',
+        __ONEWORKS_PROJECT_WORKSPACE_ID__: result.workspaceId,
+        __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: result.workspaceFolder
+      })
+      window.location.assign(workspaceClientBase)
+    } catch (error) {
+      console.error('[launcher] failed to open remote workspace', error)
+      void message.error(getApiErrorMessage(error, t('launcher.openWorkspaceFailed')))
+      setOpeningWorkspace(current =>
+        current?.path === `${target.deviceName} · ${target.workspaceFolder}`
+          ? undefined
+          : current
+      )
+    }
+  }, [message, t])
+
   const handleCreateWorkspaceInDirectory = useCallback(async (parentDirectory: string | undefined) => {
     const createWorkspaceInDirectory = desktopApi?.createWorkspaceInDirectory
-    if (createWorkspaceInDirectory == null && !canUseServerLauncher) {
+    if (activeDirectoryBrowserTarget?.kind !== 'relay' && createWorkspaceInDirectory == null && !canUseServerLauncher) {
       showDesktopActionUnavailable()
       return
     }
@@ -1227,6 +1885,29 @@ export function LauncherRoute({
     }
 
     try {
+      if (activeDirectoryBrowserTarget?.kind === 'relay') {
+        const result = await createLauncherRelayWorkspaceInDirectory({
+          deviceId: activeDirectoryBrowserTarget.deviceId,
+          parentDirectory: normalizedParentDirectory,
+          projectName,
+          serverId: activeDirectoryBrowserTarget.serverId
+        })
+        const workspaceFolder = result.workspaceFolder
+        if (workspaceFolder == null || workspaceFolder.trim() === '') {
+          focusSearchInput()
+          return
+        }
+        await openRemoteWorkspaceTarget({
+          deviceId: activeDirectoryBrowserTarget.deviceId,
+          deviceName: activeDirectoryBrowserTarget.deviceName,
+          name: getDirectoryDisplayName(workspaceFolder),
+          serverId: activeDirectoryBrowserTarget.serverId,
+          serverName: activeDirectoryBrowserTarget.serverName,
+          workspaceFolder
+        })
+        return
+      }
+
       const workspaceFolder = createWorkspaceInDirectory == null
         ? (await createLauncherWorkspaceInDirectory(normalizedParentDirectory, projectName)).workspaceFolder
         : await createWorkspaceInDirectory(normalizedParentDirectory, projectName)
@@ -1246,11 +1927,13 @@ export function LauncherRoute({
       void message.error(getApiErrorMessage(error, t('launcher.createWorkspaceFailed')))
     }
   }, [
+    activeDirectoryBrowserTarget,
     canUseServerLauncher,
     desktopApi,
     focusSearchInput,
     message,
     openWorkspace,
+    openRemoteWorkspaceTarget,
     query,
     showDesktopActionUnavailable,
     t
@@ -1264,6 +1947,18 @@ export function LauncherRoute({
       return
     }
 
+    if (activeDirectoryBrowserTarget?.kind === 'relay') {
+      await openRemoteWorkspaceTarget({
+        deviceId: activeDirectoryBrowserTarget.deviceId,
+        deviceName: activeDirectoryBrowserTarget.deviceName,
+        name: getDirectoryDisplayName(normalizedDirectory),
+        serverId: activeDirectoryBrowserTarget.serverId,
+        serverName: activeDirectoryBrowserTarget.serverName,
+        workspaceFolder: normalizedDirectory
+      })
+      return
+    }
+
     setRecentCloneDestinationDirectories((prev) => {
       const next = rememberCloneDestinationDirectory(prev, normalizedDirectory)
       persistCloneDestinationDirectories(next)
@@ -1271,7 +1966,7 @@ export function LauncherRoute({
     })
 
     await openWorkspace(normalizedDirectory)
-  }, [focusSearchInput, message, openWorkspace, t])
+  }, [activeDirectoryBrowserTarget, focusSearchInput, message, openRemoteWorkspaceTarget, openWorkspace, t])
 
   const openCurrentWorkspaceResource = useCallback(async (target: DesktopWorkspaceResourceTarget) => {
     if (onOpenWorkspaceResource != null) {
@@ -1371,6 +2066,10 @@ export function LauncherRoute({
     void message.info(t('launcher.comingSoon'))
   }, [message, t])
 
+  const openRemoteWorkspace = useCallback(async (project: LauncherRelayDeviceProject) => {
+    await openRemoteWorkspaceTarget(project)
+  }, [openRemoteWorkspaceTarget])
+
   const exitFileSearchMode = useCallback(() => {
     if (!isFileSearchMode) return false
     setIsFileSearchMode(false)
@@ -1400,7 +2099,7 @@ export function LauncherRoute({
     }
 
     setDismissedProjectContextFolder(contextProject.workspaceFolder)
-    setQuery('')
+    setLauncherQueryWithUrl('')
     setIsFileSearchMode(false)
     setFileSearchResults([])
     setIsFileSearchLoading(false)
@@ -1416,7 +2115,7 @@ export function LauncherRoute({
     setIsResourceSearchLoading(false)
     setHasResourceSearchError(false)
     return true
-  }, [contextProject])
+  }, [contextProject, setLauncherQueryWithUrl])
 
   useEffect(() => {
     if (contextProject == null) {
@@ -1733,21 +2432,353 @@ export function LauncherRoute({
     }
   }, [desktopApi, message, t])
 
+  const openLauncherView = useCallback((mode: LauncherViewMode) => {
+    setLauncherViewModeWithUrl(mode, { query: '' })
+    setDirectoryBrowserMode(undefined)
+    setCloneDestinationDirectory(undefined)
+    setDirectoryBrowserHomeDirectory(undefined)
+    setCloneDestinationList(emptyCloneDestinationDirectoryList)
+    setIsCloneDestinationLoading(false)
+    setHasCloneDestinationError(false)
+    setIsFileSearchMode(false)
+    setFileSearchResults([])
+    setIsFileSearchLoading(false)
+    setHasFileSearchError(false)
+    setActiveCommandId(undefined)
+    setIsLauncherMenuOpen(false)
+    focusSearchInput()
+  }, [focusSearchInput, setLauncherViewModeWithUrl])
+
+  const checkDesktopUpdates = useCallback(() => {
+    if (desktopApi?.checkForUpdates == null) {
+      void message.warning(t('launcher.desktopActionUnavailable'))
+      return
+    }
+
+    setIsLauncherMenuOpen(false)
+    void desktopApi.checkForUpdates({ interactive: true })
+      .catch((error) => {
+        console.error('[launcher] failed to check desktop updates', error)
+        void message.error(t('config.desktopSettings.updates.checkFailed'))
+      })
+  }, [desktopApi, message, t])
+
+  const openRelayAccountManagement = useCallback(() => {
+    const accountKey = relayAccounts.length === 1 ? cleanLauncherText(relayAccounts[0]?.accountKey) : undefined
+
+    setIsLauncherMenuOpen(false)
+    void navigate(buildRelayPluginRoutePath(
+      accountKey == null ? 'accounts' : `accounts/${encodeURIComponent(accountKey)}/account`
+    ))
+  }, [navigate, relayAccounts])
+
+  const openRelayAccountDetail = useCallback((account: LauncherRelayAccount) => {
+    const accountKey = cleanLauncherText(account.accountKey)
+    if (accountKey == null) {
+      openRelayAccountManagement()
+      return
+    }
+
+    setIsLauncherMenuOpen(false)
+    void navigate(buildRelayPluginRoutePath(`accounts/${encodeURIComponent(accountKey)}/account`))
+  }, [navigate, openRelayAccountManagement])
+
+  const startRelayAccountLogin = useCallback(async () => {
+    const serverId = cleanLauncherText(relayActiveServerId) ?? 'cf'
+    const response = await createLauncherRelayLoginUrl({
+      redirectUri: buildRelayPluginClientUrl('accounts'),
+      serverId
+    })
+    const loginUrl = cleanLauncherText(response.loginUrl)
+    if (loginUrl == null) {
+      throw new Error('Relay login URL was not returned.')
+    }
+
+    setIsLauncherMenuOpen(false)
+    const popup = window.open(loginUrl, '_blank', 'noopener,noreferrer')
+    if (popup == null) {
+      window.location.href = loginUrl
+    }
+  }, [relayActiveServerId])
+
+  const getLauncherRelayAccountServerLabel = useCallback((account: LauncherRelayAccount) => {
+    const server = findLauncherRelayServerForAccount(account, relayServers)
+    const serverId = cleanLauncherText(server?.id ?? account.serverId)
+    const serverAlias = cleanLauncherText(account.serverAlias)?.toLowerCase()
+
+    if (
+      server?.official === true || serverId === 'cf' || serverId === 'vercel' || serverAlias === 'cf' ||
+      serverAlias === 'vercel'
+    ) {
+      return t('launcher.account.defaultServer')
+    }
+    if (serverId === 'local' || serverAlias === 'local') {
+      return t('launcher.account.localServer')
+    }
+
+    const serverName = cleanLauncherText(server?.name)
+    if (
+      serverName == null || /^https?:\/\//iu.test(serverName) || serverName === cleanLauncherText(server?.remoteBaseUrl)
+    ) {
+      return t('launcher.account.serverFallback')
+    }
+    return serverName
+  }, [relayServers, t])
+
+  const relayAccountSections = useMemo<LauncherCommandSection[]>(() => {
+    const serverKeys = new Set(relayAccounts.map(getLauncherRelayAccountServerKey))
+    const shouldGroupByServer = serverKeys.size > 1
+    const accountGroups = shouldGroupByServer
+      ? [...serverKeys].map((serverKey) => {
+        const accounts = relayAccounts.filter(account => getLauncherRelayAccountServerKey(account) === serverKey)
+        return {
+          accounts,
+          id: `account-server:${serverKey}`,
+          title: getLauncherRelayAccountServerLabel(accounts[0] ?? {})
+        }
+      })
+      : [{
+        accounts: relayAccounts,
+        id: 'accounts',
+        title: t('launcher.account.title')
+      }]
+
+    const accountSections = accountGroups
+      .map(group => ({
+        commands: group.accounts.map((account, index): LauncherCommand => {
+          const name = getLauncherRelayAccountDisplayName(account)
+          return {
+            action: () => openRelayAccountDetail(account),
+            avatarInitials: getLauncherRelayAccountInitials(name),
+            avatarUrl: cleanLauncherText(account.avatarUrl),
+            badge: account.enabled === false
+              ? t('launcher.account.disabled')
+              : account.sessionAuthenticated === true
+              ? t('launcher.account.signedIn')
+              : undefined,
+            icon: 'account_circle',
+            id: `account:${cleanLauncherText(account.accountKey) ?? index}`,
+            keywords: [
+              name,
+              cleanLauncherText(account.email) ?? '',
+              cleanLauncherText(account.loginId) ?? '',
+              cleanLauncherText(account.userId) ?? '',
+              cleanLauncherText(account.serverAlias) ?? '',
+              cleanLauncherText(account.serverId) ?? '',
+              t('launcher.account.detailHint')
+            ],
+            subtitle: getLauncherRelayAccountSubtitle(account),
+            title: name
+          }
+        }),
+        id: group.id,
+        title: group.title
+      }))
+      .filter(section => section.commands.length > 0)
+
+    if (accountSections.length === 0) {
+      accountSections.push({
+        commands: [{
+          action: () => void startRelayAccountLogin(),
+          icon: hasRelayAccountError ? 'warning' : isRelayAccountLoading ? 'sync' : 'account_circle',
+          id: 'account:empty',
+          keywords: ['account', 'login', 'user', '账号', '登录'],
+          subtitle: hasRelayAccountError
+            ? t('launcher.account.loadFailedHint')
+            : isRelayAccountLoading
+            ? ''
+            : t('launcher.account.emptyHint'),
+          title: hasRelayAccountError
+            ? t('launcher.account.loadFailed')
+            : isRelayAccountLoading
+            ? t('launcher.account.loading')
+            : t('launcher.account.empty')
+        }],
+        id: 'accounts',
+        title: t('launcher.account.title')
+      })
+    }
+
+    return [
+      ...accountSections,
+      {
+        commands: [
+          {
+            action: () => void startRelayAccountLogin(),
+            icon: 'login',
+            id: 'account:login',
+            keywords: ['login', 'sign in', 'account', 'user', '登录', '账号', '新增账号'],
+            subtitle: t('launcher.account.loginHint'),
+            title: t('launcher.account.login')
+          },
+          {
+            action: openRelayAccountManagement,
+            icon: 'manage_accounts',
+            id: 'account:manage',
+            keywords: ['manage', 'account', 'user', 'profile', '管理', '账号', '账户'],
+            subtitle: t('launcher.account.manageHint'),
+            title: t('launcher.account.manage')
+          }
+        ],
+        id: 'account-actions',
+        title: t('launcher.account.actionsTitle')
+      }
+    ]
+  }, [
+    getLauncherRelayAccountServerLabel,
+    hasRelayAccountError,
+    isRelayAccountLoading,
+    openRelayAccountDetail,
+    openRelayAccountManagement,
+    relayAccounts,
+    startRelayAccountLogin,
+    t
+  ])
+
+  const openProjectFromPreview = useCallback(() => {
+    setLauncherViewModeWithUrl('commands', { query: '', replace: true })
+    enterOpenWorkspaceDirectoryMode()
+  }, [enterOpenWorkspaceDirectoryMode, setLauncherViewModeWithUrl])
+
+  const previewSections = useMemo<LauncherCommandSection[]>(() => {
+    if (contextProject == null) {
+      return [{
+        commands: [{
+          action: openProjectFromPreview,
+          icon: 'folder_open',
+          id: 'preview:open-project',
+          keywords: ['preview', 'open project', 'website', 'browser', '预览', '打开项目'],
+          subtitle: t('launcher.preview.openProjectHint'),
+          title: t('launcher.preview.openProject')
+        }],
+        id: 'preview',
+        title: t('launcher.preview.title')
+      }]
+    }
+
+    return [{
+      commands: [
+        {
+          action: () => void openCurrentWorkspaceResource({ kind: 'new-website' }),
+          badge: t('launcher.resource.tabBadge'),
+          icon: 'language',
+          id: 'preview:new-website',
+          keywords: ['preview', 'website', 'browser', 'web', 'url', 'new', 'tab', '预览', '网站', '浏览器'],
+          subtitle: t('launcher.preview.newWebsiteHint'),
+          title: t('launcher.preview.newWebsite')
+        },
+        ...resourceResults.websites
+          .filter(resource => resource.kind === 'website' && typeof resource.url === 'string')
+          .map(resource => ({
+            action: () =>
+              void openCurrentWorkspaceResource({
+                kind: 'website',
+                title: resource.title ?? resource.url,
+                url: resource.url
+              }),
+            badge: t('launcher.resource.websiteBadge'),
+            icon: 'language',
+            id: `preview:${resource.id}`,
+            keywords: [resource.title ?? '', resource.url ?? '', 'preview', '预览'],
+            subtitle: resource.url,
+            title: resource.title ?? resource.url ?? ''
+          }))
+      ],
+      id: 'preview',
+      title: t('launcher.preview.title')
+    }]
+  }, [
+    contextProject,
+    openCurrentWorkspaceResource,
+    openProjectFromPreview,
+    resourceResults.websites,
+    t
+  ])
+
+  const builtinCommands = useMemo<LauncherCommand[]>(() => [
+    {
+      action: () => openLauncherView('account'),
+      icon: 'account_circle',
+      id: 'builtin:account',
+      keywords: ['account', 'login', 'user', 'profile', '账号', '账户', '登录', '用户'],
+      subtitle: t('launcher.builtin.accountHint'),
+      title: t('launcher.menu.account')
+    },
+    {
+      action: () => openLauncherView('settings'),
+      icon: 'settings',
+      id: 'builtin:settings',
+      keywords: ['settings', 'preferences', 'config', '设置', '配置'],
+      subtitle: t('launcher.builtin.settingsHint'),
+      title: t('launcher.menu.settings')
+    },
+    {
+      action: () => openLauncherView('about'),
+      icon: 'info',
+      id: 'builtin:about',
+      keywords: ['about', 'version', 'info', '关于', '版本'],
+      subtitle: t('launcher.builtin.aboutHint'),
+      title: t('launcher.menu.about')
+    },
+    {
+      action: checkDesktopUpdates,
+      icon: 'sync',
+      id: 'builtin:check-updates',
+      keywords: ['update', 'check update', 'upgrade', '检查更新', '更新'],
+      subtitle: t('launcher.builtin.checkUpdateHint'),
+      title: t('launcher.menu.checkUpdate')
+    },
+    {
+      action: () => openLauncherView('preview'),
+      icon: 'preview',
+      id: 'builtin:preview',
+      keywords: ['preview', 'website', 'browser', 'web', '预览', '网站', '浏览器'],
+      subtitle: t('launcher.builtin.previewHint'),
+      title: t('launcher.preview.title')
+    }
+  ], [checkDesktopUpdates, openLauncherView, t])
+
+  const rememberLauncherSelection = useCallback((command: LauncherCommand) => {
+    if (launcherViewMode !== 'commands' || isDirectoryBrowserMode || isFileSearchMode) return
+
+    const id = (command.recentSelectionId ?? command.id).trim()
+    if (id === '') return
+
+    setRecentSelectionIds((previousIds) => {
+      const nextIds = rememberLauncherRecentSelectionId(previousIds, id)
+      persistLauncherRecentSelectionIds(nextIds)
+      return nextIds
+    })
+  }, [isDirectoryBrowserMode, isFileSearchMode, launcherViewMode])
+
   const commandSections = useMemo<LauncherCommandSection[]>(() => {
+    if (launcherViewMode === 'account') {
+      return relayAccountSections
+    }
+
+    if (launcherViewMode === 'preview') {
+      return previewSections
+    }
+
     if (isDirectoryBrowserMode) {
       const currentDirectory = cloneDestinationList.currentDirectory
       if (currentDirectory === '') return []
 
+      const useDirectoryMemory = activeDirectoryBrowserTarget?.kind !== 'relay'
       const currentDirectoryKey = normalizeDirectoryPathKey(currentDirectory)
       const homeDirectoryKey = directoryBrowserHomeDirectory == null
         ? currentDirectoryKey
         : normalizeDirectoryPathKey(directoryBrowserHomeDirectory)
       const isHomeDirectory = currentDirectoryKey === homeDirectoryKey
       const recentDirectoryIndexes = new Map(
-        recentCloneDestinationDirectories.map((directory, index) => [normalizeDirectoryPathKey(directory), index])
+        useDirectoryMemory
+          ? recentCloneDestinationDirectories.map((directory, index) => [normalizeDirectoryPathKey(directory), index])
+          : []
       )
       const favoriteDirectoryIndexes = new Map(
-        favoriteCloneDestinationDirectories.map((directory, index) => [normalizeDirectoryPathKey(directory), index])
+        useDirectoryMemory
+          ? favoriteCloneDestinationDirectories.map((directory, index) => [normalizeDirectoryPathKey(directory), index])
+          : []
       )
       const favoriteDirectoryKeys = new Set(favoriteDirectoryIndexes.keys())
       const sortByFavoriteAndRecentSelection = (
@@ -1779,7 +2810,7 @@ export function LauncherRoute({
         showSecondaryAction?: boolean
       }): LauncherCommand => {
         const isBackAction = actionLabel === 'back'
-        const hasFavoriteAction = showFavoriteAction && !isBackAction
+        const hasFavoriteAction = useDirectoryMemory && showFavoriteAction && !isBackAction
         const hasSecondaryAction = showSecondaryAction && !isBackAction
         const isFavorite = favoriteDirectoryKeys.has(normalizeDirectoryPathKey(path))
         const action = isBackAction
@@ -1811,12 +2842,14 @@ export function LauncherRoute({
               onClick: () => openCloneDestinationDirectory(path)
             }]
             : []),
-          {
-            icon: <span className='material-symbols-rounded launcher-command-menu__icon'>folder_open</span>,
-            key: 'reveal-directory',
-            label: t('launcher.projects.revealInFileManager', { manager: filesystemManagerName }),
-            onClick: () => void revealFilesystemPath(path)
-          },
+          ...(useDirectoryMemory
+            ? [{
+              icon: <span className='material-symbols-rounded launcher-command-menu__icon'>folder_open</span>,
+              key: 'reveal-directory',
+              label: t('launcher.projects.revealInFileManager', { manager: filesystemManagerName }),
+              onClick: () => void revealFilesystemPath(path)
+            }]
+            : []),
           { type: 'divider' },
           {
             icon: <span className='material-symbols-rounded launcher-command-menu__icon'>badge</span>,
@@ -1901,35 +2934,39 @@ export function LauncherRoute({
       const childDirectoryKeys = new Set(
         cloneDestinationList.directories.map(directory => normalizeDirectoryPathKey(directory.path))
       )
-      const favoriteDirectories = favoriteCloneDestinationDirectories
-        .filter(directory =>
-          isHomeDirectory &&
-          !fixedDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
-          !childDirectoryKeys.has(normalizeDirectoryPathKey(directory))
-        )
-        .map(directory => ({
-          name: getDirectoryDisplayName(directory),
-          path: directory
-        }))
-      const recentDirectories = recentCloneDestinationDirectories
-        .filter(directory =>
-          (
+      const favoriteDirectories = useDirectoryMemory
+        ? favoriteCloneDestinationDirectories
+          .filter(directory =>
             isHomeDirectory &&
             !fixedDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
-            !childDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
-            !favoriteDirectoryKeys.has(normalizeDirectoryPathKey(directory))
-          ) ||
-          (
-            isDirectoryPathInSameParent(directory, currentDirectory) &&
-            !fixedDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
-            !childDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
-            !favoriteDirectoryKeys.has(normalizeDirectoryPathKey(directory))
+            !childDirectoryKeys.has(normalizeDirectoryPathKey(directory))
           )
-        )
-        .map(directory => ({
-          name: getDirectoryDisplayName(directory),
-          path: directory
-        }))
+          .map(directory => ({
+            name: getDirectoryDisplayName(directory),
+            path: directory
+          }))
+        : []
+      const recentDirectories = useDirectoryMemory
+        ? recentCloneDestinationDirectories
+          .filter(directory =>
+            (
+              isHomeDirectory &&
+              !fixedDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
+              !childDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
+              !favoriteDirectoryKeys.has(normalizeDirectoryPathKey(directory))
+            ) ||
+            (
+              isDirectoryPathInSameParent(directory, currentDirectory) &&
+              !fixedDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
+              !childDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
+              !favoriteDirectoryKeys.has(normalizeDirectoryPathKey(directory))
+            )
+          )
+          .map(directory => ({
+            name: getDirectoryDisplayName(directory),
+            path: directory
+          }))
+        : []
       const commands = [
         ...directQueryDirectories.map(directory =>
           toDestinationCommand({
@@ -2016,8 +3053,50 @@ export function LauncherRoute({
       ].filter(section => section.commands.length > 0)
     }
 
-    if (contextProject != null) {
+    const withRecentSelectionsAndBuiltin = (sections: LauncherCommandSection[]) => {
+      const availableCommands = new Map<string, LauncherCommand>()
+      ;[...sections, { commands: builtinCommands, id: 'builtin', title: t('launcher.builtin.title') }]
+        .forEach(section => {
+          section.commands.forEach((command) => {
+            const id = (command.recentSelectionId ?? command.id).trim()
+            if (id !== '' && !availableCommands.has(id)) {
+              availableCommands.set(id, command)
+            }
+          })
+        })
+
+      const recentCommands = recentSelectionIds
+        .flatMap((id) => {
+          const command = availableCommands.get(id)
+          if (command == null) return []
+
+          return [{
+            ...command,
+            id: `recent:${command.recentSelectionId ?? command.id}`,
+            recentSelectionId: command.recentSelectionId ?? command.id
+          }]
+        })
+        .slice(0, LAUNCHER_RECENT_SELECTION_DISPLAY_LIMIT)
+
       return [
+        ...(recentCommands.length === 0
+          ? []
+          : [{
+            commands: recentCommands,
+            id: 'recent-selections',
+            title: t('launcher.recentSelections.title')
+          }]),
+        ...sections,
+        {
+          commands: builtinCommands,
+          id: 'builtin',
+          title: t('launcher.builtin.title')
+        }
+      ].filter(section => section.commands.length > 0)
+    }
+
+    if (contextProject != null) {
+      return withRecentSelectionsAndBuiltin([
         {
           commands: [
             {
@@ -2159,7 +3238,7 @@ export function LauncherRoute({
           id: 'plugins',
           title: t('config.sections.plugins')
         }
-      ].filter(section => section.commands.length > 0)
+      ].filter(section => section.commands.length > 0))
     }
 
     const startCommands: LauncherCommand[] = [
@@ -2201,14 +3280,9 @@ export function LauncherRoute({
       title: t('launcher.start.connectRemoteService')
     })
 
-    return [
-      {
-        commands: startCommands,
-        id: 'start',
-        title: t('launcher.start.title')
-      },
-      {
-        commands: projects.map(project => ({
+    const projectCommandEntries = [
+      ...projects.map((project, index) => ({
+        command: {
           action: () => void openWorkspace(project.workspaceFolder, project.name),
           contextMenuItems: buildProjectContextMenuItems(project),
           icon: getProjectStatusIcon(project.status),
@@ -2220,14 +3294,75 @@ export function LauncherRoute({
           removeLabel: t('launcher.projects.remove'),
           subtitle: project.description,
           title: project.name
-        })),
+        } satisfies LauncherCommand,
+        index,
+        priority: project.status == null ? 1 : 0,
+        sourceOrder: 0
+      })),
+      ...relayProjectGroups.flatMap((group, groupIndex) =>
+        group.projects.map((project, projectIndex) => ({
+          command: {
+            action: () => {
+              void openRemoteWorkspace(project)
+            },
+            icon: 'computer',
+            iconTone: 'project-remote',
+            id: project.id,
+            keywords: [
+              project.name,
+              project.workspaceFolder,
+              project.deviceName,
+              project.deviceId,
+              project.serverId,
+              project.serverName
+            ],
+            subtitle: t('launcher.remoteProjects.subtitle', {
+              device: project.deviceName,
+              path: project.workspaceFolder
+            }),
+            title: project.name
+          } satisfies LauncherCommand,
+          index: projects.length + groupIndex * 1000 + projectIndex,
+          priority: 0,
+          sourceOrder: 1
+        }))
+      )
+    ]
+    const projectCommands = projectCommandEntries
+      .sort((left, right) => {
+        if (left.priority !== right.priority) return left.priority - right.priority
+        const titleDelta = left.command.title.localeCompare(right.command.title, undefined, {
+          numeric: true,
+          sensitivity: 'base'
+        })
+        if (titleDelta !== 0) return titleDelta
+        if (left.sourceOrder !== right.sourceOrder) return left.sourceOrder - right.sourceOrder
+        const subtitleDelta = (left.command.subtitle ?? '').localeCompare(right.command.subtitle ?? '', undefined, {
+          numeric: true,
+          sensitivity: 'base'
+        })
+        if (subtitleDelta !== 0) return subtitleDelta
+        return left.index - right.index
+      })
+      .map(entry => entry.command)
+
+    return withRecentSelectionsAndBuiltin([
+      {
+        commands: startCommands,
+        id: 'start',
+        title: t('launcher.start.title')
+      },
+      {
+        commands: projectCommands,
         id: 'projects',
         title: t('launcher.projects.title')
       }
-    ]
+    ])
   }, [
+    activeDirectoryBrowserTarget,
     buildFileContextMenuItems,
     buildProjectContextMenuItems,
+    builtinCommands,
     canCloneRepository,
     cloneDestinationList.currentDirectory,
     cloneDestinationList.directories,
@@ -2248,6 +3383,7 @@ export function LauncherRoute({
     isDirectoryBrowserMode,
     isCloneRepositoryMode,
     isFileSearchMode,
+    launcherViewMode,
     isOpenWorkspaceDirectoryMode,
     filesystemManagerName,
     message,
@@ -2258,14 +3394,19 @@ export function LauncherRoute({
     openWorkspace,
     projects,
     pluginResults,
+    previewSections,
     query,
     recentCloneDestinationDirectories,
+    recentSelectionIds,
+    relayAccountSections,
+    relayProjectGroups,
     revealFilesystemPath,
     resourceResults.files,
     resourceResults.sessions,
     resourceResults.terminals,
     resourceResults.websites,
     showComingSoon,
+    openRemoteWorkspace,
     t,
     toggleCloneDestinationFavoriteDirectory
   ])
@@ -2299,6 +3440,9 @@ export function LauncherRoute({
     () => flatCommands.find(command => command.id === activeCommandId),
     [activeCommandId, flatCommands]
   )
+  const isLauncherCommandListView = launcherViewMode === 'commands' ||
+    launcherViewMode === 'account' ||
+    launcherViewMode === 'preview'
   const directoryBreadcrumbs = useMemo(() => (
     isDirectoryBrowserMode
       ? buildDirectoryBreadcrumbs(cloneDestinationList.currentDirectory)
@@ -2316,7 +3460,7 @@ export function LauncherRoute({
   }, [activeCommandId, flatCommands])
 
   useEffect(() => {
-    if (launcherViewMode !== 'commands' || activeCommandId == null) return
+    if (!isLauncherCommandListView || activeCommandId == null) return
 
     const animationFrameId = window.requestAnimationFrame(() => {
       const listElement = commandListRef.current
@@ -2344,15 +3488,16 @@ export function LauncherRoute({
     return () => {
       window.cancelAnimationFrame(animationFrameId)
     }
-  }, [activeCommandId, flatCommands, launcherViewMode])
+  }, [activeCommandId, flatCommands, isLauncherCommandListView])
 
   const runCommand = useCallback((command?: LauncherCommand) => {
     if (command == null || openingWorkspace != null) return
+    rememberLauncherSelection(command)
     void Promise.resolve(command.action()).catch((error) => {
       console.error('[launcher] command failed', error)
       void message.error(t('launcher.commandFailed'))
     })
-  }, [message, openingWorkspace, t])
+  }, [message, openingWorkspace, rememberLauncherSelection, t])
 
   const runCommandAndSelect = useCallback((command?: LauncherCommand) => {
     if (command == null) return
@@ -2387,41 +3532,28 @@ export function LauncherRoute({
     })
   }, [desktopApi, onClose])
 
-  const checkDesktopUpdates = useCallback(() => {
-    if (desktopApi?.checkForUpdates == null) {
-      void message.warning(t('launcher.desktopActionUnavailable'))
-      return
-    }
-
-    setIsLauncherMenuOpen(false)
-    void desktopApi.checkForUpdates({ interactive: true })
-      .catch((error) => {
-        console.error('[launcher] failed to check desktop updates', error)
-        void message.error(t('config.desktopSettings.updates.checkFailed'))
-      })
-  }, [desktopApi, message, t])
-
-  const openLauncherView = useCallback((mode: LauncherViewMode) => {
-    setLauncherViewMode(mode)
-    setDirectoryBrowserMode(undefined)
-    setCloneDestinationDirectory(undefined)
-    setDirectoryBrowserHomeDirectory(undefined)
-    setCloneDestinationList(emptyCloneDestinationDirectoryList)
-    setIsCloneDestinationLoading(false)
-    setHasCloneDestinationError(false)
-    setIsFileSearchMode(false)
-    setFileSearchResults([])
-    setIsFileSearchLoading(false)
-    setHasFileSearchError(false)
-    setQuery('')
-    setIsLauncherMenuOpen(false)
-    focusSearchInput()
-  }, [focusSearchInput])
-
   const restoreSearchHistoryEntry = useCallback((entry: LauncherSearchHistoryEntry) => {
-    setLauncherViewMode(entry.launcherViewMode)
+    const urlQuery = entry.directoryBrowserMode == null && !entry.isFileSearchMode ? entry.query : ''
+    setLauncherViewModeWithUrl(entry.launcherViewMode, { query: urlQuery, replace: true })
     setDirectoryBrowserMode(entry.directoryBrowserMode)
+    setDirectoryBrowserTargetId(entry.directoryBrowserTargetId ?? 'local')
     setCloneDestinationDirectory(entry.cloneDestinationDirectory)
+    const historyDirectoryTargetId = entry.directoryBrowserTargetId
+    const historyCloneDestinationDirectory = entry.cloneDestinationDirectory
+    if (
+      historyDirectoryTargetId != null &&
+      historyCloneDestinationDirectory != null &&
+      historyCloneDestinationDirectory.trim() !== ''
+    ) {
+      setDirectoryBrowserDirectoriesByTarget(prev =>
+        prev[historyDirectoryTargetId] === historyCloneDestinationDirectory
+          ? prev
+          : {
+            ...prev,
+            [historyDirectoryTargetId]: historyCloneDestinationDirectory
+          }
+      )
+    }
     setDirectoryBrowserHomeDirectory(entry.directoryBrowserHomeDirectory)
     if (entry.directoryBrowserMode == null) {
       setCloneDestinationList(emptyCloneDestinationDirectoryList)
@@ -2439,7 +3571,7 @@ export function LauncherRoute({
     setActiveCommandId(undefined)
     setIsLauncherMenuOpen(false)
     focusSearchInput()
-  }, [focusSearchInput])
+  }, [focusSearchInput, setLauncherViewModeWithUrl])
 
   const navigateSearchHistory = useCallback((direction: -1 | 1) => {
     const history = searchHistoryRef.current
@@ -2460,6 +3592,15 @@ export function LauncherRoute({
     </span>
   )
   const launcherMenuItems = useMemo<MenuProps['items']>(() => [
+    {
+      icon: menuIcon('account_circle'),
+      key: 'account',
+      label: t('launcher.menu.account'),
+      onClick: () => {
+        openLauncherView('account')
+      }
+    },
+    { type: 'divider' },
     {
       icon: menuIcon('settings'),
       key: 'settings',
@@ -2595,8 +3736,7 @@ export function LauncherRoute({
       }
 
       if (launcherViewMode !== 'commands') {
-        setLauncherViewMode('commands')
-        setQuery('')
+        setLauncherViewModeWithUrl('commands', { query: '', replace: true })
         focusSearchInput()
         event.stopPropagation()
         return
@@ -2623,6 +3763,7 @@ export function LauncherRoute({
     launcherViewMode,
     navigateSearchHistory,
     openLauncherView,
+    setLauncherViewModeWithUrl,
     openingWorkspace
   ])
 
@@ -2637,13 +3778,43 @@ export function LauncherRoute({
     }
 
     const isEmptyDeleteKey = (event.key === 'Backspace' || event.key === 'Delete') && query === ''
+    if (!isLauncherCommandListView) {
+      if (isEmptyDeleteKey) {
+        event.preventDefault()
+        setLauncherViewModeWithUrl('commands', { query: '', replace: true })
+        focusSearchInput()
+      }
+      return
+    }
+
     if (launcherViewMode !== 'commands') {
       if (isEmptyDeleteKey) {
         event.preventDefault()
-        setLauncherViewMode('commands')
-        setQuery('')
+        setLauncherViewModeWithUrl('commands', { query: '', replace: true })
         focusSearchInput()
+        return
       }
+
+      if (
+        event.key !== 'ArrowDown' &&
+        event.key !== 'ArrowUp' &&
+        event.key !== 'Enter'
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      if (flatCommands.length === 0) return
+
+      const activeIndex = Math.max(0, flatCommands.findIndex(command => command.id === activeCommandId))
+      if (event.key === 'Enter') {
+        runCommand(flatCommands[activeIndex])
+        return
+      }
+
+      const offset = event.key === 'ArrowDown' ? 1 : -1
+      const nextIndex = (activeIndex + offset + flatCommands.length) % flatCommands.length
+      setActiveCommandId(flatCommands[nextIndex]?.id)
       return
     }
 
@@ -2724,7 +3895,15 @@ export function LauncherRoute({
     const nextIndex = (activeIndex + offset + flatCommands.length) % flatCommands.length
     setActiveCommandId(flatCommands[nextIndex]?.id)
   }
-  const emptyMessage = isDirectoryBrowserMode
+  const emptyMessage = launcherViewMode === 'account'
+    ? hasRelayAccountError
+      ? t('launcher.account.loadFailed')
+      : isRelayAccountLoading
+      ? t('launcher.account.loading')
+      : t('launcher.account.empty')
+    : launcherViewMode === 'preview'
+    ? t('launcher.preview.empty')
+    : isDirectoryBrowserMode
     ? hasCloneDestinationError
       ? t('launcher.directoryBrowserFailed')
       : isCloneDestinationLoading
@@ -2752,7 +3931,11 @@ export function LauncherRoute({
   const searchPlaceholder = contextProject == null
     ? t('launcher.searchPlaceholder')
     : t('launcher.resource.searchPlaceholder', { project: contextProject.name })
-  const viewSearchPlaceholder = launcherViewMode === 'settings'
+  const viewSearchPlaceholder = launcherViewMode === 'account'
+    ? t('launcher.account.searchPlaceholder')
+    : launcherViewMode === 'preview'
+    ? t('launcher.preview.searchPlaceholder')
+    : launcherViewMode === 'settings'
     ? t('launcher.settings.searchPlaceholder')
     : launcherViewMode === 'about'
     ? t('launcher.about.searchPlaceholder')
@@ -2767,7 +3950,11 @@ export function LauncherRoute({
       ? t('launcher.files.globalSearchPlaceholder')
       : t('launcher.files.searchPlaceholder', { project: contextProject.name })
     : searchPlaceholder
-  const viewSearchLabel = launcherViewMode === 'settings'
+  const viewSearchLabel = launcherViewMode === 'account'
+    ? t('launcher.account.searchLabel')
+    : launcherViewMode === 'preview'
+    ? t('launcher.preview.searchLabel')
+    : launcherViewMode === 'settings'
     ? t('launcher.settings.searchLabel')
     : launcherViewMode === 'about'
     ? t('launcher.about.searchLabel')
@@ -2780,7 +3967,11 @@ export function LauncherRoute({
     : isFileSearchMode
     ? t('launcher.files.searchLabel')
     : t('launcher.searchLabel')
-  const viewLeadingIconTooltip = launcherViewMode === 'settings'
+  const viewLeadingIconTooltip = launcherViewMode === 'account'
+    ? t('launcher.account.title')
+    : launcherViewMode === 'preview'
+    ? t('launcher.preview.title')
+    : launcherViewMode === 'settings'
     ? t('launcher.settings.title')
     : launcherViewMode === 'about'
     ? t('launcher.about.title')
@@ -2791,7 +3982,11 @@ export function LauncherRoute({
       ? t('launcher.files.globalTitle')
       : contextProject.name
     : contextProject?.name
-  const viewLeadingIcon = launcherViewMode === 'settings'
+  const viewLeadingIcon = launcherViewMode === 'account'
+    ? 'account_circle'
+    : launcherViewMode === 'preview'
+    ? 'preview'
+    : launcherViewMode === 'settings'
     ? 'settings'
     : launcherViewMode === 'about'
     ? 'info'
@@ -2845,6 +4040,14 @@ export function LauncherRoute({
             : t('launcher.footerHints.close')
         }
       ].filter((hint): hint is { key: string; keys: string; label: string } => hint != null)
+    : launcherViewMode === 'account' || launcherViewMode === 'preview'
+    ? [
+      flatCommands.length > 1 ? { key: 'move', keys: '↑↓', label: t('launcher.footerHints.move') } : undefined,
+      activeCommand != null
+        ? { key: 'open', keys: 'Enter', label: t('launcher.footerHints.open') }
+        : undefined,
+      { key: 'back', keys: 'Esc', label: t('launcher.footerHints.back') }
+    ].filter((hint): hint is { key: string; keys: string; label: string } => hint != null)
     : launcherViewMode === 'settings'
     ? settingsOperationHints
     : [
@@ -2886,7 +4089,7 @@ export function LauncherRoute({
               className='launcher-command-search__input'
               placeholder={viewSearchPlaceholder}
               value={query}
-              onChange={event => setQuery(event.target.value)}
+              onChange={event => setLauncherQueryWithUrl(event.target.value)}
               onCompositionEnd={() =>
                 deferImeCompositionEnd((active) => {
                   isSearchComposingRef.current = active
@@ -2902,8 +4105,12 @@ export function LauncherRoute({
         <div
           ref={commandListRef}
           className='launcher-command-list'
-          role={launcherViewMode === 'commands' ? 'listbox' : undefined}
-          aria-label={launcherViewMode === 'settings'
+          role={isLauncherCommandListView ? 'listbox' : undefined}
+          aria-label={launcherViewMode === 'account'
+            ? t('launcher.account.listLabel')
+            : launcherViewMode === 'preview'
+            ? t('launcher.preview.listLabel')
+            : launcherViewMode === 'settings'
             ? t('launcher.settings.listLabel')
             : launcherViewMode === 'about'
             ? t('launcher.about.listLabel')
@@ -2920,7 +4127,36 @@ export function LauncherRoute({
           {launcherViewMode === 'about' && (
             <LauncherAboutView />
           )}
-          {launcherViewMode === 'commands' && isDirectoryBrowserMode && directoryBreadcrumbs.length > 0 && (
+          {isLauncherCommandListView && isDirectoryBrowserMode && visibleDirectoryBrowserTargets.length > 1 && (
+            <div
+              className='launcher-directory-target-tabs'
+              role='tablist'
+              aria-label={t('launcher.directoryTargets.label')}
+            >
+              {visibleDirectoryBrowserTargets.map(target => {
+                const isActive = target.id === activeDirectoryBrowserTarget?.id
+                return (
+                  <button
+                    key={target.id}
+                    type='button'
+                    role='tab'
+                    aria-selected={isActive}
+                    className={`launcher-directory-target-tab ${isActive ? 'is-active' : ''}`}
+                    title={target.kind === 'relay'
+                      ? `${target.deviceName} · ${target.serverName}`
+                      : target.label}
+                    onClick={() => selectDirectoryBrowserTarget(target)}
+                  >
+                    <span className='material-symbols-rounded' aria-hidden='true'>
+                      {target.kind === 'relay' ? 'computer' : 'radio_button_checked'}
+                    </span>
+                    <span className='launcher-directory-target-tab__label'>{target.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {isLauncherCommandListView && isDirectoryBrowserMode && directoryBreadcrumbs.length > 0 && (
             <nav className='launcher-directory-breadcrumb' aria-label={t('launcher.directoryBreadcrumbLabel')}>
               {cloneDestinationList.parentDirectory != null && (
                 <Tooltip
@@ -2966,7 +4202,7 @@ export function LauncherRoute({
               })}
             </nav>
           )}
-          {launcherViewMode === 'commands' && filteredSections.map(section => (
+          {isLauncherCommandListView && filteredSections.map(section => (
             <section className='launcher-command-section' key={section.id}>
               {section.title !== '' && (
                 <h2 className='launcher-command-section__title'>{section.title}</h2>
@@ -2992,21 +4228,29 @@ export function LauncherRoute({
                         }
                       }}
                       onClick={() => {
-                        if (command.id !== activeCommandId) {
-                          setActiveCommandId(command.id)
-                          return
-                        }
-
-                        runCommand(command)
+                        setActiveCommandId(command.id)
                       }}
                     >
-                      <span
-                        className={`material-symbols-rounded launcher-command-item__icon ${
-                          command.iconTone == null ? '' : `is-${command.iconTone}`
-                        }`}
-                      >
-                        {command.icon}
-                      </span>
+                      {command.avatarUrl != null || command.avatarInitials != null
+                        ? (
+                          <span className='launcher-command-item__avatar' aria-hidden='true'>
+                            {command.avatarUrl != null && (
+                              <img src={command.avatarUrl} alt='' />
+                            )}
+                            {command.avatarUrl == null && command.avatarInitials != null && (
+                              <span>{command.avatarInitials}</span>
+                            )}
+                          </span>
+                        )
+                        : (
+                          <span
+                            className={`material-symbols-rounded launcher-command-item__icon ${
+                              command.iconTone == null ? '' : `is-${command.iconTone}`
+                            }`}
+                          >
+                            {command.icon}
+                          </span>
+                        )}
                       <span className='launcher-command-item__content'>
                         <span className='launcher-command-item__title'>{command.title}</span>
                         {command.subtitle != null && command.subtitle !== '' && (
@@ -3150,7 +4394,7 @@ export function LauncherRoute({
               </div>
             </section>
           ))}
-          {launcherViewMode === 'commands' && flatCommands.length === 0 && (
+          {isLauncherCommandListView && flatCommands.length === 0 && (
             <div className='launcher-command-empty'>{emptyMessage}</div>
           )}
         </div>

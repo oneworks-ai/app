@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- profile page keeps current-account security modals and one-time token reveal together. */
 import './ProfilePage.css'
 
+import { adminListSurfaceClassNames } from '@oneworks/components/admin-list-surface'
 import { startRegistration } from '@simplewebauthn/browser'
 import {
   Alert,
@@ -36,6 +37,7 @@ import { AdminIcon } from '../../shared/ui/AdminIcon'
 import type { AdminIconName } from '../../shared/ui/AdminIcon'
 import { AdminListTable } from '../../shared/ui/AdminListTable'
 import type { AdminListColumnOption } from '../../shared/ui/AdminListTable'
+import { AdminTabLabel } from '../../shared/ui/AdminTabs'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 import type { AdminSessionAccount } from '../auth/adminSessionStorage'
 import { DeviceTable } from '../devices/DeviceTable'
@@ -45,6 +47,7 @@ import {
   createRelayProfileAccessToken,
   createRelayProfilePasskeyOptions,
   deleteRelayProfileAccount,
+  fetchRelayPersonalGlobalConfig,
   fetchRelayProfileOpenApiAuditEvents,
   fetchRelayProfileSecurity,
   revokeRelayProfileAccessToken,
@@ -52,6 +55,7 @@ import {
   verifyRelayProfilePasskey
 } from './profileApi'
 import type {
+  RelayPersonalConfigSnapshotResponse,
   RelayProfileAccessToken,
   RelayProfileAccessTokenScope,
   RelayProfileOpenApiAuditEvent,
@@ -78,7 +82,35 @@ const formatTimestamp = (value: string | null | undefined) => {
   }).format(date)
 }
 
+const formatByteSize = (value: number | null | undefined) => {
+  const size = typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+  if (size < 1024) return `${size} B`
+  const kib = size / 1024
+  if (kib < 1024) return `${kib.toFixed(kib >= 10 ? 0 : 1)} KB`
+  const mib = kib / 1024
+  return `${mib.toFixed(mib >= 10 ? 0 : 1)} MB`
+}
+
 const userDisplayName = (user: RelayAdminCurrentUser) => user.name.trim() || user.email
+
+const teamDisplayName = (team: RelayAdminTeam) => team.name.trim() || team.slug || team.id
+
+const teamAvatarInitials = (name: string) => {
+  const words = name
+    .split(/\s+/)
+    .map(part => part.trim())
+    .filter(Boolean)
+  const initials = words.length >= 2
+    ? `${words[0]?.[0] ?? ''}${words[1]?.[0] ?? ''}`
+    : name.slice(0, 2)
+  return initials.toUpperCase()
+}
+
+const teamRoleTone = (role: string): 'muted' | 'success' | 'warning' => {
+  if (role === 'owner' || role === 'admin') return 'success'
+  if (role === 'editor') return 'warning'
+  return 'muted'
+}
 
 const normalizeAuditStatus = (status: number) => {
   if (status >= 200 && status < 400) return 'success'
@@ -95,7 +127,7 @@ const methodTone = (method: string) => {
   return 'default'
 }
 
-const profileTabKeys = ['account', 'devices', 'security', 'tokens', 'audit'] as const
+const profileTabKeys = ['account', 'documents', 'teams', 'devices', 'security', 'tokens', 'audit'] as const
 type ProfileTabKey = typeof profileTabKeys[number]
 type DeviceStatusFilter = RelayAdminDeviceStatus | 'all'
 
@@ -256,10 +288,7 @@ const ProfileTimeRangeColumnFilter = ({
 }
 
 const profileTabLabel = (iconName: AdminIconName, label: string) => (
-  <span className='relay-profile-tab-label'>
-    <AdminIcon name={iconName} />
-    <span>{label}</span>
-  </span>
+  <AdminTabLabel iconName={iconName}>{label}</AdminTabLabel>
 )
 
 const auditColumnOptions: AdminListColumnOption[] = [
@@ -332,6 +361,7 @@ const defaultSecuritySummary = (currentUser: RelayAdminCurrentUser): RelayProfil
   }
 })
 
+// The Relay plugin account detail page mirrors these tabs through a server-side session proxy.
 export const ProfilePage = ({
   accounts,
   activeToken,
@@ -351,6 +381,9 @@ export const ProfilePage = ({
   const [security, setSecurity] = useState<RelayProfileSecuritySummary | undefined>()
   const [isLoadingSecurity, setIsLoadingSecurity] = useState(false)
   const [securityError, setSecurityError] = useState<string | undefined>()
+  const [personalConfig, setPersonalConfig] = useState<RelayPersonalConfigSnapshotResponse | undefined>()
+  const [isLoadingPersonalConfig, setIsLoadingPersonalConfig] = useState(false)
+  const [personalConfigError, setPersonalConfigError] = useState<string | undefined>()
   const [createdAccessToken, setCreatedAccessToken] = useState<string | undefined>()
   const [isSavingAccessToken, setIsSavingAccessToken] = useState(false)
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
@@ -537,6 +570,27 @@ export const ProfilePage = ({
     void loadSecurity()
   }, [loadSecurity])
 
+  const loadPersonalConfig = useCallback(async () => {
+    if (activeToken === '' || currentUser == null) {
+      setPersonalConfig(undefined)
+      return
+    }
+    setIsLoadingPersonalConfig(true)
+    setPersonalConfigError(undefined)
+    try {
+      setPersonalConfig(await fetchRelayPersonalGlobalConfig(activeToken))
+    } catch (error) {
+      setPersonalConfig(undefined)
+      setPersonalConfigError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setIsLoadingPersonalConfig(false)
+    }
+  }, [activeToken, currentUser])
+
+  useEffect(() => {
+    void loadPersonalConfig()
+  }, [loadPersonalConfig])
+
   useEffect(() => {
     if (activeProfileTab !== 'tokens' || profileItemId !== 'new') return
     setActionError(undefined)
@@ -607,6 +661,19 @@ export const ProfilePage = ({
     ? rememberedAccount?.user.avatarUrl ?? undefined
     : currentUser.avatarUrl
   const provider = currentUser.provider == null || currentUser.provider === '' ? 'local' : currentUser.provider
+  const personalSnapshot = personalConfig?.personalConfigSnapshot
+  const personalDocuments = personalSnapshot?.documents
+  const personalDocumentCounts = personalDocuments?.countsByKind
+  const personalDocumentSummary = isLoadingPersonalConfig
+    ? <Spin size='small' />
+    : personalConfigError != null
+    ? `读取失败：${personalConfigError}`
+    : personalDocuments == null
+    ? '未同步'
+    : `${personalDocuments.documentCount} 个 / ${formatByteSize(personalDocuments.totalSizeBytes)}`
+  const personalDocumentKindSummary = personalDocuments == null
+    ? '-'
+    : `AGENTS ${personalDocumentCounts?.agents ?? 0}`
   const descriptionItems: DescriptionsProps['items'] = [
     {
       children: currentUser.email,
@@ -649,6 +716,28 @@ export const ProfilePage = ({
       label: '本机记住时间'
     }
   ]
+  const personalDocumentDescriptionItems: DescriptionsProps['items'] = [
+    {
+      children: personalDocumentSummary,
+      key: 'personalDocuments',
+      label: '同步文档'
+    },
+    {
+      children: personalDocumentKindSummary,
+      key: 'personalDocumentKinds',
+      label: '文档类型'
+    },
+    {
+      children: formatTimestamp(personalDocuments?.updatedAt ?? personalSnapshot?.updatedAt),
+      key: 'personalDocumentUpdatedAt',
+      label: '文档更新时间'
+    },
+    {
+      children: personalSnapshot?.sourceDeviceId ?? '-',
+      key: 'personalDocumentSource',
+      label: '来源设备'
+    }
+  ]
   const passkeyStatus = securitySummary.passkeys.count > 0
     ? `已注册 ${securitySummary.passkeys.count} 个`
     : '尚未注册'
@@ -673,7 +762,8 @@ export const ProfilePage = ({
   const platformAccessGroups = accessGroups.filter(group =>
     group.scope === 'platform' && !group.disabled && userPlatformGroupIdSet.has(group.id)
   )
-  const userTeams = teams.filter(team => team.archivedAt == null && team.membership != null)
+  const joinedTeams = teams.filter(team => team.membership != null)
+  const userTeams = joinedTeams.filter(team => team.archivedAt == null)
   const teamById = new Map(teams.map(team => [team.id, team]))
   const tokenEditorScope = accessTokenScope ??
     (isAccessTokenCreateRoute ? 'user' : normalizeAccessTokenScope(editingAccessToken?.scope))
@@ -1471,7 +1561,7 @@ export const ProfilePage = ({
 
         <Tabs
           activeKey={activeProfileTab}
-          className='relay-profile-tabs'
+          className='relay-admin-tabs relay-profile-tabs'
           items={[
             {
               key: 'account',
@@ -1485,6 +1575,75 @@ export const ProfilePage = ({
                     items={descriptionItems}
                     size='small'
                   />
+                </section>
+              )
+            },
+            {
+              key: 'documents',
+              label: profileTabLabel('sync', '同步文档'),
+              children: (
+                <section className='relay-profile-tab-panel'>
+                  <Descriptions
+                    bordered
+                    className='relay-profile__descriptions'
+                    column={{ lg: 2, md: 1, sm: 1, xl: 2, xs: 1, xxl: 2 }}
+                    items={personalDocumentDescriptionItems}
+                    size='small'
+                  />
+                </section>
+              )
+            },
+            {
+              key: 'teams',
+              label: profileTabLabel('group', '团队'),
+              children: (
+                <section className='relay-profile-tab-panel'>
+                  {joinedTeams.length === 0
+                    ? <Empty className='relay-profile__empty' description='暂无加入的团队' />
+                    : (
+                      <div className='relay-profile-team-list'>
+                        {joinedTeams.map(team => {
+                          const name = teamDisplayName(team)
+                          const role = team.membership?.role ?? 'member'
+                          return (
+                            <div
+                              className='relay-profile-team-row'
+                              data-state={team.archivedAt == null ? 'active' : 'archived'}
+                              key={team.id}
+                            >
+                              <Avatar
+                                className='relay-profile-team-row__avatar'
+                                size={34}
+                                src={team.avatarUrl ?? undefined}
+                              >
+                                {team.avatarUrl == null ? teamAvatarInitials(name) : null}
+                              </Avatar>
+                              <span className='relay-profile-team-row__body'>
+                                <strong>{name}</strong>
+                                <span>
+                                  {[
+                                    team.slug,
+                                    team.description ?? '',
+                                    `${team.memberCount} 人`,
+                                    team.updatedAt == null ? '' : `更新于 ${formatTimestamp(team.updatedAt)}`
+                                  ].filter(value => value !== '').join(' · ')}
+                                </span>
+                              </span>
+                              <span className='relay-profile-team-row__badges'>
+                                <StatusBadge tone={teamRoleTone(role)}>{role}</StatusBadge>
+                                <StatusBadge tone={team.membership?.configEnabled === false ? 'warning' : 'success'}>
+                                  {team.membership?.configEnabled === false ? 'config off' : 'config on'}
+                                </StatusBadge>
+                                {team.membership?.defaultForPublishing === true
+                                  ? <StatusBadge tone='muted'>default publishing</StatusBadge>
+                                  : null}
+                                {team.archivedAt == null ? null : <StatusBadge tone='warning'>archived</StatusBadge>}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                 </section>
               )
             },
@@ -1570,7 +1729,7 @@ export const ProfilePage = ({
                         aria-label='生成令牌'
                         className={[
                           'route-container-header__action-button',
-                          'relay-admin-list-table__toolbar-action-button'
+                          adminListSurfaceClassNames.toolbarActionButton
                         ].join(' ')}
                         iconName='key'
                         size='small'
@@ -1608,7 +1767,7 @@ export const ProfilePage = ({
                         aria-label='刷新调用审计'
                         className={[
                           'route-container-header__action-button',
-                          'relay-admin-list-table__toolbar-action-button'
+                          adminListSurfaceClassNames.toolbarActionButton
                         ].join(' ')}
                         disabled={isLoadingAudit}
                         iconName='refresh'

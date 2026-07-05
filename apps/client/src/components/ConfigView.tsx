@@ -9,7 +9,13 @@ import useSWR from 'swr'
 
 import type { RouteContainerHeaderActionItem, RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
 import type { ConfigSource } from '@oneworks/core'
-import type { AboutInfo, ConfigResponse, ConfigUiSection } from '@oneworks/types'
+import type {
+  AboutInfo,
+  AdapterAccountDetailResult,
+  AdapterAccountsResult,
+  ConfigResponse,
+  ConfigUiSection
+} from '@oneworks/types'
 import type { ConfigDetailRoute } from './config/configDetail'
 
 import { RouteErrorState } from '#~/components/error-state'
@@ -25,6 +31,8 @@ import {
 import { useRoutePluginChrome } from '#~/plugins/route-plugin-chrome'
 
 import {
+  getAdapterAccountDetail,
+  getAdapterAccounts,
   getApiErrorMessage,
   getConfig,
   getConfigSchema,
@@ -60,6 +68,7 @@ import {
   resolveConfigDetailRouteMeta,
   serializeConfigDetailRoute
 } from './config/configDetail'
+import { getConfigDetailPlaceholderEntries } from './config/configDetailPlaceholders'
 import { getPreferredConfigSourceForTab, resolveConfigSourceForMissingQuery } from './config/configSourceDefaults'
 import { cloneValue, collectUnsetPaths, getValueByPath, isEmptyValue } from './config/configUtils'
 import { editableConfigSectionKeys } from './config/editableConfigSections'
@@ -72,6 +81,7 @@ import {
 import type { ModelServiceConfigSessionRequest } from './config/modelServiceConfigSession'
 import { openExternalUrl } from './config/modelServiceProviderActionUtils'
 import { modelServiceImportQueryKeys, parseModelServiceQueryImport } from './config/modelServiceQueryImport'
+import { toLabel } from './config/record-editors/schemaRecordUtils'
 import { toDisplayEnvironmentName, toEnvironmentReference } from './config/worktree-environment-panel-model'
 
 interface ConfigDraftConflict {
@@ -222,6 +232,21 @@ const getModelServiceProfileBreadcrumbLabel = (
   const profile = getModelServiceProfileEntry(item, resolvedItem, profileKey)
   const title = profile?.title
   return typeof title === 'string' && title.trim() !== '' ? title.trim() : profileKey
+}
+const getRecordMapEntryBreadcrumbLabel = (
+  collectionKey: string,
+  entryKey: string,
+  ...items: unknown[]
+) => {
+  const entries = items.map(item => getValueByPath(item, [collectionKey, entryKey]))
+  for (const entry of entries) {
+    if (!isRecordObject(entry)) continue
+    for (const titleKey of ['title', 'displayName', 'name', 'label']) {
+      const title = entry[titleKey]
+      if (typeof title === 'string' && title.trim() !== '') return title.trim()
+    }
+  }
+  return undefined
 }
 
 const isModelServiceDetailTabRoute = (
@@ -664,6 +689,7 @@ export function ConfigView() {
       value,
       resolvedValue,
       route,
+      placeholderEntries: getConfigDetailPlaceholderEntries(activeContentTab.key),
       detailContext: {
         mergedModelServices,
         mergedAdapters,
@@ -685,6 +711,36 @@ export function ConfigView() {
     sourceKey,
     t
   ])
+  const accountBreadcrumbAdapterKey = activeContentTab?.key === 'adapters' &&
+      activeConfigDetail?.route.nestedPath?.[0] === 'accounts'
+    ? activeConfigDetail.route.itemKey
+    : null
+  const { data: breadcrumbAdapterAccountsData } = useSWR<AdapterAccountsResult>(
+    accountBreadcrumbAdapterKey != null ? `/api/adapters/${accountBreadcrumbAdapterKey}/accounts` : null,
+    () => getAdapterAccounts(accountBreadcrumbAdapterKey!),
+    {
+      dedupingInterval: 30_000,
+      keepPreviousData: true,
+      revalidateOnFocus: false
+    }
+  )
+  const accountBreadcrumbAccountKey = (
+      accountBreadcrumbAdapterKey != null &&
+      activeConfigDetail?.route.nestedPath?.[1] != null
+    )
+    ? activeConfigDetail.route.nestedPath[1]
+    : null
+  const { data: breadcrumbAdapterAccountDetailData } = useSWR<AdapterAccountDetailResult>(
+    accountBreadcrumbAdapterKey != null && accountBreadcrumbAccountKey != null
+      ? `/api/adapters/${accountBreadcrumbAdapterKey}/accounts/${accountBreadcrumbAccountKey}`
+      : null,
+    () => getAdapterAccountDetail(accountBreadcrumbAdapterKey!, accountBreadcrumbAccountKey!),
+    {
+      dedupingInterval: 30_000,
+      keepPreviousData: true,
+      revalidateOnFocus: false
+    }
+  )
   useEffect(() => {
     if (modelServicePortalTabsState.tabs.length > 0) return
     setModelServicePortalPanelOpen(false)
@@ -760,20 +816,56 @@ export function ConfigView() {
     }
     if (activeConfigDetail == null || activeContentTab == null) return undefined
     const route = activeConfigDetail.route
-    const nestedPath = route.nestedPath ?? []
-    const isModelServiceProfileRoute = activeContentTab.key === 'modelServices' &&
-      route.fieldPath.length === 0 &&
-      nestedPath[0] === 'profiles' &&
-      nestedPath[1] != null
-    const currentTitle = isModelServiceProfileRoute
-      ? getModelServiceProfileBreadcrumbLabel(
-        activeConfigDetail.meta.item,
-        activeConfigDetail.meta.resolvedItem,
-        nestedPath[1]!
-      )
-      : activeConfigDetail.meta.itemLabel
-    const ancestors = isModelServiceProfileRoute
-      ? [
+    const rawNestedSegments = route.nestedPath ?? []
+    const nestedSegments = rawNestedSegments.length === 1 && rawNestedSegments[0] === 'profiles'
+      ? []
+      : rawNestedSegments
+    const getNestedSegmentLabel = (segment: string, index: number) => {
+      if (index === 0 && segment === 'accounts') {
+        return t('config.accounts.listTitle', {
+          defaultValue: t('config.accounts.title')
+        })
+      }
+      if (index === 0 && segment === 'profiles') return t('config.sectionGroups.profiles')
+      if (
+        index === 1 &&
+        nestedSegments[0] === 'profiles' &&
+        activeContentTab.key === 'modelServices'
+      ) {
+        return getModelServiceProfileBreadcrumbLabel(
+          activeConfigDetail.meta.item,
+          activeConfigDetail.meta.resolvedItem,
+          segment
+        )
+      }
+      if (index === 1 && nestedSegments[0] === 'accounts') {
+        const detailAccount = breadcrumbAdapterAccountDetailData?.account.key === segment
+          ? breadcrumbAdapterAccountDetailData.account
+          : undefined
+        const detailLabel = detailAccount?.email?.trim() || detailAccount?.title?.trim()
+        if (detailLabel != null && detailLabel !== '') return detailLabel
+        const runtimeAccount = breadcrumbAdapterAccountsData?.accounts.find(account => account.key === segment)
+        if (runtimeAccount?.title != null && runtimeAccount.title.trim() !== '') {
+          return runtimeAccount.title.trim()
+        }
+        const configuredLabel = getRecordMapEntryBreadcrumbLabel(
+          'accounts',
+          segment,
+          activeConfigDetail.meta.item,
+          activeConfigDetail.meta.resolvedItem,
+          ...configSourceKeys.flatMap(source => [
+            getValueByPath(data?.resolvedSources?.[source], [activeContentTab.key, route.itemKey]),
+            getValueByPath(data?.sources?.[source], [activeContentTab.key, route.itemKey])
+          ])
+        )
+        if (configuredLabel != null) return configuredLabel
+        return toLabel(segment)
+      }
+      return toLabel(segment)
+    }
+    const ancestors = nestedSegments.length === 0
+      ? []
+      : [
         {
           title: activeConfigDetail.meta.itemLabel,
           onSelect: () => {
@@ -782,9 +874,20 @@ export function ConfigView() {
               nestedPath: []
             }))
           }
-        }
+        },
+        ...nestedSegments.slice(0, -1).map((segment, index) => ({
+          title: getNestedSegmentLabel(segment, index),
+          onSelect: () => {
+            setDetailQuery(serializeConfigDetailRoute({
+              ...route,
+              nestedPath: nestedSegments.slice(0, index + 1)
+            }))
+          }
+        }))
       ]
-      : []
+    const currentTitle = nestedSegments.length > 0
+      ? getNestedSegmentLabel(nestedSegments[nestedSegments.length - 1]!, nestedSegments.length - 1)
+      : activeConfigDetail.meta.itemLabel
 
     return {
       ancestors,
@@ -796,7 +899,11 @@ export function ConfigView() {
     activeConfigDetail,
     activeContentTab,
     activeTabKey,
+    breadcrumbAdapterAccountDetailData?.account,
+    breadcrumbAdapterAccountsData?.accounts,
     closeConfigDetail,
+    data?.resolvedSources,
+    data?.sources,
     savedPasswordSettingsOpen,
     savedPasswordDetailTitle,
     setDetailQuery,

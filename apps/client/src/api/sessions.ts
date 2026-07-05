@@ -261,11 +261,22 @@ export async function branchSessionFromMessage(
 
 export async function getSessionMessages(
   id: string,
-  limit?: number
+  options?: number | {
+    afterId?: number
+    beforeId?: number
+    limit?: number
+  }
 ): Promise<SessionMessagesResponse> {
   const url = createApiUrl(`/api/sessions/${id}/messages`)
-  if (limit != null) {
-    url.searchParams.set('limit', limit.toString())
+  const resolvedOptions = typeof options === 'number' ? { limit: options } : options
+  if (resolvedOptions?.limit != null) {
+    url.searchParams.set('limit', resolvedOptions.limit.toString())
+  }
+  if (resolvedOptions?.beforeId != null) {
+    url.searchParams.set('beforeId', resolvedOptions.beforeId.toString())
+  }
+  if (resolvedOptions?.afterId != null) {
+    url.searchParams.set('afterId', resolvedOptions.afterId.toString())
   }
   return fetchApiJson<SessionMessagesResponse>(url)
 }

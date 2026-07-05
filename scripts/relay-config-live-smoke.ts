@@ -354,9 +354,8 @@ const setupRelayData = async (relayUrl: string, adminToken: string) => {
   })
   const profileId = requireStringField(requireRecordField(profileResponse, 'profile'), 'id')
   const versionResponse = await postJson(relayUrl, `/api/relay/config-profiles/${profileId}/versions`, ownerToken, {
-    allowedFields: ['defaultModelService', 'modelServices', 'plugins', 'skills'],
+    allowedFields: ['modelServices', 'plugins', 'skills'],
     configPatch: {
-      defaultModelService: LIVE_SERVICE_KEY,
       modelServices: {
         [LIVE_SERVICE_KEY]: {
           apiBaseUrl: 'https://relay-live.example.com/v1',
@@ -451,8 +450,8 @@ const assertSnapshot = (snapshot: JsonRecord, assignmentId: string) => {
     'Config patch must not include secret-like apiKey fields.'
   )
   assertCondition(
-    configPatch.defaultModelService === LIVE_SERVICE_KEY,
-    'Config patch must include default model service.'
+    JSON.stringify(configPatch).includes(LIVE_SERVICE_KEY),
+    'Config patch must include live model service.'
   )
   assertCondition(JSON.stringify(configPatch).includes(LIVE_PLUGIN_ID), 'Config patch must include plugin entries.')
   assertCondition(JSON.stringify(configPatch).includes(LIVE_SKILL_ID), 'Config patch must include skill entries.')
@@ -468,6 +467,18 @@ const assertSnapshot = (snapshot: JsonRecord, assignmentId: string) => {
   assertCondition(envelope.ref === LIVE_SECRET_REF, 'Secret envelope must keep the original secret reference.')
 }
 
+const createSourceRelayPluginFixture = async (repoRoot: string, tempRoot: string) => {
+  const pluginRoot = resolve(repoRoot, 'packages/plugins/relay')
+  const fixtureRoot = join(tempRoot, 'relay-plugin-source')
+  await writeJson(join(fixtureRoot, 'plugin.json'), {
+    __oneWorksPluginManifest: true,
+    configHook: {
+      entry: resolve(pluginRoot, 'src/config.cts')
+    }
+  })
+  return fixtureRoot
+}
+
 const createLiveWorkspace = async (input: {
   deviceToken: string
   relayUrl: string
@@ -480,6 +491,7 @@ const createLiveWorkspace = async (input: {
   const realHome = join(input.tempRoot, 'real-home')
   const configRoot = resolve(input.repoRoot, 'packages/config')
   const pluginRoot = resolve(input.repoRoot, 'packages/plugins/relay')
+  const sourcePluginRoot = await createSourceRelayPluginFixture(input.repoRoot, input.tempRoot)
   const configLink = join(workspaceDir, 'node_modules/@oneworks/config')
   const pluginLink = join(workspaceDir, 'node_modules/@oneworks/plugin-relay')
 
@@ -492,7 +504,7 @@ const createLiveWorkspace = async (input: {
     disableGlobalConfig: true,
     plugins: [
       {
-        id: '@oneworks/plugin-relay',
+        id: sourcePluginRoot,
         options: {
           activeServerId: input.relayUrl,
           enableOfficialCloudflareRelay: false,
@@ -526,6 +538,7 @@ const createLiveWorkspace = async (input: {
     env: {
       ...process.env,
       __ONEWORKS_PROJECT_DISABLE_DEV_CONFIG__: '1',
+      __ONEWORKS_PROJECT_DISABLE_DEFAULT_OFFICIAL_PLUGINS__: '1',
       __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1',
       __ONEWORKS_PROJECT_HOME_PROJECT_DIR__: projectHome,
       __ONEWORKS_PROJECT_HOME_PROJECTS_DIR__: join(input.tempRoot, 'project-homes'),
@@ -558,7 +571,6 @@ const assertMergedConfig = async (input: {
   const config = state.mergedConfig as ConfigState['mergedConfig']
   const service = config.modelServices?.[LIVE_SERVICE_KEY]
 
-  assertCondition(config.defaultModelService === LIVE_SERVICE_KEY, 'Merged config must use the live Relay service.')
   assertCondition(service != null, 'Merged config must include the live Relay model service.')
   assertCondition(service.apiBaseUrl === 'https://relay-live.example.com/v1', 'Merged service apiBaseUrl mismatch.')
   assertCondition(service.apiKey === LIVE_SECRET_VALUE, 'Merged service apiKey must be decrypted locally.')

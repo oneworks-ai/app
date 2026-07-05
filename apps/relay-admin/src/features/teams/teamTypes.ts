@@ -203,6 +203,21 @@ export interface RelayAdminConfigSecret {
   teamId: string
 }
 
+export interface RelayAdminDocumentCounts {
+  agents: number
+}
+
+export interface RelayAdminTeamDocumentSnapshot {
+  countsByKind: RelayAdminDocumentCounts
+  documentCount: number
+  hash: string
+  teamId: string
+  totalSizeBytes: number
+  updatedAt: string
+  updatedByUserId: string | null
+  version: 1
+}
+
 export interface RelayAdminConfigProfileAssignment {
   createdAt: string
   enabled: boolean

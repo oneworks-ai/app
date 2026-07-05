@@ -174,23 +174,18 @@ const buildManagedWorktreeBranchName = (baseBranch: string, sessionId: string) =
 }
 
 const getLatestSessionInfoCwd = (sessionId: string) => {
-  const events = getDb().getMessages(sessionId) as WSEvent[]
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index]
-    if (event?.type !== 'session_info' || !isRecord(event.info)) {
-      continue
-    }
-
-    const info = event.info as SessionInfo & { cwd?: unknown }
-    if (typeof info.cwd !== 'string' || info.cwd.trim() === '') {
-      continue
-    }
-
-    const cwd = info.cwd.trim()
-    return cwd.startsWith('/') ? cwd : resolve(getWorkspaceFolder(), cwd)
+  const event = getDb().getLatestSessionInfoMessage(sessionId) as WSEvent | undefined
+  if (event?.type !== 'session_info' || !isRecord(event.info)) {
+    return undefined
   }
 
-  return undefined
+  const info = event.info as SessionInfo & { cwd?: unknown }
+  if (typeof info.cwd !== 'string' || info.cwd.trim() === '') {
+    return undefined
+  }
+
+  const cwd = info.cwd.trim()
+  return cwd.startsWith('/') ? cwd : resolve(getWorkspaceFolder(), cwd)
 }
 
 const persistSessionWorkspace = (row: Omit<SessionWorkspaceRow, 'createdAt' | 'updatedAt'>) => {

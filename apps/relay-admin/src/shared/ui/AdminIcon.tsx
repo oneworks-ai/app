@@ -36,6 +36,7 @@ import refreshSvg from '@material-symbols/svg-400/rounded/refresh.svg?raw'
 import restartAltSvg from '@material-symbols/svg-400/rounded/restart_alt.svg?raw'
 import searchSvg from '@material-symbols/svg-400/rounded/search.svg?raw'
 import sellSvg from '@material-symbols/svg-400/rounded/sell.svg?raw'
+import syncSvg from '@material-symbols/svg-400/rounded/sync.svg?raw'
 import unarchiveSvg from '@material-symbols/svg-400/rounded/unarchive.svg?raw'
 import viewColumnSvg from '@material-symbols/svg-400/rounded/view_column.svg?raw'
 import viewWeekSvg from '@material-symbols/svg-400/rounded/view_week.svg?raw'
@@ -77,6 +78,7 @@ export type AdminIconName =
   | 'restart_alt'
   | 'search'
   | 'sell'
+  | 'sync'
   | 'unarchive'
   | 'view_column'
   | 'view_week'
@@ -118,6 +120,7 @@ const adminIconSvgByName: Record<AdminIconName, string> = {
   restart_alt: restartAltSvg,
   search: searchSvg,
   sell: sellSvg,
+  sync: syncSvg,
   unarchive: unarchiveSvg,
   view_column: viewColumnSvg,
   view_week: viewWeekSvg

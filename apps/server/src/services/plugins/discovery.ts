@@ -19,7 +19,8 @@ export const discoverPluginInstances = async () => {
   const instances = await resolveConfiguredPluginInstances({
     cwd: workspaceFolder,
     plugins,
-    includeDisabled: true
+    includeDisabled: true,
+    preferBundledOfficialPlugins: true
   })
 
   return {

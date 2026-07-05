@@ -178,7 +178,12 @@ export function ChatInteractionPanel({
   const { data: repoState, isLoading: isGitLoading, mutate: mutateGitState } = useSWR<GitRepositoryState>(
     gitKey,
     () => sessionId != null && sessionId !== '' ? getSessionGitState(sessionId) : getWorkspaceGitState(),
-    { refreshInterval: 3000, revalidateOnFocus: true }
+    {
+      dedupingInterval: 3000,
+      refreshInterval: 60_000,
+      refreshWhenHidden: false,
+      revalidateOnFocus: true
+    }
   )
   const approvalMessages = useMemo(
     () => agentApprovals == null ? [] : getAgentRoomApprovalMessages(agentApprovals.room),

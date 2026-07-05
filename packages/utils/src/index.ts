@@ -1,5 +1,6 @@
 export * from './adapter-account'
 export * from './ai-path'
+export * from './auth-store'
 export * from './cache'
 export * from './channel-emoji-registry'
 export * from './channel-send-permission'

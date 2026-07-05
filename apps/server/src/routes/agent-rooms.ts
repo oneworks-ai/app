@@ -3,6 +3,7 @@
 import Router from '@koa/router'
 
 import type {
+  AgentRoom,
   AgentRoomEvent,
   AgentRoomEventMember,
   AgentRoomEventRun,
@@ -12,6 +13,7 @@ import type {
 } from '@oneworks/core'
 
 import { createAgentRoomService } from '#~/services/agent-room/index.js'
+import { publishClientEvent } from '#~/services/client-events.js'
 import { badRequest, conflict, methodNotAllowed, notFound } from '#~/utils/http.js'
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -141,6 +143,14 @@ const toNotFound = (error: unknown, roomId: string) => {
   throw error
 }
 
+const publishAgentRoomUpdated = (roomId: string, room?: AgentRoom) => {
+  publishClientEvent('agent-rooms', {
+    type: 'agent_room_updated',
+    roomId,
+    ...(room?.hostSessionId != null ? { hostSessionId: room.hostSessionId } : {})
+  })
+}
+
 export function agentRoomsRouter(): Router {
   const router = new Router()
   const service = createAgentRoomService()
@@ -153,6 +163,19 @@ export function agentRoomsRouter(): Router {
     ctx.body = { rooms: service.listRooms('archived') }
   })
 
+  router.get('/summary', (ctx) => {
+    ctx.body = { rooms: service.listRoomSummaries() }
+  })
+
+  router.get('/summary/archived', (ctx) => {
+    ctx.body = { rooms: service.listRoomSummaries('archived') }
+  })
+
+  router.get('/by-host-session/:sessionId', (ctx) => {
+    const { sessionId } = ctx.params as { sessionId: string }
+    ctx.body = { room: service.getRoomForHostSession(sessionId) }
+  })
+
   router.post(['/ensure', '/ensure/'], (ctx) => {
     const { hostSessionId, title } = ctx.request.body as {
       hostSessionId?: string
@@ -163,12 +186,12 @@ export function agentRoomsRouter(): Router {
       throw badRequest('hostSessionId is required', undefined, 'invalid_agent_room_host_session')
     }
 
-    ctx.body = {
-      room: service.ensureRoomForHostSession({
-        hostSessionId: resolvedHostSessionId,
-        title
-      })
-    }
+    const room = service.ensureRoomForHostSession({
+      hostSessionId: resolvedHostSessionId,
+      title
+    })
+    publishAgentRoomUpdated(room.id, room)
+    ctx.body = { room }
   })
 
   router.post(['/', ''], (ctx) => {
@@ -182,13 +205,13 @@ export function agentRoomsRouter(): Router {
       throw badRequest('title is required', undefined, 'invalid_agent_room_title')
     }
 
-    ctx.body = {
-      room: service.createRoom({
-        id: id?.trim() || undefined,
-        title: resolvedTitle,
-        hostSessionId: hostSessionId?.trim() || undefined
-      })
-    }
+    const room = service.createRoom({
+      id: id?.trim() || undefined,
+      title: resolvedTitle,
+      hostSessionId: hostSessionId?.trim() || undefined
+    })
+    publishAgentRoomUpdated(room.id, room)
+    ctx.body = { room }
   })
 
   router.get('/:id', (ctx) => {
@@ -209,9 +232,9 @@ export function agentRoomsRouter(): Router {
     }
 
     try {
-      ctx.body = {
-        room: service.updateRoomMetadata(id, update)
-      }
+      const room = service.updateRoomMetadata(id, update)
+      publishAgentRoomUpdated(id, room)
+      ctx.body = { room }
     } catch (error) {
       throw toNotFound(error, id)
     }
@@ -229,9 +252,9 @@ export function agentRoomsRouter(): Router {
     }
 
     try {
-      ctx.body = {
-        message: await service.appendUserMessage(id, normalizedContent, normalizeTarget(target))
-      }
+      const message = await service.appendUserMessage(id, normalizedContent, normalizeTarget(target))
+      publishAgentRoomUpdated(id)
+      ctx.body = { message }
     } catch (error) {
       throw toNotFound(error, id)
     }
@@ -254,6 +277,7 @@ export function agentRoomsRouter(): Router {
           'agent_room_interaction_not_pending'
         )
       }
+      publishAgentRoomUpdated(id)
       ctx.body = { ok: true }
     } catch (error) {
       throw toNotFound(error, id)
@@ -271,9 +295,9 @@ export function agentRoomsRouter(): Router {
     }
 
     try {
-      ctx.body = {
-        message: service.applyEvent(id, body.event)
-      }
+      const message = service.applyEvent(id, body.event)
+      publishAgentRoomUpdated(id)
+      ctx.body = { message }
     } catch (error) {
       throw toNotFound(error, id)
     }
@@ -288,9 +312,9 @@ export function agentRoomsRouter(): Router {
     }
 
     try {
-      ctx.body = {
-        member: service.upsertMember(id, parsed)
-      }
+      const member = service.upsertMember(id, parsed)
+      publishAgentRoomUpdated(id)
+      ctx.body = { member }
     } catch (error) {
       throw toNotFound(error, id)
     }
@@ -306,14 +330,14 @@ export function agentRoomsRouter(): Router {
     const status = isRunStatus(run.status) ? run.status : undefined
 
     try {
-      ctx.body = {
-        run: service.upsertRun(id, {
-          ...parsed,
-          memberKey: run.memberKey.trim(),
-          ...(status != null ? { status } : {}),
-          ...(asString(run.latestSummary) != null ? { latestSummary: asString(run.latestSummary) } : {})
-        })
-      }
+      const storedRun = service.upsertRun(id, {
+        ...parsed,
+        memberKey: run.memberKey.trim(),
+        ...(status != null ? { status } : {}),
+        ...(asString(run.latestSummary) != null ? { latestSummary: asString(run.latestSummary) } : {})
+      })
+      publishAgentRoomUpdated(id)
+      ctx.body = { run: storedRun }
     } catch (error) {
       throw toNotFound(error, id)
     }
@@ -321,9 +345,13 @@ export function agentRoomsRouter(): Router {
 
   router.delete('/:id', (ctx) => {
     const { id } = ctx.params as { id: string }
+    const removed = service.deleteRoom(id)
+    if (removed) {
+      publishAgentRoomUpdated(id)
+    }
     ctx.body = {
       ok: true,
-      removed: service.deleteRoom(id)
+      removed
     }
   })
 

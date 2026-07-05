@@ -963,6 +963,12 @@
     "hideActiveSessions": "收起会话",
     "mobileVersionConflictSummary": "服务版本不一致；可重启项目服务，或稍后重试。",
     "processId": "进程",
+    "remoteDevice": "远端设备",
+    "remoteService": "远程服务",
+    "remoteWorkspace": "远程工作区",
+    "remoteWorkspaceRecovering": "远程工作区正在恢复连接",
+    "remoteWorkspaceRecoveringDetail": "正在通过 {{server}} 连接 {{device}}，页面会在远端项目服务恢复后自动继续。",
+    "remoteWorkspaceWithDevice": "远程 · {{device}}",
     "requestedVersion": "当前请求",
     "restartFailed": "重启项目服务失败",
     "restartWorkspaceServer": "重启项目服务",
@@ -1013,6 +1019,10 @@
     "directoryBrowserEmpty": "没有可进入的子目录",
     "directoryBrowserFailed": "读取目录失败",
     "directoryBreadcrumbLabel": "当前目录路径",
+    "directoryTargets": {
+      "label": "目录来源",
+      "local": "本机"
+    },
     "directoryNameCopied": "目录名字已复制",
     "directoryPathCopied": "目录路径已复制",
     "favoriteDirectory": "收藏这个目录",
@@ -1061,9 +1071,9 @@
     "start": {
       "title": "启动",
       "newProjectFolder": "新建项目",
-      "newProjectFolderHint": "创建一个本地文件夹，并作为项目打开",
+      "newProjectFolderHint": "在本机或远程服务创建文件夹，并作为项目打开",
       "openFolder": "打开项目",
-      "openFolderHint": "选择一个本地项目目录",
+      "openFolderHint": "从本机或远程服务选择项目目录",
       "cloneRepository": "克隆远端仓库",
       "cloneRepositoryHint": "从 Git 仓库创建项目",
       "connectRemoteService": "链接远程服务",
@@ -1098,14 +1108,65 @@
       "stopServiceSuccess": "项目服务已终止",
       "title": "项目"
     },
+    "remoteProjects": {
+      "badge": "远端",
+      "openPending": "{{project}} 位于 {{device}}。Relay 会触发目标设备启动 workspace server，并通过 relay 代理请求。",
+      "sessionTitle": "{{project}} · {{device}}",
+      "subtitle": "{{device}} · {{path}}"
+    },
+    "builtin": {
+      "title": "内置指令",
+      "accountHint": "查看已登录账号，或登录新的账号",
+      "settingsHint": "调整启动器和应用偏好",
+      "aboutHint": "查看 OneWorks 版本和应用信息",
+      "checkUpdateHint": "检查桌面端是否有可用更新",
+      "previewHint": "进入预览相关操作"
+    },
+    "recentSelections": {
+      "title": "最近选择"
+    },
     "menu": {
       "open": "打开 OneWorks 菜单",
+      "account": "账号",
       "settings": "设置",
       "about": "关于",
       "checkUpdate": "检查更新",
       "language": "语言",
       "projectRequired": "请先打开或聚焦一个项目，再进入设置或关于",
       "openFailed": "打开当前项目页面失败"
+    },
+    "account": {
+      "title": "账号",
+      "searchLabel": "账号",
+      "searchPlaceholder": "账号",
+      "listLabel": "账号",
+      "actionsTitle": "操作",
+      "defaultServer": "默认服务",
+      "localServer": "本地服务",
+      "serverFallback": "服务端",
+      "signedIn": "已登录",
+      "disabled": "已停用",
+      "detailHint": "查看账号详情",
+      "loading": "正在读取账号...",
+      "empty": "暂无账号",
+      "emptyHint": "登录后会在这里显示账号列表",
+      "loadFailed": "账号加载失败",
+      "loadFailedHint": "稍后重试，或进入账号管理页查看",
+      "login": "登录账号",
+      "loginHint": "添加新的 OneWorks 账号",
+      "manage": "管理账号",
+      "manageHint": "查看账号详情、消息和安全设置"
+    },
+    "preview": {
+      "title": "预览",
+      "searchLabel": "预览",
+      "searchPlaceholder": "预览",
+      "listLabel": "预览操作",
+      "empty": "暂无可用预览",
+      "openProject": "打开项目",
+      "openProjectHint": "先打开一个项目，再创建预览",
+      "newWebsite": "新建预览",
+      "newWebsiteHint": "在当前项目中打开一个浏览器预览页"
     },
     "settings": {
       "title": "启动器设置",
@@ -3354,9 +3415,11 @@
     },
     "accounts": {
       "title": "账号",
+      "listTitle": "账号列表",
       "back": "返回账号列表",
       "backToAdapter": "返回适配器",
       "empty": "暂无可用账号",
+      "loading": "正在读取账号…",
       "detailMissing": "暂时无法读取账号详情。",
       "default": "默认",
       "count": "{{count}} 个账号",
@@ -3375,9 +3438,12 @@
         "delete": "删除账号快照"
       },
       "facts": {
+        "key": "账号 Key",
         "email": "邮箱",
         "type": "类型",
-        "plan": "套餐"
+        "plan": "套餐",
+        "source": "来源",
+        "description": "说明"
       },
       "status": {
         "ready": "可用",

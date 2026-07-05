@@ -22,6 +22,7 @@ import type {
   AgentRoomRun,
   AgentRoomRunStatus,
   AgentRoomStatus,
+  AgentRoomSummary,
   AgentRoomUserMessageDelivery,
   AgentRoomUserMessageTarget,
   ChatMessageContent,
@@ -1544,13 +1545,32 @@ export function createAgentRoomService(
   const listRooms = (filter?: Parameters<AgentRoomDb['listAgentRooms']>[0]) =>
     db.listAgentRooms(filter).map(room => getDetail(room.id)?.room ?? room)
 
+  const listRoomSummaries = (filter?: Parameters<AgentRoomDb['listAgentRooms']>[0]): AgentRoomSummary[] =>
+    db.listAgentRooms(filter).map((room) => {
+      const members = db.listAgentRoomMembers(room.id)
+      const runs = db.listAgentRoomRuns(room.id)
+      return {
+        ...room,
+        activeRunCount: members.reduce((count, member) => count + member.activeRunCount, 0),
+        pendingCount: members.reduce((count, member) => count + member.pendingCount, 0),
+        sessionIds: Array.from(
+          new Set([
+            ...(room.hostSessionId != null ? [room.hostSessionId] : []),
+            ...runs.map(run => run.sessionId)
+          ])
+        )
+      }
+    })
+
   return {
     appendUserMessage,
     applyEvent,
     createRoom: db.createAgentRoom.bind(db),
     deleteRoom: db.deleteAgentRoom.bind(db),
     ensureRoomForHostSession: db.ensureAgentRoomForHostSession.bind(db),
+    getRoomForHostSession: db.getAgentRoomByHostSessionId.bind(db),
     getDetail,
+    listRoomSummaries,
     listRooms,
     respondInteraction,
     updateRoomMetadata,

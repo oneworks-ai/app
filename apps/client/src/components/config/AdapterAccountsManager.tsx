@@ -3,9 +3,14 @@ import './AdapterAccountsManager.scss'
 
 import { App, Button, Empty, Input, Popconfirm, Spin, Tooltip } from 'antd'
 import { useMemo, useState } from 'react'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 
-import type { AdapterAccountActionDescriptor, AdapterAccountInfo, ConfigUiObjectSchema } from '@oneworks/types'
+import type {
+  AdapterAccountActionDescriptor,
+  AdapterAccountInfo,
+  AdapterAccountsResult,
+  ConfigUiObjectSchema
+} from '@oneworks/types'
 
 import { getAdapterAccountDetail, getAdapterAccounts, getApiErrorMessage, manageAdapterAccount } from '#~/api'
 
@@ -377,6 +382,47 @@ const AccountDetailView = ({
   const detail = data?.account
   const statusMeta = formatStatus(detail?.status, t)
   const detailActions = (detail?.actions ?? []).filter(action => action.key !== 'refresh')
+  const detailFacts = detail == null
+    ? []
+    : [
+      {
+        key: 'key',
+        icon: 'key',
+        label: t('config.accounts.facts.key'),
+        value: detail.key
+      },
+      {
+        key: 'email',
+        icon: 'mail',
+        label: t('config.accounts.facts.email'),
+        value: detail.email
+      },
+      {
+        key: 'accountType',
+        icon: 'account_circle',
+        label: t('config.accounts.facts.type'),
+        value: detail.accountType
+      },
+      {
+        key: 'planType',
+        icon: 'workspace_premium',
+        label: t('config.accounts.facts.plan'),
+        value: detail.planType
+      },
+      {
+        key: 'source',
+        icon: 'database',
+        label: t('config.accounts.facts.source'),
+        value: detail.source?.label,
+        description: detail.source?.description
+      },
+      {
+        key: 'description',
+        icon: 'notes',
+        label: t('config.accounts.facts.description'),
+        value: detail.description
+      }
+    ].filter(fact => fact.value != null && fact.value.trim() !== '')
   const quotaMetrics = detail?.quota?.metrics?.filter((metric) => {
     if (typeof metric.value === 'string') return metric.value.trim() !== ''
     return metric.value != null
@@ -456,6 +502,25 @@ const AccountDetailView = ({
             </div>
           </div>
 
+          {detailFacts.length > 0 && (
+            <div className='adapter-account-manager__facts'>
+              {detailFacts.map(fact => (
+                <div key={fact.key} className='adapter-account-manager__fact'>
+                  <span className='material-symbols-rounded adapter-account-manager__fact-icon' aria-hidden='true'>
+                    {fact.icon}
+                  </span>
+                  <div className='adapter-account-manager__fact-body'>
+                    <div className='adapter-account-manager__fact-label'>{fact.label}</div>
+                    <div className='adapter-account-manager__fact-value'>{fact.value}</div>
+                    {fact.description != null && fact.description.trim() !== '' && fact.description !== fact.value && (
+                      <div className='adapter-account-manager__muted'>{fact.description}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {quotaMetrics.length > 0 && (
             <div className='adapter-account-manager__section'>
               <div className='adapter-account-manager__section-title'>
@@ -514,10 +579,12 @@ const AccountDetailView = ({
 
 const AccountsOverviewCard = ({
   accounts,
+  loading,
   onOpenAccounts,
   t
 }: {
   accounts: AdapterAccountInfo[]
+  loading?: boolean
   onOpenAccounts: () => void
   t: TranslationFn
 }) => {
@@ -536,9 +603,17 @@ const AccountsOverviewCard = ({
           <div className='config-view__field-text'>
             <div className='config-view__field-title'>{t('config.accounts.title')}</div>
             <div className='config-view__field-desc adapter-account-manager__overview-meta'>
-              <span>{t('config.accounts.count', { count: accounts.length })}</span>
-              <span>{t('config.accounts.readyCount', { count: readyCount })}</span>
-              {defaultAccount != null && (
+              {loading === true && accounts.length === 0
+                ? (
+                  <span>{t('config.accounts.loading')}</span>
+                )
+                : (
+                  <>
+                    <span>{t('config.accounts.count', { count: accounts.length })}</span>
+                    <span>{t('config.accounts.readyCount', { count: readyCount })}</span>
+                  </>
+                )}
+              {loading !== true && defaultAccount != null && (
                 <span>{t('config.accounts.defaultHint', { account: defaultAccount.title })}</span>
               )}
             </div>
@@ -713,6 +788,7 @@ const AccountsListView = ({
 export const AdapterAccountsManager = ({
   adapterKey,
   value,
+  accountsData,
   accountItemSchema,
   nestedPath = [],
   onChange,
@@ -721,6 +797,7 @@ export const AdapterAccountsManager = ({
 }: {
   adapterKey: string
   value: Record<string, unknown>
+  accountsData?: AdapterAccountsResult
   accountItemSchema?: ConfigUiObjectSchema
   nestedPath?: string[]
   onChange: (nextValue: Record<string, unknown>) => void
@@ -728,26 +805,37 @@ export const AdapterAccountsManager = ({
   t: TranslationFn
 }) => {
   const { message } = App.useApp()
+  const { mutate: mutateCache } = useSWRConfig()
   const configuredDefaultAccount = typeof value.defaultAccount === 'string' && value.defaultAccount.trim() !== ''
     ? value.defaultAccount.trim()
     : undefined
-  const { data, isLoading, mutate } = useSWR(
-    `/api/adapters/${adapterKey}/accounts`,
-    () => getAdapterAccounts(adapterKey)
+  const accountsCacheKey = `/api/adapters/${adapterKey}/accounts`
+  const { data: localAccountsData, isLoading } = useSWR(
+    accountsData == null ? accountsCacheKey : null,
+    () => getAdapterAccounts(adapterKey),
+    {
+      dedupingInterval: 30_000,
+      keepPreviousData: true,
+      revalidateOnFocus: false
+    }
   )
   const [loadingAction, setLoadingAction] = useState<string>()
   const [deletingAccountKey, setDeletingAccountKey] = useState<string>()
+  const resolvedAccountsData = accountsData ?? localAccountsData
   const configuredAccounts = useMemo(() => getConfiguredAccounts(value), [value])
   const accounts = useMemo(
-    () => mergeAccounts(configuredAccounts, data?.accounts ?? [], configuredDefaultAccount),
-    [configuredAccounts, configuredDefaultAccount, data?.accounts]
+    () => mergeAccounts(configuredAccounts, resolvedAccountsData?.accounts ?? [], configuredDefaultAccount),
+    [configuredAccounts, configuredDefaultAccount, resolvedAccountsData?.accounts]
   )
-  const actionDescriptors = data?.actions ?? []
+  const actionDescriptors = resolvedAccountsData?.actions ?? []
   const isAccountsView = nestedPath[0] === 'accounts'
   const activeAccountKey = isAccountsView ? nestedPath[1] : undefined
 
   const refreshAccounts = async () => {
-    await mutate()
+    await mutateCache(accountsCacheKey, getAdapterAccounts(adapterKey), {
+      populateCache: true,
+      revalidate: false
+    })
   }
 
   const handleToggleDefaultAccount = (accountKey: string) => {
@@ -840,6 +928,7 @@ export const AdapterAccountsManager = ({
   return (
     <AccountsOverviewCard
       accounts={accounts}
+      loading={isLoading && resolvedAccountsData == null}
       onOpenAccounts={() => onOpenNestedPath(['accounts'])}
       t={t}
     />

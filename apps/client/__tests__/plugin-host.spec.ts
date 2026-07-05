@@ -34,6 +34,12 @@ describe('client plugin host registry', () => {
           }],
           navItems: [{ id: 'dashboard', title: 'Dashboard', icon: 'dashboard', route: '/plugins/demo/dashboard' }],
           navFooterBefore: [{
+            children: [{
+              command: 'open-profile',
+              icon: 'person',
+              id: 'footer-status-profile',
+              title: 'Profile'
+            }],
             icon: 'route',
             id: 'footer-status',
             route: '/plugins/demo/status',
@@ -122,6 +128,12 @@ describe('client plugin host registry', () => {
       pluginScope: 'demo'
     })
     expect(snapshot.slots['nav.footer.before']?.[0]).toMatchObject({
+      children: [
+        expect.objectContaining({
+          command: 'open-profile',
+          id: 'footer-status-profile'
+        })
+      ],
       id: 'footer-status',
       pluginScope: 'demo',
       route: '/plugins/demo/status'

@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- codex account coverage keeps migration and credential scenarios together. */
-import { lstat, mkdir, mkdtemp, readFile, readlink, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { Buffer } from 'node:buffer'
+import { chmod, lstat, mkdir, mkdtemp, readFile, readlink, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -11,7 +12,7 @@ import { bridgeRealHomeToMockHome } from '@oneworks/register/mock-home-bridge'
 import type { AdapterCtx } from '@oneworks/types'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
-import { getCodexAccounts, prepareCodexSessionHome } from '#~/runtime/accounts.js'
+import { getCodexAccounts, manageCodexAccount, prepareCodexSessionHome } from '#~/runtime/accounts.js'
 
 const tempDirs: string[] = []
 const originalHome = process.env.HOME
@@ -94,7 +95,7 @@ describe('prepareCodexSessionHome', () => {
     expect(await readlink(join(result.homeDir, '.codex', 'auth.json'))).toBe(authFilePath)
   })
 
-  it('ignores a partially written stored account metadata file when selecting an account', async () => {
+  it('ignores legacy workspace stored accounts when selecting an account', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-account-meta-race-'))
     tempDirs.push(workspace)
 
@@ -112,14 +113,54 @@ describe('prepareCodexSessionHome', () => {
     await writeFile(join(accountDir, 'auth.json'), '{}\n')
     await writeFile(join(accountDir, 'meta.json'), '{"title":')
 
-    const result = await prepareCodexSessionHome({
+    await expect(prepareCodexSessionHome({
       ctx,
       sessionId: 'session',
       account: 'stored'
+    })).rejects.toThrow('Codex account "stored" is not available.')
+  })
+
+  it('materializes global config Codex auth into the isolated session home', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-global-auth-'))
+    const realHome = join(workspace, 'real-home')
+    const mockHome = resolveTestMockHome(workspace, realHome)
+    const authContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_global"}}\n'
+    tempDirs.push(workspace)
+
+    const ctx = createTestCtx(workspace, {
+      env: {
+        HOME: mockHome,
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome
+      },
+      configs: [{
+        adapters: {
+          codex: {
+            defaultAccount: 'work',
+            accounts: {
+              work: {
+                title: 'Work',
+                auth: {
+                  type: 'codex-auth-json',
+                  encoding: 'base64',
+                  token: Buffer.from(authContent, 'utf8').toString('base64')
+                }
+              }
+            }
+          }
+        }
+      } as any]
     })
 
-    expect(result.accountKey).toBe('stored')
-    expect(await readlink(join(result.homeDir, '.codex', 'auth.json'))).toBe(join(accountDir, 'auth.json'))
+    const result = await prepareCodexSessionHome({
+      ctx,
+      sessionId: 'session'
+    })
+    const sessionAuthPath = join(result.homeDir, '.codex', 'auth.json')
+
+    expect(result.accountKey).toBe('work')
+    expect(result.authFilePath).toBe(sessionAuthPath)
+    expect(await readFile(sessionAuthPath, 'utf8')).toBe(authContent)
+    expect((await lstat(sessionAuthPath)).isSymbolicLink()).toBe(false)
   })
 
   it('links real home git config into the isolated Codex session home', async () => {
@@ -527,5 +568,65 @@ describe('getCodexAccounts', () => {
       accounts: []
     })
     expect(logger.warn).not.toHaveBeenCalled()
+  })
+})
+
+describe('manageCodexAccount', () => {
+  it('stores Codex login auth in the global OneWorks config', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-login-global-'))
+    const realHome = join(workspace, 'real-home')
+    const fakeCodexPath = join(workspace, 'fake-codex.mjs')
+    const authContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_login"}}\n'
+    tempDirs.push(workspace)
+
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+if (process.argv[2] === 'login') {
+  mkdirSync(join(process.env.HOME, '.codex'), { recursive: true })
+  writeFileSync(join(process.env.HOME, '.codex', 'auth.json'), ${JSON.stringify(authContent)})
+  process.exit(0)
+}
+
+process.exit(1)
+`
+    )
+    await chmod(fakeCodexPath, 0o755)
+    await mkdir(join(realHome, '.oneworks'), { recursive: true })
+    await writeFile(
+      join(realHome, '.oneworks', '.oo.config.json'),
+      '{"adapters":{"codex":{"accounts":{"work":{"title":"Old Work","authFile":"/tmp/old-codex-auth.json"}}}}}'
+    )
+
+    const ctx = createTestCtx(workspace, {
+      env: {
+        HOME: resolveTestMockHome(workspace, realHome),
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+        __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+      }
+    })
+
+    const result = await manageCodexAccount(ctx, {
+      action: 'add',
+      account: 'work'
+    })
+
+    const globalConfig = JSON.parse(
+      await readFile(join(realHome, '.oneworks', '.oo.config.json'), 'utf8')
+    ) as any
+    const storedAccount = globalConfig.adapters.codex.accounts.work
+
+    expect(result.accountKey).toBe('work')
+    expect(result.artifacts).toBeUndefined()
+    expect(storedAccount.source).toBe('codex-login')
+    expect(storedAccount.auth).toMatchObject({
+      type: 'codex-auth-json',
+      encoding: 'base64'
+    })
+    expect(storedAccount.authFile).toBeUndefined()
+    expect(Buffer.from(storedAccount.auth.token, 'base64').toString('utf8')).toBe(authContent)
   })
 })

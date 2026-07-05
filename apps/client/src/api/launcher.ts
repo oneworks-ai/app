@@ -15,17 +15,17 @@ import {
 import { fetchApiJson, jsonHeaders } from './base'
 import type { ApiOkResponse } from './types'
 
-const getManagerServerBaseUrl = () => (
-  normalizeServerBaseUrl(globalThis.location?.origin) ??
+export const getLauncherManagerServerBaseUrl = (managerServerBaseUrl?: string) => (
+  normalizeServerBaseUrl(managerServerBaseUrl) ??
     getConfiguredServerBaseUrl() ??
     getServerBaseUrl()
 )
 
-const createLauncherApiUrl = (path: string) => (
-  createServerUrlFromBase(getManagerServerBaseUrl(), path)
+export const createLauncherApiUrl = (path: string, managerServerBaseUrl?: string) => (
+  createServerUrlFromBase(getLauncherManagerServerBaseUrl(managerServerBaseUrl), path)
 )
 
-const createLauncherClientOriginHeaders = (): Record<string, string> => {
+export const createLauncherClientOriginHeaders = (): Record<string, string> => {
   const origin = globalThis.location?.origin
   if (origin == null || origin === 'null' || origin.trim() === '') {
     return {}
@@ -49,9 +49,17 @@ export const openLauncherWorkspace = (workspaceFolder: string) => (
   })
 )
 
-export const getLauncherWorkspaceConnection = (workspaceId: string) => (
+export const getLauncherWorkspaceConnection = (
+  workspaceId: string,
+  input: {
+    managerServerBaseUrl?: string
+  } = {}
+) => (
   fetchApiJson<LauncherWorkspaceOpenResponse>(
-    createLauncherApiUrl(`/api/launcher/workspaces/${encodeURIComponent(workspaceId)}/connection`),
+    createLauncherApiUrl(
+      `/api/launcher/workspaces/${encodeURIComponent(workspaceId)}/connection`,
+      input.managerServerBaseUrl
+    ),
     {
       headers: createLauncherClientOriginHeaders(),
       timeoutMs: 30_000

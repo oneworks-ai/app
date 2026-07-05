@@ -29,6 +29,20 @@ const isHomepagePreviewSearch = (search: string) => (
   new URLSearchParams(search).get('owPreview') === 'homepage'
 )
 
+const isManagerAppRoute = (pathname: string) => (
+  pathname.startsWith('/session/') ||
+  pathname.startsWith('/rooms/') ||
+  pathname === '/archive' ||
+  pathname === '/automation' ||
+  pathname === '/benchmark' ||
+  pathname === '/knowledge' ||
+  pathname === '/modules' ||
+  pathname === '/plugins' ||
+  pathname.startsWith('/plugins/') ||
+  pathname === '/config' ||
+  pathname.startsWith('/config/')
+)
+
 function DevComponentLabApp() {
   const Route = DevComponentLabRoute
 
@@ -90,6 +104,14 @@ export default function App() {
     return (
       <Suspense fallback={null}>
         <LauncherApp />
+      </Suspense>
+    )
+  }
+
+  if (isManagerLauncher && isManagerAppRoute(location.pathname)) {
+    return (
+      <Suspense fallback={null}>
+        <WorkspaceApp />
       </Suspense>
     )
   }

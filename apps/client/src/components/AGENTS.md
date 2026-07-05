@@ -25,6 +25,7 @@
 - `Sidebar.tsx`：侧边栏数据装配、route sidebar 接入和列表状态。
 - `sidebar/SidebarHeader.tsx`：侧边栏顶部入口区、搜索区、入口 actions 和入口右键菜单触发。
 - `interaction-list/`：通用交互列表，只处理 selection、item 渲染、context menu 触发和外部 action 调用，不承载具体业务语义。
+- `native-tabs/`：通用紧凑原生 tabs 行，供 route 子页、插件详情页和账号 / 团队详情这类二级页面复用；业务模块只传 items、activeKey 和 onChange，不在本地复制 tabs padding、gap、active underline 或图标尺寸规则。
 - `browser-data-sync/`：桌面端浏览器数据迁移与密码管理 UI。设置页和网页 tab 更多菜单共用的“同步数据”弹窗只承载导入 / 同步动作；已保存密码的查看、搜索、复制和显示入口是设置页左侧独立 tab。Chrome 密码、密码管理器扩展、Authenticator / 验证码导入这类浏览器数据迁移 UI 放这里，不放到普通插件配置页或单个 webview 菜单组件里。
 - `browser-activity/`：桌面端网页历史和下载内容 UI。只负责配置页里的搜索、项目 / 会话选择过滤、打开历史和打开 / 显示下载文件；记录、持久化与下载监听在 desktop main 进程。项目 / 会话不是页面级 tab，也不是“记录里是否带有项目 / 会话字段”的泛过滤；配置侧栏进入默认全局，从具体网页 tab 入口进入时通过 route state 默认选中当前项目和会话。
 

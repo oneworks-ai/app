@@ -229,6 +229,8 @@ export const runRuntimeEntry = async (options: RunRuntimeEntryOptions) => {
     process.execPath,
     [
       '--conditions=__oneworks__',
+      '--loader',
+      nodeRequire.resolve('@oneworks/register/esm-loader'),
       '-r',
       nodeRequire.resolve('@oneworks/register/preload'),
       options.entryPath

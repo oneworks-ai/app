@@ -32,7 +32,7 @@
 - 管理页前端不放在这里；React 管理端在 `apps/relay-admin`，通过 Vite 构建后由 `/admin/assets/*` 提供。
 - `src/routes/admin-ui.ts` 只负责 HTML shell 和静态资源读取；不要把 React 代码、样式或业务状态内联回 relay-server。
 - Relay store 不保存会话正文或结果正文，只保存 trace/status/size/timestamp/errorCode 等元数据；新增存储 driver 必须复用 `content-boundary.ts` 的过滤。
-- Relay device 的 name / capabilities / workspaceFolder / pluginScope 是用户私有元数据。新写入必须加密存储，device token 只存 hash；admin 用户管理只返回 `deviceCount` / `maxDevices` 这类聚合字段，不返回其他用户设备详情。
+- Relay device 的 alias / name / capabilities / workspaceFolder / pluginScope 是用户私有元数据。新写入必须加密存储，device token 只存 hash；admin 用户管理只返回 `deviceCount` / `maxDevices` 这类聚合字段，不返回其他用户设备详情。`alias` 是 OneWorks / Relay 内的展示名，不参与设备身份判断；真实机器名继续放在 `name`，用于兜底显示和排查。
 - `/api/relay/devices` 是当前 session 用户自己的设备列表。不要因为 owner/admin 有管理权限就把其他用户设备详情从这个接口返回。
 - 系统访问令牌属于当前登录用户，落库只存 hash 和 preview；生成接口只返回一次明文。权限按令牌所属用户的 role/capability 解析，不要给系统访问令牌绕过当前用户保护，例如禁止修改自己的 role。
 - 通过系统访问令牌调用 `/api/*` 时，`src/security/audit.ts` 需要记录 OpenAPI audit event，查询入口是 `/api/profile/openapi-audit` 且只能由登录 session 查看。

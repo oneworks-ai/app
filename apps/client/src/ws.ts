@@ -1,7 +1,7 @@
 import type { WSEvent } from '@oneworks/core'
 
 import { createHomepagePreviewSocketIfEnabled } from '#~/homepage-preview/runtime-loader'
-import { createServerUrl, getServerWsPath } from '#~/runtime-config.js'
+import { createServerUrl, createServerUrlFromBase, getServerWsPath, normalizeServerBaseUrl } from '#~/runtime-config.js'
 
 import { getAuthToken } from './api/auth-token'
 
@@ -13,8 +13,17 @@ export interface WSHandlers<TMessage = WSEvent> {
   shouldReconnect?: (event: CloseEvent) => boolean
 }
 
-export const createWebSocketUrl = (params?: Record<string, string>) => {
-  const url = new URL(createServerUrl(getServerWsPath()))
+export interface WSOptions {
+  serverBaseUrl?: string
+}
+
+export const createWebSocketUrl = (params?: Record<string, string>, options: WSOptions = {}) => {
+  const normalizedServerBaseUrl = normalizeServerBaseUrl(options.serverBaseUrl)
+  const url = new URL(
+    normalizedServerBaseUrl == null
+      ? createServerUrl(getServerWsPath())
+      : createServerUrlFromBase(normalizedServerBaseUrl, getServerWsPath())
+  )
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
 
   const authToken = getAuthToken()
@@ -31,14 +40,37 @@ export const createWebSocketUrl = (params?: Record<string, string>) => {
   return url.toString()
 }
 
-export function createSocket<TMessage = WSEvent>(handlers: WSHandlers<TMessage>, params?: Record<string, string>) {
-  const url = createWebSocketUrl(params)
+const toMessageText = async (data: MessageEvent['data']) => {
+  if (typeof data === 'string') return data
+  if (data instanceof ArrayBuffer) return new TextDecoder().decode(data)
+  if (ArrayBuffer.isView(data)) {
+    return new TextDecoder().decode(data)
+  }
+  if (typeof Blob !== 'undefined' && data instanceof Blob) {
+    return await data.text()
+  }
+  return String(data)
+}
+
+export function createSocket<TMessage = WSEvent>(
+  handlers: WSHandlers<TMessage>,
+  params?: Record<string, string>,
+  options?: WSOptions
+) {
+  const url = createWebSocketUrl(params, options)
   const ws = createHomepagePreviewSocketIfEnabled(url) ?? new WebSocket(url)
+  ws.binaryType = 'arraybuffer'
   ws.addEventListener('open', () => handlers.onOpen?.())
   ws.addEventListener('message', (ev) => {
     try {
-      const data = JSON.parse(String(ev.data)) as unknown
-      handlers.onMessage?.(data as TMessage)
+      void toMessageText(ev.data)
+        .then((text) => {
+          const data = JSON.parse(text) as unknown
+          handlers.onMessage?.(data as TMessage)
+        })
+        .catch((error: unknown) => {
+          console.error(error)
+        })
     } catch (e) {
       console.error(e)
     }

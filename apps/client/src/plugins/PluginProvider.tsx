@@ -1,7 +1,13 @@
+/* eslint-disable max-lines -- provider coordinates plugin activation, relay-aware sources, and watch lifecycle. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import { useNotifications } from '#~/notifications/NotificationProvider'
+import { getRuntimeWorkspaceId } from '#~/runtime-config'
+import {
+  WORKSPACE_CONNECTION_CHANGE_EVENT,
+  readRememberedWorkspaceConnectionMetadata
+} from '#~/workspace-connection-state'
 import { createSocket } from '#~/ws.js'
 
 import { listPlugins } from './api'
@@ -23,11 +29,28 @@ export function PluginProvider({ children }: { children: ReactNode }) {
   const activationVersionsRef = useRef(new Map<string, number>())
   const importVersionsRef = useRef(new Map<string, number>())
   const [snapshot, setSnapshot] = useState(() => registry.getSnapshot())
+  const [workspaceConnectionRevision, setWorkspaceConnectionRevision] = useState(0)
 
   useEffect(() =>
     registry.subscribe(() => {
       setSnapshot(registry.getSnapshot())
     }), [registry])
+
+  useEffect(() => {
+    const handleWorkspaceConnectionChange = () => {
+      setWorkspaceConnectionRevision(revision => revision + 1)
+    }
+    window.addEventListener(WORKSPACE_CONNECTION_CHANGE_EVENT, handleWorkspaceConnectionChange)
+    return () => {
+      window.removeEventListener(WORKSPACE_CONNECTION_CHANGE_EVENT, handleWorkspaceConnectionChange)
+    }
+  }, [])
+
+  const pluginServerBaseUrl = useMemo(() => {
+    const workspaceId = getRuntimeWorkspaceId()
+    if (workspaceId == null) return undefined
+    return readRememberedWorkspaceConnectionMetadata(workspaceId, 'relay')?.managerServerBaseUrl
+  }, [workspaceConnectionRevision])
 
   const getImportVersion = useCallback((scope: string) => importVersionsRef.current.get(scope) ?? 0, [])
   const bumpImportVersion = useCallback((scope: string) => {
@@ -57,9 +80,18 @@ export function PluginProvider({ children }: { children: ReactNode }) {
       isActivationCurrent: () => isActivationCurrent(scope, activationVersion),
       notifications,
       registry,
-      reloadPlugin
+      reloadPlugin,
+      serverBaseUrl: pluginServerBaseUrl
     })
-  }, [bumpImportVersion, getImportVersion, isActivationCurrent, nextActivationVersion, notifications, registry])
+  }, [
+    bumpImportVersion,
+    getImportVersion,
+    isActivationCurrent,
+    nextActivationVersion,
+    notifications,
+    pluginServerBaseUrl,
+    registry
+  ])
 
   const activateInstances = useCallback(async (instances: PluginRuntimeInstance[], didCancel: () => boolean) => {
     instancesRef.current.forEach((instance) => {
@@ -78,19 +110,28 @@ export function PluginProvider({ children }: { children: ReactNode }) {
         isActivationCurrent: () => !didCancel() && isActivationCurrent(instance.scope, activationVersion),
         notifications,
         registry,
-        reloadPlugin
+        reloadPlugin,
+        serverBaseUrl: pluginServerBaseUrl
       })
     }
-  }, [getImportVersion, isActivationCurrent, nextActivationVersion, notifications, registry, reloadPlugin])
+  }, [
+    getImportVersion,
+    isActivationCurrent,
+    nextActivationVersion,
+    notifications,
+    pluginServerBaseUrl,
+    registry,
+    reloadPlugin
+  ])
 
   const refreshPlugins = useCallback(async () => {
-    const instances = await listPlugins()
+    const instances = await listPlugins({ serverBaseUrl: pluginServerBaseUrl })
     await activateInstances(instances, () => false)
-  }, [activateInstances])
+  }, [activateInstances, pluginServerBaseUrl])
 
   useEffect(() => {
     let didCancel = false
-    void listPlugins()
+    void listPlugins({ serverBaseUrl: pluginServerBaseUrl })
       .then(async instances => {
         if (didCancel) return
         await activateInstances(instances, () => didCancel)
@@ -109,7 +150,7 @@ export function PluginProvider({ children }: { children: ReactNode }) {
         registry.disposeScope(instance.scope)
       })
     }
-  }, [activateInstances, nextActivationVersion, registry])
+  }, [activateInstances, nextActivationVersion, pluginServerBaseUrl, registry])
 
   useEffect(() => {
     let disposed = false
@@ -139,25 +180,29 @@ export function PluginProvider({ children }: { children: ReactNode }) {
 
     const connect = () => {
       if (disposed) return
-      socket = createSocket<PluginWatchEvent>({
-        onMessage: (event) => {
-          if (disposed || event.type !== 'plugin.changed') return
-          if (event.scope === '*') {
-            instancesRef.current.forEach(instance => bumpImportVersion(instance.scope))
-          } else {
-            bumpImportVersion(event.scope)
+      socket = createSocket<PluginWatchEvent>(
+        {
+          onMessage: (event) => {
+            if (disposed || event.type !== 'plugin.changed') return
+            if (event.scope === '*') {
+              instancesRef.current.forEach(instance => bumpImportVersion(instance.scope))
+            } else {
+              bumpImportVersion(event.scope)
+            }
+            void refreshPlugins()
+          },
+          onClose: (event) => {
+            if (disposed) return
+            if (event.code === 1008) return
+            scheduleConnect(1000)
+          },
+          onError: () => {
+            closeSocket(socket)
           }
-          void refreshPlugins()
         },
-        onClose: (event) => {
-          if (disposed) return
-          if (event.code === 1008) return
-          scheduleConnect(1000)
-        },
-        onError: () => {
-          closeSocket(socket)
-        }
-      }, { channel: 'plugin', scope: '*' })
+        { channel: 'plugin', scope: '*' },
+        { serverBaseUrl: pluginServerBaseUrl }
+      )
     }
 
     scheduleConnect()
@@ -168,7 +213,7 @@ export function PluginProvider({ children }: { children: ReactNode }) {
       }
       closeSocket(socket)
     }
-  }, [bumpImportVersion, refreshPlugins])
+  }, [bumpImportVersion, pluginServerBaseUrl, refreshPlugins])
 
   const value = useMemo<PluginContextValue>(() => ({
     refreshPlugins,

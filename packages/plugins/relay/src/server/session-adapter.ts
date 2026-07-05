@@ -27,6 +27,7 @@ export const normalizeLocalRelaySession = (value: unknown): RelayLocalSession | 
   return {
     id,
     userId: toOptionalString(value.userId),
+    title: toOptionalString(value.title),
     status: toOptionalString(value.status),
     createdAt: toOptionalNumber(value.createdAt),
     updatedAt: toOptionalNumber(value.updatedAt),

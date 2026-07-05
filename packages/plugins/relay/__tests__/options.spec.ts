@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { normalizeOptions } from '../src/server/options.js'
+import { normalizeOptions, resolveActiveRelayServer } from '../src/server/options.js'
 import {
   DEFAULT_OFFICIAL_RELAY_SERVER_ID,
   OFFICIAL_RELAY_CLOUDFLARE_BASE_URL,
+  OFFICIAL_RELAY_CLOUDFLARE_DEV_BASE_URL,
   OFFICIAL_RELAY_VERCEL_BASE_URL
 } from '../src/shared/official-services.js'
 
@@ -72,6 +73,27 @@ describe('relay plugin options', () => {
     expect(options.servers[2]?.official).toBeUndefined()
   })
 
+  it('includes official development relay services in development builds', () => {
+    const previousNodeEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = 'development'
+    try {
+      expect(normalizeOptions({}).servers).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          id: 'oneworks-cloudflare-dev',
+          name: 'OneWorks Relay (Cloudflare Dev)',
+          official: true,
+          remoteBaseUrl: OFFICIAL_RELAY_CLOUDFLARE_DEV_BASE_URL
+        })
+      ]))
+    } finally {
+      if (previousNodeEnv == null) {
+        delete process.env.NODE_ENV
+      } else {
+        process.env.NODE_ENV = previousNodeEnv
+      }
+    }
+  })
+
   it('builds a relay URL from server and port fields inside servers', () => {
     expect(normalizeOptions({
       activeServerId: 'local',
@@ -98,6 +120,26 @@ describe('relay plugin options', () => {
           server: '127.0.0.1'
         }
       ]
+    })
+  })
+
+  it('resolves local relay server aliases', () => {
+    const options = {
+      servers: [
+        {
+          id: 'local',
+          baseUrl: 'http://127.0.0.1:48890'
+        }
+      ]
+    }
+
+    expect(resolveActiveRelayServer(options, 'local')).toMatchObject({
+      id: 'local',
+      remoteBaseUrl: 'http://127.0.0.1:48890'
+    })
+    expect(resolveActiveRelayServer(options, 'localhost')).toMatchObject({
+      id: 'local',
+      remoteBaseUrl: 'http://127.0.0.1:48890'
     })
   })
 

@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 
 import type { EntitySummary, SpecSummary, WorkspaceSummary } from '#~/api.js'
+import { fetchApiJson } from '#~/api/base.js'
 import { DEFAULT_CHAT_SESSION_TARGET_DRAFT, createChatSessionTargetDraft } from '#~/hooks/chat/chat-session-target'
 import type {
   ChatSessionTargetDraft,
@@ -33,6 +34,14 @@ const toResource = (item: WorkspaceSummary | EntitySummary | SpecSummary): ChatS
   path: 'path' in item ? item.path : item.id
 })
 
+const sessionTargetResourceSWRConfig = {
+  dedupingInterval: 5 * 60_000,
+  refreshWhenHidden: false,
+  revalidateOnFocus: false
+} as const
+
+const fetchSessionTargetResource = async <T,>(path: string) => fetchApiJson<T>(path)
+
 export function SenderSessionTargetBar({
   draft,
   locked,
@@ -55,9 +64,25 @@ export function SenderSessionTargetBar({
   const { t } = useTranslation()
   const { isCompactLayout, isTouchInteraction } = useResponsiveLayout()
   const [showTargetSelect, setShowTargetSelect] = useState(false)
-  const { data: specsRes } = useSWR<{ specs: SpecSummary[] }>('/api/ai/specs')
-  const { data: entitiesRes } = useSWR<{ entities: EntitySummary[] }>('/api/ai/entities')
-  const { data: workspacesRes } = useSWR<{ workspaces: WorkspaceSummary[] }>('/api/ai/workspaces')
+  const activeType = draft.type
+  const isControlDisabled = locked || disabled === true
+  const isCompactControl = isCompactLayout || isTouchInteraction
+  const shouldLoadSessionTargetResources = showTargetSelect && !isControlDisabled
+  const { data: specsRes } = useSWR<{ specs: SpecSummary[] }>(
+    shouldLoadSessionTargetResources ? '/api/ai/specs' : null,
+    fetchSessionTargetResource,
+    sessionTargetResourceSWRConfig
+  )
+  const { data: entitiesRes } = useSWR<{ entities: EntitySummary[] }>(
+    shouldLoadSessionTargetResources ? '/api/ai/entities' : null,
+    fetchSessionTargetResource,
+    sessionTargetResourceSWRConfig
+  )
+  const { data: workspacesRes } = useSWR<{ workspaces: WorkspaceSummary[] }>(
+    shouldLoadSessionTargetResources ? '/api/ai/workspaces' : null,
+    fetchSessionTargetResource,
+    sessionTargetResourceSWRConfig
+  )
 
   const resourcesByType = useMemo<Record<SelectableTargetType, ChatSessionTargetResource[]>>(() => ({
     workspace: (workspacesRes?.workspaces ?? []).map(toResource),
@@ -65,9 +90,6 @@ export function SenderSessionTargetBar({
     spec: (specsRes?.specs ?? []).map(toResource)
   }), [entitiesRes?.entities, specsRes?.specs, workspacesRes?.workspaces])
 
-  const activeType = draft.type
-  const isControlDisabled = locked || disabled === true
-  const isCompactControl = isCompactLayout || isTouchInteraction
   const selectedLabel = draft.label ?? draft.name
   const selectedText = activeType === 'default'
     ? null
@@ -159,6 +181,8 @@ export function SenderSessionTargetBar({
     }
   }
 
+  const closeTargetSelect = () => setShowTargetSelect(false)
+
   const triggerButton = (
     <SenderSessionTargetTrigger
       activeType={activeType}
@@ -193,7 +217,7 @@ export function SenderSessionTargetBar({
                   open={showTargetSelect}
                   draft={draft}
                   resourcesByType={resourcesByType}
-                  onClose={() => setShowTargetSelect(false)}
+                  onClose={closeTargetSelect}
                   onSelect={handleSelect}
                 />
               </>
@@ -212,6 +236,7 @@ export function SenderSessionTargetBar({
                 }}
                 trigger={['click']}
                 placement='topLeft'
+                onOpenChange={setShowTargetSelect}
                 overlayClassName='sender-session-target__dropdown'
                 disabled={isControlDisabled}
               >

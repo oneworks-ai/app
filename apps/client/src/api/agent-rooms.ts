@@ -1,10 +1,12 @@
 import type {
   AgentRoomDetailResponse,
+  AgentRoomHostSessionResponse,
   AgentRoomInteractionResponseRequest,
   AgentRoomInteractionResponseResponse,
   AgentRoomListResponse,
   AgentRoomMessageWriteRequest,
   AgentRoomMessageWriteResponse,
+  AgentRoomSummaryListResponse,
   UpdateAgentRoomMetadataRequest,
   UpdateAgentRoomMetadataResponse
 } from '@oneworks/core'
@@ -15,8 +17,18 @@ export async function listAgentRooms(): Promise<AgentRoomListResponse> {
   return fetchApiJson<AgentRoomListResponse>('/api/agent-rooms')
 }
 
+export async function listAgentRoomSummaries(): Promise<AgentRoomSummaryListResponse> {
+  return fetchApiJson<AgentRoomSummaryListResponse>('/api/agent-rooms/summary')
+}
+
 export async function listArchivedAgentRooms(): Promise<AgentRoomListResponse> {
   return fetchApiJson<AgentRoomListResponse>('/api/agent-rooms/archived')
+}
+
+export async function getAgentRoomByHostSession(sessionId: string): Promise<AgentRoomHostSessionResponse> {
+  return fetchApiJson<AgentRoomHostSessionResponse>(
+    `/api/agent-rooms/by-host-session/${encodeURIComponent(sessionId)}`
+  )
 }
 
 export async function getAgentRoom(roomId: string): Promise<AgentRoomDetailResponse> {

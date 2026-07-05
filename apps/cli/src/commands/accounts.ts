@@ -96,11 +96,11 @@ const printAccountActionProgress = (event: AdapterManageAccountProgressEvent) =>
 export function registerAccountsCommand(program: Command) {
   const accountsCommand = program
     .command('accounts')
-    .description('Manage adapter accounts stored in project-home runtime data')
+    .description('Manage adapter accounts')
 
   accountsCommand
     .command('add <adapter> [account]')
-    .description('Run the adapter login flow and save credentials into project-private account storage')
+    .description('Run the adapter login flow and save credentials using the adapter account store')
     .action(async (adapterInput: string, account: string | undefined) => {
       try {
         const adapterKey = normalizeCliAdapterOptionValue(adapterInput)
@@ -181,7 +181,7 @@ export function registerAccountsCommand(program: Command) {
 
   accountsCommand
     .command('remove <adapter> <account>')
-    .description('Remove the project-private credential snapshot for one adapter account')
+    .description('Remove one adapter account from the adapter account store')
     .action(async (adapterInput: string, account: string) => {
       try {
         const adapterKey = normalizeCliAdapterOptionValue(adapterInput)

@@ -36,6 +36,7 @@ export interface InteractionListItem {
   searchText?: string
   tags?: ReactNode[]
   title: ReactNode
+  tooltip?: ReactNode
 }
 
 export interface InteractionListSearchProps {
@@ -93,16 +94,23 @@ export interface InteractionListSelectionRenderContext<TItem extends Interaction
 }
 
 export interface InteractionListProps<TItem extends InteractionListItem = InteractionListItem> {
+  actionDisplay?: 'inline' | 'menu'
   actions?: (item: TItem) => InteractionListAction<TItem>[]
   activeKey?: string
+  border?: 'bordered' | 'borderless'
   className?: string
   defaultCollapsedKeys?: string[]
+  descriptionPlacement?: 'content' | 'titleHover'
   emptyText: ReactNode
+  iconSize?: number | string
+  inlineActionLimit?: number
   isTouchInteraction?: boolean
   items: TItem[]
+  padding?: 'default' | 'none'
   search?: InteractionListSearchProps
   selectedKeys?: Set<string>
   selectionMode?: boolean
+  splitActionHover?: boolean
   showItemDescription?: boolean
   renderItemAction?: (context: InteractionListActionRenderContext<TItem>) => ReactNode
   renderItemContent?: (context: InteractionListItemRenderContext<TItem>) => ReactNode
@@ -158,17 +166,46 @@ const flattenItems = <TItem extends InteractionListItem>(
   })
 }
 
+const compactInteractionListActions = <TItem extends InteractionListItem>(
+  actions: InteractionListAction<TItem>[]
+) => {
+  const compacted: InteractionListAction<TItem>[] = []
+  let previousWasDivider = true
+  for (const action of actions) {
+    if (action.type === 'divider') {
+      if (!previousWasDivider) {
+        compacted.push(action)
+        previousWasDivider = true
+      }
+      continue
+    }
+    compacted.push(action)
+    previousWasDivider = false
+  }
+  while (compacted.at(-1)?.type === 'divider') {
+    compacted.pop()
+  }
+  return compacted
+}
+
 export function InteractionList<TItem extends InteractionListItem = InteractionListItem>({
+  actionDisplay = 'menu',
   actions,
   activeKey,
+  border = 'borderless',
   className,
   defaultCollapsedKeys,
+  descriptionPlacement = 'content',
   emptyText,
+  iconSize,
+  inlineActionLimit = 2,
   isTouchInteraction = false,
   items,
+  padding = 'default',
   search,
   selectedKeys = new Set<string>(),
   selectionMode = false,
+  splitActionHover = false,
   showItemDescription = true,
   renderItemAction,
   renderItemContent,
@@ -213,6 +250,11 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
       source: 'more' | 'row'
     } | null
   >(null)
+  const listStyle = iconSize == null
+    ? undefined
+    : {
+      '--interaction-list-icon-size': typeof iconSize === 'number' ? `${iconSize}px` : iconSize
+    } as CSSProperties
 
   useEffect(() => {
     const nextDefaultKeys = defaultCollapsedKeys == null ? new Set<string>() : defaultCollapsedKeysRef
@@ -346,7 +388,17 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
     : null
 
   return (
-    <div className={['interaction-list', className].filter(Boolean).join(' ')}>
+    <div
+      className={[
+        'interaction-list',
+        border === 'bordered' ? 'interaction-list--bordered' : 'interaction-list--borderless',
+        padding === 'none' ? 'interaction-list--padding-none' : 'interaction-list--padding-default',
+        splitActionHover ? 'interaction-list--split-action-hover' : '',
+        descriptionPlacement === 'titleHover' ? 'interaction-list--title-hover-description' : '',
+        className
+      ].filter(Boolean).join(' ')}
+      style={listStyle}
+    >
       {search != null && (
         <div className='interaction-list__search-area'>
           <Input
@@ -415,7 +467,10 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
                   action.type === 'divider' || action.disabled !== true
                 ) ??
                   []
-                const visibleActions = itemActions.filter(action => action.type !== 'divider').slice(0, 2)
+                const visibleActions = itemActions
+                  .filter(action => action.type !== 'divider')
+                  .slice(0, inlineActionLimit)
+                const visibleActionKeys = new Set(visibleActions.map(action => action.key))
                 const hasActions = itemActions.some(action => action.type !== 'divider')
                 const runActionByKey = (actionKey: string) => {
                   const action = itemActions.find(candidate => candidate.key === actionKey)
@@ -429,81 +484,97 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
                   if (!hasChildren) return
                   toggleCollapsed(item.key)
                 }
-                const contextMenuEntries: SessionContextMenuEntry[] = itemActions.map(action => {
-                  if (action.type === 'divider') {
-                    return {
-                      icon: '',
-                      key: action.key,
-                      label: '',
-                      onClick: () => undefined,
-                      type: 'divider'
+                const toContextMenuEntries = (
+                  menuActions: InteractionListAction<TItem>[]
+                ): SessionContextMenuEntry[] =>
+                  menuActions.map(action => {
+                    if (action.type === 'divider') {
+                      return {
+                        icon: '',
+                        key: action.key,
+                        label: '',
+                        onClick: () => undefined,
+                        type: 'divider'
+                      }
                     }
-                  }
 
-                  return {
-                    confirmLabel: typeof action.confirmLabel === 'string' ? action.confirmLabel : undefined,
-                    danger: action.danger,
-                    icon: action.icon,
-                    key: action.key,
-                    label: typeof action.label === 'string' ? action.label : String(action.key),
-                    onClick: () => handleConfirmableAction(item, action)
-                  }
+                    return {
+                      confirmLabel: typeof action.confirmLabel === 'string' ? action.confirmLabel : undefined,
+                      danger: action.danger,
+                      icon: action.icon,
+                      key: action.key,
+                      label: typeof action.label === 'string' ? action.label : String(action.key),
+                      onClick: () => handleConfirmableAction(item, action)
+                    }
+                  })
+                const contextMenuEntries = toContextMenuEntries(compactInteractionListActions(itemActions))
+                const moreMenuActions = actionDisplay === 'menu'
+                  ? itemActions
+                  : itemActions.filter(action => action.type === 'divider' || !visibleActionKeys.has(action.key))
+                const moreMenuEntries = toContextMenuEntries(compactInteractionListActions(moreMenuActions))
+                const hasMoreMenuActions = moreMenuEntries.some(action => action.type !== 'divider')
+                const visibleActionButtons = visibleActions.map(action => {
+                  const pending = isActionPending(action.key)
+                  const label = pending ? action.confirmLabel ?? action.label : action.label
+                  return (
+                    <Tooltip key={action.key} title={resolveTooltipTitle(label)}>
+                      <Button
+                        type='text'
+                        size='small'
+                        className={[
+                          'interaction-list__action',
+                          action.danger === true ? 'is-danger' : '',
+                          pending ? 'is-confirming' : ''
+                        ].filter(Boolean).join(' ')}
+                        aria-label={typeof label === 'string' ? label : action.key}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          handleConfirmableAction(item, action)
+                        }}
+                      >
+                        {renderIconAsset({
+                          active: pending,
+                          className: 'interaction-list__action-icon',
+                          icon: pending && action.confirmLabel != null ? 'check' : action.icon
+                        })}
+                      </Button>
+                    </Tooltip>
+                  )
                 })
                 const defaultAction = hasActions
                   ? (
                     <>
-                      {visibleActions.map(action => (
-                        <Tooltip key={action.key} title={resolveTooltipTitle(action.label)}>
-                          <Button
-                            type='text'
-                            size='small'
-                            className={[
-                              'interaction-list__action',
-                              action.danger === true ? 'is-danger' : '',
-                              isActionPending(action.key) ? 'is-confirming' : ''
-                            ].filter(Boolean).join(' ')}
-                            aria-label={typeof action.label === 'string' ? action.label : action.key}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              handleConfirmableAction(item, action)
-                            }}
-                          >
-                            {renderIconAsset({
-                              active: isActionPending(action.key),
-                              className: 'interaction-list__action-icon',
-                              icon: action.icon
-                            })}
-                          </Button>
-                        </Tooltip>
-                      ))}
-                      <Dropdown
-                        trigger={['click', 'contextMenu']}
-                        open={openMenu?.itemKey === item.key && openMenu.source === 'more'}
-                        destroyOnHidden
-                        onOpenChange={(open) => {
-                          setOpenMenu(open ? { itemKey: item.key, source: 'more' } : null)
-                          if (!open) setPendingAction(null)
-                        }}
-                        popupRender={() => (
-                          <SessionContextMenuContent
-                            entries={contextMenuEntries}
-                            pendingAction={pendingAction?.itemKey === item.key ? pendingAction.actionKey : null}
-                            onCancelConfirm={() => setPendingAction(null)}
-                          />
-                        )}
-                      >
-                        <Tooltip title={resolveTooltipTitle(t('common.moreActions'))}>
-                          <Button
-                            type='text'
-                            size='small'
-                            className='interaction-list__action interaction-list__action--more'
-                            aria-label={t('common.moreActions')}
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            <MaterialSymbol name='more_horiz' />
-                          </Button>
-                        </Tooltip>
-                      </Dropdown>
+                      {visibleActionButtons}
+                      {(actionDisplay === 'menu' || hasMoreMenuActions) && (
+                        <Dropdown
+                          trigger={['click', 'contextMenu']}
+                          open={openMenu?.itemKey === item.key && openMenu.source === 'more'}
+                          destroyOnHidden
+                          onOpenChange={(open) => {
+                            setOpenMenu(open ? { itemKey: item.key, source: 'more' } : null)
+                            if (!open) setPendingAction(null)
+                          }}
+                          popupRender={() => (
+                            <SessionContextMenuContent
+                              entries={actionDisplay === 'menu' ? contextMenuEntries : moreMenuEntries}
+                              pendingAction={pendingAction?.itemKey === item.key ? pendingAction.actionKey : null}
+                              onCancelConfirm={() => setPendingAction(null)}
+                            />
+                          )}
+                        >
+                          <Tooltip title={resolveTooltipTitle(t('common.moreActions'))}>
+                            <Button
+                              type='text'
+                              size='small'
+                              className='interaction-list__action interaction-list__action--more'
+                              aria-label={t('common.moreActions')}
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <MaterialSymbol name='more_horiz' />
+                            </Button>
+                          </Tooltip>
+                        </Dropdown>
+                      )}
                     </>
                   )
                   : null
@@ -550,7 +621,7 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
                 }) ?? item.meta
                 const defaultContent = (
                   <>
-                    {showItemDescription && item.description != null && (
+                    {showItemDescription && descriptionPlacement === 'content' && item.description != null && (
                       <div className='interaction-list__description'>{item.description}</div>
                     )}
                     {(item.tags?.length ?? 0) > 0 && (
@@ -626,7 +697,16 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
                     <div className='interaction-list__body'>
                       <div className='interaction-list__header'>
                         <div className='interaction-list__title'>
-                          <span className='interaction-list__title-text'>{item.title}</span>
+                          <span className='interaction-list__title-text'>
+                            {descriptionPlacement === 'titleHover' && item.description != null
+                              ? (
+                                <span className='interaction-list__title-inline'>
+                                  <span className='interaction-list__title-primary'>{item.title}</span>
+                                  <span className='interaction-list__title-description'>{item.description}</span>
+                                </span>
+                              )
+                              : item.title}
+                          </span>
                         </div>
                         <div className='interaction-list__meta'>
                           {metaNode != null && (
@@ -653,6 +733,16 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
                     )}
                   </article>
                 )
+                const itemTooltip = item.tooltip == null || item.tooltip === ''
+                  ? undefined
+                  : resolveTooltipTitle(item.tooltip)
+                const rowContentWithTooltip = itemTooltip == null
+                  ? rowContent
+                  : (
+                    <Tooltip title={itemTooltip} placement='right' mouseEnterDelay={0.5}>
+                      {rowContent}
+                    </Tooltip>
+                  )
 
                 const handleRowAnimationEnd = phase == null || phaseOwnerKey == null
                   ? undefined
@@ -668,7 +758,7 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
                       className={rowClassName}
                       onAnimationEnd={handleRowAnimationEnd}
                     >
-                      {rowContent}
+                      {rowContentWithTooltip}
                     </div>
                   )
                 }
@@ -692,7 +782,7 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
                     )}
                   >
                     <div className={rowClassName} onAnimationEnd={handleRowAnimationEnd}>
-                      {rowContent}
+                      {rowContentWithTooltip}
                     </div>
                   </Dropdown>
                 )

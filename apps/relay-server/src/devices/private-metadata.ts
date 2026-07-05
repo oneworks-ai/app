@@ -6,6 +6,7 @@ import type { RelayDevice, RelayEncryptedPayload, RelayServerArgs } from '../typ
 import { isRecord } from '../utils.js'
 
 export interface RelayDevicePrivateMetadata {
+  alias?: string
   capabilities: Record<string, unknown>
   name: string
   pluginScope?: string
@@ -56,10 +57,12 @@ export const normalizeDevicePrivateMetadata = (
   input: Partial<RelayDevicePrivateMetadata>,
   fallbackName: string
 ): RelayDevicePrivateMetadata => {
+  const alias = cleanText(input.alias)
   const name = cleanText(input.name)
   const workspaceFolder = cleanText(input.workspaceFolder)
   const pluginScope = cleanText(input.pluginScope)
   return {
+    ...(alias === '' ? {} : { alias }),
     capabilities: isRecord(input.capabilities) ? input.capabilities : {},
     name: name === '' ? fallbackName : name,
     ...(pluginScope === '' ? {} : { pluginScope }),
@@ -69,6 +72,7 @@ export const normalizeDevicePrivateMetadata = (
 
 export const legacyDevicePrivateMetadata = (device: RelayDevice): RelayDevicePrivateMetadata =>
   normalizeDevicePrivateMetadata({
+    alias: device.alias,
     capabilities: device.capabilities,
     name: device.name,
     pluginScope: device.pluginScope,
@@ -116,6 +120,7 @@ export const decryptDevicePrivateMetadata = (
     const parsed = JSON.parse(plaintext.toString('utf8'))
     if (!isRecord(parsed)) return undefined
     return normalizeDevicePrivateMetadata({
+      alias: typeof parsed.alias === 'string' ? parsed.alias : undefined,
       capabilities: isRecord(parsed.capabilities) ? parsed.capabilities : undefined,
       name: typeof parsed.name === 'string' ? parsed.name : undefined,
       pluginScope: typeof parsed.pluginScope === 'string' ? parsed.pluginScope : undefined,
@@ -138,6 +143,7 @@ export const storeEncryptedDevicePrivateMetadata = (
 ) => {
   device.encryptedMetadata = encryptDevicePrivateMetadata(args, device, metadata)
   device.name = undefined
+  device.alias = undefined
   device.capabilities = undefined
   device.workspaceFolder = undefined
   device.pluginScope = undefined

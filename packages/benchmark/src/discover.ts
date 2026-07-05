@@ -3,7 +3,7 @@ import { relative, resolve } from 'node:path'
 import process from 'node:process'
 
 import { resolveProjectOoPath } from '@oneworks/utils'
-import { glob } from 'fast-glob'
+import fg from 'fast-glob'
 import fm from 'front-matter'
 
 import { readBenchmarkResult } from './result-store'
@@ -25,7 +25,7 @@ export const listBenchmarkCases = async (options: BenchmarkListOptions = {}): Pr
   const workspaceFolder = options.workspaceFolder ?? process.cwd()
   const benchmarkRoot = resolveBenchmarkRoot(workspaceFolder)
   const pattern = options.category == null ? '*/*/rfc.md' : `${options.category}/*/rfc.md`
-  const rfcPaths = await glob(pattern, {
+  const rfcPaths = await fg(pattern, {
     cwd: benchmarkRoot,
     absolute: true
   })

@@ -1,7 +1,9 @@
 /* eslint-disable max-lines -- plugin runtime keeps activation, scoped APIs, React exposure, and hot reload together. */
 import { Fragment, createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { buildApiUrl } from '#~/api/base'
 import type { NotificationApi, UiNotificationHandle, UiNotificationInput } from '#~/notifications/notification-types'
+import { createServerUrlFromBase, normalizeServerBaseUrl } from '#~/runtime-config'
 
 import { createPluginI18nContext } from './plugin-i18n'
 import type { PluginI18nContext } from './plugin-i18n'
@@ -133,11 +135,17 @@ const normalizePluginApiPath = (scope: string, path: string) => {
   return `/api/plugins/${encodeURIComponent(scope)}/proxy/${trimmed}`
 }
 
+const buildPluginApiUrl = (path: string, serverBaseUrl?: string) => {
+  const normalizedServerBaseUrl = normalizeServerBaseUrl(serverBaseUrl)
+  return normalizedServerBaseUrl == null
+    ? buildApiUrl(path)
+    : createServerUrlFromBase(normalizedServerBaseUrl, path)
+}
+
 const resolveEntryUrl = (instance: PluginRuntimeInstance) => {
-  if (import.meta.env.DEV && instance.devClientEntryUrl != null && instance.devClientEntryUrl !== '') {
-    return instance.devClientEntryUrl
-  }
-  return instance.clientEntryUrl
+  return import.meta.env.DEV && instance.devClientEntryUrl != null && instance.devClientEntryUrl !== ''
+    ? instance.devClientEntryUrl
+    : instance.clientEntryUrl
 }
 
 export async function activatePluginClient({
@@ -146,7 +154,8 @@ export async function activatePluginClient({
   isActivationCurrent = () => true,
   registry,
   reloadPlugin,
-  notifications = noopNotificationApi
+  notifications = noopNotificationApi,
+  serverBaseUrl
 }: {
   getImportVersion: () => number
   instance: PluginRuntimeInstance
@@ -154,6 +163,7 @@ export async function activatePluginClient({
   notifications?: NotificationApi
   registry: PluginRegistry
   reloadPlugin: (scope: string) => Promise<void>
+  serverBaseUrl?: string
 }) {
   const entryUrl = resolveEntryUrl(instance)
   if (entryUrl == null || entryUrl === '') return
@@ -170,7 +180,7 @@ export async function activatePluginClient({
   const ctx: PluginClientContext = {
     api: {
       fetch: (path, init) =>
-        fetch(normalizePluginApiPath(instance.scope, path), {
+        fetch(buildPluginApiUrl(normalizePluginApiPath(instance.scope, path), serverBaseUrl), {
           ...init,
           credentials: init?.credentials ?? 'include'
         })

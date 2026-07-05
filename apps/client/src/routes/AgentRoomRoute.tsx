@@ -27,7 +27,8 @@ import {
   buildAgentRoomSessionPath
 } from './agent-room-session-paths'
 
-export const AGENT_ROOM_DETAIL_REFRESH_INTERVAL_MS = 1000
+export const AGENT_ROOM_DETAIL_REFRESH_INTERVAL_MS = 300_000
+export const AGENT_ROOM_IDLE_DETAIL_REFRESH_INTERVAL_MS = 300_000
 
 export const getAgentRoomDetailCacheKey = (roomId: string) => `/api/agent-rooms/${roomId}`
 
@@ -38,7 +39,12 @@ const buildSearchString = (searchParams: URLSearchParams) =>
   searchParams.toString() === '' ? '' : `?${searchParams.toString()}`
 
 export const agentRoomDetailRevalidateOptions = {
-  refreshInterval: AGENT_ROOM_DETAIL_REFRESH_INTERVAL_MS,
+  dedupingInterval: 3000,
+  refreshInterval: (detail?: Awaited<ReturnType<typeof getAgentRoom>>) =>
+    detail?.room.status === 'active'
+      ? AGENT_ROOM_DETAIL_REFRESH_INTERVAL_MS
+      : AGENT_ROOM_IDLE_DETAIL_REFRESH_INTERVAL_MS,
+  refreshWhenHidden: false,
   revalidateOnFocus: true
 } as const
 

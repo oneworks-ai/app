@@ -18,6 +18,7 @@
 - 新增带 tabs 的页面时，route 层要为稳定 tab 提供 path segment，例如 `/profile/:tab` 或 `/teams/:teamId/:tab`；header 高亮、面包屑和权限判断必须识别这些子路径。页面内搜索、状态、时间范围等可回放筛选状态走 query，不用 hash，也不要只存在组件 state。
 - Relay Admin 必须复用 `@oneworks/route-layout/design-tokens.css` 的 `--bg-color`、`--text-color`、`--border-color`、`--primary-color` 等共享 token，不要新增 `--relay-*` 独立色板。
 - 主题切换必须同时影响 `html.dark` 和 AntD `ConfigProvider`；不要把主题状态只放在菜单或某个局部组件里。
+- 左下角账号菜单语义与 Relay 插件账号 popover 保持镜像：账号列表、个人资料、登录其他账号、退出登录这些用户入口变更时，必须检查 `packages/plugins/relay/src/client/index.ts` 是否需要同步；插件侧通过 scoped API 代理 session，不复制 Admin 的 localStorage token 持有方式。
 - 只有真正全局的 admin adapter 样式放在这里；共享 token、Host shell / NavRail 的结构、padding、radius、折叠预览与 footer slot 样式归 `packages/route-layout`。
 - 修改共享颜色、route header、nav rail 或 chrome 尺寸时，优先同步 `packages/route-layout/src/design-tokens.css`，再检查 `apps/client` 和 Relay Admin 的入口是否仍一致。
 - 修改页面 shell 后跑 `pnpm -C apps/relay-admin typecheck` 和 `pnpm -C apps/relay-admin build`。

@@ -5,7 +5,7 @@ status: draft
 authors:
   - Codex
 created: 2026-06-16
-updated: 2026-06-16
+updated: 2026-07-01
 targetVersion: vNext
 ---
 
@@ -79,13 +79,13 @@ Relay 需要从“按 `teamIds` 过滤配置下发”的底层原语，升级成
 
 全局 Relay role 继续控制 tenant 级管理能力。Team role 控制团队内能力：
 
-| 角色   | 能力                                                        |
-| ------ | ----------------------------------------------------------- |
-| owner  | 删除或归档 team，管理 owner/admin/editor/member，发布配置。 |
-| admin  | 管理成员，发布配置，禁用 profile。                          |
-| editor | 创建 draft，提交发布，维护 assignment。                     |
-| member | 消费团队配置，查看自己可见的 profile 元数据。               |
-| viewer | 只读团队和 profile 元数据，不消费 secret-bearing config。   |
+| 角色   | 能力                                                         |
+| ------ | ------------------------------------------------------------ |
+| owner  | 删除或归档 team，管理 owner/admin/editor/member，发布配置。  |
+| admin  | 管理成员，发布配置，禁用 profile。                           |
+| editor | 创建 draft，提交发布，维护 assignment。                      |
+| member | 消费团队配置，不查看团队配置 patch、secret 或 profile 详情。 |
+| viewer | 只读团队基础信息，不消费 secret-bearing config。             |
 
 全局 owner/admin 默认拥有所有团队权限，但操作仍写入团队审计。
 
@@ -99,7 +99,7 @@ Relay 需要从“按 `teamIds` 过滤配置下发”的底层原语，升级成
 - `team.configs.consume`
 - `team.secrets.rotate`
 
-团队作用域权限必须由用户 session、团队成员关系、全局角色三者共同判断。Device token 只能消费已经授权给所属用户的 snapshot，不能调用团队管理 API。
+团队作用域权限必须由用户 session、团队成员关系、全局角色三者共同判断。普通 member 只通过 snapshot 消费配置；只有 owner/admin/editor 或显式带 `team.configs.read/write` 的团队管理成员可以查看 profile 详情、版本 patch、assignment 和 secret metadata。Device token 只能消费已经授权给所属用户的 snapshot，不能调用团队管理 API。
 
 ## 租户策略
 
@@ -135,13 +135,17 @@ Relay 需要从“按 `teamIds` 过滤配置下发”的底层原语，升级成
 
 ## 配置分层决策
 
-Relay managed config 必须成为命名层，而不是静默并入 `userConfig`。默认优先级：
+Relay 团队配置不是另一份“个人全局配置”，而是可组合到当前用户有效配置里的团队 overlay。个人全局配置仍然是 Relay user 维度唯一的 canonical baseline；团队 profile/version/assignment 是固定的共享层，由团队 owner/admin/editor 维护，成员只消费合成结果。
+
+当前第一版 effective config 的逻辑层次：
 
 ```text
-runtime/env > local private/dev overrides > local user config > relay remoteManaged > project config
+bootstrap/local runtime -> personal global config -> Relay team profile overlay -> project-local overrides
 ```
 
-团队 owner 可把 assignment 标记为 `override`，但插件界面必须明确展示远端策略是强制策略。第一版可以继续沿用当前 hook 机制实现，但状态和契约必须暴露来源、优先级和强制标记。
+服务端 snapshot 需要把个人 assignment 放在前面、团队 assignment 按优先级放在后面，客户端 config hook 按顺序合并。非冲突字段组合保留；同一字段冲突时后续层覆盖前序层，同时 snapshot 保留 provenance，UI 后续可以展示“来自个人配置 / 团队 profile / 项目配置”的来源，并允许用户禁用特定团队来源。
+
+团队 owner 可把 assignment 标记为 `override`，但插件界面必须明确展示远端策略是强制策略。团队 overlay 永远不反写进个人 global `.oo.config.json`，也不因为用户登录了多个 Relay server 或多个账号而生成多份个人配置。
 
 ## 密钥决策
 

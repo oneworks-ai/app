@@ -81,6 +81,9 @@ describe('plugin config resolver', () => {
     )
     await writeFile(join(pluginRoot, 'runtime/config.js'), 'module.exports = () => ({})\n')
 
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', join(tempDir, 'home'))
+    vi.stubEnv('__ONEWORKS_PROJECT_PLUGIN_AUTO_INSTALL__', 'false')
+
     const [instance] = await resolveConfiguredPluginInstances({
       cwd: tempDir,
       plugins: [{ id: '@oneworks/plugin-relay' }]

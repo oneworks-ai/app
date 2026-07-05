@@ -17,10 +17,15 @@ export interface DetailCollectionEntry {
   index: number
   localIndex?: number
   resolvedIndex?: number
-  source: 'local' | 'inherited'
+  source: 'local' | 'inherited' | 'placeholder'
   localItem?: Record<string, unknown>
   resolvedItem: Record<string, unknown>
   hasResolvedOverlay: boolean
+}
+
+export interface DetailCollectionPlaceholderEntry {
+  key: string
+  item?: Record<string, unknown>
 }
 
 export interface ConfigDetailRouteMeta {
@@ -33,7 +38,7 @@ export interface ConfigDetailRouteMeta {
   itemIndex: number
   localItemIndex?: number
   resolvedItemIndex?: number
-  itemSource: 'local' | 'inherited'
+  itemSource: 'local' | 'inherited' | 'placeholder'
   hasResolvedOverlay: boolean
 }
 
@@ -59,11 +64,13 @@ export const getSectionFields = (sectionKey: string, providedFields?: FieldSpec[
 export const toDetailCollectionEntries = ({
   field,
   value,
-  resolvedValue
+  resolvedValue,
+  placeholderEntries = []
 }: {
   field: FieldSpec
   value: unknown
   resolvedValue?: unknown
+  placeholderEntries?: DetailCollectionPlaceholderEntry[]
 }): DetailCollectionEntry[] => {
   const detailCollection = field.detailCollection
   if (field.type !== 'detailCollection' || detailCollection == null) return []
@@ -220,7 +227,24 @@ export const toDetailCollectionEntries = ({
           hasResolvedOverlay: false
         }
       })
-    return [...entries, ...localOnlyEntries]
+    const existingKeys = new Set([
+      ...Object.keys(resolvedSource),
+      ...Object.keys(localSource)
+    ])
+    const placeholderOnlyEntries = placeholderEntries
+      .filter(entry => entry.key.trim() !== '' && !existingKeys.has(entry.key))
+      .map((entry, placeholderIndex) => {
+        const placeholderItem = entry.item ?? detailCollection.createItem?.(entry.key) ?? {}
+        return {
+          key: entry.key,
+          item: placeholderItem,
+          index: entries.length + localOnlyEntries.length + placeholderIndex,
+          source: 'placeholder' as const,
+          resolvedItem: placeholderItem,
+          hasResolvedOverlay: false
+        }
+      })
+    return [...entries, ...localOnlyEntries, ...placeholderOnlyEntries]
   }
 
   const localSource = isRecordObject(value) ? value : {}
@@ -331,6 +355,7 @@ export const resolveConfigDetailRouteMeta = ({
   value,
   resolvedValue,
   route,
+  placeholderEntries,
   detailContext,
   t
 }: {
@@ -339,6 +364,7 @@ export const resolveConfigDetailRouteMeta = ({
   value: unknown
   resolvedValue?: unknown
   route: ConfigDetailRoute | null
+  placeholderEntries?: DetailCollectionPlaceholderEntry[]
   detailContext: DetailCollectionContext
   t: TranslationFn
 }): ConfigDetailRouteMeta | null => {
@@ -354,7 +380,8 @@ export const resolveConfigDetailRouteMeta = ({
   const itemEntries = toDetailCollectionEntries({
     field,
     value: getValueByPath(value, field.path),
-    resolvedValue: getValueByPath(resolvedValue ?? value, field.path)
+    resolvedValue: getValueByPath(resolvedValue ?? value, field.path),
+    placeholderEntries
   })
   const entry = itemEntries.find(item => item.key === route.itemKey)
   if (entry == null) return null

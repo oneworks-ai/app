@@ -141,6 +141,21 @@ export class SqliteDb {
     return this.messages.list(sessionId)
   }
 
+  getMessageWindow(sessionId: string, options: Parameters<typeof this.messages.listWindow>[1]) {
+    return this.messages.listWindow(sessionId, options)
+  }
+
+  getMessageWindowWithCursor(
+    sessionId: string,
+    options: Parameters<typeof this.messages.listWindowWithCursor>[1]
+  ) {
+    return this.messages.listWindowWithCursor(sessionId, options)
+  }
+
+  getLatestSessionInfoMessage(sessionId: string) {
+    return this.messages.findLatestSessionInfo(sessionId)
+  }
+
   listSessionQueuedMessages(sessionId: string) {
     return this.sessionQueue.list(sessionId)
   }
@@ -275,6 +290,10 @@ export class SqliteDb {
 
   getAgentRoomMember(roomId: string, memberKey: string) {
     return this.agentRooms.getMember(roomId, memberKey)
+  }
+
+  listAgentRoomMembers(roomId: string) {
+    return this.agentRooms.listMembers(roomId)
   }
 
   getAgentRoomRun(roomId: string, runKey: string) {

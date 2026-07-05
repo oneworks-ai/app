@@ -51,6 +51,53 @@
   }
 }
 
+.chat-route__remote-workspace-status {
+  position: absolute;
+  top: calc(var(--chat-header-overlay-height, 0px) + 10px);
+  left: 50%;
+  z-index: 46;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: min(720px, calc(100% - 32px));
+  padding: 8px 12px;
+  border: 1px solid
+    color-mix(in srgb, var(--primary-color) 28%, var(--border-color));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-color) 86%, var(--primary-color) 14%);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, .16);
+  color: var(--text-color);
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.chat-route__remote-workspace-status-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+  line-height: 18px;
+  color: var(--primary-color);
+}
+
+.chat-route__remote-workspace-status-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chat-route__remote-workspace-status-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.chat-route__remote-workspace-status-detail {
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--text-secondary-color);
+}
+
 .chat-route-layout__workspace-panel .chat-workspace-drawer {
   border-left: 0;
 }

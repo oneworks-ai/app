@@ -13,6 +13,7 @@ export interface RelaySessionJsonObject {
 export interface RelayLocalSession {
   id: string
   userId?: string
+  title?: string
   status?: string
   createdAt?: number
   updatedAt?: number
@@ -51,6 +52,11 @@ export interface RelayForwardingJobStatusUpdate {
   status: RelaySessionForwardingJobStatus
   errorCode?: string
   result?: unknown
+}
+
+export interface RelayForwardingJobPollResult {
+  jobs: RelayForwardingJob[]
+  nextPollMs?: number
 }
 
 export interface RelayLocalSessionSubmitInput {

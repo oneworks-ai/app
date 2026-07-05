@@ -6,7 +6,8 @@ const createHeartbeatOptions = (fetchImpl: typeof fetch) => ({
   capabilities: {
     sessions: true,
     terminal: false,
-    workspaceFiles: true
+    workspaceFiles: true,
+    workspaceLauncher: true
   },
   deviceId: 'device-1',
   deviceName: 'Office Mac',
@@ -55,7 +56,8 @@ describe('relay plugin heartbeat', () => {
       capabilities: {
         sessions: true,
         terminal: false,
-        workspaceFiles: true
+        workspaceFiles: true,
+        workspaceLauncher: true
       },
       deviceId: 'device-1',
       deviceName: 'Office Mac',
@@ -78,5 +80,39 @@ describe('relay plugin heartbeat', () => {
     heartbeat.stop()
     await vi.advanceTimersByTimeAsync(3000)
     expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('backs off and throttles logs after repeated heartbeat failures', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn(async () => {
+      throw new Error('relay offline')
+    }) as unknown as typeof fetch
+    const logger = {
+      warn: vi.fn()
+    }
+    const heartbeat = startHeartbeat({
+      ...createHeartbeatOptions(fetchMock),
+      errorLogIntervalMs: 5000,
+      intervalMs: 1000,
+      logger,
+      maxErrorIntervalMs: 8000
+    })
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(logger.warn).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(logger.warn).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(4000)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(logger.warn).toHaveBeenCalledTimes(2)
+
+    heartbeat.stop()
   })
 })

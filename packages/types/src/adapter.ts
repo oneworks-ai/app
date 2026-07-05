@@ -148,13 +148,14 @@ export interface AdapterAccountInfo {
   key: string
   title: string
   description?: string
+  email?: string
+  avatarUrl?: string
   status?: 'ready' | 'missing' | 'error'
   isDefault?: boolean
   quota?: AdapterAccountQuotaInfo
 }
 
 export interface AdapterAccountDetail extends AdapterAccountInfo {
-  email?: string
   planType?: string
   accountType?: string
   source?: AdapterAccountSourceInfo

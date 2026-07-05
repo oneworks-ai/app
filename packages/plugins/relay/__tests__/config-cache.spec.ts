@@ -1,10 +1,16 @@
+import { Buffer } from 'node:buffer'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { createRelayConfigSnapshotStore } from '../src/shared/config-cache.js'
+import {
+  createRelayConfigSnapshotStore,
+  createRelayGlobalConfigSnapshotStore,
+  readRelayConfigSnapshotWithGlobalFallback,
+  writeRelayConfigSnapshotCaches
+} from '../src/shared/config-cache.js'
 
 const tempDirs: string[] = []
 
@@ -106,6 +112,99 @@ describe('relay config snapshot cache', () => {
     })
     expect(store.snapshotPath).toBe(join(projectHome, '.local/plugins/relay/config-snapshot.json'))
     expect(JSON.stringify(await store.readSnapshot())).not.toContain('sk-cache-secret')
+  })
+
+  it('drops adapter config from relay team snapshots', async () => {
+    const projectHome = await mkdtemp(join(tmpdir(), 'oneworks-relay-config-cache-codex-'))
+    tempDirs.push(projectHome)
+    const store = createRelayConfigSnapshotStore(projectHome)
+    const token = Buffer.from('{"auth_mode":"chatgpt"}\n', 'utf8').toString('base64')
+
+    await store.writeSnapshot({
+      assignments: [
+        {
+          allowedFields: ['adapters'],
+          configPatch: {
+            adapters: {
+              codex: {
+                accounts: {
+                  work: {
+                    auth: {
+                      encoding: 'base64',
+                      token,
+                      type: 'codex-auth-json'
+                    },
+                    title: 'Work'
+                  }
+                }
+              }
+            }
+          },
+          id: 'codex'
+        }
+      ],
+      version: 'v1'
+    })
+
+    await expect(store.readSnapshot()).resolves.toMatchObject({
+      assignments: [
+        {
+          id: 'codex'
+        }
+      ]
+    })
+    expect(JSON.stringify(await store.readSnapshot())).not.toContain(token)
+    expect(JSON.stringify(await store.readSnapshot())).not.toContain('adapters')
+  })
+
+  it('writes relay config snapshots to both project and global OneWorks caches', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'oneworks-relay-config-cache-global-'))
+    tempDirs.push(root)
+    const projectHome = join(root, 'projects', 'workspace-a')
+    const env = {
+      __ONEWORKS_PROJECT_REAL_HOME__: join(root, 'home')
+    }
+
+    const paths = await writeRelayConfigSnapshotCaches({
+      env,
+      projectHome,
+      snapshot: {
+        assignments: [
+          {
+            id: 'global-codex',
+            allowedFields: ['adapters'],
+            configPatch: {
+              adapters: {
+                codex: {
+                  defaultAccount: 'default'
+                }
+              }
+            }
+          }
+        ],
+        lastSyncedAt: '2026-06-26T00:00:00.000Z',
+        version: 'v-global'
+      }
+    })
+
+    expect(paths.snapshotPath).toBe(join(projectHome, '.local/plugins/relay/config-snapshot.json'))
+    expect(paths.globalSnapshotPath).toBe(join(root, 'home/.oneworks/.local/plugins/relay/config-snapshot.json'))
+    await expect(createRelayConfigSnapshotStore(projectHome).readSnapshot()).resolves.toMatchObject({
+      version: 'v-global'
+    })
+    await expect(createRelayGlobalConfigSnapshotStore(env).readSnapshot()).resolves.toMatchObject({
+      version: 'v-global'
+    })
+
+    await expect(readRelayConfigSnapshotWithGlobalFallback({
+      env,
+      projectHome: join(root, 'projects', 'workspace-b')
+    })).resolves.toMatchObject({
+      snapshot: {
+        version: 'v-global'
+      },
+      source: 'global'
+    })
   })
 
   it('preserves the previous snapshot while recording sync errors', async () => {

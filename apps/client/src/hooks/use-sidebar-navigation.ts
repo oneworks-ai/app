@@ -88,9 +88,7 @@ export function useSidebarNavigation() {
       return
     }
 
-    void navigate(getNavigationTarget(session.id === '' ? '/' : `/session/${session.id}`, {
-      focusRequestId: createSenderFocusRequestId()
-    }))
+    void navigate(getNavigationTarget(session.id === '' ? '/' : `/session/${session.id}`))
   }, [getNavigationTarget, location.search, navigate])
 
   const handleSelectRoom = useCallback((room: SidebarRoomItem) => {

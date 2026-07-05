@@ -9,7 +9,25 @@ import {
 } from '@oneworks/core/config-schema'
 
 const codexAdapterAccountSchema = adapterAccountConfigCommonSchema.extend({
-  authFile: z.string().optional().describe('Path to the Codex auth.json file for this account')
+  authFile: z.string().optional().describe('Path to the Codex auth.json file for this account'),
+  auth: z.object({
+    type: z.literal('codex-auth-json').optional().describe('Encoded credential payload type'),
+    encoding: z.literal('base64').describe('Credential payload encoding'),
+    token: z.string().describe('Base64 encoded Codex auth.json payload')
+  }).optional().describe('Inline Codex auth.json payload stored in the global OneWorks config'),
+  email: z.string().optional().describe('Cached Codex account email'),
+  avatarUrl: z.string().optional().describe('Custom Codex account avatar URL'),
+  planType: z.string().optional().describe('Cached Codex plan type'),
+  accountType: z.string().optional().describe('Cached Codex account type'),
+  accountId: z.string().optional().describe('Cached Codex account id'),
+  organizationId: z.string().optional().describe('Cached Codex organization id'),
+  organizationTitle: z.string().optional().describe('Cached Codex organization title'),
+  organizationRole: z.string().optional().describe('Cached Codex organization role'),
+  quota: jsonValueSchema.optional().describe('Cached Codex quota snapshot'),
+  source: z.string().optional().describe('Codex account source'),
+  createdAt: z.number().optional().describe('Account creation timestamp'),
+  updatedAt: z.number().optional().describe('Account update timestamp'),
+  authDigest: z.string().optional().describe('SHA-256 digest of the Codex auth payload')
 })
 
 export const codexAdapterConfigSchema = z.object({

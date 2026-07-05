@@ -11,6 +11,7 @@ import { WebSocket as WebSocketImpl } from 'ws'
 import type { WebSocket } from 'ws'
 
 import { getDb } from '#~/db/index.js'
+import { publishClientEvent } from '#~/services/client-events.js'
 import { safeJsonStringify } from '#~/utils/json.js'
 
 export interface SessionInteractionState {
@@ -175,6 +176,12 @@ export function broadcastSessionEvent(sessionId: string, event: WSEvent) {
   if (externalRuntime != null) {
     emitRuntimeEvent(externalRuntime, event)
   }
+
+  publishClientEvent('sessions', {
+    type: event.type === 'message' ? 'session_message_appended' : 'session_event_appended',
+    sessionId,
+    event
+  })
 }
 
 export function notifySessionUpdated(sessionId: string, session: Session | { id: string; isDeleted: boolean }) {
@@ -183,22 +190,31 @@ export function notifySessionUpdated(sessionId: string, session: Session | { id:
 
   sendEventToSockets(runtime?.sockets ?? [], event)
   sendEventToSockets(sessionSubscriberSockets, event)
+  publishClientEvent('sessions', {
+    type: 'session_updated',
+    sessionId,
+    session
+  })
 }
 
 export function notifyConfigUpdated(workspaceFolder: string) {
-  sendEventToSockets(sessionSubscriberSockets, {
+  const event = {
     type: 'config_updated',
     workspaceFolder,
     updatedAt: Date.now()
-  })
+  } as const
+  sendEventToSockets(sessionSubscriberSockets, event)
+  publishClientEvent('config', event)
 }
 
 export function notifyWorkspacePanelStateUpdated(panelState: SessionPanelState, updatedAt: number) {
-  sendEventToSockets(sessionSubscriberSockets, {
+  const event = {
     type: 'workspace_panel_state_updated',
     panelState,
     updatedAt
-  })
+  } as const
+  sendEventToSockets(sessionSubscriberSockets, event)
+  publishClientEvent('workspace', event)
 }
 
 export function notifySessionCreationProgress(sessionId: string, progress: SessionCreationProgressEvent) {

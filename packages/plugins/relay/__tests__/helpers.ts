@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { emptyOneWorksAuthStore, writeOneWorksAuthStore } from '@oneworks/utils/auth-store'
 import { vi } from 'vitest'
 
 import { activatePlugin } from '../src/server/index.js'
@@ -72,10 +73,12 @@ export interface RelayPluginStatus {
       id?: string
       name?: string
       status?: string
+      workspaceFolder?: string
     }>
     devicesError?: string
     hasToken?: boolean
     id: string
+    name?: string
     remoteBaseUrl: string
     sessionAuthenticated?: boolean
     sessionExpiresAt?: string | null
@@ -83,10 +86,37 @@ export interface RelayPluginStatus {
 }
 
 const tempDirs: string[] = []
+const tempDisposers: Array<() => void> = []
+
+const removeTempDir = async (dir: string) => {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await rm(dir, { recursive: true, force: true })
+      return
+    } catch (error) {
+      if (
+        !(
+          error instanceof Error &&
+          'code' in error &&
+          error.code === 'ENOTEMPTY'
+        ) ||
+        attempt === 2
+      ) {
+        throw error
+      }
+      await new Promise(resolve => setTimeout(resolve, 20))
+    }
+  }
+}
 
 export const cleanupPluginFixtures = async () => {
+  for (const dispose of tempDisposers.splice(0)) {
+    dispose()
+  }
+  vi.useRealTimers()
   vi.unstubAllGlobals()
-  await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
+  vi.unstubAllEnvs()
+  await Promise.all(tempDirs.splice(0).map(removeTempDir))
 }
 
 export const createPluginHarness = async (
@@ -96,14 +126,27 @@ export const createPluginHarness = async (
       getStatus?: () => RelayConfigDistributionStatus | Promise<RelayConfigDistributionStatus>
       refresh?: () => RelayConfigDistributionStatus | Promise<RelayConfigDistributionStatus>
     }
+    prepareProjectHome?: (projectHome: string) => Promise<void> | void
     sessions?: RelayLocalSessionAdapter
   } = {}
 ) => {
   const projectHome = await mkdtemp(join(tmpdir(), 'oneworks-relay-plugin-test-'))
+  const homeDir = await mkdtemp(join(tmpdir(), 'oneworks-relay-plugin-home-'))
   tempDirs.push(projectHome)
+  tempDirs.push(homeDir)
+  vi.stubEnv('HOME', homeDir)
+  vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', homeDir)
+  vi.stubEnv('__ONEWORKS_RELAY_LOOP_LEASE_ROOT__', join(homeDir, 'relay-loop-leases'))
+  await writeOneWorksAuthStore(emptyOneWorksAuthStore())
+  await harnessOptions.prepareProjectHome?.(projectHome)
   const commands = new Map<string, CommandHandler>()
   const apis = new Map<string, ApiRegistration>()
   const disposers: Array<() => void> = []
+  tempDisposers.push(() => {
+    for (const dispose of disposers.splice(0)) {
+      dispose()
+    }
+  })
   const logger = {
     warn: vi.fn()
   }
@@ -117,7 +160,14 @@ export const createPluginHarness = async (
     logger,
     registerCommand: (commandId: string, handler: CommandHandler) => commands.set(commandId, handler),
     registerApi: (apiId: string, api: ApiRegistration) => apis.set(apiId, api),
-    dispose: (callback: () => void) => disposers.push(callback),
+    dispose: (callback: () => void) => {
+      let disposed = false
+      disposers.push(() => {
+        if (disposed) return
+        disposed = true
+        callback()
+      })
+    },
     sessions: harnessOptions.sessions
   } as never)
 
@@ -125,6 +175,7 @@ export const createPluginHarness = async (
     apis,
     commands,
     disposers,
+    homeDir,
     logger,
     projectHome
   }
@@ -144,9 +195,8 @@ export const createRelayConfigSnapshotFixture = () => ({
   assignments: [
     {
       id: 'base',
-      allowedFields: ['modelServices', 'defaultModelService', 'recommendedModels'],
+      allowedFields: ['modelServices', 'recommendedModels'],
       configPatch: {
-        defaultModelService: 'relay-assigned',
         modelServices: {
           'relay-assigned': {
             apiBaseUrl: 'https://relay.example/v1',
@@ -168,7 +218,7 @@ export const createRelayConfigSnapshotFixture = () => ({
       },
       provenance: {
         assignmentId: 'base',
-        fields: ['modelServices', 'defaultModelService', 'recommendedModels'],
+        fields: ['modelServices', 'recommendedModels'],
         mode: 'default',
         profileId: 'profile-1',
         profileName: 'Base Profile',
@@ -193,6 +243,10 @@ export const stubRelayFetch = (deviceToken = 'remote-device-token') => {
     const url = String(input)
     const body = url.endsWith('/api/relay/config-snapshot')
       ? createRelayConfigSnapshotFixture()
+      : url.endsWith('/api/relay/config/global')
+      ? {
+        personalConfigSnapshot: null
+      }
       : url.endsWith('/api/auth/me')
       ? {
         session: {
@@ -214,7 +268,55 @@ export const stubRelayFetch = (deviceToken = 'remote-device-token') => {
           capabilities: { sessions: true, terminal: true, workspaceFiles: false },
           id: 'device-1',
           name: 'Office Mac',
-          status: 'online'
+          status: 'online',
+          workspaceFolder: '/workspace'
+        }]
+      }
+      : url.endsWith('/api/admin/messages')
+      ? {
+        invitations: [{
+          configEnabled: true,
+          createdAt: '2026-06-17T09:20:00.000Z',
+          createdByUserId: 'admin-1',
+          defaultForPublishing: false,
+          email: 'owner@local.test',
+          groupIds: ['team:member'],
+          id: 'invite-1',
+          inviter: {
+            avatarUrl: null,
+            email: 'admin@example.com',
+            id: 'admin-1',
+            name: 'Relay Admin',
+            provider: null,
+            role: 'admin'
+          },
+          respondedAt: null,
+          role: 'member',
+          status: 'pending',
+          teamAvatarUrl: null,
+          teamId: 'team-1',
+          teamName: 'Relay Demo Team',
+          teamSlug: 'relay-demo-team',
+          updatedAt: null,
+          user: null,
+          userId: 'owner'
+        }],
+        messages: [{
+          audience: {
+            scope: 'users',
+            team: null,
+            teamId: null,
+            userIds: ['owner'],
+            users: []
+          },
+          body: '你的账号刚刚在新设备完成登录。',
+          createdAt: '2026-06-17T09:12:00.000Z',
+          createdBy: null,
+          createdByUserId: 'system',
+          id: 'message-1',
+          kind: 'personal',
+          title: '新设备登录提醒',
+          updatedAt: null
         }]
       }
       : {

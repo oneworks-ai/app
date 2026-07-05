@@ -1,4 +1,6 @@
+/* eslint-disable max-lines -- workspace connection state keeps browser, desktop, and reconnect heuristics in one boundary. */
 import type {
+  LauncherWorkspaceOpenResponse,
   LauncherWorkspaceVersionConflictDetails,
   WorkspaceActivityResponse,
   WorkspaceActivitySession
@@ -7,10 +9,22 @@ import type {
 import { ApiError } from '#~/api/base'
 import { createServerUrlFromBase, mergeRuntimeEnv, normalizeServerBaseUrl } from '#~/runtime-config'
 
+export const WORKSPACE_CONNECTION_CHANGE_EVENT = 'oneworks:workspace-connection-change'
+
 export type WorkspaceServerRestartActivity =
   | { status: 'busy'; activeSessionCount: number; activeSessions: WorkspaceActivitySession[] }
   | { status: 'idle' }
   | { status: 'unknown' }
+
+export type WorkspaceConnectionTransport = 'local' | 'relay'
+
+export interface WorkspaceConnectionRelaySource {
+  deviceId?: string
+  deviceName?: string
+  serverId?: string
+  serverName?: string
+  workspaceFolder?: string
+}
 
 export interface WorkspaceConnectionResponse {
   serverBaseUrl: string
@@ -18,12 +32,26 @@ export interface WorkspaceConnectionResponse {
   workspaceId?: string
 }
 
+export interface WorkspaceConnection extends WorkspaceConnectionResponse {
+  managerServerBaseUrl?: string
+  project?: LauncherWorkspaceOpenResponse['project']
+  relay?: WorkspaceConnectionRelaySource
+}
+
+export interface WorkspaceConnectionMetadata extends WorkspaceConnection {
+  transport?: WorkspaceConnectionTransport
+  updatedAt?: string
+}
+
+type StoredWorkspaceConnection = WorkspaceConnectionMetadata
+
 interface WorkspaceSessionsResponse {
   sessions?: unknown
 }
 
 const WORKSPACE_ACTIVITY_CHECK_TIMEOUT_MS = 4_000
 const ACTIVE_WORKSPACE_SESSION_STATUSES = new Set(['running', 'waiting_input'])
+const WORKSPACE_CONNECTION_STORAGE_KEY = 'oneworks_workspace_connections'
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -187,4 +215,106 @@ export const applyWorkspaceConnection = (connection: WorkspaceConnectionResponse
     __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: connection.workspaceFolder,
     __ONEWORKS_PROJECT_WORKSPACE_ID__: connection.workspaceId
   })
+}
+
+const readWorkspaceConnectionCache = (): Record<string, StoredWorkspaceConnection> => {
+  try {
+    const parsed = JSON.parse(globalThis.localStorage?.getItem(WORKSPACE_CONNECTION_STORAGE_KEY) ?? '{}') as unknown
+    return isRecord(parsed) ? parsed as Record<string, StoredWorkspaceConnection> : {}
+  } catch {
+    return {}
+  }
+}
+
+const readOptionalString = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+)
+
+const normalizeRelaySource = (value: unknown): WorkspaceConnectionRelaySource | undefined => {
+  if (!isRecord(value)) return undefined
+  const source: WorkspaceConnectionRelaySource = {
+    deviceId: readOptionalString(value.deviceId),
+    deviceName: readOptionalString(value.deviceName),
+    serverId: readOptionalString(value.serverId),
+    serverName: readOptionalString(value.serverName),
+    workspaceFolder: readOptionalString(value.workspaceFolder)
+  }
+  return Object.values(source).some(item => item != null) ? source : undefined
+}
+
+const notifyWorkspaceConnectionChange = (workspaceId: string) => {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(
+    new CustomEvent(WORKSPACE_CONNECTION_CHANGE_EVENT, {
+      detail: { workspaceId }
+    })
+  )
+}
+
+export const rememberWorkspaceConnection = (
+  connection: WorkspaceConnection,
+  transport: WorkspaceConnectionTransport = 'local',
+  options: {
+    managerServerBaseUrl?: string
+    project?: LauncherWorkspaceOpenResponse['project']
+    relay?: WorkspaceConnectionRelaySource
+  } = {}
+) => {
+  const serverBaseUrl = normalizeServerBaseUrl(connection.serverBaseUrl)
+  if (serverBaseUrl == null || connection.workspaceId == null || connection.workspaceId.trim() === '') return
+
+  const cache = readWorkspaceConnectionCache()
+  const relay = normalizeRelaySource(options.relay ?? connection.relay)
+  const project = options.project ?? connection.project
+  const managerServerBaseUrl = normalizeServerBaseUrl(options.managerServerBaseUrl ?? connection.managerServerBaseUrl)
+  cache[connection.workspaceId] = {
+    ...connection,
+    ...(managerServerBaseUrl == null ? {} : { managerServerBaseUrl }),
+    ...(project == null ? {} : { project }),
+    ...(relay == null ? {} : { relay }),
+    serverBaseUrl,
+    transport,
+    updatedAt: new Date().toISOString()
+  }
+  globalThis.localStorage?.setItem(WORKSPACE_CONNECTION_STORAGE_KEY, JSON.stringify(cache))
+  notifyWorkspaceConnectionChange(connection.workspaceId)
+}
+
+export const readRememberedWorkspaceConnectionMetadata = (
+  workspaceId: string,
+  transport?: WorkspaceConnectionTransport
+): WorkspaceConnectionMetadata | undefined => {
+  const connection = readWorkspaceConnectionCache()[workspaceId]
+  if (connection == null) return undefined
+  if (transport != null && connection.transport !== transport) return undefined
+  const serverBaseUrl = normalizeServerBaseUrl(connection.serverBaseUrl)
+  if (serverBaseUrl == null) return undefined
+  const workspaceFolder = readOptionalString(connection.workspaceFolder)
+  const resolvedWorkspaceId = readOptionalString(connection.workspaceId)
+  if (workspaceFolder == null || resolvedWorkspaceId == null) return undefined
+  return {
+    serverBaseUrl,
+    workspaceFolder,
+    workspaceId: resolvedWorkspaceId,
+    ...(normalizeServerBaseUrl(connection.managerServerBaseUrl) == null
+      ? {}
+      : { managerServerBaseUrl: normalizeServerBaseUrl(connection.managerServerBaseUrl) }),
+    ...(connection.project == null ? {} : { project: connection.project }),
+    ...(normalizeRelaySource(connection.relay) == null ? {} : { relay: normalizeRelaySource(connection.relay) }),
+    ...(connection.transport == null ? {} : { transport: connection.transport }),
+    ...(connection.updatedAt == null ? {} : { updatedAt: connection.updatedAt })
+  }
+}
+
+export const readRememberedWorkspaceConnection = (
+  workspaceId: string,
+  transport?: WorkspaceConnectionTransport
+) => {
+  const connection = readRememberedWorkspaceConnectionMetadata(workspaceId, transport)
+  if (connection == null) return undefined
+  return {
+    serverBaseUrl: connection.serverBaseUrl,
+    workspaceFolder: connection.workspaceFolder,
+    workspaceId: connection.workspaceId
+  }
 }

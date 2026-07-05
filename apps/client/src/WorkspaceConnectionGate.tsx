@@ -8,18 +8,29 @@ import { useTranslation } from 'react-i18next'
 import type { LauncherWorkspaceVersionConflictDetails } from '@oneworks/types'
 
 import { getApiErrorMessage } from '#~/api/base'
-import { getLauncherWorkspaceConnection, restartLauncherWorkspace } from '#~/api/launcher'
+import { restartLauncherWorkspace } from '#~/api/launcher'
 import { DesktopWorkspaceStartupReadyContext } from '#~/components/layout/desktop-workspace-startup-ready'
 import { WorkspaceOpeningOverlay } from '#~/components/workspace/WorkspaceOpeningOverlay'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
-import type { WorkspaceServerRestartActivity } from '#~/workspace-connection-state'
+import { getRestorableWorkspaceConnection } from '#~/workspace-connection-restore'
+import type {
+  WorkspaceConnection,
+  WorkspaceConnectionTransport,
+  WorkspaceServerRestartActivity
+} from '#~/workspace-connection-state'
 import {
   applyWorkspaceConnection,
   getWorkspaceServerRestartActivity,
   getWorkspaceVersionConflictDetails,
-  isWorkspaceConnectionResponse
+  isWorkspaceConnectionResponse,
+  rememberWorkspaceConnection
 } from '#~/workspace-connection-state'
 import { WorkspaceConnectionErrorView } from './WorkspaceConnectionErrorView'
+
+interface ResolvedWorkspaceConnection {
+  connection: WorkspaceConnection
+  transport?: WorkspaceConnectionTransport
+}
 
 type ConnectionState =
   | { status: 'loading' }
@@ -135,20 +146,23 @@ export function WorkspaceConnectionGate({
     if (workspaceId == null) {
       const connection = await window.oneworksDesktop?.getWorkspaceConnection?.()
       if (isWorkspaceConnectionResponse(connection)) {
-        return connection
+        return { connection } satisfies ResolvedWorkspaceConnection
       }
       throw new Error(t('workspaceConnection.desktopConnectionUnavailable'))
     }
 
     try {
-      return await getLauncherWorkspaceConnection(workspaceId)
+      return await getRestorableWorkspaceConnection(workspaceId)
     } catch (error) {
       const details = getWorkspaceVersionConflictDetails(error)
       if (details != null) {
         try {
           const restartedConnection = await maybeRestartIdleWorkspaceServer(details)
           if (restartedConnection != null) {
-            return restartedConnection
+            return {
+              connection: restartedConnection,
+              transport: 'local'
+            } satisfies ResolvedWorkspaceConnection
           }
         } catch {
           // Keep the original version conflict visible; manual restart still reports its own error.
@@ -165,8 +179,11 @@ export function WorkspaceConnectionGate({
     restartActivityRef.current = undefined
 
     try {
-      const connection = await getWorkspaceConnection()
+      const { connection, transport } = await getWorkspaceConnection()
       applyWorkspaceConnection(connection)
+      if (transport != null) {
+        rememberWorkspaceConnection(connection, transport)
+      }
       setState({ status: 'ready' })
     } catch (error) {
       const details = getWorkspaceVersionConflictDetails(error)
@@ -193,9 +210,12 @@ export function WorkspaceConnectionGate({
       restartActivityRef.current = undefined
 
       try {
-        const connection = await getWorkspaceConnection()
+        const { connection, transport } = await getWorkspaceConnection()
         if (disposed) return
         applyWorkspaceConnection(connection)
+        if (transport != null) {
+          rememberWorkspaceConnection(connection, transport)
+        }
         setState({ status: 'ready' })
       } catch (error) {
         if (disposed) return
@@ -226,6 +246,7 @@ export function WorkspaceConnectionGate({
     try {
       const connection = await restartLauncherWorkspace(workspaceId)
       applyWorkspaceConnection(connection)
+      rememberWorkspaceConnection(connection, 'local')
       setState({ status: 'ready' })
     } catch (error) {
       setRestartErrorMessage(getApiErrorMessage(error, t('workspaceConnection.restartFailed')))

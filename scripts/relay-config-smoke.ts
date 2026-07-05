@@ -97,8 +97,7 @@ const buildSmokeResult = (
   pending: string[]
 ): RelayConfigSmokeResult => {
   const service = state.mergedConfig.modelServices?.[RELAY_CONFIG_SMOKE_SERVICE_KEY]
-  const ok = state.mergedConfig.defaultModelService === RELAY_CONFIG_SMOKE_SERVICE_KEY &&
-    service?.apiBaseUrl === 'https://relay.example.com/v1' &&
+  const ok = service?.apiBaseUrl === 'https://relay.example.com/v1' &&
     service?.apiKey === 'relay-smoke-key' &&
     service?.models?.includes(RELAY_CONFIG_SMOKE_MODEL) === true &&
     state.mergedConfig.env?.RELAY_FORBIDDEN_ENV == null &&
@@ -119,9 +118,6 @@ const buildSmokeResult = (
 
 const collectPendingSmokeChecks = (state: RelayConfigSmokeState, pending: string[]) => {
   const service = state.mergedConfig.modelServices?.[RELAY_CONFIG_SMOKE_SERVICE_KEY]
-  if (state.mergedConfig.defaultModelService !== RELAY_CONFIG_SMOKE_SERVICE_KEY) {
-    pending.push('mergedConfig.defaultModelService must come from the allowlisted Relay config snapshot assignment.')
-  }
   if (service == null) {
     pending.push('mergedConfig.modelServices.relay-smoke must be produced by the Relay config hook.')
   }

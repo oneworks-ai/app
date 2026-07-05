@@ -67,6 +67,7 @@ export const sessionsSchemaModule: SchemaModule = {
       );
 
       CREATE INDEX IF NOT EXISTS idx_messages_sessionId ON messages(sessionId);
+      CREATE INDEX IF NOT EXISTS idx_messages_sessionId_id ON messages(sessionId, id);
       CREATE INDEX IF NOT EXISTS idx_session_message_queue_sessionId ON session_message_queue(sessionId, mode, orderIndex);
     `)
 
@@ -96,6 +97,7 @@ export const sessionsSchemaModule: SchemaModule = {
     ensureColumn('messages', 'eventKey', 'TEXT')
     exec(`
       CREATE INDEX IF NOT EXISTS idx_messages_session_eventKey ON messages(sessionId, eventKey);
+      CREATE INDEX IF NOT EXISTS idx_messages_sessionId_id ON messages(sessionId, id);
 
       UPDATE sessions
       SET runtimeKind = CASE

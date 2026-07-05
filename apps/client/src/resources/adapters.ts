@@ -46,6 +46,8 @@ export const adapterDisplayMap = {
   }
 } as const satisfies Record<string, AdapterDisplay>
 
+export const builtInAdapterKeys = Object.keys(adapterDisplayMap)
+
 export const getAdapterDisplay = (adapterKey: string): AdapterDisplay => {
   return adapterDisplayMap[adapterKey as keyof typeof adapterDisplayMap] ?? {
     title: adapterKey,

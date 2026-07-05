@@ -1,6 +1,9 @@
+/* eslint-disable max-lines -- relay plugin server contracts are kept together for scoped API parity. */
 import type { Buffer } from 'node:buffer'
+import type { IncomingHttpHeaders } from 'node:http'
 
 import type { RelayConfigSourcePreferences } from './config-source-preferences.js'
+import type { RelayPersonalDocumentSyncPreferences } from './personal-document-sync-preferences.js'
 import type { RelayLocalSessionAdapter } from './session-types.js'
 
 export type RelayLocalizedText = string | Record<string, string>
@@ -35,6 +38,8 @@ export interface RelayPluginContext {
 export interface PluginProxyRequest {
   method: string
   path: string
+  query?: string
+  headers?: IncomingHttpHeaders
   body: Buffer
 }
 
@@ -45,6 +50,7 @@ export interface PluginProxyResponse {
 }
 
 export interface RelayCapabilities {
+  workspaceLauncher: boolean
   sessions: boolean
   terminal: boolean
   workspaceFiles: boolean
@@ -79,6 +85,8 @@ export interface RelayStoredServer {
   configDisabledSources?: RelayConfigSourcePreferences
   deviceToken: string
   id: string
+  personalDocumentSync?: RelayPersonalDocumentSyncPreferences
+  teamDocumentSync?: Record<string, RelayPersonalDocumentSyncPreferences>
   registeredAt?: string
   remoteBaseUrl: string
   sessionExpiresAt?: string
@@ -87,6 +95,7 @@ export interface RelayStoredServer {
 }
 
 export interface RelayRemoteDeviceSummary {
+  alias?: string
   capabilities?: Record<string, unknown>
   createdAt?: string
   id?: string
@@ -94,12 +103,176 @@ export interface RelayRemoteDeviceSummary {
   name?: string
   pluginScope?: string
   status?: string
+  workspaceFolder?: string
+}
+
+export interface RelayProfileCurrentUser {
+  avatarUrl?: string | null
+  disabledAt?: string | null
+  effectiveAccess?: Record<string, unknown>
+  email: string
+  groupIds: string[]
+  id: string
+  loginId?: string | null
+  name: string
+  provider?: string | null
+  role: string
+}
+
+export type RelayProfileAccessTokenScope = 'platform' | 'team' | 'user'
+
+export interface RelayProfileAccessToken {
+  createdAt: string
+  id: string
+  lastUsedAt: string | null
+  name: string
+  permissionGroupIds: string[]
+  permissionGroupMode: 'all' | 'custom'
+  revokedAt: string | null
+  scope: RelayProfileAccessTokenScope
+  teamId: string | null
+  tokenPreview: string
+}
+
+export interface RelayProfileSecuritySummary {
+  accessTokens: RelayProfileAccessToken[]
+  accountDeletion: {
+    available: boolean
+  }
+  password: {
+    enabled: boolean
+  }
+  passkeys: {
+    count: number
+    enabled: boolean
+    lastUsedAt: string | null
+  }
+  twoFactor: {
+    available: boolean
+    enabled: boolean
+  }
+}
+
+export interface RelayProfileOpenApiAuditEvent {
+  createdAt: string
+  error: string | null
+  id: string
+  ip: string | null
+  method: string
+  path: string
+  permission: string | null
+  status: number
+  tokenId: string
+  tokenPreview: string
+  userAgent: string | null
+  userId: string
+}
+
+export type RelayProfileMessageKind = 'announcement' | 'personal' | 'system'
+export type RelayProfileMessageAudienceScope = 'all' | 'team' | 'users'
+
+export interface RelayProfileMessageUser {
+  avatarUrl: string | null
+  email: string
+  id: string
+  name: string
+  provider: string | null
+  role: string
+}
+
+export interface RelayProfileMessageTeam {
+  avatarUrl: string | null
+  id: string
+  name: string
+  slug: string
+}
+
+export interface RelayProfileMessageAudience {
+  scope: RelayProfileMessageAudienceScope
+  team: RelayProfileMessageTeam | null
+  teamId: string | null
+  userIds: string[]
+  users: Array<RelayProfileMessageUser | null>
+}
+
+export interface RelayProfileMessage {
+  audience: RelayProfileMessageAudience
+  body: string
+  createdAt: string
+  createdBy: RelayProfileMessageUser | null
+  createdByUserId: string
+  id: string
+  kind: RelayProfileMessageKind
+  title: string
+  updatedAt: string | null
+}
+
+export interface RelayProfileTeamInvitation {
+  configEnabled: boolean
+  createdAt: string
+  createdByUserId: string
+  defaultForPublishing: boolean
+  email: string | null
+  groupIds: string[]
+  id: string
+  inviter: RelayProfileMessageUser | null
+  respondedAt: string | null
+  role: string
+  status: string
+  teamAvatarUrl: string | null
+  teamId: string
+  teamName: string | null
+  teamSlug: string | null
+  updatedAt: string | null
+  user: RelayProfileMessageUser | null
+  userId: string | null
+}
+
+export interface RelayProfileTeam {
+  archivedAt: string | null
+  avatarUrl: string | null
+  configEnabled: boolean
+  defaultForPublishing: boolean
+  description: string | null
+  id: string
+  memberCount: number
+  membership: {
+    configEnabled: boolean
+    defaultForPublishing: boolean
+    groupIds: string[]
+    role: string
+  } | null
+  name: string
+  role?: string
+  slug: string
+  updatedAt: string | null
+}
+
+export interface RelayProfileSessionSummary {
+  expiresAt?: string
+  lastSeenAt?: string
+}
+
+export interface RelayProfileStatus {
+  account: RelayPublicAuthAccount
+  accounts: RelayPublicAuthAccount[]
+  auditEvents: RelayProfileOpenApiAuditEvent[]
+  devices: RelayRemoteDeviceSummary[]
+  errors?: Partial<Record<'audit' | 'devices' | 'messages' | 'security' | 'teams', string>>
+  invitations: RelayProfileTeamInvitation[]
+  messages: RelayProfileMessage[]
+  ok: true
+  security: RelayProfileSecuritySummary
+  session?: RelayProfileSessionSummary
+  teams: RelayProfileTeam[]
+  user: RelayProfileCurrentUser
 }
 
 export interface RelayAccountProfile {
   avatarUrl?: string
   email?: string
   id?: string
+  loginId?: string
   name?: string
   provider?: string
   role?: string
@@ -138,6 +311,34 @@ export interface RelayConfigDistributionStatus {
   version: string | null
 }
 
+export interface RelayPersonalDocumentSyncStatus {
+  appliedRemote: boolean
+  conflictBackups: number
+  countsByKind: RelayPersonalDocumentSyncCounts
+  documentCount: number
+  enabled: boolean
+  entries?: RelayPersonalDocumentEntry[]
+  hash: string | null
+  lastError: string | null
+  lastSyncedAt: string | null
+  preferences: RelayPersonalDocumentSyncPreferences
+  pushedLocal: boolean
+  totalSizeBytes: number
+}
+
+export interface RelayPersonalDocumentEntry {
+  displayName: string
+  exists: boolean
+  kind: keyof RelayPersonalDocumentSyncPreferences
+  localOnly: boolean
+  path: string
+  relativePath: string
+}
+
+export interface RelayPersonalDocumentSyncCounts {
+  agents: number
+}
+
 export interface RelayConfigDistributionSourceStatus {
   assignmentId: string
   disabledBy: Array<'assignment' | 'profile' | 'team'>
@@ -166,7 +367,26 @@ export interface RelayPublicServerStatus extends RelayServerOptions {
   updatedAt: string | null
 }
 
+export interface RelayPublicAuthAccount {
+  accountKey: string
+  avatarUrl?: string
+  email?: string
+  enabled: boolean
+  loginId?: string
+  name?: string
+  registeredAt?: string
+  role?: string
+  serverAlias: string
+  serverId: string
+  serverUrl: string
+  sessionAuthenticated: boolean
+  sessionExpiresAt?: string
+  updatedAt?: string
+  userId: string
+}
+
 export interface RelayPublicStatus {
+  accounts: RelayPublicAuthAccount[]
   configDistribution: RelayConfigDistributionStatus
   connection: RelayConnectionState & {
     activeServerId?: string
@@ -180,6 +400,8 @@ export interface RelayPublicStatus {
     updatedAt: string | null
   }
   options: RelayOptions
+  personalDocumentSync: RelayPersonalDocumentSyncStatus
   servers: RelayPublicServerStatus[]
   storePath: string
+  teamDocumentSync: Record<string, RelayPersonalDocumentSyncStatus>
 }

@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next'
 import { BrowserRouter } from 'react-router-dom'
 import { SWRConfig } from 'swr'
 
-import { fetchApiJson } from '#~/api/base.js'
+import { ApiError, fetchApiJson } from '#~/api/base.js'
 import { AppErrorBoundary } from '#~/components/error-state'
 import { installHomepagePreviewRuntimeIfEnabled } from '#~/homepage-preview/runtime-loader'
 import { setupPwa } from '#~/pwa.js'
@@ -20,6 +20,7 @@ import {
   buildWorkspaceClientBase,
   getClientBase,
   mergeRuntimeEnv,
+  normalizeServerBaseUrl,
   resolveDevDocumentTitle,
   resolveWorkspaceIdFromPathname
 } from '#~/runtime-config.js'
@@ -27,6 +28,8 @@ import { setupMobileViewport } from '#~/utils/mobile-viewport.js'
 
 import App from './App'
 import { normalizeAppLanguage } from './i18n'
+import { getRestorableWorkspaceConnection } from './workspace-connection-restore'
+import { applyWorkspaceConnection, rememberWorkspaceConnection } from './workspace-connection-state'
 
 const gitRefLabel = import.meta.env.__ONEWORKS_PROJECT_GIT_REF_LABEL__ ?? ''
 
@@ -44,15 +47,58 @@ document.title = resolveDevDocumentTitle(document.title, {
   gitRef: import.meta.env.__ONEWORKS_PROJECT_DEV_GIT_REF__
 })
 
-const installWorkspaceRouteRuntimeIfAvailable = () => {
+const installDesktopWorkspaceRuntimeIfAvailable = async () => {
+  const connection = await window.oneworksDesktop?.getWorkspaceConnection?.()
+    .catch((error) => {
+      console.warn('[desktop] failed to load workspace connection', error)
+      return undefined
+    })
+  const serverBaseUrl = normalizeServerBaseUrl(connection?.serverBaseUrl)
+  if (serverBaseUrl == null) return
+
+  mergeRuntimeEnv({
+    __ONEWORKS_PROJECT_CLIENT_MODE__: 'desktop',
+    __ONEWORKS_PROJECT_SERVER_BASE_URL__: serverBaseUrl,
+    ...(connection?.workspaceFolder == null
+      ? {}
+      : { __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: connection.workspaceFolder })
+  })
+}
+
+const installWorkspaceRouteRuntimeIfAvailable = async () => {
   const workspaceId = resolveWorkspaceIdFromPathname(window.location.pathname)
   if (workspaceId == null) return
 
+  const workspaceClientBase = buildWorkspaceClientBase(workspaceId)
   mergeRuntimeEnv({
-    __ONEWORKS_PROJECT_CLIENT_BASE__: buildWorkspaceClientBase(workspaceId),
+    __ONEWORKS_PROJECT_CLIENT_BASE__: workspaceClientBase,
     __ONEWORKS_PROJECT_SERVER_ROLE__: 'workspace',
     __ONEWORKS_PROJECT_WORKSPACE_ID__: workspaceId
   })
+
+  const restoredConnection = await getRestorableWorkspaceConnection(workspaceId)
+    .catch((error) => {
+      console.warn('[workspace] failed to restore workspace connection', error)
+      return undefined
+    })
+  if (restoredConnection == null) return
+  const { connection, transport } = restoredConnection
+  const serverBaseUrl = normalizeServerBaseUrl(connection.serverBaseUrl)
+  if (serverBaseUrl == null) return
+
+  applyWorkspaceConnection({
+    serverBaseUrl,
+    workspaceFolder: connection.workspaceFolder,
+    workspaceId: connection.workspaceId
+  })
+  rememberWorkspaceConnection(connection, transport)
+}
+
+const shouldRetryOnError = (error: unknown) => {
+  if (!(error instanceof ApiError)) {
+    return true
+  }
+  return error.status == null || ![404, 405, 501].includes(error.status)
 }
 
 function AppProviders() {
@@ -70,7 +116,8 @@ function AppProviders() {
       <AntdApp>
         <SWRConfig
           value={{
-            fetcher: async (path: string) => fetchApiJson<unknown>(path)
+            fetcher: async (path: string) => fetchApiJson<unknown>(path),
+            shouldRetryOnError
           }}
         >
           <BrowserRouter basename={appClientBase}>
@@ -93,7 +140,8 @@ const renderApp = () => {
 }
 
 const startApp = async () => {
-  installWorkspaceRouteRuntimeIfAvailable()
+  await installWorkspaceRouteRuntimeIfAvailable()
+  await installDesktopWorkspaceRuntimeIfAvailable()
   setupMobileViewport()
 
   appClientBase = getClientBase()

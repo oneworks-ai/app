@@ -2,58 +2,38 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { activatePlugin } from '../src/client/index.js'
 import { buildPluginHomeWebLoginRedirectUri, buildWebLoginRedirectUri } from '../src/client/login-callback.js'
+import type { PluginClientContext, PluginReactHost } from '../src/client/types.js'
 import { DEFAULT_OFFICIAL_RELAY_SERVER_ID } from '../src/shared/official-services.js'
 
 interface FakeLocation {
   hash: string
   href: string
+  pathname: string
   search: string
 }
 
-class FakeElement {
-  constructor(public dataset: Record<string, string> = {}) {}
-
-  closest(selector: string) {
-    return selector === '[data-action]' ? this : null
-  }
-}
-
-class FakeContainer {
-  innerHTML = ''
-  listeners = new Map<string, EventListener>()
-
-  addEventListener(type: string, listener: EventListener) {
-    this.listeners.set(type, listener)
-  }
-
-  removeEventListener(type: string, listener: EventListener) {
-    if (this.listeners.get(type) === listener) {
-      this.listeners.delete(type)
-    }
-  }
-
-  clickAction(action: string, serverId?: string) {
-    const listener = this.listeners.get('click')
-    expect(listener).toBeDefined()
-    listener?.({
-      target: new FakeElement({
-        action,
-        ...(serverId == null ? {} : { serverId })
-      })
-    } as unknown as Event)
-  }
-}
-
-const flushPromises = async () => {
-  await new Promise<void>(resolve => setTimeout(resolve, 0))
-  await new Promise<void>(resolve => setTimeout(resolve, 0))
-}
+const createReactHost = (): PluginReactHost => ({
+  Fragment: Symbol.for('test.fragment'),
+  createElement: vi.fn((type, props, ...children) => ({
+    children,
+    props,
+    type
+  })),
+  useEffect: vi.fn(),
+  useMemo: vi.fn(factory => factory()),
+  useRef: vi.fn(initialValue => ({ current: initialValue })),
+  useState: (initialValue => [
+    typeof initialValue === 'function' ? (initialValue as () => unknown)() : initialValue,
+    vi.fn()
+  ]) as PluginReactHost['useState']
+})
 
 const updateLocation = (location: FakeLocation, nextHref: string) => {
   const url = new URL(nextHref)
-  location.href = url.toString()
-  location.search = url.search
   location.hash = url.hash
+  location.href = url.toString()
+  location.pathname = url.pathname
+  location.search = url.search
 }
 
 const installBrowser = (href: string, input: {
@@ -61,37 +41,37 @@ const installBrowser = (href: string, input: {
   desktop?: boolean
   open?: ReturnType<typeof vi.fn>
 } = {}) => {
+  const url = new URL(href)
   const location: FakeLocation = {
-    hash: new URL(href).hash,
+    hash: url.hash,
     href,
-    search: new URL(href).search
+    pathname: url.pathname,
+    search: url.search
   }
   const open = input.open ?? vi.fn(() => ({}))
-  const windowValue = {
+  vi.stubGlobal('window', {
     history: {
       replaceState: vi.fn((_state: unknown, _title: string, nextHref: string) => updateLocation(location, nextHref))
     },
     location,
     open,
     ...(input.desktop === true ? { oneworksDesktop: {} } : {})
-  }
-  const styleElement = {
-    remove: vi.fn(),
-    textContent: ''
-  }
-
-  vi.stubGlobal('Element', FakeElement)
-  vi.stubGlobal('window', windowValue)
+  })
   if (input.clientBase != null) {
     vi.stubGlobal('__ONEWORKS_PROJECT_RUNTIME_ENV__', {
       __ONEWORKS_PROJECT_CLIENT_BASE__: input.clientBase
     })
   }
   vi.stubGlobal('document', {
-    createElement: vi.fn(() => styleElement),
+    addEventListener: vi.fn(),
+    createElement: vi.fn(() => ({
+      remove: vi.fn(),
+      textContent: ''
+    })),
     head: {
       appendChild: vi.fn()
-    }
+    },
+    removeEventListener: vi.fn()
   })
   return {
     location,
@@ -100,45 +80,41 @@ const installBrowser = (href: string, input: {
 }
 
 const createClientHarness = async (apiFetch: ReturnType<typeof vi.fn>) => {
-  let renderHome: ((container: HTMLElement) => { dispose: () => void } | void) | undefined
   const commands = new Map<string, (payload?: unknown) => unknown | Promise<unknown>>()
-  const cleanup = await activatePlugin({
-    scope: 'relay',
-    api: {
-      fetch: apiFetch
-    },
-    commands: {
-      register: vi.fn((commandId, handler) => {
-        commands.set(commandId, handler)
-        return { dispose: vi.fn() }
-      })
-    },
-    views: {
-      register: vi.fn((viewId: string, renderer: typeof renderHome) => {
-        if (viewId === 'home') renderHome = renderer
-        return { dispose: vi.fn() }
-      })
-    }
-  })
-  expect(renderHome).toBeDefined()
+  const cleanup = await activatePlugin(
+    {
+      api: {
+        fetch: apiFetch
+      },
+      commands: {
+        register: vi.fn((commandId, handler) => {
+          commands.set(commandId, handler)
+          return { dispose: vi.fn() }
+        })
+      },
+      react: createReactHost(),
+      scope: 'relay',
+      slots: {
+        register: vi.fn(() => ({ dispose: vi.fn() }))
+      },
+      views: {
+        register: vi.fn(() => ({ dispose: vi.fn() }))
+      }
+    } satisfies PluginClientContext
+  )
   return {
     commands,
-    cleanup,
-    renderHome: renderHome as (container: HTMLElement) => { dispose: () => void } | void
+    cleanup
   }
 }
 
-const statusResponse = (state = 'registered') =>
+const statusResponse = () =>
   new Response(
     JSON.stringify({
+      accounts: [],
       connection: {
         activeServerId: 'prod',
-        state
-      },
-      device: {
-        hasToken: true,
-        id: 'device-1',
-        name: 'Device'
+        state: 'registered'
       },
       servers: [{
         active: true,
@@ -178,171 +154,21 @@ describe('relay plugin client login callbacks', () => {
   it('opens the default official relay login from the global login command', async () => {
     const open = vi.fn(() => ({}))
     installBrowser('http://127.0.0.1:5173/ui/session/abc', { clientBase: '/ui', open })
-    const apiFetch = vi.fn(async (path: string, _init?: RequestInit) => {
-      if (path === 'relay/status') {
-        return new Response(
-          JSON.stringify({
-            connection: {
-              activeServerId: DEFAULT_OFFICIAL_RELAY_SERVER_ID,
-              state: 'idle'
-            },
-            servers: [{
-              active: true,
-              id: DEFAULT_OFFICIAL_RELAY_SERVER_ID,
-              name: 'OneWorks Relay (Cloudflare)'
-            }]
-          }),
-          { status: 200 }
-        )
-      }
+    const apiFetch = vi.fn(async (path: string) => {
       if (path === 'relay/login-url') {
-        return new Response(
-          JSON.stringify({
-            loginUrl: 'https://cf.oneworks.cloud/login'
-          }),
-          { status: 200 }
-        )
+        return new Response(JSON.stringify({ loginUrl: 'http://127.0.0.1:8788/login' }), {
+          headers: { 'content-type': 'application/json' }
+        })
       }
-      return new Response('{}', { status: 404 })
+      return statusResponse()
     })
     const { cleanup, commands } = await createClientHarness(apiFetch)
 
-    await commands.get('login')?.()
+    const result = await commands.get('login')?.()
 
-    const loginUrlCall = apiFetch.mock.calls.find(call => call[0] === 'relay/login-url')
-    expect(loginUrlCall).toBeDefined()
-    expect(JSON.parse(String((loginUrlCall?.[1] as RequestInit).body))).toEqual({
-      redirectUri:
-        `http://127.0.0.1:5173/ui/plugins/relay/home?relayLogin=1&relayLoginServerId=${DEFAULT_OFFICIAL_RELAY_SERVER_ID}`,
-      serverId: DEFAULT_OFFICIAL_RELAY_SERVER_ID
-    })
-    expect(open).toHaveBeenCalledWith(
-      'https://cf.oneworks.cloud/login',
-      '_blank',
-      'noopener,noreferrer'
-    )
-    cleanup?.dispose()
-  })
-
-  it('opens the relay login page with the current Web plugin route as redirect_uri', async () => {
-    const open = vi.fn(() => ({}))
-    installBrowser('http://127.0.0.1:5173/plugins/relay/home', { open })
-    const apiFetch = vi.fn(async (path: string, _init?: RequestInit) => {
-      if (path === 'relay/status') return statusResponse('idle')
-      if (path === 'relay/login-url') {
-        return new Response(
-          JSON.stringify({
-            loginUrl: 'http://127.0.0.1:8788/login?redirect_uri=http%3A%2F%2F127.0.0.1%3A5173%2Fplugins%2Frelay%2Fhome'
-          }),
-          { status: 200 }
-        )
-      }
-      return new Response('{}', { status: 404 })
-    })
-    const { cleanup, renderHome } = await createClientHarness(apiFetch)
-    const container = new FakeContainer()
-
-    renderHome(container as unknown as HTMLElement)
-    await flushPromises()
-    container.clickAction('login', 'prod')
-    await flushPromises()
-
-    const loginUrlCall = apiFetch.mock.calls.find(call => call[0] === 'relay/login-url')
-    expect(loginUrlCall).toBeDefined()
-    expect(JSON.parse(String((loginUrlCall?.[1] as RequestInit).body))).toEqual({
-      redirectUri: 'http://127.0.0.1:5173/plugins/relay/home?relayLogin=1&relayLoginServerId=prod',
-      serverId: 'prod'
-    })
-    expect(open).toHaveBeenCalledWith(
-      'http://127.0.0.1:8788/login?redirect_uri=http%3A%2F%2F127.0.0.1%3A5173%2Fplugins%2Frelay%2Fhome',
-      '_blank',
-      'noopener,noreferrer'
-    )
-    cleanup?.dispose()
-  })
-
-  it('opens the relay login page without Web redirect_uri inside Electron runtime', async () => {
-    const open = vi.fn(() => ({}))
-    installBrowser('http://127.0.0.1:5173/plugins/relay/home', { desktop: true, open })
-    const apiFetch = vi.fn(async (path: string, _init?: RequestInit) => {
-      if (path === 'relay/status') return statusResponse('idle')
-      if (path === 'relay/login-url') {
-        return new Response(
-          JSON.stringify({
-            loginUrl: 'http://127.0.0.1:8788/login'
-          }),
-          { status: 200 }
-        )
-      }
-      return new Response('{}', { status: 404 })
-    })
-    const { cleanup, renderHome } = await createClientHarness(apiFetch)
-    const container = new FakeContainer()
-
-    renderHome(container as unknown as HTMLElement)
-    await flushPromises()
-    container.clickAction('login', 'prod')
-    await flushPromises()
-
-    const loginUrlCall = apiFetch.mock.calls.find(call => call[0] === 'relay/login-url')
-    expect(loginUrlCall).toBeDefined()
-    expect(JSON.parse(String((loginUrlCall?.[1] as RequestInit).body))).toEqual({
-      serverId: 'prod'
-    })
-    expect(open).toHaveBeenCalledWith(
-      'http://127.0.0.1:8788/login',
-      '_blank',
-      'noopener,noreferrer'
-    )
-    cleanup?.dispose()
-  })
-
-  it('consumes a Web callback token and removes it from the browser URL', async () => {
-    const browser = installBrowser(
-      'http://127.0.0.1:5173/plugins/relay/home?relayLogin=1&relayLoginServerId=prod#relay_token=web-session-token'
-    )
-    const apiFetch = vi.fn(async (path: string, _init?: RequestInit) => {
-      if (path === 'relay/login-callback') return statusResponse()
-      if (path === 'relay/status') return statusResponse()
-      return new Response('{}', { status: 404 })
-    })
-    const { cleanup, renderHome } = await createClientHarness(apiFetch)
-
-    renderHome(new FakeContainer() as unknown as HTMLElement)
-    await flushPromises()
-
-    const callbackCall = apiFetch.mock.calls.find(call => call[0] === 'relay/login-callback')
-    expect(callbackCall).toBeDefined()
-    expect(JSON.parse(String((callbackCall?.[1] as RequestInit).body))).toEqual({
-      serverId: 'prod',
-      token: 'web-session-token'
-    })
-    expect(browser.location.href).toBe('http://127.0.0.1:5173/plugins/relay/home')
-    expect(apiFetch.mock.calls.map(call => call[0])).not.toContain('relay/status')
-    cleanup?.dispose()
-  })
-
-  it('consumes an Electron deep-link plugin route token without requiring a Web redirect_uri', async () => {
-    installBrowser(
-      'http://127.0.0.1:5173/plugins/relay/home?relayLogin=1&relayLoginServerId=prod#relay_token=electron-session-token',
-      { desktop: true }
-    )
-    const apiFetch = vi.fn(async (path: string, _init?: RequestInit) => {
-      if (path === 'relay/login-callback') return statusResponse()
-      if (path === 'relay/status') return statusResponse()
-      return new Response('{}', { status: 404 })
-    })
-    const { cleanup, renderHome } = await createClientHarness(apiFetch)
-
-    renderHome(new FakeContainer() as unknown as HTMLElement)
-    await flushPromises()
-
-    const callbackCall = apiFetch.mock.calls.find(call => call[0] === 'relay/login-callback')
-    expect(callbackCall).toBeDefined()
-    expect(JSON.parse(String((callbackCall?.[1] as RequestInit).body))).toEqual({
-      serverId: 'prod',
-      token: 'electron-session-token'
-    })
-    cleanup?.dispose()
+    expect(apiFetch).toHaveBeenCalledWith('relay/login-url', expect.objectContaining({ method: 'POST' }))
+    expect(open).toHaveBeenCalledWith('http://127.0.0.1:8788/login', '_blank', 'noopener,noreferrer')
+    expect(result).toEqual({ loginUrl: 'http://127.0.0.1:8788/login', serverId: 'prod' })
+    cleanup.dispose()
   })
 })

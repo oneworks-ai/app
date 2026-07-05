@@ -102,13 +102,18 @@ export function sessionsRouter(): Router {
     typeof value === 'string' && sessionPermissionModes.has(value as SessionPermissionMode)
   )
 
-  const parseLimit = (limit?: string) => {
-    if (limit == null) {
+  const parsePositiveInt = (value?: string) => {
+    if (value == null) {
       return null
     }
 
-    const n = Number.parseInt(limit, 10)
-    return Number.isNaN(n) ? null : n
+    const n = Number.parseInt(value, 10)
+    return Number.isNaN(n) || n <= 0 ? null : n
+  }
+
+  const parseLimit = (limit?: string) => {
+    const parsed = parsePositiveInt(limit)
+    return parsed == null ? null : Math.min(parsed, 1000)
   }
 
   const normalizeMessageContent = (body: {
@@ -406,18 +411,33 @@ export function sessionsRouter(): Router {
 
   router.get('/:id/messages', (ctx) => {
     const { id } = ctx.params as { id: string }
-    const { limit } = ctx.query as { limit?: string }
+    const { afterId, beforeId, limit } = ctx.query as {
+      afterId?: string
+      beforeId?: string
+      limit?: string
+    }
     const session = db.getSession(id)
     if (session == null) {
       throw notFound('Session not found', { id }, 'session_not_found')
     }
-    const messages = db.getMessages(id)
     const interaction = getSessionInteraction(id)
 
     const parsedLimit = parseLimit(limit)
-    const responseMessages = parsedLimit == null ? messages : messages.slice(-parsedLimit)
+    const parsedBeforeId = parsePositiveInt(beforeId)
+    const parsedAfterId = parsePositiveInt(afterId)
+    const messageWindow = db.getMessageWindowWithCursor(
+      id,
+      parsedLimit == null && parsedBeforeId == null && parsedAfterId == null
+        ? {}
+        : {
+          ...(parsedAfterId != null ? { afterId: parsedAfterId } : {}),
+          ...(parsedBeforeId != null ? { beforeId: parsedBeforeId } : {}),
+          limit: parsedLimit ?? 200
+        }
+    )
     ctx.body = {
-      messages: responseMessages,
+      cursor: messageWindow.cursor,
+      messages: messageWindow.messages,
       session,
       interaction,
       queuedMessages: listSessionQueuedMessages(id)

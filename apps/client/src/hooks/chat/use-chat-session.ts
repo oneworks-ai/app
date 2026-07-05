@@ -78,6 +78,7 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     queuedMessages,
     isReady,
     errorState,
+    workspaceConnectionError,
     retryConnection,
     reconcileAfterInteraction
   } = useChatSessionMessages({
@@ -161,6 +162,7 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     interactionRequest,
     isReady,
     errorState,
+    workspaceConnectionError,
     retryConnection,
     isThinking,
     sessionActivityLabel,

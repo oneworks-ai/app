@@ -18,6 +18,7 @@ import {
   resolveConfigDetailRouteMeta,
   serializeConfigDetailRoute
 } from './configDetail'
+import { getConfigDetailPlaceholderEntries } from './configDetailPlaceholders'
 import type { FieldSpec } from './configSchema'
 import type { TranslationFn } from './configUtils'
 import type { ModelServiceConfigSessionRequest } from './modelServiceConfigSession'
@@ -114,6 +115,7 @@ export function ConfigSectionPanel({
     value,
     resolvedValue,
     route: detailRoute,
+    placeholderEntries: getConfigDetailPlaceholderEntries(sectionKey),
     detailContext: {
       mergedModelServices,
       mergedAdapters,

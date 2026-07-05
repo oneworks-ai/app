@@ -51,7 +51,15 @@ import type { PermissionMode } from './use-chat-permission-mode'
 
 const EMPTY_QUEUED_MESSAGES: SessionMessageQueueState = { steer: [], next: [] }
 const MAX_HISTORY_REFRESH_RETRIES = 2
+const INITIAL_SESSION_HISTORY_LIMIT = 240
+const INCREMENTAL_SESSION_HISTORY_LIMIT = 200
 type SessionQueuedMessagesSyncListener = (queuedMessages: SessionMessageQueueState) => void
+
+interface RefreshHistoryOptions {
+  forceFull?: boolean
+  retryAttempt?: number
+  updateReadiness?: boolean
+}
 
 const sessionQueuedMessagesSyncListeners = new Map<string, Set<SessionQueuedMessagesSyncListener>>()
 
@@ -469,6 +477,7 @@ export function useChatSessionMessages({
   const [queuedMessages, setQueuedMessages] = useState<SessionMessageQueueState>({ steer: [], next: [] })
   const [isReady, setIsReady] = useState(false)
   const [errorState, setErrorState] = useState<ChatErrorState | null>(null)
+  const [workspaceConnectionError, setWorkspaceConnectionError] = useState<unknown>(null)
   const [retryCount, setRetryCount] = useState(0)
   const isInitialLoadRef = useRef<boolean>(true)
   const lastConnectedModelRef = useRef<string | undefined>(undefined)
@@ -486,6 +495,8 @@ export function useChatSessionMessages({
   const appliedHistoryRequestSeqRef = useRef(0)
   const reconcileTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([])
   const historyRetryTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([])
+  const historyCursorBySessionIdRef = useRef(new Map<string, number>())
+  const historyEventsBySessionIdRef = useRef(new Map<string, WSEvent[]>())
   const sessionViewCacheRef = useRef(new Map<string, ChatSessionViewSnapshot>())
   const sessionCompactionEventsRef = useRef<SessionCompactionInfo[]>([])
 
@@ -512,6 +523,8 @@ export function useChatSessionMessages({
 
   const removeSessionViewCache = useCallback((sessionId: string) => {
     deleteChatSessionViewSnapshot(sessionViewCacheRef.current, sessionId)
+    historyCursorBySessionIdRef.current.delete(sessionId)
+    historyEventsBySessionIdRef.current.delete(sessionId)
   }, [])
 
   const applySessionCompactionEvents = useCallback((
@@ -624,16 +637,24 @@ export function useChatSessionMessages({
     historyRetryTimersRef.current = []
   }, [])
 
-  const refreshHistory = useCallback(async (options: { retryAttempt?: number; updateReadiness?: boolean } = {}) => {
+  const refreshHistory = useCallback(async (options: RefreshHistoryOptions = {}) => {
     const sessionId = activeSessionIdRef.current
     if (sessionId == null || sessionId === '') {
       return
     }
 
     const requestSeq = ++historyRequestSeqRef.current
+    const cachedEvents = historyEventsBySessionIdRef.current.get(sessionId)
+    const lastCursor = historyCursorBySessionIdRef.current.get(sessionId)
+    const canUseIncremental = options.forceFull !== true &&
+      cachedEvents != null &&
+      lastCursor != null
+    const requestOptions = canUseIncremental
+      ? { afterId: lastCursor, limit: INCREMENTAL_SESSION_HISTORY_LIMIT }
+      : { limit: INITIAL_SESSION_HISTORY_LIMIT }
 
     try {
-      const res = await getSessionMessages(sessionId)
+      const res = await getSessionMessages(sessionId, requestOptions)
       if (
         !shouldApplyHistoryRefreshResult({
           activeSessionId: activeSessionIdRef.current,
@@ -646,8 +667,16 @@ export function useChatSessionMessages({
       }
       appliedHistoryRequestSeqRef.current = requestSeq
       clearScheduledHistoryRetries()
+      setWorkspaceConnectionError(null)
 
-      const events = res.messages as WSEvent[]
+      const receivedEvents = res.messages as WSEvent[]
+      const events = canUseIncremental ? [...cachedEvents, ...receivedEvents] : receivedEvents
+      historyEventsBySessionIdRef.current.set(sessionId, events)
+      if (res.cursor?.lastId != null) {
+        historyCursorBySessionIdRef.current.set(sessionId, Math.max(lastCursor ?? 0, res.cursor.lastId))
+      } else if (!canUseIncremental) {
+        historyCursorBySessionIdRef.current.delete(sessionId)
+      }
 
       if (res.session) {
         updateSessionCaches(mutate, res.session)
@@ -740,9 +769,14 @@ export function useChatSessionMessages({
           appliedRequestSeq: appliedHistoryRequestSeqRef.current,
           requestSeq,
           sessionId
-        }) ||
-        sessionViewCacheRef.current.get(sessionId)?.isHydrated === true
+        })
       ) {
+        return
+      }
+
+      setWorkspaceConnectionError(err)
+
+      if (sessionViewCacheRef.current.get(sessionId)?.isHydrated === true) {
         return
       }
 
@@ -802,6 +836,7 @@ export function useChatSessionMessages({
     expectedCloseRef.current = true
     fatalSessionErrorRef.current = false
     setErrorState(null)
+    setWorkspaceConnectionError(null)
     updateSessionViewCache(session.id, { errorState: null })
     connectionManager.close(session.id)
     setRetryCount((count) => count + 1)
@@ -823,6 +858,7 @@ export function useChatSessionMessages({
       setQueuedMessages(EMPTY_QUEUED_MESSAGES)
       setIsReady(true)
       setErrorState(null)
+      setWorkspaceConnectionError(null)
       setInteractionRequest(null)
       interactionRequestRef.current = null
       sessionOperationInfoRef.current = null
@@ -852,6 +888,8 @@ export function useChatSessionMessages({
 
       interactionRequestRef.current = null
       setInteractionRequest(null)
+      historyCursorBySessionIdRef.current.delete(session.id)
+      historyEventsBySessionIdRef.current.delete(session.id)
       setMessagesState(nextMessages)
       setSessionInfo(null)
       setSessionOperationInfo(null)
@@ -862,6 +900,7 @@ export function useChatSessionMessages({
       setSessionWorkspaceChanges([])
       setQueuedMessages(EMPTY_QUEUED_MESSAGES)
       setErrorState(nextErrorState)
+      setWorkspaceConnectionError(null)
       setIsReady(true)
       isInitialLoadRef.current = false
       updateSessionViewCache(session.id, {
@@ -894,6 +933,7 @@ export function useChatSessionMessages({
     setSessionWorkspaceChanges(restoredState.sessionWorkspaceChanges)
     setQueuedMessages(restoredState.queuedMessages)
     setErrorState(restoredState.errorState)
+    setWorkspaceConnectionError(null)
     setInteractionRequest(restoredState.interactionRequest)
     interactionRequestRef.current = restoredState.interactionRequest
     sessionOperationInfoRef.current = restoredState.sessionOperationInfo
@@ -1044,6 +1084,7 @@ export function useChatSessionMessages({
           expectedCloseRef.current = false
           fatalSessionErrorRef.current = false
           setErrorState((current) => {
+            setWorkspaceConnectionError(null)
             const next = current?.kind === 'session' ? current : null
             updateSessionViewCache(session.id, {
               errorState: next
@@ -1282,6 +1323,7 @@ export function useChatSessionMessages({
     queuedMessages,
     isReady,
     errorState,
+    workspaceConnectionError,
     retryConnection,
     reconcileAfterInteraction
   }

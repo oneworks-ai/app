@@ -10,6 +10,13 @@ export type ApiRequestInit = RequestInit & {
   timeoutMs?: number
 }
 
+interface ApiEtagCacheEntry {
+  data: unknown
+  etag: string
+}
+
+const apiEtagCache = new Map<string, ApiEtagCacheEntry>()
+
 export const getServerHost = () => {
   return new URL(getServerUrl()).hostname
 }
@@ -135,6 +142,28 @@ const unwrapApiResponse = async <T>(res: Response, errorLabel?: string): Promise
   return body as T
 }
 
+const getRequestMethod = (init?: ApiRequestInit) => (init?.method ?? 'GET').toUpperCase()
+
+const createConditionalRequestInit = (url: string, init?: ApiRequestInit): ApiRequestInit | undefined => {
+  if (getRequestMethod(init) !== 'GET') {
+    return init
+  }
+
+  const entry = apiEtagCache.get(url)
+  if (entry == null) {
+    return init
+  }
+
+  const headers = new Headers(init?.headers)
+  if (!headers.has('If-None-Match')) {
+    headers.set('If-None-Match', entry.etag)
+  }
+  return {
+    ...init,
+    headers
+  }
+}
+
 export const getApiErrorMessage = (error: unknown, fallback: string) => {
   if (error instanceof ApiError && error.message.trim() !== '') {
     return error.message
@@ -150,6 +179,55 @@ export const getApiErrorMessage = (error: unknown, fallback: string) => {
 
 export const isApiRequestTimeoutError = (error: unknown) => {
   return error instanceof ApiError && error.code === 'request_timeout'
+}
+
+const stringifyApiErrorDetails = (value: unknown): string => {
+  if (value == null) return ''
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+export const isApiRemoteWorkspaceConnectionError = (error: unknown) => {
+  if (error instanceof ApiError) {
+    if (
+      error.status !== 408 &&
+      error.status !== 502 &&
+      error.status !== 503 &&
+      error.status !== 504
+    ) {
+      return false
+    }
+
+    const searchable = [
+      error.code,
+      error.message,
+      stringifyApiErrorDetails(error.details)
+    ].join(' ').toLowerCase()
+
+    return searchable.includes('workspace') ||
+      searchable.includes('relay') ||
+      searchable.includes('proxy') ||
+      searchable.includes('fetch failed') ||
+      searchable.includes('timed out') ||
+      searchable.includes('timeout')
+  }
+
+  if (isAbortLikeError(error)) {
+    return true
+  }
+
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase()
+    return message.includes('fetch failed') ||
+      message.includes('timed out') ||
+      message.includes('timeout')
+  }
+
+  return false
 }
 
 const isAbortLikeError = (error: unknown) => {
@@ -235,10 +313,29 @@ const runFetch = async (url: string, init?: ApiRequestInit) => {
   }
 }
 
+const fetchAndUnwrapApiResponse = async <T>(
+  url: string,
+  init?: ApiRequestInit,
+  errorLabel?: string
+): Promise<T> => {
+  const isConditionalGet = getRequestMethod(init) === 'GET'
+  const res = await runFetch(url, createConditionalRequestInit(url, init))
+  const cached = isConditionalGet ? apiEtagCache.get(url) : undefined
+  if (res.status === 304 && cached != null) {
+    return cached.data as T
+  }
+
+  const data = await unwrapApiResponse<T>(res, errorLabel)
+  const etag = res.headers.get('ETag')
+  if (isConditionalGet && etag != null && etag.trim() !== '') {
+    apiEtagCache.set(url, { data, etag })
+  }
+  return data
+}
+
 export async function fetchApiJson<T>(pathOrUrl: string | URL, init?: ApiRequestInit): Promise<T> {
   const url = typeof pathOrUrl === 'string' ? buildApiUrl(pathOrUrl) : pathOrUrl.toString()
-  const res = await runFetch(url, init)
-  return unwrapApiResponse<T>(res)
+  return fetchAndUnwrapApiResponse<T>(url, init)
 }
 
 export async function fetchApiJsonOrThrow<T>(
@@ -247,6 +344,5 @@ export async function fetchApiJsonOrThrow<T>(
   errorLabel: string
 ): Promise<T> {
   const url = typeof pathOrUrl === 'string' ? buildApiUrl(pathOrUrl) : pathOrUrl.toString()
-  const res = await runFetch(url, init)
-  return unwrapApiResponse<T>(res, errorLabel)
+  return fetchAndUnwrapApiResponse<T>(url, init, errorLabel)
 }

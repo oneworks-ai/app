@@ -10,10 +10,12 @@ import { isHomepagePreviewRuntimeEnabled } from '#~/homepage-preview/mock-runtim
 import {
   clearServerConnectionPickerRequest,
   getConfiguredServerBaseUrl,
+  getServerBaseUrl,
   getStoredServerBaseUrl,
   isDesktopClientMode,
   isServerConnectionManagedClientMode,
   isServerConnectionPickerRequested,
+  isServerManagerRole,
   normalizeServerBaseUrl,
   setStoredServerBaseUrl
 } from '#~/runtime-config'
@@ -39,6 +41,8 @@ export function ServerConnectionGate({ children }: PropsWithChildren) {
   const connectionManagedMode = isServerConnectionManagedClientMode()
   const desktopMode = isDesktopClientMode()
   const configuredServerUrl = getConfiguredServerBaseUrl()
+  const managerServerUrl = !desktopMode && isServerManagerRole() ? getServerBaseUrl() : undefined
+  const availableServerUrl = configuredServerUrl ?? managerServerUrl
   const pickerRequested = isServerConnectionPickerRequested()
   const [form] = Form.useForm<ServerConnectionFormValues>()
   const [connectedServerUrl, setConnectedServerUrl] = useState(() => desktopMode ? undefined : getStoredServerBaseUrl())
@@ -48,28 +52,28 @@ export function ServerConnectionGate({ children }: PropsWithChildren) {
   const homepagePreviewRuntime = isHomepagePreviewRuntimeEnabled()
 
   useEffect(() => {
-    if (configuredServerUrl == null) return
+    if (availableServerUrl == null) return
     setConnectionProfiles((profiles) => {
-      if (profiles.some(profile => profile.serverUrl === configuredServerUrl)) {
+      if (profiles.some(profile => profile.serverUrl === availableServerUrl)) {
         return profiles
       }
 
-      const rememberedProfiles = rememberServerBaseUrl(configuredServerUrl)
+      const rememberedProfiles = rememberServerBaseUrl(availableServerUrl)
       if (!desktopMode) {
         return rememberedProfiles
       }
 
-      return updateServerConnectionProfile(configuredServerUrl, {
+      return updateServerConnectionProfile(availableServerUrl, {
         alias: t('serverConnection.localServiceAlias'),
         description: t('serverConnection.localServiceProfileDescription')
       })
     })
-  }, [configuredServerUrl, desktopMode, t])
+  }, [availableServerUrl, desktopMode, t])
 
   if (
     homepagePreviewRuntime ||
     !connectionManagedMode ||
-    (!pickerRequested && (connectedServerUrl != null || configuredServerUrl != null))
+    (!pickerRequested && (connectedServerUrl != null || availableServerUrl != null))
   ) {
     return children
   }
@@ -127,13 +131,13 @@ export function ServerConnectionGate({ children }: PropsWithChildren) {
         </div>
 
         {desktopMode
-          ? configuredServerUrl != null && (
+          ? availableServerUrl != null && (
             <div className='server-connection-gate__setup'>
               <div className='server-connection-gate__setup-title'>
                 <span className='material-symbols-rounded'>computer</span>
                 <span>{t('serverConnection.localServiceTitle')}</span>
               </div>
-              <code>{configuredServerUrl}</code>
+              <code>{availableServerUrl}</code>
               <p>{t('serverConnection.localServiceBannerDescription')}</p>
             </div>
           )

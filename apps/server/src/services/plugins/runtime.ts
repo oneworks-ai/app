@@ -433,11 +433,18 @@ export class PluginManager {
     this.stopDiscoveryWatch()
     for (const record of records) {
       this.stopRecordWatch(record)
-      for (const disposable of record.disposables.reverse()) {
-        await Promise.resolve(disposable()).catch(error => {
-          logger.warn({ err: error, scope: record.instance.scope }, '[plugins] dispose failed')
-        })
-      }
+      await this.clearRecordRuntime(record)
+    }
+  }
+
+  private async clearRecordRuntime(record: RuntimeRecord) {
+    const disposables = record.disposables.splice(0).reverse()
+    record.commands.clear()
+    record.apis.clear()
+    for (const disposable of disposables) {
+      await Promise.resolve(disposable()).catch(error => {
+        logger.warn({ err: error, scope: record.instance.scope }, '[plugins] dispose failed')
+      })
     }
   }
 
@@ -556,6 +563,34 @@ export class PluginManager {
       size: asset.size,
       stream: createReadStream(asset.filePath)
     }
+  }
+
+  async resolveClientSharedAsset(scope: string, assetPath: string) {
+    await this.load()
+    const record = this.records.get(scope)
+    if (record == null || !record.instance.enabled) return undefined
+
+    const defaultAssetPath = resolveClientEntryUrlPath(record.manifest) ?? ''
+    const entryDir = defaultAssetPath === '' ? '' : path.dirname(defaultAssetPath)
+    const sharedRoots = [
+      path.resolve(record.clientAssetRoot, entryDir, '..', 'shared'),
+      path.resolve(record.clientAssetRoot, '..', 'shared')
+    ]
+    const pluginRoot = await realpath(record.instance.pluginRoot).catch(() => path.resolve(record.instance.pluginRoot))
+    for (const sharedRoot of sharedRoots) {
+      const requestedPath = path.resolve(sharedRoot, assetPath)
+      const relativeToPluginRoot = path.relative(pluginRoot, requestedPath)
+      if (isPathOutside(relativeToPluginRoot)) continue
+
+      const asset = await this.resolveScopedFile(pluginRoot, relativeToPluginRoot)
+      if (asset == null) continue
+      return {
+        filePath: asset.filePath,
+        size: asset.size,
+        stream: createReadStream(asset.filePath)
+      }
+    }
+    return undefined
   }
 
   async readReadme(scope: string): Promise<PluginReadme | undefined> {
@@ -1161,6 +1196,7 @@ export class PluginManager {
   }
 
   private async activateRecord(record: RuntimeRecord) {
+    await this.clearRecordRuntime(record)
     if (!record.instance.enabled) return
 
     const entryPath = await resolvePluginServerEntryPath(record.instance.pluginRoot, record.manifest)
@@ -1182,6 +1218,7 @@ export class PluginManager {
       const ctx = this.createServerContext(record)
       await activatePlugin(ctx)
     } catch (error) {
+      await this.clearRecordRuntime(record)
       record.instance.enabled = false
       const diagnostic = {
         level: 'error' as const,

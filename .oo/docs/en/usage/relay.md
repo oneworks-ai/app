@@ -46,7 +46,7 @@ Relay Admin exposes two separated machine-readable OpenAPI documents:
 <relay-origin>/api/profile/openapi.json
 ```
 
-`/api/admin/openapi.json` describes only platform admin APIs, including users, access groups, invites, SSO, team policy, teams, team member groups, messages, configuration profiles / secrets, and operational metrics. `/api/profile/openapi.json` describes only current-user personal APIs, including profile security, current-user team self-service flows, team member groups, and managed configuration read / management endpoints. The Admin `/admin/openapi` page can also display, download, or open both JSON documents. Protected endpoints use `Authorization: Bearer <token>`; the token can be the deployment Admin token, a login session token, or an API access token generated from `/admin/profile`. Password, passkey, and access-token management still require a normal login session; deleting the current account also accepts a current-user API access token.
+`/api/admin/openapi.json` describes only platform admin APIs, including users, access groups, invites, SSO, team policy, teams, team member groups, messages, configuration profiles / secrets, and operational metrics. `/api/profile/openapi.json` describes only current-user personal APIs, including profile security, current-user team self-service flows, team member groups, personal global configuration sync, and managed configuration read / management endpoints. The Admin `/admin/openapi` page can also display, download, or open both JSON documents. Protected endpoints use `Authorization: Bearer <token>`; the token can be the deployment Admin token, a login session token, or an API access token generated from `/admin/profile`. Password, passkey, and access-token management still require a normal login session; deleting the current account also accepts a current-user API access token.
 
 API access tokens belong to the current logged-in user and support `user`, `team`, and `platform` scopes. User tokens can call current-account APIs only; team tokens are bound to one team and are authorized through team member groups; platform tokens are authorized through platform access groups. `permissionGroupMode=all` follows the account's current groups, while `custom` restricts the token to listed group ids. The server stores only a token hash and preview, and the full token is shown once when it is created; revoke and recreate it if it is lost. An API access token cannot create or revoke other API access tokens, so those security actions require a normal login session.
 
@@ -60,6 +60,23 @@ Platform admins manage platform access groups and their capabilities / quotas fr
 - Verification code: for existing non-SSO / `email_code` accounts only. It sends a login code to that account email. It does not create accounts and cannot sign in SSO-only accounts that share the same email.
 - Passkey: one entry supports both sign-in and registration. The user first enters an email or account name and clicks "Use PASS KEY"; if a passkey exists, the browser authentication prompt opens; if none exists and registration is allowed, registration begins.
 - SSO: uses Google, GitHub, Feishu, or custom OAuth/OIDC providers configured by an admin.
+
+## CLI Login and Multiple Accounts
+
+One Works exposes the official Relay login capability as top-level CLI commands, so users do not need to know about the plugin namespace:
+
+```bash
+oneworks login
+oneworks login -s vercel
+oneworks users
+oneworks users enable alice
+oneworks users disable --account oneworks-cloudflare:user-1
+oneworks logout -s cf alice
+```
+
+`-s, --server` defaults to `cf` and also accepts `cloudflare`, `vercel` / `vc`, a server id, or a full URL. Authentication is stored locally in `~/.oneworks/auth.json`; one machine can keep multiple accounts across multiple servers. There is no current-user switch. `users enable` / `users disable` controls whether the current daemon should use a specific account.
+
+When a server has only one matching account, enable, disable, and logout commands can omit the user argument. When multiple accounts match, an interactive terminal shows candidates for selection. Scripts and AI tools should use `--json` and pass `--account serverId:userId` to avoid acting on the wrong account; prefer `--account` when the same `loginId` or email exists on multiple servers. `--input <json>` and `--stdin` merge structured JSON into the command payload.
 
 ## Passkey Registration UX
 

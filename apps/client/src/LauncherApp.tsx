@@ -18,6 +18,8 @@ import {
   persistThemePrimaryColor
 } from '#~/hooks/use-app-preferences'
 import { useDesktopThemeSourceBridge, useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
+import { NotificationProvider } from '#~/notifications/NotificationProvider'
+import { PluginProvider } from '#~/plugins/PluginProvider'
 import { themeAtom } from '#~/store'
 
 const LauncherRoute = lazy(async () => ({
@@ -120,9 +122,13 @@ export function LauncherApp() {
 
   return (
     <ConfigProvider theme={themeConfig}>
-      <Suspense fallback={null}>
-        <LauncherRoute />
-      </Suspense>
+      <NotificationProvider>
+        <PluginProvider>
+          <Suspense fallback={null}>
+            <LauncherRoute />
+          </Suspense>
+        </PluginProvider>
+      </NotificationProvider>
     </ConfigProvider>
   )
 }

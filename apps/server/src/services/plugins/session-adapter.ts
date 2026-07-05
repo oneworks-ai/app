@@ -1,12 +1,42 @@
 import { getDb } from '#~/db/index.js'
 import { processUserMessage } from '#~/services/session/index.js'
+import { resolveSessionWorkspace } from '#~/services/session/workspace.js'
 
 import type { PluginSessionAdapter } from './types.js'
 
 const readTextField = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  value != null && typeof value === 'object' && !Array.isArray(value)
+)
+
+const listSessionsWithWorkspace = async () => {
+  const sessions = getDb().getSessions('active')
+  return await Promise.all(sessions.map(async session => {
+    if (!isRecord(session)) {
+      return session
+    }
+
+    const sessionId = readTextField(session.id)
+    if (sessionId === '') {
+      return session
+    }
+
+    const workspace = await resolveSessionWorkspace(sessionId).catch(() => undefined)
+    const workspaceFolder = readTextField(workspace?.workspaceFolder)
+    if (workspaceFolder === '') {
+      return session
+    }
+
+    return {
+      ...session,
+      workspaceFolder
+    }
+  }))
+}
+
 export const createPluginSessionAdapter = (): PluginSessionAdapter => ({
-  listSessions: () => getDb().getSessions('active'),
+  listSessions: listSessionsWithWorkspace,
   submitMessage: async input => {
     const sessionId = readTextField(input.sessionId)
     const message = readTextField(input.message)

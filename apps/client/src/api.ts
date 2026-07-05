@@ -2,6 +2,8 @@
 export { getAdapterAccountDetail, getAdapterAccounts, manageAdapterAccount } from './api/adapters'
 export {
   getAgentRoom,
+  getAgentRoomByHostSession,
+  listAgentRoomSummaries,
   listAgentRooms,
   listArchivedAgentRooms,
   respondAgentRoomInteraction,
@@ -19,7 +21,7 @@ export {
   runAutomationRule,
   updateAutomationRule
 } from './api/automation'
-export { ApiError, getApiErrorMessage } from './api/base'
+export { ApiError, getApiErrorMessage, isApiRemoteWorkspaceConnectionError } from './api/base'
 export {
   getBenchmarkCase,
   getBenchmarkResult,

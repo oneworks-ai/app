@@ -1,6 +1,9 @@
 /* eslint-disable max-lines -- Relay config snapshot cache keeps normalization and persistence together. */
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import process from 'node:process'
+
+import { resolveGlobalOneWorksDir } from '@oneworks/utils/ai-path'
 
 import type {
   RelayConfigAssignment,
@@ -11,11 +14,12 @@ import type {
 } from './config-assignment.js'
 import {
   filterRelayConfigPatch,
-  normalizeRelayConfigSafeFields,
-  normalizeRelayConfigStringList
+  normalizeRelayConfigStringList,
+  normalizeRelayTeamConfigSafeFields
 } from './config-assignment.js'
 
 const CONFIG_SNAPSHOT_PATH = ['.local', 'plugins', 'relay', 'config-snapshot.json'] as const
+type RelayConfigSnapshotEnv = Record<string, string | null | undefined>
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -115,7 +119,7 @@ const normalizeProvenance = (value: unknown): RelayConfigSnapshotProvenance | un
   const teamId = normalizeText(value.teamId)
   const versionId = normalizeText(value.versionId)
   const version = Number(value.version)
-  const fields = normalizeRelayConfigSafeFields(value.fields)
+  const fields = normalizeRelayTeamConfigSafeFields(value.fields)
   if (
     assignmentId == null ||
     profileId == null ||
@@ -145,7 +149,7 @@ const normalizeAssignment = (value: unknown, fallbackId: string): RelayConfigAss
   if (!isRecord(value)) return undefined
   const id = normalizeText(value.id) ?? fallbackId
   if (id === '') return undefined
-  const allowedFields = normalizeRelayConfigSafeFields(value.allowedFields)
+  const allowedFields = normalizeRelayTeamConfigSafeFields(value.allowedFields)
   const configPatch = normalizeConfigPatch(value.configPatch ?? value.config, allowedFields)
   const secrets = normalizeSecretEnvelopes(value.secrets)
 
@@ -213,9 +217,9 @@ export const normalizeRelayConfigSnapshot = (value: unknown): RelayConfigSnapsho
   }
 }
 
-export const createRelayConfigSnapshotStore = (projectHome: string) => {
-  const storeDir = join(projectHome, '.local', 'plugins', 'relay')
-  const snapshotPath = join(projectHome, ...CONFIG_SNAPSHOT_PATH)
+const createRelayConfigSnapshotStoreForBaseDir = (baseDir: string) => {
+  const storeDir = join(baseDir, '.local', 'plugins', 'relay')
+  const snapshotPath = join(baseDir, ...CONFIG_SNAPSHOT_PATH)
 
   const writeSnapshot = async (snapshot: RelayConfigSnapshot) => {
     const normalizedSnapshot = normalizeRelayConfigSnapshot(snapshot) ?? snapshot
@@ -263,5 +267,70 @@ export const createRelayConfigSnapshotStore = (projectHome: string) => {
     snapshotPath,
     writeSnapshot,
     writeSyncError
+  }
+}
+
+export const createRelayConfigSnapshotStore = (projectHome: string) =>
+  createRelayConfigSnapshotStoreForBaseDir(projectHome)
+
+export const createRelayGlobalConfigSnapshotStore = (
+  env: RelayConfigSnapshotEnv = process.env
+) => createRelayConfigSnapshotStoreForBaseDir(resolveGlobalOneWorksDir(env))
+
+export const readRelayConfigSnapshotWithGlobalFallback = async (params: {
+  env?: RelayConfigSnapshotEnv
+  projectHome: string
+}) => {
+  const globalStore = createRelayGlobalConfigSnapshotStore(params.env)
+  const globalSnapshot = await globalStore.readSnapshot()
+  if (globalSnapshot != null) {
+    return {
+      snapshot: globalSnapshot,
+      snapshotPath: globalStore.snapshotPath,
+      source: 'global' as const
+    }
+  }
+
+  const projectStore = createRelayConfigSnapshotStore(params.projectHome)
+  const projectSnapshot = await projectStore.readSnapshot()
+  return {
+    snapshot: projectSnapshot,
+    snapshotPath: projectStore.snapshotPath,
+    source: 'project' as const
+  }
+}
+
+export const writeRelayConfigSnapshotCaches = async (params: {
+  env?: RelayConfigSnapshotEnv
+  projectHome: string
+  snapshot: RelayConfigSnapshot
+}) => {
+  const projectStore = createRelayConfigSnapshotStore(params.projectHome)
+  const globalStore = createRelayGlobalConfigSnapshotStore(params.env)
+  await Promise.all([
+    projectStore.writeSnapshot(params.snapshot),
+    globalStore.writeSnapshot(params.snapshot)
+  ])
+  return {
+    globalSnapshotPath: globalStore.snapshotPath,
+    snapshotPath: projectStore.snapshotPath
+  }
+}
+
+export const writeRelayConfigSnapshotSyncErrorCaches = async (params: {
+  env?: RelayConfigSnapshotEnv
+  lastError: string
+  projectHome: string
+  sourceServerId?: string
+}) => {
+  const projectStore = createRelayConfigSnapshotStore(params.projectHome)
+  const globalStore = createRelayGlobalConfigSnapshotStore(params.env)
+  await Promise.all([
+    projectStore.writeSyncError(params),
+    globalStore.writeSyncError(params)
+  ])
+  return {
+    globalSnapshotPath: globalStore.snapshotPath,
+    snapshotPath: projectStore.snapshotPath
   }
 }

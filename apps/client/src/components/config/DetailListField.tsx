@@ -14,7 +14,7 @@ import { renderIconRef } from '#~/utils/model-provider-icons'
 
 import { DetailCollectionFieldActions } from './DetailCollectionFieldActions'
 import { ModelServiceProviderQuotaPreview } from './ModelServiceProviderQuotaPreview'
-import type { ConfigDetailRoute } from './configDetail'
+import type { ConfigDetailRoute, DetailCollectionPlaceholderEntry } from './configDetail'
 import { toDetailCollectionEntries } from './configDetail'
 import type { FieldSpec } from './configSchema'
 import { getFieldLabel, getValueByPath, setValueByPath } from './configUtils'
@@ -86,6 +86,7 @@ export const DetailCollectionField = ({
   uiSection,
   creatingModelServiceSessionKey,
   onCreateModelServiceSession,
+  placeholderEntries,
   t
 }: {
   sectionKey: string
@@ -100,6 +101,7 @@ export const DetailCollectionField = ({
   uiSection?: ConfigUiSection
   creatingModelServiceSessionKey?: string | null
   onCreateModelServiceSession?: (request: ModelServiceConfigSessionRequest) => void | Promise<void>
+  placeholderEntries?: DetailCollectionPlaceholderEntry[]
   t: TranslationFn
 }) => {
   const { resolvedThemeMode } = useResolvedThemeMode()
@@ -113,7 +115,8 @@ export const DetailCollectionField = ({
   const items = toDetailCollectionEntries({
     field,
     value,
-    resolvedValue
+    resolvedValue,
+    placeholderEntries
   })
   const detailContext = {
     mergedModelServices,
@@ -201,7 +204,7 @@ export const DetailCollectionField = ({
     itemKey: string
     title: string
     localIndex?: number
-    source: 'local' | 'inherited'
+    source: 'local' | 'inherited' | 'placeholder'
   }) => {
     if (source !== 'local') return null
     if ((detailCollection.summaryControls?.length ?? 0) === 0) return null

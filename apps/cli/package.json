@@ -46,6 +46,7 @@
     "@oneworks/register": "workspace:*",
     "@oneworks/runtime-protocol": "workspace:*",
     "@oneworks/runtime-store": "workspace:*",
+    "@oneworks/server": "workspace:*",
     "@oneworks/types": "workspace:*",
     "@oneworks/utils": "workspace:*",
     "@oneworks/workspace-assets": "workspace:*",

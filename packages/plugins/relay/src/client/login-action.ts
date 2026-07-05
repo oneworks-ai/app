@@ -31,7 +31,7 @@ const readStatus = async (ctx: PluginClientContext): Promise<RelayStatus | null>
   }
 }
 
-export const openRelayLogin = async (
+export const createRelayLoginUrl = async (
   ctx: PluginClientContext,
   input: {
     forcePluginHomeRedirect?: boolean
@@ -62,10 +62,21 @@ export const openRelayLogin = async (
   if (body.loginUrl == null || body.loginUrl.trim() === '') {
     throw new Error('Relay login URL was not returned.')
   }
-  const popup = window.open(body.loginUrl, '_blank', 'noopener,noreferrer')
-  if (popup == null) window.location.href = body.loginUrl
   return {
     loginUrl: body.loginUrl,
     serverId
   }
+}
+
+export const openRelayLogin = async (
+  ctx: PluginClientContext,
+  input: {
+    forcePluginHomeRedirect?: boolean
+    serverId?: string
+  } = {}
+) => {
+  const result = await createRelayLoginUrl(ctx, input)
+  const popup = window.open(result.loginUrl, '_blank', 'noopener,noreferrer')
+  if (popup == null) window.location.href = result.loginUrl
+  return result
 }

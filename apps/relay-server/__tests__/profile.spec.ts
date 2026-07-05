@@ -48,6 +48,7 @@ const internalRuntimePathPrefixes = [
 ]
 
 const currentUserRelayPathPrefixes = [
+  '/api/relay/config/',
   '/api/relay/config-',
   '/api/relay/team-policy',
   '/api/relay/teams'
@@ -233,6 +234,7 @@ describe('relay profile security routes', () => {
       '/api/admin/teams/{teamId}/audit-events',
       '/api/admin/teams/{teamId}/config-profiles',
       '/api/admin/teams/{teamId}/config-secrets',
+      '/api/admin/teams/{teamId}/documents',
       '/api/admin/teams/{teamId}/invitations',
       '/api/admin/teams/{teamId}/members',
       '/api/admin/teams/{teamId}/members/{memberId}',
@@ -268,6 +270,7 @@ describe('relay profile security routes', () => {
       '/api/relay/config-secrets/{secretId}/revoke',
       '/api/relay/config-secrets/{secretId}/rotate',
       '/api/relay/config-snapshot',
+      '/api/relay/config/global',
       '/api/relay/info',
       '/api/relay/team-policy',
       '/api/relay/teams',
@@ -278,6 +281,7 @@ describe('relay profile security routes', () => {
       '/api/relay/teams/{teamId}/audit-events',
       '/api/relay/teams/{teamId}/config-profiles',
       '/api/relay/teams/{teamId}/config-secrets',
+      '/api/relay/teams/{teamId}/documents',
       '/api/relay/teams/{teamId}/invitations',
       '/api/relay/teams/{teamId}/members',
       '/api/relay/teams/{teamId}/members/{memberId}',

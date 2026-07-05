@@ -6,12 +6,17 @@ import type {
 } from '@oneworks/types'
 
 import { buildApiUrl, fetchApiJson } from '#~/api/base'
+import { createServerUrlFromBase, normalizeServerBaseUrl } from '#~/runtime-config'
 
 import type { PluginRuntimeInstance } from './plugin-manifest'
 
 interface PluginListResponse {
   diagnostics?: unknown[]
   plugins?: PluginRuntimeInstance[]
+}
+
+interface PluginApiSourceOptions {
+  serverBaseUrl?: string
 }
 
 export interface PluginReadme extends PluginReadmeVariant {}
@@ -46,8 +51,17 @@ const normalizePluginInstance = (instance: PluginRuntimeInstance): PluginRuntime
   )
 })
 
-export const listPlugins = async () => {
-  const response = await fetchApiJson<PluginListResponse | PluginRuntimeInstance[]>('/api/plugins')
+const createPluginApiUrl = (path: string, serverBaseUrl?: string) => {
+  const normalizedServerBaseUrl = normalizeServerBaseUrl(serverBaseUrl)
+  return normalizedServerBaseUrl == null
+    ? path
+    : createServerUrlFromBase(normalizedServerBaseUrl, path)
+}
+
+export const listPlugins = async (options: PluginApiSourceOptions = {}) => {
+  const response = await fetchApiJson<PluginListResponse | PluginRuntimeInstance[]>(
+    createPluginApiUrl('/api/plugins', options.serverBaseUrl)
+  )
   const plugins = Array.isArray(response) ? response : response.plugins ?? []
   return plugins.map(normalizePluginInstance)
 }

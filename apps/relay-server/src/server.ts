@@ -18,7 +18,7 @@ import {
 } from './routes/config-profiles.js'
 import { handleConfigSecretsRoute, handleTeamConfigSecretsRoute } from './routes/config-secrets.js'
 import { handleRelayConfigSnapshot } from './routes/config-snapshot.js'
-import { handleDeviceHeartbeat, handleDeviceList, handleDeviceRegister } from './routes/devices.js'
+import { handleDeviceHeartbeat, handleDeviceList, handleDeviceRegister, handleDeviceUpdate } from './routes/devices.js'
 import { handleEmailCodeLoginRoute } from './routes/email-code-login.js'
 import { handleEmailVerificationSendRoute } from './routes/email-verification.js'
 import { handleInviteLoginRoute } from './routes/invite-login.js'
@@ -26,14 +26,17 @@ import { handleLoginRoute } from './routes/login.js'
 import { handleRelayMetrics } from './routes/metrics.js'
 import { handlePasskeyRoute } from './routes/passkeys.js'
 import { handlePasswordLoginRoute } from './routes/password-login.js'
+import { handleRelayPersonalConfigRoute } from './routes/personal-config.js'
 import { handleProfileRoute } from './routes/profile.js'
 import { handleRelaySessionsRoute } from './routes/sessions.js'
+import { handleTeamDocumentsRoute } from './routes/team-documents.js'
 import { handleAdminMessagesRoute, handleTeamInvitationActionsRoute } from './routes/team-invitations.js'
 import { handleRelayTeamPolicyRoute } from './routes/team-policy.js'
 import { handleTeamsRoute } from './routes/teams.js'
 import { handleAdminSecurityTokens } from './security/admin-route.js'
 import { attachAuditLogger } from './security/audit.js'
 import { createRelayRateLimiter, sendRateLimitExceeded } from './security/rate-limit.js'
+import { getSessionJobLongPollDeviceId, handleListJobsWithoutStoreLock } from './session-forwarding/job-handlers.js'
 import { setForwardingPayloadRepository } from './session-forwarding/payloads.js'
 import type { RelayStoreRepository } from './storage/repository.js'
 import { createRelayTelemetry } from './telemetry/metrics.js'
@@ -97,6 +100,14 @@ const handleRelayRequestWithStore = async (
   store: RelayStore
 ) => {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
+  if (req.method === 'GET' && url.pathname === '/health') {
+    sendJson(res, 200, { ok: true, version: VERSION }, args.allowOrigin)
+    return
+  }
+  if (req.method === 'GET' && url.pathname === '/api/relay/info') {
+    handleInfo(res, args, store)
+    return
+  }
   const auditLogger = attachAuditLogger(req, res, args, store, storeRepository, url)
 
   try {
@@ -121,14 +132,6 @@ const handleRelayRequestWithStore = async (
     if (await handleAuthRoute(req, res, args, store, storeRepository, url)) {
       return
     }
-    if (req.method === 'GET' && url.pathname === '/health') {
-      sendJson(res, 200, { ok: true, version: VERSION }, args.allowOrigin)
-      return
-    }
-    if (req.method === 'GET' && url.pathname === '/api/relay/info') {
-      handleInfo(res, args, store)
-      return
-    }
     if (url.pathname === '/api/admin/openapi.json') {
       handleRelayAdminOpenApi(req, res, args)
       return
@@ -144,6 +147,9 @@ const handleRelayRequestWithStore = async (
       handleRelayConfigSnapshot(req, res, args, store, url)
       return
     }
+    if (await handleRelayPersonalConfigRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
     if (await handleRelayTeamPolicyRoute(req, res, args, store, storeRepository, url)) {
       return
     }
@@ -151,6 +157,9 @@ const handleRelayRequestWithStore = async (
       return
     }
     if (await handleTeamConfigSecretsRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (await handleTeamDocumentsRoute(req, res, args, store, storeRepository, url)) {
       return
     }
     if (await handleTeamsRoute(req, res, args, store, storeRepository, url)) {
@@ -196,6 +205,11 @@ const handleRelayRequestWithStore = async (
     }
     if (req.method === 'GET' && url.pathname === '/api/relay/devices') {
       handleDeviceList(req, res, args, store)
+      return
+    }
+    if (req.method === 'PATCH' && url.pathname.startsWith('/api/relay/devices/')) {
+      const deviceId = decodeURIComponent(url.pathname.slice('/api/relay/devices/'.length))
+      await handleDeviceUpdate(req, res, args, store, storeRepository, deviceId, telemetry)
       return
     }
     if (await handleRelaySessionsRoute(req, res, args, store, storeRepository, url, telemetry)) {
@@ -250,6 +264,10 @@ export const createRelayHandler = (
     }
 
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
+    if (req.method === 'GET' && url.pathname === '/health') {
+      sendJson(res, 200, { ok: true, version: VERSION }, args.allowOrigin)
+      return
+    }
     const rateLimit = rateLimiter.check(req, url)
     if (!rateLimit.allowed) {
       sendRateLimitExceeded(req, res, args, rateLimit)
@@ -258,6 +276,12 @@ export const createRelayHandler = (
 
     const activeStoreRepository = await loadStoreRepository()
     setForwardingPayloadRepository(activeStoreRepository.forwardingPayloads)
+
+    const longPollDeviceId = getSessionJobLongPollDeviceId(req, url)
+    if (longPollDeviceId != null) {
+      await handleListJobsWithoutStoreLock(req, res, args, activeStoreRepository, url, longPollDeviceId, telemetry)
+      return
+    }
 
     if (activeStoreRepository.withStore != null) {
       await activeStoreRepository.withStore(async (store, requestRepository) => {
