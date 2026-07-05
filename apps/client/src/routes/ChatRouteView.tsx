@@ -113,7 +113,7 @@ export function ChatRouteView({
   projectWorkspaceFolder,
   session,
   sessions = session == null ? [] : [session],
-  sessionActivityLabel,
+  sessionActivityLabel: sessionActivityLabelOverride,
   agentRoomTranscript
 }: {
   headerBreadcrumb?: ChatHeaderBreadcrumb
@@ -181,6 +181,7 @@ export function ChatRouteView({
     sessionWorkspaceChanges,
     queuedMessages,
     interactionRequest,
+    sessionActivityLabel,
     isReady,
     errorState,
     retryConnection,
@@ -240,6 +241,7 @@ export function ChatRouteView({
       modelUnavailable,
       t
     }), [errorState, modelUnavailable, t])
+  const resolvedSessionActivityLabel = sessionActivityLabelOverride ?? sessionActivityLabel
   const handleReferenceWorkspacePaths = (files: ContextPickerFile[]) => {
     if (files.length > 0) {
       setContextReferenceRequest(current => ({ id: (current?.id ?? 0) + 1, files }))
@@ -297,7 +299,7 @@ export function ChatRouteView({
       sessionWorkspaceChanges={sessionWorkspaceChanges}
       historyStatusNotices={historyStatusNotices}
       historyCreationProgress={creationProgress}
-      sessionActivityLabel={sessionActivityLabel}
+      sessionActivityLabel={resolvedSessionActivityLabel}
       queuedMessages={queuedMessages}
       onRetryConnection={retryConnection}
       interactionRequest={interactionRequest}
@@ -384,12 +386,12 @@ export function ChatRouteView({
     queuedMessages,
     recommendedModelOptions,
     retryConnection,
+    resolvedSessionActivityLabel,
     selectedAccount,
     selectedAdapter,
     selectedModel,
     senderFocusRequestId,
     servicePreviewModelOptions,
-    sessionActivityLabel,
     sessionCompactionEvents,
     sessionInfo,
     sessionWorkspaceChanges,

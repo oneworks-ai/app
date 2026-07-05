@@ -76,6 +76,7 @@ pnpm tools desktop-control record-batch launcher-open-workspace-ui-tour \
 - `<name>-poster.png`：首帧 poster。
 - `<name>-stills.json`：按秒切图 manifest，供 agent 逐秒读取关键帧。
 - `stills/second_0000.png`、`stills/second_0001.png` 等：按秒抽取的 PNG 关键帧。
+- 系统 display capture 录屏还会输出 `<name>-cursor-timeline.json` 和 `<name>-cursor-continuity.json`：前者是按帧采样后的完整合成光标轨迹，后者记录单帧位移、速度和事件起点连续性检查结果。`cursor-continuity.ok=false` 时必须 fail-fast，不能交付视频。
 - `frames/` / `segments/`：仅在传 `--keep-frames` 时保留。
 
 交付 Electron / workspace 录屏时，必须同时给出加载耗时分析，不能只贴视频。分析至少包含：
@@ -100,9 +101,19 @@ pnpm tools desktop-control record-batch launcher-open-workspace-ui-tour \
 
 系统 display capture 下的 `recordDuring(durationMs, action)` 里，`durationMs` 只能表示最小录制时长，不能当成硬截止。只要 `action` 仍在点击、等待或切换窗口，recorder 就必须继续录到 action settle；否则 action 结束后的 cursor 事件会落在已关闭的录屏 segment 之后，被压缩到同一时间点，最终视频里会出现鼠标瞬跳。改动这段逻辑时必须保留单测覆盖，并用 10fps 以上抽帧或 cursor 坐标检测检查 launcher -> workspace 切换附近是否连续。
 
+合成光标的初始位置和当前位置必须分开保存。导出的 timeline `initialPoint` 永远是录制开始时的初始位置；每个 cursor event 的 `from` 必须等于上一个事件的 `to`，首个 event 的 `from` 必须等于 `initialPoint`。不要在录制结束后用当前光标位置回填 `initialPoint`，否则视频开头会出现一帧级别的瞬移，`cursor-continuity` 必须能抓出这类问题。
+
+system-display 录屏用 `screencapture -V` 时，命令启动时刻不等于输出视频第一帧；合成光标 timeline 必须补偿 capture startup latency。排查“页面先变化、鼠标后点击”的问题时，用精确帧号抽帧，不要用输入前 `ffmpeg -ss` 的 fast seek 当证据。
+
+合成光标的动作要区分移动、按下和释放：移动到目标后先完整播放按下与释放回弹，留一个很短的 visual-to-input buffer，再触发真实 `mousePressed` / `mouseReleased` 输入事件。很多控件会在 pointer down 阶段切页面，不能只延后 release；否则页面行为仍会先变化、点击动画后补。移动要使用缓入缓出的非线性轨迹，默认操作节奏宁可稍慢也不要像瞬点。优化视频时不要为了压缩总时长把 click / release 动画改成无状态 PNG 叠加。
+
+launcher 打开 workspace 的录制不要把右侧 `.launcher-command-item__enter` 当作主路径。搜索目标目录后点击可见命令行本身，用 `Enter` 执行打开，然后等待 `.workspace-opening-overlay` 或聊天页 ready 足够久。不要在等待太短时立刻移动到右侧 action，也不要在打开开始后补点旧 launcher 目标，否则前一次行点击的异步打开可能在光标移动中生效，视频会表现成“光标没到目标，页面已经打开”。
+
 发布纯 Web 展示素材时优先使用 `demo-video batch`。真实 Electron launcher 打开 workspace 的素材不要用 `demo-video batch url-tour --url .../ui/launcher`，必须使用 `desktop-control record-batch launcher-open-workspace-ui-tour`，这样每个 variant 都有真实 Electron pid、真实 BrowserWindow 和真实系统显示合成。
 
-如果需要录 launcher 打开 workspace 的完整过渡，创建 Electron control session 时不要传 `workspace`。需要证明真实 UI 操作时使用 `launcher-open-workspace-ui-tour`，它会点击“打开项目”并在目录浏览器里逐级选择目标 workspace；需要发送消息并等待回复时使用 `launcher-open-workspace-chat-smoke`。
+如果需要录 launcher 打开 workspace 的完整过渡，创建 Electron control session 时不要传 `workspace`。需要证明真实 UI 操作时使用 `launcher-open-workspace-ui-tour`，它会从 launcher 进入“打开项目”，搜索目标 workspace 绝对路径并打开；需要发送消息并等待回复时使用 `launcher-open-workspace-chat-smoke`。
+
+launcher 打开 workspace 的展示路径应优先使用搜索，而不是滚动目录列表：默认先进入“打开项目”，直接搜索目标目录的绝对路径并打开；搜索仍找不到时才回退目录浏览器逐级选择。只有需要展示“最近项目”能力时，才在 launcher 首页搜索项目名。人类操作视频不要用 `scrollIntoView` 驱动长列表跳动，也不要为了稳定性在开头固定录 2 秒空镜头；应等待 launcher/search input ready 后只保留短视觉缓冲。
 
 录制已有 Electron target 时必须保留目标窗口环境：不要对 renderer 强制 `Emulation.setDeviceMetricsOverride` 或 `prefers-color-scheme`，否则会把真实窗口尺寸 / 主题覆盖成 demo-video 默认值，导致录屏样式和用户看到的 Electron 界面不一致。
 

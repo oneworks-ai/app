@@ -17,6 +17,7 @@ import { DEFAULT_SUPPORTED_PROTOCOL_RANGE, getCurrentProtocolVersion } from '@on
 import type { RuntimeCommand, RuntimeEvent } from '@oneworks/runtime-protocol'
 import type {
   AdapterErrorData,
+  AdapterOperationData,
   AdapterOutputEvent,
   AdapterQueryOptions,
   AskUserQuestionParams,
@@ -149,6 +150,39 @@ const buildAdapterCliPrepareRuntimeEvent = (params: {
     title: 'Preparing adapter CLI',
     message: params.message,
     ...(params.adapter != null ? { adapter: params.adapter } : {})
+  }
+}
+
+const buildAdapterOperationRuntimeEvent = (params: {
+  adapter?: string
+  data: AdapterOperationData
+  runId: string
+  sequence: number
+  sessionId: string
+}): RuntimeEvent => {
+  const status = params.data.type === 'operation_started'
+    ? 'running'
+    : params.data.type === 'operation_completed'
+    ? 'completed'
+    : 'failed'
+
+  return {
+    protocolVersion: getCurrentProtocolVersion(),
+    supportedProtocolRange: DEFAULT_SUPPORTED_PROTOCOL_RANGE,
+    id: `operation:${params.runId}:${params.sequence}:${params.data.operationId}:${params.data.type}`,
+    seq: 0,
+    ts: Date.now(),
+    sessionId: params.sessionId,
+    type: params.data.type,
+    operationId: params.data.operationId,
+    runId: params.runId,
+    visibility: 'system',
+    status,
+    title: params.data.title,
+    message: params.data.message,
+    summary: params.data.summary ?? params.data.message,
+    ...(params.data.error != null ? { error: params.data.error } : {}),
+    ...((params.data.adapter ?? params.adapter) != null ? { adapter: params.data.adapter ?? params.adapter } : {})
   }
 }
 
@@ -737,6 +771,7 @@ export async function startAdapterSession(
     const runId = uuidv4()
     activeAdapterRunStore.set(sessionId, runId)
     let adapterCliPrepareOperationActive = false
+    let adapterOperationSequence = 0
 
     const emitAdapterCliPrepareOperation = (
       type: 'operation_started' | 'operation_completed' | 'operation_failed',
@@ -971,6 +1006,21 @@ export async function startAdapterSession(
                 })
               }
               break
+            case 'operation': {
+              const runtimeEvent = buildAdapterOperationRuntimeEvent({
+                adapter: resolvedAdapter ?? options.adapter,
+                data: event.data,
+                runId,
+                sequence: ++adapterOperationSequence,
+                sessionId
+              })
+              const wsEvent: WSEvent = {
+                type: 'adapter_event',
+                data: { runtimeEvent }
+              }
+              applyEvent(wsEvent)
+              break
+            }
             case 'context_compaction':
               applyEvent({
                 type: 'adapter_event',

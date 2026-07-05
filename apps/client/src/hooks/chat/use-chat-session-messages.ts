@@ -106,6 +106,8 @@ type RuntimeFlatMessageEvent = {
   ts?: unknown
 }
 
+type SessionOperationEventInput = WSEvent | RuntimeFlatMessageEvent
+
 interface MessageEventContext {
   agentRoom?: ChatMessage['agentRoom']
 }
@@ -179,6 +181,14 @@ const getMessageAgentRoomMetadata = (
 )
 
 const getNestedRuntimeEvent = (data: WSEvent): Record<string, unknown> | undefined => {
+  if (
+    data.type === 'operation_started' ||
+    data.type === 'operation_completed' ||
+    data.type === 'operation_failed'
+  ) {
+    return data as unknown as Record<string, unknown>
+  }
+
   if (data.type !== 'adapter_event' || !isRecord(data.data)) {
     return undefined
   }
@@ -228,10 +238,28 @@ const getSessionOperationInfoFromEvent = (
   }
 }
 
+export const shouldClearSessionOperationForMessage = (data: SessionOperationEventInput) => {
+  if (data.type !== 'message') {
+    return false
+  }
+  if (isRuntimeFlatMessageEvent(data)) {
+    return data.role === 'assistant'
+  }
+  return data.message.role === 'assistant'
+}
+
 export const applySessionOperationEvent = (
   current: ChatSessionOperationInfo | null,
-  data: WSEvent
+  data: SessionOperationEventInput
 ) => {
+  if (shouldClearSessionOperationForMessage(data)) {
+    return null
+  }
+
+  if (isRuntimeFlatMessageEvent(data)) {
+    return current
+  }
+
   const operation = getSessionOperationInfoFromEvent(data)
   if (operation == null) {
     return current
@@ -242,7 +270,7 @@ export const applySessionOperationEvent = (
   return current?.operationId === operation.operationId ? null : current
 }
 
-export const restoreSessionOperationInfoFromHistoryEvents = (events: WSEvent[]) => {
+export const restoreSessionOperationInfoFromHistoryEvents = (events: SessionOperationEventInput[]) => {
   return events.reduce<ChatSessionOperationInfo | null>(applySessionOperationEvent, null)
 }
 
@@ -339,6 +367,10 @@ export const shouldRefreshHistoryForSessionUpdate = (
     updatedSession.lastMessage !== currentSession.lastMessage ||
     updatedSession.messageCount !== currentSession.messageCount
 }
+
+export const shouldUseOptimisticSessionOnlyView = (
+  optimisticCreation: OptimisticSessionCreation | undefined
+): optimisticCreation is OptimisticSessionCreation & { status: 'failed' } => optimisticCreation?.status === 'failed'
 
 const getHistoryRefreshRetryDelay = (retryAttempt: number) => 800 * 2 ** retryAttempt
 
@@ -805,20 +837,18 @@ export function useChatSessionMessages({
       return
     }
 
-    if (optimisticCreation != null) {
+    if (shouldUseOptimisticSessionOnlyView(optimisticCreation)) {
       clearScheduledReconciles()
       historyRequestSeqRef.current += 1
       appliedHistoryRequestSeqRef.current = historyRequestSeqRef.current
       clearScheduledHistoryRetries()
       const nextMessages = [optimisticCreation.message]
-      const nextErrorState = optimisticCreation.status === 'failed'
-        ? {
-          action: 'retry-session-creation',
-          code: 'session_create_failed',
-          kind: 'session',
-          message: optimisticCreation.errorMessage ?? t('chat.sessionCreateFailedMessage')
-        } satisfies ChatErrorState
-        : null
+      const nextErrorState = {
+        action: 'retry-session-creation',
+        code: 'session_create_failed',
+        kind: 'session',
+        message: optimisticCreation.errorMessage ?? t('chat.sessionCreateFailedMessage')
+      } satisfies ChatErrorState
 
       interactionRequestRef.current = null
       setInteractionRequest(null)
@@ -918,7 +948,7 @@ export function useChatSessionMessages({
       lastObservedSessionStatusRef.current = undefined
       return
     }
-    if (optimisticCreation != null) {
+    if (shouldUseOptimisticSessionOnlyView(optimisticCreation)) {
       lastObservedSessionStatusRef.current = session.status
       return
     }
@@ -940,7 +970,7 @@ export function useChatSessionMessages({
     if (session?.id == null || session.id === '') {
       return
     }
-    if (optimisticCreation != null) {
+    if (shouldUseOptimisticSessionOnlyView(optimisticCreation)) {
       expectedCloseRef.current = true
       fatalSessionErrorRef.current = false
       connectionManager.close(session.id)
@@ -1086,16 +1116,15 @@ export function useChatSessionMessages({
             return
           }
 
-          if (data.type === 'adapter_event') {
-            const nextOperationInfo = applySessionOperationEvent(sessionOperationInfoRef.current, data)
-            if (nextOperationInfo !== sessionOperationInfoRef.current) {
-              applySessionOperationInfo(nextOperationInfo, session.id)
-            }
+          const nextOperationInfo = applySessionOperationEvent(sessionOperationInfoRef.current, data)
+          if (nextOperationInfo !== sessionOperationInfoRef.current) {
+            applySessionOperationInfo(nextOperationInfo, session.id)
           }
 
           if (data.type === 'message') {
             const message = getChatMessageFromSessionHistoryEvent(data)
             if (message?.role === 'assistant') {
+              applySessionOperationInfo(null, session.id)
               updateSessionCompactionEvents(markSessionCompactionsCompressed)
             }
             setMessagesFromHistory((current) => applyMessageEvent(current, data))

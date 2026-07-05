@@ -150,6 +150,7 @@ fatal error 不只是“打印出来”，还必须保证：
 - 最像线上真实问题的是流损坏和断流，不是普通 400
 - `mock-malformed-stream` 比 `mock-incomplete-max-output` 更有调试价值
 - 观察点除了 `error` event，还要看 stderr 里的 retry 日志
+- 首轮长时间停在“正在思考”时，先区分 One Works runtime event 和 Codex 私有日志：`runtime/sessions/<sessionId>/events.jsonl` 只会驱动 UI；Codex 内部 sqlite / stderr 只能作为调试证据，不能直接暴露给界面。adapter 应把安全阶段摘要桥接成 `operation_started` / `operation_completed` / `operation_failed`，例如 app-server initialize、thread start / resume、turn start 和 response wait。
 
 ### Claude Code
 

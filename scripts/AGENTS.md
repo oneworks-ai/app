@@ -53,6 +53,10 @@
   - 不要在正式 batch 入口使用 `system-window`、窗口级 ScreenCaptureKit、固定 region crop、CDP 截帧、假圆角合成或只有壁纸的 display capture；这些都会重新引入 traffic light、圆角、桌面占用或错误画面问题
   - 不要用 `demo-video batch url-tour --url .../ui/launcher --page-background ...` 代替这个入口；那只录 Web renderer，不能跟随真实 Electron workspace BrowserWindow，也无法保证窗口位置 / bounds 一致
   - 系统 display capture 的 `recordDuring(durationMs, action)` 里，`durationMs` 是最小录制窗口，不是 action 的硬截止；action 未结束时必须继续录，否则 cursor 事件会跑到 segment 外并在视频里表现为鼠标瞬跳。改动后用抽帧 / 坐标检测检查 launcher -> workspace 切换处的光标连续性
+  - 系统 display capture 录屏必须输出 `<name>-cursor-timeline.json` 和 `<name>-cursor-continuity.json`；`cursor-continuity.ok=false` 时必须失败，不能交付视频。光标 `initialPoint` 是录制开始的初始位置，不要用录制结束后的当前位置回填
+  - system-display 的 `screencapture -V` 命令启动时间不等于输出视频第一帧；cursor timeline 要补偿 capture startup latency。验证时按帧号精确抽帧，不要用输入前 `ffmpeg -ss` fast seek 判断点击时序
+  - 合成光标必须区分移动、按下、释放：移动到目标后先完整播放按下与释放回弹，留一个很短的 visual-to-input buffer，再触发真实 `mousePressed` / `mouseReleased` 输入事件。很多控件会在 pointer down 阶段切页面，不能只延后 release；不要让页面行为先变化、点击动画后补，也不要把完整反馈全部放在业务行为之后
+  - launcher 打开 workspace 的展示路径默认先点“打开项目”，再搜索目标目录绝对路径，点击可见命令行本身，用 `Enter` 执行打开，然后等待 `.workspace-opening-overlay` 或聊天页 ready。不要把右侧 `.launcher-command-item__enter` 当作视频主路径，也不要在等待太短时立刻移动到右侧 action，否则前一次点击的异步打开可能在光标移动中生效，看起来像页面先于鼠标动作打开。打开已经开始后不能再补点旧 launcher 目标。找不到时才回退目录浏览。只有要展示最近项目能力时才先搜索项目名。不要用固定开头空等或 `scrollIntoView` 长列表跳动来制造“可见操作”
   - 交付 Electron / workspace 录屏时必须同步加载耗时分析：至少说明录制器启动、app spawn 到首窗、workspace server ready、renderer/chat ready、runtime package cache 命中状态，以及 stills / 抽帧是否证明已进入对话界面
 - `pnpm tools chrome-debug targets [--port 9222]`
   - 查看本机 Chrome DevTools 目标页，确认当前 remote debugging 端口上有哪些页面

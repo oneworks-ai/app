@@ -1228,6 +1228,12 @@ export const runDesktopControlRecordBatch = async (
     for (const variant of variants) {
       stdout.write(`[desktop-control] ${variant.variantId} video=${variant.result.videoPath}\n`)
       stdout.write(`[desktop-control] ${variant.variantId} stills=${variant.result.stillsManifestPath}\n`)
+      if (variant.result.cursorTimelinePath != null) {
+        stdout.write(`[desktop-control] ${variant.variantId} cursorTimeline=${variant.result.cursorTimelinePath}\n`)
+      }
+      if (variant.result.cursorContinuityPath != null) {
+        stdout.write(`[desktop-control] ${variant.variantId} cursorContinuity=${variant.result.cursorContinuityPath}\n`)
+      }
     }
     return batchResult
   } finally {

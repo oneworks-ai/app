@@ -138,6 +138,7 @@
 - 普通 PR / main / workflow_dispatch artifact 必须继续使用 `One Works Dev` 与 `ai.oneworks.desktop.dev`，否则下载到开发机后会覆盖正式 `/Applications/One Works.app`。只有 `pkg/oneworks-desktop/v*` release 或手动 release 输入允许设置 `ONEWORKS_DESKTOP_RELEASE_BUILD=true`。
 - `pnpm -C apps/desktop smoke:package` 只证明 prepackaged app 内的 server 能启动；它不能证明 `.dmg` 内容、安装复制路径、bundle metadata、构建来源元数据或安装后的资源路径正确。安装产物验证要跑 `pnpm -C apps/desktop verify:macos-install`，并在需要时从下载的 artifact 目录执行。
 - GitHub Actions 可能提示 Node.js 20 actions deprecation。该 warning 不影响当前 macOS DMG 验证结果，但后续升级 `actions/checkout`、`actions/setup-node`、`actions/upload-artifact` 或 `pnpm/action-setup` 时要重新跑 desktop-package workflow。
+- `smoke:package` 之后 pnpm 可能把 `apps/desktop/node_modules` 重建成 production-only，导致后续 `make:from-package` 找不到 `electron-builder`。如果 CI 顺序保持 smoke 在 make 前，make 前必须先用 `pnpm install --frozen-lockfile --prod=false` 恢复 devDependencies；否则就把 make 放到 smoke 前。
 
 ## 常见坑位
 

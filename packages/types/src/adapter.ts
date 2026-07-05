@@ -33,9 +33,26 @@ export interface AdapterSessionUpdateData {
   title?: string
 }
 
+export type AdapterOperationEventType =
+  | 'operation_started'
+  | 'operation_completed'
+  | 'operation_failed'
+
+export interface AdapterOperationData {
+  adapter?: string
+  error?: string
+  message?: string
+  operationId: string
+  status?: string
+  summary?: string
+  title?: string
+  type: AdapterOperationEventType
+}
+
 export type AdapterOutputEvent =
   | { type: 'init'; data: SessionInitInfo }
   | { type: 'context_compaction'; data: AdapterContextCompactionData }
+  | { type: 'operation'; data: AdapterOperationData }
   | { type: 'session_update'; data: AdapterSessionUpdateData }
   | { type: 'summary'; data: SessionSummaryInfo }
   | { type: 'message'; data: ChatMessage }

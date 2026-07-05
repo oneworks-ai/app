@@ -1859,7 +1859,8 @@
       "transcribeFailed": "Speech recognition failed"
     },
     "sessionOperation": {
-      "adapterCliPrepare": "Checking adapter CLI…"
+      "adapterCliPrepare": "Checking adapter CLI…",
+      "codexStartup": "Starting Codex service…"
     },
     "stop": "Stop",
     "result": "Result",

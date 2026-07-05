@@ -57,6 +57,8 @@ export interface DemoVideoRecordOptions {
 
 export interface DemoVideoRecordResult {
   colorScheme: DemoVideoColorScheme
+  cursorContinuityPath?: string
+  cursorTimelinePath?: string
   durationMs: number
   fps: number
   frameCount: number
@@ -130,6 +132,7 @@ export interface DemoVideoScenarioContext {
   requireWorkspace: () => string
   requireUrl: () => string
   resolveUrl: (path: string) => string
+  selectTextInSelector: (selector: string, options?: DemoVideoTextOptions) => Promise<void>
   typeText: (text: string, options?: DemoVideoTypeOptions) => Promise<void>
   waitForText: (text: string, options?: DemoVideoTextOptions) => Promise<void>
 }

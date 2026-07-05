@@ -1860,7 +1860,8 @@
       "transcribeFailed": "语音识别失败"
     },
     "sessionOperation": {
-      "adapterCliPrepare": "正在检查适配器 CLI…"
+      "adapterCliPrepare": "正在检查适配器 CLI…",
+      "codexStartup": "正在启动 Codex 服务…"
     },
     "stop": "停止",
     "result": "结果",

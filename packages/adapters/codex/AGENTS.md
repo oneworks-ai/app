@@ -113,6 +113,7 @@ Codex maintenance notes:
 - when native hooks are active, bridge duplicates must stay disabled in `packages/task/src/run.ts`
 - Codex native `PreToolUse` / `PostToolUse` should be treated as Bash-first until official coverage expands; transcript JSONL can supplement non-Bash analytics, but it cannot block or rewrite the live session
 - Codex stream app-server now surfaces `contextCompaction`; we map that to unified `PreCompact` as a bridge-only observation with `canBlock: false`
+- Codex app-server may spend tens of seconds in first-turn startup, remote plugin / MCP setup, or ChatGPT connection retry before any assistant text arrives. Do not leave this only in Codex private sqlite logs: stream mode should emit safe adapter `operation` events for user-visible phases, while raw Codex logs remain debug-only because they can include local paths or account/request details.
 
 Relevant official docs:
 
