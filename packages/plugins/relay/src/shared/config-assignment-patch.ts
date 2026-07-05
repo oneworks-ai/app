@@ -1,8 +1,9 @@
 /* eslint-disable max-lines -- Relay config patch normalization and merging share one contract module. */
-import { RELAY_CONFIG_SAFE_FIELDS } from './config-assignment-types.js'
+import { RELAY_CONFIG_SAFE_FIELDS, RELAY_TEAM_CONFIG_SAFE_FIELDS } from './config-assignment-types.js'
 import type { RelayConfigPatch, RelayConfigSafeField } from './config-assignment-types.js'
 
 const SAFE_FIELD_SET = new Set<string>(RELAY_CONFIG_SAFE_FIELDS)
+const TEAM_SAFE_FIELD_SET = new Set<string>(RELAY_TEAM_CONFIG_SAFE_FIELDS)
 
 export const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -66,6 +67,15 @@ export const normalizeRelayConfigSafeFields = (
 ): RelayConfigSafeField[] => {
   const fields = normalizeRelayConfigStringList(value)
     ?.filter((field): field is RelayConfigSafeField => SAFE_FIELD_SET.has(field)) ?? [...RELAY_CONFIG_SAFE_FIELDS]
+  return unique(fields)
+}
+
+export const normalizeRelayTeamConfigSafeFields = (
+  value: unknown
+): RelayConfigSafeField[] => {
+  const fields = normalizeRelayConfigStringList(value)
+    ?.filter((field): field is RelayConfigSafeField => TEAM_SAFE_FIELD_SET.has(field)) ??
+    [...RELAY_TEAM_CONFIG_SAFE_FIELDS]
   return unique(fields)
 }
 
@@ -135,6 +145,82 @@ const normalizeArrayOrRecordField = (value: unknown): unknown[] | Record<string,
   return undefined
 }
 
+const normalizeNumber = (value: unknown) => (
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined
+)
+
+const normalizeCodexInlineAuth = (value: unknown): Record<string, unknown> | undefined => {
+  if (!isRecord(value)) return undefined
+  const type = normalizeText(value.type)
+  const encoding = normalizeText(value.encoding)
+  const token = normalizeText(value.token)
+  if (
+    token == null ||
+    (type != null && type !== 'codex-auth-json') ||
+    encoding !== 'base64'
+  ) {
+    return undefined
+  }
+  return {
+    ...(type == null ? {} : { type }),
+    encoding,
+    token
+  }
+}
+
+const normalizeCodexAccount = (value: unknown): Record<string, unknown> | undefined => {
+  if (!isRecord(value)) return undefined
+  const auth = normalizeCodexInlineAuth(value.auth)
+  const quota = sanitizeRelayConfigValue(value.quota)
+  const account: Record<string, unknown> = {
+    ...(normalizeText(value.title) == null ? {} : { title: normalizeText(value.title) }),
+    ...(normalizeText(value.description) == null ? {} : { description: normalizeText(value.description) }),
+    ...(normalizeText(value.email) == null ? {} : { email: normalizeText(value.email) }),
+    ...(normalizeText(value.planType) == null ? {} : { planType: normalizeText(value.planType) }),
+    ...(normalizeText(value.accountType) == null ? {} : { accountType: normalizeText(value.accountType) }),
+    ...(normalizeText(value.accountId) == null ? {} : { accountId: normalizeText(value.accountId) }),
+    ...(normalizeText(value.organizationId) == null ? {} : { organizationId: normalizeText(value.organizationId) }),
+    ...(normalizeText(value.organizationTitle) == null
+      ? {}
+      : { organizationTitle: normalizeText(value.organizationTitle) }),
+    ...(normalizeText(value.organizationRole) == null
+      ? {}
+      : { organizationRole: normalizeText(value.organizationRole) }),
+    ...(normalizeText(value.source) == null ? {} : { source: normalizeText(value.source) }),
+    ...(normalizeNumber(value.createdAt) == null ? {} : { createdAt: normalizeNumber(value.createdAt) }),
+    ...(normalizeNumber(value.updatedAt) == null ? {} : { updatedAt: normalizeNumber(value.updatedAt) }),
+    ...(normalizeText(value.authDigest) == null ? {} : { authDigest: normalizeText(value.authDigest) }),
+    ...(isRecord(quota) || Array.isArray(quota) ? { quota } : {}),
+    ...(auth == null ? {} : { auth })
+  }
+  return Object.keys(account).length > 0 ? account : undefined
+}
+
+const normalizeCodexAccounts = (value: unknown): Record<string, unknown> | undefined => {
+  if (!isRecord(value)) return undefined
+  const accounts = Object.fromEntries(
+    Object.entries(value)
+      .map(([key, account]) => [normalizeText(key), normalizeCodexAccount(account)] as const)
+      .filter((entry): entry is [string, Record<string, unknown>] => entry[0] != null && entry[1] != null)
+  )
+  return Object.keys(accounts).length > 0 ? accounts : undefined
+}
+
+const normalizeCodexAdapter = (value: unknown): Record<string, unknown> | undefined => {
+  if (!isRecord(value)) return undefined
+  const accounts = normalizeCodexAccounts(value.accounts)
+  const adapter = {
+    ...(accounts == null ? {} : { accounts })
+  }
+  return Object.keys(adapter).length > 0 ? adapter : undefined
+}
+
+const normalizeAdapters = (value: unknown): Record<string, unknown> | undefined => {
+  if (!isRecord(value)) return undefined
+  const codex = normalizeCodexAdapter(value.codex)
+  return codex == null ? undefined : { codex }
+}
+
 export const filterRelayConfigPatch = (
   patch: RelayConfigPatch | undefined,
   allowedFields?: RelayConfigSafeField[]
@@ -143,9 +229,9 @@ export const filterRelayConfigPatch = (
 
   const allowed = new Set(allowedFields ?? RELAY_CONFIG_SAFE_FIELDS)
   const filtered: RelayConfigPatch = {}
-  const defaultModelService = normalizeText(patch.defaultModelService)
-  if (allowed.has('defaultModelService') && defaultModelService != null) {
-    filtered.defaultModelService = defaultModelService
+  const adapters = normalizeAdapters(patch.adapters)
+  if (allowed.has('adapters') && adapters != null) {
+    filtered.adapters = adapters
   }
   const modelServices = normalizeModelServices(patch.modelServices)
   if (allowed.has('modelServices') && modelServices != null) {
@@ -195,6 +281,26 @@ const mergeArrayOrRecordField = (
   return right ?? left
 }
 
+const mergeAdaptersField = (
+  left: RelayConfigPatch['adapters'],
+  right: RelayConfigPatch['adapters']
+) => {
+  const leftCodex = isRecord(left?.codex) ? left.codex : undefined
+  const rightCodex = isRecord(right?.codex) ? right.codex : undefined
+  if (leftCodex == null && rightCodex == null) return right ?? left
+  const leftAccounts = isRecord(leftCodex?.accounts) ? leftCodex.accounts : undefined
+  const rightAccounts = isRecord(rightCodex?.accounts) ? rightCodex.accounts : undefined
+  return {
+    codex: {
+      ...(
+        leftAccounts == null && rightAccounts == null
+          ? {}
+          : { accounts: { ...(leftAccounts ?? {}), ...(rightAccounts ?? {}) } }
+      )
+    }
+  }
+}
+
 export const mergeRelayConfigPatches = (
   left: RelayConfigPatch | undefined,
   right: RelayConfigPatch | undefined
@@ -205,6 +311,9 @@ export const mergeRelayConfigPatches = (
   const merged: RelayConfigPatch = { ...left, ...right }
   if (left.modelServices != null || right.modelServices != null) {
     merged.modelServices = { ...(left.modelServices ?? {}), ...(right.modelServices ?? {}) }
+  }
+  if (left.adapters != null || right.adapters != null) {
+    merged.adapters = mergeAdaptersField(left.adapters, right.adapters)
   }
   if (left.recommendedModels != null || right.recommendedModels != null) {
     merged.recommendedModels = [...(left.recommendedModels ?? []), ...(right.recommendedModels ?? [])]

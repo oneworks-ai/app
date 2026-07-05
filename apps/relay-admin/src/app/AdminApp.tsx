@@ -64,7 +64,9 @@ const getUserDetailIdFromPath = (pathname: string) => {
 }
 
 const getTeamDetailIdFromPath = (pathname: string) => {
-  const match = /^\/teams\/([^/]+)(?:\/(?:audit|groups|members|profiles|secrets)(?:\/[^/]+)?)?$/.exec(pathname)
+  const match = /^\/teams\/([^/]+)(?:\/(?:audit|documents|groups|members|profiles|secrets)(?:\/[^/]+)?)?$/.exec(
+    pathname
+  )
   return match == null ? undefined : decodeURIComponent(match[1])
 }
 
@@ -811,6 +813,12 @@ export const AdminApp = () => {
                       sectionId='team-access-group-editor'
                     />
                   )
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
+                path='teams/:teamId/:tabKey/:profileId'
+                element={canRenderSection('teams')
+                  ? <AdminDashboard dashboard={dashboard} sectionId='team-detail' />
                   : <Navigate to='/devices' replace />}
               />
               <Route

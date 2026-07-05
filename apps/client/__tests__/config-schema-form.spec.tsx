@@ -179,6 +179,73 @@ describe('config schema form', () => {
     expect(html).toContain('config-view__detail-list')
   })
 
+  it('renders built-in adapter placeholders after configured adapter entries', () => {
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='adapters'
+        value={{
+          'custom-adapter': {
+            defaultModel: 'gpt-5.4'
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('Custom Adapter')
+    expect(html).toContain('Codex')
+    expect(html.indexOf('Custom Adapter')).toBeLessThan(html.indexOf('Codex'))
+  })
+
+  it('opens an unconfigured built-in adapter placeholder as an editable detail page', () => {
+    const uiSection: ConfigUiSection = {
+      key: 'adapters',
+      kind: 'recordMap',
+      recordMap: {
+        mode: 'keyed',
+        keyPlaceholder: 'Adapter key',
+        schemas: {
+          codex: {
+            fields: [
+              {
+                path: ['experimentalApi'],
+                type: 'boolean',
+                label: 'Experimental API',
+                defaultValue: false
+              }
+            ]
+          }
+        },
+        unknownSchema: {
+          fields: []
+        }
+      }
+    }
+
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='adapters'
+        uiSection={uiSection}
+        value={{}}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={{
+          kind: 'detailCollectionItem',
+          fieldPath: [],
+          itemKey: 'codex'
+        }}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('Experimental API')
+    expect(html).not.toContain('config.detail.inheritedReadonly')
+  })
+
   it('renders a schema-driven adapter detail route as a second-level config page', () => {
     const uiSection: ConfigUiSection = {
       key: 'adapters',

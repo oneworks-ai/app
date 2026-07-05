@@ -10,7 +10,7 @@ import {
 import { createRelayDeviceStore } from './server/store.js'
 import { RELAY_CONFIG_SAFE_FIELDS, resolveRelayConfigPatchForProject } from './shared/config-assignment.js'
 import type { RelayConfigPatch, RelayConfigSnapshot } from './shared/config-assignment.js'
-import { createRelayConfigSnapshotStore } from './shared/config-cache.js'
+import { createRelayConfigSnapshotStore, readRelayConfigSnapshotWithGlobalFallback } from './shared/config-cache.js'
 import { decryptRelayConfigSnapshotSecretEnvelope } from './shared/config-secrets.js'
 
 interface RelayPluginConfigHookContext {
@@ -23,7 +23,7 @@ interface RelayPluginConfigHookContext {
 }
 
 interface RelaySafeConfig {
-  defaultModelService?: string
+  adapters?: Record<string, unknown>
   marketplaces?: Record<string, unknown>
   modelServices?: Record<string, unknown>
   plugins?: unknown[] | Record<string, unknown>
@@ -75,11 +75,11 @@ const toConfig = (
   if (patch == null) return undefined
 
   const config: RelaySafeConfig = {}
+  if (isRecord(patch.adapters)) {
+    config.adapters = patch.adapters
+  }
   if (isRecord(patch.modelServices)) {
     config.modelServices = patch.modelServices
-  }
-  if (typeof patch.defaultModelService === 'string' && patch.defaultModelService.trim() !== '') {
-    config.defaultModelService = patch.defaultModelService
   }
   if (Array.isArray(patch.recommendedModels)) {
     config.recommendedModels = patch.recommendedModels
@@ -198,7 +198,10 @@ export const resolveConfig = async (context: RelayPluginConfigHookContext) => {
   const workspaceFolder = resolveWorkspaceFolder(context)
   const projectHome = resolveProjectHomePath(workspaceFolder, context.env)
   const snapshotStore = createRelayConfigSnapshotStore(projectHome)
-  const snapshot = await snapshotStore.readSnapshot()
+  const { snapshot } = await readRelayConfigSnapshotWithGlobalFallback({
+    env: context.env,
+    projectHome
+  })
   if (snapshot == null) return undefined
 
   const store = await createRelayDeviceStore(projectHome).readStore()

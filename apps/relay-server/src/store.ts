@@ -16,8 +16,10 @@ import {
 } from './config-profiles.js'
 import { normalizeRelayConfigAssignment } from './config-snapshot.js'
 import { hashDeviceToken } from './devices/private-metadata.js'
+import { normalizeRelayPersonalConfigSnapshot } from './personal-config.js'
 import { sanitizeRelayStorageValue } from './storage/content-boundary.js'
 import { normalizeRelaySsoProviders } from './storage/sso-providers.js'
+import { normalizeRelayTeamDocumentSnapshot } from './team-documents.js'
 import { normalizeRelayTeamPolicy, normalizeTeamRole } from './teams.js'
 import type {
   RelayAccessToken,
@@ -47,9 +49,11 @@ import type {
   RelayPasskeyChallenge,
   RelayPasskeyChallengeKind,
   RelayPasskeyCredential,
+  RelayPersonalConfigSnapshot,
   RelaySession,
   RelayStore,
   RelayTeam,
+  RelayTeamDocumentSnapshot,
   RelayTeamInvitation,
   RelayTeamInvitationStatus,
   RelayTeamMember,
@@ -64,6 +68,8 @@ const defaultStore = (): RelayStore => ({
   openApiAuditEvents: [],
   configAssignments: [],
   configProfileAssignments: [],
+  personalConfigSnapshots: [],
+  teamDocumentSnapshots: [],
   configSecrets: [],
   configProfileVersions: [],
   configProfiles: [],
@@ -528,6 +534,7 @@ const normalizeDevice = (value: Record<string, unknown>): RelayDevice => {
   return {
     id: typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : randomUUID(),
     userId: typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined,
+    ...(typeof value.alias === 'string' && value.alias.trim() !== '' ? { alias: value.alias.trim() } : {}),
     ...(typeof value.name === 'string' && value.name.trim() !== '' ? { name: value.name.trim() } : {}),
     ...(isRecord(value.capabilities) ? { capabilities: value.capabilities } : {}),
     ...(typeof value.workspaceFolder === 'string' ? { workspaceFolder: value.workspaceFolder } : {}),
@@ -552,6 +559,9 @@ const normalizeDeviceSession = (value: Record<string, unknown>): RelayDeviceSess
     userId: typeof value.userId === 'string' && value.userId.trim() !== '' ? value.userId.trim() : undefined,
     title: typeof value.title === 'string' && value.title.trim() !== '' ? value.title.trim() : id,
     state: typeof value.state === 'string' && value.state.trim() !== '' ? value.state.trim() : undefined,
+    workspaceFolder: typeof value.workspaceFolder === 'string' && value.workspaceFolder.trim() !== ''
+      ? value.workspaceFolder.trim()
+      : undefined,
     lastActiveAt: typeof value.lastActiveAt === 'string' && value.lastActiveAt.trim() !== ''
       ? value.lastActiveAt.trim()
       : undefined,
@@ -876,6 +886,16 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
       ? store.configProfileAssignments.filter(isRecord).map(normalizeRelayConfigProfileAssignment).filter((
         value
       ): value is RelayConfigProfileAssignment => value != null)
+      : [],
+    personalConfigSnapshots: Array.isArray(store.personalConfigSnapshots)
+      ? store.personalConfigSnapshots.filter(isRecord).map(normalizeRelayPersonalConfigSnapshot).filter((
+        value
+      ): value is RelayPersonalConfigSnapshot => value != null)
+      : [],
+    teamDocumentSnapshots: Array.isArray(store.teamDocumentSnapshots)
+      ? store.teamDocumentSnapshots.filter(isRecord).map(normalizeRelayTeamDocumentSnapshot).filter((
+        value
+      ): value is RelayTeamDocumentSnapshot => value != null)
       : [],
     configSecrets: Array.isArray(store.configSecrets)
       ? store.configSecrets.filter(isRecord).map(normalizeConfigSecret).filter((

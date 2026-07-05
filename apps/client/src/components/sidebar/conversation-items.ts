@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- sidebar item derivation keeps session grouping, room rows, and plugin matchers together. */
-import type { AgentRoom, AgentRoomDetailResponse, Session } from '@oneworks/core'
+import type { AgentRoom, AgentRoomDetailResponse, AgentRoomSummary, Session } from '@oneworks/core'
 
 import type { SidebarSessionSortOrder } from '#~/hooks/use-sidebar-query-state'
 import type { PluginContributionSessionGroup } from '#~/plugins/plugin-manifest'
@@ -48,15 +48,20 @@ export const resolveConversationItemPath = (item: SidebarConversationItem) => (
 )
 
 export const toSidebarRoomItem = (
-  room: AgentRoom,
+  room: AgentRoom | AgentRoomSummary,
   detail?: AgentRoomDetailResponse
 ): SidebarRoomItem => {
   const runSessionIds = detail?.runs.map(run => run.sessionId) ?? []
+  const summary = 'sessionIds' in room ? room : undefined
   return {
     ...room,
-    activeRunCount: detail?.members.reduce((count, member) => count + member.activeRunCount, 0) ?? 0,
-    pendingCount: detail?.members.reduce((count, member) => count + member.pendingCount, 0) ?? 0,
-    sessionIds: [
+    activeRunCount: summary?.activeRunCount ??
+      detail?.members.reduce((count, member) => count + member.activeRunCount, 0) ??
+      0,
+    pendingCount: summary?.pendingCount ??
+      detail?.members.reduce((count, member) => count + member.pendingCount, 0) ??
+      0,
+    sessionIds: summary?.sessionIds ?? [
       ...(room.hostSessionId != null ? [room.hostSessionId] : []),
       ...runSessionIds
     ]

@@ -1,4 +1,4 @@
-import { parseExpression } from 'cron-parser'
+import cronParser from 'cron-parser'
 
 import { getDb } from '#~/db/index.js'
 import type { AutomationTrigger } from '#~/db/index.js'
@@ -6,6 +6,7 @@ import type { AutomationTrigger } from '#~/db/index.js'
 import { ensureLegacyRuleData, runAutomationRule } from './execution'
 
 const timers = new Map<string, NodeJS.Timeout>()
+const { parseExpression } = cronParser
 
 function clearTimer(triggerId: string) {
   const timer = timers.get(triggerId)

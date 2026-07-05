@@ -41,6 +41,7 @@ import { devStartTargets, parseDevStartTarget, runDevStart as runDevStartCommand
 import { runHomebrewTapSyncOneWorks } from './homebrew-tap'
 import { runMessageActionsVerify } from './message-actions'
 import { runPrChangeCheck } from './pr-change-check'
+import { parseRelayAuthFixtureCommand, runRelayAuthFixture } from './relay-auth-fixture'
 import { runRelayConfigLiveSmoke } from './relay-config-live-smoke'
 import { runRelayConfigSmoke } from './relay-config-smoke'
 import { runReleaseTagsPlan } from './release-tags'
@@ -127,6 +128,7 @@ interface ScriptsCliDeps {
   runAgentRoomResumeSmoke: typeof runAgentRoomResumeSmoke
   runRelayConfigLiveSmoke: typeof runRelayConfigLiveSmoke
   runRelayConfigSmoke: typeof runRelayConfigSmoke
+  runRelayAuthFixture: typeof runRelayAuthFixture
   runDevStart: typeof runDevStartCommand
 }
 
@@ -179,6 +181,7 @@ const defaultDeps: ScriptsCliDeps = {
   runAgentRoomResumeSmoke,
   runRelayConfigLiveSmoke,
   runRelayConfigSmoke,
+  runRelayAuthFixture,
   runDevStart: runDevStartCommand
 }
 
@@ -950,6 +953,28 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
         json: options.json ?? false,
         keepTemp: options.keepTemp ?? false,
         skipAdminBuild: options.skipAdminBuild ?? false
+      })
+    })
+
+  program
+    .command('relay-auth-fixture [command]')
+    .description('Switch local Relay account auth fixtures for UI debugging')
+    .option('--json', 'Print machine-readable JSON', false)
+    .addHelpText(
+      'after',
+      '\nCommands:\n' +
+        '  single-user               one account on one server\n' +
+        '  single-server-multi-user  multiple accounts on one server\n' +
+        '  multi-server-multi-user   multiple accounts across multiple servers (default)\n' +
+        '  restore                   restore the auth.json backup captured before fixture writes\n' +
+        '  path                      print auth.json and backup paths\n'
+    )
+    .action(async (command: string | undefined, options: {
+      json?: boolean
+    }) => {
+      await deps.runRelayAuthFixture({
+        command: parseRelayAuthFixtureCommand(command),
+        json: options.json ?? false
       })
     })
 

@@ -13,9 +13,13 @@ describe('relay server session forwarding jobs', () => {
       {
         id: 'session-1',
         title: 'Own session',
-        userId: 'user-1'
+        userId: 'user-1',
+        workspaceFolder: '/tmp/relay-workspace'
       }
     ])
+    const sessions = await requestJson(baseUrl, '/api/relay/devices/device-1/sessions', {
+      headers: authHeaders('member-token-1')
+    })
 
     const forbiddenSubmit = await requestJson(baseUrl, '/api/relay/devices/device-1/sessions/session-1/messages', {
       method: 'POST',
@@ -56,6 +60,14 @@ describe('relay server session forwarding jobs', () => {
     })
     const store = await readRelayStore(args.dataPath)
 
+    expect(sessions.response.status).toBe(200)
+    expect(sessions.body.sessions).toMatchObject([
+      {
+        id: 'session-1',
+        title: 'Own session',
+        workspaceFolder: '/tmp/relay-workspace'
+      }
+    ])
     expect(forbiddenSubmit.response.status).toBe(403)
     expect(submitted.response.status).toBe(202)
     expect(job).toMatchObject({
@@ -114,6 +126,80 @@ describe('relay server session forwarding jobs', () => {
       sessionId: 'session-1',
       status: 'succeeded',
       userId: 'user-1'
+    })
+  })
+
+  it('long-polls empty device job claims until a queued job is available', async () => {
+    const { baseUrl } = await listenSessionRelay()
+    await postSnapshot(baseUrl, 'device-1', 'device-token-1', [
+      {
+        id: 'session-1',
+        title: 'Own session',
+        userId: 'user-1',
+        workspaceFolder: '/tmp/relay-workspace'
+      }
+    ])
+
+    const startedAt = Date.now()
+    const polling = requestJson(baseUrl, '/api/relay/devices/device-1/session-jobs?status=queued&waitMs=2000', {
+      headers: authHeaders('device-token-1')
+    })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    const submitted = await requestJson(baseUrl, '/api/relay/devices/device-1/sessions/session-1/messages', {
+      method: 'POST',
+      headers: authHeaders('member-token-1'),
+      body: JSON.stringify({
+        message: 'hello from relay',
+        requestId: 'request-1'
+      })
+    })
+    const job = submitted.body.job as Record<string, unknown>
+    const polled = await polling
+
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(40)
+    expect(polled.response.status).toBe(200)
+    expect(polled.body.jobs).toMatchObject([
+      {
+        id: job.id,
+        payload: {
+          message: 'hello from relay'
+        },
+        status: 'claimed'
+      }
+    ])
+    expect(polled.body).not.toHaveProperty('nextPollMs')
+  })
+
+  it('does not hold the relay store lock while waiting for empty device job claims', async () => {
+    const { baseUrl } = await listenSessionRelay()
+    await postSnapshot(baseUrl, 'device-1', 'device-token-1', [
+      {
+        id: 'session-1',
+        title: 'Own session',
+        userId: 'user-1',
+        workspaceFolder: '/tmp/relay-workspace'
+      }
+    ])
+
+    const polling = requestJson(baseUrl, '/api/relay/devices/device-1/session-jobs?status=queued&waitMs=1000', {
+      headers: authHeaders('device-token-1')
+    })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    const startedAt = Date.now()
+    const invite = await requestJson(baseUrl, '/api/admin/invites', {
+      method: 'POST',
+      headers: authHeaders('admin-token'),
+      body: JSON.stringify({ code: 'pair-lock-check', role: 'member', userId: 'user-1' })
+    })
+    const inviteElapsedMs = Date.now() - startedAt
+    const polled = await polling
+
+    expect(invite.response.status).toBe(200)
+    expect(inviteElapsedMs).toBeLessThan(800)
+    expect(polled.response.status).toBe(200)
+    expect(polled.body).toMatchObject({
+      jobs: [],
+      nextPollMs: 250
     })
   })
 })

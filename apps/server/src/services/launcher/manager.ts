@@ -1075,6 +1075,8 @@ const startWorkspaceService = async (
     process.execPath,
     [
       '--conditions=__oneworks__',
+      '--loader',
+      nodeRequire.resolve('@oneworks/register/esm-loader'),
       '-r',
       nodeRequire.resolve('@oneworks/register/preload'),
       resolve(packageDir, 'src/index.ts')

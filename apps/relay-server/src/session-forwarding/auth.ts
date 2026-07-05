@@ -37,7 +37,7 @@ export const resolveSessionForwardingActor = (
   deviceId?: string
 ): RelaySessionForwardingActor | undefined => {
   const auth = resolveAuthContext(req, args, store)
-  if (auth?.kind === 'admin-token') {
+  if (auth?.kind === 'admin-token' && args.adminToken !== '') {
     return {
       kind: 'admin-token',
       principal: auth.principal
@@ -50,16 +50,26 @@ export const resolveSessionForwardingActor = (
       user: auth.user
     }
   }
-  if (deviceId == null) return undefined
-  const token = getBearerToken(req)
-  if (token === '') return undefined
-  const device = store.devices.find(item => item.id === deviceId && deviceTokenMatches(item, token))
-  if (device == null) return undefined
-  return {
-    kind: 'device',
-    principal: devicePrincipalForDevice(device),
-    device
+  if (deviceId != null) {
+    const token = getBearerToken(req)
+    const device = token === ''
+      ? undefined
+      : store.devices.find(item => item.id === deviceId && deviceTokenMatches(item, token))
+    if (device != null) {
+      return {
+        kind: 'device',
+        principal: devicePrincipalForDevice(device),
+        device
+      }
+    }
   }
+  if (auth?.kind === 'admin-token') {
+    return {
+      kind: 'admin-token',
+      principal: auth.principal
+    }
+  }
+  return undefined
 }
 
 export const actorHasPermission = (actor: RelaySessionForwardingActor, permission: string) => (

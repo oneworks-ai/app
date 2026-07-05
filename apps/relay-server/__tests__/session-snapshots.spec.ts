@@ -45,7 +45,7 @@ describe('relay server session snapshots', () => {
     expect(memberList.body.sessions).toMatchObject([
       {
         id: 'session-1',
-        title: 'session-1'
+        title: 'Own session'
       }
     ])
     expect(JSON.stringify(memberList.body.sessions)).not.toContain('do not persist this')
@@ -54,7 +54,7 @@ describe('relay server session snapshots', () => {
     expect(adminList.body.sessions).toMatchObject([
       {
         id: 'session-3',
-        title: 'session-3'
+        title: 'Second device session'
       }
     ])
     expect(unauthenticated.response.status).toBe(401)

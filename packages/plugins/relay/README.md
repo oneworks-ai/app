@@ -49,6 +49,8 @@ Each server can also use `baseUrl` when a full URL is easier than separate `serv
 
 The plugin UI can open the selected Relay Server's `/login` page. In Electron, the login redirect uses the `oneworks://relay/auth` custom scheme to return to the current workspace plugin page; in Web, the redirect returns to the current plugin route. The callback token is used only to register the current device and is then replaced by the remote-issued device token.
 
+The official package also contributes top-level CLI commands: `oneworks login`, `oneworks users`, `oneworks users enable`, `oneworks users disable`, and `oneworks logout`. They default to the managed Cloudflare service (`-s cf`), accept `-s vercel` / `-s vc` and custom server URLs, and store local login state in `~/.oneworks/auth.json`.
+
 For a minimal self-hosted relay service, run:
 
 ```bash

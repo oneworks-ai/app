@@ -1,7 +1,8 @@
 /* eslint-disable max-lines -- nav rail coordinates desktop controls and compact drawer placement. */
 import './NavRail.scss'
 
-import { Button, Dropdown } from 'antd'
+import { Button, Dropdown, Tooltip } from 'antd'
+import type { MenuProps } from 'antd'
 import { useAtom, useSetAtom } from 'jotai'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
@@ -72,6 +73,281 @@ const appendMenuItemToLastSection = (
       ...lastSection,
       items: [...lastSection.items, item]
     }
+  ]
+}
+
+type ScopedPluginMenuItem = Omit<PluginContributionMenuItem, 'children'> & {
+  children?: PluginContributionMenuItem[]
+  pluginScope: string
+}
+
+interface PluginFooterAccountPopoverAction {
+  id: string
+  title: string
+  command?: string
+  danger?: boolean
+  disabled?: boolean
+  href?: string
+  icon?: string
+  payload?: unknown
+  route?: string
+}
+
+interface PluginFooterAccountPopoverAccount {
+  actions?: PluginFooterAccountPopoverAction[]
+  avatarUrl?: string
+  command?: string
+  description?: string
+  disabled?: boolean
+  href?: string
+  id: string
+  initials?: string
+  name: string
+  payload?: unknown
+  route?: string
+  status?: string
+}
+
+interface PluginFooterAccountPopoverGroup {
+  accounts: PluginFooterAccountPopoverAccount[]
+  avatarUrl?: string
+  collapsed?: boolean
+  id: string
+  initials?: string
+  title: string
+}
+
+interface PluginFooterAccountPopover {
+  accounts?: PluginFooterAccountPopoverAccount[]
+  actions?: PluginFooterAccountPopoverAction[]
+  groups?: PluginFooterAccountPopoverGroup[]
+}
+
+type PluginFooterAccountPopoverItem = PluginContributionMenuItem & {
+  accountPopover?: PluginFooterAccountPopover
+}
+
+type AccountPopoverMenuItems = NonNullable<MenuProps['items']>
+
+const isPluginFooterAccountPopoverItem = <T extends PluginContributionMenuItem>(
+  item: T
+): item is T & PluginFooterAccountPopoverItem => (
+  'accountPopover' in item && item.accountPopover != null && typeof item.accountPopover === 'object'
+)
+
+const getAccountPopoverGroups = (
+  accountPopover: PluginFooterAccountPopover
+): PluginFooterAccountPopoverGroup[] => {
+  if (Array.isArray(accountPopover.groups) && accountPopover.groups.length > 0) return accountPopover.groups
+  return [{
+    accounts: Array.isArray(accountPopover.accounts) ? accountPopover.accounts : [],
+    collapsed: false,
+    id: 'accounts',
+    title: ''
+  }]
+}
+
+const getAccountPopoverActionIcon = (action: PluginFooterAccountPopoverAction) =>
+  action.icon ?? (
+    action.route != null ? 'badge' : action.command === 'login' ? 'login' : 'more_horiz'
+  )
+
+const notifyPluginRouteChange = (pluginScope: string, route: string) => {
+  window.setTimeout(() => {
+    window.dispatchEvent(
+      new CustomEvent('oneworks:plugin-route-change', {
+        detail: {
+          pluginScope,
+          route
+        }
+      })
+    )
+  }, 0)
+}
+
+const renderAccountPopoverActionIcon = (action: PluginFooterAccountPopoverAction, className = 'nav-menu-icon') => (
+  <MaterialSymbol className={className} name={getAccountPopoverActionIcon(action)} aria-hidden='true' />
+)
+
+const renderAccountPopoverGroupIcon = (group: PluginFooterAccountPopoverGroup) => (
+  <span className='nav-rail-account-menu-server-avatar' aria-hidden='true'>
+    {group.avatarUrl == null || group.avatarUrl.trim() === ''
+      ? <MaterialSymbol className='nav-rail-account-menu-server-avatar-symbol' name='hub' aria-hidden='true' />
+      : <img src={group.avatarUrl} alt='' />}
+  </span>
+)
+
+const renderAccountPopoverGroupLabel = (group: PluginFooterAccountPopoverGroup) => (
+  <span className='nav-rail-account-menu-group-label'>
+    <span className='nav-rail-account-menu-group-title'>{group.title}</span>
+  </span>
+)
+
+const renderAccountPopoverExpandIcon = () => (
+  <MaterialSymbol className='nav-menu-submenu-chevron' name='keyboard_arrow_right' aria-hidden='true' />
+)
+
+const renderAccountMenuItemLabel = ({
+  account,
+  onAction
+}: {
+  account: PluginFooterAccountPopoverAccount
+  onAction: (action: PluginFooterAccountPopoverAction) => void
+}) => {
+  const hasPrimaryAction = account.route != null || account.href != null || account.command != null
+  const description = account.description?.trim()
+  const avatar = (
+    <span className='nav-rail-account-menu-row__avatar' aria-hidden='true'>
+      {account.avatarUrl == null || account.avatarUrl.trim() === ''
+        ? <span>{account.initials ?? account.name.slice(0, 2).toUpperCase()}</span>
+        : <img src={account.avatarUrl} alt='' />}
+    </span>
+  )
+  const name = (
+    <span className='nav-rail-account-menu-row__name'>{account.name}</span>
+  )
+  const identityContent = (
+    <>
+      {avatar}
+      {name}
+    </>
+  )
+  const identityClassName = [
+    'nav-rail-account-menu-row__identity',
+    hasPrimaryAction ? '' : 'is-static'
+  ].filter(Boolean).join(' ')
+  const identityNodeBase = hasPrimaryAction
+    ? (
+      <button
+        type='button'
+        className={identityClassName}
+        disabled={account.disabled}
+        aria-label={description == null || description === '' ? account.name : `${account.name} ${description}`}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          if (account.disabled === true) return
+          onAction({
+            command: account.command,
+            disabled: account.disabled,
+            href: account.href,
+            id: `${account.id}:primary`,
+            payload: account.payload,
+            route: account.route,
+            title: account.name
+          })
+        }}
+      >
+        {identityContent}
+      </button>
+    )
+    : (
+      <span
+        className={identityClassName}
+        aria-label={description == null || description === '' ? undefined : description}
+      >
+        {identityContent}
+      </span>
+    )
+  const identityNode = description == null || description === ''
+    ? identityNodeBase
+    : (
+      <Tooltip
+        title={description}
+        placement='right'
+        mouseEnterDelay={0.45}
+        mouseLeaveDelay={0.08}
+        destroyOnHidden
+      >
+        {identityNodeBase}
+      </Tooltip>
+    )
+
+  return (
+    <span className='nav-rail-account-menu-row'>
+      {identityNode}
+      <span className='nav-rail-account-menu-row__actions'>
+        {(account.actions ?? []).map(action => (
+          <Button
+            key={action.id}
+            type='text'
+            size='small'
+            className={[
+              'nav-rail-account-menu-row__action',
+              action.danger === true ? 'is-danger' : ''
+            ].filter(Boolean).join(' ')}
+            aria-label={action.title}
+            title={action.title}
+            disabled={action.disabled}
+            icon={renderAccountPopoverActionIcon(action, 'nav-rail-account-menu-row__action-icon')}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              if (action.disabled === true) return
+              onAction(action)
+            }}
+          />
+        ))}
+      </span>
+    </span>
+  )
+}
+
+const buildAccountPopoverMenuItems = ({
+  accountPopover,
+  onAction
+}: {
+  accountPopover: PluginFooterAccountPopover
+  onAction: (action: PluginFooterAccountPopoverAction) => void
+}): AccountPopoverMenuItems => {
+  const groups = getAccountPopoverGroups(accountPopover)
+  const toAccountItem = (
+    account: PluginFooterAccountPopoverAccount,
+    index: number,
+    total: number
+  ): AccountPopoverMenuItems[number] => ({
+    className: [
+      'nav-rail-account-menu-item',
+      index === 0 ? 'is-first-account' : '',
+      index === total - 1 ? 'is-last-account' : ''
+    ].filter(Boolean).join(' '),
+    key: `account:${account.id}`,
+    label: renderAccountMenuItemLabel({ account, onAction }),
+    onClick: ({ domEvent }) => {
+      domEvent.preventDefault()
+      domEvent.stopPropagation()
+    }
+  })
+  const accountItems = groups.flatMap((group): AccountPopoverMenuItems => {
+    if (group.title.trim() === '') {
+      return group.accounts.map((account, index) => toAccountItem(account, index, group.accounts.length))
+    }
+
+    return [{
+      children: group.accounts.map((account, index) => toAccountItem(account, index, group.accounts.length)),
+      className: 'nav-rail-account-menu-group',
+      icon: renderAccountPopoverGroupIcon(group),
+      key: `group:${group.id}`,
+      label: renderAccountPopoverGroupLabel(group),
+      popupClassName: 'nav-rail-more-submenu-dropdown nav-rail-account-menu-submenu'
+    }]
+  })
+  const bottomActions = accountPopover.actions ?? []
+  const bottomActionItems: AccountPopoverMenuItems = bottomActions.map((action): AccountPopoverMenuItems[number] => ({
+    danger: action.danger,
+    disabled: action.disabled,
+    icon: renderAccountPopoverActionIcon(action),
+    key: `action:${action.id}`,
+    label: action.title,
+    onClick: () => {
+      if (action.disabled === true) return
+      onAction(action)
+    }
+  }))
+  return [
+    ...accountItems,
+    ...(bottomActions.length > 0 ? [{ type: 'divider' as const }] : []),
+    ...bottomActionItems
   ]
 }
 
@@ -400,6 +676,7 @@ export function NavRail({
   compactPlacement = 'bottom',
   drawerFooterAfter,
   drawerFooterBefore,
+  drawerWorkspaceStatus,
   drawerWidth,
   isCompactLayout = false,
   moreMenuSections = [],
@@ -418,6 +695,7 @@ export function NavRail({
   compactPlacement?: 'bottom' | 'drawer'
   drawerFooterAfter?: React.ReactNode
   drawerFooterBefore?: React.ReactNode
+  drawerWorkspaceStatus?: React.ReactNode
   drawerWidth?: number
   isCompactLayout?: boolean
   moreMenuSections?: NavRailMoreMenuSection[]
@@ -448,6 +726,7 @@ export function NavRail({
   const moreMenuCloseTimerRef = React.useRef<number | null>(null)
   const [isMoreMenuOpen, setIsMoreMenuOpen] = React.useState(false)
   const [isMoreMenuClosing, setIsMoreMenuClosing] = React.useState(false)
+  const [openPluginFooterPopoverKey, setOpenPluginFooterPopoverKey] = React.useState<string | null>(null)
 
   const currentPath = location.pathname
   const canResizeDrawer = !isCompactLayout && showSidebar && !sidebarCollapsed && drawerWidth != null
@@ -630,7 +909,7 @@ export function NavRail({
   const pluginFooterBeforeItems = usePluginSlot<PluginContributionMenuItem>('nav.footer.before')
   const executePluginCommand = usePluginCommandExecutor()
   const pluginLanguage = i18n.resolvedLanguage ?? i18n.language
-  const runPluginMenuItem = React.useCallback((item: PluginContributionMenuItem & { pluginScope: string }) => {
+  const runPluginMenuItem = React.useCallback((item: ScopedPluginMenuItem) => {
     if (item.command != null && executePluginCommand != null) {
       void executePluginCommand(item.pluginScope, item.command)
       return
@@ -643,23 +922,52 @@ export function NavRail({
       window.open(item.href, '_blank', 'noopener,noreferrer')
     }
   }, [executePluginCommand, navigate])
-  const pluginMoreMenuSections = React.useMemo<NavRailMoreMenuSection[]>(() => {
-    const items = pluginMoreItems.map(item => ({
-      icon: item.icon ?? 'layers',
-      key: `plugin:${item.pluginScope}:${item.id}`,
-      label: resolvePluginContributionText(item, 'title', pluginLanguage) ?? item.title,
-      title: resolvePluginContributionText(item, 'description', pluginLanguage),
-      active: item.route === currentPath,
-      selected: item.route === currentPath,
+  const runPluginAccountPopoverAction = React.useCallback((
+    pluginScope: string,
+    action: PluginFooterAccountPopoverAction
+  ) => {
+    setOpenPluginFooterPopoverKey(null)
+    if (action.command != null && executePluginCommand != null) {
+      void executePluginCommand(pluginScope, action.command, action.payload)
+      return
+    }
+    if (action.route != null) {
+      void navigate(action.route)
+      notifyPluginRouteChange(pluginScope, action.route)
+      return
+    }
+    if (action.href != null) {
+      window.open(action.href, '_blank', 'noopener,noreferrer')
+    }
+  }, [executePluginCommand, navigate])
+  const toNavRailPluginMenuItem = React.useCallback((
+    item: ScopedPluginMenuItem | PluginContributionMenuItem,
+    pluginScope: string
+  ): NavRailMoreMenuItem => {
+    const scopedItem = { ...item, pluginScope }
+    return {
+      icon: scopedItem.icon ?? 'layers',
+      key: `plugin:${pluginScope}:${scopedItem.id}`,
+      label: resolvePluginContributionText(scopedItem, 'title', pluginLanguage) ?? scopedItem.title,
+      title: resolvePluginContributionText(scopedItem, 'description', pluginLanguage),
+      active: scopedItem.route === currentPath,
+      selected: scopedItem.selected === true || scopedItem.route === currentPath,
+      danger: scopedItem.danger,
+      disabled: scopedItem.disabled,
+      shortcut: scopedItem.shortcut,
+      children: scopedItem.children?.map(child => toNavRailPluginMenuItem(child, pluginScope)),
       onSelect: () => {
-        runPluginMenuItem(item)
+        runPluginMenuItem(scopedItem)
       }
-    }))
+    }
+  }, [currentPath, pluginLanguage, runPluginMenuItem])
+  const pluginMoreMenuSections = React.useMemo<NavRailMoreMenuSection[]>(() => {
+    const items = pluginMoreItems.map(item => toNavRailPluginMenuItem(item, item.pluginScope))
 
     return items.length === 0
       ? []
       : [{ items, key: 'plugin-more-menu' }]
-  }, [currentPath, pluginLanguage, pluginMoreItems, runPluginMenuItem])
+  }, [pluginMoreItems, toNavRailPluginMenuItem])
 
   const pluginFooterBeforeNode = React.useMemo(() => {
     if (pluginFooterBeforeItems.length === 0) return null
@@ -668,17 +976,36 @@ export function NavRail({
       <div className='nav-rail-footer-extension-list' role='list'>
         {pluginFooterBeforeItems.map((item) => {
           const isActive = item.route != null && currentPath === item.route
-
-          return (
+          const footerKey = `plugin-footer:${item.pluginScope}:${item.id}`
+          const accountPopover = isPluginFooterAccountPopoverItem(item) ? item.accountPopover : undefined
+          const menuItem = toNavRailPluginMenuItem(item, item.pluginScope)
+          const childItems = 'children' in menuItem && menuItem.children != null ? menuItem.children : []
+          const hasDropdown = accountPopover != null || childItems.length > 0
+          const dropdownItems = hasDropdown
+            ? buildNavRailMoreMenuItems({
+              closeMenu: () => {},
+              isMac,
+              sections: [{ items: childItems, key: `plugin-footer:${item.pluginScope}:${item.id}` }]
+            })
+            : []
+          const selectedKeys = hasDropdown
+            ? getNavRailMoreMenuSelectedKeys([{
+              items: childItems,
+              key: `plugin-footer:${item.pluginScope}:${item.id}`
+            }])
+            : []
+          const button = (
             <button
-              key={`plugin-footer:${item.pluginScope}:${item.id}`}
+              key={`plugin-footer-button:${item.pluginScope}:${item.id}`}
               type='button'
               className={[
                 'nav-rail-footer-extension-item',
+                hasDropdown ? 'nav-rail-footer-extension-item--dropdown' : '',
                 isActive ? 'is-active' : ''
               ].filter(Boolean).join(' ')}
               aria-current={isActive ? 'page' : undefined}
-              onClick={() => runPluginMenuItem(item)}
+              aria-haspopup={hasDropdown ? 'menu' : undefined}
+              onClick={hasDropdown ? undefined : () => runPluginMenuItem(item)}
             >
               <MaterialSymbol
                 className='nav-rail-footer-extension-item__icon'
@@ -688,12 +1015,78 @@ export function NavRail({
               <span className='nav-rail-footer-extension-item__label'>
                 {resolvePluginContributionText(item, 'title', pluginLanguage) ?? item.title}
               </span>
+              {hasDropdown && (
+                <MaterialSymbol
+                  className='nav-rail-footer-extension-item__chevron'
+                  name='expand_more'
+                  aria-hidden='true'
+                />
+              )}
             </button>
+          )
+
+          if (!hasDropdown) {
+            return React.cloneElement(button, { key: footerKey })
+          }
+
+          if (accountPopover != null) {
+            const accountDropdownItems = buildAccountPopoverMenuItems({
+              accountPopover,
+              onAction: (action) => runPluginAccountPopoverAction(item.pluginScope, action)
+            })
+            return (
+              <Dropdown
+                key={footerKey}
+                destroyOnHidden
+                open={openPluginFooterPopoverKey === footerKey}
+                overlayClassName={`${NAV_RAIL_MORE_DROPDOWN_CLASS} nav-rail-footer-extension-dropdown nav-rail-account-menu-dropdown`}
+                menu={{
+                  expandIcon: renderAccountPopoverExpandIcon(),
+                  items: accountDropdownItems,
+                  triggerSubMenuAction: 'click'
+                }}
+                placement='topLeft'
+                trigger={['click']}
+                transitionName='ant-slide-down'
+                onOpenChange={(open) => {
+                  setOpenPluginFooterPopoverKey(open ? footerKey : null)
+                }}
+              >
+                {button}
+              </Dropdown>
+            )
+          }
+
+          return (
+            <Dropdown
+              key={footerKey}
+              destroyOnHidden
+              overlayClassName={`${NAV_RAIL_MORE_DROPDOWN_CLASS} nav-rail-footer-extension-dropdown`}
+              menu={{
+                items: dropdownItems,
+                selectedKeys,
+                triggerSubMenuAction: 'click'
+              }}
+              placement='topLeft'
+              trigger={['click']}
+              transitionName='ant-slide-down'
+            >
+              {button}
+            </Dropdown>
           )
         })}
       </div>
     )
-  }, [currentPath, pluginFooterBeforeItems, pluginLanguage, runPluginMenuItem])
+  }, [
+    currentPath,
+    isMac,
+    openPluginFooterPopoverKey,
+    pluginFooterBeforeItems,
+    pluginLanguage,
+    runPluginAccountPopoverAction,
+    runPluginMenuItem,
+    toNavRailPluginMenuItem
+  ])
 
   const preferenceMoreMenuSections = React.useMemo<NavRailMoreMenuSection[]>(() => [
     {
@@ -996,18 +1389,24 @@ export function NavRail({
   }), [currentPath, navigate, t])
 
   const resolvedDrawerFooterBefore = React.useMemo(() => {
-    if (drawerFooterBefore == null && pluginFooterBeforeNode == null && shellSimulationFooterNode == null) {
+    if (
+      drawerWorkspaceStatus == null &&
+      pluginFooterBeforeNode == null &&
+      drawerFooterBefore == null &&
+      shellSimulationFooterNode == null
+    ) {
       return undefined
     }
 
     return (
       <>
-        {drawerFooterBefore}
+        {drawerWorkspaceStatus}
         {pluginFooterBeforeNode}
+        {drawerFooterBefore}
         {shellSimulationFooterNode}
       </>
     )
-  }, [drawerFooterBefore, pluginFooterBeforeNode, shellSimulationFooterNode])
+  }, [drawerFooterBefore, drawerWorkspaceStatus, pluginFooterBeforeNode, shellSimulationFooterNode])
 
   const moreMenuRouteSections = React.useMemo<NavRailMoreMenuSection[]>(() => [
     ...moreMenuSections,

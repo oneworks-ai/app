@@ -189,6 +189,17 @@ export interface AgentRoomDetail {
 export interface AgentRoomListResponse {
   rooms: AgentRoom[]
 }
+export interface AgentRoomSummary extends AgentRoom {
+  activeRunCount: number
+  pendingCount: number
+  sessionIds: string[]
+}
+export interface AgentRoomSummaryListResponse {
+  rooms: AgentRoomSummary[]
+}
+export interface AgentRoomHostSessionResponse {
+  room?: AgentRoom
+}
 export interface AgentRoomDetailResponse extends AgentRoomDetail {}
 export interface UpdateAgentRoomMetadataRequest {
   isArchived?: boolean

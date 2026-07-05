@@ -24,6 +24,7 @@ import type { ModelServiceProviderPortalRequest } from './ModelServiceProviderPo
 import { RecommendedModelsItemEditor } from './RecommendedModelsItemEditor'
 import type { ConfigDetailRoute } from './configDetail'
 import { resolveConfigDetailRouteMeta } from './configDetail'
+import { getConfigDetailPlaceholderEntries } from './configDetailPlaceholders'
 import type { FieldSpec } from './configSchema'
 import { configGroupMeta, configGroupOrder, configSchema } from './configSchema'
 import {
@@ -564,6 +565,7 @@ export const SectionForm = ({
           field={field}
           value={fieldValue}
           resolvedValue={resolvedFieldValue}
+          placeholderEntries={getConfigDetailPlaceholderEntries(sectionKey)}
           source={source}
           onChange={(next) => handleValueChange(next)}
           onOpenDetail={(route) => onOpenDetailRoute?.(route)}
@@ -1097,6 +1099,7 @@ export const SectionForm = ({
     value,
     resolvedValue,
     route: detailRoute,
+    placeholderEntries: getConfigDetailPlaceholderEntries(sectionKey),
     detailContext,
     t
   })
@@ -1110,7 +1113,12 @@ export const SectionForm = ({
 
   const { data: adapterAccountsData } = useSWR(
     adapterDetailKey != null ? `/api/adapters/${adapterDetailKey}/accounts` : null,
-    () => getAdapterAccounts(adapterDetailKey!)
+    () => getAdapterAccounts(adapterDetailKey!),
+    {
+      dedupingInterval: 30_000,
+      keepPreviousData: true,
+      revalidateOnFocus: false
+    }
   )
   const adapterDefaultAccountOptions = useMemo(() => {
     if (adapterDetailKey == null || !isRecord(detailMeta?.item)) return undefined
@@ -1849,6 +1857,7 @@ export const SectionForm = ({
                 <AdapterAccountsManager
                   adapterKey={detailMeta.itemKey}
                   value={detailMeta.item}
+                  accountsData={adapterAccountsData}
                   accountItemSchema={accountItemSchema}
                   onChange={writeDetailItem}
                   nestedPath={detailRoute?.nestedPath}
@@ -1895,6 +1904,7 @@ export const SectionForm = ({
                 <AdapterAccountsManager
                   adapterKey={detailMeta.itemKey}
                   value={detailMeta.item}
+                  accountsData={adapterAccountsData}
                   accountItemSchema={accountItemSchema}
                   onChange={writeDetailItem}
                   nestedPath={detailRoute?.nestedPath}

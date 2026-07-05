@@ -197,36 +197,89 @@
       "root": "dist/client",
       "entry": "dist/client/index.js"
     },
-    "server": {
-      "entry": "dist/server/index.js"
-    },
     "contributions": {
-      "navFooterBefore": [
+      "cliCommands": [
         {
-          "id": "home",
-          "title": "Account",
+          "id": "login",
+          "path": [
+            "login"
+          ],
+          "root": true,
+          "command": "login",
           "titleI18n": {
-            "en": "Account",
-            "zh-Hans": "账号"
+            "en": "Login",
+            "zh-Hans": "登录"
           },
           "descriptionI18n": {
-            "en": "Sign in to the default OneWorks Relay service.",
-            "zh-Hans": "登录默认 OneWorks Relay 服务。"
-          },
-          "icon": "account_circle",
-          "command": "login"
-        }
-      ],
-      "navMoreMenu": [
+            "en": "Sign in to a OneWorks account. Defaults to -s cf.",
+            "zh-Hans": "登录 OneWorks 账号；默认使用 -s cf。"
+          }
+        },
         {
-          "id": "connect",
-          "title": "Connect account",
+          "id": "logout",
+          "path": [
+            "logout"
+          ],
+          "root": true,
+          "command": "logout",
           "titleI18n": {
-            "en": "Connect account",
-            "zh-Hans": "连接账号"
+            "en": "Logout",
+            "zh-Hans": "退出登录"
           },
-          "icon": "cloud_sync",
-          "command": "connect"
+          "descriptionI18n": {
+            "en": "Remove a local OneWorks account login.",
+            "zh-Hans": "移除本机 OneWorks 账号登录态。"
+          }
+        },
+        {
+          "id": "users",
+          "path": [
+            "users"
+          ],
+          "root": true,
+          "command": "users",
+          "titleI18n": {
+            "en": "Users",
+            "zh-Hans": "用户"
+          },
+          "descriptionI18n": {
+            "en": "List local OneWorks account logins.",
+            "zh-Hans": "列出本机 OneWorks 账号登录态。"
+          }
+        },
+        {
+          "id": "users-enable",
+          "path": [
+            "users",
+            "enable"
+          ],
+          "root": true,
+          "command": "users-enable",
+          "titleI18n": {
+            "en": "Enable user",
+            "zh-Hans": "启用用户"
+          },
+          "descriptionI18n": {
+            "en": "Enable a local OneWorks account for this daemon.",
+            "zh-Hans": "启用本机 OneWorks 账号供当前 daemon 使用。"
+          }
+        },
+        {
+          "id": "users-disable",
+          "path": [
+            "users",
+            "disable"
+          ],
+          "root": true,
+          "command": "users-disable",
+          "titleI18n": {
+            "en": "Disable user",
+            "zh-Hans": "停用用户"
+          },
+          "descriptionI18n": {
+            "en": "Disable a local OneWorks account without deleting its login.",
+            "zh-Hans": "停用本机 OneWorks 账号，但保留登录态。"
+          }
         }
       ],
       "routes": [
@@ -289,6 +342,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
   },
   "dependencies": {
-    "@oneworks/utils": "workspace:*"
+    "@oneworks/components": "workspace:*",
+    "@oneworks/utils": "workspace:*",
+    "ws": "^8.17.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
   }
 }

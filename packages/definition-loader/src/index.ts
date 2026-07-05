@@ -21,7 +21,7 @@ import type {
 } from '@oneworks/types'
 import { resolveWorkspaceAssetBundle, resolveWorkspaceAssetSource } from '@oneworks/workspace-assets'
 
-import { glob } from 'fast-glob'
+import fg from 'fast-glob'
 
 import { loadLocalDocuments, resolveRulePattern, resolveUniqueDefinition } from './definition-utils'
 
@@ -63,7 +63,7 @@ export class DefinitionLoader {
     patterns: string[],
     cwd: string = this.cwd
   ): Promise<string[]> {
-    const paths = await glob(patterns, { cwd, absolute: true })
+    const paths = await fg(patterns, { cwd, absolute: true })
     return paths.sort((a, b) => {
       const aKey = relative(cwd, a).split('\\').join('/')
       const bKey = relative(cwd, b).split('\\').join('/')

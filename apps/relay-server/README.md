@@ -173,7 +173,7 @@ Profile security endpoints:
 - `POST /api/profile/password`: set or change the current account password. Existing password accounts must provide `currentPassword`.
 - `POST /api/profile/passkeys/register/options` and `POST /api/profile/passkeys/register/verify`: bind a new passkey to the current account from the Admin profile page.
 
-The personal user OpenAPI document also includes current-user team, team member group, and managed configuration endpoints under `/api/relay/teams*`, `/api/relay/teams/<teamId>/access-groups*`, `/api/relay/team-policy`, `/api/relay/config-snapshot`, `/api/relay/config-profiles*`, `/api/relay/config-assignments*`, and `/api/relay/config-secrets*`.
+The personal user OpenAPI document also includes current-user team, team member group, and managed configuration endpoints under `/api/relay/teams*`, `/api/relay/teams/<teamId>/access-groups*`, `/api/relay/team-policy`, `/api/relay/config/global`, `/api/relay/config-snapshot`, `/api/relay/config-profiles*`, `/api/relay/config-assignments*`, and `/api/relay/config-secrets*`.
 
 OpenAPI coverage is guarded by `apps/relay-server/__tests__/profile.spec.ts`: the test inventory checks exact paths, schema isolation, `$ref` closure, operation tags, bearer security declarations, and the visibility matrix (`platform-admin`, `current-user`, `common-auth`, internal runtime excluded).
 

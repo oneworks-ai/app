@@ -1,6 +1,5 @@
 import type { ServerResponse } from 'node:http'
 
-import { authContextHasPermission } from '../auth/permissions.js'
 import type { RelayAuthContext } from '../auth/permissions.js'
 import { sendJson } from '../http.js'
 import { relayPermissions } from '../permissions/index.js'
@@ -16,9 +15,29 @@ import { isAdminAuth, teamMemberHasCapability, teamMembershipForAuth } from './t
 
 export const canReadConfigProfileTeam = (store: RelayStore, auth: RelayAuthContext, teamId: string) => (
   isAdminAuth(auth) ||
-  (
-    authContextHasPermission(auth, relayPermissions.relayTeamsRead) &&
-    teamMembershipForAuth(store, auth, teamId) != null
+  teamMemberHasCapability(
+    store,
+    teamMembershipForAuth(store, auth, teamId),
+    relayPermissions.relayTeamConfigProfilesRead
+  ) ||
+  teamMemberHasCapability(
+    store,
+    teamMembershipForAuth(store, auth, teamId),
+    relayPermissions.relayTeamConfigProfilesWrite
+  )
+)
+
+export const canReadConfigSecretTeam = (store: RelayStore, auth: RelayAuthContext, teamId: string) => (
+  isAdminAuth(auth) ||
+  teamMemberHasCapability(
+    store,
+    teamMembershipForAuth(store, auth, teamId),
+    relayPermissions.relayTeamConfigSecretsRead
+  ) ||
+  teamMemberHasCapability(
+    store,
+    teamMembershipForAuth(store, auth, teamId),
+    relayPermissions.relayTeamConfigSecretsWrite
   )
 )
 

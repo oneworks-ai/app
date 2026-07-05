@@ -229,7 +229,7 @@ export function useChatSessionActions({
 
   const resolveCreatedSession = useCallback(async (id: string) => {
     try {
-      const res = await getSessionMessages(id)
+      const res = await getSessionMessages(id, { limit: 20 })
       return res.session
     } catch (err) {
       console.warn('Failed to verify optimistic session creation state:', err)

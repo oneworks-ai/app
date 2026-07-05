@@ -27,7 +27,7 @@ import {
   resolveRuntimePluginConfig
 } from '@oneworks/utils/plugin-resolver'
 import type { ResolvedPluginInstance } from '@oneworks/utils/plugin-resolver'
-import { glob } from 'fast-glob'
+import fg from 'fast-glob'
 import fm from 'front-matter'
 import yaml from 'js-yaml'
 
@@ -511,13 +511,13 @@ const scanWorkspaceDocuments = async (cwd: string, env: NodeJS.ProcessEnv) => {
     entityJsonPaths,
     mcpPaths
   ] = await Promise.all([
-    glob(['rules/*.md'], { cwd: aiBaseDir, absolute: true }),
-    glob(['skills/*/SKILL.md'], { cwd: aiBaseDir, absolute: true }),
+    fg(['rules/*.md'], { cwd: aiBaseDir, absolute: true }),
+    fg(['skills/*/SKILL.md'], { cwd: aiBaseDir, absolute: true }),
     scanProjectSkillLockfileDocuments(cwd),
-    glob(['specs/*.md', 'specs/*/index.md'], { cwd: aiBaseDir, absolute: true }),
-    glob(['*.md', '*/README.md'], { cwd: entitiesDir, absolute: true }),
-    glob(['*/index.json'], { cwd: entitiesDir, absolute: true }),
-    glob(['mcp/*.json', 'mcp/*.yaml', 'mcp/*.yml'], { cwd: aiBaseDir, absolute: true })
+    fg(['specs/*.md', 'specs/*/index.md'], { cwd: aiBaseDir, absolute: true }),
+    fg(['*.md', '*/README.md'], { cwd: entitiesDir, absolute: true }),
+    fg(['*/index.json'], { cwd: entitiesDir, absolute: true }),
+    fg(['mcp/*.json', 'mcp/*.yaml', 'mcp/*.yml'], { cwd: aiBaseDir, absolute: true })
   ])
 
   return {
@@ -536,7 +536,7 @@ const scanHomeSkillDocuments = async (configs: [Config?, Config?], env: NodeJS.P
 
   const scans = await Promise.all(
     roots.map(async root => (
-      await glob(['*/SKILL.md'], { cwd: root, absolute: true }).catch(() => [] as string[])
+      await fg(['*/SKILL.md'], { cwd: root, absolute: true }).catch(() => [] as string[])
     ))
   )
 
@@ -548,20 +548,18 @@ const scanInstanceDocuments = async (instance: ResolvedPluginInstance) => {
   const resolveAssetRoot = (dir: string | undefined, fallback: string) => resolve(instance.rootDir, dir ?? fallback)
 
   const [rulePaths, skillPaths, specPaths, entityDocPaths, entityJsonPaths, mcpPaths] = await Promise.all([
-    glob(['*.md'], { cwd: resolveAssetRoot(assets?.rules, 'rules'), absolute: true }).catch(() => [] as string[]),
-    glob(['*/SKILL.md'], { cwd: resolveAssetRoot(assets?.skills, 'skills'), absolute: true }).catch(() =>
+    fg(['*.md'], { cwd: resolveAssetRoot(assets?.rules, 'rules'), absolute: true }).catch(() => [] as string[]),
+    fg(['*/SKILL.md'], { cwd: resolveAssetRoot(assets?.skills, 'skills'), absolute: true }).catch(() => [] as string[]),
+    fg(['*.md', '*/index.md'], { cwd: resolveAssetRoot(assets?.specs, 'specs'), absolute: true }).catch(() =>
       [] as string[]
     ),
-    glob(['*.md', '*/index.md'], { cwd: resolveAssetRoot(assets?.specs, 'specs'), absolute: true }).catch(() =>
+    fg(['*.md', '*/README.md'], { cwd: resolveAssetRoot(assets?.entities, 'entities'), absolute: true }).catch(() =>
       [] as string[]
     ),
-    glob(['*.md', '*/README.md'], { cwd: resolveAssetRoot(assets?.entities, 'entities'), absolute: true }).catch(() =>
+    fg(['*/index.json'], { cwd: resolveAssetRoot(assets?.entities, 'entities'), absolute: true }).catch(() =>
       [] as string[]
     ),
-    glob(['*/index.json'], { cwd: resolveAssetRoot(assets?.entities, 'entities'), absolute: true }).catch(() =>
-      [] as string[]
-    ),
-    glob(['*.json', '*.yaml', '*.yml'], { cwd: resolveAssetRoot(assets?.mcp, 'mcp'), absolute: true }).catch(() =>
+    fg(['*.json', '*.yaml', '*.yml'], { cwd: resolveAssetRoot(assets?.mcp, 'mcp'), absolute: true }).catch(() =>
       [] as string[]
     )
   ])
@@ -640,18 +638,12 @@ const scanInstanceOpenCodeOverlays = async (
 ) => {
   const opencodeRoot = resolve(instance.rootDir, 'opencode')
   const [agentPaths, commandPaths, modePaths, nativePluginPaths] = await Promise.all([
-    glob(['*.md'], { cwd: resolve(opencodeRoot, 'agents'), absolute: true, onlyFiles: true }).catch(() =>
+    fg(['*.md'], { cwd: resolve(opencodeRoot, 'agents'), absolute: true, onlyFiles: true }).catch(() => [] as string[]),
+    fg(['*.md'], { cwd: resolve(opencodeRoot, 'commands'), absolute: true, onlyFiles: true }).catch(() =>
       [] as string[]
     ),
-    glob(['*.md'], { cwd: resolve(opencodeRoot, 'commands'), absolute: true, onlyFiles: true }).catch(() =>
-      [] as string[]
-    ),
-    glob(['*.md'], { cwd: resolve(opencodeRoot, 'modes'), absolute: true, onlyFiles: true }).catch(() =>
-      [] as string[]
-    ),
-    glob(['**/*'], { cwd: resolve(opencodeRoot, 'plugins'), absolute: true, onlyFiles: true }).catch(() =>
-      [] as string[]
-    )
+    fg(['*.md'], { cwd: resolve(opencodeRoot, 'modes'), absolute: true, onlyFiles: true }).catch(() => [] as string[]),
+    fg(['**/*'], { cwd: resolve(opencodeRoot, 'plugins'), absolute: true, onlyFiles: true }).catch(() => [] as string[])
   ])
 
   return [

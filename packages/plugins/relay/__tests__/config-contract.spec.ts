@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { RELAY_CONFIG_SAFE_FIELDS } from '../src/shared/config-assignment-types.js'
+import { RELAY_CONFIG_SAFE_FIELDS, RELAY_TEAM_CONFIG_SAFE_FIELDS } from '../src/shared/config-assignment-types.js'
 import { resolveRelayConfigPatchForProject } from '../src/shared/config-assignment.js'
 import type { RelayConfigSnapshot } from '../src/shared/config-assignment.js'
 import { createRelayConfigSnapshotStore } from '../src/shared/config-cache.js'
@@ -21,12 +21,11 @@ const createRelayConfigSnapshotFixture = (workspaceFolder: string): RelayConfigS
   assignments: [
     {
       id: 'matching-workspace',
-      allowedFields: ['defaultModelService', 'modelServices'],
+      allowedFields: ['modelServices'],
       project: {
         allow: [workspaceFolder]
       },
       configPatch: {
-        defaultModelService: 'relay-smoke',
         env: {
           RELAY_FORBIDDEN_ENV: 'must-not-merge'
         },
@@ -53,12 +52,11 @@ const createRelayConfigSnapshotFixture = (workspaceFolder: string): RelayConfigS
     },
     {
       id: 'non-matching-workspace',
-      allowedFields: ['defaultModelService', 'modelServices'],
+      allowedFields: ['modelServices'],
       project: {
         allow: ['/another/workspace']
       },
       configPatch: {
-        defaultModelService: 'relay-denied',
         modelServices: {
           'relay-denied': {
             apiBaseUrl: 'https://denied.example.com/v1',
@@ -102,7 +100,16 @@ describe('relay managed config snapshot contract', () => {
     )
 
     expect(RELAY_CONFIG_SAFE_FIELDS).toEqual([
-      'defaultModelService',
+      'modelServices',
+      'recommendedModels',
+      'plugins',
+      'marketplaces',
+      'skills',
+      'skillsMeta',
+      'skillRegistries',
+      'adapters'
+    ])
+    expect(RELAY_TEAM_CONFIG_SAFE_FIELDS).toEqual([
       'modelServices',
       'recommendedModels',
       'plugins',
@@ -112,10 +119,9 @@ describe('relay managed config snapshot contract', () => {
       'skillRegistries'
     ])
     expect(result).toEqual({
-      allowedFields: ['defaultModelService', 'modelServices'],
+      allowedFields: ['modelServices'],
       matchedAssignmentIds: ['matching-workspace'],
       patch: {
-        defaultModelService: 'relay-smoke',
         modelServices: {
           'relay-smoke': {
             apiBaseUrl: 'https://relay.example.com/v1',

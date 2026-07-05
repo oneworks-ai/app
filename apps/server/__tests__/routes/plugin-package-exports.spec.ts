@@ -67,9 +67,14 @@ describe('plugin package export conventions', () => {
     const devServerUrl = await startDevServer('export const devPlugin = true\n')
     const pluginRoot = path.join(workspaceFolder, 'plugins', 'vite')
     await mkdir(path.join(pluginRoot, 'client', 'dist'), { recursive: true })
+    await mkdir(path.join(pluginRoot, 'client', 'shared'), { recursive: true })
     await mkdir(path.join(pluginRoot, 'server', 'dist'), { recursive: true })
     await mkdir(path.join(pluginRoot, 'server', 'src'), { recursive: true })
-    await writeFile(path.join(pluginRoot, 'client', 'dist', 'index.js'), 'export const builtPlugin = true\n')
+    await writeFile(
+      path.join(pluginRoot, 'client', 'dist', 'index.js'),
+      "import { sharedValue } from '../shared/constants.js'\nexport const builtPlugin = sharedValue\n"
+    )
+    await writeFile(path.join(pluginRoot, 'client', 'shared', 'constants.js'), 'export const sharedValue = true\n')
     await writeFile(
       path.join(pluginRoot, 'server', 'src', 'index.ts'),
       `
@@ -142,7 +147,12 @@ describe('plugin package export conventions', () => {
 
     const staticAssetResponse = await fetch(`${baseUrl}/api/plugins/vite/client/dist/index.js`)
     expect(staticAssetResponse.status).toBe(200)
-    await expect(staticAssetResponse.text()).resolves.toContain('builtPlugin = true')
+    await expect(staticAssetResponse.text()).resolves.toContain('builtPlugin = sharedValue')
+
+    const sharedAssetResponse = await fetch(`${baseUrl}/api/plugins/vite/shared/constants.js`)
+    const sharedAssetText = await sharedAssetResponse.text()
+    expect(sharedAssetResponse.status, sharedAssetText).toBe(200)
+    expect(sharedAssetText).toContain('sharedValue = true')
 
     const devAssetResponse = await fetch(`${baseUrl}/api/plugins/vite/dev/src/index.tsx`)
     expect(devAssetResponse.status).toBe(200)

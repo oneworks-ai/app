@@ -28,6 +28,7 @@ export const redactDevice = (
   metadata: RelayDevicePrivateMetadata = visibleDevicePrivateMetadata(args, device)
 ) => ({
   id: device.id,
+  alias: metadata.alias,
   name: metadata.name,
   userId: device.userId,
   capabilities: metadata.capabilities,
@@ -138,7 +139,9 @@ export const handleDeviceRegister = async (
     createdAt: existing?.createdAt ?? now(),
     lastSeenAt: now()
   }
+  const previousMetadata = existing == null ? undefined : visibleDevicePrivateMetadata(args, existing)
   const metadata = normalizeDevicePrivateMetadata({
+    alias: previousMetadata?.alias,
     capabilities: isRecord(body.capabilities) ? body.capabilities : {},
     name: typeof body.deviceName === 'string' ? body.deviceName : undefined,
     pluginScope: typeof body.pluginScope === 'string' ? body.pluginScope : undefined,
@@ -168,6 +171,71 @@ export const handleDeviceRegister = async (
     deviceToken,
     ...(user == null ? {} : { user: publicUser(user) })
   }, args.allowOrigin)
+}
+
+const normalizeDeviceAliasPatch = (body: unknown) => {
+  if (!isRecord(body) || !Object.prototype.hasOwnProperty.call(body, 'alias')) {
+    return { ok: false as const, error: 'Device alias is required.' }
+  }
+  if (body.alias != null && typeof body.alias !== 'string') {
+    return { ok: false as const, error: 'Device alias must be a string.' }
+  }
+  const alias = typeof body.alias === 'string' ? body.alias.trim() : ''
+  if (alias.length > 80) {
+    return { ok: false as const, error: 'Device alias must be 80 characters or fewer.' }
+  }
+  return { ok: true as const, alias }
+}
+
+export const handleDeviceUpdate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  args: RelayServerArgs,
+  store: RelayStore,
+  storeRepository: RelayStoreRepository,
+  deviceId: string,
+  telemetry?: RelayTelemetry
+) => {
+  const auth = resolveAuthContext(req, args, store)
+  if (auth == null) {
+    sendJson(res, 401, { error: 'Authentication required.' }, args.allowOrigin)
+    return
+  }
+  const canReadDevices = authContextHasPermission(auth, relayPermissions.relayDevicesRead) ||
+    authContextHasPermission(auth, relayPermissions.relayDevicesReadAny)
+  if (!canReadDevices) {
+    sendJson(res, 403, { error: 'Permission denied.' }, args.allowOrigin)
+    return
+  }
+  const device = store.devices.find(item => item.id === deviceId)
+  const canUpdate = auth.kind === 'admin-token' ||
+    (auth.kind === 'session' && device?.userId === auth.user.id) ||
+    authContextHasPermission(auth, relayPermissions.relayDevicesReadAny)
+  if (device == null || !canUpdate) {
+    sendJson(res, 404, { error: 'Device not found.' }, args.allowOrigin)
+    return
+  }
+  const aliasPatch = normalizeDeviceAliasPatch(await readRequestBody(req))
+  if (!aliasPatch.ok) {
+    sendJson(res, 400, { error: aliasPatch.error }, args.allowOrigin)
+    return
+  }
+
+  const metadata = visibleDevicePrivateMetadata(args, device)
+  if (aliasPatch.alias === '') {
+    delete metadata.alias
+  } else {
+    metadata.alias = aliasPatch.alias
+  }
+  storeEncryptedDevicePrivateMetadata(args, device, metadata)
+  await storeRepository.write(store)
+  recordRelayTraceEvent(telemetry, 'info', 'relay.device.updated', {
+    ...traceContextFromRequest(req),
+    aliasSet: metadata.alias != null,
+    deviceId: device.id,
+    userId: device.userId
+  })
+  sendJson(res, 200, { device: redactDevice(device, args, metadata), ok: true }, args.allowOrigin)
 }
 
 export const handleDeviceList = (

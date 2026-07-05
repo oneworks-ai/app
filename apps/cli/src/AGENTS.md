@@ -37,9 +37,15 @@ config、cache、definition、workspace asset 共享 contract 位于 `@oneworks/
 - `commands/run.ts`
 - `commands/agent.ts`
 - `commands/agent/*`
+- `commands/plugin-cli.ts`
 - `../../packages/hooks/src/entry.ts`
 - `../../packages/cli-helper/loader.js`
 - `../../packages/hooks/call-hook.js`
+
+插件动态二级命令：
+
+- CLI 会读取已解析插件 manifest 的 `plugin.contributions.cliCommands`，在 `commands/plugin-cli.ts` 动态注册 root / nested command；官方插件可以把命令暴露为顶层用户命令，例如 relay 插件贡献 `login`、`users enable` 等入口。
+- 参数预处理在 `cli-argv.ts`，新增顶层插件命令时要确保不会被默认插入 `run`。
 
 ## Hooks bridge 入口
 

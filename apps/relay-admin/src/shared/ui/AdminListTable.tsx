@@ -1,8 +1,7 @@
-import './AdminListTable.css'
-
+import { adminListSurfaceClassNames, ensureAdminListSurfaceStyles } from '@oneworks/components/admin-list-surface'
 import { Input, Popover, Table } from 'antd'
 import type { TableColumnsType, TableProps } from 'antd'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useInsertionEffect, useMemo, useState } from 'react'
 import type { Key, ReactNode } from 'react'
 
 import { AdminActionButton } from './AdminActionButton'
@@ -36,8 +35,8 @@ export interface AdminListTableProps<T extends object> {
   onSelectedRowKeysChange?: (keys: Key[]) => void
   onVisibleColumnKeysChange: (keys: string[]) => void
 }
-
 const DEFAULT_PAGE_SIZE = 20
+const useStyleInsertionEffect = typeof document === 'undefined' ? useEffect : useInsertionEffect
 
 export const AdminListTable = <T extends object>({
   ariaLabel,
@@ -107,6 +106,10 @@ export const AdminListTable = <T extends object>({
   }, [currentPage, pageSize, sortedData])
   const hasSelection = selectedRowKeys.length > 0
 
+  useStyleInsertionEffect(() => {
+    ensureAdminListSurfaceStyles()
+  }, [])
+
   useEffect(() => {
     setCurrentPage(page => Math.min(page, maxPage))
   }, [maxPage])
@@ -116,19 +119,19 @@ export const AdminListTable = <T extends object>({
   }, [dataSource, pageSize, searchValue, sortState])
 
   return (
-    <div className='relay-admin-list-table' aria-label={ariaLabel}>
-      <div className='relay-admin-list-table__toolbar'>
+    <div className={adminListSurfaceClassNames.root} aria-label={ariaLabel}>
+      <div className={adminListSurfaceClassNames.toolbar}>
         <Input
           allowClear
-          className='relay-admin-list-table__search'
+          className={adminListSurfaceClassNames.search}
           placeholder={searchPlaceholder}
-          prefix={<AdminIcon className='relay-admin-list-table__search-icon' name='search' />}
+          prefix={<AdminIcon className={adminListSurfaceClassNames.searchIcon} name='search' />}
           value={searchValue}
           onChange={event => onSearchChange(event.target.value)}
         />
         {toolbarActions == null
           ? null
-          : <div className='relay-admin-list-table__toolbar-actions'>{toolbarActions}</div>}
+          : <div className={adminListSurfaceClassNames.toolbarActions}>{toolbarActions}</div>}
         <Popover
           content={
             <AdminListTableColumnPicker
@@ -140,14 +143,14 @@ export const AdminListTable = <T extends object>({
             />
           }
           open={isColumnPickerOpen}
-          overlayClassName='relay-admin-list-table__column-popover'
+          overlayClassName={adminListSurfaceClassNames.columnPopover}
           placement='bottomRight'
           trigger='click'
           onOpenChange={setIsColumnPickerOpen}
         >
           <AdminActionButton
             aria-label='配置展示列'
-            className={`route-container-header__action-button relay-admin-list-table__column-trigger${
+            className={`route-container-header__action-button ${adminListSurfaceClassNames.columnTrigger}${
               isColumnPickerOpen ? ' is-active' : ''
             }`}
             iconName='view_week'
@@ -157,12 +160,12 @@ export const AdminListTable = <T extends object>({
         </Popover>
       </div>
       {onSelectedRowKeysChange == null || !hasSelection ? null : (
-        <div className='relay-admin-list-table__batch'>
-          <span className='relay-admin-list-table__selected-count'>已选 {selectedRowKeys.length}</span>
+        <div className={adminListSurfaceClassNames.batch}>
+          <span className={adminListSurfaceClassNames.selectedCount}>已选 {selectedRowKeys.length}</span>
           {batchActions}
         </div>
       )}
-      <div className='relay-admin-list-table__table-scroll'>
+      <div className={adminListSurfaceClassNames.tableScroll}>
         <Table<T>
           className={['relay-admin-table', className].filter(Boolean).join(' ')}
           columns={visibleColumns}

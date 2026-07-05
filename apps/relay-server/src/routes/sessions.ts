@@ -7,6 +7,7 @@ import {
   handleGetJobResult,
   handleListJobs,
   handleSubmitJob,
+  handleSubmitWorkspaceRequestJob,
   handleUpdateJobStatus
 } from '../session-forwarding/job-handlers.js'
 import { handleListSessions, handleSnapshotUpdate } from '../session-forwarding/session-handlers.js'
@@ -59,6 +60,24 @@ export const handleRelaySessionsRoute = async (
         storeRepository,
         decodeSegment(submitMatch[1]),
         decodeSegment(submitMatch[2]),
+        telemetry
+      )
+      return true
+    }
+    methodNotAllowed(res, args)
+    return true
+  }
+
+  const workspaceRequestMatch = /^\/api\/relay\/devices\/([^/]+)\/workspace\/requests$/.exec(url.pathname)
+  if (workspaceRequestMatch != null) {
+    if (req.method === 'POST') {
+      await handleSubmitWorkspaceRequestJob(
+        req,
+        res,
+        args,
+        store,
+        storeRepository,
+        decodeSegment(workspaceRequestMatch[1]),
         telemetry
       )
       return true

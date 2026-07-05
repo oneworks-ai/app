@@ -29,7 +29,11 @@ export const authMiddleware = (env: ServerEnv): Koa.Middleware => {
       return
     }
 
-    const token = getBearerTokenFromHeader(ctx.get('Authorization')) ?? ctx.cookies.get(AUTH_COOKIE_NAME)
+    const queryAuthToken = ctx.path === '/api/events' && typeof ctx.query.authToken === 'string'
+      ? ctx.query.authToken
+      : undefined
+    const token = getBearerTokenFromHeader(ctx.get('Authorization')) ?? ctx.cookies.get(AUTH_COOKIE_NAME) ??
+      queryAuthToken
     const authenticated = await verifySessionToken(env, token)
     if (!authenticated) {
       throw unauthorized('Login required', undefined, 'auth_required')

@@ -34,12 +34,11 @@ const createSnapshotFixture = (workspaceDir: string) => ({
   assignments: [
     {
       id: 'smoke-workspace-assignment',
-      allowedFields: ['defaultModelService', 'modelServices'],
+      allowedFields: ['modelServices'],
       project: {
         allow: [workspaceDir]
       },
       configPatch: {
-        defaultModelService: RELAY_CONFIG_SMOKE_SERVICE_KEY,
         env: {
           RELAY_FORBIDDEN_ENV: 'must-not-merge'
         },
@@ -76,12 +75,11 @@ const createSnapshotFixture = (workspaceDir: string) => ({
     },
     {
       id: 'smoke-workspace-denied-assignment',
-      allowedFields: ['defaultModelService', 'modelServices'],
+      allowedFields: ['modelServices'],
       project: {
         allow: ['/not/the/smoke/workspace']
       },
       configPatch: {
-        defaultModelService: 'relay-denied',
         modelServices: {
           'relay-denied': {
             apiBaseUrl: 'https://denied.example.com/v1',
@@ -108,6 +106,7 @@ export const createWorkspaceFixture = async (repoRoot: string): Promise<RelayCon
   const env = {
     ...process.env,
     __ONEWORKS_PROJECT_DISABLE_DEV_CONFIG__: '1',
+    __ONEWORKS_PROJECT_DISABLE_DEFAULT_OFFICIAL_PLUGINS__: '1',
     __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1',
     __ONEWORKS_PROJECT_HOME_PROJECT_DIR__: projectHome,
     __ONEWORKS_PROJECT_HOME_PROJECTS_DIR__: join(tempRoot, 'project-homes'),
@@ -124,7 +123,7 @@ export const createWorkspaceFixture = async (repoRoot: string): Promise<RelayCon
     disableGlobalConfig: true,
     plugins: [
       {
-        id: '@oneworks/plugin-relay',
+        id: pluginRoot,
         options: {
           activeServerId: 'corp',
           enableOfficialCloudflareRelay: false,

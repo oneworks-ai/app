@@ -3,7 +3,7 @@ import { dirname } from 'node:path'
 import process from 'node:process'
 
 import { resolveProjectOoPath } from '@oneworks/utils'
-import { glob } from 'fast-glob'
+import fg from 'fast-glob'
 
 import { BenchmarkResultSchema } from './schema'
 import type { BenchmarkResult } from './schema'
@@ -32,7 +32,7 @@ export const listBenchmarkResults = async (workspaceFolder = process.cwd(), cate
   const pattern = category == null
     ? '*/*/result.json'
     : `${category}/*/result.json`
-  const resultPaths = await glob(pattern, {
+  const resultPaths = await fg(pattern, {
     cwd: resultRoot,
     absolute: true
   })

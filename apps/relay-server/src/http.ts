@@ -29,7 +29,7 @@ export const sendJson = (res: ServerResponse, status: number, body: unknown, all
     'content-type': 'application/json; charset=utf-8',
     'access-control-allow-origin': allowOrigin,
     'access-control-allow-headers': 'content-type, authorization',
-    'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS'
+    'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS'
   })
   res.end(`${JSON.stringify(body)}\n`)
 }

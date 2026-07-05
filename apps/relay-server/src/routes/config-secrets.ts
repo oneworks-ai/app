@@ -14,7 +14,7 @@ import { relayPermissions } from '../permissions/index.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
 import { findRelayTeam } from '../teams.js'
 import type { RelayConfigSecret, RelayServerArgs, RelayStore } from '../types.js'
-import { ensureWritableConfigProfileTeam } from './config-profile-route-utils.js'
+import { canReadConfigSecretTeam, ensureWritableConfigProfileTeam } from './config-profile-route-utils.js'
 import { authUserId, cleanString, isAdminAuth, pathId } from './team-route-utils.js'
 
 const routeKind = (url: URL, leaf: string) => (
@@ -58,6 +58,20 @@ const validateSecretWrite = (
   if (!ensureWritableConfigProfileTeam(res, args, store, auth, teamId)) return false
   if (!store.teamPolicy.allowedSecretModes.includes('device_encrypted')) {
     sendJson(res, 403, { error: 'Device encrypted secrets are disabled by tenant policy.' }, args.allowOrigin)
+    return false
+  }
+  return true
+}
+
+const validateSecretRead = (
+  res: ServerResponse,
+  args: RelayServerArgs,
+  store: RelayStore,
+  auth: RelayAuthContext,
+  teamId: string
+) => {
+  if (!canReadConfigSecretTeam(store, auth, teamId)) {
+    sendJson(res, 403, { error: 'Permission denied.' }, args.allowOrigin)
     return false
   }
   return true
@@ -161,8 +175,8 @@ export const handleTeamConfigSecretsRoute = async (
     sendJson(res, 404, { error: 'Team not found.' }, args.allowOrigin)
     return true
   }
-  if (!validateSecretWrite(res, args, store, auth, team.id)) return true
   if (req.method === 'GET') {
+    if (!validateSecretRead(res, args, store, auth, team.id)) return true
     listSecrets(res, args, store, team.id)
     return true
   }
@@ -195,7 +209,7 @@ export const handleConfigSecretsRoute = async (
     return true
   }
   if (segments.length === 1 && req.method === 'GET') {
-    if (!validateSecretWrite(res, args, store, auth, secret.teamId)) return true
+    if (!validateSecretRead(res, args, store, auth, secret.teamId)) return true
     sendJson(res, 200, { secret: serializeRelayConfigSecret(secret) }, args.allowOrigin)
     return true
   }

@@ -316,6 +316,7 @@ export interface RelaySsoProvider {
 
 export interface RelayDevice {
   id: string
+  alias?: string
   name?: string
   userId?: string
   capabilities?: Record<string, unknown>
@@ -345,8 +346,10 @@ export type RelayConfigSafeField =
   | 'skillRegistries'
   | 'skills'
   | 'skillsMeta'
+  | 'adapters'
 
 export interface RelayConfigPatch {
+  adapters?: Record<string, unknown>
   defaultModelService?: string
   marketplaces?: Record<string, unknown>
   modelServices?: Record<string, unknown>
@@ -486,6 +489,38 @@ export interface RelayConfigSnapshot {
   version: string
 }
 
+export interface RelayPersonalConfigSnapshot {
+  allowedFields: RelayConfigSafeField[]
+  configPatch?: RelayConfigPatch
+  documents?: RelayPersonalDocumentSnapshot
+  hash: string
+  sourceDeviceId?: string
+  updatedAt: string
+  userId: string
+  version: string
+}
+
+export type RelayPersonalDocumentKind = 'agents'
+
+export interface RelayPersonalDocumentCounts {
+  agents: number
+}
+
+export interface RelayPersonalDocumentSnapshot {
+  countsByKind: RelayPersonalDocumentCounts
+  documentCount: number
+  encryptedPayload: RelayEncryptedPayload
+  hash: string
+  totalSizeBytes: number
+  updatedAt: string
+  version: 1
+}
+
+export interface RelayTeamDocumentSnapshot extends RelayPersonalDocumentSnapshot {
+  teamId: string
+  updatedByUserId?: string
+}
+
 export interface RelayAuditLogEntry {
   id: string
   actor: string
@@ -587,6 +622,7 @@ export interface RelayDeviceSession {
   userId?: string
   title: string
   state?: string
+  workspaceFolder?: string
   lastActiveAt?: string
   createdAt: string
   updatedAt: string
@@ -620,6 +656,8 @@ export interface RelayStore {
   openApiAuditEvents?: RelayOpenApiAuditEvent[]
   configAssignments: RelayConfigAssignment[]
   configProfileAssignments: RelayConfigProfileAssignment[]
+  personalConfigSnapshots?: RelayPersonalConfigSnapshot[]
+  teamDocumentSnapshots?: RelayTeamDocumentSnapshot[]
   configSecrets: RelayConfigSecret[]
   configProfileVersions: RelayConfigProfileVersion[]
   configProfiles: RelayConfigProfile[]

@@ -7,10 +7,10 @@ import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
-import type { AgentRoomListResponse, Session, UpdateAgentRoomMetadataRequest } from '@oneworks/core'
+import type { AgentRoomSummaryListResponse, Session, UpdateAgentRoomMetadataRequest } from '@oneworks/core'
 import type { ConfigResponse } from '@oneworks/types'
 
-import { deleteSession, getAgentRoom, listAgentRooms, updateSession, updateSessionTitle } from '#~/api'
+import { deleteSession, listAgentRoomSummaries, updateSession, updateSessionTitle } from '#~/api'
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import { InteractionList } from '#~/components/interaction-list'
 import type {
@@ -313,16 +313,13 @@ export function Sidebar({
     data: roomsRes,
     isLoading: isRoomsLoading,
     mutate: mutateRooms
-  } = useSWR<AgentRoomListResponse>('/api/agent-rooms', listAgentRooms, {
-    refreshInterval: 3000,
-    revalidateOnFocus: true
-  })
-  const roomDetailKey = roomsRes?.rooms.map(room => room.id).sort().join('|')
-  const { data: roomDetails } = useSWR(
-    roomDetailKey == null || roomDetailKey === '' ? null : ['agent-room-details', roomDetailKey],
-    () => Promise.all((roomsRes?.rooms ?? []).map(room => getAgentRoom(room.id))),
+  } = useSWR<AgentRoomSummaryListResponse>(
+    '/api/agent-rooms/summary',
+    listAgentRoomSummaries,
     {
-      refreshInterval: 3000,
+      dedupingInterval: 5000,
+      refreshInterval: 300_000,
+      refreshWhenHidden: false,
       revalidateOnFocus: true
     }
   )
@@ -331,10 +328,10 @@ export function Sidebar({
     [optimisticCreations, sessionsRes?.sessions]
   )
   const sidebarSessions = useMemo(() => sessions.filter(isSidebarVisibleSession), [sessions])
-  const rooms: SidebarRoomItem[] = useMemo(() => {
-    const detailMap = new Map((roomDetails ?? []).map(detail => [detail.room.id, detail]))
-    return (roomsRes?.rooms ?? []).map(room => toSidebarRoomItem(room, detailMap.get(room.id)))
-  }, [roomDetails, roomsRes?.rooms])
+  const rooms: SidebarRoomItem[] = useMemo(
+    () => (roomsRes?.rooms ?? []).map(room => toSidebarRoomItem(room)),
+    [roomsRes?.rooms]
+  )
   const { data: configRes } = useSWR<ConfigResponse>('/api/config')
 
   const newSessionShortcut = configRes?.sources?.merged?.shortcuts?.newSession

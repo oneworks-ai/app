@@ -356,6 +356,7 @@ export const normalizeCodexConfigCliCompatibility = (content: string) => {
   if (rootSection == null) return content
 
   let changed = false
+  const skippedLineNumbers = new Set<number>()
   const nextLines = scan.lines.map(line => line.text)
 
   for (let lineIndex = rootSection.startLine; lineIndex < rootSection.endLine; lineIndex += 1) {
@@ -368,11 +369,17 @@ export const normalizeCodexConfigCliCompatibility = (content: string) => {
     const nextLine = normalizeCodexServiceTierCompatibilityLine(line.text)
     if (nextLine === line.text) continue
 
-    nextLines[lineIndex] = nextLine
+    if (nextLine == null) {
+      skippedLineNumbers.add(lineIndex)
+    } else {
+      nextLines[lineIndex] = nextLine
+    }
     changed = true
   }
 
-  return changed ? nextLines.join('\n') : content
+  return changed
+    ? nextLines.filter((_, lineIndex) => !skippedLineNumbers.has(lineIndex)).join('\n')
+    : content
 }
 
 export const ensureCodexConfigCliCompatibility = async (configPath: string) => {

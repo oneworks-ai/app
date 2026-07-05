@@ -1,3 +1,5 @@
+import { Buffer } from 'node:buffer'
+
 import { describe, expect, it } from 'vitest'
 
 import { buildRelayConfigShareDraft } from '../src/shared/config-share-draft.js'
@@ -95,7 +97,6 @@ describe('relay config share draft', () => {
     const serialized = JSON.stringify(draft)
 
     expect(draft.configPatch).toMatchObject({
-      defaultModelService: 'openai',
       modelServices: {
         openai: {
           apiBaseUrl: 'https://api.openai.com/v1',
@@ -137,7 +138,6 @@ describe('relay config share draft', () => {
       }
     })
     expect(draft.allowedFields).toEqual([
-      'defaultModelService',
       'modelServices',
       'recommendedModels',
       'plugins',
@@ -168,6 +168,7 @@ describe('relay config share draft', () => {
       }
     })
     expect(draft.rejectedFields).toEqual(expect.arrayContaining([
+      'general.defaultModelService',
       'general.env',
       'mcp',
       'skillsMeta.homeBridge.roots',
@@ -227,5 +228,45 @@ describe('relay config share draft', () => {
     })
     expect(draft.secretItems).toHaveLength(1)
     expect(JSON.stringify(draft)).not.toContain('sk-local-secret')
+  })
+
+  it('rejects adapter config from team share drafts', () => {
+    const token = Buffer.from('{"auth_mode":"chatgpt"}\n', 'utf8').toString('base64')
+    const draft = buildRelayConfigShareDraft({
+      allowedFields: ['adapters'],
+      config: {
+        adapters: {
+          codex: {
+            accounts: {
+              work: {
+                auth: {
+                  encoding: 'base64',
+                  token,
+                  type: 'codex-auth-json'
+                },
+                authFile: '/Users/local/.codex/auth.json',
+                title: 'Work'
+              }
+            },
+            defaultAccount: 'work'
+          }
+        }
+      }
+    })
+
+    expect(draft).toMatchObject({
+      allowedFields: [],
+      pendingSecretRefs: {},
+      rejectedFields: ['adapters'],
+      secretItems: []
+    })
+    expect(draft.configPatch).toBeUndefined()
+    expect(draft.issues).toContainEqual(expect.objectContaining({
+      code: 'rejected_root',
+      path: 'adapters',
+      severity: 'error'
+    }))
+    expect(JSON.stringify(draft)).not.toContain('/Users/local')
+    expect(JSON.stringify(draft)).not.toContain(token)
   })
 })

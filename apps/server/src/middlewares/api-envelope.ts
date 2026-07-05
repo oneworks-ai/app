@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- API envelope normalization and conditional response handling stay colocated. */
+import { createHash } from 'node:crypto'
 import { STATUS_CODES } from 'node:http'
 
 import type { ApiErrorResponse, ApiSuccessResponse } from '#~/utils/http.js'
@@ -98,6 +100,50 @@ const ok = <T>(data: T): ApiSuccessResponse<T> => ({ success: true, data })
 const shouldSkipApiEnvelope = (ctx: Koa.Context) =>
   (ctx.state as { skipApiEnvelope?: boolean }).skipApiEnvelope === true
 
+const createResponseEtag = (body: string) => (
+  `W/"${createHash('sha256').update(body).digest('base64url')}"`
+)
+
+const ifNoneMatchContains = (value: string, etag: string) => (
+  value.split(',').some(part => {
+    const candidate = part.trim()
+    return candidate === '*' || candidate === etag
+  })
+)
+
+const appendVaryHeader = (ctx: Koa.Context, values: string[]) => {
+  const current = ctx.response.get('Vary')
+  const parts = new Set(
+    current.split(',')
+      .map(part => part.trim())
+      .filter(part => part !== '')
+  )
+  values.forEach(value => parts.add(value))
+  ctx.set('Vary', [...parts].join(', '))
+}
+
+const applyConditionalJsonResponse = (ctx: Koa.Context) => {
+  if (ctx.method !== 'GET' || ctx.status < 200 || ctx.status >= 300 || ctx.body == null) {
+    return
+  }
+
+  const body = JSON.stringify(ctx.body)
+  const etag = createResponseEtag(body)
+  ctx.set('ETag', etag)
+  if (ctx.response.get('Cache-Control') === '') {
+    ctx.set('Cache-Control', 'private, no-cache')
+  }
+  appendVaryHeader(ctx, ['Authorization', 'Cookie'])
+
+  if (ifNoneMatchContains(ctx.get('If-None-Match'), etag)) {
+    ctx.status = 304
+    ctx.body = undefined
+    return
+  }
+
+  ctx.type = 'application/json'
+}
+
 const normalizeHttpError = (error: unknown): HttpError => {
   if (error instanceof HttpError) {
     return error
@@ -159,6 +205,7 @@ export const apiEnvelopeMiddleware = (): Koa.Middleware => {
     ctx.type = 'application/json'
 
     if (isApiResponseEnvelope(ctx.body)) {
+      applyConditionalJsonResponse(ctx)
       return
     }
 
@@ -173,9 +220,11 @@ export const apiEnvelopeMiddleware = (): Koa.Middleware => {
         return
       }
       ctx.body = ok(null)
+      applyConditionalJsonResponse(ctx)
       return
     }
 
     ctx.body = ok(ctx.body)
+    applyConditionalJsonResponse(ctx)
   }
 }

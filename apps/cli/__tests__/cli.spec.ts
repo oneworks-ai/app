@@ -17,7 +17,11 @@ describe('cli argv normalization', () => {
     expect(normalizeCliArgs(['run', 'hello'])).toEqual(['__run', 'run', 'hello'])
     expect(normalizeCliArgs(['__run', '--print', 'hi'])).toEqual(['__run', '--print', 'hi'])
     expect(normalizeCliArgs(['list'])).toEqual(['list'])
+    expect(normalizeCliArgs(['login'])).toEqual(['login'])
+    expect(normalizeCliArgs(['logout'])).toEqual(['logout'])
+    expect(normalizeCliArgs(['users', 'enable'])).toEqual(['users', 'enable'])
     expect(normalizeCliArgs(['config', 'list'])).toEqual(['config', 'list'])
+    expect(normalizeCliArgs(['daemon'])).toEqual(['daemon'])
     expect(normalizeCliArgs(['benchmark', 'list'])).toEqual(['benchmark', 'list'])
     expect(normalizeCliArgs(['channel', 'erjie', 'send', 'hello'])).toEqual(['channel', 'erjie', 'send', 'hello'])
     expect(normalizeCliArgs(['mem', 'get'])).toEqual(['mem', 'get'])
@@ -31,5 +35,9 @@ describe('cli argv normalization', () => {
     expect(normalizeCliArgs(['skills', 'install'])).toEqual(['skills', 'install'])
     expect(normalizeCliArgs(['--help'])).toEqual(['--help'])
     expect(normalizeCliArgs(['-V'])).toEqual(['-V'])
+  })
+
+  it('preserves plugin contributed root subcommands', () => {
+    expect(normalizeCliArgs(['custom', 'run'], ['custom'])).toEqual(['custom', 'run'])
   })
 })

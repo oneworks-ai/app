@@ -46,6 +46,15 @@
         "require": "./dist/ai-path.js"
       }
     },
+    "./auth-store": {
+      "__oneworks__": {
+        "default": "./src/auth-store.ts"
+      },
+      "default": {
+        "import": "./dist/auth-store.mjs",
+        "require": "./dist/auth-store.js"
+      }
+    },
     "./create-logger": {
       "__oneworks__": {
         "default": "./src/create-logger.ts"

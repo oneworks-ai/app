@@ -17,6 +17,7 @@ import { TeamConfigProfiles } from './TeamConfigProfiles'
 import { TeamConfigSecrets } from './TeamConfigSecrets'
 import { TeamDetailTabActionsContext } from './TeamDetailTabActions'
 import type { TeamDetailTabKey } from './TeamDetailTabActions'
+import { TeamDocuments } from './TeamDocuments'
 import { TeamMembers } from './TeamMembers'
 import type { RelayAdminTeam, RelayAdminTeamMemberRole, RelayAdminTeamPolicy } from './teamTypes'
 
@@ -29,7 +30,8 @@ export interface TeamDetailPageProps {
 }
 
 const isTeamDetailTabKey = (value: string): value is TeamDetailTabKey =>
-  value === 'members' || value === 'groups' || value === 'profiles' || value === 'secrets' || value === 'audit'
+  value === 'members' || value === 'groups' || value === 'profiles' || value === 'secrets' ||
+  value === 'documents' || value === 'audit'
 
 const formatTimestamp = (value: string | null | undefined) => {
   if (value == null || value === '') return '-'
@@ -78,7 +80,7 @@ export const TeamDetailPage = ({
   teams,
   token
 }: TeamDetailPageProps) => {
-  const { tabKey, teamId } = useParams()
+  const { profileId, tabKey, teamId } = useParams()
   const navigate = useNavigate()
   const team = teams.find(item => item.id === teamId)
   const [teamAccessGroups, setTeamAccessGroups] = useState(team?.accessGroups ?? [])
@@ -208,9 +210,18 @@ export const TeamDetailPage = ({
               {
                 children: (
                   <TeamConfigProfiles
+                    activeProfileId={activeTabKey === 'profiles' ? profileId : undefined}
                     disabled={configDisabled}
                     team={teamWithAccessGroups}
                     token={token}
+                    onProfileRouteChange={nextProfileId => {
+                      const basePath = `/teams/${encodeURIComponent(teamWithAccessGroups.id)}/profiles`
+                      void navigate(
+                        nextProfileId == null
+                          ? basePath
+                          : `${basePath}/${encodeURIComponent(nextProfileId)}`
+                      )
+                    }}
                   />
                 ),
                 key: 'profiles',
@@ -226,6 +237,17 @@ export const TeamDetailPage = ({
                 ),
                 key: 'secrets',
                 label: teamTabLabel('key', '密钥')
+              },
+              {
+                children: (
+                  <TeamDocuments
+                    disabled={configDisabled}
+                    team={teamWithAccessGroups}
+                    token={token}
+                  />
+                ),
+                key: 'documents',
+                label: teamTabLabel('sync', '同步文档')
               },
               {
                 children: (

@@ -1,0 +1,4585 @@
+/* eslint-disable max-lines -- relay home owns the account, server, token, and team pages so the plugin no longer falls back to legacy string rendering. */
+import { adminListSurfaceClassNames } from '@oneworks/components/admin-list-surface'
+
+import {
+  LOCAL_RELAY_SERVER_ID,
+  OFFICIAL_RELAY_CLOUDFLARE_DEV_SERVER_ID,
+  OFFICIAL_RELAY_CLOUDFLARE_SERVER_ID,
+  OFFICIAL_RELAY_VERCEL_DEV_SERVER_ID,
+  OFFICIAL_RELAY_VERCEL_SERVER_ID
+} from '../shared/official-services.js'
+import { createRelayLoginUrl } from './login-action.js'
+import { clearLoginCallbackFromUrl, readLoginCallback, readLoginCallbackFromUrl } from './login-callback.js'
+import { buildRelayServerOptionsUpdate } from './options.js'
+import type {
+  PluginClientContext,
+  PluginHostInteractionListAction,
+  PluginHostInteractionListItem,
+  PluginHostNativeTabItem,
+  PluginReactHost,
+  PluginReactNode,
+  PluginViewContext,
+  PluginViewRouteHeaderAction,
+  RelayAuthAccount,
+  RelayConfigDistributionSourceStatus,
+  RelayConfigDistributionStatus,
+  RelayConfigShareDraft,
+  RelayConfigShareProfile,
+  RelayConfigShareProfileDetail,
+  RelayConfigShareTargets,
+  RelayDocumentContent,
+  RelayLoginCallback,
+  RelayPersonalDocumentEntry,
+  RelayPersonalDocumentSyncKind,
+  RelayProfileAccessToken,
+  RelayProfileStatus,
+  RelayProfileTab,
+  RelayProfileTeam,
+  RelayProfileTeamDetailTab,
+  RelayServerStatus,
+  RelayStatus
+} from './types.js'
+import {
+  cleanText,
+  cleanTextList,
+  formatDateTime,
+  getAvatarInitials,
+  normalizeComparableUrl,
+  toErrorMessage,
+  valueOrDash
+} from './utils.js'
+
+type RelayHomeRoute =
+  | { page: 'accounts' }
+  | { page: 'servers' }
+  | { page: 'login'; serverId?: string }
+  | { accountKey: string; page: 'messages' }
+  | { accountKey: string; page: 'profile'; tab: RelayProfileTab }
+  | {
+    accountKey: string
+    configPanel?: 'content' | 'versions'
+    configProfileId?: string
+    page: 'team'
+    tab: RelayProfileTeamDetailTab
+    teamId: string
+  }
+  | { accountKey: string; page: 'token'; tokenId: string }
+
+interface AsyncState<T> {
+  data: T | null
+  error: string | null
+  loading: boolean
+}
+
+interface ShareState {
+  draft: RelayConfigShareDraft | null
+  error: string | null
+  loadingTargets: boolean
+  previewing: boolean
+  profileName: string
+  publishing: boolean
+  targets: RelayConfigShareTargets | null
+  text: string
+}
+
+interface ServerDraft {
+  id?: string
+  name: string
+  remoteBaseUrl: string
+}
+
+interface RelayAccountInteractionItem extends PluginHostInteractionListItem {
+  account?: RelayAuthAccount
+  accountKey?: string
+  kind: 'account' | 'server'
+  server?: RelayServerStatus
+  serverId?: string
+}
+
+interface RelayTeamConfigInteractionItem extends PluginHostInteractionListItem {
+  kind: 'teamConfigProfile'
+  profile: RelayConfigShareProfile
+  source?: RelayConfigDistributionSourceStatus
+}
+
+interface RelayDocumentInteractionItem extends PluginHostInteractionListItem {
+  displayPath: string
+  enabled: boolean
+  exists: boolean
+  kind: 'accountAgents' | 'namespaceDocument' | 'teamAgents'
+  localOnly: boolean
+  path: string
+  relativePath: string
+}
+
+interface TokenEditorState {
+  name: string
+  permissionGroupIds: string
+  permissionGroupMode: 'all' | 'custom'
+  scope: 'platform' | 'team' | 'user'
+  teamId: string
+}
+
+const DOCUMENT_PREVIEW_CLOSE_ANIMATION_MS = 260
+
+const profileTabs: Array<{ icon: string; key: RelayProfileTab; label: string }> = [
+  { icon: 'badge', key: 'account', label: '资料' },
+  { icon: 'groups', key: 'teams', label: '团队' },
+  { icon: 'sync', key: 'documents', label: '文档' },
+  { icon: 'devices', key: 'devices', label: '设备' },
+  { icon: 'shield_lock', key: 'security', label: '安全' },
+  { icon: 'key', key: 'tokens', label: '令牌' }
+]
+
+const teamDetailTabs: Array<{ icon: string; key: RelayProfileTeamDetailTab; label: string }> = [
+  { icon: 'groups', key: 'overview', label: '概览' },
+  { icon: 'rule_settings', key: 'configs', label: '配置' },
+  { icon: 'sync', key: 'documents', label: '文档' }
+]
+
+const documentScopeSegment = (value: string | null | undefined, fallback: string) => (
+  (cleanText(value) ?? fallback).replace(/[\\/]/gu, '_')
+)
+
+const accountAgentsPath = (account: RelayAuthAccount | null) => (
+  `${accountDocumentBasePath(account)}/AGENTS.md`
+)
+
+const accountDocumentBasePath = (account: RelayAuthAccount | null) => (
+  `~/.oo/accounts/${documentScopeSegment(account?.userId, '<account-id>')}`
+)
+
+const teamAgentsPath = (team: RelayProfileTeam) => (
+  `${teamDocumentBasePath(team)}/AGENTS.md`
+)
+
+const teamDocumentBasePath = (team: RelayProfileTeam) => (
+  `~/.oo/teams/${documentScopeSegment(team.id, '<team-id>')}`
+)
+
+const documentPayloadPath = (path: string) => path.replace(/^~\//u, '')
+
+const documentFullDisplayPath = (path: string) => {
+  const payloadPath = documentPayloadPath(path)
+  return payloadPath.startsWith('~') ? payloadPath : `~/${payloadPath}`
+}
+
+const documentFileName = (path: string) => {
+  const segments = path.split('/').filter(Boolean)
+  return segments.at(-1) ?? path
+}
+
+const readDocumentPanelQueryValue = (key: 'doc' | 'q') => {
+  if (typeof window === 'undefined') return ''
+  try {
+    return new URLSearchParams(window.location.search).get(key)?.trim() ?? ''
+  } catch {
+    return ''
+  }
+}
+
+const writeDocumentPanelQuery = (input: { documentPath?: string | null; search: string }) => {
+  if (typeof window === 'undefined') return
+  try {
+    const url = new URL(window.location.href)
+    const search = input.search.trim()
+    if (search === '') {
+      url.searchParams.delete('q')
+    } else {
+      url.searchParams.set('q', search)
+    }
+    const documentPath = input.documentPath?.trim() ?? ''
+    if (documentPath === '') {
+      url.searchParams.delete('doc')
+    } else {
+      url.searchParams.set('doc', documentPath)
+    }
+    const nextRoute = `${url.pathname}${url.search}${url.hash}`
+    const currentRoute = `${window.location.pathname}${window.location.search}${window.location.hash}`
+    if (nextRoute !== currentRoute) {
+      window.history.replaceState(window.history.state, '', nextRoute)
+    }
+  } catch {
+    // Ignore malformed browser location state; document UI still works without URL persistence.
+  }
+}
+
+const documentEntryIcon = (entry: RelayPersonalDocumentEntry, team?: RelayProfileTeam) => {
+  if (entry.relativePath === 'AGENTS.md') return team == null ? 'description' : 'groups'
+  if (entry.localOnly) return 'description'
+  if (entry.relativePath.toLowerCase().includes('review')) return 'checklist'
+  return 'rule_settings'
+}
+
+const profileTabKeys = new Set(profileTabs.map(tab => tab.key))
+const teamDetailTabKeys = new Set(teamDetailTabs.map(tab => tab.key))
+
+const readCurrentPathname = () => {
+  if (typeof window === 'undefined') return ''
+  if (typeof window.location.pathname === 'string') return window.location.pathname
+  try {
+    return new URL(window.location.href).pathname
+  } catch {
+    return ''
+  }
+}
+
+const readLocationSignature = () => {
+  if (typeof window === 'undefined') return ''
+  return `${window.location.pathname}${window.location.search}${window.location.hash}`
+}
+
+const safeDecodePathSegment = (value: string) => {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+const readRelayHomeSubpathSegments = (scope: string) => {
+  const segments = readCurrentPathname().split('/')
+  const homeIndex = segments.findIndex((segment, index) =>
+    segment === 'plugins' &&
+    safeDecodePathSegment(segments[index + 1] ?? '') === scope &&
+    segments[index + 2] === 'home'
+  )
+  if (homeIndex < 0) return []
+  return segments.slice(homeIndex + 3).filter(Boolean).map(safeDecodePathSegment)
+}
+
+const getPluginRouteBasePath = (scope: string) => {
+  const segments = readCurrentPathname().split('/')
+  const homeIndex = segments.findIndex((segment, index) =>
+    segment === 'plugins' &&
+    safeDecodePathSegment(segments[index + 1] ?? '') === scope &&
+    segments[index + 2] === 'home'
+  )
+  if (homeIndex >= 0) return segments.slice(0, homeIndex + 3).join('/') || '/'
+  return `/plugins/${encodeURIComponent(scope)}/home`
+}
+
+const notifyRouteChange = (scope: string) => {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(
+    new CustomEvent('oneworks:plugin-route-change', {
+      detail: {
+        pluginScope: scope,
+        route: `${window.location.pathname}${window.location.search}${window.location.hash}`
+      }
+    })
+  )
+}
+
+const navigateTo = (scope: string, path: string) => {
+  if (typeof window === 'undefined') return
+  window.history.pushState(window.history.state, '', path)
+  notifyRouteChange(scope)
+}
+
+const parseRoute = (scope: string): RelayHomeRoute => {
+  const segments = readRelayHomeSubpathSegments(scope)
+  if (segments[0] !== 'accounts') return { page: 'accounts' }
+  if (segments[1] === 'servers') {
+    if (segments[3] === 'login') return { page: 'login', serverId: cleanText(segments[2]) }
+    return { page: 'servers' }
+  }
+  if (segments[1] === 'login') return { page: 'login' }
+  const accountKey = cleanText(segments[1])
+  if (accountKey == null) return { page: 'accounts' }
+  if (segments[2] === 'messages') return { accountKey, page: 'messages' }
+  if (segments[2] === 'tokens' && cleanText(segments[3]) != null) {
+    return { accountKey, page: 'token', tokenId: segments[3] ?? 'new' }
+  }
+  if (segments[2] === 'teams' && cleanText(segments[3]) != null) {
+    const tab = teamDetailTabKeys.has(segments[4] as RelayProfileTeamDetailTab)
+      ? segments[4] as RelayProfileTeamDetailTab
+      : 'overview'
+    const configPanel = tab === 'configs' && cleanText(segments[5]) != null &&
+        (segments[6] === 'content' || segments[6] === 'versions')
+      ? segments[6] as 'content' | 'versions'
+      : undefined
+    return {
+      accountKey,
+      configPanel,
+      configProfileId: tab === 'configs' ? cleanText(segments[5]) : undefined,
+      page: 'team',
+      tab,
+      teamId: segments[3] ?? ''
+    }
+  }
+  const tab = profileTabKeys.has(segments[2] as RelayProfileTab) ? segments[2] as RelayProfileTab : 'account'
+  return { accountKey, page: 'profile', tab }
+}
+
+const routePath = (scope: string, route: RelayHomeRoute) => {
+  const base = getPluginRouteBasePath(scope)
+  if (route.page === 'accounts') return `${base}/accounts`
+  if (route.page === 'servers') return `${base}/accounts/servers`
+  if (route.page === 'login') {
+    return route.serverId == null
+      ? `${base}/accounts/login`
+      : `${base}/accounts/servers/${encodeURIComponent(route.serverId)}/login`
+  }
+  if (route.page === 'messages') return `${base}/accounts/${encodeURIComponent(route.accountKey)}/messages`
+  if (route.page === 'profile') {
+    return `${base}/accounts/${encodeURIComponent(route.accountKey)}/${encodeURIComponent(route.tab)}`
+  }
+  if (route.page === 'team') {
+    const suffix = route.tab === 'overview' ? '' : `/${encodeURIComponent(route.tab)}`
+    const configProfileId = cleanText(route.configProfileId)
+    const detailSuffix = route.tab === 'configs' && configProfileId != null
+      ? `/${encodeURIComponent(configProfileId)}${route.configPanel == null ? '' : `/${route.configPanel}`}`
+      : ''
+    return `${base}/accounts/${encodeURIComponent(route.accountKey)}/teams/${
+      encodeURIComponent(route.teamId)
+    }${suffix}${detailSuffix}`
+  }
+  return `${base}/accounts/${encodeURIComponent(route.accountKey)}/tokens/${encodeURIComponent(route.tokenId)}`
+}
+
+const readJsonResponse = async <T>(response: Response, action: string): Promise<T> => {
+  const text = await response.text()
+  if (!response.ok) {
+    throw new Error(text || `${action} failed with ${response.status}`)
+  }
+  return (text.trim() === '' ? {} : JSON.parse(text)) as T
+}
+
+const requestJson = async <T>(
+  ctx: PluginClientContext,
+  action: string,
+  body?: Record<string, unknown>,
+  method = 'POST'
+) => {
+  const response = await ctx.api.fetch(`relay/${action}`, {
+    body: body == null ? undefined : JSON.stringify(body),
+    headers: body == null ? undefined : { 'content-type': 'application/json' },
+    method
+  })
+  return await readJsonResponse<T>(response, action)
+}
+
+const readRelayStatus = async (ctx: PluginClientContext) => {
+  const response = await ctx.api.fetch('relay/status')
+  return await readJsonResponse<RelayStatus>(response, 'status')
+}
+
+const readProfile = async (ctx: PluginClientContext, accountKey: string) => (
+  await requestJson<RelayProfileStatus>(ctx, 'profile', { accountKey, status: 'all' })
+)
+
+const useLocationSignature = (react: PluginReactHost, scope: string) => {
+  const [signature, setSignature] = react.useState(readLocationSignature)
+  react.useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const update = (event?: Event) => {
+      if (event instanceof CustomEvent) {
+        const detail = typeof event.detail === 'object' && event.detail != null
+          ? event.detail as { pluginScope?: unknown }
+          : {}
+        if (typeof detail.pluginScope === 'string' && detail.pluginScope !== scope) return
+      }
+      setSignature(readLocationSignature())
+    }
+    window.addEventListener('popstate', update)
+    window.addEventListener('oneworks:plugin-route-change', update)
+    return () => {
+      window.removeEventListener('popstate', update)
+      window.removeEventListener('oneworks:plugin-route-change', update)
+    }
+  }, [scope])
+  return signature
+}
+
+const useAsyncStatus = (react: PluginReactHost, ctx: PluginClientContext, revision: number) => {
+  const [state, setState] = react.useState<AsyncState<RelayStatus>>({
+    data: null,
+    error: null,
+    loading: true
+  })
+  react.useEffect(() => {
+    let disposed = false
+    setState(current => ({ ...current, error: null, loading: true }))
+    void readRelayStatus(ctx).then(data => {
+      if (!disposed) setState({ data, error: null, loading: false })
+    }).catch(error => {
+      if (!disposed) setState(current => ({ ...current, error: toErrorMessage(error), loading: false }))
+    })
+    return () => {
+      disposed = true
+    }
+  }, [ctx, revision])
+  return state
+}
+
+const useAsyncProfile = (
+  react: PluginReactHost,
+  ctx: PluginClientContext,
+  accountKey: string | undefined,
+  revision: number
+) => {
+  const [state, setState] = react.useState<AsyncState<RelayProfileStatus>>({
+    data: null,
+    error: null,
+    loading: accountKey != null
+  })
+  react.useEffect(() => {
+    if (accountKey == null) {
+      setState({ data: null, error: null, loading: false })
+      return undefined
+    }
+    let disposed = false
+    setState(current => ({ ...current, error: null, loading: true }))
+    void readProfile(ctx, accountKey).then(data => {
+      if (!disposed) setState({ data, error: null, loading: false })
+    }).catch(error => {
+      if (!disposed) setState(current => ({ ...current, error: toErrorMessage(error), loading: false }))
+    })
+    return () => {
+      disposed = true
+    }
+  }, [ctx, accountKey, revision])
+  return state
+}
+
+const findServerForAccount = (account: RelayAuthAccount, servers: RelayServerStatus[]) => {
+  const serverId = cleanText(account.serverId)
+  const serverUrl = normalizeComparableUrl(account.serverUrl)
+  return servers.find(server =>
+    cleanText(server.id) === serverId ||
+    normalizeComparableUrl(server.remoteBaseUrl) === serverUrl
+  )
+}
+
+const getServers = (status?: RelayStatus | null) => status?.servers ?? status?.options?.servers ?? []
+
+const getAccountKey = (account?: RelayAuthAccount) => cleanText(account?.accountKey) ?? ''
+
+const accountDisplayName = (account?: RelayAuthAccount | null) => (
+  cleanText(account?.name) ??
+    cleanText(account?.loginId) ??
+    cleanText(account?.email) ??
+    cleanText(account?.userId) ??
+    '账号'
+)
+
+const accountSubtitle = (account?: RelayAuthAccount | null, includeEmail = true) =>
+  (
+    includeEmail
+      ? cleanTextList([account?.email, account?.loginId, account?.userId]).find(value =>
+        value !== accountDisplayName(account)
+      )
+      : cleanTextList([account?.loginId, account?.userId]).find(value => value !== accountDisplayName(account))
+  ) ?? ''
+
+const isOfficialServerId = (value?: string) => (
+  value === OFFICIAL_RELAY_CLOUDFLARE_SERVER_ID ||
+  value === OFFICIAL_RELAY_CLOUDFLARE_DEV_SERVER_ID ||
+  value === OFFICIAL_RELAY_VERCEL_SERVER_ID ||
+  value === OFFICIAL_RELAY_VERCEL_DEV_SERVER_ID
+)
+
+const officialServerLabel = (server?: RelayServerStatus) => {
+  const id = cleanText(server?.id)
+  if (id === OFFICIAL_RELAY_CLOUDFLARE_DEV_SERVER_ID) return 'Official-dev'
+  if (id === OFFICIAL_RELAY_VERCEL_SERVER_ID) return 'Official-vc'
+  if (id === OFFICIAL_RELAY_VERCEL_DEV_SERVER_ID) return 'Official-vc-dev'
+  if (id === OFFICIAL_RELAY_CLOUDFLARE_SERVER_ID) return 'Official'
+  return undefined
+}
+
+const serverDisplayName = (server?: RelayServerStatus, fallback = '服务') => (
+  officialServerLabel(server) ??
+    cleanText(server?.name) ??
+    cleanText(server?.remoteBaseUrl) ??
+    cleanText(server?.server) ??
+    cleanText(server?.id) ??
+    fallback
+)
+
+const serverAddress = (server?: RelayServerStatus) => {
+  const remoteBaseUrl = cleanText(server?.remoteBaseUrl)
+  if (remoteBaseUrl != null) return remoteBaseUrl
+  const host = cleanText(server?.server)
+  if (host == null) return ''
+  if (/^https?:\/\//iu.test(host)) return host
+  const protocol = cleanText(server?.protocol) ?? 'https'
+  const port = typeof server?.port === 'number' ? `:${server.port}` : ''
+  return `${protocol}://${host}${port}`
+}
+
+const accountServerGroupLabel = (account: RelayAuthAccount, servers: RelayServerStatus[]) => {
+  const server = findServerForAccount(account, servers)
+  const serverId = cleanText(server?.id ?? account.serverId)
+  if (server?.official === true || isOfficialServerId(serverId)) return 'Official'
+  if (serverId === LOCAL_RELAY_SERVER_ID || cleanText(account.serverAlias)?.toLowerCase() === 'local') return '本地'
+  return serverDisplayName(server, cleanText(account.serverAlias) ?? '服务')
+}
+
+const groupAccountsByServer = (accounts: RelayAuthAccount[], servers: RelayServerStatus[]) => {
+  const groups = new Map<string, { accounts: RelayAuthAccount[]; label: string; server?: RelayServerStatus }>()
+  accounts.forEach((account) => {
+    const server = findServerForAccount(account, servers)
+    const key = cleanText(account.serverId) ?? normalizeComparableUrl(account.serverUrl) ??
+      cleanText(account.serverAlias) ?? 'default'
+    const current = groups.get(key)
+    if (current == null) {
+      groups.set(key, { accounts: [account], label: accountServerGroupLabel(account, servers), server })
+    } else {
+      current.accounts.push(account)
+    }
+  })
+  return [...groups.entries()].map(([key, value]) => ({ key, ...value }))
+}
+
+const teamDisplayName = (team?: RelayProfileTeam | null) => (
+  cleanText(team?.name) ?? cleanText(team?.slug) ?? cleanText(team?.id) ?? '团队'
+)
+
+const teamRoleText = (team?: RelayProfileTeam | null) => (
+  cleanText(team?.membership?.role) ?? cleanText(team?.role) ?? 'member'
+)
+
+const formatByteSize = (value?: number | null) => {
+  const size = typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+  if (size < 1024) return `${size} B`
+  const kib = size / 1024
+  if (kib < 1024) return `${kib.toFixed(kib >= 10 ? 0 : 1)} KB`
+  const mib = kib / 1024
+  return `${mib.toFixed(mib >= 10 ? 0 : 1)} MB`
+}
+
+const getProfileAccount = (
+  profile: RelayProfileStatus | null,
+  status: RelayStatus | null,
+  accountKey?: string
+) => (
+  profile?.account ??
+    status?.accounts?.find(account => cleanText(account.accountKey) === accountKey) ??
+    profile?.accounts?.find(account => cleanText(account.accountKey) === accountKey) ??
+    null
+)
+
+const renderIcon = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  name: string,
+  props: Record<string, unknown> = {}
+) => {
+  const Icon = view?.ui?.Icon
+  if (Icon != null) return react.createElement(Icon, { name, ...props })
+  return react.createElement('span', {
+    'aria-hidden': true,
+    className: 'material-symbols-rounded oneworks-relay__icon',
+    ...props
+  }, name)
+}
+
+const renderButton = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  input: {
+    danger?: boolean
+    disabled?: boolean
+    icon: string
+    key?: string
+    label: string
+    onClick?: () => void
+    primary?: boolean
+  }
+) => {
+  const Button = view?.ui?.Button
+  if (Button != null) {
+    return react.createElement(Button, {
+      ariaLabel: input.label,
+      className: 'oneworks-relay__button',
+      'data-primary': input.primary === true ? 'true' : undefined,
+      'data-tooltip': input.label,
+      danger: input.danger,
+      disabled: input.disabled,
+      icon: input.icon,
+      key: input.key,
+      onClick: input.onClick,
+      shape: 'circle',
+      size: 'small',
+      title: input.label,
+      type: 'text'
+    })
+  }
+  return react.createElement('button', {
+    'aria-label': input.label,
+    className: 'oneworks-relay__button',
+    'data-primary': input.primary === true ? 'true' : undefined,
+    'data-tooltip': input.label,
+    disabled: input.disabled,
+    key: input.key,
+    onClick: input.onClick,
+    title: input.label,
+    type: 'button'
+  }, renderIcon(react, view, input.icon))
+}
+
+const renderActionButton = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  input: {
+    disabled?: boolean
+    icon: string
+    key?: string
+    label: string
+    onClick?: () => void
+    primary?: boolean
+  }
+) =>
+  react.createElement(
+    'button',
+    {
+      'aria-label': input.label,
+      className: 'oneworks-relay__team-config-action',
+      'data-primary': input.primary === true ? 'true' : undefined,
+      disabled: input.disabled,
+      key: input.key,
+      onClick: input.onClick,
+      title: input.label,
+      type: 'button'
+    },
+    react.createElement(
+      'span',
+      { className: 'oneworks-relay__team-config-action-icon', 'aria-hidden': 'true' },
+      renderIcon(react, view, input.icon, { size: 18 })
+    ),
+    react.createElement('span', { className: 'oneworks-relay__team-config-action-label' }, input.label)
+  )
+
+const renderAvatar = (
+  react: PluginReactHost,
+  input: { avatarUrl?: string | null; className?: string; name?: string; state?: string }
+) => {
+  const name = cleanText(input.name) ?? '账号'
+  const avatarUrl = cleanText(input.avatarUrl)
+  return react.createElement(
+    'span',
+    {
+      className: ['oneworks-relay__account-avatar', input.className].filter(Boolean).join(' '),
+      'data-state': input.state ?? 'signed-in'
+    },
+    avatarUrl == null
+      ? react.createElement('span', null, getAvatarInitials(name))
+      : react.createElement('img', {
+        alt: '',
+        className: 'oneworks-relay__account-avatar-image',
+        draggable: false,
+        src: avatarUrl
+      })
+  )
+}
+
+const renderFact = (react: PluginReactHost, label: string, value: PluginReactNode) => (
+  react.createElement(
+    'span',
+    { className: 'oneworks-relay__profile-fact', key: label },
+    react.createElement('span', { className: 'oneworks-relay__profile-fact-label' }, label),
+    react.createElement('span', { className: 'oneworks-relay__profile-fact-value' }, value ?? '-')
+  )
+)
+
+const renderInput = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  props: {
+    autoFocus?: boolean
+    key?: string
+    onChange: (value: string) => void
+    placeholder?: string
+    rows?: number
+    type?: 'password' | 'textarea' | 'text'
+    value: string
+  }
+) => {
+  const Input = view?.ui?.Input
+  if (Input != null) {
+    return react.createElement(Input, {
+      allowClear: true,
+      autoFocus: props.autoFocus,
+      key: props.key,
+      onChange: props.onChange,
+      placeholder: props.placeholder,
+      rows: props.rows,
+      size: 'small',
+      type: props.type,
+      value: props.value
+    })
+  }
+  const onInput = (event: Event) => {
+    const target = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement
+      ? event.target
+      : null
+    if (target != null) props.onChange(target.value)
+  }
+  if (props.type === 'textarea') {
+    return react.createElement('textarea', {
+      className: 'oneworks-relay__textarea',
+      key: props.key,
+      onInput,
+      placeholder: props.placeholder,
+      rows: props.rows,
+      value: props.value
+    })
+  }
+  return react.createElement('input', {
+    autoFocus: props.autoFocus,
+    className: 'oneworks-relay__input',
+    key: props.key,
+    onInput,
+    placeholder: props.placeholder,
+    type: props.type ?? 'text',
+    value: props.value
+  })
+}
+
+const renderSelect = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  props: {
+    disabled?: boolean
+    mode?: 'multiple'
+    onChange: (value: string | string[]) => void
+    options: Array<{ disabled?: boolean; icon?: string; label: string; value: string }>
+    placeholder?: string
+    value: string | string[]
+  }
+) => {
+  const Select = view?.ui?.Select
+  if (Select != null) {
+    return react.createElement(Select, {
+      disabled: props.disabled,
+      mode: props.mode,
+      onChange: props.onChange,
+      options: props.options,
+      placeholder: props.placeholder,
+      size: 'small',
+      value: props.value
+    })
+  }
+  return react.createElement(
+    'select',
+    {
+      className: 'oneworks-relay__input',
+      disabled: props.disabled,
+      multiple: props.mode === 'multiple',
+      onInput: (event: Event) => {
+        const target = event.target instanceof HTMLSelectElement ? event.target : null
+        if (target == null) return
+        props.onChange(
+          props.mode === 'multiple'
+            ? [...target.selectedOptions].map(option => option.value)
+            : target.value
+        )
+      },
+      value: props.value
+    },
+    ...props.options.map(option =>
+      react.createElement('option', {
+        disabled: option.disabled,
+        key: option.value,
+        value: option.value
+      }, option.label)
+    )
+  )
+}
+
+const NativeList = (props: {
+  children?: PluginReactNode | PluginReactNode[]
+  className?: string
+  react: PluginReactHost
+}) => {
+  const children = Array.isArray(props.children)
+    ? props.children
+    : props.children == null
+    ? []
+    : [props.children]
+  return props.react.createElement(
+    'div',
+    {
+      className: ['relay-admin-list-table relay-admin-list-table--content', props.className].filter(Boolean).join(' ')
+    },
+    props.react.createElement(
+      'div',
+      { className: 'relay-admin-list-table__table-scroll' },
+      props.react.createElement('div', { className: adminListSurfaceClassNames.nativeList }, ...children)
+    )
+  )
+}
+
+const NativeEmpty = (props: { react: PluginReactHost; text: string }) =>
+  props.react.createElement('div', { className: adminListSurfaceClassNames.nativeEmpty }, props.text)
+
+const ProfileHeader = (props: {
+  account: RelayAuthAccount | null
+  accountKey?: string
+  profile: RelayProfileStatus | null
+  react: PluginReactHost
+}) => {
+  const { account, accountKey, profile, react } = props
+  const user = profile?.user
+  const name = cleanText(user?.name) ?? accountDisplayName(account) ?? accountKey ?? '账号'
+  const email = cleanText(user?.email) ?? cleanText(account?.email) ?? ''
+  return react.createElement(
+    'div',
+    { className: 'oneworks-relay__profile-header' },
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__profile-title' },
+      renderAvatar(react, {
+        avatarUrl: user?.avatarUrl ?? account?.avatarUrl,
+        className: 'oneworks-relay__profile-avatar',
+        name
+      }),
+      react.createElement(
+        'span',
+        { className: 'oneworks-relay__profile-heading-copy' },
+        react.createElement('span', { className: 'oneworks-relay__profile-eyebrow' }, '当前账号'),
+        react.createElement('strong', null, name),
+        react.createElement('span', null, email)
+      )
+    )
+  )
+}
+
+const ProfileTabs = (props: {
+  account: RelayAuthAccount | null
+  accountKey: string
+  activeTab: RelayProfileTab
+  ctx: PluginClientContext
+  onChanged: () => void
+  react: PluginReactHost
+  view?: PluginViewContext
+}) => {
+  const { account, accountKey, activeTab, ctx, onChanged, react, view } = props
+  const NativeTabs = view?.ui?.NativeTabs
+  if (NativeTabs == null) {
+    return react.createElement('div', { className: 'oneworks-relay__empty' }, '标准标签组件不可用')
+  }
+
+  return react.createElement(NativeTabs, {
+    activeKey: activeTab,
+    actions: activeTab === 'documents'
+      ? renderDocumentTabActions({ account, accountKey, ctx, onChanged, react, view })
+      : undefined,
+    ariaLabel: '账号详情',
+    className: 'oneworks-relay__profile-tabs',
+    items: profileTabs.map((tab): PluginHostNativeTabItem => ({
+      icon: tab.icon,
+      key: tab.key,
+      label: tab.label
+    })),
+    onChange: (nextTab: RelayProfileTab) =>
+      navigateTo(ctx.scope, routePath(ctx.scope, { accountKey, page: 'profile', tab: nextTab }))
+  })
+}
+
+const AccountInfoPanel = (
+  props: {
+    account: RelayAuthAccount | null
+    profile: RelayProfileStatus | null
+    react: PluginReactHost
+  }
+) => {
+  const { account, profile, react } = props
+  const user = profile?.user
+  return react.createElement(
+    'section',
+    { className: 'oneworks-relay__profile-section' },
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__profile-grid' },
+      renderFact(react, '邮箱', cleanText(user?.email) ?? cleanText(account?.email) ?? '-'),
+      renderFact(react, '名称', cleanText(user?.name) ?? accountDisplayName(account)),
+      renderFact(react, '登录 ID', cleanText(user?.loginId) ?? cleanText(account?.loginId) ?? '-'),
+      renderFact(react, '状态', cleanText(user?.disabledAt) == null && account?.enabled !== false ? '正常' : '已停用'),
+      renderFact(react, '角色', cleanText(user?.role) ?? cleanText(account?.role) ?? '-'),
+      renderFact(react, '登录方式', cleanText(user?.provider) ?? '-'),
+      renderFact(react, '账号 ID', cleanText(user?.id) ?? cleanText(account?.userId) ?? '-'),
+      renderFact(react, '本地登录时间', formatDateTime(account?.updatedAt)),
+      renderFact(react, '会话过期时间', formatDateTime(account?.sessionExpiresAt))
+    )
+  )
+}
+
+const DocumentSyncPanel = (
+  props: {
+    account: RelayAuthAccount | null
+    accountKey: string
+    ctx: PluginClientContext
+    onChanged: () => void
+    react: PluginReactHost
+    status: RelayStatus | null
+    team?: RelayProfileTeam
+    view?: PluginViewContext
+  }
+) => {
+  const { account, accountKey, ctx, onChanged, react, status, team, view } = props
+  const documentSync = team == null
+    ? status?.personalDocumentSync
+    : status?.teamDocumentSync?.[cleanText(team.id) ?? '']
+  const [savingAction, setSavingAction] = react.useState<'import' | RelayPersonalDocumentSyncKind | null>(null)
+  const [filter, setFilter] = react.useState(() => readDocumentPanelQueryValue('q'))
+  const [loadedEntries, setLoadedEntries] = react.useState<RelayPersonalDocumentEntry[] | null>(null)
+  const [selectedDocumentKey, setSelectedDocumentKey] = react.useState<string | null>(null)
+  const [documentPreviewClosing, setDocumentPreviewClosing] = react.useState(false)
+  const documentPreviewCloseTimerRef = react.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null)
+  const [resolvedInitialDocumentQuery, setResolvedInitialDocumentQuery] = react.useState(
+    () => readDocumentPanelQueryValue('doc') === ''
+  )
+  const [documentContent, setDocumentContent] = react.useState<RelayDocumentContent | null>(null)
+  const [documentContentError, setDocumentContentError] = react.useState<string | null>(null)
+  const [documentContentLoading, setDocumentContentLoading] = react.useState(false)
+  const preferences = documentSync?.preferences ?? {}
+  const countsByKind = documentSync?.countsByKind ?? {}
+  const agentsCount = countsByKind.agents ?? 0
+  const agentsEnabled = preferences.agents === true
+  const scopeTitle = team == null ? '账号文档' : '团队文档'
+  const scopeMeta = team == null
+    ? '只同步账号命名空间文件；~/AGENTS.md 仅作为一键导入来源。'
+    : '团队成员共享同一份密文快照；只读写团队命名空间文件。'
+  const toggleTeamDocumentSync = (enabled: boolean) => {
+    if (team == null) return
+    setSavingAction('agents')
+    void requestJson<RelayStatus>(
+      ctx,
+      'team-document-sync-enabled',
+      {
+        accountKey,
+        enabled,
+        kind: 'agents',
+        serverId: cleanText(account?.serverId),
+        teamId: team.id
+      }
+    )
+      .then(() => {
+        onChanged()
+      })
+      .catch(error => {
+        ctx.notifications?.show?.({
+          description: toErrorMessage(error),
+          level: 'error',
+          title: '同步设置失败'
+        })
+      })
+      .finally(() => setSavingAction(null))
+  }
+  const importAccountAgents = () => {
+    setSavingAction('import')
+    void requestJson<RelayStatus>(
+      ctx,
+      'personal-document-import-root-agents',
+      {
+        accountKey,
+        serverId: cleanText(account?.serverId)
+      }
+    )
+      .then(() => {
+        onChanged()
+        ctx.notifications?.show?.({
+          description: `${accountAgentsPath(account)} 已更新，并尝试上传到当前账号。`,
+          level: 'success',
+          title: '账号 AGENTS 已导入'
+        })
+      })
+      .catch(error => {
+        ctx.notifications?.show?.({
+          description: toErrorMessage(error),
+          level: 'error',
+          title: '导入账号 AGENTS 失败'
+        })
+      })
+      .finally(() => setSavingAction(null))
+  }
+  const syncSummary = documentSync == null
+    ? '未同步'
+    : documentSync.lastError != null && documentSync.lastError !== ''
+    ? documentSync.lastError
+    : `${documentSync.documentCount ?? 0} 个 · ${formatByteSize(documentSync.totalSizeBytes)} · ${
+      formatDateTime(documentSync.lastSyncedAt)
+    }`
+  const documentPath = team == null ? accountAgentsPath(account) : teamAgentsPath(team)
+  const documentSource = team == null ? '~/AGENTS.md' : documentPath
+  const documentStateLabel = documentSync?.lastError != null && documentSync.lastError !== ''
+    ? '同步异常'
+    : agentsEnabled
+    ? '已同步'
+    : '需要同步'
+  const documentScopeLabel = team == null ? '账号' : '团队'
+  const documentScopeKey = [
+    team == null ? 'account' : 'team',
+    accountKey,
+    cleanText(account?.serverId) ?? '',
+    cleanText(account?.userId) ?? '',
+    cleanText(team?.id) ?? ''
+  ].join('\u0000')
+  react.useEffect(() => {
+    setFilter(readDocumentPanelQueryValue('q'))
+    setSelectedDocumentKey(null)
+    setDocumentPreviewClosing(false)
+    setResolvedInitialDocumentQuery(readDocumentPanelQueryValue('doc') === '')
+  }, [documentScopeKey])
+  const clearDocumentPreviewCloseTimer = () => {
+    if (documentPreviewCloseTimerRef.current == null) return
+    globalThis.clearTimeout(documentPreviewCloseTimerRef.current)
+    documentPreviewCloseTimerRef.current = null
+  }
+  react.useEffect(() => () => clearDocumentPreviewCloseTimer(), [])
+  react.useEffect(() => {
+    let cancelled = false
+    setLoadedEntries(null)
+    void requestJson<{ entries?: RelayPersonalDocumentEntry[] }>(
+      ctx,
+      'document-entries',
+      team == null
+        ? {
+          accountKey,
+          scope: 'account',
+          serverId: cleanText(account?.serverId)
+        }
+        : {
+          accountKey,
+          scope: 'team',
+          serverId: cleanText(account?.serverId),
+          teamId: team.id
+        }
+    ).then(result => {
+      if (!cancelled) setLoadedEntries(result.entries ?? [])
+    }).catch(() => {
+      if (!cancelled) setLoadedEntries([])
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [accountKey, cleanText(account?.serverId), cleanText(account?.userId), cleanText(team?.id)])
+  const statusEntries = documentSync?.entries ?? []
+  const documentEntries = loadedEntries ?? statusEntries
+  const documentItems: RelayDocumentInteractionItem[] = documentEntries.map((entry): RelayDocumentInteractionItem => {
+    const isAgentsEntry = entry.relativePath === 'AGENTS.md'
+    const displayPath = documentFullDisplayPath(entry.path)
+    const title = cleanText(entry.displayName) ?? documentFileName(entry.relativePath)
+    const kind = isAgentsEntry
+      ? team == null ? 'accountAgents' : 'teamAgents'
+      : 'namespaceDocument'
+    const meta = isAgentsEntry
+      ? documentStateLabel
+      : entry.localOnly
+      ? '本地'
+      : '规则'
+    const tooltip = team == null && isAgentsEntry ? `${documentSource} -> ${displayPath}` : displayPath
+    return {
+      displayPath,
+      enabled: agentsEnabled,
+      exists: entry.exists,
+      icon: documentEntryIcon(entry, team),
+      key: `document:${team == null ? 'account' : 'team'}:${entry.path}`,
+      kind,
+      localOnly: entry.localOnly,
+      meta,
+      path: entry.path,
+      relativePath: entry.relativePath,
+      searchText: cleanTextList([
+        scopeTitle,
+        scopeMeta,
+        documentScopeLabel,
+        isAgentsEntry ? `${documentScopeLabel} AGENTS` : '规则',
+        title,
+        entry.relativePath,
+        entry.path,
+        displayPath,
+        meta,
+        documentSource,
+        documentPath,
+        documentStateLabel,
+        syncSummary,
+        `${agentsCount} 个`,
+        entry.localOnly ? '.local.md 本地 不上传' : '同步'
+      ]).join(' '),
+      title,
+      tooltip
+    }
+  })
+  const documentItemKeySignature = documentItems.map(item => item.key).join('\n')
+  const documentEntriesLoaded = loadedEntries != null
+  react.useEffect(() => {
+    if (resolvedInitialDocumentQuery) return
+    const requestedDocumentPath = readDocumentPanelQueryValue('doc')
+    if (requestedDocumentPath === '') {
+      setResolvedInitialDocumentQuery(true)
+      return
+    }
+
+    const matchedDocument = documentItems.find(item =>
+      item.exists && (
+        item.relativePath === requestedDocumentPath ||
+        item.path === requestedDocumentPath ||
+        item.displayPath === requestedDocumentPath
+      )
+    )
+    if (matchedDocument != null) {
+      setSelectedDocumentKey(matchedDocument.key)
+      setResolvedInitialDocumentQuery(true)
+      return
+    }
+    if (documentEntriesLoaded) {
+      setResolvedInitialDocumentQuery(true)
+    }
+  }, [documentEntriesLoaded, documentItemKeySignature, resolvedInitialDocumentQuery])
+  react.useEffect(() => {
+    if (
+      selectedDocumentKey != null &&
+      !documentItems.some(item => item.key === selectedDocumentKey)
+    ) {
+      setSelectedDocumentKey(null)
+    }
+  }, [documentItemKeySignature, selectedDocumentKey])
+  const selectedDocument = documentItems.find(item => item.key === selectedDocumentKey) ?? null
+  const selectDocument = (item: RelayDocumentInteractionItem) => {
+    if (!item.exists) return
+    clearDocumentPreviewCloseTimer()
+    setDocumentPreviewClosing(false)
+    setSelectedDocumentKey(item.key)
+  }
+  const finishDocumentPreviewClose = () => {
+    clearDocumentPreviewCloseTimer()
+    setSelectedDocumentKey(null)
+    setDocumentPreviewClosing(false)
+  }
+  const closeDocumentPreview = () => {
+    if (selectedDocument == null || documentPreviewClosing) return
+    clearDocumentPreviewCloseTimer()
+    setDocumentPreviewClosing(true)
+    documentPreviewCloseTimerRef.current = globalThis.setTimeout(() => {
+      finishDocumentPreviewClose()
+    }, DOCUMENT_PREVIEW_CLOSE_ANIMATION_MS + 80)
+  }
+  react.useEffect(() => {
+    if (!resolvedInitialDocumentQuery) return
+    writeDocumentPanelQuery({
+      documentPath: selectedDocument?.relativePath ?? null,
+      search: filter
+    })
+  }, [filter, resolvedInitialDocumentQuery, selectedDocument?.relativePath])
+  react.useEffect(() => {
+    if (selectedDocument == null) {
+      setDocumentContent(null)
+      setDocumentContentError(null)
+      setDocumentContentLoading(false)
+      return
+    }
+    if (!selectedDocument.exists) {
+      setDocumentContent(null)
+      setDocumentContentError('本地文件不存在，创建后可预览内容。')
+      setDocumentContentLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setDocumentContent(null)
+    setDocumentContentError(null)
+    setDocumentContentLoading(true)
+    void requestJson<RelayDocumentContent>(ctx, 'document-content', {
+      path: selectedDocument.path
+    }).then(result => {
+      if (!cancelled) setDocumentContent(result)
+    }).catch(error => {
+      if (!cancelled) setDocumentContentError(toErrorMessage(error))
+    }).finally(() => {
+      if (!cancelled) setDocumentContentLoading(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedDocument?.exists, selectedDocument?.path])
+  const InteractionList = view?.ui?.InteractionList
+  const CodeEditor = view?.ui?.CodeEditor
+  const copyDocumentText = (value: string, title: string) => {
+    void (async () => {
+      if (navigator.clipboard?.writeText == null) {
+        throw new Error('当前环境不支持剪贴板。')
+      }
+      await navigator.clipboard.writeText(value)
+    })()
+      .then(() => {
+        ctx.notifications?.show?.({
+          description: value,
+          level: 'success',
+          title
+        })
+      })
+      .catch(error => {
+        ctx.notifications?.show?.({
+          description: toErrorMessage(error),
+          level: 'error',
+          title: '复制失败'
+        })
+      })
+  }
+  const openDocumentPath = (item: RelayDocumentInteractionItem, mode: 'open' | 'reveal') => {
+    void requestJson(ctx, 'document-path/open', {
+      mode,
+      path: item.path
+    })
+      .catch(error => {
+        ctx.notifications?.show?.({
+          description: toErrorMessage(error),
+          level: 'error',
+          title: mode === 'reveal' ? '显示文件失败' : '打开文件失败'
+        })
+      })
+  }
+  const getDocumentActions = (
+    item: RelayDocumentInteractionItem
+  ): Array<PluginHostInteractionListAction<RelayDocumentInteractionItem>> => {
+    const actions: Array<PluginHostInteractionListAction<RelayDocumentInteractionItem>> = [
+      {
+        icon: 'open_in_new',
+        key: 'open-external',
+        label: '在外部软件打开',
+        onSelect: selected => openDocumentPath(selected, 'open')
+      },
+      {
+        icon: 'content_copy',
+        key: 'copy-path',
+        label: '复制路径',
+        onSelect: selected => copyDocumentText(selected.displayPath, '路径已复制')
+      }
+    ]
+    if (item.kind === 'accountAgents') {
+      actions.push({
+        disabled: savingAction != null,
+        icon: 'upload_file',
+        key: 'import',
+        label: savingAction === 'import' ? '导入中' : '从 ~/AGENTS.md 导入',
+        onSelect: importAccountAgents
+      })
+    } else if (item.kind === 'teamAgents') {
+      actions.push({
+        disabled: savingAction != null,
+        icon: item.enabled ? 'toggle_on' : 'toggle_off',
+        key: 'toggle-agents',
+        label: item.enabled ? '停止同步' : '同步',
+        onSelect: () => toggleTeamDocumentSync(!item.enabled)
+      })
+    }
+    actions.push(
+      {
+        icon: '',
+        key: 'divider-document-more',
+        label: '',
+        type: 'divider'
+      },
+      {
+        icon: 'folder_open',
+        key: 'reveal',
+        label: '在文件管理器中显示',
+        onSelect: selected => openDocumentPath(selected, 'reveal')
+      },
+      {
+        icon: 'content_copy',
+        key: 'copy-relative-path',
+        label: '复制相对路径',
+        onSelect: selected => copyDocumentText(selected.relativePath, '相对路径已复制')
+      }
+    )
+    return actions
+  }
+  const previewBreadcrumbItems = selectedDocument == null
+    ? []
+    : [
+      ...selectedDocument.relativePath.split('/').filter(Boolean).slice(0, -1),
+      selectedDocument.title
+    ]
+  const previewBreadcrumbNodes = previewBreadcrumbItems.flatMap((item, index) => {
+    const isLast = index === previewBreadcrumbItems.length - 1
+    return [
+      react.createElement(
+        'span',
+        {
+          className: isLast
+            ? 'oneworks-relay__document-preview-breadcrumb-item is-current'
+            : 'oneworks-relay__document-preview-breadcrumb-item',
+          key: `breadcrumb-${index}-item`,
+          title: item
+        },
+        item
+      ),
+      ...(isLast
+        ? []
+        : [
+          react.createElement(
+            'span',
+            {
+              'aria-hidden': 'true',
+              className: 'oneworks-relay__document-preview-breadcrumb-separator',
+              key: `breadcrumb-${index}-separator`
+            },
+            'chevron_right'
+          )
+        ])
+    ]
+  })
+  const previewBody = selectedDocument == null
+    ? react.createElement('div', { className: 'oneworks-relay__document-preview-empty' }, '选择左侧文件查看内容')
+    : documentContentLoading
+    ? react.createElement('div', { className: 'oneworks-relay__document-preview-empty' }, '正在加载文档内容')
+    : documentContentError != null
+    ? react.createElement(
+      'div',
+      { className: 'oneworks-relay__document-preview-empty oneworks-relay__document-preview-empty--error' },
+      documentContentError
+    )
+    : documentContent == null
+    ? react.createElement('div', { className: 'oneworks-relay__document-preview-empty' }, '选择左侧文件查看内容')
+    : CodeEditor == null
+    ? react.createElement('pre', { className: 'oneworks-relay__document-preview-pre' }, documentContent.content)
+    : react.createElement(CodeEditor, {
+      ariaLabel: `${selectedDocument.title} 内容`,
+      className: 'oneworks-relay__document-preview-editor',
+      language: 'markdown',
+      path: documentContent.path,
+      readOnly: true,
+      value: documentContent.content
+    })
+  const documentPreview = selectedDocument == null
+    ? null
+    : react.createElement(
+      'section',
+      {
+        'aria-label': '文档内容预览',
+        className: [
+          'oneworks-relay__document-preview',
+          documentPreviewClosing ? 'oneworks-relay__document-preview--closing' : ''
+        ].filter(Boolean).join(' '),
+        onAnimationEnd: (event: { currentTarget: unknown; target: unknown }) => {
+          if (documentPreviewClosing && event.currentTarget === event.target) {
+            finishDocumentPreviewClose()
+          }
+        }
+      },
+      react.createElement(
+        'header',
+        { className: 'oneworks-relay__document-preview-head' },
+        react.createElement(
+          'div',
+          { className: 'oneworks-relay__document-preview-copy' },
+          react.createElement(
+            'nav',
+            {
+              'aria-label': '文档路径',
+              className: 'oneworks-relay__document-preview-breadcrumb',
+              title: selectedDocument.displayPath
+            },
+            previewBreadcrumbNodes
+          )
+        ),
+        react.createElement(
+          'div',
+          { className: 'oneworks-relay__document-preview-actions' },
+          react.createElement(
+            'button',
+            {
+              'aria-label': '关闭预览',
+              className: 'oneworks-relay__button oneworks-relay__document-preview-close',
+              'data-tooltip': '关闭预览',
+              onClick: closeDocumentPreview,
+              title: '关闭预览',
+              type: 'button'
+            },
+            react.createElement('span', { className: 'material-symbols-rounded oneworks-relay__icon' }, 'close')
+          )
+        )
+      ),
+      react.createElement('div', { className: 'oneworks-relay__document-preview-body' }, previewBody)
+    )
+  return react.createElement(
+    'section',
+    { className: 'oneworks-relay__profile-section' },
+    react.createElement(
+      'div',
+      {
+        className: [
+          'oneworks-relay__personal-docs',
+          selectedDocument == null ? '' : 'oneworks-relay__personal-docs--preview-open',
+          documentPreviewClosing ? 'oneworks-relay__personal-docs--preview-closing' : ''
+        ].filter(Boolean).join(' ')
+      },
+      react.createElement(
+        'div',
+        { className: 'oneworks-relay__personal-docs-list-pane' },
+        InteractionList == null
+          ? react.createElement('div', { className: 'oneworks-relay__empty' }, '标准文档列表组件不可用')
+          : react.createElement(InteractionList, {
+            actionDisplay: 'inline',
+            actions: getDocumentActions,
+            activeKey: selectedDocumentKey ?? undefined,
+            border: 'borderless',
+            className: 'oneworks-relay__host-interaction-list oneworks-relay__personal-docs-list',
+            descriptionPlacement: 'content',
+            emptyText: '没有匹配的文档',
+            iconSize: 18,
+            inlineActionLimit: 3,
+            items: documentItems,
+            padding: 'none',
+            search: {
+              onChange: setFilter,
+              placeholder: team == null ? '搜索账号文档、路径或同步状态' : '搜索团队文档、路径或同步状态',
+              value: filter
+            },
+            splitActionHover: true,
+            onSelect: selectDocument
+          })
+      ),
+      documentPreview
+    )
+  )
+}
+
+const renderDocumentTabActions = (props: {
+  account: RelayAuthAccount | null
+  accountKey: string
+  ctx: PluginClientContext
+  onChanged: () => void
+  react: PluginReactHost
+  team?: RelayProfileTeam
+  view?: PluginViewContext
+}) => {
+  const { account, accountKey, ctx, onChanged, react, team, view } = props
+  return react.createElement(
+    'span',
+    { className: 'oneworks-relay__document-tab-actions' },
+    renderButton(react, view, {
+      icon: 'sync',
+      label: '同步所有文档',
+      onClick: () => {
+        if (team == null) {
+          void requestJson<RelayStatus>(
+            ctx,
+            'personal-document-import-root-agents',
+            {
+              accountKey,
+              serverId: cleanText(account?.serverId)
+            }
+          ).then(() => {
+            onChanged()
+          }).catch(error => {
+            ctx.notifications?.show?.({
+              description: toErrorMessage(error),
+              level: 'error',
+              title: '同步文档失败'
+            })
+          })
+          return
+        }
+
+        void requestJson<RelayStatus>(
+          ctx,
+          'team-document-sync-enabled',
+          {
+            accountKey,
+            enabled: true,
+            kind: 'agents',
+            serverId: cleanText(account?.serverId),
+            teamId: team.id
+          }
+        ).then(() => {
+          onChanged()
+        }).catch(error => {
+          ctx.notifications?.show?.({
+            description: toErrorMessage(error),
+            level: 'error',
+            title: '同步文档失败'
+          })
+        })
+      }
+    })
+  )
+}
+
+const tokenScopeLabel = (scope?: string) => {
+  if (scope === 'team') return '团队级'
+  if (scope === 'platform') return '平台级'
+  return '用户级'
+}
+
+const tokenPermissionLabel = (
+  profile: RelayProfileStatus | null,
+  token: RelayProfileAccessToken | TokenEditorState
+) => {
+  if (token.scope === 'team') {
+    const team = profile?.teams?.find(item => cleanText(item.id) === cleanText(token.teamId))
+    return `团队 API${team == null ? '' : ` · ${teamDisplayName(team)}`}`
+  }
+  if (token.scope === 'platform') return '平台 API'
+  return '个人 API'
+}
+
+const tokenStatusLabel = (token: RelayProfileAccessToken) => cleanText(token.revokedAt) == null ? '可用' : '已撤销'
+
+const matchesNativeSearch = (values: unknown[], normalizedFilter: string) =>
+  normalizedFilter === '' ||
+  values.some(value => cleanText(value)?.toLowerCase().includes(normalizedFilter) === true)
+
+const TokensPanel = (props: {
+  accountKey: string
+  ctx: PluginClientContext
+  profile: RelayProfileStatus | null
+  react: PluginReactHost
+  view?: PluginViewContext
+}) => {
+  const { accountKey, ctx, profile, react, view } = props
+  const [filter, setFilter] = react.useState('')
+  const tokens = profile?.security?.accessTokens ?? []
+  const normalizedFilter = filter.trim().toLowerCase()
+  const visibleTokens = normalizedFilter === ''
+    ? tokens
+    : tokens.filter(token =>
+      matchesNativeSearch(
+        [
+          token.name,
+          token.scope,
+          token.tokenPreview,
+          tokenStatusLabel(token),
+          tokenPermissionLabel(profile, token)
+        ],
+        normalizedFilter
+      )
+    )
+  const columns =
+    '24px minmax(160px, 1.4fr) minmax(80px, .6fr) minmax(120px, 1fr) minmax(140px, 1fr) minmax(120px, .8fr) minmax(100px, .8fr) minmax(70px, .5fr) auto'
+  return react.createElement(
+    'section',
+    { className: 'oneworks-relay__profile-section' },
+    react.createElement(
+      'label',
+      { className: adminListSurfaceClassNames.nativeSearch },
+      renderIcon(react, view, 'search', { size: 16 }),
+      renderInput(react, view, {
+        onChange: setFilter,
+        placeholder: '搜索令牌名称、类型、团队、Preview、状态',
+        value: filter
+      }),
+      renderButton(react, view, {
+        icon: 'add',
+        label: '生成令牌',
+        onClick: () =>
+          navigateTo(
+            ctx.scope,
+            routePath(ctx.scope, {
+              accountKey,
+              page: 'token',
+              tokenId: 'new'
+            })
+          )
+      })
+    ),
+    react.createElement(
+      NativeList,
+      { react },
+      react.createElement(
+        'div',
+        {
+          className: adminListSurfaceClassNames.nativeRow,
+          'data-kind': 'header',
+          style: { '--relay-admin-list-native-row-columns': columns }
+        },
+        react.createElement('span', null),
+        ...['名称', '类型', 'Preview', '权限范围', '创建时间', '最后使用', '状态'].map(label =>
+          react.createElement('span', { className: adminListSurfaceClassNames.nativeCell, key: label }, label)
+        ),
+        react.createElement('span', null)
+      ),
+      ...(visibleTokens.length === 0
+        ? [react.createElement(NativeEmpty, { key: 'empty', react, text: '暂无 API 令牌' })]
+        : visibleTokens.map(token => {
+          const tokenId = cleanText(token.id) ?? ''
+          const name = cleanText(token.name) ?? '未命名令牌'
+          return react.createElement(
+            'div',
+            {
+              className: adminListSurfaceClassNames.nativeRow,
+              'data-state': cleanText(token.revokedAt) == null ? 'enabled' : 'disabled',
+              key: tokenId || name,
+              style: { '--relay-admin-list-native-row-columns': columns }
+            },
+            react.createElement(
+              'span',
+              { className: adminListSurfaceClassNames.nativeIcon },
+              renderIcon(react, view, 'key')
+            ),
+            react.createElement(
+              'span',
+              { className: adminListSurfaceClassNames.nativeMain },
+              react.createElement(
+                'button',
+                {
+                  className: `oneworks-relay__link-button ${adminListSurfaceClassNames.nativeTitle}`,
+                  onClick: () =>
+                    navigateTo(
+                      ctx.scope,
+                      routePath(ctx.scope, {
+                        accountKey,
+                        page: 'token',
+                        tokenId
+                      })
+                    ),
+                  type: 'button'
+                },
+                name
+              )
+            ),
+            react.createElement(
+              'span',
+              { className: adminListSurfaceClassNames.nativeCell },
+              tokenScopeLabel(token.scope)
+            ),
+            react.createElement(
+              'span',
+              { className: `${adminListSurfaceClassNames.nativeCell} oneworks-relay__token-preview-cell` },
+              cleanText(token.tokenPreview) ?? '-',
+              cleanText(token.tokenPreview) == null ? null : renderButton(react, view, {
+                icon: 'content_copy',
+                label: '复制 Preview',
+                onClick: () => {
+                  void navigator.clipboard?.writeText(token.tokenPreview ?? '')
+                }
+              })
+            ),
+            react.createElement(
+              'span',
+              { className: adminListSurfaceClassNames.nativeCell },
+              tokenPermissionLabel(profile, token)
+            ),
+            react.createElement(
+              'span',
+              { className: adminListSurfaceClassNames.nativeCell },
+              formatDateTime(token.createdAt)
+            ),
+            react.createElement(
+              'span',
+              { className: adminListSurfaceClassNames.nativeCell },
+              formatDateTime(token.lastUsedAt)
+            ),
+            react.createElement(
+              'span',
+              { className: adminListSurfaceClassNames.nativeCell },
+              react.createElement('span', { className: 'oneworks-relay__status-badge' }, tokenStatusLabel(token))
+            ),
+            react.createElement(
+              'span',
+              { className: adminListSurfaceClassNames.nativeActions },
+              renderButton(react, view, {
+                icon: 'edit',
+                label: '配置令牌',
+                onClick: () =>
+                  navigateTo(
+                    ctx.scope,
+                    routePath(ctx.scope, {
+                      accountKey,
+                      page: 'token',
+                      tokenId
+                    })
+                  )
+              }),
+              renderButton(react, view, {
+                danger: true,
+                disabled: cleanText(token.revokedAt) != null,
+                icon: 'block',
+                label: '撤销令牌',
+                onClick: () => {
+                  void requestJson(
+                    ctx,
+                    `profile/access-tokens/${encodeURIComponent(tokenId)}`,
+                    { accountKey },
+                    'DELETE'
+                  )
+                    .then(() =>
+                      navigateTo(ctx.scope, routePath(ctx.scope, { accountKey, page: 'profile', tab: 'tokens' }))
+                    )
+                }
+              })
+            )
+          )
+        }))
+    )
+  )
+}
+
+const DevicesPanel = (props: {
+  accountKey: string
+  ctx: PluginClientContext
+  onChanged: () => void
+  profile: RelayProfileStatus | null
+  react: PluginReactHost
+  view?: PluginViewContext
+}) => {
+  const { accountKey, ctx, onChanged, profile, react, view } = props
+  const [editingId, setEditingId] = react.useState('')
+  const [aliasDraft, setAliasDraft] = react.useState('')
+  const [filter, setFilter] = react.useState('')
+  const devices = profile?.devices ?? []
+  const normalizedFilter = filter.trim().toLowerCase()
+  const visibleDevices = normalizedFilter === ''
+    ? devices
+    : devices.filter(device => {
+      const machineName = cleanText(device.name) ?? cleanText(device.id) ?? ''
+      const title = cleanText(device.alias) ?? machineName
+      return matchesNativeSearch(
+        [
+          title,
+          machineName,
+          device.id,
+          device.workspaceFolder,
+          formatDateTime(device.lastSeenAt)
+        ],
+        normalizedFilter
+      )
+    })
+  return react.createElement(
+    'section',
+    { className: 'oneworks-relay__profile-section' },
+    react.createElement(
+      'label',
+      { className: adminListSurfaceClassNames.nativeSearch },
+      renderIcon(react, view, 'search', { size: 16 }),
+      renderInput(react, view, {
+        onChange: setFilter,
+        placeholder: '搜索设备名称、路径或最近在线时间',
+        value: filter
+      })
+    ),
+    react.createElement(
+      NativeList,
+      { react },
+      ...(visibleDevices.length === 0
+        ? [
+          react.createElement(NativeEmpty, {
+            key: 'empty',
+            react,
+            text: devices.length === 0 ? '暂无设备' : '没有匹配的设备'
+          })
+        ]
+        : visibleDevices.map(device => {
+          const deviceId = cleanText(device.id) ?? ''
+          const title = cleanText(device.alias) ?? cleanText(device.name) ?? cleanText(device.id) ?? '设备'
+          const machineName = cleanText(device.name) ?? cleanText(device.id) ?? ''
+          const isEditing = editingId === deviceId
+          return react.createElement(
+            'div',
+            {
+              className: adminListSurfaceClassNames.nativeRow,
+              key: deviceId || title,
+              style: { '--relay-admin-list-native-row-columns': '24px minmax(0, 1fr) auto 18px' }
+            },
+            react.createElement(
+              'span',
+              { className: adminListSurfaceClassNames.nativeIcon },
+              renderIcon(react, view, 'computer')
+            ),
+            react.createElement(
+              'span',
+              { className: adminListSurfaceClassNames.nativeMain },
+              react.createElement(
+                'span',
+                { className: adminListSurfaceClassNames.nativeTitle, title: machineName },
+                title
+              ),
+              react.createElement(
+                'span',
+                { className: adminListSurfaceClassNames.nativeMeta },
+                cleanText(device.workspaceFolder) ?? machineName
+              )
+            ),
+            react.createElement(
+              'span',
+              { className: adminListSurfaceClassNames.nativeMeta },
+              formatDateTime(device.lastSeenAt)
+            ),
+            react.createElement(
+              'span',
+              { className: adminListSurfaceClassNames.nativeActions },
+              isEditing
+                ? [
+                  renderInput(react, view, {
+                    key: 'input',
+                    onChange: setAliasDraft,
+                    placeholder: machineName,
+                    value: aliasDraft
+                  }),
+                  renderButton(react, view, {
+                    icon: 'check',
+                    key: 'save',
+                    label: '保存设备别名',
+                    onClick: () => {
+                      void requestJson(ctx, `profile/devices/${encodeURIComponent(deviceId)}`, {
+                        accountKey,
+                        alias: aliasDraft
+                      }, 'PATCH').then(() => {
+                        setEditingId('')
+                        onChanged()
+                      })
+                    }
+                  }),
+                  renderButton(react, view, {
+                    icon: 'close',
+                    key: 'cancel',
+                    label: '取消',
+                    onClick: () => setEditingId('')
+                  })
+                ]
+                : renderButton(react, view, {
+                  icon: 'edit',
+                  label: '重命名设备',
+                  onClick: () => {
+                    setEditingId(deviceId)
+                    setAliasDraft(cleanText(device.alias) ?? '')
+                  }
+                })
+            )
+          )
+        }))
+    )
+  )
+}
+
+const TeamsPanel = (props: {
+  accountKey: string
+  ctx: PluginClientContext
+  profile: RelayProfileStatus | null
+  react: PluginReactHost
+  view?: PluginViewContext
+}) => {
+  const { accountKey, ctx, profile, react, view } = props
+  const [filter, setFilter] = react.useState('')
+  const teams = profile?.teams ?? []
+  const normalizedFilter = filter.trim().toLowerCase()
+  const visibleTeams = normalizedFilter === ''
+    ? teams
+    : teams.filter(team =>
+      matchesNativeSearch(
+        [
+          teamDisplayName(team),
+          team.id,
+          team.slug,
+          teamRoleText(team),
+          team.defaultForPublishing === true ? '默认发布团队' : undefined,
+          team.configEnabled === false ? '配置未启用' : '配置可用',
+          formatDateTime(team.updatedAt)
+        ],
+        normalizedFilter
+      )
+    )
+  return react.createElement(
+    'section',
+    { className: 'oneworks-relay__profile-section' },
+    react.createElement(
+      'label',
+      { className: adminListSurfaceClassNames.nativeSearch },
+      renderIcon(react, view, 'search', { size: 16 }),
+      renderInput(react, view, {
+        onChange: setFilter,
+        placeholder: '搜索团队名称、标识、角色或状态',
+        value: filter
+      })
+    ),
+    react.createElement(
+      NativeList,
+      { react },
+      ...(visibleTeams.length === 0
+        ? [
+          react.createElement(NativeEmpty, {
+            key: 'empty',
+            react,
+            text: teams.length === 0 ? '暂无团队' : '没有匹配的团队'
+          })
+        ]
+        : visibleTeams.map(team => {
+          const teamId = cleanText(team.id) ?? ''
+          const name = teamDisplayName(team)
+          const meta = [
+            cleanText(team.slug),
+            teamRoleText(team),
+            team.defaultForPublishing === true ? '默认发布团队' : undefined,
+            team.configEnabled === false ? '配置未启用' : '配置可用'
+          ].filter(Boolean).join(' · ')
+          return react.createElement(
+            'div',
+            {
+              className: adminListSurfaceClassNames.nativeRow,
+              key: teamId || name,
+              style: { '--relay-admin-list-native-row-columns': '34px minmax(0, 1fr) auto 24px' }
+            },
+            renderAvatar(react, { avatarUrl: team.avatarUrl, className: adminListSurfaceClassNames.nativeIcon, name }),
+            react.createElement(
+              'span',
+              { className: adminListSurfaceClassNames.nativeMain },
+              react.createElement('button', {
+                className: `oneworks-relay__link-button ${adminListSurfaceClassNames.nativeTitle}`,
+                onClick: () =>
+                  navigateTo(
+                    ctx.scope,
+                    routePath(ctx.scope, {
+                      accountKey,
+                      page: 'team',
+                      tab: 'overview',
+                      teamId
+                    })
+                  ),
+                type: 'button'
+              }, name),
+              react.createElement('span', { className: adminListSurfaceClassNames.nativeMeta }, meta)
+            ),
+            react.createElement(
+              'span',
+              { className: adminListSurfaceClassNames.nativeMeta },
+              formatDateTime(team.updatedAt)
+            ),
+            react.createElement(
+              'span',
+              { className: adminListSurfaceClassNames.nativeActions },
+              renderIcon(react, view, 'chevron_right')
+            )
+          )
+        }))
+    )
+  )
+}
+
+const SecurityPanel = (props: {
+  accountKey: string
+  ctx: PluginClientContext
+  onChanged: () => void
+  profile: RelayProfileStatus | null
+  react: PluginReactHost
+  view?: PluginViewContext
+}) => {
+  const { accountKey, ctx, onChanged, profile, react, view } = props
+  const [passwordOpen, setPasswordOpen] = react.useState(false)
+  const [currentPassword, setCurrentPassword] = react.useState('')
+  const [newPassword, setNewPassword] = react.useState('')
+  const security = profile?.security
+  const rows = [
+    {
+      action: passwordOpen
+        ? react.createElement(
+          'span',
+          { className: adminListSurfaceClassNames.nativeActions },
+          renderInput(react, view, {
+            onChange: setCurrentPassword,
+            placeholder: '当前密码',
+            type: 'password',
+            value: currentPassword
+          }),
+          renderInput(react, view, {
+            onChange: setNewPassword,
+            placeholder: '新密码',
+            type: 'password',
+            value: newPassword
+          }),
+          renderButton(react, view, {
+            icon: 'check',
+            label: '保存密码',
+            onClick: () => {
+              void requestJson(ctx, 'profile/password', {
+                accountKey,
+                currentPassword,
+                newPassword
+              }).then(() => {
+                setPasswordOpen(false)
+                setCurrentPassword('')
+                setNewPassword('')
+                onChanged()
+              })
+            }
+          }),
+          renderButton(react, view, {
+            icon: 'close',
+            label: '取消',
+            onClick: () => setPasswordOpen(false)
+          })
+        )
+        : react.createElement(
+          'span',
+          { className: adminListSurfaceClassNames.nativeActions },
+          renderButton(react, view, {
+            icon: 'edit',
+            label: '修改密码',
+            onClick: () => setPasswordOpen(true)
+          })
+        ),
+      icon: 'password',
+      meta: security?.password?.enabled === true ? '已启用密码登录' : '未设置密码',
+      title: '密码管理'
+    },
+    {
+      icon: 'passkey',
+      meta: security?.passkeys?.enabled === true ? `${security.passkeys.count ?? 0} 个 Passkey` : '暂未启用',
+      title: 'Passkey 登录'
+    },
+    {
+      icon: 'verified_user',
+      meta: security?.twoFactor?.enabled === true ? '已启用' : '暂未启用',
+      title: '双因素认证'
+    },
+    {
+      action: react.createElement(
+        'span',
+        { className: adminListSurfaceClassNames.nativeActions },
+        renderButton(react, view, {
+          danger: true,
+          icon: 'delete_forever',
+          label: '删除账号',
+          onClick: () => {
+            void requestJson(ctx, 'profile/account', { accountKey }, 'DELETE').then(() => {
+              navigateTo(ctx.scope, routePath(ctx.scope, { page: 'accounts' }))
+            })
+          }
+        })
+      ),
+      danger: true,
+      icon: 'delete_forever',
+      meta: '删除远端账号并清除本地登录态',
+      title: '删除账号'
+    }
+  ]
+  return react.createElement(
+    'section',
+    { className: 'oneworks-relay__profile-section' },
+    react.createElement(
+      NativeList,
+      { react },
+      ...rows.map(row =>
+        react.createElement(
+          'div',
+          {
+            className: adminListSurfaceClassNames.nativeRow,
+            'data-danger': row.danger === true ? 'true' : undefined,
+            key: row.title
+          },
+          react.createElement(
+            'span',
+            { className: adminListSurfaceClassNames.nativeIcon },
+            renderIcon(react, view, row.icon)
+          ),
+          react.createElement(
+            'span',
+            { className: adminListSurfaceClassNames.nativeMain },
+            react.createElement('span', { className: adminListSurfaceClassNames.nativeTitle }, row.title),
+            react.createElement('span', { className: adminListSurfaceClassNames.nativeMeta }, row.meta)
+          ),
+          row.action ?? react.createElement('span', { className: adminListSurfaceClassNames.nativeActions })
+        )
+      )
+    )
+  )
+}
+
+const MessagesPage = (props: {
+  profile: RelayProfileStatus | null
+  react: PluginReactHost
+  view?: PluginViewContext
+}) => {
+  const { profile, react, view } = props
+  const messages = [
+    ...(profile?.messages ?? []).map(message => ({
+      body: cleanText(message.body) ?? '-',
+      createdAt: message.createdAt,
+      icon: message.kind === 'announcement' ? 'campaign' : 'person',
+      meta: cleanTextList([
+        message.kind === 'personal' ? '个人通知' : message.kind === 'announcement' ? '公告' : '系统',
+        message.createdBy?.name,
+        message.audience?.team?.name
+      ]).join(' · '),
+      status: message.kind === 'personal' ? '个人' : message.kind === 'announcement' ? '公告' : '系统',
+      title: cleanText(message.title) ?? '消息'
+    })),
+    ...(profile?.invitations ?? []).map(invitation => ({
+      body: `${cleanText(invitation.inviter?.name) ?? '管理员'} 邀请你加入团队。`,
+      createdAt: invitation.createdAt,
+      icon: 'group_add',
+      meta: cleanTextList(['团队邀请', invitation.teamName, invitation.status]).join(' · '),
+      status: cleanText(invitation.status) ?? '邀请',
+      title: cleanText(invitation.teamName) == null ? '团队邀请' : `${invitation.teamName} 邀请`
+    }))
+  ]
+  return react.createElement(
+    'main',
+    { className: 'oneworks-relay' },
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__shell' },
+      react.createElement(
+        'section',
+        { className: 'oneworks-relay__surface' },
+        react.createElement(
+          'section',
+          { className: 'oneworks-relay__messages relay-message-center' },
+          messages.length === 0
+            ? react.createElement('div', { className: 'relay-message-center__empty' }, '暂无消息')
+            : react.createElement(
+              'div',
+              { className: 'relay-message-center__list' },
+              ...messages.map((message, index) =>
+                react.createElement(
+                  'article',
+                  { className: 'relay-message-center__item', key: `${message.title}-${index}` },
+                  react.createElement(
+                    'span',
+                    { className: 'relay-message-center__item-icon' },
+                    renderIcon(react, view, message.icon)
+                  ),
+                  react.createElement(
+                    'div',
+                    { className: 'relay-message-center__item-copy' },
+                    react.createElement('h4', null, message.title),
+                    react.createElement('p', null, message.body),
+                    react.createElement('span', { className: 'relay-message-center__item-meta' }, message.meta)
+                  ),
+                  react.createElement(
+                    'div',
+                    { className: 'relay-message-center__item-side' },
+                    react.createElement('span', { className: 'relay-message-center__badge' }, message.status),
+                    react.createElement('time', null, formatDateTime(message.createdAt))
+                  )
+                )
+              )
+            )
+        )
+      )
+    )
+  )
+}
+
+const AccountsPage = (props: {
+  ctx: PluginClientContext
+  onChanged: () => void
+  react: PluginReactHost
+  status: RelayStatus | null
+  view?: PluginViewContext
+}) => {
+  const { ctx, onChanged, react, status, view } = props
+  const [filter, setFilter] = react.useState('')
+  const accounts = status?.accounts ?? []
+  const servers = getServers(status)
+  const groups = groupAccountsByServer(accounts, servers)
+  const showGroups = groups.length > 1
+  const InteractionList = view?.ui?.InteractionList
+  const items = showGroups
+    ? groups.map(group => buildServerAccountInteractionItem(group, servers))
+    : accounts.map(account => buildAccountInteractionItem(account, servers))
+  return react.createElement(
+    'main',
+    { className: 'oneworks-relay' },
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__shell' },
+      react.createElement(
+        'section',
+        { className: 'oneworks-relay__surface' },
+        react.createElement(
+          'section',
+          { className: 'oneworks-relay__profile oneworks-relay__profile--accounts' },
+          InteractionList == null
+            ? react.createElement('div', { className: 'oneworks-relay__empty' }, '标准账号列表组件不可用')
+            : react.createElement(InteractionList, {
+              actionDisplay: 'inline',
+              actions: getAccountInteractionActions(ctx, onChanged),
+              border: 'borderless',
+              className: 'oneworks-relay__host-interaction-list',
+              descriptionPlacement: 'content',
+              emptyText: accounts.length === 0 ? '暂无登录账号' : '没有匹配账号',
+              iconSize: 18,
+              inlineActionLimit: 2,
+              items,
+              padding: 'none',
+              search: {
+                onChange: setFilter,
+                placeholder: showGroups ? '搜索账号、邮箱、服务或状态' : '搜索账号',
+                value: filter
+              },
+              splitActionHover: true,
+              onSelect: (item: RelayAccountInteractionItem) => {
+                if (item.kind !== 'account' || item.accountKey == null) return
+                navigateTo(
+                  ctx.scope,
+                  routePath(ctx.scope, {
+                    accountKey: item.accountKey,
+                    page: 'profile',
+                    tab: 'account'
+                  })
+                )
+              }
+            })
+        )
+      )
+    )
+  )
+}
+
+const buildAccountInteractionItem = (
+  account: RelayAuthAccount,
+  servers: RelayServerStatus[]
+): RelayAccountInteractionItem => {
+  const accountKey = getAccountKey(account)
+  const name = accountDisplayName(account)
+  const subtitle = accountSubtitle(account)
+  const server = findServerForAccount(account, servers)
+  const serverLabel = accountServerGroupLabel(account, servers)
+  return {
+    account,
+    accountKey,
+    avatar: {
+      alt: name,
+      fallback: getAvatarInitials(name),
+      src: cleanText(account.avatarUrl)
+    },
+    description: subtitle,
+    disabled: account.enabled === false,
+    kind: 'account',
+    key: `account:${accountKey}`,
+    searchText: cleanTextList([
+      name,
+      subtitle,
+      account.email,
+      account.loginId,
+      account.userId,
+      account.role,
+      account.enabled === false ? 'disabled 禁用' : 'enabled 启用',
+      serverLabel,
+      serverAddress(server),
+      account.serverAlias,
+      account.serverUrl
+    ]).join(' '),
+    title: name,
+    tooltip: subtitle === '' ? name : `${name} · ${subtitle}`
+  }
+}
+
+const buildServerAccountInteractionItem = (
+  group: { accounts: RelayAuthAccount[]; key: string; label: string; server?: RelayServerStatus },
+  servers: RelayServerStatus[]
+): RelayAccountInteractionItem => {
+  const address = serverAddress(group.server)
+  const children = group.accounts.map(account => buildAccountInteractionItem(account, servers))
+  return {
+    avatar: {
+      fallback: getAvatarInitials(group.label)
+    },
+    children,
+    itemType: 'groupTitle',
+    kind: 'server',
+    key: `server:${group.key}`,
+    searchText: cleanTextList([
+      group.label,
+      address,
+      ...children.map(child => child.searchText)
+    ]).join(' '),
+    server: group.server,
+    serverId: cleanText(group.server?.id) ?? group.key,
+    title: group.label,
+    tooltip: address === '' ? group.label : address
+  }
+}
+
+const getAccountInteractionActions = (
+  ctx: PluginClientContext,
+  onChanged: () => void
+) =>
+(item: RelayAccountInteractionItem): Array<PluginHostInteractionListAction<RelayAccountInteractionItem>> => {
+  if (item.kind === 'server') {
+    return [{
+      icon: 'login',
+      key: 'login',
+      label: '登录',
+      onSelect: () => {
+        navigateTo(
+          ctx.scope,
+          routePath(ctx.scope, {
+            page: 'login',
+            serverId: item.serverId
+          })
+        )
+      }
+    }]
+  }
+  const accountKey = item.accountKey
+  if (accountKey == null || accountKey === '') return []
+  const enabled = item.account?.enabled !== false
+  return [
+    {
+      icon: enabled ? 'toggle_off' : 'toggle_on',
+      key: enabled ? 'disable' : 'enable',
+      label: enabled ? '禁用' : '启用',
+      onSelect: () => {
+        void requestJson(ctx, enabled ? 'users/disable' : 'users/enable', { accountKey }).then(onChanged)
+      }
+    },
+    {
+      danger: true,
+      icon: 'delete',
+      key: 'delete-local',
+      label: '删除本机数据',
+      onSelect: () => {
+        void requestJson(ctx, 'users/delete-local', { accountKey }).then(onChanged)
+      }
+    }
+  ]
+}
+
+const LoginPage = (props: {
+  ctx: PluginClientContext
+  react: PluginReactHost
+  route: Extract<RelayHomeRoute, { page: 'login' }>
+}) => {
+  const { ctx, react, route } = props
+  const [loginUrl, setLoginUrl] = react.useState('')
+  const [error, setError] = react.useState<string | null>(null)
+  const [loading, setLoading] = react.useState(true)
+  react.useEffect(() => {
+    let disposed = false
+    setLoading(true)
+    setError(null)
+    setLoginUrl('')
+    void createRelayLoginUrl(ctx, {
+      forcePluginHomeRedirect: true,
+      serverId: route.serverId
+    }).then(result => {
+      if (!disposed) {
+        setLoginUrl(result.loginUrl)
+        setLoading(false)
+      }
+    }).catch(errorValue => {
+      if (!disposed) {
+        setError(toErrorMessage(errorValue))
+        setLoading(false)
+      }
+    })
+    return () => {
+      disposed = true
+    }
+  }, [ctx, route.serverId])
+  return react.createElement(
+    'main',
+    { className: 'oneworks-relay' },
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__shell' },
+      react.createElement(
+        'section',
+        { className: 'oneworks-relay__surface' },
+        error != null
+          ? react.createElement('div', { className: 'oneworks-relay__config-error' }, error)
+          : loading || loginUrl === ''
+          ? react.createElement('div', { className: 'oneworks-relay__empty' }, '正在打开登录页...')
+          : react.createElement('iframe', {
+            className: 'oneworks-relay__login-frame',
+            'data-relay-login-frame': 'true',
+            onLoad: (event: Event) => {
+              const frame = event.target instanceof HTMLIFrameElement ? event.target : null
+              let href = ''
+              try {
+                href = frame?.contentWindow?.location.href ?? ''
+              } catch {
+                return
+              }
+              const callback = readLoginCallbackFromUrl(href)
+              if (callback != null) {
+                void requestJson(ctx, 'login-callback', {
+                  serverId: callback.serverId,
+                  token: callback.token
+                }).then(() => navigateTo(ctx.scope, routePath(ctx.scope, { page: 'accounts' })))
+              }
+            },
+            src: loginUrl,
+            title: '登录'
+          })
+      )
+    )
+  )
+}
+
+const ServersPage = (props: {
+  ctx: PluginClientContext
+  onChanged: () => void
+  react: PluginReactHost
+  status: RelayStatus | null
+  view?: PluginViewContext
+}) => {
+  const { ctx, onChanged, react, status, view } = props
+  const servers = getServers(status)
+  const [editingKey, setEditingKey] = react.useState('')
+  const [draft, setDraft] = react.useState<ServerDraft>({ name: '', remoteBaseUrl: '' })
+  const saveDraft = async () => {
+    const update = view?.options?.update
+    if (update == null) throw new Error('当前环境不支持保存服务器配置。')
+    const nextOptions = buildRelayServerOptionsUpdate(view?.options?.value ?? ctx.options ?? {}, draft)
+    await update(nextOptions)
+    setEditingKey('')
+    setDraft({ name: '', remoteBaseUrl: '' })
+    onChanged()
+  }
+  return react.createElement(
+    'main',
+    { className: 'oneworks-relay' },
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__shell' },
+      react.createElement(
+        'section',
+        { className: 'oneworks-relay__surface' },
+        react.createElement(
+          'section',
+          { className: 'oneworks-relay__servers' },
+          ...servers.map((server, index) => {
+            const key = cleanText(server.id) ?? cleanText(server.remoteBaseUrl) ?? `server-${index}`
+            const official = server.official === true || isOfficialServerId(cleanText(server.id))
+            const editing = editingKey === key
+            const title = serverDisplayName(server)
+            const address = serverAddress(server)
+            return react.createElement(
+              'div',
+              { className: 'oneworks-relay__server-row', key, title: address },
+              renderAvatar(react, { name: title, state: 'server' }),
+              editing
+                ? react.createElement(
+                  'span',
+                  { className: 'oneworks-relay__server-editor' },
+                  renderInput(react, view, {
+                    onChange: value => setDraft(current => ({ ...current, name: value })),
+                    placeholder: '服务名称',
+                    value: draft.name
+                  }),
+                  renderInput(react, view, {
+                    onChange: value => setDraft(current => ({ ...current, remoteBaseUrl: value })),
+                    placeholder: 'https://relay.example.com',
+                    value: draft.remoteBaseUrl
+                  })
+                )
+                : react.createElement(
+                  'span',
+                  { className: 'oneworks-relay__server-copy' },
+                  react.createElement('strong', null, title),
+                  react.createElement('span', null, address)
+                ),
+              react.createElement(
+                'span',
+                { className: 'oneworks-relay__server-actions' },
+                editing
+                  ? [
+                    renderButton(react, view, {
+                      icon: 'check',
+                      key: 'save',
+                      label: '保存服务器',
+                      onClick: () => {
+                        void saveDraft().catch(error =>
+                          ctx.notifications?.show?.({
+                            level: 'error',
+                            title: toErrorMessage(error)
+                          })
+                        )
+                      }
+                    }),
+                    renderButton(react, view, {
+                      icon: 'close',
+                      key: 'cancel',
+                      label: '取消',
+                      onClick: () => setEditingKey('')
+                    })
+                  ]
+                  : [
+                    renderButton(react, view, {
+                      icon: 'login',
+                      key: 'login',
+                      label: '登录',
+                      onClick: () =>
+                        navigateTo(
+                          ctx.scope,
+                          routePath(ctx.scope, {
+                            page: 'login',
+                            serverId: key
+                          })
+                        )
+                    }),
+                    official ? null : renderButton(react, view, {
+                      icon: 'edit',
+                      key: 'edit',
+                      label: '修改服务器',
+                      onClick: () => {
+                        setEditingKey(key)
+                        setDraft({
+                          id: cleanText(server.id),
+                          name: cleanText(server.name) ?? '',
+                          remoteBaseUrl: address
+                        })
+                      }
+                    })
+                  ]
+              )
+            )
+          }),
+          react.createElement(
+            'div',
+            { className: 'oneworks-relay__server-row oneworks-relay__server-management-form' },
+            renderIcon(react, view, 'add_link'),
+            react.createElement(
+              'span',
+              { className: 'oneworks-relay__server-editor' },
+              renderInput(react, view, {
+                onChange: value => setDraft(current => ({ ...current, name: value })),
+                placeholder: '服务名称',
+                value: editingKey === '' ? draft.name : ''
+              }),
+              renderInput(react, view, {
+                onChange: value => setDraft(current => ({ ...current, remoteBaseUrl: value })),
+                placeholder: 'https://relay.example.com',
+                value: editingKey === '' ? draft.remoteBaseUrl : ''
+              })
+            ),
+            react.createElement(
+              'span',
+              { className: 'oneworks-relay__server-actions' },
+              renderButton(react, view, {
+                disabled: editingKey !== '',
+                icon: 'check',
+                label: '加入服务器',
+                onClick: () => {
+                  void saveDraft().catch(error =>
+                    ctx.notifications?.show?.({
+                      level: 'error',
+                      title: toErrorMessage(error)
+                    })
+                  )
+                }
+              }),
+              renderButton(react, view, {
+                icon: 'close',
+                label: '清空',
+                onClick: () => setDraft({ name: '', remoteBaseUrl: '' })
+              })
+            )
+          )
+        )
+      )
+    )
+  )
+}
+
+const tokenEditorInitialState = (
+  token: RelayProfileAccessToken | undefined,
+  profile: RelayProfileStatus | null
+): TokenEditorState => ({
+  name: cleanText(token?.name) ?? '',
+  permissionGroupIds: (token?.permissionGroupIds ?? []).join(', '),
+  permissionGroupMode: token?.permissionGroupMode ?? 'all',
+  scope: token?.scope ?? 'user',
+  teamId: cleanText(token?.teamId) ?? cleanText(profile?.teams?.[0]?.id) ?? ''
+})
+
+const TokenEditorPage = (props: {
+  accountKey: string
+  ctx: PluginClientContext
+  onChanged: () => void
+  profile: RelayProfileStatus | null
+  react: PluginReactHost
+  tokenId: string
+  view?: PluginViewContext
+}) => {
+  const { accountKey, ctx, onChanged, profile, react, tokenId, view } = props
+  const isCreate = tokenId === 'new'
+  const token = isCreate ? undefined : profile?.security?.accessTokens?.find(item => cleanText(item.id) === tokenId)
+  const [form, setForm] = react.useState<TokenEditorState>(() => tokenEditorInitialState(token, profile))
+  const [createdToken, setCreatedToken] = react.useState('')
+  const [error, setError] = react.useState<string | null>(null)
+  react.useEffect(() => {
+    setForm(tokenEditorInitialState(token, profile))
+    setCreatedToken('')
+    setError(null)
+  }, [profile, tokenId])
+  const save = async () => {
+    if (form.name.trim() === '') {
+      setError('请输入令牌名称')
+      return
+    }
+    if (form.scope === 'team' && form.teamId.trim() === '') {
+      setError('请选择团队')
+      return
+    }
+    const payload = {
+      accountKey,
+      name: form.name.trim(),
+      permissionGroupIds: form.permissionGroupIds.split(',').map(item => item.trim()).filter(Boolean),
+      permissionGroupMode: form.permissionGroupMode,
+      scope: form.scope,
+      teamId: form.scope === 'team' ? form.teamId : undefined
+    }
+    try {
+      setError(null)
+      const response = isCreate
+        ? await requestJson<RelayProfileStatus>(ctx, 'profile/access-tokens', payload)
+        : await requestJson<RelayProfileStatus>(
+          ctx,
+          `profile/access-tokens/${encodeURIComponent(tokenId)}`,
+          payload,
+          'PATCH'
+        )
+      const accessToken = cleanText(response.result?.accessToken)
+      if (accessToken != null) setCreatedToken(accessToken)
+      onChanged()
+      if (!isCreate) navigateTo(ctx.scope, routePath(ctx.scope, { accountKey, page: 'profile', tab: 'tokens' }))
+    } catch (saveError) {
+      setError(toErrorMessage(saveError))
+    }
+  }
+  const revoke = async () => {
+    if (isCreate) return
+    await requestJson(ctx, `profile/access-tokens/${encodeURIComponent(tokenId)}`, { accountKey }, 'DELETE')
+    onChanged()
+    navigateTo(ctx.scope, routePath(ctx.scope, { accountKey, page: 'profile', tab: 'tokens' }))
+  }
+  const scopeOptions = [
+    { label: '用户级', value: 'user' },
+    { label: '团队级', value: 'team' },
+    { label: '平台级', value: 'platform' }
+  ]
+  const permissionModeOptions = [
+    { label: '全部用户组', value: 'all' },
+    { label: '指定用户组', value: 'custom' }
+  ]
+  return react.createElement(
+    'main',
+    { className: 'oneworks-relay' },
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__shell' },
+      react.createElement(
+        'section',
+        { className: 'oneworks-relay__surface' },
+        react.createElement(
+          'section',
+          { className: 'oneworks-relay__profile oneworks-relay__profile--token-detail' },
+          error == null ? null : react.createElement('div', { className: 'oneworks-relay__config-error' }, error),
+          createdToken === ''
+            ? null
+            : react.createElement(
+              'div',
+              { className: 'oneworks-relay__profile-section' },
+              react.createElement('strong', null, '新令牌'),
+              react.createElement('code', null, createdToken),
+              renderButton(react, view, {
+                icon: 'content_copy',
+                label: '复制令牌',
+                onClick: () => {
+                  void navigator.clipboard?.writeText(createdToken)
+                }
+              })
+            ),
+          react.createElement(
+            'div',
+            { className: 'oneworks-relay__token-editor' },
+            renderTokenEditorRow(
+              react,
+              view,
+              '令牌类型',
+              '用户级操作当前账号数据，团队级绑定一个团队，平台级使用平台用户组授权。',
+              renderSelect(react, view, {
+                onChange: value =>
+                  setForm(current => ({
+                    ...current,
+                    scope: (Array.isArray(value) ? value[0] : value) as TokenEditorState['scope']
+                  })),
+                options: scopeOptions,
+                value: form.scope
+              })
+            ),
+            renderTokenEditorRow(
+              react,
+              view,
+              '令牌名称',
+              '用于区分 OpenAPI 调用来源。',
+              renderInput(react, view, {
+                onChange: value => setForm(current => ({ ...current, name: value })),
+                placeholder: '令牌名称',
+                value: form.name
+              })
+            ),
+            form.scope === 'team'
+              ? renderTokenEditorRow(
+                react,
+                view,
+                '授权团队',
+                '令牌只访问这个团队允许的资源。',
+                renderSelect(react, view, {
+                  onChange: value =>
+                    setForm(current => ({
+                      ...current,
+                      teamId: Array.isArray(value) ? value[0] ?? '' : value
+                    })),
+                  options: (profile?.teams ?? []).map(team => ({
+                    label: teamDisplayName(team),
+                    value: cleanText(team.id) ?? ''
+                  })),
+                  value: form.teamId
+                })
+              )
+              : null,
+            renderTokenEditorRow(
+              react,
+              view,
+              '权限范围',
+              tokenPermissionLabel(profile, form),
+              renderSelect(react, view, {
+                onChange: value =>
+                  setForm(current => ({
+                    ...current,
+                    permissionGroupMode:
+                      (Array.isArray(value) ? value[0] : value) as TokenEditorState['permissionGroupMode']
+                  })),
+                options: permissionModeOptions,
+                value: form.permissionGroupMode
+              })
+            ),
+            form.permissionGroupMode === 'custom'
+              ? renderTokenEditorRow(
+                react,
+                view,
+                '用户组',
+                '多个用户组用英文逗号分隔。',
+                renderInput(react, view, {
+                  onChange: value => setForm(current => ({ ...current, permissionGroupIds: value })),
+                  placeholder: 'group-a, group-b',
+                  value: form.permissionGroupIds
+                })
+              )
+              : null,
+            react.createElement(
+              'div',
+              { className: 'oneworks-relay__token-editor-actions' },
+              renderButton(react, view, {
+                icon: 'close',
+                label: '返回列表',
+                onClick: () =>
+                  navigateTo(
+                    ctx.scope,
+                    routePath(ctx.scope, {
+                      accountKey,
+                      page: 'profile',
+                      tab: 'tokens'
+                    })
+                  )
+              }),
+              isCreate ? null : renderButton(react, view, {
+                danger: true,
+                icon: 'block',
+                label: '撤销令牌',
+                onClick: () => {
+                  void revoke().catch(revokeError => setError(toErrorMessage(revokeError)))
+                }
+              }),
+              renderButton(react, view, {
+                icon: 'check',
+                label: isCreate ? '生成令牌' : '保存令牌配置',
+                onClick: () => {
+                  void save()
+                },
+                primary: true
+              })
+            )
+          )
+        )
+      )
+    )
+  )
+}
+
+const renderTokenEditorRow = (
+  react: PluginReactHost,
+  _view: PluginViewContext | undefined,
+  label: string,
+  description: string,
+  control: PluginReactNode
+) =>
+  react.createElement(
+    'div',
+    { className: 'oneworks-relay__token-editor-row', key: label },
+    react.createElement(
+      'span',
+      { className: 'oneworks-relay__token-editor-label' },
+      react.createElement('strong', null, label),
+      react.createElement('span', null, description)
+    ),
+    react.createElement('span', { className: 'oneworks-relay__token-editor-control' }, control)
+  )
+
+const configDistributionHasDetails = (status?: RelayConfigDistributionStatus) => (
+  cleanText(status?.hash) != null ||
+  cleanText(status?.version) != null ||
+  cleanText(status?.lastAppliedAt) != null ||
+  cleanText(status?.lastSyncedAt) != null ||
+  (status?.sources?.length ?? 0) > 0
+)
+
+const configDistributionState = (status?: RelayConfigDistributionStatus) => {
+  if (cleanText(status?.lastError) != null) return '同步失败'
+  return configDistributionHasDetails(status) ? '已同步' : '未同步'
+}
+
+const configShareProfileStatusLabel = (profile: RelayConfigShareProfile) => {
+  const status = cleanText(profile.status)
+  if (status === 'published') return '已发布'
+  if (status === 'draft') return '草稿'
+  if (status === 'archived') return '已归档'
+  return status ?? '未知状态'
+}
+
+const teamCanManageConfig = (team?: RelayProfileTeam | null) => {
+  const role = teamRoleText(team).toLowerCase()
+  return role === 'owner' || role === 'admin' || role === 'editor'
+}
+
+const teamConfigEnabled = (team?: RelayProfileTeam | null) => (
+  team?.membership?.configEnabled ?? team?.configEnabled ?? true
+)
+
+const configDistributionTone = (status?: RelayConfigDistributionStatus) => {
+  if (cleanText(status?.lastError) != null) return 'danger'
+  return configDistributionHasDetails(status) ? 'success' : 'neutral'
+}
+
+const scopedConfigDistributionForTeam = (
+  status: RelayConfigDistributionStatus | undefined,
+  team: RelayProfileTeam | undefined
+): RelayConfigDistributionStatus | undefined => {
+  if (status == null) return undefined
+  const teamId = cleanText(team?.id)
+  if (teamId == null) return status
+  const sources = (status.sources ?? []).filter(source => cleanText(source.teamId) === teamId)
+  if (sources.length === 0) {
+    return {
+      ...status,
+      hash: null,
+      lastAppliedAt: null,
+      lastError: null,
+      lastSyncedAt: null,
+      sources: [],
+      version: null
+    }
+  }
+  return {
+    ...status,
+    sources
+  }
+}
+
+const renderTeamMetric = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  props: {
+    icon: string
+    label: string
+    meta?: PluginReactNode
+    tone?: 'danger' | 'neutral' | 'primary' | 'success' | 'warning'
+    value: PluginReactNode
+  }
+) =>
+  react.createElement(
+    'span',
+    { className: 'oneworks-relay__team-metric', 'data-tone': props.tone ?? 'neutral', key: props.label },
+    react.createElement(
+      'span',
+      { className: 'oneworks-relay__team-metric-icon' },
+      renderIcon(react, view, props.icon, { size: 16 })
+    ),
+    react.createElement(
+      'span',
+      { className: 'oneworks-relay__team-metric-copy' },
+      react.createElement('span', { className: 'oneworks-relay__team-metric-label' }, props.label),
+      react.createElement('strong', null, props.value ?? '-'),
+      props.meta == null
+        ? null
+        : react.createElement('span', { className: 'oneworks-relay__team-metric-meta' }, props.meta)
+    )
+  )
+
+interface TeamDetailRowProps {
+  description?: PluginReactNode
+  icon: string
+  label: string
+  value: PluginReactNode
+}
+
+const renderTeamDetailRow = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  props: TeamDetailRowProps
+) =>
+  react.createElement(
+    'div',
+    { className: 'oneworks-relay__team-detail-row', key: props.label },
+    react.createElement(
+      'span',
+      { className: 'oneworks-relay__team-detail-label' },
+      react.createElement(
+        'span',
+        { className: 'oneworks-relay__team-detail-icon', 'aria-hidden': 'true' },
+        renderIcon(react, view, props.icon, { size: 16 })
+      ),
+      react.createElement(
+        'span',
+        { className: 'oneworks-relay__team-detail-copy' },
+        react.createElement('strong', { className: 'oneworks-relay__team-detail-title' }, props.label),
+        props.description == null
+          ? null
+          : react.createElement(
+            'span',
+            { className: 'oneworks-relay__team-detail-description' },
+            props.description
+          )
+      )
+    ),
+    react.createElement('span', { className: 'oneworks-relay__team-detail-value' }, props.value ?? '-')
+  )
+
+const renderTeamSection = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  icon: string,
+  title: string,
+  meta: string | undefined,
+  ...children: PluginReactNode[]
+) =>
+  react.createElement(
+    'section',
+    { className: 'oneworks-relay__team-panel-section' },
+    renderSectionHead(react, view, icon, title, meta),
+    ...children
+  )
+
+const renderTeamStatePanel = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  icon: string,
+  title: string,
+  description: string
+) =>
+  react.createElement(
+    'div',
+    { className: 'oneworks-relay__team-state' },
+    react.createElement(
+      'span',
+      { className: 'oneworks-relay__team-state-icon' },
+      renderIcon(react, view, icon, { size: 20 })
+    ),
+    react.createElement(
+      'span',
+      { className: 'oneworks-relay__team-state-copy' },
+      react.createElement('strong', null, title),
+      react.createElement('span', null, description)
+    )
+  )
+
+const getConfigShareProfilesForTeam = (
+  targets: RelayConfigShareTargets | null,
+  team: RelayProfileTeam | undefined
+) => {
+  const teamId = cleanText(team?.id)
+  if (teamId == null) return []
+  return targets?.profilesByTeamId?.[teamId] ?? []
+}
+
+const createInitialShareState = (): ShareState => ({
+  draft: null,
+  error: null,
+  loadingTargets: false,
+  previewing: false,
+  profileName: '',
+  publishing: false,
+  targets: null,
+  text: '{}'
+})
+
+const TeamDetailView = (props: {
+  accountKey: string
+  configPanel?: 'content' | 'versions'
+  configProfileId?: string
+  ctx: PluginClientContext
+  onChanged: () => void
+  profile: RelayProfileStatus | null
+  profileLoading: boolean
+  react: PluginReactHost
+  status: RelayStatus | null
+  tab: RelayProfileTeamDetailTab
+  teamId: string
+  view?: PluginViewContext
+}) => {
+  const {
+    accountKey,
+    configPanel,
+    configProfileId,
+    ctx,
+    onChanged,
+    profile,
+    profileLoading,
+    react,
+    status,
+    tab,
+    teamId,
+    view
+  } = props
+  const [share, setShare] = react.useState<ShareState>(createInitialShareState)
+  const [configActionId, setConfigActionId] = react.useState<string | null>(null)
+  const [configActionError, setConfigActionError] = react.useState<string | null>(null)
+  const [configSearch, setConfigSearch] = react.useState('')
+  const account = getProfileAccount(profile, status, accountKey)
+  const team = profile?.teams?.find(item => cleanText(item.id) === teamId)
+  const configDistribution = scopedConfigDistributionForTeam(status?.configDistribution ?? status?.configSync, team)
+  const teamName = team == null ? cleanText(teamId) ?? '团队' : teamDisplayName(team)
+  const teamPending = team == null && (profile == null || profileLoading)
+  const teamSubtitle = teamPending
+    ? '正在加载团队资料'
+    : team == null
+    ? '团队资料暂不可用'
+    : cleanTextList([team.slug, cleanText(team.description)]).join(' · ')
+  const mainClassName = [
+    'oneworks-relay',
+    tab === 'documents' ? 'oneworks-relay--documents-tab' : '',
+    tab === 'configs' && configPanel === 'content' ? 'oneworks-relay--team-config-content-tab' : ''
+  ].filter(Boolean).join(' ')
+  const loadTargets = async () => {
+    setShare(current => ({ ...current, error: null, loadingTargets: true }))
+    try {
+      const targets = await requestJson<RelayConfigShareTargets>(ctx, 'config-share-targets', { accountKey, teamId })
+      setShare(current => ({ ...current, loadingTargets: false, targets }))
+    } catch (error) {
+      setShare(current => ({ ...current, error: toErrorMessage(error), loadingTargets: false }))
+    }
+  }
+  react.useEffect(() => {
+    if (share.error != null) return
+    const shouldLoadTargets = tab === 'configs'
+    if (shouldLoadTargets && share.targets == null && !share.loadingTargets) {
+      void loadTargets()
+    }
+  }, [tab, share.targets, share.loadingTargets, share.error])
+  const panel = teamPending
+    ? renderTeamStatePanel(react, view, 'sync', '正在加载团队', '团队资料和共享配置会在账号信息恢复后展示。')
+    : team == null
+    ? renderTeamStatePanel(react, view, 'error', '未找到团队', `当前账号下没有找到 ${teamId}。`)
+    : tab === 'configs'
+    ? renderTeamConfigsPanel({
+      accountKey,
+      actionError: configActionError,
+      actionId: configActionId,
+      configDistribution,
+      configPanel,
+      configProfileId,
+      ctx,
+      loadTargets,
+      onActionIdChange: setConfigActionId,
+      onActionErrorChange: setConfigActionError,
+      onChanged,
+      react,
+      search: configSearch,
+      setSearch: setConfigSearch,
+      targets: share.targets,
+      targetsError: share.error,
+      targetsLoading: share.loadingTargets,
+      team,
+      view
+    })
+    : tab === 'documents'
+    ? react.createElement(DocumentSyncPanel, {
+      account,
+      accountKey,
+      ctx,
+      onChanged,
+      react,
+      status,
+      team,
+      view
+    })
+    : renderTeamOverviewPanel(react, view, configDistribution, team)
+  const NativeTabs = view?.ui?.NativeTabs
+  const tabs = NativeTabs == null
+    ? react.createElement('div', { className: 'oneworks-relay__empty' }, '标准标签组件不可用')
+    : react.createElement(NativeTabs, {
+      activeKey: tab,
+      actions: tab === 'documents' && team != null
+        ? renderDocumentTabActions({ account, accountKey, ctx, onChanged, react, team, view })
+        : undefined,
+      ariaLabel: '团队详情',
+      className: 'oneworks-relay__profile-tabs oneworks-relay__team-detail-tabs',
+      items: teamDetailTabs.map((item): PluginHostNativeTabItem => ({
+        icon: item.icon,
+        key: item.key,
+        label: item.label
+      })),
+      onChange: (nextTab: RelayProfileTeamDetailTab) =>
+        navigateTo(
+          ctx.scope,
+          routePath(ctx.scope, {
+            accountKey,
+            page: 'team',
+            tab: nextTab,
+            teamId
+          })
+        )
+    })
+  return react.createElement(
+    'main',
+    { className: mainClassName },
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__shell' },
+      react.createElement(
+        'section',
+        { className: 'oneworks-relay__surface' },
+        react.createElement(
+          'section',
+          {
+            className: [
+              'oneworks-relay__profile oneworks-relay__profile--team-detail',
+              tab === 'documents' ? 'oneworks-relay__profile--documents-tab' : ''
+            ].filter(Boolean).join(' ')
+          },
+          react.createElement(
+            'div',
+            { className: 'oneworks-relay__team-hero' },
+            react.createElement(
+              'div',
+              { className: 'oneworks-relay__team-hero-main' },
+              renderAvatar(react, {
+                avatarUrl: team?.avatarUrl,
+                className: 'oneworks-relay__team-avatar',
+                name: teamName
+              }),
+              react.createElement(
+                'span',
+                { className: 'oneworks-relay__team-hero-copy' },
+                react.createElement('strong', null, teamName),
+                react.createElement(
+                  'span',
+                  null,
+                  teamSubtitle === '' ? '通过 Relay 共享配置与成员工作环境' : teamSubtitle
+                )
+              )
+            )
+          ),
+          tabs,
+          react.createElement(
+            'div',
+            {
+              className: [
+                'oneworks-relay__team-detail-panel native-tabs-panel',
+                tab === 'documents' ? 'oneworks-relay__documents-panel' : ''
+              ].filter(Boolean).join(' ')
+            },
+            panel
+          )
+        )
+      )
+    )
+  )
+}
+
+const renderTeamOverviewPanel = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  configDistribution: RelayConfigDistributionStatus | undefined,
+  team: RelayProfileTeam
+) => {
+  const canManageConfig = teamCanManageConfig(team)
+  const configEnabled = teamConfigEnabled(team)
+  return react.createElement(
+    'div',
+    { className: 'oneworks-relay__team-overview' },
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__team-metric-grid' },
+      renderTeamMetric(react, view, {
+        icon: 'groups',
+        label: '成员',
+        meta: '团队可见成员',
+        value: typeof team.memberCount === 'number' ? `${team.memberCount} 人` : '-'
+      }),
+      renderTeamMetric(react, view, {
+        icon: 'admin_panel_settings',
+        label: '我的权限',
+        meta: canManageConfig ? '可查看和发布团队配置' : '可使用已分配配置',
+        tone: canManageConfig ? 'primary' : 'neutral',
+        value: teamRoleText(team)
+      }),
+      renderTeamMetric(react, view, {
+        icon: 'rule_settings',
+        label: '团队配置',
+        meta: configEnabled ? '会合并到当前全局配置' : '不会参与本机配置合并',
+        tone: configEnabled ? 'success' : 'warning',
+        value: configEnabled ? '可用' : '未启用'
+      }),
+      renderTeamMetric(react, view, {
+        icon: 'sync',
+        label: '同步状态',
+        meta: cleanText(configDistribution?.lastError) ?? formatDateTime(configDistribution?.lastSyncedAt),
+        tone: configDistributionTone(configDistribution),
+        value: configDistributionState(configDistribution)
+      })
+    ),
+    react.createElement(
+      'section',
+      { className: 'oneworks-relay__team-panel-section' },
+      react.createElement(
+        'div',
+        { className: 'oneworks-relay__team-detail-list' },
+        renderTeamDetailRow(react, view, {
+          description: '用于 Relay 服务端识别团队',
+          icon: 'badge',
+          label: '团队 ID',
+          value: valueOrDash(team.id)
+        }),
+        renderTeamDetailRow(react, view, {
+          description: '团队短标识',
+          icon: 'label',
+          label: 'Slug',
+          value: valueOrDash(team.slug)
+        }),
+        renderTeamDetailRow(react, view, {
+          description: '发布共享配置时的默认目标',
+          icon: 'publish',
+          label: '默认发布',
+          value: team.defaultForPublishing === true ? '是' : '否'
+        }),
+        renderTeamDetailRow(react, view, {
+          description: '本机最近一次从 Relay 拉取团队配置',
+          icon: 'sync',
+          label: '最后同步',
+          value: formatDateTime(configDistribution?.lastSyncedAt)
+        }),
+        renderTeamDetailRow(react, view, {
+          description: '团队资料最近更新时间',
+          icon: 'schedule',
+          label: '更新时间',
+          value: formatDateTime(team.updatedAt)
+        })
+      )
+    )
+  )
+}
+
+const configShareProfileTitle = (profile: RelayConfigShareProfile) =>
+  cleanText(profile.name) ?? cleanText(profile.id) ?? '未命名配置'
+
+const findConfigSourceForProfile = (
+  sources: RelayConfigDistributionSourceStatus[],
+  profile: RelayConfigShareProfile
+) => {
+  const profileId = cleanText(profile.id)
+  if (profileId == null) return undefined
+  return sources.find(source => cleanText(source.profileId) === profileId)
+}
+
+const configSourceEnabled = (source?: RelayConfigDistributionSourceStatus) => (
+  source != null && source.enabled !== false
+)
+
+const configSourceStatusLabel = (source?: RelayConfigDistributionSourceStatus) => {
+  if (source == null) return '未启用'
+  if (source.enabled === false) return '已停用'
+  return '启用中'
+}
+
+const renderTeamConfigToggle = (props: {
+  accountKey: string
+  actionId: string | null
+  ctx: PluginClientContext
+  onActionErrorChange: (value: string | null) => void
+  onActionIdChange: (value: string | null) => void
+  onChanged: () => void
+  profile: RelayConfigShareProfile
+  react: PluginReactHost
+  source?: RelayConfigDistributionSourceStatus
+  view?: PluginViewContext
+}) => {
+  const { accountKey, actionId, ctx, onActionErrorChange, onActionIdChange, onChanged, profile, react, source, view } =
+    props
+  const profileId = cleanText(profile.id)
+  const enabled = configSourceEnabled(source)
+  const busy = profileId != null && actionId === profileId
+  return renderButton(react, view, {
+    disabled: profileId == null || busy,
+    icon: enabled ? 'toggle_on' : 'toggle_off',
+    label: enabled ? '停用配置' : '启用配置',
+    onClick: () => {
+      if (profileId == null) return
+      onActionErrorChange(null)
+      onActionIdChange(profileId)
+      void requestJson(ctx, 'config-source-enabled', {
+        accountKey,
+        enabled: !enabled,
+        id: profileId,
+        kind: 'profile'
+      }).then(() => {
+        onChanged()
+      }).catch(error => {
+        onActionErrorChange(toErrorMessage(error))
+      }).finally(() => {
+        onActionIdChange(null)
+      })
+    }
+  })
+}
+
+const TEAM_CONFIG_CONTENT_TEMPLATE: Record<string, unknown> = {
+  marketplaces: {},
+  modelServices: {},
+  plugins: [],
+  recommendedModels: [],
+  skillRegistries: [],
+  skills: [],
+  skillsMeta: {}
+}
+
+const stringifyTeamConfigContent = (value: Record<string, unknown> | undefined) =>
+  JSON.stringify(value ?? TEAM_CONFIG_CONTENT_TEMPLATE, null, 2)
+
+const parseTeamConfigContent = (text: string): Record<string, unknown> => {
+  const parsed = JSON.parse(text.trim() || '{}') as unknown
+  if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('配置内容必须是 JSON object。')
+  }
+  return parsed as Record<string, unknown>
+}
+
+const activeTeamConfigVersion = (detail: RelayConfigShareProfileDetail | null, profile: RelayConfigShareProfile) => {
+  const versions = detail?.versions ?? []
+  const activeVersionId = cleanText(detail?.profile?.activeVersionId ?? profile.activeVersionId)
+  if (activeVersionId != null) {
+    const active = versions.find(version => cleanText(version.id) === activeVersionId)
+    if (active != null) return active
+  }
+  return versions.length === 0 ? undefined : versions[versions.length - 1]
+}
+
+const teamConfigDraftPublishable = (draft: RelayConfigShareDraft | null) => (
+  draft?.configPatch != null && Object.keys(draft.configPatch).length > 0
+)
+
+const TeamConfigContentEditor = (props: {
+  accountKey: string
+  ctx: PluginClientContext
+  errorNode: PluginReactNode
+  loadTargets: () => Promise<void>
+  onChanged: () => void
+  profile: RelayConfigShareProfile
+  react: PluginReactHost
+  team: RelayProfileTeam
+  view?: PluginViewContext
+}) => {
+  const { accountKey, ctx, errorNode, loadTargets, onChanged, profile, react, team, view } = props
+  const CodeEditor = view?.ui?.CodeEditor
+  const profileId = cleanText(profile.id)
+  const teamId = cleanText(team.id)
+  const [detail, setDetail] = react.useState<RelayConfigShareProfileDetail | null>(null)
+  const [text, setText] = react.useState(() => stringifyTeamConfigContent(undefined))
+  const [publishedText, setPublishedText] = react.useState(() => stringifyTeamConfigContent(undefined))
+  const [savedText, setSavedText] = react.useState(() => stringifyTeamConfigContent(undefined))
+  const [error, setError] = react.useState<string | null>(null)
+  const [draft, setDraft] = react.useState<RelayConfigShareDraft | null>(null)
+  const [loading, setLoading] = react.useState(false)
+  const [drafting, setDrafting] = react.useState(false)
+  const [saving, setSaving] = react.useState(false)
+  const [dirty, setDirty] = react.useState(false)
+
+  react.useEffect(() => {
+    if (profileId == null) {
+      setDetail(null)
+      const nextText = stringifyTeamConfigContent(undefined)
+      setText(nextText)
+      setPublishedText(nextText)
+      setSavedText(nextText)
+      setError('配置 ID 不存在。')
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    setDraft(null)
+    setDirty(false)
+    void requestJson<RelayConfigShareProfileDetail>(ctx, 'config-share-profile-detail', {
+      accountKey,
+      profileId,
+      teamId
+    }).then(nextDetail => {
+      if (cancelled) return
+      const version = activeTeamConfigVersion(nextDetail, profile)
+      const nextText = stringifyTeamConfigContent(version?.configPatch)
+      setDetail(nextDetail)
+      setText(nextText)
+      setPublishedText(nextText)
+      setSavedText(nextText)
+    }).catch(nextError => {
+      if (cancelled) return
+      const nextText = stringifyTeamConfigContent(undefined)
+      setDetail(null)
+      setText(nextText)
+      setPublishedText(nextText)
+      setSavedText(nextText)
+      setError(toErrorMessage(nextError))
+    }).finally(() => {
+      if (!cancelled) setLoading(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [accountKey, ctx, profileId, teamId])
+
+  const updateText = (value: string) => {
+    setText(value)
+    setDraft(null)
+    setDirty(value !== savedText)
+  }
+
+  const saveDraft = async () => {
+    try {
+      setError(null)
+      setDrafting(true)
+      const config = parseTeamConfigContent(text)
+      const nextDraft = await requestJson<RelayConfigShareDraft>(ctx, 'config-share-draft', { config })
+      setDraft(nextDraft)
+      setSavedText(text)
+      setDirty(false)
+    } catch (nextError) {
+      setError(toErrorMessage(nextError))
+    } finally {
+      setDrafting(false)
+    }
+  }
+
+  const publishConfig = async () => {
+    if (profileId == null || teamId == null) return
+    try {
+      setError(null)
+      setSaving(true)
+      const config = parseTeamConfigContent(text)
+      const nextDraft = draft ?? await requestJson<RelayConfigShareDraft>(ctx, 'config-share-draft', { config })
+      if (!teamConfigDraftPublishable(nextDraft)) {
+        setDraft(nextDraft)
+        throw new Error('没有可发布的团队配置内容。')
+      }
+      const response = await requestJson<{ draft?: RelayConfigShareDraft }>(ctx, 'config-share-publish', {
+        accountKey,
+        assignToTeam: true,
+        changeNote: 'Updated from team config content editor.',
+        config,
+        profileId,
+        profileName: configShareProfileTitle(profile),
+        teamId
+      })
+      const publishedDraft = response.draft ?? nextDraft
+      const nextText = stringifyTeamConfigContent(publishedDraft.configPatch)
+      setDraft(publishedDraft)
+      setText(nextText)
+      setPublishedText(nextText)
+      setSavedText(nextText)
+      setDirty(false)
+      ctx.notifications?.show?.({
+        level: 'success',
+        title: '配置内容已保存'
+      })
+      await loadTargets()
+      onChanged()
+    } catch (nextError) {
+      setError(toErrorMessage(nextError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const resetContent = () => {
+    setText(publishedText)
+    setSavedText(publishedText)
+    setDraft(null)
+    setDirty(false)
+    setError(null)
+  }
+
+  const cancelEdit = () => {
+    setText(savedText)
+    setDirty(false)
+    setError(null)
+  }
+
+  const hasLocalEdits = dirty && text !== savedText
+  const hasUnpublishedContent = !hasLocalEdits && savedText !== publishedText
+
+  return react.createElement(
+    'section',
+    { className: 'oneworks-relay__team-config-content' },
+    errorNode,
+    error == null ? null : react.createElement('div', { className: 'oneworks-relay__config-error' }, error),
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__team-config-content-editor' },
+      CodeEditor == null
+        ? react.createElement('textarea', {
+          'aria-label': `${configShareProfileTitle(profile)} 配置 JSON`,
+          className: 'oneworks-relay__textarea oneworks-relay__team-config-json-textarea',
+          onInput: (event: { currentTarget?: { value?: string } }) => {
+            updateText(event.currentTarget?.value ?? '')
+          },
+          spellCheck: false,
+          value: text
+        })
+        : react.createElement(CodeEditor, {
+          ariaLabel: `${configShareProfileTitle(profile)} 配置 JSON`,
+          className: 'oneworks-relay__team-config-json-editor',
+          language: 'json',
+          onChange: updateText,
+          path: `relay-team-config-${profileId ?? 'draft'}.json`,
+          value: text
+        })
+    ),
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__team-config-content-actions' },
+      loading
+        ? react.createElement('span', { className: 'oneworks-relay__team-config-content-state' }, '正在加载当前版本')
+        : hasLocalEdits
+        ? react.createElement('span', { className: 'oneworks-relay__team-config-content-state' }, '有未保存改动')
+        : hasUnpublishedContent
+        ? react.createElement('span', { className: 'oneworks-relay__team-config-content-state' }, '内容和上一版本不同')
+        : null,
+      hasLocalEdits
+        ? renderActionButton(react, view, {
+          disabled: loading || drafting || saving,
+          icon: 'restart_alt',
+          label: '重置',
+          onClick: resetContent
+        })
+        : null,
+      hasLocalEdits
+        ? renderActionButton(react, view, {
+          disabled: loading || drafting || saving,
+          icon: 'close',
+          label: '取消',
+          onClick: cancelEdit
+        })
+        : null,
+      hasLocalEdits
+        ? renderActionButton(react, view, {
+          disabled: loading || drafting || saving,
+          icon: 'save',
+          label: drafting ? '保存中' : '保存',
+          onClick: () => {
+            void saveDraft()
+          },
+          primary: true
+        })
+        : null,
+      !hasLocalEdits
+        ? renderActionButton(react, view, {
+          disabled: loading || drafting || saving || !hasUnpublishedContent,
+          icon: 'undo',
+          label: '回退',
+          onClick: resetContent
+        })
+        : null,
+      !hasLocalEdits
+        ? renderActionButton(react, view, {
+          disabled: loading || drafting || saving || !hasUnpublishedContent,
+          icon: 'publish',
+          label: saving ? '发布中' : '发布',
+          onClick: () => {
+            void publishConfig()
+          },
+          primary: true
+        })
+        : null
+    )
+  )
+}
+
+const renderTeamConfigVersionsPanel = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  profile: RelayConfigShareProfile,
+  errorNode: PluginReactNode
+) =>
+  react.createElement(
+    'section',
+    { className: 'oneworks-relay__team-config-detail' },
+    errorNode,
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__team-version-list' },
+      react.createElement(
+        'article',
+        { className: 'oneworks-relay__team-version-row' },
+        react.createElement(
+          'span',
+          { className: 'oneworks-relay__team-version-icon', 'aria-hidden': 'true' },
+          renderIcon(react, view, 'tag', { size: 18 })
+        ),
+        react.createElement(
+          'span',
+          { className: 'oneworks-relay__team-version-copy' },
+          react.createElement('strong', null, valueOrDash(profile.activeVersionId)),
+          react.createElement(
+            'span',
+            null,
+            cleanTextList([
+              '当前发布版本',
+              configShareProfileStatusLabel(profile),
+              formatDateTime(profile.updatedAt)
+            ]).join(' · ')
+          )
+        )
+      )
+    )
+  )
+
+const renderTeamConfigsPanel = (props: {
+  accountKey: string
+  actionError: string | null
+  actionId: string | null
+  configDistribution: RelayConfigDistributionStatus | undefined
+  configPanel?: 'content' | 'versions'
+  configProfileId?: string
+  ctx: PluginClientContext
+  loadTargets: () => Promise<void>
+  onActionErrorChange: (value: string | null) => void
+  onActionIdChange: (value: string | null) => void
+  onChanged: () => void
+  react: PluginReactHost
+  search: string
+  setSearch: (value: string) => void
+  targets: RelayConfigShareTargets | null
+  targetsError: string | null
+  targetsLoading: boolean
+  team: RelayProfileTeam
+  view?: PluginViewContext
+}) => {
+  const {
+    accountKey,
+    actionError,
+    actionId,
+    configDistribution,
+    configPanel,
+    configProfileId,
+    ctx,
+    onActionErrorChange,
+    onActionIdChange,
+    onChanged,
+    react,
+    search,
+    setSearch,
+    targets,
+    targetsError,
+    targetsLoading,
+    team,
+    view
+  } = props
+  const sources = configDistribution?.sources ?? []
+  const profiles = getConfigShareProfilesForTeam(targets, team)
+  const selectedProfile = profiles.find(profile => cleanText(profile.id) === configProfileId)
+  const selectedSource = selectedProfile == null ? undefined : findConfigSourceForProfile(sources, selectedProfile)
+  const targetLoadError = cleanText(targetsError)
+  const InteractionList = view?.ui?.InteractionList
+  const profileItems: RelayTeamConfigInteractionItem[] = profiles.map((profile, index) => {
+    const source = findConfigSourceForProfile(sources, profile)
+    const title = configShareProfileTitle(profile)
+    const profileId = cleanText(profile.id)
+    const description = cleanTextList([
+      configShareProfileStatusLabel(profile),
+      configSourceStatusLabel(source),
+      typeof profile.versionCount === 'number' ? `${profile.versionCount} 个版本` : undefined
+    ]).join(' · ')
+    return {
+      ...(source == null ? {} : { source }),
+      description,
+      icon: 'rule_settings',
+      key: `config-profile:${profileId ?? index}`,
+      kind: 'teamConfigProfile',
+      profile,
+      searchText: cleanTextList([
+        profile.id,
+        profile.name,
+        profile.status,
+        profile.teamName,
+        description,
+        source?.profileId,
+        source?.profileName,
+        source?.teamName,
+        source?.version,
+        source?.versionId,
+        ...(source?.fields ?? [])
+      ]).join(' '),
+      title,
+      tooltip: description === '' ? title : `${title} · ${description}`
+    }
+  })
+  const detailRoute = (profile: RelayConfigShareProfile) => {
+    const profileId = cleanText(profile.id)
+    if (profileId == null) return
+    navigateTo(
+      ctx.scope,
+      routePath(ctx.scope, {
+        accountKey,
+        configProfileId: profileId,
+        page: 'team',
+        tab: 'configs',
+        teamId: cleanText(team.id) ?? ''
+      })
+    )
+  }
+  const listRoute = () => {
+    navigateTo(
+      ctx.scope,
+      routePath(ctx.scope, {
+        accountKey,
+        page: 'team',
+        tab: 'configs',
+        teamId: cleanText(team.id) ?? ''
+      })
+    )
+  }
+  const backRoute = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      window.history.back()
+      return
+    }
+    listRoute()
+  }
+  const versionsRoute = (profile: RelayConfigShareProfile) => {
+    const profileId = cleanText(profile.id)
+    if (profileId == null) return
+    navigateTo(
+      ctx.scope,
+      routePath(ctx.scope, {
+        accountKey,
+        configPanel: 'versions',
+        configProfileId: profileId,
+        page: 'team',
+        tab: 'configs',
+        teamId: cleanText(team.id) ?? ''
+      })
+    )
+  }
+  const contentRoute = (profile: RelayConfigShareProfile) => {
+    const profileId = cleanText(profile.id)
+    if (profileId == null) return
+    navigateTo(
+      ctx.scope,
+      routePath(ctx.scope, {
+        accountKey,
+        configPanel: 'content',
+        configProfileId: profileId,
+        page: 'team',
+        tab: 'configs',
+        teamId: cleanText(team.id) ?? ''
+      })
+    )
+  }
+  const renderToggle = (profile: RelayConfigShareProfile, source?: RelayConfigDistributionSourceStatus) =>
+    renderTeamConfigToggle({
+      accountKey,
+      actionId,
+      ctx,
+      onActionErrorChange,
+      onActionIdChange,
+      onChanged,
+      profile,
+      react,
+      source,
+      view
+    })
+  const errorNode = cleanText(actionError ?? targetLoadError ?? configDistribution?.lastError) == null
+    ? null
+    : react.createElement(
+      'div',
+      { className: 'oneworks-relay__config-error' },
+      cleanText(actionError ?? targetLoadError ?? configDistribution?.lastError)
+    )
+  const setProfileSourceEnabled = (profile: RelayConfigShareProfile, source?: RelayConfigDistributionSourceStatus) => {
+    const profileId = cleanText(profile.id)
+    if (profileId == null) return
+    onActionErrorChange(null)
+    onActionIdChange(profileId)
+    void requestJson(ctx, 'config-source-enabled', {
+      accountKey,
+      enabled: !configSourceEnabled(source),
+      id: profileId,
+      kind: 'profile'
+    }).then(() => {
+      onChanged()
+    }).catch(error => {
+      onActionErrorChange(toErrorMessage(error))
+    }).finally(() => {
+      onActionIdChange(null)
+    })
+  }
+  const getProfileActions = (
+    item: RelayTeamConfigInteractionItem
+  ): Array<PluginHostInteractionListAction<RelayTeamConfigInteractionItem>> => {
+    const profileId = cleanText(item.profile.id)
+    const enabled = configSourceEnabled(item.source)
+    const busy = profileId != null && actionId === profileId
+    return [
+      {
+        disabled: profileId == null || busy,
+        icon: enabled ? 'toggle_on' : 'toggle_off',
+        key: 'toggle',
+        label: enabled ? '停用配置' : '启用配置',
+        onSelect: () => setProfileSourceEnabled(item.profile, item.source)
+      },
+      {
+        disabled: profileId == null,
+        icon: 'chevron_right',
+        key: 'detail',
+        label: '查看配置',
+        onSelect: () => detailRoute(item.profile)
+      }
+    ]
+  }
+
+  if (configProfileId != null) {
+    const showingContent = configPanel === 'content'
+    const showingVersions = configPanel === 'versions'
+    const showingSubpage = showingContent || showingVersions
+    const subpageTitle = showingContent ? '配置内容' : showingVersions ? '版本列表' : undefined
+    return react.createElement(
+      'div',
+      { className: 'oneworks-relay__team-configs oneworks-relay__team-configs--detail' },
+      react.createElement(
+        'div',
+        { className: 'route-container-inline-breadcrumb' },
+        react.createElement(
+          'button',
+          {
+            'aria-label': '返回',
+            className: 'route-container-inline-breadcrumb__back route-container-inline-breadcrumb__item--button',
+            onClick: backRoute,
+            title: '返回',
+            type: 'button'
+          },
+          renderIcon(react, view, 'chevron_left', { size: 18 })
+        ),
+        react.createElement(
+          'button',
+          {
+            'aria-label': '打开配置列表',
+            className: 'route-container-inline-breadcrumb__item route-container-inline-breadcrumb__item--button',
+            onClick: listRoute,
+            title: '配置列表',
+            type: 'button'
+          },
+          react.createElement('span', null, '配置列表')
+        ),
+        renderIcon(react, view, 'chevron_right', {
+          className: 'route-container-inline-breadcrumb__separator',
+          size: 18
+        }),
+        selectedProfile == null || !showingSubpage
+          ? react.createElement(
+            'span',
+            {
+              className: 'route-container-inline-breadcrumb__item route-container-inline-breadcrumb__item--current'
+            },
+            selectedProfile == null ? '配置详情' : configShareProfileTitle(selectedProfile)
+          )
+          : react.createElement(
+            'button',
+            {
+              'aria-label': '返回配置详情',
+              className: 'route-container-inline-breadcrumb__item route-container-inline-breadcrumb__item--button',
+              onClick: () => detailRoute(selectedProfile),
+              type: 'button'
+            },
+            react.createElement('span', null, configShareProfileTitle(selectedProfile))
+          ),
+        selectedProfile == null || !showingSubpage
+          ? null
+          : renderIcon(react, view, 'chevron_right', {
+            className: 'route-container-inline-breadcrumb__separator',
+            size: 18
+          }),
+        selectedProfile == null || !showingSubpage
+          ? null
+          : react.createElement(
+            'span',
+            {
+              className: 'route-container-inline-breadcrumb__item route-container-inline-breadcrumb__item--current'
+            },
+            subpageTitle
+          ),
+        selectedProfile == null
+          ? null
+          : react.createElement(
+            'span',
+            { className: 'route-container-inline-breadcrumb__actions' },
+            showingContent
+              ? null
+              : renderButton(react, view, {
+                icon: 'data_object',
+                label: '配置内容',
+                onClick: () => contentRoute(selectedProfile)
+              }),
+            showingVersions
+              ? null
+              : renderButton(react, view, {
+                icon: 'history',
+                label: '版本列表',
+                onClick: () => versionsRoute(selectedProfile)
+              }),
+            renderToggle(selectedProfile, selectedSource)
+          )
+      ),
+      selectedProfile == null
+        ? react.createElement(
+          'div',
+          { className: 'oneworks-relay__empty' },
+          targetsLoading ? '正在加载配置详情...' : '配置不存在或当前团队未共享该配置'
+        )
+        : showingContent
+        ? react.createElement(TeamConfigContentEditor, {
+          accountKey,
+          ctx,
+          errorNode,
+          loadTargets: props.loadTargets,
+          onChanged,
+          profile: selectedProfile,
+          react,
+          team,
+          view
+        })
+        : showingVersions
+        ? renderTeamConfigVersionsPanel(react, view, selectedProfile, errorNode)
+        : react.createElement(
+          'section',
+          { className: 'oneworks-relay__team-config-detail' },
+          errorNode,
+          react.createElement(
+            'div',
+            { className: 'oneworks-relay__team-detail-list' },
+            renderTeamDetailRow(react, view, {
+              description: '团队管理员填写的说明',
+              icon: 'notes',
+              label: '描述',
+              value: valueOrDash(selectedProfile.description)
+            }),
+            renderTeamDetailRow(react, view, {
+              description: '服务端发布版本',
+              icon: 'tag',
+              label: '当前版本',
+              value: cleanTextList([
+                selectedProfile.activeVersionId,
+                formatDateTime(selectedProfile.updatedAt)
+              ]).join(' · ') || '-'
+            })
+          )
+        )
+    )
+  }
+
+  return react.createElement(
+    'div',
+    { className: 'oneworks-relay__team-configs' },
+    react.createElement(
+      'section',
+      { className: 'oneworks-relay__team-panel-section' },
+      errorNode,
+      InteractionList == null
+        ? react.createElement('div', { className: 'oneworks-relay__empty' }, '标准配置列表组件不可用')
+        : react.createElement(InteractionList, {
+          actionDisplay: 'inline',
+          actions: getProfileActions,
+          border: 'borderless',
+          className: 'oneworks-relay__host-interaction-list oneworks-relay__team-config-list',
+          descriptionPlacement: 'content',
+          emptyText: targetsLoading
+            ? '正在加载团队配置...'
+            : profiles.length === 0
+            ? '暂无团队共享配置'
+            : '没有匹配的配置',
+          iconSize: 18,
+          inlineActionLimit: 2,
+          items: profileItems,
+          padding: 'none',
+          search: {
+            onChange: setSearch,
+            placeholder: '搜索配置名称、状态、版本或来源',
+            value: search
+          },
+          splitActionHover: true,
+          onSelect: (item: RelayTeamConfigInteractionItem) => detailRoute(item.profile)
+        })
+    )
+  )
+}
+
+const renderTeamSharePanel = (props: {
+  accountKey: string
+  ctx: PluginClientContext
+  loadTargets: () => Promise<void>
+  react: PluginReactHost
+  setShare: (nextValue: ShareState | ((current: ShareState) => ShareState)) => void
+  share: ShareState
+  team: RelayProfileTeam
+  view?: PluginViewContext
+}) => {
+  const { accountKey, ctx, loadTargets, react, setShare, share, team, view } = props
+  const teamId = cleanText(team.id)
+  const canManageConfig = teamCanManageConfig(team)
+  const previewShare = async () => {
+    try {
+      setShare(current => ({ ...current, error: null, previewing: true }))
+      const draft = await requestJson<RelayConfigShareDraft>(ctx, 'config-share-draft', {
+        config: JSON.parse(share.text.trim() || '{}') as Record<string, unknown>
+      })
+      setShare(current => ({ ...current, draft, previewing: false }))
+    } catch (error) {
+      setShare(current => ({ ...current, error: toErrorMessage(error), previewing: false }))
+    }
+  }
+  const publishShare = async () => {
+    if (teamId == null) return
+    try {
+      setShare(current => ({ ...current, error: null, publishing: true }))
+      const response = await requestJson<{ draft?: RelayConfigShareDraft }>(ctx, 'config-share-publish', {
+        accountKey,
+        assignToTeam: true,
+        config: JSON.parse(share.text.trim() || '{}') as Record<string, unknown>,
+        profileName: share.profileName.trim() === '' ? `${teamDisplayName(team)} 配置` : share.profileName.trim(),
+        teamId
+      })
+      setShare(current => ({ ...current, draft: response.draft ?? current.draft, publishing: false }))
+      await loadTargets()
+    } catch (error) {
+      setShare(current => ({ ...current, error: toErrorMessage(error), publishing: false }))
+    }
+  }
+  if (!canManageConfig) {
+    return react.createElement(
+      'div',
+      { className: 'oneworks-relay__team-share' },
+      renderTeamSection(
+        react,
+        view,
+        'lock',
+        '共享配置',
+        '仅可使用',
+        react.createElement(
+          'div',
+          { className: 'oneworks-relay__team-permission-note' },
+          renderIcon(react, view, 'lock', { size: 16 }),
+          react.createElement('span', null, '当前账号没有团队配置管理权限，不能查看或发布团队共享配置。')
+        )
+      )
+    )
+  }
+  return react.createElement(
+    'div',
+    { className: 'oneworks-relay__team-share' },
+    renderTeamSection(
+      react,
+      view,
+      'ios_share',
+      '发布团队配置',
+      '管理员可见',
+      share.error == null
+        ? null
+        : react.createElement('div', { className: 'oneworks-relay__config-error' }, share.error),
+      react.createElement(
+        'div',
+        { className: 'oneworks-relay__team-share-layout' },
+        react.createElement(
+          'div',
+          { className: 'oneworks-relay__team-share-form' },
+          react.createElement(
+            'label',
+            { className: 'oneworks-relay__team-share-field' },
+            react.createElement('span', null, '配置名称'),
+            renderInput(react, view, {
+              onChange: value => setShare(current => ({ ...current, profileName: value })),
+              placeholder: '团队共享配置名称',
+              value: share.profileName
+            })
+          ),
+          react.createElement(
+            'label',
+            { className: 'oneworks-relay__team-share-field oneworks-relay__team-share-field--wide' },
+            react.createElement('span', null, '配置 JSON'),
+            renderInput(react, view, {
+              onChange: value => setShare(current => ({ ...current, text: value })),
+              rows: 8,
+              type: 'textarea',
+              value: share.text
+            })
+          )
+        ),
+        react.createElement(
+          'div',
+          { className: 'oneworks-relay__team-share-actions' },
+          renderButton(react, view, {
+            disabled: share.previewing,
+            icon: 'visibility',
+            label: '预览配置',
+            onClick: () => {
+              void previewShare()
+            }
+          }),
+          renderButton(react, view, {
+            disabled: share.loadingTargets,
+            icon: 'refresh',
+            label: '刷新团队配置',
+            onClick: () => {
+              void loadTargets()
+            }
+          }),
+          renderButton(react, view, {
+            disabled: share.publishing,
+            icon: 'check',
+            label: '发布配置',
+            onClick: () => {
+              void publishShare()
+            },
+            primary: true
+          })
+        )
+      )
+    ),
+    renderTeamSection(
+      react,
+      view,
+      'fact_check',
+      '预览结果',
+      share.draft == null ? '待预览' : '已生成',
+      react.createElement(
+        'div',
+        { className: 'oneworks-relay__team-metric-grid oneworks-relay__team-metric-grid--compact' },
+        renderTeamMetric(react, view, {
+          icon: 'checklist',
+          label: '字段',
+          value: String(share.draft?.allowedFields?.length ?? 0)
+        }),
+        renderTeamMetric(react, view, {
+          icon: 'key',
+          label: '密钥引用',
+          value: String(share.draft?.secretItems?.length ?? 0)
+        }),
+        renderTeamMetric(react, view, {
+          icon: 'warning',
+          label: '问题',
+          tone: (share.draft?.issues?.length ?? 0) > 0 ? 'warning' : 'success',
+          value: String(share.draft?.issues?.length ?? 0)
+        }),
+        renderTeamMetric(react, view, {
+          icon: 'block',
+          label: '拒绝字段',
+          tone: (share.draft?.rejectedFields?.length ?? 0) > 0 ? 'danger' : 'neutral',
+          value: String(share.draft?.rejectedFields?.length ?? 0)
+        })
+      )
+    )
+  )
+}
+
+const renderSectionHead = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  icon: string,
+  title: string,
+  meta?: string
+) =>
+  react.createElement(
+    'div',
+    { className: 'oneworks-relay__team-section-head' },
+    react.createElement(
+      'span',
+      { className: 'oneworks-relay__team-section-title' },
+      renderIcon(react, view, icon, { size: 16 }),
+      react.createElement('strong', null, title)
+    ),
+    meta == null ? null : react.createElement('span', { className: 'oneworks-relay__team-section-meta' }, meta)
+  )
+
+const ProfilePage = (props: {
+  accountKey: string
+  ctx: PluginClientContext
+  onChanged: () => void
+  profile: RelayProfileStatus | null
+  react: PluginReactHost
+  status: RelayStatus | null
+  tab: RelayProfileTab
+  view?: PluginViewContext
+}) => {
+  const { accountKey, ctx, onChanged, profile, react, status, tab, view } = props
+  const account = getProfileAccount(profile, status, accountKey)
+  const panel = tab === 'teams'
+    ? react.createElement(TeamsPanel, { accountKey, ctx, profile, react, view })
+    : tab === 'documents'
+    ? react.createElement(DocumentSyncPanel, { account, accountKey, ctx, onChanged, react, status, view })
+    : tab === 'devices'
+    ? react.createElement(DevicesPanel, { accountKey, ctx, onChanged, profile, react, view })
+    : tab === 'security'
+    ? react.createElement(SecurityPanel, { accountKey, ctx, onChanged, profile, react, view })
+    : tab === 'tokens'
+    ? react.createElement(TokensPanel, { accountKey, ctx, profile, react, view })
+    : react.createElement(AccountInfoPanel, { account, profile, react })
+  return react.createElement(
+    'main',
+    { className: tab === 'documents' ? 'oneworks-relay oneworks-relay--documents-tab' : 'oneworks-relay' },
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__shell' },
+      react.createElement(
+        'section',
+        { className: 'oneworks-relay__surface' },
+        react.createElement(
+          'section',
+          {
+            className: [
+              'oneworks-relay__profile',
+              tab === 'documents' ? 'oneworks-relay__profile--documents-tab' : ''
+            ].filter(Boolean).join(' ')
+          },
+          react.createElement(ProfileHeader, { account, accountKey, profile, react }),
+          react.createElement(ProfileTabs, { account, accountKey, activeTab: tab, ctx, onChanged, react, view }),
+          react.createElement(
+            'div',
+            {
+              className: [
+                'oneworks-relay__profile-tab-panel native-tabs-panel',
+                tab === 'documents' ? 'oneworks-relay__documents-panel' : ''
+              ].filter(Boolean).join(' ')
+            },
+            panel
+          )
+        )
+      )
+    )
+  )
+}
+
+export const RelayHomeView = (props: {
+  ctx: PluginClientContext
+  view?: PluginViewContext
+}) => {
+  const { ctx, view } = props
+  const react = ctx.react
+  const signature = useLocationSignature(react, ctx.scope)
+  const route = react.useMemo(() => parseRoute(ctx.scope), [ctx.scope, signature])
+  const [revision, setRevision] = react.useState(0)
+  const refreshData = () => setRevision(current => current + 1)
+  const statusState = useAsyncStatus(react, ctx, revision)
+  const accountKey = 'accountKey' in route ? route.accountKey : undefined
+  const profileState = useAsyncProfile(react, ctx, accountKey, revision)
+  const status = statusState.data
+  const profile = profileState.data
+  const account = getProfileAccount(profile, status, accountKey)
+  const accountName = accountDisplayName(account)
+
+  react.useEffect(() => {
+    const callback = readLoginCallback()
+    if (callback == null) return undefined
+    clearLoginCallbackFromUrl()
+    void requestJson(ctx, 'login-callback', {
+      serverId: callback.serverId,
+      token: callback.token
+    }).then(() => {
+      refreshData()
+      navigateTo(ctx.scope, routePath(ctx.scope, { page: 'accounts' }))
+    }).catch(error => ctx.notifications?.show?.({ level: 'error', title: toErrorMessage(error) }))
+    return undefined
+  }, [ctx])
+
+  react.useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const onMessage = (event: MessageEvent) => {
+      const url = typeof event.data === 'string'
+        ? event.data
+        : typeof event.data === 'object' && event.data != null &&
+            typeof (event.data as { url?: unknown }).url === 'string'
+        ? (event.data as { url: string }).url
+        : ''
+      const callback: RelayLoginCallback | undefined = url === '' ? undefined : readLoginCallbackFromUrl(url)
+      if (callback == null) return
+      void requestJson(ctx, 'login-callback', {
+        serverId: callback.serverId,
+        token: callback.token
+      }).then(() => {
+        refreshData()
+        navigateTo(ctx.scope, routePath(ctx.scope, { page: 'accounts' }))
+      }).catch(error => ctx.notifications?.show?.({ level: 'error', title: toErrorMessage(error) }))
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [ctx])
+
+  react.useEffect(() => {
+    const goAccounts = () => navigateTo(ctx.scope, routePath(ctx.scope, { page: 'accounts' }))
+    const goAccount = () => {
+      if (accountKey != null) {
+        navigateTo(ctx.scope, routePath(ctx.scope, { accountKey, page: 'profile', tab: 'account' }))
+      }
+    }
+    const actions: PluginViewRouteHeaderAction[] = route.page === 'accounts'
+      ? [
+        {
+          icon: 'add_circle',
+          key: 'servers',
+          label: '加入服务器',
+          onSelect: () => navigateTo(ctx.scope, routePath(ctx.scope, { page: 'servers' }))
+        },
+        {
+          icon: 'login',
+          key: 'login',
+          label: '登录账号',
+          onSelect: () => navigateTo(ctx.scope, routePath(ctx.scope, { page: 'login' }))
+        }
+      ]
+      : route.page === 'profile'
+      ? [
+        {
+          icon: account?.enabled === false ? 'toggle_on' : 'toggle_off',
+          key: 'toggle',
+          label: account?.enabled === false ? '启用账号' : '禁用账号',
+          onSelect: () => {
+            const key = accountKey ?? ''
+            void requestJson(ctx, account?.enabled === false ? 'users/enable' : 'users/disable', { accountKey: key })
+              .then(refreshData)
+          }
+        },
+        {
+          icon: 'logout',
+          key: 'logout',
+          label: '退出登录',
+          onSelect: () => {
+            const key = accountKey ?? ''
+            void requestJson(ctx, 'users/logout', { accountKey: key }).then(refreshData)
+          }
+        }
+      ]
+      : route.page === 'token' && route.tokenId !== 'new'
+      ? [
+        {
+          danger: true,
+          icon: 'block',
+          key: 'revoke-token',
+          label: '撤销令牌',
+          onSelect: () => {
+            void requestJson(ctx, `profile/access-tokens/${encodeURIComponent(route.tokenId)}`, {
+              accountKey: route.accountKey
+            }, 'DELETE').then(() =>
+              navigateTo(
+                ctx.scope,
+                routePath(ctx.scope, {
+                  accountKey: route.accountKey,
+                  page: 'profile',
+                  tab: 'tokens'
+                })
+              )
+            )
+          }
+        }
+      ]
+      : []
+    view?.route?.setActions?.(actions)
+    if (route.page === 'accounts') {
+      view?.route?.setTitle?.('账号')
+      view?.route?.setBreadcrumb?.(undefined)
+    } else if (route.page === 'servers') {
+      view?.route?.setTitle?.('服务器')
+      view?.route?.setBreadcrumb?.({
+        ancestors: [{ onSelect: goAccounts, title: '账号' }],
+        currentTitle: '服务器',
+        onBack: goAccounts,
+        parentTitle: '账号'
+      })
+    } else if (route.page === 'login') {
+      view?.route?.setTitle?.('登录')
+      view?.route?.setBreadcrumb?.({
+        ancestors: [{ onSelect: goAccounts, title: '账号' }],
+        currentTitle: '登录',
+        onBack: goAccounts,
+        parentTitle: '账号'
+      })
+    } else if (route.page === 'messages') {
+      view?.route?.setTitle?.('消息')
+      view?.route?.setBreadcrumb?.({
+        ancestors: [
+          { onSelect: goAccounts, title: '账号' },
+          { onSelect: goAccount, title: accountName }
+        ],
+        currentTitle: '消息',
+        onBack: goAccount,
+        parentTitle: accountName
+      })
+    } else if (route.page === 'profile') {
+      view?.route?.setTitle?.('账号详情')
+      view?.route?.setBreadcrumb?.({
+        ancestors: [{ onSelect: goAccounts, title: '账号' }],
+        currentTitle: accountName,
+        onBack: goAccounts,
+        parentTitle: '账号'
+      })
+    } else if (route.page === 'team') {
+      const team = profile?.teams?.find(item => cleanText(item.id) === route.teamId)
+      const teamTitle = team == null ? cleanText(route.teamId) ?? '团队' : teamDisplayName(team)
+      const accountTitle = account == null ? cleanText(route.accountKey) ?? accountName : accountName
+      view?.route?.setTitle?.('团队详情')
+      view?.route?.setBreadcrumb?.({
+        ancestors: [
+          { onSelect: goAccounts, title: '账号' },
+          { onSelect: goAccount, title: accountTitle },
+          {
+            onSelect: () =>
+              navigateTo(
+                ctx.scope,
+                routePath(ctx.scope, {
+                  accountKey: route.accountKey,
+                  page: 'profile',
+                  tab: 'teams'
+                })
+              ),
+            title: '团队'
+          }
+        ],
+        currentTitle: teamTitle,
+        onBack: () =>
+          navigateTo(
+            ctx.scope,
+            routePath(ctx.scope, {
+              accountKey: route.accountKey,
+              page: 'profile',
+              tab: 'teams'
+            })
+          ),
+        parentTitle: '团队'
+      })
+    } else {
+      const token = profile?.security?.accessTokens?.find(item => cleanText(item.id) === route.tokenId)
+      view?.route?.setTitle?.(route.tokenId === 'new' ? '新建令牌' : '令牌详情')
+      view?.route?.setBreadcrumb?.({
+        ancestors: [
+          { onSelect: goAccounts, title: '账号' },
+          { onSelect: goAccount, title: accountName },
+          {
+            onSelect: () =>
+              navigateTo(
+                ctx.scope,
+                routePath(ctx.scope, {
+                  accountKey: route.accountKey,
+                  page: 'profile',
+                  tab: 'tokens'
+                })
+              ),
+            title: '令牌'
+          }
+        ],
+        currentTitle: route.tokenId === 'new' ? '新建令牌' : cleanText(token?.name) ?? route.tokenId,
+        onBack: () =>
+          navigateTo(
+            ctx.scope,
+            routePath(ctx.scope, {
+              accountKey: route.accountKey,
+              page: 'profile',
+              tab: 'tokens'
+            })
+          ),
+        parentTitle: '令牌'
+      })
+    }
+    return () => {
+      view?.route?.setActions?.(undefined)
+      view?.route?.setBreadcrumb?.(undefined)
+      view?.route?.setTitle?.(undefined)
+    }
+  }, [account?.enabled, accountKey, accountName, ctx.scope, profile, route, view])
+
+  const error = statusState.error ?? profileState.error
+  if (error != null && route.page !== 'login') {
+    return react.createElement(
+      'main',
+      { className: 'oneworks-relay' },
+      react.createElement(
+        'div',
+        { className: 'oneworks-relay__shell' },
+        react.createElement(
+          'section',
+          { className: 'oneworks-relay__surface' },
+          react.createElement('div', { className: 'oneworks-relay__config-error' }, error)
+        )
+      )
+    )
+  }
+
+  if (route.page === 'accounts') {
+    return react.createElement(AccountsPage, {
+      ctx,
+      onChanged: refreshData,
+      react,
+      status,
+      view
+    })
+  }
+  if (route.page === 'servers') {
+    return react.createElement(ServersPage, {
+      ctx,
+      onChanged: refreshData,
+      react,
+      status,
+      view
+    })
+  }
+  if (route.page === 'login') {
+    return react.createElement(LoginPage, { ctx, react, route })
+  }
+  if (route.page === 'messages') {
+    return react.createElement(MessagesPage, { profile, react, view })
+  }
+  if (route.page === 'team') {
+    return react.createElement(TeamDetailView, {
+      accountKey: route.accountKey,
+      configPanel: route.configPanel,
+      configProfileId: route.configProfileId,
+      ctx,
+      onChanged: refreshData,
+      profile,
+      profileLoading: profileState.loading,
+      react,
+      status,
+      tab: route.tab,
+      teamId: route.teamId,
+      view
+    })
+  }
+  if (route.page === 'token') {
+    return react.createElement(TokenEditorPage, {
+      accountKey: route.accountKey,
+      ctx,
+      onChanged: refreshData,
+      profile,
+      react,
+      tokenId: route.tokenId,
+      view
+    })
+  }
+  return react.createElement(ProfilePage, {
+    accountKey: route.accountKey,
+    ctx,
+    onChanged: refreshData,
+    profile,
+    react,
+    status,
+    tab: route.tab,
+    view
+  })
+}
+
+export type RelayHomeViewNode = ReturnType<typeof RelayHomeView>

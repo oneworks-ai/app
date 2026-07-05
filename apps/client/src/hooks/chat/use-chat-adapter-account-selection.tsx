@@ -11,9 +11,13 @@ export interface ChatAdapterAccountOption {
   label: string
   hint?: string
   meta?: string
+  email?: string
+  avatarUrl?: string
 }
 
 const ACCOUNT_STORAGE_KEY_PREFIX = 'oneworks_chat_adapter_account:'
+const EMAIL_PATTERN = /[\w.%+-]+@[\w.-]+\.[A-Z]{2,}/i
+const GENERIC_ACCOUNT_TITLES = new Set(['codex'])
 
 const formatQuotaMetric = (metric: AdapterAccountQuotaMetric) => {
   const label = normalizeNonEmptyString(metric.label) ??
@@ -46,6 +50,25 @@ const formatQuotaMeta = (quota: AdapterAccountInfo['quota']) => {
   return summary == null ? undefined : `Quota: ${summary}`
 }
 
+const inferAccountEmail = (account: AdapterAccountInfo) => {
+  const explicitEmail = normalizeNonEmptyString(account.email)
+  if (explicitEmail != null) {
+    return explicitEmail
+  }
+
+  return account.title.match(EMAIL_PATTERN)?.[0] ??
+    account.description?.match(EMAIL_PATTERN)?.[0]
+}
+
+const inferAccountLabel = (account: AdapterAccountInfo) => {
+  const title = normalizeNonEmptyString(account.title)
+  if (title != null && !GENERIC_ACCOUNT_TITLES.has(title.toLowerCase())) {
+    return title
+  }
+
+  return inferAccountEmail(account) ?? title ?? account.key
+}
+
 const readStoredAccount = (adapter: string | undefined) => {
   const normalizedAdapter = normalizeNonEmptyString(adapter)
   if (normalizedAdapter == null) {
@@ -75,7 +98,7 @@ export function useChatAdapterAccountSelection({
   }, [normalizedAdapter])
 
   const { data } = useSWR<AdapterAccountsResult>(
-    normalizedAdapter == null ? null : ['/api/adapters', normalizedAdapter, model ?? ''],
+    normalizedAdapter == null ? null : ['/api/adapters/accounts', normalizedAdapter, model ?? ''],
     normalizedAdapter == null ? null : () => getAdapterAccounts(normalizedAdapter, { model })
   )
 
@@ -84,18 +107,37 @@ export function useChatAdapterAccountSelection({
       .filter(account => account.status !== 'missing')
       .map(account => ({
         value: account.key,
-        label: account.title,
+        label: inferAccountLabel(account),
         hint: account.description,
-        meta: formatQuotaMeta(account.quota)
+        meta: formatQuotaMeta(account.quota),
+        email: inferAccountEmail(account),
+        avatarUrl: account.avatarUrl
       }))
   }, [data?.accounts])
+
+  const findAccountOptionByAlias = useCallback((value?: string) => {
+    const normalizedValue = normalizeNonEmptyString(value)
+    if (normalizedValue == null) {
+      return undefined
+    }
+
+    return accountOptions.find((option) => {
+      const aliases = [
+        option.value,
+        option.label,
+        option.email
+      ]
+      return aliases.some(alias => normalizeNonEmptyString(alias) === normalizedValue)
+    })
+  }, [accountOptions])
 
   const resolveSelectableAccount = useCallback((value?: string, preserveUnknown = false) => {
     const normalizedValue = normalizeNonEmptyString(value)
     const accountValues = new Set(accountOptions.map(option => option.value))
     if (normalizedValue != null) {
-      if (accountValues.has(normalizedValue)) {
-        return normalizedValue
+      const matchedOption = findAccountOptionByAlias(normalizedValue)
+      if (matchedOption != null) {
+        return matchedOption.value
       }
       if (preserveUnknown) {
         return normalizedValue
@@ -108,7 +150,7 @@ export function useChatAdapterAccountSelection({
     }
 
     return accountOptions[0]?.value
-  }, [accountOptions, data?.defaultAccount])
+  }, [accountOptions, data?.defaultAccount, findAccountOptionByAlias])
 
   useEffect(() => {
     if (normalizedAdapter == null) {
@@ -136,10 +178,10 @@ export function useChatAdapterAccountSelection({
   }, [normalizedAdapter, selectedAccount])
 
   const applySessionSelection = useCallback((params: { account?: string }) => {
-    const nextAccount = resolveSelectableAccount(params.account, true) ??
+    const nextAccount = resolveSelectableAccount(params.account, data == null) ??
       normalizeNonEmptyString(params.account)
     setSelectedAccountState((prev) => prev === nextAccount ? prev : nextAccount)
-  }, [resolveSelectableAccount])
+  }, [data, resolveSelectableAccount])
 
   const updateSelectedAccount = useCallback((value?: string) => {
     const nextAccount = resolveSelectableAccount(value)
@@ -148,7 +190,7 @@ export function useChatAdapterAccountSelection({
 
   return {
     accountOptions,
-    selectedAccount: resolveSelectableAccount(selectedAccount, true) ?? selectedAccount,
+    selectedAccount: resolveSelectableAccount(selectedAccount, data == null) ?? selectedAccount,
     setSelectedAccount: updateSelectedAccount,
     applySessionSelection,
     showAccountSelector: normalizedAdapter != null && accountOptions.length > 0

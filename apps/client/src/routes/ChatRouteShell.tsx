@@ -12,7 +12,7 @@ import type { ChatMessage, Session, SessionPanelAreaState, SessionPanelState } f
 import { usePanelResize } from '@oneworks/route-layout'
 import type { SessionInfo, TerminalShellKind } from '@oneworks/types'
 
-import { getWorkspacePanelState, getWorkspacePanelStateCacheKey } from '#~/api'
+import { getWorkspacePanelState, getWorkspacePanelStateCacheKey, isApiRemoteWorkspaceConnectionError } from '#~/api'
 import type { NavRailWindowBarAction } from '#~/components/NavRail'
 import { ChatHeader } from '#~/components/chat/ChatHeader.js'
 import type {
@@ -96,6 +96,10 @@ import { getRuntimeWorkspaceId } from '#~/runtime-config'
 import { readDeviceShellSimulationMode, useStoredDevShellSimulation } from '#~/utils/device-shell-simulation'
 import type { WorkspaceFileLinkTarget } from '#~/utils/link-targets'
 import { isShortcutMatch } from '#~/utils/shortcutUtils'
+import {
+  WORKSPACE_CONNECTION_CHANGE_EVENT,
+  readRememberedWorkspaceConnectionMetadata
+} from '#~/workspace-connection-state'
 
 import { ChatRouteBottomPanel } from './ChatRouteBottomPanel'
 import { LauncherOverlay } from './LauncherOverlay'
@@ -365,6 +369,8 @@ export function ChatRouteShell({
   showViewSwitches,
   timelineView,
   onHistoryTimelineHiddenChange,
+  workspaceConnectionError,
+  workspaceConnectionInterrupted,
   workspaceDrawerDefaultView,
   workspaceSession,
   workspaceSessionId
@@ -406,6 +412,8 @@ export function ChatRouteShell({
   showViewSwitches?: boolean
   timelineView?: ReactNode
   onHistoryTimelineHiddenChange?: (hidden: boolean) => void
+  workspaceConnectionError?: unknown
+  workspaceConnectionInterrupted?: boolean
   workspaceDrawerDefaultView?: WorkspaceDrawerView
   workspaceSession?: Session
   workspaceSessionId?: string
@@ -459,12 +467,45 @@ export function ChatRouteShell({
   chatRouteRenderCountRef.current += 1
   const sourceWorkspaceSession = workspaceSession ?? session
   const runtimeWorkspaceId = getRuntimeWorkspaceId()
+  const [workspaceConnectionRevision, setWorkspaceConnectionRevision] = useState(0)
   const shouldUseWorkspacePanelState = sourceWorkspaceSession == null && runtimeWorkspaceId != null
-  const { data: workspacePanelStateRes } = useSWR(
+  const { data: workspacePanelStateRes, error: workspacePanelStateError } = useSWR(
     shouldUseWorkspacePanelState ? getWorkspacePanelStateCacheKey() : null,
     getWorkspacePanelState,
     { revalidateOnFocus: true }
   )
+  const workspaceConnectionMetadata = useMemo(() => {
+    if (runtimeWorkspaceId == null) return undefined
+    return readRememberedWorkspaceConnectionMetadata(runtimeWorkspaceId)
+  }, [runtimeWorkspaceId, workspaceConnectionRevision])
+  const remoteWorkspaceConnectionIssue = useMemo(() => {
+    if (workspaceConnectionMetadata?.transport !== 'relay') return undefined
+
+    const candidateErrors = [workspaceConnectionError, workspacePanelStateError]
+    if (workspaceConnectionInterrupted !== true && !candidateErrors.some(isApiRemoteWorkspaceConnectionError)) {
+      return undefined
+    }
+
+    const relay = workspaceConnectionMetadata.relay
+    const deviceLabel = relay?.deviceName ?? relay?.deviceId
+    const serverLabel = relay?.serverName ?? relay?.serverId
+    return {
+      deviceLabel,
+      serverLabel
+    }
+  }, [workspaceConnectionError, workspaceConnectionInterrupted, workspaceConnectionMetadata, workspacePanelStateError])
+
+  useEffect(() => {
+    const handleWorkspaceConnectionChange = (event: Event) => {
+      const workspaceId = (event as CustomEvent<{ workspaceId?: string }>).detail?.workspaceId
+      if (workspaceId == null || runtimeWorkspaceId == null || workspaceId === runtimeWorkspaceId) {
+        setWorkspaceConnectionRevision(value => value + 1)
+      }
+    }
+
+    window.addEventListener(WORKSPACE_CONNECTION_CHANGE_EVENT, handleWorkspaceConnectionChange)
+    return () => window.removeEventListener(WORKSPACE_CONNECTION_CHANGE_EVENT, handleWorkspaceConnectionChange)
+  }, [runtimeWorkspaceId])
   const sessionPanelStateController = useSessionPanelState(
     sourceWorkspaceSession,
     workspaceSessionId ?? session?.id ?? (shouldUseWorkspacePanelState ? WORKSPACE_TERMINAL_SESSION_ID : undefined),
@@ -1688,6 +1729,29 @@ export function ChatRouteShell({
           ref={chatContainerRef}
           className={`chat-container ${isReady ? 'ready' : ''} ${isNewSession ? 'is-new-session' : ''}`}
         >
+          {remoteWorkspaceConnectionIssue == null
+            ? undefined
+            : (
+              <div className='chat-route__remote-workspace-status' role='status'>
+                <span
+                  className='material-symbols-rounded chat-route__remote-workspace-status-icon'
+                  aria-hidden='true'
+                >
+                  cloud_sync
+                </span>
+                <span className='chat-route__remote-workspace-status-copy'>
+                  <span className='chat-route__remote-workspace-status-title'>
+                    {t('workspaceConnection.remoteWorkspaceRecovering')}
+                  </span>
+                  <span className='chat-route__remote-workspace-status-detail'>
+                    {t('workspaceConnection.remoteWorkspaceRecoveringDetail', {
+                      device: remoteWorkspaceConnectionIssue.deviceLabel ?? t('workspaceConnection.remoteDevice'),
+                      server: remoteWorkspaceConnectionIssue.serverLabel ?? t('workspaceConnection.remoteService')
+                    })}
+                  </span>
+                </span>
+              </div>
+            )}
           {renderedView}
         </div>
       </RouteContainerLayout>

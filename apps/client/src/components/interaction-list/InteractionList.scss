@@ -1,9 +1,19 @@
 .interaction-list {
+  --interaction-list-icon-size: 16px;
+
   flex: 1;
   min-height: 0;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  border: 0;
   color: var(--text-color);
+}
+
+.interaction-list--bordered {
+  border: 1px solid var(--sub-border-color, var(--border-color));
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .interaction-list__search-area {
@@ -11,11 +21,38 @@
   padding: 4px 10px 6px;
 }
 
+.interaction-list--padding-none {
+  .interaction-list__search-area {
+    display: grid;
+    padding: 0;
+  }
+
+  .interaction-list__selection-actions {
+    padding-inline: 0;
+  }
+
+  .interaction-list__items {
+    --interaction-list-active-gutter: 0px;
+
+    padding-inline: 0;
+  }
+
+  .interaction-list__search-input.ant-input-affix-wrapper {
+    height: 16px;
+    margin-block-start: 0;
+
+    .ant-input {
+      line-height: 16px;
+    }
+  }
+}
+
 .interaction-list__search-input.ant-input-affix-wrapper {
   height: 30px;
   padding: 0 !important;
-  border-radius: 7px;
-  border-color: transparent !important;
+  border: 0 !important;
+  border-radius: 0;
+  outline: 0 !important;
   background: transparent !important;
   background-color: transparent !important;
   box-shadow: none !important;
@@ -25,10 +62,15 @@
   &:hover,
   &:focus-within,
   &.ant-input-affix-wrapper-focused {
-    border-color: transparent !important;
+    border: 0 !important;
+    outline: 0 !important;
     background: transparent !important;
     background-color: transparent !important;
     box-shadow: none !important;
+  }
+
+  .ant-input-prefix {
+    margin-inline-end: var(--oneworks-overlay-icon-gap, 6px);
   }
 
   &:focus-within .interaction-list__search-icon,
@@ -46,9 +88,9 @@
 }
 
 .interaction-list__search-icon {
-  width: 16px;
-  min-width: 16px;
-  font-size: 16px;
+  width: 18px;
+  min-width: 18px;
+  font-size: 18px;
   line-height: 1;
   color: var(--sub-text-color);
 }
@@ -143,7 +185,6 @@
 
 .interaction-list__items {
   --interaction-list-active-gutter: 8px;
-  --interaction-list-icon-size: 16px;
   --interaction-list-row-gap: 6px;
   --interaction-list-depth-size: calc(
     var(--interaction-list-icon-size) + var(--interaction-list-row-gap)
@@ -190,8 +231,9 @@
 }
 
 .interaction-list__item {
-  --interaction-list-actions-width: 72px;
+  --interaction-list-actions-width: 92px;
   --interaction-list-actions-end: 0px;
+  --interaction-list-active-indicator-left: 0px;
   --interaction-list-depth-offset: calc(
     var(--interaction-list-depth, 0) * var(--interaction-list-depth-size)
   );
@@ -220,7 +262,7 @@
     position: absolute;
     top: 8px;
     bottom: 8px;
-    left: 0;
+    left: var(--interaction-list-active-indicator-left);
     width: 4px;
     border-radius: 999px;
     background: var(--primary-color, #2563eb);
@@ -267,7 +309,6 @@
 
   &.has-children:hover .interaction-list__disclosure-slot,
   &.has-children:focus-within .interaction-list__disclosure-slot,
-  &.is-group-title .interaction-list__actions,
   &.is-group-title .interaction-list__disclosure-slot {
     opacity: 1;
     pointer-events: auto;
@@ -377,6 +418,61 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.interaction-list__title-inline {
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.interaction-list__title-primary,
+.interaction-list__title-description {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.interaction-list__title-primary {
+  flex: 0 1 auto;
+}
+
+.interaction-list__title-description {
+  flex: 1 1 auto;
+  color: var(--sub-text-color);
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .14s ease, visibility .14s ease;
+}
+
+.interaction-list--title-hover-description
+  .interaction-list__body:hover
+  .interaction-list__title-description,
+.interaction-list--title-hover-description
+  .interaction-list__body:focus-within
+  .interaction-list__title-description {
+  opacity: 1;
+  visibility: visible;
+}
+
+.interaction-list--split-action-hover
+  .interaction-list__item:hover:not(.is-active),
+.interaction-list--split-action-hover
+  .interaction-list__item:focus-within:not(.is-active) {
+  color: var(--text-color);
+}
+
+.interaction-list--split-action-hover
+  .interaction-list__body:hover
+  .interaction-list__title,
+.interaction-list--split-action-hover
+  .interaction-list__body:focus-within
+  .interaction-list__title {
+  color: var(--primary-color);
 }
 
 .interaction-list__disclosure-action.ant-btn {

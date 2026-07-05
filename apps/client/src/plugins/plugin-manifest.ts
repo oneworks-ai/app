@@ -28,6 +28,8 @@ import type {
   PluginRuntimeInstance
 } from '@oneworks/types'
 
+import type { IconAsset } from '#~/components/icons/IconAsset'
+
 import type { PluginI18nContext } from './plugin-i18n'
 
 export type PluginPlacement = 'bottom' | 'right'
@@ -309,6 +311,7 @@ export interface PluginHostOverlaySelectLabelComponentProps {
 
 export interface PluginHostButtonComponentProps {
   ariaLabel?: string
+  className?: string
   danger?: boolean
   disabled?: boolean
   icon?: string
@@ -318,6 +321,16 @@ export interface PluginHostButtonComponentProps {
   size?: PluginHostControlSize
   title?: string
   type?: 'default' | 'dashed' | 'link' | 'primary' | 'text'
+}
+
+export interface PluginHostCodeEditorComponentProps {
+  ariaLabel?: string
+  className?: string
+  language?: string
+  onChange?: (value: string) => void
+  path?: string
+  readOnly?: boolean
+  value: string
 }
 
 export interface PluginHostActionItem {
@@ -353,6 +366,18 @@ export interface PluginHostInputComponentProps {
   value?: string
 }
 
+export interface PluginHostSelectComponentProps {
+  allowClear?: boolean
+  ariaLabel?: string
+  disabled?: boolean
+  mode?: 'multiple'
+  onChange?: (value: string | string[]) => void
+  options: PluginHostControlOption[]
+  placeholder?: string
+  size?: PluginHostControlSize
+  value?: string | string[]
+}
+
 export interface PluginHostIconComponentProps {
   ariaLabel?: string
   name: string
@@ -372,6 +397,87 @@ export interface PluginHostListComponentProps {
   ariaLabel?: string
   empty?: ReactNode
   items: PluginHostListItem[]
+}
+
+export interface PluginHostInteractionListAvatar {
+  alt?: string
+  fallback?: string
+  src?: string
+}
+
+export interface PluginHostInteractionListItem {
+  avatar?: PluginHostInteractionListAvatar
+  badge?: ReactNode
+  children?: PluginHostInteractionListItem[]
+  description?: ReactNode
+  disabled?: boolean
+  icon?: IconAsset
+  iconFilled?: boolean
+  itemType?: 'groupTitle' | 'listItem'
+  key: string
+  meta?: ReactNode
+  searchText?: string
+  tags?: ReactNode[]
+  title: ReactNode
+  tooltip?: ReactNode
+}
+
+export interface PluginHostInteractionListAction<
+  TItem extends PluginHostInteractionListItem = PluginHostInteractionListItem,
+> {
+  confirmLabel?: ReactNode
+  danger?: boolean
+  disabled?: boolean
+  icon: IconAsset
+  key: string
+  label: ReactNode
+  onSelect?: (item: TItem) => void | Promise<void>
+  type?: 'divider'
+}
+
+export interface PluginHostInteractionListSearchProps {
+  defaultValue?: string
+  filterItems?: boolean
+  placeholder: string
+  suffix?: ReactNode
+  value?: string
+  onChange: (value: string) => void
+}
+
+export interface PluginHostInteractionListComponentProps<
+  TItem extends PluginHostInteractionListItem = PluginHostInteractionListItem,
+> {
+  actionDisplay?: 'default' | 'inline'
+  actions?: (item: TItem) => Array<PluginHostInteractionListAction<TItem>>
+  activeKey?: string
+  border?: 'bordered' | 'borderless'
+  className?: string
+  descriptionPlacement?: 'content' | 'titleHover'
+  emptyText: ReactNode
+  iconSize?: number | string
+  inlineActionLimit?: number
+  items: TItem[]
+  padding?: 'default' | 'none'
+  search?: PluginHostInteractionListSearchProps
+  splitActionHover?: boolean
+  onSelect?: (item: TItem) => void
+}
+
+export interface PluginHostNativeTabItem<TabKey extends string = string> {
+  disabled?: boolean
+  icon?: IconAsset
+  key: TabKey
+  label: ReactNode
+}
+
+export interface PluginHostNativeTabsComponentProps<TabKey extends string = string> {
+  activeKey?: TabKey
+  actions?: ReactNode
+  ariaLabel?: string
+  className?: string
+  iconSize?: number | string
+  items: Array<PluginHostNativeTabItem<TabKey>>
+  onChange?: (key: TabKey, item: PluginHostNativeTabItem<TabKey>) => void
 }
 
 export interface PluginHostSegmentedComponentProps {
@@ -451,9 +557,12 @@ export interface PluginHostProjectFileTreeComponentProps {
 export interface PluginHostComponentPropsById {
   actionBar: PluginHostActionBarComponentProps
   button: PluginHostButtonComponentProps
+  codeEditor: PluginHostCodeEditorComponentProps
   icon: PluginHostIconComponentProps
   input: PluginHostInputComponentProps
+  interactionList: PluginHostInteractionListComponentProps
   list: PluginHostListComponentProps
+  nativeTabs: PluginHostNativeTabsComponentProps
   overlayDropdown: PluginHostOverlayDropdownComponentProps
   overlayMenu: PluginHostOverlayMenuComponentProps
   overlaySearchMenu: PluginHostOverlaySearchMenuComponentProps
@@ -462,6 +571,7 @@ export interface PluginHostComponentPropsById {
   overlaySelectLabel: PluginHostOverlaySelectLabelComponentProps
   overlayTree: PluginHostOverlayTreeComponentProps
   projectFileTree: PluginHostProjectFileTreeComponentProps
+  select: PluginHostSelectComponentProps
   segmented: PluginHostSegmentedComponentProps
   sender: PluginHostSenderComponentProps
   switch: PluginHostSwitchComponentProps
@@ -480,9 +590,12 @@ export interface PluginHostComponentApi {
 export interface PluginHostComponentReactApi {
   ActionBar: ComponentType<PluginHostActionBarComponentProps>
   Button: ComponentType<PluginHostButtonComponentProps>
+  CodeEditor: ComponentType<PluginHostCodeEditorComponentProps>
   Icon: ComponentType<PluginHostIconComponentProps>
   Input: ComponentType<PluginHostInputComponentProps>
+  InteractionList: ComponentType<PluginHostInteractionListComponentProps>
   List: ComponentType<PluginHostListComponentProps>
+  NativeTabs: ComponentType<PluginHostNativeTabsComponentProps>
   OverlayDropdown: ComponentType<PluginHostOverlayDropdownComponentProps>
   OverlayMenu: ComponentType<PluginHostOverlayMenuComponentProps>
   OverlaySearchMenu: ComponentType<PluginHostOverlaySearchMenuComponentProps>
@@ -491,6 +604,7 @@ export interface PluginHostComponentReactApi {
   OverlaySelectLabel: ComponentType<PluginHostOverlaySelectLabelComponentProps>
   OverlayTree: ComponentType<PluginHostOverlayTreeComponentProps>
   ProjectFileTree: ComponentType<PluginHostProjectFileTreeComponentProps>
+  Select: ComponentType<PluginHostSelectComponentProps>
   Segmented: ComponentType<PluginHostSegmentedComponentProps>
   Sender: ComponentType<PluginHostSenderComponentProps>
   Switch: ComponentType<PluginHostSwitchComponentProps>
@@ -511,6 +625,11 @@ export interface PluginViewContext {
     ) => Promise<Record<string, unknown>>
     value: Record<string, unknown>
   }
+  route?: {
+    setActions: (actions?: PluginViewRouteHeaderAction[]) => void
+    setBreadcrumb: (breadcrumb?: PluginViewRouteHeaderBreadcrumb) => void
+    setTitle: (title?: string) => void
+  }
   routeId?: string
   scope: string
   tab?: {
@@ -519,6 +638,34 @@ export interface PluginViewContext {
     state: unknown
   }
   ui: PluginHostComponentReactApi
+}
+
+export interface PluginViewRouteHeaderAction {
+  icon: string
+  key: string
+  label: string
+  active?: boolean
+  activeIcon?: string
+  activeLabel?: string
+  activeTitle?: string
+  danger?: boolean
+  disabled?: boolean
+  loading?: boolean
+  shortcut?: string
+  title?: string
+  onSelect?: () => void
+}
+
+export interface PluginViewRouteHeaderBreadcrumb {
+  onBack: () => void
+  ancestors?: Array<{
+    title: ReactNode
+    onSelect?: () => void
+  }>
+  parentTitle: ReactNode
+  ariaLabel?: string
+  backLabel?: string
+  currentTitle?: ReactNode
 }
 
 export type PluginCleanup = PluginDisposable | (() => void) | void

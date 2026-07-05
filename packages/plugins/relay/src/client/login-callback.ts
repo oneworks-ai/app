@@ -67,13 +67,29 @@ export const buildPluginHomeWebLoginRedirectUri = (scope: string, serverId?: str
   return buildLoginRedirectUri(url, serverId)
 }
 
-export const readLoginCallback = (): RelayLoginCallback | undefined => {
-  const params = readSearchAndHashParams()
+const readLoginCallbackFromParams = (
+  params: ReturnType<typeof readSearchAndHashParams>
+): RelayLoginCallback | undefined => {
   const token = params.hash.get('relay_token') || params.search.get('relay_token') || ''
   if (token === '') return undefined
   return {
     serverId: params.search.get('relayLoginServerId') ?? params.hash.get('relayLoginServerId') ?? undefined,
     token
+  }
+}
+
+export const readLoginCallback = (): RelayLoginCallback | undefined =>
+  readLoginCallbackFromParams(readSearchAndHashParams())
+
+export const readLoginCallbackFromUrl = (value: string): RelayLoginCallback | undefined => {
+  try {
+    const url = new URL(value, window.location.href)
+    return readLoginCallbackFromParams({
+      hash: new URLSearchParams(url.hash.replace(/^#/, '')),
+      search: url.searchParams
+    })
+  } catch {
+    return undefined
   }
 }
 

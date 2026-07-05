@@ -2,6 +2,8 @@ import type { RelayCapabilities } from './types.js'
 import { isRecord, toString } from './utils.js'
 
 export const DEFAULT_HEARTBEAT_INTERVAL_MS = 30_000
+export const DEFAULT_HEARTBEAT_MAX_ERROR_INTERVAL_MS = 120_000
+export const DEFAULT_HEARTBEAT_ERROR_LOG_INTERVAL_MS = 30_000
 
 export interface RelayHeartbeatOptions {
   capabilities: RelayCapabilities
@@ -15,10 +17,12 @@ export interface RelayHeartbeatOptions {
 }
 
 export interface RelayHeartbeatLoopOptions extends RelayHeartbeatOptions {
+  errorLogIntervalMs?: number
   intervalMs?: number
   logger?: {
     warn: (...args: unknown[]) => void
   }
+  maxErrorIntervalMs?: number
   serverId?: string
 }
 
@@ -68,36 +72,78 @@ export const sendHeartbeat = async (options: RelayHeartbeatOptions) => {
 export const startHeartbeat = (options: RelayHeartbeatLoopOptions): RelayHeartbeatLoop => {
   let stopped = false
   let inFlight: Promise<unknown> | undefined
-  const intervalMs = options.intervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let nextIntervalMs = Math.max(1_000, Math.floor(options.intervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS))
+  let lastErrorKey: string | undefined
+  let lastErrorLoggedAt = 0
+  const intervalMs = nextIntervalMs
+  const maxErrorIntervalMs = Math.max(
+    intervalMs,
+    Math.floor(options.maxErrorIntervalMs ?? DEFAULT_HEARTBEAT_MAX_ERROR_INTERVAL_MS)
+  )
+  const errorLogIntervalMs = Math.max(
+    1_000,
+    Math.floor(options.errorLogIntervalMs ?? DEFAULT_HEARTBEAT_ERROR_LOG_INTERVAL_MS)
+  )
+
+  const describeError = (error: unknown) => (
+    error instanceof Error && error.message.trim() !== ''
+      ? error.message.trim()
+      : String(error)
+  )
+
+  const warnFailure = (error: unknown) => {
+    const now = Date.now()
+    const errorKey = describeError(error)
+    const shouldLog = errorKey !== lastErrorKey || now - lastErrorLoggedAt >= errorLogIntervalMs
+    if (!shouldLog) return
+    lastErrorKey = errorKey
+    lastErrorLoggedAt = now
+    options.logger?.warn(
+      { err: error, ...(options.serverId == null ? {} : { serverId: options.serverId }) },
+      '[relay] heartbeat failed'
+    )
+  }
 
   const sendNow = async () => {
     if (stopped) return undefined
     return await sendHeartbeat(options)
   }
 
+  const schedule = (delayMs = nextIntervalMs) => {
+    if (stopped) return
+    timer = setTimeout(sendScheduled, delayMs)
+    ;(timer as { unref?: () => void }).unref?.()
+  }
+
   const sendScheduled = () => {
-    if (stopped || inFlight != null) return
+    if (stopped) return
+    if (inFlight != null) {
+      schedule()
+      return
+    }
     inFlight = sendHeartbeat(options)
+      .then(() => {
+        lastErrorKey = undefined
+        nextIntervalMs = intervalMs
+      })
       .catch(error => {
-        options.logger?.warn(
-          { err: error, ...(options.serverId == null ? {} : { serverId: options.serverId }) },
-          '[relay] heartbeat failed'
-        )
+        warnFailure(error)
+        nextIntervalMs = Math.min(maxErrorIntervalMs, Math.max(nextIntervalMs, intervalMs) * 2)
       })
       .finally(() => {
         inFlight = undefined
+        schedule()
       })
   }
 
-  const timer = setInterval(sendScheduled, intervalMs)
-  const nodeTimer = timer as { unref?: () => void }
-  nodeTimer.unref?.()
+  schedule(intervalMs)
 
   return {
     sendNow,
     stop: () => {
       stopped = true
-      clearInterval(timer)
+      if (timer != null) clearTimeout(timer)
     }
   }
 }

@@ -2,8 +2,8 @@ import {
   filterRelayConfigPatch,
   isRecord,
   mergeRelayConfigPatches,
-  normalizeRelayConfigSafeFields,
   normalizeRelayConfigStringList,
+  normalizeRelayTeamConfigSafeFields,
   unique
 } from './config-assignment-patch.js'
 import { matchesRelayConfigProject } from './config-assignment-project.js'
@@ -80,7 +80,7 @@ const applyAssignmentPatch = (
   if (isExpiredSecretBearingAssignment(params.assignment)) return params.patch
   if (!matchesRelayConfigProject(params.assignment, params.context)) return params.patch
 
-  const assignmentAllowedFields = normalizeRelayConfigSafeFields(params.assignment.allowedFields)
+  const assignmentAllowedFields = normalizeRelayTeamConfigSafeFields(params.assignment.allowedFields)
   const nextPatch = filterRelayConfigPatch(params.assignment.configPatch, assignmentAllowedFields)
   if (nextPatch == null) return params.patch
 

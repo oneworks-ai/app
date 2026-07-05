@@ -13,7 +13,13 @@ export interface SessionInteraction {
   payload: AskUserQuestionParams
 }
 
+export interface SessionMessagesCursor {
+  firstId?: number
+  lastId?: number
+}
+
 export interface SessionMessagesResponse {
+  cursor?: SessionMessagesCursor
   messages: WSEvent[]
   session?: Session
   interaction?: SessionInteraction

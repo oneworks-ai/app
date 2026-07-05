@@ -1,24 +1,80 @@
-.account-select-popup {
-  min-width: 320px;
+.ant-select-dropdown.oneworks-overlay.account-select-popup {
+  --oneworks-overlay-select-item-min-height: 0px;
+  --oneworks-overlay-select-item-padding: var(--oneworks-overlay-item-padding);
+  --oneworks-overlay-select-panel-padding-y: 0px;
+
+  min-width: 220px !important;
   max-width: 380px;
+  padding: var(--oneworks-overlay-panel-padding-y, 8px) 0 !important;
+
+  .rc-virtual-list-holder-inner {
+    display: flex;
+    flex-direction: column;
+    gap: var(--oneworks-overlay-item-gap);
+    padding: 0 !important;
+  }
+
+  .ant-select-item-option {
+    height: auto !important;
+    min-height: 0 !important;
+    padding: var(--oneworks-overlay-item-padding) !important;
+  }
+
+  .ant-select-item-option-content {
+    min-width: 0;
+    width: 100%;
+  }
 }
 
 .account-option {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
+  --account-option-avatar-size: var(--oneworks-overlay-icon-size, 14px);
 
-.account-option__title-row {
   display: flex;
   align-items: center;
   gap: var(--oneworks-overlay-icon-gap, 6px);
   min-width: 0;
+  width: 100%;
+}
+
+.account-option__avatar {
+  width: var(--account-option-avatar-size);
+  height: var(--account-option-avatar-size);
+  min-width: var(--account-option-avatar-size);
+  border-radius: 999px;
+  background: var(--tag-bg);
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.account-option__avatar-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.account-option__avatar-pixel.room-pixel-avatar {
+  --room-pixel-avatar-size: var(--account-option-avatar-size);
+  --room-pixel-avatar-radius: 999px;
+  --room-pixel-avatar-border: transparent;
+
+  width: var(--account-option-avatar-size);
+  height: var(--account-option-avatar-size);
+  border: 0;
+}
+
+.account-option__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .account-option__title {
-  flex: 1;
+  display: block;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -32,26 +88,26 @@
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .account-option__action {
-  width: 16px;
-  height: 16px;
-  min-width: 16px;
+  width: var(--oneworks-overlay-icon-size, 14px);
+  height: var(--oneworks-overlay-icon-size, 14px);
+  min-width: var(--oneworks-overlay-icon-size, 14px);
   padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: 0;
   background: transparent;
-  color: var(--sub-text-color, #6b7280);
+  color: var(--oneworks-overlay-muted, var(--sub-text-color, #6b7280));
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background-color .18s ease, color .18s ease;
+  transition: color .16s ease;
 
   &:hover {
-    background: color-mix(in srgb, var(--border-color) 22%, transparent);
-    color: var(--text-color);
+    color: var(--primary-color);
   }
 
   .material-symbols-rounded {
@@ -62,15 +118,15 @@
 
 .account-option__meta {
   font-size: 10px;
-  line-height: 12px;
-  color: var(--sub-text-color, #6b7280);
+  line-height: 1.25;
+  color: var(--oneworks-overlay-muted, var(--sub-text-color, #6b7280));
 }
 
 .account-select-popup__footer {
-  margin-top: var(--oneworks-overlay-item-gap, 2px);
+  margin-top: var(--oneworks-overlay-panel-padding-y, 8px);
   display: flex;
   flex-direction: column;
-  gap: var(--oneworks-overlay-item-gap, 2px);
+  gap: var(--oneworks-overlay-item-gap, 6px);
 }
 
 .account-select-popup__footer-divider {

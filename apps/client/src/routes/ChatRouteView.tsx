@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
@@ -139,7 +139,7 @@ export function ChatRouteView({
   agentRoomTranscript?: ChatRouteAgentRoomTranscript
 }) {
   const { t } = useTranslation()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [contextReferenceRequest, setContextReferenceRequest] = useState<ContextReferenceRequest | null>(null)
   const [annotationReferenceRequest, setAnnotationReferenceRequest] = useState<
     {
@@ -167,6 +167,16 @@ export function ChatRouteView({
   const resolvedEnableTimelineView = useSessionTimelineExperiment(isAgentRoomMode ? false : enableTimelineView)
   const canUseTimelineView = isAgentRoomMode ? false : resolvedEnableTimelineView
   const currentSessionId = session?.id
+  const senderFocusQueryValue = searchParams.get(CHAT_ROUTE_SENDER_FOCUS_QUERY_PARAM)?.trim() || undefined
+  const [consumedSenderFocusRequest, setConsumedSenderFocusRequest] = useState<
+    {
+      id: string
+      sessionId?: string
+    } | null
+  >(null)
+  const consumedSenderFocusSessionId = consumedSenderFocusRequest?.sessionId
+  const senderFocusRequestId = senderFocusQueryValue ??
+    (consumedSenderFocusSessionId === currentSessionId ? consumedSenderFocusRequest?.id : undefined)
   const panelIndependentSession = usePanelIndependentSession(session)
   const panelIndependentSessions = usePanelIndependentSessions(sessions)
   const isHistoryTimelineHidden = currentSessionId == null
@@ -184,6 +194,7 @@ export function ChatRouteView({
     sessionActivityLabel,
     isReady,
     errorState,
+    workspaceConnectionError,
     retryConnection,
     activeView,
     isTerminalPanelFolded,
@@ -223,7 +234,23 @@ export function ChatRouteView({
   } = useChatSession({ enableTimelineView: canUseTimelineView, session })
   const targetMessageId = searchParams.get('messageId') ?? undefined
   const targetToolUseId = searchParams.get('toolUseId') ?? undefined
-  const senderFocusRequestId = searchParams.get(CHAT_ROUTE_SENDER_FOCUS_QUERY_PARAM)?.trim() || undefined
+  useEffect(() => {
+    if (!searchParams.has(CHAT_ROUTE_SENDER_FOCUS_QUERY_PARAM)) {
+      return
+    }
+
+    if (senderFocusQueryValue != null) {
+      setConsumedSenderFocusRequest({
+        id: senderFocusQueryValue,
+        sessionId: currentSessionId
+      })
+    }
+
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.delete(CHAT_ROUTE_SENDER_FOCUS_QUERY_PARAM)
+    setSearchParams(nextParams, { replace: true })
+  }, [currentSessionId, searchParams, senderFocusQueryValue, setSearchParams])
+
   const debugSessionLogPath: string | undefined = undefined
   const workspaceDrawerViewParam = searchParams.get('workspaceView') ?? searchParams.get('view')
   const workspaceDrawerDefaultView = workspaceDrawerViewParam === 'settings'
@@ -469,6 +496,8 @@ export function ChatRouteView({
       pendingFileComments={pendingFileComments}
       pendingAnnotationPreview={pendingAnnotationPreview}
       workspaceDrawerDefaultView={workspaceDrawerDefaultView}
+      workspaceConnectionError={workspaceConnectionError}
+      workspaceConnectionInterrupted={errorState?.kind === 'connection' && errorState.code !== 'auth_required'}
       workspaceSessionId={agentRoomTranscript?.workspaceSessionId}
     />
   )

@@ -273,9 +273,7 @@ export const defaultRelayTeamAccessGroups = (): RelayAccessGroup[] => [
     capabilities: {
       allow: [
         relayPermissions.relayTeamMembersRead,
-        relayPermissions.relayTeamsRead,
-        relayPermissions.relayTeamConfigProfilesRead,
-        relayPermissions.relayTeamConfigSecretsRead
+        relayPermissions.relayTeamsRead
       ]
     },
     createdAt: systemCreatedAt
@@ -354,7 +352,7 @@ const normalizeScopedRelayAccessGroups = (
         },
         parentGroupId: undefined,
         disabledAt: group.disabledAt,
-        capabilities: group.capabilities,
+        capabilities: builtin.capabilities,
         quotas: group.quotas ?? builtin.quotas,
         updatedAt: group.updatedAt ?? builtin.updatedAt
       })
@@ -495,7 +493,7 @@ export const resolveAccessTokenAccess = (
 }
 
 export const teamAccessGroupsForTeam = (team: RelayTeam | undefined) =>
-  team?.accessGroups ?? normalizeRelayTeamAccessGroups(undefined)
+  normalizeRelayTeamAccessGroups(team?.accessGroups)
 
 export const resolveTeamMemberAccess = (store: Pick<RelayStore, 'teams'>, member: RelayTeamMember) => {
   const team = store.teams.find(item => item.id === member.teamId)

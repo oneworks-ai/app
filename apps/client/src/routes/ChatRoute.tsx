@@ -8,10 +8,17 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import useSWR from 'swr'
 
-import type { AgentRoomListResponse, Session } from '@oneworks/core'
+import type { AgentRoomHostSessionResponse, Session } from '@oneworks/core'
 import type { ConfigResponse } from '@oneworks/types'
 
-import { getApiErrorMessage, getConfig, getSession, getSessionCacheKey, listAgentRooms, listSessions } from '#~/api'
+import {
+  getAgentRoomByHostSession,
+  getApiErrorMessage,
+  getConfig,
+  getSession,
+  getSessionCacheKey,
+  listSessions
+} from '#~/api'
 import { RouteErrorState } from '#~/components/error-state'
 import { useDesktopWorkspaceStartupReady } from '#~/components/layout/desktop-workspace-startup-ready'
 import {
@@ -73,11 +80,15 @@ export function ChatRoute() {
     branchSessionId != null && branchSessionId !== sessionId ? getSessionCacheKey(branchSessionId) : null,
     () => getSession(branchSessionId ?? '')
   )
-  const { data: roomsRes } = useSWR<AgentRoomListResponse>(
-    isAgentRoomEnabled && sessionId != null ? '/api/agent-rooms' : null,
-    listAgentRooms,
+  const { data: roomForSessionRes } = useSWR<AgentRoomHostSessionResponse>(
+    isAgentRoomEnabled && sessionId != null
+      ? `/api/agent-rooms/by-host-session/${encodeURIComponent(sessionId)}`
+      : null,
+    () => getAgentRoomByHostSession(sessionId ?? ''),
     {
-      refreshInterval: 1000,
+      dedupingInterval: 5000,
+      refreshInterval: 300_000,
+      refreshWhenHidden: false,
       revalidateOnFocus: true
     }
   )
@@ -137,12 +148,8 @@ export function ChatRoute() {
       branchSessionId !== sessionId &&
       (branchSession == null || isBranchSessionLoading || isBranchSessionValidating))
   const roomForSession = useMemo(
-    () => (
-      isAgentRoomEnabled && sessionId != null
-        ? roomsRes?.rooms.find(room => room.hostSessionId === sessionId)
-        : undefined
-    ),
-    [isAgentRoomEnabled, roomsRes?.rooms, sessionId]
+    () => isAgentRoomEnabled && sessionId != null ? roomForSessionRes?.room : undefined,
+    [isAgentRoomEnabled, roomForSessionRes?.room, sessionId]
   )
   const openRoom = () => {
     if (roomForSession == null) return

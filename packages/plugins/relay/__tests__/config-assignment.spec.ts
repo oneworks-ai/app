@@ -1,3 +1,5 @@
+import { Buffer } from 'node:buffer'
+
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -87,6 +89,50 @@ describe('relay config assignment', () => {
     ))).not.toContain('secret')
   })
 
+  it('preserves base64 Codex auth payloads while sanitizing unrelated adapter secrets', () => {
+    const token = Buffer.from('{"auth_mode":"chatgpt"}\n', 'utf8').toString('base64')
+
+    expect(filterRelayConfigPatch(
+      {
+        adapters: {
+          codex: {
+            accounts: {
+              work: {
+                auth: {
+                  encoding: 'base64',
+                  token,
+                  type: 'codex-auth-json'
+                },
+                authFile: '/Users/local/.codex/auth.json',
+                title: 'Work'
+              }
+            },
+            defaultAccount: 'work'
+          },
+          other: {
+            token: 'nope'
+          }
+        }
+      },
+      ['adapters']
+    )).toEqual({
+      adapters: {
+        codex: {
+          accounts: {
+            work: {
+              auth: {
+                encoding: 'base64',
+                token,
+                type: 'codex-auth-json'
+              },
+              title: 'Work'
+            }
+          }
+        }
+      }
+    })
+  })
+
   it('resolves matching assignments into a merged safe patch', () => {
     const result = resolveRelayConfigPatchForProject(
       {
@@ -94,7 +140,7 @@ describe('relay config assignment', () => {
         assignments: [
           {
             id: 'base',
-            allowedFields: ['modelServices', 'defaultModelService'],
+            allowedFields: ['modelServices'],
             configPatch: {
               defaultModelService: 'relay-base',
               modelServices: {
@@ -147,10 +193,9 @@ describe('relay config assignment', () => {
     )
 
     expect(result).toEqual({
-      allowedFields: ['modelServices', 'defaultModelService', 'recommendedModels'],
+      allowedFields: ['modelServices', 'recommendedModels'],
       matchedAssignmentIds: ['base', 'project'],
       patch: {
-        defaultModelService: 'relay-base',
         modelServices: {
           'relay-base': {
             apiBaseUrl: 'https://base.example.com/v1'
@@ -241,7 +286,6 @@ describe('relay config assignment', () => {
     expect(result).toMatchObject({
       matchedAssignmentIds: ['team-rule'],
       patch: {
-        defaultModelService: 'relay-team',
         modelServices: {
           'relay-team': {
             apiBaseUrl: 'https://team.example.com/v1'

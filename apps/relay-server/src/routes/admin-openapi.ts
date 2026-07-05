@@ -782,6 +782,152 @@ const buildAllComponents = (bearerFormat: string) => ({
     RelayConfigSnapshot: {
       type: 'object',
       additionalProperties: true
+    },
+    RelayEncryptedPayload: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['algorithm', 'ciphertext', 'iv', 'tag', 'version'],
+      properties: {
+        algorithm: { type: 'string', enum: ['aes-256-gcm'] },
+        ciphertext: { type: 'string', description: 'Base64 encoded ciphertext.' },
+        iv: { type: 'string', description: 'Base64 encoded initialization vector.' },
+        tag: { type: 'string', description: 'Base64 encoded authentication tag.' },
+        version: { type: 'integer', enum: [1] }
+      }
+    },
+    RelayPersonalDocumentCounts: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['agents'],
+      properties: {
+        agents: { type: 'integer', minimum: 0, description: 'Number of synced account or team AGENTS.md files.' }
+      }
+    },
+    RelayPersonalDocumentSnapshot: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['countsByKind', 'documentCount', 'encryptedPayload', 'hash', 'totalSizeBytes', 'updatedAt', 'version'],
+      properties: {
+        countsByKind: { $ref: '#/components/schemas/RelayPersonalDocumentCounts' },
+        documentCount: { type: 'integer', minimum: 0 },
+        encryptedPayload: { $ref: '#/components/schemas/RelayEncryptedPayload' },
+        hash: { type: 'string', description: 'Stable encrypted document snapshot hash.' },
+        totalSizeBytes: { type: 'integer', minimum: 0 },
+        updatedAt: { type: 'string', format: 'date-time' },
+        version: { type: 'integer', enum: [1] }
+      }
+    },
+    RelayTeamDocumentSnapshot: {
+      allOf: [
+        { $ref: '#/components/schemas/RelayPersonalDocumentSnapshot' },
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['teamId'],
+          properties: {
+            teamId: { type: 'string' },
+            updatedByUserId: nullableString
+          }
+        }
+      ],
+      description:
+        'Encrypted team instruction documents; Relay stores only ciphertext, counts, total size, and actor metadata.'
+    },
+    RelayTeamDocumentSnapshotResponse: {
+      type: 'object',
+      required: ['teamDocumentSnapshot'],
+      properties: {
+        teamDocumentSnapshot: {
+          oneOf: [
+            { $ref: '#/components/schemas/RelayTeamDocumentSnapshot' },
+            { type: 'null' }
+          ]
+        }
+      }
+    },
+    RelayTeamDocumentUpdate: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['documents'],
+      properties: {
+        baseHash: {
+          type: 'string',
+          description:
+            'Hash read from the previous team document snapshot. Stale writes return 409 unless force is true.'
+        },
+        documents: {
+          $ref: '#/components/schemas/RelayPersonalDocumentSnapshot',
+          description: 'Encrypted team instruction documents plus server-visible counts and total size.'
+        },
+        force: {
+          type: 'boolean',
+          description: 'Overwrite the current server snapshot even when baseHash is stale.'
+        }
+      }
+    },
+    RelayPersonalConfigSnapshot: {
+      type: 'object',
+      required: ['allowedFields', 'hash', 'updatedAt', 'userId', 'version'],
+      properties: {
+        allowedFields: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Top-level configuration fields included in this personal snapshot.'
+        },
+        configPatch: {
+          type: 'object',
+          additionalProperties: true,
+          description: 'Safe global configuration patch for the current Relay user.'
+        },
+        documents: {
+          $ref: '#/components/schemas/RelayPersonalDocumentSnapshot',
+          description: 'Encrypted user-home instruction documents; the server stores only ciphertext and statistics.'
+        },
+        hash: { type: 'string', description: 'Stable snapshot hash used for optimistic concurrency.' },
+        sourceDeviceId: nullableString,
+        updatedAt: { type: 'string', format: 'date-time' },
+        userId: { type: 'string' },
+        version: { type: 'string' }
+      }
+    },
+    RelayPersonalConfigSnapshotResponse: {
+      type: 'object',
+      required: ['personalConfigSnapshot'],
+      properties: {
+        personalConfigSnapshot: {
+          oneOf: [
+            { $ref: '#/components/schemas/RelayPersonalConfigSnapshot' },
+            { type: 'null' }
+          ]
+        }
+      }
+    },
+    RelayPersonalConfigUpdate: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        allowedFields: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Safe top-level fields to accept. Unknown or unsafe fields are filtered server-side.'
+        },
+        baseHash: {
+          type: 'string',
+          description: 'Hash read from the previous snapshot. A stale hash returns 409 unless force is true.'
+        },
+        configPatch: {
+          type: 'object',
+          additionalProperties: true
+        },
+        documents: {
+          $ref: '#/components/schemas/RelayPersonalDocumentSnapshot',
+          description: 'Encrypted user-home instruction documents plus server-visible counts and total size.'
+        },
+        force: {
+          type: 'boolean',
+          description: 'Overwrite the current server snapshot even when baseHash is stale.'
+        }
+      }
     }
   }
 })
@@ -1547,6 +1693,36 @@ const teamManagementPaths = (prefix: '/api/admin' | '/api/relay', scope: 'Admin'
         }
       })
     },
+    [`${prefix}/teams/{teamId}/documents`]: {
+      get: bearerOperation({
+        operationId: `getRelay${scope}TeamDocuments`,
+        summary: 'Read encrypted instruction document snapshot metadata for a Relay team',
+        tags: [configTag],
+        parameters: [teamId],
+        responses: {
+          200: jsonResponse('Relay team document snapshot.', {
+            $ref: '#/components/schemas/RelayTeamDocumentSnapshotResponse'
+          }),
+          ...adminAuthResponses,
+          404: errorResponse('The team was not found.')
+        }
+      }),
+      put: bearerOperation({
+        operationId: `updateRelay${scope}TeamDocuments`,
+        summary: 'Update encrypted instruction documents for a Relay team',
+        tags: [configTag],
+        parameters: [teamId],
+        requestBody: requestBody({ $ref: '#/components/schemas/RelayTeamDocumentUpdate' }),
+        responses: {
+          200: jsonResponse('Updated Relay team document snapshot.', {
+            $ref: '#/components/schemas/RelayTeamDocumentSnapshotResponse'
+          }),
+          ...adminAuthResponses,
+          ...validationResponses,
+          404: errorResponse('The team was not found.')
+        }
+      })
+    },
     [`${prefix}/config-profiles/{profileId}`]: {
       get: bearerOperation({
         operationId: `getRelay${scope}ConfigProfile`,
@@ -1834,6 +2010,35 @@ const teamManagementPaths = (prefix: '/api/admin' | '/api/relay', scope: 'Admin'
 }
 
 const buildRelayUserPaths = () => ({
+  '/api/relay/config/global': {
+    get: bearerOperation({
+      operationId: 'getRelayPersonalGlobalConfig',
+      summary: 'Read the personal global configuration snapshot for the current user',
+      tags: ['User configuration'],
+      responses: {
+        200: jsonResponse('Personal global configuration snapshot.', {
+          $ref: '#/components/schemas/RelayPersonalConfigSnapshotResponse'
+        }),
+        401: errorResponse('Authentication is required.'),
+        403: errorResponse('The caller cannot read personal configuration snapshots.')
+      }
+    }),
+    put: bearerOperation({
+      operationId: 'updateRelayPersonalGlobalConfig',
+      summary: 'Update the personal global configuration snapshot for the current user',
+      tags: ['User configuration'],
+      requestBody: requestBody({ $ref: '#/components/schemas/RelayPersonalConfigUpdate' }),
+      responses: {
+        200: jsonResponse('Updated personal global configuration snapshot.', {
+          $ref: '#/components/schemas/RelayPersonalConfigSnapshotResponse'
+        }),
+        400: errorResponse('A safe configuration patch is required.'),
+        401: errorResponse('Authentication is required.'),
+        403: errorResponse('The caller cannot write personal configuration snapshots.'),
+        409: errorResponse('The personal configuration snapshot has changed on the server.')
+      }
+    })
+  },
   '/api/relay/config-snapshot': {
     get: bearerOperation({
       operationId: 'getRelayUserConfigSnapshot',
@@ -2347,10 +2552,16 @@ const adminSchemas = [
   'RelayConfigSecret',
   'RelayConfigSecretInput',
   'RelayConfigSecretRotate',
+  'RelayEncryptedPayload',
   'RelayMessage',
   'RelayMessageInput',
   'RelayMetricsSnapshot',
+  'RelayPersonalDocumentCounts',
+  'RelayPersonalDocumentSnapshot',
   'RelayTeam',
+  'RelayTeamDocumentSnapshot',
+  'RelayTeamDocumentSnapshotResponse',
+  'RelayTeamDocumentUpdate',
   'RelayTeamInput',
   'RelayTeamInvitation',
   'RelayTeamMember',
@@ -2376,6 +2587,12 @@ const profileSchemas = [
   'RelayConfigSecretInput',
   'RelayConfigSecretRotate',
   'RelayConfigSnapshot',
+  'RelayEncryptedPayload',
+  'RelayPersonalConfigSnapshot',
+  'RelayPersonalConfigSnapshotResponse',
+  'RelayPersonalConfigUpdate',
+  'RelayPersonalDocumentCounts',
+  'RelayPersonalDocumentSnapshot',
   'RelayProfileAccessToken',
   'RelayProfileAccessTokenCreate',
   'RelayProfileAccessTokenCreateResponse',
@@ -2386,6 +2603,9 @@ const profileSchemas = [
   'RelayProfilePasskeyVerify',
   'RelayProfileSecuritySummary',
   'RelayTeam',
+  'RelayTeamDocumentSnapshot',
+  'RelayTeamDocumentSnapshotResponse',
+  'RelayTeamDocumentUpdate',
   'RelayTeamInput',
   'RelayTeamInvitation',
   'RelayTeamMember',

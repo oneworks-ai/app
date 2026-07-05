@@ -39,12 +39,13 @@ Primary implementation entrypoints for Codex hooks:
   - keeps hooks/config in `<project-home>/.mock/.codex/`, maps workspace skills into `<project-home>/.mock/.agents/skills`, and mirrors each skill into `<project-home>/.mock/.codex/skills/<name>`
   - writes a managed `<project-home>/.mock/.codex/config.toml` that trusts the current workspace and suppresses startup update checks unless `configOverrides` restores them
 - `src/runtime/accounts.ts`
-  - imports the current `~/.codex/auth.json` into `<project-home>/.local/adapters/codex/accounts/<key>/auth.json`
+  - reads Codex accounts from `adapters.codex.accounts`; `codex login` writes base64 encoded `auth.json` into global `~/.oneworks/.oo.config.json`
+  - treats the current `~/.codex/auth.json` as a read-only fallback account source and does not migrate it into project-local storage
   - prepares per-session HOME roots under `<project-home>/caches/<ctxId>/<sessionId>/adapter-codex-home`
   - does not bridge the whole shared `.codex` tree into a session HOME; only auth, config, hooks, skills, and sessions are intentionally linked so global plugin caches and app state cannot slow `codex app-server` startup
   - normalizes the imported Codex config before using that HOME with the CLI, so unsupported values from a user's real config do not break One Works sessions.
   - queries Codex account info and rate-limit/quota snapshots through `codex app-server`
-  - exposes standard adapter account management actions: add via `codex login`, detail lookup, refresh, and remove
+  - exposes standard adapter account management actions: add via `codex login`, detail lookup, refresh, and remove from global config
 - `src/models.ts`
   - exposes Codex model selector metadata to One Works
   - prefers Codex's `model_catalog_json` config file or `models_cache.json` under `CODEX_HOME` / `~/.codex`
@@ -166,32 +167,72 @@ Codex 多账号切换走 adapter 通用 `account` 能力：
 
 - `defaultAccount`：没有显式选择账号时使用的账号 key
 - `accounts.<key>.title` / `description`：前端显示信息
-- `accounts.<key>.authFile`：可选，显式指定某个账号的 `auth.json` 路径；不填时优先读取 home project 下的 `<project-home>/.local/adapters/codex/accounts/<key>/auth.json`
-- `accounts.<key>` 的本地元数据会落到 `<project-home>/.local/adapters/codex/accounts/<key>/meta.json`
-- 如果当前目录是 Git worktree，账号导入、`ow accounts add codex` 和 Web 侧新增账号会优先写到主 worktree 对应的 home project 共享账号目录
-- 账号发现也优先读主 worktree 的共享目录；只有共享目录缺失时，才回退当前 worktree 的旧目录
+- `accounts.<key>.auth`：Codex 登录态，形如 `{ type: 'codex-auth-json', encoding: 'base64', token: '<base64>' }`
+- `accounts.<key>.authFile`：可选，高级显式来源；指定某个账号的 `auth.json` 路径时会优先使用这个文件
+- `accounts.<key>` 里的 `email / planType / quota / authDigest / updatedAt` 是账号详情和 quota 的缓存元信息
+- `ow accounts add codex [accountName]` 和 Web 侧新增账号都写入 global `~/.oneworks/.oo.config.json`，不要写回 project-local account snapshot
+- 旧的 `<project-home>/.local/adapters/codex/accounts/<key>/auth.json` / `meta.json` 不再参与账号发现，也不做自动迁移
 
-如果本机存在 `~/.codex/auth.json`，adapter 会把当前登录态导入到 `<project-home>/.local/adapters/codex/accounts/`，并在 session 级 HOME 下切换到对应 auth 快照运行。
+如果本机存在 `~/.codex/auth.json`，adapter 会把它作为只读 fallback account 展示和使用；这条 fallback 不会写入 One Works config。要让 Codex 登录态通过 Relay 同步到其他设备，必须通过 `ow accounts add codex [accountName]` 或 Web 登录入口把它保存到 global config。
+
+session 级 HOME 仍然完全隔离：如果账号来自 global config，adapter 会把 base64 auth materialize 成当前 session 的 `.codex/auth.json`；如果账号来自 `authFile` 或 real home fallback，则会 symlink 到对应文件。
 
 现在还支持两类额外入口：
 
 - `ow accounts add codex [accountName]`
   - 在隔离 HOME 下执行 `codex login`
   - 登录完成后读取生成的 `auth.json`
-  - 通过 adapter 通用 account artifact 协议，把 `auth.json + meta.json` 交回上层并落盘
+  - 把 `auth.json` base64 写入 global `~/.oneworks/.oo.config.json` 的 `adapters.codex.accounts.<key>.auth.token`
 - Web 配置页 `Adapters -> Codex -> Accounts`
   - adapter 详情页会先展示 `defaultAccount` 选择，再展示 `账号` 入口
   - 账号根页可直接触发 `Connect account`
   - 三级详情页可查看来源、rate-limit / quota 摘要，并编辑 `title / description / authFile`
   - `description` 在前端按 multiline 字段编辑
-  - `authFile` 留空时默认读取 `<project-home>/.local/adapters/codex/accounts/<key>/auth.json`
+  - `authFile` 留空时默认使用 global config 里的 inline auth
 
 额度探测补充：
 
 - Codex quota 现在通过 `codex app-server` 的 `account/rateLimits/read` 读取
-- 配置页默认读 `<project-home>/.local/adapters/codex/accounts/<key>/meta.json` 里的 quota 快照
+- 配置页默认读 global config 里的 quota 快照
 - 当前快照 TTL 是 5 分钟；CLI `ow accounts show codex <account>` 会强制刷新
 - 如果 Codex 只返回套餐信息而没有 credits / rate limits，前端只展示真实返回的套餐或窗口限额，不伪造额度余额
+
+Docker / Linux sync smoke:
+
+```bash
+node scripts/verify-codex-global-config-sync.mjs
+```
+
+这个脚本是 Codex global account 经 Relay 同步到 Linux 远端 daemon 的真实链路验收，不是单元测试替代品。脚本会先把当前 workspace 需要的 One Works package 打成 tarball，在 Linux Node 容器中用这些 tarball 安装一个真实的 `/opt/oneworks-daemon` 运行时，然后通过 `npx oneworks daemon` 启动 daemon。不要把 repo 源码复制进容器当运行时，也不要通过手工改 relay store / auth snapshot / 数据库来伪造设备、账号或 workspace。
+
+完整验收要覆盖这些点：
+
+- Docker build context 只包含脚本需要的 Dockerfile / smoke 入口，不把整个 repo 当镜像上下文。
+- 容器内 daemon 由安装产物启动；`docker top` 里可能显示为 `npm exec oneworks daemon ...`，这是 `npx oneworks daemon` 的正常进程形态。
+- 容器通过 Relay 连接当前本机 server，并以独立 Linux HOME / config dir 注册成真实远端设备。
+- Launcher 发现远端 device / workspace 后，`workspaces/directories`、`workspaces/open`、`workspaces/create` 都要通过 relay plugin API 触发目标 daemon，而不是创建本地假 session。
+- 远程 workspace session 的 `/api/config` 能读到 `~/.oneworks/.oo.config.json` 中 base64 保存的 Codex auth，并在 session HOME materialize 成 `.codex/auth.json`。
+- 设置 `ONEWORKS_RELAY_DOCKER_VERIFY_AGENT=1` 时，脚本要通过真实远程 workspace session 发送消息并等待 agent 回复；这一步不能用容器内直接跑 `codex exec` 替代。
+
+推荐的完整命令：
+
+```bash
+ONEWORKS_RELAY_DOCKER_VERIFY_AGENT=1 \
+ONEWORKS_RELAY_DOCKER_AGENT_MODEL=gpt-5.5 \
+node scripts/verify-codex-global-config-sync.mjs
+```
+
+脚本成功时重点看最终 JSON：`config.authAccountCount > 0`、`remote.workspaceUrl` / `remote.createdWorkspaceUrl` 存在，开启 agent 验证时 `agent.status === "ok"`。如果 Codex CLI 安装过程长时间没有退出，但 `codex.js --version` 已经可用，脚本会继续后续 smoke；不要因为 npm 子进程仍在下载缓存就误判 daemon 没启动。ChatGPT Codex 账号的可用模型会变，默认模型是 `gpt-5.5`，需要时用 `ONEWORKS_RELAY_DOCKER_AGENT_MODEL` 覆盖，不要把一次调试中不可用的模型写死。
+
+改动该链路后至少跑：
+
+```bash
+node --check scripts/verify-codex-global-config-sync.mjs
+pnpm exec eslint scripts/verify-codex-global-config-sync.mjs
+pnpm exec vitest run --workspace vitest.workspace.ts --project node apps/bootstrap/__tests__/package-launcher.spec.ts
+```
+
+如果改动影响 packaged CLI / server resolution，再跑一次上面的 Docker smoke。脚本不依赖宿主机已有 `node_modules`；如果本机没有 Docker / Colima / OrbStack，会直接提示缺少 Docker runtime。
 
 ### `sandboxPolicy`
 

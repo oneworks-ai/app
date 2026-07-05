@@ -1,3 +1,4 @@
+import { adminListSurfaceClassNames } from '@oneworks/components/admin-list-surface'
 import { Pagination } from 'antd'
 
 export interface AdminListTablePaginationProps {
@@ -15,8 +16,8 @@ export const AdminListTablePagination = ({
   total,
   onChange
 }: AdminListTablePaginationProps) => (
-  <div className='relay-admin-list-table__pagination'>
-    <span className='relay-admin-list-table__pagination-summary'>
+  <div className={adminListSurfaceClassNames.pagination}>
+    <span className={adminListSurfaceClassNames.paginationSummary}>
       共 {total} 条
     </span>
     <Pagination

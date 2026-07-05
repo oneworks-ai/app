@@ -6,6 +6,12 @@ import {
   normalizeRelayConfigSourcePreferences,
   serializeRelayConfigSourcePreferences
 } from './config-source-preferences.js'
+import {
+  normalizeRelayPersonalDocumentSyncPreferences,
+  normalizeRelayTeamDocumentSyncPreferences,
+  serializeRelayPersonalDocumentSyncPreferences,
+  serializeRelayTeamDocumentSyncPreferences
+} from './personal-document-sync-preferences.js'
 import type { RelayStore, RelayStoredServer } from './types.js'
 import { isRecord, normalizeRemoteBaseUrl, parseJson, toString } from './utils.js'
 
@@ -17,15 +23,17 @@ const normalizeStoredAccount = (value: unknown): RelayStoredServer['account'] =>
   if (!isRecord(value)) return undefined
   const id = toString(value.id)
   const email = toString(value.email)
+  const loginId = toString(value.loginId)
   const name = toString(value.name)
   const avatarUrl = toString(value.avatarUrl)
   const provider = toString(value.provider)
   const role = toString(value.role)
-  if ([id, email, name, avatarUrl, provider, role].every(item => item === '')) return undefined
+  if ([id, email, loginId, name, avatarUrl, provider, role].every(item => item === '')) return undefined
   return {
     ...(avatarUrl === '' ? {} : { avatarUrl }),
     ...(email === '' ? {} : { email }),
     ...(id === '' ? {} : { id }),
+    ...(loginId === '' ? {} : { loginId }),
     ...(name === '' ? {} : { name }),
     ...(provider === '' ? {} : { provider }),
     ...(role === '' ? {} : { role })
@@ -43,11 +51,19 @@ const normalizeStoredServers = (value: unknown): Record<string, RelayStoredServe
     if (id === '' || remoteBaseUrl === '') continue
     const account = normalizeStoredAccount(raw.account)
     const configDisabledSources = normalizeRelayConfigSourcePreferences(raw.configDisabledSources)
+    const personalDocumentSync = normalizeRelayPersonalDocumentSyncPreferences(raw.personalDocumentSync)
+    const teamDocumentSync = normalizeRelayTeamDocumentSyncPreferences(raw.teamDocumentSync)
     servers[id] = {
       ...(account == null ? {} : { account }),
       ...(configDisabledSources == null
         ? {}
         : { configDisabledSources: serializeRelayConfigSourcePreferences(configDisabledSources) }),
+      ...(personalDocumentSync == null
+        ? {}
+        : { personalDocumentSync: serializeRelayPersonalDocumentSyncPreferences(personalDocumentSync) }),
+      ...(teamDocumentSync == null
+        ? {}
+        : { teamDocumentSync: serializeRelayTeamDocumentSyncPreferences(teamDocumentSync) }),
       deviceToken,
       id,
       registeredAt: typeof raw.registeredAt === 'string' ? raw.registeredAt : undefined,

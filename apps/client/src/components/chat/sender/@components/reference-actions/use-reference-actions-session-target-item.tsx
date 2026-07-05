@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 
 import type { EntitySummary, SpecSummary, WorkspaceSummary } from '#~/api.js'
+import { fetchApiJson } from '#~/api/base.js'
 import type { OverlayMenuItem } from '#~/components/overlay'
 import { DEFAULT_CHAT_SESSION_TARGET_DRAFT, createChatSessionTargetDraft } from '#~/hooks/chat/chat-session-target'
 import type { ChatSessionTargetResource, ChatSessionTargetType } from '#~/hooks/chat/chat-session-target'
@@ -21,6 +22,14 @@ const toResource = (item: WorkspaceSummary | EntitySummary | SpecSummary): ChatS
 const resourceKey = (type: SelectableTargetType, resource: ChatSessionTargetResource) =>
   `session-target:${type}:${type === 'workspace' ? resource.id : resource.name}`
 
+const sessionTargetResourceSWRConfig = {
+  dedupingInterval: 5 * 60_000,
+  refreshWhenHidden: false,
+  revalidateOnFocus: false
+} as const
+
+const fetchSessionTargetResource = async <T,>(path: string) => fetchApiJson<T>(path)
+
 export function useReferenceActionsSessionTargetItem({
   sessionTarget,
   showSessionTargetInMore
@@ -30,13 +39,19 @@ export function useReferenceActionsSessionTargetItem({
 }): OverlayMenuItem | null {
   const { t } = useTranslation()
   const { data: specsRes } = useSWR<{ specs: SpecSummary[] }>(
-    showSessionTargetInMore ? '/api/ai/specs' : null
+    showSessionTargetInMore ? '/api/ai/specs' : null,
+    fetchSessionTargetResource,
+    sessionTargetResourceSWRConfig
   )
   const { data: entitiesRes } = useSWR<{ entities: EntitySummary[] }>(
-    showSessionTargetInMore ? '/api/ai/entities' : null
+    showSessionTargetInMore ? '/api/ai/entities' : null,
+    fetchSessionTargetResource,
+    sessionTargetResourceSWRConfig
   )
   const { data: workspacesRes } = useSWR<{ workspaces: WorkspaceSummary[] }>(
-    showSessionTargetInMore ? '/api/ai/workspaces' : null
+    showSessionTargetInMore ? '/api/ai/workspaces' : null,
+    fetchSessionTargetResource,
+    sessionTargetResourceSWRConfig
   )
 
   return useMemo(() => {

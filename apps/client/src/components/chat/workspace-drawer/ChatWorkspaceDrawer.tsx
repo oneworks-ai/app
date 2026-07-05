@@ -560,7 +560,12 @@ export function ChatWorkspaceDrawer({
   } = useSWR<GitRepositoryState>(
     gitKey,
     () => sessionId != null && sessionId !== '' ? getSessionGitState(sessionId) : getWorkspaceGitState(),
-    { refreshInterval: 3000, revalidateOnFocus: true }
+    {
+      dedupingInterval: 3000,
+      refreshInterval: 60_000,
+      refreshWhenHidden: false,
+      revalidateOnFocus: true
+    }
   )
   const changedFilesCount = repoState?.available === true ? repoState.changedFiles?.length ?? 0 : 0
   const approvalMessages = useMemo(

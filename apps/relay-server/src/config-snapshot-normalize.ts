@@ -88,6 +88,86 @@ const normalizeSanitizedArrayOrRecord = (value: unknown): unknown[] | Record<str
   return undefined
 }
 
+const normalizeNumber = (value: unknown) => (
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined
+)
+
+const normalizeCodexInlineAuth = (value: unknown): Record<string, unknown> | undefined => {
+  if (!isRecord(value)) return undefined
+  const type = normalizeText(value.type)
+  const encoding = normalizeText(value.encoding)
+  const token = normalizeText(value.token)
+  if (
+    token == null ||
+    (type != null && type !== 'codex-auth-json') ||
+    encoding !== 'base64'
+  ) {
+    return undefined
+  }
+  return {
+    ...(type == null ? {} : { type }),
+    encoding,
+    token
+  }
+}
+
+const normalizeCodexAccount = (value: unknown): Record<string, unknown> | undefined => {
+  if (!isRecord(value)) return undefined
+  const auth = normalizeCodexInlineAuth(value.auth)
+  const quota = sanitizeRelayConfigValue(value.quota)
+  const account: Record<string, unknown> = {
+    ...(normalizeText(value.title) == null ? {} : { title: normalizeText(value.title) }),
+    ...(normalizeText(value.description) == null ? {} : { description: normalizeText(value.description) }),
+    ...(normalizeText(value.email) == null ? {} : { email: normalizeText(value.email) }),
+    ...(normalizeText(value.planType) == null ? {} : { planType: normalizeText(value.planType) }),
+    ...(normalizeText(value.accountType) == null ? {} : { accountType: normalizeText(value.accountType) }),
+    ...(normalizeText(value.accountId) == null ? {} : { accountId: normalizeText(value.accountId) }),
+    ...(normalizeText(value.organizationId) == null ? {} : { organizationId: normalizeText(value.organizationId) }),
+    ...(normalizeText(value.organizationTitle) == null
+      ? {}
+      : { organizationTitle: normalizeText(value.organizationTitle) }),
+    ...(normalizeText(value.organizationRole) == null
+      ? {}
+      : { organizationRole: normalizeText(value.organizationRole) }),
+    ...(normalizeText(value.source) == null ? {} : { source: normalizeText(value.source) }),
+    ...(normalizeNumber(value.createdAt) == null ? {} : { createdAt: normalizeNumber(value.createdAt) }),
+    ...(normalizeNumber(value.updatedAt) == null ? {} : { updatedAt: normalizeNumber(value.updatedAt) }),
+    ...(normalizeText(value.authDigest) == null ? {} : { authDigest: normalizeText(value.authDigest) }),
+    ...(isRecord(quota) || Array.isArray(quota) ? { quota } : {}),
+    ...(auth == null ? {} : { auth })
+  }
+  return Object.keys(account).length > 0 ? account : undefined
+}
+
+const normalizeCodexAccounts = (value: unknown): Record<string, unknown> | undefined => {
+  if (!isRecord(value)) return undefined
+  const accounts = Object.fromEntries(
+    Object.entries(value)
+      .map(([key, account]) => [normalizeText(key), normalizeCodexAccount(account)] as const)
+      .filter((entry): entry is [string, Record<string, unknown>] => entry[0] != null && entry[1] != null)
+  )
+  return Object.keys(accounts).length > 0 ? accounts : undefined
+}
+
+const normalizeCodexAdapter = (value: unknown): Record<string, unknown> | undefined => {
+  if (!isRecord(value)) return undefined
+  const defaultAccount = normalizeText(value.defaultAccount)
+  const accounts = normalizeCodexAccounts(value.accounts)
+  const adapter = {
+    ...(defaultAccount == null ? {} : { defaultAccount }),
+    ...(accounts == null ? {} : { accounts })
+  }
+  return Object.keys(adapter).length > 0 ? adapter : undefined
+}
+
+// Keep this explicit allowlist in sync with packages/plugins/relay/src/shared/config-assignment-patch.ts.
+// Generic token sanitization must not strip Codex auth-json payloads that are intentionally base64 encoded.
+const normalizeAdapters = (value: unknown): Record<string, unknown> | undefined => {
+  if (!isRecord(value)) return undefined
+  const codex = normalizeCodexAdapter(value.codex)
+  return codex == null ? undefined : { codex }
+}
+
 export const filterRelayConfigPatch = (
   patch: RelayConfigPatch | undefined,
   allowedFields?: RelayConfigSafeField[]
@@ -96,6 +176,10 @@ export const filterRelayConfigPatch = (
 
   const allowed = new Set(allowedFields ?? RELAY_CONFIG_SAFE_FIELDS)
   const filtered: RelayConfigPatch = {}
+  const adapters = normalizeAdapters(patch.adapters)
+  if (allowed.has('adapters') && adapters != null) {
+    filtered.adapters = adapters
+  }
   if (allowed.has('defaultModelService') && typeof patch.defaultModelService === 'string') {
     filtered.defaultModelService = patch.defaultModelService
   }

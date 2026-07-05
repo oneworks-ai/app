@@ -1,8 +1,19 @@
+/* eslint-disable max-lines -- relay option normalization keeps official presets and capability flags together. */
 import { hostname } from 'node:os'
+import process from 'node:process'
 
 import {
   DEFAULT_OFFICIAL_RELAY_SERVER_ID,
+  LOCAL_RELAY_SERVER_ID,
+  OFFICIAL_RELAY_CLOUDFLARE_BASE_URL,
+  OFFICIAL_RELAY_CLOUDFLARE_DEV_BASE_URL,
+  OFFICIAL_RELAY_CLOUDFLARE_DEV_SERVER_ID,
   OFFICIAL_RELAY_CLOUDFLARE_SERVER_ID,
+  OFFICIAL_RELAY_VERCEL_BASE_URL,
+  OFFICIAL_RELAY_VERCEL_DEV_BASE_URL,
+  OFFICIAL_RELAY_VERCEL_DEV_SERVER_ID,
+  OFFICIAL_RELAY_VERCEL_SERVER_ID,
+  officialRelayDevelopmentServicePresets,
   officialRelayServicePresets
 } from '../shared/official-services.js'
 import type { RelayOptions, RelayServerOptions } from './types.js'
@@ -23,6 +34,14 @@ export interface ResolvedRelayServer extends RelayServerOptions {
 const OFFICIAL_RELAY_OPTION_DEFAULTS = {
   enableOfficialCloudflareRelay: true,
   enableOfficialVercelRelay: true
+}
+
+const shouldShowOfficialDevelopmentServers = (options: Record<string, unknown>) => {
+  const nodeEnv = process.env.NODE_ENV
+  return toBoolean(
+    options.enableOfficialDevelopmentRelay,
+    process.env.ONEWORKS_RELAY_OFFICIAL_DEV_SERVERS === '1' || (nodeEnv !== 'production' && nodeEnv !== 'test')
+  )
 }
 
 const serverIdFromBaseUrl = (baseUrl: string, index: number) => {
@@ -81,9 +100,15 @@ const readOfficialServiceFlags = (options: Record<string, unknown>) => ({
 
 const readOfficialServers = (options: Record<string, unknown>) => {
   const flags = readOfficialServiceFlags(options)
-  return officialRelayServicePresets
+  const presets = shouldShowOfficialDevelopmentServers(options)
+    ? [
+      ...officialRelayServicePresets,
+      ...officialRelayDevelopmentServicePresets
+    ]
+    : officialRelayServicePresets
+  return presets
     .filter(preset =>
-      preset.id === OFFICIAL_RELAY_CLOUDFLARE_SERVER_ID
+      preset.platform === 'Cloudflare'
         ? flags.cloudflare
         : flags.vercel
     )
@@ -117,6 +142,52 @@ export const resolveRelayServers = (options: Record<string, unknown>): ResolvedR
   ]
 }
 
+const resolveServerAlias = (value: string) => {
+  const normalized = value.trim().toLowerCase()
+  switch (normalized) {
+    case '':
+      return DEFAULT_OFFICIAL_RELAY_SERVER_ID
+    case LOCAL_RELAY_SERVER_ID:
+    case 'localhost':
+      return LOCAL_RELAY_SERVER_ID
+    case 'cf':
+    case 'cloudflare':
+    case 'official-cf':
+    case 'official-cloudflare':
+    case OFFICIAL_RELAY_CLOUDFLARE_SERVER_ID:
+    case OFFICIAL_RELAY_CLOUDFLARE_BASE_URL:
+      return OFFICIAL_RELAY_CLOUDFLARE_SERVER_ID
+    case 'cf-dev':
+    case 'cloudflare-dev':
+    case 'official-cf-dev':
+    case 'official-cloudflare-dev':
+    case OFFICIAL_RELAY_CLOUDFLARE_DEV_SERVER_ID:
+    case OFFICIAL_RELAY_CLOUDFLARE_DEV_BASE_URL:
+      return OFFICIAL_RELAY_CLOUDFLARE_DEV_SERVER_ID
+    case 'vc':
+    case 'vercel':
+    case 'official-vc':
+    case 'official-vercel':
+    case OFFICIAL_RELAY_VERCEL_SERVER_ID:
+    case OFFICIAL_RELAY_VERCEL_BASE_URL:
+      return OFFICIAL_RELAY_VERCEL_SERVER_ID
+    case 'vc-dev':
+    case 'vercel-dev':
+    case 'official-vc-dev':
+    case 'official-vercel-dev':
+    case OFFICIAL_RELAY_VERCEL_DEV_SERVER_ID:
+    case OFFICIAL_RELAY_VERCEL_DEV_BASE_URL:
+      return OFFICIAL_RELAY_VERCEL_DEV_SERVER_ID
+    default:
+      return normalized
+  }
+}
+
+const serverFromUrl = (value: string, index: number): ResolvedRelayServer | undefined => {
+  if (!/^https?:\/\//iu.test(value)) return undefined
+  return normalizeRelayServer({ baseUrl: value }, index)
+}
+
 export const resolveActiveRelayServer = (
   options: Record<string, unknown>,
   requestedServerId?: string
@@ -124,8 +195,15 @@ export const resolveActiveRelayServer = (
   const servers = resolveRelayServers(options)
   const requested = toString(requestedServerId)
   if (requested !== '') {
-    const requestedServerId = slugify(requested)
-    return servers.find(server => server.id === requestedServerId)
+    const urlServer = serverFromUrl(requested, servers.length)
+    if (urlServer != null) return urlServer
+    const requestedServerId = slugify(resolveServerAlias(requested))
+    return servers.find(server =>
+      server.id === requestedServerId ||
+      slugify(server.name) === requestedServerId ||
+      slugify(server.platform ?? '') === requestedServerId ||
+      slugify(server.remoteBaseUrl) === requestedServerId
+    )
   }
   const active = toString(options.activeServerId)
   if (active !== '') {
@@ -145,6 +223,10 @@ export const normalizeOptions = (options: Record<string, unknown>): RelayOptions
     deviceName: toString(options.deviceName) || hostname(),
     autoConnect: toBoolean(options.autoConnect, false),
     capabilities: {
+      workspaceLauncher: toBoolean(
+        options.exposeWorkspaceLauncher,
+        process.env.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager'
+      ),
       sessions: toBoolean(options.exposeSessions, true),
       terminal: toBoolean(options.exposeTerminal, false),
       workspaceFiles: toBoolean(options.exposeWorkspaceFiles, false)

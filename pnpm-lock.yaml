@@ -169,6 +169,9 @@ importers:
       '@oneworks/runtime-store':
         specifier: workspace:*
         version: link:../../packages/runtime-store
+      '@oneworks/server':
+        specifier: workspace:*
+        version: link:../server
       '@oneworks/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -1078,9 +1081,19 @@ importers:
 
   packages/plugins/relay:
     dependencies:
+      '@oneworks/components':
+        specifier: workspace:*
+        version: link:../../components
       '@oneworks/utils':
         specifier: workspace:*
         version: link:../../utils
+      ws:
+        specifier: ^8.17.0
+        version: 8.19.0
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
 
   packages/plugins/standard-dev: {}
 

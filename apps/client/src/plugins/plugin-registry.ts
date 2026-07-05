@@ -1,5 +1,7 @@
 /* eslint-disable max-lines -- plugin registry centralizes scoped runtime registrations and cleanup semantics. */
 
+import { buildApiUrl } from '#~/api/base'
+
 import { isPluginContributionGroupDisabled, isPluginContributionItemDisabled } from './plugin-contribution-preferences'
 import type {
   PluginCleanup,
@@ -211,7 +213,7 @@ export class PluginRegistry {
       throw new Error(`Plugin command "${commandId}" is not registered`)
     }
     const response = await fetch(
-      `/api/plugins/${encodeURIComponent(targetScope)}/commands/${encodeURIComponent(targetCommandId)}`,
+      buildApiUrl(`/api/plugins/${encodeURIComponent(targetScope)}/commands/${encodeURIComponent(targetCommandId)}`),
       {
         body: JSON.stringify({ payload }),
         credentials: 'include',

@@ -24,7 +24,9 @@ describe('agentRoomsRouter', () => {
     deleteRoom: vi.fn(),
     ensureRoomForHostSession: vi.fn(),
     getDetail: vi.fn(),
+    getRoomForHostSession: vi.fn(),
     listRooms: vi.fn(),
+    listRoomSummaries: vi.fn(),
     respondInteraction: vi.fn(),
     updateRoomMetadata: vi.fn(),
     upsertMember: vi.fn(),
@@ -70,6 +72,52 @@ describe('agentRoomsRouter', () => {
 
     expect(service.listRooms).toHaveBeenCalledWith('archived')
     expect(ctx.body).toEqual({ rooms: [{ id: 'room-archived', title: 'Archived', archivedAt: 1 }] })
+  })
+
+  it('returns summary room lists without resolving full room details', async () => {
+    service.listRoomSummaries.mockReturnValue([{
+      id: 'room-summary',
+      title: 'Summary room',
+      activeRunCount: 1,
+      pendingCount: 0,
+      sessionIds: ['session-a']
+    }])
+
+    const handler = findRouteHandler('/summary', 'GET')
+    const ctx = { body: undefined }
+    await handler(ctx)
+
+    expect(service.listRoomSummaries).toHaveBeenCalledWith()
+    expect(service.getDetail).not.toHaveBeenCalled()
+    expect(ctx.body).toEqual({
+      rooms: [{
+        id: 'room-summary',
+        title: 'Summary room',
+        activeRunCount: 1,
+        pendingCount: 0,
+        sessionIds: ['session-a']
+      }]
+    })
+  })
+
+  it('returns a room by host session without listing every room', async () => {
+    const room = {
+      id: 'room-host-session',
+      title: 'Host session room',
+      hostSessionId: 'session-host'
+    }
+    service.getRoomForHostSession.mockReturnValue(room)
+
+    const handler = findRouteHandler('/by-host-session/:sessionId', 'GET')
+    const ctx = {
+      params: { sessionId: 'session-host' },
+      body: undefined
+    }
+    await handler(ctx)
+
+    expect(service.getRoomForHostSession).toHaveBeenCalledWith('session-host')
+    expect(service.listRooms).not.toHaveBeenCalled()
+    expect(ctx.body).toEqual({ room })
   })
 
   it('updates room archive and favorite metadata through the service layer', async () => {

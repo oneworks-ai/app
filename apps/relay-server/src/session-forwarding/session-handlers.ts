@@ -7,7 +7,8 @@ import { recordRelayTraceEvent, traceContextFromRequest } from '../telemetry/tra
 import type { RelayServerArgs, RelayStore } from '../types.js'
 import { canAccessForwardingSession, canUpdateDeviceSnapshot } from './auth.js'
 import { sendForbidden } from './http.js'
-import { getDeviceSessionSnapshot, updateDeviceSessionSnapshot } from './jobs.js'
+import { getDeviceSessionSnapshot, pruneSessionForwardingJobs, updateDeviceSessionSnapshot } from './jobs.js'
+import { clearForwardingPayload, clearForwardingResult } from './payloads.js'
 import { persistStore, requireDeviceAccess } from './route-context.js'
 import { normalizeForwardingSessions } from './store.js'
 
@@ -50,12 +51,22 @@ export const handleSnapshotUpdate = async (
     sessions: normalizeForwardingSessions(deviceId, body.sessions),
     updatedAt: new Date().toISOString()
   })
-  await persistStore(storeRepository, store)
-  recordRelayTraceEvent(telemetry, 'info', 'relay.forwarding.sessions_snapshot', {
-    ...traceContextFromRequest(req),
-    deviceId,
-    sessionCount: snapshot.sessions.length,
-    userId: access.device.userId
-  })
-  sendJson(res, 200, snapshot, args.allowOrigin)
+  const prunedJobs = pruneSessionForwardingJobs(store)
+  const { changed, ...publicSnapshot } = snapshot
+  if (changed || prunedJobs.length > 0) {
+    await Promise.all(prunedJobs.map(async job => {
+      await clearForwardingPayload(job.id)
+      await clearForwardingResult(job.id)
+    }))
+    await persistStore(storeRepository, store)
+  }
+  if (changed) {
+    recordRelayTraceEvent(telemetry, 'info', 'relay.forwarding.sessions_snapshot', {
+      ...traceContextFromRequest(req),
+      deviceId,
+      sessionCount: snapshot.sessions.length,
+      userId: access.device.userId
+    })
+  }
+  sendJson(res, 200, publicSnapshot, args.allowOrigin)
 }

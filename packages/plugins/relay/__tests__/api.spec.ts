@@ -1,8 +1,11 @@
 /* eslint-disable max-lines -- relay scoped API tests cover account, login, config refresh, and team config sharing routes. */
 import { Buffer } from 'node:buffer'
+import { createHash } from 'node:crypto'
 
+import { ONEWORKS_AUTH_STORE_VERSION, writeOneWorksAuthStore } from '@oneworks/utils/auth-store'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { createRelayDeviceStore } from '../src/server/store.js'
 import { createRelayConfigSnapshotStore } from '../src/shared/config-cache.js'
 import {
   DEFAULT_OFFICIAL_RELAY_SERVER_ID,
@@ -12,6 +15,22 @@ import { cleanupPluginFixtures, createPluginHarness, readDeviceStore, stubRelayF
 import type { RelayPluginStatus } from './helpers.js'
 
 afterEach(cleanupPluginFixtures)
+
+const createTestRemoteWorkspaceId = (input: {
+  deviceId: string
+  serverId: string
+  workspaceFolder: string
+}) =>
+  `w_${
+    createHash('sha256')
+      .update(input.serverId)
+      .update('\0')
+      .update(input.deviceId)
+      .update('\0')
+      .update(input.workspaceFolder)
+      .digest('base64url')
+      .slice(0, 32)
+  }`
 
 describe('relay plugin scoped API', () => {
   it('registers scoped API metadata for the host runtime', async () => {
@@ -85,6 +104,70 @@ describe('relay plugin scoped API', () => {
     expect(JSON.stringify(response.body)).not.toContain('lab-token')
   })
 
+  it('creates fixture profile access tokens without calling the remote server', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false
+    })
+    await writeOneWorksAuthStore({
+      accounts: [{
+        accountKey: 'team:owner',
+        email: 'owner@team.test',
+        enabled: true,
+        loginId: 'owner',
+        name: 'Owner Team',
+        role: 'owner',
+        serverId: 'team',
+        serverUrl: 'https://relay.team.example.test',
+        sessionExpiresAt: '2999-01-01T00:00:00.000Z',
+        sessionToken: 'relay-fixture:team:owner',
+        userId: 'owner'
+      }],
+      servers: {
+        team: {
+          id: 'team',
+          name: 'Team Workspace',
+          platform: 'cloudflare',
+          url: 'https://relay.team.example.test'
+        }
+      },
+      version: ONEWORKS_AUTH_STORE_VERSION
+    })
+
+    const response = await apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({
+        accountKey: 'team:owner',
+        name: 'Codex UI Test Token',
+        permissionGroupMode: 'all',
+        scope: 'user'
+      })),
+      method: 'POST',
+      path: 'profile/access-tokens'
+    }) as {
+      body?: {
+        result?: {
+          accessToken?: string
+          token?: { name?: string; tokenPreview?: string }
+        }
+        security?: { accessTokens?: Array<{ name?: string }> }
+      }
+      status?: number
+    }
+
+    expect(response.status).toBe(200)
+    expect(response.body?.result?.accessToken).toMatch(/^owrt_fixture_/u)
+    expect(response.body?.result?.token).toMatchObject({
+      name: 'Codex UI Test Token'
+    })
+    expect(response.body?.result?.token?.tokenPreview).not.toBe(response.body?.result?.accessToken)
+    expect(response.body?.security?.accessTokens).toEqual([
+      expect.objectContaining({ name: 'Codex UI Test Token' })
+    ])
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('previews relay team config share drafts without echoing plaintext secrets', async () => {
     const { apis } = await createPluginHarness({})
 
@@ -127,6 +210,114 @@ describe('relay plugin scoped API', () => {
     expect(JSON.stringify(response.body)).not.toContain('sk-local-secret')
   })
 
+  it('loads relay team config targets through url-matched global auth accounts', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input))
+      const json = (body: unknown) =>
+        new Response(JSON.stringify(body), {
+          headers: { 'content-type': 'application/json' },
+          status: 200
+        })
+      if (url.pathname === '/api/relay/teams') {
+        return json({
+          teams: [
+            {
+              id: 'team-1',
+              name: 'Relay Team Config UI Smoke',
+              role: 'owner',
+              slug: 'relay-team-config-ui-smoke'
+            }
+          ]
+        })
+      }
+      if (url.pathname === '/api/relay/teams/team-1/config-profiles') {
+        return json({
+          profiles: [
+            {
+              id: 'profile-1',
+              name: 'Shared Codex Defaults',
+              status: 'published',
+              teamId: 'team-1'
+            }
+          ]
+        })
+      }
+      return new Response(JSON.stringify({ error: `unexpected ${url.pathname}` }), {
+        headers: { 'content-type': 'application/json' },
+        status: 404
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [
+        {
+          id: 'local',
+          baseUrl: 'http://127.0.0.1:48890'
+        }
+      ]
+    })
+    await writeOneWorksAuthStore({
+      accounts: [
+        {
+          accountKey: 'http-127-0-0-1-48890:owner',
+          email: 'owner@local.test',
+          enabled: true,
+          loginId: 'owner',
+          name: 'Owner Local',
+          role: 'owner',
+          serverId: 'http-127-0-0-1-48890',
+          serverUrl: 'http://127.0.0.1:48890',
+          sessionToken: 'global-session-token',
+          userId: 'owner'
+        }
+      ],
+      servers: {
+        'http-127-0-0-1-48890': {
+          id: 'http-127-0-0-1-48890',
+          name: 'Local',
+          url: 'http://127.0.0.1:48890'
+        }
+      },
+      version: ONEWORKS_AUTH_STORE_VERSION
+    })
+
+    const response = await apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({
+        accountKey: 'http-127-0-0-1-48890:owner',
+        serverId: 'local'
+      })),
+      method: 'POST',
+      path: 'config-share-targets'
+    }) as {
+      body?: {
+        profilesByTeamId?: Record<string, unknown[]>
+        teams?: Array<{ id?: string; name?: string }>
+      }
+      status?: number
+    }
+    const calls = fetchMock.mock.calls.map(([url, init]) => ({
+      headers: init?.headers as Record<string, string> | undefined,
+      path: new URL(String(url)).pathname
+    }))
+
+    expect(response.status).toBe(200)
+    expect(response.body?.teams).toMatchObject([
+      {
+        id: 'team-1',
+        name: 'Relay Team Config UI Smoke'
+      }
+    ])
+    expect(response.body?.profilesByTeamId?.['team-1']).toMatchObject([
+      {
+        id: 'profile-1',
+        name: 'Shared Codex Defaults'
+      }
+    ])
+    expect(calls.every(call => call.headers?.authorization === 'Bearer global-session-token')).toBe(true)
+  })
+
   it('publishes relay team config drafts through the user session without leaking secrets', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input))
@@ -166,6 +357,9 @@ describe('relay plugin scoped API', () => {
       if (url.pathname === '/api/relay/config-snapshot') {
         return json({ assignments: [], hash: 'empty', version: 'empty' })
       }
+      if (url.pathname === '/api/relay/config/global') {
+        return json({ personalConfigSnapshot: null })
+      }
       if (url.pathname === '/api/relay/devices') {
         return json({ devices: [] })
       }
@@ -201,7 +395,6 @@ describe('relay plugin scoped API', () => {
         expect(JSON.stringify(requestBody)).not.toContain('sk-team-secret')
         expect(requestBody).toMatchObject({
           configPatch: {
-            defaultModelService: 'openai',
             modelServices: {
               openai: {
                 apiBaseUrl: 'https://api.openai.com/v1'
@@ -252,7 +445,7 @@ describe('relay plugin scoped API', () => {
       })
     })
     vi.stubGlobal('fetch', fetchMock)
-    const { apis } = await createPluginHarness({
+    const { apis, projectHome } = await createPluginHarness({
       enableOfficialCloudflareRelay: false,
       enableOfficialVercelRelay: false,
       servers: [
@@ -554,6 +747,331 @@ describe('relay plugin scoped API', () => {
     expect(loginUrl.searchParams.get('server_id')).toBe(DEFAULT_OFFICIAL_RELAY_SERVER_ID)
   })
 
+  it('does not reopen remote workspace proxies for offline devices', async () => {
+    const workspaceFolder = '/workspaces/offline-app'
+    const workspaceId = createTestRemoteWorkspaceId({
+      deviceId: 'remote-device',
+      serverId: 'prod',
+      workspaceFolder
+    })
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === 'https://relay.example/api/relay/devices') {
+        return new Response(
+          JSON.stringify({
+            devices: [{
+              capabilities: { sessions: true, workspaceLauncher: true },
+              id: 'remote-device',
+              name: 'Linux Docker Smoke',
+              status: 'offline',
+              workspaceFolder
+            }]
+          }),
+          {
+            headers: { 'content-type': 'application/json' },
+            status: 200
+          }
+        )
+      }
+      return new Response(JSON.stringify({}), {
+        headers: { 'content-type': 'application/json' },
+        status: 200
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis } = await createPluginHarness(
+      {
+        enableOfficialCloudflareRelay: false,
+        enableOfficialVercelRelay: false,
+        servers: [
+          {
+            id: 'prod',
+            baseUrl: 'https://relay.example'
+          }
+        ]
+      },
+      {
+        prepareProjectHome: async projectHome => {
+          await createRelayDeviceStore(projectHome).writeStore({
+            deviceId: 'local-device',
+            deviceName: 'Local Device',
+            deviceSecret: 'local-device-secret',
+            servers: {
+              prod: {
+                deviceToken: 'local-device-token',
+                id: 'prod',
+                registeredAt: '2026-06-15T00:00:00.000Z',
+                remoteBaseUrl: 'https://relay.example',
+                updatedAt: '2026-06-15T00:00:00.000Z'
+              }
+            }
+          })
+        }
+      }
+    )
+
+    const response = await apis.get('relay')?.handler?.({
+      body: Buffer.alloc(0),
+      method: 'GET',
+      path: `workspaces/${encodeURIComponent(workspaceId)}/connection`
+    }) as { body?: { error?: string }; status?: number }
+
+    expect(response.status).toBe(404)
+    expect(response.body?.error).toBe('Workspace not found.')
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).not.toContain(
+      'https://relay.example/api/relay/devices/remote-device/workspace/requests'
+    )
+  })
+
+  it('lists devices for relay servers stored only in the auth store', async () => {
+    const relayBaseUrl = 'http://127.0.0.1:48991'
+    const workspaceFolder = '/workspaces/linux-remote-a'
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), {
+        headers: { 'content-type': 'application/json' },
+        status: 200
+      })
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input))
+      const authorization = String((init?.headers as Record<string, string> | undefined)?.authorization ?? '')
+      if (url.origin === relayBaseUrl && url.pathname === '/api/relay/devices') {
+        expect(authorization).toBe('Bearer account-session-token')
+        return json({
+          devices: [{
+            alias: 'Linux Docker Smoke',
+            capabilities: { sessions: true, workspaceLauncher: true },
+            id: 'docker-device',
+            lastSeenAt: '2026-06-29T08:00:00.000Z',
+            name: 'linux-remote-a',
+            status: 'online',
+            workspaceFolder
+          }]
+        })
+      }
+      return new Response(JSON.stringify({ error: `Unexpected relay request: ${url.toString()}` }), {
+        headers: { 'content-type': 'application/json' },
+        status: 404
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [
+        {
+          id: 'local',
+          baseUrl: 'http://127.0.0.1:48890'
+        }
+      ]
+    })
+    await writeOneWorksAuthStore({
+      accounts: [{
+        accountKey: 'http-127-0-0-1-48991:docker',
+        email: 'docker-smoke@local.test',
+        enabled: true,
+        loginId: 'docker',
+        name: 'Docker Smoke',
+        role: 'owner',
+        serverId: 'http-127-0-0-1-48991',
+        serverUrl: relayBaseUrl,
+        sessionExpiresAt: '2999-01-01T00:00:00.000Z',
+        sessionToken: 'account-session-token',
+        userId: 'docker'
+      }],
+      servers: {
+        'http-127-0-0-1-48991': {
+          id: 'http-127-0-0-1-48991',
+          name: 'Docker Local',
+          url: relayBaseUrl
+        }
+      },
+      version: ONEWORKS_AUTH_STORE_VERSION
+    })
+
+    const response = await apis.get('relay')?.handler?.({
+      body: Buffer.alloc(0),
+      method: 'GET',
+      path: 'status'
+    }) as { body?: RelayPluginStatus; status?: number }
+    const authStoreOnlyServer = response.body?.servers?.find(server => server.id === 'http-127-0-0-1-48991')
+
+    expect(response.status).toBe(200)
+    expect(authStoreOnlyServer).toMatchObject({
+      account: {
+        email: 'docker-smoke@local.test',
+        name: 'Docker Smoke'
+      },
+      devices: [
+        expect.objectContaining({
+          id: 'docker-device',
+          status: 'online',
+          workspaceFolder
+        })
+      ],
+      id: 'http-127-0-0-1-48991',
+      name: 'Docker Local',
+      remoteBaseUrl: relayBaseUrl,
+      sessionAuthenticated: true
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens remote workspaces through the account session that sees the online device', async () => {
+    const relayBaseUrl = 'http://127.0.0.1:48890'
+    const workspaceFolder = '/workspaces/linux-remote-a'
+    const requests: Array<{ authorization: string; path: string }> = []
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), {
+        headers: { 'content-type': 'application/json' },
+        status: 200
+      })
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input))
+      const authorization = String((init?.headers as Record<string, string> | undefined)?.authorization ?? '')
+      requests.push({ authorization, path: url.pathname })
+      if (url.pathname === '/api/relay/devices') {
+        if (authorization === 'Bearer account-session-token') {
+          return json({
+            devices: [{
+              alias: 'Linux Docker Smoke',
+              capabilities: { sessions: true, workspaceLauncher: true },
+              id: 'docker-device',
+              lastSeenAt: '2026-06-29T08:00:00.000Z',
+              name: 'linux-remote-a',
+              status: 'online',
+              workspaceFolder
+            }]
+          })
+        }
+        return json({
+          devices: [{
+            capabilities: { sessions: true, workspaceLauncher: true },
+            id: 'stale-device',
+            lastSeenAt: '2026-06-20T08:00:00.000Z',
+            name: 'Linux Docker Smoke',
+            status: 'offline',
+            workspaceFolder
+          }]
+        })
+      }
+      if (url.pathname === '/api/relay/devices/docker-device/workspace/requests') {
+        return json({ job: { id: 'open-workspace-job' } })
+      }
+      if (url.pathname === '/api/relay/session-jobs/open-workspace-job') {
+        return json({ job: { id: 'open-workspace-job', status: 'succeeded' } })
+      }
+      if (url.pathname === '/api/relay/session-jobs/open-workspace-job/result') {
+        return json({
+          result: {
+            bodyBase64: Buffer.from(JSON.stringify({
+              serverBaseUrl: 'http://127.0.0.1:19000',
+              workspaceFolder
+            })).toString('base64'),
+            status: 200
+          }
+        })
+      }
+      return json({})
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis } = await createPluginHarness(
+      {
+        activeServerId: 'local',
+        enableOfficialCloudflareRelay: false,
+        enableOfficialVercelRelay: false,
+        servers: [
+          {
+            id: 'local',
+            baseUrl: relayBaseUrl
+          }
+        ]
+      },
+      {
+        prepareProjectHome: async projectHome => {
+          await createRelayDeviceStore(projectHome).writeStore({
+            deviceId: 'host-device',
+            deviceName: 'Host Device',
+            deviceSecret: 'host-device-secret',
+            servers: {
+              local: {
+                deviceToken: 'stale-device-token',
+                id: 'local',
+                registeredAt: '2026-06-15T00:00:00.000Z',
+                remoteBaseUrl: relayBaseUrl,
+                sessionToken: 'stale-session-token',
+                updatedAt: '2026-06-15T00:00:00.000Z'
+              }
+            }
+          })
+        }
+      }
+    )
+    await writeOneWorksAuthStore({
+      accounts: [{
+        accountKey: 'http-127-0-0-1-48890:docker',
+        email: 'docker-smoke@local.test',
+        enabled: true,
+        loginId: 'docker',
+        name: 'Docker Smoke',
+        role: 'owner',
+        serverId: 'http-127-0-0-1-48890',
+        serverUrl: relayBaseUrl,
+        sessionExpiresAt: '2999-01-01T00:00:00.000Z',
+        sessionToken: 'account-session-token',
+        userId: 'docker'
+      }],
+      servers: {
+        'http-127-0-0-1-48890': {
+          id: 'http-127-0-0-1-48890',
+          name: 'Local Alias',
+          url: relayBaseUrl
+        }
+      },
+      version: ONEWORKS_AUTH_STORE_VERSION
+    })
+
+    const statusResponse = await apis.get('relay')?.handler?.({
+      body: Buffer.alloc(0),
+      method: 'GET',
+      path: 'status'
+    }) as { body?: RelayPluginStatus; status?: number }
+    const openResponse = await apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({
+        deviceId: 'docker-device',
+        serverId: 'local',
+        workspaceFolder
+      })),
+      method: 'POST',
+      path: 'workspaces/open'
+    }) as { body?: { workspaceId?: string }; status?: number }
+    const workspaceRequest = requests.find(request =>
+      request.path === '/api/relay/devices/docker-device/workspace/requests'
+    )
+
+    expect(statusResponse.status).toBe(200)
+    expect(statusResponse.body?.servers?.find(server => server.id === 'local')?.devices).toEqual([
+      expect.objectContaining({
+        id: 'stale-device',
+        status: 'offline'
+      }),
+      expect.objectContaining({
+        id: 'docker-device',
+        status: 'online'
+      })
+    ])
+    expect(openResponse.status).toBe(200)
+    expect(openResponse.body?.workspaceId).toBe(createTestRemoteWorkspaceId({
+      deviceId: 'docker-device',
+      serverId: 'local',
+      workspaceFolder
+    }))
+    expect(workspaceRequest).toMatchObject({
+      authorization: 'Bearer account-session-token'
+    })
+    expect(requests.find(request => request.path === '/api/relay/devices/stale-device/workspace/requests'))
+      .toBeUndefined()
+  })
+
   it('uses login callback tokens to register the current device', async () => {
     const fetchMock = stubRelayFetch('callback-device-token')
     const { apis, projectHome } = await createPluginHarness({
@@ -575,21 +1093,59 @@ describe('relay plugin scoped API', () => {
       method: 'POST',
       path: 'login-callback'
     }) as { body?: RelayPluginStatus; status?: number }
+    const profileResponse = await apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({
+        accountKey: 'prod:owner'
+      })),
+      method: 'POST',
+      path: 'profile'
+    }) as { body?: Record<string, unknown>; status?: number }
     const store = await readDeviceStore(projectHome)
     const authMeInit = fetchMock.mock.calls.find(([url]) => String(url) === 'https://relay.example/api/auth/me')
       ?.[1] as RequestInit | undefined
     const registerInit = fetchMock.mock.calls.find(([url]) =>
       String(url) === 'https://relay.example/api/relay/devices/register'
     )?.[1] as RequestInit | undefined
+    const profileSecurityInit = fetchMock.mock.calls.find(([url]) =>
+      String(url) === 'https://relay.example/api/profile/security'
+    )?.[1] as RequestInit | undefined
+    const profileMessagesInit = fetchMock.mock.calls.find(([url]) =>
+      String(url) === 'https://relay.example/api/admin/messages'
+    )?.[1] as RequestInit | undefined
 
     expect(response.status).toBe(200)
+    expect(profileResponse.status).toBe(200)
     expect(response.body?.connection.state).toBe('registered')
+    expect(profileResponse.body?.user).toMatchObject({
+      email: 'owner@local.test',
+      id: 'owner',
+      name: 'Owner Local'
+    })
     expect(authMeInit?.headers).toMatchObject({
       authorization: 'Bearer sso-session-token'
     })
     expect(registerInit?.headers).toMatchObject({
       authorization: 'Bearer sso-session-token'
     })
+    expect(profileSecurityInit?.headers).toMatchObject({
+      authorization: 'Bearer sso-session-token'
+    })
+    expect(profileMessagesInit?.headers).toMatchObject({
+      authorization: 'Bearer sso-session-token'
+    })
+    expect(profileResponse.body?.messages).toEqual([
+      expect.objectContaining({
+        id: 'message-1',
+        title: '新设备登录提醒'
+      })
+    ])
+    expect(profileResponse.body?.invitations).toEqual([
+      expect.objectContaining({
+        id: 'invite-1',
+        teamName: 'Relay Demo Team'
+      })
+    ])
+    expect(JSON.stringify(profileResponse.body)).not.toContain('sso-session-token')
     expect(response.body?.servers?.[0]).toMatchObject({
       sessionAuthenticated: true,
       sessionExpiresAt: '2999-01-01T00:00:00.000Z'

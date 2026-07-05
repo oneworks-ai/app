@@ -24,8 +24,13 @@ import {
 } from './managed-plugin-package'
 
 const DISABLE_GLOBAL_CONFIG_ENV = '__ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__'
+const DISABLE_DEFAULT_OFFICIAL_PLUGINS_ENV = '__ONEWORKS_PROJECT_DISABLE_DEFAULT_OFFICIAL_PLUGINS__'
 const DIRECTORY_MANIFEST_FILES = ['plugin.json', 'plugin.yaml', 'plugin.yml', 'package.json'] as const
 const KNOWN_PLUGIN_ASSET_DIRS = ['rules', 'skills', 'specs', 'entities', 'mcp', 'hooks', 'client', 'server', 'plugins']
+const DEFAULT_OFFICIAL_PLUGIN_CONFIGS: PluginConfig = [
+  { id: '@oneworks/plugin-relay' }
+]
+const DEFAULT_OFFICIAL_PLUGIN_PACKAGE_IDS = new Set(['@oneworks/plugin-relay', 'relay'])
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -411,11 +416,31 @@ const resolvePackageReference = async (
   cwd: string,
   id: string,
   version?: string,
-  options?: { autoInstallManaged?: boolean }
+  options?: { autoInstallManaged?: boolean; preferInstalled?: boolean }
 ): Promise<ResolvedPluginReference> => {
   const candidates = shouldTryPrefixedPackageId(id)
     ? [id, `@oneworks/plugin-${id}`, `@vibe-forge/plugin-${id}`]
     : [id]
+
+  if (options?.preferInstalled === true) {
+    for (const candidate of candidates) {
+      const rootDir = resolveInstalledPackageRoot(cwd, candidate)
+      if (rootDir != null) {
+        const resolvedBy = candidate === id
+          ? 'direct'
+          : candidate.startsWith('@oneworks/')
+          ? 'oneworks-prefix'
+          : 'vibe-forge-prefix'
+        return {
+          sourceType: 'package',
+          requestId: id,
+          packageId: candidate,
+          resolvedBy,
+          rootDir
+        }
+      }
+    }
+  }
 
   for (const candidate of candidates) {
     const activeReference = await resolveActiveManagedPackageReference(id, candidate, version)
@@ -664,13 +689,18 @@ const resolveChildReference = async (
 const resolveTopLevelReference = async (
   cwd: string,
   config: PluginInstanceConfig,
-  options?: { autoInstallManaged?: boolean }
+  options?: { autoInstallManaged?: boolean; preferBundledOfficialPlugins?: boolean }
 ) => {
   if (isTopLevelDirectoryReference(config.id)) {
     return resolveDirectoryReference(cwd, config.id)
   }
 
-  return await resolvePackageReference(cwd, config.id, config.version, options)
+  return await resolvePackageReference(cwd, config.id, config.version, {
+    autoInstallManaged: options?.autoInstallManaged,
+    preferInstalled: options?.preferBundledOfficialPlugins === true &&
+      config.version == null &&
+      DEFAULT_OFFICIAL_PLUGIN_PACKAGE_IDS.has(config.id)
+  })
 }
 
 interface ResolvePluginInstanceParams {
@@ -683,6 +713,7 @@ interface ResolvePluginInstanceParams {
   resolvedReference?: ResolvedPluginReference
   ancestorKeys?: string[]
   autoInstallManaged?: boolean
+  preferBundledOfficialPlugins?: boolean
 }
 
 const resolveInstance = async (
@@ -706,7 +737,8 @@ const resolveInstance = async (
     ? {
       reference: resolvedReference ??
         await resolveTopLevelReference(cwd, config as PluginInstanceConfig, {
-          autoInstallManaged: params.autoInstallManaged
+          autoInstallManaged: params.autoInstallManaged,
+          preferBundledOfficialPlugins: params.preferBundledOfficialPlugins
         }),
       manifestChild: undefined
     }
@@ -768,7 +800,8 @@ const resolveInstance = async (
           children: []
         },
         ancestorKeys: nextAncestorKeys,
-        autoInstallManaged: params.autoInstallManaged
+        autoInstallManaged: params.autoInstallManaged,
+        preferBundledOfficialPlugins: params.preferBundledOfficialPlugins
       })
     )
   )
@@ -821,6 +854,11 @@ const isGlobalPluginDiscoveryDisabled = (
     env?: Record<string, string | null | undefined>
   }
 ) => options?.disableGlobalConfig === true || options?.env?.[DISABLE_GLOBAL_CONFIG_ENV] === '1'
+
+const shouldIncludeDefaultOfficialPlugins = (params: {
+  env?: Record<string, string | null | undefined>
+  includeDefaultOfficialPlugins?: boolean
+}) => params.includeDefaultOfficialPlugins === true && params.env?.[DISABLE_DEFAULT_OFFICIAL_PLUGINS_ENV] !== '1'
 
 const isDiscoverablePluginRoot = async (rootDir: string) => {
   if (hasDirectoryPluginManifest(rootDir)) return true
@@ -885,9 +923,16 @@ export const resolveRuntimePluginConfig = async (params: {
   plugins?: PluginConfig
   env?: Record<string, string | null | undefined>
   disableGlobalConfig?: boolean
+  includeDefaultOfficialPlugins?: boolean
 }): Promise<PluginConfig | undefined> => {
   const discovered = await discoverRuntimePluginConfigs(params)
-  return mergePluginConfigs(discovered.autoDiscovered, params.plugins)
+  return mergePluginConfigs(
+    [
+      ...(shouldIncludeDefaultOfficialPlugins(params) ? DEFAULT_OFFICIAL_PLUGIN_CONFIGS : []),
+      ...discovered.autoDiscovered
+    ],
+    params.plugins
+  )
 }
 
 const toResolvedPluginKey = (reference: ResolvedPluginReference) => (
@@ -928,6 +973,7 @@ export const resolveConfiguredPluginInstances = async (params: {
   overlaySource?: string
   includeDisabled?: boolean
   autoInstallManaged?: boolean
+  preferBundledOfficialPlugins?: boolean
 }) => {
   const pluginConfigs = normalizePluginConfig(
     params.plugins,
@@ -937,7 +983,8 @@ export const resolveConfiguredPluginInstances = async (params: {
   const resolvedKeys: string[] = []
   for (const [index, config] of (pluginConfigs ?? []).entries()) {
     const reference = await resolveTopLevelReference(params.cwd, config, {
-      autoInstallManaged: params.autoInstallManaged
+      autoInstallManaged: params.autoInstallManaged,
+      preferBundledOfficialPlugins: params.preferBundledOfficialPlugins
     })
     const key = toResolvedPluginKey(reference)
     removeResolvedPluginByKey(instances, resolvedKeys, key)
@@ -949,7 +996,8 @@ export const resolveConfiguredPluginInstances = async (params: {
         instancePath: String(index),
         overlaySource: params.overlaySource,
         resolvedReference: reference,
-        autoInstallManaged: params.autoInstallManaged
+        autoInstallManaged: params.autoInstallManaged,
+        preferBundledOfficialPlugins: params.preferBundledOfficialPlugins
       })
     )
     resolvedKeys.push(key)

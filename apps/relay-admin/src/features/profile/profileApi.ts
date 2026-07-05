@@ -76,8 +76,38 @@ export interface RelayProfilePasskeyOptionsResponse {
   options: PublicKeyCredentialCreationOptionsJSON
 }
 
+export interface RelayPersonalDocumentCounts {
+  agents: number
+}
+
+export interface RelayPersonalDocumentSnapshotSummary {
+  countsByKind: RelayPersonalDocumentCounts
+  documentCount: number
+  hash: string
+  sourceDeviceId?: string
+  totalSizeBytes: number
+  updatedAt: string
+  version: 1
+}
+
+export interface RelayPersonalConfigSnapshotSummary {
+  documents?: RelayPersonalDocumentSnapshotSummary
+  hash: string
+  sourceDeviceId?: string
+  updatedAt: string
+  userId: string
+  version: string
+}
+
+export interface RelayPersonalConfigSnapshotResponse {
+  personalConfigSnapshot: RelayPersonalConfigSnapshotSummary | null
+}
+
 export const fetchRelayProfileSecurity = async (token: string) =>
   await requestJson<RelayProfileSecuritySummary>(token, '/api/profile/security')
+
+export const fetchRelayPersonalGlobalConfig = async (token: string) =>
+  await requestJson<RelayPersonalConfigSnapshotResponse>(token, '/api/relay/config/global')
 
 export const deleteRelayProfileAccount = async (token: string) =>
   await requestJson<{ deleted: boolean; userId: string }>(token, '/api/profile/account', {

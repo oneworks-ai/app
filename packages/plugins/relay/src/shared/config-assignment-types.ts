@@ -1,18 +1,20 @@
 export const RELAY_CONFIG_SAFE_FIELDS = [
-  'defaultModelService',
   'modelServices',
   'recommendedModels',
   'plugins',
   'marketplaces',
   'skills',
   'skillsMeta',
-  'skillRegistries'
+  'skillRegistries',
+  'adapters'
 ] as const
 
 export type RelayConfigSafeField = typeof RELAY_CONFIG_SAFE_FIELDS[number]
 
+export const RELAY_TEAM_CONFIG_SAFE_FIELDS = RELAY_CONFIG_SAFE_FIELDS.filter(field => field !== 'adapters')
+
 export interface RelayConfigPatch {
-  defaultModelService?: string
+  adapters?: Record<string, unknown>
   marketplaces?: Record<string, unknown>
   modelServices?: Record<string, unknown>
   plugins?: unknown[] | Record<string, unknown>

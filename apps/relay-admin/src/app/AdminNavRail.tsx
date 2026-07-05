@@ -156,6 +156,7 @@ export const AdminNavRail = ({
   }, [])
   const normalizedPathname = location.pathname.replace(/\/+$/u, '')
   const isMessageCenterActive = normalizedPathname === '/messages' || normalizedPathname.startsWith('/messages/')
+  // Keep this lower-left account popover in sync with the Relay plugin footer account popover.
   const accountMenuItems = useMemo<MenuProps['items']>(() => {
     const accountItems = visibleAccounts.length === 0
       ? [{

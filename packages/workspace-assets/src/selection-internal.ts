@@ -17,7 +17,7 @@ import type {
 } from '@oneworks/types'
 import { matchesDeclaredSkillSelector, normalizePath } from '@oneworks/utils'
 import { mergePluginConfigs, normalizePluginConfig } from '@oneworks/utils/plugin-resolver'
-import { glob } from 'fast-glob'
+import fg from 'fast-glob'
 
 import {
   createRemoteRuleDefinition,
@@ -445,7 +445,7 @@ const resolvePathMatchedRules = async (
   ref: string
 ) => {
   const matchedPaths = new Set(
-    (await glob(ref, {
+    (await fg(ref, {
       cwd: bundle.cwd,
       absolute: true
     })).map(normalizePath)

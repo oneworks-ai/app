@@ -28,6 +28,23 @@
       "id": "./packages/plugins/demo-extension",
       "scope": "demo-extension",
       "watch": true
+    },
+    {
+      "id": "./packages/plugins/relay",
+      "scope": "relay",
+      "watch": true,
+      "options": {
+        "servers": [
+          {
+            "id": "local",
+            "name": "Local",
+            "protocol": "http",
+            "server": "127.0.0.1",
+            "port": 48890
+          }
+        ],
+        "activeServerId": "local"
+      }
     }
   ],
   "modelServices": {

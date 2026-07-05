@@ -14,6 +14,7 @@ export interface RelayServerOptionsDraft {
   id?: string
   name?: string
   remoteBaseUrl: string
+  useActiveServerId?: boolean
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -68,7 +69,9 @@ export const buildRelayServerOptionsUpdate = (
   const existingServers = Array.isArray(options.servers)
     ? options.servers.filter(isRecord).map(server => ({ ...server } as RelayServerOptionRecord))
     : []
-  const targetId = cleanText(draft.id) ?? cleanText(options.activeServerId) ?? normalized.id
+  const targetId = cleanText(draft.id) ??
+    (draft.useActiveServerId === true ? cleanText(options.activeServerId) : undefined) ??
+    normalized.id
   const existingIndex = existingServers.findIndex(server => server.id === targetId)
   const existingServer = existingIndex >= 0 ? existingServers[existingIndex] : {}
   const nextServer: RelayServerOptionRecord = {

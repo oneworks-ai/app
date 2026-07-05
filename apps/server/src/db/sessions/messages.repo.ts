@@ -1,8 +1,31 @@
+/* eslint-disable max-lines -- message persistence keeps dedupe keys, cursor windows, and copy helpers together. */
 import { createHash } from 'node:crypto'
 
 import { safeJsonStringify } from '#~/utils/json.js'
 
 import type { SqliteDatabase } from '../sqlite'
+
+export interface SessionMessageListOptions {
+  afterId?: number
+  beforeId?: number
+  limit?: number
+}
+
+export interface SessionMessageWindowCursor {
+  firstId?: number
+  lastId?: number
+}
+
+export interface SessionMessageWindowResult {
+  cursor: SessionMessageWindowCursor
+  messages: unknown[]
+}
+
+interface SessionMessageRow {
+  data: string
+  eventKey: string | null
+  id: number
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -116,9 +139,7 @@ export function createMessagesRepo(db: SqliteDatabase) {
     return true
   }
 
-  const list = (sessionId: string): unknown[] => {
-    const stmt = db.prepare('SELECT data, eventKey FROM messages WHERE sessionId = ? ORDER BY id ASC')
-    const rows = stmt.all<{ data: string; eventKey: string | null }>(sessionId)
+  const mapRowsWithCursor = (rows: SessionMessageRow[]): SessionMessageWindowResult => {
     const seenEventKeys = new Set<string>()
     const messages: unknown[] = []
     for (const row of rows) {
@@ -130,7 +151,76 @@ export function createMessagesRepo(db: SqliteDatabase) {
       }
       messages.push(JSON.parse(row.data) as unknown)
     }
-    return messages
+    const firstRow = rows[0]
+    const lastRow = rows[rows.length - 1]
+    return {
+      cursor: {
+        ...(firstRow == null ? {} : { firstId: firstRow.id }),
+        ...(lastRow == null ? {} : { lastId: lastRow.id })
+      },
+      messages
+    }
+  }
+
+  const mapRows = (rows: SessionMessageRow[]): unknown[] => {
+    return mapRowsWithCursor(rows).messages
+  }
+
+  const listWithCursor = (sessionId: string): SessionMessageWindowResult => {
+    const stmt = db.prepare('SELECT id, data, eventKey FROM messages WHERE sessionId = ? ORDER BY id ASC')
+    return mapRowsWithCursor(stmt.all<SessionMessageRow>(sessionId))
+  }
+
+  const list = (sessionId: string): unknown[] => {
+    return listWithCursor(sessionId).messages
+  }
+
+  const listWindowWithCursor = (
+    sessionId: string,
+    options: SessionMessageListOptions
+  ): SessionMessageWindowResult => {
+    const limit = options.limit
+    if (limit == null) {
+      return listWithCursor(sessionId)
+    }
+
+    if (options.afterId != null) {
+      return mapRowsWithCursor(
+        db.prepare(`
+          SELECT id, data, eventKey FROM messages
+          WHERE sessionId = ? AND id > ?
+          ORDER BY id ASC
+          LIMIT ?
+        `).all<SessionMessageRow>(sessionId, options.afterId, limit)
+      )
+    }
+
+    const rows = options.beforeId == null
+      ? db.prepare(`
+        SELECT id, data, eventKey FROM messages
+        WHERE sessionId = ?
+        ORDER BY id DESC
+        LIMIT ?
+      `).all<SessionMessageRow>(sessionId, limit)
+      : db.prepare(`
+        SELECT id, data, eventKey FROM messages
+        WHERE sessionId = ? AND id < ?
+        ORDER BY id DESC
+        LIMIT ?
+      `).all<SessionMessageRow>(sessionId, options.beforeId, limit)
+
+    return mapRowsWithCursor(rows.reverse())
+  }
+
+  const listWindow = (sessionId: string, options: SessionMessageListOptions): unknown[] => {
+    return listWindowWithCursor(sessionId, options).messages
+  }
+
+  const findLatestSessionInfo = (sessionId: string): unknown | undefined => {
+    const rows = db.prepare(
+      'SELECT id, data, eventKey FROM messages WHERE sessionId = ? AND data LIKE ? ORDER BY id DESC LIMIT 50'
+    ).all<SessionMessageRow>(sessionId, '%"type":"session_info"%')
+    return mapRows(rows).find(event => isRecord(event) && event.type === 'session_info')
   }
 
   const copy = (fromSessionId: string, toSessionId: string) => {
@@ -140,11 +230,7 @@ export function createMessagesRepo(db: SqliteDatabase) {
     }
   }
 
-  return {
-    copy,
-    list,
-    save
-  }
+  return { copy, findLatestSessionInfo, list, listWindow, listWindowWithCursor, save }
 }
 
 export type MessagesRepo = ReturnType<typeof createMessagesRepo>

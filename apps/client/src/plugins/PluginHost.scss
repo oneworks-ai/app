@@ -26,6 +26,14 @@
   overflow: auto;
 }
 
+.plugin-host-code-editor {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .plugin-host-control {
   --plugin-host-control-height: 28px;
   --plugin-host-control-radius: 6px;
@@ -181,6 +189,55 @@
   background: transparent;
 }
 
+.plugin-host-control-select.ant-select {
+  width: 100%;
+  min-width: 0;
+  color: var(--text-color);
+  font: 500 12px/1.35 ui-sans-serif, system-ui, sans-serif;
+}
+
+.plugin-host-control-select.ant-select .ant-select-selector {
+  min-height: var(--plugin-host-control-height);
+  border-color: var(--plugin-host-control-border);
+  border-radius: var(--plugin-host-control-radius);
+  background: var(--plugin-host-control-bg);
+  box-shadow: none;
+  transition:
+    border-color .18s ease,
+    background-color .18s ease,
+    box-shadow .18s ease;
+}
+
+.plugin-host-control-select.ant-select .ant-select-selection-item,
+.plugin-host-control-select.ant-select .ant-select-selection-placeholder {
+  color: var(--text-color);
+  font: 500 12px/1.35 ui-sans-serif, system-ui, sans-serif;
+}
+
+.plugin-host-control-select.ant-select .ant-select-selection-placeholder {
+  color: var(--placeholder-color, var(--sub-text-color));
+  opacity: .82;
+}
+
+.plugin-host-control-select.ant-select .ant-select-arrow,
+.plugin-host-control-select.ant-select .ant-select-clear {
+  color: var(--sub-text-color);
+}
+
+.plugin-host-control-select.ant-select:not(.ant-select-disabled):hover
+  .ant-select-selector {
+  border-color: var(--plugin-host-control-active-border);
+  background: var(--plugin-host-control-hover-bg);
+}
+
+.plugin-host-control-select.ant-select-focused .ant-select-selector,
+.plugin-host-control-select.ant-select-open .ant-select-selector {
+  border-color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 6%, transparent);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--primary-color) 14%, transparent);
+}
+
 .plugin-host-control-button.ant-btn {
   min-height: var(--plugin-host-control-height);
   border-color: var(--plugin-host-control-border);
@@ -189,6 +246,15 @@
   background: transparent;
   box-shadow: none;
   font: 600 12px/1 ui-sans-serif, system-ui, sans-serif;
+}
+
+.plugin-host-control-button.ant-btn.ant-btn-icon-only,
+.plugin-host-control-button.ant-btn.ant-btn-circle {
+  width: auto;
+  min-width: var(--app-chrome-icon-size, 18px);
+  height: auto;
+  min-height: var(--app-chrome-icon-size, 18px);
+  padding: 0;
 }
 
 .plugin-host-control-button.ant-btn:not(:disabled):hover,
@@ -297,6 +363,34 @@
     calc(var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)) + 4px);
   color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a));
   font: 13px/1.5 ui-sans-serif, system-ui, sans-serif;
+}
+
+.plugin-host-interaction-list {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.plugin-host-interaction-list-avatar {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 999px;
+  color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  font: 750 8px/1 ui-sans-serif, system-ui, sans-serif;
+  text-transform: uppercase;
+}
+
+.plugin-host-interaction-list-avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 @media (hover: none) {

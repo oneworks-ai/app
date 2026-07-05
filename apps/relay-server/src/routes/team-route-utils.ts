@@ -114,7 +114,19 @@ export const teamMemberHasCapability = (
     (capability === relayPermissions.relayTeamsWrite && canUpdateRelayTeam(member)) ||
     (capability === relayPermissions.relayTeamMembersWrite && canManageRelayTeamMembers(member)) ||
     (
+      capability === relayPermissions.relayTeamConfigProfilesRead &&
+      (member.role === 'owner' || member.role === 'admin' || member.role === 'editor')
+    ) ||
+    (
       capability === relayPermissions.relayTeamConfigProfilesWrite &&
+      (member.role === 'owner' || member.role === 'admin' || member.role === 'editor')
+    ) ||
+    (
+      capability === relayPermissions.relayTeamConfigSecretsRead &&
+      (member.role === 'owner' || member.role === 'admin' || member.role === 'editor')
+    ) ||
+    (
+      capability === relayPermissions.relayTeamConfigSecretsWrite &&
       (member.role === 'owner' || member.role === 'admin' || member.role === 'editor')
     )
   )

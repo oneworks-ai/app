@@ -21,7 +21,8 @@ describe('relay plugin session helpers', () => {
           messageCount: '4',
           metadata: { source: 'test' },
           title: 'Relay session',
-          userId: 'user-1'
+          userId: 'user-1',
+          workspaceFolder: '/tmp/relay-workspace'
         },
         {
           title: 'missing id'
@@ -49,11 +50,13 @@ describe('relay plugin session helpers', () => {
         adapter: 'codex',
         id: 'session-1',
         messageCount: 4,
-        userId: 'user-1'
+        title: 'Relay session',
+        userId: 'user-1',
+        workspaceFolder: '/tmp/relay-workspace'
       }
     ])
     expect(JSON.stringify(snapshot)).not.toContain('do not relay this')
-    expect(JSON.stringify(snapshot)).not.toContain('Relay session')
+    expect(JSON.stringify(snapshot)).not.toContain('source')
     expect(adapter.submitMessage).toHaveBeenCalledWith({
       jobId: 'job-1',
       message: 'hello',

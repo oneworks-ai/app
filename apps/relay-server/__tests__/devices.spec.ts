@@ -70,8 +70,8 @@ describe('relay server device routes', () => {
     const devices = await requestJson(baseUrl, '/api/relay/devices', {
       headers: authHeaders(userSessionToken)
     })
-    const store = await readRelayStore(args.dataPath)
     const rawStore = await readFile(args.dataPath, 'utf8')
+    const store = await readRelayStore(args.dataPath)
 
     expect(registered.response.status).toBe(200)
     expect(registered.body.device).toMatchObject({
@@ -157,6 +157,51 @@ describe('relay server device routes', () => {
       { id: 'device-2', name: 'Desk Mini', userId: 'user-1' }
     ])
     expect(JSON.stringify(devices.body.devices)).not.toContain('deviceToken')
+  })
+
+  it('stores account-scoped device aliases without replacing the machine name', async () => {
+    const { args, baseUrl } = await listenRelay()
+    await createInvite(args.dataPath, 'pair-alias')
+    const registered = await requestJson(baseUrl, '/api/relay/devices/register', {
+      method: 'POST',
+      headers: authHeaders('pair-alias'),
+      body: JSON.stringify({ deviceId: 'device-1', deviceName: 'YiJie-MBP-14.local' })
+    })
+    const aliasUpdate = await requestJson(baseUrl, '/api/relay/devices/device-1', {
+      method: 'PATCH',
+      headers: authHeaders(userSessionToken),
+      body: JSON.stringify({ alias: 'Studio Laptop' })
+    })
+    const heartbeat = await requestJson(baseUrl, '/api/relay/devices/heartbeat', {
+      method: 'POST',
+      headers: authHeaders(String(registered.body.deviceToken)),
+      body: JSON.stringify({ deviceName: 'YiJie-MBP-14.local', workspaceFolder: '/workspace-a' })
+    })
+    const devices = await requestJson(baseUrl, '/api/relay/devices', {
+      headers: authHeaders(userSessionToken)
+    })
+    const rawStore = await readFile(args.dataPath, 'utf8')
+
+    expect(registered.response.status).toBe(200)
+    expect(aliasUpdate.response.status).toBe(200)
+    expect(aliasUpdate.body.device).toMatchObject({
+      alias: 'Studio Laptop',
+      id: 'device-1',
+      name: 'YiJie-MBP-14.local'
+    })
+    expect(heartbeat.body.device).toMatchObject({
+      alias: 'Studio Laptop',
+      name: 'YiJie-MBP-14.local',
+      workspaceFolder: '/workspace-a'
+    })
+    expect(devices.body.devices).toMatchObject([
+      {
+        alias: 'Studio Laptop',
+        id: 'device-1',
+        name: 'YiJie-MBP-14.local'
+      }
+    ])
+    expect(rawStore).not.toContain('Studio Laptop')
   })
 
   it('binds device registration to a logged-in SSO session user', async () => {

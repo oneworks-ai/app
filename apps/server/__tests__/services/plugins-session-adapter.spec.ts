@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDb } from '#~/db/index.js'
 import { createPluginSessionAdapter } from '#~/services/plugins/session-adapter.js'
 import { processUserMessage } from '#~/services/session/index.js'
+import { resolveSessionWorkspace } from '#~/services/session/workspace.js'
 
 vi.mock('#~/db/index.js', () => ({
   getDb: vi.fn()
@@ -10,6 +11,10 @@ vi.mock('#~/db/index.js', () => ({
 
 vi.mock('#~/services/session/index.js', () => ({
   processUserMessage: vi.fn()
+}))
+
+vi.mock('#~/services/session/workspace.js', () => ({
+  resolveSessionWorkspace: vi.fn()
 }))
 
 describe('plugin session adapter', () => {
@@ -23,13 +28,27 @@ describe('plugin session adapter', () => {
     vi.mocked(getDb).mockReturnValue(db as never)
     db.getSessions.mockReturnValue([{ id: 'sess-1' }])
     db.getSession.mockReturnValue({ id: 'sess-1' })
+    vi.mocked(resolveSessionWorkspace).mockResolvedValue({
+      workspaceFolder: '/workspace/root'
+    } as never)
   })
 
-  it('lists active sessions for plugins', () => {
+  it('lists active sessions for plugins with workspace folders', async () => {
     const adapter = createPluginSessionAdapter()
 
-    expect(adapter.listSessions()).toEqual([{ id: 'sess-1' }])
+    await expect(adapter.listSessions()).resolves.toEqual([{
+      id: 'sess-1',
+      workspaceFolder: '/workspace/root'
+    }])
     expect(db.getSessions).toHaveBeenCalledWith('active')
+    expect(resolveSessionWorkspace).toHaveBeenCalledWith('sess-1')
+  })
+
+  it('keeps session rows when workspace lookup fails', async () => {
+    vi.mocked(resolveSessionWorkspace).mockRejectedValue(new Error('missing workspace'))
+    const adapter = createPluginSessionAdapter()
+
+    await expect(adapter.listSessions()).resolves.toEqual([{ id: 'sess-1' }])
   })
 
   it('submits a message into an existing session', async () => {

@@ -1,5 +1,7 @@
 /* eslint-disable max-lines -- plugin host components wire shared host UI into plugin views */
+import Editor from '@monaco-editor/react'
 import { Button, Dropdown, Input, Segmented, Switch } from 'antd'
+import type { editor as MonacoEditorNamespace } from 'monaco-editor'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import useSWR from 'swr'
@@ -10,6 +12,11 @@ import type { ConfigResponse } from '@oneworks/types'
 import { getConfig } from '#~/api.js'
 import { Sender } from '#~/components/chat/sender/Sender'
 import { ChatStatusBar } from '#~/components/chat/status-bar/ChatStatusBar'
+import { InteractionList } from '#~/components/interaction-list'
+import type { InteractionListAction, InteractionListItem } from '#~/components/interaction-list'
+import { MobileAwareSelect } from '#~/components/mobile-aware-select/MobileAwareSelect'
+import { useMonacoTheme } from '#~/components/monaco/use-monaco-theme'
+import { NativeTabs } from '#~/components/native-tabs'
 import {
   OverlayIcon,
   OverlayMenu,
@@ -40,6 +47,9 @@ import type {
   PluginHostControlOption,
   PluginHostIconComponentProps,
   PluginHostInputComponentProps,
+  PluginHostInteractionListAction,
+  PluginHostInteractionListComponentProps,
+  PluginHostInteractionListItem,
   PluginHostOverlayMenuActionItem,
   PluginHostOverlayMenuItem,
   PluginHostOverlayTreeNode,
@@ -56,6 +66,30 @@ export interface PluginHostComponentEntry {
 }
 
 const noop = () => {}
+
+const PLUGIN_HOST_CODE_EDITOR_OPTIONS: MonacoEditorNamespace.IStandaloneEditorConstructionOptions = {
+  automaticLayout: true,
+  contextmenu: true,
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+  fontSize: 12,
+  folding: true,
+  glyphMargin: false,
+  lineDecorationsWidth: 18,
+  lineHeight: 18,
+  lineNumbersMinChars: 3,
+  minimap: { enabled: false },
+  overviewRulerBorder: false,
+  padding: { bottom: 10, top: 0 },
+  renderLineHighlight: 'line',
+  scrollBeyondLastLine: false,
+  scrollbar: {
+    alwaysConsumeMouseWheel: false,
+    useShadows: false
+  },
+  showFoldingControls: 'always',
+  tabSize: 2,
+  wordWrap: 'on'
+}
 
 const getIconSizeClass = (size: PluginHostIconComponentProps['size']) => {
   if (typeof size === 'number') return ''
@@ -123,22 +157,79 @@ function PluginHostIcon(props: PluginHostIconComponentProps) {
   return renderMaterialIcon(props.name, undefined, props)
 }
 
+function PluginHostCodeEditor(props: PluginHostComponentPropsById['codeEditor']) {
+  const themeName = useMonacoTheme()
+
+  return (
+    <div
+      aria-label={props.ariaLabel}
+      className={[
+        'plugin-host-code-editor',
+        props.className
+      ].filter(Boolean).join(' ')}
+      role={props.ariaLabel == null ? undefined : 'region'}
+    >
+      <Editor
+        language={props.language ?? 'plaintext'}
+        loading={null}
+        onChange={value => props.onChange?.(value ?? '')}
+        path={props.path}
+        theme={themeName}
+        value={props.value}
+        options={{
+          ...PLUGIN_HOST_CODE_EDITOR_OPTIONS,
+          ariaLabel: props.ariaLabel,
+          readOnly: props.readOnly ?? false
+        }}
+      />
+    </div>
+  )
+}
+
+const getPluginHostStringProp = (
+  props: PluginHostComponentPropsById['button'],
+  key: string
+) => {
+  const value = (props as Record<string, unknown>)[key]
+  return typeof value === 'string' && value !== '' ? value : undefined
+}
+
 function PluginHostButton(props: PluginHostComponentPropsById['button']) {
   const iconNode = renderMaterialIcon(props.icon, 'plugin-host-control__icon')
+  const isIconOnly = props.shape === 'circle' || (iconNode != null && (props.label == null || props.label === ''))
+  const iconOnlyStyle: CSSProperties | undefined = isIconOnly
+    ? {
+      background: 'transparent',
+      border: 0,
+      boxShadow: 'none',
+      height: 'var(--app-chrome-icon-size, 18px)',
+      minWidth: 'var(--app-chrome-icon-size, 18px)',
+      padding: 0,
+      width: 'var(--app-chrome-icon-size, 18px)'
+    }
+    : undefined
+
   return (
     <Button
-      className='plugin-host-control plugin-host-control-button'
+      className={[
+        'plugin-host-control',
+        'plugin-host-control-button',
+        props.className
+      ].filter(Boolean).join(' ')}
       aria-label={props.ariaLabel}
       danger={props.danger}
+      data-primary={getPluginHostStringProp(props, 'data-primary')}
+      data-tooltip={getPluginHostStringProp(props, 'data-tooltip')}
       disabled={props.disabled}
       icon={iconNode}
       onClick={props.onClick}
-      shape={props.shape}
+      shape={isIconOnly ? undefined : props.shape}
       size={props.size}
+      style={iconOnlyStyle}
       title={props.title ?? props.label}
       type={props.type}
     >
-      {props.label}
+      {isIconOnly ? null : props.label}
     </Button>
   )
 }
@@ -257,6 +348,58 @@ function PluginHostInput(props: PluginHostInputComponentProps) {
   )
 }
 
+const normalizeSelectValue = (
+  value: PluginHostComponentPropsById['select']['value'],
+  mode: PluginHostComponentPropsById['select']['mode']
+) => {
+  if (mode === 'multiple') {
+    return Array.isArray(value) ? value : []
+  }
+  return Array.isArray(value) ? value[0] : value
+}
+
+function PluginHostSelect(props: PluginHostComponentPropsById['select']) {
+  const [value, setValue] = useState<string | string[] | undefined>(() => normalizeSelectValue(props.value, props.mode))
+  const options = useMemo(() =>
+    props.options.map(option => ({
+      disabled: option.disabled,
+      label: renderControlOptionLabel(option, false),
+      title: option.label ?? option.value,
+      value: option.value
+    })), [props.options])
+
+  useEffect(() => {
+    setValue(normalizeSelectValue(props.value, props.mode))
+  }, [props.mode, props.value])
+
+  const handleChange = (nextValue: string | string[] | undefined) => {
+    const normalizedValue = props.mode === 'multiple'
+      ? (Array.isArray(nextValue) ? nextValue.map(item => String(item)) : [])
+      : Array.isArray(nextValue)
+      ? String(nextValue[0] ?? '')
+      : String(nextValue ?? '')
+    setValue(normalizedValue)
+    props.onChange?.(normalizedValue)
+  }
+
+  return (
+    <MobileAwareSelect<string | string[]>
+      allowClear={props.allowClear}
+      aria-label={props.ariaLabel}
+      className='plugin-host-control plugin-host-control-select'
+      disabled={props.disabled}
+      mobileTitle={props.placeholder ?? props.ariaLabel}
+      mode={props.mode}
+      onChange={handleChange}
+      options={options}
+      placeholder={props.placeholder}
+      popupMatchSelectWidth={false}
+      size={props.size}
+      value={value}
+    />
+  )
+}
+
 function PluginHostList(props: PluginHostComponentPropsById['list']) {
   if (props.items.length === 0) {
     return props.empty == null ? null : <div className='plugin-host-list-empty'>{props.empty}</div>
@@ -281,6 +424,171 @@ function PluginHostList(props: PluginHostComponentPropsById['list']) {
         </li>
       ))}
     </ul>
+  )
+}
+
+const renderPluginHostInteractionListAvatar = (
+  avatar: NonNullable<PluginHostInteractionListItem['avatar']>
+) => (
+  <span className='plugin-host-interaction-list-avatar' aria-hidden={avatar.alt == null ? true : undefined}>
+    {avatar.src == null || avatar.src.trim() === ''
+      ? <span>{avatar.fallback ?? 'AC'}</span>
+      : (
+        <img
+          alt={avatar.alt ?? ''}
+          draggable={false}
+          src={avatar.src}
+        />
+      )}
+  </span>
+)
+
+const toPluginHostInteractionListItem = (
+  item: PluginHostInteractionListItem
+): InteractionListItem => ({
+  badge: item.badge,
+  children: item.children?.map(child => toPluginHostInteractionListItem(child)),
+  description: item.description,
+  disabled: item.disabled,
+  icon: item.avatar == null ? item.icon : renderPluginHostInteractionListAvatar(item.avatar),
+  iconFilled: item.iconFilled,
+  itemType: item.itemType,
+  key: item.key,
+  meta: item.meta,
+  searchText: item.searchText,
+  tags: item.tags,
+  title: item.title,
+  tooltip: item.tooltip
+})
+
+const toPluginHostInteractionListAction = (
+  action: PluginHostInteractionListAction,
+  item: PluginHostInteractionListItem
+): InteractionListAction => ({
+  confirmLabel: action.confirmLabel,
+  danger: action.danger,
+  disabled: action.disabled,
+  icon: action.icon,
+  key: action.key,
+  label: action.label,
+  onSelect: () => action.onSelect?.(item),
+  type: action.type
+})
+
+const getPluginHostInteractionListSearchText = (item: PluginHostInteractionListItem): string => {
+  if (item.searchText != null) return item.searchText
+  return [
+    typeof item.title === 'string' ? item.title : '',
+    typeof item.description === 'string' ? item.description : ''
+  ].join(' ')
+}
+
+const filterPluginHostInteractionListItems = (
+  items: PluginHostInteractionListItem[],
+  query: string
+): PluginHostInteractionListItem[] => {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (normalizedQuery === '') return items
+
+  return items.flatMap((item) => {
+    if (
+      getPluginHostInteractionListSearchText(item).toLowerCase().includes(normalizedQuery)
+    ) {
+      return [item]
+    }
+
+    const filteredChildren = item.children == null
+      ? undefined
+      : filterPluginHostInteractionListItems(item.children, query)
+    if ((filteredChildren?.length ?? 0) > 0) {
+      return [{
+        ...item,
+        ...(filteredChildren == null ? {} : { children: filteredChildren })
+      }]
+    }
+    return []
+  })
+}
+
+function PluginHostInteractionList(props: PluginHostInteractionListComponentProps) {
+  const descriptionPlacement = props.descriptionPlacement ?? 'content'
+  const actionDisplay = props.actionDisplay === 'inline' ? 'inline' : 'menu'
+  const [uncontrolledSearchValue, setUncontrolledSearchValue] = useState(
+    () => props.search?.value ?? props.search?.defaultValue ?? ''
+  )
+  const searchValue = props.search?.value ?? uncontrolledSearchValue
+  const sourceItems = useMemo(
+    () =>
+      props.search?.filterItems === false
+        ? props.items
+        : filterPluginHostInteractionListItems(props.items, searchValue),
+    [props.items, props.search?.filterItems, searchValue]
+  )
+  const items = useMemo(
+    () => sourceItems.map(item => toPluginHostInteractionListItem(item)),
+    [sourceItems]
+  )
+  const itemsByKey = useMemo(() => {
+    const next = new Map<string, PluginHostInteractionListItem>()
+    const visit = (item: PluginHostInteractionListItem) => {
+      next.set(item.key, item)
+      item.children?.forEach(visit)
+    }
+    props.items.forEach(visit)
+    return next
+  }, [props.items])
+  const search = props.search == null
+    ? undefined
+    : {
+      filterPanel: undefined,
+      placeholder: props.search.placeholder,
+      suffix: props.search.suffix,
+      value: searchValue,
+      onChange: (value: string) => {
+        setUncontrolledSearchValue(value)
+        props.search?.onChange(value)
+      }
+    }
+
+  return (
+    <InteractionList
+      actionDisplay={actionDisplay}
+      actions={props.actions == null
+        ? undefined
+        : item => {
+          const sourceItem = itemsByKey.get(item.key) ?? (item as PluginHostInteractionListItem)
+          return props.actions?.(sourceItem).map(action => toPluginHostInteractionListAction(action, sourceItem)) ?? []
+        }}
+      activeKey={props.activeKey}
+      border={props.border}
+      className={[
+        'plugin-host-interaction-list',
+        props.className
+      ].filter(Boolean).join(' ')}
+      descriptionPlacement={descriptionPlacement}
+      emptyText={props.emptyText}
+      iconSize={props.iconSize}
+      inlineActionLimit={props.inlineActionLimit}
+      items={items}
+      padding={props.padding}
+      search={search}
+      splitActionHover={props.splitActionHover}
+      onSelect={item => props.onSelect?.(itemsByKey.get(item.key) ?? (item as PluginHostInteractionListItem))}
+    />
+  )
+}
+
+function PluginHostNativeTabs(props: PluginHostComponentPropsById['nativeTabs']) {
+  return (
+    <NativeTabs
+      activeKey={props.activeKey}
+      actions={props.actions}
+      ariaLabel={props.ariaLabel}
+      className={props.className}
+      iconSize={props.iconSize}
+      items={props.items}
+      onChange={props.onChange}
+    />
   )
 }
 
@@ -817,9 +1125,12 @@ function PluginHostProjectFileTree(props: PluginHostComponentPropsById['projectF
 export const pluginHostComponentReactApi = {
   ActionBar: PluginHostActionBar,
   Button: PluginHostButton,
+  CodeEditor: PluginHostCodeEditor,
   Icon: PluginHostIcon,
   Input: PluginHostInput,
+  InteractionList: PluginHostInteractionList,
   List: PluginHostList,
+  NativeTabs: PluginHostNativeTabs,
   OverlayDropdown: PluginHostOverlayDropdown,
   OverlayMenu: PluginHostOverlayMenu,
   OverlaySearchMenu: PluginHostOverlaySearchMenu,
@@ -828,6 +1139,7 @@ export const pluginHostComponentReactApi = {
   OverlaySelectLabel: PluginHostOverlaySelectLabel,
   OverlayTree: PluginHostOverlayTree,
   ProjectFileTree: PluginHostProjectFileTree,
+  Select: PluginHostSelect,
   Segmented: PluginHostSegmented,
   Sender: PluginSenderHost,
   Switch: PluginHostSwitch
@@ -845,6 +1157,14 @@ export const renderPluginHostComponent = (
     return <PluginHostButton {...((props as PluginHostComponentPropsById['button'] | undefined) ?? {})} />
   }
 
+  if (component === 'codeEditor') {
+    return (
+      <PluginHostCodeEditor
+        {...((props as PluginHostComponentPropsById['codeEditor'] | undefined) ?? { value: '' })}
+      />
+    )
+  }
+
   if (component === 'icon') {
     const iconProps = props as PluginHostComponentPropsById['icon'] | undefined
     return <PluginHostIcon {...(iconProps ?? { name: 'extension' })} />
@@ -854,8 +1174,31 @@ export const renderPluginHostComponent = (
     return <PluginHostInput {...((props as PluginHostComponentPropsById['input'] | undefined) ?? {})} />
   }
 
+  if (component === 'interactionList') {
+    return (
+      <PluginHostInteractionList
+        {...((props as PluginHostComponentPropsById['interactionList'] | undefined) ?? {
+          emptyText: null,
+          items: []
+        })}
+      />
+    )
+  }
+
   if (component === 'list') {
     return <PluginHostList {...((props as PluginHostComponentPropsById['list'] | undefined) ?? { items: [] })} />
+  }
+
+  if (component === 'nativeTabs') {
+    return (
+      <PluginHostNativeTabs
+        {...((props as PluginHostComponentPropsById['nativeTabs'] | undefined) ?? { items: [] })}
+      />
+    )
+  }
+
+  if (component === 'select') {
+    return <PluginHostSelect {...((props as PluginHostComponentPropsById['select'] | undefined) ?? { options: [] })} />
   }
 
   if (component === 'overlayDropdown') {

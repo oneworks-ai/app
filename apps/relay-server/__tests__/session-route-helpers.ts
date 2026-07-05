@@ -1,15 +1,11 @@
 import { mkdtemp, rm } from 'node:fs/promises'
-import { createServer } from 'node:http'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { defaultRelayAccessGroups } from '../src/access-groups.js'
-import { sendJson } from '../src/http.js'
-import { handleRelaySessionsRoute } from '../src/routes/sessions.js'
-import { readRelayStore } from '../src/server.js'
-import { createRelayStoreRepository } from '../src/storage/repository.js'
+import { createRelayServer } from '../src/server.js'
 import { writeRelayStore } from '../src/store.js'
 import { normalizeRelayTeamPolicy } from '../src/teams.js'
 import type { RelayServerArgs, RelayStore } from '../src/types.js'
@@ -143,16 +139,7 @@ export const listenSessionRelay = async () => {
     port: 0
   }
   await writeRelayStore(args.dataPath, createFixtureStore())
-  const server = createServer((req, res) => {
-    void (async () => {
-      const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
-      const store = await readRelayStore(args.dataPath)
-      if (await handleRelaySessionsRoute(req, res, args, store, createRelayStoreRepository(args), url)) return
-      sendJson(res, 404, { error: 'Not found.' }, args.allowOrigin)
-    })().catch(error => {
-      sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) }, args.allowOrigin)
-    })
-  })
+  const server = createRelayServer(args)
   servers.push(server)
   await new Promise<void>(resolve => server.listen(args.port, args.host, resolve))
   const address = server.address() as AddressInfo

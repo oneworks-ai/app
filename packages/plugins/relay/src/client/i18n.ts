@@ -23,6 +23,22 @@ export interface RelayClientMessages {
     saveServer: string
     serverSaved: string
   }
+  accounts: {
+    defaultServer: string
+    deleteLocal: string
+    deleteLocalCancel: string
+    deleteLocalConfirm: string
+    disabled: string
+    disableUser: string
+    enabled: string
+    enableUser: string
+    localServer: string
+    noMatch: string
+    searchPlaceholder: string
+    serverFallback: string
+    signedIn: string
+    title: string
+  }
   aria: {
     moreDeviceActions: string
     serviceActions: string
@@ -155,6 +171,22 @@ const relayClientMessages: Record<RelayClientLocale, RelayClientMessages> = {
       saveServer: 'Save',
       serverSaved: 'Relay server saved.'
     },
+    accounts: {
+      defaultServer: 'OneWorks',
+      deleteLocal: 'Delete local data',
+      deleteLocalCancel: 'Cancel delete',
+      deleteLocalConfirm: 'Confirm delete local data',
+      disabled: 'Disabled',
+      disableUser: 'Disable account',
+      enabled: 'Enabled',
+      enableUser: 'Enable account',
+      localServer: 'Local',
+      noMatch: 'No matching accounts.',
+      searchPlaceholder: 'Search accounts, email, service, or status',
+      serverFallback: 'Service',
+      signedIn: 'Signed in',
+      title: 'Accounts'
+    },
     aria: {
       moreDeviceActions: 'More device actions',
       serviceActions: 'Service actions'
@@ -204,7 +236,7 @@ const relayClientMessages: Record<RelayClientLocale, RelayClientMessages> = {
         stale: 'stale'
       }
     },
-    emptyAccounts: 'No SSO accounts connected.',
+    emptyAccounts: 'No accounts signed in.',
     emptyServers: 'No relay servers configured.',
     errors: {
       shareConfigInvalid: 'Enter valid JSON before previewing or publishing.',
@@ -292,6 +324,22 @@ const relayClientMessages: Record<RelayClientLocale, RelayClientMessages> = {
       saveServer: '保存',
       serverSaved: '认证服务已保存。'
     },
+    accounts: {
+      defaultServer: 'OneWorks',
+      deleteLocal: '删除本机数据',
+      deleteLocalCancel: '取消删除',
+      deleteLocalConfirm: '确认删除本机数据',
+      disabled: '未启用',
+      disableUser: '停用账号',
+      enabled: '已启用',
+      enableUser: '启用账号',
+      localServer: '本地',
+      noMatch: '没有匹配的账号',
+      searchPlaceholder: '搜索账号、邮箱、服务或状态',
+      serverFallback: '服务',
+      signedIn: '已登录',
+      title: '账号'
+    },
     aria: {
       moreDeviceActions: '更多设备操作',
       serviceActions: '服务操作'
@@ -341,7 +389,7 @@ const relayClientMessages: Record<RelayClientLocale, RelayClientMessages> = {
         stale: '离线较久'
       }
     },
-    emptyAccounts: '还没有连接 SSO 登录账号。',
+    emptyAccounts: '还没有登录账号。',
     emptyServers: '还没有配置认证链接服务。',
     errors: {
       shareConfigInvalid: '请先输入有效 JSON。',

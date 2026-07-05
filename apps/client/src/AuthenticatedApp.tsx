@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { AppShell } from '#~/components/layout/AppShell'
 import { isHomepagePreviewBundleEnabled } from '#~/homepage-preview/runtime-loader'
 import { useAppPreferences } from '#~/hooks/use-app-preferences'
-import { useSessionSubscription } from '#~/hooks/use-session-subscription.js'
+import { useClientEventStream } from '#~/hooks/use-client-event-stream'
 import { useSidebarNavigation } from '#~/hooks/use-sidebar-navigation'
 import { NotificationProvider } from '#~/notifications/NotificationProvider'
 import { PluginProvider } from '#~/plugins/PluginProvider'
@@ -31,7 +31,7 @@ function HomepagePreviewNavigationBridgeSlot() {
 }
 
 export function AuthenticatedApp() {
-  useSessionSubscription()
+  useClientEventStream()
   const { isDarkMode, themeConfig } = useAppPreferences()
   const sidebarNavigation = useSidebarNavigation()
 

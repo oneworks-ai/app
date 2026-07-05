@@ -14,6 +14,7 @@ import { useSWRConfig } from 'swr'
 import { getApiErrorMessage, manageAdapterAccount } from '#~/api'
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
 import { OverlayAction, OverlayDivider } from '#~/components/overlay'
+import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
 import type { ChatAdapterAccountOption } from '#~/hooks/chat/use-chat-adapter-account-selection'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 
@@ -27,6 +28,17 @@ const renderSelectArrow = (onMouseDown: (event: ReactMouseEvent<HTMLSpanElement>
   <span className='material-symbols-rounded sender-select-arrow' onMouseDown={onMouseDown}>
     keyboard_arrow_down
   </span>
+)
+
+const normalizeOptionalText = (value: string | undefined) => {
+  const normalized = value?.trim()
+  return normalized == null || normalized === '' ? undefined : normalized
+}
+
+const getAccountAvatarSeed = (option: ChatAdapterAccountOption) => (
+  normalizeOptionalText(option.email) ??
+    normalizeOptionalText(option.label) ??
+    option.value
 )
 
 export function AccountSelectControl({
@@ -160,35 +172,51 @@ export function AccountSelectControl({
 
   const renderOption = (option: ChatAdapterAccountOption) => (
     <div className='account-option'>
-      <div className='account-option__title-row'>
+      <span className='account-option__avatar' aria-hidden='true'>
+        {normalizeOptionalText(option.avatarUrl) == null
+          ? (
+            <RoomPixelAvatar
+              className='account-option__avatar-pixel'
+              seed={`adapter-account:${getAccountAvatarSeed(option)}`}
+            />
+          )
+          : (
+            <img
+              className='account-option__avatar-image'
+              src={normalizeOptionalText(option.avatarUrl)}
+              alt=''
+            />
+          )}
+      </span>
+      <div className='account-option__body'>
         <span className='account-option__title'>{option.label}</span>
-        <div className='account-option__actions'>
-          <Tooltip
-            title={t('chat.accountSelectOpenAccountConfig', { account: option.label })}
-            placement='left'
-          >
-            <button
-              type='button'
-              className='account-option__action'
-              aria-label={t('chat.accountSelectOpenAccountConfig', { account: option.label })}
-              onMouseDown={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-              }}
-              onClick={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                openAccountConfig(option.value)
-              }}
-            >
-              <span className='material-symbols-rounded'>settings</span>
-            </button>
-          </Tooltip>
-        </div>
+        {option.meta != null && option.meta !== '' && (
+          <div className='account-option__meta'>{option.meta}</div>
+        )}
       </div>
-      {option.meta != null && option.meta !== '' && (
-        <div className='account-option__meta'>{option.meta}</div>
-      )}
+      <div className='account-option__actions'>
+        <Tooltip
+          title={t('chat.accountSelectOpenAccountConfig', { account: option.label })}
+          placement='left'
+        >
+          <button
+            type='button'
+            className='account-option__action'
+            aria-label={t('chat.accountSelectOpenAccountConfig', { account: option.label })}
+            onMouseDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              openAccountConfig(option.value)
+            }}
+          >
+            <span className='material-symbols-rounded'>settings</span>
+          </button>
+        </Tooltip>
+      </div>
     </div>
   )
 

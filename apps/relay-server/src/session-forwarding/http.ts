@@ -77,6 +77,7 @@ export const publicForwardingJob = (
   sessionId: job.sessionId,
   userId: job.userId,
   status: job.status,
+  mode: job.mode,
   traceId: job.traceId,
   requestId: job.requestId,
   payloadSizeBytes: options.payloadSizeBytes ?? options.payload?.payloadSize ?? job.payloadSizeBytes,

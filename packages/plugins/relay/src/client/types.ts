@@ -5,7 +5,35 @@ export interface Disposable {
   dispose: () => void
 }
 
+export type PluginReactNode = unknown
+
+export interface PluginReactHost {
+  Fragment: unknown
+  createElement: (
+    type: unknown,
+    props?: Record<string, unknown> | null,
+    ...children: unknown[]
+  ) => PluginReactNode
+  useEffect: (effect: () => void | (() => void), deps?: readonly unknown[]) => void
+  useMemo: <T>(factory: () => T, deps: readonly unknown[]) => T
+  useRef: <T>(initialValue: T) => { current: T }
+  useState: <T>(
+    initialValue: T | (() => T)
+  ) => [T, (nextValue: T | ((current: T) => T)) => void]
+}
+
+export type PluginViewRenderer = (
+  container: HTMLElement,
+  view?: PluginViewContext
+) => Disposable | void
+
+export interface PluginViewRegistration {
+  render?: PluginViewRenderer
+  renderNode?: (view?: PluginViewContext) => PluginReactNode
+}
+
 export interface PluginClientContext {
+  react: PluginReactHost
   scope: string
   api: {
     fetch: (path: string, init?: RequestInit) => Promise<Response>
@@ -30,12 +58,19 @@ export interface PluginClientContext {
   views: {
     register: (
       viewId: string,
-      render: (container: HTMLElement, view?: PluginViewContext) => Disposable | void
+      render: PluginViewRenderer | PluginViewRegistration
     ) => Disposable
   }
 }
 
 export interface PluginViewContext {
+  components?: {
+    render: <T extends PluginHostComponentId>(
+      component: T,
+      container: HTMLElement,
+      props: PluginHostComponentPropsById[T]
+    ) => Disposable
+  }
   options?: {
     update?: (
       options: Record<string, unknown>,
@@ -43,9 +78,187 @@ export interface PluginViewContext {
     ) => Promise<Record<string, unknown>>
     value?: Record<string, unknown>
   }
+  route?: {
+    setActions?: (actions?: PluginViewRouteHeaderAction[]) => void
+    setBreadcrumb?: (breadcrumb?: PluginViewRouteHeaderBreadcrumb) => void
+    setTitle?: (title?: string) => void
+  }
+  scope?: string
+  ui?: {
+    Button?: unknown
+    CodeEditor?: unknown
+    Icon?: unknown
+    Input?: unknown
+    InteractionList?: unknown
+    NativeTabs?: unknown
+    Select?: unknown
+  }
+}
+
+export interface PluginHostControlOption {
+  disabled?: boolean
+  icon?: string
+  label?: string
+  value: string
+}
+
+export interface PluginHostInputComponentProps {
+  allowClear?: boolean
+  ariaLabel?: string
+  autoFocus?: boolean
+  disabled?: boolean
+  onChange?: (value: string) => void
+  onCommit?: (value: string) => void
+  placeholder?: string
+  rows?: number
+  size?: 'large' | 'middle' | 'small'
+  type?: 'password' | 'textarea' | 'text'
+  value?: string
+}
+
+export interface PluginHostCodeEditorComponentProps {
+  ariaLabel?: string
+  className?: string
+  language?: string
+  onChange?: (value: string) => void
+  path?: string
+  readOnly?: boolean
+  value: string
+}
+
+export interface PluginHostSelectComponentProps {
+  allowClear?: boolean
+  ariaLabel?: string
+  disabled?: boolean
+  mode?: 'multiple'
+  onChange?: (value: string | string[]) => void
+  options: PluginHostControlOption[]
+  placeholder?: string
+  size?: 'large' | 'middle' | 'small'
+  value?: string | string[]
+}
+
+export interface PluginHostComponentPropsById {
+  codeEditor: PluginHostCodeEditorComponentProps
+  input: PluginHostInputComponentProps
+  interactionList: PluginHostInteractionListComponentProps
+  nativeTabs: PluginHostNativeTabsComponentProps
+  select: PluginHostSelectComponentProps
+}
+
+export type PluginHostComponentId = keyof PluginHostComponentPropsById
+
+export interface PluginHostInteractionListAvatar {
+  alt?: string
+  fallback?: string
+  src?: string
+}
+
+export interface PluginHostInteractionListItem {
+  avatar?: PluginHostInteractionListAvatar
+  children?: PluginHostInteractionListItem[]
+  description?: string
+  disabled?: boolean
+  icon?: string | {
+    alt?: string
+    src: string
+    type: 'image'
+  }
+  iconFilled?: boolean
+  itemType?: 'groupTitle' | 'listItem'
+  key: string
+  meta?: string
+  searchText?: string
+  tags?: string[]
+  title: string
+  tooltip?: string
+}
+
+export interface PluginHostInteractionListAction<
+  TItem extends PluginHostInteractionListItem = PluginHostInteractionListItem,
+> {
+  confirmLabel?: string
+  danger?: boolean
+  disabled?: boolean
+  icon: string
+  key: string
+  label: string
+  onSelect?: (item: TItem) => void | Promise<void>
+  type?: 'divider'
+}
+
+export interface PluginHostInteractionListComponentProps<
+  TItem extends PluginHostInteractionListItem = PluginHostInteractionListItem,
+> {
+  actionDisplay?: 'default' | 'inline'
+  actions?: (item: TItem) => Array<PluginHostInteractionListAction<TItem>>
+  activeKey?: string
+  border?: 'bordered' | 'borderless'
+  className?: string
+  descriptionPlacement?: 'content' | 'titleHover'
+  emptyText: string
+  iconSize?: number | string
+  inlineActionLimit?: number
+  items: TItem[]
+  padding?: 'default' | 'none'
+  search?: {
+    defaultValue?: string
+    filterItems?: boolean
+    placeholder: string
+    value?: string
+    onChange?: (value: string) => void
+  }
+  splitActionHover?: boolean
+  onSelect?: (item: TItem) => void
+}
+
+export interface PluginHostNativeTabItem {
+  disabled?: boolean
+  icon?: string
+  key: string
+  label: PluginReactNode
+}
+
+export interface PluginHostNativeTabsComponentProps {
+  activeKey?: string
+  actions?: PluginReactNode
+  ariaLabel?: string
+  className?: string
+  iconSize?: number | string
+  items: PluginHostNativeTabItem[]
+  onChange?: (key: string, item: PluginHostNativeTabItem) => void
+}
+
+export interface PluginViewRouteHeaderAction {
+  icon: string
+  key: string
+  label: string
+  active?: boolean
+  activeIcon?: string
+  activeLabel?: string
+  activeTitle?: string
+  danger?: boolean
+  disabled?: boolean
+  loading?: boolean
+  shortcut?: string
+  title?: string
+  onSelect?: () => void
+}
+
+export interface PluginViewRouteHeaderBreadcrumb {
+  onBack: () => void
+  ancestors?: Array<{
+    title: string
+    onSelect?: () => void
+  }>
+  parentTitle: string
+  ariaLabel?: string
+  backLabel?: string
+  currentTitle?: string
 }
 
 export interface RelayStatus {
+  accounts?: RelayAuthAccount[]
   configDistribution?: RelayConfigDistributionStatus
   configSync?: RelayConfigDistributionStatus
   connection?: {
@@ -66,8 +279,28 @@ export interface RelayStatus {
     }
     servers?: RelayServerStatus[]
   }
+  personalDocumentSync?: RelayPersonalDocumentSyncStatus
   servers?: RelayServerStatus[]
+  teamDocumentSync?: Record<string, RelayPersonalDocumentSyncStatus>
   [key: string]: unknown
+}
+
+export interface RelayAuthAccount {
+  accountKey?: string
+  avatarUrl?: string
+  email?: string
+  enabled?: boolean
+  loginId?: string
+  name?: string
+  registeredAt?: string
+  role?: string
+  serverAlias?: string
+  serverId?: string
+  serverUrl?: string
+  sessionAuthenticated?: boolean
+  sessionExpiresAt?: string
+  updatedAt?: string
+  userId?: string
 }
 
 export interface RelayConfigDistributionStatus {
@@ -99,6 +332,48 @@ export interface RelayConfigDistributionSourceStatus {
   teamName?: string
   version?: number
   versionId?: string
+}
+
+export type RelayPersonalDocumentSyncKind = 'agents'
+
+export interface RelayPersonalDocumentSyncPreferences {
+  agents?: boolean
+}
+
+export interface RelayPersonalDocumentSyncCounts {
+  agents?: number
+}
+
+export interface RelayPersonalDocumentSyncStatus {
+  appliedRemote?: boolean
+  conflictBackups?: number
+  countsByKind?: RelayPersonalDocumentSyncCounts
+  documentCount?: number
+  enabled?: boolean
+  entries?: RelayPersonalDocumentEntry[]
+  hash?: string | null
+  lastError?: string | null
+  lastSyncedAt?: string | null
+  preferences?: RelayPersonalDocumentSyncPreferences
+  pushedLocal?: boolean
+  totalSizeBytes?: number
+}
+
+export interface RelayPersonalDocumentEntry {
+  displayName: string
+  exists: boolean
+  kind: RelayPersonalDocumentSyncKind
+  localOnly: boolean
+  path: string
+  relativePath: string
+}
+
+export interface RelayDocumentContent {
+  content: string
+  displayPath: string
+  path: string
+  sizeBytes?: number
+  updatedAt?: string
 }
 
 export interface RelayServerStatus {
@@ -137,6 +412,7 @@ export interface RelayServerStatus {
 }
 
 export interface RelayDeviceSummary {
+  alias?: string
   capabilities?: Record<string, unknown>
   createdAt?: string
   id?: string
@@ -144,6 +420,208 @@ export interface RelayDeviceSummary {
   name?: string
   pluginScope?: string
   status?: string
+  workspaceFolder?: string
+}
+
+export interface RelayProfileCurrentUser {
+  avatarUrl?: string | null
+  disabledAt?: string | null
+  email?: string
+  groupIds?: string[]
+  id?: string
+  loginId?: string | null
+  name?: string
+  provider?: string | null
+  role?: string
+}
+
+export interface RelayProfileAccessToken {
+  createdAt?: string
+  id?: string
+  lastUsedAt?: string | null
+  name?: string
+  permissionGroupIds?: string[]
+  permissionGroupMode?: 'all' | 'custom'
+  revokedAt?: string | null
+  scope?: 'platform' | 'team' | 'user'
+  teamId?: string | null
+  tokenPreview?: string
+}
+
+export interface RelayProfileSecuritySummary {
+  accessTokens?: RelayProfileAccessToken[]
+  accountDeletion?: {
+    available?: boolean
+  }
+  password?: {
+    enabled?: boolean
+  }
+  passkeys?: {
+    count?: number
+    enabled?: boolean
+    lastUsedAt?: string | null
+  }
+  twoFactor?: {
+    available?: boolean
+    enabled?: boolean
+  }
+}
+
+export interface RelayProfileOpenApiAuditEvent {
+  createdAt?: string
+  error?: string | null
+  id?: string
+  ip?: string | null
+  method?: string
+  path?: string
+  permission?: string | null
+  status?: number
+  tokenId?: string
+  tokenPreview?: string
+  userAgent?: string | null
+  userId?: string
+}
+
+export type RelayProfileMessageKind = 'announcement' | 'personal' | 'system'
+export type RelayProfileMessageAudienceScope = 'all' | 'team' | 'users'
+
+export interface RelayProfileMessageUser {
+  avatarUrl?: string | null
+  email?: string
+  id?: string
+  name?: string
+  provider?: string | null
+  role?: string
+}
+
+export interface RelayProfileMessageTeam {
+  avatarUrl?: string | null
+  id?: string
+  name?: string
+  slug?: string
+}
+
+export interface RelayProfileMessageAudience {
+  scope?: RelayProfileMessageAudienceScope
+  team?: RelayProfileMessageTeam | null
+  teamId?: string | null
+  userIds?: string[]
+  users?: Array<RelayProfileMessageUser | null>
+}
+
+export interface RelayProfileMessage {
+  audience?: RelayProfileMessageAudience
+  body?: string
+  createdAt?: string
+  createdBy?: RelayProfileMessageUser | null
+  createdByUserId?: string
+  id?: string
+  kind?: RelayProfileMessageKind
+  title?: string
+  updatedAt?: string | null
+}
+
+export interface RelayProfileTeamInvitation {
+  configEnabled?: boolean
+  createdAt?: string
+  createdByUserId?: string
+  defaultForPublishing?: boolean
+  email?: string | null
+  groupIds?: string[]
+  id?: string
+  inviter?: RelayProfileMessageUser | null
+  respondedAt?: string | null
+  role?: string
+  status?: string
+  teamAvatarUrl?: string | null
+  teamId?: string
+  teamName?: string | null
+  teamSlug?: string | null
+  updatedAt?: string | null
+  user?: RelayProfileMessageUser | null
+  userId?: string | null
+}
+
+export interface RelayProfileTeam {
+  archivedAt?: string | null
+  avatarUrl?: string | null
+  configEnabled?: boolean
+  defaultForPublishing?: boolean
+  description?: string | null
+  id?: string
+  memberCount?: number
+  membership?: {
+    configEnabled?: boolean
+    defaultForPublishing?: boolean
+    groupIds?: string[]
+    role?: string
+  } | null
+  name?: string
+  role?: string
+  slug?: string
+  updatedAt?: string | null
+}
+
+export interface RelayProfileStatus {
+  account?: RelayAuthAccount
+  accounts?: RelayAuthAccount[]
+  auditEvents?: RelayProfileOpenApiAuditEvent[]
+  candidates?: RelayAuthAccount[]
+  devices?: RelayDeviceSummary[]
+  errors?: Partial<Record<'audit' | 'devices' | 'messages' | 'security' | 'teams', string>>
+  invitations?: RelayProfileTeamInvitation[]
+  message?: string
+  messages?: RelayProfileMessage[]
+  ok?: boolean
+  result?: {
+    accessToken?: string
+    token?: RelayProfileAccessToken
+    [key: string]: unknown
+  }
+  security?: RelayProfileSecuritySummary
+  session?: {
+    expiresAt?: string
+    lastSeenAt?: string
+  }
+  teams?: RelayProfileTeam[]
+  user?: RelayProfileCurrentUser
+}
+
+export type RelayProfileTab = 'account' | 'devices' | 'documents' | 'security' | 'teams' | 'tokens'
+export type RelayProfileTeamDetailTab = 'configs' | 'documents' | 'overview'
+export type RelayProfilePage = 'accounts' | 'login' | 'messages' | 'profile' | 'servers'
+
+export interface RelayProfileViewState {
+  accountKey: string
+  accountFilter: string
+  actionError: string | null
+  createdAccessToken: string | null
+  currentPassword: string
+  data: RelayProfileStatus | null
+  deviceAliasDraft: string
+  deviceAliasEditingId: string
+  deleteConfirmOpen: boolean
+  deleteConfirmValue: string
+  error: string | null
+  localDeleteConfirmAccountKey: string
+  loginServerKey: string
+  loginUrl: string
+  loginUrlError: string | null
+  loginUrlLoading: boolean
+  loading: boolean
+  passwordEditorOpen: boolean
+  newPassword: string
+  page: RelayProfilePage
+  tab: RelayProfileTab
+  teamDetailTab: RelayProfileTeamDetailTab
+  teamItemId: string | null
+  tokenFilter: string
+  tokenItemId: string | null
+  tokenName: string
+  tokenPermissionGroupIds: string[]
+  tokenPermissionGroupMode: 'all' | 'custom'
+  tokenScope: 'platform' | 'team' | 'user'
+  tokenTeamId: string
 }
 
 export interface RelayViewState {
@@ -174,8 +652,43 @@ export interface RelayConfigShareDraft {
   }>
 }
 
+export interface RelayConfigShareProfileVersion {
+  allowedFields?: string[]
+  changeNote?: string | null
+  configPatch?: Record<string, unknown>
+  createdAt?: string
+  createdByUserId?: string
+  id?: string
+  profileId?: string
+  secretRefs?: Record<string, string>
+  sourceHash?: string
+  version?: number
+}
+
+export interface RelayConfigShareProfile {
+  activeVersionId?: string | null
+  assignmentCount?: number
+  createdAt?: string
+  createdByUserId?: string
+  description?: string | null
+  id?: string
+  name?: string
+  status?: string
+  teamId?: string
+  teamName?: string
+  updatedAt?: string
+  updatedByUserId?: string
+  versionCount?: number
+}
+
+export interface RelayConfigShareProfileDetail {
+  assignments?: unknown[]
+  profile?: RelayConfigShareProfile
+  versions?: RelayConfigShareProfileVersion[]
+}
+
 export interface RelayConfigShareTargets {
-  profilesByTeamId?: Record<string, unknown[]>
+  profilesByTeamId?: Record<string, RelayConfigShareProfile[]>
   teams?: Array<{
     id?: string
     membership?: {

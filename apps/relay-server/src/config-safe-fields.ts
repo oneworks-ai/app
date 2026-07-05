@@ -8,5 +8,6 @@ export const RELAY_CONFIG_SAFE_FIELDS = [
   'marketplaces',
   'skills',
   'skillsMeta',
-  'skillRegistries'
+  'skillRegistries',
+  'adapters'
 ] as const satisfies readonly RelayConfigSafeField[]

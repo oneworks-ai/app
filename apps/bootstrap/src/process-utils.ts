@@ -79,9 +79,9 @@ export const runBufferedCommand = async (input: RunBufferedCommandOptions) => {
 export const runNodeEntrypoint = async (
   entryPath: string,
   forwardedArgs: string[],
-  options: { env?: NodeJS.ProcessEnv } = {}
+  options: { env?: NodeJS.ProcessEnv; nodeArgs?: string[] } = {}
 ) => {
-  const child = spawn(process.execPath, [entryPath, ...forwardedArgs], {
+  const child = spawn(process.execPath, [...(options.nodeArgs ?? []), entryPath, ...forwardedArgs], {
     cwd: process.cwd(),
     env: options.env ?? process.env,
     stdio: 'inherit'

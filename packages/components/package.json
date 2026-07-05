@@ -23,6 +23,13 @@
       "types": "./dist/route-layout/index.d.ts",
       "default": "./dist/route-layout/index.js"
     },
+    "./admin-list-surface": {
+      "__oneworks__": {
+        "default": "./src/admin-list-surface/index.ts"
+      },
+      "types": "./dist/admin-list-surface/index.d.ts",
+      "default": "./dist/admin-list-surface/index.js"
+    },
     "./route-layout.css": "./src/route-layout/styles.css",
     "./package.json": "./package.json"
   },

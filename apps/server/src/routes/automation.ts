@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import Router from '@koa/router'
-import { parseExpression } from 'cron-parser'
+import cronParser from 'cron-parser'
 
 import type { EffortLevel, GitBranchKind, SessionPermissionMode } from '@oneworks/types'
 
@@ -16,6 +16,7 @@ import {
 import { badRequest, conflict, notFound, unauthorized } from '#~/utils/http.js'
 
 let schedulerReady = false
+const { parseExpression } = cronParser
 
 type NormalizedAutomationTrigger = Omit<AutomationTrigger, 'ruleId' | 'createdAt'>
 type NormalizedAutomationTask = Omit<AutomationTask, 'ruleId' | 'createdAt'>

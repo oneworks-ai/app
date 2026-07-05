@@ -962,6 +962,12 @@
     "hideActiveSessions": "Hide sessions",
     "mobileVersionConflictSummary": "The service version differs. Restart the workspace server or retry later.",
     "processId": "Process",
+    "remoteDevice": "remote device",
+    "remoteService": "remote service",
+    "remoteWorkspace": "Remote workspace",
+    "remoteWorkspaceRecovering": "Reconnecting remote workspace",
+    "remoteWorkspaceRecoveringDetail": "Connecting to {{device}} through {{server}}. This page will continue automatically after the remote workspace server recovers.",
+    "remoteWorkspaceWithDevice": "Remote · {{device}}",
     "requestedVersion": "Requested",
     "restartFailed": "Failed to restart the workspace server",
     "restartWorkspaceServer": "Restart workspace server",
@@ -1012,6 +1018,10 @@
     "directoryBrowserEmpty": "No child folders",
     "directoryBrowserFailed": "Failed to load folders",
     "directoryBreadcrumbLabel": "Current folder path",
+    "directoryTargets": {
+      "label": "Directory source",
+      "local": "This Mac"
+    },
     "directoryNameCopied": "Folder name copied",
     "directoryPathCopied": "Folder path copied",
     "favoriteDirectory": "Favorite this folder",
@@ -1060,9 +1070,9 @@
     "start": {
       "title": "Start",
       "newProjectFolder": "New Project",
-      "newProjectFolderHint": "Create a local folder and open it as a project",
+      "newProjectFolderHint": "Create a folder on this Mac or a remote service, then open it as a project",
       "openFolder": "Open Project",
-      "openFolderHint": "Choose a local project directory",
+      "openFolderHint": "Choose a project directory from this Mac or a remote service",
       "cloneRepository": "Clone Remote Repository",
       "cloneRepositoryHint": "Create a project from a Git repository",
       "connectRemoteService": "Link Remote Service",
@@ -1097,14 +1107,65 @@
       "stopServiceSuccess": "Project service stopped",
       "title": "Projects"
     },
+    "remoteProjects": {
+      "badge": "Remote",
+      "openPending": "{{project}} is on {{device}}. Relay will ask the target device to start a workspace server and proxy requests through Relay.",
+      "sessionTitle": "{{project}} · {{device}}",
+      "subtitle": "{{device}} · {{path}}"
+    },
+    "builtin": {
+      "title": "Built In",
+      "accountHint": "View signed-in accounts or sign in another account",
+      "settingsHint": "Adjust launcher and app preferences",
+      "aboutHint": "View OneWorks version and app information",
+      "checkUpdateHint": "Check whether a desktop update is available",
+      "previewHint": "Open preview-related actions"
+    },
+    "recentSelections": {
+      "title": "Recent Choices"
+    },
     "menu": {
       "open": "Open OneWorks menu",
+      "account": "Account",
       "settings": "Settings",
       "about": "About",
       "checkUpdate": "Check Updates",
       "language": "Language",
       "projectRequired": "Open or focus a project before opening Settings or About",
       "openFailed": "Failed to open this workspace page"
+    },
+    "account": {
+      "title": "Account",
+      "searchLabel": "Account",
+      "searchPlaceholder": "Account",
+      "listLabel": "Account",
+      "actionsTitle": "Actions",
+      "defaultServer": "Default Service",
+      "localServer": "Local Service",
+      "serverFallback": "Service",
+      "signedIn": "Signed in",
+      "disabled": "Disabled",
+      "detailHint": "View account details",
+      "loading": "Loading accounts...",
+      "empty": "No accounts",
+      "emptyHint": "Signed-in accounts will appear here",
+      "loadFailed": "Failed to load accounts",
+      "loadFailedHint": "Try again later, or open account management",
+      "login": "Sign In",
+      "loginHint": "Add another OneWorks account",
+      "manage": "Manage Accounts",
+      "manageHint": "View account details, messages, and security settings"
+    },
+    "preview": {
+      "title": "Preview",
+      "searchLabel": "Preview",
+      "searchPlaceholder": "Preview",
+      "listLabel": "Preview actions",
+      "empty": "No previews available",
+      "openProject": "Open Project",
+      "openProjectHint": "Open a project before creating a preview",
+      "newWebsite": "New Preview",
+      "newWebsiteHint": "Open a browser preview page in the current project"
     },
     "settings": {
       "title": "Launcher Settings",
@@ -3353,9 +3414,11 @@
     },
     "accounts": {
       "title": "Accounts",
+      "listTitle": "Account List",
       "back": "Back to accounts",
       "backToAdapter": "Back to adapter",
       "empty": "No accounts available yet.",
+      "loading": "Loading accounts...",
       "detailMissing": "Account detail is currently unavailable.",
       "default": "Default",
       "count": "{{count}} accounts",
@@ -3374,9 +3437,12 @@
         "delete": "Delete account snapshot"
       },
       "facts": {
+        "key": "Account Key",
         "email": "Email",
         "type": "Type",
-        "plan": "Plan"
+        "plan": "Plan",
+        "source": "Source",
+        "description": "Description"
       },
       "status": {
         "ready": "Ready",

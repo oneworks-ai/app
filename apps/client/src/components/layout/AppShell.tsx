@@ -17,6 +17,7 @@ import { getModuleUpdates } from '#~/api'
 import { NavRail, NavRailWindowBar } from '#~/components/NavRail'
 import type { NavRailWindowBarAction } from '#~/components/NavRail'
 import { Sidebar } from '#~/components/Sidebar'
+import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import type { SidebarRoomItem } from '#~/components/sidebar/conversation-items'
 import {
   emptyDesktopUpdateStatus,
@@ -33,6 +34,7 @@ import type { DesktopViewShortcutAction } from '#~/desktop/view-shortcuts'
 import { useBrowserHistoryNavigationState } from '#~/hooks/use-browser-history-navigation-state'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 import { useSidebarQueryState } from '#~/hooks/use-sidebar-query-state'
+import { getRuntimeWorkspaceId } from '#~/runtime-config'
 import { isMobileSidebarOpenAtom, isSidebarCollapsedAtom } from '#~/store/index'
 import {
   DESKTOP_SHELL_SIMULATION_QUERY_PARAM,
@@ -41,6 +43,10 @@ import {
   useStoredDevShellSimulation
 } from '#~/utils/device-shell-simulation'
 import { isShortcutMatch } from '#~/utils/shortcutUtils'
+import {
+  WORKSPACE_CONNECTION_CHANGE_EVENT,
+  readRememberedWorkspaceConnectionMetadata
+} from '#~/workspace-connection-state'
 
 import { DesktopWorkspaceStartupProvider } from './DesktopWorkspaceStartupOverlay'
 import { useDesktopWorkspaceStartupReady } from './desktop-workspace-startup-ready'
@@ -69,6 +75,10 @@ const DESKTOP_SIMULATION_TOGGLE_KEY_COUNT = 5
 const DESKTOP_SIMULATION_TOGGLE_SEQUENCE_MS = 2_000
 const GLOBAL_MODULE_UPDATE_GROUPS = new Set<ModuleUpdateGroup>(['adapter', 'core'])
 const APP_SHELL_STARTUP_READY_SELECTOR = '.app-shell'
+
+const compactTextParts = (...values: Array<string | undefined>) => (
+  values.map(value => value?.trim()).filter((value): value is string => value != null && value !== '')
+)
 
 const isSearchParamEnabled = (value: string | null) => {
   if (value == null) return false
@@ -165,6 +175,7 @@ export function AppShell({
   const hasDesktopViewShortcut = desktopApi?.onViewShortcut != null
   const [isWindowFullscreen, setIsWindowFullscreen] = useState(false)
   const [desktopUpdateStatus, setDesktopUpdateStatus] = useState<DesktopUpdateStatus>(emptyDesktopUpdateStatus)
+  const [workspaceConnectionRevision, setWorkspaceConnectionRevision] = useState(0)
   const isWindowFullscreenVisual = isWindowFullscreen || isDesktopSimulationFullscreen
   const shouldReserveWindowControls = isMacDesktop && !isWindowFullscreenVisual
   const showSimulatedWindowControls = isMacDesktopSimulation && shouldReserveWindowControls
@@ -307,6 +318,21 @@ export function AppShell({
   useEffect(() => {
     setIsMobileSidebarOpen(false)
   }, [isCompactLayout, location.pathname, setIsMobileSidebarOpen])
+
+  useEffect(() => {
+    const handleWorkspaceConnectionChange = (event: Event) => {
+      const workspaceId = (event as CustomEvent<{ workspaceId?: string }>).detail?.workspaceId
+      const currentWorkspaceId = getRuntimeWorkspaceId()
+      if (workspaceId == null || currentWorkspaceId == null || workspaceId === currentWorkspaceId) {
+        setWorkspaceConnectionRevision(value => value + 1)
+      }
+    }
+
+    window.addEventListener(WORKSPACE_CONNECTION_CHANGE_EVENT, handleWorkspaceConnectionChange)
+    return () => {
+      window.removeEventListener(WORKSPACE_CONNECTION_CHANGE_EVENT, handleWorkspaceConnectionChange)
+    }
+  }, [])
 
   useEffect(() => {
     if (!isCompactLayout) {
@@ -534,7 +560,38 @@ export function AppShell({
   }, [globalModuleUpdateModules.length, handleModuleUpdateAction, t])
 
   const visibleUpdateAction = desktopUpdateAction ?? moduleUpdateAction
+  const workspaceConnectionMetadata = useMemo(() => {
+    const workspaceId = getRuntimeWorkspaceId()
+    if (workspaceId == null) return undefined
+    return readRememberedWorkspaceConnectionMetadata(workspaceId)
+  }, [location.pathname, workspaceConnectionRevision])
+  const remoteWorkspaceFooterNode = useMemo(() => {
+    if (workspaceConnectionMetadata?.transport !== 'relay') return undefined
 
+    const relay = workspaceConnectionMetadata.relay
+    const deviceLabel = relay?.deviceName ?? relay?.deviceId
+    const serverLabel = relay?.serverName ?? relay?.serverId
+    const workspaceFolder = relay?.workspaceFolder ?? workspaceConnectionMetadata.workspaceFolder
+    const label = deviceLabel == null
+      ? t('workspaceConnection.remoteWorkspace')
+      : t('workspaceConnection.remoteWorkspaceWithDevice', { device: deviceLabel })
+    const details = compactTextParts(serverLabel, deviceLabel, workspaceFolder)
+    const title = details.length === 0
+      ? t('workspaceConnection.remoteWorkspace')
+      : `${t('workspaceConnection.remoteWorkspace')} · ${details.join(' · ')}`
+
+    return (
+      <div
+        className='nav-rail-workspace-connection-status'
+        role='status'
+        aria-label={title}
+        title={title}
+      >
+        <MaterialSymbol className='nav-rail-workspace-connection-status__icon' name='cloud_sync' />
+        <span className='nav-rail-workspace-connection-status__label'>{label}</span>
+      </div>
+    )
+  }, [t, workspaceConnectionMetadata])
   const resolvedSidebarWidth = isCompactLayout ? Math.min(sidebarWidth, 320) : sidebarWidth
   const desktopDrawerWidth = showSidebar ? sidebarWidth : 212
   const desktopSidebarRegionWidth = isDesktopSidebarCollapsed ? 0 : desktopDrawerWidth
@@ -596,6 +653,7 @@ export function AppShell({
         compactPlacement='drawer'
         drawerFooterAfter={routeMoreMenu?.footerAfter}
         drawerFooterBefore={routeMoreMenu?.footerBefore}
+        drawerWorkspaceStatus={remoteWorkspaceFooterNode}
         moreMenuContextMenuSections={routeMoreMenu?.contextMenuSections}
         moreMenuSections={routeMoreMenu?.sections}
         moreMenuSelectedKeys={routeMoreMenu?.selectedKeys}
@@ -699,6 +757,7 @@ export function AppShell({
             <NavRail
               drawerFooterAfter={routeMoreMenu?.footerAfter}
               drawerFooterBefore={routeMoreMenu?.footerBefore}
+              drawerWorkspaceStatus={remoteWorkspaceFooterNode}
               drawerWidth={showSidebar ? sidebarWidth : undefined}
               moreMenuContextMenuSections={routeMoreMenu?.contextMenuSections}
               moreMenuSections={routeMoreMenu?.sections}

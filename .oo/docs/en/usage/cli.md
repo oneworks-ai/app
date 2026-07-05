@@ -34,6 +34,10 @@ Useful commands:
 - `oneworks config get [path]`: read a config value
 - `oneworks config set [path] [value]`: write a config value
 - `oneworks config unset [path]`: delete a config value
+- `oneworks login [-s cf|vercel|<url>]`: sign in to a One Works Relay account; defaults to the managed Cloudflare service
+- `oneworks users [-s cf|vercel|<url>]`: list local Relay account logins
+- `oneworks users enable [user]` / `oneworks users disable [user]`: enable or disable a Relay account
+- `oneworks logout [user]`: remove a locally saved Relay login
 - `oneworks accounts add <adapter> [accountName]`: run the adapter-native login flow and save the returned credentials snapshot under the project home
 - `oneworks accounts show <adapter> <accountName>`: show account details and the latest quota summary
 - `oneworks accounts remove <adapter> <accountName>`: remove an adapter account snapshot from the current workspace
@@ -172,15 +176,17 @@ ONEWORKS_STARTUP_PROFILE=1 ONEWORKS_STARTUP_PROFILE_CONSOLE=1 oneworks "hi"
 
 Logs are written under `<project-home>/logs/<ctx>/startup/`.
 
-## Adapter Accounts
+## Relay Accounts
 
 ```bash
-npx oneworks accounts add codex
-npx oneworks accounts add codex work
-npx oneworks accounts show codex work
-npx oneworks accounts remove codex work
+oneworks login
+oneworks login -s vercel
+oneworks users
+oneworks users enable alice
+oneworks users disable --account oneworks-cloudflare:user-1
+oneworks logout -s cf alice
 ```
 
-`oneworks accounts add` invokes the adapter account onboarding capability. Built-in support currently starts with `codex`. Codex runs `codex login` in an isolated HOME, reads the generated `auth.json`, and saves it under `<project-home>/.local/adapters/codex/accounts/<key>/`.
+`login`, `logout`, and `users` are top-level commands provided by the official Relay capability. `-s, --server` defaults to `cf` and also accepts `cloudflare`, `vercel` / `vc`, a server id, or a full URL such as `https://relay.example.com`. Login credentials are stored locally in `~/.oneworks/auth.json`.
 
-See [Adapter Configuration and Multiple Accounts](./adapters.md).
+If a server has only one matching account, `users enable`, `users disable`, and `logout` do not require a user argument. If several accounts match, interactive terminals prompt for a selection. Scripts and AI tools should use `--json` for structured output and `--account serverId:userId` to avoid acting on the wrong same-name account from another server. `--input <json>` and `--stdin` merge JSON payloads into the command request.

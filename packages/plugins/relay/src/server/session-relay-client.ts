@@ -1,5 +1,6 @@
 import type {
   RelayForwardingJob,
+  RelayForwardingJobPollResult,
   RelayForwardingJobStatusUpdate,
   RelayLocalSessionSnapshot,
   RelaySessionClientAuth,
@@ -107,11 +108,13 @@ export const pollRelaySessionForwardingJobs = async (
   options: {
     limit?: number
     status?: 'active' | 'all' | RelayForwardingJob['status']
+    waitMs?: number
   } = {}
-) => {
+): Promise<RelayForwardingJobPollResult> => {
   const search = new URLSearchParams()
   if (options.status != null) search.set('status', options.status)
   if (options.limit != null) search.set('limit', String(options.limit))
+  if (options.waitMs != null) search.set('waitMs', String(Math.max(0, Math.floor(options.waitMs))))
   const query = search.toString()
   const response = await fetch(
     createRelayUrl(
@@ -125,10 +128,14 @@ export const pollRelaySessionForwardingJobs = async (
   )
   await ensureOk(response)
   const body = await readJson(response)
+  const nextPollMs = typeof body.nextPollMs === 'number' && Number.isFinite(body.nextPollMs)
+    ? Math.max(0, Math.floor(body.nextPollMs))
+    : undefined
   return {
     jobs: Array.isArray(body.jobs)
       ? body.jobs.map(normalizeRelayForwardingJob).filter((job): job is RelayForwardingJob => job != null)
-      : []
+      : [],
+    ...(nextPollMs == null ? {} : { nextPollMs })
   }
 }
 

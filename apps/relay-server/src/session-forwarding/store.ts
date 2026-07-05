@@ -21,8 +21,9 @@ const normalizeDeviceSession = (
     id,
     deviceId,
     userId: toOptionalString(value.userId),
-    title: id,
+    title: toOptionalString(value.title) ?? id,
     state: toOptionalString(value.state) ?? toOptionalString(value.status),
+    workspaceFolder: toOptionalString(value.workspaceFolder),
     lastActiveAt: toOptionalString(value.lastActiveAt),
     createdAt: toTimestamp(value.createdAt),
     updatedAt: toOptionalString(value.updatedAt) ?? timestamp

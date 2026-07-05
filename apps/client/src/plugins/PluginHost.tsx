@@ -3,12 +3,13 @@ import './PluginHost.scss'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import { useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
 
 import { RouteContainerHeader } from '#~/components/layout/RouteContainerHeader'
 import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
 import { useRouteContainerSidebarOpener } from '#~/components/layout/use-route-container-sidebar-opener'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
+import type { RouteContainerHeaderActionItem, RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
 
 import { setPluginOptions } from './api'
 import { usePluginContext } from './plugin-context'
@@ -71,12 +72,18 @@ const usePluginHostComponents = () => {
 }
 
 export function PluginViewHost({
+  onRouteActionsChange,
+  onRouteBreadcrumbChange,
+  onRouteTitleChange,
   routeId,
   scope,
   surface = 'route',
   tab,
   viewId
 }: {
+  onRouteActionsChange?: (actions?: RouteContainerHeaderActionItem[]) => void
+  onRouteBreadcrumbChange?: (breadcrumb?: RouteContainerHeaderBreadcrumb) => void
+  onRouteTitleChange?: (title?: string) => void
   routeId?: string
   scope: string
   surface?: PluginViewSurface
@@ -92,6 +99,7 @@ export function PluginViewHost({
     disposeAll: disposeHostComponents,
     portals: hostComponentPortals
   } = usePluginHostComponents()
+  const location = useLocation()
   const pluginI18n = useMemo(() => createPluginI18nContext(), [])
   const view = useMemo(
     () => snapshot.views.find(item => item.scope === scope && item.id === viewId),
@@ -128,6 +136,16 @@ export function PluginViewHost({
       update: updatePluginOptions,
       value: pluginInstance?.options ?? {}
     },
+    ...(onRouteTitleChange == null
+      ? {}
+      : {
+        route: {
+          setActions: (actions) => onRouteActionsChange?.(actions as RouteContainerHeaderActionItem[] | undefined),
+          setBreadcrumb: breadcrumb =>
+            onRouteBreadcrumbChange?.(breadcrumb as RouteContainerHeaderBreadcrumb | undefined),
+          setTitle: onRouteTitleChange
+        }
+      }),
     routeId,
     scope,
     ...(tab == null ? {} : { tab }),
@@ -139,11 +157,12 @@ export function PluginViewHost({
     pluginI18n,
     pluginInstance?.options,
     registry,
+    onRouteActionsChange,
+    onRouteBreadcrumbChange,
+    onRouteTitleChange,
     resolvedThemeMode,
     routeId,
     scope,
-    snapshot.extensionContributions,
-    snapshot.extensionPoints,
     surface,
     tab,
     themeMode,
@@ -163,6 +182,22 @@ export function PluginViewHost({
       container.replaceChildren()
     }
   }, [disposeHostComponents, view, viewContext])
+
+  useEffect(() => {
+    if (surface !== 'route') return
+    window.dispatchEvent(
+      new CustomEvent('oneworks:plugin-route-change', {
+        detail: {
+          hash: location.hash,
+          path: location.pathname,
+          pluginScope: scope,
+          route: `${location.pathname}${location.search}${location.hash}`,
+          routeId,
+          search: location.search
+        }
+      })
+    )
+  }, [location.hash, location.pathname, location.search, routeId, scope, surface])
 
   if (view?.renderNode != null) {
     return (
@@ -192,12 +227,27 @@ export function PluginRoute() {
   const { openRouteSidebar } = useRouteContainerSidebarOpener()
   const { headerActions: routePluginHeaderActions } = useRoutePluginChrome('plugin-route')
   const language = i18n.resolvedLanguage ?? i18n.language
+  const [routeActionsOverride, setRouteActionsOverride] = useState<RouteContainerHeaderActionItem[]>([])
+  const [routeBreadcrumbOverride, setRouteBreadcrumbOverride] = useState<RouteContainerHeaderBreadcrumb | undefined>()
+  const [routeTitleOverride, setRouteTitleOverride] = useState<string | undefined>()
+  const handleRouteActionsChange = useCallback((actions?: RouteContainerHeaderActionItem[]) => {
+    setRouteActionsOverride(actions ?? [])
+  }, [])
+  const handleRouteBreadcrumbChange = useCallback((breadcrumb?: RouteContainerHeaderBreadcrumb) => {
+    setRouteBreadcrumbOverride(breadcrumb)
+  }, [])
+
+  useEffect(() => {
+    setRouteActionsOverride([])
+    setRouteBreadcrumbOverride(undefined)
+    setRouteTitleOverride(undefined)
+  }, [routeId, scope])
 
   if (route == null) {
     return null
   }
 
-  const routeTitle = resolvePluginContributionText(route, 'title', language) ?? routeId
+  const routeTitle = routeTitleOverride ?? resolvePluginContributionText(route, 'title', language) ?? routeId
 
   return (
     <RouteContainerLayout
@@ -206,14 +256,23 @@ export function PluginRoute() {
       contentInset
       header={
         <RouteContainerHeader
-          actionItems={routePluginHeaderActions}
+          actionItems={[...routeActionsOverride, ...routePluginHeaderActions]}
+          breadcrumb={routeBreadcrumbOverride}
           icon={route.icon ?? 'extension'}
           onOpenSidebar={openRouteSidebar}
           title={routeTitle}
         />
       }
     >
-      <PluginViewHost scope={scope} routeId={routeId} surface='route' viewId={route.viewId} />
+      <PluginViewHost
+        scope={scope}
+        routeId={routeId}
+        surface='route'
+        viewId={route.viewId}
+        onRouteActionsChange={handleRouteActionsChange}
+        onRouteBreadcrumbChange={handleRouteBreadcrumbChange}
+        onRouteTitleChange={setRouteTitleOverride}
+      />
     </RouteContainerLayout>
   )
 }
