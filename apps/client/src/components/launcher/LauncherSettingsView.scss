@@ -49,7 +49,7 @@
 
 .launcher-settings__tab.is-active {
   background: color-mix(in srgb, var(--primary-color) 12%, transparent);
-  color: var(--primary-color);
+  color: var(--primary-text-color);
   box-shadow: 0 0 0 1px
     color-mix(in srgb, var(--primary-color) 18%, transparent);
 }
@@ -82,7 +82,7 @@
   align-items: center;
   justify-content: center;
   background: color-mix(in srgb, var(--primary-color) 10%, transparent);
-  color: var(--primary-color);
+  color: var(--primary-text-color);
   font-size: 10px;
   font-weight: 700;
   line-height: 14px;
@@ -138,7 +138,7 @@
 
 .launcher-settings__item.is-active .launcher-settings__item-icon,
 .launcher-settings__item.is-active .launcher-settings__item-title {
-  color: var(--primary-color);
+  color: var(--primary-text-color);
 }
 
 .launcher-settings__item.is-stacked {
@@ -276,7 +276,7 @@
 
 .launcher-settings__choice.is-active {
   background: var(--subpage-content-card-bg);
-  color: var(--primary-color);
+  color: var(--primary-text-color);
   box-shadow: 0 1px 2px rgba(15, 23, 42, .12);
 }
 
@@ -415,6 +415,14 @@
 
   .launcher-settings__control {
     justify-content: flex-start;
+  }
+
+  .launcher-settings__item-desc {
+    display: -webkit-box;
+    overflow: hidden;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
   .launcher-settings__shortcut {
