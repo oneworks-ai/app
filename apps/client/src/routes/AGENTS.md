@@ -16,7 +16,7 @@
   - launcher host-owned 页面态必须用 path，而不是 `?view=` query：设置 `/launcher/settings`、关于 `/launcher/about`、预览 `/launcher/preview`。旧的 `?view=settings|about|preview` 只能作为兼容入口读取，并应自动 replace 到 path。
   - launcher 内置目录浏览是 host-owned 子路由，URL 形态为 `/launcher/browse/:mode/:targetId/:path`；不要把“新建项目 / 打开项目 / clone 目标目录选择”这类页面态只藏在 `/launcher` 内部 state 里，也不要把当前目录写成 query。目录 path tail 用 URL path segment 编码以保留本机 / 远端路径里的斜杠和特殊字符；旧的 `?path=...` 只能作为兼容入口读取，并应自动 replace 到 path。插件页面仍只能通过插件 manifest route 注册到 `/launcher/plugins/:scope/:routeId/...`，host 不为插件业务补内置目录或账号路由。
   - 桌面环境通过 `window.oneworksDesktop.openWorkspace()` 打开已有项目；Web manager role 打开后把当前 tab 的 server base 切到返回的 workspace server。
-  - Web workspace 页内 launcher 由 `ChatRouteShell` 渲染 `LauncherOverlay` 并复用 `LauncherRoute`；只在非 Electron Web 下注册 `Cmd/Ctrl+Shift+P`。
+  - Web workspace 页内 launcher 由 `ChatRouteShell` 渲染 `LauncherOverlay` 并复用 `LauncherRoute`；只在非 Electron Web 下注册 `Cmd/Ctrl+Shift+P`。独立 launcher 页面使用 `url` 模式持有 `/launcher/*` 路由；overlay 必须使用 `embedded` 模式，不得读取或写入宿主 workspace URL。overlay 中选择插件入口时关闭 overlay 并进入对应 `/plugins/*` workspace 路由，不能借 `/launcher/*` 中转。
   - 左下角只承载 app 级菜单入口；右下角只承载当前选中项的可用操作提示。
   - `/` 文件搜索模式在 route 层只负责进入/退出模式、展示结果和调用 preload API。全局模式搜索电脑根目录；项目上下文模式搜索当前项目资源。
   - 非桌面环境下必须降级提示能力不可用，不要直接访问 Electron IPC。
