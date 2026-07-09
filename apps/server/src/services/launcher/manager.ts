@@ -19,7 +19,8 @@ import type {
   LauncherWorkspaceSelectorState,
   LauncherWorkspaceServiceStatus,
   LauncherWorkspaceStopResponse,
-  LauncherWorkspaceVersionConflictDetails
+  LauncherWorkspaceVersionConflictDetails,
+  PluginRuntimeEndpoint
 } from '@oneworks/types'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
@@ -1220,6 +1221,46 @@ export const listLauncherWorkspaces = async (): Promise<LauncherWorkspaceSelecto
     recentProjects,
     runningProjects
   }
+}
+
+export const listLauncherWorkspaceRuntimeEndpoints = async (): Promise<PluginRuntimeEndpoint[]> => {
+  const endpoints = new Map<string, PluginRuntimeEndpoint>()
+  const addEndpoint = (endpoint: PluginRuntimeEndpoint) => {
+    endpoints.set(endpoint.workspaceId ?? endpoint.id, endpoint)
+  }
+
+  for (const service of services.values()) {
+    if (service.serverBaseUrl == null) continue
+    const workspaceId = createLauncherWorkspaceId(service.workspaceFolder)
+    addEndpoint({
+      id: `workspace:${workspaceId}`,
+      role: 'workspace',
+      serverBaseUrl: service.serverBaseUrl,
+      status: service.status === 'ready' ? 'online' : 'unknown',
+      workspaceFolder: service.workspaceFolder,
+      workspaceId
+    })
+  }
+
+  for (const workspaceFolder of await getRecentWorkspaces()) {
+    const workspaceId = createLauncherWorkspaceId(workspaceFolder)
+    if (endpoints.has(workspaceId)) continue
+    const state = await readWorkspaceInstanceState(workspaceFolder)
+    if (state?.serverBaseUrl == null) continue
+    addEndpoint({
+      id: `workspace:${workspaceId}`,
+      role: 'workspace',
+      serverBaseUrl: state.serverBaseUrl,
+      startedAt: state.startedAt,
+      status: await isWorkspaceInstanceReady(state) ? 'online' : 'offline',
+      workspaceFolder,
+      workspaceId
+    })
+  }
+
+  return [...endpoints.values()].sort((left, right) =>
+    (left.workspaceFolder ?? left.id).localeCompare(right.workspaceFolder ?? right.id)
+  )
 }
 
 const resolveLauncherWorkspaceFolderById = async (rawWorkspaceId: unknown) => {

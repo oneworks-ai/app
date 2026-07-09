@@ -1,17 +1,50 @@
 # Server Entries, Plugin Store, and Debugging
 
-UI plugins can also provide server-side behavior. Server entries are loaded from the active plugin graph and can expose commands, scoped APIs, and runtime integration points.
+UI plugins can also provide server-side behavior. Server entries are loaded from the active plugin graph and can expose commands, scoped APIs, launcher providers, and runtime channels.
 
 ## Server Entry
 
-A plugin server entry runs inside the One Works server runtime. It should keep a clear boundary:
+A plugin server entry runs inside one or more One Works server runtimes:
+
+- `manager`: the local management server. Use it only for device-level, launcher-level, account-level, or cross-workspace coordination.
+- `workspace`: a concrete workspace server. A single management server can supervise multiple workspace servers, and each workspace keeps an isolated plugin registry.
+
+Prefer package exports for entry discovery:
+
+```json
+{
+  "type": "module",
+  "exports": {
+    "./server": {
+      "source": "./server/src/index.ts",
+      "default": "./server/dist/index.js"
+    }
+  }
+}
+```
+
+Every plugin with a server entry must explicitly declare the runtime roles in its manifest. `exports["./server"]` only supplies an entry path; it does not choose `manager` or `workspace` for the plugin. If `plugin.server.roles` is missing, the host rejects the server entry and reports a plugin diagnostic.
+
+```json
+{
+  "plugin": {
+    "server": {
+      "roles": ["workspace"]
+    }
+  }
+}
+```
+
+Use `["manager"]` or `["manager", "workspace"]` only when the plugin truly owns management-plane behavior. Normal project files, scoped APIs, workspace UI, and local services belong in `workspace`.
+
+Server entries should keep a clear boundary:
 
 - plugin code owns plugin-specific behavior
 - server routes stay in the host application
 - shared contracts should live in package APIs or manifest metadata
 - project data should be accessed through the host-provided scoped APIs
 
-Server entries should not assume a global singleton project. A desktop process can host multiple project services, and the same plugin package can be instantiated with different scopes or options.
+Server entries should not assume a global singleton project. The same plugin package can be instantiated with different scopes or options, and one machine may run several workspace servers under the same management server.
 
 ## Scoped API
 
@@ -23,6 +56,8 @@ Use scoped APIs for:
 - plugin-specific data reads and writes
 - integration with plugin assets
 - status or diagnostics for plugin runtime behavior
+
+Use runtime channels when the same plugin scope needs structured communication between `manager` and `workspace` runtimes. Register channels with `ctx.runtime.registerChannel(channelId, handler)` and invoke them with `ctx.runtime.invokeChannel(channelId, { payload, target })`. The management server exposes `/api/plugins/runtime/endpoints` with the current manager endpoint and known launcher workspace endpoints; manager-to-workspace calls may target a known workspace by `workspaceId`. Cross-workspace calls and workspace-to-remote calls should still include a concrete `serverBaseUrl`, such as `{ role: "manager", serverBaseUrl }`, so a multi-workspace setup cannot accidentally send work to the wrong server.
 
 ## Plugin Store and Discovery
 
@@ -37,11 +72,13 @@ Manifest metadata should describe:
 - config schema
 - child plugin defaults
 
+New plugins should rely on `package.json` exports for `./client` and `./server` entry paths instead of public manifest fields such as `plugin.client.root`, `plugin.client.entry`, or `plugin.server.entry`.
+
 ## Development Watch
 
 `watch: true` enables file watching for a plugin directory and refreshes relevant plugin runtimes through the plugin watch channel. Plugins auto-discovered from `.oo/plugins.dev` enable watch by default.
 
-Use watch mode for local plugin development. For published plugins, rely on package versions and normal dependency updates.
+Use watch mode for local plugin development. Local plugin sources use the host Vite dev server for `exports["./client"].source`, so HMR, TypeScript / TSX transforms, source maps, and React Fast Refresh are host-provided. Do not configure `plugin.client.devServer` for new plugins. For published plugins, rely on package versions and normal dependency updates.
 
 ## Debugging
 

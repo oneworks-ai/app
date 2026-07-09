@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { SchemaObjectEditor } from '#~/components/config/record-editors/SchemaObjectEditor'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import { setPluginOptions } from '#~/plugins/api'
+import { usePluginContext } from '#~/plugins/plugin-context'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
 
 import { buildPluginConfigUiSchema } from './plugin-config-json-schema'
@@ -79,6 +80,7 @@ const buildManifestConfig = (plugin: PluginRuntimeInstance) => (
 export function PluginConfigSection({ labels, onOptionsChange, plugin }: PluginConfigSectionProps) {
   const { message } = App.useApp()
   const { i18n, t } = useTranslation()
+  const { pluginServerBaseUrl } = usePluginContext()
   const preferredLanguage = i18n.resolvedLanguage ?? i18n.language
   const optionsSchema = useMemo(
     () => buildPluginConfigUiSchema(plugin.manifest?.config, preferredLanguage),
@@ -122,7 +124,12 @@ export function PluginConfigSection({ labels, onOptionsChange, plugin }: PluginC
     }
 
     try {
-      const savedOptions = await setPluginOptions(plugin.scope, cleaned)
+      const savedOptions = await setPluginOptions(
+        plugin.scope,
+        cleaned,
+        'workspace',
+        { serverBaseUrl: pluginServerBaseUrl }
+      )
       lastSavedRef.current = serializeOptions(savedOptions)
       if (saveVersionRef.current === version) {
         setDraftOptions(savedOptions)
@@ -136,7 +143,7 @@ export function PluginConfigSection({ labels, onOptionsChange, plugin }: PluginC
         void message.error(labels.saveFailed)
       }
     }
-  }, [labels.saveFailed, message, onOptionsChange, plugin.scope])
+  }, [labels.saveFailed, message, onOptionsChange, plugin.scope, pluginServerBaseUrl])
 
   const scheduleOptionsSave = useCallback((nextOptions: Record<string, unknown>) => {
     setDraftOptions(nextOptions)

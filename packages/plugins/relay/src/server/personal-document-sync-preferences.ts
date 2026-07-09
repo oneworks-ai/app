@@ -1,12 +1,14 @@
 import type { RelayStoredServer } from './types.js'
 import { isRecord, toString } from './utils.js'
 
-export const RELAY_PERSONAL_DOCUMENT_SYNC_KINDS = ['agents'] as const
+export const RELAY_PERSONAL_DOCUMENT_SYNC_KINDS = ['agents', 'ooAgents', 'ooRules'] as const
 
 export type RelayPersonalDocumentSyncKind = typeof RELAY_PERSONAL_DOCUMENT_SYNC_KINDS[number]
 
 export interface RelayPersonalDocumentSyncPreferences {
   agents: boolean
+  ooAgents: boolean
+  ooRules: boolean
 }
 
 export type RelayTeamDocumentSyncPreferences = Record<string, RelayPersonalDocumentSyncPreferences>
@@ -14,11 +16,13 @@ export type RelayTeamDocumentSyncPreferences = Record<string, RelayPersonalDocum
 const relayPersonalDocumentSyncKindSet = new Set<string>(RELAY_PERSONAL_DOCUMENT_SYNC_KINDS)
 
 export const defaultRelayPersonalDocumentSyncPreferences = (): RelayPersonalDocumentSyncPreferences => ({
-  agents: false
+  agents: false,
+  ooAgents: false,
+  ooRules: false
 })
 
 export const relayPersonalDocumentSyncEnabled = (preferences: RelayPersonalDocumentSyncPreferences) => (
-  preferences.agents
+  preferences.agents || preferences.ooAgents || preferences.ooRules
 )
 
 export const normalizeRelayPersonalDocumentSyncPreferences = (
@@ -26,7 +30,9 @@ export const normalizeRelayPersonalDocumentSyncPreferences = (
 ): RelayPersonalDocumentSyncPreferences | undefined => {
   if (!isRecord(value)) return undefined
   const preferences = {
-    agents: value.agents === true
+    agents: value.agents === true,
+    ooAgents: value.ooAgents === true,
+    ooRules: value.ooRules === true
   }
   return relayPersonalDocumentSyncEnabled(preferences) ? preferences : undefined
 }
@@ -36,7 +42,9 @@ export const serializeRelayPersonalDocumentSyncPreferences = (
 ): RelayPersonalDocumentSyncPreferences | undefined => (
   relayPersonalDocumentSyncEnabled(preferences)
     ? {
-      agents: preferences.agents
+      agents: preferences.agents,
+      ooAgents: preferences.ooAgents,
+      ooRules: preferences.ooRules
     }
     : undefined
 )

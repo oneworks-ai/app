@@ -139,18 +139,35 @@ export const readOneWorksAuthStore = async (
   }
 }
 
-export const writeOneWorksAuthStore = async (
-  store: OneWorksAuthStore,
-  env: Record<string, string | null | undefined> = process.env
-) => {
-  const authPath = resolveOneWorksAuthStorePath(env)
+const authStoreWriteQueues = new Map<string, Promise<void>>()
+
+const writeOneWorksAuthStoreFile = async (authPath: string, store: OneWorksAuthStore) => {
   await mkdir(dirname(authPath), { recursive: true, mode: 0o700 })
-  const tempPath = `${authPath}.${process.pid}.${Date.now()}.tmp`
+  const tempPath = `${authPath}.${process.pid}.${Date.now()}.${randomBytes(6).toString('hex')}.tmp`
   await writeFile(tempPath, `${JSON.stringify(normalizeOneWorksAuthStore(store), null, 2)}\n`, {
     encoding: 'utf8',
     mode: 0o600
   })
   await rename(tempPath, authPath)
+}
+
+export const writeOneWorksAuthStore = async (
+  store: OneWorksAuthStore,
+  env: Record<string, string | null | undefined> = process.env
+) => {
+  const authPath = resolveOneWorksAuthStorePath(env)
+  const previousWrite = authStoreWriteQueues.get(authPath) ?? Promise.resolve()
+  const nextWrite = previousWrite
+    .catch(() => undefined)
+    .then(() => writeOneWorksAuthStoreFile(authPath, store))
+  authStoreWriteQueues.set(authPath, nextWrite)
+  try {
+    await nextWrite
+  } finally {
+    if (authStoreWriteQueues.get(authPath) === nextWrite) {
+      authStoreWriteQueues.delete(authPath)
+    }
+  }
 }
 
 export const upsertOneWorksAuthServer = (

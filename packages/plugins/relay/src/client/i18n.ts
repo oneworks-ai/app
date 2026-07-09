@@ -130,7 +130,13 @@ export interface RelayClientMessages {
     yes: string
   }
   launcher: {
-    statusTitle: string
+    accountCount: (count: number) => string
+    accountListTitle: string
+    accountSectionTitle: string
+    loginMoreTitle: string
+    loginSubtitle: string
+    loginTitle: string
+    recentAccountSubtitle: string
   }
   service: {
     active: string
@@ -268,7 +274,13 @@ const relayClientMessages: Record<RelayClientLocale, RelayClientMessages> = {
       yes: 'yes'
     },
     launcher: {
-      statusTitle: 'Account status'
+      accountCount: count => `${count} accounts`,
+      accountListTitle: 'Account list',
+      accountSectionTitle: 'Accounts',
+      loginMoreTitle: 'Log in another account',
+      loginSubtitle: 'Add a OneWorks account',
+      loginTitle: 'Log in',
+      recentAccountSubtitle: 'Frequent account'
     },
     service: {
       active: 'active',
@@ -421,7 +433,13 @@ const relayClientMessages: Record<RelayClientLocale, RelayClientMessages> = {
       yes: '是'
     },
     launcher: {
-      statusTitle: '账号状态'
+      accountCount: count => `${count} 个账号`,
+      accountListTitle: '账号列表',
+      accountSectionTitle: '账号',
+      loginMoreTitle: '登录更多账号',
+      loginSubtitle: '添加新的 OneWorks 账号',
+      loginTitle: '登录账号',
+      recentAccountSubtitle: '最近常用账号'
     },
     service: {
       active: '当前',
@@ -457,9 +475,9 @@ const relayClientMessages: Record<RelayClientLocale, RelayClientMessages> = {
   }
 }
 
-export const relayClientLauncherStatusTitleI18n = {
-  en: relayClientMessages.en.launcher.statusTitle,
-  'zh-Hans': relayClientMessages['zh-Hans'].launcher.statusTitle
+export const relayClientLauncherAccountListTitleI18n = {
+  en: relayClientMessages.en.launcher.accountListTitle,
+  'zh-Hans': relayClientMessages['zh-Hans'].launcher.accountListTitle
 }
 
 export const relayClientSessionGroupCreateTitleI18n = {

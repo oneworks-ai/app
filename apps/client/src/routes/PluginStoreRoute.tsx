@@ -41,7 +41,7 @@ export function PluginStoreRoute() {
   const [searchParams] = useSearchParams()
   const { openRouteSidebar } = useRouteContainerSidebarOpener()
   const { clearRouteSidebar, hasRouteSidebarProvider, setRouteSidebar } = useRouteSidebar()
-  const { refreshPlugins, reloadPlugin, snapshot } = usePluginContext()
+  const { pluginServerBaseUrl, refreshPlugins, reloadPlugin, snapshot } = usePluginContext()
   const {
     headerActions: routePluginHeaderActions,
     sidebarContextMenuItems: routePluginSidebarContextMenu
@@ -95,7 +95,7 @@ export function PluginStoreRoute() {
   const toggleWatch = useCallback(async (scope: string, enabled: boolean) => {
     setUpdatingWatchScope(scope)
     try {
-      await setPluginWatch(scope, enabled)
+      await setPluginWatch(scope, enabled, { serverBaseUrl: pluginServerBaseUrl })
       await refreshPlugins()
       void message.success(enabled ? t('pluginStore.watchEnabled') : t('pluginStore.watchDisabled'))
     } catch (error) {
@@ -104,7 +104,7 @@ export function PluginStoreRoute() {
     } finally {
       setUpdatingWatchScope(undefined)
     }
-  }, [message, refreshPlugins, t])
+  }, [message, pluginServerBaseUrl, refreshPlugins, t])
 
   const togglePluginEnabled = useCallback((
     scope: string,
@@ -113,7 +113,7 @@ export function PluginStoreRoute() {
   ) => {
     const actionKey = `${target}:${scope}`
     setUpdatingEnabledAction(actionKey)
-    return setPluginEnabled(scope, enabled, target)
+    return setPluginEnabled(scope, enabled, target, { serverBaseUrl: pluginServerBaseUrl })
       .then(async () => {
         await refreshPlugins()
         void message.success(enabled ? t('pluginStore.pluginEnabled') : t('pluginStore.pluginDisabled'))
@@ -125,7 +125,7 @@ export function PluginStoreRoute() {
       .finally(() => {
         setUpdatingEnabledAction(undefined)
       })
-  }, [message, refreshPlugins, t])
+  }, [message, pluginServerBaseUrl, refreshPlugins, t])
 
   const createPluginContextMenuItems = useCallback(
     (plugin: PluginRuntimeInstance): RouteSidebarListContextMenuItems => {
@@ -292,6 +292,7 @@ export function PluginStoreRoute() {
             : (
               <PluginDetailPanel
                 plugin={selectedPlugin}
+                pluginServerBaseUrl={pluginServerBaseUrl}
                 snapshot={snapshot}
                 enabledLoading={updatingEnabledAction === `workspace:${selectedPlugin.scope}`}
                 watchLoading={updatingWatchScope === selectedPlugin.scope}

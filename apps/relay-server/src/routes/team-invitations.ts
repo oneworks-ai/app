@@ -13,6 +13,7 @@ import type {
   RelayMessage,
   RelayMessageAudience,
   RelayMessageKind,
+  RelayMessageMetadata,
   RelayServerArgs,
   RelayStore,
   RelayTeam,
@@ -193,6 +194,7 @@ const serializeRelayMessage = (message: RelayMessage, store: RelayStore) => ({
   title: message.title,
   body: message.body,
   audience: serializeMessageAudience(message.audience, store),
+  ...(message.metadata == null ? {} : { metadata: message.metadata }),
   createdByUserId: message.createdByUserId,
   createdBy: serializeUserSummary(store.users.find(user => user.id === message.createdByUserId)),
   createdAt: message.createdAt,
@@ -291,6 +293,7 @@ const createRelayMessage = (
     body: string
     createdByUserId: string
     kind: RelayMessageKind
+    metadata?: RelayMessageMetadata
     title: string
   }
 ) => {
@@ -301,6 +304,7 @@ const createRelayMessage = (
     title: input.title,
     body: input.body,
     audience: input.audience,
+    ...(input.metadata == null ? {} : { metadata: input.metadata }),
     createdByUserId: input.createdByUserId,
     createdAt: timestamp
   }
@@ -345,6 +349,13 @@ export const recordLoginNotificationMessage = (
     body:
       `检测到账号从 IP ${ip} 在 ${location} 完成登录。设备信息：${userAgent}。如果不是你本人操作，请及时修改密码或联系管理员。`,
     audience: { scope: 'users', userIds: [user.id] },
+    metadata: {
+      login: {
+        ip,
+        location,
+        userAgent
+      }
+    },
     createdByUserId: 'system'
   })
 }

@@ -13,7 +13,8 @@ export interface PluginAssetsState {
 export const usePluginAssets = (
   plugin: PluginRuntimeInstance | undefined,
   refreshKey: unknown,
-  fallbackError: string
+  fallbackError: string,
+  serverBaseUrl?: string
 ) => {
   const [state, setState] = useState<PluginAssetsState>({ groups: [], loading: false })
 
@@ -25,7 +26,7 @@ export const usePluginAssets = (
 
     let disposed = false
     setState({ groups: [], loading: true })
-    void getPluginAssets(plugin.scope)
+    void getPluginAssets(plugin.scope, { serverBaseUrl })
       .then((groups) => {
         if (disposed) return
         setState({ groups, loading: false })
@@ -39,7 +40,7 @@ export const usePluginAssets = (
     return () => {
       disposed = true
     }
-  }, [fallbackError, plugin, refreshKey])
+  }, [fallbackError, plugin, refreshKey, serverBaseUrl])
 
   return state
 }

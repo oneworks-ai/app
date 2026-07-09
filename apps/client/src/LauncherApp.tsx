@@ -123,7 +123,7 @@ export function LauncherApp() {
   return (
     <ConfigProvider theme={themeConfig}>
       <NotificationProvider>
-        <PluginProvider>
+        <PluginProvider runtimeSource='manager' surface='launcher'>
           <Suspense fallback={null}>
             <LauncherRoute />
           </Suspense>

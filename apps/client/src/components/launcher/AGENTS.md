@@ -37,6 +37,7 @@
 
 - 毛玻璃不能只靠透明。浅色背景下标题、placeholder、section label、sticky tabs 都要有足够对比度。
 - 图标表达当前模式或语义，不替代结构。输入框左侧保留当前模式图标；tab 和 setting item 用语义图标；不要在标题旁重复堆图标。
+- 目录浏览和插件路由面包屑统一使用共享的 `route-container-inline-breadcrumb`；launcher 只做密度、滚动和容器修饰，不再维护独立的面包屑按钮 / 分隔符组件样式。
 - Tooltip 只做补充，例如文件搜索图标、section shortcut chip。不要把操作说明常驻在 UI 里。
 
 ## 回归

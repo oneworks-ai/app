@@ -798,9 +798,11 @@ const buildAllComponents = (bearerFormat: string) => ({
     RelayPersonalDocumentCounts: {
       type: 'object',
       additionalProperties: false,
-      required: ['agents'],
+      required: ['agents', 'ooAgents', 'ooRules'],
       properties: {
-        agents: { type: 'integer', minimum: 0, description: 'Number of synced account or team AGENTS.md files.' }
+        agents: { type: 'integer', minimum: 0, description: 'Number of synced AGENTS.md files.' },
+        ooAgents: { type: 'integer', minimum: 0, description: 'Number of synced .oo/AGENTS.md files.' },
+        ooRules: { type: 'integer', minimum: 0, description: 'Number of synced .oo/rules markdown files.' }
       }
     },
     RelayPersonalDocumentSnapshot: {

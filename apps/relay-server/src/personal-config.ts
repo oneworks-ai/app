@@ -121,9 +121,14 @@ const normalizeEncryptedPayload = (value: unknown): RelayEncryptedPayload | unde
 const normalizeRelayPersonalDocumentCounts = (value: unknown): RelayPersonalDocumentCounts => {
   const counts = isRecord(value) ? value : {}
   return {
-    agents: normalizeNonNegativeInteger(counts.agents) ?? 0
+    agents: normalizeNonNegativeInteger(counts.agents) ?? 0,
+    ooAgents: normalizeNonNegativeInteger(counts.ooAgents) ?? 0,
+    ooRules: normalizeNonNegativeInteger(counts.ooRules) ?? 0
   }
 }
+
+const countRelayPersonalDocuments = (counts: RelayPersonalDocumentCounts) =>
+  counts.agents + counts.ooAgents + counts.ooRules
 
 const hashRelayPersonalDocumentSnapshot = (value: Omit<RelayPersonalDocumentSnapshot, 'hash' | 'updatedAt'>) => (
   `sha256:${createHash('sha256').update(stableJsonStringify(value)).digest('hex')}`
@@ -137,7 +142,7 @@ export const normalizeRelayPersonalDocumentSnapshot = (
   if (encryptedPayload == null) return undefined
   const countsByKind = normalizeRelayPersonalDocumentCounts(value.countsByKind)
   const documentCount = normalizeNonNegativeInteger(value.documentCount) ??
-    countsByKind.agents
+    countRelayPersonalDocuments(countsByKind)
   const totalSizeBytes = normalizeNonNegativeInteger(value.totalSizeBytes) ?? 0
   const version = value.version === 1 || value.version === '1' ? 1 : undefined
   if (version !== 1) return undefined

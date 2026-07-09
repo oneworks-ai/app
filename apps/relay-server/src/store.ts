@@ -44,6 +44,7 @@ import type {
   RelayMessageAudience,
   RelayMessageAudienceScope,
   RelayMessageKind,
+  RelayMessageMetadata,
   RelayOAuthState,
   RelayOpenApiAuditEvent,
   RelayPasskeyChallenge,
@@ -337,16 +338,46 @@ const normalizeRelayMessageAudience = (value: unknown): RelayMessageAudience => 
   return { scope: 'users', userIds: userIds ?? [] }
 }
 
+const normalizeRelayMessageMetadataText = (value: unknown, maxLength: number) => (
+  typeof value === 'string' && value.trim() !== ''
+    ? value.trim().slice(0, maxLength)
+    : undefined
+)
+
+const normalizeRelayMessageLoginMetadata = (
+  value: unknown
+): RelayMessageMetadata['login'] | undefined => {
+  if (!isRecord(value)) return undefined
+  const ip = normalizeRelayMessageMetadataText(value.ip, 128)
+  const location = normalizeRelayMessageMetadataText(value.location, 160)
+  const userAgent = normalizeRelayMessageMetadataText(value.userAgent, 240)
+  if (ip == null && location == null && userAgent == null) return undefined
+  return {
+    ...(ip == null ? {} : { ip }),
+    ...(location == null ? {} : { location }),
+    ...(userAgent == null ? {} : { userAgent })
+  }
+}
+
+const normalizeRelayMessageMetadata = (value: unknown): RelayMessageMetadata | undefined => {
+  if (!isRecord(value)) return undefined
+  const login = normalizeRelayMessageLoginMetadata(value.login)
+  if (login == null) return undefined
+  return { login }
+}
+
 const normalizeRelayMessage = (value: Record<string, unknown>): RelayMessage | undefined => {
   const title = typeof value.title === 'string' && value.title.trim() !== '' ? value.title.trim() : undefined
   const body = typeof value.body === 'string' && value.body.trim() !== '' ? value.body.trim() : undefined
   if (title == null || body == null) return undefined
+  const metadata = normalizeRelayMessageMetadata(value.metadata)
   return {
     id: typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : randomUUID(),
     kind: normalizeRelayMessageKind(value.kind),
     title,
     body,
     audience: normalizeRelayMessageAudience(value.audience),
+    ...(metadata == null ? {} : { metadata }),
     createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
       ? value.createdByUserId.trim()
       : 'system',

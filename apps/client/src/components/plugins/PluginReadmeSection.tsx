@@ -15,6 +15,7 @@ interface PluginReadmeSectionProps {
   loading: boolean
   preferredLanguage?: string
   pluginScope: string
+  pluginServerBaseUrl?: string
   readme?: PluginReadme
   readmes?: PluginReadme[]
   showTitle?: boolean
@@ -43,6 +44,7 @@ export function PluginReadmeSection({
   loading,
   preferredLanguage,
   pluginScope,
+  pluginServerBaseUrl,
   readme,
   readmes = readme == null ? [] : [readme],
   showTitle = true,
@@ -71,7 +73,9 @@ export function PluginReadmeSection({
   const getReadmeAssetUrl = (href: string) => {
     if (selectedReadme == null) return undefined
     const assetPath = resolvePluginReadmeAssetPath(selectedReadme.path, href)
-    return assetPath == null ? undefined : buildPluginReadmeAssetUrl(pluginScope, assetPath)
+    return assetPath == null
+      ? undefined
+      : buildPluginReadmeAssetUrl(pluginScope, assetPath, { serverBaseUrl: pluginServerBaseUrl })
   }
   const renderImage = ({ alt, src, title: imageTitle }: { alt?: string; src: string; title?: string }) => {
     const resolvedSrc = getReadmeAssetUrl(src) ?? src

@@ -7,6 +7,7 @@ import { emptyOneWorksAuthStore, writeOneWorksAuthStore } from '@oneworks/utils/
 import { vi } from 'vitest'
 
 import { activatePlugin } from '../src/server/index.js'
+import { createRelayDeviceStore } from '../src/server/store.js'
 import type { RelayLocalSessionAdapter } from '../src/server/session-types.js'
 import type { RelayConfigDistributionStatus } from '../src/server/types.js'
 
@@ -43,6 +44,10 @@ export interface RelayPluginStatus {
   }
   device: {
     hasToken: boolean
+    id?: string
+    name?: string
+    registeredAt?: string | null
+    updatedAt?: string | null
   }
   options?: {
     activeServerId?: string
@@ -70,8 +75,32 @@ export interface RelayPluginStatus {
     }
     devices?: Array<{
       capabilities?: Record<string, unknown>
+      deviceInfo?: Record<string, unknown>
       id?: string
+      ip?: string
+      lastSeenIp?: string
+      managementServers?: Array<{
+        environment?: Record<string, unknown>
+        id?: string
+        ip?: string
+        kind?: string
+        lastSeenAt?: string
+        lastSeenIp?: string
+        name?: string
+        projects?: Array<{
+          id?: string
+          lastSeenAt?: string
+          name?: string
+          status?: string
+          title?: string
+          workspaceFolder?: string
+        }>
+        registeredIp?: string
+        status?: string
+        workspaceFolder?: string
+      }>
       name?: string
+      registeredIp?: string
       status?: string
       workspaceFolder?: string
     }>
@@ -83,6 +112,7 @@ export interface RelayPluginStatus {
     sessionAuthenticated?: boolean
     sessionExpiresAt?: string | null
   }>
+  storePath?: string
 }
 
 const tempDirs: string[] = []
@@ -153,6 +183,9 @@ export const createPluginHarness = async (
 
   activatePlugin({
     scope: 'relay',
+    runtime: {
+      role: 'workspace'
+    },
     workspaceFolder: '/workspace',
     projectHome,
     options,
@@ -182,9 +215,7 @@ export const createPluginHarness = async (
 }
 
 export const readDeviceStore = async (projectHome: string) =>
-  JSON.parse(
-    await readFile(join(projectHome, '.local/plugins/relay/device.json'), 'utf8')
-  ) as Record<string, unknown>
+  await createRelayDeviceStore(projectHome).readStore() as unknown as Record<string, unknown>
 
 export const readConfigSnapshot = async (projectHome: string) =>
   JSON.parse(
@@ -315,6 +346,13 @@ export const stubRelayFetch = (deviceToken = 'remote-device-token') => {
           createdByUserId: 'system',
           id: 'message-1',
           kind: 'personal',
+          metadata: {
+            login: {
+              ip: '203.0.113.10',
+              location: 'Shanghai CN',
+              userAgent: 'Vitest Browser'
+            }
+          },
           title: '新设备登录提醒',
           updatedAt: null
         }]

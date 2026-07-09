@@ -241,7 +241,7 @@ describe('pluginsRouter', () => {
       {
         name: 'tools',
         plugin: {
-          server: { entry: './server.mjs' }
+          server: { entry: './server.mjs', roles: ['workspace'] }
         }
       },
       `
@@ -261,6 +261,128 @@ describe('pluginsRouter', () => {
 
     expect(response.status).toBe(200)
     expect(payload).toEqual({ scope: 'tools', payload: { text: 'hello' } })
+  })
+
+  it('invokes scoped runtime channels on the current runtime', async () => {
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'runtime')
+    await createPlugin(
+      pluginRoot,
+      {
+        name: 'runtime',
+        plugin: {
+          server: { entry: './server.mjs', roles: ['workspace'] }
+        }
+      },
+      `
+      export async function activatePlugin(ctx) {
+        ctx.runtime.registerChannel('echo', async request => ({
+          payload: request.payload,
+          role: ctx.runtime.role,
+          sourceRole: request.source.role,
+          targetRole: request.target.role
+        }))
+      }
+    `
+    )
+    mockConfig([{ id: pluginRoot, scope: 'runtime' }])
+
+    const runtimeResponse = await fetch(`${baseUrl}/api/plugins/runtime`)
+    const runtimePayload = await runtimeResponse.json() as { runtime: { role: string } }
+    expect(runtimePayload.runtime.role).toBe('workspace')
+
+    const response = await fetch(`${baseUrl}/api/plugins/runtime/runtime/channels/echo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payload: { text: 'hello' } })
+    })
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload).toEqual({
+      ok: true,
+      payload: {
+        payload: { text: 'hello' },
+        role: 'workspace',
+        sourceRole: 'workspace',
+        targetRole: 'workspace'
+      }
+    })
+  })
+
+  it('does not run unresolved cross-workspace runtime targets on the current workspace', async () => {
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'runtime-target')
+    await createPlugin(
+      pluginRoot,
+      {
+        name: 'runtime-target',
+        plugin: {
+          server: { entry: './server.mjs', roles: ['workspace'] }
+        }
+      },
+      `
+      export async function activatePlugin(ctx) {
+        ctx.runtime.registerChannel('echo', async request => ({
+          local: true,
+          payload: request.payload
+        }))
+        ctx.registerCommand('call-other-workspace', async payload => ctx.runtime.invokeChannel('echo', {
+          payload,
+          target: {
+            role: 'workspace',
+            workspaceId: 'other-workspace'
+          }
+        }))
+      }
+    `
+    )
+    mockConfig([{ id: pluginRoot, scope: 'runtime-target' }])
+
+    const response = await fetch(`${baseUrl}/api/plugins/runtime-target/commands/call-other-workspace`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payload: { text: 'hello' } })
+    })
+    const message = await response.text()
+
+    expect(response.status).toBe(400)
+    expect(message).toContain('requires target.serverBaseUrl or a known runtime endpoint')
+  })
+
+  it('lists the current workspace runtime endpoint', async () => {
+    mockConfig([])
+
+    const response = await fetch(`${baseUrl}/api/plugins/runtime/endpoints`)
+    const payload = await response.json() as {
+      endpoints: Array<{ current?: boolean; role: string; status?: string }>
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.endpoints).toEqual([
+      expect.objectContaining({
+        current: true,
+        role: 'workspace',
+        status: 'online'
+      })
+    ])
+  })
+
+  it('lists the current manager runtime endpoint', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ROLE__', 'manager')
+    mockConfig([])
+
+    const response = await fetch(`${baseUrl}/api/plugins/runtime/endpoints`)
+    const payload = await response.json() as {
+      endpoints: Array<{ current?: boolean; role: string; status?: string }>
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.endpoints).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        current: true,
+        role: 'manager',
+        status: 'online'
+      })
+    ]))
   })
 
   it('serves client assets and rejects traversal', async () => {
@@ -356,7 +478,7 @@ describe('pluginsRouter', () => {
       name: 'escape',
       plugin: {
         client: { entry: '../outside-client.js', root: '..' },
-        server: { entry: '../outside-server.mjs' }
+        server: { entry: '../outside-server.mjs', roles: ['workspace'] }
       }
     })
     mockConfig([{ id: pluginRoot, scope: 'escape' }])
@@ -375,7 +497,7 @@ describe('pluginsRouter', () => {
       {
         name: 'api',
         plugin: {
-          server: { entry: './server.mjs' }
+          server: { entry: './server.mjs', roles: ['workspace'] }
         }
       },
       `
@@ -491,7 +613,7 @@ describe('pluginsRouter', () => {
       {
         name: 'proxy',
         plugin: {
-          server: { entry: './server.mjs' }
+          server: { entry: './server.mjs', roles: ['workspace'] }
         }
       },
       `
@@ -513,7 +635,7 @@ describe('pluginsRouter', () => {
       {
         name: 'launcher',
         plugin: {
-          server: { entry: './server.mjs' },
+          server: { entry: './server.mjs', roles: ['workspace'] },
           contributions: {
             launcherSearchProviders: [
               { id: 'docs', title: 'Docs', command: 'search-docs' }
@@ -549,6 +671,49 @@ describe('pluginsRouter', () => {
     await expect(invokeResponse.json()).resolves.toEqual({ invoked: 'launcher/docs/intro' })
   })
 
+  it('filters launcher providers by contribution surface before invoking commands', async () => {
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'workspace-provider')
+    await createPlugin(
+      pluginRoot,
+      {
+        name: 'workspace-provider',
+        plugin: {
+          server: { entry: './server.mjs', roles: ['workspace'] },
+          contributions: {
+            surfaces: ['workspace'],
+            launcherSearchProviders: [
+              { id: 'workspace-only', title: 'Workspace Only', command: 'search-workspace' }
+            ]
+          }
+        }
+      },
+      `
+      export async function activatePlugin(ctx) {
+        ctx.registerCommand('search-workspace', async payload => {
+          if (payload.action === 'invoke') return { invoked: true }
+          return [{ id: 'hidden', title: 'Hidden ' + payload.query }]
+        })
+      }
+    `
+    )
+    mockConfig([{ id: pluginRoot, scope: 'workspace-provider' }])
+
+    const searchResponse = await fetch(`${baseUrl}/api/plugins/launcher/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'guide' })
+    })
+    const searchPayload = await searchResponse.json() as { results: Array<{ id: string; title: string }> }
+
+    expect(searchPayload.results).toEqual([])
+
+    const invokeResponse = await fetch(
+      `${baseUrl}/api/plugins/launcher/results/workspace-provider%2Fworkspace-only%2Fhidden/invoke`,
+      { method: 'POST' }
+    )
+    expect(invokeResponse.status).toBe(404)
+  })
+
   it('keeps activation failures isolated and reports diagnostics', async () => {
     const badPluginRoot = path.join(workspaceFolder, 'plugins', 'bad')
     const goodPluginRoot = path.join(workspaceFolder, 'plugins', 'good')
@@ -556,7 +721,7 @@ describe('pluginsRouter', () => {
       badPluginRoot,
       {
         name: 'bad',
-        plugin: { server: { entry: './server.mjs' } }
+        plugin: { server: { entry: './server.mjs', roles: ['workspace'] } }
       },
       `
       export async function activatePlugin() {
@@ -568,7 +733,7 @@ describe('pluginsRouter', () => {
       goodPluginRoot,
       {
         name: 'good',
-        plugin: { server: { entry: './server.mjs' } }
+        plugin: { server: { entry: './server.mjs', roles: ['workspace'] } }
       },
       `
       export async function activatePlugin(ctx) {
@@ -602,7 +767,7 @@ describe('pluginsRouter', () => {
       pluginRoot,
       {
         name: 'flaky',
-        plugin: { server: { entry: './server.mjs' } }
+        plugin: { server: { entry: './server.mjs', roles: ['workspace'] } }
       },
       `
       globalThis.__oneworksFlakyPluginActivationCount ??= 0

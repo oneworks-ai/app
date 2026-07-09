@@ -1,19 +1,17 @@
 /* eslint-disable max-lines -- provider coordinates plugin activation, relay-aware sources, and watch lifecycle. */
+import type { PluginRuntimeEndpoint } from '@oneworks/types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
+import { getLauncherManagerServerBaseUrl } from '#~/api/launcher'
 import { useNotifications } from '#~/notifications/NotificationProvider'
-import { getRuntimeWorkspaceId } from '#~/runtime-config'
-import {
-  WORKSPACE_CONNECTION_CHANGE_EVENT,
-  readRememberedWorkspaceConnectionMetadata
-} from '#~/workspace-connection-state'
+import { getRuntimeWorkspaceId, isServerManagerRole } from '#~/runtime-config'
 import { createSocket } from '#~/ws.js'
 
-import { listPlugins } from './api'
+import { listPluginSnapshot } from './api'
 import { PluginContext } from './plugin-context'
 import type { PluginContextValue } from './plugin-context'
-import type { PluginRuntimeInstance } from './plugin-manifest'
+import type { PluginContributionSurface, PluginRuntimeInstance } from './plugin-manifest'
 import { PluginRegistry } from './plugin-registry'
 import { activatePluginClient } from './plugin-runtime'
 
@@ -22,35 +20,53 @@ interface PluginWatchEvent {
   scope: string
 }
 
-export function PluginProvider({ children }: { children: ReactNode }) {
+type PluginRuntimeSource = 'current' | 'manager'
+
+interface PluginProviderProps {
+  children: ReactNode
+  runtimeSource?: PluginRuntimeSource
+  surface?: PluginContributionSurface
+}
+
+const resolvePluginRuntimeSource = (runtimeSource: PluginRuntimeSource | undefined): PluginRuntimeSource => {
+  if (runtimeSource != null) return runtimeSource
+  if (getRuntimeWorkspaceId() != null) return 'current'
+  return isServerManagerRole() ? 'manager' : 'current'
+}
+
+export function PluginProvider({
+  children,
+  runtimeSource,
+  surface = 'workspace'
+}: PluginProviderProps) {
   const notifications = useNotifications()
   const registry = useMemo(() => new PluginRegistry(), [])
   const instancesRef = useRef<PluginRuntimeInstance[]>([])
   const activationVersionsRef = useRef(new Map<string, number>())
   const importVersionsRef = useRef(new Map<string, number>())
+  const runtimeEndpointRef = useRef<PluginRuntimeEndpoint | undefined>(undefined)
+  const [runtimeEndpoint, setRuntimeEndpoint] = useState<PluginRuntimeEndpoint | undefined>(undefined)
   const [snapshot, setSnapshot] = useState(() => registry.getSnapshot())
-  const [workspaceConnectionRevision, setWorkspaceConnectionRevision] = useState(0)
 
   useEffect(() =>
     registry.subscribe(() => {
       setSnapshot(registry.getSnapshot())
     }), [registry])
 
-  useEffect(() => {
-    const handleWorkspaceConnectionChange = () => {
-      setWorkspaceConnectionRevision(revision => revision + 1)
-    }
-    window.addEventListener(WORKSPACE_CONNECTION_CHANGE_EVENT, handleWorkspaceConnectionChange)
-    return () => {
-      window.removeEventListener(WORKSPACE_CONNECTION_CHANGE_EVENT, handleWorkspaceConnectionChange)
-    }
-  }, [])
-
   const pluginServerBaseUrl = useMemo(() => {
-    const workspaceId = getRuntimeWorkspaceId()
-    if (workspaceId == null) return undefined
-    return readRememberedWorkspaceConnectionMetadata(workspaceId, 'relay')?.managerServerBaseUrl
-  }, [workspaceConnectionRevision])
+    return resolvePluginRuntimeSource(runtimeSource) === 'manager'
+      ? getLauncherManagerServerBaseUrl()
+      : undefined
+  }, [runtimeSource])
+
+  const setRuntimeSnapshot = useCallback((runtime: PluginRuntimeEndpoint | undefined) => {
+    registry.setRuntimeContext({
+      runtime,
+      surfaces: [surface]
+    })
+    runtimeEndpointRef.current = runtime
+    setRuntimeEndpoint(runtime)
+  }, [registry, surface])
 
   const getImportVersion = useCallback((scope: string) => importVersionsRef.current.get(scope) ?? 0, [])
   const bumpImportVersion = useCallback((scope: string) => {
@@ -81,6 +97,7 @@ export function PluginProvider({ children }: { children: ReactNode }) {
       notifications,
       registry,
       reloadPlugin,
+      runtimeEndpoint: runtimeEndpointRef.current,
       serverBaseUrl: pluginServerBaseUrl
     })
   }, [
@@ -111,6 +128,7 @@ export function PluginProvider({ children }: { children: ReactNode }) {
         notifications,
         registry,
         reloadPlugin,
+        runtimeEndpoint: runtimeEndpointRef.current,
         serverBaseUrl: pluginServerBaseUrl
       })
     }
@@ -125,16 +143,18 @@ export function PluginProvider({ children }: { children: ReactNode }) {
   ])
 
   const refreshPlugins = useCallback(async () => {
-    const instances = await listPlugins({ serverBaseUrl: pluginServerBaseUrl })
-    await activateInstances(instances, () => false)
-  }, [activateInstances, pluginServerBaseUrl])
+    const pluginSnapshot = await listPluginSnapshot({ serverBaseUrl: pluginServerBaseUrl })
+    setRuntimeSnapshot(pluginSnapshot.runtime)
+    await activateInstances(pluginSnapshot.plugins, () => false)
+  }, [activateInstances, pluginServerBaseUrl, setRuntimeSnapshot])
 
   useEffect(() => {
     let didCancel = false
-    void listPlugins({ serverBaseUrl: pluginServerBaseUrl })
-      .then(async instances => {
+    void listPluginSnapshot({ serverBaseUrl: pluginServerBaseUrl })
+      .then(async pluginSnapshot => {
         if (didCancel) return
-        await activateInstances(instances, () => didCancel)
+        setRuntimeSnapshot(pluginSnapshot.runtime)
+        await activateInstances(pluginSnapshot.plugins, () => didCancel)
       })
       .catch((error) => {
         if (didCancel) return
@@ -149,8 +169,9 @@ export function PluginProvider({ children }: { children: ReactNode }) {
         nextActivationVersion(instance.scope)
         registry.disposeScope(instance.scope)
       })
+      setRuntimeSnapshot(undefined)
     }
-  }, [activateInstances, nextActivationVersion, pluginServerBaseUrl, registry])
+  }, [activateInstances, nextActivationVersion, pluginServerBaseUrl, registry, setRuntimeSnapshot])
 
   useEffect(() => {
     let disposed = false
@@ -216,11 +237,13 @@ export function PluginProvider({ children }: { children: ReactNode }) {
   }, [bumpImportVersion, pluginServerBaseUrl, refreshPlugins])
 
   const value = useMemo<PluginContextValue>(() => ({
+    pluginServerBaseUrl,
     refreshPlugins,
     registry,
     reloadPlugin,
+    runtimeEndpoint,
     snapshot
-  }), [refreshPlugins, registry, reloadPlugin, snapshot])
+  }), [pluginServerBaseUrl, refreshPlugins, registry, reloadPlugin, runtimeEndpoint, snapshot])
 
   return <PluginContext.Provider value={value}>{children}</PluginContext.Provider>
 }

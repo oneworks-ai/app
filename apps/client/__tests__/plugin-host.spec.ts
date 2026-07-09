@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- plugin host registry coverage keeps shared setup and runtime contract cases together. */
+import { isValidElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { mergeRouteMoreMenuOverrides, mergeRouteWindowBarOverrides } from '#~/components/layout/route-sidebar-context'
@@ -16,6 +17,13 @@ import {
 } from '#~/plugins/route-plugin-chrome'
 
 const encodeModule = (source: string) => `data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`
+
+vi.mock('@monaco-editor/react', () => ({
+  default: () => null,
+  loader: { config: vi.fn() }
+}))
+vi.mock('#~/components/monaco/use-monaco-theme', () => ({ useMonacoTheme: () => 'vs' }))
+vi.mock('monaco-editor', () => ({ editor: {} }))
 
 describe('client plugin host registry', () => {
   it('loads manifest contributions with scoped slot ids', () => {
@@ -244,6 +252,140 @@ describe('client plugin host registry', () => {
         pluginScope: 'canonical-route-menu'
       })
     ]))
+  })
+
+  it('filters contributions by runtime role and host surface', () => {
+    const registry = new PluginRegistry()
+
+    registry.setRuntimeContext({
+      runtime: { id: 'manager', role: 'manager' },
+      surfaces: ['launcher']
+    })
+    registry.setInstances([
+      {
+        requestId: 'workspace-only',
+        scope: 'workspace-only',
+        manifest: {
+          plugin: {
+            server: { roles: ['workspace'] },
+            contributions: {
+              launcherSearchProviders: [{ command: 'search', id: 'workspace-search', title: 'Workspace search' }],
+              navItems: [{ id: 'workspace-nav', title: 'Workspace nav' }],
+              routes: [{ clientView: 'home', id: 'home', title: 'Workspace route' }]
+            }
+          }
+        }
+      },
+      {
+        requestId: 'account',
+        scope: 'account',
+        manifest: {
+          plugin: {
+            server: { roles: ['manager', 'workspace'] },
+            contributions: {
+              launcherSearchProviders: [{
+                command: 'search',
+                id: 'account-search',
+                roles: ['manager'],
+                surfaces: ['launcher'],
+                title: 'Account search'
+              }],
+              navItems: [{
+                id: 'account-nav',
+                surfaces: ['workspace'],
+                title: 'Account nav'
+              }],
+              routes: [{
+                clientView: 'home',
+                id: 'home',
+                roles: ['manager'],
+                surfaces: ['launcher'],
+                title: 'Account route'
+              }]
+            }
+          }
+        }
+      }
+    ])
+
+    registry.registerLauncherSearchProvider('workspace-only', {
+      command: 'search',
+      id: 'dynamic-workspace',
+      title: 'Dynamic workspace'
+    })
+    registry.registerLauncherSearchProvider('account', {
+      command: 'search',
+      id: 'dynamic-workspace-surface',
+      surfaces: ['workspace'],
+      title: 'Dynamic workspace surface'
+    })
+    registry.registerLauncherSearchProvider('account', {
+      command: 'search',
+      id: 'dynamic-launcher',
+      surfaces: ['launcher'],
+      title: 'Dynamic launcher'
+    })
+
+    const snapshot = registry.getSnapshot()
+    expect(snapshot.runtime?.role).toBe('manager')
+    expect(snapshot.slots['launcher.searchProviders']).toEqual([
+      expect.objectContaining({
+        id: 'account-search',
+        pluginScope: 'account'
+      })
+    ])
+    expect(snapshot.slots['nav.items']).toBeUndefined()
+    expect(snapshot.routes).toEqual([
+      expect.objectContaining({
+        id: 'home',
+        scope: 'account',
+        viewId: 'home'
+      })
+    ])
+    expect(snapshot.launcherProviders).toEqual([
+      expect.objectContaining({
+        id: 'dynamic-launcher',
+        scope: 'account'
+      })
+    ])
+  })
+
+  it('passes launcher surface into host-rendered interaction lists', async () => {
+    vi.stubGlobal('localStorage', {
+      clear: vi.fn(),
+      getItem: vi.fn(() => null),
+      key: vi.fn(() => null),
+      length: 0,
+      removeItem: vi.fn(),
+      setItem: vi.fn()
+    })
+    const {
+      createPluginHostComponentReactApi,
+      renderPluginHostComponent
+    } = await import('#~/plugins/plugin-host-components')
+    const node = renderPluginHostComponent(
+      'interactionList',
+      {
+        emptyText: null,
+        items: []
+      },
+      'launcher'
+    )
+
+    expect(isValidElement(node)).toBe(true)
+    expect((node as { props?: { surface?: string } }).props?.surface).toBe('launcher')
+
+    const launcherUi = createPluginHostComponentReactApi('launcher')
+    expect(typeof launcherUi.InteractionList).toBe('function')
+    const renderInteractionList = launcherUi.InteractionList as unknown as (
+      props: { emptyText: null; items: [] }
+    ) => unknown
+    const reactNode = renderInteractionList({
+      emptyText: null,
+      items: []
+    })
+    expect(isValidElement(reactNode)).toBe(true)
+    expect((reactNode as { props?: { surface?: string } }).props?.surface).toBe('launcher')
   })
 
   it('merges route-owned chrome overrides with plugin-provided route chrome', () => {

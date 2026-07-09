@@ -4,6 +4,7 @@ import type { ComponentType, ReactNode } from 'react'
 import type { ChatMessageContent, SessionQueuedMessageMode } from '@oneworks/core'
 import type {
   PluginClientManifest,
+  PluginContributionAvailability,
   PluginContributionBase,
   PluginContributionChatHeaderAction,
   PluginContributionChatInteractionPanelEmptyAction,
@@ -18,6 +19,7 @@ import type {
   PluginContributionSessionGroupAction,
   PluginContributionSessionGroupCreateSession,
   PluginContributionSessionGroupMatch,
+  PluginContributionSurface,
   PluginContributionWorkbenchAddMenuItem,
   PluginContributionWorkbenchTab,
   PluginContributionWorkspaceDrawerTab,
@@ -25,7 +27,10 @@ import type {
   PluginExtensionPointManifest,
   PluginLocalizedText,
   PluginManifest,
-  PluginRuntimeInstance
+  PluginRuntimeChannelInvocation,
+  PluginRuntimeEndpoint,
+  PluginRuntimeInstance,
+  PluginServerRuntimeRole
 } from '@oneworks/types'
 
 import type { IconAsset } from '#~/components/icons/IconAsset'
@@ -46,6 +51,7 @@ export interface PluginDiagnostic {
 
 export type {
   PluginClientManifest,
+  PluginContributionAvailability,
   PluginContributionBase,
   PluginContributionChatHeaderAction,
   PluginContributionChatInteractionPanelEmptyAction,
@@ -60,6 +66,7 @@ export type {
   PluginContributionSessionGroupAction,
   PluginContributionSessionGroupCreateSession,
   PluginContributionSessionGroupMatch,
+  PluginContributionSurface,
   PluginContributionWorkbenchAddMenuItem,
   PluginContributionWorkbenchTab,
   PluginContributionWorkspaceDrawerTab,
@@ -67,7 +74,10 @@ export type {
   PluginExtensionPointManifest,
   PluginLocalizedText,
   PluginManifest,
-  PluginRuntimeInstance
+  PluginRuntimeChannelInvocation,
+  PluginRuntimeEndpoint,
+  PluginRuntimeInstance,
+  PluginServerRuntimeRole
 }
 
 export type PluginSlot =
@@ -148,13 +158,16 @@ export interface PluginViewRegistration {
   renderNode?: (context: PluginViewContext) => ReactNode
 }
 
-export type PluginViewSurface = 'route' | 'workbench' | 'drawer'
+export type PluginViewSurface = 'route' | 'workbench' | 'drawer' | 'launcher'
 export type PluginHostThemeMode = 'light' | 'dark' | 'system'
 export type PluginHostResolvedThemeMode = 'light' | 'dark'
 
 export interface PluginViewHostContext {
   isDarkMode: boolean
   language: string
+  launcherSearch?: {
+    value: string
+  }
   resolvedThemeMode: PluginHostResolvedThemeMode
   surface: PluginViewSurface
   themeMode: PluginHostThemeMode
@@ -366,6 +379,20 @@ export interface PluginHostInputComponentProps {
   value?: string
 }
 
+export interface PluginHostSearchInputComponentProps {
+  allowClear?: boolean
+  ariaLabel?: string
+  autoFocus?: boolean
+  className?: string
+  defaultValue?: string
+  disabled?: boolean
+  onChange?: (value: string) => void
+  onCommit?: (value: string) => void
+  placeholder?: string
+  suffix?: ReactNode
+  value?: string
+}
+
 export interface PluginHostSelectComponentProps {
   allowClear?: boolean
   ariaLabel?: string
@@ -413,6 +440,7 @@ export interface PluginHostInteractionListItem {
   disabled?: boolean
   icon?: IconAsset
   iconFilled?: boolean
+  iconState?: 'offline' | 'online' | 'stale' | 'unknown'
   itemType?: 'groupTitle' | 'listItem'
   key: string
   meta?: ReactNode
@@ -439,6 +467,7 @@ export interface PluginHostInteractionListSearchProps {
   defaultValue?: string
   filterItems?: boolean
   placeholder: string
+  renderInput?: boolean
   suffix?: ReactNode
   value?: string
   onChange: (value: string) => void
@@ -447,7 +476,7 @@ export interface PluginHostInteractionListSearchProps {
 export interface PluginHostInteractionListComponentProps<
   TItem extends PluginHostInteractionListItem = PluginHostInteractionListItem,
 > {
-  actionDisplay?: 'default' | 'inline'
+  actionDisplay?: 'inline' | 'menu'
   actions?: (item: TItem) => Array<PluginHostInteractionListAction<TItem>>
   activeKey?: string
   border?: 'bordered' | 'borderless'
@@ -457,8 +486,10 @@ export interface PluginHostInteractionListComponentProps<
   iconSize?: number | string
   inlineActionLimit?: number
   items: TItem[]
+  mode?: 'grouped' | 'launcher' | 'resource'
   padding?: 'default' | 'none'
   search?: PluginHostInteractionListSearchProps
+  showItemDescription?: boolean
   splitActionHover?: boolean
   onSelect?: (item: TItem) => void
 }
@@ -571,6 +602,7 @@ export interface PluginHostComponentPropsById {
   overlaySelectLabel: PluginHostOverlaySelectLabelComponentProps
   overlayTree: PluginHostOverlayTreeComponentProps
   projectFileTree: PluginHostProjectFileTreeComponentProps
+  searchInput: PluginHostSearchInputComponentProps
   select: PluginHostSelectComponentProps
   segmented: PluginHostSegmentedComponentProps
   sender: PluginHostSenderComponentProps
@@ -604,6 +636,7 @@ export interface PluginHostComponentReactApi {
   OverlaySelectLabel: ComponentType<PluginHostOverlaySelectLabelComponentProps>
   OverlayTree: ComponentType<PluginHostOverlayTreeComponentProps>
   ProjectFileTree: ComponentType<PluginHostProjectFileTreeComponentProps>
+  SearchInput: ComponentType<PluginHostSearchInputComponentProps>
   Select: ComponentType<PluginHostSelectComponentProps>
   Segmented: ComponentType<PluginHostSegmentedComponentProps>
   Sender: ComponentType<PluginHostSenderComponentProps>
@@ -625,9 +658,15 @@ export interface PluginViewContext {
     ) => Promise<Record<string, unknown>>
     value: Record<string, unknown>
   }
+  runtime: {
+    endpoint?: PluginRuntimeEndpoint
+    invokeChannel: (channelId: string, invocation?: PluginRuntimeChannelInvocation) => Promise<unknown>
+    listEndpoints: () => Promise<PluginRuntimeEndpoint[]>
+  }
   route?: {
     setActions: (actions?: PluginViewRouteHeaderAction[]) => void
     setBreadcrumb: (breadcrumb?: PluginViewRouteHeaderBreadcrumb) => void
+    setLauncherChrome: (chrome?: PluginViewRouteLauncherChrome) => void
     setTitle: (title?: string) => void
   }
   routeId?: string
@@ -666,6 +705,14 @@ export interface PluginViewRouteHeaderBreadcrumb {
   ariaLabel?: string
   backLabel?: string
   currentTitle?: ReactNode
+}
+
+export interface PluginViewRouteLauncherChrome {
+  avatarInitials?: string
+  avatarUrl?: string
+  icon?: string
+  searchTitle?: string
+  title?: string
 }
 
 export type PluginCleanup = PluginDisposable | (() => void) | void

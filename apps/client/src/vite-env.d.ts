@@ -162,9 +162,17 @@ interface DesktopWorkspaceResourceSearchResponse {
 interface DesktopPluginLauncherSearchResult {
   badge?: string
   description?: string
+  groupIcon?: string
+  groupId?: string
+  groupOrder?: number
+  groupTitle?: string
   icon?: string
   id: string
   keywords?: string[]
+  sectionIcon?: string
+  sectionId?: string
+  sectionOrder?: number
+  sectionTitle?: string
   subtitle?: string
   title: string
 }

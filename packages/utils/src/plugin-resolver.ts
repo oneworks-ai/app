@@ -12,7 +12,8 @@ import type {
   PluginConfigHookManifest,
   PluginInstanceConfig,
   PluginManifest,
-  PluginManifestChildDefinition
+  PluginManifestChildDefinition,
+  PluginServerRuntimeRole
 } from '@oneworks/types'
 
 import { resolveGlobalOneWorksAssetsPath, resolveProjectOoPath } from './ai-path'
@@ -31,6 +32,7 @@ const DEFAULT_OFFICIAL_PLUGIN_CONFIGS: PluginConfig = [
   { id: '@oneworks/plugin-relay' }
 ]
 const DEFAULT_OFFICIAL_PLUGIN_PACKAGE_IDS = new Set(['@oneworks/plugin-relay', 'relay'])
+const PLUGIN_SERVER_RUNTIME_ROLES = new Set<PluginServerRuntimeRole>(['manager', 'workspace'])
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -105,6 +107,29 @@ const normalizePluginConfigManifest = (value: unknown): PluginManifest['config']
     ? value as PluginManifest['config']
     : undefined
 )
+
+const normalizePluginServerRuntimeRoles = (value: unknown): PluginServerRuntimeRole[] => {
+  const values = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+    ? value.split(/[,\s]+/)
+    : []
+  return [...new Set(values.filter((role): role is PluginServerRuntimeRole => PLUGIN_SERVER_RUNTIME_ROLES.has(role)))]
+}
+
+const normalizePluginServerManifest = (value: unknown): NonNullable<PluginManifest['plugin']>['server'] => {
+  if (!isRecord(value)) return undefined
+  const entry = typeof value.entry === 'string' && value.entry.trim() !== '' ? value.entry.trim() : undefined
+  const roles = normalizePluginServerRuntimeRoles(value.roles)
+  if (entry == null && roles.length === 0) return undefined
+  if (entry == null) {
+    return { roles }
+  }
+  if (roles.length === 0) {
+    throw new Error('Plugin server manifest must define plugin.server.roles with manager or workspace.')
+  }
+  return { entry, roles }
+}
 
 const toPluginManifest = (value: unknown): PluginManifest | undefined => {
   if (!isRecord(value)) return undefined
@@ -181,13 +206,7 @@ const toPluginManifest = (value: unknown): PluginManifest | undefined => {
               : {})
           }
           : undefined,
-        server: isRecord(value.plugin.server)
-          ? {
-            ...(typeof value.plugin.server.entry === 'string' && value.plugin.server.entry.trim() !== ''
-              ? { entry: value.plugin.server.entry.trim() }
-              : {})
-          }
-          : undefined,
+        server: normalizePluginServerManifest(value.plugin.server),
         contributions: isRecord(value.plugin.contributions)
           ? value.plugin.contributions as NonNullable<PluginManifest['plugin']>['contributions']
           : undefined

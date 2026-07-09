@@ -5,7 +5,7 @@ export const adminListSurfaceCss = String.raw`
   flex: 1;
   flex-direction: column;
   height: 100%;
-  gap: 8px;
+  gap: var(--subpage-secondary-gap, 10px);
   max-width: 100%;
   min-width: 0;
   min-height: 0;
@@ -67,13 +67,25 @@ export const adminListSurfaceCss = String.raw`
 }
 
 .relay-admin-list-table__search .ant-input-prefix {
-  margin-inline-end: 6px;
+  margin-inline-end: var(--oneworks-overlay-icon-gap, 6px);
 }
 
 .relay-admin-list-table__search-icon {
+  align-items: center;
   color: var(--placeholder-color);
+  display: inline-flex;
+  font-size: var(--app-chrome-icon-size, 18px);
   height: var(--app-chrome-icon-size, 18px);
+  justify-content: center;
+  line-height: 1;
+  min-width: var(--app-chrome-icon-size, 18px);
   width: var(--app-chrome-icon-size, 18px);
+}
+
+.relay-admin-list-table__search-icon svg {
+  display: block;
+  height: 100%;
+  width: 100%;
 }
 
 .relay-admin-list-table .ant-input,
@@ -330,6 +342,28 @@ export const adminListSurfaceCss = String.raw`
   min-width: 0;
 }
 
+.relay-admin-list-table--content .relay-admin-list-table__native-list {
+  gap: 0;
+}
+
+.relay-admin-list-table__native-list--resource {
+  gap: 0;
+}
+
+.relay-admin-list-table--content
+  .relay-admin-list-table__native-list--resource {
+  gap: 0;
+}
+
+.relay-admin-list-table__native-list--grouped {
+  gap: var(--subpage-secondary-gap, 10px);
+}
+
+.relay-admin-list-table--content
+  .relay-admin-list-table__native-list--grouped {
+  gap: var(--subpage-secondary-gap, 10px);
+}
+
 .relay-admin-list-table__native-search {
   --relay-admin-list-native-search-control-size: var(--app-chrome-icon-size, 18px);
 
@@ -345,19 +379,26 @@ export const adminListSurfaceCss = String.raw`
   padding: 0;
 }
 
+.relay-admin-list-table__native-search.oneworks-list-search {
+  height: var(--relay-admin-list-native-search-control-size);
+  min-height: var(--relay-admin-list-native-search-control-size);
+}
+
 .relay-admin-list-table__native-search:focus-within {
   color: var(--primary-color);
 }
 
+.relay-admin-list-table__native-search .oneworks-list-search__icon,
 .relay-admin-list-table__native-search .plugin-host-icon,
 .relay-admin-list-table__native-search .oneworks-relay__icon {
   align-items: center;
   display: inline-flex;
   flex: 0 0 auto;
-  font-size: 16px;
+  font-size: var(--relay-admin-list-native-search-control-size);
   height: var(--relay-admin-list-native-search-control-size);
   justify-content: center;
   line-height: var(--relay-admin-list-native-search-control-size);
+  min-width: var(--relay-admin-list-native-search-control-size);
   width: var(--relay-admin-list-native-search-control-size);
 }
 
@@ -388,6 +429,12 @@ export const adminListSurfaceCss = String.raw`
 
 .relay-admin-list-table__native-search
   .ant-input-affix-wrapper.plugin-host-control-input
+  .ant-input-prefix {
+  margin-inline-end: var(--oneworks-overlay-icon-gap, 6px);
+}
+
+.relay-admin-list-table__native-search
+  .ant-input-affix-wrapper.plugin-host-control-input
   .ant-input-clear-icon {
   align-items: center;
   display: inline-flex;
@@ -411,8 +458,8 @@ export const adminListSurfaceCss = String.raw`
   font-weight: 600;
   height: var(--relay-admin-list-native-search-control-size);
   line-height: var(--relay-admin-list-native-search-control-size);
-  min-width: 0;
   min-height: var(--relay-admin-list-native-search-control-size);
+  min-width: 0;
   outline: 0 !important;
   padding: 0 !important;
 }
@@ -454,28 +501,65 @@ export const adminListSurfaceCss = String.raw`
 }
 
 .relay-admin-list-table__native-row {
+  --relay-admin-list-native-icon-size: var(--app-chrome-icon-size, 18px);
+
   align-items: center;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  column-gap: var(--oneworks-overlay-icon-gap, 6px);
   display: grid;
-  gap: 8px;
   grid-template-columns: var(
     --relay-admin-list-native-row-columns,
-    18px minmax(0, 1fr) auto
+    var(--relay-admin-list-native-icon-size) minmax(0, 1fr) auto
   );
   min-height: 38px;
   min-width: 0;
-  padding: 6px 0;
+  padding: 10px 0;
+  row-gap: 0;
 }
 
 .relay-admin-list-table--content .relay-admin-list-table__native-row {
   border-bottom: 0;
+  min-height: 0;
+  padding-block: 0;
+}
+
+.relay-admin-list-table__native-list--resource
+  .relay-admin-list-table__native-row {
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border-color) 72%, transparent);
+  min-height: 38px;
+  padding: 10px 0;
+}
+
+.relay-admin-list-table__native-list--grouped
+  .relay-admin-list-table__native-row {
+  border-bottom: 0;
+  min-height: 0;
+  padding-block: 0;
 }
 
 .relay-admin-list-table__native-row[data-kind="header"] {
   color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a));
   font: 750 11px/1.25 ui-sans-serif, system-ui, sans-serif;
-  min-height: 30px;
-  padding: 4px 0;
+  min-height: 38px;
+  padding: 10px 0;
+}
+
+.relay-admin-list-table--content .relay-admin-list-table__native-row[data-kind="header"] {
+  min-height: 0;
+  padding: 0;
+}
+
+.relay-admin-list-table__native-list--resource
+  .relay-admin-list-table__native-row[data-kind="header"] {
+  min-height: 38px;
+  padding: 10px 0;
+}
+
+.relay-admin-list-table__native-list--grouped
+  .relay-admin-list-table__native-row[data-kind="header"] {
+  min-height: 0;
+  padding: 0;
 }
 
 .relay-admin-list-table__native-row[data-clickable="true"] {
@@ -499,17 +583,57 @@ export const adminListSurfaceCss = String.raw`
   color: var(--danger-color, #dc2626);
 }
 
+.relay-admin-list-table__native-list .relay-admin-list-table__native-icon,
 .relay-admin-list-table__native-icon {
   align-items: center;
+  box-sizing: border-box;
   color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a));
   display: inline-flex;
-  height: var(--app-chrome-icon-size, 18px);
+  flex: 0 0 var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px));
+  font-size: var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px));
+  height: var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px));
   justify-content: center;
-  width: var(--app-chrome-icon-size, 18px);
+  line-height: 1;
+  max-height: var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px));
+  max-width: var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px));
+  min-height: var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px));
+  min-width: var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px));
+  width: var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px));
 }
 
-.relay-admin-list-table__native-icon .oneworks-relay__icon {
-  font-size: var(--app-chrome-icon-size, 18px);
+.relay-admin-list-table__native-list .relay-admin-list-table__native-icon .oneworks-relay__icon,
+.relay-admin-list-table__native-list .relay-admin-list-table__native-icon .plugin-host-icon,
+.relay-admin-list-table__native-icon .oneworks-relay__icon,
+.relay-admin-list-table__native-icon .plugin-host-icon {
+  font-size: var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px));
+  line-height: var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px));
+}
+
+.relay-admin-list-table__native-icon img,
+.relay-admin-list-table__native-icon svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.relay-admin-list-table__native-icon > * {
+  box-sizing: border-box;
+  max-height: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.relay-admin-list-table__native-icon
+  > :where(img, svg, .ant-avatar, [data-native-icon-avatar="true"]) {
+  height: 100%;
+  width: 100%;
+}
+
+.relay-admin-list-table__native-icon > .ant-avatar {
+  font-size: calc(var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px)) * .56);
+  height: 100%;
+  line-height: var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px));
+  width: 100%;
 }
 
 .relay-admin-list-table__native-cell {
@@ -546,7 +670,7 @@ export const adminListSurfaceCss = String.raw`
 .relay-admin-list-table__native-actions {
   align-items: center;
   display: inline-flex;
-  gap: 4px;
+  gap: 6px;
   grid-column: -2 / -1;
   justify-content: flex-end;
   justify-self: end;
@@ -588,21 +712,21 @@ export const adminListSurfaceCss = String.raw`
 .relay-admin-list-table__native-empty {
   color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a));
   font: 600 12px/1.4 ui-sans-serif, system-ui, sans-serif;
-  padding: 8px 0;
+  padding: 10px 0;
 }
 
 .relay-admin-list-table__native-editor {
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
   display: grid;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
-  padding: 8px 0;
+  padding: 10px 0;
 }
 
 .relay-admin-list-table__native-editor-row {
   align-items: center;
   display: grid;
-  gap: 8px;
+  gap: 6px;
   grid-template-columns: var(
     --relay-admin-list-native-editor-columns,
     minmax(160px, 1fr) minmax(110px, 160px) auto
@@ -619,14 +743,32 @@ export const adminListSurfaceCss = String.raw`
 }
 
 @media (max-width: 760px) {
-  .relay-admin-list-table__native-editor-row,
-  .relay-admin-list-table__native-row {
+  .relay-admin-list-table__native-editor-row {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .relay-admin-list-table__native-icon,
+  .relay-admin-list-table__native-row {
+    grid-template-columns: var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px)) minmax(0, 1fr);
+  }
+
+  .relay-admin-list-table__native-main,
+  .relay-admin-list-table__native-cell {
+    grid-column: 2;
+  }
+
+  .relay-admin-list-table__native-icon {
+    align-self: start;
+    display: inline-flex;
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
   .relay-admin-list-table__native-actions {
     display: none;
+  }
+
+  .relay-admin-list-table__native-row[data-kind="header"] {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -649,6 +791,8 @@ export const adminListSurfaceClassNames = {
   pagination: 'relay-admin-list-table__pagination',
   paginationSummary: 'relay-admin-list-table__pagination-summary',
   nativeList: 'relay-admin-list-table__native-list',
+  nativeListGrouped: 'relay-admin-list-table__native-list--grouped',
+  nativeListResource: 'relay-admin-list-table__native-list--resource',
   nativeSearch: 'relay-admin-list-table__native-search',
   nativeRow: 'relay-admin-list-table__native-row',
   nativeCell: 'relay-admin-list-table__native-cell',
@@ -689,16 +833,24 @@ export const renderAdminListSurfaceMarkup = ({
   </div>
 `
 
+export type AdminListSurfaceNativeListVariant = 'grouped' | 'resource'
+
 export interface AdminListSurfaceNativeListMarkupOptions {
   emptyHtml: string
   rowsHtml: string
+  variant?: AdminListSurfaceNativeListVariant
 }
 
 export const renderAdminListSurfaceNativeListMarkup = ({
   emptyHtml,
-  rowsHtml
+  rowsHtml,
+  variant = 'resource'
 }: AdminListSurfaceNativeListMarkupOptions) => `
-  <div class="${adminListSurfaceClassNames.nativeList}">
+  <div class="${adminListSurfaceClassNames.nativeList} ${
+  variant === 'grouped'
+    ? adminListSurfaceClassNames.nativeListGrouped
+    : adminListSurfaceClassNames.nativeListResource
+}">
     ${rowsHtml === '' ? emptyHtml : rowsHtml}
   </div>
 `

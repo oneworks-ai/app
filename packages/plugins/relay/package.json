@@ -193,9 +193,11 @@
     "entry": "./dist/config.cjs"
   },
   "plugin": {
-    "client": {
-      "root": "dist/client",
-      "entry": "dist/client/index.js"
+    "server": {
+      "roles": [
+        "manager",
+        "workspace"
+      ]
     },
     "contributions": {
       "cliCommands": [
@@ -291,7 +293,15 @@
             "zh-Hans": "账号"
           },
           "icon": "account_circle",
-          "clientView": "home"
+          "clientView": "home",
+          "roles": [
+            "manager",
+            "workspace"
+          ],
+          "surfaces": [
+            "launcher",
+            "workspace"
+          ]
         }
       ],
       "launcherSearchProviders": [
@@ -302,7 +312,13 @@
             "en": "Account",
             "zh-Hans": "账号"
           },
-          "command": "search"
+          "command": "search",
+          "roles": [
+            "manager"
+          ],
+          "surfaces": [
+            "launcher"
+          ]
         }
       ]
     }

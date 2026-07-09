@@ -10,64 +10,87 @@
   top: 0;
   z-index: 2;
   display: flex;
-  align-items: center;
-  gap: 4px;
+  align-items: flex-end;
+  gap: 10px;
   min-width: 0;
-  padding: 2px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent);
-  border-radius: 7px;
+  overflow-x: auto;
+  padding: 0;
+  border-bottom: 1px solid
+    var(
+      --border-color,
+      var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4))
+    );
+  border-radius: 0;
   background: color-mix(in srgb, var(--bg-color) 92%, var(--sub-bg-color));
   backdrop-filter: blur(18px) saturate(1.35);
-  box-shadow: 0 4px 14px color-mix(in srgb, #000 12%, transparent);
   box-sizing: border-box;
+  scrollbar-width: none;
   -webkit-backdrop-filter: blur(18px) saturate(1.35);
 }
 
+.launcher-settings__tabs::-webkit-scrollbar {
+  display: none;
+}
+
 .launcher-settings__tab {
+  position: relative;
   min-width: 0;
   min-height: 28px;
-  padding: 0 8px;
+  padding: 0 0 var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px));
   border: 0;
-  border-radius: 5px;
+  border-radius: 0;
   display: inline-flex;
-  flex: 1 1 0;
+  flex: 0 0 auto;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
+  justify-content: flex-start;
+  gap: 6px;
   background: transparent;
-  color: var(--launcher-muted-color, var(--placeholder-color));
+  color: var(--sub-text-color, var(--ant-color-text-secondary, #57606a));
   cursor: pointer;
-  font: inherit;
-  transition: background-color .16s ease, color .16s ease, box-shadow .16s ease;
+  font: 700 14px/1.2 ui-sans-serif, system-ui, sans-serif;
+  transition: color .16s ease;
+}
+
+.launcher-settings__tab::after {
+  position: absolute;
+  inset-inline: 0;
+  bottom: -1px;
+  height: 2px;
+  content: '';
+  opacity: 0;
+  background: var(--primary-color, var(--ant-color-primary, #1677ff));
 }
 
 .launcher-settings__tab:hover,
 .launcher-settings__tab:focus-visible {
-  outline: none;
-  color: var(--text-color);
+  color: var(--primary-color, var(--ant-color-primary, #1677ff));
 }
 
 .launcher-settings__tab.is-active {
-  background: color-mix(in srgb, var(--primary-color) 12%, transparent);
-  color: var(--primary-color);
-  box-shadow: 0 0 0 1px
-    color-mix(in srgb, var(--primary-color) 18%, transparent);
+  color: var(--primary-color, var(--ant-color-primary, #1677ff));
+}
+
+.launcher-settings__tab:focus-visible {
+  outline: 1px solid var(--primary-color, var(--ant-color-primary, #1677ff));
+  outline-offset: -1px;
+}
+
+.launcher-settings__tab.is-active::after {
+  opacity: 1;
 }
 
 .launcher-settings__tab-title {
   min-width: 0;
   overflow: hidden;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.4;
+  font: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .launcher-settings__tab-icon {
-  width: 15px;
-  min-width: 15px;
-  font-size: 15px;
+  width: 18px;
+  min-width: 18px;
+  font-size: 18px;
   line-height: 1;
 }
 

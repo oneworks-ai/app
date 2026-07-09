@@ -7,6 +7,7 @@ import type { RelayPersonalDocumentSyncPreferences } from './personal-document-s
 import type { RelayLocalSessionAdapter } from './session-types.js'
 
 export type RelayLocalizedText = string | Record<string, string>
+export type RelayPluginRuntimeRole = 'manager' | 'workspace'
 
 export interface RelayPluginApiRegistration {
   description?: RelayLocalizedText
@@ -19,6 +20,9 @@ export interface RelayPluginApiRegistration {
 
 export interface RelayPluginContext {
   scope: string
+  runtime: {
+    role: RelayPluginRuntimeRole
+  }
   workspaceFolder: string
   projectHome: string
   options: Record<string, unknown>
@@ -54,6 +58,17 @@ export interface RelayCapabilities {
   sessions: boolean
   terminal: boolean
   workspaceFiles: boolean
+}
+
+export interface RelayDeviceEnvironmentInfo {
+  arch?: string
+  deviceType?: string
+  osName?: string
+  osPlatform?: string
+  osRelease?: string
+  osVersion?: string
+  runtime?: string
+  runtimeVersion?: string
 }
 
 export interface RelayServerOptions {
@@ -98,10 +113,42 @@ export interface RelayRemoteDeviceSummary {
   alias?: string
   capabilities?: Record<string, unknown>
   createdAt?: string
+  deviceInfo?: RelayDeviceEnvironmentInfo
+  id?: string
+  isCurrentClientDevice?: boolean
+  ip?: string
+  lastSeenAt?: string
+  lastSeenIp?: string
+  managementServers?: RelayRemoteDeviceManagementServerSummary[]
+  name?: string
+  pluginScope?: string
+  registeredIp?: string
+  status?: string
+  workspaceFolder?: string
+}
+
+export interface RelayRemoteDeviceProjectSummary {
+  createdAt?: string
   id?: string
   lastSeenAt?: string
   name?: string
+  status?: string
+  title?: string
+  workspaceFolder?: string
+}
+
+export interface RelayRemoteDeviceManagementServerSummary {
+  createdAt?: string
+  environment?: RelayDeviceEnvironmentInfo
+  id?: string
+  ip?: string
+  kind?: string
+  lastSeenAt?: string
+  lastSeenIp?: string
+  name?: string
   pluginScope?: string
+  projects?: RelayRemoteDeviceProjectSummary[]
+  registeredIp?: string
   status?: string
   workspaceFolder?: string
 }
@@ -195,6 +242,16 @@ export interface RelayProfileMessageAudience {
   users: Array<RelayProfileMessageUser | null>
 }
 
+export interface RelayProfileMessageLoginMetadata {
+  ip?: string
+  location?: string
+  userAgent?: string
+}
+
+export interface RelayProfileMessageMetadata {
+  login?: RelayProfileMessageLoginMetadata
+}
+
 export interface RelayProfileMessage {
   audience: RelayProfileMessageAudience
   body: string
@@ -203,6 +260,7 @@ export interface RelayProfileMessage {
   createdByUserId: string
   id: string
   kind: RelayProfileMessageKind
+  metadata?: RelayProfileMessageMetadata
   title: string
   updatedAt: string | null
 }
@@ -258,7 +316,7 @@ export interface RelayProfileStatus {
   accounts: RelayPublicAuthAccount[]
   auditEvents: RelayProfileOpenApiAuditEvent[]
   devices: RelayRemoteDeviceSummary[]
-  errors?: Partial<Record<'audit' | 'devices' | 'messages' | 'security' | 'teams', string>>
+  errors?: Partial<Record<'audit' | 'devices' | 'messages' | 'profile' | 'security' | 'teams', string>>
   invitations: RelayProfileTeamInvitation[]
   messages: RelayProfileMessage[]
   ok: true
@@ -337,6 +395,8 @@ export interface RelayPersonalDocumentEntry {
 
 export interface RelayPersonalDocumentSyncCounts {
   agents: number
+  ooAgents: number
+  ooRules: number
 }
 
 export interface RelayConfigDistributionSourceStatus {

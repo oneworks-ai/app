@@ -70,7 +70,7 @@ const writeDirectoryPlugin = async (
     name: 'workspace-tools',
     plugin: {
       client: { entry: './client/index.js' },
-      server: { entry: './server/index.js' },
+      server: { entry: './server/index.js', roles: ['workspace'] },
       contributions: {
         navItems: [{ id: 'dashboard', title: 'Dashboard', route: '/plugins/workspace-tools/dashboard' }]
       }
@@ -84,7 +84,8 @@ const writeDirectoryPlugin = async (
       '  client:',
       '    entry: ./client/index.js',
       '  server:',
-      '    entry: ./server/index.js'
+      '    entry: ./server/index.js',
+      '    roles: workspace'
     ].join('\n')
   await writeFile(join(pluginRoot, manifestFile), content)
   await writeFile(join(pluginRoot, 'hooks/index.js'), 'module.exports = {}\n')
@@ -402,6 +403,39 @@ describe('plugin resolver', () => {
       './client/index.js',
       './client/index.js'
     ])
+  })
+
+  it('allows plugin server roles to be declared before package exports fill the entry', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    const pluginRoot = join(workspace, 'roles-only-plugin')
+    await mkdir(pluginRoot, { recursive: true })
+    await writeFile(
+      join(pluginRoot, 'plugin.json'),
+      JSON.stringify(
+        {
+          name: 'roles-only-plugin',
+          plugin: {
+            server: {
+              roles: 'manager workspace'
+            }
+          }
+        },
+        null,
+        2
+      )
+    )
+
+    const [instance] = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: [{ id: './roles-only-plugin' }]
+    })
+
+    expect(instance?.manifest?.plugin?.server).toEqual({
+      roles: ['manager', 'workspace']
+    })
   })
 
   it('discovers runtime plugins in global, dev, and explicit order without auto-loading project installs', async () => {

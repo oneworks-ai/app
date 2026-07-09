@@ -7,7 +7,7 @@ import type { RelayPluginContext } from './types.js'
 export function activatePlugin(ctx: RelayPluginContext) {
   const controller = createRelayController(ctx)
   let disposed = false
-  const options = normalizeOptions(ctx.options)
+  const options = normalizeOptions(ctx.options, ctx.runtime.role)
 
   ctx.registerCommand('connect', async payload => await controller.connect(payload))
   ctx.registerCommand('disconnect', async payload => await controller.disconnect(payload))

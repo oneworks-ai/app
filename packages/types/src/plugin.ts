@@ -101,11 +101,15 @@ export interface PluginClientManifest {
   devServer?: string
 }
 
+export type PluginServerRuntimeRole = 'manager' | 'workspace'
+
 export interface PluginServerManifest {
   entry?: string
+  roles: PluginServerRuntimeRole[]
 }
 
 export type PluginLocalizedText = string | Record<string, string>
+export type PluginContributionSurface = 'launcher' | 'workspace'
 
 export interface PluginConfigManifest {
   jsonSchema?: ConfigJsonSchema
@@ -118,7 +122,12 @@ export interface PluginConfigHookManifest {
   entry?: string
 }
 
-export interface PluginContributionBase {
+export interface PluginContributionAvailability {
+  roles?: PluginServerRuntimeRole[]
+  surfaces?: PluginContributionSurface[]
+}
+
+export interface PluginContributionBase extends PluginContributionAvailability {
   description?: PluginLocalizedText
   descriptionI18n?: Record<string, string>
   i18n?: Record<string, {
@@ -133,6 +142,7 @@ export interface PluginContributionNavItem extends PluginContributionBase {
   title: string
   icon?: string
   command?: string
+  payload?: unknown
   route?: string
 }
 
@@ -142,6 +152,7 @@ export interface PluginContributionMenuItem extends PluginContributionBase {
   children?: PluginContributionMenuItem[]
   icon?: string
   command?: string
+  payload?: unknown
   danger?: boolean
   disabled?: boolean
   href?: string
@@ -302,6 +313,25 @@ export interface PluginContributionLauncherSearchProvider extends PluginContribu
   command: string
 }
 
+export interface PluginLauncherSearchResult {
+  badge?: string
+  description?: string
+  groupIcon?: string
+  groupId?: string
+  groupOrder?: number
+  groupTitle?: string
+  icon?: string
+  id: string
+  keywords?: string[]
+  route?: string
+  sectionIcon?: string
+  sectionId?: string
+  sectionOrder?: number
+  sectionTitle?: string
+  subtitle?: string
+  title: string
+}
+
 export interface PluginContributionCliCommand extends PluginContributionBase {
   aliases?: string[]
   command: string
@@ -332,7 +362,7 @@ export interface PluginExtensionContributionManifest extends PluginContributionB
   [key: string]: unknown
 }
 
-export interface PluginContributionManifest {
+export interface PluginContributionManifest extends PluginContributionAvailability {
   extensionContributions?: PluginExtensionContributionManifest[]
   extensionPoints?: PluginExtensionPointManifest[]
   navItems?: PluginContributionNavItem[]
@@ -414,6 +444,43 @@ export interface PluginRuntimeCommandInvocation {
   commandId: string
   payload?: unknown
 }
+
+export type PluginRuntimeEndpointStatus = 'online' | 'offline' | 'unknown'
+
+export interface PluginRuntimeEndpoint {
+  current?: boolean
+  id: string
+  projectHome?: string
+  role: PluginServerRuntimeRole
+  serverBaseUrl?: string
+  startedAt?: string
+  status?: PluginRuntimeEndpointStatus
+  workspaceFolder?: string
+  workspaceId?: string
+}
+
+export interface PluginRuntimeChannelTarget {
+  endpointId?: string
+  role?: PluginServerRuntimeRole
+  serverBaseUrl?: string
+  workspaceId?: string
+}
+
+export interface PluginRuntimeChannelInvocation {
+  payload?: unknown
+  target?: PluginRuntimeChannelTarget
+}
+
+export interface PluginRuntimeChannelRequest {
+  channelId: string
+  payload?: unknown
+  source: PluginRuntimeEndpoint
+  target: PluginRuntimeEndpoint
+}
+
+export type PluginRuntimeChannelResponse =
+  | { ok: true; payload?: unknown }
+  | { ok: false; error: string }
 
 export interface PluginManifestChildSourcePackage {
   type: 'package'

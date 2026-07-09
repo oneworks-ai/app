@@ -1,6 +1,8 @@
 import { access, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import type { PluginServerRuntimeRole } from '@oneworks/types'
+
 import type { PluginRuntimeManifest } from './types.js'
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -65,6 +67,18 @@ const startsWithPathSegment = (value: string | undefined, segment: string) => {
   return normalized === segment || normalized.startsWith(`${segment}/`)
 }
 
+const SERVER_RUNTIME_ROLES = new Set<PluginServerRuntimeRole>(['manager', 'workspace'])
+
+const normalizeServerRuntimeRoles = (value: unknown): PluginServerRuntimeRole[] | undefined => {
+  const values = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+    ? value.split(/[,\s]+/)
+    : []
+  const roles = [...new Set(values.filter((role): role is PluginServerRuntimeRole => SERVER_RUNTIME_ROLES.has(role)))]
+  return roles.length === 0 ? undefined : roles
+}
+
 export const applyPackageExportConventions = (
   manifest: PluginRuntimeManifest | undefined,
   packageJson: Record<string, unknown> | undefined,
@@ -115,9 +129,11 @@ export const applyPackageExportConventions = (
 
   const existingServer = existingPlugin?.server
   const shouldCreateServer = existingServer != null || serverEntry != null
+  const serverRoles = normalizeServerRuntimeRoles(existingServer?.roles) ?? []
   const server = shouldCreateServer
     ? {
       ...existingServer,
+      roles: serverRoles,
       ...(existingServer?.entry == null && serverEntry != null ? { entry: serverEntry } : {})
     }
     : undefined

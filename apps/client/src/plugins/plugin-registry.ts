@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- plugin registry centralizes scoped runtime registrations and cleanup semantics. */
 
 import { buildApiUrl } from '#~/api/base'
+import { createServerUrlFromBase, normalizeServerBaseUrl } from '#~/runtime-config'
 
 import { isPluginContributionGroupDisabled, isPluginContributionItemDisabled } from './plugin-contribution-preferences'
 import type {
@@ -10,13 +11,17 @@ import type {
   PluginClientApiRegistration,
   PluginClientApiRuntimeRegistration,
   PluginCommandHandler,
+  PluginContributionAvailability,
+  PluginContributionSurface,
   PluginDiagnostic,
   PluginDisposable,
   PluginExtensionContributionRegistration,
   PluginExtensionPointRegistration,
   PluginLauncherSearchProvider,
   PluginRouteRegistration,
+  PluginRuntimeEndpoint,
   PluginRuntimeInstance,
+  PluginServerRuntimeRole,
   PluginSlot,
   PluginViewRegistration
 } from './plugin-manifest'
@@ -51,7 +56,25 @@ interface PendingPluginApiCall {
 }
 type RegistryListener = () => void
 
+interface PluginRegistryRemoteOptions {
+  serverBaseUrl?: string
+}
+
+interface PluginRegistryRuntimeContext {
+  runtime?: PluginRuntimeEndpoint
+  surfaces?: PluginContributionSurface[]
+}
+
+const createPluginRegistryApiUrl = (path: string, serverBaseUrl?: string) => {
+  const normalizedServerBaseUrl = normalizeServerBaseUrl(serverBaseUrl)
+  return normalizedServerBaseUrl == null
+    ? buildApiUrl(path)
+    : createServerUrlFromBase(normalizedServerBaseUrl, path)
+}
+
 const identifierPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/
+const pluginRuntimeRoles = new Set<PluginServerRuntimeRole>(['manager', 'workspace'])
+const pluginContributionSurfaces = new Set<PluginContributionSurface>(['launcher', 'workspace'])
 
 const slotFromManifestKey = {
   chatHeaderActions: 'chat.header.actions',
@@ -76,6 +99,42 @@ const toDisposable = (cleanup: PluginCleanup): PluginDisposable | null => {
   return cleanup
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  value != null && typeof value === 'object' && !Array.isArray(value)
+)
+
+const normalizeRuntimeRoles = (value: unknown): PluginServerRuntimeRole[] | undefined => {
+  if (!Array.isArray(value)) return undefined
+  const roles = [
+    ...new Set(
+      value.filter((role): role is PluginServerRuntimeRole =>
+        typeof role === 'string' && pluginRuntimeRoles.has(role as PluginServerRuntimeRole)
+      )
+    )
+  ]
+  return roles.length === 0 ? undefined : roles
+}
+
+const normalizeContributionSurfaces = (value: unknown): PluginContributionSurface[] | undefined => {
+  if (!Array.isArray(value)) return undefined
+  const surfaces = [
+    ...new Set(
+      value.filter((surface): surface is PluginContributionSurface =>
+        typeof surface === 'string' && pluginContributionSurfaces.has(surface as PluginContributionSurface)
+      )
+    )
+  ]
+  return surfaces.length === 0 ? undefined : surfaces
+}
+
+const readRuntimeRoles = (availability: unknown) => (
+  isRecord(availability) ? normalizeRuntimeRoles(availability.roles) : undefined
+)
+
+const readContributionSurfaces = (availability: unknown) => (
+  isRecord(availability) ? normalizeContributionSurfaces(availability.surfaces) : undefined
+)
+
 export class PluginRegistry {
   private commands = new Map<string, { handler: PluginCommandHandler; scope: string }>()
   private diagnostics: PluginDiagnostic[] = []
@@ -92,6 +151,8 @@ export class PluginRegistry {
   private slots = new Map<PluginSlot, Map<string, SlotContribution & { pluginScope: string }>>()
   private views = new Map<string, PluginViewRegistration & { scope: string }>()
   private launcherProviders = new Map<string, PluginLauncherSearchProvider & { scope: string }>()
+  private runtime?: PluginRuntimeEndpoint
+  private surfaces = new Set<PluginContributionSurface>(['workspace'])
 
   getSnapshot() {
     return {
@@ -107,11 +168,20 @@ export class PluginRegistry {
       launcherProviders: [...this.launcherProviders.values()],
       pluginApis: [...this.pluginApis.values()].map(({ handler: _handler, ...api }) => api),
       routes: [...this.routes.values()],
+      runtime: this.runtime,
       slots: Object.fromEntries(
         [...this.slots.entries()].map(([slot, values]) => [slot, [...values.values()]])
       ) as Partial<Record<PluginSlot, Array<SlotContribution & { pluginScope: string }>>>,
       views: [...this.views.values()]
     }
+  }
+
+  setRuntimeContext(context: PluginRegistryRuntimeContext = {}) {
+    this.runtime = context.runtime
+    this.surfaces = new Set(
+      context.surfaces?.length === 0 || context.surfaces == null ? ['workspace'] : context.surfaces
+    )
+    this.emit()
   }
 
   subscribe(listener: RegistryListener) {
@@ -203,7 +273,12 @@ export class PluginRegistry {
     return disposable
   }
 
-  async executeCommand(scope: string, commandId: string, payload?: unknown) {
+  async executeCommand(
+    scope: string,
+    commandId: string,
+    payload?: unknown,
+    options: PluginRegistryRemoteOptions = {}
+  ) {
     const key = commandId.includes('/') ? commandId : this.scopedKey(scope, commandId)
     const command = this.commands.get(key)
     if (command != null) return command.handler(payload)
@@ -213,7 +288,10 @@ export class PluginRegistry {
       throw new Error(`Plugin command "${commandId}" is not registered`)
     }
     const response = await fetch(
-      buildApiUrl(`/api/plugins/${encodeURIComponent(targetScope)}/commands/${encodeURIComponent(targetCommandId)}`),
+      createPluginRegistryApiUrl(
+        `/api/plugins/${encodeURIComponent(targetScope)}/commands/${encodeURIComponent(targetCommandId)}`,
+        options.serverBaseUrl
+      ),
       {
         body: JSON.stringify({ payload }),
         credentials: 'include',
@@ -277,6 +355,8 @@ export class PluginRegistry {
   }
 
   registerSlot(scope: string, slot: PluginSlot, contribution: SlotContribution) {
+    const preparedContribution = this.prepareRuntimeContribution(scope, contribution)
+    if (preparedContribution == null) return { dispose: () => {} }
     if (!this.validateIdentifier(scope, contribution.id, `slot ${slot}`)) return { dispose: () => {} }
     const key = this.scopedKey(scope, contribution.id)
     const values = this.slots.get(slot) ?? new Map()
@@ -284,7 +364,7 @@ export class PluginRegistry {
       this.duplicate(scope, `slot ${slot}`, key)
       return { dispose: () => {} }
     }
-    values.set(key, { ...contribution, pluginScope: scope })
+    values.set(key, { ...preparedContribution, pluginScope: scope })
     this.slots.set(slot, values)
     const disposable = { dispose: () => values.delete(key) }
     this.addDisposable(scope, disposable)
@@ -293,13 +373,15 @@ export class PluginRegistry {
   }
 
   registerRoute(scope: string, route: PluginRouteRegistration) {
+    const preparedRoute = this.prepareRuntimeContribution(scope, route)
+    if (preparedRoute == null) return { dispose: () => {} }
     if (!this.validateIdentifier(scope, route.id, 'route')) return { dispose: () => {} }
     const key = this.scopedKey(scope, route.id)
     if (this.routes.has(key)) {
       this.duplicate(scope, 'route', key)
       return { dispose: () => {} }
     }
-    this.routes.set(key, { ...route, scope })
+    this.routes.set(key, { ...preparedRoute, scope })
     const disposable = { dispose: () => this.routes.delete(key) }
     this.addDisposable(scope, disposable)
     this.emit()
@@ -321,13 +403,15 @@ export class PluginRegistry {
   }
 
   registerLauncherSearchProvider(scope: string, provider: PluginLauncherSearchProvider) {
+    const preparedProvider = this.prepareRuntimeContribution(scope, provider)
+    if (preparedProvider == null) return { dispose: () => {} }
     if (!this.validateIdentifier(scope, provider.id, 'launcher search provider')) return { dispose: () => {} }
     const key = this.scopedKey(scope, provider.id)
     if (this.launcherProviders.has(key)) {
       this.duplicate(scope, 'launcher search provider', key)
       return { dispose: () => {} }
     }
-    this.launcherProviders.set(key, { ...provider, scope })
+    this.launcherProviders.set(key, { ...preparedProvider, scope })
     const disposable = { dispose: () => this.launcherProviders.delete(key) }
     this.addDisposable(scope, disposable)
     this.emit()
@@ -335,13 +419,15 @@ export class PluginRegistry {
   }
 
   registerExtensionPoint(scope: string, point: PluginExtensionPointRegistration) {
+    const preparedPoint = this.prepareRuntimeContribution(scope, point)
+    if (preparedPoint == null) return { dispose: () => {} }
     if (!this.validateIdentifier(scope, point.id, 'extension point')) return { dispose: () => {} }
     const key = this.scopedKey(scope, point.id)
     if (this.extensionPoints.has(key)) {
       this.duplicate(scope, 'extension point', key)
       return { dispose: () => {} }
     }
-    this.extensionPoints.set(key, { ...point, pluginScope: scope })
+    this.extensionPoints.set(key, { ...preparedPoint, pluginScope: scope })
     const disposable = {
       dispose: () => {
         this.extensionPoints.delete(key)
@@ -396,9 +482,11 @@ export class PluginRegistry {
     target: string,
     contribution: PluginExtensionContributionRegistration
   ) {
+    const preparedContribution = this.prepareRuntimeContribution(scope, contribution)
+    if (preparedContribution == null) return { dispose: () => {} }
     const extensionPoint = this.normalizeExtensionPointTarget(scope, target)
     if (extensionPoint == null) return { dispose: () => {} }
-    if (!this.validateIdentifier(scope, contribution.id, `extension contribution ${extensionPoint.key}`)) {
+    if (!this.validateIdentifier(scope, preparedContribution.id, `extension contribution ${extensionPoint.key}`)) {
       return { dispose: () => {} }
     }
     if (!this.extensionPoints.has(extensionPoint.key)) {
@@ -410,13 +498,13 @@ export class PluginRegistry {
       })
       return { dispose: () => {} }
     }
-    const key = this.scopedKey(scope, contribution.id)
+    const key = this.scopedKey(scope, preparedContribution.id)
     const values = this.extensionContributions.get(extensionPoint.key) ?? new Map()
     if (values.has(key)) {
       this.duplicate(scope, `extension contribution ${extensionPoint.key}`, key)
       return { dispose: () => {} }
     }
-    values.set(key, { ...contribution, extensionPoint: extensionPoint.key, pluginScope: scope })
+    values.set(key, { ...preparedContribution, extensionPoint: extensionPoint.key, pluginScope: scope })
     this.extensionContributions.set(extensionPoint.key, values)
     const disposable = { dispose: () => values.delete(key) }
     this.addDisposable(scope, disposable)
@@ -443,16 +531,105 @@ export class PluginRegistry {
     return this.views.get(this.scopedKey(scope, viewId))
   }
 
+  private prepareRuntimeContribution<T extends object>(scope: string, contribution: T): T | undefined {
+    return this.prepareContribution(this.instances.get(scope), contribution)
+  }
+
+  private prepareManifestContribution<T extends object>(
+    instance: PluginRuntimeInstance,
+    contribution: T,
+    inheritedAvailability?: PluginContributionAvailability
+  ): T | undefined {
+    return this.prepareContribution(instance, contribution, inheritedAvailability)
+  }
+
+  private prepareContribution<T extends object>(
+    instance: PluginRuntimeInstance | undefined,
+    contribution: T,
+    inheritedAvailability?: PluginContributionAvailability
+  ): T | undefined {
+    if (!this.isContributionAvailable(instance, contribution, inheritedAvailability)) return undefined
+
+    const preparedContribution = this.applyInheritedAvailability(contribution, inheritedAvailability)
+    const children = (preparedContribution as { children?: unknown }).children
+    if (!Array.isArray(children)) return preparedContribution
+
+    const childInheritedAvailability = this.getChildInheritedAvailability(preparedContribution, inheritedAvailability)
+    const filteredChildren = children
+      .filter(isRecord)
+      .map(child => this.prepareContribution(instance, child, childInheritedAvailability))
+      .filter((child): child is Record<string, unknown> => child != null)
+
+    if (filteredChildren.length === children.length) return preparedContribution
+    const rest = { ...(preparedContribution as Record<string, unknown>) }
+    delete rest.children
+    return (filteredChildren.length === 0
+      ? rest
+      : { ...rest, children: filteredChildren }) as T
+  }
+
+  private applyInheritedAvailability<T extends object>(
+    contribution: T,
+    inheritedAvailability?: PluginContributionAvailability
+  ): T {
+    const inheritedRoles = readRuntimeRoles(inheritedAvailability)
+    const inheritedSurfaces = readContributionSurfaces(inheritedAvailability)
+    const shouldApplyRoles = readRuntimeRoles(contribution) == null && inheritedRoles != null
+    const shouldApplySurfaces = readContributionSurfaces(contribution) == null && inheritedSurfaces != null
+    if (!shouldApplyRoles && !shouldApplySurfaces) return contribution
+    return {
+      ...contribution,
+      ...(shouldApplyRoles ? { roles: inheritedRoles } : {}),
+      ...(shouldApplySurfaces ? { surfaces: inheritedSurfaces } : {})
+    }
+  }
+
+  private isContributionAvailable(
+    instance: PluginRuntimeInstance | undefined,
+    contribution: unknown,
+    inheritedAvailability?: PluginContributionAvailability
+  ) {
+    const runtimeRoles = readRuntimeRoles(contribution) ??
+      readRuntimeRoles(inheritedAvailability) ??
+      this.getInstanceServerRuntimeRoles(instance)
+    if (runtimeRoles != null && this.runtime?.role != null && !runtimeRoles.includes(this.runtime.role)) {
+      return false
+    }
+
+    const surfaces = readContributionSurfaces(contribution) ?? readContributionSurfaces(inheritedAvailability)
+    if (surfaces != null && !surfaces.some(surface => this.surfaces.has(surface))) {
+      return false
+    }
+
+    return true
+  }
+
+  private getChildInheritedAvailability(
+    contribution: unknown,
+    inheritedAvailability?: PluginContributionAvailability
+  ): PluginContributionAvailability {
+    return {
+      roles: readRuntimeRoles(contribution) ?? readRuntimeRoles(inheritedAvailability),
+      surfaces: readContributionSurfaces(contribution) ?? readContributionSurfaces(inheritedAvailability)
+    }
+  }
+
+  private getInstanceServerRuntimeRoles(instance: PluginRuntimeInstance | undefined) {
+    return normalizeRuntimeRoles(instance?.manifest?.plugin?.server?.roles)
+  }
+
   private registerManifestContributions(instance: PluginRuntimeInstance) {
     const contributions = instance.plugin?.contributions ?? instance.manifest?.plugin?.contributions
     if (contributions == null) return
     if (!isPluginContributionGroupDisabled(instance.scope, 'extensionContributions')) {
       contributions.extensionContributions?.forEach((contribution, index) => {
         if (isPluginContributionItemDisabled(instance.scope, 'extensionContributions', contribution, index)) return
+        const preparedContribution = this.prepareManifestContribution(instance, contribution, contributions)
+        if (preparedContribution == null) return
         this.onExtensionPointAvailable(
           instance.scope,
-          contribution.target,
-          () => this.contributeExtensionPoint(instance.scope, contribution.target, contribution)
+          preparedContribution.target,
+          () => this.contributeExtensionPoint(instance.scope, preparedContribution.target, preparedContribution)
         )
       })
     }
@@ -462,7 +639,13 @@ export class PluginRegistry {
       if (!Array.isArray(values)) continue
       values.forEach((value, index) => {
         if (isPluginContributionItemDisabled(instance.scope, manifestKey, value, index)) return
-        this.registerSlot(instance.scope, slot, value as unknown as SlotContribution)
+        const contribution = this.prepareManifestContribution(
+          instance,
+          value as unknown as SlotContribution,
+          contributions
+        )
+        if (contribution == null) return
+        this.registerSlot(instance.scope, slot, contribution as SlotContribution)
       })
     }
     if (
@@ -472,31 +655,42 @@ export class PluginRegistry {
     ) {
       contributions.routeMoreMenu.forEach((value, index) => {
         if (isPluginContributionItemDisabled(instance.scope, 'routeMoreMenuItems', value, index)) return
-        this.registerSlot(instance.scope, 'route.moreMenu.items', value as unknown as SlotContribution)
+        const contribution = this.prepareManifestContribution(
+          instance,
+          value as unknown as SlotContribution,
+          contributions
+        )
+        if (contribution == null) return
+        this.registerSlot(instance.scope, 'route.moreMenu.items', contribution as SlotContribution)
       })
     }
     if (!isPluginContributionGroupDisabled(instance.scope, 'workspaceDrawerTabs')) {
       contributions.workspaceDrawerTabs?.forEach((tab, index) => {
         if (isPluginContributionItemDisabled(instance.scope, 'workspaceDrawerTabs', tab, index)) return
+        const contribution = this.prepareManifestContribution(instance, tab, contributions)
+        if (contribution == null) return
         this.registerSlot(instance.scope, 'workbench.tabs', {
-          ...tab,
-          placement: tab.placement ?? 'right'
+          ...contribution,
+          placement: contribution.placement ?? 'right'
         })
       })
     }
     if (isPluginContributionGroupDisabled(instance.scope, 'routes')) return
     contributions.routes?.forEach((route, index) => {
       if (isPluginContributionItemDisabled(instance.scope, 'routes', route, index)) return
-      if (route.clientView == null) return
+      const contribution = this.prepareManifestContribution(instance, route, contributions)
+      if (contribution == null || contribution.clientView == null) return
       this.registerRoute(instance.scope, {
-        description: route.description,
-        descriptionI18n: route.descriptionI18n,
-        icon: route.icon,
-        id: route.routeId ?? route.id,
-        i18n: route.i18n,
-        title: route.title,
-        titleI18n: route.titleI18n,
-        viewId: route.clientView
+        description: contribution.description,
+        descriptionI18n: contribution.descriptionI18n,
+        icon: contribution.icon,
+        id: contribution.routeId ?? contribution.id,
+        i18n: contribution.i18n,
+        roles: contribution.roles,
+        surfaces: contribution.surfaces,
+        title: contribution.title,
+        titleI18n: contribution.titleI18n,
+        viewId: contribution.clientView
       })
     })
   }
@@ -506,7 +700,9 @@ export class PluginRegistry {
     if (contributions == null || isPluginContributionGroupDisabled(instance.scope, 'extensionPoints')) return
     contributions.extensionPoints?.forEach((point, index) => {
       if (isPluginContributionItemDisabled(instance.scope, 'extensionPoints', point, index)) return
-      this.registerExtensionPoint(instance.scope, point)
+      const contribution = this.prepareManifestContribution(instance, point, contributions)
+      if (contribution == null) return
+      this.registerExtensionPoint(instance.scope, contribution)
     })
   }
 

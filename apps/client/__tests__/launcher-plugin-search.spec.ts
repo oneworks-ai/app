@@ -28,9 +28,15 @@ describe('launcher plugin search', () => {
         results: [
           {
             description: 'Search project docs',
+            groupId: 'docs',
+            groupOrder: -10,
+            groupTitle: 'Documentation',
             icon: 'search',
             id: 'docs/result-1',
             keywords: ['docs', 42],
+            sectionId: 'fallback-docs',
+            sectionOrder: 10,
+            sectionTitle: 'Fallback docs',
             title: 'Docs'
           },
           { id: '', title: 'Missing id' },
@@ -41,9 +47,15 @@ describe('launcher plugin search', () => {
       results: [
         {
           description: 'Search project docs',
+          groupId: 'docs',
+          groupOrder: -10,
+          groupTitle: 'Documentation',
           icon: 'search',
           id: 'docs/result-1',
           keywords: ['docs'],
+          sectionId: 'fallback-docs',
+          sectionOrder: 10,
+          sectionTitle: 'Fallback docs',
           title: 'Docs'
         }
       ]

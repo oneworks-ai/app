@@ -2,6 +2,8 @@ import { Buffer } from 'node:buffer'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { arch, platform, release, type as osType } from 'node:os'
+import { basename } from 'node:path'
 import type { Duplex } from 'node:stream'
 
 import {
@@ -60,11 +62,13 @@ import {
   syncRelayTeamDocuments
 } from './personal-document-sync.js'
 import { createRelaySessionWorker } from './session-worker.js'
-import { createRelayDeviceStore } from './store.js'
+import { createRelayDeviceStore, createRelayManagementServerStore } from './store.js'
+import type { RelayManagementServerStore } from './store.js'
 import type {
   RelayAccountProfile,
   RelayConfigDistributionStatus,
   RelayConnectionState,
+  RelayDeviceEnvironmentInfo,
   RelayPersonalDocumentSyncStatus,
   RelayPluginContext,
   RelayProfileAccessToken,
@@ -73,6 +77,7 @@ import type {
   RelayProfileMessage,
   RelayProfileMessageAudienceScope,
   RelayProfileMessageKind,
+  RelayProfileMessageLoginMetadata,
   RelayProfileMessageUser,
   RelayProfileOpenApiAuditEvent,
   RelayProfileSecuritySummary,
@@ -83,6 +88,8 @@ import type {
   RelayPublicAuthAccount,
   RelayPublicServerStatus,
   RelayPublicStatus,
+  RelayRemoteDeviceManagementServerSummary,
+  RelayRemoteDeviceProjectSummary,
   RelayRemoteDeviceSummary,
   RelayStore,
   RelayStoredServer
@@ -447,18 +454,95 @@ const createMissingRemoteState = (state: RelayConnectionState, requestedServerId
     : 'unknown_relay_server'
 })
 
+interface RelayManagementServerRegistration {
+  id: string
+  kind: string
+  name?: string
+}
+
+const relayManagementServerKind = () => {
+  const configured = toString(process.env.__ONEWORKS_RELAY_MANAGEMENT_SERVER_KIND__).toLowerCase()
+  if (configured === 'web' || configured === 'electron' || configured === 'daemon') return configured
+
+  const clientMode = toString(process.env.__ONEWORKS_PROJECT_CLIENT_MODE__).toLowerCase()
+  if (clientMode === 'desktop') return 'electron'
+  if (clientMode === 'none') return 'daemon'
+  return 'web'
+}
+
+const relayManagementServerName = (ctx: RelayPluginContext) => {
+  const configured = toString(process.env.__ONEWORKS_RELAY_MANAGEMENT_SERVER_NAME__)
+  if (configured !== '') return configured
+
+  const workspaceName = basename(ctx.workspaceFolder)
+  return workspaceName === '' ? undefined : workspaceName
+}
+
+const createRelayDeviceEnvironmentInfo = (): RelayDeviceEnvironmentInfo => ({
+  arch: arch(),
+  deviceType: 'computer',
+  osName: osType(),
+  osPlatform: platform(),
+  osRelease: release(),
+  runtime: 'node',
+  runtimeVersion: process.versions.node
+})
+
+const resolveRelayManagementServerRegistration = async (
+  ctx: RelayPluginContext,
+  store: ReturnType<typeof createRelayManagementServerStore>
+): Promise<RelayManagementServerRegistration> => {
+  const persisted = await store.readStore()
+  const kind = relayManagementServerKind()
+  const name = relayManagementServerName(ctx)
+  const next: RelayManagementServerStore = {
+    ...persisted,
+    kind,
+    ...(name == null ? {} : { name }),
+    updatedAt: new Date().toISOString()
+  }
+  if (persisted.kind !== next.kind || persisted.name !== next.name) {
+    await store.writeStore(next)
+  }
+  return {
+    id: persisted.id,
+    kind,
+    ...(name == null ? {} : { name })
+  }
+}
+
+const createCurrentWorkspaceProject = (ctx: RelayPluginContext) => {
+  const workspaceName = basename(ctx.workspaceFolder) || ctx.workspaceFolder
+  return {
+    id: `workspace:${createHash('sha256').update(ctx.workspaceFolder).digest('base64url').slice(0, 16)}`,
+    name: workspaceName,
+    title: workspaceName,
+    workspaceFolder: ctx.workspaceFolder
+  }
+}
+
 const createRegisterBody = (
   ctx: RelayPluginContext,
+  managementServer: RelayManagementServerRegistration,
   store: RelayStore,
   options: ReturnType<typeof normalizeOptions>,
   deviceId = store.deviceId
-) => ({
-  deviceId,
-  deviceName: options.deviceName,
-  capabilities: options.capabilities,
-  workspaceFolder: ctx.workspaceFolder,
-  pluginScope: ctx.scope
-})
+) => {
+  const environment = createRelayDeviceEnvironmentInfo()
+  return {
+    deviceId,
+    deviceInfo: environment,
+    deviceName: options.deviceName,
+    capabilities: options.capabilities,
+    managementServerEnvironment: environment,
+    managementServerId: managementServer.id,
+    managementServerKind: managementServer.kind,
+    ...(managementServer.name == null ? {} : { managementServerName: managementServer.name }),
+    managementServerProjects: [createCurrentWorkspaceProject(ctx)],
+    workspaceFolder: ctx.workspaceFolder,
+    pluginScope: ctx.scope
+  }
+}
 
 const readServerId = (payload?: unknown) => (
   isRecord(payload) ? toString(payload.serverId) || toString(payload.server) : ''
@@ -680,6 +764,29 @@ const fixtureProfileUser = (account: OneWorksAuthAccount): RelayProfileCurrentUs
   role: account.role ?? 'member'
 })
 
+const localProfileUserFromAuthAccount = (account: OneWorksAuthAccount): RelayProfileCurrentUser => {
+  const id = account.userId || account.accountKey
+  const email = account.email ?? account.loginId ?? id
+  return {
+    ...(account.avatarUrl == null ? {} : { avatarUrl: account.avatarUrl }),
+    disabledAt: account.enabled === false ? new Date(0).toISOString() : null,
+    effectiveAccess: {},
+    email,
+    groupIds: [],
+    id,
+    loginId: account.loginId ?? null,
+    name: account.name ?? account.loginId ?? account.email ?? id,
+    provider: null,
+    role: account.role ?? 'member'
+  }
+}
+
+const profileSessionFromAuthAccount = (
+  account: OneWorksAuthAccount
+): RelayProfileSessionSummary | undefined => (
+  account.sessionExpiresAt == null ? undefined : { expiresAt: account.sessionExpiresAt }
+)
+
 const fixtureProfileMessageUser = (user: RelayProfileCurrentUser): RelayProfileMessageUser => ({
   avatarUrl: user.avatarUrl ?? null,
   email: user.email,
@@ -800,10 +907,33 @@ const normalizeProfileMessageAudience = (value: unknown): RelayProfileMessage['a
   }
 }
 
+const normalizeProfileMessageLoginMetadata = (
+  value: unknown
+): RelayProfileMessageLoginMetadata | undefined => {
+  if (!isRecord(value)) return undefined
+  const ip = readOptionalText(value.ip)
+  const location = readOptionalText(value.location)
+  const userAgent = readOptionalText(value.userAgent)
+  if (ip == null && location == null && userAgent == null) return undefined
+  return {
+    ...(ip == null ? {} : { ip }),
+    ...(location == null ? {} : { location }),
+    ...(userAgent == null ? {} : { userAgent })
+  }
+}
+
+const normalizeProfileMessageMetadata = (value: unknown): RelayProfileMessage['metadata'] | undefined => {
+  if (!isRecord(value)) return undefined
+  const login = normalizeProfileMessageLoginMetadata(value.login)
+  if (login == null) return undefined
+  return { login }
+}
+
 const normalizeProfileMessage = (value: unknown): RelayProfileMessage | undefined => {
   if (!isRecord(value)) return undefined
   const id = toString(value.id)
   if (id === '') return undefined
+  const metadata = normalizeProfileMessageMetadata(value.metadata)
   return {
     audience: normalizeProfileMessageAudience(value.audience),
     body: toString(value.body),
@@ -812,6 +942,7 @@ const normalizeProfileMessage = (value: unknown): RelayProfileMessage | undefine
     createdByUserId: toString(value.createdByUserId),
     id,
     kind: normalizeProfileMessageKind(value.kind),
+    ...(metadata == null ? {} : { metadata }),
     title: toString(value.title),
     updatedAt: readNullableText(value.updatedAt)
   }
@@ -1159,20 +1290,131 @@ const normalizeAccountProfile = (value: unknown): RelayAccountProfile | undefine
   }
 }
 
+const normalizeRemoteDeviceEnvironmentInfo = (value: unknown): RelayDeviceEnvironmentInfo | undefined => {
+  if (!isRecord(value)) return undefined
+  const archValue = readOptionalText(value.arch)
+  const deviceType = readOptionalText(value.deviceType)
+  const osName = readOptionalText(value.osName)
+  const osPlatform = readOptionalText(value.osPlatform)
+  const osRelease = readOptionalText(value.osRelease)
+  const osVersion = readOptionalText(value.osVersion)
+  const runtime = readOptionalText(value.runtime)
+  const runtimeVersion = readOptionalText(value.runtimeVersion)
+  if (
+    [archValue, deviceType, osName, osPlatform, osRelease, osVersion, runtime, runtimeVersion].every(item =>
+      item == null
+    )
+  ) {
+    return undefined
+  }
+  return {
+    ...(archValue == null ? {} : { arch: archValue }),
+    ...(deviceType == null ? {} : { deviceType }),
+    ...(osName == null ? {} : { osName }),
+    ...(osPlatform == null ? {} : { osPlatform }),
+    ...(osRelease == null ? {} : { osRelease }),
+    ...(osVersion == null ? {} : { osVersion }),
+    ...(runtime == null ? {} : { runtime }),
+    ...(runtimeVersion == null ? {} : { runtimeVersion })
+  }
+}
+
+const normalizeRemoteDeviceProjectSummary = (value: unknown): RelayRemoteDeviceProjectSummary | undefined => {
+  if (!isRecord(value)) return undefined
+  const createdAt = readOptionalText(value.createdAt)
+  const id = readOptionalText(value.id)
+  const lastSeenAt = readOptionalText(value.lastSeenAt)
+  const name = readOptionalText(value.name)
+  const status = readOptionalText(value.status)
+  const title = readOptionalText(value.title)
+  const workspaceFolder = readOptionalText(value.workspaceFolder)
+  if ([createdAt, id, lastSeenAt, name, status, title, workspaceFolder].every(item => item == null)) {
+    return undefined
+  }
+  return {
+    ...(createdAt == null ? {} : { createdAt }),
+    ...(id == null ? {} : { id }),
+    ...(lastSeenAt == null ? {} : { lastSeenAt }),
+    ...(name == null ? {} : { name }),
+    ...(status == null ? {} : { status }),
+    ...(title == null ? {} : { title }),
+    ...(workspaceFolder == null ? {} : { workspaceFolder })
+  }
+}
+
+const normalizeRemoteDeviceManagementServerSummary = (
+  value: unknown
+): RelayRemoteDeviceManagementServerSummary | undefined => {
+  if (!isRecord(value)) return undefined
+  const createdAt = readOptionalText(value.createdAt)
+  const environment = normalizeRemoteDeviceEnvironmentInfo(value.environment)
+  const id = readOptionalText(value.id)
+  const ip = readOptionalText(value.ip)
+  const kind = readOptionalText(value.kind)
+  const lastSeenAt = readOptionalText(value.lastSeenAt)
+  const lastSeenIp = readOptionalText(value.lastSeenIp)
+  const name = readOptionalText(value.name)
+  const pluginScope = readOptionalText(value.pluginScope)
+  const projects = Array.isArray(value.projects)
+    ? value.projects
+      .map(normalizeRemoteDeviceProjectSummary)
+      .filter((item): item is RelayRemoteDeviceProjectSummary => item != null)
+    : []
+  const registeredIp = readOptionalText(value.registeredIp)
+  const status = readOptionalText(value.status)
+  const workspaceFolder = readOptionalText(value.workspaceFolder)
+  if (
+    [createdAt, id, ip, kind, lastSeenAt, lastSeenIp, name, pluginScope, registeredIp, status, workspaceFolder]
+      .every(item => item == null) &&
+    environment == null &&
+    projects.length === 0
+  ) {
+    return undefined
+  }
+  return {
+    ...(createdAt == null ? {} : { createdAt }),
+    ...(environment == null ? {} : { environment }),
+    ...(id == null ? {} : { id }),
+    ...(ip == null ? {} : { ip }),
+    ...(kind == null ? {} : { kind }),
+    ...(lastSeenAt == null ? {} : { lastSeenAt }),
+    ...(lastSeenIp == null ? {} : { lastSeenIp }),
+    ...(name == null ? {} : { name }),
+    ...(pluginScope == null ? {} : { pluginScope }),
+    ...(projects.length === 0 ? {} : { projects }),
+    ...(registeredIp == null ? {} : { registeredIp }),
+    ...(status == null ? {} : { status }),
+    ...(workspaceFolder == null ? {} : { workspaceFolder })
+  }
+}
+
 const normalizeRemoteDeviceSummary = (value: unknown): RelayRemoteDeviceSummary | undefined => {
   if (!isRecord(value)) return undefined
   const alias = readOptionalText(value.alias)
+  const deviceInfo = normalizeRemoteDeviceEnvironmentInfo(value.deviceInfo)
   const id = readOptionalText(value.id)
+  const isCurrentClientDevice = value.isCurrentClientDevice === true ? true : undefined
+  const ip = readOptionalText(value.ip)
+  const lastSeenIp = readOptionalText(value.lastSeenIp)
   const name = readOptionalText(value.name)
+  const registeredIp = readOptionalText(value.registeredIp)
   const status = readOptionalText(value.status)
   const pluginScope = readOptionalText(value.pluginScope)
   const createdAt = readOptionalText(value.createdAt)
   const lastSeenAt = readOptionalText(value.lastSeenAt)
   const workspaceFolder = readOptionalText(value.workspaceFolder)
   const capabilities = isRecord(value.capabilities) ? value.capabilities : undefined
+  const managementServers = Array.isArray(value.managementServers)
+    ? value.managementServers
+      .map(normalizeRemoteDeviceManagementServerSummary)
+      .filter((item): item is RelayRemoteDeviceManagementServerSummary => item != null)
+    : []
   if (
-    [alias, id, name, status, pluginScope, createdAt, lastSeenAt, workspaceFolder].every(item => item == null) &&
-    capabilities == null
+    [alias, id, ip, lastSeenIp, name, registeredIp, status, pluginScope, createdAt, lastSeenAt, workspaceFolder]
+      .every(item => item == null) &&
+    capabilities == null &&
+    deviceInfo == null &&
+    managementServers.length === 0
   ) {
     return undefined
   }
@@ -1180,10 +1422,16 @@ const normalizeRemoteDeviceSummary = (value: unknown): RelayRemoteDeviceSummary 
     ...(alias == null ? {} : { alias }),
     ...(capabilities == null ? {} : { capabilities }),
     ...(createdAt == null ? {} : { createdAt }),
+    ...(deviceInfo == null ? {} : { deviceInfo }),
     ...(id == null ? {} : { id }),
+    ...(isCurrentClientDevice == null ? {} : { isCurrentClientDevice }),
+    ...(ip == null ? {} : { ip }),
     ...(lastSeenAt == null ? {} : { lastSeenAt }),
+    ...(lastSeenIp == null ? {} : { lastSeenIp }),
+    ...(managementServers.length === 0 ? {} : { managementServers }),
     ...(name == null ? {} : { name }),
     ...(pluginScope == null ? {} : { pluginScope }),
+    ...(registeredIp == null ? {} : { registeredIp }),
     ...(status == null ? {} : { status }),
     ...(workspaceFolder == null ? {} : { workspaceFolder })
   }
@@ -1400,6 +1648,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   let disposed = false
   let explicitConnectVersion = 0
   const deviceStore = createRelayDeviceStore(ctx.projectHome)
+  const managementServerStore = createRelayManagementServerStore(ctx.projectHome)
   const heartbeats = new Map<string, ReturnType<typeof startHeartbeat>>()
   const sessionWorkers = new Map<string, ReturnType<typeof createRelaySessionWorker>>()
   const loopLeases = new Map<string, RelayLoopLease>()
@@ -1438,7 +1687,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
       servers.push(server)
     }
 
-    for (const configuredServer of normalizeOptions(ctx.options).servers) {
+    for (const configuredServer of normalizeOptions(ctx.options, ctx.runtime.role).servers) {
       addServer(resolveActiveRelayServer(ctx.options, configuredServer.id))
     }
     for (const authServer of Object.values(authStore.servers)) {
@@ -1459,10 +1708,12 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
 
   const createLoopLeaseKey = (input: {
     deviceId: string
+    managementServerId: string
     server: Pick<ResolvedRelayServer, 'remoteBaseUrl'>
   }) =>
     JSON.stringify({
       deviceId: input.deviceId,
+      managementServerId: input.managementServerId,
       remoteBaseUrl: normalizeBaseUrl(input.server.remoteBaseUrl)
     })
 
@@ -2561,7 +2812,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   const getPublicStatus = async (
     configDistributionOverride?: RelayConfigDistributionStatus
   ): Promise<RelayPublicStatus> => {
-    const options = normalizeOptions(ctx.options)
+    const options = normalizeOptions(ctx.options, ctx.runtime.role)
     const statusActiveServerId = state.activeServerId || options.activeServerId
     const resolvedStatusServer = statusActiveServerId === ''
       ? undefined
@@ -2815,7 +3066,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     }
     const accountId = selection.account.userId.trim()
     if (accountId === '') {
-      throw new Error('当前账号缺少账号 ID，无法导入 AGENTS.md。')
+      throw new Error('当前账号缺少账号 ID，无法同步 AGENTS.md。')
     }
 
     const requestedServerId = readServerId(payload) || selection.account.serverId
@@ -3165,6 +3416,21 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     return `/api/profile/openapi-audit${query === '' ? '' : `?${query}`}`
   }
 
+  const markCurrentClientDevices = async (
+    devices: RelayRemoteDeviceSummary[]
+  ): Promise<RelayRemoteDeviceSummary[]> => {
+    const store = await deviceStore.readStore()
+    const currentDeviceId = store.deviceId.trim()
+    if (currentDeviceId === '') return devices
+    return devices.map(device => {
+      if (device.id !== currentDeviceId) return device
+      return {
+        ...device,
+        isCurrentClientDevice: true
+      }
+    })
+  }
+
   const getFixtureProfile = (
     store: OneWorksAuthStore,
     account: OneWorksAuthAccount
@@ -3256,6 +3522,56 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     }
   }
 
+  const resolveProfileFallbackServer = (
+    store: OneWorksAuthStore,
+    account: OneWorksAuthAccount
+  ): Pick<ResolvedRelayServer, 'id' | 'remoteBaseUrl'> | undefined => {
+    const resolved = resolveRelayServer(store, account.serverId)
+    if (resolved != null) return resolved
+    const remoteBaseUrl = normalizeRemoteBaseUrl(account.serverUrl)
+    if (remoteBaseUrl === '') return undefined
+    return {
+      id: account.serverId,
+      remoteBaseUrl
+    }
+  }
+
+  const getDegradedProfile = async (
+    selection: {
+      account: OneWorksAuthAccount
+      store: OneWorksAuthStore
+    },
+    error: unknown
+  ): Promise<RelayProfileStatus> => {
+    const user = localProfileUserFromAuthAccount(selection.account)
+    const server = resolveProfileFallbackServer(selection.store, selection.account)
+    const store = await deviceStore.readStore()
+    const devicesResult: RelayMergedDeviceListResult = server == null
+      ? { authTokensByDeviceId: new Map(), devices: [] }
+      : await listRelayDevicesForServer(server, store, selection.store)
+    const errors: NonNullable<RelayProfileStatus['errors']> = {
+      profile: relayFetchErrorMessage(error) || 'Relay account profile is unavailable.'
+    }
+    if (devicesResult.error != null) {
+      errors.devices = devicesResult.error
+    }
+    const session = profileSessionFromAuthAccount(selection.account)
+    return {
+      ok: true,
+      account: publicAuthAccount(selection.account),
+      accounts: selection.store.accounts.map(publicAuthAccount),
+      auditEvents: [],
+      devices: await markCurrentClientDevices(devicesResult.devices),
+      errors,
+      invitations: [],
+      messages: [],
+      security: emptyProfileSecuritySummary(user),
+      ...(session == null ? {} : { session }),
+      teams: [],
+      user
+    }
+  }
+
   const getProfile = async (payload?: unknown): Promise<unknown> => {
     const selection = await selectProfileAuthAccount(payload)
     if ('selectionRequired' in selection) return selection
@@ -3264,7 +3580,12 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
       return getFixtureProfile(selection.store, selection.account)
     }
 
-    const meBody = await fetchRelayProfileJson(selection.account, '/api/auth/me')
+    let meBody: Record<string, unknown>
+    try {
+      meBody = await fetchRelayProfileJson(selection.account, '/api/auth/me')
+    } catch (error) {
+      return await getDegradedProfile(selection, error)
+    }
     const user = normalizeProfileCurrentUser(meBody.user)
     if (user == null) {
       throw new Error('Relay account profile did not return a valid user.')
@@ -3313,11 +3634,11 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
           .map(normalizeProfileAuditEvent)
           .filter((event): event is RelayProfileOpenApiAuditEvent => event != null)
         : [],
-      devices: Array.isArray(devicesBody.devices)
+      devices: await markCurrentClientDevices(Array.isArray(devicesBody.devices)
         ? devicesBody.devices
           .map(normalizeRemoteDeviceSummary)
           .filter((device): device is RelayRemoteDeviceSummary => device != null)
-        : [],
+        : []),
       ...(Object.keys(errors).length === 0 ? {} : { errors }),
       invitations: Array.isArray(messagesBody.invitations)
         ? messagesBody.invitations
@@ -3679,7 +4000,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         readTextField(payload, 'token')
       const transientSessionToken = readTextField(payload, 'sessionToken')
       const transientSessionExpiresAt = readTextField(payload, 'sessionExpiresAt')
-      const options = normalizeOptions(ctx.options)
+      const options = normalizeOptions(ctx.options, ctx.runtime.role)
       const activeServer = resolveActiveRelayServer(ctx.options, requestedServerId)
       if (activeServer == null) {
         state = createMissingRemoteState(state, requestedServerId)
@@ -3696,6 +4017,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
       const connectionKey = accountKey || activeServer.id
       const store = await deviceStore.readStore()
       const deviceId = readTextField(payload, 'deviceId') || store.deviceId
+      const managementServer = await resolveRelayManagementServerRegistration(ctx, managementServerStore)
       const storedServer = getStoredServer(store, activeServer)
       const authToken = transientAuthToken ||
         authAccount?.sessionToken ||
@@ -3714,6 +4036,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
 
       const loopLeaseKey = createLoopLeaseKey({
         deviceId,
+        managementServerId: managementServer.id,
         server: activeServer
       })
       stopRemoteLoop(connectionKey)
@@ -3759,7 +4082,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
             'content-type': 'application/json',
             ...(authToken === '' ? {} : { authorization: `Bearer ${authToken}` })
           },
-          body: JSON.stringify(createRegisterBody(ctx, store, options, deviceId))
+          body: JSON.stringify(createRegisterBody(ctx, managementServer, store, options, deviceId))
         })
 
         const responseBody = await response.json().catch(() => ({}))
@@ -3830,10 +4153,16 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
             connectionKey,
             startHeartbeat({
               capabilities: options.capabilities,
+              deviceInfo: createRelayDeviceEnvironmentInfo(),
               deviceId: auth.deviceId,
               deviceName: options.deviceName,
               deviceToken: auth.deviceToken,
               logger: ctx.logger,
+              managementServerEnvironment: createRelayDeviceEnvironmentInfo(),
+              managementServerId: managementServer.id,
+              managementServerKind: managementServer.kind,
+              managementServerName: managementServer.name,
+              managementServerProjects: [createCurrentWorkspaceProject(ctx)],
               pluginScope: ctx.scope,
               remoteBaseUrl: auth.remoteBaseUrl,
               serverId: activeServer.id,
@@ -3894,7 +4223,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   const restoreStoredConnections = async () => {
     const restoreConnectVersion = explicitConnectVersion
     const restoreWasSuperseded = () => disposed || explicitConnectVersion !== restoreConnectVersion
-    const options = normalizeOptions(ctx.options)
+    const options = normalizeOptions(ctx.options, ctx.runtime.role)
     const store = await deviceStore.readStore()
     const authStore = await readOneWorksAuthStore()
     const restoredServerIds: string[] = []
@@ -4091,7 +4420,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
       return await getPublicStatus()
     }
 
-    const options = normalizeOptions(ctx.options)
+    const options = normalizeOptions(ctx.options, ctx.runtime.role)
     const previousState = state
     stopRemoteLoops()
     for (const server of options.servers) {
@@ -4132,7 +4461,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     const requestedServerId = readServerId(payload)
     const nextServers = { ...store.servers }
     if (requestedServerId === '') {
-      const options = normalizeOptions(ctx.options)
+      const options = normalizeOptions(ctx.options, ctx.runtime.role)
       stopRemoteLoops()
       for (const server of Object.values(nextServers)) {
         nextServers[server.id] = {
