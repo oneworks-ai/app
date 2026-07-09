@@ -48,6 +48,14 @@ export interface WorkspaceConnectionMetadata extends WorkspaceConnection {
   updatedAt?: string
 }
 
+export const withWorkspaceRouteId = (
+  connection: WorkspaceConnection,
+  routeWorkspaceId: string | undefined
+): WorkspaceConnection => {
+  const workspaceId = normalizeWorkspaceId(connection.workspaceId) ?? normalizeWorkspaceId(routeWorkspaceId)
+  return workspaceId == null ? connection : { ...connection, workspaceId }
+}
+
 type StoredWorkspaceConnection = WorkspaceConnectionMetadata
 
 interface WorkspaceSessionsResponse {

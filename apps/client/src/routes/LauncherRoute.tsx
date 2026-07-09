@@ -54,6 +54,12 @@ import type {
   LauncherRelayDirectoryTarget
 } from './launcher-relay-projects'
 import { normalizeLauncherRelayDirectoryTargets, normalizeLauncherRelayProjectGroups } from './launcher-relay-projects'
+import {
+  readLauncherLocationState,
+  readLauncherViewModeFromLocation,
+  resolveLauncherUrlNavigation
+} from './launcher-route-state'
+import type { LauncherRoutingMode, LauncherViewMode } from './launcher-route-state'
 
 const emptyWorkspaceSelectorState: DesktopWorkspaceSelectorState = {
   recentProjects: [],
@@ -611,60 +617,6 @@ const buildLauncherPluginCommandSections = (
     .map(({ commands, id, title }) => ({ commands, id, title }))
 }
 
-type LauncherViewMode = 'about' | 'commands' | 'plugin' | 'preview' | 'settings'
-
-const launcherUrlViewModes = new Set<LauncherViewMode>(['about', 'preview', 'settings'])
-
-const readLauncherViewModeFromPathname = (pathname: string): LauncherViewMode | undefined => {
-  const segments = pathname.split('/').filter(Boolean)
-  if (segments[0] !== 'launcher') return undefined
-
-  const mode = safeDecodeLauncherPathSegment(segments[1]) as LauncherViewMode | undefined
-  return mode != null && launcherUrlViewModes.has(mode) ? mode : undefined
-}
-
-const buildLauncherViewRoutePath = (mode: LauncherViewMode) => (
-  mode === 'about' || mode === 'preview' || mode === 'settings'
-    ? `/launcher/${mode}`
-    : '/launcher'
-)
-
-const readLauncherViewModeFromSearch = (search: string): LauncherViewMode | undefined => {
-  const mode = new URLSearchParams(search).get(LAUNCHER_VIEW_SEARCH_PARAM) as LauncherViewMode | null
-  return mode != null && launcherUrlViewModes.has(mode) ? mode : undefined
-}
-
-const readLauncherViewModeFromLocation = (pathname: string, search: string): LauncherViewMode =>
-  readLauncherViewModeFromPathname(pathname) ?? readLauncherViewModeFromSearch(search) ?? 'commands'
-
-const readLauncherQueryFromSearch = (search: string) => (
-  new URLSearchParams(search).get(LAUNCHER_QUERY_SEARCH_PARAM) ?? ''
-)
-
-const buildLauncherSearchForState = (
-  search: string,
-  input: {
-    mode?: LauncherViewMode
-    query?: string
-  }
-) => {
-  const searchParams = new URLSearchParams(search)
-  if (input.mode != null) {
-    searchParams.delete(LAUNCHER_VIEW_SEARCH_PARAM)
-    searchParams.delete(LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM)
-  }
-  if (input.query != null) {
-    if (input.query === '') {
-      searchParams.delete(LAUNCHER_QUERY_SEARCH_PARAM)
-    } else {
-      searchParams.set(LAUNCHER_QUERY_SEARCH_PARAM, input.query)
-    }
-  }
-
-  const nextSearch = searchParams.toString()
-  return nextSearch === '' ? '' : `?${nextSearch}`
-}
-
 interface LauncherSearchHistoryEntry {
   cloneDestinationDirectory?: string
   directoryBrowserHomeDirectory?: string
@@ -920,7 +872,7 @@ const getProjectStatusIconTone = (status: DesktopWorkspaceSelectorProject['statu
 
 export interface LauncherRouteProps {
   active?: boolean
-  routingMode?: 'embedded' | 'url'
+  routingMode?: LauncherRoutingMode
   workspaceContext?: DesktopWorkspaceSelectorProject
   onClose?: () => void
   onOpenWorkspaceResource?: (target: DesktopWorkspaceResourceTarget) => Promise<void> | void
@@ -952,7 +904,7 @@ export function LauncherRoute({
   const [selectorState, setSelectorState] = useState<DesktopWorkspaceSelectorState>(emptyWorkspaceSelectorState)
   const [query, setQuery] = useState(() =>
     routingMode === 'url' && launcherPluginRouteState == null && launcherDirectoryRouteState == null
-      ? readLauncherQueryFromSearch(location.search)
+      ? readLauncherLocationState(routingMode, location.pathname, location.search).query
       : ''
   )
   const [activeCommandId, setActiveCommandId] = useState<string>()
@@ -1006,10 +958,8 @@ export function LauncherRoute({
   const [dismissedProjectContextFolder, setDismissedProjectContextFolder] = useState<string>()
   const [isLauncherMenuOpen, setIsLauncherMenuOpen] = useState(false)
   const [launcherViewMode, setLauncherViewMode] = useState<LauncherViewMode>(() =>
-    routingMode === 'embedded'
-      ? 'commands'
-      : launcherPluginRouteState == null
-      ? readLauncherViewModeFromLocation(location.pathname, location.search)
+    launcherPluginRouteState == null
+      ? readLauncherLocationState(routingMode, location.pathname, location.search).mode
       : 'plugin'
   )
   const [pluginRouteActions, setPluginRouteActions] = useState<RouteContainerHeaderActionItem[]>([])
@@ -1060,12 +1010,12 @@ export function LauncherRoute({
         ? 'plugin'
         : launcherDirectoryRouteState != null
         ? 'commands'
-        : readLauncherViewModeFromLocation(location.pathname, location.search),
+        : readLauncherLocationState(routingMode, location.pathname, location.search).mode,
     [launcherDirectoryRouteState, launcherPluginRouteState, location.pathname, location.search, routingMode]
   )
   const urlLauncherQuery = useMemo(
-    () => readLauncherQueryFromSearch(location.search),
-    [location.search]
+    () => readLauncherLocationState(routingMode, location.pathname, location.search).query,
+    [location.pathname, location.search, routingMode]
   )
   const launcherPluginRoute = useMemo(() => {
     if (launcherPluginRouteState == null) return undefined
@@ -1109,20 +1059,17 @@ export function LauncherRoute({
       replace?: boolean
     } = {}
   ) => {
-    if (routingMode === 'embedded') return
+    const navigation = resolveLauncherUrlNavigation({
+      currentHash: location.hash,
+      currentPathname: location.pathname,
+      currentSearch: location.search,
+      routingMode,
+      ...input
+    })
+    if (navigation == null) return
 
-    const nextSearch = buildLauncherSearchForState(location.search, input)
-    const nextPathname = input.mode == null || input.mode === 'plugin'
-      ? location.pathname
-      : buildLauncherViewRoutePath(input.mode)
-    if (nextSearch === location.search && nextPathname === location.pathname) return
-
-    pendingLauncherSearchRef.current = nextSearch
-    void navigate({
-      hash: location.hash,
-      pathname: nextPathname,
-      search: nextSearch
-    }, { replace: input.replace === true })
+    pendingLauncherSearchRef.current = navigation.to.search
+    void navigate(navigation.to, { replace: navigation.replace })
   }, [
     location.hash,
     location.pathname,
@@ -1312,16 +1259,18 @@ export function LauncherRoute({
     if (launcherPluginRouteState != null || launcherDirectoryRouteState != null) return
 
     const canonicalMode = readLauncherViewModeFromLocation(location.pathname, location.search)
-    const nextPathname = buildLauncherViewRoutePath(canonicalMode)
-    const nextSearch = buildLauncherSearchForState(location.search, { mode: canonicalMode })
-    if (nextPathname === location.pathname && nextSearch === location.search) return
+    const navigation = resolveLauncherUrlNavigation({
+      currentHash: location.hash,
+      currentPathname: location.pathname,
+      currentSearch: location.search,
+      mode: canonicalMode,
+      replace: true,
+      routingMode
+    })
+    if (navigation == null) return
 
-    pendingLauncherSearchRef.current = nextSearch
-    void navigate({
-      hash: location.hash,
-      pathname: nextPathname,
-      search: nextSearch
-    }, { replace: true })
+    pendingLauncherSearchRef.current = navigation.to.search
+    void navigate(navigation.to, { replace: navigation.replace })
   }, [
     launcherDirectoryRouteState,
     launcherPluginRouteState,

@@ -4,6 +4,7 @@ import { createServer } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { arch, platform, release, type as osType } from 'node:os'
 import { basename } from 'node:path'
+import process from 'node:process'
 import type { Duplex } from 'node:stream'
 
 import {

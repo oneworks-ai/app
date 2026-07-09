@@ -27,14 +27,12 @@ type RelayProjectSyncPayload =
   | {
     action: 'config-refresh'
     accountKey?: string
-    confirm?: boolean
     label: string
     serverId?: string
   }
   | {
     accountKey?: string
     action: 'personal-document-sync-enabled'
-    confirm?: boolean
     kind: RelayPersonalDocumentSyncKind
     label: string
     serverId?: string
@@ -42,7 +40,6 @@ type RelayProjectSyncPayload =
   | {
     accountKey?: string
     action: 'team-document-sync-enabled'
-    confirm?: boolean
     label: string
     serverId?: string
     teamId: string
@@ -390,7 +387,7 @@ const buildRelayProjectSyncFooterContribution = (status: RelayStatus | null): Re
       command: 'project-sync',
       icon: 'sync',
       id: 'project-sync',
-      payload: { ...candidate, confirm: true },
+      payload: candidate,
       title: '同步当前项目'
     }
   }
@@ -579,11 +576,6 @@ export async function activatePlugin(ctx: PluginClientContext) {
     if (action == null) {
       throw new Error(t.errors.relayActionFailed('project-sync', 400))
     }
-    if (isRecord(payload) && payload.confirm === true && typeof window.confirm === 'function') {
-      const confirmed = window.confirm(`确认${label}？`)
-      if (!confirmed) return { cancelled: true }
-    }
-
     const accountKey = isRecord(payload) ? toCleanString(payload.accountKey) : undefined
     const serverId = isRecord(payload) ? toCleanString(payload.serverId) : undefined
     let path = ''

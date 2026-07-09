@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import process from 'node:process'
 
 import { resolveGlobalOneWorksPath } from '@oneworks/utils/ai-path'
 
@@ -133,11 +134,7 @@ export const createRelayDeviceStore = (projectHome: string) => {
     return store
   }
 
-  return {
-    readStore,
-    storePath,
-    writeStore
-  }
+  return { readStore, storePath, writeStore }
 }
 
 export interface RelayManagementServerStore {

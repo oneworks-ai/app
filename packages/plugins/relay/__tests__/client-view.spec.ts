@@ -138,6 +138,10 @@ describe('relay project rule detail interaction', () => {
 
     expect(source).toContain('const updateAndSaveAssignment = (')
     expect(source.match(/updateAndSaveAssignment\(assignment, index,/g)).toHaveLength(3)
+    expect(source).toContain('queueAssignmentSave(assignment, index, nextDraft)')
+    expect(source).toContain('onCommit: value => commitRepository(assignment, index, rowIndex, value)')
+    expect(source).toMatch(/key: `\$\{projectAssignmentDraftKey\(assignment, index\)\}:repository:\$\{rowIndex\}`/u)
+    expect(source).not.toMatch(/key: `\$\{rowIndex\}:\$\{repository\}`/u)
     expect(source).not.toContain("label: saving ? '保存中' : '保存设置'")
     expect(source).toContain('launcherSurface || routeDetailActive ? null')
   })

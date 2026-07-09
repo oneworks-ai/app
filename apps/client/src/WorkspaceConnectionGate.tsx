@@ -12,7 +12,6 @@ import { restartLauncherWorkspace } from '#~/api/launcher'
 import { DesktopWorkspaceStartupReadyContext } from '#~/components/layout/desktop-workspace-startup-ready'
 import { WorkspaceOpeningOverlay } from '#~/components/workspace/WorkspaceOpeningOverlay'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
-import { normalizeWorkspaceId } from '#~/runtime-config'
 import { getRestorableWorkspaceConnection } from '#~/workspace-connection-restore'
 import type {
   WorkspaceConnection,
@@ -24,7 +23,8 @@ import {
   getWorkspaceServerRestartActivity,
   getWorkspaceVersionConflictDetails,
   isWorkspaceConnectionResponse,
-  rememberWorkspaceConnection
+  rememberWorkspaceConnection,
+  withWorkspaceRouteId
 } from '#~/workspace-connection-state'
 import { WorkspaceConnectionErrorView } from './WorkspaceConnectionErrorView'
 
@@ -59,14 +59,6 @@ const createVersionConflictRestartKey = (details: LauncherWorkspaceVersionConfli
     workspaceFolder: details.workspaceFolder
   })
 )
-
-const withRouteWorkspaceId = (
-  connection: WorkspaceConnection,
-  workspaceId: string | undefined
-): WorkspaceConnection => {
-  const resolvedWorkspaceId = normalizeWorkspaceId(connection.workspaceId) ?? normalizeWorkspaceId(workspaceId)
-  return resolvedWorkspaceId == null ? connection : { ...connection, workspaceId: resolvedWorkspaceId }
-}
 
 export function WorkspaceConnectionGate({
   children,
@@ -169,7 +161,7 @@ export function WorkspaceConnectionGate({
       const restoredConnection = await getRestorableWorkspaceConnection(workspaceId)
       return {
         ...restoredConnection,
-        connection: withRouteWorkspaceId(restoredConnection.connection, workspaceId)
+        connection: withWorkspaceRouteId(restoredConnection.connection, workspaceId)
       } satisfies ResolvedWorkspaceConnection
     } catch (error) {
       const details = getWorkspaceVersionConflictDetails(error)
@@ -178,7 +170,7 @@ export function WorkspaceConnectionGate({
           const restartedConnection = await maybeRestartIdleWorkspaceServer(details)
           if (restartedConnection != null) {
             return {
-              connection: withRouteWorkspaceId(restartedConnection, workspaceId),
+              connection: withWorkspaceRouteId(restartedConnection, workspaceId),
               transport: 'local'
             } satisfies ResolvedWorkspaceConnection
           }
@@ -262,7 +254,7 @@ export function WorkspaceConnectionGate({
     setIsRestarting(true)
     setRestartErrorMessage(undefined)
     try {
-      const connection = withRouteWorkspaceId(await restartLauncherWorkspace(workspaceId), workspaceId)
+      const connection = withWorkspaceRouteId(await restartLauncherWorkspace(workspaceId), workspaceId)
       applyWorkspaceConnection(connection)
       rememberWorkspaceConnection(connection, 'local')
       setState({ status: 'ready' })

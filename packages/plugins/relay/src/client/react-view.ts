@@ -8,6 +8,7 @@ import {
   OFFICIAL_RELAY_VERCEL_DEV_SERVER_ID,
   OFFICIAL_RELAY_VERCEL_SERVER_ID
 } from '../shared/official-services.js'
+import { createDebouncedSaveQueue } from './debounced-save-queue.js'
 import { createRelayLoginUrl } from './login-action.js'
 import { clearLoginCallbackFromUrl, readLoginCallback, readLoginCallbackFromUrl } from './login-callback.js'
 import { buildRelayServerOptionsUpdate } from './options.js'
@@ -185,6 +186,8 @@ const projectRuleDetailTabs: Array<{ icon: string; key: RelayProjectRuleDetailTa
   { icon: 'description', key: 'files', label: '关联文件' },
   { icon: 'info', key: 'overview', label: '概览' }
 ]
+
+const PROJECT_RULE_AUTOSAVE_DELAY_MS = 600
 
 const deviceDetailTabs: Array<{ icon: string; key: RelayDeviceDetailTab; label: string }> = [
   { icon: 'badge', key: 'profile', label: '资料' },
@@ -844,6 +847,7 @@ const renderInput = (
     autoFocus?: boolean
     key?: string
     onChange: (value: string) => void
+    onCommit?: (value: string) => void
     placeholder?: string
     rows?: number
     type?: 'password' | 'textarea' | 'text'
@@ -857,6 +861,7 @@ const renderInput = (
       autoFocus: props.autoFocus,
       key: props.key,
       onChange: props.onChange,
+      onCommit: props.onCommit,
       placeholder: props.placeholder,
       rows: props.rows,
       size: 'small',
@@ -870,10 +875,17 @@ const renderInput = (
       : null
     if (target != null) props.onChange(target.value)
   }
+  const onBlur = (event: Event) => {
+    const target = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement
+      ? event.target
+      : null
+    if (target != null) props.onCommit?.(target.value)
+  }
   if (props.type === 'textarea') {
     return react.createElement('textarea', {
       className: 'oneworks-relay__textarea',
       key: props.key,
+      onBlur,
       onInput,
       placeholder: props.placeholder,
       rows: props.rows,
@@ -884,6 +896,7 @@ const renderInput = (
     autoFocus: props.autoFocus,
     className: 'oneworks-relay__input',
     key: props.key,
+    onBlur,
     onInput,
     placeholder: props.placeholder,
     type: props.type ?? 'text',
@@ -4968,6 +4981,20 @@ const TeamProjectRuleDetailPanel = (props: {
   const [error, setError] = react.useState<string | null>(null)
   const [loading, setLoading] = react.useState(false)
   const [savingId, setSavingId] = react.useState<string | null>(null)
+  const assignmentSaveQueueRef = react.useRef(createDebouncedSaveQueue<
+    ReturnType<
+      typeof projectAssignmentDraftFrom
+    >
+  >(PROJECT_RULE_AUTOSAVE_DELAY_MS))
+  const mountedRef = react.useRef(true)
+
+  react.useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      assignmentSaveQueueRef.current.flushAll()
+    }
+  }, [])
 
   const loadDetail = async () => {
     if (profileId == null) {
@@ -5037,27 +5064,6 @@ const TeamProjectRuleDetailPanel = (props: {
     }))
     return nextDraft
   }
-  const updateRepository = (
-    assignment: RelayConfigShareProfileAssignment,
-    index: number,
-    rowIndex: number,
-    value: string
-  ) => {
-    const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
-    const projects = draft.projects.length === 0 ? [''] : draft.projects
-    updateDraft(assignment, index, {
-      projects: projects.map((item, nextIndex) => nextIndex === rowIndex ? value : item)
-    })
-  }
-  const removeRepository = (assignment: RelayConfigShareProfileAssignment, index: number, rowIndex: number) => {
-    const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
-    const projects = draft.projects.filter((_, nextIndex) => nextIndex !== rowIndex)
-    updateDraft(assignment, index, { projects: projects.length === 0 ? [''] : projects })
-  }
-  const addRepository = (assignment: RelayConfigShareProfileAssignment, index: number) => {
-    const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
-    updateDraft(assignment, index, { projects: [...draft.projects, ''] })
-  }
   const saveAssignment = async (
     assignment: RelayConfigShareProfileAssignment,
     index: number,
@@ -5069,11 +5075,13 @@ const TeamProjectRuleDetailPanel = (props: {
     const draft = draftOverride ?? drafts[key] ?? projectAssignmentDraftFrom(assignment)
     const project = compactProjectRule(draft.projects)
     if (project == null) {
-      setError('请至少添加一个 Git 仓库。')
+      if (mountedRef.current) setError('请至少添加一个 Git 仓库。')
       return
     }
-    setSavingId(assignmentId)
-    setError(null)
+    if (mountedRef.current) {
+      setSavingId(assignmentId)
+      setError(null)
+    }
     try {
       await requestJson(ctx, 'config-share-assignment-update', {
         accountKey,
@@ -5083,18 +5091,62 @@ const TeamProjectRuleDetailPanel = (props: {
         project,
         versionId: cleanText(draft.versionId) ?? undefined
       })
-      await loadDetail()
     } catch (nextError) {
-      if (draftOverride != null) {
-        setDrafts(current => ({
-          ...current,
-          [key]: projectAssignmentDraftFrom(assignment)
-        }))
-      }
-      setError(toErrorMessage(nextError))
+      if (mountedRef.current) setError(toErrorMessage(nextError))
     } finally {
-      setSavingId(null)
+      if (mountedRef.current) setSavingId(null)
     }
+  }
+  const queueAssignmentSave = (
+    assignment: RelayConfigShareProfileAssignment,
+    index: number,
+    draft: ReturnType<typeof projectAssignmentDraftFrom>,
+    delayMs = PROJECT_RULE_AUTOSAVE_DELAY_MS
+  ) => {
+    const key = projectAssignmentDraftKey(assignment, index)
+    assignmentSaveQueueRef.current.schedule(
+      key,
+      draft,
+      nextDraft => saveAssignment(assignment, index, nextDraft),
+      delayMs
+    )
+  }
+  const updateRepository = (
+    assignment: RelayConfigShareProfileAssignment,
+    index: number,
+    rowIndex: number,
+    value: string
+  ) => {
+    const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
+    const projects = draft.projects.length === 0 ? [''] : draft.projects
+    const nextDraft = updateDraft(assignment, index, {
+      projects: projects.map((item, nextIndex) => nextIndex === rowIndex ? value : item)
+    })
+    queueAssignmentSave(assignment, index, nextDraft)
+  }
+  const commitRepository = (
+    assignment: RelayConfigShareProfileAssignment,
+    index: number,
+    rowIndex: number,
+    value: string
+  ) => {
+    const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
+    const projects = draft.projects.length === 0 ? [''] : draft.projects
+    const nextDraft = updateDraft(assignment, index, {
+      projects: projects.map((item, nextIndex) => nextIndex === rowIndex ? value : item)
+    })
+    queueAssignmentSave(assignment, index, nextDraft, 0)
+  }
+  const removeRepository = (assignment: RelayConfigShareProfileAssignment, index: number, rowIndex: number) => {
+    const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
+    const nextDraft = updateDraft(assignment, index, {
+      projects: draft.projects.filter((_, nextIndex) => nextIndex !== rowIndex)
+    })
+    queueAssignmentSave(assignment, index, nextDraft, 0)
+  }
+  const addRepository = (assignment: RelayConfigShareProfileAssignment, index: number) => {
+    const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
+    updateDraft(assignment, index, { projects: [...draft.projects, ''] })
   }
   const updateAndSaveAssignment = (
     assignment: RelayConfigShareProfileAssignment,
@@ -5102,7 +5154,7 @@ const TeamProjectRuleDetailPanel = (props: {
     patch: Partial<ReturnType<typeof projectAssignmentDraftFrom>>
   ) => {
     const nextDraft = updateDraft(assignment, index, patch)
-    void saveAssignment(assignment, index, nextDraft)
+    queueAssignmentSave(assignment, index, nextDraft, 0)
   }
   const firstVisibleAssignment = visibleAssignments[0]
   const tabActions = activeTab === 'rules' && firstVisibleAssignment != null
@@ -5171,7 +5223,10 @@ const TeamProjectRuleDetailPanel = (props: {
               const identity = gitRepositoryIdentity(repository)
               return react.createElement(
                 'div',
-                { className: 'oneworks-relay__project-rule-repository-row', key: `${rowIndex}:${repository}` },
+                {
+                  className: 'oneworks-relay__project-rule-repository-row',
+                  key: `${projectAssignmentDraftKey(assignment, index)}:repository:${rowIndex}`
+                },
                 react.createElement(
                   'span',
                   { className: 'oneworks-relay__project-rule-repository-kind' },
@@ -5188,11 +5243,12 @@ const TeamProjectRuleDetailPanel = (props: {
                   { className: 'oneworks-relay__project-rule-repository-control' },
                   renderInput(react, view, {
                     onChange: value => updateRepository(assignment, index, rowIndex, value),
+                    onCommit: value => commitRepository(assignment, index, rowIndex, value),
                     placeholder: 'github.com/owner/repo',
                     value: repository
                   }),
                   renderButton(react, view, {
-                    disabled: repositories.length === 1 && cleanText(repository) == null,
+                    disabled: repositories.length === 1,
                     icon: 'close',
                     label: '移除仓库',
                     onClick: () => removeRepository(assignment, index, rowIndex)

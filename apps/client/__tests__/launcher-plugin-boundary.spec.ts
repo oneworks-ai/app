@@ -54,17 +54,15 @@ describe('launcher plugin boundary', () => {
 
   it('keeps host-owned directory browser pages on explicit launcher routes', async () => {
     const source = await readRepoFile('apps/client/src/routes/LauncherRoute.tsx')
+    const routeState = await readRepoFile('apps/client/src/routes/launcher-route-state.ts')
     const routeGuide = await readRepoFile('apps/client/src/routes/AGENTS.md')
 
-    expect(source).toContain('buildLauncherViewRoutePath')
-    expect(source).toContain('`/launcher/${mode}`')
+    expect(routeState).toContain('buildLauncherViewRoutePath')
     expect(source).toContain('readLauncherViewModeFromLocation')
     expect(routeGuide).toContain('/launcher/settings')
     expect(routeGuide).toContain('/launcher/about')
     expect(source).toContain("segments[1] !== 'browse'")
     expect(source).toContain('buildLauncherDirectoryRoutePath')
-    expect(source).toContain('`/launcher/browse/${encodeLauncherPathSegment(mode)}')
-    expect(source).toContain('${encodeLauncherPathSegment(normalizedDirectory)}')
     expect(source).toContain('LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM')
     expect(routeGuide).toContain('/launcher/browse/:mode/:targetId/:path')
   })
@@ -75,8 +73,10 @@ describe('launcher plugin boundary', () => {
     const routeGuide = await readRepoFile('apps/client/src/routes/AGENTS.md')
 
     expect(launcherOverlay).toContain("routingMode='embedded'")
-    expect(launcherRoute).toContain("routingMode?: 'embedded' | 'url'")
+    expect(launcherRoute).toContain('routingMode?: LauncherRoutingMode')
     expect(launcherRoute).toContain("if (routingMode === 'embedded') return")
+    expect(launcherRoute).toContain('readLauncherLocationState(routingMode')
+    expect(launcherRoute).toContain('resolveLauncherUrlNavigation({')
     expect(launcherRoute).toContain("route.slice('/launcher'.length)")
     expect(routeGuide).toContain('`embedded` 模式，不得读取或写入宿主 workspace URL')
   })
