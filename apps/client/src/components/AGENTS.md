@@ -21,6 +21,7 @@
 - `nav-rail-more-menu.tsx`：底部菜单、外部注入菜单和可复用菜单 item builder。
 - `action-search-toolbar/`：配置页、管理页和列表页共用的搜索 + 紧凑 action toolbar。新增历史、下载、导入记录这类带搜索和筛选 action 的页面时优先复用它，不要在业务组件里各自拼 AntD `Input` / 图标按钮样式。
 - `mobile-aware-select/`：项目通用 Select 入口，统一桌面 AntD Select 的基础 selector 尺寸、padding、下拉箭头、点击外部关闭策略和移动端抽屉行为；下拉滚动底部留白归属 `src/styles/global.scss` 的 `oneworks-overlay` 公共规则。普通下拉默认关闭 AntD virtual scroll，避免两行或带图标 option 被固定高度估算截断；确有大列表性能需求时由调用方显式传 `virtual`。配置页、筛选器、设置弹窗等普通下拉优先复用 `MobileAwareSelect`，不要在业务组件里各自传 `suffixIcon`、覆盖 AntD 默认 `11px` padding，或局部修 popup blur / scroll padding；聊天输入栏、侧栏批量筛选这类高度特殊的紧凑控件可以在自己的模块样式里覆盖变量或 selector。
+- `stage-slider/`：离散档位的通用 slider，负责原生 range 键盘语义、阶段点、主题 token 和可选的末档动画；业务组件只提供档位 value / label，并通过 CSS 变量调整局部宽高，不复制轨道与滑块样式。
 - `workspace-scope-select/`：项目 / 会话范围选择的通用 Select。历史、下载、运行记录、审计记录这类需要按 workspace project 或 session 过滤的页面优先复用 `WorkspaceProjectSelect` / `WorkspaceSessionSelect`，并显式提供“全部项目 / 全部会话”选项；不要在业务组件里再临时拼一排 project/session chip。
 - `Sidebar.tsx`：侧边栏数据装配、route sidebar 接入和列表状态。
 - `sidebar/SidebarHeader.tsx`：侧边栏顶部入口区、搜索区、入口 actions 和入口右键菜单触发。

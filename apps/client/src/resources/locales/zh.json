@@ -2073,6 +2073,7 @@
     "accountSelectOpenAdapterConfig": "打开 {{adapter}} 配置",
     "accountSelectOpenAccountConfig": "打开 {{account}} 设置",
     "effortSelectPlaceholder": "推理强度",
+    "effortSliderLabel": "推理强度：{{value}}",
     "effortLabels": {
       "default": "默认",
       "low": "低",

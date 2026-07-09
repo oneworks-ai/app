@@ -1,141 +1,29 @@
-.effort-select {
-  .ant-select-selection-item,
-  .ant-select-selection-placeholder {
-    justify-content: flex-start;
-    color: var(--placeholder-color, #9ca3af);
-    -webkit-text-fill-color: var(--placeholder-color, #9ca3af);
-  }
-
-  .ant-select-selection-item .effort-option__icon,
-  .ant-select-selection-placeholder .effort-option__icon {
-    color: inherit !important;
-    -webkit-text-fill-color: inherit !important;
-    font-weight: 300 !important;
-  }
-
-  .ant-select-selection-item .effort-option__text,
-  .ant-select-selection-placeholder .effort-option__text {
-    color: inherit !important;
-    -webkit-text-fill-color: inherit !important;
-    font-size: 12px !important;
-    font-weight: 400 !important;
-  }
-
-  &.ant-select-open .ant-select-selection-item,
-  &.ant-select-open .ant-select-selection-placeholder,
-  &.ant-select-open .effort-option__text,
-  &.ant-select-open .effort-option__icon,
-  &.ant-select-open .sender-select-arrow,
-  &:hover .ant-select-selection-item,
-  &:hover .ant-select-selection-placeholder,
-  &:hover .effort-option__text,
-  &:hover .effort-option__icon,
-  &:hover .sender-select-arrow,
-  &.ant-select-focused .ant-select-selection-item,
-  &.ant-select-focused .ant-select-selection-placeholder,
-  &.ant-select-focused .effort-option__text,
-  &.ant-select-focused .effort-option__icon,
-  &.ant-select-focused .sender-select-arrow {
-    color: var(--sender-control-hover-color) !important;
-    -webkit-text-fill-color: var(--sender-control-hover-color) !important;
-  }
-}
-
-.effort-select--compact {
-  min-width: var(--sender-control-height);
-  max-width: var(--sender-control-height);
-
-  &.ant-select-single .ant-select-selector {
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-    padding-inline-start: 0 !important;
-    padding-inline-end: 0 !important;
-    justify-content: center;
-  }
-
-  .ant-select-selection-wrap,
-  .ant-select-selection-search {
-    justify-content: center;
-  }
-
-  &.ant-select-single .ant-select-selector .ant-select-selection-item,
-  &.ant-select-single .ant-select-selector .ant-select-selection-placeholder,
-  .ant-select-selection-item,
-  .ant-select-selection-placeholder {
-    width: 100% !important;
-    justify-content: center;
-    overflow: hidden !important;
-  }
-
-  .effort-option__text {
-    display: none !important;
-  }
-
-  .effort-option {
-    width: 100%;
-    justify-content: center;
-  }
+.sender-select-shell--effort .effort-stage-slider {
+  --stage-slider-width: 104px;
+  --stage-slider-height: var(--sender-control-height);
+  --stage-slider-thumb-size: 14px;
+  --stage-slider-track-height: var(--sender-control-height);
+  --stage-slider-edge-padding: 4px;
 }
 
 @container sender-history (max-width: 560px) {
-  .sender-select-shell--effort:not(.sender-select-shell--compact) {
-    width: var(--sender-control-height);
-    max-width: var(--sender-control-height);
-    flex: 0 0 var(--sender-control-height);
-
-    .sender-select-body-trigger {
-      inset: 0;
-    }
+  .sender-select-shell--effort .effort-stage-slider {
+    --stage-slider-width: 92px;
   }
+}
 
-  .effort-select:not(.effort-select--responsive) {
-    width: var(--sender-control-height);
-    min-width: var(--sender-control-height);
-    max-width: var(--sender-control-height);
-
-    &.ant-select-single .ant-select-selector {
-      padding-left: 0 !important;
-      padding-right: 0 !important;
-      padding-inline-start: 0 !important;
-      padding-inline-end: 0 !important;
-      justify-content: center;
-    }
-
-    .ant-select-arrow {
-      display: none !important;
-    }
-
-    .ant-select-selection-wrap,
-    .ant-select-selection-search {
-      justify-content: center;
-    }
-
-    &.ant-select-single .ant-select-selector .ant-select-selection-item,
-    &.ant-select-single .ant-select-selector .ant-select-selection-placeholder,
-    .ant-select-selection-item,
-    .ant-select-selection-placeholder {
-      width: 100% !important;
-      justify-content: center;
-      overflow: hidden !important;
-    }
-
-    .effort-option__text {
-      display: none !important;
-    }
-
-    .effort-option {
-      width: 100%;
-      justify-content: center;
-    }
+@container sender-history (max-width: 430px) {
+  .sender-select-shell--effort .effort-stage-slider {
+    --stage-slider-width: 80px;
   }
 }
 
 .effort-option {
   display: inline-flex;
-  align-items: center;
-  gap: 6px;
   min-width: 0;
   height: 100%;
+  align-items: center;
+  gap: 6px;
 }
 
 .effort-option__icon {
@@ -148,8 +36,8 @@
 .effort-option__text {
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: 12px;
   font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

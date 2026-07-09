@@ -58,7 +58,7 @@ export const buildSenderToolbar = ({
   refs: {
     fileInputRef: RefObject<HTMLInputElement>
     modelSelectRef: RefObject<RefSelectProps>
-    effortSelectRef: RefObject<RefSelectProps>
+    effortSelectRef: RefObject<HTMLInputElement>
   }
   referenceActions: {
     showReferenceActions: boolean

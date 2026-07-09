@@ -2072,6 +2072,7 @@
     "accountSelectOpenAdapterConfig": "Open {{adapter}} config",
     "accountSelectOpenAccountConfig": "Open {{account}} settings",
     "effortSelectPlaceholder": "Effort",
+    "effortSliderLabel": "Reasoning effort: {{value}}",
     "effortLabels": {
       "default": "Standard",
       "low": "Low",

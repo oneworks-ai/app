@@ -53,7 +53,10 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     model: selectedModelWithService
   })
   const { permissionMode, setPermissionMode, permissionModeOptions } = useChatPermissionMode()
-  const { effort, setEffort, effortOptions } = useChatEffort()
+  const { applySessionEffort, effort, setEffort, effortOptions } = useChatEffort({
+    adapter: selectedAdapter,
+    model: selectedModelWithService
+  })
   const {
     activeView,
     isTerminalOpen,
@@ -103,6 +106,7 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
   useEffect(() => {
     if (session?.id == null || session.id === '') {
       lastObservedSessionRef.current = null
+      applySessionEffort()
       return
     }
 
@@ -127,7 +131,7 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     }
 
     if (sessionChanged || previous?.effort !== session.effort) {
-      setEffort(session.effort)
+      applySessionEffort(session.effort)
     }
 
     lastObservedSessionRef.current = {
@@ -147,7 +151,7 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     session?.model,
     session?.permissionMode,
     applySessionSelection,
-    setEffort,
+    applySessionEffort,
     setPermissionMode
   ])
 

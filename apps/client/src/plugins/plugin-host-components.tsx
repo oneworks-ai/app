@@ -985,7 +985,10 @@ function PluginSenderHost(props: PluginHostSenderComponentProps) {
     adapter: selectedAdapter,
     model: selectedModelWithService
   })
-  const { effort, setEffort, effortOptions } = useChatEffort()
+  const { effort, setEffort, effortOptions } = useChatEffort({
+    adapter: selectedAdapter,
+    model: selectedModelWithService
+  })
   const { permissionMode, setPermissionMode, permissionModeOptions } = useChatPermissionMode()
   const modelUnavailable = props.modelUnavailable ?? !hasAvailableModels
   const showStatusBar = props.showStatusBar ?? props.hideSelectionControls !== true

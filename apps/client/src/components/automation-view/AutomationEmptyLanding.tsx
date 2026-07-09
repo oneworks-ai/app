@@ -73,7 +73,10 @@ export function AutomationEmptyLanding({
     toggleRecommendedModel,
     updatingRecommendedModelValue
   } = useChatModelAdapterSelection()
-  const { effort, setEffort, effortOptions } = useChatEffort()
+  const { effort, setEffort, effortOptions } = useChatEffort({
+    adapter: selectedAdapter,
+    model: selectedModelWithService
+  })
   const { permissionMode, setPermissionMode, permissionModeOptions } = useChatPermissionMode()
   const { isCreating: isCreatingSession, isStopping, send, sendContent, interrupt } = useChatSessionActions({
     modelForQuery: selectedModelWithService,
