@@ -27,7 +27,8 @@ import {
 import {
   getRelayConfigShareProfileDetail,
   getRelayConfigShareTargets,
-  publishRelayConfigShareDraft
+  publishRelayConfigShareDraft,
+  updateRelayConfigShareAssignment
 } from './config-share.js'
 import {
   filterRelayConfigSnapshotByPreferences,
@@ -116,6 +117,7 @@ export interface RelayController {
   getConfigShareProfileDetail: (payload?: unknown) => Promise<unknown>
   getConfigShareTargets: (payload?: unknown) => Promise<unknown>
   publishConfigShareDraft: (payload?: unknown) => Promise<unknown>
+  updateConfigShareAssignment: (payload?: unknown) => Promise<unknown>
   refreshConfigDistribution: (payload?: unknown) => Promise<RelayPublicStatus>
   importPersonalDocumentRootAgents: (payload?: unknown) => Promise<RelayPublicStatus>
   restoreStoredConnections: () => Promise<string[]>
@@ -3292,6 +3294,8 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
 
   const publishConfigShareDraft = async (payload?: unknown) => await publishRelayConfigShareDraft(ctx, payload)
 
+  const updateConfigShareAssignment = async (payload?: unknown) => await updateRelayConfigShareAssignment(ctx, payload)
+
   const resolveAccountCommandServer = (payload?: unknown) => {
     const requestedServerId = readServerId(payload) || 'cf'
     const activeServer = resolveActiveRelayServer(ctx.options, requestedServerId)
@@ -3634,11 +3638,13 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
           .map(normalizeProfileAuditEvent)
           .filter((event): event is RelayProfileOpenApiAuditEvent => event != null)
         : [],
-      devices: await markCurrentClientDevices(Array.isArray(devicesBody.devices)
-        ? devicesBody.devices
-          .map(normalizeRemoteDeviceSummary)
-          .filter((device): device is RelayRemoteDeviceSummary => device != null)
-        : []),
+      devices: await markCurrentClientDevices(
+        Array.isArray(devicesBody.devices)
+          ? devicesBody.devices
+            .map(normalizeRemoteDeviceSummary)
+            .filter((device): device is RelayRemoteDeviceSummary => device != null)
+          : []
+      ),
       ...(Object.keys(errors).length === 0 ? {} : { errors }),
       invitations: Array.isArray(messagesBody.invitations)
         ? messagesBody.invitations
@@ -4585,6 +4591,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     setPersonalDocumentSyncEnabled,
     setTeamDocumentSyncEnabled,
     setUserEnabled,
+    updateConfigShareAssignment,
     updateProfileAccessToken,
     updateProfileDeviceAlias,
     search: payload => [{

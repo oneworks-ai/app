@@ -787,6 +787,29 @@ export interface RelayConfigShareProfileVersion {
   version?: number
 }
 
+export interface RelayConfigProjectRule {
+  allow?: string[]
+  deny?: string[]
+}
+
+export interface RelayConfigTarget {
+  teamIds?: string[]
+  userIds?: string[]
+}
+
+export interface RelayConfigShareProfileAssignment {
+  createdAt?: string
+  enabled?: boolean
+  id?: string
+  mode?: 'default' | 'override'
+  priority?: number
+  profileId?: string
+  project?: RelayConfigProjectRule | null
+  target?: RelayConfigTarget | null
+  updatedAt?: string | null
+  versionId?: string | null
+}
+
 export interface RelayConfigShareProfile {
   activeVersionId?: string | null
   assignmentCount?: number
@@ -804,7 +827,7 @@ export interface RelayConfigShareProfile {
 }
 
 export interface RelayConfigShareProfileDetail {
-  assignments?: unknown[]
+  assignments?: RelayConfigShareProfileAssignment[]
   profile?: RelayConfigShareProfile
   versions?: RelayConfigShareProfileVersion[]
 }

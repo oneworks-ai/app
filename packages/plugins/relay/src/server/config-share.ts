@@ -19,6 +19,8 @@ interface RelayShareAuth {
 
 const RELAY_FIXTURE_SESSION_TOKEN_PREFIX = 'relay-fixture:'
 
+const fixtureConfigShareAssignments = new Map<string, Record<string, unknown>>()
+
 const readOptionalText = (value: unknown) => {
   const text = toString(value)
   return text === '' ? undefined : text
@@ -258,8 +260,26 @@ const fixtureConfigShareProfileDetail = (auth: RelayShareAuth, payload?: unknown
     sourceHash: 'fixture-config-version',
     version: 1
   }
+  const assignmentId = `${readOptionalText(profile.id) ?? 'fixture-profile'}:assignment`
+  const defaultAssignment = {
+    createdAt: now,
+    enabled: true,
+    id: assignmentId,
+    mode: 'default',
+    priority: 100,
+    profileId: readOptionalText(profile.id) ?? 'fixture-profile',
+    project: {
+      allow: ['oneworks-ai', 'app'],
+      deny: ['archive-*']
+    },
+    target: {
+      teamIds: [detailTeamId]
+    },
+    updatedAt: null,
+    versionId: version.id
+  }
   return {
-    assignments: [],
+    assignments: [fixtureConfigShareAssignments.get(assignmentId) ?? defaultAssignment],
     profile,
     versions: [version]
   }
@@ -354,6 +374,19 @@ const relayPostJson = async (
       'content-type': 'application/json'
     },
     method: 'POST'
+  })
+
+const relayPatchJson = async (
+  auth: RelayShareAuth,
+  path: string,
+  body: Record<string, unknown>
+) =>
+  relayJson(auth, path, {
+    body: JSON.stringify(body),
+    headers: {
+      'content-type': 'application/json'
+    },
+    method: 'PATCH'
   })
 
 const createDraftInput = (payload?: unknown): RelayConfigShareDraftInput => {
@@ -518,4 +551,47 @@ export const publishRelayConfigShareDraft = async (
     serverId: auth.server.id,
     version
   }
+}
+
+export const updateRelayConfigShareAssignment = async (
+  ctx: RelayPluginContext,
+  payload?: unknown
+) => {
+  const body = readPayload(payload)
+  const assignmentId = readOptionalText(body.assignmentId)
+  if (assignmentId == null) {
+    throw new Error('assignmentId is required to update relay config assignment.')
+  }
+  const auth = await requireShareAuth(ctx, payload)
+  const updateBody: Record<string, unknown> = {}
+  for (const key of ['enabled', 'mode', 'priority', 'project', 'target', 'versionId'] as const) {
+    if (Object.prototype.hasOwnProperty.call(body, key)) {
+      updateBody[key] = body[key]
+    }
+  }
+
+  if (isFixtureShareAuth(auth)) {
+    const now = new Date().toISOString()
+    const previous = fixtureConfigShareAssignments.get(assignmentId)
+    const assignment = {
+      createdAt: previous?.createdAt ?? now,
+      enabled: body.enabled !== false,
+      id: assignmentId,
+      mode: readOptionalText(body.mode) === 'override' ? 'override' : 'default',
+      priority: typeof body.priority === 'number' ? body.priority : 100,
+      profileId: readOptionalText(body.profileId) ?? assignmentId.replace(/:assignment$/u, ''),
+      project: isRecord(body.project) ? body.project : null,
+      target: isRecord(body.target) ? body.target : previous?.target ?? null,
+      updatedAt: now,
+      versionId: readOptionalText(body.versionId) ?? 'version-1'
+    }
+    fixtureConfigShareAssignments.set(assignmentId, assignment)
+    return { assignment }
+  }
+
+  return await relayPatchJson(
+    auth,
+    `/api/relay/config-assignments/${encodeURIComponent(assignmentId)}`,
+    updateBody
+  )
 }
