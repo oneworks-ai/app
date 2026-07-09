@@ -269,8 +269,7 @@ const fixtureConfigShareProfileDetail = (auth: RelayShareAuth, payload?: unknown
     priority: 100,
     profileId: readOptionalText(profile.id) ?? 'fixture-profile',
     project: {
-      allow: ['oneworks-ai', 'app'],
-      deny: ['archive-*']
+      allow: ['github.com/oneworks-ai/app']
     },
     target: {
       teamIds: [detailTeamId]

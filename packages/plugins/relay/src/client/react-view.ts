@@ -161,6 +161,8 @@ const DOCUMENT_PREVIEW_CLOSE_ANIMATION_MS = 260
 
 type RelayDeviceDetailTab = 'logins' | 'profile' | 'projects'
 
+type RelayProjectRuleDetailTab = 'files' | 'overview' | 'rules' | 'settings'
+
 const profileTabs: Array<{ icon: string; key: RelayProfileTab; label: string }> = [
   { icon: 'badge', key: 'account', label: '资料' },
   { icon: 'groups', key: 'teams', label: '团队' },
@@ -175,6 +177,13 @@ const teamDetailTabs: Array<{ icon: string; key: RelayProfileTeamDetailTab; labe
   { icon: 'folder_open', key: 'projects', label: '项目' },
   { icon: 'rule_settings', key: 'configs', label: '配置' },
   { icon: 'sync', key: 'documents', label: '文档' }
+]
+
+const projectRuleDetailTabs: Array<{ icon: string; key: RelayProjectRuleDetailTab; label: string }> = [
+  { icon: 'account_tree', key: 'rules', label: '匹配规则' },
+  { icon: 'tune', key: 'settings', label: '应用设置' },
+  { icon: 'description', key: 'files', label: '关联文件' },
+  { icon: 'info', key: 'overview', label: '概览' }
 ]
 
 const deviceDetailTabs: Array<{ icon: string; key: RelayDeviceDetailTab; label: string }> = [
@@ -198,6 +207,18 @@ const teamDetailTabLabel = (
     return '版本列表'
   }
   return teamDetailTabs.find(item => item.key === key)?.label ?? '团队详情'
+}
+
+const projectRuleTitleFromId = (value: string | null | undefined) => {
+  const text = cleanText(value)
+  if (text == null) return '规则详情'
+  const segment = text.replace(/:assignment$/u, '').split(':').filter(Boolean).at(-1) ?? text
+  const title = segment
+    .split(/[-_\s]+/u)
+    .filter(Boolean)
+    .map(part => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+    .join(' ')
+  return `${title || text} 项目规则`
 }
 
 const deviceDetailTabLabel = (key: RelayDeviceDetailTab) => (
@@ -4735,37 +4756,37 @@ const configSourceFieldSummary = (source?: RelayConfigDistributionSourceStatus) 
   return fields.join(', ')
 }
 
-const splitProjectRuleText = (value: string) => (
-  value.split(/\n|,/u).map(item => item.trim()).filter(Boolean)
-)
-
 const projectRulePatterns = (
   rule: RelayConfigProjectRule | null | undefined,
   key: 'allow' | 'deny'
 ) => cleanTextList(rule?.[key] ?? [])
 
-const projectRulePatternText = (
-  rule: RelayConfigProjectRule | null | undefined,
-  key: 'allow' | 'deny'
-) => projectRulePatterns(rule, key).join('\n')
+const projectRuleRepositoryValues = (values: string[]) => cleanTextList(values)
 
-const compactProjectRule = (allow: string, deny: string): RelayConfigProjectRule | null => {
-  const allowPatterns = splitProjectRuleText(allow)
-  const denyPatterns = splitProjectRuleText(deny)
-  if (allowPatterns.length === 0 && denyPatterns.length === 0) return null
-  return {
-    ...(allowPatterns.length === 0 ? {} : { allow: allowPatterns }),
-    ...(denyPatterns.length === 0 ? {} : { deny: denyPatterns })
-  }
+const compactProjectRule = (projects: string[]): RelayConfigProjectRule | null => {
+  const allow = projectRuleRepositoryValues(projects)
+  if (allow.length === 0) return null
+  return { allow }
 }
 
-const projectRuleScopeLabel = (rule: RelayConfigProjectRule | null | undefined) => {
-  const allow = projectRulePatterns(rule, 'allow')
-  const deny = projectRulePatterns(rule, 'deny')
-  return cleanTextList([
-    allow.length === 0 ? '所有 Git 项目' : `允许 ${allow.join(', ')}`,
-    deny.length === 0 ? undefined : `排除 ${deny.join(', ')}`
-  ]).join(' · ')
+const gitRepositoryIdentity = (value: string) => {
+  const text = cleanText(value)
+  if (text == null) return { meta: 'Git 仓库', title: '待填写' }
+  const normalized = text
+    .replace(/^https?:\/\//iu, '')
+    .replace(/^git@([^:]+):/iu, '$1/')
+    .replace(/\.git$/iu, '')
+    .replace(/\/+$/u, '')
+  const parts = normalized.split('/').filter(Boolean)
+  if (parts.length >= 3) {
+    const host = parts[0] ?? ''
+    const owner = parts[parts.length - 2] ?? ''
+    const repo = parts[parts.length - 1] ?? ''
+    const provider = /github\.com$/iu.test(host) ? 'GitHub' : host
+    return { meta: provider, title: `${owner}/${repo}` }
+  }
+  if (parts.length === 2) return { meta: 'Git 仓库', title: `${parts[0]}/${parts[1]}` }
+  return { meta: '本地仓库名', title: text }
 }
 
 const projectRuleItemId = (
@@ -4784,24 +4805,14 @@ const projectRuleItemMatches = (item: RelayTeamProjectInteractionItem, ruleId: s
 )
 
 const projectAssignmentDraftFrom = (assignment: RelayConfigShareProfileAssignment) => ({
-  allow: projectRulePatternText(assignment.project, 'allow'),
-  deny: projectRulePatternText(assignment.project, 'deny'),
   enabled: assignment.enabled !== false ? 'true' : 'false',
   mode: assignment.mode ?? 'default',
-  priority: typeof assignment.priority === 'number' ? String(assignment.priority) : '',
+  projects: projectRulePatterns(assignment.project, 'allow'),
   versionId: cleanText(assignment.versionId) ?? ''
 })
 
 const projectAssignmentDraftKey = (assignment: RelayConfigShareProfileAssignment, index: number) => (
   cleanText(assignment.id) ?? `assignment-${index + 1}`
-)
-
-const projectAssignmentTitle = (assignment: RelayConfigShareProfileAssignment, index: number) => (
-  cleanText(assignment.id) ?? `匹配规则 ${index + 1}`
-)
-
-const projectAssignmentModeLabel = (mode: RelayConfigShareProfileAssignment['mode']) => (
-  mode === 'override' ? '覆盖模式' : '默认模式'
 )
 
 const renderProjectRuleEditorField = (
@@ -4828,8 +4839,83 @@ const renderProjectRuleFiles = (
   account: RelayAuthAccount | null,
   team: RelayProfileTeam,
   profile: RelayConfigShareProfile | undefined
-) =>
-  react.createElement(
+) => {
+  const InteractionList = view?.ui?.InteractionList
+  const items: PluginHostInteractionListItem[] = [
+    {
+      icon: 'badge',
+      itemType: 'groupTitle',
+      key: 'project-rule-files:account',
+      title: '账号知识库'
+    },
+    {
+      description: '账号级根目录说明，会先进入当前账号命名空间。',
+      icon: 'description',
+      key: 'project-rule-files:account-agents',
+      meta: '账号',
+      searchText: cleanTextList(['账号知识库', 'AGENTS', accountAgentsPath(account)]).join(' '),
+      title: accountAgentsPath(account),
+      tooltip: accountAgentsPath(account)
+    },
+    {
+      description: '账号级规则入口，用于逐步组织长期规则和偏好。',
+      icon: 'rule_folder',
+      key: 'project-rule-files:account-rules',
+      meta: '规则',
+      searchText: cleanTextList(['账号规则', accountOoAgentsPath(), accountOoRulesPath()]).join(' '),
+      title: `${accountOoAgentsPath()} / ${accountOoRulesPath()}`,
+      tooltip: `${accountOoAgentsPath()} / ${accountOoRulesPath()}`
+    },
+    {
+      icon: 'groups',
+      itemType: 'groupTitle',
+      key: 'project-rule-files:team',
+      title: '团队知识库'
+    },
+    {
+      description: '团队命名空间说明，命中规则后参与本机上下文合并。',
+      icon: 'groups',
+      key: 'project-rule-files:team-agents',
+      meta: '团队',
+      searchText: cleanTextList(['团队知识库', teamAgentsPath(team), teamDisplayName(team)]).join(' '),
+      title: teamAgentsPath(team),
+      tooltip: teamAgentsPath(team)
+    },
+    {
+      icon: 'rule_settings',
+      itemType: 'groupTitle',
+      key: 'project-rule-files:config',
+      title: '团队配置'
+    },
+    {
+      description: '命中规则后合并的配置版本。',
+      icon: 'rule_settings',
+      key: 'project-rule-files:config-profile',
+      meta: cleanText(profile?.activeVersionId) ?? '当前发布',
+      searchText: cleanTextList(['团队配置', profile?.id, profile?.name, profile?.activeVersionId]).join(' '),
+      title: profile == null ? '未关联配置' : configShareProfileTitle(profile),
+      tooltip: profile == null
+        ? undefined
+        : cleanTextList([configShareProfileTitle(profile), profile.activeVersionId]).join(' · ')
+    }
+  ]
+  if (InteractionList != null) {
+    return react.createElement(
+      'div',
+      { className: 'oneworks-relay__project-rule-files' },
+      react.createElement(InteractionList, {
+        border: 'borderless',
+        className: 'oneworks-relay__host-interaction-list oneworks-relay__project-rule-files-list',
+        descriptionPlacement: 'content',
+        emptyText: '暂无关联文件',
+        iconSize: 18,
+        items,
+        padding: 'none',
+        mode: 'resource'
+      })
+    )
+  }
+  return react.createElement(
     'div',
     { className: 'oneworks-relay__team-detail-list' },
     renderTeamDetailRow(react, view, {
@@ -4859,6 +4945,7 @@ const renderProjectRuleFiles = (
         : cleanTextList([configShareProfileTitle(profile), profile.activeVersionId]).join(' · ') || '-'
     })
   )
+}
 
 const TeamProjectRuleDetailPanel = (props: {
   account: RelayAuthAccount | null
@@ -4872,8 +4959,10 @@ const TeamProjectRuleDetailPanel = (props: {
   view?: PluginViewContext
 }) => {
   const { account, accountKey, ctx, matchLabel, profile, react, rule, team, view } = props
+  const NativeTabs = view?.ui?.NativeTabs
   const profileId = cleanText(profile?.id ?? rule.source?.profileId)
   const teamId = cleanText(team.id)
+  const [activeTab, setActiveTab] = react.useState<RelayProjectRuleDetailTab>('rules')
   const [detail, setDetail] = react.useState<RelayConfigShareProfileDetail | null>(null)
   const [drafts, setDrafts] = react.useState<Record<string, ReturnType<typeof projectAssignmentDraftFrom>>>({})
   const [error, setError] = react.useState<string | null>(null)
@@ -4946,11 +5035,36 @@ const TeamProjectRuleDetailPanel = (props: {
       }
     }))
   }
+  const updateRepository = (
+    assignment: RelayConfigShareProfileAssignment,
+    index: number,
+    rowIndex: number,
+    value: string
+  ) => {
+    const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
+    const projects = draft.projects.length === 0 ? [''] : draft.projects
+    updateDraft(assignment, index, {
+      projects: projects.map((item, nextIndex) => nextIndex === rowIndex ? value : item)
+    })
+  }
+  const removeRepository = (assignment: RelayConfigShareProfileAssignment, index: number, rowIndex: number) => {
+    const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
+    const projects = draft.projects.filter((_, nextIndex) => nextIndex !== rowIndex)
+    updateDraft(assignment, index, { projects: projects.length === 0 ? [''] : projects })
+  }
+  const addRepository = (assignment: RelayConfigShareProfileAssignment, index: number) => {
+    const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
+    updateDraft(assignment, index, { projects: [...draft.projects, ''] })
+  }
   const saveAssignment = async (assignment: RelayConfigShareProfileAssignment, index: number) => {
     const assignmentId = cleanText(assignment.id)
     if (assignmentId == null) return
     const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
-    const priority = Number(draft.priority)
+    const project = compactProjectRule(draft.projects)
+    if (project == null) {
+      setError('请至少添加一个 Git 仓库。')
+      return
+    }
     setSavingId(assignmentId)
     setError(null)
     try {
@@ -4959,8 +5073,7 @@ const TeamProjectRuleDetailPanel = (props: {
         assignmentId,
         enabled: draft.enabled === 'true',
         mode: draft.mode,
-        priority: Number.isFinite(priority) ? priority : undefined,
-        project: compactProjectRule(draft.allow, draft.deny),
+        project,
         versionId: cleanText(draft.versionId) ?? undefined
       })
       await loadDetail()
@@ -4970,180 +5083,212 @@ const TeamProjectRuleDetailPanel = (props: {
       setSavingId(null)
     }
   }
+  const tabs = NativeTabs == null
+    ? react.createElement('div', { className: 'oneworks-relay__empty' }, '标准标签组件不可用')
+    : react.createElement(NativeTabs, {
+      activeKey: activeTab,
+      ariaLabel: '项目规则详情',
+      className: 'oneworks-relay__profile-tabs oneworks-relay__project-rule-tabs',
+      items: projectRuleDetailTabs.map((item): PluginHostNativeTabItem => ({
+        icon: item.icon,
+        key: item.key,
+        label: item.label
+      })),
+      onChange: (nextTab: RelayProjectRuleDetailTab) => setActiveTab(nextTab)
+    })
+  const overviewPanel = react.createElement(
+    'div',
+    { className: 'oneworks-relay__team-detail-list' },
+    renderTeamDetailRow(react, view, {
+      description: '匹配规则归属的配置方案',
+      icon: 'rule_settings',
+      label: '规则组',
+      value: profile == null ? valueOrDash(rule.title) : configShareProfileTitle(profile)
+    }),
+    renderTeamDetailRow(react, view, {
+      description: '当前 Git 项目是否命中团队分发',
+      icon: 'folder_open',
+      label: '当前项目',
+      value: matchLabel
+    }),
+    renderTeamDetailRow(react, view, {
+      description: '服务端 assignment 数量',
+      icon: 'account_tree',
+      label: '匹配规则',
+      value: loading ? '读取中' : `${assignments.length} 条`
+    })
+  )
+  const rulesPanel = visibleAssignments.length === 0
+    ? react.createElement(
+      'div',
+      { className: 'oneworks-relay__empty' },
+      loading ? '正在加载匹配规则...' : '暂无匹配规则'
+    )
+    : react.createElement(
+      'div',
+      { className: 'oneworks-relay__project-rule-list-panel' },
+      ...visibleAssignments.map((assignment, index) => {
+        const draft = drafts[projectAssignmentDraftKey(assignment, index)] ??
+          projectAssignmentDraftFrom(assignment)
+        const assignmentId = cleanText(assignment.id)
+        const saving = assignmentId != null && savingId === assignmentId
+        const repositories = draft.projects.length === 0 ? [''] : draft.projects
+        const repositoryCount = projectRuleRepositoryValues(draft.projects).length
+        return react.createElement(
+          'div',
+          { className: 'oneworks-relay__project-rule-repositories', key: projectAssignmentDraftKey(assignment, index) },
+          react.createElement(
+            'div',
+            { className: 'oneworks-relay__project-rule-repository-list' },
+            ...repositories.map((repository, rowIndex) => {
+              const identity = gitRepositoryIdentity(repository)
+              return react.createElement(
+                'div',
+                { className: 'oneworks-relay__project-rule-repository-row', key: `${rowIndex}:${repository}` },
+                react.createElement(
+                  'span',
+                  { className: 'oneworks-relay__project-rule-repository-kind' },
+                  renderIcon(react, view, 'hub', { size: 16 }),
+                  react.createElement(
+                    'span',
+                    { className: 'oneworks-relay__project-rule-repository-copy' },
+                    react.createElement('strong', null, identity.title),
+                    react.createElement('span', null, identity.meta)
+                  )
+                ),
+                react.createElement(
+                  'div',
+                  { className: 'oneworks-relay__project-rule-repository-control' },
+                  renderInput(react, view, {
+                    onChange: value => updateRepository(assignment, index, rowIndex, value),
+                    placeholder: 'github.com/owner/repo',
+                    value: repository
+                  }),
+                  renderButton(react, view, {
+                    disabled: repositories.length === 1 && cleanText(repository) == null,
+                    icon: 'close',
+                    label: '移除仓库',
+                    onClick: () => removeRepository(assignment, index, rowIndex)
+                  })
+                )
+              )
+            })
+          ),
+          react.createElement(
+            'div',
+            { className: 'oneworks-relay__project-rule-list-actions' },
+            renderActionButton(react, view, {
+              icon: 'add',
+              label: '添加仓库',
+              onClick: () => addRepository(assignment, index)
+            }),
+            renderActionButton(react, view, {
+              disabled: assignmentId == null || saving || repositoryCount === 0,
+              icon: saving ? 'sync' : 'save',
+              label: saving ? '保存中' : '保存列表',
+              onClick: () => {
+                void saveAssignment(assignment, index)
+              },
+              primary: true
+            })
+          )
+        )
+      })
+    )
+  const settingsPanel = visibleAssignments.length === 0
+    ? react.createElement(
+      'div',
+      { className: 'oneworks-relay__empty' },
+      loading ? '正在加载应用设置...' : '暂无应用设置'
+    )
+    : react.createElement(
+      'div',
+      { className: 'oneworks-relay__project-rule-settings-panel' },
+      ...visibleAssignments.map((assignment, index) => {
+        const draft = drafts[projectAssignmentDraftKey(assignment, index)] ??
+          projectAssignmentDraftFrom(assignment)
+        const assignmentId = cleanText(assignment.id)
+        const saving = assignmentId != null && savingId === assignmentId
+        const repositoryCount = projectRuleRepositoryValues(draft.projects).length
+        return react.createElement(
+          'section',
+          { className: 'oneworks-relay__project-rule-settings', key: projectAssignmentDraftKey(assignment, index) },
+          react.createElement(
+            'div',
+            { className: 'oneworks-relay__project-rule-fields' },
+            renderProjectRuleEditorField(
+              react,
+              '状态',
+              '停用后保留规则但不参与分发',
+              renderSelect(react, view, {
+                onChange: value =>
+                  updateDraft(assignment, index, { enabled: Array.isArray(value) ? value[0] ?? 'true' : value }),
+                options: [
+                  { label: '启用规则', value: 'true' },
+                  { label: '暂不启用', value: 'false' }
+                ],
+                value: draft.enabled
+              })
+            ),
+            renderProjectRuleEditorField(
+              react,
+              '合并方式',
+              '普通合并会叠加团队配置；覆盖模式优先生效',
+              renderSelect(react, view, {
+                onChange: value =>
+                  updateDraft(assignment, index, {
+                    mode: (Array.isArray(value) ? value[0] ?? 'default' : value) as 'default' | 'override'
+                  }),
+                options: [
+                  { label: '普通合并', value: 'default' },
+                  { label: '覆盖当前配置', value: 'override' }
+                ],
+                value: draft.mode
+              })
+            ),
+            renderProjectRuleEditorField(
+              react,
+              '配置版本',
+              '推荐跟随当前发布；需要锁定时再选择具体版本',
+              renderSelect(react, view, {
+                onChange: value =>
+                  updateDraft(assignment, index, { versionId: Array.isArray(value) ? value[0] ?? '' : value }),
+                options: versionOptions,
+                value: draft.versionId
+              })
+            )
+          ),
+          react.createElement(
+            'div',
+            { className: 'oneworks-relay__project-rule-card-actions' },
+            renderActionButton(react, view, {
+              disabled: assignmentId == null || saving || repositoryCount === 0,
+              icon: saving ? 'sync' : 'save',
+              label: saving ? '保存中' : '保存设置',
+              onClick: () => {
+                void saveAssignment(assignment, index)
+              },
+              primary: true
+            })
+          )
+        )
+      })
+    )
+  const filesPanel = renderProjectRuleFiles(react, view, account, team, profile)
+  const tabPanel = activeTab === 'overview'
+    ? overviewPanel
+    : activeTab === 'files'
+    ? filesPanel
+    : activeTab === 'settings'
+    ? settingsPanel
+    : rulesPanel
 
   return react.createElement(
     'section',
     { className: 'oneworks-relay__team-config-detail oneworks-relay__project-rule-detail' },
     error == null ? null : react.createElement('div', { className: 'oneworks-relay__config-error' }, error),
-    react.createElement(
-      'div',
-      { className: 'oneworks-relay__team-detail-list' },
-      renderTeamDetailRow(react, view, {
-        description: '匹配规则归属的配置方案',
-        icon: 'rule_settings',
-        label: '规则组',
-        value: profile == null ? valueOrDash(rule.title) : configShareProfileTitle(profile)
-      }),
-      renderTeamDetailRow(react, view, {
-        description: '当前 Git 项目是否命中团队分发',
-        icon: 'folder_open',
-        label: '当前项目',
-        value: matchLabel
-      }),
-      renderTeamDetailRow(react, view, {
-        description: '服务端 assignment 数量',
-        icon: 'account_tree',
-        label: '匹配规则',
-        value: loading ? '读取中' : `${assignments.length} 条`
-      })
-    ),
-    renderTeamSection(
-      react,
-      view,
-      'account_tree',
-      '匹配规则',
-      loading ? '读取中' : `${visibleAssignments.length} 条`,
-      visibleAssignments.length === 0
-        ? react.createElement(
-          'div',
-          { className: 'oneworks-relay__empty' },
-          loading ? '正在加载匹配规则...' : '暂无匹配规则'
-        )
-        : react.createElement(
-          'div',
-          { className: 'oneworks-relay__project-rule-stack' },
-          ...visibleAssignments.map((assignment, index) => {
-            const draft = drafts[projectAssignmentDraftKey(assignment, index)] ??
-              projectAssignmentDraftFrom(assignment)
-            const assignmentId = cleanText(assignment.id)
-            const saving = assignmentId != null && savingId === assignmentId
-            return react.createElement(
-              'section',
-              { className: 'oneworks-relay__project-rule-card', key: projectAssignmentDraftKey(assignment, index) },
-              react.createElement(
-                'div',
-                { className: 'oneworks-relay__project-rule-card-head' },
-                react.createElement(
-                  'span',
-                  { className: 'oneworks-relay__project-rule-card-title' },
-                  renderIcon(react, view, 'account_tree', { size: 16 }),
-                  react.createElement('strong', null, projectAssignmentTitle(assignment, index))
-                ),
-                react.createElement(
-                  'span',
-                  { className: 'oneworks-relay__project-rule-card-meta' },
-                  cleanTextList([
-                    assignment.enabled === false ? '停用' : '启用',
-                    projectAssignmentModeLabel(assignment.mode),
-                    `优先级 ${assignment.priority ?? '-'}`
-                  ]).join(' · ')
-                ),
-                renderActionButton(react, view, {
-                  disabled: assignmentId == null || saving,
-                  icon: saving ? 'sync' : 'save',
-                  label: saving ? '保存中' : '保存规则',
-                  onClick: () => {
-                    void saveAssignment(assignment, index)
-                  },
-                  primary: true
-                })
-              ),
-              react.createElement(
-                'div',
-                { className: 'oneworks-relay__project-rule-summary' },
-                projectRuleScopeLabel(assignment.project)
-              ),
-              react.createElement(
-                'div',
-                { className: 'oneworks-relay__project-rule-fields' },
-                renderProjectRuleEditorField(
-                  react,
-                  '启用状态',
-                  '停用后不会参与团队配置分发',
-                  renderSelect(react, view, {
-                    onChange: value =>
-                      updateDraft(assignment, index, { enabled: Array.isArray(value) ? value[0] ?? 'true' : value }),
-                    options: [
-                      { label: '启用', value: 'true' },
-                      { label: '停用', value: 'false' }
-                    ],
-                    value: draft.enabled
-                  })
-                ),
-                renderProjectRuleEditorField(
-                  react,
-                  '合并模式',
-                  '默认模式参与合并，覆盖模式优先生效',
-                  renderSelect(react, view, {
-                    onChange: value =>
-                      updateDraft(assignment, index, {
-                        mode: (Array.isArray(value) ? value[0] ?? 'default' : value) as 'default' | 'override'
-                      }),
-                    options: [
-                      { label: 'default', value: 'default' },
-                      { label: 'override', value: 'override' }
-                    ],
-                    value: draft.mode
-                  })
-                ),
-                renderProjectRuleEditorField(
-                  react,
-                  '优先级',
-                  '数字越小越先合并',
-                  renderInput(react, view, {
-                    onChange: value => updateDraft(assignment, index, { priority: value }),
-                    placeholder: '100',
-                    value: draft.priority
-                  })
-                ),
-                renderProjectRuleEditorField(
-                  react,
-                  '版本',
-                  '为空时跟随当前发布版本',
-                  renderSelect(react, view, {
-                    onChange: value =>
-                      updateDraft(assignment, index, { versionId: Array.isArray(value) ? value[0] ?? '' : value }),
-                    options: versionOptions,
-                    value: draft.versionId
-                  })
-                ),
-                renderProjectRuleEditorField(
-                  react,
-                  '允许 Git 项目',
-                  '每行一个项目名、路径或通配符；为空表示所有项目',
-                  renderInput(react, view, {
-                    onChange: value => updateDraft(assignment, index, { allow: value }),
-                    placeholder: 'oneworks-ai\n/project/path\nteam-*',
-                    rows: 3,
-                    type: 'textarea',
-                    value: draft.allow
-                  })
-                ),
-                renderProjectRuleEditorField(
-                  react,
-                  '排除 Git 项目',
-                  '命中排除规则时不会分发',
-                  renderInput(react, view, {
-                    onChange: value => updateDraft(assignment, index, { deny: value }),
-                    placeholder: 'archive-*\n/tmp/project',
-                    rows: 3,
-                    type: 'textarea',
-                    value: draft.deny
-                  })
-                )
-              )
-            )
-          })
-        )
-    ),
-    renderTeamSection(
-      react,
-      view,
-      'description',
-      '关联文件',
-      '规则命中后会关联这些配置和文档入口',
-      renderProjectRuleFiles(react, view, account, team, profile)
-    )
+    tabs,
+    react.createElement('div', { className: 'native-tabs-panel oneworks-relay__project-rule-tab-panel' }, tabPanel)
   )
 }
 
@@ -5333,52 +5478,10 @@ const renderTeamProjectsPanel = (props: {
       })
     )
   }
-  const backRoute = () => {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-      window.history.back()
-      return
-    }
-    listRoute()
-  }
   if (projectRuleId != null) {
     return react.createElement(
       'div',
       { className: 'oneworks-relay__team-projects oneworks-relay__team-configs--detail' },
-      react.createElement(
-        'div',
-        { className: 'route-container-inline-breadcrumb' },
-        react.createElement(
-          'button',
-          {
-            'aria-label': '返回',
-            className: 'route-container-inline-breadcrumb__back route-container-inline-breadcrumb__item--button',
-            onClick: backRoute,
-            title: '返回',
-            type: 'button'
-          },
-          renderIcon(react, view, 'chevron_left', { size: 18 })
-        ),
-        react.createElement(
-          'button',
-          {
-            'aria-label': '打开项目规则',
-            className: 'route-container-inline-breadcrumb__item route-container-inline-breadcrumb__item--button',
-            onClick: listRoute,
-            title: '项目规则',
-            type: 'button'
-          },
-          react.createElement('span', null, '项目规则')
-        ),
-        renderIcon(react, view, 'chevron_right', {
-          className: 'route-container-inline-breadcrumb__separator',
-          size: 18
-        }),
-        react.createElement(
-          'span',
-          { className: 'route-container-inline-breadcrumb__item route-container-inline-breadcrumb__item--current' },
-          selectedRule == null ? '规则详情' : selectedRule.title
-        )
-      ),
       selectedRule == null
         ? react.createElement(
           'div',
@@ -6553,6 +6656,9 @@ export const RelayHomeView = (props: {
       const team = profile?.teams?.find(item => cleanText(item.id) === route.teamId)
       const teamTitle = team == null ? cleanText(route.teamId) ?? '团队' : teamDisplayName(team)
       const accountTitle = account == null ? cleanText(route.accountKey) ?? accountName : accountName
+      const projectRuleId = cleanText(route.projectRuleId)
+      const projectRuleDetail = route.tab === 'projects' && projectRuleId != null
+      const projectRuleTitle = projectRuleTitleFromId(projectRuleId)
       const backToTeams = () =>
         navigateTo(
           ctx.scope,
@@ -6562,22 +6668,56 @@ export const RelayHomeView = (props: {
             tab: 'teams'
           })
         )
-      view?.route?.setTitle?.('团队详情')
+      const goTeamOverview = () =>
+        navigateTo(
+          ctx.scope,
+          routePath(ctx.scope, {
+            accountKey: route.accountKey,
+            page: 'team',
+            tab: 'overview',
+            teamId: route.teamId
+          })
+        )
+      const backToProjectRules = () =>
+        navigateTo(
+          ctx.scope,
+          routePath(ctx.scope, {
+            accountKey: route.accountKey,
+            page: 'team',
+            tab: 'projects',
+            teamId: route.teamId
+          })
+        )
+      view?.route?.setTitle?.(projectRuleDetail ? '项目规则详情' : '团队详情')
       view?.route?.setLauncherChrome?.({
         avatarInitials: getAvatarInitials(teamTitle),
         avatarUrl: cleanText(team?.avatarUrl),
-        searchTitle: teamDetailTabLabel(route.tab, route.configPanel),
-        title: teamTitle
+        searchTitle: projectRuleDetail ? '项目规则详情' : teamDetailTabLabel(route.tab, route.configPanel),
+        title: projectRuleDetail ? projectRuleTitle : teamTitle
       })
-      view?.route?.setBreadcrumb?.({
-        ancestors: [
-          { onSelect: goAccounts, title: '账号' },
-          { onSelect: goAccount, title: accountTitle }
-        ],
-        currentTitle: teamTitle,
-        onBack: backToTeams,
-        parentTitle: '团队'
-      })
+      view?.route?.setBreadcrumb?.(
+        projectRuleDetail
+          ? {
+            ancestors: [
+              { onSelect: goAccounts, title: '账号' },
+              { onSelect: goAccount, title: accountTitle },
+              { onSelect: backToTeams, title: '团队' },
+              { onSelect: goTeamOverview, title: teamTitle }
+            ],
+            currentTitle: projectRuleTitle,
+            onBack: backToProjectRules,
+            parentTitle: '项目规则'
+          }
+          : {
+            ancestors: [
+              { onSelect: goAccounts, title: '账号' },
+              { onSelect: goAccount, title: accountTitle }
+            ],
+            currentTitle: teamTitle,
+            onBack: backToTeams,
+            parentTitle: '团队'
+          }
+      )
     } else if (route.page === 'device') {
       const device = profile?.devices?.find(item => cleanText(item.id) === route.deviceId)
       const deviceTitle = device == null ? cleanText(route.deviceId) ?? '设备' : deviceDisplayName(device)
