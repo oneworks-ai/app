@@ -66,4 +66,16 @@ describe('launcher plugin boundary', () => {
     expect(source).toContain('LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM')
     expect(routeGuide).toContain('/launcher/browse/:mode/:targetId/:path')
   })
+
+  it('keeps the embedded workspace launcher isolated from the host URL', async () => {
+    const launcherRoute = await readRepoFile('apps/client/src/routes/LauncherRoute.tsx')
+    const launcherOverlay = await readRepoFile('apps/client/src/routes/LauncherOverlay.tsx')
+    const routeGuide = await readRepoFile('apps/client/src/routes/AGENTS.md')
+
+    expect(launcherOverlay).toContain("routingMode='embedded'")
+    expect(launcherRoute).toContain("routingMode?: 'embedded' | 'url'")
+    expect(launcherRoute).toContain("if (routingMode === 'embedded') return")
+    expect(launcherRoute).toContain("route.slice('/launcher'.length)")
+    expect(routeGuide).toContain('`embedded` 模式，不得读取或写入宿主 workspace URL')
+  })
 })

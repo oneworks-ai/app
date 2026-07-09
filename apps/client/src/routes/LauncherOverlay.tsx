@@ -48,6 +48,7 @@ export function LauncherOverlay({
       <PluginProvider runtimeSource='manager' surface='launcher'>
         <LauncherRoute
           active={open}
+          routingMode='embedded'
           workspaceContext={workspaceContext}
           onClose={onClose}
           onOpenWorkspaceResource={onOpenWorkspaceResource}

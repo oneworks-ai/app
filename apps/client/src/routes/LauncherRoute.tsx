@@ -920,6 +920,7 @@ const getProjectStatusIconTone = (status: DesktopWorkspaceSelectorProject['statu
 
 export interface LauncherRouteProps {
   active?: boolean
+  routingMode?: 'embedded' | 'url'
   workspaceContext?: DesktopWorkspaceSelectorProject
   onClose?: () => void
   onOpenWorkspaceResource?: (target: DesktopWorkspaceResourceTarget) => Promise<void> | void
@@ -928,6 +929,7 @@ export interface LauncherRouteProps {
 
 export function LauncherRoute({
   active = true,
+  routingMode = 'url',
   workspaceContext,
   onClose,
   onOpenWorkspaceResource,
@@ -939,17 +941,17 @@ export function LauncherRoute({
   const { pluginServerBaseUrl, registry, snapshot } = usePluginContext()
   const { message, modal } = App.useApp()
   const launcherPluginRouteState = useMemo(
-    () => readLauncherPluginRouteState(location.pathname),
-    [location.pathname]
+    () => routingMode === 'url' ? readLauncherPluginRouteState(location.pathname) : undefined,
+    [location.pathname, routingMode]
   )
   const launcherDirectoryRouteState = useMemo(
-    () => readLauncherDirectoryRouteState(location.pathname, location.search),
-    [location.pathname, location.search]
+    () => routingMode === 'url' ? readLauncherDirectoryRouteState(location.pathname, location.search) : undefined,
+    [location.pathname, location.search, routingMode]
   )
   const launcherLanguage = i18n.resolvedLanguage ?? i18n.language
   const [selectorState, setSelectorState] = useState<DesktopWorkspaceSelectorState>(emptyWorkspaceSelectorState)
   const [query, setQuery] = useState(() =>
-    launcherPluginRouteState == null && launcherDirectoryRouteState == null
+    routingMode === 'url' && launcherPluginRouteState == null && launcherDirectoryRouteState == null
       ? readLauncherQueryFromSearch(location.search)
       : ''
   )
@@ -1004,7 +1006,9 @@ export function LauncherRoute({
   const [dismissedProjectContextFolder, setDismissedProjectContextFolder] = useState<string>()
   const [isLauncherMenuOpen, setIsLauncherMenuOpen] = useState(false)
   const [launcherViewMode, setLauncherViewMode] = useState<LauncherViewMode>(() =>
-    launcherPluginRouteState == null
+    routingMode === 'embedded'
+      ? 'commands'
+      : launcherPluginRouteState == null
       ? readLauncherViewModeFromLocation(location.pathname, location.search)
       : 'plugin'
   )
@@ -1050,12 +1054,14 @@ export function LauncherRoute({
   const isDirectoryBrowserMode = directoryBrowserMode != null
   const urlLauncherViewMode = useMemo(
     () =>
-      launcherPluginRouteState != null
+      routingMode === 'embedded'
+        ? 'commands'
+        : launcherPluginRouteState != null
         ? 'plugin'
         : launcherDirectoryRouteState != null
         ? 'commands'
         : readLauncherViewModeFromLocation(location.pathname, location.search),
-    [launcherDirectoryRouteState, launcherPluginRouteState, location.pathname, location.search]
+    [launcherDirectoryRouteState, launcherPluginRouteState, location.pathname, location.search, routingMode]
   )
   const urlLauncherQuery = useMemo(
     () => readLauncherQueryFromSearch(location.search),
@@ -1103,6 +1109,8 @@ export function LauncherRoute({
       replace?: boolean
     } = {}
   ) => {
+    if (routingMode === 'embedded') return
+
     const nextSearch = buildLauncherSearchForState(location.search, input)
     const nextPathname = input.mode == null || input.mode === 'plugin'
       ? location.pathname
@@ -1119,7 +1127,8 @@ export function LauncherRoute({
     location.hash,
     location.pathname,
     location.search,
-    navigate
+    navigate,
+    routingMode
   ])
   const setLauncherViewModeWithUrl = useCallback((
     mode: LauncherViewMode,
@@ -1253,6 +1262,8 @@ export function LauncherRoute({
   }, [])
 
   useEffect(() => {
+    if (routingMode === 'embedded') return
+
     const pendingLauncherSearch = pendingLauncherSearchRef.current
     if (pendingLauncherSearch != null) {
       if (pendingLauncherSearch !== location.search) return
@@ -1291,11 +1302,13 @@ export function LauncherRoute({
     launcherViewMode,
     location.search,
     query,
+    routingMode,
     urlLauncherQuery,
     urlLauncherViewMode
   ])
 
   useEffect(() => {
+    if (routingMode === 'embedded') return
     if (launcherPluginRouteState != null || launcherDirectoryRouteState != null) return
 
     const canonicalMode = readLauncherViewModeFromLocation(location.pathname, location.search)
@@ -1315,7 +1328,8 @@ export function LauncherRoute({
     location.hash,
     location.pathname,
     location.search,
-    navigate
+    navigate,
+    routingMode
   ])
 
   useEffect(() => {
@@ -1360,6 +1374,7 @@ export function LauncherRoute({
   }, [focusSearchInput, launcherDirectoryRouteState])
 
   useEffect(() => {
+    if (routingMode === 'embedded') return
     if (!isDirectoryBrowserMode || directoryBrowserMode == null || launcherPluginRouteState != null) return
 
     const nextPathname = buildLauncherDirectoryRoutePath(
@@ -1384,7 +1399,8 @@ export function LauncherRoute({
     location.hash,
     location.pathname,
     location.search,
-    navigate
+    navigate,
+    routingMode
   ])
 
   useEffect(() => {
@@ -2743,9 +2759,27 @@ export function LauncherRoute({
   ])
 
   const invokePluginLauncherResult = useCallback(async (result: LauncherPluginSearchResult) => {
+    const openPluginRoute = (route: string) => {
+      if (routingMode === 'url') {
+        void navigate(route)
+        return
+      }
+
+      // Embedded launchers do not own the workspace URL. Plugin destinations
+      // leave the overlay and enter the equivalent workspace plugin route.
+      const workspaceRoute = route.startsWith('/launcher/plugins/')
+        ? route.slice('/launcher'.length)
+        : route.startsWith('/plugins/')
+        ? route
+        : undefined
+      if (workspaceRoute == null) return
+      onClose?.()
+      void navigate(workspaceRoute)
+    }
+
     if (result.route != null) {
       setIsLauncherMenuOpen(false)
-      void navigate(result.route)
+      openPluginRoute(result.route)
       return
     }
 
@@ -2760,7 +2794,7 @@ export function LauncherRoute({
         const route = getLauncherPluginSearchResultRoute(value)
         if (route != null) {
           setIsLauncherMenuOpen(false)
-          void navigate(route)
+          openPluginRoute(route)
         }
       } catch (error) {
         console.error('[launcher] failed to invoke plugin launcher result', error)
@@ -2777,7 +2811,7 @@ export function LauncherRoute({
       console.error('[launcher] failed to invoke workspace plugin result', error)
       void message.error(t('launcher.commandFailed'))
     }
-  }, [desktopApi, message, navigate, pluginServerBaseUrl, registry, t])
+  }, [desktopApi, message, navigate, onClose, pluginServerBaseUrl, registry, routingMode, t])
 
   const openLauncherView = useCallback((mode: LauncherViewMode) => {
     setLauncherViewModeWithUrl(mode, { query: '' })
