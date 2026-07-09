@@ -55,7 +55,6 @@ import {
   syncModelServiceProviderPortalTabs
 } from './config/ModelServiceProviderPortalBottomPanel'
 import type { ModelServiceProviderPortalRequest } from './config/ModelServiceProviderPortalBottomPanel'
-import { NativeHistoryImportQuickEntry } from './config/NativeHistoryImportQuickEntry'
 import { WorktreeEnvironmentPanel } from './config/WorktreeEnvironmentPanel'
 import {
   getConfigDraftKey,
@@ -1391,11 +1390,6 @@ export function ConfigView() {
       )}
       {tab.key === 'worktreeEnvironments' && (
         <WorktreeEnvironmentPanel t={t} />
-      )}
-      {tab.key === 'general' && (
-        <NativeHistoryImportQuickEntry
-          onManage={() => setActiveTabKey('externalSessions')}
-        />
       )}
       {tab.key === 'externalSessions' && (
         <ExternalSessionsPanel
