@@ -22,7 +22,6 @@ import {
   getClientBase,
   mergeRuntimeEnv,
   normalizeServerBaseUrl,
-  normalizeWorkspaceId,
   resolveDevDocumentTitle,
   resolveWorkspaceIdFromPathname
 } from '#~/runtime-config.js'
@@ -31,7 +30,11 @@ import { setupMobileViewport } from '#~/utils/mobile-viewport.js'
 import App from './App'
 import { normalizeAppLanguage } from './i18n'
 import { getRestorableWorkspaceConnection } from './workspace-connection-restore'
-import { applyWorkspaceConnection, rememberWorkspaceConnection } from './workspace-connection-state'
+import {
+  applyWorkspaceConnection,
+  rememberWorkspaceConnection,
+  withWorkspaceRouteId
+} from './workspace-connection-state'
 
 const gitRefLabel = import.meta.env.__ONEWORKS_PROJECT_GIT_REF_LABEL__ ?? ''
 
@@ -89,18 +92,17 @@ const installWorkspaceRouteRuntimeIfAvailable = async () => {
   const { connection, transport } = restoredConnection
   const serverBaseUrl = normalizeServerBaseUrl(connection.serverBaseUrl)
   if (serverBaseUrl == null) return
-  const restoredWorkspaceId = normalizeWorkspaceId(connection.workspaceId) ?? workspaceId
+  const routeConnection = withWorkspaceRouteId(connection, workspaceId)
 
   applyWorkspaceConnection({
     serverBaseUrl,
-    workspaceFolder: connection.workspaceFolder,
-    workspaceId: restoredWorkspaceId
+    workspaceFolder: routeConnection.workspaceFolder,
+    workspaceId: routeConnection.workspaceId
   })
   rememberWorkspaceConnection({
-    ...connection,
+    ...routeConnection,
     managerServerBaseUrl,
-    serverBaseUrl,
-    workspaceId: restoredWorkspaceId
+    serverBaseUrl
   }, transport)
 }
 

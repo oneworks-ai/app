@@ -52,7 +52,9 @@ export const withWorkspaceRouteId = (
   connection: WorkspaceConnection,
   routeWorkspaceId: string | undefined
 ): WorkspaceConnection => {
-  const workspaceId = normalizeWorkspaceId(connection.workspaceId) ?? normalizeWorkspaceId(routeWorkspaceId)
+  // The URL identifies the workspace being mounted. Restored metadata may be stale,
+  // so it can only provide an id when the route itself has none.
+  const workspaceId = normalizeWorkspaceId(routeWorkspaceId) ?? normalizeWorkspaceId(connection.workspaceId)
   return workspaceId == null ? connection : { ...connection, workspaceId }
 }
 

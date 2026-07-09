@@ -143,13 +143,13 @@ describe('workspace connection state', () => {
     })
   })
 
-  it('does not replace a workspace id returned by the restored connection', () => {
+  it('keeps the route workspace id when restored metadata belongs to another workspace', () => {
     expect(
       withWorkspaceRouteId({
         serverBaseUrl: 'http://127.0.0.1:52520',
         workspaceId: 'w_4M7QkuNsqzXBA2jCteRJLa'
       }, 'w_SpRHHjsSxAo7piB3kZ2zrQ').workspaceId
-    ).toBe('w_4M7QkuNsqzXBA2jCteRJLa')
+    ).toBe('w_SpRHHjsSxAo7piB3kZ2zrQ')
   })
 
   it('rejects missing or invalid server URLs', () => {
