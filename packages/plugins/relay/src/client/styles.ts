@@ -106,6 +106,7 @@ ${adminListSurfaceCss}
 .oneworks-relay__profile--team-detail .oneworks-relay__profile-tabs { margin-block: 10px 0; }
 .oneworks-relay__profile--team-detail.oneworks-relay__profile--launcher .oneworks-relay__profile-tabs { margin-block-start: 0; }
 .oneworks-relay__team-detail-panel { min-width: 0; display: grid; gap: 10px; }
+.oneworks-relay__team-detail-panel--route-detail { gap: 0; }
 .oneworks-relay__team-detail-panel > .oneworks-relay__config:first-child,
 .oneworks-relay__team-detail-panel > .oneworks-relay__share:first-child,
 .oneworks-relay__team-detail-panel > .oneworks-relay__profile-section:first-child { padding-block-start: 0; }
@@ -144,6 +145,18 @@ ${adminListSurfaceCss}
 .oneworks-relay__team-configs--detail > .route-container-inline-breadcrumb { padding-block-start: 0; }
 .oneworks-relay__team-config-detail { min-width: 0; display: grid; gap: 0; }
 .oneworks-relay__team-configs--detail > .route-container-inline-breadcrumb + .oneworks-relay__team-config-detail .oneworks-relay__team-detail-row:first-child { padding-block-start: var(--subpage-section-gap, 10px); }
+.oneworks-relay__project-rule-detail { gap: var(--subpage-section-gap, 10px); }
+.oneworks-relay__project-rule-stack { min-width: 0; display: grid; gap: var(--subpage-section-gap, 10px); }
+.oneworks-relay__project-rule-card { min-width: 0; display: grid; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
+.oneworks-relay__project-rule-card:first-child { padding-block-start: 0; }
+.oneworks-relay__project-rule-card-head { min-width: 0; min-height: var(--oneworks-overlay-control-height, 30px); display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--subpage-section-gap, 10px); }
+.oneworks-relay__project-rule-card-title { min-width: 0; display: inline-flex; align-items: center; gap: var(--oneworks-overlay-icon-gap, 6px); color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 750 12px/1.25 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-relay__project-rule-card-meta, .oneworks-relay__project-rule-summary { min-width: 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 11px/1.3 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-relay__project-rule-summary { color: var(--sub-text-color, var(--ant-color-text, #1f2328)); }
+.oneworks-relay__project-rule-fields { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px var(--subpage-section-gap, 10px); }
+.oneworks-relay__project-rule-field { min-width: 0; display: grid; gap: 4px; }
+.oneworks-relay__project-rule-field-copy { min-width: 0; display: grid; gap: 1px; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 11px/1.25 ui-sans-serif, system-ui, sans-serif; }
+.oneworks-relay__project-rule-field-copy strong { color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 750 12px/1.25 ui-sans-serif, system-ui, sans-serif; }
 .oneworks-relay__team-config-content { box-sizing: border-box; min-width: 0; min-height: min(540px, calc(100dvh - 250px)); display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 10px; padding-block-start: 0; border-top: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
 .oneworks-relay__team-config-content-editor { min-width: 0; min-height: 320px; display: grid; }
 .oneworks-relay--team-config-content-tab .oneworks-relay__team-config-content-editor { min-height: 0; }
@@ -280,6 +293,7 @@ ${adminListSurfaceCss}
   .oneworks-relay__personal-docs { min-height: auto; grid-template-columns: minmax(0, 1fr); overflow: visible; }
   .oneworks-relay__document-preview { position: relative; inset: auto; width: auto; min-height: 320px; border-top: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); border-left: 0; box-shadow: none; }
   .oneworks-relay__team-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .oneworks-relay__project-rule-fields { grid-template-columns: minmax(0, 1fr); }
   .oneworks-relay__team-share-form { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 520px) {
