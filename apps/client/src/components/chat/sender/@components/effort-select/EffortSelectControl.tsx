@@ -1,14 +1,12 @@
 /* eslint-disable max-lines -- effort selector keeps desktop Select, shortcut wiring, and compact drawer together. */
 import '../sender-toolbar/SenderSelectShared.scss'
-import '../sender-toolbar/SenderSelectBase.scss'
 import './EffortSelectControl.scss'
-import './EffortSelectDropdown.scss'
 
 import { ShortcutTooltip } from '@oneworks/components/route-layout'
 import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
+import { StageSlider } from '#~/components/stage-slider/StageSlider'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 
 import type {
@@ -22,12 +20,6 @@ import {
   SenderMobileSelectDrawer,
   handleSenderMobileSelectOptionKeyDown
 } from '../mobile-select-drawer/SenderMobileSelectDrawer'
-
-const renderSelectArrow = (onMouseDown: (event: React.MouseEvent<HTMLSpanElement>) => void) => (
-  <span className='material-symbols-rounded sender-select-arrow' onMouseDown={onMouseDown}>
-    keyboard_arrow_down
-  </span>
-)
 
 export function EffortSelectControl({
   state,
@@ -66,9 +58,19 @@ export function EffortSelectControl({
   } = handlers
   const isCompactControl = isCompactLayout || isTouchInteraction
   const isEffortSelectOpen = showEffortSelect
-  const selectedEffortLabel = effort === 'default'
-    ? t('chat.effortLabels.default')
-    : t(`chat.effortLabels.${effort}`)
+  const effortStages = useMemo(() => {
+    return effortOptions
+      .filter(option => option.value !== 'default')
+      .map(option => ({
+        value: option.value,
+        label: t(`chat.effortLabels.${option.value}`)
+      }))
+  }, [effortOptions, t])
+  const fallbackEffort = effortStages.find(option => option.value === 'medium')?.value ??
+    effortStages[0]?.value ?? 'medium'
+  const displayedEffort = effortStages.some(option => option.value === effort) ? effort : fallbackEffort
+  const selectedEffortLabel = effortStages.find(option => option.value === displayedEffort)?.label ??
+    t('chat.effortLabels.medium')
 
   const handleEffortSelection = (value: typeof effort) => {
     onEffortChange?.(value)
@@ -109,18 +111,22 @@ export function EffortSelectControl({
   }
 
   const decoratedEffortOptions = useMemo(() => {
-    return effortOptions.map(option => ({
+    return effortStages.map(option => ({
       ...option,
       label: (
         <span className={`effort-option effort-option--${option.value}`.trim()}>
           <span className='material-symbols-rounded effort-option__icon'>{effortIconMap[option.value]}</span>
-          <span className='effort-option__text'>
-            {option.value === 'default' ? t('chat.effortLabels.default') : t(`chat.effortLabels.${option.value}`)}
-          </span>
+          <span className='effort-option__text'>{option.label}</span>
         </span>
       )
     }))
-  }, [effortOptions, t])
+  }, [effortStages])
+
+  const handleStageSliderFocus = () => {
+    onShowModelSelectChange(false)
+    onCloseReferenceActions()
+    onShowEffortSelectChange(true)
+  }
 
   return (
     <ShortcutTooltip
@@ -138,23 +144,6 @@ export function EffortSelectControl({
         ].filter(Boolean).join(' ')}
         onPointerDownCapture={handleCompactEffortPointerDown}
       >
-        {!isCompactControl && !isEffortSelectOpen && !(modelUnavailable || isThinking) && (
-          <button
-            type='button'
-            className='sender-select-body-trigger'
-            aria-label={t('chat.effortShortcutTooltip')}
-            onMouseDown={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              openEffortSelect()
-            }}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              openEffortSelect()
-            }}
-          />
-        )}
         {isCompactControl
           ? (
             <button
@@ -175,10 +164,11 @@ export function EffortSelectControl({
               }}
             >
               <span
-                className={`effort-option effort-option--${effort} sender-responsive-select-button__value`.trim()}
+                className={`effort-option effort-option--${displayedEffort} sender-responsive-select-button__value`
+                  .trim()}
               >
                 <span className='material-symbols-rounded effort-option__icon sender-responsive-select-button__icon'>
-                  {effortIconMap[effort]}
+                  {effortIconMap[displayedEffort]}
                 </span>
                 <span className='effort-option__text sender-responsive-select-button__label'>
                   {selectedEffortLabel}
@@ -190,48 +180,28 @@ export function EffortSelectControl({
             </button>
           )
           : (
-            <Select
-              ref={effortSelectRef}
-              className='effort-select'
-              classNames={{ popup: { root: 'effort-select-popup' } }}
-              open={isEffortSelectOpen}
-              value={effort}
-              options={decoratedEffortOptions}
-              showSearch={false}
-              allowClear={false}
+            <StageSlider
+              inputRef={effortSelectRef}
+              className='effort-stage-slider'
+              ariaLabel={t('chat.effortSliderLabel', { value: selectedEffortLabel })}
+              value={displayedEffort}
+              options={effortStages}
               disabled={modelUnavailable || isThinking}
-              onChange={handleEffortSelection}
-              onOpenChange={(nextOpen) => {
-                if (nextOpen) {
-                  onShowModelSelectChange(false)
-                  onCloseReferenceActions()
-                } else {
-                  onQueueTextareaFocusRestore()
-                }
-                onShowEffortSelectChange(nextOpen)
-              }}
-              onInputKeyDown={(event) => {
-                if (event.key !== 'Escape' || !isEffortSelectOpen) {
+              animateLastStage
+              onChange={nextEffort => onEffortChange?.(nextEffort)}
+              onFocus={handleStageSliderFocus}
+              onBlur={() => onShowEffortSelectChange(false)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Escape') {
                   return
                 }
 
                 event.preventDefault()
                 event.stopPropagation()
-                closeEffortSelect()
+                onShowEffortSelectChange(false)
+                event.currentTarget.blur()
+                onQueueTextareaFocusRestore()
               }}
-              placeholder={t('chat.effortSelectPlaceholder')}
-              optionLabelProp='label'
-              popupMatchSelectWidth={false}
-              suffixIcon={renderSelectArrow((event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                if (isEffortSelectOpen) {
-                  onShowEffortSelectChange(false)
-                  onQueueTextareaFocusRestore()
-                  return
-                }
-                openEffortSelect()
-              })}
             />
           )}
         {isCompactControl && (
@@ -247,18 +217,18 @@ export function EffortSelectControl({
                   key={option.value}
                   role='option'
                   tabIndex={0}
-                  aria-selected={effort === option.value}
+                  aria-selected={displayedEffort === option.value}
                   className={[
                     'sender-mobile-select-option',
                     'effort-mobile-select-option',
-                    effort === option.value ? 'is-selected' : ''
+                    displayedEffort === option.value ? 'is-selected' : ''
                   ].filter(Boolean).join(' ')}
                   onClick={() => handleEffortSelection(option.value)}
                   onKeyDown={(event) =>
                     handleSenderMobileSelectOptionKeyDown(event, () => handleEffortSelection(option.value))}
                 >
                   <span className='sender-mobile-select-option__content'>{option.label}</span>
-                  {effort === option.value && (
+                  {displayedEffort === option.value && (
                     <span className='material-symbols-rounded sender-mobile-select-option__check'>check</span>
                   )}
                 </div>

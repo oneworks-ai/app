@@ -8,7 +8,7 @@ export const useSenderRefs = () => {
   const editorRef = useRef<SenderEditorHandle | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const modelSelectRef = useRef<RefSelectProps>(null)
-  const effortSelectRef = useRef<RefSelectProps>(null)
+  const effortSelectRef = useRef<HTMLInputElement>(null)
 
   return {
     editorRef,

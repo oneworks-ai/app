@@ -20,7 +20,7 @@ export const useSenderSelectOverlays = ({
   modelUnavailable?: boolean
   supportsEffort: boolean
   modelSelectRef: RefObject<RefSelectProps>
-  effortSelectRef: RefObject<RefSelectProps>
+  effortSelectRef: RefObject<HTMLInputElement>
 }) => {
   const [showModelSelect, setShowModelSelect] = useState(false)
   const [showEffortSelect, setShowEffortSelect] = useState(false)
@@ -42,9 +42,15 @@ export const useSenderSelectOverlays = ({
     }
   }, [modelSearchValue, showModelSelect])
 
-  const focusSelect = (selectRef: RefObject<RefSelectProps>) => {
+  const focusModelSelect = () => {
     window.requestAnimationFrame(() => {
-      selectRef.current?.focus?.()
+      modelSelectRef.current?.focus?.()
+    })
+  }
+
+  const focusEffortSlider = () => {
+    window.requestAnimationFrame(() => {
+      effortSelectRef.current?.focus()
     })
   }
 
@@ -55,7 +61,7 @@ export const useSenderSelectOverlays = ({
     setShowEffortSelect(false)
     setModelSearchValue('')
     setShowModelSelect(true)
-    focusSelect(modelSelectRef)
+    focusModelSelect()
     return true
   }
 
@@ -65,7 +71,7 @@ export const useSenderSelectOverlays = ({
     }
     setShowModelSelect(false)
     setShowEffortSelect(true)
-    focusSelect(effortSelectRef)
+    focusEffortSlider()
     return true
   }
 

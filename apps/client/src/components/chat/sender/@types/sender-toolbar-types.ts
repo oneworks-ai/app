@@ -76,7 +76,7 @@ export interface SenderToolbarData {
 export interface SenderToolbarRefs {
   fileInputRef: RefObject<HTMLInputElement>
   modelSelectRef: RefObject<RefSelectProps>
-  effortSelectRef: RefObject<RefSelectProps>
+  effortSelectRef: RefObject<HTMLInputElement>
   referenceMenuNavigation: RovingFocusNavigation<ReferenceMenuKey>
   permissionMenuNavigation: RovingFocusNavigation<PermissionMode>
 }
