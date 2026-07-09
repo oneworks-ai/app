@@ -4559,7 +4559,7 @@ const TeamDetailView = (props: {
               tab === 'documents' ? 'oneworks-relay__profile--documents-tab' : ''
             ].filter(Boolean).join(' ')
           },
-          launcherSurface ? null : react.createElement(
+          launcherSurface || routeDetailActive ? null : react.createElement(
             'div',
             { className: 'oneworks-relay__team-hero' },
             react.createElement(
@@ -5027,13 +5027,15 @@ const TeamProjectRuleDetailPanel = (props: {
     patch: Partial<ReturnType<typeof projectAssignmentDraftFrom>>
   ) => {
     const key = projectAssignmentDraftKey(assignment, index)
+    const nextDraft = {
+      ...(drafts[key] ?? projectAssignmentDraftFrom(assignment)),
+      ...patch
+    }
     setDrafts(current => ({
       ...current,
-      [key]: {
-        ...(current[key] ?? projectAssignmentDraftFrom(assignment)),
-        ...patch
-      }
+      [key]: nextDraft
     }))
+    return nextDraft
   }
   const updateRepository = (
     assignment: RelayConfigShareProfileAssignment,
@@ -5056,10 +5058,15 @@ const TeamProjectRuleDetailPanel = (props: {
     const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
     updateDraft(assignment, index, { projects: [...draft.projects, ''] })
   }
-  const saveAssignment = async (assignment: RelayConfigShareProfileAssignment, index: number) => {
+  const saveAssignment = async (
+    assignment: RelayConfigShareProfileAssignment,
+    index: number,
+    draftOverride?: ReturnType<typeof projectAssignmentDraftFrom>
+  ) => {
     const assignmentId = cleanText(assignment.id)
     if (assignmentId == null) return
-    const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
+    const key = projectAssignmentDraftKey(assignment, index)
+    const draft = draftOverride ?? drafts[key] ?? projectAssignmentDraftFrom(assignment)
     const project = compactProjectRule(draft.projects)
     if (project == null) {
       setError('请至少添加一个 Git 仓库。')
@@ -5078,10 +5085,24 @@ const TeamProjectRuleDetailPanel = (props: {
       })
       await loadDetail()
     } catch (nextError) {
+      if (draftOverride != null) {
+        setDrafts(current => ({
+          ...current,
+          [key]: projectAssignmentDraftFrom(assignment)
+        }))
+      }
       setError(toErrorMessage(nextError))
     } finally {
       setSavingId(null)
     }
+  }
+  const updateAndSaveAssignment = (
+    assignment: RelayConfigShareProfileAssignment,
+    index: number,
+    patch: Partial<ReturnType<typeof projectAssignmentDraftFrom>>
+  ) => {
+    const nextDraft = updateDraft(assignment, index, patch)
+    void saveAssignment(assignment, index, nextDraft)
   }
   const firstVisibleAssignment = visibleAssignments[0]
   const tabActions = activeTab === 'rules' && firstVisibleAssignment != null
@@ -5197,10 +5218,15 @@ const TeamProjectRuleDetailPanel = (props: {
           projectAssignmentDraftFrom(assignment)
         const assignmentId = cleanText(assignment.id)
         const saving = assignmentId != null && savingId === assignmentId
-        const repositoryCount = projectRuleRepositoryValues(draft.projects).length
+        const settingsDisabled = saving || assignmentId == null ||
+          projectRuleRepositoryValues(draft.projects).length === 0
         return react.createElement(
           'section',
-          { className: 'oneworks-relay__project-rule-settings', key: projectAssignmentDraftKey(assignment, index) },
+          {
+            'aria-busy': saving,
+            className: 'oneworks-relay__project-rule-settings',
+            key: projectAssignmentDraftKey(assignment, index)
+          },
           react.createElement(
             'div',
             { className: 'oneworks-relay__project-rule-fields' },
@@ -5209,8 +5235,11 @@ const TeamProjectRuleDetailPanel = (props: {
               '状态',
               '停用后保留规则但不参与分发',
               renderSelect(react, view, {
+                disabled: settingsDisabled,
                 onChange: value =>
-                  updateDraft(assignment, index, { enabled: Array.isArray(value) ? value[0] ?? 'true' : value }),
+                  updateAndSaveAssignment(assignment, index, {
+                    enabled: Array.isArray(value) ? value[0] ?? 'true' : value
+                  }),
                 options: [
                   { label: '启用规则', value: 'true' },
                   { label: '暂不启用', value: 'false' }
@@ -5223,8 +5252,9 @@ const TeamProjectRuleDetailPanel = (props: {
               '合并方式',
               '普通合并会叠加团队配置；覆盖模式优先生效',
               renderSelect(react, view, {
+                disabled: settingsDisabled,
                 onChange: value =>
-                  updateDraft(assignment, index, {
+                  updateAndSaveAssignment(assignment, index, {
                     mode: (Array.isArray(value) ? value[0] ?? 'default' : value) as 'default' | 'override'
                   }),
                 options: [
@@ -5239,25 +5269,15 @@ const TeamProjectRuleDetailPanel = (props: {
               '配置版本',
               '推荐跟随当前发布；需要锁定时再选择具体版本',
               renderSelect(react, view, {
+                disabled: settingsDisabled,
                 onChange: value =>
-                  updateDraft(assignment, index, { versionId: Array.isArray(value) ? value[0] ?? '' : value }),
+                  updateAndSaveAssignment(assignment, index, {
+                    versionId: Array.isArray(value) ? value[0] ?? '' : value
+                  }),
                 options: versionOptions,
                 value: draft.versionId
               })
             )
-          ),
-          react.createElement(
-            'div',
-            { className: 'oneworks-relay__project-rule-card-actions' },
-            renderActionButton(react, view, {
-              disabled: assignmentId == null || saving || repositoryCount === 0,
-              icon: saving ? 'sync' : 'save',
-              label: saving ? '保存中' : '保存设置',
-              onClick: () => {
-                void saveAssignment(assignment, index)
-              },
-              primary: true
-            })
           )
         )
       })
