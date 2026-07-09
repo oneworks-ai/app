@@ -12,6 +12,7 @@ import { restartLauncherWorkspace } from '#~/api/launcher'
 import { DesktopWorkspaceStartupReadyContext } from '#~/components/layout/desktop-workspace-startup-ready'
 import { WorkspaceOpeningOverlay } from '#~/components/workspace/WorkspaceOpeningOverlay'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
+import { normalizeWorkspaceId } from '#~/runtime-config'
 import { getRestorableWorkspaceConnection } from '#~/workspace-connection-restore'
 import type {
   WorkspaceConnection,
@@ -59,6 +60,14 @@ const createVersionConflictRestartKey = (details: LauncherWorkspaceVersionConfli
   })
 )
 
+const withRouteWorkspaceId = (
+  connection: WorkspaceConnection,
+  workspaceId: string | undefined
+): WorkspaceConnection => {
+  const resolvedWorkspaceId = normalizeWorkspaceId(connection.workspaceId) ?? normalizeWorkspaceId(workspaceId)
+  return resolvedWorkspaceId == null ? connection : { ...connection, workspaceId: resolvedWorkspaceId }
+}
+
 export function WorkspaceConnectionGate({
   children,
   workspaceId
@@ -76,6 +85,11 @@ export function WorkspaceConnectionGate({
   const overlayHiddenTimerRef = useRef<number | null>(null)
   const autoRestartAttemptKeyRef = useRef<string | undefined>()
   const restartActivityRef = useRef<WorkspaceServerRestartActivity | undefined>()
+  const desktopConnectionUnavailableMessageRef = useRef(t('workspaceConnection.desktopConnectionUnavailable'))
+
+  useEffect(() => {
+    desktopConnectionUnavailableMessageRef.current = t('workspaceConnection.desktopConnectionUnavailable')
+  }, [t])
 
   const clearOverlayTimers = useCallback(() => {
     if (overlayExitTimerRef.current != null) {
@@ -142,17 +156,21 @@ export function WorkspaceConnectionGate({
     return await restartLauncherWorkspace(workspaceId)
   }, [workspaceId])
 
-  const getWorkspaceConnection = useCallback(async () => {
+  const getWorkspaceConnection = useCallback(async (): Promise<ResolvedWorkspaceConnection> => {
     if (workspaceId == null) {
       const connection = await window.oneworksDesktop?.getWorkspaceConnection?.()
       if (isWorkspaceConnectionResponse(connection)) {
         return { connection } satisfies ResolvedWorkspaceConnection
       }
-      throw new Error(t('workspaceConnection.desktopConnectionUnavailable'))
+      throw new Error(desktopConnectionUnavailableMessageRef.current)
     }
 
     try {
-      return await getRestorableWorkspaceConnection(workspaceId)
+      const restoredConnection = await getRestorableWorkspaceConnection(workspaceId)
+      return {
+        ...restoredConnection,
+        connection: withRouteWorkspaceId(restoredConnection.connection, workspaceId)
+      } satisfies ResolvedWorkspaceConnection
     } catch (error) {
       const details = getWorkspaceVersionConflictDetails(error)
       if (details != null) {
@@ -160,7 +178,7 @@ export function WorkspaceConnectionGate({
           const restartedConnection = await maybeRestartIdleWorkspaceServer(details)
           if (restartedConnection != null) {
             return {
-              connection: restartedConnection,
+              connection: withRouteWorkspaceId(restartedConnection, workspaceId),
               transport: 'local'
             } satisfies ResolvedWorkspaceConnection
           }
@@ -170,7 +188,7 @@ export function WorkspaceConnectionGate({
       }
       throw error
     }
-  }, [maybeRestartIdleWorkspaceServer, t, workspaceId])
+  }, [maybeRestartIdleWorkspaceServer, workspaceId])
 
   const connectWorkspace = useCallback(async () => {
     resetOpeningOverlay()
@@ -244,7 +262,7 @@ export function WorkspaceConnectionGate({
     setIsRestarting(true)
     setRestartErrorMessage(undefined)
     try {
-      const connection = await restartLauncherWorkspace(workspaceId)
+      const connection = withRouteWorkspaceId(await restartLauncherWorkspace(workspaceId), workspaceId)
       applyWorkspaceConnection(connection)
       rememberWorkspaceConnection(connection, 'local')
       setState({ status: 'ready' })

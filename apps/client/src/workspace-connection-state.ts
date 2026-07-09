@@ -7,7 +7,12 @@ import type {
 } from '@oneworks/types'
 
 import { ApiError } from '#~/api/base'
-import { createServerUrlFromBase, mergeRuntimeEnv, normalizeServerBaseUrl } from '#~/runtime-config'
+import {
+  createServerUrlFromBase,
+  mergeRuntimeEnv,
+  normalizeServerBaseUrl,
+  normalizeWorkspaceId
+} from '#~/runtime-config'
 
 export const WORKSPACE_CONNECTION_CHANGE_EVENT = 'oneworks:workspace-connection-change'
 
@@ -208,12 +213,15 @@ export const applyWorkspaceConnection = (connection: WorkspaceConnectionResponse
   if (serverBaseUrl == null) {
     throw new Error('Workspace server returned an invalid URL.')
   }
+  const workspaceId = normalizeWorkspaceId(connection.workspaceId)
 
+  // Route-based workspace pages install their workspace ID before async restore;
+  // transports that only return a server URL must not erase that route identity.
   mergeRuntimeEnv({
     __ONEWORKS_PROJECT_SERVER_BASE_URL__: serverBaseUrl,
     __ONEWORKS_PROJECT_SERVER_ROLE__: 'workspace',
     __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: connection.workspaceFolder,
-    __ONEWORKS_PROJECT_WORKSPACE_ID__: connection.workspaceId
+    ...(workspaceId == null ? {} : { __ONEWORKS_PROJECT_WORKSPACE_ID__: workspaceId })
   })
 }
 

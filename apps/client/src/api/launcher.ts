@@ -8,6 +8,7 @@ import type {
 import {
   createServerUrlFromBase,
   getConfiguredServerBaseUrl,
+  getRuntimeManagerServerBaseUrl,
   getServerBaseUrl,
   normalizeServerBaseUrl
 } from '#~/runtime-config'
@@ -17,6 +18,7 @@ import type { ApiOkResponse } from './types'
 
 export const getLauncherManagerServerBaseUrl = (managerServerBaseUrl?: string) => (
   normalizeServerBaseUrl(managerServerBaseUrl) ??
+    getRuntimeManagerServerBaseUrl() ??
     getConfiguredServerBaseUrl() ??
     getServerBaseUrl()
 )
