@@ -4434,24 +4434,28 @@ export function LauncherRoute({
               className='route-container-inline-breadcrumb launcher-directory-breadcrumb'
               aria-label={t('launcher.directoryBreadcrumbLabel')}
             >
-              {cloneDestinationList.parentDirectory != null && (
-                <Tooltip
-                  classNames={{ root: 'launcher-command-tooltip' }}
-                  getPopupContainer={getLauncherPopupContainer}
-                  placement='bottomLeft'
-                  title={t('launcher.footerHints.back')}
+              <Tooltip
+                classNames={{ root: 'launcher-command-tooltip' }}
+                getPopupContainer={getLauncherPopupContainer}
+                placement='bottomLeft'
+                title={t('launcher.footerHints.back')}
+              >
+                <button
+                  type='button'
+                  className='route-container-inline-breadcrumb__back route-container-inline-breadcrumb__item--button'
+                  title={cloneDestinationList.parentDirectory ?? t('launcher.footerHints.back')}
+                  aria-label={t('launcher.footerHints.back')}
+                  onClick={() => {
+                    if (cloneDestinationList.parentDirectory == null) {
+                      exitDirectoryBrowserMode()
+                      return
+                    }
+                    openCloneDestinationDirectory(cloneDestinationList.parentDirectory)
+                  }}
                 >
-                  <button
-                    type='button'
-                    className='route-container-inline-breadcrumb__back route-container-inline-breadcrumb__item--button'
-                    title={cloneDestinationList.parentDirectory}
-                    aria-label={t('launcher.footerHints.back')}
-                    onClick={() => openCloneDestinationDirectory(cloneDestinationList.parentDirectory)}
-                  >
-                    <span className='material-symbols-rounded' aria-hidden='true'>chevron_left</span>
-                  </button>
-                </Tooltip>
-              )}
+                  <span className='material-symbols-rounded' aria-hidden='true'>chevron_left</span>
+                </button>
+              </Tooltip>
               {directoryBreadcrumbs.map((breadcrumb, index) => {
                 const isCurrent = index === directoryBreadcrumbs.length - 1
                 return (
