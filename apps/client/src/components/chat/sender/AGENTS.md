@@ -35,7 +35,7 @@
 - `ModelSelectControl`、`AccountSelectControl`、`AdapterSelectControl` 都有两层响应：
   - 交互模式：桌面 select / popover 或移动抽屉。
   - 视觉密度：文字按钮或图标按钮。
-- `EffortSelectControl` 在桌面使用 `低 / 中 / 高 / 最高` 四档原生 range slider，并按 sender container 宽度收窄轨道；`default` 必须先按上次选择与模型 / 适配器 / general 配置解析成显式档位，触屏和 mobile layout 继续使用移动抽屉。
+- `EffortSelectControl` 在桌面使用 `低 / 中 / 高 / 最高` 四档原生 range slider，并按 sender container 宽度收窄轨道；slider 行为和样式维护规则见 `../../stage-slider/AGENTS.md`。`default` 必须先按上次选择与模型 / 适配器 / general 配置解析成显式档位，触屏和 mobile layout 继续使用移动抽屉。
 - 不要把这两层重新合并；否则会回到“窗口稍窄就全部变成手机端图标按钮”的问题。
 - 桌面 select 图标化时仍应保持原 select 的 open、focus restore、keyboard 和 tooltip 行为。
 - compact drawer 分支中的按钮使用 `.sender-responsive-select-button`；桌面 select 分支通过各自组件样式在 container query 下隐藏文案。
