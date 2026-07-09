@@ -26,18 +26,6 @@ export const getLauncherRelayStatus = () => (
   })
 )
 
-export const createLauncherRelayLoginUrl = (input: {
-  redirectUri?: string
-  serverId?: string
-} = {}) => (
-  fetchApiJson<{ loginUrl?: string }>(createLauncherApiUrl('/api/plugins/relay/proxy/relay/login-url'), {
-    method: 'POST',
-    headers: jsonHeaders,
-    body: JSON.stringify(input),
-    timeoutMs: 10_000
-  })
-)
-
 export const openLauncherRelayWorkspace = (input: {
   deviceId: string
   deviceName?: string

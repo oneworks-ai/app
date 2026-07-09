@@ -44,6 +44,12 @@ Local plugin sources use the host Vite dev server for `exports["./client"].sourc
 
 When a plugin also exposes a server entry, the manifest must declare `plugin.server.roles`. `exports["./server"]` only supplies an entry path; missing roles make the host reject the server entry and report a diagnostic.
 
+## Launcher Contributions
+
+Launcher-visible plugin behavior must be registered by the plugin. Declare plugin pages in `routes[]` with `surfaces: ["launcher"]`, declare launcher search sources in `launcherSearchProviders[]` with the same surface, and implement each provider command from the plugin's `activatePlugin` entry with `ctx.commands.register(...)`. Search results can select their command-list group with `groupId` / `groupTitle`; `sectionId` / `sectionTitle` are accepted aliases.
+
+The host only discovers these structured contributions, executes scoped commands, and renders the generic route and grouping contracts. It may use a generic fallback group when a result does not declare one, but it must not mirror plugin-specific built-in commands, view modes, menu items, availability checks, account flows, or login APIs. When a plugin is disabled or does not register the contribution, its launcher entry should disappear naturally.
+
 ## Configuration UI
 
 Plugin configuration uses the same schema-driven UI as the main configuration page. A manifest can provide:

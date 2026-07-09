@@ -233,6 +233,10 @@ JSON Schema 自动推断当前支持：
 - `workspaceDrawerTabs`: 注册工作区抽屉 tab。当前它会归一到同一套 workbench tab 模型里，`placement` 可以是 `right` 或 `bottom`。
 - `launcherSearchProviders`: 注册 launcher 搜索源。桌面 launcher 里使用 server-backed `command`；普通 workspace client 里也可以在前端 `activatePlugin` 中动态注册本地搜索源。
 
+launcher 中的插件业务入口必须完全由插件贡献：页面 route 在 `routes[]` 上声明 `surfaces: ["launcher"]`，搜索源在 `launcherSearchProviders[]` 上声明同一 surface，并由插件自己的 `activatePlugin` 通过 `ctx.commands.register(...)` 提供命令结果。结果可以用 `groupId` / `groupTitle`（兼容别名为 `sectionId` / `sectionTitle`）决定 launcher 命令列表中的分组和分组标题。
+
+宿主只负责发现这些结构化贡献、调用 scoped command、按通用分组字段渲染，并在插件没有声明分组时使用通用兜底分组。宿主不能为某个插件复制内置命令、view mode、菜单项、可用性判断、账号或登录 API；插件未启用或未注册对应贡献时，入口应自然消失。
+
 route 级贡献用 `targetRoute` 或 `targetRoutes` 表达“显示在哪个宿主 route container 上”。它们是宿主显示条件，不是点击行为；菜单 / 导航项里的 `route` 仍只表示点击后的跳转目标。不要把 `route` 当成宿主匹配条件，也不要把 `targetRoute` 当成跳转地址。
 
 `targetRoute` / `targetRoutes` 的值支持：

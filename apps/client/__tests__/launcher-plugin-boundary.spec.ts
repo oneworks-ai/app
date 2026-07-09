@@ -8,6 +8,7 @@ const readRepoFile = (path: string) => readFile(join(process.cwd(), path), 'utf8
 describe('launcher plugin boundary', () => {
   it('keeps plugin-owned account entries out of the core launcher route', async () => {
     const source = await readRepoFile('apps/client/src/routes/LauncherRoute.tsx')
+    const relayApi = await readRepoFile('apps/client/src/api/launcher-relay.ts')
 
     expect(source).not.toContain('builtin:account')
     expect(source).not.toContain("openLauncherView('account')")
@@ -16,6 +17,7 @@ describe('launcher plugin boundary', () => {
     expect(source).not.toContain('createLauncherRelayLoginUrl')
     expect(source).not.toContain('readLauncherRelayAccounts')
     expect(source).not.toContain('relayAccountSections')
+    expect(relayApi).not.toContain('/relay/login-url')
   })
 
   it('keeps the relay launcher account entry registered by plugin contributions', async () => {
