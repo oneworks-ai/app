@@ -1871,8 +1871,21 @@
 }
 
 .nav-rail-more-dropdown.ant-dropdown {
+  --oneworks-overlay-surface: color-mix(
+    in srgb,
+    var(--bg-color) 96%,
+    var(--sub-bg-color) 4%
+  );
+  --oneworks-overlay-border: color-mix(
+    in srgb,
+    var(--border-color) 88%,
+    transparent
+  );
+
   .ant-dropdown-menu {
     min-width: 220px;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   .ant-dropdown-menu-item-group-title {
@@ -1895,6 +1908,24 @@
   .ant-dropdown-menu-submenu-title .ant-dropdown-menu-title-content {
     min-width: 0;
     flex: 1;
+  }
+}
+
+.nav-rail-more-submenu-dropdown.ant-dropdown-menu-submenu-popup {
+  --oneworks-overlay-surface: color-mix(
+    in srgb,
+    var(--bg-color) 96%,
+    var(--sub-bg-color) 4%
+  );
+  --oneworks-overlay-border: color-mix(
+    in srgb,
+    var(--border-color) 88%,
+    transparent
+  );
+
+  > .ant-dropdown-menu {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 

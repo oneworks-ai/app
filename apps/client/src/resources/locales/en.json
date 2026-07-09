@@ -342,11 +342,6 @@
       "codex": "Codex",
       "claudeCode": "Claude Code"
     },
-    "quickEntry": {
-      "title": "Import current project history",
-      "description": "Review candidate sessions and file sizes from local Codex and Claude Code history before importing.",
-      "manage": "Review Candidates"
-    },
     "manager": {
       "allPlatforms": "All",
       "importTitle": "Import scope",

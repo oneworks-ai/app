@@ -343,11 +343,6 @@
       "codex": "Codex",
       "claudeCode": "Claude Code"
     },
-    "quickEntry": {
-      "title": "导入当前项目历史",
-      "description": "先查看本机 Codex 和 Claude Code 历史里属于当前项目的候选会话与文件大小。",
-      "manage": "查看候选与尺寸"
-    },
     "manager": {
       "allPlatforms": "全部",
       "importTitle": "导入范围",
