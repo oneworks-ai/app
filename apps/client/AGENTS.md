@@ -62,6 +62,12 @@
 - 能复用的状态逻辑优先抽到 hooks，不在 route 和 view 间复制业务逻辑。
 - 配置页收到 `config_updated` 后，订阅层只负责刷新缓存；本地草稿和远端配置的冲突判断必须留在配置编辑器内部完成，避免静默覆盖用户正在编辑的内容。
 
+插件边界：
+
+- workspace 页面里的会话、项目 API 和工作区 server URL 属于当前 workspace runtime；全局 host chrome 的插件贡献，例如 nav/footer、全局账号入口和 launcher 账号能力，属于 manager/global plugin runtime。
+- `AuthenticatedApp` 负责显式选择 host-level plugin runtime；不要在 `PluginProvider` 默认推断里耦合某个具体插件，也不要在 `AppShell` / `NavRail` 写死 Relay 账号入口。
+- route-based workspace URL 的 workspaceId 来自 `/ui/w/:workspaceId` 路径，是 workspace 页面的身份来源；异步恢复到的 connection 只能补充 server/folder 信息，不能用空 workspaceId 覆盖路由身份。
+
 主题与 token：
 
 - client 入口必须先引入 `@oneworks/route-layout/design-tokens.css`，再引入本应用自己的 `src/styles/global.scss`。
