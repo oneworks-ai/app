@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { activatePlugin } from '../src/client/index.js'
@@ -127,5 +129,16 @@ describe('relay plugin client view styles', () => {
     expect(relayClientCss).not.toContain(
       '.oneworks-relay__project-rule-detail { gap: 0; padding-block-start:'
     )
+  })
+})
+
+describe('relay project rule detail interaction', () => {
+  it('auto-saves settings and omits the duplicate team hero', async () => {
+    const source = await readFile(new URL('../src/client/react-view.ts', import.meta.url), 'utf8')
+
+    expect(source).toContain('const updateAndSaveAssignment = (')
+    expect(source.match(/updateAndSaveAssignment\(assignment, index,/g)).toHaveLength(3)
+    expect(source).not.toContain("label: saving ? '保存中' : '保存设置'")
+    expect(source).toContain('launcherSurface || routeDetailActive ? null')
   })
 })
