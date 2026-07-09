@@ -42,15 +42,16 @@ const managementServerInputFromBody = (body: unknown) => {
 const redactManagementServerProjects = (
   server: NonNullable<RelayDevicePrivateMetadata['managementServers']>[number],
   args: RelayServerArgs
-) => (server.projects ?? []).map(project => ({
-  createdAt: project.createdAt,
-  id: project.id,
-  lastSeenAt: project.lastSeenAt,
-  name: project.name,
-  status: deviceStatusFor({ lastSeenAt: project.lastSeenAt ?? server.lastSeenAt }, args),
-  title: project.title,
-  workspaceFolder: project.workspaceFolder
-}))
+) =>
+  (server.projects ?? []).map(project => ({
+    createdAt: project.createdAt,
+    id: project.id,
+    lastSeenAt: project.lastSeenAt,
+    name: project.name,
+    status: deviceStatusFor({ lastSeenAt: project.lastSeenAt ?? server.lastSeenAt }, args),
+    title: project.title,
+    workspaceFolder: project.workspaceFolder
+  }))
 
 const redactManagementServers = (
   device: RelayDevice,
@@ -59,7 +60,7 @@ const redactManagementServers = (
 ) => {
   const managementServers = metadata.managementServers ?? []
   const visibleServers = managementServers.length === 0 &&
-    (metadata.pluginScope != null || metadata.workspaceFolder != null)
+      (metadata.pluginScope != null || metadata.workspaceFolder != null)
     ? [{
       createdAt: device.createdAt,
       id: `legacy:${device.id}`,

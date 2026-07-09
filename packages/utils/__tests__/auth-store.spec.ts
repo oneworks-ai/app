@@ -108,19 +108,20 @@ describe('oneWorks auth store', () => {
     const env = { __ONEWORKS_PROJECT_REAL_HOME__: home }
     vi.spyOn(Date, 'now').mockReturnValue(123456)
 
-    const buildStore = (userId: string) => upsertOneWorksAuthAccount(
-      upsertOneWorksAuthServer(emptyOneWorksAuthStore(), {
-        id: 'local',
-        url: 'http://127.0.0.1:8791'
-      }),
-      {
-        accountKey: createAccountKey('local', userId),
-        enabled: true,
-        serverId: 'local',
-        serverUrl: 'http://127.0.0.1:8791',
-        userId
-      }
-    )
+    const buildStore = (userId: string) =>
+      upsertOneWorksAuthAccount(
+        upsertOneWorksAuthServer(emptyOneWorksAuthStore(), {
+          id: 'local',
+          url: 'http://127.0.0.1:8791'
+        }),
+        {
+          accountKey: createAccountKey('local', userId),
+          enabled: true,
+          serverId: 'local',
+          serverUrl: 'http://127.0.0.1:8791',
+          userId
+        }
+      )
 
     await expect(Promise.all([
       writeOneWorksAuthStore(buildStore('user-1'), env),

@@ -3,9 +3,9 @@ import type { IncomingHttpHeaders } from 'node:http'
 
 import type {
   ConfigJsonSchema,
+  PluginConfigManifest,
   PluginContributionAvailability,
   PluginContributionSurface,
-  PluginConfigManifest,
   PluginLocalizedText,
   PluginRuntimeApiRegistration,
   PluginRuntimeChannelInvocation,

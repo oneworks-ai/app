@@ -1,10 +1,10 @@
 /* eslint-disable max-lines -- plugin runtime keeps activation, scoped APIs, React exposure, and hot reload together. */
-import { Fragment, createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   PluginRuntimeChannelInvocation,
   PluginRuntimeChannelResponse,
   PluginRuntimeEndpoint
 } from '@oneworks/types'
+import { Fragment, createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { buildApiUrl } from '#~/api/base'
 import type { NotificationApi, UiNotificationHandle, UiNotificationInput } from '#~/notifications/notification-types'
@@ -265,8 +265,7 @@ export async function activatePluginClient({
         })
     },
     commands: {
-      execute: (commandId, payload) =>
-        registry.executeCommand(instance.scope, commandId, payload, { serverBaseUrl }),
+      execute: (commandId, payload) => registry.executeCommand(instance.scope, commandId, payload, { serverBaseUrl }),
       register: (commandId, handler) =>
         isActivationCurrent() ? registry.registerCommand(instance.scope, commandId, handler) : noopDisposable
     },

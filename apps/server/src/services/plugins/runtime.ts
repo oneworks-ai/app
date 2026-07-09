@@ -11,9 +11,9 @@ import { pathToFileURL } from 'node:url'
 
 import { updateConfigFile } from '@oneworks/config'
 import type {
+  PluginConfig,
   PluginContributionAvailability,
   PluginContributionSurface,
-  PluginConfig,
   PluginDetailAssetFile,
   PluginDetailAssetGroup,
   PluginDetailAssetKind,
@@ -234,7 +234,9 @@ export const normalizeRuntimeEndpoint = (value: unknown): PluginRuntimeEndpoint 
     ...(typeof value.workspaceFolder === 'string' && value.workspaceFolder.trim() !== ''
       ? { workspaceFolder: value.workspaceFolder.trim() }
       : {}),
-    ...(typeof value.workspaceId === 'string' && value.workspaceId.trim() !== '' ? { workspaceId: value.workspaceId } : {})
+    ...(typeof value.workspaceId === 'string' && value.workspaceId.trim() !== ''
+      ? { workspaceId: value.workspaceId }
+      : {})
   }
 }
 
@@ -1041,7 +1043,9 @@ export class PluginManager {
     }
   }
 
-  private async resolveRuntimeChannelTarget(invocation: PluginRuntimeChannelInvocation): Promise<PluginRuntimeEndpoint> {
+  private async resolveRuntimeChannelTarget(
+    invocation: PluginRuntimeChannelInvocation
+  ): Promise<PluginRuntimeEndpoint> {
     const current = this.getRuntimeEndpoint()
     const requested = invocation.target
     if (requested == null) return current
@@ -1054,8 +1058,8 @@ export class PluginManager {
     const id = typeof requested.endpointId === 'string' && requested.endpointId.trim() !== ''
       ? requested.endpointId.trim()
       : role === current.role &&
-        (serverBaseUrl == null || serverBaseUrl === current.serverBaseUrl) &&
-        (workspaceId == null || workspaceId === current.workspaceId)
+          (serverBaseUrl == null || serverBaseUrl === current.serverBaseUrl) &&
+          (workspaceId == null || workspaceId === current.workspaceId)
       ? current.id
       : `${role}:${serverBaseUrl ?? workspaceId ?? 'remote'}`
 
@@ -1573,10 +1577,10 @@ export class PluginManager {
     return Array.isArray(providers)
       ? providers.filter((provider): provider is PluginContributionLauncherSearchProvider =>
         isRecord(provider) &&
-          typeof provider.id === 'string' &&
-          typeof provider.command === 'string' &&
-          (options?.includeUnavailable === true ||
-            this.isLauncherProviderAvailable(record, provider, inheritedAvailability))
+        typeof provider.id === 'string' &&
+        typeof provider.command === 'string' &&
+        (options?.includeUnavailable === true ||
+          this.isLauncherProviderAvailable(record, provider, inheritedAvailability))
       )
       : []
   }

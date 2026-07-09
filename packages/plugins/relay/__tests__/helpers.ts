@@ -7,8 +7,8 @@ import { emptyOneWorksAuthStore, writeOneWorksAuthStore } from '@oneworks/utils/
 import { vi } from 'vitest'
 
 import { activatePlugin } from '../src/server/index.js'
-import { createRelayDeviceStore } from '../src/server/store.js'
 import type { RelayLocalSessionAdapter } from '../src/server/session-types.js'
+import { createRelayDeviceStore } from '../src/server/store.js'
 import type { RelayConfigDistributionStatus } from '../src/server/types.js'
 
 export type CommandHandler = (payload?: unknown) => unknown | Promise<unknown>

@@ -52,22 +52,30 @@ export interface RelayDeviceManagementServerProjectMetadata {
   workspaceFolder?: string
 }
 
-type RelayDevicePrivateMetadataInput = Partial<Omit<
-  RelayDevicePrivateMetadata,
-  'capabilities' | 'deviceInfo' | 'managementServers'
->> & {
-  capabilities?: unknown
-  deviceInfo?: unknown
-  managementServers?: unknown
-}
+type RelayDevicePrivateMetadataInput =
+  & Partial<
+    Omit<
+      RelayDevicePrivateMetadata,
+      'capabilities' | 'deviceInfo' | 'managementServers'
+    >
+  >
+  & {
+    capabilities?: unknown
+    deviceInfo?: unknown
+    managementServers?: unknown
+  }
 
-type RelayDeviceManagementServerMetadataInput = Partial<Omit<
-  RelayDeviceManagementServerMetadata,
-  'environment' | 'projects'
->> & {
-  environment?: unknown
-  projects?: unknown
-}
+type RelayDeviceManagementServerMetadataInput =
+  & Partial<
+    Omit<
+      RelayDeviceManagementServerMetadata,
+      'environment' | 'projects'
+    >
+  >
+  & {
+    environment?: unknown
+    projects?: unknown
+  }
 
 type RelayDeviceManagementServerProjectMetadataInput = Partial<RelayDeviceManagementServerProjectMetadata>
 
@@ -149,15 +157,17 @@ const normalizeManagementServerProjects = (value: unknown) => (
     ? dedupeManagementServerProjects(
       value
         .filter(isRecord)
-        .map(item => normalizeManagementServerProjectMetadata({
-          createdAt: typeof item.createdAt === 'string' ? item.createdAt : undefined,
-          id: typeof item.id === 'string' ? item.id : undefined,
-          lastSeenAt: typeof item.lastSeenAt === 'string' ? item.lastSeenAt : undefined,
-          name: typeof item.name === 'string' ? item.name : undefined,
-          status: typeof item.status === 'string' ? item.status : undefined,
-          title: typeof item.title === 'string' ? item.title : undefined,
-          workspaceFolder: typeof item.workspaceFolder === 'string' ? item.workspaceFolder : undefined
-        }))
+        .map(item =>
+          normalizeManagementServerProjectMetadata({
+            createdAt: typeof item.createdAt === 'string' ? item.createdAt : undefined,
+            id: typeof item.id === 'string' ? item.id : undefined,
+            lastSeenAt: typeof item.lastSeenAt === 'string' ? item.lastSeenAt : undefined,
+            name: typeof item.name === 'string' ? item.name : undefined,
+            status: typeof item.status === 'string' ? item.status : undefined,
+            title: typeof item.title === 'string' ? item.title : undefined,
+            workspaceFolder: typeof item.workspaceFolder === 'string' ? item.workspaceFolder : undefined
+          })
+        )
         .filter((item): item is RelayDeviceManagementServerProjectMetadata => item != null)
     )
     : []
@@ -279,19 +289,21 @@ const normalizeManagementServers = (value: unknown) => (
   Array.isArray(value)
     ? value
       .filter(isRecord)
-      .map(item => normalizeManagementServerMetadata({
-        createdAt: typeof item.createdAt === 'string' ? item.createdAt : undefined,
-        environment: item.environment,
-        id: typeof item.id === 'string' ? item.id : undefined,
-        kind: typeof item.kind === 'string' ? item.kind : undefined,
-        lastSeenAt: typeof item.lastSeenAt === 'string' ? item.lastSeenAt : undefined,
-        lastSeenIp: typeof item.lastSeenIp === 'string' ? item.lastSeenIp : undefined,
-        name: typeof item.name === 'string' ? item.name : undefined,
-        pluginScope: typeof item.pluginScope === 'string' ? item.pluginScope : undefined,
-        projects: Array.isArray(item.projects) ? item.projects : undefined,
-        registeredIp: typeof item.registeredIp === 'string' ? item.registeredIp : undefined,
-        workspaceFolder: typeof item.workspaceFolder === 'string' ? item.workspaceFolder : undefined
-      }))
+      .map(item =>
+        normalizeManagementServerMetadata({
+          createdAt: typeof item.createdAt === 'string' ? item.createdAt : undefined,
+          environment: item.environment,
+          id: typeof item.id === 'string' ? item.id : undefined,
+          kind: typeof item.kind === 'string' ? item.kind : undefined,
+          lastSeenAt: typeof item.lastSeenAt === 'string' ? item.lastSeenAt : undefined,
+          lastSeenIp: typeof item.lastSeenIp === 'string' ? item.lastSeenIp : undefined,
+          name: typeof item.name === 'string' ? item.name : undefined,
+          pluginScope: typeof item.pluginScope === 'string' ? item.pluginScope : undefined,
+          projects: Array.isArray(item.projects) ? item.projects : undefined,
+          registeredIp: typeof item.registeredIp === 'string' ? item.registeredIp : undefined,
+          workspaceFolder: typeof item.workspaceFolder === 'string' ? item.workspaceFolder : undefined
+        })
+      )
       .filter((item): item is RelayDeviceManagementServerMetadata => item != null)
     : []
 )
