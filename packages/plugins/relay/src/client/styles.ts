@@ -152,13 +152,11 @@ ${adminListSurfaceCss}
 .oneworks-relay__project-rule-repositories, .oneworks-relay__project-rule-settings { min-width: 0; display: grid; gap: var(--subpage-section-gap, 10px); }
 .oneworks-relay__project-rule-repository-list { min-width: 0; display: grid; gap: 6px; }
 .oneworks-relay__project-rule-repository-row { min-width: 0; min-height: 34px; display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); align-items: center; gap: var(--subpage-section-gap, 10px); border-block-end: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); padding-block: 6px; }
-.oneworks-relay__project-rule-repository-row:first-child { border-block-start: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
 .oneworks-relay__project-rule-repository-kind { min-width: 0; display: inline-flex; align-items: center; gap: var(--oneworks-overlay-icon-gap, 6px); color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); overflow: hidden; }
 .oneworks-relay__project-rule-repository-copy { min-width: 0; display: grid; gap: 1px; }
 .oneworks-relay__project-rule-repository-copy strong { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 750 12px/1.25 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .oneworks-relay__project-rule-repository-copy span { min-width: 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 11px/1.25 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .oneworks-relay__project-rule-repository-control { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--oneworks-overlay-item-gap, 6px); }
-.oneworks-relay__project-rule-list-actions { min-width: 0; display: flex; justify-content: flex-end; gap: var(--oneworks-overlay-item-gap, 6px); padding-block-start: 2px; }
 .oneworks-relay__project-rule-fields { min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px var(--subpage-section-gap, 10px); }
 .oneworks-relay__project-rule-field { min-width: 0; display: grid; gap: 4px; }
 .oneworks-relay__project-rule-field-copy { min-width: 0; display: grid; gap: 1px; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 11px/1.25 ui-sans-serif, system-ui, sans-serif; }

@@ -5083,10 +5083,19 @@ const TeamProjectRuleDetailPanel = (props: {
       setSavingId(null)
     }
   }
+  const firstVisibleAssignment = visibleAssignments[0]
+  const tabActions = activeTab === 'rules' && firstVisibleAssignment != null
+    ? renderButton(react, view, {
+      icon: 'add',
+      label: '添加仓库',
+      onClick: () => addRepository(firstVisibleAssignment, 0)
+    })
+    : null
   const tabs = NativeTabs == null
     ? react.createElement('div', { className: 'oneworks-relay__empty' }, '标准标签组件不可用')
     : react.createElement(NativeTabs, {
       activeKey: activeTab,
+      actions: tabActions,
       ariaLabel: '项目规则详情',
       className: 'oneworks-relay__profile-tabs oneworks-relay__project-rule-tabs',
       items: projectRuleDetailTabs.map((item): PluginHostNativeTabItem => ({
@@ -5130,10 +5139,7 @@ const TeamProjectRuleDetailPanel = (props: {
       ...visibleAssignments.map((assignment, index) => {
         const draft = drafts[projectAssignmentDraftKey(assignment, index)] ??
           projectAssignmentDraftFrom(assignment)
-        const assignmentId = cleanText(assignment.id)
-        const saving = assignmentId != null && savingId === assignmentId
         const repositories = draft.projects.length === 0 ? [''] : draft.projects
-        const repositoryCount = projectRuleRepositoryValues(draft.projects).length
         return react.createElement(
           'div',
           { className: 'oneworks-relay__project-rule-repositories', key: projectAssignmentDraftKey(assignment, index) },
@@ -5172,24 +5178,6 @@ const TeamProjectRuleDetailPanel = (props: {
                   })
                 )
               )
-            })
-          ),
-          react.createElement(
-            'div',
-            { className: 'oneworks-relay__project-rule-list-actions' },
-            renderActionButton(react, view, {
-              icon: 'add',
-              label: '添加仓库',
-              onClick: () => addRepository(assignment, index)
-            }),
-            renderActionButton(react, view, {
-              disabled: assignmentId == null || saving || repositoryCount === 0,
-              icon: saving ? 'sync' : 'save',
-              label: saving ? '保存中' : '保存列表',
-              onClick: () => {
-                void saveAssignment(assignment, index)
-              },
-              primary: true
             })
           )
         )
