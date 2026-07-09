@@ -145,7 +145,7 @@ ${adminListSurfaceCss}
 .oneworks-relay__team-configs--detail > .route-container-inline-breadcrumb { padding-block-start: 0; }
 .oneworks-relay__team-config-detail { min-width: 0; display: grid; gap: 0; }
 .oneworks-relay__team-configs--detail > .route-container-inline-breadcrumb + .oneworks-relay__team-config-detail .oneworks-relay__team-detail-row:first-child { padding-block-start: var(--subpage-section-gap, 10px); }
-.oneworks-relay__project-rule-detail { gap: 0; padding-block-start: var(--subpage-section-gap, 10px); }
+.oneworks-relay__project-rule-detail { gap: 0; }
 .oneworks-relay__project-rule-tab-panel { min-width: 0; display: grid; padding-block-start: 0; }
 .oneworks-relay__project-rule-tabs + .oneworks-relay__project-rule-tab-panel { margin-block-start: 0; }
 .oneworks-relay__project-rule-list-panel, .oneworks-relay__project-rule-settings-panel { min-width: 0; display: grid; gap: var(--subpage-section-gap, 10px); }

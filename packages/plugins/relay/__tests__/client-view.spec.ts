@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { activatePlugin } from '../src/client/index.js'
 import { RelayHomeView, readJsonResponse } from '../src/client/react-view.js'
+import { relayClientCss } from '../src/client/styles.js'
 import type { PluginClientContext, PluginReactHost, PluginViewRegistration } from '../src/client/types.js'
 
 const createReactHost = (): PluginReactHost & { createElement: ReturnType<typeof vi.fn> } => ({
@@ -117,5 +118,14 @@ describe('relay plugin client view registration', () => {
       new Response(JSON.stringify({ message: 'Profile service unavailable' }), { status: 503 }),
       'profile'
     )).rejects.toThrow('Profile service unavailable')
+  })
+})
+
+describe('relay plugin client view styles', () => {
+  it('lets native tabs own the project rule detail top spacing', () => {
+    expect(relayClientCss).toContain('.oneworks-relay__project-rule-detail { gap: 0; }')
+    expect(relayClientCss).not.toContain(
+      '.oneworks-relay__project-rule-detail { gap: 0; padding-block-start:'
+    )
   })
 })

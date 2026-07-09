@@ -24,6 +24,7 @@
 ## 约定
 
 - 插件必须保持可选；不要把 Relay 行为写进默认 server/client 启动路径。
+- Relay 详情页使用 host `NativeTabs` 时，tabs 自身的标准 margin 负责与上方内容分隔；包裹 tabs 的业务详情容器不得再叠加 `padding-block-start`。tabs panel 只负责面板内容布局，不能用第二层顶部间距补偿单个页面。
 - Relay 的 launcher 账号入口属于插件：`package.json` 通过 `plugin.contributions.routes` 暴露 `home` route 的 `launcher` surface，通过 `launcherSearchProviders` 暴露账号列表搜索项，`src/client/index.ts` 用 `ctx.commands.register('search', ...)` 产生命令结果，并用 `groupId/groupTitle` 声明 launcher 分组。core `LauncherRoute` 只能消费通用 plugin route / search provider，不得再添加 `builtin:account`、`view=account`、Relay 账号菜单项或 Relay 账号 / 登录 API 调用；Relay 未启用时 launcher 不展示账号入口是正确行为。
 - Relay server entry 同时运行在 `manager` / `workspace` runtime，`package.json` 的 `plugin.server.roles` 必须保持 `["manager", "workspace"]`，client/server 入口都由 `exports["./client"]` / `exports["./server"]` 提供。management server 负责设备身份、launcher 设备管理和跨 workspace 协调；workspace server 只负责当前项目能力与本地 workspace metadata。跨 runtime 通信必须走平台插件 runtime channel / endpoint 机制，不要在 Relay 插件里私建跨进程桥。
 - 远端服务在 `normalizeOptions()` 后统一是 server item；官方服务来自集中 preset 常量和开关，用户自定义服务来自 `servers[]`。`server` / `port` / `protocol` 是 server item 内部字段，默认连接项用 `activeServerId`。
