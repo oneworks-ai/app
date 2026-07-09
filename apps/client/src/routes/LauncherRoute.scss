@@ -304,15 +304,17 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 }
 
 .launcher-command-list {
+  --launcher-command-list-padding-inline: 14px;
+
   height: 0;
   flex: 1 1 0;
   min-height: 0;
-  padding: 8px 14px 0;
+  padding: 8px var(--launcher-command-list-padding-inline) 0;
   overflow: auto;
 }
 
 .launcher-route.is-plugin-route .launcher-command-list {
-  padding: 0 14px;
+  padding: 0 var(--launcher-command-list-padding-inline);
   overflow: auto;
 }
 
@@ -408,10 +410,21 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 
 .launcher-directory-breadcrumb.route-container-inline-breadcrumb,
 .launcher-plugin-route-breadcrumb.route-container-inline-breadcrumb {
+  --route-container-inline-breadcrumb-background: color-mix(
+    in srgb,
+    var(--bg-color) 84%,
+    transparent
+  );
+  --route-container-inline-breadcrumb-backdrop-filter: blur(18px) saturate(
+    1.22
+  );
+  --route-container-inline-breadcrumb-bleed-inline: var(
+    --launcher-command-list-padding-inline
+  );
   --route-container-inline-breadcrumb-padding-block: 10px;
   border-bottom: 1px solid var(--border-color);
   min-width: 0;
-  margin: 0;
+  margin-block: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -1009,7 +1022,7 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
   }
 
   .launcher-command-list {
-    padding-inline: 10px;
+    --launcher-command-list-padding-inline: 10px;
   }
 
   .launcher-command-footer {

@@ -49,4 +49,21 @@ describe('launcher plugin boundary', () => {
     expect(relayI18n).toContain('登录更多账号')
     expect(relayI18n).not.toContain('账号状态')
   })
+
+  it('keeps host-owned directory browser pages on explicit launcher routes', async () => {
+    const source = await readRepoFile('apps/client/src/routes/LauncherRoute.tsx')
+    const routeGuide = await readRepoFile('apps/client/src/routes/AGENTS.md')
+
+    expect(source).toContain('buildLauncherViewRoutePath')
+    expect(source).toContain('`/launcher/${mode}`')
+    expect(source).toContain('readLauncherViewModeFromLocation')
+    expect(routeGuide).toContain('/launcher/settings')
+    expect(routeGuide).toContain('/launcher/about')
+    expect(source).toContain("segments[1] !== 'browse'")
+    expect(source).toContain('buildLauncherDirectoryRoutePath')
+    expect(source).toContain('`/launcher/browse/${encodeLauncherPathSegment(mode)}')
+    expect(source).toContain('${encodeLauncherPathSegment(normalizedDirectory)}')
+    expect(source).toContain('LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM')
+    expect(routeGuide).toContain('/launcher/browse/:mode/:targetId/:path')
+  })
 })

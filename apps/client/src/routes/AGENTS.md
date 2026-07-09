@@ -13,6 +13,8 @@
   - Relay 远程项目展示由 `launcher-relay-projects.ts` 从 Relay status 归一化；列表项必须看起来是远程服务上的项目，并携带 `serverId / deviceId / workspaceFolder`，不要创建本地 session tags 伪装远端 workspace。真正打开远程项目需要 relay workspace job 和 HTTP/WS proxy 链路。
   - Relay 远程目录选择只从带 `capabilities.workspaceLauncher === true` 的 manager daemon 生成 target；workspace server 只能作为已打开项目出现在项目列表里，不承担“列目录 / 新建项目 / 启动 workspace server”的 launcher 控制面。
   - launcher 内置命令只放 host-owned 能力，例如本地项目、设置、关于、检查更新和预览。插件业务入口不能写成 `LauncherViewMode`、`builtin:*` 命令、菜单项或插件专属 API 调用；例如 Relay 账号 / profile 入口必须由 Relay 插件通过 manifest route、`launcherSearchProviders` 和 client activation command 注册，并由 `PluginViewHost` 渲染。插件搜索结果的 launcher 分组也由插件通过 `groupId/groupTitle` 或 `sectionId/sectionTitle` 声明，host 只负责通用分组渲染和无声明时的默认“插件”兜底。插件未启用或未注册时，入口自然不存在，host 不要补一个内置兜底入口。
+  - launcher host-owned 页面态必须用 path，而不是 `?view=` query：设置 `/launcher/settings`、关于 `/launcher/about`、预览 `/launcher/preview`。旧的 `?view=settings|about|preview` 只能作为兼容入口读取，并应自动 replace 到 path。
+  - launcher 内置目录浏览是 host-owned 子路由，URL 形态为 `/launcher/browse/:mode/:targetId/:path`；不要把“新建项目 / 打开项目 / clone 目标目录选择”这类页面态只藏在 `/launcher` 内部 state 里，也不要把当前目录写成 query。目录 path tail 用 URL path segment 编码以保留本机 / 远端路径里的斜杠和特殊字符；旧的 `?path=...` 只能作为兼容入口读取，并应自动 replace 到 path。插件页面仍只能通过插件 manifest route 注册到 `/launcher/plugins/:scope/:routeId/...`，host 不为插件业务补内置目录或账号路由。
   - 桌面环境通过 `window.oneworksDesktop.openWorkspace()` 打开已有项目；Web manager role 打开后把当前 tab 的 server base 切到返回的 workspace server。
   - Web workspace 页内 launcher 由 `ChatRouteShell` 渲染 `LauncherOverlay` 并复用 `LauncherRoute`；只在非 Electron Web 下注册 `Cmd/Ctrl+Shift+P`。
   - 左下角只承载 app 级菜单入口；右下角只承载当前选中项的可用操作提示。

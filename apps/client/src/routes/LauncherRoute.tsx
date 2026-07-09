@@ -75,6 +75,7 @@ const LAUNCHER_RECENT_SELECTION_DISPLAY_LIMIT = 3
 const LAUNCHER_RECENT_SELECTIONS_STORAGE_KEY = 'oneworks_launcher_recent_selections'
 const LAUNCHER_QUERY_SEARCH_PARAM = 'q'
 const LAUNCHER_VIEW_SEARCH_PARAM = 'view'
+const LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM = 'path'
 const CLONE_DESTINATION_FAVORITE_LIMIT = 24
 const CLONE_DESTINATION_RECENT_LIMIT = 12
 const CLONE_DESTINATION_FAVORITES_STORAGE_KEY = 'oneworks_launcher_clone_destination_favorites'
@@ -110,6 +111,12 @@ interface LauncherPluginRouteState {
   scope: string
 }
 
+interface LauncherDirectoryRouteState {
+  directory?: string
+  mode: LauncherDirectoryBrowserMode
+  targetId: string
+}
+
 const safeDecodeLauncherPathSegment = (value: string | undefined) => {
   if (value == null || value === '') return undefined
   try {
@@ -128,6 +135,55 @@ const readLauncherPluginRouteState = (pathname: string): LauncherPluginRouteStat
   if (scope == null || routeId == null) return undefined
 
   return { routeId, scope }
+}
+
+const encodeLauncherPathSegment = (value: string) => encodeURIComponent(value)
+
+const readLauncherDirectoryPathFromSearch = (search: string) => {
+  const directory = new URLSearchParams(search).get(LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM)
+  return directory == null || directory.trim() === '' ? undefined : directory
+}
+
+const readLauncherDirectoryRouteState = (
+  pathname: string,
+  search: string
+): LauncherDirectoryRouteState | undefined => {
+  const segments = pathname.split('/').filter(Boolean)
+  if (segments[0] !== 'launcher' || segments[1] !== 'browse') return undefined
+
+  const mode = safeDecodeLauncherPathSegment(segments[2]) as LauncherDirectoryBrowserMode | undefined
+  if (mode !== 'clone' && mode !== 'create-workspace' && mode !== 'open-workspace') return undefined
+
+  const directory = safeDecodeLauncherPathSegment(segments.slice(4).join('/')) ??
+    readLauncherDirectoryPathFromSearch(search)
+
+  return {
+    ...(directory == null ? {} : { directory }),
+    mode,
+    targetId: safeDecodeLauncherPathSegment(segments[3]) ?? 'local'
+  }
+}
+
+const buildLauncherDirectoryRoutePath = (
+  mode: LauncherDirectoryBrowserMode,
+  targetId: string,
+  directory?: string
+) => {
+  const routePath = `/launcher/browse/${encodeLauncherPathSegment(mode)}/${encodeLauncherPathSegment(targetId)}`
+  const normalizedDirectory = directory?.trim()
+  return normalizedDirectory == null || normalizedDirectory === ''
+    ? routePath
+    : `${routePath}/${encodeLauncherPathSegment(normalizedDirectory)}`
+}
+
+const buildLauncherDirectoryRouteSearch = (search: string) => {
+  const searchParams = new URLSearchParams(search)
+  searchParams.delete(LAUNCHER_VIEW_SEARCH_PARAM)
+  searchParams.delete(LAUNCHER_QUERY_SEARCH_PARAM)
+  searchParams.delete(LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM)
+
+  const nextSearch = searchParams.toString()
+  return nextSearch === '' ? '' : `?${nextSearch}`
 }
 
 interface LauncherPluginSearchProvider extends PluginLauncherSearchProvider {
@@ -559,10 +615,27 @@ type LauncherViewMode = 'about' | 'commands' | 'plugin' | 'preview' | 'settings'
 
 const launcherUrlViewModes = new Set<LauncherViewMode>(['about', 'preview', 'settings'])
 
-const readLauncherViewModeFromSearch = (search: string): LauncherViewMode => {
-  const mode = new URLSearchParams(search).get(LAUNCHER_VIEW_SEARCH_PARAM) as LauncherViewMode | null
-  return mode != null && launcherUrlViewModes.has(mode) ? mode : 'commands'
+const readLauncherViewModeFromPathname = (pathname: string): LauncherViewMode | undefined => {
+  const segments = pathname.split('/').filter(Boolean)
+  if (segments[0] !== 'launcher') return undefined
+
+  const mode = safeDecodeLauncherPathSegment(segments[1]) as LauncherViewMode | undefined
+  return mode != null && launcherUrlViewModes.has(mode) ? mode : undefined
 }
+
+const buildLauncherViewRoutePath = (mode: LauncherViewMode) => (
+  mode === 'about' || mode === 'preview' || mode === 'settings'
+    ? `/launcher/${mode}`
+    : '/launcher'
+)
+
+const readLauncherViewModeFromSearch = (search: string): LauncherViewMode | undefined => {
+  const mode = new URLSearchParams(search).get(LAUNCHER_VIEW_SEARCH_PARAM) as LauncherViewMode | null
+  return mode != null && launcherUrlViewModes.has(mode) ? mode : undefined
+}
+
+const readLauncherViewModeFromLocation = (pathname: string, search: string): LauncherViewMode =>
+  readLauncherViewModeFromPathname(pathname) ?? readLauncherViewModeFromSearch(search) ?? 'commands'
 
 const readLauncherQueryFromSearch = (search: string) => (
   new URLSearchParams(search).get(LAUNCHER_QUERY_SEARCH_PARAM) ?? ''
@@ -577,11 +650,8 @@ const buildLauncherSearchForState = (
 ) => {
   const searchParams = new URLSearchParams(search)
   if (input.mode != null) {
-    if (input.mode === 'commands' || input.mode === 'plugin') {
-      searchParams.delete(LAUNCHER_VIEW_SEARCH_PARAM)
-    } else {
-      searchParams.set(LAUNCHER_VIEW_SEARCH_PARAM, input.mode)
-    }
+    searchParams.delete(LAUNCHER_VIEW_SEARCH_PARAM)
+    searchParams.delete(LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM)
   }
   if (input.query != null) {
     if (input.query === '') {
@@ -872,23 +942,40 @@ export function LauncherRoute({
     () => readLauncherPluginRouteState(location.pathname),
     [location.pathname]
   )
+  const launcherDirectoryRouteState = useMemo(
+    () => readLauncherDirectoryRouteState(location.pathname, location.search),
+    [location.pathname, location.search]
+  )
   const launcherLanguage = i18n.resolvedLanguage ?? i18n.language
   const [selectorState, setSelectorState] = useState<DesktopWorkspaceSelectorState>(emptyWorkspaceSelectorState)
   const [query, setQuery] = useState(() =>
-    launcherPluginRouteState == null ? readLauncherQueryFromSearch(location.search) : ''
+    launcherPluginRouteState == null && launcherDirectoryRouteState == null
+      ? readLauncherQueryFromSearch(location.search)
+      : ''
   )
   const [activeCommandId, setActiveCommandId] = useState<string>()
   const [canCloneRepository, setCanCloneRepository] = useState(false)
-  const [directoryBrowserMode, setDirectoryBrowserMode] = useState<LauncherDirectoryBrowserMode>()
+  const [directoryBrowserMode, setDirectoryBrowserMode] = useState<LauncherDirectoryBrowserMode | undefined>(
+    launcherDirectoryRouteState?.mode
+  )
   const [directoryBrowserHomeDirectory, setDirectoryBrowserHomeDirectory] = useState<string>()
-  const [directoryBrowserTargetId, setDirectoryBrowserTargetId] = useState<string>('local')
+  const [directoryBrowserTargetId, setDirectoryBrowserTargetId] = useState<string>(
+    launcherDirectoryRouteState?.targetId ?? 'local'
+  )
   const [directoryBrowserDirectoriesByTarget, setDirectoryBrowserDirectoriesByTarget] = useState<
     Record<string, string>
-  >({})
+  >(() => (
+    launcherDirectoryRouteState?.directory == null
+      ? {}
+      : { [launcherDirectoryRouteState.targetId]: launcherDirectoryRouteState.directory }
+  ))
   const [directoryBrowserVisitedTargets, setDirectoryBrowserVisitedTargets] = useState<Record<string, true>>({
-    local: true
+    local: true,
+    ...(launcherDirectoryRouteState == null ? {} : { [launcherDirectoryRouteState.targetId]: true })
   })
-  const [cloneDestinationDirectory, setCloneDestinationDirectory] = useState<string>()
+  const [cloneDestinationDirectory, setCloneDestinationDirectory] = useState<string | undefined>(
+    launcherDirectoryRouteState?.directory
+  )
   const [cloneDestinationList, setCloneDestinationList] = useState<DesktopCloneDestinationDirectoryList>(
     emptyCloneDestinationDirectoryList
   )
@@ -917,7 +1004,9 @@ export function LauncherRoute({
   const [dismissedProjectContextFolder, setDismissedProjectContextFolder] = useState<string>()
   const [isLauncherMenuOpen, setIsLauncherMenuOpen] = useState(false)
   const [launcherViewMode, setLauncherViewMode] = useState<LauncherViewMode>(() =>
-    launcherPluginRouteState == null ? readLauncherViewModeFromSearch(location.search) : 'plugin'
+    launcherPluginRouteState == null
+      ? readLauncherViewModeFromLocation(location.pathname, location.search)
+      : 'plugin'
   )
   const [pluginRouteActions, setPluginRouteActions] = useState<RouteContainerHeaderActionItem[]>([])
   const [pluginRouteBreadcrumb, setPluginRouteBreadcrumb] = useState<RouteContainerHeaderBreadcrumb | undefined>()
@@ -960,8 +1049,13 @@ export function LauncherRoute({
   const isOpenWorkspaceDirectoryMode = directoryBrowserMode === 'open-workspace'
   const isDirectoryBrowserMode = directoryBrowserMode != null
   const urlLauncherViewMode = useMemo(
-    () => launcherPluginRouteState == null ? readLauncherViewModeFromSearch(location.search) : 'plugin',
-    [launcherPluginRouteState, location.search]
+    () =>
+      launcherPluginRouteState != null
+        ? 'plugin'
+        : launcherDirectoryRouteState != null
+        ? 'commands'
+        : readLauncherViewModeFromLocation(location.pathname, location.search),
+    [launcherDirectoryRouteState, launcherPluginRouteState, location.pathname, location.search]
   )
   const urlLauncherQuery = useMemo(
     () => readLauncherQueryFromSearch(location.search),
@@ -1010,9 +1104,9 @@ export function LauncherRoute({
     } = {}
   ) => {
     const nextSearch = buildLauncherSearchForState(location.search, input)
-    const nextPathname = launcherPluginRouteState == null || input.mode == null || input.mode === 'plugin'
+    const nextPathname = input.mode == null || input.mode === 'plugin'
       ? location.pathname
-      : '/launcher'
+      : buildLauncherViewRoutePath(input.mode)
     if (nextSearch === location.search && nextPathname === location.pathname) return
 
     pendingLauncherSearchRef.current = nextSearch
@@ -1021,7 +1115,12 @@ export function LauncherRoute({
       pathname: nextPathname,
       search: nextSearch
     }, { replace: input.replace === true })
-  }, [launcherPluginRouteState, location.hash, location.pathname, location.search, navigate])
+  }, [
+    location.hash,
+    location.pathname,
+    location.search,
+    navigate
+  ])
   const setLauncherViewModeWithUrl = useCallback((
     mode: LauncherViewMode,
     input: {
@@ -1194,6 +1293,98 @@ export function LauncherRoute({
     query,
     urlLauncherQuery,
     urlLauncherViewMode
+  ])
+
+  useEffect(() => {
+    if (launcherPluginRouteState != null || launcherDirectoryRouteState != null) return
+
+    const canonicalMode = readLauncherViewModeFromLocation(location.pathname, location.search)
+    const nextPathname = buildLauncherViewRoutePath(canonicalMode)
+    const nextSearch = buildLauncherSearchForState(location.search, { mode: canonicalMode })
+    if (nextPathname === location.pathname && nextSearch === location.search) return
+
+    pendingLauncherSearchRef.current = nextSearch
+    void navigate({
+      hash: location.hash,
+      pathname: nextPathname,
+      search: nextSearch
+    }, { replace: true })
+  }, [
+    launcherDirectoryRouteState,
+    launcherPluginRouteState,
+    location.hash,
+    location.pathname,
+    location.search,
+    navigate
+  ])
+
+  useEffect(() => {
+    if (launcherDirectoryRouteState == null) return
+
+    setLauncherViewMode('commands')
+    setDirectoryBrowserMode(launcherDirectoryRouteState.mode)
+    setDirectoryBrowserTargetId(launcherDirectoryRouteState.targetId)
+    setDirectoryBrowserVisitedTargets(prev =>
+      prev[launcherDirectoryRouteState.targetId] === true
+        ? prev
+        : {
+          ...prev,
+          [launcherDirectoryRouteState.targetId]: true
+        }
+    )
+    setDirectoryBrowserHomeDirectory(undefined)
+    setIsFileSearchMode(false)
+    setFileSearchResults([])
+    setIsFileSearchLoading(false)
+    setHasFileSearchError(false)
+    setResourceResults(emptyWorkspaceResourceSearchResponse)
+    setPluginResults([])
+    setIsResourceSearchLoading(false)
+    setHasResourceSearchError(false)
+    setQuery('')
+    const routeDirectory = launcherDirectoryRouteState.directory
+    if (routeDirectory != null) {
+      setCloneDestinationDirectory(routeDirectory)
+      setDirectoryBrowserDirectoriesByTarget(prev =>
+        prev[launcherDirectoryRouteState.targetId] === routeDirectory
+          ? prev
+          : {
+            ...prev,
+            [launcherDirectoryRouteState.targetId]: routeDirectory
+          }
+      )
+    }
+    setActiveCommandId(undefined)
+    setIsLauncherMenuOpen(false)
+    focusSearchInput()
+  }, [focusSearchInput, launcherDirectoryRouteState])
+
+  useEffect(() => {
+    if (!isDirectoryBrowserMode || directoryBrowserMode == null || launcherPluginRouteState != null) return
+
+    const nextPathname = buildLauncherDirectoryRoutePath(
+      directoryBrowserMode,
+      directoryBrowserTargetId,
+      cloneDestinationDirectory
+    )
+    const nextSearch = buildLauncherDirectoryRouteSearch(location.search)
+    if (nextPathname === location.pathname && nextSearch === location.search) return
+
+    void navigate({
+      hash: location.hash,
+      pathname: nextPathname,
+      search: nextSearch
+    }, { replace: true })
+  }, [
+    cloneDestinationDirectory,
+    directoryBrowserMode,
+    directoryBrowserTargetId,
+    isDirectoryBrowserMode,
+    launcherPluginRouteState,
+    location.hash,
+    location.pathname,
+    location.search,
+    navigate
   ])
 
   useEffect(() => {
@@ -2170,6 +2361,7 @@ export function LauncherRoute({
 
   const exitDirectoryBrowserMode = useCallback(() => {
     if (!isDirectoryBrowserMode) return false
+    setLauncherViewModeWithUrl('commands', { query: '', replace: true })
     setDirectoryBrowserMode(undefined)
     setQuery('')
     setCloneDestinationDirectory(undefined)
@@ -2178,7 +2370,7 @@ export function LauncherRoute({
     setIsCloneDestinationLoading(false)
     setHasCloneDestinationError(false)
     return true
-  }, [isDirectoryBrowserMode])
+  }, [isDirectoryBrowserMode, setLauncherViewModeWithUrl])
 
   const exitProjectContext = useCallback(() => {
     if (contextProject == null) {
