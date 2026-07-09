@@ -9,6 +9,7 @@ export type RuntimeEnv = Partial<{
   __ONEWORKS_PROJECT_CLIENT_DEV_SERVER__: string
   __ONEWORKS_PROJECT_CLIENT_VERSION__: string
   __ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__: string
+  __ONEWORKS_PROJECT_MANAGER_SERVER_BASE_URL__: string
   __ONEWORKS_PROJECT_WORKSPACE_ID__: string
   __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: string
 }>
@@ -166,6 +167,10 @@ export const setStoredServerBaseUrl = (value: string) => {
 export const clearStoredServerBaseUrl = () => {
   getStorage()?.removeItem(SERVER_BASE_URL_STORAGE_KEY)
 }
+
+export const getRuntimeManagerServerBaseUrl = () => (
+  normalizeServerBaseUrl(getRuntimeEnv().__ONEWORKS_PROJECT_MANAGER_SERVER_BASE_URL__)
+)
 
 export const isStandaloneClientMode = () => {
   const mode = getClientMode()

@@ -12,12 +12,18 @@ import { pathToFileURL } from 'node:url'
 import { updateConfigFile } from '@oneworks/config'
 import type {
   PluginConfig,
+  PluginContributionAvailability,
+  PluginContributionSurface,
   PluginDetailAssetFile,
   PluginDetailAssetGroup,
   PluginDetailAssetKind,
   PluginInstanceConfig,
   PluginReadmeVariant,
-  PluginRuntimeApiRegistration
+  PluginRuntimeApiRegistration,
+  PluginRuntimeChannelInvocation,
+  PluginRuntimeChannelResponse,
+  PluginRuntimeEndpoint,
+  PluginServerRuntimeRole
 } from '@oneworks/types'
 import {
   resolveGlobalOneWorksAssetsPath,
@@ -27,6 +33,7 @@ import {
 import type { ResolvedPluginInstance } from '@oneworks/utils/plugin-resolver'
 
 import { loadConfigState } from '#~/services/config/index.js'
+import { listLauncherWorkspaceRuntimeEndpoints } from '#~/services/launcher/manager.js'
 import { logger } from '#~/utils/logger.js'
 
 import { discoverPluginInstances } from './discovery.js'
@@ -40,6 +47,7 @@ import type {
   PluginContributionLauncherSearchProvider,
   PluginDiagnostic,
   PluginProxyRequest,
+  PluginRuntimeChannelHandler,
   PluginRuntimeInstance,
   PluginRuntimeManifest,
   PluginServerContext
@@ -54,6 +62,7 @@ interface RuntimeRecord {
   manifest: PluginRuntimeManifest
   clientAssetRoot: string
   commands: Map<string, PluginCommandHandler>
+  channels: Map<string, PluginRuntimeChannelHandler>
   apis: Map<string, PluginApiRegistration>
   disposables: Array<() => unknown | Promise<unknown>>
   watchTimer?: NodeJS.Timeout
@@ -68,6 +77,7 @@ interface DiscoveryWatcher {
 export interface PluginManagerSnapshot {
   plugins: PluginRuntimeInstance[]
   diagnostics: PluginDiagnostic[]
+  runtime: PluginRuntimeEndpoint
 }
 
 export interface PluginReadme extends PluginReadmeVariant {}
@@ -141,12 +151,167 @@ const TEXT_ASSET_EXTENSIONS = new Set([
   '.yaml',
   '.yml'
 ])
+const PLUGIN_RUNTIME_STARTED_AT = new Date().toISOString()
+const PLUGIN_SERVER_RUNTIME_ROLES = new Set<PluginServerRuntimeRole>(['manager', 'workspace'])
+const PLUGIN_CONTRIBUTION_SURFACES = new Set<PluginContributionSurface>(['launcher', 'workspace'])
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
 )
 
 const toErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
+
+const normalizeRuntimeRole = (value: unknown): PluginServerRuntimeRole => (
+  value === 'manager' ? 'manager' : 'workspace'
+)
+
+const readNonEmptyEnv = (key: string) => {
+  const value = process.env[key]?.trim()
+  return value == null || value === '' ? undefined : value
+}
+
+const normalizeServerDisplayHost = (host: string) => (
+  host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host
+)
+
+const normalizeRuntimeServerBaseUrl = (value: string | undefined) => {
+  if (value == null) return undefined
+  try {
+    const url = new URL(value)
+    url.pathname = url.pathname.replace(/\/+$/, '')
+    url.search = ''
+    url.hash = ''
+    return url.toString().replace(/\/$/, '')
+  } catch {
+    return undefined
+  }
+}
+
+const resolveRuntimeServerBaseUrl = () => {
+  const configured = normalizeRuntimeServerBaseUrl(
+    readNonEmptyEnv('__ONEWORKS_PROJECT_SERVER_BASE_URL__') ??
+      readNonEmptyEnv('__ONEWORKS_PROJECT_PUBLIC_BASE_URL__')
+  )
+  if (configured != null) return configured
+
+  const host = normalizeServerDisplayHost(readNonEmptyEnv('__ONEWORKS_PROJECT_SERVER_HOST__') ?? '127.0.0.1')
+  const port = readNonEmptyEnv('__ONEWORKS_PROJECT_SERVER_PORT__')
+  return port == null ? undefined : `http://${host}:${port}`
+}
+
+const getRuntimeWorkspaceId = () => readNonEmptyEnv('__ONEWORKS_PROJECT_WORKSPACE_ID__')
+
+const createRuntimeEndpointId = (
+  role: PluginServerRuntimeRole,
+  serverBaseUrl: string | undefined,
+  workspaceFolder: string
+) => {
+  if (role === 'workspace') {
+    return `workspace:${getRuntimeWorkspaceId() ?? (workspaceFolder === '' ? String(process.pid) : workspaceFolder)}`
+  }
+  return `manager:${serverBaseUrl ?? process.pid}`
+}
+
+export const normalizeRuntimeEndpoint = (value: unknown): PluginRuntimeEndpoint | undefined => {
+  if (!isRecord(value)) return undefined
+  const role = value.role === 'manager' || value.role === 'workspace' ? value.role : undefined
+  if (role == null) return undefined
+  const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : `${role}:unknown`
+  return {
+    id,
+    role,
+    ...(value.current === true ? { current: true } : {}),
+    ...(typeof value.projectHome === 'string' && value.projectHome.trim() !== ''
+      ? { projectHome: value.projectHome.trim() }
+      : {}),
+    ...(typeof value.serverBaseUrl === 'string'
+      ? { serverBaseUrl: normalizeRuntimeServerBaseUrl(value.serverBaseUrl) }
+      : {}),
+    ...(typeof value.startedAt === 'string' && value.startedAt.trim() !== '' ? { startedAt: value.startedAt } : {}),
+    ...(value.status === 'online' || value.status === 'offline' || value.status === 'unknown'
+      ? { status: value.status }
+      : {}),
+    ...(typeof value.workspaceFolder === 'string' && value.workspaceFolder.trim() !== ''
+      ? { workspaceFolder: value.workspaceFolder.trim() }
+      : {}),
+    ...(typeof value.workspaceId === 'string' && value.workspaceId.trim() !== ''
+      ? { workspaceId: value.workspaceId }
+      : {})
+  }
+}
+
+const getRuntimeChannelErrorMessage = async (response: Response) => {
+  const fallback = `Plugin runtime channel request failed with HTTP ${response.status}.`
+  const text = await response.text().catch(() => '')
+  if (text.trim() === '') return fallback
+  try {
+    const parsed = JSON.parse(text) as unknown
+    if (isRecord(parsed)) {
+      const error = parsed.error
+      if (typeof error === 'string' && error.trim() !== '') return error
+      if (isRecord(error) && typeof error.message === 'string' && error.message.trim() !== '') {
+        return error.message
+      }
+    }
+  } catch {}
+  return text
+}
+
+const normalizeRuntimeChannelResponse = (value: unknown): PluginRuntimeChannelResponse => {
+  if (isRecord(value) && 'ok' in value) {
+    if (value.ok === true) {
+      return {
+        ok: true,
+        ...('payload' in value ? { payload: value.payload } : {})
+      }
+    }
+    if (value.ok === false) {
+      return {
+        ok: false,
+        error: typeof value.error === 'string' ? value.error : 'Plugin runtime channel request failed.'
+      }
+    }
+  }
+  return { ok: true, payload: value }
+}
+
+const normalizeServerRoleValues = (value: unknown) => (
+  Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+    ? value.split(/[,\s]+/)
+    : []
+)
+
+const normalizeServerRoles = (value: unknown): PluginServerRuntimeRole[] => {
+  const values = normalizeServerRoleValues(value)
+  return [...new Set(values.filter((role): role is PluginServerRuntimeRole => PLUGIN_SERVER_RUNTIME_ROLES.has(role)))]
+}
+
+const normalizeRuntimeRoles = (value: unknown): PluginServerRuntimeRole[] | undefined => {
+  const roles = normalizeServerRoles(value)
+  return roles.length === 0 ? undefined : roles
+}
+
+const normalizeContributionSurfaces = (value: unknown): PluginContributionSurface[] | undefined => {
+  if (!Array.isArray(value)) return undefined
+  const surfaces = [
+    ...new Set(
+      value.filter((surface): surface is PluginContributionSurface =>
+        typeof surface === 'string' && PLUGIN_CONTRIBUTION_SURFACES.has(surface as PluginContributionSurface)
+      )
+    )
+  ]
+  return surfaces.length === 0 ? undefined : surfaces
+}
+
+const readRuntimeRoles = (availability: unknown) => (
+  isRecord(availability) ? normalizeRuntimeRoles(availability.roles) : undefined
+)
+
+const readContributionSurfaces = (availability: unknown) => (
+  isRecord(availability) ? normalizeContributionSurfaces(availability.surfaces) : undefined
+)
 
 const getApiDescription = (api: PluginApiRegistration) => api.description ?? api.desc
 
@@ -440,6 +605,7 @@ export class PluginManager {
   private async clearRecordRuntime(record: RuntimeRecord) {
     const disposables = record.disposables.splice(0).reverse()
     record.commands.clear()
+    record.channels.clear()
     record.apis.clear()
     for (const disposable of disposables) {
       await Promise.resolve(disposable()).catch(error => {
@@ -451,8 +617,53 @@ export class PluginManager {
   snapshot(): PluginManagerSnapshot {
     return {
       plugins: [...this.records.values()].map(serializePlugin),
-      diagnostics: [...this.diagnostics]
+      diagnostics: [...this.diagnostics],
+      runtime: this.getRuntimeEndpoint()
     }
+  }
+
+  getRuntimeRole(): PluginServerRuntimeRole {
+    return normalizeRuntimeRole(process.env.__ONEWORKS_PROJECT_SERVER_ROLE__)
+  }
+
+  getRuntimeEndpoint(): PluginRuntimeEndpoint {
+    const role = this.getRuntimeRole()
+    const serverBaseUrl = resolveRuntimeServerBaseUrl()
+    return {
+      id: createRuntimeEndpointId(role, serverBaseUrl, this.workspaceFolder),
+      role,
+      current: true,
+      projectHome: this.projectHome,
+      serverBaseUrl,
+      startedAt: PLUGIN_RUNTIME_STARTED_AT,
+      status: 'online',
+      ...(role === 'workspace'
+        ? {
+          workspaceFolder: this.workspaceFolder,
+          ...(getRuntimeWorkspaceId() == null ? {} : { workspaceId: getRuntimeWorkspaceId() })
+        }
+        : {})
+    }
+  }
+
+  async listRuntimeEndpoints(): Promise<PluginRuntimeEndpoint[]> {
+    const current = this.getRuntimeEndpoint()
+    if (current.role !== 'manager') {
+      return [current]
+    }
+
+    const endpoints = new Map<string, PluginRuntimeEndpoint>()
+    endpoints.set(current.id, current)
+
+    try {
+      for (const endpoint of await listLauncherWorkspaceRuntimeEndpoints()) {
+        endpoints.set(endpoint.id, endpoint)
+      }
+    } catch (error) {
+      logger.warn({ err: error }, '[plugins] failed to list workspace runtime endpoints')
+    }
+
+    return [...endpoints.values()]
   }
 
   getRecord(scope: string) {
@@ -546,6 +757,50 @@ export class PluginManager {
       throw new Error(`Plugin command "${scope}/${commandId}" is not registered.`)
     }
     return await handler(invocation.payload)
+  }
+
+  async invokeRuntimeChannel(
+    scope: string,
+    channelId: string,
+    invocation: PluginRuntimeChannelInvocation = {}
+  ) {
+    await this.load()
+    validateId('runtime channel id', channelId, scope)
+    const target = await this.resolveRuntimeChannelTarget(invocation)
+    const current = this.getRuntimeEndpoint()
+    if (!this.isCurrentRuntimeTarget(target)) {
+      if (target.serverBaseUrl == null) {
+        throw new Error(
+          `Plugin runtime channel "${scope}/${channelId}" target requires target.serverBaseUrl or a known runtime endpoint.`
+        )
+      }
+      return await this.invokeRemoteRuntimeChannel(scope, channelId, invocation, target, current)
+    }
+    return await this.handleRuntimeChannel(scope, channelId, invocation, current)
+  }
+
+  async handleRuntimeChannel(
+    scope: string,
+    channelId: string,
+    invocation: PluginRuntimeChannelInvocation,
+    source?: PluginRuntimeEndpoint
+  ) {
+    await this.load()
+    validateId('runtime channel id', channelId, scope)
+    const record = this.records.get(scope)
+    if (record == null || !record.instance.enabled) {
+      throw new Error(`Plugin scope "${scope}" is not registered.`)
+    }
+    const handler = record.channels.get(channelId)
+    if (handler == null) {
+      throw new Error(`Plugin runtime channel "${scope}/${channelId}" is not registered.`)
+    }
+    return await handler({
+      channelId,
+      payload: invocation.payload,
+      source: source ?? this.getRuntimeEndpoint(),
+      target: this.getRuntimeEndpoint()
+    })
   }
 
   async resolveClientAsset(scope: string, assetPath: string) {
@@ -788,6 +1043,109 @@ export class PluginManager {
     }
   }
 
+  private async resolveRuntimeChannelTarget(
+    invocation: PluginRuntimeChannelInvocation
+  ): Promise<PluginRuntimeEndpoint> {
+    const current = this.getRuntimeEndpoint()
+    const requested = invocation.target
+    if (requested == null) return current
+
+    const role = requested.role ?? current.role
+    const serverBaseUrl = normalizeRuntimeServerBaseUrl(requested.serverBaseUrl)
+    const workspaceId = typeof requested.workspaceId === 'string' && requested.workspaceId.trim() !== ''
+      ? requested.workspaceId.trim()
+      : undefined
+    const id = typeof requested.endpointId === 'string' && requested.endpointId.trim() !== ''
+      ? requested.endpointId.trim()
+      : role === current.role &&
+          (serverBaseUrl == null || serverBaseUrl === current.serverBaseUrl) &&
+          (workspaceId == null || workspaceId === current.workspaceId)
+      ? current.id
+      : `${role}:${serverBaseUrl ?? workspaceId ?? 'remote'}`
+
+    const target: PluginRuntimeEndpoint = {
+      id,
+      role,
+      ...(serverBaseUrl == null ? {} : { serverBaseUrl }),
+      status: 'unknown',
+      ...(workspaceId == null ? {} : { workspaceId })
+    }
+
+    if (target.serverBaseUrl != null || this.isCurrentRuntimeTarget(target)) {
+      return target
+    }
+
+    const resolved = await this.resolveKnownRuntimeEndpoint(target)
+    return resolved ?? target
+  }
+
+  private async resolveKnownRuntimeEndpoint(target: PluginRuntimeEndpoint) {
+    if (this.getRuntimeRole() !== 'manager') return undefined
+
+    const endpoints = await this.listRuntimeEndpoints()
+    return endpoints.find(endpoint => (
+      endpoint.role === target.role &&
+      (
+        endpoint.id === target.id ||
+        (target.workspaceId != null && endpoint.workspaceId === target.workspaceId)
+      ) &&
+      endpoint.serverBaseUrl != null
+    ))
+  }
+
+  private isCurrentRuntimeTarget(target: PluginRuntimeEndpoint) {
+    const current = this.getRuntimeEndpoint()
+    if (target.role !== current.role) return false
+    if (target.workspaceId != null && target.workspaceId !== current.workspaceId) return false
+    if (target.id === current.id) return true
+    if (
+      target.serverBaseUrl != null &&
+      current.serverBaseUrl != null &&
+      target.serverBaseUrl === current.serverBaseUrl
+    ) {
+      return true
+    }
+    return target.workspaceId != null && target.workspaceId === current.workspaceId
+  }
+
+  private async invokeRemoteRuntimeChannel(
+    scope: string,
+    channelId: string,
+    invocation: PluginRuntimeChannelInvocation,
+    target: PluginRuntimeEndpoint,
+    source: PluginRuntimeEndpoint
+  ) {
+    if (target.serverBaseUrl == null) {
+      throw new Error(`Plugin runtime channel "${scope}/${channelId}" remote target requires target.serverBaseUrl.`)
+    }
+    if (!isLoopbackProxyTarget(target.serverBaseUrl)) {
+      throw new Error(`Plugin runtime channel "${scope}/${channelId}" target server must be loopback HTTP(S).`)
+    }
+
+    const url = new URL(
+      `/api/plugins/${encodeURIComponent(scope)}/runtime/channels/${encodeURIComponent(channelId)}`,
+      `${target.serverBaseUrl}/`
+    )
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        payload: invocation.payload,
+        source,
+        target
+      })
+    })
+    if (!response.ok) {
+      throw new Error(await getRuntimeChannelErrorMessage(response))
+    }
+    const json = await response.json().catch(() => undefined) as unknown
+    const normalized = normalizeRuntimeChannelResponse(json)
+    if (!normalized.ok) {
+      throw new Error(normalized.error)
+    }
+    return normalized.payload
+  }
+
   private async loadInternal() {
     this.diagnostics = []
     this.records.clear()
@@ -843,6 +1201,7 @@ export class PluginManager {
       const enabled = this.isPluginEnabled(scope, raw)
       const watchEnabled = enabled && this.isWatchEnabled(scope, raw)
       const manifest = await loadPluginRuntimeManifest(this.workspaceFolder, { ...raw, watch: watchEnabled }) ?? {}
+      this.validateServerManifest(scope, pluginRoot, manifest)
       const name = manifest.name ?? raw.packageId ?? raw.requestId
       const clientEntry = resolveClientEntryUrlPath(manifest)
       const devClientEntry = resolveClientEntryUrlPath(
@@ -876,6 +1235,7 @@ export class PluginManager {
         manifest,
         clientAssetRoot,
         commands: new Map(),
+        channels: new Map(),
         apis: new Map(),
         disposables: [],
         instance: {
@@ -1033,7 +1393,7 @@ export class PluginManager {
   }
 
   private validateContributions(record: RuntimeRecord) {
-    const providers = this.getLauncherProviders(record)
+    const providers = this.getLauncherProviders(record, { includeUnavailable: true })
     const seen = new Set<string>()
     for (const provider of providers) {
       validateId('launcher provider id', provider.id, record.instance.scope)
@@ -1045,6 +1405,28 @@ export class PluginManager {
         throw new Error(`Launcher provider "${record.instance.scope}/${provider.id}" must declare a command.`)
       }
     }
+  }
+
+  private validateServerManifest(scope: string, pluginRoot: string, manifest: PluginRuntimeManifest) {
+    const server = manifest.plugin?.server
+    if (server == null) return
+    if (typeof server.entry !== 'string' || server.entry.trim() === '') {
+      throw new Error(`Plugin "${scope}" server manifest must declare plugin.server.entry.`)
+    }
+    const roles = normalizeServerRoles(server.roles)
+    if (roles.length === 0) {
+      throw new Error(
+        `Plugin "${scope}" server manifest must declare plugin.server.roles with manager or workspace.`
+      )
+    }
+    server.roles = roles
+    logger.debug?.({ scope, pluginRoot, roles }, '[plugins] validated server runtime roles')
+  }
+
+  private shouldActivateServerEntry(record: RuntimeRecord) {
+    const server = record.manifest.plugin?.server
+    if (server == null) return false
+    return normalizeServerRoles(server.roles).includes(this.getRuntimeRole())
   }
 
   private isWatchEnabled(scope: string, raw: ResolvedPluginInstance) {
@@ -1186,18 +1568,47 @@ export class PluginManager {
     }
   }
 
-  private getLauncherProviders(record: RuntimeRecord): PluginContributionLauncherSearchProvider[] {
+  private getLauncherProviders(
+    record: RuntimeRecord,
+    options?: { includeUnavailable?: boolean }
+  ): PluginContributionLauncherSearchProvider[] {
     const providers = record.manifest.plugin?.contributions?.launcherSearchProviders
+    const inheritedAvailability = record.manifest.plugin?.contributions
     return Array.isArray(providers)
       ? providers.filter((provider): provider is PluginContributionLauncherSearchProvider =>
-        isRecord(provider) && typeof provider.id === 'string' && typeof provider.command === 'string'
+        isRecord(provider) &&
+        typeof provider.id === 'string' &&
+        typeof provider.command === 'string' &&
+        (options?.includeUnavailable === true ||
+          this.isLauncherProviderAvailable(record, provider, inheritedAvailability))
       )
       : []
+  }
+
+  private isLauncherProviderAvailable(
+    record: RuntimeRecord,
+    provider: PluginContributionLauncherSearchProvider,
+    inheritedAvailability?: PluginContributionAvailability
+  ) {
+    const runtimeRoles = readRuntimeRoles(provider) ??
+      readRuntimeRoles(inheritedAvailability) ??
+      normalizeRuntimeRoles(record.manifest.plugin?.server?.roles)
+    if (runtimeRoles != null && !runtimeRoles.includes(this.getRuntimeRole())) {
+      return false
+    }
+
+    const surfaces = readContributionSurfaces(provider) ?? readContributionSurfaces(inheritedAvailability)
+    if (surfaces != null && !surfaces.includes('launcher')) {
+      return false
+    }
+
+    return true
   }
 
   private async activateRecord(record: RuntimeRecord) {
     await this.clearRecordRuntime(record)
     if (!record.instance.enabled) return
+    if (!this.shouldActivateServerEntry(record)) return
 
     const entryPath = await resolvePluginServerEntryPath(record.instance.pluginRoot, record.manifest)
     if (entryPath == null) return
@@ -1323,6 +1734,7 @@ export class PluginManager {
 
   private createServerContext(record: RuntimeRecord): PluginServerContext {
     const scope = record.instance.scope
+    const runtimeEndpoint = this.getRuntimeEndpoint()
     return {
       scope,
       pluginRoot: record.instance.pluginRoot,
@@ -1331,6 +1743,18 @@ export class PluginManager {
       options: record.instance.options ?? {},
       sessions: createPluginSessionAdapter(),
       logger,
+      runtime: {
+        endpoint: runtimeEndpoint,
+        role: runtimeEndpoint.role,
+        invokeChannel: (channelId, invocation) => this.invokeRuntimeChannel(scope, channelId, invocation),
+        registerChannel: (channelId, handler) => {
+          validateId('runtime channel id', channelId, scope)
+          if (record.channels.has(channelId)) {
+            throw new Error(`Duplicate plugin runtime channel "${scope}/${channelId}".`)
+          }
+          record.channels.set(channelId, handler)
+        }
+      },
       registerCommand: (commandId, handler) => {
         validateId('command id', commandId, scope)
         if (record.commands.has(commandId)) {

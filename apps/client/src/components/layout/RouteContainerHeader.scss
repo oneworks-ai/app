@@ -356,17 +356,44 @@
     --subpage-section-gap,
     10px
   );
+  --route-container-inline-breadcrumb-background: var(
+    --bg-color,
+    var(--ant-color-bg-container, #fff)
+  );
+  --route-container-inline-breadcrumb-bleed-inline: 0px;
+  --route-container-inline-breadcrumb-padding-inline: var(
+    --route-container-inline-breadcrumb-bleed-inline
+  );
+  --route-container-inline-breadcrumb-sticky-top: 0;
+  --route-container-inline-breadcrumb-z-index: 4;
   --route-container-inline-breadcrumb-icon-size: 18px;
 
+  position: sticky;
+  top: var(--route-container-inline-breadcrumb-sticky-top);
+  z-index: var(--route-container-inline-breadcrumb-z-index);
+  box-sizing: border-box;
   min-width: 0;
+  margin-inline: calc(
+    -1 * var(--route-container-inline-breadcrumb-bleed-inline)
+  );
   display: flex;
   align-items: center;
   gap: var(--route-container-inline-breadcrumb-gap);
   padding-block: var(--route-container-inline-breadcrumb-padding-block);
+  padding-inline: var(--route-container-inline-breadcrumb-padding-inline);
   border-bottom: 1px solid
     var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4));
+  background: var(--route-container-inline-breadcrumb-background);
   color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a));
   font: 750 12px/1.25 ui-sans-serif, system-ui, sans-serif;
+  backdrop-filter: var(
+    --route-container-inline-breadcrumb-backdrop-filter,
+    none
+  );
+  -webkit-backdrop-filter: var(
+    --route-container-inline-breadcrumb-backdrop-filter,
+    none
+  );
 }
 
 .route-container-inline-breadcrumb__item {

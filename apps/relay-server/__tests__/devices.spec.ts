@@ -4,42 +4,10 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { readRelayStore, writeRelayStore } from '../src/store.js'
 import type { RelayDevice } from '../src/types.js'
+import { createDeviceInvite as createInvite, userSessionToken } from './device-fixtures.js'
 import { authHeaders, cleanupRelayFixtures, listenRelay, requestJson } from './helpers.js'
 
-const userSessionToken = 'user-1-session-token'
-
 afterEach(cleanupRelayFixtures)
-
-const createInvite = async (dataPath: string, code: string) => {
-  const store = await readRelayStore(dataPath)
-  if (!store.users.some(user => user.id === 'user-1')) {
-    store.users.push({
-      createdAt: new Date().toISOString(),
-      email: 'user-1@example.com',
-      id: 'user-1',
-      name: 'User 1',
-      role: 'member'
-    })
-  }
-  if (!store.sessions.some(session => session.token === userSessionToken)) {
-    store.sessions.push({
-      createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
-      lastSeenAt: new Date().toISOString(),
-      token: userSessionToken,
-      userId: 'user-1'
-    })
-  }
-  store.invites.push({
-    code,
-    createdAt: new Date().toISOString(),
-    maxUses: 1,
-    role: 'member',
-    used: 0,
-    userId: 'user-1'
-  })
-  await writeRelayStore(dataPath, store)
-}
 
 const createDevice = (overrides: Partial<RelayDevice>): RelayDevice => ({
   capabilities: {},
@@ -382,11 +350,62 @@ describe('relay server device routes', () => {
     })
 
     expect(devices.response.status).toBe(200)
-    expect(devices.body.devices).toMatchObject([
+    const listedDevices = devices.body.devices as Array<Record<string, unknown>>
+    expect(listedDevices).toMatchObject([
       { id: 'online-device', status: 'online' },
       { id: 'stale-device', status: 'stale' },
       { id: 'offline-device', status: 'offline' }
     ])
+    expect(listedDevices[0]).not.toHaveProperty('deviceInfo')
+  })
+
+  it('includes login source IP metadata in message API responses', async () => {
+    const { baseUrl } = await listenRelay()
+    const created = await requestJson(baseUrl, '/api/admin/users', {
+      method: 'POST',
+      headers: authHeaders('admin-token'),
+      body: JSON.stringify({
+        email: 'login-record@example.com',
+        loginId: 'login-record',
+        name: 'Login Record',
+        password: 'correct-password',
+        role: 'member'
+      })
+    })
+    const login = await requestJson(baseUrl, '/api/auth/password-login', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'user-agent': 'Vitest Browser',
+        'x-forwarded-for': '203.0.113.10, 10.0.0.10',
+        'x-vercel-ip-city': 'Shanghai',
+        'x-vercel-ip-country': 'CN'
+      },
+      body: JSON.stringify({
+        loginId: 'login-record',
+        password: 'correct-password'
+      })
+    })
+    const token = String(login.body.token)
+    const messages = await requestJson(baseUrl, '/api/admin/messages', {
+      headers: authHeaders(token)
+    })
+    const loginMessages = messages.body.messages as Array<Record<string, unknown>>
+    const loginMessage = loginMessages.find(message => message.title === '新设备登录提醒')
+
+    expect(created.response.status).toBe(200)
+    expect(login.response.status).toBe(200)
+    expect(messages.response.status).toBe(200)
+    expect(loginMessage).toMatchObject({
+      body: expect.stringContaining('203.0.113.10'),
+      metadata: {
+        login: {
+          ip: '203.0.113.10',
+          location: 'Shanghai CN',
+          userAgent: 'Vitest Browser'
+        }
+      }
+    })
   })
 
   it('exposes device counts to admins and enforces per-user device limits', async () => {

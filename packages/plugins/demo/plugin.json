@@ -121,7 +121,18 @@
     }
   },
   "plugin": {
+    "server": {
+      "roles": [
+        "workspace"
+      ]
+    },
     "contributions": {
+      "roles": [
+        "workspace"
+      ],
+      "surfaces": [
+        "workspace"
+      ],
       "extensionPoints": [
         {
           "id": "quick-actions",
@@ -359,21 +370,6 @@
           "icon": "palette",
           "placement": "right",
           "clientView": "drawer"
-        }
-      ],
-      "launcherSearchProviders": [
-        {
-          "id": "quick",
-          "title": "Plugin Demo launcher search",
-          "titleI18n": {
-            "en": "Plugin Demo launcher search",
-            "zh-Hans": "插件 Demo 启动器搜索"
-          },
-          "descriptionI18n": {
-            "en": "Contributes server-backed launcher search results for plugin and server command keywords.",
-            "zh-Hans": "接入服务端驱动的启动器搜索结果，可搜索插件和服务端命令关键词。"
-          },
-          "command": "launcher.search"
         }
       ],
       "routes": [

@@ -6,7 +6,8 @@ import { getRuntimeEnv, getRuntimeWorkspaceId } from '#~/runtime-config'
 import {
   applyWorkspaceConnection,
   getWorkspaceServerRestartActivity,
-  isWorkspaceConnectionResponse
+  isWorkspaceConnectionResponse,
+  withWorkspaceRouteId
 } from '#~/workspace-connection-state'
 
 const createConflictDetails = (
@@ -129,6 +130,26 @@ describe('workspace connection state', () => {
       __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: '/tmp/oneworks-workspace'
     })
     expect(getRuntimeWorkspaceId()).toBeUndefined()
+  })
+
+  it('preserves the route workspace id when an async restore only returns a server URL', () => {
+    expect(withWorkspaceRouteId({
+      serverBaseUrl: 'http://127.0.0.1:52520',
+      workspaceFolder: '/tmp/oneworks-workspace'
+    }, 'w_SpRHHjsSxAo7piB3kZ2zrQ')).toEqual({
+      serverBaseUrl: 'http://127.0.0.1:52520',
+      workspaceFolder: '/tmp/oneworks-workspace',
+      workspaceId: 'w_SpRHHjsSxAo7piB3kZ2zrQ'
+    })
+  })
+
+  it('keeps the route workspace id when restored metadata belongs to another workspace', () => {
+    expect(
+      withWorkspaceRouteId({
+        serverBaseUrl: 'http://127.0.0.1:52520',
+        workspaceId: 'w_4M7QkuNsqzXBA2jCteRJLa'
+      }, 'w_SpRHHjsSxAo7piB3kZ2zrQ').workspaceId
+    ).toBe('w_SpRHHjsSxAo7piB3kZ2zrQ')
   })
 
   it('rejects missing or invalid server URLs', () => {

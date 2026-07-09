@@ -1,7 +1,10 @@
+import { readFile } from 'node:fs/promises'
+
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { activatePlugin } from '../src/client/index.js'
-import { RelayHomeView } from '../src/client/react-view.js'
+import { RelayHomeView, readJsonResponse } from '../src/client/react-view.js'
+import { relayClientCss } from '../src/client/styles.js'
 import type { PluginClientContext, PluginReactHost, PluginViewRegistration } from '../src/client/types.js'
 
 const createReactHost = (): PluginReactHost & { createElement: ReturnType<typeof vi.fn> } => ({
@@ -106,5 +109,40 @@ describe('relay plugin client view registration', () => {
     })
 
     cleanup.dispose()
+  })
+
+  it('uses JSON error fields instead of displaying the raw JSON body', async () => {
+    await expect(readJsonResponse(
+      new Response(JSON.stringify({ error: 'fetch failed' }), { status: 500 }),
+      'profile'
+    )).rejects.toThrow('fetch failed')
+    await expect(readJsonResponse(
+      new Response(JSON.stringify({ message: 'Profile service unavailable' }), { status: 503 }),
+      'profile'
+    )).rejects.toThrow('Profile service unavailable')
+  })
+})
+
+describe('relay plugin client view styles', () => {
+  it('lets native tabs own the project rule detail top spacing', () => {
+    expect(relayClientCss).toContain('.oneworks-relay__project-rule-detail { gap: 0; }')
+    expect(relayClientCss).not.toContain(
+      '.oneworks-relay__project-rule-detail { gap: 0; padding-block-start:'
+    )
+  })
+})
+
+describe('relay project rule detail interaction', () => {
+  it('auto-saves settings and omits the duplicate team hero', async () => {
+    const source = await readFile(new URL('../src/client/react-view.ts', import.meta.url), 'utf8')
+
+    expect(source).toContain('const updateAndSaveAssignment = (')
+    expect(source.match(/updateAndSaveAssignment\(assignment, index,/g)).toHaveLength(3)
+    expect(source).toContain('queueAssignmentSave(assignment, index, nextDraft)')
+    expect(source).toContain('onCommit: value => commitRepository(assignment, index, rowIndex, value)')
+    expect(source).toMatch(/key: `\$\{projectAssignmentDraftKey\(assignment, index\)\}:repository:\$\{rowIndex\}`/u)
+    expect(source).not.toMatch(/key: `\$\{rowIndex\}:\$\{repository\}`/u)
+    expect(source).not.toContain("label: saving ? '保存中' : '保存设置'")
+    expect(source).toContain('launcherSurface || routeDetailActive ? null')
   })
 })

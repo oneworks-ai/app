@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
+import { PluginProvider } from '#~/plugins/PluginProvider'
+
 import { LauncherRoute } from './LauncherRoute'
 import type { LauncherRouteProps } from './LauncherRoute'
 
@@ -43,13 +45,16 @@ export function LauncherOverlay({
         }
       }}
     >
-      <LauncherRoute
-        active={open}
-        workspaceContext={workspaceContext}
-        onClose={onClose}
-        onOpenWorkspaceResource={onOpenWorkspaceResource}
-        searchWorkspaceResources={searchWorkspaceResources}
-      />
+      <PluginProvider runtimeSource='manager' surface='launcher'>
+        <LauncherRoute
+          active={open}
+          routingMode='embedded'
+          workspaceContext={workspaceContext}
+          onClose={onClose}
+          onOpenWorkspaceResource={onOpenWorkspaceResource}
+          searchWorkspaceResources={searchWorkspaceResources}
+        />
+      </PluginProvider>
     </div>
   )
 

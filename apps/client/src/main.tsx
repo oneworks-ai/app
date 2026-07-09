@@ -13,6 +13,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { SWRConfig } from 'swr'
 
 import { ApiError, fetchApiJson } from '#~/api/base.js'
+import { getLauncherManagerServerBaseUrl } from '#~/api/launcher.js'
 import { AppErrorBoundary } from '#~/components/error-state'
 import { installHomepagePreviewRuntimeIfEnabled } from '#~/homepage-preview/runtime-loader'
 import { setupPwa } from '#~/pwa.js'
@@ -29,7 +30,11 @@ import { setupMobileViewport } from '#~/utils/mobile-viewport.js'
 import App from './App'
 import { normalizeAppLanguage } from './i18n'
 import { getRestorableWorkspaceConnection } from './workspace-connection-restore'
-import { applyWorkspaceConnection, rememberWorkspaceConnection } from './workspace-connection-state'
+import {
+  applyWorkspaceConnection,
+  rememberWorkspaceConnection,
+  withWorkspaceRouteId
+} from './workspace-connection-state'
 
 const gitRefLabel = import.meta.env.__ONEWORKS_PROJECT_GIT_REF_LABEL__ ?? ''
 
@@ -70,8 +75,10 @@ const installWorkspaceRouteRuntimeIfAvailable = async () => {
   if (workspaceId == null) return
 
   const workspaceClientBase = buildWorkspaceClientBase(workspaceId)
+  const managerServerBaseUrl = getLauncherManagerServerBaseUrl()
   mergeRuntimeEnv({
     __ONEWORKS_PROJECT_CLIENT_BASE__: workspaceClientBase,
+    __ONEWORKS_PROJECT_MANAGER_SERVER_BASE_URL__: managerServerBaseUrl,
     __ONEWORKS_PROJECT_SERVER_ROLE__: 'workspace',
     __ONEWORKS_PROJECT_WORKSPACE_ID__: workspaceId
   })
@@ -85,13 +92,18 @@ const installWorkspaceRouteRuntimeIfAvailable = async () => {
   const { connection, transport } = restoredConnection
   const serverBaseUrl = normalizeServerBaseUrl(connection.serverBaseUrl)
   if (serverBaseUrl == null) return
+  const routeConnection = withWorkspaceRouteId(connection, workspaceId)
 
   applyWorkspaceConnection({
     serverBaseUrl,
-    workspaceFolder: connection.workspaceFolder,
-    workspaceId: connection.workspaceId
+    workspaceFolder: routeConnection.workspaceFolder,
+    workspaceId: routeConnection.workspaceId
   })
-  rememberWorkspaceConnection(connection, transport)
+  rememberWorkspaceConnection({
+    ...routeConnection,
+    managerServerBaseUrl,
+    serverBaseUrl
+  }, transport)
 }
 
 const shouldRetryOnError = (error: unknown) => {

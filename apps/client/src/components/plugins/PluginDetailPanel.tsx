@@ -29,6 +29,7 @@ import { usePluginReadme } from './use-plugin-readme'
 interface PluginDetailPanelProps {
   enabledLoading: boolean
   plugin: PluginRuntimeInstance
+  pluginServerBaseUrl?: string
   snapshot: PluginContextValue['snapshot']
   watchLoading: boolean
   onContributionPreferencesChange: () => void | Promise<void>
@@ -70,13 +71,24 @@ export function PluginDetailPanel({
   onOptionsChange,
   onWatchChange,
   plugin,
+  pluginServerBaseUrl,
   snapshot,
   watchLoading
 }: PluginDetailPanelProps) {
   const { i18n, t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
-  const readmeState = usePluginReadme(plugin, snapshot.instances, t('pluginDetail.readmeLoadFailed'))
-  const assetsState = usePluginAssets(plugin, snapshot.instances, t('pluginDetail.assetsLoadFailed'))
+  const readmeState = usePluginReadme(
+    plugin,
+    snapshot.instances,
+    t('pluginDetail.readmeLoadFailed'),
+    pluginServerBaseUrl
+  )
+  const assetsState = usePluginAssets(
+    plugin,
+    snapshot.instances,
+    t('pluginDetail.assetsLoadFailed'),
+    pluginServerBaseUrl
+  )
   const [disabledContributionGroups, setDisabledContributionGroups] = useState<string[]>(() =>
     readDisabledPluginContributionGroups(plugin.scope)
   )
@@ -335,6 +347,7 @@ export function PluginDetailPanel({
                   loading={readmeState.loading}
                   preferredLanguage={i18n.resolvedLanguage ?? i18n.language}
                   pluginScope={plugin.scope}
+                  pluginServerBaseUrl={pluginServerBaseUrl}
                   readme={readmeState.readme}
                   readmes={readmeState.readmes}
                   showTitle={false}

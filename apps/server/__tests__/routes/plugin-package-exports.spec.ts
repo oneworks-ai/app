@@ -61,6 +61,7 @@ describe('plugin package export conventions', () => {
     devServer = undefined
     await rm(workspaceFolder, { recursive: true, force: true })
     vi.clearAllMocks()
+    vi.unstubAllEnvs()
   })
 
   it('uses package exports for Vite source, built client, and built server entries', async () => {
@@ -121,7 +122,8 @@ describe('plugin package export conventions', () => {
             client: { devServer: devServerUrl },
             contributions: {
               navItems: [{ id: 'home', title: 'Vite Plugin' }]
-            }
+            },
+            server: { roles: ['workspace'] }
           }
         },
         null,
@@ -199,7 +201,10 @@ describe('plugin package export conventions', () => {
         2
       )
     )
-    await writeFile(path.join(pluginRoot, 'plugin.json'), JSON.stringify({ plugin: {} }, null, 2))
+    await writeFile(
+      path.join(pluginRoot, 'plugin.json'),
+      JSON.stringify({ plugin: { server: { roles: ['workspace'] } } }, null, 2)
+    )
     mocks.loadConfigState.mockResolvedValue({
       workspaceFolder,
       mergedConfig: { plugins: [{ id: pluginRoot, scope: 'server-source', watch: true }] }
@@ -207,6 +212,139 @@ describe('plugin package export conventions', () => {
 
     const commandResponse = await fetch(`${baseUrl}/api/plugins/server-source/commands/ping`, { method: 'POST' })
     await expect(commandResponse.text()).resolves.toBe('pong-source')
+  })
+
+  it('requires package export server entries to declare runtime roles', async () => {
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'workspace-default-server')
+    await mkdir(path.join(pluginRoot, 'server', 'dist'), { recursive: true })
+    await writeFile(
+      path.join(pluginRoot, 'server', 'dist', 'index.mjs'),
+      `
+      export async function activatePlugin(ctx) {
+        ctx.registerCommand('ping', () => ctx.runtime.role)
+      }
+    `
+    )
+    await writeFile(
+      path.join(pluginRoot, 'package.json'),
+      JSON.stringify(
+        {
+          name: '@local/plugin-workspace-default-server',
+          exports: {
+            './server': './server/dist/index.mjs',
+            './package.json': './package.json'
+          }
+        },
+        null,
+        2
+      )
+    )
+    await writeFile(path.join(pluginRoot, 'plugin.json'), JSON.stringify({ plugin: {} }, null, 2))
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder,
+      mergedConfig: { plugins: [{ id: pluginRoot, scope: 'workspace-default-server' }] }
+    })
+
+    const listResponse = await fetch(`${baseUrl}/api/plugins`)
+    const listPayload = await listResponse.json() as {
+      diagnostics: Array<{ code?: string; message?: string; scope?: string }>
+      plugins: Array<{ manifest?: { plugin?: { server?: { entry?: string; roles?: string[] } } } }>
+    }
+    expect(listPayload.plugins).toEqual([])
+    expect(listPayload.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'plugin_register_failed',
+        message: expect.stringContaining('plugin.server.roles'),
+        scope: 'workspace-default-server'
+      })
+    ])
+
+    const commandResponse = await fetch(`${baseUrl}/api/plugins/workspace-default-server/commands/ping`, {
+      method: 'POST'
+    })
+    expect(commandResponse.status).toBe(404)
+  })
+
+  it('skips workspace-only package export server entries on the manager runtime', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ROLE__', 'manager')
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'manager-skips-workspace-server')
+    await mkdir(path.join(pluginRoot, 'server', 'dist'), { recursive: true })
+    await writeFile(
+      path.join(pluginRoot, 'server', 'dist', 'index.mjs'),
+      `
+      export async function activatePlugin(ctx) {
+        ctx.registerCommand('ping', () => 'manager-should-not-load-this')
+      }
+    `
+    )
+    await writeFile(
+      path.join(pluginRoot, 'package.json'),
+      JSON.stringify(
+        {
+          name: '@local/plugin-manager-skips-workspace-server',
+          exports: {
+            './server': './server/dist/index.mjs',
+            './package.json': './package.json'
+          }
+        },
+        null,
+        2
+      )
+    )
+    await writeFile(
+      path.join(pluginRoot, 'plugin.json'),
+      JSON.stringify({ plugin: { server: { roles: ['workspace'] } } }, null, 2)
+    )
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder,
+      mergedConfig: { plugins: [{ id: pluginRoot, scope: 'manager-skips-workspace-server' }] }
+    })
+
+    const commandResponse = await fetch(`${baseUrl}/api/plugins/manager-skips-workspace-server/commands/ping`, {
+      method: 'POST'
+    })
+    expect(commandResponse.status).toBe(404)
+  })
+
+  it('allows package exports to fill manager-only server entries declared by roles', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ROLE__', 'manager')
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'manager-only-server')
+    await mkdir(path.join(pluginRoot, 'server', 'dist'), { recursive: true })
+    await writeFile(
+      path.join(pluginRoot, 'server', 'dist', 'index.mjs'),
+      `
+      export async function activatePlugin(ctx) {
+        ctx.registerCommand('ping', () => ctx.runtime.role)
+      }
+    `
+    )
+    await writeFile(
+      path.join(pluginRoot, 'package.json'),
+      JSON.stringify(
+        {
+          name: '@local/plugin-manager-only-server',
+          exports: {
+            './server': './server/dist/index.mjs',
+            './package.json': './package.json'
+          }
+        },
+        null,
+        2
+      )
+    )
+    await writeFile(
+      path.join(pluginRoot, 'plugin.json'),
+      JSON.stringify({ plugin: { server: { roles: ['manager'] } } }, null, 2)
+    )
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder,
+      mergedConfig: { plugins: [{ id: pluginRoot, scope: 'manager-only-server' }] }
+    })
+
+    const commandResponse = await fetch(`${baseUrl}/api/plugins/manager-only-server/commands/ping`, {
+      method: 'POST'
+    })
+    await expect(commandResponse.text()).resolves.toBe('manager')
   })
 
   it('re-resolves package export server entries when watch mode is toggled', async () => {
@@ -246,7 +384,10 @@ describe('plugin package export conventions', () => {
         2
       )
     )
-    await writeFile(path.join(pluginRoot, 'plugin.json'), JSON.stringify({ plugin: {} }, null, 2))
+    await writeFile(
+      path.join(pluginRoot, 'plugin.json'),
+      JSON.stringify({ plugin: { server: { roles: ['workspace'] } } }, null, 2)
+    )
     mocks.loadConfigState.mockResolvedValue({
       workspaceFolder,
       mergedConfig: { plugins: [{ id: pluginRoot, scope: 'server-watch-toggle' }] }

@@ -97,7 +97,7 @@ export default function App() {
     )
   }
 
-  if (location.pathname === '/launcher') {
+  if (location.pathname === '/launcher' || location.pathname.startsWith('/launcher/')) {
     if (window.oneworksDesktop == null && !isManagerLauncher) {
       return <Navigate to='/' replace />
     }

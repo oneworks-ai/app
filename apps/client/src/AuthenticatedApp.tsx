@@ -10,6 +10,7 @@ import { useSidebarNavigation } from '#~/hooks/use-sidebar-navigation'
 import { NotificationProvider } from '#~/notifications/NotificationProvider'
 import { PluginProvider } from '#~/plugins/PluginProvider'
 import { AppRoutes } from '#~/routes/AppRoutes'
+import { getRuntimeWorkspaceId } from '#~/runtime-config'
 
 function HomepagePreviewNavigationBridgeSlot() {
   const [Bridge, setBridge] = useState<ComponentType | null>(null)
@@ -34,11 +35,13 @@ export function AuthenticatedApp() {
   useClientEventStream()
   const { isDarkMode, themeConfig } = useAppPreferences()
   const sidebarNavigation = useSidebarNavigation()
+  const pluginRuntimeSource = getRuntimeWorkspaceId() == null ? undefined : 'manager'
 
   return (
     <ConfigProvider theme={themeConfig}>
       <NotificationProvider>
-        <PluginProvider>
+        {/* Workspace services host sessions and APIs; host-level plugin chrome stays global. */}
+        <PluginProvider runtimeSource={pluginRuntimeSource}>
           <HomepagePreviewNavigationBridgeSlot />
           <AppShell
             activeId={sidebarNavigation.activeSidebarId}

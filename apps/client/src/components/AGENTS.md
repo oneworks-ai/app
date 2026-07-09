@@ -20,13 +20,16 @@
 - `PluginStoreRoute.tsx`：插件市场 / 创建插件的切换入口归属侧栏插件父入口右侧 action；不要在 route header 里再放市场 / 创建的双按钮切换。
 - `nav-rail-more-menu.tsx`：底部菜单、外部注入菜单和可复用菜单 item builder。
 - `action-search-toolbar/`：配置页、管理页和列表页共用的搜索 + 紧凑 action toolbar。新增历史、下载、导入记录这类带搜索和筛选 action 的页面时优先复用它，不要在业务组件里各自拼 AntD `Input` / 图标按钮样式。
+- `list-search-input/`：平台级列表搜索条，统一资源列表、插件视图和 admin native list 的 search icon、prefix gap、输入高度、focus 颜色和 trailing action 节奏。插件不要自己拼 search icon + `Input`；需要裸搜索条时走 host `SearchInput`，需要列表内搜索时走 `InteractionList.search`。
+- `interaction-list/`：平台级资源 / 分组 / launcher 列表。资源列表用 divider + 10px 行内上下 padding；grouped / no-divider 列表用容器 10px gap，行本身不加上下 padding；launcher 插件页通过 host `InteractionList` 的 `mode="launcher"` 继承 launcher 命令列表密度、20px 图标槽和行 hover 语言，图标与文字间距仍走全局 6px token。状态只通过 `iconState` 这类平台语义落到左侧图标角标，业务和插件不要再在行内重复堆“在线 / 离线 / 待确认”tag。
 - `mobile-aware-select/`：项目通用 Select 入口，统一桌面 AntD Select 的基础 selector 尺寸、padding、下拉箭头、点击外部关闭策略和移动端抽屉行为；下拉滚动底部留白归属 `src/styles/global.scss` 的 `oneworks-overlay` 公共规则。普通下拉默认关闭 AntD virtual scroll，避免两行或带图标 option 被固定高度估算截断；确有大列表性能需求时由调用方显式传 `virtual`。配置页、筛选器、设置弹窗等普通下拉优先复用 `MobileAwareSelect`，不要在业务组件里各自传 `suffixIcon`、覆盖 AntD 默认 `11px` padding，或局部修 popup blur / scroll padding；聊天输入栏、侧栏批量筛选这类高度特殊的紧凑控件可以在自己的模块样式里覆盖变量或 selector。
 - `stage-slider/`：离散档位的通用 slider，负责原生 range 键盘语义、阶段点、主题 token 和可选的末档动画；业务组件只提供档位 value / label，并通过 CSS 变量调整局部宽高，不复制轨道与滑块样式。
 - `workspace-scope-select/`：项目 / 会话范围选择的通用 Select。历史、下载、运行记录、审计记录这类需要按 workspace project 或 session 过滤的页面优先复用 `WorkspaceProjectSelect` / `WorkspaceSessionSelect`，并显式提供“全部项目 / 全部会话”选项；不要在业务组件里再临时拼一排 project/session chip。
 - `Sidebar.tsx`：侧边栏数据装配、route sidebar 接入和列表状态。
 - `sidebar/SidebarHeader.tsx`：侧边栏顶部入口区、搜索区、入口 actions 和入口右键菜单触发。
-- `interaction-list/`：通用交互列表，只处理 selection、item 渲染、context menu 触发和外部 action 调用，不承载具体业务语义。
+- `interaction-list/`：通用交互列表，只处理 selection、item 渲染、context menu 触发和外部 action 调用，不承载具体业务语义。需要分隔语义时通过模式声明：文档、团队、设备、配置、版本等可扫描资源列表使用 `resource`，账号分组、侧栏导航树等层级入口使用 `grouped`，launcher 内打开的插件页面使用 `launcher`；不要在业务模块里靠局部 padding / border 复制一套列表节奏。
 - `native-tabs/`：通用紧凑原生 tabs 行，供 route 子页、插件详情页和账号 / 团队详情这类二级页面复用；业务模块只传 items、activeKey 和 onChange，不在本地复制 tabs padding、gap、active underline 或图标尺寸规则。
+- `layout/RouteContainerHeader.scss` 的 `route-container-inline-breadcrumb` 是 route / launcher / 插件二级页共享面包屑。滚动容器里的面包屑必须默认 sticky 在顶部，并通过 `--route-container-inline-breadcrumb-background` 覆盖所在 surface 背景；父容器有左右 padding 时，通过 `--route-container-inline-breadcrumb-bleed-inline` 让背景和分割线外扩覆盖整条滚动区域。业务页面不要单独实现“滚动时固定面包屑”。
 - `browser-data-sync/`：桌面端浏览器数据迁移与密码管理 UI。设置页和网页 tab 更多菜单共用的“同步数据”弹窗只承载导入 / 同步动作；已保存密码的查看、搜索、复制和显示入口是设置页左侧独立 tab。Chrome 密码、密码管理器扩展、Authenticator / 验证码导入这类浏览器数据迁移 UI 放这里，不放到普通插件配置页或单个 webview 菜单组件里。
 - `browser-activity/`：桌面端网页历史和下载内容 UI。只负责配置页里的搜索、项目 / 会话选择过滤、打开历史和打开 / 显示下载文件；记录、持久化与下载监听在 desktop main 进程。项目 / 会话不是页面级 tab，也不是“记录里是否带有项目 / 会话字段”的泛过滤；配置侧栏进入默认全局，从具体网页 tab 入口进入时通过 route state 默认选中当前项目和会话。
 

@@ -202,7 +202,9 @@ describe('relay config profile routes', () => {
       body: JSON.stringify({
         documents: {
           countsByKind: {
-            agents: 1
+            agents: 1,
+            ooAgents: 0,
+            ooRules: 0
           },
           documentCount: 1,
           encryptedPayload: {
@@ -231,7 +233,9 @@ describe('relay config profile routes', () => {
         baseHash: 'sha256:stale',
         documents: {
           countsByKind: {
-            agents: 1
+            agents: 1,
+            ooAgents: 0,
+            ooRules: 0
           },
           documentCount: 1,
           encryptedPayload: {
@@ -256,7 +260,9 @@ describe('relay config profile routes', () => {
     expect(stale.response.status).toBe(409)
     expect(pulled.body.teamDocumentSnapshot).toMatchObject({
       countsByKind: {
-        agents: 1
+        agents: 1,
+        ooAgents: 0,
+        ooRules: 0
       },
       documentCount: 1,
       encryptedPayload: {

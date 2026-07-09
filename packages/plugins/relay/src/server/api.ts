@@ -114,6 +114,9 @@ export const handleRelayApi = async (request: PluginProxyRequest, controller: Re
   if (request.method === 'POST' && route === 'config-share-publish') {
     return await controllerJson(async () => await controller.publishConfigShareDraft(readBody(request)))
   }
+  if (request.method === 'POST' && route === 'config-share-assignment-update') {
+    return await controllerJson(async () => await controller.updateConfigShareAssignment(readBody(request)))
+  }
   if (request.method === 'POST' && route === 'config-source-enabled') {
     return await controllerJson(async () => await controller.setConfigSourceEnabled(readBody(request)))
   }

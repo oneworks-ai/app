@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   createAccountKey,
@@ -23,6 +23,7 @@ const createTempHome = async () => {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { force: true, recursive: true })))
 })
 
@@ -100,5 +101,36 @@ describe('oneWorks auth store', () => {
     }))
     await writeOneWorksAuthStore(updated, env)
     await expect(readOneWorksAuthStore(env)).resolves.toEqual(updated)
+  })
+
+  it('serializes concurrent writes to the same auth file', async () => {
+    const home = await createTempHome()
+    const env = { __ONEWORKS_PROJECT_REAL_HOME__: home }
+    vi.spyOn(Date, 'now').mockReturnValue(123456)
+
+    const buildStore = (userId: string) =>
+      upsertOneWorksAuthAccount(
+        upsertOneWorksAuthServer(emptyOneWorksAuthStore(), {
+          id: 'local',
+          url: 'http://127.0.0.1:8791'
+        }),
+        {
+          accountKey: createAccountKey('local', userId),
+          enabled: true,
+          serverId: 'local',
+          serverUrl: 'http://127.0.0.1:8791',
+          userId
+        }
+      )
+
+    await expect(Promise.all([
+      writeOneWorksAuthStore(buildStore('user-1'), env),
+      writeOneWorksAuthStore(buildStore('user-2'), env),
+      writeOneWorksAuthStore(buildStore('user-3'), env)
+    ])).resolves.toBeDefined()
+
+    const store = await readOneWorksAuthStore(env)
+    expect(store.accounts).toHaveLength(1)
+    expect(store.accounts[0]?.userId).toBe('user-3')
   })
 })

@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- relay controller coverage keeps account, config, and document sync scenarios together. */
 import { Buffer } from 'node:buffer'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -31,9 +32,42 @@ const flushAsyncWork = async () => {
 }
 
 describe('relay plugin controller', () => {
+  it('keeps the relay device identity in the user-level store across project homes', async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), 'oneworks-relay-plugin-home-'))
+    const firstProjectHome = await mkdtemp(join(tmpdir(), 'oneworks-relay-plugin-project-a-'))
+    const secondProjectHome = await mkdtemp(join(tmpdir(), 'oneworks-relay-plugin-project-b-'))
+    try {
+      vi.stubEnv('HOME', homeDir)
+      vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', homeDir)
+
+      const firstStore = createRelayDeviceStore(firstProjectHome)
+      const secondStore = createRelayDeviceStore(secondProjectHome)
+      const first = await firstStore.readStore()
+      await firstStore.writeStore({
+        ...first,
+        deviceName: 'System User Device'
+      })
+      const second = await secondStore.readStore()
+
+      expect(second.deviceId).toBe(first.deviceId)
+      expect(second.deviceSecret).toBe(first.deviceSecret)
+      expect(second.deviceName).toBe('System User Device')
+      expect(firstStore.storePath).toBe(join(homeDir, '.oneworks', 'relay', 'device.json'))
+      expect(secondStore.storePath).toBe(firstStore.storePath)
+      expect(firstStore.storePath).not.toContain(firstProjectHome)
+      expect(secondStore.storePath).not.toContain(secondProjectHome)
+    } finally {
+      await Promise.all([
+        rm(homeDir, { force: true, recursive: true }),
+        rm(firstProjectHome, { force: true, recursive: true }),
+        rm(secondProjectHome, { force: true, recursive: true })
+      ])
+    }
+  })
+
   it('registers a device with the configured remote relay', async () => {
     const fetchMock = stubRelayFetch()
-    const { commands, projectHome } = await createPluginHarness({
+    const { commands, homeDir, projectHome } = await createPluginHarness({
       deviceName: 'Office Mac',
       enableOfficialCloudflareRelay: false,
       enableOfficialVercelRelay: false,
@@ -73,10 +107,31 @@ describe('relay plugin controller', () => {
         terminal: false,
         workspaceFiles: false
       },
+      deviceInfo: {
+        deviceType: 'computer',
+        runtime: 'node'
+      },
       deviceName: 'Office Mac',
+      managementServerEnvironment: {
+        deviceType: 'computer',
+        runtime: 'node'
+      },
+      managementServerKind: 'web',
+      managementServerName: 'workspace',
+      managementServerProjects: [
+        expect.objectContaining({
+          title: 'workspace',
+          workspaceFolder: '/workspace'
+        })
+      ],
       pluginScope: 'relay',
       workspaceFolder: '/workspace'
     })
+    expect(typeof requestBody.managementServerId).toBe('string')
+    expect(requestBody.managementServerId).not.toBe('')
+    expect(status.device.id).toBe(store.deviceId)
+    expect(status.storePath).toBe(join(homeDir, '.oneworks', 'relay', 'device.json'))
+    expect(status.storePath).not.toContain(projectHome)
     expect(store).not.toHaveProperty('deviceToken')
     expect(store).not.toHaveProperty('remoteBaseUrl')
     expect(store.servers).toMatchObject({
@@ -246,7 +301,10 @@ describe('relay plugin controller', () => {
     let status: RelayPluginStatus | undefined
     for (let index = 0; index < 20; index += 1) {
       status = await commands.get('status')?.() as RelayPluginStatus
-      if (status.connection.state === 'registered') break
+      if (
+        status.connection.state === 'registered' &&
+        status.servers?.some(server => server.id === 'prod' && server.hasToken)
+      ) break
       await new Promise(resolve => setTimeout(resolve, 5))
     }
     const restoredStatus = status ?? (await commands.get('status')?.() as RelayPluginStatus)
@@ -665,6 +723,10 @@ describe('relay plugin controller', () => {
   })
 
   it('includes auth store server metadata in public status for account grouping', async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError('fetch failed')
+    })
+    vi.stubGlobal('fetch', fetchMock)
     const { commands } = await createPluginHarness({
       enableOfficialCloudflareRelay: false,
       enableOfficialVercelRelay: false
@@ -756,7 +818,7 @@ describe('relay plugin controller', () => {
     ])
   })
 
-  it('registers account sessions with the workspace-local device identity', async () => {
+  it('registers account sessions with the system-user device identity', async () => {
     const fetchMock = stubRelayFetch('workspace-device-token')
     const { commands, projectHome } = await createPluginHarness({
       enableOfficialCloudflareRelay: false,

@@ -32,7 +32,8 @@ description: 当用户想创建或改造 OneWorks plugin，实现界面入口、
 - 入口在哪里：左侧导航、左侧更多菜单、chat header、下方面板 `+` 菜单、右侧/下方 workbench tab、launcher 搜索、独立 plugin route。
 - 点击后发生什么：打开页面、创建新 tab、执行命令、调用本地服务、跳转外链或展示状态。
 - 展示在哪里：plugin route、可关闭 workbench tab、右侧抽屉 tab、toast、菜单项、launcher result。
-- 是否需要 runtime：只需要前端 DOM，还是要 server command、scoped API、loopback 本地服务或文件监听。
+- 是否需要 runtime：只需要前端 DOM，还是要 server command、scoped API、loopback 本地服务、文件监听或 manager / workspace runtime 通信。
+- server 入口运行在哪里：普通工作区能力默认 `workspace`；设备级、launcher 级或跨 workspace 协调才使用 `manager`。一台设备可以同时有多个 workspace server，不要假设只有一个 workspace endpoint。
 - 是否需要开发态热更新：本地开发优先放在 `packages/plugins/<name>` 并通过 `.oo.config.json` 显式声明；临时开发目录才放在 `.oo/plugins.dev/<name>`，开启 watch。本地路径 plugin 的 client source 会通过宿主 Vite dev server 加载，不需要单独启动插件 Vite dev server。
 
 如果缺失信息会改变入口、交互、数据来源、权限、本地服务、scope 或验证方式，先列出“不确定点”让用户确认。每个不确定点都要写清它会影响什么；可以给出推荐默认值，但不要在关键需求模糊时直接替用户拍板。只有名称、图标、文案这类低风险细节缺失时，才采用保守默认并在结果里说明。
@@ -58,6 +59,7 @@ description: 当用户想创建或改造 OneWorks plugin，实现界面入口、
 - 插件间扩展点：拥有方用 `extensionPoints` 或 `ctx.extensionPoints.register` 暴露 `<scope>/<id>`；其他插件用 `ctx.extensionPoints.onAvailable('<scope>/<id>', point => ctx.extensionPoints.contribute(...))` 监听目标点出现后补充结构化能力。只有 manifest 里声明的静态贡献才用 `extensionContributions`。
 - 插件间纯前端 API：拥有方用 `ctx.pluginApis.register({ id, inputSchema, outputSchema, handler })` 暴露 in-client 过程调用；调用方用 `await ctx.pluginApis.call('<scope>/<id>', input)`。所有调用必须是 Promise，运行时会等待目标 API 注册并等待 handler 完成。
 - 本地能力：server `ctx.registerCommand` 或 `ctx.registerApi`；前端通过 `ctx.commands.execute` 或 `ctx.api.fetch` 调用。
+- manager / workspace 通信：server `ctx.runtime.registerChannel` 和 `ctx.runtime.invokeChannel`；前端通过 `ctx.runtime.invokeChannel` 调用当前 scope 的 server runtime channel。
 
 关键语义：
 
@@ -73,6 +75,8 @@ description: 当用户想创建或改造 OneWorks plugin，实现界面入口、
 - 需要默认固定或默认打开时，必须有显式配置语义，不要把所有 plugin tab 都自动打开。
 - plugin scope 是隔离边界。manifest 不声明 scope；scope 来自用户配置或运行时派生。
 - plugin 不注册顶层 `/api/*`；所有 API 必须在 `/api/plugins/<scope>/*` 下。
+- 有 server 入口的插件必须声明 `plugin.server.roles`。`package.json` 的 `exports["./server"]` 只补入口路径；未声明 roles 时宿主拒绝注册 server 入口并在 diagnostics 暴露错误。需要 `manager` 时必须显式写 `roles: ["manager"]` 或 `["manager", "workspace"]`。
+- 跨 runtime channel 调用必须明确目标。跨 manager / workspace 或跨多个 workspace 时，在 `target` 里传 `role` 和 `serverBaseUrl`；不要把当前 workspace server 当成唯一 server。
 - 插件间扩展点不是宿主固定 slot。只有当目标扩展点存在时才贡献；贡献项要保持结构化，至少写 `id`、`titleI18n` / `descriptionI18n`、`icon` 和 `command`，由拥有方 view 决定如何渲染。
 
 ## 配置 Schema
@@ -194,6 +198,9 @@ packages/plugins/<plugin-name>/
     }
   },
   "plugin": {
+    "server": {
+      "roles": ["workspace"]
+    },
     "contributions": {
       "routes": [
         {
@@ -259,8 +266,8 @@ packages/plugins/<plugin-name>/
 
 `client/src/index.tsx` 导出 `activatePlugin(ctx)`，并由 Vite 编译到 `client/dist/index.js`：
 
-- 新插件按 `package.json` exports 约定暴露入口：`exports["./client"].source` 指向 `client/src/index.tsx`，`exports["./client"].default` 指向 `client/dist/index.js`，`exports["./server"].source` 指向 `server/src/index.ts`，`exports["./server"].default` 指向 `server/dist/index.js`。不要在 manifest 里重复写 `plugin.client.entry`、`plugin.client.root` 或 `plugin.server.entry`，除非是在兼容旧插件。
-- 本地路径 plugin 在 watch 开启或位于 `.oo/plugins.dev/*` 时，开发态宿主会把 `exports["./client"].source` 转成同源 `/@fs/...` entry，由宿主 Vite dev server 负责 TS / TSX 转译、source map、样式模块 HMR 和 React Fast Refresh；不需要配置 `plugin.client.devServer`。`plugin.client.devServer` 只作为旧插件或外部 loopback dev server 兼容路径保留。
+- 新插件按 `package.json` exports 约定暴露入口：`exports["./client"].source` 指向 `client/src/index.tsx`，`exports["./client"].default` 指向 `client/dist/index.js`，`exports["./server"].source` 指向 `server/src/index.ts`，`exports["./server"].default` 指向 `server/dist/index.js`。server 入口的运行层级写在 manifest 的 `plugin.server.roles`；不要在 manifest 里重复写 `plugin.client.entry`、`plugin.client.root` 或 `plugin.server.entry`。
+- 本地路径 plugin 在 watch 开启或位于 `.oo/plugins.dev/*` 时，开发态宿主会把 `exports["./client"].source` 转成同源 `/@fs/...` entry，由宿主 Vite dev server 负责 TS / TSX 转译、source map、样式模块 HMR 和 React Fast Refresh；新插件不要配置 `plugin.client.devServer`。
 - `client/src/index.tsx` 只做薄入口：加载子模块、注入样式、注册 view / command / launcher provider、集中 dispose。页面组件、i18n 文案、样式和数据模型拆到 `client/src/view.tsx`、`client/src/i18n.ts`、`client/src/styles.ts` 等 ESM 模块；不要把整套插件都写进一个入口文件。
 - 静态入口只加载浏览器可执行的 JavaScript，不会由宿主自动转译 TypeScript / TSX。发布 / 提交前运行 `vite build --config client/vite.config.ts` 生成 `client/dist/index.js`；不要把含 TS / TSX 语法的源码文件当作静态入口。
 - server 侧本地开发可以直接写 TS：watch 开启时宿主会加载 `exports["./server"].source`，并用 esbuild register 转译 `.ts` / `.tsx` / `.mts` / `.cts`。发布 / 提交时使用 `exports["./server"].default` 的 JS 产物。
@@ -274,6 +281,7 @@ packages/plugins/<plugin-name>/
 - 用 `ctx.extensionPoints.register({ id, title, description, contributionSchema })` 暴露插件自己的扩展点；贡献方用 `ctx.extensionPoints.onAvailable('other-scope/point', point => ctx.extensionPoints.contribute('other-scope/point', contribution))`，不要用激活时的一次性 `has(...)` 判断来决定是否贡献。React view 里用 `view.extensions.getContributions('point')` 读取当前插件扩展点的贡献。
 - 用 `ctx.pluginApis.register({ id, title, description, inputSchema, outputSchema, handler })` 暴露插件内过程调用；其他插件用 `await ctx.pluginApis.call('other-scope/api-id', input)` 调用。`call` 的 Promise 会等待目标 API ready，也会等待 handler 处理完成；必要时传 `timeoutMs` 明确失败边界。
 - 用 `ctx.api.fetch('apiId/path')` 调 scoped API；不要传绝对 URL、协议相对 URL 或顶层 `/api/*`。
+- 用 `ctx.runtime.invokeChannel(channelId, { payload, target })` 调用当前 scope 的 server runtime channel；跨 workspace / manager 调用时显式给 `target.role` 和 `target.serverBaseUrl`。
 - 用 `ctx.notifications.show({ title, description, actions })` 发布宿主级消息。宿主会自动显示插件来源、发送时间、markdown 描述、按钮回调和关闭 / 屏蔽插件这类通用操作。不要在插件里自己创建 fixed toast 或引入另一套通知 UI。
 - 用 `ctx.i18n.t({ en, "zh-Hans": ... })` / `ctx.i18n.select(...)` 渲染插件自带文案，跟随宿主应用语言；DOM view 需要在 `ctx.i18n.subscribe()` 里重绘，并在 `dispose()` 中清理订阅。
 - 用 `ctx.hot.accept()` 和 `ctx.hot.reload()` 支持本 plugin 的 scope 级调试重载；它不是 Vite Fast Refresh。React Fast Refresh 由宿主 Vite `/@fs` client source entry 提供，插件仍要复用宿主 React 单例、宿主组件继续走 `view.ui.*`。
@@ -305,6 +313,9 @@ packages/plugins/<plugin-name>/
 - `ctx.registerApi(apiId, { proxy: { target } })` 只能代理到 loopback HTTP(S) 本地服务。
 - 每个 `registerApi` 都必须写清 `title`、`description`、`inputSchema`、`outputSchema`、`headerSchema`。旧插件缺失时运行时兼容但会产生 `plugin_api_metadata_missing` 诊断；新插件不要省略。
 - `ctx.registerLocalService(serviceId, start)` 管理随 plugin 生命周期启动/停止的本地服务。
+- `ctx.runtime.role` 标识当前入口运行在 `workspace` 还是 `manager`；不要用环境变量或 URL 自己判断。
+- `ctx.runtime.registerChannel(channelId, handler)` 注册当前 scope 的 runtime 通信通道。
+- `ctx.runtime.invokeChannel(channelId, invocation)` 调用当前 scope 的 runtime 通道；跨 runtime 时必须传明确目标。
 - `ctx.dispose(callback)` 清理 timer、server、watcher、临时资源。
 - 使用 `ctx.workspaceFolder`、`ctx.projectHome` 和 `ctx.pluginRoot`，不要猜路径。
 - `registerApi` 的 `handler` 按 `request.method` 和 `request.path` 分发子路由；如果需要完整 Express / Hono / Fastify router，使用 `registerLocalService` 启动本地 loopback 服务，再用 `registerApi(..., { proxy })` 暴露为 scoped API。

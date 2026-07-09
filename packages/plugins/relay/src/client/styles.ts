@@ -28,11 +28,6 @@ ${adminListSurfaceCss}
 .oneworks-relay__account-actions { flex-wrap: wrap; justify-content: flex-end; }
 .oneworks-relay__button { position: relative; width: auto; min-width: var(--app-chrome-icon-size, 18px); min-height: var(--app-chrome-icon-size, 18px); display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: var(--oneworks-overlay-item-radius, 6px); padding: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); background: transparent; cursor: pointer; }
 .oneworks-relay__button:disabled { color: var(--disabled-text-color, var(--ant-color-text-disabled, #8c959f)); cursor: default; opacity: .62; }
-.oneworks-relay__button::before, .oneworks-relay__button::after { position: absolute; inset-inline-start: 50%; z-index: 20; opacity: 0; pointer-events: none; visibility: hidden; transition: opacity .12s ease, transform .12s ease, visibility .12s ease; }
-.oneworks-relay__button::before { content: ""; inset-block-end: calc(100% + 2px); width: 7px; height: 7px; background: var(--text-color, var(--ant-color-text, #1f2328)); transform: translate(-50%, 2px) rotate(45deg); }
-.oneworks-relay__button::after { content: attr(data-tooltip); inset-block-end: calc(100% + 6px); max-width: 160px; border-radius: var(--oneworks-overlay-item-radius, 6px); padding: 5px 7px; color: var(--bg-color, var(--ant-color-bg-container, #fff)); background: var(--text-color, var(--ant-color-text, #1f2328)); box-shadow: var(--oneworks-overlay-shadow, 0 6px 18px rgb(0 0 0 / 16%)); font: 600 11px/1.15 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; transform: translate(-50%, 4px); white-space: nowrap; }
-.oneworks-relay__button:hover::before, .oneworks-relay__button:hover::after, .oneworks-relay__button:focus::before, .oneworks-relay__button:focus::after, .oneworks-relay__button:focus-visible::before, .oneworks-relay__button:focus-visible::after, .oneworks-relay__button[data-tooltip-open="true"]::before, .oneworks-relay__button[data-tooltip-open="true"]::after { opacity: 1; visibility: visible; transform: translate(-50%, 0) rotate(45deg); }
-.oneworks-relay__button:hover::after, .oneworks-relay__button:focus::after, .oneworks-relay__button:focus-visible::after, .oneworks-relay__button[data-tooltip-open="true"]::after { transform: translate(-50%, 0); }
 .oneworks-relay__button:hover { color: var(--primary-color, var(--ant-color-primary, #1677ff)); background: transparent; }
 .oneworks-relay__button:disabled:hover { color: var(--disabled-text-color, var(--ant-color-text-disabled, #8c959f)); }
 .oneworks-relay__button[data-primary="true"] { color: var(--primary-color, var(--ant-color-primary, #1677ff)); background: transparent; }
@@ -44,7 +39,7 @@ ${adminListSurfaceCss}
 .oneworks-relay__button.ant-btn:active { border: 0 !important; box-shadow: none !important; background: transparent; }
 .oneworks-relay__icon { font-size: 18px; line-height: 1; }
 .oneworks-relay__button .oneworks-relay__icon { font-size: var(--app-chrome-icon-size, 18px); }
-.oneworks-relay__server-editor { display: grid; grid-template-columns: minmax(130px, .42fr) minmax(180px, 1fr) auto; gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); align-items: center; padding: 0 0 var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)); border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
+.oneworks-relay__server-editor { min-width: 0; display: grid; grid-template-columns: minmax(130px, .42fr) minmax(180px, 1fr); gap: var(--oneworks-overlay-icon-gap, 6px); align-items: center; }
 .oneworks-relay__field { min-width: 0; min-height: var(--oneworks-overlay-control-height, 30px); display: inline-flex; align-items: center; gap: var(--oneworks-overlay-icon-gap, 6px); border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); color: var(--sub-text-color, var(--ant-color-text, #1f2328)); }
 .oneworks-relay__field:focus-within { border-bottom-color: var(--primary-color, var(--ant-color-primary, #1677ff)); color: var(--primary-color, var(--ant-color-primary, #1677ff)); }
 .oneworks-relay__input { width: 100%; min-width: 0; border: 0; outline: 0; padding: 0; color: var(--text-color, var(--ant-color-text, #1f2328)); background: transparent; font: 600 13px/1.2 ui-sans-serif, system-ui, sans-serif; }
@@ -56,48 +51,30 @@ ${adminListSurfaceCss}
 .oneworks-relay__empty { padding: var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)) 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 500 12px/1.4 ui-sans-serif, system-ui, sans-serif; }
 .oneworks-relay__empty--center { min-height: min(420px, 52vh); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 0; text-align: center; }
 .oneworks-relay__empty--center .oneworks-relay__icon { font-size: 28px; opacity: .54; }
-.oneworks-relay__account-row { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); align-items: center; padding: var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)) 0; border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
-.oneworks-relay__account-row[data-state="disabled"] { opacity: .7; }
-.oneworks-relay__account-group { min-width: 0; display: grid; }
-.oneworks-relay__account-group-title { margin: 10px 0 2px; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 700 11px/1.25 ui-sans-serif, system-ui, sans-serif; }
-.oneworks-relay__account-group-list { min-width: 0; display: grid; }
-.oneworks-relay__account { min-width: 0; display: grid; border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
-.oneworks-relay__account-summary { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); align-items: center; padding: var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)) 0; cursor: pointer; list-style: none; }
-.oneworks-relay__account-summary::-webkit-details-marker { display: none; }
-.oneworks-relay__account-summary:focus-visible { outline: 2px solid var(--primary-color, var(--ant-color-primary, #1677ff)); outline-offset: -2px; }
-.oneworks-relay__account-panel { min-width: 0; display: grid; gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); padding: 0 0 var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)) calc(34px + var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px))); }
-.oneworks-relay__account-avatar { position: relative; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; color: var(--primary-text-color, var(--ant-color-primary, #1677ff)); background: color-mix(in srgb, var(--primary-color, #2563eb) 14%, transparent); font: 800 12px/1 ui-sans-serif, system-ui, sans-serif; overflow: visible; }
+.oneworks-relay__account-avatar { --oneworks-relay-account-avatar-size: 34px; --oneworks-relay-account-avatar-font-size: 12px; position: relative; width: var(--oneworks-relay-account-avatar-size); height: var(--oneworks-relay-account-avatar-size); display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; color: var(--primary-text-color, var(--ant-color-primary, #1677ff)); background: color-mix(in srgb, var(--primary-color, #2563eb) 14%, transparent); font: 800 var(--oneworks-relay-account-avatar-font-size)/1 ui-sans-serif, system-ui, sans-serif; overflow: visible; }
+.relay-admin-list-table__native-icon.oneworks-relay__account-avatar { --oneworks-relay-account-avatar-size: var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px)); --oneworks-relay-account-avatar-font-size: calc(var(--oneworks-relay-account-avatar-size) * .56); flex-basis: var(--oneworks-relay-account-avatar-size); max-width: var(--oneworks-relay-account-avatar-size); min-width: var(--oneworks-relay-account-avatar-size); width: var(--oneworks-relay-account-avatar-size); height: var(--oneworks-relay-account-avatar-size); }
 .oneworks-relay__account-avatar[data-state="signed-in"] { color: var(--success-color, #0f766e); background: color-mix(in srgb, var(--success-color, #0f766e) 14%, transparent); }
 .oneworks-relay__account-avatar[data-state="disabled"] { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); background: color-mix(in srgb, var(--placeholder-color, #57606a) 12%, transparent); }
 .oneworks-relay__account-avatar-image { width: 100%; height: 100%; display: block; border-radius: inherit; object-fit: cover; }
-.oneworks-relay__account-status { position: absolute; inset-inline-end: -1px; inset-block-end: -1px; width: 10px; height: 10px; border: 2px solid var(--page-background, var(--ant-color-bg-layout, #fff)); border-radius: 999px; background: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); }
-.oneworks-relay__account-avatar[data-state="registered"] .oneworks-relay__account-status, .oneworks-relay__account-avatar[data-state="connected"] .oneworks-relay__account-status { background: var(--success-color, #0f766e); }
-.oneworks-relay__account-avatar[data-state="connecting"] .oneworks-relay__account-status, .oneworks-relay__account-avatar[data-state="loading"] .oneworks-relay__account-status { background: var(--primary-color, var(--ant-color-primary, #1677ff)); }
-.oneworks-relay__account-avatar[data-state="error"] .oneworks-relay__account-status { background: var(--danger-color, #dc2626); }
-.oneworks-relay__account-copy { min-width: 0; display: grid; gap: 2px; }
-.oneworks-relay__account-name { min-width: 0; display: flex; align-items: center; gap: 6px; margin: 0; font: 700 13px/1.35 ui-sans-serif, system-ui, sans-serif; }
-.oneworks-relay__account-platform { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oneworks-relay__account-state { flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--primary-color, #1677ff) 28%, transparent); border-radius: 999px; padding: 1px 6px; color: var(--primary-color, var(--ant-color-primary, #1677ff)); background: color-mix(in srgb, var(--primary-color, #1677ff) 8%, transparent); font: 700 10px/1.2 ui-sans-serif, system-ui, sans-serif; text-transform: lowercase; }
-.oneworks-relay__account-row[data-state="signed-in"] .oneworks-relay__account-state { border-color: color-mix(in srgb, var(--success-color, #0f766e) 28%, transparent); color: var(--success-color, #0f766e); background: color-mix(in srgb, var(--success-color, #0f766e) 8%, transparent); }
-.oneworks-relay__account-row[data-state="disabled"] .oneworks-relay__account-state { border-color: var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); background: transparent; }
-.oneworks-relay__account-subtitle, .oneworks-relay__account-email { margin: 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oneworks-relay__account-chevron { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); transition: transform .16s ease; }
-.oneworks-relay__account[open] .oneworks-relay__account-chevron { transform: rotate(180deg); }
-.oneworks-relay__account-meta { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); }
-.oneworks-relay__account-fact { min-width: 0; display: grid; gap: 1px; }
-.oneworks-relay__account-fact-label { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 10px/1.2 ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; }
-.oneworks-relay__account-fact-value { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oneworks-relay__account-devices { min-width: 0; display: grid; gap: 4px; padding-block-start: 2px; }
-.oneworks-relay__devices-summary { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 600 11px/1.25 ui-sans-serif, system-ui, sans-serif; }
-.oneworks-relay__device-row { min-width: 0; min-height: 22px; display: grid; grid-template-columns: 10px minmax(0, max-content) auto minmax(0, 1fr); align-items: center; gap: 6px; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); }
-.oneworks-relay__device-status { width: 8px; height: 8px; border-radius: 999px; background: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); }
-.oneworks-relay__device-status[data-state="online"] { background: var(--success-color, #0f766e); }
-.oneworks-relay__device-status[data-state="stale"] { background: var(--warning-color, #d97706); }
-.oneworks-relay__device-status[data-state="offline"] { background: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); }
-.oneworks-relay__device-name { min-width: 0; max-width: min(280px, 32vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 650 12px/1.3 ui-sans-serif, system-ui, sans-serif; }
-.oneworks-relay__device-chip { min-width: 0; color: var(--primary-color, var(--ant-color-primary, #1677ff)); font: 650 11px/1.2 ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
-.oneworks-relay__device-features { min-width: 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11px/1.25 ui-sans-serif, system-ui, sans-serif; }
-.oneworks-relay__devices-empty { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 500 12px/1.4 ui-sans-serif, system-ui, sans-serif; }
+.oneworks-relay__device-title { display: flex; align-items: center; gap: var(--oneworks-overlay-icon-gap, 6px); }
+.oneworks-relay__device-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-relay__device-presence-icon { position: relative; overflow: visible; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); }
+.oneworks-relay__device-presence-icon[data-current="true"] { color: var(--primary-color, var(--ant-color-primary, #1677ff)); }
+.oneworks-relay__device-presence-dot { position: absolute; inset-inline-end: -2px; inset-block-end: -2px; width: 7px; height: 7px; border: 2px solid var(--bg-color, var(--ant-color-bg-container, #fff)); border-radius: 999px; background: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); }
+.oneworks-relay__device-presence-icon[data-state="online"] .oneworks-relay__device-presence-dot { background: var(--success-color, #0f766e); }
+.oneworks-relay__device-presence-icon[data-state="stale"] .oneworks-relay__device-presence-dot { background: var(--warning-color, #d97706); }
+.oneworks-relay__device-presence-icon[data-state="offline"] .oneworks-relay__device-presence-dot,
+.oneworks-relay__device-presence-icon[data-state="unknown"] .oneworks-relay__device-presence-dot { background: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); }
+.oneworks-relay__device-avatar { position: relative; width: 54px; height: 54px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); background: color-mix(in srgb, var(--text-color, #1f2328) 7%, transparent); overflow: visible; }
+.oneworks-relay__device-avatar[data-current="true"] { color: var(--primary-color, var(--ant-color-primary, #1677ff)); background: color-mix(in srgb, var(--primary-color, #2563eb) 14%, transparent); }
+.oneworks-relay__device-avatar .oneworks-relay__icon { font-size: 28px; }
+.oneworks-relay__device-avatar-dot { position: absolute; inset-inline-end: 3px; inset-block-end: 3px; width: 12px; height: 12px; border: 2px solid var(--bg-color, var(--ant-color-bg-container, #fff)); border-radius: 999px; background: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); }
+.oneworks-relay__device-avatar[data-state="online"] .oneworks-relay__device-avatar-dot { background: var(--success-color, #0f766e); }
+.oneworks-relay__device-avatar[data-state="stale"] .oneworks-relay__device-avatar-dot { background: var(--warning-color, #d97706); }
+.oneworks-relay__device-avatar[data-state="offline"] .oneworks-relay__device-avatar-dot,
+.oneworks-relay__device-avatar[data-state="unknown"] .oneworks-relay__device-avatar-dot { background: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); }
+.oneworks-relay__device-manager-row .relay-admin-list-table__native-title { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font-weight: 650; }
+.oneworks-relay__device-management-group-row .relay-admin-list-table__native-title { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); }
 .oneworks-relay__config { min-width: 0; display: grid; gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); padding: var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)) 0 0; }
 .oneworks-relay__config-header { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); }
 .oneworks-relay__config-title { min-width: 0; display: inline-flex; align-items: center; gap: var(--oneworks-overlay-icon-gap, 6px); margin: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 700 12px/1.25 ui-sans-serif, system-ui, sans-serif; }
@@ -106,17 +83,6 @@ ${adminListSurfaceCss}
 .oneworks-relay__config-state[data-state="error"] { border-color: color-mix(in srgb, var(--danger-color, #dc2626) 32%, transparent); color: var(--danger-color, #dc2626); background: color-mix(in srgb, var(--danger-color, #dc2626) 8%, transparent); }
 .oneworks-relay__config-empty { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 500 12px/1.4 ui-sans-serif, system-ui, sans-serif; }
 .oneworks-relay__config-error { color: var(--danger-color, #dc2626); font: 650 12px/1.4 ui-sans-serif, system-ui, sans-serif; overflow-wrap: anywhere; }
-.oneworks-relay__config-grid { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); }
-.oneworks-relay__config-fact { min-width: 0; display: grid; gap: 1px; }
-.oneworks-relay__config-fact-label { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 10px/1.2 ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; }
-.oneworks-relay__config-fact-value { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oneworks-relay__config-sources { min-width: 0; display: grid; gap: 4px; }
-.oneworks-relay__config-source { min-width: 0; min-height: 30px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); }
-.oneworks-relay__config-source[data-enabled="false"] { opacity: .72; }
-.oneworks-relay__config-source-copy { min-width: 0; display: grid; gap: 1px; }
-.oneworks-relay__config-source-name { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 700 12px/1.25 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oneworks-relay__config-source-meta, .oneworks-relay__config-source-state { min-width: 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 500 11px/1.25 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oneworks-relay__config-source-actions { min-width: 0; display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--oneworks-overlay-item-gap, 6px); }
 .oneworks-relay__share { min-width: 0; display: grid; gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); padding: var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)) 0 0; border-top: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
 .oneworks-relay__share-form { min-width: 0; display: grid; grid-template-columns: minmax(140px, .55fr) minmax(140px, .45fr); gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); }
 .oneworks-relay__share-editor { min-width: 0; display: grid; gap: 4px; }
@@ -126,6 +92,7 @@ ${adminListSurfaceCss}
 .oneworks-relay__share-empty { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 500 12px/1.4 ui-sans-serif, system-ui, sans-serif; }
 .oneworks-relay__profile { min-width: 0; display: grid; gap: 0; padding-block-start: 0; }
 .oneworks-relay__profile--accounts { min-height: min(560px, calc(100vh - 140px)); display: flex; flex-direction: column; gap: 0; padding-block-start: 0; }
+.oneworks-relay__profile--accounts.oneworks-relay__profile--launcher { padding-block-start: 10px; }
 .oneworks-relay__profile--token-detail { min-height: calc(100dvh - var(--route-container-header-overlay-height, 39px) - 36px); gap: 0; }
 .oneworks-relay__profile--token-detail .oneworks-relay__profile-section { min-height: inherit; display: flex; flex-direction: column; gap: 0; padding-block-start: 0; }
 .oneworks-relay__profile--team-detail { gap: 0; }
@@ -137,12 +104,14 @@ ${adminListSurfaceCss}
 .oneworks-relay__team-hero-copy strong { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 800 20px/1.12 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .oneworks-relay__team-hero-copy > span:last-child { min-width: 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 12px/1.35 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .oneworks-relay__profile--team-detail .oneworks-relay__profile-tabs { margin-block: 10px 0; }
+.oneworks-relay__profile--team-detail.oneworks-relay__profile--launcher .oneworks-relay__profile-tabs { margin-block-start: 0; }
 .oneworks-relay__team-detail-panel { min-width: 0; display: grid; gap: 10px; }
+.oneworks-relay__team-detail-panel--route-detail { gap: 0; }
 .oneworks-relay__team-detail-panel > .oneworks-relay__config:first-child,
 .oneworks-relay__team-detail-panel > .oneworks-relay__share:first-child,
 .oneworks-relay__team-detail-panel > .oneworks-relay__profile-section:first-child { padding-block-start: 0; }
 .oneworks-relay__team-detail-panel > .oneworks-relay__share:first-child { border-top: 0; }
-.oneworks-relay__team-overview, .oneworks-relay__team-configs, .oneworks-relay__team-share { min-width: 0; display: grid; gap: 10px; }
+.oneworks-relay__team-overview, .oneworks-relay__team-projects, .oneworks-relay__team-configs, .oneworks-relay__team-share { min-width: 0; display: grid; gap: 10px; }
 .oneworks-relay__team-metric-grid { min-width: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
 .oneworks-relay__team-metric-grid--compact { grid-template-columns: repeat(4, minmax(0, 1fr)); padding-bottom: 0; border-bottom: 0; }
 .oneworks-relay__team-metric { min-width: 0; min-height: 56px; display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: start; gap: 8px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--sub-border-color, #d8dee4) 78%, transparent); border-radius: var(--oneworks-overlay-item-radius, 6px); background: color-mix(in srgb, var(--bg-color, var(--ant-color-bg-container, #fff)) 96%, var(--text-color, #1f2328) 4%); }
@@ -171,11 +140,30 @@ ${adminListSurfaceCss}
 .oneworks-relay__team-state-icon { color: var(--primary-color, var(--ant-color-primary, #1677ff)); font-size: 20px; }
 .oneworks-relay__team-state-copy { min-width: 0; display: grid; gap: 3px; font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif; }
 .oneworks-relay__team-state-copy strong { color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 750 13px/1.3 ui-sans-serif, system-ui, sans-serif; }
-.oneworks-relay__team-config-list { min-width: 0; }
+.oneworks-relay__team-config-list, .oneworks-relay__team-project-list, .oneworks-relay__device-project-list { min-width: 0; }
 .oneworks-relay__team-configs--detail { gap: 0; }
 .oneworks-relay__team-configs--detail > .route-container-inline-breadcrumb { padding-block-start: 0; }
 .oneworks-relay__team-config-detail { min-width: 0; display: grid; gap: 0; }
 .oneworks-relay__team-configs--detail > .route-container-inline-breadcrumb + .oneworks-relay__team-config-detail .oneworks-relay__team-detail-row:first-child { padding-block-start: var(--subpage-section-gap, 10px); }
+.oneworks-relay__project-rule-detail { gap: 0; }
+.oneworks-relay__project-rule-tab-panel { min-width: 0; display: grid; padding-block-start: 0; }
+.oneworks-relay__project-rule-tabs + .oneworks-relay__project-rule-tab-panel { margin-block-start: 0; }
+.oneworks-relay__project-rule-list-panel, .oneworks-relay__project-rule-settings-panel { min-width: 0; display: grid; gap: var(--subpage-section-gap, 10px); }
+.oneworks-relay__project-rule-repositories, .oneworks-relay__project-rule-settings { min-width: 0; display: grid; gap: var(--subpage-section-gap, 10px); }
+.oneworks-relay__project-rule-repository-list { min-width: 0; display: grid; gap: 6px; }
+.oneworks-relay__project-rule-repository-row { min-width: 0; min-height: 34px; display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); align-items: center; gap: var(--subpage-section-gap, 10px); border-block-end: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); padding-block: 6px; }
+.oneworks-relay__project-rule-repository-kind { min-width: 0; display: inline-flex; align-items: center; gap: var(--oneworks-overlay-icon-gap, 6px); color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); overflow: hidden; }
+.oneworks-relay__project-rule-repository-copy { min-width: 0; display: grid; gap: 1px; }
+.oneworks-relay__project-rule-repository-copy strong { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 750 12px/1.25 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-relay__project-rule-repository-copy span { min-width: 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 11px/1.25 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-relay__project-rule-repository-control { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--oneworks-overlay-item-gap, 6px); }
+.oneworks-relay__project-rule-fields { min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px var(--subpage-section-gap, 10px); }
+.oneworks-relay__project-rule-field { min-width: 0; display: grid; gap: 4px; }
+.oneworks-relay__project-rule-field-copy { min-width: 0; display: grid; gap: 1px; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 11px/1.25 ui-sans-serif, system-ui, sans-serif; }
+.oneworks-relay__project-rule-field-copy strong { color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 750 12px/1.25 ui-sans-serif, system-ui, sans-serif; }
+.oneworks-relay__project-rule-card-actions { min-width: 0; display: flex; justify-content: flex-end; }
+.oneworks-relay__project-rule-files { min-width: 0; min-height: min(420px, calc(100dvh - 300px)); display: flex; }
+.oneworks-relay__project-rule-files-list { min-width: 0; flex: 1 1 auto; }
 .oneworks-relay__team-config-content { box-sizing: border-box; min-width: 0; min-height: min(540px, calc(100dvh - 250px)); display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 10px; padding-block-start: 0; border-top: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
 .oneworks-relay__team-config-content-editor { min-width: 0; min-height: 320px; display: grid; }
 .oneworks-relay--team-config-content-tab .oneworks-relay__team-config-content-editor { min-height: 0; }
@@ -190,12 +178,6 @@ ${adminListSurfaceCss}
 .oneworks-relay__team-config-action[data-primary="true"] { border-color: color-mix(in srgb, var(--primary-color, #1677ff) 30%, transparent); color: var(--primary-color, var(--ant-color-primary, #1677ff)); background: color-mix(in srgb, var(--primary-color, #1677ff) 8%, transparent); }
 .oneworks-relay__team-config-action-icon { width: 18px; min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
 .oneworks-relay__team-config-action-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oneworks-relay__team-version-list { min-width: 0; display: grid; gap: 0; }
-.oneworks-relay__team-version-row { min-width: 0; display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: var(--oneworks-overlay-icon-gap, 6px); padding: var(--subpage-section-gap, 10px) 0; border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
-.oneworks-relay__team-version-icon { width: 18px; min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); line-height: 1; }
-.oneworks-relay__team-version-copy { min-width: 0; display: grid; gap: 1px; }
-.oneworks-relay__team-version-copy strong { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 750 12px/1.25 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oneworks-relay__team-version-copy span { min-width: 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 600 11px/1.25 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .oneworks-relay__team-permission-note { min-width: 0; min-height: 34px; display: flex; align-items: center; gap: 8px; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 12px/1.35 ui-sans-serif, system-ui, sans-serif; }
 .oneworks-relay__team-share-layout { min-width: 0; display: grid; gap: 8px; }
 .oneworks-relay__team-share-actions { min-width: 0; display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--oneworks-overlay-item-gap, 6px); }
@@ -204,33 +186,19 @@ ${adminListSurfaceCss}
 .oneworks-relay__team-share-field > span { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 11px/1.25 ui-sans-serif, system-ui, sans-serif; }
 .oneworks-relay__team-share-field--wide { min-width: 0; }
 .oneworks-relay__host-interaction-list { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; }
-.oneworks-relay__host-interaction-list .interaction-list__item { padding-block: 10px; }
-.oneworks-relay__profile-search { width: 100%; min-height: 32px; display: flex; align-items: center; gap: var(--oneworks-overlay-icon-gap, 6px); border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); background: transparent; }
-.oneworks-relay__profile-search:focus-within { border-bottom-color: var(--primary-color, var(--ant-color-primary, #1677ff)); color: var(--primary-color, var(--ant-color-primary, #1677ff)); }
-.oneworks-relay__profile-search .oneworks-relay__input { height: 32px; font-size: 12px; }
 .oneworks-relay__login { min-width: 0; min-height: calc(100dvh - var(--route-container-header-overlay-height, 39px) - 24px); display: flex; flex-direction: column; }
 .oneworks-relay__login-frame { flex: 1 1 auto; width: 100%; min-height: inherit; border: 0; background: var(--page-background, var(--ant-color-bg-layout, #fff)); }
 .oneworks-relay__login-loading { min-height: 160px; display: inline-flex; align-items: center; justify-content: center; gap: var(--oneworks-overlay-icon-gap, 6px); color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 12px/1.35 ui-sans-serif, system-ui, sans-serif; }
 .oneworks-relay__servers { min-width: 0; display: grid; align-content: start; gap: 10px; }
-.oneworks-relay__server-management-list { min-width: 0; display: grid; gap: 0; }
-.oneworks-relay__server-row { min-width: 0; min-height: 36px; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 8px; border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
-.oneworks-relay__server-row .oneworks-relay__account-avatar { width: 18px; height: 18px; font-size: 8px; }
-.oneworks-relay__server-copy { min-width: 0; display: inline-flex; align-items: baseline; gap: 6px; }
-.oneworks-relay__server-copy strong { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 700 12px/1.25 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oneworks-relay__server-copy span { min-width: 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 500 11px/1.25 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oneworks-relay__server-actions { min-width: max-content; display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px; opacity: 0; transition: opacity .12s ease, visibility .12s ease; visibility: hidden; }
-.oneworks-relay__server-row:hover .oneworks-relay__server-actions, .oneworks-relay__server-row:focus-within .oneworks-relay__server-actions { opacity: 1; visibility: visible; }
-.oneworks-relay__server-management-form { min-width: 0; display: grid; grid-template-columns: minmax(130px, .35fr) minmax(180px, 1fr) auto; gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); align-items: center; }
+.oneworks-relay__server-management-form { --relay-admin-list-native-row-columns: var(--app-chrome-icon-size, 18px) minmax(0, 1fr) auto; }
 .oneworks-relay__messages { min-width: 0; display: grid; gap: 0; padding: 0; }
 .relay-message-center { display: grid; gap: 0; min-width: 0; }
 .relay-message-center__filters { display: grid; gap: 8px; min-width: 0; padding: 0 0 var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)); }
-.relay-message-center__search { width: 100%; min-height: 32px; display: flex; align-items: center; gap: var(--oneworks-overlay-icon-gap, 6px); color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); background: transparent; font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif; }
-.relay-message-center__search span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .relay-message-center__filter-row { display: flex; align-items: center; justify-content: flex-start; gap: 10px; min-width: 0; }
 .relay-message-center__category-filter { flex: 0 1 auto; min-width: 0; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; border-radius: 4px; background: transparent; padding: 0; }
 .relay-message-center__category-option { min-height: 24px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; border-radius: 4px; padding: 0 8px; color: var(--sub-text-color, var(--ant-color-text-secondary, #57606a)); font: 700 12px/1 ui-sans-serif, system-ui, sans-serif; }
 .relay-message-center__category-option.is-selected { color: var(--primary-color, var(--ant-color-primary, #1677ff)); background: color-mix(in srgb, var(--primary-color, #1677ff) 12%, transparent); }
-.relay-message-center__category-option .oneworks-relay__icon, .relay-message-center__search .oneworks-relay__icon { width: 14px; height: 14px; min-width: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
+.relay-message-center__category-option .oneworks-relay__icon { width: 14px; height: 14px; min-width: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
 .relay-message-center__empty { padding: var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)) 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 600 12px/1.4 ui-sans-serif, system-ui, sans-serif; }
 .relay-message-center__list { display: grid; min-width: 0; }
 .relay-message-center__item { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 10px; row-gap: 8px; padding: var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)) 0; border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
@@ -246,7 +214,7 @@ ${adminListSurfaceCss}
 .relay-message-center__item-meta { overflow: hidden; margin: 0; color: color-mix(in srgb, var(--placeholder-color, var(--ant-color-text-secondary, #57606a)) 80%, transparent); font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif; text-overflow: ellipsis; white-space: nowrap; }
 .relay-message-center__item-side { min-width: max-content; align-self: stretch; display: grid; grid-template-rows: auto 1fr; justify-items: end; }
 .relay-message-center__item-side time { align-self: end; color: color-mix(in srgb, var(--placeholder-color, var(--ant-color-text-secondary, #57606a)) 72%, transparent); font: 600 11px/1.3 ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
-.relay-message-center__badge { display: inline-flex; align-items: center; justify-content: center; min-height: 18px; border: 1px solid color-mix(in srgb, var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)) 74%, transparent); border-radius: 999px; padding: 0 6px; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); background: transparent; font: 700 11px/1.2 ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
+.relay-message-center__status { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 700 11px/1.2 ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
 .oneworks-relay__profile-header { min-width: 0; display: flex; align-items: center; justify-content: flex-start; gap: 14px; padding-block-end: var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)); border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
 .oneworks-relay__profile-title { min-width: 0; display: inline-grid; grid-template-columns: 60px minmax(0, 1fr); align-items: center; gap: 14px; }
 .oneworks-relay__profile-avatar { width: 60px; height: 60px; font-size: 18px; }
@@ -255,7 +223,8 @@ ${adminListSurfaceCss}
 .oneworks-relay__profile-heading-copy strong { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 750 20px/1.2 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .oneworks-relay__profile-heading-copy span:not(.oneworks-relay__profile-eyebrow) { min-width: 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 500 13px/1.3 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .oneworks-relay__profile-tabs { min-width: 0; }
-.oneworks-relay__document-tab-actions { min-width: 0; display: inline-flex; align-items: center; gap: 4px; }
+.oneworks-relay__profile--launcher > .oneworks-relay__profile-tabs { padding-block-start: 10px; }
+.oneworks-relay__document-tab-actions { min-width: 0; display: inline-flex; align-items: center; gap: var(--oneworks-overlay-item-gap, 6px); }
 .oneworks-relay__profile > .oneworks-relay__profile-header + .oneworks-relay__profile-tabs { margin-block-start: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); }
 .oneworks-relay__profile-tab-panel { min-width: 0; display: grid; }
 .oneworks-relay__profile-section { min-width: 0; display: grid; gap: var(--subpage-tertiary-gap, var(--ant-padding-xs, 8px)); padding-block-start: 0; }
@@ -268,9 +237,6 @@ ${adminListSurfaceCss}
 .oneworks-relay__personal-docs-list { min-width: 0; min-height: 92px; height: 100%; display: flex; }
 .oneworks-relay__personal-docs-list .interaction-list__scroll { min-height: 0; height: 100%; flex: 1 1 auto; }
 .oneworks-relay__personal-docs-list .interaction-list__items { min-height: 100%; height: 100%; flex: 1 0 auto; }
-.oneworks-relay__personal-docs-list .interaction-list__item { --interaction-list-active-indicator-left: -5px; align-items: center; border-radius: 0; cursor: pointer; padding: 10px 0; }
-.oneworks-relay__personal-docs-list .interaction-list__row:not(:last-child) .interaction-list__item { border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
-.oneworks-relay__personal-docs-list .interaction-list__leading { align-self: center; margin-top: 0; }
 .oneworks-relay__document-preview { position: absolute; inset-block: 0; inset-inline-end: 0; z-index: 2; width: min(680px, max(420px, calc(100% - 300px))); min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border-left: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); background: var(--bg-color, var(--ant-color-bg-container, #fff)); box-shadow: -12px 0 24px rgb(0 0 0 / 6%); animation: oneworks-relay-document-preview-in .2s ease-out both; will-change: opacity, transform; }
 .oneworks-relay__document-preview--closing { pointer-events: none; animation: oneworks-relay-document-preview-out .26s ease-in both; }
 .oneworks-relay__document-preview-head { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 0 0 var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)); border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
@@ -284,14 +250,6 @@ ${adminListSurfaceCss}
 .oneworks-relay__document-preview-badge { min-width: max-content; align-self: center; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 700 11px/1.2 ui-sans-serif, system-ui, sans-serif; }
 .oneworks-relay__document-preview-actions { min-width: max-content; display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .oneworks-relay__document-preview-close { flex: 0 0 auto; overflow: visible; }
-.oneworks-relay__document-preview-close::before { inset-block-end: auto; inset-block-start: calc(100% + 2px); inset-inline-start: auto; inset-inline-end: 5px; transform: translateY(-2px) rotate(45deg); }
-.oneworks-relay__document-preview-close::after { inset-block-end: auto; inset-block-start: calc(100% + 6px); inset-inline-start: auto; inset-inline-end: 0; max-width: 120px; transform: translateY(-4px); }
-.oneworks-relay__document-preview-close:hover::before,
-.oneworks-relay__document-preview-close:focus::before,
-.oneworks-relay__document-preview-close:focus-visible::before { transform: translateY(0) rotate(45deg); }
-.oneworks-relay__document-preview-close:hover::after,
-.oneworks-relay__document-preview-close:focus::after,
-.oneworks-relay__document-preview-close:focus-visible::after { transform: translateY(0); }
 .oneworks-relay__document-preview-body { min-width: 0; min-height: 0; display: grid; padding: 0; }
 .oneworks-relay__document-preview-editor { min-width: 0; min-height: 0; height: 100%; }
 .oneworks-relay__document-preview-pre { min-width: 0; min-height: 0; margin: 0; overflow: auto; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 500 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; }
@@ -311,11 +269,9 @@ ${adminListSurfaceCss}
 	.oneworks-relay__profile-message-body { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 500 11px/1.45 ui-sans-serif, system-ui, sans-serif; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 	.oneworks-relay__link-button { min-width: 0; border: 0; padding: 0; color: inherit; background: transparent; cursor: pointer; text-align: left; }
 	.oneworks-relay__link-button:hover, .oneworks-relay__link-button:focus-visible { color: var(--primary-color, var(--ant-color-primary, #1677ff)); outline: 0; }
-	.oneworks-relay__token-preview-cell { display: inline-flex; align-items: center; gap: 4px; }
+	.oneworks-relay__token-preview-cell { display: inline-flex; align-items: center; gap: var(--oneworks-overlay-item-gap, 6px); }
 	.oneworks-relay__token-preview { flex: 1 1 auto; min-width: 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 600 11px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.oneworks-relay__token-preview-cell .oneworks-relay__button { flex: 0 0 18px; width: 18px; min-width: 18px; min-height: 18px; }
-	.relay-admin-list-table__native-actions .oneworks-relay__button::after { inset-inline-start: auto; inset-inline-end: 0; transform: translate(0, 4px); }
-	.relay-admin-list-table__native-actions .oneworks-relay__button:hover::after, .relay-admin-list-table__native-actions .oneworks-relay__button:focus::after, .relay-admin-list-table__native-actions .oneworks-relay__button:focus-visible::after, .relay-admin-list-table__native-actions .oneworks-relay__button[data-tooltip-open="true"]::after { transform: translate(0, 0); }
 	.oneworks-relay__token-editor { min-width: 0; display: grid; gap: 0; }
 	.oneworks-relay__token-editor-row { min-width: 0; display: grid; grid-template-columns: minmax(180px, .42fr) minmax(180px, .58fr); gap: 16px; align-items: center; border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); padding: 10px 0; }
 	.oneworks-relay__token-editor-label { min-width: 0; display: grid; gap: 3px; }
@@ -344,6 +300,8 @@ ${adminListSurfaceCss}
   .oneworks-relay__personal-docs { min-height: auto; grid-template-columns: minmax(0, 1fr); overflow: visible; }
   .oneworks-relay__document-preview { position: relative; inset: auto; width: auto; min-height: 320px; border-top: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); border-left: 0; box-shadow: none; }
   .oneworks-relay__team-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .oneworks-relay__project-rule-repository-row,
+  .oneworks-relay__project-rule-fields { grid-template-columns: minmax(0, 1fr); }
   .oneworks-relay__team-share-form { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 520px) {
@@ -355,7 +313,5 @@ ${adminListSurfaceCss}
   .oneworks-relay__profile-grid { grid-template-columns: minmax(0, 1fr); }
   .oneworks-relay__team-metric-grid { grid-template-columns: minmax(0, 1fr); }
   .oneworks-relay__team-detail-row { grid-template-columns: minmax(0, 1fr); align-items: center; column-gap: var(--subpage-section-gap, 10px); row-gap: var(--subpage-section-gap, 10px); padding: var(--subpage-section-gap, 10px) 0; }
-  .oneworks-relay__device-row { grid-template-columns: 10px minmax(0, 1fr) auto; }
-  .oneworks-relay__device-features { grid-column: 2 / -1; }
 }
 `

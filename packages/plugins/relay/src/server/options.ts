@@ -16,7 +16,7 @@ import {
   officialRelayDevelopmentServicePresets,
   officialRelayServicePresets
 } from '../shared/official-services.js'
-import type { RelayOptions, RelayServerOptions } from './types.js'
+import type { RelayOptions, RelayPluginRuntimeRole, RelayServerOptions } from './types.js'
 import {
   isRecord,
   normalizeRelayPort,
@@ -213,7 +213,10 @@ export const resolveActiveRelayServer = (
   return servers.find(server => server.id === DEFAULT_OFFICIAL_RELAY_SERVER_ID) ?? servers[0]
 }
 
-export const normalizeOptions = (options: Record<string, unknown>): RelayOptions => {
+export const normalizeOptions = (
+  options: Record<string, unknown>,
+  runtimeRole: RelayPluginRuntimeRole = 'workspace'
+): RelayOptions => {
   const servers = resolveRelayServers(options)
   const activeServer = resolveActiveRelayServer(options)
   const officialServices = readOfficialServiceFlags(options)
@@ -225,7 +228,7 @@ export const normalizeOptions = (options: Record<string, unknown>): RelayOptions
     capabilities: {
       workspaceLauncher: toBoolean(
         options.exposeWorkspaceLauncher,
-        process.env.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager'
+        runtimeRole === 'manager'
       ),
       sessions: toBoolean(options.exposeSessions, true),
       terminal: toBoolean(options.exposeTerminal, false),

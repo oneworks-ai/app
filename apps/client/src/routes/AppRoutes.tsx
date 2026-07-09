@@ -104,6 +104,7 @@ export function AppRoutes() {
           <Route path='/plugins' element={<PluginStoreRoute />} />
           <Route path='/plugins/:scope' element={<PluginStoreRoute />} />
           <Route path='/plugins/:scope/:routeId/*' element={<PluginRoute />} />
+          <Route path='/launcher/*' element={<Navigate to='/' replace />} />
           <Route path='*' element={<NotFoundRoute />} />
         </Routes>
       </Suspense>

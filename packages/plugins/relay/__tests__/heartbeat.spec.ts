@@ -9,10 +9,37 @@ const createHeartbeatOptions = (fetchImpl: typeof fetch) => ({
     workspaceFiles: true,
     workspaceLauncher: true
   },
+  deviceInfo: {
+    arch: 'arm64',
+    deviceType: 'computer',
+    osName: 'Darwin',
+    osPlatform: 'darwin',
+    osRelease: '25.0.0',
+    runtime: 'node',
+    runtimeVersion: '26.0.0'
+  },
   deviceId: 'device-1',
   deviceName: 'Office Mac',
   deviceToken: 'device-token',
+  managementServerEnvironment: {
+    arch: 'arm64',
+    deviceType: 'computer',
+    osName: 'Darwin',
+    osPlatform: 'darwin',
+    osRelease: '25.0.0',
+    runtime: 'node',
+    runtimeVersion: '26.0.0'
+  },
   fetchImpl,
+  managementServerId: 'management-web-1',
+  managementServerKind: 'web',
+  managementServerName: 'Web Dev Server',
+  managementServerProjects: [{
+    id: 'workspace-project',
+    name: 'workspace',
+    title: 'workspace',
+    workspaceFolder: '/workspace'
+  }],
   pluginScope: 'relay',
   remoteBaseUrl: 'https://relay.example/',
   workspaceFolder: '/workspace'
@@ -59,8 +86,35 @@ describe('relay plugin heartbeat', () => {
         workspaceFiles: true,
         workspaceLauncher: true
       },
+      deviceInfo: {
+        arch: 'arm64',
+        deviceType: 'computer',
+        osName: 'Darwin',
+        osPlatform: 'darwin',
+        osRelease: '25.0.0',
+        runtime: 'node',
+        runtimeVersion: '26.0.0'
+      },
       deviceId: 'device-1',
       deviceName: 'Office Mac',
+      managementServerEnvironment: {
+        arch: 'arm64',
+        deviceType: 'computer',
+        osName: 'Darwin',
+        osPlatform: 'darwin',
+        osRelease: '25.0.0',
+        runtime: 'node',
+        runtimeVersion: '26.0.0'
+      },
+      managementServerId: 'management-web-1',
+      managementServerKind: 'web',
+      managementServerName: 'Web Dev Server',
+      managementServerProjects: [{
+        id: 'workspace-project',
+        name: 'workspace',
+        title: 'workspace',
+        workspaceFolder: '/workspace'
+      }],
       pluginScope: 'relay',
       workspaceFolder: '/workspace'
     })

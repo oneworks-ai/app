@@ -7,6 +7,30 @@ export interface Disposable {
 
 export type PluginReactNode = unknown
 
+export type PluginServerRuntimeRole = 'manager' | 'workspace'
+
+export interface PluginRuntimeEndpoint {
+  current?: boolean
+  id: string
+  projectHome?: string
+  role: PluginServerRuntimeRole
+  serverBaseUrl?: string
+  startedAt?: string
+  status?: 'offline' | 'online' | 'unknown'
+  workspaceFolder?: string
+  workspaceId?: string
+}
+
+export interface PluginRuntimeChannelInvocation {
+  payload?: unknown
+  target?: {
+    endpointId?: string
+    role?: PluginServerRuntimeRole
+    serverBaseUrl?: string
+    workspaceId?: string
+  }
+}
+
 export interface PluginReactHost {
   Fragment: unknown
   createElement: (
@@ -52,6 +76,11 @@ export interface PluginClientContext {
     }) => { close?: () => void; id?: string } | void
   }
   options?: Record<string, unknown>
+  runtime?: {
+    endpoint?: PluginRuntimeEndpoint
+    invokeChannel?: (channelId: string, invocation?: PluginRuntimeChannelInvocation) => Promise<unknown>
+    listEndpoints?: () => Promise<PluginRuntimeEndpoint[]>
+  }
   slots?: {
     register: (slot: string, contribution: Record<string, unknown> & { id: string }) => Disposable
   }
@@ -78,9 +107,25 @@ export interface PluginViewContext {
     ) => Promise<Record<string, unknown>>
     value?: Record<string, unknown>
   }
+  host?: {
+    isDarkMode?: boolean
+    language?: string
+    launcherSearch?: {
+      value?: string
+    }
+    resolvedThemeMode?: 'dark' | 'light'
+    surface?: 'drawer' | 'launcher' | 'route' | 'workbench'
+    themeMode?: 'dark' | 'light' | 'system'
+  }
+  runtime?: {
+    endpoint?: PluginRuntimeEndpoint
+    invokeChannel?: (channelId: string, invocation?: PluginRuntimeChannelInvocation) => Promise<unknown>
+    listEndpoints?: () => Promise<PluginRuntimeEndpoint[]>
+  }
   route?: {
     setActions?: (actions?: PluginViewRouteHeaderAction[]) => void
     setBreadcrumb?: (breadcrumb?: PluginViewRouteHeaderBreadcrumb) => void
+    setLauncherChrome?: (chrome?: PluginViewRouteLauncherChrome) => void
     setTitle?: (title?: string) => void
   }
   scope?: string
@@ -91,6 +136,7 @@ export interface PluginViewContext {
     Input?: unknown
     InteractionList?: unknown
     NativeTabs?: unknown
+    SearchInput?: unknown
     Select?: unknown
   }
 }
@@ -113,6 +159,20 @@ export interface PluginHostInputComponentProps {
   rows?: number
   size?: 'large' | 'middle' | 'small'
   type?: 'password' | 'textarea' | 'text'
+  value?: string
+}
+
+export interface PluginHostSearchInputComponentProps {
+  allowClear?: boolean
+  ariaLabel?: string
+  autoFocus?: boolean
+  className?: string
+  defaultValue?: string
+  disabled?: boolean
+  onChange?: (value: string) => void
+  onCommit?: (value: string) => void
+  placeholder?: string
+  suffix?: PluginReactNode
   value?: string
 }
 
@@ -143,6 +203,7 @@ export interface PluginHostComponentPropsById {
   input: PluginHostInputComponentProps
   interactionList: PluginHostInteractionListComponentProps
   nativeTabs: PluginHostNativeTabsComponentProps
+  searchInput: PluginHostSearchInputComponentProps
   select: PluginHostSelectComponentProps
 }
 
@@ -165,6 +226,7 @@ export interface PluginHostInteractionListItem {
     type: 'image'
   }
   iconFilled?: boolean
+  iconState?: 'offline' | 'online' | 'stale' | 'unknown'
   itemType?: 'groupTitle' | 'listItem'
   key: string
   meta?: string
@@ -190,7 +252,7 @@ export interface PluginHostInteractionListAction<
 export interface PluginHostInteractionListComponentProps<
   TItem extends PluginHostInteractionListItem = PluginHostInteractionListItem,
 > {
-  actionDisplay?: 'default' | 'inline'
+  actionDisplay?: 'inline' | 'menu'
   actions?: (item: TItem) => Array<PluginHostInteractionListAction<TItem>>
   activeKey?: string
   border?: 'bordered' | 'borderless'
@@ -200,14 +262,18 @@ export interface PluginHostInteractionListComponentProps<
   iconSize?: number | string
   inlineActionLimit?: number
   items: TItem[]
+  mode?: 'grouped' | 'launcher' | 'resource'
   padding?: 'default' | 'none'
   search?: {
     defaultValue?: string
     filterItems?: boolean
     placeholder: string
+    renderInput?: boolean
+    suffix?: PluginReactNode
     value?: string
     onChange?: (value: string) => void
   }
+  showItemDescription?: boolean
   splitActionHover?: boolean
   onSelect?: (item: TItem) => void
 }
@@ -255,6 +321,14 @@ export interface PluginViewRouteHeaderBreadcrumb {
   ariaLabel?: string
   backLabel?: string
   currentTitle?: string
+}
+
+export interface PluginViewRouteLauncherChrome {
+  avatarInitials?: string
+  avatarUrl?: string
+  icon?: string
+  searchTitle?: string
+  title?: string
 }
 
 export interface RelayStatus {
@@ -334,14 +408,18 @@ export interface RelayConfigDistributionSourceStatus {
   versionId?: string
 }
 
-export type RelayPersonalDocumentSyncKind = 'agents'
+export type RelayPersonalDocumentSyncKind = 'agents' | 'ooAgents' | 'ooRules'
 
 export interface RelayPersonalDocumentSyncPreferences {
   agents?: boolean
+  ooAgents?: boolean
+  ooRules?: boolean
 }
 
 export interface RelayPersonalDocumentSyncCounts {
   agents?: number
+  ooAgents?: number
+  ooRules?: number
 }
 
 export interface RelayPersonalDocumentSyncStatus {
@@ -415,10 +493,54 @@ export interface RelayDeviceSummary {
   alias?: string
   capabilities?: Record<string, unknown>
   createdAt?: string
+  deviceInfo?: RelayDeviceEnvironmentSummary
+  id?: string
+  isCurrentClientDevice?: boolean
+  ip?: string
+  lastSeenAt?: string
+  lastSeenIp?: string
+  managementServers?: RelayDeviceManagementServerSummary[]
+  name?: string
+  pluginScope?: string
+  registeredIp?: string
+  status?: string
+  workspaceFolder?: string
+}
+
+export interface RelayDeviceEnvironmentSummary {
+  arch?: string
+  deviceType?: string
+  osName?: string
+  osPlatform?: string
+  osRelease?: string
+  osType?: string
+  osVersion?: string
+  runtime?: string
+  runtimeVersion?: string
+}
+
+export interface RelayDeviceProjectSummary {
+  createdAt?: string
   id?: string
   lastSeenAt?: string
   name?: string
+  status?: string
+  title?: string
+  workspaceFolder?: string
+}
+
+export interface RelayDeviceManagementServerSummary {
+  createdAt?: string
+  environment?: RelayDeviceEnvironmentSummary
+  id?: string
+  ip?: string
+  kind?: string
+  lastSeenAt?: string
+  lastSeenIp?: string
+  name?: string
   pluginScope?: string
+  projects?: RelayDeviceProjectSummary[]
+  registeredIp?: string
   status?: string
   workspaceFolder?: string
 }
@@ -568,7 +690,7 @@ export interface RelayProfileStatus {
   auditEvents?: RelayProfileOpenApiAuditEvent[]
   candidates?: RelayAuthAccount[]
   devices?: RelayDeviceSummary[]
-  errors?: Partial<Record<'audit' | 'devices' | 'messages' | 'security' | 'teams', string>>
+  errors?: Partial<Record<'audit' | 'devices' | 'messages' | 'profile' | 'security' | 'teams', string>>
   invitations?: RelayProfileTeamInvitation[]
   message?: string
   messages?: RelayProfileMessage[]
@@ -588,7 +710,7 @@ export interface RelayProfileStatus {
 }
 
 export type RelayProfileTab = 'account' | 'devices' | 'documents' | 'security' | 'teams' | 'tokens'
-export type RelayProfileTeamDetailTab = 'configs' | 'documents' | 'overview'
+export type RelayProfileTeamDetailTab = 'configs' | 'documents' | 'overview' | 'projects'
 export type RelayProfilePage = 'accounts' | 'login' | 'messages' | 'profile' | 'servers'
 
 export interface RelayProfileViewState {
@@ -665,6 +787,29 @@ export interface RelayConfigShareProfileVersion {
   version?: number
 }
 
+export interface RelayConfigProjectRule {
+  allow?: string[]
+  deny?: string[]
+}
+
+export interface RelayConfigTarget {
+  teamIds?: string[]
+  userIds?: string[]
+}
+
+export interface RelayConfigShareProfileAssignment {
+  createdAt?: string
+  enabled?: boolean
+  id?: string
+  mode?: 'default' | 'override'
+  priority?: number
+  profileId?: string
+  project?: RelayConfigProjectRule | null
+  target?: RelayConfigTarget | null
+  updatedAt?: string | null
+  versionId?: string | null
+}
+
 export interface RelayConfigShareProfile {
   activeVersionId?: string | null
   assignmentCount?: number
@@ -682,7 +827,7 @@ export interface RelayConfigShareProfile {
 }
 
 export interface RelayConfigShareProfileDetail {
-  assignments?: unknown[]
+  assignments?: RelayConfigShareProfileAssignment[]
   profile?: RelayConfigShareProfile
   versions?: RelayConfigShareProfileVersion[]
 }

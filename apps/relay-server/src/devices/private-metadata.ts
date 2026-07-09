@@ -4,18 +4,43 @@ import process from 'node:process'
 
 import type { RelayDevice, RelayEncryptedPayload, RelayServerArgs } from '../types.js'
 import { isRecord } from '../utils.js'
+import { cleanDeviceMetadataText, cleanNetworkAddress, normalizeDeviceEnvironmentInfo } from './device-environment.js'
+import type { RelayDeviceEnvironmentInfo } from './device-environment.js'
+import { normalizeManagementServers } from './management-server-metadata.js'
+import type { RelayDeviceManagementServerMetadata } from './management-server-metadata.js'
+
+export { normalizeDeviceEnvironmentInfo } from './device-environment.js'
+export type { RelayDeviceEnvironmentInfo } from './device-environment.js'
+export { upsertDeviceManagementServerMetadata } from './management-server-metadata.js'
+export type { RelayDeviceManagementServerMetadata } from './management-server-metadata.js'
+export type { RelayDeviceManagementServerProjectMetadata } from './management-server-projects.js'
 
 export interface RelayDevicePrivateMetadata {
   alias?: string
   capabilities: Record<string, unknown>
+  deviceInfo?: RelayDeviceEnvironmentInfo
+  lastSeenIp?: string
+  managementServers?: RelayDeviceManagementServerMetadata[]
   name: string
   pluginScope?: string
+  registeredIp?: string
   workspaceFolder?: string
 }
 
-const metadataAlgorithm = 'aes-256-gcm' as const
+type RelayDevicePrivateMetadataInput =
+  & Partial<
+    Omit<
+      RelayDevicePrivateMetadata,
+      'capabilities' | 'deviceInfo' | 'managementServers'
+    >
+  >
+  & {
+    capabilities?: unknown
+    deviceInfo?: unknown
+    managementServers?: unknown
+  }
 
-const cleanText = (value: unknown) => typeof value === 'string' ? value.trim() : ''
+const metadataAlgorithm = 'aes-256-gcm' as const
 
 export const hashDeviceToken = (token: string) => `sha256:${createHash('sha256').update(token).digest('base64url')}`
 
@@ -34,7 +59,9 @@ export const deviceTokenMatches = (device: RelayDevice, token: string) => {
 }
 
 const deviceMetadataSecret = (args: Pick<RelayServerArgs, 'adminToken' | 'dataPath' | 'deviceMetadataSecret'>) => {
-  const configured = cleanText(args.deviceMetadataSecret ?? process.env.ONEWORKS_RELAY_DEVICE_METADATA_SECRET)
+  const configured = cleanDeviceMetadataText(
+    args.deviceMetadataSecret ?? process.env.ONEWORKS_RELAY_DEVICE_METADATA_SECRET
+  )
   if (configured !== '') return configured
   if (args.adminToken !== '') return args.adminToken
   return `oneworks-relay-device-metadata:${args.dataPath}`
@@ -54,18 +81,26 @@ const deviceMetadataAad = (deviceId: string, userId: string | undefined) =>
   Buffer.from(`${deviceId}\0${userId ?? 'unowned'}`, 'utf8')
 
 export const normalizeDevicePrivateMetadata = (
-  input: Partial<RelayDevicePrivateMetadata>,
+  input: RelayDevicePrivateMetadataInput,
   fallbackName: string
 ): RelayDevicePrivateMetadata => {
-  const alias = cleanText(input.alias)
-  const name = cleanText(input.name)
-  const workspaceFolder = cleanText(input.workspaceFolder)
-  const pluginScope = cleanText(input.pluginScope)
+  const alias = cleanDeviceMetadataText(input.alias)
+  const name = cleanDeviceMetadataText(input.name)
+  const workspaceFolder = cleanDeviceMetadataText(input.workspaceFolder)
+  const pluginScope = cleanDeviceMetadataText(input.pluginScope)
+  const lastSeenIp = cleanNetworkAddress(input.lastSeenIp)
+  const registeredIp = cleanNetworkAddress(input.registeredIp)
+  const deviceInfo = normalizeDeviceEnvironmentInfo(input.deviceInfo)
+  const managementServers = normalizeManagementServers(input.managementServers)
   return {
     ...(alias === '' ? {} : { alias }),
     capabilities: isRecord(input.capabilities) ? input.capabilities : {},
+    ...(deviceInfo == null ? {} : { deviceInfo }),
+    ...(lastSeenIp === '' ? {} : { lastSeenIp }),
+    ...(managementServers.length === 0 ? {} : { managementServers }),
     name: name === '' ? fallbackName : name,
     ...(pluginScope === '' ? {} : { pluginScope }),
+    ...(registeredIp === '' ? {} : { registeredIp }),
     ...(workspaceFolder === '' ? {} : { workspaceFolder })
   }
 }
@@ -74,6 +109,7 @@ export const legacyDevicePrivateMetadata = (device: RelayDevice): RelayDevicePri
   normalizeDevicePrivateMetadata({
     alias: device.alias,
     capabilities: device.capabilities,
+    deviceInfo: undefined,
     name: device.name,
     pluginScope: device.pluginScope,
     workspaceFolder: device.workspaceFolder
@@ -122,8 +158,12 @@ export const decryptDevicePrivateMetadata = (
     return normalizeDevicePrivateMetadata({
       alias: typeof parsed.alias === 'string' ? parsed.alias : undefined,
       capabilities: isRecord(parsed.capabilities) ? parsed.capabilities : undefined,
+      deviceInfo: parsed.deviceInfo,
+      lastSeenIp: typeof parsed.lastSeenIp === 'string' ? parsed.lastSeenIp : undefined,
+      managementServers: Array.isArray(parsed.managementServers) ? parsed.managementServers : undefined,
       name: typeof parsed.name === 'string' ? parsed.name : undefined,
       pluginScope: typeof parsed.pluginScope === 'string' ? parsed.pluginScope : undefined,
+      registeredIp: typeof parsed.registeredIp === 'string' ? parsed.registeredIp : undefined,
       workspaceFolder: typeof parsed.workspaceFolder === 'string' ? parsed.workspaceFolder : undefined
     }, device.id)
   } catch {

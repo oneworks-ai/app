@@ -14,6 +14,7 @@ import { Sender } from '#~/components/chat/sender/Sender'
 import { ChatStatusBar } from '#~/components/chat/status-bar/ChatStatusBar'
 import { InteractionList } from '#~/components/interaction-list'
 import type { InteractionListAction, InteractionListItem } from '#~/components/interaction-list'
+import { ListSearchInput } from '#~/components/list-search-input'
 import { MobileAwareSelect } from '#~/components/mobile-aware-select/MobileAwareSelect'
 import { useMonacoTheme } from '#~/components/monaco/use-monaco-theme'
 import { NativeTabs } from '#~/components/native-tabs'
@@ -54,8 +55,10 @@ import type {
   PluginHostOverlayMenuItem,
   PluginHostOverlayTreeNode,
   PluginHostProjectFileTreeNode,
+  PluginHostSearchInputComponentProps,
   PluginHostSegmentedComponentProps,
-  PluginHostSenderComponentProps
+  PluginHostSenderComponentProps,
+  PluginViewSurface
 } from './plugin-manifest'
 
 export interface PluginHostComponentEntry {
@@ -348,6 +351,40 @@ function PluginHostInput(props: PluginHostInputComponentProps) {
   )
 }
 
+function PluginHostSearchInput(props: PluginHostSearchInputComponentProps) {
+  const [value, setValue] = useState(props.value ?? props.defaultValue ?? '')
+
+  useEffect(() => {
+    if (props.value !== undefined) {
+      setValue(props.value)
+    }
+  }, [props.value])
+
+  const handleChange = (nextValue: string) => {
+    if (props.value === undefined) {
+      setValue(nextValue)
+    }
+    props.onChange?.(nextValue)
+  }
+
+  const currentValue = props.value ?? value
+
+  return (
+    <ListSearchInput
+      allowClear={props.allowClear}
+      ariaLabel={props.ariaLabel}
+      autoFocus={props.autoFocus}
+      className={props.className}
+      disabled={props.disabled}
+      onChange={handleChange}
+      onCommit={props.onCommit}
+      placeholder={props.placeholder}
+      suffix={props.suffix}
+      value={currentValue}
+    />
+  )
+}
+
 const normalizeSelectValue = (
   value: PluginHostComponentPropsById['select']['value'],
   mode: PluginHostComponentPropsById['select']['mode']
@@ -452,6 +489,7 @@ const toPluginHostInteractionListItem = (
   disabled: item.disabled,
   icon: item.avatar == null ? item.icon : renderPluginHostInteractionListAvatar(item.avatar),
   iconFilled: item.iconFilled,
+  iconState: item.iconState,
   itemType: item.itemType,
   key: item.key,
   meta: item.meta,
@@ -510,13 +548,24 @@ const filterPluginHostInteractionListItems = (
   })
 }
 
-function PluginHostInteractionList(props: PluginHostInteractionListComponentProps) {
-  const descriptionPlacement = props.descriptionPlacement ?? 'content'
-  const actionDisplay = props.actionDisplay === 'inline' ? 'inline' : 'menu'
+type PluginHostInteractionListInternalProps = PluginHostInteractionListComponentProps & {
+  launcherSearchValue?: string
+  surface?: PluginViewSurface
+}
+
+function PluginHostInteractionList(props: PluginHostInteractionListInternalProps) {
+  const isLauncherSurface = props.surface === 'launcher'
+  const usesLauncherSearch = isLauncherSurface && props.search != null
+  const descriptionPlacement = props.descriptionPlacement ?? (isLauncherSurface ? 'titleHover' : 'content')
+  const actionDisplay = isLauncherSurface ? 'menu' : props.actionDisplay ?? 'menu'
+  const mode = isLauncherSurface ? 'launcher' : props.mode
+  const showItemDescription = props.showItemDescription ?? !isLauncherSurface
   const [uncontrolledSearchValue, setUncontrolledSearchValue] = useState(
     () => props.search?.value ?? props.search?.defaultValue ?? ''
   )
-  const searchValue = props.search?.value ?? uncontrolledSearchValue
+  const searchValue = usesLauncherSearch
+    ? props.launcherSearchValue ?? ''
+    : props.search?.value ?? uncontrolledSearchValue
   const sourceItems = useMemo(
     () =>
       props.search?.filterItems === false
@@ -542,9 +591,11 @@ function PluginHostInteractionList(props: PluginHostInteractionListComponentProp
     : {
       filterPanel: undefined,
       placeholder: props.search.placeholder,
+      renderInput: usesLauncherSearch ? false : props.search.renderInput,
       suffix: props.search.suffix,
       value: searchValue,
       onChange: (value: string) => {
+        if (usesLauncherSearch) return
         setUncontrolledSearchValue(value)
         props.search?.onChange(value)
       }
@@ -567,18 +618,22 @@ function PluginHostInteractionList(props: PluginHostInteractionListComponentProp
       ].filter(Boolean).join(' ')}
       descriptionPlacement={descriptionPlacement}
       emptyText={props.emptyText}
-      iconSize={props.iconSize}
-      inlineActionLimit={props.inlineActionLimit}
+      iconSize={props.iconSize ?? (isLauncherSurface ? 20 : undefined)}
+      inlineActionLimit={props.inlineActionLimit ?? (isLauncherSurface ? 1 : undefined)}
       items={items}
-      padding={props.padding}
+      padding={props.padding ?? (isLauncherSurface ? 'none' : undefined)}
       search={search}
-      splitActionHover={props.splitActionHover}
+      showItemDescription={showItemDescription}
+      splitActionHover={isLauncherSurface ? false : props.splitActionHover ?? true}
+      mode={mode}
       onSelect={item => props.onSelect?.(itemsByKey.get(item.key) ?? (item as PluginHostInteractionListItem))}
     />
   )
 }
 
-function PluginHostNativeTabs(props: PluginHostComponentPropsById['nativeTabs']) {
+function PluginHostNativeTabs(
+  props: PluginHostComponentPropsById['nativeTabs'] & { surface?: PluginViewSurface }
+) {
   return (
     <NativeTabs
       activeKey={props.activeKey}
@@ -1125,15 +1180,24 @@ function PluginHostProjectFileTree(props: PluginHostComponentPropsById['projectF
   )
 }
 
-export const pluginHostComponentReactApi = {
+export const createPluginHostComponentReactApi = (
+  surface: PluginViewSurface = 'route',
+  options: { launcherSearchValue?: string } = {}
+): PluginHostComponentReactApi => ({
   ActionBar: PluginHostActionBar,
   Button: PluginHostButton,
   CodeEditor: PluginHostCodeEditor,
   Icon: PluginHostIcon,
   Input: PluginHostInput,
-  InteractionList: PluginHostInteractionList,
+  InteractionList: props => (
+    <PluginHostInteractionList
+      {...props}
+      launcherSearchValue={options.launcherSearchValue}
+      surface={surface}
+    />
+  ),
   List: PluginHostList,
-  NativeTabs: PluginHostNativeTabs,
+  NativeTabs: props => <PluginHostNativeTabs {...props} surface={surface} />,
   OverlayDropdown: PluginHostOverlayDropdown,
   OverlayMenu: PluginHostOverlayMenu,
   OverlaySearchMenu: PluginHostOverlaySearchMenu,
@@ -1142,15 +1206,19 @@ export const pluginHostComponentReactApi = {
   OverlaySelectLabel: PluginHostOverlaySelectLabel,
   OverlayTree: PluginHostOverlayTree,
   ProjectFileTree: PluginHostProjectFileTree,
+  SearchInput: PluginHostSearchInput,
   Select: PluginHostSelect,
   Segmented: PluginHostSegmented,
   Sender: PluginSenderHost,
   Switch: PluginHostSwitch
-} satisfies PluginHostComponentReactApi
+})
+
+export const pluginHostComponentReactApi = createPluginHostComponentReactApi()
 
 export const renderPluginHostComponent = (
   component: PluginHostComponentId,
-  props?: PluginHostComponentPropsById[PluginHostComponentId]
+  props?: PluginHostComponentPropsById[PluginHostComponentId],
+  surface: PluginViewSurface = 'route'
 ) => {
   if (component === 'actionBar') {
     return <PluginHostActionBar {...((props as PluginHostComponentPropsById['actionBar'] | undefined) ?? {})} />
@@ -1184,6 +1252,7 @@ export const renderPluginHostComponent = (
           emptyText: null,
           items: []
         })}
+        surface={surface}
       />
     )
   }
@@ -1196,8 +1265,13 @@ export const renderPluginHostComponent = (
     return (
       <PluginHostNativeTabs
         {...((props as PluginHostComponentPropsById['nativeTabs'] | undefined) ?? { items: [] })}
+        surface={surface}
       />
     )
+  }
+
+  if (component === 'searchInput') {
+    return <PluginHostSearchInput {...((props as PluginHostComponentPropsById['searchInput'] | undefined) ?? {})} />
   }
 
   if (component === 'select') {

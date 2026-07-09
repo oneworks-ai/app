@@ -4,8 +4,14 @@ import type { IncomingHttpHeaders } from 'node:http'
 import type {
   ConfigJsonSchema,
   PluginConfigManifest,
+  PluginContributionAvailability,
+  PluginContributionSurface,
   PluginLocalizedText,
-  PluginRuntimeApiRegistration
+  PluginRuntimeApiRegistration,
+  PluginRuntimeChannelInvocation,
+  PluginRuntimeChannelRequest,
+  PluginRuntimeEndpoint,
+  PluginServerRuntimeRole
 } from '@oneworks/types'
 
 export const PLUGIN_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/
@@ -30,15 +36,16 @@ export interface PluginClientManifest {
 
 export interface PluginServerManifest {
   entry?: string
+  roles: PluginServerRuntimeRole[]
 }
 
-export interface PluginContributionLauncherSearchProvider {
+export interface PluginContributionLauncherSearchProvider extends PluginContributionAvailability {
   id: string
   title?: string
   command: string
 }
 
-export interface PluginContributionManifest {
+export interface PluginContributionManifest extends PluginContributionAvailability {
   navItems?: unknown[]
   menuItems?: unknown[]
   chatHeaderActions?: unknown[]
@@ -46,6 +53,7 @@ export interface PluginContributionManifest {
   workbenchTabs?: unknown[]
   workspaceDrawerTabs?: unknown[]
   launcherSearchProviders?: PluginContributionLauncherSearchProvider[]
+  surfaces?: PluginContributionSurface[]
   [key: string]: unknown
 }
 
@@ -97,6 +105,10 @@ export interface PluginCommandInvocation {
 
 export type PluginCommandHandler = (payload: unknown) => unknown | Promise<unknown>
 
+export type PluginRuntimeChannelHandler = (
+  request: PluginRuntimeChannelRequest
+) => unknown | Promise<unknown>
+
 export interface PluginProxyRequest {
   method: string
   path: string
@@ -144,6 +156,12 @@ export interface PluginSessionAdapter {
 
 export interface PluginServerContext {
   scope: string
+  runtime: {
+    endpoint: PluginRuntimeEndpoint
+    invokeChannel: (channelId: string, invocation?: PluginRuntimeChannelInvocation) => Promise<unknown>
+    registerChannel: (channelId: string, handler: PluginRuntimeChannelHandler) => void
+    role: PluginServerRuntimeRole
+  }
   pluginRoot: string
   workspaceFolder: string
   projectHome: string

@@ -8,6 +8,8 @@ import type { KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 
+import { RouteContainerHeaderActionButton } from '@oneworks/components/route-layout'
+import type { RouteContainerHeaderActionItem, RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
 import { DEFAULT_ICON_THEME } from '@oneworks/icon/presets'
 import { matchesPinyinSearch, normalizePinyinSearchQuery } from '@oneworks/utils/pinyin-search'
 
@@ -22,7 +24,6 @@ import {
   stopLauncherWorkspace
 } from '#~/api/launcher'
 import {
-  createLauncherRelayLoginUrl,
   createLauncherRelayWorkspaceInDirectory,
   getLauncherRelayStatus,
   listLauncherRelayDirectories,
@@ -36,7 +37,11 @@ import { getProjectFileIconMeta } from '#~/components/workspace/project-file-tre
 import { useInterfaceLanguageConfig } from '#~/hooks/use-interface-language-config'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { appLanguageOptions, getActiveAppLanguageOption } from '#~/i18n'
-import { buildWorkspaceClientBase, getClientBase, isServerManagerRole, mergeRuntimeEnv } from '#~/runtime-config'
+import { PluginViewHost } from '#~/plugins/PluginHost'
+import { usePluginContext } from '#~/plugins/plugin-context'
+import { resolvePluginContributionText } from '#~/plugins/plugin-i18n'
+import type { PluginLauncherSearchProvider, PluginViewRouteLauncherChrome } from '#~/plugins/plugin-manifest'
+import { buildWorkspaceClientBase, isServerManagerRole, mergeRuntimeEnv } from '#~/runtime-config'
 import { copyTextWithFeedback } from '#~/utils/copy'
 import { deferImeCompositionEnd, isImeCompositionKeyEvent } from '#~/utils/keyboard-events'
 import { createOneWorksIconDataUri } from '#~/utils/oneworks-icon'
@@ -49,6 +54,12 @@ import type {
   LauncherRelayDirectoryTarget
 } from './launcher-relay-projects'
 import { normalizeLauncherRelayDirectoryTargets, normalizeLauncherRelayProjectGroups } from './launcher-relay-projects'
+import {
+  readLauncherLocationState,
+  readLauncherViewModeFromLocation,
+  resolveLauncherUrlNavigation
+} from './launcher-route-state'
+import type { LauncherRoutingMode, LauncherViewMode } from './launcher-route-state'
 
 const emptyWorkspaceSelectorState: DesktopWorkspaceSelectorState = {
   recentProjects: [],
@@ -70,6 +81,7 @@ const LAUNCHER_RECENT_SELECTION_DISPLAY_LIMIT = 3
 const LAUNCHER_RECENT_SELECTIONS_STORAGE_KEY = 'oneworks_launcher_recent_selections'
 const LAUNCHER_QUERY_SEARCH_PARAM = 'q'
 const LAUNCHER_VIEW_SEARCH_PARAM = 'view'
+const LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM = 'path'
 const CLONE_DESTINATION_FAVORITE_LIMIT = 24
 const CLONE_DESTINATION_RECENT_LIMIT = 12
 const CLONE_DESTINATION_FAVORITES_STORAGE_KEY = 'oneworks_launcher_clone_destination_favorites'
@@ -95,155 +107,208 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
 )
 
-interface LauncherRelayAccount {
-  accountKey?: string
-  avatarUrl?: string
-  email?: string
-  enabled?: boolean
-  loginId?: string
-  name?: string
-  role?: string
-  serverAlias?: string
-  serverId?: string
-  serverUrl?: string
-  sessionAuthenticated?: boolean
-  userId?: string
-}
-
-interface LauncherRelayServer {
-  active?: boolean
-  id?: string
-  name?: string
-  official?: boolean
-  remoteBaseUrl?: string
-}
-
 const cleanLauncherText = (value: unknown) => {
   const text = typeof value === 'string' ? value.trim() : ''
   return text === '' ? undefined : text
 }
 
-const readLauncherRelayAccounts = (status: unknown): LauncherRelayAccount[] => {
-  if (!isRecord(status) || !Array.isArray(status.accounts)) return []
-
-  return status.accounts
-    .filter(isRecord)
-    .map(account => ({
-      accountKey: cleanLauncherText(account.accountKey),
-      avatarUrl: cleanLauncherText(account.avatarUrl),
-      email: cleanLauncherText(account.email),
-      enabled: typeof account.enabled === 'boolean' ? account.enabled : undefined,
-      loginId: cleanLauncherText(account.loginId),
-      name: cleanLauncherText(account.name),
-      role: cleanLauncherText(account.role),
-      serverAlias: cleanLauncherText(account.serverAlias),
-      serverId: cleanLauncherText(account.serverId),
-      serverUrl: cleanLauncherText(account.serverUrl),
-      sessionAuthenticated: typeof account.sessionAuthenticated === 'boolean'
-        ? account.sessionAuthenticated
-        : undefined,
-      userId: cleanLauncherText(account.userId)
-    }))
+interface LauncherPluginRouteState {
+  routeId: string
+  scope: string
 }
 
-const readLauncherRelayServers = (status: unknown): LauncherRelayServer[] => {
-  if (!isRecord(status) || !Array.isArray(status.servers)) return []
-
-  return status.servers
-    .filter(isRecord)
-    .map(server => ({
-      active: typeof server.active === 'boolean' ? server.active : undefined,
-      id: cleanLauncherText(server.id),
-      name: cleanLauncherText(server.name),
-      official: typeof server.official === 'boolean' ? server.official : undefined,
-      remoteBaseUrl: cleanLauncherText(server.remoteBaseUrl)
-    }))
+interface LauncherDirectoryRouteState {
+  directory?: string
+  mode: LauncherDirectoryBrowserMode
+  targetId: string
 }
 
-const readLauncherRelayActiveServerId = (status: unknown) => {
-  if (!isRecord(status)) return undefined
-
-  const connection = isRecord(status.connection) ? status.connection : {}
-  const activeServerId = cleanLauncherText(connection.activeServerId)
-  if (activeServerId != null) return activeServerId
-
-  const servers = readLauncherRelayServers(status)
-  return cleanLauncherText(servers.find(server => server.active === true)?.id) ?? cleanLauncherText(servers[0]?.id)
-}
-
-const normalizeRelayComparableUrl = (value: unknown) => {
-  const text = cleanLauncherText(value)
-  if (text == null) return undefined
-
+const safeDecodeLauncherPathSegment = (value: string | undefined) => {
+  if (value == null || value === '') return undefined
   try {
-    const url = new URL(text)
-    url.hash = ''
-    url.search = ''
-    return url.toString().replace(/\/+$/u, '').toLowerCase()
+    return decodeURIComponent(value)
   } catch {
-    return text.replace(/\/+$/u, '').toLowerCase()
+    return value
   }
 }
 
-const getLauncherRelayAccountDisplayName = (account: LauncherRelayAccount) => (
-  cleanLauncherText(account.name) ??
-    cleanLauncherText(account.loginId) ??
-    cleanLauncherText(account.email) ??
-    cleanLauncherText(account.userId) ??
-    'OneWorks'
-)
+const readLauncherPluginRouteState = (pathname: string): LauncherPluginRouteState | undefined => {
+  const segments = pathname.split('/').filter(Boolean)
+  if (segments[0] !== 'launcher' || segments[1] !== 'plugins') return undefined
 
-const getLauncherRelayAccountSubtitle = (account: LauncherRelayAccount) => {
-  const name = getLauncherRelayAccountDisplayName(account)
-  const meta = [
-    cleanLauncherText(account.email),
-    cleanLauncherText(account.loginId),
-    cleanLauncherText(account.userId)
-  ].find(value => value != null && value !== name)
-  return meta ?? ''
+  const scope = safeDecodeLauncherPathSegment(segments[2])
+  const routeId = safeDecodeLauncherPathSegment(segments[3])
+  if (scope == null || routeId == null) return undefined
+
+  return { routeId, scope }
 }
 
-const getLauncherRelayAccountInitials = (name: string) => {
-  const segments = name
-    .split(/[\s._-]+/u)
-    .map(segment => segment.trim())
-    .filter(Boolean)
-  const initials = segments.length > 1
-    ? `${segments[0]?.[0] ?? ''}${segments[1]?.[0] ?? ''}`
-    : name.slice(0, 2)
-  return initials.toUpperCase()
+const encodeLauncherPathSegment = (value: string) => encodeURIComponent(value)
+
+const readLauncherDirectoryPathFromSearch = (search: string) => {
+  const directory = new URLSearchParams(search).get(LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM)
+  return directory == null || directory.trim() === '' ? undefined : directory
 }
 
-const getLauncherRelayAccountServerKey = (account: LauncherRelayAccount) => (
-  cleanLauncherText(account.serverId) ??
-    normalizeRelayComparableUrl(account.serverUrl) ??
-    cleanLauncherText(account.serverAlias) ??
-    'default'
-)
+const readLauncherDirectoryRouteState = (
+  pathname: string,
+  search: string
+): LauncherDirectoryRouteState | undefined => {
+  const segments = pathname.split('/').filter(Boolean)
+  if (segments[0] !== 'launcher' || segments[1] !== 'browse') return undefined
 
-const findLauncherRelayServerForAccount = (
-  account: LauncherRelayAccount,
-  servers: LauncherRelayServer[]
+  const mode = safeDecodeLauncherPathSegment(segments[2]) as LauncherDirectoryBrowserMode | undefined
+  if (mode !== 'clone' && mode !== 'create-workspace' && mode !== 'open-workspace') return undefined
+
+  const directory = safeDecodeLauncherPathSegment(segments.slice(4).join('/')) ??
+    readLauncherDirectoryPathFromSearch(search)
+
+  return {
+    ...(directory == null ? {} : { directory }),
+    mode,
+    targetId: safeDecodeLauncherPathSegment(segments[3]) ?? 'local'
+  }
+}
+
+const buildLauncherDirectoryRoutePath = (
+  mode: LauncherDirectoryBrowserMode,
+  targetId: string,
+  directory?: string
 ) => {
-  const serverId = cleanLauncherText(account.serverId)
-  if (serverId != null) {
-    const server = servers.find(item => cleanLauncherText(item.id) === serverId)
-    if (server != null) return server
+  const routePath = `/launcher/browse/${encodeLauncherPathSegment(mode)}/${encodeLauncherPathSegment(targetId)}`
+  const normalizedDirectory = directory?.trim()
+  return normalizedDirectory == null || normalizedDirectory === ''
+    ? routePath
+    : `${routePath}/${encodeLauncherPathSegment(normalizedDirectory)}`
+}
+
+const buildLauncherDirectoryRouteSearch = (search: string) => {
+  const searchParams = new URLSearchParams(search)
+  searchParams.delete(LAUNCHER_VIEW_SEARCH_PARAM)
+  searchParams.delete(LAUNCHER_QUERY_SEARCH_PARAM)
+  searchParams.delete(LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM)
+
+  const nextSearch = searchParams.toString()
+  return nextSearch === '' ? '' : `?${nextSearch}`
+}
+
+interface LauncherPluginSearchProvider extends PluginLauncherSearchProvider {
+  pluginScope?: string
+  scope?: string
+}
+
+interface LauncherPluginSearchResult extends DesktopPluginLauncherSearchResult {
+  providerCommand?: string
+  providerId?: string
+  providerScope?: string
+  rawId?: string
+  route?: string
+}
+
+const isLauncherPluginSearchProvider = (value: unknown): value is LauncherPluginSearchProvider => (
+  isRecord(value) &&
+  cleanLauncherText(value.id) != null &&
+  cleanLauncherText(value.command) != null
+)
+
+const getLauncherPluginSearchProviderScope = (provider: LauncherPluginSearchProvider) => (
+  cleanLauncherText(provider.scope) ?? cleanLauncherText(provider.pluginScope)
+)
+
+const getLauncherPluginSearchProviderCommand = (provider: LauncherPluginSearchProvider) => {
+  const scope = getLauncherPluginSearchProviderScope(provider)
+  const command = cleanLauncherText(provider.command)
+  if (scope != null && command?.startsWith(`${scope}.`) === true) {
+    return command.slice(scope.length + 1)
   }
-
-  const serverUrl = normalizeRelayComparableUrl(account.serverUrl)
-  if (serverUrl == null) return undefined
-
-  return servers.find(item => normalizeRelayComparableUrl(item.remoteBaseUrl) === serverUrl)
+  return command
 }
 
-const buildRelayPluginRoutePath = (suffix = 'accounts') => `/plugins/relay/home/${suffix.replace(/^\/+/u, '')}`
+const getLauncherPluginSearchResultRoute = (value: unknown) => {
+  if (!isRecord(value)) return undefined
 
-const buildRelayPluginClientUrl = (suffix = 'accounts') => {
-  const base = getClientBase().replace(/\/+$/u, '')
-  const route = buildRelayPluginRoutePath(suffix)
-  return new URL(`${base}${route}`, window.location.origin).toString()
+  const route = cleanLauncherText(value.route)
+  if (route == null) return undefined
+  if (route.startsWith('/launcher/') || route.startsWith('/plugins/')) return route
+  return undefined
 }
+
+const getLauncherPluginSearchResultGroupId = (result: LauncherPluginSearchResult) => (
+  cleanLauncherText(result.groupId) ?? cleanLauncherText(result.sectionId) ?? 'plugins'
+)
+
+const getLauncherPluginSearchResultGroupTitle = (
+  result: LauncherPluginSearchResult,
+  fallbackTitle: string
+) => (
+  cleanLauncherText(result.groupTitle) ?? cleanLauncherText(result.sectionTitle) ?? fallbackTitle
+)
+
+const getLauncherPluginSearchResultGroupOrder = (result: LauncherPluginSearchResult) => (
+  typeof result.groupOrder === 'number' && Number.isFinite(result.groupOrder)
+    ? result.groupOrder
+    : typeof result.sectionOrder === 'number' && Number.isFinite(result.sectionOrder)
+    ? result.sectionOrder
+    : undefined
+)
+
+const getLauncherPluginRawSearchResults = (value: unknown) => (
+  Array.isArray(value)
+    ? value
+    : isRecord(value) && Array.isArray(value.results)
+    ? value.results
+    : []
+)
+
+const buildLauncherPluginSearchResultId = (scope: string, providerId: string, resultId: string) =>
+  `${scope}/${providerId}/${encodeURIComponent(resultId)}`
+
+const normalizeLauncherPluginSearchProviderResults = (
+  scope: string,
+  provider: LauncherPluginSearchProvider,
+  value: unknown
+): LauncherPluginSearchResult[] => (
+  getLauncherPluginRawSearchResults(value)
+    .filter((item): item is Record<string, unknown> => (
+      isRecord(item) &&
+      cleanLauncherText(item.id) != null &&
+      cleanLauncherText(item.title) != null
+    ))
+    .map((item) => {
+      const rawId = cleanLauncherText(item.id) ?? ''
+      const providerId = cleanLauncherText(provider.id) ?? 'provider'
+      return {
+        ...(cleanLauncherText(item.badge) == null ? {} : { badge: cleanLauncherText(item.badge) }),
+        ...(cleanLauncherText(item.description) == null ? {} : { description: cleanLauncherText(item.description) }),
+        ...(cleanLauncherText(item.groupIcon) == null ? {} : { groupIcon: cleanLauncherText(item.groupIcon) }),
+        ...(cleanLauncherText(item.groupId) == null ? {} : { groupId: cleanLauncherText(item.groupId) }),
+        ...(typeof item.groupOrder === 'number' && Number.isFinite(item.groupOrder)
+          ? { groupOrder: item.groupOrder }
+          : {}),
+        ...(cleanLauncherText(item.groupTitle) == null ? {} : { groupTitle: cleanLauncherText(item.groupTitle) }),
+        ...(cleanLauncherText(item.icon) == null ? {} : { icon: cleanLauncherText(item.icon) }),
+        id: buildLauncherPluginSearchResultId(scope, providerId, rawId),
+        keywords: Array.isArray(item.keywords)
+          ? item.keywords.filter((keyword): keyword is string => typeof keyword === 'string')
+          : [],
+        providerCommand: getLauncherPluginSearchProviderCommand(provider),
+        providerId,
+        providerScope: scope,
+        rawId,
+        ...(getLauncherPluginSearchResultRoute(item) == null
+          ? {}
+          : { route: getLauncherPluginSearchResultRoute(item) }),
+        ...(cleanLauncherText(item.sectionIcon) == null ? {} : { sectionIcon: cleanLauncherText(item.sectionIcon) }),
+        ...(cleanLauncherText(item.sectionId) == null ? {} : { sectionId: cleanLauncherText(item.sectionId) }),
+        ...(typeof item.sectionOrder === 'number' && Number.isFinite(item.sectionOrder)
+          ? { sectionOrder: item.sectionOrder }
+          : {}),
+        ...(cleanLauncherText(item.sectionTitle) == null ? {} : { sectionTitle: cleanLauncherText(item.sectionTitle) }),
+        ...(cleanLauncherText(item.subtitle) == null ? {} : { subtitle: cleanLauncherText(item.subtitle) }),
+        title: cleanLauncherText(item.title) ?? rawId
+      }
+    })
+)
 
 const emptyCloneDestinationDirectoryList: DesktopCloneDestinationDirectoryList = {
   currentDirectory: '',
@@ -493,44 +558,63 @@ interface LauncherCommandSection {
   title: string
 }
 
-type LauncherViewMode = 'about' | 'account' | 'commands' | 'preview' | 'settings'
-
-const launcherUrlViewModes = new Set<LauncherViewMode>(['about', 'account', 'preview', 'settings'])
-
-const readLauncherViewModeFromSearch = (search: string): LauncherViewMode => {
-  const mode = new URLSearchParams(search).get(LAUNCHER_VIEW_SEARCH_PARAM) as LauncherViewMode | null
-  return mode != null && launcherUrlViewModes.has(mode) ? mode : 'commands'
+interface LauncherPluginCommandSectionEntry {
+  commands: LauncherCommand[]
+  id: string
+  index: number
+  order?: number
+  title: string
 }
 
-const readLauncherQueryFromSearch = (search: string) => (
-  new URLSearchParams(search).get(LAUNCHER_QUERY_SEARCH_PARAM) ?? ''
-)
+const buildLauncherPluginCommandSections = (
+  pluginResults: LauncherPluginSearchResult[],
+  options: {
+    fallbackTitle: string
+    invokeResult: (result: LauncherPluginSearchResult) => Promise<void> | void
+  }
+): LauncherCommandSection[] => {
+  const sections = new Map<string, LauncherPluginCommandSectionEntry>()
 
-const buildLauncherSearchForState = (
-  search: string,
-  input: {
-    mode?: LauncherViewMode
-    query?: string
-  }
-) => {
-  const searchParams = new URLSearchParams(search)
-  if (input.mode != null) {
-    if (input.mode === 'commands') {
-      searchParams.delete(LAUNCHER_VIEW_SEARCH_PARAM)
-    } else {
-      searchParams.set(LAUNCHER_VIEW_SEARCH_PARAM, input.mode)
+  pluginResults.forEach((result, index) => {
+    const rawGroupId = getLauncherPluginSearchResultGroupId(result)
+    const sectionId = rawGroupId === 'plugins' ? 'plugins' : `plugin:${rawGroupId}`
+    const title = getLauncherPluginSearchResultGroupTitle(result, options.fallbackTitle)
+    const section = sections.get(sectionId) ?? {
+      commands: [],
+      id: sectionId,
+      index,
+      order: getLauncherPluginSearchResultGroupOrder(result),
+      title
     }
-  }
-  if (input.query != null) {
-    if (input.query === '') {
-      searchParams.delete(LAUNCHER_QUERY_SEARCH_PARAM)
-    } else {
-      searchParams.set(LAUNCHER_QUERY_SEARCH_PARAM, input.query)
-    }
-  }
+    const groupOrder = getLauncherPluginSearchResultGroupOrder(result)
+    section.order = section.order ?? groupOrder
+    section.commands.push({
+      action: () => void options.invokeResult(result),
+      badge: result.badge,
+      icon: result.icon ?? result.groupIcon ?? result.sectionIcon ?? 'layers',
+      id: `plugin:${encodeURIComponent(result.id)}`,
+      keywords: [
+        result.id,
+        result.title,
+        result.description ?? '',
+        result.subtitle ?? '',
+        title,
+        ...(result.keywords ?? [])
+      ],
+      subtitle: result.description ?? result.subtitle,
+      title: result.title
+    })
+    sections.set(sectionId, section)
+  })
 
-  const nextSearch = searchParams.toString()
-  return nextSearch === '' ? '' : `?${nextSearch}`
+  return [...sections.values()]
+    .sort((left, right) => {
+      if (left.order != null && right.order != null && left.order !== right.order) return left.order - right.order
+      if (left.order != null && right.order == null) return -1
+      if (left.order == null && right.order != null) return 1
+      return left.index - right.index
+    })
+    .map(({ commands, id, title }) => ({ commands, id, title }))
 }
 
 interface LauncherSearchHistoryEntry {
@@ -788,6 +872,7 @@ const getProjectStatusIconTone = (status: DesktopWorkspaceSelectorProject['statu
 
 export interface LauncherRouteProps {
   active?: boolean
+  routingMode?: LauncherRoutingMode
   workspaceContext?: DesktopWorkspaceSelectorProject
   onClose?: () => void
   onOpenWorkspaceResource?: (target: DesktopWorkspaceResourceTarget) => Promise<void> | void
@@ -796,6 +881,7 @@ export interface LauncherRouteProps {
 
 export function LauncherRoute({
   active = true,
+  routingMode = 'url',
   workspaceContext,
   onClose,
   onOpenWorkspaceResource,
@@ -804,21 +890,46 @@ export function LauncherRoute({
   const { i18n, t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
+  const { pluginServerBaseUrl, registry, snapshot } = usePluginContext()
   const { message, modal } = App.useApp()
+  const launcherPluginRouteState = useMemo(
+    () => routingMode === 'url' ? readLauncherPluginRouteState(location.pathname) : undefined,
+    [location.pathname, routingMode]
+  )
+  const launcherDirectoryRouteState = useMemo(
+    () => routingMode === 'url' ? readLauncherDirectoryRouteState(location.pathname, location.search) : undefined,
+    [location.pathname, location.search, routingMode]
+  )
+  const launcherLanguage = i18n.resolvedLanguage ?? i18n.language
   const [selectorState, setSelectorState] = useState<DesktopWorkspaceSelectorState>(emptyWorkspaceSelectorState)
-  const [query, setQuery] = useState(() => readLauncherQueryFromSearch(location.search))
+  const [query, setQuery] = useState(() =>
+    routingMode === 'url' && launcherPluginRouteState == null && launcherDirectoryRouteState == null
+      ? readLauncherLocationState(routingMode, location.pathname, location.search).query
+      : ''
+  )
   const [activeCommandId, setActiveCommandId] = useState<string>()
   const [canCloneRepository, setCanCloneRepository] = useState(false)
-  const [directoryBrowserMode, setDirectoryBrowserMode] = useState<LauncherDirectoryBrowserMode>()
+  const [directoryBrowserMode, setDirectoryBrowserMode] = useState<LauncherDirectoryBrowserMode | undefined>(
+    launcherDirectoryRouteState?.mode
+  )
   const [directoryBrowserHomeDirectory, setDirectoryBrowserHomeDirectory] = useState<string>()
-  const [directoryBrowserTargetId, setDirectoryBrowserTargetId] = useState<string>('local')
+  const [directoryBrowserTargetId, setDirectoryBrowserTargetId] = useState<string>(
+    launcherDirectoryRouteState?.targetId ?? 'local'
+  )
   const [directoryBrowserDirectoriesByTarget, setDirectoryBrowserDirectoriesByTarget] = useState<
     Record<string, string>
-  >({})
+  >(() => (
+    launcherDirectoryRouteState?.directory == null
+      ? {}
+      : { [launcherDirectoryRouteState.targetId]: launcherDirectoryRouteState.directory }
+  ))
   const [directoryBrowserVisitedTargets, setDirectoryBrowserVisitedTargets] = useState<Record<string, true>>({
-    local: true
+    local: true,
+    ...(launcherDirectoryRouteState == null ? {} : { [launcherDirectoryRouteState.targetId]: true })
   })
-  const [cloneDestinationDirectory, setCloneDestinationDirectory] = useState<string>()
+  const [cloneDestinationDirectory, setCloneDestinationDirectory] = useState<string | undefined>(
+    launcherDirectoryRouteState?.directory
+  )
   const [cloneDestinationList, setCloneDestinationList] = useState<DesktopCloneDestinationDirectoryList>(
     emptyCloneDestinationDirectoryList
   )
@@ -836,12 +947,7 @@ export function LauncherRoute({
   )
   const [relayProjectGroups, setRelayProjectGroups] = useState<LauncherRelayDeviceProjectGroup[]>([])
   const [relayDirectoryTargets, setRelayDirectoryTargets] = useState<LauncherRelayDirectoryTarget[]>([])
-  const [relayAccounts, setRelayAccounts] = useState<LauncherRelayAccount[]>([])
-  const [relayServers, setRelayServers] = useState<LauncherRelayServer[]>([])
-  const [relayActiveServerId, setRelayActiveServerId] = useState<string>()
-  const [isRelayAccountLoading, setIsRelayAccountLoading] = useState(false)
-  const [hasRelayAccountError, setHasRelayAccountError] = useState(false)
-  const [pluginResults, setPluginResults] = useState<DesktopPluginLauncherSearchResult[]>([])
+  const [pluginResults, setPluginResults] = useState<LauncherPluginSearchResult[]>([])
   const [fileSearchResults, setFileSearchResults] = useState<LauncherFileSearchItem[]>([])
   const [fileOpeners, setFileOpeners] = useState<DesktopWorkspaceFileOpenersResponse | null>(null)
   const [isFileSearchMode, setIsFileSearchMode] = useState(false)
@@ -852,8 +958,19 @@ export function LauncherRoute({
   const [dismissedProjectContextFolder, setDismissedProjectContextFolder] = useState<string>()
   const [isLauncherMenuOpen, setIsLauncherMenuOpen] = useState(false)
   const [launcherViewMode, setLauncherViewMode] = useState<LauncherViewMode>(() =>
-    readLauncherViewModeFromSearch(location.search)
+    launcherPluginRouteState == null
+      ? readLauncherLocationState(routingMode, location.pathname, location.search).mode
+      : 'plugin'
   )
+  const [pluginRouteActions, setPluginRouteActions] = useState<RouteContainerHeaderActionItem[]>([])
+  const [pluginRouteBreadcrumb, setPluginRouteBreadcrumb] = useState<RouteContainerHeaderBreadcrumb | undefined>()
+  const [pluginRouteLauncherChrome, setPluginRouteLauncherChrome] = useState<
+    PluginViewRouteLauncherChrome | undefined
+  >()
+  const [pluginRouteTitle, setPluginRouteTitle] = useState<string | undefined>()
+  const handlePluginRouteActionsChange = useCallback((actions?: RouteContainerHeaderActionItem[]) => {
+    setPluginRouteActions(actions ?? [])
+  }, [])
   const [openingWorkspace, setOpeningWorkspace] = useState<LauncherOpeningWorkspace>()
   const [settingsOperationHints, setSettingsOperationHints] = useState<LauncherKeyboardHint[]>([])
   const [settingsResetAction, setSettingsResetAction] = useState<LauncherSettingsResetAction>()
@@ -886,13 +1003,55 @@ export function LauncherRoute({
   const isOpenWorkspaceDirectoryMode = directoryBrowserMode === 'open-workspace'
   const isDirectoryBrowserMode = directoryBrowserMode != null
   const urlLauncherViewMode = useMemo(
-    () => readLauncherViewModeFromSearch(location.search),
-    [location.search]
+    () =>
+      routingMode === 'embedded'
+        ? 'commands'
+        : launcherPluginRouteState != null
+        ? 'plugin'
+        : launcherDirectoryRouteState != null
+        ? 'commands'
+        : readLauncherLocationState(routingMode, location.pathname, location.search).mode,
+    [launcherDirectoryRouteState, launcherPluginRouteState, location.pathname, location.search, routingMode]
   )
   const urlLauncherQuery = useMemo(
-    () => readLauncherQueryFromSearch(location.search),
-    [location.search]
+    () => readLauncherLocationState(routingMode, location.pathname, location.search).query,
+    [location.pathname, location.search, routingMode]
   )
+  const launcherPluginRoute = useMemo(() => {
+    if (launcherPluginRouteState == null) return undefined
+    return registry.findRoute(launcherPluginRouteState.scope, launcherPluginRouteState.routeId) ??
+      snapshot.routes.find(item =>
+        item.scope === launcherPluginRouteState.scope &&
+        item.id === launcherPluginRouteState.routeId
+      )
+  }, [launcherPluginRouteState, registry, snapshot.routes])
+  const launcherPluginRouteFallbackTitle = useMemo(() => {
+    if (launcherPluginRouteState == null) return t('config.sections.plugins')
+    return (launcherPluginRoute == null
+      ? undefined
+      : resolvePluginContributionText(launcherPluginRoute, 'title', launcherLanguage)) ??
+      launcherPluginRouteState.routeId
+  }, [launcherLanguage, launcherPluginRoute, launcherPluginRouteState, t])
+  const launcherSearchProviders = useMemo<LauncherPluginSearchProvider[]>(() => {
+    const providers = new Map<string, LauncherPluginSearchProvider>()
+    const addProvider = (provider: unknown) => {
+      if (!isLauncherPluginSearchProvider(provider)) return
+      const scope = getLauncherPluginSearchProviderScope(provider)
+      const id = cleanLauncherText(provider.id)
+      if (scope == null || id == null) return
+      providers.set(`${scope}/${id}`, provider)
+    }
+
+    snapshot.slots['launcher.searchProviders']?.forEach(addProvider)
+    snapshot.launcherProviders.forEach(addProvider)
+    return [...providers.values()]
+  }, [snapshot.launcherProviders, snapshot.slots])
+  useEffect(() => {
+    setPluginRouteActions([])
+    setPluginRouteBreadcrumb(undefined)
+    setPluginRouteLauncherChrome(undefined)
+    setPluginRouteTitle(undefined)
+  }, [launcherPluginRouteState?.routeId, launcherPluginRouteState?.scope])
   const syncLauncherStateToUrl = useCallback((
     input: {
       mode?: LauncherViewMode
@@ -900,16 +1059,24 @@ export function LauncherRoute({
       replace?: boolean
     } = {}
   ) => {
-    const nextSearch = buildLauncherSearchForState(location.search, input)
-    if (nextSearch === location.search) return
+    const navigation = resolveLauncherUrlNavigation({
+      currentHash: location.hash,
+      currentPathname: location.pathname,
+      currentSearch: location.search,
+      routingMode,
+      ...input
+    })
+    if (navigation == null) return
 
-    pendingLauncherSearchRef.current = nextSearch
-    void navigate({
-      hash: location.hash,
-      pathname: location.pathname,
-      search: nextSearch
-    }, { replace: input.replace === true })
-  }, [location.hash, location.pathname, location.search, navigate])
+    pendingLauncherSearchRef.current = navigation.to.search
+    void navigate(navigation.to, { replace: navigation.replace })
+  }, [
+    location.hash,
+    location.pathname,
+    location.search,
+    navigate,
+    routingMode
+  ])
   const setLauncherViewModeWithUrl = useCallback((
     mode: LauncherViewMode,
     input: {
@@ -927,6 +1094,7 @@ export function LauncherRoute({
       replace: input.replace
     })
   }, [syncLauncherStateToUrl])
+
   const setLauncherQueryWithUrl = useCallback((
     nextQuery: string,
     input: {
@@ -1041,6 +1209,8 @@ export function LauncherRoute({
   }, [])
 
   useEffect(() => {
+    if (routingMode === 'embedded') return
+
     const pendingLauncherSearch = pendingLauncherSearchRef.current
     if (pendingLauncherSearch != null) {
       if (pendingLauncherSearch !== location.search) return
@@ -1079,8 +1249,107 @@ export function LauncherRoute({
     launcherViewMode,
     location.search,
     query,
+    routingMode,
     urlLauncherQuery,
     urlLauncherViewMode
+  ])
+
+  useEffect(() => {
+    if (routingMode === 'embedded') return
+    if (launcherPluginRouteState != null || launcherDirectoryRouteState != null) return
+
+    const canonicalMode = readLauncherViewModeFromLocation(location.pathname, location.search)
+    const navigation = resolveLauncherUrlNavigation({
+      currentHash: location.hash,
+      currentPathname: location.pathname,
+      currentSearch: location.search,
+      mode: canonicalMode,
+      replace: true,
+      routingMode
+    })
+    if (navigation == null) return
+
+    pendingLauncherSearchRef.current = navigation.to.search
+    void navigate(navigation.to, { replace: navigation.replace })
+  }, [
+    launcherDirectoryRouteState,
+    launcherPluginRouteState,
+    location.hash,
+    location.pathname,
+    location.search,
+    navigate,
+    routingMode
+  ])
+
+  useEffect(() => {
+    if (launcherDirectoryRouteState == null) return
+
+    setLauncherViewMode('commands')
+    setDirectoryBrowserMode(launcherDirectoryRouteState.mode)
+    setDirectoryBrowserTargetId(launcherDirectoryRouteState.targetId)
+    setDirectoryBrowserVisitedTargets(prev =>
+      prev[launcherDirectoryRouteState.targetId] === true
+        ? prev
+        : {
+          ...prev,
+          [launcherDirectoryRouteState.targetId]: true
+        }
+    )
+    setDirectoryBrowserHomeDirectory(undefined)
+    setIsFileSearchMode(false)
+    setFileSearchResults([])
+    setIsFileSearchLoading(false)
+    setHasFileSearchError(false)
+    setResourceResults(emptyWorkspaceResourceSearchResponse)
+    setPluginResults([])
+    setIsResourceSearchLoading(false)
+    setHasResourceSearchError(false)
+    setQuery('')
+    const routeDirectory = launcherDirectoryRouteState.directory
+    if (routeDirectory != null) {
+      setCloneDestinationDirectory(routeDirectory)
+      setDirectoryBrowserDirectoriesByTarget(prev =>
+        prev[launcherDirectoryRouteState.targetId] === routeDirectory
+          ? prev
+          : {
+            ...prev,
+            [launcherDirectoryRouteState.targetId]: routeDirectory
+          }
+      )
+    }
+    setActiveCommandId(undefined)
+    setIsLauncherMenuOpen(false)
+    focusSearchInput()
+  }, [focusSearchInput, launcherDirectoryRouteState])
+
+  useEffect(() => {
+    if (routingMode === 'embedded') return
+    if (!isDirectoryBrowserMode || directoryBrowserMode == null || launcherPluginRouteState != null) return
+
+    const nextPathname = buildLauncherDirectoryRoutePath(
+      directoryBrowserMode,
+      directoryBrowserTargetId,
+      cloneDestinationDirectory
+    )
+    const nextSearch = buildLauncherDirectoryRouteSearch(location.search)
+    if (nextPathname === location.pathname && nextSearch === location.search) return
+
+    void navigate({
+      hash: location.hash,
+      pathname: nextPathname,
+      search: nextSearch
+    }, { replace: true })
+  }, [
+    cloneDestinationDirectory,
+    directoryBrowserMode,
+    directoryBrowserTargetId,
+    isDirectoryBrowserMode,
+    launcherPluginRouteState,
+    location.hash,
+    location.pathname,
+    location.search,
+    navigate,
+    routingMode
   ])
 
   useEffect(() => {
@@ -1175,57 +1444,31 @@ export function LauncherRoute({
   useEffect(() => {
     const shouldLoadRelayStatus = active &&
       desktopApi == null &&
-      (launcherViewMode === 'commands' || launcherViewMode === 'account')
+      launcherViewMode === 'commands'
 
     if (!shouldLoadRelayStatus) {
       if (desktopApi != null) {
         setRelayProjectGroups([])
         setRelayDirectoryTargets([])
-        setRelayAccounts([])
-        setRelayServers([])
-        setRelayActiveServerId(undefined)
       }
-      setIsRelayAccountLoading(false)
       return
     }
 
     let disposed = false
-    if (launcherViewMode === 'account') {
-      setIsRelayAccountLoading(true)
-      setHasRelayAccountError(false)
-    }
 
     void getLauncherRelayStatus()
       .then((status) => {
         if (disposed) return
 
-        if (launcherViewMode === 'commands') {
-          setRelayProjectGroups(normalizeLauncherRelayProjectGroups(status))
-          setRelayDirectoryTargets(normalizeLauncherRelayDirectoryTargets(status))
-        }
-        setRelayAccounts(readLauncherRelayAccounts(status))
-        setRelayServers(readLauncherRelayServers(status))
-        setRelayActiveServerId(readLauncherRelayActiveServerId(status))
+        setRelayProjectGroups(normalizeLauncherRelayProjectGroups(status))
+        setRelayDirectoryTargets(normalizeLauncherRelayDirectoryTargets(status))
       })
       .catch((error) => {
         if (disposed) return
 
         console.warn('[launcher] failed to load relay status', error)
-        if (launcherViewMode === 'commands') {
-          setRelayProjectGroups([])
-          setRelayDirectoryTargets([])
-        }
-        if (launcherViewMode === 'account') {
-          setRelayAccounts([])
-          setRelayServers([])
-          setRelayActiveServerId(undefined)
-          setHasRelayAccountError(true)
-        }
-      })
-      .finally(() => {
-        if (!disposed && launcherViewMode === 'account') {
-          setIsRelayAccountLoading(false)
-        }
+        setRelayProjectGroups([])
+        setRelayDirectoryTargets([])
       })
 
     return () => {
@@ -2083,6 +2326,7 @@ export function LauncherRoute({
 
   const exitDirectoryBrowserMode = useCallback(() => {
     if (!isDirectoryBrowserMode) return false
+    setLauncherViewModeWithUrl('commands', { query: '', replace: true })
     setDirectoryBrowserMode(undefined)
     setQuery('')
     setCloneDestinationDirectory(undefined)
@@ -2091,7 +2335,7 @@ export function LauncherRoute({
     setIsCloneDestinationLoading(false)
     setHasCloneDestinationError(false)
     return true
-  }, [isDirectoryBrowserMode])
+  }, [isDirectoryBrowserMode, setLauncherViewModeWithUrl])
 
   const exitProjectContext = useCallback(() => {
     if (contextProject == null) {
@@ -2117,6 +2361,32 @@ export function LauncherRoute({
     return true
   }, [contextProject, setLauncherQueryWithUrl])
 
+  const searchLauncherPluginProviders = useCallback(async (rawQuery: string): Promise<LauncherPluginSearchResult[]> => {
+    if (launcherSearchProviders.length === 0) return []
+
+    const providerResults = await Promise.all(launcherSearchProviders.map(async (provider) => {
+      const scope = getLauncherPluginSearchProviderScope(provider)
+      const providerId = cleanLauncherText(provider.id)
+      const command = getLauncherPluginSearchProviderCommand(provider)
+      if (scope == null || providerId == null || command == null) return []
+
+      try {
+        const value = typeof provider.search === 'function'
+          ? await provider.search(rawQuery)
+          : await registry.executeCommand(scope, command, {
+            providerId,
+            query: rawQuery
+          }, { serverBaseUrl: pluginServerBaseUrl })
+        return normalizeLauncherPluginSearchProviderResults(scope, provider, value)
+      } catch (error) {
+        console.warn('[launcher] failed to search plugin provider', error)
+        return []
+      }
+    }))
+
+    return providerResults.flat()
+  }, [launcherSearchProviders, pluginServerBaseUrl, registry])
+
   useEffect(() => {
     if (contextProject == null) {
       setResourceResults(emptyWorkspaceResourceSearchResponse)
@@ -2136,7 +2406,7 @@ export function LauncherRoute({
   }, [contextProject, desktopApi])
 
   useEffect(() => {
-    if (contextProject == null || isFileSearchMode || isDirectoryBrowserMode) {
+    if (launcherViewMode !== 'commands' || isFileSearchMode || isDirectoryBrowserMode) {
       setResourceResults(emptyWorkspaceResourceSearchResponse)
       setPluginResults([])
       setIsResourceSearchLoading(false)
@@ -2144,15 +2414,19 @@ export function LauncherRoute({
       return
     }
 
-    const searchResources = searchWorkspaceResources ?? desktopApi?.searchCurrentWorkspaceResources
-    const searchFiles = desktopApi?.searchCurrentWorkspaceFiles
-    const searchPlugins = desktopApi?.plugins?.searchCurrentWorkspace
+    const searchResources = contextProject == null
+      ? undefined
+      : searchWorkspaceResources ?? desktopApi?.searchCurrentWorkspaceResources
+    const searchFiles = contextProject == null ? undefined : desktopApi?.searchCurrentWorkspaceFiles
+    const searchPlugins = contextProject == null ? undefined : desktopApi?.plugins?.searchCurrentWorkspace
     const normalizedQuery = query.trim()
-    if (searchResources == null && searchPlugins == null && (normalizedQuery === '' || searchFiles == null)) {
+    const canSearchWorkspace = contextProject != null &&
+      (searchResources != null || searchPlugins != null || (normalizedQuery !== '' && searchFiles != null))
+    if (!canSearchWorkspace && launcherSearchProviders.length === 0) {
       setResourceResults(emptyWorkspaceResourceSearchResponse)
       setPluginResults([])
       setIsResourceSearchLoading(false)
-      setHasResourceSearchError(searchFiles == null)
+      setHasResourceSearchError(contextProject != null && searchFiles == null)
       return
     }
 
@@ -2160,7 +2434,9 @@ export function LauncherRoute({
     setIsResourceSearchLoading(true)
     setHasResourceSearchError(false)
     const timeoutId = window.setTimeout(() => {
-      const resourceResultPromise: Promise<DesktopWorkspaceResourceSearchResponse> = searchResources == null
+      const resourceResultPromise: Promise<DesktopWorkspaceResourceSearchResponse> = contextProject == null
+        ? Promise.resolve(emptyWorkspaceResourceSearchResponse)
+        : searchResources == null
         ? normalizedQuery === '' || searchFiles == null
           ? Promise.resolve(emptyWorkspaceResourceSearchResponse)
           : searchFiles(normalizedQuery).then(result => ({
@@ -2176,19 +2452,20 @@ export function LauncherRoute({
           }))
         : searchResources(normalizedQuery).then(normalizeWorkspaceResourceSearchResults)
       const pluginResultPromise = searchPlugins == null
-        ? Promise.resolve<DesktopPluginLauncherSearchResult[]>([])
+        ? Promise.resolve<LauncherPluginSearchResult[]>([])
         : searchPlugins(normalizedQuery)
-          .then(result => normalizePluginLauncherSearchResults(result).results)
+          .then(result => normalizePluginLauncherSearchResults(result).results as LauncherPluginSearchResult[])
           .catch((error) => {
             console.warn('[launcher] failed to search workspace plugins', error)
             return []
           })
+      const launcherPluginResultPromise = searchLauncherPluginProviders(normalizedQuery)
 
-      void Promise.all([resourceResultPromise, pluginResultPromise])
-        .then(([result, plugins]) => {
+      void Promise.all([resourceResultPromise, pluginResultPromise, launcherPluginResultPromise])
+        .then(([result, workspacePlugins, launcherPlugins]) => {
           if (isCancelled) return
           setResourceResults(result ?? emptyWorkspaceResourceSearchResponse)
-          setPluginResults(plugins)
+          setPluginResults([...launcherPlugins, ...workspacePlugins])
         })
         .catch((error) => {
           if (isCancelled) return
@@ -2206,7 +2483,17 @@ export function LauncherRoute({
       isCancelled = true
       window.clearTimeout(timeoutId)
     }
-  }, [contextProject, desktopApi, isDirectoryBrowserMode, isFileSearchMode, query, searchWorkspaceResources])
+  }, [
+    contextProject,
+    desktopApi,
+    isDirectoryBrowserMode,
+    isFileSearchMode,
+    launcherSearchProviders.length,
+    launcherViewMode,
+    query,
+    searchLauncherPluginProviders,
+    searchWorkspaceResources
+  ])
 
   useEffect(() => {
     if (!isFileSearchMode) {
@@ -2420,17 +2707,60 @@ export function LauncherRoute({
     openCurrentWorkspaceResource
   ])
 
-  const invokePluginLauncherResult = useCallback(async (resultId: string) => {
-    const invokeResult = desktopApi?.plugins?.invokeCurrentWorkspaceResult
-    if (invokeResult == null) return
+  const invokePluginLauncherResult = useCallback(async (result: LauncherPluginSearchResult) => {
+    const openPluginRoute = (route: string) => {
+      if (routingMode === 'url') {
+        void navigate(route)
+        return
+      }
+
+      // Embedded launchers do not own the workspace URL. Plugin destinations
+      // leave the overlay and enter the equivalent workspace plugin route.
+      const workspaceRoute = route.startsWith('/launcher/plugins/')
+        ? route.slice('/launcher'.length)
+        : route.startsWith('/plugins/')
+        ? route
+        : undefined
+      if (workspaceRoute == null) return
+      onClose?.()
+      void navigate(workspaceRoute)
+    }
+
+    if (result.route != null) {
+      setIsLauncherMenuOpen(false)
+      openPluginRoute(result.route)
+      return
+    }
+
+    if (result.providerScope != null && result.providerCommand != null) {
+      try {
+        const value = await registry.executeCommand(result.providerScope, result.providerCommand, {
+          action: 'invoke',
+          itemId: result.rawId,
+          providerId: result.providerId,
+          resultId: result.id
+        }, { serverBaseUrl: pluginServerBaseUrl })
+        const route = getLauncherPluginSearchResultRoute(value)
+        if (route != null) {
+          setIsLauncherMenuOpen(false)
+          openPluginRoute(route)
+        }
+      } catch (error) {
+        console.error('[launcher] failed to invoke plugin launcher result', error)
+        void message.error(t('launcher.commandFailed'))
+      }
+      return
+    }
 
     try {
-      await invokeResult(resultId)
+      const invokeResult = desktopApi?.plugins?.invokeCurrentWorkspaceResult
+      if (invokeResult == null) return
+      await invokeResult(result.id)
     } catch (error) {
       console.error('[launcher] failed to invoke workspace plugin result', error)
       void message.error(t('launcher.commandFailed'))
     }
-  }, [desktopApi, message, t])
+  }, [desktopApi, message, navigate, onClose, pluginServerBaseUrl, registry, routingMode, t])
 
   const openLauncherView = useCallback((mode: LauncherViewMode) => {
     setLauncherViewModeWithUrl(mode, { query: '' })
@@ -2462,178 +2792,6 @@ export function LauncherRoute({
         void message.error(t('config.desktopSettings.updates.checkFailed'))
       })
   }, [desktopApi, message, t])
-
-  const openRelayAccountManagement = useCallback(() => {
-    const accountKey = relayAccounts.length === 1 ? cleanLauncherText(relayAccounts[0]?.accountKey) : undefined
-
-    setIsLauncherMenuOpen(false)
-    void navigate(buildRelayPluginRoutePath(
-      accountKey == null ? 'accounts' : `accounts/${encodeURIComponent(accountKey)}/account`
-    ))
-  }, [navigate, relayAccounts])
-
-  const openRelayAccountDetail = useCallback((account: LauncherRelayAccount) => {
-    const accountKey = cleanLauncherText(account.accountKey)
-    if (accountKey == null) {
-      openRelayAccountManagement()
-      return
-    }
-
-    setIsLauncherMenuOpen(false)
-    void navigate(buildRelayPluginRoutePath(`accounts/${encodeURIComponent(accountKey)}/account`))
-  }, [navigate, openRelayAccountManagement])
-
-  const startRelayAccountLogin = useCallback(async () => {
-    const serverId = cleanLauncherText(relayActiveServerId) ?? 'cf'
-    const response = await createLauncherRelayLoginUrl({
-      redirectUri: buildRelayPluginClientUrl('accounts'),
-      serverId
-    })
-    const loginUrl = cleanLauncherText(response.loginUrl)
-    if (loginUrl == null) {
-      throw new Error('Relay login URL was not returned.')
-    }
-
-    setIsLauncherMenuOpen(false)
-    const popup = window.open(loginUrl, '_blank', 'noopener,noreferrer')
-    if (popup == null) {
-      window.location.href = loginUrl
-    }
-  }, [relayActiveServerId])
-
-  const getLauncherRelayAccountServerLabel = useCallback((account: LauncherRelayAccount) => {
-    const server = findLauncherRelayServerForAccount(account, relayServers)
-    const serverId = cleanLauncherText(server?.id ?? account.serverId)
-    const serverAlias = cleanLauncherText(account.serverAlias)?.toLowerCase()
-
-    if (
-      server?.official === true || serverId === 'cf' || serverId === 'vercel' || serverAlias === 'cf' ||
-      serverAlias === 'vercel'
-    ) {
-      return t('launcher.account.defaultServer')
-    }
-    if (serverId === 'local' || serverAlias === 'local') {
-      return t('launcher.account.localServer')
-    }
-
-    const serverName = cleanLauncherText(server?.name)
-    if (
-      serverName == null || /^https?:\/\//iu.test(serverName) || serverName === cleanLauncherText(server?.remoteBaseUrl)
-    ) {
-      return t('launcher.account.serverFallback')
-    }
-    return serverName
-  }, [relayServers, t])
-
-  const relayAccountSections = useMemo<LauncherCommandSection[]>(() => {
-    const serverKeys = new Set(relayAccounts.map(getLauncherRelayAccountServerKey))
-    const shouldGroupByServer = serverKeys.size > 1
-    const accountGroups = shouldGroupByServer
-      ? [...serverKeys].map((serverKey) => {
-        const accounts = relayAccounts.filter(account => getLauncherRelayAccountServerKey(account) === serverKey)
-        return {
-          accounts,
-          id: `account-server:${serverKey}`,
-          title: getLauncherRelayAccountServerLabel(accounts[0] ?? {})
-        }
-      })
-      : [{
-        accounts: relayAccounts,
-        id: 'accounts',
-        title: t('launcher.account.title')
-      }]
-
-    const accountSections = accountGroups
-      .map(group => ({
-        commands: group.accounts.map((account, index): LauncherCommand => {
-          const name = getLauncherRelayAccountDisplayName(account)
-          return {
-            action: () => openRelayAccountDetail(account),
-            avatarInitials: getLauncherRelayAccountInitials(name),
-            avatarUrl: cleanLauncherText(account.avatarUrl),
-            badge: account.enabled === false
-              ? t('launcher.account.disabled')
-              : account.sessionAuthenticated === true
-              ? t('launcher.account.signedIn')
-              : undefined,
-            icon: 'account_circle',
-            id: `account:${cleanLauncherText(account.accountKey) ?? index}`,
-            keywords: [
-              name,
-              cleanLauncherText(account.email) ?? '',
-              cleanLauncherText(account.loginId) ?? '',
-              cleanLauncherText(account.userId) ?? '',
-              cleanLauncherText(account.serverAlias) ?? '',
-              cleanLauncherText(account.serverId) ?? '',
-              t('launcher.account.detailHint')
-            ],
-            subtitle: getLauncherRelayAccountSubtitle(account),
-            title: name
-          }
-        }),
-        id: group.id,
-        title: group.title
-      }))
-      .filter(section => section.commands.length > 0)
-
-    if (accountSections.length === 0) {
-      accountSections.push({
-        commands: [{
-          action: () => void startRelayAccountLogin(),
-          icon: hasRelayAccountError ? 'warning' : isRelayAccountLoading ? 'sync' : 'account_circle',
-          id: 'account:empty',
-          keywords: ['account', 'login', 'user', '账号', '登录'],
-          subtitle: hasRelayAccountError
-            ? t('launcher.account.loadFailedHint')
-            : isRelayAccountLoading
-            ? ''
-            : t('launcher.account.emptyHint'),
-          title: hasRelayAccountError
-            ? t('launcher.account.loadFailed')
-            : isRelayAccountLoading
-            ? t('launcher.account.loading')
-            : t('launcher.account.empty')
-        }],
-        id: 'accounts',
-        title: t('launcher.account.title')
-      })
-    }
-
-    return [
-      ...accountSections,
-      {
-        commands: [
-          {
-            action: () => void startRelayAccountLogin(),
-            icon: 'login',
-            id: 'account:login',
-            keywords: ['login', 'sign in', 'account', 'user', '登录', '账号', '新增账号'],
-            subtitle: t('launcher.account.loginHint'),
-            title: t('launcher.account.login')
-          },
-          {
-            action: openRelayAccountManagement,
-            icon: 'manage_accounts',
-            id: 'account:manage',
-            keywords: ['manage', 'account', 'user', 'profile', '管理', '账号', '账户'],
-            subtitle: t('launcher.account.manageHint'),
-            title: t('launcher.account.manage')
-          }
-        ],
-        id: 'account-actions',
-        title: t('launcher.account.actionsTitle')
-      }
-    ]
-  }, [
-    getLauncherRelayAccountServerLabel,
-    hasRelayAccountError,
-    isRelayAccountLoading,
-    openRelayAccountDetail,
-    openRelayAccountManagement,
-    relayAccounts,
-    startRelayAccountLogin,
-    t
-  ])
 
   const openProjectFromPreview = useCallback(() => {
     setLauncherViewModeWithUrl('commands', { query: '', replace: true })
@@ -2695,15 +2853,9 @@ export function LauncherRoute({
     t
   ])
 
+  // Built-ins are host-owned capabilities only. Plugin business entries must arrive through
+  // manifest routes or launcher search providers so disabled/missing plugins do not leak commands.
   const builtinCommands = useMemo<LauncherCommand[]>(() => [
-    {
-      action: () => openLauncherView('account'),
-      icon: 'account_circle',
-      id: 'builtin:account',
-      keywords: ['account', 'login', 'user', 'profile', '账号', '账户', '登录', '用户'],
-      subtitle: t('launcher.builtin.accountHint'),
-      title: t('launcher.menu.account')
-    },
     {
       action: () => openLauncherView('settings'),
       icon: 'settings',
@@ -2752,10 +2904,6 @@ export function LauncherRoute({
   }, [isDirectoryBrowserMode, isFileSearchMode, launcherViewMode])
 
   const commandSections = useMemo<LauncherCommandSection[]>(() => {
-    if (launcherViewMode === 'account') {
-      return relayAccountSections
-    }
-
     if (launcherViewMode === 'preview') {
       return previewSections
     }
@@ -3095,6 +3243,11 @@ export function LauncherRoute({
       ].filter(section => section.commands.length > 0)
     }
 
+    const pluginCommandSections = buildLauncherPluginCommandSections(pluginResults, {
+      fallbackTitle: t('config.sections.plugins'),
+      invokeResult: invokePluginLauncherResult
+    })
+
     if (contextProject != null) {
       return withRecentSelectionsAndBuiltin([
         {
@@ -3219,26 +3372,8 @@ export function LauncherRoute({
           id: 'terminals',
           title: t('launcher.resource.terminalsTitle')
         },
-        {
-          commands: pluginResults.map(result => ({
-            action: () => void invokePluginLauncherResult(result.id),
-            badge: result.badge ?? t('config.sections.plugins'),
-            icon: result.icon ?? 'layers',
-            id: `plugin:${encodeURIComponent(result.id)}`,
-            keywords: [
-              result.id,
-              result.title,
-              result.description ?? '',
-              result.subtitle ?? '',
-              ...(result.keywords ?? [])
-            ],
-            subtitle: result.description ?? result.subtitle,
-            title: result.title
-          })),
-          id: 'plugins',
-          title: t('config.sections.plugins')
-        }
-      ].filter(section => section.commands.length > 0))
+        ...pluginCommandSections
+      ].filter((section): section is LauncherCommandSection => section != null && section.commands.length > 0))
     }
 
     const startCommands: LauncherCommand[] = [
@@ -3352,12 +3487,13 @@ export function LauncherRoute({
         id: 'start',
         title: t('launcher.start.title')
       },
+      ...pluginCommandSections,
       {
         commands: projectCommands,
         id: 'projects',
         title: t('launcher.projects.title')
       }
-    ])
+    ].filter((section): section is LauncherCommandSection => section != null))
   }, [
     activeDirectoryBrowserTarget,
     buildFileContextMenuItems,
@@ -3398,7 +3534,6 @@ export function LauncherRoute({
     query,
     recentCloneDestinationDirectories,
     recentSelectionIds,
-    relayAccountSections,
     relayProjectGroups,
     revealFilesystemPath,
     resourceResults.files,
@@ -3441,7 +3576,6 @@ export function LauncherRoute({
     [activeCommandId, flatCommands]
   )
   const isLauncherCommandListView = launcherViewMode === 'commands' ||
-    launcherViewMode === 'account' ||
     launcherViewMode === 'preview'
   const directoryBreadcrumbs = useMemo(() => (
     isDirectoryBrowserMode
@@ -3592,15 +3726,6 @@ export function LauncherRoute({
     </span>
   )
   const launcherMenuItems = useMemo<MenuProps['items']>(() => [
-    {
-      icon: menuIcon('account_circle'),
-      key: 'account',
-      label: t('launcher.menu.account'),
-      onClick: () => {
-        openLauncherView('account')
-      }
-    },
-    { type: 'divider' },
     {
       icon: menuIcon('settings'),
       key: 'settings',
@@ -3895,13 +4020,7 @@ export function LauncherRoute({
     const nextIndex = (activeIndex + offset + flatCommands.length) % flatCommands.length
     setActiveCommandId(flatCommands[nextIndex]?.id)
   }
-  const emptyMessage = launcherViewMode === 'account'
-    ? hasRelayAccountError
-      ? t('launcher.account.loadFailed')
-      : isRelayAccountLoading
-      ? t('launcher.account.loading')
-      : t('launcher.account.empty')
-    : launcherViewMode === 'preview'
+  const emptyMessage = launcherViewMode === 'preview'
     ? t('launcher.preview.empty')
     : isDirectoryBrowserMode
     ? hasCloneDestinationError
@@ -3931,10 +4050,19 @@ export function LauncherRoute({
   const searchPlaceholder = contextProject == null
     ? t('launcher.searchPlaceholder')
     : t('launcher.resource.searchPlaceholder', { project: contextProject.name })
-  const viewSearchPlaceholder = launcherViewMode === 'account'
-    ? t('launcher.account.searchPlaceholder')
-    : launcherViewMode === 'preview'
+  const launcherPluginRouteTitle = pluginRouteTitle ?? launcherPluginRouteFallbackTitle
+  const launcherPluginChromeTitle = cleanLauncherText(pluginRouteLauncherChrome?.title) ?? launcherPluginRouteTitle
+  const launcherPluginChromeIcon = cleanLauncherText(pluginRouteLauncherChrome?.icon) ??
+    launcherPluginRoute?.icon ??
+    'extension'
+  const launcherPluginChromeAvatarInitials = cleanLauncherText(pluginRouteLauncherChrome?.avatarInitials)
+  const launcherPluginChromeAvatarUrl = cleanLauncherText(pluginRouteLauncherChrome?.avatarUrl)
+  const launcherPluginSearchTitle = cleanLauncherText(pluginRouteLauncherChrome?.searchTitle) ??
+    launcherPluginChromeTitle
+  const viewSearchPlaceholder = launcherViewMode === 'preview'
     ? t('launcher.preview.searchPlaceholder')
+    : launcherViewMode === 'plugin'
+    ? t('launcher.pluginSearchPlaceholder', { title: launcherPluginSearchTitle })
     : launcherViewMode === 'settings'
     ? t('launcher.settings.searchPlaceholder')
     : launcherViewMode === 'about'
@@ -3950,10 +4078,10 @@ export function LauncherRoute({
       ? t('launcher.files.globalSearchPlaceholder')
       : t('launcher.files.searchPlaceholder', { project: contextProject.name })
     : searchPlaceholder
-  const viewSearchLabel = launcherViewMode === 'account'
-    ? t('launcher.account.searchLabel')
-    : launcherViewMode === 'preview'
+  const viewSearchLabel = launcherViewMode === 'preview'
     ? t('launcher.preview.searchLabel')
+    : launcherViewMode === 'plugin'
+    ? t('launcher.pluginSearchLabel', { title: launcherPluginSearchTitle })
     : launcherViewMode === 'settings'
     ? t('launcher.settings.searchLabel')
     : launcherViewMode === 'about'
@@ -3967,10 +4095,10 @@ export function LauncherRoute({
     : isFileSearchMode
     ? t('launcher.files.searchLabel')
     : t('launcher.searchLabel')
-  const viewLeadingIconTooltip = launcherViewMode === 'account'
-    ? t('launcher.account.title')
-    : launcherViewMode === 'preview'
+  const viewLeadingIconTooltip = launcherViewMode === 'preview'
     ? t('launcher.preview.title')
+    : launcherViewMode === 'plugin'
+    ? launcherPluginChromeTitle
     : launcherViewMode === 'settings'
     ? t('launcher.settings.title')
     : launcherViewMode === 'about'
@@ -3982,10 +4110,10 @@ export function LauncherRoute({
       ? t('launcher.files.globalTitle')
       : contextProject.name
     : contextProject?.name
-  const viewLeadingIcon = launcherViewMode === 'account'
-    ? 'account_circle'
-    : launcherViewMode === 'preview'
+  const viewLeadingIcon = launcherViewMode === 'preview'
     ? 'preview'
+    : launcherViewMode === 'plugin'
+    ? launcherPluginChromeIcon
     : launcherViewMode === 'settings'
     ? 'settings'
     : launcherViewMode === 'about'
@@ -4001,6 +4129,20 @@ export function LauncherRoute({
     : contextProject == null
     ? undefined
     : 'folder'
+  const viewLeadingAvatar = launcherViewMode === 'plugin' &&
+      (launcherPluginChromeAvatarUrl != null || launcherPluginChromeAvatarInitials != null)
+    ? {
+      initials: launcherPluginChromeAvatarInitials ?? launcherPluginChromeTitle.slice(0, 2).toUpperCase(),
+      url: launcherPluginChromeAvatarUrl
+    }
+    : undefined
+  const handlePluginRouteBack = useCallback(() => {
+    if (pluginRouteBreadcrumb != null) {
+      pluginRouteBreadcrumb.onBack()
+      return
+    }
+    setLauncherViewModeWithUrl('commands', { query: '', replace: true })
+  }, [pluginRouteBreadcrumb, setLauncherViewModeWithUrl])
   const operationHints = launcherViewMode === 'commands'
     ? isDirectoryBrowserMode
       ? [
@@ -4040,7 +4182,7 @@ export function LauncherRoute({
             : t('launcher.footerHints.close')
         }
       ].filter((hint): hint is { key: string; keys: string; label: string } => hint != null)
-    : launcherViewMode === 'account' || launcherViewMode === 'preview'
+    : launcherViewMode === 'preview'
     ? [
       flatCommands.length > 1 ? { key: 'move', keys: '↑↓', label: t('launcher.footerHints.move') } : undefined,
       activeCommand != null
@@ -4048,6 +4190,10 @@ export function LauncherRoute({
         : undefined,
       { key: 'back', keys: 'Esc', label: t('launcher.footerHints.back') }
     ].filter((hint): hint is { key: string; keys: string; label: string } => hint != null)
+    : launcherViewMode === 'plugin'
+    ? [
+      { key: 'back', keys: 'Esc', label: t('launcher.footerHints.back') }
+    ]
     : launcherViewMode === 'settings'
     ? settingsOperationHints
     : [
@@ -4056,29 +4202,46 @@ export function LauncherRoute({
 
   return (
     <main
-      className={`launcher-route ${openingWorkspace != null ? 'is-opening-workspace' : ''}`}
+      className={[
+        'launcher-route',
+        launcherViewMode === 'plugin' ? 'is-plugin-route' : '',
+        isDirectoryBrowserMode ? 'is-directory-browser-route' : '',
+        openingWorkspace != null ? 'is-opening-workspace' : ''
+      ].filter(Boolean).join(' ')}
       aria-busy={openingWorkspace != null}
     >
       <div className='launcher-command-shell'>
         <div className='launcher-command-search'>
           <div className='launcher-command-search__input-row'>
-            {viewLeadingIcon != null && (
+            {(viewLeadingIcon != null || viewLeadingAvatar != null) && (
               <Tooltip
                 align={{ offset: [-10, 6] }}
                 autoAdjustOverflow
                 classNames={{ root: 'launcher-command-tooltip launcher-command-search__icon-tooltip' }}
                 getPopupContainer={getLauncherPopupContainer}
                 placement='bottomLeft'
-                title={viewLeadingIconTooltip}
+                title={viewLeadingIconTooltip ?? viewSearchLabel}
               >
                 <span
-                  className={[
-                    'launcher-command-search__file-icon',
-                    isFileSearchMode ? 'launcher-command-search__slash-icon' : 'material-symbols-rounded'
-                  ].join(' ')}
-                  aria-label={viewLeadingIconTooltip}
+                  className={viewLeadingAvatar == null
+                    ? [
+                      'launcher-command-search__file-icon',
+                      isFileSearchMode ? 'launcher-command-search__slash-icon' : 'material-symbols-rounded'
+                    ].join(' ')
+                    : 'launcher-command-search__avatar'}
+                  aria-label={viewLeadingIconTooltip ?? viewSearchLabel}
                 >
-                  {viewLeadingIcon}
+                  {viewLeadingAvatar == null
+                    ? viewLeadingIcon
+                    : viewLeadingAvatar.url == null
+                    ? viewLeadingAvatar.initials
+                    : (
+                      <img
+                        alt=''
+                        draggable={false}
+                        src={viewLeadingAvatar.url}
+                      />
+                    )}
                 </span>
               </Tooltip>
             )}
@@ -4106,9 +4269,7 @@ export function LauncherRoute({
           ref={commandListRef}
           className='launcher-command-list'
           role={isLauncherCommandListView ? 'listbox' : undefined}
-          aria-label={launcherViewMode === 'account'
-            ? t('launcher.account.listLabel')
-            : launcherViewMode === 'preview'
+          aria-label={launcherViewMode === 'preview'
             ? t('launcher.preview.listLabel')
             : launcherViewMode === 'settings'
             ? t('launcher.settings.listLabel')
@@ -4126,6 +4287,101 @@ export function LauncherRoute({
           )}
           {launcherViewMode === 'about' && (
             <LauncherAboutView />
+          )}
+          {launcherViewMode === 'plugin' && launcherPluginRouteState != null && launcherPluginRoute != null && (
+            <div className='launcher-plugin-route-view'>
+              <nav
+                className='route-container-inline-breadcrumb launcher-plugin-route-breadcrumb'
+                aria-label={pluginRouteBreadcrumb?.ariaLabel ?? launcherPluginChromeTitle}
+              >
+                <Tooltip
+                  classNames={{ root: 'launcher-command-tooltip' }}
+                  getPopupContainer={getLauncherPopupContainer}
+                  placement='bottomLeft'
+                  title={t('launcher.footerHints.back')}
+                >
+                  <button
+                    type='button'
+                    className='route-container-inline-breadcrumb__back route-container-inline-breadcrumb__item--button'
+                    aria-label={t('launcher.footerHints.back')}
+                    onClick={handlePluginRouteBack}
+                  >
+                    <span className='material-symbols-rounded' aria-hidden='true'>chevron_left</span>
+                  </button>
+                </Tooltip>
+                {pluginRouteBreadcrumb?.ancestors?.map((ancestor, index) => (
+                  <span className='route-container-inline-breadcrumb__item' key={index}>
+                    <button
+                      type='button'
+                      className='route-container-inline-breadcrumb__item route-container-inline-breadcrumb__item--button'
+                      disabled={ancestor.onSelect == null}
+                      onClick={ancestor.onSelect}
+                    >
+                      {ancestor.title}
+                    </button>
+                    <span
+                      className='material-symbols-rounded route-container-inline-breadcrumb__separator'
+                      aria-hidden='true'
+                    >
+                      chevron_right
+                    </span>
+                  </span>
+                ))}
+                {pluginRouteBreadcrumb == null
+                  ? (
+                    <span
+                      className='route-container-inline-breadcrumb__item route-container-inline-breadcrumb__item--current'
+                      aria-current='page'
+                    >
+                      {launcherPluginChromeTitle}
+                    </span>
+                  )
+                  : (
+                    <>
+                      <button
+                        type='button'
+                        className='route-container-inline-breadcrumb__item route-container-inline-breadcrumb__item--button'
+                        onClick={pluginRouteBreadcrumb.onBack}
+                      >
+                        {pluginRouteBreadcrumb.parentTitle}
+                      </button>
+                      <span
+                        className='material-symbols-rounded route-container-inline-breadcrumb__separator'
+                        aria-hidden='true'
+                      >
+                        chevron_right
+                      </span>
+                      <span
+                        className='route-container-inline-breadcrumb__item route-container-inline-breadcrumb__item--current'
+                        aria-current='page'
+                      >
+                        {pluginRouteBreadcrumb.currentTitle ?? launcherPluginChromeTitle}
+                      </span>
+                    </>
+                  )}
+                {pluginRouteActions.length > 0 && (
+                  <span className='route-container-inline-breadcrumb__actions'>
+                    {pluginRouteActions.map(item => (
+                      <RouteContainerHeaderActionButton item={item} key={item.key} />
+                    ))}
+                  </span>
+                )}
+              </nav>
+              <PluginViewHost
+                launcherSearchValue={query}
+                scope={launcherPluginRouteState.scope}
+                routeId={launcherPluginRouteState.routeId}
+                surface='launcher'
+                viewId={launcherPluginRoute.viewId}
+                onRouteActionsChange={handlePluginRouteActionsChange}
+                onRouteBreadcrumbChange={setPluginRouteBreadcrumb}
+                onRouteLauncherChromeChange={setPluginRouteLauncherChrome}
+                onRouteTitleChange={setPluginRouteTitle}
+              />
+            </div>
+          )}
+          {launcherViewMode === 'plugin' && launcherPluginRouteState != null && launcherPluginRoute == null && (
+            <div className='launcher-command-empty'>{t('config.sections.plugins')}</div>
           )}
           {isLauncherCommandListView && isDirectoryBrowserMode && visibleDirectoryBrowserTargets.length > 1 && (
             <div
@@ -4157,41 +4413,50 @@ export function LauncherRoute({
             </div>
           )}
           {isLauncherCommandListView && isDirectoryBrowserMode && directoryBreadcrumbs.length > 0 && (
-            <nav className='launcher-directory-breadcrumb' aria-label={t('launcher.directoryBreadcrumbLabel')}>
-              {cloneDestinationList.parentDirectory != null && (
-                <Tooltip
-                  classNames={{ root: 'launcher-command-tooltip' }}
-                  getPopupContainer={getLauncherPopupContainer}
-                  placement='bottomLeft'
-                  title={t('launcher.footerHints.back')}
+            <nav
+              className='route-container-inline-breadcrumb launcher-directory-breadcrumb'
+              aria-label={t('launcher.directoryBreadcrumbLabel')}
+            >
+              <Tooltip
+                classNames={{ root: 'launcher-command-tooltip' }}
+                getPopupContainer={getLauncherPopupContainer}
+                placement='bottomLeft'
+                title={t('launcher.footerHints.back')}
+              >
+                <button
+                  type='button'
+                  className='route-container-inline-breadcrumb__back route-container-inline-breadcrumb__item--button'
+                  title={cloneDestinationList.parentDirectory ?? t('launcher.footerHints.back')}
+                  aria-label={t('launcher.footerHints.back')}
+                  onClick={() => {
+                    if (cloneDestinationList.parentDirectory == null) {
+                      exitDirectoryBrowserMode()
+                      return
+                    }
+                    openCloneDestinationDirectory(cloneDestinationList.parentDirectory)
+                  }}
                 >
-                  <button
-                    type='button'
-                    className='launcher-directory-breadcrumb__back'
-                    title={cloneDestinationList.parentDirectory}
-                    aria-label={t('launcher.footerHints.back')}
-                    onClick={() => openCloneDestinationDirectory(cloneDestinationList.parentDirectory)}
-                  >
-                    <span className='material-symbols-rounded' aria-hidden='true'>arrow_back</span>
-                  </button>
-                </Tooltip>
-              )}
+                  <span className='material-symbols-rounded' aria-hidden='true'>chevron_left</span>
+                </button>
+              </Tooltip>
               {directoryBreadcrumbs.map((breadcrumb, index) => {
                 const isCurrent = index === directoryBreadcrumbs.length - 1
                 return (
-                  <span className='launcher-directory-breadcrumb__part' key={`${breadcrumb.path}:${index}`}>
+                  <span className='route-container-inline-breadcrumb__item' key={`${breadcrumb.path}:${index}`}>
                     <button
                       type='button'
-                      className={`launcher-directory-breadcrumb__button ${isCurrent ? 'is-current' : ''}`}
+                      className={`route-container-inline-breadcrumb__item route-container-inline-breadcrumb__item--button ${
+                        isCurrent ? 'route-container-inline-breadcrumb__item--current' : ''
+                      }`}
                       title={breadcrumb.path}
                       aria-current={isCurrent ? 'location' : undefined}
                       onClick={() => openCloneDestinationDirectory(breadcrumb.path)}
                     >
-                      {breadcrumb.label}
+                      <span className='launcher-directory-breadcrumb__label'>{breadcrumb.label}</span>
                     </button>
                     {!isCurrent && (
                       <span
-                        className='material-symbols-rounded launcher-directory-breadcrumb__separator'
+                        className='material-symbols-rounded route-container-inline-breadcrumb__separator'
                         aria-hidden='true'
                       >
                         chevron_right
@@ -4228,7 +4493,7 @@ export function LauncherRoute({
                         }
                       }}
                       onClick={() => {
-                        setActiveCommandId(command.id)
+                        runCommandAndSelect(command)
                       }}
                     >
                       {command.avatarUrl != null || command.avatarInitials != null

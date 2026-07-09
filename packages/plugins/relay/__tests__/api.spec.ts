@@ -913,7 +913,18 @@ describe('relay plugin scoped API', () => {
       remoteBaseUrl: relayBaseUrl,
       sessionAuthenticated: true
     })
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls).toEqual(expect.arrayContaining([
+      expect.arrayContaining([
+        expect.objectContaining({
+          href: `${relayBaseUrl}/api/relay/devices`
+        }),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            authorization: 'Bearer account-session-token'
+          })
+        })
+      ])
+    ]))
   })
 
   it('opens remote workspaces through the account session that sees the online device', async () => {
@@ -936,8 +947,25 @@ describe('relay plugin scoped API', () => {
               alias: 'Linux Docker Smoke',
               capabilities: { sessions: true, workspaceLauncher: true },
               id: 'docker-device',
+              lastSeenIp: '198.51.100.25',
               lastSeenAt: '2026-06-29T08:00:00.000Z',
+              managementServers: [{
+                id: 'daemon-main',
+                kind: 'daemon',
+                lastSeenIp: '198.51.100.25',
+                name: 'Daemon Service',
+                projects: [{
+                  id: 'project-linux-remote-a',
+                  status: 'online',
+                  title: 'linux-remote-a',
+                  workspaceFolder
+                }],
+                registeredIp: '203.0.113.10',
+                status: 'online',
+                workspaceFolder
+              }],
               name: 'linux-remote-a',
+              registeredIp: '203.0.113.10',
               status: 'online',
               workspaceFolder
             }]
@@ -1056,6 +1084,21 @@ describe('relay plugin scoped API', () => {
       }),
       expect.objectContaining({
         id: 'docker-device',
+        lastSeenIp: '198.51.100.25',
+        managementServers: [
+          expect.objectContaining({
+            id: 'daemon-main',
+            lastSeenIp: '198.51.100.25',
+            projects: [
+              expect.objectContaining({
+                id: 'project-linux-remote-a',
+                workspaceFolder
+              })
+            ],
+            registeredIp: '203.0.113.10'
+          })
+        ],
+        registeredIp: '203.0.113.10',
         status: 'online'
       })
     ])
@@ -1136,6 +1179,13 @@ describe('relay plugin scoped API', () => {
     expect(profileResponse.body?.messages).toEqual([
       expect.objectContaining({
         id: 'message-1',
+        metadata: {
+          login: {
+            ip: '203.0.113.10',
+            location: 'Shanghai CN',
+            userAgent: 'Vitest Browser'
+          }
+        },
         title: '新设备登录提醒'
       })
     ])
@@ -1157,6 +1207,125 @@ describe('relay plugin scoped API', () => {
         sessionToken: 'sso-session-token'
       }
     })
+  })
+
+  it('degrades the profile route to local account data when the remote profile is unreachable', async () => {
+    let deviceListCalls = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === 'https://relay.example/api/relay/devices') {
+        deviceListCalls += 1
+        if (deviceListCalls === 1) {
+          return new Response(
+            JSON.stringify({
+              devices: [{
+                id: 'cached-device',
+                lastSeenAt: '2026-06-15T00:00:00.000Z',
+                name: 'Cached Device',
+                status: 'online',
+                workspaceFolder: '/workspace'
+              }]
+            }),
+            {
+              headers: { 'content-type': 'application/json' },
+              status: 200
+            }
+          )
+        }
+        throw new TypeError('fetch failed')
+      }
+      if (url === 'https://relay.example/api/auth/me') {
+        throw new TypeError('fetch failed')
+      }
+      return new Response(JSON.stringify({ error: `unexpected ${url}` }), {
+        headers: { 'content-type': 'application/json' },
+        status: 500
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis, commands } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [
+        {
+          id: 'prod',
+          baseUrl: 'https://relay.example'
+        }
+      ]
+    })
+    await writeOneWorksAuthStore({
+      accounts: [{
+        accountKey: 'prod:owner',
+        email: 'owner@local.test',
+        enabled: true,
+        loginId: 'owner',
+        name: 'Owner Local',
+        role: 'owner',
+        serverId: 'prod',
+        serverUrl: 'https://relay.example',
+        sessionExpiresAt: '2999-01-01T00:00:00.000Z',
+        sessionToken: 'session-token',
+        userId: 'owner'
+      }],
+      servers: {
+        prod: {
+          id: 'prod',
+          name: 'Production',
+          url: 'https://relay.example'
+        }
+      },
+      version: ONEWORKS_AUTH_STORE_VERSION
+    })
+    await commands.get('status')?.()
+
+    const response = await apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({ accountKey: 'prod:owner' })),
+      method: 'POST',
+      path: 'profile'
+    }) as {
+      body?: {
+        auditEvents?: unknown[]
+        devices?: Array<Record<string, unknown>>
+        errors?: Record<string, string>
+        invitations?: unknown[]
+        messages?: unknown[]
+        ok?: boolean
+        security?: { accessTokens?: unknown[] }
+        teams?: unknown[]
+        user?: Record<string, unknown>
+      }
+      status?: number
+    }
+
+    expect(response.status).toBe(200)
+    expect(response.body).toMatchObject({
+      auditEvents: [],
+      errors: {
+        profile: 'fetch failed'
+      },
+      invitations: [],
+      messages: [],
+      ok: true,
+      security: {
+        accessTokens: []
+      },
+      teams: [],
+      user: {
+        email: 'owner@local.test',
+        id: 'owner',
+        name: 'Owner Local',
+        role: 'owner'
+      }
+    })
+    expect(response.body?.devices).toMatchObject([
+      {
+        id: 'cached-device',
+        name: 'Cached Device',
+        status: 'online'
+      }
+    ])
+    expect(fetchMock.mock.calls.filter(([url]) => String(url) === 'https://relay.example/api/relay/devices'))
+      .toHaveLength(1)
   })
 
   it('passes disconnect request bodies through to the selected relay server', async () => {

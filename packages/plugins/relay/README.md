@@ -64,6 +64,7 @@ npx @oneworks/relay-server --host 0.0.0.0 --port 8788
 - Configurable `servers[]` entries with server / port, named Relay systems, pairing tokens, and capability switches.
 - Scoped plugin API for status, login URL, login callback, connect, disconnect, and forget actions.
 - Optional session exposure with metadata snapshots and forwarding jobs.
+- Optional user-root instruction document sync for `~/AGENTS.md`, `~/.oo/AGENTS.md`, and `~/.oo/rules/**/*.md`; Relay stores only encrypted payloads plus document counts and byte sizes, and `.local.md` files stay local.
 - Device token storage under the project home runtime directory.
 
 `connect`, `disconnect`, and `forget` accept an optional `serverId` payload. `connect` without `serverId` uses `activeServerId` for compatibility; `disconnect` and `forget` without `serverId` apply to all connected/stored Relay servers. Status responses keep a top-level `connection` compatibility summary and expose per-server connection details on each `servers[]` item.
