@@ -4,6 +4,7 @@ import { MaterialSymbol } from './MaterialSymbol.js'
 
 export interface RouteContainerHeaderBreadcrumb {
   currentTitle?: ReactNode
+  /** Ordered from the outermost ancestor to the nearest ancestor. */
   ancestors?: Array<{
     title: ReactNode
     onSelect?: () => void
@@ -78,16 +79,19 @@ export function RouteContainerHeaderBreadcrumbContent({
       >
         {breadcrumb.backIcon ?? <MaterialSymbol name='chevron_left' aria-hidden='true' />}
       </button>
+      {breadcrumb.ancestors?.flatMap((ancestor, index) => [
+        ...(index === 0 ? [] : [renderSeparator(`separator:ancestor:${index}`)]),
+        renderAncestor(ancestor, index)
+      ])}
+      {breadcrumb.ancestors != null && breadcrumb.ancestors.length > 0
+        ? renderSeparator('separator:parent')
+        : null}
       <span
         className='route-container-header__breadcrumb-parent'
         title={typeof breadcrumb.parentTitle === 'string' ? breadcrumb.parentTitle : undefined}
       >
         {breadcrumb.parentTitle}
       </span>
-      {breadcrumb.ancestors?.flatMap((ancestor, index) => [
-        renderSeparator(`separator:ancestor:${index}`),
-        renderAncestor(ancestor, index)
-      ])}
       {renderSeparator('separator:current')}
       <span
         className='route-container-header__breadcrumb-current'
