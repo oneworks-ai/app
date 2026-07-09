@@ -980,6 +980,8 @@
     "senderPlaceholder": "Type a project to open or start...",
     "searchLabel": "Search projects and actions",
     "searchPlaceholder": "Search projects or actions...",
+    "pluginSearchLabel": "Search {{title}}",
+    "pluginSearchPlaceholder": "Search {{title}}",
     "commandListLabel": "Launcher actions",
     "commandFailed": "Failed to run action",
     "noResults": "No matching projects or actions",

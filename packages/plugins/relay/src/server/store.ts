@@ -1,6 +1,8 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+
+import { resolveGlobalOneWorksPath } from '@oneworks/utils/ai-path'
 
 import {
   normalizeRelayConfigSourcePreferences,
@@ -15,9 +17,25 @@ import {
 import type { RelayStore, RelayStoredServer } from './types.js'
 import { isRecord, normalizeRemoteBaseUrl, parseJson, toString } from './utils.js'
 
-const STORE_PATH = ['.local', 'plugins', 'relay', 'device.json']
+const LEGACY_STORE_PATH = ['.local', 'plugins', 'relay', 'device.json']
+const STORE_PATH = ['relay', 'device.json']
+const MANAGEMENT_SERVER_STORE_PATH = ['.local', 'plugins', 'relay', 'management-server.json']
 
 const createSecret = () => randomBytes(32).toString('base64url')
+
+const readJsonFile = async (filePath: string) => {
+  const content = await readFile(filePath, 'utf8').catch(() => undefined)
+  return content == null
+    ? undefined
+    : parseJson(content)
+}
+
+const normalizeRelayStore = (parsed: Record<string, unknown>): RelayStore => ({
+  deviceId: toString(parsed.deviceId) || randomUUID(),
+  deviceSecret: toString(parsed.deviceSecret) || createSecret(),
+  deviceName: toString(parsed.deviceName),
+  servers: normalizeStoredServers(parsed.servers)
+})
 
 const normalizeStoredAccount = (value: unknown): RelayStoredServer['account'] => {
   if (!isRecord(value)) return undefined
@@ -77,10 +95,11 @@ const normalizeStoredServers = (value: unknown): Record<string, RelayStoredServe
 }
 
 export const createRelayDeviceStore = (projectHome: string) => {
-  const storePath = join(projectHome, ...STORE_PATH)
+  const storePath = resolveGlobalOneWorksPath(process.env, ...STORE_PATH)
+  const legacyStorePath = join(projectHome, ...LEGACY_STORE_PATH)
 
   const writeStore = async (store: RelayStore) => {
-    await mkdir(join(projectHome, '.local', 'plugins', 'relay'), { recursive: true })
+    await mkdir(dirname(storePath), { recursive: true })
     await writeFile(
       storePath,
       `${JSON.stringify(store, null, 2)}\n`,
@@ -93,22 +112,84 @@ export const createRelayDeviceStore = (projectHome: string) => {
 
   const readStore = async (): Promise<RelayStore> => {
     let needsWrite = false
-    const content = await readFile(storePath, 'utf8').catch(() => {
+    const parsed = await readJsonFile(storePath).catch(() => {
       needsWrite = true
-      return '{}'
+      return undefined
     })
-    const parsed = parseJson(content)
-    const store = {
-      deviceId: toString(parsed.deviceId) || randomUUID(),
-      deviceSecret: toString(parsed.deviceSecret) || createSecret(),
-      deviceName: toString(parsed.deviceName),
-      servers: normalizeStoredServers(parsed.servers)
+
+    let source = parsed
+    if (source == null) {
+      source = await readJsonFile(legacyStorePath)
+      needsWrite = true
     }
-    if (toString(parsed.deviceId) === '' || toString(parsed.deviceSecret) === '') {
+
+    const store = normalizeRelayStore(source ?? {})
+    if (parsed == null || toString(parsed.deviceId) === '' || toString(parsed.deviceSecret) === '') {
       needsWrite = true
     }
     if (needsWrite) {
       await writeStore(store)
+    }
+    return store
+  }
+
+  return {
+    readStore,
+    storePath,
+    writeStore
+  }
+}
+
+export interface RelayManagementServerStore {
+  createdAt?: string
+  id: string
+  kind?: string
+  name?: string
+  updatedAt?: string
+}
+
+const normalizeManagementServerStore = (parsed: Record<string, unknown>): RelayManagementServerStore => {
+  const id = toString(parsed.id) || randomUUID()
+  const createdAt = toString(parsed.createdAt)
+  const updatedAt = toString(parsed.updatedAt)
+  const kind = toString(parsed.kind)
+  const name = toString(parsed.name)
+  return {
+    ...(createdAt === '' ? {} : { createdAt }),
+    id,
+    ...(kind === '' ? {} : { kind }),
+    ...(name === '' ? {} : { name }),
+    ...(updatedAt === '' ? {} : { updatedAt })
+  }
+}
+
+export const createRelayManagementServerStore = (projectHome: string) => {
+  const storePath = join(projectHome, ...MANAGEMENT_SERVER_STORE_PATH)
+
+  const writeStore = async (store: RelayManagementServerStore) => {
+    await mkdir(dirname(storePath), { recursive: true })
+    await writeFile(
+      storePath,
+      `${JSON.stringify(store, null, 2)}\n`,
+      {
+        encoding: 'utf8',
+        mode: 0o600
+      }
+    )
+  }
+
+  const readStore = async (): Promise<RelayManagementServerStore> => {
+    const parsed = await readJsonFile(storePath)
+    const store = normalizeManagementServerStore(parsed ?? {})
+    if (parsed == null || toString(parsed.id) === '') {
+      const now = new Date().toISOString()
+      const next = {
+        ...store,
+        createdAt: store.createdAt ?? now,
+        updatedAt: now
+      }
+      await writeStore(next)
+      return next
     }
     return store
   }

@@ -214,12 +214,23 @@ export interface RelayMessageAudience {
   userIds?: string[]
 }
 
+export interface RelayMessageLoginMetadata {
+  ip?: string
+  location?: string
+  userAgent?: string
+}
+
+export interface RelayMessageMetadata {
+  login?: RelayMessageLoginMetadata
+}
+
 export interface RelayMessage {
   id: string
   kind: RelayMessageKind
   title: string
   body: string
   audience: RelayMessageAudience
+  metadata?: RelayMessageMetadata
   createdByUserId: string
   createdAt: string
   updatedAt?: string
@@ -319,6 +330,7 @@ export interface RelayDevice {
   alias?: string
   name?: string
   userId?: string
+  deviceInfo?: RelayDeviceEnvironmentInfo
   capabilities?: Record<string, unknown>
   workspaceFolder?: string
   pluginScope?: string
@@ -327,6 +339,43 @@ export interface RelayDevice {
   encryptedMetadata?: RelayEncryptedPayload
   createdAt: string
   lastSeenAt: string
+}
+
+export interface RelayDeviceEnvironmentInfo {
+  arch?: string
+  deviceType?: string
+  osName?: string
+  osPlatform?: string
+  osRelease?: string
+  osVersion?: string
+  runtime?: string
+  runtimeVersion?: string
+}
+
+export interface RelayDeviceProject {
+  createdAt?: string
+  id?: string
+  lastSeenAt?: string
+  name?: string
+  status?: RelayDeviceStatus
+  title?: string
+  workspaceFolder?: string
+}
+
+export interface RelayDeviceManagementServer {
+  createdAt?: string
+  environment?: RelayDeviceEnvironmentInfo
+  id: string
+  ip?: string
+  kind?: string
+  lastSeenAt?: string
+  lastSeenIp?: string
+  name?: string
+  pluginScope?: string
+  projects?: RelayDeviceProject[]
+  registeredIp?: string
+  status?: RelayDeviceStatus
+  workspaceFolder?: string
 }
 
 export interface RelayEncryptedPayload {
@@ -500,10 +549,12 @@ export interface RelayPersonalConfigSnapshot {
   version: string
 }
 
-export type RelayPersonalDocumentKind = 'agents'
+export type RelayPersonalDocumentKind = 'agents' | 'ooAgents' | 'ooRules'
 
 export interface RelayPersonalDocumentCounts {
   agents: number
+  ooAgents: number
+  ooRules: number
 }
 
 export interface RelayPersonalDocumentSnapshot {

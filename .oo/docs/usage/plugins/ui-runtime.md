@@ -62,13 +62,13 @@ my-plugin/
 }
 ```
 
-`exports["./client"].source` 是宿主 Vite dev server 加载的源码入口；`exports["./client"].default` 是发布 / 提交时的静态 ESM 产物。`exports["./server"].source` 是 watch / 本地开发时的 server TS 入口；`exports["./server"].default` 是发布 / 提交时的 server JS 入口。显式 `plugin.client.entry`、`plugin.client.devEntry` 或 `plugin.server.entry` 仍可兜底兼容旧插件，但新插件按上面的 exports 约定生成。
+`exports["./client"].source` 是宿主 Vite dev server 加载的源码入口；`exports["./client"].default` 是发布 / 提交时的静态 ESM 产物。`exports["./server"].source` 是 watch / 本地开发时的 server TS 入口；`exports["./server"].default` 是发布 / 提交时的 server JS 入口。server entry 还需要在 manifest 的 `plugin.server.roles` 里声明运行层级；未声明时宿主会拒绝注册 server 入口并在 diagnostics 里暴露错误。新插件按 exports + roles 约定生成，不要在 manifest 里重复写入口路径。
 
 静态 `/client` 入口不会在宿主里再做 TypeScript 或 JSX 转译。也就是说，未编译的 `client/src/index.tsx` 不能作为静态入口直接加载。新的 TypeScript / TSX 插件按这条链路处理：
 
 - 本地路径 plugin 在 watch 开启或位于 `.oo/plugins.dev/*` 时，开发态宿主会把 `exports["./client"].source` 转成同源 `/ui/@fs/...` entry，由宿主 Vite dev server 负责 TypeScript / TSX 转译、source map、样式模块 HMR 和 React Fast Refresh；不需要插件自己再启动一个 Vite dev server。
 - 可提交 / 发布态运行 `vite build --config client/vite.config.ts`，把 TypeScript / TSX 编译到 `client/dist/index.js`，宿主静态加载这个 JavaScript 产物。
-- `plugin.client.devServer` 只作为旧插件或外部 loopback dev server 兼容路径保留；新插件不要为了 HMR 配它。
+- 新插件不要配置 `plugin.client.devServer`。开发态 HMR、TS / TSX 转译、source map 和 React Fast Refresh 都由宿主 Vite dev server 基于 `exports["./client"].source` 提供。
 
 Server 侧也支持本地 TS：watch 开启的本地插件会优先加载 `exports["./server"].source`，并通过宿主已有的 esbuild register 转译 `.ts` / `.tsx` / `.mts` / `.cts`；发布 / 提交态使用 `exports["./server"].default` 的 JS 产物。server 入口没有独立 dev server，文件变化仍走 plugin scope reload。
 
@@ -131,6 +131,9 @@ Manifest 示例：
     }
   },
   "plugin": {
+    "server": {
+      "roles": ["workspace"]
+    },
     "contributions": {
       "navItems": [
         {
@@ -198,6 +201,11 @@ Manifest 示例：
 - `config.jsonSchema`: `config.schema` 的等价别名。
 - `config.uiSchema`: 可选。直接提供配置页内部的 `ConfigUiObjectSchema` 时，会跳过 JSON Schema 自动推断。
 
+Server runtime 字段：
+
+- `plugin.server.roles`: server 入口应该在哪些 runtime 运行。普通工作区插件写 `["workspace"]`；只有设备级、launcher 级或跨 workspace 协调能力才声明 `["manager"]` 或同时声明两个角色。
+- `exports["./server"]`: 只提供入口路径，不代表插件自动运行在 manager。需要 manager 时必须显式写 roles。
+
 JSON Schema 自动推断当前支持：
 
 - 根对象的 `properties` 会按路径展开成表单字段。
@@ -247,7 +255,7 @@ route action 状态字段由通用 chrome 统一渲染：`active` 会切换为 `
 
 ## 前端入口
 
-插件 client 入口会被前端动态加载。新插件优先通过 `package.json` 的 `exports["./client"]` 暴露入口；旧插件也可以继续用 `plugin.client.entry`。入口模块导出 `activatePlugin(ctx)`。推荐把 UI 写成 React view，用宿主暴露的 `ctx.react` 和 `view.ui`，避免在插件里拼 DOM 字符串：
+插件 client 入口会被前端动态加载。新插件优先通过 `package.json` 的 `exports["./client"]` 暴露入口。入口模块导出 `activatePlugin(ctx)`。推荐把 UI 写成 React view，用宿主暴露的 `ctx.react` 和 `view.ui`，避免在插件里拼 DOM 字符串：
 
 ```js
 function HomeView({ ctx, react, view }) {
@@ -303,6 +311,9 @@ export async function activatePlugin(ctx) {
 可用的前端能力：
 
 - `ctx.scope`: 当前 plugin scope。
+- `ctx.runtime.endpoint`: 当前 server runtime endpoint。launcher、workspace route、workbench 和 drawer 都通过同一份插件快照获得 endpoint，不要自己探测 server URL。
+- `ctx.runtime.invokeChannel(channelId, invocation)`: 调用当前 scope 的 server runtime channel。跨 manager / workspace 或跨 workspace 调用时，在 `invocation.target` 里传目标 role 和 `serverBaseUrl`。
+- `ctx.runtime.listEndpoints()`: 获取当前 host 已知的 manager / workspace runtime endpoints；插件需要选择目标 management server 或 workspace server 时使用这个 API，不要自己扫端口或读 launcher 私有缓存。
 - `ctx.i18n.getLanguage()`: 读取当前界面语言。前端命令、toast、launcher 本地搜索等不在 view render 内执行的逻辑应在运行时读取它，而不是缓存激活时的语言。
 - `ctx.i18n.resolveText(value, fallback)`: 按当前界面语言解析本地化文案。`value` 可以是字符串，也可以是 `{ en, "zh-Hans" }` 这样的语言映射。
 - `ctx.react`: 宿主 React 单例的轻量出口，包含 `createElement`、`Fragment`、`useState`、`useEffect`、`useMemo`、`useCallback` 和 `useRef`。无构建插件可以直接用它写 React；有构建插件也应把 React 视为宿主单例，不要 bundle 第二份 React。
@@ -324,6 +335,8 @@ export async function activatePlugin(ctx) {
 - `ctx.notifications.muteCurrentPlugin()`: 屏蔽当前 plugin 后续发布的界面级消息；用户也可以在消息卡片上执行同样的通用操作。
 - `ctx.api.fetch(path, init)`: 只允许访问当前 scope 下的 scoped API，例如 `ctx.api.fetch('echo/foo')` 会请求 `/api/plugins/<scope>/proxy/echo/foo`。
 - `ctx.hot.accept(callback)` 和 `ctx.hot.reload()`: 配合 watch / dev server 调试当前 plugin，不需要重启 Electron。
+
+React view 的 `PluginViewContext` 也会提供同一份 runtime bridge：`view.runtime.endpoint` 暴露当前 server runtime endpoint，`view.runtime.invokeChannel(channelId, invocation)` 用于从 route / workbench / drawer / launcher 页面调用当前 scope 的 server runtime channel，`view.runtime.listEndpoints()` 用于读取当前 host 已知的 manager / workspace endpoints。插件页面不要自己探测 server URL，也不要为 launcher 单独做一套通信 shim。
 
 插件需要提示用户时应使用宿主消息队列，不要自己创建 fixed toast、引入第三方通知组件或复制宿主样式。`description` 默认按 markdown 渲染，普通消息默认约 6.5 秒后自动清理，带操作的消息默认约 9.5 秒后自动清理；用户 hover 消息时会暂停自动清理。只有需要明确常驻时才传 `ttlMs: null`。`actions[].onClick` 可以触发插件命令、跳转或更新插件视图状态：
 
@@ -457,7 +470,7 @@ ctx.views.register('home', {
 - `themeMode`: 用户选择的主题来源，值为 `light`、`dark` 或 `system`。
 - `resolvedThemeMode`: 实际生效主题，值为 `light` 或 `dark`。
 - `isDarkMode`: 当前是否深色模式。
-- `surface`: 当前 view 的宿主位置，值为 `route`、`workbench` 或 `drawer`。
+- `surface`: 当前 view 的宿主位置，值为 `route`、`workbench`、`drawer` 或 `launcher`。
 
 语言、主题或宿主位置变化时，React view 会按普通 React 组件更新；DOM view 会重新调用 `render`，并先清理上一轮返回的 `dispose()`。插件如果在 DOM view 内注册事件、timer、MutationObserver 或宿主组件，也必须在 `dispose()` 里清理。
 
@@ -470,7 +483,14 @@ ctx.views.register('home', {
 
 - `view.ui.Icon`
 - `view.ui.Button`
+- `view.ui.ActionBar`
+- `view.ui.CodeEditor`
 - `view.ui.Input`
+- `view.ui.InteractionList`
+- `view.ui.List`
+- `view.ui.NativeTabs`
+- `view.ui.SearchInput`
+- `view.ui.Select`
 - `view.ui.Segmented`
 - `view.ui.Switch`
 - `view.ui.Sender`
@@ -488,8 +508,13 @@ React view 应优先使用 `view.ui.*`。`view.components.render(component, cont
 `view.ui.*` 和 `view.components.render(...)` 使用同一套 props：
 
 - `button`: 渲染宿主按钮。常用 props：`label`、`icon`、`type: "default" | "primary" | "text" | "link" | "dashed"`、`size: "small" | "middle" | "large"`、`danger`、`disabled`、`title`、`shape`、`onClick()`。
+- `actionBar`: 渲染一组宿主按钮。常用 props：`items: [{ key, label, icon, type, danger, disabled, onClick }]`、`size`、`align`、`wrap`。页面底部、编辑器浮层和批量操作优先用 action bar，不要自己拼按钮间距。
+- `codeEditor`: 渲染宿主代码编辑器。常用 props：`value`、`language`、`readOnly`、`height`、`minimap`、`folding`、`onChange(value)`。插件需要 JSON、Markdown 或配置预览时走这个入口，不要在插件里单独引入 Monaco。
 - `icon`: 渲染宿主图标。常用 props：`name`、`ariaLabel`、`title`、`size: "small" | "middle" | "large" | number`、`tone: "default" | "muted" | "primary" | "success" | "warning" | "danger"`。
+- `interactionList`: 渲染平台交互列表，内置搜索、右键菜单、行 actions、选中态、嵌套树、头像 / 图标槽和状态角标。常用 props：`items`、`mode: "grouped" | "launcher" | "resource"`、`search`、`actions(item)`、`actionDisplay: "menu" | "inline"`、`iconSize`、`activeKey`、`emptyText`、`onSelect(item)`。launcher 内打开的插件页面默认按 `mode: "launcher"`、20px 图标槽、菜单式 actions 和 title hover 描述渲染；插件只有业务确实需要不同密度时才显式覆盖 mode 或 action density，不要在插件包里重写 launcher 列表 CSS。普通资源列表用 `resource`，分组入口或无分割线列表用 `grouped`。
 - `input`: 渲染宿主输入框。常用 props：`value`、`placeholder`、`ariaLabel`、`type: "text" | "password" | "textarea"`、`rows`、`allowClear`、`size`、`disabled`、`onChange(value)`、`onCommit(value)`。`onCommit` 会在 blur 或回车时触发，适合插件把输入提交为配置。
+- `list`: 渲染简单宿主列表，只适合没有搜索、右键菜单、嵌套或标准行 action 的轻量内容；需要资源列表或 launcher 页面时优先用 `interactionList`。
+- `nativeTabs`: 渲染宿主原生 tab。常用 props：`items: [{ key, label, icon }]`、`activeKey`、`actions`、`iconSize`、`onChange(key)`。
 - `overlayDropdown`: 渲染真实的宿主 dropdown 触发器和浮层。常用 props：`label`、`icon`、`placement`、`open`、`defaultOpen`、`closeOnSelect`、`onOpenChange(open)`、`content`。`content` 支持 `{ type: "menu" | "searchMenu" | "tree", props }`，对应 props 与下面的 `overlayMenu` / `overlaySearchMenu` / `overlayTree` 相同。需要真实弹出式 overlay 时优先用它，不要把 overlay primitive 直接平铺在页面里。
 - `overlayMenu`: 渲染宿主 overlay 菜单 primitive。常用 props：`items`、`selectedKeys`、`defaultOpenKeys`、`openKeys`、`submenuPlacement: "left" | "right"`、`submenuTrigger: "click" | "hover"`、`surface`、`width`、`onItemClick(item)`、`onOpenKeysChange(keys)`。`items` 支持 action、`{ type: "divider" }`、`{ type: "section" }`，action 支持 `icon`、`description`、`shortcut`、`selected`、`disabled`、`confirmLabel`、`tone: "danger"` 和 `children`。
 - `overlaySearchMenu`: 渲染带搜索行的宿主 overlay 菜单。常用 props：`items`、`searchValue`、`placeholder`、`emptyLabel`、`selectedKeys`、`searchPlacement: "top" | "bottom"`、`onSearchChange(value)`、`onItemClick(item)`。
@@ -497,6 +522,8 @@ React view 应优先使用 `view.ui.*`。`view.components.render(component, cont
 - `overlaySegmented`: 渲染宿主 overlay 分段控件。常用 props：`ariaLabel`、`value`、`options: [{ value, label, icon }]`、`onChange(value)`。
 - `overlaySelectLabel`: 渲染宿主 overlay select label。常用 props：`icon`、`label`、`meta`。
 - `overlayTree`: 渲染宿主 overlay 树。常用 props：`nodes`、`collapsedKeys`、`defaultCollapsedKeys`、`expandAll`、`surface`、`onNodeToggle(key)`、`onNodeActivate(node)`。`surface: true` 会给树套用宿主 overlay panel 外观。`nodes` 支持 `key`、`label`、`meta`、`icon`、`collapsedIcon`、`expandedIcon`、`selected`、`disabled`、`confirmLabel`、`trailingIcon` 和 `children`。
+- `searchInput`: 渲染平台列表搜索条，统一 18px 搜索图标、6px icon/text gap、输入高度、focus 和清除按钮。独立搜索条用它；绑定列表搜索时优先用 `interactionList.search`，不要自己拼 search icon + AntD input。
+- `select`: 渲染宿主选择控件。常用 props：`options`、`value`、`mode`、`placeholder`、`disabled`、`onChange(value)`。
 - `segmented`: 渲染宿主分段选择。常用 props：`value`、`options: [{ value, label, icon, disabled }]`、`iconOnly`、`block`、`ariaLabel`、`size`、`disabled`、`onChange(value)`。
 - `sender`: 渲染宿主 sender 输入组件，默认套用 chat sender surface，并包含模型、权限、adapter / account 和 status bar 编排。样式只能通过结构化选项控制：`surface: "chat" | "plain"`、`density: "default" | "compact"`。常用 props：`placeholder`、`initialContent`、`defaultAdapter`、`defaultModel`、`submitLabel`、`autoFocus`、`adapterLocked`、`modelUnavailable`、`showHeader`、`showStatusBar`、`hideReferenceActions`、`hideSelectionControls`、`hideSubmitAction`、`submitLoading`、`stopLoading`、`onInputChange(value)`、`onSend(text, mode)`、`onSendContent(content, mode)`、`onCancel()`。
 - `switch`: 渲染宿主开关。常用 props：`checked`、`checkedLabel`、`uncheckedLabel`、`size: "small" | "default"`、`disabled`、`onChange(checked)`。

@@ -10,6 +10,7 @@ import type { RelayServerArgs, RelayStore } from '../types.js'
 import { createToken, now } from '../utils.js'
 import { isSupportedLoginRedirectUri } from './login-page.js'
 import { publicRequestBaseUrl } from './request-origin.js'
+import { recordLoginNotificationMessage } from './team-invitations.js'
 
 const callbackUrl = (req: IncomingMessage, args: RelayServerArgs, provider: string) => {
   const base = publicRequestBaseUrl(req, args.publicBaseUrl)
@@ -107,6 +108,7 @@ const handleCallback = async (
     })
     const user = upsertOAuthUser(store, { ...profile, provider }, state.inviteCode)
     const session = createSession(store, user.id, args.sessionTtlMs)
+    recordLoginNotificationMessage(req, store, user)
     await storeRepository.write(store)
     if (state.redirectUri != null) {
       redirect(res, redirectWithToken(state.redirectUri, session.token), args.allowOrigin)

@@ -1,10 +1,16 @@
 /* eslint-disable max-lines -- plugin runtime keeps activation, scoped APIs, React exposure, and hot reload together. */
 import { Fragment, createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type {
+  PluginRuntimeChannelInvocation,
+  PluginRuntimeChannelResponse,
+  PluginRuntimeEndpoint
+} from '@oneworks/types'
 
 import { buildApiUrl } from '#~/api/base'
 import type { NotificationApi, UiNotificationHandle, UiNotificationInput } from '#~/notifications/notification-types'
 import { createServerUrlFromBase, normalizeServerBaseUrl } from '#~/runtime-config'
 
+import { listPluginRuntimeEndpoints } from './api'
 import { createPluginI18nContext } from './plugin-i18n'
 import type { PluginI18nContext } from './plugin-i18n'
 import type {
@@ -76,6 +82,11 @@ export interface PluginClientContext {
   routes: {
     register: (route: PluginRouteRegistration) => { dispose: () => void }
   }
+  runtime: {
+    endpoint?: PluginRuntimeEndpoint
+    invokeChannel: (channelId: string, invocation?: PluginRuntimeChannelInvocation) => Promise<unknown>
+    listEndpoints: () => Promise<PluginRuntimeEndpoint[]>
+  }
   scope: string
   slots: {
     register: (slot: PluginSlot, contribution: Record<string, unknown> & { id: string }) => { dispose: () => void }
@@ -111,6 +122,10 @@ const toDisposable = (cleanup: PluginCleanup): { dispose: () => void } | undefin
 
 const isAbsoluteOrProtocolRelativeUrl = (path: string) => /^(?:[a-z][a-z\d+.-]*:)?\/\//i.test(path)
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  value != null && typeof value === 'object' && !Array.isArray(value)
+)
+
 const hasDotSegment = (path: string) =>
   path.split(/[/?#]/, 1)[0]?.split('/').some((part) => {
     if (part === '..') return true
@@ -142,6 +157,68 @@ const buildPluginApiUrl = (path: string, serverBaseUrl?: string) => {
     : createServerUrlFromBase(normalizedServerBaseUrl, path)
 }
 
+const normalizeRuntimeChannelResponse = (value: unknown): PluginRuntimeChannelResponse => {
+  if (isRecord(value) && 'ok' in value) {
+    if (value.ok === true) {
+      return {
+        ok: true,
+        ...('payload' in value ? { payload: value.payload } : {})
+      }
+    }
+    return {
+      ok: false,
+      error: typeof value.error === 'string' && value.error.trim() !== ''
+        ? value.error
+        : 'Plugin runtime channel request failed.'
+    }
+  }
+  return { ok: true, payload: value }
+}
+
+const parseRuntimeChannelError = async (response: Response) => {
+  const fallback = `Plugin runtime channel request failed with HTTP ${response.status}.`
+  const text = await response.text().catch(() => '')
+  if (text.trim() === '') return fallback
+  try {
+    const parsed = JSON.parse(text) as unknown
+    if (isRecord(parsed)) {
+      const error = parsed.error
+      if (typeof error === 'string' && error.trim() !== '') return error
+      if (isRecord(error) && typeof error.message === 'string' && error.message.trim() !== '') return error.message
+    }
+  } catch {}
+  return text
+}
+
+export const invokePluginRuntimeChannel = async (
+  scope: string,
+  channelId: string,
+  invocation: PluginRuntimeChannelInvocation | undefined,
+  serverBaseUrl: string | undefined
+) => {
+  const response = await fetch(
+    buildPluginApiUrl(
+      `/api/plugins/${encodeURIComponent(scope)}/runtime/channels/${encodeURIComponent(channelId)}`,
+      serverBaseUrl
+    ),
+    {
+      body: JSON.stringify(invocation ?? {}),
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST'
+    }
+  )
+  if (!response.ok) {
+    throw new Error(await parseRuntimeChannelError(response))
+  }
+  const json = await response.json().catch(() => undefined) as unknown
+  const normalized = normalizeRuntimeChannelResponse(json)
+  if (!normalized.ok) {
+    throw new Error(normalized.error)
+  }
+  return normalized.payload
+}
+
 const resolveEntryUrl = (instance: PluginRuntimeInstance) => {
   return import.meta.env.DEV && instance.devClientEntryUrl != null && instance.devClientEntryUrl !== ''
     ? instance.devClientEntryUrl
@@ -155,6 +232,7 @@ export async function activatePluginClient({
   registry,
   reloadPlugin,
   notifications = noopNotificationApi,
+  runtimeEndpoint,
   serverBaseUrl
 }: {
   getImportVersion: () => number
@@ -163,6 +241,7 @@ export async function activatePluginClient({
   notifications?: NotificationApi
   registry: PluginRegistry
   reloadPlugin: (scope: string) => Promise<void>
+  runtimeEndpoint?: PluginRuntimeEndpoint
   serverBaseUrl?: string
 }) {
   const entryUrl = resolveEntryUrl(instance)
@@ -186,7 +265,8 @@ export async function activatePluginClient({
         })
     },
     commands: {
-      execute: (commandId, payload) => registry.executeCommand(instance.scope, commandId, payload),
+      execute: (commandId, payload) =>
+        registry.executeCommand(instance.scope, commandId, payload, { serverBaseUrl }),
       register: (commandId, handler) =>
         isActivationCurrent() ? registry.registerCommand(instance.scope, commandId, handler) : noopDisposable
     },
@@ -244,6 +324,12 @@ export async function activatePluginClient({
     },
     routes: {
       register: route => isActivationCurrent() ? registry.registerRoute(instance.scope, route) : noopDisposable
+    },
+    runtime: {
+      endpoint: runtimeEndpoint,
+      invokeChannel: (channelId, invocation) =>
+        invokePluginRuntimeChannel(instance.scope, channelId, invocation, serverBaseUrl),
+      listEndpoints: () => listPluginRuntimeEndpoints({ serverBaseUrl })
     },
     scope: instance.scope,
     slots: {

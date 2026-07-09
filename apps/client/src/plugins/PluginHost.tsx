@@ -11,15 +11,22 @@ import { useRouteContainerSidebarOpener } from '#~/components/layout/use-route-c
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import type { RouteContainerHeaderActionItem, RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
 
-import { setPluginOptions } from './api'
+import { listPluginRuntimeEndpoints, setPluginOptions } from './api'
 import { usePluginContext } from './plugin-context'
 import type { PluginHostComponentEntry } from './plugin-host-components'
-import { pluginHostComponentReactApi, renderPluginHostComponent } from './plugin-host-components'
+import { createPluginHostComponentReactApi, renderPluginHostComponent } from './plugin-host-components'
 import { createPluginI18nContext, resolvePluginContributionText } from './plugin-i18n'
-import type { PluginDisposable, PluginHostComponentApi, PluginViewContext, PluginViewSurface } from './plugin-manifest'
+import type {
+  PluginDisposable,
+  PluginHostComponentApi,
+  PluginViewContext,
+  PluginViewRouteLauncherChrome,
+  PluginViewSurface
+} from './plugin-manifest'
+import { invokePluginRuntimeChannel } from './plugin-runtime'
 import { useRoutePluginChrome } from './route-plugin-chrome'
 
-const usePluginHostComponents = () => {
+const usePluginHostComponents = (surface: PluginViewSurface) => {
   const [entries, setEntries] = useState<PluginHostComponentEntry[]>([])
   const activeDisposablesRef = useRef(new Set<PluginDisposable>())
   const disposablesByContainerRef = useRef(new WeakMap<HTMLElement, PluginDisposable>())
@@ -58,7 +65,7 @@ const usePluginHostComponents = () => {
 
   const portals = entries.map(entry =>
     createPortal(
-      renderPluginHostComponent(entry.component, entry.props),
+      renderPluginHostComponent(entry.component, entry.props, surface),
       entry.container,
       entry.id
     )
@@ -72,8 +79,10 @@ const usePluginHostComponents = () => {
 }
 
 export function PluginViewHost({
+  launcherSearchValue,
   onRouteActionsChange,
   onRouteBreadcrumbChange,
+  onRouteLauncherChromeChange,
   onRouteTitleChange,
   routeId,
   scope,
@@ -81,8 +90,10 @@ export function PluginViewHost({
   tab,
   viewId
 }: {
+  launcherSearchValue?: string
   onRouteActionsChange?: (actions?: RouteContainerHeaderActionItem[]) => void
   onRouteBreadcrumbChange?: (breadcrumb?: RouteContainerHeaderBreadcrumb) => void
+  onRouteLauncherChromeChange?: (chrome?: PluginViewRouteLauncherChrome) => void
   onRouteTitleChange?: (title?: string) => void
   routeId?: string
   scope: string
@@ -90,7 +101,7 @@ export function PluginViewHost({
   tab?: PluginViewContext['tab']
   viewId: string
 }) {
-  const { refreshPlugins, registry, snapshot } = usePluginContext()
+  const { pluginServerBaseUrl, refreshPlugins, registry, runtimeEndpoint, snapshot } = usePluginContext()
   const { i18n } = useTranslation()
   const { isDarkMode, resolvedThemeMode, themeMode } = useResolvedThemeMode()
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -98,7 +109,11 @@ export function PluginViewHost({
     api: hostComponentApi,
     disposeAll: disposeHostComponents,
     portals: hostComponentPortals
-  } = usePluginHostComponents()
+  } = usePluginHostComponents(surface)
+  const pluginHostComponentReactApi = useMemo(
+    () => createPluginHostComponentReactApi(surface, { launcherSearchValue }),
+    [launcherSearchValue, surface]
+  )
   const location = useLocation()
   const pluginI18n = useMemo(() => createPluginI18nContext(), [])
   const view = useMemo(
@@ -114,10 +129,10 @@ export function PluginViewHost({
     options: Record<string, unknown>,
     target: 'workspace' | 'global' = 'workspace'
   ) => {
-    const savedOptions = await setPluginOptions(scope, options, target)
+    const savedOptions = await setPluginOptions(scope, options, target, { serverBaseUrl: pluginServerBaseUrl })
     await refreshPlugins()
     return savedOptions
-  }, [refreshPlugins, scope])
+  }, [pluginServerBaseUrl, refreshPlugins, scope])
   const viewContext = useMemo<PluginViewContext>(() => ({
     components: hostComponentApi,
     extensions: {
@@ -127,6 +142,13 @@ export function PluginViewHost({
     host: {
       isDarkMode,
       language,
+      ...(surface === 'launcher'
+        ? {
+          launcherSearch: {
+            value: launcherSearchValue ?? ''
+          }
+        }
+        : {}),
       resolvedThemeMode,
       surface,
       themeMode
@@ -136,6 +158,12 @@ export function PluginViewHost({
       update: updatePluginOptions,
       value: pluginInstance?.options ?? {}
     },
+    runtime: {
+      endpoint: runtimeEndpoint,
+      invokeChannel: (channelId, invocation) =>
+        invokePluginRuntimeChannel(scope, channelId, invocation, pluginServerBaseUrl),
+      listEndpoints: () => listPluginRuntimeEndpoints({ serverBaseUrl: pluginServerBaseUrl })
+    },
     ...(onRouteTitleChange == null
       ? {}
       : {
@@ -143,6 +171,7 @@ export function PluginViewHost({
           setActions: (actions) => onRouteActionsChange?.(actions as RouteContainerHeaderActionItem[] | undefined),
           setBreadcrumb: breadcrumb =>
             onRouteBreadcrumbChange?.(breadcrumb as RouteContainerHeaderBreadcrumb | undefined),
+          setLauncherChrome: chrome => onRouteLauncherChromeChange?.(chrome),
           setTitle: onRouteTitleChange
         }
       }),
@@ -154,11 +183,16 @@ export function PluginViewHost({
     hostComponentApi,
     isDarkMode,
     language,
+    launcherSearchValue,
     pluginI18n,
     pluginInstance?.options,
+    pluginServerBaseUrl,
+    pluginHostComponentReactApi,
     registry,
+    runtimeEndpoint,
     onRouteActionsChange,
     onRouteBreadcrumbChange,
+    onRouteLauncherChromeChange,
     onRouteTitleChange,
     resolvedThemeMode,
     routeId,
@@ -184,7 +218,7 @@ export function PluginViewHost({
   }, [disposeHostComponents, view, viewContext])
 
   useEffect(() => {
-    if (surface !== 'route') return
+    if (surface !== 'route' && surface !== 'launcher') return
     window.dispatchEvent(
       new CustomEvent('oneworks:plugin-route-change', {
         detail: {
@@ -193,7 +227,8 @@ export function PluginViewHost({
           pluginScope: scope,
           route: `${location.pathname}${location.search}${location.hash}`,
           routeId,
-          search: location.search
+          search: location.search,
+          surface
         }
       })
     )
@@ -202,7 +237,12 @@ export function PluginViewHost({
   if (view?.renderNode != null) {
     return (
       <>
-        <div className='plugin-view-host' data-plugin-scope={scope} data-plugin-view={viewId}>
+        <div
+          className={`plugin-view-host plugin-view-host--${surface}`}
+          data-plugin-scope={scope}
+          data-plugin-surface={surface}
+          data-plugin-view={viewId}
+        >
           {view.renderNode(viewContext)}
         </div>
         {hostComponentPortals}
@@ -212,7 +252,13 @@ export function PluginViewHost({
 
   return (
     <>
-      <div ref={containerRef} className='plugin-view-host' data-plugin-scope={scope} data-plugin-view={viewId} />
+      <div
+        ref={containerRef}
+        className={`plugin-view-host plugin-view-host--${surface}`}
+        data-plugin-scope={scope}
+        data-plugin-surface={surface}
+        data-plugin-view={viewId}
+      />
       {hostComponentPortals}
     </>
   )

@@ -981,6 +981,8 @@
     "senderPlaceholder": "输入要打开或启动的项目...",
     "searchLabel": "搜索项目和操作",
     "searchPlaceholder": "搜索项目或操作...",
+    "pluginSearchLabel": "搜索 {{title}}",
+    "pluginSearchPlaceholder": "搜索 {{title}}",
     "commandListLabel": "启动操作列表",
     "commandFailed": "执行操作失败",
     "noResults": "没有匹配的项目或操作",

@@ -11,6 +11,7 @@ import { readOneWorksAuthStore } from '@oneworks/utils/auth-store'
 
 import type { ResolvedRelayServer } from './options.js'
 import {
+  RELAY_PERSONAL_DOCUMENT_SYNC_KINDS,
   readRelayPersonalDocumentSyncPreferences,
   relayPersonalDocumentSyncEnabled
 } from './personal-document-sync-preferences.js'
@@ -79,11 +80,15 @@ export type RelayDocumentScope =
 
 type RelayDocumentOpenMode = 'open' | 'reveal'
 
-const PERSONAL_DOCUMENT_KINDS: RelayPersonalDocumentKind[] = ['agents']
+const PERSONAL_DOCUMENT_KINDS: RelayPersonalDocumentKind[] = [...RELAY_PERSONAL_DOCUMENT_SYNC_KINDS]
 
 const emptyCounts = (): RelayPersonalDocumentSyncCounts => ({
-  agents: 0
+  agents: 0,
+  ooAgents: 0,
+  ooRules: 0
 })
+
+const countFromCounts = (counts: RelayPersonalDocumentSyncCounts) => counts.agents + counts.ooAgents + counts.ooRules
 
 const stableJsonStringify = (value: unknown): string => {
   if (Array.isArray(value)) {
@@ -129,7 +134,9 @@ const normalizeNumber = (value: unknown) => (
 const normalizeCounts = (value: unknown): RelayPersonalDocumentSyncCounts => {
   const input = isRecord(value) ? value : {}
   return {
-    agents: normalizeNumber(input.agents) ?? 0
+    agents: normalizeNumber(input.agents) ?? 0,
+    ooAgents: normalizeNumber(input.ooAgents) ?? 0,
+    ooRules: normalizeNumber(input.ooRules) ?? 0
   }
 }
 
@@ -193,7 +200,7 @@ const normalizeDocumentSnapshot = (value: unknown): RelayPersonalDocumentSnapsho
   const countsByKind = normalizeCounts(value.countsByKind)
   return {
     countsByKind,
-    documentCount: normalizeNumber(value.documentCount) ?? countsByKind.agents,
+    documentCount: normalizeNumber(value.documentCount) ?? countFromCounts(countsByKind),
     encryptedPayload,
     hash: toString(value.hash) || undefined,
     totalSizeBytes: normalizeNumber(value.totalSizeBytes) ?? 0,
@@ -246,6 +253,8 @@ const normalizeDocumentActionPayloadPath = (path: string) => {
     payloadPath.includes('\0') ||
     (
       payloadPath !== 'AGENTS.md' &&
+      payloadPath !== '.oo/AGENTS.md' &&
+      !payloadPath.startsWith('.oo/rules/') &&
       !payloadPath.startsWith('.oo/accounts/') &&
       !payloadPath.startsWith('.oo/teams/')
     )
@@ -347,17 +356,27 @@ const scopeSegment = (value: string) => {
 }
 
 const agentsPayloadPath = (scope: RelayDocumentScope) => (
-  `${documentBasePayloadPath(scope)}/AGENTS.md`
+  scope.type === 'account'
+    ? 'AGENTS.md'
+    : `${documentBasePayloadPath(scope)}/AGENTS.md`
 )
 
 const documentBasePayloadPath = (scope: RelayDocumentScope) => (
   scope.type === 'account'
-    ? `.oo/accounts/${scopeSegment(scope.id)}`
+    ? ''
     : `.oo/teams/${scopeSegment(scope.id)}`
 )
 
+const ooAgentsPayloadPath = (scope: RelayDocumentScope) => (
+  scope.type === 'account'
+    ? '.oo/AGENTS.md'
+    : agentsPayloadPath(scope)
+)
+
 const rulesPayloadRoot = (scope: RelayDocumentScope) => (
-  `${documentBasePayloadPath(scope)}/rules`
+  scope.type === 'account'
+    ? '.oo/rules'
+    : `${documentBasePayloadPath(scope)}/rules`
 )
 
 const fixtureDocumentTitle = (scope: RelayDocumentScope) => (
@@ -372,6 +391,13 @@ const fixtureDocumentFiles = (scope: RelayDocumentScope) => {
         `---\ntitle: ${title} Agent Guide\nname: ${scope.type}-agents\n---\n\n# ${title} Agent Guide\n\nShared guidance fixture for Relay document sync visual testing.\n`,
       path: agentsPayloadPath(scope)
     },
+    ...(scope.type === 'account'
+      ? [{
+        content:
+          `---\ntitle: OneWorks User Agent Guide\nname: user-agents\n---\n\n# OneWorks User Agent Guide\n\nUser-level guidance shared across local OneWorks workspaces.\n`,
+        path: ooAgentsPayloadPath(scope)
+      }]
+      : []),
     {
       content:
         `---\ntitle: Backend API Contracts\nname: backend-api-contracts\n---\n\n# Backend API Contracts\n\nDocument request and response compatibility for Relay services.\n`,
@@ -482,20 +508,29 @@ export const listRelayDocumentEntries = async (
   const homeDir = resolveUserHomeDir()
   const basePayloadPath = documentBasePayloadPath(scope)
   const scannedRulePaths = await scanMarkdownPayloadPaths(homeDir, rulesPayloadRoot(scope))
-  const payloadPaths = new Set([
-    agentsPayloadPath(scope),
-    ...scannedRulePaths
-  ])
-  const entries = await Promise.all([...payloadPaths].map(async (payloadPath) => {
+  const accountRulePaths = scannedRulePaths.length === 0
+    ? [`${rulesPayloadRoot(scope)}/**/*.md`]
+    : scannedRulePaths
+  const payloadPaths: Array<{ kind: RelayPersonalDocumentKind; path: string }> = scope.type === 'account'
+    ? [
+      { kind: 'agents', path: agentsPayloadPath(scope) },
+      { kind: 'ooAgents', path: ooAgentsPayloadPath(scope) },
+      ...accountRulePaths.map(path => ({ kind: 'ooRules' as const, path }))
+    ]
+    : [
+      { kind: 'agents', path: agentsPayloadPath(scope) },
+      ...scannedRulePaths.map(path => ({ kind: 'agents' as const, path }))
+    ]
+  const entries = await Promise.all(payloadPaths.map(async ({ kind, path: payloadPath }) => {
     const path = resolve(homeDir, payloadPath)
     const content = await readFile(path, 'utf8').catch(() => undefined)
-    const relativePath = payloadPath.startsWith(`${basePayloadPath}/`)
+    const relativePath = basePayloadPath !== '' && payloadPath.startsWith(`${basePayloadPath}/`)
       ? payloadPath.slice(basePayloadPath.length + 1)
       : payloadPath
     return {
       displayName: markdownMetadataDisplayName(content ?? '') || basename(payloadPath),
       exists: content != null,
-      kind: 'agents' as const,
+      kind,
       localOnly: isLocalOnlyMarkdownPath(payloadPath),
       path: payloadPath,
       relativePath
@@ -504,6 +539,8 @@ export const listRelayDocumentEntries = async (
   return entries.sort((left, right) => {
     if (left.relativePath === 'AGENTS.md') return -1
     if (right.relativePath === 'AGENTS.md') return 1
+    if (left.relativePath === '.oo/AGENTS.md') return -1
+    if (right.relativePath === '.oo/AGENTS.md') return 1
     return left.relativePath.localeCompare(right.relativePath)
   })
 }
@@ -514,14 +551,32 @@ const collectLocalDocuments = async (
 ): Promise<RelayPersonalDocumentPayload> => {
   const homeDir = resolveUserHomeDir()
   const documents: RelayPersonalDocumentFile[] = []
-  if (preferences.agents) {
-    const payloadPaths = [
-      agentsPayloadPath(scope),
-      ...await scanMarkdownPayloadPaths(homeDir, rulesPayloadRoot(scope))
-    ]
-    for (const payloadPath of payloadPaths) {
-      const document = await readDocumentFile(homeDir, 'agents', payloadPath)
+  if (scope.type === 'team') {
+    if (preferences.agents) {
+      const payloadPaths = [
+        agentsPayloadPath(scope),
+        ...await scanMarkdownPayloadPaths(homeDir, rulesPayloadRoot(scope))
+      ]
+      for (const payloadPath of payloadPaths) {
+        const document = await readDocumentFile(homeDir, 'agents', payloadPath)
+        if (document != null) documents.push(document)
+      }
+    }
+  } else {
+    if (preferences.agents) {
+      const document = await readDocumentFile(homeDir, 'agents', agentsPayloadPath(scope))
       if (document != null) documents.push(document)
+    }
+    if (preferences.ooAgents) {
+      const document = await readDocumentFile(homeDir, 'ooAgents', ooAgentsPayloadPath(scope))
+      if (document != null) documents.push(document)
+    }
+    if (preferences.ooRules) {
+      const payloadPaths = await scanMarkdownPayloadPaths(homeDir, rulesPayloadRoot(scope))
+      for (const payloadPath of payloadPaths) {
+        const document = await readDocumentFile(homeDir, 'ooRules', payloadPath)
+        if (document != null) documents.push(document)
+      }
     }
   }
   return {
@@ -556,7 +611,7 @@ const importRootAgentsToAccountDocuments = async (accountId: string): Promise<Ap
   const source = resolve(homeDir, 'AGENTS.md')
   const content = await readFile(source, 'utf8').catch(() => undefined)
   if (content == null) {
-    throw new Error('未找到 ~/AGENTS.md，无法导入到当前账号规则。')
+    throw new Error('未找到 ~/AGENTS.md，无法同步当前账号规则。')
   }
 
   const target = resolve(homeDir, agentsPayloadPath({ id: accountId, type: 'account' }))
@@ -690,11 +745,17 @@ const decryptDocumentPayload = (
 }
 
 const kindMatchesPath = (kind: RelayPersonalDocumentKind, path: string, scope: RelayDocumentScope) => (
-  kind === 'agents' &&
-  (
-    path === agentsPayloadPath(scope) ||
-    (path.startsWith(`${rulesPayloadRoot(scope)}/`) && extname(path).toLowerCase() === '.md')
-  )
+  scope.type === 'team'
+    ? kind === 'agents' &&
+      (
+        path === agentsPayloadPath(scope) ||
+        (path.startsWith(`${rulesPayloadRoot(scope)}/`) && extname(path).toLowerCase() === '.md')
+      )
+    : (
+      (kind === 'agents' && path === agentsPayloadPath(scope)) ||
+      (kind === 'ooAgents' && path === ooAgentsPayloadPath(scope)) ||
+      (kind === 'ooRules' && path.startsWith(`${rulesPayloadRoot(scope)}/`) && extname(path).toLowerCase() === '.md')
+    )
 )
 
 const resolveSafePayloadPath = (
@@ -702,7 +763,11 @@ const resolveSafePayloadPath = (
   document: RelayPersonalDocumentFile,
   scope: RelayDocumentScope
 ) => {
-  if (!kindMatchesPath(document.kind, document.path, scope) || isLocalOnlyMarkdownPath(document.path)) return undefined
+  if (
+    document.path.includes('*') ||
+    !kindMatchesPath(document.kind, document.path, scope) ||
+    isLocalOnlyMarkdownPath(document.path)
+  ) return undefined
   const target = resolve(homeDir, document.path)
   return target === homeDir || target.startsWith(`${homeDir}${sep}`) ? target : undefined
 }

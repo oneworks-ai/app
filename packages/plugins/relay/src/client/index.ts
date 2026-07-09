@@ -6,7 +6,7 @@ import {
   OFFICIAL_RELAY_VERCEL_DEV_SERVER_ID,
   OFFICIAL_RELAY_VERCEL_SERVER_ID
 } from '../shared/official-services.js'
-import { createRelayClientI18n, relayClientLauncherStatusTitleI18n } from './i18n.js'
+import { createRelayClientI18n, relayClientLauncherAccountListTitleI18n } from './i18n.js'
 import { openRelayLogin } from './login-action.js'
 import { RelayHomeView } from './react-view.js'
 import { relayClientCss } from './styles.js'
@@ -15,11 +15,40 @@ import type {
   PluginClientContext,
   PluginViewRegistration,
   RelayAuthAccount,
+  RelayConfigDistributionSourceStatus,
+  RelayPersonalDocumentSyncKind,
   RelayServerStatus,
   RelayStatus
 } from './types.js'
 
 const ACCOUNT_FOOTER_REFRESH_INTERVAL_MS = 120_000
+
+type RelayProjectSyncPayload =
+  | {
+    action: 'config-refresh'
+    accountKey?: string
+    confirm?: boolean
+    label: string
+    serverId?: string
+  }
+  | {
+    accountKey?: string
+    action: 'personal-document-sync-enabled'
+    confirm?: boolean
+    kind: RelayPersonalDocumentSyncKind
+    label: string
+    serverId?: string
+  }
+  | {
+    accountKey?: string
+    action: 'team-document-sync-enabled'
+    confirm?: boolean
+    label: string
+    serverId?: string
+    teamId: string
+  }
+
+type RelayFooterContribution = Record<string, unknown> & { id: string }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -27,6 +56,21 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const toCleanString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
+
+const PERSONAL_DOCUMENT_SYNC_KINDS: RelayPersonalDocumentSyncKind[] = ['agents', 'ooAgents', 'ooRules']
+
+const personalDocumentSyncLabel = (kind: RelayPersonalDocumentSyncKind) => {
+  if (kind === 'agents') return '同步 ~/AGENTS.md'
+  if (kind === 'ooAgents') return '同步 ~/.oo/AGENTS.md'
+  return '同步 ~/.oo/rules'
+}
+
+const readPersonalDocumentSyncKind = (value: unknown): RelayPersonalDocumentSyncKind | undefined => {
+  const kind = toCleanString(value)
+  return PERSONAL_DOCUMENT_SYNC_KINDS.includes(kind as RelayPersonalDocumentSyncKind)
+    ? kind as RelayPersonalDocumentSyncKind
+    : undefined
+}
 
 const slugify = (value: string, fallback = 'item', maxLength = 48) => {
   const slug = value.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-|-$/g, '')
@@ -60,6 +104,28 @@ const getPreferredAccount = (accounts: RelayAuthAccount[]) => (
   accounts.find(account => account.enabled !== false && account.sessionAuthenticated === true) ??
     accounts.find(account => account.sessionAuthenticated === true) ??
     accounts[0]
+)
+
+const readAccountUpdatedTime = (account: RelayAuthAccount) => {
+  const updatedAt = toCleanString(account.updatedAt)
+  if (updatedAt == null) return 0
+  const time = Date.parse(updatedAt)
+  return Number.isFinite(time) ? time : 0
+}
+
+const getRecentAccount = (accounts: RelayAuthAccount[]) => (
+  [...accounts]
+    .sort((left, right) => {
+      const leftSignedIn = left.sessionAuthenticated === true ? 1 : 0
+      const rightSignedIn = right.sessionAuthenticated === true ? 1 : 0
+      if (leftSignedIn !== rightSignedIn) return rightSignedIn - leftSignedIn
+
+      const leftEnabled = left.enabled === false ? 0 : 1
+      const rightEnabled = right.enabled === false ? 0 : 1
+      if (leftEnabled !== rightEnabled) return rightEnabled - leftEnabled
+
+      return readAccountUpdatedTime(right) - readAccountUpdatedTime(left)
+    })[0]
 )
 
 const normalizeComparableUrl = (value?: string) => {
@@ -221,7 +287,10 @@ const buildAccountPopoverGroups = (
   }
 }
 
-const buildRelayAccountFooterContribution = (ctx: PluginClientContext, status: RelayStatus | null) => {
+const buildRelayAccountFooterContribution = (
+  ctx: PluginClientContext,
+  status: RelayStatus | null
+): RelayFooterContribution => {
   const t = createRelayClientI18n(ctx.i18n)
   const accounts = Array.isArray(status?.accounts) ? status.accounts : []
   const servers = Array.isArray(status?.servers) ? status.servers : []
@@ -251,6 +320,119 @@ const buildRelayAccountFooterContribution = (ctx: PluginClientContext, status: R
   }
 }
 
+const getRelayProjectDistribution = (status: RelayStatus | null) => status?.configDistribution ?? status?.configSync
+
+const hasMatchedRelayProject = (status: RelayStatus | null) => {
+  const matchedProject = getRelayProjectDistribution(status)?.matchedProject
+  return matchedProject === true || toCleanString(matchedProject) != null
+}
+
+const getProjectSyncTeamLabel = (source: RelayConfigDistributionSourceStatus) =>
+  toCleanString(source.teamName) ?? toCleanString(source.teamId) ?? '团队'
+
+const getProjectSyncTeamId = (source: RelayConfigDistributionSourceStatus) => toCleanString(source.teamId)
+
+const isSourceEnabledForProjectSync = (source: RelayConfigDistributionSourceStatus) =>
+  source.enabled !== false && (source.disabledBy?.length ?? 0) === 0
+
+const buildRelayProjectSyncCandidates = (status: RelayStatus | null): RelayProjectSyncPayload[] => {
+  if (!hasMatchedRelayProject(status)) return []
+
+  const accounts = Array.isArray(status?.accounts) ? status.accounts : []
+  const account = getPreferredAccount(accounts)
+  const accountKey = toCleanString(account?.accountKey)
+  const serverId = toCleanString(account?.serverId)
+  const candidates: RelayProjectSyncPayload[] = [{
+    accountKey,
+    action: 'config-refresh',
+    label: '同步当前项目配置',
+    serverId
+  }]
+
+  PERSONAL_DOCUMENT_SYNC_KINDS.forEach(kind => {
+    if (status?.personalDocumentSync?.preferences?.[kind] === true) return
+    candidates.push({
+      accountKey,
+      action: 'personal-document-sync-enabled',
+      kind,
+      label: personalDocumentSyncLabel(kind),
+      serverId
+    })
+  })
+
+  const distribution = getRelayProjectDistribution(status)
+  const teamSources = Array.isArray(distribution?.sources) ? distribution.sources : []
+  const teamIds = new Set<string>()
+  teamSources.forEach((source) => {
+    if (!isSourceEnabledForProjectSync(source)) return
+    const teamId = getProjectSyncTeamId(source)
+    if (teamId == null || teamIds.has(teamId)) return
+    teamIds.add(teamId)
+    if (status?.teamDocumentSync?.[teamId]?.preferences?.agents === true) return
+    candidates.push({
+      accountKey,
+      action: 'team-document-sync-enabled',
+      label: `同步${getProjectSyncTeamLabel(source)} AGENTS.md`,
+      serverId,
+      teamId
+    })
+  })
+
+  return candidates
+}
+
+const buildRelayProjectSyncFooterContribution = (status: RelayStatus | null): RelayFooterContribution | undefined => {
+  const candidates = buildRelayProjectSyncCandidates(status)
+  if (candidates.length === 0) return undefined
+  if (candidates.length === 1) {
+    const candidate = candidates[0] as RelayProjectSyncPayload
+    return {
+      command: 'project-sync',
+      icon: 'sync',
+      id: 'project-sync',
+      payload: { ...candidate, confirm: true },
+      title: '同步当前项目'
+    }
+  }
+
+  return {
+    children: candidates.map(candidate => ({
+      command: 'project-sync',
+      icon: candidate.action === 'config-refresh' ? 'rule_settings' : 'description',
+      id: `project-sync-${slugify(candidate.action)}-${slugify(candidate.label)}`,
+      payload: candidate,
+      title: candidate.label
+    })),
+    icon: 'sync',
+    id: 'project-sync',
+    title: '同步当前项目'
+  }
+}
+
+const buildRelayFooterContributions = (ctx: PluginClientContext, status: RelayStatus | null) =>
+  [
+    buildRelayAccountFooterContribution(ctx, status),
+    buildRelayProjectSyncFooterContribution(status)
+  ].filter((item): item is RelayFooterContribution => item != null)
+
+const buildRelayLauncherRoute = (ctx: PluginClientContext, suffix = 'accounts') => {
+  const normalizedSuffix = suffix.replace(/^\/+/u, '')
+  const route = `/launcher/plugins/${encodeURIComponent(ctx.scope)}/home`
+  return normalizedSuffix === '' ? route : `${route}/${normalizedSuffix}`
+}
+
+const buildRelayLauncherAccountRoute = (ctx: PluginClientContext, account?: RelayAuthAccount) => {
+  const accountKey = toCleanString(account?.accountKey)
+  if (accountKey == null) return buildRelayLauncherRoute(ctx, 'accounts')
+  return buildRelayLauncherRoute(ctx, `accounts/${encodeURIComponent(accountKey)}/account`)
+}
+
+const buildRelayLauncherAccountGroupFields = (t: ReturnType<typeof createRelayClientI18n>) => ({
+  groupId: 'account',
+  groupOrder: -40,
+  groupTitle: t.launcher.accountSectionTitle
+})
+
 const fetchRelayStatus = async (ctx: PluginClientContext): Promise<RelayStatus | null> => {
   try {
     const response = await ctx.api.fetch('relay/status')
@@ -262,30 +444,100 @@ const fetchRelayStatus = async (ctx: PluginClientContext): Promise<RelayStatus |
   }
 }
 
+const searchRelayLauncherStatus = async (ctx: PluginClientContext) => {
+  const t = createRelayClientI18n(ctx.i18n)
+  const status = await fetchRelayStatus(ctx)
+  const accounts = Array.isArray(status?.accounts) ? status.accounts : []
+  const servers = Array.isArray(status?.servers) ? status.servers : []
+  const recentAccount = getRecentAccount(accounts)
+  const recentAccountName = recentAccount == null ? undefined : getAccountDisplayName(recentAccount)
+  const recentServerLabel = recentAccount == null ? undefined : getServerGroupLabel(recentAccount, servers, t)
+  const accountGroupFields = buildRelayLauncherAccountGroupFields(t)
+  const accountKeywords = ['relay', 'account', 'accounts', 'login', t.accounts.title]
+  const results: Array<Record<string, unknown>> = []
+
+  if (recentAccount != null) {
+    const accountKey = toCleanString(recentAccount.accountKey) ?? slugify(recentAccountName ?? 'account', 'account')
+    results.push({
+      ...accountGroupFields,
+      icon: 'account_circle',
+      id: `account-${accountKey}`,
+      keywords: [
+        ...accountKeywords,
+        recentAccountName ?? '',
+        recentServerLabel ?? '',
+        t.launcher.recentAccountSubtitle
+      ],
+      route: buildRelayLauncherAccountRoute(ctx, recentAccount),
+      subtitle: [t.launcher.recentAccountSubtitle, recentServerLabel]
+        .filter((value): value is string => value != null && value !== '')
+        .join(' · '),
+      title: recentAccountName ?? t.accounts.title
+    })
+  }
+
+  if (accounts.length > 1) {
+    results.push({
+      ...accountGroupFields,
+      icon: 'account_circle',
+      id: 'list',
+      keywords: [
+        ...accountKeywords,
+        t.launcher.accountListTitle,
+        t.launcher.accountCount(accounts.length)
+      ],
+      route: buildRelayLauncherRoute(ctx, 'accounts'),
+      subtitle: t.launcher.accountCount(accounts.length),
+      title: t.launcher.accountListTitle,
+      titleI18n: relayClientLauncherAccountListTitleI18n
+    })
+  }
+
+  results.push({
+    ...accountGroupFields,
+    icon: 'login',
+    id: 'login',
+    keywords: [
+      ...accountKeywords,
+      t.actions.login,
+      t.launcher.loginTitle,
+      t.launcher.loginMoreTitle
+    ],
+    route: buildRelayLauncherRoute(ctx, 'accounts/login'),
+    subtitle: t.launcher.loginSubtitle,
+    title: accounts.length === 0 ? t.launcher.loginTitle : t.launcher.loginMoreTitle
+  })
+
+  return results
+}
+
 export async function activatePlugin(ctx: PluginClientContext) {
   const style = document.createElement('style')
   style.textContent = relayClientCss
   document.head.appendChild(style)
 
   let disposed = false
-  let accountFooterDisposable: Disposable | null = null
-  let accountFooterSignature = ''
-  const refreshAccountFooter = async () => {
+  let footerDisposables: Disposable[] = []
+  let footerSignature = ''
+  const disposeFooterContributions = () => {
+    footerDisposables.forEach(disposable => disposable.dispose())
+    footerDisposables = []
+  }
+  const refreshFooterContributions = async () => {
     const registerSlot = ctx.slots?.register
     if (registerSlot == null) return
-    // Mirrors Relay Admin's lower-left account popover; keep menu semantics in sync with AdminNavRail.
-    const contribution = buildRelayAccountFooterContribution(ctx, await fetchRelayStatus(ctx))
-    const signature = JSON.stringify(contribution)
-    if (signature === accountFooterSignature) return
-    accountFooterDisposable?.dispose()
-    accountFooterDisposable = null
-    accountFooterSignature = signature
-    const nextDisposable = registerSlot('nav.footer.before', contribution)
+    // Mirrors Relay Admin's lower-left account popover and project sync shortcut.
+    const contributions = buildRelayFooterContributions(ctx, await fetchRelayStatus(ctx))
+    const signature = JSON.stringify(contributions)
+    if (signature === footerSignature) return
+    disposeFooterContributions()
+    footerSignature = signature
+    const nextDisposables = contributions.map(contribution => registerSlot('nav.footer.before', contribution))
     if (disposed) {
-      nextDisposable.dispose()
+      nextDisposables.forEach(disposable => disposable.dispose())
       return
     }
-    accountFooterDisposable = nextDisposable
+    footerDisposables = nextDisposables
   }
   const logoutAccount = async (accountKey: string) => {
     const response = await ctx.api.fetch('relay/users/logout', {
@@ -301,7 +553,7 @@ export async function activatePlugin(ctx: PluginClientContext) {
       level: 'success',
       title: '已退出登录'
     })
-    await refreshAccountFooter()
+    await refreshFooterContributions()
     return result
   }
   const logoutActiveAccount = async () => {
@@ -320,6 +572,60 @@ export async function activatePlugin(ctx: PluginClientContext) {
     }
     return await logoutAccount(accountKey)
   }
+  const executeProjectSync = async (payload?: unknown) => {
+    const t = createRelayClientI18n(ctx.i18n)
+    const action = isRecord(payload) ? toCleanString(payload.action) : undefined
+    const label = isRecord(payload) ? toCleanString(payload.label) ?? '同步当前项目' : '同步当前项目'
+    if (action == null) {
+      throw new Error(t.errors.relayActionFailed('project-sync', 400))
+    }
+    if (isRecord(payload) && payload.confirm === true && typeof window.confirm === 'function') {
+      const confirmed = window.confirm(`确认${label}？`)
+      if (!confirmed) return { cancelled: true }
+    }
+
+    const accountKey = isRecord(payload) ? toCleanString(payload.accountKey) : undefined
+    const serverId = isRecord(payload) ? toCleanString(payload.serverId) : undefined
+    let path = ''
+    let body: Record<string, unknown> = {}
+    if (action === 'config-refresh') {
+      path = 'relay/config-refresh'
+      body = { accountKey, serverId }
+    } else if (action === 'personal-document-sync-enabled') {
+      const kind = readPersonalDocumentSyncKind(isRecord(payload) ? payload.kind : undefined)
+      if (kind == null) {
+        throw new Error(t.errors.relayActionFailed(action, 400))
+      }
+      path = 'relay/personal-document-sync-enabled'
+      body = { accountKey, enabled: true, kind, serverId }
+    } else if (action === 'team-document-sync-enabled') {
+      const teamId = isRecord(payload) ? toCleanString(payload.teamId) : undefined
+      if (teamId == null) {
+        throw new Error(t.errors.relayActionFailed(action, 400))
+      }
+      path = 'relay/team-document-sync-enabled'
+      body = { accountKey, enabled: true, kind: 'agents', serverId, teamId }
+    } else {
+      throw new Error(t.errors.relayActionFailed(action, 400))
+    }
+
+    const response = await ctx.api.fetch(path, {
+      body: JSON.stringify(body),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST'
+    })
+    if (!response.ok) {
+      const text = await response.text()
+      throw new Error(text || t.errors.relayActionFailed(action, response.status))
+    }
+    const result = await response.json()
+    ctx.notifications?.show?.({
+      level: 'success',
+      title: label
+    })
+    await refreshFooterContributions()
+    return result
+  }
   const setIntervalFn = typeof window.setInterval === 'function'
     ? window.setInterval.bind(window)
     : globalThis.setInterval.bind(globalThis)
@@ -330,7 +636,7 @@ export async function activatePlugin(ctx: PluginClientContext) {
   const shouldRefreshAccountFooter = () => documentRef?.visibilityState !== 'hidden'
   const refreshAccountFooterIfVisible = () => {
     if (!shouldRefreshAccountFooter()) return
-    void refreshAccountFooter().catch((error) => {
+    void refreshFooterContributions().catch((error) => {
       console.warn('[relay] failed to refresh account footer', error)
     })
   }
@@ -367,7 +673,11 @@ export async function activatePlugin(ctx: PluginClientContext) {
         headers: body == null ? undefined : { 'content-type': 'application/json' },
         method: 'POST'
       })
-      if (response.ok) return await response.json()
+      if (response.ok) {
+        const result = await response.json()
+        await refreshFooterContributions()
+        return result
+      }
       if (response.status === 404 || response.status === 405) {
         const statusResponse = await ctx.api.fetch('relay/status')
         return await statusResponse.json()
@@ -377,10 +687,11 @@ export async function activatePlugin(ctx: PluginClientContext) {
         text || createRelayClientI18n(ctx.i18n).errors.relayActionFailed('config-refresh', response.status)
       )
     }),
+    ctx.commands.register('project-sync', executeProjectSync),
     ctx.commands.register('login', async () => {
       try {
         const result = await openRelayLogin(ctx, { forcePluginHomeRedirect: true })
-        await refreshAccountFooter()
+        await refreshFooterContributions()
         return result
       } catch (error) {
         ctx.notifications?.show?.({
@@ -393,15 +704,10 @@ export async function activatePlugin(ctx: PluginClientContext) {
     }),
     ctx.commands.register('logout-active', logoutActiveAccount),
     ctx.commands.register('logout-account', logoutAccountFromPayload),
-    ctx.commands.register('search', () => [{
-      id: 'status',
-      title: createRelayClientI18n(ctx.i18n).launcher.statusTitle,
-      titleI18n: relayClientLauncherStatusTitleI18n,
-      icon: 'account_circle'
-    }])
+    ctx.commands.register('search', () => searchRelayLauncherStatus(ctx))
   ]
 
-  void refreshAccountFooter().catch((error) => {
+  void refreshFooterContributions().catch((error) => {
     console.warn('[relay] failed to register account footer', error)
   })
 
@@ -412,7 +718,7 @@ export async function activatePlugin(ctx: PluginClientContext) {
         documentRef.removeEventListener('visibilitychange', handleVisibilityChange)
       }
       clearIntervalFn(accountFooterRefreshTimer)
-      accountFooterDisposable?.dispose()
+      disposeFooterContributions()
       disposables.forEach(disposable => disposable.dispose())
       style.remove()
     }

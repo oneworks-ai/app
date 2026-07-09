@@ -27,6 +27,7 @@ import type {
   RelayConfigShareProfile,
   RelayConfigShareProfileDetail,
   RelayConfigShareTargets,
+  RelayDeviceSummary,
   RelayDocumentContent,
   RelayLoginCallback,
   RelayPersonalDocumentEntry,
@@ -44,6 +45,7 @@ import {
   cleanTextList,
   formatDateTime,
   getAvatarInitials,
+  isRecord,
   normalizeComparableUrl,
   toErrorMessage,
   valueOrDash
@@ -53,6 +55,7 @@ type RelayHomeRoute =
   | { page: 'accounts' }
   | { page: 'servers' }
   | { page: 'login'; serverId?: string }
+  | { accountKey: string; deviceId: string; page: 'device'; tab: RelayDeviceDetailTab }
   | { accountKey: string; page: 'messages' }
   | { accountKey: string; page: 'profile'; tab: RelayProfileTab }
   | {
@@ -102,11 +105,41 @@ interface RelayTeamConfigInteractionItem extends PluginHostInteractionListItem {
   source?: RelayConfigDistributionSourceStatus
 }
 
+interface RelayTeamProjectInteractionItem extends PluginHostInteractionListItem {
+  kind: 'accountDocument' | 'teamConfigProfile' | 'teamDocument'
+  profile?: RelayConfigShareProfile
+  source?: RelayConfigDistributionSourceStatus
+}
+
+interface RelayDeviceInteractionItem extends PluginHostInteractionListItem {
+  device: RelayDeviceSummary
+  deviceId: string
+  kind: 'device'
+}
+
+interface RelayDeviceLoginInteractionItem extends PluginHostInteractionListItem {
+  kind: 'loginRecord'
+}
+
+interface RelayDeviceProjectInteractionItem extends PluginHostInteractionListItem {
+  group?: RelayDeviceProjectGroup
+  kind: 'managementServer' | 'project'
+  path?: string
+  project?: RelayDeviceProjectRow
+}
+
+interface RelayTeamInteractionItem extends PluginHostInteractionListItem {
+  kind: 'team'
+  team: RelayProfileTeam
+  teamId: string
+}
+
 interface RelayDocumentInteractionItem extends PluginHostInteractionListItem {
+  documentSyncKind: RelayPersonalDocumentSyncKind
   displayPath: string
   enabled: boolean
   exists: boolean
-  kind: 'accountAgents' | 'namespaceDocument' | 'teamAgents'
+  kind: 'accountAgents' | 'namespaceDocument' | 'teamAgents' | 'userAgents' | 'userOoAgents' | 'userOoRules'
   localOnly: boolean
   path: string
   relativePath: string
@@ -122,6 +155,8 @@ interface TokenEditorState {
 
 const DOCUMENT_PREVIEW_CLOSE_ANIMATION_MS = 260
 
+type RelayDeviceDetailTab = 'logins' | 'profile' | 'projects'
+
 const profileTabs: Array<{ icon: string; key: RelayProfileTab; label: string }> = [
   { icon: 'badge', key: 'account', label: '资料' },
   { icon: 'groups', key: 'teams', label: '团队' },
@@ -133,21 +168,47 @@ const profileTabs: Array<{ icon: string; key: RelayProfileTab; label: string }> 
 
 const teamDetailTabs: Array<{ icon: string; key: RelayProfileTeamDetailTab; label: string }> = [
   { icon: 'groups', key: 'overview', label: '概览' },
+  { icon: 'folder_open', key: 'projects', label: '项目' },
   { icon: 'rule_settings', key: 'configs', label: '配置' },
   { icon: 'sync', key: 'documents', label: '文档' }
 ]
+
+const deviceDetailTabs: Array<{ icon: string; key: RelayDeviceDetailTab; label: string }> = [
+  { icon: 'badge', key: 'profile', label: '资料' },
+  { icon: 'folder_open', key: 'projects', label: '项目列表' },
+  { icon: 'history', key: 'logins', label: '登陆记录' }
+]
+
+const profileTabLabel = (key: RelayProfileTab) => (
+  profileTabs.find(item => item.key === key)?.label ?? '账号详情'
+)
+
+const teamDetailTabLabel = (
+  key: RelayProfileTeamDetailTab,
+  panel?: 'content' | 'versions'
+) => {
+  if (key === 'configs' && panel === 'content') {
+    return '配置内容'
+  }
+  if (key === 'configs' && panel === 'versions') {
+    return '版本列表'
+  }
+  return teamDetailTabs.find(item => item.key === key)?.label ?? '团队详情'
+}
+
+const deviceDetailTabLabel = (key: RelayDeviceDetailTab) => (
+  deviceDetailTabs.find(item => item.key === key)?.label ?? '设备详情'
+)
 
 const documentScopeSegment = (value: string | null | undefined, fallback: string) => (
   (cleanText(value) ?? fallback).replace(/[\\/]/gu, '_')
 )
 
-const accountAgentsPath = (account: RelayAuthAccount | null) => (
-  `${accountDocumentBasePath(account)}/AGENTS.md`
-)
+const accountAgentsPath = (_account: RelayAuthAccount | null) => '~/AGENTS.md'
 
-const accountDocumentBasePath = (account: RelayAuthAccount | null) => (
-  `~/.oo/accounts/${documentScopeSegment(account?.userId, '<account-id>')}`
-)
+const accountOoAgentsPath = () => '~/.oo/AGENTS.md'
+
+const accountOoRulesPath = () => '~/.oo/rules/**/*.md'
 
 const teamAgentsPath = (team: RelayProfileTeam) => (
   `${teamDocumentBasePath(team)}/AGENTS.md`
@@ -168,6 +229,28 @@ const documentFileName = (path: string) => {
   const segments = path.split('/').filter(Boolean)
   return segments.at(-1) ?? path
 }
+
+const PERSONAL_DOCUMENT_SYNC_KINDS: RelayPersonalDocumentSyncKind[] = ['agents', 'ooAgents', 'ooRules']
+
+const personalDocumentKindLabel = (kind: RelayPersonalDocumentSyncKind) => {
+  if (kind === 'agents') return '根 AGENTS.md'
+  if (kind === 'ooAgents') return '.oo/AGENTS.md'
+  return '.oo/rules'
+}
+
+const personalDocumentKindPathLabel = (kind: RelayPersonalDocumentSyncKind, account: RelayAuthAccount | null) => {
+  if (kind === 'agents') return accountAgentsPath(account)
+  if (kind === 'ooAgents') return accountOoAgentsPath()
+  return accountOoRulesPath()
+}
+
+const personalDocumentSyncEnabled = (sync?: RelayStatus['personalDocumentSync']) => (
+  PERSONAL_DOCUMENT_SYNC_KINDS.some(kind => sync?.preferences?.[kind] === true)
+)
+
+const personalDocumentSyncFullyEnabled = (sync?: RelayStatus['personalDocumentSync']) => (
+  PERSONAL_DOCUMENT_SYNC_KINDS.every(kind => sync?.preferences?.[kind] === true)
+)
 
 const readDocumentPanelQueryValue = (key: 'doc' | 'q') => {
   if (typeof window === 'undefined') return ''
@@ -205,7 +288,8 @@ const writeDocumentPanelQuery = (input: { documentPath?: string | null; search: 
 }
 
 const documentEntryIcon = (entry: RelayPersonalDocumentEntry, team?: RelayProfileTeam) => {
-  if (entry.relativePath === 'AGENTS.md') return team == null ? 'description' : 'groups'
+  if (entry.kind === 'agents') return team == null ? 'description' : 'groups'
+  if (entry.kind === 'ooAgents') return 'account_tree'
   if (entry.localOnly) return 'description'
   if (entry.relativePath.toLowerCase().includes('review')) return 'checklist'
   return 'rule_settings'
@@ -213,6 +297,7 @@ const documentEntryIcon = (entry: RelayPersonalDocumentEntry, team?: RelayProfil
 
 const profileTabKeys = new Set(profileTabs.map(tab => tab.key))
 const teamDetailTabKeys = new Set(teamDetailTabs.map(tab => tab.key))
+const deviceDetailTabKeys = new Set(deviceDetailTabs.map(tab => tab.key))
 
 const readCurrentPathname = () => {
   if (typeof window === 'undefined') return ''
@@ -291,6 +376,17 @@ const parseRoute = (scope: string): RelayHomeRoute => {
   if (segments[2] === 'tokens' && cleanText(segments[3]) != null) {
     return { accountKey, page: 'token', tokenId: segments[3] ?? 'new' }
   }
+  if (segments[2] === 'devices' && cleanText(segments[3]) != null) {
+    const tab = deviceDetailTabKeys.has(segments[4] as RelayDeviceDetailTab)
+      ? segments[4] as RelayDeviceDetailTab
+      : 'profile'
+    return {
+      accountKey,
+      deviceId: segments[3] ?? '',
+      page: 'device',
+      tab
+    }
+  }
   if (segments[2] === 'teams' && cleanText(segments[3]) != null) {
     const tab = teamDetailTabKeys.has(segments[4] as RelayProfileTeamDetailTab)
       ? segments[4] as RelayProfileTeamDetailTab
@@ -325,6 +421,12 @@ const routePath = (scope: string, route: RelayHomeRoute) => {
   if (route.page === 'profile') {
     return `${base}/accounts/${encodeURIComponent(route.accountKey)}/${encodeURIComponent(route.tab)}`
   }
+  if (route.page === 'device') {
+    const suffix = route.tab === 'profile' ? '' : `/${encodeURIComponent(route.tab)}`
+    return `${base}/accounts/${encodeURIComponent(route.accountKey)}/devices/${
+      encodeURIComponent(route.deviceId)
+    }${suffix}`
+  }
   if (route.page === 'team') {
     const suffix = route.tab === 'overview' ? '' : `/${encodeURIComponent(route.tab)}`
     const configProfileId = cleanText(route.configProfileId)
@@ -338,10 +440,24 @@ const routePath = (scope: string, route: RelayHomeRoute) => {
   return `${base}/accounts/${encodeURIComponent(route.accountKey)}/tokens/${encodeURIComponent(route.tokenId)}`
 }
 
-const readJsonResponse = async <T>(response: Response, action: string): Promise<T> => {
+const readErrorMessageFromJsonText = (text: string) => {
+  const trimmed = text.trim()
+  if (trimmed === '') return undefined
+  try {
+    const body = JSON.parse(trimmed) as unknown
+    if (isRecord(body)) {
+      return cleanText(body.error) ?? cleanText(body.message) ?? trimmed
+    }
+  } catch {
+    return trimmed
+  }
+  return trimmed
+}
+
+export const readJsonResponse = async <T>(response: Response, action: string): Promise<T> => {
   const text = await response.text()
   if (!response.ok) {
-    throw new Error(text || `${action} failed with ${response.status}`)
+    throw new Error(readErrorMessageFromJsonText(text) ?? `${action} failed with ${response.status}`)
   }
   return (text.trim() === '' ? {} : JSON.parse(text)) as T
 }
@@ -456,6 +572,8 @@ const getServers = (status?: RelayStatus | null) => status?.servers ?? status?.o
 
 const getAccountKey = (account?: RelayAuthAccount) => cleanText(account?.accountKey) ?? ''
 
+const isLauncherSurface = (view?: PluginViewContext) => view?.host?.surface === 'launcher'
+
 const accountDisplayName = (account?: RelayAuthAccount | null) => (
   cleanText(account?.name) ??
     cleanText(account?.loginId) ??
@@ -515,6 +633,14 @@ const accountServerGroupLabel = (account: RelayAuthAccount, servers: RelayServer
   if (server?.official === true || isOfficialServerId(serverId)) return 'Official'
   if (serverId === LOCAL_RELAY_SERVER_ID || cleanText(account.serverAlias)?.toLowerCase() === 'local') return '本地'
   return serverDisplayName(server, cleanText(account.serverAlias) ?? '服务')
+}
+
+const serverGroupIcon = (
+  group: { key: string; label: string; server?: RelayServerStatus }
+) => {
+  const serverId = cleanText(group.server?.id) ?? group.key
+  if (group.server?.official === true || isOfficialServerId(serverId)) return 'cloud'
+  return 'dns'
 }
 
 const groupAccountsByServer = (accounts: RelayAuthAccount[], servers: RelayServerStatus[]) => {
@@ -595,7 +721,6 @@ const renderButton = (
       ariaLabel: input.label,
       className: 'oneworks-relay__button',
       'data-primary': input.primary === true ? 'true' : undefined,
-      'data-tooltip': input.label,
       danger: input.danger,
       disabled: input.disabled,
       icon: input.icon,
@@ -611,7 +736,6 @@ const renderButton = (
     'aria-label': input.label,
     className: 'oneworks-relay__button',
     'data-primary': input.primary === true ? 'true' : undefined,
-    'data-tooltip': input.label,
     disabled: input.disabled,
     key: input.key,
     onClick: input.onClick,
@@ -738,6 +862,46 @@ const renderInput = (
   })
 }
 
+const renderSearchInput = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  props: {
+    ariaLabel?: string
+    autoFocus?: boolean
+    className?: string
+    onChange: (value: string) => void
+    placeholder?: string
+    suffix?: PluginReactNode
+    value: string
+  }
+) => {
+  const SearchInput = view?.ui?.SearchInput
+  if (SearchInput != null) {
+    return react.createElement(SearchInput, {
+      allowClear: true,
+      ariaLabel: props.ariaLabel ?? props.placeholder,
+      autoFocus: props.autoFocus,
+      className: props.className,
+      onChange: props.onChange,
+      placeholder: props.placeholder,
+      suffix: props.suffix,
+      value: props.value
+    })
+  }
+  return react.createElement(
+    'label',
+    { className: props.className },
+    renderIcon(react, view, 'search', { size: 18 }),
+    renderInput(react, view, {
+      autoFocus: props.autoFocus,
+      onChange: props.onChange,
+      placeholder: props.placeholder,
+      value: props.value
+    }),
+    props.suffix
+  )
+}
+
 const renderSelect = (
   react: PluginReactHost,
   view: PluginViewContext | undefined,
@@ -793,12 +957,14 @@ const NativeList = (props: {
   children?: PluginReactNode | PluginReactNode[]
   className?: string
   react: PluginReactHost
+  variant?: 'grouped' | 'resource'
 }) => {
   const children = Array.isArray(props.children)
     ? props.children
     : props.children == null
     ? []
     : [props.children]
+  const variant = props.variant ?? 'resource'
   return props.react.createElement(
     'div',
     {
@@ -807,7 +973,18 @@ const NativeList = (props: {
     props.react.createElement(
       'div',
       { className: 'relay-admin-list-table__table-scroll' },
-      props.react.createElement('div', { className: adminListSurfaceClassNames.nativeList }, ...children)
+      props.react.createElement(
+        'div',
+        {
+          className: [
+            adminListSurfaceClassNames.nativeList,
+            variant === 'grouped'
+              ? adminListSurfaceClassNames.nativeListGrouped
+              : adminListSurfaceClassNames.nativeListResource
+          ].join(' ')
+        },
+        ...children
+      )
     )
   )
 }
@@ -864,7 +1041,7 @@ const ProfileTabs = (props: {
 
   return react.createElement(NativeTabs, {
     activeKey: activeTab,
-    actions: activeTab === 'documents'
+    actions: !isLauncherSurface(view) && activeTab === 'documents'
       ? renderDocumentTabActions({ account, accountKey, ctx, onChanged, react, view })
       : undefined,
     ariaLabel: '账号详情',
@@ -937,12 +1114,38 @@ const DocumentSyncPanel = (
   const [documentContentLoading, setDocumentContentLoading] = react.useState(false)
   const preferences = documentSync?.preferences ?? {}
   const countsByKind = documentSync?.countsByKind ?? {}
-  const agentsCount = countsByKind.agents ?? 0
-  const agentsEnabled = preferences.agents === true
+  const syncedKindCount = PERSONAL_DOCUMENT_SYNC_KINDS
+    .reduce((total, kind) => total + (countsByKind[kind] ?? 0), 0)
+  const anyPersonalDocumentEnabled = personalDocumentSyncEnabled(documentSync)
   const scopeTitle = team == null ? '账号文档' : '团队文档'
   const scopeMeta = team == null
-    ? '只同步账号命名空间文件；~/AGENTS.md 仅作为一键导入来源。'
+    ? '按用户根路径同步：~/AGENTS.md、~/.oo/AGENTS.md 和 ~/.oo/rules/**/*.md。'
     : '团队成员共享同一份密文快照；只读写团队命名空间文件。'
+  const togglePersonalDocumentSync = (kind: RelayPersonalDocumentSyncKind, enabled: boolean) => {
+    if (team != null) return
+    setSavingAction(kind)
+    void requestJson<RelayStatus>(
+      ctx,
+      'personal-document-sync-enabled',
+      {
+        accountKey,
+        enabled,
+        kind,
+        serverId: cleanText(account?.serverId)
+      }
+    )
+      .then(() => {
+        onChanged()
+      })
+      .catch(error => {
+        ctx.notifications?.show?.({
+          description: toErrorMessage(error),
+          level: 'error',
+          title: '同步设置失败'
+        })
+      })
+      .finally(() => setSavingAction(null))
+  }
   const toggleTeamDocumentSync = (enabled: boolean) => {
     if (team == null) return
     setSavingAction('agents')
@@ -982,16 +1185,16 @@ const DocumentSyncPanel = (
       .then(() => {
         onChanged()
         ctx.notifications?.show?.({
-          description: `${accountAgentsPath(account)} 已更新，并尝试上传到当前账号。`,
+          description: `${accountAgentsPath(account)} 已尝试上传到当前账号。`,
           level: 'success',
-          title: '账号 AGENTS 已导入'
+          title: '账号 AGENTS 已同步'
         })
       })
       .catch(error => {
         ctx.notifications?.show?.({
           description: toErrorMessage(error),
           level: 'error',
-          title: '导入账号 AGENTS 失败'
+          title: '同步账号 AGENTS 失败'
         })
       })
       .finally(() => setSavingAction(null))
@@ -1004,10 +1207,16 @@ const DocumentSyncPanel = (
       formatDateTime(documentSync.lastSyncedAt)
     }`
   const documentPath = team == null ? accountAgentsPath(account) : teamAgentsPath(team)
-  const documentSource = team == null ? '~/AGENTS.md' : documentPath
+  const documentSource = documentPath
   const documentStateLabel = documentSync?.lastError != null && documentSync.lastError !== ''
     ? '同步异常'
-    : agentsEnabled
+    : team == null
+    ? personalDocumentSyncFullyEnabled(documentSync)
+      ? '已同步'
+      : anyPersonalDocumentEnabled
+      ? '部分同步'
+      : '需要同步'
+    : preferences.agents === true
     ? '已同步'
     : '需要同步'
   const documentScopeLabel = team == null ? '账号' : '团队'
@@ -1060,25 +1269,40 @@ const DocumentSyncPanel = (
   const statusEntries = documentSync?.entries ?? []
   const documentEntries = loadedEntries ?? statusEntries
   const documentItems: RelayDocumentInteractionItem[] = documentEntries.map((entry): RelayDocumentInteractionItem => {
-    const isAgentsEntry = entry.relativePath === 'AGENTS.md'
+    const isTeamAgentsEntry = team != null && entry.kind === 'agents' && entry.relativePath === 'AGENTS.md'
+    const isPersonalRootAgentsEntry = team == null && entry.kind === 'agents'
+    const isPersonalOoAgentsEntry = team == null && entry.kind === 'ooAgents'
+    const isPersonalOoRulesEntry = team == null && entry.kind === 'ooRules'
     const displayPath = documentFullDisplayPath(entry.path)
     const title = cleanText(entry.displayName) ?? documentFileName(entry.relativePath)
-    const kind = isAgentsEntry
-      ? team == null ? 'accountAgents' : 'teamAgents'
+    const itemKind = isPersonalRootAgentsEntry
+      ? 'userAgents'
+      : isPersonalOoAgentsEntry
+      ? 'userOoAgents'
+      : isPersonalOoRulesEntry
+      ? 'userOoRules'
+      : isTeamAgentsEntry
+      ? 'teamAgents'
       : 'namespaceDocument'
-    const meta = isAgentsEntry
+    const entryEnabled = team == null
+      ? entry.localOnly ? false : preferences[entry.kind] === true
+      : preferences.agents === true
+    const meta = isTeamAgentsEntry || isPersonalRootAgentsEntry || isPersonalOoAgentsEntry
       ? documentStateLabel
       : entry.localOnly
       ? '本地'
-      : '规则'
-    const tooltip = team == null && isAgentsEntry ? `${documentSource} -> ${displayPath}` : displayPath
+      : entryEnabled
+      ? '同步'
+      : '未同步'
+    const tooltip = displayPath
     return {
+      documentSyncKind: entry.kind,
       displayPath,
-      enabled: agentsEnabled,
+      enabled: entryEnabled,
       exists: entry.exists,
       icon: documentEntryIcon(entry, team),
       key: `document:${team == null ? 'account' : 'team'}:${entry.path}`,
-      kind,
+      kind: itemKind,
       localOnly: entry.localOnly,
       meta,
       path: entry.path,
@@ -1087,7 +1311,8 @@ const DocumentSyncPanel = (
         scopeTitle,
         scopeMeta,
         documentScopeLabel,
-        isAgentsEntry ? `${documentScopeLabel} AGENTS` : '规则',
+        personalDocumentKindLabel(entry.kind),
+        isTeamAgentsEntry ? `${documentScopeLabel} AGENTS` : '规则',
         title,
         entry.relativePath,
         entry.path,
@@ -1097,7 +1322,7 @@ const DocumentSyncPanel = (
         documentPath,
         documentStateLabel,
         syncSummary,
-        `${agentsCount} 个`,
+        `${syncedKindCount} 个`,
         entry.localOnly ? '.local.md 本地 不上传' : '同步'
       ]).join(' '),
       title,
@@ -1198,6 +1423,7 @@ const DocumentSyncPanel = (
     }
   }, [selectedDocument?.exists, selectedDocument?.path])
   const InteractionList = view?.ui?.InteractionList
+  const launcherSurface = isLauncherSurface(view)
   const CodeEditor = view?.ui?.CodeEditor
   const copyDocumentText = (value: string, title: string) => {
     void (async () => {
@@ -1251,12 +1477,21 @@ const DocumentSyncPanel = (
         onSelect: selected => copyDocumentText(selected.displayPath, '路径已复制')
       }
     ]
-    if (item.kind === 'accountAgents') {
+    if (item.kind === 'userAgents' || item.kind === 'userOoAgents' || item.kind === 'userOoRules') {
+      actions.push({
+        disabled: savingAction != null || item.localOnly,
+        icon: item.enabled ? 'toggle_on' : 'toggle_off',
+        key: `toggle-${item.documentSyncKind}`,
+        label: item.enabled ? '停止同步' : `同步${personalDocumentKindLabel(item.documentSyncKind)}`,
+        onSelect: () => togglePersonalDocumentSync(item.documentSyncKind, !item.enabled)
+      })
+    }
+    if (item.kind === 'userAgents') {
       actions.push({
         disabled: savingAction != null,
         icon: 'upload_file',
         key: 'import',
-        label: savingAction === 'import' ? '导入中' : '从 ~/AGENTS.md 导入',
+        label: savingAction === 'import' ? '同步中' : '立即同步 ~/AGENTS.md',
         onSelect: importAccountAgents
       })
     } else if (item.kind === 'teamAgents') {
@@ -1387,7 +1622,6 @@ const DocumentSyncPanel = (
             {
               'aria-label': '关闭预览',
               className: 'oneworks-relay__button oneworks-relay__document-preview-close',
-              'data-tooltip': '关闭预览',
               onClick: closeDocumentPreview,
               title: '关闭预览',
               type: 'button'
@@ -1433,6 +1667,7 @@ const DocumentSyncPanel = (
               value: filter
             },
             splitActionHover: true,
+            mode: 'resource',
             onSelect: selectDocument
           })
       ),
@@ -1459,14 +1694,18 @@ const renderDocumentTabActions = (props: {
       label: '同步所有文档',
       onClick: () => {
         if (team == null) {
-          void requestJson<RelayStatus>(
-            ctx,
-            'personal-document-import-root-agents',
-            {
-              accountKey,
-              serverId: cleanText(account?.serverId)
-            }
-          ).then(() => {
+          void Promise.all(PERSONAL_DOCUMENT_SYNC_KINDS.map(kind =>
+            requestJson<RelayStatus>(
+              ctx,
+              'personal-document-sync-enabled',
+              {
+                accountKey,
+                enabled: true,
+                kind,
+                serverId: cleanText(account?.serverId)
+              }
+            )
+          )).then(() => {
             onChanged()
           }).catch(error => {
             ctx.notifications?.show?.({
@@ -1526,6 +1765,480 @@ const matchesNativeSearch = (values: unknown[], normalizedFilter: string) =>
   normalizedFilter === '' ||
   values.some(value => cleanText(value)?.toLowerCase().includes(normalizedFilter) === true)
 
+type RelayConnectionVisualState = 'offline' | 'online' | 'stale' | 'unknown'
+
+const deviceConnectionState = (status?: string): { label: string; state: RelayConnectionVisualState } => {
+  const normalized = cleanText(status)?.toLowerCase()
+  if (normalized === 'online') return { label: '在线', state: 'online' }
+  if (normalized === 'stale') return { label: '待确认', state: 'stale' }
+  if (normalized === 'offline') return { label: '离线', state: 'offline' }
+  return { label: '未知', state: 'unknown' }
+}
+
+const isCurrentClientDevice = (
+  ctx: PluginClientContext,
+  device: RelayDeviceSummary,
+  status: RelayStatus | null
+) => {
+  const deviceId = cleanText(device.id)
+  const currentDeviceId = cleanText(status?.device?.id)
+  if (deviceId == null) return false
+  if (device.isCurrentClientDevice === true) return true
+  if (currentDeviceId != null && deviceId === currentDeviceId) return true
+  return deviceId.startsWith('fixture-device:') && cleanText(device.pluginScope) === ctx.scope
+}
+
+const pathBasename = (path?: string) => {
+  const normalized = cleanText(path)?.replace(/[/\\]+$/u, '')
+  if (normalized == null) return undefined
+  const segments = normalized.split(/[/\\]+/u).filter(Boolean)
+  return segments.at(-1) ?? normalized
+}
+
+const managementServerKindLabel = (kind?: string) => {
+  const normalized = cleanText(kind)?.toLowerCase()
+  if (normalized === 'electron') return 'Electron'
+  if (normalized === 'web') return 'Web'
+  if (normalized === 'daemon') return 'Daemon'
+  if (normalized === 'workspace') return 'Workspace'
+  return cleanText(kind) ?? 'Management Server'
+}
+
+const managementServerIcon = (kind?: string) => {
+  const normalized = cleanText(kind)?.toLowerCase()
+  if (normalized === 'electron') return 'desktop_windows'
+  if (normalized === 'web') return 'language'
+  if (normalized === 'daemon') return 'terminal'
+  return 'lan'
+}
+
+const managementServerTitle = (server: NonNullable<RelayDeviceSummary['managementServers']>[number]) => (
+  cleanText(server.name) ??
+    pathBasename(server.workspaceFolder) ??
+    managementServerKindLabel(server.kind)
+)
+
+type RelayDeviceManagerSummary = NonNullable<RelayDeviceSummary['managementServers']>[number]
+
+const deviceManagementServers = (device: RelayDeviceSummary) =>
+  (device.managementServers ?? []).filter(server => cleanText(server.id) != null)
+
+const deviceEnvironmentValues = (environment?: RelayDeviceSummary['deviceInfo']) => [
+  environment?.arch,
+  environment?.deviceType,
+  environment?.osName,
+  environment?.osPlatform,
+  environment?.osRelease,
+  environment?.osType,
+  environment?.osVersion,
+  environment?.runtime,
+  environment?.runtimeVersion
+]
+
+const deviceEnvironmentForDisplay = (
+  device: RelayDeviceSummary,
+  managers: RelayDeviceManagerSummary[]
+) => {
+  if (device.deviceInfo != null) return device.deviceInfo
+  return managers.find(server => server.environment != null)?.environment
+}
+
+const deviceTypeLabel = (environment?: RelayDeviceSummary['deviceInfo']) => {
+  const normalized = cleanText(environment?.deviceType)?.toLowerCase()
+  if (normalized === 'computer' || normalized === 'desktop' || normalized === 'laptop') return '电脑'
+  if (normalized === 'server') return '服务器'
+  if (normalized === 'phone' || normalized === 'mobile') return '手机'
+  if (normalized === 'tablet') return '平板'
+  return cleanText(environment?.deviceType) ?? '未知'
+}
+
+const osNameLabel = (environment?: RelayDeviceSummary['deviceInfo']) => {
+  const normalized = cleanText(environment?.osPlatform)?.toLowerCase()
+  if (normalized === 'darwin') return 'macOS'
+  if (normalized === 'win32') return 'Windows'
+  if (normalized === 'linux') return 'Linux'
+  return cleanText(environment?.osName) ?? cleanText(environment?.osType) ?? cleanText(environment?.osPlatform)
+}
+
+const osDetailLabel = (environment?: RelayDeviceSummary['deviceInfo']) => {
+  const osName = osNameLabel(environment)
+  return cleanTextList([
+    osName,
+    environment?.osVersion,
+    environment?.osRelease,
+    environment?.arch
+  ]).join(' · ') || '-'
+}
+
+const runtimeDetailLabel = (environment?: RelayDeviceSummary['deviceInfo']) => {
+  const runtime = cleanText(environment?.runtime)
+  const runtimeVersion = cleanText(environment?.runtimeVersion)
+  if (runtime == null && runtimeVersion == null) return '-'
+  if (runtime == null) return runtimeVersion ?? '-'
+  return runtimeVersion == null ? runtime : `${runtime} ${runtimeVersion}`
+}
+
+const deviceInfoSummary = (environment?: RelayDeviceSummary['deviceInfo']) => {
+  if (environment == null) return undefined
+  const summary = cleanTextList([
+    deviceTypeLabel(environment),
+    osDetailLabel(environment)
+  ]).filter(value => value !== '-' && value !== '未知')
+    .join(' · ')
+  return cleanText(summary)
+}
+
+const managementServerIp = (server: RelayDeviceManagerSummary) => (
+  cleanText(server.lastSeenIp) ??
+    cleanText(server.ip) ??
+    cleanText(server.registeredIp)
+)
+
+interface RelayDeviceProjectGroup {
+  id: string
+  kind?: string
+  kindLabel: string
+  projects: RelayDeviceProjectRow[]
+  status?: string
+  title: string
+}
+
+interface RelayDeviceProjectRow {
+  groupId: string
+  groupKindLabel: string
+  groupTitle: string
+  id: string
+  path?: string
+  status?: string
+  title: string
+  updatedAt?: string
+}
+
+const projectStatus = (
+  projectStatusValue: string | undefined,
+  managerStatus: string | undefined,
+  deviceStatusValue: string | undefined
+) => cleanText(projectStatusValue) ?? cleanText(managerStatus) ?? cleanText(deviceStatusValue)
+
+const projectTitle = (input: {
+  fallbackTitle: string
+  name?: string
+  path?: string
+  title?: string
+}) => (
+  pathBasename(input.path) ??
+    pathBasename(input.title) ??
+    pathBasename(input.name) ??
+    input.fallbackTitle
+)
+
+const managerProjectRows = (
+  device: RelayDeviceSummary,
+  manager: RelayDeviceManagerSummary,
+  managerIndex: number
+): RelayDeviceProjectGroup => {
+  const groupId = cleanText(manager.id) ?? `manager-${managerIndex}`
+  const groupTitle = managementServerTitle(manager)
+  const kindLabel = managementServerKindLabel(manager.kind)
+  const declaredProjects = manager.projects ?? []
+  const projects = declaredProjects
+    .map((project, projectIndex): RelayDeviceProjectRow => {
+      const path = cleanText(project.workspaceFolder)
+      const title = projectTitle({
+        fallbackTitle: groupTitle,
+        name: project.name,
+        path,
+        title: project.title
+      })
+      return {
+        groupId,
+        groupKindLabel: kindLabel,
+        groupTitle,
+        id: cleanText(project.id) ?? `${groupId}:project:${projectIndex}`,
+        path,
+        status: projectStatus(project.status, manager.status, device.status),
+        title,
+        updatedAt: cleanText(project.lastSeenAt) ?? cleanText(project.createdAt) ?? cleanText(manager.lastSeenAt)
+      }
+    })
+  if (projects.length === 0 && cleanText(manager.workspaceFolder) != null) {
+    const path = cleanText(manager.workspaceFolder)
+    projects.push({
+      groupId,
+      groupKindLabel: kindLabel,
+      groupTitle,
+      id: `${groupId}:workspace`,
+      path,
+      status: projectStatus(undefined, manager.status, device.status),
+      title: projectTitle({ fallbackTitle: groupTitle, path }),
+      updatedAt: cleanText(manager.lastSeenAt)
+    })
+  }
+  return {
+    id: groupId,
+    kind: cleanText(manager.kind),
+    kindLabel,
+    projects,
+    status: cleanText(manager.status) ?? cleanText(device.status),
+    title: groupTitle
+  }
+}
+
+const deviceProjectGroups = (
+  device: RelayDeviceSummary,
+  managers: RelayDeviceManagerSummary[]
+): RelayDeviceProjectGroup[] => {
+  if (managers.length === 0) {
+    const path = cleanText(device.workspaceFolder)
+    if (path == null) return []
+    const title = projectTitle({ fallbackTitle: deviceDisplayName(device), path })
+    return [{
+      id: cleanText(device.id) ?? 'device',
+      kind: 'workspace',
+      kindLabel: 'Workspace',
+      projects: [{
+        groupId: cleanText(device.id) ?? 'device',
+        groupKindLabel: 'Workspace',
+        groupTitle: deviceDisplayName(device),
+        id: `${cleanText(device.id) ?? 'device'}:workspace`,
+        path,
+        status: cleanText(device.status),
+        title,
+        updatedAt: cleanText(device.lastSeenAt)
+      }],
+      status: cleanText(device.status),
+      title: deviceDisplayName(device)
+    }]
+  }
+  return managers.map((manager, index) => managerProjectRows(device, manager, index))
+}
+
+const deviceConnectionRank = (status?: string) => {
+  const state = deviceConnectionState(status).state
+  if (state === 'online') return 0
+  if (state === 'stale') return 1
+  if (state === 'unknown') return 2
+  return 3
+}
+
+const timestampValue = (value?: string) => {
+  const text = cleanText(value)
+  if (text == null) return 0
+  const timestamp = Date.parse(text)
+  return Number.isNaN(timestamp) ? 0 : timestamp
+}
+
+const projectIdentityKey = (project: RelayDeviceProjectRow) => (
+  cleanText(project.path)?.toLowerCase() ??
+    cleanText(project.id)?.toLowerCase() ??
+    project.title.toLowerCase()
+)
+
+const dedupeDeviceProjectGroups = (groups: RelayDeviceProjectGroup[]) => {
+  const groupIndexById = new Map(groups.map((group, index) => [group.id, index]))
+  const candidates = groups.flatMap((group, groupIndex) =>
+    group.projects.map((project, projectIndex) => ({
+      group,
+      groupIndex,
+      key: projectIdentityKey(project),
+      project,
+      projectIndex,
+      rank: deviceConnectionRank(project.status ?? group.status),
+      timestamp: timestampValue(project.updatedAt)
+    }))
+  )
+  const selected = new Map<string, { groupId: string; projectId: string }>()
+  candidates
+    .sort((left, right) => (
+      left.rank - right.rank ||
+      right.timestamp - left.timestamp ||
+      left.groupIndex - right.groupIndex ||
+      left.projectIndex - right.projectIndex
+    ))
+    .forEach(candidate => {
+      if (selected.has(candidate.key)) return
+      selected.set(candidate.key, {
+        groupId: candidate.group.id,
+        projectId: candidate.project.id
+      })
+    })
+
+  const selectedByGroup = new Map<string, Set<string>>()
+  selected.forEach(value => {
+    const groupProjects = selectedByGroup.get(value.groupId) ?? new Set<string>()
+    groupProjects.add(value.projectId)
+    selectedByGroup.set(value.groupId, groupProjects)
+  })
+
+  return groups
+    .map(group => ({
+      ...group,
+      projects: group.projects.filter(project => selectedByGroup.get(group.id)?.has(project.id) === true)
+    }))
+    .filter(group => group.projects.length > 0)
+    .sort((left, right) => {
+      const leftRank = Math.min(
+        deviceConnectionRank(left.status),
+        ...left.projects.map(project => deviceConnectionRank(project.status ?? left.status))
+      )
+      const rightRank = Math.min(
+        deviceConnectionRank(right.status),
+        ...right.projects.map(project => deviceConnectionRank(project.status ?? right.status))
+      )
+      const leftFreshness = Math.max(0, ...left.projects.map(project => timestampValue(project.updatedAt)))
+      const rightFreshness = Math.max(0, ...right.projects.map(project => timestampValue(project.updatedAt)))
+      return (
+        leftRank - rightRank ||
+        rightFreshness - leftFreshness ||
+        (groupIndexById.get(left.id) ?? 0) - (groupIndexById.get(right.id) ?? 0)
+      )
+    })
+}
+
+const projectSearchValues = (project: RelayDeviceProjectRow, group: RelayDeviceProjectGroup) => [
+  project.title,
+  project.path,
+  project.groupTitle,
+  project.groupKindLabel,
+  deviceConnectionState(project.status ?? group.status).label,
+  project.updatedAt
+]
+
+const groupSearchValues = (group: RelayDeviceProjectGroup) => [
+  group.title,
+  group.kindLabel,
+  deviceConnectionState(group.status).label
+]
+
+const loginIpText = (ip?: string) => {
+  const value = cleanText(ip)
+  return value == null ? undefined : `IP ${value}`
+}
+
+const copyTextToClipboard = (
+  ctx: PluginClientContext,
+  value: string | undefined,
+  successTitle: string
+) => {
+  const text = cleanText(value)
+  if (text == null) return
+  void (async () => {
+    if (navigator.clipboard?.writeText == null) {
+      throw new Error('当前环境不支持剪贴板。')
+    }
+    await navigator.clipboard.writeText(text)
+  })()
+    .then(() => {
+      ctx.notifications?.show?.({
+        description: text,
+        level: 'success',
+        title: successTitle
+      })
+    })
+    .catch(error => {
+      ctx.notifications?.show?.({
+        description: toErrorMessage(error),
+        level: 'error',
+        title: '复制失败'
+      })
+    })
+}
+
+const managementServerSearchValues = (
+  server: RelayDeviceManagerSummary
+) => [
+  server.id,
+  managementServerTitle(server),
+  managementServerKindLabel(server.kind),
+  deviceConnectionState(server.status).label,
+  managementServerIp(server),
+  server.pluginScope,
+  server.workspaceFolder,
+  ...deviceEnvironmentValues(server.environment)
+]
+
+const deviceDisplayName = (device: RelayDeviceSummary | null | undefined) => (
+  cleanText(device?.alias) ?? cleanText(device?.name) ?? cleanText(device?.id) ?? '设备'
+)
+
+const deviceMachineName = (device: RelayDeviceSummary | null | undefined) => (
+  cleanText(device?.name) ?? cleanText(device?.id) ?? '设备'
+)
+
+const deviceScopeLabel = (
+  ctx: PluginClientContext,
+  device: RelayDeviceSummary,
+  status: RelayStatus | null
+) => isCurrentClientDevice(ctx, device, status) ? '本机' : '远端'
+
+const deviceSearchValues = (
+  ctx: PluginClientContext,
+  device: RelayDeviceSummary,
+  status: RelayStatus | null
+) => {
+  const connection = deviceConnectionState(device.status)
+  const managementServers = deviceManagementServers(device)
+  return [
+    deviceDisplayName(device),
+    deviceMachineName(device),
+    device.id,
+    device.ip,
+    device.lastSeenIp,
+    device.registeredIp,
+    connection.label,
+    deviceScopeLabel(ctx, device, status),
+    ...deviceEnvironmentValues(device.deviceInfo),
+    ...managementServers.flatMap(managementServerSearchValues)
+  ]
+}
+
+const renderDevicePresenceIcon = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  input: {
+    current: boolean
+    state: string
+  }
+) =>
+  react.createElement(
+    'span',
+    {
+      className: `${adminListSurfaceClassNames.nativeIcon} oneworks-relay__device-presence-icon`,
+      'data-current': input.current ? 'true' : 'false',
+      title: input.current ? '本机设备' : '远端设备',
+      'data-state': input.state
+    },
+    renderIcon(react, view, input.current ? 'important_devices' : 'computer'),
+    react.createElement('span', {
+      'aria-hidden': true,
+      className: 'oneworks-relay__device-presence-dot'
+    })
+  )
+
+const renderNativePresenceIcon = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  input: {
+    icon: string
+    state: string
+    title: string
+  }
+) =>
+  react.createElement(
+    'span',
+    {
+      className: `${adminListSurfaceClassNames.nativeIcon} oneworks-relay__device-presence-icon`,
+      'data-current': 'false',
+      'data-state': input.state,
+      title: input.title
+    },
+    renderIcon(react, view, input.icon),
+    react.createElement('span', {
+      'aria-hidden': true,
+      className: 'oneworks-relay__device-presence-dot'
+    })
+  )
+
 const TokensPanel = (props: {
   accountKey: string
   ctx: PluginClientContext
@@ -1552,20 +2265,15 @@ const TokensPanel = (props: {
       )
     )
   const columns =
-    '24px minmax(160px, 1.4fr) minmax(80px, .6fr) minmax(120px, 1fr) minmax(140px, 1fr) minmax(120px, .8fr) minmax(100px, .8fr) minmax(70px, .5fr) auto'
+    'var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px)) minmax(160px, 1.4fr) minmax(80px, .6fr) minmax(120px, 1fr) minmax(140px, 1fr) minmax(120px, .8fr) minmax(100px, .8fr) minmax(70px, .5fr) auto'
   return react.createElement(
     'section',
     { className: 'oneworks-relay__profile-section' },
-    react.createElement(
-      'label',
-      { className: adminListSurfaceClassNames.nativeSearch },
-      renderIcon(react, view, 'search', { size: 16 }),
-      renderInput(react, view, {
-        onChange: setFilter,
-        placeholder: '搜索令牌名称、类型、团队、Preview、状态',
-        value: filter
-      }),
-      renderButton(react, view, {
+    renderSearchInput(react, view, {
+      className: adminListSurfaceClassNames.nativeSearch,
+      onChange: setFilter,
+      placeholder: '搜索令牌名称、类型、团队、Preview、状态',
+      suffix: renderButton(react, view, {
         icon: 'add',
         label: '生成令牌',
         onClick: () =>
@@ -1577,8 +2285,9 @@ const TokensPanel = (props: {
               tokenId: 'new'
             })
           )
-      })
-    ),
+      }),
+      value: filter
+    }),
     react.createElement(
       NativeList,
       { react },
@@ -1669,7 +2378,7 @@ const TokensPanel = (props: {
             react.createElement(
               'span',
               { className: adminListSurfaceClassNames.nativeCell },
-              react.createElement('span', { className: 'oneworks-relay__status-badge' }, tokenStatusLabel(token))
+              tokenStatusLabel(token)
             ),
             react.createElement(
               'span',
@@ -1714,46 +2423,88 @@ const TokensPanel = (props: {
 const DevicesPanel = (props: {
   accountKey: string
   ctx: PluginClientContext
-  onChanged: () => void
   profile: RelayProfileStatus | null
   react: PluginReactHost
+  status: RelayStatus | null
   view?: PluginViewContext
 }) => {
-  const { accountKey, ctx, onChanged, profile, react, view } = props
-  const [editingId, setEditingId] = react.useState('')
-  const [aliasDraft, setAliasDraft] = react.useState('')
+  const { accountKey, ctx, profile, react, status, view } = props
   const [filter, setFilter] = react.useState('')
   const devices = profile?.devices ?? []
+  const InteractionList = view?.ui?.InteractionList
+  const deviceItems: RelayDeviceInteractionItem[] = devices.map((device) => {
+    const deviceId = cleanText(device.id) ?? ''
+    const title = deviceDisplayName(device)
+    const machineName = deviceMachineName(device)
+    const connection = deviceConnectionState(device.status)
+    const isCurrentDevice = isCurrentClientDevice(ctx, device, status)
+    const scopeLabel = deviceScopeLabel(ctx, device, status)
+    return {
+      device,
+      deviceId,
+      icon: isCurrentDevice ? 'important_devices' : 'computer',
+      iconFilled: isCurrentDevice,
+      iconState: connection.state,
+      kind: 'device',
+      key: `device:${deviceId || title}`,
+      searchText: cleanTextList(deviceSearchValues(ctx, device, status)).join(' '),
+      title,
+      tooltip: cleanTextList([
+        machineName,
+        scopeLabel,
+        connection.label,
+        deviceInfoSummary(device.deviceInfo),
+        cleanText(device.lastSeenIp) ?? cleanText(device.ip)
+      ]).join(' · ')
+    }
+  })
+
+  if (InteractionList != null) {
+    return react.createElement(
+      'section',
+      { className: 'oneworks-relay__profile-section' },
+      react.createElement(InteractionList, {
+        border: 'borderless',
+        className: 'oneworks-relay__host-interaction-list oneworks-relay__device-list',
+        emptyText: devices.length === 0 ? '暂无设备' : '没有匹配的设备',
+        iconSize: 18,
+        items: deviceItems,
+        padding: 'none',
+        search: {
+          onChange: setFilter,
+          placeholder: '搜索设备名称或状态',
+          value: filter
+        },
+        mode: 'resource',
+        onSelect: (item: RelayDeviceInteractionItem) => {
+          if (item.deviceId === '') return
+          navigateTo(
+            ctx.scope,
+            routePath(ctx.scope, {
+              accountKey,
+              deviceId: item.deviceId,
+              page: 'device',
+              tab: 'profile'
+            })
+          )
+        }
+      })
+    )
+  }
+
   const normalizedFilter = filter.trim().toLowerCase()
   const visibleDevices = normalizedFilter === ''
     ? devices
-    : devices.filter(device => {
-      const machineName = cleanText(device.name) ?? cleanText(device.id) ?? ''
-      const title = cleanText(device.alias) ?? machineName
-      return matchesNativeSearch(
-        [
-          title,
-          machineName,
-          device.id,
-          device.workspaceFolder,
-          formatDateTime(device.lastSeenAt)
-        ],
-        normalizedFilter
-      )
-    })
+    : devices.filter(device => matchesNativeSearch(deviceSearchValues(ctx, device, status), normalizedFilter))
   return react.createElement(
     'section',
     { className: 'oneworks-relay__profile-section' },
-    react.createElement(
-      'label',
-      { className: adminListSurfaceClassNames.nativeSearch },
-      renderIcon(react, view, 'search', { size: 16 }),
-      renderInput(react, view, {
-        onChange: setFilter,
-        placeholder: '搜索设备名称、路径或最近在线时间',
-        value: filter
-      })
-    ),
+    renderSearchInput(react, view, {
+      className: adminListSurfaceClassNames.nativeSearch,
+      onChange: setFilter,
+      placeholder: '搜索设备名称或状态',
+      value: filter
+    }),
     react.createElement(
       NativeList,
       { react },
@@ -1765,85 +2516,612 @@ const DevicesPanel = (props: {
             text: devices.length === 0 ? '暂无设备' : '没有匹配的设备'
           })
         ]
-        : visibleDevices.map(device => {
+        : visibleDevices.flatMap(device => {
           const deviceId = cleanText(device.id) ?? ''
-          const title = cleanText(device.alias) ?? cleanText(device.name) ?? cleanText(device.id) ?? '设备'
-          const machineName = cleanText(device.name) ?? cleanText(device.id) ?? ''
-          const isEditing = editingId === deviceId
-          return react.createElement(
+          const title = deviceDisplayName(device)
+          const machineName = deviceMachineName(device)
+          const connection = deviceConnectionState(device.status)
+          const isCurrentDevice = isCurrentClientDevice(ctx, device, status)
+          const openDetail = () => {
+            if (deviceId === '') return
+            navigateTo(
+              ctx.scope,
+              routePath(ctx.scope, {
+                accountKey,
+                deviceId,
+                page: 'device',
+                tab: 'profile'
+              })
+            )
+          }
+          return [react.createElement(
             'div',
             {
+              'aria-label': `${title} · ${deviceScopeLabel(ctx, device, status)} · ${connection.label}`,
               className: adminListSurfaceClassNames.nativeRow,
+              'data-clickable': deviceId === '' ? undefined : 'true',
               key: deviceId || title,
-              style: { '--relay-admin-list-native-row-columns': '24px minmax(0, 1fr) auto 18px' }
+              onClick: openDetail,
+              onKeyDown: (event: { key: string; preventDefault: () => void }) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.preventDefault()
+                openDetail()
+              },
+              role: deviceId === '' ? undefined : 'button',
+              style: {
+                '--relay-admin-list-native-row-columns':
+                  'var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px)) minmax(0, 1fr)'
+              },
+              tabIndex: deviceId === '' ? undefined : 0
             },
-            react.createElement(
-              'span',
-              { className: adminListSurfaceClassNames.nativeIcon },
-              renderIcon(react, view, 'computer')
-            ),
+            renderDevicePresenceIcon(react, view, {
+              current: isCurrentDevice,
+              state: connection.state
+            }),
             react.createElement(
               'span',
               { className: adminListSurfaceClassNames.nativeMain },
               react.createElement(
                 'span',
-                { className: adminListSurfaceClassNames.nativeTitle, title: machineName },
-                title
-              ),
+                {
+                  className: `${adminListSurfaceClassNames.nativeTitle} oneworks-relay__device-title`,
+                  title: machineName
+                },
+                react.createElement(
+                  'span',
+                  { className: 'oneworks-relay__device-title-text' },
+                  title
+                )
+              )
+            )
+          )]
+        }))
+    )
+  )
+}
+
+const DeviceDetailView = (props: {
+  account: RelayAuthAccount | null
+  accountKey: string
+  ctx: PluginClientContext
+  deviceId: string
+  profile: RelayProfileStatus | null
+  react: PluginReactHost
+  status: RelayStatus | null
+  tab: RelayDeviceDetailTab
+  view?: PluginViewContext
+}) => {
+  const { account, accountKey, ctx, deviceId, profile, react, status, tab, view } = props
+  const device = profile?.devices?.find(item => cleanText(item.id) === deviceId)
+  const accountName = accountDisplayName(account)
+  const NativeTabs = view?.ui?.NativeTabs
+  const launcherSurface = isLauncherSurface(view)
+  const title = device == null ? cleanText(deviceId) ?? '设备' : deviceDisplayName(device)
+  const connection = deviceConnectionState(device?.status)
+  const isCurrentDevice = device == null ? false : isCurrentClientDevice(ctx, device, status)
+  const managers = device == null ? [] : deviceManagementServers(device)
+  const [projectFilter, setProjectFilter] = react.useState('')
+  const [loginFilter, setLoginFilter] = react.useState('')
+  const tabPanel = device == null
+    ? renderTeamStatePanel(react, view, 'error', '未找到设备', `当前账号下没有找到 ${deviceId}。`)
+    : tab === 'projects'
+    ? renderDeviceProjectsPanel({
+      ctx,
+      device,
+      filter: projectFilter,
+      managers,
+      onFilterChange: setProjectFilter,
+      react,
+      view
+    })
+    : tab === 'logins'
+    ? renderDeviceLoginsPanel({
+      device,
+      filter: loginFilter,
+      managers,
+      onFilterChange: setLoginFilter,
+      react,
+      view
+    })
+    : renderDeviceProfilePanel({ ctx, device, isCurrentDevice, managers, react, status, view })
+  return react.createElement(
+    'main',
+    { className: 'oneworks-relay' },
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__shell' },
+      react.createElement(
+        'section',
+        { className: 'oneworks-relay__surface' },
+        react.createElement(
+          'section',
+          {
+            className: [
+              'oneworks-relay__profile',
+              'oneworks-relay__profile--team-detail',
+              'oneworks-relay__profile--device-detail',
+              launcherSurface ? 'oneworks-relay__profile--launcher' : ''
+            ].filter(Boolean).join(' ')
+          },
+          launcherSurface
+            ? null
+            : react.createElement(
+              'header',
+              { className: 'oneworks-relay__team-hero oneworks-relay__device-hero' },
               react.createElement(
-                'span',
-                { className: adminListSurfaceClassNames.nativeMeta },
-                cleanText(device.workspaceFolder) ?? machineName
+                'div',
+                { className: 'oneworks-relay__team-hero-main' },
+                react.createElement(
+                  'span',
+                  {
+                    className: 'oneworks-relay__device-avatar',
+                    'data-current': isCurrentDevice ? 'true' : 'false',
+                    'data-state': connection.state
+                  },
+                  renderIcon(react, view, isCurrentDevice ? 'important_devices' : 'computer'),
+                  react.createElement('span', {
+                    'aria-hidden': true,
+                    className: 'oneworks-relay__device-avatar-dot'
+                  })
+                ),
+                react.createElement(
+                  'span',
+                  { className: 'oneworks-relay__team-hero-copy' },
+                  react.createElement('strong', null, title),
+                  react.createElement(
+                    'span',
+                    null,
+                    [accountName, isCurrentDevice ? '本机设备' : '远端设备', connection.label].filter(Boolean).join(
+                      ' · '
+                    )
+                  )
+                )
               )
             ),
+          NativeTabs == null
+            ? react.createElement('div', { className: 'oneworks-relay__empty' }, '标准标签组件不可用')
+            : react.createElement(NativeTabs, {
+              activeKey: tab,
+              ariaLabel: '设备详情',
+              className: 'oneworks-relay__profile-tabs',
+              items: deviceDetailTabs.map((item): PluginHostNativeTabItem => ({
+                icon: item.icon,
+                key: item.key,
+                label: item.label
+              })),
+              onChange: (nextTab: RelayDeviceDetailTab) =>
+                navigateTo(
+                  ctx.scope,
+                  routePath(ctx.scope, {
+                    accountKey,
+                    deviceId,
+                    page: 'device',
+                    tab: nextTab
+                  })
+                )
+            }),
+          react.createElement(
+            'div',
+            { className: 'oneworks-relay__team-detail-panel native-tabs-panel' },
+            tabPanel
+          )
+        )
+      )
+    )
+  )
+}
+
+const renderDeviceProfilePanel = (props: {
+  ctx: PluginClientContext
+  device: RelayDeviceSummary
+  isCurrentDevice: boolean
+  managers: NonNullable<RelayDeviceSummary['managementServers']>
+  react: PluginReactHost
+  status: RelayStatus | null
+  view?: PluginViewContext
+}) => {
+  const { ctx, device, isCurrentDevice, managers, react, status, view } = props
+  const connection = deviceConnectionState(device.status)
+  const environment = deviceEnvironmentForDisplay(device, managers)
+  const latestIp = cleanText(device.lastSeenIp) ??
+    cleanText(device.ip) ??
+    managers.map(managementServerIp).find(value => value != null) ??
+    cleanText(device.registeredIp)
+  return react.createElement(
+    'section',
+    { className: 'oneworks-relay__team-config-detail' },
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__team-detail-list' },
+      renderTeamDetailRow(react, view, {
+        description: '用户可识别的设备名称',
+        icon: 'badge',
+        label: '设备名称',
+        value: deviceDisplayName(device)
+      }),
+      renderTeamDetailRow(react, view, {
+        description: '硬件或运行设备类型',
+        icon: 'computer',
+        label: '设备类型',
+        value: deviceTypeLabel(environment)
+      }),
+      renderTeamDetailRow(react, view, {
+        description: '操作系统与架构',
+        icon: 'developer_board',
+        label: '系统信息',
+        value: osDetailLabel(environment)
+      }),
+      renderTeamDetailRow(react, view, {
+        description: '上报设备信息的运行时',
+        icon: 'terminal',
+        label: '运行时',
+        value: runtimeDetailLabel(environment)
+      }),
+      renderTeamDetailRow(react, view, {
+        description: '基于当前客户端识别',
+        icon: isCurrentDevice ? 'important_devices' : 'computer',
+        label: '设备归属',
+        value: deviceScopeLabel(ctx, device, status)
+      }),
+      renderTeamDetailRow(react, view, {
+        description: '最近一次心跳状态',
+        icon: 'sync',
+        label: '连接状态',
+        value: connection.label
+      }),
+      renderTeamDetailRow(react, view, {
+        description: '当前设备下的管理服务实例',
+        icon: 'dns',
+        label: 'Management Server',
+        value: `${managers.length} 个`
+      }),
+      renderTeamDetailRow(react, view, {
+        description: '设备最近一次上报的插件 scope',
+        icon: 'extension',
+        label: '插件范围',
+        value: cleanText(device.pluginScope) ?? '-'
+      }),
+      renderTeamDetailRow(react, view, {
+        description: '最近一次服务端看到的连接来源',
+        icon: 'lan',
+        label: '最近 IP',
+        value: latestIp ?? '-'
+      }),
+      renderTeamDetailRow(react, view, {
+        description: '创建 / 最近心跳',
+        icon: 'schedule',
+        label: '时间',
+        value: [
+          `创建 ${formatDateTime(device.createdAt)}`,
+          `心跳 ${formatDateTime(device.lastSeenAt)}`
+        ].join(' · ')
+      }),
+      renderTeamDetailRow(react, view, {
+        description: '排查时使用的稳定标识',
+        icon: 'fingerprint',
+        label: '设备 ID',
+        value: cleanText(device.id) ?? '-'
+      }),
+      renderTeamDetailRow(react, view, {
+        description: '当前客户端是否连接到这台设备',
+        icon: 'home_pin',
+        label: '本机识别',
+        value: isCurrentDevice ? '是' : '否'
+      })
+    )
+  )
+}
+
+const renderDeviceProjectsPanel = (props: {
+  ctx: PluginClientContext
+  device: RelayDeviceSummary
+  filter: string
+  managers: NonNullable<RelayDeviceSummary['managementServers']>
+  onFilterChange: (value: string) => void
+  react: PluginReactHost
+  view?: PluginViewContext
+}) => {
+  const { ctx, device, filter, managers, onFilterChange, react, view } = props
+  const groups = dedupeDeviceProjectGroups(
+    deviceProjectGroups(device, managers).filter(group => group.projects.length > 0)
+  )
+  const grouped = groups.length > 1
+  const InteractionList = view?.ui?.InteractionList
+  const copyProjectPath = (item: RelayDeviceProjectInteractionItem) => {
+    copyTextToClipboard(ctx, item.path, '路径已复制')
+  }
+  const projectItemFor = (
+    group: RelayDeviceProjectGroup,
+    project: RelayDeviceProjectRow
+  ): RelayDeviceProjectInteractionItem => {
+    const connection = deviceConnectionState(project.status ?? group.status)
+    const tooltip = cleanTextList([
+      project.path,
+      grouped ? group.title : undefined,
+      connection.label
+    ]).join(' · ')
+    return {
+      description: undefined,
+      icon: 'folder_open',
+      iconState: connection.state,
+      key: `project:${project.id}`,
+      kind: 'project',
+      path: project.path,
+      project,
+      group,
+      searchText: cleanTextList([
+        ...projectSearchValues(project, group),
+        project.path
+      ]).join(' '),
+      title: project.title,
+      tooltip: tooltip === '' ? project.title : tooltip
+    }
+  }
+  const listItems: RelayDeviceProjectInteractionItem[] = grouped
+    ? groups.map(group => {
+      const groupConnection = deviceConnectionState(group.status)
+      return {
+        children: group.projects.map(project => projectItemFor(group, project)),
+        icon: managementServerIcon(group.kind),
+        iconState: groupConnection.state,
+        itemType: 'groupTitle',
+        key: `group:${group.id}`,
+        kind: 'managementServer',
+        group,
+        searchText: cleanTextList(groupSearchValues(group)).join(' '),
+        title: group.title,
+        tooltip: `${group.kindLabel} · ${groupConnection.label}`
+      }
+    })
+    : groups.flatMap(group => group.projects.map(project => projectItemFor(group, project)))
+  const getProjectActions = (
+    item: RelayDeviceProjectInteractionItem
+  ): Array<PluginHostInteractionListAction<RelayDeviceProjectInteractionItem>> => {
+    if (item.kind !== 'project' || cleanText(item.path) == null) return []
+    return [{
+      icon: 'content_copy',
+      key: 'copy-path',
+      label: '复制路径',
+      onSelect: copyProjectPath
+    }]
+  }
+
+  if (InteractionList != null) {
+    return react.createElement(
+      'section',
+      { className: 'oneworks-relay__profile-section' },
+      react.createElement(InteractionList, {
+        actionDisplay: 'inline',
+        actions: getProjectActions,
+        border: 'borderless',
+        className: 'oneworks-relay__host-interaction-list oneworks-relay__device-project-list',
+        descriptionPlacement: 'content',
+        emptyText: groups.length === 0 ? '暂无项目' : '没有匹配的项目',
+        iconSize: 18,
+        inlineActionLimit: 1,
+        items: listItems,
+        padding: 'none',
+        search: {
+          onChange: onFilterChange,
+          placeholder: '搜索项目名称、路径或状态',
+          value: filter
+        },
+        showItemDescription: false,
+        splitActionHover: true,
+        mode: grouped ? 'grouped' : 'resource'
+      })
+    )
+  }
+
+  const normalizedFilter = filter.trim().toLowerCase()
+  const visibleGroups = groups
+    .map(group => {
+      const groupMatches = matchesNativeSearch(groupSearchValues(group), normalizedFilter)
+      const projects = groupMatches
+        ? group.projects
+        : group.projects.filter(project => matchesNativeSearch(projectSearchValues(project, group), normalizedFilter))
+      return { ...group, projects }
+    })
+    .filter(group => group.projects.length > 0)
+  const rows = visibleGroups.flatMap(group => {
+    const groupConnection = deviceConnectionState(group.status)
+    const groupRow = grouped
+      ? [react.createElement(
+        'div',
+        {
+          className: `${adminListSurfaceClassNames.nativeRow} oneworks-relay__device-management-group-row`,
+          key: `group:${group.id}`,
+          style: {
+            '--relay-admin-list-native-row-columns':
+              'var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px)) minmax(0, 1fr)'
+          },
+          title: `${group.kindLabel} · ${groupConnection.label}`
+        },
+        renderNativePresenceIcon(react, view, {
+          icon: managementServerIcon(group.kind),
+          state: groupConnection.state,
+          title: `${group.kindLabel} · ${groupConnection.label}`
+        }),
+        react.createElement(
+          'span',
+          { className: adminListSurfaceClassNames.nativeMain },
+          react.createElement('span', { className: adminListSurfaceClassNames.nativeTitle }, group.title)
+        )
+      )]
+      : []
+    return [
+      ...groupRow,
+      ...group.projects.map(project => {
+        const connection = deviceConnectionState(project.status ?? group.status)
+        const projectTooltip = cleanTextList([
+          project.path,
+          group.title,
+          connection.label
+        ]).join(' · ')
+        return react.createElement(
+          'div',
+          {
+            className: `${adminListSurfaceClassNames.nativeRow} ${grouped ? 'oneworks-relay__device-project-row' : ''}`,
+            key: `project:${project.id}`,
+            style: {
+              '--relay-admin-list-native-row-columns':
+                'var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px)) minmax(0, 1fr)'
+            },
+            title: projectTooltip === '' ? project.title : projectTooltip
+          },
+          renderNativePresenceIcon(react, view, {
+            icon: 'folder_open',
+            state: connection.state,
+            title: connection.label
+          }),
+          react.createElement(
+            'span',
+            { className: adminListSurfaceClassNames.nativeMain },
+            react.createElement('span', { className: adminListSurfaceClassNames.nativeTitle }, project.title)
+          )
+        )
+      })
+    ]
+  })
+  return react.createElement(
+    'section',
+    { className: 'oneworks-relay__profile-section' },
+    renderSearchInput(react, view, {
+      className: adminListSurfaceClassNames.nativeSearch,
+      onChange: onFilterChange,
+      placeholder: '搜索项目名称、路径或状态',
+      value: filter
+    }),
+    react.createElement(
+      NativeList,
+      { react, variant: grouped ? 'grouped' : 'resource' },
+      ...(rows.length === 0
+        ? [
+          react.createElement(NativeEmpty, {
+            key: 'empty',
+            react,
+            text: groups.length === 0 ? '暂无项目' : '没有匹配的项目'
+          })
+        ]
+        : rows)
+    )
+  )
+}
+
+const renderDeviceLoginsPanel = (props: {
+  device: RelayDeviceSummary
+  filter: string
+  managers: NonNullable<RelayDeviceSummary['managementServers']>
+  onFilterChange: (value: string) => void
+  react: PluginReactHost
+  view?: PluginViewContext
+}) => {
+  const { device, filter, managers, onFilterChange, react, view } = props
+  const InteractionList = view?.ui?.InteractionList
+  const normalizedFilter = filter.trim().toLowerCase()
+  const rows: RelayDeviceLoginInteractionItem[] = [
+    {
+      icon: 'login',
+      key: 'device-created',
+      kind: 'loginRecord',
+      meta: cleanTextList([
+        formatDateTime(device.createdAt),
+        loginIpText(cleanText(device.registeredIp) ?? cleanText(device.ip))
+      ]).join(' · '),
+      searchText: cleanTextList(['设备注册', device.registeredIp, device.ip, device.createdAt]).join(' '),
+      title: '设备注册'
+    },
+    {
+      icon: 'sync',
+      key: 'device-heartbeat',
+      kind: 'loginRecord',
+      meta: cleanTextList([
+        formatDateTime(device.lastSeenAt),
+        loginIpText(cleanText(device.lastSeenIp) ?? cleanText(device.ip))
+      ]).join(' · '),
+      searchText: cleanTextList(['设备最近心跳', device.lastSeenIp, device.ip, device.lastSeenAt]).join(' '),
+      title: '设备最近心跳'
+    },
+    ...managers.map(server => ({
+      icon: managementServerIcon(server.kind),
+      key: `manager:${cleanText(server.id) ?? managementServerTitle(server)}`,
+      kind: 'loginRecord' as const,
+      meta: cleanTextList([
+        managementServerKindLabel(server.kind),
+        formatDateTime(server.lastSeenAt),
+        loginIpText(managementServerIp(server))
+      ]).join(' · '),
+      searchText: cleanTextList([
+        managementServerTitle(server),
+        managementServerKindLabel(server.kind),
+        server.lastSeenAt,
+        server.ip,
+        server.lastSeenIp,
+        server.registeredIp
+      ]).join(' '),
+      title: `${managementServerTitle(server)} 心跳`
+    }))
+  ]
+  if (InteractionList != null) {
+    return react.createElement(
+      'section',
+      { className: 'oneworks-relay__profile-section' },
+      react.createElement(InteractionList, {
+        border: 'borderless',
+        className: 'oneworks-relay__host-interaction-list oneworks-relay__device-login-list',
+        emptyText: rows.length === 0 ? '暂无登录记录' : '没有匹配的登录记录',
+        iconSize: 18,
+        items: rows,
+        padding: 'none',
+        search: {
+          onChange: onFilterChange,
+          placeholder: '搜索登录记录、服务或 IP',
+          value: filter
+        },
+        mode: 'resource'
+      })
+    )
+  }
+
+  const visibleRows = rows.filter(row => matchesNativeSearch([row.title, row.meta, row.searchText], normalizedFilter))
+  return react.createElement(
+    'section',
+    { className: 'oneworks-relay__profile-section' },
+    renderSearchInput(react, view, {
+      className: adminListSurfaceClassNames.nativeSearch,
+      onChange: onFilterChange,
+      placeholder: '搜索登录记录、服务或 IP',
+      value: filter
+    }),
+    react.createElement(
+      NativeList,
+      { react },
+      ...(visibleRows.length === 0
+        ? [react.createElement(NativeEmpty, { key: 'empty', react, text: '没有匹配的登录记录' })]
+        : visibleRows.map(row =>
+          react.createElement(
+            'div',
+            {
+              className: adminListSurfaceClassNames.nativeRow,
+              key: row.key,
+              style: {
+                '--relay-admin-list-native-row-columns':
+                  'var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px)) minmax(0, 1fr)'
+              }
+            },
             react.createElement(
               'span',
-              { className: adminListSurfaceClassNames.nativeMeta },
-              formatDateTime(device.lastSeenAt)
+              { className: adminListSurfaceClassNames.nativeIcon },
+              renderIcon(react, view, typeof row.icon === 'string' ? row.icon : 'login')
             ),
             react.createElement(
               'span',
-              { className: adminListSurfaceClassNames.nativeActions },
-              isEditing
-                ? [
-                  renderInput(react, view, {
-                    key: 'input',
-                    onChange: setAliasDraft,
-                    placeholder: machineName,
-                    value: aliasDraft
-                  }),
-                  renderButton(react, view, {
-                    icon: 'check',
-                    key: 'save',
-                    label: '保存设备别名',
-                    onClick: () => {
-                      void requestJson(ctx, `profile/devices/${encodeURIComponent(deviceId)}`, {
-                        accountKey,
-                        alias: aliasDraft
-                      }, 'PATCH').then(() => {
-                        setEditingId('')
-                        onChanged()
-                      })
-                    }
-                  }),
-                  renderButton(react, view, {
-                    icon: 'close',
-                    key: 'cancel',
-                    label: '取消',
-                    onClick: () => setEditingId('')
-                  })
-                ]
-                : renderButton(react, view, {
-                  icon: 'edit',
-                  label: '重命名设备',
-                  onClick: () => {
-                    setEditingId(deviceId)
-                    setAliasDraft(cleanText(device.alias) ?? '')
-                  }
-                })
+              { className: adminListSurfaceClassNames.nativeMain },
+              react.createElement('span', { className: adminListSurfaceClassNames.nativeTitle }, row.title),
+              react.createElement('span', { className: adminListSurfaceClassNames.nativeMeta }, row.meta)
             )
           )
-        }))
+        ))
     )
   )
 }
@@ -1858,19 +3136,66 @@ const TeamsPanel = (props: {
   const { accountKey, ctx, profile, react, view } = props
   const [filter, setFilter] = react.useState('')
   const teams = profile?.teams ?? []
+  const InteractionList = view?.ui?.InteractionList
+  const teamItems: RelayTeamInteractionItem[] = teams.map((team) => {
+    const teamId = cleanText(team.id) ?? ''
+    const name = teamDisplayName(team)
+    return {
+      avatar: {
+        alt: name,
+        fallback: getAvatarInitials(name),
+        src: cleanText(team.avatarUrl)
+      },
+      kind: 'team',
+      key: `team:${teamId || name}`,
+      searchText: name,
+      team,
+      teamId,
+      title: name,
+      tooltip: name
+    }
+  })
+
+  if (InteractionList != null) {
+    return react.createElement(
+      'section',
+      { className: 'oneworks-relay__profile-section' },
+      react.createElement(InteractionList, {
+        border: 'borderless',
+        className: 'oneworks-relay__host-interaction-list oneworks-relay__team-list',
+        emptyText: teams.length === 0 ? '暂无团队' : '没有匹配的团队',
+        iconSize: 18,
+        items: teamItems,
+        padding: 'none',
+        search: {
+          onChange: setFilter,
+          placeholder: '搜索团队名称',
+          value: filter
+        },
+        mode: 'resource',
+        onSelect: (item: RelayTeamInteractionItem) => {
+          if (item.teamId === '') return
+          navigateTo(
+            ctx.scope,
+            routePath(ctx.scope, {
+              accountKey,
+              page: 'team',
+              tab: 'overview',
+              teamId: item.teamId
+            })
+          )
+        }
+      })
+    )
+  }
+
   const normalizedFilter = filter.trim().toLowerCase()
   const visibleTeams = normalizedFilter === ''
     ? teams
     : teams.filter(team =>
       matchesNativeSearch(
         [
-          teamDisplayName(team),
-          team.id,
-          team.slug,
-          teamRoleText(team),
-          team.defaultForPublishing === true ? '默认发布团队' : undefined,
-          team.configEnabled === false ? '配置未启用' : '配置可用',
-          formatDateTime(team.updatedAt)
+          teamDisplayName(team)
         ],
         normalizedFilter
       )
@@ -1878,16 +3203,12 @@ const TeamsPanel = (props: {
   return react.createElement(
     'section',
     { className: 'oneworks-relay__profile-section' },
-    react.createElement(
-      'label',
-      { className: adminListSurfaceClassNames.nativeSearch },
-      renderIcon(react, view, 'search', { size: 16 }),
-      renderInput(react, view, {
-        onChange: setFilter,
-        placeholder: '搜索团队名称、标识、角色或状态',
-        value: filter
-      })
-    ),
+    renderSearchInput(react, view, {
+      className: adminListSurfaceClassNames.nativeSearch,
+      onChange: setFilter,
+      placeholder: '搜索团队名称',
+      value: filter
+    }),
     react.createElement(
       NativeList,
       { react },
@@ -1902,18 +3223,15 @@ const TeamsPanel = (props: {
         : visibleTeams.map(team => {
           const teamId = cleanText(team.id) ?? ''
           const name = teamDisplayName(team)
-          const meta = [
-            cleanText(team.slug),
-            teamRoleText(team),
-            team.defaultForPublishing === true ? '默认发布团队' : undefined,
-            team.configEnabled === false ? '配置未启用' : '配置可用'
-          ].filter(Boolean).join(' · ')
           return react.createElement(
             'div',
             {
               className: adminListSurfaceClassNames.nativeRow,
               key: teamId || name,
-              style: { '--relay-admin-list-native-row-columns': '34px minmax(0, 1fr) auto 24px' }
+              style: {
+                '--relay-admin-list-native-row-columns':
+                  'var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px)) minmax(0, 1fr) var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px))'
+              }
             },
             renderAvatar(react, { avatarUrl: team.avatarUrl, className: adminListSurfaceClassNames.nativeIcon, name }),
             react.createElement(
@@ -1932,13 +3250,7 @@ const TeamsPanel = (props: {
                     })
                   ),
                 type: 'button'
-              }, name),
-              react.createElement('span', { className: adminListSurfaceClassNames.nativeMeta }, meta)
-            ),
-            react.createElement(
-              'span',
-              { className: adminListSurfaceClassNames.nativeMeta },
-              formatDateTime(team.updatedAt)
+              }, name)
             ),
             react.createElement(
               'span',
@@ -2144,7 +3456,7 @@ const MessagesPage = (props: {
                   react.createElement(
                     'div',
                     { className: 'relay-message-center__item-side' },
-                    react.createElement('span', { className: 'relay-message-center__badge' }, message.status),
+                    react.createElement('span', { className: 'relay-message-center__status' }, message.status),
                     react.createElement('time', null, formatDateTime(message.createdAt))
                   )
                 )
@@ -2169,8 +3481,15 @@ const AccountsPage = (props: {
   const servers = getServers(status)
   const groups = groupAccountsByServer(accounts, servers)
   const showGroups = groups.length > 1
+  const launcherSurface = isLauncherSurface(view)
+  const launcherSearchValue = launcherSurface ? (cleanText(view?.host?.launcherSearch?.value) ?? '') : ''
+  const searchValue = launcherSurface ? launcherSearchValue : filter
   const InteractionList = view?.ui?.InteractionList
-  const items = showGroups
+  const items = launcherSurface
+    ? showGroups
+      ? groups.map(group => buildServerAccountInteractionItem(group, servers))
+      : accounts.map(account => buildLauncherAccountInteractionItem(account, servers, false))
+    : showGroups
     ? groups.map(group => buildServerAccountInteractionItem(group, servers))
     : accounts.map(account => buildAccountInteractionItem(account, servers))
   return react.createElement(
@@ -2184,26 +3503,37 @@ const AccountsPage = (props: {
         { className: 'oneworks-relay__surface' },
         react.createElement(
           'section',
-          { className: 'oneworks-relay__profile oneworks-relay__profile--accounts' },
+          {
+            className: [
+              'oneworks-relay__profile oneworks-relay__profile--accounts',
+              launcherSurface ? 'oneworks-relay__profile--launcher' : ''
+            ].filter(Boolean).join(' ')
+          },
           InteractionList == null
             ? react.createElement('div', { className: 'oneworks-relay__empty' }, '标准账号列表组件不可用')
             : react.createElement(InteractionList, {
-              actionDisplay: 'inline',
-              actions: getAccountInteractionActions(ctx, onChanged),
+              actionDisplay: launcherSurface ? undefined : 'inline',
+              actions: launcherSurface ? undefined : getAccountInteractionActions(ctx, onChanged),
               border: 'borderless',
               className: 'oneworks-relay__host-interaction-list',
-              descriptionPlacement: 'content',
+              descriptionPlacement: launcherSurface ? undefined : 'content',
               emptyText: accounts.length === 0 ? '暂无登录账号' : '没有匹配账号',
-              iconSize: 18,
-              inlineActionLimit: 2,
+              iconSize: launcherSurface ? undefined : 18,
+              inlineActionLimit: launcherSurface ? undefined : 2,
               items,
-              padding: 'none',
+              padding: launcherSurface ? undefined : 'none',
               search: {
-                onChange: setFilter,
-                placeholder: showGroups ? '搜索账号、邮箱、服务或状态' : '搜索账号',
-                value: filter
+                onChange: launcherSurface ? () => undefined : setFilter,
+                placeholder: launcherSurface
+                  ? '搜索账号'
+                  : showGroups
+                  ? '搜索账号、邮箱、服务或状态'
+                  : '搜索账号',
+                renderInput: !launcherSurface,
+                value: searchValue
               },
-              splitActionHover: true,
+              splitActionHover: launcherSurface ? undefined : true,
+              mode: launcherSurface ? 'launcher' : 'grouped',
               onSelect: (item: RelayAccountInteractionItem) => {
                 if (item.kind !== 'account' || item.accountKey == null) return
                 navigateTo(
@@ -2220,6 +3550,24 @@ const AccountsPage = (props: {
       )
     )
   )
+}
+
+const buildLauncherAccountInteractionItem = (
+  account: RelayAuthAccount,
+  servers: RelayServerStatus[],
+  includeServerLabel: boolean
+): RelayAccountInteractionItem => {
+  const item = buildAccountInteractionItem(account, servers)
+  const detailText = cleanTextList([
+    accountSubtitle(account),
+    includeServerLabel ? accountServerGroupLabel(account, servers) : undefined
+  ]).join(' · ')
+  return {
+    ...item,
+    description: undefined,
+    meta: account.enabled === false ? '已禁用' : undefined,
+    tooltip: detailText === '' ? item.title : `${item.title} · ${detailText}`
+  }
 }
 
 const buildAccountInteractionItem = (
@@ -2268,10 +3616,8 @@ const buildServerAccountInteractionItem = (
   const address = serverAddress(group.server)
   const children = group.accounts.map(account => buildAccountInteractionItem(account, servers))
   return {
-    avatar: {
-      fallback: getAvatarInitials(group.label)
-    },
     children,
+    icon: serverGroupIcon(group),
     itemType: 'groupTitle',
     kind: 'server',
     key: `server:${group.key}`,
@@ -2436,132 +3782,144 @@ const ServersPage = (props: {
         react.createElement(
           'section',
           { className: 'oneworks-relay__servers' },
-          ...servers.map((server, index) => {
-            const key = cleanText(server.id) ?? cleanText(server.remoteBaseUrl) ?? `server-${index}`
-            const official = server.official === true || isOfficialServerId(cleanText(server.id))
-            const editing = editingKey === key
-            const title = serverDisplayName(server)
-            const address = serverAddress(server)
-            return react.createElement(
-              'div',
-              { className: 'oneworks-relay__server-row', key, title: address },
-              renderAvatar(react, { name: title, state: 'server' }),
-              editing
-                ? react.createElement(
-                  'span',
-                  { className: 'oneworks-relay__server-editor' },
-                  renderInput(react, view, {
-                    onChange: value => setDraft(current => ({ ...current, name: value })),
-                    placeholder: '服务名称',
-                    value: draft.name
-                  }),
-                  renderInput(react, view, {
-                    onChange: value => setDraft(current => ({ ...current, remoteBaseUrl: value })),
-                    placeholder: 'https://relay.example.com',
-                    value: draft.remoteBaseUrl
-                  })
-                )
-                : react.createElement(
-                  'span',
-                  { className: 'oneworks-relay__server-copy' },
-                  react.createElement('strong', null, title),
-                  react.createElement('span', null, address)
-                ),
-              react.createElement(
-                'span',
-                { className: 'oneworks-relay__server-actions' },
-                editing
-                  ? [
-                    renderButton(react, view, {
-                      icon: 'check',
-                      key: 'save',
-                      label: '保存服务器',
-                      onClick: () => {
-                        void saveDraft().catch(error =>
-                          ctx.notifications?.show?.({
-                            level: 'error',
-                            title: toErrorMessage(error)
-                          })
-                        )
-                      }
-                    }),
-                    renderButton(react, view, {
-                      icon: 'close',
-                      key: 'cancel',
-                      label: '取消',
-                      onClick: () => setEditingKey('')
-                    })
-                  ]
-                  : [
-                    renderButton(react, view, {
-                      icon: 'login',
-                      key: 'login',
-                      label: '登录',
-                      onClick: () =>
-                        navigateTo(
-                          ctx.scope,
-                          routePath(ctx.scope, {
-                            page: 'login',
-                            serverId: key
-                          })
-                        )
-                    }),
-                    official ? null : renderButton(react, view, {
-                      icon: 'edit',
-                      key: 'edit',
-                      label: '修改服务器',
-                      onClick: () => {
-                        setEditingKey(key)
-                        setDraft({
-                          id: cleanText(server.id),
-                          name: cleanText(server.name) ?? '',
-                          remoteBaseUrl: address
-                        })
-                      }
-                    })
-                  ]
-              )
-            )
-          }),
           react.createElement(
-            'div',
-            { className: 'oneworks-relay__server-row oneworks-relay__server-management-form' },
-            renderIcon(react, view, 'add_link'),
-            react.createElement(
-              'span',
-              { className: 'oneworks-relay__server-editor' },
-              renderInput(react, view, {
-                onChange: value => setDraft(current => ({ ...current, name: value })),
-                placeholder: '服务名称',
-                value: editingKey === '' ? draft.name : ''
-              }),
-              renderInput(react, view, {
-                onChange: value => setDraft(current => ({ ...current, remoteBaseUrl: value })),
-                placeholder: 'https://relay.example.com',
-                value: editingKey === '' ? draft.remoteBaseUrl : ''
-              })
-            ),
-            react.createElement(
-              'span',
-              { className: 'oneworks-relay__server-actions' },
-              renderButton(react, view, {
-                disabled: editingKey !== '',
-                icon: 'check',
-                label: '加入服务器',
-                onClick: () => {
-                  void saveDraft().catch(error =>
-                    ctx.notifications?.show?.({
-                      level: 'error',
-                      title: toErrorMessage(error)
+            NativeList,
+            { react },
+            ...servers.map((server, index) => {
+              const key = cleanText(server.id) ?? cleanText(server.remoteBaseUrl) ?? `server-${index}`
+              const official = server.official === true || isOfficialServerId(cleanText(server.id))
+              const editing = editingKey === key
+              const title = serverDisplayName(server)
+              const address = serverAddress(server)
+              return react.createElement(
+                'div',
+                { className: adminListSurfaceClassNames.nativeRow, key, title: address },
+                renderAvatar(react, {
+                  className: adminListSurfaceClassNames.nativeIcon,
+                  name: title,
+                  state: 'server'
+                }),
+                editing
+                  ? react.createElement(
+                    'span',
+                    { className: `oneworks-relay__server-editor ${adminListSurfaceClassNames.nativeMain}` },
+                    renderInput(react, view, {
+                      onChange: value => setDraft(current => ({ ...current, name: value })),
+                      placeholder: '服务名称',
+                      value: draft.name
+                    }),
+                    renderInput(react, view, {
+                      onChange: value => setDraft(current => ({ ...current, remoteBaseUrl: value })),
+                      placeholder: 'https://relay.example.com',
+                      value: draft.remoteBaseUrl
                     })
                   )
-                }
-              }),
-              renderButton(react, view, {
-                icon: 'close',
-                label: '清空',
-                onClick: () => setDraft({ name: '', remoteBaseUrl: '' })
-              })
+                  : react.createElement(
+                    'span',
+                    { className: adminListSurfaceClassNames.nativeMain },
+                    react.createElement('strong', { className: adminListSurfaceClassNames.nativeTitle }, title),
+                    react.createElement('span', { className: adminListSurfaceClassNames.nativeMeta }, address)
+                  ),
+                react.createElement(
+                  'span',
+                  { className: adminListSurfaceClassNames.nativeActions },
+                  editing
+                    ? [
+                      renderButton(react, view, {
+                        icon: 'check',
+                        key: 'save',
+                        label: '保存服务器',
+                        onClick: () => {
+                          void saveDraft().catch(error =>
+                            ctx.notifications?.show?.({
+                              level: 'error',
+                              title: toErrorMessage(error)
+                            })
+                          )
+                        }
+                      }),
+                      renderButton(react, view, {
+                        icon: 'close',
+                        key: 'cancel',
+                        label: '取消',
+                        onClick: () => setEditingKey('')
+                      })
+                    ]
+                    : [
+                      renderButton(react, view, {
+                        icon: 'login',
+                        key: 'login',
+                        label: '登录',
+                        onClick: () =>
+                          navigateTo(
+                            ctx.scope,
+                            routePath(ctx.scope, {
+                              page: 'login',
+                              serverId: key
+                            })
+                          )
+                      }),
+                      official ? null : renderButton(react, view, {
+                        icon: 'edit',
+                        key: 'edit',
+                        label: '修改服务器',
+                        onClick: () => {
+                          setEditingKey(key)
+                          setDraft({
+                            id: cleanText(server.id),
+                            name: cleanText(server.name) ?? '',
+                            remoteBaseUrl: address
+                          })
+                        }
+                      })
+                    ]
+                )
+              )
+            }),
+            react.createElement(
+              'div',
+              { className: `${adminListSurfaceClassNames.nativeRow} oneworks-relay__server-management-form` },
+              react.createElement(
+                'span',
+                { className: adminListSurfaceClassNames.nativeIcon, 'aria-hidden': 'true' },
+                renderIcon(react, view, 'add_link', { size: 18 })
+              ),
+              react.createElement(
+                'span',
+                { className: `oneworks-relay__server-editor ${adminListSurfaceClassNames.nativeMain}` },
+                renderInput(react, view, {
+                  onChange: value => setDraft(current => ({ ...current, name: value })),
+                  placeholder: '服务名称',
+                  value: editingKey === '' ? draft.name : ''
+                }),
+                renderInput(react, view, {
+                  onChange: value => setDraft(current => ({ ...current, remoteBaseUrl: value })),
+                  placeholder: 'https://relay.example.com',
+                  value: editingKey === '' ? draft.remoteBaseUrl : ''
+                })
+              ),
+              react.createElement(
+                'span',
+                { className: adminListSurfaceClassNames.nativeActions },
+                renderButton(react, view, {
+                  disabled: editingKey !== '',
+                  icon: 'check',
+                  label: '加入服务器',
+                  onClick: () => {
+                    void saveDraft().catch(error =>
+                      ctx.notifications?.show?.({
+                        level: 'error',
+                        title: toErrorMessage(error)
+                      })
+                    )
+                  }
+                }),
+                renderButton(react, view, {
+                  icon: 'close',
+                  label: '清空',
+                  onClick: () => setDraft({ name: '', remoteBaseUrl: '' })
+                })
+              )
             )
           )
         )
@@ -3035,6 +4393,9 @@ const TeamDetailView = (props: {
   const [configActionId, setConfigActionId] = react.useState<string | null>(null)
   const [configActionError, setConfigActionError] = react.useState<string | null>(null)
   const [configSearch, setConfigSearch] = react.useState('')
+  const [projectSearch, setProjectSearch] = react.useState('')
+  const launcherSurface = isLauncherSurface(view)
+  const launcherSearchValue = launcherSurface ? (cleanText(view?.host?.launcherSearch?.value) ?? '') : ''
   const account = getProfileAccount(profile, status, accountKey)
   const team = profile?.teams?.find(item => cleanText(item.id) === teamId)
   const configDistribution = scopedConfigDistributionForTeam(status?.configDistribution ?? status?.configSync, team)
@@ -3061,7 +4422,7 @@ const TeamDetailView = (props: {
   }
   react.useEffect(() => {
     if (share.error != null) return
-    const shouldLoadTargets = tab === 'configs'
+    const shouldLoadTargets = tab === 'configs' || tab === 'projects'
     if (shouldLoadTargets && share.targets == null && !share.loadingTargets) {
       void loadTargets()
     }
@@ -3092,6 +4453,22 @@ const TeamDetailView = (props: {
       team,
       view
     })
+    : tab === 'projects'
+    ? renderTeamProjectsPanel({
+      account,
+      accountKey,
+      configDistribution,
+      ctx,
+      react,
+      search: launcherSurface ? launcherSearchValue : projectSearch,
+      setSearch: launcherSurface ? () => undefined : setProjectSearch,
+      status,
+      targets: share.targets,
+      targetsError: share.error,
+      targetsLoading: share.loadingTargets,
+      team,
+      view
+    })
     : tab === 'documents'
     ? react.createElement(DocumentSyncPanel, {
       account,
@@ -3109,7 +4486,7 @@ const TeamDetailView = (props: {
     ? react.createElement('div', { className: 'oneworks-relay__empty' }, '标准标签组件不可用')
     : react.createElement(NativeTabs, {
       activeKey: tab,
-      actions: tab === 'documents' && team != null
+      actions: !launcherSurface && tab === 'documents' && team != null
         ? renderDocumentTabActions({ account, accountKey, ctx, onChanged, react, team, view })
         : undefined,
       ariaLabel: '团队详情',
@@ -3144,10 +4521,11 @@ const TeamDetailView = (props: {
           {
             className: [
               'oneworks-relay__profile oneworks-relay__profile--team-detail',
+              launcherSurface ? 'oneworks-relay__profile--launcher' : '',
               tab === 'documents' ? 'oneworks-relay__profile--documents-tab' : ''
             ].filter(Boolean).join(' ')
           },
-          react.createElement(
+          launcherSurface ? null : react.createElement(
             'div',
             { className: 'oneworks-relay__team-hero' },
             react.createElement(
@@ -3331,6 +4709,273 @@ const renderTeamConfigToggle = (props: {
       })
     }
   })
+}
+
+const configDistributionMatchedProject = (status?: RelayConfigDistributionStatus) => (
+  status?.matchedProject === true || (typeof status?.matchedProject === 'string' && status.matchedProject !== '')
+)
+
+const configSourceFieldSummary = (source?: RelayConfigDistributionSourceStatus) => {
+  const fields = source?.fields ?? []
+  if (fields.length === 0) return undefined
+  return fields.join(', ')
+}
+
+const teamDocumentSyncFor = (status: RelayStatus | null, team: RelayProfileTeam) => (
+  status?.teamDocumentSync?.[cleanText(team.id) ?? '']
+)
+
+const documentSyncTargetLabel = (sync?: RelayStatus['personalDocumentSync']) => {
+  if (sync == null) return '未同步'
+  if (cleanText(sync.lastError) != null) return '同步异常'
+  if (personalDocumentSyncFullyEnabled(sync)) return '已启用'
+  if (personalDocumentSyncEnabled(sync)) return '部分启用'
+  return '未启用'
+}
+
+const renderTeamProjectsPanel = (props: {
+  account: RelayAuthAccount | null
+  accountKey: string
+  configDistribution: RelayConfigDistributionStatus | undefined
+  ctx: PluginClientContext
+  react: PluginReactHost
+  search: string
+  setSearch: (value: string) => void
+  status: RelayStatus | null
+  targets: RelayConfigShareTargets | null
+  targetsError: string | null
+  targetsLoading: boolean
+  team: RelayProfileTeam
+  view?: PluginViewContext
+}) => {
+  const {
+    account,
+    accountKey,
+    configDistribution,
+    ctx,
+    react,
+    search,
+    setSearch,
+    status,
+    targets,
+    targetsError,
+    targetsLoading,
+    team,
+    view
+  } = props
+  const InteractionList = view?.ui?.InteractionList
+  const launcherSurface = isLauncherSurface(view)
+  const sources = configDistribution?.sources ?? []
+  const profiles = getConfigShareProfilesForTeam(targets, team)
+  const profilesById = new Map(profiles.map(profile => [cleanText(profile.id), profile]))
+  const matchedProject = configDistributionMatchedProject(configDistribution)
+  const accountDocumentSync = status?.personalDocumentSync
+  const teamDocumentSync = teamDocumentSyncFor(status, team)
+  const targetLoadError = cleanText(targetsError)
+  const projectItems: RelayTeamProjectInteractionItem[] = [
+    ...sources.map((source, index): RelayTeamProjectInteractionItem => {
+      const profile = profilesById.get(cleanText(source.profileId)) ?? undefined
+      const title = cleanText(source.profileName) ?? cleanText(profile?.name) ?? cleanText(source.profileId) ??
+        '团队配置'
+      const enabled = configSourceEnabled(source)
+      const fields = configSourceFieldSummary(source)
+      const description = cleanTextList([
+        enabled ? '启用中' : '已停用',
+        source.mode === 'override' ? '覆盖模式' : '默认模式',
+        cleanText(source.versionId) ?? (typeof source.version === 'number' ? `v${source.version}` : undefined),
+        fields == null ? undefined : `字段 ${fields}`
+      ]).join(' · ')
+      return {
+        description,
+        icon: 'rule_settings',
+        key: `project-config:${cleanText(source.profileId) ?? index}:${cleanText(source.versionId) ?? ''}`,
+        kind: 'teamConfigProfile',
+        meta: matchedProject ? '当前项目' : '未命中',
+        profile,
+        searchText: cleanTextList([
+          '项目',
+          '配置',
+          title,
+          description,
+          source.profileId,
+          source.profileName,
+          source.teamName,
+          source.version,
+          source.versionId,
+          ...(source.fields ?? []),
+          matchedProject ? '当前项目 命中' : '未命中'
+        ]).join(' '),
+        source,
+        title,
+        tooltip: description === '' ? title : `${title} · ${description}`
+      }
+    }),
+    {
+      description: cleanTextList([
+        documentSyncTargetLabel(accountDocumentSync),
+        accountDocumentSync?.lastError == null ? undefined : '同步异常'
+      ]).join(' · '),
+      icon: 'description',
+      key: 'project-document:account-agents',
+      kind: 'accountDocument',
+      meta: '账号',
+      searchText: cleanTextList([
+        '项目',
+        '账号',
+        '文档',
+        '用户根目录文档',
+        accountAgentsPath(account),
+        accountOoAgentsPath(),
+        accountOoRulesPath(),
+        documentSyncTargetLabel(accountDocumentSync),
+        accountDocumentSync?.lastError
+      ]).join(' '),
+      title: '用户根目录文档',
+      tooltip: `${accountAgentsPath(account)} / ${accountOoAgentsPath()} / ${accountOoRulesPath()}`
+    },
+    {
+      description: cleanTextList([
+        documentSyncTargetLabel(teamDocumentSync),
+        teamDocumentSync?.lastError == null ? undefined : '同步异常'
+      ]).join(' · '),
+      icon: 'groups',
+      key: 'project-document:team-agents',
+      kind: 'teamDocument',
+      meta: '团队',
+      searchText: cleanTextList([
+        '项目',
+        '团队',
+        '文档',
+        'AGENTS.md',
+        teamAgentsPath(team),
+        documentSyncTargetLabel(teamDocumentSync),
+        teamDocumentSync?.lastError
+      ]).join(' '),
+      title: 'AGENTS.md',
+      tooltip: teamAgentsPath(team)
+    }
+  ]
+  const openConfig = (item: RelayTeamProjectInteractionItem) => {
+    const profileId = cleanText(item.profile?.id ?? item.source?.profileId)
+    navigateTo(
+      ctx.scope,
+      routePath(ctx.scope, {
+        accountKey,
+        ...(profileId == null ? {} : { configProfileId: profileId }),
+        page: 'team',
+        tab: 'configs',
+        teamId: cleanText(team.id) ?? ''
+      })
+    )
+  }
+  const openDocuments = () => {
+    navigateTo(
+      ctx.scope,
+      routePath(ctx.scope, {
+        accountKey,
+        page: 'team',
+        tab: 'documents',
+        teamId: cleanText(team.id) ?? ''
+      })
+    )
+  }
+  const getProjectActions = (
+    item: RelayTeamProjectInteractionItem
+  ): Array<PluginHostInteractionListAction<RelayTeamProjectInteractionItem>> => {
+    if (item.kind === 'teamConfigProfile') {
+      return [{
+        icon: 'chevron_right',
+        key: 'open-config',
+        label: cleanText(item.profile?.id ?? item.source?.profileId) == null ? '打开配置列表' : '打开配置',
+        onSelect: () => openConfig(item)
+      }]
+    }
+    return [{
+      icon: 'chevron_right',
+      key: 'open-documents',
+      label: '打开文档同步',
+      onSelect: openDocuments
+    }]
+  }
+  const onSelectProjectItem = (item: RelayTeamProjectInteractionItem) => {
+    if (item.kind === 'teamConfigProfile') {
+      openConfig(item)
+      return
+    }
+    openDocuments()
+  }
+  const errorNode = cleanText(targetLoadError ?? configDistribution?.lastError) == null
+    ? null
+    : react.createElement(
+      'div',
+      { className: 'oneworks-relay__config-error' },
+      cleanText(targetLoadError ?? configDistribution?.lastError)
+    )
+
+  return react.createElement(
+    'div',
+    { className: 'oneworks-relay__team-projects' },
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__team-metric-grid oneworks-relay__team-metric-grid--compact' },
+      renderTeamMetric(react, view, {
+        icon: 'folder_open',
+        label: '项目规则',
+        meta: matchedProject ? '当前项目已进入团队配置分发范围' : '当前项目未命中配置分发规则',
+        tone: matchedProject ? 'success' : 'warning',
+        value: matchedProject ? '已命中' : '未命中'
+      }),
+      renderTeamMetric(react, view, {
+        icon: 'rule_settings',
+        label: '配置目标',
+        meta: targetsLoading ? '正在读取团队配置' : '来自当前分发状态',
+        tone: sources.length > 0 ? 'primary' : 'neutral',
+        value: `${sources.length} 个`
+      }),
+      renderTeamMetric(react, view, {
+        icon: 'description',
+        label: '账号文档',
+        meta: '~/AGENTS.md / ~/.oo/AGENTS.md / ~/.oo/rules',
+        tone: personalDocumentSyncEnabled(accountDocumentSync) ? 'success' : 'neutral',
+        value: documentSyncTargetLabel(accountDocumentSync)
+      }),
+      renderTeamMetric(react, view, {
+        icon: 'groups',
+        label: '团队文档',
+        meta: '团队命名空间 AGENTS.md',
+        tone: teamDocumentSync?.preferences?.agents === true ? 'success' : 'neutral',
+        value: documentSyncTargetLabel(teamDocumentSync)
+      })
+    ),
+    react.createElement(
+      'section',
+      { className: 'oneworks-relay__team-panel-section' },
+      errorNode,
+      InteractionList == null
+        ? react.createElement('div', { className: 'oneworks-relay__empty' }, '标准项目列表组件不可用')
+        : react.createElement(InteractionList, {
+          actionDisplay: launcherSurface ? undefined : 'inline',
+          actions: launcherSurface ? undefined : getProjectActions,
+          border: 'borderless',
+          className: 'oneworks-relay__host-interaction-list oneworks-relay__team-project-list',
+          descriptionPlacement: launcherSurface ? undefined : 'content',
+          emptyText: targetsLoading ? '正在加载项目规则...' : '没有匹配的项目同步目标',
+          iconSize: launcherSurface ? undefined : 18,
+          inlineActionLimit: launcherSurface ? undefined : 1,
+          items: projectItems,
+          padding: launcherSurface ? undefined : 'none',
+          search: {
+            onChange: setSearch,
+            placeholder: '搜索当前项目可同步的配置、文档或规则',
+            renderInput: !launcherSurface,
+            value: search
+          },
+          splitActionHover: launcherSurface ? undefined : true,
+          mode: launcherSurface ? 'launcher' : 'resource',
+          onSelect: onSelectProjectItem
+        })
+    )
+  )
 }
 
 const TEAM_CONFIG_CONTENT_TEMPLATE: Record<string, unknown> = {
@@ -3615,23 +5260,27 @@ const renderTeamConfigVersionsPanel = (
     { className: 'oneworks-relay__team-config-detail' },
     errorNode,
     react.createElement(
-      'div',
-      { className: 'oneworks-relay__team-version-list' },
+      NativeList,
+      { react },
       react.createElement(
-        'article',
-        { className: 'oneworks-relay__team-version-row' },
+        'div',
+        { className: adminListSurfaceClassNames.nativeRow },
         react.createElement(
           'span',
-          { className: 'oneworks-relay__team-version-icon', 'aria-hidden': 'true' },
+          { className: adminListSurfaceClassNames.nativeIcon, 'aria-hidden': 'true' },
           renderIcon(react, view, 'tag', { size: 18 })
         ),
         react.createElement(
           'span',
-          { className: 'oneworks-relay__team-version-copy' },
-          react.createElement('strong', null, valueOrDash(profile.activeVersionId)),
+          { className: adminListSurfaceClassNames.nativeMain },
+          react.createElement(
+            'strong',
+            { className: adminListSurfaceClassNames.nativeTitle },
+            valueOrDash(profile.activeVersionId)
+          ),
           react.createElement(
             'span',
-            null,
+            { className: adminListSurfaceClassNames.nativeMeta },
             cleanTextList([
               '当前发布版本',
               configShareProfileStatusLabel(profile),
@@ -4016,6 +5665,7 @@ const renderTeamConfigsPanel = (props: {
             value: search
           },
           splitActionHover: true,
+          mode: 'resource',
           onSelect: (item: RelayTeamConfigInteractionItem) => detailRoute(item.profile)
         })
     )
@@ -4219,13 +5869,14 @@ const ProfilePage = (props: {
   view?: PluginViewContext
 }) => {
   const { accountKey, ctx, onChanged, profile, react, status, tab, view } = props
+  const launcherSurface = isLauncherSurface(view)
   const account = getProfileAccount(profile, status, accountKey)
   const panel = tab === 'teams'
     ? react.createElement(TeamsPanel, { accountKey, ctx, profile, react, view })
     : tab === 'documents'
     ? react.createElement(DocumentSyncPanel, { account, accountKey, ctx, onChanged, react, status, view })
     : tab === 'devices'
-    ? react.createElement(DevicesPanel, { accountKey, ctx, onChanged, profile, react, view })
+    ? react.createElement(DevicesPanel, { accountKey, ctx, profile, react, status, view })
     : tab === 'security'
     ? react.createElement(SecurityPanel, { accountKey, ctx, onChanged, profile, react, view })
     : tab === 'tokens'
@@ -4245,10 +5896,11 @@ const ProfilePage = (props: {
           {
             className: [
               'oneworks-relay__profile',
+              launcherSurface ? 'oneworks-relay__profile--launcher' : '',
               tab === 'documents' ? 'oneworks-relay__profile--documents-tab' : ''
             ].filter(Boolean).join(' ')
           },
-          react.createElement(ProfileHeader, { account, accountKey, profile, react }),
+          launcherSurface ? null : react.createElement(ProfileHeader, { account, accountKey, profile, react }),
           react.createElement(ProfileTabs, { account, accountKey, activeTab: tab, ctx, onChanged, react, view }),
           react.createElement(
             'div',
@@ -4322,14 +5974,16 @@ export const RelayHomeView = (props: {
   }, [ctx])
 
   react.useEffect(() => {
+    const launcherSurface = isLauncherSurface(view)
     const goAccounts = () => navigateTo(ctx.scope, routePath(ctx.scope, { page: 'accounts' }))
     const goAccount = () => {
       if (accountKey != null) {
         navigateTo(ctx.scope, routePath(ctx.scope, { accountKey, page: 'profile', tab: 'account' }))
       }
     }
-    const actions: PluginViewRouteHeaderAction[] = route.page === 'accounts'
-      ? [
+    const accountActions: PluginViewRouteHeaderAction[] = launcherSurface
+      ? []
+      : [
         {
           icon: 'add_circle',
           key: 'servers',
@@ -4343,6 +5997,8 @@ export const RelayHomeView = (props: {
           onSelect: () => navigateTo(ctx.scope, routePath(ctx.scope, { page: 'login' }))
         }
       ]
+    const actions: PluginViewRouteHeaderAction[] = route.page === 'accounts'
+      ? accountActions
       : route.page === 'profile'
       ? [
         {
@@ -4392,28 +6048,29 @@ export const RelayHomeView = (props: {
     view?.route?.setActions?.(actions)
     if (route.page === 'accounts') {
       view?.route?.setTitle?.('账号')
+      view?.route?.setLauncherChrome?.({ icon: 'account_circle', searchTitle: '账号', title: '账号' })
       view?.route?.setBreadcrumb?.(undefined)
     } else if (route.page === 'servers') {
       view?.route?.setTitle?.('服务器')
+      view?.route?.setLauncherChrome?.({ icon: 'lan', searchTitle: '服务器', title: '服务器' })
       view?.route?.setBreadcrumb?.({
-        ancestors: [{ onSelect: goAccounts, title: '账号' }],
         currentTitle: '服务器',
         onBack: goAccounts,
         parentTitle: '账号'
       })
     } else if (route.page === 'login') {
       view?.route?.setTitle?.('登录')
+      view?.route?.setLauncherChrome?.({ icon: 'login', searchTitle: '登录', title: '登录' })
       view?.route?.setBreadcrumb?.({
-        ancestors: [{ onSelect: goAccounts, title: '账号' }],
         currentTitle: '登录',
         onBack: goAccounts,
         parentTitle: '账号'
       })
     } else if (route.page === 'messages') {
       view?.route?.setTitle?.('消息')
+      view?.route?.setLauncherChrome?.({ icon: 'mail', searchTitle: '消息', title: '消息' })
       view?.route?.setBreadcrumb?.({
         ancestors: [
-          { onSelect: goAccounts, title: '账号' },
           { onSelect: goAccount, title: accountName }
         ],
         currentTitle: '消息',
@@ -4422,8 +6079,13 @@ export const RelayHomeView = (props: {
       })
     } else if (route.page === 'profile') {
       view?.route?.setTitle?.('账号详情')
+      view?.route?.setLauncherChrome?.({
+        avatarInitials: getAvatarInitials(accountName),
+        avatarUrl: cleanText(account?.avatarUrl ?? profile?.user?.avatarUrl),
+        searchTitle: profileTabLabel(route.tab),
+        title: accountName
+      })
       view?.route?.setBreadcrumb?.({
-        ancestors: [{ onSelect: goAccounts, title: '账号' }],
         currentTitle: accountName,
         onBack: goAccounts,
         parentTitle: '账号'
@@ -4432,55 +6094,72 @@ export const RelayHomeView = (props: {
       const team = profile?.teams?.find(item => cleanText(item.id) === route.teamId)
       const teamTitle = team == null ? cleanText(route.teamId) ?? '团队' : teamDisplayName(team)
       const accountTitle = account == null ? cleanText(route.accountKey) ?? accountName : accountName
+      const backToTeams = () =>
+        navigateTo(
+          ctx.scope,
+          routePath(ctx.scope, {
+            accountKey: route.accountKey,
+            page: 'profile',
+            tab: 'teams'
+          })
+        )
       view?.route?.setTitle?.('团队详情')
+      view?.route?.setLauncherChrome?.({
+        avatarInitials: getAvatarInitials(teamTitle),
+        avatarUrl: cleanText(team?.avatarUrl),
+        searchTitle: teamDetailTabLabel(route.tab, route.configPanel),
+        title: teamTitle
+      })
       view?.route?.setBreadcrumb?.({
         ancestors: [
           { onSelect: goAccounts, title: '账号' },
-          { onSelect: goAccount, title: accountTitle },
-          {
-            onSelect: () =>
-              navigateTo(
-                ctx.scope,
-                routePath(ctx.scope, {
-                  accountKey: route.accountKey,
-                  page: 'profile',
-                  tab: 'teams'
-                })
-              ),
-            title: '团队'
-          }
+          { onSelect: goAccount, title: accountTitle }
         ],
         currentTitle: teamTitle,
-        onBack: () =>
-          navigateTo(
-            ctx.scope,
-            routePath(ctx.scope, {
-              accountKey: route.accountKey,
-              page: 'profile',
-              tab: 'teams'
-            })
-          ),
+        onBack: backToTeams,
         parentTitle: '团队'
+      })
+    } else if (route.page === 'device') {
+      const device = profile?.devices?.find(item => cleanText(item.id) === route.deviceId)
+      const deviceTitle = device == null ? cleanText(route.deviceId) ?? '设备' : deviceDisplayName(device)
+      const accountTitle = account == null ? cleanText(route.accountKey) ?? accountName : accountName
+      const isCurrentDevice = device == null ? false : isCurrentClientDevice(ctx, device, status)
+      const backToDevices = () =>
+        navigateTo(
+          ctx.scope,
+          routePath(ctx.scope, {
+            accountKey: route.accountKey,
+            page: 'profile',
+            tab: 'devices'
+          })
+        )
+      view?.route?.setTitle?.('设备详情')
+      view?.route?.setLauncherChrome?.({
+        icon: isCurrentDevice ? 'important_devices' : 'computer',
+        searchTitle: deviceDetailTabLabel(route.tab),
+        title: deviceTitle
+      })
+      view?.route?.setBreadcrumb?.({
+        ancestors: [
+          { onSelect: goAccounts, title: '账号' },
+          { onSelect: goAccount, title: accountTitle }
+        ],
+        currentTitle: deviceTitle,
+        onBack: backToDevices,
+        parentTitle: '设备'
       })
     } else {
       const token = profile?.security?.accessTokens?.find(item => cleanText(item.id) === route.tokenId)
       view?.route?.setTitle?.(route.tokenId === 'new' ? '新建令牌' : '令牌详情')
+      view?.route?.setLauncherChrome?.({
+        icon: 'key',
+        searchTitle: route.tokenId === 'new' ? '新建令牌' : '令牌详情',
+        title: route.tokenId === 'new' ? '新建令牌' : cleanText(token?.name) ?? route.tokenId
+      })
       view?.route?.setBreadcrumb?.({
         ancestors: [
           { onSelect: goAccounts, title: '账号' },
-          { onSelect: goAccount, title: accountName },
-          {
-            onSelect: () =>
-              navigateTo(
-                ctx.scope,
-                routePath(ctx.scope, {
-                  accountKey: route.accountKey,
-                  page: 'profile',
-                  tab: 'tokens'
-                })
-              ),
-            title: '令牌'
-          }
+          { onSelect: goAccount, title: accountName }
         ],
         currentTitle: route.tokenId === 'new' ? '新建令牌' : cleanText(token?.name) ?? route.tokenId,
         onBack: () =>
@@ -4498,9 +6177,10 @@ export const RelayHomeView = (props: {
     return () => {
       view?.route?.setActions?.(undefined)
       view?.route?.setBreadcrumb?.(undefined)
+      view?.route?.setLauncherChrome?.(undefined)
       view?.route?.setTitle?.(undefined)
     }
-  }, [account?.enabled, accountKey, accountName, ctx.scope, profile, route, view])
+  }, [account?.avatarUrl, account?.enabled, accountKey, accountName, ctx.scope, profile, route, status, view])
 
   const error = statusState.error ?? profileState.error
   if (error != null && route.page !== 'login') {
@@ -4556,6 +6236,19 @@ export const RelayHomeView = (props: {
       status,
       tab: route.tab,
       teamId: route.teamId,
+      view
+    })
+  }
+  if (route.page === 'device') {
+    return react.createElement(DeviceDetailView, {
+      account,
+      accountKey: route.accountKey,
+      ctx,
+      deviceId: route.deviceId,
+      profile,
+      react,
+      status,
+      tab: route.tab,
       view
     })
   }

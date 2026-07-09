@@ -264,7 +264,7 @@ export function ChatInteractionPanel({
 
       onFoldChange(false)
       if (item.command != null && executePluginCommand != null) {
-        void executePluginCommand(item.pluginScope, item.command)
+        void executePluginCommand(item.pluginScope, item.command, item.payload)
         return
       }
       if (item.route != null) {

@@ -1,4 +1,4 @@
-import type { RelayCapabilities } from './types.js'
+import type { RelayCapabilities, RelayDeviceEnvironmentInfo, RelayRemoteDeviceProjectSummary } from './types.js'
 import { isRecord, toString } from './utils.js'
 
 export const DEFAULT_HEARTBEAT_INTERVAL_MS = 30_000
@@ -7,10 +7,16 @@ export const DEFAULT_HEARTBEAT_ERROR_LOG_INTERVAL_MS = 30_000
 
 export interface RelayHeartbeatOptions {
   capabilities: RelayCapabilities
+  deviceInfo?: RelayDeviceEnvironmentInfo
   deviceId: string
   deviceName?: string
   deviceToken: string
+  managementServerEnvironment?: RelayDeviceEnvironmentInfo
   fetchImpl?: typeof fetch
+  managementServerId: string
+  managementServerKind: string
+  managementServerName?: string
+  managementServerProjects?: RelayRemoteDeviceProjectSummary[]
   pluginScope: string
   remoteBaseUrl: string
   workspaceFolder: string
@@ -33,8 +39,16 @@ export interface RelayHeartbeatLoop {
 
 const createHeartbeatBody = (options: RelayHeartbeatOptions) => ({
   capabilities: options.capabilities,
+  ...(options.deviceInfo == null ? {} : { deviceInfo: options.deviceInfo }),
   deviceId: options.deviceId,
   ...(options.deviceName == null ? {} : { deviceName: options.deviceName }),
+  ...(options.managementServerEnvironment == null
+    ? {}
+    : { managementServerEnvironment: options.managementServerEnvironment }),
+  managementServerId: options.managementServerId,
+  managementServerKind: options.managementServerKind,
+  ...(options.managementServerName == null ? {} : { managementServerName: options.managementServerName }),
+  ...(options.managementServerProjects == null ? {} : { managementServerProjects: options.managementServerProjects }),
   pluginScope: options.pluginScope,
   workspaceFolder: options.workspaceFolder
 })

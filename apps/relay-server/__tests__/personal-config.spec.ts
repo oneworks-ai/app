@@ -227,7 +227,9 @@ describe('relay personal global config route', () => {
       body: JSON.stringify({
         documents: {
           countsByKind: {
-            agents: 1
+            agents: 1,
+            ooAgents: 0,
+            ooRules: 0
           },
           documentCount: 1,
           encryptedPayload: {
@@ -256,7 +258,9 @@ describe('relay personal global config route', () => {
     expect(pulled.body.personalConfigSnapshot).toMatchObject({
       documents: {
         countsByKind: {
-          agents: 1
+          agents: 1,
+          ooAgents: 0,
+          ooRules: 0
         },
         documentCount: 1,
         encryptedPayload: {
@@ -304,7 +308,9 @@ describe('relay personal global config route', () => {
         baseHash: firstHash,
         documents: {
           countsByKind: {
-            agents: 1
+            agents: 1,
+            ooAgents: 0,
+            ooRules: 0
           },
           documentCount: 1,
           encryptedPayload: {

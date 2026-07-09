@@ -14,7 +14,8 @@ export interface PluginReadmeState {
 export const usePluginReadme = (
   plugin: PluginRuntimeInstance | undefined,
   refreshKey: unknown,
-  fallbackError: string
+  fallbackError: string,
+  serverBaseUrl?: string
 ) => {
   const [state, setState] = useState<PluginReadmeState>({ loading: false, readmes: [] })
 
@@ -26,7 +27,7 @@ export const usePluginReadme = (
 
     let disposed = false
     setState({ loading: true, readmes: [] })
-    void getPluginReadme(plugin.scope)
+    void getPluginReadme(plugin.scope, { serverBaseUrl })
       .then(({ readme, readmes }) => {
         if (disposed) return
         setState({ loading: false, readme, readmes })
@@ -40,7 +41,7 @@ export const usePluginReadme = (
     return () => {
       disposed = true
     }
-  }, [fallbackError, plugin, refreshKey])
+  }, [fallbackError, plugin, refreshKey, serverBaseUrl])
 
   return state
 }

@@ -8,36 +8,108 @@ import { publicUser } from '../auth/sessions.js'
 import {
   deviceTokenMatches,
   hashDeviceToken,
+  normalizeDeviceEnvironmentInfo,
   normalizeDevicePrivateMetadata,
   storeEncryptedDevicePrivateMetadata,
+  upsertDeviceManagementServerMetadata,
   visibleDevicePrivateMetadata
 } from '../devices/private-metadata.js'
 import type { RelayDevicePrivateMetadata } from '../devices/private-metadata.js'
 import { deviceStatusFor } from '../devices/status.js'
 import { getBearerToken, readRequestBody, sendJson } from '../http.js'
 import { devicePrincipalForDevice, hasRelayPermission, relayPermissions } from '../permissions/index.js'
+import { requestIp } from '../security/request.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
 import type { RelayTelemetry } from '../telemetry/metrics.js'
 import { recordRelayTraceEvent, traceContextFromRequest } from '../telemetry/trace.js'
 import type { RelayDevice, RelayServerArgs, RelayStore } from '../types.js'
 import { createToken, isRecord, now } from '../utils.js'
 
+const managementServerInputFromBody = (body: unknown) => {
+  const record = isRecord(body) ? body : {}
+  const nested = isRecord(record.managementServer) ? record.managementServer : {}
+  return {
+    environment: nested.environment ?? record.managementServerEnvironment,
+    id: nested.id ?? record.managementServerId,
+    kind: nested.kind ?? record.managementServerKind,
+    name: nested.name ?? record.managementServerName,
+    pluginScope: record.pluginScope,
+    projects: nested.projects ?? record.managementServerProjects,
+    workspaceFolder: record.workspaceFolder
+  }
+}
+
+const redactManagementServerProjects = (
+  server: NonNullable<RelayDevicePrivateMetadata['managementServers']>[number],
+  args: RelayServerArgs
+) => (server.projects ?? []).map(project => ({
+  createdAt: project.createdAt,
+  id: project.id,
+  lastSeenAt: project.lastSeenAt,
+  name: project.name,
+  status: deviceStatusFor({ lastSeenAt: project.lastSeenAt ?? server.lastSeenAt }, args),
+  title: project.title,
+  workspaceFolder: project.workspaceFolder
+}))
+
+const redactManagementServers = (
+  device: RelayDevice,
+  args: RelayServerArgs,
+  metadata: RelayDevicePrivateMetadata
+) => {
+  const managementServers = metadata.managementServers ?? []
+  const visibleServers = managementServers.length === 0 &&
+    (metadata.pluginScope != null || metadata.workspaceFolder != null)
+    ? [{
+      createdAt: device.createdAt,
+      id: `legacy:${device.id}`,
+      lastSeenAt: device.lastSeenAt,
+      pluginScope: metadata.pluginScope,
+      workspaceFolder: metadata.workspaceFolder
+    }]
+    : managementServers
+
+  return visibleServers.map(server => ({
+    createdAt: server.createdAt,
+    environment: server.environment,
+    id: server.id,
+    kind: server.kind,
+    lastSeenAt: server.lastSeenAt,
+    lastSeenIp: server.lastSeenIp,
+    name: server.name,
+    pluginScope: server.pluginScope,
+    ...(server.projects == null ? {} : { projects: redactManagementServerProjects(server, args) }),
+    registeredIp: server.registeredIp,
+    status: deviceStatusFor({ lastSeenAt: server.lastSeenAt }, args),
+    workspaceFolder: server.workspaceFolder
+  }))
+}
+
 export const redactDevice = (
   device: RelayDevice,
   args: RelayServerArgs,
   metadata: RelayDevicePrivateMetadata = visibleDevicePrivateMetadata(args, device)
-) => ({
-  id: device.id,
-  alias: metadata.alias,
-  name: metadata.name,
-  userId: device.userId,
-  capabilities: metadata.capabilities,
-  workspaceFolder: metadata.workspaceFolder,
-  pluginScope: metadata.pluginScope,
-  status: args == null ? undefined : deviceStatusFor(device, args),
-  createdAt: device.createdAt,
-  lastSeenAt: device.lastSeenAt
-})
+) => {
+  const managementServers = redactManagementServers(device, args, metadata)
+  const managementLastSeenIp = managementServers.find(server => server.lastSeenIp != null)?.lastSeenIp
+  const managementRegisteredIp = managementServers.find(server => server.registeredIp != null)?.registeredIp
+  return {
+    id: device.id,
+    alias: metadata.alias,
+    name: metadata.name,
+    userId: device.userId,
+    deviceInfo: metadata.deviceInfo,
+    capabilities: metadata.capabilities,
+    lastSeenIp: metadata.lastSeenIp ?? managementLastSeenIp,
+    workspaceFolder: metadata.workspaceFolder,
+    pluginScope: metadata.pluginScope,
+    registeredIp: metadata.registeredIp ?? managementRegisteredIp,
+    ...(managementServers.length === 0 ? {} : { managementServers }),
+    status: args == null ? undefined : deviceStatusFor(device, args),
+    createdAt: device.createdAt,
+    lastSeenAt: device.lastSeenAt
+  }
+}
 
 const findUsableInvite = (store: RelayStore, token: string) => {
   if (token === '') return undefined
@@ -102,6 +174,7 @@ export const handleDeviceRegister = async (
   telemetry?: RelayTelemetry
 ) => {
   const body = await readRequestBody(req)
+  const registerIp = requestIp(req)
   const token = getBearerToken(req)
   const deviceId = typeof body.deviceId === 'string' && body.deviceId.trim() !== ''
     ? body.deviceId.trim()
@@ -131,22 +204,32 @@ export const handleDeviceRegister = async (
   if (!enforceDeviceLimit(res, args, store, ownerUserId, existing)) return
 
   if (invite != null) consumeInvite(invite)
+  const registeredAt = now()
   const deviceToken = authorizedByExistingToken ? token : createToken()
   const nextDevice: RelayDevice = {
     id: deviceId,
     userId: ownerUserId,
     deviceTokenHash: hashDeviceToken(deviceToken),
-    createdAt: existing?.createdAt ?? now(),
-    lastSeenAt: now()
+    createdAt: existing?.createdAt ?? registeredAt,
+    lastSeenAt: registeredAt
   }
   const previousMetadata = existing == null ? undefined : visibleDevicePrivateMetadata(args, existing)
   const metadata = normalizeDevicePrivateMetadata({
     alias: previousMetadata?.alias,
     capabilities: isRecord(body.capabilities) ? body.capabilities : {},
+    deviceInfo: normalizeDeviceEnvironmentInfo(body.deviceInfo) ?? previousMetadata?.deviceInfo,
+    lastSeenIp: registerIp,
+    managementServers: previousMetadata?.managementServers,
     name: typeof body.deviceName === 'string' ? body.deviceName : undefined,
     pluginScope: typeof body.pluginScope === 'string' ? body.pluginScope : undefined,
+    registeredIp: previousMetadata?.registeredIp ?? registerIp,
     workspaceFolder: typeof body.workspaceFolder === 'string' ? body.workspaceFolder : undefined
   }, deviceId)
+  upsertDeviceManagementServerMetadata(metadata, {
+    ...managementServerInputFromBody(body),
+    lastSeenIp: registerIp,
+    registeredIp: registerIp
+  }, registeredAt)
   storeEncryptedDevicePrivateMetadata(args, nextDevice, metadata)
 
   if (existing == null) {
@@ -285,6 +368,7 @@ export const handleDeviceHeartbeat = async (
   telemetry?: RelayTelemetry
 ) => {
   const body = await readRequestBody(req)
+  const heartbeatIp = requestIp(req)
   const token = getBearerToken(req)
   const deviceId = typeof body.deviceId === 'string' && body.deviceId.trim() !== ''
     ? body.deviceId.trim()
@@ -298,7 +382,8 @@ export const handleDeviceHeartbeat = async (
     sendJson(res, 403, { error: 'Permission denied.' }, args.allowOrigin)
     return
   }
-  device.lastSeenAt = now()
+  const heartbeatAt = now()
+  device.lastSeenAt = heartbeatAt
   const metadata = visibleDevicePrivateMetadata(args, device)
   if (typeof body.deviceName === 'string' && body.deviceName.trim() !== '') {
     metadata.name = body.deviceName.trim()
@@ -306,12 +391,21 @@ export const handleDeviceHeartbeat = async (
   if (isRecord(body.capabilities)) {
     metadata.capabilities = body.capabilities
   }
+  const deviceInfo = normalizeDeviceEnvironmentInfo(body.deviceInfo)
+  if (deviceInfo != null) {
+    metadata.deviceInfo = { ...metadata.deviceInfo, ...deviceInfo }
+  }
+  metadata.lastSeenIp = heartbeatIp
   if (typeof body.workspaceFolder === 'string') {
     metadata.workspaceFolder = body.workspaceFolder
   }
   if (typeof body.pluginScope === 'string') {
     metadata.pluginScope = body.pluginScope
   }
+  upsertDeviceManagementServerMetadata(metadata, {
+    ...managementServerInputFromBody(body),
+    lastSeenIp: heartbeatIp
+  }, heartbeatAt)
   storeEncryptedDevicePrivateMetadata(args, device, metadata)
   device.deviceTokenHash = hashDeviceToken(token)
   delete device.deviceToken

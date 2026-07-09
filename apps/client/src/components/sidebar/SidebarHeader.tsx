@@ -445,7 +445,7 @@ export function SidebarHeader({
         label: resolvePluginContributionText(item, 'title', pluginLanguage) ?? item.title,
         onSelect: () => {
           if (item.route == null && item.command != null && executePluginCommand != null) {
-            void executePluginCommand(item.pluginScope, item.command)
+            void executePluginCommand(item.pluginScope, item.command, item.payload)
             return
           }
           void navigate(route)

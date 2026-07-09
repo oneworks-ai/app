@@ -3,10 +3,15 @@ import { Buffer } from 'node:buffer'
 import path from 'node:path'
 
 import Router from '@koa/router'
+import type {
+  PluginRuntimeChannelInvocation,
+  PluginRuntimeChannelResponse,
+  PluginRuntimeEndpoint
+} from '@oneworks/types'
 
 import { getPluginManager } from '#~/services/plugins/index.js'
 import { listPluginMarketplaceCatalog } from '#~/services/plugins/marketplace.js'
-import { readProxyHandlerBody } from '#~/services/plugins/runtime.js'
+import { normalizeRuntimeEndpoint, readProxyHandlerBody } from '#~/services/plugins/runtime.js'
 import { HttpError, badRequest, notFound } from '#~/utils/http.js'
 
 const HOP_BY_HOP_HEADERS = new Set([
@@ -41,6 +46,20 @@ const getBodyBuffer = async (ctx: Router.RouterContext) => {
     return Buffer.alloc(0)
   }
   return Buffer.from(JSON.stringify(request.body))
+}
+
+const normalizeRuntimeChannelBody = (body: unknown): {
+  invocation: PluginRuntimeChannelInvocation
+  source?: PluginRuntimeEndpoint
+} => {
+  if (!isRecord(body)) return { invocation: {} }
+  return {
+    invocation: {
+      ...('payload' in body ? { payload: body.payload } : {}),
+      ...(isRecord(body.target) ? { target: body.target } : {})
+    },
+    source: normalizeRuntimeEndpoint(body.source)
+  }
 }
 
 const setProxyHeaders = (
@@ -96,6 +115,7 @@ const normalizeRouteError = (error: unknown) => {
   if (
     message.startsWith('Invalid plugin') ||
     message.startsWith('Invalid launcher') ||
+    message.startsWith('Plugin runtime channel') ||
     (message.includes('README.md') && message.includes('too large')) ||
     message.includes('must stay within the registered API scope')
   ) {
@@ -111,6 +131,22 @@ export function pluginsRouter(): Router {
     const manager = getPluginManager()
     await manager.load()
     ctx.body = manager.snapshot()
+  })
+
+  router.get('/runtime', async (ctx) => {
+    const manager = getPluginManager()
+    await manager.load()
+    ctx.body = {
+      runtime: manager.getRuntimeEndpoint()
+    }
+  })
+
+  router.get('/runtime/endpoints', async (ctx) => {
+    const manager = getPluginManager()
+    await manager.load()
+    ctx.body = {
+      endpoints: await manager.listRuntimeEndpoints()
+    }
   })
 
   router.get('/marketplace/catalog', async (ctx) => {
@@ -260,6 +296,35 @@ export function pluginsRouter(): Router {
       )
     } catch (error) {
       throw normalizeRouteError(error)
+    }
+  })
+
+  router.post('/:scope/runtime/channels/:channelId', async (ctx) => {
+    try {
+      const { invocation, source } = normalizeRuntimeChannelBody(ctx.request.body)
+      const payload = await getPluginManager().handleRuntimeChannel(
+        String(ctx.params.scope ?? ''),
+        String(ctx.params.channelId ?? ''),
+        invocation,
+        source
+      )
+      ctx.state.skipApiEnvelope = true
+      ctx.body = {
+        ok: true,
+        payload
+      } satisfies PluginRuntimeChannelResponse
+    } catch (error) {
+      const normalizedError = normalizeRouteError(error)
+      if (normalizedError instanceof HttpError) {
+        ctx.state.skipApiEnvelope = true
+        ctx.status = normalizedError.status
+        ctx.body = {
+          ok: false,
+          error: normalizedError.message
+        } satisfies PluginRuntimeChannelResponse
+        return
+      }
+      throw normalizedError
     }
   })
 

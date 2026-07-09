@@ -15,6 +15,16 @@
   min-width: 0;
 }
 
+.plugin-view-host--launcher {
+  padding: 0 0 10px;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.plugin-view-host--launcher > * {
+  min-height: 0;
+}
+
 .plugin-host-component-sender,
 .plugin-host-component-file-tree {
   width: 100%;

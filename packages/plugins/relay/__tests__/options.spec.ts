@@ -49,6 +49,13 @@ describe('relay plugin options', () => {
     })
   })
 
+  it('defaults workspace launcher exposure from the plugin runtime role', () => {
+    expect(normalizeOptions({}).capabilities.workspaceLauncher).toBe(false)
+    expect(normalizeOptions({}, 'manager').capabilities.workspaceLauncher).toBe(true)
+    expect(normalizeOptions({ exposeWorkspaceLauncher: false }, 'manager').capabilities.workspaceLauncher).toBe(false)
+    expect(normalizeOptions({ exposeWorkspaceLauncher: true }).capabilities.workspaceLauncher).toBe(true)
+  })
+
   it('keeps custom servers alongside enabled official services', () => {
     const options = normalizeOptions({
       servers: [

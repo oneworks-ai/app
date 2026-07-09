@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- generic interaction list exposes search, filtering, selection, nesting, and row actions together. */
 import './InteractionList.scss'
 
-import { Button, Checkbox, Dropdown, Input, Tag, Tooltip } from 'antd'
+import { Button, Checkbox, Dropdown, Tag, Tooltip } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import type { AnimationEvent, CSSProperties, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import type { IconAsset } from '#~/components/icons/IconAsset'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
+import { ListSearchInput } from '#~/components/list-search-input'
 import { SessionContextMenuContent } from '#~/components/sidebar/SessionContextMenuContent'
 import type { SessionContextMenuEntry } from '#~/components/sidebar/SessionContextMenuContent'
 
@@ -30,6 +31,7 @@ export interface InteractionListItem {
   disabled?: boolean
   icon?: IconAsset
   iconFilled?: boolean
+  iconState?: 'offline' | 'online' | 'stale' | 'unknown'
   itemType?: 'groupTitle' | 'listItem'
   key: string
   meta?: ReactNode
@@ -44,6 +46,7 @@ export interface InteractionListSearchProps {
   filterPanel?: ReactNode
   filterToggleIcon?: ReactNode
   placeholder: string
+  renderInput?: boolean
   suffix?: ReactNode
   value: string
   onChange: (value: string) => void
@@ -61,6 +64,7 @@ interface InteractionListRow<TItem extends InteractionListItem> {
 }
 
 type TreeAnimationPhase = 'entering' | 'exiting'
+export type InteractionListMode = 'default' | 'grouped' | 'launcher' | 'resource'
 
 export interface InteractionListItemRenderContext<TItem extends InteractionListItem = InteractionListItem> {
   isActive: boolean
@@ -106,11 +110,14 @@ export interface InteractionListProps<TItem extends InteractionListItem = Intera
   inlineActionLimit?: number
   isTouchInteraction?: boolean
   items: TItem[]
+  mode?: InteractionListMode
   padding?: 'default' | 'none'
   search?: InteractionListSearchProps
   selectedKeys?: Set<string>
   selectionMode?: boolean
   splitActionHover?: boolean
+  /** @deprecated Use mode instead. */
+  variant?: InteractionListMode
   showItemDescription?: boolean
   renderItemAction?: (context: InteractionListActionRenderContext<TItem>) => ReactNode
   renderItemContent?: (context: InteractionListItemRenderContext<TItem>) => ReactNode
@@ -201,11 +208,13 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
   inlineActionLimit = 2,
   isTouchInteraction = false,
   items,
+  mode,
   padding = 'default',
   search,
   selectedKeys = new Set<string>(),
   selectionMode = false,
   splitActionHover = false,
+  variant = 'default',
   showItemDescription = true,
   renderItemAction,
   renderItemContent,
@@ -255,6 +264,7 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
     : {
       '--interaction-list-icon-size': typeof iconSize === 'number' ? `${iconSize}px` : iconSize
     } as CSSProperties
+  const listMode = mode ?? variant
 
   useEffect(() => {
     const nextDefaultKeys = defaultCollapsedKeys == null ? new Set<string>() : defaultCollapsedKeysRef
@@ -393,20 +403,20 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
         'interaction-list',
         border === 'bordered' ? 'interaction-list--bordered' : 'interaction-list--borderless',
         padding === 'none' ? 'interaction-list--padding-none' : 'interaction-list--padding-default',
+        `interaction-list--mode-${listMode}`,
         splitActionHover ? 'interaction-list--split-action-hover' : '',
         descriptionPlacement === 'titleHover' ? 'interaction-list--title-hover-description' : '',
         className
       ].filter(Boolean).join(' ')}
       style={listStyle}
     >
-      {search != null && (
+      {search != null && search.renderInput !== false && (
         <div className='interaction-list__search-area'>
-          <Input
+          <ListSearchInput
             className='interaction-list__search-input'
             placeholder={search.placeholder}
             value={search.value}
-            onChange={(event) => search.onChange(event.target.value)}
-            prefix={<MaterialSymbol className='interaction-list__search-icon' name='search' />}
+            onChange={search.onChange}
             suffix={
               <span className='interaction-list__search-suffix'>
                 {search.suffix}
@@ -460,6 +470,7 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
             <div className='interaction-list__items' role='list'>
               {rows.map(({ depth, hasChildren, item, phase, phaseOwnerKey }) => {
                 const isGroupTitle = item.itemType === 'groupTitle'
+                const isLauncherSectionTitle = isGroupTitle && listMode === 'launcher'
                 const isSelectableItem = item.disabled !== true && !isGroupTitle
                 const isActive = !isGroupTitle && activeKey === item.key
                 const isCollapsed = collapsedKeys.has(item.key)
@@ -619,6 +630,24 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
                   isActive,
                   item
                 }) ?? item.meta
+                const itemTooltip = item.tooltip == null || item.tooltip === ''
+                  ? undefined
+                  : resolveTooltipTitle(item.tooltip)
+                const titleNode = descriptionPlacement === 'titleHover' && item.description != null
+                  ? (
+                    <span className='interaction-list__title-inline'>
+                      <span className='interaction-list__title-primary'>{item.title}</span>
+                      <span className='interaction-list__title-description'>{item.description}</span>
+                    </span>
+                  )
+                  : item.title
+                const titleContent = mode === 'launcher' && itemTooltip != null
+                  ? (
+                    <Tooltip title={itemTooltip} placement='right' mouseEnterDelay={0.5}>
+                      <span className='interaction-list__title-tooltip-anchor'>{titleNode}</span>
+                    </Tooltip>
+                  )
+                  : titleNode
                 const defaultContent = (
                   <>
                     {showItemDescription && descriptionPlacement === 'content' && item.description != null && (
@@ -657,6 +686,7 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
                       item.disabled === true ? 'is-disabled' : '',
                       isGroupTitle ? 'is-group-title' : 'is-list-item',
                       hasChildren ? 'has-children' : '',
+                      item.icon != null ? 'has-icon' : '',
                       hasContent ? '' : 'has-no-content'
                     ].filter(Boolean).join(' ')}
                     aria-expanded={hasChildren ? !isCollapsed : undefined}
@@ -665,6 +695,9 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
                     onMouseLeave={() => setPendingAction(null)}
                     onClick={() => {
                       if (item.disabled === true) return
+                      if (isLauncherSectionTitle) {
+                        return
+                      }
                       if (isGroupTitle) {
                         toggleItemCollapsed()
                         return
@@ -693,19 +726,18 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
                         className: 'interaction-list__item-icon interaction-list__item-symbol',
                         icon: item.icon
                       })}
+                      {item.iconState != null && (
+                        <span
+                          aria-hidden='true'
+                          className={`interaction-list__icon-state interaction-list__icon-state--${item.iconState}`}
+                        />
+                      )}
                     </div>
                     <div className='interaction-list__body'>
                       <div className='interaction-list__header'>
                         <div className='interaction-list__title'>
                           <span className='interaction-list__title-text'>
-                            {descriptionPlacement === 'titleHover' && item.description != null
-                              ? (
-                                <span className='interaction-list__title-inline'>
-                                  <span className='interaction-list__title-primary'>{item.title}</span>
-                                  <span className='interaction-list__title-description'>{item.description}</span>
-                                </span>
-                              )
-                              : item.title}
+                            {titleContent}
                           </span>
                         </div>
                         <div className='interaction-list__meta'>
@@ -733,10 +765,7 @@ export function InteractionList<TItem extends InteractionListItem = InteractionL
                     )}
                   </article>
                 )
-                const itemTooltip = item.tooltip == null || item.tooltip === ''
-                  ? undefined
-                  : resolveTooltipTitle(item.tooltip)
-                const rowContentWithTooltip = itemTooltip == null
+                const rowContentWithTooltip = itemTooltip == null || mode === 'launcher'
                   ? rowContent
                   : (
                     <Tooltip title={itemTooltip} placement='right' mouseEnterDelay={0.5}>

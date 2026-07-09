@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { activatePlugin } from '../src/client/index.js'
-import { RelayHomeView } from '../src/client/react-view.js'
+import { RelayHomeView, readJsonResponse } from '../src/client/react-view.js'
 import type { PluginClientContext, PluginReactHost, PluginViewRegistration } from '../src/client/types.js'
 
 const createReactHost = (): PluginReactHost & { createElement: ReturnType<typeof vi.fn> } => ({
@@ -106,5 +106,16 @@ describe('relay plugin client view registration', () => {
     })
 
     cleanup.dispose()
+  })
+
+  it('uses JSON error fields instead of displaying the raw JSON body', async () => {
+    await expect(readJsonResponse(
+      new Response(JSON.stringify({ error: 'fetch failed' }), { status: 500 }),
+      'profile'
+    )).rejects.toThrow('fetch failed')
+    await expect(readJsonResponse(
+      new Response(JSON.stringify({ message: 'Profile service unavailable' }), { status: 503 }),
+      'profile'
+    )).rejects.toThrow('Profile service unavailable')
   })
 })
