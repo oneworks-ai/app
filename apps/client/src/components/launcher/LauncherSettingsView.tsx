@@ -6,7 +6,7 @@ import '../config/ConfigEditors.scss'
 import { App, Empty, Switch, Tooltip } from 'antd'
 import { useAtom } from 'jotai'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { matchesPinyinSearch, normalizePinyinSearchQuery } from '@oneworks/utils/pinyin-search'
@@ -104,6 +104,47 @@ const getLauncherPopupContainer = (triggerNode: HTMLElement) => {
   return launcherRoute instanceof HTMLElement ? launcherRoute : document.body
 }
 
+const handleLauncherSettingsControlKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+  const target = event.target
+  if (!(target instanceof HTMLElement)) return
+
+  const targetRole = target.getAttribute('role')
+  if (
+    (targetRole === 'radio' || targetRole === 'switch') &&
+    (event.key === 'Enter' || event.key === ' ')
+  ) {
+    event.preventDefault()
+    event.stopPropagation()
+    target.click()
+    return
+  }
+  if (targetRole !== 'radio') return
+
+  const radioGroup = target.closest('[role="radiogroup"]')
+  if (!(radioGroup instanceof HTMLElement)) return
+  const radios = Array.from(radioGroup.querySelectorAll<HTMLElement>('[role="radio"]'))
+    .filter(radio => !radio.hasAttribute('disabled') && radio.getAttribute('aria-disabled') !== 'true')
+  const activeIndex = radios.indexOf(target)
+  if (activeIndex < 0 || radios.length < 2) return
+
+  let nextIndex: number | undefined
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+    nextIndex = (activeIndex + 1) % radios.length
+  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+    nextIndex = (activeIndex - 1 + radios.length) % radios.length
+  } else if (event.key === 'Home') {
+    nextIndex = 0
+  } else if (event.key === 'End') {
+    nextIndex = radios.length - 1
+  }
+  if (nextIndex == null) return
+
+  event.preventDefault()
+  event.stopPropagation()
+  radios[nextIndex]?.focus()
+  radios[nextIndex]?.click()
+}
+
 const LauncherSwitch = ({
   checked,
   label,
@@ -150,6 +191,7 @@ function LauncherChoiceGroup<T extends string>({
           ].filter(Boolean).join(' ')}
           role='radio'
           aria-checked={option.value === value}
+          aria-label={option.title}
           title={option.title}
           onClick={() => onChange(option.value)}
         >
@@ -1037,6 +1079,11 @@ export function LauncherSettingsView({
       }
       const targetInput = target instanceof HTMLInputElement ? target : undefined
       const targetTab = target instanceof HTMLElement ? target.closest('.launcher-settings__tab') : null
+      const isLauncherSearchInput = target instanceof HTMLElement &&
+        target.matches('.launcher-command-search__input')
+      const targetInteractiveElement = target instanceof HTMLElement
+        ? target.closest('button, input, select, textarea, [role="switch"], [role="radio"], [role="combobox"]')
+        : null
       const sectionNumberMatch = event.code.match(/^Digit([1-9])$/u) ?? event.code.match(/^Numpad([1-9])$/u)
       const hasSectionNumberModifier = isMac
         ? event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey
@@ -1067,6 +1114,10 @@ export function LauncherSettingsView({
           selectSectionByIndex(event.key === 'Home' ? 0 : filteredSections.length - 1, { focusTab: true })
           return
         }
+        return
+      }
+
+      if (targetInteractiveElement != null && !isLauncherSearchInput) {
         return
       }
 
@@ -1133,7 +1184,7 @@ export function LauncherSettingsView({
   return (
     <div
       className='launcher-settings'
-      role='listbox'
+      role='region'
       aria-label={t('launcher.settings.listLabel')}
       onCompositionEnd={() =>
         deferImeCompositionEnd((active) => {
@@ -1155,6 +1206,7 @@ export function LauncherSettingsView({
               role='tab'
               aria-selected={section.id === activeSection?.id}
               aria-controls={`launcher-settings-panel-${section.id}`}
+              tabIndex={section.id === activeSection?.id ? 0 : -1}
               onClick={() => setActiveSectionId(section.id)}
             >
               <span className='material-symbols-rounded launcher-settings__tab-icon' aria-hidden='true'>
@@ -1196,8 +1248,8 @@ export function LauncherSettingsView({
               ].filter(Boolean).join(' ')}
               data-launcher-setting-id={item.id}
               key={item.id}
-              role='option'
-              aria-selected={item.id === activeSetting?.id}
+              onFocusCapture={() => setActiveSettingId(item.id)}
+              onPointerDown={() => setActiveSettingId(item.id)}
             >
               <div className='launcher-settings__item-main'>
                 <span className='material-symbols-rounded launcher-settings__item-icon' aria-hidden='true'>
@@ -1212,6 +1264,7 @@ export function LauncherSettingsView({
                 className={`launcher-settings__control ${
                   item.layout === 'stacked' ? 'launcher-settings__control--wide' : ''
                 }`}
+                onKeyDown={handleLauncherSettingsControlKeyDown}
               >
                 {item.control}
               </div>

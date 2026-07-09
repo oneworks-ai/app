@@ -52,43 +52,22 @@ html.dark .launcher-web-overlay.is-open {
   background-color: color-mix(in srgb, #000 36%, transparent);
 }
 
-html.oneworks-launcher-window {
-  --launcher-label-color: color-mix(
-    in srgb,
-    var(--text-color) 64%,
-    var(--bg-color)
-  );
-  --launcher-muted-color: color-mix(
-    in srgb,
-    var(--text-color) 52%,
-    var(--bg-color)
-  );
-  --launcher-subtle-color: color-mix(
-    in srgb,
-    var(--text-color) 42%,
-    var(--bg-color)
-  );
-}
-
-html.oneworks-launcher-window.dark {
-  --launcher-label-color: color-mix(
-    in srgb,
-    var(--text-color) 70%,
-    var(--bg-color)
-  );
-  --launcher-muted-color: color-mix(
-    in srgb,
-    var(--text-color) 60%,
-    var(--bg-color)
-  );
-  --launcher-subtle-color: color-mix(
-    in srgb,
-    var(--text-color) 48%,
-    var(--bg-color)
-  );
-}
-
 .launcher-route {
+  --launcher-label-color: color-mix(
+    in srgb,
+    var(--text-color) 68%,
+    var(--bg-color)
+  );
+  --launcher-muted-color: color-mix(
+    in srgb,
+    var(--text-color) 58%,
+    var(--bg-color)
+  );
+  --launcher-subtle-color: color-mix(
+    in srgb,
+    var(--text-color) 50%,
+    var(--bg-color)
+  );
   position: relative;
   height: 100vh;
   min-height: 100%;
@@ -168,6 +147,21 @@ html.oneworks-launcher-web .launcher-route {
 }
 
 html.dark .launcher-route {
+  --launcher-label-color: color-mix(
+    in srgb,
+    var(--text-color) 72%,
+    var(--bg-color)
+  );
+  --launcher-muted-color: color-mix(
+    in srgb,
+    var(--text-color) 64%,
+    var(--bg-color)
+  );
+  --launcher-subtle-color: color-mix(
+    in srgb,
+    var(--text-color) 54%,
+    var(--bg-color)
+  );
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--bg-color) 52%, transparent),
@@ -471,7 +465,7 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
   cursor: pointer;
   font: inherit;
   text-align: left;
-  transition: color .16s ease;
+  transition: background-color .16s ease, box-shadow .16s ease, color .16s ease;
 }
 
 .launcher-command-item::before {
@@ -493,8 +487,20 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 .launcher-command-item:hover,
 .launcher-command-item:focus-visible,
 .launcher-command-item.is-active {
-  color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 5%, transparent);
+  color: var(--primary-text-color);
   outline: none;
+}
+
+.launcher-command-item:focus-visible {
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--primary-color) 34%, transparent);
+}
+
+.launcher-command-item.is-active {
+  background: color-mix(in srgb, var(--primary-color) 11%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--primary-color) 16%, transparent);
 }
 
 .launcher-command-item.is-active::before {
@@ -668,7 +674,7 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 .launcher-command-item:focus-visible .launcher-command-item__badge,
 .launcher-command-item.is-active .launcher-command-item__badge {
   background: color-mix(in srgb, var(--primary-color) 14%, transparent);
-  color: var(--primary-color);
+  color: var(--primary-text-color);
 }
 
 .launcher-command-item__favorite,
@@ -743,7 +749,7 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 .launcher-command-item__action:hover,
 .launcher-command-item__action:focus-visible {
   background: color-mix(in srgb, var(--primary-color) 14%, transparent);
-  color: var(--primary-color);
+  color: var(--primary-text-color);
   outline: none;
 }
 
@@ -885,7 +891,7 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 
 .launcher-command-footer__reset-section:hover,
 .launcher-command-footer__reset-section:focus-visible {
-  color: var(--primary-color);
+  color: var(--primary-text-color);
   outline: none;
 }
 
@@ -893,7 +899,7 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 .launcher-command-footer__reset-section:focus-visible kbd {
   border-color: color-mix(in srgb, var(--primary-color) 30%, transparent);
   background: color-mix(in srgb, var(--primary-color) 12%, transparent);
-  color: var(--primary-color);
+  color: var(--primary-text-color);
 }
 
 .launcher-command-footer__reset-section:disabled {
@@ -1042,15 +1048,17 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
   .launcher-command-search__input {
     font-size: 15px;
   }
-
-  .launcher-command-item__enter,
-  .launcher-command-item__remove,
-  .launcher-command-item__secondary {
-    display: none;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .launcher-web-overlay,
+  .launcher-web-overlay .launcher-route,
+  .launcher-web-overlay .launcher-command-shell,
+  .launcher-command-item,
+  .launcher-command-item::before {
+    transition: none;
+  }
+
   .launcher-command-item__icon.is-project-running {
     animation: none;
   }

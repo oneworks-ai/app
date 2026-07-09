@@ -42,6 +42,7 @@ import { deferImeCompositionEnd, isImeCompositionKeyEvent } from '#~/utils/keybo
 import { createOneWorksIconDataUri } from '#~/utils/oneworks-icon'
 import { resolveWorkspaceFileOpenerSelectModels } from '#~/utils/workspace-file-openers'
 import { rememberWorkspaceConnection } from '#~/workspace-connection-state'
+import { shouldShowLauncherCommandSection } from './launcher-command-sections'
 import { normalizePluginLauncherSearchResults } from './launcher-plugin-search'
 import type {
   LauncherRelayDeviceProject,
@@ -3414,6 +3415,7 @@ export function LauncherRoute({
   const normalizedQuery = normalizePinyinSearchQuery(query)
   const filteredSections = useMemo(() => (
     commandSections
+      .filter(section => shouldShowLauncherCommandSection(section.id, normalizedQuery))
       .map(section => ({
         ...section,
         commands: normalizedQuery === '' || isFileSearchMode || isCloneRepositoryMode
@@ -4395,7 +4397,14 @@ export function LauncherRoute({
             </section>
           ))}
           {isLauncherCommandListView && flatCommands.length === 0 && (
-            <div className='launcher-command-empty'>{emptyMessage}</div>
+            <div
+              className='launcher-command-empty'
+              role='status'
+              aria-atomic='true'
+              aria-live='polite'
+            >
+              {emptyMessage}
+            </div>
           )}
         </div>
 
