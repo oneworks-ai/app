@@ -1861,6 +1861,13 @@
   white-space: nowrap;
 }
 
+.nav-menu-link {
+  display: flex;
+  width: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+
 .nav-menu-shortcut {
   margin-left: auto;
   color: var(--placeholder-color);
@@ -1870,18 +1877,32 @@
   white-space: nowrap;
 }
 
-.nav-rail-more-dropdown.ant-dropdown {
-  --oneworks-overlay-surface: color-mix(
+.nav-rail-more-dropdown.ant-dropdown,
+.nav-rail-more-submenu-dropdown.ant-dropdown-menu-submenu-popup {
+  --nav-rail-more-overlay-surface: color-mix(
     in srgb,
     var(--bg-color) 96%,
     var(--sub-bg-color) 4%
   );
-  --oneworks-overlay-border: color-mix(
+  --nav-rail-more-overlay-border: color-mix(
     in srgb,
     var(--border-color) 88%,
     transparent
   );
+  --oneworks-overlay-surface: var(--nav-rail-more-overlay-surface);
+  --oneworks-overlay-border: var(--nav-rail-more-overlay-border);
+}
 
+html.dark {
+  .nav-rail-more-dropdown.ant-dropdown,
+  .nav-rail-more-submenu-dropdown.ant-dropdown-menu-submenu-popup {
+    // The global dark overlay is translucent; the navigation menu owns a solid surface.
+    --oneworks-overlay-surface: var(--nav-rail-more-overlay-surface);
+    --oneworks-overlay-border: var(--nav-rail-more-overlay-border);
+  }
+}
+
+.nav-rail-more-dropdown.ant-dropdown {
   .ant-dropdown-menu {
     min-width: 220px;
     backdrop-filter: none;
@@ -1912,17 +1933,6 @@
 }
 
 .nav-rail-more-submenu-dropdown.ant-dropdown-menu-submenu-popup {
-  --oneworks-overlay-surface: color-mix(
-    in srgb,
-    var(--bg-color) 96%,
-    var(--sub-bg-color) 4%
-  );
-  --oneworks-overlay-border: color-mix(
-    in srgb,
-    var(--border-color) 88%,
-    transparent
-  );
-
   > .ant-dropdown-menu {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;

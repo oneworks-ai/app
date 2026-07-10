@@ -208,6 +208,17 @@ export const getClientBase = () => (
   )
 )
 
+export const buildLauncherClientPath = (
+  clientBase = resolveClientBase(
+    import.meta.env.__ONEWORKS_PROJECT_CLIENT_BASE__,
+    import.meta.env.BASE_URL,
+    '/ui'
+  )
+) => {
+  const normalizedClientBase = normalizeBase(clientBase)
+  return normalizedClientBase === '/' ? '/launcher' : `${normalizedClientBase}/launcher`
+}
+
 export const WORKSPACE_CLIENT_ROUTE_SEGMENT = 'w'
 
 export const normalizeWorkspaceId = (value?: string) => {
