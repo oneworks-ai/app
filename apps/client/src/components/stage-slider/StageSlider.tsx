@@ -3,6 +3,7 @@ import './StageSlider.scss'
 import { Tooltip } from 'antd'
 import type { CSSProperties, ChangeEventHandler, FocusEventHandler, KeyboardEventHandler, Ref } from 'react'
 import { useStageSliderDrag } from './use-stage-slider-drag'
+import { useStageSliderParticles } from './use-stage-slider-particles'
 
 export interface StageSliderOption<Value extends string> {
   value: Value
@@ -10,9 +11,6 @@ export interface StageSliderOption<Value extends string> {
 }
 
 export type StageSliderAnimationVariant = 'multicolor' | 'solid'
-
-const STAGE_PARTICLES = Array.from({ length: 7 }, (_, index) => index)
-const STAGE_TRACK_PARTICLES = Array.from({ length: 9 }, (_, index) => index)
 
 interface StageSliderStyle extends CSSProperties {
   '--stage-slider-progress': string
@@ -48,6 +46,7 @@ export function StageSlider<Value extends string>({
   const selectedOption = options[selectedIndex]
   const isLastStage = options.length > 1 && selectedIndex === maxIndex
   const selectedProgress = maxIndex === 0 ? 0 : selectedIndex / maxIndex
+  const particleField = useStageSliderParticles(animationVariant != null)
   const selectStageIndex = (index: number | null) => {
     if (index == null || index === selectedIndex) {
       return
@@ -144,13 +143,12 @@ export function StageSlider<Value extends string>({
         <span className='stage-slider__progress-rail'>
           <span className='stage-slider__progress' />
         </span>
-        {animationVariant != null && (
-          <span className='stage-slider__track-particles'>
-            {STAGE_TRACK_PARTICLES.map(index => (
-              <span key={index} className='stage-slider__track-particle' />
-            ))}
-          </span>
-        )}
+        <span className='stage-slider__track-gradient' />
+        <span className='stage-slider__track-particles'>
+          {particleField.track.map((particleStyle, index) => (
+            <span key={index} className='stage-slider__track-particle' style={particleStyle} />
+          ))}
+        </span>
       </span>
       <span ref={marksRef} className='stage-slider__marks' aria-hidden='true'>
         {options.map((option, index) => {
@@ -179,13 +177,6 @@ export function StageSlider<Value extends string>({
       </span>
       <span className='stage-slider__thumb-rail' aria-hidden='true'>
         <span className='stage-slider__thumb' />
-        {animationVariant != null && (
-          <span className='stage-slider__particles'>
-            {STAGE_PARTICLES.map(index => (
-              <span key={index} className='stage-slider__particle' />
-            ))}
-          </span>
-        )}
       </span>
     </div>
   )
