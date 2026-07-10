@@ -33,6 +33,8 @@ find .oo/rules -maxdepth 1 -type f -name '*.md' -print0 | xargs -0 wc -c -l
 - 代码质量、测试、发布前检查：[`maintenance/README.md`](./maintenance/README.md)
 - 常见问题索引：[`maintenance/common-issues.md`](./maintenance/common-issues.md)
 - 日志消费与排查：[`maintenance/logs.md`](./maintenance/logs.md)
+- 开发任务的模型档位、速度、消耗与路由：[`maintenance/model-routing.md`](./maintenance/model-routing.md)
+- 历史任务分布与六模型微基准报告：[`maintenance/model-routing-analysis.md`](./maintenance/model-routing-analysis.md)
 - 任务规划、委派与经验沉淀：[`maintenance/task-planning.md`](./maintenance/task-planning.md)
 - 能力展示录屏工具：[`maintenance/demo-video.md`](./maintenance/demo-video.md)
 - 桌面打包 runtime cache：[`maintenance/desktop-packaged-runtime-cache.md`](./maintenance/desktop-packaged-runtime-cache.md)
