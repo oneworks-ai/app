@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "pnpm build:platform",
+  "ignoreCommand": "node ../../scripts/vercel-ignore-build.mjs relay-admin",
   "outputDirectory": "dist",
   "rewrites": [
     {

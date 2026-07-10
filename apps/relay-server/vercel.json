@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "pnpm build:vercel",
+  "ignoreCommand": "node ../../scripts/vercel-ignore-build.mjs relay-server",
   "functions": {
     "api/relay.ts": {
       "maxDuration": 60
