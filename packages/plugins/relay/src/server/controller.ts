@@ -9,10 +9,10 @@ import type { Duplex } from 'node:stream'
 
 import {
   createAccountKey,
-  readOneWorksAuthStore,
+  readOneWorksAuthStore as readOneWorksAuthStoreFile,
   upsertOneWorksAuthAccount,
   upsertOneWorksAuthServer,
-  writeOneWorksAuthStore
+  writeOneWorksAuthStore as writeOneWorksAuthStoreFile
 } from '@oneworks/utils/auth-store'
 import type { OneWorksAuthAccount, OneWorksAuthServer, OneWorksAuthStore } from '@oneworks/utils/auth-store'
 import { WebSocket, WebSocketServer } from 'ws'
@@ -41,6 +41,7 @@ import {
   updateRelayConfigSourcePreference
 } from './config-source-preferences.js'
 import { syncRelayConfigSnapshot } from './config-sync.js'
+import type { RelayConfigSyncResult } from './config-sync.js'
 import { startHeartbeat } from './heartbeat.js'
 import { createRelayLoopLeaseManager } from './loop-lease.js'
 import type { RelayLoopLease } from './loop-lease.js'
@@ -63,6 +64,7 @@ import {
   syncRelayPersonalDocuments,
   syncRelayTeamDocuments
 } from './personal-document-sync.js'
+import type { RelayDocumentScope } from './personal-document-sync.js'
 import { createRelaySessionWorker } from './session-worker.js'
 import { createRelayDeviceStore, createRelayManagementServerStore } from './store.js'
 import type { RelayManagementServerStore } from './store.js'
@@ -1647,6 +1649,16 @@ const fetchRelayDevices = async (
 }
 
 export const createRelayController = (ctx: RelayPluginContext): RelayController => {
+  // Keep async restore and teardown work inside the controller's original user namespace.
+  const authStoreEnv = {
+    __ONEWORKS_PROJECT_REAL_HOME__: process.env.__ONEWORKS_PROJECT_REAL_HOME__,
+    HOME: process.env.HOME,
+    USERPROFILE: process.env.USERPROFILE
+  }
+  const readOneWorksAuthStore = () => readOneWorksAuthStoreFile(authStoreEnv)
+  const writeOneWorksAuthStore = (store: OneWorksAuthStore) => (
+    writeOneWorksAuthStoreFile(store, authStoreEnv)
+  )
   let state = initialState()
   let disposed = false
   let explicitConnectVersion = 0
@@ -1666,9 +1678,34 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   let configDistributionStatus: RelayConfigDistributionStatus | undefined
   let personalDocumentSyncStatus: RelayPersonalDocumentSyncStatus | undefined
   let personalDocumentSyncStatusServerId: string | undefined
+  const projectRuleDocumentSyncStatuses = new Map<
+    string,
+    { status: RelayPersonalDocumentSyncStatus; teamId: string }
+  >()
   const teamDocumentSyncStatuses = new Map<string, RelayPersonalDocumentSyncStatus>()
 
   const teamDocumentSyncStatusKey = (serverId: string, teamId: string) => `${serverId}:${teamId}`
+  const projectRuleDocumentSyncStatusKey = (serverId: string, assignmentId: string) => (
+    `${serverId}:${assignmentId}`
+  )
+  const recordProjectRuleDocumentSyncStatuses = (
+    serverId: string,
+    result: Pick<RelayConfigSyncResult, 'projectRuleDocuments' | 'snapshot'>
+  ) => {
+    const prefix = `${serverId}:`
+    for (const key of projectRuleDocumentSyncStatuses.keys()) {
+      if (key.startsWith(prefix)) projectRuleDocumentSyncStatuses.delete(key)
+    }
+    for (const assignment of result.snapshot?.assignments ?? []) {
+      const status = result.projectRuleDocuments?.[assignment.id]
+      const teamId = assignment.provenance?.teamId?.trim()
+      if (status == null || teamId == null || teamId === '') continue
+      projectRuleDocumentSyncStatuses.set(
+        projectRuleDocumentSyncStatusKey(serverId, assignment.id),
+        { status, teamId }
+      )
+    }
+  }
 
   const getConnectionState = (server: Pick<ResolvedRelayServer, 'id' | 'remoteBaseUrl'>) => ({
     ...initialState(),
@@ -2091,6 +2128,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
       })
       personalDocumentSyncStatus = result.personalDocuments
       personalDocumentSyncStatusServerId = activeServer.id
+      recordProjectRuleDocumentSyncStatuses(activeServer.id, result)
       configDistributionStatus = snapshotToConfigDistributionStatus(
         result.snapshot,
         readRelayConfigSourcePreferencesForSnapshot(store, result.snapshot)
@@ -2832,7 +2870,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     const activeAccount = activeServer == null ? undefined : preferredAuthAccountForRelayServer(authStore, activeServer)
     const enrichDocumentSyncStatus = async (
       status: RelayPersonalDocumentSyncStatus,
-      scope: { id: string; type: 'account' | 'team' }
+      scope: RelayDocumentScope
     ): Promise<RelayPersonalDocumentSyncStatus> => ({
       ...status,
       entries: await listRelayDocumentEntries(scope).catch(() => status.entries ?? [])
@@ -2849,6 +2887,25 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
               { id: teamId, type: 'team' }
             )
           ])
+        )
+      )
+    const projectRuleDocumentSync = activeServer == null
+      ? {}
+      : Object.fromEntries(
+        await Promise.all(
+          [...projectRuleDocumentSyncStatuses.entries()]
+            .filter(([key]) => key.startsWith(`${activeServer.id}:`))
+            .map(async ([key, value]) => {
+              const assignmentId = key.slice(activeServer.id.length + 1)
+              return [
+                assignmentId,
+                await enrichDocumentSyncStatus(value.status, {
+                  id: assignmentId,
+                  teamId: value.teamId,
+                  type: 'projectRule'
+                })
+              ]
+            })
         )
       )
     const basePersonalDocumentSync = personalDocumentSyncStatusServerId === activeServer?.id &&
@@ -2907,6 +2964,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
       accounts: authStore.accounts.map(publicAuthAccount),
       options,
       personalDocumentSync,
+      projectRuleDocumentSync,
       teamDocumentSync,
       servers: [
         ...serverStatuses,
@@ -3046,6 +3104,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     })
     personalDocumentSyncStatus = result.personalDocuments ?? createPersonalDocumentSyncStatus(preferences)
     personalDocumentSyncStatusServerId = activeServer.id
+    recordProjectRuleDocumentSyncStatuses(activeServer.id, result)
     configDistributionStatus = snapshotToConfigDistributionStatus(
       result.snapshot,
       readRelayConfigSourcePreferencesForSnapshot(
@@ -3274,6 +3333,24 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
       }
       return {
         entries: await listRelayDocumentEntries({ id: teamId, type: 'team' })
+      }
+    }
+    if (toString(body.scope) === 'projectRule') {
+      const assignmentId = readOptionalText(body.assignmentId)
+      const teamId = readOptionalText(body.teamId)
+      if (assignmentId == null || teamId == null) {
+        throw new Error('Assignment id and team id are required for project rule documents.')
+      }
+      const scope: RelayDocumentScope = {
+        id: assignmentId,
+        teamId,
+        type: 'projectRule'
+      }
+      if (isRelayFixtureAuthAccount(selection.account)) {
+        await ensureRelayFixtureDocumentEntries(scope)
+      }
+      return {
+        entries: await listRelayDocumentEntries(scope)
       }
     }
 

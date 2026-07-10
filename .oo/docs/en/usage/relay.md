@@ -52,6 +52,12 @@ API access tokens belong to the current logged-in user and support `user`, `team
 
 Platform admins manage platform access groups and their capabilities / quotas from `/admin/access-groups`. Team owners manage member groups from the team's member-group subpage. Team member groups apply only inside that team, and they do not grant platform admins cross-team access to private team information. Both platform access groups and team member groups support default name / description fields plus `localizedNames` / `localizedDescriptions` keyed by supported locale tags; built-in system groups automatically include default copy for every supported language. The UI prefers the user's language and falls back to the default fields.
 
+### Project-rule documents
+
+Each project-rule assignment can own an independent progressive document library. The UI calls it **Documents**; it is not a list of files linked from account or team documentation. The Relay plugin syncs server documents into `~/.oo/teams/<team-id>/project-rules/<assignment-id>/`, with `AGENTS.md` as the entry point and optional `rules/**/*.md` files below it. The plugin adds a prompt instruction to read this directory only when the current Git repository actually matches the assignment.
+
+Current users read or update the document snapshot through `GET` / `PUT` / `POST /api/relay/config-assignments/<assignmentId>/documents`; platform admins use the matching `/api/admin/config-assignments/<assignmentId>/documents` route. Relay Server business routes store and relay the client-produced encrypted-format payload together with synchronization, scope, and audit metadata; they do not parse or index document content. The namespace-derived key provides scope separation, format integrity, and protection from accidental plaintext exposure. A Relay deployment operator can reproduce that key and decrypt the content, so this is not zero-knowledge encryption against the operator. Account, team, and project-rule documents remain separate namespaces, and local sync rejects non-canonical relative paths and symbolic links inside those namespaces so reads and writes cannot escape to another directory.
+
 ## Login Methods
 
 `/login` is shared by the Relay plugin, Admin, and Web redirect flows. Operators can set the default method with `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD`, and the browser remembers the last method selected by the user.

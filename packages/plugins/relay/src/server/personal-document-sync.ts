@@ -2,13 +2,14 @@
 import { Buffer } from 'node:buffer'
 import { spawn } from 'node:child_process'
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { homedir, platform } from 'node:os'
 import { basename, dirname, extname, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
 
 import { readOneWorksAuthStore } from '@oneworks/utils/auth-store'
 
+import { relayDocumentScopePathSegment, relayProjectRuleDocumentBasePayloadPath } from '../shared/document-paths.js'
 import type { ResolvedRelayServer } from './options.js'
 import {
   RELAY_PERSONAL_DOCUMENT_SYNC_KINDS,
@@ -70,12 +71,19 @@ interface RelayTeamDocumentSnapshotPayload extends RelayPersonalDocumentSnapshot
   updatedByUserId?: string
 }
 
+interface RelayProjectRuleDocumentSnapshotPayload extends RelayPersonalDocumentSnapshotPayload {
+  assignmentId?: string
+  teamId?: string
+  updatedByUserId?: string
+}
+
 interface ApplyRemoteDocumentsResult {
   conflictBackups: number
 }
 
 export type RelayDocumentScope =
   | { id: string; type: 'account' }
+  | { id: string; teamId: string; type: 'projectRule' }
   | { id: string; type: 'team' }
 
 type RelayDocumentOpenMode = 'open' | 'reveal'
@@ -237,6 +245,20 @@ const readTeamDocumentSnapshotPayload = (
   }
 }
 
+const readProjectRuleDocumentSnapshotPayload = (
+  body: Record<string, unknown>
+): RelayProjectRuleDocumentSnapshotPayload | undefined => {
+  const payload = isRecord(body.projectRuleDocumentSnapshot) ? body.projectRuleDocumentSnapshot : undefined
+  const documents = normalizeDocumentSnapshot(payload)
+  if (documents == null) return undefined
+  return {
+    ...documents,
+    assignmentId: toString(payload?.assignmentId) || undefined,
+    teamId: toString(payload?.teamId) || undefined,
+    updatedByUserId: toString(payload?.updatedByUserId) || undefined
+  }
+}
+
 const resolveUserHomeDir = () =>
   resolve(
     process.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() ||
@@ -244,13 +266,49 @@ const resolveUserHomeDir = () =>
       homedir()
   )
 
+const readPathStat = async (target: string) => {
+  try {
+    return await lstat(target)
+  } catch (error) {
+    if (isRecord(error) && error.code === 'ENOENT') return undefined
+    throw error
+  }
+}
+
+const assertDocumentPathHasNoSymbolicLinks = async (homeDir: string, target: string) => {
+  const relativePath = relative(homeDir, target)
+  if (relativePath === '..' || relativePath.startsWith(`..${sep}`)) {
+    throw new Error('文档路径不在允许的同步命名空间内。')
+  }
+
+  let current = homeDir
+  for (const segment of relativePath.split(sep).filter(Boolean)) {
+    current = resolve(current, segment)
+    const fileStat = await readPathStat(current)
+    if (fileStat == null) return
+    if (fileStat.isSymbolicLink()) {
+      throw new Error(`文档同步路径不能包含符号链接：${normalizePayloadPath(homeDir, current)}`)
+    }
+  }
+}
+
+const prepareDocumentWritePath = async (homeDir: string, target: string) => {
+  await assertDocumentPathHasNoSymbolicLinks(homeDir, target)
+  await mkdir(dirname(target), { recursive: true })
+  await assertDocumentPathHasNoSymbolicLinks(homeDir, dirname(target))
+  await assertDocumentPathHasNoSymbolicLinks(homeDir, target)
+}
+
+export const isCanonicalRelayDocumentPayloadPath = (path: string) => {
+  if (path === '' || path.startsWith('/') || path.includes('\\') || path.includes('\0')) return false
+  return path.split('/').every(segment => segment !== '' && segment !== '.' && segment !== '..')
+}
+
 const normalizeDocumentActionPayloadPath = (path: string) => {
   const trimmed = path.trim()
   const payloadPath = trimmed.startsWith('~/') ? trimmed.slice(2) : trimmed
   if (
-    payloadPath === '' ||
-    payloadPath.startsWith('/') ||
-    payloadPath.includes('\0') ||
+    !isCanonicalRelayDocumentPayloadPath(payloadPath) ||
     (
       payloadPath !== 'AGENTS.md' &&
       payloadPath !== '.oo/AGENTS.md' &&
@@ -261,7 +319,7 @@ const normalizeDocumentActionPayloadPath = (path: string) => {
   ) {
     return undefined
   }
-  return payloadPath.split(/[\\/]+/u).join('/')
+  return payloadPath
 }
 
 const resolveDocumentActionPath = (payloadPath: string) => {
@@ -298,6 +356,7 @@ export const openRelayDocumentPath = async (
   if (resolved == null) {
     throw new Error('文档路径不在允许的同步命名空间内。')
   }
+  await assertDocumentPathHasNoSymbolicLinks(resolveUserHomeDir(), resolved.target)
   const fileStat = await stat(resolved.target).catch(() => undefined)
   if (fileStat == null || !fileStat.isFile()) {
     throw new Error(`文件不存在：${resolved.displayPath}`)
@@ -328,6 +387,7 @@ export const readRelayDocumentContent = async (
   if (resolved == null) {
     throw new Error('文档路径不在允许的同步命名空间内。')
   }
+  await assertDocumentPathHasNoSymbolicLinks(resolveUserHomeDir(), resolved.target)
   const fileStat = await stat(resolved.target).catch(() => undefined)
   if (fileStat == null || !fileStat.isFile()) {
     throw new Error(`文件不存在：${resolved.displayPath}`)
@@ -349,12 +409,6 @@ const normalizePayloadPath = (homeDir: string, path: string) => (
   relative(homeDir, path).split(sep).join('/')
 )
 
-const scopeSegment = (value: string) => {
-  const trimmed = value.trim()
-  if (trimmed === '') throw new Error('Relay document scope id is required.')
-  return trimmed.replace(/[\\/]/gu, '_')
-}
-
 const agentsPayloadPath = (scope: RelayDocumentScope) => (
   scope.type === 'account'
     ? 'AGENTS.md'
@@ -364,7 +418,9 @@ const agentsPayloadPath = (scope: RelayDocumentScope) => (
 const documentBasePayloadPath = (scope: RelayDocumentScope) => (
   scope.type === 'account'
     ? ''
-    : `.oo/teams/${scopeSegment(scope.id)}`
+    : scope.type === 'team'
+    ? `.oo/teams/${relayDocumentScopePathSegment(scope.id)}`
+    : relayProjectRuleDocumentBasePayloadPath(scope.teamId, scope.id)
 )
 
 const ooAgentsPayloadPath = (scope: RelayDocumentScope) => (
@@ -380,7 +436,11 @@ const rulesPayloadRoot = (scope: RelayDocumentScope) => (
 )
 
 const fixtureDocumentTitle = (scope: RelayDocumentScope) => (
-  scope.type === 'account' ? 'Owner Local' : 'Team Workspace'
+  scope.type === 'account'
+    ? 'Owner Local'
+    : scope.type === 'team'
+    ? 'Team Workspace'
+    : 'Project Rule'
 )
 
 const fixtureDocumentFiles = (scope: RelayDocumentScope) => {
@@ -430,9 +490,10 @@ export const ensureRelayFixtureDocumentEntries = async (scope: RelayDocumentScop
   const homeDir = resolveUserHomeDir()
   for (const file of fixtureDocumentFiles(scope)) {
     const target = resolve(homeDir, file.path)
+    await assertDocumentPathHasNoSymbolicLinks(homeDir, target)
     const existing = await readFile(target, 'utf8').catch(() => undefined)
     if (existing != null) continue
-    await mkdir(dirname(target), { recursive: true })
+    await prepareDocumentWritePath(homeDir, target)
     await writeFile(target, file.content, {
       encoding: 'utf8',
       mode: 0o600
@@ -447,6 +508,7 @@ const readDocumentFile = async (
 ): Promise<RelayPersonalDocumentFile | undefined> => {
   if (isLocalOnlyMarkdownPath(payloadPath)) return undefined
   const path = resolve(homeDir, payloadPath)
+  await assertDocumentPathHasNoSymbolicLinks(homeDir, path)
   const content = await readFile(path, 'utf8').catch(() => undefined)
   if (content == null) return undefined
   const fileStat = await stat(path).catch(() => undefined)
@@ -465,6 +527,7 @@ const scanMarkdownPayloadPaths = async (
   payloadRoot: string
 ): Promise<string[]> => {
   const root = resolve(homeDir, payloadRoot)
+  await assertDocumentPathHasNoSymbolicLinks(homeDir, root)
   const entries = await readdir(root, { withFileTypes: true }).catch(() => [])
   const paths = await Promise.all(entries.map(async (entry) => {
     const payloadPath = `${payloadRoot}/${entry.name}`
@@ -523,6 +586,7 @@ export const listRelayDocumentEntries = async (
     ]
   const entries = await Promise.all(payloadPaths.map(async ({ kind, path: payloadPath }) => {
     const path = resolve(homeDir, payloadPath)
+    await assertDocumentPathHasNoSymbolicLinks(homeDir, path)
     const content = await readFile(path, 'utf8').catch(() => undefined)
     const relativePath = basePayloadPath !== '' && payloadPath.startsWith(`${basePayloadPath}/`)
       ? payloadPath.slice(basePayloadPath.length + 1)
@@ -551,7 +615,7 @@ const collectLocalDocuments = async (
 ): Promise<RelayPersonalDocumentPayload> => {
   const homeDir = resolveUserHomeDir()
   const documents: RelayPersonalDocumentFile[] = []
-  if (scope.type === 'team') {
+  if (scope.type !== 'account') {
     if (preferences.agents) {
       const payloadPaths = [
         agentsPayloadPath(scope),
@@ -609,22 +673,26 @@ const conflictBackupPath = (target: string) => {
 const importRootAgentsToAccountDocuments = async (accountId: string): Promise<ApplyRemoteDocumentsResult> => {
   const homeDir = resolveUserHomeDir()
   const source = resolve(homeDir, 'AGENTS.md')
+  await assertDocumentPathHasNoSymbolicLinks(homeDir, source)
   const content = await readFile(source, 'utf8').catch(() => undefined)
   if (content == null) {
     throw new Error('未找到 ~/AGENTS.md，无法同步当前账号规则。')
   }
 
   const target = resolve(homeDir, agentsPayloadPath({ id: accountId, type: 'account' }))
+  await assertDocumentPathHasNoSymbolicLinks(homeDir, target)
   const existing = await readFile(target, 'utf8').catch(() => undefined)
   let conflictBackups = 0
   if (existing != null && existing !== content) {
-    await writeFile(conflictBackupPath(target), existing, {
+    const backupTarget = conflictBackupPath(target)
+    await prepareDocumentWritePath(homeDir, backupTarget)
+    await writeFile(backupTarget, existing, {
       encoding: 'utf8',
       mode: 0o600
     })
     conflictBackups = 1
   }
-  await mkdir(dirname(target), { recursive: true })
+  await prepareDocumentWritePath(homeDir, target)
   await writeFile(target, content, {
     encoding: 'utf8',
     mode: 0o600
@@ -664,6 +732,9 @@ const deriveEncryptionKey = (params: {
     .digest()
 )
 
+// Namespace-derived keys keep snapshots opaque to generic Relay routes and bind
+// payload integrity to one scope. Deployment operators can reproduce these keys,
+// so this is not zero-knowledge encryption against the operator.
 const deriveTeamEncryptionKey = (params: {
   server: ResolvedRelayServer
   teamId: string
@@ -674,6 +745,22 @@ const deriveTeamEncryptionKey = (params: {
     .update(normalizeRemoteBaseUrl(params.server.remoteBaseUrl))
     .update('\0')
     .update(params.teamId)
+    .digest()
+)
+
+const deriveProjectRuleEncryptionKey = (params: {
+  assignmentId: string
+  server: ResolvedRelayServer
+  teamId: string
+}) => (
+  createHash('sha256')
+    .update('oneworks-relay-project-rule-documents-v1')
+    .update('\0')
+    .update(normalizeRemoteBaseUrl(params.server.remoteBaseUrl))
+    .update('\0')
+    .update(params.teamId)
+    .update('\0')
+    .update(params.assignmentId)
     .digest()
 )
 
@@ -745,7 +832,7 @@ const decryptDocumentPayload = (
 }
 
 const kindMatchesPath = (kind: RelayPersonalDocumentKind, path: string, scope: RelayDocumentScope) => (
-  scope.type === 'team'
+  scope.type !== 'account'
     ? kind === 'agents' &&
       (
         path === agentsPayloadPath(scope) ||
@@ -765,6 +852,7 @@ const resolveSafePayloadPath = (
 ) => {
   if (
     document.path.includes('*') ||
+    !isCanonicalRelayDocumentPayloadPath(document.path) ||
     !kindMatchesPath(document.kind, document.path, scope) ||
     isLocalOnlyMarkdownPath(document.path)
   ) return undefined
@@ -782,15 +870,18 @@ const applyRemoteDocuments = async (
   for (const document of filterDocumentsByPreferences(payload.documents, preferences)) {
     const target = resolveSafePayloadPath(homeDir, document, scope)
     if (target == null) continue
+    await assertDocumentPathHasNoSymbolicLinks(homeDir, target)
     const existing = await readFile(target, 'utf8').catch(() => undefined)
     if (existing != null && existing !== document.content) {
-      await writeFile(conflictBackupPath(target), existing, {
+      const backupTarget = conflictBackupPath(target)
+      await prepareDocumentWritePath(homeDir, backupTarget)
+      await writeFile(backupTarget, existing, {
         encoding: 'utf8',
         mode: 0o600
       })
       conflictBackups += 1
     }
-    await mkdir(dirname(target), { recursive: true })
+    await prepareDocumentWritePath(homeDir, target)
     await writeFile(target, document.content, {
       encoding: 'utf8',
       mode: 0o600
@@ -920,6 +1011,63 @@ const readRemoteTeamDocumentSnapshot = async (params: {
     throw new Error(toString(body.error) || `Relay team document sync failed with ${response.status}.`)
   }
   return readTeamDocumentSnapshotPayload(body)
+}
+
+const putRemoteProjectRuleDocumentSnapshot = async (params: {
+  assignmentId: string
+  baseHash?: string
+  key: Buffer
+  payload: RelayPersonalDocumentPayload
+  server: ResolvedRelayServer
+  sessionToken: string
+}): Promise<RelayProjectRuleDocumentSnapshotPayload | undefined> => {
+  const response = await fetch(
+    new URL(
+      `/api/relay/config-assignments/${encodeURIComponent(params.assignmentId)}/documents`,
+      params.server.remoteBaseUrl
+    ),
+    {
+      body: JSON.stringify({
+        ...(params.baseHash == null ? {} : { baseHash: params.baseHash }),
+        documents: buildDocumentSnapshot(params.payload, params.key)
+      }),
+      headers: {
+        accept: 'application/json',
+        authorization: `Bearer ${params.sessionToken}`,
+        'content-type': 'application/json'
+      },
+      method: 'PUT'
+    }
+  )
+  const body = await readResponseJson(response)
+  if (!response.ok) {
+    throw new Error(toString(body.error) || `Relay project rule document update failed with ${response.status}.`)
+  }
+  return readProjectRuleDocumentSnapshotPayload(body)
+}
+
+const readRemoteProjectRuleDocumentSnapshot = async (params: {
+  assignmentId: string
+  server: ResolvedRelayServer
+  sessionToken: string
+}): Promise<RelayProjectRuleDocumentSnapshotPayload | undefined> => {
+  const response = await fetch(
+    new URL(
+      `/api/relay/config-assignments/${encodeURIComponent(params.assignmentId)}/documents`,
+      params.server.remoteBaseUrl
+    ),
+    {
+      headers: {
+        accept: 'application/json',
+        authorization: `Bearer ${params.sessionToken}`
+      }
+    }
+  )
+  const body = await readResponseJson(response)
+  if (!response.ok) {
+    throw new Error(toString(body.error) || `Relay project rule document sync failed with ${response.status}.`)
+  }
+  return readProjectRuleDocumentSnapshotPayload(body)
 }
 
 export const createPersonalDocumentSyncStatus = (
@@ -1058,6 +1206,86 @@ export const syncRelayPersonalDocuments = async (params: {
   })
 }
 
+const syncRelaySharedDocuments = async (params: {
+  key: Buffer
+  preferences: RelayPersonalDocumentSyncPreferences
+  putRemote: (input: {
+    baseHash?: string
+    key: Buffer
+    payload: RelayPersonalDocumentPayload
+  }) => Promise<RelayPersonalDocumentSnapshotPayload | undefined>
+  remote: RelayPersonalDocumentSnapshotPayload | undefined
+  scope: Exclude<RelayDocumentScope, { type: 'account' }>
+}): Promise<RelayPersonalDocumentSyncStatus> => {
+  const { key, preferences, remote, scope } = params
+  const remotePayload = remote == null ? undefined : decryptDocumentPayload(remote, key)
+  const remoteEnabledPayload = remotePayload == null
+    ? undefined
+    : {
+      documents: filterDocumentsByPreferences(remotePayload.documents, preferences),
+      version: 1 as const
+    }
+  const localPayload = await collectLocalDocuments(preferences, scope)
+  const localHash = hashDocumentPayload(localPayload)
+  const remoteHash = remoteEnabledPayload == null ? undefined : hashDocumentPayload(remoteEnabledPayload)
+  const lastSyncedAt = new Date().toISOString()
+
+  if (localPayload.documents.length === 0 && (remoteEnabledPayload?.documents.length ?? 0) === 0) {
+    return createPersonalDocumentSyncStatus(preferences, {
+      countsByKind: countDocuments(remotePayload?.documents ?? []),
+      documentCount: remotePayload?.documents.length ?? 0,
+      hash: remote?.hash ?? null,
+      lastSyncedAt,
+      totalSizeBytes: totalSizeBytes(remotePayload?.documents ?? [])
+    })
+  }
+
+  if (localHash === remoteHash) {
+    return createPersonalDocumentSyncStatus(preferences, {
+      countsByKind: countDocuments(remotePayload?.documents ?? localPayload.documents),
+      documentCount: remotePayload?.documents.length ?? localPayload.documents.length,
+      hash: remote?.hash ?? localHash,
+      lastSyncedAt,
+      totalSizeBytes: totalSizeBytes(remotePayload?.documents ?? localPayload.documents)
+    })
+  }
+
+  if (
+    remoteEnabledPayload == null || (
+      localPayload.documents.length > 0 &&
+      localPayloadIsNewer(localPayloadUpdatedAt(localPayload), remote?.updatedAt)
+    )
+  ) {
+    const mergedPayload = mergeRemoteWithLocalEnabledDocuments(remotePayload, localPayload, preferences)
+    const updated = await params.putRemote({
+      baseHash: remote?.hash,
+      key,
+      payload: mergedPayload
+    })
+    return createPersonalDocumentSyncStatus(preferences, {
+      countsByKind: updated?.countsByKind ?? countDocuments(mergedPayload.documents),
+      documentCount: updated?.documentCount ?? mergedPayload.documents.length,
+      hash: updated?.hash ?? hashDocumentPayload(mergedPayload),
+      lastSyncedAt: updated?.updatedAt ?? lastSyncedAt,
+      pushedLocal: true,
+      totalSizeBytes: updated?.totalSizeBytes ?? totalSizeBytes(mergedPayload.documents)
+    })
+  }
+
+  const applied = remotePayload == null
+    ? { conflictBackups: 0 }
+    : await applyRemoteDocuments(remotePayload, preferences, scope)
+  return createPersonalDocumentSyncStatus(preferences, {
+    appliedRemote: remotePayload != null,
+    conflictBackups: applied.conflictBackups,
+    countsByKind: countDocuments(remotePayload?.documents ?? []),
+    documentCount: remotePayload?.documents.length ?? 0,
+    hash: remote?.hash ?? remoteHash ?? null,
+    lastSyncedAt,
+    totalSizeBytes: totalSizeBytes(remotePayload?.documents ?? [])
+  })
+}
+
 export const syncRelayTeamDocuments = async (params: {
   preferences: RelayPersonalDocumentSyncPreferences
   server: ResolvedRelayServer
@@ -1080,74 +1308,60 @@ export const syncRelayTeamDocuments = async (params: {
     server: params.server,
     teamId: params.teamId
   })
-  const scope: RelayDocumentScope = { id: params.teamId, type: 'team' }
-  const remotePayload = remote == null ? undefined : decryptDocumentPayload(remote, key)
-  const remoteEnabledPayload = remotePayload == null
-    ? undefined
-    : {
-      documents: filterDocumentsByPreferences(remotePayload.documents, params.preferences),
-      version: 1 as const
+  return syncRelaySharedDocuments({
+    key,
+    preferences: params.preferences,
+    putRemote: async input =>
+      await putRemoteTeamDocumentSnapshot({
+        ...input,
+        server: params.server,
+        sessionToken: params.sessionToken,
+        teamId: params.teamId
+      }),
+    remote,
+    scope: { id: params.teamId, type: 'team' }
+  })
+}
+
+export const syncRelayProjectRuleDocuments = async (params: {
+  assignmentId: string
+  preferences: RelayPersonalDocumentSyncPreferences
+  server: ResolvedRelayServer
+  sessionToken: string
+  teamId: string
+}): Promise<RelayPersonalDocumentSyncStatus> => {
+  if (!relayPersonalDocumentSyncEnabled(params.preferences)) {
+    return createPersonalDocumentSyncStatus(params.preferences)
+  }
+  if (params.sessionToken === '') {
+    throw new Error('A Relay login session is required for project rule document sync.')
+  }
+
+  const remote = await readRemoteProjectRuleDocumentSnapshot({
+    assignmentId: params.assignmentId,
+    server: params.server,
+    sessionToken: params.sessionToken
+  })
+  const key = deriveProjectRuleEncryptionKey({
+    assignmentId: params.assignmentId,
+    server: params.server,
+    teamId: params.teamId
+  })
+  return syncRelaySharedDocuments({
+    key,
+    preferences: params.preferences,
+    putRemote: async input =>
+      await putRemoteProjectRuleDocumentSnapshot({
+        ...input,
+        assignmentId: params.assignmentId,
+        server: params.server,
+        sessionToken: params.sessionToken
+      }),
+    remote,
+    scope: {
+      id: params.assignmentId,
+      teamId: params.teamId,
+      type: 'projectRule'
     }
-  const localPayload = await collectLocalDocuments(params.preferences, scope)
-  const localHash = hashDocumentPayload(localPayload)
-  const remoteHash = remoteEnabledPayload == null ? undefined : hashDocumentPayload(remoteEnabledPayload)
-  const lastSyncedAt = new Date().toISOString()
-
-  if (localPayload.documents.length === 0 && (remoteEnabledPayload?.documents.length ?? 0) === 0) {
-    return createPersonalDocumentSyncStatus(params.preferences, {
-      countsByKind: countDocuments(remotePayload?.documents ?? []),
-      documentCount: remotePayload?.documents.length ?? 0,
-      hash: remote?.hash ?? null,
-      lastSyncedAt,
-      totalSizeBytes: totalSizeBytes(remotePayload?.documents ?? [])
-    })
-  }
-
-  if (localHash === remoteHash) {
-    return createPersonalDocumentSyncStatus(params.preferences, {
-      countsByKind: countDocuments(remotePayload?.documents ?? localPayload.documents),
-      documentCount: remotePayload?.documents.length ?? localPayload.documents.length,
-      hash: remote?.hash ?? localHash,
-      lastSyncedAt,
-      totalSizeBytes: totalSizeBytes(remotePayload?.documents ?? localPayload.documents)
-    })
-  }
-
-  if (
-    remoteEnabledPayload == null || (
-      localPayload.documents.length > 0 &&
-      localPayloadIsNewer(localPayloadUpdatedAt(localPayload), remote?.updatedAt)
-    )
-  ) {
-    const mergedPayload = mergeRemoteWithLocalEnabledDocuments(remotePayload, localPayload, params.preferences)
-    const updated = await putRemoteTeamDocumentSnapshot({
-      baseHash: remote?.hash,
-      key,
-      payload: mergedPayload,
-      server: params.server,
-      sessionToken: params.sessionToken,
-      teamId: params.teamId
-    })
-    return createPersonalDocumentSyncStatus(params.preferences, {
-      countsByKind: updated?.countsByKind ?? countDocuments(mergedPayload.documents),
-      documentCount: updated?.documentCount ?? mergedPayload.documents.length,
-      hash: updated?.hash ?? hashDocumentPayload(mergedPayload),
-      lastSyncedAt: updated?.updatedAt ?? lastSyncedAt,
-      pushedLocal: true,
-      totalSizeBytes: updated?.totalSizeBytes ?? totalSizeBytes(mergedPayload.documents)
-    })
-  }
-
-  const applied = remotePayload == null
-    ? { conflictBackups: 0 }
-    : await applyRemoteDocuments(remotePayload, params.preferences, scope)
-  return createPersonalDocumentSyncStatus(params.preferences, {
-    appliedRemote: remotePayload != null,
-    conflictBackups: applied.conflictBackups,
-    countsByKind: countDocuments(remotePayload?.documents ?? []),
-    documentCount: remotePayload?.documents.length ?? 0,
-    hash: remote?.hash ?? remoteHash ?? null,
-    lastSyncedAt,
-    totalSizeBytes: totalSizeBytes(remotePayload?.documents ?? [])
   })
 }

@@ -3,9 +3,16 @@ import { adminListSurfaceCss } from '@oneworks/components/admin-list-surface'
 
 export const relayClientCss = `
 ${adminListSurfaceCss}
-.oneworks-relay { box-sizing: border-box; min-height: 100%; padding: 0; color: var(--text-color, var(--ant-color-text, #1f2328)); background: transparent; font: 13px/1.5 ui-sans-serif, system-ui, sans-serif; }
+.oneworks-relay { --oneworks-relay-surface-background: var(--page-background, var(--bg-color, var(--ant-color-bg-container, #fff))); box-sizing: border-box; min-height: 100%; height: 100%; padding: 0; color: var(--text-color, var(--ant-color-text, #1f2328)); background: var(--oneworks-relay-surface-background); font: 13px/1.5 ui-sans-serif, system-ui, sans-serif; }
+.oneworks-relay__shell,
+.oneworks-relay__surface,
+.oneworks-relay__profile,
+.oneworks-relay__team-detail-panel,
+.oneworks-relay__profile-tab-panel,
+.oneworks-relay__project-rule-tab-panel { background: var(--oneworks-relay-surface-background); }
 .oneworks-relay--documents-tab { height: 100%; display: grid; }
 .oneworks-relay--team-config-content-tab { height: 100%; display: grid; }
+.oneworks-relay--project-rule-route { height: 100%; display: grid; }
 .oneworks-relay--documents-tab .oneworks-relay__shell,
 .oneworks-relay--documents-tab .oneworks-relay__surface,
 .oneworks-relay--documents-tab .oneworks-relay__profile,
@@ -14,6 +21,23 @@ ${adminListSurfaceCss}
 .oneworks-relay--team-config-content-tab .oneworks-relay__profile { min-height: 0; height: 100%; }
 .oneworks-relay--documents-tab .oneworks-relay__profile { grid-template-rows: auto auto minmax(0, 1fr); }
 .oneworks-relay--team-config-content-tab .oneworks-relay__profile { grid-template-rows: auto auto minmax(0, 1fr); }
+.oneworks-relay--project-rule-route .oneworks-relay__shell,
+.oneworks-relay--project-rule-route .oneworks-relay__surface,
+.oneworks-relay--project-rule-route .oneworks-relay__profile,
+.oneworks-relay--project-rule-route .oneworks-relay__team-detail-panel,
+.oneworks-relay--project-rule-route .oneworks-relay__team-projects,
+.oneworks-relay--project-rule-route .oneworks-relay__team-config-detail { min-height: 0; height: 100%; }
+.oneworks-relay--project-rule-route .oneworks-relay__shell,
+.oneworks-relay--project-rule-route .oneworks-relay__surface { grid-template-rows: minmax(0, 1fr); }
+.oneworks-relay--project-rule-route .oneworks-relay__surface { align-content: stretch; }
+.oneworks-relay--project-rule-route .oneworks-relay__profile,
+.oneworks-relay--project-rule-route .oneworks-relay__team-detail-panel,
+.oneworks-relay--project-rule-route .oneworks-relay__team-projects { grid-template-rows: minmax(0, 1fr); }
+.oneworks-relay--project-rule-route .oneworks-relay__project-rule-detail { grid-template-rows: auto minmax(0, 1fr); }
+.oneworks-relay--project-rule-route .oneworks-relay__project-rule-tab-panel { min-height: 0; align-content: start; }
+.oneworks-relay--project-rule-route .oneworks-relay__project-rule-detail--documents .oneworks-relay__profile-section--documents,
+.oneworks-relay--project-rule-route .oneworks-relay__project-rule-detail--documents .oneworks-relay__personal-docs { min-height: 0; height: 100%; }
+.oneworks-relay--project-rule-route .oneworks-relay__project-rule-detail--documents .oneworks-relay__project-rule-tab-panel { min-height: 0; align-content: stretch; }
 .oneworks-relay--documents-tab .oneworks-relay__documents-panel,
 .oneworks-relay--documents-tab .oneworks-relay__documents-panel > .oneworks-relay__profile-section,
 .oneworks-relay--documents-tab .oneworks-relay__personal-docs { min-height: 0; height: 100%; }
@@ -22,8 +46,8 @@ ${adminListSurfaceCss}
 .oneworks-relay--team-config-content-tab .oneworks-relay__team-config-content { min-height: 0; height: 100%; }
 .oneworks-relay--team-config-content-tab .oneworks-relay__team-detail-panel { grid-template-rows: minmax(0, 1fr); }
 .oneworks-relay--team-config-content-tab .oneworks-relay__team-configs--detail { grid-template-rows: auto minmax(0, 1fr); }
-.oneworks-relay__shell { width: 100%; min-width: 0; display: grid; gap: var(--subpage-content-card-gap, var(--ant-padding-xs, 8px)); }
-.oneworks-relay__surface { width: 100%; min-width: 0; display: grid; overflow: visible; border: 0; border-radius: 0; background: transparent; }
+.oneworks-relay__shell { width: 100%; min-width: 0; min-height: 100%; display: grid; gap: var(--subpage-content-card-gap, var(--ant-padding-xs, 8px)); background-image: linear-gradient(var(--oneworks-relay-surface-background), var(--oneworks-relay-surface-background)); }
+.oneworks-relay__surface { width: 100%; min-width: 0; display: grid; align-content: start; overflow: visible; border: 0; border-radius: 0; }
 .oneworks-relay__primary-actions, .oneworks-relay__account-actions { min-height: var(--oneworks-overlay-control-height, 30px); display: inline-flex; align-items: center; gap: var(--oneworks-overlay-item-gap, 6px); }
 .oneworks-relay__account-actions { flex-wrap: wrap; justify-content: flex-end; }
 .oneworks-relay__button { position: relative; width: auto; min-width: var(--app-chrome-icon-size, 18px); min-height: var(--app-chrome-icon-size, 18px); display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: var(--oneworks-overlay-item-radius, 6px); padding: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); background: transparent; cursor: pointer; }
@@ -146,24 +170,25 @@ ${adminListSurfaceCss}
 .oneworks-relay__team-config-detail { min-width: 0; display: grid; gap: 0; }
 .oneworks-relay__team-configs--detail > .route-container-inline-breadcrumb + .oneworks-relay__team-config-detail .oneworks-relay__team-detail-row:first-child { padding-block-start: var(--subpage-section-gap, 10px); }
 .oneworks-relay__project-rule-detail { gap: 0; }
-.oneworks-relay__project-rule-tab-panel { min-width: 0; display: grid; padding-block-start: 0; }
-.oneworks-relay__project-rule-tabs + .oneworks-relay__project-rule-tab-panel { margin-block-start: 0; }
+.oneworks-relay__project-rule-detail > .oneworks-relay__project-rule-tabs { margin-block-start: 0; }
+.oneworks-relay__project-rule-tab-panel { min-width: 0; display: grid; }
 .oneworks-relay__project-rule-list-panel, .oneworks-relay__project-rule-settings-panel { min-width: 0; display: grid; gap: var(--subpage-section-gap, 10px); }
 .oneworks-relay__project-rule-repositories, .oneworks-relay__project-rule-settings { min-width: 0; display: grid; gap: var(--subpage-section-gap, 10px); }
-.oneworks-relay__project-rule-repository-list { min-width: 0; display: grid; gap: 6px; }
-.oneworks-relay__project-rule-repository-row { min-width: 0; min-height: 34px; display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); align-items: center; gap: var(--subpage-section-gap, 10px); border-block-end: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); padding-block: 6px; }
+.oneworks-relay__project-rule-repository-list { min-width: 0; display: grid; }
+.oneworks-relay__project-rule-repository-row { min-width: 0; min-height: 42px; display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) auto; align-items: center; gap: var(--subpage-section-gap, 10px); padding-block: 6px; border-block-end: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
+.oneworks-relay__project-rule-repository-row[data-editing='true'] { background: color-mix(in srgb, var(--primary-color, var(--ant-color-primary, #1677ff)) 4%, transparent); }
 .oneworks-relay__project-rule-repository-kind { min-width: 0; display: inline-flex; align-items: center; gap: var(--oneworks-overlay-icon-gap, 6px); color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); overflow: hidden; }
 .oneworks-relay__project-rule-repository-copy { min-width: 0; display: grid; gap: 1px; }
-.oneworks-relay__project-rule-repository-copy strong { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 750 12px/1.25 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oneworks-relay__project-rule-repository-copy span { min-width: 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 11px/1.25 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oneworks-relay__project-rule-repository-control { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--oneworks-overlay-item-gap, 6px); }
+.oneworks-relay__project-rule-repository-copy strong { min-width: 0; overflow: hidden; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 750 12px/1.25 ui-sans-serif, system-ui, sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-relay__project-rule-repository-copy span { min-width: 0; overflow: hidden; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 11px/1.25 ui-sans-serif, system-ui, sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-relay__project-rule-repository-address { min-width: 0; overflow: hidden; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 600 12px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-relay__project-rule-repository-control { min-width: 0; display: block; }
+.oneworks-relay__project-rule-repository-actions { display: inline-flex; align-items: center; gap: var(--oneworks-overlay-icon-gap, 6px); }
 .oneworks-relay__project-rule-fields { min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px var(--subpage-section-gap, 10px); }
 .oneworks-relay__project-rule-field { min-width: 0; display: grid; gap: 4px; }
 .oneworks-relay__project-rule-field-copy { min-width: 0; display: grid; gap: 1px; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 11px/1.25 ui-sans-serif, system-ui, sans-serif; }
 .oneworks-relay__project-rule-field-copy strong { color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 750 12px/1.25 ui-sans-serif, system-ui, sans-serif; }
 .oneworks-relay__project-rule-card-actions { min-width: 0; display: flex; justify-content: flex-end; }
-.oneworks-relay__project-rule-files { min-width: 0; min-height: min(420px, calc(100dvh - 300px)); display: flex; }
-.oneworks-relay__project-rule-files-list { min-width: 0; flex: 1 1 auto; }
 .oneworks-relay__team-config-content { box-sizing: border-box; min-width: 0; min-height: min(540px, calc(100dvh - 250px)); display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 10px; padding-block-start: 0; border-top: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
 .oneworks-relay__team-config-content-editor { min-width: 0; min-height: 320px; display: grid; }
 .oneworks-relay--team-config-content-tab .oneworks-relay__team-config-content-editor { min-height: 0; }
@@ -232,12 +257,15 @@ ${adminListSurfaceCss}
 .oneworks-relay__profile-fact { min-width: 0; display: grid; gap: 2px; }
 .oneworks-relay__profile-fact-label { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 10px/1.2 ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; }
 .oneworks-relay__profile-fact-value { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oneworks-relay__personal-docs { position: relative; min-width: 0; min-height: min(520px, calc(100dvh - 240px)); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 0; overflow: hidden; padding-block-start: 0; }
-.oneworks-relay__personal-docs-list-pane { min-width: 0; min-height: 0; height: 100%; display: flex; align-self: stretch; }
+.oneworks-relay__personal-docs { position: relative; min-width: 0; min-height: min(520px, calc(100dvh - 240px)); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 0; overflow: hidden; padding-block-start: 0; background: var(--bg-color, var(--ant-color-bg-container, #fff)); }
+.oneworks-relay__personal-docs-list-pane { min-width: 0; min-height: 0; height: 100%; display: flex; align-self: stretch; background: var(--bg-color, var(--ant-color-bg-container, #fff)); }
 .oneworks-relay__personal-docs-list { min-width: 0; min-height: 92px; height: 100%; display: flex; }
-.oneworks-relay__personal-docs-list .interaction-list__scroll { min-height: 0; height: 100%; flex: 1 1 auto; }
-.oneworks-relay__personal-docs-list .interaction-list__items { min-height: 100%; height: 100%; flex: 1 0 auto; }
-.oneworks-relay__document-preview { position: absolute; inset-block: 0; inset-inline-end: 0; z-index: 2; width: min(680px, max(420px, calc(100% - 300px))); min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border-left: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); background: var(--bg-color, var(--ant-color-bg-container, #fff)); box-shadow: -12px 0 24px rgb(0 0 0 / 6%); animation: oneworks-relay-document-preview-in .2s ease-out both; will-change: opacity, transform; }
+.oneworks-relay__personal-docs-list .interaction-list__scroll { min-height: 0; height: 100%; flex: 1 1 auto; background: var(--bg-color, var(--ant-color-bg-container, #fff)); }
+.oneworks-relay__personal-docs-list .interaction-list__items { min-height: 100%; height: 100%; flex: 1 0 auto; background: var(--bg-color, var(--ant-color-bg-container, #fff)); }
+.oneworks-relay__personal-docs-list-pane,
+.oneworks-relay__personal-docs-list .interaction-list__scroll,
+.oneworks-relay__personal-docs-list .interaction-list__items { background-image: linear-gradient(var(--oneworks-relay-surface-background), var(--oneworks-relay-surface-background)); }
+.oneworks-relay__document-preview { position: absolute; inset-block: 0; inset-inline-end: 0; z-index: 2; width: min(680px, max(420px, calc(100% - 300px))); min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border-left: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); background: var(--bg-color, var(--ant-color-bg-container, #fff)); box-shadow: -12px 0 24px rgb(0 0 0 / 6%); }
 .oneworks-relay__document-preview--closing { pointer-events: none; animation: oneworks-relay-document-preview-out .26s ease-in both; }
 .oneworks-relay__document-preview-head { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 0 0 var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)); border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
 .oneworks-relay__document-preview-copy { min-width: 0; display: grid; gap: 2px; padding-inline-start: 10px; }
@@ -250,15 +278,11 @@ ${adminListSurfaceCss}
 .oneworks-relay__document-preview-badge { min-width: max-content; align-self: center; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 700 11px/1.2 ui-sans-serif, system-ui, sans-serif; }
 .oneworks-relay__document-preview-actions { min-width: max-content; display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .oneworks-relay__document-preview-close { flex: 0 0 auto; overflow: visible; }
-.oneworks-relay__document-preview-body { min-width: 0; min-height: 0; display: grid; padding: 0; }
+.oneworks-relay__document-preview-body { min-width: 0; min-height: 0; display: grid; padding: 0; background: var(--oneworks-relay-surface-background); }
 .oneworks-relay__document-preview-editor { min-width: 0; min-height: 0; height: 100%; }
-.oneworks-relay__document-preview-pre { min-width: 0; min-height: 0; margin: 0; overflow: auto; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 500 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; }
+.oneworks-relay__document-preview-pre { min-width: 0; min-height: 0; height: 100%; box-sizing: border-box; margin: 0; overflow: auto; padding: 10px; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); background: var(--oneworks-relay-surface-background); font: 500 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; }
 .oneworks-relay__document-preview-empty { min-width: 0; min-height: 180px; display: flex; align-items: center; justify-content: center; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif; text-align: center; }
 .oneworks-relay__document-preview-empty--error { color: var(--danger-color, #dc2626); }
-@keyframes oneworks-relay-document-preview-in {
-  from { opacity: 0; transform: translateX(18px); }
-  to { opacity: 1; transform: translateX(0); }
-}
 @keyframes oneworks-relay-document-preview-out {
   from { opacity: 1; transform: translateX(0); }
   to { opacity: 0; transform: translateX(36px); }

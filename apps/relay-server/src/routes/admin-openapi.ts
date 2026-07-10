@@ -833,7 +833,7 @@ const buildAllComponents = (bearerFormat: string) => ({
         }
       ],
       description:
-        'Encrypted team instruction documents; Relay stores only ciphertext, counts, total size, and actor metadata.'
+        'Client-produced encrypted-format team documents with synchronization, scope, integrity, and actor metadata. Relay does not parse or index document content, but deployment operators can reproduce the namespace-derived keys, so this is not zero-knowledge against them.'
     },
     RelayTeamDocumentSnapshotResponse: {
       type: 'object',
@@ -867,6 +867,55 @@ const buildAllComponents = (bearerFormat: string) => ({
         }
       }
     },
+    RelayProjectRuleDocumentSnapshot: {
+      allOf: [
+        { $ref: '#/components/schemas/RelayPersonalDocumentSnapshot' },
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['assignmentId', 'teamId'],
+          properties: {
+            assignmentId: { type: 'string' },
+            teamId: { type: 'string' },
+            updatedByUserId: nullableString
+          }
+        }
+      ],
+      description:
+        'Client-produced encrypted-format documents bound to one project-rule assignment, with synchronization, scope, integrity, and actor metadata. Relay does not parse or index document content, but deployment operators can reproduce the namespace-derived keys, so this is not zero-knowledge against them.'
+    },
+    RelayProjectRuleDocumentSnapshotResponse: {
+      type: 'object',
+      required: ['projectRuleDocumentSnapshot'],
+      properties: {
+        projectRuleDocumentSnapshot: {
+          oneOf: [
+            { $ref: '#/components/schemas/RelayProjectRuleDocumentSnapshot' },
+            { type: 'null' }
+          ]
+        }
+      }
+    },
+    RelayProjectRuleDocumentUpdate: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['documents'],
+      properties: {
+        baseHash: {
+          type: 'string',
+          description:
+            'Hash read from the previous project-rule document snapshot. Stale writes return 409 unless force is true.'
+        },
+        documents: {
+          $ref: '#/components/schemas/RelayPersonalDocumentSnapshot',
+          description: 'Encrypted project-rule documents plus server-visible counts and total size.'
+        },
+        force: {
+          type: 'boolean',
+          description: 'Overwrite the current server snapshot even when baseHash is stale.'
+        }
+      }
+    },
     RelayPersonalConfigSnapshot: {
       type: 'object',
       required: ['allowedFields', 'hash', 'updatedAt', 'userId', 'version'],
@@ -883,7 +932,8 @@ const buildAllComponents = (bearerFormat: string) => ({
         },
         documents: {
           $ref: '#/components/schemas/RelayPersonalDocumentSnapshot',
-          description: 'Encrypted user-home instruction documents; the server stores only ciphertext and statistics.'
+          description:
+            'Client-produced encrypted-format user-home instruction documents with synchronization, scope, and integrity metadata. Relay does not parse or index document content, but deployment operators can reproduce the namespace-derived keys, so this is not zero-knowledge against them.'
         },
         hash: { type: 'string', description: 'Stable snapshot hash used for optimistic concurrency.' },
         sourceDeviceId: nullableString,
@@ -1830,6 +1880,36 @@ const teamManagementPaths = (prefix: '/api/admin' | '/api/relay', scope: 'Admin'
         }
       })
     },
+    [`${prefix}/config-assignments/{assignmentId}/documents`]: {
+      get: bearerOperation({
+        operationId: `getRelay${scope}ProjectRuleDocuments`,
+        summary: 'Read encrypted documents for a project-rule assignment',
+        tags: [configTag],
+        parameters: [assignmentId],
+        responses: {
+          200: jsonResponse('Relay project-rule document snapshot.', {
+            $ref: '#/components/schemas/RelayProjectRuleDocumentSnapshotResponse'
+          }),
+          ...adminAuthResponses,
+          404: errorResponse('The configuration assignment was not found.')
+        }
+      }),
+      put: bearerOperation({
+        operationId: `updateRelay${scope}ProjectRuleDocuments`,
+        summary: 'Update encrypted documents for a project-rule assignment',
+        tags: [configTag],
+        parameters: [assignmentId],
+        requestBody: requestBody({ $ref: '#/components/schemas/RelayProjectRuleDocumentUpdate' }),
+        responses: {
+          200: jsonResponse('Updated Relay project-rule document snapshot.', {
+            $ref: '#/components/schemas/RelayProjectRuleDocumentSnapshotResponse'
+          }),
+          ...adminAuthResponses,
+          ...validationResponses,
+          404: errorResponse('The configuration assignment was not found.')
+        }
+      })
+    },
     [`${prefix}/teams/{teamId}/config-secrets`]: {
       get: bearerOperation({
         operationId: `listRelay${scope}TeamConfigSecrets`,
@@ -2560,6 +2640,9 @@ const adminSchemas = [
   'RelayMetricsSnapshot',
   'RelayPersonalDocumentCounts',
   'RelayPersonalDocumentSnapshot',
+  'RelayProjectRuleDocumentSnapshot',
+  'RelayProjectRuleDocumentSnapshotResponse',
+  'RelayProjectRuleDocumentUpdate',
   'RelayTeam',
   'RelayTeamDocumentSnapshot',
   'RelayTeamDocumentSnapshotResponse',
@@ -2595,6 +2678,9 @@ const profileSchemas = [
   'RelayPersonalConfigUpdate',
   'RelayPersonalDocumentCounts',
   'RelayPersonalDocumentSnapshot',
+  'RelayProjectRuleDocumentSnapshot',
+  'RelayProjectRuleDocumentSnapshotResponse',
+  'RelayProjectRuleDocumentUpdate',
   'RelayProfileAccessToken',
   'RelayProfileAccessTokenCreate',
   'RelayProfileAccessTokenCreateResponse',

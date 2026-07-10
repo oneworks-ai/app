@@ -1,5 +1,8 @@
 /* eslint-disable max-lines -- Relay config hook owns snapshot resolution, secret application, and runtime config projection. */
-import { basename } from 'node:path'
+import { execFile } from 'node:child_process'
+import { stat } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { basename, resolve } from 'node:path'
 
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
@@ -8,15 +11,23 @@ import {
   readRelayConfigSourcePreferencesForSnapshot
 } from './server/config-source-preferences.js'
 import { createRelayDeviceStore } from './server/store.js'
+import { normalizeRelayGitRepositoryIdentity } from './shared/config-assignment-project.js'
 import { RELAY_CONFIG_SAFE_FIELDS, resolveRelayConfigPatchForProject } from './shared/config-assignment.js'
 import type { RelayConfigPatch, RelayConfigSnapshot } from './shared/config-assignment.js'
 import { createRelayConfigSnapshotStore, readRelayConfigSnapshotWithGlobalFallback } from './shared/config-cache.js'
 import { decryptRelayConfigSnapshotSecretEnvelope } from './shared/config-secrets.js'
+import {
+  relayProjectRuleDocumentBasePayloadPath,
+  relayProjectRuleDocumentDisplayPath
+} from './shared/document-paths.js'
 
 interface RelayPluginConfigHookContext {
   cwd: string
   env: Record<string, string | null | undefined>
   jsonVariables: Record<string, string | null | undefined>
+  mergedConfig?: {
+    systemPrompt?: string
+  }
   plugin: {
     options?: Record<string, unknown>
   }
@@ -31,6 +42,7 @@ interface RelaySafeConfig {
   skillRegistries?: unknown[] | Record<string, unknown>
   skills?: unknown[] | Record<string, unknown>
   skillsMeta?: Record<string, unknown>
+  systemPrompt?: string
 }
 
 const readText = (value: unknown) => (
@@ -56,13 +68,38 @@ const resolveWorkspaceFolder = (context: RelayPluginConfigHookContext) => (
     context.cwd
 )
 
-const resolveProjectContext = (context: RelayPluginConfigHookContext) => {
+// UI rules and runtime matching share canonical host/owner/repository identities.
+export const readRelayGitRepositoryIdentities = async (
+  workspaceFolder: string
+) =>
+  new Promise<string[]>(resolveResult => {
+    execFile(
+      'git',
+      ['-C', workspaceFolder, 'config', '--get-regexp', '^remote\\..*\\.url$'],
+      { encoding: 'utf8', maxBuffer: 256 * 1024 },
+      (error, stdout) => {
+        if (error != null) {
+          resolveResult([])
+          return
+        }
+        const identities = stdout
+          .split(/\r?\n/gu)
+          .map(line => line.replace(/^\S+\s+/u, ''))
+          .map(normalizeRelayGitRepositoryIdentity)
+          .filter((value): value is string => value != null)
+        resolveResult([...new Set(identities)])
+      }
+    )
+  })
+
+const resolveProjectContext = async (context: RelayPluginConfigHookContext) => {
   const workspaceFolder = resolveWorkspaceFolder(context)
   const projectId = readOptionText(context, 'projectId') ??
     readText(context.env.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__) ??
     readText(context.jsonVariables.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__)
   return {
     cwd: context.cwd,
+    gitRepositories: await readRelayGitRepositoryIdentities(workspaceFolder),
     projectId,
     projectName: readOptionText(context, 'projectName') ?? projectId ?? basename(workspaceFolder),
     workspaceFolder
@@ -194,6 +231,46 @@ const applySnapshotSecrets = async (
   return nextPatch
 }
 
+const resolveUserHomeDir = (context: RelayPluginConfigHookContext) => (
+  resolve(
+    readText(context.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+      readText(context.env.HOME) ??
+      homedir()
+  )
+)
+
+// Project-rule documents are local derived guidance, not part of the distributed config patch.
+const matchedProjectRuleDocumentPrompt = async (
+  context: RelayPluginConfigHookContext,
+  snapshot: RelayConfigSnapshot,
+  matchedAssignmentIds: string[]
+) => {
+  const matchedIds = new Set(matchedAssignmentIds)
+  const homeDir = resolveUserHomeDir(context)
+  const instructions: string[] = []
+  for (const assignment of snapshot.assignments ?? []) {
+    if (!matchedIds.has(assignment.id)) continue
+    const teamId = assignment.provenance?.teamId?.trim()
+    if (teamId == null || teamId === '') continue
+    const payloadPath = relayProjectRuleDocumentBasePayloadPath(teamId, assignment.id)
+    const directory = resolve(homeDir, payloadPath)
+    const directoryStat = await stat(directory).catch(() => undefined)
+    if (directoryStat?.isDirectory() !== true) continue
+    const displayPath = relayProjectRuleDocumentDisplayPath(teamId, assignment.id)
+    instructions.push(
+      `- ${
+        assignment.provenance?.profileName ?? assignment.id
+      }: read ${displayPath}/AGENTS.md and relevant Markdown files under ${displayPath}/rules/ before working on this matched Git project.`
+    )
+  }
+  if (instructions.length === 0) return undefined
+  return [
+    'Relay project rule documents apply to the current Git project.',
+    ...instructions,
+    'Treat these synced documents as project-specific instructions and follow their progressive disclosure links.'
+  ].join('\n')
+}
+
 export const resolveConfig = async (context: RelayPluginConfigHookContext) => {
   const workspaceFolder = resolveWorkspaceFolder(context)
   const projectHome = resolveProjectHomePath(workspaceFolder, context.env)
@@ -209,14 +286,25 @@ export const resolveConfig = async (context: RelayPluginConfigHookContext) => {
     snapshot,
     readRelayConfigSourcePreferencesForSnapshot(store, snapshot)
   )
-  const resolved = resolveRelayConfigPatchForProject(effectiveSnapshot, resolveProjectContext(context))
+  const resolved = resolveRelayConfigPatchForProject(effectiveSnapshot, await resolveProjectContext(context))
   const patch = await applySnapshotSecrets(
     projectHome,
     effectiveSnapshot,
     resolved.patch,
     resolved.matchedAssignmentIds
   )
-  const config = toConfig(patch)
+  const documentPrompt = await matchedProjectRuleDocumentPrompt(
+    context,
+    effectiveSnapshot,
+    resolved.matchedAssignmentIds
+  )
+  const patchConfig = toConfig(patch)
+  const config = documentPrompt == null
+    ? patchConfig
+    : {
+      ...patchConfig,
+      systemPrompt: [readText(context.mergedConfig?.systemPrompt), documentPrompt].filter(Boolean).join('\n\n')
+    }
   await snapshotStore.writeSnapshot({
     ...snapshot,
     lastAppliedAt: config == null ? snapshot.lastAppliedAt ?? null : new Date().toISOString(),

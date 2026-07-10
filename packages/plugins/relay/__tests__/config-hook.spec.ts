@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 
@@ -7,7 +8,7 @@ import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import packageJson from '../package.json'
-import { resolveConfig } from '../src/config.js'
+import { readRelayGitRepositoryIdentities, resolveConfig } from '../src/config.js'
 import { createRelayDeviceStore } from '../src/server/store.js'
 import { createRelayConfigSnapshotStore, createRelayGlobalConfigSnapshotStore } from '../src/shared/config-cache.js'
 import { encryptRelayConfigSnapshotSecretEnvelope } from '../src/shared/config-secrets.js'
@@ -18,14 +19,18 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 })
 
-const createContext = (workspaceFolder: string, env: Record<string, string>) => ({
+const createContext = (
+  workspaceFolder: string,
+  env: Record<string, string>,
+  systemPrompt?: string
+) => ({
   cwd: workspaceFolder,
   env,
   jsonVariables: {
     WORKSPACE_FOLDER: workspaceFolder,
     __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspaceFolder
   },
-  mergedConfig: {},
+  mergedConfig: systemPrompt == null ? {} : { systemPrompt },
   plugin: {
     options: {}
   },
@@ -34,6 +39,46 @@ const createContext = (workspaceFolder: string, env: Record<string, string>) => 
 })
 
 describe('relay config hook', () => {
+  it('matches project assignments from the workspace Git remote', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'oneworks-relay-config-hook-git-remote-'))
+    tempDirs.push(root)
+    const workspaceFolder = join(root, 'workspace-git-remote')
+    const home = join(root, 'home')
+    const env = {
+      __ONEWORKS_PROJECT_REAL_HOME__: home,
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspaceFolder
+    }
+    await mkdir(workspaceFolder, { recursive: true })
+    execFileSync('git', ['init', workspaceFolder], { stdio: 'ignore' })
+    execFileSync(
+      'git',
+      ['-C', workspaceFolder, 'remote', 'add', 'origin', 'git@github.com:oneworks-ai/app.git'],
+      { stdio: 'ignore' }
+    )
+    await expect(readRelayGitRepositoryIdentities(workspaceFolder)).resolves.toEqual([
+      'github.com/oneworks-ai/app'
+    ])
+    const projectHome = resolveProjectHomePath(workspaceFolder, env)
+    await createRelayConfigSnapshotStore(projectHome).writeSnapshot({
+      assignments: [{
+        allowedFields: ['skills'],
+        configPatch: { skills: ['git-remote-skill'] },
+        id: 'git-remote-assignment',
+        project: { allow: ['github.com/oneworks-ai/app'] }
+      }],
+      lastError: null,
+      lastSyncedAt: '2026-07-10T00:00:00.000Z',
+      version: 'v1'
+    })
+
+    await expect(resolveConfig(createContext(workspaceFolder, env) as never)).resolves.toEqual({
+      skills: ['git-remote-skill']
+    })
+    await expect(createRelayConfigSnapshotStore(projectHome).readSnapshot()).resolves.toMatchObject({
+      matchedProject: true
+    })
+  })
+
   it('returns safe config fields from the local snapshot for matching projects', async () => {
     const root = await mkdtemp(join(tmpdir(), 'oneworks-relay-config-hook-'))
     tempDirs.push(root)
@@ -126,6 +171,60 @@ describe('relay config hook', () => {
       matchedProject: true
     })
     expect(JSON.stringify(await snapshotStore.readSnapshot())).not.toContain('relay-key')
+  })
+
+  it('guides matched projects to their independent synced document directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'oneworks-relay-config-hook-project-docs-'))
+    tempDirs.push(root)
+    const workspaceFolder = join(root, 'workspace-project-docs')
+    const home = join(root, 'home')
+    const env = {
+      __ONEWORKS_PROJECT_REAL_HOME__: home,
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspaceFolder
+    }
+    const projectHome = resolveProjectHomePath(workspaceFolder, env)
+    const documentDirectory = join(
+      home,
+      '.oo/teams/team-1/project-rules/assignment-1'
+    )
+    await mkdir(join(documentDirectory, 'rules'), { recursive: true })
+    await writeFile(join(documentDirectory, 'AGENTS.md'), '# Project Rule Guide\n', 'utf8')
+    await writeFile(join(documentDirectory, 'rules/review.md'), '# Review Rules\n', 'utf8')
+    await createRelayConfigSnapshotStore(projectHome).writeSnapshot({
+      assignments: [{
+        allowedFields: ['skills'],
+        configPatch: { skills: ['project-skill'] },
+        id: 'assignment-1',
+        project: { allow: [basename(workspaceFolder)] },
+        provenance: {
+          assignmentId: 'assignment-1',
+          fields: ['skills'],
+          mode: 'default',
+          profileId: 'profile-1',
+          profileName: 'Base Profile',
+          teamId: 'team-1',
+          teamName: 'Team One',
+          version: 1,
+          versionId: 'version-1'
+        }
+      }],
+      lastError: null,
+      lastSyncedAt: '2026-07-10T00:00:00.000Z',
+      version: 'v1'
+    })
+
+    const config = await resolveConfig(
+      createContext(workspaceFolder, env, 'Keep the existing prompt.') as never
+    )
+
+    expect(config).toMatchObject({ skills: ['project-skill'] })
+    expect(config?.systemPrompt).toContain('Keep the existing prompt.')
+    expect(config?.systemPrompt).toContain(
+      '~/.oo/teams/team-1/project-rules/assignment-1/AGENTS.md'
+    )
+    expect(config?.systemPrompt).toContain(
+      '~/.oo/teams/team-1/project-rules/assignment-1/rules/'
+    )
   })
 
   it('ignores Codex adapter accounts from relay-managed team snapshots', async () => {
