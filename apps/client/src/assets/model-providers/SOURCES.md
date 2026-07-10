@@ -4,7 +4,7 @@ These assets are local copies of provider logos or favicons from official provid
 
 | Asset               | Source                                                                                                                                                  |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `openai.svg`        | OpenAI brand page image: `https://images.ctfassets.net/kftzwdyauwt9/3hUGLn3ypllZ0oa01qOYVq/28e8188e6f11b84c3e876569d492734f/Blossom_Light.svg`          |
+| `openai.svg`        | OpenAI icon from Simple Icons: `https://cdn.jsdelivr.net/npm/simple-icons@v14/icons/openai.svg`                                                         |
 | `anthropic.png`     | Anthropic homepage apple touch icon: `https://cdn.prod.website-files.com/67ce28cfec624e2b733f8a52/67d31dd7aa394792257596c5_webclip.png`                 |
 | `moonshot.svg`      | Kimi official Branding Guide, K-only light SVG: `https://moonshotai.github.io/Branding-Guide/scenarios/04-k-only/k-only-light.svg`                      |
 | `moonshot-dark.svg` | Kimi official Branding Guide, K-only dark SVG: `https://moonshotai.github.io/Branding-Guide/scenarios/04-k-only/k-only-dark.svg`                        |

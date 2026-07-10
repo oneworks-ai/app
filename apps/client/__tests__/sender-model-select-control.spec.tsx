@@ -78,6 +78,34 @@ const kimiOption = {
   label: <span>Kimi Code/kimi-for-coding</span>
 } satisfies ModelSelectOption
 
+const defaultCodexOption = {
+  ...kimiOption,
+  value: 'default',
+  title: 'Default',
+  displayLabel: 'Default',
+  modelName: 'default',
+  serviceKey: undefined,
+  serviceTitle: undefined,
+  serviceIcon: undefined,
+  modelIcon: { kind: 'material', name: 'deployed_code' },
+  searchText: 'Default',
+  label: <span>Default</span>
+} satisfies ModelSelectOption
+
+const gptOption = {
+  ...kimiOption,
+  value: 'gpt-5.5',
+  title: 'GPT-5.5',
+  displayLabel: 'GPT-5.5',
+  modelName: 'gpt-5.5',
+  serviceKey: undefined,
+  serviceTitle: undefined,
+  serviceIcon: undefined,
+  modelIcon: { kind: 'builtin', id: 'openai' },
+  searchText: 'GPT-5.5',
+  label: <span>GPT-5.5</span>
+} satisfies ModelSelectOption
+
 const createProps = () => ({
   state: {
     isThinking: false,
@@ -155,6 +183,29 @@ describe('model select control trigger icon', () => {
     expect(html).toContain('data-icon-id="moonshot"')
     expect(html).toContain('kimi-for-coding')
     expect(html).not.toContain('model_training')
+  })
+
+  it('shows the resolved Codex model and OpenAI icon for the native default selection', async () => {
+    const { ModelSelectControl } = await import(
+      '#~/components/chat/sender/@components/model-select/ModelSelectControl'
+    )
+    const props = createProps()
+
+    const html = renderToStaticMarkup(
+      <ModelSelectControl
+        {...props}
+        state={{ ...props.state, selectedModel: 'default' }}
+        data={{
+          ...props.data,
+          modelSearchOptions: [defaultCodexOption, gptOption],
+          builtinPreviewModelOptions: [defaultCodexOption, gptOption]
+        }}
+      />
+    )
+
+    expect(html).toContain('GPT-5.5')
+    expect(html).toContain('data-icon-id="openai"')
+    expect(html).not.toContain('deployed_code')
   })
 })
 
