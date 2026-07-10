@@ -105,6 +105,7 @@ The official topology is not a template for user private deployments. Private de
 - Preferred private Vercel shape is the `apps/relay-server` single project.
 - Official OneWorks Vercel slots use `dev.vc.oneworks.cloud` for dev and `vc.oneworks.cloud` for production. Private Vercel deployments should use the user's own Vercel project domain or custom domain.
 - The official dev Vercel slot deploys through the Vercel GitHub App, connected to `oneworks-ai/app`, production branch `main`, root directory `apps/relay-server`. GitHub Actions verifies the deployment after Vercel finishes; it does not publish Vercel with a repository-stored CLI token.
+- Vercel projects use `scripts/vercel-ignore-build.mjs` through `ignoreCommand` to skip builds when a PR or push does not change Relay Server/Admin or their workspace build dependencies.
 - `pnpm build:vercel` builds `apps/relay-admin`, embeds Admin under `/admin`, and builds the serverless function.
 - Vercel serverless must use the Postgres storage driver. Do not rely on local JSON, SQLite files, or process memory for durable cloud state.
 - Required env: `ONEWORKS_RELAY_STORAGE_DRIVER=postgres`, `ONEWORKS_RELAY_POSTGRES_URL` or `DATABASE_URL`, `ONEWORKS_RELAY_ADMIN_TOKEN`, `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`, `ONEWORKS_RELAY_PUBLIC_URL`, and `ONEWORKS_RELAY_ALLOW_ORIGIN`.
