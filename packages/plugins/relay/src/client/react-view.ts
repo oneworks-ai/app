@@ -2,13 +2,18 @@
 import { adminListSurfaceClassNames } from '@oneworks/components/admin-list-surface'
 
 import {
+  normalizeRelayGitRepositoryIdentity,
+  relayGitRepositoryIdentitiesEqual
+} from '../shared/config-assignment-project.js'
+import { relayProjectRuleDocumentDisplayPath } from '../shared/document-paths.js'
+import {
   LOCAL_RELAY_SERVER_ID,
   OFFICIAL_RELAY_CLOUDFLARE_DEV_SERVER_ID,
   OFFICIAL_RELAY_CLOUDFLARE_SERVER_ID,
   OFFICIAL_RELAY_VERCEL_DEV_SERVER_ID,
   OFFICIAL_RELAY_VERCEL_SERVER_ID
 } from '../shared/official-services.js'
-import { createDebouncedSaveQueue } from './debounced-save-queue.js'
+import { createSerializedSaveQueue } from './debounced-save-queue.js'
 import { createRelayLoginUrl } from './login-action.js'
 import { clearLoginCallbackFromUrl, readLoginCallback, readLoginCallbackFromUrl } from './login-callback.js'
 import { buildRelayServerOptionsUpdate } from './options.js'
@@ -116,6 +121,24 @@ interface RelayTeamProjectInteractionItem extends PluginHostInteractionListItem 
   source?: RelayConfigDistributionSourceStatus
 }
 
+interface RelayProjectRuleRepositoryRow {
+  assignment: RelayConfigShareProfileAssignment
+  assignmentIndex: number
+  key: string
+  meta: string
+  repositoryCount: number
+  repositoryIndex: number
+  searchText: string
+  title: string
+  value: string
+}
+
+interface RelayProjectRuleRepositoryEditState {
+  added: boolean
+  key: string
+  originalValue: string
+}
+
 interface RelayDeviceInteractionItem extends PluginHostInteractionListItem {
   device: RelayDeviceSummary
   deviceId: string
@@ -159,10 +182,22 @@ interface TokenEditorState {
 }
 
 const DOCUMENT_PREVIEW_CLOSE_ANIMATION_MS = 260
+const projectRuleAssignmentSaveQueue = createSerializedSaveQueue()
+const projectRuleAssignmentSaveKey = (
+  accountKey: string,
+  teamId: string | undefined,
+  profileId: string | undefined,
+  assignmentId: string
+) => [accountKey, teamId ?? '', profileId ?? '', assignmentId].join('\0')
+const projectRuleProfileSaveKeyPrefix = (
+  accountKey: string,
+  teamId: string | undefined,
+  profileId: string | undefined
+) => `${[accountKey, teamId ?? '', profileId ?? ''].join('\0')}\0`
 
 type RelayDeviceDetailTab = 'logins' | 'profile' | 'projects'
 
-type RelayProjectRuleDetailTab = 'files' | 'overview' | 'rules' | 'settings'
+type RelayProjectRuleDetailTab = 'documents' | 'overview' | 'rules' | 'settings'
 
 const profileTabs: Array<{ icon: string; key: RelayProfileTab; label: string }> = [
   { icon: 'badge', key: 'account', label: '资料' },
@@ -183,11 +218,9 @@ const teamDetailTabs: Array<{ icon: string; key: RelayProfileTeamDetailTab; labe
 const projectRuleDetailTabs: Array<{ icon: string; key: RelayProjectRuleDetailTab; label: string }> = [
   { icon: 'account_tree', key: 'rules', label: '匹配规则' },
   { icon: 'tune', key: 'settings', label: '应用设置' },
-  { icon: 'description', key: 'files', label: '关联文件' },
+  { icon: 'description', key: 'documents', label: '文档' },
   { icon: 'info', key: 'overview', label: '概览' }
 ]
-
-const PROJECT_RULE_AUTOSAVE_DELAY_MS = 600
 
 const deviceDetailTabs: Array<{ icon: string; key: RelayDeviceDetailTab; label: string }> = [
   { icon: 'badge', key: 'profile', label: '资料' },
@@ -246,6 +279,10 @@ const teamDocumentBasePath = (team: RelayProfileTeam) => (
   `~/.oo/teams/${documentScopeSegment(team.id, '<team-id>')}`
 )
 
+const projectRuleAgentsPath = (teamId: string, assignmentId: string) => (
+  `${relayProjectRuleDocumentDisplayPath(teamId, assignmentId)}/AGENTS.md`
+)
+
 const documentPayloadPath = (path: string) => path.replace(/^~\//u, '')
 
 const documentFullDisplayPath = (path: string) => {
@@ -288,6 +325,10 @@ const readDocumentPanelQueryValue = (key: 'doc' | 'q') => {
     return ''
   }
 }
+
+const initialProjectRuleDetailTab = (): RelayProjectRuleDetailTab => (
+  readDocumentPanelQueryValue('doc') === '' ? 'rules' : 'documents'
+)
 
 const writeDocumentPanelQuery = (input: { documentPath?: string | null; search: string }) => {
   if (typeof window === 'undefined') return
@@ -1132,16 +1173,25 @@ const DocumentSyncPanel = (
     accountKey: string
     ctx: PluginClientContext
     onChanged: () => void
+    projectRule?: {
+      assignmentId: string
+      teamId: string
+    }
     react: PluginReactHost
     status: RelayStatus | null
     team?: RelayProfileTeam
     view?: PluginViewContext
   }
 ) => {
-  const { account, accountKey, ctx, onChanged, react, status, team, view } = props
-  const documentSync = team == null
-    ? status?.personalDocumentSync
-    : status?.teamDocumentSync?.[cleanText(team.id) ?? '']
+  const { account, accountKey, ctx, onChanged, projectRule, react, status, team, view } = props
+  const projectRuleScope = projectRule != null
+  const teamScope = !projectRuleScope && team != null
+  const accountScope = !projectRuleScope && !teamScope
+  const documentSync = projectRuleScope
+    ? status?.projectRuleDocumentSync?.[projectRule.assignmentId]
+    : teamScope
+    ? status?.teamDocumentSync?.[cleanText(team.id) ?? '']
+    : status?.personalDocumentSync
   const [savingAction, setSavingAction] = react.useState<'import' | RelayPersonalDocumentSyncKind | null>(null)
   const [filter, setFilter] = react.useState(() => readDocumentPanelQueryValue('q'))
   const [loadedEntries, setLoadedEntries] = react.useState<RelayPersonalDocumentEntry[] | null>(null)
@@ -1159,12 +1209,14 @@ const DocumentSyncPanel = (
   const syncedKindCount = PERSONAL_DOCUMENT_SYNC_KINDS
     .reduce((total, kind) => total + (countsByKind[kind] ?? 0), 0)
   const anyPersonalDocumentEnabled = personalDocumentSyncEnabled(documentSync)
-  const scopeTitle = team == null ? '账号文档' : '团队文档'
-  const scopeMeta = team == null
+  const scopeTitle = projectRuleScope ? '项目规则文档' : teamScope ? '团队文档' : '账号文档'
+  const scopeMeta = projectRuleScope
+    ? '该项目规则拥有独立的加密文档快照，命中 Git 仓库后会引导会话读取。'
+    : accountScope
     ? '按用户根路径同步：~/AGENTS.md、~/.oo/AGENTS.md 和 ~/.oo/rules/**/*.md。'
     : '团队成员共享同一份密文快照；只读写团队命名空间文件。'
   const togglePersonalDocumentSync = (kind: RelayPersonalDocumentSyncKind, enabled: boolean) => {
-    if (team != null) return
+    if (!accountScope) return
     setSavingAction(kind)
     void requestJson<RelayStatus>(
       ctx,
@@ -1189,7 +1241,7 @@ const DocumentSyncPanel = (
       .finally(() => setSavingAction(null))
   }
   const toggleTeamDocumentSync = (enabled: boolean) => {
-    if (team == null) return
+    if (!teamScope || team == null) return
     setSavingAction('agents')
     void requestJson<RelayStatus>(
       ctx,
@@ -1248,27 +1300,38 @@ const DocumentSyncPanel = (
     : `${documentSync.documentCount ?? 0} 个 · ${formatByteSize(documentSync.totalSizeBytes)} · ${
       formatDateTime(documentSync.lastSyncedAt)
     }`
-  const documentPath = team == null ? accountAgentsPath(account) : teamAgentsPath(team)
+  const documentPath = projectRuleScope
+    ? projectRuleAgentsPath(projectRule.teamId, projectRule.assignmentId)
+    : teamScope && team != null
+    ? teamAgentsPath(team)
+    : accountAgentsPath(account)
   const documentSource = documentPath
   const documentStateLabel = documentSync?.lastError != null && documentSync.lastError !== ''
     ? '同步异常'
-    : team == null
+    : accountScope
     ? personalDocumentSyncFullyEnabled(documentSync)
       ? '已同步'
       : anyPersonalDocumentEnabled
       ? '部分同步'
       : '需要同步'
-    : preferences.agents === true
+    : documentSync != null && preferences.agents === true
     ? '已同步'
     : '需要同步'
-  const documentScopeLabel = team == null ? '账号' : '团队'
+  const documentScopeLabel = projectRuleScope ? '项目规则' : teamScope ? '团队' : '账号'
   const documentScopeKey = [
-    team == null ? 'account' : 'team',
+    projectRuleScope ? 'projectRule' : teamScope ? 'team' : 'account',
     accountKey,
     cleanText(account?.serverId) ?? '',
     cleanText(account?.userId) ?? '',
-    cleanText(team?.id) ?? ''
+    cleanText(team?.id) ?? '',
+    projectRule?.assignmentId ?? '',
+    projectRule?.teamId ?? ''
   ].join('\u0000')
+  const documentItemScopeKey = projectRuleScope
+    ? `projectRule:${projectRule.teamId}:${projectRule.assignmentId}`
+    : teamScope
+    ? `team:${cleanText(team?.id) ?? ''}`
+    : `account:${accountKey}`
   react.useEffect(() => {
     setFilter(readDocumentPanelQueryValue('q'))
     setSelectedDocumentKey(null)
@@ -1287,7 +1350,15 @@ const DocumentSyncPanel = (
     void requestJson<{ entries?: RelayPersonalDocumentEntry[] }>(
       ctx,
       'document-entries',
-      team == null
+      projectRuleScope
+        ? {
+          accountKey,
+          assignmentId: projectRule.assignmentId,
+          scope: 'projectRule',
+          serverId: cleanText(account?.serverId),
+          teamId: projectRule.teamId
+        }
+        : accountScope
         ? {
           accountKey,
           scope: 'account',
@@ -1297,7 +1368,7 @@ const DocumentSyncPanel = (
           accountKey,
           scope: 'team',
           serverId: cleanText(account?.serverId),
-          teamId: team.id
+          teamId: team?.id ?? ''
         }
     ).then(result => {
       if (!cancelled) setLoadedEntries(result.entries ?? [])
@@ -1307,14 +1378,22 @@ const DocumentSyncPanel = (
     return () => {
       cancelled = true
     }
-  }, [accountKey, cleanText(account?.serverId), cleanText(account?.userId), cleanText(team?.id)])
+  }, [
+    accountKey,
+    cleanText(account?.serverId),
+    cleanText(account?.userId),
+    cleanText(team?.id),
+    projectRule?.assignmentId,
+    projectRule?.teamId
+  ])
   const statusEntries = documentSync?.entries ?? []
   const documentEntries = loadedEntries ?? statusEntries
   const documentItems: RelayDocumentInteractionItem[] = documentEntries.map((entry): RelayDocumentInteractionItem => {
-    const isTeamAgentsEntry = team != null && entry.kind === 'agents' && entry.relativePath === 'AGENTS.md'
-    const isPersonalRootAgentsEntry = team == null && entry.kind === 'agents'
-    const isPersonalOoAgentsEntry = team == null && entry.kind === 'ooAgents'
-    const isPersonalOoRulesEntry = team == null && entry.kind === 'ooRules'
+    const isTeamAgentsEntry = teamScope && entry.kind === 'agents' && entry.relativePath === 'AGENTS.md'
+    const isProjectRuleAgentsEntry = projectRuleScope && entry.kind === 'agents' && entry.relativePath === 'AGENTS.md'
+    const isPersonalRootAgentsEntry = accountScope && entry.kind === 'agents'
+    const isPersonalOoAgentsEntry = accountScope && entry.kind === 'ooAgents'
+    const isPersonalOoRulesEntry = accountScope && entry.kind === 'ooRules'
     const displayPath = documentFullDisplayPath(entry.path)
     const title = cleanText(entry.displayName) ?? documentFileName(entry.relativePath)
     const itemKind = isPersonalRootAgentsEntry
@@ -1326,10 +1405,10 @@ const DocumentSyncPanel = (
       : isTeamAgentsEntry
       ? 'teamAgents'
       : 'namespaceDocument'
-    const entryEnabled = team == null
+    const entryEnabled = accountScope
       ? entry.localOnly ? false : preferences[entry.kind] === true
       : preferences.agents === true
-    const meta = isTeamAgentsEntry || isPersonalRootAgentsEntry || isPersonalOoAgentsEntry
+    const meta = isTeamAgentsEntry || isProjectRuleAgentsEntry || isPersonalRootAgentsEntry || isPersonalOoAgentsEntry
       ? documentStateLabel
       : entry.localOnly
       ? '本地'
@@ -1342,8 +1421,10 @@ const DocumentSyncPanel = (
       displayPath,
       enabled: entryEnabled,
       exists: entry.exists,
-      icon: documentEntryIcon(entry, team),
-      key: `document:${team == null ? 'account' : 'team'}:${entry.path}`,
+      icon: documentEntryIcon(entry, teamScope ? team : undefined),
+      // Local absolute paths can differ between the status snapshot and a refreshed entry list.
+      // Scope plus relative path is the stable document identity across that handoff.
+      key: `document:${documentItemScopeKey}:${entry.relativePath}`,
       kind: itemKind,
       localOnly: entry.localOnly,
       meta,
@@ -1354,7 +1435,7 @@ const DocumentSyncPanel = (
         scopeMeta,
         documentScopeLabel,
         personalDocumentKindLabel(entry.kind),
-        isTeamAgentsEntry ? `${documentScopeLabel} AGENTS` : '规则',
+        isTeamAgentsEntry || isProjectRuleAgentsEntry ? `${documentScopeLabel} AGENTS` : '规则',
         title,
         entry.relativePath,
         entry.path,
@@ -1464,9 +1545,9 @@ const DocumentSyncPanel = (
       cancelled = true
     }
   }, [selectedDocument?.exists, selectedDocument?.path])
+  const CodeEditor = view?.ui?.CodeEditor
   const InteractionList = view?.ui?.InteractionList
   const launcherSurface = isLauncherSurface(view)
-  const CodeEditor = view?.ui?.CodeEditor
   const copyDocumentText = (value: string, title: string) => {
     void (async () => {
       if (navigator.clipboard?.writeText == null) {
@@ -1615,12 +1696,19 @@ const DocumentSyncPanel = (
     : documentContent == null
     ? react.createElement('div', { className: 'oneworks-relay__document-preview-empty' }, '选择左侧文件查看内容')
     : CodeEditor == null
-    ? react.createElement('pre', { className: 'oneworks-relay__document-preview-pre' }, documentContent.content)
+    ? react.createElement(
+      'pre',
+      {
+        'aria-label': `${selectedDocument.title} 内容`,
+        className: 'oneworks-relay__document-preview-pre'
+      },
+      documentContent.content
+    )
     : react.createElement(CodeEditor, {
       ariaLabel: `${selectedDocument.title} 内容`,
       className: 'oneworks-relay__document-preview-editor',
       language: 'markdown',
-      path: documentContent.path,
+      path: selectedDocument.path,
       readOnly: true,
       value: documentContent.content
     })
@@ -1676,7 +1764,7 @@ const DocumentSyncPanel = (
     )
   return react.createElement(
     'section',
-    { className: 'oneworks-relay__profile-section' },
+    { className: 'oneworks-relay__profile-section oneworks-relay__profile-section--documents' },
     react.createElement(
       'div',
       {
@@ -1705,7 +1793,11 @@ const DocumentSyncPanel = (
             padding: 'none',
             search: {
               onChange: setFilter,
-              placeholder: team == null ? '搜索账号文档、路径或同步状态' : '搜索团队文档、路径或同步状态',
+              placeholder: projectRuleScope
+                ? '搜索项目规则文档、路径或同步状态'
+                : teamScope
+                ? '搜索团队文档、路径或同步状态'
+                : '搜索账号文档、路径或同步状态',
               value: filter
             },
             splitActionHover: true,
@@ -4453,6 +4545,7 @@ const TeamDetailView = (props: {
   const routeDetailActive = tab === 'projects' && projectRuleId != null
   const mainClassName = [
     'oneworks-relay',
+    routeDetailActive ? 'oneworks-relay--project-rule-route' : '',
     tab === 'documents' ? 'oneworks-relay--documents-tab' : '',
     tab === 'configs' && configPanel === 'content' ? 'oneworks-relay--team-config-content-tab' : ''
   ].filter(Boolean).join(' ')
@@ -4504,10 +4597,12 @@ const TeamDetailView = (props: {
       accountKey,
       configDistribution,
       ctx,
+      onChanged,
       projectRuleId,
       react,
       search: launcherSurface ? launcherSearchValue : projectSearch,
       setSearch: launcherSurface ? () => undefined : setProjectSearch,
+      status,
       targets: share.targets,
       targetsError: share.error,
       targetsLoading: share.loadingTargets,
@@ -4774,7 +4869,13 @@ const projectRulePatterns = (
   key: 'allow' | 'deny'
 ) => cleanTextList(rule?.[key] ?? [])
 
-const projectRuleRepositoryValues = (values: string[]) => cleanTextList(values)
+const projectRuleRepositoryValues = (values: string[]) => [
+  ...new Set(
+    values
+      .map(normalizeRelayGitRepositoryIdentity)
+      .filter((value): value is string => value != null)
+  )
+]
 
 const compactProjectRule = (projects: string[]): RelayConfigProjectRule | null => {
   const allow = projectRuleRepositoryValues(projects)
@@ -4785,11 +4886,7 @@ const compactProjectRule = (projects: string[]): RelayConfigProjectRule | null =
 const gitRepositoryIdentity = (value: string) => {
   const text = cleanText(value)
   if (text == null) return { meta: 'Git 仓库', title: '待填写' }
-  const normalized = text
-    .replace(/^https?:\/\//iu, '')
-    .replace(/^git@([^:]+):/iu, '$1/')
-    .replace(/\.git$/iu, '')
-    .replace(/\/+$/u, '')
+  const normalized = normalizeRelayGitRepositoryIdentity(text) ?? text
   const parts = normalized.split('/').filter(Boolean)
   if (parts.length >= 3) {
     const host = parts[0] ?? ''
@@ -4846,189 +4943,120 @@ const renderProjectRuleEditorField = (
     control
   )
 
-const renderProjectRuleFiles = (
-  react: PluginReactHost,
-  view: PluginViewContext | undefined,
-  account: RelayAuthAccount | null,
-  team: RelayProfileTeam,
-  profile: RelayConfigShareProfile | undefined
-) => {
-  const InteractionList = view?.ui?.InteractionList
-  const items: PluginHostInteractionListItem[] = [
-    {
-      icon: 'badge',
-      itemType: 'groupTitle',
-      key: 'project-rule-files:account',
-      title: '账号知识库'
-    },
-    {
-      description: '账号级根目录说明，会先进入当前账号命名空间。',
-      icon: 'description',
-      key: 'project-rule-files:account-agents',
-      meta: '账号',
-      searchText: cleanTextList(['账号知识库', 'AGENTS', accountAgentsPath(account)]).join(' '),
-      title: accountAgentsPath(account),
-      tooltip: accountAgentsPath(account)
-    },
-    {
-      description: '账号级规则入口，用于逐步组织长期规则和偏好。',
-      icon: 'rule_folder',
-      key: 'project-rule-files:account-rules',
-      meta: '规则',
-      searchText: cleanTextList(['账号规则', accountOoAgentsPath(), accountOoRulesPath()]).join(' '),
-      title: `${accountOoAgentsPath()} / ${accountOoRulesPath()}`,
-      tooltip: `${accountOoAgentsPath()} / ${accountOoRulesPath()}`
-    },
-    {
-      icon: 'groups',
-      itemType: 'groupTitle',
-      key: 'project-rule-files:team',
-      title: '团队知识库'
-    },
-    {
-      description: '团队命名空间说明，命中规则后参与本机上下文合并。',
-      icon: 'groups',
-      key: 'project-rule-files:team-agents',
-      meta: '团队',
-      searchText: cleanTextList(['团队知识库', teamAgentsPath(team), teamDisplayName(team)]).join(' '),
-      title: teamAgentsPath(team),
-      tooltip: teamAgentsPath(team)
-    },
-    {
-      icon: 'rule_settings',
-      itemType: 'groupTitle',
-      key: 'project-rule-files:config',
-      title: '团队配置'
-    },
-    {
-      description: '命中规则后合并的配置版本。',
-      icon: 'rule_settings',
-      key: 'project-rule-files:config-profile',
-      meta: cleanText(profile?.activeVersionId) ?? '当前发布',
-      searchText: cleanTextList(['团队配置', profile?.id, profile?.name, profile?.activeVersionId]).join(' '),
-      title: profile == null ? '未关联配置' : configShareProfileTitle(profile),
-      tooltip: profile == null
-        ? undefined
-        : cleanTextList([configShareProfileTitle(profile), profile.activeVersionId]).join(' · ')
-    }
-  ]
-  if (InteractionList != null) {
-    return react.createElement(
-      'div',
-      { className: 'oneworks-relay__project-rule-files' },
-      react.createElement(InteractionList, {
-        border: 'borderless',
-        className: 'oneworks-relay__host-interaction-list oneworks-relay__project-rule-files-list',
-        descriptionPlacement: 'content',
-        emptyText: '暂无关联文件',
-        iconSize: 18,
-        items,
-        padding: 'none',
-        mode: 'resource'
-      })
-    )
-  }
-  return react.createElement(
-    'div',
-    { className: 'oneworks-relay__team-detail-list' },
-    renderTeamDetailRow(react, view, {
-      description: '账号级根目录说明',
-      icon: 'description',
-      label: '账号根目录',
-      value: accountAgentsPath(account)
-    }),
-    renderTeamDetailRow(react, view, {
-      description: '账号级规则入口',
-      icon: 'rule_folder',
-      label: '账号规则',
-      value: `${accountOoAgentsPath()} / ${accountOoRulesPath()}`
-    }),
-    renderTeamDetailRow(react, view, {
-      description: '团队命名空间说明',
-      icon: 'groups',
-      label: '团队文档',
-      value: teamAgentsPath(team)
-    }),
-    renderTeamDetailRow(react, view, {
-      description: '规则命中后合并的配置版本',
-      icon: 'rule_settings',
-      label: '团队配置',
-      value: profile == null
-        ? '-'
-        : cleanTextList([configShareProfileTitle(profile), profile.activeVersionId]).join(' · ') || '-'
-    })
-  )
-}
-
 const TeamProjectRuleDetailPanel = (props: {
   account: RelayAuthAccount | null
   accountKey: string
   ctx: PluginClientContext
   matchLabel: string
+  onChanged: () => void
   profile?: RelayConfigShareProfile
   react: PluginReactHost
   rule: RelayTeamProjectInteractionItem
+  status: RelayStatus | null
   team: RelayProfileTeam
   view?: PluginViewContext
 }) => {
-  const { account, accountKey, ctx, matchLabel, profile, react, rule, team, view } = props
+  const { account, accountKey, ctx, matchLabel, onChanged, profile, react, rule, status, team, view } = props
   const NativeTabs = view?.ui?.NativeTabs
   const profileId = cleanText(profile?.id ?? rule.source?.profileId)
   const teamId = cleanText(team.id)
-  const [activeTab, setActiveTab] = react.useState<RelayProjectRuleDetailTab>('rules')
-  const [detail, setDetail] = react.useState<RelayConfigShareProfileDetail | null>(null)
+  const projectRuleStateId = cleanText(rule.source?.assignmentId ?? rule.ruleId) ?? ''
+  const routeStateKey = `${accountKey}\0${teamId ?? ''}\0${profileId ?? ''}\0${projectRuleStateId}`
+  const [activeTab, setActiveTab] = react.useState<RelayProjectRuleDetailTab>(initialProjectRuleDetailTab)
+  const [loadedDetail, setLoadedDetail] = react.useState<
+    {
+      routeStateKey: string
+      value: RelayConfigShareProfileDetail
+    } | null
+  >(null)
   const [drafts, setDrafts] = react.useState<Record<string, ReturnType<typeof projectAssignmentDraftFrom>>>({})
-  const [error, setError] = react.useState<string | null>(null)
+  const [repositoryEdit, setRepositoryEdit] = react.useState<RelayProjectRuleRepositoryEditState | null>(null)
   const [loading, setLoading] = react.useState(false)
-  const [savingId, setSavingId] = react.useState<string | null>(null)
-  const assignmentSaveQueueRef = react.useRef(createDebouncedSaveQueue<
-    ReturnType<
-      typeof projectAssignmentDraftFrom
-    >
-  >(PROJECT_RULE_AUTOSAVE_DELAY_MS))
+  const [repositorySearch, setRepositorySearch] = react.useState('')
+  const [savingIds, setSavingIds] = react.useState<Set<string>>(new Set())
+  const acknowledgedDraftsRef = react.useRef(new Map<string, ReturnType<typeof projectAssignmentDraftFrom>>())
+  const contextRef = react.useRef(ctx)
+  const detailRequestRef = react.useRef(0)
   const mountedRef = react.useRef(true)
+  const routeStateRef = react.useRef({ generation: 0, key: routeStateKey })
+  contextRef.current = ctx
+  if (routeStateRef.current.key !== routeStateKey) {
+    routeStateRef.current = {
+      generation: routeStateRef.current.generation + 1,
+      key: routeStateKey
+    }
+  }
+  const detail = loadedDetail?.routeStateKey === routeStateKey ? loadedDetail.value : null
 
   react.useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      assignmentSaveQueueRef.current.flushAll()
     }
   }, [])
 
-  const loadDetail = async () => {
+  const showProjectRuleError = (title: string, description: string) => {
+    contextRef.current.notifications?.show?.({ description, level: 'error', title })
+  }
+
+  react.useEffect(() => {
+    const requestId = detailRequestRef.current + 1
+    detailRequestRef.current = requestId
+    let cancelled = false
+    const isCurrent = () => !cancelled && mountedRef.current && detailRequestRef.current === requestId
+
+    setLoadedDetail(null)
+    setDrafts({})
+    setRepositoryEdit(null)
+    setSavingIds(new Set())
+    acknowledgedDraftsRef.current.clear()
+
     if (profileId == null) {
-      setDetail(null)
-      setDrafts({})
-      setError('当前项目规则缺少配置方案 ID。')
-      return
+      setLoading(false)
+      showProjectRuleError('无法读取项目规则', '当前项目规则缺少配置方案 ID。')
+      return () => {
+        cancelled = true
+      }
     }
+
     setLoading(true)
-    setError(null)
-    try {
-      const nextDetail = await requestJson<RelayConfigShareProfileDetail>(ctx, 'config-share-profile-detail', {
+    const requestContext = contextRef.current
+    const loadDetail = async () => {
+      await projectRuleAssignmentSaveQueue.waitForIdleByPrefix(
+        projectRuleProfileSaveKeyPrefix(accountKey, teamId, profileId)
+      )
+      if (!isCurrent()) return undefined
+      return await requestJson<RelayConfigShareProfileDetail>(requestContext, 'config-share-profile-detail', {
         accountKey,
         profileId,
         teamId
       })
+    }
+    void loadDetail().then(nextDetail => {
+      if (nextDetail == null) return
+      if (!isCurrent()) return
       const nextAssignments = nextDetail.assignments ?? []
-      setDetail(nextDetail)
-      setDrafts(Object.fromEntries(nextAssignments.map((assignment, index) => [
+      const nextDrafts = Object.fromEntries(nextAssignments.map((assignment, index) => [
         projectAssignmentDraftKey(assignment, index),
         projectAssignmentDraftFrom(assignment)
-      ])))
-    } catch (nextError) {
-      setDetail(null)
+      ]))
+      setLoadedDetail({ routeStateKey, value: nextDetail })
+      setDrafts(nextDrafts)
+      acknowledgedDraftsRef.current = new Map(Object.entries(nextDrafts))
+    }).catch(nextError => {
+      if (!isCurrent()) return
+      setLoadedDetail(null)
       setDrafts({})
-      setError(toErrorMessage(nextError))
-    } finally {
-      setLoading(false)
-    }
-  }
+      acknowledgedDraftsRef.current.clear()
+      showProjectRuleError('读取项目规则失败', toErrorMessage(nextError))
+    }).finally(() => {
+      if (isCurrent()) setLoading(false)
+    })
 
-  react.useEffect(() => {
-    void loadDetail()
-  }, [accountKey, ctx, profileId, teamId])
+    return () => {
+      cancelled = true
+    }
+  }, [accountKey, profileId, routeStateKey, teamId])
 
   const assignments = detail?.assignments ?? []
   const visibleAssignments = cleanText(rule.source?.assignmentId) == null
@@ -5069,21 +5097,35 @@ const TeamProjectRuleDetailPanel = (props: {
     index: number,
     draftOverride?: ReturnType<typeof projectAssignmentDraftFrom>
   ) => {
+    const saveRouteGeneration = routeStateRef.current.generation
+    const isCurrentRoute = () => (
+      mountedRef.current && routeStateRef.current.generation === saveRouteGeneration
+    )
     const assignmentId = cleanText(assignment.id)
-    if (assignmentId == null) return
+    if (assignmentId == null) {
+      if (isCurrentRoute()) showProjectRuleError('保存失败', '当前项目规则缺少 assignment ID。')
+      return { current: isCurrentRoute(), latest: true, saved: false }
+    }
     const key = projectAssignmentDraftKey(assignment, index)
     const draft = draftOverride ?? drafts[key] ?? projectAssignmentDraftFrom(assignment)
     const project = compactProjectRule(draft.projects)
     if (project == null) {
-      if (mountedRef.current) setError('请至少添加一个 Git 仓库。')
-      return
+      if (isCurrentRoute()) {
+        showProjectRuleError('无法保存项目规则', '请至少添加一个符合标准的 Git 仓库地址。')
+      }
+      return { current: isCurrentRoute(), latest: true, saved: false }
     }
-    if (mountedRef.current) {
-      setSavingId(assignmentId)
-      setError(null)
+    if (isCurrentRoute()) {
+      setSavingIds(current => {
+        const next = new Set(current)
+        next.add(assignmentId)
+        return next
+      })
     }
-    try {
-      await requestJson(ctx, 'config-share-assignment-update', {
+    const saveQueueKey = projectRuleAssignmentSaveKey(accountKey, teamId, profileId, assignmentId)
+    const requestContext = contextRef.current
+    const result = await projectRuleAssignmentSaveQueue.enqueue(saveQueueKey, async () => {
+      await requestJson(requestContext, 'config-share-assignment-update', {
         accountKey,
         assignmentId,
         enabled: draft.enabled === 'true',
@@ -5091,25 +5133,20 @@ const TeamProjectRuleDetailPanel = (props: {
         project,
         versionId: cleanText(draft.versionId) ?? undefined
       })
-    } catch (nextError) {
-      if (mountedRef.current) setError(toErrorMessage(nextError))
-    } finally {
-      if (mountedRef.current) setSavingId(null)
+    })
+    const current = isCurrentRoute()
+    if (!result.saved && result.latest && current) {
+      showProjectRuleError('保存项目规则失败', toErrorMessage(result.error))
     }
-  }
-  const queueAssignmentSave = (
-    assignment: RelayConfigShareProfileAssignment,
-    index: number,
-    draft: ReturnType<typeof projectAssignmentDraftFrom>,
-    delayMs = PROJECT_RULE_AUTOSAVE_DELAY_MS
-  ) => {
-    const key = projectAssignmentDraftKey(assignment, index)
-    assignmentSaveQueueRef.current.schedule(
-      key,
-      draft,
-      nextDraft => saveAssignment(assignment, index, nextDraft),
-      delayMs
-    )
+    if (result.saved && current) acknowledgedDraftsRef.current.set(key, draft)
+    if (current && result.latest) {
+      setSavingIds(currentSavingIds => {
+        const next = new Set(currentSavingIds)
+        next.delete(assignmentId)
+        return next
+      })
+    }
+    return { ...result, current }
   }
   const updateRepository = (
     assignment: RelayConfigShareProfileAssignment,
@@ -5119,12 +5156,11 @@ const TeamProjectRuleDetailPanel = (props: {
   ) => {
     const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
     const projects = draft.projects.length === 0 ? [''] : draft.projects
-    const nextDraft = updateDraft(assignment, index, {
+    updateDraft(assignment, index, {
       projects: projects.map((item, nextIndex) => nextIndex === rowIndex ? value : item)
     })
-    queueAssignmentSave(assignment, index, nextDraft)
   }
-  const commitRepository = (
+  const commitRepository = async (
     assignment: RelayConfigShareProfileAssignment,
     index: number,
     rowIndex: number,
@@ -5132,38 +5168,102 @@ const TeamProjectRuleDetailPanel = (props: {
   ) => {
     const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
     const projects = draft.projects.length === 0 ? [''] : draft.projects
+    const normalizedRepository = normalizeRelayGitRepositoryIdentity(value)
+    if (normalizedRepository == null) {
+      showProjectRuleError(
+        'Git 仓库地址无效',
+        '请输入标准 Git 远端身份，例如 github.com/owner/repo、HTTPS URL 或 SSH URL。'
+      )
+      return false
+    }
+    const duplicate = projects.some((item, nextIndex) => (
+      nextIndex !== rowIndex &&
+      relayGitRepositoryIdentitiesEqual(item, normalizedRepository)
+    ))
+    if (duplicate) {
+      showProjectRuleError('Git 仓库已存在', `${normalizedRepository} 已经在当前匹配列表中。`)
+      return false
+    }
     const nextDraft = updateDraft(assignment, index, {
-      projects: projects.map((item, nextIndex) => nextIndex === rowIndex ? value : item)
+      projects: projects.map((item, nextIndex) => nextIndex === rowIndex ? normalizedRepository : item)
     })
-    queueAssignmentSave(assignment, index, nextDraft, 0)
+    const result = await saveAssignment(assignment, index, nextDraft)
+    if (result.saved && result.current) setRepositoryEdit(null)
+    return result.saved
   }
   const removeRepository = (assignment: RelayConfigShareProfileAssignment, index: number, rowIndex: number) => {
     const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
     const nextDraft = updateDraft(assignment, index, {
       projects: draft.projects.filter((_, nextIndex) => nextIndex !== rowIndex)
     })
-    queueAssignmentSave(assignment, index, nextDraft, 0)
+    void saveAssignment(assignment, index, nextDraft).then(result => {
+      if (!result.saved && result.latest && result.current) {
+        const key = projectAssignmentDraftKey(assignment, index)
+        const acknowledgedDraft = acknowledgedDraftsRef.current.get(key) ?? draft
+        setDrafts(current => ({ ...current, [key]: acknowledgedDraft }))
+      }
+    })
   }
   const addRepository = (assignment: RelayConfigShareProfileAssignment, index: number) => {
     const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
+    const repositoryIndex = draft.projects.length
+    const key = `${projectAssignmentDraftKey(assignment, index)}:repository:${repositoryIndex}`
+    setRepositorySearch('')
+    setRepositoryEdit({ added: true, key, originalValue: '' })
     updateDraft(assignment, index, { projects: [...draft.projects, ''] })
+  }
+  const cancelRepositoryEdit = (
+    assignment: RelayConfigShareProfileAssignment,
+    index: number,
+    rowIndex: number
+  ) => {
+    if (repositoryEdit == null) return
+    const draft = drafts[projectAssignmentDraftKey(assignment, index)] ?? projectAssignmentDraftFrom(assignment)
+    updateDraft(assignment, index, {
+      projects: repositoryEdit.added
+        ? draft.projects.filter((_, nextIndex) => nextIndex !== rowIndex)
+        : draft.projects.map((item, nextIndex) => (
+          nextIndex === rowIndex ? repositoryEdit.originalValue : item
+        ))
+    })
+    setRepositoryEdit(null)
   }
   const updateAndSaveAssignment = (
     assignment: RelayConfigShareProfileAssignment,
     index: number,
     patch: Partial<ReturnType<typeof projectAssignmentDraftFrom>>
   ) => {
+    const key = projectAssignmentDraftKey(assignment, index)
     const nextDraft = updateDraft(assignment, index, patch)
-    queueAssignmentSave(assignment, index, nextDraft, 0)
+    void saveAssignment(assignment, index, nextDraft).then(result => {
+      if (!result.saved && result.latest && result.current) {
+        const acknowledgedDraft = acknowledgedDraftsRef.current.get(key) ?? projectAssignmentDraftFrom(assignment)
+        setDrafts(current => ({ ...current, [key]: acknowledgedDraft }))
+      }
+    })
   }
   const firstVisibleAssignment = visibleAssignments[0]
+  const documentAssignmentId = cleanText(rule.source?.assignmentId) ?? cleanText(firstVisibleAssignment?.id)
+  const projectRuleDocumentQuery = readDocumentPanelQueryValue('doc')
+  react.useEffect(() => {
+    if (projectRuleDocumentQuery !== '') {
+      setActiveTab('documents')
+    }
+  }, [documentAssignmentId, projectRuleDocumentQuery])
   const tabActions = activeTab === 'rules' && firstVisibleAssignment != null
     ? renderButton(react, view, {
+      disabled: repositoryEdit != null || savingIds.size > 0,
       icon: 'add',
       label: '添加仓库',
       onClick: () => addRepository(firstVisibleAssignment, 0)
     })
     : null
+  const changeActiveTab = (nextTab: RelayProjectRuleDetailTab) => {
+    if (nextTab !== 'documents') {
+      writeDocumentPanelQuery({ documentPath: null, search: '' })
+    }
+    setActiveTab(nextTab)
+  }
   const tabs = NativeTabs == null
     ? react.createElement('div', { className: 'oneworks-relay__empty' }, '标准标签组件不可用')
     : react.createElement(NativeTabs, {
@@ -5176,7 +5276,7 @@ const TeamProjectRuleDetailPanel = (props: {
         key: item.key,
         label: item.label
       })),
-      onChange: (nextTab: RelayProjectRuleDetailTab) => setActiveTab(nextTab)
+      onChange: changeActiveTab
     })
   const overviewPanel = react.createElement(
     'div',
@@ -5200,6 +5300,42 @@ const TeamProjectRuleDetailPanel = (props: {
       value: loading ? '读取中' : `${assignments.length} 条`
     })
   )
+  const repositoryItems: RelayProjectRuleRepositoryRow[] = visibleAssignments.flatMap(
+    (assignment, assignmentIndex) => {
+      const draft = drafts[projectAssignmentDraftKey(assignment, assignmentIndex)] ??
+        projectAssignmentDraftFrom(assignment)
+      const repositories = draft.projects.length === 0 ? [''] : draft.projects
+      return repositories.map((repository, repositoryIndex) => {
+        const identity = gitRepositoryIdentity(repository)
+        return {
+          assignment,
+          assignmentIndex,
+          key: `${projectAssignmentDraftKey(assignment, assignmentIndex)}:repository:${repositoryIndex}`,
+          meta: identity.meta,
+          repositoryCount: repositories.length,
+          repositoryIndex,
+          searchText: cleanTextList([
+            'Git',
+            '仓库',
+            identity.title,
+            identity.meta,
+            repository,
+            assignment.id,
+            assignment.profileId,
+            teamId
+          ]).join(' '),
+          title: identity.title,
+          value: repository
+        }
+      })
+    }
+  )
+  const filteredRepositoryItems = repositoryItems.filter(item =>
+    matchesNativeSearch(
+      [item.title, item.meta, item.value, item.searchText],
+      repositorySearch.trim().toLowerCase()
+    )
+  )
   const rulesPanel = visibleAssignments.length === 0
     ? react.createElement(
       'div',
@@ -5209,56 +5345,108 @@ const TeamProjectRuleDetailPanel = (props: {
     : react.createElement(
       'div',
       { className: 'oneworks-relay__project-rule-list-panel' },
-      ...visibleAssignments.map((assignment, index) => {
-        const draft = drafts[projectAssignmentDraftKey(assignment, index)] ??
-          projectAssignmentDraftFrom(assignment)
-        const repositories = draft.projects.length === 0 ? [''] : draft.projects
-        return react.createElement(
+      renderSearchInput(react, view, {
+        ariaLabel: '搜索 Git 仓库规则',
+        onChange: setRepositorySearch,
+        placeholder: '搜索 Git 仓库、组织或仓库地址',
+        value: repositorySearch
+      }),
+      filteredRepositoryItems.length === 0
+        ? react.createElement('div', { className: 'oneworks-relay__empty' }, '没有匹配的 Git 仓库')
+        : react.createElement(
           'div',
-          { className: 'oneworks-relay__project-rule-repositories', key: projectAssignmentDraftKey(assignment, index) },
-          react.createElement(
-            'div',
-            { className: 'oneworks-relay__project-rule-repository-list' },
-            ...repositories.map((repository, rowIndex) => {
-              const identity = gitRepositoryIdentity(repository)
-              return react.createElement(
-                'div',
-                {
-                  className: 'oneworks-relay__project-rule-repository-row',
-                  key: `${projectAssignmentDraftKey(assignment, index)}:repository:${rowIndex}`
-                },
+          { className: 'oneworks-relay__project-rule-repository-list' },
+          ...filteredRepositoryItems.map(item =>
+            react.createElement(
+              'div',
+              {
+                className: 'oneworks-relay__project-rule-repository-row',
+                'data-editing': repositoryEdit?.key === item.key ? 'true' : undefined,
+                key: item.key
+              },
+              react.createElement(
+                'span',
+                { className: 'oneworks-relay__project-rule-repository-kind' },
+                renderIcon(react, view, 'hub', { size: 16 }),
                 react.createElement(
                   'span',
-                  { className: 'oneworks-relay__project-rule-repository-kind' },
-                  renderIcon(react, view, 'hub', { size: 16 }),
-                  react.createElement(
-                    'span',
-                    { className: 'oneworks-relay__project-rule-repository-copy' },
-                    react.createElement('strong', null, identity.title),
-                    react.createElement('span', null, identity.meta)
-                  )
-                ),
-                react.createElement(
+                  { className: 'oneworks-relay__project-rule-repository-copy' },
+                  react.createElement('strong', null, item.title),
+                  react.createElement('span', null, item.meta)
+                )
+              ),
+              repositoryEdit?.key === item.key
+                ? react.createElement(
                   'div',
                   { className: 'oneworks-relay__project-rule-repository-control' },
                   renderInput(react, view, {
-                    onChange: value => updateRepository(assignment, index, rowIndex, value),
-                    onCommit: value => commitRepository(assignment, index, rowIndex, value),
+                    autoFocus: true,
+                    onChange: value =>
+                      updateRepository(
+                        item.assignment,
+                        item.assignmentIndex,
+                        item.repositoryIndex,
+                        value
+                      ),
                     placeholder: 'github.com/owner/repo',
-                    value: repository
-                  }),
-                  renderButton(react, view, {
-                    disabled: repositories.length === 1,
-                    icon: 'close',
-                    label: '移除仓库',
-                    onClick: () => removeRepository(assignment, index, rowIndex)
+                    value: item.value
                   })
                 )
+                : react.createElement(
+                  'span',
+                  { className: 'oneworks-relay__project-rule-repository-address' },
+                  item.value || '待填写 Git 仓库地址'
+                ),
+              react.createElement(
+                'span',
+                { className: 'oneworks-relay__project-rule-repository-actions' },
+                repositoryEdit?.key === item.key
+                  ? renderButton(react, view, {
+                    disabled: savingIds.size > 0,
+                    icon: 'check',
+                    label: '确认仓库',
+                    onClick: () => {
+                      void commitRepository(
+                        item.assignment,
+                        item.assignmentIndex,
+                        item.repositoryIndex,
+                        item.value
+                      )
+                    }
+                  })
+                  : renderButton(react, view, {
+                    disabled: repositoryEdit != null || savingIds.size > 0,
+                    icon: 'edit',
+                    label: '编辑仓库',
+                    onClick: () =>
+                      setRepositoryEdit({
+                        added: false,
+                        key: item.key,
+                        originalValue: item.value
+                      })
+                  }),
+                repositoryEdit?.key === item.key
+                  ? renderButton(react, view, {
+                    disabled: savingIds.size > 0,
+                    icon: 'close',
+                    label: '取消编辑',
+                    onClick: () =>
+                      cancelRepositoryEdit(
+                        item.assignment,
+                        item.assignmentIndex,
+                        item.repositoryIndex
+                      )
+                  })
+                  : renderButton(react, view, {
+                    disabled: repositoryEdit != null || savingIds.size > 0 || item.repositoryCount === 1,
+                    icon: 'close',
+                    label: '移除仓库',
+                    onClick: () => removeRepository(item.assignment, item.assignmentIndex, item.repositoryIndex)
+                  })
               )
-            })
+            )
           )
         )
-      })
     )
   const settingsPanel = visibleAssignments.length === 0
     ? react.createElement(
@@ -5273,7 +5461,7 @@ const TeamProjectRuleDetailPanel = (props: {
         const draft = drafts[projectAssignmentDraftKey(assignment, index)] ??
           projectAssignmentDraftFrom(assignment)
         const assignmentId = cleanText(assignment.id)
-        const saving = assignmentId != null && savingId === assignmentId
+        const saving = assignmentId != null && savingIds.has(assignmentId)
         const settingsDisabled = saving || assignmentId == null ||
           projectRuleRepositoryValues(draft.projects).length === 0
         return react.createElement(
@@ -5338,19 +5526,38 @@ const TeamProjectRuleDetailPanel = (props: {
         )
       })
     )
-  const filesPanel = renderProjectRuleFiles(react, view, account, team, profile)
+  const documentsPanel = documentAssignmentId == null || teamId == null
+    ? react.createElement('div', { className: 'oneworks-relay__empty' }, '当前项目规则缺少文档命名空间。')
+    : react.createElement(DocumentSyncPanel, {
+      account,
+      accountKey,
+      ctx,
+      onChanged,
+      projectRule: {
+        assignmentId: documentAssignmentId,
+        teamId
+      },
+      react,
+      status,
+      team,
+      view
+    })
   const tabPanel = activeTab === 'overview'
     ? overviewPanel
-    : activeTab === 'files'
-    ? filesPanel
+    : activeTab === 'documents'
+    ? documentsPanel
     : activeTab === 'settings'
     ? settingsPanel
     : rulesPanel
 
   return react.createElement(
     'section',
-    { className: 'oneworks-relay__team-config-detail oneworks-relay__project-rule-detail' },
-    error == null ? null : react.createElement('div', { className: 'oneworks-relay__config-error' }, error),
+    {
+      className: [
+        'oneworks-relay__team-config-detail oneworks-relay__project-rule-detail',
+        activeTab === 'documents' ? 'oneworks-relay__project-rule-detail--documents' : ''
+      ].filter(Boolean).join(' ')
+    },
     tabs,
     react.createElement('div', { className: 'native-tabs-panel oneworks-relay__project-rule-tab-panel' }, tabPanel)
   )
@@ -5361,10 +5568,12 @@ const renderTeamProjectsPanel = (props: {
   accountKey: string
   configDistribution: RelayConfigDistributionStatus | undefined
   ctx: PluginClientContext
+  onChanged: () => void
   projectRuleId?: string
   react: PluginReactHost
   search: string
   setSearch: (value: string) => void
+  status: RelayStatus | null
   targets: RelayConfigShareTargets | null
   targetsError: string | null
   targetsLoading: boolean
@@ -5376,10 +5585,12 @@ const renderTeamProjectsPanel = (props: {
     accountKey,
     configDistribution,
     ctx,
+    onChanged,
     projectRuleId,
     react,
     search,
     setSearch,
+    status,
     targets,
     targetsError,
     targetsLoading,
@@ -5557,9 +5768,11 @@ const renderTeamProjectsPanel = (props: {
           accountKey,
           ctx,
           matchLabel: matchedProjectLabel,
+          onChanged,
           profile: selectedRule.profile,
           react,
           rule: selectedRule,
+          status,
           team,
           view
         })

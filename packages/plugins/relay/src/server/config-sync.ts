@@ -17,7 +17,12 @@ import {
 } from '../shared/config-cache.js'
 import type { ResolvedRelayServer } from './options.js'
 import { readRelayPersonalDocumentSyncPreferences } from './personal-document-sync-preferences.js'
-import { createPersonalDocumentSyncStatus, syncRelayPersonalDocuments } from './personal-document-sync.js'
+import type { RelayPersonalDocumentSyncPreferences } from './personal-document-sync-preferences.js'
+import {
+  createPersonalDocumentSyncStatus,
+  syncRelayPersonalDocuments,
+  syncRelayProjectRuleDocuments
+} from './personal-document-sync.js'
 import type { RelayPersonalDocumentSyncStatus, RelayPluginContext, RelayStoredServer } from './types.js'
 import { isRecord, toString } from './utils.js'
 
@@ -27,6 +32,7 @@ export interface RelayConfigSyncResult {
   lastSyncedAt: string | null
   personalDocuments?: RelayPersonalDocumentSyncStatus
   personalGlobalConfig?: RelayPersonalGlobalConfigSyncStatus
+  projectRuleDocuments?: Record<string, RelayPersonalDocumentSyncStatus>
   snapshot?: RelayConfigSnapshot
   snapshotPath: string
 }
@@ -54,6 +60,12 @@ interface LocalPersonalGlobalConfigPatch {
 }
 
 const PERSONAL_GLOBAL_CONFIG_FIELDS: RelayConfigSafeField[] = ['adapters']
+
+const PROJECT_RULE_DOCUMENT_PREFERENCES: RelayPersonalDocumentSyncPreferences = {
+  agents: true,
+  ooAgents: false,
+  ooRules: false
+}
 
 const stableJsonStringify = (value: unknown): string => {
   if (Array.isArray(value)) {
@@ -368,6 +380,37 @@ export const syncRelayConfigSnapshot = async (params: {
       throw new Error('Relay config snapshot payload is invalid.')
     }
 
+    const projectRuleDocuments: Record<string, RelayPersonalDocumentSyncStatus> = {}
+    for (const assignment of snapshot.assignments ?? []) {
+      const teamId = assignment.provenance?.teamId?.trim()
+      if (assignment.id === '' || teamId == null || teamId === '') continue
+      try {
+        projectRuleDocuments[assignment.id] = await syncRelayProjectRuleDocuments({
+          assignmentId: assignment.id,
+          preferences: PROJECT_RULE_DOCUMENT_PREFERENCES,
+          server: params.server,
+          sessionToken: params.storedServer?.sessionToken ?? '',
+          teamId
+        })
+      } catch (error) {
+        const message = resolveSyncErrorMessage(error)
+        params.ctx.logger.warn(
+          {
+            assignmentId: assignment.id,
+            err: error,
+            scope: params.ctx.scope,
+            serverId: params.server.id,
+            teamId
+          },
+          '[relay] project rule document sync failed'
+        )
+        projectRuleDocuments[assignment.id] = createPersonalDocumentSyncStatus(
+          PROJECT_RULE_DOCUMENT_PREFERENCES,
+          { lastError: message }
+        )
+      }
+    }
+
     const snapshotPaths = await writeRelayConfigSnapshotCaches({
       projectHome: params.ctx.projectHome,
       snapshot
@@ -378,6 +421,7 @@ export const syncRelayConfigSnapshot = async (params: {
       lastSyncedAt: snapshot.lastSyncedAt ?? now,
       personalDocuments,
       personalGlobalConfig,
+      projectRuleDocuments,
       snapshot,
       snapshotPath: snapshotPaths.globalSnapshotPath
     }

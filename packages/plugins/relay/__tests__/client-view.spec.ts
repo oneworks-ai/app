@@ -124,10 +124,34 @@ describe('relay plugin client view registration', () => {
 })
 
 describe('relay plugin client view styles', () => {
-  it('lets native tabs own the project rule detail top spacing', () => {
+  it('does not stack native tab margin on the host route spacing', () => {
     expect(relayClientCss).toContain('.oneworks-relay__project-rule-detail { gap: 0; }')
+    expect(relayClientCss).toContain(
+      '.oneworks-relay__project-rule-detail > .oneworks-relay__project-rule-tabs { margin-block-start: 0; }'
+    )
+    expect(relayClientCss).not.toContain(
+      '.oneworks-relay__project-rule-detail > .oneworks-relay__project-rule-tabs { margin-block-start: 0; padding-block-start:'
+    )
     expect(relayClientCss).not.toContain(
       '.oneworks-relay__project-rule-detail { gap: 0; padding-block-start:'
+    )
+    expect(relayClientCss).not.toContain(
+      '.oneworks-relay__project-rule-tabs + .oneworks-relay__project-rule-tab-panel'
+    )
+    expect(relayClientCss).toContain(
+      '.oneworks-relay__shell { width: 100%; min-width: 0; min-height: 100%;'
+    )
+    expect(relayClientCss).toContain(
+      '.oneworks-relay--project-rule-route .oneworks-relay__surface { align-content: stretch; }'
+    )
+    expect(relayClientCss).toContain(
+      'background-image: linear-gradient(var(--oneworks-relay-surface-background), var(--oneworks-relay-surface-background));'
+    )
+    expect(relayClientCss).toContain(
+      '.oneworks-relay__personal-docs-list .interaction-list__items { background-image:'
+    )
+    expect(relayClientCss).toContain(
+      '.oneworks-relay__surface { width: 100%; min-width: 0; display: grid; align-content: start;'
     )
   })
 })
@@ -138,11 +162,62 @@ describe('relay project rule detail interaction', () => {
 
     expect(source).toContain('const updateAndSaveAssignment = (')
     expect(source.match(/updateAndSaveAssignment\(assignment, index,/g)).toHaveLength(3)
-    expect(source).toContain('queueAssignmentSave(assignment, index, nextDraft)')
-    expect(source).toContain('onCommit: value => commitRepository(assignment, index, rowIndex, value)')
-    expect(source).toMatch(/key: `\$\{projectAssignmentDraftKey\(assignment, index\)\}:repository:\$\{rowIndex\}`/u)
+    expect(source).not.toContain('queueAssignmentSave(assignment, index, nextDraft)')
+    expect(source).toContain('const commitRepository = async (')
+    expect(source).toContain('if (result.saved && result.current) setRepositoryEdit(null)')
+    expect(source).toContain('const projectRuleAssignmentSaveQueue = createSerializedSaveQueue()')
+    expect(source).toContain('projectRuleAssignmentSaveQueue.waitForIdleByPrefix(')
+    expect(source).toContain('projectRuleProfileSaveKeyPrefix(accountKey, teamId, profileId)')
+    expect(source).toContain('projectRuleAssignmentSaveQueue.enqueue(saveQueueKey')
+    expect(source).toContain('if (!result.saved && result.latest && result.current)')
+    expect(source).toContain('detailRequestRef.current === requestId')
+    expect(source).toContain('}, [accountKey, profileId, routeStateKey, teamId])')
+    expect(source).toContain('setRepositoryEdit(null)')
+    expect(source).toContain('loadedDetail?.routeStateKey === routeStateKey')
+    expect(source).toContain("const projectRuleStateId = cleanText(rule.source?.assignmentId ?? rule.ruleId) ?? ''")
+    expect(source).toContain('routeStateRef.current.generation === saveRouteGeneration')
+    expect(source).toContain('const [savingIds, setSavingIds] = react.useState<Set<string>>(new Set())')
+    expect(source).not.toContain('setSavingId(')
+    expect(source).toContain("label: '确认仓库'")
+    expect(source).toContain("label: '取消编辑'")
+    expect(source).toContain("'Git 仓库地址无效'")
+    expect(source).toMatch(
+      /key: `\$\{projectAssignmentDraftKey\(assignment, assignmentIndex\)\}:repository:\$\{repositoryIndex\}`/u
+    )
     expect(source).not.toMatch(/key: `\$\{rowIndex\}:\$\{repository\}`/u)
+    expect(source).toContain("placeholder: '搜索 Git 仓库、组织或仓库地址'")
+    expect(source).toContain("ariaLabel: '搜索 Git 仓库规则'")
+    expect(source).toContain('repositoryEdit?.key === item.key')
+    const rulesPanelSource = source.slice(source.indexOf('const rulesPanel ='), source.indexOf('const settingsPanel ='))
+    expect(rulesPanelSource).not.toContain('onCommit:')
+    expect(source).toContain(
+      "contextRef.current.notifications?.show?.({ description, level: 'error', title })"
+    )
     expect(source).not.toContain("label: saving ? '保存中' : '保存设置'")
     expect(source).toContain('launcherSurface || routeDetailActive ? null')
+  })
+
+  it('renders project-rule documents from their independent assignment scope', async () => {
+    const source = await readFile(new URL('../src/client/react-view.ts', import.meta.url), 'utf8')
+
+    expect(source).toContain("{ icon: 'description', key: 'documents', label: '文档' }")
+    expect(source).toContain("scope: 'projectRule'")
+    expect(source).toContain('status?.projectRuleDocumentSync?.[projectRule.assignmentId]')
+    expect(source).toContain('projectRule: {')
+    expect(source).toContain('key: `document:' + '$' + '{documentItemScopeKey}:' + '$' + '{entry.relativePath}`')
+    expect(source).not.toContain(
+      'key: `document:' + '$' + "{projectRuleScope ? 'projectRule' : teamScope ? 'team' : 'account'}:" + '$' +
+        '{entry.path}`'
+    )
+    expect(source).toContain("readDocumentPanelQueryValue('doc') === '' ? 'rules' : 'documents'")
+    expect(source).toContain('react.useState<RelayProjectRuleDetailTab>(initialProjectRuleDetailTab)')
+    expect(source).toContain("if (projectRuleDocumentQuery !== '')")
+    expect(source).toContain('const CodeEditor = view?.ui?.CodeEditor')
+    expect(source).toContain("className: 'oneworks-relay__document-preview-editor'")
+    expect(source).toContain("language: 'markdown'")
+    expect(source).toContain("if (nextTab !== 'documents')")
+    expect(source).toContain("writeDocumentPanelQuery({ documentPath: null, search: '' })")
+    expect(source).not.toContain('关联文件')
+    expect(source).not.toContain('renderProjectRuleFiles')
   })
 })

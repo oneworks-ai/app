@@ -1,12 +1,20 @@
 import { Buffer } from 'node:buffer'
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { listRelayDocumentEntries, syncRelayPersonalDocuments } from '../src/server/personal-document-sync.js'
+import {
+  ensureRelayFixtureDocumentEntries,
+  isCanonicalRelayDocumentPayloadPath,
+  listRelayDocumentEntries,
+  readRelayDocumentContent,
+  syncRelayPersonalDocuments,
+  syncRelayProjectRuleDocuments
+} from '../src/server/personal-document-sync.js'
 import type { RelayStoredServer } from '../src/server/types.js'
+import { relayDocumentScopePathSegment, relayProjectRuleDocumentBasePayloadPath } from '../src/shared/document-paths.js'
 
 const tempDirs: string[] = []
 
@@ -59,6 +67,45 @@ afterEach(async () => {
 })
 
 describe('relay personal document sync', () => {
+  it('keeps document scope paths inside their Relay namespace', () => {
+    expect(relayDocumentScopePathSegment(' local:team ')).toBe('local:team')
+    expect(relayProjectRuleDocumentBasePayloadPath('team/one', 'assignment\\one')).toBe(
+      '.oo/teams/team_one/project-rules/assignment_one'
+    )
+    expect(() => relayDocumentScopePathSegment('..')).toThrow('cannot traverse directories')
+    expect(relayDocumentScopePathSegment('\u0000')).toBe('_')
+    expect(isCanonicalRelayDocumentPayloadPath('.oo/rules/coding.md')).toBe(true)
+    expect(isCanonicalRelayDocumentPayloadPath('.oo/rules/../../AGENTS.md')).toBe(false)
+    expect(isCanonicalRelayDocumentPayloadPath('.oo/rules//coding.md')).toBe(false)
+    expect(isCanonicalRelayDocumentPayloadPath('/AGENTS.md')).toBe(false)
+  })
+
+  it('rejects symbolic links throughout document read and write paths', async () => {
+    const homeDir = await createTempHome()
+    const outsideDir = await mkdtemp(join(tmpdir(), 'oneworks-relay-doc-outside-'))
+    tempDirs.push(outsideDir)
+    const outsidePath = join(outsideDir, 'outside.md')
+    await writeFile(outsidePath, '# Outside\n', 'utf8')
+    const basePath = '.oo/teams/team-1/project-rules/assignment-1'
+    const linkedPath = join(homeDir, basePath, 'AGENTS.md')
+    await mkdir(dirname(linkedPath), { recursive: true })
+    await symlink(outsidePath, linkedPath)
+    const scope = { id: 'assignment-1', teamId: 'team-1', type: 'projectRule' as const }
+
+    await expect(readRelayDocumentContent(`${basePath}/AGENTS.md`)).rejects.toThrow('不能包含符号链接')
+    await expect(ensureRelayFixtureDocumentEntries(scope)).rejects.toThrow('不能包含符号链接')
+    expect(await readFile(outsidePath, 'utf8')).toBe('# Outside\n')
+  })
+
+  it('rejects traversal in local document read actions', async () => {
+    const homeDir = await createTempHome()
+    await writeHomeFile(homeDir, '.ssh/id_rsa', 'private-key')
+
+    await expect(
+      readRelayDocumentContent('.oo/teams/../../.ssh/id_rsa')
+    ).rejects.toThrow('文档路径不在允许的同步命名空间内')
+  })
+
   it('syncs user-root instruction documents by kind without uploading .local.md files or plaintext', async () => {
     const homeDir = await createTempHome()
     await writeHomeFile(homeDir, 'AGENTS.md', '# Root AGENTS\n')
@@ -209,5 +256,70 @@ describe('relay personal document sync', () => {
     expect(await readHomeFile(homeDir, '.oo/AGENTS.md')).toBe('# Remote OO\n')
     expect(rootBackups.some(name => /^AGENTS\.relay-conflict-.+\.md$/u.test(name))).toBe(true)
     expect(ooBackups.some(name => /^AGENTS\.relay-conflict-.+\.md$/u.test(name))).toBe(true)
+  })
+
+  it('syncs project-rule documents in their own assignment directory', async () => {
+    const homeDir = await createTempHome()
+    const basePath = '.oo/teams/team-1/project-rules/assignment-1'
+    await writeHomeFile(homeDir, `${basePath}/AGENTS.md`, '# Project Rule Guide\n')
+    await writeHomeFile(homeDir, `${basePath}/rules/review.md`, '# Project Review\n')
+    await writeHomeFile(homeDir, `${basePath}/rules/private.local.md`, '# Local only\n')
+
+    const putBodies: Record<string, unknown>[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe(
+          'https://relay.example/api/relay/config-assignments/assignment-1/documents'
+        )
+        expect(init?.headers).toMatchObject({ authorization: 'Bearer session-token' })
+        if (init?.method === 'PUT') {
+          const body = JSON.parse(String(init.body)) as Record<string, unknown>
+          putBodies.push(body)
+          return new Response(
+            JSON.stringify({
+              projectRuleDocumentSnapshot: {
+                ...(body.documents as Record<string, unknown>),
+                assignmentId: 'assignment-1',
+                hash: 'sha256:project-rule-documents',
+                teamId: 'team-1',
+                updatedAt: '2026-07-10T00:00:00.000Z'
+              }
+            }),
+            { headers: { 'content-type': 'application/json' }, status: 200 }
+          )
+        }
+        return new Response(
+          JSON.stringify({ projectRuleDocumentSnapshot: null }),
+          { headers: { 'content-type': 'application/json' }, status: 200 }
+        )
+      })
+    )
+
+    const status = await syncRelayProjectRuleDocuments({
+      assignmentId: 'assignment-1',
+      preferences: { agents: true, ooAgents: false, ooRules: false },
+      server: createServer(),
+      sessionToken: 'session-token',
+      teamId: 'team-1'
+    })
+    const entries = await listRelayDocumentEntries({
+      id: 'assignment-1',
+      teamId: 'team-1',
+      type: 'projectRule'
+    })
+
+    expect(status).toMatchObject({
+      countsByKind: { agents: 2, ooAgents: 0, ooRules: 0 },
+      documentCount: 2,
+      pushedLocal: true
+    })
+    expect(entries.map(entry => entry.path)).toEqual([
+      `${basePath}/AGENTS.md`,
+      `${basePath}/rules/private.local.md`,
+      `${basePath}/rules/review.md`
+    ])
+    expect(JSON.stringify(putBodies[0])).not.toContain('Project Rule Guide')
+    expect(JSON.stringify(putBodies[0])).not.toContain('Local only')
   })
 })

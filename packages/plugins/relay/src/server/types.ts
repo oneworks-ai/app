@@ -461,6 +461,7 @@ export interface RelayPublicStatus {
   }
   options: RelayOptions
   personalDocumentSync: RelayPersonalDocumentSyncStatus
+  projectRuleDocumentSync: Record<string, RelayPersonalDocumentSyncStatus>
   servers: RelayPublicServerStatus[]
   storePath: string
   teamDocumentSync: Record<string, RelayPersonalDocumentSyncStatus>

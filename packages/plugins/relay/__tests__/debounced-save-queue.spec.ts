@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createDebouncedSaveQueue } from '../src/client/debounced-save-queue.js'
+import { createDebouncedSaveQueue, createSerializedSaveQueue } from '../src/client/debounced-save-queue.js'
 
 afterEach(() => {
   vi.useRealTimers()
@@ -30,5 +30,68 @@ describe('debounced save queue', () => {
     await vi.runAllTimersAsync()
 
     expect(save).toHaveBeenCalledWith('github.com/owner/repo')
+  })
+
+  it('serializes saves and marks superseded failures as stale', async () => {
+    let rejectFirst: ((error: Error) => void) | undefined
+    const first = new Promise<void>((_resolve, reject) => {
+      rejectFirst = reject
+    })
+    const events: string[] = []
+    const queue = createSerializedSaveQueue()
+    const firstResult = queue.enqueue('assignment', async () => {
+      events.push('first:start')
+      await first
+    })
+    const secondResult = queue.enqueue('assignment', () => {
+      events.push('second:start')
+    })
+
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(events).toEqual(['first:start'])
+    rejectFirst?.(new Error('old save failed'))
+
+    await expect(firstResult).resolves.toMatchObject({ latest: false, saved: false })
+    await queue.waitForIdle('assignment')
+    await expect(secondResult).resolves.toEqual({ latest: true, saved: true })
+    expect(events).toEqual(['first:start', 'second:start'])
+  })
+
+  it('waits for every active save in a shared key prefix', async () => {
+    let releaseFirst: (() => void) | undefined
+    let releaseSecond: (() => void) | undefined
+    const first = new Promise<void>(resolve => {
+      releaseFirst = resolve
+    })
+    const second = new Promise<void>(resolve => {
+      releaseSecond = resolve
+    })
+    const queue = createSerializedSaveQueue()
+    const events: string[] = []
+
+    void queue.enqueue('account\0team\0profile\0assignment-a', async () => {
+      await first
+      events.push('assignment-a:saved')
+    })
+    void queue.enqueue('account\0team\0profile\0assignment-b', async () => {
+      await second
+      events.push('assignment-b:saved')
+    })
+
+    let idle = false
+    const waiting = queue.waitForIdleByPrefix('account\0team\0profile\0').then(() => {
+      idle = true
+    })
+    await Promise.resolve()
+    releaseFirst?.()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(idle).toBe(false)
+
+    releaseSecond?.()
+    await waiting
+    expect(events).toEqual(['assignment-a:saved', 'assignment-b:saved'])
+    expect(idle).toBe(true)
   })
 })

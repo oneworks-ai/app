@@ -95,6 +95,7 @@ export interface RelayConfigSnapshot {
 
 export interface RelayConfigProjectContext {
   cwd?: string
+  gitRepositories?: string[]
   projectId?: string
   projectName?: string
   workspaceFolder?: string
