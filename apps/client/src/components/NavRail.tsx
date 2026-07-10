@@ -38,6 +38,7 @@ import { appLanguageOptions, getActiveAppLanguageOption } from '#~/i18n'
 import { resolvePluginContributionText } from '#~/plugins/plugin-i18n'
 import type { PluginContributionMenuItem, PluginContributionNavItem } from '#~/plugins/plugin-manifest'
 import { usePluginCommandExecutor, usePluginSlot } from '#~/plugins/plugin-slots'
+import { buildLauncherClientPath } from '#~/runtime-config'
 import type { DevShellKind, DevShellOs } from '#~/utils/device-shell-simulation'
 import { useStoredDevShellSimulation, writeStoredDevShellSimulation } from '#~/utils/device-shell-simulation'
 import { createOneWorksIconDataUri } from '#~/utils/oneworks-icon'
@@ -52,6 +53,7 @@ import {
   buildCompactThemeActions
 } from './nav-rail-compact-config'
 import { buildNavItems } from './nav-rail-items'
+import { isWebProjectLauncherAvailable } from './nav-rail-project-launcher'
 
 const MIN_SIDEBAR_WIDTH = 180
 const MAX_SIDEBAR_WIDTH = 520
@@ -722,6 +724,8 @@ export function NavRail({
   const { updateGlobalInterfaceLanguage } = useInterfaceLanguageConfig()
   const storedDevShellSimulation = useStoredDevShellSimulation()
   const isMac = navigator.platform.includes('Mac')
+  const canOpenOtherProjects = isWebProjectLauncherAvailable()
+  const otherProjectsHref = buildLauncherClientPath()
   const moreButtonRef = React.useRef<HTMLButtonElement | null>(null)
   const moreMenuCloseTimerRef = React.useRef<number | null>(null)
   const [isMoreMenuOpen, setIsMoreMenuOpen] = React.useState(false)
@@ -882,6 +886,16 @@ export function NavRail({
     {
       key: 'app-pages',
       items: [
+        ...(canOpenOtherProjects
+          ? [
+            {
+              href: otherProjectsHref,
+              icon: 'folder_open',
+              key: 'app-action:open-other-projects',
+              label: t('navRail.openOtherProjects')
+            } satisfies NavRailMoreMenuItem
+          ]
+          : []),
         {
           active: currentPath === '/config' || currentPath.startsWith('/config/'),
           icon: 'settings',
@@ -903,7 +917,7 @@ export function NavRail({
         }
       ]
     }
-  ], [currentPath, navigate, navigateToWorkspaceConfig, t])
+  ], [canOpenOtherProjects, currentPath, navigate, navigateToWorkspaceConfig, otherProjectsHref, t])
   const pluginNavItems = usePluginSlot<PluginContributionNavItem>('nav.items')
   const pluginMoreItems = usePluginSlot<PluginContributionMenuItem>('nav.moreMenu')
   const pluginFooterBeforeItems = usePluginSlot<PluginContributionMenuItem>('nav.footer.before')

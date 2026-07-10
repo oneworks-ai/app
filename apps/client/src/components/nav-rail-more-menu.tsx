@@ -21,9 +21,12 @@ export interface NavRailMoreMenuBaseItem {
   className?: string
   danger?: boolean
   disabled?: boolean
+  href?: string
   popupClassName?: string
+  rel?: string
   selected?: boolean
   shortcut?: string
+  target?: React.HTMLAttributeAnchorTarget
   title?: string
   children?: NavRailMoreMenuItem[]
   menuChildren?: MenuProps['items']
@@ -60,13 +63,24 @@ const renderMenuItemLabel = (
   isMac: boolean
 ) => {
   const shortcutLabel = formatMenuShortcut(item.shortcut, isMac)
-  if (shortcutLabel === '') return item.label
-
-  return (
+  const content = shortcutLabel === '' ? item.label : (
     <span className='nav-menu-shortcut-label'>
       <span className='nav-menu-shortcut-title'>{item.label}</span>
       <span className='nav-menu-shortcut'>{shortcutLabel}</span>
     </span>
+  )
+
+  if (item.href == null) return content
+
+  return (
+    <a
+      className='nav-menu-link'
+      href={item.href}
+      rel={item.rel}
+      target={item.target}
+    >
+      {content}
+    </a>
   )
 }
 

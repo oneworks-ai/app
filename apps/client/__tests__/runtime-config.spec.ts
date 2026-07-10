@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   SERVER_BASE_URL_STORAGE_KEY,
   SERVER_CONNECTION_PICKER_STORAGE_KEY,
+  buildLauncherClientPath,
   buildWorkspaceClientBase,
   clearServerConnectionPickerRequest,
   clearStoredServerBaseUrl,
@@ -127,6 +128,12 @@ describe('workspace client route helpers', () => {
     expect(buildWorkspaceClientBase('w_abc123456', '/ui')).toBe('/ui/w/w_abc123456')
     expect(buildWorkspaceClientBase('w_abc123456', '/')).toBe('/w/w_abc123456')
     expect(buildWorkspaceClientBase(' w_abc123456 ', '/console/')).toBe('/console/w/w_abc123456')
+  })
+
+  it('builds the root launcher path outside workspace routes', () => {
+    expect(buildLauncherClientPath('/ui')).toBe('/ui/launcher')
+    expect(buildLauncherClientPath('/')).toBe('/launcher')
+    expect(buildLauncherClientPath('/console/')).toBe('/console/launcher')
   })
 
   it('resolves workspace ids from workspace client paths only', () => {
