@@ -11,6 +11,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  position: relative;
 }
 
 .account-avatar--control {
@@ -18,6 +19,8 @@
 }
 
 .account-avatar__image {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;

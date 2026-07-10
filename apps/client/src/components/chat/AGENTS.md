@@ -101,6 +101,15 @@
 - `model / effort / account` 的 shell 需要保留稳定 class：`sender-select-shell--model`、`sender-select-shell--effort`、`sender-select-shell--account`，便于容器宽度规则和 CDP 回归断言。
 - `account` 的外层 shell 宽度必须和视觉按钮同步；避免 flex item 按 max-content 撑出右侧空白。
 
+## 账号额度和头像
+
+- 聊天状态栏和账号下拉的额度数据统一走 `src/hooks/use-adapter-accounts-with-quota.ts`；先展示账号列表快照，再通过带 `refresh: true` 的账号请求刷新，不要在各个 surface 内重复请求或各自维护 TTL。
+- 五小时 / 七天窗口统一由 `src/utils/account-quota.ts` 解析，并复用 `src/components/account-quota/QuotaUsageRing.tsx`；配置详情、状态栏和下拉选项不要各自猜测 metric id、label 或百分比语义。
+- `AccountAvatar` 只消费 adapter 返回的 `avatarUrl`，缺失或图片加载失败时使用本地确定性像素头像；浏览器端不得读取 Codex auth 或自行调用 ChatGPT profile 接口。
+- 状态栏额度环必须放在 `.sender-select-shell--account` 外部，与 select 作为 `.chat-status-bar__account-group` 的 sibling；整个 group 是 popup 宽度锚点。不要把额度环塞进 select shell，否则 trigger 内容会被挤压，popup 也只会继承账号文本宽度。
+- 账号选项内也要展示对应账号的额度，避免 trigger 与 popup 信息密度不一致。
+- 改这条链路时至少覆盖共享额度解析、账号详情、状态栏和下拉列表，并用真实账号刷新验证头像 URL、5h / 7d 两个窗口及图片加载结果。
+
 ## Sender 上方 Composer Card 设计约束
 
 - sender 上方的信息卡片统一视为 `composer card stack`，不要为 TODO、thinking、ask-user-question 各自维护一套独立容器样式。

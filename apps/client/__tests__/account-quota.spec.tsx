@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
+import { AccountAvatar } from '#~/components/chat/sender/@components/account-select/AccountAvatar'
 import { AccountQuotaIndicators } from '#~/components/chat/sender/@components/account-select/AccountQuotaIndicators'
 import { getAccountQuotaWindows, parseQuotaPercent } from '#~/utils/account-quota'
 
@@ -51,5 +52,22 @@ describe('account quota indicators', () => {
     expect(html).toContain('aria-label="5h 额度：已使用 48%"')
     expect(html).toContain('aria-label="7d 额度：已使用 8%"')
     expect(html.match(/quota-usage-ring--compact/g)).toHaveLength(2)
+  })
+
+  it('keeps a deterministic pixel fallback behind a remote account avatar', () => {
+    const html = renderToStaticMarkup(
+      <AccountAvatar
+        option={{
+          value: 'personal',
+          label: 'Personal',
+          email: 'personal@example.com',
+          avatarUrl: 'https://chatgpt.com/avatar.jpg'
+        }}
+      />
+    )
+
+    expect(html).toContain('account-avatar__pixel')
+    expect(html).toContain('account-avatar__image')
+    expect(html).toContain('referrerPolicy="no-referrer"')
   })
 })

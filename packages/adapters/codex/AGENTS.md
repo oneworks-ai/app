@@ -45,7 +45,7 @@ Primary implementation entrypoints for Codex hooks:
   - does not bridge the whole shared `.codex` tree into a session HOME; only auth, config, hooks, skills, and sessions are intentionally linked so global plugin caches and app state cannot slow `codex app-server` startup
   - normalizes the imported Codex config before using that HOME with the CLI, so unsupported values from a user's real config do not break One Works sessions.
   - queries Codex account info and rate-limit/quota snapshots through `codex app-server`
-  - reads the ChatGPT profile avatar after account refresh, persists only trusted public HTTPS image URLs, and keeps an explicitly configured `avatarUrl` authoritative
+  - reads the ChatGPT profile avatar after account refresh, persists only trusted-host HTTPS image URLs, and keeps an explicitly configured `avatarUrl` authoritative
   - exposes standard adapter account management actions: add via `codex login`, detail lookup, refresh, and remove from global config
 - `src/models.ts`
   - exposes Codex model selector metadata to One Works
@@ -197,6 +197,13 @@ session 级 HOME 仍然完全隔离：如果账号来自 global config，adapter
 - 配置页默认读 global config 里的 quota 快照
 - 当前快照 TTL 是 5 分钟；CLI `ow accounts show codex <account>` 会强制刷新
 - 如果 Codex 只返回套餐信息而没有 credits / rate limits，前端只展示真实返回的套餐或窗口限额，不伪造额度余额
+
+账号头像探测补充：
+
+- `account/read` 不提供头像；`src/runtime/account-profile.ts` 只在服务端于账号刷新后读取当前 auth 的 access token，并向固定 ChatGPT profile 端点请求 `profile_picture_url`。不要把 token、profile response 或这次请求下放到浏览器。
+- 头像请求必须短超时、静默失败，并只接受 OpenAI / ChatGPT 受信域名下的 HTTPS URL；profile 端点变化不能让账号列表或 quota 探测失败。
+- 显式配置的 `avatarUrl` 始终优先。global account 可缓存自动探测到的受信头像 URL，real-home fallback 只在当前响应中使用；前端在 URL 缺失或图片失败时继续使用确定性本地头像。
+- 改 profile enrichment 时至少运行 `packages/adapters/codex/__tests__/account-profile.spec.ts`，验证 token 提取、profile endpoint fallback、受信 HTTPS host 拒绝和缺失 token 行为。另需检查调用点只在 refresh probe 中启用、请求失败不影响账号/quota、手动配置优先及 global metadata 持久化；再用真实账号确认返回 URL 能被前端加载，但不要在日志或测试快照中记录 token、完整 profile response 或个人头像 URL。
 
 Docker / Linux sync smoke:
 

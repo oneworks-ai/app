@@ -25,14 +25,21 @@ export function AccountAvatar({
 
   return (
     <span className={`account-avatar account-avatar--${size}`} aria-hidden='true'>
-      {avatarUrl == null
-        ? (
-          <RoomPixelAvatar
-            className='account-avatar__pixel'
-            seed={`adapter-account:${getAccountAvatarSeed(option)}`}
-          />
-        )
-        : <img className='account-avatar__image' src={avatarUrl} alt='' />}
+      <RoomPixelAvatar
+        className='account-avatar__pixel'
+        seed={`adapter-account:${getAccountAvatarSeed(option)}`}
+      />
+      {avatarUrl != null && (
+        <img
+          className='account-avatar__image'
+          src={avatarUrl}
+          alt=''
+          referrerPolicy='no-referrer'
+          onError={(event) => {
+            event.currentTarget.style.display = 'none'
+          }}
+        />
+      )}
     </span>
   )
 }
