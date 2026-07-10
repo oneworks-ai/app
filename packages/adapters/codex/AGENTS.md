@@ -45,6 +45,7 @@ Primary implementation entrypoints for Codex hooks:
   - does not bridge the whole shared `.codex` tree into a session HOME; only auth, config, hooks, skills, and sessions are intentionally linked so global plugin caches and app state cannot slow `codex app-server` startup
   - normalizes the imported Codex config before using that HOME with the CLI, so unsupported values from a user's real config do not break One Works sessions.
   - queries Codex account info and rate-limit/quota snapshots through `codex app-server`
+  - reads the ChatGPT profile avatar after account refresh, persists only trusted public HTTPS image URLs, and keeps an explicitly configured `avatarUrl` authoritative
   - exposes standard adapter account management actions: add via `codex login`, detail lookup, refresh, and remove from global config
 - `src/models.ts`
   - exposes Codex model selector metadata to One Works

@@ -14,7 +14,6 @@ import { useSWRConfig } from 'swr'
 import { getApiErrorMessage, manageAdapterAccount } from '#~/api'
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
 import { OverlayAction, OverlayDivider } from '#~/components/overlay'
-import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
 import type { ChatAdapterAccountOption } from '#~/hooks/chat/use-chat-adapter-account-selection'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 
@@ -23,6 +22,8 @@ import {
   SenderMobileSelectDrawer,
   handleSenderMobileSelectOptionKeyDown
 } from '../mobile-select-drawer/SenderMobileSelectDrawer'
+import { AccountAvatar } from './AccountAvatar'
+import { AccountQuotaIndicators } from './AccountQuotaIndicators'
 
 const renderSelectArrow = (onMouseDown: (event: ReactMouseEvent<HTMLSpanElement>) => void) => (
   <span className='material-symbols-rounded sender-select-arrow' onMouseDown={onMouseDown}>
@@ -30,15 +31,10 @@ const renderSelectArrow = (onMouseDown: (event: ReactMouseEvent<HTMLSpanElement>
   </span>
 )
 
-const normalizeOptionalText = (value: string | undefined) => {
-  const normalized = value?.trim()
-  return normalized == null || normalized === '' ? undefined : normalized
-}
-
-const getAccountAvatarSeed = (option: ChatAdapterAccountOption) => (
-  normalizeOptionalText(option.email) ??
-    normalizeOptionalText(option.label) ??
-    option.value
+const getAccountPopupContainer = (triggerNode: HTMLElement) => (
+  triggerNode.closest<HTMLElement>('.chat-status-bar__account-group') ??
+    triggerNode.parentElement ??
+    document.body
 )
 
 export function AccountSelectControl({
@@ -172,28 +168,18 @@ export function AccountSelectControl({
 
   const renderOption = (option: ChatAdapterAccountOption) => (
     <div className='account-option'>
-      <span className='account-option__avatar' aria-hidden='true'>
-        {normalizeOptionalText(option.avatarUrl) == null
-          ? (
-            <RoomPixelAvatar
-              className='account-option__avatar-pixel'
-              seed={`adapter-account:${getAccountAvatarSeed(option)}`}
-            />
-          )
-          : (
-            <img
-              className='account-option__avatar-image'
-              src={normalizeOptionalText(option.avatarUrl)}
-              alt=''
-            />
-          )}
-      </span>
+      <AccountAvatar option={option} />
       <div className='account-option__body'>
         <span className='account-option__title'>{option.label}</span>
         {option.meta != null && option.meta !== '' && (
           <div className='account-option__meta'>{option.meta}</div>
         )}
       </div>
+      {option.quotaWindows != null && option.quotaWindows.length > 0 && (
+        <div className='account-option__quota'>
+          <AccountQuotaIndicators windows={option.quotaWindows} />
+        </div>
+      )}
       <div className='account-option__actions'>
         <Tooltip
           title={t('chat.accountSelectOpenAccountConfig', { account: option.label })}
@@ -298,7 +284,11 @@ export function AccountSelectControl({
               setShowAccountSelect(true)
             }}
           >
-            <span className='material-symbols-rounded sender-responsive-select-button__icon'>switch_account</span>
+            {selectedOption == null
+              ? (
+                <span className='material-symbols-rounded sender-responsive-select-button__icon'>switch_account</span>
+              )
+              : <AccountAvatar option={selectedOption} size='control' />}
             <span className='sender-responsive-select-button__label'>
               {selectedOption?.label ?? t('chat.accountSelectPlaceholder')}
             </span>
@@ -320,6 +310,8 @@ export function AccountSelectControl({
             optionRender={(option) => renderOption(option.data as ChatAdapterAccountOption)}
             optionLabelProp='label'
             placeholder={t('chat.accountSelectPlaceholder')}
+            prefix={selectedOption == null ? undefined : <AccountAvatar option={selectedOption} size='control' />}
+            getPopupContainer={getAccountPopupContainer}
             popupMatchSelectWidth={false}
             popupRender={renderPopup}
             suffixIcon={renderSelectArrow((event) => {

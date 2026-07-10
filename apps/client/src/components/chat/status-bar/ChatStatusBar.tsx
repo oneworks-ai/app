@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 
+import { AccountQuotaIndicators } from '#~/components/chat/sender/@components/account-select/AccountQuotaIndicators'
 import { AccountSelectControl } from '#~/components/chat/sender/@components/account-select/AccountSelectControl'
 import { AdapterSelectControl } from '#~/components/chat/sender/@components/adapter-select/AdapterSelectControl'
 import type { ChatSessionWorkspaceDraft } from '#~/hooks/chat/chat-session-workspace-draft'
@@ -60,6 +61,9 @@ export function ChatStatusBar({
   const { isCompactLayout } = useResponsiveLayout()
   const [searchParams] = useSearchParams()
   const [uncontrolledCollapsed, setUncontrolledCollapsed] = useState(false)
+  const selectedAccountQuotaWindows = accountOptions
+    ?.find(option => option.value === selectedAccount)
+    ?.quotaWindows
   const collapsed = collapsible && (controlledCollapsed ?? uncontrolledCollapsed)
   const setCollapsed = (nextCollapsed: boolean) => {
     if (controlledCollapsed == null) {
@@ -117,17 +121,22 @@ export function ChatStatusBar({
           </button>
         )}
         <div className='chat-status-bar__actions' aria-hidden={collapsible && collapsed}>
-          <AccountSelectControl
-            state={{
-              isThinking,
-              modelUnavailable,
-              selectedAccount,
-              selectedAdapter,
-              showAccountSelector
-            }}
-            data={{ accountOptions }}
-            handlers={{ onAccountChange }}
-          />
+          {showAccountSelector && accountOptions != null && accountOptions.length > 0 && (
+            <div className='chat-status-bar__account-group'>
+              <AccountSelectControl
+                state={{
+                  isThinking,
+                  modelUnavailable,
+                  selectedAccount,
+                  selectedAdapter,
+                  showAccountSelector
+                }}
+                data={{ accountOptions }}
+                handlers={{ onAccountChange }}
+              />
+              {!isCompactLayout && <AccountQuotaIndicators windows={selectedAccountQuotaWindows} />}
+            </div>
+          )}
           <AdapterSelectControl
             state={{
               adapterLocked,

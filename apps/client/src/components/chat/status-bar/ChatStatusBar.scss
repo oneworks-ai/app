@@ -45,6 +45,16 @@
   flex-shrink: 0;
 }
 
+.chat-status-bar__account-group {
+  position: relative;
+  min-width: 0;
+  height: var(--sender-control-height);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 html.dark .chat-status-bar__actions {
   --nav-hover-bg: rgba(59, 130, 246, .14);
   --nav-hover-border: rgba(96, 165, 250, .2);

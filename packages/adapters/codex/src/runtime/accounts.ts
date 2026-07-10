@@ -37,6 +37,7 @@ import { createLogger } from '@oneworks/utils/create-logger'
 
 import { resolveCodexBinaryPath } from '#~/paths.js'
 import { CodexRpcClient } from '#~/protocol/rpc.js'
+import { fetchCodexProfileAvatarFromFile } from '#~/runtime/account-profile.js'
 import { ensureCodexConfigCliCompatibility } from '#~/runtime/config.js'
 import { ensureCodexNativeHookTrustState } from '#~/runtime/native-hooks.js'
 
@@ -101,6 +102,7 @@ interface CodexAccountDescriptor {
 }
 
 interface CodexAccountProbe extends CodexAccountIdentity {
+  avatarUrl?: string
   quota?: AdapterAccountInfo['quota']
 }
 
@@ -448,6 +450,12 @@ const mergeCodexAccountProbes = (
     if ('quota' in source && source.quota != null) {
       merged.quota = cloneQuotaInfo(source.quota)
     }
+    const avatarUrl = 'avatarUrl' in source
+      ? normalizeNonEmptyString(source.avatarUrl)
+      : undefined
+    if (avatarUrl != null) {
+      merged.avatarUrl = avatarUrl
+    }
   }
 
   return Object.keys(merged).length > 0 ? merged : undefined
@@ -610,6 +618,7 @@ const buildProbeFromMetadata = (metadata: CodexStoredAccountMetadata | undefined
       organizationId: metadata.organizationId,
       organizationTitle: metadata.organizationTitle,
       organizationRole: metadata.organizationRole,
+      avatarUrl: metadata.avatarUrl,
       quota: metadata.quota
     }
   )
@@ -890,6 +899,9 @@ const updateCodexGlobalAccountMetadata = async (
       ...(params.probe.organizationTitle != null ? { organizationTitle: params.probe.organizationTitle } : {}),
       ...(params.probe.organizationRole != null ? { organizationRole: params.probe.organizationRole } : {}),
       ...(params.probe.quota != null ? { quota: cloneQuotaInfo(params.probe.quota) } : {}),
+      avatarUrl: normalizeNonEmptyString(params.descriptor.metadata?.avatarUrl) ??
+        normalizeNonEmptyString(existing.avatarUrl) ??
+        normalizeNonEmptyString(params.probe.avatarUrl),
       title: resolveCodexAccountTitle({
         key: params.descriptor.key,
         title: params.descriptor.title ?? params.descriptor.metadata?.title,
@@ -1032,9 +1044,10 @@ const probeCodexAccount = async (params: {
   homeDir: string
   authFilePath: string
   refresh?: boolean
+  fetchProfile?: boolean
   logKey: string
 }): Promise<CodexAccountProbe> => {
-  const { ctx, homeDir, authFilePath, refresh, logKey } = params
+  const { ctx, homeDir, authFilePath, refresh, fetchProfile, logKey } = params
   const logger = resolveProbeLogger(ctx, logKey)
   const binaryPath = resolveCodexBinaryPath(ctx.env)
   const spawnEnv = buildSpawnEnv(ctx)
@@ -1088,7 +1101,12 @@ const probeCodexAccount = async (params: {
     const accountResult = await rpc.request('account/read', {
       ...(refresh === true ? { refreshToken: true } : {})
     })
-    const rateLimitsResult = await rpc.request('account/rateLimits/read')
+    const [rateLimitsResult, avatarUrl] = await Promise.all([
+      rpc.request('account/rateLimits/read'),
+      fetchProfile === false
+        ? Promise.resolve(undefined)
+        : fetchCodexProfileAvatarFromFile(authFilePath)
+    ])
 
     const account = isRecord(accountResult) && isRecord(accountResult.account)
       ? accountResult.account
@@ -1206,6 +1224,7 @@ const probeCodexAccount = async (params: {
       accountType: accountType ?? authIdentity?.accountType,
       email: email ?? authIdentity?.email,
       planType: planType ?? authIdentity?.planType,
+      avatarUrl,
       quota: summary === '' && metrics.length === 0
         ? undefined
         : {
@@ -1599,6 +1618,8 @@ const writeProbeMetadata = async (params: {
     ...(probe.organizationTitle != null ? { organizationTitle: probe.organizationTitle } : {}),
     ...(probe.organizationRole != null ? { organizationRole: probe.organizationRole } : {}),
     ...(probe.quota != null ? { quota: cloneQuotaInfo(probe.quota) } : {}),
+    avatarUrl: normalizeNonEmptyString(descriptor.metadata?.avatarUrl) ??
+      normalizeNonEmptyString(probe.avatarUrl),
     title: resolveCodexAccountTitle({
       key: descriptor.key,
       title: descriptor.title ?? descriptor.metadata?.title,
@@ -1658,6 +1679,7 @@ const getCodexAccountProbe = async (params: {
     homeDir: authSource.homeDir,
     authFilePath: authSource.authFilePath,
     refresh,
+    fetchProfile: normalizeNonEmptyString(descriptor.metadata?.avatarUrl) == null,
     logKey: `${scope}-${descriptor.key}`
   })
   await writeProbeMetadata({
@@ -1841,7 +1863,8 @@ const buildCodexAccountDetail = (params: {
     isDefault: descriptor.key === defaultAccount,
     quota: overrideError == null ? probe?.quota : undefined,
     avatarUrl: normalizeNonEmptyString(configuredAccount?.avatarUrl) ??
-      normalizeNonEmptyString(descriptor.metadata?.avatarUrl),
+      normalizeNonEmptyString(descriptor.metadata?.avatarUrl) ??
+      normalizeNonEmptyString(probe?.avatarUrl),
     email: normalizeNonEmptyString(mergedProbe?.email),
     planType: normalizeNonEmptyString(mergedProbe?.planType),
     accountType: normalizeNonEmptyString(mergedProbe?.accountType),
@@ -2414,6 +2437,8 @@ export const manageCodexAccount = async (
       organizationId: probe?.organizationId,
       organizationTitle: probe?.organizationTitle,
       organizationRole: probe?.organizationRole,
+      avatarUrl: normalizeNonEmptyString(existingConfiguredAccount?.metadata?.avatarUrl) ??
+        normalizeNonEmptyString(probe?.avatarUrl),
       quota: cloneQuotaInfo(probe?.quota),
       source: 'codex-login',
       authDigest,
