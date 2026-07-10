@@ -51,6 +51,7 @@ pnpm tools dev-start <target>
 - 分配前先查当前工具 schema 和可用 model / reasoning，不硬编码不存在的值；优先使用能满足验收的最低 reasoning。模型分级不等于每个小任务都要新建子线程，没有独立验收面或委派成本更高时直接在当前线程完成。
 - “计划使用低档模型”不等于实际降档。委派工具如果不能显式传入或核验 model / reasoning，继承父模型的 subagent 不得计为节省消耗；不要为了模型分级创建这种线程。用户已明确要求独立会话且工具支持模型参数时，才使用可指定 model / reasoning 的独立线程；否则由当前线程完成，或在模型隔离确实影响成本时回报限制。
 - Prompt 中的“到时停止”只是软约束。成本敏感委派必须由主线程记录实际开始时间和 deadline，定期检查状态；到 deadline 时即使 subagent 仍在推理，也要主动中断或停止等待并收取已有结果。当前工具不能中断时，不要把长时间任务委派给它后声称有硬超时保证。
+- 独立协调线程本身也必须按任务难度选择最低充分 model / reasoning，不能只给 worker 降档而让边界清晰的协调任务沿用默认 Sol / xhigh。总预算必须预留集成和最终输出时间；到 integration cutoff 后不再发起取证或归档类工具调用。协调器、worker 和整个任务的耗时均以外部平台记录为准，不使用模型自报时间替代。
 - 模型档位、公开消耗 / 速度信息、抽象路由算法和示例见 `.oo/rules/maintenance/model-routing.md`；复杂任务的拆分、监控与集成流程见 `.oo/rules/maintenance/task-planning.md`。
 
 ## 常规仓库阅读
