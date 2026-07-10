@@ -41,6 +41,21 @@ pnpm tools dev-start <target>
 
 只有脚本失败时才继续查看输出的 `LOG_FILE`、读取更细规则或手动排查端口；不要在这些启动需求上先做冗长仓库扫描。不要使用 `screen` 管理本仓开发服务。
 
+## 模型选择与任务分工
+
+- 不要默认让所有任务使用当前可用的最强模型。先按歧义、风险与可逆性、上下文耦合、判断深度和验收强度选择满足要求的最低充分能力模型，不要只根据“前端”“PR”“修 bug”等任务名称机械路由。
+- 默认能力分工：纯机械、强约束且可立即验收的工作先考虑 GPT-5.4 Mini；需要更可靠工具协作的明确重复任务用 Luna；需要工程判断或在既有模式内实现的日常工作用 Terra；需求含糊、未知根因、跨模块设计、高风险操作和关键最终审阅用 Sol。
+- GPT-5.4 / GPT-5.5 必须参与比较，但主要作为可用性、兼容性和已验证工作流档位：当前公开费率下 GPT-5.4 与 Terra 同价，GPT-5.5 与 Sol 同价；新任务在代表性验收相同时优先 Terra / Sol，只有 5.6 不可用、需要 Codex cloud、需要复现旧模型行为，或仓库实测证明旧模型更适合时才选 GPT-5.4 / GPT-5.5。
+- 一个任务应按“探索证据、做出决策、实现修改、验证结果、交付操作”拆阶段并分别选模型：例如核心问题分析由 Sol 负责，边界确定后的前端实现可交给 Terra，固定测试和 commit / PR 流程可交给 Luna。主线程保留最终责任。
+- medium reasoning 只作为日常实现默认，不构成质量证明。凡非机械代码修改，写入前必须先给出全局影响地图和“复用 / 扩展 / 新建 / 保持内联”的抽象决策；实现者不得自审自批，交付前按风险完成独立的局部正确性、全局 / 抽象审阅和自动化门禁。完整标准见 `.oo/rules/maintenance/code-delivery-quality.md`。
+- 新模型、新 reasoning 或费率 / 工具能力变化时，不凭版本号、单次成功或公开榜单直接调整分工；按 `.oo/rules/maintenance/model-routing-evaluation.md` 使用固定任务族、同场基线、重复运行、独立验收和真实分支路由验证后，再更新建议工作范围。
+- Git 写操作必须已有用户授权且变更已审阅；PR 创建、commit、push 和满足条件的无冲突 merge 可由 Luna / Terra 执行，但代码审阅、冲突解决和是否可合入的判断按变更本身风险选择模型。
+- 分配前先查当前工具 schema 和可用 model / reasoning，不硬编码不存在的值；优先使用能满足验收的最低 reasoning。模型分级不等于每个小任务都要新建子线程，没有独立验收面或委派成本更高时直接在当前线程完成。
+- “计划使用低档模型”不等于实际降档。委派工具如果不能显式传入或核验 model / reasoning，继承父模型的 subagent 不得计为节省消耗；不要为了模型分级创建这种线程。用户已明确要求独立会话且工具支持模型参数时，才使用可指定 model / reasoning 的独立线程；否则由当前线程完成，或在模型隔离确实影响成本时回报限制。
+- Prompt 中的“到时停止”只是软约束。成本敏感委派必须由主线程记录实际开始时间和 deadline，定期检查状态；到 deadline 时即使 subagent 仍在推理，也要主动中断或停止等待并收取已有结果。当前工具不能中断时，不要把长时间任务委派给它后声称有硬超时保证。
+- 独立协调线程本身也必须按任务难度选择最低充分 model / reasoning，不能只给 worker 降档而让边界清晰的协调任务沿用默认 Sol / xhigh。总预算必须预留集成和最终输出时间；到 integration cutoff 后不再发起取证或归档类工具调用。协调器、worker 和整个任务的耗时均以外部平台记录为准，不使用模型自报时间替代。
+- 模型档位、公开消耗 / 速度信息、抽象路由算法和示例见 `.oo/rules/maintenance/model-routing.md`；复杂任务的拆分、监控与集成流程见 `.oo/rules/maintenance/task-planning.md`。
+
 ## 常规仓库阅读
 
 未命中上面的开发服务 Fast Path 时，开始处理仓库前先读 `.oo/rules/` 下 `alwaysApply: true` 的基础规则与维护文档；其他文档按任务结合 `description` / `globs` 按需继续阅读。
@@ -89,6 +104,8 @@ pnpm tools dev-start <target>
 - Electron agent 控制、UI 自动验证、外部 CDP bridge 或 runtime evidence 验证：先读 `scripts/AGENTS.md` 和 `scripts/desktop-control-protocol.md`，再读 `apps/desktop/AGENTS.md`；优先复用 `pnpm tools desktop-control serve`，不要在场景工具里重复实现端口选择、隔离 profile、CDP target discovery 或 `events.jsonl` discovery。
 - 仓库开发与贡献：`.oo/rules/DEVELOPMENT.md`
 - 复杂任务拆分、子线程协作、交叉审阅或经验沉淀：`.oo/rules/maintenance/task-planning.md`
+- medium 编码的全局影响、抽象和交付质量门禁：`.oo/rules/maintenance/code-delivery-quality.md`
+- 新模型与 reasoning 的持续评测、分析和工作范围更新：`.oo/rules/maintenance/model-routing-evaluation.md`
 - 项目接入方式：`.oo/docs/` 公开文档内容源或对应模块 README
 - Relay 托管服务 / 私有化部署 / Vercel / Cloudflare / 域名与账号边界：`.oo/rules/RELAY-DEPLOYMENT.md`，再读 `apps/relay-server/AGENTS.md`、`apps/relay-admin/AGENTS.md` 和 `packages/plugins/relay/AGENTS.md`
 - 使用文档边界约定：`.oo/rules/USAGE.md`
