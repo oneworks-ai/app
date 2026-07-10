@@ -60,6 +60,7 @@ export async function createServerRuntimeSession(params: {
   content?: ServerRuntimeSessionContent
   cwd: string
   effort?: EffortLevel
+  fastMode?: boolean
   message?: string
   model?: string
   permissionMode?: SessionPermissionMode
@@ -101,6 +102,7 @@ export async function createServerRuntimeSession(params: {
       ...(params.account != null ? { account: params.account } : {}),
       ...(params.adapter != null ? { adapter: params.adapter } : {}),
       ...(params.effort != null ? { effort: params.effort } : {}),
+      ...(params.fastMode != null ? { fastMode: params.fastMode } : {}),
       ...(params.model != null ? { model: params.model } : {}),
       ...(params.permissionMode != null ? { permissionMode: params.permissionMode } : {}),
       ...(params.promptType != null ? { promptType: params.promptType } : {}),
@@ -134,6 +136,7 @@ export async function createServerRuntimeSession(params: {
     ...(params.account != null ? { account: params.account } : {}),
     ...(params.adapter != null ? { adapter: params.adapter } : {}),
     ...(params.effort != null ? { effort: params.effort } : {}),
+    ...(params.fastMode != null ? { fastMode: params.fastMode } : {}),
     ...(params.model != null ? { model: params.model } : {}),
     ...(params.permissionMode != null ? { permissionMode: params.permissionMode } : {}),
     ...(params.promptType != null ? { taskType: params.promptType } : {}),

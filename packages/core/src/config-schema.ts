@@ -51,7 +51,7 @@ export const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
   ])
 )
 
-export const effortLevelSchema = z.enum(['low', 'medium', 'high', 'max'])
+export const effortLevelSchema = z.enum(['low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
 export const languageCodeSchema = z.enum(['zh', 'en'])
 
 export const adapterAccountConfigCommonSchema = z.object({

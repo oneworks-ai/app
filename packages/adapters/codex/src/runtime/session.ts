@@ -57,6 +57,7 @@ export const createCodexSession = async (ctx: AdapterCtx, options: AdapterQueryO
       model: base.resolvedModel ?? options.model ?? 'default',
       account: base.resolvedAccount,
       effort: base.effectiveEffort,
+      fastMode: options.fastMode,
       version: 'unknown',
       tools: [],
       slashCommands: [],

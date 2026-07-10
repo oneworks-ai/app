@@ -20,7 +20,7 @@ import { CODEX_PROXY_META_HEADER_NAME, encodeCodexProxyMeta, ensureCodexProxySer
 
 export type CodexApprovalPolicy = 'never' | 'unlessTrusted' | 'onRequest'
 export type CodexOutboundApprovalPolicy = 'never' | 'untrusted' | 'on-request'
-export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
+export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
 
 /**
  * Map a single oneworks `AdapterMessageContent` item to zero or one Codex input items.
@@ -275,22 +275,20 @@ const normalizePositiveInteger = (value: unknown): number | undefined => (
 )
 
 const normalizeCodexReasoningEffort = (value: unknown): CodexReasoningEffort | undefined => (
-  value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh'
+  value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh' ||
+    value === 'max' || value === 'ultra'
     ? value
     : undefined
 )
 
 const mapPublicEffortToCodex = (value: AdapterQueryOptions['effort']): CodexReasoningEffort | undefined => (
-  value === 'max'
-    ? 'xhigh'
-    : value === 'low' || value === 'medium' || value === 'high'
+  value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh' ||
+    value === 'max' || value === 'ultra'
     ? value
     : undefined
 )
 
-const mapCodexEffortToPublic = (value: CodexReasoningEffort | undefined): AdapterQueryOptions['effort'] => (
-  value === 'xhigh' ? 'max' : value
-)
+const mapCodexEffortToPublic = (value: CodexReasoningEffort | undefined): AdapterQueryOptions['effort'] => value
 
 const resolveRoutedServiceKey = (rawModel: string | undefined) => {
   const normalizedRawModel = rawModel?.trim()
@@ -630,6 +628,7 @@ export interface CodexSessionBase {
   resolvedMaxOutputTokens: number | null | undefined
   effectiveEffort: AdapterQueryOptions['effort']
   turnEffort?: CodexReasoningEffort
+  serviceTier: 'priority' | null | undefined
   threadCacheKey: string
   cachedThreadId: string | undefined
 }
@@ -775,6 +774,9 @@ export async function resolveSessionBase(
   const configOverrides = mergeCodexConfigOverrides(
     isPlainObject(configOverridesValue) ? configOverridesValue : {}
   )
+  if (options.fastMode != null) {
+    delete configOverrides.service_tier
+  }
   const nativeReasoningEffort = normalizeCodexReasoningEffort(configOverrides.model_reasoning_effort)
   const requestedEffort = options.effort ?? configuredEffort
   const requestedReasoningEffort = mapPublicEffortToCodex(requestedEffort)
@@ -857,6 +859,10 @@ export async function resolveSessionBase(
   if (nativeReasoningEffort == null && requestedReasoningEffort != null) {
     configOverrideArgs.push('-c', `model_reasoning_effort=${toToml(requestedReasoningEffort)}`)
     configFingerprintArgs.push('-c', `model_reasoning_effort=${toToml(requestedReasoningEffort)}`)
+  }
+  if (options.fastMode === true) {
+    configOverrideArgs.push('-c', `service_tier=${toToml('fast')}`)
+    configFingerprintArgs.push('-c', `service_tier=${toToml('fast')}`)
   }
 
   const filteredMcpServers: Record<string, unknown> = options.assetPlan?.mcpServers ?? (() => {
@@ -957,6 +963,7 @@ export async function resolveSessionBase(
     resolvedMaxOutputTokens,
     effectiveEffort,
     turnEffort: nativeReasoningEffort == null ? requestedReasoningEffort : undefined,
+    serviceTier: options.fastMode == null ? undefined : options.fastMode ? 'priority' : null,
     threadCacheKey,
     cachedThreadId
   }

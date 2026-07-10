@@ -18,6 +18,7 @@ export interface OptimisticSessionCreationOptions {
   promptType?: SessionPromptType
   promptName?: string
   effort?: EffortLevel
+  fastMode?: boolean
   permissionMode?: SessionPermissionMode
   adapter?: string
   account?: string
@@ -144,6 +145,7 @@ export const createOptimisticSessionCreation = (
       account: request.options.account,
       permissionMode: request.options.permissionMode,
       effort: request.options.effort,
+      fastMode: request.options.fastMode,
       promptType: request.options.promptType,
       promptName: request.options.promptName
     },

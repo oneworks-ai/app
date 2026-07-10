@@ -1,5 +1,6 @@
 import type {
   ChatMessageContent,
+  EffortLevel,
   Session,
   SessionMessageQueueState,
   SessionPermissionMode,
@@ -185,7 +186,8 @@ export async function createSession(
     id?: string
     promptType?: SessionPromptType
     promptName?: string
-    effort?: 'low' | 'medium' | 'high' | 'max'
+    effort?: EffortLevel
+    fastMode?: boolean
     permissionMode?: 'default' | 'acceptEdits' | 'plan' | 'dontAsk' | 'bypassPermissions'
     adapter?: string
     account?: string
@@ -221,6 +223,7 @@ export async function createSession(
       promptType: options?.promptType,
       promptName: options?.promptName,
       effort: options?.effort,
+      fastMode: options?.fastMode,
       permissionMode: options?.permissionMode,
       adapter: options?.adapter,
       account: options?.account,

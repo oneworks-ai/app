@@ -167,6 +167,7 @@ export interface Session {
   account?: string
   permissionMode?: SessionPermissionMode
   effort?: EffortLevel
+  fastMode?: boolean
   promptType?: SessionPromptType
   promptName?: string
   panelState?: SessionPanelState

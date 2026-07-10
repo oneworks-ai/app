@@ -32,6 +32,7 @@ export const createSenderToolbarBindings = ({
     onAdapterChange?: (adapter: string) => void
     onAccountChange?: (account: string) => void
     onEffortChange?: (effort: ChatEffort) => void
+    onFastModeChange?: (enabled: boolean) => void
     onInterrupt: () => void
     onModelChange?: (model: string) => void
     onToggleRecommendedModel?: (option: ModelSelectOption) => void | Promise<void>
@@ -50,6 +51,8 @@ export const createSenderToolbarBindings = ({
     accountOptions?: SenderToolbarData['accountOptions']
     effort: ChatEffort
     effortOptions: SenderToolbarData['effortOptions']
+    fastMode: boolean
+    supportsFastMode: boolean
     builtinPreviewModelOptions?: ModelSelectOption[]
     modelMenuGroups?: ModelSelectMenuGroup[]
     modelSearchOptions?: ModelSelectOption[]
@@ -136,6 +139,8 @@ export const createSenderToolbarBindings = ({
     modelSearchValue: ui.selectOverlays.modelSearchValue,
     selectedModel: selection.selectedModel,
     effort: selection.effort,
+    fastMode: selection.fastMode,
+    supportsFastMode: selection.supportsFastMode,
     permissionMode: selection.permissionMode,
     selectedAdapter: selection.selectedAdapter,
     selectedAccount: selection.selectedAccount,

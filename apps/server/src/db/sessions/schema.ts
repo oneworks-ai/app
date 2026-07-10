@@ -28,6 +28,7 @@ export const sessionsSchemaModule: SchemaModule = {
         account TEXT,
         permissionMode TEXT,
         effort TEXT,
+        fastMode INTEGER,
         promptType TEXT,
         promptName TEXT,
         panelState TEXT
@@ -91,6 +92,7 @@ export const sessionsSchemaModule: SchemaModule = {
     ensureColumn('sessions', 'account', 'TEXT')
     ensureColumn('sessions', 'permissionMode', 'TEXT')
     ensureColumn('sessions', 'effort', 'TEXT')
+    ensureColumn('sessions', 'fastMode', 'INTEGER')
     ensureColumn('sessions', 'promptType', 'TEXT')
     ensureColumn('sessions', 'promptName', 'TEXT')
     ensureColumn('sessions', 'panelState', 'TEXT')

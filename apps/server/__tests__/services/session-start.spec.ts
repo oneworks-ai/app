@@ -800,6 +800,43 @@ describe('startAdapterSession', () => {
     expect(currentSession.effort).toBe('high')
   })
 
+  it('restarts the runtime when Fast mode changes', async () => {
+    const oldKill = vi.fn()
+
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        kill: oldKill,
+        emit: vi.fn()
+      }
+    })
+
+    const initialRuntime = await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      fastMode: false,
+      permissionMode: 'default'
+    })
+
+    mocks.run.mockResolvedValueOnce({
+      session: {
+        kill: vi.fn(),
+        emit: vi.fn()
+      }
+    })
+
+    const restartedRuntime = await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      fastMode: true,
+      permissionMode: 'default'
+    })
+
+    expect(oldKill).toHaveBeenCalledOnce()
+    expect(restartedRuntime).not.toBe(initialRuntime)
+    expect(restartedRuntime.config?.fastMode).toBe(true)
+    expect(currentSession.fastMode).toBe(true)
+  })
+
   it('restarts the runtime when account changes', async () => {
     const oldKill = vi.fn()
     const oldEmit = vi.fn()

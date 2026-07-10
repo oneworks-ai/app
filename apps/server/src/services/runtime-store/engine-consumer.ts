@@ -98,6 +98,7 @@ export interface RuntimeConsumerStartCommand {
   account?: string
   adapter?: string
   effort?: string
+  fastMode?: boolean
   entity?: string
   messageDelivery?: string
   message?: string
@@ -115,6 +116,7 @@ export interface RuntimeConsumerQueuedCommand {
   account?: string
   adapter?: string
   effort?: string
+  fastMode?: boolean
   entity?: string
   messageDelivery?: string
   message?: string
@@ -256,6 +258,7 @@ const readRuntimeConsumerCommandFields = (command: RuntimeCommand): RuntimeConsu
   account: readString(command.account),
   adapter: readString(command.adapter),
   effort: readString(command.effort),
+  fastMode: readBoolean(command.fastMode),
   entity: readString(command.entity),
   message: readString(command.content) ?? readString(command.message),
   messageDelivery: readString(command.messageDelivery),
@@ -749,6 +752,10 @@ export function buildRuntimeConsumerSpawnPlan(params: {
   }
   pushOption(args, '--model', params.command.model ?? readString(params.metadata.model))
   pushOption(args, '--effort', params.command.effort ?? readString(params.metadata.effort))
+  const fastMode = params.command.fastMode ?? readBoolean(params.metadata.fastMode)
+  if (fastMode != null) {
+    pushOption(args, '--fast-mode', fastMode ? 'on' : 'off')
+  }
   pushOption(
     args,
     '--permission-mode',

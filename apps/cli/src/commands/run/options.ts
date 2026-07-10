@@ -95,10 +95,11 @@ export const mergeListConfig = (
 
 export const resolveResumeAdapterOptions = (
   cached: CliSessionResumeRecord['adapterOptions'],
-  opts: Pick<RunOptions, 'model' | 'effort' | 'includeTool' | 'excludeTool'>
+  opts: Pick<RunOptions, 'model' | 'effort' | 'fastMode' | 'includeTool' | 'excludeTool'>
 ): CliSessionResumeRecord['adapterOptions'] => ({
   ...cached,
   ...(opts.model != null ? { model: opts.model } : {}),
   ...(opts.effort != null ? { effort: opts.effort } : {}),
+  ...(opts.fastMode != null ? { fastMode: opts.fastMode } : {}),
   tools: mergeListConfig(cached.tools, opts.includeTool, opts.excludeTool)
 })

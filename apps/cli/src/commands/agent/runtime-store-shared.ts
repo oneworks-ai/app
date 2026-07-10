@@ -19,7 +19,8 @@ export interface CreateRuntimeSessionParams {
   title?: string
   message: string
   adapter?: string
-  effort?: 'low' | 'medium' | 'high' | 'max'
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
+  fastMode?: boolean
   model?: string
   commandId?: string
   env?: NodeJS.ProcessEnv
@@ -99,7 +100,8 @@ export const buildCommand = (params: {
   data?: string | string[]
   entity?: string
   adapter?: string
-  effort?: 'low' | 'medium' | 'high' | 'max'
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
+  fastMode?: boolean
   model?: string
   memberKey?: string
   permissionMode?: 'default' | 'acceptEdits' | 'plan' | 'dontAsk' | 'bypassPermissions'
@@ -127,6 +129,7 @@ export const buildCommand = (params: {
   if (params.entity != null) command.entity = params.entity
   if (params.adapter != null) command.adapter = params.adapter
   if (params.effort != null) command.effort = params.effort
+  if (params.fastMode != null) command.fastMode = params.fastMode
   if (params.model != null) command.model = params.model
   if (params.permissionMode != null) command.permissionMode = params.permissionMode
   if (params.memberKey != null) command.memberKey = params.memberKey

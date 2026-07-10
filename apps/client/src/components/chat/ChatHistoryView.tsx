@@ -230,6 +230,9 @@ export function ChatHistoryView({
   effort,
   effortOptions,
   onEffortChange,
+  fastMode = false,
+  supportsFastMode = false,
+  onFastModeChange,
   permissionMode,
   permissionModeOptions,
   onPermissionModeChange,
@@ -304,6 +307,9 @@ export function ChatHistoryView({
   effort: ChatEffort
   effortOptions: Array<{ value: ChatEffort; label: React.ReactNode }>
   onEffortChange: (effort: ChatEffort) => void
+  fastMode?: boolean
+  supportsFastMode?: boolean
+  onFastModeChange?: (enabled: boolean) => void
   permissionMode: PermissionMode
   permissionModeOptions: Array<{ value: PermissionMode; label: React.ReactNode }>
   onPermissionModeChange: (mode: PermissionMode) => void
@@ -507,6 +513,7 @@ export function ChatHistoryView({
     modelForQuery,
     hasAvailableModels,
     effort,
+    fastMode,
     permissionMode,
     adapter: selectedAdapter,
     account: selectedAccount,
@@ -1784,6 +1791,9 @@ export function ChatHistoryView({
             effort={effort}
             effortOptions={effortOptions}
             onEffortChange={onEffortChange}
+            fastMode={fastMode}
+            supportsFastMode={supportsFastMode}
+            onFastModeChange={onFastModeChange}
             permissionMode={permissionMode}
             permissionModeOptions={permissionModeOptions}
             onPermissionModeChange={onPermissionModeChange}

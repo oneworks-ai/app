@@ -35,7 +35,7 @@ const optionalString = (value: unknown) =>
     ? value.trim()
     : undefined
 
-const RUNTIME_EFFORTS = new Set(['low', 'medium', 'high', 'max'])
+const RUNTIME_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
 const RUNTIME_PERMISSION_MODES = new Set(['default', 'acceptEdits', 'plan', 'dontAsk', 'bypassPermissions'])
 const RUNTIME_RESUME_CONSUMER_STATUSES = new Set([
   'completed',
@@ -127,6 +127,7 @@ const startRuntimeConsumer = (params: {
   command: RuntimeSessionCommandEnvelope
   cwd: string
   effort?: RuntimeSessionCommandEnvelope['effort']
+  fastMode?: boolean
   entity: string
   env?: NodeJS.ProcessEnv
   message: string
@@ -153,6 +154,7 @@ const startRuntimeConsumer = (params: {
   pushOption(args, '--adapter', params.adapter)
   pushOption(args, '--model', params.model)
   pushOption(args, '--effort', params.effort)
+  if (params.fastMode != null) args.push('--fast-mode', params.fastMode ? 'on' : 'off')
   pushOption(args, '--permission-mode', params.permissionMode)
   args.push(params.message)
 
@@ -173,6 +175,7 @@ const startRuntimeConsumer = (params: {
 const startRuntimeResumeConsumer = (params: {
   cwd: string
   effort?: RuntimeSessionCommandEnvelope['effort']
+  fastMode?: boolean
   env?: NodeJS.ProcessEnv
   model?: string
   permissionMode?: RuntimeSessionCommandEnvelope['permissionMode']
@@ -194,6 +197,7 @@ const startRuntimeResumeConsumer = (params: {
   ]
   pushOption(args, '--model', params.model)
   pushOption(args, '--effort', params.effort)
+  if (params.fastMode != null) args.push('--fast-mode', params.fastMode ? 'on' : 'off')
   pushOption(args, '--permission-mode', params.permissionMode)
 
   const child = spawn(process.execPath, args, {
@@ -239,6 +243,7 @@ const appendFollowUpRuntimeCommand = async (
     ? startRuntimeResumeConsumer({
       cwd: options.cwd,
       effort: optionalEffort(command.effort),
+      fastMode: command.fastMode,
       env: options.env,
       model: optionalString(command.model),
       permissionMode: optionalPermissionMode(command.permissionMode),
@@ -286,6 +291,7 @@ export const executeRuntimeProtocolCommand = async (
           entity,
           adapter,
           effort,
+          fastMode: command.fastMode,
           model,
           env: options.env,
           hostSessionId,
@@ -311,6 +317,7 @@ export const executeRuntimeProtocolCommand = async (
             command,
             cwd: options.cwd,
             effort,
+            fastMode: command.fastMode,
             entity,
             env: options.env,
             message,

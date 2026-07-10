@@ -6,7 +6,9 @@ export const effortIconMap: Record<ChatEffort, string> = {
   low: 'signal_cellular_alt_1_bar',
   medium: 'signal_cellular_alt_2_bar',
   high: 'signal_cellular_alt',
-  max: 'bolt'
+  xhigh: 'network_cell',
+  max: 'bolt',
+  ultra: 'auto_awesome'
 }
 
 export const permissionModeIconMap: Record<PermissionMode, string> = {

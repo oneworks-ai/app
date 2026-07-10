@@ -44,6 +44,8 @@ export interface SenderToolbarState {
   modelSearchValue: string
   selectedModel?: string
   effort: ChatEffort
+  fastMode: boolean
+  supportsFastMode: boolean
   permissionMode: PermissionMode
   selectedAdapter?: string
   selectedAccount?: string
@@ -102,6 +104,7 @@ export interface SenderToolbarHandlers {
   onConnectMoreModelServices?: () => void
   onOpenModelServicesConfig?: (serviceKey?: string) => void
   onEffortChange?: (effort: ChatEffort) => void
+  onFastModeChange?: (enabled: boolean) => void
   onAdapterChange?: (adapter: string) => void
   onAccountChange?: (account: string) => void
   onSend: (mode?: SessionQueuedMessageMode) => void

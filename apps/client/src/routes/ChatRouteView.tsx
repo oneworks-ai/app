@@ -218,6 +218,9 @@ export function ChatRouteView({
     effort,
     setEffort,
     effortOptions,
+    fastMode,
+    setFastMode,
+    supportsFastMode,
     permissionMode,
     setPermissionMode,
     permissionModeOptions,
@@ -348,6 +351,9 @@ export function ChatRouteView({
       effort={effort}
       effortOptions={effortOptions}
       onEffortChange={setEffort}
+      fastMode={fastMode}
+      supportsFastMode={supportsFastMode}
+      onFastModeChange={setFastMode}
       permissionMode={permissionMode}
       permissionModeOptions={permissionModeOptions}
       onPermissionModeChange={setPermissionMode}
@@ -388,6 +394,7 @@ export function ChatRouteView({
     currentSessionId,
     effort,
     effortOptions,
+    fastMode,
     handleClearMessages,
     handleInteractionResponse,
     hasAvailableModels,
@@ -419,6 +426,7 @@ export function ChatRouteView({
     selectedModel,
     senderFocusRequestId,
     servicePreviewModelOptions,
+    setFastMode,
     sessionCompactionEvents,
     sessionInfo,
     sessionWorkspaceChanges,
@@ -428,6 +436,7 @@ export function ChatRouteView({
     setSelectedAccount,
     setSelectedAdapter,
     setSelectedModel,
+    supportsFastMode,
     showAccountSelector,
     targetMessageId,
     targetToolUseId,

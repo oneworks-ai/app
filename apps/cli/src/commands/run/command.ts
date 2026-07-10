@@ -112,7 +112,7 @@ const writeRuntimeResumeFallbackResult = (params: {
   throw new Error(params.result.error ?? 'Failed to queue runtime resume.')
 }
 
-const RUNTIME_RESUME_EFFORTS = new Set(['low', 'medium', 'high', 'max'])
+const RUNTIME_RESUME_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
 const RUNTIME_RESUME_PERMISSION_MODES = new Set(['default', 'acceptEdits', 'plan', 'dontAsk', 'bypassPermissions'])
 
 const toRuntimeResumeEffort = (value: string | undefined): RuntimeSessionCommandEnvelope['effort'] =>
@@ -137,6 +137,12 @@ const readRuntimeSystemPromptFromEnv = async () => {
   return trimmed === '' ? undefined : content
 }
 
+const parseFastMode = (value: string) => {
+  if (value === 'on') return true
+  if (value === 'off') return false
+  throw new Error('Fast mode must be "on" or "off".')
+}
+
 const configureRunCommand = (command: Command) => {
   command
     .argument('[description...]')
@@ -146,7 +152,8 @@ const configureRunCommand = (command: Command) => {
         .argParser(parsePrintIdleTimeoutSeconds)
     )
     .option('--model <model>', 'Model to use')
-    .option('--effort <effort>', 'Effort to use (low, medium, high, max)')
+    .option('--effort <effort>', 'Effort to use (low, medium, high, xhigh, max, ultra)')
+    .addOption(new Option('--fast-mode <mode>', 'Use Codex Fast mode (on or off)').argParser(parseFastMode))
     .addOption(createAdapterOption('Adapter to use', { allowCliVersion: true }))
     .option('--account <account>', 'Adapter account to use')
     .option('--system-prompt <prompt>', 'System prompt')
@@ -564,6 +571,7 @@ Notes:
               model: opts.model,
               account: opts.account,
               effort: opts.effort,
+              fastMode: opts.fastMode,
               systemPrompt: mergeSystemPrompts({
                 generatedSystemPrompt: resolvedConfig.systemPrompt,
                 userSystemPrompt: opts.systemPrompt ?? runtimeSystemPrompt,
@@ -664,7 +672,8 @@ Notes:
             adapterOptions: {
               ...record.resume.adapterOptions,
               model: info.model,
-              effort: info.effort ?? record.resume.adapterOptions.effort
+              effort: info.effort ?? record.resume.adapterOptions.effort,
+              fastMode: info.fastMode ?? record.resume.adapterOptions.fastMode
             }
           }
           record.detail = {
@@ -685,6 +694,7 @@ Notes:
             adapter: record.resume.resolvedAdapter ?? record.resume.taskOptions.adapter,
             cwd: record.resume.taskOptions.cwd ?? record.resume.cwd,
             effort: toRuntimeResumeEffort(record.resume.adapterOptions.effort),
+            fastMode: record.resume.adapterOptions.fastMode,
             env: process.env,
             message: record.resume.description,
             model: record.resume.adapterOptions.model,

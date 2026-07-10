@@ -2080,8 +2080,12 @@
       "low": "Low",
       "medium": "Medium",
       "high": "High",
-      "max": "Max"
+      "xhigh": "Extra high",
+      "max": "Max",
+      "ultra": "Ultra"
     },
+    "fastModeEnable": "Enable Fast mode (uses more credits)",
+    "fastModeDisable": "Disable Fast mode",
     "permissionModeSelectPlaceholder": "Permission mode",
     "assetWarningsTitle": "Compatibility notes",
     "assetWarningsCount": "{{count}} asset warnings",
@@ -3397,7 +3401,9 @@
         "low": "Low",
         "medium": "Medium",
         "high": "High",
-        "max": "Max"
+        "xhigh": "Extra high",
+        "max": "Max",
+        "ultra": "Ultra"
       }
     },
     "detail": {

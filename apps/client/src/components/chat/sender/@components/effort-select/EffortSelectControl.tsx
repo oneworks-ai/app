@@ -2,6 +2,9 @@
 import '../sender-toolbar/SenderSelectShared.scss'
 import './EffortSelectControl.scss'
 
+import { ThunderboltFilled, ThunderboltOutlined } from '@ant-design/icons'
+import { Tooltip } from 'antd'
+
 import { ShortcutTooltip } from '@oneworks/components/route-layout'
 import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -29,7 +32,14 @@ export function EffortSelectControl({
 }: {
   state: Pick<
     SenderToolbarState,
-    'isThinking' | 'modelUnavailable' | 'showModelSelect' | 'showEffortSelect' | 'effort' | 'isMac'
+    | 'isThinking'
+    | 'modelUnavailable'
+    | 'showModelSelect'
+    | 'showEffortSelect'
+    | 'effort'
+    | 'fastMode'
+    | 'supportsFastMode'
+    | 'isMac'
   >
   data: Pick<SenderToolbarData, 'effortOptions' | 'composerControlShortcuts'>
   refs: Pick<SenderToolbarRefs, 'effortSelectRef'>
@@ -41,11 +51,12 @@ export function EffortSelectControl({
     | 'onQueueTextareaFocusRestore'
     | 'onCloseReferenceActions'
     | 'onEffortChange'
+    | 'onFastModeChange'
   >
 }) {
   const { t } = useTranslation()
   const { isCompactLayout, isTouchInteraction } = useResponsiveLayout()
-  const { isThinking, modelUnavailable, showEffortSelect, effort, isMac } = state
+  const { isThinking, modelUnavailable, showEffortSelect, effort, fastMode, supportsFastMode, isMac } = state
   const { effortOptions, composerControlShortcuts } = data
   const { effortSelectRef } = refs
   const {
@@ -54,7 +65,8 @@ export function EffortSelectControl({
     onOpenEffortSelector,
     onQueueTextareaFocusRestore,
     onCloseReferenceActions,
-    onEffortChange
+    onEffortChange,
+    onFastModeChange
   } = handlers
   const isCompactControl = isCompactLayout || isTouchInteraction
   const isEffortSelectOpen = showEffortSelect
@@ -69,6 +81,11 @@ export function EffortSelectControl({
   const fallbackEffort = effortStages.find(option => option.value === 'medium')?.value ??
     effortStages[0]?.value ?? 'medium'
   const displayedEffort = effortStages.some(option => option.value === effort) ? effort : fallbackEffort
+  const effortAnimationVariant = displayedEffort === 'ultra'
+    ? 'multicolor'
+    : displayedEffort === 'max'
+    ? 'solid'
+    : undefined
   const selectedEffortLabel = effortStages.find(option => option.value === displayedEffort)?.label ??
     t('chat.effortLabels.medium')
 
@@ -128,115 +145,139 @@ export function EffortSelectControl({
     onShowEffortSelectChange(true)
   }
 
-  return (
-    <ShortcutTooltip
-      shortcut={composerControlShortcuts.switchEffort}
-      isMac={isMac}
-      title={t('chat.effortShortcutTooltip')}
-      targetClassName='sender-control-tooltip-target'
-      enabled={!isCompactControl && !isEffortSelectOpen}
-    >
-      <div
-        className={[
-          'sender-select-shell',
-          'sender-select-shell--effort',
-          isCompactControl ? 'sender-select-shell--compact' : ''
-        ].filter(Boolean).join(' ')}
-        onPointerDownCapture={handleCompactEffortPointerDown}
-      >
-        {isCompactControl
-          ? (
-            <button
-              type='button'
-              className='effort-select effort-select--responsive sender-responsive-select-button sender-responsive-select-button--effort'
-              aria-label={t('chat.effortShortcutTooltip')}
-              disabled={modelUnavailable || isThinking}
-              onMouseDown={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                openCompactEffortSelect()
-              }}
-              onFocus={openCompactEffortSelect}
-              onClick={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                openCompactEffortSelect()
-              }}
-            >
-              <span
-                className={`effort-option effort-option--${displayedEffort} sender-responsive-select-button__value`
-                  .trim()}
-              >
-                <span className='material-symbols-rounded effort-option__icon sender-responsive-select-button__icon'>
-                  {effortIconMap[displayedEffort]}
-                </span>
-                <span className='effort-option__text sender-responsive-select-button__label'>
-                  {selectedEffortLabel}
-                </span>
-              </span>
-              <span className='material-symbols-rounded sender-responsive-select-button__chevron'>
-                keyboard_arrow_down
-              </span>
-            </button>
-          )
-          : (
-            <StageSlider
-              inputRef={effortSelectRef}
-              className='effort-stage-slider'
-              ariaLabel={t('chat.effortSliderLabel', { value: selectedEffortLabel })}
-              value={displayedEffort}
-              options={effortStages}
-              disabled={modelUnavailable || isThinking}
-              animateLastStage
-              onChange={nextEffort => onEffortChange?.(nextEffort)}
-              onFocus={handleStageSliderFocus}
-              onBlur={() => onShowEffortSelectChange(false)}
-              onKeyDown={(event) => {
-                if (event.key !== 'Escape') {
-                  return
-                }
+  const toggleFastMode = () => {
+    onFastModeChange?.(!fastMode)
+    onQueueTextareaFocusRestore()
+  }
 
-                event.preventDefault()
-                event.stopPropagation()
-                onShowEffortSelectChange(false)
-                event.currentTarget.blur()
-                onQueueTextareaFocusRestore()
-              }}
-            />
-          )}
-        {isCompactControl && (
-          <SenderMobileSelectDrawer
-            open={isEffortSelectOpen}
-            title={t('chat.effortSelectPlaceholder')}
-            className='effort-mobile-select-drawer'
-            onClose={closeEffortSelect}
-          >
-            <div className='sender-mobile-select-list' role='listbox'>
-              {decoratedEffortOptions.map(option => (
-                <div
-                  key={option.value}
-                  role='option'
-                  tabIndex={0}
-                  aria-selected={displayedEffort === option.value}
-                  className={[
-                    'sender-mobile-select-option',
-                    'effort-mobile-select-option',
-                    displayedEffort === option.value ? 'is-selected' : ''
-                  ].filter(Boolean).join(' ')}
-                  onClick={() => handleEffortSelection(option.value)}
-                  onKeyDown={(event) =>
-                    handleSenderMobileSelectOptionKeyDown(event, () => handleEffortSelection(option.value))}
+  return (
+    <div className={`sender-effort-controls ${fastMode ? 'is-fast-mode' : ''}`.trim()}>
+      <ShortcutTooltip
+        shortcut={composerControlShortcuts.switchEffort}
+        isMac={isMac}
+        title={t('chat.effortShortcutTooltip')}
+        targetClassName='sender-control-tooltip-target'
+        enabled={!isCompactControl && !isEffortSelectOpen}
+      >
+        <div
+          className={[
+            'sender-select-shell',
+            'sender-select-shell--effort',
+            isCompactControl ? 'sender-select-shell--compact' : ''
+          ].filter(Boolean).join(' ')}
+          onPointerDownCapture={handleCompactEffortPointerDown}
+        >
+          {isCompactControl
+            ? (
+              <button
+                type='button'
+                className='effort-select effort-select--responsive sender-responsive-select-button sender-responsive-select-button--effort'
+                aria-label={t('chat.effortShortcutTooltip')}
+                disabled={modelUnavailable || isThinking}
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  openCompactEffortSelect()
+                }}
+                onFocus={openCompactEffortSelect}
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  openCompactEffortSelect()
+                }}
+              >
+                <span
+                  className={`effort-option effort-option--${displayedEffort} sender-responsive-select-button__value`
+                    .trim()}
                 >
-                  <span className='sender-mobile-select-option__content'>{option.label}</span>
-                  {displayedEffort === option.value && (
-                    <span className='material-symbols-rounded sender-mobile-select-option__check'>check</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </SenderMobileSelectDrawer>
-        )}
-      </div>
-    </ShortcutTooltip>
+                  <span className='material-symbols-rounded effort-option__icon sender-responsive-select-button__icon'>
+                    {effortIconMap[displayedEffort]}
+                  </span>
+                  <span className='effort-option__text sender-responsive-select-button__label'>
+                    {selectedEffortLabel}
+                  </span>
+                </span>
+                <span className='material-symbols-rounded sender-responsive-select-button__chevron'>
+                  keyboard_arrow_down
+                </span>
+              </button>
+            )
+            : (
+              <StageSlider
+                inputRef={effortSelectRef}
+                className='effort-stage-slider'
+                animationVariant={effortAnimationVariant}
+                ariaLabel={t('chat.effortSliderLabel', { value: selectedEffortLabel })}
+                value={displayedEffort}
+                options={effortStages}
+                disabled={modelUnavailable || isThinking}
+                onChange={nextEffort => onEffortChange?.(nextEffort)}
+                onFocus={handleStageSliderFocus}
+                onBlur={() => onShowEffortSelectChange(false)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Escape') {
+                    return
+                  }
+
+                  event.preventDefault()
+                  event.stopPropagation()
+                  onShowEffortSelectChange(false)
+                  event.currentTarget.blur()
+                  onQueueTextareaFocusRestore()
+                }}
+              />
+            )}
+          {isCompactControl && (
+            <SenderMobileSelectDrawer
+              open={isEffortSelectOpen}
+              title={t('chat.effortSelectPlaceholder')}
+              className='effort-mobile-select-drawer'
+              onClose={closeEffortSelect}
+            >
+              <div className='sender-mobile-select-list' role='listbox'>
+                {decoratedEffortOptions.map(option => (
+                  <div
+                    key={option.value}
+                    role='option'
+                    tabIndex={0}
+                    aria-selected={displayedEffort === option.value}
+                    className={[
+                      'sender-mobile-select-option',
+                      'effort-mobile-select-option',
+                      displayedEffort === option.value ? 'is-selected' : ''
+                    ].filter(Boolean).join(' ')}
+                    onClick={() => handleEffortSelection(option.value)}
+                    onKeyDown={(event) =>
+                      handleSenderMobileSelectOptionKeyDown(event, () => handleEffortSelection(option.value))}
+                  >
+                    <span className='sender-mobile-select-option__content'>{option.label}</span>
+                    {displayedEffort === option.value && (
+                      <span className='material-symbols-rounded sender-mobile-select-option__check'>check</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </SenderMobileSelectDrawer>
+          )}
+        </div>
+      </ShortcutTooltip>
+      {supportsFastMode && (
+        <Tooltip title={t(fastMode ? 'chat.fastModeDisable' : 'chat.fastModeEnable')}>
+          <button
+            type='button'
+            className={`sender-fast-mode-toggle ${fastMode ? 'is-active' : ''}`.trim()}
+            aria-label={t(fastMode ? 'chat.fastModeDisable' : 'chat.fastModeEnable')}
+            aria-pressed={fastMode}
+            disabled={modelUnavailable || isThinking}
+            onMouseDown={event => event.preventDefault()}
+            onClick={toggleFastMode}
+          >
+            {fastMode
+              ? <ThunderboltFilled className='sender-fast-mode-toggle__icon' />
+              : <ThunderboltOutlined className='sender-fast-mode-toggle__icon' />}
+          </button>
+        </Tooltip>
+      )}
+    </div>
   )
 }

@@ -38,6 +38,15 @@ export interface AdapterBuiltinModel {
   value: string
   title: string
   description: string
+  defaultEffort?: EffortLevel
+  supportedEfforts?: EffortLevel[]
+  serviceTiers?: AdapterModelServiceTier[]
+}
+
+export interface AdapterModelServiceTier {
+  id: string
+  name: string
+  description: string
 }
 
 export type IconRef =

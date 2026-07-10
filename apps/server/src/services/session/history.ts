@@ -325,6 +325,7 @@ export async function branchSessionFromMessage(options: {
     adapter: originalSession.adapter,
     permissionMode: originalSession.permissionMode,
     effort: originalSession.effort,
+    fastMode: originalSession.fastMode,
     promptType: originalSession.promptType,
     promptName: originalSession.promptName,
     isStarred: false,

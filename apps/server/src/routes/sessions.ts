@@ -5,6 +5,7 @@ import Router from '@koa/router'
 import type {
   ChatMessage,
   ChatMessageContent,
+  EffortLevel,
   SessionPanelState,
   SessionPermissionMode,
   SessionQueuedMessageMode,
@@ -614,6 +615,7 @@ export function sessionsRouter(): Router {
       start,
       model,
       effort,
+      fastMode,
       promptType,
       promptName,
       permissionMode,
@@ -630,7 +632,8 @@ export function sessionsRouter(): Router {
       parentSessionId?: string
       start?: boolean
       model?: string
-      effort?: 'low' | 'medium' | 'high' | 'max'
+      effort?: EffortLevel
+      fastMode?: boolean
       promptType?: SessionPromptType
       promptName?: string
       permissionMode?: 'default' | 'acceptEdits' | 'plan' | 'dontAsk' | 'bypassPermissions'
@@ -661,6 +664,7 @@ export function sessionsRouter(): Router {
         onWorkspaceProgress: (sessionId, progress) => notifySessionCreationProgress(sessionId, progress),
         model,
         effort,
+        fastMode,
         promptType,
         promptName,
         permissionMode,
@@ -1077,6 +1081,7 @@ export function sessionsRouter(): Router {
         message: replayMessage,
         model: branchResult.session.model,
         effort: branchResult.session.effort,
+        fastMode: branchResult.session.fastMode,
         permissionMode: branchResult.session.permissionMode,
         adapter: branchResult.session.adapter,
         account: branchResult.session.account,
@@ -1139,6 +1144,7 @@ export function sessionsRouter(): Router {
         title: runtimeSession.title,
         model: runtimeSession.model,
         effort: runtimeSession.effort,
+        fastMode: runtimeSession.fastMode,
         permissionMode: runtimeSession.permissionMode,
         adapter: runtimeSession.adapter,
         account: runtimeSession.account,

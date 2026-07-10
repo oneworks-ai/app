@@ -116,6 +116,7 @@ describe('db schema modules', () => {
       'status',
       'model',
       'adapter',
+      'fastMode',
       'permissionMode',
       'panelState'
     ]))

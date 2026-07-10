@@ -13,7 +13,8 @@ export interface RunOptions {
   print: boolean
   printIdleTimeout?: number
   model?: string
-  effort?: 'low' | 'medium' | 'high' | 'max'
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
+  fastMode?: boolean
   adapter?: string
   account?: string
   systemPrompt?: string
