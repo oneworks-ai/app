@@ -12,6 +12,7 @@ description: 仓库通用维护与验证细则，包含启动、lint、格式化
 - [会话终止与创建取消排查](./session-termination.md)
 - [任务规划、委派与经验沉淀](./task-planning.md)
 - [Medium 编码的全局影响、抽象与交付门禁](./code-delivery-quality.md)
+- [新模型的持续评测、结果分析与推荐范围更新](./model-routing-evaluation.md)
 - [移动端 WebView 与工作区标签页经验](./mobile-workspace-webview.md)
 - [消息级操作开发经验](./message-actions.md)
 - [消息级操作维护工具](./tooling.md)

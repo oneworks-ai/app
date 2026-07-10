@@ -48,6 +48,7 @@ pnpm tools dev-start <target>
 - GPT-5.4 / GPT-5.5 必须参与比较，但主要作为可用性、兼容性和已验证工作流档位：当前公开费率下 GPT-5.4 与 Terra 同价，GPT-5.5 与 Sol 同价；新任务在代表性验收相同时优先 Terra / Sol，只有 5.6 不可用、需要 Codex cloud、需要复现旧模型行为，或仓库实测证明旧模型更适合时才选 GPT-5.4 / GPT-5.5。
 - 一个任务应按“探索证据、做出决策、实现修改、验证结果、交付操作”拆阶段并分别选模型：例如核心问题分析由 Sol 负责，边界确定后的前端实现可交给 Terra，固定测试和 commit / PR 流程可交给 Luna。主线程保留最终责任。
 - medium reasoning 只作为日常实现默认，不构成质量证明。凡非机械代码修改，写入前必须先给出全局影响地图和“复用 / 扩展 / 新建 / 保持内联”的抽象决策；实现者不得自审自批，交付前按风险完成独立的局部正确性、全局 / 抽象审阅和自动化门禁。完整标准见 `.oo/rules/maintenance/code-delivery-quality.md`。
+- 新模型、新 reasoning 或费率 / 工具能力变化时，不凭版本号、单次成功或公开榜单直接调整分工；按 `.oo/rules/maintenance/model-routing-evaluation.md` 使用固定任务族、同场基线、重复运行、独立验收和真实分支路由验证后，再更新建议工作范围。
 - Git 写操作必须已有用户授权且变更已审阅；PR 创建、commit、push 和满足条件的无冲突 merge 可由 Luna / Terra 执行，但代码审阅、冲突解决和是否可合入的判断按变更本身风险选择模型。
 - 分配前先查当前工具 schema 和可用 model / reasoning，不硬编码不存在的值；优先使用能满足验收的最低 reasoning。模型分级不等于每个小任务都要新建子线程，没有独立验收面或委派成本更高时直接在当前线程完成。
 - “计划使用低档模型”不等于实际降档。委派工具如果不能显式传入或核验 model / reasoning，继承父模型的 subagent 不得计为节省消耗；不要为了模型分级创建这种线程。用户已明确要求独立会话且工具支持模型参数时，才使用可指定 model / reasoning 的独立线程；否则由当前线程完成，或在模型隔离确实影响成本时回报限制。
@@ -104,6 +105,7 @@ pnpm tools dev-start <target>
 - 仓库开发与贡献：`.oo/rules/DEVELOPMENT.md`
 - 复杂任务拆分、子线程协作、交叉审阅或经验沉淀：`.oo/rules/maintenance/task-planning.md`
 - medium 编码的全局影响、抽象和交付质量门禁：`.oo/rules/maintenance/code-delivery-quality.md`
+- 新模型与 reasoning 的持续评测、分析和工作范围更新：`.oo/rules/maintenance/model-routing-evaluation.md`
 - 项目接入方式：`.oo/docs/` 公开文档内容源或对应模块 README
 - Relay 托管服务 / 私有化部署 / Vercel / Cloudflare / 域名与账号边界：`.oo/rules/RELAY-DEPLOYMENT.md`，再读 `apps/relay-server/AGENTS.md`、`apps/relay-admin/AGENTS.md` 和 `packages/plugins/relay/AGENTS.md`
 - 使用文档边界约定：`.oo/rules/USAGE.md`
