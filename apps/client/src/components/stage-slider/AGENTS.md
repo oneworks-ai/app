@@ -1,6 +1,6 @@
 # Stage Slider Component
 
-`stage-slider/` owns the reusable discrete slider used by compact controls such as the sender effort selector. Callers pass ordered stages and the selected value; this module owns the native range input, custom visual thumb, track fill, marks, drag preview, detent feel, and optional solid or multicolor stage particles.
+`stage-slider/` owns the reusable discrete slider used by compact controls such as the sender effort selector. Callers pass ordered stages and the selected value; this module owns the native range input, custom visual thumb, track fill, marks, drag preview, detent feel, and optional solid or multicolor track particles.
 
 ## Interaction Rules
 
@@ -15,7 +15,11 @@
 
 - Local consumers should tune dimensions through CSS custom properties on the root, for example width, height, thumb size, mark inset, and particle color. Do not copy the SCSS into business components.
 - Avoid a visible seam where the left cap meets the filled rail. Keep the internal fill edges straight and let the filled segment overlap the cap by a small amount instead of depending on two adjacent rounded shapes to line up perfectly.
-- Stage animation variants should appear on both the thumb and the track background. Callers select `solid` or `multicolor` from business state; do not hard-code business stage names in this component. Keep particle elements small, decorative, and covered by `prefers-reduced-motion`.
+- Keep stage particles in the track background; the thumb stays visually stable without particles or a particle halo. Callers select `solid` or `multicolor` from business state; do not hard-code business stage names in this component. Keep particle elements small, decorative, and covered by `prefers-reduced-motion`.
+- Animated particles should keep a stable set of DOM nodes and independently transition a subset toward new random targets. Avoid infinite particle keyframes or shared reset boundaries that become visibly repetitive after a few cycles.
+- Give particle X and Y axes independent durations and easing curves. Sharing one transition clock across both axes produces visibly straight point-to-point movement even when the targets are random.
+- The `multicolor` variant uses a permanently mounted gradient layer across the complete selected track, with multicolor particles above it. Entering the stage should fade and sweep the layer in rather than swapping `background-image`; hover keeps the final state, while drag preview fades back to single-color progress.
+- Keep track particles and related effect layers mounted across effort and fast-mode changes. Entering and leaving animated states must crossfade through the shared effect duration; do not conditionally create or remove layers at the state boundary.
 - Hover/focus mark animation must stay within the track height and should not grow larger than the surrounding rail.
 
 ## Validation
@@ -23,3 +27,4 @@
 - Verify click, drag, release, arrow keys, Home, End, focus, and tooltip/label behavior in a real browser.
 - For compact sender usage, inspect the actual bounding boxes: root width should be fully occupied by the track, endpoint marks should sit inside the track, and the custom thumb should align with the mark centers at every stage.
 - When changing drag math, test an in-progress drag separately from release: during drag the visual thumb should follow or detent while the committed value stays unchanged until pointer up.
+- For animated variants, exercise normal to solid to multicolor transitions in both directions, fast-mode toggles, rapid reversals, dragging, and `prefers-reduced-motion`. Verify entry and exit frames in a real browser because unit tests cannot judge visual crossfades or curved trajectories.

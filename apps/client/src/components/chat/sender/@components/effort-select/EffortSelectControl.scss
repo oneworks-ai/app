@@ -14,9 +14,8 @@
   --stage-slider-edge-padding: 4px;
 }
 
-.sender-effort-controls.is-fast-mode {
-  .effort-stage-slider:not(.is-disabled):not(.is-dragging)
-    .stage-slider__progress-rail::after {
+.sender-effort-controls {
+  .effort-stage-slider:not(.is-disabled) .stage-slider__progress-rail::after {
     position: absolute;
     z-index: 2;
     top: 4px;
@@ -24,6 +23,7 @@
     width: 9px;
     height: 2px;
     content: '';
+    opacity: 0;
     border-radius: 1px;
     background: var(--warning-color, #b45309);
     box-shadow:
@@ -37,6 +37,15 @@
       color-mix(in srgb, var(--warning-color, #b45309) 62%, transparent),
       132px 0 0 var(--warning-color, #b45309);
     animation: sender-fast-mode-track-flow .9s linear infinite;
+    transition: opacity var(--stage-slider-effect-fade-duration)
+      cubic-bezier(.22, .61, .36, 1);
+  }
+}
+
+.sender-effort-controls.is-fast-mode {
+  .effort-stage-slider:not(.is-disabled):not(.is-dragging)
+    .stage-slider__progress-rail::after {
+    opacity: 1;
   }
 }
 
@@ -116,7 +125,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sender-effort-controls.is-fast-mode .stage-slider__progress-rail::after {
+  .sender-effort-controls .stage-slider__progress-rail::after {
     display: none;
   }
 }
