@@ -39,6 +39,7 @@ export const createRuntimeSession = async (params: CreateRuntimeSessionParams) =
   const title = params.title?.trim() || `${entity} session`
   const adapter = params.adapter?.trim() || undefined
   const effort = params.effort
+  const fastMode = params.fastMode
   const model = params.model?.trim() || undefined
   const permissionMode = params.permissionMode
   const parentSessionId = params.parentSessionId?.trim() || undefined
@@ -62,6 +63,7 @@ export const createRuntimeSession = async (params: CreateRuntimeSessionParams) =
       entity,
       ...(adapter != null ? { adapter } : {}),
       ...(effort != null ? { effort } : {}),
+      ...(fastMode != null ? { fastMode } : {}),
       ...(model != null ? { model } : {}),
       ...(permissionMode != null ? { permissionMode } : {}),
       cwd: params.cwd,
@@ -93,6 +95,7 @@ export const createRuntimeSession = async (params: CreateRuntimeSessionParams) =
     entity,
     adapter,
     effort,
+    fastMode,
     model,
     memberKey,
     permissionMode,

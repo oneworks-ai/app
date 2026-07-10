@@ -1084,7 +1084,37 @@ describe('createCodexSession RPC approval policy mapping', () => {
     session.kill()
   })
 
-  it('maps public max effort to xhigh for stream turn/start requests', async () => {
+  it.each(['xhigh', 'max', 'ultra'] as const)(
+    'passes the %s effort through to stream turn/start requests',
+    async (effort) => {
+      process.env.HOME = '/tmp'
+      const { proc, receivedLines } = makeProc()
+      spawnMock.mockReturnValue(proc)
+
+      const session = await createCodexSession(makeCtx(), {
+        type: 'create',
+        runtime: 'server',
+        sessionId: 'session-effort-stream',
+        effort,
+        description: 'Reply with pong.',
+        onEvent: () => {}
+      } as any)
+
+      const initialTurnRequest = receivedLines.find(line => line.method === 'turn/start')
+      expect(initialTurnRequest?.params.effort).toBe(effort)
+
+      session.kill()
+    }
+  )
+
+  it.each([
+    { fastMode: true, expectedServiceTier: 'priority', expectedOverride: 'service_tier="fast"' },
+    { fastMode: false, expectedServiceTier: null, expectedOverride: undefined }
+  ])('applies Fast mode $fastMode to native Codex requests', async ({
+    expectedOverride,
+    expectedServiceTier,
+    fastMode
+  }) => {
     process.env.HOME = '/tmp'
     const { proc, receivedLines } = makeProc()
     spawnMock.mockReturnValue(proc)
@@ -1092,14 +1122,24 @@ describe('createCodexSession RPC approval policy mapping', () => {
     const session = await createCodexSession(makeCtx(), {
       type: 'create',
       runtime: 'server',
-      sessionId: 'session-effort-stream',
-      effort: 'max',
+      sessionId: `session-fast-${fastMode}`,
+      fastMode,
       description: 'Reply with pong.',
       onEvent: () => {}
     } as any)
 
+    const startRequest = receivedLines.find(line => line.method === 'thread/start')
     const initialTurnRequest = receivedLines.find(line => line.method === 'turn/start')
-    expect(initialTurnRequest?.params.effort).toBe('xhigh')
+    expect(startRequest?.params.serviceTier).toBe(expectedServiceTier)
+    expect(initialTurnRequest?.params.serviceTier).toBe(expectedServiceTier)
+
+    const spawnArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    const overrides = getConfigOverrides(spawnArgs)
+    if (expectedOverride == null) {
+      expect(overrides).not.toContain('service_tier="fast"')
+    } else {
+      expect(overrides).toContain(expectedOverride)
+    }
 
     session.kill()
   })

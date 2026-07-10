@@ -19,6 +19,12 @@ import { buildModelSelectOption } from './model-selector-data-option-utils'
 
 type ServiceModelOptionLike = ServiceModelEntry & Partial<Pick<ServiceModelOption, 'serviceIcon' | 'modelIcon'>>
 
+const OPENAI_MODEL_ICON: IconRef = { kind: 'builtin', id: 'openai' }
+
+const resolveBuiltinModelIcon = (model: string, adapterIcon: IconRef) => (
+  /^gpt(?:-|$)/i.test(model) ? OPENAI_MODEL_ICON : adapterIcon
+)
+
 const buildAdapterIconRef = (adapterKey: string): IconRef => {
   const { darkIcon, icon } = getAdapterDisplay(adapterKey)
   if (icon != null && icon.trim() !== '') {
@@ -97,11 +103,13 @@ export const buildBuiltinModelGroups = (params: {
       if (!Array.isArray(models) || models.length === 0) return null
 
       const adapterIcon = buildAdapterIconRef(adapterKey)
+      const explicitModels = models.filter(model => model.value !== 'default')
+      const displayedModels = explicitModels.length > 0 ? explicitModels : models
 
       return {
         key: `builtin:${adapterKey}`,
         title: params.builtinGroupTitle(adapterKey),
-        options: models.map((model) => {
+        options: displayedModels.map((model) => {
           const metadata = resolveModelDisplayMetadata({
             model: model.value,
             models: params.mergedModels
@@ -113,7 +121,7 @@ export const buildBuiltinModelGroups = (params: {
             modelName: model.value,
             description: metadata?.description ?? model.description,
             aliases: metadata?.aliases,
-            modelIcon: adapterIcon,
+            modelIcon: resolveBuiltinModelIcon(model.value, adapterIcon),
             searchTerms: [model.value, ...(metadata?.aliases ?? []), metadata?.title]
           })
         })

@@ -146,14 +146,49 @@ describe('buildModelSelectorData', () => {
       builtinGroupTitle: (adapter) => `${adapter} built-in models`
     })
 
-    expect(result.builtinPreviewOptions.map(option => option.value)).toEqual(['default', 'gpt-5.5'])
+    expect(result.builtinPreviewOptions.map(option => option.value)).toEqual(['gpt-5.5', 'gpt-5.4'])
     expect(result.moreModelGroups.find(group => group.key === 'builtin:codex')?.options.map(option => option.value))
-      .toEqual(['default', 'gpt-5.5', 'gpt-5.4'])
+      .toEqual(['gpt-5.5', 'gpt-5.4'])
     expect(result.flatGroups.map(group => group.key)).toEqual([
       'builtin-preview',
       'builtin:codex',
       'builtin:kimi'
     ])
+  })
+
+  it('uses the OpenAI brand icon for built-in GPT models', () => {
+    const result = buildModelSelectorData({
+      activeBuiltinModels: {
+        codex: [
+          {
+            value: 'gpt-5.5',
+            title: 'GPT-5.5',
+            description: 'OpenAI model'
+          },
+          {
+            value: 'codex-auto-review',
+            title: 'Codex Auto Review',
+            description: 'Codex utility model'
+          }
+        ]
+      },
+      availableServiceModels: [],
+      builtinPreviewAdapter: 'codex',
+      defaultModelService: undefined,
+      mergedModels: {},
+      mergedModelServices: {},
+      recommendedModels: [],
+      recommendedGroupTitle: 'Recommended Models',
+      servicePreviewGroupTitle: 'Model Services',
+      builtinGroupTitle: adapter => `${adapter} built-in models`
+    })
+
+    expect(result.builtinPreviewOptions[0]?.modelIcon).toEqual({ kind: 'builtin', id: 'openai' })
+    expect(result.builtinPreviewOptions[1]?.modelIcon).toEqual({
+      kind: 'url',
+      url: getAdapterDisplay('codex').icon,
+      darkUrl: getAdapterDisplay('codex').darkIcon
+    })
   })
 
   it('deduplicates search results by model value while preserving recommended ordering', () => {

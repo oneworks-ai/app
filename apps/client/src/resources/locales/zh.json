@@ -2081,8 +2081,12 @@
       "low": "低",
       "medium": "中",
       "high": "高",
-      "max": "最高"
+      "xhigh": "超高",
+      "max": "最高",
+      "ultra": "Ultra"
     },
+    "fastModeEnable": "开启快速模式（消耗更多额度）",
+    "fastModeDisable": "关闭快速模式",
     "permissionModeSelectPlaceholder": "权限模式",
     "assetWarningsTitle": "兼容性提示",
     "assetWarningsCount": "{{count}} 个资产告警",
@@ -3398,7 +3402,9 @@
         "low": "低",
         "medium": "中",
         "high": "高",
-        "max": "最高"
+        "xhigh": "超高",
+        "max": "最高",
+        "ultra": "Ultra"
       }
     },
     "detail": {

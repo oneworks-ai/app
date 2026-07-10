@@ -1,5 +1,6 @@
 import './StageSlider.scss'
 
+import { Tooltip } from 'antd'
 import type { CSSProperties, ChangeEventHandler, FocusEventHandler, KeyboardEventHandler, Ref } from 'react'
 import { useStageSliderDrag } from './use-stage-slider-drag'
 
@@ -8,16 +9,18 @@ export interface StageSliderOption<Value extends string> {
   label: string
 }
 
-const LAST_STAGE_PARTICLES = Array.from({ length: 7 }, (_, index) => index)
-const LAST_STAGE_TRACK_PARTICLES = Array.from({ length: 9 }, (_, index) => index)
+export type StageSliderAnimationVariant = 'multicolor' | 'solid'
+
+const STAGE_PARTICLES = Array.from({ length: 7 }, (_, index) => index)
+const STAGE_TRACK_PARTICLES = Array.from({ length: 9 }, (_, index) => index)
 
 interface StageSliderStyle extends CSSProperties {
   '--stage-slider-progress': string
 }
 
 export function StageSlider<Value extends string>({
+  animationVariant,
   ariaLabel,
-  animateLastStage = false,
   className,
   disabled = false,
   inputRef,
@@ -28,8 +31,8 @@ export function StageSlider<Value extends string>({
   options,
   value
 }: {
+  animationVariant?: StageSliderAnimationVariant
   ariaLabel: string
-  animateLastStage?: boolean
   className?: string
   disabled?: boolean
   inputRef?: Ref<HTMLInputElement>
@@ -107,7 +110,8 @@ export function StageSlider<Value extends string>({
       className={[
         'stage-slider',
         isLastStage ? 'stage-slider--last' : '',
-        animateLastStage && isLastStage ? 'stage-slider--animated-last' : '',
+        animationVariant != null ? 'stage-slider--animated' : '',
+        animationVariant != null ? `stage-slider--animation-${animationVariant}` : '',
         dragProgress != null ? 'is-dragging' : '',
         dragProgress != null && detentIndex != null ? 'is-detented' : '',
         disabled || options.length === 0 ? 'is-disabled' : '',
@@ -130,7 +134,6 @@ export function StageSlider<Value extends string>({
         value={selectedIndex}
         aria-label={ariaLabel}
         aria-valuetext={selectedOption?.label}
-        title={selectedOption?.label}
         disabled={disabled || options.length === 0}
         onBlur={onBlur}
         onChange={handleChange}
@@ -141,37 +144,49 @@ export function StageSlider<Value extends string>({
         <span className='stage-slider__progress-rail'>
           <span className='stage-slider__progress' />
         </span>
-        {animateLastStage && isLastStage && (
+        {animationVariant != null && (
           <span className='stage-slider__track-particles'>
-            {LAST_STAGE_TRACK_PARTICLES.map(index => (
+            {STAGE_TRACK_PARTICLES.map(index => (
               <span key={index} className='stage-slider__track-particle' />
             ))}
           </span>
         )}
       </span>
       <span ref={marksRef} className='stage-slider__marks' aria-hidden='true'>
-        {options.map((option, index) => (
-          <span
-            key={option.value}
-            className={[
-              'stage-slider__mark',
-              index <= selectedIndex ? 'is-complete' : '',
-              index === selectedIndex ? 'is-current' : '',
-              index === hoveredIndex ? 'is-hovered' : ''
-            ].filter(Boolean).join(' ')}
-          />
-        ))}
+        {options.map((option, index) => {
+          const isHovered = !disabled && index === hoveredIndex
+
+          return (
+            <Tooltip
+              key={option.value}
+              title={option.label}
+              placement='bottom'
+              open={isHovered}
+              trigger={[]}
+              destroyOnHidden
+            >
+              <span
+                className={[
+                  'stage-slider__mark',
+                  index <= selectedIndex ? 'is-complete' : '',
+                  index === selectedIndex ? 'is-current' : '',
+                  isHovered ? 'is-hovered' : ''
+                ].filter(Boolean).join(' ')}
+              />
+            </Tooltip>
+          )
+        })}
       </span>
       <span className='stage-slider__thumb-rail' aria-hidden='true'>
         <span className='stage-slider__thumb' />
+        {animationVariant != null && (
+          <span className='stage-slider__particles'>
+            {STAGE_PARTICLES.map(index => (
+              <span key={index} className='stage-slider__particle' />
+            ))}
+          </span>
+        )}
       </span>
-      {animateLastStage && isLastStage && (
-        <span className='stage-slider__particles' aria-hidden='true'>
-          {LAST_STAGE_PARTICLES.map(index => (
-            <span key={index} className='stage-slider__particle' />
-          ))}
-        </span>
-      )}
     </div>
   )
 }

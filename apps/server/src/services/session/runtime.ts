@@ -38,6 +38,7 @@ export interface AdapterSessionConfig {
   account?: string
   permissionMode?: SessionPermissionMode
   effort?: EffortLevel
+  fastMode?: boolean
   promptType?: SessionPromptType
   promptName?: string
   seededFromHistory?: boolean

@@ -625,6 +625,7 @@ export async function startAdapterSession(
     model?: string
     account?: string
     effort?: EffortLevel
+    fastMode?: boolean
     systemPrompt?: string
     appendSystemPrompt?: boolean
     permissionMode?: SessionPermissionMode
@@ -650,6 +651,7 @@ export async function startAdapterSession(
     const resolvedAdapter = options.adapter ?? existing?.adapter
     const resolvedAccount = options.account ?? existing?.account
     let resolvedEffort = options.effort ?? existing?.effort
+    const resolvedFastMode = options.fastMode ?? existing?.fastMode
     let resolvedPermissionMode = options.permissionMode ?? existing?.permissionMode
     const resolvedPromptType = existing?.promptType ?? options.promptType
     const resolvedPromptName = existing?.promptName ?? options.promptName
@@ -665,6 +667,7 @@ export async function startAdapterSession(
       const currentAdapter = cached.config?.adapter
       const currentAccount = cached.config?.account
       const currentEffort = cached.config?.effort
+      const currentFastMode = cached.config?.fastMode
       const currentPermissionMode = cached.config?.permissionMode
       const currentPromptType = cached.config?.promptType
       const currentPromptName = cached.config?.promptName
@@ -672,6 +675,7 @@ export async function startAdapterSession(
         currentAdapter !== resolvedAdapter ||
         currentAccount !== resolvedAccount ||
         currentEffort !== resolvedEffort ||
+        currentFastMode !== resolvedFastMode ||
         currentPermissionMode !== resolvedPermissionMode ||
         currentPromptType !== resolvedPromptType ||
         currentPromptName !== resolvedPromptName
@@ -691,6 +695,8 @@ export async function startAdapterSession(
         resolvedAccount,
         currentEffort,
         resolvedEffort,
+        currentFastMode,
+        resolvedFastMode,
         currentPermissionMode,
         resolvedPermissionMode,
         currentPromptType,
@@ -716,6 +722,7 @@ export async function startAdapterSession(
       persistedAccount: existing?.account,
       resolvedAccount,
       resolvedEffort,
+      resolvedFastMode,
       resolvedPermissionMode,
       resolvedPromptType,
       resolvedPromptName
@@ -750,6 +757,7 @@ export async function startAdapterSession(
       resolvedAdapter !== existing?.adapter ||
       resolvedAccount !== existing?.account ||
       resolvedEffort !== existing?.effort ||
+      resolvedFastMode !== existing?.fastMode ||
       resolvedPermissionMode !== existing?.permissionMode ||
       resolvedPromptType !== existing?.promptType ||
       resolvedPromptName !== existing?.promptName
@@ -761,6 +769,7 @@ export async function startAdapterSession(
           adapter: resolvedAdapter,
           account: resolvedAccount,
           effort: resolvedEffort,
+          fastMode: resolvedFastMode,
           promptType: resolvedPromptType,
           promptName: resolvedPromptName
         })
@@ -925,6 +934,7 @@ export async function startAdapterSession(
         model: resolvedModel,
         account: resolvedAccount,
         effort: resolvedEffort,
+        fastMode: resolvedFastMode,
         systemPrompt: mergedSystemPrompt,
         permissionMode: resolvedPermissionMode,
         appendSystemPrompt: options.appendSystemPrompt ?? true,
@@ -993,6 +1003,7 @@ export async function startAdapterSession(
                     adapter: persistedAdapter,
                     account: persistedAccount,
                     effort: resolvedEffort,
+                    fastMode: resolvedFastMode,
                     promptType: resolvedPromptType,
                     promptName: resolvedPromptName
                   })
@@ -1254,6 +1265,7 @@ export async function startAdapterSession(
                         model: resolvedModel,
                         adapter: resolvedAdapter,
                         effort: resolvedEffort,
+                        fastMode: resolvedFastMode,
                         permissionMode: latestPermissionMode,
                         promptType: resolvedPromptType,
                         promptName: resolvedPromptName
@@ -1399,6 +1411,7 @@ export async function startAdapterSession(
           adapter: resolvedAdapter,
           account: resolvedAccount,
           effort: resolvedEffort,
+          fastMode: resolvedFastMode,
           permissionMode: resolvedPermissionMode,
           promptType: resolvedPromptType,
           promptName: resolvedPromptName,
@@ -1635,6 +1648,7 @@ export async function processUserMessage(
         runtimeContent: options.runtimeContent,
         model: options.model ?? latestSession.model,
         effort: latestSession.effort,
+        fastMode: latestSession.fastMode,
         permissionMode: latestSession.permissionMode,
         adapter: latestSession.adapter,
         promptType: latestSession.promptType,

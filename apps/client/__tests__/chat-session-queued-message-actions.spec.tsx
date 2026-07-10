@@ -402,6 +402,7 @@ describe('chat session queued message actions', () => {
         session,
         modelForQuery: 'codex/test',
         effort: 'default',
+        fastMode: false,
         permissionMode: 'default',
         setInteractionRequest
       })

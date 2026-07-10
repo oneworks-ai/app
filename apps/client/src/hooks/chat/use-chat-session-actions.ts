@@ -96,6 +96,7 @@ export function useChatSessionActions({
   modelForQuery,
   hasAvailableModels,
   effort,
+  fastMode = false,
   permissionMode,
   adapter,
   account,
@@ -115,6 +116,7 @@ export function useChatSessionActions({
   modelForQuery?: string
   hasAvailableModels: boolean
   effort: ChatEffort
+  fastMode?: boolean
   permissionMode: PermissionMode
   adapter?: string
   account?: string
@@ -273,6 +275,7 @@ export function useChatSessionActions({
       id,
       ...targetPrompt,
       effort: effort === 'default' ? undefined : effort,
+      fastMode,
       permissionMode,
       parentSessionId: workspaceSourceSessionId,
       adapter,
@@ -290,6 +293,7 @@ export function useChatSessionActions({
     account,
     adapter,
     effort,
+    fastMode,
     permissionMode,
     sessionCreationContext?.tags,
     sessionTargetDraft,

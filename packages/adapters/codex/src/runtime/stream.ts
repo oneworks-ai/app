@@ -301,6 +301,7 @@ export async function createStreamCodexSession(
     resolvedModel,
     resolvedMaxOutputTokens,
     turnEffort,
+    serviceTier,
     threadCacheKey,
     cachedThreadId
   } = base
@@ -730,7 +731,8 @@ export async function createStreamCodexSession(
       approvalPolicy: rpcApprovalPolicy,
       sandboxPolicy,
       serviceName: CANONICAL_ONEWORKS_MCP_SERVER_NAME,
-      ...(model ? { model } : {})
+      ...(model ? { model } : {}),
+      ...(serviceTier !== undefined ? { serviceTier } : {})
     })
     startupProfiler.mark('codex.native.threadStart', threadStartStartedAt)
     threadId = startResult.thread.id
@@ -769,7 +771,8 @@ export async function createStreamCodexSession(
     const threadResumeStartedAt = startupProfiler.now()
     const resumeResult = await rpc.request<{ thread: CodexThread }>('thread/resume', {
       threadId: nextThreadId,
-      ...(model ? { model } : {})
+      ...(model ? { model } : {}),
+      ...(serviceTier !== undefined ? { serviceTier } : {})
     })
     startupProfiler.mark('codex.native.threadResume', threadResumeStartedAt)
     threadId = resumeResult.thread.id
@@ -791,6 +794,7 @@ export async function createStreamCodexSession(
       sandboxPolicy,
       ...(model ? { model } : {}),
       ...(turnEffort ? { effort: turnEffort } : {}),
+      ...(serviceTier !== undefined ? { serviceTier } : {}),
       ...(typeof maxOutputTokens === 'number' ? { maxOutputTokens } : {})
     }
 

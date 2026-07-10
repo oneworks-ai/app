@@ -350,6 +350,7 @@ describe('runtime store engine consumer', () => {
       adapter: 'codex',
       model: 'default',
       effort: 'high',
+      fastMode: true,
       permissionMode: 'bypassPermissions',
       needsEngineConsumer: true,
       createdAt: 100
@@ -393,6 +394,8 @@ describe('runtime store engine consumer', () => {
       'mock,codex',
       '--effort',
       'high',
+      '--fast-mode',
+      'on',
       '--permission-mode',
       'dontAsk',
       'Run room child'

@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- session creation coordinates metadata, workspace provisioning, and runtime startup. */
-import type { ChatMessageContent, Session } from '@oneworks/core'
+import type { ChatMessageContent, EffortLevel, Session } from '@oneworks/core'
 import type { GitBranchKind, SessionCreationProgressEvent, SessionPromptType } from '@oneworks/types'
 
 import { getDb } from '#~/db/index.js'
@@ -71,7 +71,8 @@ export async function createSessionWithInitialMessage(options: {
   onWorkspaceProgress?: (sessionId: string, progress: SessionCreationProgressEvent) => void | Promise<void>
   tags?: string[]
   model?: string
-  effort?: 'low' | 'medium' | 'high' | 'max'
+  effort?: EffortLevel
+  fastMode?: boolean
   promptType?: SessionPromptType
   promptName?: string
   permissionMode?: 'default' | 'acceptEdits' | 'plan' | 'dontAsk' | 'bypassPermissions'
@@ -95,6 +96,7 @@ export async function createSessionWithInitialMessage(options: {
     tags,
     model,
     effort,
+    fastMode,
     promptType,
     promptName,
     permissionMode,
@@ -118,13 +120,23 @@ export async function createSessionWithInitialMessage(options: {
     if (
       model !== undefined ||
       effort !== undefined ||
+      fastMode !== undefined ||
       permissionMode !== undefined ||
       adapter !== undefined ||
       account !== undefined ||
       promptType !== undefined ||
       promptName !== undefined
     ) {
-      db.updateSession(session.id, { model, effort, permissionMode, adapter, account, promptType, promptName })
+      db.updateSession(session.id, {
+        model,
+        effort,
+        fastMode,
+        permissionMode,
+        adapter,
+        account,
+        promptType,
+        promptName
+      })
       const updatedSession = db.getSession(session.id)
       if (updatedSession) {
         Object.assign(session, updatedSession)
@@ -193,6 +205,7 @@ export async function createSessionWithInitialMessage(options: {
           runtimeContent: initialAgentContent,
           model,
           effort,
+          fastMode,
           permissionMode,
           systemPrompt,
           adapter,

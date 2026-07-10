@@ -98,6 +98,9 @@ export interface SenderProps {
   effort?: ChatEffort
   effortOptions?: Array<{ value: ChatEffort; label: ReactNode }>
   onEffortChange?: (effort: ChatEffort) => void
+  fastMode?: boolean
+  supportsFastMode?: boolean
+  onFastModeChange?: (enabled: boolean) => void
   permissionMode?: PermissionMode
   permissionModeOptions?: Array<{ value: PermissionMode; label: ReactNode }>
   onPermissionModeChange?: (mode: PermissionMode) => void

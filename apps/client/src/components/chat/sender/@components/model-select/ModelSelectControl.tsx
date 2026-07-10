@@ -121,9 +121,14 @@ export function ModelSelectControl({
   const isModelSelectOpen = showModelSelect
   const defaultModelLabel = t('chat.defaultModelLabel')
   const selectedModelOption = modelSearchOptions?.find(option => option.value === selectedModel)
+  const displayedModelOption = selectedModel === 'default'
+    ? builtinPreviewModelOptions?.find(option => option.value !== 'default') ??
+      modelSearchOptions?.find(option => option.serviceKey == null && option.value !== 'default') ??
+      selectedModelOption
+    : selectedModelOption
   const selectedModelLabel = modelUnavailable
     ? t('chat.modelUnavailable')
-    : selectedModelOption?.displayLabel ??
+    : displayedModelOption?.displayLabel ??
       selectedModel ??
       defaultModelLabel
 
@@ -243,7 +248,7 @@ export function ModelSelectControl({
                 openCompactModelSelect()
               }}
             >
-              {renderSelectedModelTriggerIcon(selectedModelOption)}
+              {renderSelectedModelTriggerIcon(displayedModelOption)}
               <span className='sender-responsive-select-button__label'>{selectedModelLabel}</span>
               <span className='material-symbols-rounded sender-responsive-select-button__chevron'>
                 keyboard_arrow_down
@@ -278,7 +283,7 @@ export function ModelSelectControl({
               labelRender={() =>
                 renderSelectedModelTriggerLabel({
                   label: selectedModelLabel,
-                  option: selectedModelOption
+                  option: displayedModelOption
                 })}
               popupRender={renderModelPopup}
               popupMatchSelectWidth={false}

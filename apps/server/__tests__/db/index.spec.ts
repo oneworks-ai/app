@@ -30,6 +30,7 @@ describe('sqliteDb', () => {
       isStarred: true,
       model: 'gpt-test',
       adapter: 'adapter-test',
+      fastMode: true,
       permissionMode: 'plan',
       promptType: 'workspace',
       promptName: 'client'
@@ -50,6 +51,7 @@ describe('sqliteDb', () => {
       status: 'running',
       model: 'gpt-test',
       adapter: 'adapter-test',
+      fastMode: true,
       permissionMode: 'plan',
       promptType: 'workspace',
       promptName: 'client'

@@ -43,6 +43,7 @@ export interface CliRuntimeEventSinkOptions extends RuntimeEventSinkOptions {
   adapter?: string
   createdAt?: number
   effort?: RuntimeMeta['effort']
+  fastMode?: RuntimeMeta['fastMode']
   message?: string
   model?: string
   permissionMode?: RuntimeMeta['permissionMode']
@@ -543,6 +544,7 @@ export const createCliRuntimeEventSink = async (options: CliRuntimeEventSinkOpti
       cwd: options.cwd,
       ...(trimOptional(options.adapter) != null ? { adapter: trimOptional(options.adapter) } : {}),
       ...(options.effort != null ? { effort: options.effort } : {}),
+      ...(options.fastMode != null ? { fastMode: options.fastMode } : {}),
       ...(trimOptional(options.model) != null ? { model: trimOptional(options.model) } : {}),
       ...(options.permissionMode != null ? { permissionMode: options.permissionMode } : {}),
       createdAt: ts

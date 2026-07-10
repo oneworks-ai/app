@@ -457,6 +457,8 @@ const toolbarState: SenderToolbarState = {
   modelSearchValue: '',
   selectedModel: 'gpt-5',
   effort: 'default',
+  fastMode: false,
+  supportsFastMode: false,
   permissionMode: 'default',
   selectedAdapter: 'codex',
   selectedAccount: 'primary',
@@ -1808,7 +1810,7 @@ describe('agent room transcript rendering', () => {
 
     expectContains(
       html,
-      'chat-input-wrapper chat-input-container chat-input-monaco sender-session-target sender-room-target sender-room-target__label sender-room-target__icon sender-permission-trigger toolbar-btn--reference model-select effort-select chat-status-bar chat-status-bar__actions account-select adapter-select adapter-select--locked'
+      'chat-input-wrapper chat-input-container chat-input-monaco sender-session-target sender-room-target sender-room-target__label sender-room-target__icon sender-permission-trigger toolbar-btn--reference model-select effort-stage-slider chat-status-bar chat-status-bar__actions account-select adapter-select adapter-select--locked'
         .split(' ')
     )
     expect(html).toContain('Message the host agent...')
@@ -1921,7 +1923,7 @@ describe('agent room transcript rendering', () => {
 
     expectContains(
       html,
-      'chat-input-wrapper sender-session-target sender-session-target__trigger sender-session-target__actions sender-permission-trigger toolbar-btn--reference model-select effort-select chat-status-bar chat-status-bar__actions account-select adapter-select adapter-select--locked'
+      'chat-input-wrapper sender-session-target sender-session-target__trigger sender-session-target__actions sender-permission-trigger toolbar-btn--reference model-select effort-stage-slider chat-status-bar chat-status-bar__actions account-select adapter-select adapter-select--locked'
         .split(' ')
     )
     expect(html).not.toContain('sender-room-target')

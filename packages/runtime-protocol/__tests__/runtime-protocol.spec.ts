@@ -68,6 +68,8 @@ describe('runtime command schema', () => {
       priority: 20,
       source: 'ui',
       content: 'Continue verification.',
+      effort: 'ultra',
+      fastMode: true,
       commandId: 'cmd_parent',
       causedByCommandId: 'cmd_root',
       inReplyToCommandId: 'cmd_prev',
@@ -80,6 +82,7 @@ describe('runtime command schema', () => {
     })
 
     expect(result.success).toBe(true)
+    expect(result.data).toEqual(expect.objectContaining({ effort: 'ultra', fastMode: true }))
   })
 
   it('rejects commands with invalid protocol versions or missing required fields', () => {

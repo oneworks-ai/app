@@ -4,4 +4,4 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 export type ConfigSource = 'global' | 'project' | 'user'
 
-export type EffortLevel = 'low' | 'medium' | 'high' | 'max'
+export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'

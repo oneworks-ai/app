@@ -9,6 +9,7 @@ import { getActiveOptimisticSessionCreation, optimisticSessionCreationsAtom } fr
 import { getSessionActivityLabel } from './session-activity-label'
 import { useChatAdapterAccountSelection } from './use-chat-adapter-account-selection'
 import { useChatEffort } from './use-chat-effort'
+import { useChatFastMode } from './use-chat-fast-mode'
 import { useChatInteraction } from './use-chat-interaction'
 import { useChatModelAdapterSelection } from './use-chat-model-adapter-selection'
 import { useChatPermissionMode } from './use-chat-permission-mode'
@@ -16,7 +17,10 @@ import { useChatSessionMessages } from './use-chat-session-messages'
 import { useChatView } from './use-chat-view'
 import { useSessionPermissionModeChange } from './use-session-permission-mode-change'
 
-type ObservedSessionSelection = Pick<Session, 'id' | 'model' | 'permissionMode' | 'adapter' | 'account' | 'effort'>
+type ObservedSessionSelection = Pick<
+  Session,
+  'id' | 'model' | 'permissionMode' | 'adapter' | 'account' | 'effort' | 'fastMode'
+>
 
 export function useChatSession({ enableTimelineView, session }: { enableTimelineView?: boolean; session?: Session }) {
   const { t } = useTranslation()
@@ -57,6 +61,10 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     adapter: selectedAdapter,
     model: selectedModelWithService
   })
+  const { applySessionFastMode, fastMode, setFastMode, supportsFastMode } = useChatFastMode({
+    adapter: selectedAdapter,
+    model: selectedModelWithService
+  })
   const {
     activeView,
     isTerminalOpen,
@@ -88,6 +96,7 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     session,
     modelForQuery: selectedModelWithService,
     effort,
+    fastMode,
     permissionMode,
     adapter: selectedAdapter,
     account: selectedAccount,
@@ -107,6 +116,7 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     if (session?.id == null || session.id === '') {
       lastObservedSessionRef.current = null
       applySessionEffort()
+      applySessionFastMode()
       return
     }
 
@@ -134,24 +144,31 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
       applySessionEffort(session.effort)
     }
 
+    if (sessionChanged || previous?.fastMode !== session.fastMode) {
+      applySessionFastMode(session.fastMode)
+    }
+
     lastObservedSessionRef.current = {
       id: session.id,
       model: session.model,
       permissionMode: session.permissionMode,
       adapter: session.adapter,
       account: session.account,
-      effort: session.effort
+      effort: session.effort,
+      fastMode: session.fastMode
     }
   }, [
     applySessionAccountSelection,
     session?.adapter,
     session?.account,
     session?.effort,
+    session?.fastMode,
     session?.id,
     session?.model,
     session?.permissionMode,
     applySessionSelection,
     applySessionEffort,
+    applySessionFastMode,
     setPermissionMode
   ])
 
@@ -192,6 +209,9 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     effort,
     setEffort,
     effortOptions,
+    fastMode,
+    setFastMode,
+    supportsFastMode,
     permissionMode,
     setPermissionMode: handlePermissionModeChange,
     permissionModeOptions,

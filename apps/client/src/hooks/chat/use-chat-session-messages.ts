@@ -450,6 +450,7 @@ export function useChatSessionMessages({
   session,
   modelForQuery,
   effort,
+  fastMode,
   permissionMode,
   adapter,
   account,
@@ -459,6 +460,7 @@ export function useChatSessionMessages({
   session?: Session
   modelForQuery?: string
   effort: ChatEffort
+  fastMode: boolean
   permissionMode: PermissionMode
   adapter?: string
   account?: string
@@ -482,6 +484,7 @@ export function useChatSessionMessages({
   const isInitialLoadRef = useRef<boolean>(true)
   const lastConnectedModelRef = useRef<string | undefined>(undefined)
   const lastConnectedEffortRef = useRef<string | undefined>(undefined)
+  const lastConnectedFastModeRef = useRef<string | undefined>(undefined)
   const lastConnectedPermissionModeRef = useRef<string | undefined>(undefined)
   const lastConnectedAdapterRef = useRef<string | undefined>(undefined)
   const lastConnectedAccountRef = useRef<string | undefined>(undefined)
@@ -1029,6 +1032,10 @@ export function useChatSessionMessages({
     const effortChanged = lastConnectedEffortRef.current != null &&
       normalizedEffort !== lastConnectedEffortRef.current &&
       session?.status !== 'running'
+    const normalizedFastMode = String(fastMode)
+    const fastModeChanged = lastConnectedFastModeRef.current != null &&
+      normalizedFastMode !== lastConnectedFastModeRef.current &&
+      session?.status !== 'running'
     const normalizedPermissionMode = permissionMode ?? ''
     const normalizedAdapter = adapter ?? ''
     const adapterChanged = adapter != null &&
@@ -1040,7 +1047,8 @@ export function useChatSessionMessages({
       lastConnectedAccountRef.current != null &&
       normalizedAccount !== lastConnectedAccountRef.current &&
       session?.status !== 'running'
-    const hasRuntimeRestartConfigChanged = modelChanged || effortChanged || adapterChanged || accountChanged
+    const hasRuntimeRestartConfigChanged = modelChanged || effortChanged || fastModeChanged || adapterChanged ||
+      accountChanged
     const shouldTerminateForConfigChange = shouldTerminateSessionForConfigChange(
       session,
       hasRuntimeRestartConfigChanged
@@ -1055,6 +1063,7 @@ export function useChatSessionMessages({
     }
     lastConnectedModelRef.current = normalizedModel
     lastConnectedEffortRef.current = normalizedEffort
+    lastConnectedFastModeRef.current = normalizedFastMode
     lastConnectedPermissionModeRef.current = normalizedPermissionMode
     lastConnectedAdapterRef.current = normalizedAdapter
     lastConnectedAccountRef.current = normalizedAccount
@@ -1069,6 +1078,7 @@ export function useChatSessionMessages({
       if (effort !== 'default') {
         connectionParams.effort = effort
       }
+      connectionParams.fastMode = normalizedFastMode
       if (permissionMode) {
         connectionParams.permissionMode = permissionMode
       }
@@ -1295,6 +1305,7 @@ export function useChatSessionMessages({
     applySessionOperationInfo,
     clearScheduledReconciles,
     effort,
+    fastMode,
     modelForQuery,
     mutate,
     optimisticCreation,

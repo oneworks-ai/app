@@ -81,6 +81,7 @@ export interface SessionInitInfo {
   adapter?: string
   account?: string
   effort?: EffortLevel
+  fastMode?: boolean
   version: string
   tools: string[]
   slashCommands: string[]
@@ -219,6 +220,7 @@ export interface AdapterQueryOptions {
   model?: string
   account?: string
   effort?: EffortLevel
+  fastMode?: boolean
   mode?: 'stream' | 'direct'
   systemPrompt?: string
   appendSystemPrompt?: boolean

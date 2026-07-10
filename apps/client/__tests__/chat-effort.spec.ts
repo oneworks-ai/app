@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { resolveAdapterModelRuntimeCapabilities } from '#~/hooks/chat/model-runtime-capabilities'
 import { CHAT_EFFORT_OPTIONS, resolvePreferredChatEffort } from '#~/hooks/chat/use-chat-effort'
 
 describe('chat effort preference', () => {
@@ -8,8 +9,48 @@ describe('chat effort preference', () => {
       'low',
       'medium',
       'high',
-      'max'
+      'xhigh',
+      'max',
+      'ultra'
     ])
+  })
+
+  it('uses model metadata for supported efforts and Fast availability', () => {
+    expect(resolveAdapterModelRuntimeCapabilities({
+      adapter: 'codex',
+      model: 'gpt-next',
+      adapterBuiltinModels: {
+        codex: [{
+          value: 'gpt-next',
+          title: 'GPT Next',
+          description: 'Next Codex model',
+          defaultEffort: 'high',
+          supportedEfforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+          serviceTiers: [{ id: 'priority', name: 'Fast', description: 'Faster responses' }]
+        }]
+      }
+    })).toEqual({
+      defaultEffort: 'high',
+      supportedEfforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+      supportsFastMode: true
+    })
+  })
+
+  it('does not expose native Fast mode for routed model services', () => {
+    expect(
+      resolveAdapterModelRuntimeCapabilities({
+        adapter: 'codex',
+        model: 'openai,gpt-next',
+        adapterBuiltinModels: {
+          codex: [{
+            value: 'gpt-next',
+            title: 'GPT Next',
+            description: 'Next Codex model',
+            serviceTiers: [{ id: 'priority', name: 'Fast', description: 'Faster responses' }]
+          }]
+        }
+      }).supportsFastMode
+    ).toBe(false)
   })
 
   it('prefers the last explicit selection over configured effort', () => {
@@ -31,5 +72,14 @@ describe('chat effort preference', () => {
       configuredEffort: 'default',
       storedEffort: undefined
     })).toBe('medium')
+  })
+
+  it('clamps stored and configured values to the selected model capabilities', () => {
+    expect(resolvePreferredChatEffort({
+      configuredEffort: 'ultra',
+      storedEffort: 'max',
+      fallbackEffort: 'high',
+      supportedEfforts: ['low', 'medium', 'high']
+    })).toBe('high')
   })
 })

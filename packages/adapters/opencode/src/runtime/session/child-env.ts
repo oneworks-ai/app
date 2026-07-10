@@ -158,7 +158,9 @@ const GEMINI_BUDGET_MAP = {
   max: 32768
 } as const
 
-const normalizeEffort = (value: unknown): AdapterQueryOptions['effort'] => (
+type OpenCodeEffort = 'low' | 'medium' | 'high' | 'max'
+
+const normalizeEffort = (value: unknown): OpenCodeEffort | undefined => (
   value === 'low' || value === 'medium' || value === 'high' || value === 'max'
     ? value
     : undefined

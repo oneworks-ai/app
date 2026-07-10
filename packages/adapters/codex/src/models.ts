@@ -1,9 +1,10 @@
+/* eslint-disable max-lines -- Codex catalog loading and capability normalization share one adapter boundary. */
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 import process from 'node:process'
 
-import type { AdapterBuiltinModel } from '@oneworks/types'
+import type { AdapterBuiltinModel, AdapterModelServiceTier, EffortLevel } from '@oneworks/types'
 
 /**
  * Codex native model options.
@@ -16,6 +17,9 @@ interface CodexModelCacheEntry {
   slug?: unknown
   display_name?: unknown
   description?: unknown
+  default_reasoning_level?: unknown
+  supported_reasoning_levels?: unknown
+  service_tiers?: unknown
   visibility?: unknown
   priority?: unknown
 }
@@ -69,9 +73,39 @@ const normalizePriority = (value: unknown) => (
   typeof value === 'number' && Number.isFinite(value) ? value : undefined
 )
 
+const normalizeEffort = (value: unknown): EffortLevel | undefined => (
+  value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh' ||
+    value === 'max' || value === 'ultra'
+    ? value
+    : undefined
+)
+
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
 )
+
+const normalizeSupportedEfforts = (value: unknown): EffortLevel[] | undefined => {
+  if (!Array.isArray(value)) return undefined
+
+  const efforts = value
+    .map((entry) => isRecord(entry) ? normalizeEffort(entry.effort) : undefined)
+    .filter((effort): effort is EffortLevel => effort != null)
+  return efforts.length > 0 ? [...new Set(efforts)] : undefined
+}
+
+const normalizeServiceTiers = (value: unknown): AdapterModelServiceTier[] | undefined => {
+  if (!Array.isArray(value)) return undefined
+
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) return []
+    const id = normalizeNonEmptyString(entry.id)
+    const name = normalizeNonEmptyString(entry.name)
+    const description = normalizeNonEmptyString(entry.description)
+    return id == null || name == null
+      ? []
+      : [{ id, name, description: description ?? name }]
+  })
+}
 
 const toSyntheticDisplayName = (modelId: string) => (
   modelId
@@ -168,7 +202,10 @@ const mapCachedModel = (
     model: {
       value,
       title: normalizeNonEmptyString(model.display_name) ?? toSyntheticDisplayName(value),
-      description: normalizeNonEmptyString(model.description) ?? `Codex model ${value}`
+      description: normalizeNonEmptyString(model.description) ?? `Codex model ${value}`,
+      defaultEffort: normalizeEffort(model.default_reasoning_level),
+      supportedEfforts: normalizeSupportedEfforts(model.supported_reasoning_levels),
+      serviceTiers: normalizeServiceTiers(model.service_tiers)
     },
     priority: normalizePriority(model.priority),
     index
@@ -192,7 +229,16 @@ const loadCachedBuiltinModels = () => (
 
 export const loadCodexBuiltinModels = (): AdapterBuiltinModel[] => {
   const cachedModels = loadCachedBuiltinModels()
-  return [DEFAULT_MODEL_OPTION, ...(cachedModels.length > 0 ? cachedModels : FALLBACK_BUILTIN_MODELS)]
+  const defaultModel = cachedModels[0]
+  return [
+    {
+      ...DEFAULT_MODEL_OPTION,
+      defaultEffort: defaultModel?.defaultEffort,
+      supportedEfforts: defaultModel?.supportedEfforts,
+      serviceTiers: defaultModel?.serviceTiers
+    },
+    ...(cachedModels.length > 0 ? cachedModels : FALLBACK_BUILTIN_MODELS)
+  ]
 }
 
 export const loadBuiltinModels = loadCodexBuiltinModels

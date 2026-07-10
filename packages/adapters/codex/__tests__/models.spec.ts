@@ -39,6 +39,15 @@ describe('codex builtin models', () => {
             slug: 'gpt-first',
             display_name: 'GPT First',
             description: 'Higher priority model',
+            default_reasoning_level: 'high',
+            supported_reasoning_levels: [
+              { effort: 'low', description: 'Low' },
+              { effort: 'high', description: 'High' },
+              { effort: 'ultra', description: 'Ultra' }
+            ],
+            service_tiers: [
+              { id: 'priority', name: 'Fast', description: 'Faster responses' }
+            ],
             visibility: 'list',
             priority: 10
           }
@@ -52,12 +61,18 @@ describe('codex builtin models', () => {
       {
         value: 'default',
         title: 'Default',
-        description: 'Use the account default model and provider selection managed by Codex'
+        description: 'Use the account default model and provider selection managed by Codex',
+        defaultEffort: 'high',
+        supportedEfforts: ['low', 'high', 'ultra'],
+        serviceTiers: [{ id: 'priority', name: 'Fast', description: 'Faster responses' }]
       },
       {
         value: 'gpt-first',
         title: 'GPT First',
-        description: 'Higher priority model'
+        description: 'Higher priority model',
+        defaultEffort: 'high',
+        supportedEfforts: ['low', 'high', 'ultra'],
+        serviceTiers: [{ id: 'priority', name: 'Fast', description: 'Faster responses' }]
       },
       {
         value: 'gpt-later',
@@ -88,6 +103,24 @@ describe('codex builtin models', () => {
       title: 'Gpt Next Codex',
       description: 'Codex model gpt-next-codex'
     })
+  })
+
+  it('falls back when a cache entry has no recognized effort levels', async () => {
+    const codexHome = await mkdtemp(join(tmpdir(), 'ow-codex-models-empty-efforts-'))
+    tempDirs.push(codexHome)
+    await writeFile(
+      join(codexHome, 'models_cache.json'),
+      JSON.stringify({
+        models: [{
+          slug: 'gpt-next-codex',
+          supported_reasoning_levels: [{ effort: 'unknown' }]
+        }]
+      }),
+      'utf8'
+    )
+    vi.stubEnv('CODEX_HOME', codexHome)
+
+    expect(loadCodexBuiltinModels()[1]?.supportedEfforts).toBeUndefined()
   })
 
   it('prefers the configured model_catalog_json file before models_cache.json', async () => {

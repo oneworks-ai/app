@@ -126,6 +126,7 @@ export const ensureRuntimeSession = (db: SqliteDb, event: RuntimeEvent, metadata
 
   const adapter = event.adapter ?? metadata?.adapter
   const effort = metadata?.effort
+  const fastMode = metadata?.fastMode
   const model = event.model ?? metadata?.model
   const metadataPermissionMode = metadata?.permissionMode
   const permissionMode = existing?.permissionMode == null ? metadataPermissionMode : undefined
@@ -138,6 +139,7 @@ export const ensureRuntimeSession = (db: SqliteDb, event: RuntimeEvent, metadata
     ...(resolvedStatus != null ? { status: resolvedStatus } : {}),
     ...(adapter != null ? { adapter } : {}),
     ...(effort != null ? { effort } : {}),
+    ...(fastMode != null ? { fastMode } : {}),
     ...(model != null ? { model } : {}),
     ...(permissionMode != null ? { permissionMode } : {})
   }

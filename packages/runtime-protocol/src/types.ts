@@ -54,7 +54,8 @@ export interface RuntimeSessionCommandEnvelope
   adapter?: string
   model?: string
   account?: string
-  effort?: 'low' | 'medium' | 'high' | 'max'
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
+  fastMode?: boolean
   background?: boolean
   permissionMode?: RuntimePermissionMode
   hostSessionId?: string
@@ -124,7 +125,8 @@ export interface RuntimeCommand extends RuntimeJsonObject, RuntimeCorrelationFie
   name?: string
   entity?: string
   adapter?: string
-  effort?: 'low' | 'medium' | 'high' | 'max'
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
+  fastMode?: boolean
   model?: string
   permissionMode?: RuntimePermissionMode
   background?: boolean
@@ -155,7 +157,8 @@ export interface RuntimeCommandDraft
   name?: string
   entity?: string
   adapter?: string
-  effort?: 'low' | 'medium' | 'high' | 'max'
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
+  fastMode?: boolean
   model?: string
   permissionMode?: RuntimePermissionMode
   background?: boolean
@@ -249,7 +252,8 @@ export interface RuntimeMeta extends RuntimeJsonObject, RuntimeProtocolEnvelope 
   title?: string
   entity?: string
   adapter?: string
-  effort?: 'low' | 'medium' | 'high' | 'max'
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
+  fastMode?: boolean
   model?: string
   permissionMode?: RuntimePermissionMode
   cwd?: string
@@ -311,7 +315,8 @@ export interface StartRuntimeCommand extends RuntimeCommandBase {
   taskType?: TaskDefinitionType
   name?: string
   adapter?: string
-  effort?: 'low' | 'medium' | 'high' | 'max'
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
+  fastMode?: boolean
   model?: string
   permissionMode?: RuntimePermissionMode
   background?: boolean

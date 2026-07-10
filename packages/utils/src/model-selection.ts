@@ -122,7 +122,8 @@ export const resolveSelectableAdapterKeys = (params: {
 }
 
 export const normalizeEffortLevel = (value: unknown): EffortLevel | undefined => (
-  value === 'low' || value === 'medium' || value === 'high' || value === 'max'
+  value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh' ||
+    value === 'max' || value === 'ultra'
     ? value
     : undefined
 )

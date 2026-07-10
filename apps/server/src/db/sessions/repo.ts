@@ -43,6 +43,7 @@ interface SessionRow {
   account: string | null
   permissionMode: string | null
   effort: string | null
+  fastMode: number | null
   promptType: string | null
   promptName: string | null
   panelState: string | null
@@ -98,6 +99,7 @@ const sessionUpdateFields = [
   { key: 'account' },
   { key: 'permissionMode' },
   { key: 'effort' },
+  { key: 'fastMode', toParam: value => value == null ? null : value ? 1 : 0 },
   { key: 'promptType' },
   { key: 'promptName' },
   { key: 'panelState', toParam: value => JSON.stringify(normalizeSessionPanelState(value)) },
@@ -157,6 +159,7 @@ function mapSessionRow(row: SessionRow): Session {
     account: row.account ?? undefined,
     permissionMode: (row.permissionMode as any) ?? undefined,
     effort: (row.effort as any) ?? undefined,
+    fastMode: row.fastMode == null ? undefined : row.fastMode === 1,
     promptType: (row.promptType as any) ?? undefined,
     promptName: row.promptName ?? undefined,
     ...(panelState == null ? {} : { panelState })

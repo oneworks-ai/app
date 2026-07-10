@@ -157,6 +157,8 @@ export function setupWebSocket(server: Server, env: ServerEnv) {
 
     const model = params.get('model') ?? undefined
     const effort = params.get('effort') ?? undefined
+    const fastModeValue = params.get('fastMode')
+    const fastMode = fastModeValue === 'true' ? true : fastModeValue === 'false' ? false : undefined
     const systemPrompt = params.get('systemPrompt') ?? undefined
     const appendSystemPrompt = params.get('appendSystemPrompt') !== 'false'
     const permissionMode = params.get('permissionMode') ?? undefined
@@ -188,7 +190,8 @@ export function setupWebSocket(server: Server, env: ServerEnv) {
       } else if (shouldAutoStartAdapter) {
         const cached = await startAdapterSession(sessionId, {
           model,
-          effort: effort as 'low' | 'medium' | 'high' | 'max' | undefined,
+          effort: effort as 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra' | undefined,
+          fastMode,
           systemPrompt,
           appendSystemPrompt,
           permissionMode: permissionMode as

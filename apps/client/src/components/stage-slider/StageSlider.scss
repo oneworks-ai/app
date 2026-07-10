@@ -112,12 +112,17 @@
 
 .stage-slider__track-particle {
   --stage-slider-track-particle-y: -3px;
+  --stage-slider-particle-color: color-mix(
+    in srgb,
+    #fff 76%,
+    var(--primary-color)
+  );
 
   width: 2px;
   height: 2px;
   opacity: .18;
   border-radius: var(--stage-slider-mark-radius);
-  background: color-mix(in srgb, #fff 76%, var(--primary-color));
+  background: var(--stage-slider-particle-color);
   animation: stage-slider-track-particle 1.8s ease-in-out infinite;
 
   &:nth-child(2) {
@@ -334,9 +339,7 @@
   position: absolute;
   z-index: 3;
   top: 50%;
-  right: calc(
-    var(--stage-slider-edge-padding) + var(--stage-slider-thumb-size) / 2
-  );
+  left: var(--stage-slider-progress);
   width: 0;
   height: 0;
   pointer-events: none;
@@ -373,14 +376,20 @@
 .stage-slider__particle {
   --stage-slider-particle-x: -10px;
   --stage-slider-particle-y: -8px;
+  --stage-slider-particle-color: color-mix(
+    in srgb,
+    #fff 76%,
+    var(--primary-color)
+  );
 
   position: absolute;
   width: 3px;
   height: 3px;
   opacity: 0;
   border-radius: var(--stage-slider-mark-radius);
-  background: var(--primary-color);
-  box-shadow: 0 0 4px color-mix(in srgb, var(--primary-color) 52%, transparent);
+  background: var(--stage-slider-particle-color);
+  box-shadow: 0 0 4px
+    color-mix(in srgb, var(--stage-slider-particle-color) 64%, transparent);
   animation: stage-slider-particle-burst 1.8s ease-out infinite;
 
   &:nth-child(2) {
@@ -432,6 +441,38 @@
   }
 }
 
+.stage-slider--animation-multicolor {
+  .stage-slider__track-particle,
+  .stage-slider__particle {
+    &:nth-child(5n+1) {
+      --stage-slider-particle-color: #5eead4;
+    }
+
+    &:nth-child(5n+2) {
+      --stage-slider-particle-color: #60a5fa;
+    }
+
+    &:nth-child(5n+3) {
+      --stage-slider-particle-color: #c084fc;
+    }
+
+    &:nth-child(5n+4) {
+      --stage-slider-particle-color: #fbbf24;
+    }
+
+    &:nth-child(5n+5) {
+      --stage-slider-particle-color: #fb7185;
+    }
+  }
+
+  .stage-slider__particles::before {
+    border-color: color-mix(in srgb, #c084fc 56%, transparent);
+    box-shadow:
+      0 0 5px color-mix(in srgb, #5eead4 28%, transparent),
+      0 0 9px color-mix(in srgb, #fb7185 20%, transparent);
+  }
+}
+
 @keyframes stage-slider-particle-burst {
   0%,
   22% {
@@ -454,7 +495,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stage-slider--animated-last:not(.is-disabled) {
+  .stage-slider--animated:not(.is-disabled) {
     .stage-slider__particles,
     .stage-slider__track-particles {
       display: none;

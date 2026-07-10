@@ -17,6 +17,7 @@ export const createSenderToolbarHandlers = ({
   onAdapterChange,
   onAccountChange,
   onEffortChange,
+  onFastModeChange,
   onInterrupt,
   onModelChange,
   onToggleRecommendedModel,
@@ -44,6 +45,7 @@ export const createSenderToolbarHandlers = ({
   onAdapterChange?: (adapter: string) => void
   onAccountChange?: (account: string) => void
   onEffortChange?: (effort: ChatEffort) => void
+  onFastModeChange?: (enabled: boolean) => void
   onInterrupt: () => void
   onModelChange?: (model: string) => void
   onToggleRecommendedModel?: (option: ModelSelectOption) => void | Promise<void>
@@ -137,6 +139,7 @@ export const createSenderToolbarHandlers = ({
     onConnectMoreModelServices,
     onOpenModelServicesConfig,
     onEffortChange,
+    onFastModeChange,
     onAdapterChange,
     onAccountChange,
     onQueueModeChange,
