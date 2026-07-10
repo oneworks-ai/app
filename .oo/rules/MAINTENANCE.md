@@ -28,9 +28,15 @@ pnpm tools dev-start <target>
 find .oo/rules -maxdepth 1 -type f -name '*.md' -print0 | xargs -0 wc -c -l
 ```
 
+## 代码交付质量
+
+- medium reasoning 只负责边界明确后的日常实现，不等于可以省略全局设计和最终审阅。非机械代码修改在写入前必须产出 Change Brief、影响地图和抽象决策；实现者不得自审自批。
+- 交付前按风险完成独立的局部正确性、全局 / 抽象审阅和自动化门禁；公共契约、状态所有权、权限、安全、数据、复杂并发或不可逆操作必须升级设计或最终审阅。执行清单见 [`maintenance/code-delivery-quality.md`](./maintenance/code-delivery-quality.md)。
+
 ## 常见入口
 
 - 代码质量、测试、发布前检查：[`maintenance/README.md`](./maintenance/README.md)
+- medium 编码的全局影响、抽象与交付门禁：[`maintenance/code-delivery-quality.md`](./maintenance/code-delivery-quality.md)
 - 常见问题索引：[`maintenance/common-issues.md`](./maintenance/common-issues.md)
 - 日志消费与排查：[`maintenance/logs.md`](./maintenance/logs.md)
 - 开发任务的模型档位、速度、消耗与路由：[`maintenance/model-routing.md`](./maintenance/model-routing.md)
