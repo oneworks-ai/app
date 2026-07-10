@@ -5,10 +5,55 @@ import { describe, expect, it } from 'vitest'
 import {
   filterRelayConfigPatch,
   matchesRelayConfigProject,
+  normalizeRelayGitRepositoryIdentity,
+  relayGitRepositoryIdentitiesEqual,
   resolveRelayConfigPatchForProject
 } from '../src/shared/config-assignment.js'
 
 describe('relay config assignment', () => {
+  it('normalizes standard Git remote identities and rejects ambiguous repository names', () => {
+    expect(normalizeRelayGitRepositoryIdentity('https://github.com/OneWorks-AI/app.git')).toBe(
+      'github.com/OneWorks-AI/app'
+    )
+    expect(normalizeRelayGitRepositoryIdentity('git@github.com:oneworks-ai/app.git')).toBe(
+      'github.com/oneworks-ai/app'
+    )
+    expect(normalizeRelayGitRepositoryIdentity('ssh://git@git.example.com/platform/app.git')).toBe(
+      'git.example.com/platform/app'
+    )
+    expect(normalizeRelayGitRepositoryIdentity('ssh://git@github.com:22/OneWorks-AI/App.git')).toBe(
+      'github.com/OneWorks-AI/App'
+    )
+    expect(normalizeRelayGitRepositoryIdentity('oneworks-ai/app')).toBeUndefined()
+    expect(normalizeRelayGitRepositoryIdentity('https://github.com/oneworks-ai/app?ref=main')).toBeUndefined()
+  })
+
+  it('matches a canonical assignment against discovered Git remote identities', () => {
+    expect(matchesRelayConfigProject(
+      { project: { allow: ['github.com/oneworks-ai/app'] } },
+      { gitRepositories: ['git@github.com:oneworks-ai/app.git'] }
+    )).toBe(true)
+    expect(matchesRelayConfigProject(
+      { project: { allow: ['github.com/oneworks-ai/other'] } },
+      { gitRepositories: ['https://github.com/oneworks-ai/app.git'] }
+    )).toBe(false)
+  })
+
+  it('uses provider-aware repository path casing', () => {
+    expect(relayGitRepositoryIdentitiesEqual(
+      'github.com/OneWorks-AI/App',
+      'ssh://git@github.com:22/oneworks-ai/app.git'
+    )).toBe(true)
+    expect(relayGitRepositoryIdentitiesEqual(
+      'git.example.com/Platform/App',
+      'git.example.com/platform/app'
+    )).toBe(false)
+    expect(matchesRelayConfigProject(
+      { project: { allow: ['git.example.com/Platform/App'] } },
+      { gitRepositories: ['ssh://git@git.example.com/platform/app.git'] }
+    )).toBe(false)
+  })
+
   it('matches project allow and deny rules with deny taking precedence', () => {
     expect(matchesRelayConfigProject(
       {

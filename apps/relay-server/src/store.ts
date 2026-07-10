@@ -17,6 +17,7 @@ import {
 import { normalizeRelayConfigAssignment } from './config-snapshot.js'
 import { hashDeviceToken } from './devices/private-metadata.js'
 import { normalizeRelayPersonalConfigSnapshot } from './personal-config.js'
+import { normalizeRelayProjectRuleDocumentSnapshot } from './project-rule-documents.js'
 import { sanitizeRelayStorageValue } from './storage/content-boundary.js'
 import { normalizeRelaySsoProviders } from './storage/sso-providers.js'
 import { normalizeRelayTeamDocumentSnapshot } from './team-documents.js'
@@ -51,6 +52,7 @@ import type {
   RelayPasskeyChallengeKind,
   RelayPasskeyCredential,
   RelayPersonalConfigSnapshot,
+  RelayProjectRuleDocumentSnapshot,
   RelaySession,
   RelayStore,
   RelayTeam,
@@ -70,6 +72,7 @@ const defaultStore = (): RelayStore => ({
   configAssignments: [],
   configProfileAssignments: [],
   personalConfigSnapshots: [],
+  projectRuleDocumentSnapshots: [],
   teamDocumentSnapshots: [],
   configSecrets: [],
   configProfileVersions: [],
@@ -922,6 +925,11 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
       ? store.personalConfigSnapshots.filter(isRecord).map(normalizeRelayPersonalConfigSnapshot).filter((
         value
       ): value is RelayPersonalConfigSnapshot => value != null)
+      : [],
+    projectRuleDocumentSnapshots: Array.isArray(store.projectRuleDocumentSnapshots)
+      ? store.projectRuleDocumentSnapshots.filter(isRecord).map(normalizeRelayProjectRuleDocumentSnapshot).filter((
+        value
+      ): value is RelayProjectRuleDocumentSnapshot => value != null)
       : [],
     teamDocumentSnapshots: Array.isArray(store.teamDocumentSnapshots)
       ? store.teamDocumentSnapshots.filter(isRecord).map(normalizeRelayTeamDocumentSnapshot).filter((

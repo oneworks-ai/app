@@ -2073,6 +2073,8 @@
     "accountSelectCreateCanceled": "Account connection canceled",
     "accountSelectOpenAdapterConfig": "Open {{adapter}} config",
     "accountSelectOpenAccountConfig": "Open {{account}} settings",
+    "accountQuota": "Account quota",
+    "accountQuotaWindow": "{{window}} quota: {{value}} used",
     "effortSelectPlaceholder": "Effort",
     "effortSliderLabel": "Reasoning effort: {{value}}",
     "effortLabels": {

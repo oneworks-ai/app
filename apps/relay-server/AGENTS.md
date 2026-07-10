@@ -11,6 +11,7 @@
 - `src/routes/email-code-login.ts`：现有用户邮箱验证码登录 endpoint；发码继续走 `src/routes/email-verification.ts` 且使用 `purpose=login`。
 - `src/routes/admin-sso-providers.ts`：B 端托管 SSO provider 管理 API。
 - `src/routes/teams.ts`、`src/routes/team-*.ts`、`src/routes/config-secrets.ts`、`src/teams.ts`、`src/config-secrets.ts`：团队、成员、租户团队策略、配置 secret 加密存储 / 轮换 / 撤销 API 与团队配置消费权限 helper；`/api/relay/teams` 面向用户自助团队流程，`/api/admin/teams` 和 `/api/admin/team-policy` 只给站点管理员。
+- `src/routes/project-rule-documents.ts` / `src/project-rule-documents.ts`：项目规则 assignment 自有文档快照的当前用户与管理员 API、权限边界和持久化归一化；它不是账号 / 团队文档索引，也不负责读取正文或判断本地 Git 项目是否命中规则。
 - `src/routes/admin-openapi.ts`：Relay 机器可读 OpenAPI 3.1 文档；平台管理员 API 挂载在 `/api/admin/openapi.json`，个人用户 API 挂载在 `/api/profile/openapi.json`，不要写入真实 token 或部署 secret。Admin 前端只读取这两份文档，不在 `apps/relay-admin` 复制 paths / schema。
 - `src/routes/profile.ts`：当前登录用户自己的 profile 安全 API，包括系统访问令牌、OpenAPI 调用审计查询、密码修改和 passkey 绑定；不要在这里实现他人用户管理动作。
 - `src/devices/private-metadata.ts`：设备私有元数据加密、解密和 device token hash 工具。
@@ -32,6 +33,7 @@
 - 管理页前端不放在这里；React 管理端在 `apps/relay-admin`，通过 Vite 构建后由 `/admin/assets/*` 提供。
 - `src/routes/admin-ui.ts` 只负责 HTML shell 和静态资源读取；不要把 React 代码、样式或业务状态内联回 relay-server。
 - Relay store 不保存会话正文或结果正文，只保存 trace/status/size/timestamp/errorCode 等元数据；新增存储 driver 必须复用 `content-boundary.ts` 的过滤。
+- 项目规则文档绑定 config assignment，使用 `/api/relay/config-assignments/:assignmentId/documents` 或管理员同构路径同步。Relay Server 业务路由保存并透传客户端生成的密文格式 payload 以及同步、范围和审计元数据，不解析或索引文档正文；部署运营方能够复现当前命名空间派生密钥，因此文档不得承诺运营方无法解密。本地目录、Git 命中判断、路径安全和提示词注入由 Relay 插件负责，不能下沉到 server 或宿主应用。
 - Relay device 的 alias / name / capabilities / workspaceFolder / pluginScope 是用户私有元数据。新写入必须加密存储，device token 只存 hash；admin 用户管理只返回 `deviceCount` / `maxDevices` 这类聚合字段，不返回其他用户设备详情。`alias` 是 OneWorks / Relay 内的展示名，不参与设备身份判断；真实机器名继续放在 `name`，用于兜底显示和排查。
 - `/api/relay/devices` 是当前 session 用户自己的设备列表。不要因为 owner/admin 有管理权限就把其他用户设备详情从这个接口返回。
 - 系统访问令牌属于当前登录用户，落库只存 hash 和 preview；生成接口只返回一次明文。权限按令牌所属用户的 role/capability 解析，不要给系统访问令牌绕过当前用户保护，例如禁止修改自己的 role。

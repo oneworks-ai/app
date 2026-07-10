@@ -572,6 +572,12 @@ export interface RelayTeamDocumentSnapshot extends RelayPersonalDocumentSnapshot
   updatedByUserId?: string
 }
 
+export interface RelayProjectRuleDocumentSnapshot extends RelayPersonalDocumentSnapshot {
+  assignmentId: string
+  teamId: string
+  updatedByUserId?: string
+}
+
 export interface RelayAuditLogEntry {
   id: string
   actor: string
@@ -708,6 +714,7 @@ export interface RelayStore {
   configAssignments: RelayConfigAssignment[]
   configProfileAssignments: RelayConfigProfileAssignment[]
   personalConfigSnapshots?: RelayPersonalConfigSnapshot[]
+  projectRuleDocumentSnapshots?: RelayProjectRuleDocumentSnapshot[]
   teamDocumentSnapshots?: RelayTeamDocumentSnapshot[]
   configSecrets: RelayConfigSecret[]
   configProfileVersions: RelayConfigProfileVersion[]

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import useSWR from 'swr'
 
-import type { AdapterAccountInfo, AdapterAccountQuotaMetric, AdapterAccountsResult } from '@oneworks/types'
+import type { AdapterAccountInfo, AdapterAccountQuotaMetric } from '@oneworks/types'
 
-import { getAdapterAccounts } from '#~/api.js'
+import { useAdapterAccountsWithQuota } from '#~/hooks/use-adapter-accounts-with-quota'
+import { getAccountQuotaWindows } from '#~/utils/account-quota'
+import type { AccountQuotaWindow } from '#~/utils/account-quota'
 import { normalizeNonEmptyString } from './model-selector'
 
 export interface ChatAdapterAccountOption {
@@ -13,12 +14,11 @@ export interface ChatAdapterAccountOption {
   meta?: string
   email?: string
   avatarUrl?: string
+  quotaWindows?: AccountQuotaWindow[]
 }
-
 const ACCOUNT_STORAGE_KEY_PREFIX = 'oneworks_chat_adapter_account:'
 const EMAIL_PATTERN = /[\w.%+-]+@[\w.-]+\.[A-Z]{2,}/i
 const GENERIC_ACCOUNT_TITLES = new Set(['codex'])
-
 const formatQuotaMetric = (metric: AdapterAccountQuotaMetric) => {
   const label = normalizeNonEmptyString(metric.label) ??
     normalizeNonEmptyString(
@@ -97,10 +97,7 @@ export function useChatAdapterAccountSelection({
     setSelectedAccountState(readStoredAccount(normalizedAdapter))
   }, [normalizedAdapter])
 
-  const { data } = useSWR<AdapterAccountsResult>(
-    normalizedAdapter == null ? null : ['/api/adapters/accounts', normalizedAdapter, model ?? ''],
-    normalizedAdapter == null ? null : () => getAdapterAccounts(normalizedAdapter, { model })
-  )
+  const data = useAdapterAccountsWithQuota({ adapter: normalizedAdapter, model })
 
   const accountOptions = useMemo<ChatAdapterAccountOption[]>(() => {
     return (data?.accounts ?? [])
@@ -111,7 +108,8 @@ export function useChatAdapterAccountSelection({
         hint: account.description,
         meta: formatQuotaMeta(account.quota),
         email: inferAccountEmail(account),
-        avatarUrl: account.avatarUrl
+        avatarUrl: account.avatarUrl,
+        quotaWindows: getAccountQuotaWindows(account.quota)
       }))
   }, [data?.accounts])
 

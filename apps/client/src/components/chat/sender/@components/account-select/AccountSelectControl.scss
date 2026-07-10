@@ -8,18 +8,11 @@
     position: relative;
   }
 
-  .ant-select-selector::before {
-    content: 'switch_account';
-    font-family: 'Material Symbols Rounded';
-    font-size: 16px;
-    font-weight: 300;
-    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
-    line-height: 1;
+  .ant-select-prefix {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    color: currentColor;
     margin-right: 6px;
   }
 
@@ -61,13 +54,6 @@
     padding-inline-start: 0 !important;
     padding-inline-end: 0 !important;
     justify-content: center;
-  }
-
-  .ant-select-selector::before {
-    position: absolute;
-    inset: 0;
-    margin: 0;
-    pointer-events: none;
   }
 
   .ant-select-selection-wrap,
@@ -171,13 +157,6 @@
       padding-inline-start: 0 !important;
       padding-inline-end: 0 !important;
       justify-content: center;
-    }
-
-    .ant-select-selector::before {
-      position: absolute;
-      inset: 0;
-      margin: 0;
-      pointer-events: none;
     }
 
     .ant-select-selection-wrap,

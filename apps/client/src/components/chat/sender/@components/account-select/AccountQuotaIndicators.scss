@@ -1,0 +1,50 @@
+.account-quota-indicators {
+  --quota-usage-ring-inner-bg: var(
+    --chat-surface-status-bg,
+    var(--bg-color, #fff)
+  );
+
+  height: var(--sender-control-height);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.account-quota-indicator__tooltip-target {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+
+  .quota-usage-ring {
+    transition: transform .16s ease, filter .16s ease;
+  }
+
+  &:hover .quota-usage-ring {
+    transform: scale(1.06);
+    filter: saturate(1.12);
+  }
+}
+
+.account-quota-indicator__tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.account-quota-indicator__tooltip-title {
+  font-weight: 600;
+}
+
+.account-quota-indicator__tooltip-description {
+  color: var(--oneworks-overlay-muted, var(--sub-text-color, #9ca3af));
+  font-size: 11px;
+}
+
+@container sender-history (max-width: 700px) {
+  .chat-status-bar__account-group > .account-quota-indicators {
+    display: none;
+  }
+}

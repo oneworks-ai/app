@@ -354,6 +354,7 @@ export interface RelayStatus {
     servers?: RelayServerStatus[]
   }
   personalDocumentSync?: RelayPersonalDocumentSyncStatus
+  projectRuleDocumentSync?: Record<string, RelayPersonalDocumentSyncStatus>
   servers?: RelayServerStatus[]
   teamDocumentSync?: Record<string, RelayPersonalDocumentSyncStatus>
   [key: string]: unknown

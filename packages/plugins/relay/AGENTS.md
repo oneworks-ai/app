@@ -24,8 +24,11 @@
 ## 约定
 
 - 插件必须保持可选；不要把 Relay 行为写进默认 server/client 启动路径。
-- Relay 详情页使用 host `NativeTabs` 时，tabs 自身的标准 margin 负责与上方内容分隔；包裹 tabs 的业务详情容器不得再叠加 `padding-block-start`。tabs panel 只负责面板内容布局，不能用第二层顶部间距补偿单个页面。
-- 项目规则详情是独立 route detail：完整 breadcrumb 已承担团队与规则上下文，页面内不得重复渲染团队 hero。应用设置中的离散选择操作必须即时保存，保存期间禁用对应控件，失败时回滚并展示错误；不要恢复“保存设置”按钮，也不要用监听整个 draft 的 effect 触发初始化保存。
+- Relay 普通详情页使用 host `NativeTabs` 时，tabs 自身的标准 margin 负责与上方业务内容分隔；包裹 tabs 的业务详情容器不得再叠加 `padding-block-start`。项目规则这类紧跟 host breadcrumb 的 route detail 已由宿主提供 10px 内容间距，直属 tabs 必须清除顶部 margin，不能再叠加一层。tabs panel 只负责面板内容布局，不能用第二层顶部间距补偿单个页面。
+- 项目规则详情是独立 route detail：完整 breadcrumb 已承担团队与规则上下文，页面内不得重复渲染团队 hero。应用设置中的离散选择操作必须即时保存，保存期间禁用对应控件，失败时回滚并展示错误；同一 assignment 的连续保存必须串行，只有最新请求能提示或回滚到最近一次服务端确认稿。详情加载和保存回调都要绑定当前账号 / 团队 / profile 路由键，旧路由结果不得回写新页面。不要恢复“保存设置”按钮，也不要用监听整个 draft 的 effect 触发初始化保存。
+- 项目规则的 Git 仓库列表只保存规范化的远端身份 `host/owner/repository`。界面可以接收 HTTPS、SSH、SCP-like URL 或已规范化身份，但必须通过 `normalizeRelayGitRepositoryIdentity()` 校验并归一化；编辑行只有显式确认通过后才能保存，失败必须保持编辑态，取消时恢复原值或移除尚未保存的新行。config hook 从当前 workspace 的真实 Git remote 读取相同身份并用同一 helper 匹配，不能退回仅按目录名或任意字符串命中的语义。
+- Relay UI 的操作失败统一调用宿主 `ctx.notifications.show`，由 core client 负责消息展示、来源和生命周期；插件页面不得为项目规则错误自行插入 alert、toast 或错误横条。宿主通知不可用时也不要复制通知组件到插件内部。
+- 项目规则详情中的 `documents` tab 对外名称固定为“文档”，表示该 assignment 自己的渐进式文档库，不叫“关联文件”，也不能拼接账号文档、团队文档或配置摘要来伪装内容。远端 API 使用 `/api/relay/config-assignments/:assignmentId/documents`，本地命名空间固定为 `~/.oo/teams/<team-id>/project-rules/<assignment-id>/AGENTS.md` 和同目录 `rules/**/*.md`。插件同步到本地后，只有该 Git 项目实际命中 assignment 时，config hook 才向会话提示词注入阅读这个目录的引导。这个能力全部归 Relay 插件和 Relay Server 所有，宿主 launcher / workspace route 只承载插件贡献，不得识别 Relay assignment、文档路径或同步协议。
 - Relay 的 launcher 账号入口属于插件：`package.json` 通过 `plugin.contributions.routes` 暴露 `home` route 的 `launcher` surface，通过 `launcherSearchProviders` 暴露账号列表搜索项，`src/client/index.ts` 用 `ctx.commands.register('search', ...)` 产生命令结果，并用 `groupId/groupTitle` 声明 launcher 分组。core `LauncherRoute` 只能消费通用 plugin route / search provider，不得再添加 `builtin:account`、`view=account`、Relay 账号菜单项或 Relay 账号 / 登录 API 调用；Relay 未启用时 launcher 不展示账号入口是正确行为。
 - Relay server entry 同时运行在 `manager` / `workspace` runtime，`package.json` 的 `plugin.server.roles` 必须保持 `["manager", "workspace"]`，client/server 入口都由 `exports["./client"]` / `exports["./server"]` 提供。management server 负责设备身份、launcher 设备管理和跨 workspace 协调；workspace server 只负责当前项目能力与本地 workspace metadata。跨 runtime 通信必须走平台插件 runtime channel / endpoint 机制，不要在 Relay 插件里私建跨进程桥。
 - 远端服务在 `normalizeOptions()` 后统一是 server item；官方服务来自集中 preset 常量和开关，用户自定义服务来自 `servers[]`。`server` / `port` / `protocol` 是 server item 内部字段，默认连接项用 `activeServerId`。
@@ -46,6 +49,9 @@
 - Admin 与插件的差异点必须保留：Admin 浏览器端通过 `adminSessionStorage.ts` 持有当前 session token 并直接请求 `/api/profile/*`；插件浏览器端只请求 scoped plugin API，插件 server 用本地 `~/.oneworks/auth.json` 中的登录 session token 代调远端，并避免在 UI 暴露服务端类型和地址。
 - 不记录会话正文；插件只转发当前 in-memory job payload / result，持久化仅限 device identity 和每个 server 的 token。
 - 个人全局配置同步走 `/api/relay/config/global`，只把 global `~/.oneworks/.oo.config.json` 中经过 safe-field 过滤的字段同步到当前 Relay user 的唯一快照；当前第一版只同步 `adapters`，用于 Codex 等 adapter 账号。不要把 Relay server 列表、device token、project-local config 或团队 profile 写进个人全局同步。团队共享配置仍走 RFC 0006 的 team profile / version / assignment / secret overlay 模型，两者不要混成多份个人配置。
-- 个人 / 团队文档同步复用 `/api/relay/config/global` 的个人快照和 `/api/relay/teams/:teamId/documents` 的团队快照，但服务端只保存密文 payload 和 `documentCount / totalSizeBytes / countsByKind` 元数据，不能读取 `AGENTS.md` 正文。个人同步按三个用户根路径开关控制：`~/AGENTS.md`、`~/.oo/AGENTS.md`、`~/.oo/rules/**/*.md`；`.local.md` 永远只保留本地，不上传。团队同步继续只读写 `~/.oo/teams/<team-id>/AGENTS.md` 与团队 rules 命名空间。同步实现落在 `src/server/personal-document-sync.ts`，写入远端版本到本机前如遇已有不同内容，要先生成同目录 `*.relay-conflict-*.md` 备份，不要静默覆盖。
+- 个人 / 团队 / 项目规则文档同步分别使用 `/api/relay/config/global`、`/api/relay/teams/:teamId/documents` 和 `/api/relay/config-assignments/:assignmentId/documents`。服务端业务路由保存并透传密文格式 payload 以及同步、范围和审计元数据，不解析 `AGENTS.md` 正文；部署运营方能够复现命名空间派生密钥，因此不得承诺运营方无法解密。
+- 个人同步按三个用户根路径开关控制：`~/AGENTS.md`、`~/.oo/AGENTS.md`、`~/.oo/rules/**/*.md`；`.local.md` 永远只保留本地，不上传。团队同步只读写 `~/.oo/teams/<team-id>/AGENTS.md` 与团队 rules 命名空间，项目规则文档只读写 assignment 独立的 `project-rules/<assignment-id>` 命名空间，三者不得互相合并。
+- 远端应用、本地读取和桌面打开入口必须共用规范相对路径校验，拒绝绝对路径、反斜杠、NUL、空段、`.`、`..`，并逐级拒绝路径链上的符号链接。同步实现落在 `src/server/personal-document-sync.ts`，不能只在某一个写入入口补防护。
+- 写入远端版本到本机前如遇已有不同内容，必须先生成同目录 `*.relay-conflict-*.md` 备份，不得静默覆盖。
 - Relay config snapshot cache 只能保存 encrypted secret envelope；config hook 可以用本地 device token 解密并在内存中注入 secret 字段，但不能把 plaintext 写回 project home。
 - 修改插件行为后跑 `pnpm -C packages/plugins/relay test`、`pnpm -C packages/plugins/relay typecheck` 和 `pnpm -C packages/plugins/relay build`。
