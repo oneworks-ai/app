@@ -77,7 +77,8 @@
 原始结果保存到本地忽略目录或专用结果存储，至少包含：
 
 ```text
-evaluation_version, run_id, task_family, case_id, case_version
+evaluation_version, evaluation_group_id, run_id, parent_run_id, run_role
+task_family, case_id, case_version
 base_commit, environment_version, cache_state
 planned_model, planned_reasoning, actual_model, actual_reasoning
 started_at, completed_at, duration_ms, timeout_ms, status
@@ -86,6 +87,8 @@ test_exit_code, hard_gate_pass, judge_score, critical_miss
 scope_violation, escalation_correct, retry_count, rework_count
 review_findings, archive_status
 ```
+
+`evaluation_group_id` 标识一次完整端到端评测；`run_role` 至少区分 `coordinator`、`worker`、`judge` 和独立 `reviewer`，`parent_run_id` 保存直接父运行。每个 group 还必须生成一条聚合记录，包含端到端墙钟时间、全部角色 / 重试 / 复核 / 返工的总 tokens 与总 credits、最终状态和关键失败。不能把同一 group 的子运行当成互不相关的成功样本，也不能只汇报最便宜的 worker。
 
 公开或提交到仓库的报告只保留聚合数据和可复现方法，不写本地绝对路径、真实会话 ID、账号、secret、个人内容或仓库无关历史。对外分享包使用通用临时项目和脱敏 case。
 
@@ -99,7 +102,7 @@ review_findings, archive_status
 - 关注总任务成本与尾延迟；便宜但经常重试的模型不能按单次成功成本获胜。
 - 检查质量是否来自更高 reasoning；若 low / medium 已同样通过，不推荐 high。
 - 对架构与抽象任务记录 reviewer 找到的遗漏和返工，而不只记录最终测试是否通过。
-- 对协调场景拆出 coordinator 和每个 worker 的实际成本，防止父线程隐藏总体浪费。
+- 对协调场景先按 `evaluation_group_id` 汇总端到端总量，再拆出 coordinator、每个 worker、judge、reviewer、重试和返工的实际成本，防止父线程或后处理隐藏总体浪费。
 
 ## 更新推荐工作范围
 
@@ -112,7 +115,12 @@ review_findings, archive_status
 - 真实分支验收中实际 model / reasoning 可核验，协调器和 worker 的总成本仍成立。
 - 独立 reviewer 确认结论没有从单一 case 过度外推。
 
-如果候选只在某类任务更好，只更新该任务族、前提和升级条件；不要把局部胜出写成全局替代。连续回归、关键遗漏或工具兼容性下降时收窄 / 暂停推荐，并保留最近可靠模型作为回退。
+如果候选只在某类任务更好，只更新该任务族、前提和升级条件；不要把局部胜出写成全局替代。推荐的收窄与恢复使用以下硬条件：
+
+- 任一次出现关键行为遗漏、授权 / 修改范围越界、不安全风险决策、数据损坏或不可逆错误时，立即暂停该模型对应任务族的推荐，并回退到最近可靠路径，不等待第二次失败。
+- 同一任务族连续两次 timeout / 同类回归，或重复同场比较显示通过率低于当前基线、P95 超过任务 deadline、总成本优势消失时，收窄推荐范围并触发完整复测。
+- 单纯环境 `error` 先修复环境重跑，不计为模型回归；但不能在环境未稳定时恢复或扩大推荐。
+- 恢复被暂停 / 收窄的范围必须重新满足与扩大推荐相同的重复次数、基线比较、边界 case、真实分支验收和独立 reviewer PASS，不能靠一次修复后成功恢复默认。
 
 更新文档的职责固定为：
 
