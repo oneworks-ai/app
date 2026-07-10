@@ -2074,6 +2074,8 @@
     "accountSelectCreateCanceled": "已取消账号接入",
     "accountSelectOpenAdapterConfig": "打开 {{adapter}} 配置",
     "accountSelectOpenAccountConfig": "打开 {{account}} 设置",
+    "accountQuota": "账号额度",
+    "accountQuotaWindow": "{{window}} 额度：已使用 {{value}}",
     "effortSelectPlaceholder": "推理强度",
     "effortSliderLabel": "推理强度：{{value}}",
     "effortLabels": {

@@ -3,10 +3,14 @@
 本目录承载配置页与 worktree environment 编辑器；涉及以下入口时，先读本文件：
 
 - `../ConfigView.tsx`
+- `AdapterAccountsManager.tsx`
 - `ExternalSessionsPanel.tsx`
 - `WorktreeEnvironmentPanel.tsx`
 - `use-worktree-environment-auto-save.ts`
 - `configConflict.ts`
+- `../../hooks/use-adapter-account-quota-detail.ts`
+- `../../utils/account-quota.ts`
+- `../account-quota/QuotaUsageRing.tsx`
 - `../../hooks/use-session-subscription.ts`
 - `../../hooks/session-subscription-cache.ts`
 
@@ -33,6 +37,12 @@
 - 外部网页、管理后台和 provider portal 优先接入配置页底部 dock / portal tabs，不使用一次性的 iframe dialog。底部 dock 是 route 级状态，切换配置 section、detail 或 source 时不能被清空。
 - 查询类信息默认自动触发并使用缓存；界面只展示正在查询、查询失败、实际结果三类状态。额度、余额、状态和模型列表要按数据语义分别呈现，不为了复用 UI 把不同含义混成同一种卡片。
 - PR 证据截图必须覆盖本次改动影响到的服务类型和关键交互，例如普通 API、Coding Plan、collection、standalone、profiles / tokens、portal 下方面板。截图前要等待异步加载完成，不能用旧页面、局部错误页面或未加载完成的状态替代。
+
+## Adapter 账号额度
+
+- `AdapterAccountsManager.tsx` 的账号详情额度统一走 `use-adapter-account-quota-detail.ts`；该 hook 发起一次 `refresh: true` 的 SWR 请求，并通过 TTL 在再次进入时复用已有 cache，不存在“先请求快照、再后台刷新”的双请求。不要在 manager 内再维护一套 quota TTL 或请求状态。
+- 配置详情渲染服务端返回的全部 quota metrics，只通过 `src/components/account-quota/QuotaUsageRing.tsx` 共享百分比解析；聊天状态栏才用 `src/utils/account-quota.ts` 从 metrics 中识别 5h / 7d 窗口。不要让配置详情错误地只保留两个窗口，也不要各自实现百分比解析。
+- 修改账号额度时同时读 `../chat/AGENTS.md` 的“账号额度和头像”，并验证配置详情、聊天状态栏和账号下拉三个 surface；只验证配置页不足以覆盖 popup 宽度和账号切换后的 quota 对应关系。
 
 ## 模型服务配置建模经验
 

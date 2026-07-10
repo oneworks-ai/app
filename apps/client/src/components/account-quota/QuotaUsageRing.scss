@@ -1,0 +1,40 @@
+.quota-usage-ring {
+  --quota-usage-ring-size: 18px;
+  --quota-usage-ring-inner-size: 12px;
+
+  width: var(--quota-usage-ring-size);
+  min-width: var(--quota-usage-ring-size);
+  height: var(--quota-usage-ring-size);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: conic-gradient(
+    var(--quota-usage-ring-color) var(--quota-usage-ring-percent),
+    color-mix(in srgb, var(--border-color) 72%, transparent) 0
+  );
+}
+
+.quota-usage-ring--compact {
+  --quota-usage-ring-size: 18px;
+  --quota-usage-ring-inner-size: 12px;
+}
+
+.quota-usage-ring__inner {
+  width: var(--quota-usage-ring-inner-size);
+  height: var(--quota-usage-ring-inner-size);
+  border-radius: 50%;
+  background: var(
+    --quota-usage-ring-inner-bg,
+    var(--card-bg, var(--bg-color, #fff))
+  );
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sub-text-color, #6b7280);
+  font-size: 7px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}

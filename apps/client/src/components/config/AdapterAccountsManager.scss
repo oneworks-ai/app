@@ -361,21 +361,6 @@
   gap: 8px;
 }
 
-.adapter-account-manager__metric-ring {
-  position: relative;
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-}
-
-.adapter-account-manager__metric-ring-inner {
-  position: absolute;
-  inset: 3px;
-  border-radius: inherit;
-  background: var(--bg-elevated);
-}
-
 .adapter-account-manager__metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));

@@ -9,10 +9,11 @@
   - 改通用 overlay、Dropdown、Popover、Tooltip、NavRail、Sidebar 或右键菜单前，先读 `src/components/AGENTS.md`。
 - `src/components/config/`：配置页编辑器、worktree environment 面板与配置冲突处理逻辑。
   - 涉及配置页自动保存、热更新、外部配置变更或冲突提示时，先读 `src/components/config/AGENTS.md`。
+  - Adapter 账号详情、额度、头像或账号选择器跨配置页与聊天页；这类改动必须同时读 `src/components/config/AGENTS.md` 和 `src/components/chat/AGENTS.md`，共享实现位于 `src/hooks/use-adapter-account-quota-detail.ts`、`src/hooks/use-adapter-accounts-with-quota.ts`、`src/utils/account-quota.ts` 与 `src/components/account-quota/`。
 - `src/components/launcher/`：desktop launcher 的设置页、关于页和 launcher 专用交互组件。
   - 改 launcher 设置页、footer hint、section tabs、快捷键提示、毛玻璃或 tooltip 时，先读 `src/components/launcher/AGENTS.md`。
 - `src/components/chat/`：聊天页子视图，包含 header、history、timeline、settings、sender 和工具渲染。
-  - 消息级 `编辑 / 撤回 / 分叉 / 复制原文` 的更细维护说明见 `src/components/chat/AGENTS.md`。
+  - 消息级操作、sender、账号选择器与账号额度的更细维护说明见 `src/components/chat/AGENTS.md`。
 - `src/components/agent-room/`：Agent Room 的 transcript、room chrome、成员列表、气泡渲染和 room 专用展示模型。
   - 改 room 气泡、reaction、审批队列、成员跳转、长消息折叠或 room transcript 时，先读 `src/components/agent-room/AGENTS.md`。
 - `src/routes/`：页面级 route 入口，也包含 Agent Room 的 API detail 到 UI view model 映射。

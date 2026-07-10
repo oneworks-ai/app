@@ -13,6 +13,8 @@ import type {
 } from '@oneworks/types'
 
 import { getAdapterAccountDetail, getAdapterAccounts, getApiErrorMessage, manageAdapterAccount } from '#~/api'
+import { QuotaUsageRing } from '#~/components/account-quota/QuotaUsageRing'
+import { useAdapterAccountQuotaDetail } from '#~/hooks/use-adapter-account-quota-detail'
 
 import { getFieldDescription, getFieldLabel, getValueByPath, setValueByPath } from './configUtils'
 import type { TranslationFn } from './configUtils'
@@ -97,24 +99,6 @@ const dedupeDisplayTexts = (...values: Array<string | undefined>) => {
       uniqueValues.add(value)
       return true
     })
-}
-
-const parsePercentMetricValue = (value: string | undefined) => {
-  if (value == null) return undefined
-
-  const normalized = value.trim()
-  if (!normalized.endsWith('%')) return undefined
-
-  const parsed = Number(normalized.slice(0, -1))
-  if (!Number.isFinite(parsed)) return undefined
-
-  return Math.min(100, Math.max(0, parsed))
-}
-
-const getPercentRingColor = (percent: number) => {
-  if (percent >= 85) return 'var(--error-color, #ff4d4f)'
-  if (percent >= 60) return 'var(--warning-color, #faad14)'
-  return 'var(--success-color, #52c41a)'
 }
 
 const compareAccountInfo = (
@@ -374,14 +358,14 @@ const AccountDetailView = ({
   t: TranslationFn
 }) => {
   const { message } = App.useApp()
-  const { data, isLoading, mutate } = useSWR(
-    `/api/adapters/${adapterKey}/accounts/${accountKey}`,
-    () => getAdapterAccountDetail(adapterKey, accountKey)
-  )
+  const { data, isLoading, mutate } = useAdapterAccountQuotaDetail({
+    adapter: adapterKey,
+    account: accountKey
+  })
   const [loadingAction, setLoadingAction] = useState<string>()
   const detail = data?.account
   const statusMeta = formatStatus(detail?.status, t)
-  const detailActions = (detail?.actions ?? []).filter(action => action.key !== 'refresh')
+  const detailActions = detail?.actions ?? []
   const detailFacts = detail == null
     ? []
     : [
@@ -535,24 +519,7 @@ const AccountDetailView = ({
                     </div>
                     <div className='adapter-account-manager__metric-value'>
                       {metric.value ?? '-'}
-                      {(() => {
-                        const percent = parsePercentMetricValue(metric.value)
-                        if (percent == null) return null
-
-                        return (
-                          <span
-                            className='adapter-account-manager__metric-ring'
-                            aria-hidden='true'
-                            style={{
-                              background: `conic-gradient(${
-                                getPercentRingColor(percent)
-                              } ${percent}%, color-mix(in srgb, var(--border-color) 72%, transparent) 0)`
-                            }}
-                          >
-                            <span className='adapter-account-manager__metric-ring-inner' />
-                          </span>
-                        )
-                      })()}
+                      <QuotaUsageRing value={metric.value} />
                     </div>
                     {metric.description != null && metric.description.trim() !== '' && (
                       <div className='adapter-account-manager__metric-description'>{metric.description}</div>
