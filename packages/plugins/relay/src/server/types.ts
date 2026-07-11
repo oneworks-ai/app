@@ -419,6 +419,7 @@ export interface RelayPublicServerStatus extends RelayServerOptions {
   availabilityError?: string
   avatarUrl?: string
   lastCheckedAt?: string
+  lastSuccessfulAt?: string
   connected: boolean
   connection: RelayConnectionState
   devices?: RelayRemoteDeviceSummary[]

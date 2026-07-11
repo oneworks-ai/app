@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- client-view source contracts are intentionally covered together. */
 import { readFile } from 'node:fs/promises'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -306,6 +307,12 @@ describe('relay plugin client view styles', () => {
     expect(source).toContain('createRelayLoginOptions(ctx, {')
     expect(source).toContain("className: 'oneworks-relay__login-native'")
     expect(source).toContain("className: 'oneworks-relay__login-method-switcher'")
+    expect(source).toContain("className: 'oneworks-relay__login-method-tabs'")
+    expect(source).toContain('options.loginMethods.enabled.length <= 1')
+    expect(source).toContain("replace(/^(?:使用\\s*|use\\s+)/iu, '')")
+    expect(source).toContain("method === 'passkey'")
+    expect(source).toContain("? '通行密钥'")
+    expect(source).toContain("className: 'oneworks-relay__login-tab-panel native-tabs-panel'")
     expect(source).toMatch(/renderLoginField\(\s*'person'/u)
     expect(source).toMatch(/renderLoginField\(\s*'password'/u)
     expect(source).toMatch(/renderLoginField\(\s*'key'/u)
@@ -313,8 +320,16 @@ describe('relay plugin client view styles', () => {
     expect(source).not.toContain("className: 'oneworks-relay__login-field-label'")
     expect(source).toContain('readRelayRememberedLogins')
     expect(source).toContain("label: '登录到其他服务器'")
-    expect(source).toContain('`无法读取 $' + '{serverName} 登录能力`')
+    expect(source).toContain("completingRegistration ? '返回登录' : '注册账号'")
+    expect(source).not.toContain('注册新账号或使用完整安全登录页')
+    expect(source).toContain(
+      "className: 'oneworks-relay__login-method-switch-button oneworks-relay__login-footer-action'"
+    )
     expect(source).toContain('`打开 $' + '{serverName} 兼容登录页`')
+    expect(source).toContain('`无法读取 $' + '{serverName} 登录方式`')
+    expect(source).toContain("label: '重试'")
+    expect(source).toContain("icon: 'swap_horiz'")
+    expect(source).toContain("className: 'oneworks-relay__login-error-state-details'")
     expect(source).toContain('serverName: selectedServerDisplayName(status, route.serverId)')
     expect(source).not.toContain("'cloud_off'")
     expect(source).toContain('openLoginDestination(provider.startUrl)')
@@ -324,6 +339,16 @@ describe('relay plugin client view styles', () => {
     expect(source).toContain('serviceInfo == null ? server.avatarUrl : serviceInfo.avatarUrl')
     expect(serversPageSource).toContain("role: editing ? undefined : 'link'")
     expect(serversPageSource).toContain('onClick: editing ? undefined : openServerLogin')
+    expect(serversPageSource).toContain(
+      'officialServerLabel(server) ?? cleanText(serviceInfo?.name) ?? serverDisplayName(server)'
+    )
+    expect(serversPageSource).not.toContain("placeholder: '服务名称'")
+    expect(serversPageSource).not.toContain('className: adminListSurfaceClassNames.nativeMeta')
+    expect(serversPageSource).not.toContain('title: address')
+    expect(serversPageSource).toContain('renderServerUrlInput(react, {')
+    expect(serversPageSource.indexOf('serverManagementForm,')).toBeLessThan(
+      serversPageSource.indexOf('...servers.map')
+    )
     expect(serversPageSource).toContain('`登录到 $' + '{title}，$' + '{presenceAccessibleLabel}`')
     expect(serversPageSource).not.toContain("icon: 'login'")
     expect(relayClientCss).toContain('.oneworks-relay--login-route .oneworks-relay__shell { background-image: none; }')
@@ -334,13 +359,22 @@ describe('relay plugin client view styles', () => {
     expect(relayClientCss).toContain('.oneworks-relay__account-avatar-fallback')
     expect(relayClientCss).toContain('.oneworks-relay__account-avatar[data-has-image="true"]')
     expect(relayClientCss).toContain('.oneworks-relay__account-avatar-presence[data-state="online"]')
-    expect(relayClientCss).toContain(
-      '.oneworks-relay__server-editor .plugin-host-control-input.ant-input-affix-wrapper .ant-input'
+    expect(relayClientCss).not.toContain('.oneworks-relay__server-url-input {')
+    expect(relayClientCss).not.toContain(
+      '.oneworks-relay__server-editor .plugin-host-control-input.ant-input-affix-wrapper'
     )
     expect(relayClientCss).toContain(
       '.oneworks-relay__account-avatar-image:not([hidden]) + .oneworks-relay__account-avatar-fallback'
     )
+    expect(relayClientCss).toContain('.oneworks-relay__account-avatar-image[hidden] { display: none; }')
     expect(relayClientCss).toContain('--oneworks-relay-login-gap: 10px;')
+    expect(relayClientCss).toContain('.oneworks-relay__login-error-state-header')
+    expect(relayClientCss).toContain('.oneworks-relay__login-error-state-details')
+    expect(relayClientCss).toContain(
+      '.oneworks-relay__login-footer { min-width: 0; display: grid; justify-items: start;'
+    )
+    expect(relayClientCss).not.toContain('.oneworks-relay__login-service-picker')
+    expect(relayClientCss).not.toContain('.oneworks-relay__login-compatibility')
     expect(relayClientCss).toContain(
       '.oneworks-relay--launcher-login .oneworks-relay__surface { min-height: 0; height: 100%; align-content: center; }'
     )
@@ -355,9 +389,6 @@ describe('relay plugin client view styles', () => {
     expect(source).toContain("launcherSurface ? ' oneworks-relay--launcher-login' : ''")
     expect(source).toContain("label: launcherSurface ? '登录' : '登录账号'")
     expect(source).toMatch(/const accountActions:[\s\S]*?launcherSurface\s*\? \[loginAction\]/u)
-    expect(relayClientCss).toContain(
-      'oneworks-relay__login-footer { min-width: 0; display: grid; gap: var(--oneworks-relay-login-gap); padding-top: 0; }'
-    )
     expect(relayClientCss).not.toContain(
       '.oneworks-relay--login-route .oneworks-relay__surface { min-height: calc(100dvh - var(--route-container-header-overlay-height, 39px) - 24px); align-content: center; justify-items: center; padding: 20px; background: radial-gradient'
     )

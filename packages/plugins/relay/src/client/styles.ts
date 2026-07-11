@@ -63,9 +63,7 @@ ${adminListSurfaceCss}
 .oneworks-relay__button.ant-btn:active { border: 0 !important; box-shadow: none !important; background: transparent; }
 .oneworks-relay__icon { font-size: 18px; line-height: 1; }
 .oneworks-relay__button .oneworks-relay__icon { font-size: var(--app-chrome-icon-size, 18px); }
-.oneworks-relay__server-editor { min-width: 0; display: grid; grid-template-columns: minmax(130px, .42fr) minmax(180px, 1fr); gap: var(--oneworks-overlay-icon-gap, 6px); align-items: center; }
-.oneworks-relay__server-editor .plugin-host-control-input.ant-input-affix-wrapper { height: var(--plugin-host-control-height, 28px); min-height: var(--plugin-host-control-height, 28px); padding-block: 0; align-items: center; }
-.oneworks-relay__server-editor .plugin-host-control-input.ant-input-affix-wrapper .ant-input { height: calc(var(--plugin-host-control-height, 28px) - 2px); padding-block: 0; line-height: calc(var(--plugin-host-control-height, 28px) - 2px); }
+.oneworks-relay__server-editor { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--oneworks-overlay-icon-gap, 6px); align-items: center; }
 .oneworks-relay__server-row[data-editing="false"] { cursor: pointer; }
 .oneworks-relay__server-row[data-editing="false"]:focus-visible { outline: 2px solid var(--primary-color, var(--ant-color-primary, #1677ff)); outline-offset: -2px; }
 .oneworks-relay__field { min-width: 0; min-height: var(--oneworks-overlay-control-height, 30px); display: inline-flex; align-items: center; gap: var(--oneworks-overlay-icon-gap, 6px); border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); color: var(--sub-text-color, var(--ant-color-text, #1f2328)); }
@@ -87,6 +85,7 @@ ${adminListSurfaceCss}
 .oneworks-relay__account-avatar-fallback { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
 .oneworks-relay__account-avatar-image:not([hidden]) + .oneworks-relay__account-avatar-fallback { visibility: hidden; }
 .oneworks-relay__account-avatar-image { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border-radius: inherit; object-fit: cover; }
+.oneworks-relay__account-avatar-image[hidden] { display: none; }
 .oneworks-relay__account-avatar-presence { position: absolute; z-index: 2; inset-inline-end: -1px; inset-block-end: -1px; width: 7px; height: 7px; border: 1.5px solid var(--bg-color, var(--ant-color-bg-container, #fff)); border-radius: 999px; background: var(--placeholder-color, var(--ant-color-text-tertiary, #8c959f)); }
 .oneworks-relay__account-avatar-presence[data-state="online"] { background: var(--success-color, var(--ant-color-success, #1a7f37)); }
 .oneworks-relay__account-avatar-presence[data-state="offline"] { background: var(--placeholder-color, var(--ant-color-text-tertiary, #8c959f)); }
@@ -236,8 +235,19 @@ ${adminListSurfaceCss}
 .oneworks-relay--launcher-login .oneworks-relay__surface { min-height: 0; height: 100%; align-content: center; }
 .oneworks-relay__login-loading { min-height: 160px; display: inline-flex; align-items: center; justify-content: center; gap: var(--oneworks-overlay-icon-gap, 6px); color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 12px/1.35 ui-sans-serif, system-ui, sans-serif; }
 .oneworks-relay__login-native { --oneworks-relay-login-gap: 10px; box-sizing: border-box; width: min(480px, 100%); min-width: 0; display: grid; gap: 0; padding: 0; border: 0; border-radius: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); background: transparent; box-shadow: none; }
-.oneworks-relay__login-native--error { justify-items: center; align-content: center; min-height: 260px; text-align: center; }
-.oneworks-relay__login-native--error > span { max-width: 420px; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 600 12px/1.55 ui-sans-serif, system-ui, sans-serif; }
+.oneworks-relay__login-tab-panel { min-width: 0; display: grid; gap: 0; }
+.oneworks-relay__login-native--error { width: min(560px, 100%); align-content: center; min-height: 260px; gap: var(--oneworks-relay-login-gap); }
+.oneworks-relay__login-error-state-content { min-width: 0; display: grid; justify-items: center; gap: var(--oneworks-relay-login-gap); text-align: center; }
+.oneworks-relay__login-error-state-header { min-width: 0; display: flex; align-items: flex-start; justify-content: center; gap: var(--oneworks-relay-login-gap); }
+.oneworks-relay__login-error-state-icon { flex: 0 0 auto; margin-top: 2px; color: var(--warning-color, #d97706); line-height: 1; }
+.oneworks-relay__login-error-state-title { min-width: 0; margin: 0; color: var(--text-color, var(--ant-color-text, #1f2328)); font: 650 20px/1.35 ui-sans-serif, system-ui, sans-serif; outline: none; overflow-wrap: anywhere; }
+.oneworks-relay__login-error-state-description { max-width: 480px; margin: 0; color: var(--sub-text-color, var(--ant-color-text-secondary, #57606a)); font: 500 13px/1.5 ui-sans-serif, system-ui, sans-serif; overflow-wrap: anywhere; }
+.oneworks-relay__login-error-state-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--oneworks-relay-login-gap); }
+.oneworks-relay__login-error-state-action { min-width: 72px; height: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: var(--oneworks-overlay-icon-gap, 6px); border: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); border-radius: var(--oneworks-overlay-item-radius, 6px); padding: 0 12px; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); background: transparent; box-shadow: none; font: 600 13px/1 ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+.oneworks-relay__login-error-state-action:hover { border-color: color-mix(in srgb, var(--primary-color, #1677ff) 48%, transparent); color: var(--primary-color, var(--ant-color-primary, #1677ff)); }
+.oneworks-relay__login-error-state-action[data-primary="true"] { border-color: color-mix(in srgb, var(--primary-color, #1677ff) 36%, transparent); color: var(--primary-color, var(--ant-color-primary, #1677ff)); background: var(--primary-soft-bg, color-mix(in srgb, var(--primary-color, #1677ff) 12%, transparent)); }
+.oneworks-relay__login-error-state-details { min-width: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--oneworks-relay-login-gap); padding-top: var(--oneworks-relay-login-gap); border-top: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 500 11px/1.45 ui-sans-serif, system-ui, sans-serif; opacity: .72; text-align: start; }
+.oneworks-relay__login-error-state-details code { min-width: 0; color: inherit; font: inherit; font-family: var(--monospace-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace); overflow-wrap: anywhere; }
 .oneworks-relay__login-section { min-width: 0; display: grid; gap: var(--oneworks-relay-login-gap); padding: var(--oneworks-relay-login-gap) 0; border-top: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
 .oneworks-relay__login-section:first-child { padding-top: 0; border-top: 0; }
 .oneworks-relay__login-section-title { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 750 12px/1.2 ui-sans-serif, system-ui, sans-serif; }
@@ -250,11 +260,9 @@ ${adminListSurfaceCss}
 .oneworks-relay__login-code-row { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--oneworks-relay-login-gap); }
 .oneworks-relay__login-code-button,
 .oneworks-relay__login-submit,
-.oneworks-relay__login-provider-button,
-.oneworks-relay__login-service-picker { min-width: 0; min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: var(--oneworks-relay-login-gap); border: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); border-radius: 8px; padding: 0 10px; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); background: var(--oneworks-relay-surface-background); font: 700 12px/1.2 ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+.oneworks-relay__login-provider-button { min-width: 0; min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: var(--oneworks-relay-login-gap); border: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); border-radius: 8px; padding: 0 10px; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); background: var(--oneworks-relay-surface-background); font: 700 12px/1.2 ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
 .oneworks-relay__login-code-button:hover,
-.oneworks-relay__login-provider-button:hover,
-.oneworks-relay__login-service-picker:hover { border-color: color-mix(in srgb, var(--primary-color, #1677ff) 48%, transparent); color: var(--primary-color, var(--ant-color-primary, #1677ff)); }
+.oneworks-relay__login-provider-button:hover { border-color: color-mix(in srgb, var(--primary-color, #1677ff) 48%, transparent); color: var(--primary-color, var(--ant-color-primary, #1677ff)); }
 .oneworks-relay__login-submit[data-primary="true"] { border-color: var(--primary-color, var(--ant-color-primary, #1677ff)); color: #fff; background: var(--primary-color, var(--ant-color-primary, #1677ff)); box-shadow: none; }
 .oneworks-relay__login-submit[data-primary="true"]:hover { filter: brightness(1.04); }
 .oneworks-relay__login-submit:disabled,
@@ -280,13 +288,15 @@ ${adminListSurfaceCss}
 .oneworks-relay__login-account-copy small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .oneworks-relay__login-account-copy strong { font: 700 12px/1.3 ui-sans-serif, system-ui, sans-serif; }
 .oneworks-relay__login-account-copy small { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 600 11px/1.3 ui-sans-serif, system-ui, sans-serif; }
-.oneworks-relay__login-footer { min-width: 0; display: grid; gap: var(--oneworks-relay-login-gap); padding-top: 0; }
-.oneworks-relay__login-service-picker { width: 100%; }
-.oneworks-relay__login-compatibility { justify-self: center; border: 0; padding: 0; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); background: transparent; font: 600 11px/1.35 ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
-.oneworks-relay__login-compatibility:hover { color: var(--primary-color, var(--ant-color-primary, #1677ff)); text-decoration: underline; }
+.oneworks-relay__login-footer { min-width: 0; display: grid; justify-items: start; gap: var(--oneworks-relay-login-gap); padding-top: 0; }
+.oneworks-relay__login-footer-action { width: auto; }
 @media (max-width: 640px) {
   .oneworks-relay--login-route .oneworks-relay__surface { align-content: start; padding: 10px; }
   .oneworks-relay__login-code-row { grid-template-columns: 1fr; }
+  .oneworks-relay__login-error-state-content { justify-items: start; text-align: start; }
+  .oneworks-relay__login-error-state-header,
+  .oneworks-relay__login-error-state-actions { justify-content: flex-start; }
+  .oneworks-relay__login-error-state-details { grid-template-columns: minmax(0, 1fr); }
 }
 .oneworks-relay__servers { min-width: 0; display: grid; align-content: start; gap: 10px; }
 .oneworks-relay__server-management-form { --relay-admin-list-native-row-columns: var(--app-chrome-icon-size, 18px) minmax(0, 1fr) auto; }
