@@ -82,11 +82,14 @@ describe('markdown local media rendering', () => {
   it('renders explicit internal, external, and workspace-file link intents', () => {
     const html = renderMarkdown([
       '[internal](https://example.com/app "oneworks:open=internal")',
-      '[external](https://example.com/docs "oneworks:open=external")',
-      '[source](apps/client/src/App.tsx "oneworks:open=workspace-file")',
+      '[external](https://example.com/docs.png "oneworks:open=external")',
+      '[source](apps/client/src/diagram.svg "oneworks:open=workspace-file")',
+      '[recording source](/private/tmp/oneworks-cua/run/recording.mp4 "oneworks:open=workspace-file")',
       '[ordinary](https://example.com "Human title")'
     ].join('\n\n'))
 
+    expect(html).not.toContain('<video')
+    expect(html).not.toContain('data-local-source=')
     expect(html).toContain('data-oneworks-open="internal"')
     expect(html).toContain('markdown-link--intent-internal')
     expect(html).toContain('>web_asset</span>')

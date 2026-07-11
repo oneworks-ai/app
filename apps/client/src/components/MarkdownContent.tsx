@@ -127,7 +127,12 @@ export function MarkdownContent({
             const linkText = getNodeText(children).trim()
             const linkIntent = parseMarkdownLinkIntent(title)
             const localMedia = parseLocalMediaSourceForWorkspaceRoot(linkHref, workspaceRootPath)
-            if (localMedia != null && renderMedia != null && resolveLocalMediaUrl != null) {
+            if (
+              linkIntent == null &&
+              localMedia != null &&
+              renderMedia != null &&
+              resolveLocalMediaUrl != null
+            ) {
               const title = linkText !== '' && linkText !== linkHref ? linkText : undefined
               return renderMedia({
                 alt: linkText !== '' ? linkText : linkHref,
@@ -138,7 +143,7 @@ export function MarkdownContent({
               })
             }
 
-            if (renderImageLinks && linkHref !== '' && isLikelyImageUrl(linkHref)) {
+            if (linkIntent == null && renderImageLinks && linkHref !== '' && isLikelyImageUrl(linkHref)) {
               const title = linkText !== '' && linkText !== linkHref ? linkText : undefined
               if (renderImage != null) {
                 return renderImage({

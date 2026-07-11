@@ -895,7 +895,7 @@ export async function startAdapterSession(
         : (modelLanguage === 'en' ? 'Please respond in English.' : '请使用中文进行对话。')
       const mergedSystemPrompt = [
         finalSystemPrompt,
-        buildChatMarkdownSystemPrompt(),
+        options.appendSystemPrompt === false ? undefined : buildChatMarkdownSystemPrompt(),
         buildChannelRuntimeSystemPrompt(env),
         seededFromHistory ? runtimeState?.historySeed?.trim() : undefined,
         languagePrompt
