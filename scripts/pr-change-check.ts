@@ -75,9 +75,11 @@ const isProductPath = (filePath: string) => (
 )
 
 const isUiSurfacePath = (filePath: string) => (
-  /^apps\/client\/src\/(?:components|routes|resources|styles|assets)\//u.test(filePath) ||
-  /^apps\/client\/src\/.*\.(?:css|scss|tsx|jsx)$/u.test(filePath) ||
-  /^apps\/desktop\/src\/.*\.(?:css|scss|tsx|jsx)$/u.test(filePath)
+  !isDocsPath(filePath) && (
+    /^apps\/client\/src\/(?:components|routes|resources|styles|assets)\//u.test(filePath) ||
+    /^apps\/client\/src\/.*\.(?:css|scss|tsx|jsx)$/u.test(filePath) ||
+    /^apps\/desktop\/src\/.*\.(?:css|scss|tsx|jsx)$/u.test(filePath)
+  )
 )
 
 const hasScreenshotEvidence = (body: string | undefined) => {

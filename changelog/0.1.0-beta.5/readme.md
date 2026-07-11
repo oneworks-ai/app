@@ -6,3 +6,4 @@
 - Extend Codex and Claude Code adapter support with account/model compatibility fixes and clearer runtime evidence for packaged app verification.
 - Add the desktop control and demo-video tooling used for AI-native packaged app validation, including system-recorded Electron demos, load timing reports, per-second frames, and documented recording standards.
 - Refine Electron demo-video cursor timing, motion continuity checks, and launcher workspace selection so visual click feedback aligns with the resulting UI transition.
+- Unify development-service lifecycle coordination across worktrees with machine-readable state, operation leases, bounded diagnostics, and shared Electron and Android resource ownership.

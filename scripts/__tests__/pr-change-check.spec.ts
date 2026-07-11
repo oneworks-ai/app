@@ -92,6 +92,21 @@ describe('pr-change-check', () => {
     expect(result.violations).toEqual([])
   })
 
+  it('does not treat module guidance under UI source folders as a UI surface', () => {
+    const result = evaluatePrChangePolicy({
+      changedFiles: [
+        'apps/android/scripts/launch-visible-emulator.mjs',
+        'apps/client/src/components/chat/interaction-panel/AGENTS.md',
+        'changelog/4.0.0-alpha/readme.md'
+      ],
+      commitSubjects: ['feat: coordinate development services'],
+      prBody: experienceReviewBody
+    })
+
+    expect(result.requiresScreenshot).toBe(false)
+    expect(result.violations).toEqual([])
+  })
+
   it('does not require changelog for tooling upgrades', () => {
     const result = evaluatePrChangePolicy({
       changedFiles: ['pnpm-lock.yaml', '.github/workflows/quality.yml'],
