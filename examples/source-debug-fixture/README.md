@@ -19,7 +19,7 @@ EXAMPLE="$PWD/examples/source-debug-fixture"
 __ONEWORKS_PROJECT_WORKSPACE_FOLDER__="$EXAMPLE" \
 __ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__="$EXAMPLE" \
 __ONEWORKS_PROJECT_LAUNCH_CWD__="$EXAMPLE" \
-pnpm start
+pnpm --silent tools dev-service ensure web --json
 ```
 
 The `Smoke fixture` run command executes `node scripts/smoke.mjs` and prints a small JSON payload for quick sanity checks. Runtime files stay under the home project directory (`~/.oneworks/projects/<project-key>`) instead of this fixture workspace.

@@ -59,7 +59,7 @@
 
 - Electron main 进程不重复实现 server 业务逻辑；桌面端 server 仍通过 `src/server-child.cjs` 复用 server workspace package。
 - 本地 dev 安装包启动 workspace 时，安装包内 cli/server/client 是 runtime cache 的来源：`src/main/workspace-service-manager.ts` 和 `src/server-child.cjs` 会通过 `src/builtin-adapter-cache.cjs` 按 `desktop-build-source.json` 里的 dev cacheVersion 刷新 `~/.oneworks/bootstrap/npm/oneworks__cli/<cacheVersion>`、`oneworks__server/<cacheVersion>` 与 `oneworks__client/<cacheVersion>`。排查“安装包还是旧代码”时必须核对这个 cache 里的真实文件，不要只看 `/Applications/.../Resources/app`。
-- `pnpm desktop:dev` 默认打开不绑定 workspace 的空项目启动页；`pnpm desktop:dev:workspace` 才以当前仓库作为 workspace 启动。两者都转发到 `pnpm tools dev-start`，由 Electron 启动一个共享 Vite client，并为每个 workspace 启动独立本机 server；前端改动应走共享 client 的 HMR，不需要重复构建静态 dist。
+- `pnpm desktop:dev` 默认打开不绑定 workspace 的空项目启动页；`pnpm desktop:dev:workspace` 才以当前仓库作为 workspace 启动。两者都转发到统一 `dev-service ensure` 生命周期，由 Electron 启动共享 Vite client，并为每个 workspace 启动独立本机 server；前端改动应走共享 client 的 HMR，不需要重复构建静态 dist。`electron` 与 `electron-workspace` 受单实例约束，切换前必须先获得用户对当前 target 的显式停止授权。
 - 多 worktree / 多 AI 会话可能同时运行桌面开发态实例；排查崩溃或端口占用时，不要因为看到其他 worktree 的 Electron、`apps/desktop/src/server-child.cjs` 或 `apps/client/cli.cjs` 进程就直接清理。先列出 PID、启动时间、worktree 路径和命令来源，只有确认属于当前终端会话、明确是当前崩溃实例残留，或用户同意后才停止。
 - 桌面 main / preload 使用 `electron-vite` 构建，Electron 运行入口是 `dist/main/index.js`。
 - 外部 CDP 只作为 agent 控制面使用，默认关闭；通过 `ONEWORKS_DESKTOP_CDP_PORT` / `--oneworks-cdp-port` 显式启用，并优先配合独立 `ONEWORKS_DESKTOP_USER_DATA_DIR` / `--oneworks-user-data-dir` 冷启动，避免被单实例锁转发到真实用户实例。

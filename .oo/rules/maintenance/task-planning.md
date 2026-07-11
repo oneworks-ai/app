@@ -4,7 +4,7 @@
 
 ## 先判断任务形态
 
-- 如果用户只是要启动开发服务，命中根 `AGENTS.md` 的 dev-start fast path，直接执行统一命令，不要套用下面的复杂流程。
+- 如果用户只是要启动开发服务，命中根 `AGENTS.md` 的 dev-service Fast Path，直接执行 `pnpm --silent tools dev-service ensure <target> --json`，不要套用下面的复杂流程。
 - 如果用户是在问方案、规划、评审或经验总结，先只读规则和相关代码 / 文档，不要急着改。
 - 如果用户明确要实现，先判断主要落点、风险和验证面；需求边界清楚后再改代码。
 - 如果任务涉及公开文档、README、AGENTS 或 `.oo/rules`，先按边界归类：用户使用说明进 `.oo/docs` / README，内部维护经验进 `.oo/rules` / AGENTS，迁移过程和个人操作痕迹不落库。

@@ -40,7 +40,7 @@ The workstream turns Relay Admin from a mostly standalone admin page into a Vite
 ## Current State
 
 - Admin routes are `/admin/devices`, `/admin/devices/:deviceId`, `/admin/users`, `/admin/users/:userId`, `/admin/profile`, `/admin/invites`, and `/admin/sso`; `/admin` redirects to devices in the React app. Devices and profile are available to all authenticated Relay roles; users / invites / SSO are owner/admin-only in the UI and remain protected by server-side permission guards.
-- Vite dev server supports HMR for Admin. Use `pnpm -C apps/relay-admin dev` and open `/admin` or `/login` on that Vite origin. The static relay server at `http://127.0.0.1:48888/admin` will not HMR.
+- Vite dev server supports HMR for Admin. Use `pnpm --silent tools dev-service ensure relay --json` and open `/admin` or `/login` on the returned Admin component origin. Direct `pnpm -C apps/relay-admin dev` is only for focused foreground diagnosis. The static relay server at `http://127.0.0.1:48888/admin` will not HMR.
 - Admin dev server proxies `/api/*` to `http://127.0.0.1:48888` by default. Override with `ONEWORKS_RELAY_ADMIN_DEV_PROXY_TARGET`.
 - Admin dev server generates `/login` and `/login/complete` shell/config locally from relay-server source through `vite.relayLoginDev.ts`. `/login` loads `src/login/main.tsx` as a React + AntD entry with HMR; when opened without `redirect_uri`, dev mode defaults back to `/admin/users` on the current Vite origin. Relay-server login shell/config source changes still trigger a full reload.
 - Relay login now supports remembered accounts, password login / registration with invite code, SSO provider buttons, Google provider presets, and light/dark favicon links that match the Admin app shell icon.

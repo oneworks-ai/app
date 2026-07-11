@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- desktop-control server keeps the small protocol router and handlers together. */
 import { Buffer } from 'node:buffer'
+import { randomUUID } from 'node:crypto'
 import http from 'node:http'
 import process from 'node:process'
 
@@ -16,6 +17,7 @@ import type {
 } from './demo-video/types'
 import type { DesktopCdpLaunchInput, DesktopCdpLaunchResult } from './desktop-cdp'
 import { runDesktopCdpLaunch } from './desktop-cdp'
+import { terminateTrackedPid } from './dev-start/process-identity'
 import { listRuntimeEvidenceSessions, waitForRuntimeEvidenceReply } from './runtime-evidence'
 import type { RuntimeEvidenceWaitResult } from './runtime-evidence'
 
@@ -36,20 +38,23 @@ export interface DesktopControlServeInput {
 export interface DesktopControlSessionRecord {
   createdAt: string
   launch: DesktopCdpLaunchResult
+  processFingerprint: string
   sessionId: string
 }
 
 export interface DesktopControlServerState {
+  closeController: AbortController
+  closing: boolean
   sessions: Map<string, DesktopControlSessionRecord>
 }
 
 export interface DesktopControlServerDeps {
   getTargets: typeof getChromeDebugTargets
-  killProcess: (pid: number) => void
   launchDesktop: (input: DesktopCdpLaunchInput) => Promise<DesktopCdpLaunchResult>
   listEvidenceSessions: typeof listRuntimeEvidenceSessions
   now: () => Date
   recordDemoVideo: (input: DemoVideoRecordOptions) => Promise<DemoVideoRecordResult>
+  terminateProcess: typeof terminateTrackedPid
   waitForEvidenceReply: typeof waitForRuntimeEvidenceReply
 }
 
@@ -62,9 +67,6 @@ export interface DesktopControlServer {
 
 const defaultDeps: DesktopControlServerDeps = {
   getTargets: getChromeDebugTargets,
-  killProcess: (pid) => {
-    process.kill(pid)
-  },
   launchDesktop: async input =>
     await runDesktopCdpLaunch({
       ...input,
@@ -79,6 +81,7 @@ const defaultDeps: DesktopControlServerDeps = {
     const scenario = getDemoVideoScenario(input.scenarioId)
     return await recordDemoVideoScenario(scenario, input)
   },
+  terminateProcess: terminateTrackedPid,
   waitForEvidenceReply: waitForRuntimeEvidenceReply
 }
 
@@ -295,7 +298,7 @@ const buildProtocolDocument = (baseUrl: string) => ({
   ]
 })
 
-const createSessionId = (now: Date) => `desktop-${now.getTime().toString(36)}`
+const createSessionId = (now: Date) => `desktop-${now.getTime().toString(36)}-${randomUUID()}`
 
 const parseLaunchInput = (body: Record<string, unknown>): DesktopCdpLaunchInput => ({
   address: normalizeString(body.address),
@@ -370,6 +373,18 @@ const findRecordableTarget = (
   )
 )
 
+const terminateSessionProcess = async (
+  deps: DesktopControlServerDeps,
+  session: DesktopControlSessionRecord
+) => {
+  await deps.terminateProcess({
+    fingerprint: session.processFingerprint,
+    label: `desktop-control session ${session.sessionId}`,
+    pid: session.launch.pid,
+    timeoutMs: 1_000
+  })
+}
+
 const handleRequest = async (input: {
   baseUrl: string
   deps: DesktopControlServerDeps
@@ -395,14 +410,45 @@ const handleRequest = async (input: {
   }
 
   if (request.method === 'POST' && url.pathname === '/v1/electron/sessions') {
+    if (state.closing) {
+      errorResponse(response, 503, 'SERVER_CLOSING', 'Desktop control server is closing.')
+      return
+    }
     const body = await readJsonBody(request)
-    const launched = await deps.launchDesktop(parseLaunchInput(body))
+    let launched
+    try {
+      launched = await deps.launchDesktop({
+        ...parseLaunchInput(body),
+        signal: state.closeController.signal
+      })
+    } catch (error) {
+      if (state.closing && error instanceof Error && error.message === 'Desktop CDP launch was aborted.') {
+        errorResponse(response, 503, 'SERVER_CLOSING', error.message)
+        return
+      }
+      throw error
+    }
+    const launchFingerprint = normalizeString(launched.processFingerprint)
+    if (!Number.isInteger(launched.pid) || launched.pid <= 0 || launchFingerprint == null) {
+      await deps.terminateProcess({
+        fingerprint: launchFingerprint,
+        label: 'invalid desktop-control launch',
+        pid: launched.pid
+      })
+      throw new Error('Desktop launch did not return a verifiable process identity.')
+    }
     const now = deps.now()
     const sessionId = createSessionId(now)
     const record: DesktopControlSessionRecord = {
       createdAt: now.toISOString(),
       launch: launched,
+      processFingerprint: launchFingerprint,
       sessionId
+    }
+    if (state.closing) {
+      await terminateSessionProcess(deps, record)
+      errorResponse(response, 503, 'SERVER_CLOSING', 'Desktop control server closed during Electron launch.')
+      return
     }
     state.sessions.set(sessionId, record)
     okResponse(response, 'electron.session.ready', {
@@ -534,9 +580,7 @@ const handleRequest = async (input: {
       errorResponse(response, 404, 'SESSION_NOT_FOUND', `Unknown desktop control session: ${sessionPath.sessionId}`)
       return
     }
-    if (session.launch.pid != null) {
-      deps.killProcess(session.launch.pid)
-    }
+    await terminateSessionProcess(deps, session)
     state.sessions.delete(sessionPath.sessionId)
     okResponse(response, 'electron.session.deleted', {
       sessionId: sessionPath.sessionId
@@ -576,22 +620,30 @@ export const startDesktopControlServer = async (
     ...deps
   }
   const state: DesktopControlServerState = {
+    closeController: new AbortController(),
+    closing: false,
     sessions: new Map()
   }
   const host = input.host ?? DEFAULT_CONTROL_HOST
+  const sessionCreations = new Set<Promise<void>>()
   const server = http.createServer((request, response) => {
     const address = server.address()
     const port = typeof address === 'object' && address != null ? address.port : input.port ?? DEFAULT_CONTROL_PORT
     const baseUrl = `http://${host}:${port}`
-    void handleRequest({
+    const requestTask = handleRequest({
       baseUrl,
       deps: resolvedDeps,
       request,
       response,
       state
-    }).catch((error) => {
+    })
+    const responseTask = requestTask.catch((error) => {
       errorResponseFromUnknown(response, error)
     })
+    if (request.method === 'POST' && request.url?.split('?')[0] === '/v1/electron/sessions') {
+      sessionCreations.add(requestTask)
+      void responseTask.finally(() => sessionCreations.delete(requestTask))
+    }
   })
 
   await new Promise<void>((resolve, reject) => {
@@ -604,15 +656,42 @@ export const startDesktopControlServer = async (
     throw new Error('Desktop control server did not bind to a TCP port.')
   }
 
+  let closePromise: Promise<void> | undefined
   return {
     baseUrl: `http://${host}:${address.port}`,
     close: async () => {
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error != null) reject(error)
-          else resolve()
+      closePromise ??= (async () => {
+        state.closing = true
+        state.closeController.abort()
+        const serverClosed = new Promise<void>((resolve, reject) => {
+          server.close((error) => {
+            if (error != null) reject(error)
+            else resolve()
+          })
         })
-      })
+        server.closeAllConnections()
+        const sessions = [...state.sessions.entries()]
+        const resultsPromise = Promise.allSettled(sessions.map(async ([sessionId, session]) => {
+          await terminateSessionProcess(resolvedDeps, session)
+          state.sessions.delete(sessionId)
+        }))
+        let drainTimeout: ReturnType<typeof setTimeout> | undefined
+        const creationDrain = Promise.race([
+          Promise.allSettled([...sessionCreations]),
+          new Promise<never>((_resolve, reject) => {
+            drainTimeout = setTimeout(() => reject(new Error('Timed out cancelling Electron session creation.')), 2_000)
+          })
+        ]).finally(() => clearTimeout(drainTimeout))
+        const [results, creationResults] = await Promise.all([resultsPromise, creationDrain])
+        await serverClosed
+        const failures = [...results, ...creationResults]
+          .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+          .map(result => result.reason)
+        if (failures.length > 0) {
+          throw new AggregateError(failures, 'Failed to terminate one or more desktop-control sessions.')
+        }
+      })()
+      await closePromise
     },
     server,
     state

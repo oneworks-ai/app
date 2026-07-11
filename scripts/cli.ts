@@ -36,8 +36,13 @@ import type {
 import { runDesktopCdpLaunch } from './desktop-cdp'
 import { runDesktopControlRecordBatch } from './desktop-control-record-batch'
 import { runDesktopControlServe } from './desktop-control-server'
-import type { DevStartTarget } from './dev-start'
-import { devStartTargets, parseDevStartTarget, runDevStart as runDevStartCommand } from './dev-start'
+import type { DevServiceCommandInput, DevStartTarget } from './dev-start'
+import {
+  devStartTargets,
+  parseDevStartTarget,
+  runDevServiceCommand as runDevServiceCommandEntry,
+  runDevStart as runDevStartCommand
+} from './dev-start'
 import { runHomebrewTapSyncOneWorks } from './homebrew-tap'
 import { runMessageActionsVerify } from './message-actions'
 import { runPrChangeCheck } from './pr-change-check'
@@ -130,6 +135,7 @@ interface ScriptsCliDeps {
   runRelayConfigSmoke: typeof runRelayConfigSmoke
   runRelayAuthFixture: typeof runRelayAuthFixture
   runDevStart: typeof runDevStartCommand
+  runDevService: (input: DevServiceCommandInput) => Promise<unknown>
 }
 
 const defaultDeps: ScriptsCliDeps = {
@@ -182,16 +188,21 @@ const defaultDeps: ScriptsCliDeps = {
   runRelayConfigLiveSmoke,
   runRelayConfigSmoke,
   runRelayAuthFixture,
-  runDevStart: runDevStartCommand
+  runDevStart: runDevStartCommand,
+  runDevService: runDevServiceCommandEntry
 }
 
 const devStartTargetDescriptions: Record<DevStartTarget, string> = {
   web: 'server + Vite client',
+  daemon: 'standalone OneWorks management daemon',
   electron: 'Electron launcher without binding this repo as a workspace',
   'electron-workspace': 'Electron with the current repo opened as the workspace',
   pwa: 'server + standalone PWA preview',
   homepage: 'Astro homepage with embedded PWA preview',
-  docs: 'local markdown docs preview'
+  docs: 'local markdown docs preview',
+  relay: 'Relay Server + Relay Admin Vite client',
+  'desktop-control': 'shared local Electron control protocol bridge',
+  'android-emulator': 'shared visible Android emulator'
 }
 
 const parseNonNegativeIntegerOption = (value: string, label: string) => {
@@ -265,6 +276,71 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
         workspace: options.workspace ?? false
       })
     })
+
+  const devServiceCommand = program
+    .command('dev-service')
+    .description('Coordinate long-lived local development services across agent sessions')
+
+  for (const action of ['ensure', 'restart'] as const) {
+    devServiceCommand
+      .command(`${action} [target]`)
+      .description(`${action === 'ensure' ? 'Start or reuse' : 'Restart'} a managed development target`)
+      .option('--workspace', 'Open the current repository as the Electron workspace', false)
+      .option('--json', 'Print the resulting shared status document', false)
+      .action(async (target: string | undefined, options: { json?: boolean; workspace?: boolean }) => {
+        await deps.runDevService({
+          action,
+          json: options.json ?? false,
+          target: parseDevStartTarget(target),
+          workspace: options.workspace ?? false
+        })
+      })
+  }
+
+  devServiceCommand
+    .command('stop [target]')
+    .description('Stop one managed development target')
+    .option('--json', 'Print the resulting shared status document', false)
+    .action(async (target: string | undefined, options: { json?: boolean }) => {
+      await deps.runDevService({
+        action: 'stop',
+        json: options.json ?? false,
+        target: parseDevStartTarget(target)
+      })
+    })
+
+  devServiceCommand
+    .command('status [target]')
+    .description('Read shared service state and active operation leases without starting services')
+    .option('--json', 'Print the machine-readable shared status document', false)
+    .action(async (target: string | undefined, options: { json?: boolean }) => {
+      await deps.runDevService({
+        action: 'status',
+        json: options.json ?? false,
+        target: target == null ? undefined : parseDevStartTarget(target)
+      })
+    })
+
+  for (const action of ['logs', 'events'] as const) {
+    devServiceCommand
+      .command(`${action} <target>`)
+      .description(action === 'logs' ? 'Read a bounded manager log tail' : 'Read bounded service operation events')
+      .option(
+        '--limit <count>',
+        'Maximum number of lines or events',
+        value => parsePositiveIntegerOption(value, 'limit'),
+        80
+      )
+      .option('--json', 'Print machine-readable output', false)
+      .action(async (target: string, options: { json?: boolean; limit: number }) => {
+        await deps.runDevService({
+          action,
+          json: options.json ?? false,
+          limit: options.limit,
+          target: parseDevStartTarget(target)
+        })
+      })
+  }
 
   const adapterE2ECommand = program
     .command('adapter-e2e')

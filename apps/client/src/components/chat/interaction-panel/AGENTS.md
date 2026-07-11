@@ -39,7 +39,7 @@
   - `/__oneworks_chii__/front_end/chii_app.html` 是否注入了 `oneworks-devtools-bootstrap.js`、`oneworks-devtools-patch.js` 和 `oneworks-devtools.css`。
   - `/__oneworks_chii__/front_end/ui/legacy/legacy.js` 是否包含 `__ONEWORKS_DEVTOOLS_REWRITE_TOOLBAR_ITEM__`。
   - `/__oneworks_chii__/oneworks-devtools.css` 是否包含当前预期覆盖。
-- `apps/server/src/services/web-debug/chii-devtools-assets.ts` 是服务端拼接资产；只改这里时 Vite HMR 不一定能让 `/__oneworks_chii__/` 响应更新。排查前先用 `chii_app.html` 里的 `oneworks-devtools-patch.js?v=...` 确认版本，必要时重启 `pnpm tools dev-start web`。
+- `apps/server/src/services/web-debug/chii-devtools-assets.ts` 是服务端拼接资产；只改这里时 Vite HMR 不一定能让 `/__oneworks_chii__/` 响应更新。排查前先用 `chii_app.html` 里的 `oneworks-devtools-patch.js?v=...` 确认版本；确需重启时，先获得用户对 `web` 的显式授权，再运行 `pnpm --silent tools dev-service restart web --json`。
 - 宿主 iframe toolbar 和 DevTools 内部 toolbar 是两套样式。修改 DevTools 内部 toolbar 应放在 `chii-devtools-assets.ts` 的 patch CSS / JS；不要通过 `ChatInteractionPanel.scss` 改宿主 `.chat-interaction-panel__iframe-toolbar` 来迁就 DevTools。
 - 页面调试器日志默认关闭。需要排查宿主注入和 target 轮询时，在外层页面 URL 加 `oneworks_debug=1`。不要把普通 `oneworks_debug=1` 透传成 DevTools iframe 内的协议 WebSocket monkey patch；需要协议日志时用单独的 `oneworks_protocol_debug=1`。
 - `apps/client/src/api/web-debug.ts` 读取 Chii runtime 必须固定走当前 Web 宿主 origin 的 `/api/web-debug/chii`，不能走通用 `fetchApiJson` / `getServerBaseUrl()`。workspace 页面会把 API base 切到 workspace server；如果页面调试器跟随这个 base，target.js 和 devtools iframe 会连到 workspace server 端口，重启或端口变化后就会出现 `/__oneworks_chii__/targets` 为空、Elements 空白或 devtools iframe 停在旧端口。

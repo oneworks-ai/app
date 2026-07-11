@@ -1,0 +1,66 @@
+import { spawnSync } from 'node:child_process'
+import process from 'node:process'
+
+export const pidRunning = (pid: number | undefined) => {
+  if (typeof pid !== 'number' || !Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export const processFingerprint = (pid: number | undefined) => {
+  if (typeof pid !== 'number' || !Number.isInteger(pid) || pid <= 0) return undefined
+  const result = spawnSync('ps', ['-o', 'lstart=', '-o', 'command=', '-p', String(pid)], {
+    encoding: 'utf8',
+    stdio: 'pipe'
+  })
+  const value = result.status === 0 ? result.stdout?.trim() : undefined
+  return value == null || value === '' ? undefined : value
+}
+
+export const processCwd = (pid: number | undefined) => {
+  if (typeof pid !== 'number' || !Number.isInteger(pid) || pid <= 0) return undefined
+  const result = spawnSync('lsof', ['-a', '-d', 'cwd', '-Fn', '-p', String(pid)], {
+    encoding: 'utf8',
+    stdio: 'pipe'
+  })
+  const value = result.status === 0
+    ? result.stdout?.split('\n').find(line => line.startsWith('n'))?.slice(1).trim()
+    : undefined
+  return value == null || value === '' ? undefined : value
+}
+
+export const terminateTrackedPid = async ({
+  fingerprint,
+  label,
+  pid,
+  timeoutMs = 3_000
+}: {
+  fingerprint?: string
+  label: string
+  pid?: number
+  timeoutMs?: number
+}) => {
+  if (pid == null || !pidRunning(pid)) return
+  const actualFingerprint = processFingerprint(pid)
+  if (fingerprint == null || actualFingerprint !== fingerprint) {
+    throw new Error(`Refusing to stop ${label} pid=${pid}: process identity no longer matches shared state.`)
+  }
+
+  process.kill(pid, 'SIGTERM')
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (!pidRunning(pid)) return
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+
+  if (processFingerprint(pid) !== fingerprint) {
+    throw new Error(`Refusing to force-stop ${label} pid=${pid}: process identity changed after SIGTERM.`)
+  }
+  process.kill(pid, 'SIGKILL')
+  await new Promise(resolve => setTimeout(resolve, 100))
+  if (pidRunning(pid)) throw new Error(`Failed to stop ${label} pid=${pid}.`)
+}

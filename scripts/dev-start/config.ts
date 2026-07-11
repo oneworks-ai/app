@@ -10,11 +10,23 @@ export const getTargetConfig = (
       clientMode: 'dev',
       defaultClientPort: 5173,
       defaultServerPort: 8787,
+      kind: 'standard',
       needsClient: true,
       needsServer: true,
       readiness: 'http',
       serverRole: 'manager',
       urlSuffix: 'launcher'
+    }
+  }
+
+  if (target === 'daemon') {
+    return {
+      defaultServerPort: 8787,
+      kind: 'standard',
+      needsClient: false,
+      needsServer: true,
+      readiness: 'http',
+      serverRole: 'manager'
     }
   }
 
@@ -25,6 +37,7 @@ export const getTargetConfig = (
       clientMode: 'standalone',
       defaultClientPort: 4173,
       defaultServerPort: 8787,
+      kind: 'standard',
       needsClient: true,
       needsServer: true,
       readiness: 'http',
@@ -41,6 +54,7 @@ export const getTargetConfig = (
       extraEnv: {
         __ONEWORKS_PROJECT_CLIENT_HOMEPAGE_PREVIEW__: '1'
       },
+      kind: 'standard',
       needsClient: true,
       needsServer: true,
       readiness: 'client',
@@ -51,14 +65,46 @@ export const getTargetConfig = (
   if (target === 'docs') {
     return {
       defaultClientPort: 4317,
+      kind: 'standard',
       needsClient: false,
       needsServer: false,
       readiness: 'docs'
     }
   }
 
+  if (target === 'relay') {
+    return {
+      defaultClientPort: 5173,
+      defaultServerPort: 48888,
+      kind: 'relay',
+      needsClient: true,
+      needsServer: true,
+      readiness: 'http'
+    }
+  }
+
+  if (target === 'desktop-control') {
+    return {
+      defaultServerPort: 9777,
+      kind: 'desktop-control',
+      needsClient: false,
+      needsServer: true,
+      readiness: 'http'
+    }
+  }
+
+  if (target === 'android-emulator') {
+    return {
+      kind: 'android-emulator',
+      needsClient: false,
+      needsServer: false,
+      readiness: 'device'
+    }
+  }
+
   return {
     desktopWorkspace: target === 'electron-workspace' || options.workspace === true,
+    kind: 'desktop',
     needsClient: false,
     needsServer: false,
     readiness: 'process'

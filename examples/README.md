@@ -32,7 +32,7 @@ cd ../source-debug-fixture
 node scripts/smoke.mjs
 ```
 
-When developing One Works itself, keep repository-level commands such as `pnpm start`, `pnpm typecheck`, and root tooling at the repository root unless the task is specifically about an example scenario.
+When developing One Works itself, keep repository-level commands such as `pnpm --silent tools dev-service ensure web --json`, `pnpm typecheck`, and root tooling at the repository root unless the task is specifically about an example scenario.
 
 ## Run Against Local Source
 
@@ -44,7 +44,7 @@ EXAMPLE="$PWD/examples/task-board-demo"
 __ONEWORKS_PROJECT_WORKSPACE_FOLDER__="$EXAMPLE" \
 __ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__="$EXAMPLE" \
 __ONEWORKS_PROJECT_LAUNCH_CWD__="$EXAMPLE" \
-pnpm start
+pnpm --silent tools dev-service ensure web --json
 ```
 
 This starts the local One Works source server/client while treating the selected example as the active user workspace.

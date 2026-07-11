@@ -1,10 +1,11 @@
 import { mkdirSync } from 'node:fs'
 
-import { runMain } from './dev-start/manager'
+import { ensureDevService } from './dev-start/operations'
 import { logDir } from './dev-start/paths'
 import { runServiceChild } from './dev-start/service-child'
 import type { DevStartOptions } from './dev-start/types'
 
+export { type DevServiceCommandInput, runDevServiceCommand } from './dev-start/operations'
 export { type DevStartOptions, type DevStartTarget, devStartTargets, parseDevStartTarget } from './dev-start/types'
 
 export const runDevStart = async ({
@@ -17,5 +18,5 @@ export const runDevStart = async ({
     await runServiceChild(target)
     return
   }
-  await runMain(target, { workspace })
+  await ensureDevService(target, { workspace })
 }

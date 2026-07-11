@@ -46,7 +46,7 @@
 5. `autoInstall !== false` 时安装到全局 bootstrap package cache
 6. 系统 `PATH`（默认兜底；`source=managed` 时不启用）
 
-worktree 场景下，旧项目共享 CLI cache 会通过 [`packages/utils/src/project-cache-path.ts`](../../../packages/utils/src/project-cache-path.ts) 向主工作树归并；启动时若发现旧 cache 且全局缺失，会先移动到全局 bootstrap package cache。直接启动 server 时，server 数据库、mock home、日志、项目级 cache 与 runtime store 仍会走 project home；本仓库开发态 `pnpm start` / `pnpm tools dev-start web` 会把当前 worktree 作为 primary workspace 注入，从而隔离到当前 worktree 对应的 project key。
+worktree 场景下，旧项目共享 CLI cache 会通过 [`packages/utils/src/project-cache-path.ts`](../../../packages/utils/src/project-cache-path.ts) 向主工作树归并；启动时若发现旧 cache 且全局缺失，会先移动到全局 bootstrap package cache。直接启动 server 时，server 数据库、mock home、日志、项目级 cache 与 runtime store 仍会走 project home；本仓库开发态 `pnpm --silent tools dev-service ensure web --json` 会把当前 worktree 作为 primary workspace 注入，从而隔离到当前 worktree 对应的 project key。
 
 `__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__` 可覆盖全局 bootstrap package cache 根目录；runtime package、adapter package、内置插件、npm adapter CLI 和 Kimi uv CLI 都要使用这个根目录。
 

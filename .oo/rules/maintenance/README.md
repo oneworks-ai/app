@@ -28,7 +28,7 @@ description: 仓库通用维护与验证细则，包含启动、lint、格式化
 ## 常见问题索引
 
 - Subagent 执行“取最新代码并启动 web 服务”超过 1 分钟：见 [Subagent 启动 Web 服务超过 1 分钟](./common-issues.md#subagent-启动-web-服务超过-1-分钟)。
-- 开发服务输出 `[dev-start] ready` 后仍继续 `ps` / `curl` / 读 log：见 [开发服务 ready 后仍继续验证](./common-issues.md#开发服务-ready-后仍继续验证)。
+- `dev-service ensure` 返回 `ready: true` 后仍继续 `ps` / `curl` / 读 log：见 [开发服务 ready 后仍继续验证](./common-issues.md#开发服务-ready-后仍继续验证)。
 - 启动入口混用 `start.sh`、`screen` 或旧脚本：见 [开发服务启动入口混用历史脚本](./common-issues.md#开发服务启动入口混用历史脚本)。
 - Android 模拟器 / AVD / 虚拟机启动耗时、`emulator` 不在 PATH、SDK 路径猜错或命令会话被长期占用：见 [Android 模拟器启动排查耗时](./common-issues.md#android-模拟器启动排查耗时)。
 - PR 截图证据断链、引用已删除分支或截图来源不真实：见 [PR 截图证据断链或来源不真实](./common-issues.md#pr-截图证据断链或来源不真实)。
@@ -42,12 +42,13 @@ description: 仓库通用维护与验证细则，包含启动、lint、格式化
 
 ## 开发环境启动
 
-在根目录下运行：
+仓库内需要跨会话复用的长期开发服务统一在根目录运行：
 
-- `pnpm dev`: 同时启动前端和后端（需配置对应的并行脚本，或分别在各目录下运行）。
-- 后端启动: `cd apps/server && pnpm dev` (支持热重载)。
-- 前端启动: `cd apps/client && pnpm dev` (支持 HMR)。
-- 多 worktree / 多 AI 会话下，可能同时存在多个 dev server、Electron 或 adapter 子进程。排查端口占用、崩溃报告或残留进程时，先列出 PID、启动时间、命令路径和 worktree 来源；除非能确认进程属于当前终端会话或当前崩溃实例残留，否则先询问用户是否清理，不要直接停止其他 worktree 的进程。
+```bash
+pnpm --silent tools dev-service ensure <target> --json
+```
+
+target、状态查询、操作租约和 handoff 见 [开发服务跨会话协作协议](./dev-service-coordination.md)。不要用 package 私有 `dev` 命令建立第二个长期 owner；只有明确的内部前台诊断才可直接运行 target 私有入口。排查时先用 `status` / `events`，失败证据再用有限且已脱敏的 `logs`。无论服务是否健康，`stop` / `restart` 都必须先取得用户对该 target 的显式授权。
 
 ## 常见维护任务
 

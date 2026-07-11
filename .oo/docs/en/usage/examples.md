@@ -28,7 +28,7 @@ cd ../source-debug-fixture
 node scripts/smoke.mjs
 ```
 
-When developing the One Works repository itself, keep running repository-level commands such as `pnpm start` and `pnpm typecheck` from the repository root. Switch into an example directory only when testing that example as a user project.
+When developing the One Works repository itself, keep running repository-level commands such as `pnpm --silent tools dev-service ensure web --json` and `pnpm typecheck` from the repository root. Switch into an example directory only when testing that example as a user project.
 
 ## Use Local Source
 

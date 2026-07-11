@@ -16,14 +16,14 @@ It manages Relay users, roles, disabled status, invitation codes, and SSO provid
 ## Development
 
 ```bash
-pnpm -C apps/relay-admin dev
+pnpm --silent tools dev-service ensure relay --json
 pnpm -C apps/relay-admin test
 pnpm -C apps/relay-admin typecheck
 pnpm -C apps/relay-admin build
 pnpm -C apps/relay-admin build:platform
 ```
 
-The development server is a normal Vite React app with HMR. Open `/admin`, `/admin/users`, `/admin/profile`, `/admin/openapi`, `/admin/invites`, or `/admin/sso` on the Vite origin during UI work. In dev, `/api/*` proxies to `http://127.0.0.1:48888` by default; set `ONEWORKS_RELAY_ADMIN_DEV_PROXY_TARGET` when the relay server uses another origin. `/login` and `/login/complete` are generated locally by the Vite dev server from relay-server source; `/login` loads `src/login/main.tsx` with HMR, while relay-server shell/config changes trigger a full reload on the Vite origin. The production build must use Vite. `vite.config.ts` fixes the main output filenames to `admin.js`, `login.js`, and `admin.css`; shared hashed JS chunks are served from the same `/admin/assets/` directory.
+The shared development target runs Relay Server and the normal Vite React app with HMR together. Read the returned Admin component URL and open `/admin`, `/admin/users`, `/admin/profile`, `/admin/openapi`, `/admin/invites`, or `/admin/sso` during UI work. `pnpm -C apps/relay-admin dev` is reserved for focused foreground component diagnosis, not cross-session ownership. In dev, `/api/*` proxies to `http://127.0.0.1:48888` by default; set `ONEWORKS_RELAY_ADMIN_DEV_PROXY_TARGET` when the relay server uses another origin. `/login` and `/login/complete` are generated locally by the Vite dev server from relay-server source; `/login` loads `src/login/main.tsx` with HMR, while relay-server shell/config changes trigger a full reload on the Vite origin. The production build must use Vite. `vite.config.ts` fixes the main output filenames to `admin.js`, `login.js`, and `admin.css`; shared hashed JS chunks are served from the same `/admin/assets/` directory.
 
 ## Standalone Pages
 

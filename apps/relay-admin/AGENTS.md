@@ -26,7 +26,7 @@
 ## 约定
 
 - 构建必须走 Vite：`pnpm -C apps/relay-admin build`。
-- 开发预览走 Vite dev server 和 HMR：`pnpm -C apps/relay-admin dev`，React Router 页面包括 `/admin/users`、`/admin/invites`、`/admin/sso` 和 `/admin/openapi`。开发态 `/api/*` 默认代理到 `http://127.0.0.1:48888`；`/login` 与 `/login/complete` 在 Vite 内本地生成 shell/config 并注入 Vite client，登录页 React 源码走 HMR，relay-server 登录 shell 源码变化会 full reload。需要指向其他 relay-server API / provider 来源时设置 `ONEWORKS_RELAY_ADMIN_DEV_PROXY_TARGET`。
+- 跨会话开发预览统一走 `pnpm --silent tools dev-service ensure relay --json`，它同时托管 Relay Server 与 Relay Admin HMR。`pnpm -C apps/relay-admin dev` 只用于明确的单组件前台诊断，不作为长期共享服务入口。React Router 页面包括 `/admin/users`、`/admin/invites`、`/admin/sso` 和 `/admin/openapi`。开发态 `/api/*` 默认代理到 `http://127.0.0.1:48888`；`/login` 与 `/login/complete` 在 Vite 内本地生成 shell/config 并注入 Vite client，登录页 React 源码走 HMR，relay-server 登录 shell 源码变化会 full reload。需要指向其他 relay-server API / provider 来源时设置 `ONEWORKS_RELAY_ADMIN_DEV_PROXY_TARGET`。
 - 管理端单测：`pnpm -C apps/relay-admin test`。
 - 组件与样式按模块职责拆分，不把页面重新堆成单体文件。
 - 新增管理域时优先建 `src/features/<domain>/`，并补最近的 `AGENTS.md`；只有两个以上 feature 复用的代码才放进 `src/shared/`。

@@ -21,8 +21,7 @@ export const ensureGitUpdated = () => {
 
   const branch = readSync('git', ['symbolic-ref', '--short', '-q', 'HEAD'])
   if (branch == null || branch === '') {
-    log('detached HEAD; aligning to origin/main')
-    runSync('git', ['switch', '--detach', 'origin/main'])
+    log('detached HEAD; fetched origin and kept the current revision')
   } else if (readSync('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']) != null) {
     log(`pulling ${branch} with --ff-only`)
     runSync('git', ['pull', '--ff-only'])

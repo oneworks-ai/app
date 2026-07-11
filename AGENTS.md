@@ -7,39 +7,47 @@
 如果用户意图是“取最新代码并启动 web 服务”“拉取最新代码并启动一个 web 服务”“启动 web 服务”“start web dev server”，唯一动作是在仓库根目录直接执行：
 
 ```bash
-pnpm tools dev-start web
+pnpm --silent tools dev-service ensure web --json
 ```
 
-此类请求不要做额外预检查或成功后二次验证；`dev-start` 已经负责 fetch、安全拉取 / 对齐、workspace install 校验、端口避让、后台进程和探活。相关经验和反例见 `.oo/rules/maintenance/common-issues.md` 的 “Subagent 启动 Web 服务超过 1 分钟”。
+此类请求不要做额外预检查或成功后二次验证；`dev-service ensure` 已经负责 fetch、安全拉取 / 对齐、workspace install 校验、端口避让、后台进程、操作租约、状态写入和探活。相关经验和反例见 `.oo/rules/maintenance/common-issues.md` 的 “Subagent 启动 Web 服务超过 1 分钟”。
 
-命令退出 0 且输出 `[dev-start] ready` 时，按 target 做最短交付并停止，不要再做 `ps`、`curl` 或读日志等二次验证：
+命令退出 0 且 JSON 中对应服务为 `ready: true` 时，按 target 做最短交付并停止，不要再做 `ps`、`curl` 或读日志等二次验证：
 
-- Web / PWA / homepage / docs 等前端页面服务：用 Browser / browser-use 自动打开输出里的 `CLIENT_URL`，然后只回复一个可点击前端入口链接，例如 `[前端界面](CLIENT_URL)`；不要在成功消息里展开 `SERVER_URL`、PID 或 `LOG_FILE`，除非用户明确需要排查信息。
+- Web / PWA / homepage / docs 等前端页面服务：用 Browser / browser-use 自动打开状态里的 `clientUrl` / `docsUrl`，然后只回复一个可点击前端入口链接；不要在成功消息里展开其他 URL、PID 或日志路径，除非用户明确需要排查信息。
 - Electron / desktop / launcher：直接打开输出对应的开发态应用窗口；成功消息保持简短，不要让用户再手动打开应用。
-- 只有命令失败时才读取输出中的 `LOG_FILE` 并继续排查。
+- 只有命令失败时才读取同一 target 的有限 `events` 和已脱敏 `logs` 并继续排查。
 
 其他开发服务启动意图同样直接走统一 Commander CLI：
 
 用户要求拉取最新代码并启动开发服务时，不要手动推理端口、依赖安装、后台进程或多 worktree 进程；在仓库根目录直接执行统一 Commander CLI：
 
 ```bash
-pnpm tools dev-start <target>
+pnpm --silent tools dev-service ensure <target> --json
 ```
 
 意图识别表：
 
-- 普通 Web UI / “启动一个 web 服务” / “拉取最新代码，并启动一个 web 服务”：`pnpm tools dev-start web`
-- Electron / 桌面端 / launcher：`pnpm tools dev-start electron`
-- Electron 且要打开当前仓库作为 workspace：`pnpm tools dev-start electron-workspace`
-- PWA / 独立前端 / standalone client：`pnpm tools dev-start pwa`
-- 官网首页预览 / homepage preview：`pnpm tools dev-start homepage`
-- 使用文档 / docs 本地预览：`pnpm tools dev-start docs`
+- 普通 Web UI / “启动一个 web 服务” / “拉取最新代码，并启动一个 web 服务”：`pnpm --silent tools dev-service ensure web --json`
+- Electron / 桌面端 / launcher：`pnpm --silent tools dev-service ensure electron --json`
+- Electron 且要打开当前仓库作为 workspace：`pnpm --silent tools dev-service ensure electron-workspace --json`
+- PWA / 独立前端 / standalone client：`pnpm --silent tools dev-service ensure pwa --json`
+- 官网首页预览 / homepage preview：`pnpm --silent tools dev-service ensure homepage --json`
+- 使用文档 / docs 本地预览：`pnpm --silent tools dev-service ensure docs --json`
+- 独立 management daemon：`pnpm --silent tools dev-service ensure daemon --json`
+- Relay Server + Relay Admin：`pnpm --silent tools dev-service ensure relay --json`
+- Electron agent control bridge：`pnpm --silent tools dev-service ensure desktop-control --json`
+- Android 可见模拟器：`pnpm --silent tools dev-service ensure android-emulator --json`
 
-`pnpm tools` 通过 `scripts/run-tools.mjs` 注册 TS；如果新 worktree 缺少 register 依赖，会先执行 `pnpm install`。`dev-start` 会安全执行 `git fetch --prune origin`，在工作区干净时按当前状态拉取 / 对齐最新代码，按需校验 workspace 安装，后台启动对应开发服务，自动避开已占用端口，并在探活成功后输出 URL / PID / `LOG_FILE`。如果当前 worktree 已有同 target 服务且探活成功，会直接复用并返回 URL。
+`pnpm tools` 通过 `scripts/run-tools.mjs` 注册 TS；如果新 worktree 缺少 register 依赖，会先执行 `pnpm install`。`dev-service ensure` 会安全执行 `git fetch --prune origin`，在工作区干净时按当前状态拉取 / 对齐最新代码，按需校验 workspace 安装，后台启动对应开发服务，自动避开已占用端口，并在探活成功后输出机器可读状态。如果当前 worktree 已有同 target 服务且探活成功，会直接复用并返回 URL。
 
-`dev-start` 会把同一 worktree 的服务状态写到 `.logs/dev-start-<target>.json`，例如 web 对应 `.logs/dev-start-web.json`。当用户询问当前目录是否已有服务、URL / PID / 端口、这个服务属于哪个 worktree，或多会话如何复用时，优先读取这个 JSON；其中 `root`、`target`、`clientUrl`、`serverUrl`、`servicePid`、`clientPid`、`serverPid`、`startedAt` 和 `managerLog` 是跨会话共享识别信息。不要为查询这些信息而另起服务；如果用户的意图是启动或拉取后启动，仍直接运行 `pnpm tools dev-start <target>`，让脚本完成复用判断和端口处理。
+统一入口会把 worktree 级服务状态写到 `.logs/dev-start-<target>.json`，例如 web 对应 `.logs/dev-start-web.json`；机器级 `android-emulator`、`electron` 和 `electron-workspace` 的路径由 status 返回，位于用户目录 `.oneworks/dev-service/`。当用户询问当前目录是否已有服务、URL / PID / 端口、这个服务属于哪个 worktree，或多会话如何复用时，优先运行 `pnpm --silent tools dev-service status <target> --json`；它会读取状态快照、探活并返回当前 operation lease，不会启动服务。`.logs/dev-start-<target>.events.jsonl` 记录普通 target 的跨会话操作历史。不要为查询这些信息而另起服务；如果用户的意图是启动或拉取后启动，运行 `ensure`，让脚本完成复用判断和端口处理。
 
-只有脚本失败时才继续查看输出的 `LOG_FILE`、读取更细规则或手动排查端口；不要在这些启动需求上先做冗长仓库扫描。不要使用 `screen` 管理本仓开发服务。
+多步骤启动、失败日志收集或跨会话运维可以按需委派给项目自定义 `dev_service_operator`；简单单命令启动仍由当前会话直接执行，不创建常驻运维 agent。所有 agent 只通过 `pnpm --silent tools dev-service ensure / status / events / logs / stop / restart ... --json` 操作长期服务，不手工杀 PID。`stop` 和 `restart` 无论服务是否健康，都必须先有用户对该 target 的显式授权。查询失败证据时只读 target-scoped、有限行且已脱敏的日志。共享状态、操作租约、事件和 handoff 标准见 `.oo/rules/maintenance/dev-service-coordination.md`。
+
+`electron` 与 `electron-workspace` 共享 Electron 单实例资源，不能并行运行。`android-emulator` 是跨 worktree 的机器级资源，必须服从全局协调，不能只凭当前 worktree 快照启动或停止另一会话正在使用的 AVD。
+
+只有脚本失败时才继续读取 target-scoped `events` / 已脱敏 `logs` 和更细规则；不要在这些启动需求上先做冗长仓库扫描或手动排查端口。不要使用 `screen` 管理本仓开发服务。
 
 ## 模型选择与任务分工
 
@@ -68,7 +76,7 @@ pnpm tools dev-start <target>
 
 ## Worktree 初始化判断
 
-本节不适用于“取最新代码并启动 web 服务”等已命中开发服务 Fast Path 的请求；这些请求直接执行 `pnpm tools dev-start <target>`。
+本节不适用于“取最新代码并启动 web 服务”等已命中开发服务 Fast Path 的请求；这些请求直接执行 `pnpm --silent tools dev-service ensure <target> --json`。
 
 进入仓库后先用最小命令判断当前副本状态，再决定是否需要初始化；不要仅凭路径猜测：
 
@@ -82,13 +90,13 @@ pnpm tools dev-start <target>
 
 ## 按用户需求快速初始化
 
-本节不适用于已命中开发服务 Fast Path 的启动请求；不要把下面的手工初始化步骤叠加到 `pnpm tools dev-start <target>` 之前。
+本节不适用于已命中开发服务 Fast Path 的启动请求；不要把下面的手工初始化步骤叠加到 `pnpm --silent tools dev-service ensure <target> --json` 之前。
 
 - 只做阅读、解释、轻量检索：不安装依赖，不启动服务；读基础规则后按文件路径直接查看相关 `AGENTS.md` / 规则文档。
 - 用户要求拉取最新代码：先确认工作区干净；`git fetch --prune origin` 后，如果当前是 detached HEAD 且用户没有指定分支，可对齐到 `origin/main`；如果在本地分支上，优先 `git pull --ff-only`。遇到本地改动先停下来说明，不要重置。
 - 用户要求运行测试、构建、CLI、server、client 或 Electron：如果 `node_modules` 缺失，先在当前 worktree 根目录执行 `pnpm install`；如果任务依赖私有配置而 `.oo.dev.config.json` / `.env` 缺失，优先从已有本地副本确认可复用来源，不能确认时向用户说明缺口。
-- 用户要求启动桌面端 / Electron：继续阅读 `apps/desktop/AGENTS.md` 与 `.oo/docs/usage/desktop.md`；如果已有正式版或其他 worktree 的 Electron 在运行，先列出 PID、启动时间、命令路径和 worktree 来源。需要并行启动开发态时，使用独立 `--user-data-dir`，避免被单实例锁转发到已有应用。
-- 用户要求启动 Android 模拟器 / AVD / 虚拟机用于调试：继续阅读 `.oo/rules/maintenance/common-issues.md` 的 “Android 模拟器启动排查耗时” 与 `.oo/rules/maintenance/mobile-workspace-webview.md`；先查 `adb devices -l`、`sdkmanager --list_installed`、`avdmanager list avd`，优先复用已有 AVD 并 detached 启动，不要全盘搜索 SDK 或让前台命令长期挂住模拟器。
+- 用户要求启动桌面端 / Electron：继续阅读 `apps/desktop/AGENTS.md` 与 `.oo/docs/usage/desktop.md`；先通过统一 `dev-service status` 判断 `electron` / `electron-workspace` 的单实例占用。共享开发态不手工列 PID 或绕过协议并行启动；独立 `--user-data-dir` 只用于明确的隔离场景工具。
+- 用户要求启动 Android 模拟器 / AVD / 虚拟机用于调试：继续阅读 `.oo/rules/maintenance/common-issues.md` 的 “Android 模拟器启动排查耗时” 与 `.oo/rules/maintenance/mobile-workspace-webview.md`；通过 `pnpm --silent tools dev-service status android-emulator --json` 和机器级协调判断是否复用，再用统一 `ensure` 入口启动，不要全盘搜索 SDK、直接运行 emulator 或让前台命令长期挂住模拟器。
 - 用户要求启动前端或调试页面：继续阅读 `.oo/rules/FRONTEND-STANDARD.md`、`.oo/rules/frontend-standard/debugging.md` 和 `apps/client/AGENTS.md`；涉及聊天页 / sender / 消息级交互时，再读 `apps/client/src/components/chat/AGENTS.md`。
 - 用户要求启动后端、改 API、数据库、adapter 或 MCP：继续阅读 `.oo/rules/BACKEND-STANDARD.md`；按影响范围进入 `apps/server/src/routes/AGENTS.md`、`apps/server/src/services/*/AGENTS.md` 或相关 package 的 `AGENTS.md`。
 - 用户要求改配置语义、配置页、加载 / 写回 / 分层合并：继续阅读 `.oo/rules/CONFIG.md`，再按前端或后端落点补读对应规则。
@@ -101,7 +109,7 @@ pnpm tools dev-start <target>
 - 配置加载、写回、分层合并或配置页 source 语义：`.oo/rules/CONFIG.md`
 - 前端 / 后端约束：`.oo/rules/FRONTEND-STANDARD.md`、`.oo/rules/BACKEND-STANDARD.md`
 - 桌面端 / Electron 打包、发布与本地调试：`apps/desktop/AGENTS.md`、`.oo/docs/usage/desktop.md`
-- Electron agent 控制、UI 自动验证、外部 CDP bridge 或 runtime evidence 验证：先读 `scripts/AGENTS.md` 和 `scripts/desktop-control-protocol.md`，再读 `apps/desktop/AGENTS.md`；优先复用 `pnpm tools desktop-control serve`，不要在场景工具里重复实现端口选择、隔离 profile、CDP target discovery 或 `events.jsonl` discovery。
+- Electron agent 控制、UI 自动验证、外部 CDP bridge 或 runtime evidence 验证：先读 `scripts/AGENTS.md` 和 `scripts/desktop-control-protocol.md`，再读 `apps/desktop/AGENTS.md`；共享 bridge 使用 `pnpm --silent tools dev-service ensure desktop-control --json`，不要在场景工具里重复实现端口选择、隔离 profile、CDP target discovery 或 `events.jsonl` discovery。`pnpm tools desktop-control serve` 只用于明确的内部前台调试，不用于跨会话共享。
 - 仓库开发与贡献：`.oo/rules/DEVELOPMENT.md`
 - 复杂任务拆分、子线程协作、交叉审阅或经验沉淀：`.oo/rules/maintenance/task-planning.md`
 - medium 编码的全局影响、抽象和交付质量门禁：`.oo/rules/maintenance/code-delivery-quality.md`

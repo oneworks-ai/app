@@ -29,10 +29,10 @@ To build the APK, open `apps/android` in Android Studio or run `gradle assembleD
 
 ## Visible Emulator On macOS
 
-Use the detached helper when an agent or non-interactive shell needs to keep a visible Android Emulator window open:
+Use the shared machine-scoped service when an agent or non-interactive shell needs to keep a visible Android Emulator window open:
 
 ```bash
-pnpm -C apps/android emulator:visible -- --avd OneWorksApi35Visible --install-apk app/build/outputs/apk/debug/app-debug.apk --start-app
+pnpm --silent tools dev-service ensure android-emulator --json
 ```
 
-The helper starts the emulator with detached stdio redirected into `.logs/`, matching the repository's dev service startup pattern. The window is not tied to a Terminal tab or to the parent command process.
+The command reuses or starts the configured AVD through the machine-level state, lease, PID fingerprint, and ADB serial contract. The internal `emulator:visible` helper may be invoked directly only for focused, interactive launcher diagnosis: the launcher exits after readiness while the emulator child remains detached. A directly launched emulator is marked `uncoordinated` with no owner worktree; direct reuse of a dev-service-owned emulator preserves its coordinated registry, and direct `--restart` is rejected. It must not be treated as a shared long-lived owner. APK install and app-start actions run after the unified emulator status reports `ready: true`.
