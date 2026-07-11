@@ -56,6 +56,7 @@ description: 当用户想创建或改造 OneWorks plugin，实现界面入口、
 - 下方面板或右侧抽屉 tab：`workbenchTabs` 或 `workspaceDrawerTabs`，用 `placement: "bottom" | "right"` 决定位置。
 - 下方面板 `+` 菜单：`workbenchAddMenu`。如果要点击后创建 tab，设置 `tab` 指向 `workbenchTabs[].id`。
 - launcher 搜索：`launcherSearchProviders`，桌面 launcher 使用 server-backed `command`；workspace client 可以再用 `ctx.launcher.registerSearchProvider` 注册本地搜索。
+- chat 工具调用展示：`toolUsePresentations`，用纯声明配置工具匹配、Material Symbol、国际化标题、摘要目标、输入字段和结果格式；不要为单个插件在聊天组件里新增 renderer 或注入 JSX/HTML。
 - 插件间扩展点：拥有方用 `extensionPoints` 或 `ctx.extensionPoints.register` 暴露 `<scope>/<id>`；其他插件用 `ctx.extensionPoints.onAvailable('<scope>/<id>', point => ctx.extensionPoints.contribute(...))` 监听目标点出现后补充结构化能力。只有 manifest 里声明的静态贡献才用 `extensionContributions`。
 - 插件间纯前端 API：拥有方用 `ctx.pluginApis.register({ id, inputSchema, outputSchema, handler })` 暴露 in-client 过程调用；调用方用 `await ctx.pluginApis.call('<scope>/<id>', input)`。所有调用必须是 Promise，运行时会等待目标 API 注册并等待 handler 完成。
 - 本地能力：server `ctx.registerCommand` 或 `ctx.registerApi`；前端通过 `ctx.commands.execute` 或 `ctx.api.fetch` 调用。
@@ -70,6 +71,7 @@ description: 当用户想创建或改造 OneWorks plugin，实现界面入口、
 - route 级 chrome 的实际可见位置由宿主 route 已接入的 container 能力决定：header action、window bar action 和 route more menu 由 `useRoutePluginChrome(routeKey)` 统一安装；route sidebar 右键菜单只有在宿主 route 提供共享 sidebar 数据时才会显示。
 - route action 状态字段由宿主通用 chrome 统一渲染：`active` 切换 `activeIcon` / `activeLabel` / `activeTitle`，`disabled` 禁用，`danger` hover/focus 使用危险色，`shortcut` 进入 tooltip；菜单型贡献额外支持 `selected`。旧 `routeMoreMenu` 只是兼容别名，新插件写 `routeMoreMenuItems`。
 - `chatInteractionPanelEmptyActions` 是 chat 专属扩展点，只扩展新建面板默认页的 action card；它不进入通用 route container，也不替代 `workbenchAddMenu`。如果需要新增真实底部 / 右侧 tab，继续用 `workbenchTabs` + `workbenchAddMenu`。
+- `toolUsePresentations` 默认只按 base name 匹配当前插件 scope 下的 OneWorks MCP 工具；只有明确要展示其他来源工具时才设置 `origin: "any"`。对象数组使用宿主 `records` 字段并声明 item 路径，短原子数组使用 `chips`；结果较大时优先用 `result.mode: "declared"` + `result.fields` 做渐进披露，不要默认铺完整协议 JSON。输入和结果只能选择宿主支持的结构化格式，不允许可执行模板、任意 HTML 或插件私有 React renderer。
 - 插件扩展点的边界是：通用布局交互沉淀到 route container / layout 组件；route 层负责业务状态、持久化和 slot 内容；plugin 只注册贡献、命令、view 和 slot 内容。现有扩展点不够时，优先补宿主结构化 API，不要把 header、window bar、右键菜单或 overlay 交互复制进 plugin。
 - 点击 `workbenchAddMenu` 创建的新 tab 应该可关闭；不要把普通 plugin tab 做成默认固定。
 - 需要默认固定或默认打开时，必须有显式配置语义，不要把所有 plugin tab 都自动打开。

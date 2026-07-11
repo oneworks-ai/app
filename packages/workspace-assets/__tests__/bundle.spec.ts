@@ -50,7 +50,21 @@ describe('resolveWorkspaceAssetBundle', () => {
       ),
       'skills/research/SKILL.md': '---\ndescription: 检索资料\n---\n阅读 README.md',
       'rules/review.md': '---\ndescription: 评审规则\n---\n必须检查风险',
-      'mcp/browser.json': JSON.stringify({ command: 'npx', args: ['browser-server'] }, null, 2),
+      'mcp/browser.json': JSON.stringify(
+        {
+          command: '${' + 'ONEWORKS_NODE_EXECUTABLE}',
+          args: ['${' + 'ONEWORKS_PLUGIN_ROOT}/server.js'],
+          env: {
+            HOME: '${' + 'ONEWORKS_REAL_HOME}',
+            USERPROFILE: '${' + 'ONEWORKS_REAL_HOME}',
+            CURSOR_COLOR: '${' + 'ONEWORKS_PLUGIN_OPTION:cursor.color}',
+            CURSOR_AUTOMATIC: '${' + 'ONEWORKS_PLUGIN_OPTION:cursor.automatic}'
+          }
+        },
+        null,
+        2
+      ),
+      'server.js': 'process.stdout.write("ready")\n',
       'opencode/commands/review.md': '# review\n'
     })
     await installPluginPackage(workspace, '@oneworks/plugin-logger', {
@@ -69,7 +83,13 @@ describe('resolveWorkspaceAssetBundle', () => {
       cwd: workspace,
       configs: [{
         plugins: [
-          { id: 'demo', scope: 'demo' },
+          {
+            id: 'demo',
+            scope: 'demo',
+            options: {
+              cursor: { automatic: true, color: '#625BF6' }
+            }
+          },
           { id: 'logger' }
         ]
       }, undefined],
@@ -79,6 +99,16 @@ describe('resolveWorkspaceAssetBundle', () => {
     expect(bundle.skills.map(asset => asset.displayName)).toEqual(['demo/research'])
     expect(bundle.rules.map(asset => asset.displayName)).toEqual(['demo/review'])
     expect(Object.keys(bundle.mcpServers)).toEqual(['demo/browser'])
+    expect(bundle.mcpServers['demo/browser']?.payload.config).toEqual({
+      command: process.execPath,
+      args: [join(workspace, 'node_modules/@oneworks/plugin-demo/server.js')],
+      env: {
+        HOME: process.env.__ONEWORKS_PROJECT_REAL_HOME__,
+        USERPROFILE: process.env.__ONEWORKS_PROJECT_REAL_HOME__,
+        CURSOR_COLOR: '#625BF6',
+        CURSOR_AUTOMATIC: 'true'
+      }
+    })
     expect(bundle.hookPlugins).toEqual(expect.arrayContaining([
       expect.objectContaining({
         packageId: '@oneworks/plugin-logger'

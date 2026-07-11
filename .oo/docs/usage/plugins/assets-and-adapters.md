@@ -45,6 +45,44 @@ __ONEWORKS_PROJECT_ENTITIES_DIR__=knowledge/entities
 - 如果显式设置了 `__ONEWORKS_PROJECT_CONFIG_DIR__`，插件配置会改为从该目录读取
 - 修改 `.env` 后需要重启相关进程
 
+## 插件内资产路径
+
+插件资产中的字符串可以使用 `${ONEWORKS_PLUGIN_ROOT}` 引用当前已解析插件的绝对根目录，使用
+`${ONEWORKS_NODE_EXECUTABLE}` 引用 OneWorks 当前可靠的 Node runtime。MCP 资产应使用这些变量
+定位随包发布的 Node server 入口，避免依赖会话工作目录、用户 PATH 或 workspace 的
+`node_modules/.bin`：
+
+```json
+{
+  "command": "${ONEWORKS_NODE_EXECUTABLE}",
+  "args": ["${ONEWORKS_PLUGIN_ROOT}/bin/server.cjs"]
+}
+```
+
+MCP 资产还可以显式使用 `${ONEWORKS_REAL_HOME}`。它只适用于必须与用户级 daemon、Unix socket
+或原生权限责任域共享真实 HOME 的本地集成；普通 MCP 应继续使用 OneWorks 默认注入的隔离 HOME。
+如果必须使用，应同时覆盖 `HOME` 与 `USERPROFILE`，避免 server 与 daemon 解析到不同目录：
+
+```json
+{
+  "env": {
+    "HOME": "${ONEWORKS_REAL_HOME}",
+    "USERPROFILE": "${ONEWORKS_REAL_HOME}"
+  }
+}
+```
+
+插件资产需要读取实例配置时，应通过 `${ONEWORKS_PLUGIN_OPTION:path.to.value}` 显式声明单个值。
+基础类型会转为字符串，缺失值会变为空字符串；未被资产声明的插件配置不会自动进入进程环境：
+
+```json
+{
+  "env": {
+    "POINTER_COLOR": "${ONEWORKS_PLUGIN_OPTION:pointer.color}"
+  }
+}
+```
+
 ## Adapter 兼容范围
 
 三种 adapter 都支持统一插件资产层：

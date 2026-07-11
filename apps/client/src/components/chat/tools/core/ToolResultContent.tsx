@@ -6,11 +6,31 @@ import { getStringList, getStructuredBlocks, looksLikeMarkdown } from './tool-re
 
 export function ToolResultContent({
   content,
-  preferMarkdown = false
+  preferMarkdown = false,
+  format = 'auto',
+  language
 }: {
   content: unknown
   preferMarkdown?: boolean
+  format?: 'auto' | 'text' | 'code' | 'json' | 'markdown'
+  language?: string
 }) {
+  if (format === 'json') {
+    return <CodeBlock code={safeJsonStringify(content, 2)} lang='json' />
+  }
+  if (format === 'code') {
+    const code = typeof content === 'string' ? content : safeJsonStringify(content, 2)
+    return <CodeBlock code={code} lang={language ?? 'text'} />
+  }
+  if (format === 'text') {
+    const text = typeof content === 'string' ? content : safeJsonStringify(content, 2)
+    return <div className='tool-result-text-content'>{text}</div>
+  }
+  if (format === 'markdown') {
+    const markdown = typeof content === 'string' ? content : safeJsonStringify(content, 2)
+    return <MarkdownContent content={markdown} />
+  }
+
   const structuredBlocks = getStructuredBlocks(content)
   if (structuredBlocks != null) {
     return (

@@ -1,0 +1,14 @@
+{
+  "command": "${ONEWORKS_NODE_EXECUTABLE}",
+  "args": [
+    "${ONEWORKS_PLUGIN_ROOT}/bin/mcp-proxy.cjs"
+  ],
+  "env": {
+    "HOME": "${ONEWORKS_REAL_HOME}",
+    "USERPROFILE": "${ONEWORKS_REAL_HOME}",
+    "ONEWORKS_CUA_CURSOR_STRATEGY": "${ONEWORKS_PLUGIN_OPTION:cursorColorStrategy}",
+    "ONEWORKS_CUA_DEFAULT_CURSOR_COLOR": "${ONEWORKS_PLUGIN_OPTION:defaultCursorColor}"
+  },
+  "default_tools_approval_mode": "approve",
+  "startup_timeout_sec": 30
+}

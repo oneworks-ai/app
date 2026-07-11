@@ -97,6 +97,41 @@ Plugin UI should match the host application:
 
 Plugin UI should not describe itself with tutorial text when a familiar control can make the action obvious.
 
+## Tool-use presentations
+
+Plugins can declare `plugin.contributions.toolUsePresentations` to give their tools host-native icons, localized titles, compact targets, input fields, and result formats without shipping a client entry:
+
+```json
+{
+  "toolUsePresentations": [
+    {
+      "id": "click",
+      "title": "Click",
+      "titleI18n": { "en": "Click", "zh-Hans": "点击" },
+      "icon": "touch_app",
+      "tools": ["click"],
+      "target": "element_index",
+      "input": {
+        "mode": "declared",
+        "fields": [
+          { "path": "element_index", "title": "Element", "format": "inline" }
+        ]
+      },
+      "result": {
+        "mode": "declared",
+        "fields": [
+          { "path": "structuredContent.status", "title": "Status", "format": "inline" }
+        ]
+      }
+    }
+  ]
+}
+```
+
+`tools` accepts base names or fully qualified runtime names. `origin` defaults to `plugin`, so a base name only matches OneWorks MCP tools projected from the contributing plugin scope; use `origin: "any"` only when the plugin intentionally presents an external tool. Exact names outrank base names, and own-scope matches outrank `any` matches.
+
+`target`, `input.fields[].path`, and `result.fields[].path` are safe dotted paths, not executable expressions. Input mode supports `auto`, `declared`, and `hidden`; result mode additionally supports `declared` fields so a plugin can avoid dumping a complete protocol envelope. Field formats are `inline`, `text`, `code`, `list`, `chips`, `records`, and `json`. `chips` renders short primitive arrays compactly. `records` renders object arrays as host-native rows and accepts `item.titlePath`, `subtitlePath`, `statusPath`, `metaPath`, and `detailPath`. Auto results still support `auto`, `text`, `code`, `json`, and `markdown`. The host always owns collapsing, error state, layout, theme, and escaping; plugins cannot inject JSX or HTML into tool rows.
+
 For common UI, reuse host-owned components exposed through `view.ui.*` or `view.components.render(...)`. Lists, search inputs, icons, dropdowns, overlays, and action buttons should follow the platform components instead of plugin-local Ant Design wrappers or custom CSS.
 
 Launcher plugin pages are not a separate styling system. A React view mounted in the launcher receives the same `PluginViewHost` context as route, workbench, and drawer surfaces, with `view.host.surface === "launcher"`. Plugins should branch on that surface only to choose host component modes and action density, not to fork markup or CSS.

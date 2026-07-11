@@ -15,6 +15,47 @@ A plugin package can expose conventional directories such as:
 
 The plugin manifest determines which assets are loaded and how they are scoped. When a plugin instance has a `scope`, loaded asset IDs are prefixed with that scope.
 
+## Paths Inside Plugin Assets
+
+Strings inside plugin assets can use `${ONEWORKS_PLUGIN_ROOT}` for the resolved absolute plugin root and
+`${ONEWORKS_NODE_EXECUTABLE}` for OneWorks' reliable current Node runtime. MCP assets should use these
+variables for packaged Node server entry points instead of depending on the session working directory,
+the user's `PATH`, or the workspace's `node_modules/.bin`:
+
+```json
+{
+  "command": "${ONEWORKS_NODE_EXECUTABLE}",
+  "args": ["${ONEWORKS_PLUGIN_ROOT}/bin/server.cjs"]
+}
+```
+
+MCP assets may also explicitly use `${ONEWORKS_REAL_HOME}`. Reserve it for local integrations that
+must share the real HOME with a user-level daemon, Unix socket, or native permission responsibility
+chain; ordinary MCP servers should keep OneWorks' isolated HOME. When required, override both `HOME`
+and `USERPROFILE` so the server and daemon resolve the same location:
+
+```json
+{
+  "env": {
+    "HOME": "${ONEWORKS_REAL_HOME}",
+    "USERPROFILE": "${ONEWORKS_REAL_HOME}"
+  }
+}
+```
+
+To pass an instance option into a plugin asset, opt in to that exact value with
+`${ONEWORKS_PLUGIN_OPTION:path.to.value}`. Primitive values become strings; missing values become an
+empty string. This keeps plugin options out of the process environment unless the asset explicitly
+declares the value it needs:
+
+```json
+{
+  "env": {
+    "POINTER_COLOR": "${ONEWORKS_PLUGIN_OPTION:pointer.color}"
+  }
+}
+```
+
 ## Local Project Assets
 
 Project assets in `.oo/` still have priority in the places where project ownership should win. If a plugin asset and a local asset use the same name, add a plugin scope and reference the scoped ID explicitly.

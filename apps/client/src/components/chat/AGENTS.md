@@ -22,6 +22,9 @@
   - 图片继续走可预览的 `MessageImage`；视频 / 音频 controls 与单次失败 fallback 统一由 `MessageMedia` 承载。
   - 本地文件授权、canonical path、Range / HEAD 与 MIME 只在 server workspace resource 链路实现，前端不能直接拼 `file://` 或读取文件系统。
   - Markdown 链接可用 title 元数据显式声明打开意图：`oneworks:open=internal` 进入交互面板，`oneworks:open=external` 进入系统默认浏览器，`oneworks:open=workspace-file` 进入工作区文件标签；未声明时继续服从 `messageLinks` 配置，显式意图不得放宽 URL 或 workspace path 校验。
+- `tools/core/ToolRenderer.tsx` / `tools/DefaultTool.tsx`
+  - 内置 adapter renderer 继续处理宿主特有工具；plugin MCP 工具的业务展示走通用 `toolUsePresentations` contribution。
+  - plugin 只声明图标、标题、摘要目标、字段和结果格式；对象数组走 `records`、短原子数组走 `chips`，大结果用 declared result fields，聊天层不得新增 plugin-specific 条件分支或执行 plugin HTML / JSX。
 - `sender/Sender.tsx`
   - 默认 sender 和 inline edit 共用的最外层装配入口。
   - 只保留 sender 壳层、局部视图拼装和少量同目录引用，不再承载大段状态编排。

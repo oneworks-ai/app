@@ -225,13 +225,13 @@ describe('session service', () => {
     })
     externalSessionStore.set('sess-1', {
       ...createSessionConnectionState(),
-      currentInteraction: {
+      interactions: [{
         id: 'interaction-1',
         payload: {
           sessionId: 'sess-1',
           question: '是否继续？'
         }
-      }
+      }]
     })
 
     killSession('sess-1')

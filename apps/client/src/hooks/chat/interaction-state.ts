@@ -70,7 +70,7 @@ export const applyInteractionStateEvent = (
   data: WSEvent
 ) => {
   if (data.type === 'interaction_request') {
-    return { id: data.id, payload: data.payload }
+    return currentInteraction ?? { id: data.id, payload: data.payload }
   }
 
   if (data.type === 'interaction_response') {
@@ -96,19 +96,43 @@ export const applyInteractionStateEvent = (
   return currentInteraction
 }
 
+const dataHasFatalError = (event: Extract<WSEvent, { type: 'error' }>) => (
+  event.data != null &&
+  typeof event.data === 'object' &&
+  'fatal' in event.data &&
+  (event.data as { fatal?: boolean }).fatal !== false
+)
+
 export const restoreInteractionStateFromHistory = (
   events: WSEvent[],
   fallbackInteraction: InteractionRequestState | null,
   sessionStatus?: Session['status']
 ) => {
-  let currentInteraction: InteractionRequestState | null = null
+  const pendingInteractions = new Map<string, InteractionRequestState>()
 
   for (const event of events) {
-    currentInteraction = applyInteractionStateEvent(currentInteraction, event)
+    if (event.type === 'interaction_request') {
+      pendingInteractions.set(event.id, { id: event.id, payload: event.payload })
+    } else if (event.type === 'interaction_response') {
+      pendingInteractions.delete(event.id)
+    } else if (event.type === 'session_updated') {
+      const session = event.session as Session | { id: string; isDeleted: boolean }
+      if ('isDeleted' in session || session.status !== 'waiting_input') {
+        pendingInteractions.clear()
+      }
+    } else if (
+      event.type === 'error' &&
+      dataHasFatalError(event)
+    ) {
+      pendingInteractions.clear()
+    }
   }
 
+  const currentInteraction = pendingInteractions.values().next().value ?? null
   if (currentInteraction != null) {
-    return sessionStatus == null || sessionStatus === 'waiting_input' ? currentInteraction : null
+    return sessionStatus == null || sessionStatus === 'waiting_input' || sessionStatus === 'running'
+      ? currentInteraction
+      : null
   }
 
   return sessionStatus === 'waiting_input' ? fallbackInteraction : null

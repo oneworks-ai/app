@@ -14,6 +14,7 @@ import {
   handleInteractionResponse,
   requestInteraction,
   resolvePendingInteractionAsCancelled,
+  setSessionInteraction,
   waitForInteractionDeliveryPath
 } from '#~/services/session/interaction.js'
 import { adapterSessionStore, createSessionConnectionState, externalSessionStore } from '#~/services/session/runtime.js'
@@ -41,6 +42,7 @@ describe('session interaction service', () => {
   const getChannelSessionBySessionId = vi.fn()
   const getSession = vi.fn()
   const getMessages = vi.fn()
+  const updateSession = vi.fn()
   let previousProjectHomeProjectsDir: string | undefined
   let previousProjectOoBaseDir: string | undefined
   let tempRuntimeRoot: string | undefined
@@ -64,6 +66,7 @@ describe('session interaction service', () => {
       getChannelSessionBySessionId,
       getSession,
       getMessages,
+      updateSession,
       getSessionWorkspace: vi.fn(() => undefined),
       getSessionRuntimeState: vi.fn(() => ({
         runtimeKind: 'interactive',
@@ -125,7 +128,7 @@ describe('session interaction service', () => {
       ]
     })
 
-    const interactionId = adapterRuntime.currentInteraction?.id
+    const interactionId = adapterRuntime.interactions[0]?.id
     expect(interactionId).toBeTruthy()
     expect(vi.mocked(handleChannelSessionEvent)).toHaveBeenCalledWith(
       'sess-1',
@@ -157,8 +160,7 @@ describe('session interaction service', () => {
         data: '米饭'
       },
       expect.objectContaining({
-        broadcast: expect.any(Function),
-        onSessionUpdated: expect.any(Function)
+        broadcast: expect.any(Function)
       })
     )
   })
@@ -244,7 +246,7 @@ describe('session interaction service', () => {
       question: '晚上吃了什么？'
     })).rejects.toThrow('Session sess-1 is not active')
 
-    expect(adapterRuntime.currentInteraction).toBeUndefined()
+    expect(adapterRuntime.interactions).toEqual([])
     expect(vi.mocked(applySessionEvent)).not.toHaveBeenCalledWith(
       'sess-1',
       expect.objectContaining({ type: 'interaction_request' }),
@@ -299,7 +301,7 @@ describe('session interaction service', () => {
     })
   })
 
-  it('does not resurrect older interaction requests once a newer response was recorded', () => {
+  it('keeps an older pending interaction when a newer one was handled first', () => {
     getMessages.mockReturnValue([
       {
         type: 'interaction_request',
@@ -324,7 +326,13 @@ describe('session interaction service', () => {
       }
     ])
 
-    expect(getSessionInteraction('sess-1')).toBeUndefined()
+    expect(getSessionInteraction('sess-1')).toEqual({
+      id: 'interaction-1',
+      payload: {
+        sessionId: 'sess-1',
+        question: '第一个问题'
+      }
+    })
   })
 
   it('does not reconstruct interactions after the session leaves waiting_input', () => {
@@ -348,18 +356,18 @@ describe('session interaction service', () => {
 
   it('treats sessions parked in the external runtime store as external for interaction responses', async () => {
     const runtime = createSessionConnectionState()
-    runtime.currentInteraction = {
+    runtime.interactions.push({
       id: 'interaction-1',
       payload: {
         sessionId: 'sess-1',
         question: '是否继续？'
       }
-    }
+    })
     externalSessionStore.set('sess-1', runtime)
 
     await handleInteractionResponse('sess-1', 'interaction-1', '继续')
 
-    expect(runtime.currentInteraction).toBeUndefined()
+    expect(runtime.interactions).toEqual([])
     expect(vi.mocked(applySessionEvent)).toHaveBeenCalledWith(
       'sess-1',
       {
@@ -368,10 +376,33 @@ describe('session interaction service', () => {
         data: '继续'
       },
       expect.objectContaining({
-        broadcast: expect.any(Function),
-        onSessionUpdated: expect.any(Function)
+        broadcast: expect.any(Function)
       })
     )
+  })
+
+  it('keeps queued interactions waiting when responses arrive out of order', async () => {
+    const runtime = createSessionConnectionState()
+    externalSessionStore.set('sess-1', runtime)
+    setSessionInteraction('sess-1', {
+      id: 'interaction-1',
+      payload: {
+        sessionId: 'sess-1',
+        question: '第一个问题'
+      }
+    })
+    setSessionInteraction('sess-1', {
+      id: 'interaction-2',
+      payload: {
+        sessionId: 'sess-1',
+        question: '第二个问题'
+      }
+    })
+
+    await handleInteractionResponse('sess-1', 'interaction-1', '继续')
+
+    expect(runtime.interactions.map(interaction => interaction.id)).toEqual(['interaction-2'])
+    expect(updateSession).toHaveBeenCalledWith('sess-1', { status: 'waiting_input' })
   })
 
   it('queues submit_input commands for external runtime approval responses', async () => {
@@ -402,14 +433,14 @@ describe('session interaction service', () => {
     } as any)
 
     const runtime = createSessionConnectionState()
-    runtime.currentInteraction = {
+    runtime.interactions.push({
       id: 'approval-1',
       payload: {
         sessionId: 'sess-1',
         question: 'Allow file edit?',
         kind: 'permission'
       }
-    }
+    })
     externalSessionStore.set('sess-1', runtime)
 
     await expect(handleInteractionResponse('sess-1', 'approval-1', 'allow_once')).resolves.toBe(true)
@@ -455,8 +486,7 @@ describe('session interaction service', () => {
         data: '继续'
       },
       expect.objectContaining({
-        broadcast: expect.any(Function),
-        onSessionUpdated: expect.any(Function)
+        broadcast: expect.any(Function)
       })
     )
   })
@@ -483,12 +513,12 @@ describe('session interaction service', () => {
 
     await Promise.resolve()
 
-    const interactionId = adapterRuntime.currentInteraction?.id
+    const interactionId = adapterRuntime.interactions[0]?.id
     expect(interactionId).toBeTruthy()
     expect(resolvePendingInteractionAsCancelled('sess-1')).toBe(true)
 
     await expect(interactionPromise).resolves.toBe('cancel')
-    expect(adapterRuntime.currentInteraction).toBeUndefined()
+    expect(adapterRuntime.interactions).toEqual([])
     expect(vi.mocked(applySessionEvent)).not.toHaveBeenCalledWith(
       'sess-1',
       expect.objectContaining({

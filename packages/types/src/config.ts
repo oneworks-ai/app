@@ -830,6 +830,9 @@ export interface Config {
     & {
       enabled?: boolean
       env?: Record<string, string>
+      default_tools_approval_mode?: 'auto' | 'prompt' | 'approve'
+      startup_timeout_sec?: number
+      tool_timeout_sec?: number
     }
     & (
       | {

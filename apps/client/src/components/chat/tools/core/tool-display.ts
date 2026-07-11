@@ -66,11 +66,13 @@ const TOOL_FIELD_ICON_MAP: Record<string, string> = {
 }
 
 const TOOL_FORMAT_ICON_MAP: Record<string, string> = {
+  chips: 'sell',
   code: 'code',
   inline: 'label',
   json: 'data_object',
   list: 'format_list_bulleted',
   questions: 'quiz',
+  records: 'view_list',
   text: 'article'
 }
 

@@ -75,6 +75,61 @@ interface ManagedClaudePluginTemplateContext {
 }
 
 const CLAUDE_PLUGIN_TEMPLATE_PATTERN = /\$\{(CLAUDE_PLUGIN_ROOT|CLAUDE_PLUGIN_DATA|CLAUDE_PLUGIN_DIR)\}/g
+const ONEWORKS_PLUGIN_TEMPLATE_PATTERN = /\$\{(ONEWORKS_PLUGIN_ROOT|ONEWORKS_REAL_HOME|ONEWORKS_NODE_EXECUTABLE)\}/g
+const ONEWORKS_PLUGIN_OPTION_TEMPLATE_PATTERN = /\$\{ONEWORKS_PLUGIN_OPTION:([\w.-]+)\}/g
+
+interface OneWorksPluginTemplateContext {
+  pluginRoot: string
+  realHome?: string
+  nodeExecutable?: string
+  options?: Record<string, unknown>
+}
+
+const resolveOneWorksPluginOption = (
+  options: Record<string, unknown> | undefined,
+  optionPath: string
+) => {
+  const segments = optionPath.split('.')
+  if (segments.some(segment => ['__proto__', 'constructor', 'prototype'].includes(segment))) return ''
+
+  let current: unknown = options
+  for (const segment of segments) {
+    if (!isRecord(current) || !Object.hasOwn(current, segment)) return ''
+    current = current[segment]
+  }
+  if (current == null) return ''
+  if (typeof current === 'string') return current
+  if (typeof current === 'boolean' || typeof current === 'number') return String(current)
+  return JSON.stringify(current)
+}
+
+const transformOneWorksPluginTemplateValue = <T>(
+  value: T,
+  context: OneWorksPluginTemplateContext
+): T => {
+  if (typeof value === 'string') {
+    return value
+      .replace(ONEWORKS_PLUGIN_TEMPLATE_PATTERN, (match, key: string) => {
+        if (key === 'ONEWORKS_PLUGIN_ROOT') return context.pluginRoot
+        if (key === 'ONEWORKS_REAL_HOME') return context.realHome ?? match
+        return context.nodeExecutable ?? match
+      })
+      .replace(ONEWORKS_PLUGIN_OPTION_TEMPLATE_PATTERN, (_match, optionPath: string) => (
+        resolveOneWorksPluginOption(context.options, optionPath)
+      )) as T
+  }
+  if (Array.isArray(value)) {
+    return value.map(entry => transformOneWorksPluginTemplateValue(entry, context)) as T
+  }
+  if (!isRecord(value)) return value
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entryValue]) => [
+      key,
+      transformOneWorksPluginTemplateValue(entryValue, context)
+    ])
+  ) as T
+}
 
 const transformManagedClaudePluginTemplateString = (
   value: string,
@@ -797,7 +852,13 @@ export async function collectWorkspaceAssets(params: {
     const createdAssets = definitions.flatMap((definition) => {
       if (definition == null) return []
 
-      const resolvedDefinition = transformManagedClaudePluginDefinition(definition, templateContext)
+      const pluginDefinition = origin === 'plugin' && instance != null
+        ? transformOneWorksPluginTemplateValue(definition, {
+          pluginRoot: instance.rootDir,
+          options: instance.options
+        })
+        : definition
+      const resolvedDefinition = transformManagedClaudePluginDefinition(pluginDefinition, templateContext)
       return [createDocumentAsset({
         cwd: params.cwd,
         kind,
@@ -912,7 +973,13 @@ export async function collectWorkspaceAssets(params: {
     for (const path of scan.mcpPaths) {
       const parsed = await parseOptionalStructuredMcpFile(path)
       if (!isRecord(parsed)) continue
-      const resolvedParsed = transformManagedClaudePluginTemplateValue(parsed, templateContext)
+      const pluginParsed = transformOneWorksPluginTemplateValue(parsed, {
+        pluginRoot: instance.rootDir,
+        realHome: resolveRealHomeDir(env),
+        nodeExecutable: process.execPath,
+        options: instance.options
+      })
+      const resolvedParsed = transformManagedClaudePluginTemplateValue(pluginParsed, templateContext)
       if (!isRecord(resolvedParsed)) continue
       const fileName = basename(path, extname(path))
       const name = typeof resolvedParsed.name === 'string' && resolvedParsed.name.trim() !== ''

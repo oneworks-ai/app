@@ -4,6 +4,9 @@ import type { ChatMessage, ChatMessageContent } from '@oneworks/core'
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
+
+import { usePluginToolUsePresentations } from '#~/plugins/plugin-tool-use'
+
 import { MessageContextMenu } from '../../messages/MessageContextMenu'
 import { MessageFooter } from '../../messages/MessageFooter'
 import { ToolRenderer } from './ToolRenderer'
@@ -38,10 +41,11 @@ function ToolGroupComponent({
   const [searchParams] = useSearchParams()
   const isDebugMode = searchParams.get('debug') === 'true'
   const [expanded, setExpanded] = useState(false)
+  const pluginPresentations = usePluginToolUsePresentations()
 
   if (items.length === 0) return null
 
-  const summaryText = getToolGroupSummaryText(items, t)
+  const summaryText = getToolGroupSummaryText(items, t, pluginPresentations)
   const shouldForceExpand = targetToolUseId != null &&
     targetToolUseId !== '' &&
     items.some(item => item.item.id === targetToolUseId)

@@ -71,6 +71,9 @@ importers:
       '@oneworks/client':
         specifier: workspace:*
         version: link:apps/client
+      '@oneworks/plugin-cua-driver':
+        specifier: workspace:*
+        version: link:packages/plugins/cua-driver
       '@oneworks/plugin-demo':
         specifier: workspace:*
         version: link:packages/plugins/demo
@@ -1057,6 +1060,8 @@ importers:
         version: link:../../types
 
   packages/plugins/cli-skills: {}
+
+  packages/plugins/cua-driver: {}
 
   packages/plugins/demo:
     devDependencies:

@@ -27,7 +27,7 @@ export interface SessionQueueRuntimeState {
 export interface SessionConnectionState {
   sockets: Set<WebSocket>
   messages: WSEvent[]
-  currentInteraction?: SessionInteractionState
+  interactions: SessionInteractionState[]
   queueRuntime: SessionQueueRuntimeState
 }
 
@@ -73,6 +73,7 @@ export function createSessionConnectionState(): SessionConnectionState {
   return {
     sockets: new Set<WebSocket>(),
     messages: [],
+    interactions: [],
     queueRuntime: {
       nextInterruptRequested: false,
       nextInterruptPending: false
@@ -110,7 +111,7 @@ export function parkAdapterSessionRuntime(sessionId: string) {
   const parked: SessionConnectionState = {
     sockets: runtime.sockets,
     messages: runtime.messages,
-    currentInteraction: runtime.currentInteraction,
+    interactions: runtime.interactions,
     queueRuntime: runtime.queueRuntime
   }
   externalSessionStore.set(sessionId, parked)

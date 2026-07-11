@@ -232,6 +232,45 @@ JSON Schema 自动推断当前支持：
 - `workbenchAddMenu`: 注册下方面板 `+` 菜单项。设置 `tab` 后，点击菜单项会根据对应 `workbenchTabs[].id` 创建一个新的 tab 实例；新 tab 可以关闭。未设置 `tab`、`command`、`route`、`href` 时，会尝试用菜单项自己的 `id` 找同名 tab。
 - `workspaceDrawerTabs`: 注册工作区抽屉 tab。当前它会归一到同一套 workbench tab 模型里，`placement` 可以是 `right` 或 `bottom`。
 - `launcherSearchProviders`: 注册 launcher 搜索源。桌面 launcher 里使用 server-backed `command`；普通 workspace client 里也可以在前端 `activatePlugin` 中动态注册本地搜索源。
+- `toolUsePresentations`: 声明插件工具在聊天中的图标、标题、摘要目标、输入字段和结果格式；宿主统一渲染，不加载插件 JSX 或 HTML。
+
+工具调用展示使用纯声明，适合 MCP plugin 给自己的工具补足业务语义：
+
+```json
+{
+  "toolUsePresentations": [
+    {
+      "id": "click",
+      "title": "Click",
+      "titleI18n": { "en": "Click", "zh-Hans": "点击" },
+      "icon": "touch_app",
+      "tools": ["click"],
+      "target": "element_index",
+      "input": {
+        "mode": "declared",
+        "fields": [
+          {
+            "path": "element_index",
+            "title": "Element",
+            "titleI18n": { "en": "Element", "zh-Hans": "元素" },
+            "format": "inline"
+          }
+        ]
+      },
+      "result": {
+        "mode": "declared",
+        "fields": [
+          { "path": "structuredContent.status", "title": "Status", "format": "inline" }
+        ]
+      }
+    }
+  ]
+}
+```
+
+`tools` 支持工具 base name 和完整 runtime name。`origin` 默认为 `plugin`：base name 只会匹配当前贡献插件 scope 投影出的 OneWorks MCP 工具，避免不同插件都声明 `click` 时互相覆盖；只有明确需要接管外部工具时才写 `origin: "any"`。完整名字优先于 base name，插件自身 scope 匹配优先于 `any`。
+
+`target`、`input.fields[].path` 和 `result.fields[].path` 都是安全点路径，不执行表达式。input 支持 `auto`、`declared`、`hidden`；result 也支持 `declared` 字段，让插件只展示必要结果而不是铺开整个协议 envelope。字段 `format` 支持 `inline`、`text`、`code`、`list`、`chips`、`records`、`json`：`chips` 适合短原子数组，`records` 把对象数组渲染成宿主原生记录行，并可声明 `item.titlePath`、`subtitlePath`、`statusPath`、`metaPath`、`detailPath`。auto 结果仍支持 `auto`、`text`、`code`、`json`、`markdown`。插件只描述语义，折叠交互、错误态、布局、主题和内容转义始终由宿主管理。
 
 launcher 中的插件业务入口必须完全由插件贡献：页面 route 在 `routes[]` 上声明 `surfaces: ["launcher"]`，搜索源在 `launcherSearchProviders[]` 上声明同一 surface，并由插件自己的 `activatePlugin` 通过 `ctx.commands.register(...)` 提供命令结果。结果可以用 `groupId` / `groupTitle`（兼容别名为 `sectionId` / `sectionTitle`）决定 launcher 命令列表中的分组和分组标题。
 

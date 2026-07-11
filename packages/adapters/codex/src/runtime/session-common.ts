@@ -507,7 +507,16 @@ function buildMcpConfigArgs(
   servers: Record<string, unknown>,
   inheritedEnv: Record<string, string | null | undefined> = {}
 ): string[] {
-  const toTomlKey = (name: string) => /^[\w-]+$/.test(name) ? name : JSON.stringify(name)
+  // Codex lists arbitrary config keys but only starts MCP servers whose IDs
+  // are safe tool-namespace segments. Preserve ordinary names and encode
+  // scoped workspace asset names at the adapter boundary.
+  const nativeServerNames = new Set(Object.keys(servers).filter(name => /^[\w-]+$/.test(name)))
+  const toCodexMcpServerName = (name: string) => {
+    if (/^[\w-]+$/.test(name)) return name
+    const encodedName = `oneworks-${Buffer.from(name, 'utf8').toString('base64url')}`
+    if (!nativeServerNames.has(encodedName)) return encodedName
+    return `${encodedName}-${createHash('sha256').update(name).digest('hex').slice(0, 8)}`
+  }
   const args: string[] = []
   const inheritedMcpEnv = pickInheritedMcpEnv(inheritedEnv)
   for (const [name, server] of Object.entries(servers)) {
@@ -518,6 +527,8 @@ function buildMcpConfigArgs(
       url,
       headers,
       enabled,
+      startup_timeout_sec,
+      tool_timeout_sec,
       default_tools_approval_mode
     } = server as {
       command?: string
@@ -526,9 +537,11 @@ function buildMcpConfigArgs(
       url?: string
       headers?: Record<string, string>
       enabled?: boolean
+      startup_timeout_sec?: number
+      tool_timeout_sec?: number
       default_tools_approval_mode?: string
     }
-    const prefix = `mcp_servers.${toTomlKey(name)}`
+    const prefix = `mcp_servers.${toCodexMcpServerName(name)}`
 
     if (enabled === false) {
       args.push('-c', `${prefix}.enabled=false`)
@@ -551,6 +564,10 @@ function buildMcpConfigArgs(
         args.push('-c', `${prefix}.http_headers=${toTomlInlineTable(headers)}`)
       }
     }
+    const startupTimeoutSec = normalizePositiveInteger(startup_timeout_sec)
+    const toolTimeoutSec = normalizePositiveInteger(tool_timeout_sec)
+    if (startupTimeoutSec != null) args.push('-c', `${prefix}.startup_timeout_sec=${startupTimeoutSec}`)
+    if (toolTimeoutSec != null) args.push('-c', `${prefix}.tool_timeout_sec=${toolTimeoutSec}`)
     if (
       default_tools_approval_mode === 'auto' ||
       default_tools_approval_mode === 'prompt' ||
@@ -580,9 +597,9 @@ const withManagedMcpServerApprovalModes = (
           : {})
       }
       if (decision === 'allow') {
-        serverConfig.default_tools_approval_mode ??= 'approve'
+        serverConfig.default_tools_approval_mode = 'approve'
       } else if (decision === 'ask') {
-        serverConfig.default_tools_approval_mode ??= 'prompt'
+        serverConfig.default_tools_approval_mode = 'prompt'
       } else if (decision === 'deny') {
         serverConfig.enabled = false
       }

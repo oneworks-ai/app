@@ -80,66 +80,67 @@ export async function waitForInteractionDeliveryPath(
   return canRequestInteraction(sessionId)
 }
 
-const getStoredSessionInteraction = (sessionId: string) => {
+const getStoredSessionInteractions = (sessionId: string) => {
   const session = getDb().getSession(sessionId)
-  if (session?.status !== 'waiting_input') {
-    return undefined
+  if (session?.status !== 'waiting_input' && session?.status !== 'running') {
+    return []
   }
 
   const messages = getDb().getMessages(sessionId) as WSEvent[]
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const event = messages[index]
+  const pending = new Map<string, { id: string; payload: AskUserQuestionParams }>()
+  for (const event of messages) {
     if (event == null) continue
 
     if (event.type === 'interaction_response') {
-      return undefined
+      pending.delete(event.id)
     }
 
     if (event.type === 'interaction_request') {
-      return {
+      pending.set(event.id, {
         id: event.id,
         payload: event.payload
-      }
+      })
     }
   }
 
-  return undefined
+  return [...pending.values()]
 }
 
 export function getSessionInteraction(sessionId: string) {
-  const current = getSessionConnectionState(sessionId)?.currentInteraction
+  const current = getSessionConnectionState(sessionId)?.interactions[0]
   if (current != null) {
     return current
   }
 
-  return getStoredSessionInteraction(sessionId)
+  return getStoredSessionInteractions(sessionId)[0]
 }
 
 const hasSessionInteraction = (sessionId: string, interactionId: string) => {
-  const current = getSessionConnectionState(sessionId)?.currentInteraction
-  if (current?.id === interactionId) {
+  const current = getSessionConnectionState(sessionId)?.interactions
+  if (current?.some(interaction => interaction.id === interactionId) === true) {
     return true
   }
 
-  return getStoredSessionInteraction(sessionId)?.id === interactionId
+  return getStoredSessionInteractions(sessionId).some(interaction => interaction.id === interactionId)
 }
 
 export function setSessionInteraction(sessionId: string, interaction: { id: string; payload: AskUserQuestionParams }) {
   const runtime = getSessionConnectionState(sessionId)
-  if (runtime != null) {
-    runtime.currentInteraction = interaction
+  if (runtime != null && !runtime.interactions.some(current => current.id === interaction.id)) {
+    runtime.interactions.push(interaction)
   }
 }
 
 export function clearSessionInteraction(sessionId: string, interactionId: string) {
   const runtime = getSessionConnectionState(sessionId)
-  if (runtime?.currentInteraction?.id === interactionId) {
-    runtime.currentInteraction = undefined
+  if (runtime != null) {
+    const index = runtime.interactions.findIndex(interaction => interaction.id === interactionId)
+    if (index >= 0) runtime.interactions.splice(index, 1)
   }
 }
 
 export function resolvePendingInteractionAsCancelled(sessionId: string, interactionId?: string) {
-  const targetInteractionId = interactionId ?? getSessionConnectionState(sessionId)?.currentInteraction?.id
+  const targetInteractionId = interactionId ?? getSessionConnectionState(sessionId)?.interactions[0]?.id
   if (targetInteractionId == null || targetInteractionId === '') {
     return false
   }
@@ -231,7 +232,7 @@ export async function requestInteraction(
     payload: params
   }
 
-  runtime.currentInteraction = { id: interactionId, payload: params }
+  setSessionInteraction(sessionId, { id: interactionId, payload: params })
   serverLogger.info({
     sessionId,
     interactionId,
@@ -257,7 +258,7 @@ export async function requestInteraction(
   }
 
   if (!delivery.hasActiveWebSocket && !deliveredToChannel) {
-    runtime.currentInteraction = undefined
+    clearSessionInteraction(sessionId, interactionId)
     serverLogger.warn({
       sessionId,
       interactionId,
@@ -276,9 +277,7 @@ export async function requestInteraction(
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       deletePendingSessionInteraction(interactionId)
-      if (runtime.currentInteraction?.id === interactionId) {
-        runtime.currentInteraction = undefined
-      }
+      clearSessionInteraction(sessionId, interactionId)
       reject(new Error('Interaction timed out'))
     }, 5 * 60 * 1000)
 
@@ -324,11 +323,16 @@ export async function handleInteractionResponse(sessionId: string, interactionId
 
     clearSessionInteraction(sessionId, interactionId)
     applySessionEvent(sessionId, event, {
-      broadcast: (nextEvent) => broadcastSessionEvent(sessionId, nextEvent),
-      onSessionUpdated: (session) => {
-        notifySessionUpdated(sessionId, session)
-      }
+      broadcast: (nextEvent) => broadcastSessionEvent(sessionId, nextEvent)
     })
+
+    const nextInteraction = getSessionInteraction(sessionId)
+    if (nextInteraction != null) {
+      setSessionInteraction(sessionId, nextInteraction)
+      getDb().updateSession(sessionId, { status: 'waiting_input' })
+    }
+    const updatedSession = getDb().getSession(sessionId)
+    if (updatedSession != null) notifySessionUpdated(sessionId, updatedSession)
 
     if (pending != null) {
       pending.resolve(data as string | string[])
