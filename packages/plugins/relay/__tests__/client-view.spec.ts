@@ -1,4 +1,3 @@
-/* eslint-disable max-lines -- client-view source contracts are intentionally covered together. */
 import { readFile } from 'node:fs/promises'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'

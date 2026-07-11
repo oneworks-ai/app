@@ -1,4 +1,3 @@
-/* eslint-disable max-lines -- the relay persistence stores share normalization and queueing helpers in one module. */
 import { randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
