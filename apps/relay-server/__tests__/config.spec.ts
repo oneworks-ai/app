@@ -97,4 +97,20 @@ describe('relay server config', () => {
       emailVerificationRequired: false
     })
   })
+
+  it('normalizes explicitly trusted login redirect origins', () => {
+    const args = parseRelayServerArgs([], {
+      ONEWORKS_RELAY_LOGIN_REDIRECT_ORIGINS: [
+        'http://127.0.0.1:5175/some/path',
+        'http://localhost:5175',
+        'javascript:alert(1)',
+        'not-a-url'
+      ].join(',')
+    })
+
+    expect(args.loginRedirectOrigins).toEqual([
+      'http://127.0.0.1:5175',
+      'http://localhost:5175'
+    ])
+  })
 })

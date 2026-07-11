@@ -12,6 +12,7 @@ export interface RelayServerArgs {
   embeddedAdminUi?: boolean
   help?: boolean
   host: string
+  loginRedirectOrigins?: string[]
   oauth?: Record<string, RelayOAuthClient | undefined>
   passkey?: RelayPasskeyConfig
   port: number

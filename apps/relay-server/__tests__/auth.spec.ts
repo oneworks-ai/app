@@ -263,6 +263,45 @@ describe('relay server auth routes', () => {
     expect(completionUrl.searchParams.get('redirect_uri')).toBe(redirectUri)
   })
 
+  it('allows only explicitly configured loopback Client origins on a deployed service', async () => {
+    const redirectUri = 'http://127.0.0.1:5175/ui/launcher/plugins/relay/home?relayLogin=1'
+    const unconfigured = await listenRelay({
+      allowOrigin: '*',
+      oauth: googleOauth
+    })
+    const rejected = await requestRaw(
+      unconfigured.baseUrl,
+      `/api/auth/login-options?redirect_uri=${encodeURIComponent(redirectUri)}`
+    )
+    expect(rejected.status).toBe(400)
+
+    const { baseUrl } = await listenRelay({
+      allowOrigin: 'https://app.example',
+      loginRedirectOrigins: ['http://127.0.0.1:5175'],
+      oauth: googleOauth
+    })
+    const response = await requestRaw(
+      baseUrl,
+      `/api/auth/login-options?redirect_uri=${encodeURIComponent(redirectUri)}`
+    )
+    const config = await response.json() as {
+      redirectUri?: string
+      providers?: Array<{ startUrl?: string }>
+    }
+
+    expect(response.status).toBe(200)
+    expect(config.redirectUri).toBe(redirectUri)
+    const providerStartUrl = new URL(String(config.providers?.[0].startUrl))
+    const completionUrl = new URL(String(providerStartUrl.searchParams.get('redirect_uri')))
+    expect(completionUrl.searchParams.get('redirect_uri')).toBe(redirectUri)
+
+    const wrongPort = await requestRaw(
+      baseUrl,
+      `/api/auth/login-options?redirect_uri=${encodeURIComponent('http://127.0.0.1:5176/callback')}`
+    )
+    expect(wrongPort.status).toBe(400)
+  })
+
   it('omits native email-code login when the service requires Turnstile', async () => {
     const { baseUrl } = await listenRelay({
       defaultLoginMethod: 'verification_code',
@@ -270,7 +309,8 @@ describe('relay server auth routes', () => {
         provider: 'disabled',
         turnstile: { mode: 'required' }
       } as RelayEmailConfig,
-      emailProvider: { sendVerificationCode: async () => ({}) }
+      emailProvider: { sendVerificationCode: async () => ({}) },
+      loginRedirectOrigins: ['http://127.0.0.1:5173']
     })
     const redirectUri = 'http://127.0.0.1:5173/plugins/relay/home?relayLogin=1'
     const response = await requestRaw(
@@ -714,7 +754,10 @@ describe('relay server auth routes', () => {
   })
 
   it('redirects login page OAuth failures back to the completion page', async () => {
-    const { args, baseUrl } = await listenRelay({ oauth: googleOauth })
+    const { args, baseUrl } = await listenRelay({
+      loginRedirectOrigins: ['http://127.0.0.1'],
+      oauth: googleOauth
+    })
     await startGoogleFlow(baseUrl)
     const firstState = (await readRelayStore(args.dataPath)).oauthStates[0].state
     stubGoogleProfile('owner@example.com')

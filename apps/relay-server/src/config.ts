@@ -48,6 +48,19 @@ const readStringList = (value: string | undefined) => (
     : value.split(/[,\s]+/u).map(item => item.trim().toLowerCase()).filter(item => item !== '')
 )
 
+const readOriginList = (value: string | undefined) => (
+  value == null
+    ? []
+    : value.split(/[\s,]+/u).flatMap(item => {
+      try {
+        const url = new URL(item)
+        return url.protocol === 'http:' || url.protocol === 'https:' ? [url.origin] : []
+      } catch {
+        return []
+      }
+    })
+)
+
 const readEmailLogoUrl = (value: string | undefined) => {
   if (value == null) return DEFAULT_EMAIL_LOGO_URL
   const logoUrl = value.trim()
@@ -192,6 +205,7 @@ export const parseRelayServerArgs = (
     defaultLoginMethod: readLoginMethod(env.ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD),
     adminToken: env.ONEWORKS_RELAY_ADMIN_TOKEN || '',
     allowOrigin: env.ONEWORKS_RELAY_ALLOW_ORIGIN || '*',
+    loginRedirectOrigins: readOriginList(env.ONEWORKS_RELAY_LOGIN_REDIRECT_ORIGINS),
     deviceMetadataSecret: env.ONEWORKS_RELAY_DEVICE_METADATA_SECRET || undefined,
     publicBaseUrl: env.ONEWORKS_RELAY_PUBLIC_URL || undefined,
     sessionTtlMs: readPositiveInteger(env.ONEWORKS_RELAY_SESSION_TTL_SECONDS, DEFAULT_SESSION_TTL_MS / 1000) *
@@ -249,6 +263,7 @@ Environment:
   ONEWORKS_RELAY_ADMIN_TOKEN
   ONEWORKS_RELAY_DEVICE_METADATA_SECRET
   ONEWORKS_RELAY_ALLOW_ORIGIN
+  ONEWORKS_RELAY_LOGIN_REDIRECT_ORIGINS
   ONEWORKS_RELAY_PUBLIC_URL
   ONEWORKS_RELAY_DEVICE_ONLINE_TTL_SECONDS
   ONEWORKS_RELAY_SESSION_TTL_SECONDS

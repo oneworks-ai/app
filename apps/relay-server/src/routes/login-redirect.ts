@@ -3,10 +3,6 @@ import type { IncomingMessage } from 'node:http'
 import type { RelayServerArgs } from '../types.js'
 import { publicRequestBaseUrl } from './request-origin.js'
 
-const isLoopbackHost = (hostname: string) => (
-  hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
-)
-
 const configuredWebOrigin = (value: string) => {
   try {
     const url = new URL(value)
@@ -27,9 +23,10 @@ export const isSupportedLoginRedirectUri = (value: string, args: RelayServerArgs
     const url = new URL(value)
     if (isOneWorksCallback(url)) return true
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
+    if (args.loginRedirectOrigins?.includes(url.origin) === true) return true
     const allowedOrigin = configuredWebOrigin(args.allowOrigin)
     if (allowedOrigin != null) return url.origin === allowedOrigin
-    return args.allowOrigin === '*' && isLoopbackHost(url.hostname)
+    return false
   } catch {
     return false
   }
