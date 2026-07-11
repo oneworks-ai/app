@@ -187,17 +187,14 @@
 
 ## Lark 调试约定
 
-- 用户没有明确给出会话名时，第一次发消息前先把当前会话标题或可见候选回给用户确认。
-- 用户确认过本轮调试目标后，后续默认继续复用同一会话，除非用户明确要求切换。
+- 用户没有明确给出会话名时，第一次发消息前先把当前会话标题或可见候选回给用户确认；确认后本轮默认继续复用同一会话，除非用户明确要求切换。
 
 ## 维护约定
 
-- 入口层只做命令解析和调度，不写业务逻辑。
+- 入口层只做命令解析和调度，不写业务逻辑；测试优先直接 import TS 模块，不要绕兼容 wrapper。
 - adapter E2E 的 case 定义、Vitest spec、mock-llm 单测、snapshot 必须放在 `scripts/__tests__/adapter-e2e/` 一处维护。
 - adapter E2E 新增场景时，先在 `scripts/__tests__/adapter-e2e/cases.ts` 定义 case 的 `prompt/model/mockScenarios/expectations`，再用 `mock-llm/rules.ts` 组合 mock 行为。
 - 先写结构化 expectations，再看 snapshot。最低限度要覆盖输出文本、mock trace、hook 事件计数；file snapshot 负责保留完整回归上下文。
 - 当前标准场景至少保持两类：`*-read-once` 验证工具链路，`*-direct-answer` 验证无工具直答链路。
-- mock server 要记录“请求摘要 -> mock 响应摘要”，让 snapshot 能直接表达 mock LLM 输入输出链路。
+- mock server 要记录“请求摘要 -> mock 响应摘要”，让 snapshot 能直接表达 mock LLM 输入输出链路；协议输出和请求解析必须分文件维护，不要再回到单个大脚本。
 - hook 日志解析不要再堆复杂正则，优先维护在 `scripts/adapter-e2e/log.ts` 的 line-based parser。
-- mock server 的协议输出和请求解析必须分文件维护，不要再回到单个大脚本。
-- 优先让测试直接 import TS 模块，不要绕兼容 wrapper。
