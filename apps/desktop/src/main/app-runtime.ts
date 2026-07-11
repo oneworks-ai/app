@@ -304,6 +304,7 @@ export const createDesktopApp = () => {
   const normalizeLaunchRequest = (launchRequest: LaunchRequest): LaunchRequest => {
     const workspaceFolder = resolveProjectWorkspaceFolder(launchRequest.workspaceFolder)
     return {
+      ...(launchRequest.launcherRoutePath == null ? {} : { launcherRoutePath: launchRequest.launcherRoutePath }),
       ...(launchRequest.standaloneRoutePath == null ? {} : { standaloneRoutePath: launchRequest.standaloneRoutePath }),
       ...(launchRequest.routePath == null ? {} : { routePath: launchRequest.routePath }),
       ...(workspaceFolder == null ? {} : { workspaceFolder })
@@ -314,6 +315,10 @@ export const createDesktopApp = () => {
     const normalizedLaunchRequest = normalizeLaunchRequest(launchRequest)
     if (normalizedLaunchRequest.standaloneRoutePath != null) {
       await windowManager.openStandaloneTabWindow(normalizedLaunchRequest.standaloneRoutePath)
+      return
+    }
+    if (normalizedLaunchRequest.launcherRoutePath != null) {
+      await windowManager.openLauncherRouteWindow(normalizedLaunchRequest.launcherRoutePath)
       return
     }
     if (normalizedLaunchRequest.workspaceFolder != null && normalizedLaunchRequest.routePath != null) {

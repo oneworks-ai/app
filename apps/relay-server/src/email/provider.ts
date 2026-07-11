@@ -16,6 +16,17 @@ export class RelayEmailProviderSendError extends Error {
   }
 }
 
+export const isRelayEmailProviderConfigured = (args: RelayServerArgs) => (
+  args.email != null && (
+    args.emailProvider != null ||
+    (
+      args.email.provider === 'resend' &&
+      (args.email.resendApiKey?.trim() ?? '') !== '' &&
+      (args.email.from?.trim() ?? '') !== ''
+    )
+  )
+)
+
 const parseResendResponse = async (response: Response): Promise<RelayEmailProviderResult> => {
   const text = await response.text()
   let payload: unknown

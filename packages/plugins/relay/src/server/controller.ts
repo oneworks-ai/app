@@ -45,7 +45,7 @@ import type { RelayConfigSyncResult } from './config-sync.js'
 import { startHeartbeat } from './heartbeat.js'
 import { createRelayLoopLeaseManager } from './loop-lease.js'
 import type { RelayLoopLease } from './loop-lease.js'
-import { normalizeOptions, resolveActiveRelayServer } from './options.js'
+import { normalizeOptions, resolveActiveRelayServer, resolveRelayServers } from './options.js'
 import type { ResolvedRelayServer } from './options.js'
 import {
   readRelayPersonalDocumentSyncKind,
@@ -110,6 +110,8 @@ import {
 export interface RelayController {
   connect: (payload?: unknown) => Promise<unknown>
   createLoginUrl: (payload?: unknown) => Promise<unknown>
+  getNativeLoginOptions: (payload?: unknown) => Promise<unknown>
+  proxyNativeLoginRequest: (payload?: unknown) => Promise<unknown>
   disconnect: (payload?: unknown) => Promise<unknown>
   dispose: () => void
   forget: (payload?: unknown) => Promise<unknown>
@@ -160,6 +162,25 @@ const RELAY_DEVICE_LIST_ERROR_MAX_INTERVAL_MS = 30_000
 const RELAY_DEVICE_LIST_ERROR_LOG_INTERVAL_MS = 30_000
 const fixtureAccessTokensByAccountKey = new Map<string, RelayProfileAccessToken[]>()
 const fixtureDeviceAliasesByAccountKey = new Map<string, Map<string, string>>()
+
+const nativeLoginRequestPaths = {
+  'email-code-login': '/api/auth/email-code-login',
+  'email-verification-send': '/api/auth/email-verification/send',
+  'invite-login': '/api/auth/invite-login',
+  'password-login': '/api/auth/password-login'
+} as const
+
+class RelayNativeLoginProxyError extends Error {
+  code?: string
+  status: number
+
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.name = 'RelayNativeLoginProxyError'
+    this.code = code
+    this.status = status
+  }
+}
 
 interface RelayWorkspaceProxyEntry {
   authToken: string
@@ -1198,7 +1219,11 @@ const accountMatchesSelector = (account: OneWorksAuthAccount, selector: string) 
 
 const buildDesktopRedirectUri = (ctx: RelayPluginContext, serverId: string) => {
   const url = new URL('oneworks://relay/auth')
-  url.searchParams.set('workspace', ctx.workspaceFolder)
+  if (ctx.runtime.role === 'manager') {
+    url.searchParams.set('launcher', '1')
+  } else {
+    url.searchParams.set('workspace', ctx.workspaceFolder)
+  }
   url.searchParams.set('scope', ctx.scope)
   url.searchParams.set('serverId', serverId)
   return url.toString()
@@ -4403,6 +4428,67 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     }
   }
 
+  const getNativeLoginOptions = async (payload?: unknown) => {
+    const login = await createLoginUrl(payload)
+    const configuredServer = resolveRelayServers(ctx.options).find(server =>
+      server.id === login.serverId && server.remoteBaseUrl === login.remoteBaseUrl
+    )
+    if (configuredServer == null) {
+      throw new RelayNativeLoginProxyError(`Unknown relay server: ${login.serverId}.`, 404)
+    }
+    const loginUrl = new URL(login.loginUrl)
+    const optionsUrl = new URL('/api/auth/login-options', configuredServer.remoteBaseUrl)
+    for (const key of ['redirect_uri', 'scope', 'server_id']) {
+      const value = loginUrl.searchParams.get(key)
+      if (value != null) optionsUrl.searchParams.set(key, value)
+    }
+    const response = await fetch(optionsUrl, { headers: { accept: 'application/json' } })
+    const body = await readResponseJson(response)
+    if (!response.ok) {
+      throw new RelayNativeLoginProxyError(
+        toString(body.error) || `Relay login options failed with ${response.status}.`,
+        response.status,
+        toString(body.code) || undefined
+      )
+    }
+    return { ...login, options: body }
+  }
+
+  const proxyNativeLoginRequest = async (payload?: unknown) => {
+    if (!isRecord(payload)) throw new RelayNativeLoginProxyError('Invalid native login request.', 400)
+    const action = toString(payload.action)
+    const path = nativeLoginRequestPaths[action as keyof typeof nativeLoginRequestPaths]
+    if (path == null) throw new RelayNativeLoginProxyError('Unsupported native login action.', 400)
+    const requestedServerId = readServerId(payload) || 'cf'
+    const resolvedServer = resolveActiveRelayServer(ctx.options, requestedServerId)
+    const activeServer = resolvedServer == null
+      ? undefined
+      : resolveRelayServers(ctx.options).find(server =>
+        server.id === resolvedServer.id && server.remoteBaseUrl === resolvedServer.remoteBaseUrl
+      )
+    if (activeServer == null) {
+      throw new RelayNativeLoginProxyError(`Unknown relay server: ${requestedServerId}.`, 404)
+    }
+    const requestBody = isRecord(payload.body) ? payload.body : {}
+    const response = await fetch(new URL(path, activeServer.remoteBaseUrl), {
+      body: JSON.stringify(requestBody),
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json'
+      },
+      method: 'POST'
+    })
+    const body = await readResponseJson(response)
+    if (!response.ok) {
+      throw new RelayNativeLoginProxyError(
+        toString(body.error) || `Relay login failed with ${response.status}.`,
+        response.status,
+        toString(body.code) || undefined
+      )
+    }
+    return body
+  }
+
   const completeLogin = async (payload?: unknown) => {
     const token = readTextField(payload, 'token') || readTextField(payload, 'relayToken')
     if (token === '') {
@@ -4629,6 +4715,8 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     completeLogin,
     connect,
     createLoginUrl,
+    getNativeLoginOptions,
+    proxyNativeLoginRequest,
     disconnect,
     dispose: () => {
       disposed = true

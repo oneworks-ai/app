@@ -29,6 +29,18 @@ const resolveInitialLoginMethod = (config: RelayLoginConfig): RelayLoginMethod =
     : enabled[0] ?? 'password'
 }
 
+export const openRelayLoginProvider = (url: string) => {
+  if (window.self !== window.top && window.top != null) {
+    try {
+      window.top.location.href = url
+      return
+    } catch {
+      // Fall through when an embedding browser refuses top-level navigation.
+    }
+  }
+  window.location.href = url
+}
+
 export const RelayLoginApp = ({ config }: { config: RelayLoginConfig }) => {
   const [form] = Form.useForm<LoginFormValues>()
   const passwordRef = useRef<InputRef>(null)
@@ -107,7 +119,7 @@ export const RelayLoginApp = ({ config }: { config: RelayLoginConfig }) => {
     } else {
       url.searchParams.set('prompt', 'select_account')
     }
-    window.location.href = url.toString()
+    openRelayLoginProvider(url.toString())
   }, [rememberAccount])
 
   const startAccountLogin = useCallback((account: RelayRememberedAccount) => {

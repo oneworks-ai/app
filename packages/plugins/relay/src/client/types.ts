@@ -861,6 +861,60 @@ export interface RelayLoginCallback {
   token: string
 }
 
+export type RelayLoginMethod = 'passkey' | 'password' | 'verification_code'
+
+export interface RelayLoginOptionsMessages {
+  confirmPasswordPlaceholder: string
+  confirmPasswordRequired: string
+  continueWithRegistration: string
+  emailPlaceholder: string
+  invalidCredentials: string
+  inviteCodePlaceholder: string
+  inviteRequired: string
+  passkeyCodePlaceholder: string
+  passkeySendCode: string
+  passkeyTitle: string
+  passwordMinLength: string
+  passwordMismatch: string
+  passwordPlaceholder: string
+  recentAccounts: string
+  rememberAccount: string
+  signInMode: string
+  signInWithPassword: string
+  signInWithSso: string
+  signingIn: string
+  useLoginMethodPasskey: string
+  useLoginMethodPassword: string
+  useLoginMethodVerificationCode: string
+  verificationCodeSignIn: string
+}
+
+export interface RelayLoginProviderOption {
+  displayName?: string
+  icon?: string
+  id: string
+  label: string
+  startUrl: string
+}
+
+export interface RelayLoginOptions {
+  emailCodeLoginUrl: string
+  emailVerificationSendUrl: string
+  inviteLoginUrl: string
+  locale: 'en' | 'zh-CN'
+  loginMethods: {
+    default: RelayLoginMethod
+    enabled: RelayLoginMethod[]
+  }
+  messages: RelayLoginOptionsMessages
+  passwordLoginUrl: string
+  providers: RelayLoginProviderOption[]
+  redirectUri: string
+}
+
 export interface RelayLoginUrlResponse {
   loginUrl?: string
+  redirectUri?: string
+  remoteBaseUrl?: string
+  serverId?: string
 }

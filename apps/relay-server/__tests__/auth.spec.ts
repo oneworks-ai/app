@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { readRelayStore } from '../src/server.js'
+import type { RelayEmailConfig } from '../src/types.js'
 import { authHeaders, cleanupRelayFixtures, listenRelay, requestJson, requestRaw } from './helpers.js'
 
 afterEach(async () => {
@@ -206,6 +207,7 @@ const startGithubFlow = async (baseUrl: string, input: {
 describe('relay server auth routes', () => {
   it('lists configured OAuth providers and creates auth state redirects', async () => {
     const { args, baseUrl } = await listenRelay({
+      allowOrigin: 'https://app.example',
       oauth: googleOauth,
       publicBaseUrl: 'https://relay.example'
     })
@@ -230,6 +232,84 @@ describe('relay server auth routes', () => {
       provider: 'google',
       redirectUri: 'https://app.example/callback'
     })
+  })
+
+  it('exposes the current login methods and SSO choices for native clients', async () => {
+    const { baseUrl } = await listenRelay({ allowOrigin: 'https://app.example', oauth: googleOauth })
+    const redirectUri = 'https://app.example/plugins/relay/home?relayLogin=1'
+    const response = await requestRaw(
+      baseUrl,
+      `/api/auth/login-options?redirect_uri=${encodeURIComponent(redirectUri)}&server_id=prod&lang=zh-CN`
+    )
+    const config = await response.json() as {
+      loginMethods?: { default?: string; enabled?: string[] }
+      passwordLoginUrl?: string
+      providers?: Array<{ id?: string; startUrl?: string }>
+    }
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(config.loginMethods).toEqual({
+      default: 'password',
+      enabled: ['password', 'passkey']
+    })
+    expect(config.passwordLoginUrl).toBe('/api/auth/password-login')
+    expect(config.providers).toEqual([expect.objectContaining({
+      id: 'google',
+      startUrl: expect.stringContaining('/api/auth/oauth/google/start')
+    })])
+    const providerStartUrl = new URL(String(config.providers?.[0].startUrl))
+    const completionUrl = new URL(String(providerStartUrl.searchParams.get('redirect_uri')))
+    expect(completionUrl.searchParams.get('redirect_uri')).toBe(redirectUri)
+  })
+
+  it('omits native email-code login when the service requires Turnstile', async () => {
+    const { baseUrl } = await listenRelay({
+      defaultLoginMethod: 'verification_code',
+      email: {
+        provider: 'disabled',
+        turnstile: { mode: 'required' }
+      } as RelayEmailConfig,
+      emailProvider: { sendVerificationCode: async () => ({}) }
+    })
+    const redirectUri = 'http://127.0.0.1:5173/plugins/relay/home?relayLogin=1'
+    const response = await requestRaw(
+      baseUrl,
+      `/api/auth/login-options?redirect_uri=${encodeURIComponent(redirectUri)}`
+    )
+    const config = await response.json() as {
+      loginMethods?: { default?: string; enabled?: string[] }
+    }
+
+    expect(response.status).toBe(200)
+    expect(config.loginMethods).toEqual({ default: 'password', enabled: ['password', 'passkey'] })
+  })
+
+  it('rejects OAuth redirects outside configured Client callbacks', async () => {
+    const { args, baseUrl } = await listenRelay({
+      allowOrigin: 'https://app.example',
+      oauth: googleOauth
+    })
+    const attacker = await requestRaw(
+      baseUrl,
+      `/api/auth/oauth/google/start?redirect_uri=${encodeURIComponent('https://attacker.example/callback')}`,
+      { redirect: 'manual' }
+    )
+    const wrongSchemeTarget = await requestRaw(
+      baseUrl,
+      `/api/auth/oauth/google/start?redirect_uri=${encodeURIComponent('oneworks://attacker/auth')}`,
+      { redirect: 'manual' }
+    )
+    const clientCallback = await requestRaw(
+      baseUrl,
+      `/api/auth/oauth/google/start?redirect_uri=${encodeURIComponent('oneworks://relay/auth?scope=relay')}`,
+      { redirect: 'manual' }
+    )
+
+    expect(attacker.status).toBe(400)
+    expect(wrongSchemeTarget.status).toBe(400)
+    expect(clientCallback.status).toBe(302)
+    expect((await readRelayStore(args.dataPath)).oauthStates).toHaveLength(1)
   })
 
   it('creates an owner session from the first OAuth login and authorizes admin routes', async () => {
@@ -663,7 +743,7 @@ describe('relay server auth routes', () => {
     })
     const response = await requestRaw(
       baseUrl,
-      '/login?redirect_uri=oneworks%3A%2F%2Frelay%2Fauth%3Fworkspace%3D%252Fworkspace%26scope%3Drelay&server_id=prod',
+      '/login?redirect_uri=oneworks%3A%2F%2Frelay%2Fauth%3Fworkspace%3D%252Fworkspace%26scope%3Drelay&server_id=prod&login_method=passkey',
       {
         headers: {
           'accept-language': 'en-US,en;q=0.9'
@@ -674,6 +754,8 @@ describe('relay server auth routes', () => {
     const config = readLoginConfig(body)
 
     expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(response.headers.get('content-security-policy')).toBe("frame-ancestors 'none'")
     expect(body).toContain('id="relay-login-root"')
     expect(body).toContain('/admin/assets/favicon-dark.svg')
     expect(body).toContain('/admin/assets/favicon-light.svg')
@@ -720,13 +802,14 @@ describe('relay server auth routes', () => {
     })
     expect(config.inviteLoginUrl).toBe('/api/auth/invite-login')
     expect(config.locale).toBe('en')
+    expect(config.loginMethods.default).toBe('passkey')
     expect(config.passwordLoginUrl).toBe('/api/auth/password-login')
     expect(body).toContain(encodeURIComponent('https://relay.example/login/complete'))
     expect(config.redirectUri).toContain('oneworks://relay/auth')
   })
 
   it('marks GitHub login providers with the GitHub icon', async () => {
-    const { baseUrl } = await listenRelay({ oauth: githubOauth })
+    const { baseUrl } = await listenRelay({ allowOrigin: 'https://app.example', oauth: githubOauth })
     const response = await requestRaw(baseUrl, '/login?redirect_uri=https%3A%2F%2Fapp.example%2Fcallback')
     const config = readLoginConfig(await response.text())
 
@@ -739,7 +822,7 @@ describe('relay server auth routes', () => {
   })
 
   it('marks 飞书 login providers with the Feishu icon', async () => {
-    const { baseUrl } = await listenRelay({ oauth: feishuOauth })
+    const { baseUrl } = await listenRelay({ allowOrigin: 'https://app.example', oauth: feishuOauth })
     const response = await requestRaw(baseUrl, '/login?redirect_uri=https%3A%2F%2Fapp.example%2Fcallback')
     const config = readLoginConfig(await response.text())
 
@@ -752,7 +835,7 @@ describe('relay server auth routes', () => {
   })
 
   it('omits empty login page sections for missing local accounts and SSO providers', async () => {
-    const { baseUrl } = await listenRelay()
+    const { baseUrl } = await listenRelay({ allowOrigin: 'https://app.example' })
     const redirect = encodeURIComponent('https://app.example/callback')
     const response = await requestRaw(baseUrl, `/login?redirect_uri=${redirect}&lang=zh-CN`)
     const body = await response.text()
@@ -763,6 +846,7 @@ describe('relay server auth routes', () => {
     expect(body).not.toContain('data-account-section hidden')
     expect(body).not.toContain('这个浏览器还没有记住任何账号。')
     expect(config.providers).toEqual([])
+    expect(response.headers.get('content-security-policy')).toBe('frame-ancestors https://app.example')
     expect(config.locale).toBe('zh-CN')
     expect(body).not.toContain('还没有配置可用的 SSO 提供方。')
     expect(body).not.toContain('<div class="relay-login__providers">')
@@ -770,8 +854,20 @@ describe('relay server auth routes', () => {
     expect(body).toContain('记住账号')
   })
 
+  it('rejects login iframe ancestors outside the configured Web app origin', async () => {
+    const { baseUrl } = await listenRelay({ allowOrigin: 'https://oneworks.example' })
+    const allowedRedirect = encodeURIComponent('https://oneworks.example/plugins/relay/home')
+    const unknownRedirect = encodeURIComponent('https://unknown.example/plugins/relay/home')
+
+    const allowed = await requestRaw(baseUrl, `/login?redirect_uri=${allowedRedirect}`)
+    const unknown = await requestRaw(baseUrl, `/login?redirect_uri=${unknownRedirect}`)
+
+    expect(allowed.headers.get('content-security-policy')).toBe('frame-ancestors https://oneworks.example')
+    expect(unknown.headers.get('content-security-policy')).toBe("frame-ancestors 'none'")
+  })
+
   it('serves localized login completion failures', async () => {
-    const { baseUrl } = await listenRelay({ oauth: googleOauth })
+    const { baseUrl } = await listenRelay({ allowOrigin: 'https://app.example', oauth: googleOauth })
     const redirect = encodeURIComponent('https://app.example/callback')
     const response = await requestRaw(baseUrl, `/login/complete?redirect_uri=${redirect}&lang=zh-CN`)
     const body = await response.text()
@@ -784,7 +880,7 @@ describe('relay server auth routes', () => {
   })
 
   it('localizes the login page from query params and browser language', async () => {
-    const { baseUrl } = await listenRelay({ oauth: googleOauth })
+    const { baseUrl } = await listenRelay({ allowOrigin: 'https://app.example', oauth: googleOauth })
     const redirect = encodeURIComponent('https://app.example/callback')
     const zhResponse = await requestRaw(baseUrl, `/login?redirect_uri=${redirect}`, {
       headers: {

@@ -16,4 +16,5 @@
 - relay-server 的 `/login` route 只负责校验 redirect、计算 provider start URL、注入 JSON config 和加载 `login.js`。
 - Passkey UI 必须保持两阶段：第一屏只展示邮箱 / 账号名、记住账号和“使用 PASS KEY”；只有 `login/options` 返回 `passkey_unavailable` 且注册策略需要邮箱验证码或邀请码时，才在第二步展示这些字段。若新账号注册不需要验证码和邀请码，直接进入浏览器 passkey 创建流程；已有用户新增 passkey 仍由服务端要求邮箱验证。
 - 新增或接入品牌 SSO provider 时，按同一流程补齐 `apps/relay-server/src/routes/login-page-client-config.ts` 的 provider icon 映射、`RelayLoginProviderConfig['icon']` 类型、`LoginProviderIcon.tsx` 品牌图标组件和登录 config 回归断言；不要让品牌 provider 退回默认 login 图标。
+- 登录页嵌入 OneWorks iframe 时，本地密码、Passkey 和验证码流程继续留在 iframe 内；SSO provider 授权必须从用户点击事件导航顶层页面，避免第三方身份页的 frame policy 阻断，并让 OAuth callback 回到原 OneWorks 标签。顶层独立打开 `/login` 时仍在当前窗口跳转到 provider。
 - 修改生产挂载时同步检查 `apps/relay-admin/vite.config.ts` 的 `login` entry 和 `apps/relay-server/src/routes/admin-ui.ts` 的 asset allowlist。通过 relay-server 直接服务 `/login` 的本地 demo 不走 HMR，改完登录页要先 `pnpm -C apps/relay-admin build`，再重启 relay-server。

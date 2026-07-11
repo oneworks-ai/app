@@ -185,6 +185,7 @@ describe('relay email verification code login', () => {
   it('adds email code to the login method config when enabled', async () => {
     const { provider } = createEmailProvider()
     const { baseUrl } = await listenRelay({
+      allowOrigin: 'https://app.example',
       defaultLoginMethod: 'verification_code',
       email: emailConfig(),
       emailProvider: provider

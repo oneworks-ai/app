@@ -157,7 +157,9 @@ export const createPluginHarness = async (
       refresh?: () => RelayConfigDistributionStatus | Promise<RelayConfigDistributionStatus>
     }
     prepareProjectHome?: (projectHome: string) => Promise<void> | void
+    runtimeRole?: 'manager' | 'workspace'
     sessions?: RelayLocalSessionAdapter
+    workspaceFolder?: string
   } = {}
 ) => {
   const projectHome = await mkdtemp(join(tmpdir(), 'oneworks-relay-plugin-test-'))
@@ -184,9 +186,9 @@ export const createPluginHarness = async (
   activatePlugin({
     scope: 'relay',
     runtime: {
-      role: 'workspace'
+      role: harnessOptions.runtimeRole ?? 'workspace'
     },
-    workspaceFolder: '/workspace',
+    workspaceFolder: harnessOptions.workspaceFolder ?? '/workspace',
     projectHome,
     options,
     configDistribution: harnessOptions.configDistribution,

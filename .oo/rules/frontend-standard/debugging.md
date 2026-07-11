@@ -40,6 +40,12 @@
 - launcher 视觉回归至少看：浅色/深色可读性、footer hint 尺寸、tooltip 是否越界、sticky tabs 滚动表现、毛玻璃背景是否足够明显。
 - HMR 在 rebase、依赖安装或 Vite 配置变化后容易读到半更新状态；遇到不可解释的旧 UI 或临时 runtime error，先重启 dev app 再判断。
 
+## 插件 HMR 验证
+
+- 本地插件配置 `watch: true` 且 Client dev entry 走 Vite `/@fs/` 时有两条热更新通道：Client source root 下的 `.tsx` / `.jsx` 与样式文件由 Vite HMR / React Fast Refresh 自处理，插件 runtime 会跳过整插件 reload；entry 以及 `.ts` / `.js` 等其他 watch 变更通过插件 WebSocket 的 `plugin.changed` 增加动态 import `pluginVersion`，dispose 旧 scope 后重新 activation。插件视图两种情况都由 React host 渲染。不要把手工 `reload()`、重新导航或重启 dev server 当成插件热更新成功的证据。
+- 修改插件 Client 后先停留在当前页面等待 HMR，并用可见文案、DOM 或交互状态确认同一 URL 上自动更新；需要做可回滚探针时，临时加入唯一标记，确认自动出现后恢复源码并确认自动消失。
+- 只有确认 watch 未启用、对应的 Vite HMR / Fast Refresh 或 `plugin.changed` 通道未生效、动态 import 失败，或改动落在 Electron main / preload 等非 Client 边界时，才进入重启排查。为了重置表单等交互状态可以刷新或导航，但必须明确它不是代码更新验证。
+
 ## Electron / console warning 排查
 
 - Electron 的 insecure CSP warning 不要靠隐藏 console 处理；优先在 client HTML 或静态服务注入不含 `unsafe-eval` 的 CSP。开发态需要保留 Vite / HMR 所需的 `connect-src http: https: ws: wss:`，使用 worker 的页面需要保留 `worker-src 'self' blob:`。

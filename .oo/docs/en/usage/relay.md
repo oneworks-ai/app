@@ -60,7 +60,9 @@ Current users read or update the document snapshot through `GET` / `PUT` / `POST
 
 ## Login Methods
 
-`/login` is shared by the Relay plugin, Admin, and Web redirect flows. Operators can set the default method with `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD`, and the browser remembers the last method selected by the user.
+The One Works Web and Electron clients use a flat native Client login page without a separate card or gradient backdrop. It consumes the selected Relay Server's `/api/auth/login-options` response through the scoped plugin API and shows only the currently enabled methods and SSO providers instead of hardcoding a provider list. Password, invite, and verification-code requests also use fixed plugin-server actions targeting configured Relay servers, so the Electron renderer does not depend on cross-origin CORS and does not gain an arbitrary remote proxy. Remembered accounts, the remember-account control, the active method form, and alternate-method actions mirror Relay Admin. Password login stays in the Client form, while verification code is advertised there only when the server does not require a Turnstile challenge. Passkey must run on the Relay WebAuthn origin, and SSO must visit the identity provider; Web continues in the current top-level tab, while Electron opens the system browser and returns through `oneworks://relay/auth` to the originating Launcher or workspace. Older Relay servers can still use the compatibility `/login` page.
+
+`/login` remains the compatibility page shared by Admin, CLI / Electron, and Web redirect flows. Operators can set the default method with `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD`, and the browser remembers the last method selected by the user.
 
 - Password: for existing non-SSO accounts with a password.
 - Verification code: for existing non-SSO / `email_code` accounts only. It sends a login code to that account email. It does not create accounts and cannot sign in SSO-only accounts that share the same email.

@@ -1,6 +1,7 @@
 import type { RelayLoginCallback } from './types.js'
 
 export const isDesktopRuntime = () => (
+  typeof window !== 'undefined' &&
   (window as { oneworksDesktop?: unknown }).oneworksDesktop != null
 )
 

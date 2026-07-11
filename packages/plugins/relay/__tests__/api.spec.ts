@@ -724,6 +724,125 @@ describe('relay plugin scoped API', () => {
     expect(loginUrl.searchParams.get('redirect_uri')).toBe('https://app.example/plugins/relay/home?relayLogin=1')
   })
 
+  it('proxies native login only to fixed paths on configured Relay servers', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/api/auth/login-options') {
+        expect(url.origin).toBe('https://relay.example')
+        expect(url.searchParams.get('redirect_uri')).toBe(
+          'oneworks://relay/auth?workspace=%2Fworkspace&scope=relay&serverId=prod'
+        )
+        expect(url.searchParams.get('server_id')).toBe('prod')
+        return new Response(JSON.stringify({ loginMethods: { default: 'password', enabled: ['password'] } }), {
+          headers: { 'content-type': 'application/json' }
+        })
+      }
+      expect(url.toString()).toBe('https://relay.example/api/auth/password-login')
+      expect(init?.method).toBe('POST')
+      expect(JSON.parse(String(init?.body))).toEqual({ loginId: 'owner', password: 'wrong' })
+      return new Response(
+        JSON.stringify({
+          code: 'registration_required',
+          error: 'Registration requires an invite.'
+        }),
+        {
+          headers: { 'content-type': 'application/json' },
+          status: 409
+        }
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+    })
+    const handler = apis.get('relay')?.handler
+
+    const optionsResponse = await handler?.({
+      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+      method: 'POST',
+      path: 'login-options'
+    }) as { body?: { options?: { loginMethods?: unknown } }; status?: number }
+    const passwordResponse = await handler?.({
+      body: Buffer.from(JSON.stringify({
+        action: 'password-login',
+        body: { loginId: 'owner', password: 'wrong' },
+        serverId: 'prod'
+      })),
+      method: 'POST',
+      path: 'native-login'
+    }) as { body?: { code?: string; error?: string }; status?: number }
+
+    expect(optionsResponse.status).toBe(200)
+    expect(optionsResponse.body?.options?.loginMethods).toEqual({ default: 'password', enabled: ['password'] })
+    expect(passwordResponse).toMatchObject({
+      body: {
+        code: 'registration_required',
+        error: 'Registration requires an invite.'
+      },
+      status: 409
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects arbitrary native login actions and unconfigured server URLs without fetching them', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+    })
+    const handler = apis.get('relay')?.handler
+    const request = async (body: Record<string, unknown>) =>
+      await handler?.({
+        body: Buffer.from(JSON.stringify(body)),
+        method: 'POST',
+        path: 'native-login'
+      }) as { body?: { error?: string }; status?: number }
+
+    expect(await request({ action: 'arbitrary-path', body: {}, serverId: 'prod' })).toMatchObject({
+      status: 400
+    })
+    expect(
+      await request({
+        action: 'password-login',
+        body: {},
+        serverId: 'https://attacker.example'
+      })
+    ).toMatchObject({
+      status: 404
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('returns manager login callbacks to the Launcher instead of opening the manager directory', async () => {
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+    }, {
+      runtimeRole: 'manager',
+      workspaceFolder: '/manager-home'
+    })
+
+    const response = await apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+      method: 'POST',
+      path: 'login-url'
+    }) as { body?: { redirectUri?: string }; status?: number }
+    const redirectUri = new URL(String(response.body?.redirectUri))
+
+    expect(response.status).toBe(200)
+    expect(redirectUri.protocol).toBe('oneworks:')
+    expect(redirectUri.hostname).toBe('relay')
+    expect(redirectUri.pathname).toBe('/auth')
+    expect(redirectUri.searchParams.get('launcher')).toBe('1')
+    expect(redirectUri.searchParams.get('workspace')).toBeNull()
+    expect(redirectUri.searchParams.get('serverId')).toBe('prod')
+  })
+
   it('creates relay login URLs for the default official Cloudflare service', async () => {
     const { apis } = await createPluginHarness({})
 

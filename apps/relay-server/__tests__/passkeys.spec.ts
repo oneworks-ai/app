@@ -187,6 +187,7 @@ const readLoginConfig = (html: string) => {
 describe('relay passkey auth routes', () => {
   it('exposes passkey login config to the localized login page', async () => {
     const { baseUrl } = await listenRelay({
+      allowOrigin: 'https://app.example',
       passkey: {
         emailVerificationRequired: true,
         enabled: true,

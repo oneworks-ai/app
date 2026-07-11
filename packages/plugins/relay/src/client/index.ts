@@ -203,6 +203,10 @@ const getAccountProfileRoute = (ctx: PluginClientContext, account?: RelayAuthAcc
   return `${route}/${encodeURIComponent(accountKey)}/${encodeURIComponent(tab)}`
 }
 
+const getAccountLoginRoute = (ctx: PluginClientContext) => `${getAccountProfileRoute(ctx)}/login`
+
+const getAccountLoginAction = (ctx: PluginClientContext) => ({ route: getAccountLoginRoute(ctx) })
+
 const getAccountMessagesRoute = (ctx: PluginClientContext, account?: RelayAuthAccount) => {
   const accountKey = toCleanString(account?.accountKey)
   const route = `/plugins/${encodeURIComponent(ctx.scope)}/home/accounts`
@@ -293,12 +297,21 @@ const buildRelayAccountFooterContribution = (
   const servers = Array.isArray(status?.servers) ? status.servers : []
   const manageAccount = accounts.length === 1 ? accounts[0] : undefined
 
+  if (status != null && accounts.length === 0) {
+    return {
+      ...getAccountLoginAction(ctx),
+      icon: 'login',
+      id: 'account-login',
+      title: t.launcher.loginTitle
+    }
+  }
+
   return {
     accountPopover: {
       ...buildAccountPopoverGroups(ctx, accounts, servers, t),
       actions: [
         {
-          command: 'login',
+          ...getAccountLoginAction(ctx),
           icon: 'login',
           id: 'login',
           title: '登录账号'
@@ -515,16 +528,19 @@ export async function activatePlugin(ctx: PluginClientContext) {
 
   let disposed = false
   let footerDisposables: Disposable[] = []
+  let footerRefreshVersion = 0
   let footerSignature = ''
   const disposeFooterContributions = () => {
     footerDisposables.forEach(disposable => disposable.dispose())
     footerDisposables = []
   }
   const refreshFooterContributions = async () => {
+    const refreshVersion = ++footerRefreshVersion
     const registerSlot = ctx.slots?.register
     if (registerSlot == null) return
     // Mirrors Relay Admin's lower-left account popover and project sync shortcut.
     const contributions = buildRelayFooterContributions(ctx, await fetchRelayStatus(ctx))
+    if (disposed || refreshVersion !== footerRefreshVersion) return
     const signature = JSON.stringify(contributions)
     if (signature === footerSignature) return
     disposeFooterContributions()
@@ -645,7 +661,12 @@ export async function activatePlugin(ctx: PluginClientContext) {
     ACCOUNT_FOOTER_REFRESH_INTERVAL_MS
   )
   const renderHome: PluginViewRegistration = {
-    renderNode: view => ctx.react.createElement(RelayHomeView, { ctx, view })
+    renderNode: view =>
+      ctx.react.createElement(RelayHomeView, {
+        ctx,
+        onAccountChanged: refreshFooterContributions,
+        view
+      })
   }
 
   const disposables: Disposable[] = [
@@ -706,6 +727,7 @@ export async function activatePlugin(ctx: PluginClientContext) {
   return {
     dispose() {
       disposed = true
+      footerRefreshVersion++
       if (typeof documentRef?.removeEventListener === 'function') {
         documentRef.removeEventListener('visibilitychange', handleVisibilityChange)
       }
