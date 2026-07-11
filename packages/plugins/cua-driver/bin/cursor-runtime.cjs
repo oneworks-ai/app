@@ -11,7 +11,9 @@ const pointerActionTools = new Set(['click', 'double_click', 'right_click'])
 const directGlideMotion = Object.freeze({
   dwell_after_click_ms: 125,
   glide_duration_ms: 180,
-  idle_hide_ms: 1500,
+  // A cursor belongs to the live MCP session and is removed when that session
+  // ends, so hiding it between actions only creates distracting flicker.
+  idle_hide_ms: 0,
   // Upstream uses a Dubins planner. Its minimum allowed radius makes the
   // mandatory entry/exit turns effectively straight instead of wide loops.
   turn_radius: 1
@@ -19,6 +21,7 @@ const directGlideMotion = Object.freeze({
 const defaultSilver = '#E3E7ED'
 const defaultCursorDir = join(homedir(), 'Library', 'Caches', 'oneworks-cua', 'session-cursors')
 const defaultLockHost = '127.0.0.1'
+const cursorAssetVersion = 'up-v3'
 const defaultLockPort = 49_152 + (
   createHash('sha256')
     .update(`${homedir()}:${process.getuid?.() ?? 'unknown'}:oneworks-cua-cursor-lock`)
@@ -82,14 +85,17 @@ function renderCursorSvg(fillColor) {
   const color = normalizeCursorColor(fillColor)
   if (color == null) throw new TypeError('Cursor color must be a CSS hex color such as #625BF6.')
   const borderColor = cursorBorderColor(color)
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64" fill="none">\n  <path fill="${color}" stroke="${borderColor}" stroke-width="2.5" stroke-linejoin="round" d="${cursorPathData}"/>\n</svg>\n`
+  // CUA treats custom cursor assets as intrinsically pointing up and applies
+  // its heading transform from that basis. The authored path points right, so
+  // rotate only the asset basis; the final rendered silhouette is unchanged.
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64" fill="none">\n  <g transform="rotate(-90 32 32)">\n    <path fill="${color}" stroke="${borderColor}" stroke-width="2.5" stroke-linejoin="round" d="${cursorPathData}"/>\n  </g>\n</svg>\n`
 }
 
 async function materializeCursorSvg({ color, cursorDir = defaultCursorDir, sessionId }) {
   const normalizedColor = normalizeCursorColor(color)
   if (normalizedColor == null) throw new TypeError('Cursor color must be a CSS hex color such as #625BF6.')
   const sessionKey = createHash('sha256').update(String(sessionId ?? '')).digest('hex').slice(0, 12)
-  const fileStem = `cursor-${sessionKey}-${normalizedColor.slice(1).toLowerCase()}`
+  const fileStem = `cursor-${cursorAssetVersion}-${sessionKey}-${normalizedColor.slice(1).toLowerCase()}`
   const imagePath = join(cursorDir, `${fileStem}.svg`)
   const expectedSvg = renderCursorSvg(normalizedColor)
   await mkdir(cursorDir, { recursive: true, mode: 0o700 })

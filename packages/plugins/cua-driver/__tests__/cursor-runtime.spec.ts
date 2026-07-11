@@ -65,6 +65,7 @@ describe('cua session cursor runtime', () => {
     expect(svg).toContain('fill="#E3E7ED"')
     expect(svg).toContain('stroke="#596273"')
     expect(svg).toContain('stroke-linejoin="round"')
+    expect(svg).toContain('transform="rotate(-90 32 32)"')
     expect(() => cursorRuntime.renderCursorSvg('#fff"><script>')).toThrow('CSS hex color')
   })
 
@@ -120,7 +121,7 @@ describe('cua session cursor runtime', () => {
       expect(events[1].args).toEqual({
         dwell_after_click_ms: 125,
         glide_duration_ms: 180,
-        idle_hide_ms: 1500,
+        idle_hide_ms: 0,
         turn_radius: 1
       })
       const imagePath = events[2].args?.image_path
@@ -139,7 +140,7 @@ describe('cua session cursor runtime', () => {
     const cursorDir = await mkdtemp(join(tmpdir(), 'oneworks-conflicting-cursor-'))
     const sessionId = 'session-conflict'
     const sessionKey = createHash('sha256').update(sessionId).digest('hex').slice(0, 12)
-    const predictablePath = join(cursorDir, `cursor-${sessionKey}-625bf6.svg`)
+    const predictablePath = join(cursorDir, `cursor-up-v3-${sessionKey}-625bf6.svg`)
     try {
       await writeFile(predictablePath, '<svg><script>untrusted</script></svg>')
       const generatedPath = await cursorRuntime.materializeCursorSvg({
