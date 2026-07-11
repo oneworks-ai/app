@@ -118,6 +118,7 @@ import 约定：
   - 消息操作的前端 action 入口。
 - `src/api/sessions.ts`
   - 会话/消息分支相关 API 封装。
+  - 本地媒体 URL 统一经 `src/api/workspace-resource.ts` 选择直连 workspace resource 或共享 launcher 同源转发；不要在聊天组件拼接 server 端口，也不要把任意上游 URL交给 launcher。
 
 进一步经验与工具说明：
 

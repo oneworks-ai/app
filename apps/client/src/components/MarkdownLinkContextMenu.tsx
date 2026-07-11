@@ -8,6 +8,8 @@ import { useTranslation } from 'react-i18next'
 import { copyTextWithFeedback } from '#~/utils/copy'
 import { parseWorkspaceFileLinkForWorkspaceRoot } from '#~/utils/link-targets'
 import type { WorkspaceFileLinkTarget } from '#~/utils/link-targets'
+import { buildMarkdownLinkIntentTitle } from '#~/utils/markdown-link-intent'
+import type { MarkdownLinkIntent } from '#~/utils/markdown-link-intent'
 
 import {
   buildMarkdownLinkText,
@@ -19,6 +21,7 @@ import {
 interface MarkdownLinkContextMenuProps {
   children: React.ReactElement<{ onContextMenu?: (event: React.MouseEvent<HTMLAnchorElement>) => void }>
   href: string
+  intent?: MarkdownLinkIntent
   label: string
   workspaceRootPath?: string
   onOpenUrlInAppBrowser?: (url: string, title?: string) => void
@@ -29,6 +32,7 @@ interface LinkContextMenuState {
   appBrowserUrl: string
   externalUrl: string
   href: string
+  intent?: MarkdownLinkIntent
   label: string
   workspaceTarget: WorkspaceFileLinkTarget | null
   x: number
@@ -42,6 +46,7 @@ const getLinkContextMenuHeight = (itemCount: number) => 42 + itemCount * 40
 export function MarkdownLinkContextMenu({
   children,
   href,
+  intent,
   label,
   workspaceRootPath,
   onOpenUrlInAppBrowser,
@@ -95,12 +100,13 @@ export function MarkdownLinkContextMenu({
       appBrowserUrl,
       externalUrl,
       href,
+      intent,
       label: label || href,
       workspaceTarget,
       x: Math.max(8, Math.min(event.clientX, viewportWidth - LINK_CONTEXT_MENU_WIDTH - 8)),
       y: Math.max(8, Math.min(event.clientY, viewportHeight - menuHeight - 8))
     })
-  }, [children.props, href, label, onOpenUrlInAppBrowser, onOpenWorkspaceFile, workspaceTarget])
+  }, [children.props, href, intent, label, onOpenUrlInAppBrowser, onOpenWorkspaceFile, workspaceTarget])
 
   const handleOpenWorkspaceFile = useCallback(() => {
     if (menuState?.workspaceTarget == null) return
@@ -127,7 +133,10 @@ export function MarkdownLinkContextMenu({
       failureMessage: t('common.copyFailed'),
       messageApi: message,
       successMessage: t('chat.markdownLinkActions.copyMarkdownSuccess'),
-      text: buildMarkdownLinkText(menuState)
+      text: buildMarkdownLinkText({
+        ...menuState,
+        title: menuState.intent == null ? undefined : buildMarkdownLinkIntentTitle(menuState.intent)
+      })
     })
   }, [closeMenu, menuState, message, t])
 

@@ -7,13 +7,16 @@ import { useSearchParams } from 'react-router-dom'
 import type { ChatMessage, ChatMessageContent, Session } from '@oneworks/core'
 import type { SessionInfo } from '@oneworks/types'
 
+import { getSessionWorkspaceResourceUrl, getWorkspaceResourceUrl } from '#~/api'
 import { MarkdownContent } from '#~/components/MarkdownContent'
-import type { MarkdownImageRenderProps } from '#~/components/MarkdownContent'
+import type { MarkdownImageRenderProps, MarkdownMediaRenderProps } from '#~/components/MarkdownContent'
 import type { AgentRoomMemberView } from '#~/components/agent-room'
-import { getAppBrowserLinkUrl } from '#~/components/markdown-link-context-menu-utils'
+import { getAppBrowserLinkUrl, openExternalLink } from '#~/components/markdown-link-context-menu-utils'
 import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
 import { parseWorkspaceFileLinkForWorkspaceRoot } from '#~/utils/link-targets'
 import type { WorkspaceFileLinkTarget } from '#~/utils/link-targets'
+import { resolveMarkdownLinkIntentTarget } from '#~/utils/markdown-link-intent'
+import type { MarkdownLinkIntent } from '#~/utils/markdown-link-intent'
 import { DEFAULT_MESSAGE_LINKS_CONFIG } from '#~/utils/message-links-config'
 import type { ResolvedMessageLinksConfig } from '#~/utils/message-links-config'
 
@@ -27,6 +30,7 @@ import { MessageFooter } from './MessageFooter'
 import { MessageImage } from './MessageImage'
 import type { MessagePreviewImage } from './MessageImage'
 import { MessageImagePreviewModal } from './MessageImagePreviewModal'
+import { MessageMedia } from './MessageMedia'
 import { parseAgentRoomChildRequest } from './agent-room-child-request'
 import { parseAgentRoomEnvelope } from './agent-room-envelope'
 import { isBrowserCommentScreenshotName, parseBrowserCommentMessage } from './browser-comment-message'
@@ -219,7 +223,51 @@ function MessageItemComponent({
     />
   ), [handlePreviewImage])
 
-  const handleMarkdownLinkClick = useCallback((href: string, event: React.MouseEvent<HTMLAnchorElement>) => {
+  const resolveLocalMediaUrl = useCallback((path: string) => (
+    sessionId != null && sessionId !== ''
+      ? getSessionWorkspaceResourceUrl(sessionId, path)
+      : getWorkspaceResourceUrl(path)
+  ), [sessionId])
+
+  const renderMarkdownMedia = useCallback((media: MarkdownMediaRenderProps) => {
+    if (media.kind === 'image') {
+      return renderMarkdownImage(media)
+    }
+
+    return (
+      <MessageMedia
+        errorLabel={t(media.kind === 'video' ? 'chat.videoLoadFailed' : 'chat.audioLoadFailed')}
+        kind={media.kind}
+        source={media.source}
+        src={media.src}
+        title={media.title ?? media.alt}
+      />
+    )
+  }, [renderMarkdownImage, t])
+
+  const handleMarkdownLinkClick = useCallback((
+    href: string,
+    event: React.MouseEvent<HTMLAnchorElement>,
+    intent?: MarkdownLinkIntent
+  ) => {
+    if (intent != null) {
+      const explicitTarget = resolveMarkdownLinkIntentTarget(href, intent, resolvedWorkspaceRootPath)
+      event.preventDefault()
+      if (explicitTarget == null) return
+
+      if (explicitTarget.intent === 'external') {
+        openExternalLink(explicitTarget.url)
+        return
+      }
+      if (explicitTarget.intent === 'internal') {
+        onOpenUrlInAppBrowser?.(explicitTarget.url, event.currentTarget.textContent?.trim())
+        return
+      }
+
+      onOpenWorkspaceFile?.(explicitTarget.target.path)
+      return
+    }
+
     const appBrowserUrl = getAppBrowserLinkUrl(href)
     if (appBrowserUrl !== '' && onOpenUrlInAppBrowser != null) {
       event.preventDefault()
@@ -278,6 +326,8 @@ function MessageItemComponent({
       openLinksInNewTab={messageLinksConfig.externalLinkTarget === 'newTab'}
       renderImage={renderMarkdownImage}
       renderImageLinks={messageLinksConfig.imageLinkMode === 'inlinePreview'}
+      renderMedia={renderMarkdownMedia}
+      resolveLocalMediaUrl={resolveLocalMediaUrl}
       workspaceRootPath={resolvedWorkspaceRootPath}
     />
   ), [
@@ -288,7 +338,9 @@ function MessageItemComponent({
     messageLinksConfig.plainWorkspacePathMode,
     onOpenUrlInAppBrowser,
     onOpenWorkspaceFile,
+    renderMarkdownMedia,
     renderMarkdownImage,
+    resolveLocalMediaUrl,
     resolvedWorkspaceRootPath
   ])
   const browserCommentSource = useMemo(() => {

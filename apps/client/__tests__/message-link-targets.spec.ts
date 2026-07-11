@@ -9,10 +9,48 @@ import {
   parseWorkspaceFileLink,
   splitPlainWorkspaceFileLinks
 } from '#~/utils/link-targets'
+import { parseLocalMediaSource, parseLocalMediaSourceForWorkspaceRoot } from '#~/utils/local-media'
+import {
+  buildMarkdownLinkIntentTitle,
+  parseMarkdownLinkIntent,
+  resolveMarkdownLinkIntentTarget
+} from '#~/utils/markdown-link-intent'
 import { DEFAULT_MESSAGE_LINKS_CONFIG, resolveMessageLinksConfig } from '#~/utils/message-links-config'
 import { resolveWorkspaceFileOpenerSelectModels } from '#~/utils/workspace-file-openers'
 
 describe('message link targets', () => {
+  it('parses only the namespaced OneWorks Markdown link intent titles', () => {
+    expect(parseMarkdownLinkIntent('oneworks:open=internal')).toBe('internal')
+    expect(parseMarkdownLinkIntent(' oneworks:open=external ')).toBe('external')
+    expect(parseMarkdownLinkIntent(buildMarkdownLinkIntentTitle('workspace-file'))).toBe('workspace-file')
+    expect(parseMarkdownLinkIntent('open=external')).toBeUndefined()
+    expect(parseMarkdownLinkIntent('oneworks:open=unknown')).toBeUndefined()
+  })
+
+  it('resolves explicit link intents without widening URL or workspace access', () => {
+    expect(resolveMarkdownLinkIntentTarget(
+      'https://example.com/docs?q=one works',
+      'internal',
+      '/workspace/app'
+    )).toEqual({
+      intent: 'internal',
+      url: 'https://example.com/docs?q=one%20works'
+    })
+    expect(resolveMarkdownLinkIntentTarget('http://localhost:8787/ui', 'external')).toEqual({
+      intent: 'external',
+      url: 'http://localhost:8787/ui'
+    })
+    expect(resolveMarkdownLinkIntentTarget('mailto:team@example.com', 'external')).toBeUndefined()
+    expect(resolveMarkdownLinkIntentTarget('javascript:alert(1)', 'internal')).toBeUndefined()
+    expect(resolveMarkdownLinkIntentTarget('apps/client/src/App.tsx:12:4', 'workspace-file', '/workspace/app'))
+      .toEqual({
+        intent: 'workspace-file',
+        target: { path: 'apps/client/src/App.tsx', line: 12, column: 4 }
+      })
+    expect(resolveMarkdownLinkIntentTarget('../outside.txt', 'workspace-file', '/workspace/app')).toBeUndefined()
+    expect(resolveMarkdownLinkIntentTarget('/etc/passwd', 'workspace-file', '/workspace/app')).toBeUndefined()
+  })
+
   it('detects image URLs with query strings and hashes', () => {
     expect(isLikelyImageUrl('https://example.com/cat.png?size=large#preview')).toBe(true)
     expect(isLikelyImageUrl('https://cdn.example.com/path/photo.WEBP')).toBe(true)
@@ -39,6 +77,37 @@ describe('message link targets', () => {
     expect(isExternalUrl('https://example.com')).toBe(true)
     expect(isExternalUrl('file:///tmp/image.png')).toBe(true)
     expect(isExternalUrl('/workspace/file.png')).toBe(false)
+  })
+
+  it('classifies supported local image, video, and audio sources', () => {
+    expect(parseLocalMediaSource('./artifacts/final%20shot.png')).toEqual({
+      kind: 'image',
+      path: './artifacts/final shot.png'
+    })
+    expect(parseLocalMediaSource('/private/tmp/oneworks-cua/run/recording.mp4')).toEqual({
+      kind: 'video',
+      path: '/private/tmp/oneworks-cua/run/recording.mp4'
+    })
+    expect(parseLocalMediaSource('fixtures/voice.m4a?raw=1')).toEqual({
+      kind: 'audio',
+      path: 'fixtures/voice.m4a'
+    })
+  })
+
+  it('keeps remote, anchor, origin-relative, and non-media links unchanged', () => {
+    expect(parseLocalMediaSourceForWorkspaceRoot('https://example.com/movie.mp4', '/workspace/app')).toBeNull()
+    expect(parseLocalMediaSourceForWorkspaceRoot('//cdn.example.com/movie.mp4', '/workspace/app')).toBeNull()
+    expect(parseLocalMediaSourceForWorkspaceRoot('#recording.mp4', '/workspace/app')).toBeNull()
+    expect(parseLocalMediaSourceForWorkspaceRoot('/assets/movie.mp4', '/workspace/app')).toBeNull()
+    expect(parseLocalMediaSourceForWorkspaceRoot('/workspace/app/assets/movie.mp4', '/workspace/app')).toEqual({
+      kind: 'video',
+      path: '/workspace/app/assets/movie.mp4'
+    })
+    expect(parseLocalMediaSourceForWorkspaceRoot('/tmp/oneworks-cua/run/movie.mp4', '/workspace/app')).toEqual({
+      kind: 'video',
+      path: '/tmp/oneworks-cua/run/movie.mp4'
+    })
+    expect(parseLocalMediaSourceForWorkspaceRoot('docs/readme.md', '/workspace/app')).toBeNull()
   })
 
   it('normalizes workspace file links for the bottom file tab', () => {

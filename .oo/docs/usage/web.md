@@ -24,6 +24,22 @@
 - 下方面板的 tab header 会按 tab 类型显示右侧 action。当前打开 `.sh`、`.bash`、`.zsh` 文件时，文件 tab 右侧会出现「运行脚本」按钮，点击后通过同一套运行指令通道在当前 workspace 下执行 `bash '<path>'`，并创建或复用对应任务 tab。
 - 左侧会话列表默认不在 session card 展示消息摘要；如果希望在卡片里显示最近消息预览，可以在配置页 `Conversation -> Defaults` 打开 `conversation.showSessionCardMessage`。
 - 聊天消息里的链接行为可通过配置页 `General -> Message Links` 维护，对应配置键是 `messageLinks`：`externalLinkTarget` 控制网页链接在新标签或当前标签打开，`workspaceFileTarget` 控制工作区文件链接打开到下方文件 tab、外部应用或使用浏览器默认行为，`workspaceFileOpener` 控制首选打开工具，`imageLinkMode` 控制标准图片链接是否直接渲染为可全屏预览的图片，`plainWorkspacePathMode` 控制裸工作区文件路径是否自动变成链接。外部应用由服务端嗅探本机支持的 VS Code、Cursor、Windsurf、Zed、JetBrains 工具与 macOS TextEdit；配置页的打开工具下拉只展示当前服务端检测到的可用工具，选择 `auto` 时会使用第一个可用工具，并尽量带上工作区目录、文件路径与行列号。图片链接识别只看 URL / 路径后缀以及 `data:image`、`blob:` 源，不额外发起跨域探测请求。
+- agent 回复中的本地媒体 Markdown 会在聊天消息内安全预览：图片语法和普通图片链接渲染为图片，小图保持原始尺寸而不强制放大；常见视频与音频链接渲染为带 controls、占满消息可用宽度的播放器，并支持拖动播放位置。共享 Web client 会通过 launcher 同源转发到当前 workspace 的固定媒体端点。可读取范围仅限当前 session workspace，以及 One Works 生成的 `/tmp/oneworks-cua` 临时产物目录；其他绝对路径、目录、设备文件和越界符号链接不会由 Web UI 读取。远程 `http` / `https`、锚点和非媒体链接继续使用原有链接行为。媒体加载失败时会显示一次明确的失败入口，不会循环重试。
+
+### 聊天 Markdown 链接意图
+
+OneWorks 使用标准 Markdown 的可选 title 字段声明明确的打开方式。没有声明意图的链接继续服从上面的 `messageLinks` 配置。
+
+```md
+[在 OneWorks 内打开](https://example.com "oneworks:open=internal")
+[用系统默认浏览器打开](https://example.com "oneworks:open=external")
+[打开工作区文本文件](apps/client/src/App.tsx "oneworks:open=workspace-file")
+```
+
+- `internal` 只接受 `http` / `https`，Web 版在交互面板 iframe 中打开，桌面版使用 webview。
+- `external` 只接受 `http` / `https`，桌面版调用系统默认浏览器，Web 版打开独立浏览器标签。
+- `workspace-file` 只接受当前 workspace 内的文件路径，优先使用相对路径，并在 OneWorks 文件标签中打开；它不会授权读取 workspace 外的任意本地文件。
+- 这些标记只改变默认打开动作，不绕过 URL、workspace path 或本地媒体代理的安全校验。右键菜单仍可临时选择其他可用打开方式。
 
 示例：
 

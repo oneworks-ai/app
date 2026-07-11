@@ -17,6 +17,11 @@
 - `messages/MessageFooter.tsx`
   - 消息 footer 的统一承载层。
   - 改 footer 文案或按钮时，优先改这里，不要散落到 `MessageItem`。
+- `../MarkdownContent.tsx`、`messages/MessageImage.tsx`、`messages/MessageMedia.tsx`
+  - `MarkdownContent` 识别本地图片 / 视频 / 音频链接，`MessageItem` 注入 session-scoped resource URL。
+  - 图片继续走可预览的 `MessageImage`；视频 / 音频 controls 与单次失败 fallback 统一由 `MessageMedia` 承载。
+  - 本地文件授权、canonical path、Range / HEAD 与 MIME 只在 server workspace resource 链路实现，前端不能直接拼 `file://` 或读取文件系统。
+  - Markdown 链接可用 title 元数据显式声明打开意图：`oneworks:open=internal` 进入交互面板，`oneworks:open=external` 进入系统默认浏览器，`oneworks:open=workspace-file` 进入工作区文件标签；未声明时继续服从 `messageLinks` 配置，显式意图不得放宽 URL 或 workspace path 校验。
 - `sender/Sender.tsx`
   - 默认 sender 和 inline edit 共用的最外层装配入口。
   - 只保留 sender 壳层、局部视图拼装和少量同目录引用，不再承载大段状态编排。

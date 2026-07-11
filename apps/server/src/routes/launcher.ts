@@ -6,6 +6,7 @@ import {
   createLauncherWorkspaceInDirectory,
   forgetLauncherWorkspace,
   listLauncherDirectories,
+  listLauncherWorkspaceRuntimeEndpoints,
   listLauncherWorkspaces,
   openLauncherWorkspace,
   openLauncherWorkspaceById,
@@ -13,6 +14,8 @@ import {
   stopLauncherWorkspace
 } from '#~/services/launcher/manager.js'
 import { notFound } from '#~/utils/http.js'
+
+import { proxyLauncherWorkspaceResource } from './launcher-workspace-resource-proxy'
 
 const normalizeLauncherClientOrigin = (value: string | undefined) => {
   const trimmedValue = value?.trim()
@@ -64,6 +67,22 @@ export function launcherRouter(env: ReturnType<typeof loadEnv>): Router {
     const clientOrigin = getLauncherClientOrigin(ctx)
     ctx.body = await restartLauncherWorkspaceById(workspaceId, { clientOrigin })
   })
+
+  const handleWorkspaceResource = async (ctx: Router.RouterContext) => {
+    const { workspaceId } = ctx.params as { workspaceId?: string }
+    const endpoint = (await listLauncherWorkspaceRuntimeEndpoints()).find(candidate => (
+      candidate.workspaceId === workspaceId &&
+      candidate.status === 'online' &&
+      candidate.serverBaseUrl != null
+    ))
+    if (endpoint?.serverBaseUrl == null) {
+      throw notFound('Running workspace not found.', { workspaceId }, 'workspace_not_running')
+    }
+    await proxyLauncherWorkspaceResource(ctx, endpoint.serverBaseUrl)
+  }
+
+  router.get('/workspaces/:workspaceId/resource', handleWorkspaceResource)
+  router.head('/workspaces/:workspaceId/resource', handleWorkspaceResource)
 
   router.post('/workspaces/forget', async (ctx) => {
     const body = ctx.request.body as { workspaceFolder?: unknown }
