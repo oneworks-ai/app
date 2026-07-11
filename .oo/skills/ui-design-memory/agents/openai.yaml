@@ -1,4 +1,4 @@
 interface:
-  display_name: "OneWorks UI Design Memory"
-  short_description: "Apply and evolve team visual standards"
-  default_prompt: "Use $ui-design-memory to implement and review this OneWorks UI against team design standards."
+  display_name: OneWorks UI Design Memory
+  short_description: Apply and evolve team visual standards
+  default_prompt: Use $ui-design-memory to implement and review this OneWorks UI against team design standards.
