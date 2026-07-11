@@ -65,6 +65,16 @@
 - 线程因 rate limit、工具失败或中断卡住时，主线程应读取已有 diff / PR 接手，或另开小范围新线程继续；不要无限等待原线程。
 - 完成的审阅线程提取结论后归档；完成的实现线程先由主线程 review diff，再决定是否合并。
 
+## 权限预检与审批恢复
+
+- Git / PR 独立任务的 prompt 必须包含精确的仓库、PR / 分支、允许的写操作、merge 方式、是否删除远端分支和本轮用户授权；只写“处理 PR”或“合入”不足以让审批者判断边界。
+- 本项目通过 `.codex/config.toml` 保持 `on-request` 审批并把 eligible prompt 交给 auto-review。该项目层配置有意作用于可信项目内所有新加载任务，不只作用于独立 worker，并可能覆盖用户层较严格的 reviewer / approval 默认值（managed requirements 与显式启动覆盖仍有更高优先级）；它只替换审批者，不扩大 sandbox、网络或 GitHub 权限。
+- `.codex/rules/git-delivery.rules` 对常见的 commit、push、PR 写操作、`gh api`、`git -C` / `git -c` 和常见 executable wrapper 使用更严格的 `prompt`，以最严格规则覆盖用户层可能存在的宽泛 `allow`。规则是纵深防护，不是不可绕过的命令沙箱；自定义 wrapper 或可执行路径仍必须依赖 sandbox、auto-review 与明确 prompt 边界。
+- 新项目配置与规则只对重新加载后的任务生效。真实验收必须创建干净的独立 Git operator，让它执行一条已明确授权的远端写操作，并确认没有停在人工 `waitingOnApproval`；旧线程成功不能证明新配置已加载。
+- 如果 worker 进入 `waitingOnApproval`，先检查任务是否加载了可信项目层、`approval_policy` / `approvals_reviewer` 的有效值、命中规则和授权上下文；修复后创建至多一个干净验证任务。不要连续 fork 带有长协调历史的主任务：这种 fork 可能把自己误判成协调器并继续创建 worker。需要共享同一 worktree 时，prompt 必须明确“你就是执行者，不得再委派”，仍无法稳定执行时按“无法安全共享状态”回退并如实记录。
+- GitHub Connector 返回 `Resource not accessible by integration` 表示外部 GitHub App / 集成授权不足，可能来自安装仓库范围、App permission 或组织策略，与本地 shell approval 是两个权限层。只有补齐对应组织 / 仓库授权并复测 connector 写操作后，才能声称 Connector 已修复；在此之前，远端写入使用本机已认证 `gh`，但仍经过上述逐次审批。
+- 不要用永久 `allow` 放行 `gh pr merge`、`git push` 或 `gh api`。prefix 只能约束命令前缀，后续 URL / flags 仍可能改变目标；需要零人工停顿时由 auto-review 根据精确用户授权逐次判断，而不是取消边界。
+
 ## 集成与验证
 
 - 主线程负责最终集成，不让子线程自行合并到主干。
