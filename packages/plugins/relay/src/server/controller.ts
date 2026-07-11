@@ -66,7 +66,7 @@ import {
 } from './personal-document-sync.js'
 import type { RelayDocumentScope } from './personal-document-sync.js'
 import { createRelaySessionWorker } from './session-worker.js'
-import { createRelayDeviceStore, createRelayManagementServerStore } from './store.js'
+import { createRelayDeviceStore, createRelayManagementServerStore, createRelayServiceInfoStore } from './store.js'
 import type { RelayManagementServerStore } from './store.js'
 import type {
   RelayAccountProfile,
@@ -225,6 +225,8 @@ interface RelayServiceInfo {
   availabilityError?: string
   avatarUrl?: string
   lastCheckedAt?: string
+  lastSuccessfulAt?: string
+  name?: string
   online?: boolean
 }
 
@@ -1705,6 +1707,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   let explicitConnectVersion = 0
   const deviceStore = createRelayDeviceStore(ctx.projectHome)
   const managementServerStore = createRelayManagementServerStore(ctx.projectHome)
+  const serviceInfoStore = createRelayServiceInfoStore()
   const heartbeats = new Map<string, ReturnType<typeof startHeartbeat>>()
   const sessionWorkers = new Map<string, ReturnType<typeof createRelaySessionWorker>>()
   const loopLeases = new Map<string, RelayLoopLease>()
@@ -1716,6 +1719,18 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   const workspaceProxyOpenPromises = new Map<string, Promise<RelayWorkspaceOpenResult>>()
   const deviceListCache = new Map<string, RelayDeviceListCacheEntry>()
   const serviceInfoCache = new Map<string, RelayServiceInfoCacheEntry>()
+  const serviceInfoHydration = serviceInfoStore.readStore()
+    .then(services => {
+      for (const [cacheKey, info] of Object.entries(services)) {
+        serviceInfoCache.set(cacheKey, {
+          fetchedAt: 0,
+          value: info
+        })
+      }
+    })
+    .catch(error => {
+      ctx.logger.warn({ err: error, scope: ctx.scope }, '[relay] service info cache restore failed')
+    })
   const connectionStates: Record<string, RelayConnectionState> = {}
   let configDistributionStatus: RelayConfigDistributionStatus | undefined
   let personalDocumentSyncStatus: RelayPersonalDocumentSyncStatus | undefined
@@ -1810,6 +1825,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   const fetchRelayServiceInfo = async (
     server: Pick<ResolvedRelayServer, 'remoteBaseUrl'>
   ): Promise<RelayServiceInfo> => {
+    await serviceInfoHydration
     const cacheKey = normalizeBaseUrl(server.remoteBaseUrl)
     const existing = serviceInfoCache.get(cacheKey)
     if (existing?.inFlight != null) return await existing.inFlight
@@ -1836,21 +1852,38 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
           }
         }
         const body = await readResponseJson(response)
+        const name = readOptionalText(body.name)
         const avatarSource = readOptionalText(body.avatarUrl)
-        if (avatarSource == null) return { lastCheckedAt, online: true }
         let avatarUrl: URL | undefined
-        try {
-          avatarUrl = new URL(avatarSource)
-        } catch {
-          avatarUrl = undefined
+        if (avatarSource != null) {
+          try {
+            avatarUrl = new URL(avatarSource)
+          } catch {
+            avatarUrl = undefined
+          }
         }
-        return {
-          ...(avatarUrl != null && (avatarUrl.protocol === 'http:' || avatarUrl.protocol === 'https:')
-            ? { avatarUrl: avatarUrl.toString() }
-            : {}),
+        const discoveredAvatarUrl = avatarUrl != null &&
+            (avatarUrl.protocol === 'http:' || avatarUrl.protocol === 'https:')
+          ? avatarUrl.toString()
+          : entry.value.avatarUrl
+        const discoveredName = name ?? entry.value.name
+        const value = {
+          ...(discoveredAvatarUrl == null ? {} : { avatarUrl: discoveredAvatarUrl }),
           lastCheckedAt,
-          online: true
+          lastSuccessfulAt: lastCheckedAt,
+          ...(discoveredName == null ? {} : { name: discoveredName }),
+          online: true as const
         }
+        await serviceInfoStore
+          .writeServiceInfo(server.remoteBaseUrl, {
+            ...(value.avatarUrl == null ? {} : { avatarUrl: value.avatarUrl }),
+            lastSuccessfulAt: lastCheckedAt,
+            ...(value.name == null ? {} : { name: value.name })
+          })
+          .catch(error => {
+            ctx.logger.warn({ err: error, scope: ctx.scope }, '[relay] service info cache write failed')
+          })
+        return value
       } catch {
         return {
           ...entry.value,
@@ -2971,6 +3004,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   const getPublicStatus = async (
     configDistributionOverride?: RelayConfigDistributionStatus
   ): Promise<RelayPublicStatus> => {
+    await serviceInfoHydration
     const options = normalizeOptions(ctx.options, ctx.runtime.role)
     const statusActiveServerId = state.activeServerId || options.activeServerId
     const resolvedStatusServer = statusActiveServerId === ''

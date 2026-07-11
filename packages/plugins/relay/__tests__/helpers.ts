@@ -67,6 +67,7 @@ export interface RelayPluginStatus {
     availabilityError?: string
     avatarUrl?: string
     lastCheckedAt?: string
+    lastSuccessfulAt?: string
     connected?: boolean
     connection?: {
       activeServerId?: string
@@ -160,6 +161,7 @@ export const createPluginHarness = async (
       getStatus?: () => RelayConfigDistributionStatus | Promise<RelayConfigDistributionStatus>
       refresh?: () => RelayConfigDistributionStatus | Promise<RelayConfigDistributionStatus>
     }
+    prepareHomeDir?: (homeDir: string) => Promise<void> | void
     prepareProjectHome?: (projectHome: string) => Promise<void> | void
     runtimeRole?: 'manager' | 'workspace'
     sessions?: RelayLocalSessionAdapter
@@ -174,6 +176,7 @@ export const createPluginHarness = async (
   vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', homeDir)
   vi.stubEnv('__ONEWORKS_RELAY_LOOP_LEASE_ROOT__', join(homeDir, 'relay-loop-leases'))
   await writeOneWorksAuthStore(emptyOneWorksAuthStore())
+  await harnessOptions.prepareHomeDir?.(homeDir)
   await harnessOptions.prepareProjectHome?.(projectHome)
   const commands = new Map<string, CommandHandler>()
   const apis = new Map<string, ApiRegistration>()

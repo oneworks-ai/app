@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 import { ONEWORKS_AUTH_STORE_VERSION, writeOneWorksAuthStore } from '@oneworks/utils/auth-store'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createRelayDeviceStore } from '../src/server/store.js'
+import { createRelayDeviceStore, createRelayServiceInfoStore } from '../src/server/store.js'
 import { createRelayConfigSnapshotStore } from '../src/shared/config-cache.js'
 import {
   DEFAULT_OFFICIAL_RELAY_SERVER_ID,
@@ -75,24 +75,93 @@ describe('relay plugin scoped API', () => {
     resolveInfo?.(
       new Response(
         JSON.stringify({
-          avatarUrl: 'https://cdn.example.com/relay.png'
+          avatarUrl: 'https://cdn.example.com/relay.png',
+          name: 'Relay Cloud'
         }),
         { status: 200 }
       )
     )
     await expect(firstInfo).resolves.toMatchObject({
-      body: { avatarUrl: 'https://cdn.example.com/relay.png', online: true },
+      body: { avatarUrl: 'https://cdn.example.com/relay.png', name: 'Relay Cloud', online: true },
       status: 200
     })
     await expect(secondInfo).resolves.toMatchObject({
-      body: { avatarUrl: 'https://cdn.example.com/relay.png', online: true },
+      body: { avatarUrl: 'https://cdn.example.com/relay.png', name: 'Relay Cloud', online: true },
       status: 200
     })
     const refreshedStatus = await handler?.({ body: Buffer.alloc(0), method: 'GET', path: 'status' }) as {
       body?: RelayPluginStatus
     }
     expect(refreshedStatus.body?.servers?.[0]?.avatarUrl).toBe('https://cdn.example.com/relay.png')
+    expect(refreshedStatus.body?.servers?.[0]?.name).toBe('Relay Cloud')
     expect(refreshedStatus.body?.servers?.[0]?.online).toBe(true)
+    await expect(createRelayServiceInfoStore().readStore()).resolves.toMatchObject({
+      'https://relay.example': {
+        avatarUrl: 'https://cdn.example.com/relay.png',
+        lastSuccessfulAt: expect.any(String),
+        name: 'Relay Cloud'
+      }
+    })
+  })
+
+  it('restores the last successful service metadata when the next connection fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('Unavailable', { status: 503 }))
+    )
+    const lastSuccessfulAt = '2026-07-11T08:30:00.000Z'
+    const { apis } = await createPluginHarness(
+      {
+        enableOfficialCloudflareRelay: false,
+        enableOfficialVercelRelay: false,
+        servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+      },
+      {
+        prepareHomeDir: async () => {
+          await createRelayServiceInfoStore().writeServiceInfo('https://relay.example', {
+            avatarUrl: 'https://cdn.example.com/relay.png',
+            lastSuccessfulAt,
+            name: 'Relay Cloud'
+          })
+        }
+      }
+    )
+
+    const handler = apis.get('relay')?.handler
+    const restoredStatus = await handler?.({
+      body: Buffer.alloc(0),
+      method: 'GET',
+      path: 'status'
+    }) as { body?: RelayPluginStatus }
+    expect(restoredStatus.body?.servers?.[0]).toMatchObject({
+      avatarUrl: 'https://cdn.example.com/relay.png',
+      lastSuccessfulAt,
+      name: 'Relay Cloud'
+    })
+
+    await expect(
+      handler?.({
+        body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+        method: 'POST',
+        path: 'server-info'
+      })
+    ).resolves.toMatchObject({
+      body: {
+        availabilityError: 'HTTP 503',
+        avatarUrl: 'https://cdn.example.com/relay.png',
+        lastSuccessfulAt,
+        name: 'Relay Cloud',
+        online: false
+      },
+      status: 200
+    })
+    await expect(createRelayServiceInfoStore().readStore()).resolves.toMatchObject({
+      'https://relay.example': {
+        avatarUrl: 'https://cdn.example.com/relay.png',
+        lastSuccessfulAt,
+        name: 'Relay Cloud'
+      }
+    })
   })
 
   it('times out service avatar discovery without failing the server list', async () => {

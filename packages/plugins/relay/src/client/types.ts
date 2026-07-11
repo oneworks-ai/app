@@ -468,6 +468,7 @@ export interface RelayServerStatus {
   availabilityError?: string
   avatarUrl?: string
   lastCheckedAt?: string
+  lastSuccessfulAt?: string
   connected?: boolean
   connection?: {
     activeServerId?: string

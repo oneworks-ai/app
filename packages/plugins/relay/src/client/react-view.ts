@@ -103,7 +103,6 @@ interface ShareState {
 
 interface ServerDraft {
   id?: string
-  name: string
   remoteBaseUrl: string
 }
 
@@ -1002,6 +1001,24 @@ const renderInput = (
     value: props.value
   })
 }
+
+const renderServerUrlInput = (
+  react: PluginReactHost,
+  props: {
+    onChange: (value: string) => void
+    placeholder: string
+    value: string
+  }
+) =>
+  react.createElement('input', {
+    className: 'oneworks-relay__input oneworks-relay__server-url-input',
+    onInput: (event: Event) => {
+      if (event.target instanceof HTMLInputElement) props.onChange(event.target.value)
+    },
+    placeholder: props.placeholder,
+    type: 'url',
+    value: props.value
+  })
 
 const renderSearchInput = (
   react: PluginReactHost,
@@ -3918,6 +3935,7 @@ const LoginPage = (props: {
 }) => {
   const { ctx, react, route, serverName, view } = props
   const launcherSurface = isLauncherSurface(view)
+  const NativeTabs = view?.ui?.NativeTabs
   const [login, setLogin] = react.useState<Awaited<ReturnType<typeof createRelayLoginOptions>> | null>(null)
   const [fallbackLoginUrl, setFallbackLoginUrl] = react.useState('')
   const [loginMethod, setLoginMethod] = react.useState<RelayLoginMethod>('password')
@@ -3930,6 +3948,7 @@ const LoginPage = (props: {
   const [rememberAccount, setRememberAccount] = react.useState(true)
   const [rememberedAccounts, setRememberedAccounts] = react.useState<RelayRememberedLogin[]>(readRelayRememberedLogins)
   const [error, setError] = react.useState<string | null>(null)
+  const [loadVersion, setLoadVersion] = react.useState(0)
   const [loading, setLoading] = react.useState(true)
   const [submitting, setSubmitting] = react.useState(false)
   const [sendingCode, setSendingCode] = react.useState(false)
@@ -3968,7 +3987,7 @@ const LoginPage = (props: {
     return () => {
       disposed = true
     }
-  }, [ctx, route.serverId])
+  }, [ctx, loadVersion, route.serverId])
 
   const openLoginDestination = (destination: string) => {
     const desktopApi = (window as typeof window & {
@@ -4132,6 +4151,11 @@ const LoginPage = (props: {
     if (method === 'verification_code') return messages?.useLoginMethodVerificationCode ?? '验证码'
     return messages?.useLoginMethodPassword ?? '密码'
   }
+  const loginMethodTabLabel = (method: RelayLoginMethod) => (
+    method === 'passkey'
+      ? '通行密钥'
+      : loginMethodLabel(method).replace(/^(?:使用\s*|use\s+)/iu, '')
+  )
   const loginMethodIcon = (method: RelayLoginMethod) => {
     if (method === 'passkey') return 'passkey'
     if (method === 'verification_code') return 'mark_email_read'
@@ -4185,6 +4209,14 @@ const LoginPage = (props: {
     setConfirmPassword('')
     setInviteCode('')
     setLoginMethod(method)
+  }
+  const toggleRegistration = () => {
+    const nextCompletingRegistration = !completingRegistration
+    setError(null)
+    setCompletingRegistration(nextCompletingRegistration)
+    setConfirmPassword('')
+    setInviteCode('')
+    if (nextCompletingRegistration) setLoginMethod('password')
   }
 
   const renderLoginButton = (input: {
@@ -4363,7 +4395,21 @@ const LoginPage = (props: {
     )
 
   const alternateLoginMethods = options?.loginMethods.enabled.filter(method => method !== loginMethod) ?? []
-  const methodSwitcher = options == null || alternateLoginMethods.length === 0
+  const loginMethodTabs = options == null || options.loginMethods.enabled.length <= 1
+    ? null
+    : NativeTabs != null
+    ? react.createElement(NativeTabs, {
+      activeKey: loginMethod,
+      ariaLabel: '登录方式',
+      className: 'oneworks-relay__login-method-tabs',
+      items: options.loginMethods.enabled.map((method): PluginHostNativeTabItem => ({
+        icon: loginMethodIcon(method),
+        key: method,
+        label: loginMethodTabLabel(method)
+      })),
+      onChange: (method: RelayLoginMethod) => updateLoginMethod(method)
+    })
+    : alternateLoginMethods.length === 0
     ? null
     : react.createElement(
       'section',
@@ -4415,19 +4461,64 @@ const LoginPage = (props: {
           login == null && !loading
           ? react.createElement(
             'div',
-            { className: 'oneworks-relay__login-native oneworks-relay__login-native--error' },
-            renderIcon(react, view, 'warning', { size: 28 }),
-            react.createElement('strong', null, `无法读取 ${serverName} 登录能力`),
-            react.createElement('span', null, error),
-            fallbackLoginUrl === ''
-              ? null
-              : renderLoginButton({
-                className: 'oneworks-relay__login-submit',
-                icon: 'open_in_new',
-                label: `打开 ${serverName} 兼容登录页`,
-                onClick: () => openHostedLogin(),
-                primary: true
-              })
+            {
+              className: 'oneworks-relay__login-native oneworks-relay__login-native--error',
+              role: 'alert'
+            },
+            react.createElement(
+              'div',
+              { className: 'oneworks-relay__login-error-state-content' },
+              react.createElement(
+                'div',
+                { className: 'oneworks-relay__login-error-state-header' },
+                react.createElement(
+                  'span',
+                  { 'aria-hidden': 'true', className: 'oneworks-relay__login-error-state-icon' },
+                  renderIcon(react, view, 'warning', { size: 20 })
+                ),
+                react.createElement(
+                  'h1',
+                  { className: 'oneworks-relay__login-error-state-title', tabIndex: -1 },
+                  `无法读取 ${serverName} 登录方式`
+                )
+              ),
+              react.createElement(
+                'p',
+                { className: 'oneworks-relay__login-error-state-description' },
+                '暂时无法连接到该服务器。请检查服务状态后重试。'
+              ),
+              react.createElement(
+                'div',
+                { className: 'oneworks-relay__login-error-state-actions' },
+                renderLoginButton({
+                  className: 'oneworks-relay__login-error-state-action',
+                  icon: 'refresh',
+                  label: '重试',
+                  onClick: () => setLoadVersion(value => value + 1),
+                  primary: true
+                }),
+                renderLoginButton({
+                  className: 'oneworks-relay__login-error-state-action',
+                  icon: 'swap_horiz',
+                  label: '登录到其他服务器',
+                  onClick: () => navigateTo(ctx.scope, routePath(ctx.scope, { page: 'servers' }))
+                }),
+                fallbackLoginUrl === ''
+                  ? null
+                  : renderLoginButton({
+                    className: 'oneworks-relay__login-error-state-action',
+                    icon: 'open_in_new',
+                    label: `打开 ${serverName} 兼容登录页`,
+                    onClick: () => openHostedLogin()
+                  })
+              )
+            ),
+            react.createElement(
+              'section',
+              { className: 'oneworks-relay__login-error-state-details' },
+              react.createElement('span', null, '错误详情'),
+              react.createElement('code', null, error)
+            )
           )
           : loading || options == null
           ? react.createElement(
@@ -4439,78 +4530,84 @@ const LoginPage = (props: {
           : react.createElement(
             'section',
             { className: 'oneworks-relay__login-native' },
-            currentRememberedAccounts.length === 0
-              ? null
-              : react.createElement(
-                'section',
-                { className: 'oneworks-relay__login-accounts oneworks-relay__login-section' },
-                react.createElement(
-                  'strong',
-                  { className: 'oneworks-relay__login-section-title' },
-                  options.messages.recentAccounts
-                ),
-                ...currentRememberedAccounts.map(account =>
+            loginMethodTabs,
+            react.createElement(
+              'div',
+              {
+                className: 'oneworks-relay__login-tab-panel native-tabs-panel',
+                'data-native-tabs-panel': 'true'
+              },
+              currentRememberedAccounts.length === 0
+                ? null
+                : react.createElement(
+                  'section',
+                  { className: 'oneworks-relay__login-accounts oneworks-relay__login-section' },
                   react.createElement(
-                    'button',
-                    {
-                      className: 'oneworks-relay__login-account-button',
-                      key: `${account.provider}:${account.email}`,
-                      onClick: () => selectRememberedAccount(account),
-                      type: 'button'
-                    },
+                    'strong',
+                    { className: 'oneworks-relay__login-section-title' },
+                    options.messages.recentAccounts
+                  ),
+                  ...currentRememberedAccounts.map(account =>
                     react.createElement(
-                      'span',
-                      { className: 'oneworks-relay__login-account-avatar' },
-                      account.name.slice(0, 1).toUpperCase()
-                    ),
-                    react.createElement(
-                      'span',
-                      { className: 'oneworks-relay__login-account-copy' },
-                      react.createElement('strong', null, account.name),
-                      react.createElement('small', null, `${account.provider} · ${account.email}`)
+                      'button',
+                      {
+                        className: 'oneworks-relay__login-account-button',
+                        key: `${account.provider}:${account.email}`,
+                        onClick: () => selectRememberedAccount(account),
+                        type: 'button'
+                      },
+                      react.createElement(
+                        'span',
+                        { className: 'oneworks-relay__login-account-avatar' },
+                        account.name.slice(0, 1).toUpperCase()
+                      ),
+                      react.createElement(
+                        'span',
+                        { className: 'oneworks-relay__login-account-copy' },
+                        react.createElement('strong', null, account.name),
+                        react.createElement('small', null, `${account.provider} · ${account.email}`)
+                      )
                     )
                   )
-                )
-              ),
-            methodForm,
-            methodSwitcher,
-            options.providers.length === 0
-              ? null
-              : react.createElement(
-                'section',
-                { className: 'oneworks-relay__login-sso oneworks-relay__login-section' },
-                react.createElement(
-                  'div',
-                  { className: 'oneworks-relay__login-provider-grid' },
-                  ...options.providers.map(provider =>
-                    renderLoginButton({
-                      className: 'oneworks-relay__login-provider-button',
-                      icon: 'login',
-                      iconNode: renderProviderIcon(provider),
-                      key: provider.id,
-                      label: provider.label,
-                      onClick: () => openLoginDestination(provider.startUrl)
-                    })
+                ),
+              methodForm,
+              options.providers.length === 0
+                ? null
+                : react.createElement(
+                  'section',
+                  { className: 'oneworks-relay__login-sso oneworks-relay__login-section' },
+                  react.createElement(
+                    'div',
+                    { className: 'oneworks-relay__login-provider-grid' },
+                    ...options.providers.map(provider =>
+                      renderLoginButton({
+                        className: 'oneworks-relay__login-provider-button',
+                        icon: 'login',
+                        iconNode: renderProviderIcon(provider),
+                        key: provider.id,
+                        label: provider.label,
+                        onClick: () => openLoginDestination(provider.startUrl)
+                      })
+                    )
                   )
-                )
-              ),
-            react.createElement(
-              'footer',
-              { className: 'oneworks-relay__login-footer' },
-              renderLoginButton({
-                className: 'oneworks-relay__login-service-picker',
-                icon: 'dns',
-                label: '登录到其他服务器',
-                onClick: () => navigateTo(ctx.scope, routePath(ctx.scope, { page: 'servers' }))
-              }),
+                ),
               react.createElement(
-                'button',
-                {
-                  className: 'oneworks-relay__login-compatibility',
-                  onClick: () => openHostedLogin(),
-                  type: 'button'
-                },
-                '注册新账号或使用完整安全登录页'
+                'footer',
+                { className: 'oneworks-relay__login-footer' },
+                options.loginMethods.enabled.includes('password')
+                  ? renderLoginButton({
+                    className: 'oneworks-relay__login-method-switch-button oneworks-relay__login-footer-action',
+                    icon: completingRegistration ? 'login' : 'person_add',
+                    label: completingRegistration ? '返回登录' : '注册账号',
+                    onClick: toggleRegistration
+                  })
+                  : null,
+                renderLoginButton({
+                  className: 'oneworks-relay__login-method-switch-button oneworks-relay__login-footer-action',
+                  icon: 'dns',
+                  label: '登录到其他服务器',
+                  onClick: () => navigateTo(ctx.scope, routePath(ctx.scope, { page: 'servers' }))
+                })
               )
             )
           )
@@ -4529,12 +4626,14 @@ const ServersPage = (props: {
   const { ctx, onChanged, react, status, view } = props
   const servers = getServers(status)
   const [editingKey, setEditingKey] = react.useState('')
-  const [draft, setDraft] = react.useState<ServerDraft>({ name: '', remoteBaseUrl: '' })
+  const [draft, setDraft] = react.useState<ServerDraft>({ remoteBaseUrl: '' })
   const [serviceInfoByServer, setServiceInfoByServer] = react.useState<
     Record<string, {
       availabilityError?: string
       avatarUrl?: string
       lastCheckedAt?: string
+      lastSuccessfulAt?: string
+      name?: string
       online?: boolean
     }>
   >({})
@@ -4551,6 +4650,8 @@ const ServersPage = (props: {
         availabilityError?: string
         avatarUrl?: string
         lastCheckedAt?: string
+        lastSuccessfulAt?: string
+        name?: string
         online?: boolean
       }>(ctx, 'server-info', { serverId: key })
         .then(serviceInfo => {
@@ -4569,9 +4670,49 @@ const ServersPage = (props: {
     const nextOptions = buildRelayServerOptionsUpdate(view?.options?.value ?? ctx.options ?? {}, draft)
     await update(nextOptions)
     setEditingKey('')
-    setDraft({ name: '', remoteBaseUrl: '' })
+    setDraft({ remoteBaseUrl: '' })
     onChanged()
   }
+  const serverManagementForm = react.createElement(
+    'div',
+    { className: `${adminListSurfaceClassNames.nativeRow} oneworks-relay__server-management-form` },
+    react.createElement(
+      'span',
+      { className: adminListSurfaceClassNames.nativeIcon, 'aria-hidden': 'true' },
+      renderIcon(react, view, 'add_link', { size: 18 })
+    ),
+    react.createElement(
+      'span',
+      { className: `oneworks-relay__server-editor ${adminListSurfaceClassNames.nativeMain}` },
+      renderServerUrlInput(react, {
+        onChange: value => setDraft(current => ({ ...current, remoteBaseUrl: value })),
+        placeholder: 'https://relay.example.com',
+        value: editingKey === '' ? draft.remoteBaseUrl : ''
+      })
+    ),
+    react.createElement(
+      'span',
+      { className: adminListSurfaceClassNames.nativeActions },
+      renderButton(react, view, {
+        disabled: editingKey !== '',
+        icon: 'check',
+        label: '加入服务器',
+        onClick: () => {
+          void saveDraft().catch(error =>
+            ctx.notifications?.show?.({
+              level: 'error',
+              title: toErrorMessage(error)
+            })
+          )
+        }
+      }),
+      renderButton(react, view, {
+        icon: 'close',
+        label: '清空',
+        onClick: () => setDraft({ remoteBaseUrl: '' })
+      })
+    )
+  )
   return react.createElement(
     'main',
     { className: 'oneworks-relay' },
@@ -4587,19 +4728,23 @@ const ServersPage = (props: {
           react.createElement(
             NativeList,
             { react },
+            serverManagementForm,
             ...servers.map((server, index) => {
               const key = cleanText(server.id) ?? cleanText(server.remoteBaseUrl) ?? `server-${index}`
               const official = server.official === true || isOfficialServerId(cleanText(server.id))
               const editing = editingKey === key
-              const title = serverDisplayName(server)
-              const address = serverAddress(server)
               const serviceInfo = serviceInfoByServer[key]
+              const title = officialServerLabel(server) ?? cleanText(serviceInfo?.name) ?? serverDisplayName(server)
+              const address = serverAddress(server)
               const online = serviceInfo == null ? server.online : serviceInfo.online
               const availabilityError = cleanText(
                 serviceInfo == null ? server.availabilityError : serviceInfo.availabilityError
               )
               const lastCheckedAt = cleanText(
                 serviceInfo == null ? server.lastCheckedAt : serviceInfo.lastCheckedAt
+              )
+              const lastSuccessfulAt = cleanText(
+                serviceInfo == null ? server.lastSuccessfulAt : serviceInfo.lastSuccessfulAt
               )
               const presence = online == null ? 'checking' : online ? 'online' : 'offline'
               const presenceAccessibleLabel = online == null
@@ -4612,7 +4757,10 @@ const ServersPage = (props: {
                 : [
                   online ? '服务在线' : '服务不可用',
                   availabilityError,
-                  lastCheckedAt == null ? undefined : `检查于 ${formatDateTime(lastCheckedAt)}`
+                  lastCheckedAt == null ? undefined : `检查于 ${formatDateTime(lastCheckedAt)}`,
+                  !online && lastSuccessfulAt != null
+                    ? `上次连接于 ${formatDateTime(lastSuccessfulAt)}`
+                    : undefined
                 ].filter(Boolean).join(' · ')
               const openServerLogin = () =>
                 navigateTo(
@@ -4643,8 +4791,7 @@ const ServersPage = (props: {
                       openServerLogin()
                     },
                   role: editing ? undefined : 'link',
-                  tabIndex: editing ? undefined : 0,
-                  title: address
+                  tabIndex: editing ? undefined : 0
                 },
                 renderAvatar(react, {
                   avatarUrl: cleanText(serviceInfo == null ? server.avatarUrl : serviceInfo.avatarUrl),
@@ -4658,12 +4805,7 @@ const ServersPage = (props: {
                   ? react.createElement(
                     'span',
                     { className: `oneworks-relay__server-editor ${adminListSurfaceClassNames.nativeMain}` },
-                    renderInput(react, view, {
-                      onChange: value => setDraft(current => ({ ...current, name: value })),
-                      placeholder: '服务名称',
-                      value: draft.name
-                    }),
-                    renderInput(react, view, {
+                    renderServerUrlInput(react, {
                       onChange: value => setDraft(current => ({ ...current, remoteBaseUrl: value })),
                       placeholder: 'https://relay.example.com',
                       value: draft.remoteBaseUrl
@@ -4672,8 +4814,7 @@ const ServersPage = (props: {
                   : react.createElement(
                     'span',
                     { className: adminListSurfaceClassNames.nativeMain },
-                    react.createElement('strong', { className: adminListSurfaceClassNames.nativeTitle }, title),
-                    react.createElement('span', { className: adminListSurfaceClassNames.nativeMeta }, address)
+                    react.createElement('strong', { className: adminListSurfaceClassNames.nativeTitle }, title)
                   ),
                 official && !editing
                   ? null
@@ -4713,59 +4854,13 @@ const ServersPage = (props: {
                           setEditingKey(key)
                           setDraft({
                             id: cleanText(server.id),
-                            name: cleanText(server.name) ?? '',
                             remoteBaseUrl: address
                           })
                         }
                       })
                   )
               )
-            }),
-            react.createElement(
-              'div',
-              { className: `${adminListSurfaceClassNames.nativeRow} oneworks-relay__server-management-form` },
-              react.createElement(
-                'span',
-                { className: adminListSurfaceClassNames.nativeIcon, 'aria-hidden': 'true' },
-                renderIcon(react, view, 'add_link', { size: 18 })
-              ),
-              react.createElement(
-                'span',
-                { className: `oneworks-relay__server-editor ${adminListSurfaceClassNames.nativeMain}` },
-                renderInput(react, view, {
-                  onChange: value => setDraft(current => ({ ...current, name: value })),
-                  placeholder: '服务名称',
-                  value: editingKey === '' ? draft.name : ''
-                }),
-                renderInput(react, view, {
-                  onChange: value => setDraft(current => ({ ...current, remoteBaseUrl: value })),
-                  placeholder: 'https://relay.example.com',
-                  value: editingKey === '' ? draft.remoteBaseUrl : ''
-                })
-              ),
-              react.createElement(
-                'span',
-                { className: adminListSurfaceClassNames.nativeActions },
-                renderButton(react, view, {
-                  disabled: editingKey !== '',
-                  icon: 'check',
-                  label: '加入服务器',
-                  onClick: () => {
-                    void saveDraft().catch(error =>
-                      ctx.notifications?.show?.({
-                        level: 'error',
-                        title: toErrorMessage(error)
-                      })
-                    )
-                  }
-                }),
-                renderButton(react, view, {
-                  icon: 'close',
-                  label: '清空',
-                  onClick: () => setDraft({ name: '', remoteBaseUrl: '' })
-                })
-              )
-            )
+            })
           )
         )
       )
