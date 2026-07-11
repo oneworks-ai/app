@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- driver compatibility, lifecycle, permissions, and cursor readiness form one preflight boundary. */
 const { spawn, spawnSync } = require('node:child_process')
 const { accessSync, constants, readFileSync, realpathSync, unlinkSync } = require('node:fs')
 const { homedir } = require('node:os')
@@ -8,11 +9,6 @@ const appBinaryPath = '/Applications/CuaDriver.app/Contents/MacOS/cua-driver'
 const userBinaryPath = join(homedir(), '.local', 'bin', 'cua-driver')
 const wrapperRealPath = safeRealpath(process.argv[1])
 const daemonPollIntervalSeconds = '0.25'
-const agentCursorMotion = Object.freeze({
-  dwell_after_click_ms: 125,
-  glide_duration_ms: 350,
-  idle_hide_ms: 1500
-})
 
 function isProcessAlive(pid) {
   try {
@@ -79,6 +75,14 @@ function runCaptured(command, args) {
 
 function commandOutput(result) {
   return `${result.stdout ?? ''}\n${result.stderr ?? ''}`
+}
+
+function driverSupportsAgentCursorTurnRadius(driverBinary, options = {}) {
+  const result = (options.runCaptured ?? runCaptured)(driverBinary, [
+    'describe',
+    'set_agent_cursor_motion'
+  ])
+  return result.status === 0 && /["']turn_radius["']|\bturn_radius\b/.test(commandOutput(result))
 }
 
 function printCapturedResult(result, options = {}) {
@@ -164,10 +168,24 @@ function startDaemonIfNeeded(driverBinary, options = {}) {
 }
 
 function permissionOutputIsGranted(output) {
+  const json = permissionJsonFromOutput(output)
+  if (json != null) {
+    return json.accessibility === true &&
+      json.screen_recording === true &&
+      json.screen_recording_capturable !== false
+  }
   return output.includes('Accessibility: granted') && output.includes('Screen Recording: granted')
 }
 
 function permissionStateFromOutput(output) {
+  const json = permissionJsonFromOutput(output)
+  if (json != null) {
+    return {
+      accessibility: json.accessibility === true ? 'granted' : 'required',
+      screenRecording: json.screen_recording === true &&
+        json.screen_recording_capturable !== false ? 'granted' : 'required'
+    }
+  }
   const readState = (label) => {
     const line = output.split(/\r?\n/).find(value => value.includes(`${label}:`))
     if (line == null) return 'unknown'
@@ -178,6 +196,22 @@ function permissionStateFromOutput(output) {
   return {
     accessibility: readState('Accessibility'),
     screenRecording: readState('Screen Recording')
+  }
+}
+
+function permissionJsonFromOutput(output) {
+  const start = output.indexOf('{')
+  const end = output.lastIndexOf('}')
+  if (start < 0 || end <= start) return undefined
+  try {
+    const value = JSON.parse(output.slice(start, end + 1))
+    return value != null && typeof value === 'object' &&
+      typeof value.accessibility === 'boolean' &&
+      typeof value.screen_recording === 'boolean'
+      ? value
+      : undefined
+  } catch {
+    return undefined
   }
 }
 
@@ -220,17 +254,16 @@ function checkPermissions(driverBinary, options = {}) {
   }
 }
 
-function readCursorNumber(output, key) {
-  const match = output.match(new RegExp(`${key}=(-?\\d+(?:\\.\\d+)?)`))
-  return match == null ? undefined : Number.parseFloat(match[1])
-}
-
 function agentCursorOutputIsReady(output) {
-  if (!output.includes('enabled=true')) return false
-  return Object.entries(agentCursorMotion).every(([key, expected]) => {
-    const outputKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
-    return readCursorNumber(output, outputKey) === expected
-  })
+  if (output.includes('enabled=true')) return true
+  const start = output.indexOf('{')
+  const end = output.lastIndexOf('}')
+  if (start < 0 || end <= start) return false
+  try {
+    return JSON.parse(output.slice(start, end + 1))?.enabled === true
+  } catch {
+    return false
+  }
 }
 
 function ensureAgentCursor(driverBinary, options = {}) {
@@ -255,13 +288,6 @@ function ensureAgentCursor(driverBinary, options = {}) {
     }
   }
 
-  const motion = runCursorCall('set_agent_cursor_motion', agentCursorMotion)
-  if (motion.status !== 0) {
-    printCapturedResult(motion, options)
-    console.error('[cua-driver] The Agent pointer motion could not be configured. Retry the original task.')
-    return { ready: false, changed: false, result: motion }
-  }
-
   const verified = runCursorCall('get_agent_cursor_state')
   if (verified.status !== 0 || !agentCursorOutputIsReady(commandOutput(verified))) {
     printCapturedResult(verified, options)
@@ -275,6 +301,7 @@ module.exports = {
   agentCursorOutputIsReady,
   checkPermissions,
   cleanupStaleDaemonState,
+  driverSupportsAgentCursorTurnRadius,
   ensureAgentCursor,
   findOnPath,
   permissionOutputIsGranted,

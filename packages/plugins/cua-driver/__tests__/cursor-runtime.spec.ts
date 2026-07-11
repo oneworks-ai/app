@@ -13,6 +13,7 @@ const cursorRuntime = require('../bin/cursor-runtime.cjs') as {
     callTool: (name: string, args: Record<string, unknown>) => Promise<unknown>
     cursorDir?: string
     defaultColor?: string
+    lockOptions?: { lockPort: number; timeoutMs?: number }
     sessionId: string
     strategy?: string
     withLock?: (task: () => Promise<unknown>) => Promise<unknown>
@@ -34,11 +35,11 @@ const cursorRuntime = require('../bin/cursor-runtime.cjs') as {
     sessionId: string
     strategy?: string
   }) => string
-  withCursorActionLock: <T>(
+    withCursorActionLock: <T>(
     task: () => Promise<T>,
     options: { lockHost?: string; lockPort: number; timeoutMs?: number }
   ) => Promise<T>
-}
+  }
 
 const getAvailablePort = () => new Promise<number>((resolvePort, rejectPort) => {
   const server = createServer()
@@ -79,7 +80,7 @@ describe('cua session cursor runtime', () => {
     })).toBe('#AABBCC')
   })
 
-  it('generates the session SVG and atomically applies its style before every pointer action', async () => {
+  it('configures direct motion once and atomically applies session style before every pointer action', async () => {
     const cursorDir = await mkdtemp(join(tmpdir(), 'oneworks-session-cursor-'))
     const events: Array<{ args?: Record<string, unknown>; name: string }> = []
     const controller = cursorRuntime.createSessionCursorController({
@@ -103,17 +104,29 @@ describe('cua session cursor runtime', () => {
         source: 'agent'
       }))
       await controller.callTool('click', { element_index: 4 })
+      await controller.callTool('click', { element_index: 5 })
 
       expect(events.map(event => event.name)).toEqual([
+        'lock:start',
+        'set_agent_cursor_motion',
+        'set_agent_cursor_style',
+        'click',
+        'lock:end',
         'lock:start',
         'set_agent_cursor_style',
         'click',
         'lock:end'
       ])
-      const imagePath = events[1].args?.image_path
+      expect(events[1].args).toEqual({
+        dwell_after_click_ms: 125,
+        glide_duration_ms: 180,
+        idle_hide_ms: 1500,
+        turn_radius: 1
+      })
+      const imagePath = events[2].args?.image_path
       expect(imagePath).toEqual(expect.stringContaining('625bf6.svg'))
       await expect(readFile(imagePath as string, 'utf8')).resolves.toContain('fill="#625BF6"')
-      expect(events[1].args).toEqual({
+      expect(events[2].args).toEqual({
         bloom_color: '#625BF6',
         image_path: imagePath
       })
@@ -160,6 +173,32 @@ describe('cua session cursor runtime', () => {
     await controller.callTool('get_window_state', { pid: 42 })
     expect(calls).toEqual(['get_window_state'])
     expect(locked).toBe(false)
+  })
+
+  it('injects session motion once when the first two pointer actions arrive concurrently', async () => {
+    const lockPort = await getAvailablePort()
+    const cursorDir = await mkdtemp(join(tmpdir(), 'oneworks-concurrent-cursor-'))
+    const calls: string[] = []
+    const controller = cursorRuntime.createSessionCursorController({
+      sessionId: 'session-concurrent',
+      cursorDir,
+      lockOptions: { lockPort, timeoutMs: 1000 },
+      async callTool(name) {
+        calls.push(name)
+        return { structuredContent: { ok: true } }
+      }
+    })
+    try {
+      await Promise.all([
+        controller.callTool('click', { element_index: 4 }),
+        controller.callTool('click', { element_index: 5 })
+      ])
+      expect(calls.filter(name => name === 'set_agent_cursor_motion')).toHaveLength(1)
+      expect(calls.filter(name => name === 'set_agent_cursor_style')).toHaveLength(2)
+      expect(calls.filter(name => name === 'click')).toHaveLength(2)
+    } finally {
+      await rm(cursorDir, { force: true, recursive: true })
+    }
   })
 
   it('serializes pointer action transactions that share the cross-process lock', async () => {

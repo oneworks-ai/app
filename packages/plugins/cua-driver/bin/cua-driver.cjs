@@ -6,6 +6,7 @@ const process = require('node:process')
 
 const {
   checkPermissions,
+  driverSupportsAgentCursorTurnRadius,
   ensureAgentCursor,
   resolveDriverBinary,
   run,
@@ -74,13 +75,15 @@ function uninstallDriver(args = []) {
 
 function ensureInstalled(options = {}) {
   const existing = resolveDriverBinary()
-  if (existing != null) return existing
+  if (existing != null && driverSupportsAgentCursorTurnRadius(existing)) return existing
 
+  // The installer stages and verifies the replacement before taking its
+  // cross-process lock and stopping the retired Swift daemon.
   const installResult = installDriver(['--no-modify-path'], options)
   if (installResult.status !== 0) exitWith(installResult)
 
   const installed = resolveDriverBinary()
-  if (installed != null) return installed
+  if (installed != null && driverSupportsAgentCursorTurnRadius(installed)) return installed
   console.error('[cua-driver] Installation completed, but no cua-driver binary was found.')
   process.exit(1)
 }

@@ -8,6 +8,14 @@ const { join } = require('node:path')
 const process = require('node:process')
 
 const pointerActionTools = new Set(['click', 'double_click', 'right_click'])
+const directGlideMotion = Object.freeze({
+  dwell_after_click_ms: 125,
+  glide_duration_ms: 180,
+  idle_hide_ms: 1500,
+  // Upstream uses a Dubins planner. Its minimum allowed radius makes the
+  // mandatory entry/exit turns effectively straight instead of wide loops.
+  turn_radius: 1
+})
 const defaultSilver = '#E3E7ED'
 const defaultCursorDir = join(homedir(), 'Library', 'Caches', 'oneworks-cua', 'session-cursors')
 const defaultLockHost = '127.0.0.1'
@@ -164,6 +172,7 @@ function createSessionCursorController(options) {
   })
   let source = options.strategy === 'fixed' ? 'default' : 'automatic'
   const lock = options.withLock ?? withCursorActionLock
+  let motionReady = false
 
   return {
     getState() {
@@ -179,6 +188,10 @@ function createSessionCursorController(options) {
     async callTool(name, args) {
       if (!pointerActionTools.has(name)) return await options.callTool(name, args)
       return await lock(async () => {
+        if (!motionReady) {
+          await options.callTool('set_agent_cursor_motion', directGlideMotion)
+          motionReady = true
+        }
         const imagePath = await materializeCursorSvg({
           color,
           cursorDir: options.cursorDir,
@@ -225,6 +238,7 @@ module.exports = {
   createSessionCursorController,
   cursorBorderColor,
   deriveSessionCursorColor,
+  directGlideMotion,
   materializeCursorSvg,
   normalizeCursorColor,
   pointerActionTools,

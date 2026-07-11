@@ -29,6 +29,12 @@ const wrapper = require('../bin/cua-driver.cjs') as {
       runCaptured: () => { status: number; stdout: string; stderr: string }
     }
   ) => { failureKind: string; granted: boolean }
+  driverSupportsAgentCursorTurnRadius: (
+    driverBinary: string,
+    options: {
+      runCaptured: () => { status: number; stdout: string; stderr: string }
+    }
+  ) => boolean
   findOnPath: (
     name: string,
     options: {
@@ -114,6 +120,26 @@ describe('cua-driver plugin contract', () => {
     expect(wrapper.permissionStateFromOutput('daemon connection failed')).toEqual({
       accessibility: 'unknown',
       screenRecording: 'unknown'
+    })
+    const rustPermissionOutput = JSON.stringify({
+      accessibility: true,
+      screen_recording: true,
+      screen_recording_capturable: true
+    })
+    expect(wrapper.permissionOutputIsGranted(rustPermissionOutput)).toBe(true)
+    expect(wrapper.permissionStateFromOutput(rustPermissionOutput)).toEqual({
+      accessibility: 'granted',
+      screenRecording: 'granted'
+    })
+    const wrongProcessPermissionOutput = JSON.stringify({
+      accessibility: true,
+      screen_recording: true,
+      screen_recording_capturable: false
+    })
+    expect(wrapper.permissionOutputIsGranted(wrongProcessPermissionOutput)).toBe(false)
+    expect(wrapper.permissionStateFromOutput(wrongProcessPermissionOutput)).toEqual({
+      accessibility: 'granted',
+      screenRecording: 'required'
     })
   })
 
@@ -295,11 +321,10 @@ describe('cua-driver plugin contract', () => {
   })
 
   it('prepares and verifies the visible Agent pointer procedurally', () => {
-    const readyOutput = 'cursor: enabled=true glideDurationMs=350 dwellAfterClickMs=125 idleHideMs=1500'
+    const readyOutput = JSON.stringify({ cursors: [], enabled: true })
     const results = [
       { status: 0, stdout: 'cursor: enabled=false glideDurationMs=750 dwellAfterClickMs=400 idleHideMs=8000', stderr: '' },
       { status: 0, stdout: 'cursor: enabled=true', stderr: '' },
-      { status: 0, stdout: readyOutput, stderr: '' },
       { status: 0, stdout: readyOutput, stderr: '' }
     ]
     const calls: Array<{ command: string; args: string[] }> = []
@@ -323,14 +348,6 @@ describe('cua-driver plugin contract', () => {
       },
       {
         command: '/tmp/cua-driver',
-        args: [
-          'call',
-          'set_agent_cursor_motion',
-          '{"dwell_after_click_ms":125,"glide_duration_ms":350,"idle_hide_ms":1500}'
-        ]
-      },
-      {
-        command: '/tmp/cua-driver',
         args: ['call', 'get_agent_cursor_state', '{}']
       }
     ])
@@ -344,7 +361,7 @@ describe('cua-driver plugin contract', () => {
         calls.push(args)
         return {
           status: 0,
-          stdout: 'cursor: enabled=true glideDurationMs=350 dwellAfterClickMs=125 idleHideMs=1500',
+          stdout: JSON.stringify({ cursors: [], enabled: true }),
           stderr: ''
         }
       }
@@ -352,6 +369,23 @@ describe('cua-driver plugin contract', () => {
 
     expect(prepared).toEqual(expect.objectContaining({ changed: false, ready: true }))
     expect(calls).toEqual([['call', 'get_agent_cursor_state', '{}']])
+  })
+
+  it('requires the upstream cursor motion schema to expose turn_radius', () => {
+    expect(wrapper.driverSupportsAgentCursorTurnRadius('/tmp/cua-driver', {
+      runCaptured: () => ({
+        status: 0,
+        stdout: 'input_schema: {"properties":{"turn_radius":{"minimum":1}}}',
+        stderr: ''
+      })
+    })).toBe(true)
+    expect(wrapper.driverSupportsAgentCursorTurnRadius('/tmp/cua-driver', {
+      runCaptured: () => ({
+        status: 0,
+        stdout: 'input_schema: {"properties":{"arc_size":{"minimum":0}}}',
+        stderr: ''
+      })
+    })).toBe(false)
   })
 
   it('never resolves a relative workspace package bin as the real driver', async () => {
