@@ -46,6 +46,7 @@ import {
   createSessionChannelMemoryEnv,
   writeChannelMessageContext
 } from '#~/services/session/channel-context.js'
+import { buildChatMarkdownSystemPrompt } from '#~/services/session/chat-markdown-prompt.js'
 import { applySessionEvent } from '#~/services/session/events.js'
 import {
   canRequestInteraction,
@@ -894,6 +895,7 @@ export async function startAdapterSession(
         : (modelLanguage === 'en' ? 'Please respond in English.' : '请使用中文进行对话。')
       const mergedSystemPrompt = [
         finalSystemPrompt,
+        options.appendSystemPrompt === false ? undefined : buildChatMarkdownSystemPrompt(),
         buildChannelRuntimeSystemPrompt(env),
         seededFromHistory ? runtimeState?.historySeed?.trim() : undefined,
         languagePrompt

@@ -2106,6 +2106,8 @@
     "previewImage": "预览图片",
     "imagePreviewTitle": "图片",
     "imageLoadFailed": "图片加载失败",
+    "videoLoadFailed": "视频加载失败",
+    "audioLoadFailed": "音频加载失败",
     "openImageInBrowser": "在浏览器打开图片",
     "copyImageLink": "复制图片链接",
     "imageLinkCopied": "图片链接已复制",

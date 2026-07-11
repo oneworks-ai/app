@@ -28,6 +28,25 @@ The Web UI can edit global, project, and local configuration sources. The main c
 
 Simple scalar fields can be edited directly. Whole-field collections, JSON objects, and inherited collection entries require an explicit override action before saving to the current source.
 
+## Local Media in Chat Markdown
+
+Local media referenced by an agent response can be previewed safely inside the chat message. Markdown images and ordinary image links render as images; common video and audio links render with controls, fill the available message width, and support seeking. Small images keep their intrinsic size instead of being enlarged. In the shared Web client, playback uses a same-origin launcher route that forwards only to the selected workspace's fixed media endpoint. Access is limited to the current session workspace and One Works artifacts under `/tmp/oneworks-cua`. Other absolute paths, directories, device files, and escaping symlinks are rejected. Remote HTTP(S), anchor, and non-media links keep their existing behavior. A failed media load switches once to a clear fallback link instead of retrying indefinitely.
+
+## Chat Markdown Link Intents
+
+OneWorks uses standard Markdown's optional title field to declare an explicit opening behavior. Links without an intent continue to follow the `messageLinks` configuration.
+
+```md
+[Open inside OneWorks](https://example.com "oneworks:open=internal")
+[Open in the default browser](https://example.com "oneworks:open=external")
+[Open a workspace text file](apps/client/src/App.tsx "oneworks:open=workspace-file")
+```
+
+- `internal` accepts HTTP(S) only and opens in the interaction-panel iframe on Web or webview on Desktop.
+- `external` accepts HTTP(S) only and uses the system default browser on Desktop or a separate browser tab on Web.
+- `workspace-file` accepts only a file inside the current workspace, preferably as a relative path, and opens it in the OneWorks file tab. It does not grant access to arbitrary local files.
+- Intents select the default action but never bypass URL, workspace-path, or local-media proxy security checks. The context menu can still choose another available opening action.
+
 ## Worktree Environment Scripts
 
 Each environment directory can provide:

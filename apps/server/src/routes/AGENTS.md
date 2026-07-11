@@ -12,9 +12,12 @@
 - `module-updates.ts`：运行时模块版本检测与缓存安装 API；业务逻辑放在 `../services/module-updates.ts`。
 - `web-debug.ts`：跨入口浏览器调试 API；只返回 server 管理的调试 runtime 信息，业务逻辑放在 `../services/web-debug/`。
 - `mobile-debug.ts`：移动设备调试 API；Android ADB/scrcpy、iOS WDA、元素树和输入状态放在 `../services/mobile-debug/`。
-- `launcher.ts`：manager role 的 launcher 控制面 API；只挂项目选择、目录浏览、创建目录、启动 workspace server 等 daemon 能力。
+- `launcher.ts`：manager role 的 launcher 控制面 API；除项目选择、目录浏览、创建目录和启动 workspace server 外，共享 Web client 的本地媒体必须经 `launcher-workspace-resource-proxy.ts` 同源转发到已在线 workspace 的固定 resource route，禁止接受任意上游 URL。
 - `static-client.ts`：Web client 静态挂载与 runtime env 注入；manager role 下不要注入 workspace folder，默认入口由 client 导向 `/launcher`。
 - `workspace.ts`：workspace server 自身的文件 / Git / 面板状态 / 活动状态 API；跨 session 生命周期的忙闲判断仍调用 `../services/session/`。
+- `workspace-media-response.ts`：`workspace/resource` 与 `sessions/:id/workspace/resource` 共用的媒体 HTTP 响应层，统一处理 GET / HEAD、单段 Range、206 / 416、长度、inline 与安全响应头；路径授权和 MIME 分类在 `../services/workspace/media.ts`。
+
+聊天本地媒体必须复用上述 resource 链路。普通 workspace route 只允许当前 workspace；只有 session-scoped route 可以额外读取产品认可的 `/tmp/oneworks-cua` artifact 根。不要新增接收任意绝对路径的文件代理，也不要绕过 canonical path、symlink 和 regular-file 检查。
 
 ## Agent Room Route
 

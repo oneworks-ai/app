@@ -11,29 +11,9 @@ import { assertWorkspacePathInsideRealRoot, normalizeWorkspacePath, readGitdirFi
 
 const MAX_WORKSPACE_FILE_BYTES = 2 * 1024 * 1024
 
-const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
-  apng: 'image/apng',
-  avif: 'image/avif',
-  bmp: 'image/bmp',
-  gif: 'image/gif',
-  ico: 'image/x-icon',
-  jpeg: 'image/jpeg',
-  jpg: 'image/jpeg',
-  png: 'image/png',
-  svg: 'image/svg+xml',
-  webp: 'image/webp'
-}
-
 export interface WorkspaceFileContent {
   content: string
   encoding: 'utf-8'
-  path: string
-  size: number
-}
-
-export interface WorkspaceImageResource {
-  filePath: string
-  mimeType: string
   path: string
   size: number
 }
@@ -45,12 +25,6 @@ export interface WorkspacePathEntry {
 }
 
 const utf8Decoder = new TextDecoder('utf-8', { fatal: true })
-
-const getFileExtension = (path: string) => {
-  const fileName = path.split('/').filter(Boolean).at(-1) ?? path
-  const dotIndex = fileName.lastIndexOf('.')
-  return dotIndex <= 0 ? '' : fileName.slice(dotIndex + 1).toLowerCase()
-}
 
 export const resolveWorkspaceEntryPath = async (
   rawPath: string | undefined,
@@ -146,24 +120,6 @@ export const readWorkspaceFile = async (
     content,
     encoding: 'utf-8',
     size: buffer.byteLength
-  }
-}
-
-export const resolveWorkspaceImageResource = async (
-  rawPath: string | undefined,
-  options: { workspaceFolder?: string } = {}
-): Promise<WorkspaceImageResource> => {
-  const { filePath, fileStat, normalizedPath } = await resolveWorkspaceFileEntryPath(rawPath, options)
-  const mimeType = IMAGE_MIME_BY_EXTENSION[getFileExtension(normalizedPath)]
-  if (mimeType == null) {
-    throw badRequest('Workspace resource is not a supported image', { path: rawPath }, 'workspace_resource_not_image')
-  }
-
-  return {
-    filePath,
-    mimeType,
-    path: normalizedPath,
-    size: fileStat.size
   }
 }
 

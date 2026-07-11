@@ -7,12 +7,24 @@ import { CodeBlock } from '#~/components/CodeBlock'
 import { getMarkdownLinkIconMeta } from '#~/utils/link-icons'
 import { isExternalUrl, isLikelyImageUrl } from '#~/utils/link-targets'
 import type { WorkspaceFileLinkTarget } from '#~/utils/link-targets'
+import { parseLocalMediaSourceForWorkspaceRoot } from '#~/utils/local-media'
+import type { LocalMediaKind } from '#~/utils/local-media'
+import { parseMarkdownLinkIntent } from '#~/utils/markdown-link-intent'
+import type { MarkdownLinkIntent } from '#~/utils/markdown-link-intent'
 
 import { MarkdownLinkContextMenu } from './MarkdownLinkContextMenu'
 import { createPlainWorkspaceFileLinkPlugin } from './markdown-content-plugins'
 
 export interface MarkdownImageRenderProps {
   alt?: string
+  src: string
+  title?: string
+}
+
+export interface MarkdownMediaRenderProps {
+  alt?: string
+  kind: LocalMediaKind
+  source: string
   src: string
   title?: string
 }
@@ -24,8 +36,14 @@ interface MarkdownContentProps {
   openLinksInNewTab?: boolean
   renderImage?: (props: MarkdownImageRenderProps) => React.ReactNode
   renderImageLinks?: boolean
+  renderMedia?: (props: MarkdownMediaRenderProps) => React.ReactNode
+  resolveLocalMediaUrl?: (path: string) => string
   workspaceRootPath?: string
-  onLinkClick?: (href: string, event: React.MouseEvent<HTMLAnchorElement>) => void
+  onLinkClick?: (
+    href: string,
+    event: React.MouseEvent<HTMLAnchorElement>,
+    intent?: MarkdownLinkIntent
+  ) => void
   onOpenUrlInAppBrowser?: (url: string, title?: string) => void
   onOpenWorkspaceFileLink?: (target: WorkspaceFileLinkTarget) => void
 }
@@ -68,6 +86,12 @@ const getNodeText = (node: React.ReactNode): string => {
   return ''
 }
 
+const MARKDOWN_LINK_INTENT_ICONS: Record<MarkdownLinkIntent, string> = {
+  external: 'open_in_new',
+  internal: 'web_asset',
+  'workspace-file': 'draft'
+}
+
 export function MarkdownContent({
   content,
   enableLinkContextMenu = false,
@@ -78,6 +102,8 @@ export function MarkdownContent({
   openLinksInNewTab = false,
   renderImage,
   renderImageLinks = false,
+  renderMedia,
+  resolveLocalMediaUrl,
   workspaceRootPath
 }: MarkdownContentProps) {
   const remarkPlugins = React.useMemo(() => {
@@ -96,10 +122,28 @@ export function MarkdownContent({
           blockquote({ node, ...props }: any) {
             return <blockquote {...props} {...getSourcePositionProps(node)} />
           },
-          a({ href, children, node: _node, ...props }: any) {
+          a({ href, children, node: _node, title, ...props }: any) {
             const linkHref = typeof href === 'string' ? href : ''
             const linkText = getNodeText(children).trim()
-            if (renderImageLinks && linkHref !== '' && isLikelyImageUrl(linkHref)) {
+            const linkIntent = parseMarkdownLinkIntent(title)
+            const localMedia = parseLocalMediaSourceForWorkspaceRoot(linkHref, workspaceRootPath)
+            if (
+              linkIntent == null &&
+              localMedia != null &&
+              renderMedia != null &&
+              resolveLocalMediaUrl != null
+            ) {
+              const title = linkText !== '' && linkText !== linkHref ? linkText : undefined
+              return renderMedia({
+                alt: linkText !== '' ? linkText : linkHref,
+                kind: localMedia.kind,
+                source: localMedia.path,
+                src: resolveLocalMediaUrl(localMedia.path),
+                title
+              })
+            }
+
+            if (linkIntent == null && renderImageLinks && linkHref !== '' && isLikelyImageUrl(linkHref)) {
               const title = linkText !== '' && linkText !== linkHref ? linkText : undefined
               if (renderImage != null) {
                 return renderImage({
@@ -110,22 +154,26 @@ export function MarkdownContent({
               }
             }
 
-            const shouldOpenInNewTab = openLinksInNewTab && linkHref !== '' && isExternalUrl(linkHref)
+            const shouldOpenInNewTab = linkIntent === 'external' ||
+              (linkIntent == null && openLinksInNewTab && linkHref !== '' && isExternalUrl(linkHref))
             const iconMeta = linkHref !== '' ? getMarkdownLinkIconMeta(linkHref) : null
             const linkClassName = [
               props.className,
               iconMeta != null ? 'markdown-link' : undefined,
-              iconMeta != null ? `markdown-link--${iconMeta.kind}` : undefined
+              iconMeta != null ? `markdown-link--${iconMeta.kind}` : undefined,
+              linkIntent != null ? `markdown-link--intent-${linkIntent}` : undefined
             ].filter(Boolean).join(' ')
             const linkElement = (
               <a
                 {...props}
                 className={linkClassName === '' ? undefined : linkClassName}
+                data-oneworks-open={linkIntent}
                 href={href}
+                title={linkIntent == null && typeof title === 'string' ? title : undefined}
                 target={shouldOpenInNewTab ? '_blank' : undefined}
                 rel={shouldOpenInNewTab ? 'noreferrer' : undefined}
                 onClick={(event) => {
-                  if (linkHref !== '') onLinkClick?.(linkHref, event)
+                  if (linkHref !== '') onLinkClick?.(linkHref, event, linkIntent)
                 }}
               >
                 {iconMeta != null && (iconMeta.imageUrl != null
@@ -149,6 +197,14 @@ export function MarkdownContent({
                     </span>
                   ))}
                 {children}
+                {linkIntent != null && (
+                  <span
+                    className='material-symbols-rounded markdown-link__intent-icon'
+                    aria-hidden='true'
+                  >
+                    {MARKDOWN_LINK_INTENT_ICONS[linkIntent]}
+                  </span>
+                )}
               </a>
             )
 
@@ -156,6 +212,7 @@ export function MarkdownContent({
               ? (
                 <MarkdownLinkContextMenu
                   href={linkHref}
+                  intent={linkIntent}
                   label={linkText}
                   onOpenUrlInAppBrowser={onOpenUrlInAppBrowser}
                   onOpenWorkspaceFile={onOpenWorkspaceFileLink}
@@ -168,6 +225,21 @@ export function MarkdownContent({
           },
           img({ src, alt, title, node: _node, ...props }: any) {
             const imageSrc = typeof src === 'string' ? src : ''
+            const localMedia = parseLocalMediaSourceForWorkspaceRoot(imageSrc, workspaceRootPath)
+            if (
+              localMedia?.kind === 'image' &&
+              renderMedia != null &&
+              resolveLocalMediaUrl != null
+            ) {
+              return renderMedia({
+                alt: typeof alt === 'string' ? alt : undefined,
+                kind: 'image',
+                source: localMedia.path,
+                src: resolveLocalMediaUrl(localMedia.path),
+                title: typeof title === 'string' ? title : undefined
+              })
+            }
+
             if (imageSrc !== '' && renderImage != null) {
               return renderImage({
                 alt: typeof alt === 'string' ? alt : undefined,

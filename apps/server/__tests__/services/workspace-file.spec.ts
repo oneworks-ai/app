@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer'
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -7,21 +7,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { HttpError } from '#~/utils/http.js'
 
-import { readWorkspaceFile, resolveWorkspaceImageResource, updateWorkspaceFile } from '#~/services/workspace/file.js'
+import { readWorkspaceFile, updateWorkspaceFile } from '#~/services/workspace/file.js'
+import { resolveWorkspaceImageResource, resolveWorkspaceMediaResource } from '#~/services/workspace/media.js'
 
 describe('workspace file service', () => {
   let externalDir: string
+  let productArtifactDir: string
   let workspaceDir: string
 
   beforeEach(async () => {
     workspaceDir = await mkdtemp(join(tmpdir(), 'ow-workspace-file-'))
     externalDir = await mkdtemp(join(tmpdir(), 'ow-workspace-file-external-'))
+    await mkdir('/tmp/oneworks-cua', { recursive: true })
+    productArtifactDir = await mkdtemp('/tmp/oneworks-cua/ow-workspace-media-')
     vi.stubEnv('__ONEWORKS_PROJECT_WORKSPACE_FOLDER__', workspaceDir)
 
     await mkdir(join(workspaceDir, 'src'), { recursive: true })
     await mkdir(join(workspaceDir, 'assets'), { recursive: true })
     await writeFile(join(workspaceDir, 'src', 'index.ts'), 'export const value = 1\n')
     await writeFile(join(workspaceDir, 'assets', 'logo.png'), Buffer.from([137, 80, 78, 71]))
+    await writeFile(join(workspaceDir, 'assets', 'clip.mp4'), Buffer.from([0, 1, 2, 3]))
+    await writeFile(join(workspaceDir, 'assets', 'sound.mp3'), Buffer.from([4, 5, 6, 7]))
+    await writeFile(join(productArtifactDir, 'final screenshot.png'), Buffer.from([8, 9, 10, 11]))
     await writeFile(join(workspaceDir, 'binary.dat'), Buffer.from([0, 1, 2, 3]))
     await writeFile(join(externalDir, 'outside.ts'), 'export const outside = true\n')
   })
@@ -30,6 +37,7 @@ describe('workspace file service', () => {
     vi.unstubAllEnvs()
     await rm(workspaceDir, { recursive: true, force: true })
     await rm(externalDir, { recursive: true, force: true })
+    await rm(productArtifactDir, { recursive: true, force: true })
   })
 
   it('reads UTF-8 files relative to the workspace root', async () => {
@@ -73,8 +81,9 @@ describe('workspace file service', () => {
   })
 
   it('resolves image resources for streaming', async () => {
-    await expect(resolveWorkspaceImageResource('assets/logo.png')).resolves.toEqual({
-      filePath: join(workspaceDir, 'assets', 'logo.png'),
+    const workspaceRealPath = await realpath(workspaceDir)
+    await expect(resolveWorkspaceImageResource('assets/logo.png')).resolves.toMatchObject({
+      filePath: join(workspaceRealPath, 'assets', 'logo.png'),
       mimeType: 'image/png',
       path: 'assets/logo.png',
       size: 4
@@ -88,6 +97,94 @@ describe('workspace file service', () => {
         code: 'workspace_resource_not_image'
       } satisfies Partial<HttpError>
     )
+  })
+
+  it('resolves image, video, and audio media with canonical paths and MIME types', async () => {
+    const workspaceRealPath = await realpath(workspaceDir)
+
+    await expect(resolveWorkspaceMediaResource('assets/logo.png')).resolves.toMatchObject({
+      filePath: join(workspaceRealPath, 'assets', 'logo.png'),
+      mimeType: 'image/png',
+      size: 4
+    })
+    await expect(resolveWorkspaceMediaResource('assets/clip.mp4')).resolves.toMatchObject({
+      filePath: join(workspaceRealPath, 'assets', 'clip.mp4'),
+      mimeType: 'video/mp4',
+      size: 4
+    })
+    await expect(resolveWorkspaceMediaResource('assets/sound.mp3')).resolves.toMatchObject({
+      filePath: join(workspaceRealPath, 'assets', 'sound.mp3'),
+      mimeType: 'audio/mpeg',
+      size: 4
+    })
+  })
+
+  it('allows only session-enabled media under the product artifact root', async () => {
+    const artifactPath = join(productArtifactDir, 'final screenshot.png')
+
+    await expect(resolveWorkspaceMediaResource(artifactPath, {
+      allowProductArtifactPaths: true
+    })).resolves.toMatchObject({
+      filePath: await realpath(artifactPath),
+      mimeType: 'image/png',
+      path: artifactPath,
+      size: 4
+    })
+    await expect(resolveWorkspaceMediaResource(artifactPath)).rejects.toMatchObject(
+      {
+        status: 400,
+        code: 'workspace_media_path_not_authorized'
+      } satisfies Partial<HttpError>
+    )
+  })
+
+  it('rejects unauthorized, missing, directory, and escaping artifact paths', async () => {
+    const missingPath = join(productArtifactDir, 'missing.mp4')
+    const outsideMedia = join(externalDir, 'outside.mp4')
+    await writeFile(outsideMedia, Buffer.from([1, 2, 3]))
+    await symlink(outsideMedia, join(productArtifactDir, 'outside-link.mp4'), 'file')
+
+    await expect(resolveWorkspaceMediaResource('/dev/null', {
+      allowProductArtifactPaths: true
+    })).rejects.toMatchObject(
+      {
+        status: 400,
+        code: 'workspace_media_path_not_authorized'
+      } satisfies Partial<HttpError>
+    )
+    await expect(resolveWorkspaceMediaResource(missingPath, {
+      allowProductArtifactPaths: true
+    })).rejects.toMatchObject(
+      {
+        status: 404,
+        code: 'workspace_media_not_found'
+      } satisfies Partial<HttpError>
+    )
+    await expect(resolveWorkspaceMediaResource(productArtifactDir, {
+      allowProductArtifactPaths: true
+    })).rejects.toMatchObject(
+      {
+        status: 400,
+        code: 'workspace_media_path_not_file'
+      } satisfies Partial<HttpError>
+    )
+    await expect(resolveWorkspaceMediaResource(join(productArtifactDir, 'outside-link.mp4'), {
+      allowProductArtifactPaths: true
+    })).rejects.toMatchObject(
+      {
+        status: 400,
+        code: 'workspace_media_path_escapes_authorized_root'
+      } satisfies Partial<HttpError>
+    )
+  })
+
+  it('streams internal symlinks through their canonical target path', async () => {
+    await symlink('assets/clip.mp4', join(workspaceDir, 'clip-link.mp4'), 'file')
+
+    await expect(resolveWorkspaceMediaResource('clip-link.mp4')).resolves.toMatchObject({
+      filePath: await realpath(join(workspaceDir, 'assets', 'clip.mp4')),
+      mimeType: 'video/mp4'
+    })
   })
 
   it('rejects paths outside the workspace root', async () => {

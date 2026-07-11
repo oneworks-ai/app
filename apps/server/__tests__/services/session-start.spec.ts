@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getDb } from '#~/db/index.js'
 import { resolveSessionRuntimeStoreRoot } from '#~/services/runtime-store/session-control.js'
+import { buildChatMarkdownSystemPrompt } from '#~/services/session/chat-markdown-prompt.js'
 import { processUserMessage, resetSessionServiceState, startAdapterSession } from '#~/services/session/index.js'
 import {
   adapterSessionStore,
@@ -1043,7 +1044,7 @@ describe('startAdapterSession', () => {
       type: 'create'
     }))
     expect(mocks.run.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
-      systemPrompt: 'generated prompt\n\n历史上下文'
+      systemPrompt: `generated prompt\n\n${buildChatMarkdownSystemPrompt()}\n\n历史上下文`
     }))
     expect(updateSessionRuntimeState).toHaveBeenCalledWith('sess-1', { historySeedPending: false })
     expect(runtime.config?.seededFromHistory).toBe(true)

@@ -9,8 +9,12 @@ const escapeMarkdownLinkHref = (value: string) => {
   return value.replace(/\\/g, '\\\\')
 }
 
-export const buildMarkdownLinkText = ({ href, label }: { href: string; label: string }) =>
-  `[${escapeMarkdownLinkLabel(label || href)}](${escapeMarkdownLinkHref(href)})`
+const escapeMarkdownLinkTitle = (value: string) => value.replace(/([\\"])/g, '\\$1')
+
+export const buildMarkdownLinkText = ({ href, label, title }: { href: string; label: string; title?: string }) =>
+  `[${escapeMarkdownLinkLabel(label || href)}](${escapeMarkdownLinkHref(href)}${
+    title == null || title === '' ? '' : ` "${escapeMarkdownLinkTitle(title)}"`
+  })`
 
 export const getExternalLinkUrl = (href: string) => {
   const trimmed = href.trim()
@@ -45,6 +49,11 @@ export const getAppBrowserLinkUrl = (href: string) => {
 
 export const openExternalLink = (url: string) => {
   if (typeof window === 'undefined' || url === '') return
+
+  if (window.oneworksDesktop?.openExternalUrl != null) {
+    void window.oneworksDesktop.openExternalUrl(url)
+    return
+  }
 
   const opened = window.open(url, '_blank', 'noopener,noreferrer')
   if (opened == null) {

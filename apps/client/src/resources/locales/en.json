@@ -2105,6 +2105,8 @@
     "previewImage": "Preview image",
     "imagePreviewTitle": "Image",
     "imageLoadFailed": "Failed to load image",
+    "videoLoadFailed": "Failed to load video",
+    "audioLoadFailed": "Failed to load audio",
     "openImageInBrowser": "Open image in browser",
     "copyImageLink": "Copy image link",
     "imageLinkCopied": "Image link copied",

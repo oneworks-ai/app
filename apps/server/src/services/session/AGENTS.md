@@ -5,6 +5,7 @@
 - events.ts：会话事件落库与状态派生，负责从消息中提取摘要并更新会话元信息
 - interaction.ts：交互请求/响应服务，负责等待用户输入、超时处理与 external session 交互闭环
 - notification.ts：会话状态通知，基于 config 子域装载的统一配置决定是否发送系统通知
+- chat-markdown-prompt.ts：OneWorks 聊天消息的稳定 Markdown 展示协议，向 agent 注入显式内部网页、外部浏览器和 workspace 文件链接约定
 - runtime.ts：会话运行态仓库，统一维护 socket、消息缓存、交互等待队列与广播
 
 边界约定：session 子域统一承载所有会话生命周期与运行态逻辑；routes、websocket、channels 只能调用对外服务，不直接操作内部 store。

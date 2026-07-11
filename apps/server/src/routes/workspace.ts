@@ -1,6 +1,7 @@
 import { createReadStream } from 'node:fs'
 
 import Router from '@koa/router'
+import type { Context } from 'koa'
 
 import { getWorkspaceGitState, listWorkspaceGitBranches, listWorkspaceGitWorktrees } from '#~/services/git/index.js'
 import { getWorkspaceActivitySnapshot } from '#~/services/session/index.js'
@@ -9,11 +10,14 @@ import {
   revealWorkspacePathInFileManager
 } from '#~/services/workspace/file-manager.js'
 import { listWorkspaceFileOpeners, openWorkspaceFileInExternalOpener } from '#~/services/workspace/file-opener.js'
-import { readWorkspaceFile, resolveWorkspaceImageResource, updateWorkspaceFile } from '#~/services/workspace/file.js'
+import { readWorkspaceFile, updateWorkspaceFile } from '#~/services/workspace/file.js'
+import { resolveWorkspaceMediaResource } from '#~/services/workspace/media.js'
 import { getWorkspacePanelState, updateWorkspacePanelState } from '#~/services/workspace/panel-state.js'
 import { listWorkspaceTree } from '#~/services/workspace/tree.js'
 import { resolveWorkspaceOpenerIconResource } from '#~/services/workspace/workspace-opener-icons.js'
 import { openWorkspaceInExternalOpener } from '#~/services/workspace/workspace-opener.js'
+
+import { sendWorkspaceMediaResponse } from './workspace-media-response'
 
 export function workspaceRouter(): Router {
   const router = new Router()
@@ -80,16 +84,14 @@ export function workspaceRouter(): Router {
     ctx.body = await revealWorkspacePathInFileManager(path)
   })
 
-  router.get('/resource', async (ctx) => {
+  const handleWorkspaceResource = async (ctx: Context) => {
     const { path } = ctx.query as { path?: string }
-    const resource = await resolveWorkspaceImageResource(path)
-    ctx.state.skipApiEnvelope = true
-    ctx.type = resource.mimeType
-    ctx.length = resource.size
-    ctx.set('Cache-Control', 'private, no-cache')
-    ctx.set('X-Content-Type-Options', 'nosniff')
-    ctx.body = createReadStream(resource.filePath)
-  })
+    const resource = await resolveWorkspaceMediaResource(path)
+    await sendWorkspaceMediaResponse(ctx, resource)
+  }
+
+  router.get('/resource', handleWorkspaceResource)
+  router.head('/resource', handleWorkspaceResource)
 
   router.put('/file', async (ctx) => {
     const { content, path } = ctx.request.body as { content?: unknown; path?: string }

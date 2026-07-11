@@ -1,6 +1,5 @@
-import { createReadStream } from 'node:fs'
-
 import Router from '@koa/router'
+import type { Context } from 'koa'
 
 import type {
   ChatMessage,
@@ -73,9 +72,12 @@ import {
 import { disposeTerminalSession } from '#~/services/terminal/index.js'
 import { revealWorkspacePathInFileManager } from '#~/services/workspace/file-manager.js'
 import { openWorkspaceFileInExternalOpener } from '#~/services/workspace/file-opener.js'
-import { readWorkspaceFile, resolveWorkspaceImageResource, updateWorkspaceFile } from '#~/services/workspace/file.js'
+import { readWorkspaceFile, updateWorkspaceFile } from '#~/services/workspace/file.js'
+import { resolveWorkspaceMediaResource } from '#~/services/workspace/media.js'
 import { listWorkspaceTree } from '#~/services/workspace/tree.js'
 import { badRequest, conflict, methodNotAllowed, notFound } from '#~/utils/http.js'
+
+import { sendWorkspaceMediaResponse } from './workspace-media-response'
 
 export function sessionsRouter(): Router {
   const router = new Router()
@@ -516,18 +518,19 @@ export function sessionsRouter(): Router {
     ctx.body = await revealWorkspacePathInFileManager(path, { workspaceFolder })
   })
 
-  router.get('/:id/workspace/resource', async (ctx) => {
+  const handleSessionWorkspaceResource = async (ctx: Context) => {
     const { id } = ctx.params as { id: string }
     const { path } = ctx.query as { path?: string }
     const workspaceFolder = await resolveSessionWorkspaceFolder(id)
-    const resource = await resolveWorkspaceImageResource(path, { workspaceFolder })
-    ctx.state.skipApiEnvelope = true
-    ctx.type = resource.mimeType
-    ctx.length = resource.size
-    ctx.set('Cache-Control', 'private, no-cache')
-    ctx.set('X-Content-Type-Options', 'nosniff')
-    ctx.body = createReadStream(resource.filePath)
-  })
+    const resource = await resolveWorkspaceMediaResource(path, {
+      allowProductArtifactPaths: true,
+      workspaceFolder
+    })
+    await sendWorkspaceMediaResponse(ctx, resource)
+  }
+
+  router.get('/:id/workspace/resource', handleSessionWorkspaceResource)
+  router.head('/:id/workspace/resource', handleSessionWorkspaceResource)
 
   router.put('/:id/workspace/file', async (ctx) => {
     const { id } = ctx.params as { id: string }

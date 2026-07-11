@@ -10,6 +10,7 @@ import type {
 
 import { createApiUrl, fetchApiJson, jsonHeaders } from './base'
 import type { ApiOkResponse } from './types'
+import { routeWorkspaceResourceUrlThroughLauncher } from './workspace-resource'
 
 export interface WorkspaceTreeEntry {
   absolutePath: string
@@ -124,7 +125,7 @@ export async function revealWorkspacePathInFileManager(path: string): Promise<Wo
 export function getWorkspaceResourceUrl(path: string) {
   const url = createApiUrl('/api/workspace/resource')
   url.searchParams.set('path', path)
-  return url.toString()
+  return routeWorkspaceResourceUrlThroughLauncher(url, { path }).toString()
 }
 
 export async function updateWorkspaceFile(path: string, content: string): Promise<WorkspaceFileContent> {

@@ -14,6 +14,7 @@
 
 ## 常见落点
 
+- `MarkdownContent.tsx` / `markdown-content-plugins.ts`：跨聊天、通知和文档预览复用的 Markdown AST 与节点渲染入口。本地媒体分类和 `oneworks:open=internal|external|workspace-file` 链接意图解析在这里完成，但具体打开动作与 server proxy URL 由调用方注入；聊天页的图片预览、视频 / 音频 controls、失败 fallback 和链接打开策略落在 `chat/messages/MessageItem.tsx`、`MessageImage.tsx`、`MessageMedia.tsx`，不要让通用 Markdown 组件直接读取 runtime server 配置。
 - `NavRail.tsx` / `NavRail.scss`：桌面端左侧 rail、折叠窗口栏、底部更多菜单和 compact drawer。
 - `nav-rail-items.tsx`：主导航页面入口的唯一数据源。新增或调整固定展示在侧边栏顶部的真实页面入口时先改这里，再让 `NavRail`、compact drawer 和嵌入 `SidebarHeader` 消费同一份结果；不要在某个视图里单独硬编码一份入口列表。`设置`、`已归档会话` 这类次级全局页面入口属于底部 More 菜单，不放进主导航入口列表。插件市场只覆盖 `/plugins` 与 `/plugins/:scope`，插件注册的 `/plugins/:scope/:routeId` 入口由对应 plugin nav item 自己激活。
 - `Sidebar.tsx` / `sidebar/SidebarHeader.tsx`：主导航 quick links 承载会话、定时任务和插件的唯一父入口，不要再额外渲染同语义 primary action。父入口按路由变形：创建态显示创建中的文案并激活，具体子项详情态显示创建动作但不激活，其他页面显示列表 / 市场文案且右侧 action 才提供独立创建按钮。

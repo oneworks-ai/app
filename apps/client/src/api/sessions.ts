@@ -17,6 +17,7 @@ import type {
 import { createApiUrl, fetchApiJson, fetchApiJsonOrThrow, jsonHeaders } from './base'
 import type { ApiOkResponse, ApiRemoveResponse, SessionMessagesResponse } from './types'
 import type { WorkspaceFileContent, WorkspacePathRevealResponse, WorkspaceTreeEntry } from './workspace'
+import { routeWorkspaceResourceUrlThroughLauncher } from './workspace-resource'
 
 export async function listSessions(
   filter: 'active' | 'archived' | 'all' = 'active'
@@ -387,9 +388,9 @@ export async function revealSessionWorkspacePathInFileManager(
 }
 
 export function getSessionWorkspaceResourceUrl(id: string, path: string) {
-  const url = createApiUrl(`/api/sessions/${id}/workspace/resource`)
+  const url = createApiUrl(`/api/sessions/${encodeURIComponent(id)}/workspace/resource`)
   url.searchParams.set('path', path)
-  return url.toString()
+  return routeWorkspaceResourceUrlThroughLauncher(url, { path, sessionId: id }).toString()
 }
 
 export async function updateSessionWorkspaceFile(

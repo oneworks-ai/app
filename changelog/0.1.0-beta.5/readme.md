@@ -7,3 +7,4 @@
 - Add the desktop control and demo-video tooling used for AI-native packaged app validation, including system-recorded Electron demos, load timing reports, per-second frames, and documented recording standards.
 - Refine Electron demo-video cursor timing, motion continuity checks, and launcher workspace selection so visual click feedback aligns with the resulting UI transition.
 - Unify development-service lifecycle coordination across worktrees with machine-readable state, operation leases, bounded diagnostics, and shared Electron and Android resource ownership.
+- Safely render agent-produced local images, video, and audio in chat with seek-capable media responses, and add explicit Markdown link intents for the OneWorks panel, the external browser, and workspace files.
