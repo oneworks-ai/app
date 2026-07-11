@@ -72,9 +72,14 @@ describe('relay plugin scoped API', () => {
     })
     expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/api/relay/info'))).toHaveLength(1)
 
-    resolveInfo?.(new Response(JSON.stringify({
-      avatarUrl: 'https://cdn.example.com/relay.png'
-    }), { status: 200 }))
+    resolveInfo?.(
+      new Response(
+        JSON.stringify({
+          avatarUrl: 'https://cdn.example.com/relay.png'
+        }),
+        { status: 200 }
+      )
+    )
     await expect(firstInfo).resolves.toMatchObject({
       body: { avatarUrl: 'https://cdn.example.com/relay.png', online: true },
       status: 200
@@ -91,11 +96,14 @@ describe('relay plugin scoped API', () => {
   })
 
   it('times out service avatar discovery without failing the server list', async () => {
-    vi.stubGlobal('fetch', vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
-      new Promise<Response>((_resolve, reject) => {
-        init?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
-      })
-    ))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+        })
+      )
+    )
     const { apis } = await createPluginHarness({
       enableOfficialCloudflareRelay: false,
       enableOfficialVercelRelay: false,
@@ -114,20 +122,30 @@ describe('relay plugin scoped API', () => {
   }, 6_000)
 
   it('keeps a reachable service online when optional avatar metadata is malformed', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-      avatarUrl: 'not-a-url'
-    }), { status: 200 })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            avatarUrl: 'not-a-url'
+          }),
+          { status: 200 }
+        )
+      )
+    )
     const { apis } = await createPluginHarness({
       enableOfficialCloudflareRelay: false,
       enableOfficialVercelRelay: false,
       servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
     })
 
-    await expect(apis.get('relay')?.handler?.({
-      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
-      method: 'POST',
-      path: 'server-info'
-    })).resolves.toMatchObject({
+    await expect(
+      apis.get('relay')?.handler?.({
+        body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+        method: 'POST',
+        path: 'server-info'
+      })
+    ).resolves.toMatchObject({
       body: { online: true },
       status: 200
     })
@@ -137,9 +155,14 @@ describe('relay plugin scoped API', () => {
     let now = 1_000
     vi.spyOn(Date, 'now').mockImplementation(() => now)
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        avatarUrl: 'https://cdn.example.com/relay.png'
-      }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            avatarUrl: 'https://cdn.example.com/relay.png'
+          }),
+          { status: 200 }
+        )
+      )
       .mockResolvedValueOnce(new Response('Unavailable', { status: 503 }))
     vi.stubGlobal('fetch', fetchMock)
     const { apis } = await createPluginHarness({
@@ -148,11 +171,12 @@ describe('relay plugin scoped API', () => {
       servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
     })
     const handler = apis.get('relay')?.handler
-    const request = () => handler?.({
-      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
-      method: 'POST',
-      path: 'server-info'
-    })
+    const request = () =>
+      handler?.({
+        body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+        method: 'POST',
+        path: 'server-info'
+      })
 
     await expect(request()).resolves.toMatchObject({
       body: { avatarUrl: 'https://cdn.example.com/relay.png', online: true },

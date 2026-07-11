@@ -211,7 +211,7 @@ describe('relay plugin client login callbacks', () => {
     vi.stubGlobal('fetch', directFetch)
 
     const result = await createRelayLoginOptions(
-      { api: { fetch: apiFetch }, scope: 'relay' } as PluginClientContext,
+      { api: { fetch: apiFetch }, scope: 'relay' } as unknown as PluginClientContext,
       { forcePluginHomeRedirect: true, serverId: 'prod' }
     )
 
@@ -248,7 +248,7 @@ describe('relay plugin client login callbacks', () => {
     vi.stubGlobal('fetch', directFetch)
 
     await expect(createRelayLoginOptions(
-      { api: { fetch: apiFetch }, scope: 'relay' } as PluginClientContext,
+      { api: { fetch: apiFetch }, scope: 'relay' } as unknown as PluginClientContext,
       { forcePluginHomeRedirect: true, serverId: 'prod' }
     )).rejects.toMatchObject({
       loginUrl: expect.stringContaining('/login?'),
@@ -272,7 +272,7 @@ describe('relay plugin client login callbacks', () => {
     )
 
     await expect(postRelayLoginJson(
-      { api: { fetch: apiFetch } } as PluginClientContext,
+      { api: { fetch: apiFetch } } as unknown as PluginClientContext,
       'prod',
       'password-login',
       { loginId: 'owner', password: 'wrong' }
@@ -348,7 +348,7 @@ describe('relay plugin client login callbacks', () => {
     })
 
     await completeRelayLoginCallback(
-      { api: { fetch: apiFetch } } as PluginClientContext,
+      { api: { fetch: apiFetch } } as unknown as PluginClientContext,
       { serverId: 'local', token: 'demo-token' },
       onLoginComplete
     )

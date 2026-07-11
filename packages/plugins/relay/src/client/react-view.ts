@@ -4604,7 +4604,9 @@ const ServersPage = (props: {
               const presence = online == null ? 'checking' : online ? 'online' : 'offline'
               const presenceAccessibleLabel = online == null
                 ? '服务状态检查中'
-                : online ? '服务在线' : '服务不可用'
+                : online
+                ? '服务在线'
+                : '服务不可用'
               const presenceLabel = online == null
                 ? '正在检查服务状态'
                 : [
@@ -4715,7 +4717,7 @@ const ServersPage = (props: {
                             remoteBaseUrl: address
                           })
                         }
-                        })
+                      })
                   )
               )
             }),

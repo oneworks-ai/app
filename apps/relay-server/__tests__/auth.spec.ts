@@ -153,6 +153,10 @@ const readLoginConfig = (html: string) => {
   expect(match?.[1]).toBeDefined()
   return JSON.parse(match?.[1] ?? '{}') as {
     inviteLoginUrl?: string
+    loginMethods?: {
+      default?: string
+      enabled?: string[]
+    }
     locale?: 'en' | 'zh-CN'
     messages?: {
       confirmPasswordPlaceholder?: string
@@ -845,7 +849,7 @@ describe('relay server auth routes', () => {
     })
     expect(config.inviteLoginUrl).toBe('/api/auth/invite-login')
     expect(config.locale).toBe('en')
-    expect(config.loginMethods.default).toBe('passkey')
+    expect(config.loginMethods?.default).toBe('passkey')
     expect(config.passwordLoginUrl).toBe('/api/auth/password-login')
     expect(body).toContain(encodeURIComponent('https://relay.example/login/complete'))
     expect(config.redirectUri).toContain('oneworks://relay/auth')

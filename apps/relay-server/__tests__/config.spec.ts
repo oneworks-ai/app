@@ -115,11 +115,15 @@ describe('relay server config', () => {
   })
 
   it('accepts only HTTP service avatar URLs', () => {
-    expect(parseRelayServerArgs([], {
-      ONEWORKS_RELAY_AVATAR_URL: 'https://cdn.example.com/relay.png'
-    }).avatarUrl).toBe('https://cdn.example.com/relay.png')
-    expect(parseRelayServerArgs([], {
-      ONEWORKS_RELAY_AVATAR_URL: 'file:///tmp/relay.png'
-    }).avatarUrl).toBeUndefined()
+    expect(
+      parseRelayServerArgs([], {
+        ONEWORKS_RELAY_AVATAR_URL: 'https://cdn.example.com/relay.png'
+      }).avatarUrl
+    ).toBe('https://cdn.example.com/relay.png')
+    expect(
+      parseRelayServerArgs([], {
+        ONEWORKS_RELAY_AVATAR_URL: 'file:///tmp/relay.png'
+      }).avatarUrl
+    ).toBeUndefined()
   })
 })
