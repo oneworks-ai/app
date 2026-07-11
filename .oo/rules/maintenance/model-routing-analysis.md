@@ -55,7 +55,7 @@
 
 六个模型各使用一个干净独立 worktree、相同 prompt 和 medium reasoning，只读完成三类五分钟内任务：
 
-1. 从根 `AGENTS.md` 提取严格的 dev-start Fast Path。
+1. 从根 `AGENTS.md` 提取严格的 dev-service Fast Path。
 2. 理解真实前端页面的 header 组合与最小扩展点。
 3. 审阅 `scripts/dev-start` 的健康服务复用和并发端口分配，并报告可证实问题或残余风险。
 

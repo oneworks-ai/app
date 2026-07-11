@@ -19,6 +19,45 @@ describe('scripts cli', () => {
     })
   })
 
+  it('dispatches shared dev-service status without starting a target', async () => {
+    const runDevService = vi.fn(async () => undefined)
+    const cli = createScriptsCli({
+      runDevService
+    })
+
+    await cli.parseAsync(['node', 'oneworks-dev', 'dev-service', 'status', 'relay', '--json'])
+
+    expect(runDevService).toHaveBeenCalledWith({
+      action: 'status',
+      json: true,
+      target: 'relay'
+    })
+  })
+
+  it('dispatches a managed service restart with workspace context', async () => {
+    const runDevService = vi.fn(async () => undefined)
+    const cli = createScriptsCli({
+      runDevService
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'dev-service',
+      'restart',
+      'electron',
+      '--workspace',
+      '--json'
+    ])
+
+    expect(runDevService).toHaveBeenCalledWith({
+      action: 'restart',
+      json: true,
+      target: 'electron',
+      workspace: true
+    })
+  })
+
   it('dispatches adapter e2e run through the shared suite', async () => {
     const runAdapterSuite = vi.fn(async () => [])
     const cli = createScriptsCli({
@@ -106,7 +145,9 @@ describe('scripts cli', () => {
       nextActions: [],
       ok: true,
       phase: 'ready' as const,
+      pid: 12345,
       port: 9333,
+      processFingerprint: 'electron-process-fingerprint',
       targetCount: 1,
       targets: [],
       userDataDir: '/tmp/ow-desktop-control'

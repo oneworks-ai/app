@@ -7,6 +7,7 @@ import path from 'node:path'
 import process from 'node:process'
 
 import { getChromeDebugTargets } from './chrome-debug'
+import { processFingerprint, terminateTrackedPid } from './dev-start/process-identity'
 import { DEFAULT_DESKTOP_APP_PATH } from './release-verify'
 
 const DEFAULT_DESKTOP_CDP_ADDRESS = '127.0.0.1'
@@ -22,6 +23,7 @@ export interface DesktopCdpLaunchInput {
   json?: boolean
   port?: number
   recordableLauncherWindow?: boolean
+  signal?: AbortSignal
   stdout?: Pick<NodeJS.WriteStream, 'write'>
   userDataDir?: string
   waitMs?: number
@@ -55,8 +57,9 @@ export interface DesktopCdpLaunchResult {
   nextActions: string[]
   ok: boolean
   phase: 'ready'
-  pid?: number
+  pid: number
   port: number
+  processFingerprint: string
   targetCount: number
   targets: Awaited<ReturnType<typeof getChromeDebugTargets>>
   userDataDir: string
@@ -82,8 +85,24 @@ const buildAgentCommandHint = (input: {
   }
 }
 
-const sleep = async (ms: number) => {
-  await new Promise(resolve => setTimeout(resolve, ms))
+const abortError = () => new Error('Desktop CDP launch was aborted.')
+
+const sleep = async (ms: number, signal?: AbortSignal) => {
+  await new Promise<void>((resolve, reject) => {
+    if (signal?.aborted === true) {
+      reject(abortError())
+      return
+    }
+    const onAbort = () => {
+      clearTimeout(timeout)
+      reject(abortError())
+    }
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
 }
 
 const getFreePort = async () => {
@@ -162,12 +181,14 @@ const createDesktopCdpUserDataDir = async () => (
 
 const waitForDesktopCdpTargets = async (input: {
   port: number
+  signal?: AbortSignal
   waitMs: number
 }) => {
   const startedAt = Date.now()
   let lastError: unknown
   let lastTargetCount = 0
   while (Date.now() - startedAt <= input.waitMs) {
+    if (input.signal?.aborted === true) throw abortError()
     try {
       const targets = await getChromeDebugTargets(input.port)
       lastTargetCount = targets.length
@@ -189,7 +210,7 @@ const waitForDesktopCdpTargets = async (input: {
     } catch (error) {
       lastError = error
     }
-    await sleep(DEFAULT_DESKTOP_CDP_POLL_MS)
+    await sleep(DEFAULT_DESKTOP_CDP_POLL_MS, input.signal)
   }
   const message = lastError instanceof Error ? lastError.message : String(lastError ?? 'unknown error')
   throw new Error(
@@ -208,6 +229,7 @@ const formatDesktopCdpLaunchResult = (result: DesktopCdpLaunchResult) => (
 )
 
 export const runDesktopCdpLaunch = async (input: DesktopCdpLaunchInput = {}) => {
+  if (input.signal?.aborted === true) throw abortError()
   const appPath = path.resolve(input.appPath ?? DEFAULT_DESKTOP_APP_PATH)
   const executablePath = path.resolve(input.executable ?? resolveDesktopAppExecutablePath(appPath))
   const address = input.address ?? DEFAULT_DESKTOP_CDP_ADDRESS
@@ -244,6 +266,16 @@ export const runDesktopCdpLaunch = async (input: DesktopCdpLaunchInput = {}) => 
     },
     stdio: 'ignore'
   })
+  await new Promise<void>((resolve, reject) => {
+    child.once('error', reject)
+    child.once('spawn', resolve)
+  })
+  if (child.pid == null) throw new Error('Electron launch did not receive a process id.')
+  const fingerprint = processFingerprint(child.pid)
+  if (fingerprint == null) {
+    child.kill('SIGTERM')
+    throw new Error(`Could not fingerprint launched Electron pid=${child.pid}.`)
+  }
   child.unref()
 
   const spawnError = new Promise<never>((_resolve, reject) => {
@@ -254,10 +286,33 @@ export const runDesktopCdpLaunch = async (input: DesktopCdpLaunchInput = {}) => 
       )
     })
   })
-  const targets = await Promise.race([
-    waitForDesktopCdpTargets({ port, waitMs }),
-    spawnError
-  ])
+  let targets
+  let rejectForAbort = () => {}
+  const aborted = new Promise<never>((_resolve, reject) => {
+    rejectForAbort = () => reject(abortError())
+    input.signal?.addEventListener('abort', rejectForAbort, { once: true })
+  })
+  try {
+    targets = await Promise.race([
+      waitForDesktopCdpTargets({ port, signal: input.signal, waitMs }),
+      spawnError,
+      aborted
+    ])
+  } catch (error) {
+    try {
+      await terminateTrackedPid({
+        fingerprint,
+        label: 'desktop CDP launch',
+        pid: child.pid,
+        timeoutMs: input.signal?.aborted ? 1_000 : 3_000
+      })
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Electron launch and identity-safe cleanup both failed.')
+    }
+    throw error
+  } finally {
+    input.signal?.removeEventListener('abort', rejectForAbort)
+  }
   const agentCommands = [
     buildAgentCommandHint({
       intent: 'list-electron-cdp-targets',
@@ -296,6 +351,7 @@ export const runDesktopCdpLaunch = async (input: DesktopCdpLaunchInput = {}) => 
     phase: 'ready',
     pid: child.pid,
     port,
+    processFingerprint: fingerprint,
     targetCount: targets.length,
     targets,
     userDataDir

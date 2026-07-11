@@ -1,19 +1,28 @@
-import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+/* eslint-disable max-lines -- target preparation, resource groups, and linked docs/homepage orchestration are one flow. */
+import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
 
 import { getTargetConfig } from './config'
+import { withDevServiceOperation } from './coordination'
 import { getDocsUrl } from './docs-process'
 import { buildRuntimeEnv } from './env'
+import { resolveElectronLaunchIdentity, startAndroidEmulator, startElectron } from './external-targets'
 import { ensureGitUpdated, ensureWorkspaceInstall } from './git-workspace'
 import { resolvePorts } from './network'
-import { log, logDir, managerLogPath, repoRoot, sleep, statePath } from './paths'
-import { withDevStartPortLock } from './port-lock'
-import { readState, runSync, spawnDetachedLogged, writeJsonAtomic } from './process'
-import { printReady, reuseIfReady, stateReady, stopStaleState, waitForReady } from './readiness'
+import { log, logDir, repoRoot } from './paths'
+import { withDevStartPortLock, withDevStartPreparationLock } from './port-lock'
+import { readState, runSync } from './process'
+import {
+  assertTargetStartable,
+  printReady,
+  reuseIfReady,
+  stateHasLiveProcesses,
+  stateReady,
+  waitForReady
+} from './readiness'
 import { startServiceChild } from './service-manager'
-import type { DevStartOptions, DevStartState, DevStartTarget, TargetConfig } from './types'
+import type { DevServiceOperation, DevStartOptions, DevStartTarget, TargetConfig } from './types'
 
 const buildStaticClient = async (target: DevStartTarget, config: TargetConfig) => {
   if (config.buildClient !== true) return
@@ -28,14 +37,28 @@ const buildStaticClient = async (target: DevStartTarget, config: TargetConfig) =
   })
 }
 
-const resolveDefaultDesktopDevRuntimeVersion = () => (
-  `dev-${createHash('sha256').update(repoRoot).digest('hex').slice(0, 12)}`
-)
-
-export const resolveDesktopWorkspaceLaunchFolder = (root = repoRoot) => root
+export { resolveDesktopWorkspaceLaunchFolder } from './external-targets'
 
 interface RunMainLinks {
   linkedDocsUrl?: string
+}
+
+const resourceSibling = (target: DevStartTarget): DevStartTarget | undefined => {
+  if (target === 'electron') return 'electron-workspace'
+  if (target === 'electron-workspace') return 'electron'
+  if (target === 'web') return 'daemon'
+  if (target === 'daemon') return 'web'
+  return undefined
+}
+
+const assertResourceGroupStartable = (target: DevStartTarget) => {
+  assertTargetStartable(target)
+  const sibling = resourceSibling(target)
+  if (sibling == null || !stateHasLiveProcesses(readState(sibling))) return
+  throw new Error(
+    `${target} shares a runtime resource with active target ${sibling}. ` +
+      `Stop ${sibling} with explicit authorization before starting ${target}.`
+  )
 }
 
 const ensureHomepageWorkspace = (target: DevStartTarget) => {
@@ -59,7 +82,10 @@ const reuseLinkedHomepageIfReady = async (linkedDocsUrl: string) => {
   return true
 }
 
-const ensureLinkedHomepage = async (linkedDocsUrl: string) => {
+const ensureLinkedHomepage = async (
+  linkedDocsUrl: string,
+  options: { operation?: DevServiceOperation; portLockHeld?: boolean } = {}
+) => {
   const existingState = readState('homepage')
   if (
     existingState?.linkedDocsUrl === linkedDocsUrl &&
@@ -69,12 +95,18 @@ const ensureLinkedHomepage = async (linkedDocsUrl: string) => {
     return existingState.clientUrl
   }
 
-  if (existingState?.root === repoRoot) {
-    await stopStaleState('homepage')
-  }
-
   log('starting linked homepage service for docs')
-  await runMain('homepage', {}, { linkedDocsUrl })
+  const startHomepage = async (operation: DevServiceOperation) => {
+    await runMain('homepage', {
+      operation,
+      portLockHeld: options.portLockHeld ?? false
+    }, { linkedDocsUrl })
+  }
+  if (options.operation == null) {
+    await withDevServiceOperation('homepage', 'ensure', startHomepage)
+  } else {
+    await startHomepage(options.operation)
+  }
 
   const nextState = readState('homepage')
   if (
@@ -87,111 +119,106 @@ const ensureLinkedHomepage = async (linkedDocsUrl: string) => {
   return nextState.clientUrl
 }
 
-const startElectron = async (target: DevStartTarget, config: TargetConfig) => {
-  await stopStaleState(target)
-  writeFileSync(managerLogPath(target), '')
-
-  const env: NodeJS.ProcessEnv = { ...process.env }
-  if (config.desktopWorkspace === true) {
-    env.ONEWORKS_DESKTOP_WORKSPACE = resolveDesktopWorkspaceLaunchFolder()
-    delete env.ONEWORKS_DESKTOP_LAUNCH_MODE
-  } else {
-    env.ONEWORKS_DESKTOP_LAUNCH_MODE = env.ONEWORKS_DESKTOP_LAUNCH_MODE?.trim() || 'empty'
-  }
-  const runtimePackageCacheVersion = env.ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION?.trim() ||
-    env.ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION?.trim() ||
-    resolveDefaultDesktopDevRuntimeVersion()
-  env.ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION = runtimePackageCacheVersion
-  env.ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION = runtimePackageCacheVersion
-
-  const child = spawnDetachedLogged({
-    args: ['apps/desktop/scripts/dev.cjs', ...(config.desktopWorkspace === true ? ['--workspace'] : [])],
-    command: process.execPath,
-    cwd: repoRoot,
-    env,
-    logPath: managerLogPath(target)
-  })
-
-  const state: DevStartState = {
-    desktopPid: child.pid,
-    managerLog: managerLogPath(target),
-    readiness: 'process',
-    root: repoRoot,
-    target
-  }
-  writeJsonAtomic(statePath(target), state)
-  await sleep(1500)
-  printReady(state)
-}
-
 export const runMain = async (
   target: DevStartTarget,
-  options: Pick<DevStartOptions, 'workspace'> = {},
+  options: Pick<DevStartOptions, 'operation' | 'portLockHeld' | 'workspace'> = {},
   links: RunMainLinks = {}
 ) => {
   mkdirSync(logDir, { recursive: true })
   const config = getTargetConfig(target, options)
+  const launchIdentity = config.kind === 'desktop'
+    ? resolveElectronLaunchIdentity(config)
+    : config.kind === 'android-emulator'
+    ? `avd:${process.env.ONEWORKS_ANDROID_AVD ?? 'OneWorksApi35Visible'}`
+    : undefined
 
-  const updateResult = ensureGitUpdated()
-  if (target !== 'docs' && !updateResult.changed) {
+  await withDevStartPreparationLock(async () => {
+    ensureGitUpdated()
+    ensureWorkspaceInstall()
+  })
+  if (target !== 'docs') {
     if (target === 'homepage' && links.linkedDocsUrl != null) {
       if (await reuseLinkedHomepageIfReady(links.linkedDocsUrl)) return
-    } else if (await reuseIfReady(target)) {
+    } else if (await reuseIfReady(target, launchIdentity)) {
       return
     }
   }
 
-  ensureWorkspaceInstall()
-  ensureHomepageWorkspace(target)
-  await buildStaticClient(target, config)
-  if (target !== 'docs' && !updateResult.changed) {
+  if (config.kind === 'android-emulator') {
+    const current = readState(target)
+    if (await reuseIfReady(target, launchIdentity)) return
+    if (await stateReady(current)) {
+      throw new Error(
+        `android-emulator is already running as ${current?.launchIdentity ?? 'an unknown AVD'}; ` +
+          'stop it with explicit authorization before switching AVDs.'
+      )
+    }
+    assertResourceGroupStartable(target)
+    startAndroidEmulator(options.operation)
+    return
+  }
+  if (target !== 'docs') assertResourceGroupStartable(target)
+  await withDevStartPreparationLock(async () => {
+    ensureHomepageWorkspace(target)
+    await buildStaticClient(target, config)
+  })
+  if (target !== 'docs') {
     if (target === 'homepage' && links.linkedDocsUrl != null) {
       if (await reuseLinkedHomepageIfReady(links.linkedDocsUrl)) return
-    } else if (await reuseIfReady(target)) {
+    } else if (await reuseIfReady(target, launchIdentity)) {
       return
     }
   }
 
   if (config.readiness === 'process') {
-    await startElectron(target, config)
+    await startElectron(target, config, options.operation)
     return
   }
 
   if (target === 'docs') {
-    const existingState = readState(target)
-    if (
-      !updateResult.changed &&
-      typeof existingState?.docsUrl === 'string' &&
-      await stateReady(existingState)
-    ) {
-      const linkedHomepageUrl = await ensureLinkedHomepage(existingState.docsUrl)
-      if (existingState.linkedHomepageUrl === linkedHomepageUrl) {
-        printReady(existingState)
-        return
+    await withDevServiceOperation('homepage', 'ensure', async (homepageOperation) => {
+      const existingState = readState(target)
+      if (
+        typeof existingState?.docsUrl === 'string' &&
+        await stateReady(existingState)
+      ) {
+        const linkedHomepageUrl = await ensureLinkedHomepage(existingState.docsUrl, {
+          operation: homepageOperation
+        })
+        if (existingState.linkedHomepageUrl === linkedHomepageUrl) {
+          printReady(existingState)
+          return
+        }
       }
-    }
 
-    await withDevStartPortLock(async () => {
-      await stopStaleState(target)
-      const ports = await resolvePorts(config)
-      if (ports.clientPort == null) throw new Error('Docs port was not resolved')
-      const docsUrl = getDocsUrl(ports.clientPort)
-      const linkedHomepageUrl = await ensureLinkedHomepage(docsUrl)
-      await startServiceChild({ config, linkedHomepageUrl, ports, target })
-      await waitForReady(target)
+      await withDevStartPortLock(async () => {
+        assertResourceGroupStartable(target)
+        const ports = await resolvePorts(config)
+        if (ports.clientPort == null) throw new Error('Docs port was not resolved')
+        const docsUrl = getDocsUrl(ports.clientPort)
+        const linkedHomepageUrl = await ensureLinkedHomepage(docsUrl, {
+          operation: homepageOperation,
+          portLockHeld: true
+        })
+        await startServiceChild({ config, linkedHomepageUrl, operation: options.operation, ports, target })
+        await waitForReady(target)
+      })
     })
     return
   }
 
-  await withDevStartPortLock(async () => {
-    await stopStaleState(target)
+  const startTarget = async () => {
+    assertResourceGroupStartable(target)
     const ports = await resolvePorts(config)
     await startServiceChild({
       config,
       linkedDocsUrl: links.linkedDocsUrl,
+      operation: options.operation,
       ports,
       target
     })
     await waitForReady(target)
-  })
+  }
+  if (options.portLockHeld === true) await startTarget()
+  else await withDevStartPortLock(startTarget)
 }

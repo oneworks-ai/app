@@ -36,6 +36,10 @@ const waitForReady = async (ready: () => Promise<boolean>, errorMessage: string)
 
 export const waitForUrl = async (url: string, errorMessage: string) => waitForReady(() => urlReady(url), errorMessage)
 
+export const waitForHealthUrl = async (url: string, errorMessage: string) => (
+  waitForReady(() => fetchOk(url), errorMessage)
+)
+
 export const waitForServer = async (serverUrl: string) =>
   waitForReady(() => serverReady(serverUrl), `Server failed to become ready on ${serverUrl}/api/auth/status`)
 

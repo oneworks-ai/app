@@ -28,7 +28,7 @@ cd ../source-debug-fixture
 node scripts/smoke.mjs
 ```
 
-如果是在开发 One Works 本仓代码，仍然从仓库根目录执行 `pnpm start`、`pnpm typecheck` 等本仓级命令；只有测试具体 example 场景时才切到对应 example 目录。
+如果是在开发 One Works 本仓代码，仍然从仓库根目录执行 `pnpm --silent tools dev-service ensure web --json`、`pnpm typecheck` 等本仓级命令；只有测试具体 example 场景时才切到对应 example 目录。
 
 ## 使用本仓源码调试
 
@@ -40,7 +40,7 @@ EXAMPLE="$PWD/examples/task-board-demo"
 __ONEWORKS_PROJECT_WORKSPACE_FOLDER__="$EXAMPLE" \
 __ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__="$EXAMPLE" \
 __ONEWORKS_PROJECT_LAUNCH_CWD__="$EXAMPLE" \
-pnpm start
+pnpm --silent tools dev-service ensure web --json
 ```
 
 切换到 `examples/source-debug-fixture` 即可复用同一套源码调试方式。

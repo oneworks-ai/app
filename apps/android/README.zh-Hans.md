@@ -29,10 +29,10 @@ ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION=dev-local ANDROID_HOME="$HOME/.codex/andr
 
 ## macOS 可见模拟器
 
-当 agent 或非交互 shell 需要保留一个桌面可见的 Android Emulator 窗口时，使用 detached 启动入口：
+当 agent 或非交互 shell 需要保留一个桌面可见的 Android Emulator 窗口时，使用机器级统一服务：
 
 ```bash
-pnpm -C apps/android emulator:visible -- --avd OneWorksApi35Visible --install-apk app/build/outputs/apk/debug/app-debug.apk --start-app
+pnpm --silent tools dev-service ensure android-emulator --json
 ```
 
-这个入口会用与仓库开发服务相同的 detached 进程模式启动 emulator，并把日志重定向到 `.logs/`；它不依赖 Terminal 标签页，也不会跟随父命令进程退出。
+该命令通过机器级状态、租约、PID 指纹和 ADB serial 契约复用或启动配置的 AVD。内部 `emulator:visible` 只能用于在前台发起的聚焦 launcher 诊断：launcher 在 ready 后退出，但模拟器子进程仍以 detached 方式运行。直接启动的 emulator registry 会标记为 `uncoordinated` 且没有 owner worktree；直接复用由 dev-service 管理的 emulator 时会保留其协调 owner，直接 `--restart` 会被拒绝，不能把私有入口当成共享长期 owner。安装 APK 和启动应用应在统一状态返回 `ready: true` 后继续。

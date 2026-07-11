@@ -52,18 +52,18 @@ npx oneworks web
 如果你正在 One Works 源码仓根目录开发 UI，并且已经完成 `pnpm install`，可以执行：
 
 ```bash
-pnpm start
+pnpm --silent tools dev-service ensure web --json
 ```
 
-`pnpm start` 会调用 `pnpm tools dev-start web`，自动把 server DB、runtime store、mock home、cache 和启动日志放到当前开发实例的 project home（默认 `~/.oneworks/dev-instances/<worktree-key>/projects/<project-key>`），避免写回仓库工作区，也避免多个源码 worktree 并行开发时共享同一套本地状态。
+统一入口会自动把 server DB、runtime store、mock home、cache 和启动日志放到当前开发实例的 project home（默认 `~/.oneworks/dev-instances/<worktree-key>/projects/<project-key>`），避免写回仓库工作区，也避免多个源码 worktree 并行开发时共享同一套本地状态。
 
 如果目标是快速把当前源码 worktree 更新到最新并启动开发服务，执行：
 
 ```bash
-pnpm tools dev-start <target>
+pnpm --silent tools dev-service ensure <target> --json
 ```
 
-target 包括 `web`、`electron`、`electron-workspace`、`pwa`、`homepage`、`docs`。启动器会通过 `scripts/run-tools.mjs` 注册 TS，缺少 register 依赖时先执行 `pnpm install`，并负责安全拉取、按需校验 workspace 安装、后台启动、端口避让和探活输出。
+target 包括 `web`、`daemon`、`electron`、`electron-workspace`、`pwa`、`homepage`、`docs`、`relay`、`desktop-control`、`android-emulator`。启动器会通过 `scripts/run-tools.mjs` 注册 TS，缺少 register 依赖时先执行 `pnpm install`，并负责安全拉取、按需校验 workspace 安装、后台启动、操作租约、端口避让和探活输出。
 
 说明：
 

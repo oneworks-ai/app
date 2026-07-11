@@ -16,6 +16,34 @@ const readJson = async (response: Response) => {
   return await response.json() as Record<string, unknown>
 }
 
+const createLaunchResult = () => ({
+  address: '127.0.0.1',
+  agentCommands: [],
+  appPath: '/Applications/One Works.app',
+  control: {
+    cdpEndpoint: 'http://127.0.0.1:9444',
+    protocol: 'cdp' as const,
+    target: 'electron' as const
+  },
+  endpoint: 'http://127.0.0.1:9444',
+  executablePath: '/Applications/One Works.app/Contents/MacOS/One Works',
+  nextActions: [],
+  ok: true,
+  phase: 'ready' as const,
+  pid: 12345,
+  port: 9444,
+  processFingerprint: 'electron-process-fingerprint',
+  targetCount: 1,
+  targets: [{
+    id: 'target-1',
+    title: 'One Works',
+    type: 'page',
+    url: 'http://127.0.0.1:5173/',
+    webSocketDebuggerUrl: 'ws://127.0.0.1:9444/devtools/page/target-1'
+  }],
+  userDataDir: '/tmp/ow-agent'
+})
+
 describe('desktop control server', () => {
   it('publishes protocol metadata for agents', async () => {
     controlServer = await startDesktopControlServer()
@@ -36,32 +64,7 @@ describe('desktop control server', () => {
   })
 
   it('bridges Electron launch, target refresh, and runtime evidence', async () => {
-    const launchDesktop = vi.fn(async () => ({
-      address: '127.0.0.1',
-      agentCommands: [],
-      appPath: '/Applications/One Works.app',
-      control: {
-        cdpEndpoint: 'http://127.0.0.1:9444',
-        protocol: 'cdp' as const,
-        target: 'electron' as const
-      },
-      endpoint: 'http://127.0.0.1:9444',
-      executablePath: '/Applications/One Works.app/Contents/MacOS/One Works',
-      nextActions: [],
-      ok: true,
-      phase: 'ready' as const,
-      pid: 12345,
-      port: 9444,
-      targetCount: 1,
-      targets: [{
-        id: 'target-1',
-        title: 'One Works',
-        type: 'page',
-        url: 'http://127.0.0.1:5173/',
-        webSocketDebuggerUrl: 'ws://127.0.0.1:9444/devtools/page/target-1'
-      }],
-      userDataDir: '/tmp/ow-agent'
-    }))
+    const launchDesktop = vi.fn(async () => createLaunchResult())
     const getTargets = vi.fn(async () => [{
       id: 'target-2',
       title: 'One Works Workspace',
@@ -69,6 +72,7 @@ describe('desktop control server', () => {
       url: 'http://127.0.0.1:5173/workspace',
       webSocketDebuggerUrl: 'ws://127.0.0.1:9444/devtools/page/target-2'
     }])
+    const terminateProcess = vi.fn(async () => {})
     const waitForEvidenceReply = vi.fn(async () => ({
       assistantText: 'OK_AGENT_BRIDGE',
       completed: true,
@@ -107,6 +111,7 @@ describe('desktop control server', () => {
       launchDesktop,
       now: () => new Date('2026-07-01T00:00:00.000Z'),
       recordDemoVideo,
+      terminateProcess,
       waitForEvidenceReply
     })
 
@@ -129,6 +134,9 @@ describe('desktop control server', () => {
       phase: 'electron.session.ready'
     })
     expect(createData.sessionId).toMatch(/^desktop-/u)
+    expect(controlServer.state.sessions.get(createData.sessionId)).toMatchObject({
+      processFingerprint: 'electron-process-fingerprint'
+    })
     expect(createData.agentCommands.some(command => command.intent === 'refresh-electron-cdp-targets')).toBe(true)
     expect(createData.agentCommands.some(command => command.intent === 'record-electron-session-video')).toBe(true)
     expect(launchDesktop).toHaveBeenCalledWith(expect.objectContaining({
@@ -222,6 +230,146 @@ describe('desktop control server', () => {
       expectedReply: 'OK_AGENT_BRIDGE',
       waitMs: 1000
     }))
+    await controlServer.close()
+    controlServer = undefined
+    expect(terminateProcess).toHaveBeenCalledWith({
+      fingerprint: 'electron-process-fingerprint',
+      label: `desktop-control session ${createData.sessionId}`,
+      pid: 12345,
+      timeoutMs: 1_000
+    })
+  })
+
+  it('retains session evidence when identity-safe close refuses the process', async () => {
+    const terminateProcess = vi.fn(async () => {
+      throw new Error('process identity no longer matches shared state')
+    })
+    controlServer = await startDesktopControlServer({}, {
+      launchDesktop: async () => createLaunchResult(),
+      terminateProcess
+    })
+
+    const response = await fetch(`${controlServer.baseUrl}/v1/electron/sessions`, {
+      body: '{}',
+      method: 'POST'
+    })
+    const body = await readJson(response)
+    const sessionId = (body.data as { sessionId: string }).sessionId
+    const server = controlServer
+    controlServer = undefined
+
+    await expect(server.close()).rejects.toThrow('Failed to terminate one or more desktop-control sessions')
+    expect(terminateProcess).toHaveBeenCalledWith({
+      fingerprint: 'electron-process-fingerprint',
+      label: `desktop-control session ${sessionId}`,
+      pid: 12345,
+      timeoutMs: 1_000
+    })
+    expect(server.state.sessions.has(sessionId)).toBe(true)
+  })
+
+  it('keeps concurrent sessions distinct even when they share one timestamp', async () => {
+    const terminateProcess = vi.fn(async () => {})
+    controlServer = await startDesktopControlServer({}, {
+      launchDesktop: async () => createLaunchResult(),
+      now: () => new Date('2026-07-01T00:00:00.000Z'),
+      terminateProcess
+    })
+
+    const responses = await Promise.all([
+      fetch(`${controlServer.baseUrl}/v1/electron/sessions`, { body: '{}', method: 'POST' }),
+      fetch(`${controlServer.baseUrl}/v1/electron/sessions`, { body: '{}', method: 'POST' })
+    ])
+    const sessions = await Promise.all(responses.map(async response => await readJson(response)))
+    const ids = sessions.map(session => (session.data as { sessionId: string }).sessionId)
+    expect(new Set(ids).size).toBe(2)
+    expect(controlServer.state.sessions.size).toBe(2)
+  })
+
+  it('rejects and rolls back a launch without a verifiable process identity', async () => {
+    const terminateProcess = vi.fn(async () => {})
+    controlServer = await startDesktopControlServer({}, {
+      launchDesktop: async () => ({ ...createLaunchResult(), processFingerprint: '' }),
+      terminateProcess
+    })
+
+    const response = await fetch(`${controlServer.baseUrl}/v1/electron/sessions`, {
+      body: '{}',
+      method: 'POST'
+    })
+    expect(response.status).toBe(500)
+    expect(controlServer.state.sessions.size).toBe(0)
+    expect(terminateProcess).toHaveBeenCalledWith({
+      fingerprint: undefined,
+      label: 'invalid desktop-control launch',
+      pid: 12345
+    })
+  })
+
+  it('drains an in-flight session creation before closing and cleaning its process', async () => {
+    let launchStarted = () => {}
+    const started = new Promise<void>((resolve) => {
+      launchStarted = resolve
+    })
+    let releaseLaunch = () => {}
+    const launchGate = new Promise<void>((resolve) => {
+      releaseLaunch = resolve
+    })
+    const terminateProcess = vi.fn(async () => {})
+    controlServer = await startDesktopControlServer({}, {
+      launchDesktop: async () => {
+        launchStarted()
+        await launchGate
+        return createLaunchResult()
+      },
+      terminateProcess
+    })
+
+    const request = fetch(`${controlServer.baseUrl}/v1/electron/sessions`, {
+      body: '{}',
+      method: 'POST'
+    })
+    await started
+    const server = controlServer
+    const closing = server.close()
+    releaseLaunch()
+    await expect(request).rejects.toThrow()
+    await closing
+    controlServer = undefined
+
+    expect(server.state.closing).toBe(true)
+    expect(server.state.sessions.size).toBe(0)
+    expect(terminateProcess).toHaveBeenCalledWith(expect.objectContaining({
+      fingerprint: 'electron-process-fingerprint',
+      pid: 12345,
+      timeoutMs: 1_000
+    }))
+  })
+
+  it('does not let a long evidence request delay session cleanup and server close', async () => {
+    let waitStarted = () => {}
+    const started = new Promise<void>((resolve) => {
+      waitStarted = resolve
+    })
+    controlServer = await startDesktopControlServer({}, {
+      waitForEvidenceReply: async () => {
+        waitStarted()
+        return await new Promise<never>(() => {})
+      }
+    })
+
+    const request = fetch(`${controlServer.baseUrl}/v1/evidence/wait-reply`, {
+      body: '{}',
+      method: 'POST'
+    })
+    await started
+    const server = controlServer
+    const startedAt = Date.now()
+    await server.close()
+    controlServer = undefined
+
+    expect(Date.now() - startedAt).toBeLessThan(500)
+    await expect(request).rejects.toThrow()
   })
 
   it('returns a structured error when the installed app lacks the CDP hook', async () => {

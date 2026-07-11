@@ -18,7 +18,7 @@
   - `apps/client/src/api/mobile-debug.ts`
   - `apps/server/src/routes/mobile-debug.ts`
   - `apps/server/src/services/mobile-debug/index.ts`
-- API 返回 404 时先判断 server 是否还跑着旧代码。修改 server route / service 后，Vite HMR 不会更新后端；用 `pnpm tools dev-start web` 复用或重启当前 target，再探 API。
+- API 返回 404 时先判断 server 是否还跑着旧代码。修改 server route / service 后，Vite HMR 不会更新后端；先取得用户对 `web` 的显式重启授权，再用 `pnpm --silent tools dev-service restart web --json`，不要用 ensure 隐式替换现有进程。
 
 典型坑：
 
@@ -41,9 +41,9 @@ iOS standalone 调试的基础层是 WebDriverAgent / XCTest，不是 Android AD
 服务生命周期：
 
 - 自动启动 WDA 时同步管理 xcodebuild、WDA runner 和 iproxy / MJPEG 代理。连接断开时应优先重建 target，而不是让前端一直停在“正在读取设备画面”。
-- 停止调试服务时除了 dev server，还要检查 WDA xcodebuild、iproxy、Simulator WDA runner、Android emulator 和 adb server 是否还活着；用端口 `517x / 878x / 8100 / 8200 / 9100 / 9200` 做最终确认。
+- 停止调试服务时，顶层 dev server 与 Android emulator 必须在用户显式授权后分别走统一 `dev-service stop`；WDA xcodebuild、iproxy、Simulator WDA runner 和 adb server 继续由其宿主调试服务负责清理与确认。
 - iOS Simulator runtime 不能只靠端口判断：`simctl list devices booted` 为空时仍可能残留 `launchd_sim` 和一组 `CoreSimulator` runtime 子进程。关闭时先 `xcrun simctl shutdown <udid|all>`，再确认 `launchd_sim` 及其子进程消失；必要时退出 `Simulator.app`。
-- 不要把本地 dev-start JSON 当作进程仍然存活的证据；先用 PID 和监听端口确认，再决定是否清理。
+- 不要只看快照里的 phase；以 `pnpm --silent tools dev-service status <target> --json` 返回的 fingerprint、component health 和 `ready` 为准。不要绕过统一入口手工清理顶层服务。
 
 ## 透明元素命中层与手势冲突
 

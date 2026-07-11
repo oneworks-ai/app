@@ -7,26 +7,35 @@
 
 不要再往 `package.json` 新增一串独立脚本名。新增维护命令时，优先给 `scripts/cli.ts` 增加子命令，再在文档里写 `pnpm tools ...` 的调用方式。
 
-仓库开发服务也走同一个 CLI：当用户要求拉取最新代码并启动 web / Electron / PWA / homepage / docs 服务时，直接在仓库根目录运行 `pnpm tools dev-start <target>`。`scripts/run-tools.mjs` 会注册 TS，缺少 register 依赖时先执行 `pnpm install`；`dev-start` 会按需校验 workspace 安装并直接启动对应服务。
+仓库长期开发服务也走同一个 CLI：当用户要求拉取最新代码并启动 web / daemon / Electron / PWA / homepage / docs / Relay / desktop-control / Android emulator 时，直接在仓库根目录运行 `pnpm --silent tools dev-service ensure <target> --json`。`scripts/run-tools.mjs` 会注册 TS，缺少 register 依赖时先执行 `pnpm install`；统一入口会按需校验 workspace 安装，并在操作租约内复用或启动对应服务。
 
-`dev-start` 的跨会话状态文件位于仓库根目录 `.logs/dev-start-<target>.json`，例如 `.logs/dev-start-web.json`。需要回答“当前 worktree 已启动哪个服务、URL / PID / 端口是多少、是否属于当前目录”时，读取该 JSON 的 `root`、`target`、`clientUrl` / `serverUrl`、`servicePid`、`clientPid`、`serverPid`、`startedAt` 和 `managerLog`。不要为了查询状态手动再启动 server/client；真正的启动请求仍交给 `pnpm tools dev-start <target>` 复用或重启。
+跨会话状态文件通常位于仓库根目录 `.logs/dev-start-<target>.json`，操作事件位于 `.logs/dev-start-<target>.events.jsonl`；机器级 `android-emulator`、`electron` 和 `electron-workspace` 改用 status 返回的用户目录 `.oneworks/dev-service/` 路径。需要回答“当前 worktree 已启动哪个服务、URL / PID / 端口是多少、是否有 agent 正在修改”时，运行 `pnpm --silent tools dev-service status <target> --json`，不要为了查询状态手动再启动 server/client。多步骤生命周期操作统一使用 `pnpm --silent tools dev-service ensure / status / events / logs / stop / restart ... --json`；同 target 或 resource group 由 operation lease 串行化，`stop` / `restart` 无论健康与否都必须先有用户对该 target 的显式授权。失败证据只通过 target-scoped、有限行且已脱敏的 `logs` 返回。协议与按需自定义运维 agent 见 `.oo/rules/maintenance/dev-service-coordination.md` 和 `.codex/agents/dev-service-operator.toml`。
 
 ## 当前命令
 
-- `pnpm tools dev-start web`
+- `pnpm --silent tools dev-service ensure web --json`
   - 普通 Web UI：fetch / 安全拉取、按需 `pnpm install`、后台启动 server + Vite client、自动避开端口、探活后输出 URL
-- `pnpm tools dev-start electron`
+- `pnpm --silent tools dev-service ensure electron --json`
   - Electron 空 launcher 开发态：后台启动桌面开发进程并输出 PID / log
-- `pnpm tools dev-start electron-workspace`
+- `pnpm --silent tools dev-service ensure electron-workspace --json`
   - Electron 当前仓库 workspace 开发态：后台启动桌面开发进程并打开当前仓库
-  - workspace 路径必须来自当前 `dev-start` 进程所在仓库根；不要用继承环境里的 `INIT_CWD`，嵌套 pnpm / 多 worktree 会话里它可能指向另一个 checkout。
-  - 在 linked worktree 中验证时，检查输出的 workspace、Electron 窗口标题、会话 workspace title 和 runtime consumer cwd；如果任一项回到主 checkout，先排查 dev-start 环境变量和 desktop workspace-state 的 Git 路径归一化。
-- `pnpm tools dev-start pwa`
+  - workspace 路径必须来自当前统一入口进程所在仓库根；不要用继承环境里的 `INIT_CWD`，嵌套 pnpm / 多 worktree 会话里它可能指向另一个 checkout。
+  - 在 linked worktree 中验证时，检查输出的 workspace、Electron 窗口标题、会话 workspace title 和 runtime consumer cwd；如果任一项回到主 checkout，先排查 dev-service 环境变量和 desktop workspace-state 的 Git 路径归一化。
+  - `electron` 与 `electron-workspace` 共享 Electron 单实例资源，不能并行运行；切换 target 需要用户明确授权 `stop` / `restart`。
+- `pnpm --silent tools dev-service ensure pwa --json`
   - PWA 独立前端预览：构建 standalone client，后台启动 server + 静态 client preview
-- `pnpm tools dev-start homepage`
+- `pnpm --silent tools dev-service ensure homepage --json`
   - 官网首页预览：初始化 `assets/homepage` submodule，启动主仓 PWA iframe 预览，并启动 Astro homepage
-- `pnpm tools dev-start docs`
+- `pnpm --silent tools dev-service ensure docs --json`
   - 使用文档本地预览：通过 homepage docs shell staging 主仓 `.oo/docs` 内容并启动独立 VitePress 文档站
+- `pnpm --silent tools dev-service ensure daemon --json`
+  - 独立 OneWorks management daemon，不附带前端 client
+- `pnpm --silent tools dev-service ensure relay --json`
+  - Relay Server + Relay Admin HMR 组合服务，分别记录 component 健康状态和日志
+- `pnpm --silent tools dev-service ensure desktop-control --json`
+  - 可跨 agent 会话复用的 Electron control protocol bridge
+- `pnpm --silent tools dev-service ensure android-emulator --json`
+  - 复用或启动机器级协调器选择的可见 Android AVD，并以 ADB boot 状态探活；AVD 跨 worktree 共享，不能只依据当前 worktree 快照并发启停
 - `pnpm tools adapter-e2e run <selection>`
   - 真实离线 adapter E2E。`selection` 支持 `codex` / `claude-code` / `opencode` / case id / `all`
 - `pnpm tools adapter-e2e test [selection]`
@@ -38,7 +47,8 @@
   - 这个命令的用户是模型，不是人；新增桌面 UI 自动验证能力时优先复用返回的 `control` / `agentCommands`，不要让上层手写 `--remote-debugging-port`、app executable 路径或 profile 初始化逻辑
   - 默认会拒绝不含 `external-cdp` hook 的旧安装包，避免旧 Electron 包在验证中崩溃；只有明确排查 legacy Electron 行为时才使用 `--allow-unsupported-app`
 - `pnpm tools desktop-control serve`
-  - 面向 agent 的本地 JSON protocol bridge，启动后通过 `/protocol`、`/v1/electron/sessions`、`/v1/electron/sessions/:sessionId/recordings` 和 `/v1/evidence/wait-reply` 桥接 Electron、CDP、demo-video 录屏与 runtime evidence
+  - 仅用于维护者明确要求的内部前台调试，不用于跨会话共享；共享 bridge 必须使用 `pnpm --silent tools dev-service ensure desktop-control --json`
+  - 前台进程通过 `/protocol`、`/v1/electron/sessions`、`/v1/electron/sessions/:sessionId/recordings` 和 `/v1/evidence/wait-reply` 桥接 Electron、CDP、demo-video 录屏与 runtime evidence
   - `/recordings` 只用于已有 Electron session 的临时诊断录制；正式 Electron 验证 / 产品素材必须走 `desktop-control record-batch --use-deskpad-display`
   - Electron 验证视频不允许用 CDP 截帧作为画面 fallback；正式画面来源必须是通过可见性验证的 macOS 系统 display capture
   - 协议见 `scripts/desktop-control-protocol.md`；场景验证工具应调用这个 bridge，而不是重复实现端口选择、隔离 profile、CDP target discovery、demo-video URL 拼接或 runtime evidence discovery

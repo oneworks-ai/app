@@ -116,6 +116,9 @@ importers:
       eslint:
         specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
+      proper-lockfile:
+        specifier: 4.1.2
+        version: 4.1.2
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -847,7 +850,7 @@ importers:
     dependencies:
       '@larksuiteoapi/node-sdk':
         specifier: latest
-        version: 1.68.0
+        version: 1.70.0
       '@modelcontextprotocol/sdk':
         specifier: ^1.25.3
         version: 1.25.3(hono@4.11.4)(zod@3.25.76)
@@ -2291,8 +2294,8 @@ packages:
     engines: {node: '>= 12'}
     deprecated: Please upgrade to v15 or higher. All reported bugs in this version are fixed in newer releases, dependencies have been updated, and security has been improved.
 
-  '@larksuiteoapi/node-sdk@1.68.0':
-    resolution: {integrity: sha512-ip14+pWAv2La3bss4oDDtee2P5xBLDXuvmzhTvkxQMcPA5jCffFsler1TvNt4MyW6pexscj72AEWektyZwU9Yw==}
+  '@larksuiteoapi/node-sdk@1.70.0':
+    resolution: {integrity: sha512-CzVfMbh2MO+cVWQgQGeYN9KkFdX6mofYYTsIjImU0hQqlxaXKzHcUEwG6mrpsmU2LWqYYtIGwCSIZjYQRjD6kw==}
 
   '@levischuck/tiny-cbor@0.2.11':
     resolution: {integrity: sha512-llBRm4dT4Z89aRsm6u2oEZ8tfwL/2l6BwpZ7JcyieouniDECM5AqNgr/y08zalEIvW3RSK4upYyybDcmjXqAow==}
@@ -9231,7 +9234,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@larksuiteoapi/node-sdk@1.68.0':
+  '@larksuiteoapi/node-sdk@1.70.0':
     dependencies:
       axios: 1.13.6
       lodash.identity: 3.0.0

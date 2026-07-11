@@ -3,7 +3,7 @@ import { join } from 'node:path'
 
 import { waitForUrl } from './network'
 import { repoRoot } from './paths'
-import { spawnLogged } from './process'
+import { spawnLogged, waitForChildSpawn } from './process'
 
 export const getDocsUrl = (clientPort: number) => `http://127.0.0.1:${clientPort}/docs/`
 
@@ -33,6 +33,7 @@ export const startDocsProcess = async ({
     logPath
   })
 
+  await waitForChildSpawn(childProcess, 'docs service')
   await waitForUrl(docsUrl, `Docs failed to become ready on ${docsUrl}`)
   return childProcess
 }

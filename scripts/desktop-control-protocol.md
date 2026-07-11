@@ -5,24 +5,31 @@ This protocol is the agent-facing bridge between One Works Electron and automati
 ## Start
 
 ```bash
-pnpm tools desktop-control serve
+pnpm --silent tools dev-service ensure desktop-control --json
 ```
 
-The command prints a JSON ready payload:
+The command acquires the target operation lease, reuses a healthy shared bridge when possible, and prints a development-service status document:
 
 ```json
 {
-  "ok": true,
-  "phase": "desktop-control.ready",
-  "data": {
-    "protocol": "oneworks.desktop-control",
-    "version": 1,
-    "baseUrl": "http://127.0.0.1:12345"
-  }
+  "protocol": "oneworks.dev-service",
+  "version": 1,
+  "services": [
+    {
+      "target": "desktop-control",
+      "ready": true,
+      "state": {
+        "phase": "ready",
+        "controlUrl": "http://127.0.0.1:12345"
+      }
+    }
+  ]
 }
 ```
 
-Agents should read `data.baseUrl` and then call `GET /protocol` before running a scenario.
+Agents should read `services[0].state.controlUrl` and then call `GET /protocol` before running a scenario. Use `pnpm --silent tools dev-service status desktop-control --json` to recover the URL in a later session; do not start another bridge for discovery.
+
+`pnpm tools desktop-control serve` is reserved for explicit internal foreground debugging. It is not the shared-session start path and must not be left running as an independently managed bridge.
 
 ## Minimal Agent Workflow
 
@@ -31,10 +38,10 @@ Use this exact flow for Electron UI verification:
 1. Start the bridge:
 
    ```bash
-   pnpm tools desktop-control serve
+   pnpm --silent tools dev-service ensure desktop-control --json
    ```
 
-2. Parse the first JSON object from stdout and store `data.baseUrl`.
+2. Parse the JSON status document and store `services[0].state.controlUrl`.
 
 3. Read protocol metadata:
 
@@ -288,7 +295,7 @@ If `sessionId` is omitted, the bridge discovers the session by `expectedReply` a
 
 ## Agent Loop
 
-1. Start `desktop-control serve`.
+1. Ensure the shared bridge with `pnpm --silent tools dev-service ensure desktop-control --json`.
 2. `GET /protocol`.
 3. `POST /v1/electron/sessions` with the target workspace.
 4. Drive the returned CDP target.
@@ -298,6 +305,8 @@ If `sessionId` is omitted, the bridge discovers the session by `expectedReply` a
 8. Report the response envelope, evidence path, and recording path.
 
 The bridge is responsible for port selection, isolated user data, target discovery, video recording handoff, and evidence discovery. Scenario tools should compose these endpoints instead of reimplementing those steps.
+
+Stopping or restarting the shared bridge always requires explicit user authorization for the `desktop-control` target, even when it is unhealthy. When authorized, use `pnpm --silent tools dev-service stop desktop-control --json` or `pnpm --silent tools dev-service restart desktop-control --json` and hand off the resulting operation id, state, and events rather than killing the foreground process.
 
 ## Do Not Reimplement
 

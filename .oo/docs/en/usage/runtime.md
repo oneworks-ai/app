@@ -52,18 +52,18 @@ npx oneworks web
 From the One Works repository root, after `pnpm install`:
 
 ```bash
-pnpm start
+pnpm --silent tools dev-service ensure web --json
 ```
 
-`pnpm start` calls `pnpm tools dev-start web`. The development launcher stores the server database, runtime store, mock home, cache, and startup logs under the current development instance project home, normally `~/.oneworks/dev-instances/<worktree-key>/projects/<project-key>`. This keeps repository workspaces clean and prevents parallel source worktrees from sharing the same local state.
+The unified launcher stores the server database, runtime store, mock home, cache, and startup logs under the current development instance project home, normally `~/.oneworks/dev-instances/<worktree-key>/projects/<project-key>`. This keeps repository workspaces clean and prevents parallel source worktrees from sharing the same local state.
 
 To update the current source worktree and start a development service:
 
 ```bash
-pnpm tools dev-start <target>
+pnpm --silent tools dev-service ensure <target> --json
 ```
 
-Targets include `web`, `electron`, `electron-workspace`, `pwa`, `homepage`, and `docs`. The launcher registers TypeScript through `scripts/run-tools.mjs`, installs missing register dependencies when needed, safely fetches and aligns the worktree when possible, checks workspace install state, starts services in the background, avoids busy ports, and prints ready URLs.
+Targets include `web`, `daemon`, `electron`, `electron-workspace`, `pwa`, `homepage`, `docs`, `relay`, `desktop-control`, and `android-emulator`. The launcher registers TypeScript through `scripts/run-tools.mjs`, installs missing register dependencies when needed, safely fetches and aligns the worktree when possible, checks workspace install state, starts services in the background under an operation lease, avoids busy ports, and prints machine-readable readiness state.
 
 Notes:
 
