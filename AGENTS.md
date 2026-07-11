@@ -71,6 +71,7 @@ pnpm --silent tools dev-service ensure <target> --json
 - 同一 worktree 同时只能有一个写入者。并行只读审阅可以共享；并行代码写入应优先使用独立 worktree。
 - 每个独立任务 prompt 必须携带主任务 thread ID，并要求 worker 在每个阶段完成、失败或阻塞时主动发送结构化回调；没有回调不能视为完成。
 - 创建独立任务时必须同步建立约十分钟的 heartbeat；只有任务在同步创建调用内已完成且已回调、无需后续观察时可省略。任务结束必须删除 heartbeat；监控、UI 证据、PR 收口与归档的完整清单见 `.oo/rules/maintenance/task-planning.md`。
+- Git / PR 独立任务必须在 prompt 中携带精确的仓库、PR / 分支、写操作、merge 方式、分支清理范围和用户授权。可信项目内所有新加载任务都使用 `.codex/config.toml` 的 auto-review，`.codex/rules/git-delivery.rules` 再对常见 Git / PR 写命令逐次提示；遇到 `waitingOnApproval` 先按 task-planning 的权限预检恢复，不重复创建 worker，也不要把 GitHub Connector 的集成授权 403 与本地 shell 审批混为一谈。
 
 ## 常规仓库阅读
 

@@ -1,0 +1,103 @@
+# Keep repository delivery writes behind per-invocation review. The project
+# auto-reviewer can approve commands when the task contains exact user
+# authorization, while broader user-level allow rules cannot silently bypass
+# this boundary.
+prefix_rule(
+    pattern = ["git", "commit"],
+    decision = "prompt",
+    justification = "Commits require reviewed changes and explicit delivery authorization.",
+    match = [
+        "git commit -m docs: record permission workflow",
+        "git commit --amend --no-edit",
+    ],
+    not_match = [
+        "git status --short",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "Remote Git writes require exact repository, branch, and user authorization review.",
+    match = [
+        "git push -u origin codex/example",
+        "git push origin --delete codex/example",
+        "git push --force-with-lease origin codex/example",
+    ],
+    not_match = [
+        "git fetch --prune origin",
+    ],
+)
+
+# Common Git wrappers must not become an easy way around the direct-command
+# rules above. These intentionally prompt for every wrapped Git invocation;
+# they are defense in depth, not a replacement for sandboxing or reviewer
+# judgment.
+prefix_rule(
+    pattern = ["git", ["-C", "-c"]],
+    decision = "prompt",
+    justification = "Wrapped Git commands require review because later arguments may perform delivery writes.",
+    match = [
+        "git -C /workspace push origin main",
+        "git -c user.name=Agent commit -m example",
+    ],
+    not_match = [
+        "git status --short",
+    ],
+)
+
+prefix_rule(
+    pattern = [["/usr/bin/git", "/opt/homebrew/bin/git"]],
+    decision = "prompt",
+    justification = "Absolute-path Git commands require review because they bypass direct git prefix rules.",
+    match = [
+        "/usr/bin/git push origin main",
+        "/opt/homebrew/bin/git commit -m example",
+    ],
+    not_match = [
+        "git status --short",
+    ],
+)
+
+prefix_rule(
+    pattern = [["env", "command", "xcrun"], "git"],
+    decision = "prompt",
+    justification = "Git commands invoked through common wrappers require per-invocation review.",
+    match = [
+        "env git push origin main",
+        "command git commit -m example",
+        "xcrun git push origin main",
+    ],
+    not_match = [
+        "gh pr view 127",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", ["create", "edit", "ready", "merge", "close", "reopen", "review", "comment"]],
+    decision = "prompt",
+    justification = "Pull-request writes require exact PR scope and explicit user authorization review.",
+    match = [
+        "gh pr create --draft --title docs: example",
+        "gh pr ready 127 --repo oneworks-ai/app",
+        "gh pr merge 127 --repo oneworks-ai/app --squash --delete-branch",
+        "gh pr review 127 --approve",
+    ],
+    not_match = [
+        "gh pr view 127 --json state",
+        "gh pr checks 127",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "api"],
+    decision = "prompt",
+    justification = "GitHub API calls can mutate or delete remote state and require per-invocation review.",
+    match = [
+        "gh api repos/oneworks-ai/app/pulls/127",
+        "gh api -X DELETE repos/oneworks-ai/app/git/refs/heads/codex/example",
+    ],
+    not_match = [
+        "gh pr view 127",
+    ],
+)
