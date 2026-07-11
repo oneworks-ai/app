@@ -12,6 +12,7 @@ Relay 是 One Works 插件设备和云端会话之间的中继服务。普通用
 | 部署形态     | Vercel 单项目使用 Postgres；Cloudflare 使用 Pages + Worker / Durable Object；单机 Node 通常使用 SQLite。      |
 | `PUBLIC_URL` | `ONEWORKS_RELAY_PUBLIC_URL` 指向浏览器实际打开的 Admin / login / API origin。                                 |
 | CORS         | `ONEWORKS_RELAY_ALLOW_ORIGIN` 生产环境只放允许访问的前端 origin，不使用 `*`。                                 |
+| 服务头像     | `ONEWORKS_RELAY_AVATAR_URL` 配置该实例公开展示的 HTTP/HTTPS 头像；Client 从服务发现接口读取，不硬编码平台图标。 |
 | 密钥         | Admin token、设备元数据密钥、数据库 URL、邮件 key、OAuth secret 都放平台 secret store。                       |
 | 邮件         | 验证码、邀请、系统通知使用稳定发信域名和角色地址 Reply-To，不把发信 DNS 绑在 Relay Web host 上。              |
 | SSO          | callback URL 必须和 Relay 实际发出的 URL 完全一致；内置 GitHub / Google 用专用环境变量，飞书用 Admin 预设。   |

@@ -64,6 +64,9 @@ export interface RelayPluginStatus {
       name?: string
     }
     active?: boolean
+    availabilityError?: string
+    avatarUrl?: string
+    lastCheckedAt?: string
     connected?: boolean
     connection?: {
       activeServerId?: string
@@ -106,6 +109,7 @@ export interface RelayPluginStatus {
     }>
     devicesError?: string
     hasToken?: boolean
+    online?: boolean
     id: string
     name?: string
     remoteBaseUrl: string
@@ -276,6 +280,11 @@ export const stubRelayFetch = (deviceToken = 'remote-device-token') => {
     const url = String(input)
     const body = url.endsWith('/api/relay/config-snapshot')
       ? createRelayConfigSnapshotFixture()
+      : url.endsWith('/api/relay/info')
+      ? {
+        avatarUrl: 'https://cdn.example.com/relay.png',
+        name: 'Example Relay'
+      }
       : url.endsWith('/api/relay/config/global')
       ? {
         personalConfigSnapshot: null

@@ -875,9 +875,16 @@ const renderActionButton = (
     react.createElement('span', { className: 'oneworks-relay__team-config-action-label' }, input.label)
   )
 
-const renderAvatar = (
+export const renderAvatar = (
   react: PluginReactHost,
-  input: { avatarUrl?: string | null; className?: string; name?: string; state?: string }
+  input: {
+    avatarUrl?: string | null
+    className?: string
+    name?: string
+    presence?: 'checking' | 'offline' | 'online'
+    presenceLabel?: string
+    state?: string
+  }
 ) => {
   const name = cleanText(input.name) ?? '账号'
   const avatarUrl = cleanText(input.avatarUrl)
@@ -885,15 +892,37 @@ const renderAvatar = (
     'span',
     {
       className: ['oneworks-relay__account-avatar', input.className].filter(Boolean).join(' '),
+      'data-has-image': avatarUrl == null ? undefined : 'true',
       'data-state': input.state ?? 'signed-in'
     },
     avatarUrl == null
-      ? react.createElement('span', null, getAvatarInitials(name))
+      ? null
       : react.createElement('img', {
         alt: '',
         className: 'oneworks-relay__account-avatar-image',
         draggable: false,
+        onError: (event: { currentTarget: HTMLImageElement }) => {
+          event.currentTarget.hidden = true
+          event.currentTarget.parentElement?.removeAttribute('data-has-image')
+        },
+        onLoad: (event: { currentTarget: HTMLImageElement }) => {
+          event.currentTarget.hidden = false
+          event.currentTarget.parentElement?.setAttribute('data-has-image', 'true')
+        },
         src: avatarUrl
+      }),
+    react.createElement(
+      'span',
+      { className: 'oneworks-relay__account-avatar-fallback' },
+      getAvatarInitials(name)
+    ),
+    input.presence == null
+      ? null
+      : react.createElement('span', {
+        'aria-hidden': 'true',
+        className: 'oneworks-relay__account-avatar-presence',
+        'data-state': input.presence,
+        title: input.presenceLabel
       })
   )
 }
@@ -4501,6 +4530,39 @@ const ServersPage = (props: {
   const servers = getServers(status)
   const [editingKey, setEditingKey] = react.useState('')
   const [draft, setDraft] = react.useState<ServerDraft>({ name: '', remoteBaseUrl: '' })
+  const [serviceInfoByServer, setServiceInfoByServer] = react.useState<
+    Record<string, {
+      availabilityError?: string
+      avatarUrl?: string
+      lastCheckedAt?: string
+      online?: boolean
+    }>
+  >({})
+  const serverSignature = servers
+    .map(server => `${cleanText(server.id) ?? ''}\0${cleanText(server.remoteBaseUrl) ?? ''}`)
+    .join('\0')
+  react.useEffect(() => {
+    let disposed = false
+    setServiceInfoByServer({})
+    for (const server of servers) {
+      const key = cleanText(server.id) ?? cleanText(server.remoteBaseUrl)
+      if (key == null) continue
+      void requestJson<{
+        availabilityError?: string
+        avatarUrl?: string
+        lastCheckedAt?: string
+        online?: boolean
+      }>(ctx, 'server-info', { serverId: key })
+        .then(serviceInfo => {
+          if (disposed) return
+          setServiceInfoByServer(current => ({ ...current, [key]: serviceInfo }))
+        })
+        .catch(() => undefined)
+    }
+    return () => {
+      disposed = true
+    }
+  }, [ctx, serverSignature])
   const saveDraft = async () => {
     const update = view?.options?.update
     if (update == null) throw new Error('当前环境不支持保存服务器配置。')
@@ -4531,12 +4593,63 @@ const ServersPage = (props: {
               const editing = editingKey === key
               const title = serverDisplayName(server)
               const address = serverAddress(server)
+              const serviceInfo = serviceInfoByServer[key]
+              const online = serviceInfo == null ? server.online : serviceInfo.online
+              const availabilityError = cleanText(
+                serviceInfo == null ? server.availabilityError : serviceInfo.availabilityError
+              )
+              const lastCheckedAt = cleanText(
+                serviceInfo == null ? server.lastCheckedAt : serviceInfo.lastCheckedAt
+              )
+              const presence = online == null ? 'checking' : online ? 'online' : 'offline'
+              const presenceAccessibleLabel = online == null
+                ? '服务状态检查中'
+                : online ? '服务在线' : '服务不可用'
+              const presenceLabel = online == null
+                ? '正在检查服务状态'
+                : [
+                  online ? '服务在线' : '服务不可用',
+                  availabilityError,
+                  lastCheckedAt == null ? undefined : `检查于 ${formatDateTime(lastCheckedAt)}`
+                ].filter(Boolean).join(' · ')
+              const openServerLogin = () =>
+                navigateTo(
+                  ctx.scope,
+                  routePath(ctx.scope, {
+                    page: 'login',
+                    serverId: key
+                  })
+                )
               return react.createElement(
                 'div',
-                { className: adminListSurfaceClassNames.nativeRow, key, title: address },
+                {
+                  'aria-label': editing ? undefined : `登录到 ${title}，${presenceAccessibleLabel}`,
+                  className: `${adminListSurfaceClassNames.nativeRow} oneworks-relay__server-row`,
+                  'data-editing': editing ? 'true' : 'false',
+                  key,
+                  onClick: editing ? undefined : openServerLogin,
+                  onKeyDown: editing
+                    ? undefined
+                    : (event: {
+                      currentTarget: EventTarget
+                      key: string
+                      preventDefault: () => void
+                      target: EventTarget
+                    }) => {
+                      if (event.target !== event.currentTarget || event.key !== 'Enter') return
+                      event.preventDefault()
+                      openServerLogin()
+                    },
+                  role: editing ? undefined : 'link',
+                  tabIndex: editing ? undefined : 0,
+                  title: address
+                },
                 renderAvatar(react, {
+                  avatarUrl: cleanText(serviceInfo == null ? server.avatarUrl : serviceInfo.avatarUrl),
                   className: adminListSurfaceClassNames.nativeIcon,
                   name: title,
+                  presence,
+                  presenceLabel,
                   state: 'server'
                 }),
                 editing
@@ -4560,46 +4673,37 @@ const ServersPage = (props: {
                     react.createElement('strong', { className: adminListSurfaceClassNames.nativeTitle }, title),
                     react.createElement('span', { className: adminListSurfaceClassNames.nativeMeta }, address)
                   ),
-                react.createElement(
-                  'span',
-                  { className: adminListSurfaceClassNames.nativeActions },
-                  editing
-                    ? [
-                      renderButton(react, view, {
-                        icon: 'check',
-                        key: 'save',
-                        label: '保存服务器',
-                        onClick: () => {
-                          void saveDraft().catch(error =>
-                            ctx.notifications?.show?.({
-                              level: 'error',
-                              title: toErrorMessage(error)
-                            })
-                          )
-                        }
-                      }),
-                      renderButton(react, view, {
-                        icon: 'close',
-                        key: 'cancel',
-                        label: '取消',
-                        onClick: () => setEditingKey('')
-                      })
-                    ]
-                    : [
-                      renderButton(react, view, {
-                        icon: 'login',
-                        key: 'login',
-                        label: '登录',
-                        onClick: () =>
-                          navigateTo(
-                            ctx.scope,
-                            routePath(ctx.scope, {
-                              page: 'login',
-                              serverId: key
-                            })
-                          )
-                      }),
-                      official ? null : renderButton(react, view, {
+                official && !editing
+                  ? null
+                  : react.createElement(
+                    'span',
+                    {
+                      className: adminListSurfaceClassNames.nativeActions,
+                      onClick: (event: { stopPropagation: () => void }) => event.stopPropagation()
+                    },
+                    editing
+                      ? [
+                        renderButton(react, view, {
+                          icon: 'check',
+                          key: 'save',
+                          label: '保存服务器',
+                          onClick: () => {
+                            void saveDraft().catch(error =>
+                              ctx.notifications?.show?.({
+                                level: 'error',
+                                title: toErrorMessage(error)
+                              })
+                            )
+                          }
+                        }),
+                        renderButton(react, view, {
+                          icon: 'close',
+                          key: 'cancel',
+                          label: '取消',
+                          onClick: () => setEditingKey('')
+                        })
+                      ]
+                      : renderButton(react, view, {
                         icon: 'edit',
                         key: 'edit',
                         label: '修改服务器',
@@ -4611,9 +4715,8 @@ const ServersPage = (props: {
                             remoteBaseUrl: address
                           })
                         }
-                      })
-                    ]
-                )
+                        })
+                  )
               )
             }),
             react.createElement(

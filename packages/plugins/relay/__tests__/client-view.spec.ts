@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { activatePlugin } from '../src/client/index.js'
-import { RelayHomeView, readJsonResponse } from '../src/client/react-view.js'
+import { RelayHomeView, readJsonResponse, renderAvatar } from '../src/client/react-view.js'
 import { relayClientCss } from '../src/client/styles.js'
 import type { PluginClientContext, PluginReactHost, PluginViewRegistration } from '../src/client/types.js'
 
@@ -256,8 +256,52 @@ describe('relay plugin client view registration', () => {
 })
 
 describe('relay plugin client view styles', () => {
+  it('keeps avatar initials visible when a configured image fails to load', () => {
+    const react = createReactHost()
+    const avatar = renderAvatar(react, {
+      avatarUrl: 'https://cdn.example.com/missing.png',
+      name: 'Official Dev',
+      presence: 'offline',
+      presenceLabel: '服务不可用',
+      state: 'server'
+    }) as {
+      children: Array<{
+        children: unknown[]
+        props: Record<string, unknown>
+        type: string
+      }>
+    }
+    const image = avatar.children[0]
+    const fallback = avatar.children[1]
+    const presence = avatar.children[2]
+    const target = {
+      hidden: false,
+      parentElement: { removeAttribute: vi.fn(), setAttribute: vi.fn() }
+    }
+
+    expect(fallback.props.className).toBe('oneworks-relay__account-avatar-fallback')
+    expect(fallback.children).toEqual(['OD'])
+    expect(image.type).toBe('img')
+    expect(image.props.src).toBe('https://cdn.example.com/missing.png')
+    ;(image.props.onError as (event: { currentTarget: typeof target }) => void)({ currentTarget: target })
+    expect(target.hidden).toBe(true)
+    expect(target.parentElement.removeAttribute).toHaveBeenCalledWith('data-has-image')
+    ;(image.props.onLoad as (event: { currentTarget: typeof target }) => void)({ currentTarget: target })
+    expect(target.hidden).toBe(false)
+    expect(target.parentElement.setAttribute).toHaveBeenCalledWith('data-has-image', 'true')
+    expect(presence.props).toMatchObject({
+      className: 'oneworks-relay__account-avatar-presence',
+      'data-state': 'offline',
+      title: '服务不可用'
+    })
+  })
+
   it('renders Relay login as a native client page instead of an iframe', async () => {
     const source = await readFile(new URL('../src/client/react-view.ts', import.meta.url), 'utf8')
+    const serversPageSource = source.slice(
+      source.indexOf('const ServersPage'),
+      source.indexOf('const tokenEditorInitialState')
+    )
 
     expect(source).toContain('createRelayLoginOptions(ctx, {')
     expect(source).toContain("className: 'oneworks-relay__login-native'")
@@ -277,8 +321,25 @@ describe('relay plugin client view styles', () => {
     expect(source).toContain('desktopApi?.openExternalUrl')
     expect(source).not.toContain("className: 'oneworks-relay__login-header'")
     expect(source).not.toContain("react.createElement('iframe'")
+    expect(source).toContain('serviceInfo == null ? server.avatarUrl : serviceInfo.avatarUrl')
+    expect(serversPageSource).toContain("role: editing ? undefined : 'link'")
+    expect(serversPageSource).toContain('onClick: editing ? undefined : openServerLogin')
+    expect(serversPageSource).toContain('`登录到 ${title}，${presenceAccessibleLabel}`')
+    expect(serversPageSource).not.toContain("icon: 'login'")
     expect(relayClientCss).toContain('.oneworks-relay--login-route .oneworks-relay__shell { background-image: none; }')
     expect(relayClientCss).toContain('background: transparent; box-shadow: none;')
+    expect(relayClientCss).toContain(
+      'font-size: var(--oneworks-relay-account-avatar-font-size); line-height: 1;'
+    )
+    expect(relayClientCss).toContain('.oneworks-relay__account-avatar-fallback')
+    expect(relayClientCss).toContain('.oneworks-relay__account-avatar[data-has-image="true"]')
+    expect(relayClientCss).toContain('.oneworks-relay__account-avatar-presence[data-state="online"]')
+    expect(relayClientCss).toContain(
+      '.oneworks-relay__server-editor .plugin-host-control-input.ant-input-affix-wrapper .ant-input'
+    )
+    expect(relayClientCss).toContain(
+      '.oneworks-relay__account-avatar-image:not([hidden]) + .oneworks-relay__account-avatar-fallback'
+    )
     expect(relayClientCss).toContain('--oneworks-relay-login-gap: 10px;')
     expect(relayClientCss).toContain(
       '.oneworks-relay--launcher-login .oneworks-relay__surface { min-height: 0; height: 100%; align-content: center; }'

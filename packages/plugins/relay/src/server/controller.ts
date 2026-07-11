@@ -116,6 +116,7 @@ export interface RelayController {
   dispose: () => void
   forget: (payload?: unknown) => Promise<unknown>
   getPublicStatus: () => Promise<RelayPublicStatus>
+  getServiceInfo: (payload?: unknown) => Promise<RelayServiceInfo>
   listDocumentEntries: (payload?: unknown) => Promise<unknown>
   openDocumentPath: (payload?: unknown) => Promise<unknown>
   readDocumentContent: (payload?: unknown) => Promise<unknown>
@@ -157,6 +158,8 @@ const initialState = (): RelayConnectionState => ({
 
 const RELAY_FIXTURE_SESSION_TOKEN_PREFIX = 'relay-fixture:'
 const RELAY_DEVICE_LIST_CACHE_TTL_MS = 10_000
+const RELAY_SERVICE_INFO_CACHE_TTL_MS = 60_000
+const RELAY_SERVICE_INFO_TIMEOUT_MS = 2_500
 const RELAY_DEVICE_LIST_ERROR_BASE_INTERVAL_MS = 3_000
 const RELAY_DEVICE_LIST_ERROR_MAX_INTERVAL_MS = 30_000
 const RELAY_DEVICE_LIST_ERROR_LOG_INTERVAL_MS = 30_000
@@ -216,6 +219,19 @@ interface RelayDeviceListCacheEntry {
 interface RelayDeviceListResult {
   devices: RelayRemoteDeviceSummary[]
   error?: string
+}
+
+interface RelayServiceInfo {
+  availabilityError?: string
+  avatarUrl?: string
+  lastCheckedAt?: string
+  online?: boolean
+}
+
+interface RelayServiceInfoCacheEntry {
+  fetchedAt: number
+  inFlight?: Promise<RelayServiceInfo>
+  value: RelayServiceInfo
 }
 
 interface RelayDeviceListSource {
@@ -1699,6 +1715,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   const workspaceProxies = new Map<string, RelayWorkspaceProxyEntry>()
   const workspaceProxyOpenPromises = new Map<string, Promise<RelayWorkspaceOpenResult>>()
   const deviceListCache = new Map<string, RelayDeviceListCacheEntry>()
+  const serviceInfoCache = new Map<string, RelayServiceInfoCacheEntry>()
   const connectionStates: Record<string, RelayConnectionState> = {}
   let configDistributionStatus: RelayConfigDistributionStatus | undefined
   let personalDocumentSyncStatus: RelayPersonalDocumentSyncStatus | undefined
@@ -1788,6 +1805,82 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         deviceListCache.delete(cacheKey)
       }
     }
+  }
+
+  const fetchRelayServiceInfo = async (
+    server: Pick<ResolvedRelayServer, 'remoteBaseUrl'>
+  ): Promise<RelayServiceInfo> => {
+    const cacheKey = normalizeBaseUrl(server.remoteBaseUrl)
+    const existing = serviceInfoCache.get(cacheKey)
+    if (existing?.inFlight != null) return await existing.inFlight
+    if (existing != null && Date.now() - existing.fetchedAt < RELAY_SERVICE_INFO_CACHE_TTL_MS) {
+      return existing.value
+    }
+
+    const entry: RelayServiceInfoCacheEntry = existing ?? { fetchedAt: 0, value: {} }
+    entry.inFlight = (async () => {
+      const abortController = new AbortController()
+      const timeout = setTimeout(() => abortController.abort(), RELAY_SERVICE_INFO_TIMEOUT_MS)
+      try {
+        const response = await fetch(new URL('/api/relay/info', server.remoteBaseUrl), {
+          headers: { accept: 'application/json' },
+          signal: abortController.signal
+        })
+        const lastCheckedAt = new Date().toISOString()
+        if (!response.ok) {
+          return {
+            ...entry.value,
+            availabilityError: `HTTP ${response.status}`,
+            lastCheckedAt,
+            online: false
+          }
+        }
+        const body = await readResponseJson(response)
+        const avatarSource = readOptionalText(body.avatarUrl)
+        if (avatarSource == null) return { lastCheckedAt, online: true }
+        let avatarUrl: URL | undefined
+        try {
+          avatarUrl = new URL(avatarSource)
+        } catch {
+          avatarUrl = undefined
+        }
+        return {
+          ...(avatarUrl != null && (avatarUrl.protocol === 'http:' || avatarUrl.protocol === 'https:')
+            ? { avatarUrl: avatarUrl.toString() }
+            : {}),
+          lastCheckedAt,
+          online: true
+        }
+      } catch {
+        return {
+          ...entry.value,
+          availabilityError: abortController.signal.aborted ? 'timeout' : 'unreachable',
+          lastCheckedAt: new Date().toISOString(),
+          online: false
+        }
+      } finally {
+        clearTimeout(timeout)
+      }
+    })()
+    serviceInfoCache.set(cacheKey, entry)
+    const value = await entry.inFlight
+    entry.value = value
+    entry.fetchedAt = Date.now()
+    delete entry.inFlight
+    return value
+  }
+
+  const readRelayServiceInfo = (
+    server: Pick<ResolvedRelayServer, 'remoteBaseUrl'>
+  ): RelayServiceInfo => {
+    const cacheKey = normalizeBaseUrl(server.remoteBaseUrl)
+    const existing = serviceInfoCache.get(cacheKey)
+    if (existing == null || Date.now() - existing.fetchedAt >= RELAY_SERVICE_INFO_CACHE_TTL_MS) {
+      void fetchRelayServiceInfo(server).catch(error => {
+        ctx.logger.warn({ err: error, scope: ctx.scope }, '[relay] service info discovery failed')
+      })
+    }
+    return existing?.value ?? {}
   }
 
   const warnDeviceListFailure = (
@@ -2949,9 +3042,11 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         async (serverStatus) => {
           const server = options.servers.find(item => item.id === serverStatus.id)
           if (server == null) return serverStatus
+          const serviceInfo = readRelayServiceInfo(server)
           const result = await listRelayDevicesForServer(server, store, authStore)
           return {
             ...serverStatus,
+            ...serviceInfo,
             devices: result.devices,
             ...(result.error == null ? {} : { devicesError: result.error })
           }
@@ -2965,23 +3060,27 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         const storedServer = getStoredServer(store, server)
         const account = preferredAuthAccountForRelayServer(authStore, server)
         const connection = getConnectionState(server)
+        const serviceInfo = readRelayServiceInfo(server)
         const result = await listRelayDevicesForServer(server, store, authStore)
         const storedSessionAuthenticated = (storedServer?.sessionToken ?? '') !== '' &&
           (storedServer?.sessionExpiresAt == null || Date.parse(storedServer.sessionExpiresAt) > Date.now())
-        return authServerToPublicStatus(authServer, publicActiveServerId, {
-          ...(account == null
-            ? storedServer?.account == null ? {} : { account: storedServer.account }
-            : { account: authAccountToRelayAccountProfile(account) }),
-          connected: connection.state === 'registered',
-          connection,
-          devices: result.devices,
-          ...(result.error == null ? {} : { devicesError: result.error }),
-          hasToken: (storedServer?.deviceToken ?? '') !== '',
-          registeredAt: storedServer?.registeredAt ?? null,
-          sessionAuthenticated: account == null ? storedSessionAuthenticated : isSessionAuthenticated(account),
-          sessionExpiresAt: account?.sessionExpiresAt ?? storedServer?.sessionExpiresAt ?? null,
-          updatedAt: account?.updatedAt ?? storedServer?.updatedAt ?? null
-        })
+        return {
+          ...authServerToPublicStatus(authServer, publicActiveServerId, {
+            ...(account == null
+              ? storedServer?.account == null ? {} : { account: storedServer.account }
+              : { account: authAccountToRelayAccountProfile(account) }),
+            connected: connection.state === 'registered',
+            connection,
+            devices: result.devices,
+            ...(result.error == null ? {} : { devicesError: result.error }),
+            hasToken: (storedServer?.deviceToken ?? '') !== '',
+            registeredAt: storedServer?.registeredAt ?? null,
+            sessionAuthenticated: account == null ? storedSessionAuthenticated : isSessionAuthenticated(account),
+            sessionExpiresAt: account?.sessionExpiresAt ?? storedServer?.sessionExpiresAt ?? null,
+            updatedAt: account?.updatedAt ?? storedServer?.updatedAt ?? null
+          }),
+          ...serviceInfo
+        }
       })
     )
     return {
@@ -4428,6 +4527,16 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     }
   }
 
+  const getServiceInfo = async (payload?: unknown) => {
+    const requestedServerId = readServerId(payload)
+    const authStore = await readOneWorksAuthStore()
+    const server = resolveRelayServer(authStore, requestedServerId)
+    if (server == null) {
+      throw new RelayNativeLoginProxyError(`Unknown relay server: ${requestedServerId}.`, 404)
+    }
+    return await fetchRelayServiceInfo(server)
+  }
+
   const getNativeLoginOptions = async (payload?: unknown) => {
     const login = await createLoginUrl(payload)
     const configuredServer = resolveRelayServers(ctx.options).find(server =>
@@ -4739,6 +4848,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     getConfigShareTargets,
     getProfile,
     getPublicStatus,
+    getServiceInfo,
     getWorkspaceProxyConnection,
     importPersonalDocumentRootAgents,
     listWorkspaceDirectories,

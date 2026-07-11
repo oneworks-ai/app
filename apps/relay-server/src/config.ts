@@ -68,6 +68,16 @@ const readEmailLogoUrl = (value: string | undefined) => {
   return new Set(['0', 'false', 'no', 'none', 'off']).has(logoUrl.toLowerCase()) ? undefined : logoUrl
 }
 
+const readServiceAvatarUrl = (value: string | undefined) => {
+  if (value == null || value.trim() === '') return undefined
+  try {
+    const url = new URL(value.trim())
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : undefined
+  } catch {
+    return undefined
+  }
+}
+
 const readStorageDriver = (env: RelayConfigEnv) => {
   return parseRelayStorageDriver(env.ONEWORKS_RELAY_STORAGE_DRIVER)
 }
@@ -205,6 +215,7 @@ export const parseRelayServerArgs = (
     defaultLoginMethod: readLoginMethod(env.ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD),
     adminToken: env.ONEWORKS_RELAY_ADMIN_TOKEN || '',
     allowOrigin: env.ONEWORKS_RELAY_ALLOW_ORIGIN || '*',
+    avatarUrl: readServiceAvatarUrl(env.ONEWORKS_RELAY_AVATAR_URL),
     loginRedirectOrigins: readOriginList(env.ONEWORKS_RELAY_LOGIN_REDIRECT_ORIGINS),
     deviceMetadataSecret: env.ONEWORKS_RELAY_DEVICE_METADATA_SECRET || undefined,
     publicBaseUrl: env.ONEWORKS_RELAY_PUBLIC_URL || undefined,
@@ -263,6 +274,7 @@ Environment:
   ONEWORKS_RELAY_ADMIN_TOKEN
   ONEWORKS_RELAY_DEVICE_METADATA_SECRET
   ONEWORKS_RELAY_ALLOW_ORIGIN
+  ONEWORKS_RELAY_AVATAR_URL
   ONEWORKS_RELAY_LOGIN_REDIRECT_ORIGINS
   ONEWORKS_RELAY_PUBLIC_URL
   ONEWORKS_RELAY_DEVICE_ONLINE_TTL_SECONDS

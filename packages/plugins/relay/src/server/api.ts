@@ -36,6 +36,9 @@ export const handleRelayApi = async (request: PluginProxyRequest, controller: Re
   if (request.method === 'GET' && (route === '' || route === 'status')) {
     return createJsonResponse(await controller.getPublicStatus())
   }
+  if (request.method === 'POST' && route === 'server-info') {
+    return await controllerJson(async () => await controller.getServiceInfo(readBody(request)), 502)
+  }
   if (request.method === 'POST' && route === 'connect') {
     return createJsonResponse(await controller.connect(readBody(request)))
   }

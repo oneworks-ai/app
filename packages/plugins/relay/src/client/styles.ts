@@ -64,6 +64,10 @@ ${adminListSurfaceCss}
 .oneworks-relay__icon { font-size: 18px; line-height: 1; }
 .oneworks-relay__button .oneworks-relay__icon { font-size: var(--app-chrome-icon-size, 18px); }
 .oneworks-relay__server-editor { min-width: 0; display: grid; grid-template-columns: minmax(130px, .42fr) minmax(180px, 1fr); gap: var(--oneworks-overlay-icon-gap, 6px); align-items: center; }
+.oneworks-relay__server-editor .plugin-host-control-input.ant-input-affix-wrapper { height: var(--plugin-host-control-height, 28px); min-height: var(--plugin-host-control-height, 28px); padding-block: 0; align-items: center; }
+.oneworks-relay__server-editor .plugin-host-control-input.ant-input-affix-wrapper .ant-input { height: calc(var(--plugin-host-control-height, 28px) - 2px); padding-block: 0; line-height: calc(var(--plugin-host-control-height, 28px) - 2px); }
+.oneworks-relay__server-row[data-editing="false"] { cursor: pointer; }
+.oneworks-relay__server-row[data-editing="false"]:focus-visible { outline: 2px solid var(--primary-color, var(--ant-color-primary, #1677ff)); outline-offset: -2px; }
 .oneworks-relay__field { min-width: 0; min-height: var(--oneworks-overlay-control-height, 30px); display: inline-flex; align-items: center; gap: var(--oneworks-overlay-icon-gap, 6px); border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); color: var(--sub-text-color, var(--ant-color-text, #1f2328)); }
 .oneworks-relay__field:focus-within { border-bottom-color: var(--primary-color, var(--ant-color-primary, #1677ff)); color: var(--primary-color, var(--ant-color-primary, #1677ff)); }
 .oneworks-relay__input { width: 100%; min-width: 0; border: 0; outline: 0; padding: 0; color: var(--text-color, var(--ant-color-text, #1f2328)); background: transparent; font: 600 13px/1.2 ui-sans-serif, system-ui, sans-serif; }
@@ -76,10 +80,17 @@ ${adminListSurfaceCss}
 .oneworks-relay__empty--center { min-height: min(420px, 52vh); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 0; text-align: center; }
 .oneworks-relay__empty--center .oneworks-relay__icon { font-size: 28px; opacity: .54; }
 .oneworks-relay__account-avatar { --oneworks-relay-account-avatar-size: 34px; --oneworks-relay-account-avatar-font-size: 12px; position: relative; width: var(--oneworks-relay-account-avatar-size); height: var(--oneworks-relay-account-avatar-size); display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; color: var(--primary-text-color, var(--ant-color-primary, #1677ff)); background: color-mix(in srgb, var(--primary-color, #2563eb) 14%, transparent); font: 800 var(--oneworks-relay-account-avatar-font-size)/1 ui-sans-serif, system-ui, sans-serif; overflow: visible; }
-.relay-admin-list-table__native-icon.oneworks-relay__account-avatar { --oneworks-relay-account-avatar-size: var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px)); --oneworks-relay-account-avatar-font-size: calc(var(--oneworks-relay-account-avatar-size) * .56); flex-basis: var(--oneworks-relay-account-avatar-size); max-width: var(--oneworks-relay-account-avatar-size); min-width: var(--oneworks-relay-account-avatar-size); width: var(--oneworks-relay-account-avatar-size); height: var(--oneworks-relay-account-avatar-size); }
+.relay-admin-list-table__native-icon.oneworks-relay__account-avatar { --oneworks-relay-account-avatar-size: var(--relay-admin-list-native-icon-size, var(--app-chrome-icon-size, 18px)); --oneworks-relay-account-avatar-font-size: calc(var(--oneworks-relay-account-avatar-size) * .56); flex-basis: var(--oneworks-relay-account-avatar-size); max-width: var(--oneworks-relay-account-avatar-size); min-width: var(--oneworks-relay-account-avatar-size); width: var(--oneworks-relay-account-avatar-size); height: var(--oneworks-relay-account-avatar-size); font-size: var(--oneworks-relay-account-avatar-font-size); line-height: 1; }
 .oneworks-relay__account-avatar[data-state="signed-in"] { color: var(--success-color, #0f766e); background: color-mix(in srgb, var(--success-color, #0f766e) 14%, transparent); }
 .oneworks-relay__account-avatar[data-state="disabled"] { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); background: color-mix(in srgb, var(--placeholder-color, #57606a) 12%, transparent); }
-.oneworks-relay__account-avatar-image { width: 100%; height: 100%; display: block; border-radius: inherit; object-fit: cover; }
+.oneworks-relay__account-avatar[data-has-image="true"] { background: transparent; }
+.oneworks-relay__account-avatar-fallback { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+.oneworks-relay__account-avatar-image:not([hidden]) + .oneworks-relay__account-avatar-fallback { visibility: hidden; }
+.oneworks-relay__account-avatar-image { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border-radius: inherit; object-fit: cover; }
+.oneworks-relay__account-avatar-presence { position: absolute; z-index: 2; inset-inline-end: -1px; inset-block-end: -1px; width: 7px; height: 7px; border: 1.5px solid var(--bg-color, var(--ant-color-bg-container, #fff)); border-radius: 999px; background: var(--placeholder-color, var(--ant-color-text-tertiary, #8c959f)); }
+.oneworks-relay__account-avatar-presence[data-state="online"] { background: var(--success-color, var(--ant-color-success, #1a7f37)); }
+.oneworks-relay__account-avatar-presence[data-state="offline"] { background: var(--placeholder-color, var(--ant-color-text-tertiary, #8c959f)); }
+.oneworks-relay__account-avatar-presence[data-state="checking"] { opacity: .58; }
 .oneworks-relay__device-title { display: flex; align-items: center; gap: var(--oneworks-overlay-icon-gap, 6px); }
 .oneworks-relay__device-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .oneworks-relay__device-presence-icon { position: relative; overflow: visible; color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); }

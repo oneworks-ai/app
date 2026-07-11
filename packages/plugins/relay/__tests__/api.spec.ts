@@ -14,7 +14,11 @@ import {
 import { cleanupPluginFixtures, createPluginHarness, readDeviceStore, stubRelayFetch } from './helpers.js'
 import type { RelayPluginStatus } from './helpers.js'
 
-afterEach(cleanupPluginFixtures)
+afterEach(async () => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+  await cleanupPluginFixtures()
+})
 
 const createTestRemoteWorkspaceId = (input: {
   deviceId: string
@@ -33,6 +37,139 @@ const createTestRemoteWorkspaceId = (input: {
   }`
 
 describe('relay plugin scoped API', () => {
+  it('discovers service avatars without blocking status and deduplicates in-flight requests', async () => {
+    let resolveInfo: ((response: Response) => void) | undefined
+    const pendingInfo = new Promise<Response>(resolve => {
+      resolveInfo = resolve
+    })
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input).endsWith('/api/relay/info')) return pendingInfo
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+    })
+    const handler = apis.get('relay')?.handler
+    const statusRequest = handler?.({ body: Buffer.alloc(0), method: 'GET', path: 'status' })
+    const statusResult = await Promise.race([
+      statusRequest,
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 50))
+    ])
+
+    expect(statusResult).not.toBe('timeout')
+    const firstInfo = handler?.({
+      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+      method: 'POST',
+      path: 'server-info'
+    })
+    const secondInfo = handler?.({
+      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+      method: 'POST',
+      path: 'server-info'
+    })
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/api/relay/info'))).toHaveLength(1)
+
+    resolveInfo?.(new Response(JSON.stringify({
+      avatarUrl: 'https://cdn.example.com/relay.png'
+    }), { status: 200 }))
+    await expect(firstInfo).resolves.toMatchObject({
+      body: { avatarUrl: 'https://cdn.example.com/relay.png', online: true },
+      status: 200
+    })
+    await expect(secondInfo).resolves.toMatchObject({
+      body: { avatarUrl: 'https://cdn.example.com/relay.png', online: true },
+      status: 200
+    })
+    const refreshedStatus = await handler?.({ body: Buffer.alloc(0), method: 'GET', path: 'status' }) as {
+      body?: RelayPluginStatus
+    }
+    expect(refreshedStatus.body?.servers?.[0]?.avatarUrl).toBe('https://cdn.example.com/relay.png')
+    expect(refreshedStatus.body?.servers?.[0]?.online).toBe(true)
+  })
+
+  it('times out service avatar discovery without failing the server list', async () => {
+    vi.stubGlobal('fetch', vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+      })
+    ))
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+    })
+    const responsePromise = apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+      method: 'POST',
+      path: 'server-info'
+    })
+
+    await expect(responsePromise).resolves.toMatchObject({
+      body: { availabilityError: 'timeout', online: false },
+      status: 200
+    })
+  }, 6_000)
+
+  it('keeps a reachable service online when optional avatar metadata is malformed', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      avatarUrl: 'not-a-url'
+    }), { status: 200 })))
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+    })
+
+    await expect(apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+      method: 'POST',
+      path: 'server-info'
+    })).resolves.toMatchObject({
+      body: { online: true },
+      status: 200
+    })
+  })
+
+  it('keeps the last service avatar when a refresh fails', async () => {
+    let now = 1_000
+    vi.spyOn(Date, 'now').mockImplementation(() => now)
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        avatarUrl: 'https://cdn.example.com/relay.png'
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response('Unavailable', { status: 503 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+    })
+    const handler = apis.get('relay')?.handler
+    const request = () => handler?.({
+      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+      method: 'POST',
+      path: 'server-info'
+    })
+
+    await expect(request()).resolves.toMatchObject({
+      body: { avatarUrl: 'https://cdn.example.com/relay.png', online: true },
+      status: 200
+    })
+    now += 61_000
+    await expect(request()).resolves.toMatchObject({
+      body: {
+        availabilityError: 'HTTP 503',
+        avatarUrl: 'https://cdn.example.com/relay.png',
+        online: false
+      },
+      status: 200
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it('registers scoped API metadata for the host runtime', async () => {
     const { apis } = await createPluginHarness({})
 

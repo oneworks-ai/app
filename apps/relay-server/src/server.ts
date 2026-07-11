@@ -55,6 +55,7 @@ export { VERSION } from './version.js'
 const handleInfo = (res: ServerResponse, args: RelayServerArgs, store: RelayStore) => {
   const providers = enabledRelayAuthProviders(args, store)
   sendJson(res, 200, {
+    avatarUrl: args.avatarUrl ?? null,
     name: 'OneWorks Relay',
     version: VERSION,
     features: {

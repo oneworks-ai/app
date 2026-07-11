@@ -12,6 +12,7 @@ Before creating platform projects, OAuth clients, mail domains, or passkeys, dec
 | Deployment shape | Use Postgres for a Vercel single-project deployment, Pages + Worker / Durable Object for Cloudflare, and usually SQLite for single-host Node.          |
 | `PUBLIC_URL`     | Set `ONEWORKS_RELAY_PUBLIC_URL` to the real browser-facing Admin / login / API origin.                                                                 |
 | CORS             | In production, set `ONEWORKS_RELAY_ALLOW_ORIGIN` to the allowed frontend origin instead of `*`.                                                        |
+| Service avatar   | Set `ONEWORKS_RELAY_AVATAR_URL` to the instance's public HTTP/HTTPS avatar; Clients read it from service discovery instead of hardcoding platform icons. |
 | Secrets          | Store admin tokens, device metadata secrets, database URLs, mail keys, and OAuth secrets in the platform secret store.                                 |
 | Mail             | Send verification, invite, and system emails from a stable sending domain with a role-address Reply-To; do not attach mail DNS to the Relay web host.  |
 | SSO              | Callback URLs must exactly match the URL Relay sends; built-in GitHub and Google providers use dedicated env vars, while Feishu uses the Admin preset. |

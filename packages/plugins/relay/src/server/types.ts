@@ -416,11 +416,15 @@ export interface RelayConfigDistributionSourceStatus {
 export interface RelayPublicServerStatus extends RelayServerOptions {
   account?: RelayAccountProfile
   active: boolean
+  availabilityError?: string
+  avatarUrl?: string
+  lastCheckedAt?: string
   connected: boolean
   connection: RelayConnectionState
   devices?: RelayRemoteDeviceSummary[]
   devicesError?: string
   hasToken: boolean
+  online?: boolean
   registeredAt: string | null
   sessionExpiresAt: string | null
   sessionAuthenticated: boolean

@@ -465,6 +465,9 @@ export interface RelayServerStatus {
   accountEmail?: string
   accountName?: string
   active?: boolean
+  availabilityError?: string
+  avatarUrl?: string
+  lastCheckedAt?: string
   connected?: boolean
   connection?: {
     activeServerId?: string
@@ -477,6 +480,7 @@ export interface RelayServerStatus {
   devices?: RelayDeviceSummary[]
   devicesError?: string
   hasToken?: boolean
+  online?: boolean
   id?: string
   name?: string
   official?: boolean

@@ -17,6 +17,7 @@ Environment variables:
 - `ONEWORKS_RELAY_ADMIN_TOKEN`: admin and initial pairing token
 - `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`: optional encryption secret for user-private device metadata; production should set a long random value
 - `ONEWORKS_RELAY_ALLOW_ORIGIN`: CORS allow origin, default `*`
+- `ONEWORKS_RELAY_AVATAR_URL`: optional HTTP/HTTPS image URL advertised through public service discovery and shown by Relay clients for this server instance
 - `ONEWORKS_RELAY_LOGIN_REDIRECT_ORIGINS`: comma- or space-separated additional trusted Client origins for login callbacks. Origins are matched exactly, including the port; configure only origins controlled by the OneWorks Client.
 - `ONEWORKS_RELAY_PUBLIC_URL`: public base URL used for OAuth callback URLs
 - `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD`: default `/login` method, default `password`; supported values are `password`, `passkey`, and `verification_code`. The browser remembers the last selected method when local storage is available.
