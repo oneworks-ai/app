@@ -133,6 +133,7 @@ pnpm --silent tools dev-service ensure <target> --json
 
 前端任务补充：
 
+- 只要任务涉及用户可见的布局、样式、主题、响应式、组件外观、视觉素材或参考图还原，除了 `.oo/rules/FRONTEND-STANDARD.md`，还必须加载项目 `.oo/skills/ui-design-memory` 并继续阅读 `.oo/rules/frontend-standard/design-memory.md`；任何用户可见视觉改动结束前必须创建独立只读会话，等待其真实执行预期行为和视觉一致性验证，读取并核验证据，确认当前 revision 获得 `PASS` 后才能停止。还必须完成经验分类、冲突检查，以及仅在存在稳定经验时的项目内持久化。单点机械调整可以简化证据，但不能跳过独立验证。
 - 只要任务涉及 `apps/client` 的页面交互、样式、浮层、focus、主题、热更新、真实 Chrome 回归或 CDP 调试，除了 `.oo/rules/FRONTEND-STANDARD.md`，还必须继续阅读 `.oo/rules/frontend-standard/debugging.md`。
 - 如果改动范围落在 `apps/client/`，还应继续阅读 `apps/client/AGENTS.md`；如果涉及聊天页 / sender / 消息级交互，再继续阅读 `apps/client/src/components/chat/AGENTS.md`。
 - 如果任务落在某个已有子模块，优先继续读最近的 `AGENTS.md`，用它建立模块地图；不要一开始就广泛读取源码或规则文件。
