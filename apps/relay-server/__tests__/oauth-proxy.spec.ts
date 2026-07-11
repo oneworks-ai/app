@@ -14,6 +14,7 @@ const googleOauth = {
 describe('relay OAuth proxy support', () => {
   it('keeps the configured public callback URL behind the admin dev proxy', async () => {
     const { baseUrl } = await listenRelay({
+      loginRedirectOrigins: ['http://127.0.0.1:5180'],
       oauth: googleOauth,
       publicBaseUrl: 'http://127.0.0.1:48888'
     })
@@ -38,6 +39,7 @@ describe('relay OAuth proxy support', () => {
 
   it('uses forwarded origin for callback URLs when no public URL is configured', async () => {
     const { baseUrl } = await listenRelay({
+      loginRedirectOrigins: ['http://127.0.0.1:5180'],
       oauth: googleOauth
     })
     const redirectUri = encodeURIComponent(

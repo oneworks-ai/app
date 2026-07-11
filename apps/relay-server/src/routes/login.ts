@@ -4,6 +4,27 @@ import { relayAuthProviderSummaries } from '../auth/sso-provider-registry.js'
 import { sendHtml } from '../http.js'
 import type { RelayServerArgs, RelayStore } from '../types.js'
 import { renderRelayLoginCompletePage, renderRelayLoginPage } from './login-page.js'
+import { isSupportedLoginRedirectUri } from './login-redirect.js'
+
+const loginFrameAncestors = (url: URL, args: RelayServerArgs) => {
+  const redirectUri = url.searchParams.get('redirect_uri')?.trim() ?? ''
+  try {
+    const redirectUrl = new URL(redirectUri)
+    if (
+      (redirectUrl.protocol === 'http:' || redirectUrl.protocol === 'https:') &&
+      isSupportedLoginRedirectUri(redirectUri, args)
+    ) {
+      return redirectUrl.origin
+    }
+  } catch {
+    // Invalid redirects are rendered as an error page and must not be embeddable.
+  }
+  return "'none'"
+}
+
+const loginHtmlHeaders = (url: URL, args: RelayServerArgs) => ({
+  'content-security-policy': `frame-ancestors ${loginFrameAncestors(url, args)}`
+})
 
 export const handleLoginRoute = (
   req: IncomingMessage,
@@ -24,7 +45,8 @@ export const handleLoginRoute = (
         req,
         url
       }),
-      args.allowOrigin
+      args.allowOrigin,
+      loginHtmlHeaders(url, args)
     )
     return true
   }
@@ -39,7 +61,8 @@ export const handleLoginRoute = (
         req,
         url
       }),
-      args.allowOrigin
+      args.allowOrigin,
+      loginHtmlHeaders(url, args)
     )
     return true
   }

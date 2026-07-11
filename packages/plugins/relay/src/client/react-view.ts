@@ -14,7 +14,12 @@ import {
   OFFICIAL_RELAY_VERCEL_SERVER_ID
 } from '../shared/official-services.js'
 import { createSerializedSaveQueue } from './debounced-save-queue.js'
-import { createRelayLoginUrl } from './login-action.js'
+import {
+  RelayLoginOptionsUnavailableError,
+  RelayLoginRequestError,
+  createRelayLoginOptions,
+  postRelayLoginJson
+} from './login-action.js'
 import { clearLoginCallbackFromUrl, readLoginCallback, readLoginCallbackFromUrl } from './login-callback.js'
 import { buildRelayServerOptionsUpdate } from './options.js'
 import type {
@@ -38,6 +43,8 @@ import type {
   RelayDeviceSummary,
   RelayDocumentContent,
   RelayLoginCallback,
+  RelayLoginMethod,
+  RelayLoginProviderOption,
   RelayPersonalDocumentEntry,
   RelayPersonalDocumentSyncKind,
   RelayProfileAccessToken,
@@ -549,6 +556,19 @@ const requestJson = async <T>(
   return await readJsonResponse<T>(response, action)
 }
 
+export const completeRelayLoginCallback = async (
+  ctx: PluginClientContext,
+  callback: RelayLoginCallback,
+  onLoginComplete?: () => Promise<void> | void
+) => {
+  const result = await requestJson(ctx, 'login-callback', {
+    serverId: callback.serverId,
+    token: callback.token
+  })
+  await onLoginComplete?.()
+  return result
+}
+
 const readRelayStatus = async (ctx: PluginClientContext) => {
   const response = await ctx.api.fetch('relay/status')
   return await readJsonResponse<RelayStatus>(response, 'status')
@@ -688,6 +708,12 @@ const serverDisplayName = (server?: RelayServerStatus, fallback = '服务') => (
     cleanText(server?.id) ??
     fallback
 )
+
+const selectedServerDisplayName = (status: RelayStatus | null, requestedServerId?: string) => {
+  const serverId = cleanText(requestedServerId) ?? cleanText(status?.connection?.activeServerId)
+  const server = getServers(status).find(item => cleanText(item.id) === serverId)
+  return serverDisplayName(server ?? (serverId == null ? undefined : { id: serverId }), 'Relay')
+}
 
 const serverAddress = (server?: RelayServerStatus) => {
   const remoteBaseUrl = cleanText(server?.remoteBaseUrl)
@@ -849,9 +875,16 @@ const renderActionButton = (
     react.createElement('span', { className: 'oneworks-relay__team-config-action-label' }, input.label)
   )
 
-const renderAvatar = (
+export const renderAvatar = (
   react: PluginReactHost,
-  input: { avatarUrl?: string | null; className?: string; name?: string; state?: string }
+  input: {
+    avatarUrl?: string | null
+    className?: string
+    name?: string
+    presence?: 'checking' | 'offline' | 'online'
+    presenceLabel?: string
+    state?: string
+  }
 ) => {
   const name = cleanText(input.name) ?? '账号'
   const avatarUrl = cleanText(input.avatarUrl)
@@ -859,15 +892,37 @@ const renderAvatar = (
     'span',
     {
       className: ['oneworks-relay__account-avatar', input.className].filter(Boolean).join(' '),
+      'data-has-image': avatarUrl == null ? undefined : 'true',
       'data-state': input.state ?? 'signed-in'
     },
     avatarUrl == null
-      ? react.createElement('span', null, getAvatarInitials(name))
+      ? null
       : react.createElement('img', {
         alt: '',
         className: 'oneworks-relay__account-avatar-image',
         draggable: false,
+        onError: (event: { currentTarget: HTMLImageElement }) => {
+          event.currentTarget.hidden = true
+          event.currentTarget.parentElement?.removeAttribute('data-has-image')
+        },
+        onLoad: (event: { currentTarget: HTMLImageElement }) => {
+          event.currentTarget.hidden = false
+          event.currentTarget.parentElement?.setAttribute('data-has-image', 'true')
+        },
         src: avatarUrl
+      }),
+    react.createElement(
+      'span',
+      { className: 'oneworks-relay__account-avatar-fallback' },
+      getAvatarInitials(name)
+    ),
+    input.presence == null
+      ? null
+      : react.createElement('span', {
+        'aria-hidden': 'true',
+        className: 'oneworks-relay__account-avatar-presence',
+        'data-state': input.presence,
+        title: input.presenceLabel
       })
   )
 }
@@ -885,6 +940,7 @@ const renderInput = (
   react: PluginReactHost,
   view: PluginViewContext | undefined,
   props: {
+    ariaLabel?: string
     autoFocus?: boolean
     key?: string
     onChange: (value: string) => void
@@ -899,6 +955,7 @@ const renderInput = (
   if (Input != null) {
     return react.createElement(Input, {
       allowClear: true,
+      ariaLabel: props.ariaLabel,
       autoFocus: props.autoFocus,
       key: props.key,
       onChange: props.onChange,
@@ -934,6 +991,7 @@ const renderInput = (
     })
   }
   return react.createElement('input', {
+    'aria-label': props.ariaLabel,
     autoFocus: props.autoFocus,
     className: 'oneworks-relay__input',
     key: props.key,
@@ -3812,31 +3870,98 @@ const getAccountInteractionActions = (
   ]
 }
 
+interface RelayRememberedLogin {
+  avatarUrl?: string
+  email: string
+  name: string
+  provider: string
+  serverUrl: string
+  updatedAt: string
+}
+
+const relayRememberedLoginStorageKey = 'oneworks.relay.login.accounts.v1'
+
+const readRelayRememberedLogins = (): RelayRememberedLogin[] => {
+  try {
+    const value = JSON.parse(globalThis.localStorage?.getItem(relayRememberedLoginStorageKey) ?? '[]') as unknown
+    if (!Array.isArray(value)) return []
+    return value.flatMap(item => {
+      if (!isRecord(item)) return []
+      const email = cleanText(item.email)
+      const name = cleanText(item.name)
+      const provider = cleanText(item.provider)
+      const serverUrl = cleanText(item.serverUrl)
+      const updatedAt = cleanText(item.updatedAt)
+      if (email == null || name == null || provider == null || serverUrl == null || updatedAt == null) return []
+      return [{ avatarUrl: cleanText(item.avatarUrl), email, name, provider, serverUrl, updatedAt }]
+    })
+  } catch {
+    return []
+  }
+}
+
+const writeRelayRememberedLogins = (accounts: RelayRememberedLogin[]) => {
+  try {
+    globalThis.localStorage?.setItem(relayRememberedLoginStorageKey, JSON.stringify(accounts.slice(0, 12)))
+  } catch {
+    // Login still succeeds when browser storage is unavailable.
+  }
+}
+
 const LoginPage = (props: {
   ctx: PluginClientContext
+  onLoginComplete?: () => Promise<void> | void
   react: PluginReactHost
   route: Extract<RelayHomeRoute, { page: 'login' }>
+  serverName: string
+  view?: PluginViewContext
 }) => {
-  const { ctx, react, route } = props
-  const [loginUrl, setLoginUrl] = react.useState('')
+  const { ctx, react, route, serverName, view } = props
+  const launcherSurface = isLauncherSurface(view)
+  const [login, setLogin] = react.useState<Awaited<ReturnType<typeof createRelayLoginOptions>> | null>(null)
+  const [fallbackLoginUrl, setFallbackLoginUrl] = react.useState('')
+  const [loginMethod, setLoginMethod] = react.useState<RelayLoginMethod>('password')
+  const [loginId, setLoginId] = react.useState('')
+  const [password, setPassword] = react.useState('')
+  const [confirmPassword, setConfirmPassword] = react.useState('')
+  const [inviteCode, setInviteCode] = react.useState('')
+  const [completingRegistration, setCompletingRegistration] = react.useState(false)
+  const [verificationCode, setVerificationCode] = react.useState('')
+  const [rememberAccount, setRememberAccount] = react.useState(true)
+  const [rememberedAccounts, setRememberedAccounts] = react.useState<RelayRememberedLogin[]>(readRelayRememberedLogins)
   const [error, setError] = react.useState<string | null>(null)
   const [loading, setLoading] = react.useState(true)
+  const [submitting, setSubmitting] = react.useState(false)
+  const [sendingCode, setSendingCode] = react.useState(false)
   react.useEffect(() => {
     let disposed = false
     setLoading(true)
     setError(null)
-    setLoginUrl('')
-    void createRelayLoginUrl(ctx, {
+    setLogin(null)
+    setFallbackLoginUrl('')
+    setCompletingRegistration(false)
+    setConfirmPassword('')
+    setInviteCode('')
+    void createRelayLoginOptions(ctx, {
       forcePluginHomeRedirect: true,
       serverId: route.serverId
     }).then(result => {
       if (!disposed) {
-        setLoginUrl(result.loginUrl)
+        setLogin(result)
+        const enabledMethods = result.options.loginMethods.enabled
+        setLoginMethod(
+          enabledMethods.includes(result.options.loginMethods.default)
+            ? result.options.loginMethods.default
+            : enabledMethods[0] ?? 'password'
+        )
         setLoading(false)
       }
     }).catch(errorValue => {
       if (!disposed) {
         setError(toErrorMessage(errorValue))
+        if (errorValue instanceof RelayLoginOptionsUnavailableError) {
+          setFallbackLoginUrl(errorValue.loginUrl)
+        }
         setLoading(false)
       }
     })
@@ -3844,41 +3969,551 @@ const LoginPage = (props: {
       disposed = true
     }
   }, [ctx, route.serverId])
+
+  const openLoginDestination = (destination: string) => {
+    const desktopApi = (window as typeof window & {
+      oneworksDesktop?: { openExternalUrl?: (url: string) => Promise<void> }
+    }).oneworksDesktop
+    if (desktopApi?.openExternalUrl != null) {
+      void desktopApi.openExternalUrl(destination).catch(openError => setError(toErrorMessage(openError)))
+      return
+    }
+    window.location.href = destination
+  }
+
+  const openHostedLogin = (method?: RelayLoginMethod) => {
+    const target = cleanText(login?.loginUrl) ?? cleanText(fallbackLoginUrl)
+    if (target == null) return
+    const url = new URL(target)
+    if (method != null) url.searchParams.set('login_method', method)
+    openLoginDestination(url.toString())
+  }
+
+  const finishLogin = async (payload: Record<string, unknown>, provider: string) => {
+    const token = cleanText(payload.token)
+    if (token == null) throw new Error('Relay 登录响应缺少 token。')
+    await completeRelayLoginCallback(ctx, { serverId: login?.serverId, token }, props.onLoginComplete)
+    if (rememberAccount && login != null) {
+      const user = isRecord(payload.user) ? payload.user : {}
+      const email = cleanText(user.email) ?? loginId.trim()
+      if (email !== '') {
+        const account: RelayRememberedLogin = {
+          avatarUrl: cleanText(user.avatarUrl),
+          email,
+          name: cleanText(user.name) ?? email,
+          provider,
+          serverUrl: login.remoteBaseUrl,
+          updatedAt: new Date().toISOString()
+        }
+        setRememberedAccounts(current => {
+          const next = [
+            account,
+            ...current.filter(item =>
+              !(
+                item.serverUrl === account.serverUrl &&
+                item.provider === account.provider &&
+                item.email === account.email
+              )
+            )
+          ].slice(0, 12)
+          writeRelayRememberedLogins(next)
+          return next
+        })
+      }
+    }
+    navigateTo(ctx.scope, routePath(ctx.scope, { page: 'accounts' }))
+  }
+
+  const submitLogin = async () => {
+    if (login == null || submitting) return
+    setError(null)
+    if (loginMethod === 'passkey') {
+      openHostedLogin('passkey')
+      return
+    }
+    if (loginId.trim() === '') {
+      setError('请输入邮箱或账号名。')
+      return
+    }
+    if (loginMethod === 'password' && password === '') {
+      setError('请输入密码。')
+      return
+    }
+    if (loginMethod === 'password' && completingRegistration) {
+      if (password.length < 8) {
+        setError(login.options.messages.passwordMinLength)
+        return
+      }
+      if (confirmPassword === '') {
+        setError(login.options.messages.confirmPasswordRequired)
+        return
+      }
+      if (confirmPassword !== password) {
+        setError(login.options.messages.passwordMismatch)
+        return
+      }
+      if (inviteCode.trim() === '') {
+        setError(login.options.messages.inviteRequired)
+        return
+      }
+    }
+    if (loginMethod === 'verification_code' && verificationCode.trim() === '') {
+      setError('请输入验证码。')
+      return
+    }
+    setSubmitting(true)
+    try {
+      const options = login.options
+      const registering = loginMethod === 'password' && completingRegistration
+      const payload = await postRelayLoginJson(
+        ctx,
+        login.serverId,
+        loginMethod === 'password'
+          ? registering ? 'invite-login' : 'password-login'
+          : 'email-code-login',
+        loginMethod === 'password'
+          ? {
+            email: loginId.trim(),
+            inviteCode: registering ? inviteCode.trim() : undefined,
+            loginId: loginId.trim(),
+            password
+          }
+          : {
+            code: verificationCode.trim(),
+            email: loginId.trim(),
+            loginId: loginId.trim()
+          }
+      )
+      await finishLogin(payload, loginMethod)
+    } catch (loginError) {
+      const message = toErrorMessage(loginError)
+      if (
+        loginMethod === 'password' &&
+        loginError instanceof RelayLoginRequestError &&
+        loginError.code === 'registration_required'
+      ) {
+        setCompletingRegistration(true)
+        setConfirmPassword('')
+        setInviteCode('')
+        setError(login.options.messages.inviteRequired)
+      } else {
+        setError(message === 'Invalid email or password.' ? login.options.messages.invalidCredentials : message)
+      }
+      setSubmitting(false)
+    }
+  }
+
+  const sendVerificationCode = async () => {
+    if (login == null || sendingCode) return
+    if (loginId.trim() === '') {
+      setError('请输入邮箱或账号名。')
+      return
+    }
+    setError(null)
+    setSendingCode(true)
+    try {
+      await postRelayLoginJson(ctx, login.serverId, 'email-verification-send', {
+        email: loginId.trim(),
+        loginId: loginId.trim(),
+        locale: login.options.locale,
+        purpose: 'login'
+      })
+      ctx.notifications?.show?.({ level: 'success', title: '验证码已发送' })
+    } catch (sendError) {
+      setError(toErrorMessage(sendError))
+    } finally {
+      setSendingCode(false)
+    }
+  }
+
+  const loginMethodLabel = (method: RelayLoginMethod) => {
+    const messages = login?.options.messages
+    if (method === 'passkey') return messages?.useLoginMethodPasskey ?? 'Passkey'
+    if (method === 'verification_code') return messages?.useLoginMethodVerificationCode ?? '验证码'
+    return messages?.useLoginMethodPassword ?? '密码'
+  }
+  const loginMethodIcon = (method: RelayLoginMethod) => {
+    if (method === 'passkey') return 'passkey'
+    if (method === 'verification_code') return 'mark_email_read'
+    return 'password'
+  }
+  const renderProviderIcon = (provider: RelayLoginProviderOption): PluginReactNode => {
+    if (provider.icon === 'google') {
+      return react.createElement(
+        'span',
+        { 'aria-hidden': 'true', className: 'oneworks-relay__login-provider-brand-icon' },
+        react.createElement(
+          'svg',
+          { focusable: 'false', viewBox: '0 0 48 48' },
+          react.createElement('path', {
+            d: 'M43.611 20.083H42V20H24v8h11.303C33.654 32.657 29.223 36 24 36c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917Z',
+            fill: '#FFC107'
+          }),
+          react.createElement('path', {
+            d: 'm6.306 14.691 6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691Z',
+            fill: '#FF3D00'
+          }),
+          react.createElement('path', {
+            d: 'M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44Z',
+            fill: '#4CAF50'
+          }),
+          react.createElement('path', {
+            d: 'M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917Z',
+            fill: '#1976D2'
+          })
+        )
+      )
+    }
+    if (provider.icon === 'github') {
+      return react.createElement(
+        'span',
+        { 'aria-hidden': 'true', className: 'oneworks-relay__login-provider-brand-icon' },
+        react.createElement(
+          'svg',
+          { focusable: 'false', viewBox: '0 0 98 96' },
+          react.createElement('path', {
+            d: 'M48.9 0C21.9 0 0 21.9 0 48.9c0 21.6 14 39.9 33.4 46.4 2.4.5 3.3-1.1 3.3-2.4 0-1.2 0-5 0-9.1-13.6 3-16.5-5.8-16.5-5.8-2.2-5.7-5.4-7.2-5.4-7.2-4.4-3 .3-3 .3-3 4.9.3 7.5 5 7.5 5 4.3 7.4 11.3 5.3 14.1 4 .4-3.1 1.7-5.3 3.1-6.5-10.8-1.2-22.2-5.4-22.2-24.2 0-5.3 1.9-9.7 5-13.1-.5-1.2-2.2-6.2.5-12.9 0 0 4.1-1.3 13.4 5 3.9-1.1 8.1-1.6 12.3-1.6s8.4.6 12.3 1.6c9.3-6.3 13.4-5 13.4-5 2.7 6.7 1 11.7.5 12.9 3.1 3.4 5 7.8 5 13.1 0 18.8-11.4 22.9-22.3 24.2 1.8 1.5 3.3 4.5 3.3 9.1 0 6.5-.1 11.8-.1 13.4 0 1.3.9 2.8 3.4 2.4 19.4-6.5 33.4-24.8 33.4-46.4C97.8 21.9 75.9 0 48.9 0Z'
+          })
+        )
+      )
+    }
+    return renderIcon(react, view, provider.icon === 'feishu' ? 'workspaces' : 'login', { size: 18 })
+  }
+  const updateLoginMethod = (method: RelayLoginMethod) => {
+    setError(null)
+    setCompletingRegistration(false)
+    setConfirmPassword('')
+    setInviteCode('')
+    setLoginMethod(method)
+  }
+
+  const renderLoginButton = (input: {
+    className: string
+    disabled?: boolean
+    icon: string
+    iconNode?: PluginReactNode
+    key?: string
+    label: string
+    onClick?: () => void
+    primary?: boolean
+    type?: 'button' | 'submit'
+  }) =>
+    react.createElement(
+      'button',
+      {
+        'aria-label': input.label,
+        className: input.className,
+        'data-primary': input.primary === true ? 'true' : undefined,
+        disabled: input.disabled,
+        key: input.key,
+        onClick: input.onClick,
+        type: input.type ?? 'button'
+      },
+      input.iconNode ?? renderIcon(react, view, input.icon, { size: 18 }),
+      react.createElement('span', null, input.label)
+    )
+
+  const options = login?.options
+  const rememberRow = options == null
+    ? null
+    : react.createElement(
+      'label',
+      { className: 'oneworks-relay__login-remember' },
+      react.createElement('input', {
+        checked: rememberAccount,
+        onChange: (event: Event) => setRememberAccount((event.target as HTMLInputElement).checked),
+        type: 'checkbox'
+      }),
+      react.createElement('span', null, options.messages.rememberAccount)
+    )
+  const renderLoginField = (icon: string, control: PluginReactNode) =>
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__login-field' },
+      react.createElement(
+        'span',
+        { 'aria-hidden': 'true', className: 'oneworks-relay__login-field-icon' },
+        renderIcon(react, view, icon, { size: 18 })
+      ),
+      control
+    )
+
+  const methodForm = options == null
+    ? null
+    : loginMethod === 'passkey'
+    ? react.createElement(
+      'section',
+      { className: 'oneworks-relay__login-form oneworks-relay__login-section' },
+      react.createElement(
+        'strong',
+        { className: 'oneworks-relay__login-section-title' },
+        options.messages.passkeyTitle
+      ),
+      react.createElement(
+        'p',
+        { className: 'oneworks-relay__login-note' },
+        'Passkey 需要在 Relay 服务域名完成浏览器安全校验。继续后可选择或登记凭证，完成后会回到当前 OneWorks 页面。'
+      ),
+      error == null
+        ? null
+        : react.createElement('div', { className: 'oneworks-relay__login-error', role: 'alert' }, error),
+      renderLoginButton({
+        className: 'oneworks-relay__login-submit',
+        icon: 'passkey',
+        label: '使用 Passkey 继续',
+        onClick: () => openHostedLogin('passkey'),
+        primary: true
+      })
+    )
+    : react.createElement(
+      'form',
+      {
+        className: 'oneworks-relay__login-form oneworks-relay__login-section',
+        onSubmit: (event: Event) => {
+          event.preventDefault()
+          void submitLogin()
+        }
+      },
+      renderLoginField(
+        'person',
+        renderInput(react, view, {
+          ariaLabel: '邮箱或账号名',
+          autoFocus: true,
+          onChange: setLoginId,
+          placeholder: options.messages.emailPlaceholder,
+          value: loginId
+        })
+      ),
+      loginMethod === 'password'
+        ? react.createElement(
+          react.Fragment,
+          null,
+          renderLoginField(
+            'password',
+            renderInput(react, view, {
+              ariaLabel: '密码',
+              onChange: setPassword,
+              placeholder: options.messages.passwordPlaceholder,
+              type: 'password',
+              value: password
+            })
+          ),
+          completingRegistration
+            ? react.createElement(
+              react.Fragment,
+              null,
+              renderLoginField(
+                'password',
+                renderInput(react, view, {
+                  ariaLabel: '确认密码',
+                  onChange: setConfirmPassword,
+                  placeholder: options.messages.confirmPasswordPlaceholder,
+                  type: 'password',
+                  value: confirmPassword
+                })
+              ),
+              renderLoginField(
+                'key',
+                renderInput(react, view, {
+                  ariaLabel: '邀请码',
+                  onChange: setInviteCode,
+                  placeholder: options.messages.inviteCodePlaceholder,
+                  value: inviteCode
+                })
+              )
+            )
+            : null
+        )
+        : renderLoginField(
+          'pin',
+          react.createElement(
+            'div',
+            { className: 'oneworks-relay__login-code-row' },
+            renderInput(react, view, {
+              ariaLabel: '验证码',
+              onChange: setVerificationCode,
+              placeholder: options.messages.passkeyCodePlaceholder,
+              value: verificationCode
+            }),
+            renderLoginButton({
+              className: 'oneworks-relay__login-code-button',
+              disabled: sendingCode,
+              icon: 'send',
+              label: sendingCode ? '发送中...' : options.messages.passkeySendCode,
+              onClick: () => void sendVerificationCode()
+            })
+          )
+        ),
+      rememberRow,
+      error == null
+        ? null
+        : react.createElement('div', { className: 'oneworks-relay__login-error', role: 'alert' }, error),
+      renderLoginButton({
+        className: 'oneworks-relay__login-submit',
+        disabled: submitting,
+        icon: loginMethod === 'password' ? 'login' : 'fact_check',
+        label: submitting
+          ? options.messages.signingIn
+          : completingRegistration
+          ? options.messages.continueWithRegistration
+          : options.messages.signInMode,
+        primary: true,
+        type: 'submit'
+      })
+    )
+
+  const alternateLoginMethods = options?.loginMethods.enabled.filter(method => method !== loginMethod) ?? []
+  const methodSwitcher = options == null || alternateLoginMethods.length === 0
+    ? null
+    : react.createElement(
+      'section',
+      { 'aria-label': '切换登录方式', className: 'oneworks-relay__login-method-switcher' },
+      ...alternateLoginMethods.map(method =>
+        renderLoginButton({
+          className: 'oneworks-relay__login-method-switch-button',
+          icon: loginMethodIcon(method),
+          key: method,
+          label: loginMethodLabel(method),
+          onClick: () => updateLoginMethod(method)
+        })
+      )
+    )
+
+  const currentRememberedAccounts = login == null
+    ? []
+    : rememberedAccounts.filter(account => account.serverUrl === login.remoteBaseUrl)
+  const selectRememberedAccount = (account: RelayRememberedLogin) => {
+    setError(null)
+    setLoginId(account.email)
+    if (
+      (account.provider === 'password' || account.provider === 'passkey' || account.provider === 'verification_code') &&
+      options?.loginMethods.enabled.includes(account.provider)
+    ) {
+      updateLoginMethod(account.provider)
+      return
+    }
+    const provider = options?.providers.find(item => item.id === account.provider)
+    if (provider != null) {
+      const url = new URL(provider.startUrl)
+      url.searchParams.set('login_hint', account.email)
+      window.location.href = url.toString()
+    }
+  }
+
   return react.createElement(
     'main',
-    { className: 'oneworks-relay' },
+    {
+      className: `oneworks-relay oneworks-relay--login-route${launcherSurface ? ' oneworks-relay--launcher-login' : ''}`
+    },
     react.createElement(
       'div',
       { className: 'oneworks-relay__shell' },
       react.createElement(
         'section',
         { className: 'oneworks-relay__surface' },
-        error != null
-          ? react.createElement('div', { className: 'oneworks-relay__config-error' }, error)
-          : loading || loginUrl === ''
-          ? react.createElement('div', { className: 'oneworks-relay__empty' }, '正在打开登录页...')
-          : react.createElement('iframe', {
-            className: 'oneworks-relay__login-frame',
-            'data-relay-login-frame': 'true',
-            onLoad: (event: Event) => {
-              const frame = event.target instanceof HTMLIFrameElement ? event.target : null
-              let href = ''
-              try {
-                href = frame?.contentWindow?.location.href ?? ''
-              } catch {
-                return
-              }
-              const callback = readLoginCallbackFromUrl(href)
-              if (callback != null) {
-                void requestJson(ctx, 'login-callback', {
-                  serverId: callback.serverId,
-                  token: callback.token
-                }).then(() => navigateTo(ctx.scope, routePath(ctx.scope, { page: 'accounts' })))
-              }
-            },
-            src: loginUrl,
-            title: '登录'
-          })
+        error != null &&
+          login == null && !loading
+          ? react.createElement(
+            'div',
+            { className: 'oneworks-relay__login-native oneworks-relay__login-native--error' },
+            renderIcon(react, view, 'warning', { size: 28 }),
+            react.createElement('strong', null, `无法读取 ${serverName} 登录能力`),
+            react.createElement('span', null, error),
+            fallbackLoginUrl === ''
+              ? null
+              : renderLoginButton({
+                className: 'oneworks-relay__login-submit',
+                icon: 'open_in_new',
+                label: `打开 ${serverName} 兼容登录页`,
+                onClick: () => openHostedLogin(),
+                primary: true
+              })
+          )
+          : loading || options == null
+          ? react.createElement(
+            'div',
+            { className: 'oneworks-relay__login-loading' },
+            renderIcon(react, view, 'progress_activity', { size: 18 }),
+            `正在读取 ${serverName} 登录能力...`
+          )
+          : react.createElement(
+            'section',
+            { className: 'oneworks-relay__login-native' },
+            currentRememberedAccounts.length === 0
+              ? null
+              : react.createElement(
+                'section',
+                { className: 'oneworks-relay__login-accounts oneworks-relay__login-section' },
+                react.createElement(
+                  'strong',
+                  { className: 'oneworks-relay__login-section-title' },
+                  options.messages.recentAccounts
+                ),
+                ...currentRememberedAccounts.map(account =>
+                  react.createElement(
+                    'button',
+                    {
+                      className: 'oneworks-relay__login-account-button',
+                      key: `${account.provider}:${account.email}`,
+                      onClick: () => selectRememberedAccount(account),
+                      type: 'button'
+                    },
+                    react.createElement(
+                      'span',
+                      { className: 'oneworks-relay__login-account-avatar' },
+                      account.name.slice(0, 1).toUpperCase()
+                    ),
+                    react.createElement(
+                      'span',
+                      { className: 'oneworks-relay__login-account-copy' },
+                      react.createElement('strong', null, account.name),
+                      react.createElement('small', null, `${account.provider} · ${account.email}`)
+                    )
+                  )
+                )
+              ),
+            methodForm,
+            methodSwitcher,
+            options.providers.length === 0
+              ? null
+              : react.createElement(
+                'section',
+                { className: 'oneworks-relay__login-sso oneworks-relay__login-section' },
+                react.createElement(
+                  'div',
+                  { className: 'oneworks-relay__login-provider-grid' },
+                  ...options.providers.map(provider =>
+                    renderLoginButton({
+                      className: 'oneworks-relay__login-provider-button',
+                      icon: 'login',
+                      iconNode: renderProviderIcon(provider),
+                      key: provider.id,
+                      label: provider.label,
+                      onClick: () => openLoginDestination(provider.startUrl)
+                    })
+                  )
+                )
+              ),
+            react.createElement(
+              'footer',
+              { className: 'oneworks-relay__login-footer' },
+              renderLoginButton({
+                className: 'oneworks-relay__login-service-picker',
+                icon: 'dns',
+                label: '登录到其他服务器',
+                onClick: () => navigateTo(ctx.scope, routePath(ctx.scope, { page: 'servers' }))
+              }),
+              react.createElement(
+                'button',
+                {
+                  className: 'oneworks-relay__login-compatibility',
+                  onClick: () => openHostedLogin(),
+                  type: 'button'
+                },
+                '注册新账号或使用完整安全登录页'
+              )
+            )
+          )
       )
     )
   )
@@ -3895,6 +4530,39 @@ const ServersPage = (props: {
   const servers = getServers(status)
   const [editingKey, setEditingKey] = react.useState('')
   const [draft, setDraft] = react.useState<ServerDraft>({ name: '', remoteBaseUrl: '' })
+  const [serviceInfoByServer, setServiceInfoByServer] = react.useState<
+    Record<string, {
+      availabilityError?: string
+      avatarUrl?: string
+      lastCheckedAt?: string
+      online?: boolean
+    }>
+  >({})
+  const serverSignature = servers
+    .map(server => `${cleanText(server.id) ?? ''}\0${cleanText(server.remoteBaseUrl) ?? ''}`)
+    .join('\0')
+  react.useEffect(() => {
+    let disposed = false
+    setServiceInfoByServer({})
+    for (const server of servers) {
+      const key = cleanText(server.id) ?? cleanText(server.remoteBaseUrl)
+      if (key == null) continue
+      void requestJson<{
+        availabilityError?: string
+        avatarUrl?: string
+        lastCheckedAt?: string
+        online?: boolean
+      }>(ctx, 'server-info', { serverId: key })
+        .then(serviceInfo => {
+          if (disposed) return
+          setServiceInfoByServer(current => ({ ...current, [key]: serviceInfo }))
+        })
+        .catch(() => undefined)
+    }
+    return () => {
+      disposed = true
+    }
+  }, [ctx, serverSignature])
   const saveDraft = async () => {
     const update = view?.options?.update
     if (update == null) throw new Error('当前环境不支持保存服务器配置。')
@@ -3925,12 +4593,65 @@ const ServersPage = (props: {
               const editing = editingKey === key
               const title = serverDisplayName(server)
               const address = serverAddress(server)
+              const serviceInfo = serviceInfoByServer[key]
+              const online = serviceInfo == null ? server.online : serviceInfo.online
+              const availabilityError = cleanText(
+                serviceInfo == null ? server.availabilityError : serviceInfo.availabilityError
+              )
+              const lastCheckedAt = cleanText(
+                serviceInfo == null ? server.lastCheckedAt : serviceInfo.lastCheckedAt
+              )
+              const presence = online == null ? 'checking' : online ? 'online' : 'offline'
+              const presenceAccessibleLabel = online == null
+                ? '服务状态检查中'
+                : online
+                ? '服务在线'
+                : '服务不可用'
+              const presenceLabel = online == null
+                ? '正在检查服务状态'
+                : [
+                  online ? '服务在线' : '服务不可用',
+                  availabilityError,
+                  lastCheckedAt == null ? undefined : `检查于 ${formatDateTime(lastCheckedAt)}`
+                ].filter(Boolean).join(' · ')
+              const openServerLogin = () =>
+                navigateTo(
+                  ctx.scope,
+                  routePath(ctx.scope, {
+                    page: 'login',
+                    serverId: key
+                  })
+                )
               return react.createElement(
                 'div',
-                { className: adminListSurfaceClassNames.nativeRow, key, title: address },
+                {
+                  'aria-label': editing ? undefined : `登录到 ${title}，${presenceAccessibleLabel}`,
+                  className: `${adminListSurfaceClassNames.nativeRow} oneworks-relay__server-row`,
+                  'data-editing': editing ? 'true' : 'false',
+                  key,
+                  onClick: editing ? undefined : openServerLogin,
+                  onKeyDown: editing
+                    ? undefined
+                    : (event: {
+                      currentTarget: EventTarget
+                      key: string
+                      preventDefault: () => void
+                      target: EventTarget
+                    }) => {
+                      if (event.target !== event.currentTarget || event.key !== 'Enter') return
+                      event.preventDefault()
+                      openServerLogin()
+                    },
+                  role: editing ? undefined : 'link',
+                  tabIndex: editing ? undefined : 0,
+                  title: address
+                },
                 renderAvatar(react, {
+                  avatarUrl: cleanText(serviceInfo == null ? server.avatarUrl : serviceInfo.avatarUrl),
                   className: adminListSurfaceClassNames.nativeIcon,
                   name: title,
+                  presence,
+                  presenceLabel,
                   state: 'server'
                 }),
                 editing
@@ -3954,46 +4675,37 @@ const ServersPage = (props: {
                     react.createElement('strong', { className: adminListSurfaceClassNames.nativeTitle }, title),
                     react.createElement('span', { className: adminListSurfaceClassNames.nativeMeta }, address)
                   ),
-                react.createElement(
-                  'span',
-                  { className: adminListSurfaceClassNames.nativeActions },
-                  editing
-                    ? [
-                      renderButton(react, view, {
-                        icon: 'check',
-                        key: 'save',
-                        label: '保存服务器',
-                        onClick: () => {
-                          void saveDraft().catch(error =>
-                            ctx.notifications?.show?.({
-                              level: 'error',
-                              title: toErrorMessage(error)
-                            })
-                          )
-                        }
-                      }),
-                      renderButton(react, view, {
-                        icon: 'close',
-                        key: 'cancel',
-                        label: '取消',
-                        onClick: () => setEditingKey('')
-                      })
-                    ]
-                    : [
-                      renderButton(react, view, {
-                        icon: 'login',
-                        key: 'login',
-                        label: '登录',
-                        onClick: () =>
-                          navigateTo(
-                            ctx.scope,
-                            routePath(ctx.scope, {
-                              page: 'login',
-                              serverId: key
-                            })
-                          )
-                      }),
-                      official ? null : renderButton(react, view, {
+                official && !editing
+                  ? null
+                  : react.createElement(
+                    'span',
+                    {
+                      className: adminListSurfaceClassNames.nativeActions,
+                      onClick: (event: { stopPropagation: () => void }) => event.stopPropagation()
+                    },
+                    editing
+                      ? [
+                        renderButton(react, view, {
+                          icon: 'check',
+                          key: 'save',
+                          label: '保存服务器',
+                          onClick: () => {
+                            void saveDraft().catch(error =>
+                              ctx.notifications?.show?.({
+                                level: 'error',
+                                title: toErrorMessage(error)
+                              })
+                            )
+                          }
+                        }),
+                        renderButton(react, view, {
+                          icon: 'close',
+                          key: 'cancel',
+                          label: '取消',
+                          onClick: () => setEditingKey('')
+                        })
+                      ]
+                      : renderButton(react, view, {
                         icon: 'edit',
                         key: 'edit',
                         label: '修改服务器',
@@ -4006,8 +4718,7 @@ const ServersPage = (props: {
                           })
                         }
                       })
-                    ]
-                )
+                  )
               )
             }),
             react.createElement(
@@ -6759,9 +7470,10 @@ const ProfilePage = (props: {
 
 export const RelayHomeView = (props: {
   ctx: PluginClientContext
+  onAccountChanged?: () => Promise<void> | void
   view?: PluginViewContext
 }) => {
-  const { ctx, view } = props
+  const { ctx, onAccountChanged, view } = props
   const react = ctx.react
   const signature = useLocationSignature(react, ctx.scope)
   const route = react.useMemo(() => parseRoute(ctx.scope), [ctx.scope, signature])
@@ -6774,16 +7486,16 @@ export const RelayHomeView = (props: {
   const profile = profileState.data
   const account = getProfileAccount(profile, status, accountKey)
   const accountName = accountDisplayName(account)
+  const onLoginComplete = async () => {
+    refreshData()
+    await onAccountChanged?.()
+  }
 
   react.useEffect(() => {
     const callback = readLoginCallback()
     if (callback == null) return undefined
     clearLoginCallbackFromUrl()
-    void requestJson(ctx, 'login-callback', {
-      serverId: callback.serverId,
-      token: callback.token
-    }).then(() => {
-      refreshData()
+    void completeRelayLoginCallback(ctx, callback, onLoginComplete).then(() => {
       navigateTo(ctx.scope, routePath(ctx.scope, { page: 'accounts' }))
     }).catch(error => ctx.notifications?.show?.({ level: 'error', title: toErrorMessage(error) }))
     return undefined
@@ -6800,11 +7512,7 @@ export const RelayHomeView = (props: {
         : ''
       const callback: RelayLoginCallback | undefined = url === '' ? undefined : readLoginCallbackFromUrl(url)
       if (callback == null) return
-      void requestJson(ctx, 'login-callback', {
-        serverId: callback.serverId,
-        token: callback.token
-      }).then(() => {
-        refreshData()
+      void completeRelayLoginCallback(ctx, callback, onLoginComplete).then(() => {
         navigateTo(ctx.scope, routePath(ctx.scope, { page: 'accounts' }))
       }).catch(error => ctx.notifications?.show?.({ level: 'error', title: toErrorMessage(error) }))
     }
@@ -6820,8 +7528,14 @@ export const RelayHomeView = (props: {
         navigateTo(ctx.scope, routePath(ctx.scope, { accountKey, page: 'profile', tab: 'account' }))
       }
     }
+    const loginAction: PluginViewRouteHeaderAction = {
+      icon: 'login',
+      key: 'login',
+      label: launcherSurface ? '登录' : '登录账号',
+      onSelect: () => navigateTo(ctx.scope, routePath(ctx.scope, { page: 'login' }))
+    }
     const accountActions: PluginViewRouteHeaderAction[] = launcherSurface
-      ? []
+      ? [loginAction]
       : [
         {
           icon: 'add_circle',
@@ -6829,12 +7543,7 @@ export const RelayHomeView = (props: {
           label: '加入服务器',
           onSelect: () => navigateTo(ctx.scope, routePath(ctx.scope, { page: 'servers' }))
         },
-        {
-          icon: 'login',
-          key: 'login',
-          label: '登录账号',
-          onSelect: () => navigateTo(ctx.scope, routePath(ctx.scope, { page: 'login' }))
-        }
+        loginAction
       ]
     const actions: PluginViewRouteHeaderAction[] = route.page === 'accounts'
       ? accountActions
@@ -7094,7 +7803,14 @@ export const RelayHomeView = (props: {
     })
   }
   if (route.page === 'login') {
-    return react.createElement(LoginPage, { ctx, react, route })
+    return react.createElement(LoginPage, {
+      ctx,
+      onLoginComplete,
+      react,
+      route,
+      serverName: selectedServerDisplayName(status, route.serverId),
+      view
+    })
   }
   if (route.page === 'messages') {
     return react.createElement(MessagesPage, { profile, react, view })

@@ -25,7 +25,7 @@ interface TurnstileSiteverifyResponse {
 
 const DEFAULT_TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
 
-const turnstileRequired = (config: RelayEmailConfig) => {
+export const isRelayTurnstileRequired = (config: RelayEmailConfig) => {
   if (config.turnstile.mode === 'off') return false
   if (config.turnstile.mode === 'required') return true
   return config.turnstile.secretKey != null ||
@@ -40,7 +40,7 @@ export const verifyRelayTurnstile = async (
     token?: string
   }
 ): Promise<RelayTurnstileDecision> => {
-  if (!turnstileRequired(config)) return { allowed: true }
+  if (!isRelayTurnstileRequired(config)) return { allowed: true }
   if (config.turnstile.secretKey == null || config.turnstile.secretKey.trim() === '') {
     return {
       allowed: false,

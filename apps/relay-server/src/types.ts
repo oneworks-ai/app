@@ -3,6 +3,7 @@
 export interface RelayServerArgs {
   allowOrigin: string
   adminToken: string
+  avatarUrl?: string
   dataPath: string
   defaultLoginMethod?: RelayLoginMethod
   deviceMetadataSecret?: string
@@ -12,6 +13,7 @@ export interface RelayServerArgs {
   embeddedAdminUi?: boolean
   help?: boolean
   host: string
+  loginRedirectOrigins?: string[]
   oauth?: Record<string, RelayOAuthClient | undefined>
   passkey?: RelayPasskeyConfig
   port: number

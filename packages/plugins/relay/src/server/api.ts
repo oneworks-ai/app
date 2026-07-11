@@ -13,14 +13,21 @@ const readErrorStatus = (error: unknown, fallback: number) => {
     : fallback
 }
 
+const readErrorCode = (error: unknown) => {
+  if (error == null || typeof error !== 'object') return undefined
+  const code = (error as { code?: unknown }).code
+  return typeof code === 'string' && code.trim() !== '' ? code.trim() : undefined
+}
+
 const controllerJson = async (action: () => Promise<unknown>, errorStatus = 400) => {
   try {
     return createJsonResponse(await action())
   } catch (error) {
-    return createErrorResponse(
-      error instanceof Error ? error.message : String(error),
-      readErrorStatus(error, errorStatus)
-    )
+    const message = error instanceof Error ? error.message : String(error)
+    const code = readErrorCode(error)
+    return code == null
+      ? createErrorResponse(message, readErrorStatus(error, errorStatus))
+      : createJsonResponse({ code, error: message }, readErrorStatus(error, errorStatus))
   }
 }
 
@@ -29,11 +36,20 @@ export const handleRelayApi = async (request: PluginProxyRequest, controller: Re
   if (request.method === 'GET' && (route === '' || route === 'status')) {
     return createJsonResponse(await controller.getPublicStatus())
   }
+  if (request.method === 'POST' && route === 'server-info') {
+    return await controllerJson(async () => await controller.getServiceInfo(readBody(request)), 502)
+  }
   if (request.method === 'POST' && route === 'connect') {
     return createJsonResponse(await controller.connect(readBody(request)))
   }
   if (request.method === 'POST' && route === 'login-url') {
     return await controllerJson(async () => await controller.createLoginUrl(readBody(request)))
+  }
+  if (request.method === 'POST' && route === 'login-options') {
+    return await controllerJson(async () => await controller.getNativeLoginOptions(readBody(request)), 502)
+  }
+  if (request.method === 'POST' && route === 'native-login') {
+    return await controllerJson(async () => await controller.proxyNativeLoginRequest(readBody(request)), 502)
   }
   if (request.method === 'POST' && route === 'login-callback') {
     return await controllerJson(async () => await controller.completeLogin(readBody(request)))

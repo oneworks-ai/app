@@ -6,7 +6,7 @@
 
 - `src/server.ts`：HTTP route 挂载与服务创建。
 - `src/routes/`：传输层处理函数，只做认证、参数解析和响应。
-- `src/routes/login.ts` / `src/routes/login-page.ts`：Relay 插件打开的 `/login` 与 `/login/complete` SSO 登录入口；负责 redirect 校验、provider start URL 计算、JSON config 注入和 Web/Electron 回跳，不承载完整用户端设备 / 会话页面。`/login` 的 React + AntD 控件在 `apps/relay-admin/src/login`，不要在 relay-server 字符串模板里手写 input/button/list。
+- `src/routes/login.ts` / `src/routes/login-page.ts` / `src/routes/login-redirect.ts`：Relay 插件打开的 `/login` 与 `/login/complete` SSO 登录入口；负责受限 Client redirect 校验、provider start URL 计算、JSON config 注入和 Web/Electron 回跳，不承载完整用户端设备 / 会话页面。同一配置生成器也供 `/api/auth/login-options` 返回 Client 原生登录页所需的登录方式、endpoint 和 provider；原生能力列表必须过滤需要 Turnstile、因而不能由 Client 直接完成的验证码方式。`/login` 的 React + AntD 控件在 `apps/relay-admin/src/login`，不要在 relay-server 字符串模板里手写 input/button/list。
 - `src/auth/passkeys.ts` / `src/routes/passkeys.ts`：passkey 注册与登录核心逻辑和 HTTP route。这里处理 WebAuthn options/verify、邮箱验证码校验开关、邀请码策略、credential counter 更新和 session 发放；登录页 UI 仍在 `apps/relay-admin/src/login`。
 - `src/routes/email-code-login.ts`：现有用户邮箱验证码登录 endpoint；发码继续走 `src/routes/email-verification.ts` 且使用 `purpose=login`。
 - `src/routes/admin-sso-providers.ts`：B 端托管 SSO provider 管理 API。
@@ -43,6 +43,8 @@
 - `users.email` 是联系邮箱，不是全局唯一登录键。登录来源归属以 `store.authIdentities` 为准：SSO 用 `(provider, providerUserId)` 绑定用户，Google / GitHub 等同邮箱登录也创建独立用户；`loginId` 必须全局唯一并可由用户后续改名；邮箱验证码只允许命中 `email_code` 身份，不能借同邮箱登录 SSO-only 账号。
 - 发信入口必须先经过 `src/email/` 的 Turnstile、域名策略、同邮箱 / 同 IP / 同域名和全局预算检查，再调用 Resend 或后续 provider。域名 allowlist 只能解除域名封禁，不能绕过 Turnstile、频率或预算。
 - `/login` 的默认登录方式由 `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD` 决定，支持 `password`、`passkey`、`verification_code`；前端可记住浏览器最近一次选择，但 server config 仍是默认来源。
+- `/login` 与 `/login/complete` 的 HTML 包含当前请求时计算的登录方式和 SSO provider 配置，响应必须保持 `Cache-Control: no-store`，避免 provider 启停后浏览器继续复用旧能力列表。CSP `frame-ancestors` 只允许与受限 `ONEWORKS_RELAY_ALLOW_ORIGIN` 一致的 Web `redirect_uri` 来源；`*` 仅对 loopback redirect 保留本地开发嵌入，其他来源以及自定义协议 / 无效 redirect 均禁止 iframe，防止未知顶层站点调用已委派的 WebAuthn。
+- 登录 token 的最终 redirect 只允许与 `ONEWORKS_RELAY_ALLOW_ORIGIN` 同源的 Web URL、本地开发时的 loopback URL，或精确的 `oneworks://relay/auth` / `one-works://relay/auth` 回调形状；OAuth 中间回跳只额外允许当前 Relay origin 的 `/login/complete`，不得按“任意 HTTPS / 任意自定义协议”放行。
 - Passkey 注册默认必须先校验邮箱验证码；新用户是否还需要邀请码由 `ONEWORKS_RELAY_REGISTRATION_MODE` 决定。`invite_required` 是默认值，`email_verified` 允许邮箱验证后自注册，`admin_created_only` 禁止新账号自注册但允许已有用户绑定 passkey。`ONEWORKS_RELAY_PASSKEY_EMAIL_VERIFICATION_REQUIRED=off` 只允许新 passkey 自注册跳过邮箱确认，已有用户新增 passkey 仍必须验证邮箱。不要把这些策略硬编码到前端。
 - `ONEWORKS_RELAY_STORAGE_DRIVER=sqlite` 是单机 Node 生产推荐路径，`ONEWORKS_RELAY_DATA_PATH` 指向 SQLite 文件；不要把 SQLite 实现扩散到 routes 或 session-forwarding。
 - `ONEWORKS_RELAY_STORAGE_DRIVER=postgres` 是 Vercel / serverless Node 路径，连接串来自 `ONEWORKS_RELAY_POSTGRES_URL`、`DATABASE_URL` 或 `--data`；日志和 repository location 必须脱敏连接串密码。

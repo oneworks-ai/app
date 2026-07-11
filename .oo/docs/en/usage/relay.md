@@ -6,17 +6,18 @@ Relay connects One Works plugin devices with cloud sessions. Most users should u
 
 Before creating platform projects, OAuth clients, mail domains, or passkeys, decide these settings first:
 
-| Setting          | Recommendation                                                                                                                                         |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Public domain    | Choose the final user-facing domain such as `https://relay.example.com` before configuring SSO or passkeys.                                            |
-| Deployment shape | Use Postgres for a Vercel single-project deployment, Pages + Worker / Durable Object for Cloudflare, and usually SQLite for single-host Node.          |
-| `PUBLIC_URL`     | Set `ONEWORKS_RELAY_PUBLIC_URL` to the real browser-facing Admin / login / API origin.                                                                 |
-| CORS             | In production, set `ONEWORKS_RELAY_ALLOW_ORIGIN` to the allowed frontend origin instead of `*`.                                                        |
-| Secrets          | Store admin tokens, device metadata secrets, database URLs, mail keys, and OAuth secrets in the platform secret store.                                 |
-| Mail             | Send verification, invite, and system emails from a stable sending domain with a role-address Reply-To; do not attach mail DNS to the Relay web host.  |
-| SSO              | Callback URLs must exactly match the URL Relay sends; built-in GitHub and Google providers use dedicated env vars, while Feishu uses the Admin preset. |
-| Passkey          | Enroll on the final HTTPS origin; set `ONEWORKS_RELAY_PASSKEY_ORIGIN` / `ONEWORKS_RELAY_PASSKEY_RP_ID` when they must be explicit.                     |
-| Plugin servers   | Put only final public origins in Relay plugin `servers[]`; dev, prod, and company services can coexist.                                                |
+| Setting          | Recommendation                                                                                                                                           |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public domain    | Choose the final user-facing domain such as `https://relay.example.com` before configuring SSO or passkeys.                                              |
+| Deployment shape | Use Postgres for a Vercel single-project deployment, Pages + Worker / Durable Object for Cloudflare, and usually SQLite for single-host Node.            |
+| `PUBLIC_URL`     | Set `ONEWORKS_RELAY_PUBLIC_URL` to the real browser-facing Admin / login / API origin.                                                                   |
+| CORS             | In production, set `ONEWORKS_RELAY_ALLOW_ORIGIN` to the allowed frontend origin instead of `*`.                                                          |
+| Service avatar   | Set `ONEWORKS_RELAY_AVATAR_URL` to the instance's public HTTP/HTTPS avatar; Clients read it from service discovery instead of hardcoding platform icons. |
+| Secrets          | Store admin tokens, device metadata secrets, database URLs, mail keys, and OAuth secrets in the platform secret store.                                   |
+| Mail             | Send verification, invite, and system emails from a stable sending domain with a role-address Reply-To; do not attach mail DNS to the Relay web host.    |
+| SSO              | Callback URLs must exactly match the URL Relay sends; built-in GitHub and Google providers use dedicated env vars, while Feishu uses the Admin preset.   |
+| Passkey          | Enroll on the final HTTPS origin; set `ONEWORKS_RELAY_PASSKEY_ORIGIN` / `ONEWORKS_RELAY_PASSKEY_RP_ID` when they must be explicit.                       |
+| Plugin servers   | Put only final public origins in Relay plugin `servers[]`; dev, prod, and company services can coexist.                                                  |
 
 Configuration belongs to the deployment environment, not to code constants. Do not put real account IDs, project IDs, personal emails, database URLs, OAuth secrets, Resend keys, verification codes, or temporary deployment URLs into README files, `.oo/docs`, rules, screenshots, or example config.
 
@@ -60,7 +61,9 @@ Current users read or update the document snapshot through `GET` / `PUT` / `POST
 
 ## Login Methods
 
-`/login` is shared by the Relay plugin, Admin, and Web redirect flows. Operators can set the default method with `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD`, and the browser remembers the last method selected by the user.
+The One Works Web and Electron clients use a flat native Client login page without a separate card or gradient backdrop. It consumes the selected Relay Server's `/api/auth/login-options` response through the scoped plugin API and shows only the currently enabled methods and SSO providers instead of hardcoding a provider list. Password, invite, and verification-code requests also use fixed plugin-server actions targeting configured Relay servers, so the Electron renderer does not depend on cross-origin CORS and does not gain an arbitrary remote proxy. Remembered accounts, the remember-account control, the active method form, and alternate-method actions mirror Relay Admin. Password login stays in the Client form, while verification code is advertised there only when the server does not require a Turnstile challenge. Passkey must run on the Relay WebAuthn origin, and SSO must visit the identity provider; Web continues in the current top-level tab, while Electron opens the system browser and returns through `oneworks://relay/auth` to the originating Launcher or workspace. Older Relay servers can still use the compatibility `/login` page.
+
+`/login` remains the compatibility page shared by Admin, CLI / Electron, and Web redirect flows. Operators can set the default method with `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD`, and the browser remembers the last method selected by the user.
 
 - Password: for existing non-SSO accounts with a password.
 - Verification code: for existing non-SSO / `email_code` accounts only. It sends a login code to that account email. It does not create accounts and cannot sign in SSO-only accounts that share the same email.

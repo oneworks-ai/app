@@ -2,43 +2,20 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { buildOAuthAuthorizeUrl, fetchOAuthProfile } from '../auth/providers.js'
 import { createSession, pruneExpiredAuth, publicUser, resolveSession } from '../auth/sessions.js'
-import { relayAuthProviderSummaries, resolveOAuthClient } from '../auth/sso-provider-registry.js'
+import { resolveOAuthClient } from '../auth/sso-provider-registry.js'
 import { upsertOAuthUser } from '../auth/users.js'
 import { getBearerToken, redirect, sendJson } from '../http.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
 import type { RelayServerArgs, RelayStore } from '../types.js'
 import { createToken, now } from '../utils.js'
-import { isSupportedLoginRedirectUri } from './login-page.js'
+import { handleAuthProviders, handleLoginOptions } from './login-options.js'
+import { isSupportedOAuthRedirectUri, withRelayLoginError, withRelayLoginToken } from './login-redirect.js'
 import { publicRequestBaseUrl } from './request-origin.js'
 import { recordLoginNotificationMessage } from './team-invitations.js'
 
 const callbackUrl = (req: IncomingMessage, args: RelayServerArgs, provider: string) => {
   const base = publicRequestBaseUrl(req, args.publicBaseUrl)
   return `${base}/api/auth/oauth/${provider}/callback`
-}
-
-const redirectWithToken = (redirectUri: string, token: string) => {
-  if (!isSupportedLoginRedirectUri(redirectUri)) {
-    throw new Error('Unsupported OAuth redirect URI.')
-  }
-  const url = new URL(redirectUri)
-  url.hash = new URLSearchParams({ relay_token: token }).toString()
-  return url.toString()
-}
-
-const redirectWithError = (redirectUri: string, message: string) => {
-  if (!isSupportedLoginRedirectUri(redirectUri)) {
-    throw new Error('Unsupported OAuth redirect URI.')
-  }
-  const url = new URL(redirectUri)
-  url.hash = new URLSearchParams({ relay_error: message }).toString()
-  return url.toString()
-}
-
-const handleProviders = (res: ServerResponse, args: RelayServerArgs, store: RelayStore) => {
-  sendJson(res, 200, {
-    providers: relayAuthProviderSummaries(args, store)
-  }, args.allowOrigin)
 }
 
 const handleStart = async (
@@ -55,11 +32,16 @@ const handleStart = async (
     sendJson(res, 404, { error: `OAuth provider "${provider}" is not configured.` }, args.allowOrigin)
     return
   }
+  const redirectUri = url.searchParams.get('redirect_uri')?.trim() || undefined
+  if (redirectUri != null && !isSupportedOAuthRedirectUri(redirectUri, req, args)) {
+    sendJson(res, 400, { error: 'Unsupported OAuth redirect URI.' }, args.allowOrigin)
+    return
+  }
   const state = createToken()
   store.oauthStates.push({
     state,
     provider,
-    redirectUri: url.searchParams.get('redirect_uri') ?? undefined,
+    redirectUri,
     inviteCode: url.searchParams.get('invite_code') ?? undefined,
     createdAt: now(),
     expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString()
@@ -111,7 +93,7 @@ const handleCallback = async (
     recordLoginNotificationMessage(req, store, user)
     await storeRepository.write(store)
     if (state.redirectUri != null) {
-      redirect(res, redirectWithToken(state.redirectUri, session.token), args.allowOrigin)
+      redirect(res, withRelayLoginToken(state.redirectUri, session.token, req, args), args.allowOrigin)
       return
     }
     sendJson(res, 200, { token: session.token, user: publicUser(user) }, args.allowOrigin)
@@ -120,7 +102,7 @@ const handleCallback = async (
     const message = error instanceof Error ? error.message : String(error)
     if (state.redirectUri != null) {
       try {
-        redirect(res, redirectWithError(state.redirectUri, message), args.allowOrigin)
+        redirect(res, withRelayLoginError(state.redirectUri, message, req, args), args.allowOrigin)
         return
       } catch {}
     }
@@ -173,7 +155,11 @@ export const handleAuthRoute = async (
 ) => {
   pruneExpiredAuth(store)
   if (req.method === 'GET' && url.pathname === '/api/auth/providers') {
-    handleProviders(res, args, store)
+    handleAuthProviders(res, args, store)
+    return true
+  }
+  if (req.method === 'GET' && url.pathname === '/api/auth/login-options') {
+    handleLoginOptions(req, res, args, store, url)
     return true
   }
   if (req.method === 'GET' && url.pathname === '/api/auth/me') {
