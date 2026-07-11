@@ -105,9 +105,12 @@ jobs:
         run: |
           set -euo pipefail
           worker_name="${CF_WORKER_NAME:-oneworks-relay-dev}"
+          public_origin="${RELAY_DEV_CF_ORIGIN:-https://dev.cf.oneworks.cloud}"
           pnpm dlx "wrangler@${WRANGLER_VERSION}" deploy \
             --config apps/relay-server/wrangler.jsonc \
-            --name "$worker_name"
+            --name "$worker_name" \
+            --var "ONEWORKS_RELAY_PUBLIC_URL:${public_origin}" \
+            --var "ONEWORKS_RELAY_ALLOW_ORIGIN:${public_origin}"
 
       - name: Deploy Relay Admin Pages
         if: steps.credentials.outputs.available == 'true'
