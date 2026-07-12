@@ -28,7 +28,7 @@
 - 先把任务拆成可独立 review 的 PR 或提交范围，每个范围有明确目标、触达目录、验收标准和验证命令。
 - 让子任务写入范围尽量不重叠；强依赖前序 diff 的清理或统一收口任务后置。
 - 不要一次开满所有线程。先开互相独立的第一波，等结构稳定后再开依赖型任务。
-- 主线程维护整体矩阵：范围、推荐 model / reasoning 及理由、分支、pending worktree / thread id、写入目录、验收命令、PR、CI、阻塞点和后续接口。父任务使用 Sol 不代表所有子任务继承 Sol；按 `model-routing.md` 对每个独立验收面重新选档。
+- 主线程维护整体矩阵：范围、推荐 model / reasoning 及理由、分支、pending worktree / thread id、写入目录、验收命令、PR、CI、阻塞点、后续接口，以及适用的 `restartAuthorization`。父任务使用 Sol 不代表所有子任务继承 Sol；按 `model-routing.md` 对每个独立验收面重新选档。
 
 ## 创建子线程前
 
@@ -44,6 +44,7 @@
   - 建议分支名、验证要求、交付格式。
   - 非机械代码修改还要包含 Change Brief、影响地图、抽象决策和需升级的风险触发器。
 - 每个独立任务 prompt 都必须带主任务 thread ID，并要求 worker 在每个阶段完成、失败或阻塞时通过线程消息主动发送结构化摘要（范围、状态、证据 / diff、验证、阻塞或下一步）。没有回调只表示未证实完成，不能静默视为完成。
+- 如果当前任务已获得开发服务重启授权租约，prompt 必须按 [`dev-service-coordination.md`](./dev-service-coordination.md) 原样携带 task、worktree、target、action、scope、granted 和 expires。上下文压缩、heartbeat 或委派不得丢失租约；worker 只在字段全部匹配时复用，不匹配时回到主线程确认，不能自行扩大范围。
 - prompt 还必须要求最后一次结构化回调包含 `Terminal status`（`COMPLETED` / `FAILED` / `STOPPED` / `CANCELLED` / `BLOCKED`）、最终证据、剩余 follow-up、当前写入者 / Git / PR 状态和 `Safe to archive`。`Safe to archive` 只是 worker 声明，不能代替父线程核验；worker 不要在发出最终回调前自行归档，以免父线程丢失结果。
 - 如果主线程有未提交 diff，子线程 prompt 中写入当前 worktree 的绝对路径，让它优先读取这份最新内容，而不是只审默认分支。
 - 子线程 prompt 的最小模板字段：目标、允许范围、禁止范围、必读文件、未提交 diff 绝对路径、是否只读、建议分支名、验证命令、交付格式、停止条件。
