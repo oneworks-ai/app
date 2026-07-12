@@ -198,15 +198,48 @@ function elementMatches(element, target) {
   return ['id', 'role', 'description', 'title', 'text'].some(key => target[key] != null)
 }
 
+function frameSignature(frame) {
+  if (!isObject(frame)) return undefined
+  const values = ['x', 'y', 'w', 'h'].map(key => frame[key])
+  if (!values.every(value => typeof value === 'number' && Number.isFinite(value))) return undefined
+  return values.join(':')
+}
+
+function deduplicatePhysicalMatches(matches) {
+  const seen = new Set()
+  return matches.filter(element => {
+    const frame = frameSignature(element.frame)
+    if (frame == null) return true
+    const semantic = [element.role, element.id, element.description, element.title, element.value]
+      .map(normalizeText)
+      .join('\u001F')
+    const signature = `${semantic}\u001E${frame}`
+    if (seen.has(signature)) return false
+    seen.add(signature)
+    return true
+  })
+}
+
+function enrichTreeElements(elements, structuredElements) {
+  if (!Array.isArray(structuredElements)) return elements
+  const byIndex = new Map(structuredElements
+    .filter(element => Number.isInteger(element?.element_index))
+    .map(element => [element.element_index, element]))
+  return elements.map(element => {
+    const structured = byIndex.get(element.index)
+    return structured == null ? element : { ...element, frame: structured.frame }
+  })
+}
+
 function findTarget(treeMarkdown, target, options = {}) {
-  const elements = parseTreeElements(treeMarkdown)
+  const elements = enrichTreeElements(parseTreeElements(treeMarkdown), options.elements)
   const candidates = Array.isArray(target?.any_of) && target.any_of.length > 0 ? target.any_of : [target]
   const attemptedMatches = []
   for (const candidate of candidates) {
     const matches = elements.filter(element => elementMatches(element, candidate))
-    const actionable = options.actionable === true
+    const actionable = deduplicatePhysicalMatches(options.actionable === true
       ? matches.filter(element => Number.isInteger(element.index))
-      : matches
+      : matches)
     attemptedMatches.push(...actionable)
     if (actionable.length === 1) return { element: actionable[0], matches: actionable }
     if (actionable.length > 1) return { element: undefined, matches: actionable }
@@ -398,7 +431,10 @@ function createWorkflowService(options) {
 
   async function resolveActionTarget(run, step) {
     const observation = await observe(run, step.context)
-    const found = findTarget(observation.data.tree_markdown, step.target, { actionable: true })
+    const found = findTarget(observation.data.tree_markdown, step.target, {
+      actionable: true,
+      elements: observation.data.elements
+    })
     if (found.element != null) return { ...observation, element: found.element }
     const reason = found.matches.length > 1
       ? `Target is ambiguous for step ${step.node_id ?? step.op}.`
@@ -408,7 +444,9 @@ function createWorkflowService(options) {
 
   async function evaluateCondition(run, step) {
     const observation = await observe(run, step.context)
-    const found = findTarget(observation.data.tree_markdown, step.target)
+    const found = findTarget(observation.data.tree_markdown, step.target, {
+      elements: observation.data.elements
+    })
     const state = step.state ?? 'exists'
     const matched = state === 'not_exists' ? found.matches.length === 0 : found.matches.length > 0
     return {

@@ -35,12 +35,23 @@ const calculatorTree = (value: string) => `- AXApplication "Calculator"
     - AXStaticText = "${value}"
 `
 
+const duplicatedCalculatorTree = `- [0] AXWindow "Calculator" id=main
+  - [1] AXButton (Clear) id=Clear
+- [100] AXWindow "Calculator" id=main
+  - [101] AXButton (Clear) id=Clear
+`
+
+const duplicatedCalculatorElements = (secondX: number) => [
+  { element_index: 1, frame: { h: 48, w: 48, x: 64, y: 166 } },
+  { element_index: 101, frame: { h: 48, w: 48, x: secondX, y: 166 } }
+]
+
 const deterministicIds = () => {
   let value = 0
   return (prefix: string) => `${prefix}_${value += 1}`
 }
 
-describe('CUA workflow runtime', () => {
+describe('cua workflow runtime', () => {
   it('refreshes semantic targets and inlines three small step results', async () => {
     let display = '9'
     const calls: Array<{ args: Record<string, unknown>; name: string }> = []
@@ -262,6 +273,77 @@ describe('CUA workflow runtime', () => {
 
     expect(response.structuredContent.status).toBe('completed')
     expect(clicked).toEqual([1])
+  })
+
+  it('deduplicates repeated AX roots that describe the same physical control', async () => {
+    const clicked: unknown[] = []
+    const service = workflowRuntime.createWorkflowService({
+      createId: deterministicIds(),
+      callTool: withAxConfig(async (name, args) => {
+        if (name === 'launch_app') {
+          return toolResult({
+            pid: 42,
+            windows: [{ is_on_screen: true, on_current_space: true, title: 'Calculator', window_id: 7 }]
+          })
+        }
+        if (name === 'get_window_state') {
+          return toolResult({
+            elements: duplicatedCalculatorElements(64),
+            tree_markdown: duplicatedCalculatorTree
+          })
+        }
+        if (name === 'click') {
+          clicked.push(args.element_index)
+          return toolResult({ ok: true })
+        }
+        throw new Error(`Unexpected tool: ${name}`)
+      })
+    })
+
+    const response = await service.call('execute_workflow', {
+      contexts: { calculator: { bundle_id: 'com.apple.calculator', window_title: 'Calculator' } },
+      steps: [{ context: 'calculator', op: 'click', target: { id: 'Clear' } }]
+    })
+
+    expect(response.structuredContent.status).toBe('completed')
+    expect(clicked).toEqual([1])
+  })
+
+  it('keeps identically named controls at different positions ambiguous', async () => {
+    let clickCount = 0
+    const service = workflowRuntime.createWorkflowService({
+      createId: deterministicIds(),
+      callTool: withAxConfig(async (name) => {
+        if (name === 'launch_app') {
+          return toolResult({
+            pid: 42,
+            windows: [{ is_on_screen: true, on_current_space: true, title: 'Calculator', window_id: 7 }]
+          })
+        }
+        if (name === 'get_window_state') {
+          return toolResult({
+            elements: duplicatedCalculatorElements(164),
+            tree_markdown: duplicatedCalculatorTree
+          })
+        }
+        if (name === 'click') {
+          clickCount += 1
+          return toolResult({ ok: true })
+        }
+        throw new Error(`Unexpected tool: ${name}`)
+      })
+    })
+
+    const response = await service.call('execute_workflow', {
+      contexts: { calculator: { bundle_id: 'com.apple.calculator', window_title: 'Calculator' } },
+      steps: [{ context: 'calculator', op: 'click', target: { id: 'Clear' } }]
+    })
+
+    expect(response.structuredContent).toEqual(expect.objectContaining({
+      code: 'TARGET_NOT_FOUND',
+      status: 'failed'
+    }))
+    expect(clickCount).toBe(0)
   })
 
   it('procedurally switches the upstream driver to AX capture once per MCP session', async () => {
