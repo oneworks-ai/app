@@ -120,7 +120,11 @@ Plugins can declare `plugin.contributions.toolUsePresentations` to give their to
       "result": {
         "mode": "declared",
         "fields": [
-          { "path": "structuredContent.status", "title": "Status", "format": "inline" }
+          {
+            "path": "structuredContent.status",
+            "title": "Status",
+            "format": "inline"
+          }
         ]
       }
     }

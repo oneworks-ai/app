@@ -28,13 +28,15 @@ const workflowRuntime = require('../bin/workflow-runtime.cjs') as {
 const toolResult = (structuredContent: Record<string, unknown>) => ({ structuredContent })
 
 const withAxConfig = (
-  handler: (name: string, args: Record<string, unknown>) => Promise<Record<string, unknown>>,
-) => async (name: string, args: Record<string, unknown>) => {
+  handler: (name: string, args: Record<string, unknown>) => Promise<Record<string, unknown>>
+) =>
+async (name: string, args: Record<string, unknown>) => {
   if (name === 'get_config') return toolResult({ capture_mode: 'ax' })
   return await handler(name, args)
 }
 
-const calculatorTree = (value: string) => `- AXApplication "Calculator"
+const calculatorTree = (value: string) =>
+  `- AXApplication "Calculator"
   - [0] AXWindow "Calculator" id=main actions=[AXRaise]
     - [1] AXButton (Clear) id=Clear
     - [2] AXButton (4) id=Four
@@ -70,8 +72,20 @@ describe('cua workflow runtime', () => {
             name: 'Calculator',
             pid: 42,
             windows: [
-              { bounds: { height: 20, width: 66 }, is_on_screen: true, on_current_space: true, title: 'Window', window_id: 6 },
-              { bounds: { height: 408, width: 230 }, is_on_screen: true, on_current_space: true, title: 'Calculator', window_id: 7 }
+              {
+                bounds: { height: 20, width: 66 },
+                is_on_screen: true,
+                on_current_space: true,
+                title: 'Window',
+                window_id: 6
+              },
+              {
+                bounds: { height: 408, width: 230 },
+                is_on_screen: true,
+                on_current_space: true,
+                title: 'Calculator',
+                window_id: 7
+              }
             ]
           })
         }

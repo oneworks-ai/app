@@ -43,7 +43,7 @@ macOS 非 CI 环境安装 package 时，会 best-effort 安装官方签名的 `C
 ONEWORKS_CUA_DRIVER_SKIP_POSTINSTALL=1 pnpm install
 ```
 
-正常使用无需手动准备环境。agent 只需调用 `cua-driver` skill；插件会在 MCP 工具可用前自动安装缺失组件、准备后台服务、检查权限，并启用 Agent 虚拟指针。默认会按 OneWorks 会话稳定分配不同颜色；用户可在插件详情的「配置」页切换为固定默认色，agent 也可为当前会话传入任意合法十六进制颜色。每个 workflow 未传 `cursor_start` 时会从主屏中心开始；Agent 可传入主屏逻辑坐标，或在低层恢复流程中调用 `set_session_cursor_start` 配置下一次指针动作的起点。插件会动态生成带圆角和对比边框的安全 SVG，并只在当前会话执行点击动作前应用。`ensure` 仅保留为诊断或修复命令：
+正常使用无需手动准备环境。agent 只需调用 `cua-driver` skill；插件会在 MCP 工具可用前自动安装缺失组件、准备后台服务、检查权限，并启用 Agent 虚拟指针。默认会按 OneWorks 会话稳定分配不同颜色；用户可在插件详情的「配置」页切换为固定默认色，agent 也可为当前会话传入任意合法十六进制颜色。每个 workflow 未传 `cursor_start` 时会从主屏中心开始；Agent 可传入主屏逻辑坐标，或在低层恢复流程中调用 `set_session_cursor_start` 配置下一次指针动作的起点。CUA 负责选择颜色和决定何时应用光标；共享的 `@oneworks/cursor` 包负责生成带圆角和对比边框的安全 SVG。`ensure` 仅保留为诊断或修复命令：
 
 ```bash
 ow-cua-driver ensure

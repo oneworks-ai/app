@@ -669,7 +669,8 @@
     grid-template-columns: 22px minmax(0, 1fr);
     min-width: 0;
     padding: 7px 9px 7px 7px;
-    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+    border-bottom: 1px solid
+      color-mix(in srgb, var(--border-color) 72%, transparent);
 
     &:last-child {
       border-bottom: none;
@@ -766,7 +767,8 @@
     flex-direction: column;
     gap: 6px;
     padding-top: 7px;
-    border-top: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+    border-top: 1px solid
+      color-mix(in srgb, var(--border-color) 72%, transparent);
   }
 
   .tool-inline-token-list {

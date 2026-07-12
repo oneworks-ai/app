@@ -60,9 +60,13 @@ function installDriver(args = [], options = {}) {
     console.error(`[cua-driver] Missing bundled installer at ${installerPath}`)
     process.exit(1)
   }
-  return run('/bin/bash', [installerPath, ...args], options.stderrOnly === true
-    ? { stdio: ['ignore', 2, 2] }
-    : {})
+  return run(
+    '/bin/bash',
+    [installerPath, ...args],
+    options.stderrOnly === true
+      ? { stdio: ['ignore', 2, 2] }
+      : {}
+  )
 }
 
 function uninstallDriver(args = []) {

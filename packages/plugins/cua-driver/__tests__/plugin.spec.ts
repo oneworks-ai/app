@@ -121,8 +121,12 @@ describe('cua-driver plugin contract', () => {
     const events: string[] = []
     let releaseFirst!: () => void
     let notifyFirstStarted!: () => void
-    const firstStarted = new Promise<void>(resolve => { notifyFirstStarted = resolve })
-    const firstGate = new Promise<void>(resolve => { releaseFirst = resolve })
+    const firstStarted = new Promise<void>(resolve => {
+      notifyFirstStarted = resolve
+    })
+    const firstGate = new Promise<void>(resolve => {
+      releaseFirst = resolve
+    })
 
     const first = enqueue(async () => {
       events.push('first:start')
@@ -344,10 +348,12 @@ describe('cua-driver plugin contract', () => {
     ] as unknown as Record<string, unknown>, pendingToolLists)
     expect(batch.forward).toBeUndefined()
     expect(batch.respond?.error).toEqual(expect.objectContaining({ code: -32600 }))
-    expect(mcpProxy.transformClientMessage(
-      'not-an-object' as unknown as Record<string, unknown>,
-      pendingToolLists
-    ).respond?.error).toEqual(expect.objectContaining({ code: -32600 }))
+    expect(
+      mcpProxy.transformClientMessage(
+        'not-an-object' as unknown as Record<string, unknown>,
+        pendingToolLists
+      ).respond?.error
+    ).toEqual(expect.objectContaining({ code: -32600 }))
     expect(mcpProxy.parseJsonLine('{')).toEqual(expect.objectContaining({
       ok: false,
       error: expect.objectContaining({
@@ -391,7 +397,11 @@ describe('cua-driver plugin contract', () => {
   it('prepares and verifies the visible Agent pointer procedurally', () => {
     const readyOutput = JSON.stringify({ cursors: [], enabled: true })
     const results = [
-      { status: 0, stdout: 'cursor: enabled=false glideDurationMs=750 dwellAfterClickMs=400 idleHideMs=8000', stderr: '' },
+      {
+        status: 0,
+        stdout: 'cursor: enabled=false glideDurationMs=750 dwellAfterClickMs=400 idleHideMs=8000',
+        stderr: ''
+      },
       { status: 0, stdout: 'cursor: enabled=true', stderr: '' },
       { status: 0, stdout: readyOutput, stderr: '' }
     ]
@@ -604,11 +614,13 @@ describe('cua-driver plugin contract', () => {
       }
     }
     const exports = packageJson.exports as Record<string, unknown>
+    const dependencies = packageJson.dependencies as Record<string, string>
     const serverExport = exports['./server'] as Record<string, unknown>
 
     expect(manifest.__oneWorksPluginManifest).toBe(true)
     expect(manifest.name).toBe('@oneworks/plugin-cua-driver')
     expect(manifest.version).toBe(packageJson.version)
+    expect(dependencies['@oneworks/cursor']).toBe('workspace:*')
     expect(assets.skills).toBe('skills')
     expect(assets.mcp).toBe('mcp')
     expect(config.schema.properties.cursorColorStrategy.default).toBe('automatic')

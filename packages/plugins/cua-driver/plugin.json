@@ -133,11 +133,36 @@
           "result": {
             "mode": "declared",
             "fields": [
-              { "path": "structuredContent.run_id", "title": "Run", "titleI18n": { "zh-Hans": "运行" }, "format": "inline" },
-              { "path": "structuredContent.status", "title": "Status", "titleI18n": { "zh-Hans": "状态" }, "format": "inline" },
-              { "path": "structuredContent.outcome", "title": "Outcome", "titleI18n": { "zh-Hans": "结果" }, "format": "inline" },
-              { "path": "structuredContent.steps.total", "title": "Step count", "titleI18n": { "zh-Hans": "步骤数" }, "format": "inline" },
-              { "path": "structuredContent.steps.ids", "title": "Step IDs", "titleI18n": { "zh-Hans": "步骤 ID" }, "format": "chips" }
+              {
+                "path": "structuredContent.run_id",
+                "title": "Run",
+                "titleI18n": { "zh-Hans": "运行" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.status",
+                "title": "Status",
+                "titleI18n": { "zh-Hans": "状态" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.outcome",
+                "title": "Outcome",
+                "titleI18n": { "zh-Hans": "结果" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.steps.total",
+                "title": "Step count",
+                "titleI18n": { "zh-Hans": "步骤数" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.steps.ids",
+                "title": "Step IDs",
+                "titleI18n": { "zh-Hans": "步骤 ID" },
+                "format": "chips"
+              }
             ]
           }
         },
@@ -157,7 +182,12 @@
           "result": {
             "mode": "declared",
             "fields": [
-              { "path": "structuredContent.color", "title": "Color", "titleI18n": { "zh-Hans": "颜色" }, "format": "inline" }
+              {
+                "path": "structuredContent.color",
+                "title": "Color",
+                "titleI18n": { "zh-Hans": "颜色" },
+                "format": "inline"
+              }
             ]
           }
         },
@@ -193,15 +223,35 @@
             "mode": "declared",
             "fields": [
               { "path": "decision", "title": "Decision", "titleI18n": { "zh-Hans": "决定" }, "format": "inline" },
-              { "path": "checkpoint_id", "title": "Checkpoint", "titleI18n": { "zh-Hans": "检查点" }, "format": "inline" }
+              {
+                "path": "checkpoint_id",
+                "title": "Checkpoint",
+                "titleI18n": { "zh-Hans": "检查点" },
+                "format": "inline"
+              }
             ]
           },
           "result": {
             "mode": "declared",
             "fields": [
-              { "path": "structuredContent.status", "title": "Status", "titleI18n": { "zh-Hans": "状态" }, "format": "inline" },
-              { "path": "structuredContent.outcome", "title": "Outcome", "titleI18n": { "zh-Hans": "结果" }, "format": "inline" },
-              { "path": "structuredContent.steps.ids", "title": "Step IDs", "titleI18n": { "zh-Hans": "步骤 ID" }, "format": "chips" }
+              {
+                "path": "structuredContent.status",
+                "title": "Status",
+                "titleI18n": { "zh-Hans": "状态" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.outcome",
+                "title": "Outcome",
+                "titleI18n": { "zh-Hans": "结果" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.steps.ids",
+                "title": "Step IDs",
+                "titleI18n": { "zh-Hans": "步骤 ID" },
+                "format": "chips"
+              }
             ]
           }
         },

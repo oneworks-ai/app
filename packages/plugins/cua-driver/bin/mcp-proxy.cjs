@@ -108,7 +108,9 @@ function toolCallPolicyError(toolName, toolArguments) {
     (workflowToolNames.has(toolName) || sessionCursorToolNames.has(toolName))
   ) return
   if (typeof toolName !== 'string' || !allowedTools.has(toolName)) {
-    return `Tool ${typeof toolName === 'string' ? toolName : '(unknown)'} is not exposed by the OneWorks CUA safety profile.`
+    return `Tool ${
+      typeof toolName === 'string' ? toolName : '(unknown)'
+    } is not exposed by the OneWorks CUA safety profile.`
   }
   if (toolName === 'press_key' && toolArguments?.window_id != null) {
     return 'press_key with window_id is not exposed because it can activate the target application.'
@@ -117,7 +119,13 @@ function toolCallPolicyError(toolName, toolArguments) {
 
 function transformClientMessage(message, pendingToolLists) {
   if (!isMessage(message)) {
-    return { respond: errorResponse(null, -32600, 'JSON-RPC batch and non-object requests are not accepted by the OneWorks CUA MCP proxy.') }
+    return {
+      respond: errorResponse(
+        null,
+        -32600,
+        'JSON-RPC batch and non-object requests are not accepted by the OneWorks CUA MCP proxy.'
+      )
+    }
   }
   if (message?.method === 'tools/list') {
     const key = requestKey(message.id)
@@ -229,32 +237,33 @@ function main() {
   let diagnosticOutput = ''
   let internalCallSequence = 0
   const pendingDriverCalls = new Map()
-  const callDriverTool = (name, args) => new Promise((resolveCall, rejectCall) => {
-    const id = `oneworks-workflow-${internalCallSequence += 1}`
-    const key = requestKey(id)
-    const timeout = setTimeout(() => {
-      pendingDriverCalls.delete(key)
-      const error = new Error(`Cua Driver tool ${name} timed out.`)
-      error.code = 'DRIVER_TOOL_TIMEOUT'
-      rejectCall(error)
-    }, 65000)
-    pendingDriverCalls.set(key, {
-      reject(error) {
-        clearTimeout(timeout)
+  const callDriverTool = (name, args) =>
+    new Promise((resolveCall, rejectCall) => {
+      const id = `oneworks-workflow-${internalCallSequence += 1}`
+      const key = requestKey(id)
+      const timeout = setTimeout(() => {
+        pendingDriverCalls.delete(key)
+        const error = new Error(`Cua Driver tool ${name} timed out.`)
+        error.code = 'DRIVER_TOOL_TIMEOUT'
         rejectCall(error)
-      },
-      resolve(value) {
-        clearTimeout(timeout)
-        resolveCall(value)
-      }
+      }, 65000)
+      pendingDriverCalls.set(key, {
+        reject(error) {
+          clearTimeout(timeout)
+          rejectCall(error)
+        },
+        resolve(value) {
+          clearTimeout(timeout)
+          resolveCall(value)
+        }
+      })
+      writeJson(child.stdin, {
+        jsonrpc: '2.0',
+        id,
+        method: 'tools/call',
+        params: { name, arguments: args }
+      })
     })
-    writeJson(child.stdin, {
-      jsonrpc: '2.0',
-      id,
-      method: 'tools/call',
-      params: { name, arguments: args }
-    })
-  })
   const sessionId = process.env.__ONEWORKS_PROJECT_SESSION_ID__ ??
     process.env.__ONEWORKS_CODEX_TASK_SESSION_ID__ ??
     `process-${process.pid}`
@@ -320,11 +329,14 @@ function main() {
           result
         })
       }).catch(error => {
-        writeJson(process.stdout, errorResponse(
-          call.id,
-          error.rpcCode ?? -32603,
-          error.message
-        ))
+        writeJson(
+          process.stdout,
+          errorResponse(
+            call.id,
+            error.rpcCode ?? -32603,
+            error.message
+          )
+        )
       })
       return
     }

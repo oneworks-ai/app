@@ -6,6 +6,7 @@ const { createServer } = require('node:net')
 const { homedir } = require('node:os')
 const { join } = require('node:path')
 const process = require('node:process')
+const { createOneWorksCursorSvg } = require('@oneworks/cursor')
 
 const pointerActionTools = new Set(['click', 'double_click', 'right_click'])
 const directGlideMotion = Object.freeze({
@@ -28,7 +29,6 @@ const defaultLockPort = 49_152 + (
     .digest()
     .readUInt16BE(0) % 16_384
 )
-const cursorPathData = 'M55.87 28.26C60.04 30.56 60.04 33.44 55.87 35.74L18.38 56.42C14.56 58.53 10.45 54.55 12.42 50.66L21.18 33.38C21.62 32.51 21.62 31.49 21.18 30.62L12.42 13.34C10.45 9.45 14.56 5.47 18.38 7.58L55.87 28.26Z'
 
 const delay = milliseconds => new Promise(resolveDelay => setTimeout(resolveDelay, milliseconds))
 
@@ -74,7 +74,9 @@ async function resolveCursorStart(callTool, requestedStart) {
   const { height, width } = parseScreenSize(await callTool('get_screen_size', {}))
   const resolved = requestedStart ?? { x: width / 2, y: height / 2 }
   if (resolved.x >= width || resolved.y >= height) {
-    throw new RangeError(`Cursor start (${resolved.x}, ${resolved.y}) is outside the main display (${width} × ${height}).`)
+    throw new RangeError(
+      `Cursor start (${resolved.x}, ${resolved.y}) is outside the main display (${width} × ${height}).`
+    )
   }
   return resolved
 }
@@ -86,15 +88,22 @@ function hslToHex(hue, saturation = 72, lightness = 52) {
   const section = ((hue % 360) + 360) % 360 / 60
   const secondary = chroma * (1 - Math.abs((section % 2) - 1))
   const offset = l - (chroma / 2)
-  const [red, green, blue] = section < 1 ? [chroma, secondary, 0]
-    : section < 2 ? [secondary, chroma, 0]
-    : section < 3 ? [0, chroma, secondary]
-    : section < 4 ? [0, secondary, chroma]
-    : section < 5 ? [secondary, 0, chroma]
+  const [red, green, blue] = section < 1
+    ? [chroma, secondary, 0]
+    : section < 2
+    ? [secondary, chroma, 0]
+    : section < 3
+    ? [0, chroma, secondary]
+    : section < 4
+    ? [0, secondary, chroma]
+    : section < 5
+    ? [secondary, 0, chroma]
     : [chroma, 0, secondary]
-  return `#${[red, green, blue].map(channel => (
-    Math.round((channel + offset) * 255).toString(16).padStart(2, '0')
-  )).join('').toUpperCase()}`
+  return `#${
+    [red, green, blue].map(channel => (
+      Math.round((channel + offset) * 255).toString(16).padStart(2, '0')
+    )).join('').toUpperCase()
+  }`
 }
 
 function deriveSessionCursorColor(sessionId) {
@@ -111,32 +120,13 @@ function resolveInitialCursorColor({ defaultColor, sessionId, strategy }) {
   return strategy === 'fixed' ? fallback : deriveSessionCursorColor(sessionId)
 }
 
-function cursorBorderColor(fillColor) {
-  const color = normalizeCursorColor(fillColor) ?? defaultSilver
-  const red = Number.parseInt(color.slice(1, 3), 16)
-  const green = Number.parseInt(color.slice(3, 5), 16)
-  const blue = Number.parseInt(color.slice(5, 7), 16)
-  const luminance = ((0.2126 * red) + (0.7152 * green) + (0.0722 * blue)) / 255
-  return luminance > 0.68 ? '#596273' : '#FFFFFF'
-}
-
-function renderCursorSvg(fillColor) {
-  const color = normalizeCursorColor(fillColor)
-  if (color == null) throw new TypeError('Cursor color must be a CSS hex color such as #625BF6.')
-  const borderColor = cursorBorderColor(color)
-  // CUA treats custom cursor assets as intrinsically pointing up and applies
-  // its heading transform from that basis. The authored path points right, so
-  // rotate only the asset basis; the final rendered silhouette is unchanged.
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64" fill="none">\n  <g transform="rotate(-90 32 32)">\n    <path fill="${color}" stroke="${borderColor}" stroke-width="2.5" stroke-linejoin="round" d="${cursorPathData}"/>\n  </g>\n</svg>\n`
-}
-
 async function materializeCursorSvg({ color, cursorDir = defaultCursorDir, sessionId }) {
   const normalizedColor = normalizeCursorColor(color)
   if (normalizedColor == null) throw new TypeError('Cursor color must be a CSS hex color such as #625BF6.')
   const sessionKey = createHash('sha256').update(String(sessionId ?? '')).digest('hex').slice(0, 12)
   const fileStem = `cursor-${cursorAssetVersion}-${sessionKey}-${normalizedColor.slice(1).toLowerCase()}`
   const imagePath = join(cursorDir, `${fileStem}.svg`)
-  const expectedSvg = renderCursorSvg(normalizedColor)
+  const expectedSvg = createOneWorksCursorSvg({ color: normalizedColor })
   await mkdir(cursorDir, { recursive: true, mode: 0o700 })
   try {
     await writeFile(imagePath, expectedSvg, { encoding: 'utf8', flag: 'wx', mode: 0o600 })
@@ -162,25 +152,27 @@ async function materializeCursorSvg({ color, cursorDir = defaultCursorDir, sessi
   return uniquePath
 }
 
-const tryAcquireCursorPort = (host, port) => new Promise((resolveAcquire, rejectAcquire) => {
-  const server = createServer(socket => socket.destroy())
-  let settled = false
-  server.once('error', error => {
-    if (settled) return
-    settled = true
-    if (error?.code === 'EADDRINUSE') resolveAcquire(undefined)
-    else rejectAcquire(error)
+const tryAcquireCursorPort = (host, port) =>
+  new Promise((resolveAcquire, rejectAcquire) => {
+    const server = createServer(socket => socket.destroy())
+    let settled = false
+    server.once('error', error => {
+      if (settled) return
+      settled = true
+      if (error?.code === 'EADDRINUSE') resolveAcquire(undefined)
+      else rejectAcquire(error)
+    })
+    server.listen({ exclusive: true, host, port }, () => {
+      if (settled) return
+      settled = true
+      resolveAcquire(server)
+    })
   })
-  server.listen({ exclusive: true, host, port }, () => {
-    if (settled) return
-    settled = true
-    resolveAcquire(server)
-  })
-})
 
-const closeCursorPort = server => new Promise(resolveClose => {
-  server.close(() => resolveClose())
-})
+const closeCursorPort = server =>
+  new Promise(resolveClose => {
+    server.close(() => resolveClose())
+  })
 
 async function withCursorActionLock(task, options = {}) {
   const host = options.lockHost ?? defaultLockHost
@@ -294,7 +286,8 @@ function createSessionCursorController(options) {
 
 const sessionCursorToolDefinition = {
   name: 'set_session_cursor_color',
-  description: 'Set the visual Agent pointer color for this OneWorks session. Use this when the user requests a specific color or needs concurrent CUA sessions to be visually distinguishable. The plugin validates the color, generates a safe rounded SVG with a contrasting border, and applies it only immediately before this session performs pointer actions.',
+  description:
+    'Set the visual Agent pointer color for this OneWorks session. Use this when the user requests a specific color or needs concurrent CUA sessions to be visually distinguishable. The plugin owns and validates the color selection, then applies the shared rounded pointer design immediately before this session performs pointer actions.',
   inputSchema: {
     type: 'object',
     additionalProperties: false,
@@ -311,7 +304,8 @@ const sessionCursorToolDefinition = {
 
 const sessionCursorStartToolDefinition = {
   name: 'set_session_cursor_start',
-  description: 'Set the virtual Agent pointer starting position for the next pointer action in this OneWorks session. Coordinates use logical points on the main display and never move the physical mouse. Use get_screen_size first when choosing explicit coordinates. Workflows may instead pass cursor_start; when omitted, each workflow starts from the main-display center.',
+  description:
+    'Set the virtual Agent pointer starting position for the next pointer action in this OneWorks session. Coordinates use logical points on the main display and never move the physical mouse. Use get_screen_size first when choosing explicit coordinates. Workflows may instead pass cursor_start; when omitted, each workflow starts from the main-display center.',
   inputSchema: {
     type: 'object',
     additionalProperties: false,
@@ -348,7 +342,6 @@ function sessionCursorStartToolResult(state) {
 
 module.exports = {
   createSessionCursorController,
-  cursorBorderColor,
   deriveSessionCursorColor,
   directGlideMotion,
   materializeCursorSvg,
@@ -356,7 +349,6 @@ module.exports = {
   normalizeCursorStart,
   parseScreenSize,
   pointerActionTools,
-  renderCursorSvg,
   resolveCursorStart,
   resolveInitialCursorColor,
   sessionCursorStartToolDefinition,

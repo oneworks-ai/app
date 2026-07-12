@@ -51,18 +51,22 @@ describe('plugin tool-use presentation', () => {
   })
 
   it('builds declared fields and host-owned title, icon, and target presentation', () => {
-    const view = buildPluginToolPresentation('click', {
-      pid: 42,
-      target: { index: 4 },
-      ignored: 'not rendered'
-    }, presentation({
-      icon: 'touch_app',
-      target: 'target.index',
-      input: {
-        mode: 'declared',
-        fields: [{ path: 'pid', title: 'Process', format: 'inline' }]
-      }
-    }))
+    const view = buildPluginToolPresentation(
+      'click',
+      {
+        pid: 42,
+        target: { index: 4 },
+        ignored: 'not rendered'
+      },
+      presentation({
+        icon: 'touch_app',
+        target: 'target.index',
+        input: {
+          mode: 'declared',
+          fields: [{ path: 'pid', title: 'Process', format: 'inline' }]
+        }
+      })
+    )
 
     expect(view).toMatchObject({
       fallbackTitle: 'Click',
@@ -74,10 +78,14 @@ describe('plugin tool-use presentation', () => {
   })
 
   it('does not inherit built-in title or success-result semantics for matching plugin tools', () => {
-    const view = buildPluginToolPresentation('read', { path: '/tmp/a' }, presentation({
-      title: 'Inspect app',
-      tools: ['read']
-    }))
+    const view = buildPluginToolPresentation(
+      'read',
+      { path: '/tmp/a' },
+      presentation({
+        title: 'Inspect app',
+        tools: ['read']
+      })
+    )
 
     expect(view.titleKey).toBeUndefined()
     expect(view.fallbackTitle).toBe('Inspect app')

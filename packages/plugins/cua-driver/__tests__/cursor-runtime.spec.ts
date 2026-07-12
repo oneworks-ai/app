@@ -35,44 +35,37 @@ const cursorRuntime = require('../bin/cursor-runtime.cjs') as {
   }) => Promise<string>
   normalizeCursorColor: (color: unknown) => string | undefined
   normalizeCursorStart: (position: unknown) => { x: number; y: number } | undefined
-  renderCursorSvg: (color: string) => string
   resolveInitialCursorColor: (options: {
     defaultColor?: string
     sessionId: string
     strategy?: string
   }) => string
-    withCursorActionLock: <T>(
+  withCursorActionLock: <T>(
     task: () => Promise<T>,
     options: { lockHost?: string; lockPort: number; timeoutMs?: number }
   ) => Promise<T>
-  }
+}
 
-const getAvailablePort = () => new Promise<number>((resolvePort, rejectPort) => {
-  const server = createServer()
-  server.once('error', rejectPort)
-  server.listen({ host: '127.0.0.1', port: 0 }, () => {
-    const address = server.address()
-    const port = typeof address === 'object' && address != null ? address.port : undefined
-    server.close(error => {
-      if (error != null) rejectPort(error)
-      else if (port == null) rejectPort(new Error('Could not reserve a test port.'))
-      else resolvePort(port)
+const getAvailablePort = () =>
+  new Promise<number>((resolvePort, rejectPort) => {
+    const server = createServer()
+    server.once('error', rejectPort)
+    server.listen({ host: '127.0.0.1', port: 0 }, () => {
+      const address = server.address()
+      const port = typeof address === 'object' && address != null ? address.port : undefined
+      server.close(error => {
+        if (error != null) rejectPort(error)
+        else if (port == null) rejectPort(new Error('Could not reserve a test port.'))
+        else resolvePort(port)
+      })
     })
   })
-})
 
 describe('cua session cursor runtime', () => {
-  it('normalizes only safe CSS hex colors and renders a rounded bordered SVG', () => {
+  it('normalizes only safe CSS hex colors while the shared package owns SVG rendering', () => {
     expect(cursorRuntime.normalizeCursorColor('#6bf')).toBe('#66BBFF')
     expect(cursorRuntime.normalizeCursorColor('#625bf6')).toBe('#625BF6')
     expect(cursorRuntime.normalizeCursorColor('#fff"><script>')).toBeUndefined()
-
-    const svg = cursorRuntime.renderCursorSvg('#E3E7ED')
-    expect(svg).toContain('fill="#E3E7ED"')
-    expect(svg).toContain('stroke="#596273"')
-    expect(svg).toContain('stroke-linejoin="round"')
-    expect(svg).toContain('transform="rotate(-90 32 32)"')
-    expect(() => cursorRuntime.renderCursorSvg('#fff"><script>')).toThrow('CSS hex color')
   })
 
   it('assigns deterministic session colors while preserving a fixed configured default', () => {
@@ -189,8 +182,12 @@ describe('cua session cursor runtime', () => {
     const calls: Array<{ args?: Record<string, unknown>; name: string }> = []
     let releaseFirstStyle!: () => void
     let notifyFirstStyle!: () => void
-    const firstStyleStarted = new Promise<void>(resolve => { notifyFirstStyle = resolve })
-    const firstStyleGate = new Promise<void>(resolve => { releaseFirstStyle = resolve })
+    const firstStyleStarted = new Promise<void>(resolve => {
+      notifyFirstStyle = resolve
+    })
+    const firstStyleGate = new Promise<void>(resolve => {
+      releaseFirstStyle = resolve
+    })
     let styleCalls = 0
     const controller = cursorRuntime.createSessionCursorController({
       sessionId: 'session-snapshot',
@@ -383,8 +380,12 @@ describe('cua session cursor runtime', () => {
     const events: string[] = []
     let releaseFirst!: () => void
     let notifyFirstStarted!: () => void
-    const firstStarted = new Promise<void>(resolve => { notifyFirstStarted = resolve })
-    const firstGate = new Promise<void>(resolve => { releaseFirst = resolve })
+    const firstStarted = new Promise<void>(resolve => {
+      notifyFirstStarted = resolve
+    })
+    const firstGate = new Promise<void>(resolve => {
+      releaseFirst = resolve
+    })
 
     const first = cursorRuntime.withCursorActionLock(async () => {
       events.push('first:start')

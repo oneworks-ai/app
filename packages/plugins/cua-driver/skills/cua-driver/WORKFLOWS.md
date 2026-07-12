@@ -20,19 +20,50 @@ Specify `window_id` or `window_title` when the task targets a particular window.
     }
   },
   "steps": [
-    { "node_id": "clear", "op": "click", "context": "calculator", "target": { "any_of": [{ "id": "AllClear" }, { "id": "Clear" }] } },
-    { "node_id": "four", "op": "click", "context": "calculator", "target": { "id": "Four" } },
-    { "node_id": "add", "op": "click", "context": "calculator", "target": { "id": "Add" } },
-    { "node_id": "five", "op": "click", "context": "calculator", "target": { "id": "Five" } },
-    { "node_id": "equals", "op": "click", "context": "calculator", "target": { "id": "Equals" } },
-    { "node_id": "verify", "op": "assert", "context": "calculator", "target": { "role": "AXStaticText", "text": "4+5" } }
+    {
+      "node_id": "clear",
+      "op": "click",
+      "context": "calculator",
+      "target": { "any_of": [{ "id": "AllClear" }, { "id": "Clear" }] }
+    },
+    {
+      "node_id": "four",
+      "op": "click",
+      "context": "calculator",
+      "target": { "id": "Four" }
+    },
+    {
+      "node_id": "add",
+      "op": "click",
+      "context": "calculator",
+      "target": { "id": "Add" }
+    },
+    {
+      "node_id": "five",
+      "op": "click",
+      "context": "calculator",
+      "target": { "id": "Five" }
+    },
+    {
+      "node_id": "equals",
+      "op": "click",
+      "context": "calculator",
+      "target": { "id": "Equals" }
+    },
+    {
+      "node_id": "verify",
+      "op": "assert",
+      "context": "calculator",
+      "target": { "role": "AXStaticText", "text": "4+5" }
+    }
   ]
 }
 ```
 
 `cursor_color` is optional. Omit it to use the color automatically assigned to this OneWorks session,
 or set any `#RGB` / `#RRGGBB` value when the user wants a specific session identity. The runtime
-generates the SVG and serializes style application with each pointer action.
+selects the color and serializes style application with each pointer action; the shared
+`@oneworks/cursor` runtime owns the reusable SVG design.
 
 `cursor_start` is optional and uses logical points on the main display. When omitted, each workflow
 starts from the main-display center. When the user requests an explicit start, use `get_screen_size`

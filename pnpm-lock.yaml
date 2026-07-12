@@ -962,6 +962,8 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
 
+  packages/cursor: {}
+
   packages/definition-core:
     dependencies:
       '@oneworks/types':
@@ -1061,7 +1063,11 @@ importers:
 
   packages/plugins/cli-skills: {}
 
-  packages/plugins/cua-driver: {}
+  packages/plugins/cua-driver:
+    dependencies:
+      '@oneworks/cursor':
+        specifier: workspace:*
+        version: link:../../cursor
 
   packages/plugins/demo:
     devDependencies:

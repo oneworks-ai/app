@@ -1,11 +1,11 @@
 import { useMemo } from 'react'
 
+import { createPluginI18nContext, resolvePluginContributionText } from './plugin-i18n'
 import type {
   PluginContributionToolUseField,
   PluginContributionToolUseFieldFormat,
   PluginContributionToolUsePresentation
 } from './plugin-manifest'
-import { createPluginI18nContext, resolvePluginContributionText } from './plugin-i18n'
 import { usePluginSlot } from './plugin-slots'
 
 export type RuntimeToolUsePresentation = PluginContributionToolUsePresentation & {
@@ -39,12 +39,12 @@ const normalizeFields = (value: unknown) => {
     const item = itemRecord == null
       ? undefined
       : {
-          titlePath: asNonEmptyString(itemRecord.titlePath),
-          subtitlePath: asNonEmptyString(itemRecord.subtitlePath),
-          statusPath: asNonEmptyString(itemRecord.statusPath),
-          metaPath: asNonEmptyString(itemRecord.metaPath),
-          detailPath: asNonEmptyString(itemRecord.detailPath)
-        }
+        titlePath: asNonEmptyString(itemRecord.titlePath),
+        subtitlePath: asNonEmptyString(itemRecord.subtitlePath),
+        statusPath: asNonEmptyString(itemRecord.statusPath),
+        metaPath: asNonEmptyString(itemRecord.metaPath),
+        detailPath: asNonEmptyString(itemRecord.detailPath)
+      }
     return [{
       ...candidate,
       path,
@@ -93,11 +93,11 @@ const normalizeToolUsePresentation = (
     result: resultRecord == null
       ? undefined
       : {
-          mode: resultMode,
-          format: resultFormat,
-          fields: normalizeFields(resultRecord.fields),
-          language: asNonEmptyString(resultRecord.language)
-        }
+        mode: resultMode,
+        format: resultFormat,
+        fields: normalizeFields(resultRecord.fields),
+        language: asNonEmptyString(resultRecord.language)
+      }
   }
 }
 
@@ -160,24 +160,25 @@ export function usePluginToolUsePresentations() {
     return contributions.flatMap((contribution) => {
       const normalized = normalizeToolUsePresentation(contribution)
       if (normalized == null) return []
-      const localizeFields = (fields?: PluginContributionToolUseField[]) => fields?.map(field => ({
-        ...field,
-        title: resolvePluginContributionText(field, 'title', pluginI18n) ?? field.title
-      }))
+      const localizeFields = (fields?: PluginContributionToolUseField[]) =>
+        fields?.map(field => ({
+          ...field,
+          title: resolvePluginContributionText(field, 'title', pluginI18n) ?? field.title
+        }))
       return [{
         ...normalized,
         input: normalized.input == null
           ? undefined
           : {
-              ...normalized.input,
-              fields: localizeFields(normalized.input.fields)
-            },
+            ...normalized.input,
+            fields: localizeFields(normalized.input.fields)
+          },
         result: normalized.result == null
           ? undefined
           : {
-              ...normalized.result,
-              fields: localizeFields(normalized.result.fields)
-            }
+            ...normalized.result,
+            fields: localizeFields(normalized.result.fields)
+          }
       }]
     })
   }, [contributions])

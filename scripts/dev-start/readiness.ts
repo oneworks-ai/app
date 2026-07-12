@@ -258,9 +258,13 @@ export const assertStateCanBeForgotten = async (
   const fetchHealthy = dependencies.fetchHealthy ?? fetchOk
   const fingerprint = dependencies.fingerprint ?? processFingerprint
   const isRunning = dependencies.isRunning ?? pidRunning
-  const healthUrls = [...new Set((state.components ?? [])
-    .map(component => component.healthUrl)
-    .filter((value): value is string => value != null))]
+  const healthUrls = [
+    ...new Set(
+      (state.components ?? [])
+        .map(component => component.healthUrl)
+        .filter((value): value is string => value != null)
+    )
+  ]
   if ((await Promise.all(healthUrls.map(async url => await fetchHealthy(url)))).some(Boolean)) {
     throw new Error(`Refusing to forget stale state for ${target}: a recorded health endpoint is still reachable.`)
   }
@@ -308,7 +312,7 @@ export const forgetStaleManagedState = async (
   // or a newly matching process identity cannot be forgotten mid-operation.
   await assertStateCanBeForgotten(target, state)
   const updated = updateDevServiceStateIfCurrent(target, {
-    revision: state.revision,
+    revision: state.revision
   }, {
     clientFingerprint: undefined,
     clientPid: undefined,
@@ -326,7 +330,9 @@ export const forgetStaleManagedState = async (
     serviceFingerprint: undefined,
     servicePid: undefined
   })
-  if (updated == null) throw new Error(`Refusing to forget stale state for ${target}: shared state changed during recovery.`)
+  if (updated == null) {
+    throw new Error(`Refusing to forget stale state for ${target}: shared state changed during recovery.`)
+  }
 }
 
 export const waitForReady = async (target: DevStartTarget) => {

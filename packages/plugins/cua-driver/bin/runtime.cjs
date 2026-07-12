@@ -183,7 +183,9 @@ function permissionStateFromOutput(output) {
     return {
       accessibility: json.accessibility === true ? 'granted' : 'required',
       screenRecording: json.screen_recording === true &&
-        json.screen_recording_capturable !== false ? 'granted' : 'required'
+          json.screen_recording_capturable !== false
+        ? 'granted'
+        : 'required'
     }
   }
   const readState = (label) => {
@@ -206,8 +208,8 @@ function permissionJsonFromOutput(output) {
   try {
     const value = JSON.parse(output.slice(start, end + 1))
     return value != null && typeof value === 'object' &&
-      typeof value.accessibility === 'boolean' &&
-      typeof value.screen_recording === 'boolean'
+        typeof value.accessibility === 'boolean' &&
+        typeof value.screen_recording === 'boolean'
       ? value
       : undefined
   } catch {
@@ -233,7 +235,9 @@ function checkPermissions(driverBinary, options = {}) {
   if (!granted) {
     const hasUnknownState = Object.values(permissions).includes('unknown')
     if (hasUnknownState) {
-      console.error('[cua-driver] permission-check-failed: CuaDriver could not determine the current macOS permission state.')
+      console.error(
+        '[cua-driver] permission-check-failed: CuaDriver could not determine the current macOS permission state.'
+      )
       console.error('[cua-driver] The computer-control service will be restarted automatically on the next retry.')
     } else {
       const missing = [
@@ -241,13 +245,17 @@ function checkPermissions(driverBinary, options = {}) {
         permissions.screenRecording === 'granted' ? undefined : 'Screen & System Audio Recording'
       ].filter(Boolean)
       console.error(`[cua-driver] permission-required: ${missing.join(', ')}`)
-      console.error('[cua-driver] Open System Settings → Privacy & Security, enable CuaDriver for the permissions above, then retry the original task.')
+      console.error(
+        '[cua-driver] Open System Settings → Privacy & Security, enable CuaDriver for the permissions above, then retry the original task.'
+      )
     }
   }
   return {
     failureKind: granted
       ? undefined
-      : Object.values(permissions).includes('unknown') ? 'runtime' : 'permissions',
+      : Object.values(permissions).includes('unknown')
+      ? 'runtime'
+      : 'permissions',
     granted,
     permissions,
     result
@@ -268,11 +276,12 @@ function agentCursorOutputIsReady(output) {
 
 function ensureAgentCursor(driverBinary, options = {}) {
   const runner = options.runCaptured ?? runCaptured
-  const runCursorCall = (tool, payload = {}) => runner(driverBinary, [
-    'call',
-    tool,
-    JSON.stringify(payload)
-  ])
+  const runCursorCall = (tool, payload = {}) =>
+    runner(driverBinary, [
+      'call',
+      tool,
+      JSON.stringify(payload)
+    ])
   const initialState = runCursorCall('get_agent_cursor_state')
   const initialOutput = commandOutput(initialState)
   if (initialState.status === 0 && agentCursorOutputIsReady(initialOutput)) {

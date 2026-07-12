@@ -5,7 +5,8 @@ const { randomUUID } = require('node:crypto')
 const workflowToolDefinitions = [
   {
     name: 'execute_workflow',
-    description: `Execute a serial native-app workflow in one tool call. Prefer this over repeated low-level click/type calls whenever two or more steps are known in advance. The runner refreshes window state before semantic actions, resolves targets by accessibility id/role/title/description/text, and stops only on completion, failure, or an explicit checkpoint. Use contexts to identify apps and windows. Use sleep for fixed delays, wait_for for state-driven waiting, assert for postconditions, checkpoint for agent/user decisions, and on_missing/on_timeout for skip, successful exit, failure, or pause behavior. Short workflows inline step results; longer workflows return step ids for progressive lookup.`,
+    description:
+      `Execute a serial native-app workflow in one tool call. Prefer this over repeated low-level click/type calls whenever two or more steps are known in advance. The runner refreshes window state before semantic actions, resolves targets by accessibility id/role/title/description/text, and stops only on completion, failure, or an explicit checkpoint. Use contexts to identify apps and windows. Use sleep for fixed delays, wait_for for state-driven waiting, assert for postconditions, checkpoint for agent/user decisions, and on_missing/on_timeout for skip, successful exit, failure, or pause behavior. Short workflows inline step results; longer workflows return step ids for progressive lookup.`,
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -15,13 +16,15 @@ const workflowToolDefinitions = [
         cursor_color: {
           type: 'string',
           pattern: '^#[0-9A-Fa-f]{3}(?:[0-9A-Fa-f]{3})?$',
-          description: 'Optional Agent pointer color for this session, for example #625BF6. The plugin validates it and dynamically generates the SVG.'
+          description:
+            'Optional Agent pointer color for this session, for example #625BF6. The plugin validates, owns and applies this selection.'
         },
         cursor_start: {
           type: 'object',
           additionalProperties: false,
           required: ['x', 'y'],
-          description: 'Optional virtual Agent pointer starting position in logical points on the main display. When omitted, the workflow starts from the main-display center. This never moves the physical mouse.',
+          description:
+            'Optional virtual Agent pointer starting position in logical points on the main display. When omitted, the workflow starts from the main-display center. This never moves the physical mouse.',
           properties: {
             x: { type: 'number', minimum: 0 },
             y: { type: 'number', minimum: 0 }
@@ -29,7 +32,8 @@ const workflowToolDefinitions = [
         },
         contexts: {
           type: 'object',
-          description: 'Named native-app contexts resolved lazily. Each value needs bundle_id and may include window_id or window_title.',
+          description:
+            'Named native-app contexts resolved lazily. Each value needs bundle_id and may include window_id or window_title.',
           additionalProperties: {
             type: 'object',
             additionalProperties: false,
@@ -60,12 +64,27 @@ const workflowToolDefinitions = [
               node_id: { type: 'string', description: 'Stable author-defined node name.' },
               op: {
                 type: 'string',
-                enum: ['launch_app', 'click', 'double_click', 'right_click', 'type_text', 'press_key', 'set_value', 'scroll', 'sleep', 'wait_for', 'assert', 'checkpoint', 'exit']
+                enum: [
+                  'launch_app',
+                  'click',
+                  'double_click',
+                  'right_click',
+                  'type_text',
+                  'press_key',
+                  'set_value',
+                  'scroll',
+                  'sleep',
+                  'wait_for',
+                  'assert',
+                  'checkpoint',
+                  'exit'
+                ]
               },
               context: { type: 'string' },
               target: {
                 type: 'object',
-                description: 'Semantic target using id/role/description/title/text, or ordered any_of alternatives for state-dependent controls.'
+                description:
+                  'Semantic target using id/role/description/title/text, or ordered any_of alternatives for state-dependent controls.'
               },
               state: { type: 'string', enum: ['exists', 'not_exists'] },
               on_missing: { type: 'string', enum: ['fail', 'skip', 'exit_success', 'pause'] },
@@ -81,7 +100,8 @@ const workflowToolDefinitions = [
   },
   {
     name: 'resume_workflow',
-    description: 'Resume a paused workflow from its checkpoint. Use continue to advance, retry to execute the paused step again, skip to advance without retrying, or cancel to end the run.',
+    description:
+      'Resume a paused workflow from its checkpoint. Use continue to advance, retry to execute the paused step again, skip to advance without retrying, or cancel to end the run.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -95,7 +115,8 @@ const workflowToolDefinitions = [
   },
   {
     name: 'get_workflow_step_results',
-    description: 'Fetch selected step execution details by run id and step ids. Use only when the compact workflow result is insufficient. The default projection returns status, output, and error; request attempts or timing explicitly.',
+    description:
+      'Fetch selected step execution details by run id and step ids. Use only when the compact workflow result is insufficient. The default projection returns status, output, and error; request attempts or timing explicitly.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -233,9 +254,11 @@ function deduplicatePhysicalMatches(matches) {
 
 function enrichTreeElements(elements, structuredElements) {
   if (!Array.isArray(structuredElements)) return elements
-  const byIndex = new Map(structuredElements
-    .filter(element => Number.isInteger(element?.element_index))
-    .map(element => [element.element_index, element]))
+  const byIndex = new Map(
+    structuredElements
+      .filter(element => Number.isInteger(element?.element_index))
+      .map(element => [element.element_index, element])
+  )
   return elements.map(element => {
     const structured = byIndex.get(element.index)
     return structured == null ? element : { ...element, frame: structured.frame }
@@ -248,9 +271,11 @@ function findTarget(treeMarkdown, target, options = {}) {
   const attemptedMatches = []
   for (const candidate of candidates) {
     const matches = elements.filter(element => elementMatches(element, candidate))
-    const actionable = deduplicatePhysicalMatches(options.actionable === true
-      ? matches.filter(element => Number.isInteger(element.index))
-      : matches)
+    const actionable = deduplicatePhysicalMatches(
+      options.actionable === true
+        ? matches.filter(element => Number.isInteger(element.index))
+        : matches
+    )
     attemptedMatches.push(...actionable)
     if (actionable.length === 1) return { element: actionable[0], matches: actionable }
     if (actionable.length > 1) return { element: undefined, matches: actionable }
@@ -283,9 +308,13 @@ function chooseWindow(windows, context, appName) {
     const rightArea = Number(right?.bounds?.width ?? 0) * Number(right?.bounds?.height ?? 0)
     return rightArea - leftArea
   }
-  return windows.filter(window => window?.is_on_screen === true && window?.on_current_space === true && normalizeText(window?.title) !== '').sort(byVisibleArea)[0]
-    ?? windows.filter(window => window?.is_on_screen === true && normalizeText(window?.title) !== '').sort(byVisibleArea)[0]
-    ?? windows.find(window => Number.isInteger(window?.window_id))
+  return windows.filter(window =>
+    window?.is_on_screen === true && window?.on_current_space === true && normalizeText(window?.title) !== ''
+  ).sort(byVisibleArea)[0] ??
+    windows.filter(window => window?.is_on_screen === true && normalizeText(window?.title) !== '').sort(
+      byVisibleArea
+    )[0] ??
+    windows.find(window => Number.isInteger(window?.window_id))
 }
 
 function validateWorkflowInput(input) {
@@ -294,15 +323,19 @@ function validateWorkflowInput(input) {
     throw new WorkflowInputError('execute_workflow requires at least one step.')
   }
   if (input.steps.length > 100) throw new WorkflowInputError('A workflow may contain at most 100 steps.')
-  if (input.cursor_color != null && (
-    typeof input.cursor_color !== 'string' ||
-    !/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(input.cursor_color)
-  )) throw new WorkflowInputError('cursor_color must be a CSS hex color such as #625BF6.')
-  if (input.cursor_start != null && (
-    !isObject(input.cursor_start) ||
-    !Number.isFinite(input.cursor_start.x) || input.cursor_start.x < 0 ||
-    !Number.isFinite(input.cursor_start.y) || input.cursor_start.y < 0
-  )) throw new WorkflowInputError('cursor_start must contain finite non-negative x and y coordinates.')
+  if (
+    input.cursor_color != null && (
+      typeof input.cursor_color !== 'string' ||
+      !/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(input.cursor_color)
+    )
+  ) throw new WorkflowInputError('cursor_color must be a CSS hex color such as #625BF6.')
+  if (
+    input.cursor_start != null && (
+      !isObject(input.cursor_start) ||
+      !Number.isFinite(input.cursor_start.x) || input.cursor_start.x < 0 ||
+      !Number.isFinite(input.cursor_start.y) || input.cursor_start.y < 0
+    )
+  ) throw new WorkflowInputError('cursor_start must contain finite non-negative x and y coordinates.')
   for (const [index, step] of input.steps.entries()) {
     if (!isObject(step) || typeof step.op !== 'string' || !supportedOps.has(step.op)) {
       throw new WorkflowInputError(`Step ${index + 1} has an unsupported op.`)
@@ -378,10 +411,12 @@ function createWorkflowService(options) {
     const config = structuredToolData(await callTool('get_config', {}))
     const captureMode = config.capture_mode ?? config.config?.capture_mode
     if (captureMode !== 'ax') {
-      structuredToolData(await callTool('set_config', {
-        key: 'capture_mode',
-        value: 'ax'
-      }))
+      structuredToolData(
+        await callTool('set_config', {
+          key: 'capture_mode',
+          value: 'ax'
+        })
+      )
     }
     captureModeReady = true
   }
@@ -406,10 +441,12 @@ function createWorkflowService(options) {
     if (current == null) throw new WorkflowInputError(`Unknown workflow context: ${contextName}`, 'CONTEXT_NOT_FOUND')
     if (Number.isInteger(current.pid) && Number.isInteger(current.window_id)) return current
 
-    const data = structuredToolData(await callTool('launch_app', {
-      bundle_id: current.bundle_id,
-      ...(Array.isArray(current.urls) ? { urls: current.urls } : {})
-    }))
+    const data = structuredToolData(
+      await callTool('launch_app', {
+        bundle_id: current.bundle_id,
+        ...(Array.isArray(current.urls) ? { urls: current.urls } : {})
+      })
+    )
     const window = chooseWindow(data.windows, current, data.name)
     if (!Number.isInteger(data.pid) || !Number.isInteger(window?.window_id)) {
       throw new WorkflowInputError(`No usable window was found for context ${contextName}.`, 'WINDOW_NOT_FOUND')
@@ -425,10 +462,12 @@ function createWorkflowService(options) {
   async function observe(run, contextName) {
     checkDeadline(run)
     const context = await ensureContext(run, contextName)
-    const data = structuredToolData(await callTool('get_window_state', {
-      pid: context.pid,
-      window_id: context.window_id
-    }))
+    const data = structuredToolData(
+      await callTool('get_window_state', {
+        pid: context.pid,
+        window_id: context.window_id
+      })
+    )
     return { context, data }
   }
 
@@ -436,14 +475,16 @@ function createWorkflowService(options) {
     const action = step[kind] ?? 'fail'
     if (action === 'skip') return { control: 'continue', output: { skipped: true, reason: message } }
     if (action === 'exit_success') return { control: 'exit', outcome: 'skipped', output: { reason: message } }
-    if (action === 'pause') return {
-      control: 'pause',
-      checkpoint: {
-        kind: 'agent_decision',
-        prompt: message,
-        choices: ['continue', 'retry', 'cancel']
-      },
-      output: { reason: message }
+    if (action === 'pause') {
+      return {
+        control: 'pause',
+        checkpoint: {
+          kind: 'agent_decision',
+          prompt: message,
+          choices: ['continue', 'retry', 'cancel']
+        },
+        output: { reason: message }
+      }
     }
     const error = new Error(message)
     error.code = kind === 'on_timeout' ? 'WAIT_TIMEOUT' : 'TARGET_NOT_FOUND'
@@ -506,15 +547,15 @@ function createWorkflowService(options) {
     const args = step.op === 'type_text'
       ? { ...base, text: String(step.text ?? ''), ...(step.delay_ms == null ? {} : { delay_ms: step.delay_ms }) }
       : step.op === 'set_value'
-        ? { ...base, value: String(step.value ?? '') }
-        : step.op === 'scroll'
-          ? {
-              ...base,
-              direction: step.direction,
-              ...(step.amount == null ? {} : { amount: step.amount }),
-              ...(step.by == null ? {} : { by: step.by })
-            }
-          : base
+      ? { ...base, value: String(step.value ?? '') }
+      : step.op === 'scroll'
+      ? {
+        ...base,
+        direction: step.direction,
+        ...(step.amount == null ? {} : { amount: step.amount }),
+        ...(step.by == null ? {} : { by: step.by })
+      }
+      : base
     if (pointerActionOps.has(step.op)) {
       await preparePointerAction({
         cursorColor: run.cursor_color,
@@ -664,8 +705,9 @@ function createWorkflowService(options) {
     if (run.exit != null) base.exit = run.exit
 
     const inlineSteps = executed.map(step => publicStepResult(step, ['node_id', 'op', 'status', 'output', 'error']))
-    const canInline = run.detail_mode === 'inline'
-      || (run.detail_mode === 'auto' && inlineSteps.length <= 3 && Buffer.byteLength(JSON.stringify(inlineSteps)) <= maxInlineBytes)
+    const canInline = run.detail_mode === 'inline' ||
+      (run.detail_mode === 'auto' && inlineSteps.length <= 3 &&
+        Buffer.byteLength(JSON.stringify(inlineSteps)) <= maxInlineBytes)
     if (canInline && run.detail_mode !== 'references') base.steps = inlineSteps
     else {
       base.steps = {
@@ -750,7 +792,9 @@ function createWorkflowService(options) {
       return mcpToolError('RUN_NOT_PAUSED', 'Workflow run is not paused.', { run_id: run.run_id })
     }
     if (input.checkpoint_id != null && input.checkpoint_id !== run.checkpoint.checkpoint_id) {
-      return mcpToolError('CHECKPOINT_MISMATCH', 'Checkpoint id does not match the paused workflow.', { run_id: run.run_id })
+      return mcpToolError('CHECKPOINT_MISMATCH', 'Checkpoint id does not match the paused workflow.', {
+        run_id: run.run_id
+      })
     }
     const decision = input.decision
     const pausedStep = run.step_results.get(run.checkpoint.step_id)

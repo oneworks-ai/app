@@ -260,7 +260,11 @@ JSON Schema 自动推断当前支持：
       "result": {
         "mode": "declared",
         "fields": [
-          { "path": "structuredContent.status", "title": "Status", "format": "inline" }
+          {
+            "path": "structuredContent.status",
+            "title": "Status",
+            "format": "inline"
+          }
         ]
       }
     }

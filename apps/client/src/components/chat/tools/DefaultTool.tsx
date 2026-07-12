@@ -9,11 +9,11 @@ import { ToolCallBox } from './core/ToolCallBox'
 import { ToolDiffViewer } from './core/ToolDiffViewer'
 import { ToolResultContent } from './core/ToolResultContent'
 import { ToolSummaryHeader } from './core/ToolSummaryHeader'
+import { buildPluginToolPresentation, buildPluginToolResultPresentation } from './core/plugin-tool-presentation'
 import { hasMeaningfulToolValue } from './core/tool-content-presence'
 import { getToolTargetPresentation } from './core/tool-display'
 import { ToolInlineFields, renderToolBlockField } from './core/tool-field-sections'
 import { getToolPrimaryText } from './core/tool-summary'
-import { buildPluginToolPresentation, buildPluginToolResultPresentation } from './core/plugin-tool-presentation'
 
 export function DefaultTool({
   item,

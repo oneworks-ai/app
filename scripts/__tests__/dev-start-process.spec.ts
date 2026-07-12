@@ -68,19 +68,29 @@ describe('dev-start process ownership', () => {
       target: 'web' as const
     }
     const dependencies = {
-      async fetchHealthy() { return false },
-      fingerprint() { return 'new-unrelated-process' },
-      isRunning() { return true }
+      async fetchHealthy() {
+        return false
+      },
+      fingerprint() {
+        return 'new-unrelated-process'
+      },
+      isRunning() {
+        return true
+      }
     }
 
     await expect(assertStateCanBeForgotten('web', state, dependencies)).resolves.toBeUndefined()
     await expect(assertStateCanBeForgotten('web', state, {
       ...dependencies,
-      async fetchHealthy() { return true }
+      async fetchHealthy() {
+        return true
+      }
     })).rejects.toThrow('health endpoint is still reachable')
     await expect(assertStateCanBeForgotten('web', state, {
       ...dependencies,
-      fingerprint() { return 'old-client' }
+      fingerprint() {
+        return 'old-client'
+      }
     })).rejects.toThrow('still owned or cannot be disproven')
     await expect(assertStateCanBeForgotten('web', {
       ...state,
