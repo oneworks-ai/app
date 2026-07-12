@@ -1954,6 +1954,7 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
       pageBackgroundDataUrl?: string
       preserveTargetEnvironment: boolean
       segmentsDir: string
+      showActionCursor: boolean
       systemDisplayCrop?: DemoVideoCropRect
       systemCursorWindowBounds?: DemoVideoSystemCursorWindowBounds
       systemDisplayId: number
@@ -2005,12 +2006,12 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
   }
 
   private usesVideoLayerCursor() {
-    return this.input.captureSource === 'system-display'
+    return this.input.showActionCursor && this.input.captureSource === 'system-display'
   }
 
   private async installRendererOverlay() {
     await this.evaluate(installOverlayExpression)
-    if (this.usesVideoLayerCursor()) {
+    if (!this.input.showActionCursor || this.usesVideoLayerCursor()) {
       await this.evaluate(hideRendererCursorExpression)
     }
   }
@@ -4097,10 +4098,6 @@ const writeSecondStillFramesFromVideo = async (input: {
   return manifest
 }
 
-const shouldFollowWorkspaceWindowTargets = (scenarioId: string) =>
-  scenarioId === 'launcher-open-workspace-ui-tour' ||
-  scenarioId === 'launcher-open-workspace-chat-smoke'
-
 export const recordDemoVideoScenario = async (
   scenario: DemoVideoScenario,
   options: DemoVideoRecordOptions
@@ -4110,6 +4107,7 @@ export const recordDemoVideoScenario = async (
   const width = options.width ?? scenario.defaultViewport.width
   const height = options.height ?? scenario.defaultViewport.height
   const durationMs = options.durationMs ?? scenario.defaultDurationMs
+  const showActionCursor = options.showActionCursor ?? scenario.showActionCursor ?? true
   const headless = options.headless ?? true
   const language = normalizeDemoVideoLanguage(options.language)
   const pageBackground = normalizeDemoVideoPageBackground(options.pageBackground)
@@ -4117,8 +4115,7 @@ export const recordDemoVideoScenario = async (
     (options.cdpWebSocketDebuggerUrl != null || isSystemCaptureSource(captureSource) ? 'system' : DEFAULT_COLOR_SCHEME)
   const preserveTargetEnvironment = options.preserveTargetEnvironment ??
     (options.cdpWebSocketDebuggerUrl != null || isSystemCaptureSource(captureSource))
-  const followCdpTargets = options.followCdpTargets ??
-    (captureSource === 'system-window' && shouldFollowWorkspaceWindowTargets(scenario.id))
+  const followCdpTargets = options.followCdpTargets ?? scenario.followCdpTargets ?? false
   const explicitVideoBackgroundImage = isNonEmptyString(options.videoBackgroundImage)
     ? options.videoBackgroundImage
     : undefined
@@ -4193,6 +4190,7 @@ export const recordDemoVideoScenario = async (
       pageBackgroundDataUrl,
       preserveTargetEnvironment,
       segmentsDir: outputPaths.segmentsDir,
+      showActionCursor,
       systemCursorWindowBounds: options.systemCursorWindowBounds,
       systemDisplayCrop: options.systemDisplayCrop,
       systemDisplayId,

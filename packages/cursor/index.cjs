@@ -23,7 +23,7 @@ function createOneWorksCursorSvg({ borderColor, color, size = 256 }) {
   if (!Number.isFinite(size) || size <= 0) throw new TypeError('Cursor size must be a positive number.')
   const fill = normalizeCursorColor(color)
   const border = borderColor == null ? resolveCursorBorderColor(fill) : normalizeCursorColor(borderColor)
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 64 64" fill="none">\n  <g transform="rotate(-90 32 32)">\n    <path fill="${fill}" stroke="${border}" stroke-width="2.5" stroke-linejoin="round" d="${cursorPath}"/>\n  </g>\n</svg>\n`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 64 64" fill="none">\n  <g transform="rotate(-135 32 32)">\n    <path fill="${fill}" stroke="${border}" stroke-width="2.5" stroke-linejoin="round" d="${cursorPath}"/>\n  </g>\n</svg>\n`
 }
 
 module.exports = { createOneWorksCursorSvg, normalizeCursorColor, resolveCursorBorderColor }

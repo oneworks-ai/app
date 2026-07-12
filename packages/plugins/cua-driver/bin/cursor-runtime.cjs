@@ -2,11 +2,11 @@
 const { createHash, randomUUID } = require('node:crypto')
 const { constants } = require('node:fs')
 const { mkdir, open, writeFile } = require('node:fs/promises')
-const { createServer } = require('node:net')
 const { homedir } = require('node:os')
 const { join } = require('node:path')
 const process = require('node:process')
 const { createOneWorksCursorSvg } = require('@oneworks/cursor')
+const { withFileLock } = require('./file-lock.cjs')
 
 const pointerActionTools = new Set(['click', 'double_click', 'right_click'])
 const directGlideMotion = Object.freeze({
@@ -21,16 +21,7 @@ const directGlideMotion = Object.freeze({
 })
 const defaultSilver = '#E3E7ED'
 const defaultCursorDir = join(homedir(), 'Library', 'Caches', 'oneworks-cua', 'session-cursors')
-const defaultLockHost = '127.0.0.1'
 const cursorAssetVersion = 'up-v3'
-const defaultLockPort = 49_152 + (
-  createHash('sha256')
-    .update(`${homedir()}:${process.getuid?.() ?? 'unknown'}:oneworks-cua-cursor-lock`)
-    .digest()
-    .readUInt16BE(0) % 16_384
-)
-
-const delay = milliseconds => new Promise(resolveDelay => setTimeout(resolveDelay, milliseconds))
 
 function normalizeCursorColor(value) {
   if (typeof value !== 'string') return undefined
@@ -152,52 +143,13 @@ async function materializeCursorSvg({ color, cursorDir = defaultCursorDir, sessi
   return uniquePath
 }
 
-const tryAcquireCursorPort = (host, port) =>
-  new Promise((resolveAcquire, rejectAcquire) => {
-    const server = createServer(socket => socket.destroy())
-    let settled = false
-    server.once('error', error => {
-      if (settled) return
-      settled = true
-      if (error?.code === 'EADDRINUSE') resolveAcquire(undefined)
-      else rejectAcquire(error)
-    })
-    server.listen({ exclusive: true, host, port }, () => {
-      if (settled) return
-      settled = true
-      resolveAcquire(server)
-    })
-  })
-
-const closeCursorPort = server =>
-  new Promise(resolveClose => {
-    server.close(() => resolveClose())
-  })
-
 async function withCursorActionLock(task, options = {}) {
-  const host = options.lockHost ?? defaultLockHost
-  const port = options.lockPort ?? defaultLockPort
-  const timeoutMs = options.timeoutMs ?? 140_000
-  const startedAt = Date.now()
-
-  let server
-  while (server == null) {
-    server = await tryAcquireCursorPort(host, port)
-    if (server == null) {
-      if (Date.now() - startedAt >= timeoutMs) {
-        const timeoutError = new Error('Timed out waiting for another CUA session to finish its pointer action.')
-        timeoutError.code = 'CURSOR_ACTION_LOCK_TIMEOUT'
-        throw timeoutError
-      }
-      await delay(25)
-    }
-  }
-
-  try {
-    return await task()
-  } finally {
-    await closeCursorPort(server)
-  }
+  return await withFileLock(task, {
+    key: options.lockKey ?? `${homedir()}:${process.getuid?.() ?? 'unknown'}:cursor-action`,
+    timeoutCode: 'CURSOR_ACTION_LOCK_TIMEOUT',
+    timeoutMessage: 'Timed out waiting for another CUA session to finish its pointer action.',
+    timeoutMs: options.timeoutMs ?? 140_000
+  })
 }
 
 function createSessionCursorController(options) {
@@ -243,13 +195,21 @@ function createSessionCursorController(options) {
         source: startSource
       }
     },
-    async callTool(name, args) {
+    async callTool(name, args, actionStyle) {
       if (!pointerActionTools.has(name)) return await options.callTool(name, args)
-      const actionColor = color
-      const reservedStart = startPending
-        ? { position: startPosition, revision: startRevision }
+      const workflowStyle = actionStyle != null && typeof actionStyle === 'object' && !Array.isArray(actionStyle)
+        ? actionStyle
         : undefined
-      if (reservedStart != null) startPending = false
+      const workflowColor = normalizeCursorColor(workflowStyle?.cursorColor)
+      const actionColor = workflowColor ?? color
+      const reservedStart = workflowStyle != null
+        ? workflowStyle.cursorStartPending === true
+          ? { position: normalizeCursorStart(workflowStyle.cursorStart), source: 'workflow' }
+          : undefined
+        : startPending
+        ? { position: startPosition, revision: startRevision, source: 'session' }
+        : undefined
+      if (reservedStart?.source === 'session') startPending = false
       let startApplied = false
       try {
         return await lock(async () => {
@@ -276,6 +236,7 @@ function createSessionCursorController(options) {
       } catch (error) {
         if (
           reservedStart != null && !startApplied &&
+          reservedStart.source === 'session' &&
           startRevision === reservedStart.revision
         ) startPending = true
         throw error

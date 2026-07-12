@@ -1,0 +1,8 @@
+{
+  "command": "${ONEWORKS_NODE_EXECUTABLE}",
+  "args": [
+    "${ONEWORKS_PLUGIN_ROOT}/bin/browser-driver.cjs"
+  ],
+  "default_tools_approval_mode": "approve",
+  "startup_timeout_sec": 10
+}

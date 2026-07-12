@@ -650,6 +650,8 @@ interface DesktopBrowserDownloadRecord extends DesktopBrowserActivityScope {
 }
 
 interface DesktopInteractionPanelWebviewScopeInput extends DesktopBrowserActivityScope {
+  controlRequestId?: string
+  panelPageId?: string
   webContentsId: number
 }
 
@@ -660,6 +662,18 @@ interface DesktopInteractionPanelWebviewElementCommentRequest {
   x: number
   y: number
 }
+
+interface DesktopBrowserControlOpenPageRequest {
+  openMode: 'new-tab' | 'reuse-or-create'
+  placement: 'bottom' | 'right'
+  requestId: string
+  sessionId?: string
+  title?: string
+  url: string
+}
+
+type DesktopBrowserControlPageCommandRequest = import('@oneworks/types').BrowserControlPageCommandRequest
+type DesktopBrowserControlPageCommandCompletion = import('@oneworks/types').BrowserControlPageCommandCompletion
 
 interface Window {
   oneworksAndroidBridge?: OneWorksNativeBridgeRequestApi
@@ -754,6 +768,13 @@ interface Window {
     onViewShortcut?: (listener: (action: string) => void) => () => void
     onWindowFullscreenChange?: (listener: (isFullscreen: boolean) => void) => () => void
     onWorkspaceResourceRequest?: (listener: (target: unknown) => void) => () => void
+    onBrowserControlOpenPage?: (listener: (request: DesktopBrowserControlOpenPageRequest) => void) => () => void
+    onBrowserControlPageCommand?: (
+      listener: (request: DesktopBrowserControlPageCommandRequest) => void
+    ) => () => void
+    completeBrowserControlPageCommand?: (
+      input: DesktopBrowserControlPageCommandCompletion
+    ) => Promise<{ accepted: boolean }>
     openCurrentWorkspaceWindow?: (url: string) => Promise<void>
     openCurrentWorkspaceFileInExternalOpener?: (path: string, opener?: string) => Promise<void>
     openWorkspaceFileInExternalOpener?: (workspaceFolder: string, path: string, opener?: string) => Promise<void>

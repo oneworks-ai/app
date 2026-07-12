@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, Dispatch, KeyboardEvent, PointerEvent, SetStateAction } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { ChatMessageContent } from '@oneworks/core'
+import type { ChatMessageContent, SessionPanelWebViewportState } from '@oneworks/core'
+import type { BrowserControlDeviceModeState } from '@oneworks/types'
 
 import { sendSessionMessage } from '#~/api/sessions'
 import {
@@ -36,6 +37,7 @@ import { InteractionPanelIframeAddressBar } from './InteractionPanelIframeAddres
 import { InteractionPanelIframeNavigation } from './InteractionPanelIframeNavigation'
 import { InteractionPanelIframeToolbarActions } from './InteractionPanelIframeToolbarActions'
 import { InteractionPanelPageDebuggerListView } from './InteractionPanelPageDebuggerListView'
+import { resolveBrowserControlNavigationHistorySync } from './browser-control-navigation-history'
 import {
   buildChiiScriptSnippet,
   injectChiiTargetScript,
@@ -51,6 +53,7 @@ import {
 import { findWebDebugTargetForUrl } from './interaction-panel-page-debugger'
 import type { InteractionPanelUrlHistoryEntry } from './interaction-panel-url-history'
 import { isWebviewHttpUrl, normalizeWebviewUrlForCompare } from './interaction-panel-webview-navigation'
+import { useBrowserControlPageCommands } from './use-browser-control-page-commands'
 import { useInteractionPanelUrlHistory } from './use-interaction-panel-url-history'
 import { useInteractionPanelWebview } from './use-interaction-panel-webview'
 import type { ElectronWebviewElement } from './use-interaction-panel-webview'
@@ -1538,17 +1541,23 @@ const buildAnnotationMessageContent = (
 ]
 
 export interface InteractionPanelIframePage {
+  browserControlRequestId?: string
+  deviceToolbarOpen?: boolean
+  devtoolsDockSide?: WebDebugDevtoolsDockSide
   faviconUrl?: string
   history?: string[]
   historyIndex?: number
   id: string
+  inspectOpen?: boolean
   title: string
   url: string
   variant?: InteractionPanelIframePageVariant
+  viewport?: SessionPanelWebViewportState
 }
 
 export function InteractionPanelIframeView({
   isActive,
+  onChangePage,
   onChangeMetadata,
   onNavigateHistory,
   onSelectHistory,
@@ -1563,6 +1572,7 @@ export function InteractionPanelIframeView({
   sessionUrlHistoryKey
 }: {
   isActive: boolean
+  onChangePage: (updater: (page: InteractionPanelIframePage) => InteractionPanelIframePage) => void
   onChangeMetadata: (pageId: string, metadata: { faviconUrl?: string; title?: string }) => void
   onNavigateHistory: (pageId: string, delta: -1 | 1) => void
   onSelectHistory: (pageId: string, index: number) => void
@@ -1580,11 +1590,13 @@ export function InteractionPanelIframeView({
   const { t } = useTranslation()
   const { resolvedThemeMode } = useResolvedThemeMode()
   const [draftUrl, setDraftUrl] = useState(page.url)
-  const [developerToolsDockSide, setDeveloperToolsDockSide] = useState<WebDebugDevtoolsDockSide>('right')
+  const [developerToolsDockSide, setDeveloperToolsDockSide] = useState<WebDebugDevtoolsDockSide>(
+    page.devtoolsDockSide ?? 'right'
+  )
   const [developerToolsHeight, setDeveloperToolsHeight] = useState(DEVELOPER_TOOLS_DEFAULT_HEIGHT)
   const [developerToolsUrl, setDeveloperToolsUrl] = useState<string | null>(null)
   const [developerToolsWidth, setDeveloperToolsWidth] = useState(DEVELOPER_TOOLS_DEFAULT_WIDTH)
-  const [isDeveloperToolsOpen, setIsDeveloperToolsOpen] = useState(false)
+  const [isDeveloperToolsOpen, setIsDeveloperToolsOpen] = useState(page.inspectOpen ?? false)
   const [isDeveloperToolsResizing, setIsDeveloperToolsResizing] = useState(false)
   const [isAnnotationMode, setIsAnnotationMode] = useState(false)
   const [isSubmittingAnnotation, setIsSubmittingAnnotation] = useState(false)
@@ -1595,17 +1607,70 @@ export function InteractionPanelIframeView({
   const [isViewportMoreOpen, setIsViewportMoreOpen] = useState(false)
   const [isViewportResizing, setIsViewportResizing] = useState(false)
   const [isViewportRulersVisible, setIsViewportRulersVisible] = useState(false)
-  const [isViewportToolbarOpen, setIsViewportToolbarOpen] = useState(false)
+  const [isViewportToolbarOpen, setIsViewportToolbarOpen] = useState(page.deviceToolbarOpen ?? false)
   const [reloadVersion, setReloadVersion] = useState(0)
   const [autoViewportScale, setAutoViewportScale] = useState(1)
-  const [viewportDevicePixelRatio, setViewportDevicePixelRatio] = useState('2')
-  const [viewportDeviceType, setViewportDeviceType] = useState<IframeViewportDeviceType>('mobile')
-  const [viewportZoomValue, setViewportZoomValue] = useState<IframeViewportZoomValue>('auto')
+  const [viewportDevicePixelRatio, setViewportDevicePixelRatio] = useState(
+    String(page.viewport?.devicePixelRatio ?? 2)
+  )
+  const [viewportDeviceType, setViewportDeviceType] = useState<IframeViewportDeviceType>(
+    page.viewport?.deviceType ?? 'mobile'
+  )
+  const [viewportZoomValue, setViewportZoomValue] = useState<IframeViewportZoomValue>(
+    page.viewport?.zoom == null ? 'auto' : page.viewport.zoom as IframeViewportZoomValue
+  )
   const [viewportSize, setViewportSize] = useState<InteractionPanelEmbeddedFrameViewportSize>({
-    height: 844,
-    width: 390
+    height: page.viewport?.height ?? 844,
+    width: page.viewport?.width ?? 390
   })
-  const [viewportPresetId, setViewportPresetId] = useState<IframeViewportPresetId>('responsive')
+  const [viewportPresetId, setViewportPresetId] = useState<IframeViewportPresetId>(() => (
+    IFRAME_VIEWPORT_PRESETS.some(item => item.id === page.viewport?.presetId)
+      ? page.viewport?.presetId as IframeViewportPresetId
+      : 'responsive'
+  ))
+  const persistedBrowserViewState = useMemo(() => ({
+    deviceToolbarOpen: isViewportToolbarOpen,
+    devtoolsDockSide: developerToolsDockSide,
+    inspectOpen: isDeveloperToolsOpen,
+    viewport: {
+      devicePixelRatio: Number.parseFloat(viewportDevicePixelRatio),
+      deviceType: viewportDeviceType,
+      height: viewportSize.height,
+      presetId: viewportPresetId,
+      width: viewportSize.width,
+      zoom: viewportZoomValue
+    }
+  }), [
+    developerToolsDockSide,
+    isDeveloperToolsOpen,
+    isViewportToolbarOpen,
+    viewportDevicePixelRatio,
+    viewportDeviceType,
+    viewportPresetId,
+    viewportSize.height,
+    viewportSize.width,
+    viewportZoomValue
+  ])
+  useEffect(() => {
+    onChangePage(current => {
+      const currentState = {
+        deviceToolbarOpen: current.deviceToolbarOpen ?? false,
+        devtoolsDockSide: current.devtoolsDockSide ?? 'right',
+        inspectOpen: current.inspectOpen ?? false,
+        viewport: {
+          devicePixelRatio: current.viewport?.devicePixelRatio ?? 2,
+          deviceType: current.viewport?.deviceType ?? 'mobile',
+          height: current.viewport?.height ?? 844,
+          presetId: current.viewport?.presetId ?? 'responsive',
+          width: current.viewport?.width ?? 390,
+          zoom: current.viewport?.zoom ?? 'auto'
+        }
+      }
+      return JSON.stringify(currentState) === JSON.stringify(persistedBrowserViewState)
+        ? current
+        : { ...current, ...persistedBrowserViewState }
+    })
+  }, [onChangePage, persistedBrowserViewState])
   const [webviewFrameUrl, setWebviewFrameUrl] = useState(() => normalizeFrameUrl(page.url))
   const [webviewAttachVersion, setWebviewAttachVersion] = useState(0)
   const [webviewReadyVersion, setWebviewReadyVersion] = useState(0)
@@ -1647,6 +1712,7 @@ export function InteractionPanelIframeView({
   const viewportResizeCleanupRef = useRef<(() => void) | null>(null)
   const developerToolsFrameRef = useRef<HTMLIFrameElement | null>(null)
   const developerToolsResizeCleanupRef = useRef<(() => void) | null>(null)
+  const nativeNavigationHistorySyncRef = useRef<{ currentUrl: string } | null>(null)
   const webviewRef = useRef<ElectronWebviewElement | null>(null)
   const onChangeMetadataRef = useRef(onChangeMetadata)
   const latestPageMetadataRef = useRef<{ faviconUrl?: string; title?: string }>({})
@@ -1690,11 +1756,21 @@ export function InteractionPanelIframeView({
   const handleWebviewDomReady = useCallback(() => {
     setWebviewReadyVersion(current => current + 1)
   }, [])
+  const handleNativeFrameUrlChange = useCallback((pageId: string, url: string) => {
+    const normalizedUrl = normalizeFrameUrl(url)
+    const nativeSync = nativeNavigationHistorySyncRef.current
+    if (nativeSync != null && normalizedUrl === nativeSync.currentUrl) {
+      nativeNavigationHistorySyncRef.current = null
+      return
+    }
+    nativeNavigationHistorySyncRef.current = null
+    onChangeUrl(pageId, url)
+  }, [onChangeUrl])
   const webview = useInteractionPanelWebview({
     frameUrl,
     isMobileDebugDevtools,
     onChangeMetadata,
-    onChangeUrl,
+    onChangeUrl: handleNativeFrameUrlChange,
     onDomReady: handleWebviewDomReady,
     pageId: page.id,
     recordUrlHistory: recordPanelUrlHistory,
@@ -1964,12 +2040,13 @@ export function InteractionPanelIframeView({
 
   const buildDeveloperToolsUrlForTarget = useCallback((
     runtime: WebDebugChiiRuntime,
-    target: WebDebugTarget
+    target: WebDebugTarget,
+    dockSide: WebDebugDevtoolsDockSide = developerToolsDockSide
   ) =>
     buildWebDebugDevtoolsUrl(runtime, target, {
       debug: isWebDebugDevtoolsDebugEnabled(),
       dockControls: 'menu',
-      dockSide: developerToolsDockSide,
+      dockSide,
       ...readDeveloperToolsToolbarMetrics(toolbarRef.current)
     }), [developerToolsDockSide])
 
@@ -2005,19 +2082,21 @@ export function InteractionPanelIframeView({
     return fallbackTarget
   }, [chiiTargetId, getCurrentInspectableUrl])
 
-  const openDeveloperTools = useCallback(async () => {
+  const openDeveloperTools = useCallback(async (
+    dockSide: WebDebugDevtoolsDockSide = developerToolsDockSide
+  ) => {
     let runtime: WebDebugChiiRuntime
     try {
       runtime = await readWebDebugChiiRuntime()
     } catch {
       void message.error(t('chat.interactionPanel.iframeDebugServiceUnavailable'))
-      return
+      return false
     }
 
     setIsDeveloperToolsOpen(true)
     setDeveloperToolsUrl(null)
     debugIframeDevtools('open developer tools', {
-      dockSide: developerToolsDockSide,
+      dockSide,
       frameUrl: getCurrentInspectableUrl(),
       runtime
     })
@@ -2037,12 +2116,12 @@ export function InteractionPanelIframeView({
       }
       if (target != null) {
         debugIframeDevtools('open developer tools target', {
-          dockSide: developerToolsDockSide,
+          dockSide,
           targetId: target.id,
           targetUrl: target.url
         })
-        setDeveloperToolsUrl(buildDeveloperToolsUrlForTarget(runtime, target))
-        return
+        setDeveloperToolsUrl(buildDeveloperToolsUrlForTarget(runtime, target, dockSide))
+        return true
       }
     } catch {
       // Keep the side target list visible when target polling fails.
@@ -2052,6 +2131,7 @@ export function InteractionPanelIframeView({
       debugIframeDevtools('copy target script fallback', { status: injectionStatus })
       await copyDeveloperToolsScriptFallback(runtime)
     }
+    return true
   }, [
     copyDeveloperToolsScriptFallback,
     buildDeveloperToolsUrlForTarget,
@@ -3092,12 +3172,14 @@ export function InteractionPanelIframeView({
     if (typeof webContentsId !== 'number' || !Number.isFinite(webContentsId)) return
     void window.oneworksDesktop?.registerInteractionPanelWebviewScope?.({
       webContentsId,
+      panelPageId: page.id,
+      ...(page.browserControlRequestId == null ? {} : { controlRequestId: page.browserControlRequestId }),
       ...(projectUrlHistoryKey.trim() === '' ? {} : { projectKey: projectUrlHistoryKey }),
-      ...(sessionUrlHistoryKey.trim() === '' ? {} : { sessionKey: sessionUrlHistoryKey })
+      ...(sessionId == null || sessionId.trim() === '' ? {} : { sessionKey: sessionId })
     }).catch((error) => {
       console.warn('[browser-activity] failed to register webview scope', error)
     })
-  }, [projectUrlHistoryKey, sessionUrlHistoryKey])
+  }, [page.browserControlRequestId, page.id, projectUrlHistoryKey, sessionId])
 
   const handleWebviewAttached = useCallback(() => {
     setWebviewAttachVersion(current => current + 1)
@@ -3233,6 +3315,120 @@ export function InteractionPanelIframeView({
     onNavigateHistory(page.id, delta)
   }
 
+  const applyBrowserControlDeviceMode = useCallback(async (state: BrowserControlDeviceModeState) => {
+    const nextPresetId = state.preset_id as IframeViewportPresetId
+    const nextViewport = {
+      devicePixelRatio: state.device_pixel_ratio,
+      deviceType: state.device_type,
+      height: state.height,
+      presetId: nextPresetId,
+      width: state.width,
+      zoom: state.zoom as IframeViewportZoomValue
+    }
+    setIsViewportToolbarOpen(state.enabled)
+    setViewportDevicePixelRatio(String(state.device_pixel_ratio))
+    setViewportDeviceType(state.device_type)
+    setViewportPresetId(nextPresetId)
+    setViewportSize({ height: state.height, width: state.width })
+    setViewportZoomValue(state.zoom as IframeViewportZoomValue)
+    onChangePage(current => ({
+      ...current,
+      deviceToolbarOpen: state.enabled,
+      viewport: nextViewport
+    }))
+    await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()))
+    return state
+  }, [onChangePage])
+
+  const clearBrowserControlNavigationHistory = useCallback(async () => {
+    if (frameUrl === '') throw new Error('The browser page does not have a current URL.')
+    const history = [frameUrl]
+    const historyIndex = 0
+    onChangePage(current => ({ ...current, history, historyIndex }))
+    await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()))
+    return { history, historyIndex }
+  }, [frameUrl, onChangePage])
+
+  const syncBrowserControlNavigationHistory = useCallback(async ({
+    activeIndex,
+    currentUrl,
+    entries
+  }: {
+    activeIndex: number
+    currentUrl: string
+    entries: Array<{ title?: string; url: string }>
+  }) => {
+    const {
+      currentUrl: normalizedCurrentUrl,
+      history,
+      historyIndex
+    } = resolveBrowserControlNavigationHistorySync({ activeIndex, currentUrl, entries })
+    nativeNavigationHistorySyncRef.current = { currentUrl: normalizedCurrentUrl }
+    onChangePage(current => ({
+      ...current,
+      history,
+      historyIndex,
+      url: normalizedCurrentUrl
+    }))
+    await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()))
+    return { history, historyIndex }
+  }, [onChangePage])
+
+  const applyBrowserControlDevtools = useCallback(async ({
+    dockSide = developerToolsDockSide,
+    enabled
+  }: {
+    dockSide?: WebDebugDevtoolsDockSide
+    enabled: boolean
+  }) => {
+    setDeveloperToolsDockSide(dockSide)
+    if (enabled) {
+      const didOpen = await openDeveloperTools(dockSide)
+      if (!didOpen) throw new Error('The embedded developer tools service is unavailable.')
+    } else {
+      setIsDeveloperToolsOpen(false)
+    }
+    onChangePage(current => ({
+      ...current,
+      devtoolsDockSide: dockSide,
+      inspectOpen: enabled
+    }))
+    await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()))
+    return { dockSide, enabled }
+  }, [developerToolsDockSide, onChangePage, openDeveloperTools])
+
+  useBrowserControlPageCommands({
+    applyDeviceMode: applyBrowserControlDeviceMode,
+    applyDevtools: applyBrowserControlDevtools,
+    clearNavigationHistory: clearBrowserControlNavigationHistory,
+    devicePresets: IFRAME_VIEWPORT_PRESETS.map(preset => ({
+      id: preset.id,
+      label: 'label' in preset ? preset.label : t(preset.labelKey),
+      ...(preset.size == null ? {} : { height: preset.size.height, width: preset.size.width })
+    })),
+    pageId: page.id,
+    ...(sessionId == null ? {} : { sessionId }),
+    syncNavigationHistory: syncBrowserControlNavigationHistory,
+    state: {
+      active: isActive,
+      deviceMode: {
+        device_pixel_ratio: page.viewport?.devicePixelRatio ?? Number.parseFloat(viewportDevicePixelRatio),
+        device_type: page.viewport?.deviceType ?? viewportDeviceType,
+        enabled: page.deviceToolbarOpen ?? isViewportToolbarOpen,
+        height: page.viewport?.height ?? viewportSize.height,
+        preset_id: page.viewport?.presetId ?? viewportPresetId,
+        width: page.viewport?.width ?? viewportSize.width,
+        zoom: page.viewport?.zoom ?? viewportZoomValue
+      },
+      devtools: { dockSide: developerToolsDockSide, enabled: isDeveloperToolsOpen },
+      history,
+      historyIndex,
+      panelPageId: page.id,
+      title: page.title,
+      url: frameUrl
+    }
+  })
+
   const handleLoad = () => {
     if (frameUrl === '') {
       return
@@ -3246,7 +3442,7 @@ export function InteractionPanelIframeView({
     const { faviconUrl, title } = readIframeDocumentMetadata(iframeRef.current)
 
     if (shouldCommitLoadedUrl) {
-      onChangeUrl(page.id, visibleLoadedUrl)
+      handleNativeFrameUrlChange(page.id, visibleLoadedUrl)
       recordPanelUrlHistory({ faviconUrl, title, url: visibleLoadedUrl })
     }
     if (title != null || faviconUrl != null) {

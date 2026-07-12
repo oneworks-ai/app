@@ -17,7 +17,7 @@ The plugin runtime automatically prepares a visible virtual Agent pointer before
 
 ## Action Protocol
 
-Prefer `execute_workflow` whenever two or more actions are known in advance. Submit the serial steps once and let the runtime refresh state, resolve semantic targets, wait, verify, and stop at checkpoints. Use `resume_workflow` only after a returned agent/user checkpoint. Use `get_workflow_step_results` only when the compact result does not contain enough detail. Read [WORKFLOWS.md](WORKFLOWS.md) before composing a workflow.
+Prefer `execute_workflow` whenever one app has two or more actions known in advance. When independent work is ready for multiple apps, submit it once with `execute_workflows`; different app resources may advance concurrently, workflows touching the same app remain serial, and pointer actions retain the global safety lock. Use `resume_workflow` only after a returned agent/user checkpoint. Use `get_workflow_step_results` only when the compact result does not contain enough detail. Read [WORKFLOWS.md](WORKFLOWS.md) before composing a workflow.
 
 The workflow runner prepares its own AX-only semantic observation mode. Do not call or describe configuration tools; use the separate `screenshot` tool only when pixels are actually required.
 
@@ -31,7 +31,7 @@ Fall back to individual tools only while exploring an unknown interface or recov
 
 Element indices are cached per `(pid, window_id)`. Never reuse an index across windows or after a material state change without another `get_window_state` call.
 
-Available tools include `execute_workflow`, `resume_workflow`, `get_workflow_step_results`, `set_session_cursor_color`, `set_session_cursor_start`, `launch_app`, `list_apps`, `list_windows`, `get_window_state`, `screenshot`, `click`, `right_click`, `double_click`, `scroll`, `type_text`, `press_key`, `set_value`, `zoom`, and read-only runtime state tools. The OneWorks MCP safety profile intentionally does not expose arbitrary pointer movement, drag gestures, focus-sensitive hotkeys, browser scripting, raw cursor/config mutation, trajectory replay, or child-session recording. Call `press_key` without `window_id`; window-targeted key delivery can activate the target app and is rejected by the proxy.
+Available tools include `execute_workflow`, `execute_workflows`, `resume_workflow`, `get_workflow_step_results`, `set_session_cursor_color`, `set_session_cursor_start`, `launch_app`, `list_apps`, `list_windows`, `get_window_state`, `screenshot`, `click`, `right_click`, `double_click`, `scroll`, `type_text`, `press_key`, `set_value`, `zoom`, and read-only runtime state tools. The OneWorks MCP safety profile intentionally does not expose arbitrary pointer movement, drag gestures, focus-sensitive hotkeys, browser scripting, raw cursor/config mutation, trajectory replay, or child-session recording. Call `press_key` without `window_id`; window-targeted key delivery can activate the target app and is rejected by the proxy.
 
 ## Browsers And Web Apps
 

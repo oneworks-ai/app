@@ -2,6 +2,8 @@
 
 Use one workflow call for predictable serial work. Keep individual CUA calls for interface discovery and recovery.
 
+Use `execute_workflows` when two or more workflows target independent apps. The runtime derives resource ownership from each workflow's declared `contexts` and `launch_app` steps. Workflows sharing a bundle id remain serial across MCP sessions; different apps may overlap waits, observations, and non-conflicting actions. Pointer actions always pass through the global style/start/action transaction, so concurrency cannot cross cursor colors or starting positions. Batch results return compact `run_id` and step-id references for each workflow.
+
 ## Compose a workflow
 
 Declare named app contexts and semantic steps. Prefer stable accessibility `id`; otherwise combine `role` with `description`, `title`, or `text`.

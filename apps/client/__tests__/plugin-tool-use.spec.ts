@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -9,6 +11,19 @@ import { resolvePluginToolUsePresentation } from '#~/plugins/plugin-tool-use'
 import type { RuntimeToolUsePresentation } from '#~/plugins/plugin-tool-use'
 
 const scopedTool = (scopeToken: string, tool: string) => `adapter:codex:mcp:oneworks-${scopeToken}:${tool}`
+
+const browserDriverManifest = JSON.parse(readFileSync(
+  new URL('../../../packages/plugins/browser-driver/plugin.json', import.meta.url),
+  'utf8'
+)) as {
+  plugin: { contributions: { toolUsePresentations: RuntimeToolUsePresentation[] } }
+}
+
+const readBrowserDriverPresentation = (id: string): RuntimeToolUsePresentation => {
+  const contribution = browserDriverManifest.plugin.contributions.toolUsePresentations.find(item => item.id === id)
+  if (contribution == null) throw new Error(`Missing Browser Driver tool presentation: ${id}`)
+  return { ...contribution, pluginScope: 'browser/browser-driver' }
+}
 
 const presentation = (
   overrides: Partial<RuntimeToolUsePresentation> = {}
@@ -165,6 +180,52 @@ describe('plugin tool-use presentation', () => {
         }
       ]
     })
+  })
+
+  it('renders Browser Driver workflow outputs from the actual plugin manifest without object coercion', () => {
+    const workflow = buildPluginToolResultPresentation({
+      structuredContent: {
+        outcome: 'succeeded',
+        run_id: 'run_1',
+        status: 'completed',
+        steps: {
+          ids: ['step_1'],
+          results: [{
+            node_id: 'verify',
+            output: { matched: true, value: 42 },
+            status: 'completed',
+            step_id: 'step_1'
+          }],
+          total: 1
+        }
+      }
+    }, readBrowserDriverPresentation('in-app-browser-workflow'))
+    const workflowSteps = workflow.blockFields.find(field => field.fallbackLabel === 'Step results')
+    expect(workflowSteps?.records).toEqual([{
+      detail: { matched: true, value: 42 },
+      meta: 'step_1',
+      status: undefined,
+      subtitle: 'completed',
+      title: 'verify'
+    }])
+
+    const stepResults = buildPluginToolResultPresentation({
+      structuredContent: {
+        steps: [{
+          node_id: 'verify',
+          output: { matched: true, value: 42 },
+          status: 'completed',
+          step_id: 'step_1'
+        }]
+      }
+    }, readBrowserDriverPresentation('in-app-browser-step-results'))
+    expect(stepResults.blockFields[0]?.records?.[0]).toMatchObject({
+      detail: { matched: true, value: 42 },
+      meta: 'step_1',
+      subtitle: 'completed',
+      title: 'verify'
+    })
+    expect(JSON.stringify({ stepResults, workflow })).not.toContain('[object Object]')
   })
 
   it('skips malformed runtime contributions instead of throwing during matching', () => {

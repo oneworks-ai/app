@@ -1,0 +1,26 @@
+{
+  "name": "@oneworks/plugin-browser-driver",
+  "type": "module",
+  "version": "0.1.0-beta.5",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/plugins/browser-driver"
+  },
+  "exports": {
+    ".": "./plugin.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "AGENTS.md",
+    "README.en.md",
+    "README.md",
+    "bin",
+    "mcp",
+    "plugin.json",
+    "skills"
+  ],
+  "scripts": {
+    "test": "pnpm -C ../../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/plugins/browser-driver/__tests__"
+  }
+}

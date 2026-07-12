@@ -278,6 +278,24 @@ const buildChatSmokePrompt = (expectedReply: string) => (
   `请只回复下面字符去掉空格后的结果，不要解释：${Array.from(expectedReply).join(' ')}`
 )
 
+const buildBrowserDriverExpectedReply = () => {
+  const suffix = new Date().toISOString()
+    .replace(/[-:.TZ]/gu, '')
+    .slice(0, 14)
+  return `OK_BROWSER_DRIVER_${suffix}`
+}
+
+const buildBrowserDriverPrompt = (pageOrigin: string, expectedReply: string) => (
+  '请使用当前工作区的 browser/browser-driver skill 验证内置浏览器，不要使用外部浏览器，也不要修改代码。' +
+  `先在默认右侧打开 ${pageOrigin}/ui/browser-use-lab.html?instance=right，` +
+  '获取快照后，用 workflow 依次输入任务标题 Browser Driver right page、原生选择 High、勾选确认、创建任务，并等待 Task created successfully。' +
+  '在 right 页面使用 in_app_browser_scroll 向下滚动 640 像素，再向上滚动 -640 像素返回顶部。' +
+  `再在底部打开 ${pageOrigin}/ui/browser-use-lab.html?instance=bottom，` +
+  '获取第二个页面快照，输入 Browser Driver bottom page、选择 Urgent 并勾选确认。' +
+  '调用 in_app_browser_list_pages，确认两个页面 ID 不同；随后分别使用各自 page_id 再获取快照，确认 right 页面仍是成功状态、bottom 页面仍是未提交状态。' +
+  `全部成功后，只回复下面字符去掉空格后的结果，不要解释：${Array.from(expectedReply).join(' ')}`
+)
+
 export const demoVideoScenarios = [
   {
     defaultDurationMs: 5_000,
@@ -337,6 +355,7 @@ export const demoVideoScenarios = [
       width: 1440
     },
     description: '通过 launcher UI 点击“打开项目”，搜索目标目录并打开 workspace。',
+    followCdpTargets: true,
     id: 'launcher-open-workspace-ui-tour',
     requiresUrl: false,
     title: 'Launcher UI 打开 Workspace',
@@ -352,6 +371,7 @@ export const demoVideoScenarios = [
       width: 1440
     },
     description: '通过 launcher UI 打开 workspace，发送一条 Codex 对话 smoke 消息并等待回复。',
+    followCdpTargets: true,
     id: 'launcher-open-workspace-chat-smoke',
     requiresUrl: false,
     title: 'Launcher UI 打开 Workspace 并发送消息',
@@ -364,6 +384,36 @@ export const demoVideoScenarios = [
       await ctx.clickSelector(chatSendButtonSelector, { settleMs: 160, timeoutMs: 15_000 })
       await ctx.recordUntilText(expectedReply, { timeoutMs: 90_000 })
       await ctx.recordFor(3_000)
+    }
+  },
+  {
+    defaultDurationMs: 180_000,
+    defaultFps: 30,
+    defaultViewport: {
+      height: 900,
+      width: 1440
+    },
+    description: '通过聊天 Agent 使用 Browser Driver 操作右侧与底部两个内置页面，验证多 Tab 隔离。',
+    followCdpTargets: true,
+    id: 'launcher-browser-driver-agent-tour',
+    requiresUrl: false,
+    showActionCursor: false,
+    title: 'Electron Browser Driver Agent 演示',
+    run: async (ctx) => {
+      await openWorkspaceThroughLauncherUi(ctx, { settleMs: 300 })
+      const pageUrl = ctx.url == null ? undefined : new URL(ctx.url)
+      if (pageUrl == null) throw new Error('Browser Driver demo requires the Electron renderer URL.')
+      const expectedReply = buildBrowserDriverExpectedReply()
+      await ctx.clickSelector('[aria-label="收起侧边栏"], [aria-label="Collapse sidebar"]', {
+        settleMs: 400,
+        timeoutMs: 15_000
+      })
+      await ctx.clickSelector(chatEditorSelector, { settleMs: 120, timeoutMs: 15_000 })
+      await ctx.focusSelector(chatEditorSelector, { timeoutMs: 15_000 })
+      await ctx.typeText(buildBrowserDriverPrompt(pageUrl.origin, expectedReply), { settleMs: 160 })
+      await ctx.clickSelector(chatSendButtonSelector, { settleMs: 160, timeoutMs: 15_000 })
+      await ctx.recordUntilText(expectedReply, { timeoutMs: 180_000 })
+      await ctx.recordFor(4_000)
     }
   },
   {
@@ -422,6 +472,7 @@ export const listDemoVideoScenarios = (): DemoVideoScenarioInfo[] =>
     defaultFps: scenario.defaultFps,
     defaultViewport: scenario.defaultViewport,
     description: scenario.description,
+    followCdpTargets: scenario.followCdpTargets,
     id: scenario.id,
     requiresUrl: scenario.requiresUrl,
     title: scenario.title

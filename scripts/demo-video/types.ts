@@ -38,6 +38,7 @@ export interface DemoVideoRecordOptions {
   pageBackgroundImage?: string
   preserveTargetEnvironment?: boolean
   scenarioId: string
+  showActionCursor?: boolean
   systemDisplayCrop?: DemoVideoCropRect
   systemCursorWindowBounds?: DemoVideoSystemCursorWindowBounds
   systemDisplayId?: number
@@ -109,6 +110,7 @@ export interface DemoVideoScenarioInfo {
   defaultFps: number
   defaultViewport: DemoVideoViewport
   description: string
+  followCdpTargets?: boolean
   id: string
   requiresUrl: boolean
   title: string
@@ -159,8 +161,10 @@ export interface DemoVideoScenario {
   defaultFps: number
   defaultViewport: DemoVideoViewport
   description: string
+  followCdpTargets?: boolean
   id: string
   requiresUrl: boolean
+  showActionCursor?: boolean
   title: string
   run: (ctx: DemoVideoScenarioContext) => Promise<void>
 }

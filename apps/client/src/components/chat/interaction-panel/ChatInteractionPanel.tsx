@@ -434,7 +434,13 @@ export function ChatInteractionPanel({
       onFoldChange(false)
       panelTabs.openIframeUrl(
         currentRequest.url,
-        currentRequest.title == null ? undefined : { title: currentRequest.title }
+        {
+          ...(currentRequest.browserControlRequestId == null
+            ? {}
+            : { browserControlRequestId: currentRequest.browserControlRequestId }),
+          ...(currentRequest.title == null ? {} : { title: currentRequest.title }),
+          ...(currentRequest.openMode == null ? {} : { openMode: currentRequest.openMode })
+        }
       )
     } else if (currentRequest.action === 'open-workspace-file') {
       onFoldChange(false)
@@ -583,6 +589,7 @@ export function ChatInteractionPanel({
             onCloseWorkspaceFilePaths={panelTabs.handleCloseWorkspaceFilePaths}
             onEditPinnedTab={setEditingPinnedTab}
             onIframeMetadataChange={panelTabs.handleIframeMetadataChange}
+            onIframePageChange={panelTabs.handleIframePageChange}
             onIframeNavigateHistory={panelTabs.handleIframeNavigateHistory}
             onIframeSelectHistory={panelTabs.handleIframeSelectHistory}
             onIframeUrlChange={panelTabs.handleIframeUrlChange}

@@ -65,18 +65,23 @@ export type SessionPanelWorkspaceDrawerView =
   | `plugin:${string}:${string}`
 
 export interface SessionPanelWebViewportState {
+  devicePixelRatio?: number
+  deviceType?: 'desktop' | 'mobile'
   height?: number
   presetId?: string
   width?: number
+  zoom?: 'auto' | number
 }
 
 export type SessionPanelTab =
   | {
+    browserControlRequestId?: string
     id: string
     kind: 'web'
     title: string
     url: string
     deviceToolbarOpen?: boolean
+    devtoolsDockSide?: 'bottom' | 'left' | 'right'
     faviconUrl?: string
     history?: string[]
     historyIndex?: number

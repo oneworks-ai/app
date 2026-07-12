@@ -39,6 +39,7 @@
     "typecheck": "tsc -p server/tsconfig.json --noEmit --pretty false"
   },
   "dependencies": {
-    "@oneworks/cursor": "workspace:*"
+    "@oneworks/cursor": "workspace:*",
+    "proper-lockfile": "4.1.2"
   }
 }

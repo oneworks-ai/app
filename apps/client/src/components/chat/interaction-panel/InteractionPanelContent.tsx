@@ -62,6 +62,7 @@ export function InteractionPanelContent({
   onCloseWorkspaceFilePaths,
   onIframeUrlChange,
   onIframeMetadataChange,
+  onIframePageChange,
   onIframeNavigateHistory,
   onIframeSelectHistory,
   onLayoutChange,
@@ -125,6 +126,10 @@ export function InteractionPanelContent({
   tabs: InteractionPanelTab[]
   onIframeUrlChange: (pageId: string, url: string) => void
   onIframeMetadataChange: (pageId: string, metadata: { faviconUrl?: string; title?: string }) => void
+  onIframePageChange: (
+    pageId: string,
+    updater: (page: InteractionPanelIframePage) => InteractionPanelIframePage
+  ) => void
   onIframeNavigateHistory: (pageId: string, delta: -1 | 1) => void
   onIframeSelectHistory: (pageId: string, index: number) => void
   onLayoutChange?: (layout: RouteContainerPanelDockLayout) => void
@@ -240,6 +245,7 @@ export function InteractionPanelContent({
       onCloseWorkspaceFilePaths={onCloseWorkspaceFilePaths}
       onEditPinnedTab={onEditPinnedTab}
       onIframeMetadataChange={onIframeMetadataChange}
+      onIframePageChange={onIframePageChange}
       onIframeNavigateHistory={onIframeNavigateHistory}
       onIframeSelectHistory={onIframeSelectHistory}
       onIframeUrlChange={onIframeUrlChange}

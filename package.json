@@ -48,6 +48,7 @@
     "@oneworks/adapter-opencode": "workspace:*",
     "@oneworks/cli": "workspace:*",
     "@oneworks/client": "workspace:*",
+    "@oneworks/plugin-browser-driver": "workspace:*",
     "@oneworks/plugin-cua-driver": "workspace:*",
     "@oneworks/plugin-demo": "workspace:*",
     "@oneworks/plugin-demo-extension": "workspace:*",

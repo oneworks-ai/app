@@ -13,6 +13,8 @@ import {
   registerInteractionPanelWebviewScope,
   revealBrowserDownload
 } from './browser-activity'
+import { restoreBrowserControlDeviceEmulationForScope } from './browser-control-device-emulation'
+import { completeBrowserControlPageCommand } from './browser-control-page-commands'
 import {
   authenticateSavedPasswordsAccess,
   copySavedPasswordField,
@@ -314,7 +316,15 @@ export const registerIpcHandlers = ({
   ipcMain.handle('desktop:record-browser-history', (_event, input: unknown) => recordBrowserHistory(input))
   ipcMain.handle(
     'desktop:register-interaction-panel-webview-scope',
-    (_event, input: unknown) => registerInteractionPanelWebviewScope(input)
+    async (event, input: unknown) => {
+      const scope = registerInteractionPanelWebviewScope({
+        ...(isRecord(input) ? input : {}),
+        hostWebContentsId: event.sender.id,
+        workspaceFolder: findWindowRecordForWebContents(event.sender)?.workspaceFolder
+      })
+      await new Promise<void>(resolve => setImmediate(resolve))
+      return await restoreBrowserControlDeviceEmulationForScope(scope)
+    }
   )
   ipcMain.handle('desktop:list-browser-downloads', (_event, input: unknown) => listBrowserDownloads(input))
   ipcMain.handle('desktop:open-browser-download', (_event, id: unknown) => openBrowserDownload(id))
@@ -418,6 +428,10 @@ export const registerIpcHandlers = ({
   )
 
   ipcMain.handle('desktop:retry-launcher-shortcut-registration', () => retryLauncherShortcutRegistration())
+
+  ipcMain.handle('desktop:browser-control:complete-page-command', (event, input) => (
+    completeBrowserControlPageCommand(event.sender.id, input)
+  ))
 
   ipcMain.handle('desktop:set-theme-source', (_event, themeSource: unknown) => setThemeSource(themeSource))
 

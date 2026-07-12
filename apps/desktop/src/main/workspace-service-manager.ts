@@ -32,6 +32,7 @@ import { refreshWorkspaceRuntimeCacheInBackground } from './updates'
 interface WorkspaceServiceManagerInput {
   broadcastWorkspaceSelectorState: () => void
   findWorkspaceWindowRecord: (workspaceFolder: string) => WindowRecord | undefined
+  getBrowserControlEnv: (workspaceFolder: string) => NodeJS.ProcessEnv
   getDesktopClientOrigin: () => string | undefined
   getIsQuitting: () => boolean
   loadWorkspaceSelectorWindow: (
@@ -159,6 +160,7 @@ const logServerStartup = (displayName: string, message: string) => {
 export const createWorkspaceServiceManager = ({
   broadcastWorkspaceSelectorState,
   findWorkspaceWindowRecord,
+  getBrowserControlEnv,
   getDesktopClientOrigin,
   getIsQuitting,
   loadWorkspaceSelectorWindow,
@@ -294,6 +296,7 @@ export const createWorkspaceServiceManager = ({
           ...resolveRuntimeConsumerBootstrapEnv(),
           ...resolveCachedServerPackageEnv(packagedWorkspaceRuntimeEnv),
           ...directSourceLoaderEnv,
+          ...getBrowserControlEnv(workspaceFolder),
           __ONEWORKS_PROJECT_CLIENT_BASE__: CLIENT_BASE,
           __ONEWORKS_PROJECT_CLIENT_DIST_PATH__: clientDistPath ?? '',
           __ONEWORKS_PROJECT_CLIENT_MODE__: isDev ? 'none' : 'desktop',

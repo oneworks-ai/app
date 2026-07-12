@@ -1,0 +1,28 @@
+module.exports = name =>
+  ({
+    in_app_browser_open: 'open_page',
+    in_app_browser_show_page: 'show_page',
+    in_app_browser_close_page: 'close_page',
+    in_app_browser_duplicate_page: 'duplicate_page',
+    in_app_browser_move_page: 'move_page',
+    in_app_browser_reload: 'reload',
+    in_app_browser_stop_loading: 'stop_loading',
+    in_app_browser_navigate_history: 'navigate_history',
+    in_app_browser_get_navigation_state: 'get_navigation_state',
+    in_app_browser_get_navigation_entries: 'get_navigation_entries',
+    in_app_browser_clear_navigation_history: 'clear_navigation_history',
+    in_app_browser_get_page_view_state: 'get_page_view_state',
+    in_app_browser_list_device_presets: 'list_device_presets',
+    in_app_browser_set_device_mode: 'set_device_mode',
+    in_app_browser_set_embedded_devtools: 'set_devtools',
+    in_app_browser_set_page_zoom: 'set_zoom',
+    in_app_browser_snapshot: 'snapshot',
+    in_app_browser_navigate: 'navigate',
+    in_app_browser_click: 'click',
+    in_app_browser_type: 'type',
+    in_app_browser_select: 'select',
+    in_app_browser_press_key: 'press_key',
+    in_app_browser_scroll: 'scroll',
+    in_app_browser_wait: 'wait',
+    in_app_browser_screenshot: 'screenshot'
+  })[name]

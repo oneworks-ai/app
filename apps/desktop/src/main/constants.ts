@@ -11,6 +11,8 @@ export const RELOAD_WINDOW_MENU_ACCELERATOR = 'CmdOrCtrl+Shift+R'
 export const RELOAD_WINDOW_SHORTCUT_LABEL = process.platform === 'darwin' ? 'Command+Shift+R' : 'Ctrl+Shift+R'
 export const DEFAULT_LAUNCHER_SHORTCUT = 'option+space'
 export const AUTO_UPDATE_CONFIG_FILES = ['app-update.yml', 'dev-app-update.yml']
+export const BROWSER_CONTROL_OPEN_PAGE_CHANNEL = 'desktop:browser-control:open-page'
+export const BROWSER_CONTROL_PAGE_COMMAND_CHANNEL = 'desktop:browser-control:page-command'
 export const WORKSPACE_SELECTOR_STATE_CHANNEL = 'desktop:workspace-selector-state'
 export const DESKTOP_SETTINGS_CHANNEL = 'desktop:settings'
 export const DESKTOP_UPDATE_STATUS_CHANNEL = 'desktop:update-status'

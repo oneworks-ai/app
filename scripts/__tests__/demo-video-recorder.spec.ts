@@ -7,6 +7,15 @@ import {
   sampleSystemCursorTimeline,
   shouldContinueSystemCaptureDuringAction
 } from '../demo-video/recorder'
+import { getDemoVideoScenario } from '../demo-video/scenarios'
+
+describe('demo video scenario target following', () => {
+  it('declares workspace target following on every Launcher-to-Workspace scenario', () => {
+    expect(getDemoVideoScenario('launcher-open-workspace-ui-tour').followCdpTargets).toBe(true)
+    expect(getDemoVideoScenario('launcher-open-workspace-chat-smoke').followCdpTargets).toBe(true)
+    expect(getDemoVideoScenario('launcher-browser-driver-agent-tour').followCdpTargets).toBe(true)
+  })
+})
 
 describe('demo video recorder system capture timing', () => {
   it('treats recordDuring duration as a minimum while the action is still running', () => {

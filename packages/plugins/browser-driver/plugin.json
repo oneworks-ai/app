@@ -1,0 +1,268 @@
+{
+  "__oneWorksPluginManifest": true,
+  "name": "@oneworks/plugin-browser-driver",
+  "displayName": "Browser Driver",
+  "version": "0.1.0-beta.5",
+  "assets": {
+    "skills": "skills",
+    "mcp": "mcp"
+  },
+  "plugin": {
+    "contributions": {
+      "toolUsePresentations": [
+        {
+          "id": "in-app-browser-workflow",
+          "title": "Run in-app browser workflow",
+          "titleI18n": { "en": "Run in-app browser workflow", "zh-Hans": "执行内置浏览器工作流" },
+          "icon": "account_tree",
+          "tools": ["execute_in_app_browser_workflow"],
+          "target": "workflow_id",
+          "input": {
+            "mode": "declared",
+            "fields": [
+              {
+                "path": "steps",
+                "title": "Steps",
+                "titleI18n": { "zh-Hans": "步骤" },
+                "format": "records",
+                "item": { "titlePath": "node_id", "subtitlePath": "op", "metaPath": "ref" }
+              }
+            ]
+          },
+          "result": {
+            "mode": "declared",
+            "fields": [
+              {
+                "path": "structuredContent.run_id",
+                "title": "Run",
+                "titleI18n": { "zh-Hans": "运行" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.status",
+                "title": "Status",
+                "titleI18n": { "zh-Hans": "状态" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.outcome",
+                "title": "Outcome",
+                "titleI18n": { "zh-Hans": "结果" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.steps.total",
+                "title": "Step count",
+                "titleI18n": { "zh-Hans": "步骤数" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.steps.ids",
+                "title": "Step IDs",
+                "titleI18n": { "zh-Hans": "步骤 ID" },
+                "format": "chips"
+              },
+              {
+                "path": "structuredContent.steps.results",
+                "title": "Step results",
+                "titleI18n": { "zh-Hans": "步骤结果" },
+                "format": "records",
+                "item": {
+                  "titlePath": "node_id",
+                  "subtitlePath": "status",
+                  "metaPath": "step_id",
+                  "detailPath": "output"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "in-app-browser-workflows",
+          "title": "Run in-app browser workflows",
+          "titleI18n": { "en": "Run in-app browser workflows", "zh-Hans": "并行执行内置浏览器工作流" },
+          "icon": "splitscreen",
+          "tools": ["execute_in_app_browser_workflows"],
+          "input": {
+            "mode": "declared",
+            "fields": [
+              {
+                "path": "workflows",
+                "title": "Workflows",
+                "titleI18n": { "zh-Hans": "工作流" },
+                "format": "records",
+                "item": { "titlePath": "workflow_id", "subtitlePath": "page_id" }
+              }
+            ]
+          },
+          "result": {
+            "mode": "declared",
+            "fields": [
+              {
+                "path": "structuredContent.outcome",
+                "title": "Outcome",
+                "titleI18n": { "zh-Hans": "结果" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.runs",
+                "title": "Runs",
+                "titleI18n": { "zh-Hans": "运行" },
+                "format": "records",
+                "item": { "titlePath": "workflow_id", "subtitlePath": "outcome", "metaPath": "run_id" }
+              }
+            ]
+          }
+        },
+        {
+          "id": "in-app-browser-snapshot",
+          "title": "Inspect in-app browser page",
+          "titleI18n": { "en": "Inspect in-app browser page", "zh-Hans": "查看内置浏览器页面" },
+          "icon": "pageview",
+          "tools": ["in_app_browser_snapshot"],
+          "target": "page_id",
+          "result": {
+            "mode": "declared",
+            "fields": [
+              {
+                "path": "structuredContent.page.title",
+                "title": "Page",
+                "titleI18n": { "zh-Hans": "页面" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.snapshot.elements",
+                "title": "Elements",
+                "titleI18n": { "zh-Hans": "可操作元素" },
+                "format": "records",
+                "item": { "titlePath": "ref", "subtitlePath": "role", "metaPath": "name" }
+              }
+            ]
+          }
+        },
+        {
+          "id": "in-app-browser-tab",
+          "title": "Manage in-app browser tab",
+          "titleI18n": { "en": "Manage in-app browser tab", "zh-Hans": "管理内置浏览器标签页" },
+          "icon": "tab",
+          "tools": [
+            "in_app_browser_open",
+            "in_app_browser_show_page",
+            "in_app_browser_close_page",
+            "in_app_browser_duplicate_page",
+            "in_app_browser_move_page"
+          ],
+          "target": "page_id",
+          "input": { "mode": "auto" },
+          "result": { "mode": "auto" }
+        },
+        {
+          "id": "in-app-browser-navigation",
+          "title": "Navigate in-app browser",
+          "titleI18n": { "en": "Navigate in-app browser", "zh-Hans": "导航内置浏览器" },
+          "icon": "travel_explore",
+          "tools": [
+            "in_app_browser_navigate",
+            "in_app_browser_navigate_history",
+            "in_app_browser_reload",
+            "in_app_browser_stop_loading",
+            "in_app_browser_clear_navigation_history"
+          ],
+          "target": "page_id",
+          "input": { "mode": "auto" },
+          "result": { "mode": "auto" }
+        },
+        {
+          "id": "in-app-browser-page-state",
+          "title": "Read in-app browser state",
+          "titleI18n": { "en": "Read in-app browser state", "zh-Hans": "读取内置浏览器状态" },
+          "icon": "history",
+          "tools": [
+            "in_app_browser_list_pages",
+            "in_app_browser_get_navigation_state",
+            "in_app_browser_get_navigation_entries",
+            "in_app_browser_get_page_view_state",
+            "in_app_browser_list_device_presets"
+          ],
+          "target": "page_id",
+          "input": { "mode": "auto" },
+          "result": { "mode": "auto" }
+        },
+        {
+          "id": "in-app-browser-view-settings",
+          "title": "Configure in-app browser view",
+          "titleI18n": { "en": "Configure in-app browser view", "zh-Hans": "配置内置浏览器视图" },
+          "icon": "devices",
+          "tools": [
+            "in_app_browser_set_device_mode",
+            "in_app_browser_set_page_zoom",
+            "in_app_browser_set_embedded_devtools"
+          ],
+          "target": "page_id",
+          "input": { "mode": "auto" },
+          "result": { "mode": "auto" }
+        },
+        {
+          "id": "in-app-browser-action",
+          "title": "Use in-app browser",
+          "titleI18n": { "en": "Use in-app browser", "zh-Hans": "操作内置浏览器" },
+          "icon": "ads_click",
+          "tools": [
+            "in_app_browser_click",
+            "in_app_browser_type",
+            "in_app_browser_select",
+            "in_app_browser_press_key",
+            "in_app_browser_scroll",
+            "in_app_browser_wait"
+          ],
+          "target": "page_id",
+          "input": { "mode": "auto" },
+          "result": { "mode": "auto" }
+        },
+        {
+          "id": "in-app-browser-screenshot",
+          "title": "Capture in-app browser",
+          "titleI18n": { "en": "Capture in-app browser", "zh-Hans": "截取内置浏览器" },
+          "icon": "screenshot_monitor",
+          "tools": ["in_app_browser_screenshot"],
+          "result": {
+            "mode": "declared",
+            "fields": [
+              {
+                "path": "structuredContent.path",
+                "title": "Image",
+                "titleI18n": { "zh-Hans": "图片" },
+                "format": "inline"
+              }
+            ]
+          }
+        },
+        {
+          "id": "in-app-browser-step-results",
+          "title": "View in-app browser workflow steps",
+          "titleI18n": { "en": "View in-app browser workflow steps", "zh-Hans": "查看内置浏览器工作流步骤" },
+          "icon": "format_list_bulleted",
+          "tools": ["get_in_app_browser_workflow_steps"],
+          "target": "run_id",
+          "result": {
+            "mode": "declared",
+            "fields": [
+              {
+                "path": "structuredContent.steps",
+                "title": "Steps",
+                "titleI18n": { "zh-Hans": "步骤" },
+                "format": "records",
+                "item": {
+                  "titlePath": "node_id",
+                  "subtitlePath": "status",
+                  "metaPath": "step_id",
+                  "detailPath": "output"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

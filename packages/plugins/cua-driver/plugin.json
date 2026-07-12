@@ -167,6 +167,43 @@
           }
         },
         {
+          "id": "execute-workflows",
+          "title": "Run computer workflows",
+          "titleI18n": { "en": "Run computer workflows", "zh-Hans": "并行执行电脑工作流" },
+          "icon": "splitscreen",
+          "tools": ["execute_workflows"],
+          "input": {
+            "mode": "declared",
+            "fields": [
+              {
+                "path": "workflows",
+                "title": "Workflows",
+                "titleI18n": { "zh-Hans": "工作流" },
+                "format": "records",
+                "item": { "titlePath": "workflow_id", "subtitlePath": "cursor_color" }
+              }
+            ]
+          },
+          "result": {
+            "mode": "declared",
+            "fields": [
+              {
+                "path": "structuredContent.outcome",
+                "title": "Outcome",
+                "titleI18n": { "zh-Hans": "结果" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.runs",
+                "title": "Runs",
+                "titleI18n": { "zh-Hans": "运行" },
+                "format": "records",
+                "item": { "titlePath": "workflow_id", "subtitlePath": "outcome", "metaPath": "run_id" }
+              }
+            ]
+          }
+        },
+        {
           "id": "set-session-cursor-color",
           "title": "Set session pointer color",
           "titleI18n": { "en": "Set session pointer color", "zh-Hans": "设置会话光标颜色" },

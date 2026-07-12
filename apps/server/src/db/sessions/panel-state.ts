@@ -3,6 +3,7 @@ import type {
   SessionPanelAreaState,
   SessionPanelState,
   SessionPanelTab,
+  SessionPanelWebViewportState,
   SessionPanelWorkspaceDrawerView
 } from '@oneworks/core'
 
@@ -39,16 +40,31 @@ const normalizeNumber = (value: unknown) => {
   return value
 }
 
-const normalizeViewport = (value: unknown) => {
+const normalizeViewport = (value: unknown): SessionPanelWebViewportState | undefined => {
   if (!isObjectRecord(value)) return undefined
+  const devicePixelRatio = normalizeNumber(value.devicePixelRatio)
+  const deviceType = value.deviceType === 'desktop' || value.deviceType === 'mobile'
+    ? value.deviceType
+    : undefined
   const height = normalizeNumber(value.height)
   const width = normalizeNumber(value.width)
   const presetId = normalizeNonEmptyString(value.presetId)
-  if (height == null && presetId == null && width == null) return undefined
+  const zoom = value.zoom === 'auto' ? value.zoom : normalizeNumber(value.zoom)
+  if (
+    devicePixelRatio == null &&
+    deviceType == null &&
+    height == null &&
+    presetId == null &&
+    width == null &&
+    zoom == null
+  ) return undefined
   return {
+    ...(devicePixelRatio == null ? {} : { devicePixelRatio }),
+    ...(deviceType == null ? {} : { deviceType }),
     ...(height == null ? {} : { height }),
     ...(presetId == null ? {} : { presetId }),
-    ...(width == null ? {} : { width })
+    ...(width == null ? {} : { width }),
+    ...(zoom == null ? {} : { zoom })
   }
 }
 
@@ -63,6 +79,11 @@ const normalizePanelTab = (value: unknown): SessionPanelTab | null => {
     const url = typeof value.url === 'string' ? value.url.trim() : undefined
     if (url == null) return null
     const title = (normalizeNonEmptyString(value.title) ?? url) || id
+    const browserControlRequestId = normalizeNonEmptyString(value.browserControlRequestId)
+    const devtoolsDockSide = value.devtoolsDockSide === 'bottom' ||
+        value.devtoolsDockSide === 'left' || value.devtoolsDockSide === 'right'
+      ? value.devtoolsDockSide
+      : undefined
     const faviconUrl = normalizeNonEmptyString(value.faviconUrl)
     const history = normalizeHistory(value.history)
     const historyIndex = normalizeNumber(value.historyIndex)
@@ -73,7 +94,9 @@ const normalizePanelTab = (value: unknown): SessionPanelTab | null => {
       kind,
       title,
       url,
+      ...(browserControlRequestId == null ? {} : { browserControlRequestId }),
       ...(value.deviceToolbarOpen === true ? { deviceToolbarOpen: true } : {}),
+      ...(devtoolsDockSide == null ? {} : { devtoolsDockSide }),
       ...(faviconUrl == null ? {} : { faviconUrl }),
       ...(history == null ? {} : { history }),
       ...(historyIndex == null ? {} : { historyIndex }),

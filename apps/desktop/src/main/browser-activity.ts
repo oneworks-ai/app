@@ -21,6 +21,15 @@ export interface BrowserActivityScopeInput {
   sessionKey?: string
 }
 
+export interface InteractionPanelWebviewScope extends BrowserActivityScopeInput {
+  controlRequestId?: string
+  hostWebContentsId?: number
+  panelPageId?: string
+  registeredAt: number
+  webContentsId: number
+  workspaceFolder?: string
+}
+
 export interface BrowserHistoryRecord extends BrowserActivityScopeInput {
   faviconUrl?: string
   firstVisitedAt: string
@@ -60,13 +69,17 @@ interface BrowserActivityStore {
 }
 
 interface InteractionPanelWebviewScopeInput extends BrowserActivityScopeInput {
+  controlRequestId?: string
+  hostWebContentsId?: number
+  panelPageId?: string
   webContentsId?: number
+  workspaceFolder?: string
 }
 
 const browserActivityStoreVersion = 1 as const
 const browserHistoryLimit = 2_000
 const browserDownloadLimit = 1_000
-const webviewScopesByWebContentsId = new Map<number, BrowserActivityScopeInput>()
+const webviewScopesByWebContentsId = new Map<number, InteractionPanelWebviewScope>()
 
 let writeQueue: Promise<unknown> = Promise.resolve()
 let downloadTrackingInstalled = false
@@ -338,17 +351,52 @@ export const listBrowserDownloads = async (input: unknown) => {
 }
 
 export const registerInteractionPanelWebviewScope = (input: unknown) => {
-  if (!isRecord(input) || typeof input.webContentsId !== 'number' || !Number.isFinite(input.webContentsId)) {
+  if (
+    !isRecord(input) ||
+    typeof input.webContentsId !== 'number' ||
+    !Number.isFinite(input.webContentsId) ||
+    typeof input.hostWebContentsId !== 'number' ||
+    !Number.isFinite(input.hostWebContentsId)
+  ) {
     throw new TypeError('A webContents id is required.')
   }
 
   const webContentsId = Math.round(input.webContentsId)
-  webviewScopesByWebContentsId.set(webContentsId, normalizeScopeInput(input))
   const contents = electronWebContents.fromId(webContentsId)
-  contents?.once('destroyed', () => {
-    webviewScopesByWebContentsId.delete(webContentsId)
-  })
+  if (
+    contents == null ||
+    contents.getType() !== 'webview' ||
+    contents.hostWebContents?.id !== Math.round(input.hostWebContentsId) ||
+    contents.session !== session.fromPartition(interactionPanelWebviewPartition)
+  ) {
+    throw new TypeError('The webContents id is not an interaction-panel webview owned by this window.')
+  }
+  const alreadyRegistered = webviewScopesByWebContentsId.has(webContentsId)
+  const workspaceFolder = normalizeOptionalText(input.workspaceFolder)
+  const controlRequestId = normalizeOptionalText(input.controlRequestId)
+  const panelPageId = normalizeOptionalText(input.panelPageId)
+  const scope: InteractionPanelWebviewScope = {
+    webContentsId,
+    hostWebContentsId: Math.round(input.hostWebContentsId),
+    registeredAt: Date.now(),
+    ...normalizeScopeInput(input),
+    ...(controlRequestId == null ? {} : { controlRequestId }),
+    ...(panelPageId == null ? {} : { panelPageId }),
+    ...(workspaceFolder == null ? {} : { workspaceFolder: path.resolve(workspaceFolder) })
+  }
+  webviewScopesByWebContentsId.set(webContentsId, scope)
+  if (!alreadyRegistered) {
+    contents.once('destroyed', () => {
+      webviewScopesByWebContentsId.delete(webContentsId)
+    })
+  }
+  return scope
 }
+
+export const listInteractionPanelWebviewScopes = (): InteractionPanelWebviewScope[] => (
+  [...webviewScopesByWebContentsId.values()]
+    .filter(scope => electronWebContents.fromId(scope.webContentsId) != null)
+)
 
 const getDownloadRecordId = (item: DownloadItem, startedAt: string) =>
   createHash('sha256')
@@ -435,6 +483,7 @@ const buildDownloadRecord = (
 ): BrowserDownloadRecord => {
   const id = getDownloadRecordId(item, startedAt)
   const scope = webviewScopesByWebContentsId.get(ownerWebContents.id) ?? {}
+  const activityScope = normalizeScopeInput(scope)
   const mimeType = normalizeOptionalText(item.getMimeType())
   const filePath = normalizeOptionalText(item.getSavePath())
   return {
@@ -448,7 +497,7 @@ const buildDownloadRecord = (
     updatedAt: startedAt,
     ...(mimeType == null ? {} : { mimeType }),
     ...(filePath == null ? {} : { filePath }),
-    ...scope
+    ...activityScope
   }
 }
 
