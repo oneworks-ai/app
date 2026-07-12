@@ -313,6 +313,67 @@ export interface PluginContributionLauncherSearchProvider extends PluginContribu
   command: string
 }
 
+export type PluginContributionToolUseFieldFormat =
+  | 'inline'
+  | 'text'
+  | 'code'
+  | 'list'
+  | 'chips'
+  | 'records'
+  | 'json'
+
+export interface PluginContributionToolUseRecordItem {
+  /** Dot-separated path within each record. */
+  titlePath?: string
+  subtitlePath?: string
+  statusPath?: string
+  metaPath?: string
+  detailPath?: string
+}
+
+export interface PluginContributionToolUseField {
+  /** Dot-separated path within the tool input. Array indexes are supported. */
+  path: string
+  title: string
+  titleI18n?: Record<string, string>
+  format?: PluginContributionToolUseFieldFormat
+  item?: PluginContributionToolUseRecordItem
+  language?: string
+}
+
+export interface PluginContributionToolUseInputPresentation {
+  /**
+   * `auto` keeps the host's generic input renderer, `declared` renders only
+   * `fields`, and `hidden` omits tool-call input details.
+   */
+  mode?: 'auto' | 'declared' | 'hidden'
+  fields?: PluginContributionToolUseField[]
+}
+
+export interface PluginContributionToolUseResultPresentation {
+  format?: 'auto' | 'text' | 'code' | 'json' | 'markdown'
+  fields?: PluginContributionToolUseField[]
+  language?: string
+  mode?: 'auto' | 'declared' | 'hidden'
+}
+
+export interface PluginContributionToolUsePresentation extends PluginContributionBase {
+  id: string
+  title: string
+  icon?: string
+  /** Tool base names or fully-qualified runtime tool names. */
+  tools: string[]
+  /**
+   * Defaults to `plugin`, which limits base-name matches to MCP tools exposed
+   * by the contribution's own plugin scope. `any` must be chosen explicitly.
+   */
+  origin?: 'plugin' | 'any'
+  /** Dot-separated input path rendered beside the title as the compact target. */
+  target?: string
+  input?: PluginContributionToolUseInputPresentation
+  result?: PluginContributionToolUseResultPresentation
+}
+
 export interface PluginLauncherSearchResult {
   badge?: string
   description?: string
@@ -416,6 +477,11 @@ export interface PluginContributionManifest extends PluginContributionAvailabili
   workspaceDrawerTabs?: PluginContributionWorkspaceDrawerTab[]
   cliCommands?: PluginContributionCliCommand[]
   launcherSearchProviders?: PluginContributionLauncherSearchProvider[]
+  /**
+   * Declarative presentation metadata for tool-use rows in chat. The host owns
+   * rendering and plugins provide only matching and display semantics.
+   */
+  toolUsePresentations?: PluginContributionToolUsePresentation[]
   routes?: PluginContributionRoute[]
 }
 

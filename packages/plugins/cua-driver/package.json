@@ -1,0 +1,44 @@
+{
+  "name": "@oneworks/plugin-cua-driver",
+  "type": "module",
+  "version": "0.1.0-beta.5",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/plugins/cua-driver"
+  },
+  "exports": {
+    ".": "./plugin.json",
+    "./server": {
+      "source": "./server/src/index.ts",
+      "default": "./server/dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "cua-driver": "./bin/cua-driver.cjs",
+    "ow-cua-driver": "./bin/cua-driver.cjs"
+  },
+  "files": [
+    "README.en.md",
+    "README.md",
+    "bin",
+    "mcp",
+    "plugin.json",
+    "resources",
+    "scripts",
+    "server",
+    "skills"
+  ],
+  "scripts": {
+    "build": "pnpm run build:server",
+    "build:server": "tsc -p server/tsconfig.json",
+    "postinstall": "node scripts/postinstall.cjs",
+    "prepublish": "pnpm build",
+    "test": "pnpm -C ../../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/plugins/cua-driver/__tests__",
+    "typecheck": "tsc -p server/tsconfig.json --noEmit --pretty false"
+  },
+  "dependencies": {
+    "@oneworks/cursor": "workspace:*"
+  }
+}

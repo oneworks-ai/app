@@ -20,6 +20,12 @@ import type {
   PluginContributionSessionGroupCreateSession,
   PluginContributionSessionGroupMatch,
   PluginContributionSurface,
+  PluginContributionToolUseField,
+  PluginContributionToolUseFieldFormat,
+  PluginContributionToolUseInputPresentation,
+  PluginContributionToolUsePresentation,
+  PluginContributionToolUseRecordItem,
+  PluginContributionToolUseResultPresentation,
   PluginContributionWorkbenchAddMenuItem,
   PluginContributionWorkbenchTab,
   PluginContributionWorkspaceDrawerTab,
@@ -67,6 +73,12 @@ export type {
   PluginContributionSessionGroupCreateSession,
   PluginContributionSessionGroupMatch,
   PluginContributionSurface,
+  PluginContributionToolUseField,
+  PluginContributionToolUseFieldFormat,
+  PluginContributionToolUseInputPresentation,
+  PluginContributionToolUsePresentation,
+  PluginContributionToolUseRecordItem,
+  PluginContributionToolUseResultPresentation,
   PluginContributionWorkbenchAddMenuItem,
   PluginContributionWorkbenchTab,
   PluginContributionWorkspaceDrawerTab,
@@ -95,6 +107,7 @@ export type PluginSlot =
   | 'workbench.addMenu'
   | 'workbench.tabs'
   | 'launcher.searchProviders'
+  | 'chat.toolUse.presentations'
 
 export interface PluginRouteRegistration extends PluginContributionBase {
   icon?: string

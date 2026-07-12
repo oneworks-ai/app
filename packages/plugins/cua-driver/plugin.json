@@ -1,0 +1,437 @@
+{
+  "__oneWorksPluginManifest": true,
+  "name": "@oneworks/plugin-cua-driver",
+  "displayName": "Cua Driver",
+  "version": "0.1.0-beta.5",
+  "assets": {
+    "skills": "skills",
+    "mcp": "mcp"
+  },
+  "config": {
+    "schema": {
+      "type": "object",
+      "titleI18n": {
+        "en": "Cua Driver options",
+        "zh-Hans": "Cua Driver 选项"
+      },
+      "properties": {
+        "cursorColorStrategy": {
+          "type": "string",
+          "default": "automatic",
+          "titleI18n": {
+            "en": "Default pointer assignment",
+            "zh-Hans": "默认光标分配方式"
+          },
+          "descriptionI18n": {
+            "en": "Automatically give each session a distinct color, or use the fixed default color below. An agent may still choose a color for its own session.",
+            "zh-Hans": "自动为每个会话分配不同颜色，或使用下方固定默认色；Agent 仍可为自己的会话选择颜色。"
+          },
+          "oneOf": [
+            {
+              "const": "automatic",
+              "titleI18n": { "en": "Automatic per session", "zh-Hans": "按会话自动分配" }
+            },
+            {
+              "const": "fixed",
+              "titleI18n": { "en": "Fixed default color", "zh-Hans": "使用固定默认色" }
+            }
+          ],
+          "x-oneworks-ui": {
+            "icon": "palette"
+          }
+        },
+        "defaultCursorColor": {
+          "type": "string",
+          "default": "#E3E7ED",
+          "pattern": "^#[0-9A-Fa-f]{3}(?:[0-9A-Fa-f]{3})?$",
+          "titleI18n": {
+            "en": "Fixed default color",
+            "zh-Hans": "固定默认色"
+          },
+          "descriptionI18n": {
+            "en": "Used when fixed assignment is selected. Enter a CSS hex color such as #625BF6.",
+            "zh-Hans": "选择固定分配时使用；请输入 #625BF6 这样的十六进制颜色。"
+          },
+          "x-oneworks-ui": {
+            "icon": "format_color_fill"
+          }
+        }
+      }
+    }
+  },
+  "plugin": {
+    "server": {
+      "roles": [
+        "manager",
+        "workspace"
+      ]
+    },
+    "contributions": {
+      "launcherSearchProviders": [
+        {
+          "id": "driver",
+          "title": "Cua Driver",
+          "titleI18n": {
+            "en": "Cua Driver",
+            "zh-Hans": "Cua Driver"
+          },
+          "descriptionI18n": {
+            "en": "Check or prepare the local Cua Driver runtime.",
+            "zh-Hans": "检查或准备本机 Cua Driver 运行环境。"
+          },
+          "command": "launcher.search",
+          "roles": [
+            "manager"
+          ],
+          "surfaces": [
+            "launcher"
+          ]
+        }
+      ],
+      "toolUsePresentations": [
+        {
+          "id": "execute-workflow",
+          "title": "Run computer workflow",
+          "titleI18n": { "en": "Run computer workflow", "zh-Hans": "执行电脑工作流" },
+          "icon": "account_tree",
+          "tools": ["execute_workflow"],
+          "target": "workflow_id",
+          "input": {
+            "mode": "declared",
+            "fields": [
+              {
+                "path": "cursor_color",
+                "title": "Pointer color",
+                "titleI18n": { "zh-Hans": "光标颜色" },
+                "format": "inline"
+              },
+              {
+                "path": "cursor_start.x",
+                "title": "Pointer start X",
+                "titleI18n": { "zh-Hans": "光标起点 X" },
+                "format": "inline"
+              },
+              {
+                "path": "cursor_start.y",
+                "title": "Pointer start Y",
+                "titleI18n": { "zh-Hans": "光标起点 Y" },
+                "format": "inline"
+              },
+              {
+                "path": "steps",
+                "title": "Steps",
+                "titleI18n": { "zh-Hans": "步骤" },
+                "format": "records",
+                "item": {
+                  "titlePath": "node_id",
+                  "subtitlePath": "op",
+                  "metaPath": "context"
+                }
+              }
+            ]
+          },
+          "result": {
+            "mode": "declared",
+            "fields": [
+              {
+                "path": "structuredContent.run_id",
+                "title": "Run",
+                "titleI18n": { "zh-Hans": "运行" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.status",
+                "title": "Status",
+                "titleI18n": { "zh-Hans": "状态" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.outcome",
+                "title": "Outcome",
+                "titleI18n": { "zh-Hans": "结果" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.steps.total",
+                "title": "Step count",
+                "titleI18n": { "zh-Hans": "步骤数" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.steps.ids",
+                "title": "Step IDs",
+                "titleI18n": { "zh-Hans": "步骤 ID" },
+                "format": "chips"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set-session-cursor-color",
+          "title": "Set session pointer color",
+          "titleI18n": { "en": "Set session pointer color", "zh-Hans": "设置会话光标颜色" },
+          "icon": "palette",
+          "tools": ["set_session_cursor_color"],
+          "target": "color",
+          "input": {
+            "mode": "declared",
+            "fields": [
+              { "path": "color", "title": "Color", "titleI18n": { "zh-Hans": "颜色" }, "format": "inline" }
+            ]
+          },
+          "result": {
+            "mode": "declared",
+            "fields": [
+              {
+                "path": "structuredContent.color",
+                "title": "Color",
+                "titleI18n": { "zh-Hans": "颜色" },
+                "format": "inline"
+              }
+            ]
+          }
+        },
+        {
+          "id": "set-session-cursor-start",
+          "title": "Set session pointer start",
+          "titleI18n": { "en": "Set session pointer start", "zh-Hans": "设置会话光标起点" },
+          "icon": "my_location",
+          "tools": ["set_session_cursor_start"],
+          "input": {
+            "mode": "declared",
+            "fields": [
+              { "path": "x", "title": "X", "format": "inline" },
+              { "path": "y", "title": "Y", "format": "inline" }
+            ]
+          },
+          "result": {
+            "mode": "declared",
+            "fields": [
+              { "path": "structuredContent.position.x", "title": "X", "format": "inline" },
+              { "path": "structuredContent.position.y", "title": "Y", "format": "inline" }
+            ]
+          }
+        },
+        {
+          "id": "resume-workflow",
+          "title": "Resume computer workflow",
+          "titleI18n": { "en": "Resume computer workflow", "zh-Hans": "继续电脑工作流" },
+          "icon": "play_arrow",
+          "tools": ["resume_workflow"],
+          "target": "run_id",
+          "input": {
+            "mode": "declared",
+            "fields": [
+              { "path": "decision", "title": "Decision", "titleI18n": { "zh-Hans": "决定" }, "format": "inline" },
+              {
+                "path": "checkpoint_id",
+                "title": "Checkpoint",
+                "titleI18n": { "zh-Hans": "检查点" },
+                "format": "inline"
+              }
+            ]
+          },
+          "result": {
+            "mode": "declared",
+            "fields": [
+              {
+                "path": "structuredContent.status",
+                "title": "Status",
+                "titleI18n": { "zh-Hans": "状态" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.outcome",
+                "title": "Outcome",
+                "titleI18n": { "zh-Hans": "结果" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.steps.ids",
+                "title": "Step IDs",
+                "titleI18n": { "zh-Hans": "步骤 ID" },
+                "format": "chips"
+              }
+            ]
+          }
+        },
+        {
+          "id": "workflow-step-results",
+          "title": "Inspect workflow steps",
+          "titleI18n": { "en": "Inspect workflow steps", "zh-Hans": "查看工作流步骤" },
+          "icon": "manage_search",
+          "tools": ["get_workflow_step_results"],
+          "target": "run_id",
+          "input": {
+            "mode": "declared",
+            "fields": [
+              { "path": "step_ids", "title": "Step IDs", "titleI18n": { "zh-Hans": "步骤 ID" }, "format": "chips" },
+              { "path": "select", "title": "Fields", "titleI18n": { "zh-Hans": "查询字段" }, "format": "chips" }
+            ]
+          },
+          "result": {
+            "mode": "declared",
+            "fields": [
+              {
+                "path": "structuredContent.items",
+                "title": "Step results",
+                "titleI18n": { "zh-Hans": "步骤结果" },
+                "format": "records",
+                "item": {
+                  "titlePath": "node_id",
+                  "subtitlePath": "step_id",
+                  "statusPath": "status",
+                  "detailPath": "output"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "launch-app",
+          "title": "Open app",
+          "titleI18n": { "en": "Open app", "zh-Hans": "打开应用" },
+          "icon": "open_in_new",
+          "tools": ["launch_app"],
+          "target": "bundle_id",
+          "input": {
+            "mode": "declared",
+            "fields": [
+              { "path": "bundle_id", "title": "Bundle ID", "format": "inline" },
+              { "path": "urls", "title": "URLs", "titleI18n": { "zh-Hans": "链接" }, "format": "list" }
+            ]
+          }
+        },
+        {
+          "id": "list-apps",
+          "title": "List apps",
+          "titleI18n": { "en": "List apps", "zh-Hans": "查看应用" },
+          "icon": "apps",
+          "tools": ["list_apps"],
+          "input": { "mode": "hidden" }
+        },
+        {
+          "id": "list-windows",
+          "title": "List windows",
+          "titleI18n": { "en": "List windows", "zh-Hans": "查看窗口" },
+          "icon": "desktop_windows",
+          "tools": ["list_windows"],
+          "target": "pid",
+          "input": {
+            "fields": [
+              { "path": "pid", "title": "Process", "titleI18n": { "zh-Hans": "进程" }, "format": "inline" }
+            ]
+          }
+        },
+        {
+          "id": "inspect-window",
+          "title": "Inspect window",
+          "titleI18n": { "en": "Inspect window", "zh-Hans": "检查窗口" },
+          "icon": "screenshot_monitor",
+          "tools": ["get_window_state"],
+          "target": "query",
+          "input": {
+            "fields": [
+              { "path": "pid", "title": "Process", "titleI18n": { "zh-Hans": "进程" }, "format": "inline" },
+              { "path": "window_id", "title": "Window", "titleI18n": { "zh-Hans": "窗口" }, "format": "inline" },
+              { "path": "query", "title": "Query", "titleI18n": { "zh-Hans": "查询" }, "format": "text" }
+            ]
+          }
+        },
+        {
+          "id": "capture-screen",
+          "title": "Capture screenshot",
+          "titleI18n": { "en": "Capture screenshot", "zh-Hans": "截取画面" },
+          "icon": "screenshot",
+          "tools": ["screenshot"],
+          "target": "window_id"
+        },
+        {
+          "id": "click",
+          "title": "Click",
+          "titleI18n": { "en": "Click", "zh-Hans": "点击" },
+          "icon": "touch_app",
+          "tools": ["click"],
+          "target": "element_index",
+          "input": {
+            "fields": [
+              { "path": "element_index", "title": "Element", "titleI18n": { "zh-Hans": "元素" }, "format": "inline" },
+              { "path": "pid", "title": "Process", "titleI18n": { "zh-Hans": "进程" }, "format": "inline" },
+              { "path": "window_id", "title": "Window", "titleI18n": { "zh-Hans": "窗口" }, "format": "inline" }
+            ]
+          }
+        },
+        {
+          "id": "right-click",
+          "title": "Right click",
+          "titleI18n": { "en": "Right click", "zh-Hans": "右键点击" },
+          "icon": "ads_click",
+          "tools": ["right_click"],
+          "target": "element_index"
+        },
+        {
+          "id": "double-click",
+          "title": "Double click",
+          "titleI18n": { "en": "Double click", "zh-Hans": "双击" },
+          "icon": "ads_click",
+          "tools": ["double_click"],
+          "target": "element_index"
+        },
+        {
+          "id": "scroll",
+          "title": "Scroll",
+          "titleI18n": { "en": "Scroll", "zh-Hans": "滚动" },
+          "icon": "swipe_vertical",
+          "tools": ["scroll"],
+          "target": "direction"
+        },
+        {
+          "id": "type-text",
+          "title": "Type text",
+          "titleI18n": { "en": "Type text", "zh-Hans": "输入文本" },
+          "icon": "keyboard",
+          "tools": ["type_text"],
+          "input": {
+            "fields": [
+              { "path": "text", "title": "Text", "titleI18n": { "zh-Hans": "文本" }, "format": "text" },
+              { "path": "element_index", "title": "Element", "titleI18n": { "zh-Hans": "元素" }, "format": "inline" }
+            ]
+          }
+        },
+        {
+          "id": "press-key",
+          "title": "Press key",
+          "titleI18n": { "en": "Press key", "zh-Hans": "按键" },
+          "icon": "keyboard_command_key",
+          "tools": ["press_key"],
+          "target": "key"
+        },
+        {
+          "id": "set-value",
+          "title": "Set value",
+          "titleI18n": { "en": "Set value", "zh-Hans": "设置值" },
+          "icon": "edit_square",
+          "tools": ["set_value"],
+          "target": "element_index"
+        },
+        {
+          "id": "zoom",
+          "title": "Zoom",
+          "titleI18n": { "en": "Zoom", "zh-Hans": "缩放" },
+          "icon": "zoom_in",
+          "tools": ["zoom"],
+          "target": "direction"
+        },
+        {
+          "id": "runtime-state",
+          "title": "Check computer control",
+          "titleI18n": { "en": "Check computer control", "zh-Hans": "检查电脑控制" },
+          "icon": "settings_suggest",
+          "tools": ["get_agent_cursor_state", "get_config", "get_screen_size"],
+          "input": { "mode": "hidden" },
+          "result": { "format": "json" }
+        }
+      ]
+    }
+  }
+}

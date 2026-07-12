@@ -58,6 +58,28 @@ describe('scripts cli', () => {
     })
   })
 
+  it('dispatches stale-state recovery only through an explicit stop flag', async () => {
+    const runDevService = vi.fn(async () => undefined)
+    const cli = createScriptsCli({ runDevService })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'dev-service',
+      'stop',
+      'web',
+      '--forget-stale',
+      '--json'
+    ])
+
+    expect(runDevService).toHaveBeenCalledWith({
+      action: 'stop',
+      forgetStale: true,
+      json: true,
+      target: 'web'
+    })
+  })
+
   it('dispatches adapter e2e run through the shared suite', async () => {
     const runAdapterSuite = vi.fn(async () => [])
     const cli = createScriptsCli({

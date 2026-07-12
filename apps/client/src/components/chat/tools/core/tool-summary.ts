@@ -2,6 +2,9 @@
 
 import type { ChatMessageContent } from '@oneworks/core'
 
+import type { RuntimeToolUsePresentation } from '#~/plugins/plugin-tool-use'
+import { resolvePluginToolUsePresentation } from '#~/plugins/plugin-tool-use'
+
 import {
   buildClaudeToolPresentation,
   getClaudeToolBaseName,
@@ -130,7 +133,11 @@ interface ToolGroupDescriptor {
   qualifiedLabel: string
 }
 
-function getToolGroupDescriptor(item: ToolUseItem, t: Translate): ToolGroupDescriptor {
+function getToolGroupDescriptor(
+  item: ToolUseItem,
+  t: Translate,
+  pluginPresentations: RuntimeToolUsePresentation[]
+): ToolGroupDescriptor {
   if (isClaudeToolName(item.name)) {
     const baseName = getClaudeToolBaseName(item.name)
     const presentation = buildClaudeToolPresentation(item.name, item.input)
@@ -142,12 +149,13 @@ function getToolGroupDescriptor(item: ToolUseItem, t: Translate): ToolGroupDescr
     }
   }
 
+  const pluginPresentation = resolvePluginToolUsePresentation(item.name, pluginPresentations)
   const presentation = buildGenericToolPresentation(item.name, item.input)
-  const label = presentation.titleKey != null
-    ? t(presentation.titleKey, { defaultValue: presentation.fallbackTitle })
-    : presentation.fallbackTitle
+  const label = pluginPresentation?.title ?? (presentation.titleKey != null
+    ? t(presentation.titleKey, { defaultValue: pluginPresentation?.title ?? presentation.fallbackTitle })
+    : presentation.fallbackTitle)
   return {
-    key: item.name,
+    key: pluginPresentation == null ? item.name : `${pluginPresentation.pluginScope}:${pluginPresentation.id}`,
     label,
     qualifiedLabel: getToolQualifiedLabel(item.name, label)
   }
@@ -157,12 +165,13 @@ export function getToolGroupSummaryText(
   items: Array<{
     item: ToolUseItem
   }>,
-  t: Translate
+  t: Translate,
+  pluginPresentations: RuntimeToolUsePresentation[] = []
 ) {
   const groupedTools = new Map<string, { label: string; qualifiedLabel: string; count: number }>()
 
   for (const { item } of items) {
-    const descriptor = getToolGroupDescriptor(item, t)
+    const descriptor = getToolGroupDescriptor(item, t, pluginPresentations)
     const label = descriptor.label
     if (label === '') continue
 

@@ -80,6 +80,7 @@ const slotFromManifestKey = {
   chatHeaderActions: 'chat.header.actions',
   chatHeaderMoreMenu: 'chat.header.moreMenu',
   chatInteractionPanelEmptyActions: 'chat.interactionPanel.emptyActions',
+  toolUsePresentations: 'chat.toolUse.presentations',
   launcherSearchProviders: 'launcher.searchProviders',
   navFooterBefore: 'nav.footer.before',
   navItems: 'nav.items',

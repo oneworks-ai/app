@@ -642,6 +642,25 @@ describe('chat session interaction state', () => {
     })
   })
 
+  it('keeps the first request visible when another interaction arrives', () => {
+    const current = {
+      id: 'interaction-1',
+      payload: {
+        sessionId: 'sess-1',
+        question: '第一个问题'
+      }
+    }
+
+    expect(applyInteractionStateEvent(current, {
+      type: 'interaction_request',
+      id: 'interaction-2',
+      payload: {
+        sessionId: 'sess-1',
+        question: '第二个问题'
+      }
+    })).toBe(current)
+  })
+
   it('clears the active interaction when a matching response arrives', () => {
     expect(applyInteractionStateEvent({
       id: 'interaction-1',
@@ -789,6 +808,42 @@ describe('chat session interaction state', () => {
       payload: {
         sessionId: 'sess-1',
         question: '是否继续？'
+      }
+    })
+  })
+
+  it('restores the remaining request when concurrent interactions resolve out of order', () => {
+    expect(restoreInteractionStateFromHistory(
+      [
+        {
+          type: 'interaction_request',
+          id: 'interaction-1',
+          payload: {
+            sessionId: 'sess-1',
+            question: '第一个问题'
+          }
+        },
+        {
+          type: 'interaction_request',
+          id: 'interaction-2',
+          payload: {
+            sessionId: 'sess-1',
+            question: '第二个问题'
+          }
+        },
+        {
+          type: 'interaction_response',
+          id: 'interaction-2',
+          data: '继续'
+        }
+      ],
+      null,
+      'running'
+    )).toEqual({
+      id: 'interaction-1',
+      payload: {
+        sessionId: 'sess-1',
+        question: '第一个问题'
       }
     })
   })

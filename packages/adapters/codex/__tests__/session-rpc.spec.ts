@@ -1893,6 +1893,45 @@ describe('createCodexSession RPC approval policy mapping', () => {
     session.kill()
   })
 
+  it('preserves scoped workspace MCP server names in config override paths', async () => {
+    process.env.HOME = '/tmp'
+    const { proc } = makeProc()
+    spawnMock.mockReturnValue(proc)
+
+    const session = await createCodexSession(makeCtx(), {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'session-scoped-workspace-mcp',
+      description: 'Reply with pong.',
+      assetPlan: {
+        mcpServers: {
+          'cua/cua-driver': {
+            command: 'node',
+            args: ['/plugins/cua-driver/bin/cua-driver.cjs', 'mcp'],
+            default_tools_approval_mode: 'approve',
+            startup_timeout_sec: 120
+          }
+        }
+      },
+      onEvent: () => {}
+    } as any)
+
+    const spawnArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    const overrides = getConfigOverrides(spawnArgs)
+
+    expect(overrides).toContain('mcp_servers.oneworks-Y3VhL2N1YS1kcml2ZXI.command="node"')
+    expect(overrides).toContain(
+      'mcp_servers.oneworks-Y3VhL2N1YS1kcml2ZXI.args=["/plugins/cua-driver/bin/cua-driver.cjs","mcp"]'
+    )
+    expect(overrides).toContain('mcp_servers.oneworks-Y3VhL2N1YS1kcml2ZXI.startup_timeout_sec=120')
+    expect(overrides).toContain(
+      'mcp_servers.oneworks-Y3VhL2N1YS1kcml2ZXI.default_tools_approval_mode="approve"'
+    )
+    expect(overrides.some(override => override.includes('cua/cua-driver'))).toBe(false)
+
+    session.kill()
+  })
+
   it('maps managed OneWorks permissions to Codex MCP approval config in direct mode', async () => {
     process.env.HOME = '/tmp'
     const { proc } = makeProc()
@@ -1927,6 +1966,41 @@ describe('createCodexSession RPC approval policy mapping', () => {
 
     expect(overrides).toContain('mcp_servers.OneWorks.default_tools_approval_mode="approve"')
     expect(spawnArgs).toEqual(expect.arrayContaining(['--ask-for-approval', 'untrusted']))
+
+    session.kill()
+  })
+
+  it('lets an explicit ask permission override an MCP asset approval default', async () => {
+    process.env.HOME = '/tmp'
+    const { proc } = makeProc()
+    spawnMock.mockReturnValue(proc)
+
+    const session = await createCodexSession(
+      makeCtx({
+        configs: [{ permissions: { ask: ['cua/cua-driver'] } }, undefined]
+      }),
+      {
+        type: 'create',
+        runtime: 'server',
+        sessionId: 'session-scoped-mcp-ask',
+        description: 'Reply with pong.',
+        assetPlan: {
+          mcpServers: {
+            'cua/cua-driver': {
+              command: 'node',
+              args: ['driver.cjs', 'mcp'],
+              default_tools_approval_mode: 'approve'
+            }
+          }
+        },
+        onEvent: () => {}
+      } as any
+    )
+
+    const overrides = getConfigOverrides(spawnMock.mock.calls[0]?.[1] as string[])
+    expect(overrides).toContain(
+      'mcp_servers.oneworks-Y3VhL2N1YS1kcml2ZXI.default_tools_approval_mode="prompt"'
+    )
 
     session.kill()
   })

@@ -21,6 +21,25 @@ export const processFingerprint = (pid: number | undefined) => {
   return value == null || value === '' ? undefined : value
 }
 
+const PROCESS_START_TIME_LENGTH = 24
+
+export const processFingerprintMatches = (
+  actualFingerprint: string | undefined,
+  recordedFingerprint: string | undefined
+) => {
+  if (actualFingerprint == null || recordedFingerprint == null) return false
+  if (actualFingerprint === recordedFingerprint) return true
+  if (
+    actualFingerprint.length <= PROCESS_START_TIME_LENGTH ||
+    recordedFingerprint.length <= PROCESS_START_TIME_LENGTH
+  ) return false
+
+  // pnpm can start through a shell wrapper and later exec the real Node process.
+  // PID and kernel start time stay stable even though the command text changes.
+  return actualFingerprint.slice(0, PROCESS_START_TIME_LENGTH) ===
+    recordedFingerprint.slice(0, PROCESS_START_TIME_LENGTH)
+}
+
 export const processCwd = (pid: number | undefined) => {
   if (typeof pid !== 'number' || !Number.isInteger(pid) || pid <= 0) return undefined
   const result = spawnSync('lsof', ['-a', '-d', 'cwd', '-Fn', '-p', String(pid)], {
@@ -46,7 +65,7 @@ export const terminateTrackedPid = async ({
 }) => {
   if (pid == null || !pidRunning(pid)) return
   const actualFingerprint = processFingerprint(pid)
-  if (fingerprint == null || actualFingerprint !== fingerprint) {
+  if (!processFingerprintMatches(actualFingerprint, fingerprint)) {
     throw new Error(`Refusing to stop ${label} pid=${pid}: process identity no longer matches shared state.`)
   }
 
@@ -57,7 +76,7 @@ export const terminateTrackedPid = async ({
     await new Promise(resolve => setTimeout(resolve, 100))
   }
 
-  if (processFingerprint(pid) !== fingerprint) {
+  if (!processFingerprintMatches(processFingerprint(pid), fingerprint)) {
     throw new Error(`Refusing to force-stop ${label} pid=${pid}: process identity changed after SIGTERM.`)
   }
   process.kill(pid, 'SIGKILL')

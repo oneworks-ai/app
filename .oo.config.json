@@ -20,6 +20,11 @@
       "scope": "std"
     },
     {
+      "id": "./packages/plugins/cua-driver",
+      "scope": "cua",
+      "watch": true
+    },
+    {
       "id": "./packages/plugins/demo",
       "scope": "demo",
       "watch": true

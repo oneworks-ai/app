@@ -5,10 +5,14 @@ import { CodeBlock } from '#~/components/CodeBlock'
 import { safeJsonStringify } from '#~/utils/safe-serialize'
 
 import { TOOL_TOOLTIP_PROPS, getToolFieldIcon, getToolInlineValueText, getToolValueText } from './tool-display'
+import type { ToolRecordView } from './tool-record-field'
+import { ToolRecordField } from './tool-record-field'
 
 type Translate = (key: string, options?: Record<string, unknown>) => string
 
-export type ToolFieldFormat = 'inline' | 'text' | 'code' | 'list' | 'json' | 'questions'
+export type ToolFieldFormat = 'inline' | 'text' | 'code' | 'list' | 'chips' | 'records' | 'json' | 'questions'
+
+export type { ToolRecordView } from './tool-record-field'
 
 export interface ToolFieldView {
   labelKey: string
@@ -16,6 +20,7 @@ export interface ToolFieldView {
   format: ToolFieldFormat
   value: unknown
   lang?: string
+  records?: ToolRecordView[]
 }
 
 const getFieldKey = (field: ToolFieldView, index: number) => `${field.labelKey}-${index}`
@@ -25,6 +30,14 @@ const getSectionHeader = (icon: string, label: string) => (
     <Tooltip title={label} {...TOOL_TOOLTIP_PROPS}>
       <span className='tool-detail-section__icon material-symbols-rounded'>{icon}</span>
     </Tooltip>
+  </div>
+)
+
+const getLabeledSectionHeader = (icon: string, label: string, count?: number) => (
+  <div className='tool-detail-section__header tool-detail-section__header--labeled'>
+    <span className='tool-detail-section__icon material-symbols-rounded'>{icon}</span>
+    <span className='tool-detail-section__title'>{label}</span>
+    {count != null && <span className='tool-detail-section__count'>{count}</span>}
   </div>
 )
 
@@ -115,6 +128,33 @@ export function renderToolBlockField(
             <div className='tool-detail-list-item' key={listItem}>{listItem}</div>
           ))}
         </div>
+      </div>
+    )
+  }
+
+  if (field.format === 'chips') {
+    const items = Array.isArray(field.value) ? field.value.map(item => String(item)) : []
+    return (
+      <div className={sectionClassName} key={getFieldKey(field, index)}>
+        {getLabeledSectionHeader(getToolFieldIcon(field.labelKey, field.format), label, items.length)}
+        <div className='tool-detail-chip-list'>
+          {items.map((item, itemIndex) => (
+            <span className='tool-detail-chip' key={`${item}-${itemIndex}`}>{item}</span>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (field.format === 'records') {
+    const records = field.records ?? []
+    return (
+      <div className={sectionClassName} key={getFieldKey(field, index)}>
+        <ToolRecordField
+          icon={getToolFieldIcon(field.labelKey, field.format)}
+          label={label}
+          records={records}
+        />
       </div>
     )
   }

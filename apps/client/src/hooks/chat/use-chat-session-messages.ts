@@ -1233,15 +1233,6 @@ export function useChatSessionMessages({
 
           if (data.type === 'tool_result') {
             setMessages((current) => applyToolResultEvent(current, data))
-            return
-          }
-
-          if (data.type === 'interaction_request') {
-            interactionRequestRef.current = data
-            setInteractionRequest(data)
-            updateSessionViewCache(session.id, {
-              interactionRequest: data
-            })
           }
         },
         onError() {

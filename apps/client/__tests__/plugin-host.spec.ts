@@ -77,6 +77,12 @@ describe('client plugin host registry', () => {
             shortcut: 'mod+shift+n',
             title: 'Create card'
           }],
+          toolUsePresentations: [{
+            icon: 'touch_app',
+            id: 'click',
+            title: 'Click',
+            tools: ['click']
+          }],
           routeHeaderActions: [{
             active: true,
             activeIcon: 'check_circle',
@@ -170,6 +176,12 @@ describe('client plugin host registry', () => {
       id: 'empty-card',
       pluginScope: 'demo',
       shortcut: 'mod+shift+n'
+    })
+    expect(snapshot.slots['chat.toolUse.presentations']?.[0]).toMatchObject({
+      icon: 'touch_app',
+      id: 'click',
+      pluginScope: 'demo',
+      tools: ['click']
     })
     expect(snapshot.slots['route.header.actions']?.[0]).toMatchObject({
       id: 'mark',

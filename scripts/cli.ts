@@ -300,10 +300,12 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
   devServiceCommand
     .command('stop [target]')
     .description('Stop one managed development target')
+    .option('--forget-stale', 'Forget only disproven, unhealthy process state without sending signals', false)
     .option('--json', 'Print the resulting shared status document', false)
-    .action(async (target: string | undefined, options: { json?: boolean }) => {
+    .action(async (target: string | undefined, options: { forgetStale?: boolean; json?: boolean }) => {
       await deps.runDevService({
         action: 'stop',
+        forgetStale: options.forgetStale ?? false,
         json: options.json ?? false,
         target: parseDevStartTarget(target)
       })

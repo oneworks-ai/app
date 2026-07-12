@@ -154,6 +154,7 @@ export default [
   'packages/plugins/relay/client/src/view.tsx',
   'packages/plugins/relay/package.json',
   'packages/plugins/relay/plugin.json',
+  'packages/plugins/cua-driver/plugin.json',
   'packages/plugins/relay/src/server/controller.ts',
   'packages/register/dotenv.js',
   'packages/task/__tests__/run.spec.ts',

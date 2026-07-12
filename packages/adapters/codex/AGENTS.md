@@ -448,6 +448,13 @@ MCP server configuration is read from `config.mcpServers` and `userConfig.mcpSer
 
 Each surviving server is injected as `-c mcp_servers.<name>.*` overrides.
 
+Codex parses `-c` keys as config paths, not as a TOML document, and its runtime MCP manager only starts
+server IDs that are safe tool-namespace segments. Workspace plugin MCP assets use scoped
+`<plugin>/<asset>` names, so the adapter keeps the scoped name for selection and permission resolution,
+then maps it to a deterministic `oneworks-<base64url>` server ID when building Codex overrides. Do not
+pass `/` through or quote the segment: raw `/` is not started, while quoting makes the quote characters
+part of the server name.
+
 ### STDIO transport
 
 Detected by the presence of a `command` key.
@@ -487,10 +494,10 @@ Emitted as:
 -c 'mcp_servers.figma.http_headers={"X-Figma-Region" = "us-east-1"}'
 ```
 
-> See the [MCP docs](https://developers.openai.com/codex/mcp) for the full list of supported fields
-> (`startup_timeout_sec`, `tool_timeout_sec`, `enabled_tools`, `disabled_tools`, `bearer_token_env_var`, etc.).
-> Fields beyond `command`/`args`/`env`/`url`/`headers` must be set in `~/.codex/config.toml` directly,
-> as the adapter only injects the fields required to register the server.
+The adapter also projects `startup_timeout_sec` and `tool_timeout_sec` for MCP assets whose startup or
+individual calls need longer than Codex defaults. See the [MCP docs](https://developers.openai.com/codex/mcp)
+for additional fields (`enabled_tools`, `disabled_tools`, `bearer_token_env_var`, etc.); fields not listed
+above still need to be set in `~/.codex/config.toml` directly.
 
 ---
 

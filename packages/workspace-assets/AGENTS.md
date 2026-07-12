@@ -13,6 +13,8 @@
 
 - `src/bundle.ts`
   - `resolveWorkspaceAssetBundle()`
+- `src/bundle-internal.ts`
+  - 插件文档与 MCP 资产的 `${ONEWORKS_PLUGIN_*}` 模板投影；实例配置只通过显式 `${ONEWORKS_PLUGIN_OPTION:path}` 占位符注入
 - `src/prompt-selection.ts`
   - `resolvePromptAssetSelection()`
 - `src/prompt-builders.ts`

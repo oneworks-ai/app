@@ -6,9 +6,15 @@ import process from 'node:process'
 import { fetchOk, urlReady } from './network'
 import { isMachineScopedTarget, log, managerLogPath, repoRoot, sleep, statePath } from './paths'
 import { isPositivePid, readJson, readState, runSync } from './process'
-import { pidRunning, processCwd, processFingerprint, terminateTrackedPid } from './process-identity'
+import {
+  pidRunning,
+  processCwd,
+  processFingerprint,
+  processFingerprintMatches,
+  terminateTrackedPid
+} from './process-identity'
 import { redactDevServiceText } from './redaction'
-import { updateDevServiceState, writeDevServiceState } from './state'
+import { updateDevServiceState, updateDevServiceStateIfCurrent, writeDevServiceState } from './state'
 import type { DevServiceComponentState, DevServiceOperation, DevStartState, DevStartTarget } from './types'
 
 export const printReady = (state: DevStartState) => {
@@ -43,7 +49,7 @@ const deviceReady = (component: DevServiceComponentState, state: DevStartState) 
 
 const componentReady = async (component: DevServiceComponentState, state: DevStartState) => {
   if (!isPositivePid(component.pid) || !pidRunning(component.pid)) return false
-  if (component.fingerprint == null || processFingerprint(component.pid) !== component.fingerprint) return false
+  if (!processFingerprintMatches(processFingerprint(component.pid), component.fingerprint)) return false
   if (component.kind === 'device' && !deviceReady(component, state)) return false
   if (component.healthUrl != null && !await fetchOk(component.healthUrl)) return false
   return component.pid != null || component.healthUrl != null || component.kind === 'device'
@@ -60,8 +66,7 @@ export const stateReady = async (state: DevStartState | undefined) => {
   if (state.servicePid != null) {
     if (!isPositivePid(state.servicePid) || !pidRunning(state.servicePid)) return false
     if (
-      state.serviceFingerprint == null ||
-      processFingerprint(state.servicePid) !== state.serviceFingerprint
+      !processFingerprintMatches(processFingerprint(state.servicePid), state.serviceFingerprint)
     ) return false
   }
   if (state.target === 'docs') {
@@ -176,7 +181,7 @@ export const stopManagedState = async (
       if (
         deviceComponent?.pid == null ||
         deviceComponent.fingerprint == null ||
-        processFingerprint(deviceComponent.pid) !== deviceComponent.fingerprint
+        !processFingerprintMatches(processFingerprint(deviceComponent.pid), deviceComponent.fingerprint)
       ) {
         throw new Error(`Refusing to stop ${target}: emulator process identity no longer matches shared state.`)
       }
@@ -233,6 +238,101 @@ export const stopManagedState = async (
     serverPid: undefined,
     servicePid: undefined
   })
+}
+
+export const assertStateCanBeForgotten = async (
+  target: DevStartTarget,
+  state: DevStartState,
+  dependencies: {
+    fetchHealthy?: (url: string) => Promise<boolean>
+    fingerprint?: (pid: number) => string | undefined
+    isRunning?: (pid: number) => boolean
+  } = {}
+) => {
+  if (isMachineScopedTarget(target)) {
+    throw new Error(`Refusing to forget stale state for machine-scoped target ${target}.`)
+  }
+  if (state.schemaVersion !== 2 || !Number.isInteger(state.revision)) {
+    throw new Error(`Refusing to forget stale state for ${target}: schema v2 with a concrete revision is required.`)
+  }
+  const fetchHealthy = dependencies.fetchHealthy ?? fetchOk
+  const fingerprint = dependencies.fingerprint ?? processFingerprint
+  const isRunning = dependencies.isRunning ?? pidRunning
+  const healthUrls = [
+    ...new Set(
+      (state.components ?? [])
+        .map(component => component.healthUrl)
+        .filter((value): value is string => value != null)
+    )
+  ]
+  if ((await Promise.all(healthUrls.map(async url => await fetchHealthy(url)))).some(Boolean)) {
+    throw new Error(`Refusing to forget stale state for ${target}: a recorded health endpoint is still reachable.`)
+  }
+
+  const tracked = new Map<number, Set<string | undefined>>()
+  const add = (pid: number | undefined, expected: string | undefined) => {
+    if (pid == null) return
+    const recorded = tracked.get(pid) ?? new Set<string | undefined>()
+    recorded.add(expected)
+    tracked.set(pid, recorded)
+  }
+  add(state.servicePid, state.serviceFingerprint)
+  add(state.clientPid, state.clientFingerprint)
+  add(state.serverPid, state.serverFingerprint)
+  add(state.desktopPid, state.components?.find(component => component.pid === state.desktopPid)?.fingerprint)
+  add(state.devicePid, state.components?.find(component => component.pid === state.devicePid)?.fingerprint)
+  for (const component of state.components ?? []) add(component.pid, component.fingerprint)
+
+  for (const [pid, expected] of tracked) {
+    if (!isRunning(pid)) continue
+    const actual = fingerprint(pid)
+    if (
+      actual == null ||
+      expected.has(undefined) ||
+      [...expected].some(recorded => processFingerprintMatches(actual, recorded))
+    ) {
+      throw new Error(
+        `Refusing to forget stale state for ${target}: tracked pid=${pid} is still owned or cannot be disproven.`
+      )
+    }
+  }
+}
+
+export const forgetStaleManagedState = async (
+  target: DevStartTarget,
+  operation?: DevServiceOperation
+) => {
+  if (isMachineScopedTarget(target)) {
+    throw new Error(`Refusing to forget stale state for machine-scoped target ${target}.`)
+  }
+  const state = readState(target)
+  if (state == null || state.root !== repoRoot) return
+  await assertStateCanBeForgotten(target, state)
+  // Recheck immediately before the CAS write so a recovering health endpoint
+  // or a newly matching process identity cannot be forgotten mid-operation.
+  await assertStateCanBeForgotten(target, state)
+  const updated = updateDevServiceStateIfCurrent(target, {
+    revision: state.revision
+  }, {
+    clientFingerprint: undefined,
+    clientPid: undefined,
+    components: state.components?.map(component => ({ ...component, fingerprint: undefined, pid: undefined })),
+    desktopPid: undefined,
+    devicePid: undefined,
+    deviceSerial: undefined,
+    endedAt: new Date().toISOString(),
+    error: undefined,
+    generation: undefined,
+    operation: operation ?? state.operation,
+    phase: 'stopped',
+    serverFingerprint: undefined,
+    serverPid: undefined,
+    serviceFingerprint: undefined,
+    servicePid: undefined
+  })
+  if (updated == null) {
+    throw new Error(`Refusing to forget stale state for ${target}: shared state changed during recovery.`)
+  }
 }
 
 export const waitForReady = async (target: DevStartTarget) => {
