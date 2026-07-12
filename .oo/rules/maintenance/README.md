@@ -48,7 +48,7 @@ description: 仓库通用维护与验证细则，包含启动、lint、格式化
 pnpm --silent tools dev-service ensure <target> --json
 ```
 
-target、状态查询、操作租约和 handoff 见 [开发服务跨会话协作协议](./dev-service-coordination.md)。不要用 package 私有 `dev` 命令建立第二个长期 owner；只有明确的内部前台诊断才可直接运行 target 私有入口。排查时先用 `status` / `events`，失败证据再用有限且已脱敏的 `logs`。无论服务是否健康，`stop` / `restart` 都必须先取得用户对该 target 的显式授权。
+target、状态查询、操作租约和 handoff 见 [开发服务跨会话协作协议](./dev-service-coordination.md)。不要用 package 私有 `dev` 命令建立第二个长期 owner；只有明确的内部前台诊断才可直接运行 target 私有入口。排查时先用 `status` / `events`，失败证据再用有限且已脱敏的 `logs`。`stop` 与机器级共享 target 的 `restart` 必须逐次显式授权；worktree-local target 可以复用匹配的当前任务重启授权，服务状态本身不构成授权。
 
 ## 常见维护任务
 

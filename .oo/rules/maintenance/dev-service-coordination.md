@@ -32,7 +32,31 @@ pnpm --silent tools dev-service restart <target> --json
 pnpm --silent tools dev-service stop <target> --json
 ```
 
-旧 `dev-start` 入口只保留兼容，不再作为 agent 文档中的操作路径。查询不得触发启动；正常生命周期操作不得绕过 CLI 手工执行 `ps`、`kill`、端口探测或 target 私有命令。`stop` 与 `restart` 无论服务当前是 `ready`、`failed` 还是其他 phase，都必须先获得用户对该 target 的显式授权；父会话或运维 agent 不得把“服务不健康”推定为停止授权。
+旧 `dev-start` 入口只保留兼容，不再作为 agent 文档中的操作路径。查询不得触发启动；正常生命周期操作不得绕过 CLI 手工执行 `ps`、`kill`、端口探测或 target 私有命令。`stop` 无论服务 phase 如何都必须逐次取得用户对该 target 的显式授权；父会话或运维 agent 不得把“服务不健康”推定为停止或重启授权。worktree-local target 的 `restart` 可以使用下述当前任务授权租约；机器级共享的 `electron`、`electron-workspace`、`android-emulator` 仍须逐次授权。
+
+## 用户重启授权租约
+
+CLI 的 operation lease 只负责串行化进程变更，不代表用户授权。用户重启授权由主任务记录，适用于需要反复加载后端、配置或非 HMR 代码的开发过程：
+
+- “现在重启 web”只授权本次 `restart web`；执行后即消耗。只有“本任务按需重启 web”“本任务后续需要重启 web 就直接做，不用再问”这类同时表达 target 和持续范围的指令，才建立当前任务授权租约。模糊的“继续”“修好它”或曾经启动过服务都不构成授权。
+- 租约键为当前主任务、仓库根 worktree 和单一 target，允许动作只能是 `restart`。它从明确授权开始生效，到主任务进入终态时失效；用户撤销、切换 worktree、切换 target，或动作变为 `stop` 时也立即失效。
+- 上下文压缩、同一主任务的后续回合、heartbeat 和委派不终止租约。主会话必须把结构化授权状态放进任务矩阵和子任务 prompt；接收方核对 task / worktree / target / action 后直接执行，不得再次询问。
+- 租约不授权手工杀进程、清理工作区、替换其他 target、停止服务或操作其他任务 / worktree 的服务。`electron`、`electron-workspace`、`android-emulator` 属于机器级共享资源，即使用户说过“不用再问”也只把当次动作视为授权，后续仍逐次确认。
+
+推荐记录格式：
+
+```yaml
+restartAuthorization:
+  task: <main-thread-id>
+  worktree: <repo-root>
+  target: web
+  action: restart
+  scope: current-task
+  granted: true
+  expires: task-terminal
+```
+
+准备询问用户前先查任务矩阵：存在匹配且未撤销的租约时直接走统一 `restart`；不存在时只问一次精确到 target 和范围的问题。获得持续授权后立即记录，单次重启完成后不要错误清除当前任务租约。
 
 ## 共享上下文模型
 
@@ -50,7 +74,7 @@ agent 不共享聊天记录，通过三个本地事实层交接：
 
 - 单一 `dev-service ensure` 快路径由当前会话直接执行，避免委派开销。
 - 多服务组合、重复重启、失败日志收集或需要在主会话之外保持噪声隔离时，按需创建 `dev_service_operator`；不要创建永久在线 agent。
-- 父会话给出 target、允许动作、完成条件、deadline，以及用户是否显式授权 stop/restart。运维 agent 不接收代码修改任务。
+- 父会话给出 target、允许动作、完成条件、deadline，以及 stop 的单次授权或完整 `restartAuthorization`。运维 agent 不接收代码修改任务；收到匹配的当前任务重启租约后不得重复询问用户。
 - 运维 agent 先读 target-scoped `status --json`，再执行一个受租约保护的动作，最后读同一 target 的 status/events，并只在失败时读取有限且已脱敏的 logs，然后返回紧凑 handoff。
 - 代码根因、架构判断和修复回到父会话；运维 agent 只收集受限日志，不在失败后自行扩大范围。
 - 运维工作属于低歧义、多工具、强验收任务，项目自定义 agent 使用 Luna / medium。出现未知根因或公共契约问题时停止并升级，不通过提高运维 agent reasoning 继续试错。
@@ -60,7 +84,7 @@ agent 不共享聊天记录，通过三个本地事实层交接：
 ## 并发与恢复规则
 
 - 同一 worktree 的生命周期 mutation 经过 worktree lifecycle lock 整体串行，保证 fetch / pull / install / submodule / build 与启动交付处于同一源码一致性边界；只读 status/events/logs 仍可并行。首次运行缺少 TS register 时，`run-tools` 在加载主协议前使用独立的 worktree bootstrap guard（macOS / Linux 为内核锁，其他平台为 owner-PID/token fallback）只在锁内二次检查并按需安装依赖，释放后才执行实际 CLI；JSON 模式抑制安装器原始 stderr，失败返回统一 error envelope。资源级租约进一步约束共享 owner：`web` / `daemon` 共享 manager owner，`electron` / `electron-workspace` 受机器级单实例互斥，`android-emulator` 受机器级全局协调。跨 worktree 的机器级 target 仍必须等待其全局资源租约。
-- `ensure` 只幂等复用健康、身份相符的服务或占用空槽启动。遇到已有 live PID、failed / stale / partially-started 状态或不同 launch identity 时必须拒绝并要求显式授权 stop/restart；不能仅因加载改动或恢复异常自行替换。仅本次 ensure 新建的 generation 启动失败时允许自动回滚该 generation。
+- `ensure` 只幂等复用健康、身份相符的服务或占用空槽启动。遇到已有 live PID、failed / stale / partially-started 状态或不同 launch identity 时必须拒绝并要求有效的 stop 单次授权或 restart 单次 / 当前任务授权租约；不能仅因加载改动或恢复异常自行替换。仅本次 ensure 新建的 generation 启动失败时允许自动回滚该 generation。
 - `stop` / `restart` 会记录 `stopping` 和最终 `stopped` / `ready` phase；停止后保留不含活动 PID 的快照，便于后续会话交接。
 - 后台 component 非预期退出时，当前 generation 写入 `failed`；旧 generation 不得覆盖新状态。
 - schema v1 快照不直接复用；显式 stop 只在进程 cwd 仍属于记录的 repo root 时临时采纳 fingerprint 并清理，否则失败关闭，避免 PID 复用误杀。

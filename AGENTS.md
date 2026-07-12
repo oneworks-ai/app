@@ -43,7 +43,7 @@ pnpm --silent tools dev-service ensure <target> --json
 
 统一入口会把 worktree 级服务状态写到 `.logs/dev-start-<target>.json`，例如 web 对应 `.logs/dev-start-web.json`；机器级 `android-emulator`、`electron` 和 `electron-workspace` 的路径由 status 返回，位于用户目录 `.oneworks/dev-service/`。当用户询问当前目录是否已有服务、URL / PID / 端口、这个服务属于哪个 worktree，或多会话如何复用时，优先运行 `pnpm --silent tools dev-service status <target> --json`；它会读取状态快照、探活并返回当前 operation lease，不会启动服务。`.logs/dev-start-<target>.events.jsonl` 记录普通 target 的跨会话操作历史。不要为查询这些信息而另起服务；如果用户的意图是启动或拉取后启动，运行 `ensure`，让脚本完成复用判断和端口处理。
 
-多步骤启动、失败日志收集或跨会话运维可以按需委派给项目自定义 `dev_service_operator`；简单单命令启动仍由当前会话直接执行，不创建常驻运维 agent。所有 agent 只通过 `pnpm --silent tools dev-service ensure / status / events / logs / stop / restart ... --json` 操作长期服务，不手工杀 PID。`stop` 和 `restart` 无论服务是否健康，都必须先有用户对该 target 的显式授权。查询失败证据时只读 target-scoped、有限行且已脱敏的日志。共享状态、操作租约、事件和 handoff 标准见 `.oo/rules/maintenance/dev-service-coordination.md`。
+多步骤启动、失败日志收集或跨会话运维可以按需委派给项目自定义 `dev_service_operator`；简单单命令启动仍由当前会话直接执行，不创建常驻运维 agent。所有 agent 只通过 `pnpm --silent tools dev-service ensure / status / events / logs / stop / restart ... --json` 操作长期服务，不手工杀 PID。`stop` 以及机器级共享的 Electron / Android 重启必须逐次取得用户对该 target 的显式授权；worktree-local target 的 `restart` 可以复用用户明确授予的“当前任务内按需重启”授权，不能因服务不健康自行推定。授权范围、失效条件和跨会话传递格式见 `.oo/rules/maintenance/dev-service-coordination.md`。查询失败证据时只读 target-scoped、有限行且已脱敏的日志。
 
 `electron` 与 `electron-workspace` 共享 Electron 单实例资源，不能并行运行。`android-emulator` 是跨 worktree 的机器级资源，必须服从全局协调，不能只凭当前 worktree 快照启动或停止另一会话正在使用的 AVD。
 
