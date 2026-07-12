@@ -1,7 +1,6 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -10,15 +9,33 @@ import { describe, expect, it } from 'vitest'
 const require = createRequire(import.meta.url)
 const cursorRuntime = require('../bin/cursor-runtime.cjs') as {
   createSessionCursorController: (options: {
-    callTool: (name: string, args: Record<string, unknown>) => Promise<unknown>
+    callTool: (
+      name: string,
+      args: Record<string, unknown>,
+      actionStyle?: {
+        cursorColor?: string
+        cursorStart?: { x: number; y: number }
+        cursorStartPending?: boolean
+        runId?: string
+      }
+    ) => Promise<unknown>
     cursorDir?: string
     defaultColor?: string
-    lockOptions?: { lockPort: number; timeoutMs?: number }
+    lockOptions?: { lockKey: string; timeoutMs?: number }
     sessionId: string
     strategy?: string
     withLock?: (task: () => Promise<unknown>) => Promise<unknown>
   }) => {
-    callTool: (name: string, args: Record<string, unknown>) => Promise<unknown>
+    callTool: (
+      name: string,
+      args: Record<string, unknown>,
+      actionStyle?: {
+        cursorColor?: string
+        cursorStart?: { x: number; y: number }
+        cursorStartPending?: boolean
+        runId?: string
+      }
+    ) => Promise<unknown>
     getState: () => Record<string, unknown>
     setColor: (color: string) => { color: string; sessionId: string; source: string }
     setStartPosition: (position?: { x: number; y: number }) => {
@@ -42,24 +59,11 @@ const cursorRuntime = require('../bin/cursor-runtime.cjs') as {
   }) => string
   withCursorActionLock: <T>(
     task: () => Promise<T>,
-    options: { lockHost?: string; lockPort: number; timeoutMs?: number }
+    options: { lockKey: string; timeoutMs?: number }
   ) => Promise<T>
 }
 
-const getAvailablePort = () =>
-  new Promise<number>((resolvePort, rejectPort) => {
-    const server = createServer()
-    server.once('error', rejectPort)
-    server.listen({ host: '127.0.0.1', port: 0 }, () => {
-      const address = server.address()
-      const port = typeof address === 'object' && address != null ? address.port : undefined
-      server.close(error => {
-        if (error != null) rejectPort(error)
-        else if (port == null) rejectPort(new Error('Could not reserve a test port.'))
-        else resolvePort(port)
-      })
-    })
-  })
+const uniqueLockKey = () => `cursor-test:${randomUUID()}`
 
 describe('cua session cursor runtime', () => {
   it('normalizes only safe CSS hex colors while the shared package owns SVG rendering', () => {
@@ -232,6 +236,53 @@ describe('cua session cursor runtime', () => {
     }
   })
 
+  it('keeps concurrent workflow pointer styles bound to their own locked actions', async () => {
+    const cursorDir = await mkdtemp(join(tmpdir(), 'oneworks-workflow-cursor-'))
+    const calls: Array<{ args?: Record<string, unknown>; name: string }> = []
+    let tail = Promise.resolve()
+    const controller = cursorRuntime.createSessionCursorController({
+      sessionId: 'session-workflows',
+      cursorDir,
+      async callTool(name, args) {
+        calls.push({ args, name })
+        if (name === 'get_screen_size') {
+          return { structuredContent: { height: 800, width: 1200 } }
+        }
+        return { structuredContent: { ok: true } }
+      },
+      withLock(task) {
+        const result = tail.then(task, task)
+        tail = result.then(() => undefined, () => undefined)
+        return result
+      }
+    })
+
+    try {
+      await Promise.all([
+        controller.callTool('click', { element_index: 4 }, {
+          cursorColor: '#625BF6',
+          cursorStart: { x: 100, y: 100 },
+          cursorStartPending: true,
+          runId: 'run-violet'
+        }),
+        controller.callTool('click', { element_index: 5 }, {
+          cursorColor: '#F97316',
+          cursorStart: { x: 900, y: 700 },
+          cursorStartPending: true,
+          runId: 'run-orange'
+        })
+      ])
+
+      expect(calls.filter(call => call.name === 'set_agent_cursor_style').map(call => call.args?.bloom_color))
+        .toEqual(['#625BF6', '#F97316'])
+      expect(calls.filter(call => call.name === 'move_cursor').map(call => call.args))
+        .toEqual([{ x: 100, y: 100 }, { x: 900, y: 700 }])
+      expect(calls.filter(call => call.name === 'click').map(call => call.args?.element_index)).toEqual([4, 5])
+    } finally {
+      await rm(cursorDir, { force: true, recursive: true })
+    }
+  })
+
   it('retries a reserved start when preparation fails before the virtual pointer moves', async () => {
     const cursorDir = await mkdtemp(join(tmpdir(), 'oneworks-retry-start-cursor-'))
     const moves: Array<Record<string, unknown>> = []
@@ -347,13 +398,13 @@ describe('cua session cursor runtime', () => {
   })
 
   it('injects session motion once when the first two pointer actions arrive concurrently', async () => {
-    const lockPort = await getAvailablePort()
+    const lockKey = uniqueLockKey()
     const cursorDir = await mkdtemp(join(tmpdir(), 'oneworks-concurrent-cursor-'))
     const calls: string[] = []
     const controller = cursorRuntime.createSessionCursorController({
       sessionId: 'session-concurrent',
       cursorDir,
-      lockOptions: { lockPort, timeoutMs: 1000 },
+      lockOptions: { lockKey, timeoutMs: 1000 },
       async callTool(name) {
         calls.push(name)
         if (name === 'get_screen_size') {
@@ -376,7 +427,7 @@ describe('cua session cursor runtime', () => {
   })
 
   it('serializes pointer action transactions that share the cross-process lock', async () => {
-    const lockPort = await getAvailablePort()
+    const lockKey = uniqueLockKey()
     const events: string[] = []
     let releaseFirst!: () => void
     let notifyFirstStarted!: () => void
@@ -392,13 +443,13 @@ describe('cua session cursor runtime', () => {
       notifyFirstStarted()
       await firstGate
       events.push('first:end')
-    }, { lockPort, timeoutMs: 1000 })
+    }, { lockKey, timeoutMs: 1000 })
     await firstStarted
 
     const second = cursorRuntime.withCursorActionLock(async () => {
       events.push('second:start')
       events.push('second:end')
-    }, { lockPort, timeoutMs: 1000 })
+    }, { lockKey, timeoutMs: 1000 })
     await new Promise(resolve => setTimeout(resolve, 30))
     expect(events).toEqual(['first:start'])
 
@@ -407,14 +458,14 @@ describe('cua session cursor runtime', () => {
     expect(events).toEqual(['first:start', 'first:end', 'second:start', 'second:end'])
   })
 
-  it('releases the kernel lock when a pointer transaction fails', async () => {
-    const lockPort = await getAvailablePort()
+  it('releases the cross-process lock when a pointer transaction fails', async () => {
+    const lockKey = uniqueLockKey()
     await expect(cursorRuntime.withCursorActionLock(async () => {
       throw new Error('pointer failed')
-    }, { lockPort, timeoutMs: 500 })).rejects.toThrow('pointer failed')
+    }, { lockKey, timeoutMs: 500 })).rejects.toThrow('pointer failed')
     await expect(cursorRuntime.withCursorActionLock(
       async () => 'recovered',
-      { lockPort, timeoutMs: 500 }
+      { lockKey, timeoutMs: 500 }
     )).resolves.toBe('recovered')
   })
 })

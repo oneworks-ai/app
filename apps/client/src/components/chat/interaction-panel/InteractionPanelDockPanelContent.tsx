@@ -56,6 +56,7 @@ export function InteractionPanelDockPanelContentBody({
     workspaceFileFocusRequest,
     workspaceRootPath,
     onIframeMetadataChange,
+    onIframePageChange,
     onIframeNavigateHistory,
     onIframeSelectHistory,
     onIframeUrlChange,
@@ -248,6 +249,7 @@ export function InteractionPanelDockPanelContentBody({
       <InteractionPanelIframeView
         isActive={activeTab.kind === 'iframe' && activeTab.id === tab.id}
         page={page}
+        onChangePage={(updater) => onIframePageChange(page.id, updater)}
         projectUrlHistoryKey={projectUrlHistoryKey}
         sessionId={sessionId}
         sessionUrlHistoryKey={sessionUrlHistoryKey}

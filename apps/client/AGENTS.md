@@ -23,6 +23,7 @@
 - `src/store/`：全局状态原子。
 - `src/resources/`：静态资源、适配器元数据和 i18n 文案。
 - `src/styles/`：client 全局样式入口。共享设计 token 不在这里定义，统一来自 `@oneworks/route-layout/design-tokens.css`。
+- `public/browser-use-lab.*`：Browser Driver 的本地确定性验收页，覆盖表单、异步状态、筛选、展开和长滚动；修改内置浏览器控制协议或主题桥接时用它做 Electron 回归。
 
 ## 约定
 

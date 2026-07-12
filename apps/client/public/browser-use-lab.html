@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Browser Use Lab</title>
+    <link rel="stylesheet" href="./browser-use-lab.css" />
+  </head>
+  <body>
+    <main class="lab-shell">
+      <header class="lab-header">
+        <div>
+          <p class="lab-eyebrow">OneWorks · Browser Driver</p>
+          <h1>Browser Use Lab</h1>
+          <p class="lab-subtitle">
+            A deterministic local page for testing Agent-driven browser
+            interactions.
+          </p>
+        </div>
+        <div class="lab-indicators">
+          <span class="lab-theme-indicator" id="instance-indicator"
+          >Instance</span>
+          <span
+            class="lab-theme-indicator"
+            id="theme-indicator"
+            aria-live="polite"
+          >Theme</span>
+        </div>
+      </header>
+
+      <div class="lab-grid">
+        <section class="lab-card" aria-labelledby="form-title">
+          <h2 id="form-title">1. Create a test task</h2>
+          <label class="lab-field">
+            <span>Task title</span>
+            <input
+              id="task-title"
+              data-testid="task-title"
+              name="task-title"
+              type="text"
+              placeholder="e.g. Verify Browser Driver"
+            />
+          </label>
+          <label class="lab-field">
+            <span>Priority</span>
+            <select
+              id="task-priority"
+              data-testid="task-priority"
+              name="task-priority"
+            >
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </label>
+          <label class="lab-check">
+            <input
+              id="task-confirm"
+              data-testid="task-confirm"
+              name="task-confirm"
+              type="checkbox"
+            />
+            <span>I have verified the task details</span>
+          </label>
+          <div class="lab-actions">
+            <button
+              class="lab-primary"
+              id="create-task"
+              data-testid="create-task"
+              type="button"
+              disabled
+            >
+              Create task
+            </button>
+            <button id="reset-lab" type="button">Reset</button>
+          </div>
+        </section>
+
+        <section class="lab-card" aria-labelledby="status-title">
+          <h2 id="status-title">2. Observe async status</h2>
+          <div class="lab-status" id="task-status" aria-live="polite">
+            <strong>Waiting for input</strong>
+            <span>Complete the form to enable submission.</span>
+          </div>
+          <details>
+            <summary>Show expected workflow</summary>
+            <ol class="lab-step-list">
+              <li>Type a task title.</li>
+              <li>Confirm the checkbox.</li>
+              <li>Submit and wait for success.</li>
+              <li>Filter the results and scroll to the marker.</li>
+            </ol>
+          </details>
+        </section>
+      </div>
+
+      <section class="lab-card lab-section" aria-labelledby="filter-title">
+        <h2 id="filter-title">3. Filter test records</h2>
+        <div
+          class="lab-filter-row"
+          role="group"
+          aria-label="Record state filter"
+        >
+          <button
+            data-filter="all"
+            data-testid="filter-all"
+            type="button"
+            aria-pressed="true"
+          >
+            All records
+          </button>
+          <button
+            data-filter="ready"
+            data-testid="filter-ready"
+            type="button"
+            aria-pressed="false"
+          >
+            Ready only
+          </button>
+          <button
+            data-filter="blocked"
+            data-testid="filter-blocked"
+            type="button"
+            aria-pressed="false"
+          >
+            Blocked only
+          </button>
+        </div>
+        <div class="lab-items" aria-live="polite">
+          <article class="lab-item" data-state="ready">
+            <strong>Snapshot semantics</strong><span>Ready</span>
+          </article>
+          <article class="lab-item" data-state="ready">
+            <strong>Form interaction</strong><span>Ready</span>
+          </article>
+          <article class="lab-item" data-state="blocked">
+            <strong>External checkout</strong><span>Blocked</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="lab-long-content" aria-labelledby="scroll-title">
+        <h2 id="scroll-title">4. Scroll verification</h2>
+        <p class="lab-note">
+          The final marker is intentionally below the fold so scroll operations
+          are visible.
+        </p>
+        <div class="lab-bottom-marker">
+          Browser Use Lab · End marker reached
+        </div>
+      </section>
+    </main>
+    <script src="./browser-use-lab.js"></script>
+  </body>
+</html>

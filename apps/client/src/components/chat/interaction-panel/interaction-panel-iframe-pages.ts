@@ -1,10 +1,22 @@
 import type { InteractionPanelIframePage } from './InteractionPanelIframeView'
 
+export const WORKSPACE_DRAWER_IFRAME_TAB_PREFIX = 'workspace-drawer:iframe:'
+
+export const toWorkspaceDrawerIframeTabId = (pageId: string) =>
+  `${WORKSPACE_DRAWER_IFRAME_TAB_PREFIX}${encodeURIComponent(pageId)}`
+
+export const fromWorkspaceDrawerIframeTabId = (tabId: string) => (
+  tabId.startsWith(WORKSPACE_DRAWER_IFRAME_TAB_PREFIX)
+    ? decodeURIComponent(tabId.slice(WORKSPACE_DRAWER_IFRAME_TAB_PREFIX.length))
+    : tabId
+)
+
 const iframePageDevtoolsVariants = new Set<InteractionPanelIframePage['variant']>([
   'mobile-debug-devtools'
 ])
 
 export interface OpenInteractionPanelIframeUrlOptions {
+  browserControlRequestId?: string
   faviconUrl?: string
   openMode?: 'reuse-or-create' | 'new-tab'
   title?: string
@@ -62,11 +74,12 @@ export const isIframePageDevtoolsVariant = (page: Pick<InteractionPanelIframePag
 
 export const createIframePage = (
   title: string,
-  options: Pick<InteractionPanelIframePage, 'faviconUrl' | 'variant'> = {}
+  options: Pick<InteractionPanelIframePage, 'browserControlRequestId' | 'faviconUrl' | 'variant'> = {}
 ): InteractionPanelIframePage => ({
   id: `iframe-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
   title,
   url: '',
+  ...(options.browserControlRequestId == null ? {} : { browserControlRequestId: options.browserControlRequestId }),
   ...(options.faviconUrl == null || options.faviconUrl.trim() === '' ? {} : { faviconUrl: options.faviconUrl.trim() }),
   ...(options.variant == null ? {} : { variant: options.variant })
 })

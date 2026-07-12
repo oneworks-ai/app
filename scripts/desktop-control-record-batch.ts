@@ -1078,10 +1078,6 @@ const findRecordableTarget = (
     !target.url.startsWith('devtools:')
   )
 
-const shouldFollowWorkspaceWindowTargets = (scenarioId: string) =>
-  scenarioId === 'launcher-open-workspace-ui-tour' ||
-  scenarioId === 'launcher-open-workspace-chat-smoke'
-
 export const runDesktopControlRecordBatch = async (
   options: DesktopControlRecordBatchOptions,
   deps: Partial<DesktopControlRecordBatchDeps> = {}
@@ -1095,7 +1091,7 @@ export const runDesktopControlRecordBatch = async (
   const languages = options.languages ?? DEFAULT_BATCH_LANGUAGES
   const variants: DesktopControlRecordBatchVariant[] = []
   const outputRoot = options.outDir ?? path.join('.logs/demo-videos', 'electron', scenario.id)
-  const followCdpTargets = options.followCdpTargets ?? shouldFollowWorkspaceWindowTargets(scenario.id)
+  const followCdpTargets = options.followCdpTargets ?? scenario.followCdpTargets ?? false
   const preserveTargetEnvironment = options.preserveTargetEnvironment ?? true
   const recordingDisplayConfig = await resolveRecordingDisplayConfig(options, resolvedDeps)
   if (recordingDisplayConfig == null) {

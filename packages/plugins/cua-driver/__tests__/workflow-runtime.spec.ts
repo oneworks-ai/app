@@ -21,6 +21,7 @@ const workflowRuntime = require('../bin/workflow-runtime.cjs') as {
       isError?: boolean
       structuredContent: Record<string, any>
     }>
+    getQueuedResourceCount: () => number
   }
   parseTreeElements: (tree: string) => Array<Record<string, unknown>>
 }

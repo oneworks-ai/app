@@ -540,7 +540,9 @@ const handleRequest = async (input: {
       colorScheme: recordInput.colorScheme,
       durationMs: recordInput.durationMs,
       ffmpegPath: recordInput.ffmpegPath,
-      followCdpTargets: recordInput.followCdpTargets ?? recordInput.scenarioId === 'launcher-open-workspace-ui-tour',
+      followCdpTargets: recordInput.followCdpTargets ??
+        getDemoVideoScenario(recordInput.scenarioId).followCdpTargets ??
+        false,
       fps: recordInput.fps,
       height: recordInput.height,
       json: true,

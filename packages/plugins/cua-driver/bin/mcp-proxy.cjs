@@ -274,11 +274,7 @@ function main() {
     strategy: process.env.ONEWORKS_CUA_CURSOR_STRATEGY
   })
   const workflowService = createWorkflowService({
-    callTool: (name, args) => cursorController.callTool(name, args),
-    preparePointerAction({ cursorColor, cursorStart, cursorStartPending }) {
-      if (cursorColor != null) cursorController.setColor(cursorColor)
-      if (cursorStartPending) cursorController.setStartPosition(cursorStart)
-    }
+    callTool: (name, args, actionStyle) => cursorController.callTool(name, args, actionStyle)
   })
   const enqueueSessionOperation = createSerialTaskQueue()
   const stopForProtocolError = (response) => {
@@ -317,8 +313,7 @@ function main() {
         }
         return await workflowService.call(call.name, call.arguments)
       }
-      const shouldSerialize = sessionCursorToolNames.has(call.name) ||
-        call.name === 'execute_workflow' || call.name === 'resume_workflow'
+      const shouldSerialize = sessionCursorToolNames.has(call.name)
       const operation = shouldSerialize
         ? enqueueSessionOperation(executeLocalCall)
         : executeLocalCall()

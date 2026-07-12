@@ -61,6 +61,9 @@ export function useInteractionPanelIframePages({
       ) {
         const nextPage = {
           ...existingPage,
+          ...(options.browserControlRequestId == null
+            ? {}
+            : { browserControlRequestId: options.browserControlRequestId }),
           ...(shouldUpdateFavicon ? { faviconUrl: optionFaviconUrl } : {}),
           ...(optionTitle == null || optionTitle === '' ? {} : { title: optionTitle }),
           ...(options.variant == null ? {} : { variant: options.variant })

@@ -38,6 +38,7 @@
     "@oneworks/cli": "workspace:*",
     "@oneworks/cli-helper": "workspace:*",
     "@oneworks/config": "workspace:*",
+    "@oneworks/cursor": "workspace:*",
     "@oneworks/icon": "workspace:*",
     "@oneworks/plugin-logger": "workspace:*",
     "@oneworks/plugin-standard-dev": "workspace:*",

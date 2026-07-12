@@ -6,9 +6,9 @@ describe('@oneworks/cursor', () => {
   it('renders the reusable rounded pointer with caller-selected colors', () => {
     const svg = createOneWorksCursorSvg({ color: '#625bf6' })
     expect(svg).toContain('fill="#625BF6"')
+    expect(svg).toContain('rotate(-135 32 32)')
     expect(svg).toContain('stroke="#FFFFFF"')
     expect(svg).toContain('stroke-linejoin="round"')
-    expect(svg).toContain('rotate(-90 32 32)')
   })
 
   it('uses a dark border for light colors and accepts an explicit border', () => {

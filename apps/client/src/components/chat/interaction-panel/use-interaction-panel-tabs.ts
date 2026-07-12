@@ -74,16 +74,24 @@ const toPanelActiveTab = (tab: SessionPanelTab): ActiveInteractionTab => {
 }
 
 const toIframePage = (tab: Extract<SessionPanelTab, { kind: 'web' }>): InteractionPanelIframePage => ({
+  ...(tab.browserControlRequestId == null ? {} : { browserControlRequestId: tab.browserControlRequestId }),
+  ...(tab.deviceToolbarOpen == null ? {} : { deviceToolbarOpen: tab.deviceToolbarOpen }),
+  ...(tab.devtoolsDockSide == null ? {} : { devtoolsDockSide: tab.devtoolsDockSide }),
   id: tab.id,
   title: tab.title,
   url: tab.url,
   ...(tab.faviconUrl == null ? {} : { faviconUrl: tab.faviconUrl }),
   ...(tab.history == null ? {} : { history: tab.history }),
   ...(tab.historyIndex == null ? {} : { historyIndex: tab.historyIndex }),
+  ...(tab.inspectOpen == null ? {} : { inspectOpen: tab.inspectOpen }),
+  ...(tab.viewport == null ? {} : { viewport: tab.viewport }),
   ...(tab.variant == null ? {} : { variant: tab.variant })
 })
 
 const toWebPanelTab = (page: InteractionPanelIframePage): Extract<SessionPanelTab, { kind: 'web' }> => ({
+  ...(page.browserControlRequestId == null ? {} : { browserControlRequestId: page.browserControlRequestId }),
+  ...(page.deviceToolbarOpen == null ? {} : { deviceToolbarOpen: page.deviceToolbarOpen }),
+  ...(page.devtoolsDockSide == null ? {} : { devtoolsDockSide: page.devtoolsDockSide }),
   id: page.id,
   kind: 'web',
   title: page.title,
@@ -91,6 +99,8 @@ const toWebPanelTab = (page: InteractionPanelIframePage): Extract<SessionPanelTa
   ...(page.faviconUrl == null ? {} : { faviconUrl: page.faviconUrl }),
   ...(page.history == null ? {} : { history: page.history }),
   ...(page.historyIndex == null ? {} : { historyIndex: page.historyIndex }),
+  ...(page.inspectOpen == null ? {} : { inspectOpen: page.inspectOpen }),
+  ...(page.viewport == null ? {} : { viewport: page.viewport }),
   ...(page.variant == null ? {} : { variant: page.variant })
 })
 
@@ -571,6 +581,9 @@ export function useInteractionPanelTabs({
         : optionFaviconUrl != null && optionFaviconUrl !== '' && existingPage.faviconUrl !== optionFaviconUrl
       const nextPage = {
         ...existingPage,
+        ...(options.browserControlRequestId == null
+          ? {}
+          : { browserControlRequestId: options.browserControlRequestId }),
         ...(shouldUpdateFavicon ? { faviconUrl: optionFaviconUrl } : {}),
         ...(optionTitle == null || optionTitle === '' ? {} : { title: optionTitle }),
         ...(options.variant == null ? {} : { variant: options.variant })
@@ -723,6 +736,8 @@ export function useInteractionPanelTabs({
       updateWebTab(pageId, page => selectIframePageHistoryIndex(page, index)),
     handleIframeUrlChange: (pageId: string, url: string) =>
       updateWebTab(pageId, page => updateIframePageUrl(page, url)),
+    handleIframePageChange: (pageId: string, updater: (page: InteractionPanelIframePage) => InteractionPanelIframePage) =>
+      updateWebTab(pageId, updater),
     handleMoveTab,
     iframePages,
     mobileDebugPages,

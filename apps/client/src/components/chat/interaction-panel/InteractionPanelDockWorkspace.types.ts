@@ -108,6 +108,10 @@ export interface InteractionPanelDockWorkspaceProps {
   onCloseWorkspaceFilePaths: (paths: string[]) => void
   onEditPinnedTab: (tab: InteractionPanelPinnedTab) => void
   onIframeMetadataChange: (pageId: string, metadata: { faviconUrl?: string; title?: string }) => void
+  onIframePageChange: (
+    pageId: string,
+    updater: (page: InteractionPanelIframePage) => InteractionPanelIframePage
+  ) => void
   onIframeNavigateHistory: (pageId: string, delta: -1 | 1) => void
   onIframeSelectHistory: (pageId: string, index: number) => void
   onIframeUrlChange: (pageId: string, url: string) => void

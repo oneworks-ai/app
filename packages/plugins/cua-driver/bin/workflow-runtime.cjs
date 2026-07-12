@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- the workflow runtime keeps its bounded in-memory run state cohesive. */
 const { Buffer } = require('node:buffer')
 const { randomUUID } = require('node:crypto')
+const { withFileLock } = require('./file-lock.cjs')
 
 const workflowToolDefinitions = [
   {
@@ -133,6 +134,30 @@ const workflowToolDefinitions = [
     }
   }
 ]
+
+workflowToolDefinitions.splice(1, 0, {
+  name: 'execute_workflows',
+  description:
+    'Run independent native-app workflows concurrently across application resources. Workflows touching the same app remain serial across MCP sessions, pointer actions retain the global safety lock, and results stay compact by run id and step ids.',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['workflows'],
+    properties: {
+      workflows: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 8,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['steps'],
+          properties: workflowToolDefinitions[0].inputSchema.properties
+        }
+      }
+    }
+  }
+})
 
 const workflowToolNames = new Set(workflowToolDefinitions.map(tool => tool.name))
 const actionOps = new Set(['click', 'double_click', 'right_click', 'type_text', 'set_value', 'scroll'])
@@ -317,6 +342,31 @@ function chooseWindow(windows, context, appName) {
     windows.find(window => Number.isInteger(window?.window_id))
 }
 
+const semanticTargetKeys = ['id', 'role', 'description', 'title', 'text']
+
+function validateSemanticTarget(target, label, allowAlternatives = true) {
+  if (!isObject(target)) throw new WorkflowInputError(`${label} requires a semantic target object.`)
+  if (target.match != null && !['contains', 'exact'].includes(target.match)) {
+    throw new WorkflowInputError(`${label} has an unsupported target match mode.`)
+  }
+  if (target.any_of != null) {
+    if (!allowAlternatives || !Array.isArray(target.any_of) || target.any_of.length === 0) {
+      throw new WorkflowInputError(`${label} target any_of must contain semantic target objects.`)
+    }
+    target.any_of.forEach((candidate, index) =>
+      validateSemanticTarget(candidate, `${label} target any_of item ${index + 1}`, false)
+    )
+    return
+  }
+  const provided = semanticTargetKeys.filter(key => target[key] != null)
+  if (
+    provided.length === 0 ||
+    provided.some(key => typeof target[key] !== 'string' || target[key].trim() === '')
+  ) {
+    throw new WorkflowInputError(`${label} requires a non-empty id, role, description, title, or text target.`)
+  }
+}
+
 function validateWorkflowInput(input) {
   if (!isObject(input)) throw new WorkflowInputError('execute_workflow requires an object input.')
   if (!Array.isArray(input.steps) || input.steps.length === 0) {
@@ -336,15 +386,130 @@ function validateWorkflowInput(input) {
       !Number.isFinite(input.cursor_start.y) || input.cursor_start.y < 0
     )
   ) throw new WorkflowInputError('cursor_start must contain finite non-negative x and y coordinates.')
+  if (input.contexts != null && !isObject(input.contexts)) {
+    throw new WorkflowInputError('contexts must be an object of named native-app contexts.')
+  }
+  const knownContexts = new Set()
+  for (const [name, context] of Object.entries(input.contexts ?? {})) {
+    if (
+      name.trim() === '' || name !== name.trim() || !isObject(context) ||
+      typeof context.bundle_id !== 'string' || context.bundle_id.trim() === '' ||
+      context.bundle_id !== context.bundle_id.trim()
+    ) {
+      throw new WorkflowInputError(`Context ${name || '(empty)'} requires a non-empty bundle_id.`)
+    }
+    knownContexts.add(name)
+  }
+  const contextOps = new Set([...actionOps, 'press_key', 'wait_for', 'assert'])
+  const targetOps = new Set([...actionOps, 'wait_for', 'assert'])
   for (const [index, step] of input.steps.entries()) {
+    const label = `Step ${index + 1}`
     if (!isObject(step) || typeof step.op !== 'string' || !supportedOps.has(step.op)) {
-      throw new WorkflowInputError(`Step ${index + 1} has an unsupported op.`)
+      throw new WorkflowInputError(`${label} has an unsupported op.`)
     }
     for (const key of ['on_missing', 'on_timeout']) {
       if (step[key] != null && !outcomeActions.has(step[key])) {
-        throw new WorkflowInputError(`Step ${index + 1} has an unsupported ${key} value.`)
+        throw new WorkflowInputError(`${label} has an unsupported ${key} value.`)
       }
     }
+    if (step.op === 'launch_app') {
+      if (
+        typeof step.bundle_id !== 'string' || step.bundle_id.trim() === '' ||
+        step.bundle_id !== step.bundle_id.trim()
+      ) {
+        throw new WorkflowInputError(`${label} requires bundle_id.`)
+      }
+      const contextName = step.save_as ?? step.context ?? step.node_id ?? 'default'
+      if (typeof contextName !== 'string' || contextName.trim() === '') {
+        throw new WorkflowInputError(`${label} requires a non-empty context name.`)
+      }
+      knownContexts.add(contextName)
+      continue
+    }
+    if (contextOps.has(step.op)) {
+      const contextName = normalizeText(step.context)
+      if (contextName === '') throw new WorkflowInputError(`${label} requires context.`)
+      if (contextName !== step.context) throw new WorkflowInputError(`${label} context must not contain padding.`)
+      if (!knownContexts.has(contextName)) {
+        throw new WorkflowInputError(`${label} references unknown context ${contextName}.`)
+      }
+    }
+    if (targetOps.has(step.op)) validateSemanticTarget(step.target, label)
+    if (step.op === 'press_key' && (typeof step.key !== 'string' || step.key.trim() === '')) {
+      throw new WorkflowInputError(`${label} requires key.`)
+    }
+    if (step.op === 'type_text' && typeof step.text !== 'string') {
+      throw new WorkflowInputError(`${label} requires text.`)
+    }
+    if (step.op === 'set_value' && typeof step.value !== 'string') {
+      throw new WorkflowInputError(`${label} requires value.`)
+    }
+    if (step.op === 'scroll' && (typeof step.direction !== 'string' || step.direction.trim() === '')) {
+      throw new WorkflowInputError(`${label} requires direction.`)
+    }
+    if (step.postcondition != null) {
+      if (!isObject(step.postcondition)) {
+        throw new WorkflowInputError(`${label} postcondition requires a semantic target object.`)
+      }
+      validateSemanticTarget(step.postcondition.target, `${label} postcondition`)
+      const postconditionContext = step.postcondition.context ?? step.context
+      if (normalizeText(postconditionContext) !== postconditionContext || !knownContexts.has(postconditionContext)) {
+        throw new WorkflowInputError(`${label} postcondition references an unknown context.`)
+      }
+    }
+  }
+}
+
+function workflowResourceKeys(input) {
+  const bundleIds = new Set()
+  for (const context of Object.values(input?.contexts ?? {})) {
+    if (typeof context?.bundle_id === 'string' && context.bundle_id.trim() !== '') {
+      bundleIds.add(context.bundle_id.trim())
+    }
+  }
+  for (const step of input?.steps ?? []) {
+    if (step?.op === 'launch_app' && typeof step.bundle_id === 'string' && step.bundle_id.trim() !== '') {
+      bundleIds.add(step.bundle_id.trim())
+    }
+  }
+  return [...bundleIds].sort().map(bundleId => `app:${bundleId}`)
+}
+
+async function withWorkflowResourceLocks(keys, task) {
+  const resources = [...new Set(keys)].sort()
+  const acquire = index =>
+    index >= resources.length
+      ? task()
+      : withFileLock(() => acquire(index + 1), {
+        key: `workflow-resource:${resources[index]}`,
+        timeoutCode: 'WORKFLOW_RESOURCE_LOCK_TIMEOUT',
+        timeoutMessage: 'Timed out waiting for another CUA session to finish using the same app.',
+        timeoutMs: 310_000
+      })
+  return await acquire(0)
+}
+
+function createResourceTaskQueue(acquireResources = withWorkflowResourceLocks) {
+  const tails = new Map()
+  const run = (keys, task) => {
+    const resources = [...new Set(keys)].sort()
+    if (resources.length === 0) return Promise.resolve().then(task)
+    const previous = [...new Set(resources.map(key => tails.get(key)).filter(Boolean))]
+    const result = Promise.all(previous).then(() => acquireResources(resources, task))
+    const tail = result.then(() => undefined, () => undefined)
+    resources.forEach(key => tails.set(key, tail))
+    void tail.then(() => {
+      resources.forEach(key => {
+        if (tails.get(key) === tail) tails.delete(key)
+      })
+    })
+    return result
+  }
+  return {
+    get size() {
+      return tails.size
+    },
+    run
   }
 }
 
@@ -404,26 +569,39 @@ function createWorkflowService(options) {
   const sleep = options.sleep ?? (duration => new Promise(resolve => setTimeout(resolve, duration)))
   const createId = options.createId ?? compactId
   const runs = new Map()
+  const resourceQueue = createResourceTaskQueue(options.acquireResources)
   let captureModeReady = false
+  let captureModePromise
 
   async function ensureAxCaptureMode() {
     if (captureModeReady) return
-    const config = structuredToolData(await callTool('get_config', {}))
-    const captureMode = config.capture_mode ?? config.config?.capture_mode
-    if (captureMode !== 'ax') {
-      structuredToolData(
-        await callTool('set_config', {
-          key: 'capture_mode',
-          value: 'ax'
-        })
-      )
-    }
-    captureModeReady = true
+    captureModePromise ??= (async () => {
+      const config = structuredToolData(await callTool('get_config', {}))
+      const captureMode = config.capture_mode ?? config.config?.capture_mode
+      if (captureMode !== 'ax') {
+        structuredToolData(
+          await callTool('set_config', {
+            key: 'capture_mode',
+            value: 'ax'
+          })
+        )
+      }
+      captureModeReady = true
+    })().finally(() => {
+      captureModePromise = undefined
+    })
+    await captureModePromise
   }
 
   function storeRun(run) {
+    while (runs.size >= maxStoredRuns) {
+      const terminal = [...runs.values()].find(candidate =>
+        ['cancelled', 'completed', 'failed'].includes(candidate.status)
+      )
+      if (terminal == null) break
+      runs.delete(terminal.run_id)
+    }
     runs.set(run.run_id, run)
-    while (runs.size > maxStoredRuns) runs.delete(runs.keys().next().value)
   }
 
   function checkDeadline(run) {
@@ -564,7 +742,14 @@ function createWorkflowService(options) {
         runId: run.run_id
       })
     }
-    structuredToolData(await callTool(step.op, args))
+    structuredToolData(
+      await callTool(step.op, args, {
+        cursorColor: run.cursor_color,
+        cursorStart: run.cursor_start,
+        cursorStartPending: run.cursor_start_pending,
+        runId: run.run_id
+      })
+    )
     if (pointerActionOps.has(step.op)) run.cursor_start_pending = false
     let verified
     if (isObject(step.postcondition)) {
@@ -761,8 +946,7 @@ function createWorkflowService(options) {
     return finalizeResult(run)
   }
 
-  async function executeWorkflow(input) {
-    validateWorkflowInput(input)
+  async function executeWorkflowNow(input, resourceKeys) {
     await ensureAxCaptureMode()
     const createdAt = now()
     const run = {
@@ -774,6 +958,7 @@ function createWorkflowService(options) {
       deadline_at: createdAt + Math.min(300000, Math.max(1000, asInteger(input.max_duration_ms, 120000))),
       detail_mode: ['inline', 'references'].includes(input.detail_mode) ? input.detail_mode : 'auto',
       run_id: createId('run'),
+      resource_keys: resourceKeys,
       status: 'running',
       step_order: [],
       step_results: new Map(),
@@ -785,9 +970,59 @@ function createWorkflowService(options) {
     return mcpToolResult(result, `Workflow ${result.status}: ${result.run_id}`)
   }
 
-  async function resumeWorkflow(input) {
-    const run = runs.get(input?.run_id)
-    if (run == null) return mcpToolError('RUN_NOT_FOUND', 'Workflow run was not found.')
+  async function executeWorkflow(input) {
+    validateWorkflowInput(input)
+    const resourceKeys = workflowResourceKeys(input)
+    return await resourceQueue.run(resourceKeys, () => executeWorkflowNow(input, resourceKeys))
+  }
+
+  async function executeWorkflows(input) {
+    if (!Array.isArray(input?.workflows) || input.workflows.length === 0 || input.workflows.length > 8) {
+      throw new WorkflowInputError('Provide between 1 and 8 workflows.')
+    }
+    input.workflows.forEach(validateWorkflowInput)
+    const settled = await Promise.allSettled(input.workflows.map(executeWorkflow))
+    const results = settled.map((entry, index) => {
+      if (entry.status === 'rejected') {
+        return {
+          workflow_id: input.workflows[index].workflow_id,
+          status: 'failed',
+          outcome: 'failed',
+          error: {
+            code: entry.reason?.code ?? 'WORKFLOW_FAILED',
+            message: entry.reason?.message ?? String(entry.reason)
+          }
+        }
+      }
+      const result = entry.value.structuredContent
+      const storedRun = runs.get(result.run_id)
+      const stepIds = storedRun?.step_order ?? []
+      return {
+        run_id: result.run_id,
+        ...(input.workflows[index].workflow_id == null ? {} : { workflow_id: input.workflows[index].workflow_id }),
+        status: result.status,
+        outcome: result.outcome ?? result.status,
+        ...(result.code == null ? {} : { code: result.code }),
+        ...(result.checkpoint_id == null
+          ? {}
+          : {
+            checkpoint_id: result.checkpoint_id,
+            kind: result.kind,
+            prompt: result.prompt,
+            choices: result.choices
+          }),
+        steps: { total: stepIds.length, ids: stepIds.slice(0, 50) }
+      }
+    })
+    const outcomes = new Set(results.map(result => result.outcome))
+    const outcome = outcomes.size === 1 ? outcomes.values().next().value : 'partial'
+    return mcpToolResult(
+      { status: 'completed', outcome, runs: results },
+      `Computer workflows ${outcome}: ${results.length} run(s).`
+    )
+  }
+
+  async function resumeWorkflowNow(input, run) {
     if (run.status !== 'paused' || run.checkpoint == null) {
       return mcpToolError('RUN_NOT_PAUSED', 'Workflow run is not paused.', { run_id: run.run_id })
     }
@@ -821,6 +1056,12 @@ function createWorkflowService(options) {
     return mcpToolResult(result, `Workflow ${result.status}: ${run.run_id}`)
   }
 
+  async function resumeWorkflow(input) {
+    const run = runs.get(input?.run_id)
+    if (run == null) return mcpToolError('RUN_NOT_FOUND', 'Workflow run was not found.')
+    return await resourceQueue.run(run.resource_keys ?? [], () => resumeWorkflowNow(input, run))
+  }
+
   function getWorkflowStepResults(input) {
     const run = runs.get(input?.run_id)
     if (run == null) return mcpToolError('RUN_NOT_FOUND', 'Workflow run was not found.')
@@ -839,6 +1080,7 @@ function createWorkflowService(options) {
   async function call(name, input) {
     try {
       if (name === 'execute_workflow') return await executeWorkflow(input)
+      if (name === 'execute_workflows') return await executeWorkflows(input)
       if (name === 'resume_workflow') return await resumeWorkflow(input)
       if (name === 'get_workflow_step_results') return getWorkflowStepResults(input)
       return mcpToolError('TOOL_NOT_FOUND', `Unknown workflow tool: ${name}`)
@@ -847,15 +1089,18 @@ function createWorkflowService(options) {
     }
   }
 
-  return { call, runs }
+  return { call, getQueuedResourceCount: () => resourceQueue.size, runs }
 }
 
 module.exports = {
   createWorkflowService,
+  createResourceTaskQueue,
   elementMatches,
   findTarget,
   parseTreeElements,
   structuredToolData,
+  workflowResourceKeys,
+  withWorkflowResourceLocks,
   workflowToolDefinitions,
   workflowToolNames
 }

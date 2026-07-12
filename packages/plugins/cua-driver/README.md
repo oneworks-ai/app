@@ -13,6 +13,7 @@
 - `manager` / `workspace` server runtime：提供状态、路径、显式环境准备和 launcher 搜索
 - 自动展示与操作同步的 Agent 虚拟指针，不移动用户的物理鼠标；workflow 默认从主屏中心出发，Agent 也可配置逻辑坐标起点
 - 过程化 `execute_workflow`：一次提交可预测的串行步骤，在运行时自动刷新窗口状态、解析语义目标、等待并验证；只在 checkpoint、失败或完成时返回
+- `execute_workflows`：不同 App 的独立工作流可并行推进，同一 App 仍严格串行，点击动作继续受全局光标事务保护
 - `resume_workflow` 与 `get_workflow_step_results`：断点恢复，以及通过 `run_id + step_id` 渐进查询步骤详情
 - 通过通用 `toolUsePresentations` 贡献为工具调用提供本地化标题、操作图标、摘要目标和结构化展开内容
 
@@ -53,11 +54,11 @@ ow-cua-driver ensure
 
 ## 执行环境用法
 
-启用后，用户只需描述目标。OneWorks 会把插件 MCP 资产自动投影到会话。多个可预测动作应优先通过一次 `execute_workflow` 调用提交；只有探索未知界面或故障恢复时才逐次调用 `launch_app`、`get_window_state`、`click` 等低层工具。不应把 `ensure`、后台服务、路径解析、权限检查或指针配置写进用户任务。wrapper 会在 MCP 长连接建立前完成一次受控预检。后台 AX 操作不会移动物理鼠标，用户看到的是插件自动维护的 Agent 虚拟指针。
+启用后，用户只需描述目标。OneWorks 会把插件 MCP 资产自动投影到会话。单个 App 的多个可预测动作应通过一次 `execute_workflow` 提交；多个独立 App 可通过一次 `execute_workflows` 并行提交。只有探索未知界面或故障恢复时才逐次调用 `launch_app`、`get_window_state`、`click` 等低层工具。不应把 `ensure`、后台服务、路径解析、权限检查或指针配置写进用户任务。wrapper 会在 MCP 长连接建立前完成一次受控预检。后台 AX 操作不会移动物理鼠标，用户看到的是插件自动维护的 Agent 虚拟指针。
 
 workflow 结果按大小自适应：不超过三个且较小的步骤直接内联；更长的执行只返回步骤 ID，通过 `get_workflow_step_results` 按需批量读取。运行状态保存在当前 MCP 会话中，不会把完整 trace 默认注入 agent 上下文。
 
-workflow runtime 会在每个 MCP 会话内过程化地固定 AX 语义观察模式，避免上游截图/SOM 解析差异影响节点定位；该内部配置能力不会暴露给 agent。需要像素证据时仍单独调用 `screenshot`。由于上游 Agent 指针样式是 daemon 全局状态，插件会跨进程串行执行“应用当前会话样式 + 设置起点 + 点击动作”，避免多个并行会话互相串色或串起点；非指针操作不受这把锁影响。
+workflow runtime 会在每个 MCP 会话内过程化地固定 AX 语义观察模式，避免上游截图/SOM 解析差异影响节点定位；该内部配置能力不会暴露给 agent。不同 bundle id 的 workflow 可并发推进，任何共享 bundle id 的 workflow 即使来自不同 MCP 会话，也会按跨进程资源锁串行。需要像素证据时仍单独调用 `screenshot`。由于上游 Agent 指针样式是 daemon 全局状态，插件会跨进程串行执行“应用当前 workflow 样式 + 设置起点 + 点击动作”，避免多个并行 workflow 或会话互相串色或串起点；非指针操作不受这把锁影响。
 
 演示、录屏或回归证据由外层编排器负责系统显示录制，被测会话只执行和验证原生 App 操作。这样才能同时证明虚拟 Agent 指针实时可见、用户前台应用未被抢占。上游 trajectory、`cursor.jsonl` 和逐步截图只保留为诊断材料，不再把截图拼接视频当作动态指针证据。用户明确只要最终静态图时，被测会话仍可通过 `screenshot_out_file` 保存独立窗口截图。
 

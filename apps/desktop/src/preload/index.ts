@@ -7,6 +7,8 @@ import type { OneWorksIconLoaderHandle } from '@oneworks/icon/loader'
 import { WORKSPACE_STARTUP_ICON_SEED } from '../workspace-startup-icon'
 
 const selectorStateChannel = 'desktop:workspace-selector-state'
+const browserControlOpenPageChannel = 'desktop:browser-control:open-page'
+const browserControlPageCommandChannel = 'desktop:browser-control:page-command'
 const desktopSettingsChannel = 'desktop:settings'
 const desktopUpdateStatusChannel = 'desktop:update-status'
 const globalInterfaceLanguageChannel = 'desktop:global-interface-language'
@@ -354,6 +356,22 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
       ipcRenderer.off(workspaceResourceRequestChannel, wrappedListener)
     }
   },
+  onBrowserControlOpenPage: (listener: (request: unknown) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, request: unknown) => listener(request)
+    ipcRenderer.on(browserControlOpenPageChannel, wrappedListener)
+    return () => {
+      ipcRenderer.off(browserControlOpenPageChannel, wrappedListener)
+    }
+  },
+  onBrowserControlPageCommand: (listener: (request: unknown) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, request: unknown) => listener(request)
+    ipcRenderer.on(browserControlPageCommandChannel, wrappedListener)
+    return () => {
+      ipcRenderer.off(browserControlPageCommandChannel, wrappedListener)
+    }
+  },
+  completeBrowserControlPageCommand: (input: unknown) =>
+    ipcRenderer.invoke('desktop:browser-control:complete-page-command', input),
   onWorkspaceSelectorStateChange: (listener: (value: unknown) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, value: unknown) => {
       listener(value)

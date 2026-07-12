@@ -12,6 +12,7 @@ import {
   resolveProjectWorkspaceFolder
 } from '../workspace-state.cjs'
 import { installBrowserActivityDownloadTracking } from './browser-activity'
+import { createBrowserControlBroker } from './browser-control-broker'
 import { updateSavedPasswordsRuntimeSettings } from './browser-data-sync'
 import { readDesktopBuildSource } from './build-source'
 import { DESKTOP_SETTINGS_CHANNEL, DESKTOP_UPDATE_STATUS_CHANNEL, GLOBAL_INTERFACE_LANGUAGE_CHANNEL } from './constants'
@@ -83,6 +84,13 @@ export const createDesktopApp = () => {
   let windowManager: WindowManager
   let autoUpdateManager: ReturnType<typeof createAutoUpdateManager>
   const contextCaptureOverlayController = createDesktopContextCaptureOverlayController()
+  const browserControlBroker = createBrowserControlBroker({
+    getWorkspaceHostWebContents: workspaceFolder => (
+      [...runtimeState.windows.values()]
+        .filter(record => record.workspaceFolder === workspaceFolder && !record.window.isDestroyed())
+        .map(record => record.window.webContents)
+    )
+  })
   let registeredLauncherAccelerator: string | undefined
   let launcherShortcutError: string | undefined
   let launcherShortcutRegistered = false
@@ -378,6 +386,7 @@ export const createDesktopApp = () => {
   const serviceManager = createWorkspaceServiceManager({
     broadcastWorkspaceSelectorState,
     findWorkspaceWindowRecord: workspaceFolder => windowManager?.findWorkspaceWindowRecord(workspaceFolder),
+    getBrowserControlEnv: workspaceFolder => browserControlBroker.getWorkspaceEnv(workspaceFolder),
     getDesktopClientOrigin,
     getIsQuitting: () => runtimeState.isQuitting,
     loadWorkspaceSelectorWindow: (windowRecord, input: WorkspaceSelectorWindowInput) =>
@@ -772,6 +781,7 @@ export const createDesktopApp = () => {
   const startApp = async () => {
     const startedAt = Date.now()
     logDesktopStartup('startup begin')
+    await browserControlBroker.start()
     await loadDesktopStateIntoMemory()
     logDesktopStartup(`startup desktop state ready elapsed=${elapsedMs(startedAt)}`)
     applyDesktopIcon()
@@ -879,6 +889,7 @@ export const createDesktopApp = () => {
     app.on('will-quit', () => {
       nativeTheme.off('updated', handleNativeThemeUpdated)
       contextCaptureOverlayController.dispose()
+      void browserControlBroker.stop()
       unregisterLauncherGlobalShortcut()
     })
 

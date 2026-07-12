@@ -62,10 +62,13 @@ import { InteractionPanelPinnedTabEditModal } from '../interaction-panel/Interac
 import { InteractionPanelSessionView } from '../interaction-panel/InteractionPanelSessionView'
 import { buildInteractionPanelDockTabContextMenuItems } from '../interaction-panel/interaction-panel-dock-tab-context-menu'
 import {
+  WORKSPACE_DRAWER_IFRAME_TAB_PREFIX,
   createIframePage,
+  fromWorkspaceDrawerIframeTabId,
   navigateIframePageHistory,
   normalizeFrameUrl,
   selectIframePageHistoryIndex,
+  toWorkspaceDrawerIframeTabId,
   updateIframePageMetadata,
   updateIframePageUrl
 } from '../interaction-panel/interaction-panel-iframe-pages'
@@ -125,7 +128,6 @@ export interface ChatWorkspaceDrawerLocateFileRequest {
   path: string
 }
 
-const WORKSPACE_DRAWER_IFRAME_TAB_PREFIX = 'workspace-drawer:iframe:'
 const WORKSPACE_DRAWER_FILE_TAB_PREFIX = 'workspace-drawer:file:'
 const WORKSPACE_DRAWER_MOBILE_DEBUG_TAB_PREFIX = 'workspace-drawer:mobile-debug:'
 const WORKSPACE_DRAWER_PAGE_DEBUGGER_TAB_KEY = 'workspace-drawer:page-debugger'
@@ -159,7 +161,7 @@ type WorkspaceDrawerDockTabKey =
   | `${typeof WORKSPACE_DRAWER_TERMINAL_TAB_PREFIX}${string}`
 
 const toWorkspaceDrawerIframeTabKey = (pageId: string): WorkspaceDrawerDockTabKey =>
-  `${WORKSPACE_DRAWER_IFRAME_TAB_PREFIX}${encodeURIComponent(pageId)}`
+  toWorkspaceDrawerIframeTabId(pageId) as WorkspaceDrawerDockTabKey
 
 const toWorkspaceDrawerFileTabKey = (path: string): WorkspaceDrawerDockTabKey =>
   `${WORKSPACE_DRAWER_FILE_TAB_PREFIX}${encodeURIComponent(path)}`
@@ -314,16 +316,24 @@ const toHostedPageId = (tabId: string, prefix: string) =>
   tabId.startsWith(prefix) ? decodeURIComponent(tabId.slice(prefix.length)) : tabId
 
 const toRightIframePage = (tab: Extract<SessionPanelTab, { kind: 'web' }>) => ({
-  id: toHostedPageId(tab.id, WORKSPACE_DRAWER_IFRAME_TAB_PREFIX),
+  ...(tab.browserControlRequestId == null ? {} : { browserControlRequestId: tab.browserControlRequestId }),
+  ...(tab.deviceToolbarOpen == null ? {} : { deviceToolbarOpen: tab.deviceToolbarOpen }),
+  ...(tab.devtoolsDockSide == null ? {} : { devtoolsDockSide: tab.devtoolsDockSide }),
+  id: fromWorkspaceDrawerIframeTabId(tab.id),
   title: tab.title,
   url: tab.url,
   ...(tab.faviconUrl == null ? {} : { faviconUrl: tab.faviconUrl }),
   ...(tab.history == null ? {} : { history: tab.history }),
   ...(tab.historyIndex == null ? {} : { historyIndex: tab.historyIndex }),
+  ...(tab.inspectOpen == null ? {} : { inspectOpen: tab.inspectOpen }),
+  ...(tab.viewport == null ? {} : { viewport: tab.viewport }),
   ...(tab.variant == null ? {} : { variant: tab.variant })
 })
 
 const toRightWebPanelTab = (page: InteractionPanelIframePage): Extract<SessionPanelTab, { kind: 'web' }> => ({
+  ...(page.browserControlRequestId == null ? {} : { browserControlRequestId: page.browserControlRequestId }),
+  ...(page.deviceToolbarOpen == null ? {} : { deviceToolbarOpen: page.deviceToolbarOpen }),
+  ...(page.devtoolsDockSide == null ? {} : { devtoolsDockSide: page.devtoolsDockSide }),
   id: toWorkspaceDrawerIframeTabKey(page.id),
   kind: 'web',
   title: page.title,
@@ -331,6 +341,8 @@ const toRightWebPanelTab = (page: InteractionPanelIframePage): Extract<SessionPa
   ...(page.faviconUrl == null ? {} : { faviconUrl: page.faviconUrl }),
   ...(page.history == null ? {} : { history: page.history }),
   ...(page.historyIndex == null ? {} : { historyIndex: page.historyIndex }),
+  ...(page.inspectOpen == null ? {} : { inspectOpen: page.inspectOpen }),
+  ...(page.viewport == null ? {} : { viewport: page.viewport }),
   ...(page.variant == null ? {} : { variant: page.variant })
 })
 
@@ -404,11 +416,13 @@ const toRightPluginPanelTab = (
 export function ChatWorkspaceDrawer({
   agentApprovals,
   agentRoster,
+  browserControlOpenPageRequest,
   defaultView,
   hasPendingAnnotationReferences,
   isBottomPanelOpen = false,
   isFullscreen = false,
   locateFileRequest,
+  onBrowserControlOpenPageRequestHandled,
   onClose,
   onFullscreenChange,
   onOpenBottomPanel,
@@ -433,11 +447,13 @@ export function ChatWorkspaceDrawer({
 }: {
   agentApprovals?: ChatWorkspaceDrawerAgentApprovals
   agentRoster?: ChatWorkspaceDrawerAgentRoster
+  browserControlOpenPageRequest?: DesktopBrowserControlOpenPageRequest | null
   defaultView?: WorkspaceDrawerView
   hasPendingAnnotationReferences?: boolean
   isBottomPanelOpen?: boolean
   isFullscreen?: boolean
   locateFileRequest?: ChatWorkspaceDrawerLocateFileRequest | null
+  onBrowserControlOpenPageRequestHandled?: (requestId: string) => void
   onClose?: () => void
   onFullscreenChange?: (fullscreen: boolean) => void
   onOpenBottomPanel?: () => void
@@ -1113,6 +1129,9 @@ export function ChatWorkspaceDrawer({
       const page = toRightIframePage(existingTab)
       const nextPage = {
         ...page,
+        ...(options.browserControlRequestId == null
+          ? {}
+          : { browserControlRequestId: options.browserControlRequestId }),
         ...(options.faviconUrl == null || options.faviconUrl.trim() === '' ? {} : { faviconUrl: options.faviconUrl }),
         ...(options.title == null || options.title.trim() === '' ? {} : { title: options.title.trim() }),
         ...(options.variant == null ? {} : { variant: options.variant })
@@ -1137,6 +1156,20 @@ export function ChatWorkspaceDrawer({
     setMobileViewMode('tab')
     return nextPage
   }, [iframePages.length, rightPanelTabs, t, upsertRightPanelTab])
+
+  useEffect(() => {
+    if (browserControlOpenPageRequest == null) return
+    openRightIframeUrl(browserControlOpenPageRequest.url, {
+      browserControlRequestId: browserControlOpenPageRequest.requestId,
+      openMode: browserControlOpenPageRequest.openMode,
+      ...(browserControlOpenPageRequest.title == null ? {} : { title: browserControlOpenPageRequest.title })
+    })
+    onBrowserControlOpenPageRequestHandled?.(browserControlOpenPageRequest.requestId)
+  }, [
+    browserControlOpenPageRequest,
+    onBrowserControlOpenPageRequestHandled,
+    openRightIframeUrl
+  ])
 
   const handleOpenResourceAction = useCallback(() => {
     onOpenResource()
@@ -1622,6 +1655,7 @@ export function ChatWorkspaceDrawer({
                 <InteractionPanelIframeView
                   isActive={isVisible && resolvedActiveTabKey === tabKey}
                   page={page}
+                  onChangePage={(updater) => updateRightWebTab(page.id, updater)}
                   projectUrlHistoryKey={`${workspaceDrawerIframeSessionId}:project`}
                   sessionId={sessionId}
                   sessionUrlHistoryKey={`${workspaceDrawerIframeSessionId}:session`}

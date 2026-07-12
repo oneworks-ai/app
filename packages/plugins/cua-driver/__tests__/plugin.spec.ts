@@ -251,6 +251,7 @@ describe('cua-driver plugin contract', () => {
     expect(filtered.result.tools.map((tool: { name: string }) => tool.name)).toEqual([
       'click',
       'execute_workflow',
+      'execute_workflows',
       'resume_workflow',
       'get_workflow_step_results',
       'set_session_cursor_color',
@@ -662,6 +663,11 @@ describe('cua-driver plugin contract', () => {
             expect.objectContaining({ format: 'records', path: 'steps' })
           ])
         }),
+        result: expect.objectContaining({ mode: 'declared' })
+      }),
+      expect.objectContaining({
+        id: 'execute-workflows',
+        tools: ['execute_workflows'],
         result: expect.objectContaining({ mode: 'declared' })
       }),
       expect.objectContaining({

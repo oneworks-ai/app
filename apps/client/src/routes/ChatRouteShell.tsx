@@ -22,6 +22,7 @@ import type {
   ChatHeaderRoomIconStatus,
   ChatHeaderView
 } from '#~/components/chat/ChatHeader.js'
+import { applyBrowserControlPanelLifecycleCommandToRef } from '#~/components/chat/interaction-panel/browser-control-panel-state'
 import {
   MAX_VISIBLE_RECENT_RESOURCE_RESULTS,
   MAX_VISIBLE_RESOURCE_RESULTS,
@@ -449,6 +450,9 @@ export function ChatRouteShell({
   const [interactionPanelShortcutRequest, setInteractionPanelShortcutRequest] = useState<
     InteractionPanelShortcutRequest | null
   >(null)
+  const [rightBrowserControlOpenPageRequest, setRightBrowserControlOpenPageRequest] = useState<
+    DesktopBrowserControlOpenPageRequest | null
+  >(null)
   const [rightWorkspaceFileFocusRequest, setRightWorkspaceFileFocusRequest] = useState<
     WorkspaceFileFocusRequest | null
   >(null)
@@ -513,7 +517,13 @@ export function ChatRouteShell({
       fallbackPanelState: shouldUseWorkspacePanelState ? workspacePanelStateRes?.panelState : undefined
     }
   )
-  const { panelState: sessionPanelState, updateArea: updateSessionPanelArea } = sessionPanelStateController
+  const {
+    panelState: sessionPanelState,
+    setPanelState: setSessionPanelState,
+    updateArea: updateSessionPanelArea
+  } = sessionPanelStateController
+  const sessionPanelStateRef = useRef(sessionPanelState)
+  sessionPanelStateRef.current = sessionPanelState
   const resolvedWorkspaceSession = useMemo<Session | undefined>(() => (
     sourceWorkspaceSession == null
       ? undefined
@@ -523,6 +533,26 @@ export function ChatRouteShell({
       }
   ), [sourceWorkspaceSession, sessionPanelState])
   const resolvedWorkspaceSessionId = workspaceSessionId ?? resolvedWorkspaceSession?.id
+  const browserControlLifecycleContextRef = useRef<{
+    openBottomPanel: () => void
+    openRightPanel: () => void
+    resolvedSessionId: string | undefined
+    setPanelState: typeof setSessionPanelState
+  }>({
+    openBottomPanel: () => undefined,
+    openRightPanel: () => undefined,
+    resolvedSessionId: resolvedWorkspaceSessionId,
+    setPanelState: setSessionPanelState
+  })
+  browserControlLifecycleContextRef.current = {
+    openBottomPanel: () => {
+      setIsTerminalPanelFolded(false)
+      setIsTerminalOpen(true)
+    },
+    openRightPanel: () => setWorkspaceDrawerOpen(true),
+    resolvedSessionId: resolvedWorkspaceSessionId,
+    setPanelState: setSessionPanelState
+  }
 
   useEffect(() => {
     if (!isChatRouteDebugEnabled()) return undefined
@@ -1057,20 +1087,46 @@ export function ChatRouteShell({
   const handleTerminateRunCommandTask = useCallback((terminalId: string) => {
     requestInteractionPanelShortcut('terminate-run-command-task', { terminalId })
   }, [requestInteractionPanelShortcut])
-  const handleOpenUrlInAppBrowser = useCallback((url: string, title?: string) => {
+  const handleOpenUrlInAppBrowser = useCallback((
+    url: string,
+    title?: string,
+    browserControlRequestId?: string,
+    placement: 'bottom' | 'right' = 'bottom',
+    openMode: 'new-tab' | 'reuse-or-create' = 'reuse-or-create'
+  ) => {
     const normalizedUrl = url.trim()
     if (normalizedUrl === '') return
 
     const normalizedTitle = title?.trim()
+    if (placement === 'right' && browserControlRequestId != null) {
+      setWorkspaceDrawerOpenWithPanelState(true)
+      setRightBrowserControlOpenPageRequest({
+        placement,
+        openMode,
+        requestId: browserControlRequestId,
+        url: normalizedUrl,
+        ...(normalizedTitle == null || normalizedTitle === '' || normalizedTitle === normalizedUrl
+          ? {}
+          : { title: normalizedTitle })
+      })
+      return
+    }
     setIsTerminalPanelFolded(false)
     setIsTerminalOpen(true)
     requestInteractionPanelShortcut('open-website', {
       url: normalizedUrl,
+      ...(browserControlRequestId == null ? {} : { browserControlRequestId }),
+      openMode,
       ...(normalizedTitle != null && normalizedTitle !== '' && normalizedTitle !== normalizedUrl
         ? { title: normalizedTitle }
         : {})
     })
-  }, [requestInteractionPanelShortcut, setIsTerminalOpen, setIsTerminalPanelFolded])
+  }, [
+    requestInteractionPanelShortcut,
+    setIsTerminalOpen,
+    setIsTerminalPanelFolded,
+    setWorkspaceDrawerOpenWithPanelState
+  ])
   const handleOpenWorkspaceFileInInteractionPanel = useCallback((
     path: string,
     target?: Pick<WorkspaceFileLinkTarget, 'column' | 'line'>
@@ -1413,6 +1469,69 @@ export function ChatRouteShell({
     return dispose
   }, [handleLauncherResourceTarget])
 
+  useEffect(() => {
+    const dispose = window.oneworksDesktop?.onBrowserControlOpenPage?.((request) => {
+      if (request.sessionId != null && request.sessionId !== resolvedWorkspaceSessionId) return
+      if (request.url.trim() === '') return
+      handleOpenUrlInAppBrowser(request.url, request.title, request.requestId, request.placement, request.openMode)
+    })
+    return dispose
+  }, [handleOpenUrlInAppBrowser, resolvedWorkspaceSessionId])
+
+  useEffect(() => {
+    const lifecycleContextRef = browserControlLifecycleContextRef
+    const dispose = window.oneworksDesktop?.onBrowserControlPageCommand?.((request) => {
+      if (!['close', 'duplicate', 'move', 'show'].includes(request.command.type)) return
+      let completed = false
+      const complete = (completion: Omit<DesktopBrowserControlPageCommandCompletion, 'requestId'>) => {
+        if (completed) return
+        completed = true
+        void window.oneworksDesktop?.completeBrowserControlPageCommand?.({
+          ...completion,
+          requestId: request.requestId
+        })
+      }
+      const lifecycleContext = lifecycleContextRef.current
+      if (request.sessionId != null && request.sessionId !== lifecycleContext.resolvedSessionId) {
+        complete({
+          ok: false,
+          error: { code: 'SESSION_NOT_FOUND', message: 'The owning browser session is not active in this renderer.' }
+        })
+        return
+      }
+      const panelPageId = request.panelPageId.trim()
+      if (panelPageId === '') {
+        complete({ ok: false, error: { code: 'PANEL_PAGE_NOT_FOUND', message: 'The browser panel tab is unavailable.' } })
+        return
+      }
+      const command = request.command
+      if (
+        command.type !== 'close' &&
+        command.type !== 'duplicate' &&
+        command.type !== 'move' &&
+        command.type !== 'show'
+      ) return
+      const outcome = applyBrowserControlPanelLifecycleCommandToRef({
+        command,
+        createPageId: () => `iframe-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        panelPageId,
+        stateRef: sessionPanelStateRef
+      })
+      if (outcome.error != null) {
+        complete({ ok: false, error: outcome.error })
+        return
+      }
+      lifecycleContext.setPanelState(() => outcome.state)
+      if (outcome.openedArea === 'right') {
+        lifecycleContext.openRightPanel()
+      } else if (outcome.openedArea === 'bottom') {
+        lifecycleContext.openBottomPanel()
+      }
+      complete({ ok: true, result: outcome.result })
+    })
+    return dispose
+  }, [])
+
   useEffect(() =>
     addDesktopViewShortcutListener((action) => {
       if (action === 'toggle-terminal') {
@@ -1631,6 +1750,7 @@ export function ChatRouteShell({
             <ChatWorkspaceDrawer
               agentApprovals={agentApprovals}
               agentRoster={agentRoster}
+              browserControlOpenPageRequest={rightBrowserControlOpenPageRequest}
               defaultView={activeWorkspaceDrawerView}
               hasPendingAnnotationReferences={hasPendingAnnotationReferences}
               pendingAnnotationPreview={pendingAnnotationPreview}
@@ -1645,6 +1765,9 @@ export function ChatRouteShell({
               sessionId={resolvedWorkspaceSessionId}
               terminalSessionId={terminalSessionId}
               terminalPanes={terminalPanes}
+              onBrowserControlOpenPageRequestHandled={(requestId) => {
+                setRightBrowserControlOpenPageRequest(current => current?.requestId === requestId ? null : current)
+              }}
               onClose={() => setWorkspaceDrawerOpenWithPanelState(false)}
               onFullscreenChange={handleWorkspaceDrawerFullscreenChange}
               onOpenSidebar={openRouteSidebar}
