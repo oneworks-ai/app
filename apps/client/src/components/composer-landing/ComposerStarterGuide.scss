@@ -1,0 +1,31 @@
+.composer-starter-guide__introduction {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+  padding: 2px 4px 8px 2px;
+
+  p {
+    margin: 0;
+    color: var(--sub-text-color);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+}
+
+.composer-starter-guide__introduction-icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--sub-text-color);
+  font-size: 18px;
+}
+
+.composer-landing--compact {
+  .composer-starter-guide__introduction {
+    padding: 0;
+
+    p {
+      font-size: 12px;
+    }
+  }
+}
