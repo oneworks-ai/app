@@ -64,6 +64,10 @@ export interface RelayPluginStatus {
       name?: string
     }
     active?: boolean
+    availabilityError?: string
+    avatarUrl?: string
+    lastCheckedAt?: string
+    lastSuccessfulAt?: string
     connected?: boolean
     connection?: {
       activeServerId?: string
@@ -106,6 +110,7 @@ export interface RelayPluginStatus {
     }>
     devicesError?: string
     hasToken?: boolean
+    online?: boolean
     id: string
     name?: string
     remoteBaseUrl: string
@@ -156,8 +161,11 @@ export const createPluginHarness = async (
       getStatus?: () => RelayConfigDistributionStatus | Promise<RelayConfigDistributionStatus>
       refresh?: () => RelayConfigDistributionStatus | Promise<RelayConfigDistributionStatus>
     }
+    prepareHomeDir?: (homeDir: string) => Promise<void> | void
     prepareProjectHome?: (projectHome: string) => Promise<void> | void
+    runtimeRole?: 'manager' | 'workspace'
     sessions?: RelayLocalSessionAdapter
+    workspaceFolder?: string
   } = {}
 ) => {
   const projectHome = await mkdtemp(join(tmpdir(), 'oneworks-relay-plugin-test-'))
@@ -168,6 +176,7 @@ export const createPluginHarness = async (
   vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', homeDir)
   vi.stubEnv('__ONEWORKS_RELAY_LOOP_LEASE_ROOT__', join(homeDir, 'relay-loop-leases'))
   await writeOneWorksAuthStore(emptyOneWorksAuthStore())
+  await harnessOptions.prepareHomeDir?.(homeDir)
   await harnessOptions.prepareProjectHome?.(projectHome)
   const commands = new Map<string, CommandHandler>()
   const apis = new Map<string, ApiRegistration>()
@@ -184,9 +193,9 @@ export const createPluginHarness = async (
   activatePlugin({
     scope: 'relay',
     runtime: {
-      role: 'workspace'
+      role: harnessOptions.runtimeRole ?? 'workspace'
     },
-    workspaceFolder: '/workspace',
+    workspaceFolder: harnessOptions.workspaceFolder ?? '/workspace',
     projectHome,
     options,
     configDistribution: harnessOptions.configDistribution,
@@ -274,6 +283,11 @@ export const stubRelayFetch = (deviceToken = 'remote-device-token') => {
     const url = String(input)
     const body = url.endsWith('/api/relay/config-snapshot')
       ? createRelayConfigSnapshotFixture()
+      : url.endsWith('/api/relay/info')
+      ? {
+        avatarUrl: 'https://cdn.example.com/relay.png',
+        name: 'Example Relay'
+      }
       : url.endsWith('/api/relay/config/global')
       ? {
         personalConfigSnapshot: null

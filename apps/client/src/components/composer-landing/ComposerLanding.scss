@@ -66,10 +66,45 @@
   border-radius: 0;
 }
 
-@media (max-width: 768px) {
+.composer-content-frame {
+  --composer-content-frame-inline-padding: var(--chat-surface-padding, 10px);
+
+  width: 100%;
+  max-width: 800px;
+  box-sizing: border-box;
+  margin-inline: auto;
+  padding-inline: var(--composer-content-frame-inline-padding);
+}
+
+.composer-landing--starter {
+  height: 100%;
+  background: transparent;
+
+  .composer-landing__content {
+    align-items: stretch;
+    justify-content: stretch;
+    padding-block: 0;
+  }
+}
+
+@media (max-width: 960px) {
   .composer-stack {
     padding: 0 max(12px, env(safe-area-inset-right))
       max(12px, env(safe-area-inset-bottom))
       max(12px, env(safe-area-inset-left));
+  }
+
+  .composer-landing--starter .composer-landing__content {
+    padding: max(0px, env(safe-area-inset-top))
+      max(12px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+  }
+}
+
+.composer-landing--compact.composer-landing--starter {
+  .composer-landing__content {
+    align-items: stretch;
+    justify-content: stretch;
   }
 }

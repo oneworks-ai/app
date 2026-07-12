@@ -25,6 +25,16 @@ describe('desktop deep links', () => {
     })
   })
 
+  it('returns manager relay auth callbacks to the launcher plugin route', () => {
+    const request = parseDesktopDeepLinkLaunchRequest(
+      'oneworks://relay/auth?launcher=1&scope=relay&serverId=prod#relay_token=sso-token'
+    )
+
+    expect(request).toEqual({
+      launcherRoutePath: 'launcher/plugins/relay/home?relayLogin=1&relayLoginServerId=prod#relay_token=sso-token'
+    })
+  })
+
   it('ignores unsupported deep links and finds supported argv entries', () => {
     expect(parseDesktopDeepLinkLaunchRequest('https://relay.example/login')).toBeUndefined()
     expect(findDesktopDeepLinkArg([

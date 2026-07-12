@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 import { ONEWORKS_AUTH_STORE_VERSION, writeOneWorksAuthStore } from '@oneworks/utils/auth-store'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createRelayDeviceStore } from '../src/server/store.js'
+import { createRelayDeviceStore, createRelayServiceInfoStore } from '../src/server/store.js'
 import { createRelayConfigSnapshotStore } from '../src/shared/config-cache.js'
 import {
   DEFAULT_OFFICIAL_RELAY_SERVER_ID,
@@ -14,7 +14,11 @@ import {
 import { cleanupPluginFixtures, createPluginHarness, readDeviceStore, stubRelayFetch } from './helpers.js'
 import type { RelayPluginStatus } from './helpers.js'
 
-afterEach(cleanupPluginFixtures)
+afterEach(async () => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+  await cleanupPluginFixtures()
+})
 
 const createTestRemoteWorkspaceId = (input: {
   deviceId: string
@@ -33,6 +37,232 @@ const createTestRemoteWorkspaceId = (input: {
   }`
 
 describe('relay plugin scoped API', () => {
+  it('discovers service avatars without blocking status and deduplicates in-flight requests', async () => {
+    let resolveInfo: ((response: Response) => void) | undefined
+    const pendingInfo = new Promise<Response>(resolve => {
+      resolveInfo = resolve
+    })
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input).endsWith('/api/relay/info')) return pendingInfo
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+    })
+    const handler = apis.get('relay')?.handler
+    const statusRequest = handler?.({ body: Buffer.alloc(0), method: 'GET', path: 'status' })
+    const statusResult = await Promise.race([
+      statusRequest,
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 50))
+    ])
+
+    expect(statusResult).not.toBe('timeout')
+    const firstInfo = handler?.({
+      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+      method: 'POST',
+      path: 'server-info'
+    })
+    const secondInfo = handler?.({
+      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+      method: 'POST',
+      path: 'server-info'
+    })
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/api/relay/info'))).toHaveLength(1)
+
+    resolveInfo?.(
+      new Response(
+        JSON.stringify({
+          avatarUrl: 'https://cdn.example.com/relay.png',
+          name: 'Relay Cloud'
+        }),
+        { status: 200 }
+      )
+    )
+    await expect(firstInfo).resolves.toMatchObject({
+      body: { avatarUrl: 'https://cdn.example.com/relay.png', name: 'Relay Cloud', online: true },
+      status: 200
+    })
+    await expect(secondInfo).resolves.toMatchObject({
+      body: { avatarUrl: 'https://cdn.example.com/relay.png', name: 'Relay Cloud', online: true },
+      status: 200
+    })
+    const refreshedStatus = await handler?.({ body: Buffer.alloc(0), method: 'GET', path: 'status' }) as {
+      body?: RelayPluginStatus
+    }
+    expect(refreshedStatus.body?.servers?.[0]?.avatarUrl).toBe('https://cdn.example.com/relay.png')
+    expect(refreshedStatus.body?.servers?.[0]?.name).toBe('Relay Cloud')
+    expect(refreshedStatus.body?.servers?.[0]?.online).toBe(true)
+    await expect(createRelayServiceInfoStore().readStore()).resolves.toMatchObject({
+      'https://relay.example': {
+        avatarUrl: 'https://cdn.example.com/relay.png',
+        lastSuccessfulAt: expect.any(String),
+        name: 'Relay Cloud'
+      }
+    })
+  })
+
+  it('restores the last successful service metadata when the next connection fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('Unavailable', { status: 503 }))
+    )
+    const lastSuccessfulAt = '2026-07-11T08:30:00.000Z'
+    const { apis } = await createPluginHarness(
+      {
+        enableOfficialCloudflareRelay: false,
+        enableOfficialVercelRelay: false,
+        servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+      },
+      {
+        prepareHomeDir: async () => {
+          await createRelayServiceInfoStore().writeServiceInfo('https://relay.example', {
+            avatarUrl: 'https://cdn.example.com/relay.png',
+            lastSuccessfulAt,
+            name: 'Relay Cloud'
+          })
+        }
+      }
+    )
+
+    const handler = apis.get('relay')?.handler
+    const restoredStatus = await handler?.({
+      body: Buffer.alloc(0),
+      method: 'GET',
+      path: 'status'
+    }) as { body?: RelayPluginStatus }
+    expect(restoredStatus.body?.servers?.[0]).toMatchObject({
+      avatarUrl: 'https://cdn.example.com/relay.png',
+      lastSuccessfulAt,
+      name: 'Relay Cloud'
+    })
+
+    await expect(
+      handler?.({
+        body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+        method: 'POST',
+        path: 'server-info'
+      })
+    ).resolves.toMatchObject({
+      body: {
+        availabilityError: 'HTTP 503',
+        avatarUrl: 'https://cdn.example.com/relay.png',
+        lastSuccessfulAt,
+        name: 'Relay Cloud',
+        online: false
+      },
+      status: 200
+    })
+    await expect(createRelayServiceInfoStore().readStore()).resolves.toMatchObject({
+      'https://relay.example': {
+        avatarUrl: 'https://cdn.example.com/relay.png',
+        lastSuccessfulAt,
+        name: 'Relay Cloud'
+      }
+    })
+  })
+
+  it('times out service avatar discovery without failing the server list', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+        })
+      )
+    )
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+    })
+    const responsePromise = apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+      method: 'POST',
+      path: 'server-info'
+    })
+
+    await expect(responsePromise).resolves.toMatchObject({
+      body: { availabilityError: 'timeout', online: false },
+      status: 200
+    })
+  }, 6_000)
+
+  it('keeps a reachable service online when optional avatar metadata is malformed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            avatarUrl: 'not-a-url'
+          }),
+          { status: 200 }
+        )
+      )
+    )
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+    })
+
+    await expect(
+      apis.get('relay')?.handler?.({
+        body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+        method: 'POST',
+        path: 'server-info'
+      })
+    ).resolves.toMatchObject({
+      body: { online: true },
+      status: 200
+    })
+  })
+
+  it('keeps the last service avatar when a refresh fails', async () => {
+    let now = 1_000
+    vi.spyOn(Date, 'now').mockImplementation(() => now)
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            avatarUrl: 'https://cdn.example.com/relay.png'
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(new Response('Unavailable', { status: 503 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+    })
+    const handler = apis.get('relay')?.handler
+    const request = () =>
+      handler?.({
+        body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+        method: 'POST',
+        path: 'server-info'
+      })
+
+    await expect(request()).resolves.toMatchObject({
+      body: { avatarUrl: 'https://cdn.example.com/relay.png', online: true },
+      status: 200
+    })
+    now += 61_000
+    await expect(request()).resolves.toMatchObject({
+      body: {
+        availabilityError: 'HTTP 503',
+        avatarUrl: 'https://cdn.example.com/relay.png',
+        online: false
+      },
+      status: 200
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it('registers scoped API metadata for the host runtime', async () => {
     const { apis } = await createPluginHarness({})
 
@@ -722,6 +952,125 @@ describe('relay plugin scoped API', () => {
     expect(loginUrl.searchParams.get('server_id')).toBe('prod')
     expect(loginUrl.searchParams.get('scope')).toBe('relay')
     expect(loginUrl.searchParams.get('redirect_uri')).toBe('https://app.example/plugins/relay/home?relayLogin=1')
+  })
+
+  it('proxies native login only to fixed paths on configured Relay servers', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/api/auth/login-options') {
+        expect(url.origin).toBe('https://relay.example')
+        expect(url.searchParams.get('redirect_uri')).toBe(
+          'oneworks://relay/auth?workspace=%2Fworkspace&scope=relay&serverId=prod'
+        )
+        expect(url.searchParams.get('server_id')).toBe('prod')
+        return new Response(JSON.stringify({ loginMethods: { default: 'password', enabled: ['password'] } }), {
+          headers: { 'content-type': 'application/json' }
+        })
+      }
+      expect(url.toString()).toBe('https://relay.example/api/auth/password-login')
+      expect(init?.method).toBe('POST')
+      expect(JSON.parse(String(init?.body))).toEqual({ loginId: 'owner', password: 'wrong' })
+      return new Response(
+        JSON.stringify({
+          code: 'registration_required',
+          error: 'Registration requires an invite.'
+        }),
+        {
+          headers: { 'content-type': 'application/json' },
+          status: 409
+        }
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+    })
+    const handler = apis.get('relay')?.handler
+
+    const optionsResponse = await handler?.({
+      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+      method: 'POST',
+      path: 'login-options'
+    }) as { body?: { options?: { loginMethods?: unknown } }; status?: number }
+    const passwordResponse = await handler?.({
+      body: Buffer.from(JSON.stringify({
+        action: 'password-login',
+        body: { loginId: 'owner', password: 'wrong' },
+        serverId: 'prod'
+      })),
+      method: 'POST',
+      path: 'native-login'
+    }) as { body?: { code?: string; error?: string }; status?: number }
+
+    expect(optionsResponse.status).toBe(200)
+    expect(optionsResponse.body?.options?.loginMethods).toEqual({ default: 'password', enabled: ['password'] })
+    expect(passwordResponse).toMatchObject({
+      body: {
+        code: 'registration_required',
+        error: 'Registration requires an invite.'
+      },
+      status: 409
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects arbitrary native login actions and unconfigured server URLs without fetching them', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+    })
+    const handler = apis.get('relay')?.handler
+    const request = async (body: Record<string, unknown>) =>
+      await handler?.({
+        body: Buffer.from(JSON.stringify(body)),
+        method: 'POST',
+        path: 'native-login'
+      }) as { body?: { error?: string }; status?: number }
+
+    expect(await request({ action: 'arbitrary-path', body: {}, serverId: 'prod' })).toMatchObject({
+      status: 400
+    })
+    expect(
+      await request({
+        action: 'password-login',
+        body: {},
+        serverId: 'https://attacker.example'
+      })
+    ).toMatchObject({
+      status: 404
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('returns manager login callbacks to the Launcher instead of opening the manager directory', async () => {
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+    }, {
+      runtimeRole: 'manager',
+      workspaceFolder: '/manager-home'
+    })
+
+    const response = await apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+      method: 'POST',
+      path: 'login-url'
+    }) as { body?: { redirectUri?: string }; status?: number }
+    const redirectUri = new URL(String(response.body?.redirectUri))
+
+    expect(response.status).toBe(200)
+    expect(redirectUri.protocol).toBe('oneworks:')
+    expect(redirectUri.hostname).toBe('relay')
+    expect(redirectUri.pathname).toBe('/auth')
+    expect(redirectUri.searchParams.get('launcher')).toBe('1')
+    expect(redirectUri.searchParams.get('workspace')).toBeNull()
+    expect(redirectUri.searchParams.get('serverId')).toBe('prod')
   })
 
   it('creates relay login URLs for the default official Cloudflare service', async () => {

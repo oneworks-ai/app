@@ -28,7 +28,7 @@
 - 先把任务拆成可独立 review 的 PR 或提交范围，每个范围有明确目标、触达目录、验收标准和验证命令。
 - 让子任务写入范围尽量不重叠；强依赖前序 diff 的清理或统一收口任务后置。
 - 不要一次开满所有线程。先开互相独立的第一波，等结构稳定后再开依赖型任务。
-- 主线程维护整体矩阵：范围、推荐 model / reasoning 及理由、分支、pending worktree / thread id、写入目录、验收命令、PR、CI、阻塞点和后续接口。父任务使用 Sol 不代表所有子任务继承 Sol；按 `model-routing.md` 对每个独立验收面重新选档。
+- 主线程维护整体矩阵：范围、推荐 model / reasoning 及理由、分支、pending worktree / thread id、写入目录、验收命令、PR、CI、阻塞点、后续接口，以及适用的 `restartAuthorization`。父任务使用 Sol 不代表所有子任务继承 Sol；按 `model-routing.md` 对每个独立验收面重新选档。
 
 ## 创建子线程前
 
@@ -44,15 +44,17 @@
   - 建议分支名、验证要求、交付格式。
   - 非机械代码修改还要包含 Change Brief、影响地图、抽象决策和需升级的风险触发器。
 - 每个独立任务 prompt 都必须带主任务 thread ID，并要求 worker 在每个阶段完成、失败或阻塞时通过线程消息主动发送结构化摘要（范围、状态、证据 / diff、验证、阻塞或下一步）。没有回调只表示未证实完成，不能静默视为完成。
+- 如果当前任务已获得开发服务重启授权租约，prompt 必须按 [`dev-service-coordination.md`](./dev-service-coordination.md) 原样携带 task、worktree、target、action、scope、granted 和 expires。上下文压缩、heartbeat 或委派不得丢失租约；worker 只在字段全部匹配时复用，不匹配时回到主线程确认，不能自行扩大范围。
+- prompt 还必须要求最后一次结构化回调包含 `Terminal status`（`COMPLETED` / `FAILED` / `STOPPED` / `CANCELLED` / `BLOCKED`）、最终证据、剩余 follow-up、当前写入者 / Git / PR 状态和 `Safe to archive`。`Safe to archive` 只是 worker 声明，不能代替父线程核验；worker 不要在发出最终回调前自行归档，以免父线程丢失结果。
 - 如果主线程有未提交 diff，子线程 prompt 中写入当前 worktree 的绝对路径，让它优先读取这份最新内容，而不是只审默认分支。
 - 子线程 prompt 的最小模板字段：目标、允许范围、禁止范围、必读文件、未提交 diff 绝对路径、是否只读、建议分支名、验证命令、交付格式、停止条件。
 - 同一 worktree 同时只能有一个写入者。多个只读审阅可共享 worktree；并行实现必须优先分配独立 worktree，并在任务矩阵中登记写入范围和所有者。
 
 ## 监控与协作
 
-- 创建独立任务时同步建立约十分钟的 heartbeat，同时记录 pending worktree id；只有任务在同步创建调用内已经完成、已回调主任务且无需后续观察时才能省略。不要只靠子线程主动回来报喜。每次 heartbeat 至少检查线程状态、deadline、范围是否越界、Git 写入者、开发服务归属和是否已回调主任务；任务完成、失败或取消后删除 heartbeat 并归档线程。
+- 创建独立任务时同步建立约十分钟的 heartbeat，同时记录 pending worktree id；只有任务在同步创建调用内已经完成、已回调主任务且无需后续观察时才能省略。不要只靠子线程主动回来报喜。每次 heartbeat 至少检查线程状态、deadline、范围是否越界、Git 写入者、开发服务归属和是否已回调主任务；任务完成、失败、停止或取消后按下方“终态回调与归档”清单收口。
 - 为每个成本敏感子任务记录实际 `startedAt`、deadline 和可用的 interrupt / cancel 方法。Prompt 停止条件不构成硬超时；deadline 到达时必须主动中断，或停止等待、标记超时并使用已有证据，不能因为线程仍在推理而继续放任消耗。
-- 同时为协调器记录 worker cutoff、integration cutoff 和 final deadline；到 integration cutoff 后禁止新的读取、统计和归档调用，先完成最终输出。归档可由外部监控器在结果提取后执行，不得让清理工作导致主任务超过用户 deadline。
+- 同时为协调器记录 worker cutoff、cleanup cutoff、integration cutoff 和 final deadline；在 cleanup cutoff 前完成结果提取、heartbeat 删除和独立线程归档，不能把正常清理拖到最终输出之后。若硬 deadline 迫使主线程先返回，必须明确报告尚未完成的归档，并让已经绑定本任务的外部监控器执行；不得把“已完全收口”作为结果交付。
 - 监控顺序：
   1. 查 pending worktree 是否已经变成 thread。
   2. 查线程状态和最后输出。
@@ -64,6 +66,35 @@
 - worker、协调器和总任务是否超时只认平台或外部监控时间；模型自报“约 N 秒”不能覆盖 `durationMs`。
 - 线程因 rate limit、工具失败或中断卡住时，主线程应读取已有 diff / PR 接手，或另开小范围新线程继续；不要无限等待原线程。
 - 完成的审阅线程提取结论后归档；完成的实现线程先由主线程 review diff，再决定是否合并。
+
+## 终态回调与归档
+
+独立任务的完成状态、消息通知和归档是三件不同的事：worker 进入 `idle`、发送最终回复或把结果回调给主线程，都不会自动把线程移出任务列表。归档由创建它的主线程负责。
+
+主线程必须维护本任务创建的独立 thread id 清单，并对每个 thread 执行以下顺序：
+
+1. 收到最终结构化回调；如果没有回调但线程已经停止，直接读取该线程的最终输出、diff / PR 和外部状态，必要时只追问一次缺失证据。
+2. 核验 terminal status、实际结果、写入范围、验证、Git / PR / merge 状态和是否仍需 follow-up。`idle`、`interrupted` 或 `hasUnreadTurn: false` 都不能单独证明任务完成。
+3. 仍在运行、等待审批、等待 CI、等待用户输入或需要恢复的线程继续保留，不得提前归档；`BLOCKED` 只有在主线程已经记录阻塞和接手方案后才可归档。
+4. 对已核实的 `COMPLETED`、`FAILED`、`STOPPED` 或 `CANCELLED` 线程删除对应 heartbeat。
+5. 显式调用线程归档能力，例如 `set_thread_archived`，并检查返回结果确认归档成功。不要依赖 worker 的最终回复、状态变为 `idle` 或消息已送达来推断归档。
+6. 从本任务 pending 矩阵中移除该线程，记录其终态和已提取证据。只有本任务创建的独立 worker、reviewer、协调器和 Git / PR operator 进入本流程；不要扫描后归档用户主会话、其他任务的线程或用户仍需继续对话的会话。
+7. 主线程最终回复前再检查一次本任务 thread 清单。只要存在已经终止但未归档的独立线程，主任务就不能声称“完全完成”；应立即补做归档，或如实报告清理阻塞。
+
+推荐的最终回调最小格式：
+
+```text
+Main thread:
+Scope:
+Terminal status: COMPLETED / FAILED / STOPPED / CANCELLED / BLOCKED
+Result and evidence:
+Validation:
+Git / PR / merge state:
+Remaining follow-up:
+Safe to archive: yes / no
+```
+
+主线程收到此回调后仍要自行核验。`Safe to archive: yes` 不是归档指令，也不能覆盖未完成的 CI、merge、用户确认或证据检查。
 
 ## 权限预检与审批恢复
 

@@ -1,6 +1,6 @@
 import type { ConfigResponse, ConversationStarterConfig } from '@oneworks/types'
 
-import { collectVisibleRecentKeys, filterUniqueStrings, orderItemsByPriorityKeys } from './new-session-guide-list-order'
+import { partitionComposerStarterListItems } from '#~/components/composer-landing/composer-starter-list-items'
 
 export interface NewSessionGuideData {
   announcements: string[]
@@ -19,6 +19,7 @@ export interface ConversationStarterListItem {
 }
 
 export interface PartitionConversationStarterListItemsResult {
+  favorites: ConversationStarterListItem[]
   isSearchMode: boolean
   recentKeys: string[]
   visibleRemaining: ConversationStarterListItem[]
@@ -86,9 +87,7 @@ export const buildConversationStarterListItems = (
   ]
 }
 
-const normalizeSearchQuery = (value: string) => value.trim().toLowerCase()
-
-const buildConversationStarterSearchText = (item: ConversationStarterListItem) => {
+export const buildConversationStarterSearchText = (item: ConversationStarterListItem) => {
   const { starter } = item
 
   return [
@@ -121,50 +120,23 @@ export const partitionConversationStarterListItems = ({
   query: string
   remainingLimit: number
 }): PartitionConversationStarterListItemsResult => {
-  const normalizedQuery = normalizeSearchQuery(query)
-  if (normalizedQuery !== '') {
-    const searchTerms = normalizedQuery.split(/\s+/).filter(term => term !== '')
-    const matchedItems = items.filter((item) => {
-      const searchText = buildConversationStarterSearchText(item)
-      return searchTerms.every(term => searchText.includes(term))
-    })
-
-    return {
-      isSearchMode: true,
-      recentKeys: [],
-      visibleRemaining: matchedItems,
-      totalRemainingCount: matchedItems.length,
-      hiddenRemainingCount: 0
-    }
-  }
-
-  const favoriteSet = new Set(filterUniqueStrings(favoriteKeys))
-  const itemByKey = new Map(items.map(item => [item.key, item]))
-  const recentKeysByPriority = collectVisibleRecentKeys(recentKeys, new Set(itemByKey.keys()), 3)
-
-  const favoriteItems = orderItemsByPriorityKeys(
-    items.filter(item => favoriteSet.has(item.key)),
-    recentKeysByPriority
-  )
-  const favoriteKeySet = new Set(favoriteItems.map(item => item.key))
-  const recentRemainingKeys = recentKeysByPriority.filter(key => !favoriteKeySet.has(key))
-  const hiddenKeySet = new Set([...favoriteKeySet, ...recentRemainingKeys])
-  const remaining = orderItemsByPriorityKeys(
-    items.filter(item => !hiddenKeySet.has(item.key)),
-    []
-  )
-  const safeLimit = Math.max(0, remainingLimit)
-  const orderedItems = [
-    ...favoriteItems,
-    ...recentRemainingKeys.map(key => itemByKey.get(key)).filter(Boolean),
-    ...remaining
-  ] as ConversationStarterListItem[]
+  const partitioned = partitionComposerStarterListItems({
+    favoriteKeys,
+    items: items.map(item => ({
+      item,
+      key: item.key,
+      order: item.order,
+      searchText: buildConversationStarterSearchText(item)
+    })),
+    maxRecentCount: 3,
+    query,
+    recentKeys,
+    remainingLimit
+  })
 
   return {
-    isSearchMode: false,
-    recentKeys: recentKeysByPriority,
-    visibleRemaining: orderedItems.slice(0, safeLimit),
-    totalRemainingCount: orderedItems.length,
-    hiddenRemainingCount: Math.max(0, orderedItems.length - safeLimit)
+    ...partitioned,
+    favorites: partitioned.favorites.map(item => item.item),
+    visibleRemaining: partitioned.visibleRemaining.map(item => item.item)
   }
 }

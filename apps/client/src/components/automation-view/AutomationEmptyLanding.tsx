@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 
+import type { ChatMessageContent } from '@oneworks/core'
 import type { ConfigResponse } from '@oneworks/types'
 
 import { getConfig } from '#~/api.js'
@@ -54,8 +55,7 @@ export function AutomationEmptyLanding({
     ...DEFAULT_CHAT_SESSION_TARGET_DRAFT
   }))
   const [workspaceDraft, setWorkspaceDraft] = useState(() => ({ ...DEFAULT_CHAT_SESSION_WORKSPACE_DRAFT }))
-  const [starterContent, setStarterContent] = useState('')
-  const [starterContentKey, setStarterContentKey] = useState(0)
+  const [starterContent, setStarterContent] = useState<ChatMessageContent[] | undefined>(undefined)
   const {
     adapterOptions,
     hasAvailableModels,
@@ -90,14 +90,12 @@ export function AutomationEmptyLanding({
   })
 
   const handleSelectStarter = (prompt: string) => {
-    setStarterContent(prompt)
-    setStarterContentKey((current) => current + 1)
+    setStarterContent([{ type: 'text', text: prompt }])
   }
 
   const composer = (
-    <div className='sender-container automation-empty-guide__composer'>
+    <div className='sender-container sender-container--chat-surface automation-empty-guide__composer'>
       <Sender
-        key={starterContentKey}
         initialContent={starterContent}
         placeholder={t('automation.emptyLandingPlaceholder')}
         autoFocus
@@ -169,11 +167,10 @@ export function AutomationEmptyLanding({
         </SidebarListCollapsedActions>
       )}
       <ComposerLanding
-        className='automation-empty-landing'
+        className='composer-landing--starter automation-empty-landing'
         compact={isCompactLayout || isTouchInteraction}
-        composer={composer}
       >
-        <AutomationEmptyGuide onSelectStarter={handleSelectStarter} />
+        <AutomationEmptyGuide composer={composer} onSelectStarter={handleSelectStarter} />
       </ComposerLanding>
     </div>
   )

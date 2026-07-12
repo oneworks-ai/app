@@ -1,7 +1,9 @@
 /* eslint-disable max-lines -- login page renderer keeps the local HTML shell and scripts together. */
 import type { IncomingMessage } from 'node:http'
 
-import type { RelayServerArgs } from '../types.js'
+import { isRelayEmailProviderConfigured } from '../email/provider.js'
+import { isRelayTurnstileRequired } from '../email/turnstile.js'
+import type { RelayLoginMethod, RelayServerArgs } from '../types.js'
 import { completePageScript } from './login-complete-page-scripts.js'
 import { oneWorksIconLoaderScript } from './login-page-assets.js'
 import { buildLoginClientConfig } from './login-page-client-config.js'
@@ -12,9 +14,10 @@ import { safeJson } from './login-page-script-utils.js'
 import { iconLoaderScript } from './login-page-scripts.js'
 import { renderRelayLoginStyle } from './login-page-style.js'
 import type { RelayLoginProvider } from './login-page-types.js'
+import { isSupportedLoginRedirectUri } from './login-redirect.js'
 import { publicRequestBaseUrl } from './request-origin.js'
 
-interface RelayLoginPageInput {
+export interface RelayLoginPageInput {
   args: RelayServerArgs
   assets?: RelayLoginClientAssets
   providers: RelayLoginProvider[]
@@ -22,19 +25,9 @@ interface RelayLoginPageInput {
   url: URL
 }
 
-const supportedRedirectProtocols = new Set(['http:', 'https:', 'oneworks:', 'one-works:'])
-
 export const relayLoginBaseUrl = (req: IncomingMessage, args: RelayServerArgs) => (
   publicRequestBaseUrl(req, args.publicBaseUrl)
 )
-
-export const isSupportedLoginRedirectUri = (value: string) => {
-  try {
-    return supportedRedirectProtocols.has(new URL(value).protocol)
-  } catch {
-    return false
-  }
-}
 
 const escapeHtml = (value: unknown) =>
   String(value ?? '')
@@ -68,6 +61,34 @@ const buildProviderStartUrl = (input: RelayLoginPageInput, providerId: string, r
   const inviteCode = readLoginParam(input.url, 'invite_code')
   if (inviteCode != null) startUrl.searchParams.set('invite_code', inviteCode)
   return startUrl.toString()
+}
+
+const requestedLoginMethod = (input: RelayLoginPageInput): RelayLoginMethod | undefined => {
+  const method = readLoginParam(input.url, 'login_method')
+  return method === 'password' || method === 'passkey' || method === 'verification_code'
+    ? method
+    : undefined
+}
+
+export const buildRelayLoginPageClientConfig = (
+  input: RelayLoginPageInput,
+  options: { nativeClient?: boolean } = {}
+) => {
+  const locale = resolveRelayLoginLocale(input.req, input.url)
+  const t = getRelayLoginMessages(locale)
+  const redirectUri = readLoginParam(input.url, 'redirect_uri') ?? ''
+  if (!isSupportedLoginRedirectUri(redirectUri, input.args)) return undefined
+  return buildLoginClientConfig({
+    defaultLoginMethod: requestedLoginMethod(input) ?? input.args.defaultLoginMethod,
+    emailCodeLoginEnabled: isRelayEmailProviderConfigured(input.args) && (
+      options.nativeClient !== true || !isRelayTurnstileRequired(input.args.email!)
+    ),
+    passkey: input.args.passkey,
+    providers: input.providers,
+    redirectUri,
+    startUrlForProvider: providerId => buildProviderStartUrl(input, providerId, redirectUri),
+    t
+  })
 }
 
 const renderHeader = (t: RelayLoginMessages, title: string, subtitle?: string) => `
@@ -157,8 +178,8 @@ const renderScriptTags = (...scripts: string[]) =>
 export const renderRelayLoginPage = (input: RelayLoginPageInput) => {
   const locale = resolveRelayLoginLocale(input.req, input.url)
   const t = getRelayLoginMessages(locale)
-  const redirectUri = readLoginParam(input.url, 'redirect_uri') ?? ''
-  if (!isSupportedLoginRedirectUri(redirectUri)) {
+  const config = buildRelayLoginPageClientConfig(input)
+  if (config == null) {
     return shell(
       t,
       renderLayout(
@@ -172,26 +193,14 @@ export const renderRelayLoginPage = (input: RelayLoginPageInput) => {
       input.assets
     )
   }
-  return loginShell(
-    t,
-    buildLoginClientConfig({
-      defaultLoginMethod: input.args.defaultLoginMethod,
-      emailCodeLoginEnabled: input.args.emailProvider != null || input.args.email?.provider !== 'disabled',
-      passkey: input.args.passkey,
-      providers: input.providers,
-      redirectUri,
-      startUrlForProvider: providerId => buildProviderStartUrl(input, providerId, redirectUri),
-      t
-    }),
-    input.assets
-  )
+  return loginShell(t, config, input.assets)
 }
 
 export const renderRelayLoginCompletePage = (input: RelayLoginPageInput) => {
   const locale = resolveRelayLoginLocale(input.req, input.url)
   const t = getRelayLoginMessages(locale)
   const redirectUri = readLoginParam(input.url, 'redirect_uri') ?? ''
-  if (!isSupportedLoginRedirectUri(redirectUri)) {
+  if (!isSupportedLoginRedirectUri(redirectUri, input.args)) {
     return renderRelayLoginPage(input)
   }
   return shell(

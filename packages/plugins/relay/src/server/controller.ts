@@ -45,7 +45,7 @@ import type { RelayConfigSyncResult } from './config-sync.js'
 import { startHeartbeat } from './heartbeat.js'
 import { createRelayLoopLeaseManager } from './loop-lease.js'
 import type { RelayLoopLease } from './loop-lease.js'
-import { normalizeOptions, resolveActiveRelayServer } from './options.js'
+import { normalizeOptions, resolveActiveRelayServer, resolveRelayServers } from './options.js'
 import type { ResolvedRelayServer } from './options.js'
 import {
   readRelayPersonalDocumentSyncKind,
@@ -66,7 +66,7 @@ import {
 } from './personal-document-sync.js'
 import type { RelayDocumentScope } from './personal-document-sync.js'
 import { createRelaySessionWorker } from './session-worker.js'
-import { createRelayDeviceStore, createRelayManagementServerStore } from './store.js'
+import { createRelayDeviceStore, createRelayManagementServerStore, createRelayServiceInfoStore } from './store.js'
 import type { RelayManagementServerStore } from './store.js'
 import type {
   RelayAccountProfile,
@@ -110,10 +110,13 @@ import {
 export interface RelayController {
   connect: (payload?: unknown) => Promise<unknown>
   createLoginUrl: (payload?: unknown) => Promise<unknown>
+  getNativeLoginOptions: (payload?: unknown) => Promise<unknown>
+  proxyNativeLoginRequest: (payload?: unknown) => Promise<unknown>
   disconnect: (payload?: unknown) => Promise<unknown>
   dispose: () => void
   forget: (payload?: unknown) => Promise<unknown>
   getPublicStatus: () => Promise<RelayPublicStatus>
+  getServiceInfo: (payload?: unknown) => Promise<RelayServiceInfo>
   listDocumentEntries: (payload?: unknown) => Promise<unknown>
   openDocumentPath: (payload?: unknown) => Promise<unknown>
   readDocumentContent: (payload?: unknown) => Promise<unknown>
@@ -155,11 +158,32 @@ const initialState = (): RelayConnectionState => ({
 
 const RELAY_FIXTURE_SESSION_TOKEN_PREFIX = 'relay-fixture:'
 const RELAY_DEVICE_LIST_CACHE_TTL_MS = 10_000
+const RELAY_SERVICE_INFO_CACHE_TTL_MS = 60_000
+const RELAY_SERVICE_INFO_TIMEOUT_MS = 2_500
 const RELAY_DEVICE_LIST_ERROR_BASE_INTERVAL_MS = 3_000
 const RELAY_DEVICE_LIST_ERROR_MAX_INTERVAL_MS = 30_000
 const RELAY_DEVICE_LIST_ERROR_LOG_INTERVAL_MS = 30_000
 const fixtureAccessTokensByAccountKey = new Map<string, RelayProfileAccessToken[]>()
 const fixtureDeviceAliasesByAccountKey = new Map<string, Map<string, string>>()
+
+const nativeLoginRequestPaths = {
+  'email-code-login': '/api/auth/email-code-login',
+  'email-verification-send': '/api/auth/email-verification/send',
+  'invite-login': '/api/auth/invite-login',
+  'password-login': '/api/auth/password-login'
+} as const
+
+class RelayNativeLoginProxyError extends Error {
+  code?: string
+  status: number
+
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.name = 'RelayNativeLoginProxyError'
+    this.code = code
+    this.status = status
+  }
+}
 
 interface RelayWorkspaceProxyEntry {
   authToken: string
@@ -195,6 +219,21 @@ interface RelayDeviceListCacheEntry {
 interface RelayDeviceListResult {
   devices: RelayRemoteDeviceSummary[]
   error?: string
+}
+
+interface RelayServiceInfo {
+  availabilityError?: string
+  avatarUrl?: string
+  lastCheckedAt?: string
+  lastSuccessfulAt?: string
+  name?: string
+  online?: boolean
+}
+
+interface RelayServiceInfoCacheEntry {
+  fetchedAt: number
+  inFlight?: Promise<RelayServiceInfo>
+  value: RelayServiceInfo
 }
 
 interface RelayDeviceListSource {
@@ -1198,7 +1237,11 @@ const accountMatchesSelector = (account: OneWorksAuthAccount, selector: string) 
 
 const buildDesktopRedirectUri = (ctx: RelayPluginContext, serverId: string) => {
   const url = new URL('oneworks://relay/auth')
-  url.searchParams.set('workspace', ctx.workspaceFolder)
+  if (ctx.runtime.role === 'manager') {
+    url.searchParams.set('launcher', '1')
+  } else {
+    url.searchParams.set('workspace', ctx.workspaceFolder)
+  }
   url.searchParams.set('scope', ctx.scope)
   url.searchParams.set('serverId', serverId)
   return url.toString()
@@ -1664,6 +1707,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   let explicitConnectVersion = 0
   const deviceStore = createRelayDeviceStore(ctx.projectHome)
   const managementServerStore = createRelayManagementServerStore(ctx.projectHome)
+  const serviceInfoStore = createRelayServiceInfoStore()
   const heartbeats = new Map<string, ReturnType<typeof startHeartbeat>>()
   const sessionWorkers = new Map<string, ReturnType<typeof createRelaySessionWorker>>()
   const loopLeases = new Map<string, RelayLoopLease>()
@@ -1674,6 +1718,19 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   const workspaceProxies = new Map<string, RelayWorkspaceProxyEntry>()
   const workspaceProxyOpenPromises = new Map<string, Promise<RelayWorkspaceOpenResult>>()
   const deviceListCache = new Map<string, RelayDeviceListCacheEntry>()
+  const serviceInfoCache = new Map<string, RelayServiceInfoCacheEntry>()
+  const serviceInfoHydration = serviceInfoStore.readStore()
+    .then(services => {
+      for (const [cacheKey, info] of Object.entries(services)) {
+        serviceInfoCache.set(cacheKey, {
+          fetchedAt: 0,
+          value: info
+        })
+      }
+    })
+    .catch(error => {
+      ctx.logger.warn({ err: error, scope: ctx.scope }, '[relay] service info cache restore failed')
+    })
   const connectionStates: Record<string, RelayConnectionState> = {}
   let configDistributionStatus: RelayConfigDistributionStatus | undefined
   let personalDocumentSyncStatus: RelayPersonalDocumentSyncStatus | undefined
@@ -1763,6 +1820,100 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         deviceListCache.delete(cacheKey)
       }
     }
+  }
+
+  const fetchRelayServiceInfo = async (
+    server: Pick<ResolvedRelayServer, 'remoteBaseUrl'>
+  ): Promise<RelayServiceInfo> => {
+    await serviceInfoHydration
+    const cacheKey = normalizeBaseUrl(server.remoteBaseUrl)
+    const existing = serviceInfoCache.get(cacheKey)
+    if (existing?.inFlight != null) return await existing.inFlight
+    if (existing != null && Date.now() - existing.fetchedAt < RELAY_SERVICE_INFO_CACHE_TTL_MS) {
+      return existing.value
+    }
+
+    const entry: RelayServiceInfoCacheEntry = existing ?? { fetchedAt: 0, value: {} }
+    entry.inFlight = (async () => {
+      const abortController = new AbortController()
+      const timeout = setTimeout(() => abortController.abort(), RELAY_SERVICE_INFO_TIMEOUT_MS)
+      try {
+        const response = await fetch(new URL('/api/relay/info', server.remoteBaseUrl), {
+          headers: { accept: 'application/json' },
+          signal: abortController.signal
+        })
+        const lastCheckedAt = new Date().toISOString()
+        if (!response.ok) {
+          return {
+            ...entry.value,
+            availabilityError: `HTTP ${response.status}`,
+            lastCheckedAt,
+            online: false
+          }
+        }
+        const body = await readResponseJson(response)
+        const name = readOptionalText(body.name)
+        const avatarSource = readOptionalText(body.avatarUrl)
+        let avatarUrl: URL | undefined
+        if (avatarSource != null) {
+          try {
+            avatarUrl = new URL(avatarSource)
+          } catch {
+            avatarUrl = undefined
+          }
+        }
+        const discoveredAvatarUrl = avatarUrl != null &&
+            (avatarUrl.protocol === 'http:' || avatarUrl.protocol === 'https:')
+          ? avatarUrl.toString()
+          : entry.value.avatarUrl
+        const discoveredName = name ?? entry.value.name
+        const value = {
+          ...(discoveredAvatarUrl == null ? {} : { avatarUrl: discoveredAvatarUrl }),
+          lastCheckedAt,
+          lastSuccessfulAt: lastCheckedAt,
+          ...(discoveredName == null ? {} : { name: discoveredName }),
+          online: true as const
+        }
+        await serviceInfoStore
+          .writeServiceInfo(server.remoteBaseUrl, {
+            ...(value.avatarUrl == null ? {} : { avatarUrl: value.avatarUrl }),
+            lastSuccessfulAt: lastCheckedAt,
+            ...(value.name == null ? {} : { name: value.name })
+          })
+          .catch(error => {
+            ctx.logger.warn({ err: error, scope: ctx.scope }, '[relay] service info cache write failed')
+          })
+        return value
+      } catch {
+        return {
+          ...entry.value,
+          availabilityError: abortController.signal.aborted ? 'timeout' : 'unreachable',
+          lastCheckedAt: new Date().toISOString(),
+          online: false
+        }
+      } finally {
+        clearTimeout(timeout)
+      }
+    })()
+    serviceInfoCache.set(cacheKey, entry)
+    const value = await entry.inFlight
+    entry.value = value
+    entry.fetchedAt = Date.now()
+    delete entry.inFlight
+    return value
+  }
+
+  const readRelayServiceInfo = (
+    server: Pick<ResolvedRelayServer, 'remoteBaseUrl'>
+  ): RelayServiceInfo => {
+    const cacheKey = normalizeBaseUrl(server.remoteBaseUrl)
+    const existing = serviceInfoCache.get(cacheKey)
+    if (existing == null || Date.now() - existing.fetchedAt >= RELAY_SERVICE_INFO_CACHE_TTL_MS) {
+      void fetchRelayServiceInfo(server).catch(error => {
+        ctx.logger.warn({ err: error, scope: ctx.scope }, '[relay] service info discovery failed')
+      })
+    }
+    return existing?.value ?? {}
   }
 
   const warnDeviceListFailure = (
@@ -2853,6 +3004,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   const getPublicStatus = async (
     configDistributionOverride?: RelayConfigDistributionStatus
   ): Promise<RelayPublicStatus> => {
+    await serviceInfoHydration
     const options = normalizeOptions(ctx.options, ctx.runtime.role)
     const statusActiveServerId = state.activeServerId || options.activeServerId
     const resolvedStatusServer = statusActiveServerId === ''
@@ -2924,9 +3076,11 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         async (serverStatus) => {
           const server = options.servers.find(item => item.id === serverStatus.id)
           if (server == null) return serverStatus
+          const serviceInfo = readRelayServiceInfo(server)
           const result = await listRelayDevicesForServer(server, store, authStore)
           return {
             ...serverStatus,
+            ...serviceInfo,
             devices: result.devices,
             ...(result.error == null ? {} : { devicesError: result.error })
           }
@@ -2940,23 +3094,27 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         const storedServer = getStoredServer(store, server)
         const account = preferredAuthAccountForRelayServer(authStore, server)
         const connection = getConnectionState(server)
+        const serviceInfo = readRelayServiceInfo(server)
         const result = await listRelayDevicesForServer(server, store, authStore)
         const storedSessionAuthenticated = (storedServer?.sessionToken ?? '') !== '' &&
           (storedServer?.sessionExpiresAt == null || Date.parse(storedServer.sessionExpiresAt) > Date.now())
-        return authServerToPublicStatus(authServer, publicActiveServerId, {
-          ...(account == null
-            ? storedServer?.account == null ? {} : { account: storedServer.account }
-            : { account: authAccountToRelayAccountProfile(account) }),
-          connected: connection.state === 'registered',
-          connection,
-          devices: result.devices,
-          ...(result.error == null ? {} : { devicesError: result.error }),
-          hasToken: (storedServer?.deviceToken ?? '') !== '',
-          registeredAt: storedServer?.registeredAt ?? null,
-          sessionAuthenticated: account == null ? storedSessionAuthenticated : isSessionAuthenticated(account),
-          sessionExpiresAt: account?.sessionExpiresAt ?? storedServer?.sessionExpiresAt ?? null,
-          updatedAt: account?.updatedAt ?? storedServer?.updatedAt ?? null
-        })
+        return {
+          ...authServerToPublicStatus(authServer, publicActiveServerId, {
+            ...(account == null
+              ? storedServer?.account == null ? {} : { account: storedServer.account }
+              : { account: authAccountToRelayAccountProfile(account) }),
+            connected: connection.state === 'registered',
+            connection,
+            devices: result.devices,
+            ...(result.error == null ? {} : { devicesError: result.error }),
+            hasToken: (storedServer?.deviceToken ?? '') !== '',
+            registeredAt: storedServer?.registeredAt ?? null,
+            sessionAuthenticated: account == null ? storedSessionAuthenticated : isSessionAuthenticated(account),
+            sessionExpiresAt: account?.sessionExpiresAt ?? storedServer?.sessionExpiresAt ?? null,
+            updatedAt: account?.updatedAt ?? storedServer?.updatedAt ?? null
+          }),
+          ...serviceInfo
+        }
       })
     )
     return {
@@ -4403,6 +4561,77 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     }
   }
 
+  const getServiceInfo = async (payload?: unknown) => {
+    const requestedServerId = readServerId(payload)
+    const authStore = await readOneWorksAuthStore()
+    const server = resolveRelayServer(authStore, requestedServerId)
+    if (server == null) {
+      throw new RelayNativeLoginProxyError(`Unknown relay server: ${requestedServerId}.`, 404)
+    }
+    return await fetchRelayServiceInfo(server)
+  }
+
+  const getNativeLoginOptions = async (payload?: unknown) => {
+    const login = await createLoginUrl(payload)
+    const configuredServer = resolveRelayServers(ctx.options).find(server =>
+      server.id === login.serverId && server.remoteBaseUrl === login.remoteBaseUrl
+    )
+    if (configuredServer == null) {
+      throw new RelayNativeLoginProxyError(`Unknown relay server: ${login.serverId}.`, 404)
+    }
+    const loginUrl = new URL(login.loginUrl)
+    const optionsUrl = new URL('/api/auth/login-options', configuredServer.remoteBaseUrl)
+    for (const key of ['redirect_uri', 'scope', 'server_id']) {
+      const value = loginUrl.searchParams.get(key)
+      if (value != null) optionsUrl.searchParams.set(key, value)
+    }
+    const response = await fetch(optionsUrl, { headers: { accept: 'application/json' } })
+    const body = await readResponseJson(response)
+    if (!response.ok) {
+      throw new RelayNativeLoginProxyError(
+        toString(body.error) || `Relay login options failed with ${response.status}.`,
+        response.status,
+        toString(body.code) || undefined
+      )
+    }
+    return { ...login, options: body }
+  }
+
+  const proxyNativeLoginRequest = async (payload?: unknown) => {
+    if (!isRecord(payload)) throw new RelayNativeLoginProxyError('Invalid native login request.', 400)
+    const action = toString(payload.action)
+    const path = nativeLoginRequestPaths[action as keyof typeof nativeLoginRequestPaths]
+    if (path == null) throw new RelayNativeLoginProxyError('Unsupported native login action.', 400)
+    const requestedServerId = readServerId(payload) || 'cf'
+    const resolvedServer = resolveActiveRelayServer(ctx.options, requestedServerId)
+    const activeServer = resolvedServer == null
+      ? undefined
+      : resolveRelayServers(ctx.options).find(server =>
+        server.id === resolvedServer.id && server.remoteBaseUrl === resolvedServer.remoteBaseUrl
+      )
+    if (activeServer == null) {
+      throw new RelayNativeLoginProxyError(`Unknown relay server: ${requestedServerId}.`, 404)
+    }
+    const requestBody = isRecord(payload.body) ? payload.body : {}
+    const response = await fetch(new URL(path, activeServer.remoteBaseUrl), {
+      body: JSON.stringify(requestBody),
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json'
+      },
+      method: 'POST'
+    })
+    const body = await readResponseJson(response)
+    if (!response.ok) {
+      throw new RelayNativeLoginProxyError(
+        toString(body.error) || `Relay login failed with ${response.status}.`,
+        response.status,
+        toString(body.code) || undefined
+      )
+    }
+    return body
+  }
+
   const completeLogin = async (payload?: unknown) => {
     const token = readTextField(payload, 'token') || readTextField(payload, 'relayToken')
     if (token === '') {
@@ -4629,6 +4858,8 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     completeLogin,
     connect,
     createLoginUrl,
+    getNativeLoginOptions,
+    proxyNativeLoginRequest,
     disconnect,
     dispose: () => {
       disposed = true
@@ -4651,6 +4882,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     getConfigShareTargets,
     getProfile,
     getPublicStatus,
+    getServiceInfo,
     getWorkspaceProxyConnection,
     importPersonalDocumentRootAgents,
     listWorkspaceDirectories,

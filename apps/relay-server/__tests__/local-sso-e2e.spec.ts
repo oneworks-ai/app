@@ -127,6 +127,7 @@ describe('relay local SSO end-to-end', () => {
     const localSso = await listenLocalSso()
     try {
       const { args, baseUrl } = await listenRelay({
+        loginRedirectOrigins: ['http://127.0.0.1'],
         oauth: {
           local: {
             authorizationUrl: localSso.authorizationUrl,

@@ -133,7 +133,7 @@ UI PR 的 `pr-change-policy` 只检查 PR body 是否有截图证据，不会判
 - 先读 [Android 设备调试页维护经验](./mobile-device-debugging.md)。
 - 如果设备还没启动或 ADB 不可见，先走 [Android 模拟器启动排查耗时](#android-模拟器启动排查耗时)，不要直接改调试页。
 - 不要只凭当前 `cwd` 改代码。先确认 IAB 页面实际由哪个 worktree 的 dev server 提供；必要时用 `rg` 在 `.codex/worktrees` 内定位目标文件。
-- 后端 mobile-debug route / service 修改后，如果 API 仍 404，先运行 `pnpm --silent tools dev-service status web --json` 确认是否仍是旧服务；复用健康服务用 `ensure`，需要重启加载改动时必须先取得用户对 `web` 的显式授权，再运行统一 `restart`，不要把旧 server 误判成前端路由问题。
+- 后端 mobile-debug route / service 修改后，如果 API 仍 404，先运行 `pnpm --silent tools dev-service status web --json` 确认是否仍是旧服务。纯前端改动优先依赖 Vite HMR，不主动重启；后端、启动时配置或其他非 HMR 代码变更必须让对应进程重新加载。需要 `restart web` 时先查当前任务是否已有匹配的用户重启授权租约：有则直接运行统一 `restart`，没有则只询问一次；不要用 `ensure` 的健康复用冒充代码已加载，也不要把旧 server 误判成前端路由问题。
 - 设备状态面板要拆 Battery / Cellular / Location / Phone / Fingerprint 组件；状态型控制实时生效，事件型控制保留按钮。
 - PR 收口必须补 changelog、截图、Experience Review checklist，并跑 `pr-change-check`。远端如果只剩 `macOS installer` pending，用 `gh run view <run> --json jobs` 看具体步骤，避免长时间 `gh pr checks --watch` 刷屏。
 

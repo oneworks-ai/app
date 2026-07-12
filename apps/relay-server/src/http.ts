@@ -22,10 +22,17 @@ export const readRequestBody = async (req: IncomingMessage): Promise<Record<stri
   }
 }
 
-export const sendJson = (res: ServerResponse, status: number, body: unknown, allowOrigin: string) => {
+export const sendJson = (
+  res: ServerResponse,
+  status: number,
+  body: unknown,
+  allowOrigin: string,
+  headers: Record<string, string> = {}
+) => {
   const response = res as ServerResponse & { [relayJsonResponseBodySymbol]?: unknown }
   response[relayJsonResponseBodySymbol] = body
   res.writeHead(status, {
+    ...headers,
     'content-type': 'application/json; charset=utf-8',
     'access-control-allow-origin': allowOrigin,
     'access-control-allow-headers': 'content-type, authorization',
@@ -34,10 +41,18 @@ export const sendJson = (res: ServerResponse, status: number, body: unknown, all
   res.end(`${JSON.stringify(body)}\n`)
 }
 
-export const sendHtml = (res: ServerResponse, status: number, body: string, allowOrigin: string) => {
+export const sendHtml = (
+  res: ServerResponse,
+  status: number,
+  body: string,
+  allowOrigin: string,
+  headers: Record<string, string> = {}
+) => {
   res.writeHead(status, {
+    ...headers,
     'content-type': 'text/html; charset=utf-8',
-    'access-control-allow-origin': allowOrigin
+    'access-control-allow-origin': allowOrigin,
+    'cache-control': 'no-store'
   })
   res.end(body)
 }

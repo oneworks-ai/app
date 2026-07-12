@@ -33,7 +33,7 @@ pnpm --silent tools dev-service ensure web --json
 pnpm --silent tools dev-service ensure <target> --json
 ```
 
-target 映射：`web`、`daemon`、`electron`、`electron-workspace`、`pwa`、`homepage`、`docs`、`relay`、`desktop-control`、`android-emulator`。该快路径会自动完成 fetch / 安全拉取、缺依赖时安装、后台启动、端口避让和探活，并输出机器可读状态；跨会话共享、显式 stop/restart 授权和 handoff 规则见 [`../maintenance/dev-service-coordination.md`](../maintenance/dev-service-coordination.md)。
+target 映射：`web`、`daemon`、`electron`、`electron-workspace`、`pwa`、`homepage`、`docs`、`relay`、`desktop-control`、`android-emulator`。该快路径会自动完成 fetch / 安全拉取、缺依赖时安装、后台启动、端口避让和探活，并输出机器可读状态；跨会话共享、stop / restart 授权范围和 handoff 规则见 [`../maintenance/dev-service-coordination.md`](../maintenance/dev-service-coordination.md)。
 
 ### Worktree 启动补充
 

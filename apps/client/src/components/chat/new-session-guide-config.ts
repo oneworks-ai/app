@@ -7,6 +7,7 @@ export {
 
 export {
   buildConversationStarterListItems,
+  buildConversationStarterSearchText,
   getNewSessionGuideData,
   partitionConversationStarterListItems
 } from './new-session-guide-items'

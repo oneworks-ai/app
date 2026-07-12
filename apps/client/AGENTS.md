@@ -98,6 +98,7 @@ import 约定：
 
 前端调试入口：
 
+- 如果任务涉及布局、样式、主题、响应式、组件外观、视觉素材或参考图还原，开始修改前必须加载 `../../.oo/skills/ui-design-memory` 并阅读 `../../.oo/rules/frontend-standard/design-memory.md`。任何用户可见视觉改动结束前必须等待独立只读会话真实执行预期行为和视觉一致性验证，读取并核验其证据，确认当前 revision 获得 `PASS` 后才能停止；还要分类本轮经验是否需要项目内持久化。单点机械调整可以简化证据，但不能跳过独立验证。
 - 如果任务涉及 tooltip / popover / select / theme / sender / focus / hover / 样式回归 / 真实 Chrome 验证 / CDP 调试，开始修改前必须先读 `../../.oo/rules/frontend-standard/debugging.md`。
 - 如果任务涉及移动端 WebView、手机端工作区 tabs overview、WebView / iframe chrome、sender compact 密度、Android IME / status bar 或 device shell simulation，还必须先读 `../../.oo/rules/maintenance/mobile-workspace-webview.md`。
 - 需要通过 Chrome DevTools Protocol 调试页面时，必须使用独立 profile 和冷启动的调试 Chrome，不要直接复用用户已经打开的日常浏览器实例。

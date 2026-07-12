@@ -16,11 +16,14 @@ const buildStandaloneRoutePath = (url: URL) => {
   return normalizeStandaloneDeviceRoutePath(`/standalone${url.pathname}${url.search}`)
 }
 
-const buildRelayPluginRoutePath = (url: URL) => {
+const buildRelayPluginRoutePath = (url: URL, launcher = false) => {
   const token = readHashToken(url)
   const scope = url.searchParams.get('scope')?.trim() || 'relay'
   const serverId = url.searchParams.get('serverId')?.trim() || ''
-  const route = new URL(`/plugins/${encodeURIComponent(scope)}/home`, 'http://localhost')
+  const route = new URL(
+    `${launcher ? '/launcher' : ''}/plugins/${encodeURIComponent(scope)}/home`,
+    'http://localhost'
+  )
   route.searchParams.set('relayLogin', '1')
   if (serverId !== '') route.searchParams.set('relayLoginServerId', serverId)
   if (token !== '') {
@@ -45,6 +48,10 @@ export const parseDesktopDeepLinkLaunchRequest = (rawUrl: string): LaunchRequest
 
   const isRelayAuthRoute = url.hostname === 'relay' && url.pathname.replace(/\/+$/, '') === '/auth'
   if (!isRelayAuthRoute) return undefined
+
+  if (url.searchParams.get('launcher') === '1') {
+    return { launcherRoutePath: buildRelayPluginRoutePath(url, true) }
+  }
 
   const workspaceFolder = url.searchParams.get('workspace')?.trim() || undefined
   if (workspaceFolder == null) return undefined

@@ -18,7 +18,7 @@
   - `launcher-client-service.ts`：桌面共享 client dev server / packaged static server 生命周期
   - `workspace-service-manager.ts`：每个 workspace 的内置 server 生命周期
   - `window-titles.ts`：workspace、launcher、selector 的窗口标题和加载页 URL 组装
-  - `deep-link.ts`：`oneworks://` / `one-works://` schema URL 解析，目前用于 Relay SSO 回跳到 workspace 插件页
+  - `deep-link.ts`：`oneworks://` / `one-works://` schema URL 解析；Relay SSO 根据发起 runtime 回跳到 Launcher 插件页或具体 workspace 插件页，Manager 回跳不能把 manager home 当作 workspace 打开
   - `external-cdp.ts`：agent / 验证工具 opt-in 暴露 Electron CDP，本机默认关闭；必须在 app bootstrap / 单实例锁之前应用
   - `menu.ts`、`ipc-handlers.ts`、`shortcuts.ts`：菜单、IPC 与桌面快捷键
   - `updates.ts`：自动更新检查

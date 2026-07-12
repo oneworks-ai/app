@@ -1036,7 +1036,16 @@ const buildCommonPaths = () => ({
       responses: {
         200: jsonResponse('Public Relay feature flags and enabled auth providers.', {
           type: 'object',
-          additionalProperties: true
+          required: ['avatarUrl', 'features', 'name', 'version'],
+          properties: {
+            avatarUrl: nullableString,
+            features: {
+              type: 'object',
+              additionalProperties: true
+            },
+            name: { type: 'string' },
+            version: { type: 'string' }
+          }
         })
       }
     }

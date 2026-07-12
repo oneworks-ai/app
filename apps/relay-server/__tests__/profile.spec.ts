@@ -200,6 +200,17 @@ const waitForOpenApiAuditEvents = async (dataPath: string, expectedCount: number
 }
 
 describe('relay profile security routes', () => {
+  it('exposes the configured service avatar through public discovery', async () => {
+    const { baseUrl } = await listenRelay({ avatarUrl: 'https://cdn.example.com/relay.png' })
+    const { body, response } = await requestJson(baseUrl, '/api/relay/info')
+
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({
+      avatarUrl: 'https://cdn.example.com/relay.png',
+      name: 'OneWorks Relay'
+    })
+  })
+
   it('keeps platform admin and current-user OpenAPI path inventories separated', () => {
     const adminSpec = openApiDocument(buildRelayAdminOpenApiDocument('https://relay.example.com'))
     const profileSpec = openApiDocument(buildRelayProfileOpenApiDocument('https://relay.example.com'))

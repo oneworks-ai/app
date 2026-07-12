@@ -47,7 +47,7 @@ The default product path is the managed OneWorks Relay service. Official service
 
 Each server can also use `baseUrl` when a full URL is easier than separate `server`, `port`, and `protocol` fields. The device identity and remote-issued device tokens are stored under the project home runtime directory, not in the project config file. Tokens are stored per server id so switching Relay systems does not overwrite another system's token.
 
-The plugin UI can open the selected Relay Server's `/login` page. In Electron, the login redirect uses the `oneworks://relay/auth` custom scheme to return to the current workspace plugin page; in Web, the redirect returns to the current plugin route. The callback token is used only to register the current device and is then replaced by the remote-issued device token.
+The Web and Electron clients render a flat, native OneWorks login page and consume the selected Relay Server's `/api/auth/login-options` response through the scoped plugin API to show only enabled password, passkey, verification-code, and OAuth/OIDC provider choices; the plugin does not hardcode identity providers. Native password, invite, and verification-code requests also pass through fixed scoped actions so the Electron renderer never depends on cross-origin Relay CORS or gains an arbitrary remote proxy. Its remembered-account, remember-account, active form, and alternate-method interactions mirror Relay Admin. Password login stays in the Client form; verification code is shown there only when the server can complete it without a Turnstile challenge. Passkey continues on the Relay origin required by WebAuthn, while a selected SSO provider performs its authorization and returns to OneWorks. Older servers can still use the hosted compatibility login page. In Electron, Passkey and SSO open in the system browser, then the `oneworks://relay/auth` custom scheme returns to the originating Launcher or workspace plugin page. The callback token is used only to register the current device and is then replaced by the remote-issued device token.
 
 The official package also contributes top-level CLI commands: `oneworks login`, `oneworks users`, `oneworks users enable`, `oneworks users disable`, and `oneworks logout`. They default to the managed Cloudflare service (`-s cf`), accept `-s vercel` / `-s vc` and custom server URLs, and store local login state in `~/.oneworks/auth.json`.
 
@@ -62,7 +62,7 @@ npx @oneworks/relay-server --host 0.0.0.0 --port 8788
 - Device registration and heartbeat against the configured Relay service.
 - Server-hosted SSO login page launch and Web/Electron callback handling.
 - Configurable `servers[]` entries with server / port, named Relay systems, pairing tokens, and capability switches.
-- Scoped plugin API for status, login URL, login callback, connect, disconnect, and forget actions.
+- Scoped plugin API for status, native login capability / fixed login actions, login URL, login callback, connect, disconnect, and forget actions.
 - Optional session exposure with metadata snapshots and forwarding jobs.
 - Optional user-root instruction document sync for `~/AGENTS.md`, `~/.oo/AGENTS.md`, and `~/.oo/rules/**/*.md`; Relay relays client-produced encrypted-format payloads with synchronization, scope, integrity, and audit metadata without parsing or indexing document content, `.local.md` files stay local, and deployment operators can reproduce the namespace-derived keys, so the protocol is not zero-knowledge against them.
 - Device token storage under the project home runtime directory.

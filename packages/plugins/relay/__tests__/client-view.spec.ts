@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { activatePlugin } from '../src/client/index.js'
-import { RelayHomeView, readJsonResponse } from '../src/client/react-view.js'
+import { RelayHomeView, readJsonResponse, renderAvatar } from '../src/client/react-view.js'
 import { relayClientCss } from '../src/client/styles.js'
 import type { PluginClientContext, PluginReactHost, PluginViewRegistration } from '../src/client/types.js'
 
@@ -23,7 +23,7 @@ const createReactHost = (): PluginReactHost & { createElement: ReturnType<typeof
   ]) as PluginReactHost['useState']
 })
 
-const installBrowser = () => {
+const installBrowser = (desktop = false) => {
   vi.stubGlobal('window', {
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
@@ -33,7 +33,8 @@ const installBrowser = () => {
       pathname: '/ui/plugins/relay/home/accounts',
       search: ''
     },
-    open: vi.fn()
+    open: vi.fn(),
+    ...(desktop ? { oneworksDesktop: {} } : {})
   })
   vi.stubGlobal('document', {
     addEventListener: vi.fn(),
@@ -48,13 +49,14 @@ const installBrowser = () => {
   })
 }
 
-const createContext = () => {
+const createContext = (status: Record<string, unknown> = { accounts: [], servers: [] }) => {
   const react = createReactHost()
   let homeRegistration: PluginViewRegistration | undefined
+  const registerSlot = vi.fn(() => ({ dispose: vi.fn() }))
   const ctx: PluginClientContext = {
     api: {
       fetch: vi.fn(async () =>
-        new Response(JSON.stringify({ accounts: [], servers: [] }), {
+        new Response(JSON.stringify(status), {
           headers: { 'content-type': 'application/json' }
         })
       )
@@ -65,7 +67,7 @@ const createContext = () => {
     react,
     scope: 'relay',
     slots: {
-      register: vi.fn(() => ({ dispose: vi.fn() }))
+      register: registerSlot
     },
     views: {
       register: vi.fn((viewId, registration) => {
@@ -79,7 +81,8 @@ const createContext = () => {
   return {
     ctx,
     getHomeRegistration: () => homeRegistration,
-    react
+    react,
+    registerSlot
   }
 }
 
@@ -102,11 +105,140 @@ describe('relay plugin client view registration', () => {
     const view = { route: { setActions: vi.fn(), setBreadcrumb: vi.fn(), setTitle: vi.fn() } }
     const node = homeRegistration?.renderNode?.(view)
 
-    expect(react.createElement).toHaveBeenCalledWith(RelayHomeView, { ctx, view })
+    expect(react.createElement).toHaveBeenCalledWith(RelayHomeView, {
+      ctx,
+      onAccountChanged: expect.any(Function),
+      view
+    })
     expect(node).toMatchObject({
       props: { ctx, view },
       type: RelayHomeView
     })
+
+    cleanup.dispose()
+  })
+
+  it('registers a direct login footer action when no account is signed in', async () => {
+    installBrowser()
+    const { ctx, registerSlot } = createContext()
+
+    const cleanup = await activatePlugin(ctx)
+
+    await vi.waitFor(() => {
+      expect(registerSlot).toHaveBeenCalledWith('nav.footer.before', {
+        icon: 'login',
+        id: 'account-login',
+        route: '/plugins/relay/home/accounts/login',
+        title: 'Log in'
+      })
+    })
+
+    cleanup.dispose()
+  })
+
+  it('keeps the account popover when a signed-in account exists', async () => {
+    installBrowser()
+    const { ctx, registerSlot } = createContext({
+      accounts: [{ accountKey: 'local:owner', name: 'Owner', sessionAuthenticated: true }],
+      servers: [{ id: 'local', name: 'Local', remoteBaseUrl: 'http://127.0.0.1:48890' }]
+    })
+
+    const cleanup = await activatePlugin(ctx)
+
+    await vi.waitFor(() => {
+      expect(registerSlot).toHaveBeenCalledWith(
+        'nav.footer.before',
+        expect.objectContaining({
+          accountPopover: expect.objectContaining({
+            actions: expect.arrayContaining([
+              expect.objectContaining({
+                id: 'login',
+                route: '/plugins/relay/home/accounts/login'
+              })
+            ])
+          }),
+          id: 'account-popover'
+        })
+      )
+    })
+
+    cleanup.dispose()
+  })
+
+  it('opens the native login route in Electron', async () => {
+    installBrowser(true)
+    const { ctx, registerSlot } = createContext()
+
+    const cleanup = await activatePlugin(ctx)
+
+    await vi.waitFor(() => {
+      expect(registerSlot).toHaveBeenCalledWith('nav.footer.before', {
+        icon: 'login',
+        id: 'account-login',
+        route: '/plugins/relay/home/accounts/login',
+        title: 'Log in'
+      })
+    })
+
+    cleanup.dispose()
+  })
+
+  it('keeps the latest account footer when status requests resolve out of order', async () => {
+    installBrowser()
+    let resolveInitialStatus: ((response: Response) => void) | undefined
+    let resolveLatestStatus: ((response: Response) => void) | undefined
+    const initialStatus = new Promise<Response>((resolve) => {
+      resolveInitialStatus = resolve
+    })
+    const latestStatus = new Promise<Response>((resolve) => {
+      resolveLatestStatus = resolve
+    })
+    const { ctx, getHomeRegistration, registerSlot } = createContext()
+    ctx.api.fetch = vi.fn()
+      .mockReturnValueOnce(initialStatus)
+      .mockReturnValueOnce(latestStatus)
+
+    const cleanup = await activatePlugin(ctx)
+    await vi.waitFor(() => expect(ctx.api.fetch).toHaveBeenCalledTimes(1))
+    const node = getHomeRegistration()?.renderNode?.() as {
+      props?: { onAccountChanged?: () => Promise<void> }
+    }
+    const latestRefresh = node.props?.onAccountChanged?.()
+    await vi.waitFor(() => expect(ctx.api.fetch).toHaveBeenCalledTimes(2))
+
+    resolveLatestStatus?.(
+      new Response(
+        JSON.stringify({
+          accounts: [{ accountKey: 'local:owner', name: 'Owner', sessionAuthenticated: true }],
+          servers: [{ id: 'local', name: 'Local', remoteBaseUrl: 'http://127.0.0.1:48890' }]
+        }),
+        { headers: { 'content-type': 'application/json' } }
+      )
+    )
+    await latestRefresh
+    await vi.waitFor(() => {
+      expect(registerSlot).toHaveBeenLastCalledWith(
+        'nav.footer.before',
+        expect.objectContaining({
+          accountPopover: expect.any(Object),
+          id: 'account-popover'
+        })
+      )
+    })
+
+    resolveInitialStatus?.(
+      new Response(JSON.stringify({ accounts: [], servers: [] }), {
+        headers: { 'content-type': 'application/json' }
+      })
+    )
+    await initialStatus
+    await Promise.resolve()
+
+    expect(registerSlot).toHaveBeenCalledTimes(1)
+    expect(registerSlot).not.toHaveBeenCalledWith(
+      'nav.footer.before',
+      expect.objectContaining({ id: 'account-login' })
+    )
 
     cleanup.dispose()
   })
@@ -124,6 +256,111 @@ describe('relay plugin client view registration', () => {
 })
 
 describe('relay plugin client view styles', () => {
+  it('keeps avatar initials visible when a configured image fails to load', () => {
+    const react = createReactHost()
+    const avatar = renderAvatar(react, {
+      avatarUrl: 'https://cdn.example.com/missing.png',
+      name: 'Official Dev',
+      presence: 'offline',
+      presenceLabel: '服务不可用',
+      state: 'server'
+    }) as {
+      children: Array<{
+        children: unknown[]
+        props: Record<string, unknown>
+        type: string
+      }>
+    }
+    const image = avatar.children[0]
+    const fallback = avatar.children[1]
+    const presence = avatar.children[2]
+    const target = {
+      hidden: false,
+      parentElement: { removeAttribute: vi.fn(), setAttribute: vi.fn() }
+    }
+
+    expect(fallback.props.className).toBe('oneworks-relay__account-avatar-fallback')
+    expect(fallback.children).toEqual(['OD'])
+    expect(image.type).toBe('img')
+    expect(image.props.src).toBe('https://cdn.example.com/missing.png')
+    ;(image.props.onError as (event: { currentTarget: typeof target }) => void)({ currentTarget: target })
+    expect(target.hidden).toBe(true)
+    expect(target.parentElement.removeAttribute).toHaveBeenCalledWith('data-has-image')
+    ;(image.props.onLoad as (event: { currentTarget: typeof target }) => void)({ currentTarget: target })
+    expect(target.hidden).toBe(false)
+    expect(target.parentElement.setAttribute).toHaveBeenCalledWith('data-has-image', 'true')
+    expect(presence.props).toMatchObject({
+      className: 'oneworks-relay__account-avatar-presence',
+      'data-state': 'offline',
+      title: '服务不可用'
+    })
+  })
+
+  it('renders Relay login as a native client page instead of an iframe', async () => {
+    const source = await readFile(new URL('../src/client/react-view.ts', import.meta.url), 'utf8')
+    const serversPageSource = source.slice(
+      source.indexOf('const ServersPage'),
+      source.indexOf('const tokenEditorInitialState')
+    )
+
+    expect(source).toContain('serviceInfo == null ? server.avatarUrl : serviceInfo.avatarUrl')
+    expect(serversPageSource).toContain("role: editing ? undefined : 'link'")
+    expect(serversPageSource).toContain('onClick: editing ? undefined : openServerLogin')
+    expect(serversPageSource).toContain(
+      'officialServerLabel(server) ?? cleanText(serviceInfo?.name) ?? serverDisplayName(server)'
+    )
+    expect(serversPageSource).not.toContain("placeholder: '服务名称'")
+    expect(serversPageSource).not.toContain('className: adminListSurfaceClassNames.nativeMeta')
+    expect(serversPageSource).not.toContain('title: address')
+    expect(serversPageSource).toContain('renderServerUrlInput(react, {')
+    expect(serversPageSource.indexOf('serverManagementForm,')).toBeLessThan(
+      serversPageSource.indexOf('...servers.map')
+    )
+    expect(serversPageSource).toContain('`登录到 $' + '{title}，$' + '{presenceAccessibleLabel}`')
+    expect(serversPageSource).not.toContain("icon: 'login'")
+    expect(relayClientCss).toContain('.oneworks-relay--login-route .oneworks-relay__shell { background-image: none; }')
+    expect(relayClientCss).toContain('background: transparent; box-shadow: none;')
+    expect(relayClientCss).toContain(
+      'font-size: var(--oneworks-relay-account-avatar-font-size); line-height: 1;'
+    )
+    expect(relayClientCss).toContain('.oneworks-relay__account-avatar-fallback')
+    expect(relayClientCss).toContain('.oneworks-relay__account-avatar[data-has-image="true"]')
+    expect(relayClientCss).toContain('.oneworks-relay__account-avatar-presence[data-state="online"]')
+    expect(relayClientCss).not.toContain('.oneworks-relay__server-url-input {')
+    expect(relayClientCss).not.toContain(
+      '.oneworks-relay__server-editor .plugin-host-control-input.ant-input-affix-wrapper'
+    )
+    expect(relayClientCss).toContain(
+      '.oneworks-relay__account-avatar-image:not([hidden]) + .oneworks-relay__account-avatar-fallback'
+    )
+    expect(relayClientCss).toContain('.oneworks-relay__account-avatar-image[hidden] { display: none; }')
+    expect(relayClientCss).toContain('--oneworks-relay-login-gap: 10px;')
+    expect(relayClientCss).toContain('.oneworks-relay__login-error-state-header')
+    expect(relayClientCss).toContain('.oneworks-relay__login-error-state-details')
+    expect(relayClientCss).toContain(
+      '.oneworks-relay__login-footer { min-width: 0; display: grid; justify-items: start;'
+    )
+    expect(relayClientCss).not.toContain('.oneworks-relay__login-service-picker')
+    expect(relayClientCss).not.toContain('.oneworks-relay__login-compatibility')
+    expect(relayClientCss).toContain(
+      '.oneworks-relay--launcher-login .oneworks-relay__surface { min-height: 0; height: 100%; align-content: center; }'
+    )
+    expect(relayClientCss).toContain('.plugin-view-host--launcher .oneworks-relay,')
+    expect(relayClientCss).toContain(
+      '.plugin-view-host--launcher .oneworks-relay__project-rule-tab-panel { background: transparent; }'
+    )
+    expect(relayClientCss).toContain(
+      '.plugin-view-host--launcher .oneworks-relay__shell { background-image: none; }'
+    )
+    expect(relayClientCss).toContain('background: var(--oneworks-relay-surface-background);')
+    expect(source).toContain("launcherSurface ? ' oneworks-relay--launcher-login' : ''")
+    expect(source).toContain("label: launcherSurface ? '登录' : '登录账号'")
+    expect(source).toMatch(/const accountActions:[\s\S]*?launcherSurface\s*\? \[loginAction\]/u)
+    expect(relayClientCss).not.toContain(
+      '.oneworks-relay--login-route .oneworks-relay__surface { min-height: calc(100dvh - var(--route-container-header-overlay-height, 39px) - 24px); align-content: center; justify-items: center; padding: 20px; background: radial-gradient'
+    )
+  })
+
   it('does not stack native tab margin on the host route spacing', () => {
     expect(relayClientCss).toContain('.oneworks-relay__project-rule-detail { gap: 0; }')
     expect(relayClientCss).toContain(
@@ -219,5 +456,18 @@ describe('relay project rule detail interaction', () => {
     expect(source).toContain("writeDocumentPanelQuery({ documentPath: null, search: '' })")
     expect(source).not.toContain('关联文件')
     expect(source).not.toContain('renderProjectRuleFiles')
+  })
+
+  it('uses server-provided SSO icon identities without a redundant section title', async () => {
+    const source = await readFile(new URL('../src/client/react-view.ts', import.meta.url), 'utf8')
+
+    expect(source).toContain("provider.icon === 'google'")
+    expect(source).toContain("provider.icon === 'github'")
+    expect(source).toContain('iconNode: renderProviderIcon(provider)')
+    const ssoSection = source.slice(
+      source.indexOf("{ className: 'oneworks-relay__login-sso oneworks-relay__login-section' }"),
+      source.indexOf("{ className: 'oneworks-relay__login-provider-grid' }")
+    )
+    expect(ssoSection).not.toContain('options.messages.signInWithSso')
   })
 })

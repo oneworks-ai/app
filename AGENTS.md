@@ -43,7 +43,7 @@ pnpm --silent tools dev-service ensure <target> --json
 
 统一入口会把 worktree 级服务状态写到 `.logs/dev-start-<target>.json`，例如 web 对应 `.logs/dev-start-web.json`；机器级 `android-emulator`、`electron` 和 `electron-workspace` 的路径由 status 返回，位于用户目录 `.oneworks/dev-service/`。当用户询问当前目录是否已有服务、URL / PID / 端口、这个服务属于哪个 worktree，或多会话如何复用时，优先运行 `pnpm --silent tools dev-service status <target> --json`；它会读取状态快照、探活并返回当前 operation lease，不会启动服务。`.logs/dev-start-<target>.events.jsonl` 记录普通 target 的跨会话操作历史。不要为查询这些信息而另起服务；如果用户的意图是启动或拉取后启动，运行 `ensure`，让脚本完成复用判断和端口处理。
 
-多步骤启动、失败日志收集或跨会话运维可以按需委派给项目自定义 `dev_service_operator`；简单单命令启动仍由当前会话直接执行，不创建常驻运维 agent。所有 agent 只通过 `pnpm --silent tools dev-service ensure / status / events / logs / stop / restart ... --json` 操作长期服务，不手工杀 PID。`stop` 和 `restart` 无论服务是否健康，都必须先有用户对该 target 的显式授权。查询失败证据时只读 target-scoped、有限行且已脱敏的日志。共享状态、操作租约、事件和 handoff 标准见 `.oo/rules/maintenance/dev-service-coordination.md`。
+多步骤启动、失败日志收集或跨会话运维可以按需委派给项目自定义 `dev_service_operator`；简单单命令启动仍由当前会话直接执行，不创建常驻运维 agent。所有 agent 只通过 `pnpm --silent tools dev-service ensure / status / events / logs / stop / restart ... --json` 操作长期服务，不手工杀 PID。`stop` 以及机器级共享的 Electron / Android 重启必须逐次取得用户对该 target 的显式授权；worktree-local target 的 `restart` 可以复用用户明确授予的“当前任务内按需重启”授权，不能因服务不健康自行推定。授权范围、失效条件和跨会话传递格式见 `.oo/rules/maintenance/dev-service-coordination.md`。查询失败证据时只读 target-scoped、有限行且已脱敏的日志。
 
 `electron` 与 `electron-workspace` 共享 Electron 单实例资源，不能并行运行。`android-emulator` 是跨 worktree 的机器级资源，必须服从全局协调，不能只凭当前 worktree 快照启动或停止另一会话正在使用的 AVD。
 
@@ -61,7 +61,7 @@ pnpm --silent tools dev-service ensure <target> --json
 - 分配前先查当前工具 schema 和可用 model / reasoning，不硬编码不存在的值；优先使用能满足验收的最低 reasoning。模型分级不等于每个小任务都要新建子线程，没有独立验收面或委派成本更高时直接在当前线程完成。
 - “计划使用低档模型”不等于实际降档。委派工具如果不能显式传入或核验 model / reasoning，继承父模型的 subagent 不得计为节省消耗；不要为了模型分级创建这种线程。用户已明确要求独立会话且工具支持模型参数时，才使用可指定 model / reasoning 的独立线程；否则由当前线程完成，或在模型隔离确实影响成本时回报限制。
 - Prompt 中的“到时停止”只是软约束。成本敏感委派必须由主线程记录实际开始时间和 deadline，定期检查状态；到 deadline 时即使 subagent 仍在推理，也要主动中断或停止等待并收取已有结果。当前工具不能中断时，不要把长时间任务委派给它后声称有硬超时保证。
-- 独立协调线程本身也必须按任务难度选择最低充分 model / reasoning，不能只给 worker 降档而让边界清晰的协调任务沿用默认 Sol / xhigh。总预算必须预留集成和最终输出时间；到 integration cutoff 后不再发起取证或归档类工具调用。协调器、worker 和整个任务的耗时均以外部平台记录为准，不使用模型自报时间替代。
+- 独立协调线程本身也必须按任务难度选择最低充分 model / reasoning，不能只给 worker 降档而让边界清晰的协调任务沿用默认 Sol / xhigh。总预算必须在 integration cutoff 前预留 cleanup cutoff，用于提取终态结果、删除 heartbeat 和归档独立线程；到 integration cutoff 后不再发起新的实现或取证调用。协调器、worker 和整个任务的耗时均以外部平台记录为准，不使用模型自报时间替代。
 - 模型档位、公开消耗 / 速度信息、抽象路由算法和示例见 `.oo/rules/maintenance/model-routing.md`；复杂任务的拆分、监控与集成流程见 `.oo/rules/maintenance/task-planning.md`。
 
 ## 独立任务协作
@@ -69,8 +69,8 @@ pnpm --silent tools dev-service ensure <target> --json
 - 在声称不能为独立任务指定 model / reasoning 前，先检查当前 Codex 的 `create_thread`、`fork_thread`、`send_message_to_thread` 等线程能力及其 schema；同目录 fork 可以复用已有 worktree 和完成历史，后续线程消息也可能支持显式切换 model / reasoning。能力未核验前，不要把限制当作事实。
 - 独立线程能力可用时，commit、push、PR 创建或更新、无冲突 merge 执行等 Git / PR 写操作必须交给显式选定最低充分 model / reasoning 的独立任务（通常 Luna / low 或 medium）；只有工具不可用或无法安全共享状态时才能回退，并须说明原因。边界清楚的实现和证据准备可用 Terra / medium；主线程始终保留授权、风险判断、独立审阅与 merge 决策。
 - 同一 worktree 同时只能有一个写入者。并行只读审阅可以共享；并行代码写入应优先使用独立 worktree。
-- 每个独立任务 prompt 必须携带主任务 thread ID，并要求 worker 在每个阶段完成、失败或阻塞时主动发送结构化回调；没有回调不能视为完成。
-- 创建独立任务时必须同步建立约十分钟的 heartbeat；只有任务在同步创建调用内已完成且已回调、无需后续观察时可省略。任务结束必须删除 heartbeat；监控、UI 证据、PR 收口与归档的完整清单见 `.oo/rules/maintenance/task-planning.md`。
+- 每个独立任务 prompt 必须携带主任务 thread ID，并要求 worker 在每个阶段完成、失败或阻塞时主动发送结构化回调；最终回调必须声明终态、证据、是否仍需 follow-up 和是否可归档。没有回调或等价的父线程核验证据不能视为完成，`idle` / worker 最终回复本身也不会自动归档线程。
+- 创建独立任务时必须同步建立约十分钟的 heartbeat；只有任务在同步创建调用内已完成且已回调、无需后续观察时可省略。独立 worker、reviewer 或 Git operator 到达 `COMPLETED`、`FAILED`、`STOPPED`、`CANCELLED`，或其 `BLOCKED` 已被主线程记录并接手后，主线程必须先读取并核验最终证据，再删除 heartbeat、显式归档该独立线程并确认归档成功；完成这些清理前不得报告主任务已完全结束。不要自动归档用户主会话、仍在运行 / 等待审批的线程或其他任务创建的线程。完整生命周期清单见 `.oo/rules/maintenance/task-planning.md`。
 - Git / PR 独立任务必须在 prompt 中携带精确的仓库、PR / 分支、写操作、merge 方式、分支清理范围和用户授权。可信项目内所有新加载任务都使用 `.codex/config.toml` 的 auto-review，`.codex/rules/git-delivery.rules` 再对常见 Git / PR 写命令逐次提示；遇到 `waitingOnApproval` 先按 task-planning 的权限预检恢复，不重复创建 worker，也不要把 GitHub Connector 的集成授权 403 与本地 shell 审批混为一谈。
 
 ## 常规仓库阅读
@@ -133,6 +133,7 @@ pnpm --silent tools dev-service ensure <target> --json
 
 前端任务补充：
 
+- 只要任务涉及用户可见的布局、样式、主题、响应式、组件外观、视觉素材或参考图还原，除了 `.oo/rules/FRONTEND-STANDARD.md`，还必须加载项目 `.oo/skills/ui-design-memory` 并继续阅读 `.oo/rules/frontend-standard/design-memory.md`；任何用户可见视觉改动结束前必须创建独立只读会话，等待其真实执行预期行为和视觉一致性验证，读取并核验证据，确认当前 revision 获得 `PASS` 后才能停止。还必须完成经验分类、冲突检查，以及仅在存在稳定经验时的项目内持久化。单点机械调整可以简化证据，但不能跳过独立验证。
 - 只要任务涉及 `apps/client` 的页面交互、样式、浮层、focus、主题、热更新、真实 Chrome 回归或 CDP 调试，除了 `.oo/rules/FRONTEND-STANDARD.md`，还必须继续阅读 `.oo/rules/frontend-standard/debugging.md`。
 - 如果改动范围落在 `apps/client/`，还应继续阅读 `apps/client/AGENTS.md`；如果涉及聊天页 / sender / 消息级交互，再继续阅读 `apps/client/src/components/chat/AGENTS.md`。
 - 如果任务落在某个已有子模块，优先继续读最近的 `AGENTS.md`，用它建立模块地图；不要一开始就广泛读取源码或规则文件。

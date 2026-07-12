@@ -20,6 +20,7 @@ import { isRecord, normalizeRemoteBaseUrl, parseJson, toString } from './utils.j
 
 const LEGACY_STORE_PATH = ['.local', 'plugins', 'relay', 'device.json']
 const STORE_PATH = ['relay', 'device.json']
+const SERVICE_INFO_STORE_PATH = ['relay', 'service-info-cache.json']
 const MANAGEMENT_SERVER_STORE_PATH = ['.local', 'plugins', 'relay', 'management-server.json']
 
 const createSecret = () => randomBytes(32).toString('base64url')
@@ -137,63 +138,7 @@ export const createRelayDeviceStore = (projectHome: string) => {
   return { readStore, storePath, writeStore }
 }
 
-export interface RelayManagementServerStore {
-  createdAt?: string
-  id: string
-  kind?: string
-  name?: string
-  updatedAt?: string
-}
-
-const normalizeManagementServerStore = (parsed: Record<string, unknown>): RelayManagementServerStore => {
-  const id = toString(parsed.id) || randomUUID()
-  const createdAt = toString(parsed.createdAt)
-  const updatedAt = toString(parsed.updatedAt)
-  const kind = toString(parsed.kind)
-  const name = toString(parsed.name)
-  return {
-    ...(createdAt === '' ? {} : { createdAt }),
-    id,
-    ...(kind === '' ? {} : { kind }),
-    ...(name === '' ? {} : { name }),
-    ...(updatedAt === '' ? {} : { updatedAt })
-  }
-}
-
-export const createRelayManagementServerStore = (projectHome: string) => {
-  const storePath = join(projectHome, ...MANAGEMENT_SERVER_STORE_PATH)
-
-  const writeStore = async (store: RelayManagementServerStore) => {
-    await mkdir(dirname(storePath), { recursive: true })
-    await writeFile(
-      storePath,
-      `${JSON.stringify(store, null, 2)}\n`,
-      {
-        encoding: 'utf8',
-        mode: 0o600
-      }
-    )
-  }
-
-  const readStore = async (): Promise<RelayManagementServerStore> => {
-    const parsed = await readJsonFile(storePath)
-    const store = normalizeManagementServerStore(parsed ?? {})
-    if (parsed == null || toString(parsed.id) === '') {
-      const now = new Date().toISOString()
-      const next = {
-        ...store,
-        createdAt: store.createdAt ?? now,
-        updatedAt: now
-      }
-      await writeStore(next)
-      return next
-    }
-    return store
-  }
-
-  return {
-    readStore,
-    storePath,
-    writeStore
-  }
-}
+export { createRelayManagementServerStore } from './management-server-store.js'
+export type { RelayManagementServerStore } from './management-server-store.js'
+export { createRelayServiceInfoStore } from './service-info-store.js'
+export type { RelayCachedServiceInfo } from './service-info-store.js'

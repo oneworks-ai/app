@@ -1196,6 +1196,17 @@ export const createWindowManager = ({
     return windowRecord
   }
 
+  const openLauncherRouteWindow = async (routePath: string) => {
+    const windowRecord = await createLauncherWindow({ show: false })
+    if (!isWindowRecordUsable(windowRecord)) return windowRecord
+    const clientUrl = await ensureSharedClientUrl()
+    const targetUrl = normalizeWorkspaceClientUrl(clientUrl, routePath)
+    windowRecord.currentServerUrl = clientUrl
+    await windowRecord.window.loadURL(targetUrl)
+    showLauncherWindowRecord(windowRecord)
+    return windowRecord
+  }
+
   const workspaceDialogController = createWorkspaceDialogController({
     loadWorkspaceInWindow,
     openWorkspaceWindow
@@ -1218,6 +1229,7 @@ export const createWindowManager = ({
     markWorkspaceStartupWindowReady,
     openCurrentWorkspaceFileInExternalOpener,
     openCurrentWorkspaceResource,
+    openLauncherRouteWindow,
     openWorkspaceFileInExternalOpener,
     openWorkspaceDialog: workspaceDialogController.openWorkspaceDialog,
     openStandaloneTabWindow,

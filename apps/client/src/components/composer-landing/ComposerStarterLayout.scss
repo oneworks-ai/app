@@ -1,0 +1,111 @@
+.composer-starter-layout {
+  --chat-surface-control-size: 18px;
+  --chat-surface-padding: 10px;
+  --chat-surface-input-padding: var(--chat-surface-padding);
+
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  container: composer-starter-layout / size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.composer-starter-layout__content {
+  width: 100%;
+  min-width: 0;
+  max-height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.composer-starter-layout__introduction,
+.composer-starter-layout__composer {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+.composer-starter-layout__main {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.composer-starter-layout__composer .composer-stack {
+  padding: 0;
+}
+
+@container composer-starter-layout (max-height: 560px) {
+  .composer-starter-layout__main {
+    display: none;
+  }
+}
+
+@media (max-width: 960px) {
+  .composer-starter-layout {
+    --composer-content-frame-inline-padding: 0px;
+
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  .composer-starter-layout__content {
+    height: 100%;
+    justify-content: flex-start;
+  }
+
+  .composer-starter-layout__introduction {
+    order: 1;
+  }
+
+  .composer-starter-layout.has-introduction:not(.has-starter-list)
+    .composer-starter-layout__introduction {
+    margin-top: auto;
+    margin-bottom: 10px;
+  }
+
+  .composer-starter-layout.has-introduction.has-starter-list
+    .composer-starter-layout__introduction {
+    margin-top: auto;
+  }
+
+  .composer-starter-layout__main {
+    order: 2;
+  }
+
+  .composer-starter-layout.has-starter-list .composer-starter-layout__main {
+    margin-bottom: auto;
+  }
+
+  .composer-starter-layout.has-starter-list:not(.has-introduction)
+    .composer-starter-layout__main {
+    margin-block: auto;
+  }
+
+  .composer-starter-layout__composer {
+    order: 3;
+  }
+
+  .composer-starter-layout:not(.has-introduction):not(.has-starter-list)
+    .composer-starter-layout__composer {
+    margin-top: auto;
+  }
+}
+
+@media (max-width: 600px) {
+  .composer-starter-layout {
+    --chat-surface-padding: 6px;
+  }
+}

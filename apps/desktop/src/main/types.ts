@@ -16,6 +16,7 @@ export interface DesktopInterfaceLanguageConfig {
 }
 
 export interface LaunchRequest {
+  launcherRoutePath?: string
   standaloneRoutePath?: string
   routePath?: string
   workspaceFolder?: string

@@ -11,8 +11,6 @@ interface ComposerLandingProps {
   children: ReactNode
   className?: string
   compact?: boolean
-  composer: ReactNode
-  contentClassName?: string
 }
 
 export function ComposerStack({ children, className }: ComposerStackProps) {
@@ -28,20 +26,15 @@ export function ComposerStack({ children, className }: ComposerStackProps) {
 export function ComposerLanding({
   children,
   className,
-  compact = false,
-  composer,
-  contentClassName
+  compact = false
 }: ComposerLandingProps) {
   return (
     <div
       className={['composer-landing', compact ? 'composer-landing--compact' : '', className].filter(Boolean).join(' ')}
     >
-      <div className={['composer-landing__content', contentClassName].filter(Boolean).join(' ')}>
+      <div className='composer-landing__content'>
         {children}
       </div>
-      <ComposerStack>
-        {composer}
-      </ComposerStack>
     </div>
   )
 }
