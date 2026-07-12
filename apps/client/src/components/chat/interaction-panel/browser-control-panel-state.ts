@@ -1,9 +1,6 @@
 import type { SessionPanelArea, SessionPanelAreaState, SessionPanelState, SessionPanelTab } from '@oneworks/types'
 
-import {
-  fromWorkspaceDrawerIframeTabId,
-  toWorkspaceDrawerIframeTabId
-} from './interaction-panel-iframe-pages'
+import { fromWorkspaceDrawerIframeTabId, toWorkspaceDrawerIframeTabId } from './interaction-panel-iframe-pages'
 
 type PanelLifecycleCommand =
   | { type: 'close' }
@@ -37,7 +34,9 @@ const removeTab = (area: SessionPanelAreaState, tabId: string): SessionPanelArea
     tabs,
     ...(area.activeTabId !== tabId
       ? { activeTabId: area.activeTabId }
-      : tabs[0] == null ? {} : { activeTabId: tabs[0].id })
+      : tabs[0] == null
+      ? {}
+      : { activeTabId: tabs[0].id })
   }
 }
 
@@ -122,10 +121,14 @@ export const applyBrowserControlPanelLifecycleCommand = ({
   const withoutSource = replaceArea(state, sourceArea, removeTab(state[sourceArea], sourceTabId))
   return {
     openedArea: targetArea,
-    state: replaceArea(withoutSource, targetArea, addActiveTab(withoutSource[targetArea], {
-      ...sourceTab,
-      id: targetTabId
-    })),
+    state: replaceArea(
+      withoutSource,
+      targetArea,
+      addActiveTab(withoutSource[targetArea], {
+        ...sourceTab,
+        id: targetTabId
+      })
+    ),
     result: { moved: true, panel_page_id: panelPageId, placement: targetArea, page_id_changed: true }
   }
 }

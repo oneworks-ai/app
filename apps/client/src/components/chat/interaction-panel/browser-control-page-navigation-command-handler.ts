@@ -1,7 +1,4 @@
-import type {
-  BrowserControlPageCommandCompletion,
-  BrowserControlPageCommandRequest
-} from '@oneworks/types'
+import type { BrowserControlPageCommandCompletion, BrowserControlPageCommandRequest } from '@oneworks/types'
 
 export interface BrowserControlPageNavigationController {
   clearNavigationHistory: () => Promise<{ history: string[]; historyIndex: number }>
@@ -63,22 +60,26 @@ export const handleBrowserControlPageNavigationCommand = ({
 
   if (command.type === 'clear_navigation_history') {
     void controller.clearNavigationHistory()
-      .then(applied => complete({
-        ok: true,
-        result: {
-          current_index: applied.historyIndex,
-          current_url: applied.history[applied.historyIndex] ?? current.url,
-          page_id: request.pageId,
-          total_entries: applied.history.length
-        }
-      }))
-      .catch(error => complete({
-        ok: false,
-        error: {
-          code: 'NAVIGATION_HISTORY_CLEAR_FAILED',
-          message: error instanceof Error ? error.message : String(error)
-        }
-      }))
+      .then(applied =>
+        complete({
+          ok: true,
+          result: {
+            current_index: applied.historyIndex,
+            current_url: applied.history[applied.historyIndex] ?? current.url,
+            page_id: request.pageId,
+            total_entries: applied.history.length
+          }
+        })
+      )
+      .catch(error =>
+        complete({
+          ok: false,
+          error: {
+            code: 'NAVIGATION_HISTORY_CLEAR_FAILED',
+            message: error instanceof Error ? error.message : String(error)
+          }
+        })
+      )
     return true
   }
 
@@ -87,21 +88,25 @@ export const handleBrowserControlPageNavigationCommand = ({
       activeIndex: command.active_index,
       currentUrl: command.current_url,
       entries: command.entries
-    }).then(applied => complete({
-      ok: true,
-      result: {
-        current_index: applied.historyIndex,
-        current_url: applied.history[applied.historyIndex] ?? command.current_url,
-        page_id: request.pageId,
-        total_entries: applied.history.length
-      }
-    })).catch(error => complete({
-      ok: false,
-      error: {
-        code: 'NAVIGATION_HISTORY_SYNC_FAILED',
-        message: error instanceof Error ? error.message : String(error)
-      }
-    }))
+    }).then(applied =>
+      complete({
+        ok: true,
+        result: {
+          current_index: applied.historyIndex,
+          current_url: applied.history[applied.historyIndex] ?? command.current_url,
+          page_id: request.pageId,
+          total_entries: applied.history.length
+        }
+      })
+    ).catch(error =>
+      complete({
+        ok: false,
+        error: {
+          code: 'NAVIGATION_HISTORY_SYNC_FAILED',
+          message: error instanceof Error ? error.message : String(error)
+        }
+      })
+    )
     return true
   }
 

@@ -37,6 +37,7 @@ import { InteractionPanelIframeAddressBar } from './InteractionPanelIframeAddres
 import { InteractionPanelIframeNavigation } from './InteractionPanelIframeNavigation'
 import { InteractionPanelIframeToolbarActions } from './InteractionPanelIframeToolbarActions'
 import { InteractionPanelPageDebuggerListView } from './InteractionPanelPageDebuggerListView'
+import { resolveBrowserControlNavigationHistorySync } from './browser-control-navigation-history'
 import {
   buildChiiScriptSnippet,
   injectChiiTargetScript,
@@ -50,13 +51,12 @@ import {
   normalizeFrameUrl
 } from './interaction-panel-iframe-pages'
 import { findWebDebugTargetForUrl } from './interaction-panel-page-debugger'
-import { resolveBrowserControlNavigationHistorySync } from './browser-control-navigation-history'
 import type { InteractionPanelUrlHistoryEntry } from './interaction-panel-url-history'
 import { isWebviewHttpUrl, normalizeWebviewUrlForCompare } from './interaction-panel-webview-navigation'
+import { useBrowserControlPageCommands } from './use-browser-control-page-commands'
 import { useInteractionPanelUrlHistory } from './use-interaction-panel-url-history'
 import { useInteractionPanelWebview } from './use-interaction-panel-webview'
 import type { ElectronWebviewElement } from './use-interaction-panel-webview'
-import { useBrowserControlPageCommands } from './use-browser-control-page-commands'
 
 export type InteractionPanelIframePageVariant = 'mobile-debug-devtools'
 

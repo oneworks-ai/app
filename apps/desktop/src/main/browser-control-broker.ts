@@ -9,9 +9,9 @@ import path from 'node:path'
 import type { WebContents } from 'electron'
 
 import type { InteractionPanelWebviewScope } from './browser-activity'
-import type { SendBrowserControlPageCommand } from './browser-control-page-commands'
 import { createBrowserControlOperations } from './browser-control-operations'
 import type { BrowserControlRequest } from './browser-control-operations'
+import type { SendBrowserControlPageCommand } from './browser-control-page-commands'
 import { createBrowserControlPages, pageSummary } from './browser-control-pages'
 
 const browserControlHost = '127.0.0.1'

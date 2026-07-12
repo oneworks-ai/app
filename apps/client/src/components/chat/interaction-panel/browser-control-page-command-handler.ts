@@ -104,17 +104,21 @@ export const handleBrowserControlPageCommand = ({
       return true
     }
     void controller.applyDeviceMode(nextState)
-      .then(applied => completeOnce({
-        ok: true,
-        result: { device_mode: applied, page_id: request.pageId }
-      }))
-      .catch(error => completeOnce({
-        ok: false,
-        error: {
-          code: 'DEVICE_MODE_UPDATE_FAILED',
-          message: error instanceof Error ? error.message : String(error)
-        }
-      }))
+      .then(applied =>
+        completeOnce({
+          ok: true,
+          result: { device_mode: applied, page_id: request.pageId }
+        })
+      )
+      .catch(error =>
+        completeOnce({
+          ok: false,
+          error: {
+            code: 'DEVICE_MODE_UPDATE_FAILED',
+            message: error instanceof Error ? error.message : String(error)
+          }
+        })
+      )
     return true
   }
 
@@ -122,19 +126,23 @@ export const handleBrowserControlPageCommand = ({
     void controller.applyDevtools({
       enabled: command.enabled,
       ...(command.dock_side == null ? {} : { dockSide: command.dock_side })
-    }).then(applied => completeOnce({
-      ok: true,
-      result: {
-        devtools: { dock_side: applied.dockSide, enabled: applied.enabled },
-        page_id: request.pageId
-      }
-    })).catch(error => completeOnce({
-      ok: false,
-      error: {
-        code: 'DEVTOOLS_UPDATE_FAILED',
-        message: error instanceof Error ? error.message : String(error)
-      }
-    }))
+    }).then(applied =>
+      completeOnce({
+        ok: true,
+        result: {
+          devtools: { dock_side: applied.dockSide, enabled: applied.enabled },
+          page_id: request.pageId
+        }
+      })
+    ).catch(error =>
+      completeOnce({
+        ok: false,
+        error: {
+          code: 'DEVTOOLS_UPDATE_FAILED',
+          message: error instanceof Error ? error.message : String(error)
+        }
+      })
+    )
     return true
   }
 

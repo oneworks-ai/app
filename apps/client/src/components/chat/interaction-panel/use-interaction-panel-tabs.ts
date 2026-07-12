@@ -736,8 +736,10 @@ export function useInteractionPanelTabs({
       updateWebTab(pageId, page => selectIframePageHistoryIndex(page, index)),
     handleIframeUrlChange: (pageId: string, url: string) =>
       updateWebTab(pageId, page => updateIframePageUrl(page, url)),
-    handleIframePageChange: (pageId: string, updater: (page: InteractionPanelIframePage) => InteractionPanelIframePage) =>
-      updateWebTab(pageId, updater),
+    handleIframePageChange: (
+      pageId: string,
+      updater: (page: InteractionPanelIframePage) => InteractionPanelIframePage
+    ) => updateWebTab(pageId, updater),
     handleMoveTab,
     iframePages,
     mobileDebugPages,

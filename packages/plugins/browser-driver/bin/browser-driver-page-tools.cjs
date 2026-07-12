@@ -44,7 +44,9 @@ module.exports = [
     name: 'in_app_browser_duplicate_page',
     description: 'Duplicate an internal browser tab, optionally into another panel area.',
     inputSchema: {
-      type: 'object', additionalProperties: false, required: ['page_id'],
+      type: 'object',
+      additionalProperties: false,
+      required: ['page_id'],
       properties: { ...pageProperties, placement: { enum: ['right', 'bottom'] } }
     }
   },
@@ -52,7 +54,9 @@ module.exports = [
     name: 'in_app_browser_move_page',
     description: 'Move an internal browser tab between the right and bottom panel areas.',
     inputSchema: {
-      type: 'object', additionalProperties: false, required: ['page_id', 'placement'],
+      type: 'object',
+      additionalProperties: false,
+      required: ['page_id', 'placement'],
       properties: { ...pageProperties, placement: { enum: ['right', 'bottom'] } }
     }
   },
@@ -60,7 +64,9 @@ module.exports = [
     name: 'in_app_browser_reload',
     description: 'Reload an internal browser page, optionally bypassing cache.',
     inputSchema: {
-      type: 'object', additionalProperties: false, required: ['page_id'],
+      type: 'object',
+      additionalProperties: false,
+      required: ['page_id'],
       properties: { ...pageProperties, ignore_cache: { type: 'boolean', default: false } }
     }
   },
@@ -73,7 +79,9 @@ module.exports = [
     name: 'in_app_browser_navigate_history',
     description: 'Navigate to exactly one relative, absolute, backward, or forward entry in this tab history.',
     inputSchema: {
-      type: 'object', additionalProperties: false, required: ['page_id'],
+      type: 'object',
+      additionalProperties: false,
+      required: ['page_id'],
       oneOf: [{ required: ['offset'] }, { required: ['index'] }, { required: ['direction'] }],
       properties: {
         ...pageProperties,
@@ -92,7 +100,9 @@ module.exports = [
     name: 'in_app_browser_get_navigation_entries',
     description: 'Return a paginated slice of the current tab navigation history.',
     inputSchema: {
-      type: 'object', additionalProperties: false, required: ['page_id'],
+      type: 'object',
+      additionalProperties: false,
+      required: ['page_id'],
       properties: {
         ...pageProperties,
         offset: { type: 'integer', minimum: 0, default: 0 },
@@ -119,7 +129,9 @@ module.exports = [
     name: 'in_app_browser_set_device_mode',
     description: 'Enable or disable the device toolbar and configure its viewport.',
     inputSchema: {
-      type: 'object', additionalProperties: false, required: ['page_id', 'enabled'],
+      type: 'object',
+      additionalProperties: false,
+      required: ['page_id', 'enabled'],
       properties: {
         ...pageProperties,
         enabled: { type: 'boolean' },
@@ -136,7 +148,9 @@ module.exports = [
     name: 'in_app_browser_set_embedded_devtools',
     description: 'Open or close embedded page DevTools and optionally select its dock side.',
     inputSchema: {
-      type: 'object', additionalProperties: false, required: ['page_id', 'enabled'],
+      type: 'object',
+      additionalProperties: false,
+      required: ['page_id', 'enabled'],
       properties: {
         ...pageProperties,
         enabled: { type: 'boolean' },
@@ -148,7 +162,9 @@ module.exports = [
     name: 'in_app_browser_set_page_zoom',
     description: 'Set the native page zoom factor.',
     inputSchema: {
-      type: 'object', additionalProperties: false, required: ['page_id', 'factor'],
+      type: 'object',
+      additionalProperties: false,
+      required: ['page_id', 'factor'],
       properties: { ...pageProperties, factor: { type: 'number', minimum: 0.25, maximum: 5 } }
     }
   }

@@ -11,17 +11,17 @@ export interface BrowserControlDevicePreset {
   width?: number
 }
 
-const clamp = (value: number, minimum: number, maximum: number) =>
-  Math.min(maximum, Math.max(minimum, value))
+const clamp = (value: number, minimum: number, maximum: number) => Math.min(maximum, Math.max(minimum, value))
 
 const normalizeZoom = (
   value: BrowserControlViewportZoom | undefined,
   fallback: BrowserControlViewportZoom
-): BrowserControlViewportZoom => value == null
-  ? fallback
-  : value === 'auto'
-  ? value
-  : clamp(value, 0.25, 2)
+): BrowserControlViewportZoom =>
+  value == null
+    ? fallback
+    : value === 'auto'
+    ? value
+    : clamp(value, 0.25, 2)
 
 export const resolveBrowserControlDeviceMode = ({
   command,

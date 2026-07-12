@@ -1501,7 +1501,10 @@ export function ChatRouteShell({
       }
       const panelPageId = request.panelPageId.trim()
       if (panelPageId === '') {
-        complete({ ok: false, error: { code: 'PANEL_PAGE_NOT_FOUND', message: 'The browser panel tab is unavailable.' } })
+        complete({
+          ok: false,
+          error: { code: 'PANEL_PAGE_NOT_FOUND', message: 'The browser panel tab is unavailable.' }
+        })
         return
       }
       const command = request.command

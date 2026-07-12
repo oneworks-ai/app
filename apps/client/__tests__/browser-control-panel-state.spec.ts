@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import type { SessionPanelState } from '@oneworks/types'
 
+import { resolveBrowserControlNavigationHistorySync } from '#~/components/chat/interaction-panel/browser-control-navigation-history'
 import { handleBrowserControlPageCommand } from '#~/components/chat/interaction-panel/browser-control-page-command-handler'
 import type { BrowserControlPageCommandController } from '#~/components/chat/interaction-panel/browser-control-page-command-handler'
-import { resolveBrowserControlNavigationHistorySync } from '#~/components/chat/interaction-panel/browser-control-navigation-history'
 import {
   applyBrowserControlPanelLifecycleCommand,
   applyBrowserControlPanelLifecycleCommandToRef
@@ -88,9 +88,10 @@ describe('browser control panel lifecycle', () => {
   it('acks set_device_mode only after the page state commit resolves', async () => {
     let resolveCommit: ((value: BrowserControlPageCommandController['state']['deviceMode']) => void) | undefined
     const controller = createPageCommandController()
-    controller.applyDeviceMode = state => new Promise(resolve => {
-      resolveCommit = () => resolve(state)
-    })
+    controller.applyDeviceMode = state =>
+      new Promise(resolve => {
+        resolveCommit = () => resolve(state)
+      })
     const completions: unknown[] = []
 
     handleBrowserControlPageCommand({
@@ -119,9 +120,10 @@ describe('browser control panel lifecycle', () => {
     const controller = createPageCommandController()
     controller.state.history = ['https://one.test', 'https://example.test']
     controller.state.historyIndex = 1
-    controller.clearNavigationHistory = () => new Promise(resolve => {
-      resolveCommit = resolve
-    })
+    controller.clearNavigationHistory = () =>
+      new Promise(resolve => {
+        resolveCommit = resolve
+      })
     const completions: unknown[] = []
 
     handleBrowserControlPageCommand({
@@ -165,9 +167,10 @@ describe('browser control panel lifecycle', () => {
     const controller = createPageCommandController()
     controller.state.history = ['https://a.test/', 'https://b.test/']
     controller.state.historyIndex = 1
-    controller.syncNavigationHistory = () => new Promise(resolve => {
-      resolveCommit = resolve
-    })
+    controller.syncNavigationHistory = () =>
+      new Promise(resolve => {
+        resolveCommit = resolve
+      })
     const completions: unknown[] = []
     handleBrowserControlPageCommand({
       complete: completion => completions.push(completion),

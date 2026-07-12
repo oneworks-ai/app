@@ -50,11 +50,14 @@ describe('browser-driver page management', () => {
 
   it('maps every page-management tool to its precise broker operation', async () => {
     const calls: Array<Record<string, unknown>> = []
-    vi.stubGlobal('fetch', vi.fn(async (_url: URL, init: RequestInit) => {
-      const input = JSON.parse(String(init.body)) as Record<string, unknown>
-      calls.push(input)
-      return bridgeResponse({ ok: true, result: { ok: true, page_id: input.page_id } })
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: URL, init: RequestInit) => {
+        const input = JSON.parse(String(init.body)) as Record<string, unknown>
+        calls.push(input)
+        return bridgeResponse({ ok: true, result: { ok: true, page_id: input.page_id } })
+      })
+    )
     const invocations: Array<[string, Record<string, unknown>, string]> = [
       ['in_app_browser_close_page', { page_id: 'page_7' }, 'close_page'],
       ['in_app_browser_duplicate_page', { page_id: 'page_7', placement: 'bottom' }, 'duplicate_page'],
@@ -123,13 +126,15 @@ describe('browser-driver page management', () => {
       'set_zoom'
     ])
 
-    for (const op of [
-      'close_page',
-      'duplicate_page',
-      'move_page',
-      'clear_navigation_history',
-      'get_navigation_entries'
-    ]) {
+    for (
+      const op of [
+        'close_page',
+        'duplicate_page',
+        'move_page',
+        'clear_navigation_history',
+        'get_navigation_entries'
+      ]
+    ) {
       await expect(controller.executeWorkflow({
         page_id: 'page_7',
         steps: [{ node_id: op, op }]
