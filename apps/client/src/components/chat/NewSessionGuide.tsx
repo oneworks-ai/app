@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
 import type { ConversationStarterConfig } from '@oneworks/types'
 
 import { MarkdownContent } from '#~/components/MarkdownContent'
-import { ComposerStack } from '#~/components/composer-landing/ComposerLanding'
+import { ComposerStarterLayout } from '#~/components/composer-landing/ComposerStarterLayout'
 import { showAnnouncementsAtom, showNewSessionStarterListAtom } from '#~/store/index.js'
 
 import { NewSessionGuideStarterList } from './NewSessionGuideStarterList'
@@ -37,10 +37,13 @@ export function NewSessionGuide({
   const hasStarterList = visibleStartupPresets.length > 0 || visibleBuiltinActions.length > 0
 
   return (
-    <div className={['new-session-guide', hasStarterList ? 'has-starter-list' : ''].filter(Boolean).join(' ')}>
-      <div className='new-session-guide__content'>
-        {visibleAnnouncements.length > 0 && (
-          <div className='new-session-guide__announcements'>
+    <ComposerStarterLayout
+      className='new-session-guide'
+      composer={composer}
+      contentClassName='new-session-guide__content'
+      introduction={visibleAnnouncements.length > 0
+        ? (
+          <>
             <div className='new-session-guide__announcements-list'>
               {visibleAnnouncements.map((item, index) => (
                 <div key={`${item}-${index}`} className='new-session-guide__announcements-item'>
@@ -62,23 +65,21 @@ export function NewSessionGuide({
                 <span className='material-symbols-rounded'>close</span>
               </button>
             )}
-          </div>
-        )}
-        <div className='new-session-guide__composer'>
-          <ComposerStack>
-            {composer}
-          </ComposerStack>
-        </div>
-        {hasStarterList && (
-          <div className='new-session-guide__main'>
-            <NewSessionGuideStarterList
-              startupPresets={visibleStartupPresets}
-              builtinActions={visibleBuiltinActions}
-              onApplyStarter={onApplyStarter}
-            />
-          </div>
-        )}
-      </div>
-    </div>
+          </>
+        )
+        : undefined}
+      introductionClassName='new-session-guide__announcements'
+      main={hasStarterList
+        ? (
+          <NewSessionGuideStarterList
+            startupPresets={visibleStartupPresets}
+            builtinActions={visibleBuiltinActions}
+            onApplyStarter={onApplyStarter}
+          />
+        )
+        : undefined}
+      mainClassName='new-session-guide__main'
+      composerClassName='new-session-guide__composer'
+    />
   )
 }
