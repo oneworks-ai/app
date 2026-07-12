@@ -1,7 +1,3 @@
-/* eslint-disable max-lines -- plugin creation landing mirrors automation chat setup and composer wiring. */
-
-import './PluginCreateLanding.scss'
-
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
@@ -12,6 +8,7 @@ import type { ConfigResponse } from '@oneworks/types'
 import { getConfig } from '#~/api.js'
 import { Sender } from '#~/components/chat/sender/Sender'
 import { ChatStatusBar } from '#~/components/chat/status-bar/ChatStatusBar'
+import { ComposerLanding } from '#~/components/composer-landing/ComposerLanding'
 import { DEFAULT_CHAT_SESSION_TARGET_DRAFT } from '#~/hooks/chat/chat-session-target'
 import type { ChatSessionTargetDraft } from '#~/hooks/chat/chat-session-target'
 import {
@@ -23,6 +20,7 @@ import { useChatModelAdapterSelection } from '#~/hooks/chat/use-chat-model-adapt
 import { useChatPermissionMode } from '#~/hooks/chat/use-chat-permission-mode'
 import { useChatSessionActions } from '#~/hooks/chat/use-chat-session-actions'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
+import { PluginCreateGuide } from './PluginCreateGuide'
 
 const noop = () => {}
 
@@ -73,8 +71,7 @@ export function PluginCreateLanding() {
     ...DEFAULT_CHAT_SESSION_TARGET_DRAFT
   }))
   const [workspaceDraft, setWorkspaceDraft] = useState(() => ({ ...DEFAULT_CHAT_SESSION_WORKSPACE_DRAFT }))
-  const [starterContent, setStarterContent] = useState('')
-  const [starterContentKey, setStarterContentKey] = useState(0)
+  const [starterContent, setStarterContent] = useState<ChatMessageContent[] | undefined>(undefined)
   const {
     adapterOptions,
     hasAvailableModels,
@@ -108,36 +105,8 @@ export function PluginCreateLanding() {
     onClearMessages: noop
   })
 
-  const starters = useMemo(() => [
-    {
-      description: t('pluginStore.starterChatActionDescription'),
-      icon: 'add_comment',
-      prompt: t('pluginStore.starterChatActionPrompt'),
-      title: t('pluginStore.starterChatActionTitle')
-    },
-    {
-      description: t('pluginStore.starterLauncherDescription'),
-      icon: 'manage_search',
-      prompt: t('pluginStore.starterLauncherPrompt'),
-      title: t('pluginStore.starterLauncherTitle')
-    },
-    {
-      description: t('pluginStore.starterWorkbenchDescription'),
-      icon: 'tab',
-      prompt: t('pluginStore.starterWorkbenchPrompt'),
-      title: t('pluginStore.starterWorkbenchTitle')
-    },
-    {
-      description: t('pluginStore.starterRouteDescription'),
-      icon: 'route',
-      prompt: t('pluginStore.starterRoutePrompt'),
-      title: t('pluginStore.starterRouteTitle')
-    }
-  ], [t])
-
   const handleSelectStarter = (prompt: string) => {
-    setStarterContent(prompt)
-    setStarterContentKey(current => current + 1)
+    setStarterContent([{ type: 'text', text: prompt }])
   }
 
   useEffect(() => {
@@ -146,9 +115,8 @@ export function PluginCreateLanding() {
   }, [defaultWorkspaceDraft])
 
   const composer = (
-    <div className='sender-container plugin-create-guide__composer'>
+    <div className='sender-container sender-container--chat-surface plugin-create-guide__composer'>
       <Sender
-        key={starterContentKey}
         initialContent={starterContent}
         placeholder={t('pluginStore.createLandingPlaceholder')}
         autoFocus
@@ -195,36 +163,12 @@ export function PluginCreateLanding() {
     </div>
   )
 
-  const landingClassName = [
-    'plugin-create-landing',
-    isCompactLayout || isTouchInteraction ? 'plugin-create-landing--compact' : ''
-  ].filter(Boolean).join(' ')
-
   return (
-    <div className={landingClassName}>
-      <div className='plugin-create-guide'>
-        <div className='plugin-create-guide__header'>
-          <h2>{t('pluginStore.createLandingTitle')}</h2>
-          <p>{t('pluginStore.createLandingDescription')}</p>
-        </div>
-        <div className='plugin-create-guide__grid'>
-          {starters.map(item => (
-            <button
-              key={item.title}
-              type='button'
-              className='plugin-create-guide__item'
-              onClick={() => handleSelectStarter(item.prompt)}
-            >
-              <span className='material-symbols-rounded plugin-create-guide__icon'>{item.icon}</span>
-              <span className='plugin-create-guide__item-text'>
-                <span className='plugin-create-guide__item-title'>{item.title}</span>
-                <span className='plugin-create-guide__item-desc'>{item.description}</span>
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-      {composer}
-    </div>
+    <ComposerLanding
+      className='composer-landing--starter plugin-create-landing'
+      compact={isCompactLayout || isTouchInteraction}
+    >
+      <PluginCreateGuide composer={composer} onSelectStarter={handleSelectStarter} />
+    </ComposerLanding>
   )
 }
