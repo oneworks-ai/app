@@ -13,7 +13,7 @@ The user only describes the desired macOS outcome. Do not ask them to run setup 
 
 Keep the user's frontmost app frontmost. Use Cua Driver tools whenever an action touches native GUI state. Do not substitute `open`, mutating AppleScript, `cliclick`, raw desktop screenshots, or foregrounding shortcuts; those paths can activate apps, move the real cursor, switch Spaces, or bypass the driver's evidence trail.
 
-The plugin runtime automatically prepares a visible virtual Agent pointer before exposing the tools. The physical mouse remains untouched. Each session receives its own stable automatic color. If the user requests a particular color, call `set_session_cursor_color` once for this session or pass `cursor_color` with `execute_workflow`; do not add pointer setup commands or raw cursor-style operations to the task.
+The plugin runtime automatically prepares a visible virtual Agent pointer before exposing the tools. The physical mouse remains untouched. Each session receives its own stable automatic color. Every workflow starts its pointer from the main-display center unless `cursor_start` is provided. If the user requests a particular color, pass `cursor_color`; if they request a particular starting point, pass logical main-display coordinates through `cursor_start`. For low-level recovery calls, use `set_session_cursor_color` or `set_session_cursor_start` once before the next pointer action. Do not add daemon setup commands, raw cursor-style operations, or arbitrary pointer-motion steps to the task.
 
 ## Action Protocol
 
@@ -31,7 +31,7 @@ Fall back to individual tools only while exploring an unknown interface or recov
 
 Element indices are cached per `(pid, window_id)`. Never reuse an index across windows or after a material state change without another `get_window_state` call.
 
-Available tools include `execute_workflow`, `resume_workflow`, `get_workflow_step_results`, `set_session_cursor_color`, `launch_app`, `list_apps`, `list_windows`, `get_window_state`, `screenshot`, `click`, `right_click`, `double_click`, `scroll`, `type_text`, `press_key`, `set_value`, `zoom`, and read-only runtime state tools. The OneWorks MCP safety profile intentionally does not expose physical-cursor movement, drag gestures, focus-sensitive hotkeys, browser scripting, raw cursor/config mutation, trajectory replay, or child-session recording. Call `press_key` without `window_id`; window-targeted key delivery can activate the target app and is rejected by the proxy.
+Available tools include `execute_workflow`, `resume_workflow`, `get_workflow_step_results`, `set_session_cursor_color`, `set_session_cursor_start`, `launch_app`, `list_apps`, `list_windows`, `get_window_state`, `screenshot`, `click`, `right_click`, `double_click`, `scroll`, `type_text`, `press_key`, `set_value`, `zoom`, and read-only runtime state tools. The OneWorks MCP safety profile intentionally does not expose arbitrary pointer movement, drag gestures, focus-sensitive hotkeys, browser scripting, raw cursor/config mutation, trajectory replay, or child-session recording. Call `press_key` without `window_id`; window-targeted key delivery can activate the target app and is rejected by the proxy.
 
 ## Browsers And Web Apps
 

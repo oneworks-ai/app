@@ -8,7 +8,7 @@ import { runMain } from './manager'
 import { eventsPath, leasePath, managerLogPath, repoRoot, resourceKey, statePath, targetStateDir } from './paths'
 import { withDevStartLifecycleLock } from './port-lock'
 import { readState } from './process'
-import { stateReady, stopManagedState } from './readiness'
+import { forgetStaleManagedState, stateReady, stopManagedState } from './readiness'
 import { redactDevServiceText } from './redaction'
 import { updateDevServiceStateIfCurrent } from './state'
 import { devStartTargets } from './types'
@@ -18,6 +18,7 @@ export type DevServiceCommandAction = 'ensure' | 'events' | 'logs' | 'restart' |
 
 export interface DevServiceCommandInput {
   action: DevServiceCommandAction
+  forgetStale?: boolean
   json?: boolean
   limit?: number
   target?: DevStartTarget
@@ -72,10 +73,11 @@ export const ensureDevService = async (
   })
 }
 
-export const stopDevService = async (target: DevStartTarget) => {
+export const stopDevService = async (target: DevStartTarget, options: { forgetStale?: boolean } = {}) => {
   await withDevStartLifecycleLock(async () => {
     await withDevServiceOperation(target, 'stop', async (operation) => {
-      await stopManagedState(target, operation)
+      if (options.forgetStale === true) await forgetStaleManagedState(target, operation)
+      else await stopManagedState(target, operation)
       if (process.env.ONEWORKS_DEV_SERVICE_JSON !== '1') console.log(`[dev-service] stopped ${target}`)
     })
   })
@@ -180,7 +182,7 @@ export const runDevServiceCommand = async (input: DevServiceCommandInput) => {
     }
 
     if (input.action === 'stop') {
-      await stopDevService(input.target ?? 'web')
+      await stopDevService(input.target ?? 'web', { forgetStale: input.forgetStale })
       const document = await getDevServiceStatus(input.target ?? 'web')
       if (input.json === true) printJson(document)
       return document

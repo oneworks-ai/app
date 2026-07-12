@@ -12,6 +12,7 @@ Specify `window_id` or `window_title` when the task targets a particular window.
 {
   "workflow_id": "calculator-four-plus-five",
   "cursor_color": "#625BF6",
+  "cursor_start": { "x": 756, "y": 491 },
   "contexts": {
     "calculator": {
       "bundle_id": "com.apple.calculator",
@@ -32,6 +33,12 @@ Specify `window_id` or `window_title` when the task targets a particular window.
 `cursor_color` is optional. Omit it to use the color automatically assigned to this OneWorks session,
 or set any `#RGB` / `#RRGGBB` value when the user wants a specific session identity. The runtime
 generates the SVG and serializes style application with each pointer action.
+
+`cursor_start` is optional and uses logical points on the main display. When omitted, each workflow
+starts from the main-display center. When the user requests an explicit start, use `get_screen_size`
+to choose in-bounds `x` and `y`; the runtime applies style, start position, and the first pointer action
+inside one cross-process transaction without moving the physical mouse. For low-level recovery calls,
+`set_session_cursor_start` configures the next pointer action without exposing raw pointer movement.
 
 Every native action refreshes `get_window_state` and resolves its target at execution time. Never put a prior `element_index` into a workflow.
 

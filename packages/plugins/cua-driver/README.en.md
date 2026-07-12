@@ -11,7 +11,7 @@ The plugin does not embed Cua's agent loop.
 - `cua-driver` and `ow-cua-driver` package bins that install or delegate to the real CLI
 - narrowed install and uninstall scripts that only manage `CuaDriver.app` and the CLI link created by the plugin
 - `manager` and `workspace` server runtimes for status, path lookup, explicit preparation, and launcher search
-- a visible Agent pointer synchronized with actions without moving the user's physical mouse
+- a visible Agent pointer synchronized with actions without moving the user's physical mouse; workflows start from the main-display center by default and agents may choose logical start coordinates
 - procedural `execute_workflow` for submitting predictable serial steps once while the runtime refreshes window state, resolves semantic targets, waits, and verifies
 - `resume_workflow` and `get_workflow_step_results` for checkpoint recovery and progressive `run_id + step_id` detail lookup
 - generic `toolUsePresentations` metadata for localized tool titles, action icons, compact targets, and structured details
@@ -43,7 +43,7 @@ Package installation makes a best-effort attempt to install the signed `CuaDrive
 ONEWORKS_CUA_DRIVER_SKIP_POSTINSTALL=1 pnpm install
 ```
 
-Normal usage requires no manual preparation. The agent only invokes the `cua-driver` skill; before MCP tools become available, the plugin installs missing components, prepares its background service, checks permissions, and enables the virtual Agent pointer. By default, the plugin deterministically assigns a different color to each OneWorks session. The Config tab can switch to a fixed default, while an agent may choose any valid hex color for its current session. The plugin dynamically generates a safe rounded SVG with a contrasting border and applies it only immediately before that session clicks. `ensure` remains available only for diagnostics and repair:
+Normal usage requires no manual preparation. The agent only invokes the `cua-driver` skill; before MCP tools become available, the plugin installs missing components, prepares its background service, checks permissions, and enables the virtual Agent pointer. By default, the plugin deterministically assigns a different color to each OneWorks session. The Config tab can switch to a fixed default, while an agent may choose any valid hex color for its current session. Every workflow starts from the main-display center when `cursor_start` is omitted; an agent may pass logical main-display coordinates or use `set_session_cursor_start` before the next low-level pointer action. The plugin dynamically generates a safe rounded SVG with a contrasting border and applies it only immediately before that session clicks. `ensure` remains available only for diagnostics and repair:
 
 ```bash
 ow-cua-driver ensure
@@ -57,7 +57,7 @@ When enabled, the user only describes the desired outcome. OneWorks automaticall
 
 Workflow results adapt to size: up to three small steps are returned inline, while longer runs return step ids for selective lookup through `get_workflow_step_results`. Full traces stay out of the Agent context by default and run state remains local to the current MCP session.
 
-The workflow runtime procedurally pins AX semantic observation once per MCP session so upstream screenshot/SOM parsing differences cannot affect target resolution. This internal configuration capability is never exposed to the Agent; use the separate `screenshot` tool when pixel evidence is required. Because the upstream Agent pointer style is daemon-global, the plugin serializes “apply this session's style + pointer action” across processes so concurrent sessions do not cross colors; non-pointer operations remain concurrent.
+The workflow runtime procedurally pins AX semantic observation once per MCP session so upstream screenshot/SOM parsing differences cannot affect target resolution. This internal configuration capability is never exposed to the Agent; use the separate `screenshot` tool when pixel evidence is required. Because the upstream Agent pointer style is daemon-global, the plugin serializes “apply this session's style + set its start + pointer action” across processes so concurrent sessions do not cross colors or starts; non-pointer operations remain concurrent.
 
 The outer orchestrator owns system-display capture for demos, screen recordings, and regression evidence; the tested session only performs and verifies the native-app operation. This is the only path that can prove both a live virtual Agent pointer and an unchanged foreground app. Upstream trajectories, `cursor.jsonl`, and per-action screenshots remain diagnostic data and are not presented as live-pointer video evidence. When the user explicitly wants only a final still, the tested session may save a standalone window image through `screenshot_out_file`.
 

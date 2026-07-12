@@ -40,6 +40,45 @@ function normalizeCursorColor(value) {
   return short == null ? undefined : `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`
 }
 
+function normalizeCursorStart(value) {
+  if (value == null) return undefined
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError('Cursor start must contain logical screen coordinates x and y.')
+  }
+  const { x, y } = value
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) {
+    throw new TypeError('Cursor start x and y must be finite non-negative numbers in logical screen points.')
+  }
+  return { x, y }
+}
+
+function parseScreenSize(result) {
+  const candidates = [result?.structuredContent, result]
+  const text = result?.content?.find?.(item => item?.type === 'text')?.text
+  if (typeof text === 'string') {
+    try {
+      candidates.push(JSON.parse(text))
+    } catch {
+      // Structured MCP content is preferred; invalid fallback text is ignored.
+    }
+  }
+  const size = candidates.find(candidate => (
+    Number.isFinite(candidate?.width) && candidate.width > 0 &&
+    Number.isFinite(candidate?.height) && candidate.height > 0
+  ))
+  if (size == null) throw new Error('Cua Driver returned an invalid main-display size.')
+  return { height: size.height, width: size.width }
+}
+
+async function resolveCursorStart(callTool, requestedStart) {
+  const { height, width } = parseScreenSize(await callTool('get_screen_size', {}))
+  const resolved = requestedStart ?? { x: width / 2, y: height / 2 }
+  if (resolved.x >= width || resolved.y >= height) {
+    throw new RangeError(`Cursor start (${resolved.x}, ${resolved.y}) is outside the main display (${width} × ${height}).`)
+  }
+  return resolved
+}
+
 function hslToHex(hue, saturation = 72, lightness = 52) {
   const s = saturation / 100
   const l = lightness / 100
@@ -179,10 +218,20 @@ function createSessionCursorController(options) {
   let source = options.strategy === 'fixed' ? 'default' : 'automatic'
   const lock = options.withLock ?? withCursorActionLock
   let motionReady = false
+  let startPending = true
+  let startPosition
+  let startRevision = 0
+  let startSource = 'default'
 
   return {
     getState() {
-      return { color, sessionId, source }
+      return {
+        color,
+        cursorStart: startPosition ?? { mode: 'screen_center' },
+        cursorStartSource: startSource,
+        sessionId,
+        source
+      }
     },
     setColor(nextColor) {
       const normalized = normalizeCursorColor(nextColor)
@@ -191,24 +240,54 @@ function createSessionCursorController(options) {
       source = 'agent'
       return { color, sessionId, source }
     },
+    setStartPosition(nextPosition) {
+      startPosition = normalizeCursorStart(nextPosition)
+      startPending = true
+      startRevision += 1
+      startSource = startPosition == null ? 'default' : 'agent'
+      return {
+        position: startPosition ?? { mode: 'screen_center' },
+        sessionId,
+        source: startSource
+      }
+    },
     async callTool(name, args) {
       if (!pointerActionTools.has(name)) return await options.callTool(name, args)
-      return await lock(async () => {
-        if (!motionReady) {
-          await options.callTool('set_agent_cursor_motion', directGlideMotion)
-          motionReady = true
-        }
-        const imagePath = await materializeCursorSvg({
-          color,
-          cursorDir: options.cursorDir,
-          sessionId
-        })
-        await options.callTool('set_agent_cursor_style', {
-          bloom_color: color,
-          image_path: imagePath
-        })
-        return await options.callTool(name, args)
-      }, options.lockOptions)
+      const actionColor = color
+      const reservedStart = startPending
+        ? { position: startPosition, revision: startRevision }
+        : undefined
+      if (reservedStart != null) startPending = false
+      let startApplied = false
+      try {
+        return await lock(async () => {
+          if (!motionReady) {
+            await options.callTool('set_agent_cursor_motion', directGlideMotion)
+            motionReady = true
+          }
+          const imagePath = await materializeCursorSvg({
+            color: actionColor,
+            cursorDir: options.cursorDir,
+            sessionId
+          })
+          await options.callTool('set_agent_cursor_style', {
+            bloom_color: actionColor,
+            image_path: imagePath
+          })
+          if (reservedStart != null) {
+            const resolvedStart = await resolveCursorStart(options.callTool, reservedStart.position)
+            await options.callTool('move_cursor', resolvedStart)
+            startApplied = true
+          }
+          return await options.callTool(name, args)
+        }, options.lockOptions)
+      } catch (error) {
+        if (
+          reservedStart != null && !startApplied &&
+          startRevision === reservedStart.revision
+        ) startPending = true
+        throw error
+      }
     }
   }
 }
@@ -230,11 +309,38 @@ const sessionCursorToolDefinition = {
   }
 }
 
+const sessionCursorStartToolDefinition = {
+  name: 'set_session_cursor_start',
+  description: 'Set the virtual Agent pointer starting position for the next pointer action in this OneWorks session. Coordinates use logical points on the main display and never move the physical mouse. Use get_screen_size first when choosing explicit coordinates. Workflows may instead pass cursor_start; when omitted, each workflow starts from the main-display center.',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['x', 'y'],
+    properties: {
+      x: { type: 'number', minimum: 0, description: 'Horizontal logical point on the main display.' },
+      y: { type: 'number', minimum: 0, description: 'Vertical logical point on the main display.' }
+    }
+  }
+}
+
 function sessionCursorToolResult(state) {
   return {
     content: [{ type: 'text', text: `Session pointer color set to ${state.color}.` }],
     structuredContent: {
       color: state.color,
+      source: state.source
+    }
+  }
+}
+
+function sessionCursorStartToolResult(state) {
+  return {
+    content: [{
+      type: 'text',
+      text: `Session pointer will start at (${state.position.x}, ${state.position.y}) before its next pointer action.`
+    }],
+    structuredContent: {
+      position: state.position,
       source: state.source
     }
   }
@@ -247,9 +353,14 @@ module.exports = {
   directGlideMotion,
   materializeCursorSvg,
   normalizeCursorColor,
+  normalizeCursorStart,
+  parseScreenSize,
   pointerActionTools,
   renderCursorSvg,
+  resolveCursorStart,
   resolveInitialCursorColor,
+  sessionCursorStartToolDefinition,
+  sessionCursorStartToolResult,
   sessionCursorToolDefinition,
   sessionCursorToolResult,
   withCursorActionLock

@@ -68,6 +68,7 @@ const wrapper = require('../bin/cua-driver.cjs') as {
 }
 const mcpProxy = require('../bin/mcp-proxy.cjs') as {
   allowedTools: Set<string>
+  createSerialTaskQueue: () => <T>(task: () => Promise<T> | T) => Promise<T>
   initializeFailureResponse: (id: number, diagnosticOutput: string) => Record<string, any>
   parseJsonLine: (line: string) => { ok: boolean; value?: unknown; error?: Record<string, any> }
   parseRecoveryFromOutput: (output: string) => Record<string, unknown>
@@ -84,7 +85,15 @@ const mcpProxy = require('../bin/mcp-proxy.cjs') as {
     message: Record<string, any>,
     pendingToolLists: Set<string>
   ) => Record<string, any>
+  sessionCursorStartToolDefinition: {
+    inputSchema: Record<string, unknown>
+    name: string
+  }
   toolCallPolicyError: (toolName: unknown, toolArguments: Record<string, unknown>) => string | undefined
+  workflowToolDefinitions: Array<{
+    inputSchema: { properties: Record<string, unknown> }
+    name: string
+  }>
 }
 const evidence = require('../bin/evidence-mcp.cjs') as {
   finalizeRecording: (
@@ -107,6 +116,37 @@ const readJson = async (name: string) =>
   ) as Record<string, unknown>
 
 describe('cua-driver plugin contract', () => {
+  it('serializes session operations and continues after a rejected operation', async () => {
+    const enqueue = mcpProxy.createSerialTaskQueue()
+    const events: string[] = []
+    let releaseFirst!: () => void
+    let notifyFirstStarted!: () => void
+    const firstStarted = new Promise<void>(resolve => { notifyFirstStarted = resolve })
+    const firstGate = new Promise<void>(resolve => { releaseFirst = resolve })
+
+    const first = enqueue(async () => {
+      events.push('first:start')
+      notifyFirstStarted()
+      await firstGate
+      events.push('first:end')
+    })
+    await firstStarted
+    const second = enqueue(async () => {
+      events.push('second')
+    })
+
+    await Promise.resolve()
+    expect(events).toEqual(['first:start'])
+    releaseFirst()
+    await Promise.all([first, second])
+    expect(events).toEqual(['first:start', 'first:end', 'second'])
+
+    await expect(enqueue(async () => {
+      throw new Error('expected queue failure')
+    })).rejects.toThrow('expected queue failure')
+    await expect(enqueue(async () => 'recovered')).resolves.toBe('recovered')
+  })
+
   it('only treats both required macOS permissions as ready', () => {
     expect(wrapper.permissionOutputIsGranted(
       '✅ Accessibility: granted.\n✅ Screen Recording: granted.\n'
@@ -209,8 +249,25 @@ describe('cua-driver plugin contract', () => {
       'execute_workflow',
       'resume_workflow',
       'get_workflow_step_results',
-      'set_session_cursor_color'
+      'set_session_cursor_color',
+      'set_session_cursor_start'
     ])
+    const workflowDefinition = mcpProxy.workflowToolDefinitions
+      .find((tool: { name: string }) => tool.name === 'execute_workflow')
+    expect(workflowDefinition?.inputSchema.properties.cursor_start).toEqual({
+      type: 'object',
+      additionalProperties: false,
+      required: ['x', 'y'],
+      description: expect.stringContaining('main-display center'),
+      properties: {
+        x: { type: 'number', minimum: 0 },
+        y: { type: 'number', minimum: 0 }
+      }
+    })
+    expect(mcpProxy.sessionCursorStartToolDefinition).toEqual(expect.objectContaining({
+      name: 'set_session_cursor_start',
+      inputSchema: expect.objectContaining({ required: ['x', 'y'] })
+    }))
 
     const workflow = mcpProxy.transformClientMessage({
       jsonrpc: '2.0',
@@ -232,6 +289,17 @@ describe('cua-driver plugin contract', () => {
     expect(cursorColor.localCall).toEqual(expect.objectContaining({
       id: 72,
       name: 'set_session_cursor_color'
+    }))
+
+    const cursorStart = mcpProxy.transformClientMessage({
+      jsonrpc: '2.0',
+      id: 721,
+      method: 'tools/call',
+      params: { name: 'set_session_cursor_start', arguments: { x: 120, y: 240 } }
+    }, pendingToolLists)
+    expect(cursorStart.localCall).toEqual(expect.objectContaining({
+      id: 721,
+      name: 'set_session_cursor_start'
     }))
 
     const click = mcpProxy.transformClientMessage({
@@ -597,6 +665,11 @@ describe('cua-driver plugin contract', () => {
         icon: 'palette',
         id: 'set-session-cursor-color',
         tools: ['set_session_cursor_color']
+      }),
+      expect.objectContaining({
+        icon: 'my_location',
+        id: 'set-session-cursor-start',
+        tools: ['set_session_cursor_start']
       }),
       expect.objectContaining({
         icon: 'touch_app',

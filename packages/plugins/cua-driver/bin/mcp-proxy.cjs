@@ -7,6 +7,8 @@ const process = require('node:process')
 const {
   createSessionCursorController,
   pointerActionTools,
+  sessionCursorStartToolDefinition,
+  sessionCursorStartToolResult,
   sessionCursorToolDefinition,
   sessionCursorToolResult
 } = require('./cursor-runtime.cjs')
@@ -16,7 +18,11 @@ const {
   workflowToolNames
 } = require('./workflow-runtime.cjs')
 
-const sessionCursorToolNames = new Set([sessionCursorToolDefinition.name])
+const sessionCursorToolDefinitions = [
+  sessionCursorToolDefinition,
+  sessionCursorStartToolDefinition
+]
+const sessionCursorToolNames = new Set(sessionCursorToolDefinitions.map(tool => tool.name))
 
 const allowedTools = new Set([
   'click',
@@ -171,7 +177,7 @@ function transformServerMessage(message, pendingToolLists) {
       tools: [
         ...message.result.tools.filter(tool => allowedTools.has(tool?.name)),
         ...workflowToolDefinitions,
-        sessionCursorToolDefinition
+        ...sessionCursorToolDefinitions
       ]
     }
   }
@@ -199,6 +205,15 @@ function createLineReader(onLine) {
 
 function writeJson(stream, message) {
   stream.write(`${JSON.stringify(message)}\n`)
+}
+
+function createSerialTaskQueue() {
+  let tail = Promise.resolve()
+  return (task) => {
+    const result = tail.then(task, task)
+    tail = result.then(() => undefined, () => undefined)
+    return result
+  }
 }
 
 function main() {
@@ -250,8 +265,13 @@ function main() {
     strategy: process.env.ONEWORKS_CUA_CURSOR_STRATEGY
   })
   const workflowService = createWorkflowService({
-    callTool: (name, args) => cursorController.callTool(name, args)
+    callTool: (name, args) => cursorController.callTool(name, args),
+    preparePointerAction({ cursorColor, cursorStart, cursorStartPending }) {
+      if (cursorColor != null) cursorController.setColor(cursorColor)
+      if (cursorStartPending) cursorController.setStartPosition(cursorStart)
+    }
   })
+  const enqueueSessionOperation = createSerialTaskQueue()
   const stopForProtocolError = (response) => {
     if (stopping) return
     stopping = true
@@ -271,28 +291,29 @@ function main() {
     if (transformed.respond != null) return writeJson(process.stdout, transformed.respond)
     if (transformed.localCall != null) {
       const call = transformed.localCall
-      if (sessionCursorToolNames.has(call.name)) {
-        try {
-          const state = cursorController.setColor(call.arguments.color)
-          writeJson(process.stdout, {
-            jsonrpc: call.jsonrpc,
-            id: call.id,
-            result: sessionCursorToolResult(state)
-          })
-        } catch (error) {
-          writeJson(process.stdout, errorResponse(call.id, -32602, error.message))
+      const executeLocalCall = async () => {
+        if (sessionCursorToolNames.has(call.name)) {
+          try {
+            const isStartCall = call.name === sessionCursorStartToolDefinition.name
+            const state = isStartCall
+              ? cursorController.setStartPosition(call.arguments)
+              : cursorController.setColor(call.arguments.color)
+            return isStartCall
+              ? sessionCursorStartToolResult(state)
+              : sessionCursorToolResult(state)
+          } catch (error) {
+            error.rpcCode = -32602
+            throw error
+          }
         }
-        return
+        return await workflowService.call(call.name, call.arguments)
       }
-      if (call.name === 'execute_workflow' && call.arguments.cursor_color != null) {
-        try {
-          cursorController.setColor(call.arguments.cursor_color)
-        } catch (error) {
-          writeJson(process.stdout, errorResponse(call.id, -32602, error.message))
-          return
-        }
-      }
-      workflowService.call(call.name, call.arguments).then(result => {
+      const shouldSerialize = sessionCursorToolNames.has(call.name) ||
+        call.name === 'execute_workflow' || call.name === 'resume_workflow'
+      const operation = shouldSerialize
+        ? enqueueSessionOperation(executeLocalCall)
+        : executeLocalCall()
+      operation.then(result => {
         writeJson(process.stdout, {
           jsonrpc: call.jsonrpc,
           id: call.id,
@@ -301,7 +322,7 @@ function main() {
       }).catch(error => {
         writeJson(process.stdout, errorResponse(
           call.id,
-          -32603,
+          error.rpcCode ?? -32603,
           error.message
         ))
       })
@@ -309,7 +330,9 @@ function main() {
     }
     if (transformed.styledCall != null) {
       const call = transformed.styledCall
-      cursorController.callTool(call.name, call.arguments).then(result => {
+      enqueueSessionOperation(
+        () => cursorController.callTool(call.name, call.arguments)
+      ).then(result => {
         writeJson(process.stdout, {
           jsonrpc: call.jsonrpc,
           id: call.id,
@@ -402,13 +425,16 @@ function main() {
 
 module.exports = {
   allowedTools,
+  createSerialTaskQueue,
   initializeFailureResponse,
   parseJsonLine,
   parseRecoveryFromOutput,
   toolCallPolicyError,
   transformClientMessage,
   transformServerMessage,
+  sessionCursorStartToolDefinition,
   sessionCursorToolDefinition,
+  sessionCursorToolDefinitions,
   sessionCursorToolNames,
   workflowToolDefinitions,
   workflowToolNames

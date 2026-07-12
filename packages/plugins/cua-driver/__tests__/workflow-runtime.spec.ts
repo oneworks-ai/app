@@ -8,6 +8,12 @@ const workflowRuntime = require('../bin/workflow-runtime.cjs') as {
     callTool: (name: string, args: Record<string, unknown>) => Promise<Record<string, unknown>>
     createId?: (prefix: string) => string
     now?: () => number
+    preparePointerAction?: (options: {
+      cursorColor?: string
+      cursorStart?: { x: number; y: number }
+      cursorStartPending: boolean
+      runId: string
+    }) => Promise<void> | void
     sleep?: (duration: number) => Promise<void>
   }) => {
     call: (name: string, input: Record<string, unknown>) => Promise<{
@@ -232,6 +238,62 @@ describe('cua workflow runtime', () => {
       status: 'completed'
     }))
     expect(resumed.structuredContent.steps).toHaveLength(3)
+  })
+
+  it('keeps each paused workflow cursor configuration until its first pointer action', async () => {
+    const prepared: Array<Record<string, unknown>> = []
+    const service = workflowRuntime.createWorkflowService({
+      createId: deterministicIds(),
+      preparePointerAction(options) {
+        prepared.push(options)
+      },
+      callTool: withAxConfig(async (name) => {
+        if (name === 'launch_app') {
+          return toolResult({
+            pid: 42,
+            windows: [{ is_on_screen: true, on_current_space: true, title: 'Calculator', window_id: 7 }]
+          })
+        }
+        if (name === 'get_window_state') return toolResult({ tree_markdown: calculatorTree('0') })
+        if (name === 'click') return toolResult({ ok: true })
+        throw new Error(`Unexpected tool: ${name}`)
+      })
+    })
+    const contexts = {
+      calculator: { bundle_id: 'com.apple.calculator', window_title: 'Calculator' }
+    }
+
+    const pausedA = await service.call('execute_workflow', {
+      contexts,
+      cursor_color: '#625BF6',
+      cursor_start: { x: 100, y: 100 },
+      steps: [
+        { node_id: 'pause-a', op: 'checkpoint', prompt: 'Continue A?' },
+        { context: 'calculator', node_id: 'click-a', op: 'click', target: { id: 'Clear' } }
+      ]
+    })
+    await service.call('execute_workflow', {
+      contexts,
+      cursor_color: '#F97316',
+      cursor_start: { x: 900, y: 700 },
+      steps: [
+        { context: 'calculator', node_id: 'click-b', op: 'click', target: { id: 'Clear' } }
+      ]
+    })
+    await service.call('resume_workflow', {
+      checkpoint_id: pausedA.structuredContent.checkpoint_id,
+      decision: 'continue',
+      run_id: pausedA.structuredContent.run_id
+    })
+
+    expect(prepared.map(entry => ({
+      cursorColor: entry.cursorColor,
+      cursorStart: entry.cursorStart,
+      cursorStartPending: entry.cursorStartPending
+    }))).toEqual([
+      { cursorColor: '#F97316', cursorStart: { x: 900, y: 700 }, cursorStartPending: true },
+      { cursorColor: '#625BF6', cursorStart: { x: 100, y: 100 }, cursorStartPending: true }
+    ])
   })
 
   it('parses non-actionable state text for assertions', () => {

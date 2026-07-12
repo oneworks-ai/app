@@ -17,6 +17,16 @@ const workflowToolDefinitions = [
           pattern: '^#[0-9A-Fa-f]{3}(?:[0-9A-Fa-f]{3})?$',
           description: 'Optional Agent pointer color for this session, for example #625BF6. The plugin validates it and dynamically generates the SVG.'
         },
+        cursor_start: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['x', 'y'],
+          description: 'Optional virtual Agent pointer starting position in logical points on the main display. When omitted, the workflow starts from the main-display center. This never moves the physical mouse.',
+          properties: {
+            x: { type: 'number', minimum: 0 },
+            y: { type: 'number', minimum: 0 }
+          }
+        },
         contexts: {
           type: 'object',
           description: 'Named native-app contexts resolved lazily. Each value needs bundle_id and may include window_id or window_title.',
@@ -105,6 +115,7 @@ const workflowToolDefinitions = [
 
 const workflowToolNames = new Set(workflowToolDefinitions.map(tool => tool.name))
 const actionOps = new Set(['click', 'double_click', 'right_click', 'type_text', 'set_value', 'scroll'])
+const pointerActionOps = new Set(['click', 'double_click', 'right_click'])
 const supportedOps = new Set(workflowToolDefinitions[0].inputSchema.properties.steps.items.properties.op.enum)
 const outcomeActions = new Set(['fail', 'skip', 'exit_success', 'pause'])
 const defaultSelectedFields = ['status', 'output', 'error']
@@ -283,6 +294,15 @@ function validateWorkflowInput(input) {
     throw new WorkflowInputError('execute_workflow requires at least one step.')
   }
   if (input.steps.length > 100) throw new WorkflowInputError('A workflow may contain at most 100 steps.')
+  if (input.cursor_color != null && (
+    typeof input.cursor_color !== 'string' ||
+    !/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(input.cursor_color)
+  )) throw new WorkflowInputError('cursor_color must be a CSS hex color such as #625BF6.')
+  if (input.cursor_start != null && (
+    !isObject(input.cursor_start) ||
+    !Number.isFinite(input.cursor_start.x) || input.cursor_start.x < 0 ||
+    !Number.isFinite(input.cursor_start.y) || input.cursor_start.y < 0
+  )) throw new WorkflowInputError('cursor_start must contain finite non-negative x and y coordinates.')
   for (const [index, step] of input.steps.entries()) {
     if (!isObject(step) || typeof step.op !== 'string' || !supportedOps.has(step.op)) {
       throw new WorkflowInputError(`Step ${index + 1} has an unsupported op.`)
@@ -346,6 +366,7 @@ function publicStepResult(step, select) {
 function createWorkflowService(options) {
   if (typeof options?.callTool !== 'function') throw new TypeError('createWorkflowService requires callTool.')
   const callTool = options.callTool
+  const preparePointerAction = options.preparePointerAction ?? (() => undefined)
   const now = options.now ?? (() => Date.now())
   const sleep = options.sleep ?? (duration => new Promise(resolve => setTimeout(resolve, duration)))
   const createId = options.createId ?? compactId
@@ -494,7 +515,16 @@ function createWorkflowService(options) {
               ...(step.by == null ? {} : { by: step.by })
             }
           : base
+    if (pointerActionOps.has(step.op)) {
+      await preparePointerAction({
+        cursorColor: run.cursor_color,
+        cursorStart: run.cursor_start,
+        cursorStartPending: run.cursor_start_pending,
+        runId: run.run_id
+      })
+    }
     structuredToolData(await callTool(step.op, args))
+    if (pointerActionOps.has(step.op)) run.cursor_start_pending = false
     let verified
     if (isObject(step.postcondition)) {
       const postcondition = {
@@ -695,6 +725,9 @@ function createWorkflowService(options) {
     const createdAt = now()
     const run = {
       contexts: Object.fromEntries(Object.entries(input.contexts ?? {}).map(([key, value]) => [key, { ...value }])),
+      cursor_color: input.cursor_color,
+      cursor_start: input.cursor_start == null ? undefined : { ...input.cursor_start },
+      cursor_start_pending: true,
       current_index: 0,
       deadline_at: createdAt + Math.min(300000, Math.max(1000, asInteger(input.max_duration_ms, 120000))),
       detail_mode: ['inline', 'references'].includes(input.detail_mode) ? input.detail_mode : 'auto',

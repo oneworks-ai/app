@@ -106,6 +106,18 @@
                 "format": "inline"
               },
               {
+                "path": "cursor_start.x",
+                "title": "Pointer start X",
+                "titleI18n": { "zh-Hans": "光标起点 X" },
+                "format": "inline"
+              },
+              {
+                "path": "cursor_start.y",
+                "title": "Pointer start Y",
+                "titleI18n": { "zh-Hans": "光标起点 Y" },
+                "format": "inline"
+              },
+              {
                 "path": "steps",
                 "title": "Steps",
                 "titleI18n": { "zh-Hans": "步骤" },
@@ -146,6 +158,27 @@
             "mode": "declared",
             "fields": [
               { "path": "structuredContent.color", "title": "Color", "titleI18n": { "zh-Hans": "颜色" }, "format": "inline" }
+            ]
+          }
+        },
+        {
+          "id": "set-session-cursor-start",
+          "title": "Set session pointer start",
+          "titleI18n": { "en": "Set session pointer start", "zh-Hans": "设置会话光标起点" },
+          "icon": "my_location",
+          "tools": ["set_session_cursor_start"],
+          "input": {
+            "mode": "declared",
+            "fields": [
+              { "path": "x", "title": "X", "format": "inline" },
+              { "path": "y", "title": "Y", "format": "inline" }
+            ]
+          },
+          "result": {
+            "mode": "declared",
+            "fields": [
+              { "path": "structuredContent.position.x", "title": "X", "format": "inline" },
+              { "path": "structuredContent.position.y", "title": "Y", "format": "inline" }
             ]
           }
         },

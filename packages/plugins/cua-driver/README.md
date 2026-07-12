@@ -11,7 +11,7 @@
 - `cua-driver` / `ow-cua-driver` package bin：按需安装或转发到真实 Cua Driver CLI
 - 插件内置、经过收窄的安装与卸载脚本：只管理 `CuaDriver.app` 和插件创建的 CLI 链接
 - `manager` / `workspace` server runtime：提供状态、路径、显式环境准备和 launcher 搜索
-- 自动展示与操作同步的 Agent 虚拟指针，不移动用户的物理鼠标
+- 自动展示与操作同步的 Agent 虚拟指针，不移动用户的物理鼠标；workflow 默认从主屏中心出发，Agent 也可配置逻辑坐标起点
 - 过程化 `execute_workflow`：一次提交可预测的串行步骤，在运行时自动刷新窗口状态、解析语义目标、等待并验证；只在 checkpoint、失败或完成时返回
 - `resume_workflow` 与 `get_workflow_step_results`：断点恢复，以及通过 `run_id + step_id` 渐进查询步骤详情
 - 通过通用 `toolUsePresentations` 贡献为工具调用提供本地化标题、操作图标、摘要目标和结构化展开内容
@@ -43,7 +43,7 @@ macOS 非 CI 环境安装 package 时，会 best-effort 安装官方签名的 `C
 ONEWORKS_CUA_DRIVER_SKIP_POSTINSTALL=1 pnpm install
 ```
 
-正常使用无需手动准备环境。agent 只需调用 `cua-driver` skill；插件会在 MCP 工具可用前自动安装缺失组件、准备后台服务、检查权限，并启用 Agent 虚拟指针。默认会按 OneWorks 会话稳定分配不同颜色；用户可在插件详情的「配置」页切换为固定默认色，agent 也可为当前会话传入任意合法十六进制颜色。插件会动态生成带圆角和对比边框的安全 SVG，并只在当前会话执行点击动作前应用。`ensure` 仅保留为诊断或修复命令：
+正常使用无需手动准备环境。agent 只需调用 `cua-driver` skill；插件会在 MCP 工具可用前自动安装缺失组件、准备后台服务、检查权限，并启用 Agent 虚拟指针。默认会按 OneWorks 会话稳定分配不同颜色；用户可在插件详情的「配置」页切换为固定默认色，agent 也可为当前会话传入任意合法十六进制颜色。每个 workflow 未传 `cursor_start` 时会从主屏中心开始；Agent 可传入主屏逻辑坐标，或在低层恢复流程中调用 `set_session_cursor_start` 配置下一次指针动作的起点。插件会动态生成带圆角和对比边框的安全 SVG，并只在当前会话执行点击动作前应用。`ensure` 仅保留为诊断或修复命令：
 
 ```bash
 ow-cua-driver ensure
@@ -57,7 +57,7 @@ ow-cua-driver ensure
 
 workflow 结果按大小自适应：不超过三个且较小的步骤直接内联；更长的执行只返回步骤 ID，通过 `get_workflow_step_results` 按需批量读取。运行状态保存在当前 MCP 会话中，不会把完整 trace 默认注入 agent 上下文。
 
-workflow runtime 会在每个 MCP 会话内过程化地固定 AX 语义观察模式，避免上游截图/SOM 解析差异影响节点定位；该内部配置能力不会暴露给 agent。需要像素证据时仍单独调用 `screenshot`。由于上游 Agent 指针样式是 daemon 全局状态，插件会跨进程串行执行“应用当前会话样式 + 点击动作”，避免多个并行会话互相串色；非指针操作不受这把锁影响。
+workflow runtime 会在每个 MCP 会话内过程化地固定 AX 语义观察模式，避免上游截图/SOM 解析差异影响节点定位；该内部配置能力不会暴露给 agent。需要像素证据时仍单独调用 `screenshot`。由于上游 Agent 指针样式是 daemon 全局状态，插件会跨进程串行执行“应用当前会话样式 + 设置起点 + 点击动作”，避免多个并行会话互相串色或串起点；非指针操作不受这把锁影响。
 
 演示、录屏或回归证据由外层编排器负责系统显示录制，被测会话只执行和验证原生 App 操作。这样才能同时证明虚拟 Agent 指针实时可见、用户前台应用未被抢占。上游 trajectory、`cursor.jsonl` 和逐步截图只保留为诊断材料，不再把截图拼接视频当作动态指针证据。用户明确只要最终静态图时，被测会话仍可通过 `screenshot_out_file` 保存独立窗口截图。
 

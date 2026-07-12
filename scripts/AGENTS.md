@@ -15,6 +15,8 @@
 
 - `pnpm --silent tools dev-service ensure web --json`
   - 普通 Web UI：fetch / 安全拉取、按需 `pnpm install`、后台启动 server + Vite client、自动避开端口、探活后输出 URL
+- `pnpm --silent tools dev-service stop web --forget-stale --json`
+  - 仅用于普通 `stop` 因 PID 身份变化而拒绝、且该 target 已不健康的恢复场景；所有健康端点必须不可达，所有仍运行 PID 的当前身份必须与记录身份不同。该命令只遗忘陈旧状态，不向这些 PID 发送信号；机器级 target 禁用。
 - `pnpm --silent tools dev-service ensure electron --json`
   - Electron 空 launcher 开发态：后台启动桌面开发进程并输出 PID / log
 - `pnpm --silent tools dev-service ensure electron-workspace --json`
