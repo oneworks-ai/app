@@ -65,7 +65,7 @@ CLI、Server route、配置页和自动写回逻辑都不能基于 `effectivePro
 
 配置页的 source switch 必须影响当前 section 的读取和写回。`appearance` 作为 app 级界面样式只编辑 global source；`desktop` 面板的启动面板快捷键和图标偏好只编辑 global 桌面偏好，更新开关 `desktop.autoUpdate`、默认更新通道 `desktop.updateChannel` 与模块覆盖通道 `desktop.moduleUpdateChannels` 只编辑当前 workspace 的 project source。
 
-`appearance` 只承载 app 级界面样式字段，例如主题色 `primaryColor` 和浅色 / 深色 / 系统主题模式 `themeMode`，运行时应读取 global source 的 resolved 值，不要让 project / user source 把不同 workspace 染成不同主题。应用图标外观、图标背景、图标主题和同步系统应用图标都属于 Electron-only 桌面偏好，维护在 global `desktop` section。更新配置从当前 workspace 的 project `desktop.autoUpdate` / `desktop.updateChannel` / `desktop.moduleUpdateChannels` 读取；当前 workspace 未配置时默认自动更新开启且使用 Stable，模块更新默认继承 `desktop.updateChannel`。
+`appearance` 只承载 app 级界面样式字段，例如主题色 `primaryColor`、浅色 / 深色 / 系统主题模式 `themeMode` 和会话历史时间线展示模式 `historyTimelineMode`，运行时应读取 global source 的 resolved 值，不要让 project / user source 把不同 workspace 染成不同界面。应用图标外观、图标背景、图标主题和同步系统应用图标都属于 Electron-only 桌面偏好，维护在 global `desktop` section。更新配置从当前 workspace 的 project `desktop.autoUpdate` / `desktop.updateChannel` / `desktop.moduleUpdateChannels` 读取；当前 workspace 未配置时默认自动更新开启且使用 Stable，模块更新默认继承 `desktop.updateChannel`。
 
 重置操作按 section 维度处理。配置页或 launcher 设置页提供 reset 时，应只清理当前 section 在目标 source 中的字段或还原当前 section 的桌面偏好；不要把“重置当前 section”扩大成全局配置重置，也不要从 `mergedConfig` 反推写回内容。
 

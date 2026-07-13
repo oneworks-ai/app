@@ -4806,6 +4806,12 @@
         "label": "Theme mode",
         "desc": "Switch between light, dark, or system theme for the interface"
       },
+      "historyTimelineMode": {
+        "label": "History timeline display",
+        "desc": "Show chat history as compact event lines or timeline nodes",
+        "eventLine": "Event lines",
+        "node": "Nodes"
+      },
       "senderHeaderDisplay": {
         "label": "Composer header default",
         "desc": "Default expand or collapse behavior for the composer header when the URL does not override it",

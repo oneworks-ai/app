@@ -426,6 +426,7 @@ export interface MessageLinksConfig {
 }
 
 export type AppearancePrimaryColor = '#E23F12' | '#3F7E8F' | '#00B454' | '#8B9493'
+export type AppearanceHistoryTimelineMode = 'event-line' | 'node'
 export type AppearanceThemeMode = 'system' | 'light' | 'dark'
 export type IconBackground = 'transparent' | 'solid' | 'textured'
 /**
@@ -434,6 +435,7 @@ export type IconBackground = 'transparent' | 'solid' | 'textured'
 export type AppearanceIconBackground = IconBackground
 
 export interface AppearanceConfig {
+  historyTimelineMode?: AppearanceHistoryTimelineMode
   primaryColor?: AppearancePrimaryColor
   themeMode?: AppearanceThemeMode
 }

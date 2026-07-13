@@ -329,6 +329,13 @@ const updateConfigSection = (config: Config, section: string, value: unknown): C
     case 'appearance': {
       const appearanceConfig = config.appearance ?? {}
       const nextAppearance: NonNullable<Config['appearance']> = {}
+      if (hasOwn(sectionValue, 'historyTimelineMode')) {
+        nextAppearance.historyTimelineMode = sectionValue.historyTimelineMode as NonNullable<
+          Config['appearance']
+        >['historyTimelineMode']
+      } else if (appearanceConfig.historyTimelineMode !== undefined) {
+        nextAppearance.historyTimelineMode = appearanceConfig.historyTimelineMode
+      }
       if (hasOwn(sectionValue, 'primaryColor')) {
         nextAppearance.primaryColor = sectionValue.primaryColor as NonNullable<Config['appearance']>['primaryColor']
       } else if (appearanceConfig.primaryColor !== undefined) {

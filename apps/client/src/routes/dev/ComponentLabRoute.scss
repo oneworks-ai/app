@@ -141,8 +141,10 @@
   }
 }
 
-.overlay-lab__body {
-  overflow: auto;
+.route-container-layout__body.overlay-lab__body {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .overlay-lab__canvas {

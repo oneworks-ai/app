@@ -11,6 +11,8 @@ export type {
   ChatHistoryTimelineMessageProjection
 } from './message-timeline'
 export { getChatHistoryTimelinePathNodes } from './timeline-graph'
+export { CHAT_HISTORY_TIMELINE_MIN_CONTAINER_WIDTH, shouldShowChatHistoryTimeline } from './timeline-visibility'
+export type { ChatHistoryTimelineVisibilityOptions } from './timeline-visibility'
 export * from './types'
 export { useChatHistoryTimelineController } from './useChatHistoryTimelineController'
 export type { UseChatHistoryTimelineControllerOptions } from './useChatHistoryTimelineController'

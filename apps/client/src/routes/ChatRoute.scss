@@ -13,6 +13,7 @@
   --chat-header-overlay-content-offset: var(
     --route-container-content-padding-block-start
   );
+  --new-session-guide-compact-edge-padding: 10px;
 
   display: flex;
   flex-direction: column;
@@ -48,6 +49,23 @@
       overflow: auto;
       padding: calc(var(--chat-header-overlay-content-offset) + 12px) 24px 16px;
     }
+  }
+}
+
+@media (max-width: 960px) {
+  .chat-container.is-new-session .new-session-guide-wrapper {
+    padding-right: max(
+      var(--new-session-guide-compact-edge-padding),
+      env(safe-area-inset-right)
+    );
+    padding-bottom: max(
+      var(--new-session-guide-compact-edge-padding),
+      env(safe-area-inset-bottom)
+    );
+    padding-left: max(
+      var(--new-session-guide-compact-edge-padding),
+      env(safe-area-inset-left)
+    );
   }
 }
 
@@ -219,13 +237,15 @@
   min-height: 0;
   display: flex;
   background-color: var(--bg-color);
+  container-name: chat-history;
+  container-type: inline-size;
 }
 
 .chat-history-view__messages-frame.has-history-timeline {
   overflow: hidden;
 
   .chat-messages {
-    padding-right: 50px;
+    padding-left: 12px;
     scrollbar-gutter: auto;
     scrollbar-width: none;
 
@@ -236,8 +256,14 @@
   }
 }
 
+@container chat-history (max-width: 820px) {
+  .chat-history-view__timeline {
+    display: none;
+  }
+}
+
 .chat-history-view__timeline.chat-history-timeline-view {
-  --chat-history-timeline-view-rail-right: 7px;
+  --chat-history-timeline-view-rail-left: 7px;
   --chat-history-timeline-view-rail-width: 32px;
   --chat-history-timeline-view-graph-content-width: min(
     540px,
@@ -245,6 +271,11 @@
   );
 
   z-index: 18;
+
+  &.is-event-line-mode {
+    --chat-history-timeline-view-rail-left: 0;
+    --chat-history-timeline-view-rail-width: 10px;
+  }
 
   .chat-history-timeline-rail__top-action {
     top: calc(var(--chat-header-overlay-height) + 5px);
@@ -254,7 +285,8 @@
     top: var(--chat-header-overlay-height);
   }
 
-  .chat-history-timeline-view__rail .chat-history-timeline-rail__body {
+  .chat-history-timeline-view__rail:not(.is-event-line-mode)
+    .chat-history-timeline-rail__body {
     padding-top: calc(var(--chat-header-overlay-height) + 59px);
   }
 
@@ -291,6 +323,9 @@
 }
 
 .chat-messages-content {
+  width: 100%;
+  max-width: 800px;
+  margin-inline: auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -661,6 +696,8 @@
 
 .chat-composer-stack .composer-stack__inner {
   width: 100%;
+  max-width: 800px;
+  margin-inline: auto;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -794,9 +831,7 @@
       overflow-y: auto;
       overscroll-behavior-y: contain;
       -webkit-overflow-scrolling: touch;
-      padding: max(8px, env(safe-area-inset-top))
-        max(12px, env(safe-area-inset-right)) 12px
-        max(12px, env(safe-area-inset-left));
+      padding-top: max(8px, env(safe-area-inset-top));
     }
 
     .chat-composer-stack {

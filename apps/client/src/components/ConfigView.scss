@@ -909,9 +909,10 @@
   color: var(--sub-text-color);
 }
 
-.config-view__theme-mode-radio-group {
+.config-view__icon-radio-group {
   display: grid;
-  grid-template-columns: repeat(3, 30px);
+  grid-auto-flow: column;
+  grid-auto-columns: 30px;
   gap: 4px;
   width: auto;
   min-width: 0;
@@ -921,7 +922,7 @@
   background: color-mix(in srgb, var(--sub-bg-color) 76%, transparent);
 }
 
-.config-view__theme-mode-radio {
+.config-view__icon-radio {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -940,25 +941,25 @@
   transition: background-color .16s ease, box-shadow .16s ease, color .16s ease;
 }
 
-.config-view__theme-mode-radio:hover,
-.config-view__theme-mode-radio:focus-visible {
+.config-view__icon-radio:hover,
+.config-view__icon-radio:focus-visible {
   outline: none;
   color: var(--text-color);
   background: color-mix(in srgb, var(--tag-hover-bg) 70%, transparent);
 }
 
-.config-view__theme-mode-radio:focus-visible {
+.config-view__icon-radio:focus-visible {
   box-shadow: 0 0 0 2px
     color-mix(in srgb, var(--primary-color) 20%, transparent);
 }
 
-.config-view__theme-mode-radio.is-active {
+.config-view__icon-radio.is-active {
   color: var(--sidebar-active-text, var(--primary-color));
   background: var(--subpage-content-card-bg);
   box-shadow: 0 1px 2px rgba(15, 23, 42, .12);
 }
 
-.config-view__theme-mode-radio .material-symbols-rounded {
+.config-view__icon-radio .material-symbols-rounded {
   flex: 0 0 auto;
   width: 15px;
   height: 15px;
@@ -971,7 +972,7 @@
     justify-content: flex-end;
   }
 
-  .config-view__theme-mode-radio-group {
+  .config-view__icon-radio-group {
     width: auto;
     flex: 0 0 auto;
   }

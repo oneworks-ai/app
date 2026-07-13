@@ -6,17 +6,31 @@ interface TimelineRailCursor {
   top: number
 }
 
+interface TimelineRailScrollAffordance {
+  canScrollDown: boolean
+  canScrollUp: boolean
+}
+
+const hiddenScrollAffordance: TimelineRailScrollAffordance = {
+  canScrollDown: false,
+  canScrollUp: false
+}
+const selectedMarkerVisibilityInset = 32
+
 export function useTimelineRailSelectionCursor({
   bodyElementRef,
+  keepSelectedMarkerVisible = false,
   layoutKey,
   selectedMarkerNodeId
 }: {
   bodyElementRef: RefObject<HTMLDivElement | null>
+  keepSelectedMarkerVisible?: boolean
   layoutKey: string
   selectedMarkerNodeId?: string
 }) {
   const markerElementByIdRef = useRef(new Map<string, HTMLButtonElement>())
   const [selectionCursor, setSelectionCursor] = useState<TimelineRailCursor | null>(null)
+  const [scrollAffordance, setScrollAffordance] = useState(hiddenScrollAffordance)
 
   const registerMarkerElement = useCallback((nodeId: string) =>
   (
@@ -31,6 +45,26 @@ export function useTimelineRailSelectionCursor({
   }, [])
 
   useLayoutEffect(() => {
+    const updateScrollAffordance = () => {
+      const bodyElement = bodyElementRef.current
+      const canScroll = keepSelectedMarkerVisible &&
+        bodyElement != null &&
+        bodyElement.scrollHeight > bodyElement.clientHeight + 1
+      const nextAffordance = canScroll
+        ? {
+          canScrollDown: bodyElement.scrollTop + bodyElement.clientHeight < bodyElement.scrollHeight - 1,
+          canScrollUp: bodyElement.scrollTop > 1
+        }
+        : hiddenScrollAffordance
+
+      setScrollAffordance(current =>
+        current.canScrollDown === nextAffordance.canScrollDown &&
+          current.canScrollUp === nextAffordance.canScrollUp
+          ? current
+          : nextAffordance
+      )
+    }
+
     const updateSelectionCursor = () => {
       const bodyElement = bodyElementRef.current
       const markerElement = selectedMarkerNodeId == null
@@ -43,7 +77,20 @@ export function useTimelineRailSelectionCursor({
       }
 
       const bodyRect = bodyElement.getBoundingClientRect()
-      const markerRect = markerElement.getBoundingClientRect()
+      let markerRect = markerElement.getBoundingClientRect()
+      if (keepSelectedMarkerVisible && bodyElement.scrollHeight > bodyElement.clientHeight) {
+        const visibilityInset = Math.min(selectedMarkerVisibilityInset, bodyRect.height / 2)
+        const visibleTop = bodyRect.top + visibilityInset
+        const visibleBottom = bodyRect.bottom - visibilityInset
+
+        if (markerRect.top < visibleTop) {
+          bodyElement.scrollTop += markerRect.top - visibleTop
+          markerRect = markerElement.getBoundingClientRect()
+        } else if (markerRect.bottom > visibleBottom) {
+          bodyElement.scrollTop += markerRect.bottom - visibleBottom
+          markerRect = markerElement.getBoundingClientRect()
+        }
+      }
       const markerStyle = window.getComputedStyle(markerElement)
       const color = markerStyle.getPropertyValue('--chat-history-timeline-marker-active-color')
         .trim() || markerStyle.color
@@ -63,6 +110,7 @@ export function useTimelineRailSelectionCursor({
     }
 
     updateSelectionCursor()
+    updateScrollAffordance()
 
     const bodyElement = bodyElementRef.current
     const markerElement = selectedMarkerNodeId == null
@@ -70,9 +118,13 @@ export function useTimelineRailSelectionCursor({
       : markerElementByIdRef.current.get(selectedMarkerNodeId)
     const resizeObserver = typeof ResizeObserver === 'undefined'
       ? null
-      : new ResizeObserver(updateSelectionCursor)
+      : new ResizeObserver(() => {
+        updateSelectionCursor()
+        updateScrollAffordance()
+      })
     if (bodyElement != null) {
       resizeObserver?.observe(bodyElement)
+      bodyElement.addEventListener('scroll', updateScrollAffordance, { passive: true })
     }
     if (markerElement != null) {
       resizeObserver?.observe(markerElement)
@@ -80,8 +132,9 @@ export function useTimelineRailSelectionCursor({
 
     return () => {
       resizeObserver?.disconnect()
+      bodyElement?.removeEventListener('scroll', updateScrollAffordance)
     }
-  }, [layoutKey, selectedMarkerNodeId])
+  }, [keepSelectedMarkerVisible, layoutKey, selectedMarkerNodeId])
 
   const selectionCursorStyle = selectionCursor == null
     ? undefined
@@ -91,6 +144,7 @@ export function useTimelineRailSelectionCursor({
     } as CSSProperties
 
   return {
+    ...scrollAffordance,
     registerMarkerElement,
     selectionCursorStyle,
     selectionCursorVisible: selectionCursor != null

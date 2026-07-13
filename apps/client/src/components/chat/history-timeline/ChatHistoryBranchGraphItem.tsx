@@ -37,7 +37,7 @@ export function ChatHistoryBranchGraphItem({
         active ? 'is-active-path' : 'is-side-path',
         statusClassName
       ].filter(Boolean).join(' ')}
-      style={{ gridColumn: 1 }}
+      style={{ gridColumn: '-2 / -1' }}
       onClick={() => onSelectNode?.(node.id, { node, source: 'graph' })}
     >
       <span className='chat-history-branch-graph-item__meta'>

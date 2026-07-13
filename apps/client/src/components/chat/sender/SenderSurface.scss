@@ -15,6 +15,12 @@
   --chat-surface-icon-button-radius: 6px;
   --chat-surface-control-padding-inline: var(--chat-surface-input-padding);
   --chat-surface-control-row-padding-block: var(--chat-surface-input-padding);
+  --chat-surface-status-control-height: 24px;
+  --chat-surface-status-row-height: calc(
+    var(--chat-surface-status-control-height) +
+      var(--chat-surface-control-row-padding-block) +
+      var(--chat-surface-control-row-padding-block)
+  );
   --chat-surface-composer-content-gap: 0px;
   --chat-surface-panel-radius: 12px;
   --chat-surface-corner-indicator-inset: 5px;
@@ -696,8 +702,8 @@
   z-index: 2;
   width: 100%;
   margin: 0;
-  min-height: var(--chat-surface-control-row-height);
-  max-height: var(--chat-surface-control-row-height);
+  min-height: var(--chat-surface-status-row-height);
+  max-height: var(--chat-surface-status-row-height);
   overflow: visible;
   transition:
     max-height var(--chat-input-header-transition),
@@ -716,7 +722,7 @@
   position: relative;
   z-index: 2;
   width: 100%;
-  min-height: var(--chat-surface-control-row-height);
+  min-height: var(--chat-surface-status-row-height);
   padding: var(--chat-surface-control-row-padding-block)
     var(--chat-surface-control-padding-inline);
   line-height: var(--chat-surface-control-line-height);

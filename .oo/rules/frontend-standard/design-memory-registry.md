@@ -42,6 +42,24 @@
 - Exceptions: 在下方“作用域例外”登记。
 - Automatic enforcement: token consumer 检查、computed padding 和目标 surface 截图。
 
+### OW-DM-003 — 主会话时间线容器阈值与持续可见
+
+- Revision: 4
+- Status: ACTIVE
+- Rule: 主会话内容容器宽度超过 `820px` 且存在至少一个时间线节点时，左侧 timeline rail 持续展示；未配置时默认使用 `event-line`，用户可通过 global `appearance.historyTimelineMode` 显式切换为原有 `node` 模式。内容是否可滚动只决定上下边缘渐隐，不决定 rail 是否存在。
+- Scope: OneWorks project / desktop primary chat history timeline
+- Applies when: 宽度超过 `820px`、非嵌入式、非 Agent Room 的主会话消息历史存在时间线节点。
+- Does not apply when: 内容容器宽度不超过 `820px`、新会话没有节点、`embeddedSessionChrome`、Agent Room，或用户主动隐藏 rail；用户选择 `node` 时只替换 rail 的渲染模式，不移除可见性约束。
+- Positive example: 一问一答的短会话没有滚动空间，左侧仍显示事件短线。
+- Negative example: 因消息内容没有超过视口而移除整条 Event lines rail。
+- Owning rule: `apps/client/src/components/chat/AGENTS.md` 的消息级操作约束。
+- Token or implementation: `history-timeline/timeline-visibility.ts` 与对应单测。
+- Source: 用户先要求 Event line 模式在真实聊天页持续展示，随后明确把内容容器阈值调整为 `820px`，并要求在外观设置中支持 Event lines / Nodes 两种展示模式。
+- Effective date: 2026-07-13
+- Supersedes: OW-DM-003 Revision 3；保留 `820px` 阈值，并把用户显式选择 `node` 登记为 Event lines 默认规则的作用域例外。
+- Exceptions: 容器宽度不超过 `820px`、嵌入式会话、Agent Room、无节点、用户主动隐藏，以及用户显式选择 `node` 渲染模式。
+- Automatic enforcement: 纯可见性单测、真实短会话 DOM 断言和独立视觉审阅。
+
 ## 待确认冲突
 
 当前无。

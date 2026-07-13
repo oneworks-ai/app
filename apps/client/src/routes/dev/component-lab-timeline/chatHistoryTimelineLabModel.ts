@@ -68,7 +68,7 @@ export const chatTimelineNodes: ChatHistoryTimelineNode[] = [
     id: 'u-brief',
     messageId: 'msg-01',
     title: 'Core timeline shape with a much longer branch metadata label that should truncate gracefully',
-    description: 'Keep the right side rail focused on user turns and final answer anchors.',
+    description: 'Keep the left side rail focused on user turns and final answer anchors.',
     timestamp: '10:12',
     kind: 'question',
     activeChildId: 'a-brief-final',
@@ -733,6 +733,80 @@ export const smallTimelineNodes: ChatHistoryTimelineNode[] = [
   })
 ]
 
+const manyEventCount = 160
+const manyEventForkIndexes = new Set([17, 39, 63, 87, 111, 135, 151])
+const getManyEventNodeId = (index: number) => `many-event-${String(index + 1).padStart(3, '0')}`
+const getManyEventTimestamp = (index: number) => {
+  const totalMinutes = 13 * 60 + index
+  const hours = Math.floor(totalMinutes / 60) % 24
+  const minutes = totalMinutes % 60
+
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+const getManyEventStatus = (index: number): TimelineNodeFixture['status'] => {
+  if (index === manyEventCount - 1) return { label: 'Running', state: 'running' }
+  if (index > 0 && index % 47 === 0) return { label: 'Error', state: 'error' }
+  if (index > 0 && index % 37 === 0) return { label: 'Permission Request', state: 'permission' }
+  if (index > 0 && index % 31 === 0) return { label: 'Ask User Question', state: 'ask-user' }
+  if (index > 0 && index % 23 === 0) return { label: 'Waiting', state: 'waiting' }
+
+  return completeStatus
+}
+
+export const manyEventTimelineNodes: ChatHistoryTimelineNode[] = Array.from(
+  { length: manyEventCount },
+  (_, index) => {
+    const id = getManyEventNodeId(index)
+    const nextNodeId = index < manyEventCount - 1 ? getManyEventNodeId(index + 1) : undefined
+    const sideNodeId = `many-fork-${String(index + 1).padStart(3, '0')}`
+    const hasFork = manyEventForkIndexes.has(index)
+    const followsFork = manyEventForkIndexes.has(index - 1)
+    const kind = index % 2 === 0 ? 'question' : 'answer'
+    const mainNode = createTimelineNode({
+      id,
+      messageId: `many-message-${String(index + 1).padStart(3, '0')}`,
+      title: `Dense event ${String(index + 1).padStart(3, '0')}`,
+      description: `Event ${
+        index + 1
+      } of ${manyEventCount} exercises dense rail hover, selection, and scroll synchronization.`,
+      timestamp: getManyEventTimestamp(index),
+      kind,
+      activeChildId: nextNodeId,
+      childIds: [nextNodeId, hasFork ? sideNodeId : undefined].filter((childId): childId is string => childId != null),
+      depth: index,
+      forkCount: hasFork ? 2 : undefined,
+      marks: index > 0 && index % 29 === 0
+        ? { pinned: true, starred: index % 58 === 0 }
+        : undefined,
+      parentId: index > 0 ? getManyEventNodeId(index - 1) : undefined,
+      siblingCount: followsFork ? 2 : 1,
+      status: getManyEventStatus(index)
+    })
+
+    if (!hasFork) return [mainNode]
+
+    return [
+      mainNode,
+      createTimelineNode({
+        id: sideNodeId,
+        messageId: `${sideNodeId}-message`,
+        title: `Alternative after event ${index + 1}`,
+        description: 'Short side branch keeps double-click graph expansion meaningful in the dense fixture.',
+        timestamp: getManyEventTimestamp(index + 1),
+        kind: index % 2 === 0 ? 'answer' : 'question',
+        branchId: `many-branch-${index + 1}`,
+        depth: index + 1,
+        isOnActivePath: false,
+        lane: 1,
+        parentId: id,
+        siblingCount: 2,
+        siblingIndex: 1,
+        status: { label: 'Complete', state: 'complete' }
+      })
+    ]
+  }
+).flat()
+
 export const complexForkTimelineNodes: ChatHistoryTimelineNode[] = [
   createTimelineNode({
     id: 'cx-u-root',
@@ -1169,6 +1243,14 @@ export const chatTimelineScenarios = [
     nodes: smallTimelineNodes,
     shellClassName: 'is-small-data',
     title: 'Small Data'
+  },
+  {
+    id: 'many-events',
+    hostMessageInserts: [],
+    initialNodeId: 'many-event-081',
+    nodes: manyEventTimelineNodes,
+    shellClassName: 'is-many-events',
+    title: 'Many Events (160)'
   },
   {
     id: 'complex-forks',

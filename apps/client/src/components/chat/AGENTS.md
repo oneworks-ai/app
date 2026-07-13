@@ -77,6 +77,7 @@
 - 消息级操作要始终基于原始 message id，而不是渲染拆分后的临时 id；`text/tool-group` 拆分只影响展示，不应影响 `edit / recall / fork / copy id / copy link`。
 - `edit / fork` 创建的新 session 会通过 `messageBranchGroupId` 聚合成消息版本；前端版本切换控件应挂在对应用户消息下方，这类内部版本 session 不应在侧边栏会话列表里展示，也不要把路由 path 切到子 session id，当前版本状态放在 `branchSessionId` query 里。
 - 多轮分支时，`branchSessionId` 是当前 active leaf / active timeline；消息版本控件要沿 active leaf 祖先链解析各层分支点，只渲染仍存在于当前时间线里的分支点。
+- 主会话内容容器宽度超过 `820px` 且存在至少一个历史时间线节点时，左侧 timeline rail 必须持续展示；消息是否产生滚动只控制上下边缘渐隐，不得作为 rail 的可见性门槛。默认使用 `event-line`，global `appearance.historyTimelineMode` 可显式切换为原有 `node` 模式；容器宽度不超过 `820px`、`embeddedSessionChrome`、Agent Room 和用户主动隐藏是明确可见性例外。
 
 ## Sender 结构约束
 

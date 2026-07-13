@@ -92,7 +92,7 @@ export function ChatHistoryBranchGraph({
   const graphWidth = laneCount * timelineGraphLaneWidth
   const graphHeight = rowLayouts.reduce((total, layout) => total + layout.spanHeight, 0)
   const rowGridStyle = {
-    gridTemplateColumns: `minmax(0, 1fr) repeat(${laneCount}, ${timelineGraphLaneWidth}px)`
+    gridTemplateColumns: `repeat(${laneCount}, ${timelineGraphLaneWidth}px) minmax(0, 1fr)`
   }
   const classes = ['chat-history-branch-graph', className].filter(Boolean).join(' ')
 
@@ -135,7 +135,7 @@ export function ChatHistoryBranchGraph({
                   <div
                     key={node.id}
                     className='chat-history-branch-graph__node-cell'
-                    style={{ gridColumn: laneCount - node.info.graph.lane + 1 } as CSSProperties}
+                    style={{ gridColumn: node.info.graph.lane + 1 } as CSSProperties}
                   >
                     <button
                       ref={element => registerNodeElement(node.id, element)}

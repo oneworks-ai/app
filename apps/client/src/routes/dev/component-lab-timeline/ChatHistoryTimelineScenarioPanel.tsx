@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 
 import { ChatHistoryTimelineView, useChatHistoryTimelineController } from '#~/components/chat/history-timeline'
-import type { ChatHistoryTimelineNode } from '#~/components/chat/history-timeline'
+import type { ChatHistoryTimelineNode, ChatHistoryTimelineRailRenderMode } from '#~/components/chat/history-timeline'
 
 import { HostChatPreview } from './HostChatPreview'
 import type { HostChatPreviewMessage } from './HostChatPreview'
@@ -28,12 +28,14 @@ export function ChatHistoryTimelineScenarioPanel({
   hostMessageInserts = [],
   initialNodeId,
   nodes,
+  railRenderMode,
   shellClassName,
   title
 }: {
   hostMessageInserts?: ChatHistoryTimelineHostMessageInsert[]
   initialNodeId: string
   nodes: ChatHistoryTimelineNode[]
+  railRenderMode: ChatHistoryTimelineRailRenderMode
   shellClassName?: string
   title: string
 }) {
@@ -65,12 +67,15 @@ export function ChatHistoryTimelineScenarioPanel({
             graphExpanded={timeline.graphExpanded}
             onGraphExpandedChange={timeline.setGraphExpanded}
             nodes={nodes}
+            railRenderMode={railRenderMode}
             activeNodeIds={timeline.activeNodeIds}
             pathNodes={timeline.activePathNodes}
             selectedNodeId={timeline.selectedNodeId}
-            getNodePreview={({ label, node }) => (
-              <TimelineRailNodePreview label={label} node={node} />
-            )}
+            getNodePreview={railRenderMode === 'node'
+              ? ({ label, node }) => (
+                <TimelineRailNodePreview label={label} node={node} />
+              )
+              : undefined}
             onSelectNode={timeline.selectTimelineNode}
           />
         </HostChatPreview>

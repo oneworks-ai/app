@@ -175,6 +175,7 @@ export const messageLinksConfigSchema = z.object({
 })
 
 const appearancePrimaryColorSchema = z.enum(['#E23F12', '#3F7E8F', '#00B454', '#8B9493'])
+const appearanceHistoryTimelineModeSchema = z.enum(['event-line', 'node'])
 const appearanceThemeModeSchema = z.enum(['system', 'light', 'dark'])
 const iconBackgroundSchema = z.enum(['transparent', 'solid', 'textured'])
 const desktopIconAppearanceSchema = z.enum(['system', 'light', 'dark'])
@@ -193,6 +194,8 @@ const desktopContextCaptureConfigSchema = z.object({
 })
 
 export const appearanceConfigSchema = z.object({
+  historyTimelineMode: appearanceHistoryTimelineModeSchema.optional()
+    .describe('Global chat history timeline render mode'),
   primaryColor: appearancePrimaryColorSchema.optional()
     .describe('Global app primary color preset'),
   themeMode: appearanceThemeModeSchema.optional()

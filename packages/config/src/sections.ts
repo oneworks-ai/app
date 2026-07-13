@@ -80,6 +80,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 const buildAppearanceSection = (appearance: Config['appearance'] | undefined): Config['appearance'] | undefined => {
   if (appearance == null) return undefined
   return {
+    ...(appearance.historyTimelineMode === undefined
+      ? {}
+      : { historyTimelineMode: appearance.historyTimelineMode }),
     ...(appearance.primaryColor === undefined ? {} : { primaryColor: appearance.primaryColor }),
     ...(appearance.themeMode === undefined ? {} : { themeMode: appearance.themeMode })
   }

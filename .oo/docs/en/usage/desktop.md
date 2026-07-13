@@ -41,6 +41,7 @@ The desktop shell starts or connects to a project service, then renders the Web 
 ## Runtime Boundary
 
 - Desktop preferences such as launcher shortcuts, icon style, and module update channels are stored in the global config `desktop` section.
+- App appearance preferences, including theme and chat history timeline display, are stored in the global config `appearance` section and apply across workspaces.
 - Recent projects are stored in Electron `userData` as runtime state.
 - Project configuration, rules, skills, plugins, sessions, and adapter accounts are still resolved from the selected workspace and project home.
 - Module updates for adapters, server, client, Web shell, and plugins take effect after the relevant runtime restarts.

@@ -272,16 +272,21 @@ describe('config schema bundle', () => {
     expect(properties.themeMode).toMatchObject({
       enum: ['system', 'light', 'dark']
     })
+    expect(properties.historyTimelineMode).toMatchObject({
+      enum: ['event-line', 'node']
+    })
     expect(properties.iconBackground).toBeUndefined()
 
     const parsed = await validateConfigSection('appearance', {
       primaryColor: '#3F7E8F',
+      historyTimelineMode: 'node',
       themeMode: 'dark'
     })
     expect(parsed.success).toBe(true)
     if (parsed.success) {
       expect(parsed.data).toEqual({
         primaryColor: '#3F7E8F',
+        historyTimelineMode: 'node',
         themeMode: 'dark'
       })
     }
@@ -311,6 +316,11 @@ describe('config schema bundle', () => {
       themeMode: 'auto'
     })
     expect(invalidThemeMode.success).toBe(false)
+
+    const invalidHistoryTimelineMode = await validateConfigSection('appearance', {
+      historyTimelineMode: 'compact'
+    })
+    expect(invalidHistoryTimelineMode.success).toBe(false)
   })
 
   it('validates global desktop settings', async () => {
