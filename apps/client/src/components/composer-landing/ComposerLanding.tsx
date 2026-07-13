@@ -1,10 +1,11 @@
 import './ComposerLanding.scss'
 
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 
 interface ComposerStackProps {
   children: ReactNode
   className?: string
+  rootRef?: Ref<HTMLDivElement>
 }
 
 interface ComposerLandingProps {
@@ -13,9 +14,9 @@ interface ComposerLandingProps {
   compact?: boolean
 }
 
-export function ComposerStack({ children, className }: ComposerStackProps) {
+export function ComposerStack({ children, className, rootRef }: ComposerStackProps) {
   return (
-    <div className={['composer-stack', className].filter(Boolean).join(' ')}>
+    <div ref={rootRef} className={['composer-stack', className].filter(Boolean).join(' ')}>
       <div className='composer-stack__inner'>
         {children}
       </div>

@@ -1,5 +1,7 @@
 export type ChatHistoryTimelineNodeKind = 'answer' | 'question'
 
+export type ChatHistoryTimelineRailRenderMode = 'event-line' | 'node'
+
 export type ChatHistoryTimelineNodeStatus =
   | 'ask-user'
   | 'complete'

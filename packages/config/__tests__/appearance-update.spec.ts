@@ -24,6 +24,7 @@ describe('appearance config updates', () => {
           {
             defaultModel: 'gpt-5.4',
             appearance: {
+              historyTimelineMode: 'event-line',
               iconBackground: 'transparent',
               primaryColor: '#E23F12',
               themeMode: 'light'
@@ -39,6 +40,7 @@ describe('appearance config updates', () => {
         source: 'global',
         section: 'appearance',
         value: {
+          historyTimelineMode: 'node',
           primaryColor: '#00B454',
           themeMode: 'dark'
         }
@@ -47,6 +49,7 @@ describe('appearance config updates', () => {
       expect(result.configPath).toBe(configPath)
       expect(result.updatedConfig.defaultModel).toBe('gpt-5.4')
       expect(result.updatedConfig.appearance).toEqual({
+        historyTimelineMode: 'node',
         primaryColor: '#00B454',
         themeMode: 'dark'
       })
@@ -55,6 +58,7 @@ describe('appearance config updates', () => {
       expect(written).toEqual({
         defaultModel: 'gpt-5.4',
         appearance: {
+          historyTimelineMode: 'node',
           primaryColor: '#00B454',
           themeMode: 'dark'
         }
@@ -102,6 +106,7 @@ describe('appearance config updates', () => {
         JSON.stringify(
           {
             appearance: {
+              historyTimelineMode: 'event-line',
               primaryColor: '#3F7E8F'
             }
           },
@@ -121,6 +126,7 @@ describe('appearance config updates', () => {
 
       const written = JSON.parse(await readFile(configPath, 'utf-8'))
       expect(written.appearance).toEqual({
+        historyTimelineMode: 'event-line',
         primaryColor: '#3F7E8F',
         themeMode: 'dark'
       })

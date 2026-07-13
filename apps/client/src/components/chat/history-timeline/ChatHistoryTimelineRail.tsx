@@ -6,11 +6,18 @@ import type { ReactNode } from 'react'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 
 import { ChatHistoryTimelineRailEntry } from './ChatHistoryTimelineRailEntry'
-import type { ChatHistoryTimelineRailPreviewContext } from './ChatHistoryTimelineRailEntry'
+import type {
+  ChatHistoryTimelineRailForkDisclosure,
+  ChatHistoryTimelineRailPreviewContext
+} from './ChatHistoryTimelineRailEntry'
 import { TimelineMarks } from './TimelineMarks'
 import { buildCollapsedRailEntries, defaultCollapseThreshold } from './rail-collapse'
 import type { TimelineRailMarkerEntry } from './rail-collapse'
-import type { ChatHistoryTimelineNode, ChatHistoryTimelineSelectHandler } from './types'
+import type {
+  ChatHistoryTimelineNode,
+  ChatHistoryTimelineRailRenderMode,
+  ChatHistoryTimelineSelectHandler
+} from './types'
 import { useTimelineRailCollapseThreshold } from './useTimelineRailCollapseThreshold'
 import { useTimelineRailSelectionCursor } from './useTimelineRailSelectionCursor'
 
@@ -20,10 +27,13 @@ export interface ChatHistoryTimelineRailProps {
   activeBranchLabel?: string
   className?: string
   footerAction?: ReactNode
+  forkDisclosure?: ChatHistoryTimelineRailForkDisclosure
   getNodePreview?: (context: ChatHistoryTimelineRailPreviewContext) => ReactNode
   markerFilter?: (node: ChatHistoryTimelineNode) => boolean
   nodes: ChatHistoryTimelineNode[]
+  onExpandFork?: (node: ChatHistoryTimelineNode) => void
   onSelectNode?: ChatHistoryTimelineSelectHandler
+  renderMode?: ChatHistoryTimelineRailRenderMode
   collapseThreshold?: number
   selectedNodeId?: string
   showHeader?: boolean
@@ -44,10 +54,13 @@ export function ChatHistoryTimelineRail({
   className,
   collapseThreshold = defaultCollapseThreshold,
   footerAction,
+  forkDisclosure,
   getNodePreview,
   markerFilter = defaultMarkerFilter,
   nodes,
+  onExpandFork,
   onSelectNode,
+  renderMode = 'node',
   selectedNodeId,
   showHeader = false,
   showSelectionPreview = false,
@@ -74,7 +87,9 @@ export function ChatHistoryTimelineRail({
       node
     }
   })
-  const railEntries = buildCollapsedRailEntries(markersWithLabels, selectedNodeId, resolvedCollapseThreshold)
+  const railEntries = renderMode === 'event-line'
+    ? markersWithLabels
+    : buildCollapsedRailEntries(markersWithLabels, selectedNodeId, resolvedCollapseThreshold)
   const selectedNode = nodes.find(node => node.id === selectedNodeId) ?? markers[0] ?? nodes[0]
   const selectedMarkerNodeId = markers.some(marker => marker.id === selectedNode?.id)
     ? selectedNode?.id
@@ -83,16 +98,22 @@ export function ChatHistoryTimelineRail({
     .map(entry => entry.kind === 'ellipsis' ? entry.key : entry.node.id)
     .join('|')
   const {
+    canScrollDown,
+    canScrollUp,
     registerMarkerElement,
     selectionCursorStyle,
     selectionCursorVisible
   } = useTimelineRailSelectionCursor({
     bodyElementRef,
+    keepSelectedMarkerVisible: renderMode === 'event-line',
     layoutKey: railEntryKey,
     selectedMarkerNodeId
   })
   const classes = [
     'chat-history-timeline-rail',
+    `is-${renderMode}-mode`,
+    canScrollDown ? 'can-scroll-down' : '',
+    canScrollUp ? 'can-scroll-up' : '',
     footerAction != null ? 'has-footer-action' : '',
     topAction != null ? 'has-top-action' : '',
     className
@@ -130,8 +151,11 @@ export function ChatHistoryTimelineRail({
           <ChatHistoryTimelineRailEntry
             key={entry.kind === 'ellipsis' ? entry.key : entry.node.id}
             entry={entry}
+            forkDisclosure={forkDisclosure}
             getNodePreview={getNodePreview}
+            onExpandFork={onExpandFork}
             onSelectNode={onSelectNode}
+            renderMode={renderMode}
             registerMarkerElement={registerMarkerElement}
             selectedNodeId={selectedNode?.id}
           />

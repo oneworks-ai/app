@@ -31,7 +31,7 @@
 }
 
 .chat-status-bar__actions {
-  --sender-control-height: 24px;
+  --sender-control-height: var(--chat-surface-status-control-height, 24px);
   --sender-control-radius: 6px;
   --sender-control-hover-bg: var(--nav-hover-bg, #f3f4f6);
   --sender-control-active-bg: var(--nav-active-bg, #eff6ff);

@@ -102,6 +102,7 @@ describe('config sections helpers', () => {
         workspaceFileTarget: 'fileTab'
       },
       appearance: {
+        historyTimelineMode: 'node',
         iconBackground: 'solid',
         primaryColor: '#00B454',
         themeMode: 'dark'
@@ -151,6 +152,11 @@ describe('config sections helpers', () => {
     expect(getConfigSectionValueAtPath(sections, appearanceThemePath)).toEqual({
       exists: true,
       value: 'dark'
+    })
+    const appearanceTimelinePath = resolveConfigSectionPath(parseConfigSectionPath('appearance.historyTimelineMode'))
+    expect(getConfigSectionValueAtPath(sections, appearanceTimelinePath)).toEqual({
+      exists: true,
+      value: 'node'
     })
     const legacyAppearancePath = resolveConfigSectionPath(parseConfigSectionPath('appearance.iconBackground'))
     expect(getConfigSectionValueAtPath(sections, legacyAppearancePath)).toEqual({

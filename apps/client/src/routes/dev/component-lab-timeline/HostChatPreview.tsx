@@ -23,6 +23,8 @@ const avatarLabelByKind = {
   question: 'Y'
 } as const
 
+const programmaticScrollSpySuppressionMs = 2000
+
 export function HostChatPreview({
   children,
   messages,
@@ -48,7 +50,8 @@ export function HostChatPreview({
   useEffect(() => {
     if (scrollTargetNodeId == null) return
 
-    suppressScrollSpyUntilRef.current = window.performance.now() + 650
+    suppressScrollSpyUntilRef.current = window.performance.now() +
+      programmaticScrollSpySuppressionMs
 
     const rowElement = rowElementById.current.get(scrollTargetNodeId)
 
@@ -98,6 +101,10 @@ export function HostChatPreview({
     })
   }, [syncActiveNodeFromScroll])
 
+  const releaseScrollSpySuppression = useCallback(() => {
+    suppressScrollSpyUntilRef.current = 0
+  }, [])
+
   useEffect(() => () => {
     if (scrollFrameRef.current != null) {
       window.cancelAnimationFrame(scrollFrameRef.current)
@@ -113,7 +120,9 @@ export function HostChatPreview({
         <div
           ref={rowsElementRef}
           className='component-lab-timeline-host__rows'
+          onPointerDown={releaseScrollSpySuppression}
           onScroll={handleRowsScroll}
+          onWheel={releaseScrollSpySuppression}
         >
           {messages.map((message, index) => {
             const previousMessage = messages[index - 1]

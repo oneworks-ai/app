@@ -28,6 +28,8 @@ The Web UI can edit global, project, and local configuration sources. The main c
 
 Simple scalar fields can be edited directly. Whole-field collections, JSON objects, and inherited collection entries require an explicit override action before saving to the current source.
 
+Appearance preferences such as the primary color, theme mode, and chat history timeline display are stored in the global `appearance` section and apply across workspaces. The history timeline can use compact `Event lines` or the original `Nodes` view; `Event lines` remains the default when the option is unset.
+
 ## Local Media in Chat Markdown
 
 Local media referenced by an agent response can be previewed safely inside the chat message. Markdown images and ordinary image links render as images; common video and audio links render with controls, fill the available message width, and support seeking. Small images keep their intrinsic size instead of being enlarged. In the shared Web client, playback uses a same-origin launcher route that forwards only to the selected workspace's fixed media endpoint. Access is limited to the current session workspace and One Works artifacts under `/tmp/oneworks-cua`. Other absolute paths, directories, device files, and escaping symlinks are rejected. Remote HTTP(S), anchor, and non-media links keep their existing behavior. A failed media load switches once to a clear fallback link instead of retrying indefinitely.

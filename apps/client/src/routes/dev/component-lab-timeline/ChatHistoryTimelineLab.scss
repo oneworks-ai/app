@@ -20,6 +20,38 @@
   align-items: start;
 }
 
+.component-lab-timeline__render-mode {
+  align-self: flex-start;
+  padding: 2px;
+  border: 1px solid var(--overlay-lab-border);
+  border-radius: 8px;
+  display: inline-flex;
+  gap: 2px;
+  background: var(--overlay-lab-surface);
+
+  button {
+    min-height: 24px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--overlay-lab-muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+
+    &:hover,
+    &:focus-visible,
+    &.is-active {
+      background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+      color: var(--text-color);
+      outline: none;
+    }
+  }
+}
+
 .component-lab-timeline__scenario {
   min-width: 0;
   display: flex;
@@ -60,6 +92,10 @@
 
 .component-lab-timeline-shell.is-complex-forks {
   height: 540px;
+}
+
+.component-lab-timeline-shell.is-many-events {
+  height: 640px;
 }
 
 .component-lab-timeline-host {
@@ -110,12 +146,12 @@
   min-height: 0;
   flex: 1;
   height: 100%;
-  padding: 16px 44px 16px 16px;
+  padding: 16px 16px 16px 44px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   scrollbar-width: thin;
 }
 
@@ -334,7 +370,7 @@
   }
 
   .component-lab-timeline-host__rows {
-    padding: 12px 38px 12px 10px;
+    padding: 12px 10px 12px 38px;
   }
 
   .component-lab-timeline-host__message-card {

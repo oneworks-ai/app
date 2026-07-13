@@ -58,7 +58,7 @@ npx oneworks app --no-cache
 
 macOS Dock 图标右键菜单也会展示最近项目、当前打开窗口、`Open Launcher`、`New Window`、`Open...`、`Open Folder...` 和 `Open Recent`。
 
-配置页里的 `外观 / Appearance` 分组只调整当前配置层级的界面主题色。桌面应用内的 `桌面端 / Desktop` 分组负责全局桌面偏好，包括启动面板快捷键、应用 icon 主题、背景样式（透明、纯色、纹理）和同步系统应用图标；macOS 下对应 Dock 图标，Windows 下对应任务栏应用图标。快捷键设置为空会停用全局快捷键。这些 Electron-only 偏好统一写入全局 `~/.oneworks/.oo.config.json` 的 `desktop` section，不随项目切换；如果全局配置通过 `extend` 继承桌面偏好，界面会读取继承后的有效值，但保存时只写入本次变更的全局 `desktop` 字段。更新配置 `desktop.autoUpdate` / `desktop.updateChannel` / `desktop.moduleUpdateChannels` 例外，读取和写入当前 workspace 的 project `.oo.config.json`，未配置时默认自动更新开启且使用 Stable；模块级覆盖未配置时继承默认更新通道。最近项目列表是运行状态，继续保存在 Electron `userData/desktop-state.json`。
+配置页里的 `外观 / Appearance` 分组维护跨项目生效的 app 级个人偏好，包括界面主题色、主题模式和会话历史时间线展示模式，统一写入 global `appearance` section。桌面应用内的 `桌面端 / Desktop` 分组负责全局桌面偏好，包括启动面板快捷键、应用 icon 主题、背景样式（透明、纯色、纹理）和同步系统应用图标；macOS 下对应 Dock 图标，Windows 下对应任务栏应用图标。快捷键设置为空会停用全局快捷键。这些 Electron-only 偏好统一写入全局 `~/.oneworks/.oo.config.json` 的 `desktop` section，不随项目切换；如果全局配置通过 `extend` 继承桌面偏好，界面会读取继承后的有效值，但保存时只写入本次变更的全局 `desktop` 字段。更新配置 `desktop.autoUpdate` / `desktop.updateChannel` / `desktop.moduleUpdateChannels` 例外，读取和写入当前 workspace 的 project `.oo.config.json`，未配置时默认自动更新开启且使用 Stable；模块级覆盖未配置时继承默认更新通道。最近项目列表是运行状态，继续保存在 Electron `userData/desktop-state.json`。
 
 View 快捷键：
 

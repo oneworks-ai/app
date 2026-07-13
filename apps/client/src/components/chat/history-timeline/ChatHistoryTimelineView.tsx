@@ -1,6 +1,6 @@
 import './ChatHistoryTimeline.scss'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useId, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
@@ -9,7 +9,11 @@ import { ChatHistoryBranchGraph } from './ChatHistoryBranchGraph'
 import { ChatHistoryTimelineRail } from './ChatHistoryTimelineRail'
 import type { ChatHistoryTimelineRailPreviewContext } from './ChatHistoryTimelineRail'
 import { getChatHistoryTimelinePathNodes } from './timeline-graph'
-import type { ChatHistoryTimelineNode, ChatHistoryTimelineSelectHandler } from './types'
+import type {
+  ChatHistoryTimelineNode,
+  ChatHistoryTimelineRailRenderMode,
+  ChatHistoryTimelineSelectHandler
+} from './types'
 
 export interface ChatHistoryTimelineViewProps {
   activeBranchLabel?: string
@@ -31,6 +35,7 @@ export interface ChatHistoryTimelineViewProps {
   onSelectNode?: ChatHistoryTimelineSelectHandler
   pathNodes?: ChatHistoryTimelineNode[]
   railClassName?: string
+  railRenderMode?: ChatHistoryTimelineRailRenderMode
   selectedNodeId?: string
   showGraphToggle?: boolean
 }
@@ -65,10 +70,12 @@ export function ChatHistoryTimelineView({
   onSelectNode,
   pathNodes,
   railClassName,
+  railRenderMode = 'node',
   selectedNodeId,
   showGraphToggle = true
 }: ChatHistoryTimelineViewProps) {
   const [uncontrolledGraphExpanded, setUncontrolledGraphExpanded] = useState(defaultGraphExpanded)
+  const graphDrawerId = useId()
   const resolvedGraphExpanded = graphExpanded ?? uncontrolledGraphExpanded
   const activePathNodes = useMemo(
     () => pathNodes ?? getChatHistoryTimelinePathNodes(nodes, selectedNodeId),
@@ -95,7 +102,15 @@ export function ChatHistoryTimelineView({
     onGraphExpandedChange?.(nextExpanded)
   }, [graphExpanded, onGraphExpandedChange])
 
-  const defaultGraphAction = showGraphToggle
+  const handleSelectTimelineNode = useCallback<ChatHistoryTimelineSelectHandler>((nodeId, detail) => {
+    onSelectNode?.(nodeId, detail)
+  }, [onSelectNode])
+
+  const handleExpandFork = useCallback(() => {
+    setGraphExpanded(true)
+  }, [setGraphExpanded])
+
+  const defaultGraphAction = showGraphToggle && railRenderMode === 'node'
     ? (
       <button
         type='button'
@@ -117,6 +132,7 @@ export function ChatHistoryTimelineView({
     : undefined
   const classes = [
     'chat-history-timeline-view',
+    `is-${railRenderMode}-mode`,
     resolvedGraphExpanded ? 'is-graph-expanded' : '',
     className
   ].filter(Boolean).join(' ')
@@ -124,6 +140,7 @@ export function ChatHistoryTimelineView({
   return (
     <div className={classes}>
       <div
+        id={graphDrawerId}
         className='chat-history-timeline-view__graph-drawer'
         aria-hidden={!resolvedGraphExpanded}
       >
@@ -136,8 +153,22 @@ export function ChatHistoryTimelineView({
           activeNodeIds={resolvedActiveNodeIds}
           pathNodes={activePathNodes}
           selectedNodeId={selectedNodeId}
-          onSelectNode={onSelectNode}
+          onSelectNode={handleSelectTimelineNode}
         />
+        {railRenderMode === 'event-line' && resolvedGraphExpanded && (
+          <button
+            type='button'
+            className='chat-history-timeline-view__graph-action chat-history-timeline-view__graph-dismiss'
+            aria-label={graphToggleLabels.collapse}
+            title={graphToggleLabels.collapse}
+            onClick={() => setGraphExpanded(false)}
+          >
+            <MaterialSymbol
+              name='close'
+              className='chat-history-timeline-view__graph-action-icon'
+            />
+          </button>
+        )}
       </div>
       <ChatHistoryTimelineRail
         className={[
@@ -146,12 +177,17 @@ export function ChatHistoryTimelineView({
         ].filter(Boolean).join(' ')}
         activeBranchLabel={resolvedActiveBranchLabel}
         collapseThreshold={collapseThreshold}
-        topAction={graphAction ?? defaultGraphAction}
+        forkDisclosure={railRenderMode === 'event-line'
+          ? { controlsId: graphDrawerId, expanded: resolvedGraphExpanded }
+          : undefined}
+        topAction={railRenderMode === 'node' ? graphAction ?? defaultGraphAction : undefined}
         nodes={nodes}
         markerFilter={resolvedMarkerFilter}
+        renderMode={railRenderMode}
         selectedNodeId={selectedNodeId}
         getNodePreview={getNodePreview}
-        onSelectNode={onSelectNode}
+        onExpandFork={railRenderMode === 'event-line' ? handleExpandFork : undefined}
+        onSelectNode={handleSelectTimelineNode}
       />
     </div>
   )

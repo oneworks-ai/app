@@ -4,6 +4,8 @@ import { InputNumber, Switch } from 'antd'
 import { useAtom, useSetAtom } from 'jotai'
 import type { ReactNode } from 'react'
 
+import type { AppearanceHistoryTimelineMode } from '@oneworks/types'
+
 import {
   interactionPanelPinnedTabLimitAtom,
   normalizeThemeMode,
@@ -17,8 +19,10 @@ import type { SenderHeaderDisplayMode, ThemeMode } from '#~/store/index.js'
 
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
+import { normalizeHistoryTimelineMode } from '#~/utils/appearance-config'
 import { FieldRow } from './ConfigFieldRow'
 import { ConfigSectionFrame } from './ConfigSectionFrame'
+import { HistoryTimelineModeRadioGroup } from './HistoryTimelineModeRadioGroup'
 import { ProjectThemeColorSettings } from './ProjectThemeColorSettings'
 import { ThemeModeRadioGroup } from './ThemeModeRadioGroup'
 import type { TranslationFn } from './configUtils'
@@ -39,6 +43,7 @@ export function AppSettingsPanel({
   t: TranslationFn
 }) {
   const setThemeMode = useSetAtom(themeAtom)
+  const historyTimelineMode = normalizeHistoryTimelineMode(appearance.historyTimelineMode)
   const themeMode = normalizeThemeMode(appearance.themeMode)
   const { resolvedThemeMode } = useResolvedThemeMode()
   const [showAnnouncements, setShowAnnouncements] = useAtom(showAnnouncementsAtom)
@@ -53,6 +58,12 @@ export function AppSettingsPanel({
     onAppearanceChange({
       ...appearance,
       themeMode: nextThemeMode
+    })
+  }
+  const handleHistoryTimelineModeChange = (nextMode: AppearanceHistoryTimelineMode) => {
+    onAppearanceChange({
+      ...appearance,
+      historyTimelineMode: nextMode
     })
   }
 
@@ -84,6 +95,17 @@ export function AppSettingsPanel({
             />
           </FieldRow>
         </div>
+        <FieldRow
+          title={t('config.appSettings.historyTimelineMode.label')}
+          description={t('config.appSettings.historyTimelineMode.desc')}
+          icon='timeline'
+        >
+          <HistoryTimelineModeRadioGroup
+            value={historyTimelineMode}
+            onChange={handleHistoryTimelineModeChange}
+            t={t}
+          />
+        </FieldRow>
         <FieldRow
           title={t('config.appSettings.senderHeaderDisplay.label')}
           description={t('config.appSettings.senderHeaderDisplay.desc')}

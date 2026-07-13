@@ -85,6 +85,7 @@ import { useChatScroll } from '#~/hooks/chat/use-chat-scroll'
 import { useChatSessionActions } from '#~/hooks/chat/use-chat-session-actions'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 import { getLoopedIndex } from '#~/hooks/use-roving-focus-list'
+import { getGlobalHistoryTimelineMode } from '#~/utils/appearance-config'
 import type { WorkspaceFileLinkTarget } from '#~/utils/link-targets'
 import { buildMessageBranchSearch } from '#~/utils/message-branch-session'
 import { resolveMessageLinksConfig } from '#~/utils/message-links-config'
@@ -96,6 +97,7 @@ import {
   ChatHistoryTimelineView,
   buildChatHistoryTimelineCurrentStatus,
   buildChatHistoryTimelineFromMessageTurns,
+  shouldShowChatHistoryTimeline,
   useChatHistoryTimelineController
 } from './history-timeline'
 import type { ChatHistoryTimelineSelectHandler } from './history-timeline'
@@ -365,6 +367,7 @@ export function ChatHistoryView({
     [configRes?.sources?.merged?.general?.messageLinks]
   )
   const showVoiceInputInSender = configRes?.sources?.merged?.voice?.speechToText?.showInSender !== false
+  const historyTimelineRenderMode = getGlobalHistoryTimelineMode(configRes)
   const workspaceDraftDirtyRef = useRef(false)
   const pendingSessionCreationContext = useAtomValue(pendingSessionCreationContextAtom)
   const pendingSessionInitialContent = useAtomValue(pendingSessionInitialContentAtom)
@@ -567,7 +570,6 @@ export function ChatHistoryView({
   const shouldRevealMessages = isReady || historyRenderCount > 0 ||
     (hasPersistedSession && session?.status !== 'running')
   const {
-    hasScrollableContent,
     messagesEndRef,
     messagesContainerRef,
     messagesContentRef,
@@ -577,6 +579,24 @@ export function ChatHistoryView({
   } = useChatScroll({
     contentVersion: historyRenderCount
   })
+  const historyMessagesFrameRef = useRef<HTMLDivElement>(null)
+  const [historyTimelineContainerWidth, setHistoryTimelineContainerWidth] = useState<number>()
+  useLayoutEffect(() => {
+    const containerElement = historyMessagesFrameRef.current
+    if (containerElement == null) return
+
+    const updateContainerWidth = () => {
+      const nextWidth = containerElement.clientWidth
+      setHistoryTimelineContainerWidth(currentWidth => currentWidth === nextWidth ? currentWidth : nextWidth)
+    }
+
+    updateContainerWidth()
+    if (typeof ResizeObserver === 'undefined') return
+
+    const resizeObserver = new ResizeObserver(updateContainerWidth)
+    resizeObserver.observe(containerElement)
+    return () => resizeObserver.disconnect()
+  }, [])
   const initialScrollDoneRef = useRef(false)
   const handledHashAnchorIdRef = useRef('')
   const handledTargetScrollKeyRef = useRef('')
@@ -904,6 +924,27 @@ export function ChatHistoryView({
     sessionCompactionEvents.length === 0 &&
     sessionWorkspaceChanges.length === 0 &&
     historyStatusNotices.length === 0
+  const composerStackRef = useRef<HTMLDivElement>(null)
+  const [composerStackHeight, setComposerStackHeight] = useState(0)
+  useLayoutEffect(() => {
+    const composerStackElement = composerStackRef.current
+    if (composerStackElement == null) {
+      setComposerStackHeight(0)
+      return
+    }
+
+    const updateComposerStackHeight = () => {
+      const nextHeight = composerStackElement.getBoundingClientRect().height
+      setComposerStackHeight(currentHeight => currentHeight === nextHeight ? currentHeight : nextHeight)
+    }
+
+    updateComposerStackHeight()
+    if (typeof ResizeObserver === 'undefined') return
+
+    const resizeObserver = new ResizeObserver(updateComposerStackHeight)
+    resizeObserver.observe(composerStackElement, { box: 'border-box' })
+    return () => resizeObserver.disconnect()
+  }, [shouldShowNewSessionGuide])
   const handleApplyConversationStarter = useCallback((starter: ConversationStarterConfig) => {
     if (session?.id != null) {
       return
@@ -1230,13 +1271,15 @@ export function ChatHistoryView({
     : newSessionGuide?.placeholder ?? placeholder
   const senderSessionInfo = isAgentRoomMode ? agentRoomSenderSessionInfo : sessionInfo
   const shouldShowMessages = shouldRevealMessages || isAgentRoomMode || messageTurns.length > 0
-  const showHistoryTimeline = !embeddedSessionChrome &&
-    !isAgentRoomMode &&
-    !isCompactLayout &&
-    !hideHistoryTimeline &&
-    hasScrollableContent &&
-    shouldShowMessages &&
-    historyTimeline.nodes.length >= 2
+  const showHistoryTimeline = shouldShowChatHistoryTimeline({
+    containerWidth: historyTimelineContainerWidth,
+    embeddedSessionChrome,
+    hideHistoryTimeline,
+    isAgentRoomMode,
+    isCompactLayout,
+    nodeCount: historyTimeline.nodes.length,
+    shouldShowMessages
+  })
 
   const updateChatTextSelectionToolbar = useCallback(() => {
     const contentElement = messagesContentRef.current
@@ -1890,10 +1933,15 @@ export function ChatHistoryView({
         </div>
       )}
       <div
+        ref={historyMessagesFrameRef}
         className={[
           'chat-history-view__messages-frame',
           showHistoryTimeline ? 'has-history-timeline' : ''
         ].filter(Boolean).join(' ')}
+        style={{
+          '--chat-history-timeline-sender-half-height': `${composerStackHeight / 2}px`,
+          '--chat-history-timeline-sender-height': `${composerStackHeight}px`
+        } as React.CSSProperties}
       >
         <div
           className={`chat-messages ${shouldShowMessages ? 'ready' : ''}`}
@@ -1974,6 +2022,7 @@ export function ChatHistoryView({
           <ChatHistoryTimelineView
             className='chat-history-view__timeline'
             graphExpanded={historyTimelineGraphExpanded}
+            railRenderMode={historyTimelineRenderMode}
             graphToggleLabels={{
               collapse: t('chat.timeline.collapseGraph'),
               expand: t('chat.timeline.expandGraph')
@@ -2006,7 +2055,7 @@ export function ChatHistoryView({
           </div>
         )
         : (
-          <ComposerStack className='chat-composer-stack'>
+          <ComposerStack className='chat-composer-stack' rootRef={composerStackRef}>
             {composerContent}
           </ComposerStack>
         )}
