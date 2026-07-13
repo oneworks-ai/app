@@ -10,7 +10,9 @@
 - Added plugin-owned launcher route and search contributions so global plugins can expose account and other surfaces without coupling their product logic into the client host.
 - Added live Codex 5-hour and 7-day quota rings to account details and the chat account selector, with ChatGPT profile avatars and deterministic local fallbacks.
 - Unified new-session, automation, and plugin creation around the same centered starter composer flow, with a concise icon-led introduction and shared searchable suggestions.
+- Added configurable chat history timelines with compact event-line and legacy node modes, branch expansion, dense-history scrolling cues, and responsive chat layout integration.
 
 ![NavRail More menu with solid surface](./assets/nav-rail-more-menu-solid.png)
 ![Codex account quota rings](./assets/codex-account-quota-rings.jpg)
 ![Starter composer creation flow](./assets/starter-composer-create-flow.png)
+![Chat history timeline appearance setting](./assets/history-timeline-appearance.png)
