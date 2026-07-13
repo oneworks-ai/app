@@ -1,0 +1,71 @@
+name: IDEA Plugin CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/idea-plugin-ci.yml
+      - .github/workflows/idea-plugin-release.yml
+      - apps/idea-plugin/**
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/idea-plugin-ci.yml
+      - .github/workflows/idea-plugin-release.yml
+      - apps/idea-plugin/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: idea-plugin-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 9.0.0
+
+      - name: Read plugin version
+        id: version
+        run: |
+          VERSION=$(node -p "JSON.parse(require('fs').readFileSync('apps/idea-plugin/package.json', 'utf8')).version")
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "archive=apps/idea-plugin/build/distributions/oneworks-idea-plugin-$VERSION.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Build and verify plugin
+        run: gradle -p apps/idea-plugin --no-daemon -Dorg.gradle.vfs.watch=false buildPlugin verifyPluginStructure
+
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: oneworks-idea-plugin-v${{ steps.version.outputs.value }}
+          path: ${{ steps.version.outputs.archive }}
+          if-no-files-found: error
+          retention-days: 14

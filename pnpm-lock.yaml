@@ -467,6 +467,8 @@ importers:
         specifier: ^5.4.8
         version: 5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
 
+  apps/idea-plugin: {}
+
   apps/relay-admin:
     dependencies:
       '@material-symbols/svg-400':

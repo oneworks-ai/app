@@ -176,6 +176,13 @@ jobs:
                   --ref "$tag" \
                   -f release_tag="$tag"
                 ;;
+              pkg/oneworks-idea-plugin/v*)
+                echo "Dispatching IDEA plugin release workflow for $tag"
+                gh workflow run idea-plugin-release.yml \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --ref "$tag" \
+                  -f release_tag="$tag"
+                ;;
               *)
                 echo "No automated workflow dispatch configured for $tag"
                 ;;

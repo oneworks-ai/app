@@ -1,0 +1,32 @@
+<idea-plugin>
+  <id>ai.oneworks.idea</id>
+  <name>One Works</name>
+  <vendor email="support@oneworks.cloud" url="https://github.com/oneworks-ai/app">One Works</vendor>
+  <version>0.1.0-alpha.0</version>
+  <description><![CDATA[
+    Opens the One Works web client in an IDE tool window and starts a project-local One Works server as the execution controller.
+  ]]></description>
+
+  <idea-version since-build="243"/>
+  <depends>com.intellij.modules.platform</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <projectService serviceImplementation="ai.oneworks.idea.OneWorksProjectService"/>
+    <toolWindow
+      id="One Works"
+      anchor="right"
+      icon="/icons/toolWindowIcon.svg"
+      factoryClass="ai.oneworks.idea.OneWorksToolWindowFactory"
+      canCloseContents="false"/>
+  </extensions>
+
+  <actions>
+    <action
+      id="OneWorks.OpenToolWindow"
+      class="ai.oneworks.idea.OpenOneWorksToolWindowAction"
+      text="Open One Works"
+      description="Open One Works for the current project">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
+  </actions>
+</idea-plugin>
