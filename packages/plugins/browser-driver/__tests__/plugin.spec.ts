@@ -95,6 +95,7 @@ describe('browser-driver plugin contract', () => {
     const request = fetchMock.mock.calls[0]
     expect(request?.[0].toString()).toBe('http://127.0.0.1:49091/v1/control')
     expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({
+      driver_instance_id: expect.any(String),
       op: 'list_pages',
       session_id: 'session-browser'
     })

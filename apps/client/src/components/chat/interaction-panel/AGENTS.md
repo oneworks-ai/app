@@ -8,6 +8,8 @@
 
 - `InteractionPanelIframeView.tsx`
   - iframe / webview 页面容器、地址栏、刷新、页面调试器右侧 dock、设备尺寸工具栏和 Chii target 自动注入。
+- `InteractionPanelDockWorkspace.tsx` / `../workspace-drawer/ChatWorkspaceDrawer.tsx` / `browser-control-agent-tab-state.ts` / `use-browser-control-agent-tab-state.ts`
+  - 底部面板与右侧 workspace drawer 的 tab chrome 都必须接入 IAB Agent 操作状态；状态按 panel page id / browser page id / operation id 隔离，只短暂覆盖 tab 图标槽并复用 `@oneworks/cursor`，不能写回持久化 tab 模型或修改站点 favicon
 - `InteractionPanelPageDebuggerListView.tsx`
   - 页面调试器列表 tab；只展示目标列表和内联 devtools iframe，不展示额外工具栏。
 - `interaction-panel-iframe-debug.ts`

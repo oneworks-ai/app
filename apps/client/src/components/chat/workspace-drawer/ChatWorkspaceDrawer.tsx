@@ -95,6 +95,11 @@ import {
 } from '../interaction-panel/interaction-panel-tab-menu'
 import { getFileName, toWorkspaceDrawerInteractionTabId } from '../interaction-panel/interaction-panel-tabs'
 import type { InteractionPanelTab } from '../interaction-panel/interaction-panel-tabs'
+import {
+  getBrowserControlAgentCursorDataUrl,
+  resolveBrowserControlTabIcon,
+  useBrowserControlAgentTabState
+} from '../interaction-panel/use-browser-control-agent-tab-state'
 import { useCopyTextWithFeedback } from '../interaction-panel/use-copy-text-with-feedback'
 import { useInteractionPanelMobileDebugDeviceOptions } from '../interaction-panel/use-interaction-panel-mobile-debug-device-options'
 import { useInteractionPanelPinnedTabs } from '../interaction-panel/use-interaction-panel-pinned-tabs'
@@ -544,6 +549,10 @@ export function ChatWorkspaceDrawer({
     rightPanelTabs
       .filter((tab): tab is Extract<SessionPanelTab, { kind: 'web' }> => tab.kind === 'web')
       .map(toRightIframePage), [rightPanelTabs])
+  const browserControlAgentTabStates = useBrowserControlAgentTabState({
+    pageIds: iframePages.map(page => page.id),
+    sessionId
+  })
   const mobileDebugPages = useMemo(() =>
     rightPanelTabs
       .filter((tab): tab is Extract<SessionPanelTab, { kind: 'mobile-debug' }> => tab.kind === 'mobile-debug')
@@ -1647,6 +1656,26 @@ export function ChatWorkspaceDrawer({
         page => {
           const tabKey = toWorkspaceDrawerIframeTabKey(page.id)
           const pinnedTab = drawerPinnedTabById[tabKey]
+          const tabIcon = resolveBrowserControlTabIcon({
+            agentState: browserControlAgentTabStates[page.id],
+            faviconUrl: page.faviconUrl,
+            hasCustomIcon: pinnedTab?.customIcon != null
+          })
+          const title = pinnedTab?.title ?? page.title
+          const agentIconNode = tabIcon.kind === 'agent'
+            ? (
+              <img
+                alt=''
+                aria-hidden='true'
+                className={`chat-interaction-panel__dock-tab-agent-status chat-interaction-panel__dock-tab-agent-status--${tabIcon.state.phase}`}
+                data-agent-action={tabIcon.state.action}
+                data-agent-operation-id={tabIcon.state.operation_id}
+                data-agent-phase={tabIcon.state.phase}
+                draggable={false}
+                src={getBrowserControlAgentCursorDataUrl(tabIcon.state.color)}
+              />
+            )
+            : undefined
 
           return {
             activeIcon: pinnedTab?.icon ?? 'language',
@@ -1673,19 +1702,21 @@ export function ChatWorkspaceDrawer({
                 />
               </div>
             ),
+            headerStatus: agentIconNode == null ? undefined : { iconNode: agentIconNode, label: title },
             icon: pinnedTab?.icon ?? 'language',
-            iconNode: pinnedTab?.customIcon != null || page.faviconUrl == null || page.faviconUrl === ''
-              ? undefined
-              : (
+            iconNode: agentIconNode ?? (tabIcon.kind === 'favicon'
+              ? (
                 <img
                   alt=''
                   aria-hidden='true'
                   className='chat-interaction-panel__dock-tab-favicon'
-                  src={page.faviconUrl}
+                  draggable={false}
+                  src={tabIcon.url}
                 />
-              ),
+              )
+              : undefined),
             key: tabKey,
-            label: pinnedTab?.title ?? page.title,
+            label: title,
             title: pinnedTab?.originalTitle ?? page.title
           }
         }
@@ -1705,6 +1736,7 @@ export function ChatWorkspaceDrawer({
     agentApprovals,
     agentRoster,
     approvalMessages,
+    browserControlAgentTabStates,
     drawerPinnedTabById,
     drawerTerminalPanes,
     closeRightWorkspaceFilePaths,

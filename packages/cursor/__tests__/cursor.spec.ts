@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { createOneWorksCursorSvg as createOneWorksCursorSvgEsm } from '@oneworks/cursor'
 import { createOneWorksCursorSvg, resolveCursorBorderColor } from '../index.cjs'
 
 describe('@oneworks/cursor', () => {
@@ -20,5 +21,10 @@ describe('@oneworks/cursor', () => {
   it('rejects invalid input without owning caller color-selection policy', () => {
     expect(() => createOneWorksCursorSvg({ color: 'purple' })).toThrow('CSS hex color')
     expect(() => createOneWorksCursorSvg({ color: '#625BF6', size: 0 })).toThrow('positive')
+  })
+
+  it('keeps the native ESM/browser export visually identical to CommonJS', () => {
+    const options = { borderColor: '#123', color: '#625bf6', size: 64 }
+    expect(createOneWorksCursorSvgEsm(options)).toBe(createOneWorksCursorSvg(options))
   })
 })

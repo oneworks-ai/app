@@ -1,5 +1,6 @@
 # Browser driver
 
+- Added oneWorks Agent operation-state favicons for controlled IAB tabs, with stable tab leases, cancellation-safe cleanup, stale-lease protection, and restoration of the latest site favicon.
 - Added a session-scoped plugin for controlling OneWorks internal browser tabs with semantic snapshots, stable element references, screenshots, bounded waits, and serial workflows.
 - Added a desktop loopback broker that authenticates each workspace runtime and keeps browser pages isolated by OneWorks session.
 - Added progressive workflow results: short runs return compact step results inline, while longer runs expose step IDs for targeted detail lookup.

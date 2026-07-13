@@ -6,6 +6,7 @@ const resetButton = document.querySelector('#reset-lab')
 const status = document.querySelector('#task-status')
 const themeIndicator = document.querySelector('#theme-indicator')
 const instanceIndicator = document.querySelector('#instance-indicator')
+const favicon = document.querySelector('#lab-favicon')
 const items = Array.from(document.querySelectorAll('.lab-item'))
 const filterButtons = Array.from(document.querySelectorAll('[data-filter]'))
 
@@ -18,6 +19,7 @@ const refreshThemeIndicator = () => {
 }
 
 const instanceName = new URLSearchParams(window.location.search).get('instance')?.trim() || 'default'
+const useDynamicFavicon = new URLSearchParams(window.location.search).get('dynamic_favicon') === '1'
 instanceIndicator.textContent = `Instance: ${instanceName}`
 
 const refreshCreateButton = () => {
@@ -38,7 +40,10 @@ const resetLab = () => {
   window.scrollTo({ top: 0, behavior: 'instant' })
 }
 
-titleInput.addEventListener('input', refreshCreateButton)
+titleInput.addEventListener('input', () => {
+  refreshCreateButton()
+  if (useDynamicFavicon) favicon.href = `./favicon-metal-dark.svg?title=${encodeURIComponent(titleInput.value)}`
+})
 confirmInput.addEventListener('change', refreshCreateButton)
 
 createButton.addEventListener('click', () => {

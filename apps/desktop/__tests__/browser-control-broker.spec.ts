@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- broker integration coverage keeps the full HTTP lifecycle in one suite. */
 import { createHash } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
@@ -359,17 +360,29 @@ describe('browser control broker', () => {
     expect(page.loadURL).not.toHaveBeenCalled()
   })
 
-  it('renders the shared Browser Driver cursor inside the controlled page', async () => {
+  it('restores the tab Agent state when the owning browser driver disconnects', async () => {
     const { createBrowserControlBroker } = await import('../src/main/browser-control-broker')
-    const page = fakeWebContents(9)
+    const page = fakeWebContents(13)
+    const host = { id: 22, isDestroyed: vi.fn(() => false) }
+    const transitions: string[] = []
+    const sendPageCommand = vi.fn(async (_host, request: any) => {
+      if (request.command.type === 'set_agent_action_state') {
+        transitions.push(request.command.state.phase)
+      }
+      return { applied: true }
+    })
     const broker = createBrowserControlBroker({
-      getWebContentsById: id => id === 9 ? page as never : undefined,
+      getWebContentsById: id => id === 13 ? page as never : undefined,
+      getWorkspaceHostWebContents: () => [host as never],
       listWebviewScopes: () => [{
+        hostWebContentsId: 22,
+        panelPageId: 'iframe-agent-page',
         registeredAt: 1,
-        sessionKey: 'session-cursor',
-        webContentsId: 9,
+        sessionKey: 'session-agent',
+        webContentsId: 13,
         workspaceFolder: '/workspace'
-      }]
+      }],
+      sendPageCommand
     })
     brokers.push(broker)
     const baseUrl = await broker.start()
@@ -378,7 +391,165 @@ describe('browser control broker', () => {
       await fetch(`${baseUrl}/v1/control`, {
         method: 'POST',
         headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ ...body, page_id: 'page_9', session_id: 'session-cursor' })
+        body: JSON.stringify({
+          driver_instance_id: 'driver-agent',
+          session_id: 'session-agent',
+          ...body
+        })
+      }).then(response => response.json())
+
+    await control({ op: 'snapshot', page_id: 'page_13' })
+    expect(await control({ op: 'click', page_id: 'page_13', ref: 's1e1' })).toMatchObject({ ok: true })
+    expect(await control({ op: 'release_agent_action_state' })).toMatchObject({
+      ok: true,
+      result: { ok: true, restored_pages: 1 }
+    })
+    expect(transitions).toEqual(['moving', 'settle', 'idle'])
+  })
+
+  it('rejects an operation whose exact cancellation arrived before begin', async () => {
+    const { createBrowserControlBroker } = await import('../src/main/browser-control-broker')
+    const page = fakeWebContents(14)
+    const host = { id: 24, isDestroyed: vi.fn(() => false) }
+    const transitions: string[] = []
+    const broker = createBrowserControlBroker({
+      getWebContentsById: id => id === 14 ? page as never : undefined,
+      getWorkspaceHostWebContents: () => [host as never],
+      listWebviewScopes: () => [{
+        hostWebContentsId: 24,
+        panelPageId: 'iframe-release-before-begin',
+        registeredAt: 1,
+        sessionKey: 'session-release-before-begin',
+        webContentsId: 14,
+        workspaceFolder: '/workspace'
+      }],
+      sendPageCommand: vi.fn(async (_host, request: any) => {
+        if (request.command.type === 'set_agent_action_state') transitions.push(request.command.state.phase)
+        return { applied: true }
+      })
+    })
+    brokers.push(broker)
+    const baseUrl = await broker.start()
+    const token = broker.getWorkspaceEnv('/workspace').__ONEWORKS_DESKTOP_BROWSER_CONTROL_TOKEN__
+    const control = async (body: Record<string, unknown>) =>
+      await fetch(`${baseUrl}/v1/control`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          agent_operation_id: 'operation-pre-cancelled',
+          driver_instance_id: 'driver-pre-cancelled',
+          page_id: 'page_14',
+          session_id: 'session-release-before-begin',
+          ...body
+        })
+      })
+
+    expect(await control({ op: 'release_agent_action_state' }).then(response => response.json())).toMatchObject({
+      ok: true,
+      result: { restored_pages: 0 }
+    })
+    await control({ op: 'snapshot' })
+    const cancelled = await control({ op: 'click', ref: 's1e1' })
+    expect(cancelled.status).toBe(409)
+    expect(await cancelled.json()).toMatchObject({
+      error: { code: 'BROWSER_CONTROL_CANCELLED' },
+      ok: false
+    })
+    expect(transitions).toEqual([])
+    expect(page.executeJavaScript).toHaveBeenCalledOnce()
+  })
+
+  it('closes the Agent-state gate before broker stop drains an in-flight moving acknowledgement', async () => {
+    const { createBrowserControlBroker } = await import('../src/main/browser-control-broker')
+    const page = fakeWebContents(15)
+    const host = { id: 25, isDestroyed: vi.fn(() => false) }
+    const transitions: string[] = []
+    let acknowledgeMoving: (() => void) | undefined
+    const broker = createBrowserControlBroker({
+      getWebContentsById: id => id === 15 ? page as never : undefined,
+      getWorkspaceHostWebContents: () => [host as never],
+      listWebviewScopes: () => [{
+        hostWebContentsId: 25,
+        panelPageId: 'iframe-stop-inflight',
+        registeredAt: 1,
+        sessionKey: 'session-stop-inflight',
+        webContentsId: 15,
+        workspaceFolder: '/workspace'
+      }],
+      sendPageCommand: vi.fn(async (_host, request: any) => {
+        if (request.command.type !== 'set_agent_action_state') return { applied: true }
+        transitions.push(request.command.state.phase)
+        if (request.command.state.phase === 'moving') {
+          await new Promise<void>(resolve => {
+            acknowledgeMoving = resolve
+          })
+        }
+        return { applied: true }
+      })
+    })
+    brokers.push(broker)
+    const baseUrl = await broker.start()
+    const token = broker.getWorkspaceEnv('/workspace').__ONEWORKS_DESKTOP_BROWSER_CONTROL_TOKEN__
+    const control = async (body: Record<string, unknown>) =>
+      await fetch(`${baseUrl}/v1/control`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          driver_instance_id: 'driver-stop-inflight',
+          page_id: 'page_15',
+          session_id: 'session-stop-inflight',
+          ...body
+        })
+      })
+
+    await control({ op: 'snapshot' })
+    const click = control({
+      agent_operation_id: 'operation-stop-inflight',
+      op: 'click',
+      ref: 's1e1'
+    })
+    await vi.waitFor(() => expect(acknowledgeMoving).toBeTypeOf('function'))
+    const stop = broker.stop()
+    await vi.waitFor(() => expect(transitions).toEqual(['moving', 'idle']))
+    acknowledgeMoving?.()
+
+    const cancelled = await click
+    expect(cancelled.status).toBe(409)
+    expect(await cancelled.json()).toMatchObject({ error: { code: 'BROWSER_CONTROL_CANCELLED' }, ok: false })
+    await stop
+    expect(page.executeJavaScript).toHaveBeenCalledOnce()
+  })
+
+  it('renders the shared Browser Driver cursor inside the controlled page', async () => {
+    const { createBrowserControlBroker } = await import('../src/main/browser-control-broker')
+    const page = fakeWebContents(9)
+    const host = { id: 23, isDestroyed: vi.fn(() => false) }
+    const broker = createBrowserControlBroker({
+      getWebContentsById: id => id === 9 ? page as never : undefined,
+      getWorkspaceHostWebContents: () => [host as never],
+      listWebviewScopes: () => [{
+        hostWebContentsId: 23,
+        panelPageId: 'iframe-cursor-page',
+        registeredAt: 1,
+        sessionKey: 'session-cursor',
+        webContentsId: 9,
+        workspaceFolder: '/workspace'
+      }],
+      sendPageCommand: vi.fn(async () => ({ applied: true }))
+    })
+    brokers.push(broker)
+    const baseUrl = await broker.start()
+    const token = broker.getWorkspaceEnv('/workspace').__ONEWORKS_DESKTOP_BROWSER_CONTROL_TOKEN__
+    const control = async (body: Record<string, unknown>) =>
+      await fetch(`${baseUrl}/v1/control`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ...body,
+          driver_instance_id: 'driver-cursor',
+          page_id: 'page_9',
+          session_id: 'session-cursor'
+        })
       })
 
     expect((await control({ op: 'snapshot' })).status).toBe(200)

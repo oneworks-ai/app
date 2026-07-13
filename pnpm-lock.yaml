@@ -212,6 +212,9 @@ importers:
       '@oneworks/components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@oneworks/cursor':
+        specifier: workspace:*
+        version: link:../../packages/cursor
       '@oneworks/icon':
         specifier: workspace:*
         version: link:../../packages/icon
