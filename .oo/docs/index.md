@@ -27,7 +27,7 @@
 - 官网：[oneworks.cloud](https://oneworks.cloud/)
 - 文档站：[oneworks.cloud/docs](https://oneworks.cloud/docs/)
 - GitHub：[oneworks-ai/app](https://github.com/oneworks-ai/app)
-- 隐私政策：[oneWorks 隐私政策](./privacy.md)
+- 隐私政策：[OneWorks 隐私政策](./privacy.md)
 - 支持邮箱：[support@oneworks.cloud](mailto:support@oneworks.cloud)
 
 ## 接入目标

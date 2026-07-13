@@ -93,7 +93,7 @@ async function requestBridge(path, init = {}) {
   if (!bridgeUrl || !controlToken) {
     throw Object.assign(
       new Error(
-        'External Browser control is unavailable. Open this workspace in oneWorks and connect the Chrome extension.'
+        'External Browser control is unavailable. Open this workspace in OneWorks and connect the Chrome extension.'
       ),
       { code: 'CHROME_BRIDGE_UNAVAILABLE' }
     )

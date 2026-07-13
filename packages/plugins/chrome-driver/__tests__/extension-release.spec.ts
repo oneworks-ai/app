@@ -15,6 +15,8 @@ const release = require('../bin/extension-release.cjs') as {
   archiveFileName: (flavor: 'base' | 'privileged', version?: string) => string
   chromeVersionFor: (version: string) => string
   extensionIdForKey: (key: string) => string
+  extensionNames: { base: string; privileged: string }
+  publicExtensionName: string
   stableExtensionId: string
 }
 const packager = require('../bin/package-extension.cjs') as {
@@ -70,12 +72,17 @@ describe('external browser extension release packaging', () => {
     for (const fileName of ['manifest.json', 'manifest.privileged.json', 'manifest.e2e.json']) {
       const manifest = JSON.parse(readFileSync(join(pluginRoot, 'extension', fileName), 'utf8'))
       expect(release.extensionIdForKey(manifest.key)).toBe(CHROME_EXTENSION_ID)
+      expect(manifest.action.default_title).toBe(release.publicExtensionName)
     }
+    expect(readFileSync(join(pluginRoot, 'extension', 'popup.html'), 'utf8')).toMatch(
+      /<title>OneWorks<\/title>[\s\S]*<h1>OneWorks<\/h1>/u
+    )
   })
 
   it('maps package prerelease versions to monotonic Chrome versions', () => {
     expect(release.chromeVersionFor('0.1.0-alpha.5')).toBe('0.1.0.10005')
     expect(release.chromeVersionFor('0.1.0-beta.5')).toBe('0.1.0.20005')
+    expect(release.chromeVersionFor('0.1.0-beta.6')).toBe('0.1.0.20006')
     expect(release.chromeVersionFor('0.1.0-rc.5')).toBe('0.1.0.30005')
     expect(release.chromeVersionFor('0.1.0')).toBe('0.1.0.65535')
     expect(release.chromeVersionFor('0.1.1-alpha.0')).toBe('0.1.1.10000')
@@ -110,12 +117,12 @@ describe('external browser extension release packaging', () => {
     }
     expect(base.sha256).toBe(secondBase.sha256)
     expect(privileged.sha256).toBe(secondPrivileged.sha256)
-    expect(release.archiveFileName('privileged', '1.2.3')).toBe('oneworks-external-browser-v1.2.3.zip')
-    expect(release.archiveFileName('base', '1.2.3')).toBe('oneworks-external-browser-v1.2.3-minimal.zip')
-    expect(base).toMatchObject({ flavor: 'base', manifest_version: '0.1.0.20005' })
+    expect(release.archiveFileName('privileged', '1.2.3')).toBe('oneworks-v1.2.3.zip')
+    expect(release.archiveFileName('base', '1.2.3')).toBe('oneworks-v1.2.3-minimal.zip')
+    expect(base).toMatchObject({ flavor: 'base', manifest_version: '0.1.0.20006' })
     expect(release.stableExtensionId).toBe(CHROME_EXTENSION_ID)
     expect(base).toMatchObject({ extension_id: CHROME_EXTENSION_ID })
-    expect(privileged).toMatchObject({ flavor: 'privileged', manifest_version: '0.1.0.20005' })
+    expect(privileged).toMatchObject({ flavor: 'privileged', manifest_version: '0.1.0.20006' })
 
     const baseEntries = unzipSync(new Uint8Array(readFileSync(basePath)))
     const baseManifest = JSON.parse(Buffer.from(baseEntries['manifest.json']).toString('utf8'))
@@ -128,15 +135,15 @@ describe('external browser extension release packaging', () => {
       'icons/icon-128.png'
     ]))
     expect(baseManifest).toMatchObject({
-      name: 'oneWorks External Browser (Minimal)',
-      version: '0.1.0.20005',
-      version_name: '0.1.0-beta.5'
+      name: release.extensionNames.base,
+      version: '0.1.0.20006',
+      version_name: '0.1.0-beta.6'
     })
     expect(baseManifest.permissions).not.toContain('debugger')
 
     const privilegedEntries = unzipSync(new Uint8Array(readFileSync(privilegedPath)))
     const privilegedManifest = JSON.parse(Buffer.from(privilegedEntries['manifest.json']).toString('utf8'))
-    expect(privilegedManifest.name).toBe('oneWorks External Browser')
+    expect(privilegedManifest.name).toBe(release.extensionNames.privileged)
     expect(privilegedManifest.permissions).toEqual(expect.arrayContaining(['debugger', 'proxy']))
   })
 
@@ -151,7 +158,7 @@ describe('external browser extension release packaging', () => {
 
     const manifest = JSON.parse(readFileSync(join(materializedPath, 'manifest.json'), 'utf8'))
     expect(manifest).toMatchObject({
-      name: 'oneWorks External Browser',
+      name: release.extensionNames.privileged,
       permissions: expect.arrayContaining(['debugger', 'proxy'])
     })
     expect(validator.validateExtensionArchive({ archivePath, flavor: 'privileged' }))

@@ -11,7 +11,9 @@ const {
   chromeVersionFor,
   extensionIdForKey,
   extensionIcons,
+  extensionNames,
   packageManifest,
+  publicExtensionName,
   releasePermissionPolicy,
   stableExtensionId
 } = require('./extension-release.cjs')
@@ -76,6 +78,9 @@ const validateExtensionArchive = ({ archivePath, flavor, packageVersion = packag
   if (manifest.version_name !== packageVersion) {
     fail(`manifest version_name ${String(manifest.version_name)} does not match ${packageVersion}`)
   }
+  if (manifest.action?.default_title !== publicExtensionName) {
+    fail(`extension action title must be ${publicExtensionName}`)
+  }
   let extensionId
   try {
     extensionId = typeof manifest.key === 'string' ? extensionIdForKey(manifest.key) : undefined
@@ -116,7 +121,7 @@ const validateExtensionArchive = ({ archivePath, flavor, packageVersion = packag
     `${flavor} content script matches`
   )
   if (flavor === 'base') {
-    if (manifest.name !== 'oneWorks External Browser (Minimal)') fail('base package has the wrong extension name')
+    if (manifest.name !== extensionNames.base) fail('base package has the wrong extension name')
     if (
       permissions.has('debugger') || permissions.has('proxy') ||
       optionalPermissions.has('debugger') || optionalPermissions.has('proxy')
@@ -125,7 +130,7 @@ const validateExtensionArchive = ({ archivePath, flavor, packageVersion = packag
     }
     if (hostPermissions.has('<all_urls>')) fail('base package must not contain an all-URLs host permission')
   } else {
-    if (manifest.name !== 'oneWorks External Browser') {
+    if (manifest.name !== extensionNames.privileged) {
       fail('privileged package has the wrong extension name')
     }
     if (!permissions.has('debugger') || !permissions.has('proxy')) {

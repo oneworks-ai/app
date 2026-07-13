@@ -1,6 +1,6 @@
-# 外部浏览器
+# OneWorks
 
-外部浏览器通过 Manifest V3 扩展，让 oneWorks Agent 接管用户明确配对的 Chrome。它复用 Browser Driver 的工作流和渐进式结果基础设施，但使用独立的 Chrome extension bridge、稳定的 `windowId` / `tabId` / `frameId` / `documentId` 与 typed tools；不依赖“当前标签页”猜测。任意 JavaScript/CDP、完整 Cookie 值和页面敏感字段默认关闭，用户可在设置或扩展 popup 中为当前浏览器会话显式开启。
+OneWorks Chrome 扩展让 OneWorks Agent 接管用户明确配对的 Chrome。它复用 Browser Driver 的工作流和渐进式结果基础设施，但使用独立的 Chrome extension bridge、稳定的 `windowId` / `tabId` / `frameId` / `documentId` 与 typed tools；不依赖“当前标签页”猜测。任意 JavaScript/CDP、完整 Cookie 值和页面敏感字段默认关闭，用户可在设置或扩展 popup 中为当前浏览器会话显式开启。
 
 [English](./README.en.md)
 
@@ -10,7 +10,7 @@
 pnpm --filter @oneworks/plugin-chrome-driver build:extension
 ```
 
-在 `chrome://extensions` 开启开发者模式，选择“加载已解压的扩展程序”，加载 `packages/plugins/chrome-driver/dist-extension/privileged`。随后打开 oneWorks 设置中的“外部浏览器”子页面，在扩展 popup 中选择“Connect this oneWorks tab”，再回到页面点击“连接浏览器”。
+在 `chrome://extensions` 开启开发者模式，选择“加载已解压的扩展程序”，加载 `packages/plugins/chrome-driver/dist-extension/privileged`。随后打开 OneWorks 设置中的“外部浏览器”子页面，在扩展 popup 中选择“Connect this OneWorks tab”，再回到页面点击“连接浏览器”。
 
 正式开发者发行版声明 `debugger` 与 `proxy`，用于受控网络/控制台/DOM/性能调试、全页截图、PDF 和代理控制；书签、历史、Cookie、下载、站点数据等能力仍在 popup 中按能力组申请，并继续经过会话开关、风险确认和审计。若只需要基础语义操作，可运行 `build:extension:minimal` 并加载 `dist-extension/base`。`build:extension:e2e` 仅供隔离 profile 自动化测试，不应安装到日常浏览器。
 
@@ -22,14 +22,14 @@ pnpm --filter @oneworks/plugin-chrome-driver package:extension:all
 
 产物位于 `packages/plugins/chrome-driver/dist-package/`：
 
-- `oneworks-external-browser-v<version>.zip`：正式开发者发行版，包含 `debugger` / `proxy`，用于 Chrome Web Store 上传或解压后旁加载。
-- `oneworks-external-browser-v<version>-minimal.zip`：可选的最小权限备用包，不会上传 Chrome Web Store。
+- `oneworks-v<version>.zip`：正式开发者发行版，包含 `debugger` / `proxy`，用于 Chrome Web Store 上传或解压后旁加载。
+- `oneworks-v<version>-minimal.zip`：可选的最小权限备用包，不会上传 Chrome Web Store。
 
 两个包使用同一固定扩展身份，不能在同一个 Chrome profile 中同时启用。切换到 minimal 时先停用或移除正式开发者版（切回时同理），也可以为 minimal 使用独立 profile。
 
-Chrome 应用商店的版本化截图、宣传图和审核文案维护在 [`store-assets`](./store-assets/)；商店隐私字段使用公开的 [oneWorks 隐私政策](https://oneworks.cloud/docs/privacy)。
+Chrome 应用商店的版本化截图、宣传图和审核文案维护在 [`store-assets`](./store-assets/)；商店隐私字段使用公开的 [OneWorks 隐私政策](https://oneworks.cloud/docs/privacy)。
 
-ZIP 根目录直接包含 `manifest.json`。构建会把 workspace semver 映射为 Chrome 可比较的四段整数版本，并用 `version_name` 保留原始版本；例如 `0.1.0-beta.5` 映射为 `0.1.0.20005`。同一源码和版本重复构建会得到相同 SHA-256。`package:extension:all` 会同时校验固定扩展身份、图标、运行时入口、权限 flavor 和 E2E 泄漏。
+ZIP 根目录直接包含 `manifest.json`。构建会把 workspace semver 映射为 Chrome 可比较的四段整数版本，并用 `version_name` 保留原始版本；例如 `0.1.0-beta.6` 映射为 `0.1.0.20006`。同一源码和版本重复构建会得到相同 SHA-256。`package:extension:all` 会同时校验固定扩展身份、图标、运行时入口、权限 flavor 和 E2E 泄漏。
 
 `.github/workflows/chrome-extension-ci.yml` 在相关 PR / main 变更时构建并保留开发者版、minimal 版和 `SHA256SUMS`。main 上首次创建 `pkg/oneworks-plugin-chrome-driver/v*` tag 时，Release Tags 会显式触发 `.github/workflows/chrome-extension-release.yml`：创建带 provenance attestation 的 GitHub Release，并在通过 `chrome-web-store` environment 后，使用短期 WIF service-account token 自动上传完整开发者版和提交审核。重跑已有 tag 默认只恢复 GitHub Release，避免重复提交商店；商店失败可从同一 tag 手动 dispatch 并设置 `publish_store=true` 重试。
 
@@ -48,7 +48,7 @@ ZIP 根目录直接包含 `manifest.json`。构建会把 workspace semver 映射
 
 语义修改必须携带 snapshot / frame 发现返回的 `document_id`。导航后旧 ref 会失效，不会把点击或输入落到替换后的文档。完整 workflow 共享规范化 tab 锁，同一 tab 的两条 workflow 不会交错，不同 tab 仍可并发。截图 / PDF 使用有界 50 MiB 分块通道，不占用 request/ack JSON 上限。
 
-## oneWorks Web bridge
+## OneWorks Web bridge
 
 发布 manifest 固定扩展身份。bridge 只在扩展 ID、服务端维护的 loopback / 配置 origin 白名单、页面 nonce 与双向协议版本全部匹配后发放一次性 ticket；扩展请求还必须带精确的 `chrome-extension://` Origin。配对后可发现该标签页的 frame；跨域 frame 仍需对应 host permission，并保持独立 `frameId` / `documentId`。导航、刷新、断连、缺权限或版本不匹配均会进入可恢复状态，不会依据标题识别页面，也不会无边界访问敏感 iframe。
 

@@ -32,8 +32,8 @@ jobs:
       contents: read
       id-token: write
     outputs:
-      artifact_name: oneworks-external-browser-v${{ steps.version.outputs.value }}
-      store_archive: oneworks-external-browser-v${{ steps.version.outputs.value }}.zip
+      artifact_name: oneworks-v${{ steps.version.outputs.value }}
+      store_archive: oneworks-v${{ steps.version.outputs.value }}.zip
       release_tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.value }}
     steps:
@@ -98,7 +98,7 @@ jobs:
       - name: Upload extension artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: oneworks-external-browser-v${{ steps.version.outputs.value }}
+          name: oneworks-v${{ steps.version.outputs.value }}
           path: packages/plugins/chrome-driver/dist-package/*
           if-no-files-found: error
           retention-days: 14
@@ -128,13 +128,13 @@ jobs:
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" dist/* --clobber
             gh release edit "$RELEASE_TAG" \
-              --title "External Browser Extension v$VERSION" \
-              --notes "Full developer Chrome Web Store package and optional minimal-permission package for v$VERSION." \
+              --title "OneWorks v$VERSION" \
+              --notes "OneWorks Chrome Web Store package and optional minimal-permission package for v$VERSION." \
               "${release_flags[@]}"
           else
             gh release create "$RELEASE_TAG" dist/* \
-              --title "External Browser Extension v$VERSION" \
-              --notes "Full developer Chrome Web Store package and optional minimal-permission package for v$VERSION." \
+              --title "OneWorks v$VERSION" \
+              --notes "OneWorks Chrome Web Store package and optional minimal-permission package for v$VERSION." \
               "${release_flags[@]}"
           fi
   publish-store:

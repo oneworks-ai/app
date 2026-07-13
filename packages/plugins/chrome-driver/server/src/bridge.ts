@@ -519,7 +519,7 @@ const trustedOneWorksOrigin = (value: string) => {
   if (url.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) return origin
   throw bridgeError({
     code: 'UNTRUSTED_ONEWORKS_ORIGIN',
-    message: 'Chrome pairing is limited to loopback oneWorks or ONEWORKS_CHROME_TRUSTED_ORIGINS.',
+    message: 'Chrome pairing is limited to loopback OneWorks or ONEWORKS_CHROME_TRUSTED_ORIGINS.',
     recoverable: true
   })
 }
@@ -605,9 +605,9 @@ export class ChromeExtensionBridge {
     if (extensionId !== CHROME_EXTENSION_ID || pairingNonce.length < 16) {
       throw bridgeError({
         code: 'EXTENSION_IDENTITY_MISMATCH',
-        message: 'The installed extension identity or page challenge did not match oneWorks External Browser.',
+        message: 'The installed extension identity or page challenge did not match OneWorks.',
         recoverable: true,
-        user_action: 'Install the oneWorks-provided extension build and reconnect from its popup.'
+        user_action: 'Install the OneWorks-provided extension build and reconnect from its popup.'
       })
     }
     const ticket = randomBytes(24).toString('base64url')
@@ -728,7 +728,7 @@ export class ChromeExtensionBridge {
         code: 'DISCONNECTED',
         message: 'External Browser is not connected.',
         recoverable: true,
-        user_action: 'Open External Browser in oneWorks Settings or open the extension and reconnect.'
+        user_action: 'Open External Browser in OneWorks Settings or open the extension and reconnect.'
       })
     }
     const connection = this.#activeConnection
@@ -768,7 +768,7 @@ export class ChromeExtensionBridge {
         confirmation_id: confirmation.confirmation_id,
         message: 'This Chrome operation requires an explicit user confirmation.',
         recoverable: true,
-        user_action: 'Approve the pending action in External Browser under oneWorks Settings, then retry.'
+        user_action: 'Approve the pending action in External Browser under OneWorks Settings, then retry.'
       })
     }
     this.#grants.delete(digest)
@@ -1024,7 +1024,7 @@ export class ChromeExtensionBridge {
           protocolVersion || 'unknown'
         }.`,
         recoverable: true,
-        user_action: 'Update the oneWorks Chrome extension and reconnect.'
+        user_action: 'Update the OneWorks Chrome extension and reconnect.'
       })
     }
     const extensionId = text(body.extension_id)
@@ -1060,9 +1060,9 @@ export class ChromeExtensionBridge {
       ) {
         throw bridgeError({
           code: 'PAIRING_REQUIRED',
-          message: 'A fresh oneWorks pairing offer is required.',
+          message: 'A fresh OneWorks pairing offer is required.',
           recoverable: true,
-          user_action: 'Click Connect browser in External Browser under oneWorks Settings.'
+          user_action: 'Click Connect browser in External Browser under OneWorks Settings.'
         })
       }
       this.#pairingTickets.delete(ticket)

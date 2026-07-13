@@ -49,7 +49,7 @@ const shell = (title, eyebrow, body, image = false) =>
 
 const slides = [
   shell(
-    'oneWorks takes control of an External Browser',
+    'OneWorks takes control of an external browser',
     'Recorded verification',
     `${line('Real packaged Electron', 64, 210, { size: 27, weight: 650 })}${
       line('+ real extension bridge', 64, 246, { size: 27, weight: 650 })
@@ -79,7 +79,7 @@ const slides = [
       [
         `Tabs ${checks['tabs-and-window-created'].tab_ids.join(' and ')} created`,
         `Window ${checks['tabs-and-window-created'].window_id} created independently`,
-        `oneWorks Web tab rebound to ${checks['explicit-tab-identity-rebound'].tab_id}`,
+        `OneWorks Web tab rebound to ${checks['explicit-tab-identity-rebound'].tab_id}`,
         'Same target serialized; distinct targets execute concurrently'
       ],
       92,
@@ -92,7 +92,7 @@ const slides = [
     `${
       bullets(
         [
-          `Typed “oneWorks” into ${checks['semantic-page-interaction'].input_ref}`,
+          `Typed “OneWorks” into ${checks['semantic-page-interaction'].input_ref}`,
           `Clicked ${checks['semantic-page-interaction'].button_ref} and observed result`,
           `Workflow ${checks['mcp-workflow-request-ack-and-progressive-result'].run_id} succeeded`,
           `${checks['mcp-workflow-request-ack-and-progressive-result'].step_ids.length} progressive step ids returned`
@@ -171,7 +171,7 @@ for (const [index, svg] of slides.entries()) {
   await run('sips', ['-s', 'format', 'png', svgPath, '--out', join(outDir, `${stem}.png`)])
 }
 
-const videoPath = join(outDir, 'oneworks-external-browser-control.mp4')
+const videoPath = join(outDir, 'oneworks-browser-control.mp4')
 const ffmpeg = spawn('ffmpeg', [
   '-y',
   '-hide_banner',

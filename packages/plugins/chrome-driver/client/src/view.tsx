@@ -92,7 +92,7 @@ export function ChromeDriverView({ ctx, react, view }) {
     run('frames', async () => {
       const tabId = status?.connection?.oneworks_tab_id
       if (!Number.isInteger(tabId)) {
-        throw new TypeError(t('Reconnect from the oneWorks Web tab first.', '请先从 oneWorks Web 标签页重新连接。'))
+        throw new TypeError(t('Reconnect from the OneWorks Web tab first.', '请先从 OneWorks Web 标签页重新连接。'))
       }
       const result = await ctx.commands.execute('list-web-frames', { tab_id: tabId })
       setFrames(result?.result ?? result ?? [])
@@ -117,8 +117,8 @@ export function ChromeDriverView({ ctx, react, view }) {
   const recover = () => failure?.code === 'VERSION_MISMATCH' ? connect() : failure?.retry?.() ?? refresh()
   const failureGuidance = failure?.code === 'VERSION_MISMATCH'
     ? t(
-      'Update the oneWorks browser extension, then reconnect this tab.',
-      '请更新 oneWorks 浏览器扩展，然后重新连接当前标签页。'
+      'Update the OneWorks browser extension, then reconnect this tab.',
+      '请更新 OneWorks 浏览器扩展，然后重新连接当前标签页。'
     )
     : failure?.code === 'MISSING_PERMISSION'
     ? t(
@@ -223,8 +223,8 @@ export function ChromeDriverView({ ctx, react, view }) {
           <Icon name='extension' />
           <span>
             {t(
-              'In Chrome, open the extension on this oneWorks tab, choose “Connect this oneWorks tab”, then return here and connect the browser.',
-              '在 Chrome 的当前 oneWorks 标签页打开扩展，选择“连接此 oneWorks 标签页”，然后回到这里连接浏览器。'
+              'In Chrome, open the extension on this OneWorks tab, choose “Connect this OneWorks tab”, then return here and connect the browser.',
+              '在 Chrome 的当前 OneWorks 标签页打开扩展，选择“连接此 OneWorks 标签页”，然后回到这里连接浏览器。'
             )}
           </span>
         </div>
@@ -316,8 +316,8 @@ export function ChromeDriverView({ ctx, react, view }) {
       icon='account_tree'
       title={t('Web frame isolation', 'Web Frame 隔离')}
       description={t(
-        'Discover only frames in the paired oneWorks tab. Cross-origin access still follows Chrome host permissions.',
-        '仅发现已配对 oneWorks 标签页中的 frame；跨域访问仍遵循 Chrome host 权限。'
+        'Discover only frames in the paired OneWorks tab. Cross-origin access still follows Chrome host permissions.',
+        '仅发现已配对 OneWorks 标签页中的 frame；跨域访问仍遵循 Chrome host 权限。'
       )}
     >
       <SettingsRow

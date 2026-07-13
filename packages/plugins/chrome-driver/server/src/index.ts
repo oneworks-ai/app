@@ -36,7 +36,7 @@ export async function activatePlugin(ctx: ChromePluginContext) {
     const origin = value != null && typeof value.origin === 'string' ? value.origin : ''
     const extensionId = value != null && typeof value.extension_id === 'string' ? value.extension_id : ''
     const pairingNonce = value != null && typeof value.pairing_nonce === 'string' ? value.pairing_nonce : ''
-    if (origin === '') throw new Error('The current oneWorks origin is required for Chrome pairing.')
+    if (origin === '') throw new Error('The current OneWorks origin is required for Chrome pairing.')
     return bridge.createPairingOffer(origin, extensionId, pairingNonce)
   })
   ctx.registerCommand('approve-confirmation', (payload: unknown) => {
@@ -56,7 +56,7 @@ export async function activatePlugin(ctx: ChromePluginContext) {
   ctx.registerCommand('list-web-frames', (payload: unknown) => {
     const value = payload as Record<string, unknown> | undefined
     const tabId = value != null && Number.isInteger(value.tab_id) ? Number(value.tab_id) : undefined
-    if (tabId == null) throw new Error('A paired oneWorks Chrome tab id is required.')
+    if (tabId == null) throw new Error('A paired OneWorks Chrome tab id is required.')
     return bridge.executeFromUi('frames.list', { tab_id: tabId }, `tab:${tabId}`)
   })
   ctx.registerCommand('get-advanced-access', () => (

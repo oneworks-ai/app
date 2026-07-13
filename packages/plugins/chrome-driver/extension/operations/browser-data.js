@@ -242,7 +242,7 @@ export async function downloadsOperation(action, args) {
   else if (action === 'show') await chrome.downloads.show(args.download_id)
   else if (action === 'open') {
     throw error('USER_GESTURE_REQUIRED', 'Opening a downloaded file requires a direct click in the extension popup.', {
-      user_action: 'Open the oneWorks Chrome extension popup and choose the pending download action.'
+      user_action: 'Open the OneWorks Chrome extension popup and choose the pending download action.'
     })
   } else throw error('UNSUPPORTED_ACTION', `Unsupported downloads action: ${action}`)
   return { completed: action, download_id: args.download_id }
@@ -281,7 +281,7 @@ export async function managementOperation(action, args) {
     throw error(
       'USER_GESTURE_REQUIRED',
       'Changing another extension requires a direct user gesture in the extension popup.',
-      { user_action: 'Open the oneWorks Chrome extension popup and complete the pending native action.' }
+      { user_action: 'Open the OneWorks Chrome extension popup and complete the pending native action.' }
     )
   }
   if (action === 'uninstall') {

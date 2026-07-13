@@ -358,11 +358,11 @@ describe('chrome extension visible action indicators', () => {
       cursor_session_id: 'cursor-session',
       cursor_url: 'chrome-extension://example/agent-cursor.svg',
       ref: 'r1',
-      text: 'oneWorks'
+      text: 'OneWorks'
     })
     await vi.advanceTimersByTimeAsync(2_000)
     await expect(operation).resolves.toMatchObject({ typed: 'r1' })
-    expect(input.value).toBe('oneWorks')
+    expect(input.value).toBe('OneWorks')
     expect(cancel).toHaveBeenCalledOnce()
   })
 })

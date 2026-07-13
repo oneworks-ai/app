@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqfj8ViP2E3kusrLx7s12ONWkm0WJUhEjW3X2oSHUEGBz81RIv+IT3MhPPYQyrBuQCAmdWo36oHaIzGpngqGvOQHhEopDZbY9QdGTI3pFmSa0nD1UJ6nP/0SGGUb3W0W+//SI3ppe+vxB+WTbPRauHkYErxbIXwk23EQLwR9A9/IWOHdNlhSjQxR4u+G9A+Kn6fZLxltTZApo8z3HvaULd68NRCODGDeivIgN/Kln0QKTaa61GPIgDqDz8lrVnEWF7QVpIoR27LgMKBf9FhGfWzNYWHW6Gvis/WPKZAlDMC46VV52CBTwuqQg0marZffNDwQYrZ0cwIwyYMKc8EWTYQIDAQAB",
-  "name": "oneWorks External Browser (E2E)",
+  "name": "OneWorks (E2E)",
   "version": "0.1.0",
   "description": "Isolated-profile test flavor. Not for user installation.",
   "icons": {
@@ -51,6 +51,6 @@
       "32": "icons/icon-32.png"
     },
     "default_popup": "popup.html",
-    "default_title": "oneWorks External Browser"
+    "default_title": "OneWorks"
   }
 }

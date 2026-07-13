@@ -72,7 +72,7 @@ async function render() {
   document.querySelector('#state').textContent = status.connected
     ? `Connected to ${status.trusted_origin}`
     : status.paired
-    ? 'Paired · reconnect oneWorks to continue'
+    ? 'Paired · reconnect OneWorks to continue'
     : 'Not connected'
   document.querySelector('#version').textContent = `v${status.extension_version} · protocol ${status.protocol_version}`
   const granted = status.capabilities.permissions
@@ -132,7 +132,7 @@ document.querySelector('#connect').addEventListener(
   () =>
     send({ type: 'oneworks:inject-bridge' }).then(result => {
       document.querySelector('#state').textContent =
-        `Bridge ready in tab ${result.tab_id}. Click Connect browser in oneWorks.`
+        `Bridge ready in tab ${result.tab_id}. Click Connect browser in OneWorks.`
     }, showError)
 )
 document.querySelector('#forget').addEventListener(
