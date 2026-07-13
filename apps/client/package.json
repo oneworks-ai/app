@@ -32,6 +32,7 @@
   "dependencies": {
     "@oneworks/avatar": "workspace:*",
     "@oneworks/components": "workspace:*",
+    "@oneworks/cursor": "workspace:*",
     "@oneworks/icon": "workspace:*",
     "@oneworks/register": "workspace:*",
     "@oneworks/route-layout": "workspace:*",

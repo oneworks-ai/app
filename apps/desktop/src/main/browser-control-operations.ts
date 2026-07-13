@@ -4,8 +4,9 @@ import { createHash, randomBytes } from 'node:crypto'
 import type { WebContents } from 'electron'
 
 import { createOneWorksCursorSvg } from '@oneworks/cursor'
-import type { BrowserControlPageCommand } from '@oneworks/types'
+import type { BrowserControlAgentAction, BrowserControlPageCommand } from '@oneworks/types'
 
+import { createBrowserControlAgentState } from './browser-control-agent-state'
 import {
   applyBrowserControlDeviceEmulation,
   getAppliedBrowserControlDeviceEmulation,
@@ -47,6 +48,7 @@ export interface BrowserControlRequest {
     | 'navigate_history'
     | 'open_page'
     | 'press_key'
+    | 'release_agent_action_state'
     | 'reload'
     | 'scroll'
     | 'select'
@@ -61,6 +63,8 @@ export interface BrowserControlRequest {
     | 'wait'
   page_id?: string
   session_id?: string
+  driver_instance_id?: string
+  agent_operation_id?: string
   [key: string]: unknown
 }
 
@@ -80,7 +84,7 @@ const normalizeTimeout = (value: unknown) =>
     maxWaitTimeoutMs,
     Math.max(0, typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : defaultWaitTimeoutMs)
   )
-const delay = async (ms: number) => await new Promise(resolve => setTimeout(resolve, ms))
+const delay = async (ms: number) => await new Promise<void>(resolve => setTimeout(resolve, ms))
 const normalizePlacement = (value: unknown): 'bottom' | 'right' => value === 'bottom' ? 'bottom' : 'right'
 
 const hslToHex = (hue: number, saturation: number, lightness: number) => {
@@ -229,6 +233,48 @@ export const createBrowserControlOperations = (options: BrowserControlOperationO
     })
   }
 
+  const agentActionState = createBrowserControlAgentState({
+    delay: pause,
+    now,
+    sendState: async (workspaceFolder, page, state) =>
+      await executePageCommand(workspaceFolder, page, { type: 'set_agent_action_state', state })
+  })
+
+  const runVisibleAction = async <T>({
+    action,
+    input,
+    page,
+    phase,
+    run,
+    workspaceFolder
+  }: {
+    action: BrowserControlAgentAction
+    input: BrowserControlRequest
+    page: ReturnType<BrowserControlPages['resolvePage']>
+    phase: 'acting' | 'moving'
+    run: () => Promise<T>
+    workspaceFolder: string
+  }): Promise<T> => {
+    const sessionIdentity = (page.session_id ?? normalizeText(input.session_id)) || page.id
+    const lease = await agentActionState.begin({
+      action,
+      color: browserCursorColor(sessionIdentity),
+      driverInstanceId: normalizeText(input.driver_instance_id) || `session:${sessionIdentity}`,
+      operationId: normalizeText(input.agent_operation_id) || undefined,
+      page,
+      phase,
+      workspaceFolder
+    })
+    try {
+      const result = await run()
+      await agentActionState.settle(lease, 'succeeded')
+      return result
+    } catch (error) {
+      await agentActionState.settle(lease, 'failed')
+      throw error
+    }
+  }
+
   const waitForPanelPage = async (
     workspaceFolder: string,
     sessionId: string | undefined,
@@ -348,6 +394,21 @@ export const createBrowserControlOperations = (options: BrowserControlOperationO
 
   const execute = async (workspaceFolder: string, input: BrowserControlRequest): Promise<unknown> => {
     if (input.op === 'open_page') return await openPage(workspaceFolder, input)
+    if (input.op === 'release_agent_action_state') {
+      const driverInstanceId = normalizeText(input.driver_instance_id)
+      if (driverInstanceId === '') {
+        throw Object.assign(new Error('A browser driver instance id is required.'), {
+          code: 'DRIVER_INSTANCE_REQUIRED',
+          statusCode: 400
+        })
+      }
+      const operationId = normalizeText(input.agent_operation_id)
+      return await agentActionState.releaseDriver(
+        workspaceFolder,
+        driverInstanceId,
+        operationId === '' ? undefined : operationId
+      )
+    }
     const page = options.pages.resolvePage(workspaceFolder, input)
     if (input.op === 'show_page') {
       await executePageCommand(workspaceFolder, page, { type: 'show' })
@@ -702,6 +763,7 @@ export const createBrowserControlOperations = (options: BrowserControlOperationO
       }
     }
     if (input.op === 'click' || input.op === 'type' || input.op === 'select') {
+      const elementOperation = input.op
       const ref = normalizeText(input.ref)
       const match = /^s(\d+)e\d+$/u.exec(ref)
       if (match == null) {
@@ -715,55 +777,78 @@ export const createBrowserControlOperations = (options: BrowserControlOperationO
           statusCode: 409
         })
       }
-      const result = await withTimeout(page.webContents.executeJavaScript(
-        createElementActionScript(
-          input.op,
-          ref,
-          input.op === 'select'
-            ? typeof input.value === 'string' ? input.value : ''
-            : typeof input.text === 'string'
-            ? input.text
-            : '',
-          (() => {
-            const color = browserCursorColor((page.session_id ?? normalizeText(input.session_id)) || page.id)
-            return { color, svg: createOneWorksCursorSvg({ color, size: 64 }) }
-          })()
-        ),
-        true
-      ))
-      if (isRecord(result) && result.ok === false) {
-        throw Object.assign(
-          new Error(normalizeText(result.message) || 'Browser action failed.'),
-          { code: normalizeText(result.code) || 'BROWSER_ACTION_FAILED', statusCode: 409 }
-        )
-      }
-      await pause(input.op === 'click' ? 280 : 200)
-      return {
-        ok: true,
-        page_id: page.id,
-        ref,
-        ...(
-          input.op === 'select' && isRecord(result)
-            ? { label: result.label, value: result.value }
-            : {}
-        )
-      }
+      return await runVisibleAction({
+        action: elementOperation,
+        input,
+        page,
+        phase: 'moving',
+        workspaceFolder,
+        run: async () => {
+          const color = browserCursorColor((page.session_id ?? normalizeText(input.session_id)) || page.id)
+          const result = await withTimeout(page.webContents.executeJavaScript(
+            createElementActionScript(
+              elementOperation,
+              ref,
+              elementOperation === 'select'
+                ? typeof input.value === 'string' ? input.value : ''
+                : typeof input.text === 'string'
+                ? input.text
+                : '',
+              { color, svg: createOneWorksCursorSvg({ color, size: 64 }) }
+            ),
+            true
+          ))
+          if (isRecord(result) && result.ok === false) {
+            throw Object.assign(
+              new Error(normalizeText(result.message) || 'Browser action failed.'),
+              { code: normalizeText(result.code) || 'BROWSER_ACTION_FAILED', statusCode: 409 }
+            )
+          }
+          await pause(elementOperation === 'click' ? 280 : 200)
+          return {
+            ok: true,
+            page_id: page.id,
+            ref,
+            ...(
+              elementOperation === 'select' && isRecord(result)
+                ? { label: result.label, value: result.value }
+                : {}
+            )
+          }
+        }
+      })
     }
     if (input.op === 'press_key') {
       const key = normalizeText(input.key)
       if (key === '') throw Object.assign(new Error('A key is required.'), { code: 'INVALID_ARGUMENT' })
-      page.webContents.focus()
-      page.webContents.sendInputEvent({ type: 'keyDown', keyCode: key })
-      page.webContents.sendInputEvent({ type: 'keyUp', keyCode: key })
-      return { ok: true, page_id: page.id, key }
+      return await runVisibleAction({
+        action: 'press_key',
+        input,
+        page,
+        phase: 'acting',
+        workspaceFolder,
+        run: async () => {
+          page.webContents.focus()
+          page.webContents.sendInputEvent({ type: 'keyDown', keyCode: key })
+          page.webContents.sendInputEvent({ type: 'keyUp', keyCode: key })
+          return { ok: true, page_id: page.id, key }
+        }
+      })
     }
     if (input.op === 'scroll') {
       const x = typeof input.x === 'number' && Number.isFinite(input.x) ? Math.round(input.x) : 0
       const y = typeof input.y === 'number' && Number.isFinite(input.y) ? Math.round(input.y) : 0
-      return {
-        page_id: page.id,
-        ...(await withTimeout(page.webContents.executeJavaScript(createScrollScript(x, y), true)))
-      }
+      return await runVisibleAction({
+        action: 'scroll',
+        input,
+        page,
+        phase: 'acting',
+        workspaceFolder,
+        run: async () => ({
+          page_id: page.id,
+          ...(await withTimeout(page.webContents.executeJavaScript(createScrollScript(x, y), true)))
+        })
+      })
     }
     if (input.op === 'wait') return await wait(page, input)
     throw Object.assign(new Error('Unknown browser control operation.'), { code: 'METHOD_NOT_FOUND', statusCode: 404 })
@@ -795,5 +880,5 @@ export const createBrowserControlOperations = (options: BrowserControlOperationO
     throw Object.assign(new Error('Browser wait timed out.'), { code: 'WAIT_TIMEOUT', statusCode: 408 })
   }
 
-  return { execute }
+  return { dispose: agentActionState.dispose, execute, resume: agentActionState.resume }
 }

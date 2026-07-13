@@ -1,4 +1,6 @@
 /* eslint-disable no-new-func -- execute generated page scripts against isolated DOM fakes. */
+import { EventEmitter } from 'node:events'
+
 import { describe, expect, it, vi } from 'vitest'
 
 import { createBrowserControlOperations } from '../src/main/browser-control-operations'
@@ -137,16 +139,19 @@ describe('browser control page scripts', () => {
 
   it('applies a short server-side settle after element actions', async () => {
     const delays: number[] = []
-    const webContents = {
+    let now = 0
+    const webContents = Object.assign(new EventEmitter(), {
       id: 7,
       executeJavaScript: vi.fn()
         .mockResolvedValueOnce({ elements: [], snapshot_id: 's1' })
         .mockResolvedValue({ ok: true }),
       getTitle: vi.fn(() => 'Test page'),
       getURL: vi.fn(() => 'https://example.com/')
-    }
+    })
     const page = {
+      hostWebContentsId: 90,
       id: 'page_7',
+      panelPageId: 'panel-a',
       registered_at: new Date(0).toISOString(),
       session_id: 'session-a',
       title: 'Test page',
@@ -156,8 +161,12 @@ describe('browser control page scripts', () => {
     const operations = createBrowserControlOperations({
       delay: async ms => {
         delays.push(ms)
+        now += ms
       },
-      pages: { resolvePage: vi.fn(() => page) } as never
+      getWorkspaceHostWebContents: () => [{ id: 90, isDestroyed: () => false } as never],
+      now: () => now,
+      pages: { resolvePage: vi.fn(() => page) } as never,
+      sendPageCommand: vi.fn(async () => ({ applied: true }))
     })
     await operations.execute('/workspace', {
       op: 'snapshot',
@@ -179,6 +188,7 @@ describe('browser control page scripts', () => {
       text: 'hello'
     })
 
-    expect(delays).toEqual([280, 200])
+    expect(delays).toEqual([280, 200, 40])
+    await operations.dispose()
   })
 })

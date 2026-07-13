@@ -3,6 +3,7 @@
 This package controls only OneWorks interaction-panel browser webviews through the authenticated desktop broker.
 
 - `bin/browser-driver.cjs`: MCP transport, in-app-browser-prefixed semantic tools, page-keyed scheduling, compact results, screenshots, and progressive step lookup. Operations are serial within one `page_id`; independent pages may run concurrently.
+- Visible interaction tools carry a stable per-process `driver_instance_id` plus per-action `agent_operation_id` into the desktop broker. The host tab chrome owns the Agent-action indicator and lifecycle cleanup; MCP cancellation, stdin close, process signals, and driver disconnect must release the exact current lease without mutating the controlled page favicon or allowing a stale cancellation to clear its successor.
 - `bin/browser-driver-page-tools.cjs` owns lifecycle, history, view, device, zoom, and embedded DevTools schemas. `bin/browser-driver-interaction-tools.cjs` owns semantic page interaction schemas; workflow schemas and runtime validation stay in the `browser-driver-workflow-*` modules.
 - Page lifecycle operations are explicit: `show`, `close`, `duplicate`, and `move` go through the owning host-window/panel-tab identity. Background page operations must not implicitly change the active tab. Duplicate/move can replace the underlying webview, so their returned page ID is authoritative.
 - Navigation state and entries are per-tab. Keep entries paginated, keep clear-history explicit, and require exactly one target mode for history navigation (`direction`, `offset`, or `index`).

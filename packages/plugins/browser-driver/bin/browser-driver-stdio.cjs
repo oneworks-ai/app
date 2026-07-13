@@ -4,12 +4,26 @@ const readline = require('node:readline')
 const isRecord = value => value != null && typeof value === 'object' && !Array.isArray(value)
 
 module.exports = function createStdioServer(options) {
+  const activeRequests = new Map()
   const writeResponse = payload => process.stdout.write(`${JSON.stringify(payload)}\n`)
 
+  async function cancelAll() {
+    const active = [...activeRequests.entries()]
+    active.forEach(([, controller]) => controller.abort())
+    await Promise.allSettled(active.map(async ([requestId]) => await options.onCancel?.({ requestId })))
+  }
+
   async function handleRequest(request) {
-    if (!isRecord(request) || request.jsonrpc !== '2.0' || typeof request.method !== 'string' || request.id == null) {
+    if (!isRecord(request) || request.jsonrpc !== '2.0' || typeof request.method !== 'string') return
+    if (request.method === 'notifications/cancelled') {
+      const requestId = request.params?.requestId
+      const controller = activeRequests.get(String(requestId))
+      if (controller == null) return
+      controller.abort()
+      await options.onCancel?.({ requestId })
       return
     }
+    if (request.id == null) return
     if (request.method === 'initialize') {
       writeResponse({
         jsonrpc: '2.0',
@@ -31,10 +45,14 @@ module.exports = function createStdioServer(options) {
       return
     }
     if (request.method === 'tools/call') {
+      const requestKey = String(request.id)
+      const controller = new AbortController()
+      activeRequests.set(requestKey, controller)
       try {
         const result = await options.callTool(
           request.params?.name,
-          isRecord(request.params?.arguments) ? request.params.arguments : {}
+          isRecord(request.params?.arguments) ? request.params.arguments : {},
+          { requestId: request.id, signal: controller.signal }
         )
         writeResponse({ jsonrpc: '2.0', id: request.id, result })
       } catch (error) {
@@ -47,6 +65,8 @@ module.exports = function createStdioServer(options) {
             structuredContent: { code: error?.code || 'BROWSER_TOOL_FAILED' }
           }
         })
+      } finally {
+        if (activeRequests.get(requestKey) === controller) activeRequests.delete(requestKey)
       }
       return
     }
@@ -57,8 +77,8 @@ module.exports = function createStdioServer(options) {
     })
   }
 
-  function start() {
-    const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity })
+  function start(inputStream = process.stdin) {
+    const input = readline.createInterface({ input: inputStream, crlfDelay: Infinity })
     input.on('line', line => {
       if (!line.trim()) return
       try {
@@ -67,7 +87,15 @@ module.exports = function createStdioServer(options) {
         process.stderr.write(`[browser-driver] ${error instanceof Error ? error.message : String(error)}\n`)
       }
     })
+    input.once('close', () => {
+      void (async () => {
+        await cancelAll()
+        await options.onClose?.()
+      })().catch(error => {
+        process.stderr.write(`[browser-driver] ${error instanceof Error ? error.message : String(error)}\n`)
+      })
+    })
   }
 
-  return { handleRequest, start }
+  return { cancelAll, handleRequest, start }
 }

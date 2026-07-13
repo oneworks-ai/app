@@ -24,6 +24,7 @@
   - `updates.ts`：自动更新检查
   - `browser-data-sync.ts`：桌面端浏览器数据同步与本机加密 vault；密码 CSV / Chromium profile / Authenticator 备份导入和扩展状态同步的 main-process 落点
   - `browser-activity.ts`：interaction panel webview 的历史记录、下载记录和项目 / 会话 scope 追踪；配置页历史 / 下载内容入口通过 preload IPC 读取这里的数据
+  - `browser-control-broker.ts` / `browser-control-operations.ts`：IAB Driver 到 interaction-panel webview 的鉴权 broker 与语义操作落点；可见 Agent 操作必须通过 `browser-control-agent-state.ts` 以稳定 page / driver identity 驱动宿主 tab 状态，不能改受控网页的 title 或 favicon
 - `src/workspace-state.cjs`
   - 桌面最近项目、workspace 显示名、启动 workspace 解析入口。
   - 作为 project/workspace 打开或记录时，只规约到当前 Git worktree 的 top-level；linked worktree 必须保留为独立 workspace，不能折回 common `.git` 对应的原始 project 目录。
@@ -69,6 +70,7 @@
 - 桌面窗口统一使用隐藏 titlebar / traffic light 风格；新建窗口、右键会话新窗口、launcher 和 workspace selector 都必须通过 `browser-window-factory` 创建，避免出现系统默认标题栏。
 - macOS workspace 窗口的原生毛玻璃依赖 `vibrancy: 'sidebar'` 和 `transparent: true` 同时存在；client 侧会把 sidebar / titlebar 背景让给原生窗口材质。不要只设置透明背景色或只改前端 CSS，否则展开态 sidebar 容易退成实色灰块，和 launcher / 折叠态表现不一致。
 - workspace 内部 `window.open` 只允许打开同 workspace client base 下的 URL；跨 origin 或离开 client base 的 URL 必须拒绝或走外部浏览器，不要直接生成不受管控的新窗口。
+- IAB Driver 的操作状态属于宿主 tab chrome：桌面 main 进程按 webContents / page id 管理 moving / acting / settle 租约，并在导航、tab close、driver disconnect 与 broker stop 时恢复。受控页面 favicon 只作为站点数据同步，不能承担 Agent 状态或清理职责。
 - Relay SSO 登录回跳使用 `oneworks://relay/auth?workspace=<workspace>&scope=<scope>&serverId=<serverId>#relay_token=<token>`。改 custom scheme、单实例锁、启动参数或 workspace 路由打开逻辑时，要同时检查 `src/main/deep-link.ts`、`src/main/app-runtime.ts`、`src/main/window-manager.ts` 和 `electron-builder.yml`。
 - macOS 会话右键“在新窗口打开”应创建同风格 workspace 窗口，并通过 URL 参数让左侧栏默认折叠。
 - 最小窗口宽度当前支持到 `300px`；改 header / nav / sender 布局时要验证这个尺寸，不要只看大窗口。

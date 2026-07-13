@@ -143,6 +143,7 @@ export const createBrowserControlBroker = (options: BrowserControlBrokerOptions 
 
   const start = async () => {
     if (baseUrl != null) return baseUrl
+    operations.resume()
     server = createServer((request, response) => void handleRequest(request, response))
     await new Promise<void>((resolve, reject) => {
       server?.once('error', reject)
@@ -156,6 +157,7 @@ export const createBrowserControlBroker = (options: BrowserControlBrokerOptions 
 
   const stop = async () => {
     const current = server
+    await operations.dispose()
     server = undefined
     baseUrl = undefined
     tokens.clear()
@@ -168,10 +170,17 @@ export const createBrowserControlBroker = (options: BrowserControlBrokerOptions 
       } catch {}
     })
     credentialPaths.clear()
-    if (current != null) {
-      await new Promise<void>((resolve, reject) => (
-        current.close(error => error == null ? resolve() : reject(error))
-      ))
+    try {
+      if (current != null) {
+        await new Promise<void>((resolve, reject) => (
+          current.close(error => error == null ? resolve() : reject(error))
+        ))
+      }
+    } finally {
+      // Requests accepted just before server.close() may still have been inside
+      // an asynchronous renderer acknowledgement. Clear them once more after
+      // every handler has drained so stop cannot leave a late lease behind.
+      await operations.dispose()
     }
   }
 

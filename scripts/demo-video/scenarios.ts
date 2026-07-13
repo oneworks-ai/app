@@ -296,6 +296,13 @@ const buildBrowserDriverPrompt = (pageOrigin: string, expectedReply: string) => 
   `全部成功后，只回复下面字符去掉空格后的结果，不要解释：${Array.from(expectedReply).join(' ')}`
 )
 
+const buildBrowserDriverCancelPrompt = (pageOrigin: string) => (
+  '请使用当前工作区的 browser/browser-driver skill 验证内置浏览器，不要使用外部浏览器，也不要修改代码。' +
+  `在默认右侧打开 ${pageOrigin}/ui/browser-use-lab.html?instance=cancel&dynamic_favicon=1，` +
+  '获取快照后，用一个 workflow 依次输入任务标题 Browser Driver cancelled action、选择 High、勾选确认，' +
+  '然后等待 30000 毫秒。现在开始执行；如果用户中断，立即停止且不要继续调用工具。'
+)
+
 export const demoVideoScenarios = [
   {
     defaultDurationMs: 5_000,
@@ -387,7 +394,7 @@ export const demoVideoScenarios = [
     }
   },
   {
-    defaultDurationMs: 180_000,
+    defaultDurationMs: 300_000,
     defaultFps: 30,
     defaultViewport: {
       height: 900,
@@ -400,7 +407,10 @@ export const demoVideoScenarios = [
     showActionCursor: false,
     title: 'Electron Browser Driver Agent 演示',
     run: async (ctx) => {
-      await openWorkspaceThroughLauncherUi(ctx, { settleMs: 300 })
+      await ctx.openDesktopWorkspace(ctx.requireWorkspace())
+      await ctx.recordUntilSelector(chatRouteReadySelector, { timeoutMs: 90_000 })
+      await ctx.recordUntilSelectorAbsent('.workspace-opening-overlay', { timeoutMs: 90_000 })
+      await ctx.recordFor(300)
       const pageUrl = ctx.url == null ? undefined : new URL(ctx.url)
       if (pageUrl == null) throw new Error('Browser Driver demo requires the Electron renderer URL.')
       const expectedReply = buildBrowserDriverExpectedReply()
@@ -410,9 +420,19 @@ export const demoVideoScenarios = [
       })
       await ctx.clickSelector(chatEditorSelector, { settleMs: 120, timeoutMs: 15_000 })
       await ctx.focusSelector(chatEditorSelector, { timeoutMs: 15_000 })
+      await ctx.typeText(buildBrowserDriverCancelPrompt(pageUrl.origin), { settleMs: 160 })
+      await ctx.clickSelector(chatSendButtonSelector, { settleMs: 160, timeoutMs: 15_000 })
+      await ctx.recordUntilSelector('.chat-interaction-panel__dock-tab-agent-status', { timeoutMs: 90_000 })
+      await ctx.recordFor(240)
+      await ctx.clickSelector('.chat-send-btn.stop:not(.disabled)', { settleMs: 160, timeoutMs: 5_000 })
+      await ctx.recordUntilSelectorAbsent('.chat-interaction-panel__dock-tab-agent-status', { timeoutMs: 15_000 })
+      await ctx.recordUntilSelector('.chat-interaction-panel__dock-tab-favicon', { timeoutMs: 15_000 })
+      await ctx.recordFor(1_000)
+      await ctx.clickSelector(chatEditorSelector, { settleMs: 120, timeoutMs: 15_000 })
+      await ctx.focusSelector(chatEditorSelector, { timeoutMs: 15_000 })
       await ctx.typeText(buildBrowserDriverPrompt(pageUrl.origin, expectedReply), { settleMs: 160 })
       await ctx.clickSelector(chatSendButtonSelector, { settleMs: 160, timeoutMs: 15_000 })
-      await ctx.recordUntilText(expectedReply, { timeoutMs: 180_000 })
+      await ctx.recordUntilText(expectedReply, { timeoutMs: 300_000 })
       await ctx.recordFor(4_000)
     }
   },

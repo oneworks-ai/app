@@ -31,6 +31,11 @@ import type { InteractionPanelTabCloseScope } from './interaction-panel-tab-grou
 import { buildInteractionPanelTabHeaderActions } from './interaction-panel-tab-header-actions'
 import { isActiveTab } from './interaction-panel-tabs'
 import type { InteractionPanelTab } from './interaction-panel-tabs'
+import {
+  getBrowserControlAgentCursorDataUrl,
+  resolveBrowserControlTabIcon,
+  useBrowserControlAgentTabState
+} from './use-browser-control-agent-tab-state'
 import { useCopyTextWithFeedback } from './use-copy-text-with-feedback'
 import { useInteractionPanelMobileDebugDeviceOptions } from './use-interaction-panel-mobile-debug-device-options'
 
@@ -118,6 +123,10 @@ export function InteractionPanelDockWorkspace({
   const tabById = useMemo(() => Object.fromEntries(tabs.map(tab => [tab.id, tab])), [tabs])
   const iframePageById = useMemo(() => Object.fromEntries(iframePages.map(page => [page.id, page])), [iframePages])
   const pinnedTabById = useMemo(() => Object.fromEntries(pinnedTabs.map(tab => [tab.id, tab])), [pinnedTabs])
+  const browserControlAgentTabStates = useBrowserControlAgentTabState({
+    pageIds: tabs.filter(tab => tab.kind === 'iframe').map(tab => tab.id),
+    sessionId
+  })
   const mobileDebugPage = mobileDebugPages[0]
   const { deviceOptions, refreshDeviceOptions } = useInteractionPanelMobileDebugDeviceOptions(
     mobileDebugPage?.deviceOptions
@@ -228,8 +237,27 @@ export function InteractionPanelDockWorkspace({
     tabs.map(tab => {
       const pinnedTab = pinnedTabById[tab.id]
       const title = pinnedTab?.title ?? tab.label
-      const showFavicon = tab.kind === 'iframe' && tab.faviconUrl != null && tab.faviconUrl !== '' &&
-        pinnedTab?.customIcon == null
+      const tabIcon = tab.kind === 'iframe'
+        ? resolveBrowserControlTabIcon({
+          agentState: browserControlAgentTabStates[tab.id],
+          faviconUrl: tab.faviconUrl,
+          hasCustomIcon: pinnedTab?.customIcon != null
+        })
+        : { kind: 'symbol' as const }
+      const agentIconNode = tabIcon.kind === 'agent'
+        ? (
+          <img
+            className={`chat-interaction-panel__dock-tab-agent-status chat-interaction-panel__dock-tab-agent-status--${tabIcon.state.phase}`}
+            src={getBrowserControlAgentCursorDataUrl(tabIcon.state.color)}
+            alt=''
+            aria-hidden='true'
+            data-agent-action={tabIcon.state.action}
+            data-agent-operation-id={tabIcon.state.operation_id}
+            data-agent-phase={tabIcon.state.phase}
+            draggable={false}
+          />
+        )
+        : undefined
 
       return {
         activeIcon: pinnedTab?.icon ?? tab.icon,
@@ -237,21 +265,22 @@ export function InteractionPanelDockWorkspace({
           <InteractionPanelDockPanelContentBody isPanelVisible={isTabVisible} tabId={tab.id} />
         ),
         icon: pinnedTab?.icon ?? tab.icon,
-        iconNode: showFavicon
+        headerStatus: agentIconNode == null ? undefined : { iconNode: agentIconNode, label: title },
+        iconNode: agentIconNode ?? (tabIcon.kind === 'favicon'
           ? (
             <img
               className='chat-interaction-panel__dock-tab-favicon'
-              src={tab.faviconUrl}
+              src={tabIcon.url}
               alt=''
               draggable={false}
             />
           )
-          : undefined,
+          : undefined),
         key: tab.id,
         label: title,
         title: pinnedTab?.originalTitle ?? title
       }
-    }), [pinnedTabById, tabs])
+    }), [browserControlAgentTabStates, pinnedTabById, tabs])
   const fullscreenLabel = isPanelFullscreen ? t('common.exitFullscreen') : t('common.enterFullscreen')
   const panelMinimizeLabel = t(
     isPanelMinimized ? 'chat.interactionPanel.expandPanel' : 'chat.interactionPanel.minimizePanel'

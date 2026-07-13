@@ -224,6 +224,15 @@ export interface RouteContainerPanelTabsProps<TabKey extends string> {
  */
 export interface RouteContainerPanelDockTabItem<TabKey extends string> extends RouteContainerPanelTabItem<TabKey> {
   content: ReactNode | ((context: RouteContainerPanelDockTabRenderContext<TabKey>) => ReactNode)
+  /**
+   * Ephemeral status that must remain visible when Dockview collapses this tab
+   * into its overflow menu. The shared dock mirrors it in the group chrome and
+   * selecting the marker reveals the owning tab.
+   */
+  headerStatus?: {
+    iconNode: ReactNode
+    label: string
+  }
 }
 
 export interface RouteContainerPanelDockTabRenderContext<TabKey extends string> {
@@ -1178,10 +1187,46 @@ function RouteContainerPanelDockHeaderActionButtons({
   )
 }
 
+function RouteContainerPanelDockHeaderStatuses({
+  tabs
+}: {
+  tabs: Array<RouteContainerPanelDockTabItem<string>>
+}) {
+  const { selectTab } = useRouteContainerPanelDockContext()
+  const statusTabs = tabs.filter(
+    (tab): tab is RouteContainerPanelDockTabItem<string> & {
+      headerStatus: NonNullable<RouteContainerPanelDockTabItem<string>['headerStatus']>
+    } => tab.headerStatus != null
+  )
+
+  if (statusTabs.length === 0) return null
+
+  return (
+    <div className='route-container-panel-dock__header-statuses' onPointerDown={stopDockHeaderActionPointerDown}>
+      {statusTabs.map(tab => (
+        <Tooltip key={tab.key} title={tab.headerStatus.label} placement='top'>
+          <button
+            type='button'
+            className='route-container-panel-dock__header-status'
+            data-route-container-panel-dock-status-tab-key={tab.key}
+            aria-label={tab.headerStatus.label}
+            title={tab.headerStatus.label}
+            onClick={() => selectTab(tab.key)}
+          >
+            <span className='route-container-panel-dock__header-status-icon'>{tab.headerStatus.iconNode}</span>
+            <span className='route-container-panel-dock__header-status-label'>{tab.label}</span>
+          </button>
+        </Tooltip>
+      ))}
+    </div>
+  )
+}
+
 function RouteContainerPanelDockHeaderActions({
   activePanel,
   containerApi,
-  group
+  group,
+  panels
 }: IDockviewHeaderActionsProps) {
   const {
     activeTab,
@@ -1225,11 +1270,22 @@ function RouteContainerPanelDockHeaderActions({
   const resolvedHeaderActions = isTopRightGroup
     ? [...tabHeaderActions, ...panelChromeActions]
     : tabHeaderActions
+  const groupTabs = panels
+    .map(panel => tabByKey[panel.id])
+    .filter((tab): tab is RouteContainerPanelDockTabItem<string> => tab != null)
+  const hasHeaderStatuses = groupTabs.some(tab => tab.headerStatus != null)
+  const showHeaderActions = !(
+    getHeaderActions == null && (!isTopRightGroup || activePanel == null)
+  )
 
-  if (resolvedHeaderActions.length === 0) return null
-  if (getHeaderActions == null && (!isTopRightGroup || activePanel == null)) return null
+  if (!hasHeaderStatuses && (!showHeaderActions || resolvedHeaderActions.length === 0)) return null
 
-  return <RouteContainerPanelDockHeaderActionButtons actions={resolvedHeaderActions} />
+  return (
+    <>
+      <RouteContainerPanelDockHeaderStatuses tabs={groupTabs} />
+      {showHeaderActions ? <RouteContainerPanelDockHeaderActionButtons actions={resolvedHeaderActions} /> : null}
+    </>
+  )
 }
 
 const syncRouteContainerPanelDockPanels = (

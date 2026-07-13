@@ -421,6 +421,61 @@
   object-fit: contain;
 }
 
+.chat-interaction-panel__dock-tab-agent-status {
+  width: var(
+    --chat-interaction-panel-dock-tab-icon-size,
+    var(--app-chrome-icon-size, 18px)
+  );
+  height: var(
+    --chat-interaction-panel-dock-tab-icon-size,
+    var(--app-chrome-icon-size, 18px)
+  );
+  object-fit: contain;
+  transform-origin: 25% 25%;
+  will-change: opacity, transform;
+}
+
+.chat-interaction-panel__dock-tab-agent-status--moving {
+  animation: interaction-panel-agent-tab-moving 560ms
+    cubic-bezier(.25, .1, .25, 1) infinite alternate;
+}
+
+.chat-interaction-panel__dock-tab-agent-status--acting {
+  animation: interaction-panel-agent-tab-acting 420ms
+    cubic-bezier(.25, .1, .25, 1) infinite;
+}
+
+.chat-interaction-panel__dock-tab-agent-status--settle {
+  opacity: .82;
+  transform: scale(.92);
+}
+
+@keyframes interaction-panel-agent-tab-moving {
+  from {
+    transform: translate3d(-1px, 1px, 0) scale(.94);
+  }
+
+  to {
+    transform: translate3d(1px, -1px, 0) scale(1);
+  }
+}
+
+@keyframes interaction-panel-agent-tab-acting {
+  0%, 100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(.84);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-interaction-panel__dock-tab-agent-status {
+    animation: none;
+  }
+}
+
 .chat-interaction-panel__dock-tab-label {
   min-width: 0;
   overflow: hidden;

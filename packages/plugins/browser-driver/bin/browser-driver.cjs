@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable max-lines -- the MCP entry keeps transport routing, page queues, and lifecycle wiring together. */
 const { Buffer } = require('node:buffer')
 const { randomUUID } = require('node:crypto')
 const { mkdirSync, writeFileSync } = require('node:fs')
@@ -6,6 +7,7 @@ const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const process = require('node:process')
 
+const createAgentLifecycle = require('./browser-driver-agent-lifecycle.cjs')
 const { contentResult, operationFromTool, tools } = require('./browser-driver-contract.cjs')
 const readBridgeCredentials = require('./browser-driver-credentials.cjs')
 const createStdioServer = require('./browser-driver-stdio.cjs')
@@ -19,6 +21,20 @@ const sessionId = process.env.__ONEWORKS_PROJECT_SESSION_ID__ ??
   process.env.__ONEWORKS_KIMI_TASK_SESSION_ID__ ??
   process.env.__ONEWORKS_OPENCODE_TASK_SESSION_ID__ ??
   process.env.__ONEWORKS_COPILOT_TASK_SESSION_ID__
+
+const agentLifecycle = createAgentLifecycle(async operationId => {
+  try {
+    return await callBridge({
+      op: 'release_agent_action_state',
+      ...(operationId == null ? {} : { agent_operation_id: operationId })
+    }, { ignoreRequestSignal: true })
+  } catch (error) {
+    process.stderr.write(
+      `[browser-driver] failed to release Agent tab state: ${error instanceof Error ? error.message : String(error)}\n`
+    )
+    return { ok: false, restored_pages: 0 }
+  }
+})
 
 const pageTails = new Map()
 
@@ -43,7 +59,7 @@ function enqueueForPage(id, task) {
   return result
 }
 
-async function callBridge(payload) {
+async function callBridge(payload, options = {}) {
   const { bridgeToken, bridgeUrl } = readBridgeCredentials()
   if (!bridgeUrl || !bridgeToken) {
     const error = new Error(
@@ -63,17 +79,28 @@ async function callBridge(payload) {
       },
       body: JSON.stringify({
         ...payload,
+        driver_instance_id: agentLifecycle.driverInstanceId,
         ...(sessionId == null ? {} : { session_id: sessionId })
       }),
-      signal: AbortSignal.timeout(timeoutMs)
+      signal: (() => {
+        const timeoutSignal = AbortSignal.timeout(timeoutMs)
+        const requestSignal = options.ignoreRequestSignal ? undefined : agentLifecycle.requestSignal()
+        return requestSignal == null ? timeoutSignal : AbortSignal.any([requestSignal, timeoutSignal])
+      })()
     })
   } catch (cause) {
     const error = new Error(
       cause?.name === 'TimeoutError'
         ? 'The OneWorks browser-control service timed out.'
+        : cause?.name === 'AbortError'
+        ? 'The OneWorks browser-control operation was cancelled.'
         : 'The OneWorks browser-control service is unavailable.'
     )
-    error.code = cause?.name === 'TimeoutError' ? 'BROWSER_CONTROL_TIMEOUT' : 'BROWSER_BRIDGE_UNAVAILABLE'
+    error.code = cause?.name === 'TimeoutError'
+      ? 'BROWSER_CONTROL_TIMEOUT'
+      : cause?.name === 'AbortError'
+      ? 'BROWSER_CONTROL_CANCELLED'
+      : 'BROWSER_BRIDGE_UNAVAILABLE'
     throw error
   }
   let body
@@ -101,7 +128,7 @@ function screenshotPath(dataBase64) {
 }
 
 async function callOperation(op, args) {
-  const result = await callBridge({ op, ...args })
+  const result = await callBridge({ op, ...agentLifecycle.decorateOperation(op, args) })
   if (op !== 'screenshot') return result
   return {
     page: result.page,
@@ -111,6 +138,19 @@ async function callOperation(op, args) {
 }
 
 const { executeWorkflow, getWorkflowSteps, validateWorkflow } = createWorkflowController(callOperation)
+
+let shutdownPromise
+
+async function shutdown() {
+  if (shutdownPromise != null) return await shutdownPromise
+  shutdownPromise = (async () => {
+    const tails = [...pageTails.values()]
+    await agentLifecycle.releaseAll()
+    await Promise.allSettled(tails)
+    if (tails.length > 0) await agentLifecycle.releaseAll()
+  })()
+  return await shutdownPromise
+}
 
 function compactWorkflowRun(result) {
   const run = result.structuredContent
@@ -154,7 +194,11 @@ async function executeWorkflows(args) {
   )
 }
 
-async function callTool(name, args) {
+async function callTool(name, args, context) {
+  return await agentLifecycle.withRequest(context, async () => await dispatchTool(name, args))
+}
+
+async function dispatchTool(name, args) {
   if (name === 'in_app_browser_list_pages') {
     const result = await callBridge({ op: 'list_pages' })
     const pages = Array.isArray(result.pages) ? result.pages : []
@@ -174,7 +218,13 @@ async function callTool(name, args) {
   return contentResult(result, `${name} completed.`)
 }
 
-const stdioServer = createStdioServer({ callTool, serverInfo, tools })
+const stdioServer = createStdioServer({
+  callTool,
+  onCancel: ({ requestId }) => agentLifecycle.cancelRequest(requestId),
+  onClose: shutdown,
+  serverInfo,
+  tools
+})
 
 module.exports = {
   callBridge,
@@ -185,7 +235,13 @@ module.exports = {
   getWorkflowSteps,
   handleRequest: stdioServer.handleRequest,
   readBridgeCredentials,
+  shutdown,
   tools
 }
 
-if (require.main === module) stdioServer.start()
+if (require.main === module) {
+  stdioServer.start()
+  const stop = () => void stdioServer.cancelAll().then(shutdown).finally(() => process.exit(0))
+  process.once('SIGINT', stop)
+  process.once('SIGTERM', stop)
+}
