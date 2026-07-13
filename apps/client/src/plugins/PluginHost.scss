@@ -15,6 +15,20 @@
   min-width: 0;
 }
 
+.plugin-host-settings-section__heading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.plugin-host-settings-section__description {
+  color: var(--sub-text-color);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
 .plugin-view-host--launcher {
   padding: 0 0 10px;
   box-sizing: border-box;

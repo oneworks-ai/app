@@ -1,0 +1,105 @@
+:root {
+  color-scheme: light dark;
+  font: 13px/1.45 system-ui, sans-serif;
+}
+body {
+  margin: 0;
+  width: 350px;
+  background: Canvas;
+  color: CanvasText;
+}
+main {
+  padding: 16px;
+}
+header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: #2563eb;
+  color: white;
+  font-weight: 700;
+}
+h1 {
+  margin: 0;
+  font-size: 16px;
+}
+h2 {
+  margin: 18px 0 4px;
+  font-size: 13px;
+}
+p {
+  margin: 2px 0;
+}
+.hint {
+  color: GrayText;
+}
+.warning {
+  color: #b45309;
+  font-size: 12px;
+}
+#notice {
+  margin: 10px 0;
+  padding: 9px;
+  border-radius: 7px;
+  background: color-mix(in srgb, #d97706 15%, Canvas);
+}
+button {
+  font: inherit;
+  border: 1px solid color-mix(in srgb, CanvasText 20%, Canvas);
+  border-radius: 7px;
+  padding: 7px 10px;
+  background: ButtonFace;
+  color: ButtonText;
+  cursor: pointer;
+}
+button.primary {
+  width: 100%;
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+button.quiet {
+  border: 0;
+  padding-inline: 0;
+  background: transparent;
+  color: GrayText;
+}
+.permission {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 10%, Canvas);
+}
+.permission div {
+  flex: 1;
+}
+.permission strong {
+  display: block;
+}
+.permission span {
+  color: GrayText;
+  font-size: 12px;
+}
+.permission.granted button {
+  color: #16803c;
+}
+.permission.advanced button[aria-pressed='true'] {
+  color: #b42318;
+}
+footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  color: GrayText;
+  font-size: 11px;
+}

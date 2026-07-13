@@ -13,6 +13,7 @@ description: 当任务涉及发版范围、publish-plan、changelog、tag 或正
 - [发布步骤](./process.md)
 - [tag 与经验沉淀](./tags.md)
 - [GitHub Actions 凭据](./github-actions-secrets.md)
+- [Chrome Web Store 发布配置](./chrome-web-store.md)
 
 ## 总则
 

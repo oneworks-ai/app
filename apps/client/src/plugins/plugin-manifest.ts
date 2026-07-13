@@ -19,6 +19,7 @@ import type {
   PluginContributionSessionGroupAction,
   PluginContributionSessionGroupCreateSession,
   PluginContributionSessionGroupMatch,
+  PluginContributionSettingsPage,
   PluginContributionSurface,
   PluginContributionToolUseField,
   PluginContributionToolUseFieldFormat,
@@ -72,6 +73,7 @@ export type {
   PluginContributionSessionGroupAction,
   PluginContributionSessionGroupCreateSession,
   PluginContributionSessionGroupMatch,
+  PluginContributionSettingsPage,
   PluginContributionSurface,
   PluginContributionToolUseField,
   PluginContributionToolUseFieldFormat,
@@ -96,6 +98,7 @@ export type PluginSlot =
   | 'nav.items'
   | 'nav.moreMenu'
   | 'nav.footer.before'
+  | 'settings.pages'
   | 'chat.header.actions'
   | 'chat.header.moreMenu'
   | 'chat.interactionPanel.emptyActions'
@@ -171,7 +174,7 @@ export interface PluginViewRegistration {
   renderNode?: (context: PluginViewContext) => ReactNode
 }
 
-export type PluginViewSurface = 'route' | 'workbench' | 'drawer' | 'launcher'
+export type PluginViewSurface = 'route' | 'workbench' | 'drawer' | 'launcher' | 'settings'
 export type PluginHostThemeMode = 'light' | 'dark' | 'system'
 export type PluginHostResolvedThemeMode = 'light' | 'dark'
 
@@ -544,6 +547,21 @@ export interface PluginHostSwitchComponentProps {
   uncheckedLabel?: string
 }
 
+export interface PluginHostSettingsSectionComponentProps {
+  children: ReactNode
+  description?: ReactNode
+  icon?: string
+  title?: ReactNode
+}
+
+export interface PluginHostSettingsRowComponentProps {
+  children: ReactNode
+  description?: ReactNode
+  icon?: string
+  layout?: 'inline' | 'stacked'
+  title: ReactNode
+}
+
 export interface PluginHostSenderComponentProps {
   adapterLocked?: boolean
   autoFocus?: boolean
@@ -651,6 +669,8 @@ export interface PluginHostComponentReactApi {
   ProjectFileTree: ComponentType<PluginHostProjectFileTreeComponentProps>
   SearchInput: ComponentType<PluginHostSearchInputComponentProps>
   Select: ComponentType<PluginHostSelectComponentProps>
+  SettingsRow: ComponentType<PluginHostSettingsRowComponentProps>
+  SettingsSection: ComponentType<PluginHostSettingsSectionComponentProps>
   Segmented: ComponentType<PluginHostSegmentedComponentProps>
   Sender: ComponentType<PluginHostSenderComponentProps>
   Switch: ComponentType<PluginHostSwitchComponentProps>

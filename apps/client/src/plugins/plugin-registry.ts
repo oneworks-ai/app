@@ -72,6 +72,32 @@ const createPluginRegistryApiUrl = (path: string, serverBaseUrl?: string) => {
     : createServerUrlFromBase(normalizedServerBaseUrl, path)
 }
 
+const createRemoteCommandError = async (key: string, response: Response) => {
+  const fallback = `Plugin command "${key}" failed with status ${response.status}`
+  const body = await response.json().catch(() => undefined) as unknown
+  const envelopeError = isRecord(body) && isRecord(body.error) ? body.error : undefined
+  const details = envelopeError != null && isRecord(envelopeError.details) ? envelopeError.details : undefined
+  const message = typeof details?.message === 'string'
+    ? details.message
+    : typeof envelopeError?.message === 'string'
+    ? envelopeError.message
+    : fallback
+  const error = new Error(message) as Error & {
+    code?: string
+    details?: Record<string, unknown>
+    status?: number
+  }
+  error.status = response.status
+  if (details != null) error.details = details
+  const code = typeof details?.code === 'string'
+    ? details.code
+    : typeof envelopeError?.code === 'string'
+    ? envelopeError.code
+    : undefined
+  if (code != null) error.code = code
+  return error
+}
+
 const identifierPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/
 const pluginRuntimeRoles = new Set<PluginServerRuntimeRole>(['manager', 'workspace'])
 const pluginContributionSurfaces = new Set<PluginContributionSurface>(['launcher', 'workspace'])
@@ -89,6 +115,7 @@ const slotFromManifestKey = {
   routeMoreMenuItems: 'route.moreMenu.items',
   routeSidebarContextMenu: 'route.sidebar.contextMenu',
   routeWindowBarActions: 'route.windowBar.actions',
+  settingsPages: 'settings.pages',
   sessionGroups: 'sessions.groups',
   workbenchAddMenu: 'workbench.addMenu',
   workbenchTabs: 'workbench.tabs'
@@ -300,7 +327,7 @@ export class PluginRegistry {
         method: 'POST'
       }
     )
-    if (!response.ok) throw new Error(`Plugin command "${key}" failed with status ${response.status}`)
+    if (!response.ok) throw await createRemoteCommandError(key, response)
     const body = await response.json() as unknown
     if (
       body != null && typeof body === 'object' && 'success' in body && (body as { success?: unknown }).success === true

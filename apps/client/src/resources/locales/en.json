@@ -3360,6 +3360,7 @@
       "extensionPoints": "Plugin extension points",
       "extensionContributions": "Plugin extension contributions",
       "navItems": "Left navigation entries",
+      "settingsPages": "Settings subpages",
       "navMoreMenu": "Left more menu",
       "navFooterBefore": "Left footer above menu",
       "chatHeaderActions": "Chat header actions",
@@ -3404,7 +3405,9 @@
       "shortcut": "Shortcut",
       "inputSchema": "Input schema",
       "outputSchema": "Output schema",
-      "headerSchema": "Header schema"
+      "headerSchema": "Header schema",
+      "schema": "Settings schema",
+      "uiSchema": "Settings UI schema"
     }
   },
   "config": {
@@ -3417,6 +3420,9 @@
     "invalidJson": "Invalid JSON. Fix the format before saving.",
     "saveSuccess": "Configuration saved",
     "saveFailed": "Failed to save configuration",
+    "pluginPages": {
+      "saveFailed": "Failed to save plugin settings"
+    },
     "copySuccess": "Configuration copied",
     "copyFailed": "Copy failed",
     "sources": {

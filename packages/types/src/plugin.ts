@@ -411,6 +411,29 @@ export interface PluginContributionRoute extends PluginContributionBase {
   routeId?: string
 }
 
+interface PluginContributionSettingsPageBase extends PluginContributionBase {
+  id: string
+  title: string
+  icon?: string
+}
+
+export type PluginContributionSettingsPage =
+  & PluginContributionSettingsPageBase
+  & (
+    | {
+      /** Plugin-owned view mounted through the shared PluginViewHost runtime. */
+      clientView: string
+      schema?: never
+      uiSchema?: never
+    }
+    | {
+      /** Host-rendered options form persisted to this plugin instance. */
+      clientView?: never
+      schema: ConfigJsonSchema
+      uiSchema?: ConfigUiObjectSchema
+    }
+  )
+
 export interface PluginExtensionPointManifest extends PluginContributionBase {
   contributionSchema?: ConfigJsonSchema
   id: string
@@ -428,6 +451,8 @@ export interface PluginContributionManifest extends PluginContributionAvailabili
   extensionContributions?: PluginExtensionContributionManifest[]
   extensionPoints?: PluginExtensionPointManifest[]
   navItems?: PluginContributionNavItem[]
+  /** Settings subpages rendered inside the host Settings route. */
+  settingsPages?: PluginContributionSettingsPage[]
   navMoreMenu?: PluginContributionMenuItem[]
   /**
    * Structured actions rendered in the left navigation footer slot directly

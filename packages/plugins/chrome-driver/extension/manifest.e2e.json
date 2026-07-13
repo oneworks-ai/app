@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2VDB3EjSqQI/yqxORyULLFccXlkk+as6Z6ODfY+NJojoMzRPFJMkJWG9DkUlR/B3TGuaVdxGoOgb1DdAtR1UDTt8q/JD7JdlBHDF+seTX7RgD0dLHNrv/KOLrM/D0+3aUVjkOAJ8jKhiCcK1Zx3+lnK/r9CPj0YcGBH7GA8u+wOoL7k02s1HyH7QFrSYzyA7VASgj3+RB1P43ytzs5s7WWJ4Pvhutuur0NYlmXLgik8it5y5zhoHgvrpNNViZUMecyCW1RrPBwRf3lvziU+wSfqbPp9jHKvBkWWdHL8DFSjN6hubKUK2MgF3WkGU+f10Lnlfh6R8DbN/10uH+6tFmQIDAQAB",
+  "name": "oneWorks External Browser (E2E)",
+  "version": "0.1.0",
+  "description": "Isolated-profile test flavor. Not for user installation.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": [
+    "activeTab",
+    "alarms",
+    "bookmarks",
+    "browsingData",
+    "contentSettings",
+    "cookies",
+    "debugger",
+    "downloads",
+    "downloads.open",
+    "history",
+    "management",
+    "pageCapture",
+    "privacy",
+    "proxy",
+    "readingList",
+    "scripting",
+    "sessions",
+    "storage",
+    "system.display",
+    "tabGroups",
+    "tabs",
+    "webNavigation"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [{
+    "matches": ["http://127.0.0.1/*", "http://localhost/*"],
+    "js": ["content-script.js"],
+    "run_at": "document_start"
+  }],
+  "web_accessible_resources": [{
+    "resources": ["agent-cursor.svg", "default-tab-favicon.svg"],
+    "matches": ["<all_urls>"]
+  }],
+  "action": {
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    },
+    "default_popup": "popup.html",
+    "default_title": "oneWorks External Browser"
+  }
+}

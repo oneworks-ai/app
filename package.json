@@ -49,6 +49,7 @@
     "@oneworks/cli": "workspace:*",
     "@oneworks/client": "workspace:*",
     "@oneworks/plugin-browser-driver": "workspace:*",
+    "@oneworks/plugin-chrome-driver": "workspace:*",
     "@oneworks/plugin-cua-driver": "workspace:*",
     "@oneworks/plugin-demo": "workspace:*",
     "@oneworks/plugin-demo-extension": "workspace:*",

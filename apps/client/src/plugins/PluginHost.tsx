@@ -218,7 +218,7 @@ export function PluginViewHost({
   }, [disposeHostComponents, view, viewContext])
 
   useEffect(() => {
-    if (surface !== 'route' && surface !== 'launcher') return
+    if (surface !== 'route' && surface !== 'launcher' && surface !== 'settings') return
     window.dispatchEvent(
       new CustomEvent('oneworks:plugin-route-change', {
         detail: {

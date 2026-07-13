@@ -46,6 +46,7 @@ const runtimeSlotLabelKeys: Record<string, string> = {
   'route.moreMenu.items': 'pluginDetail.groups.routeMoreMenuItems',
   'route.sidebar.contextMenu': 'pluginDetail.groups.routeSidebarContextMenu',
   'route.windowBar.actions': 'pluginDetail.groups.routeWindowBarActions',
+  'settings.pages': 'pluginDetail.groups.settingsPages',
   'workbench.addMenu': 'pluginDetail.groups.workbenchAddMenu',
   'workbench.tabs': 'pluginDetail.groups.workbenchTabs',
   'workspace.drawer.tabs': 'pluginDetail.groups.workspaceDrawerTabs'

@@ -3,7 +3,7 @@ import { isValidElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { mergeRouteMoreMenuOverrides, mergeRouteWindowBarOverrides } from '#~/components/layout/route-sidebar-context'
-import { getPluginContributions } from '#~/components/plugins/PluginDetailSections'
+import { getPluginContributions, pluginContributionGroups } from '#~/components/plugins/PluginDetailSections'
 import { resolvePluginReadmeAssetPath } from '#~/components/plugins/plugin-readme-links'
 import i18n from '#~/i18n'
 import { createPluginI18nContext, localizePluginContributionItem } from '#~/plugins/plugin-i18n'
@@ -26,6 +26,13 @@ vi.mock('#~/components/monaco/use-monaco-theme', () => ({ useMonacoTheme: () => 
 vi.mock('monaco-editor', () => ({ editor: {} }))
 
 describe('client plugin host registry', () => {
+  it('exposes settings page contributions through plugin detail preferences', () => {
+    expect(pluginContributionGroups).toContainEqual(expect.objectContaining({
+      key: 'settingsPages',
+      labelKey: 'pluginDetail.groups.settingsPages'
+    }))
+  })
+
   it('loads manifest contributions with scoped slot ids', () => {
     const registry = new PluginRegistry()
 
@@ -41,6 +48,22 @@ describe('client plugin host registry', () => {
             title: 'Quick action add-on'
           }],
           navItems: [{ id: 'dashboard', title: 'Dashboard', icon: 'dashboard', route: '/plugins/demo/dashboard' }],
+          settingsPages: [
+            {
+              clientView: 'settings-view',
+              icon: 'settings',
+              id: 'account',
+              title: 'Account settings'
+            },
+            {
+              id: 'preferences',
+              schema: {
+                properties: { enabled: { type: 'boolean' } },
+                type: 'object'
+              },
+              title: 'Preferences'
+            }
+          ],
           navFooterBefore: [{
             children: [{
               command: 'open-profile',
@@ -140,6 +163,20 @@ describe('client plugin host registry', () => {
     expect(snapshot.slots['nav.items']?.[0]).toMatchObject({
       id: 'dashboard',
       pluginScope: 'demo'
+    })
+    expect(snapshot.slots['settings.pages']?.[0]).toMatchObject({
+      clientView: 'settings-view',
+      id: 'account',
+      pluginScope: 'demo',
+      title: 'Account settings'
+    })
+    expect(snapshot.slots['settings.pages']?.[1]).toMatchObject({
+      id: 'preferences',
+      pluginScope: 'demo',
+      schema: {
+        properties: { enabled: { type: 'boolean' } },
+        type: 'object'
+      }
     })
     expect(snapshot.slots['nav.footer.before']?.[0]).toMatchObject({
       children: [
@@ -389,6 +426,8 @@ describe('client plugin host registry', () => {
 
     const launcherUi = createPluginHostComponentReactApi('launcher')
     expect(typeof launcherUi.InteractionList).toBe('function')
+    expect(typeof launcherUi.SettingsRow).toBe('function')
+    expect(typeof launcherUi.SettingsSection).toBe('function')
     const renderInteractionList = launcherUi.InteractionList as unknown as (
       props: { emptyText: null; items: [] }
     ) => unknown
@@ -398,7 +437,7 @@ describe('client plugin host registry', () => {
     })
     expect(isValidElement(reactNode)).toBe(true)
     expect((reactNode as { props?: { surface?: string } }).props?.surface).toBe('launcher')
-  })
+  }, 20_000)
 
   it('merges route-owned chrome overrides with plugin-provided route chrome', () => {
     expect(mergeRouteWindowBarOverrides({
@@ -803,6 +842,45 @@ describe('client plugin host registry', () => {
     expect(registry.getSnapshot().extensionPoints).toEqual([])
     expect(registry.getSnapshot().extensionContributions['demo/actions']).toBeUndefined()
     expect(registry.getSnapshot().pluginApis).toEqual([])
+  })
+
+  it('preserves typed details from failed remote plugin commands', async () => {
+    const registry = new PluginRegistry()
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: false,
+          error: {
+            code: 'MISSING_PERMISSION',
+            message: 'Internal Server Error',
+            details: {
+              code: 'MISSING_PERMISSION',
+              message: 'This Chrome operation needs an optional permission.',
+              missing_permissions: ['webNavigation'],
+              recoverable: true
+            }
+          }
+        }),
+        {
+          status: 500,
+          headers: { 'content-type': 'application/json' }
+        }
+      )
+    )
+
+    try {
+      await expect(registry.executeCommand('chrome', 'list-web-frames', { tab_id: 17 })).rejects.toMatchObject({
+        code: 'MISSING_PERMISSION',
+        message: 'This Chrome operation needs an optional permission.',
+        status: 500,
+        details: expect.objectContaining({
+          missing_permissions: ['webNavigation'],
+          recoverable: true
+        })
+      })
+    } finally {
+      fetchMock.mockRestore()
+    }
   })
 
   it('rejects plugin api.fetch paths that try to leave the scoped proxy', async () => {

@@ -811,6 +811,44 @@ describe('pluginsRouter', () => {
     await expect(commandResponse.text()).resolves.toBe('pong')
   })
 
+  it('coalesces concurrent reloads so plugin activation does not register commands twice', async () => {
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'concurrent-reload')
+    await createPlugin(
+      pluginRoot,
+      {
+        name: 'concurrent-reload',
+        plugin: { server: { entry: './server.mjs', roles: ['workspace'] } }
+      },
+      `
+      globalThis.__oneworksConcurrentReloadActivationCount ??= 0
+      export async function activatePlugin(ctx) {
+        globalThis.__oneworksConcurrentReloadActivationCount += 1
+        ctx.registerCommand('status', () => globalThis.__oneworksConcurrentReloadActivationCount)
+        await new Promise(resolve => setTimeout(resolve, 25))
+        ctx.registerCommand('ready', () => true)
+      }
+    `
+    )
+    mockConfig([{ id: pluginRoot, scope: 'concurrent-reload' }])
+
+    const initialResponse = await fetch(`${baseUrl}/api/plugins`)
+    expect(initialResponse.status).toBe(200)
+
+    const manager = getPluginManager()
+    await Promise.all([manager.reload(), manager.reload(), manager.reload()])
+
+    const snapshot = manager.snapshot()
+    expect(snapshot.plugins.find(plugin => plugin.scope === 'concurrent-reload')).toMatchObject({
+      enabled: true,
+      diagnostics: []
+    })
+    const commandResponse = await fetch(
+      `${baseUrl}/api/plugins/concurrent-reload/commands/status`,
+      { method: 'POST' }
+    )
+    await expect(commandResponse.json()).resolves.toBe(2)
+  })
+
   it('reports duplicate scope diagnostics clearly', async () => {
     const firstRoot = path.join(workspaceFolder, 'plugins', 'first')
     const secondRoot = path.join(workspaceFolder, 'plugins', 'second')

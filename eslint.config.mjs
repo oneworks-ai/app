@@ -34,7 +34,8 @@ export default config(
       'packages/adapters/codex/src/**/*.js',
       'packages/adapters/codex/__tests__/**/*.js',
       'packages/adapters/opencode/src/**/*.js',
-      'packages/adapters/opencode/__tests__/**/*.js'
+      'packages/adapters/opencode/__tests__/**/*.js',
+      'packages/plugins/chrome-driver/dist-extension/**'
     ],
     stylistic: false,
     rules: {
@@ -72,6 +73,38 @@ export default config(
       overrides: {
         'test/consistent-test-it': 'off'
       }
+    }
+  },
+  {
+    files: [
+      'packages/plugins/chrome-driver/extension/**/*.js'
+    ],
+    languageOptions: {
+      globals: {
+        chrome: 'readonly'
+      }
+    },
+    rules: {
+      // MV3 service-worker generations change from message callbacks, outside the polling loop body.
+      'no-unmodified-loop-condition': 'off'
+    }
+  },
+  {
+    files: [
+      'packages/plugins/chrome-driver/extension/background.js',
+      'packages/plugins/chrome-driver/extension/operations/browser-data.js'
+    ],
+    rules: {
+      'max-lines': 'off'
+    }
+  },
+  {
+    files: [
+      'packages/plugins/chrome-driver/extension/operations/page.js'
+    ],
+    rules: {
+      // Semantic snapshots need rendered, visibility-aware text rather than raw textContent.
+      'unicorn/prefer-dom-node-text-content': 'off'
     }
   },
   {

@@ -355,19 +355,6 @@ func start(_ stream: SCStream) async throws {
   }
 }
 
-@available(macOS 15.0, *)
-func stop(_ stream: SCStream) async throws {
-  try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-    stream.stopCapture { error in
-      if let error {
-        continuation.resume(throwing: error)
-      } else {
-        continuation.resume()
-      }
-    }
-  }
-}
-
 let args = Array(CommandLine.arguments.dropFirst())
 guard args.count >= 4 else {
   throw NSError(
@@ -452,7 +439,11 @@ if #available(macOS 15.0, *) {
   }
 
   try await Task.sleep(nanoseconds: UInt64(max(0.05, seconds) * 1_000_000_000))
-  try await stop(stream)
+  // Finalize the recording output independently from stream shutdown. On some
+  // macOS builds the stopCapture completion handler can be delayed indefinitely
+  // even though SCRecordingOutput is ready. Apple's recording contract explicitly
+  // supports removeRecordingOutput as the recording-only stop path.
+  try stream.removeRecordingOutput(output)
   if delegate.finished.wait(timeout: .now() + 10) == .timedOut {
     throw NSError(
       domain: "OneWorksScreenCaptureKit",
@@ -463,6 +454,7 @@ if #available(macOS 15.0, *) {
   if let error = delegate.error {
     throw error
   }
+  stream.stopCapture(completionHandler: nil)
 
   let data = try JSONSerialization.data(withJSONObject: [
     "height": configuration.height,
@@ -1958,7 +1950,7 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
       systemDisplayCrop?: DemoVideoCropRect
       systemCursorWindowBounds?: DemoVideoSystemCursorWindowBounds
       systemDisplayId: number
-      systemWindowFrameCapture: boolean
+      systemFrameCapture: boolean
       systemWindowId?: number
       systemWindowOwnerPid?: number
       url?: string
@@ -2123,12 +2115,12 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
   ) {
     await this.waitForInitialText()
 
-    if (this.usesSystemWindowFrameCapture()) {
+    if (this.usesSystemFrameCapture()) {
       if (this.systemActionCaptureDepth > 0) {
         await this.sleepAndAdvanceSystemCursorTimeline(durationMs)
         return
       }
-      await this.captureSystemWindowFrames(durationMs)
+      await this.captureSystemFrames(durationMs)
       return
     }
 
@@ -2162,11 +2154,12 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
   async recordDuring(durationMs: number, action: () => Promise<void>) {
     await this.waitForInitialText()
 
+    if (this.usesSystemFrameCapture()) {
+      await this.captureSystemFramesDuringAction(durationMs, action)
+      return
+    }
+
     if (this.input.captureSource === 'system-window' && this.input.systemWindowOwnerPid != null) {
-      if (this.usesSystemWindowFrameCapture()) {
-        await this.captureFollowedSystemWindowFrames(durationMs, action)
-        return
-      }
       await this.captureFollowedSystemWindowVideo(durationMs, action)
       return
     }
@@ -2669,11 +2662,29 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
   }
 
   private async captureFrame() {
-    await this.followCdpTargetIfNeeded()
-    const response = await this.client.send<PageCaptureScreenshotResponse>('Page.captureScreenshot', {
-      captureBeyondViewport: false,
-      format: 'png'
-    })
+    let response: PageCaptureScreenshotResponse | undefined
+    let lastError: unknown
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await this.followCdpTargetIfNeeded()
+        response = await this.client.send<PageCaptureScreenshotResponse>('Page.captureScreenshot', {
+          captureBeyondViewport: false,
+          format: 'png'
+        })
+        break
+      } catch (error) {
+        lastError = error
+        if (!this.input.followCdpTargets || attempt === 2) throw error
+        // A followed page can disappear between target discovery and capture
+        // (for example, while an E2E flow closes the active tab). Forget the
+        // stale socket so the next pass reconnects to a live page target.
+        this.input.cdpWebSocketDebuggerUrl = undefined
+        await sleep(100)
+      }
+    }
+    if (response == null) {
+      throw lastError instanceof Error ? lastError : new Error('Chrome screenshot capture failed.')
+    }
     if (!isNonEmptyString(response.data)) {
       throw new Error('Chrome returned an empty screenshot frame.')
     }
@@ -2781,17 +2792,17 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
     this.systemWindowId = window.id
   }
 
-  private usesSystemWindowFrameCapture() {
-    return this.input.captureSource === 'system-window' && this.input.systemWindowFrameCapture
+  private usesSystemFrameCapture() {
+    return isSystemCaptureSource(this.input.captureSource) && this.input.systemFrameCapture
   }
 
-  private async captureFollowedSystemWindowFrames(durationMs: number, action: () => Promise<void>) {
+  private async captureSystemFramesDuringAction(durationMs: number, action: () => Promise<void>) {
     const actionPromise = settleAction(sleep(500).then(() => this.runSystemRecordedAction(action)))
-    await this.captureSystemWindowFrames(durationMs)
+    await this.captureSystemFrames(durationMs)
     rethrowSettledAction(await actionPromise)
   }
 
-  private async captureSystemWindowFrames(durationMs: number) {
+  private async captureSystemFrames(durationMs: number) {
     const intervalMs = 1_000 / this.input.fps
     const frameTotal = Math.max(1, Math.ceil(durationMs / intervalMs))
     const startedAt = Date.now()
@@ -2800,7 +2811,7 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
     for (let index = 0; index < frameTotal; index += 1) {
       try {
         await this.refreshSystemWindowIdFromOwner()
-        await this.captureSystemWindowFrame()
+        await this.captureSystemFrame()
         recoverableWindowCaptureFailures = 0
       } catch (error) {
         if (!this.canRecoverFollowedSystemWindowCapture(error) || recoverableWindowCaptureFailures >= 5) {
@@ -2823,7 +2834,12 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
 
   private async captureFollowedSystemWindowVideo(durationMs: number, action: () => Promise<void>) {
     const actionPromise = settleAction(sleep(500).then(() => this.runSystemRecordedAction(action)))
-    await this.captureFollowedSystemWindowVideoSegments(durationMs)
+    // A recordDuring call needs one continuous outer-window segment so visible
+    // actions are not lost while repeatedly compiling and starting the macOS
+    // recorder. Resolve the owner's current window immediately before capture;
+    // recordFor keeps the shorter followed-segment recovery path.
+    await this.refreshSystemWindowIdFromOwner()
+    await this.captureSystemVideoSegment(durationMs)
     rethrowSettledAction(await actionPromise)
   }
 
@@ -2883,14 +2899,17 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
     )
   }
 
-  private async captureSystemWindowFrame() {
-    if (this.systemWindowId == null) {
+  private async captureSystemFrame() {
+    if (this.input.captureSource === 'system-window' && this.systemWindowId == null) {
       throw new Error('system-window demo video capture requires a resolved macOS window id.')
     }
     await mkdir(this.input.framesDir, { recursive: true })
     const framePath = path.join(this.input.framesDir, frameFileName(this.frameCount + 1))
+    const captureArgs = this.input.captureSource === 'system-window'
+      ? ['-x', `-l${this.systemWindowId}`, framePath]
+      : ['-x', `-D${this.input.systemDisplayId}`, framePath]
     const result = await runCommand({
-      args: ['-x', `-l${this.systemWindowId}`, framePath],
+      args: captureArgs,
       command: 'screencapture',
       cwd: process.cwd(),
       timeoutMs: 5_000
@@ -2898,7 +2917,11 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
     if (result.code !== 0) {
       throw new Error(
         [
-          `screencapture image failed with exit code ${result.code} for window ${this.systemWindowId}.`,
+          `screencapture image failed with exit code ${result.code} for ${
+            this.input.captureSource === 'system-window'
+              ? `window ${this.systemWindowId}`
+              : `display ${this.input.systemDisplayId}`
+          }.`,
           result.timedOut ? 'timedOut=true' : undefined,
           result.stdout.trim() === '' ? undefined : `stdout:\n${result.stdout}`,
           result.stderr.trim() === '' ? undefined : `stderr:\n${result.stderr}`
@@ -2907,7 +2930,7 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
     }
     const frameBuffer = await readFile(framePath)
     if (frameBuffer.byteLength === 0) {
-      throw new Error(`screencapture produced an empty image frame for window ${this.systemWindowId}.`)
+      throw new Error(`screencapture produced an empty image frame for ${this.input.captureSource}.`)
     }
     this.frameCount += 1
     this.frameSize = expandViewport(this.frameSize, parsePngDimensions(frameBuffer))
@@ -3911,7 +3934,7 @@ const encodeSystemWindowVideo = async (input: {
       ],
       command: input.ffmpegPath,
       cwd: process.cwd(),
-      timeoutMs: 120_000
+      timeoutMs: Math.max(120_000, Math.ceil(segmentDurationSeconds * 5_000))
     })
     if (result.code !== 0) {
       throw new Error(
@@ -3926,48 +3949,52 @@ const encodeSystemWindowVideo = async (input: {
     normalizedSegmentPaths.push(normalizedPath)
   }
 
-  const concatListPath = path.join(input.segmentsDir, 'segments.txt')
-  await writeConcatList({
-    listPath: concatListPath,
-    segmentPaths: normalizedSegmentPaths
-  })
   const baseVideoPath = input.cursorTimeline?.enabled === true
     ? path.join(input.segmentsDir, 'system-recording-base.mp4')
     : input.videoPath
-  const result = await runCommand({
-    args: [
-      '-y',
-      '-f',
-      'concat',
-      '-safe',
-      '0',
-      '-i',
-      concatListPath,
-      '-t',
-      String(Math.max(1, input.durationMs / 1_000)),
-      '-r',
-      String(input.fps),
-      '-c:v',
-      'libx264',
-      '-pix_fmt',
-      'yuv420p',
-      '-movflags',
-      '+faststart',
-      baseVideoPath
-    ],
-    command: input.ffmpegPath,
-    cwd: process.cwd(),
-    timeoutMs: 120_000
-  })
-  if (result.code !== 0) {
-    throw new Error(
-      [
-        `ffmpeg failed to encode system recording video with exit code ${result.code}.`,
-        result.timedOut ? 'timedOut=true' : undefined,
-        result.stdout.trim() === '' ? undefined : `stdout:\n${result.stdout}`,
-        result.stderr.trim() === '' ? undefined : `stderr:\n${result.stderr}`
-      ].filter(Boolean).join('\n')
-    )
+  if (normalizedSegmentPaths.length === 1) {
+    await copyFile(normalizedSegmentPaths[0]!, baseVideoPath)
+  } else {
+    const concatListPath = path.join(input.segmentsDir, 'segments.txt')
+    await writeConcatList({
+      listPath: concatListPath,
+      segmentPaths: normalizedSegmentPaths
+    })
+    const result = await runCommand({
+      args: [
+        '-y',
+        '-f',
+        'concat',
+        '-safe',
+        '0',
+        '-i',
+        concatListPath,
+        '-t',
+        String(Math.max(1, input.durationMs / 1_000)),
+        '-r',
+        String(input.fps),
+        '-c:v',
+        'libx264',
+        '-pix_fmt',
+        'yuv420p',
+        '-movflags',
+        '+faststart',
+        baseVideoPath
+      ],
+      command: input.ffmpegPath,
+      cwd: process.cwd(),
+      timeoutMs: Math.max(120_000, Math.ceil(input.durationMs * 5))
+    })
+    if (result.code !== 0) {
+      throw new Error(
+        [
+          `ffmpeg failed to encode system recording video with exit code ${result.code}.`,
+          result.timedOut ? 'timedOut=true' : undefined,
+          result.stdout.trim() === '' ? undefined : `stdout:\n${result.stdout}`,
+          result.stderr.trim() === '' ? undefined : `stderr:\n${result.stderr}`
+        ].filter(Boolean).join('\n')
+      )
+    }
   }
   if (input.cursorTimeline?.enabled === true) {
     await overlaySystemCursorVideo({
@@ -4130,7 +4157,7 @@ export const recordDemoVideoScenario = async (
         : undefined)
   )
   const systemWindowCaptureBackend = normalizeSystemWindowCaptureBackend(options.systemWindowCaptureBackend)
-  const systemWindowFrameCapture = captureSource === 'system-window' && systemWindowCaptureBackend === 'frames'
+  const systemFrameCapture = isSystemCaptureSource(captureSource) && systemWindowCaptureBackend === 'frames'
   const systemWindowId = captureSource === 'system-window'
     ? await resolveSystemWindowId({
       ownerPid: options.systemWindowOwnerPid,
@@ -4194,7 +4221,7 @@ export const recordDemoVideoScenario = async (
       systemCursorWindowBounds: options.systemCursorWindowBounds,
       systemDisplayCrop: options.systemDisplayCrop,
       systemDisplayId,
-      systemWindowFrameCapture,
+      systemFrameCapture,
       systemWindowId,
       systemWindowOwnerPid: options.systemWindowOwnerPid,
       url: options.url,
@@ -4221,7 +4248,7 @@ export const recordDemoVideoScenario = async (
     })
     let frameSize = recorder.getFrameSize()
     let stills: Awaited<ReturnType<typeof writeSecondStillFrames>>
-    if (isSystemCaptureSource(captureSource) && !systemWindowFrameCapture) {
+    if (isSystemCaptureSource(captureSource) && !systemFrameCapture) {
       await encodeSystemWindowVideo({
         cursorTimeline: systemCursorTimeline,
         durationMs: recordedDurationMs,
@@ -4246,7 +4273,7 @@ export const recordDemoVideoScenario = async (
         stillsDir: outputPaths.stillsDir,
         videoPath: outputPaths.videoPath
       })
-    } else if (systemWindowFrameCapture) {
+    } else if (systemFrameCapture) {
       await encodeVideo({
         durationMs: recorder.getRecordedDurationMs(),
         ffmpegPath,

@@ -12,6 +12,8 @@ import type { ConfigResponse } from '@oneworks/types'
 import { getConfig } from '#~/api.js'
 import { Sender } from '#~/components/chat/sender/Sender'
 import { ChatStatusBar } from '#~/components/chat/status-bar/ChatStatusBar'
+import { FieldRow } from '#~/components/config/ConfigFieldRow'
+import { ConfigSectionFrame } from '#~/components/config/ConfigSectionFrame'
 import { InteractionList } from '#~/components/interaction-list'
 import type { InteractionListAction, InteractionListItem } from '#~/components/interaction-list'
 import { ListSearchInput } from '#~/components/list-search-input'
@@ -58,6 +60,8 @@ import type {
   PluginHostSearchInputComponentProps,
   PluginHostSegmentedComponentProps,
   PluginHostSenderComponentProps,
+  PluginHostSettingsRowComponentProps,
+  PluginHostSettingsSectionComponentProps,
   PluginViewSurface
 } from './plugin-manifest'
 
@@ -1180,6 +1184,35 @@ function PluginHostProjectFileTree(props: PluginHostComponentPropsById['projectF
   )
 }
 
+function PluginHostSettingsSection({
+  children,
+  description,
+  icon,
+  title
+}: PluginHostSettingsSectionComponentProps) {
+  return (
+    <ConfigSectionFrame
+      icon={icon}
+      title={title == null
+        ? undefined
+        : (
+          <span className='plugin-host-settings-section__heading'>
+            <span>{title}</span>
+            {description == null ? null : (
+              <span className='plugin-host-settings-section__description'>{description}</span>
+            )}
+          </span>
+        )}
+    >
+      {children}
+    </ConfigSectionFrame>
+  )
+}
+
+function PluginHostSettingsRow(props: PluginHostSettingsRowComponentProps) {
+  return <FieldRow {...props} />
+}
+
 export const createPluginHostComponentReactApi = (
   surface: PluginViewSurface = 'route',
   options: { launcherSearchValue?: string } = {}
@@ -1208,6 +1241,8 @@ export const createPluginHostComponentReactApi = (
   ProjectFileTree: PluginHostProjectFileTree,
   SearchInput: PluginHostSearchInput,
   Select: PluginHostSelect,
+  SettingsRow: PluginHostSettingsRow,
+  SettingsSection: PluginHostSettingsSection,
   Segmented: PluginHostSegmented,
   Sender: PluginSenderHost,
   Switch: PluginHostSwitch

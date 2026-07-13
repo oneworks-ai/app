@@ -76,6 +76,7 @@ export const pluginContributionGroups: Array<{
     labelKey: 'pluginDetail.groups.extensionContributions'
   },
   { icon: 'dock_to_left', key: 'navItems', labelKey: 'pluginDetail.groups.navItems' },
+  { icon: 'settings', key: 'settingsPages', labelKey: 'pluginDetail.groups.settingsPages' },
   { icon: 'more_horiz', key: 'navMoreMenu', labelKey: 'pluginDetail.groups.navMoreMenu' },
   { icon: 'vertical_align_top', key: 'navFooterBefore', labelKey: 'pluginDetail.groups.navFooterBefore' },
   { icon: 'add_comment', key: 'chatHeaderActions', labelKey: 'pluginDetail.groups.chatHeaderActions' },
@@ -118,6 +119,8 @@ const detailFields = [
   'selected',
   'tab',
   'clientView',
+  'schema',
+  'uiSchema',
   'viewId',
   'placement',
   'icon',
@@ -144,6 +147,7 @@ const detailFieldIcons: Record<string, string> = {
   inputSchema: 'input',
   mode: 'route',
   outputSchema: 'output',
+  schema: 'schema',
   icon: 'symbol',
   placement: 'dock_to_right',
   proxyTarget: 'hub',
@@ -156,6 +160,7 @@ const detailFieldIcons: Record<string, string> = {
   targetRoute: 'filter_alt',
   targetRoutes: 'filter_alt',
   title: 'sell',
+  uiSchema: 'view_quilt',
   viewId: 'language'
 }
 

@@ -182,8 +182,8 @@
   - 冷启动隔离 Electron 实例、分配 CDP endpoint、返回 `control` 和 `agentCommands`
 - `scripts/runtime-evidence.ts`
   - 通用 runtime session evidence discovery / wait-reply；release、Electron smoke、adapter 调试不要重复解析 `events.jsonl`
-- `apps/desktop/src/main/external-cdp.ts`
-  - Electron app 侧 bootstrap 前 opt-in CDP hook；默认关闭，协议和编排仍归 `scripts/` 层维护
+- `apps/desktop/src/main/external-cdp.ts`：Electron app 侧 bootstrap 前 opt-in CDP hook；默认关闭，协议和编排仍归 `scripts/` 层维护
+- `scripts/chrome-driver-e2e.mjs`：在隔离 Chrome profile 中由外层 harness 验证真实 oneWorks Web、扩展、权限恢复、多 target、页面 / iframe 与书签清理。
 
 ## Lark 调试约定
 

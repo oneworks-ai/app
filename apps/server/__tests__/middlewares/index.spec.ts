@@ -128,6 +128,36 @@ describe('initMiddlewares', () => {
     expect(blockedResponse.headers.get('access-control-allow-origin')).toBeNull()
   })
 
+  it('allows the workspace client-origin header during CORS preflight', async () => {
+    const app = new Koa()
+    await initMiddlewares(app, createEnv(true, 'https://client.example'))
+    app.use(async (ctx) => {
+      ctx.body = { ok: true }
+    })
+
+    server = http.createServer(app.callback())
+    await new Promise<void>((resolve) => {
+      server!.listen(0, '127.0.0.1', () => resolve())
+    })
+
+    const address = server.address()
+    if (address == null || typeof address === 'string') {
+      throw new Error('Failed to start middleware test server')
+    }
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/test`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://client.example',
+        'Access-Control-Request-Headers': 'x-oneworks-client-origin',
+        'Access-Control-Request-Method': 'GET'
+      }
+    })
+
+    expect(response.status).toBe(204)
+    expect(response.headers.get('access-control-allow-headers'))
+      .toContain('X-OneWorks-Client-Origin')
+  })
+
   it('restricts public host access to channel webhook paths plus configured extra paths', async () => {
     const app = new Koa()
     await initMiddlewares(app, createEnv(false), {

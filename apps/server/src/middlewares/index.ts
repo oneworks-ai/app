@@ -39,7 +39,7 @@ export async function initMiddlewares(
         return allowedOrigins.includes(requestOrigin) ? requestOrigin : ''
       },
       credentials: true,
-      allowHeaders: ['Content-Type', 'Authorization']
+      allowHeaders: ['Content-Type', 'Authorization', 'X-OneWorks-Client-Origin']
     }))
   }
   app.use(publicAccessMiddleware({

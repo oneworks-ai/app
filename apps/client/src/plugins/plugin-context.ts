@@ -6,6 +6,7 @@ import type { PluginRegistry } from './plugin-registry'
 type PluginRegistrySnapshot = ReturnType<PluginRegistry['getSnapshot']>
 
 export interface PluginContextValue {
+  pluginSnapshotStatus: 'error' | 'loading' | 'ready'
   pluginServerBaseUrl?: string
   refreshPlugins: () => Promise<void>
   registry: PluginRegistry

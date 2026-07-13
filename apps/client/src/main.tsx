@@ -75,10 +75,10 @@ const installWorkspaceRouteRuntimeIfAvailable = async () => {
   if (workspaceId == null) return
 
   const workspaceClientBase = buildWorkspaceClientBase(workspaceId)
-  const managerServerBaseUrl = getLauncherManagerServerBaseUrl()
+  const initialManagerServerBaseUrl = getLauncherManagerServerBaseUrl()
   mergeRuntimeEnv({
     __ONEWORKS_PROJECT_CLIENT_BASE__: workspaceClientBase,
-    __ONEWORKS_PROJECT_MANAGER_SERVER_BASE_URL__: managerServerBaseUrl,
+    __ONEWORKS_PROJECT_MANAGER_SERVER_BASE_URL__: initialManagerServerBaseUrl,
     __ONEWORKS_PROJECT_SERVER_ROLE__: 'workspace',
     __ONEWORKS_PROJECT_WORKSPACE_ID__: workspaceId
   })
@@ -92,8 +92,12 @@ const installWorkspaceRouteRuntimeIfAvailable = async () => {
   const { connection, transport } = restoredConnection
   const serverBaseUrl = normalizeServerBaseUrl(connection.serverBaseUrl)
   if (serverBaseUrl == null) return
+  const managerServerBaseUrl = getLauncherManagerServerBaseUrl(connection.managerServerBaseUrl)
   const routeConnection = withWorkspaceRouteId(connection, workspaceId)
 
+  mergeRuntimeEnv({
+    __ONEWORKS_PROJECT_MANAGER_SERVER_BASE_URL__: managerServerBaseUrl
+  })
   applyWorkspaceConnection({
     serverBaseUrl,
     workspaceFolder: routeConnection.workspaceFolder,
