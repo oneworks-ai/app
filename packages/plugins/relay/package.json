@@ -2,8 +2,17 @@
   "name": "@oneworks/plugin-relay",
   "__oneWorksPluginManifest": true,
   "displayName": "Account",
+  "displayNameI18n": {
+    "en": "Account",
+    "zh-Hans": "账号"
+  },
+  "descriptionI18n": {
+    "en": "Connects the current workspace to OneWorks Relay for account and remote client access.",
+    "zh-Hans": "将当前工作区连接到 OneWorks Relay，用于账号与远程客户端访问。"
+  },
   "type": "module",
   "version": "0.1.0-beta.5",
+  "description": "Connects the current workspace to OneWorks Relay for account and remote client access.",
   "repository": {
     "type": "git",
     "url": "https://github.com/oneworks-ai/app.git",
@@ -345,6 +354,7 @@
     },
     "./package.json": "./package.json"
   },
+  "icon": "./assets/icon.svg",
   "files": [
     "README.md",
     "dist",

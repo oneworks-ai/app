@@ -1,8 +1,29 @@
 # Marketplace Examples
 
-This page provides fuller user-side plugin marketplace examples for bringing Claude Code plugins into a project.
+This page provides fuller user-side plugin marketplace examples for bringing Claude Code and Codex plugins into a project.
 
-The `marketplaces` configuration here is for adapter-native Claude Code marketplaces. Skill marketplace configuration uses `skillRegistries[]` and is not covered here.
+The plugin marketplace includes the OpenAI Plugins and Anthropic official sources by default. Official sources can be disabled but not deleted, and custom Git sources can be added. Skill marketplace configuration uses `skillRegistries[]` and is not covered here.
+
+## Custom Codex Marketplace
+
+Codex marketplaces use `.agents/plugins/marketplace.json` in the source repository:
+
+```yaml
+marketplaces:
+  company-codex-plugins:
+    type: codex
+    enabled: true
+    plugins:
+      reviewer:
+        scope: review
+    options:
+      source:
+        source: github
+        repo: acme/codex-plugins
+        ref: main
+```
+
+Codex sources support `github`, `git`, and `directory`. One Works reads each `.codex-plugin/plugin.json` and converts reusable skills, commands, agents, MCP servers, and hooks.
 
 ## Superpowers Marketplace
 
@@ -94,6 +115,7 @@ When plugins are declared under `marketplaces.<name>.plugins`:
 
 ## Related Docs
 
+- [OpenAI Plugins](https://github.com/openai/plugins)
 - [Claude Code Plugins](https://code.claude.com/docs/en/plugins)
 - [Claude Code Plugin Marketplaces](https://code.claude.com/docs/en/plugin-marketplaces)
 - [Superpowers](https://github.com/obra/superpowers)

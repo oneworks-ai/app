@@ -7,6 +7,7 @@
 - `runtime.ts`：plugin manager 生命周期、注册上下文、命令/API/launcher 调用，以及按 scope 管理 watch 模式和 plugin 变更通知。
 - `discovery.ts`：通过 server config service 与 resolver 获取当前 workspace plugin 实例。
 - `marketplace.ts`：读取当前配置里的插件市场源，解析 catalog，并为前端插件市场返回可搜索的插件条目。
+- `native-host.ts`：聚合各 adapter 对真实用户 Home 原生插件的只读发现；原生条目与 OneWorks runtime plugin 分开返回，不能进入 runtime activation。
 - `manifest.ts`：读取目录或 package manifest 中的 `plugin.client/server/contributions` runtime 字段，并按 `package.json` exports 约定补齐 `./client`、`./server` 默认入口。
 - `proxy.ts`：loopback target 校验和 HTTP 代理转发。
 - `types.ts`：server 内部窄类型；共享 contract 完成后应迁移到 `packages/types/src/plugin.ts`。

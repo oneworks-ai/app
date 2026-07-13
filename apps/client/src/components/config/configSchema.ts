@@ -839,9 +839,13 @@ const pluginInstanceDetailFields: FieldSpec[] = [
 const pluginMarketplaceDetailFields: FieldSpec[] = [
   {
     path: ['type'],
-    type: 'string',
+    type: 'select',
     defaultValue: 'claude-code',
-    icon: 'category'
+    icon: 'category',
+    options: [
+      { value: 'claude-code', label: 'Claude Code' },
+      { value: 'codex', label: 'Codex' }
+    ]
   },
   {
     path: ['enabled'],

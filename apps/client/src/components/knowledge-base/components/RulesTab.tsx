@@ -1,85 +1,83 @@
 import './RulesTab.scss'
 
-import { Input } from 'antd'
-import React from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { RouteContainerHeaderActionItem } from '@oneworks/components/route-layout'
-
 import type { RuleSummary } from '#~/api.js'
+import { ActionSearchToolbar } from '#~/components/action-search-toolbar/ActionSearchToolbar'
+import { KnowledgeScopeTabs } from './KnowledgeScopeTabs'
 import { RuleList } from './RuleList'
 import { SectionHeader } from './SectionHeader'
 import { TabContent } from './TabContent'
+import { useKnowledgeAssetList } from './use-knowledge-asset-list'
 
 interface RulesTabProps {
   rules: RuleSummary[]
   filteredRules: RuleSummary[]
-  hideContentSearch?: boolean
   isLoading: boolean
   leading?: ReactNode
   query: string
-  onRefresh: () => void
   onQueryChange: (value: string) => void
   onCreate: () => void
-  onHeaderActionsChange?: (items: RouteContainerHeaderActionItem[]) => void
   onImport: () => void
 }
 
 export function RulesTab({
   rules,
   filteredRules,
-  hideContentSearch = false,
   isLoading,
   leading,
   query,
-  onRefresh,
   onQueryChange,
   onCreate,
-  onHeaderActionsChange,
   onImport
 }: RulesTabProps) {
   const { t } = useTranslation()
-  const headerActionItems = React.useMemo<RouteContainerHeaderActionItem[]>(() => [
-    {
-      icon: 'refresh',
-      key: 'knowledge-rules-refresh',
-      label: t('knowledge.actions.refresh'),
-      onSelect: () => void onRefresh()
-    },
-    {
-      icon: 'download',
-      key: 'knowledge-rules-import',
-      label: t('knowledge.actions.import'),
-      onSelect: onImport
-    }
-  ], [onImport, onRefresh, t])
-
-  React.useEffect(() => {
-    onHeaderActionsChange?.(headerActionItems)
-  }, [headerActionItems, onHeaderActionsChange])
-  React.useEffect(() => () => onHeaderActionsChange?.([]), [onHeaderActionsChange])
+  const {
+    changeScope,
+    currentPage,
+    pageResetKey,
+    scope,
+    scopedItems,
+    setPage,
+    total,
+    visibleItems
+  } = useKnowledgeAssetList(rules, filteredRules, query)
 
   return (
     <TabContent className='knowledge-base-view__rules-tab'>
-      <SectionHeader leading={leading} />
-      {!hideContentSearch && (
-        <div className='knowledge-base-view__filters'>
-          <Input
-            className='knowledge-base-view__filter-input'
-            prefix={<span className='material-symbols-rounded knowledge-base-view__filter-icon'>search</span>}
-            placeholder={t('knowledge.filters.search')}
-            allowClear
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-          />
-        </div>
-      )}
+      <SectionHeader leading={scope === 'project' ? leading : undefined} />
+      <KnowledgeScopeTabs
+        activeKey={scope}
+        items={[
+          { icon: 'folder', key: 'project', label: t('knowledge.scopes.project') },
+          { icon: 'extension', key: 'plugin', label: t('knowledge.scopes.plugin') }
+        ]}
+        actionItems={scope === 'project'
+          ? [{
+            icon: 'download',
+            key: 'knowledge-rules-import',
+            label: t('knowledge.actions.import'),
+            onSelect: onImport
+          }]
+          : []}
+        onChange={changeScope}
+      />
+      <ActionSearchToolbar
+        inset={false}
+        query={query}
+        placeholder={t('knowledge.filters.search')}
+        onQueryChange={onQueryChange}
+      />
       <RuleList
+        currentPage={currentPage}
         isLoading={isLoading}
-        rules={rules}
-        filteredRules={filteredRules}
-        onCreate={onCreate}
+        rules={scopedItems}
+        filteredRules={visibleItems}
+        resetKey={pageResetKey}
+        total={total}
+        onCreate={scope === 'project' ? onCreate : undefined}
+        onPageChange={setPage}
       />
     </TabContent>
   )

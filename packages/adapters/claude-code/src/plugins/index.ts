@@ -42,5 +42,8 @@ export const claudeCodePluginInstaller: AdapterPluginInstaller<ClaudePluginManif
 
 export default claudeCodePluginInstaller
 
+export { CLAUDE_CODE_BUILT_IN_PLUGIN_MARKETPLACES } from './built-in-marketplaces'
+export { convertClaudePluginToOneWorks } from './convert'
 export { loadMarketplaceCatalogFromSource } from './marketplace-catalog'
 export type { ClaudeMarketplaceCatalog } from './marketplace-catalog'
+export type { ClaudePluginManifest } from './source'

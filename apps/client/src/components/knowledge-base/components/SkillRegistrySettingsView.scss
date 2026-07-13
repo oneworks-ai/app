@@ -1,0 +1,63 @@
+.knowledge-base-view__registry-settings {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--subpage-tertiary-gap);
+}
+
+.knowledge-base-view__registry-settings-intro {
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-color);
+  color: var(--sub-text-color);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.knowledge-base-view__registry-settings-list {
+  min-height: 0;
+  overflow: auto;
+}
+
+.knowledge-base-view__registry-settings-list .ant-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.knowledge-base-view__registry-settings-item {
+  padding: 12px 14px !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 8px;
+  background: var(--bg-color);
+}
+
+.knowledge-base-view__registry-settings-main {
+  min-width: 0;
+}
+
+.knowledge-base-view__registry-settings-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--text-color);
+  font-weight: 600;
+}
+
+.knowledge-base-view__registry-settings-source,
+.knowledge-base-view__registry-settings-registry {
+  margin-top: 4px;
+  color: var(--sub-text-color);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-base-view__registry-settings-loading,
+.knowledge-base-view__registry-settings-empty {
+  display: flex;
+  min-height: 220px;
+  align-items: center;
+  justify-content: center;
+}

@@ -9,6 +9,7 @@ export interface SpecSummary {
   tags: string[]
   skills: string[]
   rules: string[]
+  source?: 'project' | 'plugin'
 }
 
 export interface EntitySummary {
@@ -20,6 +21,7 @@ export interface EntitySummary {
   tags: string[]
   skills: string[]
   rules: string[]
+  source?: 'project' | 'plugin'
 }
 
 export interface WorkspaceSummary {
@@ -37,6 +39,7 @@ export interface RuleSummary {
   description: string
   always: boolean
   globs?: string[]
+  source?: 'project' | 'plugin'
 }
 
 export interface SkillSummary {
@@ -89,12 +92,18 @@ export async function createSkill(params: {
   })
 }
 
-export async function importSkillArchive(file: File): Promise<{ fileCount: number; targetDir: string }> {
+export async function importSkillArchive(
+  file: File,
+  target: 'global' | 'project' = 'project',
+  options: { force?: boolean } = {}
+): Promise<{ fileCount: number; targetDir: string }> {
   return fetchApiJson<{ fileCount: number; targetDir: string }>('/api/ai/skills/import', {
     method: 'POST',
     headers: {
       'Content-Type': file.type || 'application/octet-stream',
-      'x-file-name': encodeURIComponent(file.name)
+      'x-file-name': encodeURIComponent(file.name),
+      'x-skill-target': target,
+      ...(options.force === true ? { 'x-skill-force': 'true' } : {})
     },
     body: file
   })

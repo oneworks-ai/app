@@ -1,5 +1,6 @@
 import type {
   ClaudeCodeMarketplaceOptions,
+  CodexMarketplaceOptions,
   MarketplaceConfig,
   MarketplaceConfigEntry,
   MarketplaceDeclaredPluginConfig
@@ -9,9 +10,9 @@ import { normalizeMarketplaceConfig } from './marketplace-config-source'
 export { normalizeMarketplaceConfig } from './marketplace-config-source'
 
 const mergeClaudeCodeMarketplaceOptions = (
-  left?: ClaudeCodeMarketplaceOptions,
-  right?: ClaudeCodeMarketplaceOptions
-): ClaudeCodeMarketplaceOptions | undefined => {
+  left?: ClaudeCodeMarketplaceOptions | CodexMarketplaceOptions,
+  right?: ClaudeCodeMarketplaceOptions | CodexMarketplaceOptions
+): ClaudeCodeMarketplaceOptions | CodexMarketplaceOptions | undefined => {
   if (left == null && right == null) return undefined
   const source = right?.source ?? left?.source
   if (source == null) return undefined
@@ -19,7 +20,7 @@ const mergeClaudeCodeMarketplaceOptions = (
     ...(left ?? {}),
     ...(right ?? {}),
     source
-  }
+  } as ClaudeCodeMarketplaceOptions | CodexMarketplaceOptions
 }
 
 const mergeMarketplaceDeclaredPluginEntry = (
@@ -63,11 +64,14 @@ const mergeMarketplaceEntry = (
   if (right == null) return left
   if (left.type !== right.type) return right
 
-  if (left.type === 'claude-code' && right.type === 'claude-code') {
+  if (
+    (left.type === 'claude-code' || left.type === 'codex') &&
+    (right.type === 'claude-code' || right.type === 'codex')
+  ) {
     const options = mergeClaudeCodeMarketplaceOptions(left.options, right.options)
     const plugins = mergeMarketplaceDeclaredPlugins(left.plugins, right.plugins)
     return {
-      type: 'claude-code',
+      type: right.type,
       ...(right.enabled != null ? { enabled: right.enabled } : left.enabled != null ? { enabled: left.enabled } : {}),
       ...(right.syncOnRun != null
         ? { syncOnRun: right.syncOnRun }
@@ -76,7 +80,7 @@ const mergeMarketplaceEntry = (
         : {}),
       ...(plugins != null ? { plugins } : {}),
       ...(options != null ? { options } : {})
-    }
+    } as MarketplaceConfigEntry
   }
 
   return right

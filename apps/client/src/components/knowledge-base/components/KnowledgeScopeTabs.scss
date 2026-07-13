@@ -1,0 +1,28 @@
+.knowledge-base-view__scope-tabs {
+  --route-container-header-icon-size: var(--app-chrome-icon-size, 18px);
+  --route-container-header-icon-button-size: var(
+    --route-container-header-icon-size
+  );
+  flex-shrink: 0;
+}
+
+.knowledge-base-view__scope-tabs .ant-tabs-nav {
+  margin-bottom: 0;
+}
+
+.knowledge-base-view__scope-tabs .ant-tabs-extra-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.knowledge-base-view__scope-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.knowledge-base-view__scope-tab-label .material-symbols-rounded {
+  font-size: 16px;
+  line-height: 1;
+}

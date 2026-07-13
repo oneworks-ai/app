@@ -1,0 +1,81 @@
+.native-plugin-detail__overview {
+  padding-bottom: 0;
+}
+
+.native-plugin-detail__facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--border-color);
+}
+
+.native-plugin-detail__fact {
+  min-width: 0;
+  min-height: 36px;
+  display: grid;
+  grid-template-columns: 18px auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-right: 1px solid var(--border-color);
+}
+
+.native-plugin-detail__fact:first-child {
+  padding-left: 0;
+}
+
+.native-plugin-detail__fact:last-child {
+  border-right: 0;
+}
+
+.native-plugin-detail__fact > .material-symbols-rounded {
+  font-size: var(--icon-size, 18px);
+  color: var(--sub-text-color);
+}
+
+.native-plugin-detail__fact-label,
+.native-plugin-detail__source {
+  color: var(--sub-text-color);
+}
+
+.native-plugin-detail__fact-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-color);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.native-plugin-detail__tabs {
+  flex: 1;
+  min-height: 0;
+}
+
+.native-plugin-detail__tabs .ant-tabs-content-holder,
+.native-plugin-detail__tabs .ant-tabs-content,
+.native-plugin-detail__tabs .ant-tabs-tabpane {
+  min-height: 0;
+  height: 100%;
+}
+
+.native-plugin-detail__body {
+  height: 100%;
+  overflow: auto;
+}
+
+.native-plugin-detail__body h2 {
+  margin: 0 0 8px;
+}
+
+.native-plugin-detail__diagnostic {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+@media (max-width: 960px) {
+  .native-plugin-detail__facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

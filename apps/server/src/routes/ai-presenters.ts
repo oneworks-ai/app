@@ -98,7 +98,8 @@ export const presentSpec = (spec: Definition<Spec>, cwd: string) => {
     always: spec.attributes.always ?? true,
     tags: toIncludeList(spec.attributes.tags, 'include'),
     skills: toIncludeList(spec.attributes.skills, 'include'),
-    rules: toIncludeList(spec.attributes.rules, 'include')
+    rules: toIncludeList(spec.attributes.rules, 'include'),
+    source: spec.resolvedSource === 'plugin' ? 'plugin' : 'project'
   }
 }
 
@@ -119,7 +120,8 @@ export const presentEntity = (entity: Definition<Entity>, cwd: string) => {
     always: entity.attributes.always ?? true,
     tags: toIncludeList(entity.attributes.tags, 'include'),
     skills: toIncludeList(entity.attributes.skills, 'list'),
-    rules: toRuleList(entity.attributes.rules)
+    rules: toRuleList(entity.attributes.rules),
+    source: entity.resolvedSource === 'plugin' ? 'plugin' : 'project'
   }
 }
 
@@ -138,7 +140,8 @@ export const presentRule = (rule: Definition<Rule>, cwd: string) => {
     globs: toStringList(
       (rule.attributes as { globs?: unknown; glob?: unknown }).globs ??
         (rule.attributes as { globs?: unknown; glob?: unknown }).glob
-    )
+    ),
+    source: rule.resolvedSource === 'plugin' ? 'plugin' : 'project'
   }
 }
 

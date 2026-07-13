@@ -49,6 +49,7 @@ const buildInstalledSkillResult = (params: {
   ref: params.normalized.ref,
   skillPath: join(params.installDir, 'SKILL.md')
 })
+type InstalledProjectSkillResult = ReturnType<typeof buildInstalledSkillResult>
 
 const withInstallLock = async <T>(lockDir: string, callback: () => Promise<T>) => {
   try {
@@ -197,6 +198,7 @@ const installNpmPackageSkillsToTemp = async (params: {
 }
 
 export const installProjectSkill = async (params: {
+  commit?: (result: InstalledProjectSkillResult) => Promise<void>
   config?: SkillsCliConfig
   expectedHash?: string
   env?: NodeJS.ProcessEnv
@@ -252,11 +254,13 @@ export const installProjectSkill = async (params: {
         expectedHash: params.expectedHash,
         installDir
       })
-      return buildInstalledSkillResult({
+      const result = buildInstalledSkillResult({
         hash: await computeSkillDirectoryHash(installDir),
         installDir,
         normalized
       })
+      await params.commit?.(result)
+      return result
     }
 
     await assertSkillDirectoryUnchanged({
@@ -314,15 +318,30 @@ export const installProjectSkill = async (params: {
       }
       await rewriteInstalledSkillName(tempSkillPath, normalized.targetName)
 
-      await rm(installDir, { recursive: true, force: true })
+      const backupDir = `${tempInstallDir}.backup`
+      await rm(backupDir, { recursive: true, force: true })
       await mkdir(dirname(installDir), { recursive: true })
-      await rename(tempInstallDir, installDir)
-
-      return buildInstalledSkillResult({
-        hash: await computeSkillDirectoryHash(installDir),
-        installDir,
-        normalized
-      })
+      const hadPreviousInstall = await pathExists(installDir)
+      if (hadPreviousInstall) await rename(installDir, backupDir)
+      let installedReplacement = false
+      try {
+        await rename(tempInstallDir, installDir)
+        installedReplacement = true
+        const result = buildInstalledSkillResult({
+          hash: await computeSkillDirectoryHash(installDir),
+          installDir,
+          normalized
+        })
+        await params.commit?.(result)
+        if (hadPreviousInstall) {
+          await rm(backupDir, { recursive: true, force: true }).catch(() => undefined)
+        }
+        return result
+      } catch (error) {
+        if (installedReplacement) await rm(installDir, { recursive: true, force: true })
+        if (hadPreviousInstall) await rename(backupDir, installDir)
+        throw error
+      }
     } catch (error) {
       await rm(tempInstallDir, { recursive: true, force: true })
       throw error

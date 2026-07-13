@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- plugin detail panel coordinates README, extension, asset, and overview tabs. */
 
-import { Tabs, Tooltip } from 'antd'
+import { Tooltip } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
@@ -19,23 +19,19 @@ import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
 
 import { PluginAssetSection } from './PluginAssetSection'
 import { PluginConfigSection } from './PluginConfigSection'
-import { PluginOverview, PluginRows, getPluginContributions, pluginContributionGroups } from './PluginDetailSections'
+import { PluginRows, getPluginContributions, pluginContributionGroups } from './PluginDetailSections'
 import type { PluginDetailRow } from './PluginDetailSections'
-import { PluginDiagnostics } from './PluginDiagnostics'
+import { PluginDetailView } from './PluginDetailView'
 import { PluginReadmeSection } from './PluginReadmeSection'
 import { usePluginAssets } from './use-plugin-assets'
 import { usePluginReadme } from './use-plugin-readme'
 
 interface PluginDetailPanelProps {
-  enabledLoading: boolean
   plugin: PluginRuntimeInstance
   pluginServerBaseUrl?: string
   snapshot: PluginContextValue['snapshot']
-  watchLoading: boolean
   onContributionPreferencesChange: () => void | Promise<void>
-  onEnabledChange: (enabled: boolean) => void
   onOptionsChange: () => void | Promise<void>
-  onWatchChange: (enabled: boolean) => void
 }
 
 const runtimeSlotLabelKeys: Record<string, string> = {
@@ -65,15 +61,11 @@ const resolvePluginDetailTabKey = (value: string | null): PluginDetailTabKey => 
 )
 
 export function PluginDetailPanel({
-  enabledLoading,
   onContributionPreferencesChange,
-  onEnabledChange,
   onOptionsChange,
-  onWatchChange,
   plugin,
   pluginServerBaseUrl,
-  snapshot,
-  watchLoading
+  snapshot
 }: PluginDetailPanelProps) {
   const { i18n, t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -235,14 +227,6 @@ export function PluginDetailPanel({
     t
   ])
 
-  const diagnostics = useMemo(() => [
-    ...snapshot.diagnostics.filter((diagnostic) => {
-      const diagnosticScope = 'pluginScope' in diagnostic ? diagnostic.pluginScope : diagnostic.scope
-      return diagnosticScope === plugin.scope
-    }),
-    ...(plugin.diagnostics ?? [])
-  ], [plugin, snapshot.diagnostics])
-
   const disabledContributionGroupSet = useMemo(
     () => new Set(disabledContributionGroups),
     [disabledContributionGroups]
@@ -313,8 +297,16 @@ export function PluginDetailPanel({
     [assetsState.groups]
   )
   const getAssetGroup = (kind: PluginDetailAssetKind) => assetsByKind.get(kind)
+  const dataAssetGroups = [
+    { icon: 'psychology', kind: 'skills' as const, title: t('knowledge.tabs.skills') },
+    { icon: 'group_work', kind: 'entities' as const, title: t('knowledge.tabs.entities') },
+    { icon: 'account_tree', kind: 'specs' as const, title: t('knowledge.tabs.flows') },
+    { icon: 'gavel', kind: 'rules' as const, title: t('knowledge.tabs.rules') }
+  ]
+  const populatedDataAssetGroups = dataAssetGroups.filter(({ kind }) => (
+    (getAssetGroup(kind)?.files.length ?? 0) > 0
+  ))
   const assetTabs = [
-    { icon: 'article', key: 'skills' as const, title: t('pluginDetail.skills') },
     { icon: 'deployed_code', key: 'mcp' as const, title: t('pluginDetail.mcp') },
     { icon: 'tune', key: 'hooks' as const, title: t('pluginDetail.hooks') }
   ]
@@ -332,170 +324,181 @@ export function PluginDetailPanel({
   }, [setSearchParams])
 
   return (
-    <div className='plugin-detail-route__content'>
-      <main className='plugin-detail-route__main'>
-        <Tabs
-          activeKey={activeTabKey}
-          className='plugin-detail-route__tabs'
-          onChange={handleTabChange}
-          items={[
-            {
-              children: (
-                <PluginReadmeSection
-                  emptyText={t('pluginDetail.readmeEmpty')}
-                  error={readmeState.error}
-                  loading={readmeState.loading}
-                  preferredLanguage={i18n.resolvedLanguage ?? i18n.language}
-                  pluginScope={plugin.scope}
-                  pluginServerBaseUrl={pluginServerBaseUrl}
-                  readme={readmeState.readme}
-                  readmes={readmeState.readmes}
-                  showTitle={false}
-                  title={t('pluginDetail.readme')}
-                />
-              ),
-              key: 'readme',
-              label: (
-                <Tooltip title={readmeTabLabel}>
-                  <span className='plugin-detail-route__tab-label' aria-label={readmeTabLabel}>
-                    <MaterialSymbol name='article' aria-hidden='true' />
-                    <span>{t('pluginDetail.readme')}</span>
-                  </span>
-                </Tooltip>
-              )
-            },
-            {
-              children: (
-                <PluginRows
-                  emptyText={t('pluginDetail.noContributions')}
-                  disabledText={t('pluginDetail.contributionDisabled')}
-                  disableText={t('pluginDetail.disableContribution')}
-                  disableItemText={t('pluginDetail.disableContributionItem')}
-                  enableText={t('pluginDetail.enableContribution')}
-                  enableItemText={t('pluginDetail.enableContributionItem')}
-                  fieldLabels={{
-                    clientView: t('pluginDetail.fields.clientView'),
-                    command: t('pluginDetail.fields.command'),
-                    contributionSchema: t('pluginDetail.fields.contributionSchema'),
-                    extensionPoint: t('pluginDetail.fields.extensionPoint'),
-                    headerSchema: t('pluginDetail.fields.headerSchema'),
-                    href: t('pluginDetail.fields.href'),
-                    id: t('pluginDetail.fields.id'),
-                    inputSchema: t('pluginDetail.fields.inputSchema'),
-                    mode: t('pluginDetail.fields.mode'),
-                    outputSchema: t('pluginDetail.fields.outputSchema'),
-                    placement: t('pluginDetail.fields.placement'),
-                    proxyTarget: t('pluginDetail.fields.proxyTarget'),
-                    route: t('pluginDetail.fields.route'),
-                    routeId: t('pluginDetail.fields.routeId'),
-                    tab: t('pluginDetail.fields.tab'),
-                    target: t('pluginDetail.fields.target'),
-                    title: t('pluginDetail.fields.title'),
-                    viewId: t('pluginDetail.fields.viewId')
-                  }}
-                  itemDisabledText={t('pluginDetail.contributionItemDisabled')}
-                  language={i18n.resolvedLanguage ?? i18n.language}
-                  noMatchesText={t('pluginDetail.noContributionMatches')}
-                  noDescriptionText={t('pluginDetail.noContributionDescription')}
-                  onItemEnabledChange={handleContributionItemEnabledChange}
-                  onRowEnabledChange={handleContributionGroupEnabledChange}
-                  rows={detailRows}
-                  searchPlaceholder={t('pluginDetail.searchContributions')}
-                  showTitle={false}
-                  title={t('pluginDetail.contributions')}
-                />
-              ),
-              key: 'contributions',
-              label: (
-                <Tooltip title={contributionsTabLabel}>
-                  <span className='plugin-detail-route__tab-label' aria-label={contributionsTabLabel}>
-                    <MaterialSymbol name='extension' aria-hidden='true' />
-                    <span>{t('pluginDetail.contributions')}</span>
-                  </span>
-                </Tooltip>
-              )
-            },
-            {
-              children: (
-                <PluginConfigSection
-                  labels={{
-                    instance: t('pluginDetail.configInstance'),
-                    manifest: t('pluginDetail.configManifest'),
-                    noSchema: t('pluginDetail.configNoSchema'),
-                    options: t('pluginDetail.configOptions'),
-                    saved: t('pluginDetail.configSaved'),
-                    saveFailed: t('pluginDetail.configSaveFailed'),
-                    saving: t('pluginDetail.configSaving')
-                  }}
-                  onOptionsChange={onOptionsChange}
-                  plugin={plugin}
-                />
-              ),
-              key: 'config',
-              label: (
-                <Tooltip title={t('pluginDetail.config')}>
-                  <span className='plugin-detail-route__tab-label' aria-label={t('pluginDetail.config')}>
-                    <MaterialSymbol name='settings' aria-hidden='true' />
-                    <span>{t('pluginDetail.config')}</span>
-                  </span>
-                </Tooltip>
-              )
-            },
-            ...assetTabs.map(tab => ({
-              children: (
-                <PluginAssetSection
-                  emptyText={t('pluginDetail.assetsEmpty')}
-                  error={assetsState.error}
-                  group={getAssetGroup(tab.key)}
-                  loading={assetsState.loading}
-                  title={tab.title}
-                />
-              ),
-              key: tab.key,
-              label: (
-                <Tooltip title={tab.title}>
-                  <span className='plugin-detail-route__tab-label' aria-label={tab.title}>
-                    <MaterialSymbol name={tab.icon} aria-hidden='true' />
-                    <span>{tab.title}</span>
-                  </span>
-                </Tooltip>
-              )
-            }))
-          ]}
-        />
-      </main>
-
-      <aside className='plugin-detail-route__side'>
-        <PluginOverview
-          labels={{
-            clientDevEntry: t('pluginDetail.clientDevEntry'),
-            clientEntry: t('pluginDetail.clientEntry'),
-            disabled: t('pluginStore.disabled'),
-            enabled: t('pluginStore.enablePluginInWorkspace'),
-            overview: t('pluginDetail.overview'),
-            package: t('pluginDetail.package'),
-            request: t('pluginDetail.request'),
-            requestedVersion: t('pluginDetail.requestedVersion'),
-            root: t('pluginDetail.root'),
-            serverEntry: t('pluginDetail.serverEntry'),
-            version: t('pluginDetail.version'),
-            watch: t('pluginStore.watch')
-          }}
-          enabledHint={t('pluginStore.enabledHint')}
-          enabledLoading={enabledLoading}
-          plugin={plugin}
-          watchHint={t('pluginStore.watchHint')}
-          watchLoading={watchLoading}
-          onEnabledChange={onEnabledChange}
-          onWatchChange={onWatchChange}
-        />
-
-        <PluginDiagnostics
-          diagnostics={diagnostics}
-          emptyText={t('pluginDetail.diagnosticsEmpty')}
-          title={t('pluginStore.diagnostics')}
-        />
-      </aside>
-    </div>
+    <PluginDetailView
+      activeTabKey={activeTabKey}
+      overviewLabels={{
+        clientDevEntry: t('pluginDetail.clientDevEntry'),
+        clientEntry: t('pluginDetail.clientEntry'),
+        disabled: t('pluginStore.disabled'),
+        overview: t('pluginDetail.overview'),
+        package: t('pluginDetail.package'),
+        request: t('pluginDetail.request'),
+        requestedVersion: t('pluginDetail.requestedVersion'),
+        root: t('pluginDetail.root'),
+        serverEntry: t('pluginDetail.serverEntry'),
+        version: t('pluginDetail.version')
+      }}
+      overviewPlugin={plugin}
+      onTabChange={handleTabChange}
+      items={[
+        {
+          children: (
+            <PluginReadmeSection
+              emptyText={t('pluginDetail.readmeEmpty')}
+              error={readmeState.error}
+              loading={readmeState.loading}
+              preferredLanguage={i18n.resolvedLanguage ?? i18n.language}
+              pluginScope={plugin.scope}
+              pluginServerBaseUrl={pluginServerBaseUrl}
+              readme={readmeState.readme}
+              readmes={readmeState.readmes}
+              showTitle={false}
+              title={t('pluginDetail.readme')}
+            />
+          ),
+          key: 'readme',
+          label: (
+            <Tooltip title={readmeTabLabel}>
+              <span className='plugin-detail-route__tab-label' aria-label={readmeTabLabel}>
+                <MaterialSymbol name='article' aria-hidden='true' />
+                <span>{t('pluginDetail.readme')}</span>
+              </span>
+            </Tooltip>
+          )
+        },
+        {
+          children: (
+            <PluginRows
+              emptyText={t('pluginDetail.noContributions')}
+              disabledText={t('pluginDetail.contributionDisabled')}
+              disableText={t('pluginDetail.disableContribution')}
+              disableItemText={t('pluginDetail.disableContributionItem')}
+              enableText={t('pluginDetail.enableContribution')}
+              enableItemText={t('pluginDetail.enableContributionItem')}
+              fieldLabels={{
+                clientView: t('pluginDetail.fields.clientView'),
+                command: t('pluginDetail.fields.command'),
+                contributionSchema: t('pluginDetail.fields.contributionSchema'),
+                extensionPoint: t('pluginDetail.fields.extensionPoint'),
+                headerSchema: t('pluginDetail.fields.headerSchema'),
+                href: t('pluginDetail.fields.href'),
+                id: t('pluginDetail.fields.id'),
+                inputSchema: t('pluginDetail.fields.inputSchema'),
+                mode: t('pluginDetail.fields.mode'),
+                outputSchema: t('pluginDetail.fields.outputSchema'),
+                placement: t('pluginDetail.fields.placement'),
+                proxyTarget: t('pluginDetail.fields.proxyTarget'),
+                route: t('pluginDetail.fields.route'),
+                routeId: t('pluginDetail.fields.routeId'),
+                tab: t('pluginDetail.fields.tab'),
+                target: t('pluginDetail.fields.target'),
+                title: t('pluginDetail.fields.title'),
+                viewId: t('pluginDetail.fields.viewId')
+              }}
+              itemDisabledText={t('pluginDetail.contributionItemDisabled')}
+              language={i18n.resolvedLanguage ?? i18n.language}
+              noMatchesText={t('pluginDetail.noContributionMatches')}
+              noDescriptionText={t('pluginDetail.noContributionDescription')}
+              onItemEnabledChange={handleContributionItemEnabledChange}
+              onRowEnabledChange={handleContributionGroupEnabledChange}
+              rows={detailRows}
+              searchPlaceholder={t('pluginDetail.searchContributions')}
+              showTitle={false}
+              title={t('pluginDetail.contributions')}
+            />
+          ),
+          key: 'contributions',
+          label: (
+            <Tooltip title={contributionsTabLabel}>
+              <span className='plugin-detail-route__tab-label' aria-label={contributionsTabLabel}>
+                <MaterialSymbol name='extension' aria-hidden='true' />
+                <span>{t('pluginDetail.contributions')}</span>
+              </span>
+            </Tooltip>
+          )
+        },
+        {
+          children: (
+            <PluginConfigSection
+              labels={{
+                instance: t('pluginDetail.configInstance'),
+                manifest: t('pluginDetail.configManifest'),
+                noSchema: t('pluginDetail.configNoSchema'),
+                options: t('pluginDetail.configOptions'),
+                saved: t('pluginDetail.configSaved'),
+                saveFailed: t('pluginDetail.configSaveFailed'),
+                saving: t('pluginDetail.configSaving')
+              }}
+              onOptionsChange={onOptionsChange}
+              plugin={plugin}
+            />
+          ),
+          key: 'config',
+          label: (
+            <Tooltip title={t('pluginDetail.config')}>
+              <span className='plugin-detail-route__tab-label' aria-label={t('pluginDetail.config')}>
+                <MaterialSymbol name='settings' aria-hidden='true' />
+                <span>{t('pluginDetail.config')}</span>
+              </span>
+            </Tooltip>
+          )
+        },
+        {
+          children: assetsState.loading || assetsState.error != null || populatedDataAssetGroups.length === 0
+            ? (
+              <PluginAssetSection
+                emptyText={t('pluginDetail.assetsEmpty')}
+                error={assetsState.error}
+                loading={assetsState.loading}
+                title={t('pluginDetail.dataAssets')}
+              />
+            )
+            : (
+              <div className='plugin-detail-route__data-assets'>
+                {populatedDataAssetGroups.map(group => (
+                  <PluginAssetSection
+                    key={group.kind}
+                    emptyText={t('pluginDetail.assetsEmpty')}
+                    group={getAssetGroup(group.kind)}
+                    icon={group.icon}
+                    loading={false}
+                    showHeading
+                    title={group.title}
+                  />
+                ))}
+              </div>
+            ),
+          key: 'skills',
+          label: (
+            <Tooltip title={t('pluginDetail.dataAssets')}>
+              <span className='plugin-detail-route__tab-label' aria-label={t('pluginDetail.dataAssets')}>
+                <MaterialSymbol name='database' aria-hidden='true' />
+                <span>{t('pluginDetail.dataAssets')}</span>
+              </span>
+            </Tooltip>
+          )
+        },
+        ...assetTabs.map(tab => ({
+          children: (
+            <PluginAssetSection
+              emptyText={t('pluginDetail.assetsEmpty')}
+              error={assetsState.error}
+              group={getAssetGroup(tab.key)}
+              loading={assetsState.loading}
+              title={tab.title}
+            />
+          ),
+          key: tab.key,
+          label: (
+            <Tooltip title={tab.title}>
+              <span className='plugin-detail-route__tab-label' aria-label={tab.title}>
+                <MaterialSymbol name={tab.icon} aria-hidden='true' />
+                <span>{tab.title}</span>
+              </span>
+            </Tooltip>
+          )
+        }))
+      ]}
+    />
   )
 }

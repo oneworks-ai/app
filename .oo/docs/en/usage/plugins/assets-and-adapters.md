@@ -72,8 +72,8 @@ Adapter-native managed installs live under the project home:
 
 That location is private runtime data and should not be committed.
 
-## When to Declare a Runtime Plugin
+## Native Plugin Marketplaces
 
-Converted assets do not automatically become unified runtime plugins. If you want One Works to load the converted `oneworks/` directory as a plugin, declare it explicitly in the top-level `plugins` config.
+One Works supports both Claude Code and Codex plugin marketplaces. Reusable skills, commands, agents, MCP servers, and hooks are converted into the unified asset layer. Codex `.app.json` integrations remain Codex-specific and are not converted.
 
-This keeps adapter-native installation and One Works runtime plugin loading separate and predictable.
+Marketplace-managed installs automatically participate in runtime plugin discovery. Direct path or package installs still require an explicit top-level `plugins` entry.

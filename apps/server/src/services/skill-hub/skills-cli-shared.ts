@@ -1,7 +1,4 @@
-import { basename } from 'node:path'
-
 import type { ConfigSource, ResolvedConfigState } from '@oneworks/config'
-import { resolveWritableConfigPath } from '@oneworks/config'
 import type { ConfiguredSkillInstallConfig, ConfiguredSkillRegistry } from '@oneworks/types'
 import {
   buildSkillsConfigValue,
@@ -15,13 +12,15 @@ import {
 } from '@oneworks/utils'
 import { toSkillSlug } from '@oneworks/utils/skills-cli'
 
+import { BUILT_IN_SKILL_REGISTRIES } from './built-in-skill-registries'
+import { getSourceConfig, toConfigLabel } from './config-source'
 import type { SkillHubRegistrySummary } from './types'
 
 export const ALL_REGISTRIES = 'all'
 export const DEFAULT_SEARCH_LIMIT = 100
 export const MAX_SEARCH_LIMIT = 500
-
 export interface ResolvedConfiguredSkillRegistryEntry extends ConfiguredSkillRegistry {
+  builtIn?: boolean
   configLabel: string
   configSource: ConfigSource
   effectiveRegistry?: string
@@ -29,34 +28,6 @@ export interface ResolvedConfiguredSkillRegistryEntry extends ConfiguredSkillReg
 }
 
 const toRegistryKey = (configSource: ConfigSource, source: string) => `${configSource}:${source}`
-
-export const toConfigLabel = (workspaceFolder: string, configSource: ConfigSource) => (
-  configSource === 'global'
-    ? '~/.oneworks/.oo.config.json'
-    : basename(resolveWritableConfigPath(workspaceFolder, configSource))
-)
-
-export const getSourceConfig = (state: ResolvedConfigState, configSource: ConfigSource) => {
-  switch (configSource) {
-    case 'global':
-      return state.globalConfig
-    case 'project':
-      return state.projectSource?.resolvedConfig
-    case 'user':
-      return state.userConfig
-  }
-}
-
-export const getRawSourceConfig = (state: ResolvedConfigState, configSource: ConfigSource) => {
-  switch (configSource) {
-    case 'global':
-      return state.globalSource?.rawConfig
-    case 'project':
-      return state.projectSource?.rawConfig
-    case 'user':
-      return state.userSource?.rawConfig
-  }
-}
 
 export const normalizeSearchLimit = (limit: number | undefined) => {
   if (limit == null || !Number.isFinite(limit)) return DEFAULT_SEARCH_LIMIT
@@ -68,10 +39,11 @@ export const normalizeNonEmptyString = (value: unknown) => (
 )
 
 export const resolveSkillHubRegistries = (params: {
+  includeBuiltIns?: boolean
   state: ResolvedConfigState
   workspaceFolder: string
 }) => {
-  const entries: ResolvedConfiguredSkillRegistryEntry[] = []
+  const entries = new Map<string, ResolvedConfiguredSkillRegistryEntry>()
 
   for (const configSource of ['global', 'project', 'user'] as const) {
     const config = getSourceConfig(params.state, configSource)
@@ -79,25 +51,23 @@ export const resolveSkillHubRegistries = (params: {
     const configLabel = toConfigLabel(params.workspaceFolder, configSource)
 
     for (const entry of resolveConfiguredSkillRegistries(config)) {
-      entries.push({
+      const previous = entries.get(entry.source)
+      const merged = { ...previous, ...entry }
+      entries.set(entry.source, {
         ...entry,
+        ...merged,
         configSource,
         configLabel,
         key: toRegistryKey(configSource, entry.source),
-        ...(entry.registry == null && defaultRegistry == null
+        ...(merged.registry == null && defaultRegistry == null && previous?.effectiveRegistry == null
           ? {}
-          : { effectiveRegistry: entry.registry ?? defaultRegistry })
+          : { effectiveRegistry: merged.registry ?? defaultRegistry ?? previous?.effectiveRegistry })
       })
     }
 
-    const configuredSources = new Set(
-      entries
-        .filter(entry => entry.configSource === configSource)
-        .map(entry => entry.source)
-    )
     for (const source of resolveSkillsMeta(config)?.sources ?? []) {
-      if (configuredSources.has(source)) continue
-      entries.push({
+      if (entries.has(source)) continue
+      entries.set(source, {
         source,
         configSource,
         configLabel,
@@ -106,7 +76,22 @@ export const resolveSkillHubRegistries = (params: {
     }
   }
 
-  return entries
+  if (params.includeBuiltIns !== false) {
+    const configSource = 'project' as const
+    const configLabel = toConfigLabel(params.workspaceFolder, configSource)
+    for (const registry of BUILT_IN_SKILL_REGISTRIES) {
+      if (entries.has(registry.source)) continue
+      entries.set(registry.source, {
+        ...registry,
+        builtIn: true,
+        configSource,
+        configLabel,
+        key: toRegistryKey(configSource, registry.source)
+      })
+    }
+  }
+
+  return Array.from(entries.values())
 }
 
 export const findDeclaredRegistrySkill = (
@@ -141,12 +126,13 @@ export const toRegistrySummary = (
   id: registryEntry.key,
   name: registryEntry.source,
   type: 'skills-cli',
-  enabled: true,
-  searchable: true,
+  enabled: registryEntry.enabled !== false,
+  searchable: registryEntry.enabled !== false,
   source: registryEntry.source,
   ...(registryEntry.registry == null ? {} : { registry: registryEntry.registry }),
   ...(registryEntry.title == null ? {} : { title: registryEntry.title }),
   ...(registryEntry.description == null ? {} : { description: registryEntry.description }),
+  ...(registryEntry.builtIn === true ? { builtIn: true } : {}),
   configSource: registryEntry.configSource,
   configLabel: registryEntry.configLabel
 })

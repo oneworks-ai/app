@@ -14,6 +14,7 @@ export const listSkillsCliSource = async (params: {
   config?: SkillsCliConfig
   registry?: string
   source: string
+  timeoutMs?: number
 }) => {
   const source = normalizeNonEmptyString(params.source)
   if (source == null) {
@@ -39,6 +40,7 @@ export const listSkillsCliSource = async (params: {
       cwd: tempDir,
       config: params.config,
       registry: params.registry,
+      timeoutMs: params.timeoutMs,
       args: ['add', source, '--list', '-y']
     })
     const results = parseSkillsCliListOutput(`${stdout}\n${stderr}`)

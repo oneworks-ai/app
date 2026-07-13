@@ -1,0 +1,21 @@
+.knowledge-base-view__paginated-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.knowledge-base-view__paginated-list-scroll {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.knowledge-base-view__asset-pagination {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  padding-top: var(--subpage-tertiary-gap);
+}

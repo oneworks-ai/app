@@ -2,7 +2,26 @@
   "__oneWorksPluginManifest": true,
   "name": "@oneworks/plugin-demo",
   "displayName": "Plugin Demo",
+  "displayNameI18n": {
+    "en": "Plugin Demo",
+    "zh-Hans": "插件示例"
+  },
+  "description": "A compact reference plugin that demonstrates OneWorks routes, commands, panels, configuration, and extension points.",
+  "descriptionI18n": {
+    "en": "A compact reference plugin that demonstrates OneWorks routes, commands, panels, configuration, and extension points.",
+    "zh-Hans": "用于演示 OneWorks 路由、命令、面板、配置与扩展点的精简参考插件。"
+  },
+  "icon": "./assets/icon.svg",
   "version": "0.1.0",
+  "children": {
+    "standard-dev": {
+      "source": {
+        "type": "package",
+        "id": "@oneworks/plugin-standard-dev"
+      },
+      "activation": "optional"
+    }
+  },
   "config": {
     "schema": {
       "type": "object",

@@ -102,7 +102,35 @@ const normalizeRuntimeManifest = (value: unknown): PluginRuntimeManifest | undef
   const plugin = isRecord(value.plugin) ? value.plugin : undefined
   if (plugin == null && !('name' in value) && !('displayName' in value) && !('version' in value)) return undefined
 
-  return value as unknown as PluginRuntimeManifest
+  const displayNameI18n = isRecord(value.displayNameI18n)
+    ? Object.fromEntries(
+      Object.entries(value.displayNameI18n)
+        .filter((entry): entry is [string, string] => (
+          entry[0].trim() !== '' && typeof entry[1] === 'string' && entry[1].trim() !== ''
+        ))
+        .map(([language, text]) => [language.trim(), text.trim()])
+    )
+    : undefined
+  const icon = typeof value.icon === 'string' ? value.icon.trim().replaceAll('\\', '/') : undefined
+  if (
+    icon != null && icon !== '' && (
+      icon.includes('\0') || path.isAbsolute(icon) || /^[a-z]:\//iu.test(icon) || icon.split('/').includes('..')
+    )
+  ) {
+    throw new Error('Plugin manifest icon must be a plugin-root-relative path without parent traversal.')
+  }
+
+  const {
+    displayNameI18n: _displayNameI18n,
+    icon: _icon,
+    ...manifest
+  } = value
+
+  return {
+    ...(manifest as unknown as PluginRuntimeManifest),
+    ...(displayNameI18n != null && Object.keys(displayNameI18n).length > 0 ? { displayNameI18n } : {}),
+    ...(icon != null && icon !== '' ? { icon } : {})
+  }
 }
 
 const loadPackageExportManifest = async (workspaceFolder: string, instance: ResolvedPluginInstance) => {
@@ -166,7 +194,11 @@ export const loadPluginRuntimeManifest = async (
   const merged = {
     ...secondary,
     ...primary,
+    description: primary?.description ?? secondary?.description,
+    descriptionI18n: primary?.descriptionI18n ?? secondary?.descriptionI18n,
     displayName: primary?.displayName ?? secondary?.displayName,
+    displayNameI18n: primary?.displayNameI18n ?? secondary?.displayNameI18n,
+    icon: primary?.icon ?? secondary?.icon,
     name: primary?.name ?? secondary?.name,
     version: primary?.version ?? secondary?.version
   }

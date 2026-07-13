@@ -114,6 +114,7 @@ export const execFileAsync = (
     cwd: string
     env: NodeJS.ProcessEnv
     maxBuffer: number
+    timeout?: number
   }
 ) =>
   new Promise<{ stderr: string; stdout: string }>((resolve, reject) => {

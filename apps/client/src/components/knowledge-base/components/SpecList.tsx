@@ -5,22 +5,30 @@ import { useTranslation } from 'react-i18next'
 
 import type { SpecSummary } from '#~/api.js'
 import { EmptyState } from './EmptyState'
-import { KnowledgeList } from './KnowledgeList'
 import { LoadingState } from './LoadingState'
+import { PaginatedKnowledgeList } from './PaginatedKnowledgeList'
 import { SpecItem } from './SpecItem'
 
 interface SpecListProps {
+  currentPage: number
   isLoading: boolean
   specs: SpecSummary[]
   filteredSpecs: SpecSummary[]
-  onCreate: () => void
+  resetKey: string
+  total: number
+  onCreate?: () => void
+  onPageChange: (page: number) => void
 }
 
 export function SpecList({
+  currentPage,
   isLoading,
   specs,
   filteredSpecs,
-  onCreate
+  resetKey,
+  total,
+  onCreate,
+  onPageChange
 }: SpecListProps) {
   const { t } = useTranslation()
 
@@ -36,9 +44,12 @@ export function SpecList({
     return (
       <div className='knowledge-base-view__spec-list'>
         <EmptyState
-          description={t('knowledge.flows.empty')}
-          actionLabel={t('knowledge.flows.create')}
+          description={onCreate == null
+            ? t('knowledge.filters.emptyScope')
+            : t('knowledge.flows.empty')}
+          actionLabel={onCreate == null ? undefined : t('knowledge.flows.create')}
           onAction={onCreate}
+          variant={onCreate == null ? 'simple' : undefined}
         />
       </div>
     )
@@ -57,13 +68,17 @@ export function SpecList({
 
   return (
     <div className='knowledge-base-view__spec-list'>
-      <KnowledgeList
+      <PaginatedKnowledgeList
+        currentPage={currentPage}
         data={filteredSpecs}
+        resetKey={resetKey}
         renderItem={(spec) => (
           <List.Item className='knowledge-base-view__list-item'>
             <SpecItem spec={spec} />
           </List.Item>
         )}
+        total={total}
+        onPageChange={onPageChange}
       />
     </div>
   )

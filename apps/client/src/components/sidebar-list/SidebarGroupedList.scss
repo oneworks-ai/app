@@ -14,10 +14,10 @@
 }
 
 .sidebar-grouped-list {
-  --sidebar-grouped-list-icon-size: 16px;
-  --sidebar-grouped-list-item-gap: 8px;
   --sidebar-grouped-list-active-offset: -8px;
-  --sidebar-grouped-list-child-indent: 14px;
+  --sidebar-grouped-list-child-indent: calc(
+    var(--app-chrome-icon-size, 18px) + var(--oneworks-overlay-icon-gap, 6px)
+  );
 
   flex: 1;
   min-height: 100%;
@@ -44,7 +44,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: var(--oneworks-overlay-icon-gap, 6px);
   width: 100%;
   min-height: 28px;
   padding: 0 0 2px;
@@ -93,18 +93,18 @@
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: var(--sidebar-grouped-list-item-gap);
+  gap: var(--oneworks-overlay-icon-gap, 6px);
 }
 
 .sidebar-grouped-list__group-icon {
-  flex: 0 0 var(--sidebar-grouped-list-icon-size);
-  width: var(--sidebar-grouped-list-icon-size);
-  min-width: var(--sidebar-grouped-list-icon-size);
-  height: var(--sidebar-grouped-list-icon-size);
+  flex: 0 0 var(--app-chrome-icon-size, 18px);
+  width: var(--app-chrome-icon-size, 18px);
+  min-width: var(--app-chrome-icon-size, 18px);
+  height: var(--app-chrome-icon-size, 18px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--sidebar-grouped-list-icon-size);
+  font-size: var(--app-chrome-icon-size, 18px);
   line-height: 1;
 }
 
@@ -160,7 +160,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--oneworks-overlay-icon-gap, 6px);
   width: 100%;
   min-width: 0;
   min-height: 28px;
@@ -209,13 +209,13 @@
 
 .sidebar-grouped-list__item-icon {
   flex: 0 0 auto;
-  width: var(--sidebar-grouped-list-icon-size);
-  min-width: var(--sidebar-grouped-list-icon-size);
-  height: var(--sidebar-grouped-list-icon-size);
+  width: var(--app-chrome-icon-size, 18px);
+  min-width: var(--app-chrome-icon-size, 18px);
+  height: var(--app-chrome-icon-size, 18px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--sidebar-grouped-list-icon-size);
+  font-size: var(--app-chrome-icon-size, 18px);
   line-height: 1;
   color: currentcolor;
 }

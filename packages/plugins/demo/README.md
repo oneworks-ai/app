@@ -3,6 +3,22 @@
 Built-in workspace plugin loaded from `@oneworks/plugin-demo`. It is intentionally small, but it exercises the plugin
 detail page with README language variants, localized contribution names, contribution descriptions, and search.
 
+The package also declares `@oneworks/plugin-standard-dev` as an optional child capability. A project can enable that
+child with the `std` scope while keeping Plugin Demo as the only top-level runtime instance:
+
+```json
+{
+  "id": "@oneworks/plugin-demo",
+  "scope": "demo",
+  "children": [
+    { "id": "standard-dev", "scope": "std" }
+  ]
+}
+```
+
+This preserves the existing `std/standard-dev-flow` and `std/dev-*` asset identifiers without exposing a second
+top-level plugin in the runtime or sidebar.
+
 It demonstrates these surfaces:
 
 - app nav route: `/plugins/demo/home`

@@ -12,7 +12,12 @@ import {
 } from './convert-support'
 import type { ClaudeTemplateContext } from './convert-support'
 import type { ClaudePluginManifest } from './source'
-import { parseClaudePluginManifest, pathExists } from './source'
+import {
+  assertPluginTreePathsStayWithinRoot,
+  parseClaudePluginManifest,
+  pathExists,
+  resolvePathWithinPluginRoot
+} from './source'
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -30,7 +35,7 @@ const collectSkillSourceDirs = async (pluginRoot: string, manifest: ClaudePlugin
   const dirs = new Map<string, string>()
 
   for (const entry of entries) {
-    const resolved = path.resolve(pluginRoot, entry)
+    const resolved = await resolvePathWithinPluginRoot(pluginRoot, entry, 'Claude plugin skill path')
     if (!await pathExists(resolved)) continue
 
     const stat = await fs.stat(resolved)
@@ -64,7 +69,7 @@ const collectMarkdownFiles = async (
   const files = new Map<string, string>()
 
   for (const entry of entries) {
-    const resolved = path.resolve(pluginRoot, entry)
+    const resolved = await resolvePathWithinPluginRoot(pluginRoot, entry, `Claude plugin ${fallbackDir} path`)
     if (!await pathExists(resolved)) continue
     const stat = await fs.stat(resolved)
     if (stat.isFile() && path.extname(resolved) === '.md') {
@@ -90,7 +95,7 @@ const mergeMcpConfig = (target: Record<string, Record<string, unknown>>, value: 
 }
 const readStructuredConfigValues = async (pluginRoot: string, value: unknown): Promise<unknown[]> => {
   if (typeof value === 'string') {
-    const resolved = path.resolve(pluginRoot, value)
+    const resolved = await resolvePathWithinPluginRoot(pluginRoot, value, 'Claude plugin config path')
     if (!await pathExists(resolved)) return []
 
     const stat = await fs.stat(resolved)
@@ -126,6 +131,7 @@ export const convertClaudePluginToOneWorks = async (params: {
   }
   const seenTargets = new Map<string, string>()
   for (const [name, sourceDir] of await collectSkillSourceDirs(params.nativePluginRoot, manifest)) {
+    await assertPluginTreePathsStayWithinRoot(params.nativePluginRoot, sourceDir, `Claude plugin skill "${name}"`)
     const targetDir = path.join(params.oneworksRoot, 'skills', name)
     const targetSkillPath = path.join(targetDir, 'SKILL.md')
     reserveTargetFile(seenTargets, targetSkillPath, `skill "${name}"`, params.oneworksRoot)

@@ -1,7 +1,8 @@
 import type {
+  NativeHostPluginAssetGroup,
+  NativeHostPluginDiscoveryResult,
   PluginDetailAssetGroup,
   PluginDetailAssetKind,
-  PluginMarketplaceCatalogResponse,
   PluginReadmeVariant,
   PluginRuntimeEndpoint
 } from '@oneworks/types'
@@ -17,7 +18,7 @@ interface PluginListResponse {
   runtime?: PluginRuntimeEndpoint
 }
 
-interface PluginApiSourceOptions {
+export interface PluginApiSourceOptions {
   serverBaseUrl?: string
 }
 
@@ -27,11 +28,29 @@ interface PluginRuntimeEndpointsResponse {
 
 export interface PluginReadme extends PluginReadmeVariant {}
 export type { PluginDetailAssetGroup, PluginDetailAssetKind }
+export type { NativeHostPluginAssetGroup }
 
 export interface PluginSnapshot {
   diagnostics?: unknown[]
   plugins: PluginRuntimeInstance[]
   runtime?: PluginRuntimeEndpoint
+}
+
+export const listNativeHostPlugins = async (
+  options: PluginApiSourceOptions = {}
+): Promise<NativeHostPluginDiscoveryResult> =>
+  fetchApiJson<NativeHostPluginDiscoveryResult>(
+    createPluginApiUrl('/api/plugins/native', options.serverBaseUrl)
+  )
+
+export const getNativeHostPluginAssets = async (
+  id: string,
+  options: PluginApiSourceOptions = {}
+): Promise<NativeHostPluginAssetGroup[]> => {
+  const response = await fetchApiJson<{ groups?: NativeHostPluginAssetGroup[] }>(
+    createPluginApiUrl(`/api/plugins/native/${encodeURIComponent(id)}/assets`, options.serverBaseUrl)
+  )
+  return response.groups ?? []
 }
 
 interface PluginReadmeResponse {
@@ -63,7 +82,7 @@ const normalizePluginInstance = (instance: PluginRuntimeInstance): PluginRuntime
   )
 })
 
-const createPluginApiUrl = (path: string, serverBaseUrl?: string) => {
+export const createPluginApiUrl = (path: string, serverBaseUrl?: string) => {
   const normalizedServerBaseUrl = normalizeServerBaseUrl(serverBaseUrl)
   return normalizedServerBaseUrl == null
     ? buildApiUrl(path)
@@ -93,12 +112,6 @@ export const listPluginSnapshot = async (options: PluginApiSourceOptions = {}): 
     runtime: Array.isArray(response) ? undefined : response.runtime
   }
 }
-
-export const listPluginMarketplaceCatalog = async () => (
-  fetchApiJson<PluginMarketplaceCatalogResponse>('/api/plugins/marketplace/catalog', {
-    timeoutMs: 60_000
-  })
-)
 
 export const setPluginWatch = async (
   scope: string,

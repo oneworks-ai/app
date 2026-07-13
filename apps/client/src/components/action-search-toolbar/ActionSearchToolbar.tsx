@@ -1,7 +1,9 @@
 import './ActionSearchToolbar.scss'
 
-import { Button, Input, Tooltip } from 'antd'
+import { Input } from 'antd'
 import type { ReactNode } from 'react'
+
+import { RouteContainerHeaderActionButton } from '@oneworks/components/route-layout'
 
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 
@@ -21,24 +23,28 @@ export interface ActionSearchToolbarAction {
 export interface ActionSearchToolbarProps {
   actions?: ActionSearchToolbarAction[]
   className?: string
+  inset?: boolean
   onQueryChange: (query: string) => void
   placeholder: string
   query: string
 }
 
-const renderActionIcon = (icon: ReactNode | string) => (
-  typeof icon === 'string' ? <MaterialSymbol name={icon} /> : icon
-)
-
 export function ActionSearchToolbar({
   actions = [],
   className,
+  inset = true,
   onQueryChange,
   placeholder,
   query
 }: ActionSearchToolbarProps) {
   return (
-    <div className={['action-search-toolbar', className].filter(Boolean).join(' ')}>
+    <div
+      className={[
+        'action-search-toolbar',
+        inset ? '' : 'action-search-toolbar--flush',
+        className
+      ].filter(Boolean).join(' ')}
+    >
       <Input
         className='action-search-toolbar__search'
         allowClear={query !== ''}
@@ -50,22 +56,26 @@ export function ActionSearchToolbar({
       {actions.length > 0 && (
         <div className='action-search-toolbar__actions'>
           {actions.map(action => (
-            <Tooltip key={action.key} title={action.title}>
-              <Button
-                className={[
-                  'action-search-toolbar__button',
-                  action.active ? 'is-active' : '',
-                  action.hasIndicator ? 'has-indicator' : ''
-                ].filter(Boolean).join(' ')}
-                type='text'
-                aria-label={action.ariaLabel}
-                aria-pressed={action.pressed}
-                disabled={action.disabled}
-                loading={action.loading}
-                icon={renderActionIcon(action.icon)}
-                onClick={action.onClick}
+            <span
+              key={action.key}
+              className={[
+                'action-search-toolbar__action',
+                action.hasIndicator ? 'has-indicator' : ''
+              ].filter(Boolean).join(' ')}
+            >
+              <RouteContainerHeaderActionButton
+                item={{
+                  active: action.active ?? action.pressed,
+                  disabled: action.disabled,
+                  icon: action.icon,
+                  key: action.key,
+                  label: action.ariaLabel,
+                  loading: action.loading,
+                  onSelect: action.onClick,
+                  title: typeof action.title === 'string' ? action.title : action.ariaLabel
+                }}
               />
-            </Tooltip>
+            </span>
           ))}
         </div>
       )}

@@ -8,12 +8,14 @@ import type { Adapter } from './adapter'
 import type { AdapterCliPreparer } from './adapter-cli-prepare'
 import { resolveExistingAdapterPackageCacheDir } from './adapter-package-cache'
 import type { AdapterBuiltinModel, Config } from './config'
+import type { AdapterNativePluginManager } from './native-host-plugin'
 import type { AdapterPluginInstaller } from './native-plugin'
 
 const ADAPTER_SCOPE = '@oneworks'
 const ADAPTER_PREFIX = 'adapter-'
 const ADAPTER_CLI_PREPARE_EXPORT = '/cli-prepare'
 const ADAPTER_MODELS_EXPORT = '/models'
+const ADAPTER_NATIVE_PLUGINS_EXPORT = '/native-plugins'
 const ADAPTER_PLUGIN_EXPORT = '/plugins'
 
 interface AdapterModelsExport {
@@ -375,6 +377,10 @@ const loadAdapterPackageExport = (params: {
           sourcePath: params.workspaceSourcePath
         })
       }
+      if ((error as NodeJS.ErrnoException | undefined)?.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED') {
+        missingError ??= error
+        continue
+      }
       if (isMissingRequestedModuleError(error, params.request)) {
         missingError ??= error
         continue
@@ -485,6 +491,34 @@ export const loadAdapterPluginInstaller = async (type: string, options: AdapterP
       (code === 'MODULE_NOT_FOUND' && message.includes(exportName))
     ) {
       throw new Error(`Adapter ${type} does not support native plugin management.`)
+    }
+    throw error
+  }
+}
+
+export const loadAdapterNativePluginManager = async (
+  type: string,
+  options: AdapterPackageLoadOptions = {}
+) => {
+  const { packageName, packageRoot } = resolveAdapterLoadTarget(type, options)
+  const exportName = `${packageName}${ADAPTER_NATIVE_PLUGINS_EXPORT}`
+
+  try {
+    return loadAdapterPackageExport({
+      packageName,
+      request: packageRoot == null ? exportName : `${packageRoot}${ADAPTER_NATIVE_PLUGINS_EXPORT}`,
+      packageRoot,
+      exportKey: './native-plugins',
+      workspaceSourcePath: 'src/native-plugins/index.ts'
+    }).default as AdapterNativePluginManager
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | undefined)?.code
+    const message = error instanceof Error ? error.message : String(error)
+    if (
+      code === 'ERR_PACKAGE_PATH_NOT_EXPORTED' ||
+      (code === 'MODULE_NOT_FOUND' && message.includes(exportName))
+    ) {
+      throw new Error(`Adapter ${type} does not expose native Home plugin discovery.`)
     }
     throw error
   }

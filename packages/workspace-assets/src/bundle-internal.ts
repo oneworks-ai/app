@@ -10,6 +10,7 @@ import {
 } from '@oneworks/config'
 import type { Config, Definition, Entity, PluginConfig, WorkspaceAsset, WorkspaceAssetKind } from '@oneworks/types'
 import {
+  mergeMarketplaceConfigs,
   mergeProcessEnvWithProjectEnv,
   readProjectSkillsLockfile,
   resolveProjectHomePath,
@@ -798,6 +799,7 @@ export async function collectWorkspaceAssets(params: {
   }
   const pluginConfigs = await resolveRuntimePluginConfig({
     cwd: params.cwd,
+    marketplaces: mergeMarketplaceConfigs(config?.marketplaces, userConfig?.marketplaces),
     plugins: params.plugins ?? mergePluginConfigs(config?.plugins, userConfig?.plugins),
     env
   })

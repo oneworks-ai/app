@@ -28,8 +28,59 @@ export const pathExists = async (target: string) => {
   }
 }
 
+export const resolvePathWithinPluginRoot = async (
+  pluginRoot: string,
+  entry: string,
+  description: string
+): Promise<string> => {
+  const resolved = path.resolve(pluginRoot, entry)
+  const relative = path.relative(pluginRoot, resolved)
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`${description} must stay within the plugin root: ${entry}`)
+  }
+
+  if (!await pathExists(resolved)) return resolved
+
+  const [realRoot, realResolved] = await Promise.all([
+    fs.realpath(pluginRoot),
+    fs.realpath(resolved)
+  ])
+  const realRelative = path.relative(realRoot, realResolved)
+  if (realRelative === '..' || realRelative.startsWith(`..${path.sep}`) || path.isAbsolute(realRelative)) {
+    throw new Error(`${description} resolves outside the plugin root: ${entry}`)
+  }
+  return resolved
+}
+
+export const assertPluginTreePathsStayWithinRoot = async (
+  pluginRoot: string,
+  treeRoot: string,
+  description: string
+): Promise<void> => {
+  const realPluginRoot = await fs.realpath(pluginRoot)
+  const entries = await fs.readdir(treeRoot, { withFileTypes: true })
+  for (const entry of entries) {
+    const entryPath = path.join(treeRoot, entry.name)
+    if (entry.isSymbolicLink()) {
+      const realEntryPath = await fs.realpath(entryPath)
+      const relative = path.relative(realPluginRoot, realEntryPath)
+      if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+        throw new Error(`${description} contains a symlink that resolves outside the plugin root: ${entryPath}`)
+      }
+      continue
+    }
+    if (entry.isDirectory()) {
+      await assertPluginTreePathsStayWithinRoot(pluginRoot, entryPath, description)
+    }
+  }
+}
+
 export const parseClaudePluginManifest = async (pluginRoot: string): Promise<ClaudePluginManifest | undefined> => {
-  const manifestPath = path.join(pluginRoot, '.claude-plugin', 'plugin.json')
+  const manifestPath = await resolvePathWithinPluginRoot(
+    pluginRoot,
+    path.join('.claude-plugin', 'plugin.json'),
+    'Claude plugin manifest'
+  )
   if (!await pathExists(manifestPath)) return undefined
 
   const raw = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as unknown

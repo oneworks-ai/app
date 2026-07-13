@@ -9,7 +9,7 @@ import type {
 } from '@oneworks/types'
 import { normalizeMarketplaceConfig } from '@oneworks/utils'
 
-import { pathExists } from './source'
+import { parseClaudePluginManifest, pathExists } from './source'
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -60,14 +60,22 @@ const normalizeMarketplaceCatalog = (catalog: unknown, description: string): Cla
 }
 
 const readMarketplaceCatalogFromRoot = async (rootDir: string): Promise<ClaudeMarketplaceCatalog> => {
-  const catalogPath = path.join(rootDir, '.claude-plugin', 'marketplace.json')
+  const catalogPath = await resolvePathWithinRoot(
+    rootDir,
+    path.join('.claude-plugin', 'marketplace.json'),
+    'Claude marketplace catalog'
+  )
   if (!await pathExists(catalogPath)) {
     throw new Error(`Claude marketplace catalog not found at ${catalogPath}.`)
   }
-  return normalizeMarketplaceCatalog(JSON.parse(await fs.readFile(catalogPath, 'utf8')) as unknown, catalogPath)
+  const catalog = normalizeMarketplaceCatalog(
+    JSON.parse(await fs.readFile(catalogPath, 'utf8')) as unknown,
+    catalogPath
+  )
+  return enrichLocalPluginVersions(rootDir, catalog)
 }
 
-const resolvePathWithinRoot = (rootDir: string, candidatePath: string, description: string) => {
+const resolvePathWithinRoot = async (rootDir: string, candidatePath: string, description: string) => {
   const resolvedPath = path.resolve(rootDir, candidatePath)
   const relativePath = path.relative(rootDir, resolvedPath)
   if (
@@ -78,8 +86,50 @@ const resolvePathWithinRoot = (rootDir: string, candidatePath: string, descripti
   ) {
     throw new Error(`${description} resolves outside the marketplace root.`)
   }
+  if (await pathExists(resolvedPath)) {
+    const [realRoot, realResolved] = await Promise.all([
+      fs.realpath(rootDir),
+      fs.realpath(resolvedPath)
+    ])
+    const realRelative = path.relative(realRoot, realResolved)
+    if (
+      realRelative === '..' ||
+      realRelative.startsWith('../') ||
+      realRelative.startsWith('..\\') ||
+      path.isAbsolute(realRelative)
+    ) {
+      throw new Error(`${description} resolves outside the marketplace root through a symlink.`)
+    }
+  }
   return resolvedPath
 }
+
+const normalizeNonEmptyString = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+)
+
+const enrichLocalPluginVersions = async (
+  rootDir: string,
+  catalog: ClaudeMarketplaceCatalog
+): Promise<ClaudeMarketplaceCatalog> => ({
+  ...catalog,
+  plugins: await Promise.all(catalog.plugins.map(async (plugin) => {
+    if (normalizeNonEmptyString(plugin.version) != null || typeof plugin.source !== 'string') return plugin
+    const pluginRootPrefix = normalizeNonEmptyString(catalog.metadata?.pluginRoot)
+    const relativeSource = pluginRootPrefix != null &&
+        !plugin.source.startsWith('./') &&
+        !plugin.source.startsWith('../')
+      ? path.join(pluginRootPrefix, plugin.source)
+      : plugin.source
+    const pluginRoot = await resolvePathWithinRoot(
+      rootDir,
+      relativeSource,
+      `Marketplace plugin source for ${plugin.name}`
+    )
+    const version = normalizeNonEmptyString((await parseClaudePluginManifest(pluginRoot))?.version)
+    return version == null ? plugin : { ...plugin, version }
+  }))
+})
 
 export const loadMarketplaceCatalogFromSource = async (
   tempDir: string,
@@ -120,7 +170,7 @@ export const loadMarketplaceCatalogFromSource = async (
       const marketplaceRoot = source.source === 'directory'
         ? sourceRoot
         : source.path != null
-        ? resolvePathWithinRoot(sourceRoot, source.path, `Marketplace ${marketplaceName} path`)
+        ? await resolvePathWithinRoot(sourceRoot, source.path, `Marketplace ${marketplaceName} path`)
         : sourceRoot
 
       return {

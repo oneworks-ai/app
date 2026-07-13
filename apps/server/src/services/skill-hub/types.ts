@@ -10,6 +10,7 @@ export interface SkillHubRegistrySummary {
   registry?: string
   title?: string
   description?: string
+  builtIn?: boolean
   configSource: ConfigSource
   configLabel: string
   error?: string
@@ -30,14 +31,24 @@ export interface SkillHubItem {
   hasHooks: boolean
   installed: boolean
   declared: boolean
+  declaredSources: ConfigSource[]
+  builtIn?: boolean
   installRef?: string
   source: string
 }
+
+export type SkillHubInstallTarget = Extract<ConfigSource, 'global' | 'project'>
 
 export interface SkillHubSearchResult {
   hasMore?: boolean
   registries: SkillHubRegistrySummary[]
   items: SkillHubItem[]
+  sources: string[]
+  total: number
+}
+
+export interface SkillHubRegistriesResult {
+  registries: SkillHubRegistrySummary[]
 }
 
 export interface SkillHubInstallResult {

@@ -1,13 +1,15 @@
-import type { SkillHubItem, SkillHubRegistrySummary } from '#~/api.js'
+import type { SkillHubInstallTarget, SkillHubItem, SkillHubRegistrySummary } from '#~/api.js'
+
 import type { SkillHubInstallFilter, SkillHubSortKey } from './skill-hub-utils'
 
 export interface SkillMarketViewProps {
-  canLoadMore: boolean
+  currentPage: number
   hubItems: SkillHubItem[]
   installingId: string | null
   installFilter: SkillHubInstallFilter
   isLoading: boolean
-  loadingMore: boolean
+  isPageLoading: boolean
+  pageSize: number
   query: string
   registries: SkillHubRegistrySummary[]
   registry: string
@@ -16,10 +18,12 @@ export interface SkillMarketViewProps {
   sortKey: SkillHubSortKey
   sourceFilter: string
   sourceOptions: Array<{ label: string; value: string }>
+  total: number
   onAddRegistry: () => void
-  onInstall: (item: SkillHubItem) => void
+  onInstall: (item: SkillHubItem, target: SkillHubInstallTarget) => void
   onInstallFilterChange: (value: SkillHubInstallFilter) => void
-  onLoadMore: () => void
+  onOpenSettings: () => void
+  onPageChange: (page: number) => void
   onQueryChange: (value: string) => void
   onRegistryChange: (value: string) => void
   onSortChange: (value: SkillHubSortKey) => void

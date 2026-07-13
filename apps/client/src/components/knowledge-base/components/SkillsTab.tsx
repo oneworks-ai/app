@@ -4,7 +4,6 @@ import { App } from 'antd'
 import React from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
 import type { RouteContainerHeaderActionItem } from '@oneworks/components/route-layout'
@@ -19,10 +18,9 @@ import { SkillArchiveInput } from './SkillArchiveInput'
 import { SkillMarketView } from './SkillMarketView'
 import { SkillRegistryModal } from './SkillRegistryModal'
 import { TabContent } from './TabContent'
-import { ALL_REGISTRIES, filterProjectSkills } from './skill-hub-utils'
+import { ALL_REGISTRIES, ALL_SKILL_SOURCES } from './skill-hub-utils'
 import type { SkillHubInstallFilter, SkillHubSortKey } from './skill-hub-utils'
 import { buildSkillsTabHeaderActions } from './skills-tab-header-actions'
-import { useSkillMarketFilters } from './use-skill-market-filters'
 import { useSkillMarketSearch } from './use-skill-market-search'
 import { useSkillRegistryModal } from './use-skill-registry-modal'
 
@@ -40,6 +38,8 @@ interface SkillsTabProps {
   onHeaderActionsChange?: (items: RouteContainerHeaderActionItem[]) => void
   onInstallFilterChange: (value: SkillHubInstallFilter) => void
   onMarketQueryChange: (value: string) => void
+  onOpenSettings: () => void
+  onProjectQueryChange: (value: string) => void
   onRegistryChange: (value: string) => void
   onSortChange: (value: SkillHubSortKey) => void
   onSourceFilterChange: (value: string) => void
@@ -59,6 +59,8 @@ export function SkillsTab({
   onHeaderActionsChange,
   onInstallFilterChange,
   onMarketQueryChange,
+  onOpenSettings,
+  onProjectQueryChange,
   onRegistryChange,
   onRefresh,
   onSortChange,
@@ -67,7 +69,6 @@ export function SkillsTab({
 }: SkillsTabProps) {
   const { t } = useTranslation()
   const { message } = App.useApp()
-  const navigate = useNavigate()
   const {
     data: skillsRes,
     isLoading: isSkillsLoading,
@@ -77,6 +78,7 @@ export function SkillsTab({
   const marketSearch = useSkillMarketSearch({ installFilter, marketQuery, registry, sortKey, sourceFilter, viewMode })
   const registryModal = useSkillRegistryModal({
     configRes,
+    existingRegistrySources: marketSearch.data?.registries.map(registry => registry.source),
     mutateConfig,
     mutateHub: marketSearch.mutate,
     setRegistry: onRegistryChange
@@ -94,32 +96,27 @@ export function SkillsTab({
   const skills = skillsRes?.skills ?? []
   const registries = marketSearch.data?.registries ?? []
   const hubItems = marketSearch.data?.items ?? []
-  const filteredSkills = React.useMemo(() => filterProjectSkills(skills, projectQuery), [projectQuery, skills])
-  const marketFilters = useSkillMarketFilters(hubItems, {
-    sourceFilter,
-    installFilter,
-    sortKey
-  })
   const registryOptions = React.useMemo(() => [
     { label: t('knowledge.skills.allRegistries'), value: ALL_REGISTRIES },
-    ...registries.map(item => ({
-      label: item.title != null && item.title.trim() !== ''
-        ? `${item.title} · ${item.configLabel}`
-        : `${item.name} · ${item.configLabel}`,
+    ...registries.filter(item => item.enabled).map(item => ({
+      label: `${item.title != null && item.title.trim() !== '' ? item.title : item.name} · ${
+        item.builtIn ? t('knowledge.skills.builtInRegistry') : item.configLabel
+      }`,
       value: item.id
     }))
   ], [registries, t])
+  const sourceOptions = React.useMemo(() => [
+    { label: t('knowledge.skills.allSources'), value: ALL_SKILL_SOURCES },
+    ...(marketSearch.data?.sources ?? []).map(source => ({ label: source, value: source }))
+  ], [marketSearch.data?.sources, t])
   const headerActionItems = React.useMemo<RouteContainerHeaderActionItem[]>(() => (
     buildSkillsTabHeaderActions({
-      importInputRef: actions.importInputRef,
-      importing: actions.importing,
-      navigateToConfig: () => navigate('/config/general'),
-      onRefresh: () => void actions.handleRefresh(),
+      navigateToSettings: onOpenSettings,
       onViewModeChange,
       t,
       viewMode
     })
-  ), [actions.handleRefresh, actions.importInputRef, actions.importing, navigate, onViewModeChange, t, viewMode])
+  ), [onOpenSettings, onViewModeChange, t, viewMode])
 
   React.useEffect(() => {
     onHeaderActionsChange?.(headerActionItems)
@@ -135,31 +132,37 @@ export function SkillsTab({
       />
       {viewMode === 'project' && (
         <ProjectSkillsList
-          allCount={skills.length}
           isLoading={isSkillsLoading}
-          skills={filteredSkills}
+          importing={actions.importing}
+          query={projectQuery}
+          skills={skills}
           onCreate={onCreate}
+          onImport={actions.triggerImport}
+          onQueryChange={onProjectQueryChange}
         />
       )}
       {viewMode === 'market' && (
         <SkillMarketView
-          hubItems={marketFilters.filteredHubItems}
+          currentPage={marketSearch.page}
+          hubItems={hubItems}
           installingId={actions.installingId}
           installFilter={installFilter}
           isLoading={marketSearch.isLoading && hubItems.length === 0}
+          isPageLoading={marketSearch.isValidating}
+          pageSize={marketSearch.pageSize}
           query={marketQuery}
           registries={registries}
           registry={registry}
           registryOptions={registryOptions}
           sortKey={sortKey}
           sourceFilter={sourceFilter}
-          sourceOptions={marketFilters.sourceOptions}
-          canLoadMore={marketSearch.canLoadMore}
-          loadingMore={marketSearch.isValidating && hubItems.length > 0}
-          onAddRegistry={() => registryModal.setOpen(true)}
+          sourceOptions={sourceOptions}
+          total={marketSearch.data?.total ?? 0}
+          onAddRegistry={registryModal.openModal}
           onInstall={actions.handleInstall}
           onInstallFilterChange={onInstallFilterChange}
-          onLoadMore={marketSearch.loadMore}
+          onOpenSettings={onOpenSettings}
+          onPageChange={marketSearch.setPage}
           onQueryChange={onMarketQueryChange}
           onRegistryChange={onRegistryChange}
           resetKey={marketSearch.resetKey}
@@ -172,7 +175,7 @@ export function SkillsTab({
         saving={registryModal.saving}
         form={registryModal.form}
         onSave={() => void registryModal.save()}
-        onClose={() => registryModal.setOpen(false)}
+        onClose={registryModal.close}
       />
     </TabContent>
   )

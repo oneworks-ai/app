@@ -5,22 +5,30 @@ import { useTranslation } from 'react-i18next'
 
 import type { RuleSummary } from '#~/api.js'
 import { EmptyState } from './EmptyState'
-import { KnowledgeList } from './KnowledgeList'
 import { LoadingState } from './LoadingState'
+import { PaginatedKnowledgeList } from './PaginatedKnowledgeList'
 import { RuleItem } from './RuleItem'
 
 interface RuleListProps {
+  currentPage: number
   isLoading: boolean
   rules: RuleSummary[]
   filteredRules: RuleSummary[]
-  onCreate: () => void
+  resetKey: string
+  total: number
+  onCreate?: () => void
+  onPageChange: (page: number) => void
 }
 
 export function RuleList({
+  currentPage,
   isLoading,
   rules,
   filteredRules,
-  onCreate
+  resetKey,
+  total,
+  onCreate,
+  onPageChange
 }: RuleListProps) {
   const { t } = useTranslation()
 
@@ -36,9 +44,12 @@ export function RuleList({
     return (
       <div className='knowledge-base-view__rule-list'>
         <EmptyState
-          description={t('knowledge.rules.empty')}
-          actionLabel={t('knowledge.rules.create')}
+          description={onCreate == null
+            ? t('knowledge.filters.emptyScope')
+            : t('knowledge.rules.empty')}
+          actionLabel={onCreate == null ? undefined : t('knowledge.rules.create')}
           onAction={onCreate}
+          variant={onCreate == null ? 'simple' : undefined}
         />
       </div>
     )
@@ -57,13 +68,17 @@ export function RuleList({
 
   return (
     <div className='knowledge-base-view__rule-list'>
-      <KnowledgeList
+      <PaginatedKnowledgeList
+        currentPage={currentPage}
         data={filteredRules}
+        resetKey={resetKey}
         renderItem={(rule) => (
           <List.Item className='knowledge-base-view__list-item'>
             <RuleItem rule={rule} />
           </List.Item>
         )}
+        total={total}
+        onPageChange={onPageChange}
       />
     </div>
   )

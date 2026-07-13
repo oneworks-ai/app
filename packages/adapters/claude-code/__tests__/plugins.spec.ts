@@ -232,6 +232,42 @@ describe('claude plugin manager', () => {
     }))
   })
 
+  it('rejects manifest asset paths outside the plugin root', async () => {
+    const cwd = await createTempDir()
+    const pluginSourceDir = path.join(cwd, 'plugin-with-escaped-assets')
+
+    await fs.mkdir(path.join(pluginSourceDir, '.claude-plugin'), { recursive: true })
+    await fs.writeFile(
+      path.join(pluginSourceDir, '.claude-plugin', 'plugin.json'),
+      JSON.stringify({ name: 'Escaped Plugin', skills: '../outside' }, null, 2)
+    )
+
+    await expect(installAdapterPluginWithInstaller(claudeCodePluginInstaller, {
+      cwd,
+      source: pluginSourceDir
+    })).rejects.toThrow(/must stay within the plugin root/i)
+  })
+
+  it('rejects symlinks inside skill trees that escape the plugin root', async () => {
+    const cwd = await createTempDir()
+    const pluginSourceDir = path.join(cwd, 'plugin-with-escaped-symlink')
+    const outsideFile = path.join(cwd, 'outside-secret.md')
+
+    await fs.mkdir(path.join(pluginSourceDir, '.claude-plugin'), { recursive: true })
+    await fs.mkdir(path.join(pluginSourceDir, 'skills', 'research'), { recursive: true })
+    await fs.writeFile(
+      path.join(pluginSourceDir, '.claude-plugin', 'plugin.json'),
+      JSON.stringify({ name: 'Escaped Symlink Plugin' }, null, 2)
+    )
+    await fs.writeFile(outsideFile, 'OUTSIDE_SECRET')
+    await fs.symlink(outsideFile, path.join(pluginSourceDir, 'skills', 'research', 'SKILL.md'))
+
+    await expect(installAdapterPluginWithInstaller(claudeCodePluginInstaller, {
+      cwd,
+      source: pluginSourceDir
+    })).rejects.toThrow(/symlink that resolves outside the plugin root/i)
+  })
+
   it('installs a Claude plugin from a configured marketplace', async () => {
     const cwd = await createTempDir()
     const marketplaceDir = path.join(cwd, 'team-marketplace')
@@ -292,6 +328,45 @@ describe('claude plugin manager', () => {
     await expect(
       fs.readFile(path.join(result.workspacePluginDir!, 'skills', 'review', 'SKILL.md'), 'utf8')
     ).resolves.toContain('Review from marketplace')
+  })
+
+  it('rejects a marketplace plugin source symlink that escapes the marketplace root', async () => {
+    const cwd = await createTempDir()
+    const marketplaceDir = path.join(cwd, 'team-marketplace')
+    const outsidePluginDir = path.join(cwd, 'outside-plugin')
+
+    await fs.mkdir(path.join(marketplaceDir, '.claude-plugin'), { recursive: true })
+    await fs.mkdir(path.join(marketplaceDir, 'plugins'), { recursive: true })
+    await fs.mkdir(path.join(outsidePluginDir, '.claude-plugin'), { recursive: true })
+    await fs.writeFile(
+      path.join(cwd, '.oo.config.yaml'),
+      [
+        'marketplaces:',
+        '  team-tools:',
+        '    type: claude-code',
+        '    options:',
+        '      source:',
+        '        source: directory',
+        `        path: ${JSON.stringify(marketplaceDir)}`
+      ].join('\n')
+    )
+    await fs.writeFile(
+      path.join(marketplaceDir, '.claude-plugin', 'marketplace.json'),
+      JSON.stringify({
+        metadata: { pluginRoot: './plugins' },
+        plugins: [{ name: 'reviewer', source: 'reviewer' }]
+      })
+    )
+    await fs.writeFile(
+      path.join(outsidePluginDir, '.claude-plugin', 'plugin.json'),
+      JSON.stringify({ name: 'reviewer' })
+    )
+    await fs.symlink(outsidePluginDir, path.join(marketplaceDir, 'plugins', 'reviewer'))
+
+    await expect(installAdapterPluginWithInstaller(claudeCodePluginInstaller, {
+      cwd,
+      source: 'reviewer@team-tools'
+    })).rejects.toThrow(/outside the marketplace root through a symlink/i)
   })
 
   it('rejects ambiguous marketplace-like sources when no marketplace is configured', async () => {

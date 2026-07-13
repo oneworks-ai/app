@@ -1,6 +1,8 @@
 import { buildConfigJsonVariables, loadConfigState } from '@oneworks/config'
 import type { AdapterPluginResolveSourceContext, Config, ResolvedAdapterPluginSource } from '@oneworks/types'
+import { mergeMarketplaceConfigs } from '@oneworks/utils'
 
+import { CLAUDE_CODE_BUILT_IN_PLUGIN_MARKETPLACES } from './built-in-marketplaces'
 import { loadMarketplaceCatalogFromSource } from './marketplace-catalog'
 import { resolveMarketplacePluginSource, toMarketplaceManifestOverrides } from './marketplace-source'
 import type { ClaudePluginManifest } from './source'
@@ -60,7 +62,14 @@ export const resolveClaudeMarketplaceInstallSource = async (
     cwd: params.cwd,
     jsonVariables: buildConfigJsonVariables(params.cwd)
   })
-  const configuredMarketplace = getConfiguredClaudeMarketplace(mergedConfig, reference.marketplace)
+  const effectiveMarketplaces = mergeMarketplaceConfigs(
+    CLAUDE_CODE_BUILT_IN_PLUGIN_MARKETPLACES,
+    mergedConfig?.marketplaces
+  )
+  const configuredMarketplace = getConfiguredClaudeMarketplace(
+    effectiveMarketplaces == null ? undefined : { marketplaces: effectiveMarketplaces },
+    reference.marketplace
+  )
   if (configuredMarketplace == null) {
     throw new Error(
       `Ambiguous Claude plugin source "${params.requestedSource}". No Claude marketplace named "${reference.marketplace}" is configured. Use "npm:${params.requestedSource}" to install an npm package, or configure that marketplace first.`
@@ -85,7 +94,7 @@ export const resolveClaudeMarketplaceInstallSource = async (
   }
 
   return {
-    installSource: resolveMarketplacePluginSource({
+    installSource: await resolveMarketplacePluginSource({
       source: plugin.source,
       catalog,
       rootDir,

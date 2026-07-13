@@ -10,7 +10,11 @@ import type {
 } from '@oneworks/types'
 
 import { getPluginManager } from '#~/services/plugins/index.js'
+import { setPluginMarketplaceSelection } from '#~/services/plugins/marketplace-selection.js'
+import { syncPluginMarketplaceSelection } from '#~/services/plugins/marketplace-sync.js'
+import { resolvePluginMarketplaceVersions } from '#~/services/plugins/marketplace-version-resolver.js'
 import { listPluginMarketplaceCatalog } from '#~/services/plugins/marketplace.js'
+import { listNativeHostPluginAssets, listNativeHostPlugins } from '#~/services/plugins/native-host.js'
 import { normalizeRuntimeEndpoint, readProxyHandlerBody } from '#~/services/plugins/runtime.js'
 import { HttpError, badRequest, notFound } from '#~/utils/http.js'
 
@@ -149,8 +153,95 @@ export function pluginsRouter(): Router {
     }
   })
 
+  router.get('/native', async (ctx) => {
+    ctx.body = await listNativeHostPlugins()
+  })
+
+  router.get('/native/:id/assets', async (ctx) => {
+    const id = String(ctx.params.id ?? '')
+    const groups = await listNativeHostPluginAssets(id)
+    if (groups == null) throw notFound('Native plugin not found.', undefined, 'native_plugin_not_found')
+    ctx.body = { groups, id }
+  })
+
   router.get('/marketplace/catalog', async (ctx) => {
     ctx.body = await listPluginMarketplaceCatalog()
+  })
+
+  router.post('/marketplace/versions', async (ctx) => {
+    const body = ctx.request.body as { generation?: unknown; items?: unknown }
+    if (
+      typeof body?.generation !== 'string' || body.generation.trim() === '' || body.generation.length > 128 ||
+      !Array.isArray(body?.items) || body.items.length > 50 || body.items.some(item => (
+        item == null || typeof item !== 'object' ||
+        typeof (item as { marketplace?: unknown }).marketplace !== 'string' ||
+        (item as { marketplace: string }).marketplace.trim() === '' ||
+        (item as { marketplace: string }).marketplace.length > 256 ||
+        typeof (item as { plugin?: unknown }).plugin !== 'string' ||
+        (item as { plugin: string }).plugin.trim() === '' ||
+        (item as { plugin: string }).plugin.length > 256
+      ))
+    ) {
+      throw badRequest(
+        '"generation" and at most 50 marketplace/plugin pairs are required.',
+        undefined,
+        'invalid_plugin_versions_request'
+      )
+    }
+    const result = await resolvePluginMarketplaceVersions(
+      body.generation,
+      body.items as Array<{ marketplace: string; plugin: string }>
+    )
+    if (!result.found) {
+      throw new HttpError(
+        409,
+        'plugin_version_generation_expired',
+        'Plugin catalog changed before versions were resolved.'
+      )
+    }
+    if (result.retryable.length > 0) {
+      throw new HttpError(
+        503,
+        'plugin_version_lookup_retryable',
+        'Some plugin versions could not be resolved yet.',
+        { retryable: result.retryable },
+        { expose: true }
+      )
+    }
+    ctx.body = { versions: result.versions }
+  })
+
+  router.post('/marketplace/plugins/:marketplace/:plugin/sync', async (ctx) => {
+    const body = ctx.request.body as { enabled?: unknown }
+    if (typeof body?.enabled !== 'boolean') {
+      throw badRequest('"enabled" must be a boolean.', undefined, 'invalid_plugin_marketplace_request')
+    }
+    const results = await syncPluginMarketplaceSelection({
+      enabled: body.enabled,
+      marketplace: String(ctx.params.marketplace ?? ''),
+      plugin: String(ctx.params.plugin ?? '')
+    })
+    await getPluginManager().reload()
+    ctx.body = { results }
+  })
+
+  router.post('/marketplace/plugins/:marketplace/:plugin/selection', async (ctx) => {
+    const body = ctx.request.body as { enabled?: unknown; target?: unknown }
+    if (typeof body?.enabled !== 'boolean' || (body.target !== 'global' && body.target !== 'project')) {
+      throw badRequest(
+        '"enabled" must be a boolean and "target" must be global or project.',
+        undefined,
+        'invalid_plugin_marketplace_selection_request'
+      )
+    }
+    const results = await setPluginMarketplaceSelection({
+      enabled: body.enabled,
+      marketplace: String(ctx.params.marketplace ?? ''),
+      plugin: String(ctx.params.plugin ?? ''),
+      target: body.target
+    })
+    await getPluginManager().reload()
+    ctx.body = { results }
   })
 
   router.post('/launcher/search', async (ctx) => {

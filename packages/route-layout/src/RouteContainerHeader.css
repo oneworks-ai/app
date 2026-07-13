@@ -1,5 +1,6 @@
 .route-container-header {
   --route-container-header-icon-size: var(--app-chrome-icon-size, 18px);
+  --route-container-header-title-gap: var(--oneworks-overlay-icon-gap, 4px);
   --route-container-header-icon-button-size: var(
     --route-container-header-icon-size
   );
@@ -129,7 +130,7 @@
 .route-container-header__title-content {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--route-container-header-title-gap);
   max-width: 100%;
   min-width: 0;
 }
@@ -172,7 +173,7 @@
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--route-container-header-title-gap);
   min-height: var(
     --route-container-header-content-height,
     var(--app-chrome-icon-size, 18px)

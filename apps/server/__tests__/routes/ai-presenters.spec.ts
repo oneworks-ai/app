@@ -34,7 +34,8 @@ describe('ai presenters', () => {
       always: true,
       tags: [],
       skills: ['research'],
-      rules: ['.oo/rules/release.md']
+      rules: ['.oo/rules/release.md'],
+      source: 'project'
     })
     expect(presentSpecDetail(spec, cwd).body).toBe('发布流程\n执行发布')
   })
@@ -68,7 +69,8 @@ describe('ai presenters', () => {
       always: true,
       tags: [],
       skills: ['review'],
-      rules: ['评审检查清单', 'remote:security']
+      rules: ['评审检查清单', 'remote:security'],
+      source: 'project'
     })
   })
 
@@ -87,11 +89,37 @@ describe('ai presenters', () => {
       name: 'base',
       description: '始终检查边界',
       always: true,
-      globs: ['src/**/*.ts']
+      globs: ['src/**/*.ts'],
+      source: 'project'
     })
     expect(matchesDefinitionPath(rule, '.oo/rules/base.md', cwd)).toBe(true)
     expect(matchesDefinitionPath(rule, rule.path, cwd)).toBe(true)
     expect(matchesDefinitionPath(rule, '.oo/rules/missing.md', cwd)).toBe(false)
+  })
+
+  it('marks plugin-provided assets as plugin scoped', () => {
+    const spec: Definition<Spec> = {
+      path: join(cwd, 'node_modules/plugin/specs/release/index.md'),
+      body: '插件流程',
+      attributes: {},
+      resolvedSource: 'plugin'
+    }
+    const entity: Definition<Entity> = {
+      path: join(cwd, 'node_modules/plugin/entities/reviewer/README.md'),
+      body: '插件实体',
+      attributes: {},
+      resolvedSource: 'plugin'
+    }
+    const rule: Definition<Rule> = {
+      path: join(cwd, 'node_modules/plugin/rules/base.md'),
+      body: '插件规则',
+      attributes: {},
+      resolvedSource: 'plugin'
+    }
+
+    expect(presentSpec(spec, cwd).source).toBe('plugin')
+    expect(presentEntity(entity, cwd).source).toBe('plugin')
+    expect(presentRule(rule, cwd).source).toBe('plugin')
   })
 
   it('presents skill sources for project, plugin, and home entries', () => {

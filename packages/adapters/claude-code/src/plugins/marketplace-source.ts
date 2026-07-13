@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises'
 import path from 'node:path'
 
 import type {
@@ -13,7 +14,7 @@ const normalizeNonEmptyString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
 
-const resolvePathWithinRoot = (rootDir: string, candidatePath: string, description: string) => {
+const resolvePathWithinRoot = async (rootDir: string, candidatePath: string, description: string) => {
   const resolvedPath = path.resolve(rootDir, candidatePath)
   const relativePath = path.relative(rootDir, resolvedPath)
   if (
@@ -24,16 +25,29 @@ const resolvePathWithinRoot = (rootDir: string, candidatePath: string, descripti
   ) {
     throw new Error(`${description} resolves outside the marketplace root.`)
   }
+  const [realRoot, realResolved] = await Promise.all([
+    fs.realpath(rootDir),
+    fs.realpath(resolvedPath)
+  ])
+  const realRelative = path.relative(realRoot, realResolved)
+  if (
+    realRelative === '..' ||
+    realRelative.startsWith('../') ||
+    realRelative.startsWith('..\\') ||
+    path.isAbsolute(realRelative)
+  ) {
+    throw new Error(`${description} resolves outside the marketplace root through a symlink.`)
+  }
   return resolvedPath
 }
 
-export const resolveMarketplacePluginSource = (params: {
+export const resolveMarketplacePluginSource = async (params: {
   source: ClaudeCodeMarketplacePluginSource
   catalog: ClaudeMarketplaceCatalog
   rootDir?: string
   marketplaceName: string
   pluginName: string
-}): ManagedPluginSource => {
+}): Promise<ManagedPluginSource> => {
   if (typeof params.source === 'string') {
     if (params.rootDir == null) {
       throw new Error(
@@ -50,7 +64,7 @@ export const resolveMarketplacePluginSource = (params: {
 
     return {
       type: 'path',
-      path: resolvePathWithinRoot(
+      path: await resolvePathWithinRoot(
         params.rootDir,
         relativeSource,
         `Marketplace plugin source for ${params.pluginName}@${params.marketplaceName}`

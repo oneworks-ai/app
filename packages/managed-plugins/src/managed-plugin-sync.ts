@@ -1,4 +1,4 @@
-import { readFile, stat } from 'node:fs/promises'
+import { readFile, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import type { ManagedPluginSource } from '@oneworks/types'
@@ -11,6 +11,8 @@ const resolveMarketplacePluginAdapter = (type: string) => {
   switch (type) {
     case 'claude-code':
       return 'claude'
+    case 'codex':
+      return 'codex'
     default:
       return undefined
   }
@@ -40,20 +42,38 @@ const hasLegacyPluginDataTarget = async (install: ManagedPluginInstall) => {
   }
 }
 
+type MarketplaceSyncConfig = Record<string, {
+  type: string
+  enabled?: boolean
+  syncOnRun?: boolean
+  plugins?: Record<string, {
+    enabled?: boolean
+    scope?: string
+  }>
+}>
+
+export const assertUniqueMarketplacePluginScopes = (marketplaces: MarketplaceSyncConfig | undefined) => {
+  const desiredScopes = new Map<string, string>()
+  for (const [marketplaceName, marketplace] of Object.entries(marketplaces ?? {})) {
+    if (marketplace.enabled === false || resolveMarketplacePluginAdapter(marketplace.type) == null) continue
+    for (const [pluginName, plugin] of Object.entries(marketplace.plugins ?? {})) {
+      if (plugin.enabled === false) continue
+      const desiredScope = plugin.scope?.trim() || pluginName
+      const owner = desiredScopes.get(desiredScope)
+      if (owner != null) {
+        throw new Error(
+          `Plugin scope "${desiredScope}" is declared by both ${owner} and ${pluginName}@${marketplaceName}.`
+        )
+      }
+      desiredScopes.set(desiredScope, `${pluginName}@${marketplaceName}`)
+    }
+  }
+}
+
 export const syncConfiguredMarketplacePlugins = async (params: {
   cwd: string
   env?: Record<string, string | null | undefined>
-  marketplaces:
-    | Record<string, {
-      type: string
-      enabled?: boolean
-      syncOnRun?: boolean
-      plugins?: Record<string, {
-        enabled?: boolean
-        scope?: string
-      }>
-    }>
-    | undefined
+  marketplaces: MarketplaceSyncConfig | undefined
 }) => {
   const results: Array<{
     marketplace: string
@@ -62,6 +82,7 @@ export const syncConfiguredMarketplacePlugins = async (params: {
   }> = []
   const marketplaces = Object.entries(params.marketplaces ?? {})
     .sort(([left], [right]) => left.localeCompare(right))
+  assertUniqueMarketplacePluginScopes(params.marketplaces)
 
   for (const [marketplaceName, marketplace] of marketplaces) {
     if (marketplace.enabled === false) continue
@@ -79,9 +100,8 @@ export const syncConfiguredMarketplacePlugins = async (params: {
     for (const [pluginName, plugin] of plugins) {
       if (plugin.enabled === false) continue
 
-      const existingInstall = installs.find((install) => (
-        matchesMarketplaceSource(install.config.source, marketplaceName, pluginName) ||
-        install.config.name === pluginName
+      const existingInstall = installs.find(install => (
+        matchesMarketplaceSource(install.config.source, marketplaceName, pluginName)
       ))
       const desiredScope = plugin.scope?.trim() !== '' ? plugin.scope?.trim() : undefined
       const shouldMigratePluginData = existingInstall == null ? false : await hasLegacyPluginDataTarget(existingInstall)
@@ -101,7 +121,7 @@ export const syncConfiguredMarketplacePlugins = async (params: {
         continue
       }
 
-      await addAdapterPlugin(adapter, {
+      const installed = await addAdapterPlugin(adapter, {
         cwd: params.cwd,
         env: params.env,
         source: `${pluginName}@${marketplaceName}`,
@@ -109,6 +129,9 @@ export const syncConfiguredMarketplacePlugins = async (params: {
         silent: true,
         ...(desiredScope != null ? { scope: desiredScope } : {})
       })
+      if (existingInstall != null && existingInstall.installDir !== installed.installDir) {
+        await rm(existingInstall.installDir, { recursive: true, force: true })
+      }
       results.push({
         marketplace: marketplaceName,
         plugin: pluginName,

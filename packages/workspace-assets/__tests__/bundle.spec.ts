@@ -776,6 +776,70 @@ describe('resolveWorkspaceAssetBundle', () => {
     }
   })
 
+  it('loads installed built-in marketplace plugins without an explicit plugins entry', async () => {
+    const workspace = await createWorkspace()
+    const previousProjectHomeProjectsDir = process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__
+    process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = join(workspace, '.oneworks-projects')
+    const installDir = getManagedPluginInstallDir(
+      workspace,
+      'codex',
+      'openai-plugins--github',
+      process.env
+    )
+    const oneworksDir = join(installDir, 'oneworks')
+
+    try {
+      await writeDocument(
+        join(installDir, '.oneworks-plugin.json'),
+        JSON.stringify({
+          version: 1,
+          adapter: 'codex',
+          name: 'github',
+          scope: 'github-tools',
+          installedAt: new Date().toISOString(),
+          source: {
+            type: 'marketplace',
+            marketplace: 'openai-plugins',
+            plugin: 'github'
+          },
+          nativePluginPath: 'native',
+          oneworksPluginPath: 'oneworks'
+        })
+      )
+      await writeDocument(
+        join(oneworksDir, 'skills/review/SKILL.md'),
+        '---\ndescription: Review GitHub changes\n---\nReview the pull request.'
+      )
+
+      const bundle = await resolveWorkspaceAssetBundle({
+        cwd: workspace,
+        configs: [
+          {
+            marketplaces: {
+              'openai-plugins': {
+                type: 'codex',
+                plugins: { github: { enabled: true, scope: 'github-tools' } }
+              }
+            }
+          },
+          undefined
+        ],
+        useDefaultOneworksMcpServer: false
+      })
+
+      expect(bundle.pluginConfigs).toEqual([
+        { id: oneworksDir, scope: 'github-tools' }
+      ])
+      expect(bundle.skills.map(asset => asset.displayName)).toContain('github-tools/review')
+    } finally {
+      if (previousProjectHomeProjectsDir == null) {
+        delete process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__
+      } else {
+        process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = previousProjectHomeProjectsDir
+      }
+    }
+  })
+
   it('adds the built-in OneWorks MCP server when enabled and omits it when disabled', async () => {
     const workspace = await createWorkspace()
 
@@ -905,6 +969,94 @@ describe('resolveWorkspaceAssetBundle', () => {
 
     expect(bundle.skills).toEqual([])
     expect(bundle.pluginInstances.map(instance => instance.packageId)).toEqual(['@oneworks/plugin-bundle'])
+  })
+
+  it('composes scoped child assets without adding another top-level plugin instance', async () => {
+    const workspace = await createWorkspace()
+
+    await installPluginPackage(workspace, '@oneworks/plugin-demo', {
+      'package.json': JSON.stringify(
+        {
+          name: '@oneworks/plugin-demo',
+          version: '1.0.0'
+        },
+        null,
+        2
+      ),
+      'index.js': [
+        'module.exports = {',
+        '  __oneWorksPluginManifest: true,',
+        '  children: {',
+        '    "standard-dev": {',
+        '      source: { type: "package", id: "@oneworks/plugin-standard-dev" },',
+        '      activation: "optional"',
+        '    }',
+        '  }',
+        '}',
+        ''
+      ].join('\n')
+    })
+    await installPluginPackage(workspace, '@oneworks/plugin-standard-dev', {
+      'package.json': JSON.stringify(
+        {
+          name: '@oneworks/plugin-standard-dev',
+          version: '1.0.0'
+        },
+        null,
+        2
+      ),
+      'skills/standard-dev-flow/SKILL.md': [
+        '---',
+        'name: standard-dev-flow',
+        'description: 标准研发流程',
+        '---',
+        '执行标准研发流程'
+      ].join('\n'),
+      'entities/dev-planner/README.md': [
+        '---',
+        'description: 标准研发规划实体',
+        'skills:',
+        '  - standard-dev-flow',
+        '---',
+        '规划研发任务'
+      ].join('\n')
+    })
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [{
+        plugins: [{
+          id: 'demo',
+          scope: 'demo',
+          children: [{ id: 'standard-dev', scope: 'std' }]
+        }]
+      }, undefined],
+      useDefaultOneworksMcpServer: false
+    })
+
+    expect(bundle.pluginInstances).toHaveLength(1)
+    expect(bundle.pluginInstances[0]).toMatchObject({
+      packageId: '@oneworks/plugin-demo',
+      scope: 'demo'
+    })
+    expect(bundle.pluginInstances[0]?.children).toEqual([
+      expect.objectContaining({
+        packageId: '@oneworks/plugin-standard-dev',
+        scope: 'std'
+      })
+    ])
+    expect(bundle.skills).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        displayName: 'std/standard-dev-flow',
+        packageId: '@oneworks/plugin-standard-dev'
+      })
+    ]))
+    expect(bundle.entities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        displayName: 'std/dev-planner',
+        packageId: '@oneworks/plugin-standard-dev'
+      })
+    ]))
   })
 
   it('lets later config layers disable matching plugin instances by id and scope', async () => {

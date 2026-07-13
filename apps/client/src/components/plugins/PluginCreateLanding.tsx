@@ -29,10 +29,7 @@ type Translate = (key: string, options?: Record<string, string>) => string
 const buildPluginCreationText = (text: string, t: Translate) => {
   const request = text.trim()
   const lowerRequest = request.toLowerCase()
-  if (
-    lowerRequest.includes('create-plugin') ||
-    lowerRequest.includes('plugin-creator')
-  ) {
+  if (lowerRequest.includes('create-plugin')) {
     return request
   }
 

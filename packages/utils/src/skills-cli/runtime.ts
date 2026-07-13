@@ -93,6 +93,7 @@ export const runSkillsCli = async (params: {
   config?: SkillsCliConfig
   cwd: string
   registry?: string
+  timeoutMs?: number
 }) => {
   const command = await resolveSkillsCliCommand({
     cacheCwd: params.cacheCwd,
@@ -111,6 +112,7 @@ export const runSkillsCli = async (params: {
   return await execFileAsync(command.command, [...command.prefixArgs, ...params.args], {
     cwd: params.cwd,
     env,
-    maxBuffer: DEFAULT_MAX_BUFFER
+    maxBuffer: DEFAULT_MAX_BUFFER,
+    ...(params.timeoutMs == null ? {} : { timeout: params.timeoutMs })
   })
 }

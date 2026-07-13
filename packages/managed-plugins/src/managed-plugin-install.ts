@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -81,6 +82,7 @@ export const installAdapterPluginWithInstaller = async <
   try {
     const resolvedSource = await installer.resolveSource?.({
       cwd,
+      env,
       requestedSource: options.source,
       tempDir,
       installSource: (targetDir, source) => installManagedPluginSource(targetDir, cwd, source)
@@ -104,7 +106,11 @@ export const installAdapterPluginWithInstaller = async <
     })
 
     const pluginName = resolvePluginName(installer, pluginRoot, manifest)
-    const pluginSlug = toPluginSlug(pluginName)
+    const pluginSlug = toPluginSlug(
+      managedSource.type === 'marketplace'
+        ? `${managedSource.marketplace}--${pluginName}`
+        : pluginName
+    )
     const installDir = getManagedPluginInstallDir(cwd, installer.adapter, pluginSlug, env)
     const nativePluginDir = path.join(installDir, MANAGED_NATIVE_PLUGIN_DIR)
     const oneworksPluginDir = path.join(installDir, MANAGED_ONEWORKS_PLUGIN_DIR)
@@ -117,42 +123,14 @@ export const installAdapterPluginWithInstaller = async <
     if (installConfigExists && !options.force) {
       throw new Error(`Plugin ${pluginName} is already installed at ${installDir}. Use --force to replace it.`)
     }
-    if (installDirExists) {
-      await Promise.all([
-        fs.rm(nativePluginDir, { recursive: true, force: true }),
-        fs.rm(oneworksPluginDir, { recursive: true, force: true }),
-        fs.rm(managedConfigPath, { force: true })
-      ])
-    }
 
-    await fs.mkdir(installDir, { recursive: true })
-    const shouldRemoveInstallDirOnFailure = !installDirExists
-
-    try {
-      await fs.mkdir(pluginDataDir, { recursive: true })
-      await fs.cp(pluginRoot, nativePluginDir, { recursive: true })
-      await fs.mkdir(oneworksPluginDir, { recursive: true })
-      await installer.convertToOneWorks({
-        nativePluginRoot: nativePluginDir,
-        oneworksRoot: oneworksPluginDir,
-        pluginName,
-        pluginDataDir,
-        manifest
-      })
-    } catch (error) {
-      await Promise.all([
-        fs.rm(nativePluginDir, { recursive: true, force: true }),
-        fs.rm(oneworksPluginDir, { recursive: true, force: true }),
-        fs.rm(managedConfigPath, { force: true })
-      ])
-      if (shouldRemoveInstallDirOnFailure) {
-        await fs.rm(installDir, { recursive: true, force: true })
-      }
-      if (!pluginDataDirExists) {
-        await fs.rm(pluginDataDir, { recursive: true, force: true })
-      }
-      throw error
-    }
+    const installParentDir = path.dirname(installDir)
+    await fs.mkdir(installParentDir, { recursive: true })
+    const stagingDir = await fs.mkdtemp(path.join(installParentDir, '.install-staging-'))
+    const stagingNativePluginDir = path.join(stagingDir, MANAGED_NATIVE_PLUGIN_DIR)
+    const stagingOneworksPluginDir = path.join(stagingDir, MANAGED_ONEWORKS_PLUGIN_DIR)
+    const stagingConfigPath = getManagedPluginConfigPath(stagingDir)
+    const backupDir = path.join(installParentDir, `.install-backup-${randomUUID()}`)
 
     const config = {
       version: 1 as const,
@@ -164,7 +142,53 @@ export const installAdapterPluginWithInstaller = async <
       nativePluginPath: MANAGED_NATIVE_PLUGIN_DIR,
       oneworksPluginPath: MANAGED_ONEWORKS_PLUGIN_DIR
     }
-    await fs.writeFile(managedConfigPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8')
+
+    try {
+      await fs.mkdir(pluginDataDir, { recursive: true })
+      await fs.cp(pluginRoot, stagingNativePluginDir, { recursive: true })
+      await fs.mkdir(stagingOneworksPluginDir, { recursive: true })
+      await installer.convertToOneWorks({
+        nativePluginRoot: stagingNativePluginDir,
+        oneworksRoot: stagingOneworksPluginDir,
+        pluginName,
+        pluginDataDir,
+        manifest
+      })
+      await fs.writeFile(stagingConfigPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8')
+    } catch (error) {
+      await fs.rm(stagingDir, { recursive: true, force: true })
+      if (!pluginDataDirExists) {
+        await fs.rm(pluginDataDir, { recursive: true, force: true })
+      }
+      throw error
+    }
+
+    let existingInstallMoved = false
+    try {
+      if (installDirExists) {
+        await fs.rename(installDir, backupDir)
+        existingInstallMoved = true
+      }
+      await fs.rename(stagingDir, installDir)
+    } catch (error) {
+      await fs.rm(stagingDir, { recursive: true, force: true })
+      if (existingInstallMoved && !await pathExists(installDir)) {
+        await fs.rename(backupDir, installDir)
+      }
+      if (!pluginDataDirExists) {
+        await fs.rm(pluginDataDir, { recursive: true, force: true })
+      }
+      throw error
+    }
+    if (existingInstallMoved) {
+      try {
+        await fs.rm(backupDir, { recursive: true, force: true })
+      } catch (error) {
+        process.stderr.write(
+          `Warning: installed ${pluginName}, but could not remove backup ${backupDir}: ${String(error)}\n`
+        )
+      }
+    }
 
     if (options.silent !== true) {
       writeInstallSummary(

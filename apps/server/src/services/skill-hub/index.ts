@@ -1,2 +1,9 @@
 export { installSkillHubItem, searchSkillHub } from './skills-cli'
-export type { SkillHubInstallResult, SkillHubItem, SkillHubRegistrySummary, SkillHubSearchResult } from './types'
+export { listSkillHubRegistries } from './skills-cli-registry-list'
+export type {
+  SkillHubInstallResult,
+  SkillHubItem,
+  SkillHubRegistriesResult,
+  SkillHubRegistrySummary,
+  SkillHubSearchResult
+} from './types'

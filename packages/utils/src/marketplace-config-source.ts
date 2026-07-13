@@ -1,11 +1,12 @@
 import type {
-  ClaudeCodeMarketplaceConfigEntry,
   ClaudeCodeMarketplaceOptions,
   ClaudeCodeMarketplaceSource,
+  CodexMarketplaceOptions,
   MarketplaceConfig,
   MarketplaceConfigEntry
 } from '@oneworks/types'
 
+import { normalizeCodexAppServerMarketplaceSource } from './marketplace-config-codex-source'
 import { normalizeMarketplaceDeclaredPlugins } from './marketplace-config-declared-plugin'
 import { normalizeMarketplacePluginDefinition } from './marketplace-config-plugin'
 
@@ -124,9 +125,10 @@ const normalizeMarketplaceEntry = (
   }
 
   switch (value.type) {
-    case 'claude-code': {
-      const entry: ClaudeCodeMarketplaceConfigEntry = {
-        type: 'claude-code',
+    case 'claude-code':
+    case 'codex': {
+      const entry: MarketplaceConfigEntry = {
+        type: value.type,
         ...(typeof value.enabled === 'boolean' ? { enabled: value.enabled } : {}),
         ...(typeof value.syncOnRun === 'boolean' ? { syncOnRun: value.syncOnRun } : {})
       }
@@ -140,9 +142,35 @@ const normalizeMarketplaceEntry = (
         if (value.options.source == null) {
           throw new TypeError(`Invalid marketplace entry at ${path}. "options.source" is required.`)
         }
-        entry.options = {
-          source: normalizeClaudeCodeMarketplaceSource(value.options.source, `${path}.options.source`, options)
-        } satisfies ClaudeCodeMarketplaceOptions
+        const codexAppServerSource = value.type === 'codex'
+          ? normalizeCodexAppServerMarketplaceSource(value.options.source, `${path}.options.source`)
+          : undefined
+        if (value.type === 'codex') {
+          const source = codexAppServerSource ?? normalizeClaudeCodeMarketplaceSource(
+            value.options.source,
+            `${path}.options.source`,
+            options
+          )
+          if (
+            source.source !== 'github' &&
+            source.source !== 'git' &&
+            source.source !== 'directory' &&
+            source.source !== 'app-server'
+          ) {
+            throw new TypeError(
+              `Unsupported Codex marketplace source "${source.source}" at ${path}.options.source.`
+            )
+          }
+          entry.options = { source } as CodexMarketplaceOptions
+        } else {
+          entry.options = {
+            source: normalizeClaudeCodeMarketplaceSource(
+              value.options.source,
+              `${path}.options.source`,
+              options
+            )
+          } satisfies ClaudeCodeMarketplaceOptions
+        }
       }
       return entry
     }
@@ -160,7 +188,6 @@ export const normalizeMarketplaceConfig = (
   if (!isRecord(marketplaces)) {
     throw new TypeError(`Invalid ${path} config. "marketplaces" must be a record keyed by marketplace name.`)
   }
-
   return Object.fromEntries(
     Object.entries(marketplaces).map(([name, entry]) => {
       const normalizedName = normalizeNonEmptyString(name)

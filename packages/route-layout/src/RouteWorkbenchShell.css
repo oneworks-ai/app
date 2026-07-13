@@ -160,11 +160,15 @@
 }
 
 @media (max-width: 720px) {
-  .route-workbench-shell {
+  /* HostAppShell owns its responsive transition through
+   * `.host-app-shell--compact`; do not force its desktop shell into the
+   * direct RouteWorkbenchShell stacked layout at a different breakpoint. */
+  .route-workbench-shell:not(.host-app-shell) {
     flex-direction: column;
   }
 
-  .route-workbench-shell__sidebar-region {
+  .route-workbench-shell:not(.host-app-shell)
+    > .route-workbench-shell__sidebar-region {
     width: 100%;
     min-width: 0;
     height: auto;
@@ -172,7 +176,9 @@
     flex-basis: auto;
   }
 
-  .route-workbench-shell__sidebar {
+  .route-workbench-shell:not(.host-app-shell)
+    > .route-workbench-shell__sidebar-region
+    > .route-workbench-shell__sidebar {
     width: 100%;
     min-width: 0;
     min-height: auto;
@@ -181,16 +187,19 @@
     border-bottom: 1px solid var(--route-workbench-sidebar-border);
   }
 
-  .route-workbench-shell__sidebar-nav {
+  .route-workbench-shell:not(.host-app-shell)
+    .route-workbench-shell__sidebar-nav {
     display: flex;
     overflow-x: auto;
   }
 
-  .route-workbench-shell__sidebar-item {
+  .route-workbench-shell:not(.host-app-shell)
+    .route-workbench-shell__sidebar-item {
     flex: 0 0 auto;
   }
 
-  .route-workbench-shell__sidebar-footer {
+  .route-workbench-shell:not(.host-app-shell)
+    .route-workbench-shell__sidebar-footer {
     display: none;
   }
 }

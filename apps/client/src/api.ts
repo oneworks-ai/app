@@ -145,11 +145,13 @@ export type {
 export type {
   SkillHubConfigSource,
   SkillHubInstallResult,
+  SkillHubInstallTarget,
   SkillHubItem,
+  SkillHubRegistriesResult,
   SkillHubRegistrySummary,
   SkillHubSearchResult
 } from './api/skill-hub'
-export { installSkillHubItem, searchSkillHub } from './api/skill-hub'
+export { installSkillHubItem, listSkillHubRegistries, searchSkillHub } from './api/skill-hub'
 
 // 基础响应类型与会话交互类型
 export type { ApiOkResponse, ApiRemoveResponse, SessionInteraction, SessionMessagesResponse } from './api/types'

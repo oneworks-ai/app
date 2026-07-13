@@ -98,7 +98,7 @@ export function PluginReadmeSection({
   }
 
   return (
-    <section className='plugin-detail-route__readme'>
+    <section className={`plugin-detail-route__readme${readmeOptions.length > 1 ? ' has-language-selector' : ''}`}>
       {showTitle && (
         <div className='plugin-detail-route__title-row'>
           <div className='plugin-detail-route__title-main'>

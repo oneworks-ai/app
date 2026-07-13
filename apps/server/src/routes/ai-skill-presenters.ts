@@ -1,7 +1,7 @@
 import { relative } from 'node:path'
 
 import { resolveDefinitionName, resolveDocumentDescription } from '@oneworks/definition-core'
-import type { ConfigSource, Definition, DefinitionSource, Skill } from '@oneworks/types'
+import type { ConfigSource, Definition, DefinitionSource, NativeHostSkill, Skill } from '@oneworks/types'
 
 const toRelativePath = (absolutePath: string, cwd: string) => {
   const rel = relative(cwd, absolutePath)
@@ -62,4 +62,21 @@ export const presentSkillDetail = (
 ) => ({
   ...presentSkill(skill, cwd, sourceDetail),
   body: skill.body ?? ''
+})
+
+export const presentNativeHostSkill = (skill: NativeHostSkill) => ({
+  id: `native:${skill.id}`,
+  name: skill.name,
+  description: skill.description ?? '',
+  always: false,
+  source: skill.scope === 'global' ? 'home' as const : 'project' as const,
+  sourceDetail: {
+    kind: skill.scope === 'global' ? 'home' as const : 'projectDefault' as const,
+    configLabel: `${skill.adapter} · ${skill.source.displayPath ?? skill.source.id}`
+  }
+})
+
+export const presentNativeHostSkillDetail = (skill: NativeHostSkill) => ({
+  ...presentNativeHostSkill(skill),
+  body: skill.body
 })

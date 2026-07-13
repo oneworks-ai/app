@@ -130,7 +130,7 @@ describe('syncConfiguredMarketplacePlugins', () => {
   it('installs declared marketplace plugins into project home when missing', async () => {
     const { workspace } = await createMarketplaceWorkspace()
     loadAdapterPluginInstallerMock.mockResolvedValue(mockInstaller)
-    const installDir = getManagedPluginInstallDir(workspace, 'claude', 'reviewer', process.env)
+    const installDir = getManagedPluginInstallDir(workspace, 'claude', 'team-tools--reviewer', process.env)
 
     const results = await syncConfiguredMarketplacePlugins({
       cwd: workspace,
@@ -162,7 +162,9 @@ describe('syncConfiguredMarketplacePlugins', () => {
     ).resolves.toContain('"scope": "review"')
     await expect(stat(path.join(installDir, 'data'))).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(
-      stat(resolveProjectHomePath(workspace, process.env, '.local', 'plugins', 'claude', 'reviewer', 'data'))
+      stat(
+        resolveProjectHomePath(workspace, process.env, '.local', 'plugins', 'claude', 'team-tools--reviewer', 'data')
+      )
     ).resolves.toEqual(expect.objectContaining({ isDirectory: expect.any(Function) }))
     await expect(stat(path.join(workspace, '.oo/plugins/reviewer'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
@@ -170,7 +172,7 @@ describe('syncConfiguredMarketplacePlugins', () => {
   it('updates declared marketplace plugins on run when syncOnRun is enabled', async () => {
     const { workspace, pluginSourceDir } = await createMarketplaceWorkspace({ syncOnRun: true })
     loadAdapterPluginInstallerMock.mockResolvedValue(mockInstaller)
-    const installDir = getManagedPluginInstallDir(workspace, 'claude', 'reviewer', process.env)
+    const installDir = getManagedPluginInstallDir(workspace, 'claude', 'team-tools--reviewer', process.env)
 
     await syncConfiguredMarketplacePlugins({
       cwd: workspace,
@@ -211,5 +213,26 @@ describe('syncConfiguredMarketplacePlugins', () => {
     await expect(
       readFile(path.join(installDir, 'oneworks/skills/review/SKILL.md'), 'utf8')
     ).resolves.toContain('Review from marketplace v2')
+  })
+
+  it('rejects duplicate runtime scopes before installing marketplace plugins', async () => {
+    const { workspace } = await createMarketplaceWorkspace()
+    loadAdapterPluginInstallerMock.mockResolvedValue(mockInstaller)
+
+    await expect(syncConfiguredMarketplacePlugins({
+      cwd: workspace,
+      marketplaces: {
+        'team-tools': {
+          type: 'claude-code',
+          plugins: { reviewer: { scope: 'review' } }
+        },
+        'other-tools': {
+          type: 'claude-code',
+          plugins: { auditor: { scope: 'review' } }
+        }
+      }
+    })).rejects.toThrow(/scope "review" is declared by both/i)
+
+    expect(loadAdapterPluginInstallerMock).not.toHaveBeenCalled()
   })
 })

@@ -1,8 +1,11 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import process from 'node:process'
 
 import { loadMarketplaceCatalogFromSource } from '@oneworks/adapter-claude-code/plugins'
+import { loadCodexMarketplaceCatalogFromSource } from '@oneworks/adapter-codex/plugins'
+import type { CodexMarketplacePluginDefinition } from '@oneworks/adapter-codex/plugins'
 import { installManagedPluginSource } from '@oneworks/managed-plugins'
 import type {
   ClaudeCodeMarketplacePluginDefinition,
@@ -13,14 +16,19 @@ import type {
   PluginMarketplaceCatalogPlugin,
   PluginMarketplaceCatalogResponse,
   PluginMarketplaceCatalogSource,
-  PluginMarketplaceConfigSource,
-  PluginMarketplacePluginSourceType
+  PluginMarketplaceConfigSource
 } from '@oneworks/types'
+import { mergeMarketplaceConfigs } from '@oneworks/utils'
 
 import { loadConfigState } from '#~/services/config/index.js'
 
-const configSourceOrder: PluginMarketplaceConfigSource[] = ['user', 'project', 'global']
+import { BUILT_IN_PLUGIN_MARKETPLACES } from './built-in-marketplaces'
+import { getPluginSourceSummary, resolveMarketplacePluginVersion, toCatalogPlugin } from './marketplace-catalog-view'
+import { getMarketplacePluginVersionKey, publishMarketplacePluginVersionSources } from './marketplace-version-resolver'
+import type { MarketplacePluginVersionSourceMap } from './marketplace-version-resolver'
 
+const configSourceOrder: PluginMarketplaceConfigSource[] = ['user', 'project', 'global']
+const installedSourceOrder: PluginMarketplaceConfigSource[] = ['global', 'project', 'user']
 const getMarketplaces = (config: Config | undefined): MarketplaceConfig => config?.marketplaces ?? {}
 
 const getMarketplaceConfigSource = (
@@ -28,72 +36,27 @@ const getMarketplaceConfigSource = (
   key: string
 ) => configSourceOrder.find(source => sources[source][key] != null)
 
-const toStringList = (value: string | string[] | undefined) => (
-  typeof value === 'string'
-    ? [value]
-    : value
-)
+const getPluginInstalledSources = (
+  sources: Record<PluginMarketplaceConfigSource, MarketplaceConfig>,
+  marketplaceKey: string,
+  pluginName: string
+) =>
+  installedSourceOrder.filter((source) => {
+    const marketplace = sources[source][marketplaceKey]
+    const plugin = marketplace?.plugins?.[pluginName]
+    return marketplace?.enabled !== false && plugin != null && plugin.enabled !== false
+  })
 
 const toErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
 
-const getPluginSourceSummary = (
-  source: ClaudeCodeMarketplacePluginSource
-): { label: string; type: PluginMarketplacePluginSourceType } => {
-  if (typeof source === 'string') {
-    return { label: source, type: 'path' }
-  }
-
-  switch (source.source) {
-    case 'github':
-      return { label: source.repo, type: 'github' }
-    case 'git-subdir':
-      return {
-        label: [source.url, source.path].filter(Boolean).join(' · '),
-        type: 'git-subdir'
-      }
-    case 'npm':
-      return {
-        label: source.version != null ? `${source.package}@${source.version}` : source.package,
-        type: 'npm'
-      }
-    case 'url':
-      return { label: source.url, type: 'url' }
-  }
-}
-
-const toCatalogPlugin = (params: {
-  configSource?: PluginMarketplaceConfigSource
-  marketplace: MarketplaceConfigEntry
-  marketplaceKey: string
-  marketplaceTitle?: string
-  plugin: ClaudeCodeMarketplacePluginDefinition
-}): PluginMarketplaceCatalogPlugin => {
-  const pluginConfig = params.marketplace.plugins?.[params.plugin.name]
-  const source = getPluginSourceSummary(params.plugin.source)
-  const enabled = params.marketplace.enabled !== false && pluginConfig != null && pluginConfig.enabled !== false
-  return {
-    marketplace: params.marketplaceKey,
-    marketplaceEnabled: params.marketplace.enabled !== false,
-    name: params.plugin.name,
-    declared: pluginConfig != null,
-    enabled,
-    sourceType: source.type,
-    sourceLabel: source.label,
-    ...(params.configSource != null ? { configSource: params.configSource } : {}),
-    ...(params.marketplaceTitle != null ? { marketplaceTitle: params.marketplaceTitle } : {}),
-    ...(params.plugin.description != null ? { description: params.plugin.description } : {}),
-    ...(params.plugin.version != null ? { version: params.plugin.version } : {}),
-    ...(toStringList(params.plugin.skills) != null ? { skills: toStringList(params.plugin.skills) } : {}),
-    ...(toStringList(params.plugin.commands) != null ? { commands: toStringList(params.plugin.commands) } : {}),
-    ...(toStringList(params.plugin.agents) != null ? { agents: toStringList(params.plugin.agents) } : {})
-  }
-}
-
 const loadMarketplacePlugins = async (params: {
+  builtIn: boolean
   configSource?: PluginMarketplaceConfigSource
   cwd: string
   key: string
   marketplace: MarketplaceConfigEntry
+  sourceConfigs: Record<PluginMarketplaceConfigSource, MarketplaceConfig>
+  versionSources: MarketplacePluginVersionSourceMap
 }): Promise<{
   plugins: PluginMarketplaceCatalogPlugin[]
   source: PluginMarketplaceCatalogSource
@@ -103,6 +66,8 @@ const loadMarketplacePlugins = async (params: {
     return {
       plugins: [],
       source: {
+        builtIn: params.builtIn,
+        entry: params.marketplace,
         key: params.key,
         type: params.marketplace.type,
         enabled: params.marketplace.enabled !== false,
@@ -115,38 +80,76 @@ const loadMarketplacePlugins = async (params: {
 
   const tempDir = await mkdtemp(path.join(tmpdir(), 'oneworks-marketplace-'))
   try {
-    const { catalog } = await loadMarketplaceCatalogFromSource(
-      tempDir,
-      source,
-      params.key,
-      (targetDir, managedSource) => installManagedPluginSource(targetDir, params.cwd, managedSource)
-    )
-    const plugins = catalog.plugins
-      .map(plugin =>
-        toCatalogPlugin({
+    const installSource = (targetDir: string, managedSource: Parameters<typeof installManagedPluginSource>[2]) =>
+      installManagedPluginSource(targetDir, params.cwd, managedSource)
+    const loaded = params.marketplace.type === 'codex'
+      ? await loadCodexMarketplaceCatalogFromSource(
+        tempDir,
+        params.marketplace.options!.source,
+        params.key,
+        installSource,
+        { cwd: params.cwd, env: process.env }
+      )
+      : await loadMarketplaceCatalogFromSource(
+        tempDir,
+        params.marketplace.options!.source,
+        params.key,
+        installSource
+      )
+    const marketplaceTitle = 'title' in loaded.catalog
+      ? loaded.catalog.title ?? loaded.catalog.name
+      : loaded.catalog.name
+    const plugins = loaded.catalog.plugins
+      .map((plugin) => {
+        const codexPlugin = plugin as CodexMarketplacePluginDefinition
+        const pluginSource = params.marketplace.type === 'codex'
+          ? codexPlugin.source.source === 'local'
+            ? { label: codexPlugin.source.path, type: 'path' as const }
+            : {
+              label: `${codexPlugin.source.marketplace} · ${codexPlugin.source.pluginId}`,
+              type: 'remote' as const
+            }
+          : getPluginSourceSummary((plugin as ClaudeCodeMarketplacePluginDefinition).source)
+        if (params.marketplace.type === 'claude-code') {
+          params.versionSources.set(
+            getMarketplacePluginVersionKey(params.key, plugin.name),
+            (plugin as ClaudeCodeMarketplacePluginDefinition).source
+          )
+        }
+        return toCatalogPlugin({
+          builtIn: params.builtIn,
+          source: pluginSource,
           configSource: params.configSource,
           marketplace: params.marketplace,
           marketplaceKey: params.key,
-          marketplaceTitle: catalog.name,
+          marketplaceTitle,
+          installedSources: getPluginInstalledSources(params.sourceConfigs, params.key, plugin.name),
+          version: params.marketplace.type === 'codex'
+            ? plugin.version
+            : resolveMarketplacePluginVersion(plugin as ClaudeCodeMarketplacePluginDefinition),
           plugin
         })
-      )
+      })
       .sort((left, right) => left.name.localeCompare(right.name))
     return {
       plugins,
       source: {
+        builtIn: params.builtIn,
+        entry: params.marketplace,
         key: params.key,
         type: params.marketplace.type,
         enabled: params.marketplace.enabled !== false,
         pluginCount: plugins.length,
         ...(params.configSource != null ? { configSource: params.configSource } : {}),
-        ...(catalog.name != null ? { title: catalog.name } : {})
+        ...(marketplaceTitle != null ? { title: marketplaceTitle } : {})
       }
     }
   } catch (error) {
     return {
       plugins: [],
       source: {
+        builtIn: params.builtIn,
+        entry: params.marketplace,
         key: params.key,
         type: params.marketplace.type,
         enabled: params.marketplace.enabled !== false,
@@ -161,28 +164,37 @@ const loadMarketplacePlugins = async (params: {
 }
 
 export const listPluginMarketplaceCatalog = async (): Promise<PluginMarketplaceCatalogResponse> => {
-  const { globalConfig, mergedConfig, projectConfig, userConfig, workspaceFolder } = await loadConfigState()
+  const versionSources = new Map<string, ClaudeCodeMarketplacePluginSource>()
+  const { globalSource, mergedConfig, projectSource, userSource, workspaceFolder } = await loadConfigState()
   const sourceConfigs: Record<PluginMarketplaceConfigSource, MarketplaceConfig> = {
-    global: getMarketplaces(globalConfig),
-    project: getMarketplaces(projectConfig),
-    user: getMarketplaces(userConfig)
+    global: getMarketplaces(globalSource?.resolvedConfig),
+    project: getMarketplaces(projectSource?.resolvedConfig),
+    user: getMarketplaces(userSource?.resolvedConfig)
   }
-  const marketplaces = Object.entries(getMarketplaces(mergedConfig))
+  const effectiveMarketplaces = mergeMarketplaceConfigs(
+    BUILT_IN_PLUGIN_MARKETPLACES,
+    getMarketplaces(mergedConfig)
+  ) ?? BUILT_IN_PLUGIN_MARKETPLACES
+  const marketplaces = Object.entries(effectiveMarketplaces)
     .sort(([left], [right]) => left.localeCompare(right))
 
   const results = await Promise.all(
     marketplaces.map(([key, marketplace]) =>
       loadMarketplacePlugins({
+        builtIn: BUILT_IN_PLUGIN_MARKETPLACES[key] != null,
         configSource: getMarketplaceConfigSource(sourceConfigs, key),
         cwd: workspaceFolder,
         key,
-        marketplace
+        marketplace,
+        sourceConfigs,
+        versionSources
       })
     )
   )
 
   return {
     plugins: results.flatMap(result => result.plugins),
-    sources: results.map(result => result.source)
+    sources: results.map(result => result.source),
+    versionGeneration: publishMarketplacePluginVersionSources(versionSources)
   }
 }
