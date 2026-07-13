@@ -11,7 +11,7 @@ import process from 'node:process'
 const PROTOCOL_VERSION = 1
 const MAX_REQUEST_BYTES = 2 * 1024 * 1024
 const MAX_ARTIFACT_BYTES = 50 * 1024 * 1024
-export const CHROME_EXTENSION_ID = 'lkelihcemfdhmkedmfhpoihoelochpab'
+export const CHROME_EXTENSION_ID = 'eiikbhfmjohfcldcmgjikafpmpbfipbi'
 const MAX_AUDIT_ENTRIES = 500
 const COMMAND_TIMEOUT_MS = 35_000
 const POLL_TIMEOUT_MS = 25_000

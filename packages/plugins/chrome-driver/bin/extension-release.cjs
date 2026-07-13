@@ -54,7 +54,7 @@ const releasePermissionPolicy = {
 }
 
 const supportedReleaseFlavors = new Set(['base', 'privileged'])
-const stableExtensionId = 'lkelihcemfdhmkedmfhpoihoelochpab'
+const stableExtensionId = 'eiikbhfmjohfcldcmgjikafpmpbfipbi'
 
 const extensionIdForKey = (key) => {
   const decoded = Buffer.from(key, 'base64')

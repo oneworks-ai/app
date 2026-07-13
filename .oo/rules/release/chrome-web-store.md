@@ -8,14 +8,14 @@
 2. 在 Chrome Web Store Developer Dashboard 的 Account 设置中添加该 service account。Chrome 当前每个 publisher 只允许添加一个 service account。
 3. 创建只信任 GitHub OIDC 的 Workload Identity Pool / Provider。attribute condition 至少限制 `assertion.repository == 'oneworks-ai/app'`，service-account IAM binding 只向该 repository principal 授予 `roles/iam.workloadIdentityUser`。因为 workflow 需要让 `google-github-actions/auth` 输出 OAuth access token，还要按该 action 的前置条件让 underlying service account 对自身拥有 `roles/iam.serviceAccountTokenCreator`；不要把 Token Creator 授给 GitHub principal。
 4. 创建 GitHub environment `chrome-web-store`。Release Tags 仅在 main 首次创建 Chrome Driver tag 时传入 `publish_store=true`；workflow 的商店 job 必须经过该 environment，重跑已有 tag 默认不重复提交商店。
-5. 首次在 Developer Dashboard 创建 item，完成 Store listing、Privacy、测试说明和可见性，并至少手动建立可由 API 更新的发布状态。打开 Package > View public key，确认它与仓库 manifest 的 `key` 相同且 Item ID 是 `lkelihcemfdhmkedmfhpoihoelochpab`；若不一致，必须先用商店公钥更新仓库 canonical identity、服务端 allowlist 和相关测试，不能启用发布 workflow。API workflow 只更新已有 item。
+5. 首次在 Developer Dashboard 创建 item，完成 Store listing、Privacy、测试说明和可见性，并至少手动建立可由 API 更新的发布状态。打开 Package > View public key，确认它与仓库 manifest 的 `key` 相同且 Item ID 是 `eiikbhfmjohfcldcmgjikafpmpbfipbi`；若不一致，必须先用商店公钥更新仓库 canonical identity、服务端 allowlist 和相关测试，不能启用发布 workflow。API workflow 只更新已有 item。
 
 仓库 Actions variables：
 
 - `CHROME_WEB_STORE_WIF_PROVIDER`：完整 provider resource name，例如 `projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`。
 - `CHROME_WEB_STORE_SERVICE_ACCOUNT`：已加入 Developer Dashboard 的 service-account email。
 - `CHROME_WEB_STORE_PUBLISHER_ID`：Developer Dashboard Publisher > Settings 中的 publisher ID。
-- `CHROME_WEB_STORE_EXTENSION_ID`：正式开发者扩展的 item ID，当前必须是 `lkelihcemfdhmkedmfhpoihoelochpab`；不能指向其他 item，minimal/E2E 也不能作为上传源。发布脚本会在任何网络请求前将它与 ZIP 公钥派生 ID 交叉校验，并要求包具备 audited `debugger` / `proxy` 权限。
+- `CHROME_WEB_STORE_EXTENSION_ID`：正式开发者扩展的 item ID，当前必须是 `eiikbhfmjohfcldcmgjikafpmpbfipbi`；不能指向其他 item，minimal/E2E 也不能作为上传源。发布脚本会在任何网络请求前将它与 ZIP 公钥派生 ID 交叉校验，并要求包具备 audited `debugger` / `proxy` 权限。
 
 service-account self-binding 只需配置一次（替换 project 与账号）：
 

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2VDB3EjSqQI/yqxORyULLFccXlkk+as6Z6ODfY+NJojoMzRPFJMkJWG9DkUlR/B3TGuaVdxGoOgb1DdAtR1UDTt8q/JD7JdlBHDF+seTX7RgD0dLHNrv/KOLrM/D0+3aUVjkOAJ8jKhiCcK1Zx3+lnK/r9CPj0YcGBH7GA8u+wOoL7k02s1HyH7QFrSYzyA7VASgj3+RB1P43ytzs5s7WWJ4Pvhutuur0NYlmXLgik8it5y5zhoHgvrpNNViZUMecyCW1RrPBwRf3lvziU+wSfqbPp9jHKvBkWWdHL8DFSjN6hubKUK2MgF3WkGU+f10Lnlfh6R8DbN/10uH+6tFmQIDAQAB",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqfj8ViP2E3kusrLx7s12ONWkm0WJUhEjW3X2oSHUEGBz81RIv+IT3MhPPYQyrBuQCAmdWo36oHaIzGpngqGvOQHhEopDZbY9QdGTI3pFmSa0nD1UJ6nP/0SGGUb3W0W+//SI3ppe+vxB+WTbPRauHkYErxbIXwk23EQLwR9A9/IWOHdNlhSjQxR4u+G9A+Kn6fZLxltTZApo8z3HvaULd68NRCODGDeivIgN/Kln0QKTaa61GPIgDqDz8lrVnEWF7QVpIoR27LgMKBf9FhGfWzNYWHW6Gvis/WPKZAlDMC46VV52CBTwuqQg0marZffNDwQYrZ0cwIwyYMKc8EWTYQIDAQAB",
   "name": "oneWorks External Browser (Minimal)",
   "version": "0.1.0",
   "description": "Minimal-permission flavor for paired, typed, auditable oneWorks browser control.",

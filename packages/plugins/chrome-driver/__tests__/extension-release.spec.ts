@@ -14,6 +14,7 @@ const require = createRequire(import.meta.url)
 const release = require('../bin/extension-release.cjs') as {
   archiveFileName: (flavor: 'base' | 'privileged', version?: string) => string
   chromeVersionFor: (version: string) => string
+  extensionIdForKey: (key: string) => string
   stableExtensionId: string
 }
 const packager = require('../bin/package-extension.cjs') as {
@@ -64,6 +65,14 @@ afterEach(() => {
 })
 
 describe('external browser extension release packaging', () => {
+  it('keeps every manifest flavor on the canonical Store identity', () => {
+    const pluginRoot = resolve(import.meta.dirname, '..')
+    for (const fileName of ['manifest.json', 'manifest.privileged.json', 'manifest.e2e.json']) {
+      const manifest = JSON.parse(readFileSync(join(pluginRoot, 'extension', fileName), 'utf8'))
+      expect(release.extensionIdForKey(manifest.key)).toBe(CHROME_EXTENSION_ID)
+    }
+  })
+
   it('maps package prerelease versions to monotonic Chrome versions', () => {
     expect(release.chromeVersionFor('0.1.0-alpha.5')).toBe('0.1.0.10005')
     expect(release.chromeVersionFor('0.1.0-beta.5')).toBe('0.1.0.20005')
