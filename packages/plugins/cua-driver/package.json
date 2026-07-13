@@ -22,6 +22,7 @@
   "files": [
     "README.en.md",
     "README.md",
+    "assets",
     "bin",
     "mcp",
     "plugin.json",

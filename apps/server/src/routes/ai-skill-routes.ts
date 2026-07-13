@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- skill routes keep list, detail, create, and import semantics together. */
 import { basename, relative } from 'node:path'
 import process from 'node:process'
 
@@ -8,13 +9,23 @@ import type { DefinitionLoader } from '@oneworks/definition-loader'
 import type { ConfigSource, Definition, Skill } from '@oneworks/types'
 import { normalizeProjectSkillInstall, resolveConfiguredSkillInstalls, resolveProjectOoPath } from '@oneworks/utils'
 
-import { importSkillArchive } from '#~/services/ai/skill-archive-import.js'
+import {
+  importSkillArchive,
+  normalizeSkillArchiveImportForce,
+  normalizeSkillArchiveImportTarget
+} from '#~/services/ai/skill-archive-import.js'
 import { createProjectSkill } from '#~/services/ai/skill-create.js'
 import { loadConfigState } from '#~/services/config/index.js'
+import { listNativeHostSkills } from '#~/services/plugins/native-host.js'
 import { badRequest, internalServerError, isHttpError, notFound } from '#~/utils/http.js'
 
 import { matchesDefinitionPath } from './ai-presenters.js'
-import { presentSkill, presentSkillDetail } from './ai-skill-presenters.js'
+import {
+  presentNativeHostSkill,
+  presentNativeHostSkillDetail,
+  presentSkill,
+  presentSkillDetail
+} from './ai-skill-presenters.js'
 import type { PresentedSkillSourceDetail } from './ai-skill-presenters.js'
 
 const resolveProjectSkillDirName = (workspaceRoot: string, skillPath: string) => {
@@ -111,21 +122,39 @@ export const registerAiSkillRoutes = (router: Router, params: {
 }) => {
   router.get('/skills', async (ctx) => {
     try {
-      const skills = await params.loader.loadDefaultSkills()
+      const [skills, nativeSkills] = await Promise.all([
+        params.loader.loadDefaultSkills(),
+        listNativeHostSkills()
+      ])
       const sourceMaps = await loadSkillSourceMaps(params.workspaceRoot)
+      const presentedSkills = skills.map((skill: Definition<Skill>) =>
+        presentSkill(
+          skill,
+          params.workspaceRoot,
+          resolvePresentedSkillSourceDetail({
+            ...sourceMaps,
+            skill,
+            workspaceRoot: params.workspaceRoot
+          })
+        )
+      )
+      const seen = new Set(presentedSkills.map(skill => (
+        `${skill.source === 'home' ? 'global' : 'project'}\0${skill.name}`
+      )))
+      const presentedNativeSkills = nativeSkills.skills
+        .map(presentNativeHostSkill)
+        .filter((skill) => {
+          const key = `${skill.source === 'home' ? 'global' : 'project'}\0${skill.name}`
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
 
       ctx.body = {
-        skills: skills.map((skill: Definition<Skill>) =>
-          presentSkill(
-            skill,
-            params.workspaceRoot,
-            resolvePresentedSkillSourceDetail({
-              ...sourceMaps,
-              skill,
-              workspaceRoot: params.workspaceRoot
-            })
-          )
-        )
+        skills: [
+          ...presentedSkills,
+          ...presentedNativeSkills
+        ]
       }
     } catch (err) {
       throw internalServerError('Failed to load skills', { cause: err, code: 'ai_skills_load_failed' })
@@ -150,7 +179,17 @@ export const registerAiSkillRoutes = (router: Router, params: {
 
   router.post('/skills/import', async (ctx) => {
     const archiveName = ctx.get('x-file-name')
-    ctx.body = await importSkillArchive(params.workspaceRoot, ctx.req, archiveName)
+    const targetHeader = ctx.get('x-skill-target')
+    const forceHeader = ctx.get('x-skill-force')
+    const target = normalizeSkillArchiveImportTarget(targetHeader)
+    const force = normalizeSkillArchiveImportForce(forceHeader)
+    if (target == null) {
+      throw badRequest('Invalid skill import target', { target: targetHeader }, 'invalid_skill_import_target')
+    }
+    if (force == null) {
+      throw badRequest('Invalid skill import force flag', { force: forceHeader }, 'invalid_skill_import_force')
+    }
+    ctx.body = await importSkillArchive(params.workspaceRoot, ctx.req, archiveName, target, { force })
   })
 
   router.get('/skills/detail', async (ctx) => {
@@ -160,26 +199,34 @@ export const registerAiSkillRoutes = (router: Router, params: {
     }
 
     try {
-      const skills = await params.loader.loadDefaultSkills()
+      const [skills, nativeSkills] = await Promise.all([
+        params.loader.loadDefaultSkills(),
+        listNativeHostSkills()
+      ])
       const sourceMaps = await loadSkillSourceMaps(params.workspaceRoot)
       const skill = skills.find((item: Definition<Skill>) => (
         matchesDefinitionPath(item, targetPath, params.workspaceRoot)
       ))
 
-      if (!skill) {
+      const nativeSkill = targetPath.startsWith('native:')
+        ? nativeSkills.skills.find(item => `native:${item.id}` === targetPath)
+        : undefined
+      if (!skill && nativeSkill == null) {
         throw notFound('Skill not found', { path: targetPath }, 'skill_not_found')
       }
 
       ctx.body = {
-        skill: presentSkillDetail(
-          skill,
-          params.workspaceRoot,
-          resolvePresentedSkillSourceDetail({
-            ...sourceMaps,
-            skill,
-            workspaceRoot: params.workspaceRoot
-          })
-        )
+        skill: nativeSkill == null
+          ? presentSkillDetail(
+            skill as Definition<Skill>,
+            params.workspaceRoot,
+            resolvePresentedSkillSourceDetail({
+              ...sourceMaps,
+              skill: skill as Definition<Skill>,
+              workspaceRoot: params.workspaceRoot
+            })
+          )
+          : presentNativeHostSkillDetail(nativeSkill)
       }
     } catch (err) {
       if (isHttpError(err)) throw err

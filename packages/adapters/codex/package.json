@@ -82,9 +82,28 @@
         "require": "./dist/hook-bridge.js"
       }
     },
+    "./plugins": {
+      "__oneworks__": {
+        "default": "./src/plugins/index.ts"
+      },
+      "default": {
+        "import": "./dist/plugins/index.mjs",
+        "require": "./dist/plugins/index.js"
+      }
+    },
+    "./native-plugins": {
+      "__oneworks__": {
+        "default": "./src/native-plugins/index.ts"
+      },
+      "default": {
+        "import": "./dist/native-plugins/index.mjs",
+        "require": "./dist/native-plugins/index.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "dependencies": {
+    "@oneworks/adapter-claude-code": "workspace:*",
     "@oneworks/config": "workspace:*",
     "@oneworks/core": "workspace:*",
     "@oneworks/hooks": "workspace:*",

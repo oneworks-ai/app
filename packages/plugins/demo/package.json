@@ -24,6 +24,9 @@
     "build:client": "tsc -p client/tsconfig.json --noEmit && vite build --config client/vite.config.ts",
     "build:server": "tsc -p server/tsconfig.json"
   },
+  "dependencies": {
+    "@oneworks/plugin-standard-dev": "workspace:*"
+  },
   "devDependencies": {
     "vite": "^5.4.8"
   }

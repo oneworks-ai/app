@@ -1,4 +1,4 @@
-import type { SkillHubConfigSource, SkillHubItem, SkillSummary } from '#~/api.js'
+import type { SkillHubConfigSource, SkillSummary } from '#~/api.js'
 
 export interface RegistryFormValues {
   configSource: SkillHubConfigSource
@@ -23,6 +23,9 @@ export const ALL_SKILL_SOURCES = 'all'
 
 export type SkillHubInstallFilter = 'all' | 'installed' | 'notInstalled'
 export type SkillHubSortKey = 'default' | 'nameAsc' | 'nameDesc'
+export type ProjectSkillScope = 'all' | 'project' | 'global'
+
+export const PROJECT_SKILLS_PAGE_SIZE = 20
 
 export const isSkillHubInstallFilter = (value: string): value is SkillHubInstallFilter => (
   value === 'all' || value === 'installed' || value === 'notInstalled'
@@ -105,31 +108,22 @@ export const filterProjectSkills = (skills: SkillSummary[], query: string) => {
   })
 }
 
-export const getSkillHubItemSource = (item: SkillHubItem) => item.source
-
-export const filterAndSortSkillHubItems = (
-  items: SkillHubItem[],
-  options: {
-    sourceFilter: string
-    installFilter: SkillHubInstallFilter
-    sortKey: SkillHubSortKey
-  }
-) => {
-  const filtered = items.filter((item) => {
-    if (options.sourceFilter !== ALL_SKILL_SOURCES && getSkillHubItemSource(item) !== options.sourceFilter) {
-      return false
-    }
-    if (options.installFilter === 'installed' && !item.installed) return false
-    if (options.installFilter === 'notInstalled' && item.installed) return false
-    return true
+export const filterProjectSkillsByScope = (
+  skills: SkillSummary[],
+  scope: ProjectSkillScope
+) =>
+  skills.filter((skill) => {
+    if (scope === 'all') return true
+    const isGlobal = skill.sourceDetail.kind === 'globalConfig' || skill.sourceDetail.kind === 'home'
+    return scope === 'global' ? isGlobal : !isGlobal
   })
 
-  switch (options.sortKey) {
-    case 'nameAsc':
-      return [...filtered].sort((left, right) => left.name.localeCompare(right.name))
-    case 'nameDesc':
-      return [...filtered].sort((left, right) => right.name.localeCompare(left.name))
-    case 'default':
-      return filtered
-  }
+export const paginateProjectSkills = (
+  skills: SkillSummary[],
+  page: number,
+  pageSize = PROJECT_SKILLS_PAGE_SIZE
+) => {
+  const normalizedPage = Math.max(1, page)
+  const offset = (normalizedPage - 1) * pageSize
+  return skills.slice(offset, offset + pageSize)
 }

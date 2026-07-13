@@ -436,6 +436,7 @@ export const skillRegistryPublishConfigSchema = z.object({
 export const configuredSkillRegistrySchema = z.object({
   title: z.string().optional().describe('Display title'),
   description: z.string().optional().describe('Display description'),
+  enabled: z.boolean().optional().describe('Whether this skills registry is enabled'),
   source: z.string().min(1).describe('Skills CLI source path used for listing and installing skills'),
   registry: z.string().optional().describe('npm registry used to install the managed skills CLI'),
   publish: skillRegistryPublishConfigSchema.optional().describe(
@@ -577,6 +578,11 @@ const marketplaceSourceSchema = z.union([
     path: z.string().min(1)
   }),
   z.object({
+    source: z.literal('app-server'),
+    marketplace: z.string().min(1),
+    includeRemoteCatalog: z.boolean().optional()
+  }),
+  z.object({
     source: z.literal('url'),
     url: z.string().min(1)
   }),
@@ -605,7 +611,7 @@ const marketplaceDeclaredPluginConfigSchema = z.union([
 export const marketplaceConfigSchema = z.record(
   z.string(),
   z.object({
-    type: z.literal('claude-code'),
+    type: z.union([z.literal('claude-code'), z.literal('codex')]),
     enabled: z.boolean().optional(),
     syncOnRun: z.boolean().optional(),
     plugins: z.record(z.string(), marketplaceDeclaredPluginConfigSchema).optional(),

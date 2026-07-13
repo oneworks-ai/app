@@ -64,6 +64,29 @@ pnpm add -D @oneworks/plugin-standard-dev @oneworks/plugin-logger
 - `options`: 可选。当前插件实例的配置值；插件详情页的「配置」tab 会把交互表单保存回这里
 - `children`: 可选。显式启用或覆写 child plugin
 
+## 插件名称与图标规范
+
+每个 One Works plugin 都必须在顶层 manifest 提供稳定机器名和完整展示元数据：
+
+```json
+{
+  "name": "@acme/plugin-workspace-tools",
+  "displayName": "Workspace Tools",
+  "displayNameI18n": {
+    "en": "Workspace Tools",
+    "zh-Hans": "工作区工具"
+  },
+  "icon": "./assets/icon.svg"
+}
+```
+
+- `displayName` 是英文兼容兜底，不能用 npm package id 代替。
+- `displayNameI18n` 至少包含非空的 `en` 与 `zh-Hans`；插件列表、详情标题与搜索会使用这些名称。
+- `icon` 指向 plugin 根目录内的相对图片或 SVG。禁止绝对路径、空路径和 `..` 父级穿越。
+- 推荐把图标放在 `assets/icon.svg`。宿主会优先展示插件图标；旧插件没有图标时才生成稳定的字母图标。
+
+使用插件创建页或仓库内 `create-plugin` skill 生成新插件时，这四个展示字段属于必填项。
+
 ## 插件实例配置
 
 插件作者可以在 manifest 的 `config` 字段里声明配置结构。用户仍然在项目配置的

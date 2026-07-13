@@ -3,6 +3,7 @@ import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
+import { setTimeout as delay } from 'node:timers/promises'
 
 import { describe, expect, it } from 'vitest'
 
@@ -408,6 +409,106 @@ describe('updateConfigFile', () => {
       }
       await rm(primaryDir, { recursive: true, force: true })
       await rm(worktreeDir, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves an existing project config symlink when updating its target', async () => {
+    if (process.platform === 'win32') {
+      return
+    }
+
+    const workspaceDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-update-symlink-workspace-'))
+    const configDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-update-symlink-config-'))
+
+    try {
+      const targetPath = path.join(configDir, 'project-config.json')
+      const configPath = path.join(workspaceDir, '.oo.config.json')
+      await writeFile(targetPath, JSON.stringify({ defaultModel: 'old-model' }))
+      await symlink(targetPath, configPath)
+
+      const result = await updateConfigFile({
+        workspaceFolder: workspaceDir,
+        source: 'project',
+        section: 'general',
+        value: {
+          defaultModel: 'new-model'
+        }
+      })
+
+      expect(result.configPath).toBe(configPath)
+      expect((await lstat(configPath)).isSymbolicLink()).toBe(true)
+      expect(JSON.parse(await readFile(targetPath, 'utf-8'))).toEqual({
+        defaultModel: 'new-model'
+      })
+    } finally {
+      await rm(workspaceDir, { recursive: true, force: true })
+      await rm(configDir, { recursive: true, force: true })
+    }
+  })
+
+  it('serializes config updates that reach the same target through an ancestor symlink', async () => {
+    if (process.platform === 'win32') {
+      return
+    }
+
+    const workspaceDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-update-canonical-workspace-'))
+    const aliasRoot = await mkdtemp(path.join(os.tmpdir(), 'ow-config-update-canonical-alias-'))
+    const aliasWorkspace = path.join(aliasRoot, 'workspace')
+    let releaseFirst: () => void = () => undefined
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    let firstEnteredResolve: () => void = () => undefined
+    const firstEntered = new Promise<void>((resolve) => {
+      firstEnteredResolve = resolve
+    })
+    let secondEntered = false
+    let firstUpdate: Promise<unknown> | undefined
+    let secondUpdate: Promise<unknown> | undefined
+
+    try {
+      await writeFile(path.join(workspaceDir, '.oo.config.json'), '{}')
+      await symlink(workspaceDir, aliasWorkspace)
+
+      firstUpdate = updateConfigFile({
+        workspaceFolder: workspaceDir,
+        source: 'project',
+        section: 'general',
+        resolveValue: async () => {
+          firstEnteredResolve()
+          await firstGate
+          return { defaultModelService: 'first-service' }
+        }
+      })
+      await firstEntered
+
+      secondUpdate = updateConfigFile({
+        workspaceFolder: aliasWorkspace,
+        source: 'project',
+        section: 'general',
+        resolveValue: (currentConfig) => {
+          secondEntered = true
+          return {
+            defaultModel: currentConfig.defaultModelService === 'first-service' ? 'second-model' : 'stale-model'
+          }
+        }
+      })
+      await delay(25)
+      expect(secondEntered).toBe(false)
+
+      releaseFirst()
+      await Promise.all([firstUpdate, secondUpdate])
+      expect(JSON.parse(await readFile(path.join(workspaceDir, '.oo.config.json'), 'utf8'))).toEqual({
+        defaultModelService: 'first-service',
+        defaultModel: 'second-model'
+      })
+    } finally {
+      releaseFirst()
+      await Promise.allSettled(
+        [firstUpdate, secondUpdate].filter((promise): promise is Promise<unknown> => promise != null)
+      )
+      await rm(aliasRoot, { recursive: true, force: true })
+      await rm(workspaceDir, { recursive: true, force: true })
     }
   })
 

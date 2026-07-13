@@ -6,21 +6,29 @@ import { useTranslation } from 'react-i18next'
 import type { EntitySummary } from '#~/api.js'
 import { EmptyState } from './EmptyState'
 import { EntityItem } from './EntityItem'
-import { KnowledgeList } from './KnowledgeList'
 import { LoadingState } from './LoadingState'
+import { PaginatedKnowledgeList } from './PaginatedKnowledgeList'
 
 interface EntityListProps {
+  currentPage: number
   isLoading: boolean
   entities: EntitySummary[]
   filteredEntities: EntitySummary[]
-  onCreate: () => void
+  resetKey: string
+  total: number
+  onCreate?: () => void
+  onPageChange: (page: number) => void
 }
 
 export function EntityList({
+  currentPage,
   isLoading,
   entities,
   filteredEntities,
-  onCreate
+  resetKey,
+  total,
+  onCreate,
+  onPageChange
 }: EntityListProps) {
   const { t } = useTranslation()
 
@@ -36,9 +44,12 @@ export function EntityList({
     return (
       <div className='knowledge-base-view__entity-list'>
         <EmptyState
-          description={t('knowledge.entities.empty')}
-          actionLabel={t('knowledge.entities.create')}
+          description={onCreate == null
+            ? t('knowledge.filters.emptyScope')
+            : t('knowledge.entities.empty')}
+          actionLabel={onCreate == null ? undefined : t('knowledge.entities.create')}
           onAction={onCreate}
+          variant={onCreate == null ? 'simple' : undefined}
         />
       </div>
     )
@@ -57,13 +68,17 @@ export function EntityList({
 
   return (
     <div className='knowledge-base-view__entity-list'>
-      <KnowledgeList
+      <PaginatedKnowledgeList
+        currentPage={currentPage}
         data={filteredEntities}
+        resetKey={resetKey}
         renderItem={(entity) => (
           <List.Item className='knowledge-base-view__list-item'>
             <EntityItem entity={entity} />
           </List.Item>
         )}
+        total={total}
+        onPageChange={onPageChange}
       />
     </div>
   )

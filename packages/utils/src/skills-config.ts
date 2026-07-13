@@ -30,6 +30,7 @@ const normalizeConfiguredSkillRegistry = (
 
   return {
     source,
+    ...(value.enabled == null ? {} : { enabled: value.enabled }),
     ...(title == null ? {} : { title }),
     ...(description == null ? {} : { description }),
     ...(registry == null ? {} : { registry }),

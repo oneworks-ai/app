@@ -98,10 +98,18 @@ export function AppRoutes() {
             path='/automation'
             element={<AutomationRoute />}
           />
-          <Route path='/knowledge' element={<KnowledgeRoute />} />
+          <Route path='/knowledge/*' element={<KnowledgeRoute />} />
           <Route path='/modules' element={<ModuleManagementRoute />} />
           <Route path='/config/*' element={<ConfigRoute />} />
           <Route path='/plugins' element={<PluginStoreRoute />} />
+          <Route path='/plugins/list' element={<PluginStoreRoute />} />
+          <Route path='/plugins/store' element={<PluginStoreRoute />} />
+          <Route path='/plugins/create' element={<PluginStoreRoute />} />
+          <Route path='/plugins/list/:scope/diagnostics' element={<PluginStoreRoute />} />
+          <Route path='/plugins/list/:scope' element={<PluginStoreRoute />} />
+          <Route path='/plugins/store/:scope/diagnostics' element={<PluginStoreRoute />} />
+          <Route path='/plugins/store/:scope' element={<PluginStoreRoute />} />
+          <Route path='/plugins/:scope/diagnostics' element={<PluginStoreRoute />} />
           <Route path='/plugins/:scope' element={<PluginStoreRoute />} />
           <Route path='/plugins/:scope/:routeId/*' element={<PluginRoute />} />
           <Route path='/launcher/*' element={<Navigate to='/' replace />} />

@@ -67,6 +67,12 @@ const writeDirectoryPlugin = async (
 ) => {
   await mkdir(join(pluginRoot, 'hooks'), { recursive: true })
   const manifest = {
+    displayName: 'Workspace Tools',
+    displayNameI18n: {
+      en: 'Workspace Tools',
+      'zh-Hans': '工作区工具'
+    },
+    icon: './assets/icon.svg',
     name: 'workspace-tools',
     plugin: {
       client: { entry: './client/index.js' },
@@ -403,6 +409,21 @@ describe('plugin resolver', () => {
       './client/index.js',
       './client/index.js'
     ])
+    expect(instances[0]?.manifest).toMatchObject({
+      displayName: 'Workspace Tools',
+      displayNameI18n: {
+        en: 'Workspace Tools',
+        'zh-Hans': '工作区工具'
+      },
+      icon: './assets/icon.svg'
+    })
+    expect(instances[3]?.manifest).toMatchObject({
+      displayNameI18n: {
+        en: 'Workspace Tools',
+        'zh-Hans': '工作区工具'
+      },
+      icon: './assets/icon.svg'
+    })
   })
 
   it('allows plugin server roles to be declared before package exports fill the entry', async () => {
@@ -579,6 +600,94 @@ describe('plugin resolver', () => {
       rootDir: managedPlugin,
       scope: 'managed'
     })
+  })
+
+  it('loads enabled managed marketplace plugins into runtime config', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    const env = {
+      __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1',
+      __ONEWORKS_PROJECT_REAL_HOME__: join(tempDir, 'home')
+    }
+    const managedInstall = getManagedPluginInstallDir(workspace, 'codex', 'openai-plugins--github', env)
+    const managedPlugin = join(managedInstall, 'oneworks')
+    await Promise.all([
+      writeDirectoryPlugin(managedPlugin),
+      mkdir(managedInstall, { recursive: true })
+    ])
+    await writeFile(
+      join(managedInstall, '.oneworks-plugin.json'),
+      JSON.stringify({
+        version: 1,
+        adapter: 'codex',
+        name: 'github',
+        scope: 'github-tools',
+        installedAt: '2026-01-01T00:00:00.000Z',
+        source: { type: 'marketplace', marketplace: 'openai-plugins', plugin: 'github' },
+        nativePluginPath: 'native',
+        oneworksPluginPath: 'oneworks'
+      })
+    )
+
+    await expect(resolveRuntimePluginConfig({
+      cwd: workspace,
+      env,
+      marketplaces: {
+        'openai-plugins': {
+          type: 'codex',
+          plugins: { github: { enabled: true } }
+        }
+      }
+    })).resolves.toEqual([{ id: managedPlugin, scope: 'github-tools' }])
+
+    await expect(resolveRuntimePluginConfig({
+      cwd: workspace,
+      env,
+      marketplaces: {
+        'openai-plugins': {
+          type: 'codex',
+          enabled: false,
+          plugins: { github: { enabled: true } }
+        }
+      }
+    })).resolves.toBeUndefined()
+
+    const secondInstall = getManagedPluginInstallDir(workspace, 'claude', 'claude-official--github', env)
+    const secondPlugin = join(secondInstall, 'oneworks')
+    await Promise.all([
+      writeDirectoryPlugin(secondPlugin),
+      mkdir(secondInstall, { recursive: true })
+    ])
+    await writeFile(
+      join(secondInstall, '.oneworks-plugin.json'),
+      JSON.stringify({
+        version: 1,
+        adapter: 'claude',
+        name: 'github',
+        scope: 'github-tools',
+        installedAt: '2026-01-01T00:00:00.000Z',
+        source: { type: 'marketplace', marketplace: 'claude-official', plugin: 'github' },
+        nativePluginPath: 'native',
+        oneworksPluginPath: 'oneworks'
+      })
+    )
+
+    await expect(resolveRuntimePluginConfig({
+      cwd: workspace,
+      env,
+      marketplaces: {
+        'openai-plugins': {
+          type: 'codex',
+          plugins: { github: { enabled: true } }
+        },
+        'claude-official': {
+          type: 'claude-code',
+          plugins: { github: { enabled: true } }
+        }
+      }
+    })).rejects.toThrow(/scope "github-tools" is used by both/i)
   })
 
   it('lets explicit config replace an auto-discovered plugin by resolved root even when scope differs', async () => {

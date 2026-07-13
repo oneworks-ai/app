@@ -1,6 +1,7 @@
+import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { lstat, mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
-import { dirname, extname, resolve } from 'node:path'
+import { lstat, mkdir, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises'
+import { basename, dirname, extname, resolve } from 'node:path'
 import process from 'node:process'
 
 import type { Config, ConfigSource } from '@oneworks/types'
@@ -10,18 +11,31 @@ import {
   resolveProjectConfigDir,
   resolveProjectWorkspaceFolder
 } from '@oneworks/utils'
+import { withDirectoryInstallLock } from '@oneworks/utils/install-lock'
 import { dump, load } from 'js-yaml'
 
 import { resetConfigCache, resolveGlobalConfigDir } from './load'
 
 export type { ConfigSource } from '@oneworks/types'
 
-export interface UpdateConfigFileOptions {
+interface UpdateConfigFileBaseOptions {
   workspaceFolder?: string
   source: ConfigSource
   section: string
-  value: unknown
 }
+
+export type UpdateConfigFileOptions =
+  & UpdateConfigFileBaseOptions
+  & (
+    | {
+      resolveValue?: never
+      value: unknown
+    }
+    | {
+      resolveValue: (currentConfig: Config) => Promise<unknown> | unknown
+      value?: never
+    }
+  )
 
 const sensitiveHeaderKeys = new Set([
   'authorization',
@@ -121,6 +135,58 @@ const prepareWritableConfigPath = async (configPath: string, hasExisting: boolea
     await unlink(configPath)
   }
   await mkdir(dirname(configPath), { recursive: true })
+}
+
+const writeConfigFileAtomic = async (targetPath: string, content: string, hasExisting: boolean) => {
+  const mode = hasExisting ? (await stat(targetPath)).mode : 0o600
+  const tempPath = `${targetPath}.${process.pid}.${randomUUID()}.tmp`
+  try {
+    await writeFile(tempPath, content, { encoding: 'utf8', flag: 'wx', mode })
+    await rename(tempPath, targetPath)
+  } finally {
+    await rm(tempPath, { force: true }).catch(() => undefined)
+  }
+}
+
+const resolveCanonicalWriteTarget = async (configPath: string) => {
+  try {
+    return await realpath(configPath)
+  } catch (error) {
+    if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')) throw error
+  }
+
+  const missingSegments = [basename(configPath)]
+  let parentPath = dirname(configPath)
+  while (true) {
+    try {
+      return resolve(await realpath(parentPath), ...missingSegments)
+    } catch (error) {
+      if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')) throw error
+      const nextParent = dirname(parentPath)
+      if (nextParent === parentPath) throw error
+      missingSegments.unshift(basename(parentPath))
+      parentPath = nextParent
+    }
+  }
+}
+
+const withCanonicalConfigWriteLock = async <T>(
+  configPath: string,
+  callback: (targetPath: string) => Promise<T>
+) => {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const targetPath = await resolveCanonicalWriteTarget(configPath)
+    const result = await withDirectoryInstallLock({
+      lockDir: `${targetPath}.oneworks-write-lock`
+    }, async () => {
+      const lockedTargetPath = await resolveCanonicalWriteTarget(configPath)
+      return lockedTargetPath === targetPath
+        ? { retry: false as const, value: await callback(targetPath) }
+        : { retry: true as const }
+    })
+    if (!result.retry) return result.value
+  }
+  throw new Error(`Config write target changed repeatedly while waiting for its lock: ${configPath}`)
 }
 
 const mergeMaskedValues = (incoming: unknown, existing: unknown): unknown => {
@@ -409,26 +475,30 @@ const updateConfigSection = (config: Config, section: string, value: unknown): C
 }
 
 export const updateConfigFile = async (options: UpdateConfigFileOptions) => {
-  const writeError = resolveConfigSectionWriteError(options.source, options.section, options.value)
-  if (writeError != null) {
-    throw new Error(writeError)
-  }
-
   const workspaceFolder = options.workspaceFolder ?? process.cwd()
   const configPath = resolveWritableConfigPath(workspaceFolder, options.source)
-  const format = extname(configPath).toLowerCase()
-  const hasExisting = existsSync(configPath)
-  const existingContent = hasExisting ? await readFile(configPath, 'utf-8') : ''
-  const existingConfig = hasExisting ? parseConfigContent(format, existingContent) : {}
-  const updatedConfig = updateConfigSection(existingConfig as Config, options.section, options.value)
+  return withCanonicalConfigWriteLock(configPath, async (targetPath) => {
+    const format = extname(configPath).toLowerCase()
+    const hasExisting = existsSync(configPath)
+    const existingContent = hasExisting ? await readFile(targetPath, 'utf-8') : ''
+    const existingConfig = hasExisting ? parseConfigContent(format, existingContent) : {}
+    const value = options.resolveValue == null
+      ? options.value
+      : await options.resolveValue(existingConfig as Config)
+    const writeError = resolveConfigSectionWriteError(options.source, options.section, value)
+    if (writeError != null) {
+      throw new Error(writeError)
+    }
+    const updatedConfig = updateConfigSection(existingConfig as Config, options.section, value)
 
-  await prepareWritableConfigPath(configPath, hasExisting)
-  await writeFile(
-    configPath,
-    serializeConfigContent(format, updatedConfig as Record<string, unknown>),
-    'utf-8'
-  )
+    await prepareWritableConfigPath(configPath, hasExisting)
+    await writeConfigFileAtomic(
+      targetPath,
+      serializeConfigContent(format, updatedConfig as Record<string, unknown>),
+      hasExisting
+    )
 
-  resetConfigCache()
-  return { configPath, updatedConfig }
+    resetConfigCache()
+    return { configPath, updatedConfig }
+  })
 }

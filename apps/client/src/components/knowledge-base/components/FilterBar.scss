@@ -6,26 +6,25 @@
   flex-shrink: 0;
 }
 
-.knowledge-base-view__filter-input {
-  flex: 1;
-  min-width: 220px;
-}
-
 .knowledge-base-view__filter-select {
   min-width: 220px;
   flex: 0 1 280px;
 }
 
-.knowledge-base-view__filter-icon {
-  font-size: 14px;
-  color: var(--sub-text-color);
-}
-
-.knowledge-base-view__filter-input .ant-input-affix-wrapper,
 .knowledge-base-view__filter-select .ant-select-selector {
   height: 30px !important;
   border-radius: 6px !important;
   background: var(--bg-color);
+}
+
+.knowledge-base-view__scope-filter-panel {
+  padding: 0 0 var(--subpage-tertiary-padding);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.knowledge-base-view__scope-filter-panel .knowledge-base-view__filter-select {
+  flex: 1 1 100%;
+  width: 100%;
 }
 
 .knowledge-base-view__filter-select .ant-select-selector {

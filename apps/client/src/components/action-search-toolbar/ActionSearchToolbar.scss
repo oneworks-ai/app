@@ -1,17 +1,20 @@
 .action-search-toolbar {
   flex: 0 0 auto;
   min-width: 0;
-  min-height: 44px;
   display: flex;
   align-items: center;
   gap: var(--subpage-tertiary-gap, 10px);
   padding: 0 var(--subpage-tertiary-padding, 10px);
 }
 
+.action-search-toolbar--flush {
+  padding-inline: 0;
+}
+
 .action-search-toolbar__search.ant-input-affix-wrapper {
   flex: 1 1 auto;
   min-width: 0;
-  height: 44px;
+  height: auto;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -28,6 +31,7 @@
 
   .ant-input {
     background: transparent;
+    line-height: var(--route-container-header-content-height, 18px);
   }
 
   .ant-input-suffix:empty {
@@ -42,44 +46,28 @@
 }
 
 .action-search-toolbar__actions {
+  --route-container-header-icon-size: var(--app-chrome-icon-size, 18px);
+  --route-container-header-icon-button-size: var(
+    --route-container-header-icon-size
+  );
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
 
-.action-search-toolbar__button.ant-btn {
+.action-search-toolbar__action {
   position: relative;
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
-  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 0;
-  border-radius: 7px;
-  color: var(--sub-text-color);
-  background: transparent;
-  box-shadow: none;
-
-  &:hover,
-  &:focus-visible,
-  &.is-active {
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 14%, transparent);
-  }
-
-  .material-symbols-rounded {
-    font-size: 18px;
-  }
 }
 
-.action-search-toolbar__button.has-indicator::after {
+.action-search-toolbar__action.has-indicator::after {
   content: '';
   position: absolute;
-  top: 5px;
-  right: 5px;
+  top: -1px;
+  right: -1px;
   width: 6px;
   height: 6px;
   border-radius: 999px;

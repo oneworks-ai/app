@@ -2,6 +2,16 @@
   "__oneWorksPluginManifest": true,
   "name": "@oneworks/plugin-demo-extension",
   "displayName": "Plugin Demo Extension",
+  "displayNameI18n": {
+    "en": "Plugin Demo Extension",
+    "zh-Hans": "插件示例扩展"
+  },
+  "description": "An extension companion that contributes actions and commands to Plugin Demo.",
+  "descriptionI18n": {
+    "en": "An extension companion that contributes actions and commands to Plugin Demo.",
+    "zh-Hans": "向插件示例贡献操作与命令的配套扩展。"
+  },
+  "icon": "./assets/icon.svg",
   "version": "0.1.0",
   "plugin": {
     "contributions": {

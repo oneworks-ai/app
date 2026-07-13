@@ -80,6 +80,15 @@
         "require": "./dist/plugins/index.js"
       }
     },
+    "./native-plugins": {
+      "__oneworks__": {
+        "default": "./src/native-plugins/index.ts"
+      },
+      "default": {
+        "import": "./dist/native-plugins/index.mjs",
+        "require": "./dist/native-plugins/index.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "dependencies": {

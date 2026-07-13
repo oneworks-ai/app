@@ -17,6 +17,11 @@
   overflow: hidden;
 }
 
+.plugin-store-route.has-content-inset
+  .plugin-store-route__body.is-runtime-list {
+  padding-top: var(--route-container-header-overlay-height, 39px);
+}
+
 .plugin-store-route__content {
   position: relative;
   flex: 1 1 auto;
@@ -32,7 +37,11 @@
 .plugin-store-route__main {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
+
+  &.is-plugin-detail {
+    overflow: hidden;
+  }
 
   .plugin-detail-route__content {
     height: 100%;
@@ -56,26 +65,18 @@
   z-index: 2;
 }
 
-.plugin-store-route__diagnostic-badge {
-  position: absolute;
-  right: 18px;
-  top: 12px;
+.plugin-store-route__diagnostics-action {
+  position: relative;
   display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 24px;
-  padding: 0 7px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--bg-color);
-  color: var(--sub-text-color);
-  font-size: 12px;
-  font-weight: 600;
-  pointer-events: none;
-  z-index: 2;
+}
 
-  .material-symbols-rounded {
-    color: var(--warning-color);
-    font-size: 18px;
-  }
+.plugin-store-route__diagnostics-action.has-indicator::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  right: -2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--warning-color);
 }

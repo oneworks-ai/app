@@ -105,6 +105,8 @@ description: 当用户想创建或改造 OneWorks plugin，实现界面入口、
 每个用户可见贡献项都要写清楚名称和说明：
 
 - `id` 是稳定机器标识，短横线命名，不展示给用户当说明。
+- plugin 顶层 manifest 必须同时声明 `displayName`、`displayNameI18n.en`、`displayNameI18n.zh-Hans` 和 `icon`。`displayName` 是兼容旧宿主的英文兜底；宿主优先显示当前语言的 `displayNameI18n`。
+- `icon` 必须指向 plugin 根目录内的相对资产（推荐 `./assets/icon.svg`），禁止绝对路径和 `..` 穿越。优先设计简洁、深浅主题都清晰的 SVG，不要用宿主固定的 `extension` 图标冒充插件自己的品牌图标。
 - `title` 是兜底文案；同时写 `titleI18n.en` 和 `titleI18n.zh-Hans`。
 - 宿主会统一把 contribution 的 `titleI18n` / `descriptionI18n` 解析成当前应用语言；不要在左侧导航、菜单、workbench 等宿主 slot 里自己判断浏览器语言。
 - `descriptionI18n.en` 和 `descriptionI18n.zh-Hans` 描述这个入口点击后做什么、展示在哪里、是否调用命令或 server。
@@ -128,6 +130,7 @@ README 多语言规则：
 packages/plugins/<plugin-name>/
   package.json
   plugin.json
+  assets/icon.svg
   README.md
   README.zh-Hans.md
   client/src/index.tsx
@@ -175,6 +178,11 @@ packages/plugins/<plugin-name>/
   "__oneWorksPluginManifest": true,
   "name": "@local/plugin-example",
   "displayName": "Plugin Example",
+  "displayNameI18n": {
+    "en": "Plugin Example",
+    "zh-Hans": "插件示例"
+  },
+  "icon": "./assets/icon.svg",
   "version": "0.1.0",
   "config": {
     "schema": {
@@ -390,6 +398,7 @@ export function activatePlugin(ctx) {
 实现后按影响面验证：
 
 - `GET /api/plugins` 能看到 plugin、scope、贡献项和诊断。
+- `GET /api/plugins` 中能看到 `displayName`、`displayNameI18n` 与 `icon`；切换中文/英文后插件列表与详情标题使用对应名称，图标资产请求返回成功。
 - `/plugins` 插件商店能看到 plugin；`/plugins/<scope>` 详情能看到 README、entry、contributions、runtime 注册项和 watch 开关。
 - 点击每个入口验证真实效果：左侧入口、菜单项、chat header、`+` 菜单、创建/关闭 workbench tab、launcher 搜索。
 - 验证 `workbenchAddMenu.tab` 创建的是新 tab 实例，不是常驻 tab。

@@ -2,6 +2,20 @@
 
 这是从 `@oneworks/plugin-demo` 加载的内置 workspace 插件。它保持尽量小，但会覆盖插件详情页需要展示的几类信息：README 多语言版本、点位名称、点位描述以及点位搜索。
 
+该包也把 `@oneworks/plugin-standard-dev` 声明为可选子能力。项目可以在保持插件示例为唯一顶层运行时实例的同时，以 `std` scope 启用标准研发资产：
+
+```json
+{
+  "id": "@oneworks/plugin-demo",
+  "scope": "demo",
+  "children": [
+    { "id": "standard-dev", "scope": "std" }
+  ]
+}
+```
+
+这样既不会在运行时和侧栏暴露第二个顶层插件，也会继续兼容 `std/standard-dev-flow` 和 `std/dev-*` 等既有标识。
+
 它演示了这些入口：
 
 - 左侧导航路由：`/plugins/demo/home`

@@ -54,7 +54,6 @@ type PluginOverviewLabelKey =
   | 'clientDevEntry'
   | 'clientEntry'
   | 'disabled'
-  | 'enabled'
   | 'overview'
   | 'package'
   | 'request'
@@ -62,7 +61,6 @@ type PluginOverviewLabelKey =
   | 'root'
   | 'serverEntry'
   | 'version'
-  | 'watch'
 
 export type PluginOverviewLabels = Record<PluginOverviewLabelKey, string>
 
@@ -404,41 +402,14 @@ export function PluginFact({ icon, label, value }: PluginFactProps) {
 }
 
 export function PluginOverview({
-  enabledHint,
-  enabledLoading,
   labels,
-  onEnabledChange,
-  onWatchChange,
-  plugin,
-  watchHint,
-  watchLoading
+  plugin
 }: {
-  enabledHint: string
-  enabledLoading: boolean
   labels: PluginOverviewLabels
-  onEnabledChange: (enabled: boolean) => void
-  onWatchChange: (enabled: boolean) => void
   plugin: PluginRuntimeInstance
-  watchHint: string
-  watchLoading: boolean
 }) {
   return (
     <section className='plugin-detail-route__overview'>
-      <div className='plugin-detail-route__title-row'>
-        <div className='plugin-detail-route__title-main'>
-          <MaterialSymbol name='info' aria-hidden='true' />
-          <h2>{labels.overview}</h2>
-        </div>
-        {plugin.enabled === false && (
-          <div className='plugin-detail-route__title-tags'>
-            <Tooltip title={labels.disabled}>
-              <span className='plugin-detail-route__scope-icon is-danger' aria-label={labels.disabled}>
-                <MaterialSymbol name='close' aria-hidden='true' />
-              </span>
-            </Tooltip>
-          </div>
-        )}
-      </div>
       <div className='plugin-detail-route__facts'>
         <PluginFact icon='deployed_code' label={labels.version} value={plugin.version} />
         <PluginFact icon='download' label={labels.requestedVersion} value={plugin.requestedVersion} />
@@ -453,35 +424,6 @@ export function PluginOverview({
         />
         <PluginFact icon='terminal' label={labels.serverEntry} value={plugin.manifest?.plugin?.server?.entry} />
       </div>
-      <Tooltip title={enabledHint}>
-        <span className='plugin-detail-route__watch' aria-label={labels.enabled}>
-          <span className='plugin-detail-route__watch-main'>
-            <MaterialSymbol name={plugin.enabled === false ? 'extension_off' : 'extension'} aria-hidden='true' />
-            <span>{labels.enabled}</span>
-          </span>
-          <Switch
-            aria-label={labels.enabled}
-            checked={plugin.enabled !== false}
-            loading={enabledLoading}
-            onChange={onEnabledChange}
-          />
-        </span>
-      </Tooltip>
-      <Tooltip title={watchHint}>
-        <span className='plugin-detail-route__watch' aria-label={labels.watch}>
-          <span className='plugin-detail-route__watch-main'>
-            <MaterialSymbol name='speed' aria-hidden='true' />
-            <span>{labels.watch}</span>
-          </span>
-          <Switch
-            aria-label={labels.watch}
-            checked={plugin.watch?.enabled === true}
-            disabled={plugin.enabled === false}
-            loading={watchLoading}
-            onChange={onWatchChange}
-          />
-        </span>
-      </Tooltip>
     </section>
   )
 }

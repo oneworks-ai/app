@@ -2,6 +2,11 @@
   "__oneWorksPluginManifest": true,
   "name": "@oneworks/plugin-cua-driver",
   "displayName": "Cua Driver",
+  "displayNameI18n": {
+    "en": "Cua Driver",
+    "zh-Hans": "Cua 驱动"
+  },
+  "icon": "./assets/icon.svg",
   "version": "0.1.0-beta.5",
   "assets": {
     "skills": "skills",

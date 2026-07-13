@@ -539,6 +539,9 @@ importers:
       '@oneworks/adapter-claude-code':
         specifier: workspace:*
         version: link:../../packages/adapters/claude-code
+      '@oneworks/adapter-codex':
+        specifier: workspace:*
+        version: link:../../packages/adapters/codex
       '@oneworks/app-runtime':
         specifier: workspace:*
         version: link:../../packages/app-runtime
@@ -708,6 +711,9 @@ importers:
 
   packages/adapters/codex:
     dependencies:
+      '@oneworks/adapter-claude-code':
+        specifier: workspace:*
+        version: link:../claude-code
       '@oneworks/config':
         specifier: workspace:*
         version: link:../../config
@@ -1081,6 +1087,10 @@ importers:
         version: 4.1.2
 
   packages/plugins/demo:
+    dependencies:
+      '@oneworks/plugin-standard-dev':
+        specifier: workspace:*
+        version: link:../standard-dev
     devDependencies:
       vite:
         specifier: ^5.4.8

@@ -7,6 +7,13 @@ const DEFAULT_LOCK_TIMEOUT_MS = 30_000
 const DEFAULT_LOCK_RETRY_MS = 100
 const LOCK_METADATA_FILENAME = '.oneworks-lock.json'
 
+export class DirectoryInstallLockBusyError extends Error {
+  constructor(public readonly lockDir: string) {
+    super(`Timed out waiting for install lock ${lockDir}`)
+    this.name = 'DirectoryInstallLockBusyError'
+  }
+}
+
 const isProcessAlive = (pid: number) => {
   try {
     process.kill(pid, 0)
@@ -50,9 +57,12 @@ const clearStaleLock = async (lockDir: string, timeoutMs: number) => {
 export const withDirectoryInstallLock = async <T>(params: {
   lockDir: string
   retryMs?: number
+  staleTimeoutMs?: number
   timeoutMs?: number
+  waitTimeoutMs?: number
 }, callback: () => Promise<T>) => {
-  const timeoutMs = params.timeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS
+  const staleTimeoutMs = params.staleTimeoutMs ?? params.timeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS
+  const waitTimeoutMs = params.waitTimeoutMs ?? params.timeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS
   const retryMs = params.retryMs ?? DEFAULT_LOCK_RETRY_MS
   const start = Date.now()
 
@@ -61,18 +71,25 @@ export const withDirectoryInstallLock = async <T>(params: {
   while (true) {
     try {
       await mkdir(params.lockDir)
-      await writeLockMetadata(params.lockDir)
-      break
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
-      if (await clearStaleLock(params.lockDir, timeoutMs)) {
+      if (await clearStaleLock(params.lockDir, staleTimeoutMs)) {
         continue
       }
-      if (Date.now() - start > timeoutMs) {
-        throw new Error(`Timed out waiting for install lock ${params.lockDir}`)
+      if (Date.now() - start >= waitTimeoutMs) {
+        throw new DirectoryInstallLockBusyError(params.lockDir)
       }
       await delay(retryMs)
+      continue
     }
+
+    try {
+      await writeLockMetadata(params.lockDir)
+    } catch (error) {
+      await rm(params.lockDir, { recursive: true, force: true })
+      throw error
+    }
+    break
   }
 
   try {

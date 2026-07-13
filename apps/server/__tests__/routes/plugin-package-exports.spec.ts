@@ -203,15 +203,85 @@ describe('plugin package export conventions', () => {
     )
     await writeFile(
       path.join(pluginRoot, 'plugin.json'),
-      JSON.stringify({ plugin: { server: { roles: ['workspace'] } } }, null, 2)
+      JSON.stringify(
+        {
+          displayName: 'Server Source',
+          displayNameI18n: {
+            en: 'Server Source',
+            'zh-Hans': '服务端源码'
+          },
+          icon: './assets/icon.svg',
+          plugin: { server: { roles: ['workspace'] } }
+        },
+        null,
+        2
+      )
     )
+    const pluginConfig = { id: pluginRoot, scope: 'server-source', watch: true }
     mocks.loadConfigState.mockResolvedValue({
       workspaceFolder,
-      mergedConfig: { plugins: [{ id: pluginRoot, scope: 'server-source', watch: true }] }
+      mergedConfig: { plugins: [pluginConfig] },
+      projectSource: { resolvedConfig: { plugins: [pluginConfig] } }
     })
 
     const commandResponse = await fetch(`${baseUrl}/api/plugins/server-source/commands/ping`, { method: 'POST' })
     await expect(commandResponse.text()).resolves.toBe('pong-source')
+
+    const listResponse = await fetch(`${baseUrl}/api/plugins`)
+    const listPayload = await listResponse.json() as {
+      plugins: Array<{
+        displayNameI18n?: Record<string, string>
+        icon?: string
+        sourceGroup?: string
+      }>
+    }
+    expect(listPayload.plugins[0]).toMatchObject({
+      displayNameI18n: {
+        en: 'Server Source',
+        'zh-Hans': '服务端源码'
+      },
+      icon: './assets/icon.svg',
+      sourceGroup: 'project'
+    })
+  })
+
+  it('keeps bundled official packages in the built-in source group when enabled by project config', async () => {
+    const pluginRoot = path.join(
+      workspaceFolder,
+      'node_modules',
+      '@oneworks',
+      'plugin-logger'
+    )
+    await mkdir(pluginRoot, { recursive: true })
+    await writeFile(
+      path.join(pluginRoot, 'package.json'),
+      JSON.stringify({
+        name: '@oneworks/plugin-logger',
+        version: '0.1.0'
+      })
+    )
+    await writeFile(
+      path.join(pluginRoot, 'plugin.json'),
+      JSON.stringify({
+        displayName: 'Logger',
+        name: '@oneworks/plugin-logger'
+      })
+    )
+    const pluginConfig = { id: '@oneworks/plugin-logger', scope: 'logger' }
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder,
+      mergedConfig: { plugins: [pluginConfig] },
+      projectSource: { resolvedConfig: { plugins: [pluginConfig] } }
+    })
+
+    const listResponse = await fetch(`${baseUrl}/api/plugins`)
+    const listPayload = await listResponse.json() as {
+      plugins: Array<{ packageId?: string; sourceGroup?: string }>
+    }
+    expect(listPayload.plugins[0]).toMatchObject({
+      packageId: '@oneworks/plugin-logger',
+      sourceGroup: 'builtIn'
+    })
   })
 
   it('requires package export server entries to declare runtime roles', async () => {

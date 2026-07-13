@@ -1,22 +1,25 @@
 import { existsSync } from 'node:fs'
 import { readFile, readdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, extname, resolve } from 'node:path'
+import { dirname, extname, isAbsolute, resolve } from 'node:path'
 import process from 'node:process'
 
 import { load as loadYaml } from 'js-yaml'
 
 import type {
+  MarketplaceConfig,
   PluginChildConfig,
   PluginConfig,
   PluginConfigHookManifest,
   PluginInstanceConfig,
   PluginManifest,
   PluginManifestChildDefinition,
+  PluginRuntimeSourceGroup,
   PluginServerRuntimeRole
 } from '@oneworks/types'
 
 import { resolveGlobalOneWorksAssetsPath, resolveProjectOoPath } from './ai-path'
+import { listManagedPluginInstalls } from './managed-plugin'
 import {
   ensureManagedPluginPackage,
   isManagedPluginPackageName,
@@ -131,6 +134,28 @@ const normalizePluginServerManifest = (value: unknown): NonNullable<PluginManife
   return { entry, roles }
 }
 
+const normalizeLocalizedTextMap = (value: unknown) => {
+  if (!isRecord(value)) return undefined
+  const entries = Object.entries(value)
+    .filter((entry): entry is [string, string] => (
+      entry[0].trim() !== '' && typeof entry[1] === 'string' && entry[1].trim() !== ''
+    ))
+    .map(([language, text]) => [language.trim(), text.trim()] as const)
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+const normalizePluginIconPath = (value: unknown) => {
+  if (typeof value !== 'string') return undefined
+  const normalized = value.trim().replaceAll('\\', '/')
+  if (
+    normalized === '' || normalized.includes('\0') || isAbsolute(normalized) ||
+    /^[a-z]:\//iu.test(normalized) || normalized.split('/').includes('..')
+  ) {
+    throw new Error('Plugin manifest icon must be a plugin-root-relative path without parent traversal.')
+  }
+  return normalized
+}
+
 const toPluginManifest = (value: unknown): PluginManifest | undefined => {
   if (!isRecord(value)) return undefined
 
@@ -147,6 +172,20 @@ const toPluginManifest = (value: unknown): PluginManifest | undefined => {
 
   return {
     __oneWorksPluginManifest: true,
+    ...(typeof value.name === 'string' && value.name.trim() !== '' ? { name: value.name.trim() } : {}),
+    ...(typeof value.displayName === 'string' && value.displayName.trim() !== ''
+      ? { displayName: value.displayName.trim() }
+      : {}),
+    ...(normalizeLocalizedTextMap(value.displayNameI18n) != null
+      ? { displayNameI18n: normalizeLocalizedTextMap(value.displayNameI18n) }
+      : {}),
+    ...(typeof value.description === 'string' && value.description.trim() !== ''
+      ? { description: value.description.trim() }
+      : {}),
+    ...(normalizeLocalizedTextMap(value.descriptionI18n) != null
+      ? { descriptionI18n: normalizeLocalizedTextMap(value.descriptionI18n) }
+      : {}),
+    ...(normalizePluginIconPath(value.icon) != null ? { icon: normalizePluginIconPath(value.icon) } : {}),
     ...(normalizeVersion(value.version) != null ? { version: normalizeVersion(value.version) } : {}),
     assets: isRecord(value.assets)
       ? Object.fromEntries(
@@ -234,6 +273,7 @@ export interface ResolvedPluginInstance {
   requestId: string
   packageId?: string
   requestedVersion?: string
+  sourceGroup?: PluginRuntimeSourceGroup
   sourceType: 'package' | 'directory'
   rootDir: string
   enabled?: boolean
@@ -940,15 +980,44 @@ export const discoverRuntimePluginConfigs = async (params: {
 export const resolveRuntimePluginConfig = async (params: {
   cwd: string
   plugins?: PluginConfig
+  marketplaces?: MarketplaceConfig
   env?: Record<string, string | null | undefined>
   disableGlobalConfig?: boolean
   includeDefaultOfficialPlugins?: boolean
 }): Promise<PluginConfig | undefined> => {
   const discovered = await discoverRuntimePluginConfigs(params)
+  const managedMarketplacePlugins: PluginConfig = []
+  const managedMarketplaceScopes = new Map<string, string>()
+  for (
+    const install of await listManagedPluginInstalls(params.cwd, {
+      env: params.env as NodeJS.ProcessEnv | undefined
+    })
+  ) {
+    if (install.config.source.type !== 'marketplace') continue
+    const marketplace = params.marketplaces?.[install.config.source.marketplace]
+    const declaredPlugin = marketplace?.plugins?.[install.config.source.plugin]
+    if (
+      marketplace == null || marketplace.enabled === false || declaredPlugin == null || declaredPlugin.enabled === false
+    ) {
+      continue
+    }
+    const scope = declaredPlugin.scope ?? install.config.scope ?? install.config.name
+    const owner = managedMarketplaceScopes.get(scope)
+    const current = `${install.config.source.plugin}@${install.config.source.marketplace}`
+    if (owner != null) {
+      throw new Error(`Managed marketplace plugin scope "${scope}" is used by both ${owner} and ${current}.`)
+    }
+    managedMarketplaceScopes.set(scope, current)
+    managedMarketplacePlugins.push({
+      id: install.oneworksPluginDir,
+      scope
+    })
+  }
   return mergePluginConfigs(
     [
       ...(shouldIncludeDefaultOfficialPlugins(params) ? DEFAULT_OFFICIAL_PLUGIN_CONFIGS : []),
-      ...discovered.autoDiscovered
+      ...discovered.autoDiscovered,
+      ...managedMarketplacePlugins
     ],
     params.plugins
   )

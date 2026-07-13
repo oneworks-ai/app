@@ -1,6 +1,16 @@
 {
   "name": "@oneworks/plugin-logger",
+  "displayName": "Logger",
+  "displayNameI18n": {
+    "en": "Logger",
+    "zh-Hans": "日志"
+  },
+  "descriptionI18n": {
+    "en": "Structured runtime logging and diagnostics for OneWorks plugins.",
+    "zh-Hans": "为 OneWorks 插件提供结构化运行日志与诊断能力。"
+  },
   "version": "0.1.0-beta.5",
+  "description": "Structured runtime logging and diagnostics for OneWorks plugins.",
   "repository": {
     "type": "git",
     "url": "https://github.com/oneworks-ai/app.git",
@@ -38,6 +48,7 @@
     },
     "./package.json": "./package.json"
   },
+  "icon": "./assets/icon.svg",
   "dependencies": {
     "@oneworks/core": "workspace:*",
     "@oneworks/hooks": "workspace:*",

@@ -22,6 +22,7 @@ export interface AdapterPluginManifest {
 
 export interface AdapterPluginResolveSourceContext {
   cwd: string
+  env: Record<string, string | null | undefined>
   requestedSource: string
   tempDir: string
   installSource: (targetDir: string, source: ManagedPluginSource) => Promise<string>

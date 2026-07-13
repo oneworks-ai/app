@@ -1,0 +1,71 @@
+.plugin-runtime-list {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--subpage-tertiary-gap, 10px);
+  overflow: hidden;
+}
+
+.plugin-runtime-list__scope-tabs > .ant-tabs-nav {
+  margin: 0;
+}
+
+.plugin-runtime-list__scope-tabs > .ant-tabs-nav .ant-tabs-tab {
+  height: auto;
+  min-height: 0;
+  padding: 8px 0;
+}
+
+.plugin-runtime-list__scope-tabs .ant-tabs-tab-btn > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plugin-runtime-list__scope-tabs .material-symbols-rounded {
+  font-size: var(--icon-size, 18px);
+}
+
+.plugin-runtime-list__empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+}
+
+.plugin-runtime-list__native-note {
+  color: var(--sub-text-color);
+  font-size: 11px;
+}
+
+.plugin-runtime-list__status-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 7px;
+  height: 7px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--bg-color);
+  border-radius: 999px;
+  background: var(--sub-text-color);
+  pointer-events: none;
+}
+
+.plugin-runtime-list__type-icon {
+  flex: 0 0
+    var(--marketplace-card-icon-size, var(--app-chrome-icon-size, 18px));
+  font-size: var(
+    --marketplace-card-icon-size,
+    var(--app-chrome-icon-size, 18px)
+  );
+  line-height: 1;
+}
+
+.plugin-runtime-list__status-dot.is-enabled {
+  background: var(--success-color, #52c41a);
+}
+
+.plugin-runtime-list__status-dot.is-disabled,
+.plugin-runtime-list__status-dot.is-unknown {
+  background: var(--disabled-text-color, #8c8c8c);
+}

@@ -25,11 +25,7 @@ import type {
   PluginRuntimeEndpoint,
   PluginServerRuntimeRole
 } from '@oneworks/types'
-import {
-  resolveGlobalOneWorksAssetsPath,
-  resolveGlobalOneWorksDir,
-  resolveProjectOoPath
-} from '@oneworks/utils/ai-path'
+import { resolveGlobalOneWorksDir, resolveProjectOoPath } from '@oneworks/utils/ai-path'
 import type { ResolvedPluginInstance } from '@oneworks/utils/plugin-resolver'
 
 import { loadConfigState } from '#~/services/config/index.js'
@@ -131,6 +127,9 @@ const HOST_VITE_SELF_HANDLED_CLIENT_EXTENSIONS = new Set([
 ])
 const DETAIL_ASSET_GROUPS = [
   { kind: 'skills', defaultPath: 'skills' },
+  { kind: 'entities', defaultPath: 'entities' },
+  { kind: 'specs', defaultPath: 'specs' },
+  { kind: 'rules', defaultPath: 'rules' },
   { kind: 'mcp', defaultPath: 'mcp' },
   { kind: 'hooks', defaultPath: 'hooks', extraFiles: ['hooks.js', 'hooks.mjs', 'hooks.cjs'] }
 ] as const satisfies Array<{
@@ -531,8 +530,6 @@ const isPathInside = (parentPath: string, targetPath: string) => {
     !path.isAbsolute(relativePath)
   )
 }
-
-const resolveGlobalPluginsRoot = () => resolveGlobalOneWorksAssetsPath(process.env, 'plugins')
 
 const readRequestBody = async (request: NodeJS.ReadableStream) => {
   const chunks: Buffer[] = []
@@ -1242,11 +1239,15 @@ export class PluginManager {
           scope,
           name,
           displayName: manifest.displayName,
+          displayNameI18n: manifest.displayNameI18n,
+          description: manifest.description,
+          descriptionI18n: manifest.descriptionI18n,
+          icon: manifest.icon,
           requestedVersion: raw.requestedVersion,
           version: manifest.version,
           requestId: raw.requestId,
           packageId: raw.packageId,
-          sourceGroup: this.resolveSourceGroup(raw, pluginRoot),
+          sourceGroup: raw.sourceGroup ?? 'project',
           watch: {
             enabled: watchEnabled
           },
@@ -1280,37 +1281,6 @@ export class PluginManager {
 
   private getConfigPlugins(config: { plugins?: unknown } | undefined): PluginConfig {
     return Array.isArray(config?.plugins) ? config.plugins : []
-  }
-
-  private resolveSourceGroup(raw: ResolvedPluginInstance, pluginRoot: string): PluginRuntimeInstance['sourceGroup'] {
-    const normalizedRoot = pluginRoot.replaceAll('\\', '/')
-    if (
-      raw.watch === true ||
-      isPathInside(resolveProjectOoPath(this.workspaceFolder, process.env, 'plugins.dev'), pluginRoot)
-    ) {
-      return 'localDev'
-    }
-    if (
-      raw.packageId?.startsWith('@oneworks/plugin-') === true ||
-      normalizedRoot.includes('/packages/plugins/') ||
-      normalizedRoot.includes('/plugins/cache/openai-bundled/') ||
-      normalizedRoot.includes('/plugins/cache/openai-primary-runtime/')
-    ) {
-      return 'builtIn'
-    }
-    if (isPathInside(resolveGlobalPluginsRoot(), pluginRoot)) {
-      return 'global'
-    }
-    if (path.isAbsolute(raw.requestId) && !normalizedRoot.includes('/node_modules/')) {
-      return 'localDev'
-    }
-    if (raw.sourceType === 'directory' && !normalizedRoot.includes('/node_modules/')) {
-      return 'local'
-    }
-    if (normalizedRoot.includes('/node_modules/') || raw.packageId != null) {
-      return 'local'
-    }
-    return 'global'
   }
 
   private async writePluginEnabledConfig(

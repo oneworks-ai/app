@@ -64,6 +64,29 @@ Fields:
 - `options`: per-instance plugin config values
 - `children`: explicit child plugin enablement or overrides
 
+## Plugin Name and Icon Contract
+
+Every One Works plugin must provide a stable machine name and complete presentation metadata in its top-level manifest:
+
+```json
+{
+  "name": "@acme/plugin-workspace-tools",
+  "displayName": "Workspace Tools",
+  "displayNameI18n": {
+    "en": "Workspace Tools",
+    "zh-Hans": "工作区工具"
+  },
+  "icon": "./assets/icon.svg"
+}
+```
+
+- `displayName` is the English compatibility fallback; do not expose the npm package id as the product name.
+- `displayNameI18n` must contain non-empty `en` and `zh-Hans` values. Plugin lists, detail titles, and search use these names.
+- `icon` must be a plugin-root-relative image or SVG path. Absolute, empty, and parent-traversal paths are rejected.
+- Prefer `assets/icon.svg`. The host shows the declared plugin icon and only generates a stable monogram for legacy plugins without one.
+
+These four presentation fields are required when using the plugin creation page or the repository `create-plugin` skill.
+
 ## Plugin Instance Configuration
 
 Plugin authors can describe configuration UI with the manifest `config` field. Users save concrete values in `plugins[].options`.

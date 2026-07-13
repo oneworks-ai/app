@@ -495,6 +495,7 @@ export interface SkillRegistryPublishConfig {
 export interface ConfiguredSkillRegistry {
   title?: string
   description?: string
+  enabled?: boolean
   source: string
   registry?: string
   publish?: SkillRegistryPublishConfig
@@ -675,6 +676,22 @@ export interface ClaudeCodeMarketplaceOptions {
   source: ClaudeCodeMarketplaceSource
 }
 
+export type CodexMarketplaceSource =
+  | ClaudeCodeMarketplaceSourceGithub
+  | ClaudeCodeMarketplaceSourceGit
+  | ClaudeCodeMarketplaceSourceDirectory
+  | {
+    /** Query a marketplace owned by the Codex app-server plugin protocol. */
+    source: 'app-server'
+    marketplace: string
+    /** Enable Codex's account-scoped remote catalog capability for this source. */
+    includeRemoteCatalog?: boolean
+  }
+
+export interface CodexMarketplaceOptions {
+  source: CodexMarketplaceSource
+}
+
 export interface MarketplaceDeclaredPluginConfig {
   enabled?: boolean
   scope?: string
@@ -688,7 +705,15 @@ export interface ClaudeCodeMarketplaceConfigEntry {
   options?: ClaudeCodeMarketplaceOptions
 }
 
-export type MarketplaceConfigEntry = ClaudeCodeMarketplaceConfigEntry
+export interface CodexMarketplaceConfigEntry {
+  type: 'codex'
+  enabled?: boolean
+  syncOnRun?: boolean
+  plugins?: Record<string, MarketplaceDeclaredPluginConfig>
+  options?: CodexMarketplaceOptions
+}
+
+export type MarketplaceConfigEntry = ClaudeCodeMarketplaceConfigEntry | CodexMarketplaceConfigEntry
 
 export type MarketplaceConfig = Record<string, MarketplaceConfigEntry>
 

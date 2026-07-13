@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- shared plugin contract keeps config, manifest, runtime, and managed plugin types together. */
-import type { ConfigJsonSchema, ConfigUiObjectSchema } from './config'
+import type { ConfigJsonSchema, ConfigUiObjectSchema, IconRef, MarketplaceConfigEntry } from './config'
 
 /**
  * 用户配置中的单个插件实例。
@@ -109,6 +109,7 @@ export interface PluginServerManifest {
 }
 
 export type PluginLocalizedText = string | Record<string, string>
+export type PluginRuntimeSourceGroup = 'builtIn' | 'global' | 'project' | 'localDev'
 export type PluginContributionSurface = 'launcher' | 'workspace'
 
 export interface PluginConfigManifest {
@@ -573,6 +574,11 @@ export interface PluginManifest {
   __oneWorksPluginManifest?: true
   name?: string
   displayName?: string
+  displayNameI18n?: Record<string, string>
+  description?: string
+  descriptionI18n?: Record<string, string>
+  /** Plugin-root-relative presentation icon. Absolute paths and parent traversal are rejected. */
+  icon?: string
   version?: string
   assets?: PluginManifestAssets
   children?: Record<string, PluginManifestChildDefinition>
@@ -589,11 +595,15 @@ export interface PluginRuntimeInstance {
   scope: string
   name?: string
   displayName?: string
+  displayNameI18n?: Record<string, string>
+  description?: string
+  descriptionI18n?: Record<string, string>
+  icon?: string
   requestedVersion?: string
   version?: string
   requestId: string
   packageId?: string
-  sourceGroup?: 'builtIn' | 'global' | 'local' | 'localDev'
+  sourceGroup?: PluginRuntimeSourceGroup
   watch?: {
     enabled: boolean
   }
@@ -626,25 +636,36 @@ export interface PluginRuntimeInstance {
 }
 
 export type PluginMarketplaceConfigSource = 'global' | 'project' | 'user'
+export type PluginMarketplaceInstallTarget = 'global' | 'project'
 
 export type PluginMarketplacePluginSourceType =
   | 'github'
   | 'git-subdir'
   | 'npm'
   | 'path'
+  | 'remote'
   | 'url'
 
 export interface PluginMarketplaceCatalogPlugin {
   agents?: string[]
+  builtIn?: boolean
   commands?: string[]
   configSource?: PluginMarketplaceConfigSource
   declared: boolean
   description?: string
+  displayName?: string
   enabled: boolean
+  featured?: boolean
+  icon?: IconRef
+  installable?: boolean
   marketplace: string
   marketplaceEnabled: boolean
   marketplaceTitle?: string
+  marketplaceType: MarketplaceConfigEntry['type']
   name: string
+  nativeEnabled?: boolean
+  nativeInstalled?: boolean
+  installedSources?: PluginMarketplaceConfigSource[]
   skills?: string[]
   sourceLabel: string
   sourceType: PluginMarketplacePluginSourceType
@@ -652,7 +673,9 @@ export interface PluginMarketplaceCatalogPlugin {
 }
 
 export interface PluginMarketplaceCatalogSource {
+  builtIn?: boolean
   configSource?: PluginMarketplaceConfigSource
+  entry: MarketplaceConfigEntry
   enabled: boolean
   error?: string
   key: string
@@ -664,9 +687,10 @@ export interface PluginMarketplaceCatalogSource {
 export interface PluginMarketplaceCatalogResponse {
   plugins: PluginMarketplaceCatalogPlugin[]
   sources: PluginMarketplaceCatalogSource[]
+  versionGeneration: string
 }
 
-export type PluginDetailAssetKind = 'hooks' | 'mcp' | 'skills'
+export type PluginDetailAssetKind = 'entities' | 'hooks' | 'mcp' | 'rules' | 'skills' | 'specs'
 
 export interface PluginReadmeVariant {
   content: string

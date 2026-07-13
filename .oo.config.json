@@ -16,10 +16,6 @@
       "id": "logger"
     },
     {
-      "id": "standard-dev",
-      "scope": "std"
-    },
-    {
       "id": "./packages/plugins/cua-driver",
       "scope": "cua",
       "watch": true
@@ -32,7 +28,13 @@
     {
       "id": "./packages/plugins/demo",
       "scope": "demo",
-      "watch": true
+      "watch": true,
+      "children": [
+        {
+          "id": "standard-dev",
+          "scope": "std"
+        }
+      ]
     },
     {
       "id": "./packages/plugins/demo-extension",

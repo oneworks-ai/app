@@ -2,13 +2,15 @@ import { Alert, Skeleton, Tag } from 'antd'
 
 import { MarkdownContent } from '#~/components/MarkdownContent'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
-import type { PluginDetailAssetGroup } from '#~/plugins/api'
+import type { PluginDetailAssetFile } from '@oneworks/types'
 
 interface PluginAssetSectionProps {
   emptyText: string
   error?: string
-  group?: PluginDetailAssetGroup
+  group?: { files: PluginDetailAssetFile[] }
+  icon?: string
   loading: boolean
+  showHeading?: boolean
   title: string
 }
 
@@ -18,11 +20,25 @@ const formatBytes = (size: number) => {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export function PluginAssetSection({ emptyText, error, group, loading, title }: PluginAssetSectionProps) {
+export function PluginAssetSection({
+  emptyText,
+  error,
+  group,
+  icon,
+  loading,
+  showHeading = false,
+  title
+}: PluginAssetSectionProps) {
   const files = group?.files ?? []
 
   return (
     <section className='plugin-detail-route__section plugin-detail-route__asset-section'>
+      {showHeading && (
+        <div className='plugin-detail-route__asset-group-header'>
+          {icon != null && <MaterialSymbol name={icon} aria-hidden='true' />}
+          <h2>{title}</h2>
+        </div>
+      )}
       {loading
         ? <Skeleton active paragraph={{ rows: 5 }} title={false} />
         : error != null
@@ -44,7 +60,9 @@ export function PluginAssetSection({ emptyText, error, group, loading, title }: 
                   </div>
                 </div>
                 {file.content == null
-                  ? <p className='plugin-detail-route__asset-empty'>{emptyText}</p>
+                  ? file.contentKind === 'binary'
+                    ? null
+                    : <p className='plugin-detail-route__asset-empty'>{emptyText}</p>
                   : file.contentKind === 'markdown'
                   ? (
                     <div className='plugin-detail-route__asset-markdown markdown-body'>

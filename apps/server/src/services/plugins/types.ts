@@ -11,6 +11,7 @@ import type {
   PluginRuntimeChannelInvocation,
   PluginRuntimeChannelRequest,
   PluginRuntimeEndpoint,
+  PluginRuntimeSourceGroup,
   PluginServerRuntimeRole
 } from '@oneworks/types'
 
@@ -59,12 +60,19 @@ export interface PluginContributionManifest extends PluginContributionAvailabili
 
 export interface PluginRuntimeManifest {
   assets?: {
+    entities?: string
     hooks?: string
     mcp?: string
+    rules?: string
     skills?: string
+    specs?: string
   }
   name?: string
   displayName?: string
+  displayNameI18n?: Record<string, string>
+  description?: string
+  descriptionI18n?: Record<string, string>
+  icon?: string
   version?: string
   config?: PluginConfigManifest
   plugin?: {
@@ -78,11 +86,15 @@ export interface PluginRuntimeInstance {
   scope: string
   name: string
   displayName?: string
+  displayNameI18n?: Record<string, string>
+  description?: string
+  descriptionI18n?: Record<string, string>
+  icon?: string
   requestedVersion?: string
   version?: string
   requestId: string
   packageId?: string
-  sourceGroup?: 'builtIn' | 'global' | 'local' | 'localDev'
+  sourceGroup?: PluginRuntimeSourceGroup
   watch?: {
     enabled: boolean
   }

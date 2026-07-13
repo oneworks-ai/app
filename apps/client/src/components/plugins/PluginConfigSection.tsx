@@ -182,15 +182,11 @@ export function PluginConfigSection({ labels, onOptionsChange, plugin }: PluginC
   return (
     <section className='plugin-detail-route__section plugin-detail-route__config-section'>
       <article className='plugin-detail-route__config-form'>
-        <div className='plugin-detail-route__config-block-header'>
-          <MaterialSymbol name='tune' aria-hidden='true' />
-          <h2>{labels.options}</h2>
-          {statusLabel != null && (
-            <span className={`plugin-detail-route__config-save-state is-${saveStatus}`}>
-              {statusLabel}
-            </span>
-          )}
-        </div>
+        {statusLabel != null && (
+          <span className={`plugin-detail-route__config-save-state is-${saveStatus}`}>
+            {statusLabel}
+          </span>
+        )}
         {optionsSchema == null
           ? (
             <Empty

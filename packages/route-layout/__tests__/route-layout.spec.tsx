@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+
 import type { CSSProperties } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
@@ -207,5 +209,14 @@ describe('route layout primitives', () => {
     expect(html).toContain('host-nav-rail__footer-button')
     expect(html).toContain('aria-current="page"')
     expect(html).toContain('Admin users')
+  })
+
+  it('leaves HostAppShell responsive ownership to its compact state', () => {
+    const styles = readFileSync(new URL('../src/RouteWorkbenchShell.css', import.meta.url), 'utf8')
+    const responsiveStyles = styles.slice(styles.indexOf('@media (max-width: 720px)'))
+
+    expect(responsiveStyles).toContain('.route-workbench-shell:not(.host-app-shell)')
+    expect(responsiveStyles).not.toContain('\n  .route-workbench-shell {\n    flex-direction: column;')
+    expect(responsiveStyles).toContain('> .route-workbench-shell__sidebar-region')
   })
 })

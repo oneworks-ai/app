@@ -1,14 +1,23 @@
 import { Tooltip } from 'antd'
 
+import type { NativeHostPlugin } from '@oneworks/types'
+
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import type {
   RouteSidebarListContextMenuItems,
   RouteSidebarListGroup
 } from '#~/components/layout/route-sidebar-context'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
+import {
+  getPluginPresentationSearchText,
+  resolvePluginDisplayName,
+  resolvePluginPresentationIcon
+} from '#~/plugins/plugin-presentation'
+
+import { createNativePluginRouteKey } from './plugin-runtime-list-items'
 
 export type PluginGroupMode = 'enabled' | 'source'
-type PluginSourceGroup = 'builtIn' | 'global' | 'local' | 'localDev'
+type PluginSourceGroup = 'builtIn' | 'global' | 'project' | 'localDev'
 type PluginContextMenuItemsFactory = (plugin: PluginRuntimeInstance) => RouteSidebarListContextMenuItems
 
 interface PluginGroupModeControlsProps {
@@ -28,56 +37,60 @@ const pluginGroupModeOptions: Array<{
 
 const createPluginListItem = (
   plugin: PluginRuntimeInstance,
+  language: string,
+  serverBaseUrl?: string,
   getContextMenuItems?: PluginContextMenuItemsFactory
 ) => ({
   contextMenuItems: getContextMenuItems?.(plugin),
-  icon: plugin.enabled === false ? 'extension_off' : 'extension',
+  icon: resolvePluginPresentationIcon(plugin, serverBaseUrl),
   key: plugin.scope,
-  label: plugin.displayName ?? plugin.name ?? plugin.scope,
-  searchText: `${plugin.displayName ?? ''} ${plugin.name ?? ''} ${plugin.scope} ${plugin.packageId ?? ''} ${
-    plugin.requestId ?? ''
-  } ${plugin.pluginRoot ?? plugin.rootDir ?? ''}`
+  label: resolvePluginDisplayName(plugin, language),
+  searchText: getPluginPresentationSearchText(plugin, language)
 })
 
-export const resolvePluginSourceGroup = (plugin: PluginRuntimeInstance): PluginSourceGroup => {
-  if (plugin.sourceGroup != null) return plugin.sourceGroup
+const nativeAdapterIcons: Record<string, string> = {
+  codex: 'code',
+  'claude-code': 'psychology',
+  copilot: 'support_agent',
+  gemini: 'auto_awesome',
+  kimi: 'dark_mode',
+  opencode: 'terminal'
+}
 
-  const root = (plugin.pluginRoot ?? plugin.rootDir ?? '').replaceAll('\\', '/')
-  const requestId = plugin.requestId.replaceAll('\\', '/')
+const createNativePluginListItem = (plugin: NativeHostPlugin) => ({
+  contextMenuItems: undefined,
+  icon: plugin.icon == null
+    ? { name: nativeAdapterIcons[plugin.adapter] ?? 'extension', type: 'material' as const }
+    : { alt: plugin.displayName ?? plugin.name, src: plugin.icon, type: 'image' as const },
+  key: createNativePluginRouteKey(plugin),
+  label: plugin.displayName ?? plugin.name,
+  searchText: [
+    plugin.displayName,
+    plugin.name,
+    plugin.adapter,
+    plugin.marketplace,
+    plugin.source.displayPath
+  ].filter(Boolean).join(' ')
+})
 
-  if (plugin.watch?.enabled === true || root.includes('/.oo/plugins.dev/')) {
-    return 'localDev'
-  }
-
-  if (
-    plugin.packageId?.startsWith('@oneworks/plugin-') === true ||
-    root.includes('/packages/plugins/') ||
-    root.includes('/plugins/cache/openai-bundled/') ||
-    root.includes('/plugins/cache/openai-primary-runtime/')
-  ) {
-    return 'builtIn'
-  }
-
-  if (root.includes('/.oneworks/global/plugins/')) {
-    return 'global'
-  }
-
-  if (requestId.startsWith('/') && !root.includes('/node_modules/')) {
-    return 'localDev'
-  }
-
-  if (root.includes('/node_modules/') || plugin.packageId != null) {
-    return 'local'
-  }
-
+const resolveNativeSourceGroup = (plugin: NativeHostPlugin): PluginSourceGroup => {
+  if (plugin.scope === 'project') return 'project'
+  if (plugin.scope === 'builtin') return 'builtIn'
   return 'global'
+}
+
+export const resolvePluginSourceGroup = (plugin: PluginRuntimeInstance): PluginSourceGroup => {
+  return plugin.sourceGroup ?? 'project'
 }
 
 export const buildPluginRouteSidebarGroups = (
   plugins: PluginRuntimeInstance[],
   groupMode: PluginGroupMode,
   t: (key: string) => string,
-  getContextMenuItems?: PluginContextMenuItemsFactory
+  language: string,
+  serverBaseUrl?: string,
+  getContextMenuItems?: PluginContextMenuItemsFactory,
+  nativePlugins: NativeHostPlugin[] = []
 ): RouteSidebarListGroup[] => {
   if (groupMode === 'source') {
     const sourceGroups: Array<{
@@ -87,7 +100,7 @@ export const buildPluginRouteSidebarGroups = (
     }> = [
       { icon: 'deployed_code', key: 'builtIn', labelKey: 'pluginStore.sourceBuiltIn' },
       { icon: 'public', key: 'global', labelKey: 'pluginStore.sourceGlobal' },
-      { icon: 'folder', key: 'local', labelKey: 'pluginStore.sourceLocal' },
+      { icon: 'folder', key: 'project', labelKey: 'pluginStore.sourceProject' },
       { icon: 'code_blocks', key: 'localDev', labelKey: 'pluginStore.sourceLocalDev' }
     ]
 
@@ -95,7 +108,12 @@ export const buildPluginRouteSidebarGroups = (
       icon: group.icon,
       items: plugins
         .filter(plugin => resolvePluginSourceGroup(plugin) === group.key)
-        .map(plugin => createPluginListItem(plugin, getContextMenuItems)),
+        .map(plugin => createPluginListItem(plugin, language, serverBaseUrl, getContextMenuItems))
+        .concat(
+          nativePlugins
+            .filter(plugin => resolveNativeSourceGroup(plugin) === group.key)
+            .map(createNativePluginListItem)
+        ),
       key: `source:${group.key}`,
       label: t(group.labelKey)
     }))
@@ -106,7 +124,8 @@ export const buildPluginRouteSidebarGroups = (
       icon: 'toggle_on',
       items: plugins
         .filter(plugin => plugin.enabled !== false)
-        .map(plugin => createPluginListItem(plugin, getContextMenuItems)),
+        .map(plugin => createPluginListItem(plugin, language, serverBaseUrl, getContextMenuItems))
+        .concat(nativePlugins.filter(plugin => plugin.state === 'enabled').map(createNativePluginListItem)),
       key: 'enabled:true',
       label: t('pluginStore.groupEnabled')
     },
@@ -114,7 +133,8 @@ export const buildPluginRouteSidebarGroups = (
       icon: 'toggle_off',
       items: plugins
         .filter(plugin => plugin.enabled === false)
-        .map(plugin => createPluginListItem(plugin, getContextMenuItems)),
+        .map(plugin => createPluginListItem(plugin, language, serverBaseUrl, getContextMenuItems))
+        .concat(nativePlugins.filter(plugin => plugin.state !== 'enabled').map(createNativePluginListItem)),
       key: 'enabled:false',
       label: t('pluginStore.groupDisabled')
     }

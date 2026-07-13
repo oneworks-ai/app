@@ -1,8 +1,29 @@
 # Marketplace 详细示例
 
-这页补充用户侧更完整的 plugin marketplace 配置示例，适合你已经确定要把 Claude Code 插件接进项目时参考。
+这页补充用户侧更完整的 plugin marketplace 配置示例，覆盖 Claude Code 与 Codex 插件源。
 
-注意：这里的 `marketplaces` 只描述 Claude Code 这类 adapter 原生插件市场。知识库「技能 -> 市场」使用的是 `skillRegistries[]`，不在本页范围内。
+插件市场页默认内置 OpenAI Plugins 与 Anthropic 官方插件源；用户可以直接浏览并选择安装到当前项目。官方源可以屏蔽但不能删除，也可以继续添加自定义 Git 源。知识库「技能 -> 市场」使用的是 `skillRegistries[]`，不在本页范围内。
+
+## 示例：自定义 Codex 插件源
+
+Codex marketplace 使用仓库内的 `.agents/plugins/marketplace.json`：
+
+```yaml
+marketplaces:
+  company-codex-plugins:
+    type: codex
+    enabled: true
+    plugins:
+      reviewer:
+        scope: review
+    options:
+      source:
+        source: github
+        repo: acme/codex-plugins
+        ref: main
+```
+
+Codex 源支持 `github`、`git` 与 `directory`。One Works 会读取每个插件的 `.codex-plugin/plugin.json`，并转换可复用的 skills、commands、agents、MCP 与 hooks。
 
 ## 示例：接入 Superpowers Marketplace
 
@@ -101,6 +122,7 @@ oneworks plugin --adapter claude add private-journal-mcp@superpowers
 
 ## 相关文档
 
+- [OpenAI Plugins](https://github.com/openai/plugins)
 - [Claude Code Plugins](https://code.claude.com/docs/en/plugins)
 - [Claude Code Plugin Marketplaces](https://code.claude.com/docs/en/plugin-marketplaces)
 - [Superpowers](https://github.com/obra/superpowers)

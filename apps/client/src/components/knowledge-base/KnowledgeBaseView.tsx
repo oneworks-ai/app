@@ -5,7 +5,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 
-import type { RouteContainerHeaderActionItem } from '@oneworks/components/route-layout'
+import type { RouteContainerHeaderActionItem, RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
 
 import { createSkill, getApiErrorMessage } from '#~/api.js'
 import type { EntitySummary, RuleSummary, SkillSummary, SpecSummary } from '#~/api.js'
@@ -22,6 +22,7 @@ import { EntitiesTab } from './components/EntitiesTab.js'
 import { FlowsTab } from './components/FlowsTab.js'
 import { KnowledgeContentControls } from './components/KnowledgeContentControls.js'
 import { RulesTab } from './components/RulesTab.js'
+import { SkillRegistrySettingsView } from './components/SkillRegistrySettingsView.js'
 import { SkillsTab } from './components/SkillsTab.js'
 import {
   ALL_REGISTRIES,
@@ -30,51 +31,48 @@ import {
   isSkillHubSortKey
 } from './components/skill-hub-utils.js'
 import type { SkillHubInstallFilter, SkillHubSortKey } from './components/skill-hub-utils.js'
+import type { KnowledgeSectionKey, KnowledgeSkillPage } from './knowledge-routes.js'
 
 interface KnowledgeQueryParams extends Record<string, string> {
-  kbTab: string
   skillInstall: string
   skillMarketSearch: string
   skillProjectSearch: string
   skillRegistry: string
+  skillRegistrySettingsSearch: string
   skillSort: string
   skillSource: string
-  skillView: string
 }
 
 const KNOWLEDGE_QUERY_KEYS: Array<Extract<keyof KnowledgeQueryParams, string>> = [
-  'kbTab',
-  'skillView',
   'skillProjectSearch',
   'skillMarketSearch',
   'skillRegistry',
+  'skillRegistrySettingsSearch',
   'skillSource',
   'skillInstall',
   'skillSort'
 ]
 
 const KNOWLEDGE_QUERY_DEFAULTS: Partial<KnowledgeQueryParams> = {
-  kbTab: 'skills',
-  skillView: 'project',
   skillProjectSearch: '',
   skillMarketSearch: '',
   skillRegistry: ALL_REGISTRIES,
+  skillRegistrySettingsSearch: '',
   skillSource: ALL_SKILL_SOURCES,
   skillInstall: 'all',
   skillSort: 'default'
 }
 
 const KNOWLEDGE_QUERY_OMIT: Partial<Record<Extract<keyof KnowledgeQueryParams, string>, (value: string) => boolean>> = {
-  skillView: value => value === 'project',
   skillProjectSearch: value => value === '',
   skillMarketSearch: value => value === '',
   skillRegistry: value => value === ALL_REGISTRIES,
+  skillRegistrySettingsSearch: value => value === '',
   skillSource: value => value === ALL_SKILL_SOURCES,
   skillInstall: value => value === 'all',
   skillSort: value => value === 'default'
 }
 
-const toSkillViewMode = (value: string): 'project' | 'market' => value === 'market' ? 'market' : 'project'
 const toSkillHubInstallFilter = (value: string): SkillHubInstallFilter => (
   isSkillHubInstallFilter(value) ? value : 'all'
 )
@@ -82,7 +80,21 @@ const toSkillHubSortKey = (value: string): SkillHubSortKey => (
   isSkillHubSortKey(value) ? value : 'default'
 )
 
-export function KnowledgeBaseView() {
+interface KnowledgeBaseViewProps {
+  sectionKey: KnowledgeSectionKey
+  skillPage: KnowledgeSkillPage
+  onBack: () => void
+  onNavigateSection: (sectionKey: KnowledgeSectionKey) => void
+  onNavigateSkillPage: (skillPage: KnowledgeSkillPage) => void
+}
+
+export function KnowledgeBaseView({
+  sectionKey,
+  skillPage,
+  onBack,
+  onNavigateSection,
+  onNavigateSkillPage
+}: KnowledgeBaseViewProps) {
   const { t } = useTranslation()
   const { message } = App.useApp()
   const {
@@ -135,24 +147,28 @@ export function KnowledgeBaseView() {
     defaults: KNOWLEDGE_QUERY_DEFAULTS,
     omit: KNOWLEDGE_QUERY_OMIT
   })
-  const skillViewMode = toSkillViewMode(values.skillView)
+  const skillViewMode = skillPage === 'store' ? 'market' : 'project'
   const skillInstallFilter = toSkillHubInstallFilter(values.skillInstall)
   const skillSortKey = toSkillHubSortKey(values.skillSort)
   const skillProjectQuery = values.skillProjectSearch
   const skillMarketQuery = values.skillMarketSearch
   const skillRegistry = values.skillRegistry || ALL_REGISTRIES
+  const skillRegistrySettingsQuery = values.skillRegistrySettingsSearch
   const skillSourceFilter = values.skillSource || ALL_SKILL_SOURCES
   const updateSkillProjectQuery = React.useCallback((value: string) => {
     update({ skillProjectSearch: value })
   }, [update])
   const updateSkillViewMode = React.useCallback((value: 'project' | 'market') => {
-    update({ skillView: value })
-  }, [update])
+    onNavigateSkillPage(value === 'market' ? 'store' : 'project')
+  }, [onNavigateSkillPage])
   const updateSkillMarketQuery = React.useCallback((value: string) => {
     update({ skillMarketSearch: value })
   }, [update])
   const updateSkillRegistry = React.useCallback((value: string) => {
     update({ skillRegistry: value })
+  }, [update])
+  const updateSkillRegistrySettingsQuery = React.useCallback((value: string) => {
+    update({ skillRegistrySettingsSearch: value })
   }, [update])
   const updateSkillSourceFilter = React.useCallback((value: string) => {
     update({ skillSource: value })
@@ -303,6 +319,15 @@ export function KnowledgeBaseView() {
   const handleContentHeaderActionsChange = React.useCallback((items: RouteContainerHeaderActionItem[]) => {
     setContentHeaderActions(items)
   }, [])
+  const handleNavigateSkillProject = React.useCallback(() => {
+    onNavigateSkillPage('project')
+  }, [onNavigateSkillPage])
+  const handleNavigateSkillSettings = React.useCallback(() => {
+    onNavigateSkillPage('settings')
+  }, [onNavigateSkillPage])
+  const handleNavigateSkillStore = React.useCallback(() => {
+    onNavigateSkillPage('store')
+  }, [onNavigateSkillPage])
 
   const sections = [
     {
@@ -311,27 +336,38 @@ export function KnowledgeBaseView() {
       label: t('knowledge.tabs.skills'),
       description: t('knowledge.skills.desc'),
       count: skillCount,
-      content: (
-        <SkillsTab
-          installFilter={skillInstallFilter}
-          leading={getContentControls(handleCreateSkill)}
-          marketQuery={skillMarketQuery}
-          projectQuery={skillProjectQuery}
-          registry={skillRegistry}
-          sortKey={skillSortKey}
-          sourceFilter={skillSourceFilter}
-          viewMode={skillViewMode}
-          onRefresh={handleRefresh}
-          onCreate={handleCreateSkill}
-          onHeaderActionsChange={handleContentHeaderActionsChange}
-          onInstallFilterChange={updateSkillInstallFilter}
-          onMarketQueryChange={updateSkillMarketQuery}
-          onRegistryChange={updateSkillRegistry}
-          onSortChange={updateSkillSortKey}
-          onSourceFilterChange={updateSkillSourceFilter}
-          onViewModeChange={updateSkillViewMode}
-        />
-      )
+      content: skillPage === 'settings'
+        ? (
+          <SkillRegistrySettingsView
+            query={skillRegistrySettingsQuery}
+            onHeaderActionsChange={handleContentHeaderActionsChange}
+            onNavigateProject={handleNavigateSkillProject}
+            onNavigateStore={handleNavigateSkillStore}
+          />
+        )
+        : (
+          <SkillsTab
+            installFilter={skillInstallFilter}
+            leading={getContentControls(handleCreateSkill)}
+            marketQuery={skillMarketQuery}
+            projectQuery={skillProjectQuery}
+            registry={skillRegistry}
+            sortKey={skillSortKey}
+            sourceFilter={skillSourceFilter}
+            viewMode={skillViewMode}
+            onRefresh={handleRefresh}
+            onCreate={handleCreateSkill}
+            onHeaderActionsChange={handleContentHeaderActionsChange}
+            onInstallFilterChange={updateSkillInstallFilter}
+            onMarketQueryChange={updateSkillMarketQuery}
+            onOpenSettings={handleNavigateSkillSettings}
+            onProjectQueryChange={updateSkillProjectQuery}
+            onRegistryChange={updateSkillRegistry}
+            onSortChange={updateSkillSortKey}
+            onSourceFilterChange={updateSkillSourceFilter}
+            onViewModeChange={updateSkillViewMode}
+          />
+        )
     },
     {
       key: 'entities',
@@ -343,17 +379,14 @@ export function KnowledgeBaseView() {
         <EntitiesTab
           entities={entities}
           filteredEntities={filteredEntities}
-          hideContentSearch={isCompactView}
           isLoading={isEntitiesLoading}
           leading={getContentControls(handleCreateEntity)}
           query={entityQuery}
           tagOptions={entityTagOptions}
           tagFilter={entityTagFilter}
-          onRefresh={handleRefresh}
           onQueryChange={setEntityQuery}
           onTagFilterChange={setEntityTagFilter}
           onCreate={handleCreateEntity}
-          onHeaderActionsChange={handleContentHeaderActionsChange}
           onImport={handleImportEntity}
         />
       )
@@ -368,17 +401,14 @@ export function KnowledgeBaseView() {
         <FlowsTab
           specs={specs}
           filteredSpecs={filteredSpecs}
-          hideContentSearch={isCompactView}
           isLoading={isSpecsLoading}
           leading={getContentControls(handleCreateSpec)}
           query={specQuery}
           tagOptions={specTagOptions}
           tagFilter={specTagFilter}
-          onRefresh={handleRefresh}
           onQueryChange={setSpecQuery}
           onTagFilterChange={setSpecTagFilter}
           onCreate={handleCreateSpec}
-          onHeaderActionsChange={handleContentHeaderActionsChange}
           onImport={handleImportSpec}
         />
       )
@@ -393,27 +423,25 @@ export function KnowledgeBaseView() {
         <RulesTab
           rules={rules}
           filteredRules={filteredRules}
-          hideContentSearch={isCompactView}
           isLoading={isRulesLoading}
           leading={getContentControls(handleCreateRule)}
           query={ruleQuery}
-          onRefresh={handleRefresh}
           onQueryChange={setRuleQuery}
           onCreate={handleCreateRule}
-          onHeaderActionsChange={handleContentHeaderActionsChange}
           onImport={handleImportRule}
         />
       )
     }
   ]
 
-  const sectionKeys = React.useMemo(() => sections.map(section => section.key), [sections])
-  const activeSectionKey = sectionKeys.includes(values.kbTab) ? values.kbTab : sectionKeys[0]
+  const activeSectionKey = sectionKey
   const activeSection = React.useMemo(
     () => sections.find(section => section.key === activeSectionKey) ?? sections[0],
     [activeSectionKey, sections]
   )
-  const activeSearchValue = activeSectionKey === 'skills'
+  const activeSearchValue = activeSectionKey === 'skills' && skillPage === 'settings'
+    ? skillRegistrySettingsQuery
+    : activeSectionKey === 'skills'
     ? skillViewMode === 'market' ? skillMarketQuery : skillProjectQuery
     : activeSectionKey === 'entities'
     ? entityQuery
@@ -423,11 +451,19 @@ export function KnowledgeBaseView() {
     ? ruleQuery
     : ''
   const activeSearchPlaceholder = activeSectionKey === 'skills'
-    ? skillViewMode === 'market' ? t('knowledge.skills.searchHub') : t('knowledge.skills.searchProject')
+    ? skillPage === 'settings'
+      ? t('knowledge.skills.searchRegistries')
+      : skillViewMode === 'market'
+      ? t('knowledge.skills.searchHub')
+      : t('knowledge.skills.searchProject')
     : t('knowledge.filters.searchActive')
 
   const handleActiveSearchChange = React.useCallback((value: string) => {
     if (activeSectionKey === 'skills') {
+      if (skillPage === 'settings') {
+        updateSkillRegistrySettingsQuery(value)
+        return
+      }
       if (skillViewMode === 'market') {
         updateSkillMarketQuery(value)
         return
@@ -447,12 +483,19 @@ export function KnowledgeBaseView() {
     if (activeSectionKey === 'rules') {
       setRuleQuery(value)
     }
-  }, [activeSectionKey, skillViewMode, updateSkillMarketQuery, updateSkillProjectQuery])
+  }, [
+    activeSectionKey,
+    skillPage,
+    skillViewMode,
+    updateSkillMarketQuery,
+    updateSkillProjectQuery,
+    updateSkillRegistrySettingsQuery
+  ])
 
   const handleSelectSection = React.useCallback((key: string) => {
-    update({ kbTab: key })
+    onNavigateSection(key as KnowledgeSectionKey)
     closeRouteSidebar()
-  }, [closeRouteSidebar, update])
+  }, [closeRouteSidebar, onNavigateSection])
 
   const routeSidebarGroups = React.useMemo(() => [
     {
@@ -496,6 +539,34 @@ export function KnowledgeBaseView() {
     ...contentHeaderActions,
     ...routePluginHeaderActions
   ], [contentHeaderActions, routePluginHeaderActions])
+  const headerBreadcrumb = React.useMemo<RouteContainerHeaderBreadcrumb>(() => {
+    if (activeSectionKey === 'skills') {
+      const currentTitle = skillPage === 'store'
+        ? t('knowledge.skills.store')
+        : skillPage === 'settings'
+        ? t('knowledge.skills.registrySettings')
+        : t('knowledge.skills.project')
+      return {
+        ancestors: [{
+          title: t('common.knowledgeBase'),
+          onSelect: () => onNavigateSkillPage('project')
+        }],
+        ariaLabel: t('knowledge.breadcrumbLabel'),
+        backLabel: t('common.back'),
+        currentTitle,
+        onBack: skillPage === 'project' ? onBack : () => onNavigateSkillPage('project'),
+        parentTitle: t('knowledge.tabs.skills')
+      }
+    }
+
+    return {
+      ariaLabel: t('knowledge.breadcrumbLabel'),
+      backLabel: t('common.back'),
+      currentTitle: activeSection.label,
+      onBack,
+      parentTitle: t('common.knowledgeBase')
+    }
+  }, [activeSection.label, activeSectionKey, onBack, onNavigateSkillPage, skillPage, t])
 
   React.useLayoutEffect(() => {
     if (!hasRouteSidebarProvider) return undefined
@@ -530,12 +601,6 @@ export function KnowledgeBaseView() {
     t
   ])
 
-  React.useEffect(() => {
-    if (values.kbTab !== activeSectionKey) {
-      update({ kbTab: activeSectionKey })
-    }
-  }, [activeSectionKey, update, values.kbTab])
-
   return (
     <RouteContainerLayout
       className={`knowledge-base-view ${isCompactView ? 'knowledge-base-view--compact' : ''}`}
@@ -544,9 +609,8 @@ export function KnowledgeBaseView() {
       header={
         <RouteContainerHeader
           actionItems={headerActionItems}
-          icon='database'
+          breadcrumb={headerBreadcrumb}
           onOpenSidebar={openRouteSidebar}
-          title={t('common.knowledgeBase')}
         />
       }
     >

@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import {
   isObjectSkillsConfig,
+  mergeConfiguredSkillRegistries,
   mergeSkillsMeta,
   resolveConfiguredSkillInstalls,
+  resolveConfiguredSkillRegistries,
   resolveSkillsHomeBridge,
   resolveSkillsMeta,
   resolveSkillsRegistry
@@ -83,5 +85,19 @@ describe('skills config utilities', () => {
     })).toEqual({
       enabled: false
     })
+  })
+
+  it('preserves and merges skill registry enabled overrides', () => {
+    expect(resolveConfiguredSkillRegistries({
+      skillRegistries: [{
+        enabled: false,
+        source: ' official/skills '
+      }]
+    })).toEqual([{ enabled: false, source: 'official/skills' }])
+
+    expect(mergeConfiguredSkillRegistries(
+      { skillRegistries: [{ enabled: false, source: 'official/skills' }] },
+      { skillRegistries: [{ enabled: true, source: 'official/skills', title: 'Official' }] }
+    )).toEqual([{ enabled: true, source: 'official/skills', title: 'Official' }])
   })
 })

@@ -1,7 +1,8 @@
-import { Button, Empty, Input, Spin, Tooltip } from 'antd'
+import { Button, Empty, Spin, Tooltip } from 'antd'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { ActionSearchToolbar } from '#~/components/action-search-toolbar/ActionSearchToolbar'
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
 import { EmptyState } from './EmptyState'
 import { SkillMarketResults } from './SkillMarketResults'
@@ -9,15 +10,15 @@ import type { SkillMarketViewProps } from './SkillMarketView.types'
 import { SkillRegistryErrors } from './SkillRegistryErrors'
 import { ALL_REGISTRIES, ALL_SKILL_SOURCES } from './skill-hub-utils'
 import type { SkillHubInstallFilter, SkillHubSortKey } from './skill-hub-utils'
-import { useSkillMarketQueryInput } from './use-skill-market-query-input'
 
 export function SkillMarketView({
-  canLoadMore,
+  currentPage,
   hubItems,
   installingId,
   installFilter,
   isLoading,
-  loadingMore,
+  isPageLoading,
+  pageSize,
   query,
   registries,
   registry,
@@ -26,10 +27,12 @@ export function SkillMarketView({
   sortKey,
   sourceFilter,
   sourceOptions,
+  total,
   onAddRegistry,
   onInstall,
   onInstallFilterChange,
-  onLoadMore,
+  onOpenSettings,
+  onPageChange,
   onQueryChange,
   onRegistryChange,
   onSortChange,
@@ -37,10 +40,6 @@ export function SkillMarketView({
 }: SkillMarketViewProps) {
   const { t } = useTranslation()
   const [actionsOpen, setActionsOpen] = React.useState(false)
-  const { draftQuery, flushDraftQuery, setDraftQuery } = useSkillMarketQueryInput({
-    query,
-    onQueryChange
-  })
   const hasRegistryFilter = registry !== ALL_REGISTRIES
   const hasSourceFilter = sourceFilter !== ALL_SKILL_SOURCES
   const hasInstallFilter = installFilter !== 'all'
@@ -63,39 +62,31 @@ export function SkillMarketView({
 
   return (
     <>
-      <div className='knowledge-base-view__skill-market-search-row'>
-        <Input
-          className='knowledge-base-view__filter-input knowledge-base-view__skill-market-search'
-          prefix={<span className='material-symbols-rounded knowledge-base-view__filter-icon'>search</span>}
-          suffix={
-            <Tooltip title={t('knowledge.skills.marketActions')}>
-              <button
-                type='button'
-                className={`knowledge-base-view__search-toggle-button ${actionsOpen ? 'is-open' : ''} ${
-                  hasActiveControls ? 'has-active-filters' : ''
-                }`}
-                aria-label={t('knowledge.skills.marketActions')}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => setActionsOpen((prev) => !prev)}
-              >
-                <span className='material-symbols-rounded knowledge-base-view__search-chevron'>expand_more</span>
-              </button>
-            </Tooltip>
+      <ActionSearchToolbar
+        inset={false}
+        query={query}
+        placeholder={t('knowledge.skills.searchHub')}
+        actions={[
+          {
+            active: actionsOpen,
+            ariaLabel: t('knowledge.skills.marketActions'),
+            hasIndicator: hasActiveControls,
+            icon: 'filter_alt',
+            key: 'knowledge-skill-market-filter',
+            onClick: () => setActionsOpen(value => !value),
+            pressed: actionsOpen,
+            title: t('knowledge.skills.marketActions')
+          },
+          {
+            ariaLabel: t('knowledge.skills.openConfig'),
+            icon: 'tune',
+            key: 'knowledge-skill-market-settings',
+            onClick: onOpenSettings,
+            title: t('knowledge.skills.openConfig')
           }
-          placeholder={t('knowledge.skills.searchHub')}
-          allowClear
-          value={draftQuery}
-          onBlur={() => flushDraftQuery()}
-          onChange={(event) => {
-            const nextQuery = event.target.value
-            setDraftQuery(nextQuery)
-            if (nextQuery === '') {
-              flushDraftQuery('')
-            }
-          }}
-          onPressEnter={() => flushDraftQuery()}
-        />
-      </div>
+        ]}
+        onQueryChange={onQueryChange}
+      />
       <div className={`knowledge-base-view__skill-market-actions ${actionsOpen ? 'is-open' : ''}`}>
         <div className='knowledge-base-view__skill-market-actions-inner'>
           <div className='knowledge-base-view__skill-toolbar-field knowledge-base-view__skill-toolbar-field--wide'>
@@ -160,13 +151,15 @@ export function SkillMarketView({
       )}
       {!isLoading && hubItems.length > 0 && (
         <SkillMarketResults
-          canLoadMore={canLoadMore}
+          currentPage={currentPage}
           hubItems={hubItems}
           installingId={installingId}
-          loadingMore={loadingMore}
+          isPageLoading={isPageLoading}
+          pageSize={pageSize}
           resetKey={resetKey}
+          total={total}
           onInstall={onInstall}
-          onLoadMore={onLoadMore}
+          onPageChange={onPageChange}
         />
       )}
       {!isLoading && hubItems.length === 0 && registries.length > 0 && (

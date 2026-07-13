@@ -17,6 +17,7 @@ import type {
   RuleSummary,
   SkillDetail,
   SkillHubInstallResult,
+  SkillHubInstallTarget,
   SkillHubItem,
   SkillHubRegistrySummary,
   SkillHubSearchResult,
@@ -1158,6 +1159,7 @@ const buildMockSpecs = (): SpecDetail[] => [
     tags: [t('tagHomepage'), t('tagTooling')],
     skills: ['adapter-routing', 'multi-device-handoff'],
     rules: ['preview-readonly-workspace'],
+    source: 'project',
     body: t('specOnboardingBody')
   },
   {
@@ -1172,7 +1174,20 @@ const buildMockSpecs = (): SpecDetail[] => [
     tags: [t('tagIm'), t('tagRoom')],
     skills: ['im-bridge-notifier'],
     rules: ['download-for-real-actions'],
+    source: 'project',
     body: t('specImBody')
+  },
+  {
+    id: 'plugin-onboarding-flow',
+    name: `Plugin · ${t('specOnboardingName')}`,
+    description: t('specOnboardingDescription'),
+    params: [],
+    always: false,
+    tags: [t('tagTooling')],
+    skills: [],
+    rules: [],
+    source: 'plugin',
+    body: t('specOnboardingBody')
   }
 ]
 
@@ -1184,7 +1199,8 @@ const toSpecSummary = (detail: SpecDetail): SpecSummary => ({
   always: detail.always,
   tags: detail.tags,
   skills: detail.skills,
-  rules: detail.rules
+  rules: detail.rules,
+  source: detail.source
 })
 
 const buildMockEntities = (): EntityDetail[] => [
@@ -1197,6 +1213,7 @@ const buildMockEntities = (): EntityDetail[] => [
     tags: [t('tagTooling')],
     skills: ['adapter-routing'],
     rules: ['preview-readonly-workspace'],
+    source: 'project',
     body: t('entityCodexBody')
   },
   {
@@ -1208,7 +1225,20 @@ const buildMockEntities = (): EntityDetail[] => [
     tags: [t('tagIm')],
     skills: ['im-bridge-notifier'],
     rules: ['download-for-real-actions'],
+    source: 'project',
     body: t('entityKimiBody')
+  },
+  {
+    id: 'plugin-agent-codex',
+    name: 'Plugin · Codex',
+    avatar: 'extension',
+    description: t('entityCodexDescription'),
+    always: false,
+    tags: [t('tagTooling')],
+    skills: [],
+    rules: [],
+    source: 'plugin',
+    body: t('entityCodexBody')
   }
 ]
 
@@ -1220,6 +1250,7 @@ const toEntitySummary = (detail: EntityDetail): EntitySummary => ({
   tags: detail.tags,
   skills: detail.skills,
   rules: detail.rules,
+  source: detail.source,
   ...(detail.avatar == null ? {} : { avatar: detail.avatar })
 })
 
@@ -1230,6 +1261,7 @@ const buildMockRules = (): RuleDetail[] => [
     description: t('ruleReadonlyDescription'),
     always: true,
     globs: ['src/**/*', 'package.json', 'README.md'],
+    source: 'project',
     body: t('ruleReadonlyBody', { downloadUrl: getPreviewConfig().downloadUrl })
   },
   {
@@ -1238,7 +1270,17 @@ const buildMockRules = (): RuleDetail[] => [
     description: t('ruleDownloadDescription'),
     always: true,
     globs: ['.oo/**/*', 'apps/**/*'],
+    source: 'project',
     body: t('ruleDownloadBody', { downloadUrl: getPreviewConfig().downloadUrl })
+  },
+  {
+    id: 'plugin-preview-readonly-workspace',
+    name: `Plugin · ${t('ruleReadonlyName')}`,
+    description: t('ruleReadonlyDescription'),
+    always: false,
+    globs: ['plugins/**/*'],
+    source: 'plugin',
+    body: t('ruleReadonlyBody', { downloadUrl: getPreviewConfig().downloadUrl })
   }
 ]
 
@@ -1247,6 +1289,7 @@ const toRuleSummary = (detail: RuleDetail): RuleSummary => ({
   name: detail.name,
   description: detail.description,
   always: detail.always,
+  source: detail.source,
   ...(detail.globs == null ? {} : { globs: detail.globs })
 })
 
@@ -1336,73 +1379,92 @@ const buildSkillHubRegistries = (): SkillHubRegistrySummary[] => [
     source: 'https://github.com/oneworks-ai/skills',
     title: t('skillHubRegistryTitle'),
     description: t('skillHubRegistryDescription'),
-    configSource: 'project',
+    configSource: 'project' as const,
     configLabel: t('knowledgeConfigLabel')
   }
 ]
 
-const buildSkillHubItems = (): SkillHubItem[] => [
-  {
-    id: 'homepage-preview-skills:ui-review',
-    registry: 'homepage-preview-skills',
-    registryName: t('skillHubRegistryTitle'),
-    configSource: 'project',
-    configLabel: t('knowledgeConfigLabel'),
-    name: 'homepage/ui-review',
-    description: t('skillHubUiReviewDescription'),
-    skills: ['ui-review', 'accessibility-audit'],
-    commands: ['pnpm lint', 'pnpm typecheck'],
-    agents: ['Codex', 'Claude Code'],
-    mcpServers: [],
-    hasHooks: true,
-    installed: false,
-    declared: false,
-    installRef: 'homepage/ui-review',
-    source: 'homepage-preview'
-  },
-  {
-    id: 'homepage-preview-skills:adapter-smoke',
-    registry: 'homepage-preview-skills',
-    registryName: t('skillHubRegistryTitle'),
-    configSource: 'project',
-    configLabel: t('knowledgeConfigLabel'),
-    name: 'runtime/adapter-smoke',
-    description: t('skillHubAdapterSmokeDescription'),
-    skills: ['adapter-routing'],
-    commands: ['pnpm test -- adapter'],
-    agents: ['Codex'],
-    mcpServers: ['filesystem'],
-    hasHooks: false,
-    installed: false,
-    declared: false,
-    installRef: 'runtime/adapter-smoke',
-    source: 'homepage-preview'
-  },
-  {
-    id: 'homepage-preview-skills:im-handoff',
-    registry: 'homepage-preview-skills',
-    registryName: t('skillHubRegistryTitle'),
-    configSource: 'project',
-    configLabel: t('knowledgeConfigLabel'),
-    name: 'channels/im-handoff',
-    description: t('skillHubImHandoffDescription'),
-    skills: ['im-bridge-notifier', 'multi-device-handoff'],
-    commands: [],
-    agents: ['Kimi', 'Claude Code'],
-    mcpServers: [],
-    hasHooks: true,
-    installed: false,
-    declared: false,
-    installRef: 'channels/im-handoff',
-    source: 'homepage-preview'
-  }
-]
+const installedSkillHubTargets = new Map<string, Set<SkillHubInstallTarget>>()
+
+const buildSkillHubItems = (): SkillHubItem[] =>
+  [
+    {
+      id: 'homepage-preview-skills:ui-review',
+      registry: 'homepage-preview-skills',
+      registryName: t('skillHubRegistryTitle'),
+      configSource: 'project' as const,
+      configLabel: t('knowledgeConfigLabel'),
+      name: 'homepage/ui-review',
+      description: t('skillHubUiReviewDescription'),
+      skills: ['ui-review', 'accessibility-audit'],
+      commands: ['pnpm lint', 'pnpm typecheck'],
+      agents: ['Codex', 'Claude Code'],
+      mcpServers: [],
+      hasHooks: true,
+      installed: false,
+      declared: false,
+      declaredSources: [],
+      installRef: 'homepage/ui-review',
+      source: 'homepage-preview'
+    },
+    {
+      id: 'homepage-preview-skills:adapter-smoke',
+      registry: 'homepage-preview-skills',
+      registryName: t('skillHubRegistryTitle'),
+      configSource: 'project' as const,
+      configLabel: t('knowledgeConfigLabel'),
+      name: 'runtime/adapter-smoke',
+      description: t('skillHubAdapterSmokeDescription'),
+      skills: ['adapter-routing'],
+      commands: ['pnpm test -- adapter'],
+      agents: ['Codex'],
+      mcpServers: ['filesystem'],
+      hasHooks: false,
+      installed: false,
+      declared: false,
+      declaredSources: [],
+      installRef: 'runtime/adapter-smoke',
+      source: 'homepage-preview'
+    },
+    {
+      id: 'homepage-preview-skills:im-handoff',
+      registry: 'homepage-preview-skills',
+      registryName: t('skillHubRegistryTitle'),
+      configSource: 'project' as const,
+      configLabel: t('knowledgeConfigLabel'),
+      name: 'channels/im-handoff',
+      description: t('skillHubImHandoffDescription'),
+      skills: ['im-bridge-notifier', 'multi-device-handoff'],
+      commands: [],
+      agents: ['Kimi', 'Claude Code'],
+      mcpServers: [],
+      hasHooks: true,
+      installed: false,
+      declared: false,
+      declaredSources: [],
+      installRef: 'channels/im-handoff',
+      source: 'homepage-preview'
+    }
+  ].map(item => {
+    const declaredSources = Array.from(installedSkillHubTargets.get(item.id) ?? [])
+    return {
+      ...item,
+      declared: declaredSources.length > 0,
+      declaredSources,
+      installed: declaredSources.length > 0
+    }
+  })
 
 const buildSkillHubSearchResponse = (url: URL): SkillHubSearchResult => {
   const query = (url.searchParams.get('q') ?? '').trim().toLowerCase()
   const registry = url.searchParams.get('registry') ?? 'all'
   const parsedLimit = Number.parseInt(url.searchParams.get('limit') ?? '', 10)
   const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 100
+  const parsedOffset = Number.parseInt(url.searchParams.get('offset') ?? '', 10)
+  const offset = Number.isFinite(parsedOffset) && parsedOffset >= 0 ? parsedOffset : 0
+  const source = url.searchParams.get('source') ?? 'all'
+  const installFilter = url.searchParams.get('install') ?? 'all'
+  const sort = url.searchParams.get('sort') ?? 'default'
   const matchesRegistry = (item: SkillHubItem) => registry === 'all' || registry === '' || item.registry === registry
   const matchesQuery = (item: SkillHubItem) => {
     if (query === '') return true
@@ -1414,12 +1476,28 @@ const buildSkillHubSearchResponse = (url: URL): SkillHubSearchResult => {
       item.agents.join(' ')
     ].join(' ').toLowerCase().includes(query)
   }
-  const items = buildSkillHubItems().filter(item => matchesRegistry(item) && matchesQuery(item))
+  const matchingItems = buildSkillHubItems().filter(item => matchesRegistry(item) && matchesQuery(item))
+  const sources = Array.from(new Set(matchingItems.map(item => item.source))).sort((left, right) => (
+    left.localeCompare(right)
+  ))
+  const items = matchingItems.filter((item) => {
+    if (source !== 'all' && source !== '' && item.source !== source) return false
+    if (installFilter === 'installed' && !item.installed) return false
+    if (installFilter === 'notInstalled' && item.installed) return false
+    return true
+  }).sort((left, right) => {
+    if (sort === 'nameAsc') return left.name.localeCompare(right.name)
+    if (sort === 'nameDesc') return right.name.localeCompare(left.name)
+    return left.registryName.localeCompare(right.registryName) || left.name.localeCompare(right.name)
+  })
+  const total = items.length
 
   return {
-    hasMore: items.length > limit,
+    hasMore: offset + limit < total,
     registries: buildSkillHubRegistries(),
-    items: items.slice(0, limit)
+    items: items.slice(offset, offset + limit),
+    sources,
+    total
   }
 }
 
@@ -1431,13 +1509,19 @@ const buildSkillHubInstallResponse = async (init?: RequestInit): Promise<Homepag
   const registry = typeof body.registry === 'string' && body.registry.trim() !== ''
     ? body.registry.trim()
     : 'homepage-preview-skills'
+  const target = body.target === 'global' ? 'global' : 'project'
   const item = buildSkillHubItems().find(candidate => candidate.registry === registry && candidate.installRef === skill)
+  if (item != null) {
+    const declaredSources = installedSkillHubTargets.get(item.id) ?? new Set<SkillHubInstallTarget>()
+    declaredSources.add(target)
+    installedSkillHubTargets.set(item.id, declaredSources)
+  }
   const result: SkillHubInstallResult = {
     registry,
     registryName: item?.registryName ?? t('skillHubRegistryTitle'),
-    configSource: 'project',
-    configLabel: t('knowledgeConfigLabel'),
-    configPath: '.oo.config.json',
+    configSource: target,
+    configLabel: target === 'global' ? '~/.oneworks/.oo.config.json' : t('knowledgeConfigLabel'),
+    configPath: target === 'global' ? '~/.oneworks/.oo.config.json' : '.oo.config.json',
     source: item?.source ?? 'homepage-preview',
     skill,
     name: item?.name ?? skill,
@@ -2217,7 +2301,23 @@ const handleApiRequest = async (
   }
 
   if (path === '/api/ai/skills/import' && method === 'POST') {
-    return { body: { fileCount: 3, targetDir: `${t('workspaceFolder')}/.oo/skills/homepage-preview` } }
+    const targetHeader = new Headers(init?.headers).get('x-skill-target')
+    if (targetHeader != null && targetHeader !== '' && targetHeader !== 'project' && targetHeader !== 'global') {
+      return {
+        status: 400,
+        body: {
+          success: false,
+          error: { code: 'invalid_skill_import_target', message: 'Invalid skill import target' }
+        }
+      }
+    }
+    const target = targetHeader === 'global' ? 'global' : 'project'
+    return {
+      body: {
+        fileCount: 3,
+        targetDir: target === 'global' ? '~/.agents/skills' : `${t('workspaceFolder')}/.oo/skills`
+      }
+    }
   }
 
   if (path === '/api/ai/skills' && method === 'GET') {
