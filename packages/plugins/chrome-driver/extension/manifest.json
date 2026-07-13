@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqfj8ViP2E3kusrLx7s12ONWkm0WJUhEjW3X2oSHUEGBz81RIv+IT3MhPPYQyrBuQCAmdWo36oHaIzGpngqGvOQHhEopDZbY9QdGTI3pFmSa0nD1UJ6nP/0SGGUb3W0W+//SI3ppe+vxB+WTbPRauHkYErxbIXwk23EQLwR9A9/IWOHdNlhSjQxR4u+G9A+Kn6fZLxltTZApo8z3HvaULd68NRCODGDeivIgN/Kln0QKTaa61GPIgDqDz8lrVnEWF7QVpIoR27LgMKBf9FhGfWzNYWHW6Gvis/WPKZAlDMC46VV52CBTwuqQg0marZffNDwQYrZ0cwIwyYMKc8EWTYQIDAQAB",
+  "name": "oneWorks External Browser (Minimal)",
+  "version": "0.1.0",
+  "description": "Minimal-permission flavor for paired, typed, auditable oneWorks browser control.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": ["storage", "alarms", "activeTab"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "optional_permissions": [
+    "bookmarks",
+    "browsingData",
+    "contentSettings",
+    "cookies",
+    "downloads",
+    "downloads.open",
+    "history",
+    "management",
+    "pageCapture",
+    "privacy",
+    "readingList",
+    "scripting",
+    "sessions",
+    "system.display",
+    "tabGroups",
+    "tabs",
+    "webNavigation"
+  ],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [{
+    "matches": ["http://127.0.0.1/*", "http://localhost/*"],
+    "js": ["content-script.js"],
+    "run_at": "document_start"
+  }],
+  "web_accessible_resources": [{
+    "resources": ["agent-cursor.svg", "default-tab-favicon.svg"],
+    "matches": ["<all_urls>"]
+  }],
+  "action": {
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    },
+    "default_popup": "popup.html",
+    "default_title": "oneWorks External Browser"
+  }
+}

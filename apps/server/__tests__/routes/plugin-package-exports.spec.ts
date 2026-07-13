@@ -579,9 +579,9 @@ describe('plugin package export conventions', () => {
     expect(watchedPayload.plugins[0]?.contributions?.navItems).toBeUndefined()
   })
 
-  it('uses the host Vite dev server entry for local client source exports', async () => {
+  it('uses the host Vite base for workspace-routed local client source exports', async () => {
     const previousBase = process.env.__ONEWORKS_PROJECT_CLIENT_BASE__
-    process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ = '/ui/'
+    process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ = '/ui/w/w_12345678/'
     const pluginRoot = path.join(workspaceFolder, 'plugins', 'host-vite')
     try {
       await mkdir(path.join(pluginRoot, 'client', 'src'), { recursive: true })

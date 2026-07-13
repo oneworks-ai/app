@@ -50,24 +50,23 @@ const resolveRestorableWorkspaceConnection = async (workspaceId: string) => {
   const rememberedRelayConnection = readRememberedWorkspaceConnectionMetadata(workspaceId, 'relay')
   const relayManagerServerBaseUrl = getLauncherManagerServerBaseUrl(rememberedRelayConnection?.managerServerBaseUrl)
   let relayError: unknown
-  const relayConnection = await getLauncherRelayWorkspaceConnection(workspaceId, {
-    managerServerBaseUrl: relayManagerServerBaseUrl
-  })
-    .catch((error) => {
-      relayError = error
-      return undefined
-    })
-  if (relayConnection != null) {
-    return {
-      connection: {
-        ...relayConnection,
-        managerServerBaseUrl: relayManagerServerBaseUrl
-      },
-      transport: 'relay'
-    } satisfies RestorableWorkspaceConnection
-  }
-
   if (rememberedRelayConnection != null) {
+    const relayConnection = await getLauncherRelayWorkspaceConnection(workspaceId, {
+      managerServerBaseUrl: relayManagerServerBaseUrl
+    })
+      .catch((error) => {
+        relayError = error
+        return undefined
+      })
+    if (relayConnection != null) {
+      return {
+        connection: {
+          ...relayConnection,
+          managerServerBaseUrl: relayManagerServerBaseUrl
+        },
+        transport: 'relay'
+      } satisfies RestorableWorkspaceConnection
+    }
     if (isRemoteWorkspaceUnavailableError(relayError)) {
       throw relayError
     }

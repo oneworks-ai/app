@@ -3361,6 +3361,7 @@
       "extensionPoints": "插件扩展点",
       "extensionContributions": "插件扩展贡献",
       "navItems": "左侧导航入口",
+      "settingsPages": "设置子页面",
       "navMoreMenu": "左侧更多菜单",
       "navFooterBefore": "左侧菜单上方区域",
       "chatHeaderActions": "会话头部按钮",
@@ -3405,7 +3406,9 @@
       "shortcut": "快捷键",
       "inputSchema": "输入 Schema",
       "outputSchema": "输出 Schema",
-      "headerSchema": "Header Schema"
+      "headerSchema": "Header Schema",
+      "schema": "设置 Schema",
+      "uiSchema": "设置 UI Schema"
     }
   },
   "config": {
@@ -3418,6 +3421,9 @@
     "invalidJson": "JSON 格式错误，请修正后再保存。",
     "saveSuccess": "配置已保存",
     "saveFailed": "配置保存失败",
+    "pluginPages": {
+      "saveFailed": "插件设置保存失败"
+    },
     "copySuccess": "配置已复制",
     "copyFailed": "复制失败",
     "sources": {

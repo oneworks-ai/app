@@ -26,6 +26,11 @@
       "watch": true
     },
     {
+      "id": "./packages/plugins/chrome-driver",
+      "scope": "chrome",
+      "watch": true
+    },
+    {
       "id": "./packages/plugins/demo",
       "scope": "demo",
       "watch": true,

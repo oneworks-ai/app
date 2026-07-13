@@ -9,6 +9,8 @@
   },
   "exports": {
     ".": "./plugin.json",
+    "./runtime/stdio": "./bin/browser-driver-stdio.cjs",
+    "./runtime/workflows": "./bin/browser-driver-workflows.cjs",
     "./package.json": "./package.json"
   },
   "files": [

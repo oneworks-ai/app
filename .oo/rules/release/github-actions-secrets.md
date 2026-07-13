@@ -15,6 +15,8 @@
 - `RELAY_DEV_CLOUDFLARE_API_TOKEN`、`RELAY_DEV_CLOUDFLARE_ACCOUNT_ID`：部署官方 Cloudflare dev Relay/Admin。
 - `APPLE_ID`、`APPLE_ID_PASSWORD`、`APPLE_TEAM_ID`、`DESKTOP_CSC_LINK`、`DESKTOP_CSC_KEY_PASSWORD`、`DESKTOP_CSC_INSTALLER_LINK`、`DESKTOP_CSC_INSTALLER_KEY_PASSWORD`：macOS App Store 外分发签名和 notarization；未做 Apple Developer 签名时可以缺省。
 
+Chrome Web Store 发布不使用长期 OAuth refresh token 或 service-account JSON key，因此不新增 repository secret。它使用 GitHub OIDC -> Google Cloud Workload Identity Federation -> Chrome Web Store service account 的短期 token。
+
 官方 Vercel dev Relay/Admin 不再使用 GitHub repository secret 里的 CLI token 部署。常规路径是 Vercel GitHub App 监听 `oneworks-ai/app` 的 `main` 分支并部署 `apps/relay-server` project；GitHub Actions 只轮询 `dev.vc.oneworks.cloud` 做 smoke 验证。不要为常规 dev deploy 新增或轮换 `RELAY_DEV_VERCEL_TOKEN`、`RELAY_DEV_VERCEL_ORG_ID`、`RELAY_DEV_VERCEL_PROJECT_ID`。
 
 macOS Developer ID 签名的完整创建和验证步骤见 [macOS signing](./macos-signing.md)。
@@ -62,6 +64,10 @@ bootstrap_with_token=true
 2. 创建 Automation / publish 用 token。
 3. 写入仓库 secret：`gh secret set NPM_TOKEN --repo oneworks-ai/app`
 4. 用一个需要 bootstrap 的新包或 dry-run 发布计划验证。不要为了验证而重复发布已存在版本。
+
+## Chrome Web Store
+
+Chrome Web Store 不使用长期 repository secret；WIF、service account、environment、Actions variables、首次 item identity 和正式提交命令见 [Chrome Web Store 发布配置](./chrome-web-store.md)。
 
 ## VS Code Marketplace：VSCE_PAT
 

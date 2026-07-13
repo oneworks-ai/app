@@ -14,5 +14,6 @@ This package controls only OneWorks interaction-panel browser webviews through t
 - A page ref is snapshot-scoped. On `TARGET_NOT_FOUND`, take a new snapshot instead of guessing a selector.
 - Keep tool names explicit about the controlled surface: low-level tools use `in_app_browser_*`; workflow tools use `execute_in_app_browser_*` and `get_in_app_browser_*`. Do not add ambiguous `browser_*` or `execute_browser_*` aliases.
 - Workflow steps may include page-local operations with compact results. Do not add page close/duplicate/move, clear-history, full history reads, arbitrary scripts, or raw protocol calls to the workflow whitelist.
+- `./runtime/stdio` and `./runtime/workflows` are intentionally public, transport-neutral exports reused by other semantic browser drivers. Keep their JSON-RPC envelope and run/step result shape backwards compatible; surface-specific operation schemas stay in the owning plugin.
 
 Run `pnpm -C packages/plugins/browser-driver test` and the repository typecheck after changing the plugin contract.

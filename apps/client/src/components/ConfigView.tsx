@@ -14,7 +14,8 @@ import type {
   AdapterAccountDetailResult,
   AdapterAccountsResult,
   ConfigResponse,
-  ConfigUiSection
+  ConfigUiSection,
+  PluginContributionSettingsPage
 } from '@oneworks/types'
 import type { ConfigDetailRoute } from './config/configDetail'
 
@@ -28,6 +29,8 @@ import {
   pendingSessionCreationContextAtom,
   pendingSessionInitialContentAtom
 } from '#~/hooks/chat/session-creation-context'
+import { usePluginContext } from '#~/plugins/plugin-context'
+import { usePluginSlot } from '#~/plugins/plugin-slots'
 import { useRoutePluginChrome } from '#~/plugins/route-plugin-chrome'
 
 import {
@@ -82,6 +85,8 @@ import { openExternalUrl } from './config/modelServiceProviderActionUtils'
 import { modelServiceImportQueryKeys, parseModelServiceQueryImport } from './config/modelServiceQueryImport'
 import { toLabel } from './config/record-editors/schemaRecordUtils'
 import { toDisplayEnvironmentName, toEnvironmentReference } from './config/worktree-environment-panel-model'
+import { PluginSettingsPage } from './plugins/PluginSettingsPage'
+import { isPluginSettingsTabKey, resolveSettingsTabKey } from './plugins/plugin-settings-route'
 
 interface ConfigDraftConflict {
   draftKey: string
@@ -89,6 +94,25 @@ interface ConfigDraftConflict {
   source: ConfigSource
   remoteValue: unknown
 }
+
+type PluginSettingsPageContribution = PluginContributionSettingsPage & { pluginScope: string }
+
+interface ConfigGroupTab {
+  key: string
+  label: string
+  type: 'group'
+}
+
+interface ConfigContentTab {
+  icon: string
+  key: string
+  label: string
+  pluginSettingsPage?: PluginSettingsPageContribution
+  type?: undefined
+  value?: unknown
+}
+
+type ConfigTab = ConfigGroupTab | ConfigContentTab
 
 interface ConfigQueryParams extends Record<string, string> {
   detail: string
@@ -101,6 +125,7 @@ const configSourceKeys = ['global', 'project', 'user'] as const
 const configLegacyRouteQueryKeys = ['tab', 'detail', 'section']
 const configQueryDefaults: ConfigQueryParams = { tab: 'general', source: '', detail: '', section: '' }
 const CONFIG_ROUTE_SIDEBAR_KEY = 'config-view'
+const getPluginSettingsPageKey = (scope: string, id: string) => `plugin:${scope}:${id}`
 const modelServiceDetailTabPathSegments = new Set([
   'access',
   'advanced',
@@ -261,6 +286,7 @@ const isModelServiceDetailTabRoute = (
 export function ConfigView() {
   const { i18n, t } = useTranslation()
   const { message, modal } = App.useApp()
+  const { pluginSnapshotStatus } = usePluginContext()
   const navigate = useNavigate()
   const location = useLocation()
   const setPendingSessionInitialContent = useSetAtom(pendingSessionInitialContentAtom)
@@ -343,10 +369,16 @@ export function ConfigView() {
   const hasBrowserDownloads = window.oneworksDesktop?.listBrowserDownloads != null
   const hasConfigLoadError = !isLoading && data == null && error != null
   const canRenderConfig = !isLoading && data != null
+  const pluginSettingsPages = usePluginSlot<PluginContributionSettingsPage>('settings.pages')
+  const validPluginSettingsPages = useMemo(() =>
+    pluginSettingsPages.filter(page => (
+      (typeof page.clientView === 'string' && page.clientView.trim() !== '') ||
+      (page.schema != null && typeof page.schema === 'object' && !Array.isArray(page.schema))
+    )), [pluginSettingsPages])
 
   const configTabKeys = useMemo(() => new Set<string>(editableConfigSectionKeys), [])
 
-  const tabs = useMemo(() => [
+  const tabs = useMemo<ConfigTab[]>(() => [
     { key: 'group-config', type: 'group', label: t('config.groups.config') },
     { key: 'general', icon: 'tune', label: t('config.sections.general'), value: currentSource?.general },
     {
@@ -385,6 +417,12 @@ export function ConfigView() {
       value: currentSource?.adapters
     },
     { key: 'plugins', icon: 'extension', label: t('config.sections.plugins'), value: currentSource?.plugins },
+    ...validPluginSettingsPages.map(page => ({
+      key: getPluginSettingsPageKey(page.pluginScope, page.id),
+      icon: page.icon ?? 'extension',
+      label: page.title,
+      pluginSettingsPage: page
+    })),
     { key: 'mcp', icon: 'account_tree', label: t('config.sections.mcp'), value: currentSource?.mcp },
     { key: 'voice', icon: 'mic', label: t('config.sections.voice'), value: currentSource?.voice },
     { key: 'shortcuts', icon: 'keyboard', label: t('config.sections.shortcuts'), value: currentSource?.shortcuts },
@@ -413,7 +451,8 @@ export function ConfigView() {
     hasBrowserHistory,
     hasDesktopSettings,
     hasSavedPasswords,
-    t
+    t,
+    validPluginSettingsPages
   ])
   const tabKeys = useMemo(() => new Set(tabs.filter(tab => tab.type !== 'group').map(tab => tab.key)), [tabs])
   const desktopNavGroups = useMemo(() => {
@@ -462,8 +501,18 @@ export function ConfigView() {
 
   const sectionAliasTab = queryValues.section === 'voice.speechToText' ? 'voice' : undefined
   const rawTab = searchParams.get('tab')
-  const queryTabKey = sectionAliasTab ??
-    ((pathValues.hasTabPath || rawTab != null) && tabKeys.has(queryValues.tab) ? queryValues.tab : 'general')
+  const hasExplicitTab = pathValues.hasTabPath || rawTab != null
+  const queryTabKey = sectionAliasTab ?? (hasExplicitTab
+    ? resolveSettingsTabKey({
+      availableTabKeys: tabKeys,
+      requestedTabKey: queryValues.tab,
+      snapshotStatus: pluginSnapshotStatus
+    })
+    : 'general')
+  const shouldRedirectUnavailablePluginPage = hasExplicitTab &&
+    isPluginSettingsTabKey(queryValues.tab) &&
+    pluginSnapshotStatus !== 'loading' &&
+    !tabKeys.has(queryValues.tab)
   const [activeTabKey, setActiveTabKeyState] = useState(queryTabKey)
   const hasModelServiceImportQuery = useMemo(() => (
     modelServiceImportQueryKeys.some(key => searchParams.has(key))
@@ -537,6 +586,10 @@ export function ConfigView() {
     updateConfigRoute
   ])
   useEffect(() => {
+    if (!shouldRedirectUnavailablePluginPage) return
+    updateConfigRoute({ detail: '', section: '', tab: 'plugins' })
+  }, [shouldRedirectUnavailablePluginPage, updateConfigRoute])
+  useEffect(() => {
     if (searchParams.get('source') != null) return
     const preferredSource = getPreferredConfigSourceForTab(activeTabKey)
     if (preferredSource != null) {
@@ -602,6 +655,7 @@ export function ConfigView() {
 
   useEffect(() => {
     if (activeTab == null) return
+    if (activeTab.type === 'group') return
     if (!configTabKeys.has(activeTab.key)) return
     const draftKey = `${sourceKey}:${activeTab.key}`
     setDrafts((prev) => {
@@ -1341,7 +1395,7 @@ export function ConfigView() {
     t
   ])
 
-  const renderTabContent = (tab: typeof tabs[number]) => (
+  const renderTabContent = (tab: ConfigContentTab) => (
     <div key={`${sourceKey}:${tab.key}`} className='config-view__content'>
       {tab.key === 'about' && (
         <AboutSection value={tab.value as AboutInfo | undefined} />
@@ -1403,6 +1457,9 @@ export function ConfigView() {
           }}
         />
       )}
+      {'pluginSettingsPage' in tab && tab.pluginSettingsPage != null && (
+        <PluginSettingsPage page={tab.pluginSettingsPage} />
+      )}
       {tab.key !== 'about' &&
         tab.key !== 'browserDownloads' &&
         tab.key !== 'browserHistory' &&
@@ -1411,6 +1468,7 @@ export function ConfigView() {
         tab.key !== 'appearance' &&
         tab.key !== 'externalSessions' &&
         tab.key !== 'worktreeEnvironments' &&
+        !('pluginSettingsPage' in tab) &&
         !configTabKeys.has(tab.key) && (
           <DisplayValue value={tab.value} sectionKey={tab.key} t={t} />
         )}
@@ -1549,7 +1607,7 @@ export function ConfigView() {
           title={t('config.loadFailed')}
         />
       )}
-      {canRenderConfig && activeTab != null ? renderTabContent(activeTab) : null}
+      {canRenderConfig && activeContentTab != null ? renderTabContent(activeContentTab) : null}
     </RouteContainerLayout>
   )
 }

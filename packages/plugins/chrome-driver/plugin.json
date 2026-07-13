@@ -1,0 +1,167 @@
+{
+  "__oneWorksPluginManifest": true,
+  "name": "@oneworks/plugin-chrome-driver",
+  "displayName": "External Browser",
+  "version": "0.1.0-beta.5",
+  "assets": {
+    "skills": "skills",
+    "mcp": "mcp"
+  },
+  "plugin": {
+    "client": {},
+    "server": {
+      "roles": ["manager", "workspace"]
+    },
+    "contributions": {
+      "roles": ["manager", "workspace"],
+      "surfaces": ["workspace"],
+      "settingsPages": [
+        {
+          "id": "external-browser",
+          "title": "External Browser",
+          "titleI18n": { "en": "External Browser", "zh-Hans": "外部浏览器" },
+          "descriptionI18n": {
+            "en": "Pair an external browser, grant capabilities, review confirmations, and inspect bridge state.",
+            "zh-Hans": "配对外部浏览器、按需授权、处理确认并查看连接状态。"
+          },
+          "icon": "language",
+          "clientView": "control"
+        }
+      ],
+      "toolUsePresentations": [
+        {
+          "id": "external-chrome-workflow",
+          "title": "Run external browser workflow",
+          "titleI18n": { "en": "Run external browser workflow", "zh-Hans": "执行外部浏览器工作流" },
+          "icon": "account_tree",
+          "tools": ["execute_chrome_workflow", "execute_chrome_workflows", "resume_chrome_workflow"],
+          "target": "tab_id",
+          "input": { "mode": "auto" },
+          "result": {
+            "mode": "declared",
+            "fields": [
+              {
+                "path": "structuredContent.run_id",
+                "title": "Run",
+                "titleI18n": { "zh-Hans": "运行" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.outcome",
+                "title": "Outcome",
+                "titleI18n": { "zh-Hans": "结果" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.steps.ids",
+                "title": "Steps",
+                "titleI18n": { "zh-Hans": "步骤" },
+                "format": "chips"
+              },
+              {
+                "path": "structuredContent.runs",
+                "title": "Runs",
+                "titleI18n": { "zh-Hans": "运行" },
+                "format": "records",
+                "item": { "titlePath": "workflow_id", "subtitlePath": "outcome", "metaPath": "run_id" }
+              }
+            ]
+          }
+        },
+        {
+          "id": "external-chrome-targets",
+          "title": "Inspect external browser targets",
+          "titleI18n": { "en": "Inspect external browser targets", "zh-Hans": "查看外部浏览器目标" },
+          "icon": "tab",
+          "tools": [
+            "chrome_capabilities",
+            "chrome_windows",
+            "chrome_tabs",
+            "chrome_tab_groups",
+            "chrome_frames",
+            "chrome_devices"
+          ],
+          "target": "tab_id",
+          "input": { "mode": "auto" },
+          "result": { "mode": "auto" }
+        },
+        {
+          "id": "external-chrome-data",
+          "title": "Use external browser data",
+          "titleI18n": { "en": "Use external browser data", "zh-Hans": "使用外部浏览器数据" },
+          "icon": "inventory_2",
+          "tools": [
+            "chrome_sessions",
+            "chrome_history",
+            "chrome_bookmarks",
+            "chrome_downloads",
+            "chrome_reading_list",
+            "chrome_extensions"
+          ],
+          "target": "action",
+          "input": { "mode": "auto" },
+          "result": { "mode": "auto" }
+        },
+        {
+          "id": "external-chrome-page",
+          "title": "Use external browser page",
+          "titleI18n": { "en": "Use external browser page", "zh-Hans": "操作外部浏览器页面" },
+          "icon": "ads_click",
+          "tools": ["chrome_page", "chrome_debug"],
+          "target": "tab_id",
+          "input": { "mode": "auto" },
+          "result": { "mode": "auto" }
+        },
+        {
+          "id": "external-chrome-sensitive",
+          "title": "Manage external browser privacy",
+          "titleI18n": { "en": "Manage external browser privacy", "zh-Hans": "管理外部浏览器隐私" },
+          "icon": "shield",
+          "tools": [
+            "chrome_cookies",
+            "chrome_site_settings",
+            "chrome_browsing_data",
+            "chrome_proxy",
+            "chrome_privacy",
+            "chrome_raw",
+            "chrome_audit"
+          ],
+          "target": "action",
+          "input": { "mode": "auto" },
+          "result": {
+            "mode": "declared",
+            "fields": [
+              {
+                "path": "structuredContent.status",
+                "title": "Status",
+                "titleI18n": { "zh-Hans": "状态" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.audit_id",
+                "title": "Audit",
+                "titleI18n": { "zh-Hans": "审计" },
+                "format": "inline"
+              },
+              {
+                "path": "structuredContent.summary",
+                "title": "Summary",
+                "titleI18n": { "zh-Hans": "摘要" },
+                "format": "text"
+              }
+            ]
+          }
+        },
+        {
+          "id": "external-chrome-workflow-steps",
+          "title": "View external browser workflow steps",
+          "titleI18n": { "en": "View external browser workflow steps", "zh-Hans": "查看外部浏览器工作流步骤" },
+          "icon": "format_list_bulleted",
+          "tools": ["get_chrome_workflow_steps"],
+          "target": "run_id",
+          "result": { "mode": "auto" }
+        }
+      ]
+    }
+  }
+}

@@ -1,5 +1,6 @@
 # @oneworks/client 0.1.0-beta.5
 
+- Preserve the remembered local manager endpoint when restoring a workspace route so host plugins do not accidentally resolve through the Web client or a colliding Relay workspace id.
 - Removed the quick native history import entry from the General config page while keeping the External Sessions management page available from the settings sidebar.
 - Fixed the NavRail More menu surface so Electron macOS vibrancy no longer makes the menu content transparent over the session list.
 - Added a Web-only "Open Another Project" menu link that returns workspace users to the launcher while preserving native browser drag, copy-link, and open-in-new-tab behavior.

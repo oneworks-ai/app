@@ -1,0 +1,59 @@
+{
+  "name": "@oneworks/plugin-chrome-driver",
+  "type": "module",
+  "version": "0.1.0-beta.5",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/plugins/chrome-driver"
+  },
+  "exports": {
+    ".": "./plugin.json",
+    "./client": {
+      "source": "./client/src/index.tsx",
+      "default": "./client/dist/index.js"
+    },
+    "./server": {
+      "source": "./server/src/index.ts",
+      "default": "./server/dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "AGENTS.md",
+    "README.en.md",
+    "README.md",
+    "bin",
+    "client/dist",
+    "extension",
+    "mcp",
+    "plugin.json",
+    "server/dist",
+    "skills"
+  ],
+  "scripts": {
+    "build": "pnpm run build:client && pnpm run build:server",
+    "build:extension": "node bin/materialize-extension.cjs",
+    "build:extension:e2e": "node bin/materialize-extension.cjs --e2e",
+    "build:extension:minimal": "node bin/materialize-extension.cjs --minimal",
+    "build:extension:privileged": "pnpm run build:extension",
+    "package:extension": "node bin/package-extension.cjs",
+    "package:extension:all": "pnpm run package:extension && pnpm run package:extension:minimal",
+    "package:extension:minimal": "node bin/package-extension.cjs --flavor base",
+    "package:extension:privileged": "pnpm run package:extension",
+    "publish:chrome-web-store": "node bin/publish-chrome-web-store.cjs",
+    "validate:extension-package": "node bin/validate-extension-package.cjs",
+    "build:client": "tsc -p client/tsconfig.json --noEmit && vite build --config client/vite.config.ts",
+    "build:server": "tsc -p server/tsconfig.json",
+    "test": "pnpm -C ../../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/plugins/chrome-driver/__tests__",
+    "typecheck": "tsc -p server/tsconfig.json --noEmit && tsc -p client/tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@oneworks/cursor": "workspace:*",
+    "@oneworks/plugin-browser-driver": "workspace:*"
+  },
+  "devDependencies": {
+    "fflate": "^0.8.2",
+    "vite": "^5.4.8"
+  }
+}

@@ -442,7 +442,8 @@ const normalizeHostViteBasePath = () => {
   const rawBase = process.env.__ONEWORKS_PROJECT_CLIENT_BASE__?.trim() || '/'
   const base = /^[a-z][a-z\d+.-]*:\/\//i.test(rawBase) || rawBase.startsWith('/') ? rawBase : `/${rawBase}`
   const pathname = new URL(base, 'http://vibe.local').pathname
-  return pathname === '/' ? '' : pathname.replace(/\/$/, '')
+  const normalizedPathname = pathname === '/' ? '' : pathname.replace(/\/$/, '')
+  return normalizedPathname.replace(/\/w\/w_[\w-]{8,64}$/u, '')
 }
 
 const resolveHostViteDevClientEntryUrl = async (
@@ -563,6 +564,7 @@ const shouldReloadForDiscoveryPath = (relativePath: string) => {
 
 export class PluginManager {
   private loading?: Promise<void>
+  private reloading?: Promise<void>
   private loaded = false
   private records = new Map<string, RuntimeRecord>()
   private diagnostics: PluginDiagnostic[] = []
@@ -581,10 +583,20 @@ export class PluginManager {
   }
 
   async reload() {
-    await this.dispose()
-    this.loading = undefined
-    this.loaded = false
-    await this.load()
+    this.reloading ??= (async () => {
+      await this.dispose()
+      this.loading = undefined
+      this.loaded = false
+      await this.load()
+    })()
+    const pending = this.reloading
+    try {
+      await pending
+    } finally {
+      if (this.reloading === pending) {
+        this.reloading = undefined
+      }
+    }
   }
 
   async dispose() {

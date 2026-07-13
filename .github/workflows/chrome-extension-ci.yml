@@ -1,0 +1,95 @@
+name: Chrome Extension CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/chrome-extension-ci.yml
+      - .github/workflows/chrome-extension-release.yml
+      - .github/workflows/release-tags.yml
+      - packages/cursor/**
+      - packages/plugins/browser-driver/**
+      - packages/plugins/chrome-driver/**
+      - packages/types/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/chrome-extension-ci.yml
+      - .github/workflows/chrome-extension-release.yml
+      - .github/workflows/release-tags.yml
+      - packages/cursor/**
+      - packages/plugins/browser-driver/**
+      - packages/plugins/chrome-driver/**
+      - packages/types/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: chrome-extension-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Read extension version
+        id: version
+        run: |
+          version="$(node -p "require('./packages/plugins/chrome-driver/package.json').version")"
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Typecheck extension plugin
+        run: pnpm --filter @oneworks/plugin-chrome-driver typecheck
+
+      - name: Test extension plugin
+        run: pnpm --filter @oneworks/plugin-chrome-driver test
+
+      - name: Build extension plugin
+        run: pnpm --filter @oneworks/plugin-chrome-driver build
+
+      - name: Package developer and minimal extensions
+        run: pnpm --filter @oneworks/plugin-chrome-driver package:extension:all
+
+      - name: Write package checksums
+        working-directory: packages/plugins/chrome-driver/dist-package
+        run: sha256sum *.zip > SHA256SUMS
+
+      - name: Upload extension artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: oneworks-external-browser-v${{ steps.version.outputs.value }}
+          path: packages/plugins/chrome-driver/dist-package/*
+          if-no-files-found: error
+          retention-days: 14

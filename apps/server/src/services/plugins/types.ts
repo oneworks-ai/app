@@ -5,7 +5,7 @@ import type {
   ConfigJsonSchema,
   PluginConfigManifest,
   PluginContributionAvailability,
-  PluginContributionSurface,
+  PluginContributionManifest as SharedPluginContributionManifest,
   PluginLocalizedText,
   PluginRuntimeApiRegistration,
   PluginRuntimeChannelInvocation,
@@ -42,19 +42,12 @@ export interface PluginServerManifest {
 
 export interface PluginContributionLauncherSearchProvider extends PluginContributionAvailability {
   id: string
-  title?: string
+  title: string
   command: string
 }
 
-export interface PluginContributionManifest extends PluginContributionAvailability {
-  navItems?: unknown[]
+export interface PluginContributionManifest extends SharedPluginContributionManifest {
   menuItems?: unknown[]
-  chatHeaderActions?: unknown[]
-  chatInteractionPanelEmptyActions?: unknown[]
-  workbenchTabs?: unknown[]
-  workspaceDrawerTabs?: unknown[]
-  launcherSearchProviders?: PluginContributionLauncherSearchProvider[]
-  surfaces?: PluginContributionSurface[]
   [key: string]: unknown
 }
 

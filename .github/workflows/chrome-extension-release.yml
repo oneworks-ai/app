@@ -1,0 +1,200 @@
+name: Chrome Extension Release
+on:
+  push:
+    tags:
+      - "pkg/oneworks-plugin-chrome-driver/v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to package. Must start with pkg/oneworks-plugin-chrome-driver/v.
+        required: true
+        type: string
+      publish_store:
+        description: Submit the full developer package to Chrome Web Store after building the GitHub Release.
+        default: false
+        required: true
+        type: boolean
+permissions:
+  contents: read
+env:
+  CHROME_EXTENSION_RELEASE_TAG_PREFIX: pkg/oneworks-plugin-chrome-driver/v
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+concurrency:
+  group: chrome-extension-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      artifact-metadata: write
+      attestations: write
+      contents: read
+      id-token: write
+    outputs:
+      artifact_name: oneworks-external-browser-v${{ steps.version.outputs.value }}
+      store_archive: oneworks-external-browser-v${{ steps.version.outputs.value }}.zip
+      release_tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate release tag and version
+        id: version
+        env:
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag || '' }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          tag_name="${INPUT_RELEASE_TAG:-$REF_NAME}"
+          package_version="$(node -p "require('./packages/plugins/chrome-driver/package.json').version")"
+          case "$tag_name" in
+            ${CHROME_EXTENSION_RELEASE_TAG_PREFIX}*) ;;
+            *)
+              echo "Chrome extension release tags must start with ${CHROME_EXTENSION_RELEASE_TAG_PREFIX}." >&2
+              exit 1
+              ;;
+          esac
+          tag_version="${tag_name#${CHROME_EXTENSION_RELEASE_TAG_PREFIX}}"
+          if [ "$tag_version" != "$package_version" ]; then
+            echo "Tag version ($tag_version) does not match extension package version ($package_version)." >&2
+            exit 1
+          fi
+          tag_commit="$(git rev-parse "$tag_name^{commit}")"
+          head_commit="$(git rev-parse HEAD)"
+          if [ "$tag_commit" != "$head_commit" ]; then
+            echo "Workflow checkout ($head_commit) does not match release tag $tag_name ($tag_commit)." >&2
+            exit 1
+          fi
+          echo "tag=$tag_name" >> "$GITHUB_OUTPUT"
+          echo "value=$package_version" >> "$GITHUB_OUTPUT"
+      - name: Typecheck extension plugin
+        run: pnpm --filter @oneworks/plugin-chrome-driver typecheck
+      - name: Test extension plugin
+        run: pnpm --filter @oneworks/plugin-chrome-driver test
+      - name: Build extension plugin
+        run: pnpm --filter @oneworks/plugin-chrome-driver build
+      - name: Package developer and minimal extensions
+        run: pnpm --filter @oneworks/plugin-chrome-driver package:extension:all
+      - name: Write package checksums
+        working-directory: packages/plugins/chrome-driver/dist-package
+        run: sha256sum *.zip > SHA256SUMS
+      - name: Attest extension packages
+        uses: actions/attest@v4
+        with:
+          subject-path: packages/plugins/chrome-driver/dist-package/*.zip
+      - name: Upload extension artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: oneworks-external-browser-v${{ steps.version.outputs.value }}
+          path: packages/plugins/chrome-driver/dist-package/*
+          if-no-files-found: error
+          retention-days: 14
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Download packaged extensions
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: dist
+      - name: Create or update GitHub Release
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          release_flags=(--latest=false)
+          if [[ "$VERSION" == *-* ]]; then
+            release_flags+=(--prerelease)
+          fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/* --clobber
+            gh release edit "$RELEASE_TAG" \
+              --title "External Browser Extension v$VERSION" \
+              --notes "Full developer Chrome Web Store package and optional minimal-permission package for v$VERSION." \
+              "${release_flags[@]}"
+          else
+            gh release create "$RELEASE_TAG" dist/* \
+              --title "External Browser Extension v$VERSION" \
+              --notes "Full developer Chrome Web Store package and optional minimal-permission package for v$VERSION." \
+              "${release_flags[@]}"
+          fi
+  publish-store:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_store == true
+    needs:
+      - build
+      - release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: chrome-web-store
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Download packaged extensions
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: dist
+      - name: Validate Chrome Web Store configuration
+        env:
+          EXTENSION_ID: ${{ vars.CHROME_WEB_STORE_EXTENSION_ID }}
+          PUBLISHER_ID: ${{ vars.CHROME_WEB_STORE_PUBLISHER_ID }}
+          SERVICE_ACCOUNT: ${{ vars.CHROME_WEB_STORE_SERVICE_ACCOUNT }}
+          WIF_PROVIDER: ${{ vars.CHROME_WEB_STORE_WIF_PROVIDER }}
+        run: |
+          for value in EXTENSION_ID PUBLISHER_ID SERVICE_ACCOUNT WIF_PROVIDER; do
+            if [ -z "${!value}" ]; then
+              echo "Required Chrome Web Store variable $value is not configured." >&2
+              exit 1
+            fi
+          done
+      - name: Authenticate with Google Cloud
+        id: google-auth
+        uses: google-github-actions/auth@v3
+        with:
+          access_token_lifetime: 900s
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+          create_credentials_file: false
+          service_account: ${{ vars.CHROME_WEB_STORE_SERVICE_ACCOUNT }}
+          token_format: access_token
+          workload_identity_provider: ${{ vars.CHROME_WEB_STORE_WIF_PROVIDER }}
+      - name: Upload and submit developer extension
+        env:
+          CHROME_WEB_STORE_ACCESS_TOKEN: ${{ steps.google-auth.outputs.access_token }}
+          CHROME_WEB_STORE_EXTENSION_ID: ${{ vars.CHROME_WEB_STORE_EXTENSION_ID }}
+          CHROME_WEB_STORE_PUBLISHER_ID: ${{ vars.CHROME_WEB_STORE_PUBLISHER_ID }}
+        run: >-
+          pnpm --filter @oneworks/plugin-chrome-driver publish:chrome-web-store --
+          --archive "${{ github.workspace }}/dist/${{ needs.build.outputs.store_archive }}"
