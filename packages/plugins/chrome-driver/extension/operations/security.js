@@ -48,7 +48,7 @@ export async function requireAdvancedAccess(key) {
     recoverable: true,
     advanced_access_key: key,
     user_action:
-      'Enable the matching Advanced session access switch in oneWorks Settings or the extension popup, then retry.'
+      'Enable the matching Advanced session access switch in OneWorks Settings or the extension popup, then retry.'
   })
 }
 

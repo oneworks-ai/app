@@ -5,8 +5,10 @@ import { describe, expect, it, vi } from 'vitest'
 const require = createRequire(import.meta.url)
 const manifest = require('../plugin.json') as {
   displayName: string
+  version: string
   plugin: { contributions: Record<string, unknown> & { settingsPages?: Array<Record<string, unknown>> } }
 }
+const packageManifest = require('../package.json') as { version: string }
 const contract = require('../bin/chrome-driver-contract.cjs') as {
   tools: Array<{ name: string; inputSchema: Record<string, unknown> }>
 }
@@ -29,7 +31,8 @@ const createWorkflowController = require('../../browser-driver/bin/browser-drive
 describe('external browser MCP contract', () => {
   it('injects its control view into Settings instead of the main navigation', () => {
     const contributions = manifest.plugin.contributions
-    expect(manifest.displayName).toBe('External Browser')
+    expect(manifest.displayName).toBe('OneWorks')
+    expect(manifest.version).toBe(packageManifest.version)
     expect(contributions.navItems).toBeUndefined()
     expect(contributions.routes).toBeUndefined()
     expect(contributions.settingsPages).toEqual([

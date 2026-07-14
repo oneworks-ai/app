@@ -62,7 +62,7 @@ export async function requirePermissions(permissions = [], origins = []) {
   if (Object.keys(request).length === 0 || await chrome.permissions.contains(request)) return
   throw error('MISSING_PERMISSION', 'This Chrome operation needs an optional permission.', {
     missing_permissions: [...permissions, ...origins],
-    user_action: 'Open the oneWorks Chrome extension and grant only the requested capability.'
+    user_action: 'Open the OneWorks Chrome extension and grant only the requested capability.'
   })
 }
 

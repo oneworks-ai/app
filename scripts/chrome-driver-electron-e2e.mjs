@@ -19,7 +19,7 @@ if (!Number.isInteger(port) || port <= 0) throw new Error('ONEWORKS_ELECTRON_CDP
 
 const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then(response => response.json())
 const target = targets.find(candidate => candidate.type === 'page' && candidate.url.includes('/ui/'))
-if (target == null) throw new Error('The packaged oneWorks Electron page target was not found.')
+if (target == null) throw new Error('The packaged OneWorks Electron page target was not found.')
 
 const socket = new WebSocket(target.webSocketDebuggerUrl)
 await new Promise((resolveOpen, rejectOpen) => {

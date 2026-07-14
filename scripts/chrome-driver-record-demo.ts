@@ -87,11 +87,11 @@ async function main() {
       defaultDurationMs: durationMs,
       defaultFps: fps,
       defaultViewport: { height: 900, width: 1280 },
-      description: 'Outer-process recording of oneWorks controlling an isolated external browser window.',
+      description: 'Outer-process recording of OneWorks controlling an isolated external browser window.',
       id: 'external-browser-driver-e2e',
       requiresUrl: false,
       showActionCursor: false,
-      title: 'oneWorks External Browser Driver E2E',
+      title: 'OneWorks Chrome Driver E2E',
       run: async ctx => {
         await ctx.recordDuring(ctx.durationMs, async () => {
           await writeFile(startPath, `${new Date().toISOString()}\n`, { mode: 0o600 })
@@ -118,7 +118,7 @@ async function main() {
       headless: false,
       keepFrames: false,
       language: 'zh-Hans',
-      name: 'oneworks-external-browser-control',
+      name: 'oneworks-browser-control',
       outDir,
       preserveTargetEnvironment: true,
       scenarioId: scenario.id,

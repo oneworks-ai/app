@@ -89,7 +89,7 @@ jobs:
       - name: Upload extension artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: oneworks-external-browser-v${{ steps.version.outputs.value }}
+          name: oneworks-v${{ steps.version.outputs.value }}
           path: packages/plugins/chrome-driver/dist-package/*
           if-no-files-found: error
           retention-days: 14

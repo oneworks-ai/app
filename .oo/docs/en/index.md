@@ -27,7 +27,7 @@ This documentation is the user-facing entry point for integrating One Works into
 - Website: [oneworks.cloud](https://oneworks.cloud/)
 - Docs: [oneworks.cloud/docs](https://oneworks.cloud/docs/)
 - GitHub: [oneworks-ai/app](https://github.com/oneworks-ai/app)
-- Privacy: [oneWorks Privacy Policy](./privacy.md)
+- Privacy: [OneWorks Privacy Policy](./privacy.md)
 - Support: [support@oneworks.cloud](mailto:support@oneworks.cloud)
 
 ## Integration Goals

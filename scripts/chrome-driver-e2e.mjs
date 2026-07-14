@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 /* eslint-disable max-lines -- Real extension E2E keeps lifecycle and evidence capture in one outer harness. */
+import { Buffer } from 'node:buffer'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { access, chmod, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
@@ -22,6 +23,9 @@ const outputRoot = resolve(
 const profileDir = join(outputRoot, 'profile')
 const extensionDir = join(outputRoot, 'extension')
 const evidencePath = join(outputRoot, 'evidence.json')
+const storeAssetsOutput = process.env.CHROME_DRIVER_E2E_STORE_ASSETS == null
+  ? undefined
+  : resolve(process.env.CHROME_DRIVER_E2E_STORE_ASSETS)
 const sourceExtension = join(workspaceFolder, 'packages/plugins/chrome-driver/extension')
 const demoMode = process.env.CHROME_DRIVER_E2E_DEMO === '1'
 const demoControlPath = process.env.CHROME_DRIVER_E2E_DEMO_CONTROL
@@ -64,6 +68,7 @@ async function materialize(flavor) {
       'content-script.js',
       'cursor-runtime.js',
       'default-tab-favicon.svg',
+      'icons',
       'operations',
       'popup.css',
       'popup.html',
@@ -263,6 +268,30 @@ async function evaluate(cdp, expression) {
   return result.result.value
 }
 
+async function captureStoreAsset(cdp, fileName, position = 'top') {
+  if (storeAssetsOutput == null) return
+  await mkdir(storeAssetsOutput, { recursive: true })
+  await cdp.call('Emulation.setDeviceMetricsOverride', {
+    deviceScaleFactor: 1,
+    height: 800,
+    mobile: false,
+    width: 1280
+  })
+  await evaluate(
+    cdp,
+    `(()=>{const candidates=[document.scrollingElement,...document.querySelectorAll('*')].filter(item=>item&&item.scrollHeight>item.clientHeight+80);const target=candidates.sort((left,right)=>(right.scrollHeight-right.clientHeight)-(left.scrollHeight-left.clientHeight))[0];if(target)target.scrollTop=${
+      position === 'bottom' ? 'target.scrollHeight' : '0'
+    };return true})()`
+  )
+  await sleep(200)
+  const screenshot = await cdp.call('Page.captureScreenshot', {
+    captureBeyondViewport: false,
+    format: 'png',
+    fromSurface: true
+  })
+  await writeFile(join(storeAssetsOutput, fileName), Buffer.from(screenshot.data, 'base64'))
+}
+
 async function bridgeRequest(credentials, path, body, allowError = false) {
   const response = await fetch(new URL(path, credentials.baseUrl), {
     method: path === '/v1/status' ? 'GET' : 'POST',
@@ -341,7 +370,7 @@ async function pairFromUi(cdp, credentials, previousConnectionId) {
         ? stable
         : undefined
     },
-    'Extension did not pair with oneWorks',
+    'Extension did not pair with OneWorks',
     20_000
   ).catch(async error => {
     const messages = await evaluate(cdp, `globalThis.__oneWorksPairingMessages`)
@@ -645,6 +674,7 @@ async function run() {
   })
   let reconnected = await pairFromUi(ui, credentials, autoReconnected.connection.connection_id)
   check('explicit-tab-identity-rebound', { tab_id: reconnected.connection.oneworks_tab_id })
+  await captureStoreAsset(ui, 'screenshot-connection.png')
   await setAdvancedAccessFromUi(ui, ['Complete cookie values', '完整 Cookie 值'], true)
   await setAdvancedAccessFromUi(ui, ['Sensitive page fields', '页面敏感字段'], true)
   await setAdvancedAccessFromUi(ui, ['Raw CDP and JavaScript', '原始 CDP 与 JavaScript'], true)
@@ -657,7 +687,7 @@ async function run() {
           ui,
           `document.body?.innerText?.includes('Top document')||document.body?.innerText?.includes('顶层文档')`
         ),
-      'Paired oneWorks frame inventory did not render'
+      'Paired OneWorks frame inventory did not render'
     )
     await demoPause(1_800)
   }
@@ -755,7 +785,7 @@ async function run() {
   const typeOperation = control(
     credentials,
     'page.type',
-    { action: 'type', tab_id: pageA.id, frame_id: 0, document_id: pageDocumentId, ref: inputRef, text: 'oneWorks' },
+    { action: 'type', tab_id: pageA.id, frame_id: 0, document_id: pageDocumentId, ref: inputRef, text: 'OneWorks' },
     2,
     `tab:${pageA.id}`
   )
@@ -869,7 +899,7 @@ async function run() {
   )
   if (
     !afterInteraction.payload.result.result.text.includes('clicked') ||
-    !afterInteraction.payload.result.result.elements.some(item => item.value === 'oneWorks')
+    !afterInteraction.payload.result.result.elements.some(item => item.value === 'OneWorks')
   ) throw new Error('Semantic interaction result did not persist.')
   const popupTarget = await ui.call('Target.createTarget', {
     url: `chrome-extension://${reconnected.connection.extension_id}/popup.html`
@@ -1033,7 +1063,7 @@ async function run() {
   await control(
     credentials,
     'groups.update',
-    { action: 'update', group_id: groupId, title: 'oneWorks evidence', color: 'blue' },
+    { action: 'update', group_id: groupId, title: 'OneWorks evidence', color: 'blue' },
     2,
     `group:${groupId}`
   )
@@ -1046,7 +1076,7 @@ async function run() {
   )
   check('tab-group-control', { group_id: groupId })
 
-  const bookmarkTitle = `oneWorks Chrome evidence ${Date.now()}`
+  const bookmarkTitle = `OneWorks Chrome evidence ${Date.now()}`
   const createdBookmark = await control(
     credentials,
     'bookmarks.create',
@@ -1159,6 +1189,7 @@ async function run() {
   }
 
   const finalStatus = (await bridgeRequest(credentials, '/v1/status')).payload.result
+  await captureStoreAsset(ui, 'screenshot-audit.png', 'bottom')
   ui.close()
   evidence.completed_at = new Date().toISOString()
   evidence.connection = finalStatus.connection

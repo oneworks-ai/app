@@ -92,7 +92,7 @@ const handlers = {
 
 async function post(path, body, token, signal) {
   if (connection?.bridge_url == null && body.bridge_url == null) {
-    throw error('PAIRING_REQUIRED', 'oneWorks pairing is required.')
+    throw error('PAIRING_REQUIRED', 'OneWorks pairing is required.')
   }
   const bridgeUrl = body.bridge_url ?? connection.bridge_url
   const response = await fetch(new URL(path, bridgeUrl), {
@@ -120,7 +120,7 @@ async function connect(input = {}) {
     const bridgeUrl = input.bridge_url ?? saved.bridge_url
     const trustedOrigin = input.trusted_origin ?? saved.trusted_origin
     if (bridgeUrl == null || trustedOrigin == null) {
-      throw error('PAIRING_REQUIRED', 'Open External Browser in oneWorks Settings and create a pairing offer.')
+      throw error('PAIRING_REQUIRED', 'Open External Browser in OneWorks Settings and create a pairing offer.')
     }
     const capabilities = await discoverCapabilities()
     const previousConnection = connection
@@ -337,11 +337,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const respond = async () => {
     if (message?.type === 'oneworks:pairing-offer') {
       if (sender.tab?.url == null) {
-        throw error('ORIGIN_MISMATCH', 'Pairing offers must come from a visible oneWorks tab.')
+        throw error('ORIGIN_MISMATCH', 'Pairing offers must come from a visible OneWorks tab.')
       }
       const senderOrigin = new URL(sender.tab.url).origin
       if (senderOrigin !== message.offer?.trusted_origin) {
-        throw error('ORIGIN_MISMATCH', 'The pairing offer did not match the oneWorks tab origin.')
+        throw error('ORIGIN_MISMATCH', 'The pairing offer did not match the OneWorks tab origin.')
       }
       if (message.offer?.ticket != null && message.offer.ticket === lastPairingTicket && connection != null) {
         return publicStatus()
@@ -365,7 +365,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type === 'oneworks:inject-bridge') {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (tab?.id == null || tab.url == null || !/^https?:/.test(tab.url)) {
-        throw error('RESTRICTED_PAGE', 'Open the oneWorks Web page in the active tab first.')
+        throw error('RESTRICTED_PAGE', 'Open the OneWorks Web page in the active tab first.')
       }
       const origin = new URL(tab.url).origin
       await chrome.permissions.request({ permissions: ['scripting'], origins: [`${origin}/*`] })
@@ -397,7 +397,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       await chrome.storage.local.remove(storageKey)
       return publicStatus()
     }
-    throw error('UNKNOWN_MESSAGE', 'Unknown oneWorks Chrome extension message.')
+    throw error('UNKNOWN_MESSAGE', 'Unknown OneWorks Chrome extension message.')
   }
   void respond().then(
     result => sendResponse({ ok: true, result }),

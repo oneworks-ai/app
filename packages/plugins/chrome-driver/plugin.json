@@ -1,8 +1,8 @@
 {
   "__oneWorksPluginManifest": true,
   "name": "@oneworks/plugin-chrome-driver",
-  "displayName": "External Browser",
-  "version": "0.1.0-beta.5",
+  "displayName": "OneWorks",
+  "version": "0.1.0-beta.6",
   "assets": {
     "skills": "skills",
     "mcp": "mcp"

@@ -55,6 +55,11 @@ const releasePermissionPolicy = {
 
 const supportedReleaseFlavors = new Set(['base', 'privileged'])
 const stableExtensionId = 'eiikbhfmjohfcldcmgjikafpmpbfipbi'
+const publicExtensionName = 'OneWorks'
+const extensionNames = {
+  base: `${publicExtensionName} (Minimal)`,
+  privileged: publicExtensionName
+}
 
 const extensionIdForKey = (key) => {
   const decoded = Buffer.from(key, 'base64')
@@ -103,7 +108,7 @@ const assertReleaseFlavor = (flavor) => {
 const archiveFileName = (flavor, packageVersion = packageManifest.version) => {
   assertReleaseFlavor(flavor)
   const suffix = flavor === 'base' ? '-minimal' : ''
-  return `oneworks-external-browser-v${packageVersion}${suffix}.zip`
+  return `oneworks-v${packageVersion}${suffix}.zip`
 }
 
 const materializedManifest = (template, packageVersion = packageManifest.version) => ({
@@ -124,11 +129,13 @@ module.exports = {
   archiveFileName,
   assertReleaseFlavor,
   chromeVersionFor,
+  extensionNames,
   extensionIdForKey,
   extensionIcons,
   materializedManifest,
   packageManifest,
   pluginRoot,
+  publicExtensionName,
   releasePermissionPolicy,
   stableExtensionId
 }
