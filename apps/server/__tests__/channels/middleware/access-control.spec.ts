@@ -92,6 +92,20 @@ describe('checkChannelAccess', () => {
     expect(checkChannelAccess(makeInbound({ sessionType: 'group', channelId: 'grp-ok' }) as any, config)).toBe(true)
   })
 
+  it('checks group access against raw accessChannelId when present', () => {
+    const config: any = { access: { allowedGroups: ['grp-root'] } }
+    expect(checkChannelAccess(
+      makeInbound({
+        sessionType: 'group',
+        channelId: 'grp-root#thread=42',
+        raw: {
+          accessChannelId: 'grp-root'
+        }
+      }) as any,
+      config
+    )).toBe(true)
+  })
+
   it('blocks a sender in blockedSenders', () => {
     const config: any = { access: { blockedSenders: ['bad-user'] } }
     expect(checkChannelAccess(makeInbound({ senderId: 'bad-user' }) as any, config)).toBe(false)

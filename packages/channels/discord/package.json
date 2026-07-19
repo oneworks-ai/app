@@ -1,0 +1,45 @@
+{
+  "name": "@oneworks/channel-discord",
+  "version": "0.1.0-alpha.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/channels/discord"
+  },
+  "imports": {
+    "#~/*.js": {
+      "__oneworks__": {
+        "default": "./src/*.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    }
+  },
+  "exports": {
+    ".": {
+      "__oneworks__": {
+        "default": "./src/index.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    },
+    "./connection": {
+      "__oneworks__": {
+        "default": "./src/connection.ts"
+      },
+      "default": {
+        "import": "./dist/connection.mjs",
+        "require": "./dist/connection.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@oneworks/core": "workspace:*",
+    "zod": "^3.24.1"
+  }
+}

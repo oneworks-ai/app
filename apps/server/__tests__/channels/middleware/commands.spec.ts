@@ -708,7 +708,10 @@ describe('channel control commands', () => {
       commandText: '/stop',
       config: { type: 'lark', access: { admins: ['admin1'], blockedGroups: ['group-old'] } } as any,
       inbound: makeInbound({
-        channelId: 'group-new',
+        channelId: 'group-new#thread=42',
+        raw: {
+          accessChannelId: 'group-new'
+        },
         senderId: 'admin1',
         sessionType: 'group'
       }) as any
@@ -736,7 +739,10 @@ describe('channel control commands', () => {
       commandText: '/start',
       config: { type: 'lark', access: { admins: ['admin1'], blockedGroups: ['group-old', 'group-new'] } } as any,
       inbound: makeInbound({
-        channelId: 'group-new',
+        channelId: 'group-new#thread=42',
+        raw: {
+          accessChannelId: 'group-new'
+        },
         senderId: 'admin1',
         sessionType: 'group'
       }) as any
