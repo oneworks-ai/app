@@ -1,0 +1,495 @@
+html[data-oneworks-theme-pack='china-red'] {
+  --oneworks-china-control-size: 30px;
+  --oneworks-china-control-gap: 5px;
+  --oneworks-china-control-padding: 5px;
+  --oneworks-china-control-radius: 4px;
+  --oneworks-control-radius: var(--oneworks-china-control-radius);
+  --oneworks-group-radius: 5px;
+  --oneworks-surface-radius: 5px;
+  --oneworks-interactive-card-radius: 5px;
+  --oneworks-switch-radius: 999px;
+  --oneworks-switch-handle-radius: 999px;
+  --oneworks-compact-action-size: var(--oneworks-china-control-size);
+  --oneworks-compact-action-icon-size: 16px;
+  --oneworks-launcher-viewport-background: var(--sub-bg-color);
+  --oneworks-launcher-shell-background: color-mix(
+    in srgb,
+    var(--bg-color) 96%,
+    transparent
+  );
+  --oneworks-launcher-shell-border-color: var(--oneworks-china-gold, #c89b3c);
+  --oneworks-launcher-shell-radius: var(--oneworks-surface-radius);
+  --oneworks-launcher-shell-shadow: 0 18px 52px color-mix(
+    in srgb,
+    var(--primary-color) 18%,
+    transparent
+  );
+  --oneworks-launcher-window-shadow: inset 0 -1px 0 var(
+    --oneworks-china-gold,
+    #c89b3c
+  );
+  --oneworks-launcher-item-radius: var(--oneworks-control-radius);
+  --oneworks-launcher-item-hover-bg: var(--tag-hover-bg);
+  --oneworks-launcher-item-active-bg: var(--sidebar-active-bg);
+  --oneworks-launcher-action-radius: var(--oneworks-control-radius);
+  --oneworks-launcher-tab-radius: var(--oneworks-control-radius);
+  --oneworks-launcher-keycap-radius: var(--oneworks-control-radius);
+  --oneworks-launcher-badge-radius: var(--oneworks-control-radius);
+}
+
+html[data-oneworks-theme-pack='china-red']:not(.dark) {
+  --plugin-theme-banner-accent: #b51418;
+  --plugin-theme-banner-accent-strong: #850b0e;
+  --plugin-theme-banner-border: #c89b34;
+  --plugin-theme-banner-surface: #fff9e9;
+  --plugin-theme-banner-surface-soft: #f2dfbd;
+  --plugin-theme-banner-text: #6f090d;
+  --plugin-theme-banner-muted: #8e312d;
+  --plugin-theme-banner-contrast: #fff7df;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='backgrounds']:not(.dark) {
+  --app-chrome-overlay-background: color-mix(in srgb, #fff8e8 78%, transparent);
+  --bg-color: #fffaf0;
+  --sub-bg-color: #f6ead7;
+  --sub-sub-bg-color: #ead6b8;
+  --text-color: #431b15;
+  --sub-text-color: #744039;
+  --sub-sub-text-color: #94695d;
+  --placeholder-color: #9a7165;
+  --tag-bg: #f7e8ce;
+  --tag-hover-bg: #efd9b7;
+  --code-bg: #f5e7d1;
+  --star-color: #c59024;
+  --success-color: #2f6f3e;
+  --warning-color: #a96d15;
+  --danger-color: #b91c1c;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='borders']:not(.dark) {
+  --app-chrome-divider-color: #c8a04a;
+  --border-color: #c8a04a;
+  --sub-border-color: #b88a2f;
+  --sub-sub-border-color: #9d6f1b;
+  --code-border: #c8a04a;
+}
+
+html[data-oneworks-theme-pack='china-red'].dark {
+  --plugin-theme-banner-accent: #8f1215;
+  --plugin-theme-banner-accent-strong: #59090b;
+  --plugin-theme-banner-border: #d0a84f;
+  --plugin-theme-banner-surface: #2b1815;
+  --plugin-theme-banner-surface-soft: #3a211b;
+  --plugin-theme-banner-text: #ffe9bc;
+  --plugin-theme-banner-muted: #d5a975;
+  --plugin-theme-banner-contrast: #fff3d4;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='backgrounds'].dark {
+  --app-chrome-overlay-background: color-mix(in srgb, #2b1815 68%, transparent);
+  --bg-color: #241512;
+  --sub-bg-color: #1b100e;
+  --sub-sub-bg-color: #3a211b;
+  --text-color: #fff2d8;
+  --sub-text-color: #d9b99f;
+  --sub-sub-text-color: #ad8572;
+  --placeholder-color: #8c675a;
+  --tag-bg: #34201a;
+  --tag-hover-bg: #43271f;
+  --code-bg: #2d1b17;
+  --star-color: #e7b85b;
+  --success-color: #6bb67b;
+  --warning-color: #e7b85b;
+  --danger-color: #f0716f;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='borders'].dark {
+  --app-chrome-divider-color: #d0a84f;
+  --border-color: #b88a36;
+  --sub-border-color: #c9a64f;
+  --sub-sub-border-color: #dcbd68;
+  --code-border: #8f6b25;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='overlays'] {
+  --oneworks-overlay-radius: 4px;
+  --oneworks-overlay-shadow:
+    0 10px 24px color-mix(in srgb, #5f130f 16%, transparent),
+    0 2px 6px color-mix(in srgb, #5f130f 12%, transparent);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='overlays']
+  .app-shell {
+  --app-shell-content-radius: 5px;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='overlays']
+  .route-container-layout {
+  --subpage-tertiary-radius: 5px;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.app-shell__sidebar-region, .sidebar-container) {
+  background: var(--sub-bg-color);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='menus']
+  .sidebar-container {
+  --sidebar-hover-bg: color-mix(
+    in srgb,
+    var(--sub-bg-color) 88%,
+    var(--text-color)
+  );
+  --sidebar-active-bg: var(--sub-sub-bg-color);
+  --sidebar-active-text: var(--primary-color);
+  --sidebar-btn-color: var(--sub-text-color);
+  --sidebar-btn-hover-bg: color-mix(
+    in srgb,
+    var(--sub-bg-color) 86%,
+    var(--text-color)
+  );
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='menus']
+  .sidebar-header
+  .sidebar-list-header__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--oneworks-china-control-gap);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.sidebar-header__quick-links, .sidebar-grouped-list, .sidebar-grouped-list__group, .sidebar-grouped-list__items) {
+  gap: var(--oneworks-china-control-gap);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.nav-rail-drawer-footer, .nav-rail-drawer-footer__slot, .nav-rail-footer-extension-list) {
+  gap: var(--oneworks-china-control-gap);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='menus']
+  .sidebar-grouped-list {
+  padding-top: var(--oneworks-china-control-gap);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs {
+  --native-tabs-gap: var(--oneworks-china-control-gap);
+  padding-bottom: var(--oneworks-china-control-gap);
+  border-bottom-color: var(--border-color);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.ant-btn-default, .ant-btn-primary):not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled) {
+  border-radius: 4px;
+  font-weight: 650;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled) {
+  border-color: var(--border-color);
+  background: linear-gradient(180deg, var(--bg-color), var(--sub-bg-color));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 54%, transparent);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.ant-btn-primary, .ant-switch.ant-switch-checked):not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):not(.ant-switch-disabled) {
+  border-color: var(--sub-sub-border-color);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--primary-color) 88%, white),
+    color-mix(in srgb, var(--primary-color) 86%, #5f090b)
+  );
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons']
+  .nav-rail-chrome-button.ant-btn {
+  width: var(--oneworks-china-control-size) !important;
+  min-width: var(--oneworks-china-control-size) !important;
+  height: var(--oneworks-china-control-size) !important;
+  min-height: var(--oneworks-china-control-size) !important;
+  padding: 0 !important;
+  border-radius: var(--oneworks-china-control-radius);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons']
+  .nav-rail-chrome-button--plain-label
+  .nav-rail-chrome-button__label {
+  display: none;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.nav-rail-chrome-button.ant-btn, .host-nav-rail__footer-button, .sidebar-header__quick-link, .sidebar-header__quick-link-action, .sidebar-grouped-list__group-label, .sidebar-grouped-list__item, .native-tabs__tab) {
+  box-sizing: border-box;
+  border-radius: var(--oneworks-china-control-radius);
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='padding'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.host-nav-rail__footer-button, .sidebar-header__quick-link, .sidebar-grouped-list__group-label, .native-tabs__tab) {
+  height: var(--oneworks-china-control-size);
+  padding: var(--oneworks-china-control-padding) !important;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.sidebar-grouped-list__group-label, .sidebar-grouped-list__item, .native-tabs__tab) {
+  min-height: var(--oneworks-china-control-size);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.sidebar-grouped-list__group-label, .sidebar-grouped-list__item) {
+  color: var(--text-color);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='padding'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-grouped-list__item {
+  height: var(--oneworks-china-control-size);
+  padding: var(--oneworks-china-control-padding) !important;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='padding'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-grouped-list__group:not(.sidebar-grouped-list__group--unlabeled)
+  .sidebar-grouped-list__item {
+  padding-left: calc(
+    var(--sidebar-grouped-list-child-indent) +
+      var(--oneworks-china-control-padding)
+  ) !important;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-grouped-list__group-toggle {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons']
+  .host-nav-rail__footer {
+  --nav-rail-footer-item-height: var(--oneworks-china-control-size);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='icons']
+  .host-nav-rail__footer {
+  --nav-rail-footer-item-icon-size: var(
+    --oneworks-theme-pack-component-icon-size
+  );
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-header__quick-link-action {
+  width: var(--oneworks-china-control-size);
+  min-width: var(--oneworks-china-control-size);
+  height: var(--oneworks-china-control-size);
+  padding: 0;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='padding'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.nav-rail-chrome-button.ant-btn, .sidebar-header__quick-link-action) {
+  padding: var(--oneworks-china-control-padding) !important;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.nav-rail-chrome-button.ant-btn, .host-nav-rail__footer-button, .sidebar-header__quick-link, .sidebar-header__quick-link-action, .sidebar-grouped-list__group-label, .sidebar-grouped-list__item, .native-tabs__tab):is(:hover, :focus-visible, .ant-dropdown-open) {
+  background: color-mix(
+    in srgb,
+    var(--sub-bg-color) 86%,
+    var(--text-color)
+  ) !important;
+  color: var(--text-color) !important;
+  outline: none;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.host-nav-rail__footer-button, .sidebar-header__quick-link, .sidebar-grouped-list__group-label, .sidebar-grouped-list__item).is-active,
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs__tab[aria-selected='true'] {
+  background: var(--sub-sub-bg-color) !important;
+  color: var(--primary-color) !important;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs__tab::after {
+  display: none;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='inputs']
+  :is(.ant-input, .ant-input-affix-wrapper, .ant-input-number, .ant-picker):not(.ant-input-status-error):not(.ant-input-status-warning):not(.ant-input-disabled),
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='inputs']
+  .ant-select:not(.ant-select-status-error):not(.ant-select-status-warning):not(.ant-select-disabled)
+  .ant-select-selector {
+  border-color: var(--border-color) !important;
+  border-radius: 4px !important;
+  background-color: var(--bg-color) !important;
+  box-shadow: inset 0 1px 2px color-mix(in srgb, #6f1a13 7%, transparent);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='inputs']
+  .sidebar-header
+  .search-input.ant-input-affix-wrapper {
+  height: var(--oneworks-china-control-size) !important;
+  min-height: var(--oneworks-china-control-size) !important;
+  padding-inline: var(--oneworks-china-control-padding) !important;
+  border-color: var(--border-color) !important;
+  border-radius: var(--oneworks-china-control-radius) !important;
+  background: var(--bg-color) !important;
+  box-shadow: none !important;
+  transition: background-color .12s ease, border-color .12s ease;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='inputs']
+  .sidebar-header
+  .search-input.ant-input-affix-wrapper:is(:hover, :focus-within, .ant-input-affix-wrapper-focused) {
+  border-color: var(--sub-border-color) !important;
+  background: color-mix(in srgb, var(--bg-color) 90%, var(--text-color))
+    !important;
+  box-shadow: none !important;
+  outline: none;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='inputs']
+  .sidebar-header
+  .search-input.ant-input-affix-wrapper
+  .ant-input {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='overlays']
+  :is(.ant-card, .ant-modal-content, .ant-drawer-content, .ant-collapse) {
+  border-color: var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-color);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='overlays']
+  :is(.oneworks-overlay-panel, .ant-popover-inner, .ant-tooltip-inner),
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.oneworks-overlay-menu, .oneworks-overlay-menu-submenu, .ant-dropdown-menu, .ant-select-dropdown, .dv-context-menu) {
+  --oneworks-overlay-surface: color-mix(
+    in srgb,
+    var(--bg-color) 94%,
+    transparent
+  );
+  border-radius: var(--oneworks-overlay-radius, 4px) !important;
+  backdrop-filter: blur(10px) saturate(115%);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='padding'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn:not(.ant-btn-icon-only),
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='padding'][data-oneworks-theme-pack-overrides~='inputs']
+  :is(.ant-input, .ant-input-affix-wrapper, .ant-input-number-input, .ant-picker) {
+  padding-inline: var(--oneworks-theme-pack-component-padding);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='padding'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.ant-dropdown-menu-item, .ant-dropdown-menu-submenu-title, .oneworks-overlay-menu-item) {
+  padding: 6px var(--oneworks-theme-pack-component-padding);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='icons']
+  .config-view__field-icon,
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='icons'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn
+  .material-symbols-rounded,
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='icons'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.ant-dropdown-menu, .oneworks-overlay-menu, .dv-context-menu)
+  .material-symbols-rounded {
+  font-size: var(--oneworks-theme-pack-component-icon-size);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='overlays'].dark {
+  --oneworks-overlay-shadow:
+    0 14px 34px rgba(0, 0, 0, .32),
+    0 2px 8px rgba(0, 0, 0, .24);
+}
+
+html[data-oneworks-theme-pack='china-red'][data-oneworks-theme-pack-overrides~='buttons'].dark
+  .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled) {
+  background: linear-gradient(
+    180deg,
+    var(--sub-sub-bg-color),
+    var(--sub-bg-color)
+  );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+
+.theme-pack-settings__option[data-theme-id='china-red']
+  .theme-pack-settings__preview {
+  border-color: #c9a469;
+  background: #f4e7cf;
+}
+
+.theme-pack-settings__option[data-theme-id='china-red']
+  .theme-pack-settings__preview-banner {
+  border-bottom-color: #be922f;
+  background:
+    linear-gradient(160deg, transparent 0 58%, #a20f12 59% 100%),
+    #fff5df;
+}
+
+.theme-pack-settings__option[data-theme-id='china-red']
+  .theme-pack-settings__preview-sidebar {
+  border-right-color: #d7b77f;
+  background: #f3e4c8;
+}
+
+.theme-pack-settings__option[data-theme-id='china-red']
+  .theme-pack-settings__preview-sidebar
+  span,
+.theme-pack-settings__option[data-theme-id='china-red']
+  .theme-pack-settings__preview-toolbar,
+.theme-pack-settings__option[data-theme-id='china-red']
+  .theme-pack-settings__preview-button {
+  background: #a20f12;
+}
+
+.theme-pack-settings__option[data-theme-id='china-red']
+  .theme-pack-settings__preview-content {
+  background: #fff9ec;
+}
+
+.theme-pack-settings__option[data-theme-id='china-red']
+  .theme-pack-settings__preview-lines {
+  background: repeating-linear-gradient(
+    180deg,
+    #9a7364 0 2px,
+    transparent 2px 5px
+  );
+}
+
+.theme-pack-settings__editor[data-theme-id='china-red']
+  .theme-pack-settings__swatches--backgrounds
+  i:nth-child(1) {
+  background: #fffaf0;
+}
+.theme-pack-settings__editor[data-theme-id='china-red']
+  .theme-pack-settings__swatches--backgrounds
+  i:nth-child(2) {
+  background: #f6ead7;
+}
+.theme-pack-settings__editor[data-theme-id='china-red']
+  .theme-pack-settings__swatches--backgrounds
+  i:nth-child(3) {
+  background: #431b15;
+}
+.theme-pack-settings__editor[data-theme-id='china-red']
+  .theme-pack-settings__swatches--borders
+  i:nth-child(1) {
+  background: #d9bc78;
+}
+.theme-pack-settings__editor[data-theme-id='china-red']
+  .theme-pack-settings__swatches--borders
+  i:nth-child(2) {
+  background: #c8a04a;
+}
+.theme-pack-settings__editor[data-theme-id='china-red']
+  .theme-pack-settings__swatches--borders
+  i:nth-child(3) {
+  background: #9d6f1b;
+}

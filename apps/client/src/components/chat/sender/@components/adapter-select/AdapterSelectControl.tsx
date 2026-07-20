@@ -78,27 +78,11 @@ export function AdapterSelectControl({
             'sender-select-shell',
             'sender-select-shell--adapter',
             isCompactControl ? 'sender-select-shell--compact' : '',
+            showAdapterSelect ? 'is-open' : '',
             isDisabled ? 'is-disabled' : ''
           ].filter(Boolean).join(' ')}
           onPointerDownCapture={openCompactAdapterSelect}
         >
-          {!isCompactControl && !showAdapterSelect && !isDisabled && (
-            <button
-              type='button'
-              className='sender-select-body-trigger'
-              aria-label={t('chat.adapterSelectPlaceholder', { defaultValue: 'Adapter' })}
-              onMouseDown={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                setShowAdapterSelect(true)
-              }}
-              onClick={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                setShowAdapterSelect(true)
-              }}
-            />
-          )}
           {isCompactControl
             ? (
               <button
@@ -137,6 +121,11 @@ export function AdapterSelectControl({
               <Select
                 className={`adapter-select ${adapterLocked ? 'adapter-select--locked' : ''}`.trim()}
                 classNames={{ popup: { root: 'adapter-select-popup' } }}
+                controlTrigger={{
+                  ariaLabel: t('chat.adapterSelectPlaceholder', { defaultValue: 'Adapter' }),
+                  className: 'sender-select-body-trigger',
+                  stopPropagation: true
+                }}
                 open={showAdapterSelect}
                 value={selectedAdapter}
                 options={visibleAdapterOptions}

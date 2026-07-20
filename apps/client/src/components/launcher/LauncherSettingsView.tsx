@@ -26,12 +26,16 @@ import {
   fallbackLauncherShortcut,
   normalizeDesktopSettings
 } from '#~/components/config/desktop-settings-model'
-import { getPresetByTheme } from '#~/components/config/project-theme-color-settings-model'
+import {
+  canUpdateLauncherPrimaryColor,
+  getPresetByTheme
+} from '#~/components/config/project-theme-color-settings-model'
 import { useProjectThemePreviewSources } from '#~/components/config/use-project-theme-preview-sources'
 import { MobileAwareSelect } from '#~/components/mobile-aware-select/MobileAwareSelect'
 import { useInterfaceLanguageConfig } from '#~/hooks/use-interface-language-config'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { appLanguageOptions, getActiveAppLanguageOption } from '#~/i18n'
+import { usePluginThemes } from '#~/plugins/plugin-themes'
 import { normalizeThemeMode, themeAtom } from '#~/store/index.js'
 import type { ThemeMode } from '#~/store/index.js'
 import { deferImeCompositionEnd, isImeCompositionKeyEvent } from '#~/utils/keyboard-events'
@@ -196,6 +200,7 @@ export function LauncherSettingsView({
   onResetActionChange: (action: LauncherSettingsResetAction | undefined) => void
 }) {
   const { message } = App.useApp()
+  const themes = usePluginThemes()
   const { i18n, t } = useTranslation()
   const [themeMode, setThemeMode] = useAtom(themeAtom)
   const { resolvedThemeMode } = useResolvedThemeMode()
@@ -208,6 +213,7 @@ export function LauncherSettingsView({
     ...emptyDesktopSettings,
     launcherShortcut: fallbackLauncherShortcut
   }))
+  const [desktopSettingsLoaded, setDesktopSettingsLoaded] = useState(false)
   const [desktopIconSettings, setDesktopIconSettings] = useState<NormalizedDesktopIconSettings>(() =>
     normalizeDesktopIconSettings(undefined)
   )
@@ -231,6 +237,11 @@ export function LauncherSettingsView({
   const iconTheme = desktopIconSettings.iconTheme
   const iconBackground = desktopIconSettings.iconBackground
   const syncAppIcon = desktopIconSettings.syncAppIcon
+  const canUpdatePrimaryColor = canUpdateLauncherPrimaryColor(
+    desktopSettingsLoaded,
+    desktopSettings.themePack,
+    themes
+  )
   const previewSources = useProjectThemePreviewSources({
     desktopApi,
     iconAppearance: desktopIconSettings.iconAppearance,
@@ -353,17 +364,25 @@ export function LauncherSettingsView({
   }, [desktopApi, message, setThemeMode, t, themeMode])
   const updateIconTheme = useCallback((nextIconTheme: DesktopIconTheme) => {
     const preset = getPresetByTheme(nextIconTheme)
-    void desktopApi?.updateGlobalAppearanceConfig?.({ primaryColor: preset.primaryColor })
-      .then(value => setDesktopSettings(normalizeDesktopSettings(value)))
-      .catch((error) => {
-        console.error('[launcher-settings] failed to update global primary color', error)
-      })
+    if (canUpdatePrimaryColor) {
+      void desktopApi?.updateGlobalAppearanceConfig?.({ primaryColor: preset.primaryColor })
+        .then(value => setDesktopSettings(normalizeDesktopSettings(value)))
+        .catch((error) => {
+          console.error('[launcher-settings] failed to update global primary color', error)
+        })
+    }
     updateDesktopIconSettings({
       iconAppearance: desktopIconSettings.iconAppearance,
       iconBackground,
       iconTheme: nextIconTheme
     })
-  }, [desktopApi, desktopIconSettings.iconAppearance, iconBackground, updateDesktopIconSettings])
+  }, [
+    desktopApi,
+    desktopIconSettings.iconAppearance,
+    iconBackground,
+    canUpdatePrimaryColor,
+    updateDesktopIconSettings
+  ])
   const updateIconBackground = useCallback((nextIconBackground: DesktopIconBackground) => {
     updateDesktopIconSettings({
       iconAppearance: desktopIconSettings.iconAppearance,
@@ -410,6 +429,7 @@ export function LauncherSettingsView({
       .then((value) => {
         if (!disposed) {
           const nextSettings = normalizeDesktopSettings(value)
+          setDesktopSettingsLoaded(true)
           setThemeMode(normalizeThemeMode(nextSettings.themeMode))
           setDesktopSettings(nextSettings)
           setDesktopIconSettings(normalizeDesktopIconSettings(nextSettings))
@@ -421,6 +441,7 @@ export function LauncherSettingsView({
 
     const dispose = desktopApi?.onDesktopSettingsChange?.((value) => {
       const nextSettings = normalizeDesktopSettings(value)
+      setDesktopSettingsLoaded(true)
       setThemeMode(normalizeThemeMode(nextSettings.themeMode))
       setDesktopSettings(nextSettings)
       setDesktopIconSettings(normalizeDesktopIconSettings(nextSettings))

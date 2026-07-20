@@ -1,7 +1,9 @@
-import { Button, Dropdown } from 'antd'
+import { Dropdown } from 'antd'
 import type { MenuProps } from 'antd'
 import type React from 'react'
 import type { ReactNode } from 'react'
+
+import { HostNavRailFooterButton } from '@oneworks/route-layout'
 
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import type { IconAsset } from '#~/components/icons/IconAsset'
@@ -219,7 +221,7 @@ export function NavRailMoreDropdown({
   active: boolean
   buttonIconSrc: string
   buttonLabel: string
-  buttonRef: React.Ref<HTMLAnchorElement | HTMLButtonElement>
+  buttonRef: React.Ref<HTMLButtonElement>
   contextMenuItems?: MenuProps['items']
   items: MenuProps['items']
   open: boolean
@@ -268,25 +270,22 @@ export function NavRailMoreDropdown({
       trigger={['click']}
       transitionName='ant-slide-down'
     >
-      <Button
+      <HostNavRailFooterButton
         ref={buttonRef}
-        type='default'
-        className={`nav-rail-more-button ${active ? 'is-active' : 'is-idle'}`}
-        aria-haspopup='menu'
-        aria-expanded={visuallyOpen}
-        block
-        onClick={onTriggerFeedback}
-      >
-        <span className='nav-rail-more-button__content'>
+        active={active}
+        className='nav-rail-more-button'
+        icon={
           <img
             className='nav-rail-vibe-icon nav-rail-vibe-icon--more'
             src={buttonIconSrc}
             alt=''
-            aria-hidden='true'
           />
-          <span>{buttonLabel}</span>
-        </span>
-      </Button>
+        }
+        label={buttonLabel}
+        aria-haspopup='menu'
+        aria-expanded={visuallyOpen}
+        onClick={onTriggerFeedback}
+      />
     </Dropdown>
   )
 }

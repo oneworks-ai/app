@@ -519,15 +519,17 @@
 }
 
 .workspace-file-editor__markdown-splitter {
+  --workspace-file-editor-splitter-hit-size: 10px;
+
   position: relative;
-  width: 10px;
-  min-width: 10px;
+  width: var(--workspace-file-editor-splitter-hit-size);
+  min-width: var(--workspace-file-editor-splitter-hit-size);
   display: flex;
   align-items: stretch;
   justify-content: center;
   background: transparent;
   cursor: col-resize;
-  flex: 0 0 10px;
+  flex: 0 0 var(--workspace-file-editor-splitter-hit-size);
   touch-action: none;
 
   &:hover,
@@ -535,22 +537,27 @@
     outline: none;
 
     .workspace-file-editor__markdown-splitter-line {
-      width: 2px;
-      background-color: var(--primary-color);
+      width: var(--oneworks-resize-handle-active-line-width, 3px);
+      background-color: var(--oneworks-resize-handle-hover-color);
     }
   }
 }
 
 .workspace-file-editor__markdown-splitter-line {
-  width: 1px;
-  background-color: var(--border-color);
-  transition: width .14s ease, background-color .14s ease;
+  width: var(--oneworks-resize-handle-line-width, 1px);
+  border-radius: var(--oneworks-resize-handle-line-radius, 999px);
+  background-color: var(
+    --oneworks-resize-handle-idle-color,
+    var(--border-color)
+  );
+  box-shadow: var(--oneworks-resize-handle-shadow, none);
+  transition: var(--oneworks-resize-handle-transition);
 }
 
 .workspace-file-editor__markdown-layout.is-dragging {
   .workspace-file-editor__markdown-splitter-line {
-    width: 2px;
-    background-color: var(--primary-color);
+    width: var(--oneworks-resize-handle-active-line-width, 3px);
+    background-color: var(--oneworks-resize-handle-active-color);
   }
 }
 

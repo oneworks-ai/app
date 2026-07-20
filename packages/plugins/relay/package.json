@@ -369,6 +369,7 @@
   },
   "dependencies": {
     "@oneworks/components": "workspace:*",
+    "@oneworks/types": "workspace:*",
     "@oneworks/utils": "workspace:*",
     "ws": "^8.17.0"
   },

@@ -252,6 +252,25 @@ describe('server base URL helpers', () => {
     expect(createServerUrl('/api/auth/status')).toBe('http://127.0.0.1:5174/api/auth/status')
   })
 
+  it('ignores a stale stored server address for the manager dev client', () => {
+    vi.stubGlobal('location', {
+      origin: 'http://127.0.0.1:5173',
+      protocol: 'http:',
+      hostname: '127.0.0.1'
+    })
+    localStorage.setItem(SERVER_BASE_URL_STORAGE_KEY, 'http://127.0.0.1:8788')
+    setRuntimeEnv({
+      __ONEWORKS_PROJECT_CLIENT_MODE__: 'dev',
+      __ONEWORKS_PROJECT_SERVER_HOST__: '127.0.0.1',
+      __ONEWORKS_PROJECT_SERVER_PORT__: '8787',
+      __ONEWORKS_PROJECT_SERVER_ROLE__: 'manager'
+    })
+
+    expect(getConfiguredServerBaseUrl()).toBe('http://127.0.0.1:8787')
+    expect(getServerBaseUrl()).toBe('http://127.0.0.1:5173')
+    expect(createServerUrl('/api/config')).toBe('http://127.0.0.1:5173/api/config')
+  })
+
   it('keeps desktop connection behavior while using the dev server proxy', () => {
     vi.stubGlobal('location', {
       origin: 'http://127.0.0.1:5175',

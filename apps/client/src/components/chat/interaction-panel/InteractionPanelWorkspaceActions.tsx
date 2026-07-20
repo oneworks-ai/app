@@ -1,3 +1,5 @@
+import { RouteHeaderActionGroup } from '@oneworks/components/route-layout'
+
 import { InteractionPanelRunCommandsPopover } from './InteractionPanelRunCommandsPopover'
 import { InteractionPanelWorkspaceOpener } from './InteractionPanelWorkspaceOpener'
 import type { InteractionPanelRunCommand, InteractionPanelRunCommandTaskStatus } from './interaction-panel-run-commands'
@@ -25,7 +27,7 @@ export function InteractionPanelWorkspaceActions({
   )
 
   return (
-    <div className={containerClassName}>
+    <RouteHeaderActionGroup className={containerClassName}>
       <InteractionPanelWorkspaceOpener
         iconClassName={iconClassName}
         menuIconClassName={menuIconClassName}
@@ -41,6 +43,6 @@ export function InteractionPanelWorkspaceActions({
         recordRunCommand={recordRunCommand}
         saveCommands={saveCommands}
       />
-    </div>
+    </RouteHeaderActionGroup>
   )
 }

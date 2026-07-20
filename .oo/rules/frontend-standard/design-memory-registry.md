@@ -44,7 +44,7 @@
 
 ### OW-DM-003 — 主会话时间线容器阈值与持续可见
 
-- Revision: 4
+- Revision: 6
 - Status: ACTIVE
 - Rule: 主会话内容容器宽度超过 `820px` 且存在至少一个时间线节点时，左侧 timeline rail 持续展示；未配置时默认使用 `event-line`，用户可通过 global `appearance.historyTimelineMode` 显式切换为原有 `node` 模式。内容是否可滚动只决定上下边缘渐隐，不决定 rail 是否存在。
 - Scope: OneWorks project / desktop primary chat history timeline
@@ -60,9 +60,90 @@
 - Exceptions: 容器宽度不超过 `820px`、嵌入式会话、Agent Room、无节点、用户主动隐藏，以及用户显式选择 `node` 渲染模式。
 - Automatic enforcement: 纯可见性单测、真实短会话 DOM 断言和独立视觉审阅。
 
+### OW-DM-004 — 主题包独立配置边界
+
+- Revision: 1
+- Status: ACTIVE
+- Rule: 主题包独立于主题色与明暗模式，通过设置页独立入口选择；每个主题的私有选项由自己的 `appearance.themePacks.<theme-id>` 命名空间拥有。
+- Scope: OneWorks project / app theme packs and settings
+- Applies when: 新增或修改会统一覆盖应用壳、共享 token、AntD token 或内置组件样式的主题包。
+- Does not apply when: 只调整现有 `primaryColor`、`themeMode` 或单个业务组件的局部样式。
+- Positive example: 中国方案通过 `appearance.themePack` 选中，横幅开关保存在 `appearance.themePacks["china-red"].showBanner`。
+- Negative example: 把所有主题的私有开关平铺到 `appearance` 根层，或把主题包做成主题色预设。
+- Owning rule: [`theme-i18n.md`](./theme-i18n.md) 中的“主题包”和 [`../config/README.md`](../config/README.md) 的配置页语义。
+- Token or implementation: `apps/client/src/plugins/plugin-theme-contract.ts`、`apps/client/src/components/config/ThemePackSettingsPanel.tsx` 和插件注册内容。
+- Source: 用户明确要求主题包不同于现有主题色、在设置页使用独立入口，并允许不同主题拥有自己的配置。
+- Effective date: 2026-07-13
+- Supersedes: none
+- Exceptions: none
+- Automatic enforcement: 配置 schema / 写回测试、主题设置组件测试、真实浅色 / 深色 / 响应式视觉审阅。
+
+### OW-DM-005 — 中国方案主题金色边框
+
+- Revision: 1
+- Status: ACTIVE
+- Rule: 中国方案主题中的结构分割线、容器边框和普通组件边框统一使用金色主题 token；错误、警告、成功等语义边框继续使用状态色。
+- Scope: OneWorks project / `china-red` theme pack border system
+- Applies when: 为中国方案主题新增或修改面板、卡片、输入框、菜单、浮层及其他内置组件的普通边框。
+- Does not apply when: 组件正在表达错误、警告、成功等明确业务状态，或只涉及非边框的强调色。
+- Positive example: 设置页表面、主题卡片、输入框和 AntD 容器使用同一组金色边框 token。
+- Negative example: 普通面板保留蓝灰边框，或把错误输入框的红色边框也强制改成金色。
+- Owning rule: [`theme-i18n.md`](./theme-i18n.md) 中的“主题包”。
+- Token or implementation: `packages/plugins/china-red-theme/client/src/theme.css` 和该插件的主题注册内容。
+- Source: 用户明确要求中国方案主题中的项目边框统一改成金色。
+- Effective date: 2026-07-13
+- Supersedes: none
+- Exceptions: 语义状态边框。
+- Automatic enforcement: 主题 token 单测、真实浅色 / 深色视觉审阅和语义状态样式检查。
+
+### OW-DM-006 — 主题列表与主题自有配置 tabs
+
+- Revision: 2
+- Status: ACTIVE
+- Rule: 主题设置页直接展示 divider list；每个主题由客户端插件注册自己的配置 tabs。默认主题只读，可配置主题的覆盖项按基础颜色、普通组件布局和组件类型分组，并写回主题自己的配置命名空间；数值型覆盖必须展示“启用状态 + 具体数值与单位”。
+- Scope: OneWorks project / theme-pack settings UI and configuration ownership
+- Applies when: 新增主题包、主题专属配置项或修改主题设置页的信息架构。
+- Does not apply when: 只修改“外观”页的主题色、明暗模式或与主题包无关的业务组件设置。
+- Positive example: 中国方案展示“基础颜色 / 间距与图标 / 组件 / 横幅”tabs，padding 与 icon size 同时显示开关和 px 数值，默认主题只展示只读“概览”。
+- Negative example: 所有主题共享一套固定 tabs、把主题列表继续包在无功能意义的 chooser card 里，或数值型覆盖只显示开关。
+- Owning rule: [`theme-i18n.md`](./theme-i18n.md) 中的“主题包”和 [`../config/README.md`](../config/README.md) 的配置页语义。
+- Token or implementation: `apps/client/src/plugins/plugin-theme-contract.ts`、`ThemePackSettingsPanel.tsx` 和 `appearance.themePacks.<theme-id>` schema。
+- Source: 用户明确要求主题直接展示为列表、不同主题展示不同 tabs、默认主题只读、按基础颜色与组件覆盖分组配置，并要求数值类型展示具体数值。
+- Effective date: 2026-07-13
+- Supersedes: none
+- Exceptions: 普通组件 padding / icon size 覆盖不改变 route chrome 的共享几何 token。
+- Automatic enforcement: plugin registration / schema 单测、默认主题无编辑控件断言和独立视觉审阅。
+
+### OW-DM-007 — 主题包中性 hover 与侧栏层级
+
+- Revision: 1
+- Status: ACTIVE
+- Rule: 主题包的普通按钮、图标按钮、菜单和侧栏 hover 从当前 surface 与文字色生成，不使用主题强调色铺底；侧栏保持中性 surface 阶梯和渐进背景。主题声明紧凑按钮几何时，普通按钮与图标按钮统一使用四向 `5px` padding。
+- Scope: OneWorks project / plugin theme component recipes
+- Applies when: 主题插件覆盖普通按钮、图标按钮、菜单、侧栏或紧凑按钮几何。
+- Does not apply when: 主操作、危险操作、明确选中强调态，或主题通过自己的配置明确声明非紧凑按钮几何。
+- Positive example: 专注工作台的默认按钮 hover 使用 `bg` 与 `text` 混合后的浅一层 surface，普通按钮和图标按钮均使用四向 `5px` padding；新粗野主题的侧栏仍使用奶油色中性阶梯而不是粉色铺底。
+- Negative example: 把 `primaryColor` 的半透明色作为所有普通按钮和整个侧栏 hover，或普通按钮使用 `5px` 而图标按钮继续保留另一套 padding。
+- Owning rule: [`theme-i18n.md`](./theme-i18n.md) 中的“主题包”。
+- Token or implementation: 各 `packages/plugins/*-theme/client/src/theme.css` 的 scoped component recipe。
+- Source: 用户在主题风格研究和组件实验中明确要求普通 hover 使用背景色变体、侧栏保持渐进层级，并统一普通与图标按钮的四向 `5px` padding。
+- Effective date: 2026-07-14
+- Supersedes: none
+- Exceptions: 主操作、危险操作、明确选中强调态，以及主题声明的非紧凑按钮几何。
+- Automatic enforcement: computed hover / padding / sidebar background 检查、明暗模式截图和独立视觉审阅。
+
 ## 待确认冲突
 
-当前无。
+### OW-DM-P001 — 主题侧栏是否保留渐变
+
+- Revision: 1
+- Status: PENDING_CONFLICT_RESOLUTION
+- Candidate rule: Codex 主题的侧栏使用单一中性纯色表面，不使用渐变。
+- Conflicts with: `OW-DM-007` 和 [`theme-i18n.md`](./theme-i18n.md) 当前要求主题侧栏保留渐进背景。
+- Candidate scope: 待用户确认仅限 `focus-workbench` / Codex 主题，还是替换全部插件主题的项目级规则。
+- Current-task behavior: `focus-workbench` 侧栏按本轮明确反馈改为纯色；其他主题保持原规则。
+- Question asked: 已询问用户这是 Codex 主题的特例，还是要替换所有主题的侧栏渐变规范。
+- Source: 用户在 Codex 主题页对侧栏明确反馈“不要弄渐变色”，2026-07-14。
 
 新增候选时使用：
 
@@ -84,7 +165,35 @@ Resolution:
 
 ## 作用域例外
 
-当前无。
+### OW-DM-E001 — 可选主题包紧凑导航间距
+
+- Revision: 1
+- Status: SCOPED_EXCEPTION
+- Base rule: `OW-DM-001` 的项目默认 `10px` spacing token。
+- Exception rule: 可选主题包覆盖宿主紧凑导航控件时，快捷入口、搜索、配置分组、Footer 插件入口和 NativeTabs 统一消费主题自己的 `5px` control gap token。
+- Scope: OneWorks project / opt-in theme-pack compact host navigation controls
+- Applies when: `focus-workbench`、`china-red`、`neo-workshop`、`warm-cowork` 等可选主题包启用自己的 menus / buttons / inputs 组件覆盖。
+- Does not apply when: 默认主题、业务内容列表、route chrome，或主题关闭对应组件覆盖。
+- Positive example: 主题内 quick-link rows、quick links 到 search、group / item、footer slot 和 NativeTabs 都由同一个 `5px` token 提供间距。
+- Negative example: 每个 selector 单独硬编码不同 gap，或把主题的 `5px` 间距反向写进默认主题和业务列表。
+- Source: 用户先要求 Codex 主题从通用角度统一调整，随后明确要求其他主题按照同一调整方式保证预期，2026-07-14。
+- Effective date: 2026-07-14
+- Automatic enforcement: 四个可选主题的 computed gap / padding、桌面与窄屏、浅色与深色独立视觉回归。
+
+### OW-DM-E002 — 新粗野主题分割线控件组
+
+- Revision: 4
+- Status: SCOPED_EXCEPTION
+- Base rule: `OW-DM-E001` 的可选主题包 `5px` 紧凑导航间距，以及 `OW-DM-007` 的普通控件中性 hover。
+- Exception rule: `neo-workshop` 的快捷入口列表、分组导航、Footer、NativeTabs、Sender 工具栏和 Sender 状态栏使用零间距结构，所需的 `2px` 分割线必须由相邻表面中的单一元素拥有；Route Header action group 同样保持零间距，独立 actions 由后一个 action 在左侧拥有 `2px` 分割线，但“通过其他应用打开”这类 joined 复合动作内部不绘制分割线。Footer 只由外层容器拥有顶部 `2px` 分割线。侧栏 header、分组列表和 Footer 外层不保留 inset，Tabs、Footer 与分组导航选中项不使用阴影。Sender 工具栏和状态栏的外层不保留 padding 或 gap，交互项自身拥有统一的点击内边距，相邻项只由后一个项目绘制全高分割线；上下两行必须消费同一套 action 高度、响应式字号、字重、行高、空闲前景色与表面色，布局 bleed 和装饰分割线不得参与行高计算。同一 Sender 控件组内的“更多”、通用 Select、状态栏动作、账号、额度与适配器使用一致的黄色 hover / open 表面、黑色前景和零阴影，不沿用普通控件的中性 hover。窗口栏拥有 header/list 边界，内容 shell 拥有 sidebar/content 边界；满宽侧栏控件不绘制贴视口的左边框。展开态 Web 窗口栏使用带底部分割线的整行点击区，并与下方导航条目使用相同的 control padding 对齐图标。主题浮层使用暖纸表面、方形 `2px` 结构框、零模糊和硬偏移阴影，菜单项保持方形并用结构分割线切组；主题配置行也使用直角覆盖。侧栏表面不使用软渐变或晕染阴影。主题启用时宿主内容区不保留外层 inset，内容 shell 仅保留与侧栏相邻的左边界，NavRail 顶部间距跟随共享 header 高度。
+- Scope: OneWorks project / `neo-workshop` theme structural navigation, Sender controls, and content chrome
+- Applies when: `neo-workshop` 启用 borders / buttons / menus / shadows 对应覆盖，渲染宿主侧栏、Footer、NativeTabs、Sender 工具栏、Sender 状态栏和内容区结构边界。
+- Does not apply when: 默认主题、其他主题包、业务内容列表，或新粗野主题关闭对应覆盖。
+- Positive example: 相邻 tab 通过重叠边框共享一条 `2px` 分割线；分组导航和 Footer 都是零 gap；Route Header 的“通过其他应用打开”双动作保持 `40px + 40px`、零 gap 且无内部线，运行指令、下方面板和工作区抽屉等独立 actions 各自由左侧单一 `2px` 线分隔；Sender 的“更多”、通用 Select、推理强度、语音和发送操作紧密拼接，状态栏左右动作组也以单一全高分割线切分，相关 hover / open 状态都使用同一黄色表面、黑色前景且不产生阴影；窗口栏与快捷入口只绘制一条相邻边界且图标在同一水平起点；主题配置行保持直角；菜单浮层使用方形硬框与硬阴影。
+- Negative example: 在快捷入口、分组导航、Footer、tab、Sender 工具栏或 Sender 状态栏的分割线组内部继续保留 `5px` gap、让外层和子项同时拥有 padding、重复绘制相邻边框；在 joined 复合动作内部画线，或只给部分独立 Route Header actions 分隔而留下不一致边界；或让 Sender 的模型、状态栏、账号、额度、适配器分别使用文字变色、圆环缩放、灰底或内描边等不同 hover；或让窗口栏图标偏离下方导航图标、给主题配置行保留圆角、给 tab / Footer / 选中分组条目添加硬阴影、给浮层保留默认蓝灰圆角和模糊阴影、用渐变制造 Footer 上方晕染，或在贴视口的内容区上/右/下边缘重复画框。
+- Source: 用户明确指出新粗野主题应使用分割线切分交互元素，并要求移除 Footer 与 tab 阴影、统一检查结构边框宽度；随后要求 Sender 工具栏和状态栏沿用同一零间距结构，以“更多”为基准统一模型、状态栏、账号、额度和适配器的 hover，并要求上下两行的高度、padding、字体和表面语义完全匹配；最后明确 joined 的“通过其他应用打开”内部不画线，但运行指令、下方面板和工作区抽屉等独立 Header actions 左侧需要一致分割线，2026-07-14 至 2026-07-20。
+- Effective date: 2026-07-14
+- Automatic enforcement: `neo-workshop` 浅色 / 深色、桌面 / 窄屏 computed border / gap / padding / shadow / content inset 与交互视觉回归；Sender 通过共享样式契约测试覆盖工具栏与状态栏的高度、padding、字号、字重、行高、前景色、表面色、hover / open 状态和默认主题回退。
 
 新增例外时使用：
 

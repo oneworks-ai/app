@@ -8,6 +8,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactElement, Re
 import { forwardRef, isValidElement, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { ControlTrigger } from '#~/components/control-trigger/ControlTrigger'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 
 const DRAG_CLOSE_THRESHOLD = 72
@@ -47,10 +48,19 @@ type RawSelectOption = BaseOptionType & {
 
 type SelectClassNames = NonNullable<SelectProps['classNames']>
 
+export interface MobileAwareSelectControlTrigger {
+  ariaLabel: string
+  className?: string
+  content?: ReactNode
+  wrapperClassName?: string
+  stopPropagation?: boolean
+}
+
 export type MobileAwareSelectProps<
   ValueType = unknown,
   OptionType extends BaseOptionType | DefaultOptionType = DefaultOptionType,
 > = SelectProps<ValueType, OptionType> & {
+  controlTrigger?: MobileAwareSelectControlTrigger
   mobileTitle?: ReactNode
 }
 
@@ -206,6 +216,7 @@ function MobileAwareSelectInner<
   OptionType extends BaseOptionType | DefaultOptionType = DefaultOptionType,
 >(
   {
+    controlTrigger,
     mobileTitle,
     options,
     value,
@@ -237,6 +248,7 @@ function MobileAwareSelectInner<
   const [open, setOpen] = useState(false)
   const [searchValue, setSearchValue] = useState('')
   const dragStateRef = useRef<DrawerDragState | null>(null)
+  const internalSelectRef = useRef<RefSelectProps | null>(null)
   const dragOffsetRef = useRef(0)
   const [dragOffset, setDragOffset] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
@@ -286,6 +298,18 @@ function MobileAwareSelectInner<
     selectProps['aria-label'] ??
     (typeof placeholder === 'string' ? placeholder : undefined) ??
     t('common.select')
+
+  const setSelectRef = useCallback((node: RefSelectProps | null) => {
+    internalSelectRef.current = node
+    if (typeof ref === 'function') {
+      ref(node)
+      return
+    }
+    if (ref != null) {
+      const mutableRef = ref as { current: RefSelectProps | null }
+      mutableRef.current = node
+    }
+  }, [ref])
 
   const setDrawerOpen = useCallback((nextOpen: boolean) => {
     if (controlledOpen == null) {
@@ -434,6 +458,82 @@ function MobileAwareSelectInner<
     }
   }
 
+  const setOpenFromControlTrigger = (nextOpen: boolean) => {
+    setDrawerOpen(nextOpen)
+    if (nextOpen) {
+      window.requestAnimationFrame(() => internalSelectRef.current?.focus())
+    }
+  }
+
+  const renderControlTrigger = ({
+    ariaLabel,
+    className,
+    content,
+    stopPropagation
+  }: MobileAwareSelectControlTrigger) => (
+    <ControlTrigger
+      variant={content == null ? 'overlay' : 'content'}
+      className={className}
+      aria-label={ariaLabel}
+      aria-haspopup='listbox'
+      aria-expanded={drawerOpen}
+      disabled={disabled}
+      onPointerDown={(event) => {
+        if (stopPropagation) {
+          event.stopPropagation()
+        }
+      }}
+      onClick={(event) => {
+        if (stopPropagation) {
+          event.stopPropagation()
+        }
+        setOpenFromControlTrigger(content == null ? true : !drawerOpen)
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+          return
+        }
+        event.preventDefault()
+        if (stopPropagation) {
+          event.stopPropagation()
+        }
+        setOpenFromControlTrigger(content == null ? true : !drawerOpen)
+      }}
+    >
+      {content}
+    </ControlTrigger>
+  )
+
+  const renderDesktopSelect = () => (
+    <AntdSelect
+      {...selectProps}
+      ref={setSelectRef}
+      allowClear={allowClear}
+      aria-hidden={controlTrigger?.content != null && !drawerOpen ? true : selectProps['aria-hidden']}
+      className={selectClassName}
+      classNames={mergedClassNames}
+      disabled={disabled}
+      filterOption={filterOption}
+      mode={mode}
+      options={options}
+      placeholder={placeholder}
+      showSearch={showSearch}
+      searchValue={controlledSearchValue}
+      suffixIcon={suffixIcon === undefined ? defaultSuffixIcon : suffixIcon}
+      tabIndex={controlTrigger != null && !drawerOpen ? -1 : selectProps.tabIndex}
+      value={value}
+      virtual={selectProps.virtual ?? false}
+      onChange={handleDesktopChange}
+      onClear={onClear}
+      onDeselect={onDeselect}
+      onInputKeyDown={handleDesktopInputKeyDown}
+      onOpenChange={handleDesktopOpenChange}
+      onSearch={onSearch}
+      onSelect={onSelect}
+      open={drawerOpen}
+    />
+  )
+
   const handleDesktopChange: SelectProps<ValueType, OptionType>['onChange'] = (nextValue, nextOptions) => {
     onChange?.(nextValue, nextOptions)
     if (!multiple) {
@@ -487,32 +587,27 @@ function MobileAwareSelectInner<
   }
 
   if (!isMobileSelect || options == null) {
+    if (controlTrigger != null) {
+      const hasContentTrigger = controlTrigger.content != null
+      return (
+        <span
+          className={mergeClassNames(
+            'mobile-aware-select-trigger-shell',
+            selectInstanceClass,
+            hasContentTrigger && 'mobile-aware-select-trigger-shell--content',
+            controlTrigger.wrapperClassName,
+            drawerOpen && 'is-open',
+            disabled && 'is-disabled'
+          )}
+        >
+          {renderDesktopSelect()}
+          {(hasContentTrigger || (!disabled && !drawerOpen)) && renderControlTrigger(controlTrigger)}
+        </span>
+      )
+    }
+
     return (
-      <AntdSelect
-        {...selectProps}
-        ref={ref}
-        allowClear={allowClear}
-        className={selectClassName}
-        classNames={mergedClassNames}
-        disabled={disabled}
-        filterOption={filterOption}
-        mode={mode}
-        options={options}
-        placeholder={placeholder}
-        showSearch={showSearch}
-        searchValue={controlledSearchValue}
-        suffixIcon={suffixIcon === undefined ? defaultSuffixIcon : suffixIcon}
-        value={value}
-        virtual={selectProps.virtual ?? false}
-        onChange={handleDesktopChange}
-        onClear={onClear}
-        onDeselect={onDeselect}
-        onInputKeyDown={handleDesktopInputKeyDown}
-        onOpenChange={handleDesktopOpenChange}
-        onSearch={onSearch}
-        onSelect={onSelect}
-        open={drawerOpen}
-      />
+      renderDesktopSelect()
     )
   }
 
@@ -521,7 +616,7 @@ function MobileAwareSelectInner<
       <span className='mobile-aware-select-trigger-shell'>
         <AntdSelect
           {...selectProps}
-          ref={ref}
+          ref={setSelectRef}
           allowClear={allowClear}
           className={selectClassName}
           classNames={mergedClassNames}
@@ -533,11 +628,12 @@ function MobileAwareSelectInner<
           placeholder={placeholder}
           showSearch={false}
           suffixIcon={suffixIcon === undefined ? defaultSuffixIcon : suffixIcon}
+          tabIndex={-1}
           value={value}
         />
         {!disabled && (
-          <button
-            type='button'
+          <ControlTrigger
+            variant='overlay'
             className='mobile-aware-select-trigger-hitbox'
             aria-label={String(drawerTitle)}
             onClick={() => setDrawerOpen(true)}

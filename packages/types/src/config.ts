@@ -428,16 +428,22 @@ export interface MessageLinksConfig {
 export type AppearancePrimaryColor = '#E23F12' | '#3F7E8F' | '#00B454' | '#8B9493'
 export type AppearanceHistoryTimelineMode = 'event-line' | 'node'
 export type AppearanceThemeMode = 'system' | 'light' | 'dark'
+export type AppearanceThemePack = string
 export type IconBackground = 'transparent' | 'solid' | 'textured'
 /**
  * @deprecated Icon background is a desktop preference. Use `DesktopIconBackground`.
  */
 export type AppearanceIconBackground = IconBackground
 
+export type AppearanceThemePackConfig = Record<string, unknown>
+export type AppearanceThemePackConfigMap = Record<string, AppearanceThemePackConfig | undefined>
+
 export interface AppearanceConfig {
   historyTimelineMode?: AppearanceHistoryTimelineMode
   primaryColor?: AppearancePrimaryColor
   themeMode?: AppearanceThemeMode
+  themePack?: AppearanceThemePack
+  themePacks?: AppearanceThemePackConfigMap
 }
 
 export type DesktopIconAppearance = 'system' | 'light' | 'dark'

@@ -1,0 +1,14 @@
+{
+  "__oneWorksPluginManifest": true,
+  "name": "@oneworks/plugin-neo-workshop-theme",
+  "displayName": "Neo Workshop Theme",
+  "displayNameI18n": { "en": "Neo Workshop Theme", "zh-Hans": "新粗野工坊主题" },
+  "description": "An optional neo-brutalist theme pack for OneWorks.",
+  "descriptionI18n": {
+    "en": "Cream surfaces, black structural borders, hard shadows, yellow highlights, and playful pink actions.",
+    "zh-Hans": "奶油色表面、黑色结构边框、硬阴影、黄色高亮与俏皮粉色操作组成的新粗野主义主题。"
+  },
+  "icon": "./assets/icon.svg",
+  "version": "0.1.0",
+  "plugin": { "contributions": { "roles": ["manager", "workspace"], "surfaces": ["launcher", "workspace"] } }
+}

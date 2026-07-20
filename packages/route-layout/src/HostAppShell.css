@@ -1,6 +1,6 @@
 .host-app-shell {
   --host-app-content-bg: var(--sub-bg-color, var(--bg-color, #f6f7f8));
-  --host-app-content-radius: 12px;
+  --host-app-content-radius: var(--oneworks-surface-radius, 12px);
   --host-app-layout-transition: .3s cubic-bezier(.4, 0, .2, 1);
   --nav-rail-window-spacer-width: 64px;
   --nav-rail-collapsed-window-spacer-width: 66px;

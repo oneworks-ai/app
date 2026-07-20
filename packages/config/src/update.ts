@@ -412,6 +412,16 @@ const updateConfigSection = (config: Config, section: string, value: unknown): C
       } else if (appearanceConfig.themeMode !== undefined) {
         nextAppearance.themeMode = appearanceConfig.themeMode
       }
+      if (hasOwn(sectionValue, 'themePack')) {
+        nextAppearance.themePack = sectionValue.themePack as NonNullable<Config['appearance']>['themePack']
+      } else if (appearanceConfig.themePack !== undefined) {
+        nextAppearance.themePack = appearanceConfig.themePack
+      }
+      if (hasOwn(sectionValue, 'themePacks')) {
+        nextAppearance.themePacks = sectionValue.themePacks as NonNullable<Config['appearance']>['themePacks']
+      } else if (appearanceConfig.themePacks !== undefined) {
+        nextAppearance.themePacks = appearanceConfig.themePacks
+      }
       updateField('appearance', nextAppearance)
       return nextConfig
     }

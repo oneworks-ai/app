@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect
+    x="4"
+    y="4"
+    width="50"
+    height="50"
+    fill="#ffd43b"
+    stroke="#141111"
+    stroke-width="4"
+  />
+  <rect
+    x="12"
+    y="13"
+    width="36"
+    height="28"
+    fill="#fff8e7"
+    stroke="#141111"
+    stroke-width="4"
+  />
+  <path d="M18 22h15M18 30h22" stroke="#141111" stroke-width="4" />
+  <rect
+    x="36"
+    y="36"
+    width="20"
+    height="20"
+    fill="#fe7da8"
+    stroke="#141111"
+    stroke-width="4"
+  />
+</svg>

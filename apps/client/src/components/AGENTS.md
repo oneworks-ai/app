@@ -26,6 +26,7 @@
 - `knowledge-base/`：数据资产页的技能、实体、流程和规则视图；技能市场前端只消费 skill-hub API、维护筛选、Registry 设置和安装交互，内置 registry 的有效状态与安装写回语义归属 Server `services/skill-hub/`。
 - `composer-landing/`：跨页面 composer 外框、starter layout、starter guide 和 starter-list 交互。新建会话、自动化创建、插件创建等页面需要“欢迎 / 说明 + composer + 搜索 / 收藏 / 最近 / 展开列表”的创建态时复用 `ComposerStarterLayout` / `ComposerStarterGuide` / `ComposerStarterList`；桌面端由共享 layout 将整个交互整体居中，窄屏再统一把 composer 放到底部。页面只提供结构化 item、文案、composer 和选择回调，不复制列表行、搜索样式或创建页专属编排。
 - `mobile-aware-select/`：项目通用 Select 入口，统一桌面 AntD Select 的基础 selector 尺寸、padding、下拉箭头、点击外部关闭策略和移动端抽屉行为；下拉滚动底部留白归属 `src/styles/global.scss` 的 `oneworks-overlay` 公共规则。普通下拉默认关闭 AntD virtual scroll，避免两行或带图标 option 被固定高度估算截断；确有大列表性能需求时由调用方显式传 `virtual`。配置页、筛选器、设置弹窗等普通下拉优先复用 `MobileAwareSelect`，不要在业务组件里各自传 `suffixIcon`、覆盖 AntD 默认 `11px` padding，或局部修 popup blur / scroll padding；聊天输入栏、侧栏批量筛选这类高度特殊的紧凑控件可以在自己的模块样式里覆盖变量或 selector。
+- `control-trigger/`：项目级原生触发器外壳。Select、Menu 等控件需要统一 button 语义、reset 或整面点击 hitbox 时复用 `ControlTrigger`；业务组件继续拥有 popup 内容与开关状态，不要为相同触发器几何重复使用可点击 `div` 或透明绝对定位按钮。
 - `marketplace/`：技能商店和插件商店共用的卡片、能力标签、双列结果区与分页。新增 marketplace 类列表时传入业务标题、来源、描述、能力与 action slot，不要再复制卡片边框、三行截断、分页或响应式双列 CSS。
 - `stage-slider/`：离散档位的通用 slider，负责原生 range 键盘语义、阶段点、主题 token 和可选的末档动画；业务组件只提供档位 value / label，并通过 CSS 变量调整局部宽高，不复制轨道与滑块样式。
 - `workspace-scope-select/`：项目 / 会话范围选择的通用 Select。历史、下载、运行记录、审计记录这类需要按 workspace project 或 session 过滤的页面优先复用 `WorkspaceProjectSelect` / `WorkspaceSessionSelect`，并显式提供“全部项目 / 全部会话”选项；不要在业务组件里再临时拼一排 project/session chip。

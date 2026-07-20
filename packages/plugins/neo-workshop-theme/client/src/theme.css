@@ -1,0 +1,1074 @@
+html[data-oneworks-theme-pack='neo-workshop'] {
+  --oneworks-neo-control-size: 32px;
+  --oneworks-neo-control-gap: 5px;
+  --oneworks-neo-control-radius: 8px;
+  --oneworks-neo-icon-size: 16px;
+  --oneworks-neo-structural-border-width: 2px;
+  --oneworks-control-radius: var(--oneworks-neo-control-radius);
+  --oneworks-group-radius: var(--oneworks-neo-control-radius);
+  --oneworks-surface-radius: var(--oneworks-neo-control-radius);
+  --oneworks-interactive-card-radius: 8px;
+  --oneworks-switch-radius: var(--oneworks-neo-control-radius);
+  --oneworks-switch-handle-radius: var(--oneworks-neo-control-radius);
+  --oneworks-compact-action-size: var(--oneworks-neo-control-size);
+  --oneworks-compact-action-icon-size: var(--oneworks-neo-icon-size);
+  --oneworks-compact-action-gap: 0px;
+  --oneworks-compact-action-divider-width: var(
+    --oneworks-neo-structural-border-width
+  );
+  --sidebar-inline-action-size: var(--oneworks-neo-control-size);
+  --sidebar-inline-action-icon-size: var(--oneworks-neo-icon-size);
+  --sidebar-inline-action-radius: var(--oneworks-neo-control-radius);
+  --nav-rail-window-action-size: var(--oneworks-neo-control-size);
+  --nav-rail-window-icon-size: var(--oneworks-neo-icon-size);
+  --oneworks-resize-handle-line-width: var(
+    --oneworks-neo-structural-border-width
+  );
+  --oneworks-resize-handle-active-line-width: var(
+    --oneworks-neo-structural-border-width
+  );
+  --oneworks-resize-handle-line-radius: 0px;
+  --oneworks-resize-handle-idle-color: var(--border-color);
+  --oneworks-resize-handle-affordance-idle-color: var(--border-color);
+  --oneworks-resize-handle-hover-color: var(--primary-color);
+  --oneworks-resize-handle-active-color: var(--primary-color);
+  --oneworks-resize-handle-shadow: none;
+  --oneworks-resize-handle-mask-image: none;
+  --oneworks-resize-handle-horizontal-mask-image: none;
+  --oneworks-resize-handle-transition: none;
+  --oneworks-launcher-viewport-background: var(--sub-bg-color);
+  --oneworks-launcher-shell-background: var(--bg-color);
+  --oneworks-launcher-shell-border-width: var(
+    --oneworks-neo-structural-border-width
+  );
+  --oneworks-launcher-shell-border-color: var(--border-color);
+  --oneworks-launcher-shell-radius: 0px;
+  --oneworks-launcher-shell-shadow: 4px 4px 0 var(--border-color);
+  --oneworks-launcher-shell-backdrop-filter: none;
+  --oneworks-launcher-window-shadow: none;
+  --oneworks-launcher-item-min-height: var(--oneworks-neo-control-size);
+  --oneworks-launcher-item-radius: 0px;
+  --oneworks-launcher-item-hover-bg: var(--sub-sub-bg-color);
+  --oneworks-launcher-item-active-bg: var(--tag-bg);
+  --oneworks-launcher-active-indicator-width: 0px;
+  --oneworks-launcher-active-indicator-radius: 0px;
+  --oneworks-launcher-action-size: var(--oneworks-neo-control-size);
+  --oneworks-launcher-action-radius: 0px;
+  --oneworks-launcher-tab-height: var(--oneworks-neo-control-size);
+  --oneworks-launcher-tab-gap: 0px;
+  --oneworks-launcher-tab-radius: 0px;
+  --oneworks-launcher-tab-ink-display: none;
+  --oneworks-launcher-keycap-radius: 0px;
+  --oneworks-launcher-badge-radius: 0px;
+  --oneworks-launcher-tab-bar-backdrop-filter: none;
+  --oneworks-launcher-overlay-background: color-mix(
+    in srgb,
+    var(--bg-color) 92%,
+    transparent
+  );
+  --oneworks-launcher-overlay-backdrop-filter: none;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='palette'] {
+  --oneworks-launcher-item-active-color: #141111;
+  --oneworks-launcher-item-active-muted-color: color-mix(
+    in srgb,
+    #141111 72%,
+    var(--tag-bg)
+  );
+}
+
+html[data-oneworks-theme-pack='neo-workshop']
+  :is(.host-app-shell__content-region, .app-shell__content-region) {
+  padding: 0;
+}
+
+html[data-oneworks-theme-pack='neo-workshop']
+  .host-app-shell:not(.app-shell--window-controls-reserved) {
+  --nav-rail-top-padding: var(--route-container-header-overlay-height);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='palette']:not(.dark) {
+  --app-chrome-overlay-background: color-mix(in srgb, #fff8e7 88%, transparent);
+  --bg-color: #fff8e7;
+  --sub-bg-color: #f7eddc;
+  --sub-sub-bg-color: #eadfce;
+  --text-color: #141111;
+  --sub-text-color: #5f5548;
+  --sub-sub-text-color: #827465;
+  --placeholder-color: #8b7e70;
+  --tag-bg: #ffd43b;
+  --tag-hover-bg: #f1c62c;
+  --code-bg: #fffdf6;
+  --star-color: #d9a900;
+  --success-color: #3d9f55;
+  --warning-color: #c78f00;
+  --danger-color: #d9363e;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='palette'].dark {
+  --app-chrome-overlay-background: color-mix(in srgb, #171411 82%, transparent);
+  --bg-color: #171411;
+  --sub-bg-color: #1e1a17;
+  --sub-sub-bg-color: #2a251f;
+  --text-color: #fff7e5;
+  --sub-text-color: #c5b9a5;
+  --sub-sub-text-color: #958a79;
+  --placeholder-color: #8c8171;
+  --tag-bg: #d0ab22;
+  --tag-hover-bg: #b9981c;
+  --code-bg: #11100e;
+  --star-color: #e1bd33;
+  --success-color: #73d486;
+  --warning-color: #e1bd33;
+  --danger-color: #ff7770;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders']:not(.dark) {
+  --app-chrome-divider-color: #141111;
+  --border-color: #141111;
+  --sub-border-color: #141111;
+  --sub-sub-border-color: #141111;
+  --code-border: #141111;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'].dark {
+  --app-chrome-divider-color: #fff7e5;
+  --border-color: #fff7e5;
+  --sub-border-color: #e6dcc8;
+  --sub-sub-border-color: #c5b9a5;
+  --code-border: #fff7e5;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'] {
+  --app-chrome-border-width: var(--oneworks-neo-structural-border-width);
+  --route-container-header-border-width: var(
+    --oneworks-neo-structural-border-width
+  );
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders']
+  .route-container-layout {
+  --subpage-tertiary-border: var(--oneworks-neo-structural-border-width) solid
+    var(--border-color);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders']
+  .app-shell:not(.app-shell--compact)
+  .app-shell__content.app-shell__content--session:not(.is-sidebar-collapsed) {
+  border: 0;
+  border-left: var(--oneworks-neo-structural-border-width) solid
+    var(--border-color);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='corners'] {
+  --oneworks-overlay-radius: 0px;
+  --oneworks-neo-control-radius: 0px;
+  --nav-rail-preview-radius: 0;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='corners']
+  .app-shell {
+  --app-shell-content-radius: 0px;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='corners']
+  .route-container-layout {
+  --subpage-tertiary-radius: 0px;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='corners']
+  :is(.ant-btn, .ant-card, .ant-collapse, .ant-drawer-content, .ant-input, .ant-input-affix-wrapper, .ant-input-number, .ant-modal-content, .ant-picker, .ant-popover-inner, .ant-select-selector, .ant-tooltip-inner, .oneworks-overlay-panel, .oneworks-overlay-menu) {
+  border-radius: 0 !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.app-shell__sidebar-region, .sidebar-container) {
+  background: var(--sub-bg-color);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='menus']
+  .sidebar-container {
+  --sidebar-hover-bg: color-mix(
+    in srgb,
+    var(--sub-bg-color) 86%,
+    var(--text-color)
+  );
+  --sidebar-active-bg: var(--sub-sub-bg-color);
+  --sidebar-active-text: var(--text-color);
+  --sidebar-btn-color: var(--sub-text-color);
+  --sidebar-btn-hover-bg: color-mix(
+    in srgb,
+    var(--sub-bg-color) 82%,
+    var(--text-color)
+  );
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='menus']
+  .sidebar-header
+  .sidebar-list-header__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='menus']
+  .sidebar-list-header {
+  padding-inline: 0;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.sidebar-grouped-list, .sidebar-grouped-list__group, .sidebar-grouped-list__items) {
+  gap: 0;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.nav-rail-drawer-footer, .nav-rail-drawer-footer__slot, .nav-rail-footer-extension-list) {
+  gap: 0;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='menus']
+  .sidebar-header__quick-links {
+  gap: 0;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='menus']
+  .sidebar-grouped-list {
+  padding: 0;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='menus']
+  .nav-rail-drawer-footer {
+  padding: 0;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs {
+  --native-tabs-gap: 0px;
+  padding-bottom: 0;
+  border-bottom-color: var(--border-color);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs__items {
+  gap: 0;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs {
+  border-bottom-width: var(--oneworks-neo-structural-border-width);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs__items {
+  margin-bottom: calc(-1 * var(--oneworks-neo-structural-border-width));
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs__tab {
+  border: var(--oneworks-neo-structural-border-width) solid var(--border-color)
+    !important;
+  box-shadow: none !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs__tab
+  + .native-tabs__tab {
+  margin-inline-start: calc(-1 * var(--oneworks-neo-structural-border-width));
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs__tab:is(:hover, :focus-visible, [aria-selected='true']) {
+  z-index: 1;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn:not(.route-container-header__action-button):not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled) {
+  font-weight: 700;
+  transition:
+    transform .12s ease,
+    box-shadow .12s ease,
+    background-color .12s ease;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='button-padding'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn:not(.route-container-header__action-button):not(.ant-btn-link) {
+  width: auto;
+  height: auto;
+  min-height: 30px;
+  padding: var(--oneworks-neo-button-padding) !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='button-padding'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.oneworks-select, .mobile-aware-select-trigger-shell--content) {
+  --oneworks-select-padding-inline: var(
+    --oneworks-neo-button-padding,
+    5px
+  );
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled) {
+  border-color: var(--border-color);
+  background: var(--bg-color);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):hover,
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn-text:not(.route-container-header__action-button):not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):hover {
+  border-color: var(--border-color) !important;
+  background: color-mix(in srgb, var(--bg-color) 84%, var(--text-color))
+    !important;
+  color: var(--text-color) !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.ant-btn-primary, .ant-switch.ant-switch-checked):not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):not(.ant-switch-disabled) {
+  border-color: var(--border-color);
+  background: #fe7da8;
+  color: #141111;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='inputs']
+  :is(.ant-input, .ant-input-affix-wrapper, .ant-input-number, .ant-picker),
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='inputs']
+  :where(.ant-select:not(.ant-select-status-error):not(.ant-select-status-warning):not(.ant-select-disabled)
+    .ant-select-selector) {
+  border-color: var(--border-color) !important;
+  background: var(--bg-color) !important;
+  box-shadow: none !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='inputs']
+  .sidebar-header
+  .search-input.ant-input-affix-wrapper {
+  height: var(--oneworks-neo-control-size) !important;
+  min-height: var(--oneworks-neo-control-size) !important;
+  padding-inline: var(--oneworks-neo-button-padding) !important;
+  border-color: var(--border-color) !important;
+  border-radius: var(--oneworks-neo-control-radius) !important;
+  background: var(--bg-color) !important;
+  box-shadow: none !important;
+  transition: background-color .12s ease, border-color .12s ease;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='inputs']
+  .sidebar-header
+  .search-input.ant-input-affix-wrapper:is(:hover, :focus-within, .ant-input-affix-wrapper-focused) {
+  border-color: var(--sub-border-color) !important;
+  background: color-mix(in srgb, var(--bg-color) 84%, var(--text-color))
+    !important;
+  box-shadow: none !important;
+  outline: none;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='inputs']
+  .sidebar-header
+  .search-input.ant-input-affix-wrapper
+  .ant-input {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders']
+  :is(.ant-btn, .ant-card, .ant-collapse, .ant-input, .ant-input-affix-wrapper, .ant-input-number, .ant-modal-content, .ant-picker),
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders']
+  .ant-select-selector {
+  border-width: 2px !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='overlays']
+  :is(.ant-card, .ant-modal-content, .ant-drawer-content, .ant-collapse) {
+  border-color: var(--border-color);
+  background: var(--bg-color);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='overlays']
+  :is(.oneworks-overlay-panel, .ant-popover-inner, .ant-tooltip-inner),
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.oneworks-overlay-menu, .oneworks-overlay-menu-submenu, .ant-dropdown-menu, .ant-select-dropdown, .dv-context-menu) {
+  --oneworks-overlay-surface: var(--bg-color);
+  --oneworks-overlay-line-width: 0px;
+  border: var(--oneworks-neo-structural-border-width) solid var(--border-color)
+    !important;
+  border-radius: 0 !important;
+  background: var(--bg-color) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.ant-dropdown-menu, .oneworks-overlay-menu, .dv-context-menu) {
+  gap: 0 !important;
+  padding: 0 !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.ant-dropdown-menu-item, .ant-dropdown-menu-submenu-title, .oneworks-overlay-menu-item) {
+  box-sizing: border-box;
+  height: var(--oneworks-neo-control-size) !important;
+  min-height: var(--oneworks-neo-control-size) !important;
+  padding: var(--oneworks-neo-button-padding) !important;
+  border-radius: 0 !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='menus']
+  .ant-dropdown-menu-item-divider {
+  height: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-top: var(--oneworks-neo-structural-border-width) solid
+    var(--border-color) !important;
+  background: transparent !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.ant-dropdown-menu-item, .ant-dropdown-menu-submenu-title):not(.ant-dropdown-menu-item-danger):is(:hover, .ant-dropdown-menu-item-active) {
+  background: var(--tag-bg) !important;
+  color: #141111 !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='shadows'] {
+  --oneworks-neo-button-shadow: 3px 3px 0 #141111;
+  --oneworks-neo-hard-shadow: 4px 4px 0 #141111;
+  --oneworks-overlay-shadow: var(--oneworks-neo-hard-shadow);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='shadows'][data-oneworks-theme-pack-overrides~='overlays']
+  :is(.ant-card, .ant-modal-content, .ant-drawer-content, .ant-popover-inner, .ant-tooltip-inner, .ant-dropdown-menu, .ant-select-dropdown, .oneworks-overlay-panel, .oneworks-overlay-menu) {
+  box-shadow: var(--oneworks-neo-hard-shadow) !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='shadows'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn:not(.ant-btn-text):not(.ant-btn-link):not(:disabled):not(.ant-btn-disabled) {
+  box-shadow: var(--oneworks-neo-button-shadow);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='shadows'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn:not(.ant-btn-text):not(.ant-btn-link):not(:disabled):not(.ant-btn-disabled):active {
+  box-shadow: 1px 1px 0 #141111;
+  transform: translate(2px, 2px);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .nav-rail-chrome-button.ant-btn {
+  width: var(--oneworks-neo-control-size) !important;
+  min-width: var(--oneworks-neo-control-size) !important;
+  height: var(--oneworks-neo-control-size) !important;
+  min-height: var(--oneworks-neo-control-size) !important;
+  padding: 0 !important;
+  border-radius: var(--oneworks-neo-control-radius);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .nav-rail-chrome-button--plain-label
+  .nav-rail-chrome-button__label {
+  display: none;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .nav-rail-window-bar:not(.is-sidebar-collapsed) {
+  --nav-rail-window-bar-padding-x: 0px;
+  --nav-rail-window-gap: 0px;
+
+  height: var(--route-container-header-overlay-height);
+  gap: var(--nav-rail-window-gap);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .nav-rail-window-bar:not(.is-sidebar-collapsed)
+  > .shortcut-tooltip-target:has(.nav-rail-chrome-button--plain-label) {
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  flex: 1 1 auto;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .nav-rail-window-bar:not(.is-sidebar-collapsed)
+  .nav-rail-chrome-button--plain-label.ant-btn {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  justify-content: flex-start;
+  padding-inline: var(--oneworks-neo-button-padding) !important;
+  border: 0 !important;
+  border-radius: 0;
+  box-shadow: none !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.nav-rail-chrome-button.ant-btn, .host-nav-rail__footer-button, .sidebar-header__quick-link, .sidebar-header__quick-link-action, .sidebar-grouped-list__group-label, .sidebar-grouped-list__item, .native-tabs__tab) {
+  box-sizing: border-box;
+  border-radius: var(--oneworks-neo-control-radius);
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='button-padding'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.host-nav-rail__footer-button, .sidebar-header__quick-link, .sidebar-grouped-list__group-label, .native-tabs__tab) {
+  height: var(--oneworks-neo-control-size);
+  padding: var(--oneworks-neo-button-padding) !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.sidebar-grouped-list__group-label, .sidebar-grouped-list__item, .native-tabs__tab) {
+  min-height: var(--oneworks-neo-control-size);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.sidebar-grouped-list__group-label, .sidebar-grouped-list__item) {
+  color: var(--text-color);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='button-padding'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-grouped-list__item {
+  height: var(--oneworks-neo-control-size);
+  padding: var(--oneworks-neo-button-padding) !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='button-padding'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-grouped-list__group:not(.sidebar-grouped-list__group--unlabeled)
+  .sidebar-grouped-list__item {
+  padding-left: calc(
+    var(--sidebar-grouped-list-child-indent) +
+      var(--oneworks-neo-button-padding)
+  ) !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-grouped-list__group-toggle {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .host-nav-rail__footer {
+  --nav-rail-footer-item-height: var(--oneworks-neo-control-size);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .host-nav-rail__footer {
+  --nav-rail-footer-item-icon-size: var(--oneworks-neo-icon-size);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-header__quick-link-action {
+  width: var(--oneworks-neo-control-size);
+  min-width: var(--oneworks-neo-control-size);
+  height: var(--oneworks-neo-control-size);
+  padding: 0;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-header__quick-link-row.has-actions {
+  box-sizing: border-box;
+  height: var(--oneworks-neo-control-size);
+  gap: 0;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-header__quick-link-row.has-actions
+  :is(.sidebar-header__quick-link, .sidebar-header__quick-link-action) {
+  height: 100%;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-header__quick-link-row.has-actions
+  .sidebar-header__quick-link-actions {
+  align-self: stretch;
+  gap: 0;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-header__quick-links {
+  border: var(--oneworks-neo-structural-border-width) solid var(--border-color);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='buttons']
+  .host-nav-rail.nav-rail--desktop-drawer
+  .sidebar-header__quick-links {
+  border-block-start: 0;
+  border-inline-start: 0;
+  border-inline-end: 0;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-header__quick-links
+  :is(.sidebar-header__quick-link, .sidebar-header__quick-link-action) {
+  border: 0 !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-header__quick-link-row
+  + .sidebar-header__quick-link-row {
+  border-top: var(--oneworks-neo-structural-border-width) solid
+    var(--border-color);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-header__quick-link-row.has-actions
+  .sidebar-header__quick-link-actions {
+  border-left: var(--oneworks-neo-structural-border-width) solid
+    var(--border-color);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='button-padding'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.nav-rail-chrome-button.ant-btn, .sidebar-header__quick-link-action) {
+  padding: var(--oneworks-neo-button-padding) !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.nav-rail-chrome-button.ant-btn, .host-nav-rail__footer-button, .sidebar-header__quick-link, .sidebar-header__quick-link-action, .sidebar-grouped-list__group-label, .sidebar-grouped-list__item, .native-tabs__tab):is(:hover, :focus-visible, .ant-dropdown-open) {
+  background: color-mix(
+    in srgb,
+    var(--sub-bg-color) 82%,
+    var(--text-color)
+  ) !important;
+  color: var(--text-color) !important;
+  outline: none;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.host-nav-rail__footer-button, .sidebar-header__quick-link, .sidebar-grouped-list__group-label, .sidebar-grouped-list__item).is-active,
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs__tab[aria-selected='true'] {
+  background: var(--tag-bg) !important;
+  color: #141111 !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.sidebar-grouped-list__group-label, .sidebar-grouped-list__item).is-active {
+  border: 2px solid var(--border-color) !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='buttons']
+  .host-nav-rail.nav-rail--desktop-drawer
+  :is(.sidebar-grouped-list__group-label, .sidebar-grouped-list__item).is-active {
+  border-inline-start: 0 !important;
+  border-inline-end: 0 !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='buttons']
+  .host-nav-rail__footer-button {
+  border: 0 !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='buttons']
+  .nav-rail-window-bar:not(.is-sidebar-collapsed) {
+  border-bottom: var(--oneworks-neo-structural-border-width) solid
+    var(--border-color);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='menus']
+  .nav-rail-drawer-footer {
+  border-top: var(--oneworks-neo-structural-border-width) solid
+    var(--border-color);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='inputs'][data-oneworks-theme-pack-overrides~='menus']
+  .sidebar-header
+  .header-search-row {
+  margin-top: calc(-1 * var(--oneworks-neo-structural-border-width));
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='inputs'][data-oneworks-theme-pack-overrides~='menus']
+  .host-nav-rail.nav-rail--desktop-drawer
+  .sidebar-header
+  .search-input.ant-input-affix-wrapper {
+  border-inline-start: 0 !important;
+  border-inline-end: 0 !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='shadows'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.host-nav-rail__footer-button, .native-tabs__tab) {
+  box-shadow: none !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders']
+  :is(.theme-pack-settings__list, .theme-pack-settings__read-only-list) {
+  border-top-width: var(--oneworks-neo-structural-border-width);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders']
+  :is(.theme-pack-settings__option, .theme-pack-settings__fields
+    .config-view__field-row, .theme-pack-settings__read-only-row) {
+  border-bottom-width: var(--oneworks-neo-structural-border-width);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders']
+  :is(.theme-pack-settings__option-title
+    small, .theme-pack-settings__swatches) {
+  border-width: var(--oneworks-neo-structural-border-width);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs__tab::after {
+  display: none;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .route-container-header {
+  --route-container-header-padding-block: 0px;
+  --route-container-header-padding-inline-start: var(
+    --oneworks-neo-button-padding,
+    5px
+  );
+  --route-container-header-padding-inline-end: 0px;
+  --route-container-header-action-cell-height: var(
+    --route-container-header-overlay-height
+  );
+  --route-container-header-action-inline-size: var(
+    --route-container-header-action-cell-height
+  );
+  --route-container-header-action-gap: 0px;
+  --route-container-header-action-divider-width: 0px;
+  --route-container-header-action-group-divider-width: var(
+    --oneworks-neo-structural-border-width
+  );
+  --route-container-header-action-group-divider-color: var(--border-color);
+  --route-container-header-joined-action-divider-width: 0px;
+  --route-container-header-action-radius: 0px;
+  --route-container-header-action-hover-bg: color-mix(
+    in srgb,
+    var(--sub-bg-color) 82%,
+    var(--text-color)
+  );
+  --route-container-header-action-active-bg: var(--tag-bg);
+  --route-container-header-action-active-color: #141111;
+  --route-container-header-action-active-shadow: none;
+  --route-container-header-action-focus-ring: none;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .oneworks-icon-segmented {
+  --oneworks-icon-segmented-gap: 0px;
+  --oneworks-icon-segmented-group-radius: 0px;
+  --oneworks-icon-segmented-item-radius: 0px;
+  --oneworks-icon-segmented-hover-bg: color-mix(
+    in srgb,
+    var(--sub-bg-color) 82%,
+    var(--text-color)
+  );
+  --oneworks-icon-segmented-hover-color: var(--text-color);
+  --oneworks-icon-segmented-active-bg: var(--tag-bg);
+  --oneworks-icon-segmented-active-color: #141111;
+  --oneworks-icon-segmented-active-shadow: none;
+  --oneworks-icon-segmented-focus-ring: none;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-tabs.ant-tabs {
+  --oneworks-tabs-gap: 0px;
+  --oneworks-tabs-tab-padding-block-start: var(
+    --oneworks-neo-button-padding,
+    5px
+  );
+  --oneworks-tabs-tab-padding-block-end: var(
+    --oneworks-neo-button-padding,
+    5px
+  );
+  --oneworks-tabs-tab-padding-inline: var(
+    --oneworks-neo-button-padding,
+    5px
+  );
+  --oneworks-tabs-tab-radius: var(--oneworks-neo-control-radius);
+  --oneworks-tabs-tab-hover-bg: color-mix(
+    in srgb,
+    var(--sub-bg-color) 82%,
+    var(--text-color)
+  );
+  --oneworks-tabs-tab-hover-color: var(--text-color);
+  --oneworks-tabs-tab-active-bg: var(--tag-bg);
+  --oneworks-tabs-tab-active-color: #141111;
+  --oneworks-tabs-tab-focus-ring: none;
+  --oneworks-tabs-ink-display: none;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-tabs.ant-tabs {
+  --oneworks-tabs-tab-border-width: var(--oneworks-neo-structural-border-width);
+  --oneworks-tabs-tab-adjacent-offset: calc(
+    -1 * var(--oneworks-neo-structural-border-width)
+  );
+  --oneworks-tabs-nav-border-width: var(--oneworks-neo-structural-border-width);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders'][data-oneworks-theme-pack-overrides~='buttons']
+  .oneworks-icon-segmented {
+  --oneworks-icon-segmented-divider-width: var(
+    --oneworks-neo-structural-border-width
+  );
+  --oneworks-icon-segmented-divider-color: var(--border-color);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='palette']
+  :is(.sender-container--chat-surface, .chat-composer-card) {
+  --chat-composer-card-bg: var(--bg-color);
+  --chat-composer-card-border: var(--border-color);
+  --chat-surface-frame-border-color: var(--border-color);
+  --chat-surface-control-border-color: var(--border-color);
+  --chat-surface-status-bg: var(--sub-bg-color);
+  --chat-surface-toolbar-bg: var(--chat-surface-status-bg);
+  --chat-surface-status-border: var(--border-color);
+  --composer-starter-divider-color: var(--border-color);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders']
+  .sender-container--chat-surface {
+  --chat-surface-frame-border-width: var(
+    --oneworks-neo-structural-border-width
+  );
+  --chat-surface-composer-border-width: 0px;
+  --chat-surface-status-divider-width: var(
+    --oneworks-neo-structural-border-width
+  );
+  --chat-surface-status-divider-layout-width: 0px;
+  --chat-surface-status-divider-overlay-width: var(
+    --oneworks-neo-structural-border-width
+  );
+  --chat-surface-status-overlap: 0px;
+  --chat-surface-toolbar-divider-width: var(
+    --oneworks-neo-structural-border-width
+  );
+  --chat-surface-toolbar-divider-color: var(--border-color);
+  --chat-surface-control-separator-width: var(
+    --oneworks-neo-structural-border-width
+  );
+  --chat-surface-control-separator-height: 100%;
+  --chat-surface-control-separator-offset: 0px;
+  --chat-surface-control-separator-radius: 0px;
+  --chat-surface-control-separator-color: var(--border-color);
+  --chat-surface-toolbar-right-divider-width: var(
+    --oneworks-neo-structural-border-width
+  );
+  --chat-surface-toolbar-right-divider-offset: 0px;
+  --chat-surface-status-separator-width: var(
+    --oneworks-neo-structural-border-width
+  );
+  --chat-surface-status-separator-height: 100%;
+  --chat-surface-status-separator-offset: 0px;
+  --chat-surface-status-separator-radius: 0px;
+  --chat-surface-status-account-separator-width: var(
+    --oneworks-neo-structural-border-width
+  );
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders']
+  .sender-container:not(.sender-container--chat-surface)
+  .chat-input-container {
+  border-width: var(--oneworks-neo-structural-border-width);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders']
+  .chat-composer-card {
+  --chat-composer-card-border-width: var(
+    --oneworks-neo-structural-border-width
+  );
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders']
+  .composer-stack {
+  --composer-stack-seam-width: var(--oneworks-neo-structural-border-width);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='borders']
+  .composer-starter-list {
+  --composer-starter-divider-width: var(--oneworks-neo-structural-border-width);
+  --composer-starter-divider-color: var(--border-color);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .sender-container--chat-surface {
+  --chat-surface-toolbar-gap: 0px;
+  --chat-surface-toolbar-left-gap: 0px;
+  --chat-surface-toolbar-right-gap: 0px;
+  --chat-surface-toolbar-bleed-inline: var(--chat-surface-input-padding);
+  --chat-surface-toolbar-bleed-bottom: var(--chat-surface-input-padding);
+  --chat-surface-toolbar-margin-top: 4px;
+  --chat-surface-toolbar-action-padding-block: var(
+    --oneworks-neo-button-padding,
+    5px
+  );
+  --chat-surface-toolbar-action-height: var(--oneworks-neo-control-size);
+  --chat-surface-toolbar-action-padding-inline: var(
+    --oneworks-neo-button-padding,
+    5px
+  );
+  --chat-surface-control-hover-bg: var(--tag-bg);
+  --chat-surface-control-hover-color: #141111;
+  --chat-surface-control-hover-shadow: none;
+  --chat-surface-status-control-height: var(--oneworks-neo-control-size);
+  --chat-surface-status-icon-action-size: var(
+    --chat-surface-status-control-height
+  );
+  --chat-surface-status-padding-block: 0px;
+  --chat-surface-status-padding-inline: 0px;
+  --chat-surface-status-group-gap: 0px;
+  --chat-surface-status-actions-gap: 0px;
+  --chat-surface-status-account-gap: 0px;
+  --chat-surface-status-actions-margin-inline-start: 0px;
+  --chat-surface-status-action-padding-inline: var(
+    --oneworks-neo-button-padding,
+    5px
+  );
+  --chat-surface-status-action-padding-block: var(
+    --oneworks-neo-button-padding,
+    5px
+  );
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='corners']
+  .sender-container {
+  --chat-surface-panel-radius: 0px;
+  --chat-surface-control-radius: 0px;
+  --chat-surface-icon-button-radius: 0px;
+  --chat-composer-card-radius: 0px;
+  --sender-control-radius: 0px;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='corners']
+  :is(.sender-container--chat-surface, .sender-container
+    .chat-input-wrapper, .sender-container
+    .chat-input-container, .sender-container
+    .chat-input-composer, .sender-container .chat-status-bar, .sender-container
+    .chat-input-header-toggle-tab, .sender-container
+    .toolbar-btn, .sender-container .toolbar-btn__icon-shell, .sender-container
+    .chat-send-btn, .chat-composer-card) {
+  border-radius: 0 !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='shadows']
+  .sender-container--chat-surface {
+  --chat-surface-frame-shadow: var(--oneworks-neo-hard-shadow);
+  --chat-surface-status-shadow: none;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='shadows']
+  .sender-container:not(.sender-container--chat-surface)
+  .chat-input-container {
+  box-shadow: var(--oneworks-neo-hard-shadow);
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .sender-container
+  .chat-send-btn:not(.stop):not(.disabled):not(.blocked) {
+  border-color: var(--border-color) !important;
+  background: #fe7da8 !important;
+  color: #141111 !important;
+  box-shadow: none !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .sender-container
+  .chat-send-btn:not(.stop):not(.disabled):not(.blocked):hover {
+  background: var(--tag-bg) !important;
+  color: #141111 !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .sender-container
+  .chat-send-btn.stop,
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .sender-container
+  .chat-send-btn.stop:hover {
+  border-color: var(--border-color) !important;
+  background: var(--danger-color) !important;
+  box-shadow: none !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .sender-container
+  :is(.toolbar-btn, .chat-input-header-toggle-tab, .chat-status-bar__collapse-toggle):is(:hover, :focus-visible, .active) {
+  background: var(--tag-bg) !important;
+  color: #141111 !important;
+}
+
+html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='buttons']
+  .composer-starter-list
+  .interaction-list__item:is(:hover, :focus-within) {
+  background: var(--tag-bg);
+  color: #141111;
+}
+
+.theme-pack-settings__option[data-theme-id='neo-workshop']
+  .theme-pack-settings__preview {
+  border: 2px solid #141111;
+  border-radius: 0;
+  background: #fff8e7;
+  box-shadow: 3px 3px 0 #141111;
+}
+
+.theme-pack-settings__option[data-theme-id='neo-workshop']
+  .theme-pack-settings__preview-banner {
+  border-bottom: 2px solid #141111;
+  background: #ffd43b;
+}
+
+.theme-pack-settings__option[data-theme-id='neo-workshop']
+  .theme-pack-settings__preview-sidebar {
+  border-right: 2px solid #141111;
+  background: linear-gradient(180deg, #f7eddc, #eadfce);
+}
+
+.theme-pack-settings__option[data-theme-id='neo-workshop']
+  .theme-pack-settings__preview-sidebar
+  span,
+.theme-pack-settings__option[data-theme-id='neo-workshop']
+  .theme-pack-settings__preview-button {
+  background: #fe7da8;
+}
+
+.theme-pack-settings__option[data-theme-id='neo-workshop']
+  .theme-pack-settings__preview-toolbar {
+  background: #ffd43b;
+}
+
+.theme-pack-settings__option[data-theme-id='neo-workshop']
+  .theme-pack-settings__preview-content {
+  background: #fffdf6;
+}
+
+.theme-pack-settings__option[data-theme-id='neo-workshop']
+  .theme-pack-settings__preview-lines {
+  background: repeating-linear-gradient(
+    180deg,
+    #141111 0 2px,
+    transparent 2px 6px
+  );
+}
+
+.theme-pack-settings__editor[data-theme-id='neo-workshop']
+  .theme-pack-settings__swatches--palette
+  i:nth-child(1) {
+  background: #fff8e7;
+}
+.theme-pack-settings__editor[data-theme-id='neo-workshop']
+  .theme-pack-settings__swatches--palette
+  i:nth-child(2) {
+  background: #ffd43b;
+}
+.theme-pack-settings__editor[data-theme-id='neo-workshop']
+  .theme-pack-settings__swatches--palette
+  i:nth-child(3) {
+  background: #fe7da8;
+}
+.theme-pack-settings__editor[data-theme-id='neo-workshop']
+  .theme-pack-settings__swatches--borders
+  i {
+  background: #141111;
+}
+
+@media (max-width: 600px) {
+  html[data-oneworks-theme-pack='neo-workshop'][data-oneworks-theme-pack-overrides~='shadows'] {
+    --oneworks-neo-button-shadow: 2px 2px 0 #141111;
+    --oneworks-neo-hard-shadow: 2px 2px 0 #141111;
+  }
+}

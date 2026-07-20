@@ -1,0 +1,22 @@
+{
+  "__oneWorksPluginManifest": true,
+  "name": "@oneworks/plugin-china-red-theme",
+  "displayName": "China Edition Theme",
+  "displayNameI18n": {
+    "en": "China Edition Theme",
+    "zh-Hans": "中国方案主题"
+  },
+  "description": "An optional China Edition theme pack for OneWorks.",
+  "descriptionI18n": {
+    "en": "An optional China Edition theme pack with warm paper surfaces, gold borders, component overrides, and a playful banner.",
+    "zh-Hans": "可选的中国方案主题包，包含暖宣纸表面、金色边框、组件样式覆盖和整活横幅。"
+  },
+  "icon": "./assets/icon.svg",
+  "version": "0.1.0",
+  "plugin": {
+    "contributions": {
+      "roles": ["manager", "workspace"],
+      "surfaces": ["launcher", "workspace"]
+    }
+  }
+}

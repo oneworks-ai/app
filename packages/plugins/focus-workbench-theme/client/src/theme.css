@@ -1,0 +1,476 @@
+html[data-oneworks-theme-pack='focus-workbench'] {
+  --oneworks-focus-control-size: 30px;
+  --oneworks-focus-control-gap: 5px;
+  --oneworks-control-radius: 8px;
+  --oneworks-group-radius: 10px;
+  --oneworks-surface-radius: 16px;
+  --oneworks-interactive-card-radius: 10px;
+  --oneworks-switch-radius: 999px;
+  --oneworks-switch-handle-radius: 999px;
+  --oneworks-compact-action-size: var(--oneworks-focus-control-size);
+  --oneworks-compact-action-icon-size: 16px;
+  --oneworks-launcher-viewport-background: var(--sub-bg-color);
+  --oneworks-launcher-shell-background: color-mix(
+    in srgb,
+    var(--bg-color) 96%,
+    var(--sub-bg-color)
+  );
+  --oneworks-launcher-shell-border-color: var(--border-color);
+  --oneworks-launcher-shell-radius: var(--oneworks-surface-radius);
+  --oneworks-launcher-shell-shadow: 0 14px 40px color-mix(
+    in srgb,
+    #000 14%,
+    transparent
+  );
+  --oneworks-launcher-shell-backdrop-filter: none;
+  --oneworks-launcher-window-shadow: inset 0 -1px 0 var(--border-color);
+  --oneworks-launcher-item-radius: var(--oneworks-control-radius);
+  --oneworks-launcher-item-hover-bg: color-mix(
+    in srgb,
+    var(--sub-bg-color) 84%,
+    var(--text-color)
+  );
+  --oneworks-launcher-item-active-bg: var(--sidebar-active-bg);
+  --oneworks-launcher-action-radius: var(--oneworks-control-radius);
+  --oneworks-launcher-tab-radius: var(--oneworks-control-radius);
+  --oneworks-launcher-keycap-radius: var(--oneworks-control-radius);
+  --oneworks-launcher-tab-bar-backdrop-filter: none;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='surfaces']:not(.dark) {
+  --app-chrome-overlay-background: color-mix(in srgb, #f7f7f7 86%, transparent);
+  --bg-color: #f7f7f7;
+  --sub-bg-color: #f0f0f0;
+  --sub-sub-bg-color: #e8e8e8;
+  --text-color: #171717;
+  --sub-text-color: #737373;
+  --sub-sub-text-color: #929292;
+  --placeholder-color: #8c8c8c;
+  --tag-bg: #eeeeee;
+  --tag-hover-bg: #e4e4e4;
+  --code-bg: #181818;
+  --star-color: #c28724;
+  --success-color: #2da56f;
+  --warning-color: #c28724;
+  --danger-color: #d64f4f;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='surfaces'].dark {
+  --app-chrome-overlay-background: color-mix(in srgb, #151515 78%, transparent);
+  --bg-color: #151515;
+  --sub-bg-color: #1b1b1b;
+  --sub-sub-bg-color: #242424;
+  --text-color: #f5f5f5;
+  --sub-text-color: #9b9b9b;
+  --sub-sub-text-color: #737373;
+  --placeholder-color: #6f6f6f;
+  --tag-bg: #2a2a2a;
+  --tag-hover-bg: #333333;
+  --code-bg: #101010;
+  --star-color: #d7a547;
+  --success-color: #44c487;
+  --warning-color: #d7a547;
+  --danger-color: #e46c6c;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='dividers']:not(.dark) {
+  --app-chrome-divider-color: #d7d7d7;
+  --border-color: #d7d7d7;
+  --sub-border-color: #c8c8c8;
+  --sub-sub-border-color: #b8b8b8;
+  --code-border: #383838;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='dividers'].dark {
+  --app-chrome-divider-color: #383838;
+  --border-color: #383838;
+  --sub-border-color: #484848;
+  --sub-sub-border-color: #575757;
+  --code-border: #383838;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.app-shell__sidebar-region, .sidebar-container) {
+  background: var(--sub-bg-color);
+  background-image: none;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='menus']
+  .sidebar-container {
+  --sidebar-hover-bg: color-mix(
+    in srgb,
+    var(--sub-bg-color) 90%,
+    var(--text-color)
+  );
+  --sidebar-active-bg: var(--sub-sub-bg-color);
+  --sidebar-active-text: var(--text-color);
+  --sidebar-btn-color: var(--sub-text-color);
+  --sidebar-btn-hover-bg: color-mix(
+    in srgb,
+    var(--sub-bg-color) 88%,
+    var(--text-color)
+  );
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='menus']
+  .sidebar-header
+  .sidebar-list-header__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--oneworks-focus-control-gap);
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.sidebar-header__quick-links, .sidebar-grouped-list, .sidebar-grouped-list__group, .sidebar-grouped-list__items) {
+  gap: var(--oneworks-focus-control-gap);
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.nav-rail-drawer-footer, .nav-rail-drawer-footer__slot, .nav-rail-footer-extension-list) {
+  gap: var(--oneworks-focus-control-gap);
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='menus']
+  .sidebar-grouped-list {
+  padding-top: var(--oneworks-focus-control-gap);
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs {
+  --native-tabs-gap: var(--oneworks-focus-control-gap);
+  padding-bottom: var(--oneworks-focus-control-gap);
+  border-bottom-color: var(--border-color);
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled) {
+  border-radius: 8px;
+  transition:
+    background-color .12s ease,
+    border-color .12s ease,
+    color .12s ease;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='button-padding'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn:not(.ant-btn-link) {
+  width: auto;
+  height: auto;
+  min-height: 30px;
+  padding: var(--oneworks-focus-button-padding) !important;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled) {
+  border-color: var(--border-color);
+  background: var(--bg-color);
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons'].dark
+  .ant-btn-primary:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled) {
+  color: #101010;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):hover,
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn-text:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):hover {
+  border-color: var(--border-color) !important;
+  background: color-mix(in srgb, var(--bg-color) 92%, var(--text-color))
+    !important;
+  color: var(--text-color) !important;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  .nav-rail-chrome-button.ant-btn {
+  width: var(--oneworks-focus-control-size) !important;
+  min-width: var(--oneworks-focus-control-size) !important;
+  height: var(--oneworks-focus-control-size) !important;
+  min-height: var(--oneworks-focus-control-size) !important;
+  padding: 0 !important;
+  border-radius: 8px;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  .nav-rail-chrome-button--plain-label
+  .nav-rail-chrome-button__label {
+  display: none;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.nav-rail-chrome-button.ant-btn, .host-nav-rail__footer-button, .sidebar-header__quick-link, .sidebar-header__quick-link-action, .sidebar-grouped-list__group-label, .sidebar-grouped-list__item, .native-tabs__tab) {
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: transparent !important;
+  box-shadow: none;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='button-padding'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.host-nav-rail__footer-button, .sidebar-header__quick-link, .sidebar-grouped-list__group-label, .native-tabs__tab) {
+  height: var(--oneworks-focus-control-size);
+  padding: var(--oneworks-focus-button-padding) !important;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.sidebar-grouped-list__group-label, .sidebar-grouped-list__item, .native-tabs__tab) {
+  min-height: var(--oneworks-focus-control-size);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.sidebar-grouped-list__group-label, .sidebar-grouped-list__item) {
+  color: var(--text-color);
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='button-padding'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-grouped-list__item {
+  height: var(--oneworks-focus-control-size);
+  padding: var(--oneworks-focus-button-padding) !important;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='button-padding'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-grouped-list__group:not(.sidebar-grouped-list__group--unlabeled)
+  .sidebar-grouped-list__item {
+  padding-left: calc(
+    var(--sidebar-grouped-list-child-indent) +
+      var(--oneworks-focus-button-padding)
+  ) !important;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-grouped-list__group-toggle {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  .host-nav-rail__footer {
+  --nav-rail-footer-item-height: var(--oneworks-focus-control-size);
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='icons']
+  .host-nav-rail__footer {
+  --nav-rail-footer-item-icon-size: var(--oneworks-focus-icon-size);
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-header__quick-link-action {
+  width: var(--oneworks-focus-control-size);
+  min-width: var(--oneworks-focus-control-size);
+  height: var(--oneworks-focus-control-size);
+  padding: 0;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='button-padding'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.nav-rail-chrome-button.ant-btn, .sidebar-header__quick-link-action) {
+  padding: var(--oneworks-focus-button-padding) !important;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.nav-rail-chrome-button.ant-btn, .host-nav-rail__footer-button, .sidebar-header__quick-link, .sidebar-header__quick-link-action, .sidebar-grouped-list__group-label, .sidebar-grouped-list__item, .native-tabs__tab):is(:hover, :focus-visible, .ant-dropdown-open) {
+  background: color-mix(in srgb, var(--sub-bg-color) 88%, var(--text-color))
+    !important;
+  color: var(--text-color) !important;
+  outline: none;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.host-nav-rail__footer-button, .sidebar-header__quick-link, .sidebar-grouped-list__group-label, .sidebar-grouped-list__item).is-active,
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs__tab[aria-selected='true'] {
+  background: var(--sub-sub-bg-color) !important;
+  color: var(--primary-color) !important;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs__tab::after {
+  display: none;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  .route-container-header {
+  --route-container-header-action-radius: 8px;
+  --route-container-header-action-hover-bg: color-mix(
+    in srgb,
+    var(--sub-bg-color) 88%,
+    var(--text-color)
+  );
+  --route-container-header-action-hover-color: var(--text-color);
+  --route-container-header-action-active-bg: var(--sub-sub-bg-color);
+  --route-container-header-action-active-color: var(--primary-color);
+  --route-container-header-action-active-shadow: none;
+  --route-container-header-action-focus-ring: 0 0 0 2px color-mix(
+    in srgb,
+    var(--primary-color) 20%,
+    transparent
+  );
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='buttons']
+  .oneworks-icon-segmented {
+  --oneworks-icon-segmented-group-radius: 8px;
+  --oneworks-icon-segmented-item-radius: 8px;
+  --oneworks-icon-segmented-hover-bg: color-mix(
+    in srgb,
+    var(--sub-bg-color) 88%,
+    var(--text-color)
+  );
+  --oneworks-icon-segmented-hover-color: var(--text-color);
+  --oneworks-icon-segmented-active-bg: var(--sub-sub-bg-color);
+  --oneworks-icon-segmented-active-color: var(--primary-color);
+  --oneworks-icon-segmented-active-shadow: none;
+  --oneworks-icon-segmented-focus-ring: 0 0 0 2px color-mix(
+    in srgb,
+    var(--primary-color) 20%,
+    transparent
+  );
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='inputs']
+  :is(.ant-input, .ant-input-affix-wrapper, .ant-input-number, .ant-picker),
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='inputs']
+  .ant-select:not(.ant-select-status-error):not(.ant-select-status-warning):not(.ant-select-disabled)
+  .ant-select-selector {
+  border-color: var(--border-color) !important;
+  border-radius: 8px !important;
+  background: var(--bg-color) !important;
+  box-shadow: none;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='inputs']
+  :is(.ant-input, .ant-input-affix-wrapper, .ant-input-number, .ant-picker):focus,
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='inputs']
+  .ant-input-affix-wrapper-focused {
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--primary-color) 20%, transparent) !important;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='inputs']
+  .sidebar-header
+  .search-input.ant-input-affix-wrapper {
+  height: var(--oneworks-focus-control-size) !important;
+  min-height: var(--oneworks-focus-control-size) !important;
+  padding-inline: var(--oneworks-focus-button-padding) !important;
+  transition: background-color .12s ease, border-color .12s ease;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='inputs']
+  .sidebar-header
+  .search-input.ant-input-affix-wrapper:is(:hover, :focus-within, .ant-input-affix-wrapper-focused) {
+  border-color: var(--sub-border-color) !important;
+  background: color-mix(in srgb, var(--bg-color) 92%, var(--text-color))
+    !important;
+  box-shadow: none !important;
+  outline: none;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='inputs']
+  .sidebar-header
+  .search-input.ant-input-affix-wrapper
+  .ant-input {
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='overlays'] {
+  --oneworks-overlay-radius: 12px;
+  --oneworks-overlay-shadow: 0 10px 28px rgba(48, 52, 58, .18);
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='overlays']
+  .app-shell {
+  --app-shell-content-radius: 16px;
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='overlays']
+  :is(.ant-card, .ant-modal-content, .ant-drawer-content, .ant-collapse) {
+  border-color: var(--border-color);
+  border-radius: 16px;
+  background: var(--bg-color);
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='overlays'].dark {
+  --oneworks-overlay-shadow: 0 10px 28px rgba(0, 0, 0, .34);
+}
+
+html[data-oneworks-theme-pack='focus-workbench'][data-oneworks-theme-pack-overrides~='icons']
+  :is(.config-view__field-icon, .ant-btn
+    .material-symbols-rounded, .ant-dropdown-menu
+    .material-symbols-rounded, .oneworks-overlay-menu
+    .material-symbols-rounded) {
+  font-size: var(--oneworks-focus-icon-size);
+}
+
+.theme-pack-settings__option[data-theme-id='focus-workbench']
+  .theme-pack-settings__preview {
+  border-color: #d7d7d7;
+  background: #f7f7f7;
+}
+
+.theme-pack-settings__option[data-theme-id='focus-workbench']
+  .theme-pack-settings__preview-banner {
+  border-bottom-color: #d7d7d7;
+  background: #eeeeee;
+}
+
+.theme-pack-settings__option[data-theme-id='focus-workbench']
+  .theme-pack-settings__preview-sidebar {
+  border-right-color: #d7d7d7;
+  background: #f0f0f0;
+}
+
+.theme-pack-settings__option[data-theme-id='focus-workbench']
+  .theme-pack-settings__preview-sidebar
+  span,
+.theme-pack-settings__option[data-theme-id='focus-workbench']
+  .theme-pack-settings__preview-toolbar,
+.theme-pack-settings__option[data-theme-id='focus-workbench']
+  .theme-pack-settings__preview-button {
+  background: #006dcc;
+}
+
+.theme-pack-settings__option[data-theme-id='focus-workbench']
+  .theme-pack-settings__preview-content {
+  background: #fff;
+}
+.theme-pack-settings__option[data-theme-id='focus-workbench']
+  .theme-pack-settings__preview-lines {
+  background: repeating-linear-gradient(
+    180deg,
+    #737373 0 1px,
+    transparent 1px 5px
+  );
+}
+
+.theme-pack-settings__editor[data-theme-id='focus-workbench']
+  .theme-pack-settings__swatches--surfaces
+  i:nth-child(1) {
+  background: #f7f7f7;
+}
+.theme-pack-settings__editor[data-theme-id='focus-workbench']
+  .theme-pack-settings__swatches--surfaces
+  i:nth-child(2) {
+  background: #eeeeee;
+}
+.theme-pack-settings__editor[data-theme-id='focus-workbench']
+  .theme-pack-settings__swatches--surfaces
+  i:nth-child(3) {
+  background: #171717;
+}
+.theme-pack-settings__editor[data-theme-id='focus-workbench']
+  .theme-pack-settings__swatches--dividers
+  i:nth-child(1) {
+  background: #eeeeee;
+}
+.theme-pack-settings__editor[data-theme-id='focus-workbench']
+  .theme-pack-settings__swatches--dividers
+  i:nth-child(2) {
+  background: #d7d7d7;
+}
+.theme-pack-settings__editor[data-theme-id='focus-workbench']
+  .theme-pack-settings__swatches--dividers
+  i:nth-child(3) {
+  background: #383838;
+}

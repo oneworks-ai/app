@@ -1,5 +1,25 @@
 .composer-starter-list {
   --composer-starter-list-padding: var(--chat-surface-input-padding, 10px);
+  --composer-starter-divider-width: 1px;
+  --composer-starter-divider-color: color-mix(
+    in srgb,
+    var(--border-color) 72%,
+    transparent
+  );
+  --composer-starter-title-color: var(--text-color);
+  --composer-starter-description-color: color-mix(
+    in srgb,
+    var(--text-color) 72%,
+    var(--bg-color)
+  );
+  --composer-starter-hover-title-color: var(--primary-color);
+  --interaction-list-title-color: var(--composer-starter-title-color);
+  --interaction-list-description-color: var(
+    --composer-starter-description-color
+  );
+  --interaction-list-title-hover-color: var(
+    --composer-starter-hover-title-color
+  );
 
   width: 100%;
   min-width: 0;
@@ -21,8 +41,8 @@
     position: relative;
     z-index: 1;
     padding: var(--composer-starter-list-padding);
-    border-bottom: 1px solid
-      color-mix(in srgb, var(--border-color) 72%, transparent);
+    border-bottom: var(--composer-starter-divider-width) solid
+      var(--composer-starter-divider-color);
     background: var(--bg-color);
   }
 
@@ -60,8 +80,8 @@
     var(--app-chrome-icon-size, 18px) + var(--composer-starter-list-padding) * 2
   );
   padding: var(--composer-starter-list-padding);
-  border-top: 1px solid
-    color-mix(in srgb, var(--border-color) 72%, transparent);
+  border-top: var(--composer-starter-divider-width) solid
+    var(--composer-starter-divider-color);
   background: var(--bg-color);
 }
 

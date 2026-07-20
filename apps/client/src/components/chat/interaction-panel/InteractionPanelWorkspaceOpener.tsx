@@ -1,8 +1,13 @@
-import { App, Button, Dropdown } from 'antd'
+import { App, Dropdown } from 'antd'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 
+import {
+  RouteHeaderActionButton,
+  RouteHeaderActionGroup,
+  readRouteHeaderIsMac
+} from '@oneworks/components/route-layout'
 import type { WorkspaceExternalOpenerId, WorkspaceTerminalOpenerId } from '@oneworks/types'
 
 import {
@@ -43,10 +48,10 @@ export function InteractionPanelWorkspaceOpener({
   } = useInteractionPanelWorkspaceOpeners()
 
   return (
-    <div className='chat-header-workspace-opener'>
-      <Button
-        type='text'
-        className='chat-header-workspace-opener__primary'
+    <RouteHeaderActionGroup className='chat-header-workspace-opener' joined>
+      <RouteHeaderActionButton
+        isMac={readRouteHeaderIsMac()}
+        buttonClassName='chat-header-workspace-opener__primary'
         data-dock-panel-no-resize='true'
         disabled={defaultWorkspaceOpener == null}
         icon={defaultWorkspaceOpener == null
@@ -57,8 +62,8 @@ export function InteractionPanelWorkspaceOpener({
             iconUrl: defaultWorkspaceOpener.iconUrl,
             title: defaultWorkspaceOpener.title
           })}
-        title={defaultWorkspaceOpenerLabel}
-        aria-label={defaultWorkspaceOpenerLabel}
+        label={defaultWorkspaceOpenerLabel}
+        tooltipTitle={defaultWorkspaceOpenerLabel}
         onClick={() => {
           if (defaultWorkspaceOpener != null) {
             handleOpenWorkspace(defaultWorkspaceOpener.id)
@@ -82,16 +87,16 @@ export function InteractionPanelWorkspaceOpener({
         onOpenChange={setIsMenuOpen}
         trigger={['click']}
       >
-        <Button
-          type='text'
-          className='chat-header-workspace-opener__menu'
+        <RouteHeaderActionButton
+          isMac={readRouteHeaderIsMac()}
+          buttonClassName='chat-header-workspace-opener__menu'
           data-dock-panel-no-resize='true'
           icon={<span className={iconClassName}>expand_more</span>}
-          title={t('chat.interactionPanel.openWorkspace')}
-          aria-label={t('chat.interactionPanel.openWorkspace')}
+          label={t('chat.interactionPanel.openWorkspace')}
+          tooltipTitle={t('chat.interactionPanel.openWorkspace')}
         />
       </Dropdown>
-    </div>
+    </RouteHeaderActionGroup>
   )
 }
 

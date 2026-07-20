@@ -688,7 +688,7 @@
   min-width: 0;
   padding: 4px;
   border: 1px solid color-mix(in srgb, var(--border-color) 68%, transparent);
-  border-radius: 8px;
+  border-radius: var(--oneworks-group-radius, 8px);
   background: color-mix(in srgb, var(--sub-bg-color) 72%, transparent);
 }
 
@@ -711,7 +711,7 @@
   left: 0;
   width: calc((100% - 8px) / 3);
   height: 32px;
-  border-radius: 6px;
+  border-radius: var(--oneworks-control-radius, 6px);
   background: var(--subpage-content-card-bg);
   box-shadow: 0 1px 2px rgba(15, 23, 42, .12);
   pointer-events: none;
@@ -880,7 +880,7 @@
   min-height: 38px;
   padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--border-color) 68%, transparent);
-  border-radius: 8px;
+  border-radius: var(--oneworks-group-radius, 8px);
   background: color-mix(in srgb, var(--sub-bg-color) 72%, transparent);
 }
 
@@ -918,7 +918,7 @@
   min-width: 0;
   padding: 3px;
   border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
-  border-radius: 8px;
+  border-radius: var(--oneworks-group-radius, 8px);
   background: color-mix(in srgb, var(--sub-bg-color) 76%, transparent);
 }
 
@@ -931,7 +931,7 @@
   height: 28px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--oneworks-control-radius, 6px);
   background: transparent;
   color: var(--sub-text-color);
   font: inherit;
@@ -1762,32 +1762,26 @@
   font-size: 18px;
 }
 
-.config-view__source-option {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  line-height: 0;
-}
-
-.config-view__source-option-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 .config-view__source-switch {
+  --oneworks-icon-segmented-item-size: 20px;
+  --oneworks-icon-segmented-icon-size: 14px;
+  --oneworks-icon-segmented-gap: 2px;
+  --oneworks-icon-segmented-group-radius: 8px;
+  --oneworks-icon-segmented-item-radius: 6px;
+  --oneworks-icon-segmented-hover-bg: color-mix(
+    in srgb,
+    var(--tag-hover-bg) 82%,
+    transparent
+  );
+  --oneworks-icon-segmented-hover-color: var(--text-color);
+  --oneworks-icon-segmented-active-bg: var(--subpage-content-card-bg);
+  --oneworks-icon-segmented-active-color: var(
+    --sidebar-active-text,
+    var(--primary-color)
+  );
+  --oneworks-icon-segmented-active-shadow: 0 1px 2px rgba(15, 23, 42, .08);
+
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
   height: 20px;
   min-height: 20px;
   padding: 0 1px;
@@ -1810,41 +1804,12 @@
   z-index: -1;
 }
 
-.config-view__source-switch-button.ant-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  min-width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--sub-text-color);
-  box-shadow: none;
-}
-
-.config-view__source-switch-button.ant-btn:hover,
-.config-view__source-switch-button.ant-btn:focus-visible {
-  background: color-mix(in srgb, var(--tag-hover-bg) 82%, transparent);
-  color: var(--text-color);
-}
-
-.config-view__source-switch-button.ant-btn.is-active,
-.config-view__source-switch-button.ant-btn.is-active:hover,
-.config-view__source-switch-button.ant-btn.is-active:focus-visible {
-  background: var(--subpage-content-card-bg);
-  color: var(--sidebar-active-text, var(--primary-color));
-  box-shadow: 0 1px 2px rgba(15, 23, 42, .08);
-}
-
-.config-view__source-switch-button.ant-btn .material-symbols-rounded {
+.config-view__source-switch-button .material-symbols-rounded {
   display: block;
-  font-size: 14px;
-  width: 14px;
-  height: 14px;
-  line-height: 14px;
+  font-size: var(--oneworks-icon-segmented-icon-size);
+  width: var(--oneworks-icon-segmented-icon-size);
+  height: var(--oneworks-icon-segmented-icon-size);
+  line-height: var(--oneworks-icon-segmented-icon-size);
 }
 
 .config-view .ant-empty-image {

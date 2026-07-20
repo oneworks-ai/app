@@ -17,10 +17,12 @@ vi.mock('electron', () => ({
 }))
 
 const {
+  loadGlobalAppearanceSettings,
   loadGlobalDesktopSettings,
   loadGlobalDesktopSettingsState,
   loadProjectDesktopUpdateChannel,
   loadProjectDesktopUpdateSettings,
+  saveGlobalAppearanceSettingsPatch,
   saveGlobalDesktopSettings,
   saveGlobalDesktopSettingsPatch,
   saveProjectDesktopUpdateChannel,
@@ -63,6 +65,72 @@ afterEach(async () => {
 })
 
 describe('desktop global settings config', () => {
+  it('bridges resolved global theme-pack settings into desktop windows', async () => {
+    await mkdir(path.join(electronMock.homeDir, '.oneworks'), { recursive: true })
+    await writeFile(
+      path.join(electronMock.homeDir, '.oneworks', '.oo.config.json'),
+      JSON.stringify({
+        appearance: {
+          themePack: 'china-red',
+          themePacks: {
+            'china-red': {
+              overrides: {
+                components: { buttons: false },
+                layout: { iconSize: { enabled: false, value: 18 } }
+              },
+              showBanner: false
+            }
+          }
+        }
+      })
+    )
+
+    await expect(loadGlobalAppearanceSettings()).resolves.toEqual({
+      themePack: 'china-red',
+      themePacks: {
+        'china-red': {
+          overrides: {
+            components: { buttons: false },
+            layout: { iconSize: { enabled: false, value: 18 } }
+          },
+          showBanner: false
+        }
+      }
+    })
+  })
+
+  it('persists theme-pack patches without dropping existing appearance settings', async () => {
+    await mkdir(path.join(electronMock.homeDir, '.oneworks'), { recursive: true })
+    await writeFile(
+      path.join(electronMock.homeDir, '.oneworks', '.oo.config.json'),
+      JSON.stringify({
+        appearance: {
+          primaryColor: '#3F7E8F',
+          themeMode: 'dark'
+        }
+      })
+    )
+
+    await saveGlobalAppearanceSettingsPatch({
+      themePack: 'neo-workshop',
+      themePacks: {
+        'neo-workshop': { borders: true }
+      }
+    })
+
+    const config = JSON.parse(
+      await readFile(path.join(electronMock.homeDir, '.oneworks', '.oo.config.json'), 'utf8')
+    )
+    expect(config.appearance).toEqual({
+      primaryColor: '#3F7E8F',
+      themeMode: 'dark',
+      themePack: 'neo-workshop',
+      themePacks: {
+        'neo-workshop': { borders: true }
+      }
+    })
+  })
+
   it('migrates legacy desktop settings into the real global config file', async () => {
     const settings = await loadGlobalDesktopSettings({
       launcherShortcut: 'option+space',

@@ -73,7 +73,8 @@ export function InteractionPanelMobileDeviceInspectPanel({
     elementListColumn,
     handleSplitterKeyDown,
     handleSplitterPointerDown,
-    inspectWorkspaceRef
+    inspectWorkspaceRef,
+    isElementSplitterDragging
   } = useMobileDeviceElementSplitter()
   const selectedElementPathItems = useMemo(
     () => getSelectedElementPathItems(flattenedNodes, selectedNode, selectedNodeId),
@@ -181,7 +182,10 @@ export function InteractionPanelMobileDeviceInspectPanel({
           </div>
         </div>
         <div
-          className='chat-interaction-panel-mobile-debug__element-splitter'
+          className={[
+            'chat-interaction-panel-mobile-debug__element-splitter',
+            isElementSplitterDragging ? 'is-resizing' : ''
+          ].filter(Boolean).join(' ')}
           role='separator'
           aria-label={t('chat.interactionPanel.mobileDebugResizeElementDetails')}
           aria-orientation='vertical'

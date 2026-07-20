@@ -25,21 +25,21 @@ let responsiveLayout = {
   isCompactLayout: false,
   isTouchInteraction: false
 }
+let capturedSelectProps: Record<string, unknown> | undefined
 
 vi.mock('#~/hooks/use-responsive-layout', () => ({
   useResponsiveLayout: () => responsiveLayout
 }))
 
 vi.mock('#~/components/mobile-aware-select/MobileAwareSelect', () => ({
-  MobileAwareSelect: React.forwardRef<HTMLDivElement, Record<string, unknown>>((
-    {
+  MobileAwareSelect: React.forwardRef<HTMLDivElement, Record<string, unknown>>((props, ref) => {
+    capturedSelectProps = props
+    const {
       className,
       labelRender,
       placeholder,
       suffixIcon
-    },
-    ref
-  ) => {
+    } = props
     const renderLabel = typeof labelRender === 'function'
       ? labelRender
       : () => placeholder
@@ -149,6 +149,7 @@ const createProps = () => ({
 
 describe('model select control trigger icon', () => {
   beforeEach(() => {
+    capturedSelectProps = undefined
     responsiveLayout = {
       isCompactLayout: false,
       isTouchInteraction: false
@@ -166,6 +167,17 @@ describe('model select control trigger icon', () => {
     expect(html).toContain('data-icon-id="moonshot"')
     expect(html).toContain('kimi-for-coding')
     expect(html).not.toContain('model_training')
+    expect(capturedSelectProps?.controlTrigger).toMatchObject({
+      ariaLabel: 'chat.modelShortcutTooltip',
+      className: 'sender-select-content-trigger',
+      stopPropagation: true,
+      wrapperClassName: 'sender-select-shell sender-select-shell--model'
+    })
+    const triggerContent = (capturedSelectProps?.controlTrigger as { content?: React.ReactNode })?.content
+    const triggerHtml = renderToStaticMarkup(<>{triggerContent}</>)
+    expect(triggerHtml).toContain('model-select-trigger-label')
+    expect(triggerHtml).toContain('kimi-for-coding')
+    expect(triggerHtml).toContain('keyboard_arrow_down')
   })
 
   it('uses the selected model service icon in the compact trigger', async () => {
@@ -183,6 +195,55 @@ describe('model select control trigger icon', () => {
     expect(html).toContain('data-icon-id="moonshot"')
     expect(html).toContain('kimi-for-coding')
     expect(html).not.toContain('model_training')
+  })
+
+  it('forwards the compact model open state to the visible Select shell', async () => {
+    responsiveLayout = {
+      isCompactLayout: true,
+      isTouchInteraction: false
+    }
+    const { ModelSelectControl } = await import(
+      '#~/components/chat/sender/@components/model-select/ModelSelectControl'
+    )
+    const props = createProps()
+
+    const html = renderToStaticMarkup(
+      <ModelSelectControl
+        {...props}
+        state={{ ...props.state, showModelSelect: true }}
+      />
+    )
+
+    expect(html).toMatch(
+      /class="[^"]*sender-select-shell--model[^"]*is-open[^"]*"/
+    )
+  })
+
+  it('marks the compact model shell disabled without dropping its open state', async () => {
+    responsiveLayout = {
+      isCompactLayout: true,
+      isTouchInteraction: false
+    }
+    const { ModelSelectControl } = await import(
+      '#~/components/chat/sender/@components/model-select/ModelSelectControl'
+    )
+    const props = createProps()
+
+    const html = renderToStaticMarkup(
+      <ModelSelectControl
+        {...props}
+        state={{
+          ...props.state,
+          modelUnavailable: true,
+          showModelSelect: true
+        }}
+      />
+    )
+
+    expect(html).toMatch(
+      /class="[^"]*sender-select-shell--model[^"]*is-open[^"]*is-disabled[^"]*"/
+    )
+    expect(html).toContain('disabled=""')
   })
 
   it('shows the resolved Codex model and OpenAI icon for the native default selection', async () => {

@@ -1,5 +1,8 @@
 .interaction-list {
   --interaction-list-icon-size: var(--app-chrome-icon-size, 18px);
+  --interaction-list-title-color: currentcolor;
+  --interaction-list-description-color: var(--sub-text-color);
+  --interaction-list-title-hover-color: var(--primary-color);
 
   flex: 1;
   min-height: 0;
@@ -96,12 +99,16 @@
   }
 
   .interaction-list__item {
-    width: calc(100% + 20px);
-    min-height: 38px;
+    width: calc(100% + var(--launcher-item-bleed-inline, 10px) * 2);
+    min-height: var(--launcher-item-min-height, 38px);
     align-items: center;
-    margin: 0 -10px;
-    padding: 4px 8px 4px calc(8px + var(--interaction-list-depth-offset));
-    border-radius: 7px;
+    margin: 0 calc(-1 * var(--launcher-item-bleed-inline, 10px));
+    padding: var(--launcher-item-padding, 4px 8px);
+    padding-inline-start: calc(8px + var(--interaction-list-depth-offset));
+    border-radius: var(
+      --launcher-item-radius,
+      var(--oneworks-control-radius, 7px)
+    );
   }
 
   .interaction-list__item.is-group-title {
@@ -182,7 +189,7 @@
   .interaction-list__badge {
     max-width: 78px;
     padding: 1px 5px;
-    border-radius: 999px;
+    border-radius: var(--launcher-badge-radius, 999px);
     overflow: hidden;
     background: color-mix(
       in srgb,
@@ -548,6 +555,7 @@
   font-size: 12px;
   line-height: 18px;
   font-weight: 500;
+  color: var(--interaction-list-title-color);
 }
 
 .interaction-list__title-text {
@@ -588,7 +596,7 @@
 
 .interaction-list__title-description {
   flex: 1 1 auto;
-  color: var(--sub-text-color);
+  color: var(--interaction-list-description-color);
   font-size: 11px;
   font-weight: 500;
   opacity: 0;
@@ -619,7 +627,7 @@
 .interaction-list--split-action-hover
   .interaction-list__body:focus-within
   .interaction-list__title {
-  color: var(--primary-color);
+  color: var(--interaction-list-title-hover-color);
 }
 
 .interaction-list__disclosure-action.ant-btn {

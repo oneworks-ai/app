@@ -19,6 +19,7 @@ export function useMobileDeviceElementSplitter() {
   const inspectWorkspaceRef = useRef<HTMLDivElement>(null)
   const [elementListColumn, setElementListColumn] = useState<string>()
   const [elementDetailsColumn, setElementDetailsColumn] = useState<string>()
+  const [isElementSplitterDragging, setIsElementSplitterDragging] = useState(false)
 
   const setElementListWidth = useCallback((width: number, workspaceWidth: number) => {
     const columns = getClampedElementColumns(width, workspaceWidth)
@@ -36,12 +37,14 @@ export function useMobileDeviceElementSplitter() {
     const workspaceWidth = workspace.getBoundingClientRect().width
     const startX = event.clientX
     const startWidth = elementList.getBoundingClientRect().width
+    setIsElementSplitterDragging(true)
     splitter.setPointerCapture(event.pointerId)
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
       setElementListWidth(startWidth + moveEvent.clientX - startX, workspaceWidth)
     }
     const cleanup = () => {
+      setIsElementSplitterDragging(false)
       splitter.removeEventListener('pointermove', handlePointerMove)
       splitter.removeEventListener('pointerup', cleanup)
       splitter.removeEventListener('pointercancel', cleanup)
@@ -74,6 +77,7 @@ export function useMobileDeviceElementSplitter() {
     elementListColumn,
     handleSplitterKeyDown,
     handleSplitterPointerDown,
-    inspectWorkspaceRef
+    inspectWorkspaceRef,
+    isElementSplitterDragging
   }
 }

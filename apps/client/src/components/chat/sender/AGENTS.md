@@ -1,12 +1,15 @@
 # Sender Module
 
-本目录是聊天输入区的模块边界。默认 sender、inline edit sender、launcher 输入框都会复用这里的入口和子模块。
+本目录是聊天输入区的模块边界。默认 sender、inline edit sender、自动化创建 / 编辑、插件创建和插件宿主 chat surface 都复用这里的入口和子模块。
 
 ## 入口与分层
 
 - `Sender.tsx`：最外层装配入口，只组合 controller 和 `SenderBody`。
 - `Sender.scss`：sender / inline edit 共享样式，并声明 `container: sender-history / inline-size`。
 - `SenderSurface.scss`：chat sender surface 视觉层，维护 `.sender-container--chat-surface` 及其 status bar / select 密度外观；页面和插件宿主只加公共 surface class，不复制这套样式。
+  - theme pack 需要改变边框、圆角、阴影或 status 分割线时，只覆盖 `--chat-surface-*` / `--chat-composer-card-*` 等共享 token，不能新增 automation、plugin-create 或 route 专属选择器。
+  - 外框、composer 内框和 status 分割线必须有唯一 owner；主题启用粗外框时，应关闭 composer 的重复内框并用 status 顶部分割线连接同一 surface。
+  - 改共享 surface 后至少同时检查会话、自动化空态、自动化任务编辑和插件创建；不能用单页截图替代复用入口回归。
 - `@components/`：私有视图组件和子模块，例如 toolbar、model select、effort select、account select、adapter select。
 - `@core/`：toolbar bindings、content 组装和纯逻辑。
 - `@hooks/`：composer 状态、overlay、快捷键、focus restore、提交等状态编排。

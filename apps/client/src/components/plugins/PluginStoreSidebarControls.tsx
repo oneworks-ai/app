@@ -1,7 +1,6 @@
-import { Tooltip } from 'antd'
-
 import type { NativeHostPlugin } from '@oneworks/types'
 
+import { IconSegmentedControl } from '#~/components/icon-segmented-control'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import type {
   RouteSidebarListContextMenuItems,
@@ -147,28 +146,18 @@ export function PluginGroupModeControls({
   onGroupModeChange
 }: PluginGroupModeControlsProps) {
   return (
-    <span className='plugin-store-route__group-actions' aria-label={t('pluginStore.groupMode')}>
-      {pluginGroupModeOptions.map(option => {
-        const isActive = groupMode === option.key
-        return (
-          <Tooltip key={option.key} title={t(option.labelKey)}>
-            <button
-              type='button'
-              className={[
-                'search-toggle-button',
-                'plugin-store-route__group-button',
-                isActive ? 'is-open' : ''
-              ].filter(Boolean).join(' ')}
-              aria-label={t(option.labelKey)}
-              aria-pressed={isActive}
-              onMouseDown={event => event.preventDefault()}
-              onClick={() => onGroupModeChange(option.key)}
-            >
-              <MaterialSymbol className='search-toggle-icon' name={option.icon} />
-            </button>
-          </Tooltip>
-        )
-      })}
-    </span>
+    <IconSegmentedControl
+      ariaLabel={t('pluginStore.groupMode')}
+      className='plugin-store-route__group-actions'
+      itemClassName='plugin-store-route__group-button'
+      preservePointerFocus
+      value={groupMode}
+      options={pluginGroupModeOptions.map(option => ({
+        icon: <MaterialSymbol name={option.icon} />,
+        label: t(option.labelKey),
+        value: option.key
+      }))}
+      onChange={onGroupModeChange}
+    />
   )
 }

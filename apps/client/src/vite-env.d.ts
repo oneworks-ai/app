@@ -238,6 +238,8 @@ interface DesktopSettings {
   iconTheme?: 'industrial' | 'metal' | 'matrix'
   primaryColor?: '#E23F12' | '#3F7E8F' | '#00B454' | '#8B9493'
   themeMode?: 'system' | 'light' | 'dark'
+  themePack?: string
+  themePacks?: Record<string, Record<string, unknown> | undefined>
   buildSource?: DesktopBuildSource
   launcherShortcut: string
   launcherShortcutError?: string
@@ -822,7 +824,7 @@ interface Window {
     systemLocale?: string
     updateDesktopSettings?: (settings: Partial<DesktopSettings>) => Promise<DesktopSettings>
     updateGlobalAppearanceConfig?: (
-      appearance: Partial<Pick<DesktopSettings, 'primaryColor' | 'themeMode'>>
+      appearance: Partial<Pick<DesktopSettings, 'primaryColor' | 'themeMode' | 'themePack' | 'themePacks'>>
     ) => Promise<DesktopSettings>
     updateGlobalInterfaceLanguageConfig?: (language: string) => Promise<DesktopInterfaceLanguageConfig>
     writeImageDataUrlToClipboard?: (dataUrl: string) => Promise<void>

@@ -5,6 +5,7 @@ import { Dropdown } from 'antd'
 import type { MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { ControlTrigger } from '#~/components/control-trigger/ControlTrigger'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 
 import type { SenderProps } from '../../@types/sender-props'
@@ -78,7 +79,7 @@ export function ReferenceActionsControl({
   const showSessionTargetInMore = showHeaderControlsInMore && !isInlineEdit && sessionTarget != null &&
     !sessionTarget.locked && sessionTarget.disabled !== true
 
-  const handleReferenceTriggerClick = (event: MouseEvent<HTMLDivElement>) => {
+  const handleReferenceTriggerClick = (event: MouseEvent<HTMLButtonElement>) => {
     if (!isCompactControl && canOpenReferenceActions) {
       return
     }
@@ -121,9 +122,8 @@ export function ReferenceActionsControl({
         overlayClassName='reference-actions-dropdown'
         destroyOnHidden
       >
-        <div
+        <ControlTrigger
           className={`toolbar-btn toolbar-btn--reference ${showReferenceActions ? 'active' : ''}`.trim()}
-          tabIndex={-1}
           aria-haspopup='menu'
           aria-expanded={!isCompactControl && showReferenceActions}
           onClick={handleReferenceTriggerClick}
@@ -132,7 +132,7 @@ export function ReferenceActionsControl({
             <span className='material-symbols-rounded'>menu</span>
           </span>
           <span className='toolbar-btn__text'>{t('chat.referenceActionsShort')}</span>
-        </div>
+        </ControlTrigger>
       </Dropdown>
       {isCompactControl && (
         <ReferenceActionsCompactMenu

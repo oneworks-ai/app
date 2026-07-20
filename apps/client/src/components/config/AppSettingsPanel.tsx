@@ -19,7 +19,7 @@ import type { SenderHeaderDisplayMode, ThemeMode } from '#~/store/index.js'
 
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
-import { normalizeHistoryTimelineMode } from '#~/utils/appearance-config'
+import { applyAppearanceConfigPatch, normalizeHistoryTimelineMode } from '#~/utils/appearance-config'
 import { FieldRow } from './ConfigFieldRow'
 import { ConfigSectionFrame } from './ConfigSectionFrame'
 import { HistoryTimelineModeRadioGroup } from './HistoryTimelineModeRadioGroup'
@@ -32,6 +32,7 @@ export function AppSettingsPanel({
   headerExtra,
   headerLeading,
   onAppearanceChange,
+  rawAppearance = appearance,
   showHeader = true,
   t
 }: {
@@ -39,6 +40,7 @@ export function AppSettingsPanel({
   headerExtra?: ReactNode
   headerLeading?: ReactNode
   onAppearanceChange: (value: Record<string, unknown>) => void
+  rawAppearance?: Record<string, unknown>
   showHeader?: boolean
   t: TranslationFn
 }) {
@@ -55,16 +57,10 @@ export function AppSettingsPanel({
   )
   const handleThemeModeChange = (nextThemeMode: ThemeMode) => {
     setThemeMode(nextThemeMode)
-    onAppearanceChange({
-      ...appearance,
-      themeMode: nextThemeMode
-    })
+    onAppearanceChange(applyAppearanceConfigPatch(rawAppearance, { themeMode: nextThemeMode }))
   }
   const handleHistoryTimelineModeChange = (nextMode: AppearanceHistoryTimelineMode) => {
-    onAppearanceChange({
-      ...appearance,
-      historyTimelineMode: nextMode
-    })
+    onAppearanceChange(applyAppearanceConfigPatch(rawAppearance, { historyTimelineMode: nextMode }))
   }
 
   return (
@@ -80,6 +76,7 @@ export function AppSettingsPanel({
             appearance={appearance}
             iconAppearance={themeMode}
             iconMode={resolvedThemeMode}
+            rawAppearance={rawAppearance}
             t={t}
             onAppearanceChange={onAppearanceChange}
           />

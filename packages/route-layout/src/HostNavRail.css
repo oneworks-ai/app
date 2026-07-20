@@ -305,7 +305,7 @@
   width: var(--nav-rail-drawer-width, 212px);
   border-right: 1px solid
     color-mix(in srgb, var(--border-color, #d8dee4) 80%, transparent);
-  border-radius: 0 10px 10px 0;
+  border-radius: var(--nav-rail-preview-radius, 0 10px 10px 0);
   background: color-mix(
     in srgb,
     var(--host-app-content-bg, var(--sub-bg-color, #f6f7f8)) 72%,
@@ -596,12 +596,12 @@
 }
 
 .sidebar-header__quick-link-action {
-  width: 20px;
-  min-width: 20px;
-  height: 20px;
+  width: var(--sidebar-inline-action-size);
+  min-width: var(--sidebar-inline-action-size);
+  height: var(--sidebar-inline-action-size);
   padding: 0;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--sidebar-inline-action-radius);
   background: transparent;
   color: var(--sub-text-color, var(--placeholder-color, #6b7280));
   display: inline-flex;
@@ -655,9 +655,9 @@
 }
 
 .sidebar-header__quick-link-action .material-symbols-rounded {
-  width: 16px;
-  height: 16px;
-  font-size: 16px;
+  width: var(--sidebar-inline-action-icon-size);
+  height: var(--sidebar-inline-action-icon-size);
+  font-size: var(--sidebar-inline-action-icon-size);
   line-height: 1;
 }
 
@@ -759,6 +759,7 @@
 
 .host-nav-rail__footer-button:hover,
 .host-nav-rail__footer-button:focus-visible,
+.host-nav-rail__footer-button.ant-dropdown-open,
 .host-nav-rail__footer-button.is-active {
   color: var(--primary-color, #2563eb);
   background: transparent;
@@ -803,6 +804,27 @@
   white-space: nowrap;
 }
 
+.host-nav-rail__footer-button-trailing {
+  width: var(--nav-rail-footer-item-icon-size);
+  height: var(--nav-rail-footer-item-icon-size);
+  flex: 0 0 var(--nav-rail-footer-item-icon-size);
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--nav-rail-footer-item-icon-size);
+  line-height: 1;
+}
+
+.host-nav-rail__footer-button-trailing > * {
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
 .host-nav-rail.is-sidebar-collapsed .host-nav-rail__body,
 .host-nav-rail.is-sidebar-collapsed .host-nav-rail__footer {
   opacity: 0;
@@ -822,13 +844,16 @@
 .host-nav-rail__resize-handle {
   position: absolute;
   top: 0;
-  right: -4px;
+  right: calc(var(--oneworks-resize-handle-hit-size, 8px) / -2);
   bottom: 0;
   z-index: 30;
-  width: 8px;
+  width: var(--oneworks-resize-handle-hit-size, 8px);
   cursor: col-resize;
   touch-action: none;
-  --nav-rail-resize-line-color: transparent;
+  --nav-rail-resize-line-color: var(
+    --oneworks-resize-handle-affordance-idle-color,
+    transparent
+  );
 }
 
 .host-nav-rail__resize-handle::before,
@@ -837,38 +862,29 @@
   position: absolute;
   top: 50%;
   background: var(--nav-rail-resize-line-color);
-  border-radius: 999px;
-  transform: translateY(-50%);
-  transition: background-color .16s ease, opacity .16s ease;
+  border-radius: var(--oneworks-resize-handle-line-radius, 999px);
+  box-shadow: var(--oneworks-resize-handle-shadow, none);
+  transform: translate(-50%, -50%);
+  transition: var(--oneworks-resize-handle-transition);
 }
 
 .host-nav-rail__resize-handle::before {
-  left: 3px;
-  width: 1px;
+  left: 50%;
+  width: var(--oneworks-resize-handle-line-width, 1px);
   height: 50vh;
 }
 
 .host-nav-rail__resize-handle::after {
-  left: 1px;
-  width: 3px;
+  left: 50%;
+  width: var(--oneworks-resize-handle-active-line-width, 3px);
   height: 34vh;
   opacity: .9;
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    #000 28%,
-    #000 72%,
-    transparent 100%
-  );
+  mask-image: var(--oneworks-resize-handle-mask-image);
 }
 
 .host-nav-rail__resize-handle:hover,
 .host-nav-rail__resize-handle:focus-visible {
-  --nav-rail-resize-line-color: color-mix(
-    in srgb,
-    var(--primary-color, #2563eb) 48%,
-    transparent
-  );
+  --nav-rail-resize-line-color: var(--oneworks-resize-handle-hover-color);
 }
 
 .host-nav-rail__resize-handle:focus-visible {
@@ -876,9 +892,5 @@
 }
 
 .host-nav-rail.is-resizing .host-nav-rail__resize-handle {
-  --nav-rail-resize-line-color: color-mix(
-    in srgb,
-    var(--primary-color, #2563eb) 48%,
-    transparent
-  );
+  --nav-rail-resize-line-color: var(--oneworks-resize-handle-active-color);
 }

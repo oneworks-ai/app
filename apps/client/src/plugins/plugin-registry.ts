@@ -25,8 +25,11 @@ import type {
   PluginSlot,
   PluginViewRegistration
 } from './plugin-manifest'
+import type { PluginThemeRegistration, PluginThemeRuntimeRegistration } from './plugin-theme-contract'
 
-type SlotContribution = Record<string, unknown> & { id: string }
+interface SlotContribution {
+  id: string
+}
 type ExtensionPointRecord = PluginExtensionPointRegistration & { pluginScope: string }
 type ExtensionContributionRecord = PluginExtensionContributionRegistration & {
   extensionPoint: string
@@ -177,6 +180,7 @@ export class PluginRegistry {
   private pluginApis = new Map<string, PluginApiRecord>()
   private routes = new Map<string, PluginRouteRegistration & { scope: string }>()
   private slots = new Map<PluginSlot, Map<string, SlotContribution & { pluginScope: string }>>()
+  private themes = new Map<string, PluginThemeRuntimeRegistration>()
   private views = new Map<string, PluginViewRegistration & { scope: string }>()
   private launcherProviders = new Map<string, PluginLauncherSearchProvider & { scope: string }>()
   private runtime?: PluginRuntimeEndpoint
@@ -200,6 +204,7 @@ export class PluginRegistry {
       slots: Object.fromEntries(
         [...this.slots.entries()].map(([slot, values]) => [slot, [...values.values()]])
       ) as Partial<Record<PluginSlot, Array<SlotContribution & { pluginScope: string }>>>,
+      themes: [...this.themes.values()],
       views: [...this.views.values()]
     }
   }
@@ -261,6 +266,7 @@ export class PluginRegistry {
     this.pluginApis = new Map([...this.pluginApis].filter(([, value]) => value.pluginScope !== scope))
     this.rejectPendingPluginApiCallsForCaller(scope, `Plugin "${scope}" was disposed before the API call was ready.`)
     this.routes = new Map([...this.routes].filter(([, value]) => value.scope !== scope))
+    this.themes = new Map([...this.themes].filter(([, value]) => value.pluginScope !== scope))
     this.views = new Map([...this.views].filter(([, value]) => value.scope !== scope))
     this.launcherProviders = new Map([...this.launcherProviders].filter(([, value]) => value.scope !== scope))
     for (const [slot, values] of this.slots) {
@@ -275,6 +281,26 @@ export class PluginRegistry {
     const disposables = this.disposablesByScope.get(scope) ?? []
     disposables.push(disposable)
     this.disposablesByScope.set(scope, disposables)
+  }
+
+  createScopeRegistrationCheckpoint(scope: string) {
+    return this.disposablesByScope.get(scope)?.length ?? 0
+  }
+
+  rollbackScopeRegistrations(scope: string, checkpoint: number) {
+    const disposables = this.disposablesByScope.get(scope) ?? []
+    const retained = disposables.slice(0, checkpoint)
+    for (const disposable of disposables.slice(checkpoint).reverse()) {
+      try {
+        disposable.dispose()
+      } catch {}
+    }
+    if (retained.length === 0) {
+      this.disposablesByScope.delete(scope)
+    } else {
+      this.disposablesByScope.set(scope, retained)
+    }
+    this.emit()
   }
 
   addDiagnostic(diagnostic: PluginDiagnostic) {
@@ -382,7 +408,7 @@ export class PluginRegistry {
     return await this.waitForPluginApi(callerScope, api.key, input, options)
   }
 
-  registerSlot(scope: string, slot: PluginSlot, contribution: SlotContribution) {
+  registerSlot<T extends SlotContribution>(scope: string, slot: PluginSlot, contribution: T) {
     const preparedContribution = this.prepareRuntimeContribution(scope, contribution)
     if (preparedContribution == null) return { dispose: () => {} }
     if (!this.validateIdentifier(scope, contribution.id, `slot ${slot}`)) return { dispose: () => {} }
@@ -395,6 +421,28 @@ export class PluginRegistry {
     values.set(key, { ...preparedContribution, pluginScope: scope })
     this.slots.set(slot, values)
     const disposable = { dispose: () => values.delete(key) }
+    this.addDisposable(scope, disposable)
+    this.emit()
+    return disposable
+  }
+
+  registerTheme(scope: string, theme: PluginThemeRegistration) {
+    if (!this.validateIdentifier(scope, theme.id, 'theme')) return { dispose: () => {} }
+    if (theme.id === 'default') {
+      this.addDiagnostic({
+        level: 'error',
+        message: `Plugin theme id "default" is reserved by the host in scope "${scope}".`,
+        pluginScope: scope
+      })
+      return { dispose: () => {} }
+    }
+    if (this.themes.has(theme.id)) {
+      this.duplicate(scope, 'theme', theme.id)
+      return { dispose: () => {} }
+    }
+
+    this.themes.set(theme.id, { ...theme, pluginScope: scope })
+    const disposable = { dispose: () => this.themes.delete(theme.id) }
     this.addDisposable(scope, disposable)
     this.emit()
     return disposable

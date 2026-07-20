@@ -1,0 +1,14 @@
+{
+  "__oneWorksPluginManifest": true,
+  "name": "@oneworks/plugin-focus-workbench-theme",
+  "displayName": "Codex Theme",
+  "displayNameI18n": { "en": "Codex Theme", "zh-Hans": "Codex 主题" },
+  "description": "An optional restrained, low-noise workbench theme for OneWorks.",
+  "descriptionI18n": {
+    "en": "Neutral layers, thin dividers, compact controls, and quiet blue interaction feedback.",
+    "zh-Hans": "中性层级、纤细分隔线、紧凑控件与克制蓝色交互反馈组成的低噪工作台主题。"
+  },
+  "icon": "./assets/icon.svg",
+  "version": "0.1.0",
+  "plugin": { "contributions": { "roles": ["manager", "workspace"], "surfaces": ["launcher", "workspace"] } }
+}

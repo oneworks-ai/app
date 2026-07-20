@@ -1,0 +1,94 @@
+:where(.oneworks-icon-segmented) {
+  --oneworks-icon-segmented-item-size: 20px;
+  --oneworks-icon-segmented-icon-size: 14px;
+  --oneworks-icon-segmented-gap: 2px;
+  --oneworks-icon-segmented-group-radius: var(--oneworks-group-radius, 8px);
+  --oneworks-icon-segmented-item-radius: var(--oneworks-control-radius, 6px);
+  --oneworks-icon-segmented-group-bg: transparent;
+  --oneworks-icon-segmented-item-bg: transparent;
+  --oneworks-icon-segmented-item-color: var(--sub-text-color);
+  --oneworks-icon-segmented-hover-bg: color-mix(
+    in srgb,
+    var(--tag-hover-bg) 82%,
+    transparent
+  );
+  --oneworks-icon-segmented-hover-color: var(--text-color);
+  --oneworks-icon-segmented-active-bg: var(--subpage-content-card-bg);
+  --oneworks-icon-segmented-active-color: var(
+    --sidebar-active-text,
+    var(--primary-color)
+  );
+  --oneworks-icon-segmented-active-shadow: none;
+  --oneworks-icon-segmented-divider-width: 0px;
+  --oneworks-icon-segmented-divider-color: var(--border-color);
+  --oneworks-icon-segmented-focus-ring: 0 0 0 2px color-mix(
+    in srgb,
+    var(--primary-color) 24%,
+    transparent
+  );
+
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--oneworks-icon-segmented-gap);
+  min-width: 0;
+  border-radius: var(--oneworks-icon-segmented-group-radius);
+  background: var(--oneworks-icon-segmented-group-bg);
+}
+
+.oneworks-icon-segmented__item {
+  box-sizing: border-box;
+  position: relative;
+  width: var(--oneworks-icon-segmented-item-size);
+  min-width: var(--oneworks-icon-segmented-item-size);
+  height: var(--oneworks-icon-segmented-item-size);
+  min-height: var(--oneworks-icon-segmented-item-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--oneworks-icon-segmented-item-radius);
+  background: var(--oneworks-icon-segmented-item-bg);
+  color: var(--oneworks-icon-segmented-item-color);
+  box-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  line-height: 1;
+  transition: background-color .18s ease, color .18s ease, box-shadow .18s ease;
+}
+
+.oneworks-icon-segmented__item + .oneworks-icon-segmented__item {
+  border-inline-start: var(--oneworks-icon-segmented-divider-width) solid
+    var(--oneworks-icon-segmented-divider-color);
+}
+
+.oneworks-icon-segmented__item:hover {
+  background: var(--oneworks-icon-segmented-hover-bg);
+  color: var(--oneworks-icon-segmented-hover-color);
+}
+
+.oneworks-icon-segmented__item:focus-visible {
+  outline: 0;
+  box-shadow: var(--oneworks-icon-segmented-focus-ring);
+}
+
+.oneworks-icon-segmented__item.is-active {
+  background: var(--oneworks-icon-segmented-active-bg);
+  color: var(--oneworks-icon-segmented-active-color);
+  box-shadow: var(--oneworks-icon-segmented-active-shadow);
+}
+
+.oneworks-icon-segmented__item.is-active:focus-visible {
+  box-shadow: var(--oneworks-icon-segmented-focus-ring);
+}
+
+.oneworks-icon-segmented__icon,
+.oneworks-icon-segmented__icon.material-symbols-rounded {
+  width: var(--oneworks-icon-segmented-icon-size);
+  height: var(--oneworks-icon-segmented-icon-size);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--oneworks-icon-segmented-icon-size);
+  line-height: 1;
+}

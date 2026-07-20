@@ -9,7 +9,7 @@
   display: inline-flex;
   align-items: center;
 
-  &:hover {
+  &:not(.is-disabled):hover {
     .model-select,
     .effort-select,
     .account-select {
@@ -106,6 +106,8 @@
 .sender-responsive-select-button {
   position: relative;
   z-index: 1;
+  height: var(--sender-control-height);
+  min-height: var(--sender-control-height);
   min-width: var(--sender-control-height);
   max-width: min(180px, 100%);
   padding: 0 6px;

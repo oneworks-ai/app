@@ -65,7 +65,9 @@ CLI、Server route、配置页和自动写回逻辑都不能基于 `effectivePro
 
 配置页的 source switch 必须影响当前 section 的读取和写回。`appearance` 作为 app 级界面样式只编辑 global source；`desktop` 面板的启动面板快捷键和图标偏好只编辑 global 桌面偏好，更新开关 `desktop.autoUpdate`、默认更新通道 `desktop.updateChannel` 与模块覆盖通道 `desktop.moduleUpdateChannels` 只编辑当前 workspace 的 project source。
 
-`appearance` 只承载 app 级界面样式字段，例如主题色 `primaryColor`、浅色 / 深色 / 系统主题模式 `themeMode` 和会话历史时间线展示模式 `historyTimelineMode`，运行时应读取 global source 的 resolved 值，不要让 project / user source 把不同 workspace 染成不同界面。应用图标外观、图标背景、图标主题和同步系统应用图标都属于 Electron-only 桌面偏好，维护在 global `desktop` section。更新配置从当前 workspace 的 project `desktop.autoUpdate` / `desktop.updateChannel` / `desktop.moduleUpdateChannels` 读取；当前 workspace 未配置时默认自动更新开启且使用 Stable，模块更新默认继承 `desktop.updateChannel`。
+`appearance` 只承载 app 级界面样式字段，例如主题色 `primaryColor`、浅色 / 深色 / 系统主题模式 `themeMode`、组件样式包 `themePack`、主题包专属配置 `themePacks` 和会话历史时间线展示模式 `historyTimelineMode`，运行时应读取 global source 的 resolved 值，不要让 project / user source 把不同 workspace 染成不同界面。主题插件可以通过客户端注册声明内置主题色；启用时该值覆盖运行时 primary color，但不能覆盖或删除已保存的 `appearance.primaryColor`，切回没有内置主题色的主题后恢复使用。每个主题的专属设置必须收敛到 `themePacks.<theme-id>`，不要继续向 `appearance` 根层追加主题私有开关。应用图标外观、图标背景、图标主题和同步系统应用图标都属于 Electron-only 桌面偏好，维护在 global `desktop` section。更新配置从当前 workspace 的 project `desktop.autoUpdate` / `desktop.updateChannel` / `desktop.moduleUpdateChannels` 读取；当前 workspace 未配置时默认自动更新开启且使用 Stable，模块更新默认继承 `desktop.updateChannel`。
+
+主题设置 UI 由每个主题插件的 `ctx.themes.register(...)` 注册内容声明可见 tabs；tabs 只是配置能力的展示分组，不改变写回边界。默认主题是只读概览，可配置主题的颜色、布局和组件覆盖仍写入自己的 `appearance.themePacks.<theme-id>`，数值型覆盖使用 `enabled + value` 同时持久化启用状态和具体数值；主题预设值在 UI 只读，开关只控制是否应用。缺省值由该主题的运行时 normalizer 决定，不能因为 UI 没显示某个 tab 就删除同主题的其它私有字段。主题插件未安装或被禁用时保留保存值，界面按默认主题渲染；插件重新启用后恢复原设置。
 
 重置操作按 section 维度处理。配置页或 launcher 设置页提供 reset 时，应只清理当前 section 在目标 source 中的字段或还原当前 section 的桌面偏好；不要把“重置当前 section”扩大成全局配置重置，也不要从 `mergedConfig` 反推写回内容。
 

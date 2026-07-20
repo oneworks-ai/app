@@ -14,16 +14,97 @@ html, body, #root, .ant-app {
   justify-content: center;
 }
 
-.ant-tabs.ant-tabs .ant-tabs-tab {
-  margin-left: 0;
-  padding: 0 0 var(--subpage-tertiary-padding, 10px);
-}
-
-.ant-tabs.ant-tabs .ant-tabs-tab + .ant-tabs-tab {
-  margin-left: var(
+.ant-tabs.ant-tabs {
+  --oneworks-tabs-gap: var(
     --subpage-tertiary-gap,
     var(--subpage-tertiary-padding, 10px)
   );
+  --oneworks-tabs-tab-padding-block-start: 0px;
+  --oneworks-tabs-tab-padding-block-end: var(
+    --subpage-tertiary-padding,
+    10px
+  );
+  --oneworks-tabs-tab-padding-inline: 0px;
+  --oneworks-tabs-tab-border-width: 0px;
+  --oneworks-tabs-tab-border-color: var(--border-color);
+  --oneworks-tabs-tab-radius: 0px;
+  --oneworks-tabs-tab-bg: transparent;
+  --oneworks-tabs-tab-color: var(--sub-text-color);
+  --oneworks-tabs-tab-hover-bg: transparent;
+  --oneworks-tabs-tab-hover-color: var(--primary-color);
+  --oneworks-tabs-tab-active-bg: transparent;
+  --oneworks-tabs-tab-active-color: var(--primary-color);
+  --oneworks-tabs-tab-focus-ring: 0 0 0 1px var(--primary-color);
+  --oneworks-tabs-tab-adjacent-offset: 0px;
+  --oneworks-tabs-nav-border-width: 1px;
+  --oneworks-tabs-nav-border-color: var(--border-color);
+  --oneworks-tabs-ink-display: block;
+  --oneworks-tabs-ink-height: 2px;
+  --oneworks-tabs-ink-radius: 999px 999px 0 0;
+  --oneworks-tabs-ink-color: var(--primary-color);
+}
+
+.ant-tabs.ant-tabs > .ant-tabs-nav::before {
+  border-bottom: var(--oneworks-tabs-nav-border-width) solid
+    var(--oneworks-tabs-nav-border-color);
+}
+
+.ant-tabs.ant-tabs > .ant-tabs-nav .ant-tabs-nav-list {
+  gap: var(--oneworks-tabs-gap);
+}
+
+.ant-tabs.ant-tabs > .ant-tabs-nav .ant-tabs-tab {
+  margin: 0;
+  padding: var(--oneworks-tabs-tab-padding-block-start)
+    var(--oneworks-tabs-tab-padding-inline)
+    var(--oneworks-tabs-tab-padding-block-end);
+  border: var(--oneworks-tabs-tab-border-width) solid
+    var(--oneworks-tabs-tab-border-color);
+  border-radius: var(--oneworks-tabs-tab-radius);
+  background: var(--oneworks-tabs-tab-bg);
+  color: var(--oneworks-tabs-tab-color);
+}
+
+.ant-tabs.ant-tabs > .ant-tabs-nav .ant-tabs-tab + .ant-tabs-tab {
+  margin-inline-start: var(--oneworks-tabs-tab-adjacent-offset);
+}
+
+.ant-tabs.ant-tabs > .ant-tabs-nav .ant-tabs-tab:hover {
+  background: var(--oneworks-tabs-tab-hover-bg);
+  color: var(--oneworks-tabs-tab-hover-color);
+}
+
+.ant-tabs.ant-tabs > .ant-tabs-nav .ant-tabs-tab:focus-within {
+  box-shadow: var(--oneworks-tabs-tab-focus-ring);
+  outline: none;
+}
+
+.ant-tabs.ant-tabs > .ant-tabs-nav .ant-tabs-tab.ant-tabs-tab-active {
+  background: var(--oneworks-tabs-tab-active-bg);
+  color: var(--oneworks-tabs-tab-active-color);
+}
+
+.ant-tabs.ant-tabs
+  > .ant-tabs-nav
+  .ant-tabs-tab.ant-tabs-tab-active
+  .ant-tabs-tab-btn {
+  color: inherit;
+  text-shadow: none;
+}
+
+.ant-tabs.ant-tabs > .ant-tabs-nav .ant-tabs-ink-bar {
+  display: var(--oneworks-tabs-ink-display);
+  height: var(--oneworks-tabs-ink-height);
+  border-radius: var(--oneworks-tabs-ink-radius);
+  background: var(--oneworks-tabs-ink-color);
+}
+
+.ant-switch.ant-switch {
+  border-radius: var(--oneworks-switch-radius, 999px);
+}
+
+.ant-switch.ant-switch .ant-switch-handle::before {
+  border-radius: var(--oneworks-switch-handle-radius, 999px);
 }
 
 * {

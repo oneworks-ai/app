@@ -89,6 +89,108 @@ html.oneworks-launcher-window.dark {
 }
 
 .launcher-route {
+  --launcher-viewport-background: var(
+    --oneworks-launcher-viewport-background,
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-color) 32%, transparent),
+      color-mix(in srgb, var(--bg-color) 20%, transparent)
+    )
+  );
+  --launcher-shell-background: var(
+    --oneworks-launcher-shell-background,
+    color-mix(in srgb, var(--bg-color) 72%, transparent)
+  );
+  --launcher-shell-border-width: var(
+    --oneworks-launcher-shell-border-width,
+    1px
+  );
+  --launcher-shell-border-color: var(
+    --oneworks-launcher-shell-border-color,
+    color-mix(in srgb, var(--border-color) 82%, transparent)
+  );
+  --launcher-shell-radius: var(
+    --oneworks-launcher-shell-radius,
+    var(--oneworks-surface-radius, 14px)
+  );
+  --launcher-shell-shadow: var(
+    --oneworks-launcher-shell-shadow,
+    0 24px 64px color-mix(in srgb, #000 18%, transparent),
+    0 1px 0 color-mix(in srgb, #fff 50%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 34%, transparent)
+  );
+  --launcher-shell-backdrop-filter: var(
+    --oneworks-launcher-shell-backdrop-filter,
+    blur(42px) saturate(1.65)
+  );
+  --launcher-window-shadow: var(
+    --oneworks-launcher-window-shadow,
+    inset 0 1px 0 color-mix(in srgb, #fff 34%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, #000 10%, transparent)
+  );
+  --launcher-search-height: var(--oneworks-launcher-search-height, 44px);
+  --launcher-content-padding-inline: var(
+    --oneworks-launcher-content-padding-inline,
+    14px
+  );
+  --launcher-content-padding-block-start: var(
+    --oneworks-launcher-content-padding-block-start,
+    8px
+  );
+  --launcher-item-min-height: var(--oneworks-launcher-item-min-height, 38px);
+  --launcher-item-bleed-inline: var(
+    --oneworks-launcher-item-bleed-inline,
+    10px
+  );
+  --launcher-item-padding: var(--oneworks-launcher-item-padding, 4px 8px);
+  --launcher-item-gap: var(--oneworks-launcher-item-gap, 8px);
+  --launcher-item-radius: var(
+    --oneworks-launcher-item-radius,
+    var(--oneworks-control-radius, 7px)
+  );
+  --launcher-item-hover-bg: var(
+    --oneworks-launcher-item-hover-bg,
+    color-mix(in srgb, var(--primary-color) 7%, transparent)
+  );
+  --launcher-item-active-bg: var(
+    --oneworks-launcher-item-active-bg,
+    color-mix(in srgb, var(--primary-color) 10%, transparent)
+  );
+  --launcher-item-active-color: var(
+    --oneworks-launcher-item-active-color,
+    var(--primary-color)
+  );
+  --launcher-item-active-muted-color: var(
+    --oneworks-launcher-item-active-muted-color,
+    var(--launcher-muted-color)
+  );
+  --launcher-active-indicator-width: var(
+    --oneworks-launcher-active-indicator-width,
+    4px
+  );
+  --launcher-active-indicator-radius: var(
+    --oneworks-launcher-active-indicator-radius,
+    999px
+  );
+  --launcher-action-size: var(--oneworks-launcher-action-size, 22px);
+  --launcher-action-radius: var(
+    --oneworks-launcher-action-radius,
+    var(--oneworks-control-radius, 6px)
+  );
+  --launcher-tab-height: var(--oneworks-launcher-tab-height, 28px);
+  --launcher-tab-gap: var(--oneworks-launcher-tab-gap, 10px);
+  --launcher-tab-radius: var(
+    --oneworks-launcher-tab-radius,
+    var(--oneworks-control-radius, 6px)
+  );
+  --launcher-tab-ink-display: var(--oneworks-launcher-tab-ink-display, block);
+  --launcher-footer-height: var(--oneworks-launcher-footer-height, 38px);
+  --launcher-keycap-radius: var(
+    --oneworks-launcher-keycap-radius,
+    var(--oneworks-control-radius, 5px)
+  );
+  --launcher-badge-radius: var(--oneworks-launcher-badge-radius, 999px);
+
   position: relative;
   height: 100vh;
   min-height: 100%;
@@ -96,17 +198,11 @@ html.oneworks-launcher-window.dark {
   align-items: flex-start;
   justify-content: center;
   overflow: hidden;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-color) 32%, transparent),
-    color-mix(in srgb, var(--bg-color) 20%, transparent)
-  );
+  background: var(--launcher-viewport-background);
   color: var(--text-color);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 34%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, #000 10%, transparent);
-  backdrop-filter: blur(42px) saturate(1.65);
-  -webkit-backdrop-filter: blur(42px) saturate(1.65);
+  box-shadow: var(--launcher-window-shadow);
+  backdrop-filter: var(--launcher-shell-backdrop-filter);
+  -webkit-backdrop-filter: var(--launcher-shell-backdrop-filter);
   -webkit-app-region: drag;
   box-sizing: border-box;
   user-select: none;
@@ -119,23 +215,16 @@ html.oneworks-launcher-web .launcher-route,
   min-height: 0;
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 48px);
-  border: 1px solid transparent;
-  border-radius: 14px;
+  border: var(--launcher-shell-border-width) solid transparent;
+  border-radius: var(--launcher-shell-radius);
   overflow: hidden;
   -webkit-app-region: no-drag;
 }
 
 html.oneworks-launcher-web .launcher-route {
-  border-color: color-mix(in srgb, var(--border-color) 82%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-color) 76%, transparent),
-    color-mix(in srgb, var(--bg-color) 68%, transparent)
-  );
-  box-shadow:
-    0 24px 64px color-mix(in srgb, #000 18%, transparent),
-    0 1px 0 color-mix(in srgb, #fff 50%, transparent),
-    inset 0 1px 0 color-mix(in srgb, #fff 34%, transparent);
+  border-color: var(--launcher-shell-border-color);
+  background: var(--launcher-shell-background);
+  box-shadow: var(--launcher-shell-shadow);
 }
 
 .launcher-web-overlay .launcher-route {
@@ -148,12 +237,9 @@ html.oneworks-launcher-web .launcher-route {
 }
 
 .launcher-web-overlay.is-open .launcher-route {
-  border-color: color-mix(in srgb, var(--border-color) 82%, transparent);
-  background-color: color-mix(in srgb, var(--bg-color) 72%, transparent);
-  box-shadow:
-    0 24px 64px color-mix(in srgb, #000 18%, transparent),
-    0 1px 0 color-mix(in srgb, #fff 50%, transparent),
-    inset 0 1px 0 color-mix(in srgb, #fff 34%, transparent);
+  border-color: var(--launcher-shell-border-color);
+  background: var(--launcher-shell-background);
+  box-shadow: var(--launcher-shell-shadow);
 }
 
 .launcher-web-overlay .launcher-command-shell {
@@ -168,36 +254,46 @@ html.oneworks-launcher-web .launcher-route {
 }
 
 html.dark .launcher-route {
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-color) 52%, transparent),
-    color-mix(in srgb, var(--bg-color) 40%, transparent)
+  --launcher-viewport-background: var(
+    --oneworks-launcher-viewport-background,
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-color) 52%, transparent),
+      color-mix(in srgb, var(--bg-color) 40%, transparent)
+    )
   );
-  box-shadow:
+  --launcher-window-shadow: var(
+    --oneworks-launcher-window-shadow,
     inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, #000 30%, transparent);
+    inset 0 -1px 0 color-mix(in srgb, #000 30%, transparent)
+  );
 }
 
 html.dark.oneworks-launcher-web .launcher-route {
-  border-color: color-mix(in srgb, var(--border-color) 70%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-color) 74%, transparent),
-    color-mix(in srgb, var(--bg-color) 66%, transparent)
+  --launcher-shell-border-color: var(
+    --oneworks-launcher-shell-border-color,
+    color-mix(in srgb, var(--border-color) 70%, transparent)
   );
-  box-shadow:
+  --launcher-shell-background: var(
+    --oneworks-launcher-shell-background,
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-color) 74%, transparent),
+      color-mix(in srgb, var(--bg-color) 66%, transparent)
+    )
+  );
+  --launcher-shell-shadow: var(
+    --oneworks-launcher-shell-shadow,
     0 24px 72px color-mix(in srgb, #000 44%, transparent),
     0 1px 0 color-mix(in srgb, #fff 10%, transparent),
-    inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent);
+    inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent)
+  );
 }
 
 html.dark .launcher-web-overlay.is-open .launcher-route {
-  border-color: color-mix(in srgb, var(--border-color) 70%, transparent);
-  background-color: color-mix(in srgb, var(--bg-color) 70%, transparent);
-  box-shadow:
-    0 24px 72px color-mix(in srgb, #000 44%, transparent),
-    0 1px 0 color-mix(in srgb, #fff 10%, transparent),
-    inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent);
+  border-color: var(--launcher-shell-border-color);
+  background: var(--launcher-shell-background);
+  box-shadow: var(--launcher-shell-shadow);
 }
 
 .launcher-command-shell {
@@ -216,9 +312,9 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 }
 
 .launcher-command-search {
-  height: 44px;
+  height: var(--launcher-search-height);
   flex: 0 0 auto;
-  padding: 0 14px;
+  padding: 0 var(--launcher-content-padding-inline);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
@@ -304,12 +400,15 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 }
 
 .launcher-command-list {
-  --launcher-command-list-padding-inline: 14px;
+  --launcher-command-list-padding-inline: var(
+    --launcher-content-padding-inline
+  );
 
   height: 0;
   flex: 1 1 0;
   min-height: 0;
-  padding: 8px var(--launcher-command-list-padding-inline) 0;
+  padding: var(--launcher-content-padding-block-start)
+    var(--launcher-command-list-padding-inline) 0;
   overflow: auto;
 }
 
@@ -349,12 +448,12 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 }
 
 .launcher-directory-target-tabs {
-  min-height: 26px;
+  min-height: var(--launcher-tab-height);
   margin: 0;
   padding: 0 0 3px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--launcher-tab-gap);
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -366,10 +465,10 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 
 .launcher-directory-target-tab {
   max-width: 180px;
-  height: 24px;
+  height: var(--launcher-tab-height);
   padding: 0 7px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--launcher-tab-radius);
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -460,15 +559,15 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 
 .launcher-command-item {
   position: relative;
-  width: calc(100% + 20px);
-  min-height: 38px;
-  margin: 0 -10px;
-  padding: 4px 8px;
+  width: calc(100% + var(--launcher-item-bleed-inline) * 2);
+  min-height: var(--launcher-item-min-height);
+  margin: 0 calc(-1 * var(--launcher-item-bleed-inline));
+  padding: var(--launcher-item-padding);
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--launcher-item-radius);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--launcher-item-gap);
   background: transparent;
   color: var(--text-color);
   cursor: pointer;
@@ -482,8 +581,8 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
   top: 8px;
   bottom: 8px;
   left: 0;
-  width: 4px;
-  border-radius: 999px;
+  width: var(--launcher-active-indicator-width);
+  border-radius: var(--launcher-active-indicator-radius);
   background: var(--primary-color);
   content: '';
   opacity: 0;
@@ -496,6 +595,7 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 .launcher-command-item:hover,
 .launcher-command-item:focus-visible,
 .launcher-command-item.is-active {
+  background: var(--launcher-item-hover-bg);
   color: var(--primary-color);
   outline: none;
 }
@@ -503,6 +603,15 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 .launcher-command-item.is-active::before {
   opacity: 1;
   transform: scaleY(1);
+}
+
+.launcher-command-item.is-active {
+  background: var(--launcher-item-active-bg);
+  color: var(--launcher-item-active-color);
+}
+
+.launcher-command-item.is-active .launcher-command-item__subtitle {
+  color: var(--launcher-item-active-muted-color);
 }
 
 .launcher-command-item__icon {
@@ -655,7 +764,7 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
   flex: 0 0 auto;
   max-width: 78px;
   padding: 1px 5px;
-  border-radius: 999px;
+  border-radius: var(--launcher-badge-radius);
   overflow: hidden;
   background: color-mix(in srgb, var(--launcher-muted-color) 14%, transparent);
   color: var(--launcher-muted-color);
@@ -668,10 +777,18 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 }
 
 .launcher-command-item:hover .launcher-command-item__badge,
-.launcher-command-item:focus-visible .launcher-command-item__badge,
-.launcher-command-item.is-active .launcher-command-item__badge {
+.launcher-command-item:focus-visible .launcher-command-item__badge {
   background: color-mix(in srgb, var(--primary-color) 14%, transparent);
   color: var(--primary-color);
+}
+
+.launcher-command-item.is-active .launcher-command-item__badge {
+  background: color-mix(
+    in srgb,
+    var(--launcher-item-active-color) 14%,
+    transparent
+  );
+  color: var(--launcher-item-active-color);
 }
 
 .launcher-command-item__favorite,
@@ -682,12 +799,12 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
     var(--star-color, #f59e0b) 78%,
     var(--warning-color, #b45309) 22%
   );
-  width: 22px;
-  height: 22px;
+  width: var(--launcher-action-size);
+  height: var(--launcher-action-size);
   margin: 0;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--launcher-action-radius);
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -720,6 +837,11 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 .launcher-command-item.is-active .launcher-command-item__action {
   opacity: 1;
   pointer-events: auto;
+}
+
+.launcher-command-item.is-active
+  :where(.launcher-command-item__favorite, .launcher-command-item__remove, .launcher-command-item__action) {
+  color: var(--launcher-item-active-muted-color);
 }
 
 .launcher-command-item__favorite:hover,
@@ -759,8 +881,8 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 }
 
 .launcher-command-footer {
-  min-height: 38px;
-  padding: 0 14px;
+  min-height: var(--launcher-footer-height);
+  padding: 0 var(--launcher-content-padding-inline);
   border-top: 1px solid var(--border-color);
   display: flex;
   flex: 0 0 auto;
@@ -789,7 +911,7 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
   height: 22px;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--launcher-action-radius);
   display: grid;
   flex: 0 0 22px;
   overflow: hidden;
@@ -853,7 +975,7 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
   padding: 1px 5px;
   border: 1px solid
     color-mix(in srgb, var(--launcher-muted-color) 28%, transparent);
-  border-radius: 5px;
+  border-radius: var(--launcher-keycap-radius);
   background: color-mix(in srgb, var(--launcher-muted-color) 10%, transparent);
   color: var(--text-color);
   font: inherit;
@@ -924,7 +1046,7 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 
   .ant-dropdown-menu {
     min-width: 220px;
-    background: var(--bg-color) !important;
+    background: var(--oneworks-overlay-surface, var(--bg-color)) !important;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }

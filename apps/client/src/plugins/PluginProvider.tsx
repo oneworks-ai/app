@@ -47,6 +47,7 @@ export function PluginProvider({
   const runtimeEndpointRef = useRef<PluginRuntimeEndpoint | undefined>(undefined)
   const [runtimeEndpoint, setRuntimeEndpoint] = useState<PluginRuntimeEndpoint | undefined>(undefined)
   const [pluginSnapshotStatus, setPluginSnapshotStatus] = useState<'error' | 'loading' | 'ready'>('loading')
+  const [ready, setReady] = useState(false)
   const [snapshot, setSnapshot] = useState(() => registry.getSnapshot())
 
   useEffect(() =>
@@ -157,7 +158,10 @@ export function PluginProvider({
         if (didCancel) return
         setRuntimeSnapshot(pluginSnapshot.runtime)
         await activateInstances(pluginSnapshot.plugins, () => didCancel)
-        if (!didCancel) setPluginSnapshotStatus('ready')
+        if (!didCancel) {
+          setPluginSnapshotStatus('ready')
+          setReady(true)
+        }
       })
       .catch((error) => {
         if (didCancel) return
@@ -166,6 +170,7 @@ export function PluginProvider({
           level: 'warning',
           message: `Failed to load plugins: ${error instanceof Error ? error.message : String(error)}`
         })
+        setReady(true)
       })
     return () => {
       didCancel = true
@@ -243,6 +248,7 @@ export function PluginProvider({
   const value = useMemo<PluginContextValue>(() => ({
     pluginSnapshotStatus,
     pluginServerBaseUrl,
+    ready,
     refreshPlugins,
     registry,
     reloadPlugin,
@@ -251,6 +257,7 @@ export function PluginProvider({
   }), [
     pluginServerBaseUrl,
     pluginSnapshotStatus,
+    ready,
     refreshPlugins,
     registry,
     reloadPlugin,

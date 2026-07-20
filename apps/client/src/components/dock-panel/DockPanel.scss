@@ -106,15 +106,20 @@
 }
 
 .dock-panel__resize-strip {
+  --dock-panel-resize-hit-size: 9px;
+
   position: absolute;
-  top: -4px;
+  top: calc(var(--dock-panel-resize-hit-size) / -2);
   right: 0;
   left: 0;
   z-index: 2;
-  height: 9px;
+  height: var(--dock-panel-resize-hit-size);
   cursor: row-resize;
   touch-action: none;
-  --dock-panel-resize-line-color: transparent;
+  --dock-panel-resize-line-color: var(
+    --oneworks-resize-handle-affordance-idle-color,
+    transparent
+  );
 
   &::before,
   &::after {
@@ -122,48 +127,35 @@
     position: absolute;
     left: 50%;
     background: var(--dock-panel-resize-line-color);
-    border-radius: 999px;
-    transform: translateX(-50%);
-    transition: background-color .16s ease, opacity .16s ease;
+    border-radius: var(--oneworks-resize-handle-line-radius, 999px);
+    box-shadow: var(--oneworks-resize-handle-shadow, none);
+    transform: translate(-50%, -50%);
+    transition: var(--oneworks-resize-handle-transition);
   }
 
   &::before {
-    top: 4px;
+    top: 50%;
     width: 50vw;
-    height: 1px;
+    height: var(--oneworks-resize-handle-line-width, 1px);
   }
 
   &::after {
-    top: 3px;
+    top: 50%;
     width: 34vw;
-    height: 3px;
+    height: var(--oneworks-resize-handle-active-line-width, 3px);
     opacity: .9;
-    mask-image: linear-gradient(
-      to right,
-      transparent 0%,
-      #000 28%,
-      #000 72%,
-      transparent 100%
-    );
+    mask-image: var(--oneworks-resize-handle-horizontal-mask-image);
   }
 
   &:hover,
   &:focus-visible {
-    --dock-panel-resize-line-color: color-mix(
-      in srgb,
-      var(--primary-color) 48%,
-      transparent
-    );
+    --dock-panel-resize-line-color: var(--oneworks-resize-handle-hover-color);
     outline: none;
   }
 }
 
 .dock-panel.is-resizing .dock-panel__resize-strip {
-  --dock-panel-resize-line-color: color-mix(
-    in srgb,
-    var(--primary-color) 48%,
-    transparent
-  );
+  --dock-panel-resize-line-color: var(--oneworks-resize-handle-active-color);
 }
 
 .dock-panel__header {

@@ -9,8 +9,15 @@
   position: absolute;
   inset: 0 0 auto;
   min-height: var(--route-container-header-overlay-height);
-  padding: var(--route-container-header-padding-block, 10px)
-    var(--route-container-header-padding-inline, 10px);
+  padding-block: var(--route-container-header-padding-block, 10px);
+  padding-inline-start: var(
+    --route-container-header-padding-inline-start,
+    var(--route-container-header-padding-inline, 10px)
+  );
+  padding-inline-end: var(
+    --route-container-header-padding-inline-end,
+    var(--route-container-header-padding-inline, 10px)
+  );
   background: var(
     --app-chrome-overlay-background,
     color-mix(in srgb, var(--bg-color) 48%, transparent)
@@ -146,14 +153,6 @@
   gap: 12px;
   flex: 1;
   min-width: 0;
-}
-
-.route-container-header__leading-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--app-chrome-action-gap, 4px);
-  flex-shrink: 0;
-  -webkit-app-region: no-drag;
 }
 
 .route-container-header__info {
@@ -482,10 +481,37 @@
 
 .route-container-header__actions {
   display: flex;
-  align-items: center;
-  gap: var(--app-chrome-action-gap, 4px);
+  align-items: stretch;
+  align-self: center;
+  height: var(
+    --route-container-header-action-cell-height,
+    var(--route-container-header-icon-size)
+  );
+  gap: var(
+    --route-container-header-action-gap,
+    var(--app-chrome-action-gap, 4px)
+  );
   min-width: 0;
   -webkit-app-region: no-drag;
+}
+
+.route-container-header__actions > .route-container-header__action-segment {
+  box-sizing: border-box;
+  height: 100%;
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+}
+
+.route-container-header__actions
+  > .route-container-header__action-segment
+  + .route-container-header__action-segment {
+  border-inline-start: var(--route-container-header-action-divider-width, 0px)
+    solid
+    var(
+      --route-container-header-action-divider-color,
+      var(--app-chrome-divider-color, var(--border-color))
+    );
 }
 
 .route-container-header

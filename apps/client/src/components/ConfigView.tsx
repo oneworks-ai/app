@@ -1,6 +1,6 @@
 import './ConfigView.scss'
 
-import { App, Button, Spin } from 'antd'
+import { App, Spin } from 'antd'
 import { useSetAtom } from 'jotai'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -32,6 +32,7 @@ import {
 import { usePluginContext } from '#~/plugins/plugin-context'
 import { usePluginSlot } from '#~/plugins/plugin-slots'
 import { useRoutePluginChrome } from '#~/plugins/route-plugin-chrome'
+import { mergeAppearanceConfigForEditing } from '#~/utils/appearance-config'
 
 import {
   getAdapterAccountDetail,
@@ -46,7 +47,7 @@ import {
 import { resolveWorkspaceFileOpenerSelectModels } from '../utils/workspace-file-openers'
 import { BrowserActivityPanel } from './browser-activity/BrowserActivityPanel'
 import { SavedPasswordManagerPanel } from './browser-data-sync/SavedPasswordManagerPanel'
-import { AboutSection, ConfigSectionPanel, ConfigSourceSwitch, DisplayValue } from './config'
+import { AboutSection, ConfigSectionPanel, DisplayValue } from './config'
 import { AppSettingsPanel } from './config/AppSettingsPanel'
 import { DesktopSettingsPanel } from './config/DesktopSettingsPanel'
 import { ExternalSessionsPanel } from './config/ExternalSessionsPanel'
@@ -58,6 +59,7 @@ import {
   syncModelServiceProviderPortalTabs
 } from './config/ModelServiceProviderPortalBottomPanel'
 import type { ModelServiceProviderPortalRequest } from './config/ModelServiceProviderPortalBottomPanel'
+import { ThemePackSettingsPanel } from './config/ThemePackSettingsPanel'
 import { WorktreeEnvironmentPanel } from './config/WorktreeEnvironmentPanel'
 import {
   getConfigDraftKey,
@@ -334,6 +336,9 @@ export function ConfigView() {
   const [detailQuery, setDetailQueryState] = useState(queryValues.detail)
   const [navSearchQuery, setNavSearchQuery] = useState('')
   const [drafts, setDrafts] = useState<Record<string, unknown>>({})
+  const [worktreeEnvironmentHeaderActions, setWorktreeEnvironmentHeaderActions] = useState<
+    RouteContainerHeaderActionItem[]
+  >([])
   const globalSource = data?.sources?.global
   const globalResolvedSource = data?.resolvedSources?.global
   const currentSource = data?.sources?.[sourceKey]
@@ -440,6 +445,7 @@ export function ConfigView() {
     ...(hasSavedPasswords
       ? [{ key: 'savedPasswords', icon: 'password', label: t('config.sections.savedPasswords') }]
       : []),
+    { key: 'themes', icon: 'palette', label: t('config.sections.themes'), value: globalSource?.appearance },
     { key: 'appearance', icon: 'tune', label: t('config.sections.appearance'), value: globalSource?.appearance },
     { key: 'experiments', icon: 'science', label: t('config.sections.experiments'), value: currentSource?.experiments },
     { key: 'about', icon: 'info', label: t('config.sections.about'), value: data?.meta?.about }
@@ -1030,6 +1036,25 @@ export function ConfigView() {
       await updateConfig(source, sectionKey, value, {
         unsetPaths: collectUnsetPaths(value)
       })
+      if (
+        source === 'global' &&
+        sectionKey === 'appearance' &&
+        isRecordObject(value) &&
+        window.oneworksDesktop?.updateGlobalAppearanceConfig != null
+      ) {
+        await window.oneworksDesktop.updateGlobalAppearanceConfig({
+          ...(typeof value.primaryColor === 'string'
+            ? { primaryColor: value.primaryColor as DesktopSettings['primaryColor'] }
+            : {}),
+          ...(value.themeMode === 'light' || value.themeMode === 'dark' || value.themeMode === 'system'
+            ? { themeMode: value.themeMode }
+            : {}),
+          ...(typeof value.themePack === 'string' ? { themePack: value.themePack } : {}),
+          ...(isRecordObject(value.themePacks)
+            ? { themePacks: value.themePacks as DesktopSettings['themePacks'] }
+            : {})
+        })
+      }
       lastSavedRef.current[draftKey] = serialized
       baseSnapshotsRef.current[draftKey] = serialized
       await mutate()
@@ -1395,21 +1420,33 @@ export function ConfigView() {
     t
   ])
 
-  const renderTabContent = (tab: ConfigContentTab) => (
+  const globalAppearanceDraft = (drafts[getDraftKey('appearance', 'global')] ??
+    cloneValue(globalSource?.appearance) ??
+    {}) as Record<string, unknown>
+  const globalAppearanceDisplay = mergeAppearanceConfigForEditing(
+    globalResolvedSource?.appearance,
+    globalAppearanceDraft
+  )
+
+  const renderTabContent = (tab: typeof tabs[number]) => (
     <div key={`${sourceKey}:${tab.key}`} className='config-view__content'>
       {tab.key === 'about' && (
         <AboutSection value={tab.value as AboutInfo | undefined} />
       )}
       {tab.key === 'appearance' && (
         <AppSettingsPanel
-          appearance={(drafts[getDraftKey('appearance', 'global')] ??
-            cloneValue({
-              ...(globalResolvedSource?.appearance ?? {}),
-              ...(globalSource?.appearance ?? {})
-            }) ??
-            {}) as Record<string, unknown>}
+          appearance={globalAppearanceDisplay}
+          rawAppearance={globalAppearanceDraft}
           t={t}
           showHeader={false}
+          onAppearanceChange={(next) => handleDraftChange('appearance', next, 'global')}
+        />
+      )}
+      {tab.key === 'themes' && (
+        <ThemePackSettingsPanel
+          appearance={globalAppearanceDisplay}
+          rawAppearance={globalAppearanceDraft}
+          t={t}
           onAppearanceChange={(next) => handleDraftChange('appearance', next, 'global')}
         />
       )}
@@ -1443,7 +1480,10 @@ export function ConfigView() {
         />
       )}
       {tab.key === 'worktreeEnvironments' && (
-        <WorktreeEnvironmentPanel t={t} />
+        <WorktreeEnvironmentPanel
+          t={t}
+          onHeaderActionsChange={setWorktreeEnvironmentHeaderActions}
+        />
       )}
       {tab.key === 'externalSessions' && (
         <ExternalSessionsPanel
@@ -1466,6 +1506,7 @@ export function ConfigView() {
         tab.key !== 'desktop' &&
         tab.key !== 'savedPasswords' &&
         tab.key !== 'appearance' &&
+        tab.key !== 'themes' &&
         tab.key !== 'externalSessions' &&
         tab.key !== 'worktreeEnvironments' &&
         !('pluginSettingsPage' in tab) &&
@@ -1521,32 +1562,39 @@ export function ConfigView() {
       }]
       : []
   ), [shouldShowSavedPasswordSettingsAction, t])
-  const headerActionItems = useMemo(
-    () => [...routePluginHeaderActions, ...savedPasswordHeaderActions],
-    [routePluginHeaderActions, savedPasswordHeaderActions]
-  )
-  const headerActions = shouldShowSourceSwitch || activeTabKey === 'voice'
-    ? (
-      <>
-        {activeTabKey === 'voice' && (
-          <Button
-            size='small'
-            icon={<span className='material-symbols-rounded'>auto_awesome</span>}
-            onClick={handleCreateVoiceSetupSession}
-          >
-            {t('config.voice.aiAssist.label')}
-          </Button>
-        )}
-        {shouldShowSourceSwitch && (
-          <ConfigSourceSwitch
-            value={sourceKey}
-            onChange={setSourceKey}
-            options={sourceOptions}
-          />
-        )}
-      </>
-    )
-    : undefined
+  const headerActionItems = useMemo<RouteContainerHeaderActionItem[]>(() => [
+    ...routePluginHeaderActions,
+    ...savedPasswordHeaderActions,
+    ...(activeTabKey === 'worktreeEnvironments' ? worktreeEnvironmentHeaderActions : []),
+    ...(activeTabKey === 'voice'
+      ? [{
+        icon: 'auto_awesome',
+        key: 'voice-ai-assist',
+        label: t('config.voice.aiAssist.label'),
+        onSelect: handleCreateVoiceSetupSession
+      }]
+      : []),
+    ...(shouldShowSourceSwitch
+      ? sourceOptions.map(option => ({
+        active: sourceKey === option.value,
+        icon: option.icon,
+        key: `config-source-${option.value}`,
+        label: String(option.label),
+        onSelect: () => setSourceKey(option.value)
+      }))
+      : [])
+  ], [
+    activeTabKey,
+    handleCreateVoiceSetupSession,
+    routePluginHeaderActions,
+    savedPasswordHeaderActions,
+    setSourceKey,
+    shouldShowSourceSwitch,
+    sourceKey,
+    sourceOptions,
+    t,
+    worktreeEnvironmentHeaderActions
+  ])
 
   return (
     <RouteContainerLayout
@@ -1570,7 +1618,6 @@ export function ConfigView() {
       header={
         <RouteContainerHeader
           actionItems={headerActionItems}
-          actions={headerActions}
           breadcrumb={headerBreadcrumb}
           icon={activeContentTab?.icon ?? 'settings'}
           onOpenSidebar={openRouteSidebar}

@@ -1,9 +1,8 @@
-import { Button, Tooltip } from 'antd'
 import type { ReactNode } from 'react'
 
 import type { ConfigSource } from '@oneworks/core'
 
-import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
+import { IconSegmentedControl } from '#~/components/icon-segmented-control'
 
 export function ConfigSourceSwitch<TSource extends ConfigSource>({
   value,
@@ -14,37 +13,18 @@ export function ConfigSourceSwitch<TSource extends ConfigSource>({
   onChange: (value: TSource) => void
   options: Array<{ value: TSource; icon: string; label: ReactNode }>
 }) {
-  const { isTouchInteraction } = useResponsiveLayout()
-
   return (
-    <div className='config-view__source-switch' role='group'>
-      {options.map(opt => {
-        const isActive = opt.value === value
-        return (
-          <Tooltip
-            key={opt.value}
-            title={isTouchInteraction ? undefined : opt.label}
-            placement='top'
-          >
-            <Button
-              type='text'
-              size='small'
-              aria-pressed={isActive}
-              aria-label={String(opt.label)}
-              className={`config-view__source-switch-button ${isActive ? 'is-active' : ''}`}
-              icon={
-                <span className='config-view__source-option' aria-hidden='true'>
-                  <span className='material-symbols-rounded'>{opt.icon}</span>
-                  <span className='config-view__source-option-label'>{opt.label}</span>
-                </span>
-              }
-              onClick={() => {
-                onChange(opt.value)
-              }}
-            />
-          </Tooltip>
-        )
-      })}
-    </div>
+    <IconSegmentedControl
+      ariaLabel={options.map(option => String(option.label)).join(' / ')}
+      className='config-view__source-switch'
+      itemClassName='config-view__source-switch-button'
+      value={value}
+      options={options.map(option => ({
+        icon: <span className='material-symbols-rounded'>{option.icon}</span>,
+        label: String(option.label),
+        value: option.value
+      }))}
+      onChange={onChange}
+    />
   )
 }
