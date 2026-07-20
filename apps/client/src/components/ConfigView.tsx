@@ -1428,7 +1428,7 @@ export function ConfigView() {
     globalAppearanceDraft
   )
 
-  const renderTabContent = (tab: typeof tabs[number]) => (
+  const renderTabContent = (tab: ConfigContentTab) => (
     <div key={`${sourceKey}:${tab.key}`} className='config-view__content'>
       {tab.key === 'about' && (
         <AboutSection value={tab.value as AboutInfo | undefined} />
