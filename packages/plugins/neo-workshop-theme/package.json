@@ -1,0 +1,23 @@
+{
+  "name": "@oneworks/plugin-neo-workshop-theme",
+  "type": "module",
+  "version": "0.1.0-beta.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/plugins/neo-workshop-theme"
+  },
+  "exports": {
+    ".": "./plugin.json",
+    "./client": { "source": "./client/src/index.ts", "default": "./client/dist/index.js" },
+    "./package.json": "./package.json"
+  },
+  "files": ["README.md", "README.zh-Hans.md", "assets", "client/dist", "client/src", "plugin.json"],
+  "scripts": {
+    "build": "pnpm run build:client",
+    "build:client": "tsc -p client/tsconfig.json --noEmit && vite build --config client/vite.config.ts",
+    "prepack": "pnpm build",
+    "test": "pnpm -C ../../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/plugins/neo-workshop-theme/__tests__"
+  },
+  "devDependencies": { "vite": "^5.4.8" }
+}

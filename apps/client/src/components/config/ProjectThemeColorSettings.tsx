@@ -1,6 +1,8 @@
 import { App, Tooltip } from 'antd'
 import { useEffect, useState } from 'react'
 
+import { usePluginThemes } from '#~/plugins/plugin-themes'
+import { applyAppearanceConfigPatch } from '#~/utils/appearance-config'
 import type { ConfigOneWorksIconMode } from '#~/utils/oneworks-icon'
 
 import { ProjectThemeColorSettingsControls } from './ProjectThemeColorSettingsControls'
@@ -14,10 +16,11 @@ import type {
 } from './app-icon-settings-model'
 import type { TranslationFn } from './configUtils'
 import {
+  getEffectiveProjectPrimaryColor,
   getPresetByPrimaryColor,
   getPresetByTheme,
   getProjectIconBackground,
-  getProjectPrimaryColor,
+  getProjectThemePackPrimaryColor,
   getSyncAppIconCopy
 } from './project-theme-color-settings-model'
 import { useProjectThemePreviewSources } from './use-project-theme-preview-sources'
@@ -27,15 +30,18 @@ export function ProjectThemeColorSettings({
   iconAppearance,
   iconMode,
   onAppearanceChange,
+  rawAppearance = appearance,
   t
 }: {
   appearance: Record<string, unknown>
   iconAppearance: DesktopIconAppearance
   iconMode: ConfigOneWorksIconMode
   onAppearanceChange: (value: Record<string, unknown>) => void
+  rawAppearance?: Record<string, unknown>
   t: TranslationFn
 }) {
   const { message } = App.useApp()
+  const themes = usePluginThemes()
   const desktopApi = window.oneworksDesktop
   const [desktopSettings, setDesktopSettings] = useState<NormalizedDesktopIconSettings>(() =>
     normalizeDesktopIconSettings(undefined)
@@ -43,13 +49,16 @@ export function ProjectThemeColorSettings({
   const [savingDesktopSettings, setSavingDesktopSettings] = useState(false)
   const canUpdateDesktopIcon = desktopApi?.getDesktopSettings != null &&
     desktopApi.updateDesktopSettings != null
-  const projectPrimaryColor = getProjectPrimaryColor(appearance)
+  const isThemePackManaged = getProjectThemePackPrimaryColor(appearance, themes) != null
+  const projectPrimaryColor = getEffectiveProjectPrimaryColor(appearance, themes)
   const selectedTheme = getPresetByPrimaryColor(projectPrimaryColor).theme
   const iconBackground = canUpdateDesktopIcon
     ? desktopSettings.iconBackground
     : getProjectIconBackground(appearance) ?? desktopSettings.iconBackground
   const label = t('config.appSettings.projectThemeColor.label')
-  const description = t('config.appSettings.projectThemeColor.desc')
+  const description = isThemePackManaged
+    ? t('config.appSettings.projectThemeColor.themeManagedDesc')
+    : t('config.appSettings.projectThemeColor.desc')
   const previewSources = useProjectThemePreviewSources({
     desktopApi,
     iconAppearance,
@@ -57,7 +66,6 @@ export function ProjectThemeColorSettings({
     iconMode,
     t
   })
-  const selectedPreviewSrc = previewSources[selectedTheme]
   const syncAppIconCopy = getSyncAppIconCopy(desktopApi?.platform, t)
 
   useEffect(() => {
@@ -83,10 +91,7 @@ export function ProjectThemeColorSettings({
   }, [canUpdateDesktopIcon, desktopApi])
 
   const updateAppearance = (patch: Record<string, unknown>) => {
-    onAppearanceChange({
-      ...appearance,
-      ...patch
-    })
+    onAppearanceChange(applyAppearanceConfigPatch(rawAppearance, patch))
   }
 
   const updateDesktopIconSettings = (
@@ -114,6 +119,8 @@ export function ProjectThemeColorSettings({
   }
 
   const updateTheme = (theme: DesktopIconTheme) => {
+    if (isThemePackManaged) return
+
     const preset = getPresetByTheme(theme)
     updateAppearance({
       primaryColor: preset.primaryColor
@@ -133,16 +140,12 @@ export function ProjectThemeColorSettings({
     }
     updateDesktopIconSettings({
       iconAppearance,
-      iconBackground: nextIconBackground,
-      iconTheme: selectedTheme
+      iconBackground: nextIconBackground
     })
   }
 
   const updateSyncAppIcon = (syncAppIcon: DesktopIconSync) => {
     updateDesktopIconSettings({
-      iconAppearance,
-      iconBackground,
-      iconTheme: selectedTheme,
       syncAppIcon
     })
   }
@@ -159,10 +162,10 @@ export function ProjectThemeColorSettings({
             role='img'
             aria-label={t('config.appSettings.projectThemeColor.previewAlt')}
           >
-            {selectedPreviewSrc != null && (
+            {previewSources[selectedTheme] != null && (
               <img
                 className='config-view__project-theme-preview-image'
-                src={selectedPreviewSrc}
+                src={previewSources[selectedTheme]}
                 alt=''
               />
             )}
@@ -172,6 +175,8 @@ export function ProjectThemeColorSettings({
       <div className='config-view__field-control config-view__project-theme-field-control'>
         <ProjectThemeColorSettingsControls
           canUpdateDesktopIcon={canUpdateDesktopIcon}
+          disabled={isThemePackManaged}
+          iconPreferencesDisabled={false}
           iconBackground={iconBackground}
           previewSources={previewSources}
           saving={savingDesktopSettings}

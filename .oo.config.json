@@ -47,6 +47,26 @@
       "watch": true
     },
     {
+      "id": "./packages/plugins/china-red-theme",
+      "scope": "china-red-theme",
+      "watch": true
+    },
+    {
+      "id": "./packages/plugins/neo-workshop-theme",
+      "scope": "neo-workshop-theme",
+      "watch": true
+    },
+    {
+      "id": "./packages/plugins/focus-workbench-theme",
+      "scope": "focus-workbench-theme",
+      "watch": true
+    },
+    {
+      "id": "./packages/plugins/warm-cowork-theme",
+      "scope": "warm-cowork-theme",
+      "watch": true
+    },
+    {
       "id": "./packages/plugins/relay",
       "scope": "relay",
       "watch": true,

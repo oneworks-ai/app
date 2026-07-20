@@ -164,6 +164,21 @@ describe('config schema bundle', () => {
         plainWorkspacePathMode: 'text'
       })
     }
+
+    const legacyNumericSwitches = await validateConfigSection('appearance', {
+      themePacks: {
+        'fixture-theme': {
+          overrides: { layout: { iconSize: false, padding: true } }
+        }
+      }
+    })
+    expect(legacyNumericSwitches.success).toBe(true)
+    if (legacyNumericSwitches.success) {
+      expect(legacyNumericSwitches.data.themePacks?.['fixture-theme']?.overrides?.layout).toEqual({
+        iconSize: false,
+        padding: true
+      })
+    }
   })
 
   it('validates server public endpoint and extra public path settings', async () => {
@@ -275,19 +290,50 @@ describe('config schema bundle', () => {
     expect(properties.historyTimelineMode).toMatchObject({
       enum: ['event-line', 'node']
     })
+    expect(properties.themePack).toMatchObject({
+      type: 'string'
+    })
     expect(properties.iconBackground).toBeUndefined()
 
     const parsed = await validateConfigSection('appearance', {
       primaryColor: '#3F7E8F',
       historyTimelineMode: 'node',
-      themeMode: 'dark'
+      themeMode: 'dark',
+      themePack: 'fixture-theme',
+      themePacks: {
+        'fixture-theme': {
+          overrides: {
+            colors: { backgrounds: false, borders: true },
+            components: { buttons: true, inputs: false, menus: true, overlays: false },
+            layout: {
+              iconSize: { enabled: false, value: 18 },
+              padding: { enabled: true, value: 12 }
+            }
+          },
+          showBanner: false
+        }
+      }
     })
     expect(parsed.success).toBe(true)
     if (parsed.success) {
       expect(parsed.data).toEqual({
         primaryColor: '#3F7E8F',
         historyTimelineMode: 'node',
-        themeMode: 'dark'
+        themeMode: 'dark',
+        themePack: 'fixture-theme',
+        themePacks: {
+          'fixture-theme': {
+            overrides: {
+              colors: { backgrounds: false, borders: true },
+              components: { buttons: true, inputs: false, menus: true, overlays: false },
+              layout: {
+                iconSize: { enabled: false, value: 18 },
+                padding: { enabled: true, value: 12 }
+              }
+            },
+            showBanner: false
+          }
+        }
       })
     }
 
@@ -321,6 +367,18 @@ describe('config schema bundle', () => {
       historyTimelineMode: 'compact'
     })
     expect(invalidHistoryTimelineMode.success).toBe(false)
+
+    const invalidThemePack = await validateConfigSection('appearance', {
+      themePack: 'Invalid Theme'
+    })
+    expect(invalidThemePack.success).toBe(false)
+
+    const pluginOwnedThemePackSettings = await validateConfigSection('appearance', {
+      themePacks: {
+        'fixture-theme': { arbitraryPluginValue: 'preserved' }
+      }
+    })
+    expect(pluginOwnedThemePackSettings.success).toBe(true)
   })
 
   it('validates global desktop settings', async () => {

@@ -4786,6 +4786,7 @@
       "browserHistory": "History",
       "browserDownloads": "Downloads",
       "savedPasswords": "Saved passwords",
+      "themes": "Themes",
       "appearance": "Appearance",
       "experiments": "Experiments",
       "about": "About"
@@ -4879,10 +4880,38 @@
         }
       }
     },
+    "themePacks": {
+      "title": "Theme packs",
+      "settingsTabs": "Theme-specific settings",
+      "readOnly": "View only",
+      "configurable": "Configurable",
+      "options": {
+        "default": {
+          "label": "OneWorks Default",
+          "description": "A quiet, compact, neutral workbench",
+          "settingsTitle": "Default theme rules",
+          "overview": {
+            "colors": {
+              "label": "Base colors",
+              "value": "Follows Appearance"
+            },
+            "layout": {
+              "label": "Spacing and icons",
+              "value": "Platform standard"
+            },
+            "components": {
+              "label": "Component styles",
+              "value": "Platform default"
+            }
+          }
+        }
+      }
+    },
     "appSettings": {
       "projectThemeColor": {
         "label": "Interface theme color",
         "desc": "Choose the interface primary color for the selected config layer",
+        "themeManagedDesc": "The active theme pack provides its interface color; switch to the default theme to configure it again",
         "previewAlt": "Interface theme icon preview",
         "saveFailed": "Failed to save theme settings",
         "backgroundStyle": {

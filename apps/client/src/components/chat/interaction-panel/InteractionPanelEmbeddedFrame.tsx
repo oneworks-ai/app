@@ -256,7 +256,11 @@ function FrameViewport({
             {onViewportResizeStart != null && resizeEdges.map(edge => (
               <div
                 key={edge}
-                className={`chat-interaction-panel__iframe-frame-resize-handle is-${edge}`}
+                className={[
+                  'chat-interaction-panel__iframe-frame-resize-handle',
+                  `is-${edge}`,
+                  isViewportResizing ? 'is-resizing' : ''
+                ].join(' ')}
                 data-dock-panel-no-resize='true'
                 onPointerDown={event => onViewportResizeStart(event, edge)}
               />

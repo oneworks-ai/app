@@ -30,6 +30,8 @@
 }
 
 .composer-stack {
+  --composer-stack-seam-width: 1px;
+
   flex: 0;
   min-width: 0;
   padding: 0 12px max(12px, env(safe-area-inset-bottom));
@@ -54,7 +56,7 @@
 
 .composer-stack__inner > :not(:last-child).chat-composer-card,
 .composer-stack__inner > :not(:last-child) .chat-composer-card {
-  margin-bottom: -1px;
+  margin-bottom: calc(-1 * var(--composer-stack-seam-width));
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
 }
@@ -95,10 +97,12 @@
   }
 
   .composer-landing--starter .composer-landing__content {
-    padding: max(0px, env(safe-area-inset-top))
-      max(12px, env(safe-area-inset-right))
-      max(12px, env(safe-area-inset-bottom))
-      max(12px, env(safe-area-inset-left));
+    padding: max(0px, env(safe-area-inset-top)) 0
+      max(0px, env(safe-area-inset-bottom));
+  }
+
+  .composer-landing--starter .composer-content-frame {
+    --composer-content-frame-inline-padding: 0px;
   }
 }
 

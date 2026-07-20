@@ -28,24 +28,26 @@ export function RouteContainerHeaderActionButton({
     : item.title ?? item.label
 
   return (
-    <button
-      type='button'
-      className={[
-        'route-container-header__action-button',
-        isActive ? 'is-active' : '',
-        item.danger === true ? 'is-danger' : ''
-      ].filter(Boolean).join(' ')}
-      disabled={item.disabled}
-      aria-busy={item.loading === true}
-      aria-label={resolvedLabel}
-      aria-pressed={item.active == null ? undefined : isActive}
-      title={resolvedTitle}
-      onClick={item.onSelect}
-    >
-      <span className='route-container-header__action-icon'>
-        {resolvedIcon}
-      </span>
-    </button>
+    <span className='route-container-header__action-segment'>
+      <button
+        type='button'
+        className={[
+          'route-container-header__action-button',
+          isActive ? 'is-active' : '',
+          item.danger === true ? 'is-danger' : ''
+        ].filter(Boolean).join(' ')}
+        disabled={item.disabled}
+        aria-busy={item.loading === true}
+        aria-label={resolvedLabel}
+        aria-pressed={item.active == null ? undefined : isActive}
+        title={resolvedTitle}
+        onClick={item.onSelect}
+      >
+        <span className='route-container-header__action-icon'>
+          {resolvedIcon}
+        </span>
+      </button>
+    </span>
   )
 }
 
@@ -181,7 +183,13 @@ export function RouteContainerHeader({
       {(actionItems.length > 0 || actions != null) && (
         <div className='route-container-header__actions'>
           {actionItems.map(item => <RouteContainerHeaderActionButton key={item.key} item={item} />)}
-          {actions}
+          {actions == null
+            ? null
+            : (
+              <span className='route-container-header__action-segment route-container-header__custom-actions'>
+                {actions}
+              </span>
+            )}
         </div>
       )}
     </div>

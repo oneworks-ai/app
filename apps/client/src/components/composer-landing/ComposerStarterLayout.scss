@@ -55,7 +55,7 @@
 
 @media (max-width: 960px) {
   .composer-starter-layout {
-    --composer-content-frame-inline-padding: 0px;
+    --composer-starter-sender-bleed-inline: 0px;
 
     align-items: stretch;
     justify-content: stretch;
@@ -96,6 +96,8 @@
 
   .composer-starter-layout__composer {
     order: 3;
+    width: 100%;
+    margin-inline: 0;
   }
 
   .composer-starter-layout:not(.has-introduction):not(.has-starter-list)

@@ -1,3 +1,5 @@
+import type { AppearanceThemePack, AppearanceThemePackConfigMap } from '@oneworks/types'
+
 import type {
   DesktopIconAppearance,
   DesktopIconBackground,
@@ -48,6 +50,8 @@ export interface DesktopSettings {
   iconTheme: DesktopIconTheme
   primaryColor?: '#E23F12' | '#3F7E8F' | '#00B454' | '#8B9493'
   themeMode?: 'system' | 'light' | 'dark'
+  themePack?: AppearanceThemePack
+  themePacks?: AppearanceThemePackConfigMap
   buildSource?: DesktopBuildSource
   launcherShortcut: string
   launcherShortcutError?: string

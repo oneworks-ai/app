@@ -51,6 +51,7 @@ interface ModuleUpdateActionsOptions {
   checkLoading: boolean
   className?: string
   iconClassName?: string
+  headerMode?: boolean
   onCheck: () => void
   onUpdate: () => void
   pendingActivation: number
@@ -930,6 +931,7 @@ export function ModuleManagementView() {
     checkLoading,
     className,
     iconClassName,
+    headerMode = false,
     onCheck,
     onUpdate,
     pendingActivation,
@@ -946,11 +948,22 @@ export function ModuleManagementView() {
     ].filter(Boolean).join(' ')
 
     return (
-      <div className={['module-management-view__actions', className].filter(Boolean).join(' ')}>
+      <div
+        className={[
+          'module-management-view__actions',
+          headerMode ? 'is-route-header-group' : '',
+          className
+        ].filter(Boolean).join(' ')}
+      >
         {channelControl}
         {showMetrics && renderActionMetrics(available, pendingActivation)}
         <Tooltip title={updateLabel}>
-          <span className='module-management-view__icon-button-tooltip'>
+          <span
+            className={[
+              'module-management-view__icon-button-tooltip',
+              headerMode ? 'route-container-header__action-segment' : ''
+            ].filter(Boolean).join(' ')}
+          >
             <Button
               aria-label={updateLabel}
               className={actionButtonClassName}
@@ -964,7 +977,12 @@ export function ModuleManagementView() {
           </span>
         </Tooltip>
         <Tooltip title={checkLabel}>
-          <span className='module-management-view__icon-button-tooltip'>
+          <span
+            className={[
+              'module-management-view__icon-button-tooltip',
+              headerMode ? 'route-container-header__action-segment' : ''
+            ].filter(Boolean).join(' ')}
+          >
             <Button
               aria-label={checkLabel}
               className={actionButtonClassName}
@@ -1218,33 +1236,35 @@ export function ModuleManagementView() {
   }
 
   const headerChannelControl = (
-    <Tooltip title={t('moduleUpdates.defaultChannel')}>
-      <Dropdown
-        disabled={headerChannelDisabled}
-        menu={{
-          items: headerChannelMenuItems,
-          selectedKeys: [currentDefaultChannel]
-        }}
-        overlayClassName='module-management-view__channel-opener-dropdown'
-        placement='bottomRight'
-        trigger={['click']}
-      >
-        <button
-          aria-label={t('moduleUpdates.defaultChannel')}
-          className='module-management-view__channel-opener'
+    <span className='route-container-header__action-segment'>
+      <Tooltip title={t('moduleUpdates.defaultChannel')}>
+        <Dropdown
           disabled={headerChannelDisabled}
-          title={t('moduleUpdates.defaultChannel')}
-          type='button'
+          menu={{
+            items: headerChannelMenuItems,
+            selectedKeys: [currentDefaultChannel]
+          }}
+          overlayClassName='module-management-view__channel-opener-dropdown'
+          placement='bottomRight'
+          trigger={['click']}
         >
-          <span className='module-management-view__channel-opener-primary'>
-            {currentDefaultChannelLabel}
-          </span>
-          <span className='module-management-view__channel-opener-menu' aria-hidden='true'>
-            <MaterialSymbol className='module-management-view__channel-opener-icon' name='expand_more' />
-          </span>
-        </button>
-      </Dropdown>
-    </Tooltip>
+          <button
+            aria-label={t('moduleUpdates.defaultChannel')}
+            className='module-management-view__channel-opener'
+            disabled={headerChannelDisabled}
+            title={t('moduleUpdates.defaultChannel')}
+            type='button'
+          >
+            <span className='module-management-view__channel-opener-primary'>
+              {currentDefaultChannelLabel}
+            </span>
+            <span className='module-management-view__channel-opener-menu' aria-hidden='true'>
+              <MaterialSymbol className='module-management-view__channel-opener-icon' name='expand_more' />
+            </span>
+          </button>
+        </Dropdown>
+      </Tooltip>
+    </span>
   )
   const headerActions = renderUpdateActions({
     available: moduleSummary.available,
@@ -1254,6 +1274,7 @@ export function ModuleManagementView() {
     checkLoading: checking,
     className: 'module-management-view__header-actions module-management-view__actions--header',
     iconClassName: 'route-container-header__action-icon',
+    headerMode: true,
     onCheck: refresh,
     onUpdate: installAll,
     pendingActivation: moduleSummary.pendingActivation,

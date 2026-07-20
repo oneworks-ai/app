@@ -33,6 +33,41 @@ describe('client plugin host registry', () => {
     }))
   })
 
+  it('registers plugin themes globally and removes them with their scope', () => {
+    const registry = new PluginRegistry()
+    registry.registerTheme('theme-plugin', {
+      id: 'fixture-theme',
+      title: 'Fixture',
+      description: 'Fixture theme',
+      normalizeSettings: value => value as Record<string, unknown>
+    })
+
+    expect(registry.getSnapshot().themes).toEqual([
+      expect.objectContaining({ id: 'fixture-theme', pluginScope: 'theme-plugin' })
+    ])
+
+    registry.registerTheme('duplicate-plugin', {
+      id: 'fixture-theme',
+      title: 'Duplicate',
+      description: 'Duplicate theme',
+      normalizeSettings: () => ({})
+    })
+    registry.registerTheme('reserved-plugin', {
+      id: 'default',
+      title: 'Default',
+      description: 'Reserved theme',
+      normalizeSettings: () => ({})
+    })
+    expect(registry.getSnapshot().themes).toHaveLength(1)
+    expect(registry.getSnapshot().diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ level: 'error', pluginScope: 'duplicate-plugin' }),
+      expect.objectContaining({ level: 'error', pluginScope: 'reserved-plugin' })
+    ]))
+
+    registry.disposeScope('theme-plugin')
+    expect(registry.getSnapshot().themes).toEqual([])
+  })
+
   it('loads manifest contributions with scoped slot ids', () => {
     const registry = new PluginRegistry()
 
@@ -881,6 +916,54 @@ describe('client plugin host registry', () => {
     } finally {
       fetchMock.mockRestore()
     }
+  })
+
+  it('rolls back runtime registrations when plugin activation fails', async () => {
+    const registry = new PluginRegistry()
+    registry.registerCommand('demo', 'manifest-command', () => 'kept')
+    registry.registerTheme('other-plugin', {
+      id: 'other-theme',
+      title: 'Other theme',
+      description: 'Unrelated theme',
+      normalizeSettings: () => ({})
+    })
+    const instance: PluginRuntimeInstance = {
+      requestId: 'demo',
+      scope: 'demo',
+      clientEntryUrl: encodeModule(`
+        export function activatePlugin(ctx) {
+          ctx.themes.register({
+            id: 'failed-theme',
+            title: 'Failed theme',
+            description: 'Must be rolled back',
+            normalizeSettings: () => ({})
+          })
+          ctx.commands.register('runtime-command', () => 'removed')
+          throw new Error('activation exploded')
+        }
+      `)
+    }
+
+    await activatePluginClient({
+      getImportVersion: () => 0,
+      instance,
+      registry,
+      reloadPlugin: vi.fn()
+    })
+
+    expect(registry.getSnapshot().themes).toEqual([
+      expect.objectContaining({ id: 'other-theme', pluginScope: 'other-plugin' })
+    ])
+    await expect(registry.executeCommand('demo', 'manifest-command')).resolves.toBe('kept')
+    registry.registerCommand('demo', 'runtime-command', () => 'replacement')
+    await expect(registry.executeCommand('demo', 'runtime-command')).resolves.toBe('replacement')
+    expect(registry.getSnapshot().diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        level: 'error',
+        message: expect.stringContaining('activation exploded'),
+        pluginScope: 'demo'
+      })
+    ]))
   })
 
   it('rejects plugin api.fetch paths that try to leave the scoped proxy', async () => {

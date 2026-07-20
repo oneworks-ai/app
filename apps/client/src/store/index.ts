@@ -1,5 +1,15 @@
 import { atom } from 'jotai'
 
+export {
+  THEME_PACK_SETTINGS_STORAGE_KEY,
+  THEME_PACK_STORAGE_KEY,
+  getStoredThemePackSettings,
+  normalizeThemePack,
+  themePackAtom,
+  themePackSettingsAtom
+} from './theme-pack'
+export type { ThemePack } from './theme-pack'
+
 // 侧边栏宽度
 export const sidebarWidthAtom = atom(
   Number(localStorage.getItem('sidebarWidth')) || 300

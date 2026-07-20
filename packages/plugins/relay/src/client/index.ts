@@ -1,4 +1,6 @@
 /* eslint-disable max-lines -- relay client entry wires plugin lifecycle, status polling, and account controls. */
+import type { PluginContributionNavFooterItem } from '@oneworks/types'
+
 import {
   LOCAL_RELAY_SERVER_ID,
   OFFICIAL_RELAY_CLOUDFLARE_DEV_SERVER_ID,
@@ -45,7 +47,7 @@ type RelayProjectSyncPayload =
     teamId: string
   }
 
-type RelayFooterContribution = Record<string, unknown> & { id: string }
+type RelayFooterContribution = PluginContributionNavFooterItem
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value != null && typeof value === 'object' && !Array.isArray(value)

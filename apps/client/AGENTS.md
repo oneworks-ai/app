@@ -76,6 +76,9 @@
 - `src/styles/global.scss` 只维护 client 专属全局样式、overlay、AntD 细节覆盖和页面级通用样式；不要在这里重新定义 `--bg-color`、`--text-color`、`--border-color`、`--primary-color` 或暗色 token 表。
 - 修改共享颜色、chrome 尺寸、route header 或 nav rail token 时，去 `packages/route-layout/src/design-tokens.css`，并同步检查 Relay Admin 是否受影响。
 - `useAppPreferences` 负责把主题状态同步到 `html.dark` 和 AntD `ConfigProvider`；新增主题入口时不要只改 CSS token 而漏掉 AntD theme。
+- `appearance.themePack` 选择当前样式包，主题私有配置放在 `appearance.themePacks.<theme-id>`；除宿主 `default` 外，主题由客户端插件通过 `ctx.themes.register(...)` 注册，插件拥有 id、文案、内置主题色、normalizer、AntD token、CSS、素材和专属 tabs。宿主只保留通用注册、选择、持久化和渲染能力，不得增加主题 id 分支。
+- 主题内置颜色只覆盖运行时 effective primary color，不能改写已保存的 `appearance.primaryColor`，切回默认主题后必须恢复。默认主题只读；插件 tab 必须映射回自己的 `appearance.themePacks.<theme-id>`，数值型覆盖同时呈现 `enabled` 和实际 `value`，其中主题预设值只读、开关只控制是否应用。主题插件缺失时保留保存值并安全回退默认样式。
+- manager 角色的本地 dev client 必须优先使用当前 Vite origin，让 `/api/*` 走同一 worktree 的代理；历史保存的 server address 只用于 standalone / static manager 等连接选择场景，不能把本地开发页导向另一份旧服务。显式 runtime server base URL 仍保持最高优先级。
 
 组件与 hook 归档约定：
 

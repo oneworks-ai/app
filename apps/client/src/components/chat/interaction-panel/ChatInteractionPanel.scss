@@ -1716,51 +1716,62 @@
 }
 
 .chat-interaction-panel__iframe-frame-resize-handle {
+  --interaction-frame-resize-hit-size: 6px;
+
   position: absolute;
   z-index: 3;
   background: transparent;
-  transition: background-color .16s ease;
+  transition: var(--oneworks-resize-handle-transition);
 
   &::after {
     content: '';
     position: absolute;
-    background-color: color-mix(in srgb, var(--primary-color) 64%, transparent);
-    opacity: 0;
-    transition: opacity .16s ease;
+    border-radius: var(--oneworks-resize-handle-line-radius, 999px);
+    background-color: var(
+      --oneworks-resize-handle-idle-color,
+      var(--border-color)
+    );
+    box-shadow: var(--oneworks-resize-handle-shadow, none);
+    opacity: 1;
+    transition: var(--oneworks-resize-handle-transition);
   }
 
   &:hover::after,
   &:focus-visible::after {
-    opacity: 1;
+    background-color: var(--oneworks-resize-handle-hover-color);
+  }
+
+  &.is-resizing::after {
+    background-color: var(--oneworks-resize-handle-active-color);
   }
 
   &.is-top,
   &.is-bottom {
     right: 0;
     left: 0;
-    height: 6px;
+    height: var(--interaction-frame-resize-hit-size);
     cursor: ns-resize;
 
     &::after {
       right: 0;
       left: 0;
-      height: 1px;
+      height: var(--oneworks-resize-handle-line-width, 1px);
     }
   }
 
   &.is-top {
-    top: -3px;
+    top: calc(var(--interaction-frame-resize-hit-size) / -2);
 
     &::after {
-      top: 3px;
+      top: calc(var(--interaction-frame-resize-hit-size) / 2);
     }
   }
 
   &.is-bottom {
-    bottom: -3px;
+    bottom: calc(var(--interaction-frame-resize-hit-size) / -2);
 
     &::after {
-      bottom: 3px;
+      bottom: calc(var(--interaction-frame-resize-hit-size) / 2);
     }
   }
 
@@ -1768,29 +1779,29 @@
   &.is-right {
     top: 0;
     bottom: 0;
-    width: 6px;
+    width: var(--interaction-frame-resize-hit-size);
     cursor: ew-resize;
 
     &::after {
       top: 0;
       bottom: 0;
-      width: 1px;
+      width: var(--oneworks-resize-handle-line-width, 1px);
     }
   }
 
   &.is-left {
-    left: -3px;
+    left: calc(var(--interaction-frame-resize-hit-size) / -2);
 
     &::after {
-      left: 3px;
+      left: calc(var(--interaction-frame-resize-hit-size) / 2);
     }
   }
 
   &.is-right {
-    right: -3px;
+    right: calc(var(--interaction-frame-resize-hit-size) / -2);
 
     &::after {
-      right: 3px;
+      right: calc(var(--interaction-frame-resize-hit-size) / 2);
     }
   }
 }
@@ -2054,29 +2065,60 @@
 }
 
 .chat-interaction-panel__iframe-devtools-resizer {
+  --iframe-devtools-resizer-hit-size: 7px;
+  --iframe-devtools-resizer-line-color: var(
+    --oneworks-resize-handle-idle-color,
+    var(--border-color)
+  );
+
   position: relative;
   z-index: 2;
-  width: 1px;
-  min-width: 1px;
-  background-color: var(--border-color);
+  width: var(--oneworks-resize-handle-line-width, 1px);
+  min-width: var(--oneworks-resize-handle-line-width, 1px);
+  background: transparent;
   cursor: col-resize;
-  flex: 0 0 1px;
+  flex: 0 0 var(--oneworks-resize-handle-line-width, 1px);
+
+  &::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: var(--oneworks-resize-handle-line-width, 1px);
+    border-radius: var(--oneworks-resize-handle-line-radius, 999px);
+    background-color: var(--iframe-devtools-resizer-line-color);
+    box-shadow: var(--oneworks-resize-handle-shadow, none);
+    transform: translateX(-50%);
+    transition: var(--oneworks-resize-handle-transition);
+    content: '';
+  }
 
   &::after {
     position: absolute;
     top: 0;
     bottom: 0;
-    left: -3px;
-    width: 7px;
+    left: 50%;
+    width: var(--iframe-devtools-resizer-hit-size);
     background: transparent;
+    transform: translateX(-50%);
     content: '';
     cursor: col-resize;
   }
 
   &:hover,
   &:focus-visible {
-    background-color: var(--primary-color);
+    --iframe-devtools-resizer-line-color: var(
+      --oneworks-resize-handle-hover-color
+    );
+    outline: none;
   }
+}
+
+.chat-interaction-panel__iframe-workspace.is-resizing-devtools
+  .chat-interaction-panel__iframe-devtools-resizer {
+  --iframe-devtools-resizer-line-color: var(
+    --oneworks-resize-handle-active-color
+  );
 }
 
 .chat-interaction-panel__iframe-devtools-pane {
@@ -2093,19 +2135,30 @@
 .chat-interaction-panel__iframe-workspace.is-dock-bottom
   .chat-interaction-panel__iframe-devtools-resizer {
   width: 100%;
-  height: 1px;
+  height: var(--oneworks-resize-handle-line-width, 1px);
   min-width: 0;
-  min-height: 1px;
+  min-height: var(--oneworks-resize-handle-line-width, 1px);
   cursor: row-resize;
-  flex-basis: 1px;
+  flex-basis: var(--oneworks-resize-handle-line-width, 1px);
 
-  &::after {
-    top: -3px;
+  &::before {
+    top: 50%;
     right: 0;
     bottom: auto;
     left: 0;
     width: 100%;
-    height: 7px;
+    height: var(--oneworks-resize-handle-line-width, 1px);
+    transform: translateY(-50%);
+  }
+
+  &::after {
+    top: 50%;
+    right: 0;
+    bottom: auto;
+    left: 0;
+    width: 100%;
+    height: var(--iframe-devtools-resizer-hit-size);
+    transform: translateY(-50%);
     cursor: row-resize;
   }
 }
@@ -3165,10 +3218,12 @@
 }
 
 .chat-interaction-panel-mobile-debug__element-splitter {
+  --mobile-debug-splitter-hit-size: 5px;
+
   position: relative;
   display: none;
-  width: 5px;
-  min-width: 5px;
+  width: var(--mobile-debug-splitter-hit-size);
+  min-width: var(--mobile-debug-splitter-hit-size);
   min-height: 0;
   border: 0;
   background: transparent;
@@ -3179,15 +3234,25 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    left: 2px;
-    width: 1px;
-    background: var(--border-color);
+    left: 50%;
+    width: var(--oneworks-resize-handle-line-width, 1px);
+    border-radius: var(--oneworks-resize-handle-line-radius, 999px);
+    background: var(
+      --oneworks-resize-handle-idle-color,
+      var(--border-color)
+    );
+    box-shadow: var(--oneworks-resize-handle-shadow, none);
+    transform: translateX(-50%);
     content: '';
   }
 
   &:hover::before,
   &:focus-visible::before {
-    background: var(--primary-color);
+    background: var(--oneworks-resize-handle-hover-color);
+  }
+
+  &.is-resizing::before {
+    background: var(--oneworks-resize-handle-active-color);
   }
 
   &:focus-visible {

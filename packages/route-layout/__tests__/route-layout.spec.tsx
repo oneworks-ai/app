@@ -84,6 +84,23 @@ describe('route layout primitives', () => {
     expect(html).toContain('route-container-header__title-icon')
   })
 
+  it('wraps custom route header actions in the shared action segment contract', () => {
+    const html = renderToStaticMarkup(
+      <RouteContainerHeader
+        title='Custom actions'
+        actions={
+          <div data-testid='custom-actions'>
+            <button type='button'>Run</button>
+          </div>
+        }
+      />
+    )
+
+    expect(html).toContain('route-container-header__custom-actions')
+    expect(html).toContain('route-container-header__action-segment')
+    expect(html).toContain('data-testid="custom-actions"')
+  })
+
   it('renders route header breadcrumbs with supplied icon slots', () => {
     const html = renderToStaticMarkup(
       <RouteContainerHeader
@@ -168,7 +185,7 @@ describe('route layout primitives', () => {
         closeLabel='Close'
         desktopSidebar={() => (
           <HostNavRail
-            footerMenu={<HostNavRailFooterButton label='菜单' />}
+            footerMenu={<HostNavRailFooterButton label='菜单' trailingIcon={<span>展开</span>} />}
           >
             <div className='sidebar-container sidebar-container--nav-embedded'>
               <div className='sidebar-content'>
@@ -207,6 +224,7 @@ describe('route layout primitives', () => {
     expect(html).toContain('sidebar-list-header')
     expect(html).toContain('sidebar-header__quick-links')
     expect(html).toContain('host-nav-rail__footer-button')
+    expect(html).toContain('host-nav-rail__footer-button-trailing')
     expect(html).toContain('aria-current="page"')
     expect(html).toContain('Admin users')
   })

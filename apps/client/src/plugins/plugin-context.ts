@@ -8,6 +8,7 @@ type PluginRegistrySnapshot = ReturnType<PluginRegistry['getSnapshot']>
 export interface PluginContextValue {
   pluginSnapshotStatus: 'error' | 'loading' | 'ready'
   pluginServerBaseUrl?: string
+  ready: boolean
   refreshPlugins: () => Promise<void>
   registry: PluginRegistry
   reloadPlugin: (scope: string) => Promise<void>

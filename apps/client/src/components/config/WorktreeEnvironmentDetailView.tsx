@@ -1,5 +1,4 @@
 import { Button, Input, Spin, Tooltip } from 'antd'
-import type { ReactNode } from 'react'
 
 import type { WorktreeEnvironmentDetail, WorktreeEnvironmentScriptKey } from '@oneworks/types'
 
@@ -12,7 +11,6 @@ export function WorktreeEnvironmentDetailView({
   isDetailLoading,
   nameDraft,
   selectedEnvironment,
-  sourceSwitch,
   onBack,
   onNameDraftChange,
   onScriptChange,
@@ -22,7 +20,6 @@ export function WorktreeEnvironmentDetailView({
   isDetailLoading: boolean
   nameDraft: string
   selectedEnvironment?: WorktreeEnvironmentDetail
-  sourceSwitch: ReactNode
   onBack: () => void
   onNameDraftChange: (value: string) => void
   onScriptChange: (key: WorktreeEnvironmentScriptKey, content: string) => void
@@ -45,9 +42,6 @@ export function WorktreeEnvironmentDetailView({
           onBack={onBack}
           t={t}
         />
-        <div className='config-view__section-header-extra'>
-          {sourceSwitch}
-        </div>
       </div>
 
       <section className='worktree-env-panel__section'>

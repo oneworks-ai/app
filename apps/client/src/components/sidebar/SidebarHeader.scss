@@ -276,12 +276,12 @@
   }
 
   .sidebar-header__quick-link-action {
-    width: 20px;
-    min-width: 20px;
-    height: 20px;
+    width: var(--sidebar-inline-action-size);
+    min-width: var(--sidebar-inline-action-size);
+    height: var(--sidebar-inline-action-size);
     padding: 0;
     border: 0;
-    border-radius: 5px;
+    border-radius: var(--sidebar-inline-action-radius);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -298,9 +298,9 @@
     }
 
     .material-symbols-rounded {
-      width: 18px;
-      height: 18px;
-      font-size: 18px;
+      width: var(--sidebar-inline-action-icon-size);
+      height: var(--sidebar-inline-action-icon-size);
+      font-size: var(--sidebar-inline-action-icon-size);
       line-height: 1;
     }
 
@@ -420,6 +420,10 @@
       display: inline-flex;
       align-items: center;
       margin-inline-start: 4px;
+    }
+
+    .oneworks-icon-segmented {
+      flex: 0 0 auto;
     }
 
     .sidebar-list-header__search-icon {

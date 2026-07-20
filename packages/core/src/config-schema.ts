@@ -177,6 +177,7 @@ export const messageLinksConfigSchema = z.object({
 const appearancePrimaryColorSchema = z.enum(['#E23F12', '#3F7E8F', '#00B454', '#8B9493'])
 const appearanceHistoryTimelineModeSchema = z.enum(['event-line', 'node'])
 const appearanceThemeModeSchema = z.enum(['system', 'light', 'dark'])
+const appearanceThemePackSchema = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/)
 const iconBackgroundSchema = z.enum(['transparent', 'solid', 'textured'])
 const desktopIconAppearanceSchema = z.enum(['system', 'light', 'dark'])
 const desktopIconThemeSchema = z.enum(['industrial', 'metal', 'matrix'])
@@ -199,7 +200,11 @@ export const appearanceConfigSchema = z.object({
   primaryColor: appearancePrimaryColorSchema.optional()
     .describe('Global app primary color preset'),
   themeMode: appearanceThemeModeSchema.optional()
-    .describe('Global app light/dark/system theme mode')
+    .describe('Global app light/dark/system theme mode'),
+  themePack: appearanceThemePackSchema.optional()
+    .describe('Global app component style pack'),
+  themePacks: z.record(z.string(), z.record(z.string(), z.unknown())).optional()
+    .describe('Plugin-owned theme settings keyed by registered theme id')
 })
 
 export const desktopConfigSchema = z.object({

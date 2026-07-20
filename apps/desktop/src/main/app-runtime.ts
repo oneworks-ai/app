@@ -581,11 +581,13 @@ export const createDesktopApp = () => {
   }
 
   const updateGlobalAppearanceConfig = async (
-    appearance: Partial<Pick<DesktopSettings, 'primaryColor' | 'themeMode'>>
+    appearance: Partial<Pick<DesktopSettings, 'primaryColor' | 'themeMode' | 'themePack' | 'themePacks'>>
   ) => {
     const appearancePatch = {
       ...(appearance.primaryColor == null ? {} : { primaryColor: appearance.primaryColor }),
-      ...(appearance.themeMode == null ? {} : { themeMode: appearance.themeMode })
+      ...(appearance.themeMode == null ? {} : { themeMode: appearance.themeMode }),
+      ...(appearance.themePack == null ? {} : { themePack: appearance.themePack }),
+      ...(appearance.themePacks == null ? {} : { themePacks: appearance.themePacks })
     }
     await saveGlobalAppearanceSettingsPatch(appearancePatch)
     broadcastDesktopSettings()

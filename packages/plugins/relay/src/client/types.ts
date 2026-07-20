@@ -1,4 +1,6 @@
 /* eslint-disable max-lines -- relay client types mirror account status, config sharing, and source controls. */
+import type { PluginContributionNavFooterItem } from '@oneworks/types'
+
 import type { RelayClientI18nHost } from './i18n.js'
 
 export interface Disposable {
@@ -82,7 +84,7 @@ export interface PluginClientContext {
     listEndpoints?: () => Promise<PluginRuntimeEndpoint[]>
   }
   slots?: {
-    register: (slot: string, contribution: Record<string, unknown> & { id: string }) => Disposable
+    register: (slot: 'nav.footer.before', contribution: PluginContributionNavFooterItem) => Disposable
   }
   views: {
     register: (

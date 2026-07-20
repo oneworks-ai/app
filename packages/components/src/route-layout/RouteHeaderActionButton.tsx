@@ -45,6 +45,7 @@ export const RouteHeaderActionButton = forwardRef<HTMLDivElement, RouteHeaderAct
       shortcut={shortcut}
       title={resolvedTitle}
       placement='bottom'
+      targetClassName='route-container-header__action-segment'
       enabled={tooltipEnabled && tooltipTitle !== null}
     >
       <Button

@@ -1,8 +1,13 @@
+.oneworks-select,
+.mobile-aware-select-trigger-shell {
+  --oneworks-select-padding-block: 0px;
+  --oneworks-select-padding-inline: 10px;
+}
+
 .oneworks-select {
   --oneworks-select-border-width: 1px;
   --oneworks-select-content-height: 18px;
   --oneworks-select-padding-block: 5px;
-  --oneworks-select-padding-inline: 10px;
   --oneworks-select-control-height: calc(
     var(--oneworks-select-content-height) +
       var(--oneworks-select-padding-block) +
@@ -139,16 +144,30 @@
   }
 }
 
+.mobile-aware-select-trigger-shell--content {
+  > .ant-select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  > .oneworks-control-trigger--content {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    box-sizing: border-box;
+    padding-block: var(--oneworks-select-padding-block);
+    padding-inline: var(--oneworks-select-padding-inline);
+  }
+}
+
 .mobile-aware-select-trigger-hitbox {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  margin: 0;
-  padding: 0;
-  border: 0;
   border-radius: inherit;
-  background: transparent;
-  cursor: pointer;
 }
 
 .mobile-aware-select-drawer-root {

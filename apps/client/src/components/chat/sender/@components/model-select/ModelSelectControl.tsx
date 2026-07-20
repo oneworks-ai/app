@@ -24,7 +24,7 @@ import type {
 } from '../../@types/sender-toolbar-types'
 import { ModelMobileSelectDrawer } from './ModelMobileSelectDrawer'
 
-const renderSelectArrow = (onMouseDown: (event: React.MouseEvent<HTMLSpanElement>) => void) => (
+const renderSelectArrow = (onMouseDown?: (event: React.MouseEvent<HTMLSpanElement>) => void) => (
   <span className='material-symbols-rounded sender-select-arrow' onMouseDown={onMouseDown}>
     keyboard_arrow_down
   </span>
@@ -81,11 +81,9 @@ export function ModelSelectControl({
   handlers: Pick<
     SenderToolbarHandlers,
     | 'onShowModelSelectChange'
-    | 'onShowEffortSelectChange'
     | 'onModelSearchValueChange'
     | 'onOpenModelSelector'
     | 'onQueueTextareaFocusRestore'
-    | 'onCloseReferenceActions'
     | 'onModelChange'
     | 'onToggleRecommendedModel'
     | 'onConnectMoreModelServices'
@@ -107,11 +105,9 @@ export function ModelSelectControl({
   const { modelSelectRef } = refs
   const {
     onShowModelSelectChange,
-    onShowEffortSelectChange,
     onModelSearchValueChange,
     onOpenModelSelector,
     onQueueTextareaFocusRestore,
-    onCloseReferenceActions,
     onModelChange,
     onToggleRecommendedModel,
     onConnectMoreModelServices,
@@ -204,33 +200,18 @@ export function ModelSelectControl({
       targetClassName='sender-control-tooltip-target'
       enabled={!isCompactControl && !isModelSelectOpen}
     >
-      <div
-        className={[
-          'sender-select-shell',
-          'sender-select-shell--model',
-          isCompactControl ? 'sender-select-shell--compact' : ''
-        ].filter(Boolean).join(' ')}
-        onPointerDownCapture={handleCompactModelPointerDown}
-      >
-        {!isCompactControl && !isModelSelectOpen && !(modelUnavailable || isThinking) && (
-          <button
-            type='button'
-            className='sender-select-body-trigger'
-            aria-label={t('chat.modelShortcutTooltip')}
-            onMouseDown={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              openModelSelect()
-            }}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              openModelSelect()
-            }}
-          />
-        )}
-        {isCompactControl
-          ? (
+      {isCompactControl
+        ? (
+          <div
+            className={[
+              'sender-select-shell',
+              'sender-select-shell--model',
+              'sender-select-shell--compact',
+              isModelSelectOpen ? 'is-open' : '',
+              modelUnavailable || isThinking ? 'is-disabled' : ''
+            ].filter(Boolean).join(' ')}
+            onPointerDownCapture={handleCompactModelPointerDown}
+          >
             <button
               type='button'
               className='model-select model-select--responsive sender-responsive-select-button sender-responsive-select-button--model'
@@ -254,71 +235,83 @@ export function ModelSelectControl({
                 keyboard_arrow_down
               </span>
             </button>
-          )
-          : (
-            <Select
-              ref={modelSelectRef}
-              className='model-select'
-              classNames={{ popup: { root: 'model-select-popup' } }}
-              dropdownAlign={{ overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true } }}
-              placement='topLeft'
+            <ModelMobileSelectDrawer
               open={isModelSelectOpen}
-              value={selectedModel}
-              options={modelSearchOptions ?? []}
-              showSearch={false}
-              allowClear={false}
-              disabled={modelUnavailable || isThinking}
-              onChange={handleModelSelection}
-              onOpenChange={(nextOpen) => {
-                if (nextOpen) {
-                  onShowEffortSelectChange(false)
-                  onCloseReferenceActions()
-                } else {
-                  onQueueTextareaFocusRestore()
-                }
-                onShowModelSelectChange(nextOpen)
-              }}
-              placeholder={modelUnavailable ? t('chat.modelUnavailable') : defaultModelLabel}
-              optionLabelProp='displayLabel'
-              labelRender={() =>
-                renderSelectedModelTriggerLabel({
-                  label: selectedModelLabel,
-                  option: displayedModelOption
-                })}
-              popupRender={renderModelPopup}
-              popupMatchSelectWidth={false}
-              suffixIcon={renderSelectArrow((event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                if (isModelSelectOpen) {
-                  onShowModelSelectChange(false)
-                  onQueueTextareaFocusRestore()
-                  return
-                }
-                openModelSelect()
-              })}
+              builtinPreviewModelOptions={builtinPreviewModelOptions}
+              selectedModel={selectedModel}
+              modelSearchValue={modelSearchValue}
+              modelSearchOptions={modelSearchOptions}
+              modelMenuGroups={modelMenuGroups}
+              recommendedModelOptions={recommendedModelOptions}
+              servicePreviewModelOptions={servicePreviewModelOptions}
+              updatingRecommendedModelValue={updatingRecommendedModelValue}
+              onClose={closeModelSelect}
+              onSearchChange={onModelSearchValueChange}
+              onSelectModel={handleModelSelection}
+              onToggleRecommendedModel={onToggleRecommendedModel}
+              onConnectMoreModelServices={onConnectMoreModelServices}
+              onOpenModelServicesConfig={onOpenModelServicesConfig}
             />
-          )}
-        {isCompactControl && (
-          <ModelMobileSelectDrawer
+          </div>
+        )
+        : (
+          <Select
+            ref={modelSelectRef}
+            className='model-select'
+            classNames={{ popup: { root: 'model-select-popup' } }}
+            controlTrigger={{
+              ariaLabel: t('chat.modelShortcutTooltip'),
+              className: 'sender-select-content-trigger',
+              content: (
+                <>
+                  {renderSelectedModelTriggerLabel({
+                    label: selectedModelLabel,
+                    option: displayedModelOption
+                  })}
+                  {renderSelectArrow()}
+                </>
+              ),
+              stopPropagation: true,
+              wrapperClassName: 'sender-select-shell sender-select-shell--model'
+            }}
+            dropdownAlign={{ overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true } }}
+            placement='topLeft'
             open={isModelSelectOpen}
-            builtinPreviewModelOptions={builtinPreviewModelOptions}
-            selectedModel={selectedModel}
-            modelSearchValue={modelSearchValue}
-            modelSearchOptions={modelSearchOptions}
-            modelMenuGroups={modelMenuGroups}
-            recommendedModelOptions={recommendedModelOptions}
-            servicePreviewModelOptions={servicePreviewModelOptions}
-            updatingRecommendedModelValue={updatingRecommendedModelValue}
-            onClose={closeModelSelect}
-            onSearchChange={onModelSearchValueChange}
-            onSelectModel={handleModelSelection}
-            onToggleRecommendedModel={onToggleRecommendedModel}
-            onConnectMoreModelServices={onConnectMoreModelServices}
-            onOpenModelServicesConfig={onOpenModelServicesConfig}
+            value={selectedModel}
+            options={modelSearchOptions ?? []}
+            showSearch={false}
+            allowClear={false}
+            disabled={modelUnavailable || isThinking}
+            onChange={handleModelSelection}
+            onOpenChange={(nextOpen) => {
+              if (nextOpen) {
+                openModelSelect()
+                return
+              }
+              onQueueTextareaFocusRestore()
+              onShowModelSelectChange(false)
+            }}
+            placeholder={modelUnavailable ? t('chat.modelUnavailable') : defaultModelLabel}
+            optionLabelProp='displayLabel'
+            labelRender={() =>
+              renderSelectedModelTriggerLabel({
+                label: selectedModelLabel,
+                option: displayedModelOption
+              })}
+            popupRender={renderModelPopup}
+            popupMatchSelectWidth={false}
+            suffixIcon={renderSelectArrow((event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              if (isModelSelectOpen) {
+                onShowModelSelectChange(false)
+                onQueueTextareaFocusRestore()
+                return
+              }
+              openModelSelect()
+            })}
           />
         )}
-      </div>
     </ShortcutTooltip>
   )
 }

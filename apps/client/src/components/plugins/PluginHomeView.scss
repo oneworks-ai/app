@@ -54,7 +54,7 @@
   padding: 0;
   list-style: none;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--oneworks-interactive-card-radius, 8px);
   background: var(--bg-color);
 }
 
@@ -91,7 +91,7 @@
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--oneworks-interactive-card-radius, 8px);
   background: var(--bg-color);
   color: var(--text-color);
   cursor: pointer;

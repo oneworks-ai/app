@@ -54,6 +54,24 @@ describe('config sections helpers', () => {
       sectionPath: ['primaryColor']
     })
 
+    expect(resolveConfigSectionPath(parseConfigSectionPath('appearance.themePacks.china-red.showBanner'))).toEqual({
+      input: ['appearance', 'themePacks', 'china-red', 'showBanner'],
+      normalizedPath: 'appearance.themePacks.china-red.showBanner',
+      section: 'appearance',
+      sectionPath: ['themePacks', 'china-red', 'showBanner']
+    })
+
+    expect(
+      resolveConfigSectionPath(
+        parseConfigSectionPath('appearance.themePacks.china-red.overrides.components.buttons')
+      )
+    ).toEqual({
+      input: ['appearance', 'themePacks', 'china-red', 'overrides', 'components', 'buttons'],
+      normalizedPath: 'appearance.themePacks.china-red.overrides.components.buttons',
+      section: 'appearance',
+      sectionPath: ['themePacks', 'china-red', 'overrides', 'components', 'buttons']
+    })
+
     expect(resolveConfigSectionPath(parseConfigSectionPath('desktop.launcherShortcut'))).toEqual({
       input: ['desktop', 'launcherShortcut'],
       normalizedPath: 'desktop.launcherShortcut',
@@ -105,7 +123,17 @@ describe('config sections helpers', () => {
         historyTimelineMode: 'node',
         iconBackground: 'solid',
         primaryColor: '#00B454',
-        themeMode: 'dark'
+        themeMode: 'dark',
+        themePack: 'china-red',
+        themePacks: {
+          'china-red': {
+            overrides: {
+              components: { buttons: false },
+              layout: { padding: { enabled: true, value: 12 } }
+            },
+            showBanner: false
+          }
+        }
       } as Config['appearance'],
       disableGlobalConfig: true,
       experiments: {
@@ -157,6 +185,32 @@ describe('config sections helpers', () => {
     expect(getConfigSectionValueAtPath(sections, appearanceTimelinePath)).toEqual({
       exists: true,
       value: 'node'
+    })
+    const appearanceThemePackPath = resolveConfigSectionPath(parseConfigSectionPath('appearance.themePack'))
+    expect(getConfigSectionValueAtPath(sections, appearanceThemePackPath)).toEqual({
+      exists: true,
+      value: 'china-red'
+    })
+    const appearanceThemeBannerPath = resolveConfigSectionPath(
+      parseConfigSectionPath('appearance.themePacks.china-red.showBanner')
+    )
+    expect(getConfigSectionValueAtPath(sections, appearanceThemeBannerPath)).toEqual({
+      exists: true,
+      value: false
+    })
+    const appearanceThemeButtonPath = resolveConfigSectionPath(
+      parseConfigSectionPath('appearance.themePacks.china-red.overrides.components.buttons')
+    )
+    expect(getConfigSectionValueAtPath(sections, appearanceThemeButtonPath)).toEqual({
+      exists: true,
+      value: false
+    })
+    const appearanceThemePaddingPath = resolveConfigSectionPath(
+      parseConfigSectionPath('appearance.themePacks.china-red.overrides.layout.padding.value')
+    )
+    expect(getConfigSectionValueAtPath(sections, appearanceThemePaddingPath)).toEqual({
+      exists: true,
+      value: 12
     })
     const legacyAppearancePath = resolveConfigSectionPath(parseConfigSectionPath('appearance.iconBackground'))
     expect(getConfigSectionValueAtPath(sections, legacyAppearancePath)).toEqual({

@@ -4787,6 +4787,7 @@
       "browserHistory": "历史记录",
       "browserDownloads": "下载内容",
       "savedPasswords": "已保存的密码",
+      "themes": "主题",
       "appearance": "外观",
       "experiments": "实验功能",
       "about": "关于"
@@ -4880,10 +4881,38 @@
         }
       }
     },
+    "themePacks": {
+      "title": "主题包",
+      "settingsTabs": "主题专属配置",
+      "readOnly": "仅查看",
+      "configurable": "可配置",
+      "options": {
+        "default": {
+          "label": "OneWorks 默认",
+          "description": "安静、紧凑的中性色工作台",
+          "settingsTitle": "默认主题规则",
+          "overview": {
+            "colors": {
+              "label": "基础颜色",
+              "value": "跟随外观设置"
+            },
+            "layout": {
+              "label": "间距与图标",
+              "value": "平台标准"
+            },
+            "components": {
+              "label": "组件样式",
+              "value": "平台默认"
+            }
+          }
+        }
+      }
+    },
     "appSettings": {
       "projectThemeColor": {
         "label": "界面主题色",
         "desc": "选择当前配置层级的界面主色",
+        "themeManagedDesc": "当前主题包已内置界面主题色；切换到默认主题后可重新配置",
         "previewAlt": "界面主题图标预览",
         "saveFailed": "保存主题设置失败",
         "backgroundStyle": {

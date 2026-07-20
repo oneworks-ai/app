@@ -3,7 +3,7 @@ import './NavRail.scss'
 
 import { Button, Dropdown, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
-import { useAtom, useSetAtom } from 'jotai'
+import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -11,7 +11,7 @@ import useSWR from 'swr'
 
 import { ShortcutTooltip } from '@oneworks/components/route-layout'
 import { DEFAULT_THEME_PRIMARY_COLOR, ONEWORKS_THEME_COLOR_PRESETS } from '@oneworks/icon/presets'
-import { HostNavRail } from '@oneworks/route-layout'
+import { HostNavRail, HostNavRailFooterButton } from '@oneworks/route-layout'
 import type { ConfigResponse } from '@oneworks/types'
 
 import { getConfig, updateConfig } from '#~/api'
@@ -36,13 +36,23 @@ import { usePanelResize } from '#~/hooks/use-panel-resize'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { appLanguageOptions, getActiveAppLanguageOption } from '#~/i18n'
 import { resolvePluginContributionText } from '#~/plugins/plugin-i18n'
-import type { PluginContributionMenuItem, PluginContributionNavItem } from '#~/plugins/plugin-manifest'
+import type {
+  PluginContributionMenuItem,
+  PluginContributionNavFooterAccount,
+  PluginContributionNavFooterAccountAction,
+  PluginContributionNavFooterAccountGroup,
+  PluginContributionNavFooterAccountPopover,
+  PluginContributionNavFooterItem,
+  PluginContributionNavItem
+} from '#~/plugins/plugin-manifest'
 import { usePluginCommandExecutor, usePluginSlot } from '#~/plugins/plugin-slots'
+import { usePluginThemes } from '#~/plugins/plugin-themes'
 import { buildLauncherClientPath } from '#~/runtime-config'
 import type { DevShellKind, DevShellOs } from '#~/utils/device-shell-simulation'
 import { useStoredDevShellSimulation, writeStoredDevShellSimulation } from '#~/utils/device-shell-simulation'
 import { createOneWorksIconDataUri } from '#~/utils/oneworks-icon'
-import { isSidebarResizingAtom, sidebarWidthAtom, themeAtom } from '../store'
+import { resolveThemePackPrimaryColor } from '#~/utils/theme-pack'
+import { isSidebarResizingAtom, sidebarWidthAtom, themeAtom, themePackAtom } from '../store'
 import type { ThemeMode } from '../store'
 import { NavRailCompact } from './NavRailCompact'
 import type { NavRailCompactMoreAction } from './NavRailCompact'
@@ -83,63 +93,17 @@ type ScopedPluginMenuItem = Omit<PluginContributionMenuItem, 'children'> & {
   pluginScope: string
 }
 
-interface PluginFooterAccountPopoverAction {
-  id: string
-  title: string
-  command?: string
-  danger?: boolean
-  disabled?: boolean
-  href?: string
-  icon?: string
-  payload?: unknown
-  route?: string
-}
-
-interface PluginFooterAccountPopoverAccount {
-  actions?: PluginFooterAccountPopoverAction[]
-  avatarUrl?: string
-  command?: string
-  description?: string
-  disabled?: boolean
-  href?: string
-  id: string
-  initials?: string
-  name: string
-  payload?: unknown
-  route?: string
-  status?: string
-}
-
-interface PluginFooterAccountPopoverGroup {
-  accounts: PluginFooterAccountPopoverAccount[]
-  avatarUrl?: string
-  collapsed?: boolean
-  id: string
-  initials?: string
-  title: string
-}
-
-interface PluginFooterAccountPopover {
-  accounts?: PluginFooterAccountPopoverAccount[]
-  actions?: PluginFooterAccountPopoverAction[]
-  groups?: PluginFooterAccountPopoverGroup[]
-}
-
-type PluginFooterAccountPopoverItem = PluginContributionMenuItem & {
-  accountPopover?: PluginFooterAccountPopover
-}
-
 type AccountPopoverMenuItems = NonNullable<MenuProps['items']>
 
-const isPluginFooterAccountPopoverItem = <T extends PluginContributionMenuItem>(
+const isPluginFooterAccountPopoverItem = <T extends PluginContributionNavFooterItem>(
   item: T
-): item is T & PluginFooterAccountPopoverItem => (
+): item is T & { accountPopover: PluginContributionNavFooterAccountPopover } => (
   'accountPopover' in item && item.accountPopover != null && typeof item.accountPopover === 'object'
 )
 
 const getAccountPopoverGroups = (
-  accountPopover: PluginFooterAccountPopover
-): PluginFooterAccountPopoverGroup[] => {
+  accountPopover: PluginContributionNavFooterAccountPopover
+): PluginContributionNavFooterAccountGroup[] => {
   if (Array.isArray(accountPopover.groups) && accountPopover.groups.length > 0) return accountPopover.groups
   return [{
     accounts: Array.isArray(accountPopover.accounts) ? accountPopover.accounts : [],
@@ -149,7 +113,7 @@ const getAccountPopoverGroups = (
   }]
 }
 
-const getAccountPopoverActionIcon = (action: PluginFooterAccountPopoverAction) =>
+const getAccountPopoverActionIcon = (action: PluginContributionNavFooterAccountAction) =>
   action.icon ?? (
     action.route != null ? 'badge' : action.command === 'login' ? 'login' : 'more_horiz'
   )
@@ -167,11 +131,14 @@ const notifyPluginRouteChange = (pluginScope: string, route: string) => {
   }, 0)
 }
 
-const renderAccountPopoverActionIcon = (action: PluginFooterAccountPopoverAction, className = 'nav-menu-icon') => (
+const renderAccountPopoverActionIcon = (
+  action: PluginContributionNavFooterAccountAction,
+  className = 'nav-menu-icon'
+) => (
   <MaterialSymbol className={className} name={getAccountPopoverActionIcon(action)} aria-hidden='true' />
 )
 
-const renderAccountPopoverGroupIcon = (group: PluginFooterAccountPopoverGroup) => (
+const renderAccountPopoverGroupIcon = (group: PluginContributionNavFooterAccountGroup) => (
   <span className='nav-rail-account-menu-server-avatar' aria-hidden='true'>
     {group.avatarUrl == null || group.avatarUrl.trim() === ''
       ? <MaterialSymbol className='nav-rail-account-menu-server-avatar-symbol' name='hub' aria-hidden='true' />
@@ -179,7 +146,7 @@ const renderAccountPopoverGroupIcon = (group: PluginFooterAccountPopoverGroup) =
   </span>
 )
 
-const renderAccountPopoverGroupLabel = (group: PluginFooterAccountPopoverGroup) => (
+const renderAccountPopoverGroupLabel = (group: PluginContributionNavFooterAccountGroup) => (
   <span className='nav-rail-account-menu-group-label'>
     <span className='nav-rail-account-menu-group-title'>{group.title}</span>
   </span>
@@ -193,8 +160,8 @@ const renderAccountMenuItemLabel = ({
   account,
   onAction
 }: {
-  account: PluginFooterAccountPopoverAccount
-  onAction: (action: PluginFooterAccountPopoverAction) => void
+  account: PluginContributionNavFooterAccount
+  onAction: (action: PluginContributionNavFooterAccountAction) => void
 }) => {
   const hasPrimaryAction = account.route != null || account.href != null || account.command != null
   const description = account.description?.trim()
@@ -299,12 +266,12 @@ const buildAccountPopoverMenuItems = ({
   accountPopover,
   onAction
 }: {
-  accountPopover: PluginFooterAccountPopover
-  onAction: (action: PluginFooterAccountPopoverAction) => void
+  accountPopover: PluginContributionNavFooterAccountPopover
+  onAction: (action: PluginContributionNavFooterAccountAction) => void
 }): AccountPopoverMenuItems => {
   const groups = getAccountPopoverGroups(accountPopover)
   const toAccountItem = (
-    account: PluginFooterAccountPopoverAccount,
+    account: PluginContributionNavFooterAccount,
     index: number,
     total: number
   ): AccountPopoverMenuItems[number] => ({
@@ -713,6 +680,8 @@ export function NavRail({
 }) {
   const { t, i18n } = useTranslation()
   const [themeMode, setThemeMode] = useAtom(themeAtom)
+  const themePack = useAtomValue(themePackAtom)
+  const themes = usePluginThemes()
   const setIsSidebarResizing = useSetAtom(isSidebarResizingAtom)
   const setSidebarWidth = useSetAtom(sidebarWidthAtom)
   const navigate = useNavigate()
@@ -920,7 +889,7 @@ export function NavRail({
   ], [canOpenOtherProjects, currentPath, navigate, navigateToWorkspaceConfig, otherProjectsHref, t])
   const pluginNavItems = usePluginSlot<PluginContributionNavItem>('nav.items')
   const pluginMoreItems = usePluginSlot<PluginContributionMenuItem>('nav.moreMenu')
-  const pluginFooterBeforeItems = usePluginSlot<PluginContributionMenuItem>('nav.footer.before')
+  const pluginFooterBeforeItems = usePluginSlot<PluginContributionNavFooterItem>('nav.footer.before')
   const executePluginCommand = usePluginCommandExecutor()
   const pluginLanguage = i18n.resolvedLanguage ?? i18n.language
   const runPluginMenuItem = React.useCallback((item: ScopedPluginMenuItem) => {
@@ -938,7 +907,7 @@ export function NavRail({
   }, [executePluginCommand, navigate])
   const runPluginAccountPopoverAction = React.useCallback((
     pluginScope: string,
-    action: PluginFooterAccountPopoverAction
+    action: PluginContributionNavFooterAccountAction
   ) => {
     setOpenPluginFooterPopoverKey(null)
     if (action.command != null && executePluginCommand != null) {
@@ -1009,34 +978,33 @@ export function NavRail({
             }])
             : []
           const button = (
-            <button
+            <HostNavRailFooterButton
               key={`plugin-footer-button:${item.pluginScope}:${item.id}`}
-              type='button'
+              active={isActive}
               className={[
                 'nav-rail-footer-extension-item',
-                hasDropdown ? 'nav-rail-footer-extension-item--dropdown' : '',
-                isActive ? 'is-active' : ''
+                hasDropdown ? 'nav-rail-footer-extension-item--dropdown' : ''
               ].filter(Boolean).join(' ')}
+              icon={
+                <MaterialSymbol
+                  name={item.icon ?? 'extension'}
+                  aria-hidden='true'
+                />
+              }
+              label={resolvePluginContributionText(item, 'title', pluginLanguage) ?? item.title}
+              trailingIcon={hasDropdown
+                ? (
+                  <MaterialSymbol
+                    className='nav-rail-footer-chevron'
+                    name='expand_more'
+                    aria-hidden='true'
+                  />
+                )
+                : undefined}
               aria-current={isActive ? 'page' : undefined}
               aria-haspopup={hasDropdown ? 'menu' : undefined}
               onClick={hasDropdown ? undefined : () => runPluginMenuItem(item)}
-            >
-              <MaterialSymbol
-                className='nav-rail-footer-extension-item__icon'
-                name={item.icon ?? 'extension'}
-                aria-hidden='true'
-              />
-              <span className='nav-rail-footer-extension-item__label'>
-                {resolvePluginContributionText(item, 'title', pluginLanguage) ?? item.title}
-              </span>
-              {hasDropdown && (
-                <MaterialSymbol
-                  className='nav-rail-footer-extension-item__chevron'
-                  name='expand_more'
-                  aria-hidden='true'
-                />
-              )}
-            </button>
+            />
           )
 
           if (!hasDropdown) {
@@ -1361,28 +1329,24 @@ export function NavRail({
           trigger={['click']}
           transitionName='ant-slide-down'
         >
-          <Button
-            type='default'
+          <HostNavRailFooterButton
             className='nav-rail-dev-shell-simulation__button'
-            aria-haspopup='dialog'
-            block
-          >
-            <span className='nav-rail-dev-shell-simulation__content'>
+            icon={
               <MaterialSymbol
-                className='nav-rail-dev-shell-simulation__icon'
                 name={shellSimulationSummary.icon}
                 aria-hidden='true'
               />
-              <span className='nav-rail-dev-shell-simulation__label'>
-                {shellSimulationSummary.label}
-              </span>
+            }
+            label={shellSimulationSummary.label}
+            trailingIcon={
               <MaterialSymbol
-                className='nav-rail-dev-shell-simulation__chevron'
+                className='nav-rail-footer-chevron'
                 name='expand_more'
                 aria-hidden='true'
               />
-            </span>
-          </Button>
+            }
+            aria-haspopup='dialog'
+          />
         </Dropdown>
       </div>
     )
@@ -1471,7 +1435,11 @@ export function NavRail({
   const moreButtonLabel = t('navRail.more')
   const isMoreMenuVisuallyOpen = isMoreMenuOpen && !isMoreMenuClosing
   const isMoreButtonActive = isMoreMenuVisuallyOpen || moreButtonSelectedKeys.length > 0
-  const activeThemePrimaryColor = getGlobalThemePrimaryColor(configRes) ?? DEFAULT_THEME_PRIMARY_COLOR
+  const activeThemePrimaryColor = resolveThemePackPrimaryColor(
+    themePack,
+    getGlobalThemePrimaryColor(configRes) ?? DEFAULT_THEME_PRIMARY_COLOR,
+    themes
+  )
   const activeIconTheme = React.useMemo(
     () =>
       ONEWORKS_THEME_COLOR_PRESETS.find(preset => preset.primaryColor === activeThemePrimaryColor)?.theme ??
@@ -1603,7 +1571,7 @@ export function NavRail({
           active={isMoreButtonActive}
           buttonIconSrc={moreButtonIconSrc}
           buttonLabel={moreButtonLabel}
-          buttonRef={moreButtonRef as React.Ref<HTMLAnchorElement | HTMLButtonElement>}
+          buttonRef={moreButtonRef}
           contextMenuItems={moreMenuContextMenuItems}
           items={moreMenuItems}
           open={isMoreMenuOpen}

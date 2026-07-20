@@ -118,16 +118,25 @@ const normalizeThemeMode = (value: unknown) => (
     : undefined
 )
 
+const normalizeThemePack = (value: unknown) => (
+  typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(value)
+    ? value
+    : undefined
+)
+
 const pickDefinedAppearanceSettings = (
   value: Config['appearance'] | Partial<NonNullable<Config['appearance']>> | undefined
 ): Partial<NonNullable<Config['appearance']>> => {
   if (value == null) return {}
   const primaryColor = normalizeThemePrimaryColor(value.primaryColor)
   const themeMode = normalizeThemeMode(value.themeMode)
+  const themePack = normalizeThemePack(value.themePack)
 
   return {
     ...(primaryColor == null ? {} : { primaryColor }),
-    ...(themeMode == null ? {} : { themeMode })
+    ...(themeMode == null ? {} : { themeMode }),
+    ...(themePack == null ? {} : { themePack }),
+    ...(value.themePacks == null ? {} : { themePacks: value.themePacks })
   }
 }
 

@@ -11,7 +11,7 @@
   z-index: 2;
   display: flex;
   align-items: flex-end;
-  gap: 10px;
+  gap: var(--launcher-tab-gap, 10px);
   min-width: 0;
   overflow-x: auto;
   padding: 0;
@@ -21,11 +21,20 @@
       var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4))
     );
   border-radius: 0;
-  background: color-mix(in srgb, var(--bg-color) 92%, var(--sub-bg-color));
-  backdrop-filter: blur(18px) saturate(1.35);
+  background: var(
+    --oneworks-launcher-tab-bar-background,
+    color-mix(in srgb, var(--bg-color) 92%, var(--sub-bg-color))
+  );
+  backdrop-filter: var(
+    --oneworks-launcher-tab-bar-backdrop-filter,
+    blur(18px) saturate(1.35)
+  );
   box-sizing: border-box;
   scrollbar-width: none;
-  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: var(
+    --oneworks-launcher-tab-bar-backdrop-filter,
+    blur(18px) saturate(1.35)
+  );
 }
 
 .launcher-settings__tabs::-webkit-scrollbar {
@@ -35,10 +44,13 @@
 .launcher-settings__tab {
   position: relative;
   min-width: 0;
-  min-height: 28px;
-  padding: 0 0 var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px));
+  min-height: var(--launcher-tab-height, 28px);
+  padding: 0 var(--launcher-tab-gap, 10px);
   border: 0;
-  border-radius: 0;
+  border-radius: var(
+    --launcher-tab-radius,
+    var(--oneworks-control-radius, 6px)
+  );
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -59,14 +71,17 @@
   content: '';
   opacity: 0;
   background: var(--primary-color, var(--ant-color-primary, #1677ff));
+  display: var(--launcher-tab-ink-display, block);
 }
 
 .launcher-settings__tab:hover,
 .launcher-settings__tab:focus-visible {
+  background: var(--launcher-item-hover-bg, transparent);
   color: var(--primary-color, var(--ant-color-primary, #1677ff));
 }
 
 .launcher-settings__tab.is-active {
+  background: var(--launcher-item-active-bg, transparent);
   color: var(--primary-color, var(--ant-color-primary, #1677ff));
 }
 
@@ -99,7 +114,10 @@
   min-width: 24px;
   padding: 0 5px;
   border: 1px solid color-mix(in srgb, var(--primary-color) 22%, transparent);
-  border-radius: 5px;
+  border-radius: var(
+    --launcher-keycap-radius,
+    var(--oneworks-control-radius, 5px)
+  );
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -133,7 +151,7 @@
   min-height: 44px;
   padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
-  border-radius: 7px;
+  border-radius: var(--launcher-item-radius, var(--oneworks-group-radius, 7px));
   background: color-mix(in srgb, var(--bg-color) 86%, transparent);
   box-sizing: border-box;
   transition: border-color .16s ease, background-color .16s ease;
@@ -240,7 +258,7 @@
 
   &.ant-select-single .ant-select-selector {
     min-height: 30px;
-    border-radius: 7px;
+    border-radius: var(--oneworks-control-radius, 7px);
   }
 
   .ant-select-selection-item,
@@ -261,7 +279,7 @@
   min-width: 0;
   padding: 3px;
   border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
-  border-radius: 8px;
+  border-radius: var(--oneworks-group-radius, 8px);
   background: color-mix(in srgb, var(--sub-bg-color) 76%, transparent);
 }
 
@@ -271,7 +289,7 @@
   min-height: 28px;
   padding: 0 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--oneworks-control-radius, 6px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -340,7 +358,7 @@
   position: relative;
   width: 36px;
   height: 23px;
-  border-radius: 4px;
+  border-radius: var(--oneworks-control-radius, 4px);
   display: block;
   overflow: hidden;
   background:
@@ -380,7 +398,7 @@
 
 .launcher-settings .config-view__icon-radio-group {
   padding: 3px;
-  border-radius: 8px;
+  border-radius: var(--oneworks-group-radius, 8px);
   background: color-mix(in srgb, var(--sub-bg-color) 76%, transparent);
 }
 

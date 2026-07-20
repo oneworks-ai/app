@@ -84,7 +84,9 @@ const buildAppearanceSection = (appearance: Config['appearance'] | undefined): C
       ? {}
       : { historyTimelineMode: appearance.historyTimelineMode }),
     ...(appearance.primaryColor === undefined ? {} : { primaryColor: appearance.primaryColor }),
-    ...(appearance.themeMode === undefined ? {} : { themeMode: appearance.themeMode })
+    ...(appearance.themeMode === undefined ? {} : { themeMode: appearance.themeMode }),
+    ...(appearance.themePack === undefined ? {} : { themePack: appearance.themePack }),
+    ...(appearance.themePacks === undefined ? {} : { themePacks: appearance.themePacks })
   }
 }
 

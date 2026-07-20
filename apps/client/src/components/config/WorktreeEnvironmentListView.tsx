@@ -1,5 +1,4 @@
 import { Button, Empty, Input, Spin } from 'antd'
-import type { ReactNode } from 'react'
 import { useMemo, useState } from 'react'
 
 import type { WorktreeEnvironmentSummary } from '@oneworks/types'
@@ -9,14 +8,12 @@ import { toDisplayEnvironmentName } from './worktree-environment-panel-model'
 
 export function WorktreeEnvironmentListView({
   isLoading,
-  sourceSwitch,
   visibleEnvironments,
   onCreate,
   onSelectEnvironment,
   t
 }: {
   isLoading: boolean
-  sourceSwitch: ReactNode
   visibleEnvironments: WorktreeEnvironmentSummary[]
   onCreate: () => void
   onSelectEnvironment: (id: string) => void
@@ -36,13 +33,6 @@ export function WorktreeEnvironmentListView({
 
   return (
     <div className='worktree-env-panel__list-view'>
-      <div className='worktree-env-panel__topbar'>
-        <div className='config-view__section-title'>
-          <span className='material-symbols-rounded config-view__section-icon'>deployed_code</span>
-          <span>{t('config.sections.environments')}</span>
-        </div>
-        {sourceSwitch}
-      </div>
       <section className='worktree-env-panel__section'>
         <div className='worktree-env-panel__search-row'>
           <Input

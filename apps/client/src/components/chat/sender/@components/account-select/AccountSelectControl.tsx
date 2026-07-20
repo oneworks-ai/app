@@ -240,67 +240,114 @@ export function AccountSelectControl({
   )
 
   return (
-    <div
-      className={[
-        'sender-select-shell',
-        'sender-select-shell--account',
-        isCompactControl ? 'sender-select-shell--compact' : ''
-      ].filter(Boolean).join(' ')}
-      onPointerDownCapture={openCompactAccountSelect}
-    >
-      {!isCompactControl && !showAccountSelect && !isDisabled && (
-        <button
-          type='button'
-          className='sender-select-body-trigger'
-          aria-label={selectedOption?.label ?? t('chat.accountSelectPlaceholder')}
-          onMouseDown={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            setShowAccountSelect(true)
-          }}
-          onClick={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            setShowAccountSelect(true)
-          }}
-        />
-      )}
+    <>
       {isCompactControl
         ? (
-          <button
-            type='button'
-            className='account-select account-select--responsive sender-responsive-select-button sender-responsive-select-button--account'
-            aria-label={selectedOption?.label ?? t('chat.accountSelectPlaceholder')}
-            disabled={isDisabled}
-            onMouseDown={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              setShowAccountSelect(true)
-            }}
-            onFocus={() => setShowAccountSelect(true)}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              setShowAccountSelect(true)
-            }}
+          <div
+            className={[
+              'sender-select-shell',
+              'sender-select-shell--account',
+              'sender-select-shell--compact',
+              showAccountSelect ? 'is-open' : '',
+              isDisabled ? 'is-disabled' : ''
+            ].filter(Boolean).join(' ')}
+            onPointerDownCapture={openCompactAccountSelect}
           >
-            {selectedOption == null
-              ? (
-                <span className='material-symbols-rounded sender-responsive-select-button__icon'>switch_account</span>
-              )
-              : <AccountAvatar option={selectedOption} size='control' />}
-            <span className='sender-responsive-select-button__label'>
-              {selectedOption?.label ?? t('chat.accountSelectPlaceholder')}
-            </span>
-            <span className='material-symbols-rounded sender-responsive-select-button__chevron'>
-              keyboard_arrow_down
-            </span>
-          </button>
+            <button
+              type='button'
+              className='account-select account-select--responsive sender-responsive-select-button sender-responsive-select-button--account'
+              aria-label={selectedOption?.label ?? t('chat.accountSelectPlaceholder')}
+              disabled={isDisabled}
+              onMouseDown={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                setShowAccountSelect(true)
+              }}
+              onFocus={() => setShowAccountSelect(true)}
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                setShowAccountSelect(true)
+              }}
+            >
+              {selectedOption == null
+                ? (
+                  <span className='material-symbols-rounded sender-responsive-select-button__icon'>
+                    switch_account
+                  </span>
+                )
+                : <AccountAvatar option={selectedOption} size='control' />}
+              <span className='sender-responsive-select-button__label'>
+                {selectedOption?.label ?? t('chat.accountSelectPlaceholder')}
+              </span>
+              <span className='material-symbols-rounded sender-responsive-select-button__chevron'>
+                keyboard_arrow_down
+              </span>
+            </button>
+            <SenderMobileSelectDrawer
+              open={showAccountSelect}
+              title={t('chat.accountSelectPlaceholder')}
+              className='account-mobile-select-drawer'
+              onClose={() => setShowAccountSelect(false)}
+            >
+              <div className='sender-mobile-select-list' role='listbox'>
+                {accountOptions.map(option => (
+                  <div
+                    key={option.value}
+                    role='option'
+                    tabIndex={0}
+                    aria-selected={selectedAccount === option.value}
+                    className={[
+                      'sender-mobile-select-option',
+                      'account-mobile-select-option',
+                      selectedAccount === option.value ? 'is-selected' : ''
+                    ].filter(Boolean).join(' ')}
+                    onClick={() => handleAccountSelection(option.value)}
+                    onKeyDown={(event) =>
+                      handleSenderMobileSelectOptionKeyDown(event, () => handleAccountSelection(option.value))}
+                  >
+                    <span className='sender-mobile-select-option__content'>
+                      {renderOption(option)}
+                    </span>
+                    {selectedAccount === option.value && (
+                      <span className='material-symbols-rounded sender-mobile-select-option__check'>check</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {selectedAdapter != null && selectedAdapter.trim() !== '' && (
+                <div className='sender-mobile-select-actions'>
+                  <button
+                    type='button'
+                    className='account-select-popup__footer-action'
+                    onClick={createAccount}
+                  >
+                    <span className='material-symbols-rounded'>person_add</span>
+                    <span>{t('chat.accountSelectCreateAccount', { adapter: selectedAdapter })}</span>
+                  </button>
+                  <button
+                    type='button'
+                    className='account-select-popup__footer-action'
+                    onClick={openAdapterConfig}
+                  >
+                    <span className='material-symbols-rounded'>settings</span>
+                    <span>{t('chat.accountSelectOpenAdapterConfig', { adapter: selectedAdapter })}</span>
+                  </button>
+                </div>
+              )}
+            </SenderMobileSelectDrawer>
+          </div>
         )
         : (
           <Select
             className='account-select'
             classNames={{ popup: { root: 'account-select-popup' } }}
+            controlTrigger={{
+              ariaLabel: selectedOption?.label ?? t('chat.accountSelectPlaceholder'),
+              className: 'sender-select-body-trigger',
+              stopPropagation: true,
+              wrapperClassName: 'sender-select-shell sender-select-shell--account'
+            }}
             open={showAccountSelect}
             value={selectedAccount}
             options={accountOptions}
@@ -321,60 +368,6 @@ export function AccountSelectControl({
             })}
           />
         )}
-      {isCompactControl && (
-        <SenderMobileSelectDrawer
-          open={showAccountSelect}
-          title={t('chat.accountSelectPlaceholder')}
-          className='account-mobile-select-drawer'
-          onClose={() => setShowAccountSelect(false)}
-        >
-          <div className='sender-mobile-select-list' role='listbox'>
-            {accountOptions.map(option => (
-              <div
-                key={option.value}
-                role='option'
-                tabIndex={0}
-                aria-selected={selectedAccount === option.value}
-                className={[
-                  'sender-mobile-select-option',
-                  'account-mobile-select-option',
-                  selectedAccount === option.value ? 'is-selected' : ''
-                ].filter(Boolean).join(' ')}
-                onClick={() => handleAccountSelection(option.value)}
-                onKeyDown={(event) =>
-                  handleSenderMobileSelectOptionKeyDown(event, () => handleAccountSelection(option.value))}
-              >
-                <span className='sender-mobile-select-option__content'>
-                  {renderOption(option)}
-                </span>
-                {selectedAccount === option.value && (
-                  <span className='material-symbols-rounded sender-mobile-select-option__check'>check</span>
-                )}
-              </div>
-            ))}
-          </div>
-          {selectedAdapter != null && selectedAdapter.trim() !== '' && (
-            <div className='sender-mobile-select-actions'>
-              <button
-                type='button'
-                className='account-select-popup__footer-action'
-                onClick={createAccount}
-              >
-                <span className='material-symbols-rounded'>person_add</span>
-                <span>{t('chat.accountSelectCreateAccount', { adapter: selectedAdapter })}</span>
-              </button>
-              <button
-                type='button'
-                className='account-select-popup__footer-action'
-                onClick={openAdapterConfig}
-              >
-                <span className='material-symbols-rounded'>settings</span>
-                <span>{t('chat.accountSelectOpenAdapterConfig', { adapter: selectedAdapter })}</span>
-              </button>
-            </div>
-          )}
-        </SenderMobileSelectDrawer>
-      )}
       <Modal
         open={creatingAccount}
         centered
@@ -405,6 +398,6 @@ export function AccountSelectControl({
           </div>
         </div>
       </Modal>
-    </div>
+    </>
   )
 }

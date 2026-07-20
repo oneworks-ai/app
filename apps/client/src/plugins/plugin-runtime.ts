@@ -25,9 +25,11 @@ import type {
   PluginRouteRegistration,
   PluginRuntimeInstance,
   PluginSlot,
+  PluginSlotContribution,
   PluginViewRegistration
 } from './plugin-manifest'
 import type { PluginRegistry } from './plugin-registry'
+import type { PluginThemeRegistration } from './plugin-theme-contract'
 
 export interface PluginClientContext {
   api: {
@@ -89,7 +91,10 @@ export interface PluginClientContext {
   }
   scope: string
   slots: {
-    register: (slot: PluginSlot, contribution: Record<string, unknown> & { id: string }) => { dispose: () => void }
+    register: <T extends PluginSlot>(slot: T, contribution: PluginSlotContribution<T>) => { dispose: () => void }
+  }
+  themes: {
+    register: (theme: PluginThemeRegistration) => { dispose: () => void }
   }
   views: {
     register: (
@@ -335,6 +340,9 @@ export async function activatePluginClient({
       register: (slot, contribution) =>
         isActivationCurrent() ? registry.registerSlot(instance.scope, slot, contribution) : noopDisposable
     },
+    themes: {
+      register: theme => isActivationCurrent() ? registry.registerTheme(instance.scope, theme) : noopDisposable
+    },
     views: {
       register: (viewId, renderer) =>
         isActivationCurrent()
@@ -346,6 +354,7 @@ export async function activatePluginClient({
     }
   }
 
+  const registrationCheckpoint = registry.createScopeRegistrationCheckpoint(instance.scope)
   try {
     const versionedEntryUrl = entryUrl.startsWith('data:')
       ? entryUrl
@@ -367,6 +376,7 @@ export async function activatePluginClient({
     })
   } catch (error) {
     if (!isActivationCurrent()) return
+    registry.rollbackScopeRegistrations(instance.scope, registrationCheckpoint)
     registry.addDiagnostic({
       level: 'error',
       message: `Failed to activate plugin "${instance.scope}": ${

@@ -56,6 +56,12 @@ export const normalizeDesktopSettings = (value: unknown): DesktopSettings => {
     primaryColor: typeof value.primaryColor === 'string' && appearancePrimaryColors.has(value.primaryColor)
       ? value.primaryColor as DesktopSettings['primaryColor']
       : undefined,
+    themePack: typeof value.themePack === 'string' && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(value.themePack)
+      ? value.themePack
+      : undefined,
+    themePacks: isRecord(value.themePacks)
+      ? value.themePacks as DesktopSettings['themePacks']
+      : undefined,
     themeMode: value.themeMode === 'light' || value.themeMode === 'dark' || value.themeMode === 'system'
       ? value.themeMode
       : undefined,

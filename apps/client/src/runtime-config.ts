@@ -363,6 +363,10 @@ export const getServerBaseUrl = () => {
     return explicitServerBaseUrl
   }
 
+  if (isDevServerClient() && isServerManagerRole() && globalThis.location?.origin != null) {
+    return globalThis.location.origin
+  }
+
   if (isServerConnectionManagedClientMode()) {
     const storedServerBaseUrl = getStoredServerBaseUrl()
     if (storedServerBaseUrl != null) {

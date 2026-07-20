@@ -1,6 +1,6 @@
-import { ConfigProvider, theme } from 'antd'
-import { useSetAtom } from 'jotai'
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import { ConfigProvider } from 'antd'
+import { useAtomValue, useSetAtom } from 'jotai'
+import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
 
 import { DEFAULT_THEME_PRIMARY_COLOR, normalizeThemePrimaryColor } from '@oneworks/icon/presets'
@@ -15,19 +15,44 @@ import {
   getPrimaryColorForDesktopSettings,
   getStoredThemePrimaryColor,
   getThemeModeForDesktopSettings,
+  getThemePackForDesktopSettings,
+  getThemePackSettingsForDesktopSettings,
   persistThemePrimaryColor
 } from '#~/hooks/use-app-preferences'
 import { useDesktopThemeSourceBridge, useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { NotificationProvider } from '#~/notifications/NotificationProvider'
 import { PluginProvider } from '#~/plugins/PluginProvider'
-import { themeAtom } from '#~/store'
+import { usePluginContext } from '#~/plugins/plugin-context'
+import { PluginThemeStyles, usePluginThemes } from '#~/plugins/plugin-themes'
+import {
+  THEME_PACK_SETTINGS_STORAGE_KEY,
+  THEME_PACK_STORAGE_KEY,
+  getStoredThemePackSettings,
+  normalizeThemePack,
+  themeAtom,
+  themePackAtom,
+  themePackSettingsAtom
+} from '#~/store'
+import { getGlobalAppearanceThemePack, getGlobalThemePackSettingsMap } from '#~/utils/appearance-config'
+import {
+  applyThemePackToDocument,
+  buildThemePackConfig,
+  getThemePack,
+  normalizeThemePackSettings,
+  resolveThemePackPrimaryColor
+} from '#~/utils/theme-pack'
 
 const LauncherRoute = lazy(async () => ({
   default: (await import('#~/routes/LauncherRoute')).LauncherRoute
 }))
 
 function useLauncherThemeConfig() {
+  const themes = usePluginThemes()
   const setThemeMode = useSetAtom(themeAtom)
+  const setThemePack = useSetAtom(themePackAtom)
+  const setThemePackSettings = useSetAtom(themePackSettingsAtom)
+  const themePack = useAtomValue(themePackAtom)
+  const themePackSettings = useAtomValue(themePackSettingsAtom)
   const { isDarkMode, themeMode } = useResolvedThemeMode()
   const desktopApi = window.oneworksDesktop
   const canUseDesktopSettings = desktopApi?.getDesktopSettings != null
@@ -35,52 +60,52 @@ function useLauncherThemeConfig() {
   const [storedPrimaryColor, setStoredPrimaryColor] = useState(() => getStoredThemePrimaryColor())
   const [desktopSettings, setDesktopSettings] = useState<unknown>()
   const { data: configRes } = useSWR<ConfigResponse>(canUseApiConfig ? '/api/config' : null, getConfig)
-  const primaryColor = normalizeThemePrimaryColor(
-    getPrimaryColorForDesktopSettings(desktopSettings) ??
-      getGlobalThemePrimaryColor(configRes)
+  const configuredPrimaryColor = normalizeThemePrimaryColor(
+    getPrimaryColorForDesktopSettings(desktopSettings) ?? getGlobalThemePrimaryColor(configRes)
   ) ?? storedPrimaryColor ?? DEFAULT_THEME_PRIMARY_COLOR
   const configuredThemeMode = getThemeModeForDesktopSettings(desktopSettings) ?? getGlobalThemeMode(configRes)
+  const configuredThemePack = getThemePackForDesktopSettings(desktopSettings) ?? getGlobalAppearanceThemePack(configRes)
+  const configuredThemePackSettings = useMemo(
+    () => getThemePackSettingsForDesktopSettings(desktopSettings) ?? getGlobalThemePackSettingsMap(configRes),
+    [configRes, desktopSettings]
+  )
+  const activeTheme = getThemePack(themePack, themes)
+  const settings = useMemo(
+    () => normalizeThemePackSettings(activeTheme, themePackSettings[themePack]),
+    [activeTheme, themePack, themePackSettings]
+  )
+  const primaryColor = resolveThemePackPrimaryColor(themePack, configuredPrimaryColor, themes)
 
   useDesktopThemeSourceBridge(themeMode)
-
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDarkMode)
   }, [isDarkMode])
-
   useEffect(() => {
-    if (configuredThemeMode != null) {
-      setThemeMode(configuredThemeMode)
-    }
+    if (configuredThemeMode != null) setThemeMode(configuredThemeMode)
   }, [configuredThemeMode, setThemeMode])
-
   useEffect(() => {
-    applyThemePrimaryColorVariables(primaryColor)
-    persistThemePrimaryColor(primaryColor)
-  }, [primaryColor])
+    if (configuredThemePack != null) setThemePack(configuredThemePack)
+  }, [configuredThemePack, setThemePack])
+  useEffect(() => {
+    if (configuredThemePackSettings != null) setThemePackSettings(configuredThemePackSettings)
+  }, [configuredThemePackSettings, setThemePackSettings])
+  useEffect(() => applyThemePrimaryColorVariables(primaryColor), [primaryColor])
+  useEffect(() => persistThemePrimaryColor(configuredPrimaryColor), [configuredPrimaryColor])
+  useLayoutEffect(
+    () => applyThemePackToDocument(themePack, activeTheme, settings),
+    [activeTheme, settings, themePack]
+  )
 
   useEffect(() => {
     if (!canUseDesktopSettings) {
       setDesktopSettings(undefined)
       return
     }
-
     let disposed = false
     void desktopApi?.getDesktopSettings?.()
-      .then((settings) => {
-        if (!disposed) {
-          setDesktopSettings(settings)
-        }
-      })
-      .catch((error) => {
-        if (!disposed) {
-          console.error('[launcher] failed to load desktop theme settings', error)
-        }
-      })
-
-    const dispose = desktopApi?.onDesktopSettingsChange?.((settings) => {
-      setDesktopSettings(settings)
-    })
-
+      .then(settings => !disposed && setDesktopSettings(settings))
+      .catch(error => !disposed && console.error('[launcher] failed to load desktop theme settings', error))
+    const dispose = desktopApi?.onDesktopSettingsChange?.(setDesktopSettings)
     return () => {
       disposed = true
       dispose?.()
@@ -89,28 +114,43 @@ function useLauncherThemeConfig() {
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
-      if (event.key !== THEME_PRIMARY_COLOR_STORAGE_KEY) return
-      const nextPrimaryColor = normalizeThemePrimaryColor(event.newValue) ?? DEFAULT_THEME_PRIMARY_COLOR
-      setStoredPrimaryColor(nextPrimaryColor)
-      applyThemePrimaryColorVariables(nextPrimaryColor)
+      if (event.key === THEME_PRIMARY_COLOR_STORAGE_KEY) {
+        setStoredPrimaryColor(normalizeThemePrimaryColor(event.newValue) ?? DEFAULT_THEME_PRIMARY_COLOR)
+      } else if (event.key === THEME_PACK_STORAGE_KEY) {
+        setThemePack(normalizeThemePack(event.newValue))
+      } else if (event.key === THEME_PACK_SETTINGS_STORAGE_KEY) {
+        setThemePackSettings(getStoredThemePackSettings())
+      }
     }
-
     window.addEventListener('storage', handleStorage)
     return () => window.removeEventListener('storage', handleStorage)
-  }, [])
+  }, [setThemePack, setThemePackSettings])
 
-  return useMemo(() => ({
-    algorithm: isDarkMode ? theme.darkAlgorithm : theme.defaultAlgorithm,
-    token: {
-      colorPrimary: primaryColor
-    }
-  }), [isDarkMode, primaryColor])
+  return useMemo(() =>
+    buildThemePackConfig({
+      isDarkMode,
+      primaryColor,
+      settings,
+      theme: activeTheme
+    }), [activeTheme, isDarkMode, primaryColor, settings])
+}
+
+function ThemedLauncherApp() {
+  const { ready } = usePluginContext()
+  const themeConfig = useLauncherThemeConfig()
+  if (!ready) return null
+  return (
+    <ConfigProvider theme={themeConfig}>
+      <PluginThemeStyles />
+      <Suspense fallback={null}>
+        <LauncherRoute />
+      </Suspense>
+    </ConfigProvider>
+  )
 }
 
 export function LauncherApp() {
-  const themeConfig = useLauncherThemeConfig()
   const isWebLauncher = window.oneworksDesktop == null
-
   useEffect(() => {
     document.documentElement.classList.add('oneworks-launcher-window')
     document.documentElement.classList.toggle('oneworks-launcher-web', isWebLauncher)
@@ -121,14 +161,10 @@ export function LauncherApp() {
   }, [isWebLauncher])
 
   return (
-    <ConfigProvider theme={themeConfig}>
-      <NotificationProvider>
-        <PluginProvider runtimeSource='manager' surface='launcher'>
-          <Suspense fallback={null}>
-            <LauncherRoute />
-          </Suspense>
-        </PluginProvider>
-      </NotificationProvider>
-    </ConfigProvider>
+    <NotificationProvider>
+      <PluginProvider runtimeSource='manager' surface='launcher'>
+        <ThemedLauncherApp />
+      </PluginProvider>
+    </NotificationProvider>
   )
 }

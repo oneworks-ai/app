@@ -4,12 +4,12 @@ import { App } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
 
+import type { RouteContainerHeaderActionItem } from '@oneworks/components/route-layout'
 import type { ConfigSource } from '@oneworks/core'
 import type { WorktreeEnvironmentScriptKey, WorktreeEnvironmentSummary } from '@oneworks/types'
 
 import { getApiErrorMessage, getWorktreeEnvironment, listWorktreeEnvironments, saveWorktreeEnvironment } from '#~/api'
 
-import { ConfigSourceSwitch } from './ConfigSourceSwitch'
 import { WorktreeEnvironmentDetailView } from './WorktreeEnvironmentDetailView'
 import { WorktreeEnvironmentListView } from './WorktreeEnvironmentListView'
 import type { TranslationFn } from './configUtils'
@@ -24,7 +24,13 @@ const getEnvironmentSource = (
   environment?.isLocal === true ? 'user' : 'project'
 )
 
-export function WorktreeEnvironmentPanel({ t }: { t: TranslationFn }) {
+export function WorktreeEnvironmentPanel({
+  onHeaderActionsChange,
+  t
+}: {
+  onHeaderActionsChange?: (items: RouteContainerHeaderActionItem[]) => void
+  t: TranslationFn
+}) {
   const { message, modal } = App.useApp()
   const [sourceKey, setSourceKey] = useState<WorktreeEnvironmentConfigSource>('project')
   const [selectedId, setSelectedId] = useState<string>()
@@ -104,19 +110,33 @@ export function WorktreeEnvironmentPanel({ t }: { t: TranslationFn }) {
     }
   }
 
-  const sourceSwitch = (
-    <ConfigSourceSwitch
-      value={sourceKey}
-      onChange={(next) => {
-        setSourceKey(next)
+  const headerActionItems = useMemo<RouteContainerHeaderActionItem[]>(() => [
+    {
+      active: sourceKey === 'project',
+      icon: 'folder',
+      key: 'worktree-environment-source-project',
+      label: t('config.environments.sources.project'),
+      onSelect: () => {
+        setSourceKey('project')
         setSelectedId(undefined)
-      }}
-      options={[
-        { value: 'project', icon: 'folder', label: t('config.environments.sources.project') },
-        { value: 'user', icon: 'person', label: t('config.environments.sources.user') }
-      ]}
-    />
-  )
+      }
+    },
+    {
+      active: sourceKey === 'user',
+      icon: 'person',
+      key: 'worktree-environment-source-user',
+      label: t('config.environments.sources.user'),
+      onSelect: () => {
+        setSourceKey('user')
+        setSelectedId(undefined)
+      }
+    }
+  ], [sourceKey, t])
+
+  useEffect(() => {
+    onHeaderActionsChange?.(headerActionItems)
+    return () => onHeaderActionsChange?.([])
+  }, [headerActionItems, onHeaderActionsChange])
 
   return (
     <div className='worktree-env-panel'>
@@ -124,7 +144,6 @@ export function WorktreeEnvironmentPanel({ t }: { t: TranslationFn }) {
         ? (
           <WorktreeEnvironmentListView
             isLoading={isLoading}
-            sourceSwitch={sourceSwitch}
             visibleEnvironments={visibleEnvironments}
             onCreate={() => void handleCreate()}
             onSelectEnvironment={setSelectedId}
@@ -137,7 +156,6 @@ export function WorktreeEnvironmentPanel({ t }: { t: TranslationFn }) {
             isDetailLoading={isDetailLoading}
             nameDraft={nameDraft}
             selectedEnvironment={selectedEnvironment}
-            sourceSwitch={sourceSwitch}
             onBack={() => setSelectedId(undefined)}
             onNameDraftChange={setNameDraft}
             onScriptChange={(key, content) => {

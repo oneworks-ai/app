@@ -21,6 +21,29 @@
     min-width: 0;
   }
 
+  &__actions.is-route-header-group {
+    align-items: stretch;
+    gap: var(
+      --route-container-header-action-gap,
+      var(--app-chrome-action-gap, 4px)
+    );
+    height: 100%;
+  }
+
+  &__actions.is-route-header-group > .route-container-header__action-segment {
+    height: 100%;
+  }
+
+  &__actions.is-route-header-group &__channel-opener {
+    height: 100%;
+    margin-block: 0;
+  }
+
+  &__actions.is-route-header-group &__channel-opener-primary,
+  &__actions.is-route-header-group &__channel-opener-menu {
+    height: 100%;
+  }
+
   &__actions--module {
     height: 24px;
   }

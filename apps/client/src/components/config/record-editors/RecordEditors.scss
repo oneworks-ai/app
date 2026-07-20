@@ -226,7 +226,7 @@
 .config-view__detail-list-empty {
   padding: 14px 16px;
   border: var(--subpage-tertiary-border);
-  border-radius: 10px;
+  border-radius: var(--oneworks-group-radius, 8px);
   background: var(--subpage-tertiary-bg);
   display: flex;
   flex-direction: column;

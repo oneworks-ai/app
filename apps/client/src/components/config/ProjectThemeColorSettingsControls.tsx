@@ -1,9 +1,10 @@
 import type { CSSProperties } from 'react'
 
-import { Switch, Tooltip } from 'antd'
+import { Tooltip } from 'antd'
 
 import { ONEWORKS_THEME_COLOR_PRESETS } from '@oneworks/icon/presets'
 
+import { ProjectThemeSwitch } from './ProjectThemeSwitch'
 import { iconBackgrounds } from './app-icon-settings-model'
 import type { DesktopIconBackground, DesktopIconSync, DesktopIconTheme } from './app-icon-settings-model'
 import type { TranslationFn } from './configUtils'
@@ -18,6 +19,8 @@ export function ProjectThemeColorSettingsControls({
   canUpdateDesktopIcon,
   backgroundAriaLabel,
   backgroundOptionTranslationPrefix = 'config.appSettings.projectThemeColor.backgroundStyle.options',
+  disabled = false,
+  iconPreferencesDisabled = disabled,
   iconBackground,
   previewSources,
   saving,
@@ -35,6 +38,8 @@ export function ProjectThemeColorSettingsControls({
   backgroundAriaLabel?: string
   backgroundOptionTranslationPrefix?: string
   canUpdateDesktopIcon: boolean
+  disabled?: boolean
+  iconPreferencesDisabled?: boolean
   iconBackground: DesktopIconBackground
   previewSources: Partial<Record<DesktopIconTheme, string>>
   saving: boolean
@@ -53,7 +58,6 @@ export function ProjectThemeColorSettingsControls({
     0,
     ONEWORKS_THEME_COLOR_PRESETS.findIndex(preset => preset.theme === selectedTheme)
   )
-
   return (
     <div className='config-view__project-theme-settings'>
       <div className='config-view__project-theme-controls'>
@@ -77,7 +81,7 @@ export function ProjectThemeColorSettingsControls({
                     aria-checked={isActive}
                     aria-label={label}
                     role='radio'
-                    disabled={saving}
+                    disabled={disabled || saving}
                     onClick={() => onThemeChange(preset.theme)}
                   >
                     <span className='config-view__project-theme-radio-icon' aria-hidden='true'>
@@ -96,7 +100,7 @@ export function ProjectThemeColorSettingsControls({
             <ProjectThemeBackgroundRadioGroup
               ariaLabel={backgroundAriaLabel ?? t('config.appSettings.projectThemeColor.backgroundStyle.label')}
               optionTranslationPrefix={backgroundOptionTranslationPrefix}
-              disabled={saving}
+              disabled={iconPreferencesDisabled || saving}
               t={t}
               value={iconBackground}
               onChange={onIconBackgroundChange}
@@ -107,7 +111,7 @@ export function ProjectThemeColorSettingsControls({
           <div className='config-view__project-theme-options'>
             <ProjectThemeSwitch
               checked={syncAppIcon}
-              disabled={saving}
+              disabled={iconPreferencesDisabled || saving}
               label={syncAppIconLabel}
               description={syncAppIconDescription}
               onChange={onSyncAppIconChange}
@@ -135,7 +139,6 @@ function ProjectThemeBackgroundRadioGroup({
   onChange: (background: DesktopIconBackground) => void
 }) {
   const activeBackgroundIndex = Math.max(0, iconBackgrounds.indexOf(value))
-
   return (
     <div
       className='config-view__project-theme-background-radio-group'
@@ -167,34 +170,6 @@ function ProjectThemeBackgroundRadioGroup({
           </Tooltip>
         )
       })}
-    </div>
-  )
-}
-
-function ProjectThemeSwitch({
-  checked,
-  description,
-  disabled,
-  label,
-  onChange
-}: {
-  checked: boolean
-  description: string
-  disabled: boolean
-  label: string
-  onChange: (checked: boolean) => void
-}) {
-  return (
-    <div className='config-view__project-theme-switch'>
-      <span className='config-view__project-theme-switch-text'>
-        <span className='config-view__project-theme-switch-title'>
-          {label}
-        </span>
-        <span className='config-view__project-theme-switch-desc'>
-          {description}
-        </span>
-      </span>
-      <Switch aria-label={label} size='small' checked={checked} disabled={disabled} onChange={onChange} />
     </div>
   )
 }

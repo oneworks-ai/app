@@ -124,7 +124,13 @@ export function RouteContainerHeader({
     ? (
       <>
         {actionItems.map(item => <RouteContainerHeaderActionButton key={item.key} isMac={isMac} item={item} />)}
-        {actions}
+        {actions == null
+          ? null
+          : (
+            <span className='route-container-header__action-segment route-container-header__custom-actions'>
+              {actions}
+            </span>
+          )}
       </>
     )
     : undefined

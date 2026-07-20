@@ -206,7 +206,7 @@ export function AutomationTaskComposer({ fieldName, form }: AutomationTaskCompos
         </Form.Item>
       </div>
       <div className='automation-view__task-collapsible' hidden={collapsed}>
-        <div className='sender-container automation-view__task-sender-stack'>
+        <div className='sender-container sender-container--chat-surface automation-view__task-sender-stack'>
           <Form.Item
             className='automation-view__task-prompt-item'
             name={[fieldName, 'prompt']}

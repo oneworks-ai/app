@@ -76,10 +76,38 @@
 
 .route-container-header__leading-actions {
   display: flex;
-  align-items: center;
-  gap: var(--app-chrome-action-gap, 4px);
+  align-items: stretch;
+  align-self: center;
+  height: var(
+    --route-container-header-action-cell-height,
+    var(--route-container-header-icon-size)
+  );
+  gap: var(
+    --route-container-header-action-gap,
+    var(--app-chrome-action-gap, 4px)
+  );
   flex-shrink: 0;
   -webkit-app-region: no-drag;
+}
+
+.route-container-header__leading-actions
+  > .route-container-header__action-segment {
+  box-sizing: border-box;
+  height: 100%;
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+}
+
+.route-container-header__leading-actions
+  > .route-container-header__action-segment
+  + .route-container-header__action-segment {
+  border-inline-start: var(--route-container-header-action-divider-width, 0px)
+    solid
+    var(
+      --route-container-header-action-divider-color,
+      var(--app-chrome-divider-color, var(--border-color))
+    );
 }
 
 .route-container-header__title-icon.icon-asset--svg svg,
@@ -139,16 +167,27 @@
 }
 
 .route-container-header__action-button.ant-btn.ant-btn-text {
-  width: var(--route-container-header-icon-button-size);
-  height: var(--route-container-header-icon-button-size);
-  min-width: var(--route-container-header-icon-button-size);
-  min-height: 0;
-  padding: 0 !important;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  background-color: transparent;
-  color: var(--placeholder-color, #66707a);
+  width: var(
+    --route-container-header-action-inline-size,
+    var(--route-container-header-icon-button-size)
+  ) !important;
+  height: 100% !important;
+  min-width: var(
+    --route-container-header-action-inline-size,
+    var(--route-container-header-icon-button-size)
+  ) !important;
+  min-height: 0 !important;
+  padding: var(--route-container-header-action-padding, 0) !important;
+  border: none !important;
+  border-radius: var(--route-container-header-action-radius, 6px) !important;
+  background: var(--route-container-header-action-bg, transparent) !important;
+  background-color: var(--route-container-header-action-bg, transparent)
+    !important;
+  color: var(
+    --route-container-header-action-color,
+    var(--placeholder-color, #66707a)
+  ) !important;
+  box-shadow: none !important;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -157,6 +196,10 @@
     height .3s cubic-bezier(.4, 0, .2, 1),
     border-radius .3s cubic-bezier(.4, 0, .2, 1),
     color .2s ease;
+}
+
+.route-container-header__action-button--content.ant-btn.ant-btn-text {
+  font-size: var(--route-container-header-action-font-size, 13px);
 }
 
 .route-container-header__action-button.ant-btn.ant-btn-text .ant-btn-icon {
@@ -184,9 +227,18 @@
 
 .route-container-header__action-button.ant-btn.ant-btn-text:hover,
 .route-container-header__action-button.ant-btn.ant-btn-text:focus-visible {
-  background: transparent !important;
-  background-color: transparent !important;
-  color: var(--primary-color, #2563eb) !important;
+  background: var(--route-container-header-action-hover-bg, transparent)
+    !important;
+  background-color: var(--route-container-header-action-hover-bg, transparent)
+    !important;
+  color: var(
+    --route-container-header-action-hover-color,
+    var(--primary-color, #2563eb)
+  ) !important;
+}
+
+.route-container-header__action-button.ant-btn.ant-btn-text:focus-visible {
+  box-shadow: var(--route-container-header-action-focus-ring, none) !important;
 }
 
 .route-container-header__action-button.ant-btn.ant-btn-text:disabled,
@@ -200,9 +252,16 @@
 }
 
 .route-container-header__action-button.ant-btn.ant-btn-text.is-active {
-  background: transparent !important;
-  background-color: transparent !important;
-  color: var(--primary-color, #2563eb) !important;
+  background: var(--route-container-header-action-active-bg, transparent)
+    !important;
+  background-color: var(--route-container-header-action-active-bg, transparent)
+    !important;
+  color: var(
+    --route-container-header-action-active-color,
+    var(--primary-color, #2563eb)
+  ) !important;
+  box-shadow: var(--route-container-header-action-active-shadow, none)
+    !important;
 }
 
 .route-container-header__action-button.ant-btn.ant-btn-text.is-active

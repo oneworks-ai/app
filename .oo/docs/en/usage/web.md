@@ -28,7 +28,9 @@ The Web UI can edit global, project, and local configuration sources. The main c
 
 Simple scalar fields can be edited directly. Whole-field collections, JSON objects, and inherited collection entries require an explicit override action before saving to the current source.
 
-Appearance preferences such as the primary color, theme mode, and chat history timeline display are stored in the global `appearance` section and apply across workspaces. The history timeline can use compact `Event lines` or the original `Nodes` view; `Event lines` remains the default when the option is unset.
+The separate Themes page uses a direct list to select plugin-provided packs. Tabs below the list are registered by the selected theme plugin. The default theme is view-only; after the China Edition Theme plugin is installed and enabled, it can independently toggle base backgrounds, gold borders, buttons, inputs, menus, overlays, and its playful banner. Ordinary component padding and icon sizing show both an enable switch and a read-only px preset. Each pack keeps its private settings in its own configuration namespace. Missing or disabled plugins safely fall back to the default theme without deleting saved settings.
+
+Appearance preferences such as the primary color, theme mode, theme pack, and chat history timeline display are stored in the global `appearance` section and apply across workspaces. A theme pack may provide its own primary color; while such a pack is active, the Appearance color control is read-only and the runtime uses the pack color without overwriting the saved `primaryColor`. Switching back to the default theme restores that saved color. The history timeline can use compact `Event lines` or the original `Nodes` view; `Event lines` remains the default when the option is unset.
 
 ## Local Media in Chat Markdown
 

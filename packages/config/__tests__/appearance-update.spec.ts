@@ -27,7 +27,16 @@ describe('appearance config updates', () => {
               historyTimelineMode: 'event-line',
               iconBackground: 'transparent',
               primaryColor: '#E23F12',
-              themeMode: 'light'
+              themeMode: 'light',
+              themePack: 'default',
+              themePacks: {
+                'china-red': {
+                  overrides: {
+                    colors: { backgrounds: true, borders: true }
+                  },
+                  showBanner: true
+                }
+              }
             }
           },
           null,
@@ -42,7 +51,18 @@ describe('appearance config updates', () => {
         value: {
           historyTimelineMode: 'node',
           primaryColor: '#00B454',
-          themeMode: 'dark'
+          themeMode: 'dark',
+          themePack: 'china-red',
+          themePacks: {
+            'china-red': {
+              overrides: {
+                colors: { backgrounds: false, borders: true },
+                components: { buttons: false },
+                layout: { padding: { enabled: true, value: 12 } }
+              },
+              showBanner: false
+            }
+          }
         }
       })
 
@@ -51,7 +71,18 @@ describe('appearance config updates', () => {
       expect(result.updatedConfig.appearance).toEqual({
         historyTimelineMode: 'node',
         primaryColor: '#00B454',
-        themeMode: 'dark'
+        themeMode: 'dark',
+        themePack: 'china-red',
+        themePacks: {
+          'china-red': {
+            overrides: {
+              colors: { backgrounds: false, borders: true },
+              components: { buttons: false },
+              layout: { padding: { enabled: true, value: 12 } }
+            },
+            showBanner: false
+          }
+        }
       })
 
       const written = JSON.parse(await readFile(configPath, 'utf-8'))
@@ -60,7 +91,18 @@ describe('appearance config updates', () => {
         appearance: {
           historyTimelineMode: 'node',
           primaryColor: '#00B454',
-          themeMode: 'dark'
+          themeMode: 'dark',
+          themePack: 'china-red',
+          themePacks: {
+            'china-red': {
+              overrides: {
+                colors: { backgrounds: false, borders: true },
+                components: { buttons: false },
+                layout: { padding: { enabled: true, value: 12 } }
+              },
+              showBanner: false
+            }
+          }
         }
       })
     } finally {
@@ -107,7 +149,11 @@ describe('appearance config updates', () => {
           {
             appearance: {
               historyTimelineMode: 'event-line',
-              primaryColor: '#3F7E8F'
+              primaryColor: '#3F7E8F',
+              themePack: 'china-red',
+              themePacks: {
+                'china-red': { showBanner: false }
+              }
             }
           },
           null,
@@ -128,7 +174,11 @@ describe('appearance config updates', () => {
       expect(written.appearance).toEqual({
         historyTimelineMode: 'event-line',
         primaryColor: '#3F7E8F',
-        themeMode: 'dark'
+        themeMode: 'dark',
+        themePack: 'china-red',
+        themePacks: {
+          'china-red': { showBanner: false }
+        }
       })
     } finally {
       if (previousRealHome == null) {

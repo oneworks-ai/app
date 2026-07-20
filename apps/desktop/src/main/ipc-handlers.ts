@@ -105,7 +105,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 
 const normalizeGlobalAppearancePatch = (
   value: unknown
-): Partial<Pick<DesktopSettings, 'primaryColor' | 'themeMode'>> => {
+): Partial<Pick<DesktopSettings, 'primaryColor' | 'themeMode' | 'themePack' | 'themePacks'>> => {
   if (!isRecord(value)) return {}
 
   return {
@@ -114,6 +114,12 @@ const normalizeGlobalAppearancePatch = (
       : {}),
     ...(value.themeMode === 'light' || value.themeMode === 'dark' || value.themeMode === 'system'
       ? { themeMode: value.themeMode }
+      : {}),
+    ...(typeof value.themePack === 'string' && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(value.themePack)
+      ? { themePack: value.themePack }
+      : {}),
+    ...(isRecord(value.themePacks)
+      ? { themePacks: value.themePacks as DesktopSettings['themePacks'] }
       : {})
   }
 }
@@ -258,7 +264,7 @@ interface IpcHandlersInput {
   stopWorkspaceFolder: (workspaceFolder: string, input?: { forget?: boolean }) => Promise<unknown>
   updateDesktopSettings: (settings: Partial<DesktopSettings>, windowRecord?: WindowRecord) => Promise<DesktopSettings>
   updateGlobalAppearanceConfig: (
-    appearance: Partial<Pick<DesktopSettings, 'primaryColor' | 'themeMode'>>
+    appearance: Partial<Pick<DesktopSettings, 'primaryColor' | 'themeMode' | 'themePack' | 'themePacks'>>
   ) => Promise<DesktopSettings>
   updateGlobalInterfaceLanguageConfig: (language: unknown) => Promise<DesktopInterfaceLanguageConfig>
 }

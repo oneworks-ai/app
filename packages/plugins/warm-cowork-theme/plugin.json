@@ -1,0 +1,14 @@
+{
+  "__oneWorksPluginManifest": true,
+  "name": "@oneworks/plugin-warm-cowork-theme",
+  "displayName": "Cowork Theme",
+  "displayNameI18n": { "en": "Cowork Theme", "zh-Hans": "Cowork 主题" },
+  "description": "An optional warm, card-oriented collaboration theme for OneWorks.",
+  "descriptionI18n": {
+    "en": "Ivory grid surfaces, roomy cards, coral actions, and blue progress semantics for collaborative work.",
+    "zh-Hans": "象牙白网格、宽松卡片、珊瑚色操作与蓝色进度语义组成的协作工作台主题。"
+  },
+  "icon": "./assets/icon.svg",
+  "version": "0.1.0",
+  "plugin": { "contributions": { "roles": ["manager", "workspace"], "surfaces": ["launcher", "workspace"] } }
+}

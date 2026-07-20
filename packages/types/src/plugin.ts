@@ -162,6 +162,57 @@ export interface PluginContributionMenuItem extends PluginContributionBase {
   shortcut?: string
 }
 
+export interface PluginContributionNavFooterAccountAction {
+  id: string
+  title: string
+  command?: string
+  danger?: boolean
+  disabled?: boolean
+  href?: string
+  icon?: string
+  payload?: unknown
+  route?: string
+}
+
+export interface PluginContributionNavFooterAccount {
+  actions?: PluginContributionNavFooterAccountAction[]
+  avatarUrl?: string
+  command?: string
+  description?: string
+  disabled?: boolean
+  href?: string
+  id: string
+  initials?: string
+  name: string
+  payload?: unknown
+  route?: string
+  status?: string
+}
+
+export interface PluginContributionNavFooterAccountGroup {
+  accounts: PluginContributionNavFooterAccount[]
+  avatarUrl?: string
+  collapsed?: boolean
+  id: string
+  initials?: string
+  title: string
+}
+
+export interface PluginContributionNavFooterAccountPopover {
+  accounts?: PluginContributionNavFooterAccount[]
+  actions?: PluginContributionNavFooterAccountAction[]
+  groups?: PluginContributionNavFooterAccountGroup[]
+}
+
+/**
+ * Structured action rendered by the host in the navigation footer. Plugins
+ * provide data and behavior targets; the host owns the trigger and popover
+ * chrome.
+ */
+export interface PluginContributionNavFooterItem extends PluginContributionMenuItem {
+  accountPopover?: PluginContributionNavFooterAccountPopover
+}
+
 export interface PluginContributionChatHeaderAction extends PluginContributionBase {
   id: string
   title: string
@@ -459,7 +510,7 @@ export interface PluginContributionManifest extends PluginContributionAvailabili
    * above the built-in More menu. The host owns layout, active state, and menu
    * chrome; plugins only provide command / route / href targets.
    */
-  navFooterBefore?: PluginContributionMenuItem[]
+  navFooterBefore?: PluginContributionNavFooterItem[]
   chatHeaderActions?: PluginContributionChatHeaderAction[]
   chatHeaderMoreMenu?: PluginContributionMenuItem[]
   /**

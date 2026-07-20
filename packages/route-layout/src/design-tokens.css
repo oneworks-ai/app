@@ -74,6 +74,55 @@
     --nav-rail-collapsed-window-bar-computed-width
   );
   --nav-rail-window-icon-color: var(--placeholder-color);
+  --sidebar-inline-action-size: 20px;
+  --sidebar-inline-action-icon-size: 16px;
+  --sidebar-inline-action-radius: 5px;
+  --oneworks-compact-action-size: var(--sidebar-inline-action-size);
+  --oneworks-compact-action-icon-size: var(--sidebar-inline-action-icon-size);
+  --oneworks-compact-action-gap: 4px;
+  --oneworks-compact-action-divider-width: 0px;
+  --oneworks-compact-action-divider-color: var(--border-color);
+  --oneworks-control-radius: 6px;
+  --oneworks-group-radius: 8px;
+  --oneworks-surface-radius: 12px;
+  --oneworks-interactive-card-radius: 8px;
+  --oneworks-switch-radius: 999px;
+  --oneworks-switch-handle-radius: 999px;
+  --oneworks-resize-handle-hit-size: 8px;
+  --oneworks-resize-handle-line-width: 1px;
+  --oneworks-resize-handle-active-line-width: 3px;
+  --oneworks-resize-handle-line-radius: 999px;
+  --oneworks-resize-handle-idle-color: var(--border-color);
+  --oneworks-resize-handle-affordance-idle-color: transparent;
+  --oneworks-resize-handle-hover-color: color-mix(
+    in srgb,
+    var(--primary-color) 48%,
+    transparent
+  );
+  --oneworks-resize-handle-active-color: var(
+    --oneworks-resize-handle-hover-color
+  );
+  --oneworks-resize-handle-shadow: none;
+  --oneworks-resize-handle-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 28%,
+    #000 72%,
+    transparent 100%
+  );
+  --oneworks-resize-handle-horizontal-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    #000 28%,
+    #000 72%,
+    transparent 100%
+  );
+  --oneworks-resize-handle-transition:
+    background-color .16s ease,
+    opacity .16s ease,
+    width .16s ease,
+    height .16s ease;
+  --nav-rail-preview-radius: 0 10px 10px 0;
 
   --bg-color: #ffffff;
   --sub-bg-color: #f6f6f6;

@@ -4,8 +4,11 @@ import {
   normalizeThemePrimaryColor
 } from '@oneworks/icon/presets'
 
+import type { PluginThemeRuntimeRegistration } from '#~/plugins/plugin-theme-contract'
+import { normalizeAppearanceThemePack } from '#~/utils/appearance-config'
 import { createOneWorksIconDataUri } from '#~/utils/oneworks-icon'
 import type { ConfigOneWorksIconMode } from '#~/utils/oneworks-icon'
+import { getThemePackPrimaryColor } from '#~/utils/theme-pack'
 
 import { normalizeDesktopIconBackground } from './app-icon-settings-model'
 import type { DesktopIconBackground, DesktopIconTheme } from './app-icon-settings-model'
@@ -14,7 +17,7 @@ import type { TranslationFn } from './configUtils'
 export type ThemePrimaryColor = typeof ONEWORKS_THEME_COLOR_PRESETS[number]['primaryColor']
 type ThemePreset = typeof ONEWORKS_THEME_COLOR_PRESETS[number]
 
-export const getPresetByPrimaryColor = (primaryColor: ThemePrimaryColor): ThemePreset =>
+export const getPresetByPrimaryColor = (primaryColor: string): ThemePreset =>
   ONEWORKS_THEME_COLOR_PRESETS.find(preset => preset.primaryColor === primaryColor) ??
     ONEWORKS_THEME_COLOR_PRESETS[0]
 
@@ -26,6 +29,27 @@ export const getProjectPrimaryColor = (appearance: Record<string, unknown>) =>
   normalizeThemePrimaryColor(
     typeof appearance.primaryColor === 'string' ? appearance.primaryColor : undefined
   ) ?? DEFAULT_THEME_PRIMARY_COLOR
+
+export const getProjectThemePackPrimaryColor = (
+  appearance: Record<string, unknown>,
+  themes: PluginThemeRuntimeRegistration[]
+) => getThemePackPrimaryColor(normalizeAppearanceThemePack(appearance.themePack), themes)
+
+export const isThemePackPrimaryColorManaged = (
+  themePack: unknown,
+  themes: PluginThemeRuntimeRegistration[]
+) => getThemePackPrimaryColor(normalizeAppearanceThemePack(themePack), themes) != null
+
+export const canUpdateLauncherPrimaryColor = (
+  desktopSettingsLoaded: boolean,
+  themePack: unknown,
+  themes: PluginThemeRuntimeRegistration[]
+) => desktopSettingsLoaded && !isThemePackPrimaryColorManaged(themePack, themes)
+
+export const getEffectiveProjectPrimaryColor = (
+  appearance: Record<string, unknown>,
+  themes: PluginThemeRuntimeRegistration[]
+) => getProjectThemePackPrimaryColor(appearance, themes) ?? getProjectPrimaryColor(appearance)
 
 export const getProjectIconBackground = (appearance: Record<string, unknown>) => (
   'iconBackground' in appearance

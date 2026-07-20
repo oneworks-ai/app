@@ -4,7 +4,7 @@ This directory hosts the workspace client plugin runtime.
 
 - `plugin-manifest.ts`: narrow frontend copy of the `/api/plugins` response and contribution contracts until shared package types are available.
 - `plugin-i18n.ts`: host-provided plugin i18n helper. Client plugins should read language, localized text selection, contribution title/description resolution, and language-change subscription from `ctx.i18n` instead of guessing browser or URL locale themselves.
-- `plugin-registry.ts`: scoped in-memory registry for commands, slots, routes, views, plugin-to-plugin extension points, launcher providers, diagnostics, and cleanup.
+- `plugin-registry.ts`: scoped in-memory registry for commands, slots, routes, views, themes, plugin-to-plugin extension points, launcher providers, diagnostics, and cleanup.
 - `plugin-runtime.ts`: activation context, host React singleton exposure, host notification queue bridge, dynamic client entry import, scoped API helper, and hot reload plumbing.
 - `PluginProvider.tsx`: React provider that fetches `/api/plugins`, activates client entries, and exposes registry snapshots.
 - `PluginProvider.tsx` also owns the plugin watch websocket subscription. `plugin.changed` events should refresh plugin instances and re-import the changed plugin without reloading the whole app.
@@ -12,6 +12,7 @@ This directory hosts the workspace client plugin runtime.
 - `plugin-host-components.tsx`: host-rendered shared components, common controls, overlay dropdowns, and overlay primitives that DOM plugin views can mount through `view.components.render(...)`.
 - `plugin-slots.tsx`: hooks for built-in UI surfaces to read plugin slot contributions. Slot consumers receive localized `title` / `description` values resolved from contribution `titleI18n` / `descriptionI18n`.
 - Settings subpages are a host slot: plugins contribute `settingsPages` / `settings.pages` using either `clientView` for plugin-owned rendering or `schema` plus optional `uiSchema` for a host-rendered options form. The Settings route owns navigation, route identity, schema controls, and option persistence; custom pages mount through `PluginViewHost` with the `settings` surface and use `view.ui.SettingsSection` / `SettingsRow` for native layout.
+- `plugin-theme-contract.ts` and `plugin-themes.tsx`: first-class theme registration contract and React readers. Theme plugins register through `ctx.themes.register(...)` and own localized metadata, settings tabs, normalizer, primary color, AntD token factory, document state, CSS, and banner assets. The host owns only the generic picker, persistence, style injection, banner primitive, safe fallback, and scoped cleanup.
 - Session sidebar grouping is a host slot: plugins contribute `sessionGroups` / `sessions.groups` with declarative match rules and optional header actions; sidebar rendering and action styling stay host-owned.
 - Chat tool-use presentation is a host slot: plugins contribute `toolUsePresentations` / `chat.toolUse.presentations` with scoped matching and declarative title, icon, target, field, and result metadata. Object arrays use host `records`, short primitive arrays use `chips`, and large protocol results use declared result fields; matching and localization live in `plugin-tool-use.ts`, while chat owns rendering. Do not add plugin-specific tool renderers to the host.
 

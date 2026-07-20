@@ -44,6 +44,8 @@ const appTitle = import.meta.env.DEV && gitRefLabel !== ''
 
 document.title = appTitle
 
+document.documentElement.dataset.oneworksThemePack = 'default'
+
 const root = createRoot(document.getElementById('root')!)
 let appClientBase = getClientBase()
 

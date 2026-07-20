@@ -1,7 +1,9 @@
 /* eslint-disable max-lines -- run command popover coordinates menu, editor shortcuts, and close behavior. */
-import { App, Button, Popover } from 'antd'
+import { App, Popover } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+
+import { RouteHeaderActionButton, readRouteHeaderIsMac } from '@oneworks/components/route-layout'
 
 import { InteractionPanelRunCommandEditor } from './InteractionPanelRunCommandEditor'
 import { InteractionPanelRunCommandMenu } from './InteractionPanelRunCommandMenu'
@@ -279,13 +281,13 @@ export function InteractionPanelRunCommandsPopover({
         destroyOnHidden
         arrow={false}
       >
-        <Button
-          type='text'
-          className='chat-header-run-command-trigger__menu'
+        <RouteHeaderActionButton
+          isMac={readRouteHeaderIsMac()}
+          buttonClassName='chat-header-run-command-trigger__menu'
           data-dock-panel-no-resize='true'
           icon={<span className={iconClassName}>expand_more</span>}
-          title={t('chat.interactionPanel.runCommands')}
-          aria-label={t('chat.interactionPanel.runCommands')}
+          label={t('chat.interactionPanel.runCommands')}
+          tooltipTitle={t('chat.interactionPanel.runCommands')}
         />
       </Popover>
     </InteractionPanelRunCommandsTrigger>

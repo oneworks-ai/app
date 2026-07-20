@@ -1,0 +1,589 @@
+html[data-oneworks-theme-pack='warm-cowork'] {
+  --oneworks-cowork-control-size: 32px;
+  --oneworks-cowork-control-gap: 5px;
+  --oneworks-cowork-control-padding: 5px;
+  --oneworks-cowork-icon-size: 16px;
+  --oneworks-control-radius: var(--oneworks-cowork-control-radius, 9px);
+  --oneworks-group-radius: var(--oneworks-cowork-group-radius, 14px);
+  --oneworks-surface-radius: var(--oneworks-cowork-panel-radius, 20px);
+  --oneworks-interactive-card-radius: var(--oneworks-cowork-group-radius, 14px);
+  --oneworks-switch-radius: 999px;
+  --oneworks-switch-handle-radius: 999px;
+  --oneworks-compact-action-size: var(--oneworks-cowork-control-size);
+  --oneworks-compact-action-icon-size: var(--oneworks-cowork-icon-size);
+  --sidebar-inline-action-size: var(--oneworks-cowork-control-size);
+  --sidebar-inline-action-icon-size: var(--oneworks-cowork-icon-size);
+  --sidebar-inline-action-radius: var(--oneworks-control-radius);
+  --oneworks-launcher-viewport-background:
+    linear-gradient(
+    color-mix(in srgb, var(--border-color) 24%, transparent) 1px,
+    transparent 1px
+  ),
+    linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--border-color) 24%, transparent) 1px,
+    transparent 1px
+  ),
+    var(--sub-bg-color);
+  --oneworks-launcher-shell-background: color-mix(
+    in srgb,
+    var(--bg-color) 96%,
+    transparent
+  );
+  --oneworks-launcher-shell-border-color: var(--border-color);
+  --oneworks-launcher-shell-radius: var(--oneworks-surface-radius);
+  --oneworks-launcher-shell-shadow: 0 18px 48px color-mix(
+    in srgb,
+    var(--text-color) 16%,
+    transparent
+  );
+  --oneworks-launcher-shell-backdrop-filter: blur(18px) saturate(1.08);
+  --oneworks-launcher-window-shadow: inset 0 -1px 0 var(--border-color);
+  --oneworks-launcher-item-radius: var(--oneworks-control-radius);
+  --oneworks-launcher-item-hover-bg: var(--tag-hover-bg);
+  --oneworks-launcher-item-active-bg: var(--sidebar-active-bg);
+  --oneworks-launcher-action-size: var(--oneworks-cowork-control-size);
+  --oneworks-launcher-action-radius: var(--oneworks-control-radius);
+  --oneworks-launcher-tab-height: var(--oneworks-cowork-control-size);
+  --oneworks-launcher-tab-radius: var(--oneworks-control-radius);
+  --oneworks-launcher-keycap-radius: var(--oneworks-control-radius);
+  --oneworks-launcher-badge-radius: var(--oneworks-control-radius);
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='palette']:not(.dark) {
+  --app-chrome-overlay-background: color-mix(in srgb, #f7f4ee 86%, transparent);
+  --bg-color: #f7f4ee;
+  --sub-bg-color: #f1eee7;
+  --sub-sub-bg-color: #e9e5dc;
+  --text-color: #24221f;
+  --sub-text-color: #6f6961;
+  --sub-sub-text-color: #9b958a;
+  --placeholder-color: #989188;
+  --tag-bg: #efede6;
+  --tag-hover-bg: #e6e2d9;
+  --code-bg: #202337;
+  --star-color: #c58a3d;
+  --success-color: #2b6fa6;
+  --warning-color: #c58a3d;
+  --danger-color: #c45d57;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='palette'].dark {
+  --app-chrome-overlay-background: color-mix(in srgb, #1d1b18 78%, transparent);
+  --bg-color: #1d1b18;
+  --sub-bg-color: #221f1b;
+  --sub-sub-bg-color: #2c2823;
+  --text-color: #f4efe6;
+  --sub-text-color: #aaa197;
+  --sub-sub-text-color: #7e766d;
+  --placeholder-color: #766f67;
+  --tag-bg: #35302a;
+  --tag-hover-bg: #403a33;
+  --code-bg: #151725;
+  --star-color: #d3a050;
+  --success-color: #69abe0;
+  --warning-color: #d3a050;
+  --danger-color: #df756a;
+}
+
+html[data-oneworks-theme-pack='warm-cowork']:not(.dark) {
+  --app-chrome-divider-color: #d9d4ca;
+  --border-color: #d9d4ca;
+  --sub-border-color: #c9c3b8;
+  --sub-sub-border-color: #b7afa2;
+  --code-border: #45495f;
+  --oneworks-cowork-card: #fffdf9;
+  --oneworks-cowork-elevated: #efede6;
+  --oneworks-cowork-grid-line: color-mix(in srgb, #d9d4ca 48%, transparent);
+  --oneworks-cowork-info: #2b6fa6;
+  --oneworks-cowork-shadow-color: #675f54;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'].dark {
+  --app-chrome-divider-color: #474139;
+  --border-color: #474139;
+  --sub-border-color: #5a5349;
+  --sub-sub-border-color: #6b6257;
+  --code-border: #45495f;
+  --oneworks-cowork-card: #27241f;
+  --oneworks-cowork-elevated: #35302a;
+  --oneworks-cowork-grid-line: color-mix(in srgb, #474139 48%, transparent);
+  --oneworks-cowork-info: #69abe0;
+  --oneworks-cowork-shadow-color: #080706;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='grid']
+  :is(.app-shell__content, .route-container-layout__surface, .route-container-layout__body, .config-view__body) {
+  background-color: var(--bg-color);
+  background-image:
+    linear-gradient(
+      to right,
+      var(--oneworks-cowork-grid-line) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+    to bottom,
+    var(--oneworks-cowork-grid-line) 1px,
+    transparent 1px
+  );
+  background-size: 32px 32px;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.app-shell__sidebar-region, .sidebar-container) {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--sub-bg-color) 92%, var(--bg-color)) 0%,
+    var(--sub-bg-color) 48%,
+    color-mix(in srgb, var(--sub-bg-color) 90%, var(--text-color)) 100%
+  );
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='menus']
+  .sidebar-container {
+  --sidebar-hover-bg: var(--oneworks-cowork-elevated);
+  --sidebar-active-bg: var(--oneworks-cowork-elevated);
+  --sidebar-active-text: var(--text-color);
+  --sidebar-btn-color: var(--sub-text-color);
+  --sidebar-btn-hover-bg: color-mix(
+    in srgb,
+    var(--sub-bg-color) 88%,
+    var(--text-color)
+  );
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='menus']
+  .sidebar-header
+  .sidebar-list-header__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--oneworks-cowork-control-gap);
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.sidebar-header__quick-links, .sidebar-grouped-list, .sidebar-grouped-list__group, .sidebar-grouped-list__items) {
+  gap: var(--oneworks-cowork-control-gap);
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='menus']
+  :is(.nav-rail-drawer-footer, .nav-rail-drawer-footer__slot, .nav-rail-footer-extension-list) {
+  gap: var(--oneworks-cowork-control-gap);
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='menus']
+  .sidebar-grouped-list {
+  padding-top: var(--oneworks-cowork-control-gap);
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs {
+  --native-tabs-gap: var(--oneworks-cowork-control-gap);
+  padding-bottom: var(--oneworks-cowork-control-gap);
+  border-bottom-color: var(--border-color);
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='control-radius']
+  :is(.ant-btn, .ant-input, .ant-input-affix-wrapper, .ant-input-number, .ant-picker, .ant-segmented),
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='control-radius']
+  .ant-select-selector {
+  border-radius: var(--oneworks-cowork-control-radius) !important;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='group-radius']
+  :is(.ant-popover-inner, .ant-dropdown-menu, .ant-select-dropdown, .oneworks-overlay-menu, .oneworks-overlay-panel) {
+  border-radius: var(--oneworks-cowork-group-radius) !important;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='panel-radius']
+  .app-shell {
+  --app-shell-content-radius: var(--oneworks-cowork-panel-radius);
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='panel-radius']
+  :is(.ant-card, .ant-modal-content, .ant-drawer-content, .ant-collapse) {
+  border-radius: var(--oneworks-cowork-panel-radius) !important;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled) {
+  height: auto;
+  min-height: 32px;
+  padding: 5px !important;
+  transition:
+    background-color .12s ease,
+    border-color .12s ease,
+    color .12s ease,
+    box-shadow .12s ease;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled) {
+  border-color: var(--border-color);
+  background: var(--oneworks-cowork-card);
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):hover,
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  .ant-btn-text:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):hover {
+  border-color: var(--border-color) !important;
+  background: color-mix(
+    in srgb,
+    var(--oneworks-cowork-card) 84%,
+    var(--text-color)
+  ) !important;
+  color: var(--text-color) !important;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.ant-btn-primary, .ant-switch.ant-switch-checked):not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):not(.ant-switch-disabled) {
+  border-color: var(--primary-color);
+  background: var(--primary-color);
+  color: #21120d;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  .nav-rail-chrome-button.ant-btn {
+  width: var(--oneworks-cowork-control-size) !important;
+  min-width: var(--oneworks-cowork-control-size) !important;
+  height: var(--oneworks-cowork-control-size) !important;
+  min-height: var(--oneworks-cowork-control-size) !important;
+  padding: 0 !important;
+  border-radius: var(--oneworks-cowork-control-radius, 9px);
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  .nav-rail-chrome-button--plain-label
+  .nav-rail-chrome-button__label {
+  display: none;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.nav-rail-chrome-button.ant-btn, .host-nav-rail__footer-button, .sidebar-header__quick-link, .sidebar-header__quick-link-action, .sidebar-grouped-list__group-label, .sidebar-grouped-list__item, .native-tabs__tab) {
+  box-sizing: border-box;
+  border-radius: var(--oneworks-cowork-control-radius, 9px);
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.host-nav-rail__footer-button, .sidebar-header__quick-link, .sidebar-grouped-list__group-label, .native-tabs__tab) {
+  height: var(--oneworks-cowork-control-size);
+  padding: var(--oneworks-cowork-control-padding) !important;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.sidebar-grouped-list__group-label, .sidebar-grouped-list__item, .native-tabs__tab) {
+  min-height: var(--oneworks-cowork-control-size);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.sidebar-grouped-list__group-label, .sidebar-grouped-list__item) {
+  color: var(--text-color);
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-grouped-list__item {
+  height: var(--oneworks-cowork-control-size);
+  padding: var(--oneworks-cowork-control-padding) !important;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-grouped-list__group:not(.sidebar-grouped-list__group--unlabeled)
+  .sidebar-grouped-list__item {
+  padding-left: calc(
+    var(--sidebar-grouped-list-child-indent) +
+      var(--oneworks-cowork-control-padding)
+  ) !important;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-grouped-list__group-toggle {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  .host-nav-rail__footer {
+  --nav-rail-footer-item-height: var(--oneworks-cowork-control-size);
+  --nav-rail-footer-item-icon-size: var(--oneworks-cowork-icon-size);
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  .sidebar-header__quick-link-action {
+  width: var(--oneworks-cowork-control-size);
+  min-width: var(--oneworks-cowork-control-size);
+  height: var(--oneworks-cowork-control-size);
+  padding: var(--oneworks-cowork-control-padding);
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.nav-rail-chrome-button.ant-btn, .host-nav-rail__footer-button, .sidebar-header__quick-link, .sidebar-header__quick-link-action, .sidebar-grouped-list__group-label, .sidebar-grouped-list__item, .native-tabs__tab):is(:hover, :focus-visible, .ant-dropdown-open) {
+  background: color-mix(
+    in srgb,
+    var(--oneworks-cowork-card) 84%,
+    var(--text-color)
+  ) !important;
+  color: var(--text-color) !important;
+  outline: none;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  :is(.host-nav-rail__footer-button, .sidebar-header__quick-link, .sidebar-grouped-list__group-label, .sidebar-grouped-list__item).is-active,
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs__tab[aria-selected='true'] {
+  background: var(--oneworks-cowork-elevated) !important;
+  color: var(--primary-color) !important;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  .native-tabs__tab::after {
+  display: none;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  .route-container-header {
+  --route-container-header-action-radius: var(
+    --oneworks-cowork-control-radius,
+    9px
+  );
+  --route-container-header-action-hover-bg: color-mix(
+    in srgb,
+    var(--oneworks-cowork-card) 84%,
+    var(--text-color)
+  );
+  --route-container-header-action-hover-color: var(--text-color);
+  --route-container-header-action-active-bg: var(--oneworks-cowork-elevated);
+  --route-container-header-action-active-color: var(--primary-color);
+  --route-container-header-action-active-shadow: 0 1px 2px color-mix(
+    in srgb,
+    var(--oneworks-cowork-shadow-color) 18%,
+    transparent
+  );
+  --route-container-header-action-focus-ring: 0 0 0 2px color-mix(
+    in srgb,
+    var(--primary-color) 20%,
+    transparent
+  );
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='buttons']
+  .oneworks-icon-segmented {
+  --oneworks-icon-segmented-group-radius: var(
+    --oneworks-cowork-group-radius,
+    14px
+  );
+  --oneworks-icon-segmented-item-radius: var(
+    --oneworks-cowork-control-radius,
+    9px
+  );
+  --oneworks-icon-segmented-hover-bg: color-mix(
+    in srgb,
+    var(--oneworks-cowork-card) 84%,
+    var(--text-color)
+  );
+  --oneworks-icon-segmented-hover-color: var(--text-color);
+  --oneworks-icon-segmented-active-bg: var(--oneworks-cowork-elevated);
+  --oneworks-icon-segmented-active-color: var(--primary-color);
+  --oneworks-icon-segmented-active-shadow: 0 1px 2px color-mix(
+    in srgb,
+    var(--oneworks-cowork-shadow-color) 18%,
+    transparent
+  );
+  --oneworks-icon-segmented-focus-ring: 0 0 0 2px color-mix(
+    in srgb,
+    var(--primary-color) 20%,
+    transparent
+  );
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='inputs']
+  :is(.ant-input, .ant-input-affix-wrapper, .ant-input-number, .ant-picker),
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='inputs']
+  .ant-select:not(.ant-select-status-error):not(.ant-select-status-warning):not(.ant-select-disabled)
+  .ant-select-selector {
+  border-color: var(--border-color) !important;
+  background: var(--oneworks-cowork-card) !important;
+  box-shadow: none;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='inputs']
+  .sidebar-header
+  .search-input.ant-input-affix-wrapper {
+  height: var(--oneworks-cowork-control-size) !important;
+  min-height: var(--oneworks-cowork-control-size) !important;
+  padding-inline: var(--oneworks-cowork-control-padding) !important;
+  border-color: var(--border-color) !important;
+  border-radius: var(--oneworks-cowork-control-radius, 9px) !important;
+  background: var(--oneworks-cowork-card) !important;
+  box-shadow: none !important;
+  transition: background-color .12s ease, border-color .12s ease;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='inputs']
+  .sidebar-header
+  .search-input.ant-input-affix-wrapper:is(:hover, :focus-within, .ant-input-affix-wrapper-focused) {
+  border-color: var(--sub-border-color) !important;
+  background: color-mix(
+    in srgb,
+    var(--oneworks-cowork-card) 84%,
+    var(--text-color)
+  ) !important;
+  box-shadow: none !important;
+  outline: none;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='inputs']
+  .sidebar-header
+  .search-input.ant-input-affix-wrapper
+  .ant-input {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='inputs']
+  :is(.sender-container, .chat-composer-card):focus-within {
+  box-shadow: 0 4px 12px
+    color-mix(in srgb, var(--primary-color) 20%, transparent) !important;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='menus']
+  .ant-segmented {
+  padding: 3px;
+  background: var(--oneworks-cowork-elevated);
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='menus']
+  .ant-segmented-item:hover {
+  background: color-mix(
+    in srgb,
+    var(--oneworks-cowork-card) 58%,
+    var(--oneworks-cowork-elevated)
+  );
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='overlays'] {
+  --oneworks-overlay-radius: var(--oneworks-cowork-group-radius, 14px);
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='overlays']
+  :is(.ant-card, .ant-modal-content, .ant-drawer-content, .ant-collapse) {
+  border-color: var(--border-color);
+  background: var(--oneworks-cowork-card);
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='shadows'] {
+  --oneworks-overlay-shadow: 0 4px 12px color-mix(
+    in srgb,
+    var(--oneworks-cowork-shadow-color) 18%,
+    transparent
+  );
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='shadows'][data-oneworks-theme-pack-overrides~='overlays']
+  :is(.ant-card, .ant-modal-content, .ant-drawer-content, .oneworks-overlay-panel, .oneworks-overlay-menu) {
+  box-shadow: 0 4px 12px
+    color-mix(in srgb, var(--oneworks-cowork-shadow-color) 18%, transparent);
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='status']
+  :is(.ant-progress-bg, .ant-spin-dot-item) {
+  background-color: var(--oneworks-cowork-info) !important;
+}
+
+html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='status']
+  :is(.ant-progress-text, .ant-badge-status-processing, .ant-timeline-item-head-blue) {
+  color: var(--oneworks-cowork-info) !important;
+  border-color: var(--oneworks-cowork-info) !important;
+}
+
+.theme-pack-settings__option[data-theme-id='warm-cowork']
+  .theme-pack-settings__preview {
+  border-color: #d9d4ca;
+  border-radius: 14px;
+  background: #f7f4ee;
+  box-shadow: 0 3px 8px rgba(103, 95, 84, .16);
+}
+
+.theme-pack-settings__option[data-theme-id='warm-cowork']
+  .theme-pack-settings__preview-banner {
+  border-bottom-color: #d9d4ca;
+  background:
+    linear-gradient(to right, rgba(217, 212, 202, .45) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(217, 212, 202, .45) 1px, transparent 1px),
+    #f7f4ee;
+  background-size: 12px 12px;
+}
+
+.theme-pack-settings__option[data-theme-id='warm-cowork']
+  .theme-pack-settings__preview-sidebar {
+  border-right-color: #d9d4ca;
+  background: linear-gradient(180deg, #f1eee7, #e9e5dc);
+}
+
+.theme-pack-settings__option[data-theme-id='warm-cowork']
+  .theme-pack-settings__preview-sidebar
+  span,
+.theme-pack-settings__option[data-theme-id='warm-cowork']
+  .theme-pack-settings__preview-button {
+  background: #c9684d;
+}
+.theme-pack-settings__option[data-theme-id='warm-cowork']
+  .theme-pack-settings__preview-toolbar {
+  background: #2b6fa6;
+}
+.theme-pack-settings__option[data-theme-id='warm-cowork']
+  .theme-pack-settings__preview-content {
+  background: #fffdf9;
+}
+.theme-pack-settings__option[data-theme-id='warm-cowork']
+  .theme-pack-settings__preview-lines {
+  background: repeating-linear-gradient(
+    180deg,
+    #7e7970 0 1px,
+    transparent 1px 5px
+  );
+}
+
+.theme-pack-settings__editor[data-theme-id='warm-cowork']
+  .theme-pack-settings__swatches--palette
+  i:nth-child(1) {
+  background: #f7f4ee;
+}
+.theme-pack-settings__editor[data-theme-id='warm-cowork']
+  .theme-pack-settings__swatches--palette
+  i:nth-child(2) {
+  background: #fffdf9;
+}
+.theme-pack-settings__editor[data-theme-id='warm-cowork']
+  .theme-pack-settings__swatches--palette
+  i:nth-child(3) {
+  background: #c9684d;
+}
+.theme-pack-settings__editor[data-theme-id='warm-cowork']
+  .theme-pack-settings__swatches--status
+  i:nth-child(1) {
+  background: #2b6fa6;
+}
+.theme-pack-settings__editor[data-theme-id='warm-cowork']
+  .theme-pack-settings__swatches--status
+  i:nth-child(2) {
+  background: #c58a3d;
+}
+.theme-pack-settings__editor[data-theme-id='warm-cowork']
+  .theme-pack-settings__swatches--status
+  i:nth-child(3) {
+  background: #c45d57;
+}
+
+@media (max-width: 600px) {
+  html[data-oneworks-theme-pack='warm-cowork'][data-oneworks-theme-pack-overrides~='grid']
+    :is(.app-shell__content, .route-container-layout__surface, .route-container-layout__body, .config-view__body) {
+    background-size: 24px 24px;
+  }
+}

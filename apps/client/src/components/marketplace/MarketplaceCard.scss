@@ -33,7 +33,7 @@
   align-items: stretch;
   overflow: hidden;
   border: 1px solid var(--border-color) !important;
-  border-radius: 8px;
+  border-radius: var(--oneworks-interactive-card-radius, 8px);
   background: var(--bg-color);
   box-sizing: border-box;
   transition: border-color .2s ease, background-color .2s ease;

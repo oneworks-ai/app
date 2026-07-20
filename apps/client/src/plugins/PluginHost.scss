@@ -30,7 +30,7 @@
 }
 
 .plugin-view-host--launcher {
-  padding: 0 0 10px;
+  padding: 0 0 var(--launcher-content-padding-block-start, 10px);
   box-sizing: border-box;
   overflow: auto;
 }
@@ -60,7 +60,7 @@
 
 .plugin-host-control {
   --plugin-host-control-height: 28px;
-  --plugin-host-control-radius: 6px;
+  --plugin-host-control-radius: var(--oneworks-control-radius, 6px);
   --plugin-host-control-border: var(--border-color);
   --plugin-host-control-bg: color-mix(
     in srgb,

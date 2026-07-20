@@ -10,8 +10,15 @@
   inset: 0 0 auto;
   height: var(--route-container-header-overlay-height, 39px);
   min-height: var(--route-container-header-overlay-height, 39px);
-  padding: var(--route-container-header-padding-block, 10px)
-    var(--route-container-header-padding-inline, 10px);
+  padding-block: var(--route-container-header-padding-block, 10px);
+  padding-inline-start: var(
+    --route-container-header-padding-inline-start,
+    var(--route-container-header-padding-inline, 10px)
+  );
+  padding-inline-end: var(
+    --route-container-header-padding-inline-end,
+    var(--route-container-header-padding-inline, 10px)
+  );
   background: var(
     --app-chrome-overlay-background,
     color-mix(in srgb, var(--bg-color, #fff) 48%, transparent)
@@ -272,16 +279,25 @@
 
 .route-container-header__actions {
   height: var(
-    --route-container-header-content-height,
-    var(--app-chrome-icon-size, 18px)
+    --route-container-header-action-cell-height,
+    var(
+      --route-container-header-content-height,
+      var(--app-chrome-icon-size, 18px)
+    )
   );
   min-height: var(
-    --route-container-header-content-height,
-    var(--app-chrome-icon-size, 18px)
+    --route-container-header-action-cell-height,
+    var(
+      --route-container-header-content-height,
+      var(--app-chrome-icon-size, 18px)
+    )
   );
   display: flex;
-  align-items: center;
-  gap: var(--app-chrome-action-gap, 4px);
+  align-items: stretch;
+  gap: var(
+    --route-container-header-action-gap,
+    var(--app-chrome-action-gap, 4px)
+  );
   min-width: 0;
   line-height: var(
     --route-container-header-content-height,
@@ -290,17 +306,126 @@
   -webkit-app-region: no-drag;
 }
 
+.route-container-header__action-segment {
+  box-sizing: border-box;
+  height: 100%;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.route-container-header__action-group {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  display: inline-flex;
+  align-items: stretch;
+  gap: var(
+    --route-container-header-action-group-gap,
+    var(--route-container-header-action-gap, var(--app-chrome-action-gap, 4px))
+  );
+  flex: 0 0 auto;
+}
+
+.route-container-header__action-group > * {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  flex: 0 0 auto;
+}
+
+.route-container-header__action-group:not(.is-joined) > * + * {
+  position: relative;
+}
+
+.route-container-header__action-group:not(.is-joined) > * + *::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: var(--route-container-header-action-group-divider-width, 0px);
+  background: var(
+    --route-container-header-action-group-divider-color,
+    var(
+      --route-container-header-action-divider-color,
+      var(--app-chrome-divider-color, var(--border-color, #d8dee4))
+    )
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.route-container-header__action-group.is-joined
+  > .route-container-header__action-segment
+  + .route-container-header__action-segment {
+  position: relative;
+}
+
+.route-container-header__action-group.is-joined
+  > .route-container-header__action-segment
+  + .route-container-header__action-segment::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: var(
+    --route-container-header-joined-action-divider-width,
+    var(--app-chrome-border-width, 1px)
+  );
+  background: var(
+    --route-container-header-action-group-divider-color,
+    var(
+      --route-container-header-action-divider-color,
+      var(--app-chrome-divider-color, var(--border-color, #d8dee4))
+    )
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.route-container-header__action-group.is-joined {
+  --route-container-header-action-group-gap: 0px;
+}
+
+.route-container-header__custom-actions {
+  min-width: 0;
+}
+
+.route-container-header__custom-actions > * {
+  height: 100%;
+  min-height: 0;
+}
+
+.route-container-header__actions
+  > .route-container-header__action-segment
+  + .route-container-header__action-segment {
+  border-inline-start: var(--route-container-header-action-divider-width, 0px)
+    solid
+    var(
+      --route-container-header-action-divider-color,
+      var(--app-chrome-divider-color, var(--border-color, #d8dee4))
+    );
+}
+
 .route-container-header__action-button {
   position: relative;
-  width: var(--route-container-header-icon-button-size);
-  height: var(--route-container-header-icon-button-size);
-  min-width: var(--route-container-header-icon-button-size);
+  width: var(
+    --route-container-header-action-inline-size,
+    var(--route-container-header-icon-button-size)
+  );
+  height: 100%;
+  min-width: var(
+    --route-container-header-action-inline-size,
+    var(--route-container-header-icon-button-size)
+  );
   min-height: 0;
-  padding: 0;
+  padding: var(--route-container-header-action-padding, 0);
   border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--placeholder-color, #66707a);
+  border-radius: var(--route-container-header-action-radius, 6px);
+  background: var(--route-container-header-action-bg, transparent);
+  color: var(
+    --route-container-header-action-color,
+    var(--placeholder-color, #66707a)
+  );
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -310,6 +435,16 @@
     height .3s cubic-bezier(.4, 0, .2, 1),
     border-radius .3s cubic-bezier(.4, 0, .2, 1),
     color .2s ease;
+}
+
+.route-container-header__action-button--content {
+  --route-container-header-action-inline-size: auto;
+  --route-container-header-action-padding: 0 var(
+    --route-container-header-content-action-padding-inline,
+    var(--route-container-header-padding-inline, 10px)
+  );
+
+  font-size: var(--route-container-header-action-font-size, 13px);
 }
 
 .route-container-header__action-icon {
@@ -322,8 +457,11 @@
 
 .route-container-header__action-button:hover,
 .route-container-header__action-button:focus-visible {
-  background: transparent;
-  color: var(--primary-color, #2563eb);
+  background: var(--route-container-header-action-hover-bg, transparent);
+  color: var(
+    --route-container-header-action-hover-color,
+    var(--primary-color, #2563eb)
+  );
   outline: none;
 }
 
@@ -337,8 +475,12 @@
 }
 
 .route-container-header__action-button.is-active {
-  background: transparent;
-  color: var(--primary-color, #2563eb);
+  background: var(--route-container-header-action-active-bg, transparent);
+  color: var(
+    --route-container-header-action-active-color,
+    var(--primary-color, #2563eb)
+  );
+  box-shadow: var(--route-container-header-action-active-shadow, none);
 }
 
 .route-container-header__action-button.is-danger:hover,

@@ -5,10 +5,19 @@
   display: grid;
   place-items: center;
   padding: 44px;
-  background: color-mix(in srgb, var(--bg-color) 76%, transparent);
+  background: var(
+    --oneworks-launcher-overlay-background,
+    color-mix(in srgb, var(--bg-color) 76%, transparent)
+  );
   color: var(--text-color);
-  -webkit-backdrop-filter: blur(30px) saturate(112%);
-  backdrop-filter: blur(30px) saturate(112%);
+  -webkit-backdrop-filter: var(
+    --oneworks-launcher-overlay-backdrop-filter,
+    blur(30px) saturate(112%)
+  );
+  backdrop-filter: var(
+    --oneworks-launcher-overlay-backdrop-filter,
+    blur(30px) saturate(112%)
+  );
   opacity: 0;
   pointer-events: auto;
   text-align: center;
@@ -33,7 +42,10 @@
 }
 
 html.dark .workspace-opening-overlay {
-  background: color-mix(in srgb, var(--bg-color) 78%, transparent);
+  background: var(
+    --oneworks-launcher-overlay-background,
+    color-mix(in srgb, var(--bg-color) 78%, transparent)
+  );
 }
 
 .workspace-opening-overlay__content {

@@ -4,7 +4,7 @@ import './AppShell.scss'
 
 import { useAtom, useSetAtom } from 'jotai'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, PropsWithChildren } from 'react'
+import type { CSSProperties, PropsWithChildren, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
@@ -36,6 +36,7 @@ import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 import { useSidebarQueryState } from '#~/hooks/use-sidebar-query-state'
 import { getRuntimeWorkspaceId } from '#~/runtime-config'
 import { isMobileSidebarOpenAtom, isSidebarCollapsedAtom } from '#~/store/index'
+import type { ThemePack } from '#~/store/index'
 import {
   DESKTOP_SHELL_SIMULATION_QUERY_PARAM,
   parseDesktopShellSimulationValue,
@@ -66,6 +67,8 @@ interface AppShellProps extends PropsWithChildren {
   onSelectSession: (session: Session, isNew?: boolean) => void
   showSidebar: boolean
   sidebarWidth: number
+  themeBanner?: (reserveWindowControls: boolean) => ReactNode
+  themePack: ThemePack
 }
 
 const FULLSCREEN_SIZE_TOLERANCE = 2
@@ -142,7 +145,9 @@ export function AppShell({
   onSelectRoom,
   onSelectSession,
   showSidebar,
-  sidebarWidth
+  sidebarWidth,
+  themeBanner,
+  themePack
 }: AppShellProps) {
   const { t } = useTranslation()
   const { isSidebarCollapsed, setSidebarCollapsed } = useSidebarQueryState()
@@ -699,91 +704,97 @@ export function AppShell({
     <DesktopWorkspaceStartupProvider>
       <AppShellStartupReadySignal />
       <RouteSidebarProvider value={routeSidebarContextValue}>
-        <HostAppShell
-          className={shellClassName}
-          closeLabel={t('common.close')}
-          contentClassName={contentClassName}
-          contentRegionClassName='app-shell__content-region'
-          contentRegionCollapsedClassName='is-sidebar-collapsed'
-          desktopLayoutStyle={desktopLayoutStyle}
-          isCompactLayout={isCompactLayout}
-          isMobileSidebarOpen={isMobileSidebarOpen}
-          mobileSidebar={() => mobileSidebar}
-          mobileSidebarBackdropClassName='app-shell__mobile-sidebar-backdrop'
-          mobileSidebarBackdropOpenClassName='is-open'
-          mobileSidebarSheetClassName={[
-            'app-shell__mobile-sidebar-sheet',
-            showSidebar
-              ? 'app-shell__mobile-sidebar-sheet--with-sidebar'
-              : 'app-shell__mobile-sidebar-sheet--nav-only'
-          ].filter(Boolean).join(' ')}
-          mobileSidebarSheetId={MOBILE_SIDEBAR_DIALOG_ID}
-          mobileSidebarSheetOpenClassName='is-open'
-          onMobileSidebarOpenChange={setIsMobileSidebarOpen}
-          routeSidebarAriaLabel={routeSidebarAriaLabel}
-          sidebarCollapsed={isSidebarCollapsed}
-          sidebarEdgeSwipeZoneClassName='app-shell__sidebar-edge-swipe-zone'
-          sidebarPreviewDismissLayerClassName='app-shell__sidebar-preview-dismiss-layer'
-          sidebarRegionClassName='app-shell__sidebar-region'
-          showSidebar={showSidebar}
-          desktopChrome={(
-            { closeSidebarPreview, openSidebarPreview, scheduleSidebarPreviewClose, sidebarPreviewOpen }
-          ) => (
-            <NavRailWindowBar
-              canGoBack={canGoBack}
-              canGoForward={canGoForward}
-              collapsedActions={routeWindowBarActions}
-              drawerWidth={showSidebar ? sidebarWidth : undefined}
-              isMacShortcutLayout={isMacShortcutLayout}
-              onNavigateBack={goBack}
-              onNavigateForward={goForward}
-              onCreateSession={() => onSelectSession({ id: '' } as Session, true)}
-              onSidebarPreviewClose={closeSidebarPreview}
-              onSidebarPreviewPointerEnter={openSidebarPreview}
-              onSidebarPreviewPointerLeave={scheduleSidebarPreviewClose}
-              onToggleSidebarCollapsed={() => setSidebarCollapsed(!isSidebarCollapsed)}
-              reserveWindowControls={shouldReserveWindowControls}
-              showCreateSessionActiveIndicator={!hideCreateSessionAction}
-              showCreateSessionControl={!hideCreateSessionAction}
-              showHistoryNavigation={isDesktopShell}
-              showSimulatedWindowControls={showSimulatedWindowControls}
-              showToggleSidebarLabel={!isDesktopShell}
-              sidebarCollapsed={isSidebarCollapsed}
-              sidebarPreviewOpen={sidebarPreviewOpen}
-              updateAction={visibleUpdateAction}
-            />
-          )}
-          desktopSidebar={({ openSidebarPreview, scheduleSidebarPreviewClose, sidebarPreviewOpen }) => (
-            <NavRail
-              drawerFooterAfter={routeMoreMenu?.footerAfter}
-              drawerFooterBefore={routeMoreMenu?.footerBefore}
-              drawerWorkspaceStatus={remoteWorkspaceFooterNode}
-              drawerWidth={showSidebar ? sidebarWidth : undefined}
-              moreMenuContextMenuSections={routeMoreMenu?.contextMenuSections}
-              moreMenuSections={routeMoreMenu?.sections}
-              moreMenuSelectedKeys={routeMoreMenu?.selectedKeys}
-              onOpenSidebar={() => setSidebarCollapsed(false)}
-              onSidebarPreviewPointerEnter={openSidebarPreview}
-              onSidebarPreviewPointerLeave={scheduleSidebarPreviewClose}
-              sidebarCollapsed={isSidebarCollapsed}
-              sidebarPreviewOpen={sidebarPreviewOpen}
-              showSidebar={showSidebar}
-            >
-              {showSidebar && (
-                <Sidebar
-                  width={sidebarWidth}
-                  activeId={activeId}
-                  embeddedInNavRail
-                  onSelectRoom={onSelectRoom}
-                  onSelectSession={onSelectSession}
-                  onDeletedSession={onDeletedSession}
-                />
-              )}
-            </NavRail>
-          )}
+        <div
+          className={`app-shell-stage${themeBanner != null ? ' app-shell-stage--with-banner' : ''}`}
+          data-theme-pack={themePack}
         >
-          {children}
-        </HostAppShell>
+          {themeBanner?.(shouldReserveWindowControls)}
+          <HostAppShell
+            className={shellClassName}
+            closeLabel={t('common.close')}
+            contentClassName={contentClassName}
+            contentRegionClassName='app-shell__content-region'
+            contentRegionCollapsedClassName='is-sidebar-collapsed'
+            desktopLayoutStyle={desktopLayoutStyle}
+            isCompactLayout={isCompactLayout}
+            isMobileSidebarOpen={isMobileSidebarOpen}
+            mobileSidebar={() => mobileSidebar}
+            mobileSidebarBackdropClassName='app-shell__mobile-sidebar-backdrop'
+            mobileSidebarBackdropOpenClassName='is-open'
+            mobileSidebarSheetClassName={[
+              'app-shell__mobile-sidebar-sheet',
+              showSidebar
+                ? 'app-shell__mobile-sidebar-sheet--with-sidebar'
+                : 'app-shell__mobile-sidebar-sheet--nav-only'
+            ].filter(Boolean).join(' ')}
+            mobileSidebarSheetId={MOBILE_SIDEBAR_DIALOG_ID}
+            mobileSidebarSheetOpenClassName='is-open'
+            onMobileSidebarOpenChange={setIsMobileSidebarOpen}
+            routeSidebarAriaLabel={routeSidebarAriaLabel}
+            sidebarCollapsed={isSidebarCollapsed}
+            sidebarEdgeSwipeZoneClassName='app-shell__sidebar-edge-swipe-zone'
+            sidebarPreviewDismissLayerClassName='app-shell__sidebar-preview-dismiss-layer'
+            sidebarRegionClassName='app-shell__sidebar-region'
+            showSidebar={showSidebar}
+            desktopChrome={(
+              { closeSidebarPreview, openSidebarPreview, scheduleSidebarPreviewClose, sidebarPreviewOpen }
+            ) => (
+              <NavRailWindowBar
+                canGoBack={canGoBack}
+                canGoForward={canGoForward}
+                collapsedActions={routeWindowBarActions}
+                drawerWidth={showSidebar ? sidebarWidth : undefined}
+                isMacShortcutLayout={isMacShortcutLayout}
+                onNavigateBack={goBack}
+                onNavigateForward={goForward}
+                onCreateSession={() => onSelectSession({ id: '' } as Session, true)}
+                onSidebarPreviewClose={closeSidebarPreview}
+                onSidebarPreviewPointerEnter={openSidebarPreview}
+                onSidebarPreviewPointerLeave={scheduleSidebarPreviewClose}
+                onToggleSidebarCollapsed={() => setSidebarCollapsed(!isSidebarCollapsed)}
+                reserveWindowControls={shouldReserveWindowControls}
+                showCreateSessionActiveIndicator={!hideCreateSessionAction}
+                showCreateSessionControl={!hideCreateSessionAction}
+                showHistoryNavigation={isDesktopShell}
+                showSimulatedWindowControls={showSimulatedWindowControls}
+                showToggleSidebarLabel={!isDesktopShell}
+                sidebarCollapsed={isSidebarCollapsed}
+                sidebarPreviewOpen={sidebarPreviewOpen}
+                updateAction={visibleUpdateAction}
+              />
+            )}
+            desktopSidebar={({ openSidebarPreview, scheduleSidebarPreviewClose, sidebarPreviewOpen }) => (
+              <NavRail
+                drawerFooterAfter={routeMoreMenu?.footerAfter}
+                drawerFooterBefore={routeMoreMenu?.footerBefore}
+                drawerWorkspaceStatus={remoteWorkspaceFooterNode}
+                drawerWidth={showSidebar ? sidebarWidth : undefined}
+                moreMenuContextMenuSections={routeMoreMenu?.contextMenuSections}
+                moreMenuSections={routeMoreMenu?.sections}
+                moreMenuSelectedKeys={routeMoreMenu?.selectedKeys}
+                onOpenSidebar={() => setSidebarCollapsed(false)}
+                onSidebarPreviewPointerEnter={openSidebarPreview}
+                onSidebarPreviewPointerLeave={scheduleSidebarPreviewClose}
+                sidebarCollapsed={isSidebarCollapsed}
+                sidebarPreviewOpen={sidebarPreviewOpen}
+                showSidebar={showSidebar}
+              >
+                {showSidebar && (
+                  <Sidebar
+                    width={sidebarWidth}
+                    activeId={activeId}
+                    embeddedInNavRail
+                    onSelectRoom={onSelectRoom}
+                    onSelectSession={onSelectSession}
+                    onDeletedSession={onDeletedSession}
+                  />
+                )}
+              </NavRail>
+            )}
+          >
+            {children}
+          </HostAppShell>
+        </div>
       </RouteSidebarProvider>
     </DesktopWorkspaceStartupProvider>
   )

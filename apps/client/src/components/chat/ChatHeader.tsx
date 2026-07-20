@@ -1,6 +1,10 @@
 import './ChatHeader.scss'
 
-import { RouteContainerHeaderActionButton, RouteHeaderActionButton } from '@oneworks/components/route-layout'
+import {
+  RouteContainerHeaderActionButton,
+  RouteHeaderActionButton,
+  RouteHeaderActionGroup
+} from '@oneworks/components/route-layout'
 import type { RouteContainerHeaderActionItem } from '@oneworks/components/route-layout'
 import type { ChatMessage, Session, SessionStatus } from '@oneworks/core'
 import type { SessionInfo } from '@oneworks/types'
@@ -867,7 +871,7 @@ export function ChatHeader({
       onCreateSession={isCreateSessionActive ? undefined : onCreateSession}
       onOpenSidebar={onOpenSidebar}
       onTitleClick={handleTitleClick}
-      actions={<div className='chat-header-actions'>{routeHeaderActions}</div>}
+      actions={<RouteHeaderActionGroup className='chat-header-actions'>{routeHeaderActions}</RouteHeaderActionGroup>}
     />
   )
 }

@@ -1,6 +1,6 @@
 import './index.scss'
 
-import { App, Button, Tooltip } from 'antd'
+import { App } from 'antd'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -284,37 +284,27 @@ export function AutomationView() {
     ? 'edit_square'
     : activeRuleIcon
 
-  const createModeSwitch = panelMode === 'create'
-    ? (
-      <div className='automation-view__create-mode-switch' role='tablist' aria-label={t('automation.createMode')}>
-        <Tooltip title={t('automation.createModeForm')}>
-          <Button
-            className={`automation-view__create-mode-button ${createMode === 'form' ? 'is-active' : ''}`.trim()}
-            type='text'
-            role='tab'
-            aria-label={t('automation.createModeForm')}
-            aria-selected={createMode === 'form'}
-            icon={<span className='material-symbols-rounded automation-view__create-mode-icon'>edit_note</span>}
-            onClick={() => setCreateMode('form')}
-          />
-        </Tooltip>
-        <Tooltip title={t('automation.createModeChat')}>
-          <Button
-            className={`automation-view__create-mode-button ${createMode === 'chat' ? 'is-active' : ''}`.trim()}
-            type='text'
-            role='tab'
-            aria-label={t('automation.createModeChat')}
-            aria-selected={createMode === 'chat'}
-            icon={<span className='material-symbols-rounded automation-view__create-mode-icon'>forum</span>}
-            onClick={() => setCreateMode('chat')}
-          />
-        </Tooltip>
-      </div>
-    )
-    : null
-
   const automationHeaderActions = useMemo<RouteContainerHeaderActionItem[]>(() => {
     const actions: RouteContainerHeaderActionItem[] = []
+
+    if (panelMode === 'create') {
+      actions.push(
+        {
+          active: createMode === 'form',
+          icon: 'edit_note',
+          key: 'automation-create-form',
+          label: t('automation.createModeForm'),
+          onSelect: () => setCreateMode('form')
+        },
+        {
+          active: createMode === 'chat',
+          icon: 'forum',
+          key: 'automation-create-chat',
+          label: t('automation.createModeChat'),
+          onSelect: () => setCreateMode('chat')
+        }
+      )
+    }
 
     if (panelMode !== 'create') {
       actions.push({
@@ -349,6 +339,7 @@ export function AutomationView() {
   }, [
     handleCancelForm,
     handleCreateRule,
+    createMode,
     isChatCreateMode,
     panelMode,
     routePluginHeaderActions,
@@ -438,10 +429,9 @@ export function AutomationView() {
         isCompactView ? 'automation-view--compact' : ''
       ].filter(Boolean).join(' ')}
       bodyClassName='automation-view__body'
-      contentInset
+      contentInset={!isCompactView}
       header={
         <RouteContainerHeader
-          actions={createModeSwitch}
           actionItems={automationHeaderActions}
           icon={headerIcon}
           onOpenSidebar={openRouteSidebar}

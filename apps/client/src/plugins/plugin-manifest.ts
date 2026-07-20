@@ -11,6 +11,11 @@ import type {
   PluginContributionLauncherSearchProvider,
   PluginContributionManifest,
   PluginContributionMenuItem,
+  PluginContributionNavFooterAccount,
+  PluginContributionNavFooterAccountAction,
+  PluginContributionNavFooterAccountGroup,
+  PluginContributionNavFooterAccountPopover,
+  PluginContributionNavFooterItem,
   PluginContributionNavItem,
   PluginContributionRoute,
   PluginContributionRouteHeaderAction,
@@ -65,6 +70,11 @@ export type {
   PluginContributionLauncherSearchProvider,
   PluginContributionManifest,
   PluginContributionMenuItem,
+  PluginContributionNavFooterAccount,
+  PluginContributionNavFooterAccountAction,
+  PluginContributionNavFooterAccountGroup,
+  PluginContributionNavFooterAccountPopover,
+  PluginContributionNavFooterItem,
   PluginContributionNavItem,
   PluginContributionRoute,
   PluginContributionRouteHeaderAction,
@@ -111,6 +121,10 @@ export type PluginSlot =
   | 'workbench.tabs'
   | 'launcher.searchProviders'
   | 'chat.toolUse.presentations'
+
+export type PluginSlotContribution<T extends PluginSlot> = T extends 'nav.footer.before'
+  ? PluginContributionNavFooterItem
+  : Record<string, unknown> & { id: string }
 
 export interface PluginRouteRegistration extends PluginContributionBase {
   icon?: string

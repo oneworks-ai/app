@@ -23,6 +23,7 @@ export interface HostNavRailFooterButtonProps extends Omit<ButtonHTMLAttributes<
   active?: boolean
   icon?: ReactNode
   label: ReactNode
+  trailingIcon?: ReactNode
 }
 
 const hostNavRailItemClassName = (item: HostNavRailItem) =>
@@ -87,6 +88,7 @@ export const HostNavRailFooterButton = forwardRef<HTMLButtonElement, HostNavRail
       className,
       icon,
       label,
+      trailingIcon,
       title,
       type = 'button',
       ...buttonProps
@@ -106,6 +108,11 @@ export const HostNavRailFooterButton = forwardRef<HTMLButtonElement, HostNavRail
         </span>
       )}
       <span className='host-nav-rail__footer-button-label'>{label}</span>
+      {trailingIcon == null ? null : (
+        <span className='host-nav-rail__footer-button-trailing' aria-hidden='true'>
+          {trailingIcon}
+        </span>
+      )}
     </button>
   )
 )

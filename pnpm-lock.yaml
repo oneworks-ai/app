@@ -1069,6 +1069,12 @@ importers:
 
   packages/plugins/browser-driver: {}
 
+  packages/plugins/china-red-theme:
+    devDependencies:
+      vite:
+        specifier: ^5.4.8
+        version: 5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
+
   packages/plugins/chrome-devtools:
     dependencies:
       '@oneworks/core':
@@ -1124,6 +1130,12 @@ importers:
         specifier: ^5.4.8
         version: 5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
 
+  packages/plugins/focus-workbench-theme:
+    devDependencies:
+      vite:
+        specifier: ^5.4.8
+        version: 5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
+
   packages/plugins/logger:
     dependencies:
       '@oneworks/core':
@@ -1136,11 +1148,20 @@ importers:
         specifier: workspace:*
         version: link:../../types
 
+  packages/plugins/neo-workshop-theme:
+    devDependencies:
+      vite:
+        specifier: ^5.4.8
+        version: 5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
+
   packages/plugins/relay:
     dependencies:
       '@oneworks/components':
         specifier: workspace:*
         version: link:../../components
+      '@oneworks/types':
+        specifier: workspace:*
+        version: link:../../types
       '@oneworks/utils':
         specifier: workspace:*
         version: link:../../utils
@@ -1153,6 +1174,12 @@ importers:
         version: 8.18.1
 
   packages/plugins/standard-dev: {}
+
+  packages/plugins/warm-cowork-theme:
+    devDependencies:
+      vite:
+        specifier: ^5.4.8
+        version: 5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
 
   packages/register:
     dependencies:

@@ -3,9 +3,12 @@
 }
 
 .plugin-store-route__group-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
+  --oneworks-icon-segmented-item-size: var(--sidebar-inline-action-size);
+  --oneworks-icon-segmented-icon-size: var(--sidebar-inline-action-icon-size);
+  --oneworks-icon-segmented-group-radius: var(--sidebar-inline-action-radius);
+  --oneworks-icon-segmented-item-radius: var(--sidebar-inline-action-radius);
+
+  flex: 0 0 auto;
 }
 
 .plugin-store-route__group-button {
