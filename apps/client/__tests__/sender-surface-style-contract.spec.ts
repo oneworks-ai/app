@@ -103,10 +103,10 @@ describe('shared sender surface toolbar contract', () => {
       /:is\(\.sender-select-shell:hover \.model-select,[^}]*\)\s*:is\(\.ant-select-selection-item,[^}]*\)\s*\{[^}]*color:\s*var\(--chat-surface-control-hover-color\)/
     )
     expect(styles).not.toMatch(
-      /\.model-select-trigger-text[^}]*\{[^}]*var\(--placeholder-color/
+      /\.model-select-trigger-text[\s\S]*var\(--placeholder-color/
     )
     expect(styles).not.toMatch(
-      /:is\(\.model-select, \.effort-select\)[^}]*\{[^}]*var\(--primary-color/
+      /:is\(\.model-select, \.effort-select\)[\s\S]*var\(--primary-color/
     )
     expect(styles).toMatch(
       /\.chat-header-git__trigger\.ant-btn\.ant-btn-text\)\s*\{[^}]*font-size:\s*var\(--chat-surface-control-font-size\) !important;[^}]*font-weight:\s*var\(--chat-surface-control-font-weight\) !important;[^}]*line-height:\s*var\(--chat-surface-control-line-height\) !important/

@@ -136,32 +136,10 @@
 
 ### OW-DM-P001 — 主题侧栏是否保留渐变
 
-- Revision: 1
-- Status: PENDING_CONFLICT_RESOLUTION
-- Candidate rule: Codex 主题的侧栏使用单一中性纯色表面，不使用渐变。
-- Conflicts with: `OW-DM-007` 和 [`theme-i18n.md`](./theme-i18n.md) 当前要求主题侧栏保留渐进背景。
-- Candidate scope: 待用户确认仅限 `focus-workbench` / Codex 主题，还是替换全部插件主题的项目级规则。
-- Current-task behavior: `focus-workbench` 侧栏按本轮明确反馈改为纯色；其他主题保持原规则。
-- Question asked: 已询问用户这是 Codex 主题的特例，还是要替换所有主题的侧栏渐变规范。
-- Source: 用户在 Codex 主题页对侧栏明确反馈“不要弄渐变色”，2026-07-14。
-
-新增候选时使用：
-
-```text
-ID:
-Revision:
-Status: PENDING_CONFLICT_RESOLUTION
-Candidate rule:
-Conflicts with:
-Candidate scope:
-Current-task behavior:
-Question asked:
-Source:
-Created date:
-Resolution:
-```
-
-用户确认后，不删除记录；把它更新为 `ACTIVE`、`SCOPED_EXCEPTION` 或 `REJECTED`，并链接 owning rule 的实际修改。
+- Revision: 2
+- Status: SCOPED_EXCEPTION
+- Rule: Codex 主题侧栏使用单一中性纯色表面；其他主题继续遵循各自表面配方。
+- Source: 用户明确要求 Codex 主题移除渐变，2026-07-14；已由 `OW-DM-E002` 的主题范围约束承接。
 
 ## 作用域例外
 

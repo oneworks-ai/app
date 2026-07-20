@@ -10,10 +10,10 @@ describe('app shell surface geometry', () => {
     )
 
     expect(styles).not.toMatch(
-      /\.app-shell__content\.app-shell__content--route-sidebar\s*\{[^}]*border-radius:\s*0/s
+      /\.app-shell__content\.app-shell__content--route-sidebar\s*\{[^}]*border-radius:\s*0/
     )
     expect(styles).toMatch(
-      /\.app-shell__content\.app-shell__content--route-sidebar\s*>\s*\*\s*\{[^}]*border-radius:\s*var\(--app-shell-content-radius\)/s
+      /\.app-shell__content\.app-shell__content--route-sidebar\s*>\s*\*\s*\{[^}]*border-radius:\s*var\(--app-shell-content-radius\)/
     )
   })
 })
