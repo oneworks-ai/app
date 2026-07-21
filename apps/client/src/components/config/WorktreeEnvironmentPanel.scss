@@ -1,31 +1,42 @@
 .worktree-env-panel {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   color: var(--text-color);
+  display: flex;
+  flex-direction: column;
 
   &__list-view,
   &__detail-view {
-    width: min(100%, 1280px);
-    margin: 0 auto;
+    width: 100%;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: var(--subpage-tertiary-gap);
   }
 
-  &__topbar {
+  &__list-body {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    min-height: 32px;
+    flex-direction: column;
+    gap: var(--subpage-tertiary-gap);
+    overflow: hidden;
   }
 
-  &__actions {
+  &__list-view {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  &__detail-view {
+    overflow: auto;
+  }
+
+  &__list-main {
+    flex: 1 1 auto;
+    min-height: 0;
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    gap: var(--subpage-tertiary-gap);
   }
 
   &__section {
@@ -55,95 +66,33 @@
   }
 
   &__search-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 32px;
-    align-items: center;
-    gap: 8px;
+    flex: 0 0 auto;
   }
 
-  &__create-button {
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border-radius: 6px;
-    background: transparent !important;
-    color: var(--sub-text-color);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-
-    .material-symbols-rounded {
-      font-size: 18px;
-      line-height: 1;
-    }
-
-    &:hover,
-    &:focus-visible {
-      background: var(--nav-hover-bg) !important;
-      color: var(--text-color) !important;
-    }
-  }
-
-  &__search {
-    width: 100%;
-
-    .material-symbols-rounded {
-      color: var(--sub-text-color);
-      font-size: 18px;
-    }
+  &__list-results {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
   }
 
   &__env-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  &__env-row {
-    width: 100%;
-    min-height: 64px;
-    padding: 12px 14px;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: var(--subpage-content-card-bg);
-    color: var(--text-color);
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 12px;
-    text-align: left;
-    cursor: pointer;
-    transition: border-color .2s ease, background-color .2s ease;
-
-    &:hover {
-      border-color: var(--primary-color);
-      background: var(--tag-hover-bg);
-    }
-
-    .material-symbols-rounded {
-      color: var(--sub-text-color);
-    }
-  }
-
-  &__env-row-main {
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+
+    .config-view__record-subtitle {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: var(--mono-font-family, monospace);
+    }
   }
 
-  &__env-row-title {
-    font-size: 14px;
-    font-weight: 700;
+  &__env-row--disabled {
+    opacity: .62;
   }
 
-  &__env-row-path {
+  &__row-chevron {
     color: var(--sub-text-color);
-    font-size: 12px;
-    font-family: var(--mono-font-family, monospace);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-size: 18px;
   }
 
   &__field-row {
@@ -162,6 +111,7 @@
     display: grid;
     place-items: center;
     min-height: 180px;
+    height: 100%;
   }
 
   &__script-sections {
@@ -412,11 +362,6 @@
     &__list-view,
     &__detail-view {
       gap: 18px;
-    }
-
-    &__topbar {
-      align-items: flex-start;
-      flex-direction: column;
     }
 
     &__field-row {

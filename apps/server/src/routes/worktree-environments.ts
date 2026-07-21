@@ -3,12 +3,17 @@ import Router from '@koa/router'
 import type { WorktreeEnvironmentSavePayload, WorktreeEnvironmentSource } from '@oneworks/types'
 
 import {
+  WorktreeEnvironmentImportError,
+  importWorktreeEnvironmentsFromAdapter,
+  listWorktreeEnvironmentImporters
+} from '#~/services/worktree-environment-import.js'
+import {
   deleteWorktreeEnvironment,
   getWorktreeEnvironment,
   listWorktreeEnvironments,
   saveWorktreeEnvironment
 } from '#~/services/worktree-environments.js'
-import { badRequest, notFound } from '#~/utils/http.js'
+import { badRequest, internalServerError, notFound } from '#~/utils/http.js'
 
 const ENVIRONMENT_ID_PATTERN = /^\w[\w.-]{0,127}$/
 
@@ -30,11 +35,49 @@ const getSourceQuery = (value: unknown): WorktreeEnvironmentSource | undefined =
   return undefined
 }
 
+const asBodyRecord = (body: unknown): Record<string, unknown> => (
+  body != null && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {}
+)
+
+const handleImportError = (error: unknown): never => {
+  if (error instanceof WorktreeEnvironmentImportError) {
+    if (error.code === 'worktree_environment_importer_not_found') {
+      throw notFound(error.message, error.details, error.code)
+    }
+    if (error.code === 'invalid_worktree_environment_import_result') {
+      throw internalServerError(error.message, { code: error.code, details: error.details })
+    }
+    throw badRequest(error.message, error.details, error.code)
+  }
+  throw internalServerError('Failed to import worktree environments', {
+    code: 'worktree_environment_import_failed'
+  })
+}
+
 export function worktreeEnvironmentsRouter(): Router {
   const router = new Router()
 
   router.get(['/', ''], async (ctx) => {
     ctx.body = await listWorktreeEnvironments()
+  })
+
+  router.get('/imports/adapters', async (ctx) => {
+    try {
+      ctx.body = await listWorktreeEnvironmentImporters()
+    } catch (error) {
+      handleImportError(error)
+    }
+  })
+
+  router.post('/imports/:adapterKey', async (ctx) => {
+    try {
+      ctx.body = await importWorktreeEnvironmentsFromAdapter({
+        adapterKey: ctx.params.adapterKey,
+        source: asBodyRecord(ctx.request.body).source
+      })
+    } catch (error) {
+      handleImportError(error)
+    }
   })
 
   router.get('/:id', async (ctx) => {

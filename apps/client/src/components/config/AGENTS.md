@@ -22,6 +22,8 @@
 
 外部软件会话历史管理属于配置页的独立 app 级入口：`ExternalSessionsPanel.tsx` 负责当前项目维度的 Codex / Claude Code 历史导入、平台选择和已导入外部会话列表；不要把这类管理入口塞进 NavRail More 菜单或一次性弹窗。
 
+Worktree Environment 的 Project / User source switch 属于 route header；列表正文从搜索入口开始，不再重复标题或来源切换。原生环境导入入口位于搜索框尾部、创建按钮左侧，并与创建保持相同的 icon-only 样式；点击后由 `AdapterImportDialog.tsx` 先选择 adapter capability，再显式确认导入。source 和请求状态由 `ConfigView.tsx` 持有。
+
 配置页和 worktree environment 编辑器都遵循相同的“三份状态”模型：
 
 - `base`：开始编辑时或上次成功保存后的远端基线。
@@ -32,6 +34,7 @@
 
 - 复杂 detail 页优先组织为 tabs，而不是把所有字段纵向堆在同一页。tab 应按用户任务分组，例如服务信息、接入配置、模型配置、展示与链接、套餐信息、高级配置；只在对应类型确实需要时显示特定 tab。
 - 列表创建、编辑、删除和进入详情优先复用 `ConfigRecordList` 这类统一记录列表。列表组件必须允许外部决定按钮行为，例如点击行进入详情、打开对话框、执行内联创建或跳转；不要把某个页面的一次性行为写死在通用组件里。
+- record-map 记录列表的新增行放在已有条目上方；如果同一列表还有独立导入行，则顺序为“导入、新增、已有条目”。行内选择器与方形动作按钮必须同高。
 - 主流程保持简洁，低频或实现视角字段放进高级配置。服务图标、管理主页、Base URL 覆盖、扩展 JSON、服务类型等字段，只有没有 provider 或当前类型必须用户配置时才默认展开。
 - 卡片标题、列表行尾、tab chrome 和配置页工具区的按钮优先使用 icon-only + tooltip + `aria-label`，尺寸和 hover 状态跟随现有 config / sidebar inline action 风格。必要快捷动作放在更多按钮左侧，低频动作收进更多菜单。
 - 外部网页、管理后台和 provider portal 优先接入配置页底部 dock / portal tabs，不使用一次性的 iframe dialog。底部 dock 是 route 级状态，切换配置 section、detail 或 source 时不能被清空。
@@ -52,6 +55,8 @@
 - 管理型平台的远端令牌和本地 profile 不要拆成两套用户概念：profile 选择一个远端令牌并补充本地参数。创建 profile 时默认选择第一个可用远端令牌；没有远端令牌时应引导去令牌管理，而不是让用户填一堆无效字段。
 - 普通 API key、Coding Plan key、subscription key、平台管理 token 是不同凭证。界面文案和字段分组必须明确区分，不要把“模型调用密钥”和“平台管理密钥”混用。
 - 能从 provider、collection 或远端令牌推导的模型列表、base URL、provider 图标和默认配置，优先自动生成或合并；不要暴露“写入模型列表”这类实现视角操作。
+- Model Services 导入是列表最上方的独立 adapter-capability 行：左侧可搜索选择服务端发现的 importer，右侧使用方形 icon-only 按钮显式执行；可选项和 source 支持范围必须来自 adapter package 的 `model-provider-import` capability，不能由前端内置 adapter 列表猜测。不要把它移回 route header、塞进手工新增行或改成 adapter init 自动写回。
+- `AdapterImportRow.tsx` 与 `AdapterImportDialog.tsx` 共用 `AdapterImportSelect`，只负责 importer 选择、搜索、adapter 展示和导入按钮状态；各配置域的 source/draft/in-flight 编排继续由 `ConfigView.tsx` 持有。
 - Coding Plan / Token Plan 的专属 base URL 和 key 类型只在对应服务类型里展示和校验；普通 API 服务不因为同一 provider 存在 Coding Plan 就继承其限制。
 
 ## 不变式

@@ -686,6 +686,118 @@ describe('config schema form', () => {
     expect(accessHtml).toContain('config.fields.modelServices.item.apiBaseUrl.label')
   })
 
+  it('renders adapter model service import as a searchable row separate from manual creation', () => {
+    const importAdapters = [
+      {
+        adapterKey: 'codex',
+        runtimeAdapter: 'codex',
+        title: 'Codex config.toml'
+      },
+      {
+        adapterKey: 'nativeImport',
+        description: 'Acme provider settings',
+        runtimeAdapter: '@acme/adapter-native-import',
+        title: 'Acme native config'
+      }
+    ]
+    const importAction = {
+      actionLabel: 'Import model services from Codex config.toml',
+      adapters: importAdapters,
+      buttonLabel: 'Import',
+      emptyLabel: 'No import adapters',
+      mobileTitle: 'Select import adapter',
+      onAdapterChange: () => undefined,
+      onClick: () => undefined,
+      placeholder: 'Select adapter',
+      selectedAdapterKey: 'codex',
+      selectLabel: 'Model service import adapter'
+    }
+    const globalHtml = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{
+          kimi: {
+            provider: 'openai-compatible',
+            title: 'Kimi'
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        modelServiceImportAction={importAction}
+        t={t}
+      />
+    )
+    const loadingHtml = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{}}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        modelServiceImportAction={{ ...importAction, loading: true }}
+        t={t}
+      />
+    )
+    const userHtml = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{}}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        modelServiceImportAction={{
+          ...importAction,
+          disabled: true,
+          onClick: undefined,
+          title: 'Select Global or Project.'
+        }}
+        t={t}
+      />
+    )
+    const customHtml = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{}}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        modelServiceImportAction={{
+          ...importAction,
+          actionLabel: 'Import model services from Acme native config',
+          selectedAdapterKey: 'nativeImport'
+        }}
+        t={t}
+      />
+    )
+
+    expect(globalHtml.match(/config-view__record-add-inputs/gu)).toHaveLength(2)
+    expect(globalHtml).toContain('config-view__adapter-import-row')
+    expect(globalHtml).toContain('aria-label="Model service import adapter"')
+    expect(globalHtml).toContain('Codex config.toml')
+    expect(globalHtml.match(/class="config-view__adapter-import-selected"/gu)).toHaveLength(1)
+    expect(globalHtml).toContain('config-view__adapter-import-option-icon')
+    expect(globalHtml).not.toContain('<span>Import</span>')
+    expect(globalHtml).toContain('file_download')
+    expect(globalHtml.indexOf('config-view__adapter-import-row')).toBeLessThan(
+      globalHtml.indexOf('config.editor.newModelServiceName')
+    )
+    expect(globalHtml.indexOf('config.editor.newModelServiceName')).toBeLessThan(
+      globalHtml.indexOf('config-view__record-card')
+    )
+    expect(globalHtml.indexOf('file_download')).toBeLessThan(
+      globalHtml.indexOf('>check<')
+    )
+    expect(customHtml).toContain('Acme native config')
+    expect(customHtml).toContain('config-view__adapter-import-selected')
+    expect(customHtml).toContain('>deployed_code</span>')
+    expect(loadingHtml).toContain('aria-busy="true"')
+    expect(loadingHtml).toContain('aria-disabled="true"')
+    expect(loadingHtml).toContain('ant-btn-loading')
+    expect(userHtml).toContain('disabled=""')
+    expect(userHtml).toContain('aria-disabled="true"')
+  })
+
   it('groups model service detail fields by function', () => {
     const itemFields = configSchema.modelServices?.[0]?.detailCollection?.itemFields ?? []
     const groupFor = (path: string) => itemFields.find(field => field.path.join('.') === path)?.group

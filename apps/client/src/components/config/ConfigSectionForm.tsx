@@ -12,6 +12,7 @@ import { normalizeSendShortcut, resolveSendShortcut } from '#~/utils/shortcutUti
 
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
 import { AdapterAccountsManager, mergeAccounts } from './AdapterAccountsManager'
+import type { AdapterImportAction } from './AdapterImportRow'
 import { DisplayValue } from './ConfigDisplayValue'
 import { ComplexTextEditor, StringArrayEditor } from './ConfigEditors'
 import { FieldRow } from './ConfigFieldRow'
@@ -216,6 +217,7 @@ export const SectionForm = ({
   onOpenModelServicePortal,
   creatingModelServiceSessionKey,
   onCreateModelServiceSession,
+  modelServiceImportAction,
   t
 }: {
   sectionKey: string
@@ -235,6 +237,7 @@ export const SectionForm = ({
   onOpenModelServicePortal?: (request: ModelServiceProviderPortalRequest) => void
   creatingModelServiceSessionKey?: string | null
   onCreateModelServiceSession?: (request: ModelServiceConfigSessionRequest) => void | Promise<void>
+  modelServiceImportAction?: AdapterImportAction
   t: TranslationFn
 }) => {
   const fields = providedFields ?? configSchema[sectionKey] ?? []
@@ -574,6 +577,7 @@ export const SectionForm = ({
           uiSection={uiSection}
           creatingModelServiceSessionKey={creatingModelServiceSessionKey}
           onCreateModelServiceSession={onCreateModelServiceSession}
+          modelServiceImportAction={modelServiceImportAction}
           t={t}
         />
       )

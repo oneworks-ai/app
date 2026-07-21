@@ -14,6 +14,7 @@ import {
 
 import { loadConfigState } from '#~/services/config/index.js'
 
+import { ModelProvidersServiceError } from './errors.js'
 import {
   createProviderManagementToken,
   createProviderSecret,
@@ -26,16 +27,7 @@ import {
   updateProviderManagementToken
 } from './provider-client.js'
 
-export class ModelProvidersServiceError extends Error {
-  constructor(
-    public readonly code: string,
-    message: string,
-    public readonly details?: unknown
-  ) {
-    super(message)
-    this.name = 'ModelProvidersServiceError'
-  }
-}
+export { ModelProvidersServiceError } from './errors.js'
 
 const normalizeString = (
   value: unknown

@@ -2063,11 +2063,13 @@ const extractCodexSessionRootConfigLines = (content: string | undefined) => {
 
 const buildCodexSessionConfigContent = (params: {
   cwd: string
+  nativeProviderConfigOverrides?: string[]
   sharedConfigContent?: string
 }) => {
   const rootLines = extractCodexSessionRootConfigLines(params.sharedConfigContent)
   return [
     ...rootLines,
+    ...(params.nativeProviderConfigOverrides ?? []),
     'check_for_update_on_startup = false',
     '',
     `[projects.${JSON.stringify(resolve(params.cwd))}]`,
@@ -2079,6 +2081,7 @@ const buildCodexSessionConfigContent = (params: {
 const writeCodexSessionConfigFile = async (params: {
   ctx: Pick<AdapterCtx, 'cwd' | 'env'>
   homeDir: string
+  nativeProviderConfigOverrides?: string[]
 }) => {
   const mockHome = resolveMockHome(params.ctx.cwd, params.ctx.env)
   const sharedConfigPath = join(mockHome, '.codex', 'config.toml')
@@ -2096,9 +2099,10 @@ const writeCodexSessionConfigFile = async (params: {
     configPath,
     buildCodexSessionConfigContent({
       cwd: params.ctx.cwd,
+      nativeProviderConfigOverrides: params.nativeProviderConfigOverrides,
       sharedConfigContent
     }),
-    'utf8'
+    { encoding: 'utf8', mode: 0o600 }
   )
 
   return configPath
@@ -2142,6 +2146,7 @@ export const prepareCodexSessionHome = async (params: {
   ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId' | 'configs'>
   sessionId: string
   account?: string
+  nativeProviderConfigOverrides?: string[]
 }) => {
   const { ctx, sessionId } = params
   const startupProfiler = createStartupProfiler({
@@ -2195,7 +2200,11 @@ export const prepareCodexSessionHome = async (params: {
   await syncSharedCodexSessionHomeFiles(ctx, homeDir, sessionId)
   startupProfiler.mark('codex.accounts.syncSharedSessionHomeFiles', sharedFilesStartedAt)
   const sessionConfigStartedAt = startupProfiler.now()
-  const sessionConfigPath = await writeCodexSessionConfigFile({ ctx, homeDir })
+  const sessionConfigPath = await writeCodexSessionConfigFile({
+    ctx,
+    homeDir,
+    nativeProviderConfigOverrides: params.nativeProviderConfigOverrides
+  })
   await ensureCodexNativeHookTrustState({
     configPath: sessionConfigPath,
     hooksPath: join(homeDir, '.codex', 'hooks.json')

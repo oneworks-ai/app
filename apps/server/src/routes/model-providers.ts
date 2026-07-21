@@ -22,6 +22,10 @@ import {
   probeModelProvider,
   updateModelServiceManagementToken
 } from '#~/services/model-providers/index.js'
+import {
+  importModelServicesFromAdapter,
+  listModelServiceImporters
+} from '#~/services/model-providers/model-service-import.js'
 import { ProviderActionError } from '#~/services/model-providers/provider-client.js'
 import { HttpError, badRequest, internalServerError, notFound } from '#~/utils/http.js'
 
@@ -52,7 +56,16 @@ const mapProviderActionError = (error: ProviderActionError) => {
 }
 
 const mapServiceError = (error: ModelProvidersServiceError) => {
-  if (error.code === 'model_service_not_found') return notFound(error.message, error.details, error.code)
+  if (error.code === 'invalid_model_service_import_result') {
+    return internalServerError(error.message, {
+      code: error.code,
+      details: error.details
+    })
+  }
+  if (
+    error.code === 'model_service_not_found' ||
+    error.code === 'model_service_importer_not_found'
+  ) return notFound(error.message, error.details, error.code)
   return badRequest(error.message, error.details, error.code)
 }
 
@@ -91,6 +104,25 @@ export function modelProvidersRouter(): Router {
 
 export function modelServicesRouter(): Router {
   const router = new Router()
+
+  router.get('/importers', async (ctx) => {
+    try {
+      ctx.body = await listModelServiceImporters()
+    } catch (error) {
+      handleProviderError(error)
+    }
+  })
+
+  router.post('/import/:adapterKey', async (ctx) => {
+    try {
+      ctx.body = await importModelServicesFromAdapter({
+        adapterKey: ctx.params.adapterKey,
+        source: asBodyRecord(ctx.request.body).source
+      })
+    } catch (error) {
+      handleProviderError(error)
+    }
+  })
 
   router.post('/:serviceKey/models/list', async (ctx) => {
     try {

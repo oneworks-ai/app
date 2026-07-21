@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- workspace git fixture coverage is intentionally consolidated */
 
 import { execFileSync } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
@@ -93,7 +93,9 @@ describe('session workspace service', () => {
   })
 
   afterEach(async () => {
+    vi.doUnmock('node:fs/promises')
     vi.doUnmock('node:process')
+    vi.doUnmock('#~/services/safe-regular-file-update.js')
     process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = previousWorkspaceEnv
     process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__ = previousPrimaryWorkspaceEnv
     db.close()
@@ -257,9 +259,11 @@ describe('session workspace service', () => {
     })
     const log = await readFile(path.join(workspace.workspaceFolder, 'env-create.log'), 'utf8')
 
-    expect(log).toContain(`base:sess-env:create:${workspaceRoot}`)
     if (platformScriptFileName != null) {
-      expect(log).toContain('platform:create')
+      expect(log.trim()).toBe('platform:create')
+      expect(log).not.toContain('base:')
+    } else {
+      expect(log).toContain(`base:sess-env:create:${workspaceRoot}`)
     }
     expect(progress.some(event => event.step === 'worktree_creating' && event.status === 'running')).toBe(true)
     expect(progress.some(event => event.step === 'environment_script_running')).toBe(true)
@@ -367,6 +371,346 @@ describe('session workspace service', () => {
     await expect(
       readFile(path.join(primaryWorkspaceRoot, '.oo', 'env', 'env-windows', 'start.windows.ps1'), 'utf8')
     ).resolves.toBe('Write-Output "start windows"\n')
+  })
+
+  it('creates imported worktree environments only when the target id is absent', async () => {
+    const {
+      createWorktreeEnvironmentIfAbsent,
+      getWorktreeEnvironment
+    } = await import('#~/services/worktree-environments.js')
+
+    await expect(createWorktreeEnvironmentIfAbsent({
+      id: 'native-env',
+      scripts: { create: 'printf "original\\n"' },
+      source: 'project',
+      workspaceFolder: workspaceRoot
+    })).resolves.toMatchObject({ created: true, environmentId: 'native-env' })
+    await expect(createWorktreeEnvironmentIfAbsent({
+      id: 'native-env',
+      scripts: { create: 'printf "overwritten\\n"' },
+      source: 'project',
+      workspaceFolder: workspaceRoot
+    })).resolves.toMatchObject({ created: false, environmentId: 'native-env' })
+
+    const environment = await getWorktreeEnvironment('native-env', workspaceRoot, 'project')
+    expect(environment.scripts.find(script => script.key === 'create')?.content).toBe('printf "original\\n"\n')
+  })
+
+  it('allows only one concurrent imported environment writer to claim an id', async () => {
+    const { createWorktreeEnvironmentIfAbsent } = await import('#~/services/worktree-environments.js')
+    const results = await Promise.all([
+      createWorktreeEnvironmentIfAbsent({
+        id: 'native-race',
+        scripts: { create: 'printf "first\\n"' },
+        source: 'project',
+        workspaceFolder: workspaceRoot
+      }),
+      createWorktreeEnvironmentIfAbsent({
+        id: 'native-race',
+        scripts: { create: 'printf "second\\n"' },
+        source: 'project',
+        workspaceFolder: workspaceRoot
+      })
+    ])
+
+    expect(results.filter(result => result.created)).toHaveLength(1)
+    expect(results.filter(result => !result.created)).toHaveLength(1)
+  })
+
+  it('never publishes a partially written imported environment', async () => {
+    const { createWorktreeEnvironmentIfAbsent } = await import('#~/services/worktree-environments.js')
+    const scripts = { create: 'printf "secret\\n"' } as Record<string, string>
+    Object.defineProperty(scripts, 'start', {
+      enumerable: true,
+      get: () => {
+        throw new Error('simulated adapter failure')
+      }
+    })
+
+    await expect(createWorktreeEnvironmentIfAbsent({
+      id: 'native-partial',
+      scripts,
+      source: 'project',
+      workspaceFolder: workspaceRoot
+    })).rejects.toThrow('simulated adapter failure')
+
+    const environmentRoot = path.join(primaryWorkspaceRoot, '.oo', 'env')
+    const entries = await readdir(environmentRoot)
+    expect(entries).not.toContain('native-partial')
+    expect(entries.some(entry => entry.startsWith('.import-native-partial-'))).toBe(false)
+  })
+
+  it('keeps a live publishing sentinel when an unverified final directory cannot be cleaned', async () => {
+    const environmentRoot = path.join(primaryWorkspaceRoot, '.oo', 'env')
+    const environmentDirectory = path.join(environmentRoot, 'native-unverified-target')
+    const sentinelPath = path.join(environmentRoot, '.oneworks-import-publishing-native-unverified-target')
+    let injectedTargetIdentityFailure = false
+    vi.doMock('#~/services/safe-regular-file-update.js', async () => {
+      const actual = await vi.importActual<typeof import('#~/services/safe-regular-file-update.js')>(
+        '#~/services/safe-regular-file-update.js'
+      )
+      return {
+        ...actual,
+        captureVerifiedDirectoryIdentity: async (directory: string) => {
+          if (directory === environmentDirectory && !injectedTargetIdentityFailure) {
+            injectedTargetIdentityFailure = true
+            throw new Error('simulated target identity failure')
+          }
+          return actual.captureVerifiedDirectoryIdentity(directory)
+        }
+      }
+    })
+    const {
+      createWorktreeEnvironmentIfAbsent,
+      listWorktreeEnvironments
+    } = await import('#~/services/worktree-environments.js')
+
+    await expect(createWorktreeEnvironmentIfAbsent({
+      id: 'native-unverified-target',
+      scripts: { create: 'printf "hidden\\n"' },
+      source: 'project',
+      workspaceFolder: workspaceRoot
+    })).rejects.toThrow('simulated target identity failure')
+
+    expect(injectedTargetIdentityFailure).toBe(true)
+    await expect(readFile(sentinelPath, 'utf8')).resolves.toBeTruthy()
+    await expect(readdir(environmentDirectory)).resolves.toEqual([])
+    await expect(listWorktreeEnvironments(workspaceRoot)).resolves.not.toEqual(expect.objectContaining({
+      environments: expect.arrayContaining([
+        expect.objectContaining({ id: 'native-unverified-target' })
+      ])
+    }))
+
+    vi.doUnmock('#~/services/safe-regular-file-update.js')
+    vi.resetModules()
+    const { createWorktreeEnvironmentIfAbsent: retryImport } = await import('#~/services/worktree-environments.js')
+    await expect(retryImport({
+      id: 'native-unverified-target',
+      scripts: { create: 'printf "recovered\\n"' },
+      source: 'project',
+      workspaceFolder: workspaceRoot
+    })).resolves.toMatchObject({ created: true, environmentId: 'native-unverified-target' })
+    await expect(readFile(sentinelPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('recovers a crash between claiming and marking the final import directory', async () => {
+    const { createWorktreeEnvironmentIfAbsent } = await import('#~/services/worktree-environments.js')
+    const environmentRoot = path.join(primaryWorkspaceRoot, '.oo', 'env')
+    await mkdir(path.join(environmentRoot, 'native-stale-claim'), { recursive: true })
+    await writeFile(
+      path.join(environmentRoot, '.oneworks-import-publishing-native-stale-claim'),
+      'stale-token\n',
+      'utf8'
+    )
+
+    await expect(createWorktreeEnvironmentIfAbsent({
+      id: 'native-stale-claim',
+      scripts: { create: 'printf "recovered\\n"' },
+      source: 'project',
+      workspaceFolder: workspaceRoot
+    })).resolves.toMatchObject({ created: true, environmentId: 'native-stale-claim' })
+    await expect(readFile(
+      path.join(environmentRoot, 'native-stale-claim', 'create.sh'),
+      'utf8'
+    )).resolves.toBe('printf "recovered\\n"\n')
+  })
+
+  it('keeps the publishing sentinel visible until a stale final directory is removed', async () => {
+    const environmentRoot = path.join(primaryWorkspaceRoot, '.oo', 'env')
+    const environmentDirectory = path.join(environmentRoot, 'native-stale-order')
+    const sentinelPath = path.join(environmentRoot, '.oneworks-import-publishing-native-stale-order')
+    await mkdir(environmentDirectory, { recursive: true })
+    await writeFile(sentinelPath, 'stale-token\n', 'utf8')
+
+    let sentinelExistedDuringTargetRemoval = false
+    vi.doMock('node:fs/promises', async () => {
+      const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')
+      return {
+        ...actual,
+        rm: async (...args: Parameters<typeof actual.rm>) => {
+          if (String(args[0]) === environmentDirectory) {
+            sentinelExistedDuringTargetRemoval = await actual.lstat(sentinelPath).then(
+              () => true,
+              () => false
+            )
+          }
+          return actual.rm(...args)
+        }
+      }
+    })
+    const { createWorktreeEnvironmentIfAbsent } = await import('#~/services/worktree-environments.js')
+
+    await expect(createWorktreeEnvironmentIfAbsent({
+      id: 'native-stale-order',
+      scripts: { create: 'printf "recovered\\n"' },
+      source: 'project',
+      workspaceFolder: workspaceRoot
+    })).resolves.toMatchObject({ created: true, environmentId: 'native-stale-order' })
+
+    expect(sentinelExistedDuringTargetRemoval).toBe(true)
+    await expect(readFile(sentinelPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('rejects non-directory and symlink placeholders for an imported id', async () => {
+    const { createWorktreeEnvironmentIfAbsent } = await import('#~/services/worktree-environments.js')
+    const environmentRoot = path.join(primaryWorkspaceRoot, '.oo', 'env')
+    const outsideDirectory = path.join(workspaceRoot, 'outside-environment')
+    await Promise.all([
+      mkdir(environmentRoot, { recursive: true }),
+      mkdir(outsideDirectory)
+    ])
+    await writeFile(path.join(environmentRoot, 'occupied-file'), 'do-not-replace\n', 'utf8')
+    await symlink(outsideDirectory, path.join(environmentRoot, 'occupied-link'), 'dir')
+
+    await expect(createWorktreeEnvironmentIfAbsent({
+      id: 'occupied-file',
+      scripts: { create: 'unsafe' },
+      source: 'project',
+      workspaceFolder: workspaceRoot
+    })).rejects.toThrow('Unsafe existing worktree environment path')
+    await expect(createWorktreeEnvironmentIfAbsent({
+      id: 'occupied-link',
+      scripts: { create: 'unsafe' },
+      source: 'project',
+      workspaceFolder: workspaceRoot
+    })).rejects.toThrow('Unsafe existing worktree environment path')
+    await expect(readFile(path.join(environmentRoot, 'occupied-file'), 'utf8')).resolves.toBe('do-not-replace\n')
+    expect(await readdir(outsideDirectory)).toEqual([])
+  })
+
+  it('canonicalizes the local presentation suffix for both environment sources', async () => {
+    const { normalizeWorktreeEnvironmentIdForSource } = await import('#~/services/worktree-environments.js')
+
+    expect(normalizeWorktreeEnvironmentIdForSource('node.local', 'project')).toBe('node')
+    expect(normalizeWorktreeEnvironmentIdForSource('node.LOCAL', 'user')).toBe('node')
+    expect(() => normalizeWorktreeEnvironmentIdForSource('node.local.local', 'project')).toThrow(
+      'Invalid worktree environment id'
+    )
+  })
+
+  it('rejects an imported environment when the configured .oo directory is a symlink', async () => {
+    const { createWorktreeEnvironmentIfAbsent } = await import('#~/services/worktree-environments.js')
+    const escapedRoot = path.join(workspaceRoot, 'escaped-oo')
+    await mkdir(escapedRoot)
+    await symlink(escapedRoot, path.join(primaryWorkspaceRoot, '.oo'), 'dir')
+
+    await expect(createWorktreeEnvironmentIfAbsent({
+      id: 'unsafe-root',
+      scripts: { create: 'secret-script' },
+      source: 'project',
+      workspaceFolder: workspaceRoot
+    })).rejects.toThrow('Unsafe worktree environment directory')
+    await expect(readFile(path.join(escapedRoot, 'env', 'unsafe-root', 'create.sh'), 'utf8')).rejects.toThrow()
+  })
+
+  it('rejects an imported environment when its environment root is a symlink', async () => {
+    const { createWorktreeEnvironmentIfAbsent } = await import('#~/services/worktree-environments.js')
+    const ooDirectory = path.join(primaryWorkspaceRoot, '.oo')
+    const escapedRoot = path.join(workspaceRoot, 'escaped-env')
+    await mkdir(ooDirectory)
+    await mkdir(escapedRoot)
+    await symlink(escapedRoot, path.join(ooDirectory, 'env'), 'dir')
+
+    await expect(createWorktreeEnvironmentIfAbsent({
+      id: 'unsafe-environment-root',
+      scripts: { create: 'secret-script' },
+      source: 'project',
+      workspaceFolder: workspaceRoot
+    })).rejects.toThrow('Unsafe worktree environment directory')
+    await expect(readFile(path.join(escapedRoot, 'unsafe-environment-root', 'create.sh'), 'utf8')).rejects.toThrow()
+  })
+
+  it('never follows a symlinked gitignore while importing a user environment', async () => {
+    const { createWorktreeEnvironmentIfAbsent } = await import('#~/services/worktree-environments.js')
+    const outsideGitignore = path.join(workspaceRoot, 'outside.gitignore')
+    const originalContent = 'keep-this-content\n'
+    await writeFile(outsideGitignore, originalContent, 'utf8')
+    await symlink(outsideGitignore, path.join(primaryWorkspaceRoot, '.gitignore'))
+
+    await expect(createWorktreeEnvironmentIfAbsent({
+      id: 'unsafe-gitignore',
+      scripts: { create: 'secret-script' },
+      source: 'user',
+      workspaceFolder: workspaceRoot
+    })).rejects.toThrow()
+    await expect(readFile(outsideGitignore, 'utf8')).resolves.toBe(originalContent)
+    await expect(readFile(
+      path.join(primaryWorkspaceRoot, '.oo', 'env.local', 'unsafe-gitignore', 'create.sh'),
+      'utf8'
+    )).rejects.toThrow()
+  })
+
+  it('repairs the ignore rule before accepting an existing user environment', async () => {
+    const { createWorktreeEnvironmentIfAbsent } = await import('#~/services/worktree-environments.js')
+    const environmentDirectory = path.join(primaryWorkspaceRoot, '.oo', 'env.local', 'existing-user')
+    await mkdir(environmentDirectory, { recursive: true })
+    await writeFile(path.join(environmentDirectory, 'create.sh'), 'existing\n', 'utf8')
+
+    await expect(createWorktreeEnvironmentIfAbsent({
+      id: 'existing-user',
+      scripts: { create: 'should-not-replace' },
+      source: 'user',
+      workspaceFolder: workspaceRoot
+    })).resolves.toMatchObject({ created: false, environmentId: 'existing-user' })
+
+    const gitignore = await readFile(path.join(primaryWorkspaceRoot, '.gitignore'), 'utf8')
+    expect(gitignore.split(/\r?\n/)).toContain('.oo/env.local/')
+    await expect(readFile(path.join(environmentDirectory, 'create.sh'), 'utf8')).resolves.toBe('existing\n')
+  })
+
+  it('escapes a custom in-repository environment root in gitignore', async () => {
+    const { createWorktreeEnvironmentIfAbsent } = await import('#~/services/worktree-environments.js')
+    const previousBaseDir = process.env.__ONEWORKS_PROJECT_BASE_DIR__
+    process.env.__ONEWORKS_PROJECT_BASE_DIR__ = path.join(primaryWorkspaceRoot, 'custom[base] ?')
+    try {
+      await createWorktreeEnvironmentIfAbsent({
+        id: 'escaped-ignore',
+        scripts: { create: 'safe' },
+        source: 'user',
+        workspaceFolder: workspaceRoot
+      })
+      const gitignore = await readFile(path.join(primaryWorkspaceRoot, '.gitignore'), 'utf8')
+      expect(gitignore.split(/\r?\n/)).toContain('custom\\[base\\]\\ \\?/env.local/')
+    } finally {
+      if (previousBaseDir == null) delete process.env.__ONEWORKS_PROJECT_BASE_DIR__
+      else process.env.__ONEWORKS_PROJECT_BASE_DIR__ = previousBaseDir
+    }
+  })
+
+  it('does not add an incorrect ignore rule for an environment root outside the repository', async () => {
+    const { createWorktreeEnvironmentIfAbsent } = await import('#~/services/worktree-environments.js')
+    const previousBaseDir = process.env.__ONEWORKS_PROJECT_BASE_DIR__
+    process.env.__ONEWORKS_PROJECT_BASE_DIR__ = path.join(workspaceRoot, 'external-oo')
+    await writeFile(path.join(primaryWorkspaceRoot, '.gitignore'), 'keep\n', 'utf8')
+    try {
+      await createWorktreeEnvironmentIfAbsent({
+        id: 'external-ignore',
+        scripts: { create: 'safe' },
+        source: 'user',
+        workspaceFolder: workspaceRoot
+      })
+      await expect(readFile(path.join(primaryWorkspaceRoot, '.gitignore'), 'utf8')).resolves.toBe('keep\n')
+    } finally {
+      if (previousBaseDir == null) delete process.env.__ONEWORKS_PROJECT_BASE_DIR__
+      else process.env.__ONEWORKS_PROJECT_BASE_DIR__ = previousBaseDir
+    }
+  })
+
+  it('lists uppercase legacy local suffixes consistently as user environments', async () => {
+    const { listWorktreeEnvironments } = await import('#~/services/worktree-environments.js')
+    const environmentDirectory = path.join(primaryWorkspaceRoot, '.oo', 'env', 'legacy-node.LOCAL')
+    await mkdir(environmentDirectory, { recursive: true })
+    await writeFile(path.join(environmentDirectory, 'create.sh'), 'legacy\n', 'utf8')
+
+    const result = await listWorktreeEnvironments(workspaceRoot)
+
+    expect(result.environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'legacy-node',
+        isLocal: true,
+        source: 'user'
+      })
+    ]))
   })
 
   it('does not run shell base scripts as Windows worktree environment defaults', async () => {
@@ -497,12 +841,25 @@ describe('session workspace service', () => {
       ),
       'utf8'
     )
+    const platformScriptFileName = getPlatformScriptFileName('destroy')
+    if (platformScriptFileName != null) {
+      await writeFile(
+        path.join(environmentDir, platformScriptFileName),
+        buildScriptContent(
+          `printf "platform:%s\n" "$ONEWORKS_WORKTREE_FORCE" > "${markerPath}"\n`,
+          `Set-Content -Path "${markerPath}" -Value "platform:$($env:ONEWORKS_WORKTREE_FORCE)"\n`
+        ),
+        'utf8'
+      )
+    }
 
     const workspace = await provisionSessionWorkspace('sess-destroy-env')
     await deleteSessionWorkspace('sess-destroy-env', { force: true })
     const log = await readFile(markerPath, 'utf8')
 
-    expect(log.trim()).toBe(`${workspace.worktreePath}:true`)
+    expect(log.trim()).toBe(
+      platformScriptFileName == null ? `${workspace.worktreePath}:true` : 'platform:true'
+    )
   })
 
   it('runs configured worktree environment start scripts for a workspace', async () => {

@@ -7,6 +7,8 @@ import { useLayoutEffect, useRef } from 'react'
 
 import type { ConfigSource, ConfigUiSection } from '@oneworks/types'
 
+import { AdapterImportRow } from './AdapterImportRow'
+import type { AdapterImportAction } from './AdapterImportRow'
 import { SectionForm } from './ConfigSectionForm'
 import { ConfigSectionFrame } from './ConfigSectionFrame'
 import type { ModelServiceProviderPortalRequest } from './ModelServiceProviderPortalBottomPanel'
@@ -60,6 +62,7 @@ export function ConfigSectionPanel({
   value,
   resolvedValue,
   source = 'project',
+  disabled = false,
   onChange,
   mergedModelServices,
   mergedAdapters,
@@ -71,6 +74,7 @@ export function ConfigSectionPanel({
   onOpenModelServicePortal,
   creatingModelServiceSessionKey,
   onCreateModelServiceSession,
+  modelServiceImportAction,
   headerExtra,
   showHeader = true,
   t,
@@ -85,6 +89,7 @@ export function ConfigSectionPanel({
   value: unknown
   resolvedValue?: unknown
   source?: ConfigSource
+  disabled?: boolean
   onChange: (nextValue: unknown) => void
   mergedModelServices: Record<string, unknown>
   mergedAdapters: Record<string, unknown>
@@ -96,6 +101,7 @@ export function ConfigSectionPanel({
   onOpenModelServicePortal?: (request: ModelServiceProviderPortalRequest) => void
   creatingModelServiceSessionKey?: string | null
   onCreateModelServiceSession?: (request: ModelServiceConfigSessionRequest) => void | Promise<void>
+  modelServiceImportAction?: AdapterImportAction
   headerExtra?: ReactNode
   showHeader?: boolean
   t: TranslationFn
@@ -103,6 +109,7 @@ export function ConfigSectionPanel({
 }) {
   const hasHeading = title != null || icon != null
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const formRef = useRef<HTMLDivElement | null>(null)
   const scrollPositionsRef = useRef<Record<string, number>>({})
   const resolvedFields = getSectionFields(sectionKey, fields)
   const detailRoute = parseConfigDetailRoute({
@@ -124,6 +131,9 @@ export function ConfigSectionPanel({
     t
   })
   const currentViewKey = getConfigDetailRouteKey(detailRoute)
+  const detachedModelServiceImportAction = disabled && modelServiceImportAction?.selectDisabled === true
+    ? modelServiceImportAction
+    : undefined
 
   const storeCurrentScroll = () => {
     const node = scrollRef.current
@@ -219,6 +229,13 @@ export function ConfigSectionPanel({
     node.scrollTop = scrollPositionsRef.current[currentViewKey] ?? 0
   }, [currentViewKey])
 
+  useLayoutEffect(() => {
+    const node = formRef.current
+    if (node == null) return
+    if (disabled) node.setAttribute('inert', '')
+    else node.removeAttribute('inert')
+  }, [disabled])
+
   const headerContent = hasHeading
     ? detailMeta == null
       ? undefined
@@ -269,26 +286,34 @@ export function ConfigSectionPanel({
       icon={showHeader && headerContent == null ? icon : undefined}
       title={showHeader && headerContent == null ? title : undefined}
     >
-      <SectionForm
-        sectionKey={sectionKey}
-        fields={resolvedFields}
-        uiSection={uiSection}
-        value={value}
-        resolvedValue={resolvedValue}
-        source={source}
-        onChange={onChange}
-        mergedModelServices={mergedModelServices}
-        mergedAdapters={mergedAdapters}
-        selectedModelService={selectedModelService}
-        worktreeEnvironmentOptions={worktreeEnvironmentOptions}
-        workspaceFileOpenerOptions={workspaceFileOpenerOptions}
-        detailRoute={detailRoute}
-        onOpenDetailRoute={handleOpenDetail}
-        onOpenModelServicePortal={onOpenModelServicePortal}
-        creatingModelServiceSessionKey={creatingModelServiceSessionKey}
-        onCreateModelServiceSession={onCreateModelServiceSession}
-        t={t}
-      />
+      {detachedModelServiceImportAction != null && (
+        <AdapterImportRow action={detachedModelServiceImportAction} />
+      )}
+      <div ref={formRef} aria-busy={disabled} aria-disabled={disabled}>
+        <SectionForm
+          sectionKey={sectionKey}
+          fields={resolvedFields}
+          uiSection={uiSection}
+          value={value}
+          resolvedValue={resolvedValue}
+          source={source}
+          onChange={onChange}
+          mergedModelServices={mergedModelServices}
+          mergedAdapters={mergedAdapters}
+          selectedModelService={selectedModelService}
+          worktreeEnvironmentOptions={worktreeEnvironmentOptions}
+          workspaceFileOpenerOptions={workspaceFileOpenerOptions}
+          detailRoute={detailRoute}
+          onOpenDetailRoute={handleOpenDetail}
+          onOpenModelServicePortal={onOpenModelServicePortal}
+          creatingModelServiceSessionKey={creatingModelServiceSessionKey}
+          onCreateModelServiceSession={onCreateModelServiceSession}
+          modelServiceImportAction={detachedModelServiceImportAction == null
+            ? modelServiceImportAction
+            : undefined}
+          t={t}
+        />
+      </div>
     </ConfigSectionFrame>
   )
 }

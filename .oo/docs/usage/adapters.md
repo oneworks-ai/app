@@ -132,9 +132,15 @@ adapters:
 
 行为说明：
 
+- “设置 → 模型服务”列表底部有独立导入行：左侧可搜索选择声明了模型服务导入能力的 adapter package，右侧点击“导入”；每个 adapter 自己声明支持 Global、Project 或 User 中的哪些来源
 - 空项目没有 `adapters` 配置时，运行时默认使用 `codex`，不会为了启动会话主动写入 `.oo.config.json`
 - 如果本机存在 `~/.codex/auth.json`，Codex 适配器会把当前登录态导入到 project home 私有目录
 - 每个 Codex session 会切到隔离 HOME 运行，并在该 HOME 下挂载所选账号的 `auth.json`
+- 在该导入行选择 `Codex config.toml`：当前来源为 Global 时，会把用户级 `CODEX_HOME/config.toml` 或 `~/.codex/config.toml` 中缺失的 provider 导入 global `modelServices`；只有点击“导入”时才执行
+- 当前来源为 Project 时，同一选项会把可信 workspace `.codex/config.toml` 中的 provider 导入 project `.oo.config.*`；Codex 原生会忽略 project 层的 provider/auth 字段，但 One Works 会按 `global < project < user` 使用导入结果。未信任的 project 层不导入，也不会把 global/user provider 展开复制进 project 文件
+- 两类导入都不会修改原 Codex 配置，也不会覆盖目标 One Works source 中已有的服务
+- “设置 → 环境”同样在列表底部提供通用 adapter 导入行，来源只支持 Project 与 User。选择 Codex 后会安全读取当前 workspace `.codex/environments` 下有界的普通 `*.toml` 文件（包括默认、编号和命名环境）；`setup` 映射为 `create`，`cleanup` 映射为 `destroy`，当前平台脚本会覆盖默认脚本。空的基础脚本视为未配置，因此只声明平台脚本也能导入；环境 ID 末尾的 `.local`（不区分大小写）会被规范化，因为该后缀保留给 One Works 的 User 来源展示语义
+- Codex environment 的 `actions` 不等价于 One Works 生命周期 `start`，因此只会报告为跳过，不会被错误迁移；导入只新增缺失环境，不合并或覆盖已有目录，也不会修改原生 TOML
 - Web 模型选择器优先复用 Codex 本地模型目录：`CODEX_HOME` / `~/.codex/config.toml` 里的 `model_catalog_json`，其次是 `models_cache.json`；没有可读目录时才回退内置模型列表
 - Web 配置页默认展示缓存后的额度快照；当前 Codex quota 快照默认缓存 5 分钟
 - CLI `oneworks accounts show codex <account>` 会主动刷新一次最新额度信息

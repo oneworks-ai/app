@@ -7,6 +7,7 @@
 - 服务商模型列表、余额、消费、状态和 secret 动作的上游 API client。
 - provider action 的错误归一化、超时、缓存和 secret 脱敏。
 - `modelServices` 指定 source 的模型刷新写回编排。
+- adapter 原生模型服务的显式导入；通过可选 `model-provider-import` package capability 发现并调用 importer。adapter 只负责读取/转换原生配置，server 统一校验结果并在写锁内 additions-only 写入目标 source；不要在 server 重写各 adapter 的原生格式映射，也不要把客户端传入值直接当 package/path 加载。
 
 边界：
 

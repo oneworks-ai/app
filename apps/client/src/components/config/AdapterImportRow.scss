@@ -1,0 +1,94 @@
+.config-view__adapter-import-row .config-view__record-add-inputs {
+  min-width: 0;
+  width: 100%;
+}
+
+.config-view__adapter-import-select {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.config-view__adapter-import-select
+  :is(.oneworks-select, .mobile-aware-select-trigger-shell),
+.config-view__adapter-import-select
+  .mobile-aware-select-trigger-shell
+  > .oneworks-select {
+  width: 100%;
+}
+
+.config-view__adapter-import-dialog .ant-form-item {
+  margin-bottom: 0;
+}
+
+.config-view__adapter-import-button.ant-btn {
+  flex: 0 0 30px;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+}
+
+.config-view__adapter-import-row
+  .config-view__adapter-import-select
+  > .oneworks-select,
+.config-view__adapter-import-row
+  .config-view__adapter-import-select
+  > .mobile-aware-select-trigger-shell,
+.config-view__adapter-import-row
+  .config-view__adapter-import-select
+  > .mobile-aware-select-trigger-shell
+  > .oneworks-select {
+  height: 30px;
+}
+
+.config-view__adapter-import-option {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+}
+
+.config-view__adapter-import-selected {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.config-view__adapter-import-selected-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-view__adapter-import-selected .config-view__adapter-import-option-icon {
+  flex-basis: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.config-view__adapter-import-option > .config-view__option {
+  min-width: 0;
+}
+
+.config-view__adapter-import-option-icon {
+  display: inline-flex;
+  flex: 0 0 20px;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--sub-text-color);
+}
+
+.config-view__adapter-import-option-icon img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.config-view__adapter-import-option-icon .material-symbols-rounded {
+  font-size: 17px;
+}

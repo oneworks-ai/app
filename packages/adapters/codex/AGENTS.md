@@ -51,6 +51,22 @@ Primary implementation entrypoints for Codex hooks:
   - exposes Codex model selector metadata to One Works
   - prefers Codex's `model_catalog_json` config file or `models_cache.json` under `CODEX_HOME` / `~/.codex`
   - falls back to packaged model metadata only when no Codex catalog/cache is readable
+- `src/runtime/model-provider-import.ts`
+  - implements the shared `model-provider-import` discovery capability used by the explicit Model Services import row; adapter init never imports automatically
+  - reads user-level Codex `model_providers` for global imports and workspace layers for project imports
+  - returns mapped `modelServices` without writing One Works config; the server owns additions-only target-source persistence
+  - never materializes a global/user overlay into project discovery output
+  - keeps Codex-only authentication, AWS, header, query, and retry settings under `modelServices.<key>.extra.codex`
+- `src/runtime/model-provider-project-config-read.ts`
+  - discovers active project `.codex/config.toml` layers through app-server `config/read`
+  - skips layers with `disabledReason`, then parses ignored provider keys through an isolated temporary user layer
+  - merges root-to-cwd project layers with the closest layer winning
+- `src/runtime/worktree-environment-import.ts`
+  - implements the optional `worktree-environment-import` capability for explicit Environment-page imports
+  - discovers bounded, regular `*.toml` files under the canonical `workspace/.codex/environments` directory with no-follow reads; both generated numbered files and named environment files are supported
+  - treats a missing native schema version as version 1, rejects unsupported versions, treats an empty lifecycle script as absent, and fails the whole candidate closed when any non-empty declared lifecycle script is invalid or oversized
+  - maps Codex `setup` scripts to One Works `create` scripts and `cleanup` scripts to `destroy`; platform scripts override the base script, while Codex actions are reported as skipped and never become `start`
+  - returns discovery candidates only; the server owns validation, additions-only persistence, and source conflict handling
 - `src/runtime/session-common.ts`
   - enables `hooks`, injects runtime config, model/provider settings, and session env
 - `src/hook-bridge.ts`
@@ -298,6 +314,45 @@ trust_level = "trusted"
 
 so Codex does not stop on first-run workspace trust prompts inside the isolated
 mock home.
+
+### Native model provider import
+
+When the real user-level `CODEX_HOME/config.toml` or `~/.codex/config.toml`
+contains `model_provider`, `model_providers`, or `openai_base_url`, the Model Services
+config page exposes Codex in its explicit adapter import row. Global discovery reads
+the real user config; project imports read trusted workspace `.codex/config.toml` layers.
+Adapter init must stay read/write-free for this feature.
+Codex itself ignores provider and authentication keys in project config; the adapter therefore
+uses app-server only to discover active/trusted layers, then parses each original project TOML
+as an isolated temporary user layer. Do not replace this with a partial TOML parser.
+
+The capability never changes the native Codex file and only returns discovered model services.
+The server performs the idempotent, additions-only write and never overwrites an existing One
+Works service in the same source. Project discovery only merges project raw values, so global/user
+provider values and secrets are not expanded into a committable project file. The action imports
+`modelServices` only; it does not silently change adapter defaults.
+
+Imported services use `extra.codex.nativeProvider` so session routing restores
+Codex-native provider fields directly instead of sending them through the
+One Works proxy. Keep command auth, AWS options, `env_key`, environment-backed
+headers, retry settings, and `requires_openai_auth` on this direct path.
+
+### Native worktree environment import
+
+The Environment config page exposes Codex through the adapter package's optional
+`worktree-environment-import` export. Discovery is explicit and read-only: adapter init must
+not import environments or write One Works files. Read only regular, non-symlinked native
+environment TOML files within the canonical workspace `.codex/environments` directory.
+Discovery accepts generated default/numbered files and named `*.toml` environments, uses bounded
+no-follow file handles, and treats an omitted schema version as version 1.
+
+Codex `setup` scripts map to One Works `create` variants and `cleanup` scripts map to
+`destroy` variants for base, Darwin, Linux, and Windows; a matching platform script overrides
+the base script. Treat empty base scripts as absent so a valid platform-only override remains
+importable, and avoid emitting suggested IDs ending in the reserved `.local` suffix. Native `actions` have a different
+interaction model, so report them as skipped and never map them to `start`. The adapter returns
+script candidates in memory; the server validates every candidate before writing and creates
+only missing Project or User environments without merging or overwriting an existing directory.
 
 ### Native hooks
 

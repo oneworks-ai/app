@@ -1,5 +1,7 @@
 /* eslint-disable max-lines -- model provider API wrappers intentionally stay in one typed module. */
 import type {
+  AdapterModelProviderImportResult,
+  AdapterModelProviderImporterDescriptor,
   ConfigSource,
   ModelProviderDefinition,
   ModelProviderIdentity,
@@ -42,6 +44,26 @@ export const probeModelProvider = (service: ModelServiceConfig) => (
       body: JSON.stringify({ service })
     },
     '[api] probe model provider failed:'
+  )
+)
+
+export const listModelServiceImporters = () => (
+  fetchApiJsonOrThrow<{ importers: AdapterModelProviderImporterDescriptor[] }>(
+    '/api/model-services/importers',
+    { method: 'GET' },
+    '[api] list model service importers failed:'
+  )
+)
+
+export const importModelServicesFromAdapter = (adapterKey: string, source: ConfigSource) => (
+  fetchApiJsonOrThrow<AdapterModelProviderImportResult>(
+    `/api/model-services/import/${encodeURIComponent(adapterKey)}`,
+    {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ source })
+    },
+    '[api] import adapter model services failed:'
   )
 )
 

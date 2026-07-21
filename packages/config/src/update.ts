@@ -19,6 +19,7 @@ import { resetConfigCache, resolveGlobalConfigDir } from './load'
 export type { ConfigSource } from '@oneworks/types'
 
 interface UpdateConfigFileBaseOptions {
+  env?: Record<string, string | null | undefined>
   workspaceFolder?: string
   source: ConfigSource
   section: string
@@ -486,7 +487,7 @@ const updateConfigSection = (config: Config, section: string, value: unknown): C
 
 export const updateConfigFile = async (options: UpdateConfigFileOptions) => {
   const workspaceFolder = options.workspaceFolder ?? process.cwd()
-  const configPath = resolveWritableConfigPath(workspaceFolder, options.source)
+  const configPath = resolveWritableConfigPath(workspaceFolder, options.source, options.env ?? process.env)
   return withCanonicalConfigWriteLock(configPath, async (targetPath) => {
     const format = extname(configPath).toLowerCase()
     const hasExisting = existsSync(configPath)

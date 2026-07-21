@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- provider route coverage shares one HTTP server harness. */
 import http from 'node:http'
 
 import Router from '@koa/router'
@@ -10,7 +11,25 @@ import { modelProvidersRouter, modelServicesRouter } from '#~/routes/model-provi
 import { HttpError } from '#~/utils/http.js'
 
 const mocks = vi.hoisted(() => ({
-  loadConfigState: vi.fn()
+  codexDiscover: vi.fn(),
+  composeWorkspaceConfigSchemaBundle: vi.fn(),
+  customDiscover: vi.fn(),
+  loadAdapterModelProviderImportCapability: vi.fn(),
+  loadConfigState: vi.fn(),
+  tryLoadAdapterModelProviderImportCapability: vi.fn(),
+  updateConfigFile: vi.fn()
+}))
+
+vi.mock('@oneworks/types', async importOriginal => ({
+  ...await importOriginal<typeof import('@oneworks/types')>(),
+  loadAdapterModelProviderImportCapability: mocks.loadAdapterModelProviderImportCapability,
+  tryLoadAdapterModelProviderImportCapability: mocks.tryLoadAdapterModelProviderImportCapability
+}))
+
+vi.mock('@oneworks/config', async importOriginal => ({
+  ...await importOriginal<typeof import('@oneworks/config')>(),
+  composeWorkspaceConfigSchemaBundle: mocks.composeWorkspaceConfigSchemaBundle,
+  updateConfigFile: mocks.updateConfigFile
 }))
 
 vi.mock('#~/services/config/index.js', () => ({
@@ -23,6 +42,61 @@ describe('model provider routes', () => {
   let request: typeof fetch
 
   beforeEach(async () => {
+    const resolveCapability = (specifier: string) => {
+      if (specifier === 'codex') {
+        return {
+          descriptor: {
+            title: 'Codex config.toml',
+            supportedSources: ['global', 'project']
+          },
+          discover: mocks.codexDiscover
+        }
+      }
+      if (specifier === '@acme/adapter-native-import') {
+        return {
+          descriptor: {
+            title: 'Acme native config',
+            description: 'Acme provider settings',
+            supportedSources: ['global', 'project', 'user']
+          },
+          discover: mocks.customDiscover
+        }
+      }
+      return undefined
+    }
+    mocks.tryLoadAdapterModelProviderImportCapability.mockImplementation(async specifier => (
+      resolveCapability(specifier)
+    ))
+    mocks.loadAdapterModelProviderImportCapability.mockImplementation(async specifier => {
+      const capability = resolveCapability(specifier)
+      if (capability == null) throw new TypeError('Unsupported adapter import capability')
+      return capability
+    })
+    mocks.composeWorkspaceConfigSchemaBundle.mockResolvedValue({
+      extensions: { adapters: ['codex', 'nativeImport'] }
+    })
+    mocks.updateConfigFile.mockImplementation(async ({ resolveValue, source }) => {
+      const currentConfig = source === 'project'
+        ? {
+          modelServices: {
+            projectKimi: { provider: 'moonshot-cn', apiKey: 'secret-project' }
+          }
+        }
+        : source === 'user'
+        ? {
+          modelServices: {
+            kimi: { provider: 'moonshot-cn', apiKey: 'secret-kimi' },
+            sibling: { apiBaseUrl: 'https://sibling.example.com/v1', apiKey: 'secret-sibling' }
+          }
+        }
+        : {}
+      return {
+        updatedConfig: {
+          ...currentConfig,
+          modelServices: resolveValue(currentConfig)
+        }
+      }
+    })
     request = globalThis.fetch.bind(globalThis)
     const app = new Koa()
     const providerRouter = new Router({ prefix: '/api/model-providers' })
@@ -65,6 +139,11 @@ describe('model provider routes', () => {
     mocks.loadConfigState.mockResolvedValue({
       workspaceFolder: '/workspace',
       mergedConfig: {
+        adapters: {
+          nativeImport: {
+            packageId: '@acme/adapter-native-import'
+          }
+        },
         modelServices: {
           kimi: {
             provider: 'moonshot-cn',
@@ -168,6 +247,276 @@ describe('model provider routes', () => {
       listModels: 'api'
     })
     expect(JSON.stringify(payload)).not.toContain('secret-kimi')
+  })
+
+  it('lists model service importers discovered from adapter package capabilities', async () => {
+    const response = await request(`${baseUrl}/api/model-services/importers`)
+    const payload = await response.json() as {
+      importers?: Array<{
+        adapterKey: string
+        description?: string
+        runtimeAdapter: string
+        supportedSources: string[]
+        title: string
+      }>
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.importers).toEqual([
+      {
+        adapterKey: 'codex',
+        runtimeAdapter: 'codex',
+        supportedSources: ['global', 'project'],
+        title: 'Codex config.toml'
+      },
+      {
+        adapterKey: 'nativeImport',
+        description: 'Acme provider settings',
+        runtimeAdapter: '@acme/adapter-native-import',
+        supportedSources: ['global', 'project', 'user'],
+        title: 'Acme native config'
+      }
+    ])
+    expect(JSON.stringify(payload)).not.toContain('packageId')
+    expect(JSON.stringify(payload)).not.toContain('/workspace')
+    expect(JSON.stringify(payload)).not.toContain('secret')
+  })
+
+  it('imports Codex providers into the requested project source without overwriting or returning secrets', async () => {
+    mocks.codexDiscover.mockResolvedValue({
+      found: true,
+      skippedProviderIds: [],
+      modelServices: {
+        projectKimi: { provider: 'moonshot-cn', apiKey: 'secret-native-collision' },
+        'project-provider': { apiBaseUrl: 'https://project.example.com/v1', apiKey: 'secret-native' }
+      }
+    })
+
+    const response = await request(`${baseUrl}/api/model-services/import/codex`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'project' })
+    })
+    const payload = await response.json() as {
+      adapterKey?: string
+      existingServiceKeys?: string[]
+      importedServiceKeys?: string[]
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.adapterKey).toBe('codex')
+    expect(payload.existingServiceKeys).toEqual(['projectKimi'])
+    expect(payload.importedServiceKeys).toEqual(['project-provider'])
+    expect(mocks.codexDiscover).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: '/workspace',
+      source: 'project'
+    }))
+    expect(mocks.tryLoadAdapterModelProviderImportCapability).toHaveBeenCalledWith('codex', { cwd: '/workspace' })
+    expect(mocks.updateConfigFile).toHaveBeenCalledWith(expect.objectContaining({
+      section: 'modelServices',
+      source: 'project',
+      workspaceFolder: '/workspace'
+    }))
+    expect(JSON.stringify(payload)).not.toContain('secret-project')
+    expect(JSON.stringify(payload)).not.toContain('secret-native')
+  })
+
+  it('keeps additions-only semantics when a service appears during the locked write', async () => {
+    mocks.codexDiscover.mockResolvedValue({
+      found: true,
+      modelServices: {
+        'project-provider': { apiBaseUrl: 'https://project.example.com/v1', apiKey: 'secret-native' }
+      },
+      skippedProviderIds: []
+    })
+    mocks.updateConfigFile.mockImplementationOnce(async ({ resolveValue }) => {
+      const currentConfig = {
+        modelServices: {
+          projectKimi: { provider: 'moonshot-cn' },
+          'project-provider': { provider: 'existing-concurrent', apiKey: 'secret-concurrent' }
+        }
+      }
+      return {
+        updatedConfig: {
+          ...currentConfig,
+          modelServices: resolveValue(currentConfig)
+        }
+      }
+    })
+
+    const response = await request(`${baseUrl}/api/model-services/import/codex`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'project' })
+    })
+    const payload = await response.json() as {
+      existingServiceKeys?: string[]
+      importedServiceKeys?: string[]
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.importedServiceKeys).toEqual([])
+    expect(payload.existingServiceKeys).toEqual(['project-provider'])
+    expect(JSON.stringify(payload)).not.toContain('secret-concurrent')
+  })
+
+  it('rejects import when the selected adapter does not support the current source', async () => {
+    const response = await request(`${baseUrl}/api/model-services/import/codex`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'user' })
+    })
+    const payload = await response.json() as { error?: { code?: string } }
+
+    expect(response.status).toBe(400)
+    expect(payload.error?.code).toBe('invalid_import_source')
+    expect(mocks.codexDiscover).not.toHaveBeenCalled()
+    expect(mocks.updateConfigFile).not.toHaveBeenCalled()
+  })
+
+  it('imports through a configured third-party adapter capability including its user source', async () => {
+    mocks.customDiscover.mockResolvedValue({
+      found: true,
+      skippedProviderIds: ['unsupported-native-provider'],
+      modelServices: {
+        kimi: { provider: 'moonshot-cn', apiKey: 'secret-collision' },
+        acme: { apiBaseUrl: 'https://acme.example.com/v1', apiKey: 'secret-acme' }
+      }
+    })
+
+    const response = await request(`${baseUrl}/api/model-services/import/nativeImport`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'user' })
+    })
+    const payload = await response.json() as {
+      adapterKey?: string
+      existingServiceKeys?: string[]
+      importedServiceKeys?: string[]
+      skippedProviderIds?: string[]
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload).toMatchObject({
+      adapterKey: 'nativeImport',
+      existingServiceKeys: ['kimi'],
+      importedServiceKeys: ['acme'],
+      skippedProviderIds: ['unsupported-native-provider']
+    })
+    expect(mocks.tryLoadAdapterModelProviderImportCapability).toHaveBeenCalledWith(
+      '@acme/adapter-native-import',
+      { cwd: '/workspace' }
+    )
+    expect(mocks.customDiscover).toHaveBeenCalledWith(expect.objectContaining({ source: 'user' }))
+    expect(JSON.stringify(payload)).not.toContain('secret-acme')
+  })
+
+  it('adapts runtime-supported model services to a configured adapter instance alias', async () => {
+    const state = await mocks.loadConfigState()
+    mocks.loadConfigState.mockResolvedValueOnce({
+      ...state,
+      mergedConfig: {
+        ...state.mergedConfig,
+        adapters: {
+          ...state.mergedConfig.adapters,
+          fast: { packageId: 'codex' }
+        }
+      }
+    })
+    mocks.codexDiscover.mockResolvedValue({
+      found: true,
+      skippedProviderIds: [],
+      modelServices: {
+        fastNative: {
+          apiBaseUrl: 'https://fast.example.com/v1',
+          apiKey: 'secret-fast',
+          supportedAdapters: ['codex']
+        }
+      }
+    })
+    let writtenModelServices: Record<string, unknown> | undefined
+    mocks.updateConfigFile.mockImplementationOnce(async ({ resolveValue }) => {
+      writtenModelServices = resolveValue({})
+      return { updatedConfig: { modelServices: writtenModelServices } }
+    })
+
+    const response = await request(`${baseUrl}/api/model-services/import/fast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'project' })
+    })
+
+    expect(response.status).toBe(200)
+    expect(writtenModelServices).toMatchObject({
+      fastNative: {
+        supportedAdapters: ['codex', 'fast']
+      }
+    })
+    expect(JSON.stringify(await response.json())).not.toContain('secret-fast')
+  })
+
+  it('rejects arbitrary adapter package or path input outside the server allowlist', async () => {
+    const adapterKey = encodeURIComponent('/tmp/untrusted-adapter')
+    const response = await request(`${baseUrl}/api/model-services/import/${adapterKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'project' })
+    })
+    const payload = await response.json() as { error?: { code?: string } }
+
+    expect(response.status).toBe(404)
+    expect(payload.error?.code).toBe('model_service_importer_not_found')
+    expect(mocks.tryLoadAdapterModelProviderImportCapability).not.toHaveBeenCalled()
+  })
+
+  it('rejects malformed adapter discovery output without writing or returning it', async () => {
+    mocks.codexDiscover.mockResolvedValue({
+      found: true,
+      modelServices: {
+        leaked: 'secret-invalid-result'
+      },
+      skippedProviderIds: []
+    })
+
+    const response = await request(`${baseUrl}/api/model-services/import/codex`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'project' })
+    })
+    const payload = await response.json() as { error?: { code?: string } }
+
+    expect(response.status).toBe(500)
+    expect(payload.error?.code).toBe('invalid_model_service_import_result')
+    expect(mocks.updateConfigFile).not.toHaveBeenCalled()
+    expect(JSON.stringify(payload)).not.toContain('secret-invalid-result')
+  })
+
+  it('rejects invalid nested model service config from an adapter before writing', async () => {
+    mocks.customDiscover.mockResolvedValue({
+      found: true,
+      modelServices: {
+        invalid: {
+          kind: 'evil',
+          models: 'not-an-array',
+          timeoutMs: -1,
+          management: {
+            headers: { Authorization: 42 }
+          }
+        }
+      },
+      skippedProviderIds: []
+    })
+
+    const response = await request(`${baseUrl}/api/model-services/import/nativeImport`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'project' })
+    })
+    const payload = await response.json() as { error?: { code?: string } }
+
+    expect(response.status).toBe(500)
+    expect(payload.error?.code).toBe('invalid_model_service_import_result')
+    expect(mocks.updateConfigFile).not.toHaveBeenCalled()
   })
 
   it('probes provider identity from draft service host', async () => {
