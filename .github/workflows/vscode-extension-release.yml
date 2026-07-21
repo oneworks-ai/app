@@ -129,6 +129,8 @@ jobs:
           path: dist
 
       - name: Publish to VS Code Marketplace
+        id: vscode_marketplace
+        continue-on-error: true
         env:
           ARCHIVE_FILE: ${{ github.workspace }}/dist/${{ needs.build.outputs.archive_file }}
           VSCODE_EXTENSION_PUBLISHER: ${{ vars.VSCODE_EXTENSION_PUBLISHER }}
@@ -189,3 +191,9 @@ jobs:
               --notes "Packaged VS Code extension build for v$VERSION." \
               "${release_flags[@]}"
           fi
+
+      - name: Report VS Code Marketplace publish failure
+        if: steps.vscode_marketplace.outcome == 'failure'
+        run: |
+          echo "VS Code Marketplace publish failed after the remaining release targets completed." >&2
+          exit 1
