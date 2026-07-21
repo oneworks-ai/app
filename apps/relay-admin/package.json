@@ -1,7 +1,7 @@
 {
   "name": "@oneworks/relay-admin",
   "type": "module",
-  "version": "0.1.0-beta.5",
+  "version": "0.1.0-beta.7",
   "description": "OneWorks Relay admin client",
   "repository": {
     "type": "git",
