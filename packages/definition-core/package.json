@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/definition-core",
-  "version": "0.1.0-beta.5",
+  "version": "0.1.0-beta.7",
   "description": "Shared definition-domain helpers for One Works",
   "repository": {
     "type": "git",

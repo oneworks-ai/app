@@ -9,7 +9,7 @@
     "en": "Structured runtime logging and diagnostics for OneWorks plugins.",
     "zh-Hans": "为 OneWorks 插件提供结构化运行日志与诊断能力。"
   },
-  "version": "0.1.0-beta.5",
+  "version": "0.1.0-beta.7",
   "description": "Structured runtime logging and diagnostics for OneWorks plugins.",
   "repository": {
     "type": "git",

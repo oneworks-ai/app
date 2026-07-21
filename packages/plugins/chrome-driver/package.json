@@ -1,7 +1,7 @@
 {
   "name": "@oneworks/plugin-chrome-driver",
   "type": "module",
-  "version": "0.1.0-beta.6",
+  "version": "0.1.0-beta.7",
   "repository": {
     "type": "git",
     "url": "https://github.com/oneworks-ai/app.git",
