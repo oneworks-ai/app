@@ -11,6 +11,7 @@ const responsiveLayout = vi.hoisted(() => ({
 
 vi.mock('antd', () => ({
   Drawer: () => null,
+  Spin: () => <span data-testid='spin' />,
   Select: React.forwardRef<HTMLDivElement, Record<string, unknown>>((
     { 'aria-hidden': ariaHidden, className, tabIndex },
     ref
@@ -84,6 +85,25 @@ describe('mobile-aware select control trigger', () => {
     expect(html).not.toContain('oneworks-control-trigger--overlay')
   })
 
+  it('treats a loading desktop select as non-interactive', async () => {
+    const { MobileAwareSelect } = await import(
+      '#~/components/mobile-aware-select/MobileAwareSelect'
+    )
+
+    const html = renderToStaticMarkup(
+      <MobileAwareSelect<string>
+        loading
+        value='one'
+        options={[{ label: 'One', value: 'one' }]}
+        controlTrigger={{ ariaLabel: 'Choose an option' }}
+      />
+    )
+
+    expect(html).toContain('mobile-aware-select-trigger-shell')
+    expect(html).toContain('is-disabled')
+    expect(html).not.toContain('oneworks-control-trigger--overlay')
+  })
+
   it('renders a content trigger as the visible select control for custom compact surfaces', async () => {
     const { MobileAwareSelect } = await import(
       '#~/components/mobile-aware-select/MobileAwareSelect'
@@ -130,6 +150,28 @@ describe('mobile-aware select control trigger', () => {
     expect(html).toContain('<span>One</span>')
   })
 
+  it('keeps a loading content trigger visible but non-interactive', async () => {
+    const { MobileAwareSelect } = await import(
+      '#~/components/mobile-aware-select/MobileAwareSelect'
+    )
+
+    const html = renderToStaticMarkup(
+      <MobileAwareSelect<string>
+        loading
+        value='one'
+        options={[{ label: 'One', value: 'one' }]}
+        controlTrigger={{
+          ariaLabel: 'Choose an option',
+          content: <span>One</span>
+        }}
+      />
+    )
+
+    expect(html).toContain('oneworks-control-trigger--content')
+    expect(html).toContain('disabled=""')
+    expect(html).toContain('<span>One</span>')
+  })
+
   it('keeps the compact drawer hitbox as the only tab stop', async () => {
     responsiveLayout.isCompactLayout = true
     const { MobileAwareSelect } = await import(
@@ -147,6 +189,25 @@ describe('mobile-aware select control trigger', () => {
     expect(html).toContain('data-tab-index="-1"')
     expect(html).toContain('oneworks-control-trigger--overlay mobile-aware-select-trigger-hitbox')
     expect(html).toContain('aria-label="Choose an option"')
+  })
+
+  it('does not render the compact drawer hitbox while loading', async () => {
+    responsiveLayout.isCompactLayout = true
+    const { MobileAwareSelect } = await import(
+      '#~/components/mobile-aware-select/MobileAwareSelect'
+    )
+
+    const html = renderToStaticMarkup(
+      <MobileAwareSelect<string>
+        loading
+        value='one'
+        options={[{ label: 'One', value: 'one' }]}
+        mobileTitle='Choose an option'
+      />
+    )
+
+    expect(html).toContain('data-tab-index="-1"')
+    expect(html).not.toContain('mobile-aware-select-trigger-hitbox')
   })
 
   it('lets every visible content trigger consume the shared Select padding token', () => {

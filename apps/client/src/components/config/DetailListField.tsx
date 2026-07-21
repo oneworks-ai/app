@@ -12,6 +12,8 @@ import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { getAdapterDisplay, resolveAdapterDisplayIcon } from '#~/resources/adapters'
 import { renderIconRef } from '#~/utils/model-provider-icons'
 
+import { AdapterImportRow } from './AdapterImportRow'
+import type { AdapterImportAction } from './AdapterImportRow'
 import { DetailCollectionFieldActions } from './DetailCollectionFieldActions'
 import { ModelServiceProviderQuotaPreview } from './ModelServiceProviderQuotaPreview'
 import type { ConfigDetailRoute, DetailCollectionPlaceholderEntry } from './configDetail'
@@ -86,6 +88,7 @@ export const DetailCollectionField = ({
   uiSection,
   creatingModelServiceSessionKey,
   onCreateModelServiceSession,
+  modelServiceImportAction,
   placeholderEntries,
   t
 }: {
@@ -101,6 +104,7 @@ export const DetailCollectionField = ({
   uiSection?: ConfigUiSection
   creatingModelServiceSessionKey?: string | null
   onCreateModelServiceSession?: (request: ModelServiceConfigSessionRequest) => void | Promise<void>
+  modelServiceImportAction?: AdapterImportAction
   placeholderEntries?: DetailCollectionPlaceholderEntry[]
   t: TranslationFn
 }) => {
@@ -275,6 +279,59 @@ export const DetailCollectionField = ({
 
   return (
     <div className='config-view__detail-list'>
+      {isRecordMapCollection && sectionKey === 'modelServices' && modelServiceImportAction != null && (
+        <AdapterImportRow action={modelServiceImportAction} />
+      )}
+      {isRecordMapCollection && (
+        <div className='config-view__record-add'>
+          <div className='config-view__record-add-inputs'>
+            <Input
+              value={newRecordKey}
+              placeholder={keyPlaceholder}
+              onChange={(event) => setNewRecordKey(event.target.value)}
+            />
+            {canSelectKind && (
+              <Select
+                value={newRecordKind}
+                options={kindOptions}
+                onChange={(nextValue) => setNewRecordKind(nextValue)}
+              />
+            )}
+            <Tooltip title={t('common.confirm')}>
+              <Button
+                size='small'
+                type='primary'
+                className='config-view__icon-button'
+                aria-label={t('common.confirm')}
+                icon={<span className='material-symbols-rounded'>check</span>}
+                disabled={newRecordKey.trim() === '' ||
+                  items.some(item => item.key === newRecordKey.trim()) ||
+                  (canSelectKind && newRecordKind.trim() === '')}
+                onClick={addRecordItem}
+              />
+            </Tooltip>
+            {sectionKey === 'modelServices' && onCreateModelServiceSession != null && (
+              <Tooltip title={t('config.actions.createModelServiceWithSession')}>
+                <Button
+                  size='small'
+                  type='text'
+                  className='config-view__icon-button'
+                  aria-label={t('config.actions.createModelServiceWithSession')}
+                  loading={creatingModelServiceSessionKey === createModelServiceActionKey}
+                  disabled={creatingModelServiceSessionKey != null &&
+                    creatingModelServiceSessionKey !== createModelServiceActionKey}
+                  icon={<span className='material-symbols-rounded'>forum</span>}
+                  onClick={() =>
+                    void onCreateModelServiceSession({
+                      mode: 'create',
+                      source
+                    })}
+                />
+              </Tooltip>
+            )}
+          </div>
+        </div>
+      )}
       {items.map(({ item, key, index, localIndex, source: itemSource, hasResolvedOverlay }) => {
         const title = detailCollection.getItemTitle(item, key, index, detailContext)
         const subtitle = detailCollection.getItemSubtitle?.(item, key, index, detailContext)
@@ -493,56 +550,6 @@ export const DetailCollectionField = ({
               }}
             />
           </Tooltip>
-        </div>
-      )}
-      {isRecordMapCollection && (
-        <div className='config-view__record-add'>
-          <div className='config-view__record-add-inputs'>
-            <Input
-              value={newRecordKey}
-              placeholder={keyPlaceholder}
-              onChange={(event) => setNewRecordKey(event.target.value)}
-            />
-            {canSelectKind && (
-              <Select
-                value={newRecordKind}
-                options={kindOptions}
-                onChange={(nextValue) => setNewRecordKind(nextValue)}
-              />
-            )}
-            <Tooltip title={t('common.confirm')}>
-              <Button
-                size='small'
-                type='primary'
-                className='config-view__icon-button'
-                aria-label={t('common.confirm')}
-                icon={<span className='material-symbols-rounded'>check</span>}
-                disabled={newRecordKey.trim() === '' ||
-                  items.some(item => item.key === newRecordKey.trim()) ||
-                  (canSelectKind && newRecordKind.trim() === '')}
-                onClick={addRecordItem}
-              />
-            </Tooltip>
-            {sectionKey === 'modelServices' && onCreateModelServiceSession != null && (
-              <Tooltip title={t('config.actions.createModelServiceWithSession')}>
-                <Button
-                  size='small'
-                  type='text'
-                  className='config-view__icon-button'
-                  aria-label={t('config.actions.createModelServiceWithSession')}
-                  loading={creatingModelServiceSessionKey === createModelServiceActionKey}
-                  disabled={creatingModelServiceSessionKey != null &&
-                    creatingModelServiceSessionKey !== createModelServiceActionKey}
-                  icon={<span className='material-symbols-rounded'>forum</span>}
-                  onClick={() =>
-                    void onCreateModelServiceSession({
-                      mode: 'create',
-                      source
-                    })}
-                />
-              </Tooltip>
-            )}
-          </div>
         </div>
       )}
     </div>

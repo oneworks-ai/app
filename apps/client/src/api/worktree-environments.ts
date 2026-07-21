@@ -1,4 +1,6 @@
 import type {
+  AdapterWorktreeEnvironmentImportResult,
+  AdapterWorktreeEnvironmentImporterDescriptor,
   WorktreeEnvironmentDetail,
   WorktreeEnvironmentListResult,
   WorktreeEnvironmentMutationResult,
@@ -10,6 +12,28 @@ import { fetchApiJson, jsonHeaders } from './base'
 
 export async function listWorktreeEnvironments(): Promise<WorktreeEnvironmentListResult> {
   return fetchApiJson<WorktreeEnvironmentListResult>('/api/worktree-environments')
+}
+
+export async function listWorktreeEnvironmentImporters(): Promise<{
+  importers: AdapterWorktreeEnvironmentImporterDescriptor[]
+}> {
+  return fetchApiJson<{ importers: AdapterWorktreeEnvironmentImporterDescriptor[] }>(
+    '/api/worktree-environments/imports/adapters'
+  )
+}
+
+export async function importWorktreeEnvironmentsFromAdapter(
+  adapterKey: string,
+  source: WorktreeEnvironmentSource
+): Promise<AdapterWorktreeEnvironmentImportResult> {
+  return fetchApiJson<AdapterWorktreeEnvironmentImportResult>(
+    `/api/worktree-environments/imports/${encodeURIComponent(adapterKey)}`,
+    {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ source })
+    }
+  )
 }
 
 const getSourceQuery = (source?: WorktreeEnvironmentSource) => (

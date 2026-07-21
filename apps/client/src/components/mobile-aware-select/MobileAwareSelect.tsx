@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- shared select needs desktop passthrough plus mobile drawer behavior. */
 import './MobileAwareSelect.scss'
 
-import { Drawer, Select as AntdSelect } from 'antd'
+import { Drawer, Select as AntdSelect, Spin } from 'antd'
 import type { RefSelectProps, SelectProps } from 'antd'
 import type { BaseOptionType, DefaultOptionType } from 'antd/es/select'
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactElement, ReactNode, Ref } from 'react'
@@ -254,6 +254,7 @@ function MobileAwareSelectInner<
   const [isDragging, setIsDragging] = useState(false)
   const isMobileSelect = isCompactLayout || isTouchInteraction
   const drawerOpen = controlledOpen ?? open
+  const interactionDisabled = disabled === true || selectProps.loading === true
   const reactId = useId()
   const selectInstanceClass = useMemo(
     () => `oneworks-select-instance-${reactId.replace(/[^\w-]/g, '-')}`,
@@ -336,6 +337,12 @@ function MobileAwareSelectInner<
       setIsDragging(false)
     }
   }, [controlledSearchValue, drawerOpen])
+
+  useEffect(() => {
+    if (interactionDisabled && drawerOpen) {
+      setDrawerOpen(false)
+    }
+  }, [drawerOpen, interactionDisabled, setDrawerOpen])
 
   useEffect(() => {
     if (isMobileSelect || !drawerOpen) {
@@ -477,7 +484,7 @@ function MobileAwareSelectInner<
       aria-label={ariaLabel}
       aria-haspopup='listbox'
       aria-expanded={drawerOpen}
-      disabled={disabled}
+      disabled={interactionDisabled}
       onPointerDown={(event) => {
         if (stopPropagation) {
           event.stopPropagation()
@@ -551,7 +558,7 @@ function MobileAwareSelectInner<
   }
 
   const selectOption = (option: NormalizedSelectOption<OptionType | RawSelectOption>) => {
-    if (option.disabled) {
+    if (interactionDisabled || option.disabled) {
       return
     }
 
@@ -579,6 +586,7 @@ function MobileAwareSelectInner<
   }
 
   const clearValue = () => {
+    if (interactionDisabled) return
     onClear?.()
     emitChange(multiple ? [] : undefined, multiple ? [] : undefined)
     if (!multiple) {
@@ -597,11 +605,11 @@ function MobileAwareSelectInner<
             hasContentTrigger && 'mobile-aware-select-trigger-shell--content',
             controlTrigger.wrapperClassName,
             drawerOpen && 'is-open',
-            disabled && 'is-disabled'
+            interactionDisabled && 'is-disabled'
           )}
         >
           {renderDesktopSelect()}
-          {(hasContentTrigger || (!disabled && !drawerOpen)) && renderControlTrigger(controlTrigger)}
+          {(hasContentTrigger || (!interactionDisabled && !drawerOpen)) && renderControlTrigger(controlTrigger)}
         </span>
       )
     }
@@ -631,7 +639,7 @@ function MobileAwareSelectInner<
           tabIndex={-1}
           value={value}
         />
-        {!disabled && (
+        {!interactionDisabled && (
           <ControlTrigger
             variant='overlay'
             className='mobile-aware-select-trigger-hitbox'
@@ -641,7 +649,7 @@ function MobileAwareSelectInner<
         )}
       </span>
       <Drawer
-        open={drawerOpen}
+        open={drawerOpen && !interactionDisabled}
         placement='bottom'
         height='auto'
         closable={false}
@@ -667,6 +675,7 @@ function MobileAwareSelectInner<
                 <button
                   type='button'
                   className='mobile-aware-select-drawer__clear'
+                  disabled={interactionDisabled}
                   onClick={clearValue}
                 >
                   {t('common.clear')}
@@ -687,6 +696,7 @@ function MobileAwareSelectInner<
               <span className='material-symbols-rounded mobile-aware-select-drawer__search-icon'>search</span>
               <input
                 className='mobile-aware-select-drawer__search-input'
+                disabled={interactionDisabled}
                 value={activeSearchValue}
                 placeholder={typeof placeholder === 'string' ? placeholder : String(drawerTitle)}
                 onChange={(event) => updateSearchValue(event.target.value)}
@@ -698,7 +708,13 @@ function MobileAwareSelectInner<
             role='listbox'
             aria-multiselectable={multiple || undefined}
           >
-            {visibleGroups.length === 0
+            {selectProps.loading === true
+              ? (
+                <div className='mobile-aware-select-drawer__empty'>
+                  <Spin size='small' />
+                </div>
+              )
+              : visibleGroups.length === 0
               ? (
                 <div className='mobile-aware-select-drawer__empty'>
                   {selectProps.notFoundContent ?? t('common.noData')}
@@ -717,7 +733,7 @@ function MobileAwareSelectInner<
                         role='option'
                         key={option.key}
                         aria-selected={selected}
-                        disabled={option.disabled}
+                        disabled={interactionDisabled || option.disabled}
                         className={[
                           'mobile-aware-select-drawer__option',
                           selected ? 'is-selected' : ''

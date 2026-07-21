@@ -4,12 +4,12 @@ import { App } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
 
-import type { RouteContainerHeaderActionItem } from '@oneworks/components/route-layout'
 import type { ConfigSource } from '@oneworks/core'
 import type { WorktreeEnvironmentScriptKey, WorktreeEnvironmentSummary } from '@oneworks/types'
 
 import { getApiErrorMessage, getWorktreeEnvironment, listWorktreeEnvironments, saveWorktreeEnvironment } from '#~/api'
 
+import type { AdapterImportAction } from './AdapterImportRow'
 import { WorktreeEnvironmentDetailView } from './WorktreeEnvironmentDetailView'
 import { WorktreeEnvironmentListView } from './WorktreeEnvironmentListView'
 import type { TranslationFn } from './configUtils'
@@ -25,25 +25,33 @@ const getEnvironmentSource = (
 )
 
 export function WorktreeEnvironmentPanel({
-  onHeaderActionsChange,
+  disabled = false,
+  importAction,
+  sourceKey,
   t
 }: {
-  onHeaderActionsChange?: (items: RouteContainerHeaderActionItem[]) => void
+  disabled?: boolean
+  importAction?: AdapterImportAction
+  sourceKey: WorktreeEnvironmentConfigSource
   t: TranslationFn
 }) {
   const { message, modal } = App.useApp()
-  const [sourceKey, setSourceKey] = useState<WorktreeEnvironmentConfigSource>('project')
   const [selectedId, setSelectedId] = useState<string>()
   const [nameDraft, setNameDraft] = useState('')
   const [draftEnvironmentId, setDraftEnvironmentId] = useState<string>()
   const [draftScripts, setDraftScripts] = useState<Record<WorktreeEnvironmentScriptKey, string>>(
     () => buildDraftScripts()
   )
+
+  useEffect(() => {
+    setSelectedId(undefined)
+    setNameDraft('')
+    setDraftEnvironmentId(undefined)
+    setDraftScripts(buildDraftScripts())
+  }, [sourceKey])
+
   const { data, isLoading, mutate } = useSWR('worktree-environments', listWorktreeEnvironments)
   const environments = data?.environments ?? []
-  const selectedSummary = environments.find(environment => (
-    environment.id === selectedId && getEnvironmentSource(environment) === sourceKey
-  ))
   const { data: detailData, isLoading: isDetailLoading, mutate: mutateDetail } = useSWR(
     selectedId != null ? ['worktree-environment', sourceKey, selectedId] : null,
     ([, source, id]) => getWorktreeEnvironment(id, source)
@@ -54,11 +62,6 @@ export function WorktreeEnvironmentPanel({
       sourceKey === 'user' ? environment.isLocal : !environment.isLocal
     ))
   ), [environments, sourceKey])
-
-  useEffect(() => {
-    if (selectedSummary == null) return
-    setSourceKey(getEnvironmentSource(selectedSummary))
-  }, [selectedSummary])
 
   useWorktreeEnvironmentAutoSave({
     draftEnvironmentId,
@@ -110,40 +113,14 @@ export function WorktreeEnvironmentPanel({
     }
   }
 
-  const headerActionItems = useMemo<RouteContainerHeaderActionItem[]>(() => [
-    {
-      active: sourceKey === 'project',
-      icon: 'folder',
-      key: 'worktree-environment-source-project',
-      label: t('config.environments.sources.project'),
-      onSelect: () => {
-        setSourceKey('project')
-        setSelectedId(undefined)
-      }
-    },
-    {
-      active: sourceKey === 'user',
-      icon: 'person',
-      key: 'worktree-environment-source-user',
-      label: t('config.environments.sources.user'),
-      onSelect: () => {
-        setSourceKey('user')
-        setSelectedId(undefined)
-      }
-    }
-  ], [sourceKey, t])
-
-  useEffect(() => {
-    onHeaderActionsChange?.(headerActionItems)
-    return () => onHeaderActionsChange?.([])
-  }, [headerActionItems, onHeaderActionsChange])
-
   return (
     <div className='worktree-env-panel'>
       {selectedId == null
         ? (
           <WorktreeEnvironmentListView
             isLoading={isLoading}
+            disabled={disabled}
+            importAction={importAction}
             visibleEnvironments={visibleEnvironments}
             onCreate={() => void handleCreate()}
             onSelectEnvironment={setSelectedId}

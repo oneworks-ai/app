@@ -14,6 +14,9 @@
 - `src/adapter.ts`
   - `Adapter`、`AdapterCtx`、`AdapterQueryOptions`
   - `loadAdapter()` / `defineAdapter()`
+- `src/adapter-model-provider-import.ts`、`src/adapter-worktree-environment-import.ts`、`src/adapter-package.ts`
+  - adapter 可选 `model-provider-import` / `worktree-environment-import` discovery capability、source 声明与严格/可选 package export loader
+  - capability 只发现并转换原生配置；调用方必须把当前目标 source 传给 discoverer，目标 config 的冲突保护和写回由消费方统一编排
 - `src/logger.ts`
   - 共享 `Logger` 接口
 - `src/mcp.ts`

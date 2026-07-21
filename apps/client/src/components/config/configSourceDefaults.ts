@@ -8,8 +8,13 @@ interface ConfigPresentState {
 
 export const getPreferredConfigSourceForTab = (tabKey: string): ConfigSource | undefined => {
   if (tabKey === 'modelServices') return 'global'
+  if (tabKey === 'worktreeEnvironments') return 'project'
   return undefined
 }
+
+export const normalizeConfigSourceForTab = (tabKey: string, source: ConfigSource): ConfigSource => (
+  tabKey === 'worktreeEnvironments' && source === 'global' ? 'project' : source
+)
 
 export const resolveConfigSourceForMissingQuery = (
   tabKey: string,

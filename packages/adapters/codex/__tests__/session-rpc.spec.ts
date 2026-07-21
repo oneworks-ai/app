@@ -2,6 +2,8 @@ import { Buffer } from 'node:buffer'
 import { PassThrough } from 'node:stream'
 
 import { spawn } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
 import { CODEX_PROXY_META_HEADER_NAME } from '#~/runtime/proxy.js'
 import { createCodexSession } from '#~/runtime/session.js'
@@ -1538,6 +1540,284 @@ describe('createCodexSession RPC approval policy mapping', () => {
         wireApi: 'responses'
       }
     })
+
+    session.kill()
+  })
+
+  it('restores imported native provider settings without starting the local proxy', async () => {
+    process.env.HOME = '/tmp'
+    const { proc } = makeProc()
+    spawnMock.mockReturnValue(proc)
+
+    const session = await createCodexSession(
+      makeCtx({
+        configs: [{
+          modelServices: {
+            azure: {
+              title: 'Azure',
+              apiBaseUrl: 'https://example.openai.azure.com/openai',
+              apiKey: ['${', 'AZURE_OPENAI_API_KEY', '}'].join(''),
+              extra: {
+                codex: {
+                  nativeProvider: true,
+                  providerId: 'azure',
+                  envKey: 'AZURE_OPENAI_API_KEY',
+                  envKeyInstructions: 'Set the Azure key',
+                  wireApi: 'responses',
+                  headers: {
+                    'X.Provider.Id': 'tenant-1'
+                  },
+                  envHeaders: {
+                    'X-Project': 'AZURE_PROJECT'
+                  },
+                  queryParams: {
+                    'filters[tag]': '2025-04-01-preview'
+                  },
+                  requestMaxRetries: 0,
+                  streamIdleTimeoutMs: 0,
+                  streamMaxRetries: 10,
+                  websocketConnectTimeoutMs: 0,
+                  supportsWebsockets: false
+                }
+              }
+            }
+          }
+        }, undefined]
+      }),
+      {
+        type: 'create',
+        runtime: 'server',
+        sessionId: 'session-native-provider',
+        model: 'azure,gpt-5.4',
+        description: 'Reply with pong.',
+        onEvent: () => {}
+      } as any
+    )
+
+    const spawnArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    const overrides = getConfigOverrides(spawnArgs)
+    const spawnOptions = spawnMock.mock.calls[0]?.[2] as { env?: Record<string, string> }
+    const sessionConfig = await readFile(join(spawnOptions.env!.HOME, '.codex', 'config.toml'), 'utf8')
+
+    expect(spawnOptions.env?.CODEX_HOME).toBe(join(spawnOptions.env!.HOME, '.codex'))
+    expect(sessionConfig).toContain('model_provider="azure"')
+    expect(sessionConfig).toContain('model_providers.azure.name="Azure"')
+    expect(sessionConfig).toContain('model_providers.azure.base_url="https://example.openai.azure.com/openai"')
+    expect(sessionConfig).toContain('model_providers.azure.env_key="AZURE_OPENAI_API_KEY"')
+    expect(sessionConfig).toContain('model_providers.azure.env_key_instructions="Set the Azure key"')
+    expect(sessionConfig).toContain('model_providers.azure.wire_api="responses"')
+    expect(sessionConfig).toContain('model_providers.azure.request_max_retries=0')
+    expect(sessionConfig).toContain('model_providers.azure.stream_max_retries=10')
+    expect(sessionConfig).toContain('model_providers.azure.supports_websockets=false')
+    expect(sessionConfig).toContain('model_providers.azure.websocket_connect_timeout_ms=0')
+    expect(sessionConfig).toContain('model_providers.azure.stream_idle_timeout_ms=0')
+    expect(overrides.some(override => override.includes('experimental_bearer_token'))).toBe(false)
+    expect(overrides.some(override => override.includes(CODEX_PROXY_META_HEADER_NAME))).toBe(false)
+    expect(sessionConfig).toContain('http_headers={"X.Provider.Id" = "tenant-1"}')
+    expect(sessionConfig).toContain('env_http_headers={X-Project = "AZURE_PROJECT"}')
+    expect(sessionConfig).toContain('query_params={"filters[tag]" = "2025-04-01-preview"}')
+
+    session.kill()
+  })
+
+  it('restores imported openai_base_url without defining the reserved provider table', async () => {
+    process.env.HOME = '/tmp'
+    const { proc, receivedLines } = makeProc()
+    spawnMock.mockReturnValue(proc)
+
+    const session = await createCodexSession(
+      makeCtx({
+        env: {
+          __ONEWORKS_CODEX_NATIVE_PROVIDER_SERVICE__: 'openai'
+        },
+        configs: [{
+          modelServices: {
+            openai: {
+              title: 'OpenAI',
+              provider: 'openai',
+              apiBaseUrl: 'https://us.api.openai.com/v1',
+              extra: {
+                codex: {
+                  nativeProvider: true,
+                  providerId: 'openai',
+                  useOpenAIBaseUrl: true
+                }
+              }
+            }
+          }
+        }, undefined]
+      }),
+      {
+        type: 'create',
+        runtime: 'server',
+        sessionId: 'session-native-openai-provider',
+        model: 'default',
+        description: 'Reply with pong.',
+        onEvent: () => {}
+      } as any
+    )
+
+    const spawnArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    const overrides = getConfigOverrides(spawnArgs)
+    const spawnOptions = spawnMock.mock.calls[0]?.[2] as { env?: Record<string, string> }
+    const sessionConfig = await readFile(join(spawnOptions.env!.HOME, '.codex', 'config.toml'), 'utf8')
+
+    expect(sessionConfig).toContain('model_provider="openai"')
+    expect(sessionConfig).toContain('openai_base_url="https://us.api.openai.com/v1"')
+    expect(sessionConfig).not.toContain('model_providers.openai.')
+    expect(overrides.some(override => override.includes('us.api.openai.com'))).toBe(false)
+    expect(receivedLines.find(line => line.method === 'thread/start')?.params.model).toBeUndefined()
+
+    session.kill()
+  })
+
+  it('restores an imported built-in provider without defining a custom provider table', async () => {
+    process.env.HOME = '/tmp'
+    const { proc, receivedLines } = makeProc()
+    spawnMock.mockReturnValue(proc)
+
+    const session = await createCodexSession(
+      makeCtx({
+        env: {
+          __ONEWORKS_CODEX_NATIVE_PROVIDER_SERVICE__: 'ollama'
+        },
+        configs: [{
+          modelServices: {
+            ollama: {
+              title: 'Ollama',
+              provider: 'ollama',
+              extra: {
+                codex: {
+                  nativeProvider: true,
+                  providerId: 'ollama',
+                  useBuiltinProvider: true
+                }
+              }
+            }
+          }
+        }, undefined]
+      }),
+      {
+        type: 'create',
+        runtime: 'server',
+        sessionId: 'session-native-ollama-provider',
+        model: 'default',
+        description: 'Reply with pong.',
+        onEvent: () => {}
+      } as any
+    )
+
+    const spawnArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    const overrides = getConfigOverrides(spawnArgs)
+    const spawnOptions = spawnMock.mock.calls[0]?.[2] as { env?: Record<string, string> }
+    const sessionConfig = await readFile(join(spawnOptions.env!.HOME, '.codex', 'config.toml'), 'utf8')
+
+    expect(sessionConfig).toContain('model_provider="ollama"')
+    expect(sessionConfig).not.toContain('model_providers.ollama.')
+    expect(overrides.some(override => override.includes('ollama'))).toBe(false)
+    expect(receivedLines.find(line => line.method === 'thread/start')?.params.model).toBeUndefined()
+
+    session.kill()
+  })
+
+  it('restores only supported AWS overrides for the built-in Bedrock provider', async () => {
+    process.env.HOME = '/tmp'
+    const { proc } = makeProc()
+    spawnMock.mockReturnValue(proc)
+
+    const session = await createCodexSession(
+      makeCtx({
+        configs: [{
+          modelServices: {
+            bedrock: {
+              title: 'Bedrock',
+              provider: 'amazon-bedrock',
+              extra: {
+                codex: {
+                  nativeProvider: true,
+                  providerId: 'amazon-bedrock',
+                  useBuiltinProvider: true,
+                  aws: {
+                    region: 'us-east-1',
+                    profile: 'developer'
+                  }
+                }
+              }
+            }
+          }
+        }, undefined]
+      }),
+      {
+        type: 'create',
+        runtime: 'server',
+        sessionId: 'session-native-bedrock-provider',
+        model: 'bedrock,anthropic.claude-3-5-sonnet',
+        description: 'Reply with pong.',
+        onEvent: () => {}
+      } as any
+    )
+
+    const spawnArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    const spawnOptions = spawnMock.mock.calls[0]?.[2] as { env?: Record<string, string> }
+    const sessionConfig = await readFile(join(spawnOptions.env!.HOME, '.codex', 'config.toml'), 'utf8')
+
+    expect(sessionConfig).toContain('model_provider="amazon-bedrock"')
+    expect(sessionConfig).toContain('model_providers.amazon-bedrock.aws.region="us-east-1"')
+    expect(sessionConfig).toContain('model_providers.amazon-bedrock.aws.profile="developer"')
+    expect(sessionConfig).not.toContain('model_providers.amazon-bedrock.name')
+    expect(spawnArgs.some(arg => arg.includes('amazon-bedrock'))).toBe(false)
+
+    session.kill()
+  })
+
+  it('keeps custom provider command auth and static headers out of process arguments', async () => {
+    process.env.HOME = '/tmp'
+    const { proc } = makeProc()
+    spawnMock.mockReturnValue(proc)
+
+    const session = await createCodexSession(
+      makeCtx({
+        configs: [{
+          modelServices: {
+            commandProxy: {
+              title: 'Command proxy',
+              provider: 'command-proxy',
+              apiBaseUrl: 'https://proxy.example.com/v1',
+              extra: {
+                codex: {
+                  nativeProvider: true,
+                  providerId: 'command-proxy',
+                  headers: { Authorization: 'secret-header' },
+                  auth: {
+                    command: '/usr/local/bin/fetch-token',
+                    args: ['--audience', 'codex'],
+                    refresh_interval_ms: 0
+                  }
+                }
+              }
+            }
+          }
+        }, undefined]
+      }),
+      {
+        type: 'create',
+        runtime: 'server',
+        sessionId: 'session-native-command-auth-provider',
+        model: 'commandProxy,gpt-5.4',
+        description: 'Reply with pong.',
+        onEvent: () => {}
+      } as any
+    )
+
+    const spawnArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    const spawnOptions = spawnMock.mock.calls[0]?.[2] as { env?: Record<string, string> }
+    const sessionConfig = await readFile(join(spawnOptions.env!.HOME, '.codex', 'config.toml'), 'utf8')
+
+    expect(sessionConfig).toContain('model_providers.command-proxy.http_headers={Authorization = "secret-header"}')
+    expect(sessionConfig).toContain('model_providers.command-proxy.auth.command="/usr/local/bin/fetch-token"')
+    expect(sessionConfig).toContain('model_providers.command-proxy.auth.args=["--audience","codex"]')
+    expect(sessionConfig).toContain('model_providers.command-proxy.auth.refresh_interval_ms=0')
+    expect(spawnArgs.some(arg => arg.includes('secret-header') || arg.includes('fetch-token'))).toBe(false)
 
     session.kill()
   })

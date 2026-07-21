@@ -10,6 +10,37 @@ import { describe, expect, it } from 'vitest'
 import { updateConfigFile } from '#~/update.js'
 
 describe('updateConfigFile', () => {
+  it('uses the provided environment when resolving the global config path', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'oneworks-config-update-env-'))
+    try {
+      const realHome = path.join(tempDir, 'real-home')
+
+      const result = await updateConfigFile({
+        env: {
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome
+        },
+        source: 'global',
+        section: 'modelServices',
+        value: {
+          imported: {
+            apiBaseUrl: 'https://example.com/v1'
+          }
+        }
+      })
+
+      expect(result.configPath).toBe(path.join(realHome, '.oneworks', '.oo.config.json'))
+      expect(JSON.parse(await readFile(result.configPath, 'utf8'))).toMatchObject({
+        modelServices: {
+          imported: {
+            apiBaseUrl: 'https://example.com/v1'
+          }
+        }
+      })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it('writes global config updates into real home', async () => {
     const realHomeDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-update-global-home-'))
     const workspaceDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-update-global-workspace-'))

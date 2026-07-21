@@ -64,6 +64,24 @@
         "require": "./dist/models.js"
       }
     },
+    "./model-provider-import": {
+      "__oneworks__": {
+        "default": "./src/model-provider-import.ts"
+      },
+      "default": {
+        "import": "./dist/model-provider-import.mjs",
+        "require": "./dist/model-provider-import.js"
+      }
+    },
+    "./worktree-environment-import": {
+      "__oneworks__": {
+        "default": "./src/worktree-environment-import.ts"
+      },
+      "default": {
+        "import": "./dist/worktree-environment-import.mjs",
+        "require": "./dist/worktree-environment-import.js"
+      }
+    },
     "./icon": {
       "__oneworks__": {
         "default": "./src/icon.ts"
@@ -110,6 +128,7 @@
     "@oneworks/register": "workspace:*",
     "@oneworks/types": "workspace:*",
     "@oneworks/utils": "workspace:*",
+    "smol-toml": "^1.7.0",
     "zod": "^3.24.1"
   }
 }

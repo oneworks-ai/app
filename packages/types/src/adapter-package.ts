@@ -6,7 +6,17 @@ import process from 'node:process'
 
 import type { Adapter } from './adapter'
 import type { AdapterCliPreparer } from './adapter-cli-prepare'
+import type {
+  AdapterModelProviderImportCapability,
+  AdapterModelProviderImportDiscoverer,
+  AdapterModelProviderImportSource
+} from './adapter-model-provider-import'
 import { resolveExistingAdapterPackageCacheDir } from './adapter-package-cache'
+import type {
+  AdapterWorktreeEnvironmentImportCapability,
+  AdapterWorktreeEnvironmentImportDiscoverer,
+  AdapterWorktreeEnvironmentImportSource
+} from './adapter-worktree-environment-import'
 import type { AdapterBuiltinModel, Config } from './config'
 import type { AdapterNativePluginManager } from './native-host-plugin'
 import type { AdapterPluginInstaller } from './native-plugin'
@@ -15,12 +25,22 @@ const ADAPTER_SCOPE = '@oneworks'
 const ADAPTER_PREFIX = 'adapter-'
 const ADAPTER_CLI_PREPARE_EXPORT = '/cli-prepare'
 const ADAPTER_MODELS_EXPORT = '/models'
+const ADAPTER_MODEL_PROVIDER_IMPORT_EXPORT = '/model-provider-import'
+const ADAPTER_WORKTREE_ENVIRONMENT_IMPORT_EXPORT = '/worktree-environment-import'
 const ADAPTER_NATIVE_PLUGINS_EXPORT = '/native-plugins'
 const ADAPTER_PLUGIN_EXPORT = '/plugins'
 
 interface AdapterModelsExport {
   builtinModels?: unknown
   loadBuiltinModels?: unknown
+}
+
+interface AdapterModelProviderImportExport {
+  default?: unknown
+}
+
+interface AdapterWorktreeEnvironmentImportExport {
+  default?: unknown
 }
 
 export interface AdapterRuntimeTarget {
@@ -40,6 +60,7 @@ export interface AdapterPackageLoadOptions {
 }
 
 const createWorkspaceRequire = (cwd: string) => createRequire(resolve(cwd, '__oneworks_adapter_loader__.cjs'))
+const defaultAdapterRequire = createWorkspaceRequire(process.cwd())
 
 const normalizeRuntimePackageDir = (value: string | undefined) => {
   const trimmed = value?.trim()
@@ -344,7 +365,7 @@ const loadWorkspacePackageExport = (params: {
   packageName: string
   sourcePath: string
 }) => {
-  const packageRequire = params.packageRequire ?? require
+  const packageRequire = params.packageRequire ?? defaultAdapterRequire
   const packageJsonPath = packageRequire.resolve(`${params.packageName}/package.json`)
   return packageRequire(join(dirname(packageJsonPath), params.sourcePath))
 }
@@ -390,8 +411,7 @@ const loadAdapterPackageExport = (params: {
   }
 
   try {
-    // eslint-disable-next-line ts/no-require-imports
-    return require(params.request)
+    return defaultAdapterRequire(params.request)
   } catch (error) {
     if (isWorkspaceDistMissingError(error)) {
       return loadWorkspacePackageExport({
@@ -469,6 +489,175 @@ export const loadAdapterBuiltinModels = (type: string, options: AdapterPackageLo
     if (Array.isArray(loaded)) return loaded as AdapterBuiltinModel[]
   }
   return Array.isArray(mod.builtinModels) ? mod.builtinModels as AdapterBuiltinModel[] : undefined
+}
+
+const isMissingAdapterPackageExportError = (
+  error: unknown,
+  request: string,
+  exportName: string
+) => {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code
+  const message = error instanceof Error ? error.message : String(error)
+  return (code === 'ERR_PACKAGE_PATH_NOT_EXPORTED' && message.includes(exportName)) ||
+    (code === 'MODULE_NOT_FOUND' && message.includes(`Cannot find module '${request}'`))
+}
+
+const isAdapterModelProviderImportSource = (
+  value: unknown
+): value is AdapterModelProviderImportSource => (
+  value === 'global' || value === 'project' || value === 'user'
+)
+
+const asAdapterModelProviderImportCapability = (
+  value: unknown,
+  type: string
+): AdapterModelProviderImportCapability => {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError(`Adapter ${type} does not expose a model provider import capability.`)
+  }
+  const capability = value as Record<string, unknown>
+  const descriptor = capability.descriptor
+  if (descriptor == null || typeof descriptor !== 'object' || Array.isArray(descriptor)) {
+    throw new TypeError(`Adapter ${type} does not declare a model provider import descriptor.`)
+  }
+  const descriptorRecord = descriptor as Record<string, unknown>
+  const title = normalizeNonEmptyString(descriptorRecord.title)
+  const description = normalizeNonEmptyString(descriptorRecord.description)
+  const supportedSources = descriptorRecord.supportedSources
+  if (
+    title == null ||
+    !Array.isArray(supportedSources) ||
+    supportedSources.length === 0 ||
+    !supportedSources.every(isAdapterModelProviderImportSource)
+  ) {
+    throw new TypeError(`Adapter ${type} has an invalid model provider import descriptor.`)
+  }
+  if (typeof capability.discover !== 'function') {
+    throw new TypeError(`Adapter ${type} does not expose a model provider import discoverer.`)
+  }
+
+  return {
+    descriptor: {
+      ...(description == null ? {} : { description }),
+      supportedSources: [...new Set(supportedSources)],
+      title
+    },
+    discover: capability.discover as AdapterModelProviderImportDiscoverer
+  }
+}
+
+export const tryLoadAdapterModelProviderImportCapability = async (
+  type: string,
+  options: AdapterPackageLoadOptions = {}
+): Promise<AdapterModelProviderImportCapability | undefined> => {
+  const { packageName, packageRoot } = resolveAdapterLoadTarget(type, options)
+  const exportName = `${packageName}${ADAPTER_MODEL_PROVIDER_IMPORT_EXPORT}`
+  const request = packageRoot == null ? exportName : `${packageRoot}${ADAPTER_MODEL_PROVIDER_IMPORT_EXPORT}`
+  let mod: AdapterModelProviderImportExport
+  try {
+    mod = loadAdapterPackageExport({
+      packageName,
+      request,
+      packageRoot,
+      exportKey: './model-provider-import',
+      workspaceSourcePath: 'src/model-provider-import.ts'
+    }) as AdapterModelProviderImportExport
+  } catch (error) {
+    if (isMissingAdapterPackageExportError(error, request, 'model-provider-import')) return undefined
+    throw error
+  }
+
+  return asAdapterModelProviderImportCapability(mod.default, type)
+}
+
+export const loadAdapterModelProviderImportCapability = async (
+  type: string,
+  options: AdapterPackageLoadOptions = {}
+) => {
+  const capability = await tryLoadAdapterModelProviderImportCapability(type, options)
+  if (capability == null) {
+    throw new TypeError(`Adapter ${type} does not expose a model provider import capability.`)
+  }
+  return capability
+}
+
+const isAdapterWorktreeEnvironmentImportSource = (
+  value: unknown
+): value is AdapterWorktreeEnvironmentImportSource => (
+  value === 'project' || value === 'user'
+)
+
+const asAdapterWorktreeEnvironmentImportCapability = (
+  value: unknown,
+  type: string
+): AdapterWorktreeEnvironmentImportCapability => {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError(`Adapter ${type} does not expose a worktree environment import capability.`)
+  }
+  const capability = value as Record<string, unknown>
+  const descriptor = capability.descriptor
+  if (descriptor == null || typeof descriptor !== 'object' || Array.isArray(descriptor)) {
+    throw new TypeError(`Adapter ${type} does not declare a worktree environment import descriptor.`)
+  }
+  const descriptorRecord = descriptor as Record<string, unknown>
+  const title = normalizeNonEmptyString(descriptorRecord.title)
+  const description = normalizeNonEmptyString(descriptorRecord.description)
+  const supportedSources = descriptorRecord.supportedSources
+  if (
+    title == null ||
+    !Array.isArray(supportedSources) ||
+    supportedSources.length === 0 ||
+    !supportedSources.every(isAdapterWorktreeEnvironmentImportSource)
+  ) {
+    throw new TypeError(`Adapter ${type} has an invalid worktree environment import descriptor.`)
+  }
+  if (typeof capability.discover !== 'function') {
+    throw new TypeError(`Adapter ${type} does not expose a worktree environment import discoverer.`)
+  }
+
+  return {
+    descriptor: {
+      ...(description == null ? {} : { description }),
+      supportedSources: [...new Set(supportedSources)],
+      title
+    },
+    discover: capability.discover as AdapterWorktreeEnvironmentImportDiscoverer
+  }
+}
+
+export const tryLoadAdapterWorktreeEnvironmentImportCapability = async (
+  type: string,
+  options: AdapterPackageLoadOptions = {}
+): Promise<AdapterWorktreeEnvironmentImportCapability | undefined> => {
+  const { packageName, packageRoot } = resolveAdapterLoadTarget(type, options)
+  const exportName = `${packageName}${ADAPTER_WORKTREE_ENVIRONMENT_IMPORT_EXPORT}`
+  const request = packageRoot == null ? exportName : `${packageRoot}${ADAPTER_WORKTREE_ENVIRONMENT_IMPORT_EXPORT}`
+  let mod: AdapterWorktreeEnvironmentImportExport
+  try {
+    mod = loadAdapterPackageExport({
+      packageName,
+      request,
+      packageRoot,
+      exportKey: './worktree-environment-import',
+      workspaceSourcePath: 'src/worktree-environment-import.ts'
+    }) as AdapterWorktreeEnvironmentImportExport
+  } catch (error) {
+    if (isMissingAdapterPackageExportError(error, request, 'worktree-environment-import')) return undefined
+    throw error
+  }
+
+  return asAdapterWorktreeEnvironmentImportCapability(mod.default, type)
+}
+
+export const loadAdapterWorktreeEnvironmentImportCapability = async (
+  type: string,
+  options: AdapterPackageLoadOptions = {}
+) => {
+  const capability = await tryLoadAdapterWorktreeEnvironmentImportCapability(type, options)
+  if (capability == null) {
+    throw new TypeError(`Adapter ${type} does not expose a worktree environment import capability.`)
+  }
+  return capability
 }
 
 export const loadAdapterPluginInstaller = async (type: string, options: AdapterPackageLoadOptions = {}) => {

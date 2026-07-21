@@ -81,7 +81,9 @@ export {
   getModelServiceManagementSnapshot,
   getModelServiceManagementTokenProfile,
   getModelServiceStatus,
+  importModelServicesFromAdapter,
   listModelProviders,
+  listModelServiceImporters,
   listModelServiceModels,
   probeModelProvider,
   updateModelServiceManagementToken
@@ -184,11 +186,15 @@ export type { WorkspacePanelStateResponse } from './api/workspace'
 export {
   deleteWorktreeEnvironment,
   getWorktreeEnvironment,
+  importWorktreeEnvironmentsFromAdapter,
+  listWorktreeEnvironmentImporters,
   listWorktreeEnvironments,
   saveWorktreeEnvironment
 } from './api/worktree-environments'
 
 export type {
+  AdapterWorktreeEnvironmentImportResult,
+  AdapterWorktreeEnvironmentImporterDescriptor,
   AgentRoomDetailResponse,
   AgentRoomListResponse,
   AgentRoomMessageWriteRequest,

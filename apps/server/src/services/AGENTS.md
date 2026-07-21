@@ -9,6 +9,9 @@
 - web-debug/：跨入口浏览器调试 runtime 目录，负责内置 Chii 等 Web/iframe/webview 调试能力，不归属单个 webpage metadata 功能
 - mobile-debug/：跨入口移动设备调试 runtime，负责 Android ADB/scrcpy、iOS WDA、设备发现、截图 / 视频流、元素树和输入
 - model-providers/：官方模型服务商能力目录，负责服务商模型、余额、状态和 secret 动作的服务端编排
+- adapter-imports.ts：模型服务与 worktree environment 导入共用的 adapter runtime target 解析；不要在各导入域重复拼 package/export 位置
+- worktree-environment-import.ts：枚举 adapter 的可选环境导入 capability，完整校验 discovery 结果、按目标 source 规范化 `.local` 展示后缀并整批去重，再按 Project / User additions-only 写入；响应与日志不得包含脚本正文
+- worktree-environments.ts：adapter 导入走独占目录 claim 与 no-follow 文件写入，必须拒绝 `.oo`、环境根目录或 `.gitignore` 的符号链接；平台生命周期脚本存在时覆盖 base 脚本，不得双重执行
 - skill-hub/：技能市场领域服务，负责内置/用户配置 registry 按 source 跨层合并、Registry 管理列表、远端 skills CLI 搜索，以及安装后的配置写回；`enabled: false` 必须同时阻止搜索和安装
 - module-updates.ts：运行时模块版本检测与 bootstrap cache 安装编排，供普通 web、bootstrap web 和桌面 workspace 共同使用
 

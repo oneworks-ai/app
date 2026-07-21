@@ -9,11 +9,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   loadAdapter,
   loadAdapterBuiltinModels,
+  loadAdapterModelProviderImportCapability,
+  loadAdapterWorktreeEnvironmentImportCapability,
   normalizeAdapterPackageId,
   resolveAdapterPackageName,
   resolveAdapterRuntimeTarget,
   resolveExistingNpmPackageDirs,
-  sanitizePackageName
+  sanitizePackageName,
+  tryLoadAdapterModelProviderImportCapability,
+  tryLoadAdapterWorktreeEnvironmentImportCapability
 } from '@oneworks/types'
 
 const tempDirs: string[] = []
@@ -27,7 +31,13 @@ const writeAdapterPackage = async (
   packageDir: string,
   adapterId: string,
   packageName = '@acme/custom-adapter',
-  options: { models?: string[]; dynamicModels?: string[]; version?: string } = {}
+  options: {
+    models?: string[]
+    dynamicModels?: string[]
+    modelProviderImporter?: boolean | 'broken' | 'malformed'
+    worktreeEnvironmentImporter?: boolean | 'broken' | 'malformed'
+    version?: string
+  } = {}
 ) => {
   const version = options.version ?? '1.0.0'
   const adapterRoot = join(packageDir, 'node_modules', ...packageName.split('/'))
@@ -42,6 +52,12 @@ const writeAdapterPackage = async (
         exports: {
           '.': './dist/index.js',
           ...(options.models == null && options.dynamicModels == null ? {} : { './models': './dist/models.js' }),
+          ...(options.modelProviderImporter
+            ? { './model-provider-import': './dist/model-provider-import.js' }
+            : {}),
+          ...(options.worktreeEnvironmentImporter
+            ? { './worktree-environment-import': './dist/worktree-environment-import.js' }
+            : {}),
           './package.json': './package.json'
         }
       },
@@ -71,6 +87,47 @@ const writeAdapterPackage = async (
       }builtinModels: ${JSON.stringify(staticModels ?? [])} }\n`
     )
   }
+  if (options.modelProviderImporter) {
+    await writeFile(
+      join(adapterRoot, 'dist/model-provider-import.js'),
+      options.modelProviderImporter === 'broken'
+        ? "module.exports = require('@acme/missing-import-dependency')\n"
+        : options.modelProviderImporter === 'malformed'
+        ? 'module.exports = { default: async () => ({}) }\n'
+        : `module.exports = { default: {
+          descriptor: {
+            title: 'Custom native config',
+            supportedSources: ['global', 'project']
+          },
+          discover: async params => ({
+            found: true,
+            modelServices: { [params.source]: { title: params.source } },
+            skippedProviderIds: []
+          })
+        } }\n`
+    )
+  }
+  if (options.worktreeEnvironmentImporter) {
+    await writeFile(
+      join(adapterRoot, 'dist/worktree-environment-import.js'),
+      options.worktreeEnvironmentImporter === 'broken'
+        ? "module.exports = require('@acme/missing-environment-import-dependency')\n"
+        : options.worktreeEnvironmentImporter === 'malformed'
+        ? 'module.exports = { default: async () => ({}) }\n'
+        : `module.exports = { default: {
+          descriptor: {
+            title: 'Custom environments',
+            supportedSources: ['project', 'user']
+          },
+          discover: async () => ({
+            found: true,
+            environments: [],
+            skippedActionCount: 0,
+            skippedEnvironmentCount: 0
+          })
+        } }\n`
+    )
+  }
 }
 
 describe('adapter package helpers', () => {
@@ -95,7 +152,8 @@ describe('adapter package helpers', () => {
 
     const callerPackageDir = join(tempDir, 'caller-package')
     await writeAdapterPackage(callerPackageDir, 'path-codex', '@oneworks/adapter-codex', {
-      models: ['path-model']
+      models: ['path-model'],
+      modelProviderImporter: true
     })
     const adapterRoot = join(callerPackageDir, 'node_modules', '@oneworks', 'adapter-codex')
 
@@ -130,6 +188,9 @@ describe('adapter package helpers', () => {
       id: 'path-codex'
     })
     expect(loadAdapterBuiltinModels(adapterRoot)?.map(model => model.value)).toEqual(['path-model'])
+    await expect(loadAdapterModelProviderImportCapability(adapterRoot)).resolves.toMatchObject({
+      descriptor: { title: 'Custom native config' }
+    })
   })
 
   it('loads adapters from the caller package dir before the active runtime package dir', async () => {
@@ -164,6 +225,109 @@ describe('adapter package helpers', () => {
       'native-default',
       'native-pro'
     ])
+  })
+
+  it('loads a model provider import capability through the adapter package export', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-provider-importer-'))
+    tempDirs.push(tempDir)
+
+    const callerPackageDir = join(tempDir, 'caller-package')
+    await writeAdapterPackage(callerPackageDir, 'caller', '@acme/custom-adapter', {
+      modelProviderImporter: true
+    })
+    vi.stubEnv('__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__', callerPackageDir)
+
+    const capability = await loadAdapterModelProviderImportCapability('@acme/custom-adapter')
+
+    expect(capability.descriptor).toEqual({
+      title: 'Custom native config',
+      supportedSources: ['global', 'project']
+    })
+    await expect(capability.discover({ cwd: '/workspace', env: {}, source: 'project' })).resolves.toMatchObject({
+      found: true,
+      modelServices: { project: { title: 'project' } }
+    })
+  })
+
+  it('returns undefined only when the optional model provider import export is absent', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-provider-importer-absent-'))
+    tempDirs.push(tempDir)
+    const callerPackageDir = join(tempDir, 'caller-package')
+    await writeAdapterPackage(callerPackageDir, 'caller')
+    vi.stubEnv('__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__', callerPackageDir)
+
+    await expect(tryLoadAdapterModelProviderImportCapability('@acme/custom-adapter')).resolves.toBeUndefined()
+    await expect(loadAdapterModelProviderImportCapability('@acme/custom-adapter')).rejects.toThrow(
+      'does not expose a model provider import capability'
+    )
+  })
+
+  it('loads and validates an optional worktree environment import capability', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-environment-importer-'))
+    tempDirs.push(tempDir)
+    const callerPackageDir = join(tempDir, 'caller-package')
+    await writeAdapterPackage(callerPackageDir, 'caller', '@acme/custom-adapter', {
+      worktreeEnvironmentImporter: true
+    })
+    vi.stubEnv('__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__', callerPackageDir)
+
+    const capability = await loadAdapterWorktreeEnvironmentImportCapability('@acme/custom-adapter')
+
+    expect(capability.descriptor).toEqual({
+      title: 'Custom environments',
+      supportedSources: ['project', 'user']
+    })
+    await expect(capability.discover({ cwd: '/workspace', env: {}, source: 'project' })).resolves.toEqual({
+      environments: [],
+      found: true,
+      skippedActionCount: 0,
+      skippedEnvironmentCount: 0
+    })
+  })
+
+  it('distinguishes an absent environment import export from a malformed or broken capability', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-environment-importer-invalid-'))
+    tempDirs.push(tempDir)
+    const absentDir = join(tempDir, 'absent')
+    const malformedDir = join(tempDir, 'malformed')
+    const brokenDir = join(tempDir, 'broken')
+    await writeAdapterPackage(absentDir, 'absent', '@acme/absent-adapter')
+    await writeAdapterPackage(malformedDir, 'malformed', '@acme/malformed-adapter', {
+      worktreeEnvironmentImporter: 'malformed'
+    })
+    await writeAdapterPackage(brokenDir, 'broken', '@acme/broken-adapter', {
+      worktreeEnvironmentImporter: 'broken'
+    })
+
+    await expect(tryLoadAdapterWorktreeEnvironmentImportCapability(
+      join(absentDir, 'node_modules', '@acme', 'absent-adapter')
+    )).resolves.toBeUndefined()
+    await expect(tryLoadAdapterWorktreeEnvironmentImportCapability(
+      join(malformedDir, 'node_modules', '@acme', 'malformed-adapter')
+    )).rejects.toThrow('does not expose a worktree environment import capability')
+    await expect(tryLoadAdapterWorktreeEnvironmentImportCapability(
+      join(brokenDir, 'node_modules', '@acme', 'broken-adapter')
+    )).rejects.toMatchObject({ code: 'MODULE_NOT_FOUND' })
+  })
+
+  it('does not hide malformed capabilities or missing internal dependencies as unsupported', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-provider-importer-invalid-'))
+    tempDirs.push(tempDir)
+    const malformedDir = join(tempDir, 'malformed')
+    const brokenDir = join(tempDir, 'broken')
+    await writeAdapterPackage(malformedDir, 'malformed', '@acme/malformed-adapter', {
+      modelProviderImporter: 'malformed'
+    })
+    await writeAdapterPackage(brokenDir, 'broken', '@acme/broken-adapter', {
+      modelProviderImporter: 'broken'
+    })
+
+    await expect(tryLoadAdapterModelProviderImportCapability(
+      join(malformedDir, 'node_modules', '@acme', 'malformed-adapter')
+    )).rejects.toThrow('does not expose a model provider import capability')
+    await expect(tryLoadAdapterModelProviderImportCapability(
+      join(brokenDir, 'node_modules', '@acme', 'broken-adapter')
+    )).rejects.toMatchObject({ code: 'MODULE_NOT_FOUND' })
   })
 
   it('prefers a dynamic builtin model loader when the adapter exports one', async () => {

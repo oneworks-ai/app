@@ -13,6 +13,8 @@ import type {
   AboutInfo,
   AdapterAccountDetailResult,
   AdapterAccountsResult,
+  AdapterModelProviderImporterDescriptor,
+  AdapterWorktreeEnvironmentImporterDescriptor,
   ConfigResponse,
   ConfigUiSection,
   PluginContributionSettingsPage
@@ -40,7 +42,11 @@ import {
   getApiErrorMessage,
   getConfig,
   getConfigSchema,
+  importModelServicesFromAdapter,
+  importWorktreeEnvironmentsFromAdapter,
+  listModelServiceImporters,
   listWorkspaceFileOpeners,
+  listWorktreeEnvironmentImporters,
   listWorktreeEnvironments,
   updateConfig
 } from '../api'
@@ -61,6 +67,7 @@ import {
 import type { ModelServiceProviderPortalRequest } from './config/ModelServiceProviderPortalBottomPanel'
 import { ThemePackSettingsPanel } from './config/ThemePackSettingsPanel'
 import { WorktreeEnvironmentPanel } from './config/WorktreeEnvironmentPanel'
+import { getAdapterImporterConfigFingerprint } from './config/adapterImporterCache'
 import {
   getConfigDraftKey,
   resolveRemoteConfigChangeAction,
@@ -73,7 +80,11 @@ import {
   serializeConfigDetailRoute
 } from './config/configDetail'
 import { getConfigDetailPlaceholderEntries } from './config/configDetailPlaceholders'
-import { getPreferredConfigSourceForTab, resolveConfigSourceForMissingQuery } from './config/configSourceDefaults'
+import {
+  getPreferredConfigSourceForTab,
+  normalizeConfigSourceForTab,
+  resolveConfigSourceForMissingQuery
+} from './config/configSourceDefaults'
 import { cloneValue, collectUnsetPaths, getValueByPath, isEmptyValue } from './config/configUtils'
 import { editableConfigSectionKeys } from './config/editableConfigSections'
 import type { NativeHistoryImportSettings } from './config/external-sessions-panel-model'
@@ -288,7 +299,7 @@ const isModelServiceDetailTabRoute = (
 export function ConfigView() {
   const { i18n, t } = useTranslation()
   const { message, modal } = App.useApp()
-  const { pluginSnapshotStatus } = usePluginContext()
+  const { pluginSnapshotStatus, snapshot: pluginSnapshot } = usePluginContext()
   const navigate = useNavigate()
   const location = useLocation()
   const setPendingSessionInitialContent = useSetAtom(pendingSessionInitialContentAtom)
@@ -308,7 +319,36 @@ export function ConfigView() {
     shouldRetryOnError: true
   })
   const { data: schemaData } = useSWR('/api/config/schema', getConfigSchema)
-  const { data: worktreeEnvironmentData } = useSWR('worktree-environments', listWorktreeEnvironments)
+  const adapterImporterConfigFingerprint = useMemo(() =>
+    getAdapterImporterConfigFingerprint({
+      mergedConfig: data?.sources?.merged,
+      pluginInstances: pluginSnapshot.instances.map(instance => ({
+        packageId: instance.packageId,
+        requestId: instance.requestId,
+        scope: instance.scope,
+        version: instance.version
+      }))
+    }), [data?.sources?.merged, pluginSnapshot.instances])
+  const {
+    data: modelServiceImporterData,
+    error: modelServiceImporterError,
+    isLoading: isLoadingModelServiceImporters
+  } = useSWR(
+    data == null ? null : ['/api/model-services/importers', adapterImporterConfigFingerprint],
+    () => listModelServiceImporters()
+  )
+  const {
+    data: worktreeEnvironmentImporterData,
+    error: worktreeEnvironmentImporterError,
+    isLoading: isLoadingWorktreeEnvironmentImporters
+  } = useSWR(
+    data == null ? null : ['/api/worktree-environments/imports/adapters', adapterImporterConfigFingerprint],
+    () => listWorktreeEnvironmentImporters()
+  )
+  const {
+    data: worktreeEnvironmentData,
+    mutate: mutateWorktreeEnvironments
+  } = useSWR('worktree-environments', listWorktreeEnvironments)
   const { data: workspaceFileOpenersData } = useSWR('workspace-file-openers', listWorkspaceFileOpeners)
   const browserActivityRouteContext = useMemo(() => resolveBrowserActivityRouteContext(location.state), [
     location.state
@@ -331,14 +371,14 @@ export function ConfigView() {
   }, [pathValues.detail, pathValues.hasDetailPath, pathValues.hasTabPath, pathValues.tab, searchParams])
   const configPresent = data?.meta?.configPresent
   const fallbackSourceKey = resolveConfigSourceForMissingQuery(queryValues.tab, configPresent)
-  const querySourceKey: ConfigSource = isConfigSourceKey(queryValues.source) ? queryValues.source : fallbackSourceKey
+  const querySourceKey = normalizeConfigSourceForTab(
+    queryValues.tab,
+    isConfigSourceKey(queryValues.source) ? queryValues.source : fallbackSourceKey
+  )
   const [sourceKey, setSourceKeyState] = useState<ConfigSource>(querySourceKey)
   const [detailQuery, setDetailQueryState] = useState(queryValues.detail)
   const [navSearchQuery, setNavSearchQuery] = useState('')
   const [drafts, setDrafts] = useState<Record<string, unknown>>({})
-  const [worktreeEnvironmentHeaderActions, setWorktreeEnvironmentHeaderActions] = useState<
-    RouteContainerHeaderActionItem[]
-  >([])
   const globalSource = data?.sources?.global
   const globalResolvedSource = data?.resolvedSources?.global
   const currentSource = data?.sources?.[sourceKey]
@@ -346,6 +386,8 @@ export function ConfigView() {
   const draftsRef = useRef<Record<string, unknown>>(drafts)
   const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const savingRef = useRef<Record<string, boolean>>({})
+  const importRefreshBlockedDraftKeysRef = useRef<Record<string, boolean>>({})
+  const importingModelServicesDraftKeyRef = useRef<string | null>(null)
   const lastSavedRef = useRef<Record<string, string>>({})
   const baseSnapshotsRef = useRef<Record<string, string>>({})
   const blockedDraftKeysRef = useRef<Record<string, boolean>>({})
@@ -353,6 +395,16 @@ export function ConfigView() {
   const [pendingConflicts, setPendingConflicts] = useState<Record<string, ConfigDraftConflict>>({})
   const [activeConflictKey, setActiveConflictKey] = useState<string | null>(null)
   const [creatingModelServiceSessionKey, setCreatingModelServiceSessionKey] = useState<string | null>(null)
+  const [isImportingModelServices, setImportingModelServices] = useState(false)
+  const [pendingModelServiceRefreshSources, setPendingModelServiceRefreshSources] = useState<
+    Partial<Record<ConfigSource, true>>
+  >({})
+  const [selectedModelServiceImporterKey, setSelectedModelServiceImporterKey] = useState('')
+  const [isImportingWorktreeEnvironments, setImportingWorktreeEnvironments] = useState(false)
+  const [pendingWorktreeEnvironmentRefreshSources, setPendingWorktreeEnvironmentRefreshSources] = useState<
+    Partial<Record<'project' | 'user', true>>
+  >({})
+  const [selectedWorktreeEnvironmentImporterKey, setSelectedWorktreeEnvironmentImporterKey] = useState('')
   const [isModelServicePortalPanelOpen, setModelServicePortalPanelOpen] = useState(false)
   const [modelServicePortalTabsState, setModelServicePortalTabsState] = useState(
     emptyModelServiceProviderPortalTabsState
@@ -367,6 +419,54 @@ export function ConfigView() {
   const mergedAdapters = useMemo(() => data?.sources?.merged?.adapters ?? {}, [
     data?.sources?.merged?.adapters
   ])
+  const modelServiceImporters = useMemo<AdapterModelProviderImporterDescriptor[]>(
+    () => modelServiceImporterData?.importers ?? [],
+    [modelServiceImporterData?.importers]
+  )
+  const selectedModelServiceImporter = useMemo(
+    () => modelServiceImporters.find(item => item.adapterKey === selectedModelServiceImporterKey),
+    [modelServiceImporters, selectedModelServiceImporterKey]
+  )
+  useEffect(() => {
+    setSelectedModelServiceImporterKey(current => (
+      modelServiceImporters.some(item => item.adapterKey === current)
+        ? current
+        : modelServiceImporters[0]?.adapterKey ?? ''
+    ))
+  }, [modelServiceImporters])
+  const worktreeEnvironmentImporters = useMemo<AdapterWorktreeEnvironmentImporterDescriptor[]>(
+    () => worktreeEnvironmentImporterData?.importers ?? [],
+    [worktreeEnvironmentImporterData?.importers]
+  )
+  const worktreeEnvironmentSourceKey = sourceKey === 'user' ? 'user' : 'project'
+  const availableWorktreeEnvironmentImporters = useMemo(
+    () =>
+      worktreeEnvironmentImporters.filter(importer => (
+        importer.supportedSources.includes(worktreeEnvironmentSourceKey)
+      )),
+    [worktreeEnvironmentImporters, worktreeEnvironmentSourceKey]
+  )
+  const selectedWorktreeEnvironmentImporter = useMemo(
+    () =>
+      availableWorktreeEnvironmentImporters.find(
+        item => item.adapterKey === selectedWorktreeEnvironmentImporterKey
+      ),
+    [availableWorktreeEnvironmentImporters, selectedWorktreeEnvironmentImporterKey]
+  )
+  useEffect(() => {
+    setSelectedWorktreeEnvironmentImporterKey(current => (
+      availableWorktreeEnvironmentImporters.some(item => item.adapterKey === current)
+        ? current
+        : availableWorktreeEnvironmentImporters[0]?.adapterKey ?? ''
+    ))
+  }, [availableWorktreeEnvironmentImporters])
+  const isModelServiceImportRefreshPending = pendingModelServiceRefreshSources[sourceKey] === true
+  const isWorktreeEnvironmentImportRefreshPending = pendingWorktreeEnvironmentRefreshSources[
+    worktreeEnvironmentSourceKey
+  ] === true
+  const hasModelServiceImporterLoadError = modelServiceImporterError != null && modelServiceImporterData == null
+  const hasWorktreeEnvironmentImporterLoadError = worktreeEnvironmentImporterError != null &&
+    worktreeEnvironmentImporterData == null
   const hasDesktopSettings = window.oneworksDesktop?.getDesktopSettings != null &&
     window.oneworksDesktop.updateDesktopSettings != null
   const hasSavedPasswords = window.oneworksDesktop?.listSavedPasswords != null
@@ -526,7 +626,8 @@ export function ConfigView() {
   const updateConfigRoute = useCallback((patch: Partial<ConfigQueryParams>, options?: { state?: unknown }) => {
     const nextTab = patch.tab ?? activeTabKey
     const nextDetail = patch.detail ?? detailQuery
-    const nextSource = patch.source ?? sourceKey
+    const requestedSource = isConfigSourceKey(patch.source ?? '') ? patch.source as ConfigSource : sourceKey
+    const nextSource = normalizeConfigSourceForTab(nextTab, requestedSource)
     const nextSearchParams = new URLSearchParams(location.search)
 
     configLegacyRouteQueryKeys.forEach(key => nextSearchParams.delete(key))
@@ -596,7 +697,16 @@ export function ConfigView() {
     updateConfigRoute({ detail: '', section: '', tab: 'plugins' })
   }, [shouldRedirectUnavailablePluginPage, updateConfigRoute])
   useEffect(() => {
-    if (searchParams.get('source') != null) return
+    const requestedSource = searchParams.get('source')
+    if (requestedSource != null) {
+      if (isConfigSourceKey(requestedSource)) {
+        const normalizedSource = normalizeConfigSourceForTab(activeTabKey, requestedSource)
+        if (normalizedSource !== requestedSource) {
+          updateConfigRoute({ source: normalizedSource })
+        }
+      }
+      return
+    }
     const preferredSource = getPreferredConfigSourceForTab(activeTabKey)
     if (preferredSource != null) {
       updateConfigRoute({ source: preferredSource })
@@ -611,9 +721,10 @@ export function ConfigView() {
     updateConfigRoute
   ])
   const setSourceKey = useCallback((next: ConfigSource) => {
-    setSourceKeyState(next)
-    updateConfigRoute({ source: next })
-  }, [updateConfigRoute])
+    const normalizedSource = normalizeConfigSourceForTab(activeTabKey, next)
+    setSourceKeyState(normalizedSource)
+    updateConfigRoute({ source: normalizedSource })
+  }, [activeTabKey, updateConfigRoute])
   const setDetailQuery = useCallback((next: string) => {
     setDetailQueryState(next)
     updateConfigRoute({ detail: next })
@@ -658,6 +769,18 @@ export function ConfigView() {
         : t('config.sources.userMissing')
     }
   ], [configPresent?.global, configPresent?.project, configPresent?.user, t])
+  const worktreeEnvironmentSourceOptions = useMemo(() => [
+    {
+      value: 'project' as const,
+      icon: 'folder',
+      label: t('config.environments.sources.project')
+    },
+    {
+      value: 'user' as const,
+      icon: 'person',
+      label: t('config.environments.sources.user')
+    }
+  ], [t])
 
   useEffect(() => {
     if (activeTab == null) return
@@ -1068,7 +1191,10 @@ export function ConfigView() {
 
   const scheduleSave = (sectionKey: string, source: ConfigSource, nextValue: unknown) => {
     const draftKey = getDraftKey(sectionKey, source)
-    if (blockedDraftKeysRef.current[draftKey]) {
+    if (
+      blockedDraftKeysRef.current[draftKey] ||
+      importRefreshBlockedDraftKeysRef.current[draftKey]
+    ) {
       clearSaveTimer(draftKey)
       return
     }
@@ -1079,7 +1205,10 @@ export function ConfigView() {
     }
     clearSaveTimer(draftKey)
     saveTimersRef.current[draftKey] = setTimeout(async () => {
-      if (blockedDraftKeysRef.current[draftKey]) return
+      if (
+        blockedDraftKeysRef.current[draftKey] ||
+        importRefreshBlockedDraftKeysRef.current[draftKey]
+      ) return
       if (savingRef.current[draftKey]) return
       const currentValue = draftsRef.current[draftKey] ?? nextValue
       const currentSerialized = serializeComparableConfigValue(currentValue)
@@ -1097,8 +1226,218 @@ export function ConfigView() {
 
   const handleDraftChange = (sectionKey: string, nextValue: unknown, source = sourceKey) => {
     const draftKey = getDraftKey(sectionKey, source)
+    if (importingModelServicesDraftKeyRef.current === draftKey) return
     setDrafts(prev => ({ ...prev, [draftKey]: nextValue }))
     scheduleSave(sectionKey, source, nextValue)
+  }
+
+  const refreshModelServicesAfterImport = async (
+    targetSource: ConfigSource,
+    draftKey: string
+  ) => {
+    try {
+      const refreshed = await mutate()
+      if (refreshed == null) throw new Error('Model service config refresh returned no data.')
+      const refreshedValue = cloneValue(refreshed.sources?.[targetSource]?.modelServices ?? {}) ?? {}
+      const refreshedSerialized = serializeComparableConfigValue(refreshedValue)
+      draftsRef.current[draftKey] = refreshedValue
+      lastSavedRef.current[draftKey] = refreshedSerialized
+      baseSnapshotsRef.current[draftKey] = refreshedSerialized
+      delete importRefreshBlockedDraftKeysRef.current[draftKey]
+      setDrafts(current => ({ ...current, [draftKey]: refreshedValue }))
+      setPendingModelServiceRefreshSources((current) => {
+        if (current[targetSource] !== true) return current
+        const next = { ...current }
+        delete next[targetSource]
+        return next
+      })
+      return true
+    } catch {
+      importRefreshBlockedDraftKeysRef.current[draftKey] = true
+      setPendingModelServiceRefreshSources(current => ({ ...current, [targetSource]: true }))
+      void message.warning(t('config.modelServices.import.refreshFailed'))
+      return false
+    }
+  }
+
+  const handleRetryModelServiceImportRefresh = async () => {
+    const targetSource = sourceKey
+    if (
+      pendingModelServiceRefreshSources[targetSource] !== true ||
+      isImportingModelServices
+    ) return
+    setImportingModelServices(true)
+    try {
+      await refreshModelServicesAfterImport(
+        targetSource,
+        getConfigDraftKey('modelServices', targetSource)
+      )
+    } finally {
+      setImportingModelServices(false)
+    }
+  }
+
+  const refreshWorktreeEnvironmentsAfterImport = async (
+    targetSource: 'project' | 'user'
+  ) => {
+    try {
+      const refreshed = await mutateWorktreeEnvironments()
+      if (refreshed == null) throw new Error('Worktree environment refresh returned no data.')
+      setPendingWorktreeEnvironmentRefreshSources((current) => {
+        if (current[targetSource] !== true) return current
+        const next = { ...current }
+        delete next[targetSource]
+        return next
+      })
+      return true
+    } catch {
+      setPendingWorktreeEnvironmentRefreshSources(current => ({ ...current, [targetSource]: true }))
+      void message.warning(t('config.environments.import.refreshFailed'))
+      return false
+    }
+  }
+
+  const handleRetryWorktreeEnvironmentImportRefresh = async () => {
+    const targetSource = worktreeEnvironmentSourceKey
+    if (
+      pendingWorktreeEnvironmentRefreshSources[targetSource] !== true ||
+      isImportingWorktreeEnvironments
+    ) return
+    setImportingWorktreeEnvironments(true)
+    try {
+      await refreshWorktreeEnvironmentsAfterImport(targetSource)
+    } finally {
+      setImportingWorktreeEnvironments(false)
+    }
+  }
+
+  const handleImportModelServices = async () => {
+    const importer = selectedModelServiceImporter
+    if (
+      importer == null ||
+      !importer.supportedSources.includes(sourceKey) ||
+      isImportingModelServices ||
+      importingModelServicesDraftKeyRef.current != null
+    ) return
+    const targetSource = sourceKey
+    const draftKey = getConfigDraftKey('modelServices', targetSource)
+    const serverValue = data?.sources?.[targetSource]?.modelServices ?? {}
+
+    importingModelServicesDraftKeyRef.current = draftKey
+    setImportingModelServices(true)
+    clearSaveTimer(draftKey)
+    let importRequestAttempted = false
+    try {
+      for (let attempt = 0; savingRef.current[draftKey] === true && attempt < 100; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 50))
+      }
+      if (savingRef.current[draftKey] === true) {
+        throw new Error('Timed out waiting for the current model service save.')
+      }
+
+      const draftValue = draftsRef.current[draftKey] ?? cloneValue(serverValue) ?? {}
+      if (serializeComparableConfigValue(draftValue) !== serializeComparableConfigValue(serverValue)) {
+        await persistDraftValue({
+          draftKey,
+          sectionKey: 'modelServices',
+          source: targetSource,
+          value: draftValue
+        })
+      }
+
+      importRequestAttempted = true
+      importRefreshBlockedDraftKeysRef.current[draftKey] = true
+      const result = await importModelServicesFromAdapter(importer.adapterKey, targetSource)
+
+      if (!result.found) {
+        void message.info(t('config.modelServices.import.notFound', { adapter: importer.title }))
+      } else if (result.providerCount === 0) {
+        void message.info(t('config.modelServices.import.noProviders', { adapter: importer.title }))
+      } else if (result.importedServiceKeys.length === 0) {
+        void message.info(t('config.modelServices.import.noChanges', { adapter: importer.title }))
+      } else {
+        void message.success(t('config.modelServices.import.success', {
+          adapter: importer.title,
+          count: result.importedServiceKeys.length
+        }))
+      }
+      if (result.skippedProviderIds.length > 0) {
+        void message.warning(t('config.modelServices.import.skipped', {
+          adapter: importer.title,
+          count: result.skippedProviderIds.length
+        }))
+      }
+    } catch (error) {
+      void message.error(getApiErrorMessage(
+        error,
+        t('config.modelServices.import.failed', {
+          adapter: importer.title
+        })
+      ))
+    } finally {
+      if (importRequestAttempted) {
+        await refreshModelServicesAfterImport(targetSource, draftKey)
+      }
+      clearSaveTimer(draftKey)
+      if (importingModelServicesDraftKeyRef.current === draftKey) {
+        importingModelServicesDraftKeyRef.current = null
+      }
+      setImportingModelServices(false)
+    }
+  }
+
+  const handleImportWorktreeEnvironments = async () => {
+    const importer = selectedWorktreeEnvironmentImporter
+    const targetSource = worktreeEnvironmentSourceKey
+    if (
+      importer == null ||
+      !importer.supportedSources.includes(targetSource) ||
+      isImportingWorktreeEnvironments
+    ) return
+
+    setImportingWorktreeEnvironments(true)
+    let importRequestAttempted = false
+    try {
+      importRequestAttempted = true
+      const result = await importWorktreeEnvironmentsFromAdapter(importer.adapterKey, targetSource)
+      if (!result.found) {
+        void message.info(t('config.environments.import.notFound', { adapter: importer.title }))
+      } else if (result.environmentCount === 0) {
+        void message.info(t('config.environments.import.noEnvironments', { adapter: importer.title }))
+      } else if (result.importedEnvironmentIds.length === 0) {
+        void message.info(t('config.environments.import.noChanges', { adapter: importer.title }))
+      } else {
+        void message.success(t('config.environments.import.success', {
+          adapter: importer.title,
+          count: result.importedEnvironmentIds.length
+        }))
+      }
+      if (result.skippedActionCount > 0) {
+        void message.warning(t('config.environments.import.skippedActions', {
+          count: result.skippedActionCount
+        }))
+      }
+      if (result.skippedEnvironmentCount > 0) {
+        void message.warning(t('config.environments.import.skippedEnvironments', {
+          count: result.skippedEnvironmentCount
+        }))
+      }
+      if (result.warningCount > 0) {
+        void message.warning(t('config.environments.import.warnings', {
+          count: result.warningCount
+        }))
+      }
+    } catch (error) {
+      void message.error(getApiErrorMessage(
+        error,
+        t('config.environments.import.failed', { adapter: importer.title })
+      ))
+    } finally {
+      if (importRequestAttempted) {
+        await refreshWorktreeEnvironmentsAfterImport(targetSource)
+      }
+      setImportingWorktreeEnvironments(false)
+    }
   }
 
   useEffect(() => {
@@ -1481,8 +1820,61 @@ export function ConfigView() {
       )}
       {tab.key === 'worktreeEnvironments' && (
         <WorktreeEnvironmentPanel
+          key={worktreeEnvironmentSourceKey}
+          disabled={isImportingWorktreeEnvironments || isWorktreeEnvironmentImportRefreshPending}
+          sourceKey={worktreeEnvironmentSourceKey}
+          importAction={{
+            actionLabel: isWorktreeEnvironmentImportRefreshPending
+              ? t('config.environments.import.retryRefresh')
+              : selectedWorktreeEnvironmentImporter == null
+              ? t('config.environments.import.action')
+              : t('config.environments.import.actionWithAdapter', {
+                adapter: selectedWorktreeEnvironmentImporter.title
+              }),
+            adapters: availableWorktreeEnvironmentImporters,
+            buttonLabel: isWorktreeEnvironmentImportRefreshPending
+              ? t('config.environments.import.retryRefresh')
+              : t('config.environments.import.action'),
+            disabled: isWorktreeEnvironmentImportRefreshPending
+              ? false
+              : hasWorktreeEnvironmentImporterLoadError ||
+                selectedWorktreeEnvironmentImporter == null ||
+                !selectedWorktreeEnvironmentImporter.supportedSources.includes(worktreeEnvironmentSourceKey),
+            emptyLabel: hasWorktreeEnvironmentImporterLoadError
+              ? t('config.environments.import.loadFailed')
+              : t('config.environments.import.noAdapters'),
+            loading: isImportingWorktreeEnvironments,
+            mobileTitle: t('config.environments.import.adapterMobileTitle'),
+            onAdapterChange: setSelectedWorktreeEnvironmentImporterKey,
+            onClick: isWorktreeEnvironmentImportRefreshPending
+              ? () => void handleRetryWorktreeEnvironmentImportRefresh()
+              : selectedWorktreeEnvironmentImporter?.supportedSources.includes(
+                  worktreeEnvironmentSourceKey
+                ) === true
+              ? () => void handleImportWorktreeEnvironments()
+              : undefined,
+            optionsLoading: isLoadingWorktreeEnvironmentImporters,
+            placeholder: hasWorktreeEnvironmentImporterLoadError
+              ? t('config.environments.import.loadFailed')
+              : t('config.environments.import.adapterPlaceholder'),
+            selectedAdapterKey: selectedWorktreeEnvironmentImporter?.adapterKey,
+            selectDisabled: isWorktreeEnvironmentImportRefreshPending,
+            selectLabel: t('config.environments.import.adapterSelectLabel'),
+            title: isWorktreeEnvironmentImportRefreshPending
+              ? t('config.environments.import.refreshPending')
+              : hasWorktreeEnvironmentImporterLoadError
+              ? t('config.environments.import.loadFailed')
+              : selectedWorktreeEnvironmentImporter == null
+              ? t('config.environments.import.noAdapters')
+              : !selectedWorktreeEnvironmentImporter.supportedSources.includes(worktreeEnvironmentSourceKey)
+              ? t('config.environments.import.sourceUnavailable', {
+                adapter: selectedWorktreeEnvironmentImporter.title
+              })
+              : t('config.environments.import.actionWithAdapter', {
+                adapter: selectedWorktreeEnvironmentImporter.title
+              })
+          }}
           t={t}
-          onHeaderActionsChange={setWorktreeEnvironmentHeaderActions}
         />
       )}
       {tab.key === 'externalSessions' && (
@@ -1526,6 +1918,7 @@ export function ConfigView() {
               : undefined
           ) ?? {}}
           source={sourceKey}
+          disabled={(isImportingModelServices || isModelServiceImportRefreshPending) && tab.key === 'modelServices'}
           onChange={(next) => handleDraftChange(tab.key, next)}
           mergedModelServices={mergedModelServices as Record<string, unknown>}
           mergedAdapters={mergedAdapters as Record<string, unknown>}
@@ -1537,6 +1930,57 @@ export function ConfigView() {
           onOpenModelServicePortal={activeTabKey === tab.key ? handleOpenModelServicePortal : undefined}
           creatingModelServiceSessionKey={creatingModelServiceSessionKey}
           onCreateModelServiceSession={handleCreateModelServiceSession}
+          modelServiceImportAction={tab.key === 'modelServices'
+            ? {
+              actionLabel: isModelServiceImportRefreshPending
+                ? t('config.modelServices.import.retryRefresh')
+                : selectedModelServiceImporter == null
+                ? t('config.modelServices.import.action')
+                : t('config.modelServices.import.actionWithAdapter', {
+                  adapter: selectedModelServiceImporter.title
+                }),
+              adapters: modelServiceImporters,
+              buttonLabel: isModelServiceImportRefreshPending
+                ? t('config.modelServices.import.retryRefresh')
+                : t('config.modelServices.import.action'),
+              disabled: isModelServiceImportRefreshPending
+                ? false
+                : hasModelServiceImporterLoadError ||
+                  selectedModelServiceImporter == null ||
+                  !selectedModelServiceImporter.supportedSources.includes(sourceKey),
+              emptyLabel: hasModelServiceImporterLoadError
+                ? t('config.modelServices.import.loadFailed')
+                : t('config.modelServices.import.noAdapters'),
+              loading: isImportingModelServices,
+              mobileTitle: t('config.modelServices.import.adapterMobileTitle'),
+              onAdapterChange: setSelectedModelServiceImporterKey,
+              onClick: isModelServiceImportRefreshPending
+                ? () => void handleRetryModelServiceImportRefresh()
+                : selectedModelServiceImporter?.supportedSources.includes(sourceKey) === true
+                ? () => void handleImportModelServices()
+                : undefined,
+              optionsLoading: isLoadingModelServiceImporters,
+              placeholder: hasModelServiceImporterLoadError
+                ? t('config.modelServices.import.loadFailed')
+                : t('config.modelServices.import.adapterPlaceholder'),
+              selectedAdapterKey: selectedModelServiceImporter?.adapterKey,
+              selectDisabled: isModelServiceImportRefreshPending,
+              selectLabel: t('config.modelServices.import.adapterSelectLabel'),
+              title: isModelServiceImportRefreshPending
+                ? t('config.modelServices.import.refreshPending')
+                : hasModelServiceImporterLoadError
+                ? t('config.modelServices.import.loadFailed')
+                : selectedModelServiceImporter == null
+                ? t('config.modelServices.import.noAdapters')
+                : !selectedModelServiceImporter.supportedSources.includes(sourceKey)
+                ? t('config.modelServices.import.sourceUnavailable', {
+                  adapter: selectedModelServiceImporter.title
+                })
+                : t('config.modelServices.import.actionWithAdapter', {
+                  adapter: selectedModelServiceImporter.title
+                })
+            }
+            : undefined}
           t={t}
           showHeader={false}
         />
@@ -1544,7 +1988,11 @@ export function ConfigView() {
     </div>
   )
   const shouldShowSourceSwitch = activeTabKey !== 'appearance' &&
-    (configTabKeys.has(activeTabKey) || activeTabKey === 'externalSessions')
+    (
+      configTabKeys.has(activeTabKey) ||
+      activeTabKey === 'externalSessions' ||
+      activeTabKey === 'worktreeEnvironments'
+    )
   const shouldShowSavedPasswordSettingsAction = activeTabKey === 'savedPasswords' && !savedPasswordSettingsOpen
   const savedPasswordHeaderTitle = savedPasswordSettingsOpen
     ? t('browserDataSync.savedPasswords.settingsTitle')
@@ -1562,10 +2010,15 @@ export function ConfigView() {
       }]
       : []
   ), [shouldShowSavedPasswordSettingsAction, t])
+  const activeSourceOptions = activeTabKey === 'worktreeEnvironments'
+    ? worktreeEnvironmentSourceOptions
+    : sourceOptions
+  const activeSourceKey = activeTabKey === 'worktreeEnvironments'
+    ? worktreeEnvironmentSourceKey
+    : sourceKey
   const headerActionItems = useMemo<RouteContainerHeaderActionItem[]>(() => [
     ...routePluginHeaderActions,
     ...savedPasswordHeaderActions,
-    ...(activeTabKey === 'worktreeEnvironments' ? worktreeEnvironmentHeaderActions : []),
     ...(activeTabKey === 'voice'
       ? [{
         icon: 'auto_awesome',
@@ -1575,8 +2028,9 @@ export function ConfigView() {
       }]
       : []),
     ...(shouldShowSourceSwitch
-      ? sourceOptions.map(option => ({
-        active: sourceKey === option.value,
+      ? activeSourceOptions.map(option => ({
+        active: activeSourceKey === option.value,
+        disabled: isImportingModelServices || isImportingWorktreeEnvironments,
         icon: option.icon,
         key: `config-source-${option.value}`,
         label: String(option.label),
@@ -1584,16 +2038,17 @@ export function ConfigView() {
       }))
       : [])
   ], [
+    activeSourceKey,
+    activeSourceOptions,
     activeTabKey,
     handleCreateVoiceSetupSession,
+    isImportingModelServices,
+    isImportingWorktreeEnvironments,
     routePluginHeaderActions,
     savedPasswordHeaderActions,
     setSourceKey,
     shouldShowSourceSwitch,
-    sourceKey,
-    sourceOptions,
-    t,
-    worktreeEnvironmentHeaderActions
+    t
   ])
 
   return (

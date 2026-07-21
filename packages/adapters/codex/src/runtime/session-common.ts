@@ -14,7 +14,12 @@ import { resolveCodexBinaryPath } from '#~/paths.js'
 import { CodexRpcError } from '#~/protocol/rpc.js'
 import type { CodexInputItem, CodexSandboxPolicy } from '#~/types.js'
 import { prepareCodexSessionHome } from './accounts'
-import { buildNativeConfigOverrideArgs, mergeCodexConfigOverrides, resolveCodexAdapterConfig } from './config'
+import {
+  buildNativeConfigOverrideArgs,
+  encodeCodexConfigValue,
+  mergeCodexConfigOverrides,
+  resolveCodexAdapterConfig
+} from './config'
 import { buildMcpServerPermissionSubjectKeys, resolveManagedPermissionDecision } from './permissions'
 import { CODEX_PROXY_META_HEADER_NAME, encodeCodexProxyMeta, ensureCodexProxyServer } from './proxy'
 
@@ -164,14 +169,32 @@ const mergeDeveloperInstructions = (systemPrompt: string | undefined) => {
 }
 
 interface CodexModelProviderExtra {
+  auth?: Record<string, unknown>
+  aws?: Record<string, unknown>
+  envHeaders?: Record<string, string>
+  envKey?: string
+  envKeyInstructions?: string
   wireApi?: string
   queryParams?: Record<string, string>
   headers?: Record<string, string>
+  nativeProvider?: boolean
+  providerId?: string
+  requestMaxRetries?: number
+  requiresOpenAIAuth?: boolean
+  streamIdleTimeoutMs?: number
+  streamMaxRetries?: number
+  supportsWebsockets?: boolean
+  useBuiltinProvider?: boolean
+  useOpenAIBaseUrl?: boolean
+  websocketConnectTimeoutMs?: number
 }
 
-const resolveConfiguredModelService = (service: ModelServiceConfig | undefined) => (
-  service == null ? undefined : resolveModelServiceConfig(service).service
-)
+const resolveConfiguredModelService = (service: ModelServiceConfig | undefined) => {
+  if (service == null) return undefined
+  const codexExtra = service.extra?.codex
+  if (isPlainObject(codexExtra) && codexExtra.nativeProvider === true) return service
+  return resolveModelServiceConfig(service).service
+}
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -274,6 +297,12 @@ const normalizePositiveInteger = (value: unknown): number | undefined => (
     : undefined
 )
 
+const normalizeNonNegativeInteger = (value: unknown): number | undefined => (
+  typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : undefined
+)
+
 const normalizeCodexReasoningEffort = (value: unknown): CodexReasoningEffort | undefined => (
   value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh' ||
     value === 'max' || value === 'ultra'
@@ -307,8 +336,13 @@ const normalizeProviderBaseUrl = (apiBaseUrl: string | undefined, wireApi: strin
 /**
  * Encode a flat string→string record as a TOML inline table: `{key = "value", …}`.
  */
+const toTomlDottedKeySegment = (value: string) =>
+  /^[\w-]+$/.test(value)
+    ? value
+    : JSON.stringify(value)
+
 const toTomlInlineTable = (obj: Record<string, string>) =>
-  `{${Object.entries(obj).map(([k, v]) => `${k} = ${JSON.stringify(v)}`).join(', ')}}`
+  `{${Object.entries(obj).map(([k, v]) => `${toTomlDottedKeySegment(k)} = ${JSON.stringify(v)}`).join(', ')}}`
 
 const MCP_INHERITED_ENV_KEYS = [
   'HOME',
@@ -382,6 +416,7 @@ function buildCodexConfigOverrides(params: {
 }): {
   args: string[]
   fingerprintArgs: string[]
+  nativeProviderConfigOverrides: string[]
   resolvedModel: string | undefined
   resolvedMaxOutputTokens: number | null | undefined
 } {
@@ -395,6 +430,7 @@ function buildCodexConfigOverrides(params: {
   } = params
   const args: string[] = []
   const fingerprintArgs: string[] = []
+  const nativeProviderConfigOverrides: string[] = []
   const normalizedRawModel = rawModel?.trim()
   const pushArgs = (value: string) => {
     args.push('-c', value)
@@ -424,18 +460,99 @@ function buildCodexConfigOverrides(params: {
       const resolvedService = resolveConfiguredModelService(service)
       if (resolvedService) {
         const { title, apiBaseUrl, apiKey, extra, timeoutMs, maxOutputTokens } = resolvedService
-        const { wireApi, queryParams, headers } = (extra?.codex as CodexModelProviderExtra | undefined) ?? {}
-        const prefix = `model_providers.${serviceKey}`
+        const codexExtra = (extra?.codex as CodexModelProviderExtra | undefined) ?? {}
+        const {
+          auth,
+          aws,
+          envHeaders,
+          envKey,
+          envKeyInstructions,
+          headers,
+          nativeProvider,
+          providerId: configuredProviderId,
+          queryParams,
+          requestMaxRetries,
+          requiresOpenAIAuth,
+          streamIdleTimeoutMs,
+          streamMaxRetries,
+          supportsWebsockets,
+          useBuiltinProvider,
+          useOpenAIBaseUrl,
+          websocketConnectTimeoutMs,
+          wireApi
+        } = codexExtra
+        const providerId = readOptionalString(configuredProviderId) ?? serviceKey
+        const prefix = `model_providers.${toTomlDottedKeySegment(providerId)}`
         const normalizedBaseUrl = normalizeProviderBaseUrl(apiBaseUrl, wireApi)
         const normalizedHeaders = normalizeStringRecord(headers)
+        const normalizedEnvHeaders = normalizeStringRecord(envHeaders)
         const normalizedQueryParams = normalizeStringRecord(queryParams)
         const normalizedTimeoutMs = normalizePositiveInteger(timeoutMs)
         const normalizedMaxOutputTokens = normalizePositiveInteger(maxOutputTokens)
         const shouldProxyProvider = proxyBaseUrl != null && normalizedBaseUrl != null
 
-        pushBoth(`model_provider=${toToml(serviceKey)}`)
-        pushBoth(`${prefix}.name=${toToml(title ?? serviceKey)}`)
-        if (shouldProxyProvider) {
+        if (nativeProvider === true) {
+          nativeProviderConfigOverrides.push(`model_provider=${toToml(providerId)}`)
+          const pushEncodedOverride = (key: string, value: unknown) => {
+            const encoded = encodeCodexConfigValue(value)
+            if (encoded != null) nativeProviderConfigOverrides.push(`${key}=${encoded}`)
+          }
+          const pushNestedRecord = (key: string, value: unknown) => {
+            if (!isPlainObject(value)) return
+            for (const [nestedKey, nestedValue] of Object.entries(value)) {
+              pushEncodedOverride(`${key}.${toTomlDottedKeySegment(nestedKey)}`, nestedValue)
+            }
+          }
+          if (useOpenAIBaseUrl === true) {
+            if (normalizedBaseUrl != null) {
+              nativeProviderConfigOverrides.push(`openai_base_url=${toToml(normalizedBaseUrl)}`)
+            }
+          } else if (useBuiltinProvider !== true) {
+            nativeProviderConfigOverrides.push(`${prefix}.name=${toToml(title ?? providerId)}`)
+            if (normalizedBaseUrl != null) {
+              nativeProviderConfigOverrides.push(`${prefix}.base_url=${toToml(normalizedBaseUrl)}`)
+            }
+            if (readOptionalString(envKey) != null) {
+              nativeProviderConfigOverrides.push(`${prefix}.env_key=${toToml(readOptionalString(envKey)!)}`)
+            } else if (apiKey) {
+              nativeProviderConfigOverrides.push(`${prefix}.experimental_bearer_token=${toToml(apiKey)}`)
+            }
+            if (readOptionalString(envKeyInstructions) != null) {
+              nativeProviderConfigOverrides.push(
+                `${prefix}.env_key_instructions=${toToml(readOptionalString(envKeyInstructions)!)}`
+              )
+            }
+            if (wireApi) nativeProviderConfigOverrides.push(`${prefix}.wire_api=${toToml(wireApi)}`)
+            if (Object.keys(normalizedHeaders).length > 0) {
+              nativeProviderConfigOverrides.push(`${prefix}.http_headers=${toTomlInlineTable(normalizedHeaders)}`)
+            }
+            if (Object.keys(normalizedEnvHeaders).length > 0) {
+              nativeProviderConfigOverrides.push(
+                `${prefix}.env_http_headers=${toTomlInlineTable(normalizedEnvHeaders)}`
+              )
+            }
+            if (Object.keys(normalizedQueryParams).length > 0) {
+              nativeProviderConfigOverrides.push(`${prefix}.query_params=${toTomlInlineTable(normalizedQueryParams)}`)
+            }
+            pushEncodedOverride(`${prefix}.requires_openai_auth`, requiresOpenAIAuth)
+            pushEncodedOverride(`${prefix}.request_max_retries`, normalizeNonNegativeInteger(requestMaxRetries))
+            pushEncodedOverride(`${prefix}.stream_max_retries`, normalizeNonNegativeInteger(streamMaxRetries))
+            pushEncodedOverride(
+              `${prefix}.websocket_connect_timeout_ms`,
+              normalizeNonNegativeInteger(websocketConnectTimeoutMs)
+            )
+            pushEncodedOverride(`${prefix}.supports_websockets`, supportsWebsockets)
+            const nativeStreamIdleTimeoutMs = normalizeNonNegativeInteger(streamIdleTimeoutMs ?? timeoutMs)
+            if (nativeStreamIdleTimeoutMs != null) {
+              nativeProviderConfigOverrides.push(`${prefix}.stream_idle_timeout_ms=${nativeStreamIdleTimeoutMs}`)
+            }
+            pushNestedRecord(`${prefix}.auth`, auth)
+          }
+          pushNestedRecord(`${prefix}.aws`, aws)
+          resolvedMaxOutputTokens = normalizedMaxOutputTokens
+        } else if (shouldProxyProvider) {
+          pushBoth(`model_provider=${toToml(providerId)}`)
+          pushBoth(`${prefix}.name=${toToml(title ?? serviceKey)}`)
           const proxyMeta = encodeCodexProxyMeta({
             upstreamBaseUrl: normalizedBaseUrl,
             ...(Object.keys(normalizedHeaders).length > 0 ? { headers: normalizedHeaders } : {}),
@@ -468,26 +585,28 @@ function buildCodexConfigOverrides(params: {
           pushFingerprintArgs(
             `${prefix}.http_headers=${toTomlInlineTable({ [CODEX_PROXY_META_HEADER_NAME]: fingerprintProxyMeta })}`
           )
-        } else if (normalizedBaseUrl != null) {
-          pushBoth(`${prefix}.base_url=${toToml(normalizedBaseUrl)}`)
-        }
-        if (apiKey) {
-          pushBoth(`${prefix}.experimental_bearer_token=${toToml(apiKey)}`)
-        }
-        if (wireApi) {
-          pushBoth(`${prefix}.wire_api=${toToml(wireApi)}`)
-        }
-        if (!shouldProxyProvider && Object.keys(normalizedHeaders).length > 0) {
-          pushBoth(`${prefix}.http_headers=${toTomlInlineTable(normalizedHeaders)}`)
-        }
-        if (normalizedTimeoutMs != null) {
-          pushBoth(`${prefix}.stream_idle_timeout_ms=${normalizedTimeoutMs}`)
-        }
-        resolvedMaxOutputTokens = shouldProxyProvider && normalizedMaxOutputTokens != null
-          ? null
-          : normalizedMaxOutputTokens
-        if (!shouldProxyProvider && Object.keys(normalizedQueryParams).length > 0) {
-          pushBoth(`${prefix}.query_params=${toTomlInlineTable(normalizedQueryParams)}`)
+          if (apiKey) pushBoth(`${prefix}.experimental_bearer_token=${toToml(apiKey)}`)
+          if (wireApi) pushBoth(`${prefix}.wire_api=${toToml(wireApi)}`)
+          if (normalizedTimeoutMs != null) {
+            pushBoth(`${prefix}.stream_idle_timeout_ms=${normalizedTimeoutMs}`)
+          }
+          resolvedMaxOutputTokens = normalizedMaxOutputTokens != null ? null : undefined
+        } else {
+          pushBoth(`model_provider=${toToml(providerId)}`)
+          pushBoth(`${prefix}.name=${toToml(title ?? serviceKey)}`)
+          if (normalizedBaseUrl != null) pushBoth(`${prefix}.base_url=${toToml(normalizedBaseUrl)}`)
+          if (apiKey) pushBoth(`${prefix}.experimental_bearer_token=${toToml(apiKey)}`)
+          if (wireApi) pushBoth(`${prefix}.wire_api=${toToml(wireApi)}`)
+          if (Object.keys(normalizedHeaders).length > 0) {
+            pushBoth(`${prefix}.http_headers=${toTomlInlineTable(normalizedHeaders)}`)
+          }
+          if (normalizedTimeoutMs != null) {
+            pushBoth(`${prefix}.stream_idle_timeout_ms=${normalizedTimeoutMs}`)
+          }
+          if (Object.keys(normalizedQueryParams).length > 0) {
+            pushBoth(`${prefix}.query_params=${toTomlInlineTable(normalizedQueryParams)}`)
+          }
+          resolvedMaxOutputTokens = normalizedMaxOutputTokens
         }
       }
     }
@@ -497,7 +616,12 @@ function buildCodexConfigOverrides(params: {
     resolvedModel = normalizedRawModel || undefined
   }
 
-  return { args, fingerprintArgs, resolvedModel, resolvedMaxOutputTokens }
+  if (nativeProviderConfigOverrides.length > 0) {
+    const digest = createHash('sha256').update(JSON.stringify(nativeProviderConfigOverrides)).digest('hex')
+    pushFingerprintArgs(`oneworks_native_provider_fingerprint=${toToml(digest)}`)
+  }
+
+  return { args, fingerprintArgs, nativeProviderConfigOverrides, resolvedModel, resolvedMaxOutputTokens }
 }
 
 /**
@@ -804,7 +928,9 @@ export async function resolveSessionBase(
   const routedServiceKey = resolveRoutedServiceKey(options.model)
   const routedService = routedServiceKey != null ? mergedModelServices[routedServiceKey] : undefined
   const resolvedRoutedService = resolveConfiguredModelService(routedService)
-  const shouldUseProxy = typeof resolvedRoutedService?.apiBaseUrl === 'string' &&
+  const routedCodexExtra = (resolvedRoutedService?.extra?.codex as CodexModelProviderExtra | undefined) ?? {}
+  const shouldUseProxy = routedCodexExtra.nativeProvider !== true &&
+    typeof resolvedRoutedService?.apiBaseUrl === 'string' &&
     resolvedRoutedService.apiBaseUrl.trim() !== ''
   const proxyLogger = shouldUseProxy
     ? createLogger(
@@ -832,15 +958,23 @@ export async function resolveSessionBase(
     })
   }
 
+  const nativeProviderServiceKey = readOptionalString(env.__ONEWORKS_CODEX_NATIVE_PROVIDER_SERVICE__)
+  const requestedModel = options.model ?? env.__ONEWORKS_PROJECT_MODEL__ ?? undefined
+  const effectiveRawModel = nativeProviderServiceKey == null || requestedModel?.includes(',') === true
+    ? requestedModel
+    : requestedModel == null || requestedModel.toLowerCase() === 'default'
+    ? `${nativeProviderServiceKey},`
+    : `${nativeProviderServiceKey},${requestedModel}`
   const configOverridesStartedAt = startupProfiler.now()
   const {
     args: configOverrideArgs,
     fingerprintArgs: configFingerprintArgs,
+    nativeProviderConfigOverrides,
     resolvedModel,
     resolvedMaxOutputTokens
   } = buildCodexConfigOverrides({
     systemPrompt: options.systemPrompt,
-    rawModel: options.model,
+    rawModel: effectiveRawModel,
     modelServices: mergedModelServices,
     proxyBaseUrl,
     proxyLogContext: proxyBaseUrl != null
@@ -922,10 +1056,12 @@ export async function resolveSessionBase(
   const runtimeHome = await prepareCodexSessionHome({
     ctx,
     sessionId: options.sessionId,
-    account: options.account
+    account: options.account,
+    nativeProviderConfigOverrides
   })
   startupProfiler.mark('codex.session.prepareSessionHome', sessionHomeStartedAt)
   spawnEnv.HOME = runtimeHome.homeDir
+  spawnEnv.CODEX_HOME = resolve(runtimeHome.homeDir, '.codex')
   await mkdir(resolve(spawnEnv.HOME ?? process.env.HOME!, '.codex'), { recursive: true })
 
   if (env.__ONEWORKS_PROJECT_CODEX_NATIVE_HOOKS_AVAILABLE__ === '1') {

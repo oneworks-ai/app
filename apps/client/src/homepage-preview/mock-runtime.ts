@@ -2130,6 +2130,14 @@ const handleApiRequest = async (
     return { body: { environments: [] } }
   }
 
+  if (path === '/api/worktree-environments/imports/adapters') {
+    return { body: { importers: [] } }
+  }
+
+  if (path === '/api/model-services/importers') {
+    return { body: { importers: [] } }
+  }
+
   if (path === '/api/workspace/file-openers') {
     return { body: { defaultOpener: 'vscode', openers: [] } }
   }
