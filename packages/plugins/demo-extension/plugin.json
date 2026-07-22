@@ -12,7 +12,7 @@
     "zh-Hans": "向插件示例贡献操作与命令的配套扩展。"
   },
   "icon": "./assets/icon.svg",
-  "version": "0.1.0-beta.7",
+  "version": "0.1.0-beta.8",
   "plugin": {
     "contributions": {
       "extensionContributions": [

@@ -103,7 +103,7 @@ describe('plugin marketplace sync', () => {
       plugins: [{
         id: '@oneworks/plugin-logger',
         scope: 'logs',
-        version: '0.1.0-beta.7'
+        version: '0.1.0-beta.8'
       }]
     })
 

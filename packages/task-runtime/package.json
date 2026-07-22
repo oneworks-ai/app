@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/task-runtime",
-  "version": "0.1.0-beta.7",
+  "version": "0.1.0-beta.8",
   "description": "Runtime command and event engine for One Works tasks",
   "repository": {
     "type": "git",

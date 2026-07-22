@@ -7,7 +7,7 @@
     "zh-Hans": "Cua 驱动"
   },
   "icon": "./assets/icon.svg",
-  "version": "0.1.0-beta.7",
+  "version": "0.1.0-beta.8",
   "assets": {
     "skills": "skills",
     "mcp": "mcp"

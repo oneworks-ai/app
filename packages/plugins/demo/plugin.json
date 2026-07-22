@@ -12,7 +12,7 @@
     "zh-Hans": "用于演示 OneWorks 路由、命令、面板、配置与扩展点的精简参考插件。"
   },
   "icon": "./assets/icon.svg",
-  "version": "0.1.0-beta.7",
+  "version": "0.1.0-beta.8",
   "children": {
     "standard-dev": {
       "source": {

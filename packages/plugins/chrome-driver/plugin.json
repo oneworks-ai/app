@@ -2,7 +2,7 @@
   "__oneWorksPluginManifest": true,
   "name": "@oneworks/plugin-chrome-driver",
   "displayName": "OneWorks",
-  "version": "0.1.0-beta.7",
+  "version": "0.1.0-beta.8",
   "assets": {
     "skills": "skills",
     "mcp": "mcp"

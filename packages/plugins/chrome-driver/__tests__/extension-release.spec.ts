@@ -119,10 +119,10 @@ describe('external browser extension release packaging', () => {
     expect(privileged.sha256).toBe(secondPrivileged.sha256)
     expect(release.archiveFileName('privileged', '1.2.3')).toBe('oneworks-v1.2.3.zip')
     expect(release.archiveFileName('base', '1.2.3')).toBe('oneworks-v1.2.3-minimal.zip')
-    expect(base).toMatchObject({ flavor: 'base', manifest_version: '0.1.0.20007' })
+    expect(base).toMatchObject({ flavor: 'base', manifest_version: '0.1.0.20008' })
     expect(release.stableExtensionId).toBe(CHROME_EXTENSION_ID)
     expect(base).toMatchObject({ extension_id: CHROME_EXTENSION_ID })
-    expect(privileged).toMatchObject({ flavor: 'privileged', manifest_version: '0.1.0.20007' })
+    expect(privileged).toMatchObject({ flavor: 'privileged', manifest_version: '0.1.0.20008' })
 
     const baseEntries = unzipSync(new Uint8Array(readFileSync(basePath)))
     const baseManifest = JSON.parse(Buffer.from(baseEntries['manifest.json']).toString('utf8'))
@@ -136,8 +136,8 @@ describe('external browser extension release packaging', () => {
     ]))
     expect(baseManifest).toMatchObject({
       name: release.extensionNames.base,
-      version: '0.1.0.20007',
-      version_name: '0.1.0-beta.7'
+      version: '0.1.0.20008',
+      version_name: '0.1.0-beta.8'
     })
     expect(baseManifest.permissions).not.toContain('debugger')
 
