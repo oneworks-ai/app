@@ -2,7 +2,7 @@ import process from 'node:process'
 
 import { buildConfigJsonVariables, loadConfig } from '@oneworks/config'
 import type { PluginConfig, ResolvedPluginInstanceMetadata } from '@oneworks/types'
-import { createStartupProfiler } from '@oneworks/utils'
+import { createStartupProfiler, mergeMarketplaceConfigs } from '@oneworks/utils'
 import { mergePluginConfigs } from '@oneworks/utils/plugin-resolver'
 
 import { resolvePlugins, warmConfiguredPluginHookModules } from './loader'
@@ -71,27 +71,31 @@ export const warmHookRuntime = async (
 
   const mergePluginConfigStartedAt = startupProfiler.now()
   const pluginConfig = mergePluginConfigs(config?.plugins, userConfig?.plugins)
+  const marketplaces = mergeMarketplaceConfigs(config?.marketplaces, userConfig?.marketplaces)
   startupProfiler.mark('hook.workerWarmup.mergePluginConfig', mergePluginConfigStartedAt, {
     count: pluginConfig?.length ?? 0
   })
 
   if (input.light === true) {
     const warmModulesStartedAt = startupProfiler.now()
-    await warmConfiguredPluginHookModules(workspaceFolder, pluginConfig, {
+    const pluginCount = await warmConfiguredPluginHookModules(workspaceFolder, pluginConfig, {
+      env,
+      marketplaces,
       profiler: startupProfiler,
       profilePrefix: 'hook.workerWarmup.warmConfiguredPluginHookModules'
     })
     startupProfiler.mark('hook.workerWarmup.warmConfiguredPluginHookModules', warmModulesStartedAt, {
-      count: pluginConfig?.length ?? 0
+      count: pluginCount
     })
     return {
-      pluginCount: pluginConfig?.length ?? 0
+      pluginCount
     }
   }
 
   const resolvePluginsStartedAt = startupProfiler.now()
   const plugins = await resolvePlugins(workspaceFolder, pluginConfig, {
     env,
+    marketplaces,
     profiler: startupProfiler,
     profilePrefix: 'hook.workerWarmup.resolvePlugins'
   })

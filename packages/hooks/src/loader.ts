@@ -1,6 +1,6 @@
 import { isAbsolute, resolve } from 'node:path'
 
-import type { PluginConfig } from '@oneworks/types'
+import type { MarketplaceConfig, PluginConfig } from '@oneworks/types'
 import { mergeProcessEnvWithProjectEnv } from '@oneworks/utils'
 import type { StartupProfiler } from '@oneworks/utils'
 import {
@@ -13,6 +13,7 @@ import { resolveHookEntriesWithCache } from './plugin-entry-cache'
 
 interface ResolvePluginsProfileOptions {
   env?: Record<string, string | null | undefined>
+  marketplaces?: MarketplaceConfig
   profiler?: StartupProfiler
   profilePrefix?: string
 }
@@ -72,6 +73,7 @@ export const warmConfiguredPluginHookModules = async (
   const profilePrefix = profileOptions.profilePrefix ?? 'hook.warmConfiguredPluginHookModules'
   const effectiveConfig = (await resolveRuntimePluginConfig({
     cwd,
+    marketplaces: profileOptions.marketplaces,
     plugins: config,
     env: resolvePluginEnv(profileOptions.env)
   }) ?? []).filter(plugin => plugin.enabled !== false)
@@ -99,6 +101,7 @@ export const warmConfiguredPluginHookModules = async (
       }
     })
   )
+  return effectiveConfig.length
 }
 
 export const resolvePlugins = async (
@@ -110,6 +113,7 @@ export const resolvePlugins = async (
   const resolveConfigStartedAt = profileOptions.profiler?.now()
   const effectiveConfig = await resolveRuntimePluginConfig({
     cwd,
+    marketplaces: profileOptions.marketplaces,
     plugins: config,
     env: resolvePluginEnv(profileOptions.env)
   }) ?? []

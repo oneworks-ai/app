@@ -142,6 +142,37 @@ describe('plugin resolver', () => {
     )
   })
 
+  it('uses package.json as the authoritative version for package plugin manifests', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-version-'))
+    tempDirs.push(tempDir)
+    const workspace = join(tempDir, 'workspace')
+    const pluginRoot = join(workspace, 'node_modules/@oneworks/plugin-versioned')
+    await mkdir(pluginRoot, { recursive: true })
+    await writeFile(
+      join(pluginRoot, 'package.json'),
+      JSON.stringify({
+        name: '@oneworks/plugin-versioned',
+        version: '0.1.0-beta.7',
+        exports: { '.': './plugin.json' }
+      })
+    )
+    await writeFile(
+      join(pluginRoot, 'plugin.json'),
+      JSON.stringify({
+        name: '@oneworks/plugin-versioned',
+        version: '0.1.0',
+        plugin: { contributions: {} }
+      })
+    )
+
+    const [instance] = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: [{ id: '@oneworks/plugin-versioned' }]
+    })
+
+    expect(instance?.manifest?.version).toBe('0.1.0-beta.7')
+  })
+
   it('resolves default OneWorks plugins from the global package cache when workspace and runtime omit them', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
     tempDirs.push(tempDir)
@@ -550,6 +581,36 @@ describe('plugin resolver', () => {
       },
       includeDefaultOfficialPlugins: true
     })).resolves.toBeUndefined()
+  })
+
+  it('projects enabled One Works marketplace declarations into versioned runtime plugins', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-marketplace-'))
+    tempDirs.push(tempDir)
+    const workspace = join(tempDir, 'workspace')
+    const env = {
+      __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1',
+      __ONEWORKS_PROJECT_REAL_HOME__: join(tempDir, 'home')
+    }
+    await mkdir(workspace, { recursive: true })
+
+    await expect(resolveRuntimePluginConfig({
+      cwd: workspace,
+      env,
+      marketplaces: {
+        'oneworks-official': {
+          type: 'oneworks',
+          options: { version: '0.1.0-beta.7' },
+          plugins: {
+            '@oneworks/plugin-logger': { enabled: true, scope: 'logs' },
+            '@oneworks/plugin-relay': { enabled: false }
+          }
+        }
+      }
+    })).resolves.toEqual([{
+      id: '@oneworks/plugin-logger',
+      scope: 'logs',
+      version: '0.1.0-beta.7'
+    }])
   })
 
   it('loads project-home managed plugin install directories only when explicitly configured', async () => {

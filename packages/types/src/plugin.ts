@@ -739,6 +739,7 @@ export interface PluginMarketplaceCatalogPlugin {
   marketplaceTitle?: string
   marketplaceType: MarketplaceConfigEntry['type']
   name: string
+  searchKeywords?: string[]
   nativeEnabled?: boolean
   nativeInstalled?: boolean
   installedSources?: PluginMarketplaceConfigSource[]

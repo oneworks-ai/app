@@ -307,22 +307,25 @@ export function PluginStoreRoute() {
       })
   }, [message, pluginServerBaseUrl, refreshPlugins, t])
 
-  const installMarketplacePlugin = useCallback(async (target: PluginMarketplaceInstallTarget) => {
+  const toggleMarketplacePlugin = useCallback(async (target: PluginMarketplaceInstallTarget) => {
     if (selectedMarketplacePlugin == null || !isMarketplacePluginInstallable(selectedMarketplacePlugin)) return
+    const enabled = !isPluginInstalledForTarget(selectedMarketplacePlugin, target)
     setInstallingMarketplaceTarget(target)
     try {
       await syncPluginMarketplaceSelection(
         selectedMarketplacePlugin.marketplace,
         selectedMarketplacePlugin.name,
-        true,
+        enabled,
         target,
         { serverBaseUrl: pluginServerBaseUrl }
       )
       await Promise.all([mutateMarketplaceCatalog(), refreshPlugins()])
       void message.success(t(
-        target === 'global'
-          ? 'pluginStore.marketplacePluginInstalledGlobal'
-          : 'pluginStore.marketplacePluginInstalledProject'
+        enabled
+          ? target === 'global'
+            ? 'pluginStore.marketplacePluginInstalledGlobal'
+            : 'pluginStore.marketplacePluginInstalledProject'
+          : 'pluginStore.marketplacePluginRemoved'
       ))
     } catch (error) {
       void message.error(getApiErrorMessage(error, t('pluginStore.marketplacePluginSaveFailed')))
@@ -532,14 +535,14 @@ export function PluginStoreRoute() {
           label: t(
             target === 'global'
               ? installed
-                ? 'pluginStore.reinstallMarketplacePluginGlobal'
+                ? 'pluginStore.removeMarketplacePlugin'
                 : 'pluginStore.installMarketplacePluginGlobal'
               : installed
-              ? 'pluginStore.reinstallMarketplacePluginProject'
+              ? 'pluginStore.removeMarketplacePlugin'
               : 'pluginStore.installMarketplacePluginProject'
           ),
           loading: installingMarketplaceTarget === target,
-          onSelect: () => void installMarketplacePlugin(target)
+          onSelect: () => void toggleMarketplacePlugin(target)
         })
       }
     }
@@ -547,7 +550,7 @@ export function PluginStoreRoute() {
   }, [
     isDiagnosticsPage,
     detailPath,
-    installMarketplacePlugin,
+    toggleMarketplacePlugin,
     installingMarketplaceTarget,
     navigate,
     pluginLocation.page,
@@ -665,6 +668,7 @@ export function PluginStoreRoute() {
                         )
                       }`
                     )}
+                  onPluginsChanged={refreshPlugins}
                   onQueryChange={setPluginMarketplaceQuery}
                 />
               )

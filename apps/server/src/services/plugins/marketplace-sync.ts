@@ -4,6 +4,7 @@ import { assertUniqueMarketplacePluginScopes, syncConfiguredMarketplacePlugins }
 import type { Config, MarketplaceConfig } from '@oneworks/types'
 import { mergeMarketplaceConfigs } from '@oneworks/utils'
 import { listManagedPluginInstalls } from '@oneworks/utils/managed-plugin'
+import { resolveConfiguredPluginInstances } from '@oneworks/utils/plugin-resolver'
 
 import { loadConfigState } from '#~/services/config/index.js'
 
@@ -25,13 +26,26 @@ export const syncPluginMarketplaceSelection = async (params: {
   if (marketplace == null) {
     throw new Error(`Plugin marketplace ${params.marketplace} is not configured.`)
   }
-  const adapter = marketplace.type === 'codex' ? 'codex' : 'claude'
-
   if (params.enabled) {
     assertUniqueMarketplacePluginScopes(effectiveMarketplaces)
     const declaredPlugin = marketplace.plugins?.[params.plugin]
     if (declaredPlugin == null || declaredPlugin.enabled === false) {
       throw new Error(`Plugin ${params.plugin}@${params.marketplace} is not enabled in config.`)
+    }
+    if (marketplace.type === 'oneworks') {
+      await resolveConfiguredPluginInstances({
+        cwd: workspaceFolder,
+        plugins: [{
+          id: params.plugin,
+          ...(declaredPlugin.scope != null ? { scope: declaredPlugin.scope } : {}),
+          ...(marketplace.options?.version != null ? { version: marketplace.options.version } : {})
+        }]
+      })
+      return [{
+        marketplace: params.marketplace,
+        plugin: params.plugin,
+        action: 'installed' as const
+      }]
     }
     return syncConfiguredMarketplacePlugins({
       cwd: workspaceFolder,
@@ -48,6 +62,15 @@ export const syncPluginMarketplaceSelection = async (params: {
     }]
   }
 
+  if (marketplace.type === 'oneworks') {
+    return [{
+      marketplace: params.marketplace,
+      plugin: params.plugin,
+      action: 'removed' as const
+    }]
+  }
+
+  const adapter = marketplace.type === 'codex' ? 'codex' : 'claude'
   const installs = await listManagedPluginInstalls(workspaceFolder, { adapter })
   const matchingInstalls = installs.filter(install => (
     install.config.source.type === 'marketplace' &&

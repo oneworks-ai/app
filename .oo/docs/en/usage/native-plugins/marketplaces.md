@@ -1,8 +1,10 @@
 # Marketplace Examples
 
-This page provides fuller user-side plugin marketplace examples for bringing Claude Code and Codex plugins into a project.
+This page provides fuller user-side plugin marketplace examples for bringing One Works, Claude Code, and Codex plugins into a project.
 
-The plugin marketplace includes the OpenAI Plugins and Anthropic official sources by default. Official sources can be disabled but not deleted, and custom Git sources can be added. Skill marketplace configuration uses `skillRegistries[]` and is not covered here.
+The plugin marketplace includes the One Works, OpenAI Plugins, and Anthropic official sources by default. Plugins can be installed into the current project or globally. Official sources can be disabled but not deleted, and custom Git sources can be added. Skill marketplace configuration uses `skillRegistries[]` and is not covered here.
+
+The One Works official source lists the `@oneworks/plugin-*` packages matching the current app version. Installation downloads a missing package into the shared package cache and reloads the plugin runtime immediately. Removal only drops the project or global declaration; the cache remains available to other projects.
 
 ## Custom Codex Marketplace
 

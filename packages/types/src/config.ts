@@ -698,6 +698,11 @@ export interface CodexMarketplaceOptions {
   source: CodexMarketplaceSource
 }
 
+export interface OneWorksMarketplaceOptions {
+  /** Version used for every package in the official One Works catalog. */
+  version?: string
+}
+
 export interface MarketplaceDeclaredPluginConfig {
   enabled?: boolean
   scope?: string
@@ -719,7 +724,18 @@ export interface CodexMarketplaceConfigEntry {
   options?: CodexMarketplaceOptions
 }
 
-export type MarketplaceConfigEntry = ClaudeCodeMarketplaceConfigEntry | CodexMarketplaceConfigEntry
+export interface OneWorksMarketplaceConfigEntry {
+  type: 'oneworks'
+  enabled?: boolean
+  syncOnRun?: boolean
+  plugins?: Record<string, MarketplaceDeclaredPluginConfig>
+  options?: OneWorksMarketplaceOptions
+}
+
+export type MarketplaceConfigEntry =
+  | ClaudeCodeMarketplaceConfigEntry
+  | CodexMarketplaceConfigEntry
+  | OneWorksMarketplaceConfigEntry
 
 export type MarketplaceConfig = Record<string, MarketplaceConfigEntry>
 

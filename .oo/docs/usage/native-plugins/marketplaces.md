@@ -1,8 +1,10 @@
 # Marketplace 详细示例
 
-这页补充用户侧更完整的 plugin marketplace 配置示例，覆盖 Claude Code 与 Codex 插件源。
+这页补充用户侧更完整的 plugin marketplace 配置示例，覆盖 One Works、Claude Code 与 Codex 插件源。
 
-插件市场页默认内置 OpenAI Plugins 与 Anthropic 官方插件源；用户可以直接浏览并选择安装到当前项目。官方源可以屏蔽但不能删除，也可以继续添加自定义 Git 源。知识库「技能 -> 市场」使用的是 `skillRegistries[]`，不在本页范围内。
+插件市场页默认内置 One Works、OpenAI Plugins 与 Anthropic 官方插件源；用户可以直接浏览并选择安装到当前项目或全局。官方源可以屏蔽但不能删除，也可以继续添加自定义 Git 源。知识库「技能 -> 市场」使用的是 `skillRegistries[]`，不在本页范围内。
+
+One Works 官方源展示当前应用版本对应的 `@oneworks/plugin-*` 包。安装时会把缺失包下载到共享 package cache，并立即重新加载插件运行时；移除时只删除当前项目或全局的启用声明，不删除其他项目可复用的缓存包。
 
 ## 示例：自定义 Codex 插件源
 

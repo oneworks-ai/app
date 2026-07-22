@@ -17,6 +17,8 @@
   - model service、defaultModel、adapter/model 兼容性处理
 - `src/plugin-resolver.ts`
   - 统一插件实例解析、简写包名解析、manifest / hooks / config hook 入口解析
+- `src/marketplace-config*.ts`
+  - 跨 config/server/adapter 共用的 marketplace 规范化与分层合并；One Works 官方市场声明在这里投影为普通 runtime plugin config
 - `src/managed-plugin-package.ts`
   - `@oneworks/plugin-*` package 的 bootstrap cache、registry fallback、metadata 解析与安装 helper
 - `src/cache.ts`

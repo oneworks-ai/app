@@ -21,6 +21,17 @@ describe('plugin marketplace config overrides', () => {
     })
   })
 
+  it('preserves a One Works marketplace version while toggling its override', () => {
+    expect(createMarketplaceEnabledOverride('oneworks', {
+      type: 'oneworks',
+      options: { version: '0.1.0-beta.7' }
+    }, false)).toEqual({
+      type: 'oneworks',
+      enabled: false,
+      options: { version: '0.1.0-beta.7' }
+    })
+  })
+
   it('creates separate Codex and Claude entries for a multi-format source', () => {
     expect(createMarketplaceSourceEntries({
       baseKey: 'team-plugins',
@@ -121,6 +132,33 @@ describe('plugin marketplace config overrides', () => {
         status: 'all'
       }).map(plugin => plugin.name)
     ).toEqual(['alpha'])
+  })
+
+  it('matches marketplace display names and localized search keywords', () => {
+    const plugin = {
+      declared: false,
+      displayName: 'China Edition Theme',
+      enabled: false,
+      marketplace: 'oneworks-official',
+      marketplaceEnabled: true,
+      marketplaceType: 'oneworks',
+      name: '@oneworks/plugin-china-red-theme',
+      searchKeywords: ['中国方案主题'],
+      sourceLabel: '@oneworks/plugin-china-red-theme@0.1.0-beta.7',
+      sourceType: 'npm'
+    } satisfies PluginMarketplaceCatalogPlugin
+    const search = (query: string) =>
+      filterAndSortMarketplacePlugins([plugin], {
+        format: 'all',
+        marketplace: '',
+        query,
+        sort: 'default',
+        source: 'all',
+        status: 'all'
+      })
+
+    expect(search('China Edition Theme')).toEqual([plugin])
+    expect(search('中国方案主题')).toEqual([plugin])
   })
 
   it('interleaves marketplaces for the default order while preserving each marketplace order', () => {

@@ -18,6 +18,10 @@ const resolveMarketplacePluginAdapter = (type: string) => {
   }
 }
 
+const isSupportedMarketplaceType = (type: string) => (
+  type === 'claude-code' || type === 'codex' || type === 'oneworks'
+)
+
 const matchesMarketplaceSource = (
   source: ManagedPluginSource,
   marketplace: string,
@@ -55,7 +59,7 @@ type MarketplaceSyncConfig = Record<string, {
 export const assertUniqueMarketplacePluginScopes = (marketplaces: MarketplaceSyncConfig | undefined) => {
   const desiredScopes = new Map<string, string>()
   for (const [marketplaceName, marketplace] of Object.entries(marketplaces ?? {})) {
-    if (marketplace.enabled === false || resolveMarketplacePluginAdapter(marketplace.type) == null) continue
+    if (marketplace.enabled === false || !isSupportedMarketplaceType(marketplace.type)) continue
     for (const [pluginName, plugin] of Object.entries(marketplace.plugins ?? {})) {
       if (plugin.enabled === false) continue
       const desiredScope = plugin.scope?.trim() || pluginName

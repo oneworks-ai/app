@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- marketplace catalog aggregation keeps source loading and attribution together. */
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -26,6 +28,7 @@ import { BUILT_IN_PLUGIN_MARKETPLACES } from './built-in-marketplaces'
 import { getPluginSourceSummary, resolveMarketplacePluginVersion, toCatalogPlugin } from './marketplace-catalog-view'
 import { getMarketplacePluginVersionKey, publishMarketplacePluginVersionSources } from './marketplace-version-resolver'
 import type { MarketplacePluginVersionSourceMap } from './marketplace-version-resolver'
+import { loadOneWorksOfficialMarketplaceCatalog } from './oneworks-official-marketplace'
 
 const configSourceOrder: PluginMarketplaceConfigSource[] = ['user', 'project', 'global']
 const installedSourceOrder: PluginMarketplaceConfigSource[] = ['global', 'project', 'user']
@@ -61,6 +64,16 @@ const loadMarketplacePlugins = async (params: {
   plugins: PluginMarketplaceCatalogPlugin[]
   source: PluginMarketplaceCatalogSource
 }> => {
+  if (params.marketplace.type === 'oneworks') {
+    return loadOneWorksOfficialMarketplaceCatalog({
+      builtIn: params.builtIn,
+      configSource: params.configSource,
+      installedSources: plugin => getPluginInstalledSources(params.sourceConfigs, params.key, plugin),
+      key: params.key,
+      marketplace: params.marketplace
+    })
+  }
+
   const source = params.marketplace.options?.source
   if (source == null) {
     return {

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   assertUniqueMarketplacePluginScopes: vi.fn(),
   listManagedPluginInstalls: vi.fn(),
   loadConfigState: vi.fn(),
+  resolveConfiguredPluginInstances: vi.fn(),
   syncConfiguredMarketplacePlugins: vi.fn()
 }))
 
@@ -20,6 +21,10 @@ vi.mock('@oneworks/managed-plugins', () => ({
 
 vi.mock('@oneworks/utils/managed-plugin', () => ({
   listManagedPluginInstalls: mocks.listManagedPluginInstalls
+}))
+
+vi.mock('@oneworks/utils/plugin-resolver', () => ({
+  resolveConfiguredPluginInstances: mocks.resolveConfiguredPluginInstances
 }))
 
 vi.mock('#~/services/config/index.js', () => ({
@@ -33,6 +38,7 @@ describe('plugin marketplace sync', () => {
     vi.clearAllMocks()
     mocks.syncConfiguredMarketplacePlugins.mockResolvedValue([])
     mocks.listManagedPluginInstalls.mockResolvedValue([])
+    mocks.resolveConfiguredPluginInstances.mockResolvedValue([])
   })
 
   afterEach(async () => {
@@ -68,6 +74,53 @@ describe('plugin marketplace sync', () => {
     expect(mocks.assertUniqueMarketplacePluginScopes).toHaveBeenCalledWith(
       expect.objectContaining({ 'openai-plugins': expect.any(Object) })
     )
+  })
+
+  it('installs and removes a version-pinned native One Works plugin without deleting the shared cache', async () => {
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder: '/workspace',
+      mergedConfig: {
+        marketplaces: {
+          'oneworks-official': {
+            type: 'oneworks',
+            plugins: { '@oneworks/plugin-logger': { enabled: true, scope: 'logs' } }
+          }
+        }
+      }
+    })
+
+    await expect(syncPluginMarketplaceSelection({
+      enabled: true,
+      marketplace: 'oneworks-official',
+      plugin: '@oneworks/plugin-logger'
+    })).resolves.toEqual([{
+      marketplace: 'oneworks-official',
+      plugin: '@oneworks/plugin-logger',
+      action: 'installed'
+    }])
+    expect(mocks.resolveConfiguredPluginInstances).toHaveBeenCalledWith({
+      cwd: '/workspace',
+      plugins: [{
+        id: '@oneworks/plugin-logger',
+        scope: 'logs',
+        version: '0.1.0-beta.7'
+      }]
+    })
+
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder: '/workspace',
+      mergedConfig: { marketplaces: { 'oneworks-official': { type: 'oneworks' } } }
+    })
+    await expect(syncPluginMarketplaceSelection({
+      enabled: false,
+      marketplace: 'oneworks-official',
+      plugin: '@oneworks/plugin-logger'
+    })).resolves.toEqual([{
+      marketplace: 'oneworks-official',
+      plugin: '@oneworks/plugin-logger',
+      action: 'removed'
+    }])
+    expect(mocks.listManagedPluginInstalls).not.toHaveBeenCalled()
   })
 
   it('removes only the matching managed marketplace install', async () => {

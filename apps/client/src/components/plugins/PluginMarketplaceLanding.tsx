@@ -35,6 +35,7 @@ type MarketplacePanel = 'config' | 'filter'
 type MarketplaceSourceFilter = MarketplaceConfigSource | 'all' | 'builtIn'
 type MarketplaceStatusFilter = 'all' | 'disabled' | 'enabled'
 type MarketplaceFormat = MarketplaceConfigEntry['type']
+type MarketplaceExternalFormat = Exclude<MarketplaceFormat, 'oneworks'>
 type MarketplaceFormatFilter = MarketplaceFormat | 'all'
 type MarketplaceSortKey = 'default' | 'nameAsc' | 'nameDesc'
 
@@ -42,6 +43,7 @@ interface PluginMarketplaceLandingProps {
   query: string
   serverBaseUrl?: string
   onOpenPlugin: (plugin: PluginMarketplaceCatalogPlugin) => void
+  onPluginsChanged: () => Promise<void>
   onQueryChange: (query: string) => void
 }
 
@@ -56,15 +58,14 @@ interface MarketplaceSourceFormValues {
   name?: string
   path?: string
   ref?: string
-  types: MarketplaceFormat[]
+  types: MarketplaceExternalFormat[]
   url: string
 }
 
 const configSourceOrder: MarketplaceConfigSource[] = ['user', 'project', 'global']
 const sourceFilterOptions: MarketplaceSourceFilter[] = ['all', 'builtIn', ...configSourceOrder]
 const statusFilterOptions: MarketplaceStatusFilter[] = ['all', 'enabled', 'disabled']
-const marketplaceFormats: MarketplaceFormat[] = ['claude-code', 'codex']
-const defaultMarketplaceFormats: MarketplaceFormat[] = [...marketplaceFormats]
+const defaultMarketplaceFormats: MarketplaceExternalFormat[] = ['claude-code', 'codex']
 const ALL_MARKETPLACES = ''
 const PLUGIN_PAGE_SIZE = 20
 const pluginInstallTargets: Array<{ icon: string; target: PluginMarketplaceInstallTarget }> = [
@@ -85,6 +86,7 @@ export const isMarketplacePluginInstallable = (item: PluginMarketplaceCatalogPlu
 )
 
 const marketplaceFormatPresentation: Record<MarketplaceFormat, { iconId: string; label: string }> = {
+  oneworks: { iconId: 'extension', label: 'One Works' },
   'claude-code': { iconId: 'anthropic', label: 'Claude Code' },
   codex: { iconId: 'openai', label: 'Codex' }
 }
@@ -119,7 +121,13 @@ export const createMarketplaceEnabledOverride = (
   current: MarketplaceConfigEntry | undefined,
   enabled: boolean
 ): MarketplaceConfigEntry =>
-  type === 'codex'
+  type === 'oneworks'
+    ? {
+      ...(current?.type === 'oneworks' ? current : {}),
+      type: 'oneworks',
+      enabled
+    }
+    : type === 'codex'
     ? {
       ...(current?.type === 'codex' ? current : {}),
       type: 'codex',
@@ -162,7 +170,7 @@ const getUniqueSourceKey = (baseKey: string, marketplaces: MarketplaceConfig) =>
 
 export const createMarketplaceSourceEntries = (params: {
   baseKey: string
-  formats: MarketplaceFormat[]
+  formats: MarketplaceExternalFormat[]
   occupied: MarketplaceConfig
   options: {
     source: {
@@ -267,6 +275,7 @@ export const filterAndSortMarketplacePlugins = (
     const matchesQuery = normalizedQuery === '' ||
       [
         item.name,
+        item.displayName,
         item.description,
         item.version,
         item.marketplace,
@@ -274,7 +283,8 @@ export const filterAndSortMarketplacePlugins = (
         item.sourceLabel,
         ...(item.skills ?? []),
         ...(item.commands ?? []),
-        ...(item.agents ?? [])
+        ...(item.agents ?? []),
+        ...(item.searchKeywords ?? [])
       ].filter(Boolean).join(' ').toLowerCase().includes(normalizedQuery)
     const itemSource = item.builtIn === true ? 'builtIn' : item.configSource ?? 'user'
     const matchesSource = filters.source === 'all' || itemSource === filters.source
@@ -290,6 +300,9 @@ export const filterAndSortMarketplacePlugins = (
 }
 
 const formatSourceSummary = (entry: MarketplaceConfigEntry) => {
+  if (entry.type === 'oneworks') {
+    return { detail: entry.options?.version ?? '', icon: 'extension', title: '@oneworks/plugin-*' }
+  }
   const source = entry.options?.source
   if (source == null) {
     return { detail: '', icon: 'storefront', title: '-' }
@@ -331,6 +344,7 @@ const formatSourceSummary = (entry: MarketplaceConfigEntry) => {
 
 export function PluginMarketplaceLanding({
   onOpenPlugin,
+  onPluginsChanged,
   onQueryChange,
   query,
   serverBaseUrl
@@ -545,20 +559,23 @@ export function PluginMarketplaceLanding({
     }
   }
 
-  const handleInstallPlugin = async (
+  const handleTogglePlugin = async (
     item: PluginMarketplaceCatalogPlugin,
     target: PluginMarketplaceInstallTarget
   ) => {
     if (!isMarketplacePluginInstallable(item)) return
+    const enabled = !isPluginInstalledForTarget(item, target)
     const savingKey = `${item.marketplace}:${item.name}:${target}`
     setSavingPluginKey(savingKey)
     try {
-      await syncPluginMarketplaceSelection(item.marketplace, item.name, true, target, { serverBaseUrl })
-      await Promise.all([mutateConfig(), mutateCatalog()])
+      await syncPluginMarketplaceSelection(item.marketplace, item.name, enabled, target, { serverBaseUrl })
+      await Promise.all([mutateConfig(), mutateCatalog(), onPluginsChanged()])
       void message.success(t(
-        target === 'global'
-          ? 'pluginStore.marketplacePluginInstalledGlobal'
-          : 'pluginStore.marketplacePluginInstalledProject'
+        enabled
+          ? target === 'global'
+            ? 'pluginStore.marketplacePluginInstalledGlobal'
+            : 'pluginStore.marketplacePluginInstalledProject'
+          : 'pluginStore.marketplacePluginRemoved'
       ))
     } catch (error) {
       void message.error(getApiErrorMessage(error, t('pluginStore.marketplacePluginSaveFailed')))
@@ -654,7 +671,8 @@ export function PluginMarketplaceLanding({
               options={[
                 { label: t('pluginStore.marketplaceFilterAll'), value: 'all' },
                 { label: 'Claude Code', value: 'claude-code' },
-                { label: 'Codex', value: 'codex' }
+                { label: 'Codex', value: 'codex' },
+                { label: 'One Works', value: 'oneworks' }
               ]}
               suffixIcon={filterChevron}
               onChange={value => setFormatFilter(value as MarketplaceFormatFilter)}
@@ -854,12 +872,10 @@ export function PluginMarketplaceLanding({
                       actions={pluginInstallTargets.map(({ icon, target }) => {
                         const installed = target === 'global' ? globalInstalled : projectInstalled
                         const title = t(
-                          target === 'global'
-                            ? installed
-                              ? 'pluginStore.reinstallMarketplacePluginGlobal'
-                              : 'pluginStore.installMarketplacePluginGlobal'
-                            : installed
-                            ? 'pluginStore.reinstallMarketplacePluginProject'
+                          installed
+                            ? 'pluginStore.removeMarketplacePlugin'
+                            : target === 'global'
+                            ? 'pluginStore.installMarketplacePluginGlobal'
                             : 'pluginStore.installMarketplacePluginProject'
                         )
                         return (
@@ -874,7 +890,7 @@ export function PluginMarketplaceLanding({
                               loading={savingPluginKey === `${pluginKey}:${target}`}
                               onClick={(event) => {
                                 event.stopPropagation()
-                                void handleInstallPlugin(item, target)
+                                void handleTogglePlugin(item, target)
                               }}
                               icon={<MaterialSymbol name={icon} />}
                             />

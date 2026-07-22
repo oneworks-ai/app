@@ -143,7 +143,7 @@ export const applyPackageExportConventions = (
     displayName: manifest.displayName ??
       (typeof packageJson.displayName === 'string' ? packageJson.displayName : undefined),
     name: manifest.name ?? (typeof packageJson.name === 'string' ? packageJson.name : undefined),
-    version: manifest.version ?? (typeof packageJson.version === 'string' ? packageJson.version : undefined),
+    version: typeof packageJson.version === 'string' ? packageJson.version : manifest.version,
     plugin: existingPlugin == null && client == null && server == null
       ? undefined
       : {

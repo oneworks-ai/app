@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- selection transaction keeps layered writes and compensation in one service. */
+
 import { updateConfigFile } from '@oneworks/config'
 import type { Config, MarketplaceConfig, MarketplaceConfigEntry, PluginMarketplaceInstallTarget } from '@oneworks/types'
 import { mergeMarketplaceConfigs } from '@oneworks/utils'
@@ -6,6 +8,7 @@ import { loadConfigState } from '#~/services/config/index.js'
 
 import { BUILT_IN_PLUGIN_MARKETPLACES } from './built-in-marketplaces'
 import { syncPluginMarketplaceSelection } from './marketplace-sync'
+import { isOneWorksOfficialPlugin } from './oneworks-official-marketplace'
 
 const getMarketplaces = (config: Config | undefined): MarketplaceConfig => config?.marketplaces ?? {}
 
@@ -15,7 +18,8 @@ const removeEmptyMarketplaceOverride = (
 ) => {
   const entry = marketplaces[marketplaceKey]
   if (entry == null || entry.plugins != null) return marketplaces
-  if (entry.enabled != null || entry.syncOnRun != null || entry.options != null) return marketplaces
+  if (entry.enabled != null || entry.syncOnRun != null) return marketplaces
+  if (entry.type !== 'oneworks' && entry.options != null) return marketplaces
 
   const next = { ...marketplaces }
   delete next[marketplaceKey]
@@ -43,6 +47,10 @@ export const updateMarketplacePluginDeclaration = (params: {
       ...(params.baseEntry.options != null ? { options: params.baseEntry.options } : {})
     }
     : { type: params.marketplaceType }
+  const inheritedOneWorksOptions = params.baseEntry?.type === 'oneworks' &&
+      (currentWithoutPlugins ?? baseEntry).type === 'oneworks'
+    ? params.baseEntry.options
+    : undefined
 
   if (params.enabled) {
     plugins[params.pluginName] = {
@@ -54,6 +62,7 @@ export const updateMarketplacePluginDeclaration = (params: {
   }
 
   const nextEntry: MarketplaceConfigEntry = {
+    ...(inheritedOneWorksOptions != null ? { options: inheritedOneWorksOptions } : {}),
     ...(currentWithoutPlugins ?? baseEntry),
     ...(Object.keys(plugins).length > 0 ? { plugins } : {})
   } as MarketplaceConfigEntry
@@ -102,6 +111,12 @@ export const setPluginMarketplaceSelection = async (params: {
   if (effectiveMarketplace == null) {
     throw new Error(`Plugin marketplace ${params.marketplace} is not configured.`)
   }
+  if (
+    effectiveMarketplace.type === 'oneworks' &&
+    !isOneWorksOfficialPlugin(params.marketplace, params.plugin)
+  ) {
+    throw new Error(`Plugin ${params.plugin} is not in the official One Works marketplace.`)
+  }
   const wasEnabled = isMarketplacePluginEnabled(effectiveMarketplaces, params.marketplace, params.plugin)
   const targetConfig = params.target === 'global'
     ? state.globalSource?.rawConfig
@@ -114,7 +129,8 @@ export const setPluginMarketplaceSelection = async (params: {
     current: targetConfig,
     next: updateMarketplacePluginDeclaration({
       ...(
-        params.target === 'global' && BUILT_IN_PLUGIN_MARKETPLACES[params.marketplace] == null
+        effectiveMarketplace.type === 'oneworks' ||
+          (params.target === 'global' && BUILT_IN_PLUGIN_MARKETPLACES[params.marketplace] == null)
           ? { baseEntry: effectiveMarketplace }
           : {}
       ),

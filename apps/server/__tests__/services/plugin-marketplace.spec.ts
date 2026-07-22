@@ -112,6 +112,38 @@ describe('plugin marketplace catalog', () => {
     expect(byKey.get('user')?.configSource).toBe('user')
   })
 
+  it('includes the version-pinned official One Works plugin catalog', async () => {
+    mocks.loadConfigState.mockResolvedValue({
+      mergedConfig: {},
+      workspaceFolder: '/workspace'
+    })
+
+    const response = await listPluginMarketplaceCatalog()
+    const official = response.plugins.filter(plugin => plugin.marketplace === 'oneworks-official')
+
+    expect(response.sources).toContainEqual(expect.objectContaining({
+      builtIn: true,
+      key: 'oneworks-official',
+      pluginCount: 14,
+      title: 'One Works',
+      type: 'oneworks'
+    }))
+    expect(official).toHaveLength(14)
+    expect(official).toContainEqual(expect.objectContaining({
+      displayName: 'Logger',
+      marketplaceType: 'oneworks',
+      name: '@oneworks/plugin-logger',
+      sourceLabel: '@oneworks/plugin-logger@0.1.0-beta.7',
+      sourceType: 'npm',
+      version: '0.1.0-beta.7'
+    }))
+    expect(official).toContainEqual(expect.objectContaining({
+      displayName: 'China Edition Theme',
+      name: '@oneworks/plugin-china-red-theme',
+      searchKeywords: ['中国方案主题']
+    }))
+  })
+
   it('reports every config layer that enables a marketplace plugin', async () => {
     const marketplace = {
       type: 'claude-code' as const,
