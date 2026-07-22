@@ -7,6 +7,39 @@ import { describe, expect, it, vi } from 'vitest'
 import { loadConfig, resetConfigCache } from '#~/load.js'
 
 describe('marketplace config loading', () => {
+  it('loads the official One Works marketplace with a pinned package version', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-oneworks-marketplace-'))
+
+    try {
+      await writeFile(
+        path.join(tempDir, '.oo.config.yaml'),
+        [
+          'marketplaces:',
+          '  oneworks-official:',
+          '    type: oneworks',
+          '    plugins:',
+          '      "@oneworks/plugin-logger": true',
+          '    options:',
+          '      version: 0.1.0-beta.7'
+        ].join('\n')
+      )
+
+      resetConfigCache()
+      const [projectConfig] = await loadConfig({ cwd: tempDir, jsonVariables: {} })
+
+      expect(projectConfig?.marketplaces).toEqual({
+        'oneworks-official': {
+          type: 'oneworks',
+          plugins: { '@oneworks/plugin-logger': { enabled: true } },
+          options: { version: '0.1.0-beta.7' }
+        }
+      })
+    } finally {
+      resetConfigCache()
+      await rm(tempDir, { force: true, recursive: true })
+    }
+  })
+
   it('loads a Codex app-server marketplace source with the remote catalog capability', async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-codex-app-server-marketplace-'))
 

@@ -50,6 +50,20 @@ const getMarketplacePluginSourceGroup = (
     return marketplace?.enabled !== false && plugin != null && plugin.enabled !== false
   })?.sourceGroup
 
+const getOneWorksMarketplacePluginSourceGroup = (
+  instance: ResolvedPluginInstance,
+  sources: Array<{ config?: MarketplaceConfig; sourceGroup: PluginRuntimeSourceGroup }>
+) =>
+  sources.find(({ config }) =>
+    Object.values(config ?? {}).some((marketplace) => {
+      if (marketplace.type !== 'oneworks' || marketplace.enabled === false) return false
+      const plugin = marketplace.plugins?.[instance.requestId]
+      return plugin != null && plugin.enabled !== false && (
+        plugin.scope == null || plugin.scope === instance.scope
+      )
+    })
+  )?.sourceGroup
+
 const applyPluginSourceGroup = (
   instance: ResolvedPluginInstance,
   sourceGroup: PluginRuntimeSourceGroup
@@ -116,11 +130,12 @@ export const discoverPluginInstances = async () => {
       : managedSourceGroups.get(path.resolve(instance.rootDir)) ??
         (isPathInside(globalPluginsRoot, instance.rootDir)
           ? 'global'
-          : instance.sourceType === 'package' && instance.packageId != null &&
-              bundledOfficialPluginPackageIds.has(instance.packageId)
-          ? 'builtIn'
           : explicitSourceGroups.get(pluginConfigKey({ id: instance.requestId, scope: instance.scope })) ??
-            'project')
+            getOneWorksMarketplacePluginSourceGroup(instance, marketplaceSources) ??
+            (instance.sourceType === 'package' && instance.packageId != null &&
+                bundledOfficialPluginPackageIds.has(instance.packageId)
+              ? 'builtIn'
+              : 'project'))
     applyPluginSourceGroup(instance, sourceGroup)
   }
 

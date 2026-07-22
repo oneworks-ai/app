@@ -78,6 +78,7 @@ export const toCatalogPlugin = (params: {
       installable?: boolean
       nativeEnabled?: boolean
       nativeInstalled?: boolean
+      searchKeywords?: string[]
     }
 }): PluginMarketplaceCatalogPlugin => {
   const pluginConfig = params.marketplace.plugins?.[params.plugin.name]
@@ -104,6 +105,7 @@ export const toCatalogPlugin = (params: {
     ...(params.plugin.installable != null ? { installable: params.plugin.installable } : {}),
     ...(params.plugin.nativeEnabled != null ? { nativeEnabled: params.plugin.nativeEnabled } : {}),
     ...(params.plugin.nativeInstalled != null ? { nativeInstalled: params.plugin.nativeInstalled } : {}),
+    ...(params.plugin.searchKeywords != null ? { searchKeywords: params.plugin.searchKeywords } : {}),
     ...(version != null ? { version } : {}),
     ...(toStringList(params.plugin.skills) != null ? { skills: toStringList(params.plugin.skills) } : {}),
     ...(toStringList(params.plugin.commands) != null ? { commands: toStringList(params.plugin.commands) } : {}),

@@ -64,21 +64,34 @@ const mergeMarketplaceEntry = (
   if (right == null) return left
   if (left.type !== right.type) return right
 
+  const plugins = mergeMarketplaceDeclaredPlugins(left.plugins, right.plugins)
+  const common = {
+    type: right.type,
+    ...(right.enabled != null ? { enabled: right.enabled } : left.enabled != null ? { enabled: left.enabled } : {}),
+    ...(right.syncOnRun != null
+      ? { syncOnRun: right.syncOnRun }
+      : left.syncOnRun != null
+      ? { syncOnRun: left.syncOnRun }
+      : {}),
+    ...(plugins != null ? { plugins } : {})
+  }
+
+  if (left.type === 'oneworks' && right.type === 'oneworks') {
+    const version = right.options?.version ?? left.options?.version
+    return {
+      ...common,
+      type: 'oneworks',
+      ...(version != null ? { options: { version } } : {})
+    }
+  }
+
   if (
     (left.type === 'claude-code' || left.type === 'codex') &&
     (right.type === 'claude-code' || right.type === 'codex')
   ) {
     const options = mergeClaudeCodeMarketplaceOptions(left.options, right.options)
-    const plugins = mergeMarketplaceDeclaredPlugins(left.plugins, right.plugins)
     return {
-      type: right.type,
-      ...(right.enabled != null ? { enabled: right.enabled } : left.enabled != null ? { enabled: left.enabled } : {}),
-      ...(right.syncOnRun != null
-        ? { syncOnRun: right.syncOnRun }
-        : left.syncOnRun != null
-        ? { syncOnRun: left.syncOnRun }
-        : {}),
-      ...(plugins != null ? { plugins } : {}),
+      ...common,
       ...(options != null ? { options } : {})
     } as MarketplaceConfigEntry
   }

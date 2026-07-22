@@ -615,15 +615,26 @@ const marketplaceDeclaredPluginConfigSchema = z.union([
 
 export const marketplaceConfigSchema = z.record(
   z.string(),
-  z.object({
-    type: z.union([z.literal('claude-code'), z.literal('codex')]),
-    enabled: z.boolean().optional(),
-    syncOnRun: z.boolean().optional(),
-    plugins: z.record(z.string(), marketplaceDeclaredPluginConfigSchema).optional(),
-    options: z.object({
-      source: marketplaceSourceSchema
-    }).optional()
-  })
+  z.union([
+    z.object({
+      type: z.union([z.literal('claude-code'), z.literal('codex')]),
+      enabled: z.boolean().optional(),
+      syncOnRun: z.boolean().optional(),
+      plugins: z.record(z.string(), marketplaceDeclaredPluginConfigSchema).optional(),
+      options: z.object({
+        source: marketplaceSourceSchema
+      }).optional()
+    }),
+    z.object({
+      type: z.literal('oneworks'),
+      enabled: z.boolean().optional(),
+      syncOnRun: z.boolean().optional(),
+      plugins: z.record(z.string(), marketplaceDeclaredPluginConfigSchema).optional(),
+      options: z.object({
+        version: z.string().min(1).optional()
+      }).optional()
+    })
+  ])
 )
 
 const mcpServerCommonSchema = z.object({

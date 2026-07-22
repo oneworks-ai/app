@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- marketplace source normalization keeps all adapter source variants together. */
+
 import type {
   ClaudeCodeMarketplaceOptions,
   ClaudeCodeMarketplaceSource,
@@ -8,6 +10,7 @@ import type {
 
 import { normalizeCodexAppServerMarketplaceSource } from './marketplace-config-codex-source'
 import { normalizeMarketplaceDeclaredPlugins } from './marketplace-config-declared-plugin'
+import { normalizeOneWorksMarketplaceEntry } from './marketplace-config-oneworks-source'
 import { normalizeMarketplacePluginDefinition } from './marketplace-config-plugin'
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -125,6 +128,8 @@ const normalizeMarketplaceEntry = (
   }
 
   switch (value.type) {
+    case 'oneworks':
+      return normalizeOneWorksMarketplaceEntry(value, path)
     case 'claude-code':
     case 'codex': {
       const entry: MarketplaceConfigEntry = {

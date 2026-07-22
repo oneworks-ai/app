@@ -39,7 +39,7 @@ oneworks plugin --adapter claude add <source>
 
 ## Marketplace 配置
 
-这里的 `marketplaces` 只用于 adapter 原生插件 marketplace，不再承载知识库里的 skills registry。
+这里的 `marketplaces` 用于 One Works 官方插件和 adapter 原生插件 marketplace，不承载知识库里的 skills registry。
 
 自定义 plugin marketplace 默认在解析后的 workspace 根目录的 `.oo.config.yaml`、`.oo.config.json`、`.oo.dev.config.yaml` 或 `.oo.dev.config.json` 中配置 `marketplaces`，也可以放在全局 `~/.oneworks/.oo.config.json` 里作为跨项目默认 marketplace。
 

@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer'
 import process from 'node:process'
 
 import { buildConfigJsonVariables, loadConfig, resetConfigCache } from '@oneworks/config'
-import { createStartupProfiler, nowStartupMs } from '@oneworks/utils'
+import { createStartupProfiler, mergeMarketplaceConfigs, nowStartupMs } from '@oneworks/utils'
 import { createLogger } from '@oneworks/utils/create-logger'
 import { resolveServerLogLevel } from '@oneworks/utils/log-level'
 import { mergePluginConfigs } from '@oneworks/utils/plugin-resolver'
@@ -66,6 +66,7 @@ export const executeHookInput = async (
 
   const mergePluginConfigStartedAt = startupProfiler.now()
   const pluginConfig = mergePluginConfigs(config?.plugins, userConfig?.plugins)
+  const marketplaces = mergeMarketplaceConfigs(config?.marketplaces, userConfig?.marketplaces)
   startupProfiler.mark(`hook.${input.hookEventName}.mergePluginConfig`, mergePluginConfigStartedAt, {
     count: pluginConfig?.length ?? 0
   })
@@ -81,6 +82,7 @@ export const executeHookInput = async (
     builtinPermissionPlugin,
     ...await resolvePlugins(workspaceFolder, pluginConfig, {
       env,
+      marketplaces,
       profiler: startupProfiler,
       profilePrefix: `hook.${input.hookEventName}.resolvePlugins`
     })

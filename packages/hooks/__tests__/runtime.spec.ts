@@ -168,6 +168,47 @@ describe('hook runtime', () => {
     expect(logContent).toContain('[plugin.logger]')
   })
 
+  it('executes hooks enabled through the One Works marketplace', async () => {
+    const workspace = await createWorkspace('ow-hook-marketplace-')
+    await installLoggerPluginPackage(workspace)
+
+    await writeFile(
+      join(workspace, '.oo.config.json'),
+      JSON.stringify({
+        marketplaces: {
+          'oneworks-official': {
+            type: 'oneworks',
+            plugins: {
+              '@oneworks/plugin-logger': true
+            }
+          }
+        }
+      })
+    )
+
+    const result = await callHook(
+      'TaskStart',
+      {
+        cwd: workspace,
+        sessionId: 'session-marketplace',
+        adapter: 'codex',
+        options: { cwd: workspace },
+        adapterOptions: { sessionId: 'session-marketplace', runtime: 'cli', type: 'create' }
+      },
+      {
+        ...process.env,
+        __ONEWORKS_PROJECT_CTX_ID__: 'ctx-marketplace-hook',
+        __ONEWORKS_PROJECT_SERVER_HOST__: '127.0.0.1',
+        __ONEWORKS_PROJECT_SERVER_PORT__: '1'
+      }
+    )
+
+    expect(result).toEqual({ continue: true })
+    const logFiles = await collectLogFiles(workspace, 'ctx-marketplace-hook')
+    expect(logFiles).toHaveLength(1)
+    expect(await readFile(logFiles[0], 'utf-8')).toContain('[plugin.logger]')
+  })
+
   it('formats plugin logger payloads as yaml with folded multiline strings', async () => {
     const workspace = await createWorkspace('ow-hook-yaml-')
     await installLoggerPluginPackage(workspace)

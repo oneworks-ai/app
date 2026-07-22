@@ -9,6 +9,6 @@
     "zh-Hans": "中性层级、纤细分隔线、紧凑控件与克制蓝色交互反馈组成的低噪工作台主题。"
   },
   "icon": "./assets/icon.svg",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.7",
   "plugin": { "contributions": { "roles": ["manager", "workspace"], "surfaces": ["launcher", "workspace"] } }
 }

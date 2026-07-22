@@ -56,6 +56,56 @@ describe('plugin marketplace selection', () => {
     })
   })
 
+  it('pins official One Works selections and removes the empty override on uninstall', () => {
+    const baseEntry = {
+      type: 'oneworks' as const,
+      options: { version: '0.1.0-beta.7' }
+    }
+    const installed = updateMarketplacePluginDeclaration({
+      baseEntry,
+      enabled: true,
+      marketplaceKey: 'oneworks-official',
+      marketplaceType: 'oneworks',
+      marketplaces: { 'oneworks-official': { type: 'oneworks' } },
+      pluginName: '@oneworks/plugin-logger'
+    })
+
+    expect(installed).toEqual({
+      'oneworks-official': {
+        type: 'oneworks',
+        options: { version: '0.1.0-beta.7' },
+        plugins: { '@oneworks/plugin-logger': { enabled: true } }
+      }
+    })
+    expect(updateMarketplacePluginDeclaration({
+      baseEntry,
+      enabled: false,
+      marketplaceKey: 'oneworks-official',
+      marketplaceType: 'oneworks',
+      marketplaces: installed,
+      pluginName: '@oneworks/plugin-logger'
+    })).toEqual({})
+  })
+
+  it('rejects packages outside the official One Works catalog before writing config', async () => {
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder: '/workspace',
+      mergedConfig: {
+        marketplaces: {
+          'oneworks-official': { type: 'oneworks' }
+        }
+      }
+    })
+
+    await expect(setPluginMarketplaceSelection({
+      enabled: true,
+      marketplace: 'oneworks-official',
+      plugin: '@oneworks/plugin-not-published',
+      target: 'project'
+    })).rejects.toThrow('not in the official One Works marketplace')
+    expect(mocks.updateConfigFile).not.toHaveBeenCalled()
+  })
+
   it('writes project scope and removes a legacy user declaration without dropping sibling config', async () => {
     const state = {
       workspaceFolder: '/workspace',

@@ -47,7 +47,8 @@ const normalizeMarketplaceCatalog = (catalog: unknown, description: string): Cla
     }
   )
 
-  const source = normalized?.__catalog__?.options?.source
+  const entry = normalized?.__catalog__
+  const source = entry?.type === 'claude-code' ? entry.options?.source : undefined
   if (source == null || source.source !== 'settings') {
     throw new TypeError(`Failed to normalize Claude marketplace catalog from ${description}.`)
   }

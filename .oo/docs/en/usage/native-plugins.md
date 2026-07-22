@@ -36,7 +36,7 @@ Notes:
 
 ## Marketplace Configuration
 
-`marketplaces` here is only for adapter-native plugin marketplaces. Skill registries use a different configuration path.
+`marketplaces` covers the official One Works catalog and adapter-native plugin marketplaces. Skill registries use a different configuration path.
 
 Custom marketplaces can be configured in workspace `.oo.config.*`, `.oo.dev.config.*`, or global `~/.oneworks/.oo.config.json`. If `__ONEWORKS_PROJECT_CONFIG_DIR__` is set, marketplace config is read from that directory.
 

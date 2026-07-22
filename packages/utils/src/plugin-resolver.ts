@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { readFile, readdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, extname, isAbsolute, resolve } from 'node:path'
@@ -562,7 +562,17 @@ const loadManifest = (
   const workspaceRequire = createWorkspaceRequire(cwd)
   try {
     const mod = workspaceRequire(rootEntryPath)
-    return toPluginManifest(mod?.default ?? mod)
+    const manifest = toPluginManifest(mod?.default ?? mod)
+    if (manifest == null || rootDir == null) return manifest
+    try {
+      const packageJson = JSON.parse(readFileSync(resolve(rootDir, 'package.json'), 'utf8')) as {
+        version?: unknown
+      }
+      const packageVersion = normalizeVersion(packageJson.version)
+      return packageVersion == null ? manifest : { ...manifest, version: packageVersion }
+    } catch {
+      return manifest
+    }
   } catch (error) {
     throw new Error(`Failed to load plugin manifest for ${packageId}.`, { cause: error })
   }
@@ -986,6 +996,18 @@ export const resolveRuntimePluginConfig = async (params: {
   includeDefaultOfficialPlugins?: boolean
 }): Promise<PluginConfig | undefined> => {
   const discovered = await discoverRuntimePluginConfigs(params)
+  const oneWorksMarketplacePlugins: PluginConfig = []
+  for (const marketplace of Object.values(params.marketplaces ?? {})) {
+    if (marketplace.type !== 'oneworks' || marketplace.enabled === false) continue
+    for (const [pluginName, plugin] of Object.entries(marketplace.plugins ?? {})) {
+      if (plugin.enabled === false) continue
+      oneWorksMarketplacePlugins.push({
+        id: pluginName,
+        ...(plugin.scope != null ? { scope: plugin.scope } : {}),
+        ...(marketplace.options?.version != null ? { version: marketplace.options.version } : {})
+      })
+    }
+  }
   const managedMarketplacePlugins: PluginConfig = []
   const managedMarketplaceScopes = new Map<string, string>()
   for (
@@ -1017,6 +1039,7 @@ export const resolveRuntimePluginConfig = async (params: {
     [
       ...(shouldIncludeDefaultOfficialPlugins(params) ? DEFAULT_OFFICIAL_PLUGIN_CONFIGS : []),
       ...discovered.autoDiscovered,
+      ...oneWorksMarketplacePlugins,
       ...managedMarketplacePlugins
     ],
     params.plugins

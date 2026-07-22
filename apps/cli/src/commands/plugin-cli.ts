@@ -434,6 +434,7 @@ export const loadPluginCliCommandContributions = async (
     disableGlobalConfig,
     env,
     includeDefaultOfficialPlugins: true,
+    marketplaces: state.mergedConfig.marketplaces,
     plugins: state.mergedConfig.plugins as PluginConfig | undefined
   })
   const instances = flattenPluginInstances(
