@@ -12,7 +12,7 @@
     "zh-Hans": "可选的中国方案主题包，包含暖宣纸表面、金色边框、组件样式覆盖和整活横幅。"
   },
   "icon": "./assets/icon.svg",
-  "version": "0.1.0-beta.7",
+  "version": "0.1.0-beta.8",
   "plugin": {
     "contributions": {
       "roles": ["manager", "workspace"],
