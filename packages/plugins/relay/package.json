@@ -362,7 +362,8 @@
     "src"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && pnpm run build:bundles",
+    "build:bundles": "esbuild src/client/index.ts --bundle --conditions=__oneworks__ --format=esm --platform=browser --target=es2022 --outfile=dist/client/index.js && esbuild src/config.ts --bundle --conditions=__oneworks__ --format=esm --platform=node --target=node22 --outfile=dist/config.js && esbuild src/server/index.ts --bundle --conditions=__oneworks__ --external:ws --format=esm --platform=node --target=node22 --outfile=dist/server/index.js",
     "prepublish": "pnpm build",
     "test": "pnpm -C ../../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/plugins/relay/__tests__",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
@@ -374,6 +375,7 @@
     "ws": "^8.17.0"
   },
   "devDependencies": {
-    "@types/ws": "^8.18.1"
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.27.2"
   }
 }

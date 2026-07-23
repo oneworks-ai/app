@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url'
 import type { Config, PluginConfig, PluginConfigHook } from '@oneworks/types'
 import {
   flattenPluginInstances,
+  mergeDefaultOfficialPluginConfigs,
   mergePluginConfigs,
   resolveConfiguredPluginInstances,
   resolvePluginConfigEntryPathForInstance
@@ -17,6 +18,7 @@ export const defineConfigPlugin = (plugin: PluginConfigHook) => plugin
 export interface ApplyPluginConfigHooksOptions {
   cwd: string
   env?: Record<string, string | null | undefined>
+  includeDefaultOfficialPlugins?: boolean
   jsonVariables?: Record<string, string | null | undefined>
   projectConfig?: Config
   userConfig?: Config
@@ -98,16 +100,30 @@ const resolvePluginConfigHookInstances = async (
   pluginConfigs: PluginConfig
 ) => {
   const instances: Awaited<ReturnType<typeof resolveConfiguredPluginInstances>> = []
+  const resolvedIdentities: string[] = []
 
   for (const plugin of pluginConfigs) {
     try {
-      instances.push(
-        ...await resolveConfiguredPluginInstances({
-          cwd,
-          plugins: [plugin],
-          autoInstallManaged: false
-        })
-      )
+      const resolvedInstances = await resolveConfiguredPluginInstances({
+        cwd,
+        plugins: [plugin],
+        autoInstallManaged: false,
+        includeDisabled: true,
+        preferBundledOfficialPlugins: true
+      })
+      for (const instance of resolvedInstances) {
+        const identity = instance.packageId == null
+          ? `directory:${instance.rootDir}`
+          : `package:${instance.packageId}`
+        for (let index = resolvedIdentities.length - 1; index >= 0; index--) {
+          if (resolvedIdentities[index] !== identity) continue
+          resolvedIdentities.splice(index, 1)
+          instances.splice(index, 1)
+        }
+        if (plugin.enabled === false) continue
+        resolvedIdentities.push(identity)
+        instances.push(instance)
+      }
     } catch (error) {
       if (isOptionalConfigHookResolutionMiss(error)) {
         continue
@@ -124,9 +140,14 @@ export const applyPluginConfigHooks = async (
 ): Promise<readonly [Config | undefined, Config | undefined]> => {
   const projectConfig = omitConfigLoaderFields(options.projectConfig)
   let userConfig = omitConfigLoaderFields(options.userConfig)
+  const env = options.env ?? process.env
   let pluginConfigs: PluginConfig | undefined
   try {
-    pluginConfigs = mergePluginConfigs(projectConfig?.plugins, userConfig?.plugins)
+    pluginConfigs = mergeDefaultOfficialPluginConfigs({
+      env,
+      includeDefaultOfficialPlugins: options.includeDefaultOfficialPlugins,
+      plugins: mergePluginConfigs(projectConfig?.plugins, userConfig?.plugins)
+    })
   } catch (error) {
     console.warn('Failed to read plugin config hooks from invalid plugin config:', error)
     return [projectConfig, userConfig] as const
@@ -136,7 +157,6 @@ export const applyPluginConfigHooks = async (
   }
 
   let mergedConfig = mergeConfigs(projectConfig, userConfig) ?? {}
-  const env = options.env ?? process.env
   const jsonVariables = options.jsonVariables ?? {}
   const pluginInstances = await resolvePluginConfigHookInstances(options.cwd, pluginConfigs)
 

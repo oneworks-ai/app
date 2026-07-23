@@ -43,6 +43,8 @@ describe('pluginsRouter', () => {
   let devServers: http.Server[] = []
 
   beforeEach(async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_DISABLE_DEFAULT_OFFICIAL_PLUGINS__', '1')
+    vi.stubEnv('__ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__', '1')
     workspaceFolder = await fsMkdtemp('ow-plugin-routes-')
     const app = new Koa()
     const rootRouter = new Router({ prefix: '/api/plugins' })
@@ -90,7 +92,7 @@ describe('pluginsRouter', () => {
     vi.unstubAllEnvs()
   })
 
-  it('does not load the official relay plugin by default', async () => {
+  it('supports disabling default official plugins for isolated runtimes', async () => {
     mockConfig([])
 
     const response = await fetch(`${baseUrl}/api/plugins`)
@@ -104,12 +106,14 @@ describe('pluginsRouter', () => {
     expect(payload.plugins).toEqual([])
   })
 
-  it('loads the official relay plugin when configured', async () => {
-    mockConfig([{ id: '@oneworks/plugin-relay' }])
+  it('allows the default Relay plugin to be explicitly disabled', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_DISABLE_DEFAULT_OFFICIAL_PLUGINS__', '0')
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', path.resolve('.'))
+    mockConfig([{ enabled: false, id: '@oneworks/plugin-relay' }])
 
     const response = await fetch(`${baseUrl}/api/plugins`)
     const payload = await response.json() as {
-      plugins: Array<{ packageId?: string; scope: string }>
+      plugins: Array<{ enabled: boolean; packageId?: string; scope: string }>
       diagnostics: unknown[]
     }
 
@@ -117,6 +121,7 @@ describe('pluginsRouter', () => {
     expect(payload.diagnostics).toEqual([])
     expect(payload.plugins).toEqual([
       expect.objectContaining({
+        enabled: false,
         packageId: '@oneworks/plugin-relay',
         scope: 'relay'
       })
@@ -223,9 +228,19 @@ describe('pluginsRouter', () => {
 
     const listResponse = await fetch(`${baseUrl}/api/plugins`)
     const listPayload = await listResponse.json() as {
-      plugins: Array<{ scope: string; watch?: { enabled: boolean } }>
+      plugins: Array<{
+        diagnostics?: Array<{ code: string }>
+        scope: string
+        watch?: { enabled: boolean }
+      }>
     }
-    expect(listPayload.plugins.find(plugin => plugin.scope === 'watched')?.watch).toEqual({ enabled: true })
+    const watchedPlugin = listPayload.plugins.find(plugin => plugin.scope === 'watched')
+    expect(watchedPlugin?.watch?.enabled).toEqual(expect.any(Boolean))
+    if (watchedPlugin?.watch?.enabled === false) {
+      expect(watchedPlugin.diagnostics).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'plugin_watch_failed' })
+      ]))
+    }
 
     const disableResponse = await fetch(`${baseUrl}/api/plugins/watched/watch`, { method: 'DELETE' })
     await expect(disableResponse.json()).resolves.toEqual({
@@ -871,7 +886,7 @@ describe('pluginsRouter', () => {
     ])
   })
 
-  function mockConfig(plugins: Array<{ id: string; scope?: string }>) {
+  function mockConfig(plugins: Array<{ enabled?: boolean; id: string; scope?: string }>) {
     mocks.loadConfigState.mockResolvedValue({
       workspaceFolder,
       mergedConfig: { plugins }

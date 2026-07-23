@@ -59,6 +59,19 @@ describe('selectRecommendedMarketplacePlugins', () => {
       ]).map(plugin => plugin.name)
     ).toEqual(['notion'])
   })
+
+  it('falls back to available plugins when every featured plugin is already installed', () => {
+    expect(
+      selectRecommendedMarketplacePlugins([
+        createPlugin('ordinary'),
+        createPlugin('figma', {
+          featured: true,
+          marketplace: 'openai-curated-remote',
+          nativeInstalled: true
+        })
+      ]).map(plugin => plugin.name)
+    ).toEqual(['ordinary'])
+  })
 })
 
 describe('plugin homepage routing', () => {

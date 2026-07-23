@@ -10,7 +10,7 @@ The plugin does not embed Cua's agent loop.
 - a scoped Cua Driver MCP asset that projects the native tools into the active adapter
 - `cua-driver` and `ow-cua-driver` package bins that install or delegate to the real CLI
 - narrowed install and uninstall scripts that only manage `CuaDriver.app` and the CLI link created by the plugin
-- `manager` and `workspace` server runtimes for status, path lookup, explicit preparation, and launcher search
+- `manager` and `workspace` server runtimes for status, path lookup, explicit preparation, and the scoped status API
 - a visible Agent pointer synchronized with actions without moving the user's physical mouse; workflows start from the main-display center by default and agents may choose logical start coordinates
 - procedural `execute_workflow` for submitting predictable serial steps once while the runtime refreshes window state, resolves semantic targets, waits, and verifies
 - `execute_workflows` for advancing independent apps concurrently while keeping same-app workflows serial and pointer actions globally protected
@@ -67,14 +67,13 @@ The outer orchestrator owns system-display capture for demos, screen recordings,
 `plugin.json` declares both `manager` and `workspace` server roles:
 
 - `workspace` exposes `status`, `driver-path`, `ensure`, and the scoped `status` API to the current project
-- `manager` exposes the same device-level commands and contributes status/preparation actions to the desktop launcher
+- `manager` exposes the same device-level commands and scoped `status` API
 
 Scoped commands:
 
 - `status`: read-only install-path and background-service status; never installs
 - `driver-path`: read-only resolution of the current driver binary
 - `ensure`: explicitly prepare the runtime using plugin-managed defaults
-- `launcher.search`: provide launcher results and invocation actions
 
 Scoped API:
 

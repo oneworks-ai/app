@@ -132,6 +132,24 @@
 - Exceptions: 主操作、危险操作、明确选中强调态，以及主题声明的非紧凑按钮几何。
 - Automatic enforcement: computed hover / padding / sidebar background 检查、明暗模式截图和独立视觉审阅。
 
+### OW-DM-008 — Launcher 默认选中态不铺底
+
+- Revision: 1
+- Status: ACTIVE
+- Rule: 默认主题的 Launcher command 选中行和设置 section tab 不使用填充 active 背景；command 由左侧 indicator 与强调文字表达选中，section tab 由强调文字与下划线表达选中。hover / focus 期间可以显示临时背景。
+- Scope: OneWorks project / default launcher command list and settings section tabs
+- Applies when: 默认主题下渲染 Launcher 主命令列表、最近选择和设置页 section tabs。
+- Does not apply when: 显式主题包通过 `--oneworks-launcher-item-active-bg` 声明自己的选中语言，或控件属于设置内容区里的 choice / field active 状态。
+- Positive example: 最近选择中的当前命令保持透明表面，只显示左侧强调条；“通用”tab 保持透明表面，只显示强调文字和底部 ink。
+- Negative example: Launcher 一打开就给第一条命令和当前 section tab 铺一层 10% 主题色背景。
+- Owning rule: `apps/client/src/components/launcher/AGENTS.md` 的“视觉细节”。
+- Token or implementation: `apps/client/src/routes/LauncherRoute.scss` 的 `--launcher-item-active-bg` 默认 fallback 与 `apps/client/__tests__/launcher-style-contract.spec.ts`。
+- Source: 用户明确指出 Launcher 设置 tab 和最近选择命令不应具有选中背景色，2026-07-23。
+- Effective date: 2026-07-23
+- Supersedes: none
+- Exceptions: 显式主题包的 scoped active recipe；设置内容区里的 choice / field active 状态。
+- Automatic enforcement: CSS contract test、默认主题 computed `background-color`、键盘导航与浅色 / 深色真实页面回归。
+
 ## 待确认冲突
 
 ### OW-DM-P001 — 主题侧栏是否保留渐变

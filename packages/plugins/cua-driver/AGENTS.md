@@ -10,6 +10,6 @@ This package owns the OneWorks-facing lifecycle around the native Cua Driver.
 - `mcp/cua-driver.json`: projects the upstream native CUA tools into agent sessions.
 - `bin/evidence-mcp.cjs`: internal diagnostic utility for legacy trajectory artifacts. It is intentionally not projected from `mcp/`; child sessions must never receive recording-finalization tools.
 - `skills/cua-driver/`: intent routing, workflow-first selection, and action semantics only. Do not move daemon commands, binary discovery, permission preflight, workflow execution guarantees, or media repair into the skill.
-- `server/src/`: manager/workspace status and launcher integration; it is not the MCP transport owner.
+- `server/src/`: manager/workspace status commands and scoped status API; it is not the MCP transport owner.
 
 Run `pnpm -C packages/plugins/cua-driver test`, `pnpm -C packages/plugins/cua-driver typecheck`, and the repository typecheck after changing plugin assets or runtime contracts.

@@ -1250,6 +1250,128 @@ module.exports = async (ctx) => {
     }
   })
 
+  it('applies default official plugin config hooks and respects explicit disable', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-default-plugin-hook-'))
+
+    try {
+      const pluginRoot = path.join(tempDir, 'node_modules', '@oneworks', 'plugin-relay')
+      await mkdir(path.join(pluginRoot, 'dist'), { recursive: true })
+      await writeFile(
+        path.join(pluginRoot, 'package.json'),
+        JSON.stringify(
+          {
+            name: '@oneworks/plugin-relay',
+            version: '1.0.0',
+            exports: {
+              '.': './dist/index.js',
+              './config': './dist/config.js',
+              './package.json': './package.json'
+            }
+          },
+          null,
+          2
+        )
+      )
+      await writeFile(
+        path.join(pluginRoot, 'dist', 'index.js'),
+        'module.exports = { __oneWorksPluginManifest: true }\n'
+      )
+      await writeFile(
+        path.join(pluginRoot, 'dist', 'config.js'),
+        `
+module.exports = (ctx) => {
+  const serviceKey = ctx.plugin.options?.serviceKey || 'default-relay-hook'
+  return {
+    defaultModelService: serviceKey,
+    modelServices: {
+      [serviceKey]: {
+        apiBaseUrl: 'https://relay.example.com/v1',
+        models: ['relay-model']
+      }
+    }
+  }
+}
+`
+      )
+
+      resetConfigCache()
+      const enabledState = await loadConfigState({
+        cwd: tempDir,
+        env: {
+          __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1'
+        }
+      })
+
+      expect(enabledState.userConfig?.defaultModelService).toBe('default-relay-hook')
+      expect(enabledState.userConfig?.modelServices?.['default-relay-hook']).toEqual({
+        apiBaseUrl: 'https://relay.example.com/v1',
+        models: ['relay-model']
+      })
+
+      await writeFile(
+        path.join(tempDir, '.oo.config.json'),
+        JSON.stringify(
+          {
+            plugins: [
+              {
+                id: 'relay',
+                options: {
+                  serviceKey: 'shorthand-relay-hook'
+                },
+                scope: 'custom-relay'
+              }
+            ]
+          },
+          null,
+          2
+        )
+      )
+      resetConfigCache()
+      const shorthandState = await loadConfigState({
+        cwd: tempDir,
+        env: {
+          __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1'
+        }
+      })
+
+      expect(shorthandState.userConfig?.defaultModelService).toBe('shorthand-relay-hook')
+      expect(shorthandState.userConfig?.modelServices?.['default-relay-hook']).toBeUndefined()
+      expect(shorthandState.userConfig?.modelServices?.['shorthand-relay-hook']).toEqual({
+        apiBaseUrl: 'https://relay.example.com/v1',
+        models: ['relay-model']
+      })
+
+      await writeFile(
+        path.join(tempDir, '.oo.config.json'),
+        JSON.stringify(
+          {
+            plugins: [
+              {
+                enabled: false,
+                id: 'relay'
+              }
+            ]
+          },
+          null,
+          2
+        )
+      )
+      resetConfigCache()
+      const disabledState = await loadConfigState({
+        cwd: tempDir,
+        env: {
+          __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1'
+        }
+      })
+
+      expect(disabledState.userConfig?.defaultModelService).toBeUndefined()
+      expect(disabledState.userConfig?.modelServices?.['default-relay-hook']).toBeUndefined()
+    } finally {
+      resetConfigCache()
+      await rm(tempDir, { force: true, recursive: true })
+    }
+  })
+
   it('loads ESM-only plugin config hooks through dynamic import fallback', async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-plugin-hook-esm-'))
 

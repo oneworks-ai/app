@@ -77,17 +77,6 @@ export const ONEWORKS_OFFICIAL_PLUGINS: OneWorksOfficialPluginDefinition[] = [
     name: '@oneworks/plugin-neo-workshop-theme'
   },
   {
-    description: 'Connects the current workspace to One Works Relay for account and remote client access.',
-    displayName: 'Relay',
-    featured: true,
-    name: '@oneworks/plugin-relay'
-  },
-  {
-    displayName: 'Standard Development',
-    featured: true,
-    name: '@oneworks/plugin-standard-dev'
-  },
-  {
     description: 'An optional warm, card-oriented collaboration theme for One Works.',
     displayName: 'Cowork Theme',
     name: '@oneworks/plugin-warm-cowork-theme'

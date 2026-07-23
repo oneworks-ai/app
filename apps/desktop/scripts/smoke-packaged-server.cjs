@@ -54,6 +54,25 @@ const firstExistingPath = (...candidates) => {
   return found
 }
 
+const assertPackagedRelayPlugin = (appDir) => {
+  const packageDir = path.join(appDir, 'node_modules', '@oneworks', 'plugin-relay')
+  const requiredPaths = [
+    'package.json',
+    'dist/client/index.js',
+    'dist/config.cjs',
+    'dist/config.js',
+    'dist/server/index.js'
+  ]
+  const missingPaths = requiredPaths.filter(relativePath => !fs.existsSync(path.join(packageDir, relativePath)))
+  if (missingPaths.length > 0) {
+    throw new Error(
+      `Packaged Relay plugin is missing production entries:\n${
+        missingPaths.map(relativePath => path.join(packageDir, relativePath)).join('\n')
+      }`
+    )
+  }
+}
+
 const resolvePackagedPaths = () => {
   const packageDir = findPackageDir()
 
@@ -137,8 +156,64 @@ const waitForServer = ({ port, startedAt = Date.now() }) =>
     request.once('error', retry)
   })
 
+const readPluginCatalog = port =>
+  new Promise((resolve, reject) => {
+    const request = http.get({
+      hostname: host,
+      path: '/api/plugins',
+      port,
+      timeout: 5000
+    }, (response) => {
+      let body = ''
+      response.setEncoding('utf8')
+      response.on('data', chunk => {
+        body += chunk
+      })
+      response.on('end', () => {
+        if (response.statusCode !== 200) {
+          reject(new Error(`Packaged plugin catalog returned HTTP ${response.statusCode}: ${body}`))
+          return
+        }
+        try {
+          resolve(JSON.parse(body))
+        } catch {
+          reject(new Error(`Packaged plugin catalog returned invalid JSON: ${body}`))
+        }
+      })
+    })
+    request.once('timeout', () => {
+      request.destroy(new Error('Packaged plugin catalog request timed out.'))
+    })
+    request.once('error', reject)
+  })
+
+const assertRelayRuntimeActive = (catalog) => {
+  const plugins = Array.isArray(catalog?.data?.plugins)
+    ? catalog.data.plugins
+    : Array.isArray(catalog?.plugins)
+    ? catalog.plugins
+    : []
+  const relay = plugins.find(plugin => plugin?.packageId === '@oneworks/plugin-relay')
+  if (relay == null) {
+    const packageIds = plugins.map(plugin => plugin?.packageId ?? plugin?.scope).filter(Boolean)
+    throw new Error(
+      `Packaged plugin catalog does not contain the default Relay plugin. Found: ${JSON.stringify(packageIds)}`
+    )
+  }
+  if (relay.enabled !== true) {
+    throw new Error('Packaged Relay plugin is present but not enabled.')
+  }
+  if (Array.isArray(relay.diagnostics) && relay.diagnostics.length > 0) {
+    throw new Error(`Packaged Relay plugin reported diagnostics: ${JSON.stringify(relay.diagnostics)}`)
+  }
+  if (relay.client?.clientEntryUrl == null) {
+    throw new Error('Packaged Relay plugin did not expose its client production entry.')
+  }
+}
+
 const main = async () => {
   const paths = resolvePackagedPaths()
+  assertPackagedRelayPlugin(paths.appDir)
   const port = await getAvailablePort()
   const workspaceEnv = createWorkspaceRuntimeEnv()
   const smokeRoot = resolveProjectHomePath(workspaceRoot, workspaceEnv, '.local', 'desktop-smoke')
@@ -186,6 +261,7 @@ const main = async () => {
       exitPromise
     ])
     if (result instanceof Error) throw result
+    assertRelayRuntimeActive(await readPluginCatalog(port))
     console.log(result)
   } finally {
     if (!child.killed) {

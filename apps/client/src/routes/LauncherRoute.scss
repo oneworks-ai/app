@@ -154,7 +154,7 @@ html.oneworks-launcher-window.dark {
   );
   --launcher-item-active-bg: var(
     --oneworks-launcher-item-active-bg,
-    color-mix(in srgb, var(--primary-color) 10%, transparent)
+    transparent
   );
   --launcher-item-active-color: var(
     --oneworks-launcher-item-active-color,

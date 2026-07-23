@@ -4,7 +4,7 @@ This page provides fuller user-side plugin marketplace examples for bringing One
 
 The plugin marketplace includes the One Works, OpenAI Plugins, and Anthropic official sources by default. Plugins can be installed into the current project or globally. Official sources can be disabled but not deleted, and custom Git sources can be added. Skill marketplace configuration uses `skillRegistries[]` and is not covered here.
 
-The One Works official source lists the `@oneworks/plugin-*` packages matching the current app version. Installation downloads a missing package into the shared package cache and reloads the plugin runtime immediately. Removal only drops the project or global declaration; the cache remains available to other projects.
+The One Works official source lists optional `@oneworks/plugin-*` packages matching the current app version. Installation downloads a missing package into the shared package cache and reloads the plugin runtime immediately. Removal only drops the project or global declaration; the cache remains available to other projects. Built-in Relay is omitted from the install catalog, and Standard Development is exposed as the optional child of Plugin Demo instead of a separate marketplace entry.
 
 ## Custom Codex Marketplace
 

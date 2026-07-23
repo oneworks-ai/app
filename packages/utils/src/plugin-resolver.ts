@@ -929,6 +929,16 @@ const shouldIncludeDefaultOfficialPlugins = (params: {
   includeDefaultOfficialPlugins?: boolean
 }) => params.includeDefaultOfficialPlugins === true && params.env?.[DISABLE_DEFAULT_OFFICIAL_PLUGINS_ENV] !== '1'
 
+export const mergeDefaultOfficialPluginConfigs = (params: {
+  env?: Record<string, string | null | undefined>
+  includeDefaultOfficialPlugins?: boolean
+  plugins?: PluginConfig
+}): PluginConfig | undefined =>
+  mergePluginConfigs(
+    shouldIncludeDefaultOfficialPlugins(params) ? DEFAULT_OFFICIAL_PLUGIN_CONFIGS : undefined,
+    params.plugins
+  )
+
 const isDiscoverablePluginRoot = async (rootDir: string) => {
   if (hasDirectoryPluginManifest(rootDir)) return true
 
@@ -1036,12 +1046,15 @@ export const resolveRuntimePluginConfig = async (params: {
     })
   }
   return mergePluginConfigs(
-    [
-      ...(shouldIncludeDefaultOfficialPlugins(params) ? DEFAULT_OFFICIAL_PLUGIN_CONFIGS : []),
-      ...discovered.autoDiscovered,
-      ...oneWorksMarketplacePlugins,
-      ...managedMarketplacePlugins
-    ],
+    mergeDefaultOfficialPluginConfigs({
+      env: params.env,
+      includeDefaultOfficialPlugins: params.includeDefaultOfficialPlugins,
+      plugins: [
+        ...discovered.autoDiscovered,
+        ...oneWorksMarketplacePlugins,
+        ...managedMarketplacePlugins
+      ]
+    }),
     params.plugins
   )
 }

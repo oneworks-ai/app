@@ -19,16 +19,19 @@ const RECOMMENDATION_LIMIT = 10
 export const selectRecommendedMarketplacePlugins = (
   plugins: PluginMarketplaceCatalogPlugin[],
   limit = RECOMMENDATION_LIMIT
-) =>
-  interleaveMarketplacePlugins(plugins
-    .filter(plugin => (
-      plugin.builtIn === true &&
-      plugin.marketplaceEnabled &&
-      (plugin.featured === true || !plugins.some(candidate => candidate.featured === true)) &&
-      plugin.nativeInstalled !== true &&
-      (plugin.installedSources?.length ?? 0) === 0
-    )))
-    .slice(0, limit)
+) => {
+  const availablePlugins = plugins.filter(plugin => (
+    plugin.builtIn === true &&
+    plugin.marketplaceEnabled &&
+    plugin.nativeInstalled !== true &&
+    (plugin.installedSources?.length ?? 0) === 0
+  ))
+  const featuredPlugins = availablePlugins.filter(plugin => plugin.featured === true)
+
+  return interleaveMarketplacePlugins(
+    featuredPlugins.length > 0 ? featuredPlugins : availablePlugins
+  ).slice(0, limit)
+}
 
 export function PluginHomeView({
   catalogLoading,

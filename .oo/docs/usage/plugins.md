@@ -11,9 +11,13 @@ One Works 现在有两套并行的插件使用方式：
 
 ## 安装方式
 
+- Relay 是默认启用的内置 One Works 插件，可通过显式插件配置禁用。它不会重复出现在插件市场的可安装列表中。
 - 内置 One Works 插件会按运行时声明的版本从全局 package cache 解析；缺失时会安装到该 cache。
 - 其他插件通过 npm 安装到你的项目 workspace，或使用目录路径引用；如果包解析不到，会直接报错。
 - `id` 支持简写：例如配置 `logger` 时，会优先解析 `logger`，失败后再尝试 `@oneworks/plugin-logger`；旧的 `@vibe-forge/plugin-logger` 仍作为兼容路径解析。
+
+Standard Development 继续作为独立 npm 包兼容已有配置，但官方市场不再提供第二个顶层入口。新配置应通过
+`@oneworks/plugin-demo` 的可选 `standard-dev` child 启用它。
 
 全局 package cache 默认位于 `~/.oneworks/bootstrap/npm`；如需调整根目录，可以设置 `__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__`。
 
@@ -32,7 +36,7 @@ One Works 现在有两套并行的插件使用方式：
 示例：
 
 ```bash
-pnpm add -D @oneworks/plugin-standard-dev @oneworks/plugin-logger
+pnpm add -D @oneworks/plugin-demo @oneworks/plugin-logger
 ```
 
 ## 基本配置
@@ -43,8 +47,14 @@ pnpm add -D @oneworks/plugin-standard-dev @oneworks/plugin-logger
 {
   "plugins": [
     {
-      "id": "standard-dev",
-      "scope": "std"
+      "id": "@oneworks/plugin-demo",
+      "scope": "demo",
+      "children": [
+        {
+          "id": "standard-dev",
+          "scope": "std"
+        }
+      ]
     },
     {
       "id": "logger",

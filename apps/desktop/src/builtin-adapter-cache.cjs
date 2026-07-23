@@ -15,7 +15,7 @@ const BUILTIN_ADAPTER_PACKAGES = [
 
 const BUILTIN_PLUGIN_PACKAGES = [
   '@oneworks/plugin-logger',
-  '@oneworks/plugin-standard-dev'
+  '@oneworks/plugin-relay'
 ]
 const BUILTIN_RUNTIME_CLI_PACKAGE = '@oneworks/cli'
 const BUILTIN_RUNTIME_SERVER_PACKAGE = '@oneworks/server'

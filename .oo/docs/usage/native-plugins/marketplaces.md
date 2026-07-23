@@ -4,7 +4,7 @@
 
 插件市场页默认内置 One Works、OpenAI Plugins 与 Anthropic 官方插件源；用户可以直接浏览并选择安装到当前项目或全局。官方源可以屏蔽但不能删除，也可以继续添加自定义 Git 源。知识库「技能 -> 市场」使用的是 `skillRegistries[]`，不在本页范围内。
 
-One Works 官方源展示当前应用版本对应的 `@oneworks/plugin-*` 包。安装时会把缺失包下载到共享 package cache，并立即重新加载插件运行时；移除时只删除当前项目或全局的启用声明，不删除其他项目可复用的缓存包。
+One Works 官方源展示当前应用版本对应的可选 `@oneworks/plugin-*` 包。安装时会把缺失包下载到共享 package cache，并立即重新加载插件运行时；移除时只删除当前项目或全局的启用声明，不删除其他项目可复用的缓存包。默认内置的 Relay 不在可安装目录中；Standard Development 由 Plugin Demo 的可选 child 提供，也不再作为独立市场条目展示。
 
 ## 示例：自定义 Codex 插件源
 

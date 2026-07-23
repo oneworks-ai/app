@@ -18,8 +18,7 @@ const bundledOfficialPluginPackageIds = new Set([
   '@oneworks/plugin-demo',
   '@oneworks/plugin-demo-extension',
   '@oneworks/plugin-logger',
-  '@oneworks/plugin-relay',
-  '@oneworks/plugin-standard-dev'
+  '@oneworks/plugin-relay'
 ])
 
 const isPathInside = (root: string, candidate: string) => {
@@ -89,6 +88,7 @@ export const discoverPluginInstances = async () => {
     cwd: workspaceFolder,
     disableGlobalConfig,
     env: process.env,
+    includeDefaultOfficialPlugins: true,
     marketplaces: mergedConfig?.marketplaces,
     plugins: mergedConfig?.plugins as PluginConfig | undefined
   })
