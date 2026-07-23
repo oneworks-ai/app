@@ -9,6 +9,9 @@ describe('launcher command item visual contract', () => {
       'utf8'
     )
 
+    expect(styles).toMatch(
+      /--launcher-item-active-bg:\s*var\(\s*--oneworks-launcher-item-active-bg,\s*transparent\s*\)/
+    )
     expect(styles).toContain('--launcher-item-active-color: var(')
     expect(styles).toContain('--launcher-item-active-muted-color: var(')
     expect(styles).toMatch(

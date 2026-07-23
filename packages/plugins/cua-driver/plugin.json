@@ -72,27 +72,6 @@
       ]
     },
     "contributions": {
-      "launcherSearchProviders": [
-        {
-          "id": "driver",
-          "title": "Cua Driver",
-          "titleI18n": {
-            "en": "Cua Driver",
-            "zh-Hans": "Cua Driver"
-          },
-          "descriptionI18n": {
-            "en": "Check or prepare the local Cua Driver runtime.",
-            "zh-Hans": "检查或准备本机 Cua Driver 运行环境。"
-          },
-          "command": "launcher.search",
-          "roles": [
-            "manager"
-          ],
-          "surfaces": [
-            "launcher"
-          ]
-        }
-      ],
       "toolUsePresentations": [
         {
           "id": "execute-workflow",

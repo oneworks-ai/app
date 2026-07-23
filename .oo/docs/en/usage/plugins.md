@@ -11,9 +11,12 @@ For Claude Code plugins and marketplaces, see [Adapter Native Plugins and Market
 
 ## Installation
 
+- Relay is a built-in One Works plugin enabled by default and can be disabled through explicit plugin config. It is not duplicated in the marketplace install list.
 - Built-in One Works plugins resolve from the global package cache at the version declared by the runtime. Missing packages are installed into that cache.
 - Other plugins are installed into your project workspace through npm or referenced by directory path. Resolution failure is an error.
 - `id` supports shorthand. For example, `logger` first resolves as `logger`, then as `@oneworks/plugin-logger`; legacy `@vibe-forge/plugin-logger` remains a compatibility fallback.
+
+Standard Development remains available as a standalone npm package for existing configurations, but the official marketplace no longer exposes a second top-level entry. New configurations should enable the optional `standard-dev` child of `@oneworks/plugin-demo`.
 
 The global package cache defaults to `~/.oneworks/bootstrap/npm`. Override it with `__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__`.
 
@@ -32,7 +35,7 @@ Project `.npmrc` example:
 ```
 
 ```bash
-pnpm add -D @oneworks/plugin-standard-dev @oneworks/plugin-logger
+pnpm add -D @oneworks/plugin-demo @oneworks/plugin-logger
 ```
 
 ## Basic Configuration
@@ -43,8 +46,14 @@ Configure plugins in `.oo.config.json` or `.oo.config.yaml` at the resolved work
 {
   "plugins": [
     {
-      "id": "standard-dev",
-      "scope": "std"
+      "id": "@oneworks/plugin-demo",
+      "scope": "demo",
+      "children": [
+        {
+          "id": "standard-dev",
+          "scope": "std"
+        }
+      ]
     },
     {
       "id": "logger",

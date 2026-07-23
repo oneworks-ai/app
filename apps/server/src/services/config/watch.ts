@@ -100,10 +100,20 @@ const syncDirectoryWatches = (
         scheduleConfigWatchRefresh(runtime)
       }
     )
+    runtime.directoryWatches.set(dir, watchEntry)
+    watcher.once('error', (error) => {
+      if (runtime.directoryWatches.get(dir) !== watchEntry) return
+      controller.abort()
+      runtime.directoryWatches.delete(dir)
+      logger.warn({
+        workspaceFolder: runtime.workspaceFolder,
+        dir,
+        error: error instanceof Error ? error.message : String(error)
+      }, '[config] Config watch failed; continuing without live reload for this directory')
+    })
     controller.signal.addEventListener('abort', () => {
       watcher.close()
     }, { once: true })
-    runtime.directoryWatches.set(dir, watchEntry)
   }
 }
 

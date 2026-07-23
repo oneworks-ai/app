@@ -10,7 +10,7 @@
 - scoped Cua Driver MCP 资产：把原生 GUI 工具直接投影到当前 adapter
 - `cua-driver` / `ow-cua-driver` package bin：按需安装或转发到真实 Cua Driver CLI
 - 插件内置、经过收窄的安装与卸载脚本：只管理 `CuaDriver.app` 和插件创建的 CLI 链接
-- `manager` / `workspace` server runtime：提供状态、路径、显式环境准备和 launcher 搜索
+- `manager` / `workspace` server runtime：提供状态、路径、显式环境准备和 scoped 状态 API
 - 自动展示与操作同步的 Agent 虚拟指针，不移动用户的物理鼠标；workflow 默认从主屏中心出发，Agent 也可配置逻辑坐标起点
 - 过程化 `execute_workflow`：一次提交可预测的串行步骤，在运行时自动刷新窗口状态、解析语义目标、等待并验证；只在 checkpoint、失败或完成时返回
 - `execute_workflows`：不同 App 的独立工作流可并行推进，同一 App 仍严格串行，点击动作继续受全局光标事务保护
@@ -67,14 +67,13 @@ workflow runtime 会在每个 MCP 会话内过程化地固定 AX 语义观察模
 `plugin.json` 声明 `manager` 和 `workspace` 两个 server role：
 
 - `workspace`：为当前项目提供 `status`、`driver-path`、`ensure` 和 scoped `status` API
-- `manager`：提供同一组设备级命令，并向桌面 launcher 暴露状态检查与环境准备入口
+- `manager`：提供同一组设备级命令与 scoped `status` API
 
 Scoped commands：
 
 - `status`：只读检查安装路径与后台服务状态，不触发安装
 - `driver-path`：只读返回当前可发现的 driver 路径
 - `ensure`：使用插件托管默认值显式准备运行环境
-- `launcher.search`：提供 launcher 搜索结果与执行动作
 
 Scoped API：
 

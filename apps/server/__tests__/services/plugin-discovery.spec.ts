@@ -30,7 +30,22 @@ describe('plugin discovery', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.listManagedPluginInstalls.mockResolvedValue([])
+    mocks.resolveConfiguredPluginInstances.mockResolvedValue([])
     mocks.resolveRuntimePluginConfig.mockResolvedValue([])
+  })
+
+  it('loads Relay through the default official plugin set', async () => {
+    mocks.loadConfigState.mockResolvedValue({
+      globalConfig: {},
+      mergedConfig: {},
+      workspaceFolder: '/workspace'
+    })
+
+    await discoverPluginInstances()
+
+    expect(mocks.resolveRuntimePluginConfig).toHaveBeenCalledWith(expect.objectContaining({
+      includeDefaultOfficialPlugins: true
+    }))
   })
 
   it('attributes an official package selected by the project marketplace to the project', async () => {

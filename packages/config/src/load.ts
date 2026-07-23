@@ -607,6 +607,7 @@ const loadEffectiveConfigPair = async (options: LoadConfigOptions = {}) => {
   const [hookedProjectConfig, hookedUserConfig] = await applyPluginConfigHooks({
     cwd: resolvePluginConfigCwd(options),
     env: options.env ?? process.env,
+    includeDefaultOfficialPlugins: true,
     jsonVariables: options.jsonVariables ?? {},
     projectConfig: effectiveProjectConfig,
     userConfig: userSource?.resolvedConfig

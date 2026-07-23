@@ -6,6 +6,10 @@ const require = createRequire(import.meta.url)
 
 const desktopPackageJson = require('../package.json') as {
   dependencies?: Record<string, string>
+  scripts?: Record<string, string>
+}
+const { BUILTIN_PLUGIN_PACKAGES } = require('../src/builtin-adapter-cache.cjs') as {
+  BUILTIN_PLUGIN_PACKAGES: string[]
 }
 
 const bundledAdapterPackages = [
@@ -19,7 +23,7 @@ const bundledAdapterPackages = [
 
 const bundledPluginPackages = [
   '@oneworks/plugin-logger',
-  '@oneworks/plugin-standard-dev'
+  '@oneworks/plugin-relay'
 ]
 
 describe('desktop runtime dependencies', () => {
@@ -37,5 +41,10 @@ describe('desktop runtime dependencies', () => {
         Object.fromEntries(bundledPluginPackages.map(packageName => [packageName, 'workspace:*']))
       )
     )
+    expect(BUILTIN_PLUGIN_PACKAGES).toEqual(bundledPluginPackages)
+    expect(desktopPackageJson.scripts?.['build:plugins']).toBe(
+      'pnpm --filter @oneworks/plugin-relay build'
+    )
+    expect(desktopPackageJson.scripts?.package).toContain('pnpm run build:plugins')
   })
 })

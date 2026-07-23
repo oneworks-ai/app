@@ -50,7 +50,7 @@
   - 签名开关
   - macOS 双架构 `latest-mac.yml` 合并
 - `scripts/smoke-packaged-server.cjs`
-  - 包内 server smoke test 契约
+  - 包内 server smoke test 契约；除基础 server 探活外，还必须确认默认内置 Relay 的生产入口存在、runtime 已激活且没有 diagnostics
 - `electron-builder.yml`
   - 目标平台、artifact 命名、GitHub publish 配置
 - `build/app-update.yml`
@@ -75,6 +75,7 @@
 - macOS 会话右键“在新窗口打开”应创建同风格 workspace 窗口，并通过 URL 参数让左侧栏默认折叠。
 - 最小窗口宽度当前支持到 `300px`；改 header / nav / sender 布局时要验证这个尺寸，不要只看大窗口。
 - `pnpm desktop:package`、`pnpm desktop:make` 仍依赖静态 client dist，并默认先构建 client。
+- `pnpm desktop:package` / `package:icon` 必须先运行 `build:plugins`，为 `BUILTIN_PLUGIN_PACKAGES` 中带生产 client/server entry 的插件准备 `dist`。Relay 默认内置后，正式包至少要包含 `dist/client/index.js`、`dist/server/index.js` 与 config 的 CJS/ESM 产物；只把 workspace package overlay 进 staging 不能替代构建。
 - macOS `.pkg` 安装向导包通过 `pnpm desktop:make:pkg` 或 `node apps/desktop/scripts/make.cjs --target pkg` 生成；`ONEWORKS_DESKTOP_MAKE_TARGETS` 只作为 CI / 临时覆盖入口，不作为用户文档里的主要入口。
 - 当前 GitHub `desktop-package` workflow 先收口 macOS：生成 `arm64,x64` 预打包 app 与 `.dmg` / `.pkg` / `.zip`，再挂载 `arm64` `.dmg`、复制安装到 `/Applications`，并从已安装 app 跑 smoke。Windows / Linux builder 目标保留，但暂时不作为 CI gate。
 - 桌面图标资产来自 `assets/icon` submodule；更新 submodule 后运行 `pnpm desktop:icons:sync`，默认根图标是工业风格。macOS package / make 默认 `--mac-icon auto`，只有完整 Xcode 26+ 的 `actool` 支持 Icon Composer 时才启用 `.icon` / `Assets.car`，否则继续使用 `.icns`；显式验证可用 `pnpm desktop:make:pkg:icon`。

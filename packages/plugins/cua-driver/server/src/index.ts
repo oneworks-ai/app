@@ -1,5 +1,4 @@
 import { ensureDriver, getDriverStatus } from './driver.js'
-import { searchLauncher } from './launcher.js'
 import type { CuaPluginContext } from './types.js'
 
 const statusApiInputSchema = {
@@ -58,7 +57,6 @@ export function activatePlugin(ctx: CuaPluginContext) {
     }
   })
   ctx.registerCommand('ensure', payload => ensureDriver(ctx, payload))
-  ctx.registerCommand('launcher.search', payload => searchLauncher(ctx, payload))
 
   ctx.registerApi('status', {
     title: {

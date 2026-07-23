@@ -600,7 +600,6 @@ describe('cua-driver plugin contract', () => {
     ])
     const plugin = manifest.plugin as {
       contributions: {
-        launcherSearchProviders: Array<Record<string, unknown>>
         toolUsePresentations: Array<Record<string, unknown>>
       }
       server: { roles: string[] }
@@ -648,13 +647,7 @@ describe('cua-driver plugin contract', () => {
     await expect(readFile(new URL('../mcp/cua-evidence.json', import.meta.url), 'utf8'))
       .rejects.toMatchObject({ code: 'ENOENT' })
     expect(plugin.server.roles).toEqual(['manager', 'workspace'])
-    expect(plugin.contributions.launcherSearchProviders).toEqual([
-      expect.objectContaining({
-        command: 'launcher.search',
-        roles: ['manager'],
-        surfaces: ['launcher']
-      })
-    ])
+    expect(plugin.contributions).not.toHaveProperty('launcherSearchProviders')
     expect(plugin.contributions.toolUsePresentations).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'execute-workflow',
@@ -709,7 +702,7 @@ describe('cua-driver plugin contract', () => {
     expect(packageJson.files).toContain('mcp')
   })
 
-  it('registers scoped commands, launcher results, and documented status API metadata', async () => {
+  it('registers scoped commands and documented status API metadata', async () => {
     const commands = new Map<string, (payload: unknown) => unknown>()
     const apis = new Map<string, CuaPluginApiRegistration>()
     const disposers: Array<() => unknown> = []
@@ -744,11 +737,8 @@ describe('cua-driver plugin contract', () => {
 
     activatePlugin(ctx)
 
-    expect([...commands.keys()]).toEqual(['status', 'driver-path', 'ensure', 'launcher.search'])
+    expect([...commands.keys()]).toEqual(['status', 'driver-path', 'ensure'])
     expect([...apis.keys()]).toEqual(['status'])
-    const launcherSearch = commands.get('launcher.search')
-    const results = await launcherSearch?.({ query: 'cua' }) as Array<{ id: string }>
-    expect(results.map(item => item.id)).toEqual(['status', 'ensure'])
     expect(apis.get('status')).toEqual(expect.objectContaining({
       title: expect.any(Object),
       description: expect.any(Object),

@@ -1419,6 +1419,19 @@ export class PluginManager {
     return this.enabledOverrides.get(scope) ?? raw.enabled !== false
   }
 
+  private failRecordWatch(record: RuntimeRecord, error: unknown) {
+    record.instance.watch = { enabled: false }
+    record.instance.diagnostics.push({
+      level: 'warning',
+      code: 'plugin_watch_failed',
+      message: `Failed to watch plugin "${record.instance.scope}": ${toErrorMessage(error)}`,
+      scope: record.instance.scope,
+      pluginRoot: record.instance.pluginRoot
+    })
+    this.stopRecordWatch(record)
+    logger.warn({ err: error, scope: record.instance.scope }, '[plugins] failed to start watch mode')
+  }
+
   private syncRecordWatch(record: RuntimeRecord) {
     if (!record.instance.enabled) {
       record.instance.watch = { enabled: false }
@@ -1440,16 +1453,11 @@ export class PluginManager {
         if (shouldSkipPluginReloadForHostViteClientChange(record, relativePath)) return
         this.scheduleRecordReload(record, relativePath)
       })
-    } catch (error) {
-      record.instance.watch = { enabled: false }
-      record.instance.diagnostics.push({
-        level: 'warning',
-        code: 'plugin_watch_failed',
-        message: `Failed to watch plugin "${record.instance.scope}": ${toErrorMessage(error)}`,
-        scope: record.instance.scope,
-        pluginRoot: record.instance.pluginRoot
+      record.watcher.once('error', (error) => {
+        this.failRecordWatch(record, error)
       })
-      logger.warn({ err: error, scope: record.instance.scope }, '[plugins] failed to start watch mode')
+    } catch (error) {
+      this.failRecordWatch(record, error)
     }
   }
 
@@ -1470,7 +1478,13 @@ export class PluginManager {
         if (!shouldReloadForDiscoveryPath(relativePath)) return
         this.scheduleDiscoveryReload(root, relativePath)
       })
-      this.discoveryWatchers.push({ root, watcher })
+      const entry = { root, watcher }
+      this.discoveryWatchers.push(entry)
+      watcher.once('error', (error) => {
+        watcher.close()
+        this.discoveryWatchers = this.discoveryWatchers.filter(candidate => candidate !== entry)
+        logger.warn({ err: error, root }, '[plugins] discovery watch failed; continuing without live reload')
+      })
     } catch {
       // The local discovery root is optional; it may not exist in a workspace.
     }

@@ -124,11 +124,13 @@ describe('plugin marketplace catalog', () => {
     expect(response.sources).toContainEqual(expect.objectContaining({
       builtIn: true,
       key: 'oneworks-official',
-      pluginCount: 14,
+      pluginCount: 12,
       title: 'One Works',
       type: 'oneworks'
     }))
-    expect(official).toHaveLength(14)
+    expect(official).toHaveLength(12)
+    expect(official.map(plugin => plugin.name)).not.toContain('@oneworks/plugin-relay')
+    expect(official.map(plugin => plugin.name)).not.toContain('@oneworks/plugin-standard-dev')
     expect(official).toContainEqual(expect.objectContaining({
       displayName: 'Logger',
       marketplaceType: 'oneworks',

@@ -34,6 +34,7 @@
   - `defineConfig()` typed helper
   - global/project/user/extend config merge 策略
   - 插件 config hook 返回值到最终 user 层的运行时合并
+  - 默认启用的官方插件与显式插件使用同一套 config hook 解析；显式 `enabled: false` 必须压过默认启用
   - 默认 system prompt 开关解析与合并策略
   - 默认内建 MCP 开关与 package 解析
 - 本包不负责：
