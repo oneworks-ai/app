@@ -1,8 +1,6 @@
 # 项目设计记忆登记表
 
-返回流程：[design-memory.md](./design-memory.md)
-
-本文件只登记 OneWorks 项目级设计规范的身份、作用域、冲突、替代和例外。规范正文仍由 `styles.md`、最近模块 `AGENTS.md`、共享 token 或组件拥有，避免在登记表复制完整规则。
+返回流程：[design-memory.md](./design-memory.md)。本文件只登记 OneWorks 项目级设计规范的身份、作用域、冲突、替代和例外；规范正文仍由 `styles.md`、最近模块 `AGENTS.md`、共享 token 或组件拥有，避免在登记表复制完整规则。
 
 ## 有效规范索引
 
@@ -133,6 +131,7 @@
 - Automatic enforcement: computed hover / padding / sidebar background 检查、明暗模式截图和独立视觉审阅。
 
 ### OW-DM-008 — Launcher 默认选中态不铺底
+
 - Revision / status / scope: 1 / ACTIVE / OneWorks project，默认主题的 Launcher 主命令列表、最近选择和设置 section tabs。command 选中行保持透明，只以左侧 indicator 与强调文字表达；section tab 保持透明，只以强调文字与下划线表达；hover / focus 可显示临时背景。
 - Ownership / source / exceptions / enforcement: `apps/client/src/components/launcher/AGENTS.md`“视觉细节”；实现与契约位于 `apps/client/src/routes/LauncherRoute.scss`、`apps/client/__tests__/launcher-style-contract.spec.ts`；来源为用户 2026-07-23 的明确反馈。显式主题包通过 `--oneworks-launcher-item-active-bg` 声明的选中语言及设置内容区 choice / field active 状态不受此规则约束；由 CSS contract、computed `background-color`、键盘导航和浅色 / 深色真实页面回归验证。
 
