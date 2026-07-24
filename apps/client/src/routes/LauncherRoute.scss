@@ -150,7 +150,7 @@ html.oneworks-launcher-window.dark {
   );
   --launcher-item-hover-bg: var(
     --oneworks-launcher-item-hover-bg,
-    color-mix(in srgb, var(--primary-color) 7%, transparent)
+    transparent
   );
   --launcher-item-active-bg: var(
     --oneworks-launcher-item-active-bg,
