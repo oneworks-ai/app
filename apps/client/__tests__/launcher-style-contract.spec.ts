@@ -3,6 +3,30 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 describe('launcher command item visual contract', () => {
+  it('keeps default hover surfaces transparent while preserving theme overrides', () => {
+    const routeStyles = readFileSync(
+      new URL('../src/routes/LauncherRoute.scss', import.meta.url),
+      'utf8'
+    )
+    const settingsStyles = readFileSync(
+      new URL(
+        '../src/components/launcher/LauncherSettingsView.scss',
+        import.meta.url
+      ),
+      'utf8'
+    )
+
+    expect(routeStyles).toMatch(
+      /--launcher-item-hover-bg:\s*var\(\s*--oneworks-launcher-item-hover-bg,\s*transparent\s*\)/
+    )
+    expect(routeStyles).toMatch(
+      /\.launcher-command-item:hover,[^{]*\{[^}]*background:\s*var\(--launcher-item-hover-bg\)/
+    )
+    expect(settingsStyles).toMatch(
+      /\.launcher-settings__tab:hover,[^{]*\{[^}]*background:\s*var\(--launcher-item-hover-bg,\s*transparent\)/
+    )
+  })
+
   it('uses complete active foreground semantics for command content', () => {
     const styles = readFileSync(
       new URL('../src/routes/LauncherRoute.scss', import.meta.url),

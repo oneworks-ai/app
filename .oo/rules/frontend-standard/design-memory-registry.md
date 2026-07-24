@@ -132,8 +132,8 @@
 
 ### OW-DM-008 — Launcher 默认选中态不铺底
 
-- Revision / status / scope: 1 / ACTIVE / OneWorks project，默认主题的 Launcher 主命令列表、最近选择和设置 section tabs。command 选中行保持透明，只以左侧 indicator 与强调文字表达；section tab 保持透明，只以强调文字与下划线表达；hover / focus 可显示临时背景。
-- Ownership / source / exceptions / enforcement: `apps/client/src/components/launcher/AGENTS.md`“视觉细节”；实现与契约位于 `apps/client/src/routes/LauncherRoute.scss`、`apps/client/__tests__/launcher-style-contract.spec.ts`；来源为用户 2026-07-23 的明确反馈。显式主题包通过 `--oneworks-launcher-item-active-bg` 声明的选中语言及设置内容区 choice / field active 状态不受此规则约束；由 CSS contract、computed `background-color`、键盘导航和浅色 / 深色真实页面回归验证。
+- Revision / status / scope: 2 / ACTIVE / OneWorks project，默认主题的 Launcher 主命令列表、最近选择和设置 section tabs。command 行在 hover、focus、active 时保持透明，以前景色、焦点轮廓、左侧 indicator 与强调文字表达交互；section tab 保持透明，以强调文字、焦点轮廓与下划线表达交互。
+- Ownership / source / exceptions / enforcement: `apps/client/src/components/launcher/AGENTS.md`“视觉细节”；实现与契约位于 `apps/client/src/routes/LauncherRoute.scss`、`apps/client/__tests__/launcher-style-contract.spec.ts`；来源为用户 2026-07-23 至 2026-07-24 的明确反馈。显式主题包通过 `--oneworks-launcher-item-hover-bg` / `--oneworks-launcher-item-active-bg` 声明的交互语言及设置内容区 choice / field active 状态不受此规则约束；由 CSS contract、computed `background-color`、鼠标 hover、键盘导航和浅色 / 深色真实页面回归验证。
 
 ## 待确认冲突
 
