@@ -3150,6 +3150,15 @@
     "pluginList": "插件列表",
     "listBreadcrumb": "列表",
     "homeRecommended": "推荐插件",
+    "recommendationCategories": {
+      "automation": "自动化",
+      "creative": "创意与设计",
+      "data": "数据与分析",
+      "development": "开发工具",
+      "other": "其他",
+      "productivity": "效率工具",
+      "themes": "主题"
+    },
     "exploreMorePlugins": "探索更多插件",
     "homeInstalled": "已装插件",
     "managePlugins": "管理插件",

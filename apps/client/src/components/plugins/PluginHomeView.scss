@@ -41,6 +41,26 @@
   font-weight: 650;
 }
 
+.plugin-home-view__recommendation-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--subpage-secondary-gap, 16px);
+}
+
+.plugin-home-view__recommendation-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--subpage-tertiary-gap, 10px);
+}
+
+.plugin-home-view__recommendation-group h3 {
+  margin: 0;
+  color: var(--text-secondary-color);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
 .plugin-home-view__recommendations {
   margin: 0;
   padding: 0;

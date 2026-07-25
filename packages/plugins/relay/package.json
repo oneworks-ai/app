@@ -357,6 +357,7 @@
   "icon": "./assets/icon.svg",
   "files": [
     "README.md",
+    "assets",
     "dist",
     "package.json",
     "src"

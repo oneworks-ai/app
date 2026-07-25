@@ -3149,6 +3149,15 @@
     "pluginList": "Plugin list",
     "listBreadcrumb": "List",
     "homeRecommended": "Recommended plugins",
+    "recommendationCategories": {
+      "automation": "Automation",
+      "creative": "Creative & design",
+      "data": "Data & analytics",
+      "development": "Developer tools",
+      "other": "Other",
+      "productivity": "Productivity",
+      "themes": "Themes"
+    },
     "exploreMorePlugins": "Explore more plugins",
     "homeInstalled": "Installed plugins",
     "managePlugins": "Manage plugins",

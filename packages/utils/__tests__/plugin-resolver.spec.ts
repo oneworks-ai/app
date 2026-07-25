@@ -256,13 +256,14 @@ describe('plugin resolver', () => {
     })
   })
 
-  it('prefers bundled official plugins over active cache when requested', async () => {
+  it('prefers official plugins bundled with the runtime over active cache when requested', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
     tempDirs.push(tempDir)
 
     const workspace = join(tempDir, 'workspace')
+    const runtimePackageDir = join(tempDir, 'runtime')
     const realHome = join(tempDir, 'home')
-    const workspacePluginRoot = join(workspace, 'node_modules/@oneworks/plugin-relay')
+    const bundledPluginRoot = join(runtimePackageDir, 'node_modules/@oneworks/plugin-relay')
     const activePluginRoot = resolveManagedPluginPackageInstallDir({
       env: {
         __ONEWORKS_PROJECT_REAL_HOME__: realHome
@@ -272,7 +273,7 @@ describe('plugin resolver', () => {
     })
     await mkdir(workspace, { recursive: true })
     await mkdir(join(realHome, '.oneworks/bootstrap/module-updates'), { recursive: true })
-    await writeLoggerPluginPackage(workspacePluginRoot, '0.2.0', '@oneworks/plugin-relay')
+    await writeLoggerPluginPackage(bundledPluginRoot, '0.2.0', '@oneworks/plugin-relay')
     await writeLoggerPluginPackage(activePluginRoot, '0.1.0', '@oneworks/plugin-relay')
     await writeFile(
       join(realHome, '.oneworks/bootstrap/module-updates/oneworks__plugin-relay.json'),
@@ -288,6 +289,7 @@ describe('plugin resolver', () => {
       )
     )
 
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', runtimePackageDir)
     vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', realHome)
 
     const [normal] = await resolveConfiguredPluginInstances({
@@ -301,7 +303,43 @@ describe('plugin resolver', () => {
     })
 
     expect(normal?.rootDir).toBe(activePluginRoot)
-    expect(preferred?.rootDir).toBe(workspacePluginRoot)
+    expect(preferred?.rootDir).toBe(bundledPluginRoot)
+  })
+
+  it('does not treat an older workspace package as the bundled official plugin', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    const runtimePackageDir = join(tempDir, 'runtime')
+    const realHome = join(tempDir, 'home')
+    const workspacePluginRoot = join(workspace, 'node_modules/@oneworks/plugin-relay')
+    const cachedPluginRoot = resolveManagedPluginPackageInstallDir({
+      env: {
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome
+      },
+      packageName: '@oneworks/plugin-relay',
+      version: '0.1.0-beta.8'
+    })
+    await mkdir(runtimePackageDir, { recursive: true })
+    await writeLoggerPluginPackage(workspacePluginRoot, '0.1.0-beta.5', '@oneworks/plugin-relay')
+    await writeLoggerPluginPackage(cachedPluginRoot, '0.1.0-beta.8', '@oneworks/plugin-relay')
+
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', runtimePackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_PLUGIN_AUTO_INSTALL__', 'false')
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', realHome)
+
+    const [instance] = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: [{ id: '@oneworks/plugin-relay' }],
+      preferBundledOfficialPlugins: true
+    })
+
+    expect(instance).toMatchObject({
+      packageId: '@oneworks/plugin-relay',
+      rootDir: cachedPluginRoot,
+      resolvedBy: 'managed-package-cache'
+    })
   })
 
   it('prefers an existing global package cache over workspace packages for OneWorks plugins', async () => {

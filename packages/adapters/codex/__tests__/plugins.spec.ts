@@ -45,6 +45,7 @@ describe('codex plugin manager', () => {
           installPolicy: 'ALLOWED',
           installed: false,
           interface: {
+            category: 'Productivity',
             displayName: 'Notion',
             logoUrl: 'https://example.test/notion.png',
             shortDescription: 'Notion workflows'
@@ -67,6 +68,7 @@ describe('codex plugin manager', () => {
           installPolicy: 'ALLOWED',
           installed: false,
           interface: {
+            category: 'Productivity',
             displayName: 'Notion',
             logoUrl: 'https://example.test/notion.png',
             shortDescription: 'Notion workflows'
@@ -94,6 +96,7 @@ describe('codex plugin manager', () => {
         id: 'figma@openai-curated-remote',
         installed: true,
         interface: {
+          category: 'Developer tools',
           displayName: 'Figma',
           logoUrl: 'https://example.test/figma.png',
           shortDescription: 'Design-to-code workflows'
@@ -106,6 +109,7 @@ describe('codex plugin manager', () => {
       'openai-curated-remote',
       new Set(['figma@openai-curated-remote'])
     )).toEqual({
+      category: 'Developer tools',
       description: 'Design-to-code workflows',
       displayName: 'Figma',
       featured: true,

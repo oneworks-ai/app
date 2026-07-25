@@ -131,6 +131,14 @@ describe('plugin marketplace catalog', () => {
     expect(official).toHaveLength(12)
     expect(official.map(plugin => plugin.name)).not.toContain('@oneworks/plugin-relay')
     expect(official.map(plugin => plugin.name)).not.toContain('@oneworks/plugin-standard-dev')
+    expect(official.filter(plugin => plugin.featured).map(plugin => plugin.name)).toEqual([
+      '@oneworks/plugin-china-red-theme',
+      '@oneworks/plugin-cua-driver',
+      '@oneworks/plugin-demo',
+      '@oneworks/plugin-focus-workbench-theme',
+      '@oneworks/plugin-neo-workshop-theme',
+      '@oneworks/plugin-warm-cowork-theme'
+    ])
     expect(official).toContainEqual(expect.objectContaining({
       displayName: 'Logger',
       marketplaceType: 'oneworks',
@@ -140,9 +148,26 @@ describe('plugin marketplace catalog', () => {
       version: '0.1.0-beta.8'
     }))
     expect(official).toContainEqual(expect.objectContaining({
+      category: 'themes',
       displayName: 'China Edition Theme',
+      featured: true,
+      icon: { kind: 'builtin', id: 'oneworks-china-red-theme' },
       name: '@oneworks/plugin-china-red-theme',
       searchKeywords: ['中国方案主题']
+    }))
+    expect(official).toContainEqual(expect.objectContaining({
+      category: 'automation',
+      displayName: 'CUA Driver',
+      featured: true,
+      icon: { kind: 'builtin', id: 'oneworks-cua-driver' },
+      name: '@oneworks/plugin-cua-driver'
+    }))
+    expect(official).toContainEqual(expect.objectContaining({
+      category: 'developer-tools',
+      displayName: 'Plugin Demo',
+      featured: true,
+      icon: { kind: 'builtin', id: 'oneworks-plugin-demo' },
+      name: '@oneworks/plugin-demo'
     }))
   })
 

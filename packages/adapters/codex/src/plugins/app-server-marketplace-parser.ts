@@ -13,6 +13,7 @@ const stringList = (value: unknown) => (
 )
 
 export interface CodexAppServerPluginInterface {
+  category?: string
   composerIcon?: string
   composerIconUrl?: string
   displayName?: string
@@ -54,6 +55,7 @@ export interface CodexAppServerPluginList {
 const parsePluginInterface = (value: unknown): CodexAppServerPluginInterface | undefined => {
   if (!isRecord(value)) return undefined
   return {
+    ...(optionalString(value.category) != null ? { category: optionalString(value.category) } : {}),
     ...(optionalString(value.composerIcon) != null ? { composerIcon: optionalString(value.composerIcon) } : {}),
     ...(optionalString(value.composerIconUrl) != null
       ? { composerIconUrl: optionalString(value.composerIconUrl) }
