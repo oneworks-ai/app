@@ -21,7 +21,7 @@ import { debugOperation } from './operations/debug.js'
 import { deliverCommand } from './operations/delivery.js'
 import { cleanupPageCursors, framesOperation, pageOperation } from './operations/page.js'
 import { rawDebugOperation } from './operations/raw-debug.js'
-import { securityOperation, setAdvancedAccessPolicy } from './operations/security.js'
+import { securityOperation } from './operations/security.js'
 import {
   EXTENSION_VERSION,
   PROTOCOL_VERSION,
@@ -29,6 +29,7 @@ import {
   sanitizeResult,
   sanitizeSensitiveSnapshotResult
 } from './operations/shared.js'
+import { assertCommandExpectedTargets } from './operations/target-guard.js'
 
 const storageKey = 'oneWorksChromeConnection'
 const sessionStorageKey = 'oneWorksChromeExtensionSessionId'
@@ -217,9 +218,14 @@ async function execute(command, commandConnection = connection) {
   if (handler == null || !action) {
     throw error('UNSUPPORTED_OPERATION', `Unsupported typed Chrome operation: ${command.op}`)
   }
+  await assertCommandExpectedTargets(command.op, command.expected_targets)
+  const guardedArgs = {
+    ...(command.args ?? {}),
+    ...(command.expected_targets == null ? {} : { expected_targets: command.expected_targets })
+  }
   const args = module === 'page'
-    ? { ...command.args, cursor_session_id: commandConnection?.cursor_session_id }
-    : command.args ?? {}
+    ? { ...guardedArgs, cursor_session_id: commandConnection?.cursor_session_id }
+    : guardedArgs
   const result = await handler(action, args)
   if (module === 'raw') {
     const serialized = JSON.stringify(result)
@@ -378,11 +384,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         origins: message.origins ?? []
       })
       return { granted, capabilities: await synchronizeCapabilities() }
-    }
-    if (message?.type === 'oneworks:set-advanced-access') {
-      const policy = await setAdvancedAccessPolicy(message.key, message.enabled)
-      await synchronizeCapabilities()
-      return policy
     }
     if (message?.type === 'oneworks:forget') {
       const storedCursorSession = normalizeStoredCursorSession(

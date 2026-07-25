@@ -29,6 +29,11 @@ export async function discoverCapabilities() {
     protocol_version: PROTOCOL_VERSION,
     extension_version: EXTENSION_VERSION,
     browser: navigator.userAgent,
+    execution_target_guard: {
+      algorithm: 'SHA-256',
+      canonicalization: 'whatwg-url-href-v1',
+      version: 1
+    },
     permissions: granted,
     optional_permissions: optionalPermissions,
     constraints: {
@@ -47,7 +52,7 @@ export async function discoverCapabilities() {
         per_operation_confirmation: true,
         raw_debugger_browser_wide: true,
         raw_debugger_global_serialization: true,
-        raw_debugger_initial_target_guard: ['tab_id', 'expected_origin'],
+        raw_debugger_initial_target_guard: ['tab_id', 'expected_origin', 'url_sha256'],
         raw_debugger_includes: ['cookie_values', 'sensitive_fields'],
         host_file_escape_blocked: true
       },

@@ -18,7 +18,7 @@ const driver = require('../bin/chrome-driver.cjs') as {
   riskFor: (module: string, action: string, args?: Record<string, unknown>) => number
   targetKey: (module: string, args: Record<string, unknown>) => string
 }
-const { minimumRiskFor } = await import('../server/src/bridge.js')
+const { EXECUTION_TARGET_GUARD_CAPABILITY, minimumRiskFor } = await import('../server/src/bridge.js')
 const createWorkflowController = require('../../browser-driver/bin/browser-driver-workflows.cjs') as (
   operation: (op: string, args: Record<string, unknown>) => Promise<Record<string, unknown>>,
   options: Record<string, unknown>
@@ -38,6 +38,7 @@ describe('external browser MCP contract', () => {
     expect(contributions.settingsPages).toEqual([
       expect.objectContaining({
         clientView: 'control',
+        group: 'external-control',
         id: 'external-browser',
         title: 'External Browser',
         titleI18n: { en: 'External Browser', 'zh-Hans': '外部浏览器' }
@@ -92,9 +93,25 @@ describe('external browser MCP contract', () => {
     const rawActions = (rawTool?.inputSchema as { oneOf: SchemaVariant[] }).oneOf
       .map(variant => variant.properties.action.const)
     expect(rawActions).toEqual(['evaluate', 'cdp_command'])
+
+    const pageTool = contract.tools.find(tool => tool.name === 'chrome_page')
+    const captureVariants = (pageTool?.inputSchema as { oneOf: Array<SchemaVariant & { required: string[] }> }).oneOf
+      .filter(variant => ['save_mhtml', 'screenshot'].includes(variant.properties.action.const))
+    expect(captureVariants).toHaveLength(2)
+    for (const variant of captureVariants) {
+      expect(variant.required).toEqual(expect.arrayContaining([
+        'document_id',
+        'tab_id'
+      ]))
+    }
   })
 
   it('uses stable explicit target identities and escalates destructive risk', () => {
+    expect(EXECUTION_TARGET_GUARD_CAPABILITY).toEqual({
+      algorithm: 'SHA-256',
+      canonicalization: 'whatwg-url-href-v1',
+      version: 1
+    })
     expect(driver.targetKey('page', { tab_id: 7, frame_id: 4, document_id: 'doc-9' }))
       .toBe('tab:7')
     expect(driver.targetKey('tabs', { tab_ids: [9, 2] })).toBe('tabs:2,9')

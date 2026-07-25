@@ -55,9 +55,9 @@ ZIP 根目录直接包含 `manifest.json`。构建会把 workspace semver 映射
 ## 风险与明确边界
 
 - R0：能力与审计发现；R1：元数据/语义读取；R2：可逆的目标级控制；R3：敏感或破坏性的限定操作；R4：浏览器级高权限修改。
-- R3/R4 由 bridge 按操作服务端定级。确认绑定精确操作、参数、target、连接和浏览器会话，五分钟后过期，换会话即作废；关闭 tab/window 与完整页面归档/PDF 均为 R3。
+- R3/R4 由 bridge 按操作服务端定级。默认确认绑定精确操作、参数、target、连接和浏览器会话，五分钟后过期，换会话即作废；关闭 tab/window 与完整页面归档/PDF 均为 R3。用户也可在“网站权限”中按受限 URL 通配规则选择“始终询问”或“始终允许”；首条匹配规则生效，bridge 会在确认前和实际下发前两次核对当前 tab URL。“始终允许”可跳过普通网站操作的 OneWorks 确认，但不会绕过高级访问、扩展能力或 Chrome 权限。
 - 默认结果经过扩展与 bridge 双重脱敏：URL 去掉 userinfo 与敏感查询键，敏感表单值和 console 文本会遮蔽，内联 PAC 源码会移除，cookie 元数据查询不返回 value。
-- “高级会话访问”提供 Raw CDP/JavaScript、完整 Cookie 值、页面敏感字段开关；策略只保存在 `chrome.storage.session`，浏览器会话结束即复位。Raw 是 Cookie/敏感字段能力的超集，也是浏览器会话级权限；`tab_id` 与来源检查用于发现误导航，不构成安全隔离。Raw 全局独占执行，并由 bridge 对每次调用执行 R4 确认；待确认项显示脱敏预览，持久审计只保存分类与 hash。明显的宿主文件路径/文件系统逃逸方法仍被硬阻断。
+- “高级访问”提供 Raw CDP/JavaScript、完整 Cookie 值、页面敏感字段开关；OneWorks 持久保存用户选择的布尔配置，与当前是否连接无关，并在浏览器连接后同步到扩展的 `chrome.storage.session` 执行策略。设置页是配置的唯一写入口，扩展弹窗只展示当前实际生效状态。Raw 是 Cookie/敏感字段能力的超集，也是浏览器会话级权限；`tab_id` 与来源检查用于发现误导航，不构成安全隔离。高级访问即使命中“始终允许”网站规则也仍需逐次针对准确操作确认，Raw 还会全局独占执行；待确认项显示脱敏预览，持久审计只保存分类与 hash。明显的宿主文件路径/文件系统逃逸方法仍被硬阻断。
 - 点击、输入、选择、按键和滚动使用共享 `@oneworks/cursor` 28px 标准光标；首次操作平滑出现，并在同一连接 session 的连续操作间保留位置，只在断开或忘记连接时淡出清理。执行期间目标 Chrome tab 的 favicon 临时显示同一 Agent 光标，结束或取消后恢复页面最新 favicon。状态按显式 tab/document 隔离。
 - 需要 Chrome 原生用户手势的操作（如打开下载文件、启停其他扩展）返回 `USER_GESTURE_REQUIRED`；Agent 确认不会被伪装成 Chrome user activation。
 - Chrome 没有向扩展开放已保存密码库的读取/导出 API；高级访问覆盖当前网页中的密码字段、DOM 和存储，不代表能读取 Chrome Password Manager。

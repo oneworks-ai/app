@@ -1,6 +1,8 @@
-import { ensureDebuggerAttached, sendDebuggerCommand } from './debug.js'
+import { ensureDebuggerAttached, verifyDebuggerAttachment } from './debug.js'
+import { sendGuardedDebuggerCommand } from './debugger-attachment.js'
 import { requireAdvancedAccess } from './security.js'
 import { error } from './shared.js'
+import { assertExpectedTarget } from './target-guard.js'
 
 const blockedHostMethods = new Set([
   'Browser.setDownloadBehavior',
@@ -62,29 +64,48 @@ async function requireExpectedOrigin(tabId, expectedOrigin) {
   return actual
 }
 
+async function verifyRawTarget(args) {
+  const expectedOrigin = await requireExpectedOrigin(args.tab_id, args.expected_origin)
+  const target = await assertExpectedTarget(args)
+  return { ...target, expected_origin: expectedOrigin }
+}
+
 export async function rawDebugOperation(action, args) {
   await requireAdvancedAccess('raw_debugger')
-  const origin = await requireExpectedOrigin(args.tab_id, args.expected_origin)
+  const verification = await verifyDebuggerAttachment(args.tab_id, undefined, () => verifyRawTarget(args))
+  const origin = verification.expected_origin
   if (action === 'cdp_command') {
     if (typeof args.method !== 'string' || !/^[A-Za-z][A-Za-z0-9]*\.[A-Za-z][A-Za-z0-9]*$/u.test(args.method)) {
       throw error('INVALID_ARGUMENT', 'Raw CDP method must use a Domain.command name.')
     }
     assertNoHostFileEscape(args.method, args.params ?? {})
   }
-  await ensureDebuggerAttached(args.tab_id)
-  await requireExpectedOrigin(args.tab_id, args.expected_origin)
+  const ownership = await ensureDebuggerAttached(args.tab_id, () => assertExpectedTarget(args))
+  const verify = () => verifyRawTarget(args)
   if (action === 'evaluate') {
-    const result = await sendDebuggerCommand(args.tab_id, 'Runtime.evaluate', {
-      expression: args.expression,
-      awaitPromise: args.await_promise === true,
-      returnByValue: args.return_by_value !== false,
-      userGesture: args.user_gesture === true,
-      ...(Number.isInteger(args.execution_context_id) ? { contextId: args.execution_context_id } : {})
-    })
+    const result = await sendGuardedDebuggerCommand(
+      args.tab_id,
+      ownership,
+      verify,
+      'Runtime.evaluate',
+      {
+        expression: args.expression,
+        awaitPromise: args.await_promise === true,
+        returnByValue: args.return_by_value !== false,
+        userGesture: args.user_gesture === true,
+        ...(Number.isInteger(args.execution_context_id) ? { contextId: args.execution_context_id } : {})
+      }
+    )
     return { tab_id: args.tab_id, expected_origin: origin, method: 'Runtime.evaluate', result }
   }
   if (action === 'cdp_command') {
-    const result = await sendDebuggerCommand(args.tab_id, args.method, args.params ?? {})
+    const result = await sendGuardedDebuggerCommand(
+      args.tab_id,
+      ownership,
+      verify,
+      args.method,
+      args.params ?? {}
+    )
     return { tab_id: args.tab_id, expected_origin: origin, method: args.method, result }
   }
   throw error('UNSUPPORTED_ACTION', `Unsupported raw debugger action: ${action}`)

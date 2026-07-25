@@ -282,9 +282,9 @@ const tools = [
       object(
         'screenshot',
         { ...pageTarget, format: { enum: ['png', 'jpeg'] }, full_page: { type: 'boolean' } },
-        tabRequired
+        stablePageRequired
       ),
-      object('save_mhtml', { ...pageTarget, filename: { type: 'string' } }, tabRequired),
+      object('save_mhtml', { ...pageTarget, filename: { type: 'string' } }, stablePageRequired),
       object('print', pageTarget, tabRequired),
       object('print_to_pdf', {
         ...pageTarget,

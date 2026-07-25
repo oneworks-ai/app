@@ -4693,6 +4693,7 @@
     },
     "groups": {
       "config": "配置",
+      "externalControl": "外部控制",
       "app": "应用"
     },
     "environments": {

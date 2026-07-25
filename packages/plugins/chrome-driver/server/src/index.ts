@@ -1,6 +1,8 @@
 import process from 'node:process'
 
 import { ChromeExtensionBridge } from './bridge.js'
+import type { AdvancedAccessKey } from './bridge.js'
+import type { WebsitePermissionMode } from './site-permissions.js'
 import type { ChromePluginContext } from './types.js'
 
 const emptyObjectSchema = { type: 'object', additionalProperties: false }
@@ -59,9 +61,7 @@ export async function activatePlugin(ctx: ChromePluginContext) {
     if (tabId == null) throw new Error('A paired OneWorks Chrome tab id is required.')
     return bridge.executeFromUi('frames.list', { tab_id: tabId }, `tab:${tabId}`)
   })
-  ctx.registerCommand('get-advanced-access', () => (
-    bridge.executeFromUi('security.get_policy', {}, 'security')
-  ))
+  ctx.registerCommand('get-advanced-access', () => bridge.getConfiguredAdvancedAccess())
   ctx.registerCommand('set-advanced-access', (payload: unknown) => {
     const value = payload as Record<string, unknown> | undefined
     const key = value != null && typeof value.key === 'string' ? value.key : ''
@@ -69,7 +69,25 @@ export async function activatePlugin(ctx: ChromePluginContext) {
     if (!['raw_debugger', 'cookie_values', 'sensitive_fields'].includes(key) || typeof enabled !== 'boolean') {
       throw new Error('A known advanced access key and boolean enabled value are required.')
     }
-    return bridge.executeFromUi('security.set_policy', { enabled, key }, 'security')
+    return bridge.setConfiguredAdvancedAccess(key as AdvancedAccessKey, enabled)
+  })
+  ctx.registerCommand('get-site-permissions', () => bridge.getWebsitePermissions())
+  ctx.registerCommand('add-site-permission', (payload: unknown) => {
+    const value = payload as Record<string, unknown> | undefined
+    const pattern = value != null && typeof value.pattern === 'string' ? value.pattern : ''
+    const mode = value != null && typeof value.mode === 'string' ? value.mode : ''
+    return bridge.addWebsitePermission(pattern, mode as WebsitePermissionMode)
+  })
+  ctx.registerCommand('set-site-permission', (payload: unknown) => {
+    const value = payload as Record<string, unknown> | undefined
+    const ruleId = value != null && typeof value.rule_id === 'string' ? value.rule_id : ''
+    const mode = value != null && typeof value.mode === 'string' ? value.mode : ''
+    return bridge.setWebsitePermission(ruleId, mode as WebsitePermissionMode)
+  })
+  ctx.registerCommand('remove-site-permission', (payload: unknown) => {
+    const value = payload as Record<string, unknown> | undefined
+    const ruleId = value != null && typeof value.rule_id === 'string' ? value.rule_id : ''
+    return bridge.removeWebsitePermission(ruleId)
   })
 
   ctx.registerApi('status', {

@@ -189,9 +189,10 @@ const workflows = createWorkflowController(workflowOperation, {
   enqueueTarget: (target, task) => enqueueWorkflow(target, task),
   validateWorkflow: args => {
     if (
-      args.steps.some(step => ['click', 'type', 'select', 'press_key', 'scroll'].includes(step.op)) && !args.document_id
+      args.steps.some(step => ['click', 'type', 'select', 'press_key', 'scroll', 'screenshot'].includes(step.op)) &&
+      !args.document_id
     ) {
-      throw new Error('Chrome workflows with semantic mutations require document_id from snapshot or frame discovery.')
+      throw new Error('Chrome workflows with document-bound operations require document_id from frame discovery.')
     }
   },
   validateStep: step => {

@@ -74,9 +74,16 @@ describe('external browser extension release packaging', () => {
       expect(release.extensionIdForKey(manifest.key)).toBe(CHROME_EXTENSION_ID)
       expect(manifest.action.default_title).toBe(release.publicExtensionName)
     }
-    expect(readFileSync(join(pluginRoot, 'extension', 'popup.html'), 'utf8')).toMatch(
+    const popupHtml = readFileSync(join(pluginRoot, 'extension', 'popup.html'), 'utf8')
+    const popupScript = readFileSync(join(pluginRoot, 'extension', 'popup.js'), 'utf8')
+    const backgroundScript = readFileSync(join(pluginRoot, 'extension', 'background.js'), 'utf8')
+    expect(popupHtml).toMatch(
       /<title>OneWorks<\/title>[\s\S]*<h1>OneWorks<\/h1>/u
     )
+    expect(popupHtml).toContain('Managed in OneWorks Settings → External Browser.')
+    expect(popupScript).toMatch(/state\.className = `advanced-state \$\{enabled \? 'enabled' : ''\}`/u)
+    expect(popupScript).not.toContain('oneworks:set-advanced-access')
+    expect(backgroundScript).not.toContain('oneworks:set-advanced-access')
   })
 
   it('maps package prerelease versions to monotonic Chrome versions', () => {

@@ -4692,6 +4692,7 @@
     },
     "groups": {
       "config": "Configuration",
+      "externalControl": "External Control",
       "app": "Application"
     },
     "environments": {

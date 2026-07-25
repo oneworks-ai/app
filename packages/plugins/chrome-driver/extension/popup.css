@@ -92,8 +92,14 @@ button.quiet {
 .permission.granted button {
   color: #16803c;
 }
-.permission.advanced button[aria-pressed='true'] {
-  color: #b42318;
+.permission .advanced-state {
+  flex: none;
+  color: GrayText;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.permission .advanced-state.enabled {
+  color: #16803c;
 }
 footer {
   display: flex;

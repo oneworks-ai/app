@@ -1,11 +1,20 @@
 /* eslint-disable max-lines -- Semantic target identity and page actions share one injected state machine. */
 import { requireAdvancedAccess } from './security.js'
 import { cleanTab, error, requirePermissions, safeFilename } from './shared.js'
+import {
+  assertExpectedDocumentTarget,
+  assertExpectedTarget,
+  bindExpectedDocumentTarget,
+  documentIdentityForFrame,
+  fingerprintTargetUrl
+} from './target-guard.js'
+import { observeTargetMutation } from './target-observer.js'
 
 const activeCursorTargets = new Map()
 
 async function resolveTarget(args) {
   await requirePermissions(['tabs', 'webNavigation'])
+  await assertExpectedTarget(args)
   const tab = await chrome.tabs.get(args.tab_id)
   if (
     tab.url?.startsWith('chrome://') || tab.url?.startsWith('chrome-extension://') || tab.url?.startsWith('devtools://')
@@ -32,6 +41,38 @@ async function resolveTarget(args) {
 
 export async function semanticPageOperation(input) {
   const state = globalThis.__oneWorksChromeState ??= { generation: 0, refs: new Map() }
+  const assertBoundDocumentUrl = async () => {
+    const expected = input.expected_document_url_sha256
+    if (expected == null) return
+    if (!/^[a-f0-9]{64}$/u.test(expected) || crypto?.subtle == null) {
+      throw Object.assign(new Error('The sensitive field target guard is invalid.'), {
+        code: 'INVALID_TARGET_GUARD'
+      })
+    }
+    let before
+    try {
+      before = new URL(location.href).toString()
+    } catch {
+      throw Object.assign(new Error('The sensitive field target is not an HTTP(S) document.'), {
+        code: 'TARGET_DOCUMENT_CHANGED'
+      })
+    }
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(before))
+    const actual = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')
+    let after
+    try {
+      after = new URL(location.href).toString()
+    } catch {
+      after = undefined
+    }
+    if (before !== after || actual !== expected) {
+      throw Object.assign(new Error('The sensitive field target changed before the DOM action.'), {
+        code: 'TARGET_URL_CHANGED',
+        actual_fingerprint: actual.slice(0, 12),
+        expected_fingerprint: expected.slice(0, 12)
+      })
+    }
+  }
   const visible = element => {
     const style = getComputedStyle(element)
     const rect = element.getBoundingClientRect()
@@ -221,6 +262,7 @@ export async function semanticPageOperation(input) {
   })
 
   if (input.action === 'snapshot') {
+    if (input.allow_sensitive_fields === true) await assertBoundDocumentUrl()
     state.generation += 1
     state.refs = new Map()
     const elements = []
@@ -280,6 +322,7 @@ export async function semanticPageOperation(input) {
       )
     }
     const cursor = await showCursor(node)
+    if (input.allow_sensitive_fields === true) await assertBoundDocumentUrl()
     node.focus()
     if (input.clear !== false && 'value' in node) node.value = ''
     if ('value' in node) node.value = `${node.value ?? ''}${input.text}`
@@ -547,6 +590,13 @@ export async function semanticTabActivity(input) {
 
 async function executeSemantic(args, action = args.action) {
   const target = await resolveTarget({ ...args, action })
+  const sensitiveSemanticAction = args.allow_sensitive_fields === true && ['snapshot', 'type'].includes(action)
+  const documentIdentity = sensitiveSemanticAction
+    ? { ...documentIdentityForFrame(target.frame), url_sha256: await fingerprintTargetUrl(target.frame.url) }
+    : undefined
+  if (sensitiveSemanticAction && documentIdentity.url_sha256 == null) {
+    throw error('INVALID_TARGET_GUARD', 'Sensitive page access requires an exact HTTP(S) document fingerprint.')
+  }
   const visibleAction = ['click', 'type', 'select', 'press_key', 'scroll'].includes(action)
   const cursorUrl = chrome.runtime.getURL('agent-cursor.svg')
   const defaultFaviconUrl = chrome.runtime.getURL('default-tab-favicon.svg')
@@ -575,11 +625,23 @@ async function executeSemantic(args, action = args.action) {
   }
   let result
   try {
+    if (sensitiveSemanticAction) await assertExpectedDocumentTarget(args, documentIdentity)
     ;[result] = await chrome.scripting.executeScript({
-      target: { tabId: args.tab_id, frameIds: [target.frameId] },
+      target: sensitiveSemanticAction
+        ? { tabId: args.tab_id, documentIds: [documentIdentity.document_id] }
+        : { tabId: args.tab_id, frameIds: [target.frameId] },
+      world: 'ISOLATED',
       func: semanticPageOperation,
-      args: [{ ...args, action, cursor_url: cursorUrl }]
+      args: [{
+        ...args,
+        action,
+        cursor_url: cursorUrl,
+        ...(sensitiveSemanticAction
+          ? { expected_document_url_sha256: documentIdentity.url_sha256 }
+          : {})
+      }]
     })
+    if (sensitiveSemanticAction) await assertExpectedDocumentTarget(args, documentIdentity)
   } finally {
     if (visibleAction) {
       await chrome.scripting.executeScript({
@@ -646,6 +708,9 @@ async function wait(args) {
 }
 
 async function visibleScreenshot(args) {
+  if (args.frame_id != null && args.frame_id !== 0) {
+    throw error('INVALID_ARGUMENT', 'A visible screenshot captures the main frame and requires frame_id 0.')
+  }
   const target = await resolveTarget(args)
   if (args.full_page === true) {
     throw error(
@@ -654,15 +719,50 @@ async function visibleScreenshot(args) {
     )
   }
   const [previous] = await chrome.tabs.query({ active: true, windowId: target.tab.windowId })
-  await chrome.windows.update(target.tab.windowId, { focused: true })
-  await chrome.tabs.update(args.tab_id, { active: true })
-  const dataUrl = await chrome.tabs.captureVisibleTab(target.tab.windowId, { format: args.format ?? 'png' })
-  if (previous?.id != null && previous.id !== args.tab_id) {
-    await chrome.tabs.update(previous.id, { active: true }).catch(() => undefined)
+  const previouslyFocusedWindow = typeof chrome.windows.getLastFocused === 'function'
+    ? await chrome.windows.getLastFocused().catch(() => undefined)
+    : undefined
+  const expectedDocument = await bindExpectedDocumentTarget(args)
+  let mutationObserver
+  const assertVisibleTarget = async () => {
+    const [active] = await chrome.tabs.query({ active: true, windowId: target.tab.windowId })
+    const current = await chrome.tabs.get(args.tab_id)
+    if (active?.id !== args.tab_id || current.windowId !== target.tab.windowId) {
+      throw error(
+        'TARGET_DOCUMENT_CHANGED',
+        'The visible screenshot target stopped being the active tab in its bound window.'
+      )
+    }
+    await assertExpectedDocumentTarget(args, expectedDocument)
+    mutationObserver?.assertUnchanged()
   }
-  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl)
-  if (match == null) throw error('SCREENSHOT_FAILED', 'Chrome returned an invalid screenshot.')
-  return { tab_id: args.tab_id, mime_type: match[1], data_base64: match[2] }
+  try {
+    await chrome.windows.update(target.tab.windowId, { focused: true })
+    await chrome.tabs.update(args.tab_id, { active: true })
+    mutationObserver = observeTargetMutation({
+      includeActivation: true,
+      tabId: args.tab_id,
+      windowId: target.tab.windowId
+    })
+    await assertVisibleTarget()
+    const dataUrl = await chrome.tabs.captureVisibleTab(target.tab.windowId, { format: args.format ?? 'png' })
+    mutationObserver.assertUnchanged()
+    await assertVisibleTarget()
+    const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl)
+    if (match == null) throw error('SCREENSHOT_FAILED', 'Chrome returned an invalid screenshot.')
+    return { tab_id: args.tab_id, mime_type: match[1], data_base64: match[2] }
+  } finally {
+    mutationObserver?.close()
+    if (previous?.id != null && previous.id !== args.tab_id) {
+      await chrome.tabs.update(previous.id, { active: true }).catch(() => undefined)
+    }
+    if (
+      previouslyFocusedWindow?.id != null &&
+      previouslyFocusedWindow.id !== target.tab.windowId
+    ) {
+      await chrome.windows.update(previouslyFocusedWindow.id, { focused: true }).catch(() => undefined)
+    }
+  }
 }
 
 export async function framesOperation(action, args) {
@@ -719,17 +819,32 @@ export async function pageOperation(action, args, debugOperation) {
   if (action === 'wait') return wait(args)
   if (action === 'screenshot') return visibleScreenshot(args)
   if (action === 'save_mhtml') {
-    await requirePermissions(['pageCapture', 'downloads'])
-    const blob = await chrome.pageCapture.saveAsMHTML({ tabId: args.tab_id })
-    const bytes = new Uint8Array(await blob.arrayBuffer())
-    let binary = ''
-    for (const byte of bytes) binary += String.fromCharCode(byte)
-    const dataUrl = `data:multipart/related;base64,${btoa(binary)}`
-    const downloadId = await chrome.downloads.download({
-      url: dataUrl,
-      filename: safeFilename(args.filename, `page-${Date.now()}.mhtml`)
-    })
-    return { download_id: downloadId, filename: safeFilename(args.filename, `page-${Date.now()}.mhtml`) }
+    if (args.frame_id != null && args.frame_id !== 0) {
+      throw error('INVALID_ARGUMENT', 'MHTML capture applies to the main frame and requires frame_id 0.')
+    }
+    await requirePermissions(['pageCapture', 'downloads', 'webNavigation'])
+    const expectedDocument = await bindExpectedDocumentTarget(args)
+    const mutationObserver = observeTargetMutation({ tabId: args.tab_id })
+    try {
+      await assertExpectedDocumentTarget(args, expectedDocument)
+      mutationObserver.assertUnchanged()
+      const blob = await chrome.pageCapture.saveAsMHTML({ tabId: args.tab_id })
+      mutationObserver.assertUnchanged()
+      await assertExpectedDocumentTarget(args, expectedDocument)
+      mutationObserver.assertUnchanged()
+      const bytes = new Uint8Array(await blob.arrayBuffer())
+      mutationObserver.assertUnchanged()
+      let binary = ''
+      for (const byte of bytes) binary += String.fromCharCode(byte)
+      const dataUrl = `data:multipart/related;base64,${btoa(binary)}`
+      await assertExpectedDocumentTarget(args, expectedDocument)
+      mutationObserver.assertUnchanged()
+      const filename = safeFilename(args.filename, `page-${Date.now()}.mhtml`)
+      const downloadId = await chrome.downloads.download({ url: dataUrl, filename })
+      return { download_id: downloadId, filename }
+    } finally {
+      mutationObserver.close()
+    }
   }
   if (action === 'print_to_pdf') return debugOperation('print_to_pdf', args)
   throw error('UNSUPPORTED_ACTION', `Unsupported page action: ${action}`)

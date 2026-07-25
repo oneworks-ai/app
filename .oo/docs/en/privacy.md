@@ -13,7 +13,7 @@ Depending on the capabilities the user enables, the browser targets the user sel
 - bookmarks, history, downloads, Reading List entries, cookies, site settings, and browsing data that the user authorizes on demand;
 - origins, protocol versions, capabilities, connection state, and audit classifications required to pair the extension with OneWorks.
 
-Password fields, complete cookie values, sensitive page fields, and raw JavaScript/CDP are off by default. A user must explicitly enable the relevant advanced access for the current browser session, and high-risk operations still require per-use confirmation bound to the exact target and arguments. Proxy status is available after pairing because `proxy` is a required developer permission; setting or clearing a proxy is a high-risk operation that requires exact per-use confirmation. The extension does not read passwords saved in Chrome Password Manager.
+Password fields, complete cookie values, sensitive page fields, and raw JavaScript/CDP are off by default. OneWorks locally stores the user's boolean advanced-access preferences independently of browser connection state and applies them to a compatible extension after it connects. Ordinary site-scoped operations use risk-based confirmation by default; users may also save bounded URL wildcard rules for “Always ask” or “Always allow”. “Always allow” does not enable advanced access or grant Chrome permissions; every advanced-access use still requires confirmation bound to the exact operation, target, and arguments. The extension keeps the effective advanced-access policy in `chrome.storage.session`. OneWorks preference files store only the configured booleans and URL patterns, and its audit file stores only redacted summaries; these files do not store complete Cookie values, tokens, passwords, or page content returned by sensitive operations. Sensitive operation results may still be processed and retained by the paired OneWorks runtime, the active session, or configured model, AI, and tool providers according to their configuration and policies. Proxy status is available after pairing because `proxy` is a required developer permission; setting or clearing a proxy is high-risk by default. The extension does not read passwords saved in Chrome Password Manager.
 
 ## How data is used
 
@@ -25,8 +25,10 @@ The extension communicates only with the authenticated OneWorks bridge bound to 
 
 - `chrome.storage.local` stores the paired bridge URL, trusted origin, reconnect client token, and OneWorks tab identifier under the connection record.
 - `chrome.storage.session` stores the extension session identifier, cursor session/state, and advanced-access policy. Session data is cleared when the Chrome session ends.
-- Operation results and audit records are retained by the paired OneWorks instance according to its configuration. The extension does not create a separate cloud advertising profile or analytics database.
-- Users can disconnect or forget a connection, revoke Chrome permissions, clear extension data, or uninstall the extension.
+- Operation results may be processed or retained by the paired OneWorks runtime, the active session, and configured model, AI, or tool providers according to their configuration and policies. OneWorks persists only redacted audit summaries in its Chrome Driver audit file. The extension does not create a separate cloud advertising profile or analytics database.
+- OneWorks stores the URL match patterns that users enter for website permissions in the local project data directory; query strings and fragments are neither accepted in patterns nor used for matching.
+- Execution-target verification is separate from website-permission matching. Guard messages carry only a SHA-256 fingerprint of the complete canonical URL, not plaintext query strings or fragments, and errors expose at most fingerprint prefixes.
+- Users can disconnect or forget a connection, remove website-permission rules, revoke Chrome permissions, clear extension data, or uninstall the extension.
 
 ## Sharing and security
 

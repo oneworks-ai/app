@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 const readPluginVersion = () => {
   try {
     return new URL(import.meta.url).searchParams.get('pluginVersion') ?? String(Date.now())
@@ -5,25 +7,45 @@ const readPluginVersion = () => {
     return String(Date.now())
   }
 }
-const isSourceEntry = () => {
-  try {
-    return new URL(import.meta.url).pathname.includes('/client/src/')
-  } catch {
-    return false
+
+const importVersionedPeer = (path, version) =>
+  import(/* @vite-ignore */ `${path}?pluginVersion=${encodeURIComponent(version)}`)
+
+const loadChromeDriverModules = () => {
+  if (import.meta.env.DEV) {
+    return Promise.all([import('./styles'), import('./view')])
   }
+  const version = readPluginVersion()
+  return Promise.all([
+    importVersionedPeer('./styles.js', version),
+    importVersionedPeer('./view.js', version)
+  ])
 }
-const peer = (name, extension = 'ts') => isSourceEntry() ? `./${name}.${extension}` : `./${name}.js`
-const dynamic = (path, version) => import(`${path}?pluginVersion=${encodeURIComponent(version)}`)
+
+const activeReloads = new Set<() => Promise<void>>()
+const activeStyles = new Set<HTMLStyleElement>()
+const reloadActivePlugins = () => {
+  activeReloads.forEach(reload => void reload())
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept('./styles.ts', (styles) => {
+    if (styles == null) return
+    activeStyles.forEach(style => {
+      style.textContent = styles.chromeDriverCss
+    })
+  })
+  import.meta.hot.accept(reloadActivePlugins)
+}
 
 export async function activatePlugin(ctx) {
-  const version = readPluginVersion()
-  const [{ chromeDriverCss }, { ChromeDriverView }] = await Promise.all([
-    dynamic(peer('styles'), version),
-    dynamic(peer('view', 'tsx'), version)
-  ])
+  const [{ chromeDriverCss }, { ChromeDriverView }] = await loadChromeDriverModules()
   const style = document.createElement('style')
   style.textContent = chromeDriverCss
   document.head.appendChild(style)
+  activeStyles.add(style)
+  const reload = () => ctx.hot.reload()
+  activeReloads.add(reload)
 
   let extensionNonce
   let extensionId
@@ -70,6 +92,7 @@ export async function activatePlugin(ctx) {
     void postPairingOffer()
   }
   window.addEventListener('message', handleHandshake)
+  window.postMessage({ type: 'ONEWORKS_CHROME_HELLO_REQUEST' }, location.origin)
 
   const disposable = ctx.views.register('control', {
     renderNode: view => ctx.react.createElement(ChromeDriverView, { ctx, react: ctx.react, view })
@@ -78,6 +101,8 @@ export async function activatePlugin(ctx) {
     dispose() {
       disposable.dispose()
       window.removeEventListener('message', handleHandshake)
+      activeReloads.delete(reload)
+      activeStyles.delete(style)
       style.remove()
     }
   }

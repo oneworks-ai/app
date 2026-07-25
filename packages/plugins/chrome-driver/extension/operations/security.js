@@ -44,12 +44,15 @@ export async function setAdvancedAccessPolicy(key, enabled) {
 export async function requireAdvancedAccess(key) {
   const policy = await getAdvancedAccessPolicy()
   if (policy[key] === true) return policy
-  throw error('ADVANCED_ACCESS_DISABLED', 'This operation requires an explicit session-only advanced access switch.', {
-    recoverable: true,
-    advanced_access_key: key,
-    user_action:
-      'Enable the matching Advanced session access switch in OneWorks Settings or the extension popup, then retry.'
-  })
+  throw error(
+    'ADVANCED_ACCESS_DISABLED',
+    'Enable this preference in OneWorks Settings and synchronize it to the current browser session.',
+    {
+      recoverable: true,
+      advanced_access_key: key,
+      user_action: 'Enable the matching Advanced access switch in OneWorks Settings under External Browser, then retry.'
+    }
+  )
 }
 
 export async function securityOperation(action, args) {

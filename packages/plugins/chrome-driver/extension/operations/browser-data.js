@@ -9,6 +9,7 @@ import {
   requirePermissions,
   safeFilename
 } from './shared.js'
+import { fingerprintTargetUrl } from './target-guard.js'
 
 export async function windowsOperation(action, args) {
   if (action === 'list') {
@@ -61,7 +62,16 @@ export async function tabsOperation(action, args) {
       url: args.url_patterns
     })).map(cleanTab)
   }
-  if (action === 'get') return cleanTab(await chrome.tabs.get(args.tab_id))
+  if (action === 'get') {
+    const tab = await chrome.tabs.get(args.tab_id)
+    const cleaned = cleanTab(tab)
+    return {
+      ...cleaned,
+      ...(typeof tab.pendingUrl === 'string' && tab.pendingUrl !== ''
+        ? {}
+        : { url_sha256: await fingerprintTargetUrl(tab.url) })
+    }
+  }
   if (action === 'get_active') {
     const [tab] = await chrome.tabs.query({ active: true, windowId: args.window_id })
     if (tab == null) throw error('TARGET_NOT_FOUND', 'No active tab exists in the requested window.')

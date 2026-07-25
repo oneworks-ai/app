@@ -1,3 +1,4 @@
+/* @jsxRuntime classic */
 /* @jsx h */
 /* eslint-disable max-lines -- Demo view intentionally exercises host UI surfaces in one inspectable example. */
 

@@ -86,6 +86,7 @@ describe('client plugin host registry', () => {
           settingsPages: [
             {
               clientView: 'settings-view',
+              group: 'external-control',
               icon: 'settings',
               id: 'account',
               title: 'Account settings'
@@ -201,6 +202,7 @@ describe('client plugin host registry', () => {
     })
     expect(snapshot.slots['settings.pages']?.[0]).toMatchObject({
       clientView: 'settings-view',
+      group: 'external-control',
       id: 'account',
       pluginScope: 'demo',
       title: 'Account settings'

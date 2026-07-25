@@ -463,10 +463,15 @@ export interface PluginContributionRoute extends PluginContributionBase {
 }
 
 interface PluginContributionSettingsPageBase extends PluginContributionBase {
+  /** Host-owned Settings group where this page is rendered. */
+  group?: PluginContributionSettingsPageGroup
   id: string
   title: string
   icon?: string
 }
+
+/** Settings groups whose navigation and layout are owned by the host. */
+export type PluginContributionSettingsPageGroup = 'external-control'
 
 export type PluginContributionSettingsPage =
   & PluginContributionSettingsPageBase
