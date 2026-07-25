@@ -96,6 +96,7 @@ import {
 import type { ModelServiceConfigSessionRequest } from './config/modelServiceConfigSession'
 import { openExternalUrl } from './config/modelServiceProviderActionUtils'
 import { modelServiceImportQueryKeys, parseModelServiceQueryImport } from './config/modelServiceQueryImport'
+import { partitionPluginSettingsPages } from './config/pluginSettingsNavigation'
 import { toLabel } from './config/record-editors/schemaRecordUtils'
 import { toDisplayEnvironmentName, toEnvironmentReference } from './config/worktree-environment-panel-model'
 import { PluginSettingsPage } from './plugins/PluginSettingsPage'
@@ -121,6 +122,7 @@ interface ConfigContentTab {
   key: string
   label: string
   pluginSettingsPage?: PluginSettingsPageContribution
+  searchText?: string
   type?: undefined
   value?: unknown
 }
@@ -480,6 +482,10 @@ export function ConfigView() {
       (typeof page.clientView === 'string' && page.clientView.trim() !== '') ||
       (page.schema != null && typeof page.schema === 'object' && !Array.isArray(page.schema))
     )), [pluginSettingsPages])
+  const { defaultPages: defaultPluginSettingsPages, externalControlPages } = useMemo(
+    () => partitionPluginSettingsPages(validPluginSettingsPages),
+    [validPluginSettingsPages]
+  )
 
   const configTabKeys = useMemo(() => new Set<string>(editableConfigSectionKeys), [])
 
@@ -522,7 +528,7 @@ export function ConfigView() {
       value: currentSource?.adapters
     },
     { key: 'plugins', icon: 'extension', label: t('config.sections.plugins'), value: currentSource?.plugins },
-    ...validPluginSettingsPages.map(page => ({
+    ...defaultPluginSettingsPages.map(page => ({
       key: getPluginSettingsPageKey(page.pluginScope, page.id),
       icon: page.icon ?? 'extension',
       label: page.title,
@@ -531,6 +537,18 @@ export function ConfigView() {
     { key: 'mcp', icon: 'account_tree', label: t('config.sections.mcp'), value: currentSource?.mcp },
     { key: 'voice', icon: 'mic', label: t('config.sections.voice'), value: currentSource?.voice },
     { key: 'shortcuts', icon: 'keyboard', label: t('config.sections.shortcuts'), value: currentSource?.shortcuts },
+    ...(externalControlPages.length > 0
+      ? [
+        { key: 'group-external-control', type: 'group' as const, label: t('config.groups.externalControl') },
+        ...externalControlPages.map(page => ({
+          key: getPluginSettingsPageKey(page.pluginScope, page.id),
+          icon: page.icon ?? 'extension',
+          label: page.title,
+          pluginSettingsPage: page,
+          searchText: t('config.groups.externalControl')
+        }))
+      ]
+      : []),
     { key: 'group-app', type: 'group', label: t('config.groups.app') },
     { key: 'externalSessions', icon: 'history', label: t('config.sections.externalSessions') },
     ...(hasDesktopSettings
@@ -558,7 +576,8 @@ export function ConfigView() {
     hasDesktopSettings,
     hasSavedPasswords,
     t,
-    validPluginSettingsPages
+    defaultPluginSettingsPages,
+    externalControlPages
   ])
   const tabKeys = useMemo(() => new Set(tabs.filter(tab => tab.type !== 'group').map(tab => tab.key)), [tabs])
   const desktopNavGroups = useMemo(() => {
@@ -591,7 +610,8 @@ export function ConfigView() {
       const label = String(tab.label)
       const matches = query === '' ||
         label.toLowerCase().includes(query) ||
-        tab.key.toLowerCase().includes(query)
+        tab.key.toLowerCase().includes(query) ||
+        tab.searchText?.toLowerCase().includes(query) === true
 
       if (matches) {
         targetGroup.tabs.push(navTab)
@@ -1707,14 +1727,18 @@ export function ConfigView() {
 
   const routeSidebarGroups = useMemo(() =>
     desktopNavGroups.map(group => ({
-      icon: group.key === 'group-app' ? 'apps' : 'tune',
+      icon: group.key === 'group-app'
+        ? 'apps'
+        : group.key === 'group-external-control'
+        ? 'devices'
+        : 'tune',
       key: group.key,
       label: group.label,
       items: group.tabs.map(tab => ({
         icon: tab.icon,
         key: tab.key,
         label: tab.label,
-        searchText: `${tab.key} ${String(tab.label)}`
+        searchText: `${tab.key} ${String(tab.label)} ${tab.searchText ?? ''}`.trim()
       }))
     })), [desktopNavGroups])
 

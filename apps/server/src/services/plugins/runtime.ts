@@ -114,17 +114,7 @@ const README_BASE_FILE_PRIORITY = new Map(README_FILE_NAMES.map((fileName, index
 const README_VARIANT_PATTERN = /^readme(?:\.([\w-]+))?\.(?:md|markdown)$/i
 const IGNORED_WATCH_PATH_PARTS = new Set(['.git', 'node_modules'])
 const DISCOVERY_WATCH_FILE_NAMES = new Set(['package.json', 'plugin.json', 'plugin.yaml', 'plugin.yml'])
-const HOST_VITE_SELF_HANDLED_CLIENT_EXTENSIONS = new Set([
-  '.css',
-  '.jsx',
-  '.less',
-  '.postcss',
-  '.sass',
-  '.scss',
-  '.styl',
-  '.stylus',
-  '.tsx'
-])
+const VITE_CONFIG_BUNDLE_TEMP_PATTERN = /(?:^|[\\/])vite\.config\.[^\\/]+\.timestamp-\d+-[\da-f]+\.mjs$/i
 const DETAIL_ASSET_GROUPS = [
   { kind: 'skills', defaultPath: 'skills' },
   { kind: 'entities', defaultPath: 'entities' },
@@ -486,28 +476,58 @@ const getHostViteDevClientAllowedRoots = () => [
   ...parseHostViteExtraAllowedRoots()
 ]
 
-const getHostViteDevClientSourceRoot = (record: RuntimeRecord) => {
-  if (record.instance.client?.devClientEntryUrl?.includes('/@fs/') !== true) return undefined
-  const devEntry = normalizeEntryPathForUrl(record.manifest.plugin?.client?.devEntry)
-  if (devEntry == null) return undefined
-  return path.dirname(path.resolve(record.instance.pluginRoot, devEntry))
+interface HostViteClientChangePaths {
+  builtEntry?: string
+  devEntry?: string
+  pluginRoot: string
+  relativePath: string
+  serverEntry?: string
 }
 
-const getHostViteDevClientEntryPath = (record: RuntimeRecord) => {
-  if (record.instance.client?.devClientEntryUrl?.includes('/@fs/') !== true) return undefined
-  const devEntry = normalizeEntryPathForUrl(record.manifest.plugin?.client?.devEntry)
-  if (devEntry == null) return undefined
-  return path.resolve(record.instance.pluginRoot, devEntry)
+const isHostViteManagedClientChange = ({
+  builtEntry,
+  devEntry,
+  pluginRoot,
+  relativePath,
+  serverEntry
+}: HostViteClientChangePaths) => {
+  if (relativePath === '') return false
+  const changedPath = path.resolve(pluginRoot, relativePath)
+  if (!isPathInside(pluginRoot, changedPath)) return false
+  const pluginRelativePath = path.relative(pluginRoot, changedPath)
+  if (DISCOVERY_WATCH_FILE_NAMES.has(pluginRelativePath)) return false
+
+  const normalizedDevEntry = normalizeEntryPathForUrl(devEntry)
+  const devEntryPath = normalizedDevEntry == null ? undefined : path.resolve(pluginRoot, normalizedDevEntry)
+  if (devEntryPath == null || !isPathInside(pluginRoot, devEntryPath)) return false
+
+  const normalizedServerEntry = normalizeEntryPathForUrl(serverEntry)
+  if (normalizedServerEntry != null) {
+    const serverRoot = path.dirname(path.resolve(pluginRoot, normalizedServerEntry))
+    if (isPathInside(pluginRoot, serverRoot) && isPathInside(serverRoot, changedPath)) return false
+  }
+
+  const sourceRoot = path.dirname(devEntryPath)
+  if (sourceRoot === path.resolve(pluginRoot)) return false
+  if (isPathInside(sourceRoot, changedPath)) return true
+
+  const normalizedBuiltEntry = normalizeEntryPathForUrl(builtEntry)
+  if (normalizedBuiltEntry == null) return false
+  const builtEntryPath = path.resolve(pluginRoot, normalizedBuiltEntry)
+  if (!isPathInside(pluginRoot, builtEntryPath)) return false
+  const builtRoot = path.dirname(builtEntryPath)
+  return builtRoot !== path.resolve(pluginRoot) && isPathInside(builtRoot, changedPath)
 }
 
 const shouldSkipPluginReloadForHostViteClientChange = (record: RuntimeRecord, relativePath: string) => {
-  if (relativePath === '') return false
-  const sourceRoot = getHostViteDevClientSourceRoot(record)
-  if (sourceRoot == null) return false
-  const changedPath = path.resolve(record.instance.pluginRoot, relativePath)
-  if (!isPathInside(sourceRoot, changedPath)) return false
-  if (changedPath === getHostViteDevClientEntryPath(record)) return false
-  return HOST_VITE_SELF_HANDLED_CLIENT_EXTENSIONS.has(path.extname(changedPath).toLowerCase())
+  if (record.instance.client?.devClientEntryUrl?.includes('/@fs/') !== true) return false
+  return isHostViteManagedClientChange({
+    builtEntry: record.manifest.plugin?.client?.entry,
+    devEntry: record.manifest.plugin?.client?.devEntry,
+    pluginRoot: record.instance.pluginRoot,
+    relativePath,
+    serverEntry: record.manifest.plugin?.server?.entry
+  })
 }
 
 const validateId = (kind: string, id: string, scope?: string) => {
@@ -549,6 +569,7 @@ const serializePlugin = (record: RuntimeRecord): PluginRuntimeInstance => ({
 const shouldIgnoreWatchPath = (relativePath: string) => {
   if (relativePath === '') return false
   if (relativePath.endsWith('.DS_Store')) return true
+  if (VITE_CONFIG_BUNDLE_TEMP_PATTERN.test(relativePath)) return true
   return relativePath.split(/[\\/]/).some(part => IGNORED_WATCH_PATH_PARTS.has(part))
 }
 
@@ -1842,3 +1863,13 @@ export const readProxyHandlerBody = async (body: unknown) => {
 }
 
 export const readJsonFileForTests = async (filePath: string) => JSON.parse(await readFile(filePath, 'utf8')) as unknown
+
+export const isHostViteManagedClientChangeForTests = (input: {
+  builtEntry?: string
+  devEntry?: string
+  pluginRoot: string
+  relativePath: string
+  serverEntry?: string
+}) => isHostViteManagedClientChange(input)
+
+export const shouldIgnorePluginWatchPathForTests = (relativePath: string) => shouldIgnoreWatchPath(relativePath)

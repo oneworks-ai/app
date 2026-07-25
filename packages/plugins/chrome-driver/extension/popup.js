@@ -114,15 +114,10 @@ async function render() {
         ? includedByRaw ? 'Included while Raw CDP & JavaScript is enabled.' : group.detail
         : 'Install the privileged extension flavor first.'
     }</span>`
-    const button = document.createElement('button')
-    button.textContent = available ? includedByRaw ? 'Included' : enabled ? 'Disable' : 'Enable' : 'Unavailable'
-    button.disabled = !available || includedByRaw
-    button.setAttribute('aria-pressed', String(enabled))
-    button.addEventListener(
-      'click',
-      () => send({ type: 'oneworks:set-advanced-access', key: group.key, enabled: !enabled }).then(render, showError)
-    )
-    row.append(label, button)
+    const state = document.createElement('span')
+    state.className = `advanced-state ${enabled ? 'enabled' : ''}`
+    state.textContent = available ? includedByRaw ? 'Included' : enabled ? 'Enabled' : 'Disabled' : 'Unavailable'
+    row.append(label, state)
     return row
   }))
 }

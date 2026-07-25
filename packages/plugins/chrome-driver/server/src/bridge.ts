@@ -8,6 +8,16 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 
+import {
+  assertWebsitePermissionCapacity,
+  createWebsitePermissionRule,
+  emptyWebsitePermissions,
+  findWebsitePermission,
+  normalizeWebsitePermissions,
+  websitePermissionModes
+} from './site-permissions.js'
+import type { WebsitePermissionMode, WebsitePermissions } from './site-permissions.js'
+
 const PROTOCOL_VERSION = 1
 const MAX_REQUEST_BYTES = 2 * 1024 * 1024
 const MAX_ARTIFACT_BYTES = 50 * 1024 * 1024
@@ -18,8 +28,28 @@ const POLL_TIMEOUT_MS = 25_000
 const CONNECTION_STALE_MS = 45_000
 const PAIRING_TICKET_TTL_MS = 2 * 60_000
 const CONFIRMATION_TTL_MS = 5 * 60_000
+const advancedAccessKeys = ['raw_debugger', 'cookie_values', 'sensitive_fields'] as const
+export const EXECUTION_TARGET_GUARD_CAPABILITY = {
+  algorithm: 'SHA-256',
+  canonicalization: 'whatwg-url-href-v1',
+  version: 1
+} as const
 
 type JsonRecord = Record<string, unknown>
+export type AdvancedAccessKey = typeof advancedAccessKeys[number]
+
+export interface ConfiguredAdvancedAccess {
+  cookie_values: boolean
+  raw_debugger: boolean
+  scope: 'oneworks_configuration'
+  sensitive_fields: boolean
+  updated_at?: string
+}
+
+export interface ConfiguredAdvancedAccessStatus extends ConfiguredAdvancedAccess {
+  sync_error?: string
+  sync_state: 'pending_connection' | 'sync_failed' | 'synced' | 'syncing'
+}
 
 interface BridgeErrorShape {
   advanced_access_key?: string
@@ -36,6 +66,7 @@ interface BridgeCommand {
   args: JsonRecord
   command_id: string
   created_at: string
+  expected_targets?: ExpectedTargetGuard[]
   op: string
   risk_tier: number
   target_key: string
@@ -90,6 +121,25 @@ interface Confirmation {
   target_key: string
 }
 
+interface WebsitePermissionContext {
+  mode: 'default' | WebsitePermissionMode
+  revision: number
+  targets: WebsitePermissionTarget[]
+}
+
+interface WebsitePermissionTarget {
+  mode?: WebsitePermissionMode
+  rule_id?: string
+  tab_id?: number
+  url?: string
+  url_sha256?: string
+}
+
+interface ExpectedTargetGuard {
+  tab_id: number
+  url_sha256?: string
+}
+
 interface ArtifactUpload {
   chunks: string[]
   createdAt: number
@@ -136,6 +186,24 @@ const isRecord = (value: unknown): value is JsonRecord => (
 
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 
+const emptyConfiguredAdvancedAccess = (): ConfiguredAdvancedAccess => ({
+  cookie_values: false,
+  raw_debugger: false,
+  scope: 'oneworks_configuration',
+  sensitive_fields: false
+})
+
+const normalizeConfiguredAdvancedAccess = (value: unknown): ConfiguredAdvancedAccess => {
+  const record = isRecord(value) ? value : {}
+  return {
+    cookie_values: record.cookie_values === true,
+    raw_debugger: record.raw_debugger === true,
+    scope: 'oneworks_configuration',
+    sensitive_fields: record.sensitive_fields === true,
+    ...(text(record.updated_at) === '' ? {} : { updated_at: text(record.updated_at) })
+  }
+}
+
 const bridgeError = (details: BridgeErrorShape) => {
   const error = Object.assign(new Error(details.message), { code: details.code, details })
   return error
@@ -157,17 +225,156 @@ const stableJson = (value: unknown): string => {
   return JSON.stringify(value) ?? 'null'
 }
 
-const commandDigest = (op: string, args: JsonRecord, targetKey: string, connection: ActiveConnection) => (
+const commandDigest = (
+  op: string,
+  args: JsonRecord,
+  targetKey: string,
+  connection: ActiveConnection,
+  websitePermission?: WebsitePermissionContext
+) => (
   tokenHash(
     stableJson({
       args,
       browserSessionId: connection.browserSessionId,
       connectionId: connection.connectionId,
       op,
-      targetKey
+      targetKey,
+      websitePermission
     })
   )
 )
+
+interface WebsiteOperationScope {
+  arrayFields?: readonly string[]
+  scalarFields?: readonly string[]
+  targetTabs?: boolean
+}
+
+const websiteOperationScope = (op: string, args: JsonRecord): WebsiteOperationScope => {
+  const [module, action] = op.split('.')
+  if (module === 'debug' && action === 'detach') return {}
+  if (module === 'page' || module === 'frames' || module === 'debug') return { targetTabs: true }
+  if (module === 'raw') return { scalarFields: ['expected_origin'], targetTabs: true }
+  if (module === 'windows' && action === 'create') return { arrayFields: ['urls'] }
+  if (module === 'tabs') {
+    if (action === 'create') return { scalarFields: ['url'] }
+    if (action === 'update' && normalizedWebsiteUrl(args.url) != null) return { scalarFields: ['url'] }
+    if (
+      new Set([
+        'back',
+        'close',
+        'discard',
+        'duplicate',
+        'forward',
+        'get',
+        'get_zoom',
+        'group',
+        'move',
+        'reload',
+        'set_zoom',
+        'ungroup',
+        'update'
+      ]).has(action)
+    ) return { targetTabs: true }
+  }
+  if (module === 'history' && new Set(['add', 'remove_url', 'visits']).has(action)) {
+    return { scalarFields: ['url'] }
+  }
+  if (module === 'bookmarks' && new Set(['create', 'update']).has(action)) return { scalarFields: ['url'] }
+  if (module === 'downloads' && action === 'start') return { scalarFields: ['url'] }
+  if (module === 'readingList' && new Set(['add', 'list', 'remove', 'update']).has(action)) {
+    return { scalarFields: ['url'] }
+  }
+  if (module === 'cookies') return { scalarFields: ['url'] }
+  if (module === 'contentSettings' && action === 'get') {
+    return { scalarFields: ['primary_url', 'secondary_url'] }
+  }
+  if (module === 'browsingData' && new Set(['preview_removal', 'remove']).has(action)) {
+    return { arrayFields: ['origins'] }
+  }
+  return {}
+}
+
+const normalizedWebsiteUrl = (value: unknown) => {
+  if (typeof value !== 'string') return undefined
+  try {
+    const url = new URL(value)
+    if (!['http:', 'https:'].includes(url.protocol)) return undefined
+    url.username = ''
+    url.password = ''
+    url.search = ''
+    url.hash = ''
+    return url.toString()
+  } catch {
+    return undefined
+  }
+}
+
+const expectedTargetsFor = (context: WebsitePermissionContext): ExpectedTargetGuard[] => (
+  context.targets.flatMap(target =>
+    target.tab_id == null
+      ? []
+      : [{ tab_id: target.tab_id, ...(target.url_sha256 == null ? {} : { url_sha256: target.url_sha256 }) }]
+  )
+)
+
+const policyPatternDigest = (pattern: string) => tokenHash(pattern).slice(0, 16)
+
+const explicitWebsiteUrls = (op: string, args: JsonRecord) => {
+  const scope = websiteOperationScope(op, args)
+  const urls = new Set<string>()
+  for (const field of scope.scalarFields ?? []) {
+    const url = normalizedWebsiteUrl(args[field])
+    if (url != null) urls.add(url)
+  }
+  for (const field of scope.arrayFields ?? []) {
+    if (!Array.isArray(args[field])) continue
+    for (const value of args[field]) {
+      const url = normalizedWebsiteUrl(value)
+      if (url != null) urls.add(url)
+    }
+  }
+  return urls
+}
+
+const targetTabIds = (op: string, args: JsonRecord) => {
+  if (websiteOperationScope(op, args).targetTabs !== true) return []
+  const values = [
+    ...(Number.isInteger(args.tab_id) ? [Number(args.tab_id)] : []),
+    ...(Array.isArray(args.tab_ids) ? args.tab_ids.filter(Number.isInteger).map(Number) : [])
+  ]
+  return [...new Set(values)].sort((left, right) => left - right)
+}
+
+const executionTargetGuardRequired = (op: string) => {
+  const [module, action] = op.split('.')
+  if (module === 'raw') return true
+  if (module === 'debug') return !new Set(['detach', 'status']).has(action)
+  return module === 'page' &&
+    new Set([
+      'print',
+      'print_to_pdf',
+      'save_mhtml',
+      'screenshot',
+      'snapshot',
+      'snapshot_sensitive',
+      'type_sensitive'
+    ]).has(action)
+}
+
+const supportsExecutionTargetGuard = (capabilities: unknown) => {
+  if (!isRecord(capabilities) || !isRecord(capabilities.execution_target_guard)) return false
+  const guard = capabilities.execution_target_guard
+  return guard.algorithm === EXECUTION_TARGET_GUARD_CAPABILITY.algorithm &&
+    guard.canonicalization === EXECUTION_TARGET_GUARD_CAPABILITY.canonicalization &&
+    guard.version === EXECUTION_TARGET_GUARD_CAPABILITY.version
+}
+
+const operationRequiresTargetGuardCapability = (
+  op: string,
+  args: JsonRecord,
+  websiteRuleCount: number
+) => executionTargetGuardRequired(op) || websiteRuleCount > 0 && targetTabIds(op, args).length > 0
 
 const readActions = new Set([
   'check_url',
@@ -307,12 +514,16 @@ const canonicalTargetKey = (op: string, args: JsonRecord) => {
   if (Number.isInteger(args.group_id)) return `group:${String(args.group_id)}`
   if (Number.isInteger(args.download_id)) return `download:${String(args.download_id)}`
   if (typeof args.bookmark_id === 'string') return `bookmark:${tokenHash(args.bookmark_id).slice(0, 12)}`
-  if (typeof args.url === 'string') {
-    try {
-      return `origin:${new URL(args.url).origin}`
-    } catch {}
-  }
+  const [websiteUrl] = explicitWebsiteUrls(op, args)
+  if (websiteUrl != null) return `origin:${new URL(websiteUrl).origin}`
   return /^[A-Za-z][\w-]{0,63}$/u.test(module) ? module : 'browser'
+}
+
+const advancedAccessKeyForOperation = (op: string): AdvancedAccessKey | undefined => {
+  if (op.startsWith('raw.')) return 'raw_debugger'
+  if (op === 'cookies.list_with_values') return 'cookie_values'
+  if (op === 'page.snapshot_sensitive' || op === 'page.type_sensitive') return 'sensitive_fields'
+  return undefined
 }
 
 const summarizeField = (key: string, value: unknown) => {
@@ -525,11 +736,19 @@ const trustedOneWorksOrigin = (value: string) => {
 }
 
 export class ChromeExtensionBridge {
+  readonly advancedAccessPath: string
   readonly controlToken = randomBytes(32).toString('base64url')
   readonly credentialPath: string
   readonly persistentStatePath: string
+  readonly websitePermissionsPath: string
 
   #activeConnection?: ActiveConnection
+  #advancedAccessMutationTail = Promise.resolve()
+  #advancedAccessRevision = 0
+  #advancedAccessSyncError?: string
+  #advancedAccessSyncRevision = -1
+  #advancedAccessSyncState: ConfiguredAdvancedAccessStatus['sync_state'] = 'pending_connection'
+  #advancedAccessSyncTail = Promise.resolve()
   #artifactUploads = new Map<string, ArtifactUpload>()
   #completedArtifacts = new Map<string, { data: string; expiresAt: number }>()
   #ackLedger = new Map<string, { expiresAt: number }>()
@@ -550,10 +769,16 @@ export class ChromeExtensionBridge {
   #globalTail = Promise.resolve()
   #targetTails = new Map<string, Promise<void>>()
   #url?: string
+  #configuredAdvancedAccess = emptyConfiguredAdvancedAccess()
+  #websitePermissions = emptyWebsitePermissions()
+  #websitePermissionsMutationTail = Promise.resolve()
+  #websitePermissionsRevision = 0
 
   constructor(readonly options: ChromeBridgeOptions) {
+    this.advancedAccessPath = join(options.projectHome, 'chrome-driver', 'advanced-access.json')
     this.credentialPath = credentialPathFor(options.workspaceFolder)
     this.persistentStatePath = join(options.projectHome, 'chrome-driver', 'connection.json')
+    this.websitePermissionsPath = join(options.projectHome, 'chrome-driver', 'site-permissions.json')
   }
 
   get url() {
@@ -561,7 +786,11 @@ export class ChromeExtensionBridge {
   }
 
   async start() {
-    await this.#loadPairingState()
+    await Promise.all([
+      this.#loadPairingState(),
+      this.#loadConfiguredAdvancedAccess(),
+      this.#loadWebsitePermissions()
+    ])
     this.#server = createServer((request, response) => {
       void this.#handleRequest(request, response)
     })
@@ -701,6 +930,162 @@ export class ChromeExtensionBridge {
     }
   }
 
+  getConfiguredAdvancedAccess() {
+    const syncState = this.#advancedAccessSyncRevision === this.#advancedAccessRevision
+      ? this.#advancedAccessSyncState
+      : 'syncing'
+    return {
+      ...this.#configuredAdvancedAccess,
+      sync_state: this.status().connected ? syncState : 'pending_connection',
+      ...(syncState === 'sync_failed' && this.#advancedAccessSyncError != null
+        ? { sync_error: this.#advancedAccessSyncError }
+        : {})
+    } satisfies ConfiguredAdvancedAccessStatus
+  }
+
+  async setConfiguredAdvancedAccess(key: AdvancedAccessKey, enabled: boolean) {
+    if (!advancedAccessKeys.includes(key) || typeof enabled !== 'boolean') {
+      throw bridgeError({
+        code: 'INVALID_ARGUMENT',
+        message: 'A known advanced access key and boolean enabled value are required.',
+        recoverable: true
+      })
+    }
+    const mutation = this.#advancedAccessMutationTail.then(async () => {
+      const next = {
+        ...this.#configuredAdvancedAccess,
+        [key]: enabled,
+        updated_at: new Date().toISOString()
+      }
+      await this.#saveConfiguredAdvancedAccess(next)
+      this.#configuredAdvancedAccess = next
+      this.#advancedAccessRevision += 1
+    })
+    this.#advancedAccessMutationTail = mutation.catch(() => undefined)
+    await mutation
+    this.#recordAudit({
+      op: 'settings.advanced_access',
+      outcome: 'succeeded',
+      riskTier: 2,
+      summary: `advanced access preference changed (key=${key}, enabled=${String(enabled)})`,
+      targetKey: 'settings:advanced-access'
+    })
+    if (this.status().connected) {
+      await this.#queueAdvancedAccessSync().catch(error => {
+        this.options.logger.warn({ error }, '[chrome-driver] failed to synchronize configured advanced access')
+      })
+    } else {
+      this.#advancedAccessSyncError = undefined
+      this.#advancedAccessSyncState = 'pending_connection'
+    }
+    return this.getConfiguredAdvancedAccess()
+  }
+
+  getWebsitePermissions() {
+    return {
+      ...this.#websitePermissions,
+      rules: this.#websitePermissions.rules.map(rule => ({ ...rule }))
+    }
+  }
+
+  async addWebsitePermission(pattern: string, mode: WebsitePermissionMode) {
+    let addedPattern = ''
+    const result = await this.#mutateWebsitePermissions(current => {
+      try {
+        assertWebsitePermissionCapacity(current.rules)
+        const rule = createWebsitePermissionRule(pattern, mode)
+        addedPattern = rule.pattern
+        return {
+          rules: [rule, ...current.rules],
+          scope: 'oneworks_configuration' as const,
+          updated_at: new Date().toISOString()
+        }
+      } catch (error) {
+        throw bridgeError({
+          code: 'INVALID_SITE_PERMISSION',
+          message: error instanceof Error ? error.message : String(error),
+          recoverable: true
+        })
+      }
+    })
+    this.#recordAudit({
+      op: 'settings.site_permission',
+      outcome: 'succeeded',
+      riskTier: 2,
+      summary: `website permission added (mode=${mode}, pattern_sha256=${policyPatternDigest(addedPattern)})`,
+      targetKey: 'settings:site-permissions'
+    })
+    return result
+  }
+
+  async setWebsitePermission(ruleId: string, mode: WebsitePermissionMode) {
+    if (text(ruleId) === '' || !websitePermissionModes.includes(mode)) {
+      throw bridgeError({
+        code: 'INVALID_SITE_PERMISSION',
+        message: 'A website permission rule id and known mode are required.',
+        recoverable: true
+      })
+    }
+    let pattern = ''
+    const result = await this.#mutateWebsitePermissions(current => {
+      const index = current.rules.findIndex(rule => rule.id === ruleId)
+      if (index < 0) {
+        throw bridgeError({
+          code: 'SITE_PERMISSION_NOT_FOUND',
+          message: 'The website permission rule no longer exists.',
+          recoverable: true
+        })
+      }
+      pattern = current.rules[index]!.pattern
+      const rules = current.rules.map((rule, ruleIndex) =>
+        ruleIndex === index
+          ? { ...rule, mode, updated_at: new Date().toISOString() }
+          : rule
+      )
+      return { rules, scope: 'oneworks_configuration' as const, updated_at: new Date().toISOString() }
+    })
+    this.#recordAudit({
+      op: 'settings.site_permission',
+      outcome: 'succeeded',
+      riskTier: 2,
+      summary: `website permission mode changed (mode=${mode}, pattern_sha256=${policyPatternDigest(pattern)})`,
+      targetKey: 'settings:site-permissions'
+    })
+    return result
+  }
+
+  async removeWebsitePermission(ruleId: string) {
+    if (text(ruleId) === '') {
+      throw bridgeError({ code: 'INVALID_SITE_PERMISSION', message: 'A rule id is required.', recoverable: true })
+    }
+    let removedPattern = ''
+    let removedMode: WebsitePermissionMode = 'always_ask'
+    const result = await this.#mutateWebsitePermissions(current => {
+      const removed = current.rules.find(rule => rule.id === ruleId)
+      const rules = current.rules.filter(rule => rule.id !== ruleId)
+      if (rules.length === current.rules.length) {
+        throw bridgeError({
+          code: 'SITE_PERMISSION_NOT_FOUND',
+          message: 'The website permission rule no longer exists.',
+          recoverable: true
+        })
+      }
+      removedPattern = removed!.pattern
+      removedMode = removed!.mode
+      return { rules, scope: 'oneworks_configuration' as const, updated_at: new Date().toISOString() }
+    })
+    this.#recordAudit({
+      op: 'settings.site_permission',
+      outcome: 'succeeded',
+      riskTier: 2,
+      summary: `website permission removed (mode=${removedMode}, pattern_sha256=${
+        policyPatternDigest(removedPattern)
+      })`,
+      targetKey: 'settings:site-permissions'
+    })
+    return result
+  }
+
   executeFromUi(op: string, args: JsonRecord, targetKey: string) {
     if (!new Set(['frames.list', 'capabilities.discover', 'security.get_policy', 'security.set_policy']).has(op)) {
       throw bridgeError({
@@ -735,14 +1120,49 @@ export class ChromeExtensionBridge {
     if (connection == null) {
       throw bridgeError({ code: 'DISCONNECTED', message: 'External Browser is not connected.', recoverable: true })
     }
+    if (
+      operationRequiresTargetGuardCapability(op, input.args, this.#websitePermissions.rules.length) &&
+      !supportsExecutionTargetGuard(connection.capabilities)
+    ) {
+      throw bridgeError({
+        code: 'EXTENSION_UPDATE_REQUIRED',
+        message: 'The connected Chrome extension cannot verify the exact execution target for this operation.',
+        recoverable: true,
+        user_action: 'Update the OneWorks Chrome extension, reconnect the browser, and retry the operation.'
+      })
+    }
+    const advancedAccessKey = advancedAccessKeyForOperation(op)
+    if (advancedAccessKey != null) this.#assertAdvancedAccessReady(advancedAccessKey, connection)
     const riskTier = Number.isInteger(input.riskTier) ? Math.max(0, Math.min(4, input.riskTier)) : 2
+    const resourceKeys = resourceKeysFor(input.args, targetKey)
+    const resolveInTargetQueue = targetTabIds(op, input.args).length > 0 &&
+      (this.#websitePermissions.rules.length > 0 || executionTargetGuardRequired(op))
+    const websitePermission = resolveInTargetQueue
+      ? await this.#enqueueTargets(
+        resourceKeys,
+        () => this.#resolveWebsitePermissionContext(op, input.args, connection),
+        op.startsWith('raw.')
+      )
+      : await this.#resolveWebsitePermissionContext(op, input.args, connection)
     this.#expireSecurityState()
-    const digest = commandDigest(op, input.args, targetKey, connection)
-    const auditSummary = summarizeAuditCommand(op, input.args, targetKey, digest)
+    const digest = commandDigest(op, input.args, targetKey, connection, websitePermission)
+    const permissionAudit = websitePermission.mode === 'default'
+      ? ''
+      : `; website_permission=${websitePermission.mode}; rule_ids=${
+        websitePermission.targets.flatMap(target => target.rule_id == null ? [] : [target.rule_id]).join('|')
+      }`
+    const auditSummary = `${summarizeAuditCommand(op, input.args, targetKey, digest)}${permissionAudit}`.slice(0, 500)
     const reviewSummary = op.startsWith('raw.')
-      ? summarizeRawReview(op, input.args, targetKey, digest)
+      ? `${summarizeRawReview(op, input.args, targetKey, digest)}${permissionAudit}`.slice(0, 900)
       : auditSummary
-    if (riskTier >= 3 && (this.#grants.get(digest) ?? 0) <= Date.now()) {
+    const confirmationRequired = advancedAccessKey != null
+      ? true
+      : websitePermission.mode === 'always_ask'
+      ? riskTier > 0
+      : websitePermission.mode === 'always_allow'
+      ? false
+      : riskTier >= 3
+    if (confirmationRequired && (this.#grants.get(digest) ?? 0) <= Date.now()) {
       const existing = [...this.#confirmations.values()].find(item =>
         item.digest === digest && item.status === 'pending'
       )
@@ -772,11 +1192,39 @@ export class ChromeExtensionBridge {
       })
     }
     this.#grants.delete(digest)
-    return await this.#enqueueTargets(resourceKeysFor(input.args, targetKey), async () => {
+    return await this.#enqueueTargets(resourceKeys, async () => {
+      if (this.#activeConnection?.connectionId !== connection.connectionId || !this.status().connected) {
+        throw bridgeError({
+          code: 'CONNECTION_CHANGED',
+          message: 'The browser connection changed while this operation was waiting to run.',
+          recoverable: true,
+          user_action: 'Review the current browser target and retry the operation.'
+        })
+      }
+      if (advancedAccessKey != null) this.#assertAdvancedAccessReady(advancedAccessKey, connection)
+      const currentWebsitePermission = await this.#resolveWebsitePermissionContext(op, input.args, connection)
+      if (stableJson(currentWebsitePermission) !== stableJson(websitePermission)) {
+        throw bridgeError({
+          code: 'SITE_PERMISSION_CONTEXT_CHANGED',
+          message: 'The target URL or its website permission changed while this operation was waiting.',
+          recoverable: true,
+          user_action: 'Review the current page and website permission, then retry the operation.'
+        })
+      }
+      const expectedTargets = expectedTargetsFor(currentWebsitePermission)
+      if (expectedTargets.length > 0 && !supportsExecutionTargetGuard(connection.capabilities)) {
+        throw bridgeError({
+          code: 'EXTENSION_UPDATE_REQUIRED',
+          message: 'The connected Chrome extension lost exact execution-target guard support.',
+          recoverable: true,
+          user_action: 'Update the OneWorks Chrome extension, reconnect the browser, and retry the operation.'
+        })
+      }
       const command: BridgeCommand = {
         args: input.args,
         command_id: `command_${randomUUID().replaceAll('-', '').slice(0, 16)}`,
         created_at: new Date().toISOString(),
+        ...(expectedTargets.length === 0 ? {} : { expected_targets: expectedTargets }),
         op,
         risk_tier: riskTier,
         target_key: targetKey
@@ -798,6 +1246,85 @@ export class ChromeExtensionBridge {
         throw error
       }
     }, op.startsWith('raw.'))
+  }
+
+  async #resolveWebsitePermissionContext(
+    op: string,
+    args: JsonRecord,
+    connection: ActiveConnection
+  ): Promise<WebsitePermissionContext> {
+    if (this.#activeConnection?.connectionId !== connection.connectionId || !this.status().connected) {
+      throw bridgeError({
+        code: 'CONNECTION_CHANGED',
+        message: 'The browser connection changed while resolving the target website.',
+        recoverable: true,
+        user_action: 'Review the current browser target and retry the operation.'
+      })
+    }
+    const revision = this.#websitePermissionsRevision
+    const rules = this.#websitePermissions.rules.map(rule => ({ ...rule }))
+    const targets: WebsitePermissionTarget[] = [...explicitWebsiteUrls(op, args)].sort().map(url => {
+      const rule = findWebsitePermission(rules, url)
+      return {
+        ...(rule == null ? {} : { mode: rule.mode, rule_id: rule.id }),
+        url
+      }
+    })
+    const tabIds = rules.length > 0 || executionTargetGuardRequired(op) ? targetTabIds(op, args) : []
+    for (const tabId of tabIds) {
+      if (this.#activeConnection?.connectionId !== connection.connectionId || !this.status().connected) {
+        throw bridgeError({
+          code: 'CONNECTION_CHANGED',
+          message: 'The browser connection changed while resolving the target website.',
+          recoverable: true
+        })
+      }
+      const result = await this.#dispatch({
+        args: { action: 'get', tab_id: tabId },
+        command_id: `command_${randomUUID().replaceAll('-', '').slice(0, 16)}`,
+        created_at: new Date().toISOString(),
+        op: 'tabs.get',
+        risk_tier: 1,
+        target_key: `tab:${tabId}`
+      })
+      if (revision !== this.#websitePermissionsRevision) {
+        throw bridgeError({
+          code: 'SITE_PERMISSION_CONTEXT_CHANGED',
+          message: 'Website permissions changed while resolving the target website.',
+          recoverable: true,
+          user_action: 'Review the current website permission and retry the operation.'
+        })
+      }
+      const pendingUrl = isRecord(result) ? text(result.pending_url) || text(result.pendingUrl) : ''
+      const targetUrl = pendingUrl === '' && isRecord(result) ? result.url : undefined
+      const url = normalizedWebsiteUrl(targetUrl)
+      const suppliedFingerprint = pendingUrl === '' && isRecord(result) ? text(result.url_sha256) : ''
+      const urlSha256 = /^[a-f0-9]{64}$/u.test(suppliedFingerprint) ? suppliedFingerprint : undefined
+      const rule = url == null ? undefined : findWebsitePermission(rules, url)
+      targets.push({
+        ...(rule == null ? {} : { mode: rule.mode, rule_id: rule.id }),
+        tab_id: tabId,
+        ...(url == null ? {} : { url }),
+        ...(urlSha256 == null ? {} : { url_sha256: urlSha256 })
+      })
+    }
+    const mode: WebsitePermissionContext['mode'] =
+      targets.some(target =>
+          (rules.length > 0 && target.tab_id != null && target.url == null) || target.mode === 'always_ask'
+        )
+        ? 'always_ask'
+        : targets.length > 0 && targets.every(target => target.mode === 'always_allow')
+        ? 'always_allow'
+        : 'default'
+    if (revision !== this.#websitePermissionsRevision) {
+      throw bridgeError({
+        code: 'SITE_PERMISSION_CONTEXT_CHANGED',
+        message: 'Website permissions changed while resolving the target website.',
+        recoverable: true,
+        user_action: 'Review the current website permission and retry the operation.'
+      })
+    }
+    return { mode, revision, targets }
   }
 
   async #handleRequest(request: IncomingMessage, response: ServerResponse) {
@@ -826,7 +1353,9 @@ export class ChromeExtensionBridge {
       }
       if (request.method === 'POST' && url.pathname === '/v1/extensions/poll') {
         const connection = this.#authenticateExtension(request)
+        const resumedAfterStale = Date.now() - connection.lastSeenAt >= CONNECTION_STALE_MS
         connection.lastSeenAt = Date.now()
+        if (resumedAfterStale) this.#scheduleAdvancedAccessSync()
         jsonResponse(response, 200, { ok: true, result: { command: await this.#nextCommand() } }, origin)
         return
       }
@@ -843,6 +1372,7 @@ export class ChromeExtensionBridge {
         connection.capabilities = body.capabilities
         connection.permissions = body.permissions
         connection.lastSeenAt = Date.now()
+        this.#scheduleAdvancedAccessSync()
         jsonResponse(response, 200, { ok: true, result: { accepted: true } }, origin)
         return
       }
@@ -1090,6 +1620,7 @@ export class ChromeExtensionBridge {
         ? Number(body.oneworks_tab_id)
         : existingConnection.oneWorksTabId
       existingConnection.permissions = body.permissions
+      this.#scheduleAdvancedAccessSync()
       return {
         browser_session_id: existingConnection.browserSessionId,
         client_token: clientToken,
@@ -1117,6 +1648,7 @@ export class ChromeExtensionBridge {
       trustedOrigin: normalizedTrustedOrigin
     }
     this.#activeConnection = connection
+    this.#scheduleAdvancedAccessSync()
     return {
       browser_session_id: connection.browserSessionId,
       client_token: clientToken,
@@ -1341,6 +1873,44 @@ export class ChromeExtensionBridge {
     return entry.audit_id
   }
 
+  #assertAdvancedAccessReady(key: AdvancedAccessKey, connection: ActiveConnection) {
+    const configured = this.#configuredAdvancedAccess
+    const configuredEnabled = configured[key] === true ||
+      (key !== 'raw_debugger' && configured.raw_debugger === true)
+    if (!configuredEnabled) {
+      throw bridgeError({
+        advanced_access_key: key,
+        code: 'ADVANCED_ACCESS_DISABLED',
+        message: 'The matching advanced access preference is disabled in OneWorks Settings.',
+        recoverable: true,
+        user_action: 'Enable the preference under Settings → External Browser → Advanced access, then retry.'
+      })
+    }
+    const syncState = this.getConfiguredAdvancedAccess().sync_state
+    if (syncState !== 'synced') {
+      throw bridgeError({
+        advanced_access_key: key,
+        code: 'ADVANCED_ACCESS_NOT_SYNCHRONIZED',
+        message: 'The saved advanced access preference is not synchronized to the connected browser.',
+        recoverable: true,
+        user_action: 'Reconnect the browser and wait for advanced access synchronization, then retry.'
+      })
+    }
+    const capabilities = isRecord(connection.capabilities) ? connection.capabilities : {}
+    const effective = isRecord(capabilities.advanced_access) ? capabilities.advanced_access : {}
+    if (effective[key] !== true) {
+      throw bridgeError({
+        advanced_access_key: key,
+        code: 'ADVANCED_ACCESS_NOT_APPLIED',
+        message: 'The connected browser did not apply the required advanced access policy.',
+        recoverable: true,
+        user_action: key === 'raw_debugger'
+          ? 'Install the privileged extension and reconnect the browser.'
+          : 'Reconnect the browser and verify the required Chrome permissions.'
+      })
+    }
+  }
+
   async #appendAudit(entry: AuditEntry) {
     try {
       const path = join(this.options.projectHome, 'chrome-driver', 'audit.jsonl')
@@ -1350,6 +1920,101 @@ export class ChromeExtensionBridge {
     } catch (error) {
       this.options.logger.warn({ error }, '[chrome-driver] failed to append audit')
     }
+  }
+
+  #queueAdvancedAccessSync() {
+    const snapshot = { ...this.#configuredAdvancedAccess }
+    const revision = this.#advancedAccessRevision
+    const sync = this.#advancedAccessSyncTail.then(() => this.#syncConfiguredAdvancedAccess(snapshot, revision))
+    this.#advancedAccessSyncTail = sync.catch(() => undefined)
+    return sync
+  }
+
+  #scheduleAdvancedAccessSync() {
+    void this.#queueAdvancedAccessSync().catch(error =>
+      this.options.logger.warn({ error }, '[chrome-driver] failed to synchronize configured advanced access')
+    )
+  }
+
+  async #syncConfiguredAdvancedAccess(snapshot: ConfiguredAdvancedAccess, revision: number) {
+    const connection = this.#activeConnection
+    if (connection == null || !this.status().connected) {
+      this.#advancedAccessSyncError = undefined
+      this.#advancedAccessSyncRevision = revision
+      this.#advancedAccessSyncState = 'pending_connection'
+      return
+    }
+    this.#advancedAccessSyncError = undefined
+    this.#advancedAccessSyncRevision = revision
+    this.#advancedAccessSyncState = 'syncing'
+    try {
+      const capabilities = isRecord(connection.capabilities) ? connection.capabilities : {}
+      const modules = isRecord(capabilities.modules) ? capabilities.modules : {}
+      const applied = {
+        ...snapshot,
+        raw_debugger: modules.raw === true && snapshot.raw_debugger
+      }
+      for (const key of advancedAccessKeys) {
+        if (this.#activeConnection?.connectionId !== connection.connectionId) {
+          this.#advancedAccessSyncState = 'pending_connection'
+          return
+        }
+        await this.executeFromUi('security.set_policy', { enabled: applied[key], key }, 'security')
+      }
+      this.#advancedAccessSyncState = 'synced'
+    } catch (error) {
+      if (this.#activeConnection?.connectionId !== connection.connectionId || !this.status().connected) {
+        this.#advancedAccessSyncState = 'pending_connection'
+      } else {
+        this.#advancedAccessSyncState = 'sync_failed'
+        this.#advancedAccessSyncError = error instanceof Error ? error.message : String(error)
+      }
+      throw error
+    }
+  }
+
+  async #loadConfiguredAdvancedAccess() {
+    try {
+      this.#configuredAdvancedAccess = normalizeConfiguredAdvancedAccess(
+        JSON.parse(await readFile(this.advancedAccessPath, 'utf8')) as unknown
+      )
+    } catch {}
+  }
+
+  async #saveConfiguredAdvancedAccess(value: ConfiguredAdvancedAccess) {
+    await mkdir(dirname(this.advancedAccessPath), { recursive: true, mode: 0o700 })
+    const temporaryPath = `${this.advancedAccessPath}.${process.pid}.${randomUUID()}.tmp`
+    await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 })
+    await rename(temporaryPath, this.advancedAccessPath)
+    await chmod(this.advancedAccessPath, 0o600)
+  }
+
+  async #mutateWebsitePermissions(mutate: (current: WebsitePermissions) => WebsitePermissions) {
+    const mutation = this.#websitePermissionsMutationTail.then(async () => {
+      const next = mutate(this.getWebsitePermissions())
+      await this.#saveWebsitePermissions(next)
+      this.#websitePermissions = next
+      this.#websitePermissionsRevision += 1
+    })
+    this.#websitePermissionsMutationTail = mutation.catch(() => undefined)
+    await mutation
+    return this.getWebsitePermissions()
+  }
+
+  async #loadWebsitePermissions() {
+    try {
+      this.#websitePermissions = normalizeWebsitePermissions(
+        JSON.parse(await readFile(this.websitePermissionsPath, 'utf8')) as unknown
+      )
+    } catch {}
+  }
+
+  async #saveWebsitePermissions(value: WebsitePermissions) {
+    await mkdir(dirname(this.websitePermissionsPath), { recursive: true, mode: 0o700 })
+    const temporaryPath = `${this.websitePermissionsPath}.${process.pid}.${randomUUID()}.tmp`
+    await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 })
+    await rename(temporaryPath, this.websitePermissionsPath)
+    await chmod(this.websitePermissionsPath, 0o600)
   }
 
   async #loadPairingState() {

@@ -14,7 +14,12 @@
     }, location.origin)
 
   window.addEventListener('message', event => {
-    if (event.source !== window || event.origin !== location.origin || event.data?.nonce !== nonce) return
+    if (event.source !== window || event.origin !== location.origin) return
+    if (event.data?.type === 'ONEWORKS_CHROME_HELLO_REQUEST') {
+      postHello()
+      return
+    }
+    if (event.data?.nonce !== nonce) return
     if (event.data.type === 'ONEWORKS_CHROME_WELCOME') {
       negotiated = event.data.protocol_version === 1
       window.postMessage(

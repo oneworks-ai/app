@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Vite config keeps dev-server plugins and production build policy together. */
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import process from 'node:process'
@@ -8,6 +9,7 @@ import { defineConfig } from 'vite'
 
 import { resolveDevServerFsAllow } from './vite-fs-allow.js'
 import { resolveManualChunk } from './vite-manual-chunks.js'
+import { pluginClientSourceWatch } from './vite-plugin-client-source-watch.js'
 
 const clientMode = process.env.__ONEWORKS_PROJECT_CLIENT_MODE__
 const clientDeployMode = process.env.__ONEWORKS_PROJECT_CLIENT_DEPLOY_MODE__
@@ -113,6 +115,7 @@ const sourceAlias = (find: string, source: string) => ({
 export default defineConfig({
   plugins: [
     react(),
+    pluginClientSourceWatch(),
     {
       name: 'oneworks-dev-base-redirect',
       enforce: 'pre',

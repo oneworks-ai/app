@@ -39,6 +39,7 @@ describe('plugin settings page host', () => {
         <PluginSettingsPage
           page={{
             clientView: 'control',
+            group: 'external-control',
             id: 'browser',
             pluginScope: 'demo',
             title: 'External Browser'
@@ -57,6 +58,7 @@ describe('plugin settings page host', () => {
       <App>
         <PluginSettingsPage
           page={{
+            group: 'external-control',
             id: 'preferences',
             pluginScope: 'demo',
             schema: {

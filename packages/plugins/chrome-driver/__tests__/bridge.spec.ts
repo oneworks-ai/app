@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { CHROME_EXTENSION_ID, ChromeExtensionBridge } from '../server/src/bridge.js'
+import type { AdvancedAccessInput } from './bridge-test-helpers.js'
+import { drainAdvancedAccessSync, extensionPost, guardedExtensionCapabilities } from './bridge-test-helpers.js'
 
 const trustedOrigin = 'http://127.0.0.1:5207'
 const pairingNonce = 'nonce-0123456789abcdef'
@@ -22,7 +24,7 @@ afterEach(async () => {
   )
 })
 
-async function setup() {
+async function setup(advancedAccess: AdvancedAccessInput = {}) {
   const root = await mkdtemp(join(tmpdir(), 'oneworks-chrome-bridge-test-'))
   const bridge = new ChromeExtensionBridge({
     logger: { error() {}, info() {}, warn() {} },
@@ -30,6 +32,9 @@ async function setup() {
     workspaceFolder: root
   })
   await bridge.start()
+  for (const [key, enabled] of Object.entries(advancedAccess)) {
+    await bridge.setConfiguredAdvancedAccess(key as keyof typeof advancedAccess, enabled)
+  }
   resources.push({ bridge, root })
   const offer = await bridge.createPairingOffer(trustedOrigin, CHROME_EXTENSION_ID, pairingNonce)
   const connectResponse = await fetch(new URL('/v1/extensions/connect', bridge.url), {
@@ -43,12 +48,13 @@ async function setup() {
       extension_session_id: 'extension-session-1',
       trusted_origin: offer.trusted_origin,
       ticket: offer.ticket,
-      capabilities: { tabs: true },
+      capabilities: guardedExtensionCapabilities({ modules: { raw: true }, tabs: true }),
       permissions: { permissions: ['tabs'] }
     })
   })
   const connected = await connectResponse.json() as any
   expect(connected.ok).toBe(true)
+  await drainAdvancedAccessSync(bridge, connected.result.session_token, advancedAccess)
   return {
     bridge,
     clientToken: connected.result.client_token,
@@ -57,13 +63,6 @@ async function setup() {
     root
   }
 }
-
-const extensionPost = (bridge: ChromeExtensionBridge, token: string, path: string, body = {}) =>
-  fetch(new URL(path, bridge.url), {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', origin: extensionOrigin },
-    body: JSON.stringify(body)
-  }).then(response => response.json()) as Promise<any>
 
 describe('chrome extension bridge', () => {
   it('keeps workspace credentials authoritative while a manager bridge is alive', async () => {
@@ -257,7 +256,20 @@ describe('chrome extension bridge', () => {
   it('accepts chunked artifacts larger than the JSON request limit and duplicate acknowledgements', async () => {
     const { bridge, token } = await setup()
     const execution = bridge.execute({ args: { tab_id: 5 }, op: 'page.screenshot', riskTier: 2, targetKey: 'tab:5' })
+    for (let index = 0; index < 2; index += 1) {
+      const targetCheck = await extensionPost(bridge, token, '/v1/extensions/poll')
+      expect(targetCheck.result.command).toMatchObject({ op: 'tabs.get' })
+      await extensionPost(bridge, token, '/v1/extensions/ack', {
+        command_id: targetCheck.result.command.command_id,
+        ok: true,
+        result: { id: 5, url: 'https://example.com/capture' }
+      })
+    }
     const poll = await extensionPost(bridge, token, '/v1/extensions/poll')
+    expect(poll.result.command).toMatchObject({
+      expected_targets: [{ tab_id: 5, url_sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) }],
+      op: 'page.screenshot'
+    })
     const data = 'A'.repeat(3 * 1024 * 1024)
     const started = await extensionPost(bridge, token, '/v1/extensions/artifacts/start', { size: data.length })
     const artifactId = started.result.artifact_id
@@ -316,36 +328,6 @@ describe('chrome extension bridge', () => {
       .toMatchObject({ code: 'CONFIRMATION_REQUIRED' })
   })
 
-  it('preserves explicitly enabled raw results while keeping code out of persistent audit', async () => {
-    const { bridge, root, token } = await setup()
-    const input = {
-      args: { action: 'evaluate', tab_id: 7, expected_origin: 'https://example.com', expression: 'localStorage.token' },
-      op: 'raw.evaluate',
-      riskTier: 4,
-      targetKey: 'tab:7'
-    }
-    await expect(bridge.execute(input)).rejects.toMatchObject({ code: 'CONFIRMATION_REQUIRED' })
-    const confirmation = bridge.status().pending_confirmations[0]
-    expect(confirmation).toMatchObject({ target_key: 'browser:raw' })
-    expect(confirmation.summary).toContain('localStorage.token')
-    expect(confirmation.summary).toMatch(/args_sha256=[a-f0-9]{16}/u)
-    bridge.approveConfirmation(confirmation.confirmation_id)
-
-    const execution = bridge.execute(input)
-    const poll = await extensionPost(bridge, token, '/v1/extensions/poll')
-    await extensionPost(bridge, token, '/v1/extensions/ack', {
-      command_id: poll.result.command.command_id,
-      ok: true,
-      result: { result: { value: 'Bearer canary-secret' } }
-    })
-    await expect(execution).resolves.toMatchObject({ result: { result: { value: 'Bearer canary-secret' } } })
-    expect(JSON.stringify(bridge.status().recent_audit)).not.toContain('localStorage.token')
-    await new Promise(resolve => setTimeout(resolve, 20))
-    const persisted = await readFile(join(root, 'project', 'chrome-driver', 'audit.jsonl'), 'utf8')
-    expect(persisted).not.toContain('localStorage.token')
-    expect(persisted).not.toContain('canary-secret')
-  })
-
   it('expires confirmations and invalidates them when the browser session changes', async () => {
     const { bridge, clientToken } = await setup()
     const input = { args: { tab_ids: [11] }, op: 'tabs.close', riskTier: 3, targetKey: 'tab:11' }
@@ -368,7 +350,7 @@ describe('chrome extension bridge', () => {
         extension_session_id: 'replacement-session',
         trusted_origin: trustedOrigin,
         client_token: clientToken,
-        capabilities: {},
+        capabilities: guardedExtensionCapabilities(),
         permissions: {}
       })
     })
@@ -380,7 +362,7 @@ describe('chrome extension bridge', () => {
   })
 
   it('enforces the server-side minimum risk when a control caller under-reports it', async () => {
-    const { bridge } = await setup()
+    const { bridge, token } = await setup({ raw_debugger: true })
     const response = await fetch(new URL('/v1/control', bridge.url), {
       method: 'POST',
       headers: { authorization: `Bearer ${bridge.controlToken}`, 'content-type': 'application/json' },
@@ -408,7 +390,7 @@ describe('chrome extension bridge', () => {
     })
     expect(overwrite.status).toBe(409)
     await expect(overwrite.json()).resolves.toMatchObject({ error: { code: 'CONFIRMATION_REQUIRED' } })
-    const raw = await fetch(new URL('/v1/control', bridge.url), {
+    const rawRequest = fetch(new URL('/v1/control', bridge.url), {
       method: 'POST',
       headers: { authorization: `Bearer ${bridge.controlToken}`, 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -423,6 +405,14 @@ describe('chrome extension bridge', () => {
         target_key: 'tab:9'
       })
     })
+    const rawTarget = await extensionPost(bridge, token, '/v1/extensions/poll')
+    expect(rawTarget.result.command).toMatchObject({ op: 'tabs.get', target_key: 'tab:9' })
+    await extensionPost(bridge, token, '/v1/extensions/ack', {
+      command_id: rawTarget.result.command.command_id,
+      ok: true,
+      result: { id: 9, url: 'https://example.com/' }
+    })
+    const raw = await rawRequest
     expect(raw.status).toBe(409)
     await expect(raw.json()).resolves.toMatchObject({ error: { code: 'CONFIRMATION_REQUIRED' } })
     expect(bridge.status().pending_confirmations.at(-1)).toMatchObject({ risk_tier: 4 })
@@ -468,7 +458,7 @@ describe('chrome extension bridge', () => {
         trusted_origin: trustedOrigin,
         client_token: clientToken,
         oneworks_tab_id: 42,
-        capabilities: { tabs: true },
+        capabilities: guardedExtensionCapabilities({ tabs: true }),
         permissions: { permissions: ['tabs'] }
       })
     })

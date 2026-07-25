@@ -24,6 +24,7 @@
             "en": "Pair an external browser, grant capabilities, review confirmations, and inspect bridge state.",
             "zh-Hans": "配对外部浏览器、按需授权、处理确认并查看连接状态。"
           },
+          "group": "external-control",
           "icon": "language",
           "clientView": "control"
         }

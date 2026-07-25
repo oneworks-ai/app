@@ -1,3 +1,6 @@
+/// <reference types="vite/client" />
+/* eslint-disable max-lines -- Demo entry keeps activation and its literal Vite HMR boundaries together. */
+
 const readPluginVersion = () => {
   try {
     return new URL(import.meta.url).searchParams.get('pluginVersion') ?? String(Date.now())
@@ -7,18 +10,7 @@ const readPluginVersion = () => {
 }
 
 const importWithPluginVersion = (modulePath, pluginVersion) =>
-  import(`${modulePath}?pluginVersion=${encodeURIComponent(pluginVersion)}`)
-
-const isSourceEntry = () => {
-  try {
-    return new URL(import.meta.url).pathname.includes('/client/src/')
-  } catch {
-    return false
-  }
-}
-
-const resolvePeerModule = (name, sourceExtension = 'ts') =>
-  isSourceEntry() ? `./${name}.${sourceExtension}` : `./${name}.js`
+  import(/* @vite-ignore */ `${modulePath}?pluginVersion=${encodeURIComponent(pluginVersion)}`)
 
 const loadDemoModules = async () => {
   const pluginVersion = readPluginVersion()
@@ -27,12 +19,19 @@ const loadDemoModules = async () => {
     { createTranslator, getLocalizedMessage },
     demoModel,
     { PluginDemoView }
-  ] = await Promise.all([
-    importWithPluginVersion(resolvePeerModule('styles'), pluginVersion),
-    importWithPluginVersion(resolvePeerModule('i18n'), pluginVersion),
-    importWithPluginVersion(resolvePeerModule('demo-model'), pluginVersion),
-    importWithPluginVersion(resolvePeerModule('view', 'tsx'), pluginVersion)
-  ])
+  ] = await (import.meta.env.DEV
+    ? Promise.all([
+      import('./styles'),
+      import('./i18n'),
+      import('./demo-model'),
+      import('./view')
+    ])
+    : Promise.all([
+      importWithPluginVersion('./styles.js', pluginVersion),
+      importWithPluginVersion('./i18n.js', pluginVersion),
+      importWithPluginVersion('./demo-model.js', pluginVersion),
+      importWithPluginVersion('./view.js', pluginVersion)
+    ]))
 
   return {
     pluginDemoViewDeps: {
@@ -48,6 +47,23 @@ const loadDemoModules = async () => {
     getLocalizedMessage,
     pluginDemoCss
   }
+}
+
+const activeReloads = new Set<() => Promise<void>>()
+const activeStyles = new Set<HTMLStyleElement>()
+const reloadActivePlugins = () => {
+  activeReloads.forEach(reload => void reload())
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept('./styles.ts', (styles) => {
+    if (styles == null) return
+    activeStyles.forEach(style => {
+      style.textContent = styles.pluginDemoCss
+    })
+  })
+  import.meta.hot.accept(['./i18n.ts', './demo-model.ts'], reloadActivePlugins)
+  import.meta.hot.accept(reloadActivePlugins)
 }
 
 const registerDemoView = (ctx, viewId, variant, PluginDemoView, pluginDemoViewDeps) =>
@@ -74,6 +90,9 @@ export async function activatePlugin(ctx) {
   const style = document.createElement('style')
   style.textContent = pluginDemoCss
   document.head.appendChild(style)
+  activeStyles.add(style)
+  const reload = () => ctx.hot.reload()
+  activeReloads.add(reload)
   const t = createTranslator(ctx.i18n)
 
   const disposables = [
@@ -183,6 +202,8 @@ export async function activatePlugin(ctx) {
   return {
     dispose() {
       disposables.forEach(disposable => disposable.dispose())
+      activeReloads.delete(reload)
+      activeStyles.delete(style)
       style.remove()
     }
   }

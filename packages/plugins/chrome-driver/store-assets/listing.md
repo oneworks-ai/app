@@ -22,8 +22,8 @@ Safety is part of the control model:
 - The extension connects only after an explicit pairing with a trusted OneWorks origin.
 - Every operation names its exact browser target; it never guesses the current tab.
 - Sensitive values are redacted by default.
-- Raw JavaScript/CDP, complete cookie values, and sensitive fields are off by default and reset with the browser session. Proxy status is readable after pairing; every proxy set or clear requires exact high-risk confirmation.
-- High-risk operations require a confirmation bound to the exact operation, target, and arguments.
+- Raw JavaScript/CDP, complete cookie values, and sensitive fields are off by default. OneWorks can save the user's explicit boolean preferences while disconnected and synchronize the enforcement policy after a compatible browser connects. Every advanced-access use still requires an exact per-use confirmation. Proxy status is readable after pairing; every proxy set or clear requires exact high-risk confirmation.
+- Ordinary site-scoped operations can follow an explicit “Always ask” or “Always allow” URL rule. Advanced access and non-site-scoped high-risk operations still require confirmation bound to the exact operation, target, and arguments.
 - Operations produce auditable summaries without storing complete secrets.
 
 OneWorks is intended for developers who want an Agent to work with their real browser while preserving visible control, recoverable permissions, target isolation, and an explicit audit trail.

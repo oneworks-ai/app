@@ -1,4 +1,8 @@
+import { createHash } from 'node:crypto'
+
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const targetFingerprint = (value: string) => createHash('sha256').update(new URL(value).toString()).digest('hex')
 
 afterEach(() => {
   vi.useRealTimers()
@@ -58,6 +62,29 @@ describe('chrome extension typed operations', () => {
     await expect(requirePermissions(['history'])).rejects.toMatchObject({
       code: 'MISSING_PERMISSION',
       missing_permissions: ['history']
+    })
+  })
+
+  it('advertises the exact execution-target guard capability', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'Chrome Test' })
+    vi.stubGlobal('chrome', {
+      debugger: {},
+      permissions: { getAll: vi.fn(async () => ({ origins: [], permissions: ['tabs'] })) },
+      storage: {
+        session: {
+          get: vi.fn(async () => ({ oneWorksExternalBrowserAdvancedAccess: {} }))
+        }
+      }
+    })
+    // @ts-expect-error -- Extension modules intentionally remain plain browser JavaScript.
+    const { discoverCapabilities } = await import('../extension/operations/capabilities.js')
+
+    await expect(discoverCapabilities()).resolves.toMatchObject({
+      execution_target_guard: {
+        algorithm: 'SHA-256',
+        canonicalization: 'whatwg-url-href-v1',
+        version: 1
+      }
     })
   })
 
@@ -135,6 +162,8 @@ describe('chrome extension typed operations', () => {
     const sendCommand = vi.fn(async (_target, method) =>
       method === 'Runtime.evaluate'
         ? { result: { value: 'raw-secret' } }
+        : method === 'Page.getFrameTree'
+        ? { frameTree: { frame: { id: 'main-frame' } } }
         : {}
     )
     vi.stubGlobal('chrome', {
@@ -144,6 +173,7 @@ describe('chrome extension typed operations', () => {
       tabs: { get: vi.fn(async () => ({ id: 4, url: 'https://example.com/path' })) },
       debugger: {
         attach: vi.fn(async () => undefined),
+        detach: vi.fn(async () => undefined),
         sendCommand,
         onEvent: { addListener: vi.fn() },
         onDetach: { addListener: vi.fn() }
@@ -155,6 +185,7 @@ describe('chrome extension typed operations', () => {
     await expect(rawDebugOperation('evaluate', {
       tab_id: 4,
       expected_origin: 'https://example.com',
+      expected_targets: [{ tab_id: 4, url_sha256: targetFingerprint('https://example.com/path') }],
       expression: 'localStorage.token'
     })).resolves.toMatchObject({
       expected_origin: 'https://example.com',
@@ -164,6 +195,7 @@ describe('chrome extension typed operations', () => {
     await expect(rawDebugOperation('evaluate', {
       tab_id: 4,
       expected_origin: 'https://other.example',
+      expected_targets: [{ tab_id: 4, url_sha256: targetFingerprint('https://example.com/path') }],
       expression: '1'
     })).rejects.toMatchObject({ code: 'ORIGIN_CHANGED' })
   })
