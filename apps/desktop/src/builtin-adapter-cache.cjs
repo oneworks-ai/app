@@ -23,7 +23,7 @@ const BUILTIN_RUNTIME_CLIENT_PACKAGE = '@oneworks/client'
 
 const MANIFEST_FILE = '.oneworks-adapter-cache.json'
 const NPM_PACKAGE_MANIFEST_FILE = '.oneworks-package-cache.json'
-const PACKAGE_CACHE_LAYOUT_VERSION = 3
+const PACKAGE_CACHE_LAYOUT_VERSION = 4
 const BUILTIN_ADAPTER_PACKAGE_ENV = '__ONEWORKS_DESKTOP_BUILTIN_ADAPTER_PACKAGES__'
 const RUNTIME_PACKAGE_CACHE_VERSION_ENV = '__ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__'
 const PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV = 'ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION'
@@ -149,10 +149,20 @@ const resolvePackageDependencyEntries = (packageDir) => {
   const optionalDependencies = Object.keys(parsed.optionalDependencies ?? {})
     .filter(name => !Object.hasOwn(parsed.dependencies ?? {}, name))
     .map(name => ({ name, optional: true }))
+  const peerDependencies = Object.keys(parsed.peerDependencies ?? {})
+    .filter(name =>
+      !Object.hasOwn(parsed.dependencies ?? {}, name) &&
+      !Object.hasOwn(parsed.optionalDependencies ?? {}, name)
+    )
+    .map(name => ({
+      name,
+      optional: parsed.peerDependenciesMeta?.[name]?.optional === true
+    }))
 
   return [
     ...dependencies,
-    ...optionalDependencies
+    ...optionalDependencies,
+    ...peerDependencies
   ].sort((left, right) => left.name.localeCompare(right.name))
 }
 
@@ -731,6 +741,9 @@ const ensureBuiltinPluginPackageCache = (options = {}) => {
   const homeDir = options.homeDir ?? resolveRealHomeDir(options.env)
   const packageCacheRootDir = options.packageCacheRootDir ?? resolvePackageCacheRootDir(options.env, homeDir)
   const packages = options.packages ?? BUILTIN_PLUGIN_PACKAGES
+  const runtimeCacheVersion = normalizePackageCacheVersion(options.cacheVersion) ??
+    resolveDesktopDevRuntimeVersion(options.env)
+  const trustManifest = options.trustManifest === true && !runtimeCacheVersion?.startsWith('dev-')
   return packages.flatMap((packageName) => {
     const sourcePackageDir = options.resolvePackageDir?.(packageName) ?? resolveBuiltinPluginPackageDir(packageName)
     const packageInfo = readPackageInfo(sourcePackageDir)
@@ -747,7 +760,7 @@ const ensureBuiltinPluginPackageCache = (options = {}) => {
         packageCacheRootDir,
         packageName,
         sourcePackageDir,
-        trustManifest: options.trustManifest === true
+        trustManifest
       })
     )
   })
@@ -760,6 +773,7 @@ const ensureBuiltinRuntimePackageCache = (options = {}) => {
 
   const homeDir = options.homeDir ?? resolveRealHomeDir(options.env)
   const packageCacheRootDir = options.packageCacheRootDir ?? resolvePackageCacheRootDir(options.env, homeDir)
+  const trustManifest = options.trustManifest === true && !cacheVersion.startsWith('dev-')
   const seeded = []
 
   const cliPackageDir = options.resolvePackageDir?.(BUILTIN_RUNTIME_CLI_PACKAGE) ??
@@ -770,7 +784,7 @@ const ensureBuiltinRuntimePackageCache = (options = {}) => {
     packageCacheRootDir,
     packageName: BUILTIN_RUNTIME_CLI_PACKAGE,
     sourcePackageDir: cliPackageDir,
-    trustManifest: options.trustManifest === true
+    trustManifest
   }))
 
   const serverPackageDir = options.resolvePackageDir?.(BUILTIN_RUNTIME_SERVER_PACKAGE) ??
@@ -781,7 +795,7 @@ const ensureBuiltinRuntimePackageCache = (options = {}) => {
     packageCacheRootDir,
     packageName: BUILTIN_RUNTIME_SERVER_PACKAGE,
     sourcePackageDir: serverPackageDir,
-    trustManifest: options.trustManifest === true
+    trustManifest
   }))
 
   const clientPackageDir = options.resolvePackageDir?.(BUILTIN_RUNTIME_CLIENT_PACKAGE) ??
@@ -793,7 +807,7 @@ const ensureBuiltinRuntimePackageCache = (options = {}) => {
       packageCacheRootDir,
       packageName: BUILTIN_RUNTIME_CLIENT_PACKAGE,
       sourcePackageDir: clientPackageDir,
-      trustManifest: options.trustManifest === true
+      trustManifest
     }))
   }
 

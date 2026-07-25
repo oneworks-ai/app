@@ -275,6 +275,7 @@ export const filterAndSortMarketplacePlugins = (
     const matchesQuery = normalizedQuery === '' ||
       [
         item.name,
+        item.category,
         item.displayName,
         item.description,
         item.version,

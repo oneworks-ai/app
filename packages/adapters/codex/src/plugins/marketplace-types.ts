@@ -2,6 +2,7 @@ import type { IconRef } from '@oneworks/types'
 
 export interface CodexMarketplacePluginDefinition {
   agents?: string[]
+  category?: string
   commands?: string[]
   description?: string
   displayName?: string

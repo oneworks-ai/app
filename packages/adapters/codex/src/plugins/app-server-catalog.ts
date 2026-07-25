@@ -35,6 +35,7 @@ export const toCodexAppServerCatalogPlugin = (
     ...(pluginInterface?.longDescription ?? pluginInterface?.shortDescription) != null
       ? { description: pluginInterface?.longDescription ?? pluginInterface?.shortDescription }
       : {},
+    ...(pluginInterface?.category != null ? { category: pluginInterface.category } : {}),
     ...(pluginInterface?.displayName != null ? { displayName: pluginInterface.displayName } : {}),
     ...(remoteIcon != null ? { icon: { kind: 'url', url: remoteIcon } } : {}),
     nativeEnabled: plugin.enabled,

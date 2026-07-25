@@ -11,27 +11,9 @@ import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import { MarketplaceCard } from '#~/components/marketplace/MarketplaceCard'
 import { renderIconRef } from '#~/utils/model-provider-icons'
 
-import { MarketplaceFormatIcon, interleaveMarketplacePlugins } from './PluginMarketplaceLanding'
+import { MarketplaceFormatIcon } from './PluginMarketplaceLanding'
+import { groupRecommendedMarketplacePlugins, selectRecommendedMarketplacePlugins } from './plugin-recommendations'
 import type { PluginListItem } from './plugin-runtime-list-items'
-
-const RECOMMENDATION_LIMIT = 10
-
-export const selectRecommendedMarketplacePlugins = (
-  plugins: PluginMarketplaceCatalogPlugin[],
-  limit = RECOMMENDATION_LIMIT
-) => {
-  const availablePlugins = plugins.filter(plugin => (
-    plugin.builtIn === true &&
-    plugin.marketplaceEnabled &&
-    plugin.nativeInstalled !== true &&
-    (plugin.installedSources?.length ?? 0) === 0
-  ))
-  const featuredPlugins = availablePlugins.filter(plugin => plugin.featured === true)
-
-  return interleaveMarketplacePlugins(
-    featuredPlugins.length > 0 ? featuredPlugins : availablePlugins
-  ).slice(0, limit)
-}
 
 export function PluginHomeView({
   catalogLoading,
@@ -49,7 +31,9 @@ export function PluginHomeView({
   onOpenStore: (plugin?: PluginMarketplaceCatalogPlugin) => void
 }) {
   const { t } = useTranslation()
-  const recommendedPlugins = selectRecommendedMarketplacePlugins(catalogPlugins)
+  const recommendedPluginGroups = groupRecommendedMarketplacePlugins(
+    selectRecommendedMarketplacePlugins(catalogPlugins)
+  )
 
   return (
     <div className='plugin-home-view'>
@@ -89,7 +73,7 @@ export function PluginHomeView({
         ? <div className='plugin-home-view__loading'>
           <Spin size='small' />
         </div>
-        : recommendedPlugins.length > 0 && (
+        : recommendedPluginGroups.length > 0 && (
           <section className='plugin-home-view__section'>
             <div className='plugin-home-view__section-header'>
               <h2>{t('pluginStore.homeRecommended')}</h2>
@@ -102,24 +86,37 @@ export function PluginHomeView({
                 }}
               />
             </div>
-            <ul className='plugin-home-view__recommendations'>
-              {recommendedPlugins.map(plugin => (
-                <MarketplaceCard
-                  key={`${plugin.marketplace}:${plugin.name}`}
-                  icon={plugin.icon == null
-                    ? <MarketplaceFormatIcon type={plugin.marketplaceType} />
-                    : renderIconRef({
-                      icon: plugin.icon,
-                      imageClassName: 'plugin-marketplace__format-icon-image',
-                      symbolClassName: 'plugin-marketplace__format-icon-symbol'
-                    })}
-                  title={plugin.displayName ?? plugin.name}
-                  subtitle={plugin.marketplaceTitle ?? plugin.marketplace}
-                  description={plugin.description}
-                  onSelect={() => onOpenStore(plugin)}
-                />
+            <div className='plugin-home-view__recommendation-groups'>
+              {recommendedPluginGroups.map(group => (
+                <section
+                  key={group.category}
+                  className='plugin-home-view__recommendation-group'
+                  aria-labelledby={`plugin-recommendation-category-${group.category}`}
+                >
+                  <h3 id={`plugin-recommendation-category-${group.category}`}>
+                    {t(`pluginStore.recommendationCategories.${group.category}`)}
+                  </h3>
+                  <ul className='plugin-home-view__recommendations'>
+                    {group.plugins.map(plugin => (
+                      <MarketplaceCard
+                        key={`${plugin.marketplace}:${plugin.name}`}
+                        icon={plugin.icon == null
+                          ? <MarketplaceFormatIcon type={plugin.marketplaceType} />
+                          : renderIconRef({
+                            icon: plugin.icon,
+                            imageClassName: 'plugin-marketplace__format-icon-image',
+                            symbolClassName: 'plugin-marketplace__format-icon-symbol'
+                          })}
+                        title={plugin.displayName ?? plugin.name}
+                        subtitle={plugin.marketplaceTitle ?? plugin.marketplace}
+                        description={plugin.description}
+                        onSelect={() => onOpenStore(plugin)}
+                      />
+                    ))}
+                  </ul>
+                </section>
               ))}
-            </ul>
+            </div>
           </section>
         )}
     </div>

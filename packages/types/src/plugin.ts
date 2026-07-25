@@ -730,6 +730,7 @@ export type PluginMarketplacePluginSourceType =
 export interface PluginMarketplaceCatalogPlugin {
   agents?: string[]
   builtIn?: boolean
+  category?: string
   commands?: string[]
   configSource?: PluginMarketplaceConfigSource
   declared: boolean

@@ -8,6 +8,10 @@ const desktopPackageJson = require('../package.json') as {
   dependencies?: Record<string, string>
   scripts?: Record<string, string>
 }
+const relayPackageJson = require('../../../packages/plugins/relay/package.json') as {
+  files?: string[]
+  icon?: string
+}
 const { BUILTIN_PLUGIN_PACKAGES } = require('../src/builtin-adapter-cache.cjs') as {
   BUILTIN_PLUGIN_PACKAGES: string[]
 }
@@ -46,5 +50,10 @@ describe('desktop runtime dependencies', () => {
       'pnpm --filter @oneworks/plugin-relay build'
     )
     expect(desktopPackageJson.scripts?.package).toContain('pnpm run build:plugins')
+  })
+
+  it('ships the Relay presentation icon in the built-in plugin package', () => {
+    expect(relayPackageJson.icon).toBe('./assets/icon.svg')
+    expect(relayPackageJson.files).toContain('assets')
   })
 })

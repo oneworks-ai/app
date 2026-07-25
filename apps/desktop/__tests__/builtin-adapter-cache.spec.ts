@@ -250,6 +250,50 @@ const writeSourceAdapterPackageWithDuplicateDependencyVersions = async (rootDir:
   }
 }
 
+const writeSourceAdapterPackageWithPeerDependency = async (rootDir: string) => {
+  const packageName = '@acme/adapter-peer'
+  const packageDir = path.join(rootDir, sanitizePackageName(packageName))
+  const consumerDir = path.join(packageDir, 'node_modules', '@acme/consumer')
+  const peerDir = path.join(packageDir, 'node_modules', '@acme/peer')
+
+  await mkdir(path.join(packageDir, 'dist'), { recursive: true })
+  await mkdir(consumerDir, { recursive: true })
+  await mkdir(peerDir, { recursive: true })
+
+  await writePackageJson(packageDir, {
+    name: packageName,
+    version: '1.0.0',
+    main: './dist/index.js',
+    dependencies: {
+      '@acme/consumer': '1.0.0',
+      '@acme/peer': '1.0.0'
+    }
+  })
+  await writeFile(path.join(packageDir, 'dist', 'index.js'), "module.exports = require('@acme/consumer')\n")
+
+  await writePackageJson(consumerDir, {
+    name: '@acme/consumer',
+    version: '1.0.0',
+    main: './index.js',
+    peerDependencies: {
+      '@acme/peer': '1.0.0'
+    }
+  })
+  await writeFile(path.join(consumerDir, 'index.js'), "module.exports = require('@acme/peer')\n")
+
+  await writePackageJson(peerDir, {
+    name: '@acme/peer',
+    version: '1.0.0',
+    main: './index.js'
+  })
+  await writeFile(path.join(peerDir, 'index.js'), 'module.exports = { peer: true }\n')
+
+  return {
+    packageDir,
+    packageName
+  }
+}
+
 const writeSourcePluginPackageWithConflictingDeps = async (rootDir: string, packageName: string, version: string) => {
   const installRoot = path.join(rootDir, 'node_modules')
   const packageDir = path.join(installRoot, ...packageName.split('/'))
@@ -503,6 +547,34 @@ describe('desktop built-in adapter package cache', () => {
     ).resolves.toContain('"version": "7.1.2"')
   })
 
+  it('links peer dependencies inside copied package closures', async () => {
+    const tempDir = await createTempDir('oneworks-desktop-adapter-peer-')
+    const homeDir = path.join(tempDir, 'home')
+    const { packageDir: sourcePackageDir, packageName } = await writeSourceAdapterPackageWithPeerDependency(tempDir)
+
+    const result = materializeBuiltinAdapterPackage({
+      homeDir,
+      packageName,
+      sourcePackageDir
+    })
+
+    const packageDir = resolveAdapterPackageInstallDir(result.cacheDir, packageName)
+    expect(require(path.join(packageDir, 'dist', 'index.js'))).toEqual({ peer: true })
+    await expect(
+      readFile(
+        path.join(
+          packageDir,
+          'node_modules',
+          '@acme/consumer',
+          'node_modules',
+          '@acme/peer',
+          'package.json'
+        ),
+        'utf8'
+      )
+    ).resolves.toContain('"version": "1.0.0"')
+  })
+
   it('can seed multiple packages through the startup helper', async () => {
     const tempDir = await createTempDir('oneworks-desktop-adapter-ensure-')
     const homeDir = path.join(tempDir, 'home')
@@ -690,6 +762,40 @@ describe('desktop built-in adapter package cache', () => {
     ).resolves.toContain('"version": "1.2.3"')
   })
 
+  it('refreshes same-version built-in plugins for a dev runtime build', async () => {
+    const tempDir = await createTempDir('oneworks-desktop-plugin-dev-refresh-')
+    const homeDir = path.join(tempDir, 'home')
+    const packageName = '@acme/plugin-dev-refresh'
+    const sourcePackageDir = await writeSourcePluginPackage(tempDir, packageName, '1.2.3')
+    const env = {
+      __ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__: 'dev-worktree'
+    }
+
+    ensureBuiltinPluginPackageCache({
+      env,
+      homeDir,
+      packages: [packageName],
+      resolvePackageDir: () => sourcePackageDir,
+      trustManifest: true
+    })
+
+    await writeFile(path.join(sourcePackageDir, 'dist', 'hooks.js'), 'module.exports = { refreshed: true }\n')
+    const refreshed = ensureBuiltinPluginPackageCache({
+      env,
+      homeDir,
+      packages: [packageName],
+      resolvePackageDir: () => sourcePackageDir,
+      trustManifest: true
+    })
+
+    expect(refreshed.every(item => item.seeded)).toBe(true)
+    const packageDir = resolveNpmPackageInstallDir(
+      resolveNpmPackageCacheDir(packageName, '1.2.3', homeDir),
+      packageName
+    )
+    expect(require(path.join(packageDir, 'dist', 'hooks.js'))).toEqual({ refreshed: true })
+  })
+
   it('materializes a static built-in npm package under a dev cache version', async () => {
     const tempDir = await createTempDir('oneworks-desktop-static-runtime-cache-')
     const homeDir = path.join(tempDir, 'home')
@@ -762,5 +868,45 @@ describe('desktop built-in adapter package cache', () => {
     expect(require(path.join(cliPackageDir, 'dist', 'hooks.js'))).toEqual({ ok: true })
     expect(require(path.join(serverPackageDir, 'dist', 'hooks.js'))).toEqual({ ok: true })
     await expect(readFile(path.join(clientPackageDir, 'dist', 'index.html'), 'utf8')).resolves.toBe('client-dist')
+  })
+
+  it('refreshes same-version bundled runtime packages for a dev runtime build', async () => {
+    const tempDir = await createTempDir('oneworks-desktop-runtime-dev-refresh-')
+    const homeDir = path.join(tempDir, 'home')
+    const cliPackage = '@oneworks/cli'
+    const serverPackage = '@oneworks/server'
+    const clientPackage = '@oneworks/client'
+    const cliSource = await writeSourcePluginPackage(tempDir, cliPackage, '1.2.3')
+    const serverSource = await writeSourcePluginPackage(tempDir, serverPackage, '1.2.3')
+    const clientSource = await writeSourceStaticPackage(tempDir, clientPackage, '1.2.3', 'client-first')
+    const options = {
+      env: {
+        [PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV]: 'dev-runtime'
+      },
+      homeDir,
+      resolvePackageDir: (packageName: string) => {
+        if (packageName === cliPackage) return cliSource
+        if (packageName === serverPackage) return serverSource
+        return clientSource
+      },
+      trustManifest: true
+    }
+
+    ensureBuiltinRuntimePackageCache(options)
+    await writeFile(path.join(serverSource, 'dist', 'hooks.js'), 'module.exports = { refreshed: true }\n')
+    await writeFile(path.join(clientSource, 'dist', 'index.html'), 'client-refreshed')
+    const refreshed = ensureBuiltinRuntimePackageCache(options)
+
+    const serverPackageDir = resolveNpmPackageInstallDir(
+      resolveNpmPackageCacheDir(serverPackage, 'dev-runtime', homeDir),
+      serverPackage
+    )
+    const clientPackageDir = resolveNpmPackageInstallDir(
+      resolveNpmPackageCacheDir(clientPackage, 'dev-runtime', homeDir),
+      clientPackage
+    )
+    expect(refreshed.map(item => item.seeded)).toEqual([false, true, true])
+    expect(require(path.join(serverPackageDir, 'dist', 'hooks.js'))).toEqual({ refreshed: true })
+    await expect(readFile(path.join(clientPackageDir, 'dist', 'index.html'), 'utf8')).resolves.toBe('client-refreshed')
   })
 })

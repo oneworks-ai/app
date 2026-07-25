@@ -72,6 +72,7 @@ export const toCatalogPlugin = (params: {
       'agents' | 'commands' | 'description' | 'name' | 'skills' | 'version'
     >
     & {
+      category?: string
       displayName?: string
       featured?: boolean
       icon?: PluginMarketplaceCatalogPlugin['icon']
@@ -98,6 +99,7 @@ export const toCatalogPlugin = (params: {
     ...(params.installedSources != null && params.installedSources.length > 0
       ? { installedSources: params.installedSources }
       : {}),
+    ...(params.plugin.category != null ? { category: params.plugin.category } : {}),
     ...(params.plugin.description != null ? { description: params.plugin.description } : {}),
     ...(params.plugin.displayName != null ? { displayName: params.plugin.displayName } : {}),
     ...(params.plugin.featured != null ? { featured: params.plugin.featured } : {}),

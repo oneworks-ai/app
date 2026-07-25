@@ -15,11 +15,29 @@ const appMetadata = resolveDesktopAppMetadata()
 const appName = appMetadata.productName
 const host = '127.0.0.1'
 
-const createWorkspaceRuntimeEnv = () => {
+const createWorkspaceRuntimeEnv = (runtimePackageCacheVersion) => {
   const env = { ...process.env }
   delete env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__
   env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = workspaceRoot
+  if (runtimePackageCacheVersion != null) {
+    env.__ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__ = runtimePackageCacheVersion
+    env.__ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__ = runtimePackageCacheVersion
+  }
   return env
+}
+
+const readRuntimePackageCacheVersion = (resourcesDir) => {
+  try {
+    const buildSource = JSON.parse(
+      fs.readFileSync(path.join(resourcesDir, 'desktop-build-source.json'), 'utf8')
+    )
+    return typeof buildSource.runtimePackageCacheVersion === 'string' &&
+        buildSource.runtimePackageCacheVersion.startsWith('dev-')
+      ? buildSource.runtimePackageCacheVersion
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 const findPackageDir = () => {
@@ -78,26 +96,30 @@ const resolvePackagedPaths = () => {
 
   if (process.platform === 'darwin') {
     const bundleDir = path.join(packageDir, `${appName}.app`)
+    const resourcesDir = path.join(bundleDir, 'Contents/Resources')
     return {
-      appDir: path.join(bundleDir, 'Contents/Resources/app'),
-      clientDistDir: path.join(bundleDir, 'Contents/Resources/dist'),
+      appDir: path.join(resourcesDir, 'app'),
+      clientDistDir: path.join(resourcesDir, 'dist'),
       executablePath: firstExistingPath(
         path.join(bundleDir, 'Contents/MacOS', appMetadata.executableName),
         path.join(bundleDir, 'Contents/MacOS', appMetadata.artifactBaseName)
-      )
+      ),
+      runtimePackageCacheVersion: readRuntimePackageCacheVersion(resourcesDir)
     }
   }
 
+  const resourcesDir = path.join(packageDir, 'resources')
   const executableName = process.platform === 'win32'
     ? `${appMetadata.executableName}.exe`
     : appMetadata.executableName
   return {
-    appDir: path.join(packageDir, 'resources/app'),
-    clientDistDir: path.join(packageDir, 'resources/dist'),
+    appDir: path.join(resourcesDir, 'app'),
+    clientDistDir: path.join(resourcesDir, 'dist'),
     executablePath: firstExistingPath(
       path.join(packageDir, executableName),
       path.join(packageDir, `${appName}.exe`)
-    )
+    ),
+    runtimePackageCacheVersion: readRuntimePackageCacheVersion(resourcesDir)
   }
 }
 
@@ -209,13 +231,26 @@ const assertRelayRuntimeActive = (catalog) => {
   if (relay.client?.clientEntryUrl == null) {
     throw new Error('Packaged Relay plugin did not expose its client production entry.')
   }
+
+  const cua = plugins.find(plugin => plugin?.name === '@oneworks/plugin-cua-driver')
+  if (cua == null) {
+    throw new Error('Packaged workspace did not discover the configured CUA plugin.')
+  }
+  if (cua.enabled !== true) {
+    throw new Error(
+      `Packaged CUA plugin is present but not enabled: ${JSON.stringify(cua.diagnostics ?? [])}`
+    )
+  }
+  if (Array.isArray(cua.diagnostics) && cua.diagnostics.length > 0) {
+    throw new Error(`Packaged CUA plugin reported diagnostics: ${JSON.stringify(cua.diagnostics)}`)
+  }
 }
 
 const main = async () => {
   const paths = resolvePackagedPaths()
   assertPackagedRelayPlugin(paths.appDir)
   const port = await getAvailablePort()
-  const workspaceEnv = createWorkspaceRuntimeEnv()
+  const workspaceEnv = createWorkspaceRuntimeEnv(paths.runtimePackageCacheVersion)
   const smokeRoot = resolveProjectHomePath(workspaceRoot, workspaceEnv, '.local', 'desktop-smoke')
   const dataDir = path.join(smokeRoot, 'data')
   const logDir = resolveProjectHomePath(workspaceRoot, workspaceEnv, 'logs', 'desktop-smoke')

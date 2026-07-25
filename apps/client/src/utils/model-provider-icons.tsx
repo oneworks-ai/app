@@ -22,6 +22,39 @@ const builtinImageIconMap: Record<string, BuiltinImageIcon> = {
   micu: { src: new URL('../assets/model-providers/micu.png', import.meta.url).href },
   minimax: { src: new URL('../assets/model-providers/minimax.png', import.meta.url).href },
   moonshot: { light: moonshotLightIcon, dark: moonshotDarkIcon },
+  'oneworks-browser-driver': {
+    src: new URL('../../../../packages/plugins/browser-driver/assets/icon.svg', import.meta.url).href
+  },
+  'oneworks-china-red-theme': {
+    src: new URL('../../../../packages/plugins/china-red-theme/assets/icon.svg', import.meta.url).href
+  },
+  'oneworks-chrome-devtools': {
+    src: new URL('../../../../packages/plugins/chrome-devtools/assets/icon.svg', import.meta.url).href
+  },
+  'oneworks-cli-skills': {
+    src: new URL('../../../../packages/plugins/cli-skills/assets/icon.svg', import.meta.url).href
+  },
+  'oneworks-cua-driver': {
+    src: new URL('../../../../packages/plugins/cua-driver/assets/icon.svg', import.meta.url).href
+  },
+  'oneworks-focus-workbench-theme': {
+    src: new URL('../../../../packages/plugins/focus-workbench-theme/assets/icon.svg', import.meta.url).href
+  },
+  'oneworks-logger': {
+    src: new URL('../../../../packages/plugins/logger/assets/icon.svg', import.meta.url).href
+  },
+  'oneworks-neo-workshop-theme': {
+    src: new URL('../../../../packages/plugins/neo-workshop-theme/assets/icon.svg', import.meta.url).href
+  },
+  'oneworks-plugin-demo': {
+    src: new URL('../../../../packages/plugins/demo/assets/icon.svg', import.meta.url).href
+  },
+  'oneworks-plugin-demo-extension': {
+    src: new URL('../../../../packages/plugins/demo-extension/assets/icon.svg', import.meta.url).href
+  },
+  'oneworks-warm-cowork-theme': {
+    src: new URL('../../../../packages/plugins/warm-cowork-theme/assets/icon.svg', import.meta.url).href
+  },
   openai: { src: new URL('../assets/model-providers/openai.svg', import.meta.url).href, invertInDark: true },
   openrouter: { src: new URL('../assets/model-providers/openrouter.ico', import.meta.url).href },
   portkey: { src: new URL('../assets/model-providers/portkey.png', import.meta.url).href },

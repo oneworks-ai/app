@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { readFile, readdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, extname, isAbsolute, resolve } from 'node:path'
+import { basename, dirname, extname, isAbsolute, resolve } from 'node:path'
 import process from 'node:process'
 
 import { load as loadYaml } from 'js-yaml'
@@ -54,12 +54,17 @@ const normalizeRuntimePackageDir = (value: string | undefined) => {
 
 const unique = <T>(values: T[]) => [...new Set(values)]
 
+const getRuntimePackageDirs = () =>
+  unique([
+    normalizeRuntimePackageDir(process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__),
+    normalizeRuntimePackageDir(process.env.__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__)
+  ].filter((value): value is string => value != null))
+
 const createPluginRequires = (cwd: string) =>
   unique([
     cwd,
-    normalizeRuntimePackageDir(process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__),
-    normalizeRuntimePackageDir(process.env.__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__)
-  ].filter((value): value is string => value != null)).map(createWorkspaceRequire)
+    ...getRuntimePackageDirs()
+  ]).map(createWorkspaceRequire)
 
 const isMissingPackageEntryError = (error: unknown) => {
   if (!isRecord(error)) return false
@@ -368,9 +373,12 @@ export const normalizePluginConfig = (
   return plugins.map((plugin, index) => normalizePluginInstanceConfig(plugin, `${path}[${index}]`))
 }
 
-const resolveInstalledPackageRoot = (cwd: string, packageId: string) => {
+const resolvePackageRootFromRequires = (
+  pluginRequires: ReturnType<typeof createPluginRequires>,
+  packageId: string
+) => {
   const lookupPaths = unique(
-    createPluginRequires(cwd).flatMap(pluginRequire => pluginRequire.resolve.paths(packageId) ?? [])
+    pluginRequires.flatMap(pluginRequire => pluginRequire.resolve.paths(packageId) ?? [])
   )
   const packageSegments = packageId.split('/')
 
@@ -378,6 +386,47 @@ const resolveInstalledPackageRoot = (cwd: string, packageId: string) => {
     const packageJsonPath = resolve(lookupPath, ...packageSegments, 'package.json')
     if (existsSync(packageJsonPath)) {
       return dirname(packageJsonPath)
+    }
+  }
+
+  return undefined
+}
+
+const resolveInstalledPackageRoot = (cwd: string, packageId: string) =>
+  resolvePackageRootFromRequires(createPluginRequires(cwd), packageId)
+
+const resolveRuntimePackageBoundary = (runtimePackageDir: string) => {
+  let currentDir = resolve(runtimePackageDir)
+  while (true) {
+    if (existsSync(resolve(currentDir, 'pnpm-workspace.yaml'))) {
+      return currentDir
+    }
+    if (basename(currentDir) === 'node_modules') {
+      return dirname(currentDir)
+    }
+    const parentDir = dirname(currentDir)
+    if (parentDir === currentDir) {
+      return resolve(runtimePackageDir)
+    }
+    currentDir = parentDir
+  }
+}
+
+const resolveRuntimePackageRoot = (packageId: string) => {
+  const packageSegments = packageId.split('/')
+
+  for (const runtimePackageDir of getRuntimePackageDirs()) {
+    let currentDir = resolve(runtimePackageDir)
+    const boundaryDir = resolveRuntimePackageBoundary(currentDir)
+    while (true) {
+      const packageJsonPath = resolve(currentDir, 'node_modules', ...packageSegments, 'package.json')
+      if (existsSync(packageJsonPath)) {
+        return dirname(packageJsonPath)
+      }
+      if (currentDir === boundaryDir) break
+      const parentDir = dirname(currentDir)
+      if (parentDir === currentDir) break
+      currentDir = parentDir
     }
   }
 
@@ -475,15 +524,15 @@ const resolvePackageReference = async (
   cwd: string,
   id: string,
   version?: string,
-  options?: { autoInstallManaged?: boolean; preferInstalled?: boolean }
+  options?: { autoInstallManaged?: boolean; preferRuntimePackage?: boolean }
 ): Promise<ResolvedPluginReference> => {
   const candidates = shouldTryPrefixedPackageId(id)
     ? [id, `@oneworks/plugin-${id}`, `@vibe-forge/plugin-${id}`]
     : [id]
 
-  if (options?.preferInstalled === true) {
+  if (options?.preferRuntimePackage === true) {
     for (const candidate of candidates) {
-      const rootDir = resolveInstalledPackageRoot(cwd, candidate)
+      const rootDir = resolveRuntimePackageRoot(candidate)
       if (rootDir != null) {
         const resolvedBy = candidate === id
           ? 'direct'
@@ -766,7 +815,7 @@ const resolveTopLevelReference = async (
 
   return await resolvePackageReference(cwd, config.id, config.version, {
     autoInstallManaged: options?.autoInstallManaged,
-    preferInstalled: options?.preferBundledOfficialPlugins === true &&
+    preferRuntimePackage: options?.preferBundledOfficialPlugins === true &&
       config.version == null &&
       DEFAULT_OFFICIAL_PLUGIN_PACKAGE_IDS.has(config.id)
   })
