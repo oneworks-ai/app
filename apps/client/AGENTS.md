@@ -69,6 +69,7 @@
 - workspace 页面里的会话、项目 API 和工作区 server URL 属于当前 workspace runtime；全局 host chrome 的插件贡献，例如 nav/footer、全局账号入口和 launcher 账号能力，属于 manager/global plugin runtime。
 - `AuthenticatedApp` 负责显式选择 host-level plugin runtime；不要在 `PluginProvider` 默认推断里耦合某个具体插件，也不要在 `AppShell` / `NavRail` 写死 Relay 账号入口。
 - route-based workspace URL 的 workspaceId 来自 `/ui/w/:workspaceId` 路径，是 workspace 页面的身份来源；异步恢复到的 connection 只能补充 server/folder 信息，不能用空 workspaceId 覆盖路由身份。
+- 插件市场首页的名称、图标、category 与 featured 状态必须来自统一 catalog 契约并由 renderer 通用消费，不要在卡片组件里按包名写展示分支。第一方推荐可以优先，但不能把 OpenAI / 其他外部市场的可用推荐整体过滤掉。
 
 主题与 token：
 

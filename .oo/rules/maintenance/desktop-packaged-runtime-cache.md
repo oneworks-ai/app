@@ -13,6 +13,7 @@
 
 - 安装包里的 `/Applications/.../Resources/app` 不是唯一真相。packaged workspace 启动时会先把内置 runtime package 刷新到 `~/.oneworks/bootstrap/npm/oneworks__server/<cacheVersion>` 与 `oneworks__client/<cacheVersion>`，真实运行代码通常来自这里。
 - `desktop-build-source.json` 里的 `runtimePackageCacheVersion` 是本次 dev build 指纹。client、server、adapter cache 必须使用同一个 dev cacheVersion；如果任一链路回落到普通版本号，例如 `0.1.0-alpha.0`，就会出现“部分新、部分旧”的混合行为。
+- `dev-*` cacheVersion 只隔离不同 worktree / build，不代表同一个开发版本内的文件不会继续变化。dev runtime 与内置插件每次 ensure 都必须核对源文件完整性并刷新变化项，不能仅凭 manifest 版本相同就跳过复制；正式版本仍可信任稳定 manifest。
 - Electron shared client 和 workspace server 是两条启动链路。修 server cache 不等于前端也用了新 cache；`src/main/launcher-client-service.ts` 必须和 `src/main/workspace-service-manager.ts` 一样传入 runtime cache version。
 - `Switch Project` 页面不是聊天业务 UI。它通常表示没有 workspace 或 workspace server 启动失败；先查 server-child stderr / 启动日志，不要把它当成前端路由回归。
 
@@ -21,6 +22,7 @@
 - 本地 package 只跑了 `pnpm deploy`，没有把当前 workspace package overlay 到 staging，导致安装包仍携带发布版本代码。
 - server-child 刷新了 dev runtime cache，但 shared client 静态服务仍按默认版本解析 `@oneworks/client`，导致前端旧、后端新。
 - runtime package closure 复制依赖时只按 `package.json.name` 匹配依赖名，漏掉 pnpm alias 依赖，例如依赖键是 `function-bind`，真实包名是 `@nolyfill/function-bind`。这种情况下 cache 目录看似存在，server 启动时才报 `Cannot find module ...`。
+- runtime package closure 只遍历 `dependencies` / `optionalDependencies`，没有把非重复的 `peerDependencies` 连同 optional peer 语义纳入闭包。插件可能在 workspace 中依靠提升后的 peer 正常运行，复制进独立 cache 后才缺包；materialize 必须显式复制 peer closure。
 - packaged launcher 首屏期间可以提前预热 workspace package cache，但预热必须在 `ELECTRON_RUN_AS_NODE` 子进程里执行，覆盖 cli / server / client runtime、内置 adapters 和内置 plugins。不要在 Electron main 进程里同步 seed 这些包；首次 3/3 或 9/13 changed 时会抢占 launcher renderer，造成首屏 ready 变慢。
 - 只验证 Electron 窗口能打开，没有验证 packaged server 是否真正响应 `/api/auth/status`。
 
@@ -73,4 +75,6 @@ pnpm -C apps/desktop verify:macos-install
 - PR body 说明本次改动覆盖 client / server / adapter 哪些链路，不要只写“修复打包”。
 - 如果改了 dev cacheVersion 语义，同时检查 desktop、bootstrap、Android 三处是否一致。
 - 如果改了依赖闭包复制，必须有 pnpm alias 依赖测试。
+- 如果改了 dev manifest 信任语义，必须覆盖“同 cacheVersion、源文件变化后只刷新变化包”的回归测试。
+- 如果改了 peer dependency 闭包，必须验证复制后的消费包能从自身 `node_modules` 解析 peer。
 - 如果改了 packaged shared client，必须有测试证明 client dist 能按指定 runtime cache env 解析。

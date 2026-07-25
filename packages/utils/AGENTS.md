@@ -53,3 +53,4 @@
 - 只放可复用、无业务编排的 helper；带产品语义的逻辑留在消费包。
 - 优先依赖 `@oneworks/types`，不要反向依赖 `core`、`hooks` 或 `mcp`。
 - 修改 logger、log level、插件解析或 managed plugin package installer 后，至少回归 `packages/utils/__tests__` 和相关消费方测试。
+- `preferBundledOfficialPlugins` 只表示优先使用 runtime package roots（`__ONEWORKS_PROJECT_PACKAGE_DIR__` / `__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__`）内真正随运行时提供的官方插件；不能把当前 workspace 的 `node_modules` 当作 bundled 来源。runtime 未携带目标插件时继续走 managed package cache / registry 解析。
