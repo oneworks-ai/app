@@ -4,6 +4,7 @@ export interface RelayServerArgs {
   allowOrigin: string
   adminToken: string
   avatarUrl?: string
+  buildSha?: string
   dataPath: string
   defaultLoginMethod?: RelayLoginMethod
   deviceMetadataSecret?: string

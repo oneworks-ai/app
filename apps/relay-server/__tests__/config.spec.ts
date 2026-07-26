@@ -14,6 +14,15 @@ describe('relay server config', () => {
     expect(VERSION).toBe(relayServerPackage.version)
   })
 
+  it('reads immutable deployment metadata from the environment', () => {
+    expect(
+      parseRelayServerArgs([], {
+        ONEWORKS_RELAY_BUILD_SHA: ' 49a96a48025febc8554f0c65cddd9a21f0cfd779 '
+      }).buildSha
+    ).toBe('49a96a48025febc8554f0c65cddd9a21f0cfd779')
+    expect(parseRelayServerArgs([], {}).buildSha).toBeUndefined()
+  })
+
   it('parses CLI args and prints help without starting a server', () => {
     vi.stubEnv('ONEWORKS_RELAY_HOST', '0.0.0.0')
     vi.stubEnv('ONEWORKS_RELAY_ADMIN_TOKEN', 'env-admin')

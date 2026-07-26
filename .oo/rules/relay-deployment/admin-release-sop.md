@@ -39,7 +39,7 @@ Before creating or approving a production release:
 - If the release changes API, auth, storage, SSO, passkey, email, device registration, or session forwarding, treat it as a Relay release, not just an Admin static release.
 - Confirm additive compatibility for any data model change. Production canary is not a substitute for backward-compatible migrations.
 - Confirm official domains and secrets are configured in platform secret stores, not local files or committed docs.
-- Confirm the deployment platform can identify the source SHA being promoted. If `/health` includes build metadata in the future, compare it with the target SHA; until then, use platform deployment metadata and GitHub Actions logs.
+- Confirm the deployment platform can identify the source SHA being promoted. Compare `/health.buildSha` with the target SHA and retain the matching platform deployment metadata and GitHub Actions run.
 - Confirm rollback target:
   - Previous Cloudflare Worker version and Pages deployment id.
   - Previous Vercel production deployment.

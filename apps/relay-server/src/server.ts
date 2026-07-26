@@ -52,6 +52,12 @@ export { readRelayStore } from './store.js'
 export type { RelayServerArgs } from './types.js'
 export { VERSION } from './version.js'
 
+const relayHealth = (args: RelayServerArgs) => ({
+  buildSha: args.buildSha ?? null,
+  ok: true,
+  version: VERSION
+})
+
 const handleInfo = (res: ServerResponse, args: RelayServerArgs, store: RelayStore) => {
   const providers = enabledRelayAuthProviders(args, store)
   sendJson(res, 200, {
@@ -103,7 +109,7 @@ const handleRelayRequestWithStore = async (
 ) => {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
   if (req.method === 'GET' && url.pathname === '/health') {
-    sendJson(res, 200, { ok: true, version: VERSION }, args.allowOrigin)
+    sendJson(res, 200, relayHealth(args), args.allowOrigin)
     return
   }
   if (req.method === 'GET' && url.pathname === '/api/relay/info') {
@@ -270,7 +276,7 @@ export const createRelayHandler = (
 
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
     if (req.method === 'GET' && url.pathname === '/health') {
-      sendJson(res, 200, { ok: true, version: VERSION }, args.allowOrigin)
+      sendJson(res, 200, relayHealth(args), args.allowOrigin)
       return
     }
     const rateLimit = rateLimiter.check(req, url)

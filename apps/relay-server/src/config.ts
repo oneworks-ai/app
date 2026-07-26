@@ -216,6 +216,7 @@ export const parseRelayServerArgs = (
     adminToken: env.ONEWORKS_RELAY_ADMIN_TOKEN || '',
     allowOrigin: env.ONEWORKS_RELAY_ALLOW_ORIGIN || '*',
     avatarUrl: readServiceAvatarUrl(env.ONEWORKS_RELAY_AVATAR_URL),
+    buildSha: env.ONEWORKS_RELAY_BUILD_SHA?.trim() || undefined,
     loginRedirectOrigins: readOriginList(env.ONEWORKS_RELAY_LOGIN_REDIRECT_ORIGINS),
     deviceMetadataSecret: env.ONEWORKS_RELAY_DEVICE_METADATA_SECRET || undefined,
     publicBaseUrl: env.ONEWORKS_RELAY_PUBLIC_URL || undefined,
@@ -275,6 +276,7 @@ Environment:
   ONEWORKS_RELAY_DEVICE_METADATA_SECRET
   ONEWORKS_RELAY_ALLOW_ORIGIN
   ONEWORKS_RELAY_AVATAR_URL
+  ONEWORKS_RELAY_BUILD_SHA
   ONEWORKS_RELAY_LOGIN_REDIRECT_ORIGINS
   ONEWORKS_RELAY_PUBLIC_URL
   ONEWORKS_RELAY_DEVICE_ONLINE_TTL_SECONDS

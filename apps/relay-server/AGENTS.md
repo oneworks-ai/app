@@ -52,6 +52,7 @@
 - Vercel serverless 入口是单项目形态：`apps/relay-server` 的 `build:vercel` 会内置 Admin 静态页到 `/admin`；Cloudflare 仍使用 `apps/relay-admin` Pages + `apps/relay-server` Worker 两个部署面。
 - Cloudflare Fetch request adapter 必须保留 Node `IncomingMessage` 的请求生命周期能力，至少包括 `aborted` / `destroyed` 状态以及 `once` / `off` 事件订阅；session forwarding job 的长轮询会用这些能力在请求关闭时清理监听器。`wrangler.jsonc` 必须保留 `enable_request_signal` compatibility flag，修改适配层后必须通过 `__tests__/fetch-handler.spec.ts` 覆盖真实 Fetch `Request` 的正常、运行中 abort 和预先 abort 长轮询路径。
 - Relay Server 的公开版本号必须从 `apps/relay-server/package.json` 元数据读取；不要在 `src/types.ts`、`src/config.ts`、`src/server.ts`、平台入口或 Admin/login config 中硬编码 release 字符串。修改版本输出时同步覆盖 `/health` / public config 测试，并在 Vercel / Cloudflare 部署后确认 `/health.version` 等于本包版本。
+- 正式发布用 `ONEWORKS_RELAY_BUILD_SHA` 注入不可变 Git SHA，`/health.buildSha` 对外返回该值；本地和未注入的部署返回 `null`。production smoke 必须同时核对 package version 与 build SHA，不能只凭相同版本号判断代码已经提升。
 - 用户只想使用 Relay 时，默认引导到 OneWorks 托管服务；只有用户明确选择私有化部署时，才按其提供的平台账号和域名部署。不要把个人账号、真实 account id、测试凭据、token、数据库 URL 或临时部署 URL 写入可提交文档。
 - OneWorks 官方服务域名、`support@oneworks.cloud` / `hello@oneworks.cloud` 收信路由和 Resend 发信子域约定只维护在 `.oo/rules/RELAY-DEPLOYMENT.md`；不要把私人收信目标或个人邮箱写入 README、AGENTS、handoff 或示例配置。
 - 私有化部署的域名和邮件策略是配置，不是代码常量。Vercel 默认是 `<project>.vercel.app` 或自定义域；Cloudflare Worker 默认是 `<worker>.<account-subdomain>.workers.dev`，其中 account subdomain 是账号级设置，变更会影响该账号下所有 Workers。部署前确认用户自己的 DNS 托管、收信策略、事务邮件发信域名和 Reply-To。
