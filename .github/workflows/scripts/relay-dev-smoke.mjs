@@ -77,6 +77,17 @@ const [scriptAsset, styleAsset] = await Promise.all([
 ])
 assert(scriptAsset.text.trim() !== '', `${adminScript} returned an empty JavaScript asset.`)
 assert(styleAsset.text.trim() !== '', `${adminStyle} returned an empty CSS asset.`)
+const scriptContentType = scriptAsset.response.headers.get('content-type')?.toLowerCase() ?? ''
+const styleContentType = styleAsset.response.headers.get('content-type')?.toLowerCase() ?? ''
+assert(
+  (scriptContentType.includes('javascript') || scriptContentType.includes('ecmascript')) &&
+    !scriptContentType.includes('text/html'),
+  `${adminScript} returned unexpected Content-Type "${scriptContentType || '(missing)'}".`
+)
+assert(
+  styleContentType.includes('text/css') && !styleContentType.includes('text/html'),
+  `${adminStyle} returned unexpected Content-Type "${styleContentType || '(missing)'}".`
+)
 
 const unauthorized = await fetch(`${origin}/api/admin/users`)
 assert(
@@ -88,7 +99,7 @@ assert(
 // domain is not necessarily an allowed client origin (for example, Vercel uses
 // its canonical project origin), so using one here can turn a healthy deployment
 // into a false-negative smoke result.
-const redirectUri = 'oneworks://relay/auth?workspace=%2Fsmoke&scope=relay'
+const redirectUri = 'oneworks://relay/auth?workspace=%2Fsmoke&scope=relay&serverId=smoke'
 const loginUrl = `/login?redirect_uri=${encodeURIComponent(redirectUri)}&lang=zh-CN`
 const login = await fetchText(loginUrl)
 assert(
