@@ -14,6 +14,13 @@ const outputDir = path.join(desktopRoot, 'out')
 const appMetadata = resolveDesktopAppMetadata()
 const appName = appMetadata.productName
 const host = '127.0.0.1'
+const serverReadyTimeoutMs = (() => {
+  const value = Number.parseInt(process.env.ONEWORKS_DESKTOP_SMOKE_TIMEOUT_MS?.trim() || '120000', 10)
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`ONEWORKS_DESKTOP_SMOKE_TIMEOUT_MS must be a positive integer, received: ${value}`)
+  }
+  return value
+})()
 
 const createWorkspaceRuntimeEnv = (runtimePackageCacheVersion, runtimePackageBuildFingerprint) => {
   const env = { ...process.env }
@@ -150,8 +157,15 @@ const getAvailablePort = () =>
     })
   })
 
-const waitForServer = ({ port, startedAt = Date.now() }) =>
+const readLogTail = (logPath, maxLines = 200) => {
+  if (!fs.existsSync(logPath)) return 'Packaged server log was not created.'
+  const lines = fs.readFileSync(logPath, 'utf8').trimEnd().split(/\r?\n/u)
+  return lines.slice(-maxLines).join('\n')
+}
+
+const waitForServer = ({ logPath, port, startedAt = Date.now() }) =>
   new Promise((resolve, reject) => {
+    let retryScheduled = false
     const request = http.get({
       hostname: host,
       path: '/api/auth/status',
@@ -173,12 +187,19 @@ const waitForServer = ({ port, startedAt = Date.now() }) =>
     })
 
     const retry = () => {
-      if (Date.now() - startedAt > 40000) {
-        reject(new Error('Packaged server did not become ready.'))
+      if (retryScheduled) return
+      retryScheduled = true
+      const elapsedMs = Date.now() - startedAt
+      if (elapsedMs > serverReadyTimeoutMs) {
+        reject(
+          new Error(
+            `Packaged server did not become ready within ${serverReadyTimeoutMs}ms.\n${readLogTail(logPath)}`
+          )
+        )
         return
       }
       setTimeout(() => {
-        waitForServer({ port, startedAt }).then(resolve, reject)
+        waitForServer({ logPath, port, startedAt }).then(resolve, reject)
       }, 250)
     }
 
@@ -306,7 +327,7 @@ const main = async () => {
 
   try {
     const result = await Promise.race([
-      waitForServer({ port }),
+      waitForServer({ logPath, port }),
       exitPromise
     ])
     if (result instanceof Error) throw result
