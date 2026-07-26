@@ -84,7 +84,7 @@ jobs:
             exit 0
           fi
 
-          git diff --name-only --diff-filter=ACMRT "$base" "$head" > "$RUNNER_TEMP/desktop-package-changes.txt"
+          git diff --name-only --diff-filter=ACMRTD "$base" "$head" > "$RUNNER_TEMP/desktop-package-changes.txt"
 
           package=false
           while IFS= read -r file_path; do
