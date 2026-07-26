@@ -1,5 +1,4 @@
 name: Relay Server Deploy
-
 on:
   workflow_dispatch:
     inputs:
@@ -7,20 +6,15 @@ on:
         description: Immutable origin/main commit SHA approved for production.
         required: true
         type: string
-
 run-name: Deploy Relay production ${{ inputs.source_sha }}
-
 permissions:
   contents: read
-
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   WRANGLER_VERSION: 4.49.0
-
 concurrency:
   group: relay-server-deploy-${{ github.ref }}
   cancel-in-progress: false
-
 jobs:
   deploy:
     name: deploy-relay-server
@@ -29,21 +23,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 11.7.0
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
           cache: pnpm
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
       - name: Validate immutable production source
         env:
           APPROVED_SOURCE_SHA: ${{ inputs.source_sha }}
@@ -60,13 +50,10 @@ jobs:
             echo "::error::Approved source SHA ${APPROVED_SOURCE_SHA} does not match checked out main SHA ${CHECKED_OUT_SOURCE_SHA}."
             exit 1
           fi
-
       - name: Build Relay server deployment artifact
         run: pnpm -C apps/relay-server build:vercel
-
       - name: Run Relay live smoke against built Admin assets
         run: pnpm tools relay-config live-smoke --json --skip-admin-build
-
       - name: Upload Relay server artifact
         uses: actions/upload-artifact@v4
         with:
@@ -75,7 +62,6 @@ jobs:
             apps/relay-server/dist
             apps/relay-server/public
           if-no-files-found: error
-
       - name: Resolve production deployment target
         id: deployment-target
         env:
@@ -89,7 +75,6 @@ jobs:
           [ -n "${GH_TOKEN}" ] && configured=$((configured + 1))
           [ -n "${RELAY_SERVER_DEPLOY_REPOSITORY}" ] && configured=$((configured + 1))
           [ -n "${RELAY_SERVER_DEPLOY_WORKFLOW}" ] && configured=$((configured + 1))
-
           if [ "$configured" -eq 0 ]; then
             echo "external=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -98,10 +83,8 @@ jobs:
             echo "external=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
           echo "::error::External Relay deployment must configure token, repository, and workflow together."
           exit 1
-
       - name: Trigger external Relay server deployment
         if: steps.deployment-target.outputs.external == 'true'
         env:
@@ -117,19 +100,16 @@ jobs:
             --ref main \
             -f source_ref="${SOURCE_REF}" \
             -f source_sha="${SOURCE_SHA}")"
-
           echo "$run_url"
           run_id="${run_url##*/}"
           if [ -z "$run_id" ] || [ "$run_id" = "$run_url" ]; then
             echo "Unable to resolve Relay server workflow run id from: $run_url" >&2
             exit 1
           fi
-
           gh run watch "$run_id" \
             --repo "${RELAY_SERVER_DEPLOY_REPOSITORY}" \
             --exit-status \
             --interval 10
-
       - name: Validate Cloudflare production credentials
         id: cloudflare-credentials
         if: steps.deployment-target.outputs.external != 'true'
@@ -152,7 +132,6 @@ jobs:
             echo "source=prod" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
           dev_configured=0
           [ -n "${DEV_API_TOKEN}" ] && dev_configured=$((dev_configured + 1))
           [ -n "${DEV_ACCOUNT_ID}" ] && dev_configured=$((dev_configured + 1))
@@ -161,10 +140,8 @@ jobs:
             echo "source=dev" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
           echo "::error::Configure an atomic Cloudflare production credential pair; the migration fallback is also incomplete."
           exit 1
-
       - name: Deploy Relay Worker to Cloudflare production
         if: steps.deployment-target.outputs.external != 'true'
         env:
@@ -180,7 +157,6 @@ jobs:
             --name "$worker_name" \
             --keep-vars \
             --var "ONEWORKS_RELAY_BUILD_SHA:${GITHUB_SHA}"
-
       - name: Deploy Relay Admin to Cloudflare production
         if: steps.deployment-target.outputs.external != 'true'
         working-directory: apps/relay-admin
@@ -197,7 +173,6 @@ jobs:
             --branch main \
             --commit-hash "${GITHUB_SHA}" \
             --commit-message "Deploy Relay production ${GITHUB_SHA}"
-
       - name: Smoke check Relay production
         env:
           RELAY_PROD_ORIGIN: ${{ vars.RELAY_PROD_ORIGIN }}
