@@ -19,7 +19,7 @@ env:
 
 concurrency:
   group: relay-server-deploy-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
