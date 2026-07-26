@@ -4251,7 +4251,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
 
       const authStore = await readOneWorksAuthStore()
       const authAccount = accountKey === ''
-        ? undefined
+        ? authAccountsForRelayServer(authStore, activeServer).find(isSessionAuthenticated)
         : authStore.accounts.find(account => account.accountKey === accountKey)
       if (accountKey !== '' && authAccount == null) {
         throw new Error(`Unknown OneWorks account: ${accountKey}.`)

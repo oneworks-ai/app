@@ -19,7 +19,12 @@ on:
       - .node-version
       - .npmrc
       - .github/workflows/desktop-package.yml
+      - apps/bootstrap/**
+      - apps/cli/**
+      - apps/client/**
       - apps/desktop/**
+      - apps/server/**
+      - packages/**
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
@@ -79,12 +84,12 @@ jobs:
             exit 0
           fi
 
-          git diff --name-only --diff-filter=ACMRT "$base" "$head" > "$RUNNER_TEMP/desktop-package-changes.txt"
+          git diff --name-only --diff-filter=ACMRTD "$base" "$head" > "$RUNNER_TEMP/desktop-package-changes.txt"
 
           package=false
           while IFS= read -r file_path; do
             case "$file_path" in
-              .node-version|.npmrc|.github/workflows/desktop-package.yml|apps/desktop/*|package.json|pnpm-lock.yaml|pnpm-workspace.yaml)
+              .node-version|.npmrc|.github/workflows/desktop-package.yml|apps/bootstrap/*|apps/cli/*|apps/client/*|apps/desktop/*|apps/server/*|packages/*|package.json|pnpm-lock.yaml|pnpm-workspace.yaml)
                 package=true
                 break
                 ;;

@@ -1121,6 +1121,29 @@ describe('relay plugin controller', () => {
       serverId: 'prod'
     })
     await commands.get('connect')?.({ serverId: 'prod' })
+    const registerCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url) === 'https://relay.example/api/relay/devices/register'
+    )
+    expect(registerCalls).toHaveLength(2)
+    expect(registerCalls[1]?.[1]?.headers).toMatchObject({
+      authorization: 'Bearer session-token'
+    })
+    const authStore = await readOneWorksAuthStore()
+    await writeOneWorksAuthStore({
+      ...authStore,
+      accounts: authStore.accounts.map(account => ({
+        ...account,
+        sessionExpiresAt: '2000-01-01T00:00:00.000Z'
+      }))
+    })
+    await commands.get('connect')?.({ serverId: 'prod' })
+    const registerCallsAfterExpiry = fetchMock.mock.calls.filter(([url]) =>
+      String(url) === 'https://relay.example/api/relay/devices/register'
+    )
+    expect(registerCallsAfterExpiry).toHaveLength(3)
+    expect(registerCallsAfterExpiry[2]?.[1]?.headers).toMatchObject({
+      authorization: 'Bearer remote-device-token'
+    })
     await flushAsyncWork()
     fetchMock.mockClear()
     await vi.advanceTimersByTimeAsync(30_000)
