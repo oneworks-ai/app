@@ -1019,8 +1019,9 @@ const buildCommonPaths = () => ({
       responses: {
         200: jsonResponse('Relay server health.', {
           type: 'object',
-          required: ['ok', 'version'],
+          required: ['buildSha', 'ok', 'version'],
           properties: {
+            buildSha: nullableString,
             ok: { type: 'boolean' },
             version: { type: 'string' }
           }

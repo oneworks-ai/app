@@ -1,22 +1,14 @@
 name: Relay Server Deploy
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - apps/relay-admin/**
-      - apps/relay-server/**
-      - packages/cli-helper/**
-      - packages/components/**
-      - packages/route-layout/**
-      - packages/tsconfigs/**
-      - package.json
-      - pnpm-lock.yaml
-      - pnpm-workspace.yaml
-      - .node-version
-      - .github/workflows/deploy-relay-server.yml
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Immutable origin/main commit SHA approved for production.
+        required: true
+        type: string
+
+run-name: Deploy Relay production ${{ inputs.source_sha }}
 
 permissions:
   contents: read
@@ -52,6 +44,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Validate immutable production source
+        env:
+          APPROVED_SOURCE_SHA: ${{ inputs.source_sha }}
+          CHECKED_OUT_REF: ${{ github.ref }}
+          CHECKED_OUT_SOURCE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${CHECKED_OUT_REF}" != "refs/heads/main" ]; then
+            echo "::error::Relay production promotion must run from the main branch, got ${CHECKED_OUT_REF}."
+            exit 1
+          fi
+          if [ "${APPROVED_SOURCE_SHA}" != "${CHECKED_OUT_SOURCE_SHA}" ]; then
+            echo "::error::Approved source SHA ${APPROVED_SOURCE_SHA} does not match checked out main SHA ${CHECKED_OUT_SOURCE_SHA}."
+            exit 1
+          fi
+
       - name: Build Relay server deployment artifact
         run: pnpm -C apps/relay-server build:vercel
 
@@ -67,8 +76,34 @@ jobs:
             apps/relay-server/public
           if-no-files-found: error
 
-      - name: Trigger Relay server deployment
-        id: external-deploy
+      - name: Resolve production deployment target
+        id: deployment-target
+        env:
+          GH_TOKEN: ${{ secrets.RELAY_SERVER_DEPLOY_TOKEN }}
+          RELAY_SERVER_DEPLOY_REPOSITORY: ${{ vars.RELAY_SERVER_DEPLOY_REPOSITORY }}
+          RELAY_SERVER_DEPLOY_WORKFLOW: ${{ vars.RELAY_SERVER_DEPLOY_WORKFLOW }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          configured=0
+          [ -n "${GH_TOKEN}" ] && configured=$((configured + 1))
+          [ -n "${RELAY_SERVER_DEPLOY_REPOSITORY}" ] && configured=$((configured + 1))
+          [ -n "${RELAY_SERVER_DEPLOY_WORKFLOW}" ] && configured=$((configured + 1))
+
+          if [ "$configured" -eq 0 ]; then
+            echo "external=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$configured" -eq 3 ]; then
+            echo "external=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "::error::External Relay deployment must configure token, repository, and workflow together."
+          exit 1
+
+      - name: Trigger external Relay server deployment
+        if: steps.deployment-target.outputs.external == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELAY_SERVER_DEPLOY_TOKEN }}
           RELAY_SERVER_DEPLOY_REPOSITORY: ${{ vars.RELAY_SERVER_DEPLOY_REPOSITORY }}
@@ -77,14 +112,6 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-
-          if [ -z "${GH_TOKEN}" ] || [ -z "${RELAY_SERVER_DEPLOY_REPOSITORY}" ] || [ -z "${RELAY_SERVER_DEPLOY_WORKFLOW}" ]; then
-            echo "::notice::External Relay deployment target is not configured; falling back to the official Cloudflare production slot."
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "configured=true" >> "$GITHUB_OUTPUT"
           run_url="$(gh workflow run "${RELAY_SERVER_DEPLOY_WORKFLOW}" \
             --repo "${RELAY_SERVER_DEPLOY_REPOSITORY}" \
             --ref main \
@@ -104,38 +131,62 @@ jobs:
             --interval 10
 
       - name: Validate Cloudflare production credentials
-        if: steps.external-deploy.outputs.configured != 'true'
+        id: cloudflare-credentials
+        if: steps.deployment-target.outputs.external != 'true'
         env:
-          CF_API_TOKEN: ${{ secrets.RELAY_PROD_CLOUDFLARE_API_TOKEN || secrets.RELAY_DEV_CLOUDFLARE_API_TOKEN }}
-          CF_ACCOUNT_ID: ${{ secrets.RELAY_PROD_CLOUDFLARE_ACCOUNT_ID || secrets.RELAY_DEV_CLOUDFLARE_ACCOUNT_ID }}
+          PROD_API_TOKEN: ${{ secrets.RELAY_PROD_CLOUDFLARE_API_TOKEN }}
+          PROD_ACCOUNT_ID: ${{ secrets.RELAY_PROD_CLOUDFLARE_ACCOUNT_ID }}
+          DEV_API_TOKEN: ${{ secrets.RELAY_DEV_CLOUDFLARE_API_TOKEN }}
+          DEV_ACCOUNT_ID: ${{ secrets.RELAY_DEV_CLOUDFLARE_ACCOUNT_ID }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${CF_API_TOKEN}" ] || [ -z "${CF_ACCOUNT_ID}" ]; then
-            echo "::error::Configure the external Relay deploy target or Cloudflare production credentials; refusing to report a build-only run as deployed."
+          prod_configured=0
+          [ -n "${PROD_API_TOKEN}" ] && prod_configured=$((prod_configured + 1))
+          [ -n "${PROD_ACCOUNT_ID}" ] && prod_configured=$((prod_configured + 1))
+          if [ "$prod_configured" -eq 1 ]; then
+            echo "::error::Cloudflare production token and account id must be configured together."
             exit 1
           fi
+          if [ "$prod_configured" -eq 2 ]; then
+            echo "source=prod" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          dev_configured=0
+          [ -n "${DEV_API_TOKEN}" ] && dev_configured=$((dev_configured + 1))
+          [ -n "${DEV_ACCOUNT_ID}" ] && dev_configured=$((dev_configured + 1))
+          if [ "$dev_configured" -eq 2 ]; then
+            echo "::notice::Using the migration fallback Cloudflare credential pair for this production promotion."
+            echo "source=dev" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "::error::Configure an atomic Cloudflare production credential pair; the migration fallback is also incomplete."
+          exit 1
 
       - name: Deploy Relay Worker to Cloudflare production
-        if: steps.external-deploy.outputs.configured != 'true'
+        if: steps.deployment-target.outputs.external != 'true'
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.RELAY_PROD_CLOUDFLARE_API_TOKEN || secrets.RELAY_DEV_CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.RELAY_PROD_CLOUDFLARE_ACCOUNT_ID || secrets.RELAY_DEV_CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ steps.cloudflare-credentials.outputs.source == 'prod' && secrets.RELAY_PROD_CLOUDFLARE_API_TOKEN || secrets.RELAY_DEV_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cloudflare-credentials.outputs.source == 'prod' && secrets.RELAY_PROD_CLOUDFLARE_ACCOUNT_ID || secrets.RELAY_DEV_CLOUDFLARE_ACCOUNT_ID }}
           RELAY_PROD_CF_WORKER_NAME: ${{ vars.RELAY_PROD_CF_WORKER_NAME }}
         shell: bash
         run: |
           set -euo pipefail
-          worker_name="${RELAY_PROD_CF_WORKER_NAME:-pro}"
+          worker_name="${RELAY_PROD_CF_WORKER_NAME:-oneworks-relay-server}"
           pnpm dlx "wrangler@${WRANGLER_VERSION}" deploy \
             --config apps/relay-server/wrangler.jsonc \
-            --name "$worker_name"
+            --name "$worker_name" \
+            --keep-vars \
+            --var "ONEWORKS_RELAY_BUILD_SHA:${GITHUB_SHA}"
 
       - name: Deploy Relay Admin to Cloudflare production
-        if: steps.external-deploy.outputs.configured != 'true'
+        if: steps.deployment-target.outputs.external != 'true'
         working-directory: apps/relay-admin
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.RELAY_PROD_CLOUDFLARE_API_TOKEN || secrets.RELAY_DEV_CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.RELAY_PROD_CLOUDFLARE_ACCOUNT_ID || secrets.RELAY_DEV_CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ steps.cloudflare-credentials.outputs.source == 'prod' && secrets.RELAY_PROD_CLOUDFLARE_API_TOKEN || secrets.RELAY_DEV_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cloudflare-credentials.outputs.source == 'prod' && secrets.RELAY_PROD_CLOUDFLARE_ACCOUNT_ID || secrets.RELAY_DEV_CLOUDFLARE_ACCOUNT_ID }}
           RELAY_PROD_CF_PAGES_PROJECT: ${{ vars.RELAY_PROD_CF_PAGES_PROJECT }}
         shell: bash
         run: |
@@ -147,19 +198,20 @@ jobs:
             --commit-hash "${GITHUB_SHA}" \
             --commit-message "Deploy Relay production ${GITHUB_SHA}"
 
-      - name: Smoke check Cloudflare production
-        if: steps.external-deploy.outputs.configured != 'true'
+      - name: Smoke check Relay production
         env:
+          RELAY_PROD_ORIGIN: ${{ vars.RELAY_PROD_ORIGIN }}
           RELAY_PROD_CF_ORIGIN: ${{ vars.RELAY_PROD_CF_ORIGIN }}
           RELAY_PROD_EXPECTED_SSO_PROVIDERS: ${{ vars.RELAY_PROD_EXPECTED_SSO_PROVIDERS }}
         shell: bash
         run: |
           set -euo pipefail
-          origin="${RELAY_PROD_CF_ORIGIN:-https://cf.oneworks.cloud}"
+          origin="${RELAY_PROD_ORIGIN:-${RELAY_PROD_CF_ORIGIN:-https://cf.oneworks.cloud}}"
           version="$(node -p "require('./apps/relay-server/package.json').version")"
           for attempt in $(seq 1 30); do
             echo "Production smoke attempt ${attempt}/30 against ${origin}"
             if RELAY_ORIGIN="$origin" \
+              RELAY_EXPECTED_BUILD_SHA="${GITHUB_SHA}" \
               RELAY_EXPECTED_VERSION="$version" \
               RELAY_EXPECTED_SSO_PROVIDERS="${RELAY_PROD_EXPECTED_SSO_PROVIDERS:-}" \
               node .github/workflows/scripts/relay-dev-smoke.mjs; then

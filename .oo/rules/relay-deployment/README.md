@@ -80,7 +80,7 @@ The official topology is not a template for user private deployments. Private de
 - Keep an operator-owned deployment matrix outside the repo for each private customer or self-hosted account: platform account/team, dev/prod domains, DNS host, storage backend, transactional mail domain, Reply-To, SSO app/client ids, callback URLs, and secret names. Repository docs should use placeholders only.
 - Use platform secret stores for `ONEWORKS_RELAY_ADMIN_TOKEN`, `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`, database URLs, Resend/API keys, OAuth client secrets, and Turnstile secrets. Local `.env` / scratch files are only for temporary operator setup and must stay ignored.
 - When copying a deployment between Cloudflare and Vercel, re-evaluate storage and long-lived forwarding behavior instead of copying env blindly: Vercel requires Postgres for durable serverless state, Cloudflare uses Durable Object storage through the Worker adapter, and single-host Node usually uses SQLite.
-- Treat health, login config, SSO providers, passkey registration, email code delivery, and plugin device registration as configuration smoke checks. A deployment that returns `ok` but exposes the wrong version, public URL, provider list, CORS origin, or login method is not fully configured.
+- Treat health, login config, SSO providers, passkey registration, email code delivery, and plugin device registration as configuration smoke checks. A deployment that returns `ok` but exposes the wrong version, build SHA, public URL, provider list, CORS origin, or login method is not fully configured.
 
 ## SSO / OAuth Provider Onboarding
 
