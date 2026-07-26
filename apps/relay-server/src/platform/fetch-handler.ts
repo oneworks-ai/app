@@ -7,22 +7,48 @@ import type { RelayStoreRepository } from '../storage/repository.js'
 import type { RelayTelemetry } from '../telemetry/metrics.js'
 import type { RelayServerArgs } from '../types.js'
 
-class RelayFetchIncomingMessage {
+class RelayFetchIncomingMessage extends EventEmitter {
+  aborted = false
+  destroyed = false
   headers: IncomingMessage['headers']
   method: string
   socket = {
     remoteAddress: 'fetch'
   }
   url: string
+  private readonly abortSignal: AbortSignal
+  private readonly abortResponse: () => void
+  private readonly handleAbort = () => {
+    if (this.aborted) return
+    this.aborted = true
+    this.destroyed = true
+    this.emit('aborted')
+    this.emit('close')
+    this.abortResponse()
+  }
 
   constructor(
     request: Request,
-    private readonly body: Uint8Array
+    private readonly body: Uint8Array,
+    abortResponse: () => void
   ) {
+    super()
     this.method = request.method
     const url = new URL(request.url)
     this.url = `${url.pathname}${url.search}`
     this.headers = Object.fromEntries(request.headers.entries())
+    this.abortSignal = request.signal
+    this.abortResponse = abortResponse
+    if (request.signal.aborted) {
+      queueMicrotask(this.handleAbort)
+    } else {
+      request.signal.addEventListener('abort', this.handleAbort, { once: true })
+    }
+  }
+
+  dispose() {
+    this.abortSignal.removeEventListener('abort', this.handleAbort)
+    this.destroyed = true
   }
 
   async *[Symbol.asyncIterator]() {
@@ -38,6 +64,7 @@ class RelayFetchServerResponse extends EventEmitter {
   private responsePromise: Promise<Response>
   private resolveResponse!: (response: Response) => void
   private rejectResponse!: (error: unknown) => void
+  private settled = false
 
   constructor() {
     super()
@@ -48,11 +75,16 @@ class RelayFetchServerResponse extends EventEmitter {
   }
 
   destroy(error?: Error) {
+    if (this.settled) return
+    this.settled = true
+    this.emit('close')
     this.rejectResponse(error ?? new Error('Response destroyed.'))
   }
 
   end(chunk?: unknown) {
+    if (this.settled) return
     if (chunk != null) this.write(chunk)
+    this.settled = true
     this.headersSent = true
     this.emit('finish')
     this.resolveResponse(
@@ -66,6 +98,7 @@ class RelayFetchServerResponse extends EventEmitter {
   toResponse = async () => await this.responsePromise
 
   write(chunk: unknown) {
+    if (this.settled) return false
     if (typeof chunk === 'string') {
       this.body.push(Buffer.from(chunk))
     } else if (Buffer.isBuffer(chunk)) {
@@ -73,6 +106,7 @@ class RelayFetchServerResponse extends EventEmitter {
     } else if (chunk instanceof Uint8Array) {
       this.body.push(chunk)
     }
+    return true
   }
 
   writeHead(statusCode: number, headers: Record<string, number | string | string[]> = {}) {
@@ -98,8 +132,13 @@ export const createRelayFetchHandler = (
   const handler = createRelayHandler(args, options.telemetry, options.storeRepository)
   return async (request: Request) => {
     const body = new Uint8Array(await request.arrayBuffer())
-    const req = new RelayFetchIncomingMessage(request, body) as unknown as IncomingMessage
     const response = new RelayFetchServerResponse()
+    const incomingMessage = new RelayFetchIncomingMessage(request, body, () => {
+      const error = new Error('Request aborted.')
+      error.name = 'AbortError'
+      response.destroy(error)
+    })
+    const req = incomingMessage as unknown as IncomingMessage
     const res = response as unknown as ServerResponse
     void handler(req, res).catch(error => {
       if (response.headersSent) {
@@ -109,6 +148,10 @@ export const createRelayFetchHandler = (
       response.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
       response.end(`${JSON.stringify({ error: error instanceof Error ? error.message : String(error) })}\n`)
     })
-    return await response.toResponse()
+    try {
+      return await response.toResponse()
+    } finally {
+      incomingMessage.dispose()
+    }
   }
 }

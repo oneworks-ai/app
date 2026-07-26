@@ -6,6 +6,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const electronMock = vi.hoisted(() => ({
+  appVersion: '0.0.0',
   appPath: undefined as string | undefined,
   isPackaged: false
 }))
@@ -14,6 +15,7 @@ vi.mock('electron', () => ({
   app: {
     getAppPath: () => electronMock.appPath ?? path.resolve(__dirname, '..'),
     getPath: () => path.join('/tmp', 'oneworks-desktop-test'),
+    getVersion: () => electronMock.appVersion,
     get isPackaged() {
       return electronMock.isPackaged
     }
@@ -23,6 +25,7 @@ vi.mock('electron', () => ({
 const bundledBootstrapPattern = /(?:oneworks|apps[\\/]bootstrap)[\\/]cli\.js$/
 
 afterEach(() => {
+  electronMock.appVersion = '0.0.0'
   electronMock.appPath = undefined
   electronMock.isPackaged = false
   vi.resetModules()
@@ -171,7 +174,7 @@ describe('desktop runtime consumer bootstrap path', () => {
     }
   })
 
-  it('uses the packaged app version as the release runtime cache version', async () => {
+  it('uses the tagged packaged app version as the release runtime cache version', async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'oneworks-desktop-release-runtime-version-'))
     const previousResourcesPath = Object.getOwnPropertyDescriptor(process, 'resourcesPath')
     try {
@@ -188,6 +191,7 @@ describe('desktop runtime consumer bootstrap path', () => {
         configurable: true,
         value: resourcesDir
       })
+      electronMock.appVersion = '9.8.7-beta.1'
       electronMock.appPath = appDir
       electronMock.isPackaged = true
       vi.resetModules()
@@ -195,8 +199,8 @@ describe('desktop runtime consumer bootstrap path', () => {
       const { resolveDesktopDevRuntimeVersionEnv } = await import('../src/main/workspace-service-manager')
 
       expect(resolveDesktopDevRuntimeVersionEnv({})).toEqual({
-        __ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__: '9.8.7-beta.0',
-        __ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__: '9.8.7-beta.0'
+        __ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__: '9.8.7-beta.1',
+        __ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__: '9.8.7-beta.1'
       })
     } finally {
       if (previousResourcesPath == null) {

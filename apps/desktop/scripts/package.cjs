@@ -10,6 +10,10 @@ const {
   DESKTOP_BUILD_SOURCE_FILE,
   writeDesktopBuildSourceFile
 } = require('./desktop-build-source.cjs')
+const {
+  resolveDesktopPackageVersion,
+  stampDesktopPackageVersion
+} = require('./desktop-package-version.cjs')
 const { normalizeMacIconFormat, resolveDarwinPackagerIconPath } = require('./mac-icon-support.cjs')
 
 const desktopRoot = path.resolve(__dirname, '..')
@@ -125,15 +129,6 @@ const spawnPnpm = (args, options = {}) => {
     shell,
     stdio: options.stdio ?? 'inherit'
   })
-}
-
-const resolveAppVersion = () => {
-  const requestedVersion = process.env.ONEWORKS_DESKTOP_VERSION?.trim()
-  const version = requestedVersion || packageJson.version
-  if (!/^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$/.test(version)) {
-    throw new Error(`Invalid desktop app version: ${version}`)
-  }
-  return version
 }
 
 const runPnpm = (args) => {
@@ -543,7 +538,10 @@ const packageDesktopArch = async (targetArch, { buildSourceResources }) => {
     pruneUnusedPlatformBinaries(stagingDir, targetArch)
 
     const iconPath = resolvePackageIconPath()
-    const appVersion = resolveAppVersion()
+    const appVersion = resolveDesktopPackageVersion({
+      fallbackVersion: packageJson.version
+    })
+    stampDesktopPackageVersion(stagingDir, appVersion)
     const enableAutoUpdate = isTruthy(process.env.ONEWORKS_DESKTOP_ENABLE_AUTO_UPDATE)
     assertIconPaths(iconPath)
     if (enableAutoUpdate && !fs.existsSync(appUpdateConfigPath)) {

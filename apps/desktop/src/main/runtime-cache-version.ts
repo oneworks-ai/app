@@ -1,5 +1,3 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import process from 'node:process'
 
 import { app } from 'electron'
@@ -25,11 +23,7 @@ const readPackagedAppRuntimePackageCacheVersion = () => {
   if (!app.isPackaged) return undefined
 
   try {
-    const packageJsonPath = path.join(app.getAppPath(), 'package.json')
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as { version?: unknown }
-    return typeof packageJson.version === 'string'
-      ? normalizeRuntimePackageCacheVersion(packageJson.version)
-      : undefined
+    return normalizeRuntimePackageCacheVersion(app.getVersion())
   } catch (error) {
     console.warn('[oneworks-desktop] failed to read packaged app runtime cache version', error)
     return undefined

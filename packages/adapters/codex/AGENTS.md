@@ -41,12 +41,15 @@ Primary implementation entrypoints for Codex hooks:
 - `src/runtime/accounts.ts`
   - reads Codex accounts from `adapters.codex.accounts`; `codex login` writes base64 encoded `auth.json` into global `~/.oneworks/.oo.config.json`
   - treats the current `~/.codex/auth.json` as a read-only fallback account source and does not migrate it into project-local storage
+  - when a global inline account and `~/.codex/auth.json` have the same stable account identity, keeps the configured key / metadata but uses the real-home file as the local runtime credential; this avoids replaying an already-rotated inline refresh token without silently writing real-home auth back to One Works config
   - prepares per-session HOME roots under `<project-home>/caches/<ctxId>/<sessionId>/adapter-codex-home`
   - does not bridge the whole shared `.codex` tree into a session HOME; only auth, config, hooks, skills, and sessions are intentionally linked so global plugin caches and app state cannot slow `codex app-server` startup
   - normalizes the imported Codex config before using that HOME with the CLI, so unsupported values from a user's real config do not break One Works sessions.
   - queries Codex account info and rate-limit/quota snapshots through `codex app-server`
   - reads the ChatGPT profile avatar after account refresh, persists only trusted-host HTTPS image URLs, and keeps an explicitly configured `avatarUrl` authoritative
   - exposes standard adapter account management actions: add via `codex login`, detail lookup, refresh, and remove from global config
+- `src/paths.ts`
+  - resolves the official `@openai/codex` JavaScript launcher to its platform package's native executable, because packaged Electron users may not have a standalone `node` binary on `PATH`
 - `src/models.ts`
   - exposes Codex model selector metadata to One Works
   - prefers Codex's `model_catalog_json` config file or `models_cache.json` under `CODEX_HOME` / `~/.codex`
@@ -191,8 +194,9 @@ Codex 多账号切换走 adapter 通用 `account` 能力：
 - 旧的 `<project-home>/.local/adapters/codex/accounts/<key>/auth.json` / `meta.json` 不再参与账号发现，也不做自动迁移
 
 如果本机存在 `~/.codex/auth.json`，adapter 会把它作为只读 fallback account 展示和使用；这条 fallback 不会写入 One Works config。要让 Codex 登录态通过 Relay 同步到其他设备，必须通过 `ow accounts add codex [accountName]` 或 Web 登录入口把它保存到 global config。
+如果 global config 里已经有同一 stable identity 的 inline account，本机运行时会保留它的 key、标题和默认账号语义，但优先软链当前 `~/.codex/auth.json`；这样 Codex 或 ChatGPT 轮换 refresh token 后不会继续重放旧 inline token，同时也不会把真实 home 的新凭据自动写回 global config。
 
-session 级 HOME 仍然完全隔离：如果账号来自 global config，adapter 会把 base64 auth materialize 成当前 session 的 `.codex/auth.json`；如果账号来自 `authFile` 或 real home fallback，则会 symlink 到对应文件。
+session 级 HOME 仍然完全隔离：如果账号只来自 global config，adapter 会把 base64 auth materialize 成当前 session 的 `.codex/auth.json`；如果账号来自 `authFile`、real home fallback，或命中了上面的同身份本机凭据覆盖，则会 symlink 到对应文件。
 
 现在还支持两类额外入口：
 
